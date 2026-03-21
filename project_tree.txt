@@ -1,0 +1,181 @@
+.
+├── D
+│   ├── Assets.xcassets
+│   │   ├── AccentColor.colorset
+│   │   │   └── Contents.json
+│   │   ├── AppIcon.appiconset
+│   │   │   └── Contents.json
+│   │   └── Contents.json
+│   ├── DApp.swift
+│   └── Item.swift
+├── D.xcodeproj
+│   ├── project.pbxproj
+│   ├── project.xcworkspace
+│   │   ├── contents.xcworkspacedata
+│   │   ├── xcshareddata
+│   │   │   └── swiftpm
+│   │   │       ├── Package.resolved
+│   │   │       └── configuration
+│   │   └── xcuserdata
+│   │       └── lfrledh.xcuserdatad
+│   │           ├── IDEFindNavigatorScopes.plist
+│   │           └── UserInterfaceState.xcuserstate
+│   └── xcuserdata
+│       └── lfrledh.xcuserdatad
+│           ├── xcdebugger
+│           │   └── Breakpoints_v2.xcbkptlist
+│           └── xcschemes
+│               └── xcschememanagement.plist
+├── DTests
+│   └── DTests.swift
+├── DUITests
+│   ├── DUITests.swift
+│   └── DUITestsLaunchTests.swift
+├── Packages
+│   ├── AIAssistant
+│   │   ├── MyLibrary
+│   │   │   ├── Package.swift
+│   │   │   ├── Sources
+│   │   │   │   └── MyLibrary
+│   │   │   │       └── MyLibrary.swift
+│   │   │   └── Tests
+│   │   │       └── MyLibraryTests
+│   │   │           └── MyLibraryTests.swift
+│   │   ├── Package.swift
+│   │   ├── Sources
+│   │   │   └── AIAssistant
+│   │   │       └── AIAssistant.swift
+│   │   └── Tests
+│   │       └── AIAssistantTests
+│   │           └── AIAssistantTests.swift
+│   ├── Core
+│   │   ├── Package.swift
+│   │   ├── Sources
+│   │   │   └── Core
+│   │   │       ├── Common
+│   │   │       ├── Hardware
+│   │   │       │   ├── HardwareProfile.swift
+│   │   │       │   ├── MLXConfiguration.swift
+│   │   │       │   └── empty.swift
+│   │   │       ├── ModelAdaptation
+│   │   │       │   └── Protocols
+│   │   │       │       └── VisionAddOn.swift
+│   │   │       ├── Models
+│   │   │       │   ├── ArchitectureHints.swift
+│   │   │       │   ├── AudioGenerationParameters.swift
+│   │   │       │   ├── GenerateParameters.swift
+│   │   │       │   ├── ImageGenerationParameters.swift
+│   │   │       │   ├── InferenceTask.swift
+│   │   │       │   ├── LoRAConfig.swift
+│   │   │       │   ├── LoadedTensor.swift
+│   │   │       │   ├── ModelCapability.swift
+│   │   │       │   ├── ModelConfig.swift
+│   │   │       │   ├── ModelDescriptor.swift
+│   │   │       │   ├── ShardMap.swift
+│   │   │       │   └── VideoGenerationParameters.swift
+│   │   │       ├── Services
+│   │   │       │   └── Protocols
+│   │   │       │       ├── AudioGenerationService.swift
+│   │   │       │       ├── ImageGenerationService.swift
+│   │   │       │       ├── ModelContainerProtocol.swift
+│   │   │       │       ├── ModelLoading.swift
+│   │   │       │       ├── TextGenerationService.swift
+│   │   │       │       ├── VideoGenerationService.swift
+│   │   │       │       └── VisionLanguageService.swift
+│   │   │       └── Tokenization
+│   │   │           └── Tokenizer.swift
+│   │   └── Tests
+│   │       └── CoreTests
+│   │           └── CoreTests.swift
+│   ├── ImageInference
+│   │   ├── Package.resolved
+│   │   ├── Package.swift
+│   │   ├── Sources
+│   │   │   └── ImageInference
+│   │   │       ├── Diffusion
+│   │   │       │   ├── SD3
+│   │   │       │   │   ├── SD3AdaLayerNorm.swift
+│   │   │       │   │   ├── SD3Config.swift
+│   │   │       │   │   ├── SD3FeedForward.swift
+│   │   │       │   │   ├── SD3JointAttention.swift
+│   │   │       │   │   ├── SD3JointTransformerBlock.swift
+│   │   │       │   │   ├── SD3PatchEmbed.swift
+│   │   │       │   │   ├── SD3Service.swift
+│   │   │       │   │   ├── SD3TimestepEmbedding.swift
+│   │   │       │   │   ├── SD3Transformer.swift
+│   │   │       │   │   └── SD3WeightMap.swift
+│   │   │       │   ├── Schedulers
+│   │   │       │   │   └── FlowMatchEulerDiscreteScheduler.swift
+│   │   │       │   └── VAE
+│   │   │       │       ├── Activations.swift
+│   │   │       │       ├── AttentionBlock.swift
+│   │   │       │       ├── AutoencoderKL.swift
+│   │   │       │       ├── DiagonalGaussianDistribution.swift
+│   │   │       │       ├── Downsample2D.swift
+│   │   │       │       ├── ResnetBlock2D.swift
+│   │   │       │       ├── Upsample2D.swift
+│   │   │       │       ├── VAEConfig.swift
+│   │   │       │       ├── VAEDecoder.swift
+│   │   │       │       └── VAEEncoder.swift
+│   │   │       ├── StableDiffusionService.swift
+│   │   │       └── TextEncoders
+│   │   │           ├── CLIPConfig.swift
+│   │   │           ├── CLIPTextEncoder.swift
+│   │   │           ├── T5Config.swift
+│   │   │           ├── T5Encoder.swift
+│   │   │           └── TextEncoderWeightMaps.swift
+│   │   └── Tests
+│   │       └── ImageInferenceTests
+│   │           └── ImageInferenceTests.swift
+│   ├── ModelLoading
+│   │   ├── Package.resolved
+│   │   ├── Package.swift
+│   │   ├── Sources
+│   │   │   └── ModelLoading
+│   │   │       ├── DownloadTaskHandleImpl.swift
+│   │   │       ├── ModelContainerWrapper.swift
+│   │   │       ├── ModelLoadingActor.swift
+│   │   │       ├── ModelLoadingError.swift
+│   │   │       ├── SafetensorsLoader.swift
+│   │   │       └── TransformersTokenizer.swift
+│   │   └── Tests
+│   │       └── ModelLoadingTests
+│   │           └── ModelLoadingTests.swift
+│   ├── TextInference
+│   │   ├── Package.resolved
+│   │   ├── Package.swift
+│   │   ├── Sources
+│   │   │   └── TextInference
+│   │   │       └── LLMChatService.swift
+│   │   └── Tests
+│   │       └── TextInferenceTests
+│   │           └── TextInferenceTests.swift
+│   └── UI
+│       ├── Package.swift
+│       ├── Sources
+│       │   └── UI
+│       │       ├── AssetHistoryView.swift
+│       │       ├── CapabilityViewModel.swift
+│       │       ├── DownloadManagerView.swift
+│       │       ├── DownloadTaskRow.swift
+│       │       ├── ImageCapabilityViewModel.swift
+│       │       ├── ImageGenerationArea.swift
+│       │       ├── LiquidGlassTabBar.swift
+│       │       ├── MainView.swift
+│       │       ├── MainViewModel.swift
+│       │       ├── ParameterPanelView.swift
+│       │       ├── PlaceholderArea.swift
+│       │       ├── ProjectResourcesView.swift
+│       │       ├── ResourceDetailPlaceholder.swift
+│       │       ├── SettingsView.swift
+│       │       ├── SidebarView.swift
+│       │       ├── TextCapabilityViewModel.swift
+│       │       ├── TextGenerationArea.swift
+│       │       └── empty2.swift
+│       └── Tests
+│           └── UITests
+│               └── UITests.swift
+├── VAEConfig.txt
+└── project_tree.txt
+
+67 directories, 112 files
