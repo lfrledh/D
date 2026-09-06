@@ -218,10 +218,16 @@ internal final class ImageArtifactTransaction {
         guard url.isFileURL, url.path.hasPrefix("/"), !url.path.contains("\0") else {
             throw InferenceFailure.invalidRequest("Invalid artifact directory.")
         }
-        var fd = open("/", O_RDONLY | O_DIRECTORY | O_CLOEXEC)
+        let components = url.standardizedFileURL.path.split(separator: "/")
+        // A security-scoped child grant does not grant enumeration of /Volumes or
+        // the user's other ancestors. Search-only descriptors preserve the
+        // anchored O_NOFOLLOW walk without requesting their file-read-data access.
+        let traversalFlags = O_SEARCH | O_NOFOLLOW | O_CLOEXEC
+        let rootFlags = O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC
+        var fd = open("/", components.isEmpty ? rootFlags : traversalFlags)
         guard fd >= 0 else { throw ioFailure("Open filesystem root") }
-        for component in url.standardizedFileURL.path.split(separator: "/") {
-            let next = openat(fd, String(component), O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+        for (index, component) in components.enumerated() {
+            let next = openat(fd, String(component), index == components.count - 1 ? rootFlags : traversalFlags)
             close(fd)
             guard next >= 0 else { throw ioFailure("Open artifact directory (must exist and contain no symbolic links)") }
             fd = next

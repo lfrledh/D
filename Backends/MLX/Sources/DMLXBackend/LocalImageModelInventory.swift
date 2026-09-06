@@ -169,12 +169,17 @@ struct LocalImageModelInventory: Sendable {
     /// Open each path component relative to its parent; O_NOFOLLOW on the final
     /// component alone would still follow symbolic links in ancestor directories.
     private static func withRoot<T>(_ directory: URL, body: (Int32) throws -> T) throws -> T {
-        var descriptor = Darwin.open("/", directoryFlags)
+        let components = directory.pathComponents.filter { $0 != "/" }
+        // The application grants access to the model, not enumeration of every
+        // directory leading to it. Only the selected root needs a readable cursor.
+        let traversalFlags = O_SEARCH | O_NOFOLLOW | O_CLOEXEC
+        var descriptor = Darwin.open("/", components.isEmpty ? directoryFlags : traversalFlags)
         guard descriptor >= 0 else { throw fileError("Cannot open filesystem root") }
         defer { Darwin.close(descriptor) }
-        for component in directory.pathComponents where component != "/" {
+        for (index, component) in components.enumerated() {
             try Task.checkCancellation()
-            let next = Darwin.openat(descriptor, component, directoryFlags)
+            let next = Darwin.openat(descriptor, component,
+                                    index == components.count - 1 ? directoryFlags : traversalFlags)
             guard next >= 0 else { throw fileError("Cannot open image directory component \(component); symbolic links are not allowed") }
             Darwin.close(descriptor)
             descriptor = next

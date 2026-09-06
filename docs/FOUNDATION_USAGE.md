@@ -6,7 +6,7 @@
 ./scripts/test-foundation.sh
 ```
 
-真实实现已位于同仓 Backends/MLX，独立 CLI 通过以下公共契约调用后端。根包不直接依赖这个集成包，旧应用尚未迁移。宿主注入符合 InferenceBackend 的实现后，可以：
+真实实现已位于同仓 Backends/MLX，独立 CLI 通过以下公共契约调用后端。根包不直接依赖这个集成包；新图像工作台由应用装配同一个运行时与后端。宿主注入符合 InferenceBackend 的实现后，可以：
 
 ```swift
 let configuration = try RuntimeConfiguration(memoryBudgetBytes: budget)
@@ -35,6 +35,6 @@ await runtime.shutdown()
 - 模型下载、目录授权、输入资产生命周期由宿主保证。后端只能访问宿主已解析且已授权的资源。
 - 后端estimate不得开始真实加载；release须幂等并在取消状态下完成；execute不得返回后遗留生成任务或继续emit。
 - 预算是后端声明的峰值准入限制。真实 MLX 后端另外设置缓存上限并记录 allocator 快照；这不把 runtime 预算变成分配器硬限制，也不是跨进程或对旧应用的全局 OOM 防护。
-- 新框架不依赖旧 Packages/*，旧 UI 也尚未接入新 runtime；未来接入时必须统一重推理入口，避免旧后端绕过资源调度。
+- 新框架不依赖 Packages/*；新的 Packages/UI 工作台只依赖 DInference，由应用注入 runtime。旧生成入口已退出应用，不得重新绕过资源调度。
 
 2026-09-06 的验证状态：17 项纯框架测试通过，固定模型的真实 CLI 10 类验收通过。原有重复加载分配增长已通过 MLX 所有权补丁修复，C++ 7 组回归通过，50 轮真实推理释放后的 MLX 活动分配与缓存均为 0，见 [修复记录](MLX_OWNERSHIP_FIX.zh-CN.md)。MLX XCTest 已实际通过 25 项声明／37 个展开场景，0 失败、0 跳过；此前的外盘授权启动阻塞未在此次运行中重现。构建命令、真实运行方法和具体限制见 [本地 MLX 参考实现](MLX_REFERENCE_GUIDE.zh-CN.md)。

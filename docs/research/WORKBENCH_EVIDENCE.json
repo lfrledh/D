@@ -1,0 +1,376 @@
+{
+  "schemaVersion": 1,
+  "checkpoint": "D-W01",
+  "recordedAt": "2026-09-06T16:38:59.788921+00:00",
+  "baselineCommit": "d244c252d9f4b084458b640586b1f379a9b8c610",
+  "branch": "codex/inference-foundation",
+  "environment": {
+    "hardware": "Mac mini Apple M4 / 16 GiB",
+    "macOS": "26.6.2",
+    "xcode": "26.6",
+    "storage": "external SSD",
+    "appMinimumMacOS": "26.2"
+  },
+  "finalBuild": {
+    "executable": {
+      "path": "/Volumes/CodexProjects/Codex/D-Development/DerivedData/Build/Products/Debug/D.app/Contents/MacOS/D",
+      "bytes": 59040,
+      "sha256": "3b9c80b346e7801d70b8282efee30982b02cfbc78393e945da793dc58d621f30"
+    },
+    "debugDylib": {
+      "path": "/Volumes/CodexProjects/Codex/D-Development/DerivedData/Build/Products/Debug/D.app/Contents/MacOS/D.debug.dylib",
+      "bytes": 85281376,
+      "sha256": "2743cf67d8a0b58044830abe6627073152360ade7397859b96bd3f0efd61b9c4"
+    },
+    "entitlements": {
+      "com.apple.security.app-sandbox": true,
+      "com.apple.security.files.bookmarks.app-scope": true,
+      "com.apple.security.files.user-selected.read-write": true,
+      "com.apple.security.get-task-allow": true
+    },
+    "codesignDeepStrictVerified": true,
+    "buildLog": {
+      "path": "/Volumes/CodexProjects/Codex/D-Development/Logs/build-local.log",
+      "bytes": 67473,
+      "sha256": "b0c490c01a059ce00a5936083a6ae1ad37b23f8717d3a36dcf526b8927fe37ee"
+    }
+  },
+  "fullImageGenerationBuildSignature": {
+    "path": "/Volumes/CodexProjects/Codex/D-Development/Logs/workbench-app-search-relocation-signature.json",
+    "bytes": 671,
+    "sha256": "acefc6d58a518316239ab225974a91748ebd65e47249747ce02232b74d237df0"
+  },
+  "tests": {
+    "workbench": {
+      "declarations": 30,
+      "expandedCases": 32,
+      "failures": 0,
+      "gpu": false,
+      "command": "./scripts/test-workbench.sh",
+      "log": {
+        "path": "/Volumes/CodexProjects/Codex/D-Development/Logs/workbench-package-tests.log",
+        "bytes": 6670,
+        "sha256": "6ec088a4e05e5f03077874fcdd5cd3e5f03410cfc099da93d73e9162750042ad"
+      }
+    },
+    "foundation": {
+      "declarations": 17,
+      "expandedCases": 18,
+      "failures": 0,
+      "command": "./scripts/test-foundation.sh",
+      "log": {
+        "path": "/Volumes/CodexProjects/Codex/D-Development/Logs/workbench-foundation-regression.log",
+        "bytes": 4172,
+        "sha256": "9e5dff1a36984691f75c78aa8d7378d07159014ace0f624bcb57841ccb2d6989"
+      }
+    },
+    "backendCPU": {
+      "declarations": 31,
+      "expandedCases": 62,
+      "failures": 0,
+      "skips": 0,
+      "gpu": false,
+      "summary": {
+        "path": "/Volumes/CodexProjects/Codex/D-Development/Logs/WorkbenchBackendCPU-20260907-0123.summary.json",
+        "bytes": 1045,
+        "sha256": "7d7886b9b1cfeeb55ebd97cf248711ddfb315e2f32fb2d40224a29e802de68ca"
+      },
+      "resultBundle": "/Volumes/CodexProjects/Codex/D-Development/Logs/WorkbenchBackendCPU-20260907-0123.xcresult",
+      "log": {
+        "path": "/Volumes/CodexProjects/Codex/D-Development/Logs/workbench-backend-cpu-tests.log",
+        "bytes": 15744,
+        "sha256": "98980efd400c1f0961f38a88b304c68dc9897d4c1734a80d7760dd2156ecb296"
+      }
+    },
+    "hostCloseGate": {
+      "declarations": 2,
+      "expandedCases": 2,
+      "failures": 0,
+      "summary": {
+        "path": "/Volumes/CodexProjects/Codex/D-Development/Logs/WorkbenchHostTests-20260907-0100.summary.json",
+        "bytes": 925,
+        "sha256": "0399a5845cc0aa33ee76715582c8b11c92002a9f1dfe7357f6f755c334042134"
+      },
+      "resultBundle": "/Volumes/CodexProjects/Codex/D-Development/Logs/WorkbenchHostTests-20260907-0100.xcresult"
+    },
+    "xctestUI": {
+      "authoredTests": 3,
+      "executedTests": 0,
+      "status": "not executed: runner initialization timed out enabling automation mode",
+      "log": {
+        "path": "/Volumes/CodexProjects/Codex/D-Development/Logs/workbench-ui-tests.log",
+        "bytes": 113171,
+        "sha256": "085a5bd1e3521cecd8bd1a62ebaf6b6fd31caee733ba6bbd18beeb43c343761b"
+      },
+      "resultBundle": "/Volumes/CodexProjects/Codex/D-Development/Logs/WorkbenchUITests-20260907-0103.xcresult"
+    }
+  },
+  "manualUI": {
+    "method": "CUA native AppKit/SwiftUI UI actions; observations and screenshots retained in the conversation",
+    "normalSandboxNoTestExceptions": true,
+    "verified": [
+      "create project via NSSavePanel",
+      "register local model via NSOpenPanel",
+      "invalid folder rejected while retaining preceding valid model",
+      "real image seed 42",
+      "cancel queued seed 0",
+      "cancel active seed 0 and generate next seed 0",
+      "fit and actual pixel view",
+      "copy history conditions",
+      "export PNG without re-encoding",
+      "quit and restore model bookmark, artwork and jobs",
+      "unsent Chinese draft and incomplete seed - survive quit/relaunch",
+      "running job quit prompts wait/cancel/continue; cancel-and-close drains and persists",
+      "move closed project to Validation then automatic bookmark resolution restores all assets and jobs",
+      "final Generate and task-list accessibility identifiers"
+    ],
+    "notFullyVerified": [
+      "full light/reduced-transparency/reduce-motion accessibility appearance matrix",
+      "full GPU memory stress suite not rerun in this checkpoint"
+    ]
+  },
+  "project": {
+    "projectID": "BDCD16CD-BC18-4CCB-93D2-FF06FD62DE4E",
+    "revision": 13,
+    "manifest": {
+      "path": "/Volumes/CodexProjects/Codex/D-Development/Validation/D Workbench Acceptance.dproject/project.json",
+      "bytes": 6661,
+      "sha256": "af7a85b38b8366b846c10b0474004b7040a851e8e1d57355d6b6109072d25855"
+    },
+    "jobs": [
+      {
+        "artifactIDs": [
+          "4AFB791A-AFE1-40EE-8281-6F4667F73FEF"
+        ],
+        "createdAt": 810404305.726584,
+        "id": "1BF77113-7F45-4641-8B2D-BEF378CB5C2F",
+        "request": {
+          "id": "1BF77113-7F45-4641-8B2D-BEF378CB5C2F",
+          "input": {
+            "image": {
+              "_0": {
+                "guidanceScale": 1,
+                "height": 512,
+                "prompt": "A red ceramic teapot on a wooden table beside a window, soft morning light, detailed studio photograph.",
+                "seed": 42,
+                "steps": 4,
+                "width": 512
+              }
+            }
+          },
+          "model": {
+            "directory": "file:///Volumes/CodexProjects/Codex/D-Development/Models/FLUX.2-klein-4B-q8/"
+          }
+        },
+        "resultMetadata": {
+          "estimatedPeakBytes": "8589934592",
+          "flux2SourceRevision": "959a4af7c0721c800851c84431ffd3fa1f353f1f",
+          "guidanceScale": "1.0",
+          "height": "512",
+          "modelRepository": "mzbac/FLUX.2-klein-4B-q8",
+          "modelRevision": "ef52ee019fd1d0e75ae4deb40476ba65989716d7",
+          "modelTimestepScale": "0.001",
+          "pngBytes": "427767",
+          "pngDecodedAndValidated": "true",
+          "promptTruncated": "false",
+          "seed": "42",
+          "steps": "4",
+          "textSequenceLength": "512",
+          "weightBytes": "9410563077",
+          "width": "512"
+        },
+        "state": "completed"
+      },
+      {
+        "artifactIDs": [],
+        "createdAt": 810404333.93785,
+        "id": "2113120A-EA93-493E-9D1E-D31682FA2FE2",
+        "request": {
+          "id": "2113120A-EA93-493E-9D1E-D31682FA2FE2",
+          "input": {
+            "image": {
+              "_0": {
+                "guidanceScale": 1,
+                "height": 512,
+                "prompt": "A red ceramic teapot on a wooden table beside a window, soft morning light, detailed studio photograph.",
+                "seed": 0,
+                "steps": 4,
+                "width": 512
+              }
+            }
+          },
+          "model": {
+            "directory": "file:///Volumes/CodexProjects/Codex/D-Development/Models/FLUX.2-klein-4B-q8/"
+          }
+        },
+        "resultMetadata": {},
+        "state": "cancelled"
+      },
+      {
+        "artifactIDs": [],
+        "createdAt": 810404445.284562,
+        "id": "F9B40B35-3592-4096-87E4-943860F82249",
+        "request": {
+          "id": "F9B40B35-3592-4096-87E4-943860F82249",
+          "input": {
+            "image": {
+              "_0": {
+                "guidanceScale": 1,
+                "height": 512,
+                "prompt": "A red ceramic teapot on a wooden table beside a window, soft morning light, detailed studio photograph.",
+                "seed": 0,
+                "steps": 4,
+                "width": 512
+              }
+            }
+          },
+          "model": {
+            "directory": "file:///Volumes/CodexProjects/Codex/D-Development/Models/FLUX.2-klein-4B-q8/"
+          }
+        },
+        "resultMetadata": {},
+        "state": "cancelled"
+      },
+      {
+        "artifactIDs": [
+          "00AF28A5-294F-4367-8547-5BC5A1A3306E"
+        ],
+        "createdAt": 810404457.701477,
+        "id": "06C62345-5277-4FB8-9109-3343A664043B",
+        "request": {
+          "id": "06C62345-5277-4FB8-9109-3343A664043B",
+          "input": {
+            "image": {
+              "_0": {
+                "guidanceScale": 1,
+                "height": 512,
+                "prompt": "A red ceramic teapot on a wooden table beside a window, soft morning light, detailed studio photograph.",
+                "seed": 0,
+                "steps": 4,
+                "width": 512
+              }
+            }
+          },
+          "model": {
+            "directory": "file:///Volumes/CodexProjects/Codex/D-Development/Models/FLUX.2-klein-4B-q8/"
+          }
+        },
+        "resultMetadata": {
+          "estimatedPeakBytes": "8589934592",
+          "flux2SourceRevision": "959a4af7c0721c800851c84431ffd3fa1f353f1f",
+          "guidanceScale": "1.0",
+          "height": "512",
+          "modelRepository": "mzbac/FLUX.2-klein-4B-q8",
+          "modelRevision": "ef52ee019fd1d0e75ae4deb40476ba65989716d7",
+          "modelTimestepScale": "0.001",
+          "pngBytes": "419855",
+          "pngDecodedAndValidated": "true",
+          "promptTruncated": "false",
+          "seed": "0",
+          "steps": "4",
+          "textSequenceLength": "512",
+          "weightBytes": "9410563077",
+          "width": "512"
+        },
+        "state": "completed"
+      },
+      {
+        "artifactIDs": [],
+        "createdAt": 810405199.797308,
+        "id": "0E31E9D2-AD25-44E1-9761-2D002C838957",
+        "request": {
+          "id": "0E31E9D2-AD25-44E1-9761-2D002C838957",
+          "input": {
+            "image": {
+              "_0": {
+                "guidanceScale": 1,
+                "height": 512,
+                "prompt": "A red ceramic teapot on a wooden table beside a window, soft morning light, detailed studio photograph.",
+                "seed": 0,
+                "steps": 4,
+                "width": 512
+              }
+            }
+          },
+          "model": {
+            "directory": "file:///Volumes/CodexProjects/Codex/D-Development/Models/FLUX.2-klein-4B-q8/"
+          }
+        },
+        "resultMetadata": {},
+        "state": "cancelled"
+      }
+    ],
+    "draft": {
+      "prompt": "A red ceramic teapot on a wooden table beside a window, soft morning light, detailed studio photograph.",
+      "randomSeed": false,
+      "seedText": "0"
+    },
+    "artifacts": [
+      {
+        "assetID": "4AFB791A-AFE1-40EE-8281-6F4667F73FEF",
+        "jobID": "1BF77113-7F45-4641-8B2D-BEF378CB5C2F",
+        "metadata": {
+          "bitDepth": 8,
+          "colorSpace": "sRGB IEC61966-2.1",
+          "height": 512,
+          "width": 512
+        },
+        "path": "/Volumes/CodexProjects/Codex/D-Development/Validation/D Workbench Acceptance.dproject/Tasks/1BF77113-7F45-4641-8B2D-BEF378CB5C2F-B9824629-9D47-41E6-8BFA-A7F82E0CD7F9/image.png",
+        "bytes": 427767,
+        "sha256": "05f0b80ac7d9d6e4ffa105af12a8805cdea4425a9448f9d35a1bd9d8f8dda553"
+      },
+      {
+        "assetID": "00AF28A5-294F-4367-8547-5BC5A1A3306E",
+        "jobID": "06C62345-5277-4FB8-9109-3343A664043B",
+        "metadata": {
+          "bitDepth": 8,
+          "colorSpace": "sRGB IEC61966-2.1",
+          "height": 512,
+          "width": 512
+        },
+        "path": "/Volumes/CodexProjects/Codex/D-Development/Validation/D Workbench Acceptance.dproject/Tasks/06C62345-5277-4FB8-9109-3343A664043B-DE92B0FA-6A1B-49AE-BBDA-B4F5CC00E874/image.png",
+        "bytes": 419855,
+        "sha256": "d07e166c5583245766dd8c255fff3b85966d04e6ffc8dca8614bd22c423254dd"
+      }
+    ]
+  },
+  "export": {
+    "path": "/Volumes/CodexProjects/Codex/D-Development/Probes/workbench-export.png",
+    "bytes": 427767,
+    "sha256": "05f0b80ac7d9d6e4ffa105af12a8805cdea4425a9448f9d35a1bd9d8f8dda553"
+  },
+  "sameSeed42PNGasB2": true,
+  "sourceSHA256": {
+    "Backends/MLX/Sources/DMLXBackend/ImageArtifactStore.swift": "45b5696e453b9602dcf18565e347cb6e2968e2a87aa8c765b3ae93ec7fc95481",
+    "Backends/MLX/Sources/DMLXBackend/LocalImageModelInventory.swift": "c3acbc11811f376c54a860bb72da23db1d57078aaa73e4ca4fad6dedafa67496",
+    "Backends/MLX/Tests/DMLXBackendTests/SandboxDirectoryTests.swift": "36031a6937002873a101fed2329b07ff96866c1148bbf0d7332e37095cf1e078",
+    "D/AppSessionFactory.swift": "195d6a61181e3b5ccc1f1f3f88bbaad7d958bc633c856f5ac2ed39f28715e1aa",
+    "D/D.entitlements": "d2436a166e08413039583da07f6b55bdfe33c8c9e0fc99294826030cdc8d1c6d",
+    "D/DApp.swift": "d2c7707e17921a4991a74b14ba944db15a3bf868214c9e0ab3ff0260f81f0c3c",
+    "D/Info.plist": "9120f371f50ab69cc01609da99d710d442377f0328d85008e2338c5c1ebe16fa",
+    "D/WorkbenchApplicationDelegate.swift": "2bcef377aeacab22d4cc69632260f4b688116331297b8bfc08fc91135d22ef3b",
+    "D.xcodeproj/project.pbxproj": "f1276fc2e336d5f105d65ecf9ee5bd7fb9edc7c2916b37d87a5389a0c613c490",
+    "DTests/DTests.swift": "389e576c5b2f25297c6a39d3ac52a9a64b210a7804ac4fa33a8d898954f605ff",
+    "DUITests/DUITests.swift": "1aad70bd2f12fe4f507636cad2d4050b0a2daa65e9819de7128c5960ec0ae729",
+    "Packages/UI/Package.swift": "8b283b0603c18e6e1d87ace94ae333f113b65fcef4c7213d73182391bc1aecf5",
+    "Packages/UI/Sources/UI/Project/ProjectModels.swift": "60ccf14da1834bf0662544b713457f2bfa994dc631967acb7ffcc64bbac5aeb6",
+    "Packages/UI/Sources/UI/Project/ProjectStore.swift": "a6f1115821f0df132693af1b3fa65316fb0c8295805d9a9f16f639cdaf0d8e2f",
+    "Packages/UI/Sources/UI/Services/LocationAccess.swift": "f5e301a502d2303e15b3ee843b9d1b65d5570b71aafb0b8f1c4e0d8d2ed9bf1d",
+    "Packages/UI/Sources/UI/Services/WorkbenchSession.swift": "b2fbcef43da806aebc8f3af138353cdc7dc3567fde69e8f1244ec81904fb1ff8",
+    "Packages/UI/Sources/UI/State/WorkbenchModel.swift": "ddc7ee02aabe3e500e0cd4f67c0f7afcc7eff2fe8bbd0592bc9988a7f230541f",
+    "Packages/UI/Sources/UI/Views/ArtworkPreview.swift": "4d7b5dd58a1a02a0eaef192fdb535bd34a4de92eae0e63599f3e0932a5f7ac89",
+    "Packages/UI/Sources/UI/Views/GenerationInspector.swift": "0abbfa6da02c063145d9e8318810aed47d69c8e9d4c5b7d33109227e24da4bb7",
+    "Packages/UI/Sources/UI/Views/WorkbenchTasks.swift": "7d4675534344904b85673326fcbf5dffc1811b519fe88fe43a537acaa23ad51e",
+    "Packages/UI/Sources/UI/Views/WorkbenchView.swift": "b2eb77cccbe761ed47460c4537e36d62540cf0c7b97d6cc3010985c2dea61b3e",
+    "Packages/UI/Tests/UITests/ProjectStoreTests.swift": "cbefb79d4c760f6b8616ae5c0305974359cdd6e07dd7ca4ba1c3fbe5c8a75977",
+    "Packages/UI/Tests/UITests/WorkbenchModelConcurrencyTests.swift": "6a9039e023ed32c5f5c07f11225b8e3d66a580858fb56fa11ffc4d9323d624f9",
+    "Packages/UI/Tests/UITests/WorkbenchModelTests.swift": "665de2fe940806ac2b84c60fe70e338bf8b6498815de6ae771ec2515881d9a09",
+    "scripts/test-workbench.sh": "91682120252012135c286ef230875660df1e269fb9f19a5e116c485d2f02f0b8"
+  },
+  "scopeNotes": [
+    "No core runtime/text inference implementation changes.",
+    "No vendor changes. Image backend changes only directory traversal for sandbox grants.",
+    "Full GPU output validation used the pre-draft C1 build; final lifecycle/draft/quit/cancel and moved-project recovery were exercised on final C1 application iterations.",
+    "The final app remains open with the moved acceptance project."
+  ]
+}

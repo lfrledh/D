@@ -1,6 +1,6 @@
 # 正式图像核心 B2：调用和边界
 
-B2 将已验证的分阶段 FLUX.2 计算接入 `DInference → DRuntime → DMLXBackend`。文本与图像由同一个运行时排队，在进程内共用一个 MLX 重推理许可。没有新增生产框架包；旧 SwiftUI 应用仍使用旧生成入口，尚未接入这一链路。
+B2 将已验证的分阶段 FLUX.2 计算接入 `DInference → DRuntime → DMLXBackend`。文本与图像由同一个运行时排队，在进程内共用一个 MLX 重推理许可。没有新增生产框架包；新的图像项目工作台已接入这一链路，应用使用方式与实测范围见 [工作台验收](WORKBENCH_ACCEPTANCE.zh-CN.md)。
 
 ## 支持范围
 

@@ -4,7 +4,7 @@
 
 D 是面向专业 AI 创作者、兼顾初学者的原生 Mac 本地推理工作站。原生 MLX 推理与高完成度体验是核心。完整依据见 docs/ARCHITECTURE_RESEARCH.zh-CN.md 与 docs/decisions/。
 
-当前处于渐进迁移阶段：根 Package.swift 的 DInference/DRuntime 是纯框架；同仓 Backends/MLX 中的 DMLXBackend 提供真实文本与图像后端，d-infer 是宿主 CLI。B2 复用这三个核心模块，没有新增生产框架包。Packages/* 仍供旧应用使用，旧 SwiftUI 入口尚未接入新 runtime。六个原子模块已成为主仓库普通目录，Swift package 边界暂留。
+当前处于渐进迁移阶段：根 Package.swift 的 DInference/DRuntime 是纯框架；同仓 Backends/MLX 中的 DMLXBackend 提供真实文本与图像后端，d-infer 是宿主 CLI。B2 复用这三个核心模块，没有新增生产框架包。D 应用已迁移到图像项目工作台：Packages/UI 仅依赖 DInference，包含项目、任务应用服务与 Liquid Glass 视图，具体 runtime/MLX 在 D/AppSessionFactory.swift 装配。其他旧 Packages/* 不再接入应用，源代码暂留。六个原子模块仍是主仓库普通目录。当前产品目标与状态统一维护在 docs/PRODUCT_GOALS.zh-CN.md，工作台检查点以 docs/WORKBENCH_ACCEPTANCE.zh-CN.md 的实际证据为准。
 
 图像 B2 已通过 DRuntime 调度固定 FLUX.2 Klein 4B q8，支持 512²、4 步、guidance 1、本地模型完整校验、分阶段加载、进度、取消与图片引用。图文 XCTest 已实际通过 61 项声明／120 个展开场景，0 失败、0 跳过，包含 12 个阶段取消、图文交接、消费者失败、损坏权重和输出目录故障；观测释放后的 MLX 活跃分配与缓存均为 0。最终图像 CLI 17/17、文本 CLI 10/10 和旧应用构建均通过；不能把构建通过视作 UI 已迁移。调用规则见 docs/IMAGE_RUNTIME_GUIDE.zh-CN.md，最终检查点证据与未完成项以 docs/IMAGE_RUNTIME_ACCEPTANCE.zh-CN.md 为准。
 
@@ -43,7 +43,9 @@ D 是面向专业 AI 创作者、兼顾初学者的原生 Mac 本地推理工作
 
 - 用户已授权按验证需要下载真实模型权重并执行本地推理，优先存放外置 SSD，固定来源并校验文件。本机 M4／16 GiB：选择模型与测试参数时须评估权重、上下文/KV 缓存、推理工作区及系统余量，逐步提高负载并记录实际峰值；不能把权重文件大小当作运行内存需求，也不能用小文本模型结果替代图像等负载的实测。
 - 新核心：`./scripts/test-foundation.sh`（Swift 6，无模型下载）。
-- 原应用：`./scripts/build-local.sh`（D.xcworkspace，固定 vendor MLX 与锁定远程依赖）。
+- 项目与工作台服务：`./scripts/test-workbench.sh`（Swift 6，CPU 图片 fixture，不加载 MLX；测试目录和缓存使用外盘）。
+- XCTest 的 build/test 会给宿主签名注入临时沙盒例外；做真实权限验收或交付前必须重新正常 build，并核验签名中没有测试例外。CUA 的真实 UI 验证不能虚报为 XCTest UI 测试执行成功。
+- 新工作台应用：`./scripts/build-local.sh`（D.xcworkspace，固定 vendor MLX 与锁定远程依赖）。
 - MLX CLI：`./scripts/build-mlx.sh` 构建文本／图像共用的 d-infer。文本固定模型文件校验：`python3 scripts/download-test-model.py --verify-only`；图像固定模型校验与调用参数见 docs/IMAGE_RUNTIME_GUIDE.zh-CN.md。
 - CLI 真实进程验证：文本 `python3 scripts/verify-mlx-cli.py`；图像 `python3 scripts/verify-image-cli.py`。后者 `--offline-only` 只验证帮助和参数，不能记为真实推理通过；完整报告使用新目录，保留原有图片和证据。
 - MLX 所有权回归：`./scripts/test-mlx-ownership.sh`；固定源码校验：`python3 scripts/verify-mlx-vendor.py` 与 `python3 scripts/verify-flux2-vendor.py`。不要直接修改 vendor 清单之外的源文件；来源和增量见 Vendor/README.md 与 docs/FLUX2_DEPENDENCY_PATCH.zh-CN.md。

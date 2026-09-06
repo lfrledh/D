@@ -1,27 +1,15 @@
-// swift-tools-version:5.9
+// swift-tools-version: 6.0
 import PackageDescription
 
+// Workbench application services and views. Inference implementation is injected by the app.
 let package = Package(
     name: "UI",
-    platforms: [.macOS(.v14)],
-    products: [
-        .library(name: "UI", targets: ["UI"]),
-    ],
-    dependencies: [
-        .package(name: "Core", path: "../Core"),
-        .package(name: "TextInference", path: "../TextInference"),  // 添加依赖
-        .package(name: "ImageInference", path: "../ImageInference"), // 新增依赖
-    ],
+    platforms: [.macOS("26.0")],
+    products: [.library(name: "UI", targets: ["UI"])],
+    dependencies: [.package(name: "DPlatform", path: "../..")],
     targets: [
-        .target(
-            name: "UI",
-            dependencies: ["Core", "TextInference", "ImageInference"],
-            path: "Sources/UI"
-        ),
-        .testTarget(
-            name: "UITests",
-            dependencies: ["UI"],
-            path: "Tests/UITests"
-        ),
-    ]
+        .target(name: "UI", dependencies: [.product(name: "DInference", package: "DPlatform")]),
+        .testTarget(name: "UITests", dependencies: ["UI", .product(name: "DRuntime", package: "DPlatform")]),
+    ],
+    swiftLanguageModes: [.v6]
 )

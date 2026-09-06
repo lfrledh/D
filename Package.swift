@@ -2,7 +2,7 @@
 import PackageDescription
 
 // The new runtime has no MLX, UI, network, or model-weight dependency.
-// Legacy Packages/* remain in the app until each backend is migrated and verified.
+// The image workbench lives in Packages/UI; the app injects the MLX integration.
 let package = Package(
     name: "DPlatform",
     platforms: [.macOS(.v14)],
