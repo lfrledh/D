@@ -1,0 +1,48 @@
+{
+  "import_date": "2026-09-06",
+  "method": "Byte-identical import at existing paths; Swift package boundaries unchanged. Original remote repositories retain their histories. Local full-history bundles are outside the source repository.",
+  "modules": [
+    {
+      "name": "AIAssistant",
+      "path": "Packages/AIAssistant",
+      "repository": "https://github.com/lfrledh/AIAssistant.git",
+      "commit": "79975d75a148c44e7cc7a4ca3cc538858f67f875",
+      "tree": "f304342dc71677abcf694b4d0233156fa54660ef"
+    },
+    {
+      "name": "Core",
+      "path": "Packages/Core",
+      "repository": "https://github.com/lfrledh/Core.git",
+      "commit": "2da91443d6b7d466b9df70836f8f3065c53e55db",
+      "tree": "b11b83d91a29a0927263c12e9b2a0af8931b1852"
+    },
+    {
+      "name": "ImageInference",
+      "path": "Packages/ImageInference",
+      "repository": "https://github.com/lfrledh/ImageInference.git",
+      "commit": "a4e6d484cc23b094607d96fecbe4d229c1408ee2",
+      "tree": "26434b727750c5b7043a5be049f23216d1d25116"
+    },
+    {
+      "name": "ModelLoading",
+      "path": "Packages/ModelLoading",
+      "repository": "https://github.com/lfrledh/ModelLoading.git",
+      "commit": "607d286ddcda96d242470dbf0cd571fdca3c148f",
+      "tree": "b031f79aaaa26f2c5f21c8b269b2ae3bcb9ff8b9"
+    },
+    {
+      "name": "TextInference",
+      "path": "Packages/TextInference",
+      "repository": "https://github.com/lfrledh/TextInference.git",
+      "commit": "d8904410f006a27eb7e7e3a2313a3a1e203cc142",
+      "tree": "ce9c5fc3748e71ab949b0bebb0044959e0b1ce92"
+    },
+    {
+      "name": "UI",
+      "path": "Packages/UI",
+      "repository": "https://github.com/lfrledh/UI.git",
+      "commit": "7c7ac36968f49abe9edd9311428278f42a664330",
+      "tree": "a6ce577e24f802d2f74ab94735ecd98c6cb3d24f"
+    }
+  ]
+}

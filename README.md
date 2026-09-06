@@ -15,18 +15,17 @@
 - Xcode 的本用户 WorkspaceSettings 已将 DerivedData 放在外盘；该本地偏好不提交；命令行和 Xcode 项目缓存目录内均设置 SourcePackages 链接，以复用外盘依赖。Xcode 会在指定 DerivedData 内再创建项目子目录。首次打开留下约 636 MB 内置盘临时缓存，未删除。
 - 外盘需要保持挂载。系统工具、用户偏好及部分系统管理缓存仍位于内置盘。
 
-## 子模块
+## 版本管理
 
-主仓库包含 6 个独立 Git 子模块，修改子模块源码后需先保存子模块提交，再更新主仓库引用。
+原来的六个 Git 子模块现已纳入主仓库，保留原路径与 Swift package 边界。原仓库历史与导入提交见 [来源记录](docs/history/SUBMODULE_PROVENANCE.json)。现在一次提交即可保存应用与各模块的关联修改。
 
-从零检出（HTTPS，无需 SSH 密钥）：
+从零检出（HTTPS，无需 SSH 密钥或递归子模块初始化）：
 
 ```sh
 git clone https://github.com/lfrledh/D.git
-git -C D -c url.https://github.com/.insteadOf=git@github.com: submodule update --init --recursive
 ```
 
-环境适配包含 ImageInference 的一个 `Darwin.sqrt` 编译修复。当前主仓库工作分支为 `codex/inference-foundation`，子模块修复分支为 `codex/mac-ssd-setup`。保存检查点时先提交、推送子模块，再提交、推送主仓库引用。
+环境适配包含 ImageInference 的一个 `Darwin.sqrt` 编译修复。当前主仓库工作分支为 `codex/inference-foundation`；旧子模块的修复已在导入前推送到原仓库。
 
 ## 验证范围
 
