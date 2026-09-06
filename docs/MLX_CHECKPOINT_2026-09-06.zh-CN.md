@@ -14,6 +14,7 @@
 | 验证链 | 实际结果 |
 |---|---|
 | 普通远程检出 | 六棵源码树匹配原提交，无 gitlink 或嵌套 Git；16 核心测试通过，旧应用构建通过 |
+| 新 MLX 集成的独立检出构建 | 远程 9664d2f 的普通 clone 使用自己的 build-mlx.sh 构建成功；DPlatform 路径正确，d-infer 与 Metal 库均生成，锁文件和工作区保持干净 |
 | 新 MLX 源码、CLI 和测试 bundle | Xcode `build-for-testing` 成功 |
 | CLI 实际进程验收 | 10/10：帮助、非法参数、缺模型、预算拒绝、1-token 上限、连续五轮、首块取消、SIGINT、SIGTERM、断管 |
 | MLX XCTest | 25 项声明、37 个参数展开场景已编译；尚未执行通过。首次启动在测试 bundle 加载前等待可移除宗卷授权并超时 |
@@ -35,4 +36,4 @@ macOS 授予 Xcode/xctest 访问外盘后运行 `./scripts/test-mlx.sh`，确认
 
 完成这条验证链后才能结束本阶段验收。后续商品化还需解决上述 MLX 分配问题，并扩展到长期运行、真实图像负载和应用集成；当前检查点没有声称完成这些工作。
 
-复验命令见 [参考实现指南](MLX_REFERENCE_GUIDE.zh-CN.md)。原始日志在同级 D-Development/Logs：clone-validation-summary.json、build-mlx-tests-prepared.log、cli-acceptance/summary.json、mlx-tests.log、mlx-allocation-probe.log、mlx-load-only-probe.log。报告和权重不随源码提交；这里保留可审阅的结果摘要。
+复验命令见 [参考实现指南](MLX_REFERENCE_GUIDE.zh-CN.md)。原始日志在同级 D-Development/Logs：clone-validation-summary.json、clone-mlx-validation-summary.json、build-mlx-tests-prepared.log、cli-acceptance/summary.json、mlx-tests.log、mlx-allocation-probe.log、mlx-load-only-probe.log。报告和权重不随源码提交；这里保留可审阅的结果摘要。
