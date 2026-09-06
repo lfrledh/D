@@ -1,0 +1,93 @@
+{
+  "schemaVersion": 1,
+  "packageIdentity": "mlx-swift",
+  "snapshotDirectory": "mlx-swift",
+  "createdAt": "2026-09-06T11:46:55.787165+00:00",
+  "repositories": [
+    {
+      "id": "mlx-swift",
+      "path": ".",
+      "url": "https://github.com/ml-explore/mlx-swift",
+      "revision": "6ba4827fb82c97d012eec9ab4b2de21f85c3b33d",
+      "version": "0.30.6",
+      "license": "MIT",
+      "licensePath": "LICENSE"
+    },
+    {
+      "id": "mlx",
+      "path": "Source/Cmlx/mlx",
+      "url": "https://github.com/ml-explore/mlx",
+      "revision": "185b06d9efc1c869540eccfb5baff853fff3659d",
+      "license": "MIT",
+      "licensePath": "Source/Cmlx/mlx/LICENSE"
+    },
+    {
+      "id": "mlx-c",
+      "path": "Source/Cmlx/mlx-c",
+      "url": "https://github.com/ml-explore/mlx-c",
+      "revision": "a1290d221f92bd020af805b7d14207eee4ec973b",
+      "license": "MIT",
+      "licensePath": "Source/Cmlx/mlx-c/LICENSE"
+    }
+  ],
+  "snapshot": {
+    "fileCount": 1811,
+    "upstreamBytes": 23200811,
+    "patchedBytes": 23202968,
+    "manifest": "mlx-swift.files.json",
+    "manifestSHA256": "38f80368c0353176d43b880759fd391f7ab6b8cf60bd09a1d840778af9c8964e"
+  },
+  "patch": {
+    "file": "patches/mlx-array-ownership.patch",
+    "sha256": "adcd5ca948fdb4679dc6ab7152a985f6e05e283c73ee0de31619c7f7d9525d16",
+    "sourceExperimentPatchSHA256": "bc754e3c530a237b0e51c7952d926ef45452b3b9c9e41bdf156ce5b03c163ac0",
+    "upstreamPullRequest": "https://github.com/ml-explore/mlx/pull/4453",
+    "upstreamTitle": "Break the sibling cycle when an array is released by assignment",
+    "upstreamAuthor": "tudalex",
+    "upstreamHeadRepository": "https://github.com/tudalex/mlx",
+    "upstreamHead": "5002b5ff6adff93a9a439d012e60773c171ec206",
+    "upstreamStateAtReview": "open",
+    "reviewedOn": "2026-09-06",
+    "adaptation": "Backport array descriptor reset/assignment ownership handling to the pinned C++ tree; mirror header changes into the Swift framework header. No other upstream source changes.",
+    "modifiedFiles": [
+      {
+        "path": "Source/Cmlx/include-framework/mlx-array.h",
+        "upstreamSHA256": "9400ca16f7f3a7999cdadaea531091f44787e0bf95b309a477647831a2b5c810",
+        "sha256": "c1533e5c52550bbe68edaca462e17e23cc8d5e928cf889396dbbc7df5c5e1852",
+        "upstreamSize": 17664,
+        "size": 18619
+      },
+      {
+        "path": "Source/Cmlx/mlx/mlx/array.cpp",
+        "upstreamSHA256": "5068a714eacf6b5505224da5b4aa5a48d3bf5934abafae68cdf999e0a9e1b3aa",
+        "sha256": "af208c1fc1c7f697e5dc55931c538431fcfef15182e0d7101702f4e9b4d20a2f",
+        "upstreamSize": 9952,
+        "size": 10199
+      },
+      {
+        "path": "Source/Cmlx/mlx/mlx/array.h",
+        "upstreamSHA256": "2afde69d4e1a00d6526b2127620e28f04b1a52e61873b9a708ac836ff8a1a57c",
+        "sha256": "096d013a5c2abc5d2fda4a719ff8597085d37e992bb1a617efd51190879890b1",
+        "upstreamSize": 17613,
+        "size": 18568
+      }
+    ]
+  },
+  "expandedGitlinks": [
+    {
+      "path": "Source/Cmlx/mlx",
+      "revision": "185b06d9efc1c869540eccfb5baff853fff3659d",
+      "url": "https://github.com/ml-explore/mlx"
+    },
+    {
+      "path": "Source/Cmlx/mlx-c",
+      "revision": "a1290d221f92bd020af805b7d14207eee4ec973b",
+      "url": "https://github.com/ml-explore/mlx-c"
+    }
+  ],
+  "additionalNotices": [
+    "ACKNOWLEDGMENTS.md",
+    "Source/Cmlx/vendor-README.md",
+    "Source/Cmlx/mlx/ACKNOWLEDGMENTS.md"
+  ]
+}

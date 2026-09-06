@@ -8,11 +8,11 @@
 
 MLX XCTest 已完成 `build-for-testing`；实际执行在加载测试 bundle 前受到 Xcode/xctest 外盘访问授权提示阻塞并超时。等待系统授权后须重新运行，当前不能记作测试通过。纯框架的 16 项测试与旧应用构建已通过，但它们也不能替代这组真实模型测试。
 
-本次 CLI 连续五轮释放后的 `activeBytes` 为 2720、5440、8160、10880、13600，`cacheBytes` 均为 0。独立纯上游模型加载复现了相同增长，见 [分配调查与复验](research/MLX_ALLOCATION_FINDINGS.zh-CN.md)。**CLI 验收通过属于当前证据，MLX 阶段仍待完整验收；不据此宣称零泄漏或旧 UI 已迁移。** 具体交付与剩余验收见 [本轮检查点](MLX_CHECKPOINT_2026-09-06.zh-CN.md)。
+原版每轮 2720 字节的增长已通过回移 MLX 数组所有权修复解决。C++ 7 组/36 项检查通过，50 轮真实加载/生成/释放后的 `activeBytes` 和 `cacheBytes` 均为 0。见 [修复报告](MLX_OWNERSHIP_FIX.zh-CN.md) 与 [原始调查](research/MLX_ALLOCATION_FINDINGS.zh-CN.md)。这不替代完整 XCTest，也不是所有模型、长期运行或整个进程无泄漏的证明。
 
 ## 环境与构建
 
-Apple Silicon Mac、Xcode 与 Python 3；本机为 M4 / 16 GiB。首次依赖解析需要网络，依赖由 Backends/MLX/Package.resolved 锁定。纯 runtime 测试仍可独立执行，不依赖 MLX 或模型。
+Apple Silicon Mac、Xcode 与 Python 3；本机为 M4 / 16 GiB。打开根目录 D.xcworkspace。MLX 使用同仓 Vendor/mlx-swift 固定源码，其他远程依赖由解析锁文件固定，首次解析仍需要网络。两个构建入口都把 vendor 注册为 workspace 根包，确保统一覆盖远程间接依赖。纯 runtime 测试仍可独立执行，不依赖 MLX 或模型。
 
 在项目根目录运行：
 
@@ -22,7 +22,7 @@ Apple Silicon Mac、Xcode 与 Python 3；本机为 M4 / 16 GiB。首次依赖解
 python3 scripts/download-test-model.py
 ```
 
-构建脚本只在 stdout 输出 d-infer 的绝对路径，日志在项目同级 D-Development/Logs/build-mlx.log。默认构建目录是同级 BuildCaches/D-MLX；可用 D_MLX_BUILD_ROOT 覆盖。必须保留 Xcode 生成的产品目录与 MLX 资源 bundle；不能只复制单个二进制后假设 Metal 资源仍可找到。
+构建脚本只在 stdout 输出 d-infer 的绝对路径，日志在项目同级 D-Development/Logs/build-mlx.log。依赖检出缓存为 D-Development/SourcePackages-MLX，与旧应用的 SourcePackages-App 分开。默认构建目录是同级 BuildCaches/D-MLX；可用 D_MLX_BUILD_ROOT 覆盖。必须保留 Xcode 生成的产品目录与 MLX 资源 bundle；不能只复制单个二进制后假设 Metal 资源仍可找到。
 
 模型默认下载到同级 D-Development/Models/Qwen2.5-0.5B-Instruct-4bit，共约 276 MiB。清单 fixtures/text-model.json 固定 revision、大小和摘要，脚本不执行远程模型代码。已有文件只有校验通过才跳过；下载后原子替换完整文件。可用 --destination 指定另一个仓库外目录。
 
@@ -48,12 +48,14 @@ python3 scripts/download-test-model.py
 ## 可重复验收
 
 ```sh
+python3 scripts/verify-mlx-vendor.py
 python3 scripts/download-test-model.py --verify-only
+./scripts/test-mlx-ownership.sh
 ./scripts/test-mlx.sh
 python3 scripts/verify-mlx-cli.py
 ```
 
-test-mlx.sh 先验证全部模型文件，再 build-for-testing，并把模型目录注入测试进程。日志在 D-Development/Logs/mlx-tests.log，结构化 Xcode 结果保存在该目录的 MLXTests-*.xcresult。执行结束后，脚本还会检查真实取消和连续运行证据；缺少模型、启动超时或只有测试构建成功都不会变成“通过”。可把其他位置的同一固定 fixture 路径作为脚本第一个参数。
+test-mlx.sh 先验证依赖源码和全部模型文件，再使用 DMLXTests scheme build-for-testing，明确检查测试清单包含 DMLXBackendTests，并把模型目录注入测试进程。日志在 D-Development/Logs/mlx-tests.log，结构化 Xcode 结果保存在该目录的 MLXTests-*.xcresult。执行结束后，脚本还会检查真实取消和连续运行证据；缺少模型、启动超时或只有测试构建成功都不会变成“通过”。可把其他位置的同一固定 fixture 路径作为脚本第一个参数。
 
 首次在外置磁盘运行 Xcode 测试时，macOS 可能要求 Xcode/xctest 访问“可移除宗卷”。需要在系统提示中允许；测试进程可能在加载 bundle 前等待授权，这不表示推理已经执行。
 
@@ -66,7 +68,7 @@ CLI 验证器覆盖帮助、参数错误、无效模型目录、预算拒绝、�
 - 当前真实基准使用固定的 Qwen2.5-0.5B-Instruct-4bit；不代表其他 Qwen2 权重或其他架构已验收。支持的量化参数有明确限制，后续扩展必须增加真实证据。
 - 默认最多 2048 个输入 token、1024 个输出 token；实际还受模型上下文限制。加载与同步 prefill 不能被强制瞬间中断。
 - activeBytes/cacheBytes/peakBytes 是进程内 MLX allocator 数据，不等于系统 RSS。单次剩余分配不能直接证明泄漏，也不能自动归因于无害的全局缓存；需要检查随运行次数的变化并定位来源。
-- CLI 五轮检查允许释放后活跃分配相对首轮增长不超过 64 MiB，用于发现明显资源残留。这是短时回归阈值，不能证明长期无增长；当前观测到的约 2720 字节/轮增长已在纯上游加载路径复现，尚未修复。
+- CLI 与真实测试的五轮检查允许释放后活跃分配相对首轮最多增加 1024 bytes，能检测原 2720 bytes/轮的回归；C++ weak_ptr 测试直接验证释放语义。短轮次数值检查不能替代长期运行和其他模型验证。
 - memory-budget-mib 是加载前估计准入，包含权重、KV、工作区与缓存，不是硬 OOM 限制。
 - 本实现按次释放模型，以验证清晰的生命周期；没有常驻模型复用优化。避免在旧 UI 推理同时运行时接入同进程新后端，直到资源入口统一。
 - CLI 成功不证明旧应用的下载书签、图像生成、项目保存或界面体验已经完成。

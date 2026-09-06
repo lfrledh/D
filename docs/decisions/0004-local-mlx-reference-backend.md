@@ -8,7 +8,7 @@
 
 分离 package 是为了让 SwiftPM 解析依赖和 Xcode Metal 资源构建不成为纯调度测试的前置条件。两个 package 都有实际使用者，不创建其他预留包。旧 Packages/* 的 Swift manifest 暂时保留，旧 UI 尚未接入新 runtime。
 
-锁定 MLX 0.30.6、mlx-swift-lm 2.30.6、swift-transformers 1.1.8；集成 package 有自己的 Package.resolved。使用 Xcode 编译 Metal 资源，CLI 与资源 bundle 一起保存在外盘。
+初始锁定 MLX 0.30.6、mlx-swift-lm 2.30.6、swift-transformers 1.1.8；MLX 后续按 [ADR 0005](0005-owned-mlx-compatibility-patch.md) 改用带小补丁的同仓快照，其他版本保持一致；集成 package 有自己的 Package.resolved。使用 Xcode 编译 Metal 资源，CLI 与资源 bundle 一起保存在外盘。
 
 真实 maxTokens=1/32 实验发现 LM 2.30.6 将正常长度终止标为 cancelled。源码 generateLoopTask 的 for-in 迭代 TokenIterator 值副本，随后检查原值的 tokenCount。适配层在父任务和生成任务均未取消、实际 token 数恰好达到请求上限时，将该原因规范化为 length，并在元数据保留 upstreamStopReason。真实取消优先，不把未达到上限的意外终止转换为成功。此兼容逻辑有回归测试；未来升级依赖时复核并删除已无必要的修正。
 
@@ -40,7 +40,7 @@ fixture 固定 Hugging Face revision 与每个文件的大小/摘要，权重不
 
 fixture 校验还拒绝未列入清单的权重、目录和元数据，避免上游递归权重发现加载额外文件却仍被标记为固定版本。CLI 验收在启动用例前执行完整 fixture 校验。
 
-每轮约 2720 bytes 的 MLX 活跃分配增长已在不依赖 D、只调用上游 loadContainer 的程序中复现。最小数组赋值对照与上游引用环问题吻合；保留锁定依赖和独立 probe，不修改 SwiftPM 外部 checkout。此限制尚未修复，不能声明长期内存稳定，见 [调查记录](../research/MLX_ALLOCATION_FINDINGS.zh-CN.md)。
+每轮约 2720 bytes 的 MLX 活跃分配增长已在不依赖 D、只调用上游 loadContainer 的程序中复现。最小数组赋值对照与上游引用环问题吻合；保留锁定依赖和独立 probe，不修改 SwiftPM 外部 checkout。此缺陷已在后续固定 vendor 补丁中修复；仍不能据此声明所有负载的长期内存稳定，见 [调查记录](../research/MLX_ALLOCATION_FINDINGS.zh-CN.md)。
 
 真实测试必须显式提供模型路径；复验脚本先验证 fixture，再向 xctestrun 注入环境变量，检查真实执行证据。无模型时的 skipped suite 不能被记作通过。测试覆盖正常输出、token 上限、取消和队列交接、连续运行、部分加载失败及消费者错误后的恢复。
 

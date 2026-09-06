@@ -4,14 +4,15 @@ PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DEVELOPMENT_ROOT="${D_DEVELOPMENT_ROOT:-$(dirname "$PROJECT_ROOT")/D-Development}"
 MLX_BUILD_ROOT="${D_MLX_BUILD_ROOT:-$(dirname "$PROJECT_ROOT")/BuildCaches/D-MLX}"
 MODEL_DIR="${1:-$DEVELOPMENT_ROOT/Models/Qwen2.5-0.5B-Instruct-4bit}"
+python3 "$PROJECT_ROOT/scripts/verify-mlx-vendor.py"
 mkdir -p "$DEVELOPMENT_ROOT/Logs" "$DEVELOPMENT_ROOT/TestTemporary"
 # A missing or damaged fixture is a failed acceptance run, never a silently skipped suite.
 python3 "$PROJECT_ROOT/scripts/download-test-model.py" --destination "$MODEL_DIR" --verify-only >/dev/null
 cd "$PROJECT_ROOT/Backends/MLX"
-xcodebuild -scheme DMLXIntegration-Package -configuration Debug \
+xcodebuild -workspace "$PROJECT_ROOT/D.xcworkspace" -scheme DMLXTests -configuration Debug \
   -enableCodeCoverage NO \
   -destination 'platform=macOS,arch=arm64' -derivedDataPath "$MLX_BUILD_ROOT" \
-  -clonedSourcePackagesDirPath "$DEVELOPMENT_ROOT/SourcePackages" \
+  -clonedSourcePackagesDirPath "$DEVELOPMENT_ROOT/SourcePackages-MLX" \
   -onlyUsePackageVersionsFromResolvedFile CODE_SIGNING_ALLOWED=NO build-for-testing \
   > "$DEVELOPMENT_ROOT/Logs/build-mlx-tests.log" 2>&1 || {
     awk '/error:|BUILD FAILED|TEST BUILD FAILED/ {print NR ":" $0}' "$DEVELOPMENT_ROOT/Logs/build-mlx-tests.log" >&2
@@ -20,7 +21,7 @@ xcodebuild -scheme DMLXIntegration-Package -configuration Debug \
 TEST_RUN=$(python3 - "$MLX_BUILD_ROOT/Build/Products" "$MODEL_DIR" "$DEVELOPMENT_ROOT/TestTemporary" <<'PY'
 import pathlib, plistlib, sys
 products = pathlib.Path(sys.argv[1])
-candidates = [p for p in products.glob('*.xctestrun') if not p.name.startswith('D-configured-')]
+candidates = list(products.glob('DMLXTests_*.xctestrun'))
 if not candidates:
     raise SystemExit('Xcode did not produce an xctestrun file.')
 source = max(candidates, key=lambda p: p.stat().st_mtime)
@@ -30,7 +31,7 @@ count = 0
 def configure(node):
     global count
     if isinstance(node, dict):
-        if 'TestBundlePath' in node:
+        if 'TestBundlePath' in node and node.get('BlueprintName') == 'DMLXBackendTests':
             node.setdefault('EnvironmentVariables', {}).update({
                 'D_TEST_MODEL_DIR': str(pathlib.Path(sys.argv[2]).resolve()),
                 'D_TEST_TEMP_DIR': sys.argv[3],
@@ -42,8 +43,8 @@ def configure(node):
         for value in node:
             configure(value)
 configure(data)
-if count == 0:
-    raise SystemExit('No test targets found; refusing an unconfigured test run.')
+if count != 1:
+    raise SystemExit(f'Expected one DMLXBackendTests target, found {count}; refusing an unconfigured test run.')
 destination = products / ('D-configured-' + source.name)
 with destination.open('wb') as f:
     plistlib.dump(data, f)

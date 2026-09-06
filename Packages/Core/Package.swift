@@ -8,7 +8,7 @@ let package = Package(
         .library(name: "Core", targets: ["Core"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/ml-explore/mlx-swift", from: "0.15.0"),
+        .package(path: "../../Vendor/mlx-swift"),
     ],
     targets: [
         .target(

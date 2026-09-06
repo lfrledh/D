@@ -1,0 +1,183 @@
+diff --git a/Source/Cmlx/mlx/mlx/array.cpp b/Source/Cmlx/mlx/mlx/array.cpp
+--- a/Source/Cmlx/mlx/mlx/array.cpp
++++ b/Source/Cmlx/mlx/mlx/array.cpp
+@@ -205,33 +205,38 @@
+   copy_shared_buffer(other, other.strides(), other.flags(), other.data_size());
+ }
+ 
+-array::~array() {
+-  if (array_desc_ == nullptr) {
++void array::reset(std::shared_ptr<ArrayDesc> desc) {
++  // Hold the new descriptor first, so that a cycle it belongs to has an
++  // outside reference while the old one is checked below
++  auto previous = std::move(array_desc_);
++  array_desc_ = std::move(desc);
++
++  if (previous == nullptr) {
+     return;
+   }
+ 
+   // Detached/detaching
+-  if (array_desc_->primitive == nullptr) {
++  if (previous->primitive == nullptr) {
+     return;
+   }
+ 
+   // Break circular reference for non-detached arrays with siblings
+-  if (auto n = siblings().size(); n > 0) {
++  if (auto n = previous->siblings.size(); n > 0) {
+     bool do_detach = true;
+     // If all siblings have siblings.size() references except
+-    // the one we are currently destroying (which has siblings.size() + 1)
++    // the one we are currently releasing (which has siblings.size() + 1)
+     // then there are no more external references
+-    do_detach &= (array_desc_.use_count() == (n + 1));
+-    for (auto& s : siblings()) {
++    do_detach &= (previous.use_count() == (n + 1));
++    for (auto& s : previous->siblings) {
+       do_detach &= (s.array_desc_.use_count() == n);
+       if (!do_detach) {
+         break;
+       }
+     }
+     if (do_detach) {
+-      for (auto& s : siblings()) {
++      for (auto& s : previous->siblings) {
+         for (auto& ss : s.siblings()) {
+-          // Set to null here to avoid descending into array destructor
++          // Set to null here to avoid descending into reset()
+           // for siblings
+           ss.array_desc_ = nullptr;
+         }
+diff --git a/Source/Cmlx/mlx/mlx/array.h b/Source/Cmlx/mlx/mlx/array.h
+--- a/Source/Cmlx/mlx/mlx/array.h
++++ b/Source/Cmlx/mlx/mlx/array.h
+@@ -80,13 +80,26 @@
+   array& operator=(array&& other) && = delete;
+ 
+   /** Default copy and move constructors otherwise. */
+-  array& operator=(array&& other) & = default;
+   array(const array& other) = default;
+   array(array&& other) = default;
+ 
++  /**
++   * Assignment goes through reset() so that the sibling reference cycle of a
++   * multi-output primitive is broken when the last external reference to it
++   * goes away by assignment rather than by destruction. Otherwise a cycle can
++   * outlive everything that used it and keep its inputs (including captured
++   * constants) alive forever.
++   */
++  array& operator=(array&& other) & noexcept {
++    if (this != &other) {
++      reset(std::move(other.array_desc_));
++    }
++    return *this;
++  }
++
+   array& operator=(const array& other) & {
+     if (this->id() != other.id()) {
+-      this->array_desc_ = other.array_desc_;
++      reset(other.array_desc_);
+     }
+     return *this;
+   }
+@@ -455,10 +468,12 @@
+   void copy_shared_buffer(const array& other);
+ 
+   void overwrite_descriptor(const array& other) {
+-    array_desc_ = other.array_desc_;
+-  }
+-
+-  ~array();
++    reset(other.array_desc_);
++  }
++
++  ~array() {
++    reset();
++  }
+ 
+  private:
+   // Initialize the arrays data
+@@ -521,6 +536,16 @@
+   // the primitive which knows how to compute the array's data from its inputs
+   // and the list of array's inputs for the primitive.
+   std::shared_ptr<ArrayDesc> array_desc_;
++
++  /**
++   * Like shared_ptr::reset: drop the current descriptor and hold desc instead
++   * (null when destroying). Dropping it breaks the sibling reference cycle of
++   * a multi-output primitive if this was the last reference to it from outside
++   * the cycle. The new descriptor is held before the old one is checked, so a
++   * sibling assigned over the last outside reference to its own cycle does not
++   * have that cycle broken under it.
++   */
++  void reset(std::shared_ptr<ArrayDesc> desc = nullptr);
+ };
+ 
+ template <typename T>
+diff --git a/Source/Cmlx/include-framework/mlx-array.h b/Source/Cmlx/include-framework/mlx-array.h
+--- a/Source/Cmlx/include-framework/mlx-array.h
++++ b/Source/Cmlx/include-framework/mlx-array.h
+@@ -81,13 +81,26 @@
+   array& operator=(array&& other) && = delete;
+ 
+   /** Default copy and move constructors otherwise. */
+-  array& operator=(array&& other) & = default;
+   array(const array& other) = default;
+   array(array&& other) = default;
+ 
++  /**
++   * Assignment goes through reset() so that the sibling reference cycle of a
++   * multi-output primitive is broken when the last external reference to it
++   * goes away by assignment rather than by destruction. Otherwise a cycle can
++   * outlive everything that used it and keep its inputs (including captured
++   * constants) alive forever.
++   */
++  array& operator=(array&& other) & noexcept {
++    if (this != &other) {
++      reset(std::move(other.array_desc_));
++    }
++    return *this;
++  }
++
+   array& operator=(const array& other) & {
+     if (this->id() != other.id()) {
+-      this->array_desc_ = other.array_desc_;
++      reset(other.array_desc_);
+     }
+     return *this;
+   }
+@@ -456,10 +469,12 @@
+   void copy_shared_buffer(const array& other);
+ 
+   void overwrite_descriptor(const array& other) {
+-    array_desc_ = other.array_desc_;
+-  }
+-
+-  ~array();
++    reset(other.array_desc_);
++  }
++
++  ~array() {
++    reset();
++  }
+ 
+  private:
+   // Initialize the arrays data
+@@ -522,6 +537,16 @@
+   // the primitive which knows how to compute the array's data from its inputs
+   // and the list of array's inputs for the primitive.
+   std::shared_ptr<ArrayDesc> array_desc_;
++
++  /**
++   * Like shared_ptr::reset: drop the current descriptor and hold desc instead
++   * (null when destroying). Dropping it breaks the sibling reference cycle of
++   * a multi-output primitive if this was the last reference to it from outside
++   * the cycle. The new descriptor is held before the old one is checked, so a
++   * sibling assigned over the last outside reference to its own cycle does not
++   * have that cycle broken under it.
++   */
++  void reset(std::shared_ptr<ArrayDesc> desc = nullptr);
+ };
+ 
+ template <typename T>

@@ -10,7 +10,7 @@ let package = Package(
     dependencies: [
         .package(name: "Core", path: "../Core"),
         .package(name: "ModelLoading", path: "../ModelLoading"),
-        .package(url: "https://github.com/ml-explore/mlx-swift", from: "0.15.0"),
+        .package(path: "../../Vendor/mlx-swift"),
         .package(url: "https://github.com/huggingface/swift-transformers", .upToNextMinor(from: "1.1.6")),
         .package(url: "https://github.com/ml-explore/mlx-swift-lm", .upToNextMajor(from: "2.30.6")),
     ],

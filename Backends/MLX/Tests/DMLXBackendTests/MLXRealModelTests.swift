@@ -176,11 +176,12 @@ struct MLXRealModelTests {
                 print("D_MLX_RELEASE cycle=\(index + 1) activeBytes=\(released.memory.activeBytes) cacheBytes=\(released.memory.cacheBytes) peakBytes=\(released.memory.peakBytes)")
             }
             let baseline = try #require(releaseSnapshots.first)
-            // Allow modest allocator/library initialization. A retained 278 MB model per run
-            // exceeds this threshold; system RSS is deliberately not expected to fall to zero.
+            // The original 2720-byte/load leak must fail this short-run regression check.
+            // A small bookkeeping allowance is separate from the C++ weak-reference lifetime tests;
+            // neither measurement promises that process RSS falls to zero.
             for sample in releaseSnapshots.dropFirst() {
-                #expect(sample.activeBytes <= baseline.activeBytes + 64 * 1024 * 1024)
-                #expect(sample.cacheBytes <= baseline.cacheBytes + 64 * 1024 * 1024)
+                #expect(sample.activeBytes <= baseline.activeBytes + 1024)
+                #expect(sample.cacheBytes == 0)
             }
             expectNoLateOutputs(await trace.entries())
         }

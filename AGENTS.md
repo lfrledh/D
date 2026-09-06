@@ -6,10 +6,12 @@ D 是面向专业 AI 创作者、兼顾初学者的原生 Mac 本地推理工作
 
 当前处于渐进迁移阶段：根 Package.swift 的 DInference/DRuntime 是纯框架；同仓 Backends/MLX 是有真实使用者的 MLX 集成 package；Packages/* 是仍供旧应用使用的实现。六个原子模块已成为主仓库普通目录，Swift package 边界暂留。
 
-2026-09-06 的验证快照：纯框架 16 项测试与旧应用构建通过，固定本地文本模型的 CLI 10 类验收通过。MLX XCTest 仅 build-for-testing 成功，实际执行在外盘权限授权前超时，仍待复验；每轮约 2720 字节的 MLX 活跃分配增长正在独立核查。CLI 尚未接入旧 UI，MLX 阶段未完成全部验收。docs/history 是历史资料，不是当前执行规范；后续状态以最新运行证据更新。
+2026-09-06 的验证快照：纯框架 16 项测试与旧应用构建通过，固定本地文本模型的 CLI 10 类验收通过。MLX XCTest 仅 build-for-testing 成功，实际执行在外盘权限授权前超时，仍待复验；原每轮 2720 字节增长已由固定 vendor 补丁修复；C++ 7 组/36 检查和 50 轮真实推理通过，后者每轮释放的 MLX 活跃分配与缓存均为 0。CLI 尚未接入旧 UI，MLX 阶段未完成全部验收。docs/history 是历史资料，不是当前执行规范；后续状态以最新运行证据更新。
 
 ## 依赖与并发
 
+- 用户已授权按产品质量需要升级、替换、修复第三方依赖，或自行实现；调用库是手段。发现问题应说明可复现行为、影响、选择方案及验证结果，不因属于上游就默认保留缺陷。
+- 依赖修复必须进入可重复检出的源码或固定版本配置，记录上游来源、许可证、补丁和回退/移除条件；不能只改本机 SwiftPM checkout。优先选择有证据支持、维护范围最小的方案，保持执行所有权和模块边界。
 - 新公共契约只含 Sendable 值和资源引用，不泄露 MLXArray、ChatSession、AppKit、SwiftUI。
 - DInference 不依赖 DRuntime、MLX、网络或 UI；DRuntime 只依赖 DInference 和标准库/Foundation。
 - 状态隔离和执行所有权解决并发；不得为了消除编译诊断批量添加 nonisolated、nonisolated(unsafe) 或 unchecked Sendable。
@@ -30,11 +32,12 @@ D 是面向专业 AI 创作者、兼顾初学者的原生 Mac 本地推理工作
 
 ## 本机路径与验证
 
-主项目 /Volumes/CodexProjects/Codex/D；应用产物、模型和日志使用同级 D-Development；纯核心测试 scratch 使用同级 BuildCaches/D-Foundation，避免 Swift 调试路径前缀碰撞；MLX 集成使用同级 BuildCaches/D-MLX，保留二进制旁的 Metal 资源。均优先外置 SSD。
+主项目 /Volumes/CodexProjects/Codex/D；应用产物、模型和日志使用同级 D-Development；纯核心测试 scratch 使用同级 BuildCaches/D-Foundation，避免 Swift 调试路径前缀碰撞；MLX 集成使用同级 BuildCaches/D-MLX，保留二进制旁的 Metal 资源。统一入口是 D.xcworkspace；命令行依赖检出区分 SourcePackages-App/MLX，不能将两者链接到同一个可变检出目录。均优先外置 SSD。
 
 - 新核心：`./scripts/test-foundation.sh`（Swift 6，无模型下载）。
-- 原应用：`./scripts/build-local.sh`（Xcode，原锁定依赖）。
+- 原应用：`./scripts/build-local.sh`（D.xcworkspace，固定 vendor MLX 与锁定远程依赖）。
 - MLX CLI：`./scripts/build-mlx.sh`；固定模型文件校验：`python3 scripts/download-test-model.py --verify-only`；真实进程验证：`python3 scripts/verify-mlx-cli.py`。
+- MLX 所有权回归：`./scripts/test-mlx-ownership.sh`；vendor 摘要校验：`python3 scripts/verify-mlx-vendor.py`。不要直接修改 vendor 清单之外的源文件；来源和增量见 Vendor/README.md。
 - MLX XCTest：`./scripts/test-mlx.sh`，包含模型校验、测试构建和执行证据检查。系统授权导致的启动超时不得记为模型测试已执行；授权解决后重新运行。
 - 报告、ADR、README随实际边界变化更新。无需每次手工更新project_tree.txt；若需要目录树应排除.git、缓存和构建产物。
 - 真实 MLX 集成需要验证输出、峰值内存、取消后停止和多次加载/卸载。`cacheBytes == 0` 及短轮次阈值检查不证明无泄漏；记录实际活跃分配趋势，未定位的增长保留为待核查事项。原有空模板测试不能作为这些能力的证明。

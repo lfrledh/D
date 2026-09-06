@@ -11,9 +11,9 @@
 - 纯框架与 MLX 集成构建缓存：`/Volumes/CodexProjects/Codex/BuildCaches/D-Foundation`、`/Volumes/CodexProjects/Codex/BuildCaches/D-MLX`
 - 模型下载设置：`/Volumes/CodexProjects/Codex/D-Development/Models`
 - Apple M4 / 16 GiB；macOS 26.6.2；Xcode 26.6。
-- 打开 `D.xcodeproj`，选择 `D` / `My Mac`。Debug 使用本机 ad-hoc 签名。
+- 打开 `D.xcworkspace`，应用选择 `D` / `My Mac`；CLI 使用 `d-infer`，真实后端测试使用 `DMLXTests`。Debug 使用本机 ad-hoc 签名。
 - 命令行重建：`./scripts/build-local.sh`。默认缓存位于项目同级的 `D-Development`，可用 `D_DEVELOPMENT_ROOT` 覆盖。
-- Xcode 的本用户 WorkspaceSettings 已将 DerivedData 放在外盘；该本地偏好不提交；命令行和 Xcode 项目缓存目录内均设置 SourcePackages 链接，以复用外盘依赖。Xcode 会在指定 DerivedData 内再创建项目子目录。首次打开留下约 636 MB 内置盘临时缓存，未删除。
+- 新 workspace 的本用户 WorkspaceSettings 将 GUI DerivedData 放在外盘 `D-Development/DerivedData-Workspace`，该偏好不提交。命令行的依赖检出分别位于 `SourcePackages-App` 与 `SourcePackages-MLX`，避免并行构建互相清理检出目录。首次环境设置留下的约 636 MB 内置盘临时缓存未删除。
 - 外盘需要保持挂载。系统工具、用户偏好及部分系统管理缓存仍位于内置盘。
 
 ## 版本管理
@@ -26,7 +26,7 @@
 git clone --branch codex/inference-foundation https://github.com/lfrledh/D.git
 ```
 
-环境适配包含 ImageInference 的一个 `Darwin.sqrt` 编译修复。当前主仓库工作分支为 `codex/inference-foundation`；旧子模块的修复已在导入前推送到原仓库。
+环境适配包含 ImageInference 的一个 `Darwin.sqrt` 编译修复。第三方 MLX 的固定源码、许可证、补丁和摘要保存在 [Vendor](Vendor/README.md)，由 D 的 Git 提交锁定，不需要子模块初始化。当前主仓库工作分支为 `codex/inference-foundation`；旧子模块的修复已在导入前推送到原仓库。
 
 ## 验证范围
 
@@ -34,7 +34,7 @@ git clone --branch codex/inference-foundation https://github.com/lfrledh/D.git
 
 2026-09-06 的 MLX 集成进展：固定版本的 Qwen2.5-0.5B-Instruct-4bit 已下载到外盘并校验，独立 CLI 的 10 类进程验收全部通过，覆盖真实输出、token 上限、连续运行、取消、信号与断管后的清理及报告保存。详情和复验入口见 [本地 MLX 使用说明](docs/MLX_REFERENCE_GUIDE.zh-CN.md)。
 
-MLX XCTest 已完成 `build-for-testing`，实际运行在加载测试 bundle 前遇到外盘访问权限提示并超时，尚未记为通过。连续五轮中释放缓存均为 0，但 MLX 活跃分配每轮约增加 2720 字节，正在独立核查。该阶段仍待完整验收；当前证据不代表零泄漏、旧 UI 已迁移或图像生成已验证。
+MLX XCTest 已完成 `build-for-testing`，实际运行在加载测试 bundle 前遇到外盘访问权限提示并超时，尚未记为通过。原先每轮 2720 字节增长已通过回移 MLX 所有权修复解决：C++ 7 组生命周期回归通过，50 轮真实推理释放后的 MLX 活跃分配与缓存均为 0。该证据针对已复现缺陷，不代表整个进程无任何泄漏；完整 XCTest 与旧 UI 迁移仍未完成。修复和依赖取舍见 [修复报告](docs/MLX_OWNERSHIP_FIX.zh-CN.md)。
 
 原有下载路径实现没有持久化 security-scoped bookmark，外盘目录跨重启访问仍需修复/验证；仅保存路径字符串不能保证永久授权。StableDiffusion 使用独立 HubApi，缓存路径还需统一。
 

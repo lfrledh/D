@@ -12,7 +12,7 @@ let package = Package(
     ],
     dependencies: [
         .package(name: "DPlatform", path: "../.."),
-        .package(url: "https://github.com/ml-explore/mlx-swift", exact: "0.30.6"),
+        .package(path: "../../Vendor/mlx-swift"),
         .package(url: "https://github.com/ml-explore/mlx-swift-lm", exact: "2.30.6"),
         .package(url: "https://github.com/huggingface/swift-transformers", exact: "1.1.8"),
     ],

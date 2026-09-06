@@ -8,7 +8,7 @@ import MLXLMCommon
 /// The runtime owns cancellation and calls release after execute has completely drained.
 public actor MLXTextBackend: InferenceBackend {
     public nonisolated let descriptor = BackendDescriptor(
-        id: "mlx.text", version: "0.1.0+mlx-0.30.6.lm-2.30.6", capabilities: [.textGeneration])
+        id: "mlx.text", version: "0.1.1+mlx-0.30.6.d1.lm-2.30.6", capabilities: [.textGeneration])
 
     private let configuration: MLXBackendConfiguration
     private let observer: @Sendable (MLXLifecycleEvent) async -> Void
@@ -63,8 +63,8 @@ public actor MLXTextBackend: InferenceBackend {
             try Task.checkCancellation()
             // .directory follows the upstream local tokenizer and weight paths, with no Hub download.
             // Model initialization and stochastic sampling use a per-run RNG state.
-            // This does not fix the locked MLX version's lazy-array assignment leak;
-            // the separate allocation probe and validation report document that limitation.
+            // The vendored MLX core separately fixes lazy-array assignment ownership;
+            // per-run RNG isolation is not a substitute for that core lifetime fix.
             let randomSeed = UInt64.random(in: .min ... .max)
             let randomState = MLXRandom.RandomState(seed: randomSeed)
             let loaded = try await withRandomState(randomState) {

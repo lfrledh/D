@@ -9,7 +9,7 @@ let package = Package(
     ],
     dependencies: [
         .package(name: "Core", path: "../Core"),
-        .package(url: "https://github.com/ml-explore/mlx-swift", from: "0.15.0"),
+        .package(path: "../../Vendor/mlx-swift"),
         .package(url: "https://github.com/ml-explore/mlx-swift-lm", .upToNextMajor(from: "2.30.6")),
     ],
     targets: [

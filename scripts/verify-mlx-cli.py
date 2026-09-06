@@ -156,8 +156,9 @@ def validate_case(name, process, stdout, stderr, report, revision):
             baseline = memories[0]["activeBytes"]
             growth = max(memory["activeBytes"] for memory in memories) - baseline
             measurements["maximumReleasedGrowthBytes"] = growth
-            measurements["allowedGrowthBytes"] = 64 * 1024 * 1024
-            require(growth <= 64 * 1024 * 1024,
+            # Detect the original 2720-byte/load regression while allowing small bookkeeping noise.
+            measurements["allowedGrowthBytes"] = 1024
+            require(growth <= 1024,
                     f"Released allocation grew by {growth} bytes over the first run")
         return measurements
 

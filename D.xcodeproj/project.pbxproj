@@ -297,7 +297,7 @@
 			mainGroup = ED4365852F52D7D300430841;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				ED4365BA2F52D92300430841 /* XCRemoteSwiftPackageReference "mlx-swift" */,
+				ED4365BA2F52D92300430841 /* XCLocalSwiftPackageReference "Vendor/mlx-swift" */,
 				ED4365D92F52D9B000430841 /* XCLocalSwiftPackageReference "Packages/Core" */,
 				ED4365DF2F52D9E200430841 /* XCLocalSwiftPackageReference "Packages/TextInference" */,
 				ED4365E22F52D9F800430841 /* XCLocalSwiftPackageReference "Packages/UI" */,
@@ -747,17 +747,13 @@
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Packages/ModelLoading;
 		};
+		ED4365BA2F52D92300430841 /* XCLocalSwiftPackageReference "Vendor/mlx-swift" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Vendor/mlx-swift;
+		};
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCRemoteSwiftPackageReference section */
-		ED4365BA2F52D92300430841 /* XCRemoteSwiftPackageReference "mlx-swift" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/ml-explore/mlx-swift";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 0.30.6;
-			};
-		};
 		ED6327DB2F55CE2A0019907F /* XCRemoteSwiftPackageReference "mlx-swift-examples" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/ml-explore/mlx-swift-examples";
@@ -787,37 +783,37 @@
 /* Begin XCSwiftPackageProductDependency section */
 		ED4365BB2F52D92300430841 /* MLX */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = ED4365BA2F52D92300430841 /* XCRemoteSwiftPackageReference "mlx-swift" */;
+			package = ED4365BA2F52D92300430841 /* XCLocalSwiftPackageReference "Vendor/mlx-swift" */;
 			productName = MLX;
 		};
 		ED4365BD2F52D92300430841 /* MLXFFT */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = ED4365BA2F52D92300430841 /* XCRemoteSwiftPackageReference "mlx-swift" */;
+			package = ED4365BA2F52D92300430841 /* XCLocalSwiftPackageReference "Vendor/mlx-swift" */;
 			productName = MLXFFT;
 		};
 		ED4365BF2F52D92300430841 /* MLXFast */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = ED4365BA2F52D92300430841 /* XCRemoteSwiftPackageReference "mlx-swift" */;
+			package = ED4365BA2F52D92300430841 /* XCLocalSwiftPackageReference "Vendor/mlx-swift" */;
 			productName = MLXFast;
 		};
 		ED4365C12F52D92300430841 /* MLXLinalg */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = ED4365BA2F52D92300430841 /* XCRemoteSwiftPackageReference "mlx-swift" */;
+			package = ED4365BA2F52D92300430841 /* XCLocalSwiftPackageReference "Vendor/mlx-swift" */;
 			productName = MLXLinalg;
 		};
 		ED4365C32F52D92300430841 /* MLXNN */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = ED4365BA2F52D92300430841 /* XCRemoteSwiftPackageReference "mlx-swift" */;
+			package = ED4365BA2F52D92300430841 /* XCLocalSwiftPackageReference "Vendor/mlx-swift" */;
 			productName = MLXNN;
 		};
 		ED4365C52F52D92300430841 /* MLXOptimizers */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = ED4365BA2F52D92300430841 /* XCRemoteSwiftPackageReference "mlx-swift" */;
+			package = ED4365BA2F52D92300430841 /* XCLocalSwiftPackageReference "Vendor/mlx-swift" */;
 			productName = MLXOptimizers;
 		};
 		ED4365C72F52D92300430841 /* MLXRandom */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = ED4365BA2F52D92300430841 /* XCRemoteSwiftPackageReference "mlx-swift" */;
+			package = ED4365BA2F52D92300430841 /* XCLocalSwiftPackageReference "Vendor/mlx-swift" */;
 			productName = MLXRandom;
 		};
 		ED4365DA2F52D9B000430841 /* Core */ = {
