@@ -1,0 +1,233 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-09-06T13:33:59.633735+00:00",
+  "scope": "B1 isolated FLUX.2 Klein 4B q8 512px feasibility; not DRuntime or UI acceptance",
+  "hardware": {
+    "chip": "Apple M4",
+    "physicalMemoryBytes": 17179869184,
+    "macOS": "26.6.2",
+    "xcode": "26.6",
+    "configuration": "Debug arm64"
+  },
+  "model": {
+    "repository": "mzbac/FLUX.2-klein-4B-q8",
+    "revision": "ef52ee019fd1d0e75ae4deb40476ba65989716d7",
+    "files": 18,
+    "verifiedBytes": 9426536934
+  },
+  "summary": {
+    "schemaVersion": 1,
+    "scope": "B1 isolated 512px image hardware probe",
+    "complete": true,
+    "passed": true,
+    "binarySHA256": "3844b52d8f8e356901da605da8aeafe268be3a20f5cdab48a1b13cdee5f8fffe",
+    "normal": {
+      "runs": 3,
+      "sameProcess": true,
+      "pngSHA256": [
+        "05f0b80ac7d9d6e4ffa105af12a8805cdea4425a9448f9d35a1bd9d8f8dda553",
+        "05f0b80ac7d9d6e4ffa105af12a8805cdea4425a9448f9d35a1bd9d8f8dda553",
+        "05f0b80ac7d9d6e4ffa105af12a8805cdea4425a9448f9d35a1bd9d8f8dda553"
+      ],
+      "sameSeedPNGIdentical": true,
+      "releasedActiveBytes": [
+        524304,
+        524304,
+        524304
+      ],
+      "releasedCacheBytes": [
+        0,
+        0,
+        0
+      ],
+      "mlxPeakBytes": [
+        6207522060,
+        6207522060,
+        6207522060
+      ],
+      "processMaximumResidentBytes": [
+        3109912576,
+        3856154624,
+        3856154624
+      ],
+      "elapsedSeconds": [
+        34.956566958335316,
+        34.521116250001796,
+        35.41508912499921
+      ]
+    },
+    "stopped": {
+      "exitCode": 130,
+      "releasedActiveBytes": 524304,
+      "releasedCacheBytes": 0
+    },
+    "tinyComparisonsPassed": 5
+  },
+  "tiny": {
+    "status": "passed",
+    "checks": [
+      {
+        "absoluteTolerance": 9.999999747378752e-05,
+        "actualShape": [
+          2,
+          8,
+          8
+        ],
+        "comparedElements": 128,
+        "expectedShape": [
+          2,
+          8,
+          8
+        ],
+        "maximumAbsoluteError": 0,
+        "mismatchedElements": 0,
+        "name": "prompt_embeds",
+        "nonfiniteElements": 0,
+        "passed": true,
+        "relativeTolerance": 0.0010000000474974513
+      },
+      {
+        "absoluteTolerance": 0,
+        "actualShape": [
+          2,
+          8,
+          4
+        ],
+        "comparedElements": 64,
+        "expectedShape": [
+          2,
+          8,
+          4
+        ],
+        "maximumAbsoluteError": 0,
+        "mismatchedElements": 0,
+        "name": "text_ids",
+        "nonfiniteElements": 0,
+        "passed": true,
+        "relativeTolerance": 0
+      },
+      {
+        "absoluteTolerance": 0,
+        "actualShape": [
+          2,
+          4,
+          4
+        ],
+        "comparedElements": 32,
+        "expectedShape": [
+          2,
+          4,
+          4
+        ],
+        "maximumAbsoluteError": 0,
+        "mismatchedElements": 0,
+        "name": "latent_ids",
+        "nonfiniteElements": 0,
+        "passed": true,
+        "relativeTolerance": 0
+      },
+      {
+        "absoluteTolerance": 9.999999747378752e-05,
+        "actualShape": [
+          2,
+          4,
+          8
+        ],
+        "comparedElements": 64,
+        "expectedShape": [
+          2,
+          4,
+          8
+        ],
+        "maximumAbsoluteError": 2.9653310775756836e-06,
+        "mismatchedElements": 0,
+        "name": "packed_latents",
+        "nonfiniteElements": 0,
+        "passed": true,
+        "relativeTolerance": 0.0010000000474974513
+      },
+      {
+        "absoluteTolerance": 9.999999747378752e-05,
+        "actualShape": [
+          2,
+          3,
+          8,
+          8
+        ],
+        "comparedElements": 384,
+        "expectedShape": [
+          2,
+          3,
+          8,
+          8
+        ],
+        "maximumAbsoluteError": 2.4437904357910156e-06,
+        "mismatchedElements": 0,
+        "name": "decoded",
+        "nonfiniteElements": 0,
+        "passed": true,
+        "relativeTolerance": 0.0010000000474974513
+      }
+    ],
+    "fixtureSHA256": {
+      "klein_expected.safetensors": "35396a5e188062424539030d672289c0f2a762dd012f549793f092be263bfc23",
+      "klein_inputs.safetensors": "8d30e518d7db645c168d102551ead5ac7706abaef38caf4ea67789cda801da85",
+      "scheduler/config.json": "3c233b884e8369c53ac8c8e85d5e8badbcc7b3a0c1b39e50f4d50b202527d32a",
+      "text_encoder/config.json": "3540b59d99f2d216c0277a14e91fdfa380c33793e07cdd62a467765c665d0bdc",
+      "text_encoder/model.safetensors": "949cdce9886077a5f28f22868cbd32c7c90263f536e0e6df6dbec5fb1541b297",
+      "transformer/config.json": "2f6a8356789100cf25010827bd47ec1865bdacaebd0d138e97e63f1e137dfabd",
+      "transformer/model.safetensors": "bb8413c80cc2d33735a720840a1b74317471cfa32dc22d5d856d13151cb15869",
+      "vae/config.json": "a794fc264f81e4f4730984807dd63b59b222d9f6e6235ee67baca79b8437bb88",
+      "vae/model.safetensors": "744c78a04084bdc9ea638c427e75c9b02095a1fa3c4ea5bafaa8631ac23bc878"
+    },
+    "elapsedSeconds": 0.1033459166646935,
+    "releasedActiveBytes": 48,
+    "releasedCacheBytes": 0,
+    "peakBytes": 320008
+  },
+  "sourceSHA256": {
+    "Experiments/Flux2Probe/Sources/Flux2Probe/Probe.swift": "c11ed3d0687153e06fc2ca0cdfd1c3d90d87f70b53dba8399689ee5a09ea50b3",
+    "Experiments/Flux2Probe/Sources/Flux2Probe/Parity.swift": "d6d3c5f24b039323aa567c497c320b14c8008286e719c5d47bb1c67aa36132bc",
+    "Experiments/Flux2Probe/Package.swift": "ba20618668378a3b8d9aaefe27b519b92a4a9b54bb7e6f5c513fd8bc4cd6ab4c",
+    "Experiments/Flux2Probe/Probe.xcworkspace/xcshareddata/swiftpm/Package.resolved": "e1d97f953d783ed421db0a660bf8c2559c3c66e5216afe72cc7f61f360f1e469",
+    "Experiments/Flux2Probe/validate.py": "ecb452de6bad1d20f4a6ede4fe2acfce7725cfc85d9b6e57d4eaa38477688a41",
+    "Experiments/Flux2Probe/run_monitored.py": "020d973dbb16fad2c74b21c32206dc1480cbde93ee7e7e90e8c5657395ef3934",
+    "Experiments/Flux2Probe/download_model.py": "d6e713cdbaf94baab933d241e8c459623b8886ce4f13ae7ec2dd09f5c7fbf70d",
+    "Experiments/Flux2Probe/model-manifest.json": "4868860df31cc3f17e52ec286f17171d0269f42088278ca758ae707ae00f5f6a"
+  },
+  "rawReportsDirectory": "/Volumes/CodexProjects/Codex/D-Development/Logs/flux2-probe-b1",
+  "downloaderTests": {
+    "tests": 21,
+    "passed": true
+  },
+  "monitorCleanupChecks": [
+    {
+      "command": [
+        "/Applications/Xcode.app/Contents/Developer/usr/bin/python3",
+        "-c",
+        "import signal,time; signal.signal(signal.SIGTERM,signal.SIG_IGN); time.sleep(40)"
+      ],
+      "exitCode": -9,
+      "watchdogReason": "monitor_interrupted",
+      "elapsedSeconds": 11.999412084,
+      "sampledPeakRSSBytes": 9338880,
+      "rssSamplingIntervalSeconds": 1,
+      "timeoutSeconds": 900,
+      "rssLimitBytes": 13958643712
+    },
+    {
+      "command": [
+        "/Applications/Xcode.app/Contents/Developer/usr/bin/python3",
+        "-c",
+        "import time; time.sleep(40)"
+      ],
+      "exitCode": -15,
+      "watchdogReason": "monitor_interrupted",
+      "elapsedSeconds": 1.9778616660000001,
+      "sampledPeakRSSBytes": 8568832,
+      "rssSamplingIntervalSeconds": 1,
+      "timeoutSeconds": 900,
+      "rssLimitBytes": 13958643712
+    }
+  ]
+}

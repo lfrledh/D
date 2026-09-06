@@ -6,6 +6,8 @@ D 是面向专业 AI 创作者、兼顾初学者的原生 Mac 本地推理工作
 
 当前处于渐进迁移阶段：根 Package.swift 的 DInference/DRuntime 是纯框架；同仓 Backends/MLX 是有真实使用者的 MLX 集成 package；Packages/* 是仍供旧应用使用的实现。六个原子模块已成为主仓库普通目录，Swift package 边界暂留。
 
+图像 B1 的独立实验位于 Experiments/Flux2Probe：固定 FLUX.2 Klein 4B q8 已在 M4／16 GiB 上通过 512²、4 步真实三轮和主动停止验证。它不是已接入 DRuntime/旧 UI 的图像后端；约 0.5 MiB 固定残留不等于完全释放或长期无泄漏。来源、可重复入口与后续边界见 docs/IMAGE_PROBE_RESULTS.zh-CN.md。
+
 2026-09-06 的验证快照：纯框架 17 项测试与旧应用构建通过，固定本地文本模型的 CLI 10 类验收通过。MLX XCTest 已实际通过 25 项声明／37 个展开场景，失败和跳过均为 0；原每轮 2720 字节增长已由固定 vendor 补丁修复；C++ 7 组/36 检查和 50 轮真实推理通过，后者每轮释放的 MLX 活跃分配与缓存均为 0。CLI 尚未接入旧 UI；本阶段验证范围是固定文本模型的后端生命周期。docs/history 是历史资料，不是当前执行规范；后续状态以最新运行证据更新。
 
 ## 依赖与并发
@@ -36,6 +38,7 @@ D 是面向专业 AI 创作者、兼顾初学者的原生 Mac 本地推理工作
 
 主项目 /Volumes/CodexProjects/Codex/D；应用产物、模型和日志使用同级 D-Development；纯核心测试 scratch 使用同级 BuildCaches/D-Foundation，避免 Swift 调试路径前缀碰撞；MLX 集成使用同级 BuildCaches/D-MLX，保留二进制旁的 Metal 资源。统一入口是 D.xcworkspace；命令行依赖检出区分 SourcePackages-App/MLX，不能将两者链接到同一个可变检出目录。均优先外置 SSD。
 
+- 用户已授权按验证需要下载真实模型权重并执行本地推理，优先存放外置 SSD，固定来源并校验文件。本机 M4／16 GiB：选择模型与测试参数时须评估权重、上下文/KV 缓存、推理工作区及系统余量，逐步提高负载并记录实际峰值；不能把权重文件大小当作运行内存需求，也不能用小文本模型结果替代图像等负载的实测。
 - 新核心：`./scripts/test-foundation.sh`（Swift 6，无模型下载）。
 - 原应用：`./scripts/build-local.sh`（D.xcworkspace，固定 vendor MLX 与锁定远程依赖）。
 - MLX CLI：`./scripts/build-mlx.sh`；固定模型文件校验：`python3 scripts/download-test-model.py --verify-only`；真实进程验证：`python3 scripts/verify-mlx-cli.py`。

@@ -6,6 +6,8 @@
 
 单仓整合与真实文本推理基础的四项工作已完成，最终验收结果和边界见 [基础阶段验收](docs/FOUNDATION_STAGE_ACCEPTANCE.zh-CN.md)。
 
+图像 B1 已完成独立硬件验证：FLUX.2 Klein 4B q8 在本机 16 GiB Mac 上完成 512×512／4 步生成，同进程三轮各约 35 秒，MLX 分配峰值约 5.78 GiB。实验尚未接入新 runtime 或旧 UI，详细数据与限制见 [图像探针报告](docs/IMAGE_PROBE_RESULTS.zh-CN.md)。
+
 ## 本机开发环境（2026-09-06）
 
 - 项目：`/Volumes/CodexProjects/Codex/D`
