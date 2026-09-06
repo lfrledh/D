@@ -13,6 +13,7 @@ let package = Package(
     dependencies: [
         .package(name: "DPlatform", path: "../.."),
         .package(path: "../../Vendor/mlx-swift"),
+        .package(path: "../../Vendor/flux2-swift"),
         .package(url: "https://github.com/ml-explore/mlx-swift-lm", exact: "2.30.6"),
         .package(url: "https://github.com/huggingface/swift-transformers", exact: "1.1.8"),
     ],
@@ -20,9 +21,11 @@ let package = Package(
         .target(name: "DMLXBackend", dependencies: [
             .product(name: "DInference", package: "DPlatform"),
             .product(name: "MLX", package: "mlx-swift"),
+            .product(name: "MLXNN", package: "mlx-swift"),
+            .product(name: "Flux2", package: "flux2-swift"),
             .product(name: "MLXLLM", package: "mlx-swift-lm"),
             .product(name: "MLXLMCommon", package: "mlx-swift-lm"),
-        ]),
+        ], resources: [.process("Resources")]),
         .executableTarget(name: "DInferenceCLI", dependencies: [
             "DMLXBackend",
             .product(name: "DInference", package: "DPlatform"),
@@ -37,6 +40,8 @@ let package = Package(
         .testTarget(name: "DMLXBackendTests", dependencies: [
             "DMLXBackend",
             .product(name: "DRuntime", package: "DPlatform"),
+            .product(name: "MLX", package: "mlx-swift"),
+            .product(name: "Flux2", package: "flux2-swift"),
         ]),
     ],
     swiftLanguageModes: [.v6]

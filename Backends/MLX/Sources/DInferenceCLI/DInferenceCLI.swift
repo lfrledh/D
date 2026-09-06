@@ -15,6 +15,7 @@ struct DInferenceCLI {
         var report = CLIReport()
         var reportPath = CLIOptions.reportDestination(in: arguments)
         var runtime: InferenceRuntime?
+        var imageBackend: MLXImageBackend?
         let control = ExecutionControl()
         var signalMonitor: SignalMonitor?
 
@@ -27,7 +28,21 @@ struct DInferenceCLI {
             reportPath = options.report
             signalMonitor = SignalMonitor(control: control)
             let recorder = LifecycleRecorder()
-            let backend = try MLXTextBackend(observer: { event in await recorder.append(event) })
+            let backend: any InferenceBackend
+            switch options.capability {
+            case .text:
+                backend = try MLXTextBackend(observer: { event in await recorder.append(event) })
+            case .image:
+                guard let path = options.artifacts else {
+                    throw CLIArgumentError("Image mode requires --artifacts.")
+                }
+                let directory = URL(fileURLWithPath: path, isDirectory: true)
+                try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+                let image = try MLXImageBackend(configuration: .init(artifactDirectory: directory),
+                                               observer: { event in await recorder.append(event) })
+                imageBackend = image
+                backend = image
+            }
             report.backend = backend.descriptor
             let engine = try InferenceRuntime(
                 backends: [backend],
@@ -37,13 +52,16 @@ struct DInferenceCLI {
             for iteration in 1...options.repeatCount {
                 if await control.interruption != nil { break }
                 let runReport = await execute(iteration: iteration, options: options,
-                                              runtime: engine, recorder: recorder, control: control)
+                                              runtime: engine, recorder: recorder, control: control,
+                                              imageBackend: imageBackend)
                 report.runs.append(runReport)
-                if runReport.outcome == "failed" || runReport.outputError != nil {
+                if runReport.outcome == "failed" || runReport.outputError != nil
+                    || runReport.artifactCleanupError != nil {
                     report.exitCode = 1
                 } else if runReport.outcome == "cancelled", report.exitCode == 0 {
                     report.exitCode = 130
                 }
+                if options.capability == .image, report.exitCode != 0 { break }
             }
         } catch let error as CLIArgumentError {
             report.failure = error.localizedDescription
@@ -57,6 +75,12 @@ struct DInferenceCLI {
 
         // Outcome awaits per-run cleanup; shutdown also closes admission and drains any residual work.
         await runtime?.shutdown()
+        do { try await imageBackend?.cleanupUnpublishedArtifacts() }
+        catch {
+            report.artifactCleanupError = error.localizedDescription
+            report.exitCode = 1
+            CLIOutput.diagnostic("Artifact cleanup failed: \(error.localizedDescription)")
+        }
         await signalMonitor?.stop()
         if let interruption = await control.interruption {
             report.terminationSignal = interruption.number
@@ -79,32 +103,61 @@ struct DInferenceCLI {
     private static func execute(iteration: Int, options: CLIOptions,
                                 runtime: InferenceRuntime,
                                 recorder: LifecycleRecorder,
-                                control: ExecutionControl) async -> CLIRunReport {
+                                control: ExecutionControl,
+                                imageBackend: MLXImageBackend?) async -> CLIRunReport {
+        let input: InferenceInput
+        switch options.capability {
+        case .text:
+            input = .text(TextRequest(prompt: options.prompt, maxTokens: options.maxTokens,
+                                      temperature: options.temperature, topP: options.topP))
+        case .image:
+            input = .image(ImageRequest(prompt: options.prompt, width: options.width,
+                                        height: options.height, steps: options.steps,
+                                        guidanceScale: options.guidance, seed: options.seed))
+        }
         let request = InferenceRequest(
             model: ModelReference(directory: URL(fileURLWithPath: options.model), revision: options.revision),
-            input: .text(TextRequest(prompt: options.prompt, maxTokens: options.maxTokens,
-                                     temperature: options.temperature, topP: options.topP)))
+            input: input)
         let started = ProcessInfo.processInfo.systemUptime
         var report = CLIRunReport(iteration: iteration, runID: request.id, startedAt: Date())
+        report.request = request
         CLIOutput.diagnostic("Run \(iteration)/\(options.repeatCount): \(request.id)")
 
         do {
-            let run = try await runtime.submit(request, backendID: "mlx.text")
+            let run = try await runtime.submit(request, backendID: options.backendID)
             await control.activate(run)
             var outputFailure: String?
             do {
                 for try await event in run.events {
-                    guard case .textDelta(let fragment) = event else { continue }
-                    report.chunkCount += 1
-                    report.text += fragment
-                    if report.firstChunkSeconds == nil {
-                        report.firstChunkSeconds = ProcessInfo.processInfo.systemUptime - started
+                    var thresholdReached = false
+                    let elapsed = ProcessInfo.processInfo.systemUptime - started
+                    switch event {
+                    case .textDelta(let fragment):
+                        report.chunkCount += 1
+                        report.text += fragment
+                        if report.firstChunkSeconds == nil { report.firstChunkSeconds = elapsed }
+                        if outputFailure == nil {
+                            do { try CLIOutput.text(fragment) }
+                            catch { outputFailure = error.localizedDescription }
+                        }
+                        thresholdReached = options.cancelAfterChunks.map { report.chunkCount >= $0 } ?? false
+                    case .progress(let completed, let total):
+                        report.progress.append(CLIProgress(completed: completed, total: total, elapsedSeconds: elapsed))
+                        if report.firstProgressSeconds == nil { report.firstProgressSeconds = elapsed }
+                        CLIOutput.diagnostic("[\(request.id)] progress \(completed)/\(total)")
+                        thresholdReached = options.cancelAfterSteps.map { completed >= $0 } ?? false
+                    case .artifact(let artifact):
+                        // Retain the reference before attempting stdout: published files survive
+                        // output failure and remain discoverable in the execution report.
+                        report.artifacts.append(artifact)
+                        if report.firstArtifactSeconds == nil { report.firstArtifactSeconds = elapsed }
+                        if outputFailure == nil {
+                            do { try CLIOutput.artifact(artifact, runID: request.id) }
+                            catch { outputFailure = error.localizedDescription }
+                        }
+                    case .preview:
+                        break
                     }
-                    if outputFailure == nil {
-                        do { try CLIOutput.text(fragment) }
-                        catch { outputFailure = error.localizedDescription }
-                    }
-                    let thresholdReached = options.cancelAfterChunks.map { report.chunkCount >= $0 } ?? false
                     if report.cancellationRequestedSeconds == nil, thresholdReached || outputFailure != nil {
                         report.cancellationRequestedSeconds = ProcessInfo.processInfo.systemUptime - started
                         await run.cancel()
@@ -129,6 +182,17 @@ struct DInferenceCLI {
             case .completed(let result):
                 report.outcome = "completed"
                 report.result = result
+                // A backend may return a final artifact without an earlier artifact event.
+                for artifact in result.artifacts where !report.artifacts.contains(artifact) {
+                    report.artifacts.append(artifact)
+                    if report.firstArtifactSeconds == nil {
+                        report.firstArtifactSeconds = ProcessInfo.processInfo.systemUptime - started
+                    }
+                    if outputFailure == nil, options.capability == .image {
+                        do { try CLIOutput.artifact(artifact, runID: request.id) }
+                        catch { outputFailure = error.localizedDescription }
+                    }
+                }
             case .cancelled:
                 report.outcome = "cancelled"
             case .failed(let failure):
@@ -139,7 +203,7 @@ struct DInferenceCLI {
             if let outputFailure {
                 report.outputError = "Cannot write stdout: \(outputFailure)"
             }
-            if outputFailure == nil {
+            if outputFailure == nil, options.capability == .text {
                 do { try CLIOutput.text("\n") }
                 catch {
                     report.outputError = "Cannot write stdout: \(error.localizedDescription)"
@@ -150,9 +214,17 @@ struct DInferenceCLI {
             report.failure = error as? InferenceFailure
             report.errorMessage = error.localizedDescription
         }
+        // The run has drained before this host-owned cleanup. Published artifacts are retained.
+        do { try await imageBackend?.cleanupUnpublishedArtifacts() }
+        catch {
+            report.artifactCleanupError = error.localizedDescription
+            CLIOutput.diagnostic("Artifact cleanup failed: \(error.localizedDescription)")
+        }
         report.lifecycle = await recorder.take(for: request.id)
         report.elapsedSeconds = ProcessInfo.processInfo.systemUptime - started
-        CLIOutput.diagnostic("Run \(iteration): \(report.outcome), \(report.chunkCount) chunks, "
+        let outputCount = options.capability == .text
+            ? "\(report.chunkCount) chunks" : "\(report.artifacts.count) artifacts"
+        CLIOutput.diagnostic("Run \(iteration): \(report.outcome), \(outputCount), "
             + String(format: "%.3f seconds", report.elapsedSeconds))
         if let errorMessage = report.errorMessage { CLIOutput.diagnostic(errorMessage) }
         if let outputError = report.outputError { CLIOutput.diagnostic(outputError) }

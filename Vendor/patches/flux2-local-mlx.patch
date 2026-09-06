@@ -1,0 +1,12 @@
+diff --git a/Package.swift b/Package.swift
+--- a/Package.swift
++++ b/Package.swift
+@@ -12,7 +12,7 @@
+     .executable(name: "flux2-cli", targets: ["Flux2CLI"])
+   ],
+   dependencies: [
+-    .package(url: "https://github.com/ml-explore/mlx-swift", .upToNextMinor(from: "0.30.6")),
++    .package(path: "../mlx-swift"),
+     .package(url: "https://github.com/apple/swift-argument-parser.git", .upToNextMinor(from: "1.4.0")),
+     .package(
+       url: "https://github.com/huggingface/swift-transformers",

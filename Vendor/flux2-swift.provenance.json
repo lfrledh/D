@@ -1,0 +1,80 @@
+{
+  "schemaVersion": 1,
+  "packageIdentity": "flux2-swift",
+  "snapshotDirectory": "flux2-swift",
+  "createdAt": "2026-09-06T14:37:55.613117+00:00",
+  "repository": {
+    "url": "https://github.com/mzbac/flux2.swift",
+    "revision": "959a4af7c0721c800851c84431ffd3fa1f353f1f",
+    "tree": "3f46b9d8581879ff21ef60b2f916c60e2e9b6210",
+    "commitText": "tree 3f46b9d8581879ff21ef60b2f916c60e2e9b6210\nparent ab45cd1153fd9b07cd0081c34882970d73976283\nauthor mzbac <li.anchen.au@gmail.com> 1770819929 +1100\ncommitter mzbac <li.anchen.au@gmail.com> 1770819929 +1100\n\nBump mlx-swift to 0.30.6\n",
+    "license": "Apache-2.0",
+    "licensePath": "LICENSE"
+  },
+  "snapshot": {
+    "fileCount": 206,
+    "upstreamBytes": 41852259,
+    "patchedBytes": 41856374,
+    "manifest": "flux2-swift.files.json",
+    "manifestSHA256": "80f0cb099a3f4958f554a1e06547cb6ae375cc01a330e33b7f1248f99e651830",
+    "selection": "All 206 tracked upstream blobs; no trimming or expanded gitlinks."
+  },
+  "patches": [
+    {
+      "file": "patches/flux2-local-mlx.patch",
+      "sha256": "96c4f393f84bf03f9082af9080405812ec50738239355ceead24471b0e864b5f",
+      "description": "Share D pinned local MLX instance",
+      "modifiedFiles": [
+        {
+          "path": "Package.swift",
+          "upstreamSHA256": "76467a9516b2e9798e505c2a552fdae4de8fc92d4133b7f3c326c7f20604e0f1",
+          "sha256": "493ce6d92875b97b56e8bccfb7da13cece15bc38364c6844e154673ca99cbdea",
+          "upstreamSize": 1486,
+          "size": 1428
+        }
+      ]
+    },
+    {
+      "file": "patches/flux2-runtime-cache-release.patch",
+      "sha256": "1d0b5b3ca7a58c5d5cfd147be54e3a22e28e12a15aaaa37e94c0dadc7b3ee48a",
+      "description": "Expose cache release after exclusive execution drains",
+      "modifiedFiles": [
+        {
+          "path": "Sources/Flux2/Support/Flux2AttentionMaskCache.swift",
+          "upstreamSHA256": "88437be81b89b03b74d3edf3430e03f62ae06d5c299afaa1f2df414550d60839",
+          "sha256": "4aa67eadede51f886ee59720f865df686a018e64567ee4896f996a326d450367",
+          "upstreamSize": 1888,
+          "size": 2501
+        }
+      ]
+    },
+    {
+      "file": "patches/flux2-tokenizer-no-truncation.patch",
+      "sha256": "bc868322068f6d809900847fb2fd42ddc9a37ea79bf82092aae7f3f6421ccfaa",
+      "description": "Opt-in rejection of complete overlong chat-template tokens",
+      "modifiedFiles": [
+        {
+          "path": "Sources/Flux2/Models/TextEncoder/Flux2QwenTokenizer.swift",
+          "upstreamSHA256": "41d71305910e9792f5f578029a7ba36987bc6d37f4fddd87d6100558d5c0bf68",
+          "sha256": "2c6cc51a10dc8f0af395430f93ef019f1e9275fc1cae41fc4b9918048eb14b90",
+          "upstreamSize": 8453,
+          "size": 9095
+        },
+        {
+          "path": "Sources/Flux2/Pipeline/Flux2KleinPromptEncoder.swift",
+          "upstreamSHA256": "7474462c7c436ebcf774ccdd2d14f39c7f18c4d7fd54c41d50ec0f2abaddf19d",
+          "sha256": "21bbc3358ae4846b107a8ba7b618e9800859da21a31fd323af844b92da950106",
+          "upstreamSize": 3830,
+          "size": 3889
+        },
+        {
+          "path": "Tests/Flux2Tests/Flux2QwenTokenizerTests.swift",
+          "upstreamSHA256": "a52264337e93e6ba1b238d04aa8ac5d5de269d06bf7bd16ae65ab259c6d33eab",
+          "sha256": "bc155536366d393775385bb3e816ae524cdb7a1df34f7b08e95b13357321b5f1",
+          "upstreamSize": 1264,
+          "size": 4123
+        }
+      ]
+    }
+  ]
+}

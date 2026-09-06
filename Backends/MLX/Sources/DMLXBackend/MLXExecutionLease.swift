@@ -2,7 +2,7 @@ import DInference
 import Foundation
 
 /// MLX allocator settings and its default streams are process-wide. This gate covers all
-/// instances of THIS backend through release, including instances in different runtimes.
+/// text and image backend instances through release, including instances in different runtimes.
 /// It cannot coordinate unrelated legacy/third-party MLX callers in the same process.
 actor MLXExecutionLease {
     static let shared = MLXExecutionLease()

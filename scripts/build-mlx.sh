@@ -4,6 +4,7 @@ PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DEVELOPMENT_ROOT="${D_DEVELOPMENT_ROOT:-$(dirname "$PROJECT_ROOT")/D-Development}"
 MLX_BUILD_ROOT="${D_MLX_BUILD_ROOT:-$(dirname "$PROJECT_ROOT")/BuildCaches/D-MLX}"
 python3 "$PROJECT_ROOT/scripts/verify-mlx-vendor.py"
+python3 "$PROJECT_ROOT/scripts/verify-flux2-vendor.py" >&2
 mkdir -p "$DEVELOPMENT_ROOT/Logs"
 cd "$PROJECT_ROOT/Backends/MLX"
 # Xcode compiles the MLX Metal library and bundles it beside the executable.

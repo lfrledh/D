@@ -1,0 +1,1500 @@
+{
+  "schemaVersion": 1,
+  "stage": "B2 production image core",
+  "status": "passed",
+  "recordedAtUTC": "2026-09-06T15:21:19.982648+00:00",
+  "baseCommit": "ccf66f51bb5dc1d39a9709e0587fd2a0b5755f21",
+  "hardware": {
+    "chip": "Apple M4",
+    "memoryGiB": 16,
+    "macOS": "26.6.2",
+    "Xcode": "26.6",
+    "storage": "external SSD"
+  },
+  "supported": {
+    "modelRepository": "mzbac/FLUX.2-klein-4B-q8",
+    "modelRevision": "ef52ee019fd1d0e75ae4deb40476ba65989716d7",
+    "width": 512,
+    "height": 512,
+    "steps": 4,
+    "guidance": 1,
+    "textSequenceLength": 512,
+    "promptTruncation": false
+  },
+  "dependencies": {
+    "flux2UpstreamRevision": "959a4af7c0721c800851c84431ffd3fa1f353f1f",
+    "flux2Files": 206,
+    "flux2ManifestSHA256": "80f0cb099a3f4958f554a1e06547cb6ae375cc01a330e33b7f1248f99e651830",
+    "mlxManifestSHA256": "38f80368c0353176d43b880759fd391f7ab6b8cf60bd09a1d840778af9c8964e",
+    "resolvedSHA256": "f2992cac7cf1494c6a229fd2c69426ff711dbfc4eff3e89a89a574faec1ae819"
+  },
+  "foundation": {
+    "declarations": 17,
+    "expandedCases": 18,
+    "passed": true
+  },
+  "mlxXCTest": {
+    "declarations": 61,
+    "expandedCases": 120,
+    "failures": 0,
+    "skips": 0,
+    "expectedFailures": 0,
+    "elapsedSeconds": 571.63,
+    "resultBundle": "/Volumes/CodexProjects/Codex/D-Development/Logs/MLXTests-20260907T000528-6594.xcresult",
+    "realLifecycleRecords": [
+      {
+        "label": "normal-round-1",
+        "runID": "65D65639-5A94-4066-9D3B-F1B5F87EB5AD",
+        "elapsedLifecycleSeconds": 39.79101120833275,
+        "phases": [
+          "verifying",
+          "tokenizing",
+          "loadingTextEncoder",
+          "textEncoderLoaded",
+          "encoding",
+          "encoded",
+          "loadingTransformer",
+          "transformerLoaded",
+          "denoising",
+          "denoising",
+          "denoising",
+          "denoising",
+          "loadingVAE",
+          "vaeLoaded",
+          "decoding",
+          "decoded",
+          "publishing",
+          "drained",
+          "released"
+        ],
+        "drained": {
+          "activeBytes": 524288,
+          "cacheBytes": 268435456,
+          "peakBytes": 6207522060
+        },
+        "released": {
+          "activeBytes": 0,
+          "cacheBytes": 0,
+          "peakBytes": 6207522060
+        }
+      },
+      {
+        "label": "normal-round-2",
+        "runID": "E0B22E0A-F964-4F78-842F-7A34A12D577D",
+        "elapsedLifecycleSeconds": 34.7041398333331,
+        "phases": [
+          "verifying",
+          "tokenizing",
+          "loadingTextEncoder",
+          "textEncoderLoaded",
+          "encoding",
+          "encoded",
+          "loadingTransformer",
+          "transformerLoaded",
+          "denoising",
+          "denoising",
+          "denoising",
+          "denoising",
+          "loadingVAE",
+          "vaeLoaded",
+          "decoding",
+          "decoded",
+          "publishing",
+          "drained",
+          "released"
+        ],
+        "drained": {
+          "activeBytes": 524288,
+          "cacheBytes": 268435456,
+          "peakBytes": 6207522060
+        },
+        "released": {
+          "activeBytes": 0,
+          "cacheBytes": 0,
+          "peakBytes": 6207522060
+        }
+      },
+      {
+        "label": "normal-round-3",
+        "runID": "D18B6D23-D484-4187-91C4-3380649C6850",
+        "elapsedLifecycleSeconds": 39.33795329166696,
+        "phases": [
+          "verifying",
+          "tokenizing",
+          "loadingTextEncoder",
+          "textEncoderLoaded",
+          "encoding",
+          "encoded",
+          "loadingTransformer",
+          "transformerLoaded",
+          "denoising",
+          "denoising",
+          "denoising",
+          "denoising",
+          "loadingVAE",
+          "vaeLoaded",
+          "decoding",
+          "decoded",
+          "publishing",
+          "drained",
+          "released"
+        ],
+        "drained": {
+          "activeBytes": 524288,
+          "cacheBytes": 268435456,
+          "peakBytes": 6207522060
+        },
+        "released": {
+          "activeBytes": 0,
+          "cacheBytes": 0,
+          "peakBytes": 6207522060
+        }
+      },
+      {
+        "label": "cancel-loadingTextEncoder",
+        "runID": "19A5BD86-7DC2-45D8-BA91-C045144335E0",
+        "elapsedLifecycleSeconds": 5.061217791667332,
+        "phases": [
+          "verifying",
+          "tokenizing",
+          "loadingTextEncoder",
+          "drained",
+          "released"
+        ],
+        "drained": {
+          "activeBytes": 0,
+          "cacheBytes": 4104,
+          "peakBytes": 4104
+        },
+        "released": {
+          "activeBytes": 0,
+          "cacheBytes": 0,
+          "peakBytes": 4104
+        }
+      },
+      {
+        "label": "cancel-textEncoderLoaded",
+        "runID": "734B41DB-3EE9-4C59-8E98-DAB9CD444E91",
+        "elapsedLifecycleSeconds": 6.460022541667058,
+        "phases": [
+          "verifying",
+          "tokenizing",
+          "loadingTextEncoder",
+          "textEncoderLoaded",
+          "drained",
+          "released"
+        ],
+        "drained": {
+          "activeBytes": 0,
+          "cacheBytes": 777913912,
+          "peakBytes": 4865788936
+        },
+        "released": {
+          "activeBytes": 0,
+          "cacheBytes": 0,
+          "peakBytes": 4865788936
+        }
+      },
+      {
+        "label": "cancel-encoding",
+        "runID": "815F61DD-10F7-4F67-9E8B-C224C9CCDE05",
+        "elapsedLifecycleSeconds": 6.314823333334061,
+        "phases": [
+          "verifying",
+          "tokenizing",
+          "loadingTextEncoder",
+          "textEncoderLoaded",
+          "encoding",
+          "drained",
+          "released"
+        ],
+        "drained": {
+          "activeBytes": 0,
+          "cacheBytes": 777913912,
+          "peakBytes": 4865788936
+        },
+        "released": {
+          "activeBytes": 0,
+          "cacheBytes": 0,
+          "peakBytes": 4865788936
+        }
+      },
+      {
+        "label": "cancel-encoded",
+        "runID": "495FF418-1322-4791-9050-0C8528CAD95B",
+        "elapsedLifecycleSeconds": 8.392911583333444,
+        "phases": [
+          "verifying",
+          "tokenizing",
+          "loadingTextEncoder",
+          "textEncoderLoaded",
+          "encoding",
+          "encoded",
+          "drained",
+          "released"
+        ],
+        "drained": {
+          "activeBytes": 524288,
+          "cacheBytes": 269278244,
+          "peakBytes": 5737351300
+        },
+        "released": {
+          "activeBytes": 0,
+          "cacheBytes": 0,
+          "peakBytes": 5737351300
+        }
+      },
+      {
+        "label": "cancel-loadingTransformer",
+        "runID": "5C2BD393-4903-4B8C-94BC-AD8878BA08A8",
+        "elapsedLifecycleSeconds": 8.331935291666923,
+        "phases": [
+          "verifying",
+          "tokenizing",
+          "loadingTextEncoder",
+          "textEncoderLoaded",
+          "encoding",
+          "encoded",
+          "loadingTransformer",
+          "drained",
+          "released"
+        ],
+        "drained": {
+          "activeBytes": 524288,
+          "cacheBytes": 15742984,
+          "peakBytes": 5737351300
+        },
+        "released": {
+          "activeBytes": 0,
+          "cacheBytes": 0,
+          "peakBytes": 5737351300
+        }
+      },
+      {
+        "label": "cancel-transformerLoaded",
+        "runID": "A0D57D2D-5D20-4D41-AE43-FA2395CD9521",
+        "elapsedLifecycleSeconds": 9.686488083333643,
+        "phases": [
+          "verifying",
+          "tokenizing",
+          "loadingTextEncoder",
+          "textEncoderLoaded",
+          "encoding",
+          "encoded",
+          "loadingTransformer",
+          "transformerLoaded",
+          "drained",
+          "released"
+        ],
+        "drained": {
+          "activeBytes": 524288,
+          "cacheBytes": 270894780,
+          "peakBytes": 5737351300
+        },
+        "released": {
+          "activeBytes": 0,
+          "cacheBytes": 0,
+          "peakBytes": 5737351300
+        }
+      },
+      {
+        "label": "cancel-denoising",
+        "runID": "BDEB3CF2-E3BB-4DA7-A86F-F095F2973DB4",
+        "elapsedLifecycleSeconds": 9.745648666666966,
+        "phases": [
+          "verifying",
+          "tokenizing",
+          "loadingTextEncoder",
+          "textEncoderLoaded",
+          "encoding",
+          "encoded",
+          "loadingTransformer",
+          "transformerLoaded",
+          "denoising",
+          "drained",
+          "released"
+        ],
+        "drained": {
+          "activeBytes": 524288,
+          "cacheBytes": 271442788,
+          "peakBytes": 5737351300
+        },
+        "released": {
+          "activeBytes": 0,
+          "cacheBytes": 0,
+          "peakBytes": 5737351300
+        }
+      },
+      {
+        "label": "cancel-loadingVAE",
+        "runID": "17840F2A-2663-4F04-B40C-3FE1E4FB5F72",
+        "elapsedLifecycleSeconds": 37.734957416666475,
+        "phases": [
+          "verifying",
+          "tokenizing",
+          "loadingTextEncoder",
+          "textEncoderLoaded",
+          "encoding",
+          "encoded",
+          "loadingTransformer",
+          "transformerLoaded",
+          "denoising",
+          "denoising",
+          "denoising",
+          "denoising",
+          "loadingVAE",
+          "drained",
+          "released"
+        ],
+        "drained": {
+          "activeBytes": 524288,
+          "cacheBytes": 540688,
+          "peakBytes": 6207522060
+        },
+        "released": {
+          "activeBytes": 0,
+          "cacheBytes": 0,
+          "peakBytes": 6207522060
+        }
+      },
+      {
+        "label": "cancel-vaeLoaded",
+        "runID": "50A55FEB-78FF-4209-AB47-990D9E5B4A06",
+        "elapsedLifecycleSeconds": 38.00646279166722,
+        "phases": [
+          "verifying",
+          "tokenizing",
+          "loadingTextEncoder",
+          "textEncoderLoaded",
+          "encoding",
+          "encoded",
+          "loadingTransformer",
+          "transformerLoaded",
+          "denoising",
+          "denoising",
+          "denoising",
+          "denoising",
+          "loadingVAE",
+          "vaeLoaded",
+          "drained",
+          "released"
+        ],
+        "drained": {
+          "activeBytes": 524288,
+          "cacheBytes": 168635390,
+          "peakBytes": 6207522060
+        },
+        "released": {
+          "activeBytes": 0,
+          "cacheBytes": 0,
+          "peakBytes": 6207522060
+        }
+      },
+      {
+        "label": "cancel-decoding",
+        "runID": "DA68838E-B8D0-4138-94B9-CED4C217F85F",
+        "elapsedLifecycleSeconds": 37.83044062499994,
+        "phases": [
+          "verifying",
+          "tokenizing",
+          "loadingTextEncoder",
+          "textEncoderLoaded",
+          "encoding",
+          "encoded",
+          "loadingTransformer",
+          "transformerLoaded",
+          "denoising",
+          "denoising",
+          "denoising",
+          "denoising",
+          "loadingVAE",
+          "vaeLoaded",
+          "decoding",
+          "drained",
+          "released"
+        ],
+        "drained": {
+          "activeBytes": 524288,
+          "cacheBytes": 168635390,
+          "peakBytes": 6207522060
+        },
+        "released": {
+          "activeBytes": 0,
+          "cacheBytes": 0,
+          "peakBytes": 6207522060
+        }
+      },
+      {
+        "label": "cancel-decoded",
+        "runID": "B99749C1-8114-47EB-B9B1-27DC1D513648",
+        "elapsedLifecycleSeconds": 40.426314541666216,
+        "phases": [
+          "verifying",
+          "tokenizing",
+          "loadingTextEncoder",
+          "textEncoderLoaded",
+          "encoding",
+          "encoded",
+          "loadingTransformer",
+          "transformerLoaded",
+          "denoising",
+          "denoising",
+          "denoising",
+          "denoising",
+          "loadingVAE",
+          "vaeLoaded",
+          "decoding",
+          "decoded",
+          "drained",
+          "released"
+        ],
+        "drained": {
+          "activeBytes": 524288,
+          "cacheBytes": 268435456,
+          "peakBytes": 6207522060
+        },
+        "released": {
+          "activeBytes": 0,
+          "cacheBytes": 0,
+          "peakBytes": 6207522060
+        }
+      },
+      {
+        "label": "cancel-drained",
+        "runID": "F3E1D63C-F8FC-4ACE-BF50-380D9EB3C2B9",
+        "elapsedLifecycleSeconds": 40.60655845833389,
+        "phases": [
+          "verifying",
+          "tokenizing",
+          "loadingTextEncoder",
+          "textEncoderLoaded",
+          "encoding",
+          "encoded",
+          "loadingTransformer",
+          "transformerLoaded",
+          "denoising",
+          "denoising",
+          "denoising",
+          "denoising",
+          "loadingVAE",
+          "vaeLoaded",
+          "decoding",
+          "decoded",
+          "publishing",
+          "drained",
+          "released"
+        ],
+        "drained": {
+          "activeBytes": 524288,
+          "cacheBytes": 268435456,
+          "peakBytes": 6207522060
+        },
+        "released": {
+          "activeBytes": 0,
+          "cacheBytes": 0,
+          "peakBytes": 6207522060
+        }
+      },
+      {
+        "label": "mixed-queue",
+        "runID": "6BA63DA1-44A2-4D2E-902D-E42D9483E089",
+        "elapsedLifecycleSeconds": 8.326616374999503,
+        "phases": [
+          "verifying",
+          "tokenizing",
+          "loadingTextEncoder",
+          "textEncoderLoaded",
+          "encoding",
+          "encoded",
+          "drained",
+          "released"
+        ],
+        "drained": {
+          "activeBytes": 524288,
+          "cacheBytes": 269276184,
+          "peakBytes": 5737351300
+        },
+        "released": {
+          "activeBytes": 0,
+          "cacheBytes": 0,
+          "peakBytes": 5737351300
+        }
+      },
+      {
+        "label": "mixed-queue",
+        "runID": "F981A045-21BB-404C-8C1B-97E394AD45ED",
+        "elapsedLifecycleSeconds": 0.9812173749996873,
+        "phases": [
+          "loading",
+          "loaded",
+          "generating",
+          "drained",
+          "released"
+        ],
+        "drained": {
+          "activeBytes": 281161472,
+          "cacheBytes": 43671768,
+          "peakBytes": 322512180
+        },
+        "released": {
+          "activeBytes": 0,
+          "cacheBytes": 0,
+          "peakBytes": 322512180
+        }
+      },
+      {
+        "label": "mixed-queue",
+        "runID": "2691AA64-68D4-4348-A240-C0E182E8A2CB",
+        "elapsedLifecycleSeconds": 40.353154375000486,
+        "phases": [
+          "verifying",
+          "tokenizing",
+          "loadingTextEncoder",
+          "textEncoderLoaded",
+          "encoding",
+          "encoded",
+          "loadingTransformer",
+          "transformerLoaded",
+          "denoising",
+          "denoising",
+          "denoising",
+          "denoising",
+          "loadingVAE",
+          "vaeLoaded",
+          "decoding",
+          "decoded",
+          "publishing",
+          "drained",
+          "released"
+        ],
+        "drained": {
+          "activeBytes": 524288,
+          "cacheBytes": 268435456,
+          "peakBytes": 6207522060
+        },
+        "released": {
+          "activeBytes": 0,
+          "cacheBytes": 0,
+          "peakBytes": 6207522060
+        }
+      },
+      {
+        "label": "consumer-progress",
+        "runID": "03F945C1-4352-43AD-8498-DC184FF6BABA",
+        "elapsedLifecycleSeconds": 9.745142875000056,
+        "phases": [
+          "verifying",
+          "tokenizing",
+          "loadingTextEncoder",
+          "textEncoderLoaded",
+          "encoding",
+          "encoded",
+          "loadingTransformer",
+          "transformerLoaded",
+          "drained",
+          "released"
+        ],
+        "drained": {
+          "activeBytes": 524288,
+          "cacheBytes": 271442788,
+          "peakBytes": 5737351300
+        },
+        "released": {
+          "activeBytes": 0,
+          "cacheBytes": 0,
+          "peakBytes": 5737351300
+        }
+      },
+      {
+        "label": "consumer-recovery-progress",
+        "runID": "B1FD6873-9230-4535-9644-D95DDB7D8F0E",
+        "elapsedLifecycleSeconds": 40.314256833333275,
+        "phases": [
+          "verifying",
+          "tokenizing",
+          "loadingTextEncoder",
+          "textEncoderLoaded",
+          "encoding",
+          "encoded",
+          "loadingTransformer",
+          "transformerLoaded",
+          "denoising",
+          "denoising",
+          "denoising",
+          "denoising",
+          "loadingVAE",
+          "vaeLoaded",
+          "decoding",
+          "decoded",
+          "publishing",
+          "drained",
+          "released"
+        ],
+        "drained": {
+          "activeBytes": 524288,
+          "cacheBytes": 268435456,
+          "peakBytes": 6207522060
+        },
+        "released": {
+          "activeBytes": 0,
+          "cacheBytes": 0,
+          "peakBytes": 6207522060
+        }
+      },
+      {
+        "label": "consumer-artifact",
+        "runID": "87DDDDDA-C943-4C96-9D3F-3C73123F6919",
+        "elapsedLifecycleSeconds": 30.419541916667185,
+        "phases": [
+          "verifying",
+          "tokenizing",
+          "loadingTextEncoder",
+          "textEncoderLoaded",
+          "encoding",
+          "encoded",
+          "loadingTransformer",
+          "transformerLoaded",
+          "denoising",
+          "denoising",
+          "denoising",
+          "denoising",
+          "loadingVAE",
+          "vaeLoaded",
+          "decoding",
+          "decoded",
+          "publishing",
+          "drained",
+          "released"
+        ],
+        "drained": {
+          "activeBytes": 524288,
+          "cacheBytes": 268435456,
+          "peakBytes": 6207522060
+        },
+        "released": {
+          "activeBytes": 0,
+          "cacheBytes": 0,
+          "peakBytes": 6207522060
+        }
+      },
+      {
+        "label": "consumer-recovery-artifact",
+        "runID": "8BD56854-253B-4660-8AF3-3862D6FFCE23",
+        "elapsedLifecycleSeconds": 28.433716458333038,
+        "phases": [
+          "verifying",
+          "tokenizing",
+          "loadingTextEncoder",
+          "textEncoderLoaded",
+          "encoding",
+          "encoded",
+          "loadingTransformer",
+          "transformerLoaded",
+          "denoising",
+          "denoising",
+          "denoising",
+          "denoising",
+          "loadingVAE",
+          "vaeLoaded",
+          "decoding",
+          "decoded",
+          "publishing",
+          "drained",
+          "released"
+        ],
+        "drained": {
+          "activeBytes": 524288,
+          "cacheBytes": 268435456,
+          "peakBytes": 6207522060
+        },
+        "released": {
+          "activeBytes": 0,
+          "cacheBytes": 0,
+          "peakBytes": 6207522060
+        }
+      },
+      {
+        "label": "damaged-vae-copy",
+        "runID": "117B389A-9FD5-4E62-8A8B-FA0036966B33",
+        "elapsedLifecycleSeconds": 4.121975874999407,
+        "phases": [
+          "verifying",
+          "drained",
+          "released"
+        ],
+        "drained": {
+          "activeBytes": 0,
+          "cacheBytes": 0,
+          "peakBytes": 0
+        },
+        "released": {
+          "activeBytes": 0,
+          "cacheBytes": 0,
+          "peakBytes": 0
+        }
+      },
+      {
+        "label": "artifact-root-moved",
+        "runID": "A740D8FC-34F0-4767-940D-CC50172B4757",
+        "elapsedLifecycleSeconds": 26.963119916666983,
+        "phases": [
+          "verifying",
+          "tokenizing",
+          "loadingTextEncoder",
+          "textEncoderLoaded",
+          "encoding",
+          "encoded",
+          "loadingTransformer",
+          "transformerLoaded",
+          "denoising",
+          "denoising",
+          "denoising",
+          "denoising",
+          "loadingVAE",
+          "vaeLoaded",
+          "decoding",
+          "decoded",
+          "publishing",
+          "drained",
+          "released"
+        ],
+        "drained": {
+          "activeBytes": 524288,
+          "cacheBytes": 268435456,
+          "peakBytes": 6207522060
+        },
+        "released": {
+          "activeBytes": 0,
+          "cacheBytes": 0,
+          "peakBytes": 6207522060
+        }
+      },
+      {
+        "label": "overlong-prompt",
+        "runID": "652B22F6-FC19-43F0-8EB3-42686013EDAE",
+        "elapsedLifecycleSeconds": 4.908397166666873,
+        "phases": [
+          "verifying",
+          "tokenizing",
+          "drained",
+          "released"
+        ],
+        "drained": {
+          "activeBytes": 0,
+          "cacheBytes": 8,
+          "peakBytes": 8
+        },
+        "released": {
+          "activeBytes": 0,
+          "cacheBytes": 0,
+          "peakBytes": 8
+        }
+      }
+    ],
+    "tinyCacheControl": [
+      {
+        "activeBytes": 0,
+        "cacheBytes": 0,
+        "phase": "baseline"
+      },
+      {
+        "activeBytes": 48,
+        "cacheBytes": 344368,
+        "phase": "after_tiny_before_clear"
+      },
+      {
+        "activeBytes": 48,
+        "cacheBytes": 0,
+        "phase": "allocator_cleared_rng_and_flux_cache_alive"
+      },
+      {
+        "activeBytes": 8,
+        "cacheBytes": 40,
+        "phase": "flux_cache_cleared_rng_alive"
+      },
+      {
+        "activeBytes": 8,
+        "cacheBytes": 0,
+        "phase": "both_caches_cleared_rng_alive"
+      },
+      {
+        "activeBytes": 0,
+        "cacheBytes": 0,
+        "phase": "scoped_rng_released"
+      }
+    ]
+  },
+  "rngControl": [
+    {
+      "phase": "baseline",
+      "activeBytes": 0,
+      "cacheBytes": 0
+    },
+    {
+      "phase": "scoped_noise_released",
+      "activeBytes": 0,
+      "cacheBytes": 0
+    },
+    {
+      "phase": "global_noise_retained",
+      "activeBytes": 16,
+      "cacheBytes": 0
+    },
+    {
+      "phase": "global_state_reseeded",
+      "activeBytes": 8,
+      "cacheBytes": 0
+    }
+  ],
+  "firstProductionImage": {
+    "elapsedSeconds": 39.750600083332756,
+    "path": "/Volumes/CodexProjects/Codex/D-Development/Logs/image-b2-first/artifacts/DB92180A-F4A2-4A33-9735-EA79D0B07FF1-3E83E6EB-135B-4DA7-8CC2-59050F4EE988/image.png",
+    "bytes": 427767,
+    "sha256": "05f0b80ac7d9d6e4ffa105af12a8805cdea4425a9448f9d35a1bd9d8f8dda553",
+    "matchesB1Exactly": true
+  },
+  "finalBinarySHA256": "c0f3e4947175b789a5fbce52bf0699982e4dc841e406da177e0e0e4c2bbb08ce",
+  "imageCLI": {
+    "schemaVersion": 1,
+    "scope": "B2 image CLI",
+    "offlineOnly": false,
+    "binary": "/Volumes/CodexProjects/Codex/BuildCaches/D-MLX/Build/Products/Debug/d-infer",
+    "binarySHA256": "c0f3e4947175b789a5fbce52bf0699982e4dc841e406da177e0e0e4c2bbb08ce",
+    "model": "/Volumes/CodexProjects/Codex/D-Development/Models/FLUX.2-klein-4B-q8",
+    "modelRepository": "mzbac/FLUX.2-klein-4B-q8",
+    "modelRevision": "ef52ee019fd1d0e75ae4deb40476ba65989716d7",
+    "expectedCaseCount": 17,
+    "cases": [
+      {
+        "name": "help",
+        "passed": true,
+        "returnCode": 0,
+        "measurements": {}
+      },
+      {
+        "name": "invalid-capability",
+        "passed": true,
+        "returnCode": 2,
+        "measurements": {}
+      },
+      {
+        "name": "invalid-missing-artifacts",
+        "passed": true,
+        "returnCode": 2,
+        "measurements": {}
+      },
+      {
+        "name": "invalid-relative-artifacts",
+        "passed": true,
+        "returnCode": 2,
+        "measurements": {}
+      },
+      {
+        "name": "invalid-model-artifacts",
+        "passed": true,
+        "returnCode": 2,
+        "measurements": {}
+      },
+      {
+        "name": "invalid-guidance",
+        "passed": true,
+        "returnCode": 2,
+        "measurements": {}
+      },
+      {
+        "name": "invalid-seed",
+        "passed": true,
+        "returnCode": 2,
+        "measurements": {}
+      },
+      {
+        "name": "invalid-width",
+        "passed": true,
+        "returnCode": 2,
+        "measurements": {}
+      },
+      {
+        "name": "invalid-mixed-flags",
+        "passed": true,
+        "returnCode": 2,
+        "measurements": {}
+      },
+      {
+        "name": "invalid-image-flags-in-text",
+        "passed": true,
+        "returnCode": 2,
+        "measurements": {}
+      },
+      {
+        "name": "missing-model",
+        "passed": true,
+        "returnCode": 1,
+        "measurements": {
+          "failure": {
+            "invalidRequest": {
+              "_0": "Cannot open image directory component absent-model; symbolic links are not allowed: No such file or directory"
+            }
+          }
+        }
+      },
+      {
+        "name": "memory-rejection",
+        "passed": true,
+        "returnCode": 1,
+        "measurements": {
+          "failure": {
+            "memoryBudgetExceeded": {
+              "limit": 1048576,
+              "required": 8589934592
+            }
+          }
+        }
+      },
+      {
+        "name": "repeat-three",
+        "passed": true,
+        "returnCode": 0,
+        "measurements": {
+          "releasedActiveBytes": [
+            0,
+            0,
+            0
+          ],
+          "releasedCacheBytes": [
+            0,
+            0,
+            0
+          ],
+          "peakBytes": [
+            6207522060,
+            6207522060,
+            6207522060
+          ],
+          "elapsedSeconds": [
+            38.89587462500003,
+            39.63384254166613,
+            39.97881987500023
+          ],
+          "cancellationLatencySeconds": [
+            null,
+            null,
+            null
+          ],
+          "artifacts": [
+            {
+              "path": "/Volumes/CodexProjects/Codex/D-Development/Logs/image-cli-b2-final/repeat-three-artifacts/E13839CC-B8C9-4D04-8F8E-5A0F0A91BCB4-87DF9C93-4252-49D0-90BF-3D41CC497ABC/image.png",
+              "bytes": 492977,
+              "sha256": "1743b94c4aab0365a131de5c82d6b5df46eafe3857e78497feff395a0044d8d9"
+            },
+            {
+              "path": "/Volumes/CodexProjects/Codex/D-Development/Logs/image-cli-b2-final/repeat-three-artifacts/A7D637F8-6980-40E3-AA38-E469649197FD-931E23DC-E001-484F-A2A0-CD241A688A00/image.png",
+              "bytes": 492977,
+              "sha256": "1743b94c4aab0365a131de5c82d6b5df46eafe3857e78497feff395a0044d8d9"
+            },
+            {
+              "path": "/Volumes/CodexProjects/Codex/D-Development/Logs/image-cli-b2-final/repeat-three-artifacts/13FCF552-C652-48E7-935A-F8B815D171E7-DCD7D606-7BD8-45D1-8EFE-2B055437DB17/image.png",
+              "bytes": 492977,
+              "sha256": "1743b94c4aab0365a131de5c82d6b5df46eafe3857e78497feff395a0044d8d9"
+            }
+          ],
+          "maximumReleasedGrowthBytes": 0,
+          "allowedGrowthBytes": 0
+        }
+      },
+      {
+        "name": "cancel-after-step",
+        "passed": true,
+        "returnCode": 130,
+        "measurements": {
+          "releasedActiveBytes": [
+            0
+          ],
+          "releasedCacheBytes": [
+            0
+          ],
+          "peakBytes": [
+            6206997772
+          ],
+          "elapsedSeconds": [
+            16.652844583333717
+          ],
+          "cancellationLatencySeconds": [
+            0.06303745833338326
+          ]
+        }
+      },
+      {
+        "name": "sigint",
+        "passed": true,
+        "returnCode": 130,
+        "measurements": {
+          "releasedActiveBytes": [
+            0
+          ],
+          "releasedCacheBytes": [
+            0
+          ],
+          "peakBytes": [
+            6207522060
+          ],
+          "elapsedSeconds": [
+            23.608175708332965
+          ],
+          "cancellationLatencySeconds": [
+            7.126997750000555
+          ]
+        }
+      },
+      {
+        "name": "sigterm",
+        "passed": true,
+        "returnCode": 130,
+        "measurements": {
+          "releasedActiveBytes": [
+            0
+          ],
+          "releasedCacheBytes": [
+            0
+          ],
+          "peakBytes": [
+            6207522060
+          ],
+          "elapsedSeconds": [
+            23.866373291666605
+          ],
+          "cancellationLatencySeconds": [
+            7.134289333333072
+          ]
+        }
+      },
+      {
+        "name": "broken-pipe",
+        "passed": true,
+        "returnCode": 1,
+        "measurements": {
+          "releasedActiveBytes": [
+            0
+          ],
+          "releasedCacheBytes": [
+            0
+          ],
+          "peakBytes": [
+            6207522060
+          ],
+          "elapsedSeconds": [
+            39.46392787500008
+          ],
+          "cancellationLatencySeconds": [
+            3.979166649514809e-05
+          ],
+          "artifacts": [
+            {
+              "path": "/Volumes/CodexProjects/Codex/D-Development/Logs/image-cli-b2-final/broken-pipe-artifacts/0587C0D7-814D-4451-8213-5462A184199D-0676901C-8186-4346-B581-7F8AEB9D90C2/image.png",
+              "bytes": 492977,
+              "sha256": "1743b94c4aab0365a131de5c82d6b5df46eafe3857e78497feff395a0044d8d9"
+            }
+          ]
+        }
+      }
+    ],
+    "complete": true,
+    "passed": true,
+    "fixtureVerification": {
+      "command": [
+        "/Applications/Xcode.app/Contents/Developer/usr/bin/python3",
+        "/Volumes/CodexProjects/Codex/D/Experiments/Flux2Probe/download_model.py",
+        "--manifest",
+        "/Volumes/CodexProjects/Codex/D/Experiments/Flux2Probe/model-manifest.json",
+        "--destination",
+        "/Volumes/CodexProjects/Codex/D-Development/Models/FLUX.2-klein-4B-q8",
+        "--verify-only"
+      ],
+      "trigger": null,
+      "triggered": false,
+      "returnCode": 0,
+      "elapsedSeconds": 4.050408458
+    },
+    "elapsedSeconds": 226.996211625,
+    "offlineRevalidation": {
+      "timeUTC": "2026-09-06T15:21:19.932380+00:00",
+      "verifierSHA256": "436166cda931daa5af7790d77965e5b4010afd7575f7e6fb047fa56b5489c4c4",
+      "note": "Replayed all 17 existing process reports, stdout, stderr and retained artifacts after changing the redundant growth check from 1024 to 0 bytes. The original validation already required every released activeBytes and cacheBytes to equal zero. No inference rerun or raw evidence modification."
+    }
+  },
+  "textCLI": {
+    "passed": true,
+    "caseCount": 10,
+    "cases": [
+      {
+        "name": "help",
+        "passed": true,
+        "returnCode": 0,
+        "measurements": {
+          "backendDiagnosticsAbsent": true
+        }
+      },
+      {
+        "name": "invalid-arguments",
+        "passed": true,
+        "returnCode": 2,
+        "measurements": {}
+      },
+      {
+        "name": "missing-model",
+        "passed": true,
+        "returnCode": 1,
+        "measurements": {
+          "failure": {
+            "invalidRequest": {
+              "_0": "Model directory does not exist: /Volumes/CodexProjects/Codex/D-Development/Logs/text-cli-b2-final/missing-model-a4fcb619c045412d9fe1ebd88634f7b7"
+            }
+          },
+          "lifecycleCount": 0
+        }
+      },
+      {
+        "name": "memory-rejection",
+        "passed": true,
+        "returnCode": 1,
+        "measurements": {
+          "failure": {
+            "memoryBudgetExceeded": {
+              "limit": 1048576,
+              "required": 1212014128
+            }
+          },
+          "lifecycleCount": 0
+        }
+      },
+      {
+        "name": "max-tokens-one",
+        "passed": true,
+        "returnCode": 0,
+        "measurements": {
+          "releasedActiveBytes": [
+            0
+          ],
+          "releasedCacheBytes": [
+            0
+          ],
+          "peakBytes": [
+            345419996
+          ],
+          "firstChunkSeconds": [
+            1.195148916666767
+          ],
+          "cancellationLatencySeconds": [
+            null
+          ]
+        }
+      },
+      {
+        "name": "repeat-five",
+        "passed": true,
+        "returnCode": 0,
+        "measurements": {
+          "releasedActiveBytes": [
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "releasedCacheBytes": [
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "peakBytes": [
+            345468876,
+            345468876,
+            345468876,
+            345468876,
+            345426636
+          ],
+          "firstChunkSeconds": [
+            0.9591664999998102,
+            0.9277561250000872,
+            0.9373577500000465,
+            0.9450048333328596,
+            0.93567666666695
+          ],
+          "cancellationLatencySeconds": [
+            null,
+            null,
+            null,
+            null,
+            null
+          ],
+          "maximumReleasedGrowthBytes": 0,
+          "allowedGrowthBytes": 1024
+        }
+      },
+      {
+        "name": "cancel-after-chunk",
+        "passed": true,
+        "returnCode": 130,
+        "measurements": {
+          "releasedActiveBytes": [
+            0
+          ],
+          "releasedCacheBytes": [
+            0
+          ],
+          "peakBytes": [
+            345468876
+          ],
+          "firstChunkSeconds": [
+            0.9575891249996857
+          ],
+          "cancellationLatencySeconds": [
+            0.033983208332756476
+          ]
+        }
+      },
+      {
+        "name": "sigint",
+        "passed": true,
+        "returnCode": 130,
+        "measurements": {
+          "releasedActiveBytes": [
+            0
+          ],
+          "releasedCacheBytes": [
+            0
+          ],
+          "peakBytes": [
+            345468876
+          ],
+          "firstChunkSeconds": [
+            0.9786345833326777
+          ],
+          "cancellationLatencySeconds": [
+            0.04327775000001566
+          ]
+        }
+      },
+      {
+        "name": "sigterm",
+        "passed": true,
+        "returnCode": 130,
+        "measurements": {
+          "releasedActiveBytes": [
+            0
+          ],
+          "releasedCacheBytes": [
+            0
+          ],
+          "peakBytes": [
+            345468876
+          ],
+          "firstChunkSeconds": [
+            0.9730512500000259
+          ],
+          "cancellationLatencySeconds": [
+            0.02954391666662559
+          ]
+        }
+      },
+      {
+        "name": "broken-pipe",
+        "passed": true,
+        "returnCode": 1,
+        "measurements": {
+          "releasedActiveBytes": [
+            0
+          ],
+          "releasedCacheBytes": [
+            0
+          ],
+          "peakBytes": [
+            345420100
+          ],
+          "firstChunkSeconds": [
+            0.952676750000137
+          ],
+          "cancellationLatencySeconds": [
+            0.023866999999881955
+          ],
+          "outputError": "Cannot write stdout: The file couldn’t be saved."
+        }
+      }
+    ]
+  },
+  "appBuild": {
+    "passed": true,
+    "scheme": "D",
+    "configuration": "Debug",
+    "destination": "macOS arm64"
+  },
+  "testedSourceSHA256": {
+    "Backends/MLX/Package.resolved": "f2992cac7cf1494c6a229fd2c69426ff711dbfc4eff3e89a89a574faec1ae819",
+    "Backends/MLX/Package.swift": "92c461d7d31ff2f220eab7761670773b2c6d01d4ddf69d9a1aa1f754e9cca8e0",
+    "Backends/MLX/Sources/DInferenceCLI/CLIOptions.swift": "7ec788d3c24391e56df204bf637c7852a91fe0a33fda35c38578212ac47b7ad4",
+    "Backends/MLX/Sources/DInferenceCLI/CLIReport.swift": "016596303ef9d2048a175e03bcf6d958e4f8ac29f541e42f078e1b1eab8bb356",
+    "Backends/MLX/Sources/DInferenceCLI/DInferenceCLI.swift": "ded2fbfacff7afa0961c34c4865edc47c93e792f97041f19cad9524f22b71bef",
+    "Backends/MLX/Sources/DInferenceCLI/SignalMonitor.swift": "ffac7f8f7053040f537f1156c58b20ee4d9edec0639c8873c792ff42da5a0191",
+    "Backends/MLX/Sources/DMLXBackend/Flux2ImageMath.swift": "b610101ec8544514fd80ca61201c8ef629ed42cd052058b7930e556732eb46ac",
+    "Backends/MLX/Sources/DMLXBackend/GenerationTermination.swift": "bcee05d67c24909657e708600e8023c409bdb4976f9881aa4c8b0970647a7377",
+    "Backends/MLX/Sources/DMLXBackend/ImageArtifactStore.swift": "caa8dce1f273fbe4cf0ff6b6cb8a468ae44d4296c021b39c4d518b6c42fd5eaa",
+    "Backends/MLX/Sources/DMLXBackend/LocalImageModelInventory.swift": "021159af53e4d7cb6df5b3d2adcd91c8a7af5d5fadf7eb8cb8f1809524d3c92c",
+    "Backends/MLX/Sources/DMLXBackend/LocalModelInventory.swift": "beb248e7c6591258711c712daaec1075120af6eab0355cfe41a6cf8e2b20b968",
+    "Backends/MLX/Sources/DMLXBackend/MLXDiagnostics.swift": "159dc4fa6263415739b7c9143b24fa602389d47fd4a8e1bd8ecd362ddcc34989",
+    "Backends/MLX/Sources/DMLXBackend/MLXExecutionLease.swift": "2247cdf7b42a8efcda1166944e09f1e4e0301f3c28a8e349d965fc3ad1a49efc",
+    "Backends/MLX/Sources/DMLXBackend/MLXImageBackend.swift": "39dc3367778fedb18c09395b5cdf124acf9ceaf620014a2a8397d9755f5026d0",
+    "Backends/MLX/Sources/DMLXBackend/MLXTextBackend.swift": "f853e2246a559d453ddc55123c134ca209f90e6657058eb691df9838bd9fe8bd",
+    "Backends/MLX/Sources/DMLXBackend/Resources/flux2-klein-model.json": "4868860df31cc3f17e52ec286f17171d0269f42088278ca758ae707ae00f5f6a",
+    "Backends/MLX/Sources/MLXAllocationProbe/Probe.swift": "4276e51f26ee1bbd1c95f6649852ef0872956cbb72bfc72ded1fa694bb6fd569",
+    "Backends/MLX/Tests/DMLXBackendTests/Flux2ImageMathTests.swift": "7b4a123f364ff8a7b8c606147f7e82bdbb2190912816edad61c39c1542a27f08",
+    "Backends/MLX/Tests/DMLXBackendTests/GenerationTerminationTests.swift": "6d930e5214a28d6c80b602e4a7cd320f6f5ae272e099f1e9d8b84f94001d86d5",
+    "Backends/MLX/Tests/DMLXBackendTests/ImageArtifactStoreTests.swift": "363fe6ad61ce78ef3e571b81b1d0da1ddc2f3463120977e15f788dc7dbf15f1d",
+    "Backends/MLX/Tests/DMLXBackendTests/LocalImageModelInventoryTests.swift": "96ffb0f5700d1463334d3b310ca34989d410a26210703fe7ee1a8b839a935030",
+    "Backends/MLX/Tests/DMLXBackendTests/LocalModelInventoryTests.swift": "438d2f3485eaa9ef5df076cbd3f26622c2e0bb9cd27d79fc56a11b07e1afe40b",
+    "Backends/MLX/Tests/DMLXBackendTests/MLXHardwareTests.swift": "ba56d435652119c940caa3675239ddf592dbf2364ea899226fae74421b58999e",
+    "Backends/MLX/Tests/DMLXBackendTests/MLXImageRealModelTests.swift": "9c549e59b41af1e250d8d70c1f5260ca400ce76b23b3663ca61a4ed301a06d87",
+    "Backends/MLX/Tests/DMLXBackendTests/MLXRealModelTests.swift": "9fe9ab275dbb45e37f31593a3e77e5e3801111f6d1481187db111ce2eca63d4a",
+    "Backends/MLX/Tests/DMLXBackendTests/MLXTestSupport.swift": "5e7ae5c116e1a9c510d83651d507736ccb0c46b141f9a0779ab247bb0879c567",
+    "Sources/DInference/InferenceBackend.swift": "e3b509edf83b2d1725561757b97189a45e3d81015c502e31200401b6c844ffac",
+    "Sources/DInference/InferenceRequest.swift": "cddc5cf6cd6bc625257765927b3370dbf386096f43cca7706044838e3dba26d6",
+    "Sources/DInference/InferenceRun.swift": "22f3deb6ce9c60dcbd756db83abebc7708824a6f3355f9d8931e306176ca000f",
+    "Sources/DRuntime/InferenceRuntime.swift": "95340533e0f1b36f1383646c8fd8bdb3c4aa8ee10851ded9ae12bceaa2e8c385",
+    "Sources/DRuntime/RunCompletion.swift": "c762918637dba5e00a26f900b025a6c17be1ee585e8650768cee0c5dbfdb7150",
+    "Sources/DRuntime/RuntimeConfiguration.swift": "ba5b98b4b438b7c3bce28f0463faaec9e667b83a6d6a938e3b314cc7498c42db",
+    "Tests/DRuntimeTests/InferenceRuntimeTests.swift": "0c277129a18d4b0e99fd7de076f22c330b59cac89b0f1de4116914d6d921d176",
+    "Tests/DRuntimeTests/RuntimeTestSupport.swift": "b7a603a119e7bdb282b19463f76fcdf349af5ea430d37ce0bc10c8bb66866b61",
+    "Tests/DRuntimeTests/TerminalReentrancyTests.swift": "5cec4b7dc70f74d606d28ee826947f7eef37b9550b30ef1fd3e2816f49ce220d"
+  },
+  "rawEvidenceSHA256": {
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/foundation-tests.log": "1be7b7f4f112e88dabd6efd3fde2bb217d94543dc9f487acec85b7166ad18239",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/mlx-tests.log": "122e79526723295f26751cc9281838f77830667c2d53d4207f832d5953995e21",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/MLXTests-20260907T000528-6594.summary.json": "7ea61393299024735d9258271808cdc4f9093b9f72b66109c77a56aed56dea2e",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/build-mlx.log": "9d1ff58f15ee02dec92a1cb3a81d1367eb56a9d61967917d99d8f66eab184e0f",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/build-local-b2.stdout.log": "f1049279e30e868348d0f9ab631c817cbb87173643429672d2d5261819efe98b",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/image-rng-control.log": "dc81ead248fee46cc1e9fe398a1793ed93427a3417f8f52777bbcdd0034f6f03",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/image-cli-b2-final/broken-pipe.json": "81f1f53e1c2285d30d1be63fc420816d5c0176a3e0a7cce9f85c31b5b4536374",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/image-cli-b2-final/broken-pipe.process.json": "8b2343516ef2b5c4a006eadec6b1831a31ebd9b56ec0b793207ec7b40f869888",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/image-cli-b2-final/cancel-after-step.json": "139c4a546e3a7ad75426f38d79c85a991c94c07160dfc5d49c3cefa3fd37da8c",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/image-cli-b2-final/cancel-after-step.process.json": "40e3d24bc7920631cd9dbd88792e2efbe89428de268a6dc097caa6c5dbd5e4b3",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/image-cli-b2-final/fixture-verification.process.json": "3f4f07f14b469dc9fcdadb1daea2c2cecb9eeb79b13f0bf0ff71055fc9c07b4d",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/image-cli-b2-final/help.process.json": "413b141998b870a9af15b3cccdb8fd7c160addc43d3ea11653c60c70cc895ceb",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/image-cli-b2-final/invalid-capability.json": "c76303d8666ae40b217645908a9216a15dbe671e52b5d6d30a31668ef40fca85",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/image-cli-b2-final/invalid-capability.process.json": "5e1b385d691ef1a4477ead946cfd390a99576e7bffdaa1f6ffa9269b6e4f2bde",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/image-cli-b2-final/invalid-guidance.json": "f72583e2c61fa47d87b8e2d2c8a9d814b6b0802f9adee62f295ff64a4beec8c8",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/image-cli-b2-final/invalid-guidance.process.json": "78f4567a14e33055b89bc5d43eea87f0ce3600f51bb042976e74da7848efec33",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/image-cli-b2-final/invalid-image-flags-in-text.json": "15070eb6aab2ca5ad99db08d88347435f611dac45d0852daf7f2d22d055de880",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/image-cli-b2-final/invalid-image-flags-in-text.process.json": "e0efe2c4c1507dab78fc59af7fb1e60d207cc590de68441f52f5b0dc42fa588c",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/image-cli-b2-final/invalid-missing-artifacts.json": "84d9fcb14c14e3c0d76f4d7932dec225661e76e2b466b9c1c8aa846d612039ac",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/image-cli-b2-final/invalid-missing-artifacts.process.json": "dd2a8c2ecb5c61874af55318fa2129bba6e228d17fbaf5478d4660320260c740",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/image-cli-b2-final/invalid-mixed-flags.json": "91ff1d2386a3a6b12291ed880eb66c2a116a2619910be2b0d9d010911b2b644a",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/image-cli-b2-final/invalid-mixed-flags.process.json": "390ce89f3fb0385e0158a13f2ca54501b4a5baae10c7bd9725a8ed820dcd4832",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/image-cli-b2-final/invalid-model-artifacts.json": "f05ed5b5401fffe63372462b6e83085c07540e04f923f4b68c03bee618aa527b",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/image-cli-b2-final/invalid-model-artifacts.process.json": "6d2f9914e7feb098764f0ff6fed148b772f672c4e96d35f7c1a6daa964030747",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/image-cli-b2-final/invalid-relative-artifacts.json": "3adf0fc49986f52fa839debf40337b27bdc3bc6abf1b368e1d7ef70cd7ddd136",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/image-cli-b2-final/invalid-relative-artifacts.process.json": "5c967755f7fc98128553ef64b3fc19c2f7452b4bcfbe59fcefc5f40084891232",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/image-cli-b2-final/invalid-seed.json": "d1f59f689b1b7f27862a6a734dcac76a1209d8841ba93331b59fdc6ae85d71f2",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/image-cli-b2-final/invalid-seed.process.json": "1558b3869dfe77bcbeacf9e85317805e67aea6b3e6a3378e11235cbaeae51bf9",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/image-cli-b2-final/invalid-width.json": "5f5a382b04934e15fe4b85a40cac06befa5ef107d56f09ce0bce9f18e86d6bdd",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/image-cli-b2-final/invalid-width.process.json": "2eb998afb1d716d6f7ac72a527e33bb60aea93ec0929dda6e801f1fa10324891",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/image-cli-b2-final/memory-rejection.json": "81413e96f476f1981deba480df1e31aaba80fade2ac2dee2ab1f523ca420134f",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/image-cli-b2-final/memory-rejection.process.json": "40d549496138ba45cec6d5e356721996d7c54e7a3d68a5b51e95a735e9d893dc",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/image-cli-b2-final/missing-model.json": "757a57c119aca0393069f311a0ee20f91c2a2b85de2626c627b87c930c7face5",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/image-cli-b2-final/missing-model.process.json": "0617f3cff138cfceab6b9ef0f13606250db3046e1fc05619337d5a05d3045696",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/image-cli-b2-final/repeat-three.json": "0018b1072de8ffac5883afb42f4bea0eacdcf332165f7a5ee524ed4bc323b4ef",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/image-cli-b2-final/repeat-three.process.json": "cba97cf897669bd4849f6bd90393d3a88bc200bb43ceae9212a72983b0d1f618",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/image-cli-b2-final/sigint.json": "4c80b651679cf00176db5fd9683f9434387e544b96520bf21011b52848e87799",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/image-cli-b2-final/sigint.process.json": "8a9bf5efcbcc02a31bfa0ed4c756f35ac01f9e75aa9d2252991b65f997afb6d5",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/image-cli-b2-final/sigterm.json": "85aa50d6534c851aa44c40684c4063e68f3da4e73280e1aa14d064328165afb5",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/image-cli-b2-final/sigterm.process.json": "8c71b4c626e555965a77059e4087c614d496d0b53af9e94519833cbeef4ab63d",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/image-cli-b2-final/summary.before-redundant-growth-tightening.json": "ec47592246145282ba96c832306424b2dda2943ae8573e02ceff0b24eb5cb07d",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/image-cli-b2-final/summary.json": "fa4aaf8265d066baf3b140ba7c33dfded7cf342da8322c0fb01ffed6e1b9438f",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/image-cli-b2-final/broken-pipe.stderr.log": "66ad2553a96b541701593b13d033dee644b2a6d64a2952e2a95b4e836a25d397",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/image-cli-b2-final/broken-pipe.stdout.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/image-cli-b2-final/cancel-after-step.stderr.log": "038e20593232df37013d5dffa0499715a4afe492afaec5da43e92c4b8b8941ad",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/image-cli-b2-final/cancel-after-step.stdout.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/image-cli-b2-final/fixture-verification.stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/image-cli-b2-final/fixture-verification.stdout.log": "eef5a505d47ab7ddec887651a682588529620546e5841f8839a844d9834ec360",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/image-cli-b2-final/help.stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/image-cli-b2-final/help.stdout.log": "8aafb167c699304ee94359a8d61705a5d83f15c19dea990de3720d82036af486",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/image-cli-b2-final/invalid-capability.stderr.log": "e358d5088c7b27957867689089f0aecb1b99ccd0b47f21f5cf0e20adc7e488da",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/image-cli-b2-final/invalid-capability.stdout.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/image-cli-b2-final/invalid-guidance.stderr.log": "6930ceb5d05e8028f0d26a0877f61e1f42577fbcda531b440f2b0659603b70ae",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/image-cli-b2-final/invalid-guidance.stdout.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/image-cli-b2-final/invalid-image-flags-in-text.stderr.log": "589075c2396e36d0483a02346bd0ee0d87591301dd0d8ab66237ba5b0df75454",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/image-cli-b2-final/invalid-image-flags-in-text.stdout.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/image-cli-b2-final/invalid-missing-artifacts.stderr.log": "99f0356932bca10307cd1594bf97ed1fc889e73c5ccc11e34554cb91b8c7c8af",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/image-cli-b2-final/invalid-missing-artifacts.stdout.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/image-cli-b2-final/invalid-mixed-flags.stderr.log": "fdaf326b2eeb202303e6d09e53c227fe71a9c2a9b235643bb92062bfd4b4b2e8",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/image-cli-b2-final/invalid-mixed-flags.stdout.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/image-cli-b2-final/invalid-model-artifacts.stderr.log": "1243f956daabb1eaf490b4b08f71d48034ba7ffec71a8ca69466246bf3329d2e",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/image-cli-b2-final/invalid-model-artifacts.stdout.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/image-cli-b2-final/invalid-relative-artifacts.stderr.log": "9ca3f7527417578e154f8a20e534e238b59ebbce963a1b0aa7d9494668f58aa1",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/image-cli-b2-final/invalid-relative-artifacts.stdout.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/image-cli-b2-final/invalid-seed.stderr.log": "f21968548b19e9280d4949011437451ae611ae1c8c6d1dde994876c39a7c1240",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/image-cli-b2-final/invalid-seed.stdout.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/image-cli-b2-final/invalid-width.stderr.log": "14afb2a9a2038fda26a37928f97d8a8d2a2fee0f3c623771bdc1f5ac384c9079",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/image-cli-b2-final/invalid-width.stdout.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/image-cli-b2-final/memory-rejection.stderr.log": "18ac40b943a086ccf67b8e205e6a758af274808734017a64ec3454f114e58421",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/image-cli-b2-final/memory-rejection.stdout.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/image-cli-b2-final/missing-model.stderr.log": "9e5557138e67210d3d6227dcfb55769669b557e9e3ab8afc35cd9fe8aa6a6208",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/image-cli-b2-final/missing-model.stdout.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/image-cli-b2-final/repeat-three.stderr.log": "67441a8435d72fda8ae183f65186429078b2f15abec571ac0e84c87573984e9e",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/image-cli-b2-final/repeat-three.stdout.log": "f06ad4897ce1821792f6d152e703190b0a9a92c0cc12deed667686a74f8b9503",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/image-cli-b2-final/sigint.stderr.log": "7f9c31037ff7869ed183370f187a91efe84a879a7885f790d1c6eb531d95732e",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/image-cli-b2-final/sigint.stdout.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/image-cli-b2-final/sigterm.stderr.log": "7283baa27c811d307b7bc064921e653cab5058395ec588a1958fa19f9529e6a3",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/image-cli-b2-final/sigterm.stdout.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/text-cli-b2-final/broken-pipe.json": "e2bfbe2441d42a0ef1b6e83b6400e68803c5035e2cd18f1a81821e9f5217270a",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/text-cli-b2-final/broken-pipe.process.json": "ee66b43271679ae74127c01c550ccf4b84c5a2b18ee6394637a3bb6191f88c4e",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/text-cli-b2-final/cancel-after-chunk.json": "0c753e58fb3d405d068d1084bd9e3239f88baaf4972e9e133d076e2466061f76",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/text-cli-b2-final/cancel-after-chunk.process.json": "b9638117c3bff05546eb3de61a961f2c8f05b5e5ed26bdb015cc26db3f95b7d5",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/text-cli-b2-final/fixture-verification.process.json": "b5ba88b0f22b03780678e1c62308faeff3e4ae29270092fa8c6932551a0d4375",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/text-cli-b2-final/help.process.json": "d4285b740275785d4a4aa1b0100effaf21d1dbeb6c381bddae142bef803a4ab9",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/text-cli-b2-final/invalid-arguments.json": "7e517b6c94cb2c432ffa908ca60ebbe4731686eaecb846e2816ce584157c855d",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/text-cli-b2-final/invalid-arguments.process.json": "a46f4d6bcd6f081ea94109c2e78c6f468e8d23f788a1b12d10eadee2cb99ad8b",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/text-cli-b2-final/max-tokens-one.json": "a744bc94212f25e827e0193acfc29ce01840422f6c401d2715bb580aba865cc2",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/text-cli-b2-final/max-tokens-one.process.json": "e65b0626ffb823047e24bfba8d452476aa85784e0cbacb93fe9847eedb2e1b01",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/text-cli-b2-final/memory-rejection.json": "fb15674cbc482c334c745766749ab049fde64617864908e5ee76b7ee65550624",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/text-cli-b2-final/memory-rejection.process.json": "e9aea13fa420f09e3df04108a68c5396c45fd04d78834e387428f8bea00ab006",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/text-cli-b2-final/missing-model.json": "e0db1eb87ef584003707a0eef6367cc87285e45fe2c1579a7674f4a7e42e2668",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/text-cli-b2-final/missing-model.process.json": "c749a40e9af33d92337a2fe317fdb5cc1172a797f62a8b27b766df4dc06d4342",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/text-cli-b2-final/repeat-five.json": "8d8fc6efb3573b81b9b74e6a1f618ec7906f3b58ffb392fd3798288063abaa89",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/text-cli-b2-final/repeat-five.process.json": "262ad793ab09257c8e127127d126a9fbd9806aa1905c61b6d7f10bb3c700c401",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/text-cli-b2-final/sigint.json": "90467f2000540b9c6213e9ab18443fed6bf20c2cdc02f3deea45be14da086f44",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/text-cli-b2-final/sigint.process.json": "bb6ef200902dfe9e03fb7d7f75b75d0fa052b9c92f5c109e55e418143bf00fe8",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/text-cli-b2-final/sigterm.json": "651a4702163c8d2a905132407fd75b9d3bfde829cabbb35cc82a26c5b899c41d",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/text-cli-b2-final/sigterm.process.json": "b5f20fe9a5ceb344da4d853e6fa7255b71516fca7fdd0aa2e6b47e30580e6ada",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/text-cli-b2-final/summary.json": "171fed4388a912a2da6397312d167f81243540725e5fce51c10be74c640fc0a2",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/text-cli-b2-final/broken-pipe.stderr.log": "f3f2520619f34b2fffeb30a19d4f39113351716ad51f10e9e28c4005952c2961",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/text-cli-b2-final/broken-pipe.stdout.log": "6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/text-cli-b2-final/cancel-after-chunk.stderr.log": "0b7734899b7ccfd90cfe6397d9ae3d6763e83bf1746f425d2b96063901a16b8f",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/text-cli-b2-final/cancel-after-chunk.stdout.log": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/text-cli-b2-final/fixture-verification.stderr.log": "8f5c453ec00f44e569b403e8d44a7335edc7ba7919ae2255dd3eb869836704dc",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/text-cli-b2-final/fixture-verification.stdout.log": "6732514b34a9d4641e874e013ce370619e802f0d36b23481f50099794e0133c9",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/text-cli-b2-final/help.stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/text-cli-b2-final/help.stdout.log": "8aafb167c699304ee94359a8d61705a5d83f15c19dea990de3720d82036af486",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/text-cli-b2-final/invalid-arguments.stderr.log": "4ce5d5650b42c41f4000de286f0c142ea61fd542071df22eac363365ad0584b2",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/text-cli-b2-final/invalid-arguments.stdout.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/text-cli-b2-final/max-tokens-one.stderr.log": "28afc009ccdad8b9f65974149f5b48d0ca6a861a5243f595f18ab8f91f3a7905",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/text-cli-b2-final/max-tokens-one.stdout.log": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/text-cli-b2-final/memory-rejection.stderr.log": "1b4f564615755ba22fb4b5ce9a838b9e556c3814cdadc2c8c20ed55e9bdc2c08",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/text-cli-b2-final/memory-rejection.stdout.log": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/text-cli-b2-final/missing-model.stderr.log": "6e8cd3486dabccc383988c584b650a67c15418f36db377222c898aa99956d557",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/text-cli-b2-final/missing-model.stdout.log": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/text-cli-b2-final/repeat-five.stderr.log": "228c71bc76c09eca7ddb6e5c6e2346db157e32374dc344cf02f89eafe328ec6d",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/text-cli-b2-final/repeat-five.stdout.log": "7c121b83089ce74af8118a346617eb8a097ccbc974a0302385b55bd23e0e660f",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/text-cli-b2-final/sigint.stderr.log": "e45d9c796428855d07af33072ef6f76fe6a46f13cab4c5f14aa52479a406dfb3",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/text-cli-b2-final/sigint.stdout.log": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/text-cli-b2-final/sigterm.stderr.log": "6c09ca6706ba35628d0c88eaaa356df57378e134e848691d133a9e82f8104732",
+    "/Volumes/CodexProjects/Codex/D-Development/Logs/text-cli-b2-final/sigterm.stdout.log": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865"
+  },
+  "limits": [
+    "The legacy SwiftUI application is built but not migrated to DRuntime.",
+    "Allocator counters are not process RSS, and bounded repeated runs are not a universal no-leak proof.",
+    "Actual SSD exhaustion and physical drive removal were not performed; failure tests use controlled permission errors and directory relocation.",
+    "Installed model files must remain immutable after verification; other same-user processes can still modify paths afterward.",
+    "Published PNG files are preserved, but cancellation or stream rejection before delivery can prevent an artifact reference from appearing in the report.",
+    "Dependency fixture tests retained in the vendor snapshot are not all run; the D suite directly checks production numerical helpers and the real strict-prompt path."
+  ]
+}

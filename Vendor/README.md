@@ -50,3 +50,7 @@ python3 scripts/verify-mlx-vendor.py
 上游正式包含修复且 D 的回归验证通过后，可移除本地包覆盖，恢复一致的官方精确依赖并更新解析锁文件，随后移除已无使用者的快照。回退以 D 的检查点提交为单位；保留来源与实验记录。当前无需创建用户 GitHub fork。
 
 本目录包含上游自己的 `.gitignore`。首次提交应根据文件清单精确加入源码，避免上游 ignore 规则漏掉原来已跟踪的文件；也不要对整个目录使用无差别强制添加，将本机 `.swiftpm` 或 `.build` 一并提交。
+
+## FLUX.2 图像依赖
+
+`flux2-swift/` 是固定的 Apache-2.0 源码快照，包含上游全部 206 个文件。D 仅增加统一本地 MLX、显式缓存清理和严格分词三项补丁。完整来源、许可证、前后摘要和维护条件见 [FLUX.2 依赖记录](../docs/FLUX2_DEPENDENCY_PATCH.zh-CN.md)；运行 `python3 scripts/verify-flux2-vendor.py` 离线核对。实际模型权重保存在项目外，未提交到 Git。

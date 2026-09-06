@@ -6,6 +6,7 @@ import Testing
 
 /// Intentionally opt-in: the acceptance script sets this variable in the XCTest process.
 /// A skipped suite is never evidence that real inference was tested successfully.
+extension MLXHardwareTests {
 @Suite("Real local MLX model", .serialized,
        .enabled(if: ProcessInfo.processInfo.environment["D_TEST_MODEL_DIR"] != nil))
 struct MLXRealModelTests {
@@ -256,4 +257,6 @@ struct MLXRealModelTests {
             expectNoLateOutputs(await trace.entries())
         }
     }
+}
+
 }

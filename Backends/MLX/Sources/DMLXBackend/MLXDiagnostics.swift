@@ -17,6 +17,9 @@ public struct MLXMemorySnapshot: Sendable, Codable, Equatable {
 public struct MLXLifecycleEvent: Sendable, Codable {
     public enum Phase: String, Sendable, Codable {
         case loading, loaded, generating, drained, released
+        case verifying, tokenizing, loadingTextEncoder, textEncoderLoaded, encoding, encoded
+        case loadingTransformer, transformerLoaded, denoising, loadingVAE, vaeLoaded
+        case decoding, decoded, publishing
     }
     public let runID: UUID
     public let phase: Phase

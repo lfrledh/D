@@ -25,9 +25,38 @@ import Foundation
     }
 }
 
+// Run in a separate process: deliberately touching the global RNG establishes a
+// process-lifetime owner and would contaminate backend tests that require zero active arrays.
+@inline(never) func scopedNoise() {
+    let state = MLXRandom.RandomState(seed: 42)
+    withRandomState(state) {
+        eval(MLXRandom.normal([1, 1024, 128]))
+    }
+}
+
+@inline(never) func globalNoise() {
+    MLXRandom.seed(42)
+    eval(MLXRandom.normal([1, 1024, 128]))
+}
+
+func rngSnapshot(_ phase: String) {
+    Stream.gpu.synchronize()
+    Stream.cpu.synchronize()
+    Memory.clearCache()
+    print("D_RNG_CONTROL phase=\(phase) activeBytes=\(Memory.activeMemory) cacheBytes=\(Memory.cacheMemory)")
+}
+
 @main struct Probe {
     static func main() async throws {
-        if CommandLine.arguments.count == 2 {
+        if CommandLine.arguments.dropFirst() == ["--rng-ownership-control"] {
+            rngSnapshot("baseline")
+            scopedNoise()
+            rngSnapshot("scoped_noise_released")
+            globalNoise()
+            rngSnapshot("global_noise_retained")
+            MLXRandom.seed(0)
+            rngSnapshot("global_state_reseeded")
+        } else if CommandLine.arguments.count == 2 {
             for iteration in 1...5 {
                 try await loadOnly(URL(fileURLWithPath: CommandLine.arguments[1]))
                 Stream.gpu.synchronize()

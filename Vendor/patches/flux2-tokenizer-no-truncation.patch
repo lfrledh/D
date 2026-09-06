@@ -1,0 +1,150 @@
+diff --git a/Sources/Flux2/Models/TextEncoder/Flux2QwenTokenizer.swift b/Sources/Flux2/Models/TextEncoder/Flux2QwenTokenizer.swift
+--- a/Sources/Flux2/Models/TextEncoder/Flux2QwenTokenizer.swift
++++ b/Sources/Flux2/Models/TextEncoder/Flux2QwenTokenizer.swift
+@@ -10,6 +10,7 @@
+   case padTokenNotInVocabulary(String)
+   case emptyPromptList
+   case invalidMaxLength(Int)
++  case promptTooLong(index: Int, tokenCount: Int, maxLength: Int)
+ }
+ 
+ public struct Flux2TokenBatch {
+@@ -104,11 +105,17 @@
+     )
+   }
+ 
++  /// Encodes and pads prompts to the effective maximum length.
++  ///
++  /// With `truncation: false`, counts the complete chat-template output and throws
++  /// `promptTooLong` before constructing MLX arrays if any prompt exceeds that
++  /// length. The default preserves the upstream truncating behavior.
+   public func encode(
+     prompts: [String],
+     maxLength: Int? = nil,
+     addGenerationPrompt: Bool = true,
+-    enableThinking: Bool = false
++    enableThinking: Bool = false,
++    truncation: Bool = true
+   ) throws -> Flux2TokenBatch {
+     guard !prompts.isEmpty else {
+       throw Flux2TokenizerError.emptyPromptList
+@@ -123,7 +130,7 @@
+     inputSequences.reserveCapacity(prompts.count)
+     attentionSequences.reserveCapacity(prompts.count)
+ 
+-    for prompt in prompts {
++    for (index, prompt) in prompts.enumerated() {
+       let messages: [Message] = [
+         ["role": "user", "content": prompt]
+       ]
+@@ -131,11 +138,17 @@
+         messages: messages,
+         chatTemplate: chatTemplate,
+         addGenerationPrompt: addGenerationPrompt,
+-        truncation: true,
+-        maxLength: targetLength,
++        truncation: truncation,
++        maxLength: truncation ? targetLength : nil,
+         tools: nil,
+         additionalContext: ["enable_thinking": enableThinking]
+       )
++
++      if !truncation && tokens.count > targetLength {
++        throw Flux2TokenizerError.promptTooLong(
++          index: index, tokenCount: tokens.count, maxLength: targetLength
++        )
++      }
+ 
+       let (padded, attention) = Self.padTokens(tokens: tokens, padTokenId: padTokenId, maxLength: targetLength)
+       inputSequences.append(padded)
+diff --git a/Sources/Flux2/Pipeline/Flux2KleinPromptEncoder.swift b/Sources/Flux2/Pipeline/Flux2KleinPromptEncoder.swift
+--- a/Sources/Flux2/Pipeline/Flux2KleinPromptEncoder.swift
++++ b/Sources/Flux2/Pipeline/Flux2KleinPromptEncoder.swift
+@@ -51,7 +51,8 @@
+     addGenerationPrompt: Bool = true,
+     enableThinking: Bool = false,
+     numImagesPerPrompt: Int = 1,
+-    tCoord: MLXArray? = nil
++    tCoord: MLXArray? = nil,
++    truncation: Bool = true
+   ) throws -> Flux2PromptEncoding {
+     guard let tokenizer else {
+       throw Flux2PromptEncoderError.tokenizerUnavailable
+@@ -60,7 +61,8 @@
+       prompts: prompts,
+       maxLength: maxLength,
+       addGenerationPrompt: addGenerationPrompt,
+-      enableThinking: enableThinking
++      enableThinking: enableThinking,
++      truncation: truncation
+     )
+     return try encodeTokens(
+       inputIds: tokens.inputIds,
+diff --git a/Tests/Flux2Tests/Flux2QwenTokenizerTests.swift b/Tests/Flux2Tests/Flux2QwenTokenizerTests.swift
+--- a/Tests/Flux2Tests/Flux2QwenTokenizerTests.swift
++++ b/Tests/Flux2Tests/Flux2QwenTokenizerTests.swift
+@@ -4,6 +4,64 @@
+ @testable import Flux2
+ 
+ final class Flux2QwenTokenizerTests: XCTestCase {
++  private func fixtureTokenizer(maxLength: Int = 512) throws -> Flux2QwenTokenizer {
++    let directory = URL(fileURLWithPath: #filePath)
++      .deletingLastPathComponent()
++      .deletingLastPathComponent()
++      .deletingLastPathComponent()
++      .appendingPathComponent("fixtures/flux2_klein4b/tokenizer")
++    return try Flux2QwenTokenizer.load(from: directory, maxLengthOverride: maxLength)
++  }
++
++  func testStrictEncodingReportsCompleteTokenCountAndPromptIndex() throws {
++    let tokenizer = try fixtureTokenizer()
++    let longPrompt = String(repeating: "orange cat sitting on a windowsill ", count: 20)
++    let fullBatch = try tokenizer.encode(prompts: [longPrompt], truncation: false)
++    let fullCount = fullBatch.attentionMask.asArray(Int32.self).reduce(0, +)
++    XCTAssertGreaterThan(fullCount, 32)
++
++    XCTAssertThrowsError(try tokenizer.encode(
++      prompts: ["cat", longPrompt], maxLength: 32, truncation: false
++    )) { error in
++      guard case Flux2TokenizerError.promptTooLong(let index, let count, let limit) = error else {
++        return XCTFail("Unexpected error: \(error)")
++      }
++      XCTAssertEqual(index, 1)
++      XCTAssertEqual(count, Int(fullCount))
++      XCTAssertEqual(limit, 32)
++    }
++  }
++
++  func testStrictEncodingAcceptsExactBoundaryAndPreservesDefaultTruncation() throws {
++    let tokenizer = try fixtureTokenizer(maxLength: 128)
++    let prompt = "A fluffy orange cat sitting on a windowsill"
++    let fullBatch = try tokenizer.encode(prompts: [prompt], truncation: false)
++    let count = Int(fullBatch.attentionMask.asArray(Int32.self).reduce(0, +))
++    XCTAssertGreaterThan(count, 1)
++    let exact = try tokenizer.encode(prompts: [prompt], maxLength: count, truncation: false)
++    XCTAssertEqual(exact.inputIds.shape, [1, count])
++    XCTAssertEqual(exact.attentionMask.asArray(Int32.self), Array(repeating: 1, count: count))
++    XCTAssertThrowsError(try tokenizer.encode(prompts: [prompt], maxLength: count - 1, truncation: false))
++
++    let legacy = try tokenizer.encode(prompts: [prompt], maxLength: count - 1)
++    let explicit = try tokenizer.encode(prompts: [prompt], maxLength: count - 1, truncation: true)
++    let expected = Array(fullBatch.inputIds.asArray(Int32.self).prefix(count - 1))
++    XCTAssertEqual(legacy.inputIds.asArray(Int32.self), expected)
++    XCTAssertEqual(explicit.inputIds.asArray(Int32.self), expected)
++  }
++
++  func testStrictEncodingIncludesChatTemplateTokensInTheLimit() throws {
++    let tokenizer = try fixtureTokenizer()
++    XCTAssertThrowsError(try tokenizer.encode(prompts: [""], maxLength: 1, truncation: false)) { error in
++      guard case Flux2TokenizerError.promptTooLong(let index, let count, let limit) = error else {
++        return XCTFail("Unexpected error: \(error)")
++      }
++      XCTAssertEqual(index, 0)
++      XCTAssertGreaterThan(count, 1)
++      XCTAssertEqual(limit, 1)
++    }
++  }
++
+   func testTokenizerLoadsAndEncodes() throws {
+     let fixtureRoot = URL(fileURLWithPath: #filePath)
+       .deletingLastPathComponent()

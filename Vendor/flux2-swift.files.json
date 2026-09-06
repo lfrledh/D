@@ -1,0 +1,1860 @@
+{
+  "schemaVersion": 1,
+  "algorithm": "sha256",
+  "files": [
+    {
+      "path": ".github/workflows/ci.yml",
+      "gitMode": "100644",
+      "upstreamGitBlob": "57803728339023ca86ef26e190eed490970ddc6d",
+      "upstreamSize": 2952,
+      "upstreamSHA256": "65a1fe915db2b15d552c14139d06285370362c99dc37fe8c5af9e8f2dc9edffb",
+      "size": 2952,
+      "sha256": "65a1fe915db2b15d552c14139d06285370362c99dc37fe8c5af9e8f2dc9edffb"
+    },
+    {
+      "path": ".gitignore",
+      "gitMode": "100644",
+      "upstreamGitBlob": "cb12312ddc94394c98f3ef07b3d5d6be92c18117",
+      "upstreamSize": 1657,
+      "upstreamSHA256": "2929b0c04ccb642ea5c397a88f5350130edf2d783c422d6faa45aee68f511fc4",
+      "size": 1657,
+      "sha256": "2929b0c04ccb642ea5c397a88f5350130edf2d783c422d6faa45aee68f511fc4"
+    },
+    {
+      "path": "AGENTS.md",
+      "gitMode": "100644",
+      "upstreamGitBlob": "6482178c816c3a18c6dc7a4c247b5baa0ebf6e03",
+      "upstreamSize": 2364,
+      "upstreamSHA256": "c3309e60641d2dbf2a2bc52a8f477dd5078cffa8423d470bc4508646c077c365",
+      "size": 2364,
+      "sha256": "c3309e60641d2dbf2a2bc52a8f477dd5078cffa8423d470bc4508646c077c365"
+    },
+    {
+      "path": "LICENSE",
+      "gitMode": "100644",
+      "upstreamGitBlob": "709d2d7ce12146926e1a538f8a32fa71d9a8e6c4",
+      "upstreamSize": 10745,
+      "upstreamSHA256": "c2c8137666d1fc922941bc82bfaea45f4a69410032c047f519d01ce4dc664099",
+      "size": 10745,
+      "sha256": "c2c8137666d1fc922941bc82bfaea45f4a69410032c047f519d01ce4dc664099"
+    },
+    {
+      "path": "Package.resolved",
+      "gitMode": "100644",
+      "upstreamGitBlob": "26f3033f139a7c3e88b347e3f74499776387c4b3",
+      "upstreamSize": 1778,
+      "upstreamSHA256": "2b01c711237f859a24137ffd5126ab96919954f835a953212f71587b82bb5bfb",
+      "size": 1778,
+      "sha256": "2b01c711237f859a24137ffd5126ab96919954f835a953212f71587b82bb5bfb"
+    },
+    {
+      "path": "Package.swift",
+      "gitMode": "100644",
+      "upstreamGitBlob": "295d2f7326e676123137f6ebf8417409cd0a4db6",
+      "upstreamSize": 1486,
+      "upstreamSHA256": "76467a9516b2e9798e505c2a552fdae4de8fc92d4133b7f3c326c7f20604e0f1",
+      "size": 1428,
+      "sha256": "493ce6d92875b97b56e8bccfb7da13cece15bc38364c6844e154673ca99cbdea"
+    },
+    {
+      "path": "README.md",
+      "gitMode": "100644",
+      "upstreamGitBlob": "b60fb661097927114707458f0b3009514a407494",
+      "upstreamSize": 8406,
+      "upstreamSHA256": "e97e65be6fae33c7188f66aa2dc934113f939624893ecee6abf64f7831cdd103",
+      "size": 8406,
+      "sha256": "e97e65be6fae33c7188f66aa2dc934113f939624893ecee6abf64f7831cdd103"
+    },
+    {
+      "path": "Sources/Flux2/Config/Flux2ModelConfig.swift",
+      "gitMode": "100644",
+      "upstreamGitBlob": "4bba5f1ad9dfb6b84a38a2e240b45ecaf1219627",
+      "upstreamSize": 1827,
+      "upstreamSHA256": "553fa33815c0caf5b553e4180bf8268565a7c38f9b442ff65fb5eeea4e3472d5",
+      "size": 1827,
+      "sha256": "553fa33815c0caf5b553e4180bf8268565a7c38f9b442ff65fb5eeea4e3472d5"
+    },
+    {
+      "path": "Sources/Flux2/Config/Flux2SystemMessages.swift",
+      "gitMode": "100644",
+      "upstreamGitBlob": "a0f9e9f58e485c0513f315de8cb05ec2d9b28575",
+      "upstreamSize": 1776,
+      "upstreamSHA256": "ee18a9dd05677d06f53b2d3f83dd8a35c820159ca041843d3e3bbacc99bc3fe8",
+      "size": 1776,
+      "sha256": "ee18a9dd05677d06f53b2d3f83dd8a35c820159ca041843d3e3bbacc99bc3fe8"
+    },
+    {
+      "path": "Sources/Flux2/IO/DTypeMapping.swift",
+      "gitMode": "100644",
+      "upstreamGitBlob": "bd3795c62291d910fa3167cfe0009c32d3d849f3",
+      "upstreamSize": 931,
+      "upstreamSHA256": "2d9748bccc753e515cc06f0ae2ddad6de09bd738204cd66cb817ae3e75213633",
+      "size": 931,
+      "sha256": "2d9748bccc753e515cc06f0ae2ddad6de09bd738204cd66cb817ae3e75213633"
+    },
+    {
+      "path": "Sources/Flux2/IO/Flux2Quantization.swift",
+      "gitMode": "100644",
+      "upstreamGitBlob": "95f45f4b70848330d4b191d82581b558efa85d02",
+      "upstreamSize": 15023,
+      "upstreamSHA256": "c90032742fcce459453c295079382618a871d0e5bc32325c04f5a4cf9aa38b7c",
+      "size": 15023,
+      "sha256": "c90032742fcce459453c295079382618a871d0e5bc32325c04f5a4cf9aa38b7c"
+    },
+    {
+      "path": "Sources/Flux2/IO/SafeTensorsReader.swift",
+      "gitMode": "100644",
+      "upstreamGitBlob": "561edc5153a7faaef80492c7f54f2157e25ad411",
+      "upstreamSize": 8481,
+      "upstreamSHA256": "3025da02f505a34962861cb2a84854e53e87c3ce0b778679269897066321ddde",
+      "size": 8481,
+      "sha256": "3025da02f505a34962861cb2a84854e53e87c3ce0b778679269897066321ddde"
+    },
+    {
+      "path": "Sources/Flux2/IO/Weights/Flux2WeightsLoader.swift",
+      "gitMode": "100644",
+      "upstreamGitBlob": "139d10ae596e51818f2552b5d1ce856025183934",
+      "upstreamSize": 3406,
+      "upstreamSHA256": "2558cb165a1da0d04056bca3095d34c84e64284f121f47b9e9bec06f7576c2f9",
+      "size": 3406,
+      "sha256": "2558cb165a1da0d04056bca3095d34c84e64284f121f47b9e9bec06f7576c2f9"
+    },
+    {
+      "path": "Sources/Flux2/Models/TextEncoder/Flux2Mistral3Configuration.swift",
+      "gitMode": "100644",
+      "upstreamGitBlob": "901d186b2d4747a33c0ca7d974bb9766f971f17c",
+      "upstreamSize": 3776,
+      "upstreamSHA256": "18ed285e9572fc0b9c014ded968f9666693c49e25c17f69650943b70067a3d34",
+      "size": 3776,
+      "sha256": "18ed285e9572fc0b9c014ded968f9666693c49e25c17f69650943b70067a3d34"
+    },
+    {
+      "path": "Sources/Flux2/Models/TextEncoder/Flux2Mistral3MultiModalProjector.swift",
+      "gitMode": "100644",
+      "upstreamGitBlob": "054c1e3350496231cd29e8234a431adf73cd7939",
+      "upstreamSize": 3277,
+      "upstreamSHA256": "1667afb9bc5d5b98e7d2da53b7aaf3a56a2da2813f6f7e129e649a0005b7c49d",
+      "size": 3277,
+      "sha256": "1667afb9bc5d5b98e7d2da53b7aaf3a56a2da2813f6f7e129e649a0005b7c49d"
+    },
+    {
+      "path": "Sources/Flux2/Models/TextEncoder/Flux2Mistral3TextEncoder.swift",
+      "gitMode": "100644",
+      "upstreamGitBlob": "59a0f5a2670fb43d41dbe96111195a8a301692cf",
+      "upstreamSize": 24548,
+      "upstreamSHA256": "1d137dab82435d7a468b534a5c482e26451e08e288de52a7db4e8469bf8dd70c",
+      "size": 24548,
+      "sha256": "1d137dab82435d7a468b534a5c482e26451e08e288de52a7db4e8469bf8dd70c"
+    },
+    {
+      "path": "Sources/Flux2/Models/TextEncoder/Flux2Mistral3VLMConfiguration.swift",
+      "gitMode": "100644",
+      "upstreamGitBlob": "34c4efd2d383679944b0bfea4bde7dcd91b6c5a0",
+      "upstreamSize": 1789,
+      "upstreamSHA256": "0e1da07a557a0e2653acd873e519c7e6b04119d4d276b5dfff84fcf227716970",
+      "size": 1789,
+      "sha256": "0e1da07a557a0e2653acd873e519c7e6b04119d4d276b5dfff84fcf227716970"
+    },
+    {
+      "path": "Sources/Flux2/Models/TextEncoder/Flux2PixtralImageProcessor.swift",
+      "gitMode": "100644",
+      "upstreamGitBlob": "a7c824f1857a3546c6c14590f149da2b33c31abb",
+      "upstreamSize": 6222,
+      "upstreamSHA256": "d21fd1f85007d82a041d6a632634ac2d85175a290a391de591ed2a8a8aafc793",
+      "size": 6222,
+      "sha256": "d21fd1f85007d82a041d6a632634ac2d85175a290a391de591ed2a8a8aafc793"
+    },
+    {
+      "path": "Sources/Flux2/Models/TextEncoder/Flux2PixtralProcessor.swift",
+      "gitMode": "100644",
+      "upstreamGitBlob": "b9bd6d74ba4dce581d8bec0ed7d4f22bef85f015",
+      "upstreamSize": 18218,
+      "upstreamSHA256": "87c8def2e682df7f379c0ac4ae1c5bfbbaf3b465c081653e59cdbd04128a6088",
+      "size": 18218,
+      "sha256": "87c8def2e682df7f379c0ac4ae1c5bfbbaf3b465c081653e59cdbd04128a6088"
+    },
+    {
+      "path": "Sources/Flux2/Models/TextEncoder/Flux2PixtralVisionConfiguration.swift",
+      "gitMode": "100644",
+      "upstreamGitBlob": "919c10a2dbf9847747e25812bdca6fe424c34d4f",
+      "upstreamSize": 1951,
+      "upstreamSHA256": "654c45db8a8ff3e8a3919af2b9384d6f8844aff11cdd865208f5327292296973",
+      "size": 1951,
+      "sha256": "654c45db8a8ff3e8a3919af2b9384d6f8844aff11cdd865208f5327292296973"
+    },
+    {
+      "path": "Sources/Flux2/Models/TextEncoder/Flux2PixtralVisionTower.swift",
+      "gitMode": "100644",
+      "upstreamGitBlob": "0fa86402d1bbdb6cccb3869810589bd3ab8ed442",
+      "upstreamSize": 10945,
+      "upstreamSHA256": "7c627c28b8e5f52a632ecbc4b220d6f51a113848b7bd5188db73bc798f7b8ac5",
+      "size": 10945,
+      "sha256": "7c627c28b8e5f52a632ecbc4b220d6f51a113848b7bd5188db73bc798f7b8ac5"
+    },
+    {
+      "path": "Sources/Flux2/Models/TextEncoder/Flux2Qwen3Configuration.swift",
+      "gitMode": "100644",
+      "upstreamGitBlob": "876408d34874e8015b76dbd8584806c4b99c2de8",
+      "upstreamSize": 2129,
+      "upstreamSHA256": "53248ca492060dbe1346d0b167532edea8cdb602c5273ed9bdfb9a67d8ea33e3",
+      "size": 2129,
+      "sha256": "53248ca492060dbe1346d0b167532edea8cdb602c5273ed9bdfb9a67d8ea33e3"
+    },
+    {
+      "path": "Sources/Flux2/Models/TextEncoder/Flux2Qwen3TextEncoder.swift",
+      "gitMode": "100644",
+      "upstreamGitBlob": "b956f7e5a29932c8e6c624b9b3692db52cfc345b",
+      "upstreamSize": 10148,
+      "upstreamSHA256": "56942a7d37c32a44565fee71b697a1f5e6b15f58fc0263258fb41cdb7374c3be",
+      "size": 10148,
+      "sha256": "56942a7d37c32a44565fee71b697a1f5e6b15f58fc0263258fb41cdb7374c3be"
+    },
+    {
+      "path": "Sources/Flux2/Models/TextEncoder/Flux2QwenTokenizer.swift",
+      "gitMode": "100644",
+      "upstreamGitBlob": "5cb36a1464940d12a3e5663e6fcaa8effd820b3b",
+      "upstreamSize": 8453,
+      "upstreamSHA256": "41d71305910e9792f5f578029a7ba36987bc6d37f4fddd87d6100558d5c0bf68",
+      "size": 9095,
+      "sha256": "2c6cc51a10dc8f0af395430f93ef019f1e9275fc1cae41fc4b9918048eb14b90"
+    },
+    {
+      "path": "Sources/Flux2/Models/Transformer/Flux2AdaLayerNormContinuous.swift",
+      "gitMode": "100644",
+      "upstreamGitBlob": "c6dcf6a8aed7b925bcb08dad3b60c252e4f0fc8e",
+      "upstreamSize": 1050,
+      "upstreamSHA256": "1d77fcd8cd5619957ccc5ff7456d28cb216e8cbebb00990218698f65e6139a93",
+      "size": 1050,
+      "sha256": "1d77fcd8cd5619957ccc5ff7456d28cb216e8cbebb00990218698f65e6139a93"
+    },
+    {
+      "path": "Sources/Flux2/Models/Transformer/Flux2Attention.swift",
+      "gitMode": "100644",
+      "upstreamGitBlob": "755372fc9486cf8b71a3ecc4366aab128a3a8cd0",
+      "upstreamSize": 8186,
+      "upstreamSHA256": "42429b1f05b2735baaab60b65ba8acdf881f013d9228db1c11593697f5941842",
+      "size": 8186,
+      "sha256": "42429b1f05b2735baaab60b65ba8acdf881f013d9228db1c11593697f5941842"
+    },
+    {
+      "path": "Sources/Flux2/Models/Transformer/Flux2Embeddings.swift",
+      "gitMode": "100644",
+      "upstreamGitBlob": "5bc5b77b43606c2db57f1d7d56dde3fcc1432184",
+      "upstreamSize": 3311,
+      "upstreamSHA256": "5f9700fae9c78482a7d7f609ef4d978e9a87411b27f255c150df88cc776ca54e",
+      "size": 3311,
+      "sha256": "5f9700fae9c78482a7d7f609ef4d978e9a87411b27f255c150df88cc776ca54e"
+    },
+    {
+      "path": "Sources/Flux2/Models/Transformer/Flux2FeedForward.swift",
+      "gitMode": "100644",
+      "upstreamGitBlob": "14056e8e7d165b3d8b299640355c3a4b4a31d88c",
+      "upstreamSize": 929,
+      "upstreamSHA256": "de10083639b64e0753ccbe90c74f97e3e7215b68c11ce5ee57b898afea0c140f",
+      "size": 929,
+      "sha256": "de10083639b64e0753ccbe90c74f97e3e7215b68c11ce5ee57b898afea0c140f"
+    },
+    {
+      "path": "Sources/Flux2/Models/Transformer/Flux2FusedKernels.swift",
+      "gitMode": "100644",
+      "upstreamGitBlob": "aebd9826aed269ea15682b9a066976c064c88872",
+      "upstreamSize": 3752,
+      "upstreamSHA256": "27a70bb2060c391d445e0d2fbf1aeee929cf60069e2c16527e333467fad80e63",
+      "size": 3752,
+      "sha256": "27a70bb2060c391d445e0d2fbf1aeee929cf60069e2c16527e333467fad80e63"
+    },
+    {
+      "path": "Sources/Flux2/Models/Transformer/Flux2LayerNorm.swift",
+      "gitMode": "100644",
+      "upstreamGitBlob": "29f534b061e6494a9bacfdec61525ccaa2654876",
+      "upstreamSize": 244,
+      "upstreamSHA256": "c6fb2849d9e0be2028cb25e2c0196c43b33882489c7e863f5c01e9988efdc7b3",
+      "size": 244,
+      "sha256": "c6fb2849d9e0be2028cb25e2c0196c43b33882489c7e863f5c01e9988efdc7b3"
+    },
+    {
+      "path": "Sources/Flux2/Models/Transformer/Flux2Modulation.swift",
+      "gitMode": "100644",
+      "upstreamGitBlob": "808fedac95a5f37939fb879f1f44f869137e62c4",
+      "upstreamSize": 910,
+      "upstreamSHA256": "a77e3780df9ecc4774db103fb17e56469b0ce37930090195f853f9b29b34f520",
+      "size": 910,
+      "sha256": "a77e3780df9ecc4774db103fb17e56469b0ce37930090195f853f9b29b34f520"
+    },
+    {
+      "path": "Sources/Flux2/Models/Transformer/Flux2RotaryEmbeddings.swift",
+      "gitMode": "100644",
+      "upstreamGitBlob": "d17111142e90c313cc5dd15fa2839eb4ab9b9224",
+      "upstreamSize": 4081,
+      "upstreamSHA256": "4fdce0dd26cabb7d2525b929f1e8fef02fd8ee9dee9d159388cc383c1a0103db",
+      "size": 4081,
+      "sha256": "4fdce0dd26cabb7d2525b929f1e8fef02fd8ee9dee9d159388cc383c1a0103db"
+    },
+    {
+      "path": "Sources/Flux2/Models/Transformer/Flux2Transformer2DModel.swift",
+      "gitMode": "100644",
+      "upstreamGitBlob": "c1fa1e3a4df11b0f0b5f7167cf2c0a3cdb034120",
+      "upstreamSize": 7455,
+      "upstreamSHA256": "72533cafb7de8d269bde25178388598a7083499fadf7a31ee87d620b28bf9641",
+      "size": 7455,
+      "sha256": "72533cafb7de8d269bde25178388598a7083499fadf7a31ee87d620b28bf9641"
+    },
+    {
+      "path": "Sources/Flux2/Models/Transformer/Flux2TransformerBlocks.swift",
+      "gitMode": "100644",
+      "upstreamGitBlob": "5e2818058d7bf8db15bbf5f2c016f5eb6e12ee6a",
+      "upstreamSize": 5907,
+      "upstreamSHA256": "4ed76eac1398ff4bfd7b696461c6ef3d285ec55a1aa9f37d9bb3446abed966fb",
+      "size": 5907,
+      "sha256": "4ed76eac1398ff4bfd7b696461c6ef3d285ec55a1aa9f37d9bb3446abed966fb"
+    },
+    {
+      "path": "Sources/Flux2/Models/Transformer/Flux2TransformerConfiguration.swift",
+      "gitMode": "100644",
+      "upstreamGitBlob": "e7143fe45e54c88aa2595598febdc70b60e748cf",
+      "upstreamSize": 2677,
+      "upstreamSHA256": "4cb5c76ee46528edb26d94bea474870092289e16b2f67876011a1f71877213ec",
+      "size": 2677,
+      "sha256": "4cb5c76ee46528edb26d94bea474870092289e16b2f67876011a1f71877213ec"
+    },
+    {
+      "path": "Sources/Flux2/Models/VAE/Flux2AutoencoderKL.swift",
+      "gitMode": "100644",
+      "upstreamGitBlob": "f2f06332abeca5f26ad0ae20030428fd0e98c5bd",
+      "upstreamSize": 9174,
+      "upstreamSHA256": "c80db82e60d3cecbb17688660c22093dfe220850ada4f18f5b4bf12f3fdeafd7",
+      "size": 9174,
+      "sha256": "c80db82e60d3cecbb17688660c22093dfe220850ada4f18f5b4bf12f3fdeafd7"
+    },
+    {
+      "path": "Sources/Flux2/Models/VAE/Flux2AutoencoderKLConfiguration.swift",
+      "gitMode": "100644",
+      "upstreamGitBlob": "bf83a14bc564a2f35e3382155730fbcc9b6451ee",
+      "upstreamSize": 4284,
+      "upstreamSHA256": "fe15bb970b8e728eb62244c28aff32ff5287f19962f4e253e77df461bcb95d10",
+      "size": 4284,
+      "sha256": "fe15bb970b8e728eb62244c28aff32ff5287f19962f4e253e77df461bcb95d10"
+    },
+    {
+      "path": "Sources/Flux2/Models/VAE/Flux2LatentUtils.swift",
+      "gitMode": "100644",
+      "upstreamGitBlob": "09a9d76f0d8a78a20d75ad150f0b59f0e24d7794",
+      "upstreamSize": 5921,
+      "upstreamSHA256": "61910d983cb4ecec8d308386a24315207806656f50356d3facfe298a61949466",
+      "size": 5921,
+      "sha256": "61910d983cb4ecec8d308386a24315207806656f50356d3facfe298a61949466"
+    },
+    {
+      "path": "Sources/Flux2/Models/VAE/Flux2VAEBlocks.swift",
+      "gitMode": "100644",
+      "upstreamGitBlob": "904c33e1788306924536b465880063a4002c948b",
+      "upstreamSize": 7343,
+      "upstreamSHA256": "ede4be2206daf622b13b8ef864d9bf0a9d02148313a6f7d154fc4675a4bc30e4",
+      "size": 7343,
+      "sha256": "ede4be2206daf622b13b8ef864d9bf0a9d02148313a6f7d154fc4675a4bc30e4"
+    },
+    {
+      "path": "Sources/Flux2/Pipeline/Flux2Denoiser.swift",
+      "gitMode": "100644",
+      "upstreamGitBlob": "76f52c9d557075cc6b6c83b2e334c228a28fc2b4",
+      "upstreamSize": 1747,
+      "upstreamSHA256": "2cbf6f02b1d1d200d70101377db6fd3ed12cb8ca9b0df5b19ee75465be489761",
+      "size": 1747,
+      "sha256": "2cbf6f02b1d1d200d70101377db6fd3ed12cb8ca9b0df5b19ee75465be489761"
+    },
+    {
+      "path": "Sources/Flux2/Pipeline/Flux2DevPipeline.swift",
+      "gitMode": "100644",
+      "upstreamGitBlob": "b08651b596cabc0135f36d79058a7c90daa24740",
+      "upstreamSize": 8516,
+      "upstreamSHA256": "44a3fc79612445f11c556253aabcc69be4b8913107a7d2403353d5b442158b77",
+      "size": 8516,
+      "sha256": "44a3fc79612445f11c556253aabcc69be4b8913107a7d2403353d5b442158b77"
+    },
+    {
+      "path": "Sources/Flux2/Pipeline/Flux2DevPromptEncoder.swift",
+      "gitMode": "100644",
+      "upstreamGitBlob": "d330388a129875abf90c768e28231a9dd7637466",
+      "upstreamSize": 3792,
+      "upstreamSHA256": "0e516192d5c01b259b3173618c28635e5e2e397c1459a2c984a5c7c97e3c21e2",
+      "size": 3792,
+      "sha256": "0e516192d5c01b259b3173618c28635e5e2e397c1459a2c984a5c7c97e3c21e2"
+    },
+    {
+      "path": "Sources/Flux2/Pipeline/Flux2DevPromptUpsampler.swift",
+      "gitMode": "100644",
+      "upstreamGitBlob": "4204abee3b96eda65f01d62146bae3735d8e7421",
+      "upstreamSize": 3877,
+      "upstreamSHA256": "ae47bbf8036cda95417bf2056feaf1c6b63567d5ea576b06ef70bc3da3bbf4ff",
+      "size": 3877,
+      "sha256": "ae47bbf8036cda95417bf2056feaf1c6b63567d5ea576b06ef70bc3da3bbf4ff"
+    },
+    {
+      "path": "Sources/Flux2/Pipeline/Flux2ImageConditioningPipeline.swift",
+      "gitMode": "100644",
+      "upstreamGitBlob": "211e0f1f4447526aa830aefda0b6c8bbb8f64c24",
+      "upstreamSize": 1794,
+      "upstreamSHA256": "75a4ef806a52ca9b2c76ba412c320c33a9f81ae2bee6d6ef4bb3290498c363e1",
+      "size": 1794,
+      "sha256": "75a4ef806a52ca9b2c76ba412c320c33a9f81ae2bee6d6ef4bb3290498c363e1"
+    },
+    {
+      "path": "Sources/Flux2/Pipeline/Flux2KleinPipeline.swift",
+      "gitMode": "100644",
+      "upstreamGitBlob": "16819203cf0cb7d1d758d0ae336868d36101427a",
+      "upstreamSize": 15343,
+      "upstreamSHA256": "07012ab51bf92cfb396bf123dd151a4d4ac2b9bb769c65e4c3f7643b2fd02662",
+      "size": 15343,
+      "sha256": "07012ab51bf92cfb396bf123dd151a4d4ac2b9bb769c65e4c3f7643b2fd02662"
+    },
+    {
+      "path": "Sources/Flux2/Pipeline/Flux2KleinPromptEncoder.swift",
+      "gitMode": "100644",
+      "upstreamGitBlob": "cec0d3e961689504dcbf4eec30ca14f8adaf847c",
+      "upstreamSize": 3830,
+      "upstreamSHA256": "7474462c7c436ebcf774ccdd2d14f39c7f18c4d7fd54c41d50ec0f2abaddf19d",
+      "size": 3889,
+      "sha256": "21bbc3358ae4846b107a8ba7b618e9800859da21a31fd323af844b92da950106"
+    },
+    {
+      "path": "Sources/Flux2/Pipeline/Flux2LatentPreparation.swift",
+      "gitMode": "100644",
+      "upstreamGitBlob": "52b58593ce55fd6c2460493c6c5c349aa81eadf8",
+      "upstreamSize": 4394,
+      "upstreamSHA256": "cd87e5ffec528a86a9c2d2d1b1e375c441b052ecbf348dacfaf8b8aaea324a14",
+      "size": 4394,
+      "sha256": "cd87e5ffec528a86a9c2d2d1b1e375c441b052ecbf348dacfaf8b8aaea324a14"
+    },
+    {
+      "path": "Sources/Flux2/Pipeline/Flux2Pipeline.swift",
+      "gitMode": "100644",
+      "upstreamGitBlob": "dda73adbfc87040d8b61e808bb9cab2553c7814c",
+      "upstreamSize": 3141,
+      "upstreamSHA256": "967947055996f83cdb61b51053ac90ba58c40e45d3105007f80a4ffb69b2334a",
+      "size": 3141,
+      "sha256": "967947055996f83cdb61b51053ac90ba58c40e45d3105007f80a4ffb69b2334a"
+    },
+    {
+      "path": "Sources/Flux2/Schedulers/FlowMatchEulerDiscreteScheduler.swift",
+      "gitMode": "100644",
+      "upstreamGitBlob": "f9c0e7ab95932a92e946a9edea6cb6a480d6a9a7",
+      "upstreamSize": 14851,
+      "upstreamSHA256": "4aba21c4e517158bc3940ecfa32bed834d78b5cbd4441609acfcca91e1b2b76f",
+      "size": 14851,
+      "sha256": "4aba21c4e517158bc3940ecfa32bed834d78b5cbd4441609acfcca91e1b2b76f"
+    },
+    {
+      "path": "Sources/Flux2/Schedulers/FlowMatchEulerDiscreteSchedulerConfiguration.swift",
+      "gitMode": "100644",
+      "upstreamGitBlob": "456e8e767a40858ef8abf3ddb870b760e1e050c3",
+      "upstreamSize": 2819,
+      "upstreamSHA256": "b3a6466d5eee5a153c579ae418cd02652c17a32d49081a0804fd657b8c1d6fc3",
+      "size": 2819,
+      "sha256": "b3a6466d5eee5a153c579ae418cd02652c17a32d49081a0804fd657b8c1d6fc3"
+    },
+    {
+      "path": "Sources/Flux2/Support/Flux2AttentionMaskCache.swift",
+      "gitMode": "100644",
+      "upstreamGitBlob": "becdfcaeb9fda2080de513b44de9ea9b09efc793",
+      "upstreamSize": 1888,
+      "upstreamSHA256": "88437be81b89b03b74d3edf3430e03f62ae06d5c299afaa1f2df414550d60839",
+      "size": 2501,
+      "sha256": "4aa67eadede51f886ee59720f865df686a018e64567ee4896f996a326d450367"
+    },
+    {
+      "path": "Sources/Flux2/Support/Flux2EvaluationPolicy.swift",
+      "gitMode": "100644",
+      "upstreamGitBlob": "13b4109ffee9957c3d4ae9517d9820be62a98fac",
+      "upstreamSize": 234,
+      "upstreamSHA256": "d8d6132300eb00db5a0f6087a5bb09424f64d295f307bbe55731f71f782a896e",
+      "size": 234,
+      "sha256": "d8d6132300eb00db5a0f6087a5bb09424f64d295f307bbe55731f71f782a896e"
+    },
+    {
+      "path": "Sources/Flux2/Support/Flux2KVCache.swift",
+      "gitMode": "100644",
+      "upstreamGitBlob": "81652656dcd1cc9115fd7e4360c25147f0d3f1cb",
+      "upstreamSize": 2010,
+      "upstreamSHA256": "c4cf24bfdabeefa84bc6ba1bae30ef2c3c47d3b972519839ebf921e48e68c8ea",
+      "size": 2010,
+      "sha256": "c4cf24bfdabeefa84bc6ba1bae30ef2c3c47d3b972519839ebf921e48e68c8ea"
+    },
+    {
+      "path": "Sources/Flux2/Support/Flux2PositionIds.swift",
+      "gitMode": "100644",
+      "upstreamGitBlob": "78c61e1186f852f70a53e633444a24d6c7541732",
+      "upstreamSize": 4104,
+      "upstreamSHA256": "faca7cffd32228b1a6fe0fe6b907a66acb0b1bd36b5f63568e5a30bc07a1b68c",
+      "size": 4104,
+      "sha256": "faca7cffd32228b1a6fe0fe6b907a66acb0b1bd36b5f63568e5a30bc07a1b68c"
+    },
+    {
+      "path": "Sources/Flux2/Support/Flux2StringOrNumber.swift",
+      "gitMode": "100644",
+      "upstreamGitBlob": "8b7a4b727e3c9c220af8b6b3716689afe21814d5",
+      "upstreamSize": 2623,
+      "upstreamSHA256": "d0224519d5a35796bfdebc82144ed01a4d68ee97ea673ee003a352621e86bfd4",
+      "size": 2623,
+      "sha256": "d0224519d5a35796bfdebc82144ed01a4d68ee97ea673ee003a352621e86bfd4"
+    },
+    {
+      "path": "Sources/Flux2/Utils/Flux2ModulePlaceholders.swift",
+      "gitMode": "100644",
+      "upstreamGitBlob": "bd9ff02d03848e448b47e66dc38c801acb15bc9c",
+      "upstreamSize": 449,
+      "upstreamSHA256": "5881e0bfd2fd9909f42546b1ae4910c6b3f7f5a4d9c6f0a454bcbd814bfdc83a",
+      "size": 449,
+      "sha256": "5881e0bfd2fd9909f42546b1ae4910c6b3f7f5a4d9c6f0a454bcbd814bfdc83a"
+    },
+    {
+      "path": "Sources/Flux2CLI/CLI+Generate.swift",
+      "gitMode": "100644",
+      "upstreamGitBlob": "bc066a9d6702c7d9658acf839b5dc49ae181f536",
+      "upstreamSize": 12171,
+      "upstreamSHA256": "c5b0734fe01b35cf7caa4a67c6c62952a2618c59cc93553499d06382d8d4e53d",
+      "size": 12171,
+      "sha256": "c5b0734fe01b35cf7caa4a67c6c62952a2618c59cc93553499d06382d8d4e53d"
+    },
+    {
+      "path": "Sources/Flux2CLI/CLI+Hub.swift",
+      "gitMode": "100644",
+      "upstreamGitBlob": "d26e399681f395b8fc50488ca8c2f9c846afc590",
+      "upstreamSize": 4144,
+      "upstreamSHA256": "94545d04be2684372be97a3c58a1b4c0cacf9e6030ead516ccc5f7d00c7c3004",
+      "size": 4144,
+      "sha256": "94545d04be2684372be97a3c58a1b4c0cacf9e6030ead516ccc5f7d00c7c3004"
+    },
+    {
+      "path": "Sources/Flux2CLI/CLI+Image.swift",
+      "gitMode": "100644",
+      "upstreamGitBlob": "c869dcd2d4baf3fc2df2438155b16a1da7f78aab",
+      "upstreamSize": 10574,
+      "upstreamSHA256": "1d9e8843ee42114c4bef508ec1fac6296a12d6718bd06bfe13f4a932b32a7994",
+      "size": 10574,
+      "sha256": "1d9e8843ee42114c4bef508ec1fac6296a12d6718bd06bfe13f4a932b32a7994"
+    },
+    {
+      "path": "Sources/Flux2CLI/CLI+ModelResolution.swift",
+      "gitMode": "100644",
+      "upstreamGitBlob": "1948edf079656e85b14ddb0e1965f3197bf2b46a",
+      "upstreamSize": 8728,
+      "upstreamSHA256": "eebeade5a0b4a55c095d72a88f042c025e8d6efaadd55016daccc94dbddd662f",
+      "size": 8728,
+      "sha256": "eebeade5a0b4a55c095d72a88f042c025e8d6efaadd55016daccc94dbddd662f"
+    },
+    {
+      "path": "Sources/Flux2CLI/CLI+Parsing.swift",
+      "gitMode": "100644",
+      "upstreamGitBlob": "9e46027a7ddc2805fc4fa76c4bdf6f443c553e44",
+      "upstreamSize": 286,
+      "upstreamSHA256": "cc4e881a954ac38130363f6521e916fc053f1a40a67d14a74d0c89a58685f32d",
+      "size": 286,
+      "sha256": "cc4e881a954ac38130363f6521e916fc053f1a40a67d14a74d0c89a58685f32d"
+    },
+    {
+      "path": "Sources/Flux2CLI/CLI.swift",
+      "gitMode": "100644",
+      "upstreamGitBlob": "a9805e7bbee2f2174f12513e9319f595c1d4db1d",
+      "upstreamSize": 10660,
+      "upstreamSHA256": "920b3d82ba311c2bc3ca228cf0a3a4178ac87b35cc45d35a0286264fe2d9bbe1",
+      "size": 10660,
+      "sha256": "920b3d82ba311c2bc3ca228cf0a3a4178ac87b35cc45d35a0286264fe2d9bbe1"
+    },
+    {
+      "path": "Sources/Flux2CLICore/CLIError.swift",
+      "gitMode": "100644",
+      "upstreamGitBlob": "61bc16649157d499aa8ff22a060fd7f1cb42b6cb",
+      "upstreamSize": 342,
+      "upstreamSHA256": "b126651cec8cf5a5ee1a6b7fb2455f6d981f8f6672874e29a8abdd75e5c9ad1e",
+      "size": 342,
+      "sha256": "b126651cec8cf5a5ee1a6b7fb2455f6d981f8f6672874e29a8abdd75e5c9ad1e"
+    },
+    {
+      "path": "Sources/Flux2CLICore/CLIImageDataLoader.swift",
+      "gitMode": "100644",
+      "upstreamGitBlob": "a99eeb0ab9bd970c5393b19ba119f017271780f3",
+      "upstreamSize": 2956,
+      "upstreamSHA256": "f80857c0c26e94c10a0543344d2da678e4ec41ae668f224d00e0857f9d199c50",
+      "size": 2956,
+      "sha256": "f80857c0c26e94c10a0543344d2da678e4ec41ae668f224d00e0857f9d199c50"
+    },
+    {
+      "path": "Tests/Flux2CLITests/CLIImageTests.swift",
+      "gitMode": "100644",
+      "upstreamGitBlob": "16d5b926d40fd18aa51b34ce256388b0481a1e3f",
+      "upstreamSize": 1279,
+      "upstreamSHA256": "246574a575e22777fc5ac976824424d7f3e442198f4428af129a443d42965966",
+      "size": 1279,
+      "sha256": "246574a575e22777fc5ac976824424d7f3e442198f4428af129a443d42965966"
+    },
+    {
+      "path": "Tests/Flux2Tests/FlowMatchEulerDiscreteSchedulerParityTests.swift",
+      "gitMode": "100644",
+      "upstreamGitBlob": "4b90f3236e949cf8f0754b5042e20404c1d96530",
+      "upstreamSize": 2075,
+      "upstreamSHA256": "d8397cc3f360397768e5e932ced9890091bf9670cd2fd2a41b17368685df1c2a",
+      "size": 2075,
+      "sha256": "d8397cc3f360397768e5e932ced9890091bf9670cd2fd2a41b17368685df1c2a"
+    },
+    {
+      "path": "Tests/Flux2Tests/FlowMatchEulerDiscreteSchedulerTests.swift",
+      "gitMode": "100644",
+      "upstreamGitBlob": "ef9c9a915b60c6062a6456c910a8fd891a9526c7",
+      "upstreamSize": 886,
+      "upstreamSHA256": "f5d08b986eb83b704b265b6cf4ad62dc6fb76beb27a01d8c4601ecbefd8335c4",
+      "size": 886,
+      "sha256": "f5d08b986eb83b704b265b6cf4ad62dc6fb76beb27a01d8c4601ecbefd8335c4"
+    },
+    {
+      "path": "Tests/Flux2Tests/Flux2DenoisePerfTests.swift",
+      "gitMode": "100644",
+      "upstreamGitBlob": "85e3e1e99e556b041551c4ee35b337d940222c71",
+      "upstreamSize": 4774,
+      "upstreamSHA256": "a8c4571375e5a3430358bfd7f5927bf0d68acfe32294c3720e4d527b4cbed11f",
+      "size": 4774,
+      "sha256": "a8c4571375e5a3430358bfd7f5927bf0d68acfe32294c3720e4d527b4cbed11f"
+    },
+    {
+      "path": "Tests/Flux2Tests/Flux2DevPipelineTests.swift",
+      "gitMode": "100644",
+      "upstreamGitBlob": "5de0fd68d89461115ce8ba272219168701c4c5ab",
+      "upstreamSize": 3317,
+      "upstreamSHA256": "9fcdacfbeb80411107697a002db0fce677b7135407ddf377a8da17f74e85e08d",
+      "size": 3317,
+      "sha256": "9fcdacfbeb80411107697a002db0fce677b7135407ddf377a8da17f74e85e08d"
+    },
+    {
+      "path": "Tests/Flux2Tests/Flux2FusedKernelsPerfTests.swift",
+      "gitMode": "100644",
+      "upstreamGitBlob": "d16af5bf29ca7819186cfb10b5b99c12a416cee9",
+      "upstreamSize": 3505,
+      "upstreamSHA256": "586a318129ee3b620770e2a9614cfe90fdb3733200e0c4014119405b82f7fc32",
+      "size": 3505,
+      "sha256": "586a318129ee3b620770e2a9614cfe90fdb3733200e0c4014119405b82f7fc32"
+    },
+    {
+      "path": "Tests/Flux2Tests/Flux2FusedKernelsTests.swift",
+      "gitMode": "100644",
+      "upstreamGitBlob": "dddf283e40c654cf27416a26791bdb397f2ab874",
+      "upstreamSize": 8282,
+      "upstreamSHA256": "a07551f3b8302246527ae3f32d209510dfe4a39353f18ca25a39def2bcf62279",
+      "size": 8282,
+      "sha256": "a07551f3b8302246527ae3f32d209510dfe4a39353f18ca25a39def2bcf62279"
+    },
+    {
+      "path": "Tests/Flux2Tests/Flux2KleinPipelineTests.swift",
+      "gitMode": "100644",
+      "upstreamGitBlob": "2d9bfa6273ec01400bd4e0f506ed4c7e91a319a0",
+      "upstreamSize": 20107,
+      "upstreamSHA256": "dfd6af07f8cf488f9b50ed2251dbdf45b690b26200ce6030d3d8b3392ea4a89e",
+      "size": 20107,
+      "sha256": "dfd6af07f8cf488f9b50ed2251dbdf45b690b26200ce6030d3d8b3392ea4a89e"
+    },
+    {
+      "path": "Tests/Flux2Tests/Flux2LayerNormTests.swift",
+      "gitMode": "100644",
+      "upstreamGitBlob": "0a2252765fffd5f0558da7d5c8673c4110342634",
+      "upstreamSize": 559,
+      "upstreamSHA256": "fb972ff817df19bc8b839377b6d80b04204f8e0e10d823ad90f4cd36f81020a9",
+      "size": 559,
+      "sha256": "fb972ff817df19bc8b839377b6d80b04204f8e0e10d823ad90f4cd36f81020a9"
+    },
+    {
+      "path": "Tests/Flux2Tests/Flux2Mistral3TextEncoderTests.swift",
+      "gitMode": "100644",
+      "upstreamGitBlob": "0a633623aa9727a7b35c1ec16014854aeae4d798",
+      "upstreamSize": 4638,
+      "upstreamSHA256": "3fa215ab32409863ed06526bbff349e99a62fd11577f2c9587d8376ad3b79a4e",
+      "size": 4638,
+      "sha256": "3fa215ab32409863ed06526bbff349e99a62fd11577f2c9587d8376ad3b79a4e"
+    },
+    {
+      "path": "Tests/Flux2Tests/Flux2PipelineGuidanceTests.swift",
+      "gitMode": "100644",
+      "upstreamGitBlob": "bbf8f1af6121416dd03a4b2250acd6cb79c081d7",
+      "upstreamSize": 2655,
+      "upstreamSHA256": "ac12cb1e649064941edb8dfdfcdc7ad40464ffe95f5f7d27e518528066c1c6e8",
+      "size": 2655,
+      "sha256": "ac12cb1e649064941edb8dfdfcdc7ad40464ffe95f5f7d27e518528066c1c6e8"
+    },
+    {
+      "path": "Tests/Flux2Tests/Flux2PixtralUpsamplingTests.swift",
+      "gitMode": "100644",
+      "upstreamGitBlob": "baa4b0c11bc9d078fcd2abeefca62aff6e1d17f3",
+      "upstreamSize": 6959,
+      "upstreamSHA256": "69f95d280441d6c6f57bd921cdedb3723cc1d0779dcbc8b5a43417e388300350",
+      "size": 6959,
+      "sha256": "69f95d280441d6c6f57bd921cdedb3723cc1d0779dcbc8b5a43417e388300350"
+    },
+    {
+      "path": "Tests/Flux2Tests/Flux2QuantizationTests.swift",
+      "gitMode": "100644",
+      "upstreamGitBlob": "2ad19d5dba0a47048478e0c82e81f226aefd2e6d",
+      "upstreamSize": 4381,
+      "upstreamSHA256": "9842b0e0081cd83721808162852e782992d32e23740a22a1cc6292b57abc83d3",
+      "size": 4381,
+      "sha256": "9842b0e0081cd83721808162852e782992d32e23740a22a1cc6292b57abc83d3"
+    },
+    {
+      "path": "Tests/Flux2Tests/Flux2Qwen3TextEncoderParityTests.swift",
+      "gitMode": "100644",
+      "upstreamGitBlob": "fe2f40d3e4e71f0300b60ffde81f2acb8220726a",
+      "upstreamSize": 1463,
+      "upstreamSHA256": "ea92e326ac1fe3bd261b5e975b015533b66744e2fd8de09e7deff2c71eebe355",
+      "size": 1463,
+      "sha256": "ea92e326ac1fe3bd261b5e975b015533b66744e2fd8de09e7deff2c71eebe355"
+    },
+    {
+      "path": "Tests/Flux2Tests/Flux2QwenTokenizerTests.swift",
+      "gitMode": "100644",
+      "upstreamGitBlob": "137e65003a4e892e8fd0b4b67fb0dd76261afbfc",
+      "upstreamSize": 1264,
+      "upstreamSHA256": "a52264337e93e6ba1b238d04aa8ac5d5de269d06bf7bd16ae65ab259c6d33eab",
+      "size": 4123,
+      "sha256": "bc155536366d393775385bb3e816ae524cdb7a1df34f7b08e95b13357321b5f1"
+    },
+    {
+      "path": "Tests/Flux2Tests/Flux2TransformerParityTests.swift",
+      "gitMode": "100644",
+      "upstreamGitBlob": "e680bbfa3cbf9397e479bc2cd9601e6247a3ff74",
+      "upstreamSize": 1714,
+      "upstreamSHA256": "48e56189d9ebe1b9026a62f9b74ac1288b224e03707358879ab0f432c2300e4e",
+      "size": 1714,
+      "sha256": "48e56189d9ebe1b9026a62f9b74ac1288b224e03707358879ab0f432c2300e4e"
+    },
+    {
+      "path": "Tests/Flux2Tests/Flux2VAEParityTests.swift",
+      "gitMode": "100644",
+      "upstreamGitBlob": "a7ede847c65db7b077131ff005b58f3d9e0fab4b",
+      "upstreamSize": 1700,
+      "upstreamSHA256": "6d00d4d2074e9673edd70110f95c3578933c38dc13b067b4d5c13d147caa8ba5",
+      "size": 1700,
+      "sha256": "6d00d4d2074e9673edd70110f95c3578933c38dc13b067b4d5c13d147caa8ba5"
+    },
+    {
+      "path": "Tests/Flux2Tests/Flux2WeightsLoaderTests.swift",
+      "gitMode": "100644",
+      "upstreamGitBlob": "290943b31daf1193357d35585edd49d5f3406671",
+      "upstreamSize": 2110,
+      "upstreamSHA256": "0fc9a37bc2f0685210c18975cdf69497e6833dfc0c54e9d7489c934c49f8624b",
+      "size": 2110,
+      "sha256": "0fc9a37bc2f0685210c18975cdf69497e6833dfc0c54e9d7489c934c49f8624b"
+    },
+    {
+      "path": "Tests/Flux2Tests/SafeTensorsReaderTests.swift",
+      "gitMode": "100644",
+      "upstreamGitBlob": "af6df8d1e3ded5a698178933fb6592095f11b041",
+      "upstreamSize": 3937,
+      "upstreamSHA256": "231e4d631a6165c3308834d9bbd3d03e0671ff3b5374163e33171cfacef59a11",
+      "size": 3937,
+      "sha256": "231e4d631a6165c3308834d9bbd3d03e0671ff3b5374163e33171cfacef59a11"
+    },
+    {
+      "path": "Tests/Flux2Tests/TestHelpers.swift",
+      "gitMode": "100644",
+      "upstreamGitBlob": "b7bc2f06992ea680462398c50fd2384029adc207",
+      "upstreamSize": 1804,
+      "upstreamSHA256": "dc0a368fb73095c6aa999e9a8b259d002ab9bcb143aecb2bd26da77c09f01c46",
+      "size": 1804,
+      "sha256": "dc0a368fb73095c6aa999e9a8b259d002ab9bcb143aecb2bd26da77c09f01c46"
+    },
+    {
+      "path": "examples/dev_i2i_cat_sunglasses.png",
+      "gitMode": "100644",
+      "upstreamGitBlob": "ef20a3b7c5e5a990315eebff6c310393a34e5f13",
+      "upstreamSize": 1102637,
+      "upstreamSHA256": "0b1e03ec5176515f6a5431c999955a185036b243fb52a03338c7cfdffcef74e2",
+      "size": 1102637,
+      "sha256": "0b1e03ec5176515f6a5431c999955a185036b243fb52a03338c7cfdffcef74e2"
+    },
+    {
+      "path": "examples/dev_i2i_upsample.png",
+      "gitMode": "100644",
+      "upstreamGitBlob": "1867eb855dd4314256bff65f0abad57b0c76e222",
+      "upstreamSize": 1735463,
+      "upstreamSHA256": "4ebbf996ef3a55c01ba76028afd2b9777f9d329d5758530cab92fcbda12f8da1",
+      "size": 1735463,
+      "sha256": "4ebbf996ef3a55c01ba76028afd2b9777f9d329d5758530cab92fcbda12f8da1"
+    },
+    {
+      "path": "examples/dev_q8_64_i2i_cat.png",
+      "gitMode": "100644",
+      "upstreamGitBlob": "bdbba6b264a98032ece71b0cdc11bfb4933a2c97",
+      "upstreamSize": 1088391,
+      "upstreamSHA256": "5bf5ef004847218e375daf7d3ae317827f00a8f8b1a92935fb397265b2445dcc",
+      "size": 1088391,
+      "sha256": "5bf5ef004847218e375daf7d3ae317827f00a8f8b1a92935fb397265b2445dcc"
+    },
+    {
+      "path": "examples/dev_q8_64_t2i.png",
+      "gitMode": "100644",
+      "upstreamGitBlob": "39e7c9b446f28adce4c6e3ed048a0bb8b83138fb",
+      "upstreamSize": 418049,
+      "upstreamSHA256": "25caf8320da2d56e23c3b1c0c994ede0790afedfaafe0dba691277bad3082516",
+      "size": 418049,
+      "sha256": "25caf8320da2d56e23c3b1c0c994ede0790afedfaafe0dba691277bad3082516"
+    },
+    {
+      "path": "examples/dev_t2i.png",
+      "gitMode": "100644",
+      "upstreamGitBlob": "645a88cf6a1c71db99aeabee5e3fc3bc85bf8c18",
+      "upstreamSize": 490685,
+      "upstreamSHA256": "d7e7e90b3e2fa1d76a581bfb82a874ffc851566d822e49fe561e75ebe5697b63",
+      "size": 490685,
+      "sha256": "d7e7e90b3e2fa1d76a581bfb82a874ffc851566d822e49fe561e75ebe5697b63"
+    },
+    {
+      "path": "examples/klein4b_i2i_cat.jpg",
+      "gitMode": "100644",
+      "upstreamGitBlob": "b9076c6606e139d9729c2dd292cad898c1385f49",
+      "upstreamSize": 146308,
+      "upstreamSHA256": "194b75a82a81192c6a55a11b720d0c1d256664639a0bce3143df6b7117e7699f",
+      "size": 146308,
+      "sha256": "194b75a82a81192c6a55a11b720d0c1d256664639a0bce3143df6b7117e7699f"
+    },
+    {
+      "path": "examples/klein4b_q8_64_i2i_cat.png",
+      "gitMode": "100644",
+      "upstreamGitBlob": "e5cf807cd46a2dc3658b22711feebc6d296bcdc8",
+      "upstreamSize": 1147128,
+      "upstreamSHA256": "9b931230980811f2a05e837cc92c633734033abb12dacc9fac87155726634a16",
+      "size": 1147128,
+      "sha256": "9b931230980811f2a05e837cc92c633734033abb12dacc9fac87155726634a16"
+    },
+    {
+      "path": "examples/klein4b_q8_64_t2i.png",
+      "gitMode": "100644",
+      "upstreamGitBlob": "b20c1fb3189f45237288494bf767c02674845985",
+      "upstreamSize": 474579,
+      "upstreamSHA256": "2946602a9d9941189dda54e834b1269b6436e43e48aad731928af5a89c5e97b7",
+      "size": 474579,
+      "sha256": "2946602a9d9941189dda54e834b1269b6436e43e48aad731928af5a89c5e97b7"
+    },
+    {
+      "path": "examples/klein4b_t2i.png",
+      "gitMode": "100644",
+      "upstreamGitBlob": "abffa2ff1de9dfdba0e06fdfd261edb8a0827a57",
+      "upstreamSize": 473448,
+      "upstreamSHA256": "b4c5e44c520a336c254d14464c4ed83238422336d7adb28e6f741ffcb39f1b65",
+      "size": 473448,
+      "sha256": "b4c5e44c520a336c254d14464c4ed83238422336d7adb28e6f741ffcb39f1b65"
+    },
+    {
+      "path": "examples/klein9b_i2i_cat.jpg",
+      "gitMode": "100644",
+      "upstreamGitBlob": "9d06dc9bd8bb8bdfbd5dc035997cd9636f62b2dc",
+      "upstreamSize": 115146,
+      "upstreamSHA256": "48889669afa5d1130a299c888dbea2ae5dd5d6ef6144b766f3af874576430ff8",
+      "size": 115146,
+      "sha256": "48889669afa5d1130a299c888dbea2ae5dd5d6ef6144b766f3af874576430ff8"
+    },
+    {
+      "path": "examples/klein9b_q8_64_i2i_cat.png",
+      "gitMode": "100644",
+      "upstreamGitBlob": "46abab1f307f2c5daa718419c784e30e2aee3bd2",
+      "upstreamSize": 749537,
+      "upstreamSHA256": "562e5faddc642bd8563407d1ebdc60fa5f9ac3fb33a02e86120e481cfe4abb68",
+      "size": 749537,
+      "sha256": "562e5faddc642bd8563407d1ebdc60fa5f9ac3fb33a02e86120e481cfe4abb68"
+    },
+    {
+      "path": "examples/klein9b_q8_64_t2i.png",
+      "gitMode": "100644",
+      "upstreamGitBlob": "6133cde8d73768c0edab3859d98bb1f249cedf46",
+      "upstreamSize": 483474,
+      "upstreamSHA256": "fe02f5490ce0e959ae9a069e13fc3d39a87e223060564235f2526706eb65616c",
+      "size": 483474,
+      "sha256": "fe02f5490ce0e959ae9a069e13fc3d39a87e223060564235f2526706eb65616c"
+    },
+    {
+      "path": "examples/klein9b_t2i.png",
+      "gitMode": "100644",
+      "upstreamGitBlob": "227a337cabba08cff52ada588b5bf43bf146d92d",
+      "upstreamSize": 485420,
+      "upstreamSHA256": "0c7b3d6e15b3972b397718005219eda3f1788e3621931b692ac7ed4b466689fd",
+      "size": 485420,
+      "sha256": "0c7b3d6e15b3972b397718005219eda3f1788e3621931b692ac7ed4b466689fd"
+    },
+    {
+      "path": "fixtures/flux2_klein4b/manifest.json",
+      "gitMode": "100644",
+      "upstreamGitBlob": "b5aa27935722d1a997f4099c70450ca2b5ea31cf",
+      "upstreamSize": 279,
+      "upstreamSHA256": "930b648ad2042cf2124fb0966b580c60d16c54c140d90b21adbe6e6f54317b4d",
+      "size": 279,
+      "sha256": "930b648ad2042cf2124fb0966b580c60d16c54c140d90b21adbe6e6f54317b4d"
+    },
+    {
+      "path": "fixtures/flux2_klein4b/prompt_embeds.safetensors",
+      "gitMode": "100644",
+      "upstreamGitBlob": "8d6af8b8443c342d67a51e8ba9a92f22de620aaf",
+      "upstreamSize": 15737072,
+      "upstreamSHA256": "064064e40059ba0eba8b878364829a13e345427bb49199ddadc370a6a35b718a",
+      "size": 15737072,
+      "sha256": "064064e40059ba0eba8b878364829a13e345427bb49199ddadc370a6a35b718a"
+    },
+    {
+      "path": "fixtures/flux2_klein4b/tokenizer/added_tokens.json",
+      "gitMode": "100644",
+      "upstreamGitBlob": "b54f9135e44c1e81047e8d05cb027af8bc039eed",
+      "upstreamSize": 707,
+      "upstreamSHA256": "c0284b582e14987fbd3d5a2cb2bd139084371ed9acbae488829a1c900833c680",
+      "size": 707,
+      "sha256": "c0284b582e14987fbd3d5a2cb2bd139084371ed9acbae488829a1c900833c680"
+    },
+    {
+      "path": "fixtures/flux2_klein4b/tokenizer/chat_template.jinja",
+      "gitMode": "100644",
+      "upstreamGitBlob": "01be9b307daa2d425f7c168c9fb145a286e0afb4",
+      "upstreamSize": 4168,
+      "upstreamSHA256": "a55ee1b1660128b7098723e0abcd92caa0788061051c62d51cbe87d9cf1974d8",
+      "size": 4168,
+      "sha256": "a55ee1b1660128b7098723e0abcd92caa0788061051c62d51cbe87d9cf1974d8"
+    },
+    {
+      "path": "fixtures/flux2_klein4b/tokenizer/merges.txt",
+      "gitMode": "100644",
+      "upstreamGitBlob": "31349551d90c7606f325fe0f11bbb8bd5fa0d7c7",
+      "upstreamSize": 1671853,
+      "upstreamSHA256": "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5",
+      "size": 1671853,
+      "sha256": "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5"
+    },
+    {
+      "path": "fixtures/flux2_klein4b/tokenizer/special_tokens_map.json",
+      "gitMode": "100644",
+      "upstreamGitBlob": "ac23c0aaa2434523c494330aeb79c58395378103",
+      "upstreamSize": 613,
+      "upstreamSHA256": "76862e765266b85aa9459767e33cbaf13970f327a0e88d1c65846c2ddd3a1ecd",
+      "size": 613,
+      "sha256": "76862e765266b85aa9459767e33cbaf13970f327a0e88d1c65846c2ddd3a1ecd"
+    },
+    {
+      "path": "fixtures/flux2_klein4b/tokenizer/tokenizer.json",
+      "gitMode": "100644",
+      "upstreamGitBlob": "949e1ec83f61520a25c75426edc4a43acc36f29a",
+      "upstreamSize": 11422654,
+      "upstreamSHA256": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
+      "size": 11422654,
+      "sha256": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4"
+    },
+    {
+      "path": "fixtures/flux2_klein4b/tokenizer/tokenizer_config.json",
+      "gitMode": "100644",
+      "upstreamGitBlob": "ddaf69808214a44fdd26d3785b66c1367c78277a",
+      "upstreamSize": 5404,
+      "upstreamSHA256": "443bfa629eb16387a12edbf92a76f6a6f10b2af3b53d87ba1550adfcf45f7fa0",
+      "size": 5404,
+      "sha256": "443bfa629eb16387a12edbf92a76f6a6f10b2af3b53d87ba1550adfcf45f7fa0"
+    },
+    {
+      "path": "fixtures/flux2_klein4b/tokenizer/vocab.json",
+      "gitMode": "100644",
+      "upstreamGitBlob": "4783fe10ac3adce15ac8f358ef5462739852c569",
+      "upstreamSize": 2776833,
+      "upstreamSHA256": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910",
+      "size": 2776833,
+      "sha256": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910"
+    },
+    {
+      "path": "fixtures/flux2_tiny/denoise_inputs.safetensors",
+      "gitMode": "100644",
+      "upstreamGitBlob": "fd1a668d5ec35369b10e7fc500aa5053a7218cef",
+      "upstreamSize": 812,
+      "upstreamSHA256": "f67fb72bcaf61645bbf3b72a6d16bd94abbf973bd9d0b95025f9b83ae02f745c",
+      "size": 812,
+      "sha256": "f67fb72bcaf61645bbf3b72a6d16bd94abbf973bd9d0b95025f9b83ae02f745c"
+    },
+    {
+      "path": "fixtures/flux2_tiny/denoise_loop_inputs.safetensors",
+      "gitMode": "100644",
+      "upstreamGitBlob": "7f97093290230497a5e219b3f5fa23659bbebcf1",
+      "upstreamSize": 820,
+      "upstreamSHA256": "bddce77fde62f5861c36943ec5eec4a6107a613eaf85a9a95efe0b8c9db17067",
+      "size": 820,
+      "sha256": "bddce77fde62f5861c36943ec5eec4a6107a613eaf85a9a95efe0b8c9db17067"
+    },
+    {
+      "path": "fixtures/flux2_tiny/prepare_image_latents_inputs.safetensors",
+      "gitMode": "100644",
+      "upstreamGitBlob": "11b6dad4cebd482302778baa9c94268af3d8ecb5",
+      "upstreamSize": 1684,
+      "upstreamSHA256": "e571cab3f2054d7fdd130435a7284a692e5935c0a85c30fa2c12aebd5542e264",
+      "size": 1684,
+      "sha256": "e571cab3f2054d7fdd130435a7284a692e5935c0a85c30fa2c12aebd5542e264"
+    },
+    {
+      "path": "fixtures/flux2_tiny/prepare_latents_inputs.safetensors",
+      "gitMode": "100644",
+      "upstreamGitBlob": "935d24afc3a615631c2816b275801bded65cf64d",
+      "upstreamSize": 464,
+      "upstreamSHA256": "a2bc4d593159a981fec84f5c3b0a4342e792d1f8d3076598c7ed31cd43f29ab1",
+      "size": 464,
+      "sha256": "a2bc4d593159a981fec84f5c3b0a4342e792d1f8d3076598c7ed31cd43f29ab1"
+    },
+    {
+      "path": "fixtures/flux2_tiny/scheduler/config.json",
+      "gitMode": "100644",
+      "upstreamGitBlob": "541d6b425fca4797df82c57c1703e462382e0496",
+      "upstreamSize": 480,
+      "upstreamSHA256": "3c233b884e8369c53ac8c8e85d5e8badbcc7b3a0c1b39e50f4d50b202527d32a",
+      "size": 480,
+      "sha256": "3c233b884e8369c53ac8c8e85d5e8badbcc7b3a0c1b39e50f4d50b202527d32a"
+    },
+    {
+      "path": "fixtures/flux2_tiny/scheduler_expected.safetensors",
+      "gitMode": "100644",
+      "upstreamGitBlob": "a0c1da798f99d4cc2bb6503ffdc9c0eff2b4be7d",
+      "upstreamSize": 1888,
+      "upstreamSHA256": "c7c4c22455dcd7e1c33d107592837cef135de5002d16709ca6f19c6c5c34d4e3",
+      "size": 1888,
+      "sha256": "c7c4c22455dcd7e1c33d107592837cef135de5002d16709ca6f19c6c5c34d4e3"
+    },
+    {
+      "path": "fixtures/flux2_tiny/transformer/config.json",
+      "gitMode": "100644",
+      "upstreamGitBlob": "cbc6b8c76ad404c330fae42c4b53ba49aeefed75",
+      "upstreamSize": 364,
+      "upstreamSHA256": "2f6a8356789100cf25010827bd47ec1865bdacaebd0d138e97e63f1e137dfabd",
+      "size": 364,
+      "sha256": "2f6a8356789100cf25010827bd47ec1865bdacaebd0d138e97e63f1e137dfabd"
+    },
+    {
+      "path": "fixtures/flux2_tiny/transformer/model.safetensors",
+      "gitMode": "100644",
+      "upstreamGitBlob": "d0517e2269a896ca5ab0b15e6c102473a5a45e36",
+      "upstreamSize": 16912,
+      "upstreamSHA256": "bb8413c80cc2d33735a720840a1b74317471cfa32dc22d5d856d13151cb15869",
+      "size": 16912,
+      "sha256": "bb8413c80cc2d33735a720840a1b74317471cfa32dc22d5d856d13151cb15869"
+    },
+    {
+      "path": "fixtures/flux2_tiny/transformer_expected.safetensors",
+      "gitMode": "100644",
+      "upstreamGitBlob": "0c708997965b5545ecec35f7933a348484f51a6c",
+      "upstreamSize": 208,
+      "upstreamSHA256": "914f039e7487ee8fd2f271096d1e21f56b40282664d8371625bd8d8763e9a3bd",
+      "size": 208,
+      "sha256": "914f039e7487ee8fd2f271096d1e21f56b40282664d8371625bd8d8763e9a3bd"
+    },
+    {
+      "path": "fixtures/flux2_tiny/transformer_inputs.safetensors",
+      "gitMode": "100644",
+      "upstreamGitBlob": "c9d4761655ff1c12e9940be3730f588c0bf080d0",
+      "upstreamSize": 812,
+      "upstreamSHA256": "9a568d0d8b044743dd36ba04b7d7e3835ced39447a8987c78f0ea9441c01757d",
+      "size": 812,
+      "sha256": "9a568d0d8b044743dd36ba04b7d7e3835ced39447a8987c78f0ea9441c01757d"
+    },
+    {
+      "path": "fixtures/flux2_tiny/vae/config.json",
+      "gitMode": "100644",
+      "upstreamGitBlob": "7858ccedab2d79ad047724a0d88e00ad7c23505a",
+      "upstreamSize": 564,
+      "upstreamSHA256": "db3a3a62d61cc37765f7b22ed299c4b0cb419dae68ee95fd1ba022f778278ede",
+      "size": 564,
+      "sha256": "db3a3a62d61cc37765f7b22ed299c4b0cb419dae68ee95fd1ba022f778278ede"
+    },
+    {
+      "path": "fixtures/flux2_tiny/vae/model.safetensors",
+      "gitMode": "100644",
+      "upstreamGitBlob": "77ab204463a80767e7c88d13b8bcf8d3e8c3ff8f",
+      "upstreamSize": 60092,
+      "upstreamSHA256": "1ffa9e030de60294147764f34fc8efbf5115754c2f477bac6a70218b5ad30ca2",
+      "size": 60092,
+      "sha256": "1ffa9e030de60294147764f34fc8efbf5115754c2f477bac6a70218b5ad30ca2"
+    },
+    {
+      "path": "fixtures/flux2_tiny/vae_expected.safetensors",
+      "gitMode": "100644",
+      "upstreamGitBlob": "56a3d8126aa75a5384f79a95e23dd750b40e3de6",
+      "upstreamSize": 1760,
+      "upstreamSHA256": "07fba520bbe07f917d6ac16334d0a71c2bde793dcae08dd3758e62aa6403b470",
+      "size": 1760,
+      "sha256": "07fba520bbe07f917d6ac16334d0a71c2bde793dcae08dd3758e62aa6403b470"
+    },
+    {
+      "path": "fixtures/flux2_tiny/vae_inputs.safetensors",
+      "gitMode": "100644",
+      "upstreamGitBlob": "f045f075bad4dcb6f95f97e95df704413ea5318c",
+      "upstreamSize": 848,
+      "upstreamSHA256": "737073988a22e20f01a8dc08002d9d68925860adff9543db6d4835d29975a458",
+      "size": 848,
+      "sha256": "737073988a22e20f01a8dc08002d9d68925860adff9543db6d4835d29975a458"
+    },
+    {
+      "path": "fixtures/flux2_tiny_dev_pipeline/dev_expected.safetensors",
+      "gitMode": "100644",
+      "upstreamGitBlob": "563a7e075953d9210974e3ed2c8727028eaaf830",
+      "upstreamSize": 1584,
+      "upstreamSHA256": "5d1f5223532d88ac9adf389f8a36468120b81a0a005a4c556d2d458cc3a3b88f",
+      "size": 1584,
+      "sha256": "5d1f5223532d88ac9adf389f8a36468120b81a0a005a4c556d2d458cc3a3b88f"
+    },
+    {
+      "path": "fixtures/flux2_tiny_dev_pipeline/dev_inputs.safetensors",
+      "gitMode": "100644",
+      "upstreamGitBlob": "68b6226ef8386aed1c47e8cc88e0a07ca3f847f4",
+      "upstreamSize": 392,
+      "upstreamSHA256": "eaa5bd44eae0f3dae5a72fd38b38a7eb5fd645bcc6b97b8d63e8f046b8a351e0",
+      "size": 392,
+      "sha256": "eaa5bd44eae0f3dae5a72fd38b38a7eb5fd645bcc6b97b8d63e8f046b8a351e0"
+    },
+    {
+      "path": "fixtures/flux2_tiny_dev_pipeline/scheduler/config.json",
+      "gitMode": "100644",
+      "upstreamGitBlob": "541d6b425fca4797df82c57c1703e462382e0496",
+      "upstreamSize": 480,
+      "upstreamSHA256": "3c233b884e8369c53ac8c8e85d5e8badbcc7b3a0c1b39e50f4d50b202527d32a",
+      "size": 480,
+      "sha256": "3c233b884e8369c53ac8c8e85d5e8badbcc7b3a0c1b39e50f4d50b202527d32a"
+    },
+    {
+      "path": "fixtures/flux2_tiny_dev_pipeline/text_encoder/config.json",
+      "gitMode": "100644",
+      "upstreamGitBlob": "971baede9ce66a96562134166041306b3c84ad14",
+      "upstreamSize": 6007,
+      "upstreamSHA256": "435f3e69d61576d1c6c79c4e51dc508b4fead68af59ada36c94014426344ab33",
+      "size": 6007,
+      "sha256": "435f3e69d61576d1c6c79c4e51dc508b4fead68af59ada36c94014426344ab33"
+    },
+    {
+      "path": "fixtures/flux2_tiny_dev_pipeline/text_encoder/model.safetensors",
+      "gitMode": "100644",
+      "upstreamGitBlob": "1bf14dfc82ced09af81dbaa03146b032aff46265",
+      "upstreamSize": 20128,
+      "upstreamSHA256": "2ce89a040c61ac87d70e11d656755bd8a0863aa2a7b24b0b04de4dffbe72dca2",
+      "size": 20128,
+      "sha256": "2ce89a040c61ac87d70e11d656755bd8a0863aa2a7b24b0b04de4dffbe72dca2"
+    },
+    {
+      "path": "fixtures/flux2_tiny_dev_pipeline/transformer/config.json",
+      "gitMode": "100644",
+      "upstreamGitBlob": "cbc6b8c76ad404c330fae42c4b53ba49aeefed75",
+      "upstreamSize": 364,
+      "upstreamSHA256": "2f6a8356789100cf25010827bd47ec1865bdacaebd0d138e97e63f1e137dfabd",
+      "size": 364,
+      "sha256": "2f6a8356789100cf25010827bd47ec1865bdacaebd0d138e97e63f1e137dfabd"
+    },
+    {
+      "path": "fixtures/flux2_tiny_dev_pipeline/transformer/model.safetensors",
+      "gitMode": "100644",
+      "upstreamGitBlob": "d0517e2269a896ca5ab0b15e6c102473a5a45e36",
+      "upstreamSize": 16912,
+      "upstreamSHA256": "bb8413c80cc2d33735a720840a1b74317471cfa32dc22d5d856d13151cb15869",
+      "size": 16912,
+      "sha256": "bb8413c80cc2d33735a720840a1b74317471cfa32dc22d5d856d13151cb15869"
+    },
+    {
+      "path": "fixtures/flux2_tiny_dev_pipeline/vae/config.json",
+      "gitMode": "100644",
+      "upstreamGitBlob": "a3007a913ec8069a7f246ecc6a9248602409ae1b",
+      "upstreamSize": 564,
+      "upstreamSHA256": "a794fc264f81e4f4730984807dd63b59b222d9f6e6235ee67baca79b8437bb88",
+      "size": 564,
+      "sha256": "a794fc264f81e4f4730984807dd63b59b222d9f6e6235ee67baca79b8437bb88"
+    },
+    {
+      "path": "fixtures/flux2_tiny_dev_pipeline/vae/model.safetensors",
+      "gitMode": "100644",
+      "upstreamGitBlob": "11b92210f667fe4f863296822ce512267635cb27",
+      "upstreamSize": 58004,
+      "upstreamSHA256": "744c78a04084bdc9ea638c427e75c9b02095a1fa3c4ea5bafaa8631ac23bc878",
+      "size": 58004,
+      "sha256": "744c78a04084bdc9ea638c427e75c9b02095a1fa3c4ea5bafaa8631ac23bc878"
+    },
+    {
+      "path": "fixtures/flux2_tiny_klein_image_pipeline/klein_image_expected.safetensors",
+      "gitMode": "100644",
+      "upstreamGitBlob": "9a75c0b27069112aa5e8cf401a46840c3cf80226",
+      "upstreamSize": 2608,
+      "upstreamSHA256": "bf601769e6043c20e444e18c04a34ecc1eb7edbe9107a2ab8035e7159014df98",
+      "size": 2608,
+      "sha256": "bf601769e6043c20e444e18c04a34ecc1eb7edbe9107a2ab8035e7159014df98"
+    },
+    {
+      "path": "fixtures/flux2_tiny_klein_image_pipeline/klein_image_inputs.safetensors",
+      "gitMode": "100644",
+      "upstreamGitBlob": "ff24645d5059be76e28ffb31afc3b0144e74312a",
+      "upstreamSize": 3352,
+      "upstreamSHA256": "58aaab75c74b7f845623c9b6df4fc9a8ef40d9e510275ccd468c7127acb1475e",
+      "size": 3352,
+      "sha256": "58aaab75c74b7f845623c9b6df4fc9a8ef40d9e510275ccd468c7127acb1475e"
+    },
+    {
+      "path": "fixtures/flux2_tiny_klein_image_pipeline/scheduler/config.json",
+      "gitMode": "100644",
+      "upstreamGitBlob": "541d6b425fca4797df82c57c1703e462382e0496",
+      "upstreamSize": 480,
+      "upstreamSHA256": "3c233b884e8369c53ac8c8e85d5e8badbcc7b3a0c1b39e50f4d50b202527d32a",
+      "size": 480,
+      "sha256": "3c233b884e8369c53ac8c8e85d5e8badbcc7b3a0c1b39e50f4d50b202527d32a"
+    },
+    {
+      "path": "fixtures/flux2_tiny_klein_image_pipeline/text_encoder/config.json",
+      "gitMode": "100644",
+      "upstreamGitBlob": "95b76381cdcff8dbdf83ef1b4de37c67b9134ccb",
+      "upstreamSize": 2129,
+      "upstreamSHA256": "3540b59d99f2d216c0277a14e91fdfa380c33793e07cdd62a467765c665d0bdc",
+      "size": 2129,
+      "sha256": "3540b59d99f2d216c0277a14e91fdfa380c33793e07cdd62a467765c665d0bdc"
+    },
+    {
+      "path": "fixtures/flux2_tiny_klein_image_pipeline/text_encoder/model.safetensors",
+      "gitMode": "100644",
+      "upstreamGitBlob": "39a7cf11aa486deab12111a484f06598feaaeab6",
+      "upstreamSize": 8168,
+      "upstreamSHA256": "949cdce9886077a5f28f22868cbd32c7c90263f536e0e6df6dbec5fb1541b297",
+      "size": 8168,
+      "sha256": "949cdce9886077a5f28f22868cbd32c7c90263f536e0e6df6dbec5fb1541b297"
+    },
+    {
+      "path": "fixtures/flux2_tiny_klein_image_pipeline/transformer/config.json",
+      "gitMode": "100644",
+      "upstreamGitBlob": "cbc6b8c76ad404c330fae42c4b53ba49aeefed75",
+      "upstreamSize": 364,
+      "upstreamSHA256": "2f6a8356789100cf25010827bd47ec1865bdacaebd0d138e97e63f1e137dfabd",
+      "size": 364,
+      "sha256": "2f6a8356789100cf25010827bd47ec1865bdacaebd0d138e97e63f1e137dfabd"
+    },
+    {
+      "path": "fixtures/flux2_tiny_klein_image_pipeline/transformer/model.safetensors",
+      "gitMode": "100644",
+      "upstreamGitBlob": "d0517e2269a896ca5ab0b15e6c102473a5a45e36",
+      "upstreamSize": 16912,
+      "upstreamSHA256": "bb8413c80cc2d33735a720840a1b74317471cfa32dc22d5d856d13151cb15869",
+      "size": 16912,
+      "sha256": "bb8413c80cc2d33735a720840a1b74317471cfa32dc22d5d856d13151cb15869"
+    },
+    {
+      "path": "fixtures/flux2_tiny_klein_image_pipeline/vae/config.json",
+      "gitMode": "100644",
+      "upstreamGitBlob": "a3007a913ec8069a7f246ecc6a9248602409ae1b",
+      "upstreamSize": 564,
+      "upstreamSHA256": "a794fc264f81e4f4730984807dd63b59b222d9f6e6235ee67baca79b8437bb88",
+      "size": 564,
+      "sha256": "a794fc264f81e4f4730984807dd63b59b222d9f6e6235ee67baca79b8437bb88"
+    },
+    {
+      "path": "fixtures/flux2_tiny_klein_image_pipeline/vae/model.safetensors",
+      "gitMode": "100644",
+      "upstreamGitBlob": "11b92210f667fe4f863296822ce512267635cb27",
+      "upstreamSize": 58004,
+      "upstreamSHA256": "744c78a04084bdc9ea638c427e75c9b02095a1fa3c4ea5bafaa8631ac23bc878",
+      "size": 58004,
+      "sha256": "744c78a04084bdc9ea638c427e75c9b02095a1fa3c4ea5bafaa8631ac23bc878"
+    },
+    {
+      "path": "fixtures/flux2_tiny_klein_image_pipeline_cfg/klein_image_cfg_expected.safetensors",
+      "gitMode": "100644",
+      "upstreamGitBlob": "dee7f210a9a1c8271037d8bf02c59379a4ba5fac",
+      "upstreamSize": 2608,
+      "upstreamSHA256": "3caf85c13a737c2b109ed638950c71afcb0405150d39a61852f2f74c7d0415d2",
+      "size": 2608,
+      "sha256": "3caf85c13a737c2b109ed638950c71afcb0405150d39a61852f2f74c7d0415d2"
+    },
+    {
+      "path": "fixtures/flux2_tiny_klein_image_pipeline_cfg/klein_image_cfg_inputs.safetensors",
+      "gitMode": "100644",
+      "upstreamGitBlob": "d2f7d57b8e7ed7bd4d1f8dbc3434eda0cf386ec4",
+      "upstreamSize": 5028,
+      "upstreamSHA256": "be7eb6d60b7e8d3937e7e7bc181b9de6623366892fefb54ab93c0ec1de47c3ab",
+      "size": 5028,
+      "sha256": "be7eb6d60b7e8d3937e7e7bc181b9de6623366892fefb54ab93c0ec1de47c3ab"
+    },
+    {
+      "path": "fixtures/flux2_tiny_klein_image_pipeline_cfg/scheduler/config.json",
+      "gitMode": "100644",
+      "upstreamGitBlob": "541d6b425fca4797df82c57c1703e462382e0496",
+      "upstreamSize": 480,
+      "upstreamSHA256": "3c233b884e8369c53ac8c8e85d5e8badbcc7b3a0c1b39e50f4d50b202527d32a",
+      "size": 480,
+      "sha256": "3c233b884e8369c53ac8c8e85d5e8badbcc7b3a0c1b39e50f4d50b202527d32a"
+    },
+    {
+      "path": "fixtures/flux2_tiny_klein_image_pipeline_cfg/text_encoder/config.json",
+      "gitMode": "100644",
+      "upstreamGitBlob": "95b76381cdcff8dbdf83ef1b4de37c67b9134ccb",
+      "upstreamSize": 2129,
+      "upstreamSHA256": "3540b59d99f2d216c0277a14e91fdfa380c33793e07cdd62a467765c665d0bdc",
+      "size": 2129,
+      "sha256": "3540b59d99f2d216c0277a14e91fdfa380c33793e07cdd62a467765c665d0bdc"
+    },
+    {
+      "path": "fixtures/flux2_tiny_klein_image_pipeline_cfg/text_encoder/model.safetensors",
+      "gitMode": "100644",
+      "upstreamGitBlob": "39a7cf11aa486deab12111a484f06598feaaeab6",
+      "upstreamSize": 8168,
+      "upstreamSHA256": "949cdce9886077a5f28f22868cbd32c7c90263f536e0e6df6dbec5fb1541b297",
+      "size": 8168,
+      "sha256": "949cdce9886077a5f28f22868cbd32c7c90263f536e0e6df6dbec5fb1541b297"
+    },
+    {
+      "path": "fixtures/flux2_tiny_klein_image_pipeline_cfg/transformer/config.json",
+      "gitMode": "100644",
+      "upstreamGitBlob": "cbc6b8c76ad404c330fae42c4b53ba49aeefed75",
+      "upstreamSize": 364,
+      "upstreamSHA256": "2f6a8356789100cf25010827bd47ec1865bdacaebd0d138e97e63f1e137dfabd",
+      "size": 364,
+      "sha256": "2f6a8356789100cf25010827bd47ec1865bdacaebd0d138e97e63f1e137dfabd"
+    },
+    {
+      "path": "fixtures/flux2_tiny_klein_image_pipeline_cfg/transformer/model.safetensors",
+      "gitMode": "100644",
+      "upstreamGitBlob": "d0517e2269a896ca5ab0b15e6c102473a5a45e36",
+      "upstreamSize": 16912,
+      "upstreamSHA256": "bb8413c80cc2d33735a720840a1b74317471cfa32dc22d5d856d13151cb15869",
+      "size": 16912,
+      "sha256": "bb8413c80cc2d33735a720840a1b74317471cfa32dc22d5d856d13151cb15869"
+    },
+    {
+      "path": "fixtures/flux2_tiny_klein_image_pipeline_cfg/vae/config.json",
+      "gitMode": "100644",
+      "upstreamGitBlob": "a3007a913ec8069a7f246ecc6a9248602409ae1b",
+      "upstreamSize": 564,
+      "upstreamSHA256": "a794fc264f81e4f4730984807dd63b59b222d9f6e6235ee67baca79b8437bb88",
+      "size": 564,
+      "sha256": "a794fc264f81e4f4730984807dd63b59b222d9f6e6235ee67baca79b8437bb88"
+    },
+    {
+      "path": "fixtures/flux2_tiny_klein_image_pipeline_cfg/vae/model.safetensors",
+      "gitMode": "100644",
+      "upstreamGitBlob": "11b92210f667fe4f863296822ce512267635cb27",
+      "upstreamSize": 58004,
+      "upstreamSHA256": "744c78a04084bdc9ea638c427e75c9b02095a1fa3c4ea5bafaa8631ac23bc878",
+      "size": 58004,
+      "sha256": "744c78a04084bdc9ea638c427e75c9b02095a1fa3c4ea5bafaa8631ac23bc878"
+    },
+    {
+      "path": "fixtures/flux2_tiny_klein_pipeline/klein_expected.safetensors",
+      "gitMode": "100644",
+      "upstreamGitBlob": "787be77b1f85d1e103178ec2c555931ed84d06d1",
+      "upstreamSize": 1952,
+      "upstreamSHA256": "35396a5e188062424539030d672289c0f2a762dd012f549793f092be263bfc23",
+      "size": 1952,
+      "sha256": "35396a5e188062424539030d672289c0f2a762dd012f549793f092be263bfc23"
+    },
+    {
+      "path": "fixtures/flux2_tiny_klein_pipeline/klein_inputs.safetensors",
+      "gitMode": "100644",
+      "upstreamGitBlob": "cec2fa73cc02f512888693131f7c9b902f2ff0f5",
+      "upstreamSize": 2444,
+      "upstreamSHA256": "8d30e518d7db645c168d102551ead5ac7706abaef38caf4ea67789cda801da85",
+      "size": 2444,
+      "sha256": "8d30e518d7db645c168d102551ead5ac7706abaef38caf4ea67789cda801da85"
+    },
+    {
+      "path": "fixtures/flux2_tiny_klein_pipeline/scheduler/config.json",
+      "gitMode": "100644",
+      "upstreamGitBlob": "541d6b425fca4797df82c57c1703e462382e0496",
+      "upstreamSize": 480,
+      "upstreamSHA256": "3c233b884e8369c53ac8c8e85d5e8badbcc7b3a0c1b39e50f4d50b202527d32a",
+      "size": 480,
+      "sha256": "3c233b884e8369c53ac8c8e85d5e8badbcc7b3a0c1b39e50f4d50b202527d32a"
+    },
+    {
+      "path": "fixtures/flux2_tiny_klein_pipeline/text_encoder/config.json",
+      "gitMode": "100644",
+      "upstreamGitBlob": "95b76381cdcff8dbdf83ef1b4de37c67b9134ccb",
+      "upstreamSize": 2129,
+      "upstreamSHA256": "3540b59d99f2d216c0277a14e91fdfa380c33793e07cdd62a467765c665d0bdc",
+      "size": 2129,
+      "sha256": "3540b59d99f2d216c0277a14e91fdfa380c33793e07cdd62a467765c665d0bdc"
+    },
+    {
+      "path": "fixtures/flux2_tiny_klein_pipeline/text_encoder/model.safetensors",
+      "gitMode": "100644",
+      "upstreamGitBlob": "39a7cf11aa486deab12111a484f06598feaaeab6",
+      "upstreamSize": 8168,
+      "upstreamSHA256": "949cdce9886077a5f28f22868cbd32c7c90263f536e0e6df6dbec5fb1541b297",
+      "size": 8168,
+      "sha256": "949cdce9886077a5f28f22868cbd32c7c90263f536e0e6df6dbec5fb1541b297"
+    },
+    {
+      "path": "fixtures/flux2_tiny_klein_pipeline/transformer/config.json",
+      "gitMode": "100644",
+      "upstreamGitBlob": "cbc6b8c76ad404c330fae42c4b53ba49aeefed75",
+      "upstreamSize": 364,
+      "upstreamSHA256": "2f6a8356789100cf25010827bd47ec1865bdacaebd0d138e97e63f1e137dfabd",
+      "size": 364,
+      "sha256": "2f6a8356789100cf25010827bd47ec1865bdacaebd0d138e97e63f1e137dfabd"
+    },
+    {
+      "path": "fixtures/flux2_tiny_klein_pipeline/transformer/model.safetensors",
+      "gitMode": "100644",
+      "upstreamGitBlob": "d0517e2269a896ca5ab0b15e6c102473a5a45e36",
+      "upstreamSize": 16912,
+      "upstreamSHA256": "bb8413c80cc2d33735a720840a1b74317471cfa32dc22d5d856d13151cb15869",
+      "size": 16912,
+      "sha256": "bb8413c80cc2d33735a720840a1b74317471cfa32dc22d5d856d13151cb15869"
+    },
+    {
+      "path": "fixtures/flux2_tiny_klein_pipeline/vae/config.json",
+      "gitMode": "100644",
+      "upstreamGitBlob": "a3007a913ec8069a7f246ecc6a9248602409ae1b",
+      "upstreamSize": 564,
+      "upstreamSHA256": "a794fc264f81e4f4730984807dd63b59b222d9f6e6235ee67baca79b8437bb88",
+      "size": 564,
+      "sha256": "a794fc264f81e4f4730984807dd63b59b222d9f6e6235ee67baca79b8437bb88"
+    },
+    {
+      "path": "fixtures/flux2_tiny_klein_pipeline/vae/model.safetensors",
+      "gitMode": "100644",
+      "upstreamGitBlob": "11b92210f667fe4f863296822ce512267635cb27",
+      "upstreamSize": 58004,
+      "upstreamSHA256": "744c78a04084bdc9ea638c427e75c9b02095a1fa3c4ea5bafaa8631ac23bc878",
+      "size": 58004,
+      "sha256": "744c78a04084bdc9ea638c427e75c9b02095a1fa3c4ea5bafaa8631ac23bc878"
+    },
+    {
+      "path": "fixtures/flux2_tiny_klein_pipeline_cfg/klein_cfg_expected.safetensors",
+      "gitMode": "100644",
+      "upstreamGitBlob": "2f3b93621a40251792f2771120d43dd78e246f3f",
+      "upstreamSize": 1952,
+      "upstreamSHA256": "119cfa4be722a67668dfc9c4ffa05e1d50413d0ddb0223afc159b5ea0f734152",
+      "size": 1952,
+      "sha256": "119cfa4be722a67668dfc9c4ffa05e1d50413d0ddb0223afc159b5ea0f734152"
+    },
+    {
+      "path": "fixtures/flux2_tiny_klein_pipeline_cfg/klein_cfg_inputs.safetensors",
+      "gitMode": "100644",
+      "upstreamGitBlob": "41c2843a758dccdb9ffae9d51c02e0a54ed6d9c2",
+      "upstreamSize": 4120,
+      "upstreamSHA256": "e7ef3cefef4becfeb7ac6daea21ab122d092ac8524e3aa0cd4cf3f5f4a483d50",
+      "size": 4120,
+      "sha256": "e7ef3cefef4becfeb7ac6daea21ab122d092ac8524e3aa0cd4cf3f5f4a483d50"
+    },
+    {
+      "path": "fixtures/flux2_tiny_klein_pipeline_cfg/scheduler/config.json",
+      "gitMode": "100644",
+      "upstreamGitBlob": "541d6b425fca4797df82c57c1703e462382e0496",
+      "upstreamSize": 480,
+      "upstreamSHA256": "3c233b884e8369c53ac8c8e85d5e8badbcc7b3a0c1b39e50f4d50b202527d32a",
+      "size": 480,
+      "sha256": "3c233b884e8369c53ac8c8e85d5e8badbcc7b3a0c1b39e50f4d50b202527d32a"
+    },
+    {
+      "path": "fixtures/flux2_tiny_klein_pipeline_cfg/text_encoder/config.json",
+      "gitMode": "100644",
+      "upstreamGitBlob": "95b76381cdcff8dbdf83ef1b4de37c67b9134ccb",
+      "upstreamSize": 2129,
+      "upstreamSHA256": "3540b59d99f2d216c0277a14e91fdfa380c33793e07cdd62a467765c665d0bdc",
+      "size": 2129,
+      "sha256": "3540b59d99f2d216c0277a14e91fdfa380c33793e07cdd62a467765c665d0bdc"
+    },
+    {
+      "path": "fixtures/flux2_tiny_klein_pipeline_cfg/text_encoder/model.safetensors",
+      "gitMode": "100644",
+      "upstreamGitBlob": "39a7cf11aa486deab12111a484f06598feaaeab6",
+      "upstreamSize": 8168,
+      "upstreamSHA256": "949cdce9886077a5f28f22868cbd32c7c90263f536e0e6df6dbec5fb1541b297",
+      "size": 8168,
+      "sha256": "949cdce9886077a5f28f22868cbd32c7c90263f536e0e6df6dbec5fb1541b297"
+    },
+    {
+      "path": "fixtures/flux2_tiny_klein_pipeline_cfg/transformer/config.json",
+      "gitMode": "100644",
+      "upstreamGitBlob": "cbc6b8c76ad404c330fae42c4b53ba49aeefed75",
+      "upstreamSize": 364,
+      "upstreamSHA256": "2f6a8356789100cf25010827bd47ec1865bdacaebd0d138e97e63f1e137dfabd",
+      "size": 364,
+      "sha256": "2f6a8356789100cf25010827bd47ec1865bdacaebd0d138e97e63f1e137dfabd"
+    },
+    {
+      "path": "fixtures/flux2_tiny_klein_pipeline_cfg/transformer/model.safetensors",
+      "gitMode": "100644",
+      "upstreamGitBlob": "d0517e2269a896ca5ab0b15e6c102473a5a45e36",
+      "upstreamSize": 16912,
+      "upstreamSHA256": "bb8413c80cc2d33735a720840a1b74317471cfa32dc22d5d856d13151cb15869",
+      "size": 16912,
+      "sha256": "bb8413c80cc2d33735a720840a1b74317471cfa32dc22d5d856d13151cb15869"
+    },
+    {
+      "path": "fixtures/flux2_tiny_klein_pipeline_cfg/vae/config.json",
+      "gitMode": "100644",
+      "upstreamGitBlob": "a3007a913ec8069a7f246ecc6a9248602409ae1b",
+      "upstreamSize": 564,
+      "upstreamSHA256": "a794fc264f81e4f4730984807dd63b59b222d9f6e6235ee67baca79b8437bb88",
+      "size": 564,
+      "sha256": "a794fc264f81e4f4730984807dd63b59b222d9f6e6235ee67baca79b8437bb88"
+    },
+    {
+      "path": "fixtures/flux2_tiny_klein_pipeline_cfg/vae/model.safetensors",
+      "gitMode": "100644",
+      "upstreamGitBlob": "11b92210f667fe4f863296822ce512267635cb27",
+      "upstreamSize": 58004,
+      "upstreamSHA256": "744c78a04084bdc9ea638c427e75c9b02095a1fa3c4ea5bafaa8631ac23bc878",
+      "size": 58004,
+      "sha256": "744c78a04084bdc9ea638c427e75c9b02095a1fa3c4ea5bafaa8631ac23bc878"
+    },
+    {
+      "path": "fixtures/flux2_tiny_mistral3_text_encoder/prompt_embeds.safetensors",
+      "gitMode": "100644",
+      "upstreamGitBlob": "595c81ff2c6dfcf347cda67c073beb115e7ffe74",
+      "upstreamSize": 2600,
+      "upstreamSHA256": "49ded815fb443593e4aa9cd16f817d40eb0d9d3f548ec7aa6e07ce611d2786de",
+      "size": 2600,
+      "sha256": "49ded815fb443593e4aa9cd16f817d40eb0d9d3f548ec7aa6e07ce611d2786de"
+    },
+    {
+      "path": "fixtures/flux2_tiny_mistral3_text_encoder/text_encoder/config.json",
+      "gitMode": "100644",
+      "upstreamGitBlob": "971baede9ce66a96562134166041306b3c84ad14",
+      "upstreamSize": 6007,
+      "upstreamSHA256": "435f3e69d61576d1c6c79c4e51dc508b4fead68af59ada36c94014426344ab33",
+      "size": 6007,
+      "sha256": "435f3e69d61576d1c6c79c4e51dc508b4fead68af59ada36c94014426344ab33"
+    },
+    {
+      "path": "fixtures/flux2_tiny_mistral3_text_encoder/text_encoder/model.safetensors",
+      "gitMode": "100644",
+      "upstreamGitBlob": "1bf14dfc82ced09af81dbaa03146b032aff46265",
+      "upstreamSize": 20128,
+      "upstreamSHA256": "2ce89a040c61ac87d70e11d656755bd8a0863aa2a7b24b0b04de4dffbe72dca2",
+      "size": 20128,
+      "sha256": "2ce89a040c61ac87d70e11d656755bd8a0863aa2a7b24b0b04de4dffbe72dca2"
+    },
+    {
+      "path": "fixtures/flux2_tiny_pipeline/pipeline_expected.safetensors",
+      "gitMode": "100644",
+      "upstreamGitBlob": "247ab8a2c81acc200b55f6f1fb56691033ae71a7",
+      "upstreamSize": 1048,
+      "upstreamSHA256": "ec2677c231bed46447500a7996f287664afa32347e447ddd108d616bfa9d1321",
+      "size": 1048,
+      "sha256": "ec2677c231bed46447500a7996f287664afa32347e447ddd108d616bfa9d1321"
+    },
+    {
+      "path": "fixtures/flux2_tiny_pipeline/pipeline_image_inputs.safetensors",
+      "gitMode": "100644",
+      "upstreamGitBlob": "fe5113b8e314c6bbfb3e1d41817e889736cd428b",
+      "upstreamSize": 2496,
+      "upstreamSHA256": "b811882ac9ff6e4c927a29b2503405f301539de25dd014ed7b8fe66014307de5",
+      "size": 2496,
+      "sha256": "b811882ac9ff6e4c927a29b2503405f301539de25dd014ed7b8fe66014307de5"
+    },
+    {
+      "path": "fixtures/flux2_tiny_pipeline/pipeline_inputs.safetensors",
+      "gitMode": "100644",
+      "upstreamGitBlob": "402a6b5d4bf67d3f6d3b7b252898c948a88d2356",
+      "upstreamSize": 1012,
+      "upstreamSHA256": "5871473bc4ee79ba75539682be8cd94e585cce570147a2542ccc781e4d4693de",
+      "size": 1012,
+      "sha256": "5871473bc4ee79ba75539682be8cd94e585cce570147a2542ccc781e4d4693de"
+    },
+    {
+      "path": "fixtures/flux2_tiny_pipeline/scheduler/config.json",
+      "gitMode": "100644",
+      "upstreamGitBlob": "541d6b425fca4797df82c57c1703e462382e0496",
+      "upstreamSize": 480,
+      "upstreamSHA256": "3c233b884e8369c53ac8c8e85d5e8badbcc7b3a0c1b39e50f4d50b202527d32a",
+      "size": 480,
+      "sha256": "3c233b884e8369c53ac8c8e85d5e8badbcc7b3a0c1b39e50f4d50b202527d32a"
+    },
+    {
+      "path": "fixtures/flux2_tiny_pipeline/transformer/config.json",
+      "gitMode": "100644",
+      "upstreamGitBlob": "cbc6b8c76ad404c330fae42c4b53ba49aeefed75",
+      "upstreamSize": 364,
+      "upstreamSHA256": "2f6a8356789100cf25010827bd47ec1865bdacaebd0d138e97e63f1e137dfabd",
+      "size": 364,
+      "sha256": "2f6a8356789100cf25010827bd47ec1865bdacaebd0d138e97e63f1e137dfabd"
+    },
+    {
+      "path": "fixtures/flux2_tiny_pipeline/transformer/model.safetensors",
+      "gitMode": "100644",
+      "upstreamGitBlob": "d0517e2269a896ca5ab0b15e6c102473a5a45e36",
+      "upstreamSize": 16912,
+      "upstreamSHA256": "bb8413c80cc2d33735a720840a1b74317471cfa32dc22d5d856d13151cb15869",
+      "size": 16912,
+      "sha256": "bb8413c80cc2d33735a720840a1b74317471cfa32dc22d5d856d13151cb15869"
+    },
+    {
+      "path": "fixtures/flux2_tiny_pipeline/vae/config.json",
+      "gitMode": "100644",
+      "upstreamGitBlob": "a3007a913ec8069a7f246ecc6a9248602409ae1b",
+      "upstreamSize": 564,
+      "upstreamSHA256": "a794fc264f81e4f4730984807dd63b59b222d9f6e6235ee67baca79b8437bb88",
+      "size": 564,
+      "sha256": "a794fc264f81e4f4730984807dd63b59b222d9f6e6235ee67baca79b8437bb88"
+    },
+    {
+      "path": "fixtures/flux2_tiny_pipeline/vae/model.safetensors",
+      "gitMode": "100644",
+      "upstreamGitBlob": "11b92210f667fe4f863296822ce512267635cb27",
+      "upstreamSize": 58004,
+      "upstreamSHA256": "744c78a04084bdc9ea638c427e75c9b02095a1fa3c4ea5bafaa8631ac23bc878",
+      "size": 58004,
+      "sha256": "744c78a04084bdc9ea638c427e75c9b02095a1fa3c4ea5bafaa8631ac23bc878"
+    },
+    {
+      "path": "fixtures/flux2_tiny_pipeline_guidance/pipeline_expected.safetensors",
+      "gitMode": "100644",
+      "upstreamGitBlob": "cb6660f513f4bfa2f61500127eec3b7af352d8d5",
+      "upstreamSize": 1048,
+      "upstreamSHA256": "03170534625a829e3e01e5f04562f4b2d557522f249d424a64503e95e12af7b9",
+      "size": 1048,
+      "sha256": "03170534625a829e3e01e5f04562f4b2d557522f249d424a64503e95e12af7b9"
+    },
+    {
+      "path": "fixtures/flux2_tiny_pipeline_guidance/pipeline_inputs.safetensors",
+      "gitMode": "100644",
+      "upstreamGitBlob": "c70347083dbb469eaa9bfb3334329ae941ab0f63",
+      "upstreamSize": 1080,
+      "upstreamSHA256": "3f9aecc3fab5321bde1405853eb37eca4bbf34c89f9ac90015bb1ca5079e8535",
+      "size": 1080,
+      "sha256": "3f9aecc3fab5321bde1405853eb37eca4bbf34c89f9ac90015bb1ca5079e8535"
+    },
+    {
+      "path": "fixtures/flux2_tiny_pipeline_guidance/scheduler/config.json",
+      "gitMode": "100644",
+      "upstreamGitBlob": "541d6b425fca4797df82c57c1703e462382e0496",
+      "upstreamSize": 480,
+      "upstreamSHA256": "3c233b884e8369c53ac8c8e85d5e8badbcc7b3a0c1b39e50f4d50b202527d32a",
+      "size": 480,
+      "sha256": "3c233b884e8369c53ac8c8e85d5e8badbcc7b3a0c1b39e50f4d50b202527d32a"
+    },
+    {
+      "path": "fixtures/flux2_tiny_pipeline_guidance/transformer/config.json",
+      "gitMode": "100644",
+      "upstreamGitBlob": "cbc6b8c76ad404c330fae42c4b53ba49aeefed75",
+      "upstreamSize": 364,
+      "upstreamSHA256": "2f6a8356789100cf25010827bd47ec1865bdacaebd0d138e97e63f1e137dfabd",
+      "size": 364,
+      "sha256": "2f6a8356789100cf25010827bd47ec1865bdacaebd0d138e97e63f1e137dfabd"
+    },
+    {
+      "path": "fixtures/flux2_tiny_pipeline_guidance/transformer/model.safetensors",
+      "gitMode": "100644",
+      "upstreamGitBlob": "d0517e2269a896ca5ab0b15e6c102473a5a45e36",
+      "upstreamSize": 16912,
+      "upstreamSHA256": "bb8413c80cc2d33735a720840a1b74317471cfa32dc22d5d856d13151cb15869",
+      "size": 16912,
+      "sha256": "bb8413c80cc2d33735a720840a1b74317471cfa32dc22d5d856d13151cb15869"
+    },
+    {
+      "path": "fixtures/flux2_tiny_pipeline_guidance/vae/config.json",
+      "gitMode": "100644",
+      "upstreamGitBlob": "a3007a913ec8069a7f246ecc6a9248602409ae1b",
+      "upstreamSize": 564,
+      "upstreamSHA256": "a794fc264f81e4f4730984807dd63b59b222d9f6e6235ee67baca79b8437bb88",
+      "size": 564,
+      "sha256": "a794fc264f81e4f4730984807dd63b59b222d9f6e6235ee67baca79b8437bb88"
+    },
+    {
+      "path": "fixtures/flux2_tiny_pipeline_guidance/vae/model.safetensors",
+      "gitMode": "100644",
+      "upstreamGitBlob": "11b92210f667fe4f863296822ce512267635cb27",
+      "upstreamSize": 58004,
+      "upstreamSHA256": "744c78a04084bdc9ea638c427e75c9b02095a1fa3c4ea5bafaa8631ac23bc878",
+      "size": 58004,
+      "sha256": "744c78a04084bdc9ea638c427e75c9b02095a1fa3c4ea5bafaa8631ac23bc878"
+    },
+    {
+      "path": "fixtures/flux2_tiny_text_encoder/prompt_embeds.safetensors",
+      "gitMode": "100644",
+      "upstreamGitBlob": "edd452a75480e50ba4d625104ace251a4e9a33ae",
+      "upstreamSize": 2600,
+      "upstreamSHA256": "1b510ead1d177fa1b7e1e5488aa7ecb5d931c83ee3cdb0cb740dad5467474820",
+      "size": 2600,
+      "sha256": "1b510ead1d177fa1b7e1e5488aa7ecb5d931c83ee3cdb0cb740dad5467474820"
+    },
+    {
+      "path": "fixtures/flux2_tiny_text_encoder/text_encoder/config.json",
+      "gitMode": "100644",
+      "upstreamGitBlob": "95b76381cdcff8dbdf83ef1b4de37c67b9134ccb",
+      "upstreamSize": 2129,
+      "upstreamSHA256": "3540b59d99f2d216c0277a14e91fdfa380c33793e07cdd62a467765c665d0bdc",
+      "size": 2129,
+      "sha256": "3540b59d99f2d216c0277a14e91fdfa380c33793e07cdd62a467765c665d0bdc"
+    },
+    {
+      "path": "fixtures/flux2_tiny_text_encoder/text_encoder/model.safetensors",
+      "gitMode": "100644",
+      "upstreamGitBlob": "39a7cf11aa486deab12111a484f06598feaaeab6",
+      "upstreamSize": 8168,
+      "upstreamSHA256": "949cdce9886077a5f28f22868cbd32c7c90263f536e0e6df6dbec5fb1541b297",
+      "size": 8168,
+      "sha256": "949cdce9886077a5f28f22868cbd32c7c90263f536e0e6df6dbec5fb1541b297"
+    },
+    {
+      "path": "scripts/build-cli.sh",
+      "gitMode": "100755",
+      "upstreamGitBlob": "0fa08c3ad037080ea2fceb54f6f7538d7ff35e8a",
+      "upstreamSize": 1344,
+      "upstreamSHA256": "210d25a42b555329a790a10babfb850a669903480e5f54c453d79337be9aded9",
+      "size": 1344,
+      "sha256": "210d25a42b555329a790a10babfb850a669903480e5f54c453d79337be9aded9"
+    },
+    {
+      "path": "scripts/generate_flux2_klein4b_fixtures.py",
+      "gitMode": "100644",
+      "upstreamGitBlob": "204ad768404f585edd4e64b7f9e28d7b9219439f",
+      "upstreamSize": 5243,
+      "upstreamSHA256": "6486f864e65351db569ab46bb6acb6c1250afcccbbae9e17ed60b825eb978722",
+      "size": 5243,
+      "sha256": "6486f864e65351db569ab46bb6acb6c1250afcccbbae9e17ed60b825eb978722"
+    },
+    {
+      "path": "scripts/generate_flux2_tiny_denoise_fixtures.py",
+      "gitMode": "100644",
+      "upstreamGitBlob": "1234e136b1894f9e377e266ea35fed8aecca0e5e",
+      "upstreamSize": 4738,
+      "upstreamSHA256": "de17dd82552a471ecf23ee0abce82cd0c6e7c9a28937cd82cc8776d132f5fde2",
+      "size": 4738,
+      "sha256": "de17dd82552a471ecf23ee0abce82cd0c6e7c9a28937cd82cc8776d132f5fde2"
+    },
+    {
+      "path": "scripts/generate_flux2_tiny_denoise_loop_fixtures.py",
+      "gitMode": "100644",
+      "upstreamGitBlob": "2ca8e83e788ebc7e3ca9e7ec0dd28a38dbf4e141",
+      "upstreamSize": 5054,
+      "upstreamSHA256": "5ee74997770f7389cb987fac51c215c9d0db4883665955ca97ba1d5ffa6fe215",
+      "size": 5054,
+      "sha256": "5ee74997770f7389cb987fac51c215c9d0db4883665955ca97ba1d5ffa6fe215"
+    },
+    {
+      "path": "scripts/generate_flux2_tiny_dev_pipeline_fixtures.py",
+      "gitMode": "100755",
+      "upstreamGitBlob": "23bf34b6129f402434c030492ba532957d74318e",
+      "upstreamSize": 11146,
+      "upstreamSHA256": "3cd01a53918eb7eb5c40340c3d0f840accfaee8565d042722961c2843ac59b3f",
+      "size": 11146,
+      "sha256": "3cd01a53918eb7eb5c40340c3d0f840accfaee8565d042722961c2843ac59b3f"
+    },
+    {
+      "path": "scripts/generate_flux2_tiny_klein_image_pipeline_cfg_fixtures.py",
+      "gitMode": "100644",
+      "upstreamGitBlob": "2c0afb44ec81e27652f70b4ba6cb640e70cfa847",
+      "upstreamSize": 13888,
+      "upstreamSHA256": "48b4b977e48bfd12877033ce4e18e7a59c022ccb9a744328d2da75008dca0812",
+      "size": 13888,
+      "sha256": "48b4b977e48bfd12877033ce4e18e7a59c022ccb9a744328d2da75008dca0812"
+    },
+    {
+      "path": "scripts/generate_flux2_tiny_klein_image_pipeline_fixtures.py",
+      "gitMode": "100644",
+      "upstreamGitBlob": "6bf5ed1e7ef31b6567d54fc4f2d58b68017ed100",
+      "upstreamSize": 12280,
+      "upstreamSHA256": "59f2c318ffe1f70d33572a2b041bf1d10aea4aade0e1db38098f660adb920b53",
+      "size": 12280,
+      "sha256": "59f2c318ffe1f70d33572a2b041bf1d10aea4aade0e1db38098f660adb920b53"
+    },
+    {
+      "path": "scripts/generate_flux2_tiny_klein_pipeline_cfg_fixtures.py",
+      "gitMode": "100644",
+      "upstreamGitBlob": "c1653699940a59ec0ab031eb8767f1caa14e0d1e",
+      "upstreamSize": 12186,
+      "upstreamSHA256": "89fbbe14b3b6b2bc8309e9d294dea9f0f11637ee321f05e932a08791a25454ee",
+      "size": 12186,
+      "sha256": "89fbbe14b3b6b2bc8309e9d294dea9f0f11637ee321f05e932a08791a25454ee"
+    },
+    {
+      "path": "scripts/generate_flux2_tiny_klein_pipeline_fixtures.py",
+      "gitMode": "100644",
+      "upstreamGitBlob": "749804ce06781d452fe8926e52e891c19a5b6efd",
+      "upstreamSize": 10628,
+      "upstreamSHA256": "d4b2714a4690e50f27a239246ee2c859dfce52885a1d0fa207be0742dead1b82",
+      "size": 10628,
+      "sha256": "d4b2714a4690e50f27a239246ee2c859dfce52885a1d0fa207be0742dead1b82"
+    },
+    {
+      "path": "scripts/generate_flux2_tiny_latent_fixtures.py",
+      "gitMode": "100644",
+      "upstreamGitBlob": "903719989e00ada11535fd15611e45853f462492",
+      "upstreamSize": 4284,
+      "upstreamSHA256": "865ce40988c28cc6038f1e9a3764f197d4b6dccbdce1983156e5bb01c36cc797",
+      "size": 4284,
+      "sha256": "865ce40988c28cc6038f1e9a3764f197d4b6dccbdce1983156e5bb01c36cc797"
+    },
+    {
+      "path": "scripts/generate_flux2_tiny_mistral3_text_encoder_fixtures.py",
+      "gitMode": "100755",
+      "upstreamGitBlob": "499a00bd01ec4d67e980bd7a96a2af6fe163b0ea",
+      "upstreamSize": 6243,
+      "upstreamSHA256": "4f856c3a93b6dc1cd9ff0958424c5e04e7c11f0ea1b6ff94dfe7016e432f9e49",
+      "size": 6243,
+      "sha256": "4f856c3a93b6dc1cd9ff0958424c5e04e7c11f0ea1b6ff94dfe7016e432f9e49"
+    },
+    {
+      "path": "scripts/generate_flux2_tiny_pipeline_fixtures.py",
+      "gitMode": "100644",
+      "upstreamGitBlob": "ffc70895aaef32cea77f660674efe635b18f1572",
+      "upstreamSize": 7510,
+      "upstreamSHA256": "636b99756cb262ea1c4effa6dd707e9e6d9e28e70c4a80da846758a88256b50a",
+      "size": 7510,
+      "sha256": "636b99756cb262ea1c4effa6dd707e9e6d9e28e70c4a80da846758a88256b50a"
+    },
+    {
+      "path": "scripts/generate_flux2_tiny_pipeline_guidance_fixtures.py",
+      "gitMode": "100755",
+      "upstreamGitBlob": "438544ddf02b207b6bc631b8a95c9e4e9fe92935",
+      "upstreamSize": 7349,
+      "upstreamSHA256": "cc2ca9643029a9d274ecb6ceaa14282c5146baa4de4505451b887c7ee3d23280",
+      "size": 7349,
+      "sha256": "cc2ca9643029a9d274ecb6ceaa14282c5146baa4de4505451b887c7ee3d23280"
+    },
+    {
+      "path": "scripts/generate_flux2_tiny_pipeline_image_fixtures.py",
+      "gitMode": "100644",
+      "upstreamGitBlob": "50cc3d45ac4024ec49dddcde5043d672da343bc9",
+      "upstreamSize": 7825,
+      "upstreamSHA256": "b818cddb1f66fed85951538190ac15102675b4b3648e01e5b7e0337bbb2bf54f",
+      "size": 7825,
+      "sha256": "b818cddb1f66fed85951538190ac15102675b4b3648e01e5b7e0337bbb2bf54f"
+    },
+    {
+      "path": "scripts/generate_flux2_tiny_position_fixtures.py",
+      "gitMode": "100644",
+      "upstreamGitBlob": "533729e6ab1ae6eca02c7ccafba2c1d695897535",
+      "upstreamSize": 4442,
+      "upstreamSHA256": "156c406b3e8abb6625dc77b37486b3d055a1d023dcaee697011e577674506aa5",
+      "size": 4442,
+      "sha256": "156c406b3e8abb6625dc77b37486b3d055a1d023dcaee697011e577674506aa5"
+    },
+    {
+      "path": "scripts/generate_flux2_tiny_prepare_latents_fixtures.py",
+      "gitMode": "100644",
+      "upstreamGitBlob": "a323a164671067a5312fbd48dc937b58a5008a09",
+      "upstreamSize": 6161,
+      "upstreamSHA256": "8aab51e72b5423fba80151b955defbf62b4a5234ed0f166f0c6205dfbd0dfeb4",
+      "size": 6161,
+      "sha256": "8aab51e72b5423fba80151b955defbf62b4a5234ed0f166f0c6205dfbd0dfeb4"
+    },
+    {
+      "path": "scripts/generate_flux2_tiny_scheduler_fixtures.py",
+      "gitMode": "100644",
+      "upstreamGitBlob": "647d2f6423a0b3cfcbeeb4444490db374f271854",
+      "upstreamSize": 3908,
+      "upstreamSHA256": "e51ad6d09c4a45f215edadc7de654e0ce0ac2cc918c64c8a92c2e8ec89b8dce6",
+      "size": 3908,
+      "sha256": "e51ad6d09c4a45f215edadc7de654e0ce0ac2cc918c64c8a92c2e8ec89b8dce6"
+    },
+    {
+      "path": "scripts/generate_flux2_tiny_text_encoder_fixtures.py",
+      "gitMode": "100644",
+      "upstreamGitBlob": "3012a5f3b6ebbeeff92fe9baa00fcd5488960e33",
+      "upstreamSize": 5145,
+      "upstreamSHA256": "f9016bc181b69f43ca4b89fdd5ced7bb2208d8b27853f9f1367c806bc0db9b0a",
+      "size": 5145,
+      "sha256": "f9016bc181b69f43ca4b89fdd5ced7bb2208d8b27853f9f1367c806bc0db9b0a"
+    },
+    {
+      "path": "scripts/generate_flux2_tiny_transformer_fixtures.py",
+      "gitMode": "100644",
+      "upstreamGitBlob": "d25b51b19fc68a2c030a16169fd5fa0343419d8d",
+      "upstreamSize": 5247,
+      "upstreamSHA256": "8a74b1276403320879d88927f62bec38f4c8d221eaaa079d9090f24ae49c7577",
+      "size": 5247,
+      "sha256": "8a74b1276403320879d88927f62bec38f4c8d221eaaa079d9090f24ae49c7577"
+    },
+    {
+      "path": "scripts/generate_flux2_tiny_vae_fixtures.py",
+      "gitMode": "100644",
+      "upstreamGitBlob": "8cec99909a082720312650dabf029a5ce819ea95",
+      "upstreamSize": 3941,
+      "upstreamSHA256": "998e4cb89701e873aae36b6c989eafbb7b395c71589258bb0fcf30fd1a577223",
+      "size": 3941,
+      "sha256": "998e4cb89701e873aae36b6c989eafbb7b395c71589258bb0fcf30fd1a577223"
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+diff --git a/Sources/Flux2/Support/Flux2AttentionMaskCache.swift b/Sources/Flux2/Support/Flux2AttentionMaskCache.swift
+--- a/Sources/Flux2/Support/Flux2AttentionMaskCache.swift
++++ b/Sources/Flux2/Support/Flux2AttentionMaskCache.swift
+@@ -1,5 +1,19 @@
+ import Foundation
+ import MLX
++
++/// Explicit lifecycle operations for process-wide resources retained by Flux2.
++public enum Flux2RuntimeResources {
++  /// Releases Flux2's cached attention masks.
++  ///
++  /// The caller must exclusively own Flux2 execution and must first drain all
++  /// inference work, including pending GPU evaluation. This does not synchronize
++  /// an inference task, release caller-owned arrays/models, or clear MLX's own
++  /// allocator cache. Concurrent cache construction could otherwise repopulate
++  /// the cache after this method returns.
++  public static func clearCaches() {
++    Flux2AttentionMaskCache.clear()
++  }
++}
+ 
+ enum Flux2AttentionMaskCache {
+   private struct Key: Hashable {
