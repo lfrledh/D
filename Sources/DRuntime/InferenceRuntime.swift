@@ -169,13 +169,17 @@ public actor InferenceRuntime: InferenceEngine {
         case .cancelled: entry.continuation.finish(throwing: CancellationError())
         case .failed(let failure): entry.continuation.finish(throwing: failure)
         }
+        // Commit all scheduler state together before the completion actor can suspend
+        // us. Otherwise a resubmission can reuse id while activeRunID still identifies
+        // the preceding run, and batch cancellation can strand that new queued entry.
         entries.removeValue(forKey: id)
         reservedBytes = 0
-        // Resolve before relinquishing the lease; completion is observable only after release.
-        await entry.completion.resolve(outcome)
         activeRunID = nil
         phase = nil
         worker = nil
+        // release has finished. A reentrant submission may start the FIFO head during
+        // this await; after resuming, never clear or replace that newer run's state.
+        await entry.completion.resolve(outcome)
         startNextIfIdle()
     }
 

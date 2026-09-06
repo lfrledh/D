@@ -4,6 +4,8 @@
 
 目前已有独立命令行运行固定文本模型的新推理链路。旧 SwiftUI 应用保留文本与部分图像推理原型，尚未接入新 runtime；SD3、音频、视频、视觉语言和 AI 助手仍未完成。
 
+单仓整合与真实文本推理基础的四项工作已完成，最终验收结果和边界见 [基础阶段验收](docs/FOUNDATION_STAGE_ACCEPTANCE.zh-CN.md)。
+
 ## 本机开发环境（2026-09-06）
 
 - 项目：`/Volumes/CodexProjects/Codex/D`
@@ -34,7 +36,7 @@ git clone --branch codex/inference-foundation https://github.com/lfrledh/D.git
 
 2026-09-06 的 MLX 集成进展：固定版本的 Qwen2.5-0.5B-Instruct-4bit 已下载到外盘并校验，独立 CLI 的 10 类进程验收全部通过，覆盖真实输出、token 上限、连续运行、取消、信号与断管后的清理及报告保存。详情和复验入口见 [本地 MLX 使用说明](docs/MLX_REFERENCE_GUIDE.zh-CN.md)。
 
-MLX XCTest 已完成 `build-for-testing`，实际运行在加载测试 bundle 前遇到外盘访问权限提示并超时，尚未记为通过。原先每轮 2720 字节增长已通过回移 MLX 所有权修复解决：C++ 7 组生命周期回归通过，50 轮真实推理释放后的 MLX 活跃分配与缓存均为 0。该证据针对已复现缺陷，不代表整个进程无任何泄漏；完整 XCTest 与旧 UI 迁移仍未完成。修复和依赖取舍见 [修复报告](docs/MLX_OWNERSHIP_FIX.zh-CN.md)。
+MLX XCTest 已实际通过 25 项声明、37 个参数展开场景，0 失败、0 跳过；此前外盘访问授权造成的启动阻塞未在此次运行中重现。原先每轮 2720 字节增长已通过回移 MLX 所有权修复解决：C++ 7 组生命周期回归通过，50 轮真实推理释放后的 MLX 活跃分配与缓存均为 0。该证据针对已复现缺陷，不代表整个进程无任何泄漏；旧 UI 迁移仍未完成。修复和依赖取舍见 [修复报告](docs/MLX_OWNERSHIP_FIX.zh-CN.md)。
 
 原有下载路径实现没有持久化 security-scoped bookmark，外盘目录跨重启访问仍需修复/验证；仅保存路径字符串不能保证永久授权。StableDiffusion 使用独立 HubApi，缓存路径还需统一。
 

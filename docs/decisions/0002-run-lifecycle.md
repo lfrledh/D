@@ -10,6 +10,8 @@
 
 每次提交拥有独立内部token。公开request UUID可在结束后复用，但旧句柄或旧流迟到取消不能影响新提交。
 
+后端 release 返回后，在一个不含 await 的 actor 区段内清除旧 entry、activeRunID、worker、phase 和预算，再跨 actor 发布 outcome。这样同 UUID 的新提交不会与旧活动许可混淆。发布终态后的恢复路径不得再清理共享活动状态，因为重入提交可能已启动下一任务；只按原有 FIFO 队列调用 startNextIfIdle。
+
 后端实例属于一个runtime，不可直接交给多个runtime重复调度。模型对象、KV cache、懒计算图与内部生成Task由后端独占。只有Sendable值/引用标识跨公共边界。
 
 ## 合约

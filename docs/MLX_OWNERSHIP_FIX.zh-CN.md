@@ -1,6 +1,6 @@
 # MLX 数组所有权修复记录
 
-日期：2026-09-06。状态：局部依赖修复、C++ 回归和真实 CLI 验证完成；MLX XCTest 已编译，实际执行仍待 macOS 外置宗卷授权后的复验。
+日期：2026-09-06。状态：局部依赖修复、C++ 回归和真实 CLI 验证完成；MLX XCTest 已实际通过 25 项声明／37 个展开场景，0 失败、0 跳过。
 
 ## 问题与处理
 
@@ -33,11 +33,11 @@ C++ array 的多个输出通过 sibling 引用相互关联。原版赋值覆盖 
 | 连续加载、生成、释放 50 轮 | 未做同轮数对照 | 50/50 完成且文本非空，每轮活动分配与缓存均为 0 |
 | 旧应用、CLI、MLX 测试 bundle | 初始检查点可编译 | 统一 workspace 构建全部成功 |
 | 普通 HTTPS clone 检出修复提交 | — | 完整源码摘要校验与独立 CLI 构建通过 |
-| 完整 MLX XCTest 执行 | 外盘访问授权前启动超时 | 待授权后实际执行，尚未计为通过 |
+| 完整 MLX XCTest 执行 | 外盘访问授权前启动超时 | 25 项声明／37 个展开场景实际通过，0 失败、0 跳过 |
 
 C++ 回归使用 weak_ptr 验证对象真实生命周期，覆盖赋值覆盖、自身赋值、改指 sibling 和共享 descriptor；不仅比较分配器数字。50 轮运行使用 `maxTokens=8`、`temperature=0`，每轮都经历 loading → loaded → generating → drained → released。总用时约 49.6 秒，首块延迟范围 0.884–0.947 秒，MLX 峰值分配范围 322,442,428–322,526,260 bytes。
 
-CLI 验收还覆盖参数与缺失模型错误、预算拒绝、单 token 终止、取消、SIGINT、SIGTERM、输出管道断开。正常生成和中断后的释放观测均回到 0；完整 XCTest 中的队列衔接、部分加载失败恢复等断言仍需由测试 runner 实际执行。
+CLI 验收还覆盖参数与缺失模型错误、预算拒绝、单 token 终止、取消、SIGINT、SIGTERM、输出管道断开。正常生成和中断后的释放观测均回到 0；随后完整 XCTest 中的队列衔接、部分加载失败恢复等断言也已由测试 runner 实际执行通过。
 
 这些结果支持“已修复这个可复现的所有权缺陷”。MLX 分配器计数不包含全部进程 RSS，短文本小模型的 50 轮也不代表所有模型、长上下文、多模态或无限次运行均无泄漏。
 
@@ -54,7 +54,7 @@ python3 scripts/verify-mlx-cli.py
 ./scripts/test-mlx.sh
 ```
 
-最后一项需要 macOS 允许 Xcode/xctest 访问外置宗卷；本记录没有把 build-for-testing 成功当作执行成功。50 轮运行可以在 CLI 构建后复验：
+最后一项需要 macOS 允许 Xcode/xctest 访问外置宗卷；本次已实际执行通过，不以 build-for-testing 成功代替执行结果。50 轮运行可以在 CLI 构建后复验：
 
 ```sh
 ../BuildCaches/D-MLX/Build/Products/Debug/d-infer \
@@ -83,3 +83,9 @@ python3 scripts/verify-mlx-cli.py
 该检出使用独立的 `D-CloneMLX` 构建目录和独立 `SourcePackages-MLX` 目录；仅复制 bare repository 下载缓存作为种子，没有共享可变 checkout 或 workspace 状态。`scripts/build-mlx.sh` 退出 0，日志确认修复后的 `array.cpp` 重新编译、依赖解析到该 clone 内的 vendor、没有 identity 冲突警告，完成后工作区干净。此次独立验证仅检查源码检出和构建，没有另行执行模型或 XCTest。
 
 本机摘要为 `D-Development/Logs/clone-vendor-validation-summary.json`，其中保存完整构建命令与日志路径。
+
+## 完整测试的后续验收
+
+随后两次运行 `scripts/test-mlx.sh` 均成功实际执行。最终一次包含 runtime 终态重入修复，结构化结果为 25 项声明、37 个展开场景通过，0 失败、0 跳过；结果包为同级 `D-Development/Logs/MLXTests-20260906T213356-39291.xcresult`，摘要为 `mlx-tests-summary-final.json`。7 个真实模型用例全部通过，五轮释放的活动分配和缓存均为 0。此前外盘授权造成的启动阻塞未在这两次运行中重现。
+
+本阶段四项工作的完整验收与范围见 [基础阶段验收](FOUNDATION_STAGE_ACCEPTANCE.zh-CN.md)。

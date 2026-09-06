@@ -6,7 +6,7 @@
 
 固定 fixture 已下载到外盘并校验，CLI 的 10 类进程验收全部通过，完整结果在项目同级 `D-Development/Logs/cli-acceptance/summary.json`。检查包含正常 token 上限、同进程五轮加载/生成/释放、指定片段取消、SIGINT/SIGTERM 取消和停止后续重复、断管后的报告保存，以及无效参数、模型路径与预算拒绝。
 
-MLX XCTest 已完成 `build-for-testing`；实际执行在加载测试 bundle 前受到 Xcode/xctest 外盘访问授权提示阻塞并超时。等待系统授权后须重新运行，当前不能记作测试通过。纯框架的 16 项测试与旧应用构建已通过，但它们也不能替代这组真实模型测试。
+MLX XCTest 已实际执行通过：25 项声明、37 个参数展开场景，0 失败、0 跳过。真实 suite 的 7 个用例包含生成、严格 token 上限、加载后取消、取消与队列交接、连续释放、部分加载失败恢复及消费者异常。此前外盘访问授权造成的启动阻塞未在此次运行中重现。纯框架的 17 项测试、旧应用构建与真实模型测试分别保留验证证据。
 
 原版每轮 2720 字节的增长已通过回移 MLX 数组所有权修复解决。C++ 7 组/36 项检查通过，50 轮真实加载/生成/释放后的 `activeBytes` 和 `cacheBytes` 均为 0。见 [修复报告](MLX_OWNERSHIP_FIX.zh-CN.md) 与 [原始调查](research/MLX_ALLOCATION_FINDINGS.zh-CN.md)。这不替代完整 XCTest，也不是所有模型、长期运行或整个进程无泄漏的证明。
 
