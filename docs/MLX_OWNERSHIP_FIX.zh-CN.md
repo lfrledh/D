@@ -32,6 +32,7 @@ C++ array 的多个输出通过 sibling 引用相互关联。原版赋值覆盖 
 | 真实 CLI，10 类验收 | 旧版允许宽松内存阈值 | 全部通过；重复运行阈值收紧为 1024 bytes |
 | 连续加载、生成、释放 50 轮 | 未做同轮数对照 | 50/50 完成且文本非空，每轮活动分配与缓存均为 0 |
 | 旧应用、CLI、MLX 测试 bundle | 初始检查点可编译 | 统一 workspace 构建全部成功 |
+| 普通 HTTPS clone 检出修复提交 | — | 完整源码摘要校验与独立 CLI 构建通过 |
 | 完整 MLX XCTest 执行 | 外盘访问授权前启动超时 | 待授权后实际执行，尚未计为通过 |
 
 C++ 回归使用 weak_ptr 验证对象真实生命周期，覆盖赋值覆盖、自身赋值、改指 sibling 和共享 descriptor；不仅比较分配器数字。50 轮运行使用 `maxTokens=8`、`temperature=0`，每轮都经历 loading → loaded → generating → drained → released。总用时约 49.6 秒，首块延迟范围 0.884–0.947 秒，MLX 峰值分配范围 322,442,428–322,526,260 bytes。
@@ -57,7 +58,7 @@ python3 scripts/verify-mlx-cli.py
 
 ```sh
 ../BuildCaches/D-MLX/Build/Products/Debug/d-infer \
-  --model ../D-Development/Models/Qwen2.5-0.5B-Instruct-4bit \
+  --model "$(cd ../D-Development/Models/Qwen2.5-0.5B-Instruct-4bit && pwd)" \
   --prompt 'Answer in one short sentence: What is two plus two?' \
   --max-tokens 8 --temperature 0 --repeat 50 \
   --revision a5339a4131f135d0fdc6a5c8b5bbed2753bbe0f3 \
@@ -74,3 +75,11 @@ python3 scripts/verify-mlx-cli.py
 - `BeforeMLXOwnershipFix/`：修复前的分配与 CLI 记录。旧检查点文档保留历史数据，不能用来判断当前补丁是否生效。
 
 日志和模型保存在外盘，不随源码提交。独立审阅另外核对了全部 1811 个原始 Git blob 与清单、补丁反向检查，以及所有本地依赖路径；提交时按清单精确加入上游跟踪文件，避免 ignore 规则遗漏。
+
+## 推送后独立检出验证
+
+修复提交为 [`490ab4f`](https://github.com/lfrledh/D/commit/490ab4f12507a40cd6f21368a765bd4f912f1387)，已推送至 `codex/inference-foundation`。另一个通过 HTTPS 建立的普通 clone 从远程获取并快进到该提交后，完整 vendor 校验通过，1811 个文件均存在，包括受 ignore 规则影响的上游跟踪文件 `xcode/default.profraw`。仓库没有 gitlink，也不需要初始化子模块。
+
+该检出使用独立的 `D-CloneMLX` 构建目录和独立 `SourcePackages-MLX` 目录；仅复制 bare repository 下载缓存作为种子，没有共享可变 checkout 或 workspace 状态。`scripts/build-mlx.sh` 退出 0，日志确认修复后的 `array.cpp` 重新编译、依赖解析到该 clone 内的 vendor、没有 identity 冲突警告，完成后工作区干净。此次独立验证仅检查源码检出和构建，没有另行执行模型或 XCTest。
+
+本机摘要为 `D-Development/Logs/clone-vendor-validation-summary.json`，其中保存完整构建命令与日志路径。

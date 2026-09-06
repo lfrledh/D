@@ -14,7 +14,7 @@ MLX 0.30.6 的 C++ array 在赋值覆盖旧 descriptor 时，没有执行析构�
 
 只移植有关 hunks，不复制 PR 基线中其余新 API。同步 canonical array.h、array.cpp 及 framework 导出的数组头，保持头文件和实现一致。PR 在核对时尚未合并，因此本项目承担选用此固定补丁的验证责任，不将其标为上游正式版本。
 
-将 MLX Swift 0.30.6 的跟踪源码及两层直接子模块完整展开为 `Vendor/mlx-swift`，约 22 MiB，保留许可证、三份来源 SHA、补丁和逐文件摘要。没有嵌套 Git 仓库。D 的提交锁定本地依赖，Package.resolved 继续锁定其他远程依赖。
+将 MLX Swift 0.30.6 的跟踪源码及两个直接子模块完整展开为 `Vendor/mlx-swift`，约 22 MiB，保留许可证、三份来源 SHA、补丁和逐文件摘要。没有嵌套 Git 仓库。D 的提交锁定本地依赖，Package.resolved 继续锁定其他远程依赖。
 
 旧应用和新集成都显式使用这同一个本地 package，目录 identity 仍为 mlx-swift。上游 LM/examples 的依赖声明保留；验证解析图只有一个 MLX 实现，避免重复 C 符号、分配器与运行状态。纯 DInference/DRuntime 保持零远程依赖。
 
