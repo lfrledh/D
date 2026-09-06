@@ -1,22 +1,27 @@
 import DInference
+import DWorkbench
 import SwiftUI
 
 /// The workbench presents saved project values and application actions, never model objects.
 public struct WorkbenchView: View {
     @Bindable private var model: WorkbenchModel
+    private let library: ModelLibraryModel?
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @State private var showInspector = true
     @State private var showTasks = true
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    public init(model: WorkbenchModel) { self.model = model }
+    public init(model: WorkbenchModel, library: ModelLibraryModel? = nil) {
+        self.model = model
+        self.library = library
+    }
 
     public var body: some View {
         Group {
             if model.manifest != nil {
                 projectWorkbench
             } else {
-                WorkbenchWelcome(model: model)
+                WorkbenchWelcome(model: model, library: library)
             }
         }
         .frame(minWidth: 860, minHeight: 580)
@@ -40,6 +45,23 @@ public struct WorkbenchView: View {
         } message: {
             Text(model.errorMessage ?? "")
         }
+        .sheet(isPresented: Binding(
+            get: { library?.isPresented ?? false },
+            set: { library?.isPresented = $0 }
+        )) {
+            if let library {
+                ModelLibraryView(model: library, selectedModelID: model.selectedModelID,
+                    canSelect: model.manifest != nil && !model.isChangingProject) { id in
+                    await model.selectModel(id: id)
+                    if model.selectedModelID == id {
+                        library.isPresented = false
+                    } else if let message = model.errorMessage {
+                        library.errorMessage = message
+                        model.clearError()
+                    }
+                }
+            }
+        }
     }
 
     private var projectWorkbench: some View {
@@ -56,7 +78,7 @@ public struct WorkbenchView: View {
             }
             .navigationTitle(model.manifest?.name ?? "D")
             .inspector(isPresented: $showInspector) {
-                GenerationInspector(model: model)
+                GenerationInspector(model: model, library: library)
                     .inspectorColumnWidth(min: 280, ideal: 310, max: 400)
             }
             .toolbar {
@@ -83,6 +105,15 @@ public struct WorkbenchView: View {
                     .help("项目操作")
                 }
                 ToolbarItemGroup(placement: .primaryAction) {
+                    if let library {
+                        Button {
+                            library.isPresented = true
+                        } label: {
+                            Label("模型库", systemImage: "cube.transparent")
+                        }
+                        .accessibilityIdentifier("open-model-library")
+                        .help(library.hasActiveWork ? "模型库有 \(library.activityCount) 项安装操作进行中" : "管理、安装和选择模型")
+                    }
                     Button {
                         guard let job = model.selectedJob else { return }
                         Task { await model.copySettings(from: job.id) }
@@ -203,6 +234,7 @@ private struct ArtworkSidebar: View {
 
 private struct WorkbenchWelcome: View {
     @Bindable var model: WorkbenchModel
+    let library: ModelLibraryModel?
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     var body: some View {
@@ -248,6 +280,15 @@ private struct WorkbenchWelcome: View {
                 Label("打开项目…", systemImage: "folder").padding(.horizontal, 9)
             }
             .accessibilityIdentifier("open-project")
+            if let library {
+                Button {
+                    library.isPresented = true
+                } label: {
+                    Label("模型库", systemImage: "cube.transparent").padding(.horizontal, 9)
+                }
+                .accessibilityIdentifier("open-model-library")
+                .help("安装或登记模型，无需先打开项目")
+            }
         }
     }
 }

@@ -35,6 +35,16 @@ await runtime.shutdown()
 - 模型下载、目录授权、输入资产生命周期由宿主保证。后端只能访问宿主已解析且已授权的资源。
 - 后端estimate不得开始真实加载；release须幂等并在取消状态下完成；execute不得返回后遗留生成任务或继续emit。
 - 预算是后端声明的峰值准入限制。真实 MLX 后端另外设置缓存上限并记录 allocator 快照；这不把 runtime 预算变成分配器硬限制，也不是跨进程或对旧应用的全局 OOM 防护。
-- 新框架不依赖 Packages/*；新的 Packages/UI 工作台只依赖 DInference，由应用注入 runtime。旧生成入口已退出应用，不得重新绕过资源调度。
+- 新框架不依赖 Packages/*；Packages/UI 中的 DWorkbench 服务 target 只依赖 DInference，UI target 依赖 DWorkbench，由 D 应用注入 runtime。旧生成入口已退出应用，不得重新绕过资源调度。
+
+## 工作台服务调用边界
+
+`ProjectSession` 是无视图的主 actor 服务，持有项目、任务消费、取消等待、自动保存及恢复；`WorkbenchModel` 是原生面板和界面绑定的适配层。替换视图不转移任务的执行所有权。`ModelLibrary` actor 持有固定模型目录、下载、校验、安装记录和使用租约。后端读取的是完成验证的 `ModelReference`，不参与网络安装。
+
+项目提交任务前向模型库获取 `ModelUsageLease`，排队和执行期间均持有，直到权威终态及结果处理完成后释放。在此期间不可移除或重新定位该安装。下载和完整 SHA 校验的状态与模型硬件适用性分别判断；`ImageModelProfile` 统一提供当前支持的参数，不能让界面和执行器各自维护默认值。
+
+关闭项目或模型管理窗口不停止应用级下载。退出应用先排空项目任务并保存，再暂停安装器、保存检查点并等待写盘结束。重开后下载停留在可继续的状态，须由用户明确继续。
+
+纯服务可用 `swift build --package-path Packages/UI --target DWorkbench --scratch-path ../BuildCaches/D-Workbench` 单独构建，不编译 UI。服务与安装器测试入口为 `./scripts/test-workbench.sh`。公共 Swift 接口不是已发布的网络协议；远程提供方、服务协议版本和项目格式分别演进，详见 [ADR 0008](decisions/0008-application-services-and-provider-evolution.md)。
 
 2026-09-06 的验证状态：17 项纯框架测试通过，固定模型的真实 CLI 10 类验收通过。原有重复加载分配增长已通过 MLX 所有权补丁修复，C++ 7 组回归通过，50 轮真实推理释放后的 MLX 活动分配与缓存均为 0，见 [修复记录](MLX_OWNERSHIP_FIX.zh-CN.md)。MLX XCTest 已实际通过 25 项声明／37 个展开场景，0 失败、0 跳过；此前的外盘授权启动阻塞未在此次运行中重现。构建命令、真实运行方法和具体限制见 [本地 MLX 参考实现](MLX_REFERENCE_GUIDE.zh-CN.md)。

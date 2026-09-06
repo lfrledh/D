@@ -2,7 +2,7 @@
 
 原生 macOS 本地 AI 工作站原型，使用 SwiftUI、MLX Swift 和 Hugging Face 模型。
 
-当前应用已完成图像项目工作台检查点：原生 SwiftUI／Liquid Glass 界面通过 DRuntime 与 DMLXBackend 运行图像任务，使用自包含 `.dproject` 保存作品和生成条件。文本后端与命令行仍然保留；旧文本和占位模态界面已退出应用入口。产品目标及之后的 RAW、高位深媒体等需求统一维护在 [产品目标清单](docs/PRODUCT_GOALS.zh-CN.md)。当前检查点的实现、实测与限制见 [工作台验收](docs/WORKBENCH_ACCEPTANCE.zh-CN.md)。
+原生 SwiftUI／Liquid Glass 工作台通过 DRuntime 与 DMLXBackend 运行图像任务，使用自包含 `.dproject` 保存作品和生成条件。当前行动与验收状态集中在 [行动指南](docs/CURRENT_ACTIONS.zh-CN.md)。已完成的单项目检查点见 [工作台验收](docs/WORKBENCH_ACCEPTANCE.zh-CN.md)，后续目标统一维护在 [产品目标清单](docs/PRODUCT_GOALS.zh-CN.md)。文本后端与命令行仍然保留；旧文本和占位模态界面已退出应用入口。
 
 单仓整合与真实文本推理基础的四项工作已完成，最终验收结果和边界见 [基础阶段验收](docs/FOUNDATION_STAGE_ACCEPTANCE.zh-CN.md)。
 
@@ -44,7 +44,7 @@ git clone --branch codex/inference-foundation https://github.com/lfrledh/D.git
 
 2026-09-07 的 B2 图文 XCTest 已实际通过 **61 项声明／120 个展开场景**，**0 失败、0 跳过**，包含真实三轮图像、12 个阶段取消、图文交接、损坏权重和输出失败后的释放与恢复。测试观测的释放后 MLX 活跃分配和缓存均回到 0。最终图像 CLI 17/17、文本 CLI 10/10 与当时的旧应用构建均通过；各自的执行结果见 [图像运行时验收](docs/IMAGE_RUNTIME_ACCEPTANCE.zh-CN.md)。
 
-新工作台使用项目与本地模型的安全作用域书签，权限与实际沙盒验证见工作台报告。旧下载器不再接入应用；下一检查点实现模型安装／管理，当前只登记已安装模型。
+工作台使用项目与模型库的安全作用域书签。应用的“资源 → 管理模型…”提供固定模型下载、暂停／继续、完整校验与已有模型登记；模型权重与暂存位于用户选择的外盘目录，小型索引和书签位于应用容器。关闭窗口后下载继续，退出应用保存检查点。模型库与服务检查点已经验收：58 项服务／安装器测试、6 项 UI 测试及普通沙盒真实下载到出图通过，详情和限制见 [验收报告](docs/MODEL_LIBRARY_ACCEPTANCE.zh-CN.md)。旧下载器不再接入应用。
 
 早期代码审阅见 [项目审阅与讨论建议](docs/PROJECT_REVIEW.zh-CN.md)；其中环境与验证状态属于当时的历史基线，当前状态以上述进展为准。
 
@@ -52,7 +52,9 @@ git clone --branch codex/inference-foundation https://github.com/lfrledh/D.git
 
 最新定位：像ComfyUI一样灵活、提供更易用模式的专业Mac本地AI创作工作站。研究结论和框架基线见 [架构研究报告](docs/ARCHITECTURE_RESEARCH.zh-CN.md)。
 
-根目录内部 Swift package 含 DInference（纯契约）和 DRuntime（串行任务生命周期）两个 target，零远程依赖、Swift 6 严格模式。Backends/MLX 中的 DMLXBackend 提供真实文本与图像后端，d-infer 是宿主入口。B2 复用这三个核心模块；工作台继续使用已有 Packages/UI 包组织 Project、Services、State 和 Views，由 D 应用装配具体后端，没有新增独立框架库。其他旧 Packages/* 暂留源代码，不在新应用依赖路径中。
+根目录 Swift package 含 DInference（纯契约）和 DRuntime（串行任务生命周期）两个 target，零远程依赖、Swift 6 严格模式。Backends/MLX 中的 DMLXBackend 提供文本与图像后端，d-infer 是宿主入口。现有 Packages/UI 包内包含两个实际 target：DWorkbench 拥有项目、任务、资产及模型安装服务，只依赖 DInference；UI 依赖这些服务，负责展示和原生交互。D 应用装配具体 runtime／backend。其他旧 Packages/* 暂留源代码，不在新应用依赖路径中。
+
+逻辑导航确定为“项目 → 创作文档”，模型是共享资源，任务是运行状态。完整多文档和快速草稿尚未实现；当前仍为兼容 v1 的单项目工作台。结构与服务演进规则见 [信息架构](docs/decisions/0007-project-information-architecture.md) 和 [服务边界](docs/decisions/0008-application-services-and-provider-evolution.md)。远程 API、对外推理服务和 RAW 媒体按目标清单后续启动，没有空的产品入口。
 
 运行 `./scripts/test-foundation.sh` 验证框架；运行 `./scripts/build-local.sh` 构建新应用，`./scripts/test-workbench.sh` 验证无 GPU 的项目与任务服务。二者默认使用外置SSD缓存：应用在D-Development，新核心测试在同级BuildCaches/D-Foundation；日志都保存在D-Development/Logs。详见 [框架调用与限制](docs/FOUNDATION_USAGE.md)、[架构决策](docs/decisions/0001-inference-boundary.md)、[任务生命周期决策](docs/decisions/0002-run-lifecycle.md)。
 

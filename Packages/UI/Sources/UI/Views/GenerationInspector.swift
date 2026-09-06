@@ -1,10 +1,32 @@
 import DInference
+import DWorkbench
 import SwiftUI
 
 struct GenerationInspector: View {
     @Bindable var model: WorkbenchModel
+    var library: ModelLibraryModel? = nil
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @FocusState private var promptFocused: Bool
+
+    private var selectedLibraryRecord: ModelRecord? {
+        guard let id = model.selectedModelID else { return nil }
+        return library?.records.first { $0.id == id }
+    }
+
+    private var displayedModelStatus: String {
+        guard let library else { return model.modelStatus }
+        if let record = selectedLibraryRecord { return library.status(for: record) }
+        if model.selectedModelID != nil, library.snapshot != nil {
+            return "这份模型已不在库中，请重新选择。作品和生成记录会保留。"
+        }
+        return "从模型库中选择已完成校验的模型。"
+    }
+
+    private var hasAvailableSelection: Bool {
+        guard let library else { return true }
+        guard let record = selectedLibraryRecord else { return false }
+        return library.canUse(record)
+    }
 
     var body: some View {
         ScrollView {
@@ -43,18 +65,26 @@ struct GenerationInspector: View {
             } else {
                 Text("选择已安装的模型").font(.callout.weight(.medium))
             }
-            Text(model.modelStatus).font(.caption).foregroundStyle(.secondary)
+            Text(displayedModelStatus).font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("model-status")
             Button {
-                Task { await model.registerModel() }
+                if let library { library.isPresented = true }
+                else { Task { await model.registerModel() } }
             } label: {
-                Label(model.modelName == nil ? "选择模型文件夹…" : "更换或重新授权…",
-                      systemImage: "folder.badge.plus")
+                Label(library != nil ? "从模型库选择…" : (model.modelName == nil ? "选择模型文件夹…" : "更换或重新授权…"),
+                      systemImage: library != nil ? "cube.transparent" : "folder.badge.plus")
             }
-            .accessibilityIdentifier("register-model")
-            .disabled(model.isBusy)
-            .help(model.isBusy ? "任务结束后可以更换模型" : "选择本地 FLUX.2 Klein 4B q8 模型文件夹")
+            .accessibilityIdentifier(library != nil ? "choose-project-model" : "register-model")
+            .disabled(library == nil && model.isBusy)
+            .help(library != nil ? "安装、登记并选择当前项目使用的模型" : "选择本地 FLUX.2 Klein 4B q8 模型文件夹")
+            if let library, library.hasActiveWork {
+                Label("模型库中有 \(library.activityCount) 项安装操作进行中", systemImage: "arrow.down.circle")
+                    .font(.caption).foregroundStyle(.secondary)
+            } else if let library, library.failedCount > 0 {
+                Label("模型库中有未完成的操作，请打开检查。", systemImage: "exclamationmark.circle")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
         }
     }
 
@@ -114,11 +144,11 @@ struct GenerationInspector: View {
         VStack(alignment: .leading, spacing: 10) {
             sectionTitle("生成规格", systemImage: "slider.horizontal.3")
             HStack(spacing: 0) {
-                settingValue("尺寸", value: "512 × 512")
+                settingValue("尺寸", value: "\(model.imageProfile.width) × \(model.imageProfile.height)")
                 Spacer()
-                settingValue("步数", value: "4")
+                settingValue("步数", value: "\(model.imageProfile.steps)")
                 Spacer()
-                settingValue("Guidance", value: "1")
+                settingValue("Guidance", value: model.imageProfile.guidanceScale.formatted())
             }
             Text("当前模型使用这一组已验证的固定规格。")
                 .font(.caption).foregroundStyle(.secondary)
@@ -143,7 +173,7 @@ struct GenerationInspector: View {
                 .padding(.vertical, 5)
         }
         .controlSize(.large)
-        .disabled(!model.canGenerate)
+        .disabled(!model.canGenerate || !hasAvailableSelection)
         .keyboardShortcut(.return, modifiers: .command)
         .accessibilityIdentifier("generate")
         .help("生成并自动保存作品（⌘ Return）")

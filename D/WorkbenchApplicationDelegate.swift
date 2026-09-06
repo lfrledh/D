@@ -28,12 +28,19 @@ final class WorkbenchApplicationDelegate: NSObject, NSApplicationDelegate, NSWin
     private var windowClosePending = false
     private var windowCloseApproved = false
     private var terminationPending = false
+    private var prepareLibraryForTermination: (@MainActor () async -> Bool)?
 
-    func connect(window: NSWindow, model: WorkbenchModel) {
+    // Installation belongs to the app. A single SwiftUI Window otherwise quits
+    // when closed; only an explicit app Quit should shut the library down.
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
+
+    func connect(window: NSWindow, model: WorkbenchModel,
+                 prepareLibraryForTermination: @escaping @MainActor () async -> Bool) {
         guard workbenchWindow !== window else { return }
         workbenchWindow = window
         previousWindowDelegate = window.delegate
         closeGate = CloseRequestGate { await model.requestClose() }
+        self.prepareLibraryForTermination = prepareLibraryForTermination
         window.delegate = self
     }
 
@@ -59,7 +66,8 @@ final class WorkbenchApplicationDelegate: NSObject, NSApplicationDelegate, NSWin
         guard !terminationPending else { return .terminateLater }
         terminationPending = true
         Task { @MainActor [weak self] in
-            let approved = await closeGate.prepareToClose()
+            var approved = await closeGate.prepareToClose()
+            if approved { approved = await self?.prepareLibraryForTermination?() ?? true }
             self?.terminationPending = false
             sender.reply(toApplicationShouldTerminate: approved)
         }
@@ -117,9 +125,13 @@ final class WorkbenchApplicationDelegate: NSObject, NSApplicationDelegate, NSWin
 struct WorkbenchWindowConnection: NSViewRepresentable {
     let delegate: WorkbenchApplicationDelegate
     let model: WorkbenchModel
+    let prepareLibraryForTermination: @MainActor () async -> Bool
 
     func makeNSView(context: Context) -> WindowConnectionView {
-        WindowConnectionView { window in delegate.connect(window: window, model: model) }
+        WindowConnectionView { window in
+            delegate.connect(window: window, model: model,
+                             prepareLibraryForTermination: prepareLibraryForTermination)
+        }
     }
 
     func updateNSView(_ nsView: WindowConnectionView, context: Context) {}

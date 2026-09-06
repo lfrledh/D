@@ -5,52 +5,77 @@ import UI
 @main
 struct DApp: App {
     @NSApplicationDelegateAdaptor(WorkbenchApplicationDelegate.self) private var applicationDelegate
-    @State private var model = WorkbenchModel(sessionFactory: AppSessionFactory.makeSession)
+    @State private var bootstrap = WorkbenchBootstrap()
 
     var body: some Scene {
         Window("D", id: "workbench") {
-            WorkbenchView(model: model)
-                .background(WorkbenchWindowConnection(delegate: applicationDelegate, model: model))
-                .task { await model.restoreLastProject() }
-                .onOpenURL { url in Task { await model.openProject(at: url) } }
+            Group {
+                if let model = bootstrap.model, let library = bootstrap.libraryModel {
+                    WorkbenchView(model: model, library: library)
+                        .background(WorkbenchWindowConnection(delegate: applicationDelegate, model: model,
+                            prepareLibraryForTermination: bootstrap.prepareLibraryForTermination))
+                } else if let error = bootstrap.startupError {
+                    VStack(spacing: 18) {
+                        Label("无法准备工作台", systemImage: "externaldrive.badge.exclamationmark")
+                            .font(.title2)
+                        Text(error).textSelection(.enabled).multilineTextAlignment(.center)
+                        Button("重试") { Task { await bootstrap.start() } }.buttonStyle(.glassProminent)
+                    }.padding(40).frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    ProgressView("正在准备工作台…")
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+            }
+            .disabled(bootstrap.isTerminating)
+            .task { await bootstrap.start() }
+            .onOpenURL { url in Task { await bootstrap.openProject(at: url) } }
         }
         .defaultSize(width: 1280, height: 820)
         .windowResizability(.contentMinSize)
-        .commands { WorkbenchCommands(model: model) }
+        .commands { WorkbenchCommands(bootstrap: bootstrap) }
     }
 }
 
 private struct WorkbenchCommands: Commands {
-    let model: WorkbenchModel
+    let bootstrap: WorkbenchBootstrap
     @Environment(\.openWindow) private var openWindow
+    private var modalResourceOperation: Bool {
+        bootstrap.libraryModel?.isPresented == true || bootstrap.libraryModel?.isChoosingLocation == true
+    }
 
     var body: some Commands {
         CommandGroup(replacing: .newItem) {
             Button("新建项目…") {
                 openWindow(id: "workbench")
-                Task { await model.newProject() }
+                Task { await bootstrap.model?.newProject() }
             }
             .keyboardShortcut("n")
-            .disabled(model.isChangingProject)
+            .disabled(modalResourceOperation || bootstrap.isTerminating || bootstrap.model == nil || bootstrap.model?.isChangingProject == true)
 
             Button("打开项目…") {
                 openWindow(id: "workbench")
-                Task { await model.openProject() }
+                Task { await bootstrap.model?.openProject() }
             }
             .keyboardShortcut("o")
-            .disabled(model.isChangingProject)
+            .disabled(modalResourceOperation || bootstrap.isTerminating || bootstrap.model == nil || bootstrap.model?.isChangingProject == true)
         }
         CommandGroup(after: .importExport) {
-            Button("导出所选作品…") { Task { await model.exportSelected() } }
+            Button("导出所选作品…") { Task { await bootstrap.model?.exportSelected() } }
                 .keyboardShortcut("e", modifiers: [.command, .shift])
-                .disabled(model.selectedAsset == nil)
+                .disabled(modalResourceOperation || bootstrap.isTerminating || bootstrap.model?.selectedAsset == nil)
         }
         CommandMenu("创作") {
-            Button("生成图片") { Task { await model.generate() } }
+            Button("生成图片") { Task { await bootstrap.model?.generate() } }
                 .keyboardShortcut(.return, modifiers: [.command])
-                .disabled(!model.canGenerate)
-            Button("注册本地模型…") { Task { await model.registerModel() } }
-                .disabled(model.manifest == nil || model.isBusy || model.isChangingProject)
+                .disabled(modalResourceOperation || bootstrap.isTerminating || bootstrap.model?.canGenerate != true)
+        }
+        CommandMenu("资源") {
+            Button("管理模型…") {
+                openWindow(id: "workbench")
+                bootstrap.libraryModel?.isPresented = true
+            }
+            .keyboardShortcut("m", modifiers: [.command, .shift])
+            .disabled(bootstrap.isTerminating || bootstrap.libraryModel == nil)
         }
     }
 }

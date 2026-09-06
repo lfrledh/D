@@ -1,0 +1,318 @@
+{
+  "schemaVersion": 1,
+  "createdAtUTC": "2026-09-06T18:20:57.278285+00:00",
+  "baselineCommit": "28cbb6cf32e88fe641175b792a6035cfb4841c10",
+  "branch": "codex/inference-foundation",
+  "hardware": {
+    "chip": "Apple M4",
+    "unifiedMemoryGiB": 16,
+    "macOS": "26.6.2 (25G83)",
+    "xcode": "26.6 (17F113)"
+  },
+  "verification": {
+    "workbench": {
+      "declarations": 58,
+      "expandedScenarios": 72,
+      "failed": 0,
+      "skipped": 0
+    },
+    "foundation": {
+      "declarations": 17,
+      "expandedScenarios": 18,
+      "failed": 0
+    },
+    "appClose": {
+      "passed": 2,
+      "failed": 0
+    },
+    "uiInitial": {
+      "passed": 2,
+      "failed": 3,
+      "cause": "Native panel label query mismatch; exact observed identifiers fixed test selectors"
+    },
+    "uiFinal": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0
+    },
+    "normalSandbox": {
+      "signatureVerified": true,
+      "temporaryExceptions": false
+    },
+    "download": {
+      "activeLeaseCount": 0,
+      "availability": "available",
+      "catalogID": "flux2-klein-4b-q8",
+      "directory": "file:///Volumes/CodexProjects/Codex/D-Development/Validation/ModelLibrary-20260907/.d-model-library/Installations/1F9AB02E-EF7D-4D0B-96E0-91041515B930/",
+      "downloadedBytes": 9426536934,
+      "id": {
+        "rawValue": "1F9AB02E-EF7D-4D0B-96E0-91041515B930"
+      },
+      "revision": "ef52ee019fd1d0e75ae4deb40476ba65989716d7",
+      "state": "installed",
+      "storage": "managed",
+      "totalBytes": 9426536934
+    },
+    "reference": {
+      "sha256": "05f0b80ac7d9d6e4ffa105af12a8805cdea4425a9448f9d35a1bd9d8f8dda553",
+      "bytes": 427767,
+      "completedRunIDs": [
+        "40D30DB7-6155-4D3B-A3F1-19E8AF4F178A",
+        "311C476C-D748-4CCE-9E57-FD48EACAFCFA"
+      ],
+      "cancelledRunID": "C3ADDC15-3A08-43D4-B995-CAE648F2049B",
+      "cancelObservedDenoiseProgress": 0.25,
+      "exportMatches": true
+    },
+    "reopen": {
+      "timestampUTC": "2026-09-06T18:20:57.237426+00:00",
+      "manifestUnchanged": true,
+      "manifestSHA256": "a91ddcfcdf7cd093651b80eea2134830a0afc63816acdecc6472b70a8a30f4e9",
+      "assetsRestored": 2,
+      "jobsRestored": 3,
+      "draftRestored": {
+        "prompt": "A red ceramic teapot on a wooden table beside a window, soft morning light, detailed studio photograph.",
+        "randomSeed": false,
+        "seedText": "42"
+      },
+      "managedSelectionRestored": true,
+      "pathAvailabilitySimulation": "Idle task-owned installation renamed, generate disabled while existing art and export stayed available; path restored, generation enabled",
+      "fullscreen": "Entered through native green control; View menu reported Exit Full Screen; returned to normal window"
+    }
+  },
+  "evidenceFiles": [
+    {
+      "path": "/Volumes/CodexProjects/Codex/D-Development/Logs/model-library-fixtures-all-8.log",
+      "sha256": "46afa5318ada04aaefec74f672766e0cd68e0721a85d4a66e9c2393f5d8eded7",
+      "bytes": 12688
+    },
+    {
+      "path": "/Volumes/CodexProjects/Codex/D-Development/Logs/foundation-tests.log",
+      "sha256": "da8b7a0b85497b9150ec621360e19888e794b17ced42ae370b1933e510c17e7f",
+      "bytes": 4193
+    },
+    {
+      "path": "/Volumes/CodexProjects/Codex/D-Development/Logs/dworkbench-headless-build-20260906T174154Z.log",
+      "sha256": "691e16386388c97c7675b8cb33b4cdb61e0e6cd212ca1bc1dc08a40250c3607d",
+      "bytes": 1115
+    },
+    {
+      "path": "/Volumes/CodexProjects/Codex/D-Development/Logs/model-library-app-tests.summary.json",
+      "sha256": "07679ea41ca776917c7d1ed858b383ef6d4f66e33db73cca0dd17e155b0b8962",
+      "bytes": 925
+    },
+    {
+      "path": "/Volumes/CodexProjects/Codex/D-Development/Logs/model-library-ui-tests-initial.summary.json",
+      "sha256": "20caa8297ee2b65ff88db53f062ac1d3bf87b2ca24f8f7e285c3b263627ef191",
+      "bytes": 2529
+    },
+    {
+      "path": "/Volumes/CodexProjects/Codex/D-Development/Logs/model-library-ui-tests-final.summary.json",
+      "sha256": "ac6522d9376865734f5ca6f4e3c37f50294781b3254f9b9ba4aeaafae299db0e",
+      "bytes": 924
+    },
+    {
+      "path": "/Volumes/CodexProjects/Codex/D-Development/Logs/model-library-ui-tests-lifecycle.summary.json",
+      "sha256": "456228fa2761e17f2d1d93ca99182c4f1e46fa2e46f9e1542b2bf126f01f508c",
+      "bytes": 925
+    },
+    {
+      "path": "/Volumes/CodexProjects/Codex/D-Development/Logs/model-library-acceptance-build.log",
+      "sha256": "438d294a2bf6c71875e9f101b7359f9f1a5d0054e2658d681085047b8d7828bd",
+      "bytes": 31021
+    },
+    {
+      "path": "/Volumes/CodexProjects/Codex/D-Development/Logs/model-library-acceptance-entitlements.plist",
+      "sha256": "13b794067a09ca17cfad8fc2e58f1c5173a980d12a92dfed93a25a6c67c73a06",
+      "bytes": 463
+    },
+    {
+      "path": "/Volumes/CodexProjects/Codex/D-Development/Validation/ModelLibrary-20260907/download-upgrade-checkpoint.json",
+      "sha256": "fcd51014b19a1141bc9bb88b630b3525e8405b72b1501eb667cb257dcc5376f7",
+      "bytes": 6729
+    },
+    {
+      "path": "/Volumes/CodexProjects/Codex/D-Development/Validation/ModelLibrary-20260907/inference-before-reopen.json",
+      "sha256": "4ad60d2a681d687ecd439d57b79b2c0653adea71516c34759fc5ad929fc2ac00",
+      "bytes": 5179
+    },
+    {
+      "path": "/Volumes/CodexProjects/Codex/D-Development/Validation/ModelLibrary-20260907/native-appearance.json",
+      "sha256": "6a243d79c0a0247d800edc1d9b52e0e21593e12ab9832e370c08ada7b50f1172",
+      "bytes": 953
+    },
+    {
+      "path": "/Volumes/CodexProjects/Codex/D-Development/Validation/ModelLibrary-20260907/baseline.json",
+      "sha256": "5bb98f46c4b890a3a2e94001c70bc1dd7a6a8cce92e6123beea6e6e144bfd41c",
+      "bytes": 335
+    },
+    {
+      "path": "/Volumes/CodexProjects/Codex/D-Development/Validation/ModelLibrary-20260907/window-closed-download.json",
+      "sha256": "3055f51892cbca3f66cb7da48f03dd17cbc4e670f1749da99572e53a77b936b2",
+      "bytes": 1295
+    },
+    {
+      "path": "/Volumes/CodexProjects/Codex/D-Development/Validation/ModelLibrary-20260907/download-quit.json",
+      "sha256": "b830e95eaf4293dd89aa6e6b645b4ef99cfa3ba5bcb0c1d2f8d808905e4464ae",
+      "bytes": 1188
+    },
+    {
+      "path": "/Volumes/CodexProjects/Codex/D-Development/Validation/ModelLibrary-20260907/reopened.json",
+      "sha256": "88a40612424f97908804a15e6c8db56d231a68d9a91e543207a32bb7d640bb55",
+      "bytes": 740
+    },
+    {
+      "path": "/Volumes/CodexProjects/Codex/D-Development/Validation/ModelLibrary-20260907/download-paused.json",
+      "sha256": "f8bd63f19646f0bdfd929cf04a670bb3366777900812c54680f3c414e3150165",
+      "bytes": 1188
+    },
+    {
+      "path": "/Volumes/CodexProjects/Codex/D-Development/Validation/ModelLibrary-20260907/download-installed.json",
+      "sha256": "f04c94b9bd5d99ca2d7f6134caaeff55eacd3977062bb800b1e504598ef0d27d",
+      "bytes": 5437
+    },
+    {
+      "path": "/Volumes/CodexProjects/Codex/D-Development/Validation/ModelLibrary-20260907/Model Library Acceptance.dproject/project.json",
+      "sha256": "a91ddcfcdf7cd093651b80eea2134830a0afc63816acdecc6472b70a8a30f4e9",
+      "bytes": 5496
+    },
+    {
+      "path": "/Volumes/CodexProjects/Codex/D-Development/Validation/ModelLibrary-20260907/model-library-reference.png",
+      "sha256": "05f0b80ac7d9d6e4ffa105af12a8805cdea4425a9448f9d35a1bd9d8f8dda553",
+      "bytes": 427767
+    }
+  ],
+  "sources": [
+    {
+      "path": "D.xcodeproj/project.pbxproj",
+      "sha256": "278e3746a9f9103365219c6f7a80836fa3cb613292c8f576dd2e5dadfeb72993"
+    },
+    {
+      "path": "D/AppSessionFactory.swift",
+      "sha256": "de2cb9b453c003e6c1899c3df55d93f03d9b9322d190dbe1ca02351c4916bffc"
+    },
+    {
+      "path": "D/D.entitlements",
+      "sha256": "3975aff69fb76282fd57a959cbe341a164e948c51aaa65e74a4e710ebd82b3a7"
+    },
+    {
+      "path": "D/DApp.swift",
+      "sha256": "2f695281c1109c4308ed81fecbc423a60172769279fb81d75e1c9cf40142d909"
+    },
+    {
+      "path": "D/WorkbenchApplicationDelegate.swift",
+      "sha256": "d84c28d18d301727ceb27a30edd7b5a1c9c85d33a1a8c8ed6720ec4ca2b422da"
+    },
+    {
+      "path": "D/WorkbenchBootstrap.swift",
+      "sha256": "b11e474f7f784f8b863aa378e35b79a07d93acce7b7fc3fc0bb2a51b7be4fdb6"
+    },
+    {
+      "path": "DUITests/DUITests.swift",
+      "sha256": "51097c383bd66399bc663fc4e47d390f24b4c32b363b961f23746f1b64ae6a15"
+    },
+    {
+      "path": "Packages/UI/Package.swift",
+      "sha256": "ee081c3efb325b64e5b7296dacd38e6a357f4acc24664527c67e9d44c1654e3a"
+    },
+    {
+      "path": "Packages/UI/Sources/DWorkbench/Models/ModelLibrary.swift",
+      "sha256": "becff4e591ff809daa1dbf228e3a35b6f9e3b95b4757bd4b7dac4259ef14a06d"
+    },
+    {
+      "path": "Packages/UI/Sources/DWorkbench/Models/ModelLibraryFiles.swift",
+      "sha256": "e3c9f4d4413394b35caadb2f16a667b28dd52bf8be8aa6a7593dc69f01faa81d"
+    },
+    {
+      "path": "Packages/UI/Sources/DWorkbench/Models/ModelLibraryTypes.swift",
+      "sha256": "d3e9a257d48cd066498a056a860fbbc78ea371817233bdc7478aec6769b5694f"
+    },
+    {
+      "path": "Packages/UI/Sources/DWorkbench/Models/ModelRangeDownload.swift",
+      "sha256": "6bb5a7bc3bff03ff8122632750dea271aff70fdf2a86db83bacae0b8f9ead401"
+    },
+    {
+      "path": "Packages/UI/Sources/DWorkbench/Models/Resources/flux2-klein-model.json",
+      "sha256": "4868860df31cc3f17e52ec286f17171d0269f42088278ca758ae707ae00f5f6a"
+    },
+    {
+      "path": "Packages/UI/Sources/DWorkbench/Project/ProjectModels.swift",
+      "sha256": "60ccf14da1834bf0662544b713457f2bfa994dc631967acb7ffcc64bbac5aeb6"
+    },
+    {
+      "path": "Packages/UI/Sources/DWorkbench/Project/ProjectStore.swift",
+      "sha256": "a6f1115821f0df132693af1b3fa65316fb0c8295805d9a9f16f639cdaf0d8e2f"
+    },
+    {
+      "path": "Packages/UI/Sources/DWorkbench/Services/LocationAccess.swift",
+      "sha256": "f5e301a502d2303e15b3ee843b9d1b65d5570b71aafb0b8f1c4e0d8d2ed9bf1d"
+    },
+    {
+      "path": "Packages/UI/Sources/DWorkbench/Services/WorkbenchSession.swift",
+      "sha256": "b2fbcef43da806aebc8f3af138353cdc7dc3567fde69e8f1244ec81904fb1ff8"
+    },
+    {
+      "path": "Packages/UI/Sources/DWorkbench/State/ProjectSession.swift",
+      "sha256": "7fb43176cae3bf91d78a5c74deb3fd1183ac00e53f5d640d05b7d8427d9d3dda"
+    },
+    {
+      "path": "Packages/UI/Sources/UI/State/ModelLibraryModel.swift",
+      "sha256": "8a3cb8d328183534755e1cd72b83369da2d31202dd9afa710a69deda8213d57a"
+    },
+    {
+      "path": "Packages/UI/Sources/UI/State/WorkbenchModel.swift",
+      "sha256": "64caf4bee883fbe0a1939541a421c8b8ce433267decb42a8ddc6f42f8cad95b2"
+    },
+    {
+      "path": "Packages/UI/Sources/UI/Views/GenerationInspector.swift",
+      "sha256": "e8b762e777ca131c2cf92f00945f8ebc9f092323a2d3d197ea823b33f9c56e05"
+    },
+    {
+      "path": "Packages/UI/Sources/UI/Views/ModelLibraryView.swift",
+      "sha256": "2ebe0f9dc558a540bb853e1e6077efae91efe8f3ad03bb2831d17cc0ac5e3737"
+    },
+    {
+      "path": "Packages/UI/Sources/UI/Views/WorkbenchTasks.swift",
+      "sha256": "58224c6b5c7b515bf4bb5c4fd1fcd8dbb33bcdef56ffb3e97e72ea5f5dbcf06e"
+    },
+    {
+      "path": "Packages/UI/Sources/UI/Views/WorkbenchView.swift",
+      "sha256": "9f94797854972f63c4eccc0c7f619abc475057e5f75ab73b71856b1c28116194"
+    },
+    {
+      "path": "Packages/UI/Tests/DWorkbenchTests/ProjectSessionConcurrencyTests.swift",
+      "sha256": "f7207abe703376a3938227a239ae39e34f666cda042cb53a1620792dbb9de947"
+    },
+    {
+      "path": "Packages/UI/Tests/DWorkbenchTests/ProjectSessionTests.swift",
+      "sha256": "543b0a615196c9765fbe249d08d71d6eaf2edae399c8e7a71612e996072ff149"
+    },
+    {
+      "path": "Packages/UI/Tests/DWorkbenchTests/ProjectStoreTests.swift",
+      "sha256": "98dfae707ed7743044a353f8678869aa2a8d6c518c6adb1d43d09f01f997b8c9"
+    },
+    {
+      "path": "Packages/UI/Tests/ModelLibraryTests/LibraryFixture.swift",
+      "sha256": "d2d8e5358d6bb18073859ce41535c844511a272d16009679ad1a76ef973dd610"
+    },
+    {
+      "path": "Packages/UI/Tests/ModelLibraryTests/ModelLibraryTests.swift",
+      "sha256": "43cfa1faca975ad09ce1fb076725b7cbe76daefc4a9c4d129d081d99748f7eea"
+    },
+    {
+      "path": "Packages/UI/Tests/UITests/WorkbenchFacadeTests.swift",
+      "sha256": "d7b6a1a713e177e6901cc1e05b86927a6fb0ebea86bb4d3b71b2ca17968748d7"
+    },
+    {
+      "path": "scripts/test-workbench.sh",
+      "sha256": "ca4eca5b77b580736e74d62252b9768875675bbffa735f7798eb0eca857f3172"
+    }
+  ],
+  "limits": [
+    "No new full MLX mathematical/lifecycle suite; unchanged backend, current normal sandbox reference and cancellation verified",
+    "No process-kill or power-loss acceptance",
+    "Managed cross-volume library copying is rejected; same-volume identity-preserving relocation supported",
+    "Not a full VoiceOver, hardware or display matrix",
+    "Use documented external temporary directory for legacy ProjectStore fixtures"
+  ]
+}

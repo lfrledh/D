@@ -1,7 +1,7 @@
 import DInference
 import Foundation
 import Testing
-@testable import UI
+@testable import DWorkbench
 
 private actor CloseTransactionGate {
     private(set) var reached = false
@@ -46,7 +46,7 @@ private actor FailFirstCleanup {
 }
 
 @Suite(.serialized) @MainActor
-struct WorkbenchModelConcurrencyTests {
+struct ProjectSessionConcurrencyTests {
     private func directory() throws -> URL {
         let base = ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"]
             .map { URL(fileURLWithPath: $0, isDirectory: true) }
@@ -77,7 +77,7 @@ struct WorkbenchModelConcurrencyTests {
         }
         let engine = CloseRecordingEngine()
         let shutdown = CloseTransactionGate()
-        let subject = WorkbenchModel(sessionFactory: { _ in
+        let subject = ProjectSession(sessionFactory: { _ in
             WorkbenchSession(engine: engine, backendID: "test.close", status: {
                 WorkbenchRuntimeStatus(activeRunID: nil, phase: nil, queuedRunIDs: [])
             }, shutdown: {
@@ -115,7 +115,7 @@ struct WorkbenchModelConcurrencyTests {
         }
         let engine = CloseRecordingEngine()
         let cleanup = FailFirstCleanup()
-        let subject = WorkbenchModel(sessionFactory: { _ in
+        let subject = ProjectSession(sessionFactory: { _ in
             WorkbenchSession(engine: engine, backendID: "test.close", status: {
                 WorkbenchRuntimeStatus(activeRunID: nil, phase: nil, queuedRunIDs: [])
             }, shutdown: { await engine.shutdown() },

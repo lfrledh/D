@@ -3,7 +3,7 @@ import DInference
 import Foundation
 import ImageIO
 import Testing
-import UI
+import DWorkbench
 import UniformTypeIdentifiers
 
 @Suite("Project package durability and recovery")

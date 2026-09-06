@@ -1,4 +1,5 @@
 import DInference
+import DWorkbench
 import SwiftUI
 
 struct WorkbenchTasks: View {

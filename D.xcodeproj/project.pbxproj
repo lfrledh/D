@@ -11,6 +11,7 @@
 		D02000000000000000000001 /* DInference in Frameworks */ = {isa = PBXBuildFile; productRef = D01000000000000000000001 /* DInference */; };
 		D02000000000000000000002 /* DRuntime in Frameworks */ = {isa = PBXBuildFile; productRef = D01000000000000000000002 /* DRuntime */; };
 		D02000000000000000000003 /* DMLXBackend in Frameworks */ = {isa = PBXBuildFile; productRef = D01000000000000000000003 /* DMLXBackend */; };
+		D02000000000000000000004 /* DWorkbench in Frameworks */ = {isa = PBXBuildFile; productRef = D01000000000000000000004 /* DWorkbench */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -76,6 +77,7 @@
 				D02000000000000000000001 /* DInference in Frameworks */,
 				D02000000000000000000002 /* DRuntime in Frameworks */,
 				D02000000000000000000003 /* DMLXBackend in Frameworks */,
+				D02000000000000000000004 /* DWorkbench in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -148,6 +150,7 @@
 				D01000000000000000000001 /* DInference */,
 				D01000000000000000000002 /* DRuntime */,
 				D01000000000000000000003 /* DMLXBackend */,
+				D01000000000000000000004 /* DWorkbench */,
 			);
 			productName = D;
 			productReference = ED43658E2F52D7D300430841 /* D.app */;
@@ -670,6 +673,11 @@
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		D01000000000000000000004 /* DWorkbench */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = ED4365E22F52D9F800430841;
+			productName = DWorkbench;
+		};
 		ED4365E32F52D9F800430841 /* UI */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = ED4365E22F52D9F800430841;

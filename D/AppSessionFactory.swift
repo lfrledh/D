@@ -1,8 +1,8 @@
 import DInference
 import DMLXBackend
 import DRuntime
+import DWorkbench
 import Foundation
-import UI
 
 /// The application is the only layer that chooses a concrete compute backend.
 enum AppSessionFactory {
@@ -12,7 +12,7 @@ enum AppSessionFactory {
                                          observer: { await stages.record($0) })
         let runtime = try InferenceRuntime(
             backends: [backend],
-            configuration: try RuntimeConfiguration(memoryBudgetBytes: 8 * 1024 * 1024 * 1024,
+            configuration: try RuntimeConfiguration(memoryBudgetBytes: ImageModelProfile.flux2Klein.estimatedPeakBytes,
                                                     maximumQueuedRuns: 8))
         return WorkbenchSession(
             engine: runtime,
@@ -32,8 +32,7 @@ enum AppSessionFactory {
                 // Registration checks layout and configuration without loading weights.
                 // Actual execution still verifies the complete fixed model SHA-256 manifest.
                 let request = InferenceRequest(model: ModelReference(directory: directory), input: .image(
-                    ImageRequest(prompt: "Model registration", width: 512, height: 512,
-                                 steps: 4, guidanceScale: 1, seed: 0)))
+                    ImageModelProfile.flux2Klein.request(prompt: "Model registration", seed: 0)))
                 _ = try await backend.estimate(request)
             })
     }
