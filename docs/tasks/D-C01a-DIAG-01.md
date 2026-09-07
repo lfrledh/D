@@ -1,7 +1,7 @@
 # D-C01a-DIAG-01：只读开发签名／产物诊断工具
 
-状态：准备／等待执行链路预检；未授权 IMPLEMENT，非 D-C01a 整阶段验收。
-规格修订：1。维护者：Lead（Codex，当前 Astra 设置）。日期：2026-09-07。
+状态：初次候选未接纳；三项预检已过，待第 1 轮定向修复。非 D-C01a 整阶段验收。
+规格修订：2（原契约与范围不变，增加初次复核发现及回归要求）。维护者：Lead（Codex，当前 Astra 设置）。日期：2026-09-07。
 run_id：`run-20260907T090333Z`。本文件复用 TASK_SPEC_TEMPLATE 的职责，合并规格、运行、审核与恢复记录。
 
 ## 基线、目录与角色
@@ -85,3 +85,21 @@ Worker 回传 task/revision/run_id、实际 cwd/HEAD、修改文件、git diff�
 - 未完成：执行链路预检、受限写入配置核验、实现、CPU 测试、真实只读产物检查和候选审核。
 - Lead 只读准备检查曾有两个非 Worker 辅助命令错误：系统 Python 不含 tomllib，改用限定字段读取完成；尝试读取 sandbox 子命令帮助时该版把 macos 当命令，未找到可执行文件，未产生项目修改。不作为 Worker 失败或模型能力证据。
 - 当前源 HEAD 及个人文件摘要见首节；后续恢复先核对实际仓库、任务状态和权限，不只相信本文件。准备提交不代表实现或阶段验收。完整 SHA、启动参数与运行证据由外部 preparation.json/运行记录补充；Lead 在 Worker 结束写入后更新本节。
+
+### 初次交付和 Lead 复核（修订 2）
+
+实际准备执行基线为 `90bcaa87d2430c4504d3c11b59c4bc89b238bc80`。独立会话 `01a07b1f-4f6c-7e03-91fe-15c550396036` 经随客户端附带的 CLI 启动，先 read-only，再同会话 workspace-write 只读确认，随后 IMPLEMENT。三轮运行元数据均为 gpt-5.6-terra / medium；网络关闭，写根为本工作树及指定 worker-output/tmp，排除通用 /tmp、系统 TMPDIR；隐藏服务端解析 unknown。不是桌面 create_thread 自动工作树功能的验证。证据 `gates.json`、`implementation-runtime.json`；会话原始记录按必要字段摘录，未复制全局配置或密钥。
+
+Worker 初次实现耗时 272.721 秒，未 commit；首次自检前有日志未生成的命令使用问题，后修正；一次夹具构造错误修正后最终 5 项 unittest 通过。Lead 独立重跑这 5 项通过，真实普通 D.app 诊断退出 0。源码快照和 SHA 在外部 `initial-candidate/`、`initial-code-version.json`。Lead 未改写实现。
+
+但 Lead 的 9 个定向受控场景仅 control 通过，8 个揭示缺口，见外部 `lead-review-probes.py` / `lead-initial-probes.json`。本次候选拒绝接纳，以下为第 1 轮修复；原期望不降低，不改模型、签名、权限或应用：
+
+1. 两个 identifier 都为 wrong.bundle 时初版退出 0；必须独立要求 Info bundle ID 为 first-test.D，不能只要求两来源相同。
+2. 损坏的 Info/entitlement XML 抛出 ExpatError；超时携带 bytes 部分输出造成 TypeError；选择的 debug entitlement 为 plist Data 时 JSON 序列化失败。必须产出结构完整、JSON 可序列化的错误报告和退出 2，不能崩溃、吞错或将无法解释的值转成 false/missing。
+3. 缺路径等提前返回缺少必需 overall 字段；每条有效解析 CLI 请求的路径都需稳定报告结构。display 非正常非零也须独立记录工具／解析问题，而不只留规则 UNKNOWN。
+4. disable-library-validation 为非布尔字符串时误判安全；应报告 invalid/UNKNOWN、退出 2。已选择检查的调试布尔 entitlement 同样区分非法类型，合法 get-task-allow true/false/missing 的原规则不变。保留实际类型的可序列化证据，不凭默认值断言不存在。
+5. 安全 executable 文件名仍可通过 symlink 读到 bundle 外文件；Info/Contents/MacOS/主程序的相关解析后位置应在所选 bundle 内，否则退出 2，不读取越界目标。测试用授权 tmp 中的受控外部文件，不接触源工作区或用户数据，不把禁止写入当探针。
+6. 补齐原规格已有而初版缺失的可观察测试：证书签名分类但不宣称信任；损坏／非字典 plist、缺主程序；所关注 entitlement false/missing/invalid；display/verify/entitlements 命令异常及 stdout/stderr 语义；报告成功写入、不可写、拒绝覆盖后原字节保持、拒绝 app 内报告；实际 CPU 子进程输出后超时并被回收。Python 子进程仅为该测试的受控夹具，禁止启动真实 app 或执行其他功能。
+7. 私有测试用 --timeout 也必须保证有限正数；NaN/Infinity/非正数应在启动命令前拒绝。不能用该参数取消有限超时要求。必要时覆盖 stdout 写入异常的明确错误退出。
+
+Lead 保留初次候选与本修订的本地检查点，修复执行基线完整 SHA 写入外部 `repair-1-request.json` 和发给同一 Worker 的明确消息。Worker 从该 SHA 起步；只改原有两文件，不修改本文或 Lead 探针。只读确认修订／SHA／目录后修复，结束写入并返回 Lead；至多再有一轮定向修复。所有原始失败证据保留，不能把后来的通过覆盖成首次通过。
