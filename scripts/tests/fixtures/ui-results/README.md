@@ -1,0 +1,3 @@
+# UI result fixture
+
+Derived by Lead from the existing Exploration UITests-6.xcresult export using xcresulttool get test-results tests --schema-version 0.1.0 on 2026-09-07. Two historical test cases Passed; this is incomplete against the current eight-case plan. Device ID/name and warning text are redacted; node structure, case IDs and outcomes are preserved. It is not a new GUI run. Original export SHA256: fe22ffdd89e9c02d3b9a7aae705c27cc93b58ff8399d4e0bc8c1e86f689ebcc1. Raw export and readonly bundle metadata evidence stay in D-C01a-RESULT-01/run-20260907T125732Z; original xcresult is not modified or copied into Git.

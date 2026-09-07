@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "plan_id": "D-UI-complete",
+  "plan_revision": 1,
+  "target": "DUITests",
+  "expected_test_ids": [
+    "DUITests/testWelcomeOffersProjectActionsInResizableNativeWindow()",
+    "DUITests/testNewProjectPanelCanBeCancelledWithoutChangingWelcome()",
+    "DUITests/testNativeNewAndOpenKeyboardCommandsPresentCancellablePanels()",
+    "DUITests/testClosingWelcomeWindowKeepsHostAliveAndModelManagerCanReopen()",
+    "DUITests/testModelManagerWorksWithoutProjectAndKeepsProjectCommandsModal()",
+    "DUITests/testExistingModelPickerCancelReturnsToManagerWithoutRegistration()",
+    "DUITests/testDocumentsCandidateEditsPersistThroughReopen()",
+    "DUITests/testCompareAndForkUseActualConditionsWithoutChangingOriginal()"
+  ],
+  "source": {
+    "path": "DUITests/DUITests.swift",
+    "git_commit": "c14f892cacd69ce909e368c03db9b69c7dac1db8",
+    "sha256": "17f366fcc5fe7d40adb7838ea196e0bb6a863399b02ff0dc121e40ba27615f6d"
+  }
+}
