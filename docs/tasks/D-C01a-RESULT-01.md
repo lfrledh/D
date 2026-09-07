@@ -85,3 +85,18 @@ Worker 不 commit、不改本文，回传实际改动、测试方法／数量／
 ## 实现、审核与恢复记录
 
 Lead 准备了版本化八项计划、本机 schema 和脱敏真实小夹具，解决格式与判定歧义；尚未写实现。源个人 scheme 当前差异／SHA／索引及保护副本见 preparation.json，不能假定未来不变。CLI 版本 0.153.4，与前一任务相同，复用已验证调用方式；新任务的实际 runtime 仍须单次定位核验。实现与模型表现需和规格质量分别记录，不把本任务当作与 DIAG-01 的严格 A/B 实验。
+
+### 初次交付与修复 1（规格修订 2，原契约不变）
+
+单次定位预检 27.871 秒；执行基线 `07d2d27c116fad2e6355fd77081de124e3215d55`。独立 CLI 线程 `01a07bf6-6775-7cf2-8cd0-d5e88340655e` 的预检与实现均记录 gpt-5.6-terra / medium、指定外盘 cwd、workspace-write、仅两个额外输出/tmp 根、网络关闭；gates.json／implementation-runtime.json 核实，隐藏服务端解析 unknown。未重复旧派工设施探针。
+
+初次实现 277.595 秒、只交付两个允许文件。Worker 最终 9 项 unittest 通过，Lead 重跑也通过；独立 39 个 CLI 场景有 17 项未通过，主要为错误报告丢失已知上下文，另有 bool 版本报绿。真实历史 5／6 轮的 FAIL／INCOMPLETE 对照正确；报告保护场景通过。证据 lead-initial-probes.json、lead-initial-unit.json 和 lead-initial-extra.json；初次实现的源码 SHA 已在探针摘要记录，以下检查点提交保留此候选，不称验收通过。
+
+修复 1 为原有要求的澄清／落实，不增加产品范围，不降低验收。具体反例及期望如下：
+
+1. 计划有效而 attempt／导出有误时，现 main 丢弃所有已知字段、tests/counts=null。仅计划本身无法可靠取得时才能 null；已验证计划应按全部预期 ID 输出 UNKNOWN，保留已读取的计划身份与 path/hash；run／attempt 等只保留有效取得的值，未知留 null。任一导出错误都不能留下局部 Passed 或猜成 Missing。duplicate-id 等现已退出 2，但报告缺这项契约；不修改原反例来适配实现。
+2. schema_version=true、schema_version=1.0、attempt.plan_revision=true 被 Python 的等值比较当作 1；原契约明确整数且排除 bool，需校验 plan／attempt 的版本及 revision 类型。真实 CLI 的 lead-initial-extra.json 另证实 node.result=[] 在字典成员判断处 TypeError，实际退出 1 且无报告；非字符串 result 必须是明确格式错误、退出 2，不靠捕获全部程序异常掩盖。
+3. evidence 尚缺 attempt 原始字节 SHA，也未标明原 xcresult 只是调用方声明、未独立认证；按原输出契约补齐。已读输入的路径/hash应留存，读取／解析失败的未知值如实表示；不读取原 xcresult。可自行确定说明字段名，但含义必须明确，不把所有出处归结为工具推断。
+4. 补上述实际 CLI 回归及原要求遗漏的版本/格式、只读输出错误路径。测试 subprocess.run 加有限超时并用任务 tmp，避免失去有界验证；不得删原断言。错误提示用 best-effort 写入，避免 stderr 刷新错误破坏退出 2，可参考既有 diagnose-app main 中已验证的处理经验。该项不是重做 DIAG-01 或推广新 I/O 框架。
+
+Lead 帮助类型为需求澄清、Python 类型语义说明和可执行反例；没有编辑实现／测试，也未逐函数提供算法。Worker 的数据读取／实现错误与规格质量分别评估；当前修订仍为相同 frozen 行为，后续最多再一轮普通修复。本修订和初次代码由 Lead 检查点提交后，将完整 SHA 发给同一 Worker。
