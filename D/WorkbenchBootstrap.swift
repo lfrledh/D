@@ -25,9 +25,22 @@ final class WorkbenchBootstrap {
             // Model bytes and partial downloads go to the user-selected external library.
             let support = try FileManager.default.url(for: .applicationSupportDirectory,
                 in: .userDomainMask, appropriateFor: nil, create: true)
-            let library = try await ModelLibrary(stateDirectory:
-                support.appendingPathComponent("D/ModelLibrary", isDirectory: true))
-            let model = WorkbenchModel(sessionFactory: AppSessionFactory.makeSession, modelLibrary: library)
+            var settings = UserDefaults.standard
+            var libraryDirectory = support.appendingPathComponent("D/ModelLibrary", isDirectory: true)
+            #if DEBUG
+            // UI fixtures exercise the real services and native file panels, while keeping
+            // project bookmarks and installation recovery separate from the user's session.
+            if let token = ProcessInfo.processInfo.environment["D_UI_TEST_SESSION"],
+               let id = UUID(uuidString: token),
+               let isolated = UserDefaults(suiteName: "D.UITests.\(id.uuidString)") {
+                settings = isolated
+                libraryDirectory = support.appendingPathComponent("D/UITests/\(id.uuidString)/ModelLibrary",
+                    isDirectory: true)
+            }
+            #endif
+            let library = try await ModelLibrary(stateDirectory: libraryDirectory)
+            let model = WorkbenchModel(sessionFactory: AppSessionFactory.makeSession,
+                settings: settings, modelLibrary: library)
             let observer = ModelLibraryModel(library: library)
             self.library = library
             self.model = model

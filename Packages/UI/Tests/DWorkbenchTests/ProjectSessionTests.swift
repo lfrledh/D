@@ -14,6 +14,7 @@ private actor WorkbenchGate {
         if opened { return }
         await withCheckedContinuation { waiters.append($0) }
     }
+    func close() { opened = false }
     func open() {
         opened = true
         let pending = waiters
@@ -244,7 +245,15 @@ struct ProjectSessionTests {
         #expect(subject.manifest?.jobs.allSatisfy { $0.state == .completed } == true)
         let requests = await backend.requests
         #expect(requests == [first.request, second.request])
-        await subject.copySettings(from: first.id)
+        let sourceAsset = try #require(subject.manifest?.jobs.first(where: { $0.id == first.id })?.artifactIDs.first)
+        #expect(subject.forkCompatibilityWarning(for: sourceAsset) != nil) // Legacy model revision is unknown.
+        await subject.forkDocument(from: sourceAsset)
+        #expect(subject.prompt == "Unsaved next draft")
+        subject.clearError()
+        await subject.forkDocument(from: sourceAsset, acknowledgeCurrentModel: true)
+        #expect(subject.documents.count == 2)
+        #expect(subject.activeDocument?.sourceAssetID == sourceAsset)
+        #expect(subject.documents.first?.draft.prompt == "Unsaved next draft")
         #expect(subject.prompt == "First immutable prompt")
         #expect(subject.seedText == "0")
         #expect(subject.randomSeed == false)
@@ -342,4 +351,215 @@ struct ProjectSessionTests {
         #expect(subject.manifest?.jobs.isEmpty == true)
         #expect(await subject.cancelAndCloseProject())
     }
+    @Test func independentDraftsFailureBlocksSwitchAndActiveDocumentRestores() async throws {
+        let folder = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let project = folder.appendingPathComponent("Documents.dproject")
+        let backend = WorkbenchTestBackend(root: project.appendingPathComponent("Tasks"))
+        let subject = model(root: folder, backend: backend)
+        await subject.createProject(at: project)
+        let first = try #require(subject.activeDocumentID)
+        subject.prompt = "Unsubmitted first direction"
+        subject.randomSeed = false
+        subject.seedText = "-"
+        await subject.createDocument(name: "Second direction")
+        let second = try #require(subject.activeDocumentID)
+        #expect(second != first)
+        subject.prompt = "Second draft"
+        subject.seedText = "007"
+        await subject.selectDocument(id: first)
+        #expect(subject.prompt == "Unsubmitted first direction")
+        #expect(subject.seedText == "-")
+        #expect(!subject.randomSeed)
+        subject.prompt = "Keep this even if disk disappears"
+        let moved = folder.appendingPathComponent("Moved.dproject")
+        try FileManager.default.moveItem(at: project, to: moved)
+        await subject.selectDocument(id: second)
+        #expect(subject.activeDocumentID == first)
+        #expect(subject.prompt == "Keep this even if disk disappears")
+        #expect(subject.errorMessage != nil)
+        try FileManager.default.moveItem(at: moved, to: project)
+        subject.clearError()
+        await subject.selectDocument(id: second)
+        #expect(subject.prompt == "Second draft")
+        #expect(subject.seedText == "007")
+        // Allow a cancelled old debounce enough time to prove it cannot replace the selected draft.
+        try await Task.sleep(for: .milliseconds(500))
+        #expect(subject.documents.first(where: { $0.id == first })?.draft.prompt == "Keep this even if disk disappears")
+        #expect(await subject.cancelAndCloseProject())
+        await subject.openProject(at: project)
+        #expect(subject.activeDocumentID == second)
+        #expect(subject.prompt == "Second draft")
+        #expect(subject.seedText == "007")
+        #expect(await subject.cancelAndCloseProject())
+    }
+
+    @Test func delayedResultStaysWithOriginAndCandidateMetadataSurvivesReopen() async throws {
+        let folder = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let project = folder.appendingPathComponent("ResultOwnership.dproject")
+        let gate = WorkbenchGate()
+        let backend = WorkbenchTestBackend(root: project.appendingPathComponent("Tasks"), executeGate: gate)
+        let subject = model(root: folder, backend: backend)
+        await subject.createProject(at: project)
+        await subject.registerModel(at: folder)
+        let first = try #require(subject.activeDocumentID)
+        subject.prompt = "Origin request"
+        await subject.generate()
+        try await waitUntil { await backend.requests.count == 1 }
+        await subject.createDocument(name: "Other direction")
+        let second = try #require(subject.activeDocumentID)
+        subject.prompt = "Do not replace this direction"
+        await gate.open()
+        try await waitUntil { !subject.isBusy }
+        let asset = try #require(subject.manifest?.assets.first)
+        #expect(subject.manifest?.jobs.first?.documentID == first)
+        #expect(subject.activeDocumentID == second)
+        #expect(subject.prompt == "Do not replace this direction")
+        #expect(subject.selectedAssetID == nil)
+        #expect(subject.visibleAssets.isEmpty)
+        await subject.showAllArtworks()
+        #expect(subject.visibleAssets.count == 1)
+        await subject.selectAsset(asset.id)
+        #expect(subject.selectedAssetID == asset.id)
+        #expect(subject.activeDocumentID == second)
+        #expect(subject.activeDocument?.selectedAssetID == nil)
+        await subject.updateCandidate(assetID: asset.id, name: "Chosen concept", isFavorite: true, note: "Keep the silhouette")
+        await subject.adoptAsset(id: asset.id)
+        #expect(subject.documents.first(where: { $0.id == first })?.adoptedAssetID == asset.id)
+        await subject.clearAdoptedAsset(documentID: first)
+        #expect(subject.documents.first(where: { $0.id == first })?.adoptedAssetID == nil)
+        await subject.adoptAsset(id: asset.id)
+        // Independent metadata edits merge rather than copying stale values of other fields.
+        async let favoriteUpdate: Void = subject.updateCandidate(assetID: asset.id, isFavorite: false)
+        async let noteUpdate: Void = subject.updateCandidate(assetID: asset.id, note: "Keep the silhouette and lighting")
+        _ = await (favoriteUpdate, noteUpdate)
+        #expect(subject.manifest?.assets.first?.isFavorite == false)
+        #expect(subject.manifest?.assets.first?.note == "Keep the silhouette and lighting")
+        await subject.updateCandidate(assetID: asset.id, isFavorite: true)
+        await subject.selectDocument(id: first)
+        await subject.selectAsset(asset.id)
+        #expect(await subject.cancelAndCloseProject())
+        await subject.openProject(at: project)
+        #expect(subject.activeDocumentID == first)
+        #expect(subject.selectedAssetID == asset.id)
+        #expect(subject.selectedAsset?.name == "Chosen concept")
+        #expect(subject.selectedAsset?.note == "Keep the silhouette and lighting")
+        #expect(subject.selectedAsset?.isFavorite == true)
+        #expect(subject.activeDocument?.adoptedAssetID == asset.id)
+        #expect(await subject.cancelAndCloseProject())
+    }
+
+    @Test func inspectionSuppressesAutomaticSelectionDuringDelayedGeneration() async throws {
+        let folder = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let project = folder.appendingPathComponent("Inspection.dproject")
+        let gate = WorkbenchGate()
+        let backend = WorkbenchTestBackend(root: project.appendingPathComponent("Tasks"), executeGate: gate)
+        let subject = model(root: folder, backend: backend)
+        await subject.createProject(at: project)
+        await subject.registerModel(at: folder)
+        subject.prompt = "Do not move the inspection selection"
+        await gate.open()
+        await subject.generate()
+        try await waitUntil { !subject.isBusy }
+        await subject.generate()
+        try await waitUntil { !subject.isBusy }
+        #expect(subject.manifest?.assets.count == 2)
+        try #require(subject.selectedAssetID != nil)
+        await gate.close()
+        await subject.generate()
+        try await waitUntil { await backend.requests.count == 3 }
+        subject.automaticResultSelectionEnabled = false
+        let before = subject.selectedAssetID
+        await gate.open()
+        try await waitUntil { !subject.isBusy }
+        #expect(subject.manifest?.assets.count == 3)
+        #expect(subject.selectedAssetID == before)
+        #expect(subject.activeDocument?.selectedAssetID == before)
+        subject.automaticResultSelectionEnabled = true
+        #expect(subject.selectedAssetID == before) // Ending inspection does not replay a queued selection.
+        let asset = try #require(subject.manifest?.assets.first)
+        await subject.selectAsset(asset.id)
+        #expect(subject.selectedAssetID == asset.id)
+        let choices = try #require(subject.manifest?.assets.map(\.id))
+        var issued = 0
+        var lastIssued: UUID?
+        let selections = (0..<24).map { index in
+            Task { @MainActor in
+                let choice = choices[index % choices.count]
+                issued += 1
+                lastIssued = choice
+                await subject.selectAsset(choice)
+            }
+        }
+        try await waitUntil { issued == selections.count }
+        let expectedSelection = try #require(lastIssued)
+        // Close waits the FIFO selection tail, even if a view operation has not resumed yet.
+        #expect(await subject.cancelAndCloseProject())
+        for selection in selections { await selection.value }
+        await subject.openProject(at: project)
+        #expect(subject.selectedAssetID == expectedSelection)
+        #expect(subject.activeDocument?.selectedAssetID == expectedSelection)
+        #expect(subject.errorMessage == nil)
+        #expect(await subject.cancelAndCloseProject())
+    }
+
+    @Test func metadataAndAdoptionWritesFinishBeforeImmediateClose() async throws {
+        let folder = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let project = folder.appendingPathComponent("MetadataClose.dproject")
+        let backend = WorkbenchTestBackend(root: project.appendingPathComponent("Tasks"))
+        let subject = model(root: folder, backend: backend)
+        await subject.createProject(at: project)
+        await subject.registerModel(at: folder)
+        subject.prompt = "Candidates for close ordering"
+        await subject.generate()
+        try await waitUntil { !subject.isBusy }
+        await subject.generate()
+        try await waitUntil { !subject.isBusy }
+        let document = try #require(subject.activeDocumentID)
+        let assets = try #require(subject.manifest?.assets)
+        try #require(assets.count == 2)
+        var issued = 0
+        let firstAdoption = Task { @MainActor in
+            issued += 1
+            await subject.adoptAsset(id: assets[0].id)
+        }
+        try await waitUntil { issued == 1 }
+        let clearing = Task { @MainActor in
+            issued += 1
+            await subject.clearAdoptedAsset(documentID: document)
+        }
+        try await waitUntil { issued == 2 }
+        let secondAdoption = Task { @MainActor in
+            issued += 1
+            await subject.adoptAsset(id: assets[1].id)
+        }
+        let favorite = Task { @MainActor in
+            issued += 1
+            await subject.updateCandidate(assetID: assets[1].id, isFavorite: true)
+        }
+        let annotation = Task { @MainActor in
+            issued += 1
+            await subject.updateCandidate(assetID: assets[1].id, name: "Final candidate", note: "Preserve through close")
+        }
+        // All operations have entered the service; do not wait for their caller tasks to finish.
+        try await waitUntil { issued == 5 }
+        #expect(await subject.requestClose())
+        await firstAdoption.value
+        await clearing.value
+        await secondAdoption.value
+        await favorite.value
+        await annotation.value
+        await subject.openProject(at: project)
+        #expect(subject.activeDocument?.adoptedAssetID == assets[1].id)
+        let saved = try #require(subject.manifest?.assets.first(where: { $0.id == assets[1].id }))
+        #expect(saved.name == "Final candidate")
+        #expect(saved.note == "Preserve through close")
+        #expect(saved.isFavorite)
+        #expect(subject.errorMessage == nil)
+        #expect(await subject.requestClose())
+    }
+
 }

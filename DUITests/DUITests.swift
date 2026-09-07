@@ -1,10 +1,8 @@
 import AppKit
 import XCTest
 
-/// Exercise the real app and native panels without generating, creating projects,
-/// changing model registrations, or replacing the persistent project bookmark.
-/// Run only when the development app has no active installs: launching/terminating
-/// the real app uses its normal model-registry recovery and shutdown behavior.
+/// Native UI exercises use a DEBUG-only isolated settings/library session. Fixture
+/// projects contain CPU-created PNGs and open through the normal NSOpenPanel path.
 final class DUITests: XCTestCase {
     override func setUpWithError() throws { continueAfterFailure = false }
 
@@ -152,8 +150,276 @@ final class DUITests: XCTestCase {
     }
 
     @MainActor
-    private func launchWithoutRestoringProject() -> XCUIApplication {
+    func testDocumentsCandidateEditsPersistThroughReopen() throws {
+        let fixture = try makeExplorationFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.deletingLastPathComponent()) }
+        let token = UUID().uuidString
+        var app = launchWithoutRestoringProject(sessionID: token)
+        defer { app.terminate() }
+        try openFixture(fixture, in: app)
+        XCTAssertTrue(app.buttons["document-\(fixtureFirstDocument)"].waitForExistence(timeout: 10))
+        // Verify the first sheet presentation without typing: mode, initial value,
+        // and Save enablement must derive from the same immutable context.
+        app.buttons["rename-document-\(fixtureFirstDocument)"].click()
+        expectNameEditor(title: "重命名创作", name: "Landscape study", in: app)
+        app.typeKey(.escape, modifierFlags: [])
+        XCTAssertTrue(app.buttons["save-document-name"].waitForNonExistence(timeout: 8))
+        app.buttons["new-document"].click()
+        expectNameEditor(title: "新建创作", name: "新创作", in: app)
+        replaceText(app.textFields["document-name"], with: "Alternate composition")
+        app.buttons["save-document-name"].click()
+        XCTAssertTrue(app.buttons["save-document-name"].waitForNonExistence(timeout: 8))
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Alternate composition")).firstMatch.waitForExistence(timeout: 8))
+        let documents = try readFixtureManifest(fixture)["documents"] as? [[String: Any]]
+        let created = try XCTUnwrap(documents?.first { $0["name"] as? String == "Alternate composition" })
+        let createdID = try XCTUnwrap(created["id"] as? String)
+        app.buttons["rename-document-\(createdID)"].click()
+        expectNameEditor(title: "重命名创作", name: "Alternate composition", in: app)
+        replaceText(app.textFields["document-name"], with: "Composition study")
+        app.buttons["save-document-name"].click()
+        XCTAssertTrue(app.buttons["save-document-name"].waitForNonExistence(timeout: 8))
+        app.buttons["document-\(fixtureFirstDocument)"].click()
+        expectCandidateName("Warm candidate", in: app)
+        app.buttons["artwork-\(fixtureSecondAsset)"].click()
+        expectCandidateName("Cool candidate", in: app)
+        revealInInspector(app.buttons["edit-candidate"], in: app)
+        app.buttons["edit-candidate"].click()
+        replaceText(app.textFields["candidate-name"], with: "Blue choice")
+        let note = app.descendants(matching: .any).matching(identifier: "candidate-note").firstMatch
+        replaceText(note, with: "Keep the cool palette")
+        app.typeKey("q", modifierFlags: .command)
+        XCTAssertFalse(app.wait(for: .notRunning, timeout: 1), "Quit must not discard pending metadata.")
+        app.activate()
+        XCTAssertTrue(app.buttons["save-candidate"].exists)
+        XCTAssertEqual(note.value as? String, "Keep the cool palette")
+        app.buttons["save-candidate"].click()
+        XCTAssertTrue(app.buttons["save-candidate"].waitForNonExistence(timeout: 8))
+        app.activate()
+        expectCandidateName("Blue choice", in: app)
+        let favorite = app.descendants(matching: .any).matching(identifier: "candidate-favorite").firstMatch
+        revealInInspector(favorite, in: app)
+        favorite.click()
+        waitForUI(NSPredicate(format: "value == 1 OR value == '1'"), element: favorite,
+                  message: "Favorite was not saved", in: app)
+        revealInInspector(app.buttons["adopt-candidate"], in: app)
+        app.buttons["adopt-candidate"].click()
+        waitForUI(NSPredicate(format: "label == %@", "取消采用"), element: app.buttons["adopt-candidate"],
+                  message: "Adoption did not complete", in: app)
+        app.buttons["document-\(fixtureSecondDocument)"].click()
+        XCTAssertTrue(app.buttons["artwork-\(fixtureSecondAsset)"].waitForNonExistence(timeout: 8))
+        app.buttons["all-artworks"].click()
+        XCTAssertTrue(app.buttons["artwork-\(fixtureSecondAsset)"].waitForExistence(timeout: 8))
+        app.buttons["artwork-\(fixtureFirstAsset)"].click()
+        expectCandidateName("Warm candidate", in: app)
+        app.buttons["document-\(fixtureFirstDocument)"].click()
+        expectCandidateName("Blue choice", in: app)
+        recordScreenshot(app, name: "D document candidates and adoption")
+        app.typeKey("q", modifierFlags: .command)
+        XCTAssertTrue(app.wait(for: .notRunning, timeout: 10))
+        app = launchWithoutRestoringProject(sessionID: token)
+        try openFixture(fixture, in: app)
+        expectCandidateName("Blue choice", in: app)
+        let saved = try readFixtureManifest(fixture)
+        let savedDocuments = try XCTUnwrap(saved["documents"] as? [[String: Any]])
+        let first = try XCTUnwrap(savedDocuments.first { $0["id"] as? String == fixtureFirstDocument })
+        XCTAssertEqual(first["selectedAssetID"] as? String, fixtureSecondAsset)
+        XCTAssertEqual(first["adoptedAssetID"] as? String, fixtureSecondAsset)
+        XCTAssertTrue(savedDocuments.contains { $0["name"] as? String == "Composition study" })
+        let assets = try XCTUnwrap(saved["assets"] as? [[String: Any]])
+        let edited = try XCTUnwrap(assets.first { $0["id"] as? String == fixtureSecondAsset })
+        XCTAssertEqual(edited["note"] as? String, "Keep the cool palette")
+        XCTAssertEqual(edited["isFavorite"] as? Bool, true)
+    }
+
+    @MainActor
+    func testCompareAndForkUseActualConditionsWithoutChangingOriginal() throws {
+        let fixture = try makeExplorationFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.deletingLastPathComponent()) }
+        let app = launchWithoutRestoringProject()
+        defer { app.terminate() }
+        try openFixture(fixture, in: app)
+        app.buttons["compare-select-\(fixtureFirstAsset)"].click()
+        app.buttons["compare-select-\(fixtureSecondAsset)"].click()
+        waitForUI(NSPredicate(format: "enabled == true"), element: app.buttons["compare-artworks"],
+                  message: "Two candidates did not enable comparison", in: app)
+        app.buttons["compare-artworks"].click()
+        XCTAssertTrue(app.buttons["end-comparison"].waitForExistence(timeout: 8))
+        for id in [fixtureFirstAsset, fixtureSecondAsset] {
+            XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "comparison-image-\(id)").firstMatch.exists)
+        }
+        XCTAssertTrue(app.buttons["comparison-center"].exists)
+        for id in [fixtureFirstAsset, fixtureSecondAsset] {
+            XCTAssertEqual(app.descendants(matching: .any).matching(identifier: "comparison-prompt-difference-\(id)").firstMatch.label, "提示词不同")
+        }
+        let zoom = app.descendants(matching: .any).matching(identifier: "comparison-zoom").firstMatch
+        let actual = zoom.descendants(matching: .any).matching(NSPredicate(format: "label == %@", "100%")).firstMatch
+        XCTAssertTrue(actual.exists)
+        actual.click()
+        let image = app.descendants(matching: .any).matching(identifier: "comparison-image-\(fixtureFirstAsset)").firstMatch
+        image.coordinate(withNormalizedOffset: CGVector(dx: 0.6, dy: 0.5)).press(forDuration: 0.1,
+            thenDragTo: image.coordinate(withNormalizedOffset: CGVector(dx: 0.3, dy: 0.4)))
+        recordScreenshot(app, name: "D side by side actual-pixel comparison")
+        app.buttons["end-comparison"].click()
+        XCTAssertTrue(app.buttons["end-comparison"].waitForNonExistence(timeout: 8))
+        expectCandidateName("Warm candidate", in: app)
+        app.buttons["copy-settings"].click()
+        // NSAlert.runModal presents an AppKit dialog, not necessarily an XCTest Alert.
+        let warning = app.staticTexts["使用当前模型探索"].firstMatch
+        let continueButtons = app.dialogs.buttons.matching(identifier: "action-button-1")
+        let proceed = continueButtons.firstMatch
+        guard warning.waitForExistence(timeout: 8), proceed.waitForExistence(timeout: 8) else {
+            recordScreenshot(app, name: "Missing native model compatibility warning")
+            XCTFail("Native model compatibility warning is missing.\n\(app.debugDescription)")
+            throw NativePanelError.notFound
+        }
+        XCTAssertEqual(continueButtons.count, 1)
+        proceed.click()
+        XCTAssertTrue(proceed.waitForNonExistence(timeout: 8))
+        let forkedPrompt = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "value == %@", "Warm illustrated landscape"),
+            object: app.textViews["prompt-editor"])
+        XCTAssertEqual(XCTWaiter.wait(for: [forkedPrompt], timeout: 8), .completed)
+        XCTAssertEqual(app.textViews["prompt-editor"].value as? String, "Warm illustrated landscape")
+        XCTAssertEqual(app.textFields["seed-field"].value as? String, "42")
+        let manifest = try readFixtureManifest(fixture)
+        let documents = try XCTUnwrap(manifest["documents"] as? [[String: Any]])
+        XCTAssertEqual(documents.count, 3)
+        XCTAssertEqual(documents.last?["sourceAssetID"] as? String, fixtureFirstAsset)
+        XCTAssertEqual((manifest["assets"] as? [Any])?.count, 2, "Fork references its source and never duplicates image files.")
+        XCTAssertEqual((documents.first?["draft"] as? [String: Any])?["prompt"] as? String, "An unfinished draft")
+    }
+
+    private let fixtureFirstDocument = "10000000-0000-0000-0000-000000000001"
+    private let fixtureSecondDocument = "10000000-0000-0000-0000-000000000002"
+    private let fixtureFirstAsset = "20000000-0000-0000-0000-000000000001"
+    private let fixtureSecondAsset = "20000000-0000-0000-0000-000000000002"
+
+    @MainActor
+    private func makeExplorationFixture() throws -> URL {
+        // The UI runner is sandboxed. This tiny CPU fixture must start in its own
+        // temporary container; the app receives access through the normal open panel.
+        let root = FileManager.default.temporaryDirectory.resolvingSymlinksInPath().appendingPathComponent("D-UI-\(UUID())", isDirectory: true)
+        let project = root.appendingPathComponent("Exploration.dproject", isDirectory: true)
+        try FileManager.default.createDirectory(at: project.appendingPathComponent("Tasks"), withIntermediateDirectories: true)
+        let date = Date().timeIntervalSinceReferenceDate
+        var assets: [[String: Any]] = []
+        var jobs: [[String: Any]] = []
+        for index in 0..<2 {
+            let job = UUID().uuidString
+            let asset = index == 0 ? fixtureFirstAsset : fixtureSecondAsset
+            let path = "Tasks/\(job)-\(UUID())/image.png"
+            let url = project.appendingPathComponent(path)
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            let width = index == 0 ? 1024 : 768
+            let height = index == 0 ? 768 : 1024
+            let bitmap = try XCTUnwrap(NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: width, pixelsHigh: height,
+                bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+                colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0))
+            NSGraphicsContext.saveGraphicsState()
+            NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: bitmap)
+            (index == 0 ? NSColor.systemOrange : NSColor.systemBlue).setFill()
+            NSBezierPath(rect: NSRect(x: 0, y: 0, width: width, height: height)).fill()
+            NSColor.white.setFill()
+            NSBezierPath(rect: NSRect(x: 128, y: 128, width: 192, height: 512)).fill()
+            NSGraphicsContext.restoreGraphicsState()
+            try XCTUnwrap(bitmap.representation(using: .png, properties: [:])).write(to: url)
+            assets.append(["id": asset, "jobID": job, "relativePath": path, "mediaType": "image/png", "role": "result",
+                "createdAt": date, "metadata": ["width": width, "height": height, "bitDepth": 8],
+                "name": index == 0 ? "Warm candidate" : "Cool candidate", "isFavorite": false, "note": ""])
+            jobs.append(["id": job, "documentID": fixtureFirstDocument, "createdAt": date, "state": "completed",
+                "artifactIDs": [asset], "resultMetadata": [:], "request": ["id": job,
+                "model": ["directory": root.absoluteString, "revision": "fixture-only"],
+                "input": ["image": ["_0": ["prompt": index == 0 ? "Warm illustrated landscape" : "Cool illustrated landscape",
+                    "width": width, "height": height, "steps": 4, "guidanceScale": 1, "seed": index == 0 ? 42 : 99]]]]])
+        }
+        let draft: [String: Any] = ["prompt": "An unfinished draft", "randomSeed": true, "seedText": "-"]
+        let manifest: [String: Any] = ["schemaVersion": 2, "revision": 0, "id": UUID().uuidString,
+            "name": "Exploration", "createdAt": date, "updatedAt": date, "activeDocumentID": fixtureFirstDocument,
+            "documents": [["id": fixtureFirstDocument, "name": "Landscape study", "draft": draft, "selectedAssetID": fixtureFirstAsset],
+                ["id": fixtureSecondDocument, "name": "Another study", "draft": draft]], "jobs": jobs, "assets": assets]
+        try JSONSerialization.data(withJSONObject: manifest, options: [.prettyPrinted, .sortedKeys]).write(to: project.appendingPathComponent("project.json"))
+        return project
+    }
+
+    private func readFixtureManifest(_ project: URL) throws -> [String: Any] {
+        try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: project.appendingPathComponent("project.json"))) as? [String: Any])
+    }
+
+    @MainActor
+    private func openFixture(_ url: URL, in app: XCUIApplication) throws {
+        XCTAssertTrue(app.buttons["open-project"].waitForExistence(timeout: 10))
+        app.buttons["open-project"].click()
+        let panel = try nativePanel(in: app, identifier: "open-panel")
+        app.typeKey("g", modifierFlags: [.command, .shift])
+        app.typeText(url.path)
+        app.typeKey(.return, modifierFlags: [])
+        panel.buttons["OKButton"].click()
+        guard panel.waitForNonExistence(timeout: 8) else {
+            recordScreenshot(app, name: "Project open panel remained visible")
+            XCTFail("Native project panel did not close.\n\(app.debugDescription)")
+            throw NativePanelError.notFound
+        }
+        guard app.buttons["new-document"].waitForExistence(timeout: 10) else {
+            recordScreenshot(app, name: "Project opened without accessible creation controls")
+            XCTFail("Project creation controls missing after native open.\n\(app.debugDescription)")
+            throw NativePanelError.notFound
+        }
+    }
+
+    @MainActor
+    private func expectNameEditor(title: String, name: String, in app: XCUIApplication) {
+        XCTAssertTrue(app.textFields["document-name"].waitForExistence(timeout: 8))
+        XCTAssertEqual(app.textFields["document-name"].value as? String, name)
+        XCTAssertEqual(app.descendants(matching: .any).matching(identifier: "document-name-title").firstMatch.label, title)
+        XCTAssertTrue(app.buttons["save-document-name"].isEnabled, "Valid default names must be immediately savable.")
+    }
+
+    @MainActor
+    private func waitForUI(_ predicate: NSPredicate, element: XCUIElement, message: String, in app: XCUIApplication) {
+        let expected = XCTNSPredicateExpectation(predicate: predicate, object: element)
+        guard XCTWaiter.wait(for: [expected], timeout: 8) == .completed else {
+            recordScreenshot(app, name: message)
+            XCTFail("\(message).\n\(app.debugDescription)")
+            return
+        }
+    }
+
+    @MainActor
+    private func expectCandidateName(_ name: String, in app: XCUIApplication) {
+        let label = app.descendants(matching: .any).matching(identifier: "candidate-saved-name").firstMatch
+        let expected = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == true AND label == %@", name), object: label)
+        guard XCTWaiter.wait(for: [expected], timeout: 8) == .completed else {
+            recordScreenshot(app, name: "Candidate selection did not settle")
+            XCTFail("Expected selected candidate \(name).\n\(app.debugDescription)")
+            return
+        }
+    }
+
+    @MainActor
+    private func revealInInspector(_ element: XCUIElement, in app: XCUIApplication) {
+        app.activate()
+        let scroll = app.scrollViews["generation-inspector-scroll"]
+        XCTAssertTrue(scroll.waitForExistence(timeout: 8))
+        for _ in 0..<8 {
+            if element.exists, element.isHittable, scroll.frame.intersects(element.frame) { return }
+            scroll.scroll(byDeltaX: 0, deltaY: -240)
+        }
+        recordScreenshot(app, name: "Inspector control could not be revealed")
+        XCTFail("Inspector control is not visible and hittable.\n\(app.debugDescription)")
+    }
+
+    @MainActor
+    private func replaceText(_ element: XCUIElement, with text: String) {
+        XCTAssertTrue(element.waitForExistence(timeout: 8))
+        element.click()
+        element.typeKey("a", modifierFlags: .command)
+        element.typeText(text)
+    }
+
+    @MainActor
+    private func launchWithoutRestoringProject(sessionID: String = UUID().uuidString) -> XCUIApplication {
         let app = XCUIApplication()
+        app.launchEnvironment["D_UI_TEST_SESSION"] = sessionID
         // Argument-domain overrides do not modify the persistent defaults domain.
         // A string intentionally cannot decode as bookmark Data.
         app.launchArguments = [

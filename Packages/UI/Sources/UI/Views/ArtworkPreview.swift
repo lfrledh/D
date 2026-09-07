@@ -3,7 +3,7 @@ import ImageIO
 import SwiftUI
 
 /// Preview pixels are disposable. The project keeps the original file as its source of truth.
-private actor ArtworkPreviewDecoder {
+actor ArtworkPreviewDecoder {
     static let shared = ArtworkPreviewDecoder()
     private var thumbnails: [URL: CGImage] = [:]
 
@@ -134,9 +134,10 @@ struct ArtworkCanvas: View {
 }
 
 /// Native scroll and mouse handling, including backing-scale changes between displays.
-private struct PixelCanvas: NSViewRepresentable {
+struct PixelCanvas: NSViewRepresentable {
     let image: CGImage
     let zoom: ArtworkZoom
+    var synchronizedPan: Binding<CGPoint>? = nil
 
     func makeNSView(context: Context) -> CanvasScrollView {
         let scroll = CanvasScrollView()
@@ -147,17 +148,57 @@ private struct PixelCanvas: NSViewRepresentable {
         scroll.borderType = .noBorder
         scroll.documentView = CanvasDocumentView()
         scroll.setImage(image, zoom: zoom)
+        configurePan(scroll)
         return scroll
     }
 
     func updateNSView(_ scroll: CanvasScrollView, context: Context) {
         scroll.setImage(image, zoom: zoom)
+        configurePan(scroll)
+    }
+
+    private func configurePan(_ scroll: CanvasScrollView) {
+        guard let synchronizedPan else { scroll.panChanged = nil; return }
+        scroll.setNormalizedPan(synchronizedPan.wrappedValue)
+        scroll.panChanged = { point in
+            // AppKit may report bounds during SwiftUI layout. Publish on the next turn.
+            DispatchQueue.main.async {
+                if abs(synchronizedPan.wrappedValue.x - point.x) > 0.0001 ||
+                    abs(synchronizedPan.wrappedValue.y - point.y) > 0.0001 {
+                    synchronizedPan.wrappedValue = point
+                }
+            }
+        }
     }
 }
 
-private final class CanvasScrollView: NSScrollView {
+final class CanvasScrollView: NSScrollView {
     private var pixels: CGImage?
     private var zoom: ArtworkZoom = .fit
+    var panChanged: ((CGPoint) -> Void)?
+    private var normalizedPan = CGPoint(x: 0.5, y: 0.5)
+    private var arranging = false
+
+    func setNormalizedPan(_ point: CGPoint) {
+        normalizedPan = point
+        guard zoom == .actual, let document = documentView as? CanvasDocumentView else { return }
+        arranging = true
+        defer { arranging = false }
+        var proposed = contentView.bounds
+        proposed.origin = CGPoint(x: document.imageRect.minX + document.imageRect.width * point.x - proposed.width / 2,
+                                  y: document.imageRect.minY + document.imageRect.height * point.y - proposed.height / 2)
+        contentView.scroll(to: contentView.constrainBoundsRect(proposed).origin)
+        reflectScrolledClipView(contentView)
+    }
+
+    override func reflectScrolledClipView(_ clipView: NSClipView) {
+        super.reflectScrolledClipView(clipView)
+        guard !arranging, zoom == .actual, let document = documentView as? CanvasDocumentView,
+              document.imageRect.width > 0, document.imageRect.height > 0 else { return }
+        normalizedPan = CGPoint(x: min(1, max(0, (clipView.bounds.midX - document.imageRect.minX) / document.imageRect.width)),
+                                y: min(1, max(0, (clipView.bounds.midY - document.imageRect.minY) / document.imageRect.height)))
+        panChanged?(normalizedPan)
+    }
 
     func setImage(_ image: CGImage, zoom: ArtworkZoom) {
         let changed = pixels !== image || self.zoom != zoom
@@ -182,6 +223,8 @@ private final class CanvasScrollView: NSScrollView {
 
     private func arrangeImage(center: Bool) {
         guard let pixels, let document = documentView as? CanvasDocumentView else { return }
+        arranging = true
+        defer { arranging = false }
         let available = contentView.bounds.size
         guard available.width > 0, available.height > 0 else { return }
         let scale: CGFloat

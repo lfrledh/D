@@ -118,11 +118,11 @@ public struct WorkbenchView: View {
                         guard let job = model.selectedJob else { return }
                         Task { await model.copySettings(from: job.id) }
                     } label: {
-                        Label("使用生成条件", systemImage: "arrow.uturn.backward")
+                        Label("基于条件新建创作", systemImage: "arrow.branch")
                     }
                     .disabled(model.selectedJob == nil)
                     .accessibilityIdentifier("copy-settings")
-                    .help("将这张作品的提示词和 seed 复制到新草稿")
+                    .help("将实际提示词与 seed 复制到独立创作；不使用图片作为输入")
 
                     Button {
                         Task { await model.exportSelected() }
@@ -143,6 +143,7 @@ public struct WorkbenchView: View {
                 }
             }
         }
+        .onChange(of: model.projectURL) { _, _ in model.invalidateComparison() }
         .onChange(of: model.manifest?.jobs.count) { oldValue, newValue in
             if (newValue ?? 0) > (oldValue ?? 0) {
                 withAnimation(reduceMotion ? nil : .default) { showTasks = true }
@@ -151,7 +152,9 @@ public struct WorkbenchView: View {
     }
 
     @ViewBuilder private var canvas: some View {
-        if let asset = model.selectedAsset, let url = model.assetURLs[asset.id] {
+        if model.isComparing {
+            ArtworkComparison(model: model)
+        } else if let asset = model.selectedAsset, let url = model.assetURLs[asset.id] {
             ArtworkCanvas(url: url, label: "已保存的作品")
         } else if model.selectedAsset != nil {
             ContentUnavailableView("作品暂时无法访问", systemImage: "externaldrive.badge.exclamationmark",
@@ -171,64 +174,210 @@ public struct WorkbenchView: View {
 
 private struct ArtworkSidebar: View {
     @Bindable var model: WorkbenchModel
+    @State private var namingContext: DocumentNameContext?
 
     var body: some View {
-        List(selection: $model.selectedAssetID) {
-            Section {
-                if let assets = model.manifest?.assets, !assets.isEmpty {
-                    ForEach(assets.reversed(), id: \.id) { asset in
-                        HStack(spacing: 10) {
-                            ArtworkThumbnail(url: model.assetURLs[asset.id])
-                            VStack(alignment: .leading, spacing: 5) {
-                                Text(title(for: asset)).font(.callout.weight(.medium)).lineLimit(2)
-                                Text(subtitle(for: asset))
-                                    .font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                            }
+        // A sidebar List combines custom multi-action rows into one accessibility
+        // element on macOS. Keep navigation and secondary actions as real buttons.
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 8) {
+                sidebarHeading("项目")
+                Button {
+                    Task { await model.showAllArtworks() }
+                } label: {
+                    Label("全部作品", systemImage: "square.grid.2x2")
+                        .fontWeight(model.showingAllArtworks ? .semibold : .regular)
+                        .frame(maxWidth: .infinity, alignment: .leading).padding(8)
+                        .contentShape(Rectangle())
+                }
+                .background(model.showingAllArtworks ? Color.accentColor.opacity(0.12) : .clear,
+                            in: RoundedRectangle(cornerRadius: 7))
+                .accessibilityIdentifier("all-artworks")
+                .accessibilityAddTraits(model.showingAllArtworks ? .isSelected : [])
+                sidebarHeading("创作")
+                ForEach(model.documents, id: \.id) { document in
+                    HStack(spacing: 4) {
+                        Button {
+                            Task { await model.switchDocument(to: document.id) }
+                        } label: {
+                            Label(document.name, systemImage: "doc.text.image")
+                                .lineLimit(2)
+                                .fontWeight(!model.showingAllArtworks && model.activeDocumentID == document.id ? .semibold : .regular)
+                                .frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 8)
+                                .contentShape(Rectangle())
                         }
-                        .padding(.vertical, 4)
-                        .tag(asset.id)
-                        .accessibilityIdentifier("artwork-\(asset.id.uuidString)")
+                        .accessibilityIdentifier("document-\(document.id.uuidString)")
+                        .accessibilityAddTraits(!model.showingAllArtworks && model.activeDocumentID == document.id ? .isSelected : [])
+                        Button {
+                            model.beginEditing()
+                            namingContext = DocumentNameContext(documentID: document.id, name: document.name)
+                        } label: { Image(systemName: "pencil").frame(width: 24, height: 28) }
+                        .help("重命名创作")
+                        .accessibilityLabel("重命名 \(document.name)")
+                        .accessibilityIdentifier("rename-document-\(document.id.uuidString)")
                     }
-                } else {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("还没有作品").font(.callout.weight(.medium))
-                        Text("完成的图片会出现在这里。")
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
-                    .padding(.vertical, 12)
-                    .listRowSeparator(.hidden)
+                    .padding(.horizontal, 8)
+                    .background(!model.showingAllArtworks && model.activeDocumentID == document.id
+                                ? Color.accentColor.opacity(0.12) : .clear, in: RoundedRectangle(cornerRadius: 7))
+                    .accessibilityElement(children: .contain)
                 }
-            } header: {
+                Button {
+                    model.beginEditing()
+                    namingContext = DocumentNameContext(documentID: nil, name: "新创作")
+                } label: {
+                    Label("新建创作", systemImage: "plus")
+                        .frame(maxWidth: .infinity, alignment: .leading).padding(8)
+                        .contentShape(Rectangle())
+                }
+                .keyboardShortcut("n", modifiers: [.command, .shift])
+                .accessibilityIdentifier("new-document")
                 HStack {
-                    Text("作品")
+                    sidebarHeading(model.showingAllArtworks ? "全部作品" : "候选作品")
                     Spacer()
-                    Text("\(model.manifest?.assets.count ?? 0)").monospacedDigit()
+                    Text("\(model.visibleAssets.count)").font(.caption).foregroundStyle(.secondary).monospacedDigit()
                 }
-            }
+                ForEach(model.visibleAssets.reversed(), id: \.id) { asset in candidateRow(asset) }
+                if model.visibleAssets.isEmpty {
+                    Text("完成的图片会出现在这里。")
+                        .font(.caption).foregroundStyle(.secondary).padding(8)
+                }
+            }.padding(10)
         }
-        .listStyle(.sidebar)
+        .buttonStyle(.borderless)
         .accessibilityIdentifier("artwork-list")
         .safeAreaInset(edge: .bottom) {
-            HStack(spacing: 7) {
-                Image(systemName: "externaldrive")
-                Text("保存在项目中")
-                Spacer(minLength: 0)
+            VStack(alignment: .leading, spacing: 8) {
+                Button {
+                    model.beginComparison()
+                } label: {
+                    Label("比较已选 \(model.comparisonSelection.count)/2", systemImage: "rectangle.split.2x1")
+                }
+                .buttonStyle(.bordered)
+                .disabled(model.comparisonSelection.count != 2)
+                .accessibilityIdentifier("compare-artworks")
+                Label("保存在项目中", systemImage: "externaldrive")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .help(model.projectURL?.path ?? "")
             }
-            .font(.caption).foregroundStyle(.secondary)
-            .padding(.horizontal, 18).padding(.vertical, 12)
-            .help(model.projectURL?.path ?? "")
+            .padding(14).frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .sheet(item: $namingContext, onDismiss: { model.endEditing() }) { context in
+            DocumentNameEditor(model: model, context: context)
         }
     }
 
-    private func title(for asset: ProjectAsset) -> String {
-        guard let job = model.manifest?.jobs.first(where: { $0.id == asset.jobID }),
-              case .image(let request) = job.request.input else { return "恢复的作品" }
-        return request.prompt
+    private func sidebarHeading(_ name: String) -> some View {
+        Text(name).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+            .padding(.horizontal, 8).padding(.top, 10)
+            .accessibilityAddTraits(.isHeader)
     }
 
-    private func subtitle(for asset: ProjectAsset) -> String {
-        guard let job = model.manifest?.jobs.first(where: { $0.id == asset.jobID }) else { return "PNG" }
-        return job.createdAt.formatted(date: .abbreviated, time: .shortened)
+    private func candidateRow(_ asset: ProjectAsset) -> some View {
+        HStack(spacing: 8) {
+            Button {
+                Task { await model.selectAsset(asset.id) }
+            } label: {
+                HStack(spacing: 8) {
+                    ArtworkThumbnail(url: model.assetURLs[asset.id])
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(asset.name).font(.callout.weight(model.selectedAssetID == asset.id ? .semibold : .regular))
+                            .lineLimit(2)
+                        HStack(spacing: 4) {
+                            if asset.isFavorite { Image(systemName: "star.fill").accessibilityLabel("已收藏") }
+                            if model.documents.contains(where: { $0.adoptedAssetID == asset.id }) {
+                                Label("已采用", systemImage: "checkmark.seal.fill")
+                            }
+                        }.font(.caption).foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 0)
+                }.contentShape(Rectangle())
+            }
+            .disabled(model.isComparing)
+            .accessibilityLabel(asset.name)
+            .accessibilityIdentifier("artwork-\(asset.id.uuidString)")
+            .accessibilityAddTraits(model.selectedAssetID == asset.id ? .isSelected : [])
+            Button {
+                model.toggleComparisonCandidate(asset.id)
+            } label: {
+                Image(systemName: model.comparisonSelection.contains(asset.id) ? "checkmark.circle.fill" : "circle")
+            }
+            .disabled(!model.comparisonSelection.contains(asset.id) && model.comparisonSelection.count == 2)
+            .help("选择两张作品进行比较")
+            .accessibilityLabel("比较 \(asset.name)")
+            .accessibilityValue(model.comparisonSelection.contains(asset.id) ? "已选择" : "未选择")
+            .accessibilityIdentifier("compare-select-\(asset.id.uuidString)")
+        }
+        .padding(8)
+        .background(model.selectedAssetID == asset.id ? Color.accentColor.opacity(0.10) : .clear,
+                    in: RoundedRectangle(cornerRadius: 7))
+        .accessibilityElement(children: .contain)
+    }
+}
+
+/// One immutable presentation value prevents the sheet from capturing mismatched
+/// mode/name state when it is first presented.
+private struct DocumentNameContext: Identifiable {
+    let id = UUID()
+    let documentID: UUID?
+    let name: String
+    var title: String { documentID == nil ? "新建创作" : "重命名创作" }
+}
+
+private struct DocumentNameEditor: View {
+    @Bindable var model: WorkbenchModel
+    let context: DocumentNameContext
+    @State private var name: String
+    @State private var saving = false
+    @State private var saveError: String?
+    @Environment(\.dismiss) private var dismiss
+
+    init(model: WorkbenchModel, context: DocumentNameContext) {
+        self.model = model
+        self.context = context
+        _name = State(initialValue: context.name)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Text(context.title).font(.headline)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(context.title)
+                .accessibilityIdentifier("document-name-title")
+            TextField("创作名称", text: $name)
+                .textFieldStyle(.roundedBorder)
+                .accessibilityIdentifier("document-name")
+            if let saveError { Text(saveError).font(.caption).foregroundStyle(.red) }
+            if model.editorCloseAttempted {
+                Text("请先保存或取消编辑，再关闭项目或退出 D。")
+                    .font(.caption).accessibilityIdentifier("pending-editor-close")
+            }
+            HStack {
+                Spacer()
+                Button("取消", role: .cancel) { dismiss() }.keyboardShortcut(.cancelAction)
+                Button("保存") {
+                    let value = name.trimmingCharacters(in: .whitespacesAndNewlines)
+                    let previousCount = model.documents.count
+                    saving = true
+                    Task {
+                        if let id = context.documentID { await model.renameDocument(id: id, name: value) }
+                        else { await model.createDocument(name: value) }
+                        saving = false
+                        let saved = context.documentID.map { identifier in
+                            model.documents.contains { $0.id == identifier && $0.name == value }
+                        } ?? (model.documents.count > previousCount && model.activeDocument?.name == value)
+                        if saved { dismiss() }
+                        else {
+                            saveError = model.errorMessage ?? "未能保存，名称仍然保留。"
+                            model.clearError()
+                        }
+                    }
+                }
+                .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .keyboardShortcut(.defaultAction)
+                .accessibilityIdentifier("save-document-name")
+            }
+        }.padding(24).frame(width: 320)
+            .disabled(saving).interactiveDismissDisabled()
     }
 }
 

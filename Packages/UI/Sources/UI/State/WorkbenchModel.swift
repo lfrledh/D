@@ -10,6 +10,17 @@ import UniformTypeIdentifiers
 public final class WorkbenchModel {
     public let projectSession: ProjectSession
     private var isChoosingLocation = false
+    public private(set) var hasPendingEditor = false
+    public private(set) var editorCloseAttempted = false
+
+    public func beginEditing() { hasPendingEditor = true; editorCloseAttempted = false }
+    public func endEditing() { hasPendingEditor = false; editorCloseAttempted = false }
+    private func refuseEditorClose() -> Bool {
+        guard hasPendingEditor else { return false }
+        editorCloseAttempted = true
+        NSSound.beep()
+        return true
+    }
 
     public var manifest: ProjectManifest? { projectSession.manifest }
     public var projectURL: URL? { projectSession.projectURL }
@@ -29,10 +40,102 @@ public final class WorkbenchModel {
         get { projectSession.seedText }
         set { projectSession.seedText = newValue }
     }
-    public var selectedAssetID: UUID? {
-        get { projectSession.selectedAssetID }
-        set { projectSession.selectedAssetID = newValue }
+    public var selectedAssetID: UUID? { projectSession.selectedAssetID }
+    public var documents: [ProjectDocument] { projectSession.documents }
+    public var activeDocumentID: UUID? { projectSession.activeDocumentID }
+    public var activeDocument: ProjectDocument? { projectSession.activeDocument }
+    public var showingAllArtworks: Bool { projectSession.showingAllArtworks }
+    public private(set) var comparisonSelection: [UUID] = []
+    private var comparisonProjectID: UUID?
+    private var comparisonProjectURL: URL?
+    private var comparisonDocumentID: UUID?
+    private var comparisonOriginalAssetID: UUID?
+    private var comparisonWasAllArtworks = false
+    public private(set) var comparisonAssetIDs: [UUID] = []
+    public var visibleAssets: [ProjectAsset] {
+        projectSession.visibleAssets
     }
+    public var isComparing: Bool { comparisonAssetIDs.count == 2 && comparisonProjectID == manifest?.id && comparisonProjectURL == projectURL }
+
+    public func createDocument(name: String = "新创作") async {
+        await endComparison()
+        await projectSession.createDocument(name: name)
+    }
+    public func renameDocument(id: UUID, name: String) async {
+        await projectSession.renameDocument(id: id, name: name)
+    }
+    public func switchDocument(to id: UUID) async {
+        await endComparison()
+        await projectSession.selectDocument(id: id)
+    }
+    public func showAllArtworks() async { await endComparison(); await projectSession.showAllArtworks() }
+    public func selectAsset(_ id: UUID?) async { await projectSession.selectAsset(id) }
+    public func updateAsset(id: UUID, name: String? = nil, note: String? = nil, isFavorite: Bool? = nil) async {
+        await projectSession.updateCandidate(assetID: id, name: name, isFavorite: isFavorite, note: note)
+    }
+    public func adoptAsset(_ id: UUID) async { await projectSession.adoptAsset(id: id) }
+    public func clearAdoptedAsset(documentID: UUID) async {
+        await projectSession.clearAdoptedAsset(documentID: documentID)
+    }
+    public func revealAsset(_ id: UUID) async {
+        if !showingAllArtworks, let asset = manifest?.assets.first(where: { $0.id == id }),
+           let job = manifest?.jobs.first(where: { $0.id == asset.jobID }), job.documentID != activeDocumentID {
+            await switchDocument(to: job.documentID)
+        }
+        await selectAsset(id)
+    }
+    public func forkFromAsset(_ id: UUID) async {
+        let originalProjectID = manifest?.id
+        var acknowledged = false
+        if let warning = projectSession.forkCompatibilityWarning(for: id) {
+            let alert = NSAlert()
+            alert.messageText = "使用当前模型探索"
+            alert.informativeText = warning
+            alert.addButton(withTitle: "继续")
+            alert.addButton(withTitle: "取消")
+            guard alert.runModal() == .alertFirstButtonReturn else { return }
+            acknowledged = true
+        }
+        guard originalProjectID == manifest?.id,
+              manifest?.assets.contains(where: { $0.id == id }) == true else { return }
+        await endComparison()
+        guard originalProjectID == manifest?.id else { return }
+        await projectSession.forkDocument(from: id, acknowledgeCurrentModel: acknowledged)
+    }
+    public func toggleComparisonCandidate(_ id: UUID) {
+        if comparisonProjectID != manifest?.id || comparisonProjectURL != projectURL {
+            clearComparisonState()
+            comparisonProjectID = manifest?.id
+            comparisonProjectURL = projectURL
+        }
+        guard manifest?.assets.contains(where: { $0.id == id }) == true else { return }
+        if comparisonSelection.contains(id) { comparisonSelection.removeAll { $0 == id } }
+        else if comparisonSelection.count < 2 { comparisonSelection.append(id) }
+    }
+    public func beginComparison() {
+        let available = Set(manifest?.assets.map(\.id) ?? [])
+        guard comparisonSelection.count == 2, comparisonSelection.allSatisfy(available.contains) else { return }
+        comparisonDocumentID = activeDocumentID
+        comparisonOriginalAssetID = selectedAssetID
+        comparisonWasAllArtworks = showingAllArtworks
+        comparisonAssetIDs = comparisonSelection
+        projectSession.automaticResultSelectionEnabled = false
+    }
+    public func endComparison() async {
+        if isComparing, comparisonDocumentID == activeDocumentID,
+           comparisonWasAllArtworks == showingAllArtworks {
+            await projectSession.selectAsset(comparisonOriginalAssetID)
+        }
+        clearComparisonState()
+    }
+    /// Project replacement invalidates transient presentation without writing to the new store.
+    public func invalidateComparison() { clearComparisonState() }
+    private func clearComparisonState() {
+        comparisonAssetIDs = []; comparisonSelection = []; comparisonProjectID = nil; comparisonProjectURL = nil
+        comparisonDocumentID = nil; comparisonOriginalAssetID = nil
+        projectSession.automaticResultSelectionEnabled = true
+    }
+
     public var errorMessage: String? {
         get { projectSession.errorMessage }
         set { projectSession.errorMessage = newValue }
@@ -60,7 +163,10 @@ public final class WorkbenchModel {
     public func clearError() { projectSession.clearError() }
     public func canCancel(_ id: UUID) -> Bool { projectSession.canCancel(id) }
     public func cancel(_ id: UUID) async { await projectSession.cancel(id) }
-    public func copySettings(from id: UUID) async { await projectSession.copySettings(from: id) }
+    public func copySettings(from id: UUID) async {
+        guard let asset = manifest?.assets.first(where: { $0.jobID == id }) else { return }
+        await forkFromAsset(asset.id)
+    }
     public func restoreLastProject() async { await projectSession.restoreLastProject() }
     public func recoverArtifacts() async {
         guard !isChoosingLocation else { return }
@@ -79,24 +185,29 @@ public final class WorkbenchModel {
         await projectSession.registerModel(at: url)
     }
     public func createProject(at url: URL) async {
+        guard !refuseEditorClose() else { return }
         guard !isChoosingLocation else { return }
         await projectSession.createProject(at: url)
     }
     public func openProject(at url: URL) async {
+        guard !refuseEditorClose() else { return }
         guard !isChoosingLocation else { return }
         await projectSession.openProject(at: url)
     }
     public func closeProject() async { _ = await requestClose() }
     public func requestClose() async -> Bool {
+        guard !refuseEditorClose() else { return false }
         guard !isChoosingLocation else { return false }
         return await projectSession.requestClose()
     }
     public func cancelAndCloseProject() async -> Bool {
+        guard !refuseEditorClose() else { return false }
         guard !isChoosingLocation else { return false }
         return await projectSession.cancelAndCloseProject()
     }
 
     public func newProject() async {
+        guard !refuseEditorClose() else { return }
         guard !isChangingProject else { return }
         isChoosingLocation = true
         defer { isChoosingLocation = false }
@@ -111,6 +222,7 @@ public final class WorkbenchModel {
     }
 
     public func openProject() async {
+        guard !refuseEditorClose() else { return }
         guard !isChangingProject else { return }
         isChoosingLocation = true
         defer { isChoosingLocation = false }

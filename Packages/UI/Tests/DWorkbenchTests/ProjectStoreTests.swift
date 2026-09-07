@@ -51,12 +51,16 @@ struct ProjectStoreTests {
             try await store.close()
             let file = fixture.project.appendingPathComponent(ProjectStore.manifestFilename)
             var contents = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any])
+            contents["schemaVersion"] = 1
+            contents.removeValue(forKey: "documents")
+            contents.removeValue(forKey: "activeDocumentID")
             contents.removeValue(forKey: "draft")
             let bytes = try JSONSerialization.data(withJSONObject: contents)
             try bytes.write(to: file, options: .atomic)
             let reopened = try await ProjectStore.open(at: fixture.project)
             #expect(await reopened.snapshot().draft == .init())
-            #expect(try Data(contentsOf: file) == bytes)
+            #expect(await reopened.snapshot().schemaVersion == 2)
+            #expect(try Data(contentsOf: fixture.project.appendingPathComponent(ProjectStore.versionOneBackupFilename)) == bytes)
             try await reopened.close()
         }
     }
@@ -441,7 +445,7 @@ struct ProjectStoreTests {
     }
 }
 
-private struct ProjectFixture: Sendable {
+struct ProjectFixture: Sendable {
     let directory: URL
     var project: URL { directory.appendingPathComponent("Test.dproject", isDirectory: true) }
 
@@ -467,7 +471,7 @@ private struct ProjectFixture: Sendable {
     }
 }
 
-private func withFixture(_ body: @Sendable (ProjectFixture) async throws -> Void) async throws {
+func withFixture(_ body: @Sendable (ProjectFixture) async throws -> Void) async throws {
     let base = ProcessInfo.processInfo.environment["D_TEST_WORKBENCH_ROOT"]
         ?? ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"]
         ?? FileManager.default.temporaryDirectory.appendingPathComponent("D-Workbench-Tests", isDirectory: true).path

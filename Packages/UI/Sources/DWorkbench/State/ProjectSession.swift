@@ -20,7 +20,24 @@ public final class ProjectSession {
     public var prompt = "" { didSet { scheduleDraftSave() } }
     public var randomSeed = true { didSet { scheduleDraftSave() } }
     public var seedText = "0" { didSet { scheduleDraftSave() } }
-    public var selectedAssetID: UUID?
+    public private(set) var selectedAssetID: UUID?
+    public private(set) var showingAllArtworks = false
+    /// Hosts can keep inspection/comparison stable while new results are published.
+    public var automaticResultSelectionEnabled = true {
+        didSet { selectionVersion &+= 1 }
+    }
+    public var documents: [ProjectDocument] { manifest?.documents ?? [] }
+    public var activeDocumentID: UUID? { manifest?.activeDocumentID }
+    public var activeDocument: ProjectDocument? { manifest?.activeDocument }
+    public var documentJobs: [ProjectJob] {
+        manifest?.jobs.filter { $0.documentID == activeDocumentID } ?? []
+    }
+    public var visibleAssets: [ProjectAsset] {
+        guard let manifest else { return [] }
+        if showingAllArtworks { return manifest.assets }
+        let jobs = Set(documentJobs.map(\.id))
+        return manifest.assets.filter { $0.id == activeDocument?.sourceAssetID || $0.jobID.map(jobs.contains) == true }
+    }
     public var errorMessage: String?
     public private(set) var isChangingProject = false
     public private(set) var phases: [UUID: String] = [:]
@@ -31,7 +48,7 @@ public final class ProjectSession {
     public var isBusy: Bool { !activeJobIDs.isEmpty }
     public var canGenerate: Bool {
         manifest != nil && ((selectedModelID != nil && selectedModelReady) || modelLease != nil)
-        && !isChangingProject && !closePending && pendingSaves.isEmpty
+        && !isChangingProject && !showingAllArtworks && !closePending && pendingSaves.isEmpty
         && !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && activeJobIDs.count < 8
     }
     public var selectedAsset: ProjectAsset? { manifest?.assets.first { $0.id == selectedAssetID } }
@@ -58,6 +75,13 @@ public final class ProjectSession {
     @ObservationIgnored private var modelPoller: Task<Void, Never>?
     @ObservationIgnored private var draftWriter: Task<Void, Never>?
     @ObservationIgnored private var draftSaveFailed = false
+    @ObservationIgnored private var draftWriteTail: Task<Void, Never>?
+    @ObservationIgnored private var selectionWriteTail: Task<Void, Never>?
+    @ObservationIgnored private var metadataWriteTail: Task<Void, Never>?
+    @ObservationIgnored private var applyingDraft = false
+    @ObservationIgnored private var draftEditVersion: UInt64 = 0
+    @ObservationIgnored private var selectionVersion: UInt64 = 0
+    @ObservationIgnored private var selectedModelRevision: String?
     @ObservationIgnored private var admissionTail: Task<Void, Never>?
     @ObservationIgnored private var closePending = false
     private static let projectBookmarkKey = "workbench.projectBookmark.v1"
@@ -80,31 +104,68 @@ public final class ProjectSession {
     private var draft: ProjectDraft { ProjectDraft(prompt: prompt, randomSeed: randomSeed, seedText: seedText) }
 
     private func scheduleDraftSave() {
-        guard store != nil, !isChangingProject, !closePending else { return }
+        guard !applyingDraft else { return }
+        draftEditVersion &+= 1
+        guard let store, let documentID = activeDocumentID, !isChangingProject, !closePending else { return }
         draftWriter?.cancel()
+        let value = draft
         draftWriter = Task { [weak self] in
             do { try await Task.sleep(for: .milliseconds(400)) } catch { return }
-            guard let self, let store = self.store else { return }
-            let value = self.draft
+            guard let self, self.store === store, !Task.isCancelled else { return }
+            let write = self.queueDraftWrite(value, documentID: documentID, store: store)
             do {
-                let updated = try await store.saveDraft(value)
+                let updated = try await write.value
                 guard self.store === store else { return }
                 self.applyManifest(updated)
                 self.draftSaveFailed = false
             } catch {
-                guard self.store === store, !Task.isCancelled else { return }
+                guard self.store === store else { return }
                 if !self.draftSaveFailed { self.report(error, context: "草稿暂未保存，请恢复项目磁盘访问后重试") }
                 self.draftSaveFailed = true
             }
         }
     }
 
+    /// A debounce cancellation must not cancel or overtake an already admitted disk write.
+    private func queueDraftWrite(_ value: ProjectDraft, documentID: UUID,
+                                 store: ProjectStore) -> Task<ProjectManifest, Error> {
+        let preceding = draftWriteTail
+        let write = Task {
+            if let preceding { await preceding.value }
+            return try await store.saveDraft(value, documentID: documentID)
+        }
+        draftWriteTail = Task { _ = try? await write.value }
+        return write
+    }
+
     private func flushDraft(to store: ProjectStore) async throws {
+        // Admission is closed by navigation/close callers, so this is a stable final tail.
+        // A selection already issued by the old view must finish before navigation or close.
+        await selectionWriteTail?.value
+        await metadataWriteTail?.value
+        guard let documentID = activeDocumentID else { return }
         draftWriter?.cancel()
         await draftWriter?.value
         draftWriter = nil
-        applyManifest(try await store.saveDraft(draft))
+        // While saving is suspended, programmatic edits must also survive a navigation.
+        repeat {
+            let version = draftEditVersion
+            let updated = try await queueDraftWrite(draft, documentID: documentID, store: store).value
+            applyManifest(updated)
+            if version == draftEditVersion { break }
+        } while self.store === store && activeDocumentID == documentID
         draftSaveFailed = false
+    }
+
+    private func loadActiveDocument() {
+        applyingDraft = true
+        defer { applyingDraft = false }
+        let value = activeDocument?.draft ?? .init()
+        prompt = value.prompt
+        randomSeed = value.randomSeed
+        seedText = value.seedText
+        selectedAssetID = activeDocument?.selectedAssetID
+        selectionVersion &+= 1
     }
 
     public func createProject(at url: URL) async {
@@ -245,10 +306,9 @@ public final class ProjectSession {
         projectURL = lease.url
         settings.set(lease.bookmark, forKey: Self.projectBookmarkKey)
         manifest = await candidate.snapshot()
-        prompt = manifest?.draft.prompt ?? ""
-        randomSeed = manifest?.draft.randomSeed ?? true
-        seedText = manifest?.draft.seedText ?? "0"
-        selectedAssetID = manifest?.assets.last?.id
+        showingAllArtworks = false
+        automaticResultSelectionEnabled = true
+        loadActiveDocument()
         await refreshAssets()
         await restoreModelSelection(using: createdSession)
     }
@@ -306,6 +366,7 @@ public final class ProjectSession {
         await access.release(modelLease)
         modelLease = nil
         selectedModelID = id
+        selectedModelRevision = reference.revision
         selectedModelReady = true
         imageProfile = profile
         modelName = snapshot.records.first(where: { $0.id == id }).map {
@@ -364,6 +425,7 @@ public final class ProjectSession {
             await access.release(modelLease)
             modelLease = candidate
             selectedModelID = nil
+            selectedModelRevision = nil
             selectedModelReady = false
             imageProfile = .flux2Klein
             modelName = candidate.url.lastPathComponent
@@ -374,13 +436,15 @@ public final class ProjectSession {
 
     /// Capture all editable values before the first suspension, then persist before admission.
     public func generate() async {
-        guard canGenerate, let store, let session else { return }
+        guard canGenerate, let store, let session, let documentID = activeDocumentID else { return }
         let seed: UInt64
         if randomSeed { seed = UInt64.random(in: .min ... .max) }
         else if let parsed = UInt64(seedText.trimmingCharacters(in: .whitespacesAndNewlines)) { seed = parsed }
         else { errorMessage = "Seed 必须是 0 到 18446744073709551615 之间的整数。"; return }
         let id = UUID()
         let input = imageProfile.request(prompt: prompt, seed: seed)
+        let savedDraft = queueDraftWrite(draft, documentID: documentID, store: store)
+        draftWriter?.cancel()
         let selectedID = selectedModelID
         let legacyReference = modelLease.map { ModelReference(directory: $0.url) }
         activeJobIDs.insert(id)
@@ -402,7 +466,7 @@ public final class ProjectSession {
                     throw ModelLibraryError.unavailable("尚未选择可用模型。")
                 }
                 let request = InferenceRequest(id: id, model: reference, input: .image(input))
-                await admit(request, store: store, session: session)
+                await admit(request, documentID: documentID, savedDraft: savedDraft, store: store, session: session)
             } catch {
                 await removeActive(id)
                 phases.removeValue(forKey: id)
@@ -414,10 +478,11 @@ public final class ProjectSession {
         await admission.value
     }
 
-    private func admit(_ request: InferenceRequest, store: ProjectStore, session: WorkbenchSession) async {
+    private func admit(_ request: InferenceRequest, documentID: UUID,
+                       savedDraft: Task<ProjectManifest, Error>, store: ProjectStore, session: WorkbenchSession) async {
         do {
-            try await flushDraft(to: store)
-            applyManifest(try await store.enqueue(request: request))
+            applyManifest(try await savedDraft.value)
+            applyManifest(try await store.enqueue(request: request, documentID: documentID))
             if cancellationRequests.contains(request.id) {
                 await finish(id: request.id, outcome: .cancelled, store: store)
                 return
@@ -480,8 +545,13 @@ public final class ProjectSession {
     private func persist(id: UUID, outcome: RunOutcome, store: ProjectStore) async throws {
         switch outcome {
         case .completed(let result):
+            let origin = manifest?.jobs.first(where: { $0.id == id })?.documentID
+            let selection = selectionVersion
             applyManifest(try await store.complete(id: id, result: result))
-            selectedAssetID = manifest?.jobs.first(where: { $0.id == id })?.artifactIDs.first
+            if automaticResultSelectionEnabled, !showingAllArtworks, origin == activeDocumentID, selection == selectionVersion,
+               let assetID = manifest?.jobs.first(where: { $0.id == id })?.artifactIDs.first {
+                await selectAsset(assetID)
+            }
         case .cancelled:
             applyManifest(try await store.updateJob(id: id, state: .cancelled))
         case .failed(let failure):
@@ -541,11 +611,147 @@ public final class ProjectSession {
         } catch { report(error, context: "恢复尚未完成，请确认项目磁盘可用且允许写入") }
     }
 
+    /// Compatibility entry point: reuse always creates a separate creative document.
     public func copySettings(from jobID: UUID) async {
-        guard let job = manifest?.jobs.first(where: { $0.id == jobID }), case .image(let image) = job.request.input else { return }
-        prompt = image.prompt
-        randomSeed = false
-        seedText = String(image.seed)
+        guard let assetID = manifest?.jobs.first(where: { $0.id == jobID })?.artifactIDs.first else { return }
+        await forkDocument(from: assetID)
+    }
+
+    public func createDocument(name: String = "新创作") async {
+        guard let store, !isChangingProject, !closePending else { return }
+        isChangingProject = true
+        defer { isChangingProject = false }
+        do {
+            try await flushDraft(to: store)
+            applyManifest(try await store.createDocument(name: name))
+            showingAllArtworks = false
+            loadActiveDocument()
+        } catch { report(error, context: "无法新建创作；当前输入已保留") }
+    }
+
+    public func renameDocument(id: UUID, name: String) async {
+        guard let store, !isChangingProject, !closePending else { return }
+        isChangingProject = true
+        defer { isChangingProject = false }
+        do { applyManifest(try await store.renameDocument(id: id, name: name)) }
+        catch { report(error, context: "创作名称未能保存") }
+    }
+
+    public func selectDocument(id: UUID) async {
+        guard let store, !isChangingProject, !closePending else { return }
+        isChangingProject = true
+        defer { isChangingProject = false }
+        do {
+            try await flushDraft(to: store)
+            applyManifest(try await store.selectDocument(id: id))
+            showingAllArtworks = false
+            loadActiveDocument()
+        } catch { report(error, context: "草稿未能安全保存，仍留在当前创作") }
+    }
+
+    public func showAllArtworks() async {
+        guard let store, !isChangingProject, !closePending else { return }
+        isChangingProject = true
+        defer { isChangingProject = false }
+        do {
+            try await flushDraft(to: store)
+            showingAllArtworks = true
+            selectionVersion &+= 1
+        } catch { report(error, context: "草稿未能安全保存，仍留在当前创作") }
+    }
+
+    public func selectAsset(_ id: UUID?) async {
+        guard let store, !isChangingProject, !closePending else { return }
+        if let id, !visibleAssets.contains(where: { $0.id == id }) { return }
+        selectionVersion &+= 1
+        let version = selectionVersion
+        if showingAllArtworks { selectedAssetID = id; return }
+        guard let documentID = activeDocumentID else { return }
+        let preceding = selectionWriteTail
+        let write = Task {
+            if let preceding { await preceding.value }
+            return try await store.setSelectedAsset(id, documentID: documentID)
+        }
+        selectionWriteTail = Task { _ = try? await write.value }
+        do {
+            let updated = try await write.value
+            guard self.store === store else { return }
+            applyManifest(updated)
+            if activeDocumentID == documentID, !showingAllArtworks, version == selectionVersion {
+                selectedAssetID = id
+            }
+        } catch { report(error, context: "作品选择未能保存") }
+    }
+
+    private func queueMetadataWrite(
+        _ operation: @escaping @Sendable () async throws -> ProjectManifest
+    ) -> Task<ProjectManifest, Error> {
+        let preceding = metadataWriteTail
+        let write = Task {
+            if let preceding { await preceding.value }
+            return try await operation()
+        }
+        metadataWriteTail = Task { _ = try? await write.value }
+        return write
+    }
+
+    public func updateCandidate(assetID: UUID, name: String? = nil, isFavorite: Bool? = nil, note: String? = nil) async {
+        guard let store, !isChangingProject, !closePending else { return }
+        let write = queueMetadataWrite {
+            try await store.updateAsset(id: assetID, name: name, note: note, isFavorite: isFavorite)
+        }
+        do { applyManifest(try await write.value) }
+        catch { report(error, context: "作品名称、收藏或备注未能保存") }
+    }
+
+    public func adoptAsset(id: UUID) async {
+        guard let store, !isChangingProject, !closePending,
+              let asset = manifest?.assets.first(where: { $0.id == id }),
+              let owner = manifest?.jobs.first(where: { $0.id == asset.jobID })?.documentID else { return }
+        let write = queueMetadataWrite { try await store.adoptAsset(id: id, documentID: owner) }
+        do { applyManifest(try await write.value) }
+        catch { report(error, context: "采用状态未能保存") }
+    }
+
+    public func clearAdoptedAsset(documentID: UUID) async {
+        guard let store, !isChangingProject, !closePending else { return }
+        let write = queueMetadataWrite { try await store.adoptAsset(id: nil, documentID: documentID) }
+        do { applyManifest(try await write.value) }
+        catch { report(error, context: "取消采用未能保存") }
+    }
+
+    public func forkCompatibilityWarning(for assetID: UUID) -> String? {
+        guard let asset = manifest?.assets.first(where: { $0.id == assetID }),
+              let job = manifest?.jobs.first(where: { $0.id == asset.jobID }),
+              case .image(let image) = job.request.input else {
+            return "此作品缺少可复用的图像生成条件。"
+        }
+        guard image.width == imageProfile.width, image.height == imageProfile.height,
+              image.steps == imageProfile.steps, image.guidanceScale == imageProfile.guidanceScale,
+              let revision = job.request.model.revision, revision == selectedModelRevision else {
+            return "原作品的模型版本或参数与当前模型不同，或无法确认。继续将只复用提示词和实际 Seed，并使用当前模型及其参数；不能保证得到相同图片。"
+        }
+        return nil
+    }
+
+    public func forkDocument(from assetID: UUID, acknowledgeCurrentModel: Bool = false) async {
+        guard let store, !isChangingProject, !closePending,
+              let asset = manifest?.assets.first(where: { $0.id == assetID }),
+              let job = manifest?.jobs.first(where: { $0.id == asset.jobID }),
+              case .image(let image) = job.request.input else { return }
+        if let warning = forkCompatibilityWarning(for: assetID), !acknowledgeCurrentModel {
+            errorMessage = warning
+            return
+        }
+        isChangingProject = true
+        defer { isChangingProject = false }
+        do {
+            try await flushDraft(to: store)
+            let value = ProjectDraft(prompt: image.prompt, randomSeed: false, seedText: String(image.seed))
+            applyManifest(try await store.createDocument(name: "从作品继续", draft: value, sourceAssetID: assetID))
+            showingAllArtworks = false
+            loadActiveDocument()
+        } catch { report(error, context: "无法从作品新建创作；当前输入已保留") }
     }
 
     public func canCancel(_ id: UUID) -> Bool {
@@ -647,12 +853,14 @@ public final class ProjectSession {
             modelLease = nil
             modelName = nil
             selectedModelID = nil
+            selectedModelRevision = nil
             selectedModelReady = false
             modelPoller?.cancel()
             modelPoller = nil
             imageProfile = .flux2Klein
             modelStatus = modelLibrary == nil ? "请选择已安装的 FLUX.2 Klein 4B q8 模型文件夹。" : "请在模型库中安装或选择可用模型。"
             manifest = nil
+            showingAllArtworks = false
             projectURL = nil
             selectedAssetID = nil
             assetURLs = [:]

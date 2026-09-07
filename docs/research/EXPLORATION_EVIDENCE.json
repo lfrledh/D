@@ -1,0 +1,465 @@
+{
+  "date": "2026-09-07",
+  "branch": "codex/inference-foundation",
+  "baseline": "c39a94d",
+  "strategyCheckpoint": "010c23f",
+  "completedGoals": [
+    "D-W02",
+    "D-W04a"
+  ],
+  "hardware": "Apple M4 / 16 GiB; macOS 26.6.2; Xcode 26.6",
+  "validationDirectory": "/Volumes/CodexProjects/Codex/D-Development/Validation/Exploration-20260907",
+  "cpu": {
+    "testDeclarations": 82,
+    "suites": 8,
+    "failed": 0,
+    "log": "/Volumes/CodexProjects/Codex/D-Development/Logs/exploration-workbench-final.log",
+    "logSHA256": "08d251ef64afa26ae2c0f7c8e6dc4005d7b9e59ecc9d58cb24cef900930ee7f0",
+    "note": "One earlier model-library fixture install failure not reproduced in 31 targeted and one full rerun; known readiness publication race hardened, not claimed as confirmed original cause."
+  },
+  "foundation": {
+    "testDeclarations": 17,
+    "passed": true,
+    "log": "/Volumes/CodexProjects/Codex/D-Development/Logs/exploration-foundation.log"
+  },
+  "hostClose": {
+    "passed": 2,
+    "failed": 0,
+    "bundle": "/Volumes/CodexProjects/Codex/D-Development/Validation/Exploration-20260907/UITests-4.xcresult"
+  },
+  "uiLatestByScenario": {
+    "testClosingWelcomeWindowKeepsHostAliveAndModelManagerCanReopen": {
+      "state": "passed",
+      "attempt": 5
+    },
+    "testCompareAndForkUseActualConditionsWithoutChangingOriginal": {
+      "state": "passed",
+      "attempt": 6
+    },
+    "testDocumentsCandidateEditsPersistThroughReopen": {
+      "state": "passed",
+      "attempt": 7
+    },
+    "testExistingModelPickerCancelReturnsToManagerWithoutRegistration": {
+      "state": "passed",
+      "attempt": 5
+    },
+    "testModelManagerWorksWithoutProjectAndKeepsProjectCommandsModal": {
+      "state": "passed",
+      "attempt": 5
+    },
+    "testNativeNewAndOpenKeyboardCommandsPresentCancellablePanels": {
+      "state": "passed",
+      "attempt": 5
+    },
+    "testNewProjectPanelCanBeCancelledWithoutChangingWelcome": {
+      "state": "passed",
+      "attempt": 5
+    },
+    "testWelcomeOffersProjectActionsInResizableNativeWindow": {
+      "state": "passed",
+      "attempt": 5
+    }
+  },
+  "uiAttempts": [
+    {
+      "bundle": "/Volumes/CodexProjects/Codex/D-Development/Validation/Exploration-20260907/UITests-1.xcresult",
+      "passed": 8,
+      "failed": 2,
+      "skipped": 0,
+      "note": "Includes DTests host tests"
+    },
+    {
+      "bundle": "/Volumes/CodexProjects/Codex/D-Development/Validation/Exploration-20260907/UITests-2.xcresult",
+      "passed": 6,
+      "failed": 2,
+      "skipped": 0,
+      "note": "UI only"
+    },
+    {
+      "bundle": "/Volumes/CodexProjects/Codex/D-Development/Validation/Exploration-20260907/UITests-3.xcresult",
+      "passed": 0,
+      "failed": 2,
+      "skipped": 0,
+      "note": "UI only"
+    },
+    {
+      "bundle": "/Volumes/CodexProjects/Codex/D-Development/Validation/Exploration-20260907/UITests-4.xcresult",
+      "passed": 8,
+      "failed": 2,
+      "skipped": 0,
+      "note": "Includes DTests host tests"
+    },
+    {
+      "bundle": "/Volumes/CodexProjects/Codex/D-Development/Validation/Exploration-20260907/UITests-5.xcresult",
+      "passed": 6,
+      "failed": 2,
+      "skipped": 0,
+      "note": "UI only"
+    },
+    {
+      "bundle": "/Volumes/CodexProjects/Codex/D-Development/Validation/Exploration-20260907/UITests-6.xcresult",
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0,
+      "note": "UI only"
+    },
+    {
+      "bundle": "/Volumes/CodexProjects/Codex/D-Development/Validation/Exploration-20260907/UITests-7.xcresult",
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "note": "UI only"
+    }
+  ],
+  "normalBuild": {
+    "passed": true,
+    "log": "/Volumes/CodexProjects/Codex/D-Development/Logs/exploration-build-final.log",
+    "entitlements": {
+      "com.apple.security.app-sandbox": true,
+      "com.apple.security.files.bookmarks.app-scope": true,
+      "com.apple.security.files.user-selected.read-write": true,
+      "com.apple.security.get-task-allow": true,
+      "com.apple.security.network.client": true
+    },
+    "strictSignatureVerified": true,
+    "applicationBinarySHA256": "27940705eb341461293605a97b0bf164fb6f232b9bc08930d92a31ddc175297d",
+    "debugLibrarySHA256": "0b8f71fa1e8cc211b6e86e09326a0f22bf12b9e473fd00af12d2177ba0442086",
+    "note": "Real GPU runs preceded final naming-sheet/export-only fixes; runtime/backend math unchanged. Final normal build validated recovery and new export."
+  },
+  "migration": {
+    "schemaVersion": 2,
+    "documents": 1,
+    "backupMatches": true,
+    "mediaUnchanged": true
+  },
+  "realRuns": {
+    "schemaVersion": 2,
+    "projectPath": "/Volumes/CodexProjects/Codex/D-Development/Validation/Exploration-20260907/Visual Exploration.dproject",
+    "manifestAfterCloseSHA256": "221095c81b7c7d2b853c47c6c7a273377a6c5da0e2109a0aa757001d70de9483",
+    "documents": [
+      {
+        "adoptedAssetID": "2926F02B-615C-46F5-9BE9-5D5A5411033A",
+        "draft": {
+          "prompt": "Unfinished composition study: keep this draft while exploring the saved result.",
+          "randomSeed": false,
+          "seedText": "42"
+        },
+        "id": "95477180-FF9E-41FC-8217-18D07C0D20F0",
+        "name": "茶壶 · 构图 A",
+        "selectedAssetID": "2926F02B-615C-46F5-9BE9-5D5A5411033A"
+      },
+      {
+        "draft": {
+          "prompt": "A red ceramic teapot on a wooden table beside a window, soft morning light, detailed studio photograph.",
+          "randomSeed": false,
+          "seedText": "42"
+        },
+        "id": "2DCE4235-E34F-416D-A0AB-CE615E7C051F",
+        "name": "茶壶 · 构图 B",
+        "selectedAssetID": "17167F21-65A6-4DDB-B328-37280EA28F5B"
+      },
+      {
+        "draft": {
+          "prompt": "A red ceramic teapot on a wooden table beside a window, soft morning light, detailed studio photograph.",
+          "randomSeed": false,
+          "seedText": "42"
+        },
+        "id": "6F070F3F-BAB6-4E0F-AD20-73ADB1188479",
+        "name": "从作品继续",
+        "selectedAssetID": "2926F02B-615C-46F5-9BE9-5D5A5411033A",
+        "sourceAssetID": "2926F02B-615C-46F5-9BE9-5D5A5411033A"
+      }
+    ],
+    "activeDocumentID": "6F070F3F-BAB6-4E0F-AD20-73ADB1188479",
+    "newJobs": [
+      {
+        "artifactIDs": [
+          "2926F02B-615C-46F5-9BE9-5D5A5411033A"
+        ],
+        "createdAt": 810434826.606767,
+        "documentID": "95477180-FF9E-41FC-8217-18D07C0D20F0",
+        "id": "5674554E-55F1-40CB-88B9-8D7538F513FC",
+        "request": {
+          "id": "5674554E-55F1-40CB-88B9-8D7538F513FC",
+          "input": {
+            "image": {
+              "_0": {
+                "guidanceScale": 1,
+                "height": 512,
+                "prompt": "A red ceramic teapot on a wooden table beside a window, soft morning light, detailed studio photograph.",
+                "seed": 42,
+                "steps": 4,
+                "width": 512
+              }
+            }
+          },
+          "model": {
+            "directory": "file:///Volumes/CodexProjects/Codex/D-Development/Validation/ModelLibrary-20260907/.d-model-library/Installations/1F9AB02E-EF7D-4D0B-96E0-91041515B930/",
+            "revision": "ef52ee019fd1d0e75ae4deb40476ba65989716d7"
+          }
+        },
+        "resultMetadata": {
+          "estimatedPeakBytes": "8589934592",
+          "flux2SourceRevision": "959a4af7c0721c800851c84431ffd3fa1f353f1f",
+          "guidanceScale": "1.0",
+          "height": "512",
+          "modelRepository": "mzbac/FLUX.2-klein-4B-q8",
+          "modelRevision": "ef52ee019fd1d0e75ae4deb40476ba65989716d7",
+          "modelTimestepScale": "0.001",
+          "pngBytes": "427767",
+          "pngDecodedAndValidated": "true",
+          "promptTruncated": "false",
+          "seed": "42",
+          "steps": "4",
+          "textSequenceLength": "512",
+          "weightBytes": "9410563077",
+          "width": "512"
+        },
+        "state": "completed"
+      },
+      {
+        "artifactIDs": [
+          "17167F21-65A6-4DDB-B328-37280EA28F5B"
+        ],
+        "createdAt": 810434905.71403,
+        "documentID": "2DCE4235-E34F-416D-A0AB-CE615E7C051F",
+        "id": "1FACB732-B547-42D9-B299-C11DC4F45059",
+        "request": {
+          "id": "1FACB732-B547-42D9-B299-C11DC4F45059",
+          "input": {
+            "image": {
+              "_0": {
+                "guidanceScale": 1,
+                "height": 512,
+                "prompt": "A red ceramic teapot on a wooden table beside a window, soft morning light, detailed studio photograph.",
+                "seed": 0,
+                "steps": 4,
+                "width": 512
+              }
+            }
+          },
+          "model": {
+            "directory": "file:///Volumes/CodexProjects/Codex/D-Development/Validation/ModelLibrary-20260907/.d-model-library/Installations/1F9AB02E-EF7D-4D0B-96E0-91041515B930/",
+            "revision": "ef52ee019fd1d0e75ae4deb40476ba65989716d7"
+          }
+        },
+        "resultMetadata": {
+          "estimatedPeakBytes": "8589934592",
+          "flux2SourceRevision": "959a4af7c0721c800851c84431ffd3fa1f353f1f",
+          "guidanceScale": "1.0",
+          "height": "512",
+          "modelRepository": "mzbac/FLUX.2-klein-4B-q8",
+          "modelRevision": "ef52ee019fd1d0e75ae4deb40476ba65989716d7",
+          "modelTimestepScale": "0.001",
+          "pngBytes": "419855",
+          "pngDecodedAndValidated": "true",
+          "promptTruncated": "false",
+          "seed": "0",
+          "steps": "4",
+          "textSequenceLength": "512",
+          "weightBytes": "9410563077",
+          "width": "512"
+        },
+        "state": "completed"
+      },
+      {
+        "artifactIDs": [],
+        "createdAt": 810434906.25437,
+        "documentID": "95477180-FF9E-41FC-8217-18D07C0D20F0",
+        "id": "50DB7E32-2A8C-42B6-B47A-050172C3951F",
+        "request": {
+          "id": "50DB7E32-2A8C-42B6-B47A-050172C3951F",
+          "input": {
+            "image": {
+              "_0": {
+                "guidanceScale": 1,
+                "height": 512,
+                "prompt": "A red ceramic teapot on a wooden table beside a window, soft morning light, detailed studio photograph.",
+                "seed": 42,
+                "steps": 4,
+                "width": 512
+              }
+            }
+          },
+          "model": {
+            "directory": "file:///Volumes/CodexProjects/Codex/D-Development/Validation/ModelLibrary-20260907/.d-model-library/Installations/1F9AB02E-EF7D-4D0B-96E0-91041515B930/",
+            "revision": "ef52ee019fd1d0e75ae4deb40476ba65989716d7"
+          }
+        },
+        "resultMetadata": {},
+        "state": "cancelled"
+      },
+      {
+        "artifactIDs": [
+          "AF4A8AC3-8F21-4C56-B4CD-BEDAC500CA85"
+        ],
+        "createdAt": 810434931.134767,
+        "documentID": "2DCE4235-E34F-416D-A0AB-CE615E7C051F",
+        "id": "AE66588A-D74B-4A9B-A2EC-D067FECCE460",
+        "request": {
+          "id": "AE66588A-D74B-4A9B-A2EC-D067FECCE460",
+          "input": {
+            "image": {
+              "_0": {
+                "guidanceScale": 1,
+                "height": 512,
+                "prompt": "A red ceramic teapot on a wooden table beside a window, soft morning light, detailed studio photograph.",
+                "seed": 42,
+                "steps": 4,
+                "width": 512
+              }
+            }
+          },
+          "model": {
+            "directory": "file:///Volumes/CodexProjects/Codex/D-Development/Validation/ModelLibrary-20260907/.d-model-library/Installations/1F9AB02E-EF7D-4D0B-96E0-91041515B930/",
+            "revision": "ef52ee019fd1d0e75ae4deb40476ba65989716d7"
+          }
+        },
+        "resultMetadata": {
+          "estimatedPeakBytes": "8589934592",
+          "flux2SourceRevision": "959a4af7c0721c800851c84431ffd3fa1f353f1f",
+          "guidanceScale": "1.0",
+          "height": "512",
+          "modelRepository": "mzbac/FLUX.2-klein-4B-q8",
+          "modelRevision": "ef52ee019fd1d0e75ae4deb40476ba65989716d7",
+          "modelTimestepScale": "0.001",
+          "pngBytes": "427767",
+          "pngDecodedAndValidated": "true",
+          "promptTruncated": "false",
+          "seed": "42",
+          "steps": "4",
+          "textSequenceLength": "512",
+          "weightBytes": "9410563077",
+          "width": "512"
+        },
+        "state": "completed"
+      }
+    ],
+    "assets": [
+      {
+        "id": "DC12D0AD-5EB8-4C2D-8E09-8ABFD95FBF56",
+        "jobID": "40D30DB7-6155-4D3B-A3F1-19E8AF4F178A",
+        "relativePath": "Tasks/40D30DB7-6155-4D3B-A3F1-19E8AF4F178A-D6CF7500-318C-4693-B48F-A731B83687C0/image.png",
+        "bytes": 427767,
+        "sha256": "05f0b80ac7d9d6e4ffa105af12a8805cdea4425a9448f9d35a1bd9d8f8dda553",
+        "name": "未命名作品",
+        "favorite": false,
+        "note": ""
+      },
+      {
+        "id": "E83712EB-45A2-4074-AFE8-E0C688B6AAE0",
+        "jobID": "311C476C-D748-4CCE-9E57-FD48EACAFCFA",
+        "relativePath": "Tasks/311C476C-D748-4CCE-9E57-FD48EACAFCFA-A579F5CF-B912-4D08-9C41-3D9FA0CDB328/image.png",
+        "bytes": 427767,
+        "sha256": "05f0b80ac7d9d6e4ffa105af12a8805cdea4425a9448f9d35a1bd9d8f8dda553",
+        "name": "未命名作品",
+        "favorite": false,
+        "note": ""
+      },
+      {
+        "id": "2926F02B-615C-46F5-9BE9-5D5A5411033A",
+        "jobID": "5674554E-55F1-40CB-88B9-8D7538F513FC",
+        "relativePath": "Tasks/5674554E-55F1-40CB-88B9-8D7538F513FC-9571AB1F-C3F8-45F3-A8F7-FA6C90905676/image.png",
+        "bytes": 427767,
+        "sha256": "05f0b80ac7d9d6e4ffa105af12a8805cdea4425a9448f9d35a1bd9d8f8dda553",
+        "name": "晨光茶壶 · 采用方案",
+        "favorite": true,
+        "note": "保留窗边光线与红色陶瓷质感。固定 seed 42 的正式运行时对照。"
+      },
+      {
+        "id": "17167F21-65A6-4DDB-B328-37280EA28F5B",
+        "jobID": "1FACB732-B547-42D9-B299-C11DC4F45059",
+        "relativePath": "Tasks/1FACB732-B547-42D9-B299-C11DC4F45059-8D059E37-5513-4D17-919D-CDBE04FAF938/image.png",
+        "bytes": 419855,
+        "sha256": "d07e166c5583245766dd8c255fff3b85966d04e6ffc8dca8614bd22c423254dd",
+        "name": "候选 4",
+        "favorite": false,
+        "note": ""
+      },
+      {
+        "id": "AF4A8AC3-8F21-4C56-B4CD-BEDAC500CA85",
+        "jobID": "AE66588A-D74B-4A9B-A2EC-D067FECCE460",
+        "relativePath": "Tasks/AE66588A-D74B-4A9B-A2EC-D067FECCE460-B2014E70-5853-44D8-95C7-25186AE3E9C4/image.png",
+        "bytes": 427767,
+        "sha256": "05f0b80ac7d9d6e4ffa105af12a8805cdea4425a9448f9d35a1bd9d8f8dda553",
+        "name": "候选 5",
+        "favorite": false,
+        "note": ""
+      }
+    ],
+    "manualObservations": {
+      "normalSandboxBuildVerified": true,
+      "fourNewSubmissionsAcrossTwoDocuments": true,
+      "threeCompletedOneCancelled": true,
+      "cancelledDuringImageGeneration": "50DB7E32-2A8C-42B6-B47A-050172C3951F",
+      "queuedJobStartedAfterCancellation": "AE66588A-D74B-4A9B-A2EC-D067FECCE460",
+      "backgroundResultKeptOtherDocumentSelection": true,
+      "twoImagesComparedWhileOtherDocumentGenerating": true,
+      "comparison100PercentSynchronizedVerticalScrollValues": [
+        1,
+        1
+      ],
+      "comparisonRestoredOriginalSelection": true,
+      "forkPreservedOriginalDraft": true,
+      "exportToFreshFileInitiallyFailed": "EPERM; under investigation",
+      "reopenPending": false,
+      "reopenedDocumentsMetadataRecipesAndAssets": true,
+      "mediaReappearedAfterPathRestored": true
+    },
+    "export": {
+      "path": "/Volumes/CodexProjects/Codex/D-Development/Validation/Exploration-20260907/D-Exploration-accepted.png",
+      "bytes": 427767,
+      "sha256": "05f0b80ac7d9d6e4ffa105af12a8805cdea4425a9448f9d35a1bd9d8f8dda553",
+      "normalNSSavePanel": true,
+      "freshFileGrant": true
+    },
+    "manifestAfterRecoverySHA256": "221095c81b7c7d2b853c47c6c7a273377a6c5da0e2109a0aa757001d70de9483"
+  },
+  "missingMedia": {
+    "assetID": "2926F02B-615C-46F5-9BE9-5D5A5411033A",
+    "path": "/Volumes/CodexProjects/Codex/D-Development/Validation/Exploration-20260907/Visual Exploration.dproject/Tasks/5674554E-55F1-40CB-88B9-8D7538F513FC-9571AB1F-C3F8-45F3-A8F7-FA6C90905676/image.png",
+    "heldPath": "/Volumes/CodexProjects/Codex/D-Development/Validation/Exploration-20260907/Visual Exploration.dproject/Tasks/5674554E-55F1-40CB-88B9-8D7538F513FC-9571AB1F-C3F8-45F3-A8F7-FA6C90905676/image.png.validation-held",
+    "originalSHA256": "05f0b80ac7d9d6e4ffa105af12a8805cdea4425a9448f9d35a1bd9d8f8dda553",
+    "originalManifestSHA256": "221095c81b7c7d2b853c47c6c7a273377a6c5da0e2109a0aa757001d70de9483",
+    "status": "restored; native missing-media alert and placeholder observed; records preserved",
+    "manifestUnchanged": true,
+    "restoredSHA256": "05f0b80ac7d9d6e4ffa105af12a8805cdea4425a9448f9d35a1bd9d8f8dda553"
+  },
+  "exportSandboxProbe": {
+    "log": "/Volumes/CodexProjects/Codex/D-Development/Logs/export-sandbox-probe.log",
+    "logSHA256": "59d84016f5357f5c30145a03e13d5efcf8224056fff51a0755ba7ebc8d5ef927",
+    "legacySibling": "EPERM",
+    "sameVolumeSystemStaging": "success; file and parent fsync successful"
+  },
+  "sourceSHA256": {
+    "D/DApp.swift": "55682a0799ec75c5674814e599a212e42a82acdbf2c14d089f902ef01ab75b8d",
+    "D/WorkbenchBootstrap.swift": "61dbeb66d87dc07d5514a80c86abc256d6fa46d5cc7253ad82669a72d19d3ee2",
+    "DUITests/DUITests.swift": "17f366fcc5fe7d40adb7838ea196e0bb6a863399b02ff0dc121e40ba27615f6d",
+    "Packages/UI/Sources/DWorkbench/Project/ProjectModels.swift": "fbda9704bab8721d6c36546b4c61a32a449b7209f8312f1f188d096a3b3e5a75",
+    "Packages/UI/Sources/DWorkbench/Project/ProjectStore.swift": "94c0cf90f786cd3a2372d2515d6a0defe47edcd97241ae1b298984c4c3cb039f",
+    "Packages/UI/Sources/DWorkbench/State/ProjectSession.swift": "deaa550b3795293bb8d506759a38823452dbe7fec3645c26fac68685b9a498fc",
+    "Packages/UI/Sources/UI/State/WorkbenchModel.swift": "a7757bef4cc065444ebf7785b853e9dccc5384dcabf0357b871458eb4724eaa8",
+    "Packages/UI/Sources/UI/Views/ArtworkPreview.swift": "b93d2118b0f0edbac857126b70736f31ae2c3fbd52197fe691c921b1796c4e67",
+    "Packages/UI/Sources/UI/Views/GenerationInspector.swift": "451a920bb6c375d0f6ecc1bf2cd1ac1c980321ad917513e6cde89aabdb12b9a2",
+    "Packages/UI/Sources/UI/Views/WorkbenchTasks.swift": "62201a74c426ff77732e43687c7a9dc468dd99dfc1190a7bd7222b9a0445f9be",
+    "Packages/UI/Sources/UI/Views/WorkbenchView.swift": "7454538625cb9f80a03efd1c4215591749af3751179a55edeed266879199efbd",
+    "Packages/UI/Tests/DWorkbenchTests/ProjectSessionConcurrencyTests.swift": "06baceaba89fd9efa62443354ef7e1dbf9759840f18c172460d426f4555fc045",
+    "Packages/UI/Tests/DWorkbenchTests/ProjectSessionTests.swift": "12aaabea6a49a5c1ac24db99232a1c71e5a14a897a7c75cb25086147924a85a7",
+    "Packages/UI/Tests/DWorkbenchTests/ProjectStoreTests.swift": "4866e19f800df6f5c4bb4d0141afc18ec214243819de5e027f9db07f4a0cc2c2",
+    "Packages/UI/Tests/ModelLibraryTests/LibraryFixture.swift": "1e7d1e964c0ae25cb9b8a1de04b0bd63283c0e406c115b33d6e4eb9f892ca439",
+    "Packages/UI/Tests/ModelLibraryTests/ModelLibraryTests.swift": "13d91d67b4b96d8a946d7e78c8d203b1f0f5956a5b9bee83bba4fe8436d28770",
+    "Packages/UI/Tests/UITests/WorkbenchFacadeTests.swift": "2a5af541bb7f3da518ef96ff99b65473fac4e0ded61e2f84e6621cd314d0a140",
+    "Packages/UI/Sources/UI/Views/ArtworkComparison.swift": "c606d9f528eb8a14126d91367287260bfbc66d74c6eb2725ffbc548d8749cce1",
+    "Packages/UI/Tests/DWorkbenchTests/ProjectDocumentStoreTests.swift": "0f0152391c5ed38bae2356701a8e3b60f1f9ce5f3ca1501f4b37e255d104bf93",
+    "Packages/UI/Tests/DWorkbenchTests/ProjectExportTests.swift": "63d7ff58aec162d733232337a1e11f8bf30172c5450e235c74b512f43a7bb8ed",
+    "Packages/UI/Tests/DWorkbenchTests/ProjectMigrationTests.swift": "f49e62c4fd45b2186328f89709574090c1bcf8a2dc6c6433f15c59df8ceede94"
+  },
+  "limits": [
+    "No physical power-loss or SSD-unplug test",
+    "No new model, inference math, resolution or modality",
+    "No new actual memory peak measurement",
+    "UI distinct scenario passes span several full and targeted runs",
+    "Full VoiceOver and distribution hardware matrix remain pending"
+  ]
+}

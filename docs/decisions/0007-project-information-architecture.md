@@ -1,6 +1,6 @@
 # ADR 0007：项目、创作文档与共享资源的信息架构
 
-日期：2026-09-07。状态：用户已批准；战略更新见 [总体规划](../PRODUCT_STRATEGY.zh-CN.md)，当前实施见 [探索阶段](../EXPLORATION_STAGE_PLAN.zh-CN.md)。远期结构不代表已实现 UI。
+日期：2026-09-07。状态：用户已批准；战略更新见 [总体规划](../PRODUCT_STRATEGY.zh-CN.md)，已实现范围见 [探索阶段验收](../EXPLORATION_STAGE_ACCEPTANCE.zh-CN.md)。远期结构不代表已实现 UI。
 
 ## 决定与用户选择
 

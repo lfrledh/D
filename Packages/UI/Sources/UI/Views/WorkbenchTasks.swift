@@ -91,7 +91,7 @@ struct WorkbenchTasks: View {
                 .accessibilityIdentifier("cancel-task-\(job.id.uuidString)")
             } else if let assetID = job.artifactIDs.first {
                 Button {
-                    model.selectedAssetID = assetID
+                    Task { await model.revealAsset(assetID) }
                 } label: {
                     Image(systemName: "arrow.up.right.square")
                 }

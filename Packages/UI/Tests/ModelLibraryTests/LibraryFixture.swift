@@ -56,12 +56,20 @@ final class LoopbackServer {
         process.arguments = ["python3", "-u", "-c", Self.script, fixture.source.path, control.path, events.path, portFile.path]
         process.standardOutput = FileHandle.nullDevice; process.standardError = FileHandle.nullDevice
         try process.run()
+        var readyPort: Int?
         for _ in 0..<300 {
-            if FileManager.default.fileExists(atPath: portFile.path) { break }
+            if let text = try? String(contentsOf: portFile, encoding: .utf8),
+               let port = Int(text.trimmingCharacters(in: .whitespacesAndNewlines)),
+               (1...65535).contains(port) {
+                readyPort = port
+                break
+            }
+            guard process.isRunning else { break }
             try await Task.sleep(for: .milliseconds(10))
         }
-        guard let port = try? String(contentsOf: portFile, encoding: .utf8), let address = URL(string: "http://127.0.0.1:" + port) else {
-            process.terminate(); throw ModelLibraryError.download("Fixture HTTP server failed to start")
+        guard let port = readyPort, let address = URL(string: "http://127.0.0.1:\(port)") else {
+            if process.isRunning { process.terminate() }
+            throw ModelLibraryError.download("Fixture HTTP server did not publish a valid listening port")
         }
         url = address
     }
@@ -115,7 +123,11 @@ class Handler(BaseHTTPRequestHandler):
                 active -= 1
                 with open(events, 'a') as f: f.write(json.dumps(dict(event='end', start=start, path=relative, active=active))+'\n')
 server = ThreadingHTTPServer(('127.0.0.1',0),Handler)
-open(portfile,'w').write(str(server.server_port))
+# Publish readiness only after the complete port is written and closed. A reader must
+# never mistake an existing but empty file for an HTTP peer on the default port.
+with open(portfile + '.tmp', 'w') as ready:
+    ready.write(str(server.server_port))
+os.replace(portfile + '.tmp', portfile)
 server.serve_forever()
 """#
 }

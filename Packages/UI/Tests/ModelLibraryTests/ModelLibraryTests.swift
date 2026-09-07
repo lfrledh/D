@@ -178,7 +178,8 @@ struct ModelLibraryTests {
         var library: ModelLibrary? = try await fixture.library(server: server)
         try await library!.configureRoot(at: fixture.destination)
         let id = try await library!.install(catalogID: fixture.entry.id)
-        #expect(try await waitRecord(library!, id: id) { [.installed, .failed].contains($0.state) }.state == .installed)
+        let installed = try await waitRecord(library!, id: id) { [.installed, .failed].contains($0.state) }
+        try #require(installed.state == .installed, "Fixture installation failed: \(installed.error ?? "no error details"); HTTP peer: \(server.url)")
         try await library!.shutdown(); library = nil
         let copied = fixture.root.appendingPathComponent("copied")
         try FileManager.default.copyItem(at: fixture.destination, to: copied)

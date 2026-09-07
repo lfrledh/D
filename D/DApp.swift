@@ -41,6 +41,7 @@ private struct WorkbenchCommands: Commands {
     @Environment(\.openWindow) private var openWindow
     private var modalResourceOperation: Bool {
         bootstrap.libraryModel?.isPresented == true || bootstrap.libraryModel?.isChoosingLocation == true
+            || bootstrap.model?.hasPendingEditor == true
     }
 
     var body: some Commands {

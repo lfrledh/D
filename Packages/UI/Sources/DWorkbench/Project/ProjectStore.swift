@@ -3,12 +3,17 @@ import Darwin
 import Foundation
 import ImageIO
 
+/// Internal fault injection points exercise actual durable migration boundaries in CPU tests.
+enum ProjectMigrationCheckpoint: Sendable { case backupDurable, beforePublication, publicationDurable }
+enum ProjectExportCheckpoint: Sendable { case contentDurable(URL), published(URL) }
+
 /// Owns durable project records and media. Its actor keeps file I/O off the UI executor.
 /// The lock prevents two application sessions from silently replacing each other's manifest.
 public actor ProjectStore {
     public nonisolated let rootURL: URL
     public nonisolated var artifactDirectory: URL { rootURL.appendingPathComponent("Tasks", isDirectory: true) }
     public static let manifestFilename = "project.json"
+    public static let versionOneBackupFilename = "project.v1.backup.json"
     private let rootFD: Int32
     private let lockFD: Int32
     private var manifest: ProjectManifest
@@ -48,6 +53,10 @@ public actor ProjectStore {
     }
 
     public static func open(at url: URL) async throws -> ProjectStore {
+        try await open(at: url, migrationCheckpoint: nil)
+    }
+
+    static func open(at url: URL, migrationCheckpoint: (@Sendable (ProjectMigrationCheckpoint) throws -> Void)?) async throws -> ProjectStore {
         let root = try ProjectFiles.projectURL(url)
         let descriptor = try ProjectFiles.openDirectory(root)
         var lock: Int32 = -1
@@ -59,36 +68,108 @@ public actor ProjectStore {
             }
         }
         lock = try ProjectFiles.lock(in: descriptor)
-                let data = try ProjectFiles.read(relative: manifestFilename, in: descriptor, limit: 32 * 1_024 * 1_024)
-                struct Header: Decodable { let schemaVersion: Int }
-                let decoder = JSONDecoder()
-                let header: Header
-                do { header = try decoder.decode(Header.self, from: data) }
-                catch { throw ProjectStoreError.invalidProject("项目清单不是有效的 JSON。") }
-                guard header.schemaVersion == ProjectManifest.currentSchemaVersion else {
-                    throw ProjectStoreError.unsupportedSchema(header.schemaVersion)
-                }
-                let loaded: ProjectManifest
-                do { loaded = try decoder.decode(ProjectManifest.self, from: data) }
-                catch { throw ProjectStoreError.invalidProject("项目清单缺少必要字段或已经损坏。") }
-                try ProjectFiles.validate(loaded)
-                let tasks = try ProjectFiles.openRelativeDirectory("Tasks", in: descriptor)
-                Darwin.close(tasks)
-                let store = ProjectStore(rootURL: root, rootFD: descriptor, lockFD: lock, manifest: loaded)
-                // Ownership of both descriptors has moved to the actor before recovery can throw.
-                transferred = true
-                return try await store.recoverOnOpen()
+        let data = try ProjectFiles.read(relative: manifestFilename, in: descriptor, limit: 32 * 1_024 * 1_024)
+        struct Header: Decodable { let schemaVersion: Int }
+        let decoder = JSONDecoder()
+        let header: Header
+        do { header = try decoder.decode(Header.self, from: data) }
+        catch { throw ProjectStoreError.invalidProject("项目清单不是有效的 JSON。") }
+        guard header.schemaVersion == 1 || header.schemaVersion == ProjectManifest.currentSchemaVersion else {
+            throw ProjectStoreError.unsupportedSchema(header.schemaVersion)
+        }
+        var loaded: ProjectManifest
+        do { loaded = try decoder.decode(ProjectManifest.self, from: data) }
+        catch { throw ProjectStoreError.invalidProject("项目清单缺少必要字段或已经损坏。") }
+        let tasks = try ProjectFiles.openRelativeDirectory("Tasks", in: descriptor)
+        Darwin.close(tasks)
+        if loaded.schemaVersion == 1 {
+            loaded = try ProjectFiles.migrateVersionOne(loaded, original: data, in: descriptor,
+                                                      checkpoint: migrationCheckpoint)
+        } else { try ProjectFiles.validate(loaded) }
+        let store = ProjectStore(rootURL: root, rootFD: descriptor, lockFD: lock, manifest: loaded)
+        // Ownership of both descriptors has moved to the actor before recovery can throw.
+        transferred = true
+        return try await store.recoverOnOpen()
     }
 
     public func snapshot() -> ProjectManifest { manifest }
 
-    public func saveDraft(_ draft: ProjectDraft) throws -> ProjectManifest {
-        guard !isClosed else { throw ProjectStoreError.io("项目会话已关闭，请重新打开项目") }
-        guard manifest.draft != draft else { return manifest }
+    public func saveDraft(_ draft: ProjectDraft, documentID: UUID? = nil) throws -> ProjectManifest {
+        let index = try documentIndex(documentID ?? manifest.activeDocumentID)
+        guard manifest.documents[index].draft != draft else { return manifest }
         var candidate = manifest
-        candidate.draft = draft
+        candidate.documents[index].draft = draft
         try commit(candidate)
         return manifest
+    }
+
+    public func createDocument(name: String, draft: ProjectDraft = .init(), sourceAssetID: UUID? = nil) throws -> ProjectManifest {
+        try checkLocation()
+        if let sourceAssetID, !manifest.assets.contains(where: { $0.id == sourceAssetID }) {
+            throw ProjectStoreError.missingAsset
+        }
+        let document = ProjectDocument(name: name, draft: draft, sourceAssetID: sourceAssetID,
+                                       selectedAssetID: sourceAssetID)
+        var candidate = manifest
+        candidate.documents.append(document)
+        candidate.activeDocumentID = document.id
+        try commit(candidate)
+        return manifest
+    }
+
+    public func selectDocument(id: UUID) throws -> ProjectManifest {
+        _ = try documentIndex(id)
+        guard manifest.activeDocumentID != id else { return manifest }
+        var candidate = manifest
+        candidate.activeDocumentID = id
+        try commit(candidate)
+        return manifest
+    }
+
+    public func renameDocument(id: UUID, name: String) throws -> ProjectManifest {
+        let index = try documentIndex(id)
+        guard manifest.documents[index].name != name else { return manifest }
+        var candidate = manifest
+        candidate.documents[index].name = name
+        try commit(candidate)
+        return manifest
+    }
+
+    public func setSelectedAsset(_ id: UUID?, documentID: UUID) throws -> ProjectManifest {
+        let index = try documentIndex(documentID)
+        guard manifest.documents[index].selectedAssetID != id else { return manifest }
+        var candidate = manifest
+        candidate.documents[index].selectedAssetID = id
+        try commit(candidate)
+        return manifest
+    }
+
+    /// Adoption is an explicit creative choice. Generating, selecting, favoriting or recovering
+    /// a candidate never silently replaces the document's adopted result.
+    public func adoptAsset(id: UUID?, documentID: UUID) throws -> ProjectManifest {
+        let index = try documentIndex(documentID)
+        guard manifest.documents[index].adoptedAssetID != id else { return manifest }
+        var candidate = manifest
+        candidate.documents[index].adoptedAssetID = id
+        try commit(candidate)
+        return manifest
+    }
+
+    public func updateAsset(id: UUID, name: String? = nil, note: String? = nil, isFavorite: Bool? = nil) throws -> ProjectManifest {
+        try checkLocation()
+        guard let index = manifest.assets.firstIndex(where: { $0.id == id }) else { throw ProjectStoreError.missingAsset }
+        var candidate = manifest
+        if let name { candidate.assets[index].name = name }
+        if let note { candidate.assets[index].note = note }
+        if let isFavorite { candidate.assets[index].isFavorite = isFavorite }
+        if candidate != manifest { try commit(candidate) }
+        return manifest
+    }
+
+    private func documentIndex(_ id: UUID) throws -> Int {
+        guard !isClosed else { throw ProjectStoreError.io("项目会话已关闭，请重新打开项目") }
+        guard let index = manifest.documents.firstIndex(where: { $0.id == id }) else { throw ProjectStoreError.missingDocument }
+        return index
     }
 
     /// Recognize the same directory after a Finder move without trusting its displayed name
@@ -123,13 +204,14 @@ public actor ProjectStore {
         return replacement
     }
 
-    public func enqueue(request: InferenceRequest) throws -> ProjectManifest {
+    public func enqueue(request: InferenceRequest, documentID: UUID? = nil) throws -> ProjectManifest {
         try request.validate()
+        let index = try documentIndex(documentID ?? manifest.activeDocumentID)
         guard !manifest.jobs.contains(where: { $0.id == request.id }) else {
             throw ProjectStoreError.invalidProject("任务编号重复。")
         }
         var candidate = manifest
-        candidate.jobs.append(ProjectJob(id: request.id, request: request))
+        candidate.jobs.append(ProjectJob(id: request.id, documentID: manifest.documents[index].id, request: request))
         try commit(candidate)
         return manifest
     }
@@ -163,7 +245,8 @@ public actor ProjectStore {
                 throw ProjectStoreError.invalidProject("图片已登记，不能重复引用。")
             }
             let metadata = try readPNG(relative: relative, job: candidate.jobs[index])
-            let asset = ProjectAsset(jobID: id, relativePath: relative, metadata: metadata)
+            let asset = ProjectAsset(jobID: id, relativePath: relative, metadata: metadata,
+                                     name: "候选 \(candidate.assets.count + 1)")
             candidate.assets.append(asset)
             candidate.jobs[index].artifactIDs.append(asset.id)
         }
@@ -190,9 +273,15 @@ public actor ProjectStore {
         return rootURL.appendingPathComponent(asset.relativePath)
     }
 
-    /// Export is a byte-for-byte copy. A temporary sibling is published with RENAME_EXCL;
-    /// an existing destination is never truncated, even if it appears during the copy.
+    /// Export is a byte-for-byte copy staged in the system's same-volume replacement
+    /// directory. A Save panel grants the destination file, not permission to create siblings.
+    /// RENAME_EXCL publishes atomically without replacing a destination that appeared meanwhile.
     public func export(assetID: UUID, to destination: URL) throws {
+        try export(assetID: assetID, to: destination, checkpoint: nil)
+    }
+
+    func export(assetID: UUID, to destination: URL,
+                checkpoint: (@Sendable (ProjectExportCheckpoint) throws -> Void)?) throws {
         guard let asset = manifest.assets.first(where: { $0.id == assetID }) else { throw ProjectStoreError.missingAsset }
         try checkLocation()
         guard destination.isFileURL, destination.path.hasPrefix("/"),
@@ -201,7 +290,7 @@ public actor ProjectStore {
         defer { Darwin.close(source) }
         let parent = try ProjectFiles.openDirectory(destination.deletingLastPathComponent())
         defer { Darwin.close(parent) }
-        try ProjectFiles.publish(in: parent, name: destination.lastPathComponent, replacing: false) { target in
+        try ProjectFiles.publishExport(to: destination, parent: parent, checkpoint: checkpoint) { target in
             var buffer = [UInt8](repeating: 0, count: 64 * 1_024)
             while true {
                 let count = Darwin.read(source, &buffer, buffer.count)
@@ -285,7 +374,8 @@ public actor ProjectStore {
                 if status != 0, failure == ENOENT { continue }
                 guard status == 0 else { throw ProjectStoreError.io(String(cString: strerror(failure))) }
                 let metadata = try readPNG(relative: relative, job: candidate.jobs[index])
-                let asset = ProjectAsset(jobID: jobID, relativePath: relative, metadata: metadata)
+                let asset = ProjectAsset(jobID: jobID, relativePath: relative, metadata: metadata,
+                                         name: "候选 \(candidate.assets.count + 1)")
                 candidate.assets.append(asset)
                 candidate.jobs[index].artifactIDs.append(asset.id)
                 if candidate.jobs[index].state != .completed {
@@ -472,6 +562,41 @@ private enum ProjectFiles {
         }
     }
 
+    /// Back up the exact v1 bytes durably before publishing v2. The backup is immutable;
+    /// its equality to the still-current v1 manifest is the restart marker. A crash before
+    /// publication leaves a readable v1 project, and a crash afterwards leaves valid v2.
+    static func migrateVersionOne(_ legacy: ProjectManifest, original: Data, in root: Int32,
+                                  checkpoint: (@Sendable (ProjectMigrationCheckpoint) throws -> Void)?) throws -> ProjectManifest {
+        var migrated = legacy
+        migrated.schemaVersion = ProjectManifest.currentSchemaVersion
+        guard migrated.revision < UInt64.max else {
+            throw ProjectStoreError.invalidProject("项目修订编号已经达到上限，无法安全升级。")
+        }
+        migrated.revision += 1
+        migrated.updatedAt = Date()
+        try validate(migrated)
+        let backup = ProjectStore.versionOneBackupFilename
+        var info = stat()
+        if fstatat(root, backup, &info, AT_SYMLINK_NOFOLLOW) == 0 {
+            guard try read(relative: backup, in: root, limit: 32 * 1_024 * 1_024) == original else {
+                throw ProjectStoreError.invalidProject("已有的 v1 备份与当前项目不同，已保留两者；请检查后再升级。")
+            }
+        } else {
+            guard errno == ENOENT else { throw error() }
+            try publish(in: root, name: backup, replacing: false) { descriptor in
+                try original.withUnsafeBytes { try writeAll($0, to: descriptor) }
+            }
+        }
+        try checkpoint?(.backupDurable)
+        guard try read(relative: ProjectStore.manifestFilename, in: root, limit: 32 * 1_024 * 1_024) == original else {
+            throw ProjectStoreError.externalModification
+        }
+        try checkpoint?(.beforePublication)
+        try writeManifest(migrated, in: root, replacing: true)
+        try checkpoint?(.publicationDurable)
+        return migrated
+    }
+
     static func writeAll(_ bytes: UnsafeRawBufferPointer, to descriptor: Int32) throws {
         var offset = 0
         while offset < bytes.count {
@@ -501,6 +626,57 @@ private enum ProjectFiles {
             }
         }
         guard fsync(parent) == 0 else { throw error() }
+    }
+
+    static func publishExport(to destination: URL, parent: Int32,
+                              checkpoint: (@Sendable (ProjectExportCheckpoint) throws -> Void)?,
+                              write: (Int32) throws -> Void) throws {
+        _ = try components(destination.lastPathComponent)
+        // Apple documents this API for atomic safe-save on the destination's volume:
+        // https://developer.apple.com/documentation/foundation/filemanager/url(for:in:appropriatefor:create:)
+        let temporary = try FileManager.default.url(for: .itemReplacementDirectory, in: .userDomainMask,
+                                                    appropriateFor: destination, create: true)
+        // Only the OS-created temporary directory is canonicalized. User-selected destination
+        // components still go through the unchanged O_NOFOLLOW descriptor walk above.
+        guard let resolved = realpath(temporary.path, nil) else { throw error() }
+        defer { free(resolved) }
+        let location = URL(fileURLWithPath: String(cString: resolved), isDirectory: true)
+        let directory = try openDirectory(location)
+        defer { Darwin.close(directory) }
+        var temporaryInfo = stat(), destinationInfo = stat()
+        guard fstat(directory, &temporaryInfo) == 0, fstat(parent, &destinationInfo) == 0 else { throw error() }
+        defer {
+            // Remove only this operation's empty directory, never recursively delete content
+            // whose ownership is unknown. The temporary filename is handled by its own defer.
+            if let owner = try? openDirectory(location.deletingLastPathComponent()) {
+                var current = stat()
+                if fstatat(owner, location.lastPathComponent, &current, AT_SYMLINK_NOFOLLOW) == 0,
+                   current.st_dev == temporaryInfo.st_dev, current.st_ino == temporaryInfo.st_ino {
+                    _ = unlinkat(owner, location.lastPathComponent, AT_REMOVEDIR)
+                }
+                Darwin.close(owner)
+            }
+        }
+        guard temporaryInfo.st_dev == destinationInfo.st_dev else {
+            throw ProjectStoreError.io("系统未能提供与导出目标同卷的临时位置，无法安全完成原子导出")
+        }
+        let name = "export-\(UUID().uuidString).partial"
+        let descriptor = openat(directory, name, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0o600)
+        guard descriptor >= 0 else { throw error() }
+        defer { Darwin.close(descriptor); _ = unlinkat(directory, name, 0) }
+        try write(descriptor)
+        guard fsync(descriptor) == 0 else { throw error() }
+        try checkpoint?(.contentDurable(location.appendingPathComponent(name)))
+        guard renameatx_np(directory, name, parent, destination.lastPathComponent, UInt32(RENAME_EXCL)) == 0 else {
+            if errno == EEXIST { throw ProjectStoreError.alreadyExists(destination.path) }
+            throw error()
+        }
+        try checkpoint?(.published(destination))
+        // After publication no failure path deletes the delivered file. In particular, a
+        // disconnected volume during directory synchronization must not trigger a rollback.
+        guard fsync(parent) == 0 else {
+            throw ProjectStoreError.io("导出文件已发布并保留，但无法确认目标目录已同步：\(String(cString: strerror(errno)))")
+        }
     }
 
     static func taskOwner(_ name: String) -> UUID? {
@@ -546,15 +722,20 @@ private enum ProjectFiles {
     static func validate(_ value: ProjectManifest) throws {
         guard value.schemaVersion == ProjectManifest.currentSchemaVersion else { throw ProjectStoreError.unsupportedSchema(value.schemaVersion) }
         guard !value.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              !value.documents.isEmpty,
+              Set(value.documents.map(\.id)).count == value.documents.count,
+              value.documents.contains(where: { $0.id == value.activeDocumentID }),
               Set(value.jobs.map(\.id)).count == value.jobs.count,
               Set(value.assets.map(\.id)).count == value.assets.count,
               Set(value.assets.map(\.relativePath)).count == value.assets.count else {
-            throw ProjectStoreError.invalidProject("项目名称为空或包含重复的任务、作品编号。")
+            throw ProjectStoreError.invalidProject("项目名称为空，文档选择无效，或包含重复的文档、任务、作品编号。")
         }
+        let documents = Set(value.documents.map(\.id))
         let jobs = Dictionary(uniqueKeysWithValues: value.jobs.map { ($0.id, $0) })
         let assets = Dictionary(uniqueKeysWithValues: value.assets.map { ($0.id, $0) })
         for job in value.jobs {
-            guard job.id == job.request.id, Set(job.artifactIDs).count == job.artifactIDs.count,
+            guard documents.contains(job.documentID), job.id == job.request.id,
+                  Set(job.artifactIDs).count == job.artifactIDs.count,
                   job.artifactIDs.allSatisfy({ assets[$0]?.jobID == job.id }),
                   job.state != .completed || !job.artifactIDs.isEmpty else {
                 throw ProjectStoreError.invalidProject("任务与作品的对应关系已损坏。")
@@ -562,6 +743,9 @@ private enum ProjectFiles {
             try job.request.validate()
         }
         for asset in value.assets {
+            guard !asset.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                throw ProjectStoreError.invalidProject("作品名称不能为空。")
+            }
             _ = try components(asset.relativePath)
             if let jobID = asset.jobID {
                 guard let job = jobs[jobID], job.artifactIDs.contains(asset.id) else {
@@ -577,6 +761,25 @@ private enum ProjectFiles {
             }
             for dimension in [asset.metadata.width, asset.metadata.height, asset.metadata.bitDepth].compactMap({ $0 }) {
                 guard dimension > 0 else { throw ProjectStoreError.invalidProject("媒体元数据包含无效尺寸或位深。") }
+            }
+        }
+        for document in value.documents {
+            guard !document.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                throw ProjectStoreError.invalidProject("探索文档名称不能为空。")
+            }
+            if let source = document.sourceAssetID, assets[source] == nil {
+                throw ProjectStoreError.invalidProject("探索文档引用的来源作品不存在。")
+            }
+            func isCandidate(_ id: UUID) -> Bool {
+                guard let asset = assets[id], asset.role == .result, let jobID = asset.jobID else { return false }
+                return jobs[jobID]?.documentID == document.id
+            }
+            if let adopted = document.adoptedAssetID, !isCandidate(adopted) {
+                throw ProjectStoreError.invalidProject("采用的作品不属于该探索文档。")
+            }
+            if let selected = document.selectedAssetID,
+               !(isCandidate(selected) || selected == document.sourceAssetID) {
+                throw ProjectStoreError.invalidProject("选中的作品不属于该探索文档或其来源。")
             }
         }
     }
