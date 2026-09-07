@@ -1,129 +1,361 @@
 #!/usr/bin/env python3
-"""Read-only diagnostics for one explicitly selected macOS .app bundle."""
-import argparse, base64, datetime as dt, hashlib, json, math, os, plistlib, subprocess, sys
+"""Read-only diagnostics for an explicitly selected macOS application bundle."""
+
+import argparse
+import base64
+import datetime as datetime
+import hashlib
+import json
+import math
+import os
 from pathlib import Path
+import plistlib
+import subprocess
+import sys
+
 
 SCHEMA_VERSION = 1
 CODESIGN = "/usr/bin/codesign"
-REQUIRED = ("com.apple.security.app-sandbox", "com.apple.security.files.user-selected.read-write", "com.apple.security.files.bookmarks.app-scope", "com.apple.security.network.client")
-DEBUG = "com.apple.security.get-task-allow"
-def json_safe(v):
-    if v is None or isinstance(v, (str, int, float, bool)): return v
-    if isinstance(v, bytes): return {"type":"bytes", "base64":base64.b64encode(v).decode("ascii")}
-    if isinstance(v, dict): return {str(k):json_safe(x) for k,x in v.items()}
-    if isinstance(v, (list, tuple)): return [json_safe(x) for x in v]
-    return {"type":type(v).__name__, "repr":repr(v)}
-def item(state, reason, evidence=None):
-    r={"status":state,"reason":reason}
-    if evidence is not None: r["evidence"]=json_safe(evidence)
-    return r
-def inside(path, root):
-    try: path.relative_to(root); return True
-    except ValueError: return False
-def text(v): return v.decode("utf-8", "replace") if isinstance(v,bytes) else "" if v is None else str(v)
-def digest(path):
-    h=hashlib.sha256()
-    with path.open("rb") as f:
-        for b in iter(lambda:f.read(1048576),b""): h.update(b)
-    return h.hexdigest()
-def run_command(argv, timeout=10, runner=subprocess.run):
-    e={"argv":list(argv),"returncode":None,"stdout":"","stderr":"","timed_out":False,"unavailable":False,"exception":None}
-    try:
-        p=runner(argv,stdin=subprocess.DEVNULL,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,encoding="utf-8",errors="replace",timeout=timeout,check=False)
-        e.update(returncode=p.returncode,stdout=text(p.stdout),stderr=text(p.stderr))
-    except subprocess.TimeoutExpired as x:
-        e.update(timed_out=True,stdout=text(x.stdout),stderr=text(x.stderr),exception=f"TimeoutExpired: {x}")
-    except FileNotFoundError as x: e.update(unavailable=True,exception=f"FileNotFoundError: {x}")
-    except Exception as x: e["exception"]=f"{type(x).__name__}: {x}"
-    return e
-def parse_entitlements(output):
-    at=output.find("<?xml")
-    if at<0: at=output.find("<plist")
-    if at<0: raise ValueError("codesign output did not contain an entitlement plist")
-    value=plistlib.loads(output[at:].encode())
-    if not isinstance(value,dict): raise ValueError("entitlements plist is not a dictionary")
+EXPECTED_BUNDLE_IDENTIFIER = "first-test.D"
+REQUIRED_ENTITLEMENTS = (
+    "com.apple.security.app-sandbox",
+    "com.apple.security.files.user-selected.read-write",
+    "com.apple.security.files.bookmarks.app-scope",
+    "com.apple.security.network.client",
+)
+DEBUG_ENTITLEMENT = "com.apple.security.get-task-allow"
+LIBRARY_VALIDATION = "com.apple.security.cs.disable-library-validation"
+
+
+def json_safe(value):
+    """Convert plist and subprocess values to standard-JSON values without guessing."""
+    if value is None or isinstance(value, (str, int, bool)):
+        return value
+    if isinstance(value, float):
+        if math.isfinite(value):
+            return value
+        return {"type": "float", "value": "NaN" if math.isnan(value) else "Infinity" if value > 0 else "-Infinity"}
+    if isinstance(value, bytes):
+        return {"type": "bytes", "base64": base64.b64encode(value).decode("ascii")}
+    if isinstance(value, dict):
+        return {str(key): json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [json_safe(item) for item in value]
+    return {"type": type(value).__name__, "repr": repr(value)}
+
+
+def result(status, reason, evidence=None):
+    value = {"status": status, "reason": reason}
+    if evidence is not None:
+        value["evidence"] = json_safe(evidence)
     return value
-def bool_value(d,k):
-    if k not in d:return {"state":"missing"}
-    if d[k] is True:return {"state":"true","value":True}
-    if d[k] is False:return {"state":"false","value":False}
-    return {"state":"invalid","value":json_safe(d[k])}
-def safe_name(n): return isinstance(n,str) and n not in ("",".","..") and "/" not in n and "\\" not in n and "\0" not in n
-def initial(app):
-    return {"schema_version":1,"checked_at":dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00","Z"),"input_path":str(app),"resolved_path":None,"report_complete":False,"checks":{},"rules":{},"tool_errors":[],"commands":[],"overall":item("UNKNOWN","diagnosis did not complete"),"not_checked":["certificate chain trust","notarization/Gatekeeper","actual sandbox file operations","ongoing TCC effectiveness","bookmark restoration across builds","GUI","D-C01a full-stage acceptance"]}
-def finish(r, code=None):
-    rules=[x for x in r["rules"].values() if x["status"]!="NOT_APPLICABLE"]
-    unknown=bool(r["tool_errors"]) or any(x["status"]=="UNKNOWN" for x in rules); failed=any(x["status"]=="FAIL" for x in rules)
-    if code is None: code=2 if unknown else 1 if failed else 0
-    r["report_complete"]=(code!=2); r["overall"]=item("UNKNOWN" if code==2 else "FAIL" if code==1 else "PASS","required rules evaluated")
-    return r,code
-def structural(r,reason,evidence=None):
-    r["checks"]["artifact"]=item("FAIL",reason,evidence);r["tool_errors"].append("artifact: "+reason);return finish(r,2)
+
+
+def utc_timestamp():
+    value = datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0)
+    return value.isoformat().replace("+00:00", "Z")
+
+
+def is_within(path, root):
+    try:
+        path.relative_to(root)
+        return True
+    except ValueError:
+        return False
+
+
+def sha256(path):
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        for block in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def output_text(value):
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    return "" if value is None else str(value)
+
+
+def run_command(argv, timeout=10, runner=subprocess.run):
+    """Run a finite argv-only process; subprocess.run kills and reaps timeouts."""
+    evidence = {
+        "argv": list(argv),
+        "returncode": None,
+        "stdout": "",
+        "stderr": "",
+        "timed_out": False,
+        "unavailable": False,
+        "exception": None,
+    }
+    try:
+        completed = runner(
+            argv,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=timeout,
+            check=False,
+        )
+        evidence["returncode"] = completed.returncode
+        evidence["stdout"] = output_text(completed.stdout)
+        evidence["stderr"] = output_text(completed.stderr)
+    except subprocess.TimeoutExpired as error:
+        evidence["timed_out"] = True
+        evidence["stdout"] = output_text(error.stdout)
+        evidence["stderr"] = output_text(error.stderr)
+        evidence["exception"] = f"TimeoutExpired: {error}"
+    except FileNotFoundError as error:
+        evidence["unavailable"] = True
+        evidence["exception"] = f"FileNotFoundError: {error}"
+    except Exception as error:
+        evidence["exception"] = f"{type(error).__name__}: {error}"
+    return evidence
+
+
+def parse_entitlements(output):
+    start = output.find("<?xml")
+    if start < 0:
+        start = output.find("<plist")
+    if start < 0:
+        raise ValueError("codesign output did not contain an entitlement plist")
+    entitlements = plistlib.loads(output[start:].encode("utf-8"))
+    if not isinstance(entitlements, dict):
+        raise ValueError("entitlements plist is not a dictionary")
+    return entitlements
+
+
+def boolean_entitlement(entitlements, key):
+    if key not in entitlements:
+        return {"state": "missing"}
+    value = entitlements[key]
+    if value is True:
+        return {"state": "true", "value": True}
+    if value is False:
+        return {"state": "false", "value": False}
+    return {"state": "invalid", "value": json_safe(value)}
+
+
+def is_safe_executable_name(value):
+    return (
+        isinstance(value, str)
+        and value not in ("", ".", "..")
+        and "/" not in value
+        and "\\" not in value
+        and "\0" not in value
+    )
+
+
+def new_report(app):
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "checked_at": utc_timestamp(),
+        "input_path": str(app),
+        "resolved_path": None,
+        "report_complete": False,
+        "checks": {},
+        "rules": {},
+        "tool_errors": [],
+        "commands": [],
+        "overall": result("UNKNOWN", "diagnosis did not complete"),
+        "not_checked": [
+            "certificate chain trust",
+            "notarization/Gatekeeper",
+            "actual sandbox file operations",
+            "ongoing TCC effectiveness",
+            "bookmark restoration across builds",
+            "GUI",
+            "D-C01a full-stage acceptance",
+        ],
+    }
+
+
+def finalize(report, exit_code=None):
+    applicable = [rule for rule in report["rules"].values() if rule["status"] != "NOT_APPLICABLE"]
+    unknown = bool(report["tool_errors"]) or any(rule["status"] == "UNKNOWN" for rule in applicable)
+    failed = any(rule["status"] == "FAIL" for rule in applicable)
+    if exit_code is None:
+        exit_code = 2 if unknown else 1 if failed else 0
+    report["report_complete"] = exit_code != 2
+    status = "UNKNOWN" if exit_code == 2 else "FAIL" if exit_code == 1 else "PASS"
+    report["overall"] = result(status, "required rules evaluated")
+    return report, exit_code
+
+
+def structural_failure(report, reason, evidence=None):
+    report["checks"]["artifact"] = result("FAIL", reason, evidence)
+    report["tool_errors"].append(f"artifact: {reason}")
+    return finalize(report, 2)
+
+
+def resolve_inside(path, bundle, label):
+    resolved = path.resolve(strict=True)
+    if not is_within(resolved, bundle):
+        raise ValueError(f"{label} resolves outside the bundle")
+    return resolved
+
+
 def diagnose(app, timeout=10, runner=subprocess.run):
-    r=initial(app)
-    if isinstance(timeout,bool) or not isinstance(timeout,(int,float)) or not math.isfinite(timeout) or timeout<=0:
-        r["tool_errors"].append("timeout: must be a finite positive number");return finish(r,2)
-    try: bundle=Path(app).resolve(strict=True)
-    except Exception as x:return structural(r,"input path cannot be resolved",f"{type(x).__name__}: {x}")
-    r["resolved_path"]=str(bundle)
-    if not bundle.is_dir():return structural(r,"app path is not a directory")
+    report = new_report(app)
+    if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or not math.isfinite(timeout) or timeout <= 0:
+        report["tool_errors"].append("timeout: must be a finite positive number")
+        return finalize(report, 2)
     try:
-        contents=(bundle/"Contents").resolve(strict=True)
-        if not inside(contents,bundle) or not contents.is_dir() or not os.access(contents,os.R_OK|os.X_OK):return structural(r,"Contents directory is missing, unreadable, or outside the bundle")
-        plist=(contents/"Info.plist").resolve(strict=True)
-        if not inside(plist,bundle):return structural(r,"Info.plist resolves outside the bundle")
-        with plist.open("rb") as f: info=plistlib.load(f)
-        if not isinstance(info,dict):return structural(r,"Info.plist is not a dictionary")
-    except Exception as x:return structural(r,"Info.plist is missing, unreadable, or invalid",f"{type(x).__name__}: {x}")
-    exe=info.get("CFBundleExecutable")
-    if not safe_name(exe):return structural(r,"CFBundleExecutable is not a safe single filename")
+        bundle = Path(app).resolve(strict=True)
+    except Exception as error:
+        return structural_failure(report, "input path cannot be resolved", f"{type(error).__name__}: {error}")
+    report["resolved_path"] = str(bundle)
+    if not bundle.is_dir():
+        return structural_failure(report, "app path is not a directory")
     try:
-        binary=(contents/"MacOS"/exe).resolve(strict=True)
-        if not inside(binary,bundle) or not binary.is_file():return structural(r,"bundle executable is missing or resolves outside the bundle")
-        r["checks"]["artifact"]=item("PASS","bundle structure is readable",{"info_plist_sha256":digest(plist),"executable_sha256":digest(binary),"CFBundleExecutable":exe,"CFBundleShortVersionString":info.get("CFBundleShortVersionString","missing"),"CFBundleVersion":info.get("CFBundleVersion","missing"),"CFBundleIdentifier":info.get("CFBundleIdentifier","missing")})
-    except FileNotFoundError as x:return structural(r,"bundle executable is missing",f"{type(x).__name__}: {x}")
-    except Exception as x:return structural(r,"bundle executable cannot be read",f"{type(x).__name__}: {x}")
-    bundle_id=info.get("CFBundleIdentifier")
-    r["rules"]["expected_bundle_identifier"]=item("PASS" if bundle_id=="first-test.D" else "FAIL","Info bundle identifier must be first-test.D",bundle_id)
-    def command(name,argv):
-        e=run_command(argv,timeout,runner);r["commands"].append({"name":name,**e})
-        if e["exception"]:r["tool_errors"].append(f"{name}: {e['exception']}")
-        return e
-    display=command("codesign_display",[CODESIGN,"-dvv",str(bundle)]); shown=display["stdout"]+"\n"+display["stderr"]
-    unsigned=display["returncode"] not in (None,0) and "not signed at all" in shown.lower()
+        contents = resolve_inside(bundle / "Contents", bundle, "Contents directory")
+        if not contents.is_dir() or not os.access(contents, os.R_OK | os.X_OK):
+            return structural_failure(report, "Contents directory is missing or unreadable")
+        plist_path = resolve_inside(contents / "Info.plist", bundle, "Info.plist")
+        with plist_path.open("rb") as source:
+            info = plistlib.load(source)
+        if not isinstance(info, dict):
+            return structural_failure(report, "Info.plist is not a dictionary")
+        macos_directory = resolve_inside(contents / "MacOS", bundle, "Contents/MacOS directory")
+        if not macos_directory.is_dir():
+            return structural_failure(report, "Contents/MacOS directory is missing")
+    except Exception as error:
+        return structural_failure(report, "bundle metadata is missing, unreadable, or invalid", f"{type(error).__name__}: {error}")
+    executable = info.get("CFBundleExecutable")
+    if not is_safe_executable_name(executable):
+        return structural_failure(report, "CFBundleExecutable is not a safe single filename")
+    try:
+        executable_path = resolve_inside(macos_directory / executable, bundle, "bundle executable")
+        if not executable_path.is_file():
+            return structural_failure(report, "bundle executable is missing")
+        report["checks"]["artifact"] = result(
+            "PASS",
+            "bundle structure is readable",
+            {
+                "info_plist_sha256": sha256(plist_path),
+                "executable_sha256": sha256(executable_path),
+                "CFBundleExecutable": executable,
+                "CFBundleShortVersionString": info.get("CFBundleShortVersionString", "missing"),
+                "CFBundleVersion": info.get("CFBundleVersion", "missing"),
+                "CFBundleIdentifier": info.get("CFBundleIdentifier", "missing"),
+            },
+        )
+    except ValueError as error:
+        return structural_failure(report, str(error), f"{type(error).__name__}: {error}")
+    except FileNotFoundError as error:
+        return structural_failure(report, "bundle executable is missing", f"{type(error).__name__}: {error}")
+    except Exception as error:
+        return structural_failure(report, "bundle executable cannot be read", f"{type(error).__name__}: {error}")
+
+    bundle_identifier = info.get("CFBundleIdentifier")
+    report["rules"]["expected_bundle_identifier"] = result(
+        "PASS" if bundle_identifier == EXPECTED_BUNDLE_IDENTIFIER else "FAIL",
+        "Info bundle identifier must be first-test.D",
+        bundle_identifier,
+    )
+
+    def record_command(name, argv, nonzero_is_error=False):
+        evidence = run_command(argv, timeout, runner)
+        report["commands"].append({"name": name, **evidence})
+        if evidence["exception"]:
+            report["tool_errors"].append(f"{name}: {evidence['exception']}")
+        elif nonzero_is_error and evidence["returncode"] != 0:
+            report["tool_errors"].append(f"{name}: exited {evidence['returncode']}")
+        return evidence
+
+    display = record_command("codesign_display", [CODESIGN, "-dvv", str(bundle)])
+    display_text = display["stdout"] + "\n" + display["stderr"]
+    unsigned = display["returncode"] not in (None, 0) and "not signed at all" in display_text.lower()
     if unsigned:
-        r["checks"]["signature"]=item("FAIL","codesign reports unsigned",{"classification":"unsigned"});r["rules"].update(signature_present=item("FAIL","application is unsigned"),integrity=item("NOT_APPLICABLE","application is unsigned"),entitlements=item("NOT_APPLICABLE","application is unsigned"));return finish(r)
-    if display["returncode"]!=0 or display["exception"]:
-        r["checks"]["signature"]=item("UNKNOWN","codesign display did not complete");r["rules"]["signature_present"]=item("UNKNOWN","signature evidence unavailable");return finish(r)
-    identifier=next((line.split("=",1)[1] for line in shown.splitlines() if line.startswith("Identifier=")),None); sig=next((line for line in shown.splitlines() if line.startswith("Signature=")),"")
-    classification="ad-hoc" if "adhoc" in sig.lower() else "certificate-backed" if "Authority=" in shown else "unknown"
-    r["checks"]["signature"]=item("PASS","codesign display completed",{"identifier":identifier,"classification":classification});r["rules"]["signature_present"]=item("PASS","signature exists")
-    r["rules"]["identifier_consistency"]=item("PASS" if isinstance(bundle_id,str) and identifier==bundle_id else "UNKNOWN" if identifier is None or not isinstance(bundle_id,str) else "FAIL","bundle and signature identifiers compared",{"bundle":bundle_id,"signature":identifier})
-    verify=command("codesign_verify",[CODESIGN,"--verify","--strict",str(bundle)]);r["rules"]["integrity"]=item("PASS" if verify["returncode"]==0 else "UNKNOWN" if verify["exception"] else "FAIL","codesign strict verification")
-    ent=command("codesign_entitlements",[CODESIGN,"-d","--entitlements",":-",str(bundle)])
+        report["checks"]["signature"] = result("FAIL", "codesign reports unsigned", {"classification": "unsigned"})
+        report["rules"]["signature_present"] = result("FAIL", "application is unsigned")
+        report["rules"]["integrity"] = result("NOT_APPLICABLE", "application is unsigned")
+        report["rules"]["entitlements"] = result("NOT_APPLICABLE", "application is unsigned")
+        return finalize(report)
+    if display["returncode"] != 0 or display["exception"]:
+        if display["returncode"] != 0 and not display["exception"]:
+            report["tool_errors"].append(f"codesign_display: exited {display['returncode']}")
+        report["checks"]["signature"] = result("UNKNOWN", "codesign display did not complete")
+        report["rules"]["signature_present"] = result("UNKNOWN", "signature evidence unavailable")
+        return finalize(report)
+
+    identifier = next((line.split("=", 1)[1] for line in display_text.splitlines() if line.startswith("Identifier=")), None)
+    signature_line = next((line for line in display_text.splitlines() if line.startswith("Signature=")), "")
+    classification = "ad-hoc" if "adhoc" in signature_line.lower() else "certificate-backed" if "Authority=" in display_text else "unknown"
+    report["checks"]["signature"] = result("PASS", "codesign display completed", {"identifier": identifier, "classification": classification})
+    report["rules"]["signature_present"] = result("PASS", "signature exists")
+    if identifier is None or not isinstance(bundle_identifier, str):
+        consistency = "UNKNOWN"
+    else:
+        consistency = "PASS" if identifier == bundle_identifier else "FAIL"
+    report["rules"]["identifier_consistency"] = result(consistency, "bundle and signature identifiers compared", {"bundle": bundle_identifier, "signature": identifier})
+
+    verify = record_command("codesign_verify", [CODESIGN, "--verify", "--strict", str(bundle)])
+    verify_status = "PASS" if verify["returncode"] == 0 else "UNKNOWN" if verify["exception"] else "FAIL"
+    report["rules"]["integrity"] = result(verify_status, "codesign strict verification")
+
+    entitlement_command = record_command("codesign_entitlements", [CODESIGN, "-d", "--entitlements", ":-", str(bundle)], nonzero_is_error=True)
     try:
-        if ent["returncode"]!=0 or ent["exception"]:raise ValueError("codesign entitlement command did not complete")
-        values=parse_entitlements(ent["stdout"]); evidence={k:bool_value(values,k) for k in REQUIRED+(DEBUG,)}
-        for k,v in values.items():
-            if k.startswith("com.apple.security.temporary-exception.") or k=="com.apple.security.cs.disable-library-validation":evidence[k]={"state":"present","value":json_safe(v)}
-        invalid=[k for k in REQUIRED+(DEBUG,) if evidence[k]["state"]=="invalid"]; library=values.get("com.apple.security.cs.disable-library-validation")
-        if library is not None and not isinstance(library,bool):invalid.append("com.apple.security.cs.disable-library-validation")
-        if invalid:raise ValueError("selected entitlement values are not boolean: "+", ".join(invalid))
-        r["checks"]["entitlements"]=item("PASS","entitlement plist parsed",evidence);r["rules"]["entitlements"]=item("PASS" if all(evidence[k]["state"]=="true" for k in REQUIRED) else "FAIL","required entitlement values evaluated")
-        unsafe=[(k,v) for k,v in values.items() if (k.startswith("com.apple.security.temporary-exception.") and v not in (None,"",[],{},False)) or (k=="com.apple.security.cs.disable-library-validation" and v is True)]
-        r["rules"]["unsafe_entitlements"]=item("FAIL" if unsafe else "PASS","temporary exceptions and library validation evaluated",unsafe)
-    except Exception as x:
-        r["checks"]["entitlements"]=item("UNKNOWN","entitlements cannot be reliably parsed",f"{type(x).__name__}: {x}");r["rules"]["entitlements"]=item("UNKNOWN","required entitlement evidence unavailable");r["tool_errors"].append(f"entitlements: {type(x).__name__}: {x}")
-    return finish(r)
-def write_report(path,report):
-    target=Path(path); app=report.get("resolved_path")
-    if target.exists() or (app and inside(target.resolve(strict=False),Path(app))):raise ValueError("report path exists or is inside the app bundle")
-    with target.open("x",encoding="utf-8") as f:json.dump(report,f,indent=2,ensure_ascii=False);f.write("\n")
+        if entitlement_command["returncode"] != 0 or entitlement_command["exception"]:
+            raise ValueError("codesign entitlement command did not complete")
+        entitlements = parse_entitlements(entitlement_command["stdout"])
+        evidence = {key: boolean_entitlement(entitlements, key) for key in REQUIRED_ENTITLEMENTS + (DEBUG_ENTITLEMENT,)}
+        for key, value in entitlements.items():
+            if key.startswith("com.apple.security.temporary-exception.") or key == LIBRARY_VALIDATION:
+                evidence[key] = {"state": "present", "value": json_safe(value)}
+        invalid = [key for key in REQUIRED_ENTITLEMENTS + (DEBUG_ENTITLEMENT,) if evidence[key]["state"] == "invalid"]
+        library_validation = entitlements.get(LIBRARY_VALIDATION)
+        if library_validation is not None and not isinstance(library_validation, bool):
+            invalid.append(LIBRARY_VALIDATION)
+        if invalid:
+            raise ValueError("selected entitlement values are not boolean: " + ", ".join(invalid))
+        report["checks"]["entitlements"] = result("PASS", "entitlement plist parsed", evidence)
+        required_pass = all(evidence[key]["state"] == "true" for key in REQUIRED_ENTITLEMENTS)
+        report["rules"]["entitlements"] = result("PASS" if required_pass else "FAIL", "required entitlement values evaluated")
+        unsafe = [
+            (key, value)
+            for key, value in entitlements.items()
+            if (key.startswith("com.apple.security.temporary-exception.") and value not in (None, "", [], {}, False))
+            or (key == LIBRARY_VALIDATION and value is True)
+        ]
+        report["rules"]["unsafe_entitlements"] = result("FAIL" if unsafe else "PASS", "temporary exceptions and library validation evaluated", unsafe)
+    except Exception as error:
+        report["checks"]["entitlements"] = result("UNKNOWN", "entitlements cannot be reliably parsed", f"{type(error).__name__}: {error}")
+        report["rules"]["entitlements"] = result("UNKNOWN", "required entitlement evidence unavailable")
+        report["tool_errors"].append(f"entitlements: {type(error).__name__}: {error}")
+    return finalize(report)
+
+
+def write_report(path, report):
+    target = Path(path)
+    bundle_path = report.get("resolved_path")
+    if target.exists() or (bundle_path and is_within(target.resolve(strict=False), Path(bundle_path))):
+        raise ValueError("report path exists or is inside the app bundle")
+    with target.open("x", encoding="utf-8") as output:
+        json.dump(report, output, indent=2, ensure_ascii=False, allow_nan=False)
+        output.write("\n")
+
+
 def main(argv=None):
-    p=argparse.ArgumentParser(description=__doc__);p.add_argument("--app",required=True);p.add_argument("--report");p.add_argument("--timeout",type=float,default=10,help=argparse.SUPPRESS);a=p.parse_args(argv)
-    report,code=diagnose(a.app,a.timeout)
-    if a.report:
-        try:write_report(a.report,report)
-        except Exception as x:report["tool_errors"].append(f"report: {type(x).__name__}: {x}");report,code=finish(report,2)
-    print(json.dumps(report,ensure_ascii=False,indent=2));return code
-if __name__=="__main__":sys.exit(main())
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--app", required=True)
+    parser.add_argument("--report")
+    parser.add_argument("--timeout", type=float, default=10, help=argparse.SUPPRESS)
+    arguments = parser.parse_args(argv)
+    report, exit_code = diagnose(arguments.app, arguments.timeout)
+    if arguments.report:
+        try:
+            write_report(arguments.report, report)
+        except Exception as error:
+            report["tool_errors"].append(f"report: {type(error).__name__}: {error}")
+            report, exit_code = finalize(report, 2)
+    print(json.dumps(report, ensure_ascii=False, indent=2, allow_nan=False))
+    return exit_code
+
+
+if __name__ == "__main__":
+    sys.exit(main())
