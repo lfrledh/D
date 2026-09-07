@@ -195,3 +195,19 @@ Worker 为唯一 Terra 会话：初次实现 272.721 秒，修复 1 为 292.919 
 - 源仍为 `85bc509932562c27e091a22cb101365117a9d76c`／codex/inference-foundation，唯一 scheme orderHint 1→6 的差异、SHA256 `ca3635d88aa5a15397b90e528667c66c0e6db7e596176e885c79d194b544206c` 及未暂存状态与开始完全一致。候选仍在原外盘工作树和 codex/d-c01a-diag-01，改动仅两个本任务文件和本文追加；源保护复核见 `lead-review.json` 和最终交接快照。
 - 本轮未新建 Worker；所有受控 CLI／验证进程已完整等待，测试内超时夹具回收检查通过。未停止用户 D，最终 PID 观察另存 `final-handoff.json`。不将线程归档视为进程结束。
 - 唯一下一动作：等用户决定是否接纳此候选。没有合并、推送、改权限／签名、清理工作树或启动后续任务。恢复先核对 Git、个人文件、运行状态及本节最新授权边界；历史修订不自动恢复执行授权。
+
+## 本地集成与结案 v4（最新状态，2026-09-07）
+
+**已本地集成并通过任务验收；未推送。** 用户 v4 已批准本次有限集成，本节替代此前“等待决定集成”的当前状态，保留全部候选、失败和 Lead 接管历史。D-C01a 整阶段、稳定签名／集中授权、D-P01 和双 Worker 均未因此获批或完成。
+
+- 源 `/Volumes/CodexProjects/Codex/D` 的 `codex/inference-foundation` 从 `85bc509932562c27e091a22cb101365117a9d76c` 使用 `git merge --ff-only --no-autostash --no-overwrite-ignore 2524fc61417ddb5fe07e28f466ba6709fcba69f8` 快进，退出 0。7 个提交的全部路径及最终差异仅为本任务文档、诊断脚本和对应测试；无分叉、冲突、路径碰撞、活动 hooks／过滤或已知并发写入。检查不是系统写锁。候选分支／工作树保持原 SHA 且干净，main/master 未推进。
+- 三种版本：原已测代码 `eb5c9f015a164197ba900665a42253c6e3eb4c19`；本轮源目录实际受测版本 `2524fc61417ddb5fe07e28f466ba6709fcba69f8`；之后一个结案提交只改本文、CURRENT_ACTIONS 和 DELIVERY_AND_MODEL_BUDGET 三份文档。最终源 SHA 写入本轮外部 `integration-receipt.json`，不自引用反复提交；不称测试在尚未产生的文档提交执行。
+- 本轮证据：`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-C01a-DIAG-01/run-20260907T110547Z-local-integration`。`pre-integration.json`、`complete-task.diff` 记录门槛和完整提交范围；`fast-forward.json` 记录更新前复核、实际 Git 命令及立即后验；保护副本在 `protection/`，不是自动还原授权。
+- 2026-09-07 11:08:15 UTC 从源目录完成复验：Python 3.9.6，`python3 -B -m unittest discover -s scripts/tests -p test_diagnose_app.py -v`，原 10 方法＋新增 5 方法通过；新增包含 8 个真实 CLI 场景，完整等待进程退出。原 Lead 9＋3 场景、报告保存／拒绝覆盖／输出错误保护、AST 和差异检查通过。未合并历史场景计算总通过率，也未重放历史失败实现。
+- 入口证据 `source-entry-binding.json` 确认测试的 SCRIPT 和实际导入实现均在源目录。两个旧 Lead 探针无路径参数，本轮证据副本只替换 ROOT 路径常量，所有场景、runner、断言逐字保持；精确逆变换核对及差异见 `probe-path-bindings.json`／`source-probes/*.diff`。复验编排仅适配源版本、受保护个人差异和证据位置，省去已被 CLI 回归覆盖的两次重复 stdout 调用；见 `verification-adaptation.json`。生产代码／测试无修改。
+- 同一普通 Debug/D.app 正常诊断退出 0；直接 codesign／plist／摘要交叉检查通过。Info.plist、D、D.debug.dylib、CodeResources 的 SHA256、大小和 mtime 前后一致，亦与最近候选证据一致。实际仍为 ad-hoc，证书分支仍是夹具；公证、TCC 持续性、GUI、实际沙盒和跨构建恢复未验证。`real-validation.json` 与 `artifact-before/after.json` 保留实证；未构建、重签、启动或关闭 D。
+- 总复验索引 `verification-summary.json` 记录受测版本、源脚本／测试摘要、命令、返回码、解释器和进程 PID；临时输出只在本 run 的 tmp。CPU 超时子进程回收检查通过，本轮命令已完整等待；最终 PID 观察在回执中。不删除候选、工作树或旧证据。
+- 保护项逐项核对：scheme 的完整字节、orderHint 1→6 差异和 SHA256 `ca3635d88aa5a15397b90e528667c66c0e6db7e596176e885c79d194b544206c` 不变，索引 blob 仍为 `9c76916bdc97c2d4298cefe64e0b0fae3380573e`，保持未暂存；结案仅显式暂存三份获准文档。最终源索引无暂存内容，源工作区仍保留该个人修改，不能称完全干净。
+- 归因：**Terra 初步实现及两轮修复，Astra Lead 修补并复验**；Terra 在原预算内未通过的事实不变。本轮同一 Astra Lead 集成／复核，没有新增独立评审模型。指定 Terra/medium 与受限独立 CLI 链路仅在既有可观察范围验证；桌面原生自动派工与隐藏服务端解析未验证。
+- 不重算已核对的五次历史用量。本轮仅轻量读取当前 Lead 元数据，观察为 gpt-6-astra / ultra；11:02:13–11:08:26 UTC 部分区间输入 967,686（含缓存 935,424）、输出 10,009，reasoning_output 3,351 不另加；不含区间外和后续结案／回复，不称完整本轮用量。证据 `lead-runtime-usage.json`。实际订阅费用和完整 Lead 归因仍 unknown；首样本说明协作可交付，不证明成本最优。
+- 恢复检查点：代码已快进、源入口复验通过、三份文档结案；无活跃 Worker，用户 D 保持运行。本轮不推送，长期工作分支推送约定未永久撤销。若以后需要恢复，以集成前 SHA、固定候选和个人副本定位，另行授权，不自动 reset/revert。下一步只建议按原 D-C01a 方案另行审批稳定开发签名及其验证，不启动执行。

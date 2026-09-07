@@ -50,4 +50,8 @@
 
 历史权限和其他失败已按原因／复验／当前处理整理为 [审计清单](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md)。已知历史权限阻塞对应的核心验收后来通过；UI 启动超时的具体根因未证实，不能统一归因于 D 外盘权限。
 
-新增 D-C01a：当前 Debug 为 ad-hoc，本机有可用 Apple Development 身份；建议先稳定开发签名，再集中人工授权并验证跨构建恢复，见 [操作方案](MAC_PERMISSION_SETUP.zh-CN.md)。本次只完成审计和方案，未修改签名／系统权限，用户目前不能物理操作 Mac。B10 偶发测试保留观察；物理拔盘／断电、完整 VoiceOver 等仍属于发行前独立验收。
+D-C01a 的只读诊断子任务 [D-C01a-DIAG-01](tasks/D-C01a-DIAG-01.md) **已本地集成并通过任务验收；未推送**。2026-09-07 源目录在 `2524fc61417ddb5fe07e28f466ba6709fcba69f8` 完成 15 个 CPU 测试方法（原 10＋新增 5，后者含 8 个真实 CLI 场景）、Lead 12 场景、报告保护及普通 D.app 只读交叉检查。之后仅有结案文档变化，最终版本／证据见任务记录；源个人 scheme 排序修改保持未暂存。
+
+诊断入口：`python3 -B scripts/diagnose-app.py --app PATH`，必须显式指定产物，可用 `--report PATH` 新建报告；只检查并报告，不修签名／权限。对应局部回归：`python3 -B -m unittest discover -s scripts/tests -p test_diagnose_app.py -v`。真实产物仍为 ad-hoc，本任务不证明公证、TCC、GUI 或跨构建恢复通过。
+
+D-C01a 整阶段尚未完成。下一步仅建议按 [操作方案](MAC_PERMISSION_SETUP.zh-CN.md) 单独审批稳定开发签名，再集中人工授权并验证跨构建恢复；未自动启动签名切换、D-P01 或双 Worker。B10 偶发测试保留观察；物理拔盘／断电、完整 VoiceOver 等仍属于发行前独立验收。
