@@ -1,6 +1,6 @@
 # D-C01a-DIAG-01：只读开发签名／产物诊断工具
 
-状态：第 1 轮候选仍未接纳；三项预检已过，待第 2／最后一轮定向修复。非 D-C01a 整阶段验收。
+状态：试点执行结束；候选未通过全部验收、待用户决定。两轮修复已用完，停止继续实现。非 D-C01a 整阶段验收。
 规格修订：3（原契约与范围不变，记录剩余复核问题）。维护者：Lead（Codex，当前 Astra 设置）。日期：2026-09-07。
 run_id：`run-20260907T090333Z`。本文件复用 TASK_SPEC_TEMPLATE 的职责，合并规格、运行、审核与恢复记录。
 
@@ -117,3 +117,43 @@ Lead 保留初次候选与本修订的本地检查点，修复执行基线完整
 5. 落实上轮已经要求的测试缺口：Info/entitlements 的非字典或损坏数据；verify 与 entitlements 各自的命令异常/超时；报告不可写及不覆盖的实际字节断言；合法 debug false/missing 与 sandbox 独立变化。超时夹具不依赖 20ms 内 Python 一定完成启动，使用合理有限时间、输出 pid，并独立确认自己创建的子进程已经回收，不能只凭 returncode=null 宣称已回收。stdio 输出错误的 2 退出语义如涉及实现，应在此一并完成。
 
 本轮之后不再自动继续修复。Worker 只回传两个获准文件及新命名 repair-2-* 证据；Lead 完成最终独立复验，按实际证据接纳候选或明确拒绝。第 2 轮完整执行 SHA 由本修订检查点及 `repair-2-request.json` 固定。
+
+## 最终交付、未通过项和恢复检查点
+
+核实日期：2026-09-07。有效规格修订仍为 3，未因验收失败降低规则。修复 2 基线 `cc6eb169c4799d90e4743158245464785ace904d`；最终实现及测试候选提交 **`a2ed7c58a9bcf142090821041d4e8037bbb3d155`**，由 Lead 按文件提交 Terra 的改动。Lead 只维护任务规格、写独立复验探针、审核和提交，没有编辑诊断实现或其项目内测试。本文最终记录产生后续纯文档提交；验证绑定 a2ed7c5，不宣称在文档提交上重新执行。
+
+### 三个独立结论
+
+1. **工程候选：暂不接纳。** 主体功能和以下检查通过，但标准输出写入失败的退出语义不符合冻结契约。`scripts/diagnose-app.py` 的 main 最后直接 print，Python 延迟 flush 失败时实际退出 **120**，而报告写入错误约定为 **2**。复现仅将子进程 stdout 连接到任务自有夹具的只读文件描述符，没有修改文件／系统权限；夹具原字节未改变。证据 `lead-final-output-io.json`。该问题未修复，未用解释或修改验收标准掩盖。最多两轮修复已用完，不再自动派工或由 Lead 补写。
+2. **模型与隔离流程：在可观察范围通过。** 同一个线程 `01a07b1f-4f6c-7e03-91fe-15c550396036`；显式请求 Terra/medium，五个运行上下文均记录 gpt-5.6-terra/medium。先 read-only，后同会话核验 workspace-write，再实现和两次修复；网络关闭，默认 /tmp 和系统 TMPDIR 排除，唯一附加写根为该 run 的 worker-output/tmp。任务工作文件和 index 独立，common .git 留在源仓库且不在 Worker 写根。授权目录内实际写入和 CPU 测试已执行；没有做源目录越界写入探针，不称其为系统层防逃逸认证。服务端最终解析／隐藏回退 unknown。桌面原生自动 worktree 派工未验证；本轮链路是附带 CLI 的独立受限会话，未改全局配置。参数来源为当前 CLI 帮助及 [官方配置参考](https://learn.chatgpt.com/docs/config-file/config-reference)，有效边界以 gates/runtime JSON 为证据。
+3. **模型性价比：证据不足。** 样本只有一个，初次候选未验收通过，经过两轮返工仍有一项输出错误契约未满足，Lead 审核介入明显。不能据此断言 Terra 普遍胜任脚本、Swift 或比 Astra 更省订阅额度。
+
+### 检查结果与边界
+
+| 检查 | 方法／版本 | 实际结果与证据 |
+| --- | --- | --- |
+| 项目内 CPU 测试 | Python 3.9.6，macOS 26.6.2 arm64；`python3 -B -m unittest discover -s scripts/tests -p test_diagnose_app.py -v`，a2ed7c5 | Lead 重跑 10 个测试方法通过，含实际受控 Python 子进程超时并以 PID 确认回收；`lead-final-unittest.*` |
+| 已知问题回归 | Lead 原 9 场景＋后续 3 场景，标准库受控签名/plist/path 夹具，a2ed7c5 | 12 场景通过；`lead-final-original-probes.stdout.log`、`lead-final-extra-probes.stdout.log`。与 Worker 自检分开，不能当成另一模型审阅 |
+| 语法／差异 | AST 解析和 `git diff --check`，a2ed7c5 | 通过；`lead-final-checks.json` 绑定 SHA 与文件摘要 |
+| 普通 D.app 实际只读验证 | 唯一既定 Debug/D.app；工具报告与直接 codesign、plistlib、hashlib 交叉核对 | 通过；ad-hoc、first-test.D 两来源一致、严格完整性验证 0、四项正式 entitlement 和 get-task-allow 均 true。报告中的类型／hash／文件结果一致；`lead-final-real-validation.json`、`lead-final-real-report.json` |
+| 应用符合规则但报告保存失败 | 对同一正常 app 使用任务目录内既有报告／缺父目录目标 | 退出 2、独立报告错误、原文件字节不变；`lead-final-valid-app-report-errors.json` |
+| 标准输出不可写 | 任务自有只读描述符，无 chmod／TCC／系统权限变更，a2ed7c5 | **未通过**：实际 120，期望 2；`lead-final-output-io.json` |
+
+产物前后核对 Info.plist、主程序、D.debug.dylib、_CodeSignature/CodeResources 的 SHA256、大小和 mtime；最终实际验证与最初快照完全一致。所有真实验证都不包含构建、重签、GPU、模型推理或 GUI；没有关闭现有 D。证书签名的正常/失败类别只用夹具，不证明真实 Apple Development 或 Developer ID 信任。公证／Gatekeeper、TCC 持续性、真实沙盒操作、跨构建书签和完整 D-C01a 均未验收。
+
+### 来源、消耗与执行问题
+
+Worker 为唯一 Terra 会话：初次实现 272.721 秒，修复 1 为 292.919 秒，修复 2 为 302.895 秒；两次预检 38.948＋17.765 秒，CLI 调用总墙钟 **925.248 秒（约 15.4 分钟）**。不把 Lead 并行审核或准备时间从这个数倒推。原始 CLI turn.completed 合计记录输入 3,377,519，其中 cached_input 3,253,760；输出 38,266，另有 reasoning_output 字段 5,335，不重复相加。输入包含多次调用的重复上下文，不是独特文本长度，更不是订阅扣费。账户额度扣除、任务级实际费用和独立归因的 Lead token/活跃耗时均 unknown。见 `usage-summary.json`。
+
+没有预检重试、模型替换或权限扩大；首次交付后恰好两轮修复。初次自检夹具创建失败、首轮修复的原因文字断言失败、最后一轮新增测试的临时目录生命周期错误均在各轮内部修正，失败日志保留，不计作首次通过。初次日志写入命令使用问题属于工具操作／证据保存问题，不能混作权限拒绝。未发现 Worker 越过两个项目文件的写入范围；没有给高价模型代写实现后署 Terra 名称。关键遗漏属于实现／测试覆盖问题，不以环境解释掩盖。
+
+### 恢复与保留
+
+- 已完成：源身份保护、一个外盘工作树、受限 Terra 链路核验、初次实现＋两轮修复、Lead 复核和现有产物交叉检查、本地候选提交。
+- 未完成：标准输出写入错误的 2 退出语义及对应永久回归；工程候选的完整接纳。尚未完成的测试覆盖应随这一小修补一起复核，不能因已有检查通过宣称穷尽所有文件系统故障。
+- 源保持 `85bc509932562c27e091a22cb101365117a9d76c` / `codex/inference-foundation`；唯一源差异仍为 scheme orderHint 1→6，SHA256 `ca3635d88aa5a15397b90e528667c66c0e6db7e596176e885c79d194b544206c`；源 index 无暂存改动。
+- 候选位置：本工作树／`codex/d-c01a-diag-01`；未合入源分支，未推进 main/master，未 push、发布、上传证据；未改认证、远端、人类 Git 作者、签名、权限或全局 Codex 设置。
+- 创建的 CLI PID 42155、42337、42551、42939、43235 均已结束；各 turn.completed 有记录，CPU fixture 子进程回收检查通过。既有 D PID 36901 仍运行。未用归档或中断代替进程结束证据；没有归档本试点或关闭共享客户端服务。
+- 下一动作仅为建议：由用户决定是否单独批准修补 stdout 写入错误及回归，再复验当前候选。现有 IMPLEMENT/REPAIR 授权已用完，不自动启动下一工作。
+- 外盘证据目录保持本文件首节的 run 路径；关键索引：preparation.json、worktree-check.json、gates.json、各阶段 request/runtime/process JSON、lead-final-checks.json、lead-final-real-validation.json、lead-final-output-io.json、usage-summary.json、final-process-observation.json。小摘要在 Git，本轮日志、受控夹具输出和源码快照留外盘证据目录，不只留临时 worktree；未存权重或批量作品。工作树和证据均保留，不清理无关文件。
+- 压缩／重开后先核对源 HEAD、受保护文件、候选 SHA／差异、Worker 状态和权限；不得仅靠此文或聊天摘要恢复执行。
