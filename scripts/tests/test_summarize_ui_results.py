@@ -65,7 +65,7 @@ class SummarizeUIResultsTests(unittest.TestCase):
     def run_cli(self, attempt, report="report output.json"):
         path = self.dir / report
         completed = subprocess.run([sys.executable, "-B", str(SCRIPT), "--plan", str(self.plan_path), "--attempt", str(attempt), "--report", str(path)],
-                                   text=True, capture_output=True, check=False)
+                                   text=True, capture_output=True, check=False, timeout=5)
         return completed, path
 
     def test_all_passed_cli_is_silent_and_passes(self):
@@ -110,8 +110,41 @@ class SummarizeUIResultsTests(unittest.TestCase):
     def test_plan_and_export_hash_identity_are_enforced(self):
         bad = self.attempt({"plan_sha256": "0" * 64})
         with self.assertRaises(summary.InputError): summary.summarize(self.plan_path, bad)
+
+    def test_cli_error_retains_known_plan_rows_and_attempt_provenance(self):
+        attempt = self.attempt(tests=export([(IDS[0], "Passed"), (IDS[0], "Passed")]))
+        completed, path = self.run_cli(attempt)
+        report = json.loads(path.read_text())
+        self.assertEqual((completed.returncode, report["tool_status"], report["acceptance"]), (2, "ERROR", "UNKNOWN"))
+        self.assertEqual(report["plan"]["plan_id"], "small")
+        self.assertEqual([item["status"] for item in report["tests"]], ["UNKNOWN", "UNKNOWN"])
+        self.assertEqual(report["counts"]["UNKNOWN"], 2)
+        self.assertEqual(report["evidence"]["attempt_sha256"], hashlib.sha256(attempt.read_bytes()).hexdigest())
+        self.assertEqual(report["evidence"]["source_xcresult_provenance"], "caller_declared_unverified")
+
+    def test_cli_rejects_bool_float_versions_and_nonstring_result(self):
+        cases = [
+            {"schema_version": True}, {"schema_version": 1.0}, {"plan_revision": True},
+        ]
+        for change in cases:
+            with self.subTest(change=change):
+                completed, path = self.run_cli(self.attempt(change), "bad-" + str(len(change)) + "-" + str(id(change)) + ".json")
+                report = json.loads(path.read_text())
+                self.assertEqual((completed.returncode, report["tool_status"], report["counts"]["UNKNOWN"]), (2, "ERROR", 2))
+        completed, path = self.run_cli(self.attempt(tests=export([(IDS[0], []), (IDS[1], "Passed")])), "result-list.json")
+        report = json.loads(path.read_text())
+        self.assertEqual((completed.returncode, report["tool_status"], report["counts"]["UNKNOWN"]), (2, "ERROR", 2))
         bad = self.attempt({"evidence": {"format": "xcresulttool.test-results.tests", "schema_version": "0.1.0", "tests_path": "tests data.json", "tests_sha256": "0" * 64, "source_xcresult": "/declared/original.xcresult"}})
         with self.assertRaises(summary.InputError): summary.summarize(self.plan_path, bad)
+
+    def test_cli_rejects_boolean_plan_schema_version(self):
+        invalid_plan = self.dir / "boolean plan.json"
+        value = plan(); value["schema_version"] = True; dump(invalid_plan, value)
+        report_path = self.dir / "invalid-plan-report.json"
+        completed = subprocess.run([sys.executable, "-B", str(SCRIPT), "--plan", str(invalid_plan), "--attempt", str(self.attempt()), "--report", str(report_path)],
+                                   text=True, capture_output=True, check=False, timeout=5)
+        report = json.loads(report_path.read_text())
+        self.assertEqual((completed.returncode, report["tool_status"], report["tests"]), (2, "ERROR", None))
 
     def test_duplicate_unknown_and_malformed_structures_are_errors(self):
         for body in [export([(IDS[0], "Passed"), (IDS[0], "Passed")]), export([("DUITests/other()", "Passed")]), {"devices": [], "testPlanConfigurations": [], "testNodes": []}]:

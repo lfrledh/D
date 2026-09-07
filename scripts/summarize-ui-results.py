@@ -61,10 +61,18 @@ def positive_int(value, label):
     return value
 
 
+def exact_integer(value, label, expected=None):
+    if isinstance(value, bool) or not isinstance(value, int) or (expected is not None and value != expected):
+        suffix = " must be " + str(expected) if expected is not None else " must be an integer"
+        raise InputError(label + suffix)
+    return value
+
+
 def load_plan(path):
     raw, plan = read_json(path)
-    if not isinstance(plan, dict) or plan.get("schema_version") != 1:
-        raise InputError("plan schema_version must be 1")
+    if not isinstance(plan, dict):
+        raise InputError("plan must be an object")
+    exact_integer(plan.get("schema_version"), "plan schema_version", 1)
     plan_id = nonempty_string(plan.get("plan_id"), "plan_id")
     revision = positive_int(plan.get("plan_revision"), "plan_revision")
     if plan.get("target") != "DUITests":
@@ -88,10 +96,12 @@ def resolved_existing(path, label):
 
 
 def validate_attempt(attempt, attempt_path, plan_id, revision, plan_hash):
-    if not isinstance(attempt, dict) or attempt.get("schema_version") != 1:
-        raise InputError("attempt schema_version must be 1")
+    if not isinstance(attempt, dict):
+        raise InputError("attempt must be an object")
+    exact_integer(attempt.get("schema_version"), "attempt schema_version", 1)
     run_id = nonempty_string(attempt.get("run_id"), "run_id")
     attempt_id = nonempty_string(attempt.get("attempt_id"), "attempt_id")
+    exact_integer(attempt.get("plan_revision"), "attempt plan_revision")
     if attempt.get("plan_id") != plan_id or attempt.get("plan_revision") != revision or attempt.get("plan_sha256") != plan_hash:
         raise InputError("attempt plan identity does not match the supplied plan bytes")
     state = attempt.get("execution_state")
@@ -128,7 +138,7 @@ def walk_nodes(nodes, expected, cases, container_results, in_bundle=False, in_ca
         if not isinstance(children, list):
             raise InputError("node children must be a list")
         result = node.get("result")
-        if result is not None and result not in RESULT_TO_STATUS:
+        if result is not None and (not isinstance(result, str) or result not in RESULT_TO_STATUS):
             raise InputError("invalid node result")
         if kind == "Test Case":
             if not in_bundle or in_case:
@@ -182,16 +192,17 @@ def counts_for(tests):
     return {status: sum(1 for item in tests if item["status"] == status) for status in STATUSES}
 
 
-def make_report(plan, plan_path, plan_hash, run_id, attempt_id, state, attempt_path, tests_path=None, tests_hash=None, evidence=None):
+def make_report(plan, plan_path, plan_hash, run_id, attempt_id, state, attempt_path, tests_path=None, tests_hash=None, evidence=None, attempt_hash=None):
     return {"schema_version": 1, "tool_status": "OK", "acceptance": "UNKNOWN", "run_id": run_id,
             "attempt_id": attempt_id, "execution_state": state,
             "plan": {"plan_id": plan.get("plan_id") if isinstance(plan, dict) else None,
                      "plan_revision": plan.get("plan_revision") if isinstance(plan, dict) else None,
                      "sha256": plan_hash, "path": str(plan_path) if plan_path else None},
             "tests": None, "counts": None, "issues": [],
-            "evidence": {"attempt_path": str(attempt_path) if attempt_path else None,
+            "evidence": {"attempt_path": str(attempt_path) if attempt_path else None, "attempt_sha256": attempt_hash,
                          "tests_path": str(tests_path) if tests_path else None, "tests_sha256": tests_hash,
                          "source_xcresult": evidence.get("source_xcresult") if evidence else None,
+                         "source_xcresult_provenance": "caller_declared_unverified" if evidence and evidence.get("source_xcresult") is not None else None,
                          "format": evidence.get("format") if evidence else None,
                          "schema_version": evidence.get("schema_version") if evidence else None}}
 
@@ -202,7 +213,7 @@ def summarize(plan_path, attempt_path):
     plan_hash = sha(plan_raw)
     attempt_raw, attempt = read_json(attempt_path)
     run_id, attempt_id, state, tests_path, evidence = validate_attempt(attempt, attempt_path, plan_id, revision, plan_hash)
-    report = make_report(plan, plan_path, plan_hash, run_id, attempt_id, state, attempt_path, tests_path, None, evidence)
+    report = make_report(plan, plan_path, plan_hash, run_id, attempt_id, state, attempt_path, tests_path, None, evidence, sha(attempt_raw))
     if state == "not_started":
         report["tests"] = [{"test_id": ident, "status": "NOT_STARTED", "reason": attempt["reason"], "evidence_pointer": None} for ident in expected]
         report["counts"] = counts_for(report["tests"]); report["acceptance"] = "INCOMPLETE"; return report, 1
@@ -250,17 +261,54 @@ def write_report(path, report):
         output.write(data)
 
 
+def known_attempt_fields(report, attempt, attempt_path, attempt_hash):
+    report["evidence"]["attempt_path"] = str(attempt_path)
+    report["evidence"]["attempt_sha256"] = attempt_hash
+    if not isinstance(attempt, dict):
+        return
+    for key in ("run_id", "attempt_id"):
+        if isinstance(attempt.get(key), str) and attempt[key]:
+            report[key] = attempt[key]
+    if attempt.get("execution_state") in ("completed", "not_started", "tool_error"):
+        report["execution_state"] = attempt["execution_state"]
+    evidence = attempt.get("evidence")
+    if isinstance(evidence, dict):
+        for key in ("format", "schema_version", "source_xcresult"):
+            if key in evidence:
+                report["evidence"][key] = evidence[key]
+        if "source_xcresult" in evidence:
+            report["evidence"]["source_xcresult_provenance"] = "caller_declared_unverified"
+
+
+def error_with_known_plan(report, expected, reason):
+    report["tool_status"] = "ERROR"
+    report["acceptance"] = "UNKNOWN"
+    report["issues"].append({"code": "INPUT_ERROR", "reason": reason})
+    if expected is not None:
+        report["tests"] = [{"test_id": ident, "status": "UNKNOWN", "reason": "attempt/export could not be reliably parsed", "evidence_pointer": None} for ident in expected]
+        report["counts"] = counts_for(report["tests"])
+    return report
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--plan", required=True); parser.add_argument("--attempt", required=True); parser.add_argument("--report", required=True)
     args = parser.parse_args(argv)
-    report_path = None
+    report_path = None; report = None; expected = None
     try:
         report_path = safe_output_path(args.report)
-        report, code = summarize(Path(args.plan), Path(args.attempt))
+        plan_path = resolved_existing(Path(args.plan), "plan")
+        plan_raw, plan, expected, plan_id, revision = load_plan(plan_path)
+        plan_hash = sha(plan_raw)
+        report = make_report(plan, plan_path, plan_hash, None, None, None, None)
+        attempt_path = resolved_existing(Path(args.attempt), "attempt")
+        attempt_raw, attempt = read_json(attempt_path)
+        known_attempt_fields(report, attempt, attempt_path, sha(attempt_raw))
+        report, code = summarize(plan_path, attempt_path)
     except (InputError, OSError) as error:
-        report = make_report(None, None, None, None, None, None, None)
-        report["tool_status"] = "ERROR"; report["issues"].append({"code": "INPUT_ERROR", "reason": str(error)})
+        if report is None:
+            report = make_report(None, None, None, None, None, None, None)
+        report = error_with_known_plan(report, expected, str(error))
         code = 2
     if report_path is not None:
         try:
@@ -269,7 +317,10 @@ def main(argv=None):
             sys.stderr.write("cannot write report: " + str(error) + "\n")
             return 2
     else:
-        sys.stderr.write(report["issues"][0]["reason"] + "\n")
+        try:
+            sys.stderr.write(report["issues"][0]["reason"] + "\n")
+        except Exception:
+            pass
     return code
 
 
