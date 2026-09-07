@@ -1,6 +1,6 @@
 # D 的 Mac 授权与无人值守开发方案
 
-日期：2026-09-07。状态：方案已记录，签名调整和新的授权复验尚未执行。历史失败归档见 [审计清单](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md)。
+日期：2026-09-07。状态：本机稳定开发签名、私钥调用与首次重开恢复已验证；完整 UI／真实生成／再次签名重建后的连续验收仍待执行。下文方案保留背景，最新实测见文末。历史失败归档见 [审计清单](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md)。
 
 目标是让**已授权位置内的常规构建、测试、生成和保存能够连续运行**。不能承诺一次操作永久消除系统授权：新增资源、权限撤销、应用身份变化及部分系统安全界面仍可能需要本人确认。
 
@@ -17,7 +17,7 @@ Apple 将 App Sandbox 与系统强制访问控制区分为独立机制，并说�
 
 ## 先完成的工程准备（D-C01a）
 
-本机检查结果：当前 D 的 bundle ID 是 `first-test.D`；Debug 配置为 `CODE_SIGN_IDENTITY = "-"`、空 Team，实际二进制显示 `Signature=adhoc`。这是最初为了快速恢复本机构建采用的设置。钥匙串可枚举到一个有效 Apple Development 身份；**只检查了身份可用性，没有导出私钥、签署新版本或更改钥匙串权限**。
+签名切换前的历史检查结果：D 的 bundle ID 是 `first-test.D`；Debug 配置为 `CODE_SIGN_IDENTITY = "-"`、空 Team，实际二进制显示 `Signature=adhoc`。这是最初为了快速恢复本机构建采用的设置。钥匙串可枚举到一个有效 Apple Development 身份；**只检查了身份可用性，没有导出私钥、签署新版本或更改钥匙串权限**。
 
 建议在集中人工授权前实施一个小工作包：
 
@@ -53,3 +53,31 @@ Apple 将 App Sandbox 与系统强制访问控制区分为独立机制，并说�
 建议验收顺序：稳定签名正常构建 → 本人集中处理实际提示 → 既有项目／模型恢复 → 一次完整 8 项 UI 测试 → 恢复普通签名 → 真实生成与导出 → 小改动重建 → 不再手选位置而重开恢复。只有这条跨构建链路通过，才能把“当前开发流程已具备连续运行条件”记为验收；它仍不是永久不再授权的保证。
 
 本方案不要求现在远程输入密码，也不要求重置 TCC、修改系统数据库或移除系统保护。用户回到 Mac 前，可以继续文档、源码审查和不触发新授权的已有验证工作。
+
+## 2026-09-07 本机授权设置检查点
+
+用户回到 Mac 后授权先处理环境与应用授权；本轮由原 Lead 直接执行，没有 Worker、GPU 生成、XCTest、远端操作或新产品阶段。应用源码基线为 `c14f892cacd69ce909e368c03db9b69c7dac1db8`。本轮共享修改仅为构建脚本读取本机签名配置及本节／当前行动记录。
+
+- Codex 项目已改指向 `/Volumes/CodexProjects/Codex/D`；原内盘空仓库未操作。用户同时将主会话改为 full access。这不是“仅外盘可写”的隔离证明，后续 Worker 仍必须使用独立受限配置。
+- 系统设置实读：ChatGPT、Xcode 显示完全磁盘访问权限；DUITests-Runner 的可移除宗卷开关已开。普通 D 没有单独条目，但项目与模型书签能够恢复，不能据此判定 D 被拒绝。本轮未改 TCC 数据库、全盘权限或钥匙串 ACL。
+- 本机现有 Apple Development 证书有效至 2027-04-03，Team `3V4T79WLQS`。首次构建观察到 codesign 等待与 SecurityAgent；电脑控制工具拒绝访问安全窗口，未读取／输入密码。随后 `codesign --dryrun` 对任务副本真实调用私钥，退出 0，副本 SHA-256 前后相同；不能据此断言用户选择了某个永久允许选项。
+- 独立 DerivedData 正常构建退出 0（74.166 秒）；实际产物使用 Apple Development 证书、同一 `first-test.D`、Hardened Runtime，严格／深层签名验证通过。Sandbox、用户选择读写、app-scope bookmarks、客户端网络及普通 Debug 的 get-task-allow 均保留，无测试临时例外。补充了外盘用途说明。
+- 经正常退出旧实例，在原路径安装签名版并重新打开。原三份创作文档、7 条历史任务、提示词／seed、模型库两条安装记录恢复，生成按钮可用；没有重新选择目录或重新登记模型。已知项目 8 个文件的字节摘要全部保持一致。此为 CUA 恢复检查，不是生成或完整 UI XCTest 通过。
+
+### 后续构建入口
+
+`./scripts/build-local.sh` 默认读取同级 `D-Development/Configuration/DevelopmentSigning.xcconfig`；本机文件只含公开签名身份选择、Team 和外盘用途说明，不含私钥、不入 Git。也可显式设置 `D_SIGNING_CONFIG=/absolute/path/to/DevelopmentSigning.xcconfig`；显式指定不存在文件时退出 2。未配置本机文件的其他机器仍沿用工程原设置。配置路径包含空格／非 ASCII、无默认配置、显式缺失配置的 3 个 CPU 参数夹具通过，另有 Bash 语法检查；夹具不算真实构建。
+
+Xcode GUI 的工程 Debug 设置没有更改，直接点击 GUI Build 仍可能产生 ad-hoc 版本；当前稳定签名入口是上述脚本，或为明确的 `xcodebuild` 操作传入同一 `-xcconfig`。后续测试必须给宿主和 runner 同一签名配置，测试后恢复普通构建。不能把这次首次切换恢复写成“以后任何构建都不会再询问”。
+
+### 本轮构建意外与恢复
+
+第一次尝试复用原 DerivedData、只改变 CONFIGURATION_BUILD_DIR，运行期间原 Debug/D.app 消失，目标目录只有空骨架。怀疑是共享构建状态导致产物失效／清理，但日志没有直接记录移除动作，机制仍属推断。Lead 在检查完成前曾称原产物不变，发现后已纠正；只停止本轮 xcodebuild 及其子进程（退出 -15），未终止当时的 D。
+
+随后以未改源码和原 ad-hoc 设置在原位置重新构建成功（57.947 秒），严格签名检查通过，并备份完整应用后再做完全独立 DerivedData 的签名构建。恢复产物是新构建，部分二进制摘要与历史不同，不能冒充旧产物原字节还原。当前安装的正式签名版和切换前恢复版均保留；源码、个人 scheme 排序修改及已知项目文件受保护。后续隔离构建必须连同 DerivedData 一起隔离，修改前先保存完整可运行产物，而不只记录摘要。
+
+### 证据与停止边界
+
+持久目录：`/Volumes/CodexProjects/Codex/D-Development/PermissionSetup/run-20260907T134650Z`。关键索引：`artifact-incident.json`、`artifact-recovery.json`、`signing-access-probe-result.json`、`stable-build-result.json`、`stable-signature-checks.json`、`signed-app-install.json`、`installed-app-diagnostic.json`、`permission-setup-checkpoint.json`。保留构建日志、xcresult、应用和约 2.1 MB 已知项目备份，不默认入 Git。
+
+D-C01a 尚未整体结案：完整 8 项 UI XCTest、真实签名版生成／导出、再次签名重建后恢复均待验证；D-C01a-RESULT-01 的既有候选仍暂停、未在本轮接纳或集成。没有启动 D-P01、双 Worker 或推送。主会话恢复时先核对 Git 状态、已安装签名、运行进程与本机配置，再进行下一项验证。

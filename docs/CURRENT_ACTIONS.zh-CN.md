@@ -52,6 +52,8 @@
 
 D-C01a 的只读诊断子任务 [D-C01a-DIAG-01](tasks/D-C01a-DIAG-01.md) **已本地集成并通过任务验收；未推送**。2026-09-07 源目录在 `2524fc61417ddb5fe07e28f466ba6709fcba69f8` 完成 15 个 CPU 测试方法（原 10＋新增 5，后者含 8 个真实 CLI 场景）、Lead 12 场景、报告保护及普通 D.app 只读交叉检查。之后仅有结案文档变化，最终版本／证据见任务记录；源个人 scheme 排序修改保持未暂存。
 
-诊断入口：`python3 -B scripts/diagnose-app.py --app PATH`，必须显式指定产物，可用 `--report PATH` 新建报告；只检查并报告，不修签名／权限。对应局部回归：`python3 -B -m unittest discover -s scripts/tests -p test_diagnose_app.py -v`。真实产物仍为 ad-hoc，本任务不证明公证、TCC、GUI 或跨构建恢复通过。
+诊断入口：`python3 -B scripts/diagnose-app.py --app PATH`，必须显式指定产物，可用 `--report PATH` 新建报告；只检查并报告，不修签名／权限。对应局部回归：`python3 -B -m unittest discover -s scripts/tests -p test_diagnose_app.py -v`。该任务当时的真实产物为 ad-hoc，本任务不证明公证、TCC、GUI 或跨构建恢复通过。
 
-D-C01a 整阶段尚未完成。下一步仅建议按 [操作方案](MAC_PERMISSION_SETUP.zh-CN.md) 单独审批稳定开发签名，再集中人工授权并验证跨构建恢复；未自动启动签名切换、D-P01 或双 Worker。B10 偶发测试保留观察；物理拔盘／断电、完整 VoiceOver 等仍属于发行前独立验收。
+D-C01a 整阶段尚未完成。2026-09-07 用户回到 Mac 并授权处理环境／应用权限后，已完成外盘项目绑定、现有开发私钥调用、Apple Development 签名正常构建及原路径首次重开恢复。后续 `build-local.sh` 读取外盘本机签名配置；直接 Xcode GUI Build 仍保留原设置，不能混用后假定签名稳定。完整 8 项 UI XCTest、真实签名版生成／导出、再次签名重建恢复尚待验证。详见 [最新授权检查点、构建意外与恢复记录](MAC_PERMISSION_SETUP.zh-CN.md)。没有启动 D-P01、双 Worker 或推送。
+
+D-C01a-RESULT-01 候选仍在独立工作树、HEAD `829ca10e2f396c8309723d55a69149cb132017d6`；因既有权限事件停止，第一轮修复尚未由 Lead 复验／集成。本轮授权设置不改写该试点结论。B10 偶发测试保留观察；物理拔盘／断电、完整 VoiceOver 等仍属于发行前独立验收。
