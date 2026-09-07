@@ -1,4 +1,7 @@
 import importlib.util
+import json
+import math
+import sys
 import plistlib
 from pathlib import Path
 import subprocess
@@ -36,8 +39,15 @@ class DiagnoseAppTests(unittest.TestCase):
                 if mode == "get_task_allow": ent["com.apple.security.get-task-allow"] = True
                 if mode == "missing_entitlement": ent.pop("com.apple.security.network.client")
                 if mode == "invalid_entitlement": ent["com.apple.security.app-sandbox"] = "yes"
+                if mode == "false_entitlement": ent["com.apple.security.app-sandbox"] = False
+                if mode == "invalid_library_validation": ent["com.apple.security.cs.disable-library-validation"] = "yes"
+                if mode == "data_debug": ent["com.apple.security.get-task-allow"] = b"data"
                 return subprocess.CompletedProcess(argv, 0, plistlib.dumps(ent).decode(), "normal note")
             if mode == "unsigned": return subprocess.CompletedProcess(argv, 1, "", "code object is not signed at all")
+            if mode == "certificate":
+                return subprocess.CompletedProcess(argv, 0, "", "Identifier=first-test.D\nAuthority=Apple Development: Example\nnormal note")
+            if mode == "display_error":
+                return subprocess.CompletedProcess(argv, 1, "", "display failed")
             return subprocess.CompletedProcess(argv, 0, "", "Identifier=first-test.D\nSignature=adhoc\nnormal note")
         return run
 
@@ -89,6 +99,63 @@ class DiagnoseAppTests(unittest.TestCase):
             report, code = diagnose_app.diagnose(app, runner=self.runner("get_task_allow"))
         self.assertEqual(code, 0)
         self.assertEqual(report["checks"]["entitlements"]["evidence"]["com.apple.security.get-task-allow"]["state"], "true")
+
+    def test_bundle_identifier_and_entitlement_type_rules(self):
+        with tempfile.TemporaryDirectory() as raw:
+            app = self.make_app(Path(raw))
+            certificate_report, certificate_code = diagnose_app.diagnose(app, runner=self.runner("certificate"))
+            self.assertEqual(certificate_code, 0)
+            self.assertEqual(certificate_report["checks"]["signature"]["evidence"]["classification"], "certificate-backed")
+            (app / "Contents/MacOS/D").unlink()
+            missing_report, missing_code = diagnose_app.diagnose(app, runner=self.runner())
+            self.assertEqual(missing_code, 2)
+            self.assertIn("missing", missing_report["checks"]["artifact"]["reason"])
+            (app / "Contents/MacOS/D").write_bytes(b"binary")
+            with (app / "Contents/Info.plist").open("wb") as out:
+                plistlib.dump({"CFBundleExecutable": "D", "CFBundleIdentifier": "wrong.bundle"}, out)
+            report, code = diagnose_app.diagnose(app, runner=self.runner())
+            self.assertEqual(code, 1)
+            self.assertEqual(report["rules"]["expected_bundle_identifier"]["status"], "FAIL")
+            for mode, expected in (("false_entitlement", 1), ("invalid_library_validation", 2), ("data_debug", 2), ("display_error", 2)):
+                with (app / "Contents/Info.plist").open("wb") as out:
+                    plistlib.dump({"CFBundleExecutable": "D", "CFBundleIdentifier": "first-test.D"}, out)
+                report, code = diagnose_app.diagnose(app, runner=self.runner(mode))
+                self.assertEqual(code, expected, mode)
+                json.dumps(report)
+
+    def test_corrupt_plist_symlink_and_timeout_report_are_complete(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw); app = self.make_app(root)
+            (app / "Contents/Info.plist").write_bytes(b"<?xml version='1.0'?><plist><dict><key>broken")
+            report, code = diagnose_app.diagnose(app, runner=self.runner())
+            self.assertEqual(code, 2); self.assertIn("overall", report); json.dumps(report)
+            app = self.make_app(root / "again")
+            outside = root / "outside"; outside.write_bytes(b"fixture")
+            (app / "Contents/MacOS/D").unlink(); (app / "Contents/MacOS/D").symlink_to(outside)
+            report, code = diagnose_app.diagnose(app, runner=self.runner())
+            self.assertEqual(code, 2); self.assertIn("outside the bundle", report["checks"]["artifact"]["reason"])
+            def bytes_timeout(argv, **kwargs):
+                raise subprocess.TimeoutExpired(argv, .01, output=b"stdout", stderr=b"stderr")
+            report, code = diagnose_app.diagnose(self.make_app(root / "timeout"), runner=bytes_timeout)
+            self.assertEqual(code, 2); json.dumps(report)
+
+    def test_report_policy_and_finite_timeout(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw); app = self.make_app(root); report, code = diagnose_app.diagnose(app, runner=self.runner())
+            target = root / "report.json"; diagnose_app.write_report(target, report)
+            self.assertEqual(json.loads(target.read_text())["overall"]["status"], "PASS")
+            original = target.read_bytes()
+            with self.assertRaises(ValueError): diagnose_app.write_report(target, report)
+            self.assertEqual(target.read_bytes(), original)
+            for value in (0, -1, math.inf, math.nan):
+                failed, exit_code = diagnose_app.diagnose(app, timeout=value, runner=self.runner())
+                self.assertEqual(exit_code, 2); self.assertIn("overall", failed)
+
+    def test_actual_cpu_timeout_is_reaped(self):
+        evidence = diagnose_app.run_command([sys.executable, "-c", "import time; print('started', flush=True); time.sleep(10)"], timeout=.02)
+        self.assertTrue(evidence["timed_out"])
+        self.assertIsNone(evidence["returncode"])
+        self.assertIn("started", evidence["stdout"])
 
 
 if __name__ == "__main__":
