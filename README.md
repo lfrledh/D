@@ -50,7 +50,7 @@ git clone --branch codex/inference-foundation https://github.com/lfrledh/D.git
 
 ## 架构研究与新框架（2026-09-07）
 
-最新定位：像ComfyUI一样灵活、提供更易用模式的专业Mac本地AI创作工作站。研究结论和框架基线见 [架构研究报告](docs/ARCHITECTURE_RESEARCH.zh-CN.md)。
+最新定位：面向视觉探索与创作，独立完成 AI 关键流程并与专业软件协作的 Mac 工作台。已确认的场景、范围与证据见 [总体产品规划](docs/PRODUCT_STRATEGY.zh-CN.md)；节点不是必经阶段。研究结论和框架基线见 [架构研究报告](docs/ARCHITECTURE_RESEARCH.zh-CN.md)。
 
 根目录 Swift package 含 DInference（纯契约）和 DRuntime（串行任务生命周期）两个 target，零远程依赖、Swift 6 严格模式。Backends/MLX 中的 DMLXBackend 提供文本与图像后端，d-infer 是宿主入口。现有 Packages/UI 包内包含两个实际 target：DWorkbench 拥有项目、任务、资产及模型安装服务，只依赖 DInference；UI 依赖这些服务，负责展示和原生交互。D 应用装配具体 runtime／backend。其他旧 Packages/* 暂留源代码，不在新应用依赖路径中。
 
