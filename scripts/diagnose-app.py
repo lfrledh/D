@@ -353,7 +353,22 @@ def main(argv=None):
         except Exception as error:
             report["tool_errors"].append(f"report: {type(error).__name__}: {error}")
             report, exit_code = finalize(report, 2)
-    print(json.dumps(report, ensure_ascii=False, indent=2, allow_nan=False))
+    try:
+        print(json.dumps(report, ensure_ascii=False, indent=2, allow_nan=False))
+        sys.stdout.flush()
+    except OSError as error:
+        # Prevent shutdown from retrying the failed descriptor and replacing
+        # exit 2 with Python's cleanup-error status 120. Keep normal cleanup.
+        with open(os.devnull, "w") as sink:
+            os.dup2(sink.fileno(), sys.stdout.fileno())
+        try:
+            # Do not buffer a diagnostic that could itself fail at shutdown.
+            message = f"stdout: {type(error).__name__}: {error}\n"
+            os.write(2, message.encode("utf-8", errors="backslashreplace"))
+        except OSError:
+            # An unavailable error stream must not replace the original error.
+            pass
+        return 2
     return exit_code
 
 

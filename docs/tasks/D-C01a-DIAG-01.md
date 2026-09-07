@@ -157,3 +157,14 @@ Worker 为唯一 Terra 会话：初次实现 272.721 秒，修复 1 为 292.919 
 - 下一动作仅为建议：由用户决定是否单独批准修补 stdout 写入错误及回归，再复验当前候选。现有 IMPLEMENT/REPAIR 授权已用完，不自动启动下一工作。
 - 外盘证据目录保持本文件首节的 run 路径；关键索引：preparation.json、worktree-check.json、gates.json、各阶段 request/runtime/process JSON、lead-final-checks.json、lead-final-real-validation.json、lead-final-output-io.json、usage-summary.json、final-process-observation.json。小摘要在 Git，本轮日志、受控夹具输出和源码快照留外盘证据目录，不只留临时 worktree；未存权重或批量作品。工作树和证据均保留，不清理无关文件。
 - 压缩／重开后先核对源 HEAD、受保护文件、候选 SHA／差异、Worker 状态和权限；不得仅靠此文或聊天摘要恢复执行。
+
+## Lead 定点收尾授权 v3（追加，2026-09-07）
+
+本节按用户新的有限授权续接，保留以上历史结论；不是 Terra 第三轮修复。原规格修订 3／输出契约 v1 不变。Lead 本轮亲自修补并复核，不另称独立评审模型。源码来源为 Terra 初步实现，Astra Lead 修补并复验；是否满足验收以下文最终记录为准。
+
+- 新 run_id：`run-20260907T102038Z-lead-finish`；证据在 `/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-C01a-DIAG-01/run-20260907T102038Z-lead-finish`，不覆盖旧 run。
+- 起点：候选 `932c14092559e39c0ed36c85afe8c73c8f7ff4d7`、干净；其相对 `a2ed7c58a9bcf142090821041d4e8037bbb3d155` 只有本任务文档变化。源仍 `85bc509932562c27e091a22cb101365117a9d76c`，唯一个人差异和未暂存状态符合预期；三个旧子代理已结束，未新建任务，既有 D PID 36901 未操作。前置快照见 `baseline.json`。
+- 根因实证：未改实现、真实 `/usr/bin/python3 -B scripts/diagnose-app.py --app <任务目录不存在路径>`，stdout 接任务自有只读描述符，完整 wait 后退出 120、stderr 为退出清理的 `Exception ignored ... OSError: [Errno 9]`。同一入口增加 `-u` 后在 print 当场抛 OSError、退出 1。不是外层启动器替换退出码。Python 3.9.6 实测与 [sys.exit 的清理错误说明](https://docs.python.org/3/library/sys.html#sys.exit)一致；证据 `red-original-process.json`。
+- 先增加永久真实 CLI 回归，再修实现。新增 5 个方法含 8 次 CLI 场景：缓冲／无缓冲各自只读 stdout、断管 stdout；stdout 失败且 stderr 只读／断管；stdout 失败但报告已保存；正常 stdout 与报告一致。未修补时正常场景通过，其余 7 场景失败（120 或 1），`red-regression.*` 与 `red-tests.py` 保留原断言和测试摘要。原有 10 方法与 Lead 12 场景不修改。
+- 最小修补只在 main 的 JSON 输出处捕获 OSError 并显式 flush；失败时仅把当前诊断进程的 stdout 描述符重定向到 /dev/null，避免退出重刷失败改变退出码。错误提示使用不缓冲的 os.write；仅忽略该提示自身的 OSError，保持返回 2。不使用 os._exit，不吞其他异常，不改变签名判断、报告保存顺序或文件保护。报告文件仍由 with 关闭、codesign 子进程已同步等待／超时回收；正常解释器清理保留。与 [官方 SIGPIPE 示例](https://docs.python.org/3/library/signal.html#note-on-sigpipe)使用相同的退出重刷处理原则，但执行本任务的退出 2 契约。
+- 此检查点仅保存待复验的修补和原始失败；后续完整复验绑定该代码提交和文件 SHA，不把提交本身当作验收。仅限两个原有脚本／测试文件及本文追加；不合并、不推送、不改源分支或真实应用。

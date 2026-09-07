@@ -207,5 +207,83 @@ class DiagnoseAppTests(unittest.TestCase):
             self.assertEqual(report["checks"]["artifact"]["evidence"]["CFBundleVersion"]["type"], "float")
 
 
+class CLIOutputTests(unittest.TestCase):
+    def run_cli(self, root, *, unbuffered=False, stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE, report=None):
+        command = [sys.executable, "-B"]
+        if unbuffered:
+            command.append("-u")
+        command.extend([str(SCRIPT), "--app", str(root / "不存在 app.app")])
+        if report is not None:
+            command.extend(["--report", str(report)])
+        # Wait for interpreter shutdown, including standard-stream cleanup.
+        return subprocess.run(command, stdout=stdout, stderr=stderr, timeout=10)
+
+    def test_cli_stdout_read_only_exits_two(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            target = root / "只读 stdout.txt"
+            target.write_bytes(b"preserve this fixture")
+            for unbuffered in (False, True):
+                with self.subTest(unbuffered=unbuffered), target.open("rb") as output:
+                    process = self.run_cli(root, unbuffered=unbuffered, stdout=output)
+                    self.assertEqual(process.returncode, 2, process.stderr)
+                    self.assertIn(b"stdout", process.stderr)
+                    self.assertNotIn(b"Exception ignored", process.stderr)
+                    self.assertEqual(target.read_bytes(), b"preserve this fixture")
+
+    def test_cli_closed_pipe_exits_two(self):
+        with tempfile.TemporaryDirectory() as raw:
+            for unbuffered in (False, True):
+                reader, writer = os.pipe()
+                os.close(reader)
+                with self.subTest(unbuffered=unbuffered), os.fdopen(writer, "wb") as output:
+                    process = self.run_cli(Path(raw), unbuffered=unbuffered, stdout=output)
+                    self.assertEqual(process.returncode, 2, process.stderr)
+                    self.assertIn(b"stdout", process.stderr)
+                    self.assertNotIn(b"Exception ignored", process.stderr)
+
+    def test_cli_failed_stderr_preserves_output_error(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            target = root / "unwritable.txt"
+            target.write_bytes(b"keep")
+            for broken_pipe in (False, True):
+                if broken_pipe:
+                    reader, writer = os.pipe()
+                    os.close(reader)
+                    error_output = os.fdopen(writer, "wb")
+                else:
+                    error_output = target.open("rb")
+                with self.subTest(broken_pipe=broken_pipe), error_output, target.open("rb") as output:
+                    process = self.run_cli(root, stdout=output, stderr=error_output)
+                    self.assertEqual(process.returncode, 2)
+                    self.assertEqual(target.read_bytes(), b"keep")
+
+    def test_cli_report_is_preserved_when_stdout_fails(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            target = root / "unwritable.txt"
+            target.write_bytes(b"keep")
+            report_path = root / "saved.json"
+            with target.open("rb") as output:
+                process = self.run_cli(root, stdout=output, report=report_path)
+            self.assertEqual(process.returncode, 2, process.stderr)
+            report = json.loads(report_path.read_text())
+            self.assertEqual(report["schema_version"], 1)
+            self.assertTrue(report["tool_errors"])
+            self.assertEqual(target.read_bytes(), b"keep")
+            self.assertNotIn(b"Exception ignored", process.stderr)
+
+    def test_cli_normal_stdout_and_report_match(self):
+        with tempfile.TemporaryDirectory() as raw:
+            root = Path(raw)
+            report_path = root / "saved.json"
+            process = self.run_cli(root, report=report_path)
+            self.assertEqual(process.returncode, 2)
+            self.assertEqual(process.stderr, b"")
+            self.assertEqual(json.loads(process.stdout), json.loads(report_path.read_text()))
+
+
 if __name__ == "__main__":
     unittest.main()
