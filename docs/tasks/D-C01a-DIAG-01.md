@@ -168,3 +168,30 @@ Worker 为唯一 Terra 会话：初次实现 272.721 秒，修复 1 为 292.919 
 - 先增加永久真实 CLI 回归，再修实现。新增 5 个方法含 8 次 CLI 场景：缓冲／无缓冲各自只读 stdout、断管 stdout；stdout 失败且 stderr 只读／断管；stdout 失败但报告已保存；正常 stdout 与报告一致。未修补时正常场景通过，其余 7 场景失败（120 或 1），`red-regression.*` 与 `red-tests.py` 保留原断言和测试摘要。原有 10 方法与 Lead 12 场景不修改。
 - 最小修补只在 main 的 JSON 输出处捕获 OSError 并显式 flush；失败时仅把当前诊断进程的 stdout 描述符重定向到 /dev/null，避免退出重刷失败改变退出码。错误提示使用不缓冲的 os.write；仅忽略该提示自身的 OSError，保持返回 2。不使用 os._exit，不吞其他异常，不改变签名判断、报告保存顺序或文件保护。报告文件仍由 with 关闭、codesign 子进程已同步等待／超时回收；正常解释器清理保留。与 [官方 SIGPIPE 示例](https://docs.python.org/3/library/signal.html#note-on-sigpipe)使用相同的退出重刷处理原则，但执行本任务的退出 2 契约。
 - 此检查点仅保存待复验的修补和原始失败；后续完整复验绑定该代码提交和文件 SHA，不把提交本身当作验收。仅限两个原有脚本／测试文件及本文追加；不合并、不推送、不改源分支或真实应用。
+
+### 收尾验收及当前恢复检查点（本任务最新状态）
+
+**候选满足本任务验收，等待用户决定集成。** 这替代本文较早的“候选未通过”当前状态，不删除其历史。实际被测代码／测试提交为 `eb5c9f015a164197ba900665a42253c6e3eb4c19`；2026-09-07 10:25:35 UTC 完成全部复验。之后的最终候选提交只追加本段文档，代码与被测版本一致，不声称在最终文档提交重新运行测试；完整最终 SHA 记录在本 run 的 `final-handoff.json`。
+
+| 检查组 | 本轮结果与证据 |
+| --- | --- |
+| 真实进程原失败 | 只读 stdout：缓冲、无缓冲均退出 2，无退出清理异常，夹具字节不变；`green-original-flush.json`、`green-original-write.json`。原始 120／1 证据未覆盖 |
+| 永久 CPU 回归 | `python3 -B -m unittest discover -s scripts/tests -p test_diagnose_app.py -v`，原 10 方法＋新增 5 方法全部通过；新增方法包含 8 次 CLI 场景，不把方法数和场景数相加计算通过率。`cpu-tests.json`。红绿阶段测试 SHA 相同，原 10 方法逐字保持不变 |
+| Lead 既有复现场景 | 原 9＋后续 3 场景通过，直接复用旧 run 的两个探针，未调整预期；`lead-original-9.json`、`lead-extra-3.json`。AST、差异检查通过 |
+| 输出保存／保护 | 原缺路径＋报告已存在／父目录不存在／只读 stdout 场景重验通过；同一正常 D.app 的报告覆盖／缺父目录错误仍退出 2；额外确认正常 app 先保存的完整 PASS 报告在 stdout 失败后仍可解析、进程退出 2。正常 stdout 与保存文件一致。`missing-app-report-*.json`、`valid-app-report-*.json`、`valid-app-stdout-failed.json` |
+| 普通 D.app 真实只读检查 | 工具正常退出 0；直接读取 Info、执行 codesign display／strict verify／entitlements，并独立核对报告，共 10 个原有交叉检查通过。仍为 first-test.D、ad-hoc、四项正式权限和 get-task-allow=true。四个关键文件的 SHA256／大小／mtime 前后完全一致，亦与旧 run 一致。`real-validation.json`、`artifact-before.json`、`artifact-after.json` |
+
+总索引 `verification-summary.json` 绑定代码 SHA、文件摘要、全部命令、结果与 PID；可复现复验入口 `verify-finish.py` 保存在外盘证据目录，重用时必须使用新的输出 run 以免覆盖。正常／失败证书场景仍是受控夹具；实际检查不证明证书信任、公证、Gatekeeper、TCC、真实沙盒操作、书签或 GUI，未做构建或真实生成。由同一 Lead 实施并复核，未冒称另一模型独立审阅。仅改 main 输出处理（净新增 16 行）和直接回归；非诊断工具重写。
+
+**三个结论分开：** 工程候选现已满足本任务验收；历史 Terra/medium 受限独立 CLI 链路的可观察结论保留，本轮没有再次派工或补做隔离认证；经济性仍不足以定论。Terra 初次实现＋两轮修复后没有满足全部契约，本次属于 **Terra 初步实现，Astra Lead 修补并复验**，不记作 Terra 独立通过或第三轮修复。
+
+用量核对仅使用原五次运行：只读定位预检、切换受限权限后的预检、初次实现、修复 1、修复 2。各次 CLI 调用的累计值重新起算；逐次 `last_token_usage` 增量之和均等于该次最终累计快照，也等于唯一 `turn.completed` 和旧汇总。旧汇总只加各次最终值一次，**未发现把中途累计快照重复相加**。五次累计输入 3,377,519（含 cached input 3,253,760）、输出 38,266；reasoning_output 5,335 不另加。CLI 墙钟仍为 925.248 秒。记录中 total_tokens=input+output，缓存输入不再次计入；见 `worker-usage-audit.json` 的逐次行号与核对。
+
+本次请求保持 Lead 原设置，当前会话运行上下文核实为 gpt-6-astra / ultra；服务端隐藏解析 unknown。本 Lead 原权限仍 danger-full-access／never，本次获用户定点授权，不把它当作 Worker 受限执行；所有项目命令显式定位外盘工作树，未操作会话元数据 cwd 所指的内盘空仓库。2026-09-07 10:26:50 UTC 读取到的本 Lead 当前 turn 部分快照差额为输入 745,241（其中缓存 642,816）、输出 11,233、reasoning_output 2,669（不另加）；后续记录与最终回复不在该快照内，不称完整本轮用量。账户额度、实际费用、模型活跃计费时间 unknown，不套 API 标价。详见 `lead-usage-snapshot.json`；本 run 首次证据时间至完整复验约 297 秒，仅为经过时间，非思考时间或费用。
+
+可复用失败经验：**CLI 的契约必须验到完整进程退出。** main 返回 2 不足以证明实际退出 2；缓冲输出可能把错误推迟到解释器清理。回归同时覆盖写入／显式刷新／退出和错误提示失败，保留真实描述符、stderr、完整 wait 结果及红绿证据；不要通过接受 120、os._exit 或只测函数返回值掩盖问题。
+
+- 已完成：一次授权内的 Lead 定点修补、先红后绿永久回归、完整复验、来源／用量口径核对、本地候选及持久证据。未完成／待决：用户决定是否集成；D-C01a 其余工作、D-P01 与新试点均未开始。
+- 源仍为 `85bc509932562c27e091a22cb101365117a9d76c`／codex/inference-foundation，唯一 scheme orderHint 1→6 的差异、SHA256 `ca3635d88aa5a15397b90e528667c66c0e6db7e596176e885c79d194b544206c` 及未暂存状态与开始完全一致。候选仍在原外盘工作树和 codex/d-c01a-diag-01，改动仅两个本任务文件和本文追加；源保护复核见 `lead-review.json` 和最终交接快照。
+- 本轮未新建 Worker；所有受控 CLI／验证进程已完整等待，测试内超时夹具回收检查通过。未停止用户 D，最终 PID 观察另存 `final-handoff.json`。不将线程归档视为进程结束。
+- 唯一下一动作：等用户决定是否接纳此候选。没有合并、推送、改权限／签名、清理工作树或启动后续任务。恢复先核对 Git、个人文件、运行状态及本节最新授权边界；历史修订不自动恢复执行授权。
