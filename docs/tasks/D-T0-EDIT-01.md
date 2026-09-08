@@ -49,3 +49,11 @@ Lead 帮助为语义说明、反例和测试，未代写实现；具体修复消
 repair-1 的18方法已通过；Lead 非实现者代码审核发现，流结束后等待 outcome 期间没有消费者取消处理。原契约要求消费者取消到达原 run 并等待清理，不能只在最后丢弃候选。新增 Lead 只读反例：先进入 outcome gate，取消消费者，确认在手动释放清理 gate 前后端收到一次取消；即使断言失败也释放自有 gate。它覆盖既有要求，不改变产品范围，也不声称真实 MLX 生命周期已重测。
 
 修复2为最后普通修复，仅允许 TextDraftSession.swift 及 TextDraftSessionTests.swift。修复需以每运行身份隔离迟到取消，仍待权威 outcome 结束、不 shutdown 引擎、不暴露新公共 API。Lead 契约测试不可修改。前轮执行结束；事件和保护核对未见越界／拒绝。
+
+## 候选验收（2026-09-08，待批次接纳）
+
+选段版本/Unicode、接受/拒绝/撤销、真实 InferenceEngine 桥接及草稿 Data 往返；取消 outcome 边界反例先失败后通过。 固定代码/测试 `1399502c6593678a71b91e6b726217b54c47d1b0`，Lead 串行定向测试 20 方法通过，证据 `/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-T0-EDIT-01/run-v7-initial/lead-repair-2-tests.json` 及同名 log。真实模型/GUI/生产文件事务未执行，不默认替换现有界面。本记录提交仅追加文档，候选最终 SHA 见外部 final-candidate-review.json，不声称在后来的文档提交上重测。
+
+Terra 初步实现及两轮修复；Lead 规格、独立反例和生产代码非实现者审查，未代写产品实现。 任务修订3/契约1，初次＋两轮修复额度已消耗，全部 CLI 已结束并交回写入权。请求及全部可见 turn_context 为 gpt-5.6-terra / medium、workspace-write、网络关闭、独立任务目录及自有输出/tmp；共享 Git 写入由 Lead 完成。隐藏服务解析未知。执行异常及允许路径已复核，无未处理权限/来源事件；没有全系统写锁或全系统进程检查。
+
+原始源 c808293692eb7be90b7c9de73667c9d7bc327e3a，共同准备 e4e39b404a9d0d83c92bae285b12b961976de438。实际每轮执行 SHA、模型/写根、终止和用量见 final-candidate-review.json；逐 CLI 终态用量仅记一次，缓存输入已含于输入，不把累计快照反复相加。完整 Lead 归因/订阅费用 unknown。下一步仅 Lead 保留历史合入 D-T0-META-01，验证组合和源入口；候选不是默认 UI 已启用。
