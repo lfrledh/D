@@ -28,12 +28,11 @@ public enum PNGRecipeCodec {
 
     public static func embedding(_ recipe: GenerationRecipe, in png: Data, disclosure: RecipeDisclosure = .publicShare) throws -> Data {
         let parsed = try PNG.parse(png)
+        if parsed.recipeJSON != nil { _ = try inspect(png) }
         if disclosure == .publicShare && parsed.hasPrivateMetadata { throw PNGRecipeError.privacyConflict }
         try PNG.verify(recipe, digest: parsed.digest, width: parsed.width, height: parsed.height)
         var embedded = recipe
         embedded.mediaPayloadSHA256 = .value(parsed.digest)
-        embedded.width = .value(parsed.width)
-        embedded.height = .value(parsed.height)
         let json: Data
         do { json = try GenerationRecipeCodec.encode(embedded, disclosure: disclosure) }
         catch let error as GenerationRecipeError where error == .sizeLimitExceeded { throw PNGRecipeError.sizeLimitExceeded }
@@ -52,8 +51,11 @@ public enum PNGRecipeCodec {
             }
         }
         guard output.count <= PNG.maxBytes else { throw PNGRecipeError.sizeLimitExceeded }
+        let expectedRecipe: GenerationRecipe
+        do { expectedRecipe = try GenerationRecipeCodec.decode(json) }
+        catch { throw PNGRecipeError.invalidRecipe }
         let check = try inspect(output)
-        guard check.recipe == try GenerationRecipeCodec.decode(json), check.mediaPayloadSHA256 == parsed.digest,
+        guard check.recipe == expectedRecipe, check.mediaPayloadSHA256 == parsed.digest,
               check.width == parsed.width, check.height == parsed.height else { throw PNGRecipeError.invalidRecipe }
         return output
     }
@@ -77,24 +79,28 @@ private enum PNG {
     }
 
     static func parse(_ data: Data) throws -> Parsed {
-        guard data.count >= signature.count, data.count <= maxBytes, Array(data.prefix(8)) == signature else { throw PNGRecipeError.invalidPNG }
+        guard data.count <= maxBytes else { throw PNGRecipeError.sizeLimitExceeded }
+        let input = Data(data)
+        guard input.count >= signature.count, Array(input.prefix(8)) == signature else { throw PNGRecipeError.invalidPNG }
         var offset = 8, chunks: [Chunk] = [], width = 0, height = 0, colorType: UInt8 = 0, bitDepth: UInt8 = 0
         var seenIHDR = false, seenIEND = false, seenPLTE = false, sawIDAT = false, finishedIDAT = false, idatBytes = 0
         var recipeJSON: Data?, recipeCount = 0, hasPrivateMetadata = false
         var digestInput = Data(signature)
-        while offset < data.count {
-            guard chunks.count < maxChunks, offset + 12 <= data.count else { throw PNGRecipeError.invalidPNG }
-            let length = try u32(data, offset)
-            guard length <= maxBytes, offset <= data.count - 12 - Int(length) else { throw PNGRecipeError.invalidPNG }
-            let typeBytes = Array(data[(offset + 4)..<(offset + 8)])
+        while offset < input.count {
+            guard chunks.count < maxChunks else { throw PNGRecipeError.sizeLimitExceeded }
+            guard offset + 12 <= input.count else { throw PNGRecipeError.invalidPNG }
+            let length = try u32(input, offset)
+            guard length <= maxBytes else { throw PNGRecipeError.sizeLimitExceeded }
+            guard offset <= input.count - 12 - Int(length) else { throw PNGRecipeError.invalidPNG }
+            let typeBytes = Array(input[(offset + 4)..<(offset + 8)])
             guard typeBytes.allSatisfy(isASCIIAlpha), (typeBytes[2] & 0x20) == 0,
                   let type = String(bytes: typeBytes, encoding: .ascii) else { throw PNGRecipeError.invalidPNG }
             let payloadStart = offset + 8, payloadEnd = payloadStart + Int(length), crcStart = payloadEnd
-            let payload = Data(data[payloadStart..<payloadEnd])
-            let expected = try u32(data, crcStart)
+            let payload = Data(input[payloadStart..<payloadEnd])
+            let expected = try u32(input, crcStart)
             var crcInput = Data(typeBytes); crcInput.append(payload)
             guard crc32(crcInput) == expected else { throw PNGRecipeError.invalidPNG }
-            let raw = Data(data[offset..<(crcStart + 4)])
+            let raw = Data(input[offset..<(crcStart + 4)])
             offset = crcStart + 4
             guard !seenIEND else { throw PNGRecipeError.invalidPNG }
             if type == "IHDR" {
@@ -113,7 +119,7 @@ private enum PNG {
                 case "IDAT":
                     guard !finishedIDAT else { throw PNGRecipeError.invalidPNG }; sawIDAT = true; idatBytes += payload.count
                 case "IEND":
-                    guard payload.isEmpty, sawIDAT, idatBytes > 0, offset == data.count else { throw PNGRecipeError.invalidPNG }; seenIEND = true
+                    guard payload.isEmpty, sawIDAT, idatBytes > 0, offset == input.count else { throw PNGRecipeError.invalidPNG }; seenIEND = true
                 case "acTL", "fcTL", "fdAT": throw PNGRecipeError.unsupportedPNG
                 default:
                     if typeBytes[0] & 0x20 == 0 { throw PNGRecipeError.unsupportedPNG }
@@ -122,16 +128,11 @@ private enum PNG {
             }
             var isRecipe = false
             if type == "iTXt" || type == "tEXt" || type == "zTXt" {
-                let text = try recipeText(type: type, payload: payload)
-                if text.keyword == keyword {
+                let textKeyword = try keyword(in: payload)
+                if textKeyword == keyword {
                     recipeCount += 1
                     guard recipeCount == 1 else { throw PNGRecipeError.duplicateRecipe }
-                    switch type {
-                    case "iTXt":
-                        guard let json = text.json else { throw PNGRecipeError.invalidRecipe }
-                        recipeJSON = json; isRecipe = true
-                    default: throw PNGRecipeError.unsupportedRecipe
-                    }
+                    if type == "iTXt" { recipeJSON = try dRecipeJSON(payload); isRecipe = true }
                 }
             }
             if type != "IHDR" && type != "IEND" && !isRecipe { if !publicTypes.contains(type) { hasPrivateMetadata = true } }
@@ -140,6 +141,7 @@ private enum PNG {
         }
         guard seenIHDR, seenIEND else { throw PNGRecipeError.invalidPNG }
         guard colorType != 3 || seenPLTE else { throw PNGRecipeError.invalidPNG }
+        if recipeCount == 1 && recipeJSON == nil { throw PNGRecipeError.unsupportedRecipe }
         return Parsed(chunks: chunks, width: width, height: height, digest: SHA256.hash(data: digestInput).map { String(format: "%02x", $0) }.joined(), recipeJSON: recipeJSON, hasPrivateMetadata: hasPrivateMetadata)
     }
 
@@ -158,11 +160,16 @@ private enum PNG {
         var result = Data(); appendU32(UInt32(payload.count), to: &result); let typeData = Data(type.utf8); result.append(typeData); result.append(payload)
         var crcInput = typeData; crcInput.append(payload); appendU32(crc32(crcInput), to: &result); return result
     }
-    static func recipeText(type: String, payload: Data) throws -> (keyword: String, json: Data?) {
-        guard let first = payload.firstIndex(of: 0), first > 0,
-              let key = String(bytes: payload[..<first], encoding: .isoLatin1) else { throw PNGRecipeError.invalidPNG }
-        if type == "tEXt" { return (key, nil) }
-        if type == "zTXt" { guard first + 1 < payload.count else { throw PNGRecipeError.invalidPNG }; return (key, nil) }
+    static func keyword(in payload: Data) throws -> String {
+        guard let first = payload.firstIndex(of: 0) else {
+            if payload.starts(with: Data(keyword.utf8)) { throw PNGRecipeError.invalidRecipe }
+            throw PNGRecipeError.invalidPNG
+        }
+        guard first > 0, let key = String(bytes: payload[..<first], encoding: .isoLatin1) else { throw PNGRecipeError.invalidPNG }
+        return key
+    }
+    static func dRecipeJSON(_ payload: Data) throws -> Data {
+        guard let first = payload.firstIndex(of: 0), String(bytes: payload[..<first], encoding: .isoLatin1) == keyword else { throw PNGRecipeError.invalidRecipe }
         let afterKey = first + 1
         guard afterKey + 2 <= payload.count else { throw PNGRecipeError.invalidRecipe }
         let flag = payload[afterKey], method = payload[afterKey + 1]
@@ -171,7 +178,7 @@ private enum PNG {
         guard let languageEnd = payload[languageStart...].firstIndex(of: 0), languageEnd == languageStart else { throw PNGRecipeError.invalidRecipe }
         let translatedStart = languageEnd + 1
         guard let translatedEnd = payload[translatedStart...].firstIndex(of: 0), translatedEnd == translatedStart else { throw PNGRecipeError.invalidRecipe }
-        return (key, Data(payload[(translatedEnd + 1)...]))
+        return Data(payload[(translatedEnd + 1)...])
     }
     static func legal(_ depth: UInt8, _ color: UInt8) -> Bool {
         switch color { case 0: return [1, 2, 4, 8, 16].contains(depth); case 2, 4, 6: return [8, 16].contains(depth); case 3: return [1, 2, 4, 8].contains(depth); default: return false }
