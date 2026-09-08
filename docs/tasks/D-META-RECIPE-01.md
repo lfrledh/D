@@ -34,3 +34,9 @@
 Lead 已检查初次执行事件：修改只在允许文件和自有输出，静态命令退出0，未观察到越界/权限拒绝/网络/安装；子 CLI 结束并交回写入权。Lead 新增只读验收夹具 Packages/UI/Tests/DWorkbenchTests/GenerationRecipeLeadContractTests.swift；不扩大 Worker 修改清单，Worker 不可修改该文件。反例来自原契约，新增的是真实覆盖而非新的产品需求。修复1后仍最多余一次普通修复；不换编号重置。
 
 Lead 帮助为语义说明、反例和测试，未代写实现；具体修复消息/请求SHA/模型写根在 repair-1-prompt.txt/request.json。Swift package 测试仍由 Lead 串行承担；Worker 不得把未执行测试报为通过。
+
+## 修订 3：最后一次普通修复（2026-09-08）
+
+repair-1 已结束并交回写入；Lead 复验 ec374a9b4790ebe573fef693946327e14ec4214d，15 方法中一方法失败，原因为测试夹具 missingNeedle：字符串 seed 的 JSON 为 value:"42"，测试尝试替换数字 value:42。独立契约反例已通过；不能删除负例或放宽判断。修复2仅允许修改 GenerationRecipeTests.swift，修正真实负例构造并保证不因缺匹配而跳过。实现及 Lead 只读测试冻结。此为原测试要求的修正，不是新需求。事件复核未见权限拒绝、越界写入或网络命令；原文件/Lead 测试保护已核对。
+
+本轮之后普通修复额度为0。Lead 帮助为定位夹具与原契约解释，未代写实现。局部 Swift 测试由 Lead 串行执行；Worker 不运行构建。
