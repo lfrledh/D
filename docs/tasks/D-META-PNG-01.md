@@ -38,3 +38,34 @@ CPU acceptance: synthetic ImageIO PNG prepare/private/public -> file no-overwrit
 Lead combined-initial f593478:133 methods/2 issues. Codec11 methods passed; product fixture wrongly assumed ImageIO produced no extra metadata, public refusal worked correctly. Public success fixture now explicitly strips noncritical metadata before fixture registration; production rejection unchanged. More importantly ImageIO accepted deliberately invalid zlib IDAT with complete status. Lead adds exact bounded zlib scanline verification using existing macOS SDK zlib module, no dependency install. Validate expected Adam7/noninterlaced byte count, filter bytes, end/checksum/trailing data, 64KiB window. Compressed profiles/EXIF are excluded from the validation-only ImageIO buffer; actual export still preserves original non-D bytes. Failure evidence retained; this is Lead assembly correction, not Worker repair2. Reviewer must inspect this new code and its limits.
 
 Worker repair2 actual CPU at3047f945815c733ae1a3da595e73455bbf0298be:12 methods,1 failure. The new max-length fixture had only12 bytes, so the implementation correctly rejected a truncated chunk before reading its claimed length. Lead uses the one bounded CODEC takeover only to supply the missing type/CRC framing in that fixture; expected sizeLimitExceeded and production limits stay unchanged. No third Terra repair, no production codec rewrite. Separate Lead scanline/session tests passed3 methods at14b723b3c21fe06dbd115546e4f99f33b3866dc7. Sol/high read-only review865ed238 found no clear production defect but3 frozen evidence gaps; these added tests close those gaps subject to actual full run and delta review.
+
+## v8 检查点：实现候选保留，产品尚未接纳
+
+2026-09-08，source_base=6735266933773adaee33b3a66a01b09c0b1f7d9b。最终受测组合 ea1c19abf89ca8fdc6339df904aba0c0c7c59a98，137方法/16套件通过（combined-final，60.117秒）。未运行真实GUI；尚未源接纳或默认启用PNG菜单。未修改项目schema、模型、原D、权限或签名方案。后续仅检查点文档提交，源码/测试与受测版本的对应由final-receipt记录，不反复自引用提交。
+
+实现：从已完成任务捕获配方，新导出快照UUID，已知输入/seed/尺寸/步数来自不可变request，未知模型或数值字段保留unknown。私有/公开预览、新副本原子不覆盖保存、离线读取、明确接受后新建草稿及保存重开；不执行外来URI或自动下载/推理。原PNG所有非D块保持原字节，摘要明确排除D配方块，不是最终文件摘要。公开模式拒绝额外未知/可能私密元数据，不能声称任意来源PNG均可公开或自动除密；图片像素内容不脱敏。原始图像不被登记成新项目资产，项目格式不变。
+
+实际CPU产品检查使用明确合成PNG，私有往返经过真实文件保存、关闭原store、独立项目读回新草稿、关闭重开；中文组合字符和最大UInt64 seed保留。公开成功夹具明确无私密附加块；额外元数据拒绝规则不放宽。覆盖已有目标/链接不覆盖、发布前后失败原件保护、外部项目变化拒绝、损坏压缩流、Adam7和64KiB窗、错误项目ID、debounce前flush及失败保留输入。这些是CPU文件/会话验收，不是普通沙盒GUI或真实图像生成。
+
+### 证据与失败分类
+
+证据根：/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-META-PNG-01/run-v8-20260908。
+
+- codec-initial：c22c6c7d70329c1d5f42623f1a9628d68c3e50c3，实际编译失败（try表达式）；Worker受限SwiftPM此前被native sandbox拒绝，停止该检查，未禁用沙箱。
+- combined-initial：f593478184609cf805b779394dd5b0f0abfc8409，133方法/2问题：Lead公开成功夹具带有额外元数据；ImageIO容忍坏zlib。Lead分别纠正夹具来源和新增系统SDK zlib严格有界校验，不改codec精度/权限/依赖。
+- combined-corrected：865ed238d0ebc0bdb526f303d00c221b663e28c9，新增PNG检查通过，但旧openSessionRelocationPreservesIdentityRevisionAssetsAndExclusiveLock有1次锁异常；relocation-isolated单独通过，最终137组合也通过。原根因仍未知。独立Foundation Process+1秒sleep的自有锁探针没有复现“子进程继承锁”的假设；不把该假设写成根因，不声称随机失败已修复，未改共享锁实现。
+- app-build：865ed238，完整隔离D.app禁止签名编译通过（49.798秒），不是运行/正常签名沙盒验收。后续受测ea1c只增加测试/任务记录，生产Sources相同。构建自动登记LaunchServices；未启动或替换普通D。
+- boundary-session：14b723b3c21fe06dbd115546e4f99f33b3866dc7，3个新增测试方法通过，包含多个压缩流反例与生产session时序。
+- codec-repair2：3047f945815c733ae1a3da595e73455bbf0298be，12方法/1问题；最大块长度夹具缺少8字节框架，先被正确判为截断。Lead在一次有界CODEC接管中仅补齐type/CRC框架，断言与生产实现不变。combined-final137通过，不累加旧运行凑通过率。
+
+### 来源、审核与预算
+
+Terra/medium负责PNGRecipeCodec及直接测试，独立目录D-META-PNG-CODEC-01；线程01a080aa-8997-7f01-8ff1-06ae3fd2de90，受限workspace-write，网络关闭，仅工作树及本run输出/tmp，公共Git不可写。初交c22c6c7，修复1 29ba0e61de76f64da4c95c377ab2bd3b26271aa8，修复2 7c294be完整SHA见receipt。两轮已用尽；Lead代提交不等于代实现。生产codec在修复1后未由Lead重写。Lead负责ProjectStore/ProjectSession/视图装配、真实文件和时序反例、zlib严格校验，并单列最后8字节测试夹具修补。
+
+Sol/high非实现者只读审核，线程01a080b7-0012-73e2-8180-32e80ab413a1。实际运行上下文确认read-only与所请求模型/档位。首次预检Git shim尝试/tmp/xcrun_db缓存被拒，未提权或恢复写入；Lead明确改用已安装Xcode Git实体执行只读查询，权限不变。review检查865ed238生产实现未见明确安全缺陷，但提出3组冻结证据缺口。delta检查ea1c，关闭压缩流/会话及多数容量缺口，仍要求尺寸0×1拒绝、8192×1接受、8192×2048接受、8192×2049拒绝四个精确夹具。没有将只读审核称为独立执行测试。
+
+**停止点**：CODEC普通修复及本轮Lead有界接管已使用，不再自行追加修复。候选不接纳。除以上4个边界夹具，Lead收尾自查还发现RecipeHandoffView.prepare在MainActor同步调用PNGRecipeCodec.inspect，最大容量输入可能造成界面停顿；应在另获准的有界收尾中移至受控后台任务，回主线程后复核项目身份，再进行相应编译/测试/差异审核。这个发现未经GUI计时，不把潜在卡顿量化为实测。真实面板/沙盒单文件授权/交接菜单与T0一样尚无本轮资源窗口，不以CPU代替产品操作验收。
+
+新范围不会以新编号或换模型重置预算。本次只选META，未启动HUM原型/转录/移动端/第三个目标。全部实现/审核和CPU/构建自有进程结束后才更新本记录；系统与用户D/GPU活动不作空闲证明。所有候选/证据保留，无push/fetch/main操作/清理。可观察单轮时间和CLI usage快照见runtime-observations.json；未重新核算历史样本，完整Lead与订阅费用unknown，不据此宣称低成本最优。
+
+恢复：先核对源/两候选HEAD、用户scheme未暂存内容/摘要/index、任务状态与权限。T0仅待真实窗口与隔离操作；META仍待上述有限收尾和真实产品检查。源码未启用，任何仅文档的源检查点不等于接纳代码。
