@@ -683,6 +683,7 @@ public final class ProjectSession {
     }
 
     public func createRecipeDocument(_ recipe: GenerationRecipe, expectedProjectID: UUID) async -> Bool {
+        guard textNavigationReady() else { return false }
         guard let store, manifest?.id == expectedProjectID, !isChangingProject, !closePending else { return false }
         isChangingProject = true
         defer { isChangingProject = false }

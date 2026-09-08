@@ -73,6 +73,35 @@ struct ProjectTextFlowTests {
         return text
     }
 
+    @Test func recipeHandoffCannotDiscardPendingTextCandidateAndFlushesAfterRejection() async throws {
+        let root = try folder(); defer { try? FileManager.default.removeItem(at: root) }
+        let subject = host(engine: FlowEngine()), text = try await prepare(subject, at: root)
+        await subject.saveText()
+        await subject.rewriteText()
+        let original = text.editor.document
+        let projectID = try #require(subject.manifest?.id)
+        let before = subject.documents.count
+        let recipe = GenerationRecipe(assetID: UUID(), assetVersion: UUID(), runID: UUID(),
+            modelSource: .unknown, modelRevision: .unknown, weightsManifestSHA256: .unknown,
+            prompt: .value("Imported fixture"), structuredInputRevision: .unknown, seed: .value("9"),
+            steps: .unknown, guidance: .unknown, width: .unknown, height: .unknown, scheduler: .unknown,
+            computePrecision: .unknown, quantization: .unknown, implementationVersion: .unknown,
+            mediaPayloadSHA256: .unknown, parents: [], claim: .callerDeclared)
+        let applied = await subject.createRecipeDocument(recipe, expectedProjectID: projectID)
+        #expect(!applied)
+        #expect(subject.activeDocumentID == original.id)
+        #expect(subject.documents.count == before)
+        #expect(subject.text === text && text.hasPendingCandidate)
+        if applied { _ = await subject.requestClose(); return }
+        text.reject()
+        subject.editText("Latest e\u{301} 👩‍💻", documentID: original.id)
+        #expect(await subject.createRecipeDocument(recipe, expectedProjectID: projectID))
+        #expect(subject.documents.count == before + 1)
+        #expect(subject.documents.first { $0.id == original.id }?.textDraft?.text == "Latest e\u{301} 👩‍💻")
+        #expect(subject.activeDocument?.draft.prompt == "Imported fixture")
+        #expect(await subject.requestClose())
+    }
+
     @Test func acceptUndoRejectAndReopenPreserveOriginalUntilExplicitAcceptance() async throws {
         let root = try folder(); defer { try? FileManager.default.removeItem(at: root) }
         let subject = host(engine: FlowEngine())
