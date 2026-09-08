@@ -57,6 +57,23 @@ public final class WorkbenchModel {
     }
     public var isComparing: Bool { comparisonAssetIDs.count == 2 && comparisonProjectID == manifest?.id && comparisonProjectURL == projectURL }
 
+    public func createTextDocument() async {
+        await endComparison()
+        await projectSession.createTextDocument()
+    }
+    public func chooseTextModel() async {
+        guard !isChangingProject, !isBusy else { return }
+        isChoosingLocation = true
+        defer { isChoosingLocation = false }
+        let panel = NSOpenPanel()
+        panel.title = "选择已有 Qwen2.5 0.5B Instruct 4-bit 模型"
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        guard await panel.begin() == .OK, let url = panel.url else { return }
+        await projectSession.registerTextModel(at: url)
+    }
+
     public func createDocument(name: String = "新创作") async {
         await endComparison()
         await projectSession.createDocument(name: name)

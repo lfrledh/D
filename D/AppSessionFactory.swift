@@ -10,8 +10,9 @@ enum AppSessionFactory {
         let stages = BackendStageMonitor()
         let backend = try MLXImageBackend(configuration: .init(artifactDirectory: artifactDirectory),
                                          observer: { await stages.record($0) })
+        let textBackend = try MLXTextBackend()
         let runtime = try InferenceRuntime(
-            backends: [backend],
+            backends: [backend, textBackend],
             configuration: try RuntimeConfiguration(memoryBudgetBytes: ImageModelProfile.flux2Klein.estimatedPeakBytes,
                                                     maximumQueuedRuns: 8))
         return WorkbenchSession(
@@ -34,6 +35,10 @@ enum AppSessionFactory {
                 let request = InferenceRequest(model: ModelReference(directory: directory), input: .image(
                     ImageModelProfile.flux2Klein.request(prompt: "Model registration", seed: 0)))
                 _ = try await backend.estimate(request)
+            }, textBackendID: textBackend.descriptor.id, validateTextModel: { directory in
+                let reference = try await FixedTextModel.verify(at: directory)
+                _ = try await textBackend.estimate(InferenceRequest(model: reference, input: .text(TextRequest(prompt: "Registration", maxTokens: 256))))
+                return reference
             })
     }
 

@@ -45,9 +45,21 @@ public final class ProjectSession {
     public private(set) var liveStates: [UUID: JobState] = [:]
     public private(set) var assetURLs: [UUID: URL] = [:]
     public private(set) var activeJobIDs: Set<UUID> = []
-    public var isBusy: Bool { !activeJobIDs.isEmpty }
+    public private(set) var text: ProjectTextController?
+    public private(set) var textModelStatus = "选择已安装的 Qwen2.5 0.5B Instruct 4-bit 文件夹。"
+    public private(set) var isTextWorking = false
+    public private(set) var isRegisteringTextModel = false
+    public var canRewriteText: Bool {
+        text?.canRewrite == true && textReference != nil && !isBusy && !isChangingProject
+            && !closePending && !showingAllArtworks && !isRegisteringTextModel
+    }
+    @ObservationIgnored private var textReference: ModelReference?
+    @ObservationIgnored private var textModelLease: LocationAccess.Lease?
+    @ObservationIgnored private var textWork: Task<Void, Never>?
+    @ObservationIgnored private var textContextID = UUID()
+    public var isBusy: Bool { !activeJobIDs.isEmpty || isTextWorking }
     public var canGenerate: Bool {
-        manifest != nil && ((selectedModelID != nil && selectedModelReady) || modelLease != nil)
+        manifest != nil && activeDocument?.kind == .image && !isTextWorking && ((selectedModelID != nil && selectedModelReady) || modelLease != nil)
         && !isChangingProject && !showingAllArtworks && !closePending && pendingSaves.isEmpty
         && !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && activeJobIDs.count < 8
     }
@@ -106,7 +118,7 @@ public final class ProjectSession {
     private func scheduleDraftSave() {
         guard !applyingDraft else { return }
         draftEditVersion &+= 1
-        guard let store, let documentID = activeDocumentID, !isChangingProject, !closePending else { return }
+        guard let store, let documentID = activeDocumentID, activeDocument?.kind == .image, !isChangingProject, !closePending else { return }
         draftWriter?.cancel()
         let value = draft
         draftWriter = Task { [weak self] in
@@ -139,10 +151,12 @@ public final class ProjectSession {
     }
 
     private func flushDraft(to store: ProjectStore) async throws {
+        try await text?.flush()
         // Admission is closed by navigation/close callers, so this is a stable final tail.
         // A selection already issued by the old view must finish before navigation or close.
         await selectionWriteTail?.value
         await metadataWriteTail?.value
+        if activeDocument?.kind == .text { return }
         guard let documentID = activeDocumentID else { return }
         draftWriter?.cancel()
         await draftWriter?.value
@@ -158,6 +172,19 @@ public final class ProjectSession {
     }
 
     private func loadActiveDocument() {
+        if let value = activeDocument?.textDraft, let session, let backendID = session.textBackendID {
+            if text?.editor.document.id != value.id {
+                let identity = textContextID
+                text = ProjectTextController(document: value, engine: session.engine, backendID: backendID) { [weak self] draft, revision in
+                    guard let self, self.textContextID == identity, let currentStore = self.store else {
+                        throw ProjectStoreError.invalidProject("文字文档所属项目已关闭。")
+                    }
+                    let updated = try await currentStore.saveTextDraft(draft, documentID: draft.id, expectedRevision: revision)
+                    guard self.textContextID == identity else { return }
+                    self.applyManifest(updated)
+                }
+            }
+        } else { text = nil }
         applyingDraft = true
         defer { applyingDraft = false }
         let value = activeDocument?.draft ?? .init()
@@ -253,7 +280,11 @@ public final class ProjectSession {
     }
 
     private func relocateOpenProject(_ previousStore: ProjectStore, lease: LocationAccess.Lease) async {
-        guard await drainForClose() else { await access.release(lease); return }
+        guard !isRegisteringTextModel, await drainForClose(), text?.hasPendingCandidate != true else {
+            await access.release(lease)
+            errorMessage = "请先完成模型校验并处理文字候选，再重新定位项目。"
+            return
+        }
         let previousURL = projectURL
         do {
             let replacement = try await factory(lease.url.appendingPathComponent("Tasks", isDirectory: true))
@@ -264,6 +295,9 @@ public final class ProjectSession {
             projectURL = lease.url
             assetURLs = [:]
             manifest = await relocated.snapshot()
+            if let backendID = replacement.textBackendID {
+                text?.rebind(engine: replacement.engine, backendID: backendID)
+            }
             await previousSession?.shutdown()
             // A moved old backend may still own unpublished temporary files. Its path checks
             // deliberately prevent deletion there; leaving those files is safer than guessing.
@@ -300,6 +334,8 @@ public final class ProjectSession {
 
     private func activate(_ candidate: ProjectStore, lease: LocationAccess.Lease) async throws {
         let createdSession = try await factory(candidate.artifactDirectory)
+        textContextID = UUID()
+        text = nil
         store = candidate
         session = createdSession
         projectLease = lease
@@ -311,6 +347,17 @@ public final class ProjectSession {
         loadActiveDocument()
         await refreshAssets()
         await restoreModelSelection(using: createdSession)
+        if let bookmark = settings.data(forKey: "workbench.textModelBookmark.v1"), createdSession.validateTextModel != nil {
+            do {
+                let lease = try await access.restore(bookmark)
+                do {
+                    textReference = try await createdSession.validateTextModel?(lease.url)
+                    textModelLease = lease
+                    settings.set(lease.bookmark, forKey: "workbench.textModelBookmark.v1")
+                    textModelStatus = FixedTextModel.title + " · 已校验"
+                } catch { await access.release(lease); throw error }
+            } catch { textModelStatus = "文字模型暂不可用，请重新选择原模型文件夹。" }
+        }
     }
 
     private func restoreModelSelection(using runtime: WorkbenchSession) async {
@@ -618,6 +665,7 @@ public final class ProjectSession {
     }
 
     public func createDocument(name: String = "新创作") async {
+        guard textNavigationReady() else { return }
         guard let store, !isChangingProject, !closePending else { return }
         isChangingProject = true
         defer { isChangingProject = false }
@@ -638,6 +686,7 @@ public final class ProjectSession {
     }
 
     public func selectDocument(id: UUID) async {
+        guard textNavigationReady() else { return }
         guard let store, !isChangingProject, !closePending else { return }
         isChangingProject = true
         defer { isChangingProject = false }
@@ -650,6 +699,7 @@ public final class ProjectSession {
     }
 
     public func showAllArtworks() async {
+        guard textNavigationReady() else { return }
         guard let store, !isChangingProject, !closePending else { return }
         isChangingProject = true
         defer { isChangingProject = false }
@@ -735,6 +785,7 @@ public final class ProjectSession {
     }
 
     public func forkDocument(from assetID: UUID, acknowledgeCurrentModel: Bool = false) async {
+        guard textNavigationReady() else { return }
         guard let store, !isChangingProject, !closePending,
               let asset = manifest?.assets.first(where: { $0.id == assetID }),
               let job = manifest?.jobs.first(where: { $0.id == asset.jobID }),
@@ -793,6 +844,11 @@ public final class ProjectSession {
 
     /// Used by project switching and native window/application close delegates.
     public func requestClose(decision: ProjectCloseDecision? = nil) async -> Bool {
+        if isRegisteringTextModel { return false }
+        if text?.hasPendingCandidate == true {
+            errorMessage = "请先接受或拒绝文字候选，再关闭项目。正文可以随时保存。"
+            return false
+        }
         guard !isChangingProject, !closePending else { return false }
         closePending = true
         isChangingProject = true
@@ -806,6 +862,7 @@ public final class ProjectSession {
             let selected = if let decision { decision } else { await closeDecision() }
             if selected == .keepOpen { return false }
             if selected == .cancel {
+                await cancelTextRewrite()
                 for id in activeJobIDs { await cancel(id) }
             }
             while isBusy { try? await Task.sleep(for: .milliseconds(100)) }
@@ -815,16 +872,21 @@ public final class ProjectSession {
 
     /// A deterministic action for harnesses/tests that have already chosen to cancel.
     public func cancelAndCloseProject() async -> Bool {
-        guard !isChangingProject, !closePending else { return false }
+        guard !isRegisteringTextModel, !isChangingProject, !closePending else { return false }
         closePending = true
         isChangingProject = true
         defer { closePending = false; isChangingProject = false }
+        await cancelTextRewrite()
         for id in activeJobIDs { await cancel(id) }
         while isBusy { try? await Task.sleep(for: .milliseconds(100)) }
         return await closeDrainedProject()
     }
 
     private func closeDrainedProject() async -> Bool {
+        if text?.hasPendingCandidate == true {
+            errorMessage = "请先接受或拒绝文字候选，再关闭项目。"
+            return false
+        }
         guard let store else {
             modelPoller?.cancel()
             modelPoller = nil
@@ -847,6 +909,12 @@ public final class ProjectSession {
             if let session { await session.shutdown() }
             self.store = nil
             session = nil
+            await access.release(textModelLease)
+            textModelLease = nil
+            textReference = nil
+            textContextID = UUID()
+            text = nil
+            textModelStatus = "选择已安装的 Qwen2.5 0.5B Instruct 4-bit 文件夹。"
             await access.release(modelLease)
             await access.release(projectLease)
             projectLease = nil
@@ -872,6 +940,77 @@ public final class ProjectSession {
             report(error, context: "项目尚未安全保存，暂不能关闭。请恢复磁盘访问后重试")
             return false
         }
+    }
+
+
+    private func textNavigationReady() -> Bool {
+        guard !isTextWorking, !isRegisteringTextModel, text?.hasPendingCandidate != true else {
+            errorMessage = "请先取消并等待改写结束，或接受／拒绝文字候选，再切换文档。"
+            return false
+        }
+        return true
+    }
+
+    public func createTextDocument(name: String = "新文稿") async {
+        guard textNavigationReady(), let store, !isChangingProject, !closePending,
+              session?.textBackendID != nil else { return }
+        isChangingProject = true
+        defer { isChangingProject = false }
+        do {
+            try await flushDraft(to: store)
+            applyManifest(try await store.createTextDocument(name: name))
+            showingAllArtworks = false
+            loadActiveDocument()
+        } catch { report(error, context: "无法新建文稿，当前输入已保留") }
+    }
+
+    public func editText(_ value: String, documentID: UUID) {
+        guard !isChangingProject, !closePending, activeDocumentID == documentID else { return }
+        text?.edit(value, documentID: documentID)
+    }
+    public func selectText(_ range: NSRange, documentID: UUID) {
+        guard !isChangingProject, !closePending, activeDocumentID == documentID else { return }
+        text?.select(range, documentID: documentID)
+    }
+    public func saveText() async {
+        do { try await text?.flush() }
+        catch { report(error, context: "正文尚未保存，输入仍在当前窗口") }
+    }
+    public func registerTextModel(at url: URL) async {
+        guard !isBusy, !isChangingProject, !closePending, !isRegisteringTextModel,
+              let validator = session?.validateTextModel else { return }
+        isRegisteringTextModel = true
+        defer { isRegisteringTextModel = false }
+        do {
+            let lease = try await access.acquire(selected: url)
+            do {
+                let reference = try await validator(lease.url)
+                await access.release(textModelLease)
+                textModelLease = lease
+                textReference = reference
+                settings.set(lease.bookmark, forKey: "workbench.textModelBookmark.v1")
+                textModelStatus = FixedTextModel.title + " · 已校验"
+            } catch { await access.release(lease); throw error }
+        } catch { report(error, context: "文字模型未能登记，未下载或更改任何权重") }
+    }
+    public func rewriteText() async {
+        guard canRewriteText, let controller = text, let reference = textReference,
+              let validator = session?.validateTextModel else { return }
+        isTextWorking = true
+        let work = Task { [self] in
+            defer { isTextWorking = false; textWork = nil }
+            await controller.rewrite(using: reference) { reference in
+                try await validator(reference.directory)
+            }
+        }
+        textWork = work
+        await work.value
+    }
+    public func cancelTextRewrite() async {
+        let work = textWork
+        work?.cancel()
+        await text?.cancel()
+        await work?.value
     }
 
     private func report(_ error: Error, context: String) {

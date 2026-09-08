@@ -77,7 +77,7 @@ public struct WorkbenchView: View {
                 }
             }
             .navigationTitle(model.manifest?.name ?? "D")
-            .inspector(isPresented: $showInspector) {
+            .inspector(isPresented: Binding(get: { showInspector && model.activeDocument?.kind != .text }, set: { showInspector = $0 })) {
                 GenerationInspector(model: model, library: library)
                     .inspectorColumnWidth(min: 280, ideal: 310, max: 400)
             }
@@ -152,7 +152,32 @@ public struct WorkbenchView: View {
     }
 
     @ViewBuilder private var canvas: some View {
-        if model.isComparing {
+        if !model.showingAllArtworks, let text = model.projectSession.text {
+            let project = model.projectSession
+            let id = text.editor.document.id
+            VStack(spacing: 0) {
+                if project.isTextWorking && !text.editor.isRunning {
+                    HStack {
+                        ProgressView().controlSize(.small)
+                        Text("正在校验本地文字模型…")
+                        Button("取消") { Task { await project.cancelTextRewrite() } }
+                    }.padding(8)
+                }
+                TextWorkbenchView(session: text.editor, selection: text.selection,
+                    instruction: Binding(get: { text.instruction }, set: { text.instruction = $0 }),
+                    modelStatus: project.textModelStatus, canGenerate: project.canRewriteText,
+                    canAccept: text.canAccept, canUndo: text.canUndo,
+                    isSaving: text.isSaving, saveStatus: text.saveStatus,
+                    onEdit: { project.editText($0, documentID: id) },
+                    onSelection: { project.selectText($0, documentID: id) },
+                    onGenerate: { Task { await project.rewriteText() } },
+                    onCancel: { Task { await project.cancelTextRewrite() } },
+                    onAccept: { text.accept() }, onReject: { text.reject() }, onUndo: { text.undo() },
+                    onSave: { Task { await project.saveText() } },
+                    onChooseModel: { Task { await model.chooseTextModel() } })
+                    .id(id)
+            }
+        } else if model.isComparing {
             ArtworkComparison(model: model)
         } else if let asset = model.selectedAsset, let url = model.assetURLs[asset.id] {
             ArtworkCanvas(url: url, label: "已保存的作品")
@@ -200,7 +225,7 @@ private struct ArtworkSidebar: View {
                         Button {
                             Task { await model.switchDocument(to: document.id) }
                         } label: {
-                            Label(document.name, systemImage: "doc.text.image")
+                            Label(document.name, systemImage: document.kind == .text ? "doc.text" : "doc.text.image")
                                 .lineLimit(2)
                                 .fontWeight(!model.showingAllArtworks && model.activeDocumentID == document.id ? .semibold : .regular)
                                 .frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 8)
@@ -231,6 +256,13 @@ private struct ArtworkSidebar: View {
                 }
                 .keyboardShortcut("n", modifiers: [.command, .shift])
                 .accessibilityIdentifier("new-document")
+                Button {
+                    Task { await model.createTextDocument() }
+                } label: {
+                    Label("新建文稿", systemImage: "text.badge.plus")
+                        .frame(maxWidth: .infinity, alignment: .leading).padding(8)
+                }
+                .accessibilityIdentifier("new-text-document")
                 HStack {
                     sidebarHeading(model.showingAllArtworks ? "全部作品" : "候选作品")
                     Spacer()

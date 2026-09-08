@@ -23,3 +23,5 @@ D-T0-STORE-01负责限定项目值类型/存储及migration测试；D-T0-VIEW-01
 CPU：原工作台117/核心17回归＋新增存储/选区/协调/保存失败反例，旧schema断言只有从2更新到当前3的明确演进，不删原保护断言。全应用隔离DerivedData及已存在依赖，代码签名关闭只证明编译，不证明运行签名。真实当前模型和GUI必须确认用户D/GPU无争用及独立会话/项目；不能则保留整个候选批次，不将schema3/新UI默认接入源或安装普通D。GUI查询本轮曾长时间超时，未知资源/权限不靠重签或关应用解决。
 
 证据 /Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-T0-WORKBENCH-01/run-20260908；普通源个人scheme不入任务树。输出/缓存/临时归各自run。无网络下载/签名/权限/依赖修改/推送/main操作/清理。只对自有进程限时回收。到此产品检查点停止；音乐/HUM紧接独立数据/普通试听路线，不等文字高级功能，META PNG另包。
+
+Lead实现清单补充：新增DWorkbench/Text/ProjectTextController.swift及其CPU协调测试；新增DWorkbench/Models/FixedTextModel.swift与已存在fixtures/text-model.json的资源副本，用于固定本地模型只读校验，不引入下载/依赖/新精度。Lead负责选择代次、写入排队和关闭保护，后续非实现者审核这部分重要实现。
