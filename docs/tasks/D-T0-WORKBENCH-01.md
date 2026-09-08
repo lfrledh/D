@@ -91,3 +91,17 @@ CPU方法由Lead以swift test --package-path <明确工作树>/Packages/UI运行
 **最小剩余动作**：确认D及其他本地AI任务空闲，恢复Codex对明确D产物的界面控制响应；随后在既有签名/授权范围使用独立测试产物、独立项目和已有固定文字模型完成真实改写与GUI选段/接受拒绝/撤销/保存重开。没有新签名/权限批准时不得临时绕行，未具备条件继续保留候选。通过后复核并按既定规则本地接纳，无需重新制定产品目标。
 
 音乐、HUM及资产来源保持已落地路线；下一独立音乐/HUM包以原声/自由时间/音符数据和普通试听为有限出口，不等文本高级功能或META全部完成。本轮没有启动它们。
+
+## v8 恢复：签名产物已就绪，真实窗口待确认
+
+2026-09-08，源仍6735266933773adaee33b3a66a01b09c0b1f7d9b。既有代码/测试62fc7b5dd568e5f53354382dd189d09e96b7e0bc，候选8c40e968c61f4ee661efdb6c92ffe77cd7b91cff仅含其后6份文档。v8没有T0实现改动，STORE/VIEW预算不刷新，额外Lead收尾周期尚未用于代码修补。
+
+新普通签名构建通过（66.995秒），使用现有DevelopmentSigning.xcconfig、独立整个DerivedData及既有依赖副本；不改Team/bundle/entitlements/钥匙串策略，未替换或启动普通D。产物为 D-Development/AgentTrials/D-T0-WORKBENCH-01/run-v8-20260908/signed-build/DerivedData/Build/Products/Debug/D.app。正常系统诊断确认完整性、App Sandbox、用户选择文件读写、app-scope bookmarks、network client、Debug get-task-allow；无测试临时权限例外。同一产物先在受限诊断环境报不可信/无法读取entitlements，再经获准正常系统只读验证通过；没有修签名。
+
+CUA仅getState有界响应0.32秒，发现两个同名同bundle D记录，没有按名称选择或启动任何实例。已集中请求本轮约30分钟空闲/GPU/界面窗口及必要IME协助，尚未收到答复。本轮未真实推理/GUI、未打开真实项目或迁移作品，因此T0不接纳源、不默认启用schema3。后续绑定明确产物和可观察进程，用现有D_UI_TEST_SESSION UUID隔离偏好/模型库、禁止系统状态恢复、仅用合成项目；共享bundle容器不等于隔离证明。
+
+证据：run-v8-20260908/start.json、protected-scheme.plist、signed-build.json/log、signed-diagnostic.json、validation-entry.json。最后一项含四个关键文件摘要/大小mtime及独立签名交叉核对。构建自动登记LaunchServices，未launch；原生SwiftPM沙箱保留，固定依赖/禁更新/Git策略不等于系统级断网。自有构建已结束；用户进程/GPU状态未知，未关闭D。GUI、真实IME、取消释放、签名沙盒保存与隔离v1/v2迁移仍待完成。
+
+v8后续选择META-PNG，独立从已接纳schema2源开发，不依赖此T0候选。HUM因当前ProjectStore只接纳image/png结果，需要独立音频持久化增量；下一出口仍为原声导入/试听及随后真实转录，不等全部文本增强。
+
+环境事件补记：本次一次混有中文长文本的stdin Python准备命令在解析期报告Non-UTF-8，未执行其正文。沿用已知处理方式将文档与ASCII脚本分开；没有重试原失败方式，未把事件计为模型实现修复，具体根因未知。
