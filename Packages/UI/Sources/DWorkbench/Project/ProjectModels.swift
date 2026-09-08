@@ -39,13 +39,26 @@ public struct MediaMetadata: Codable, Sendable, Equatable {
     public var height: Int?
     public var bitDepth: Int?
     public var colorSpace: String?
+    public var audio: AudioAssetMetadata?
 
     public init(width: Int? = nil, height: Int? = nil, bitDepth: Int? = nil,
-                colorSpace: String? = nil) {
+                colorSpace: String? = nil, audio: AudioAssetMetadata? = nil) {
         self.width = width
         self.height = height
         self.bitDepth = bitDepth
         self.colorSpace = colorSpace
+        self.audio = audio
+    }
+
+    private enum CodingKeys: String, CodingKey { case width, height, bitDepth, colorSpace, audio }
+
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        width = try values.decodeIfPresent(Int.self, forKey: .width)
+        height = try values.decodeIfPresent(Int.self, forKey: .height)
+        bitDepth = try values.decodeIfPresent(Int.self, forKey: .bitDepth)
+        colorSpace = try values.decodeIfPresent(String.self, forKey: .colorSpace)
+        audio = try values.decodeIfPresent(AudioAssetMetadata.self, forKey: .audio)
     }
 }
 
@@ -135,7 +148,7 @@ public struct ProjectDraft: Codable, Sendable, Equatable {
 }
 
 public struct ProjectManifest: Codable, Sendable, Equatable, Identifiable {
-    public static let currentSchemaVersion = 3
+    public static let currentSchemaVersion = 4
     public var schemaVersion: Int
     /// Monotonic committed state version lets the UI discard a late, stale actor response.
     public var revision: UInt64
@@ -158,11 +171,13 @@ public struct ProjectManifest: Codable, Sendable, Equatable, Identifiable {
     }
     public var jobs: [ProjectJob]
     public var assets: [ProjectAsset]
+    public var pendingAudioCaptures: [AudioCaptureReservation]
 
     public init(schemaVersion: Int = Self.currentSchemaVersion, revision: UInt64 = 0, id: UUID = UUID(),
                 name: String, createdAt: Date = Date(), updatedAt: Date = Date(), draft: ProjectDraft = .init(),
                 jobs: [ProjectJob] = [], assets: [ProjectAsset] = [],
-                documents: [ProjectDocument]? = nil, activeDocumentID: UUID? = nil) {
+                documents: [ProjectDocument]? = nil, activeDocumentID: UUID? = nil,
+                pendingAudioCaptures: [AudioCaptureReservation] = []) {
         self.schemaVersion = schemaVersion
         self.revision = revision
         self.id = id
@@ -174,10 +189,12 @@ public struct ProjectManifest: Codable, Sendable, Equatable, Identifiable {
         self.activeDocumentID = activeDocumentID ?? initialDocuments.first?.id ?? UUID()
         self.jobs = jobs
         self.assets = assets
+        self.pendingAudioCaptures = pendingAudioCaptures
     }
 
     private enum CodingKeys: String, CodingKey {
-        case schemaVersion, revision, id, name, createdAt, updatedAt, draft, jobs, assets, documents, activeDocumentID
+        case schemaVersion, revision, id, name, createdAt, updatedAt, draft, jobs, assets, documents, activeDocumentID,
+             pendingAudioCaptures
     }
 
     public init(from decoder: Decoder) throws {
@@ -189,6 +206,8 @@ public struct ProjectManifest: Codable, Sendable, Equatable, Identifiable {
         createdAt = try values.decode(Date.self, forKey: .createdAt)
         updatedAt = try values.decode(Date.self, forKey: .updatedAt)
         assets = try values.decode([ProjectAsset].self, forKey: .assets)
+        pendingAudioCaptures = try values.decodeIfPresent([AudioCaptureReservation].self,
+                                                          forKey: .pendingAudioCaptures) ?? []
         if schemaVersion == 1 {
             // Stable across a crash after the backup but before v2 publication. Object
             // categories have separate identity spaces; no existing ID is rewritten.
@@ -217,12 +236,13 @@ public struct ProjectManifest: Codable, Sendable, Equatable, Identifiable {
         try values.encode(activeDocumentID, forKey: .activeDocumentID)
         try values.encode(jobs, forKey: .jobs)
         try values.encode(assets, forKey: .assets)
+        try values.encode(pendingAudioCaptures, forKey: .pendingAudioCaptures)
     }
 }
 
 /// A named exploration owns editable settings and references candidates without copying media.
 public enum ProjectDocumentKind: String, Codable, Sendable {
-    case image, text
+    case image, text, audio
 }
 
 public struct ProjectDocument: Codable, Sendable, Equatable, Identifiable {
@@ -231,6 +251,7 @@ public struct ProjectDocument: Codable, Sendable, Equatable, Identifiable {
     public var kind: ProjectDocumentKind
     public var draft: ProjectDraft
     public var textDraft: TextDraftDocument?
+    public var audioDraft: AudioDraftDocument?
     /// A reference for the creator, not an implicit image-to-image inference input.
     public var sourceAssetID: UUID?
     public var adoptedAssetID: UUID?
@@ -238,19 +259,21 @@ public struct ProjectDocument: Codable, Sendable, Equatable, Identifiable {
 
     public init(id: UUID = UUID(), name: String, kind: ProjectDocumentKind = .image,
                 draft: ProjectDraft = .init(), textDraft: TextDraftDocument? = nil,
+                audioDraft: AudioDraftDocument? = nil,
                 sourceAssetID: UUID? = nil, adoptedAssetID: UUID? = nil, selectedAssetID: UUID? = nil) {
         self.id = id
         self.name = name
         self.kind = kind
         self.draft = draft
         self.textDraft = textDraft
+        self.audioDraft = audioDraft
         self.sourceAssetID = sourceAssetID
         self.adoptedAssetID = adoptedAssetID
         self.selectedAssetID = selectedAssetID
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, kind, draft, textDraft, sourceAssetID, adoptedAssetID, selectedAssetID
+        case id, name, kind, draft, textDraft, audioDraft, sourceAssetID, adoptedAssetID, selectedAssetID
     }
 
     public init(from decoder: Decoder) throws {
@@ -261,6 +284,7 @@ public struct ProjectDocument: Codable, Sendable, Equatable, Identifiable {
         kind = try values.decodeIfPresent(ProjectDocumentKind.self, forKey: .kind) ?? .image
         draft = try values.decode(ProjectDraft.self, forKey: .draft)
         textDraft = try values.decodeIfPresent(TextDraftDocument.self, forKey: .textDraft)
+        audioDraft = try values.decodeIfPresent(AudioDraftDocument.self, forKey: .audioDraft)
         sourceAssetID = try values.decodeIfPresent(UUID.self, forKey: .sourceAssetID)
         adoptedAssetID = try values.decodeIfPresent(UUID.self, forKey: .adoptedAssetID)
         selectedAssetID = try values.decodeIfPresent(UUID.self, forKey: .selectedAssetID)
