@@ -118,3 +118,13 @@ Lead 帮助类型为需求澄清、Python 类型语义说明和可执行反例�
 恢复检查点：源仍 `c14f892cacd69ce909e368c03db9b69c7dac1db8`／codex/inference-foundation；源个人 scheme 的当前字节、差异、SHA 和索引以 preparation.json、保护副本与最终回执比对。候选留 codex/d-c01a-result-01 和原外盘任务工作树；修复后两个源码文件另留 `repair-1-unverified/` 及 SHA，不只存临时工作树。最终保留提交／进程／保护结果见 `stopped-receipt.json`。无合并、推送或产品阶段切换。
 
 最小后续动作：用户允许从本候选继续原任务的 Lead 复验，固定语法检查为不写缓存的 AST，并保持现有模型、目录、沙箱和剩余返工预算；不需要修改 Mac 权限。此处不自行恢复执行。当前没有两项已具备独立验收条件的 D-C01a 后续任务：签名稳定化与完整 UI 运行共享应用产物且有前后依赖，本离线工具也尚待复核；暂不建议双 Worker，不要求模型连续零返工作为门槛。
+
+### v7 恢复与有界 Lead 接管（2026-09-08；修订 3，冻结语义不变）
+
+原候选 829ca10e2f396c8309723d55a69149cb132017d6 与签名源 85ef963093f95a4f22e82927df67849522c8a0eb 已在候选内保留历史合并为 3f7985240a5932956ca970cb9b3de76f96cbb2a2。源未提前推进。相关旧 CLI 有结束回执，当前原生代理状态为 completed；没有新 Worker。工具的默认沙箱拒绝本轮外盘证据目录创建，随后仅该文件操作取得工具审批；未改全局配置／系统权限，未声称默认写根已经变化。
+
+Lead 在合并 SHA 上重跑 12 项原测试和 39 个原 Lead CLI 场景通过；不是实际 GUI 8/8。补查发现：错误导出丢失已读取路径／SHA；显式 null 容器结果被当缺省；不可写 stderr 的退出清理导致 120（无缓冲的写报告失败分支为 1）。新增三项测试方法含七个场景，修补前 15 方法运行有六个失败子场景。选择 v7 的一次有界 Lead 接管，不再叠加最后一轮 Worker 修复作为后备救援。
+
+Astra Lead 修补单次输入读取中的证据传递、显式 null 校验、直接文件描述符 best-effort 错误提示（包括参数错误）。没有 os._exit、吞全部程序异常或修改验收标准。新增回归调用真实 CLI 等待完整结束；既有 12 方法和 39 场景不改。来源：Terra 初步实现及一次修复，Astra Lead 定点接管；非 Terra 独立通过，尚待本次完整复验与非实现者审核。历史权限未停报和 Lead 延迟审核事实不变；后续修订不追溯生效。
+
+本轮证据：../D-Development/AgentTrials/D-C01a-RESULT-01/run-20260908T033837Z-v7-restore（实际为主仓库同级 D-Development，非本工作树相对目录）。start-protection.json、merge-command.json、merged-candidate.json、candidate-unit-execution.json、candidate-probes.json、extra-before.json、lead-regressions-before.json。运行全程不触碰 D.app、签名、模型或用户 scheme。当前待完整复验；后续实际 SHA 见运行回执。

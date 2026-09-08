@@ -177,5 +177,44 @@ class SummarizeUIResultsTests(unittest.TestCase):
         self.assertEqual(completed.returncode, 0); self.assertTrue(path.exists())
 
 
+    def test_export_parse_errors_keep_actual_read_evidence(self):
+        for malformed_json in (False, True):
+            with self.subTest(malformed_json=malformed_json):
+                attempt = self.attempt(tests=export([(IDS[0], []), (IDS[1], "Passed")]))
+                source = self.dir / "tests data.json"
+                if malformed_json:
+                    source.write_text("{bad", encoding="utf-8")
+                    value = json.loads(attempt.read_text())
+                    value["evidence"]["tests_sha256"] = hashlib.sha256(source.read_bytes()).hexdigest()
+                    dump(attempt, value)
+                completed, output = self.run_cli(attempt, "context-" + str(malformed_json) + ".json")
+                report = json.loads(output.read_text())
+                self.assertEqual(completed.returncode, 2)
+                self.assertEqual(report["evidence"]["tests_path"], str(source.resolve()))
+                self.assertEqual(report["evidence"]["tests_sha256"], hashlib.sha256(source.read_bytes()).hexdigest())
+                self.assertEqual(report["counts"]["UNKNOWN"], 2)
+
+    def test_explicit_null_container_result_is_invalid(self):
+        completed, output = self.run_cli(self.attempt(tests=export([(x, "Passed") for x in IDS], None)))
+        self.assertEqual(completed.returncode, 2)
+        self.assertEqual(json.loads(output.read_text())["tool_status"], "ERROR")
+
+    def test_unwritable_stderr_cannot_replace_cli_error_exit(self):
+        attempt = self.attempt()
+        stderr_file = self.dir / "read-only-stderr"; stderr_file.write_bytes(b"preserve")
+        existing = self.dir / "existing-report"; existing.write_bytes(b"preserve")
+        for unbuffered in (False, True):
+            for name in ("existing-report", "r" * 260):
+                with self.subTest(unbuffered=unbuffered, target=name[:20]):
+                    argv = [sys.executable, "-B"] + (["-u"] if unbuffered else [])
+                    argv += [str(SCRIPT), "--plan", str(self.plan_path), "--attempt", str(attempt), "--report", str(self.dir / name)]
+                    with stderr_file.open("rb") as errors:
+                        process = subprocess.run(argv, stdout=subprocess.PIPE, stderr=errors, timeout=5)
+                    self.assertEqual(process.returncode, 2)
+                    self.assertEqual(process.stdout, b"")
+                    self.assertEqual(stderr_file.read_bytes(), b"preserve")
+                    self.assertEqual(existing.read_bytes(), b"preserve")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -35,9 +35,13 @@ def no_duplicates(pairs):
     return result
 
 
-def read_json(path):
+def read_json(path, provenance=None, path_key=None, hash_key=None):
+    if provenance is not None:
+        provenance[path_key] = str(path)
     try:
         raw = path.read_bytes()
+        if provenance is not None:
+            provenance[hash_key] = sha(raw)
         value = json.loads(raw.decode("utf-8"), object_pairs_hook=no_duplicates,
                            parse_constant=no_constant)
     except (OSError, UnicodeError, ValueError, json.JSONDecodeError) as error:
@@ -68,8 +72,8 @@ def exact_integer(value, label, expected=None):
     return value
 
 
-def load_plan(path):
-    raw, plan = read_json(path)
+def load_plan(path, provenance=None):
+    raw, plan = read_json(path, provenance, "path", "sha256")
     if not isinstance(plan, dict):
         raise InputError("plan must be an object")
     exact_integer(plan.get("schema_version"), "plan schema_version", 1)
@@ -91,7 +95,7 @@ def load_plan(path):
 def resolved_existing(path, label):
     try:
         return path.resolve(strict=True)
-    except OSError as error:
+    except (OSError, RuntimeError) as error:
         raise InputError(label + " cannot be resolved: " + str(error))
 
 
@@ -138,7 +142,7 @@ def walk_nodes(nodes, expected, cases, container_results, in_bundle=False, in_ca
         if not isinstance(children, list):
             raise InputError("node children must be a list")
         result = node.get("result")
-        if result is not None and (not isinstance(result, str) or result not in RESULT_TO_STATUS):
+        if "result" in node and (not isinstance(result, str) or result not in RESULT_TO_STATUS):
             raise InputError("invalid node result")
         if kind == "Test Case":
             if not in_bundle or in_case:
@@ -207,20 +211,28 @@ def make_report(plan, plan_path, plan_hash, run_id, attempt_id, state, attempt_p
                          "schema_version": evidence.get("schema_version") if evidence else None}}
 
 
-def summarize(plan_path, attempt_path):
-    plan_path, attempt_path = resolved_existing(plan_path, "plan"), resolved_existing(attempt_path, "attempt")
-    plan_raw, plan, expected, plan_id, revision = load_plan(plan_path)
+def summarize(plan_path, attempt_path, report=None):
+    # Update one report as bytes are read, so an error preserves the evidence
+    # already obtained without re-reading inputs or retaining partial test results.
+    if report is None:
+        report = make_report(None, None, None, None, None, None, None)
+    plan_path = resolved_existing(plan_path, "plan")
+    plan_raw, plan, expected, plan_id, revision = load_plan(plan_path, report["plan"])
     plan_hash = sha(plan_raw)
-    attempt_raw, attempt = read_json(attempt_path)
+    report["plan"].update(plan_id=plan_id, plan_revision=revision)
+    report["tests"] = [{"test_id": ident, "status": "UNKNOWN", "reason": None,
+                        "evidence_pointer": None} for ident in expected]
+    attempt_path = resolved_existing(attempt_path, "attempt")
+    attempt_raw, attempt = read_json(attempt_path, report["evidence"], "attempt_path", "attempt_sha256")
+    known_attempt_fields(report, attempt, attempt_path, sha(attempt_raw))
     run_id, attempt_id, state, tests_path, evidence = validate_attempt(attempt, attempt_path, plan_id, revision, plan_hash)
-    report = make_report(plan, plan_path, plan_hash, run_id, attempt_id, state, attempt_path, tests_path, None, evidence, sha(attempt_raw))
     if state == "not_started":
         report["tests"] = [{"test_id": ident, "status": "NOT_STARTED", "reason": attempt["reason"], "evidence_pointer": None} for ident in expected]
         report["counts"] = counts_for(report["tests"]); report["acceptance"] = "INCOMPLETE"; return report, 1
     if state == "tool_error":
         report["tests"] = [{"test_id": ident, "status": "UNKNOWN", "reason": attempt["reason"], "evidence_pointer": None} for ident in expected]
         report["counts"] = counts_for(report["tests"]); report["acceptance"] = "UNKNOWN"; return report, 1
-    tests_raw, tests_json = read_json(tests_path)
+    tests_raw, tests_json = read_json(tests_path, report["evidence"], "tests_path", "tests_sha256")
     if evidence["tests_sha256"] != sha(tests_raw):
         raise InputError("tests_sha256 does not match tests bytes")
     report["evidence"]["tests_sha256"] = sha(tests_raw)
@@ -274,9 +286,9 @@ def known_attempt_fields(report, attempt, attempt_path, attempt_hash):
     evidence = attempt.get("evidence")
     if isinstance(evidence, dict):
         for key in ("format", "schema_version", "source_xcresult"):
-            if key in evidence:
+            if isinstance(evidence.get(key), str) and evidence[key]:
                 report["evidence"][key] = evidence[key]
-        if "source_xcresult" in evidence:
+        if isinstance(evidence.get("source_xcresult"), str) and evidence["source_xcresult"]:
             report["evidence"]["source_xcresult_provenance"] = "caller_declared_unverified"
 
 
@@ -290,37 +302,41 @@ def error_with_known_plan(report, expected, reason):
     return report
 
 
+def report_error(message):
+    # Do not leave an error message buffered for interpreter-shutdown flushing.
+    try:
+        os.write(2, (message + "\n").encode("utf-8", errors="backslashreplace"))
+    except OSError:
+        pass
+
+
+class CLIParser(argparse.ArgumentParser):
+    def error(self, message):
+        report_error("argument error: " + message)
+        raise SystemExit(2)
+
+
 def main(argv=None):
-    parser = argparse.ArgumentParser()
+    parser = CLIParser()
     parser.add_argument("--plan", required=True); parser.add_argument("--attempt", required=True); parser.add_argument("--report", required=True)
     args = parser.parse_args(argv)
-    report_path = None; report = None; expected = None
+    report_path = None
+    report = make_report(None, None, None, None, None, None, None)
     try:
         report_path = safe_output_path(args.report)
-        plan_path = resolved_existing(Path(args.plan), "plan")
-        plan_raw, plan, expected, plan_id, revision = load_plan(plan_path)
-        plan_hash = sha(plan_raw)
-        report = make_report(plan, plan_path, plan_hash, None, None, None, None)
-        attempt_path = resolved_existing(Path(args.attempt), "attempt")
-        attempt_raw, attempt = read_json(attempt_path)
-        known_attempt_fields(report, attempt, attempt_path, sha(attempt_raw))
-        report, code = summarize(plan_path, attempt_path)
+        report, code = summarize(Path(args.plan), Path(args.attempt), report)
     except (InputError, OSError) as error:
-        if report is None:
-            report = make_report(None, None, None, None, None, None, None)
+        expected = [item["test_id"] for item in report["tests"]] if report["tests"] is not None else None
         report = error_with_known_plan(report, expected, str(error))
         code = 2
     if report_path is not None:
         try:
             write_report(report_path, report)
         except OSError as error:
-            sys.stderr.write("cannot write report: " + str(error) + "\n")
+            report_error("cannot write report: " + str(error))
             return 2
     else:
-        try:
-            sys.stderr.write(report["issues"][0]["reason"] + "\n")
-        except Exception:
-            pass
+        report_error(report["issues"][0]["reason"])
     return code
 
 
