@@ -164,7 +164,7 @@ struct PNGRecipeBoundaryTests {
         // Independent known sizes: 8x8 grayscale is 72 filtered bytes, Adam7 is79.
         let valid: [(Int, Int, UInt8, Data)] = [
             (8,8,0,Data(repeating:0,count:72)), (8,8,1,Data(repeating:0,count:79)),
-            (256,256,0,Data(repeating:0,count:257*256))]
+            (256,257,0,Data(repeating:0,count:257*257))]
         let base = ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"].map { URL(fileURLWithPath:$0, isDirectory:true) } ?? FileManager.default.temporaryDirectory.resolvingSymlinksInPath()
         try FileManager.default.createDirectory(at:base,withIntermediateDirectories:true)
         for (width,height,interlace,raw) in valid {
