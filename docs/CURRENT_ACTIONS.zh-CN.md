@@ -74,3 +74,13 @@ D-C01a-RESULT-01 已保留历史合并、由 Lead 有界修补、非实现者只
 已明确多模态出口：[音乐/HUM](MUSIC_ROADMAP.zh-CN.md)、[资产来源](ASSET_PROVENANCE_PLAN.zh-CN.md)。图像有限出口已有历史证据，签名版完整 UI/重建恢复缺口保留，不阻塞独立组件。当前 T0 范围仅编辑/运行桥接/草稿 Data 归档，META 仅内部配方 Data/隐私，不默认启用新 UI；完整工作台保存、真实文字生成、PNG往返及音乐仍未验收。
 
 下一用户可感知出口是 T0 工作台界面和生产保存接线，在允许的独立环境完成实际选段改写、保存重开。下一音乐包以 HUM/MUS0 原声/自由时间/音符数据与普通试听出口进入，不等所有图像/文字增强或 META 全部完成；下载/音源/模型精度需另行明确。
+
+## v8 里程碑检查点（2026-09-08；覆盖上面的下一步待批描述）
+
+本轮授权为T0真实收尾＋一个后续有限闭环。**产品代码未接纳，普通D未替换，无推送**。本段所在源提交仅更新当前动作/协作规程；最后已接纳产品代码仍6735266933773adaee33b3a66a01b09c0b1f7d9b。以下候选不能当作已交付：
+
+- T0：候选目录 /Volumes/CodexProjects/Codex/D-Worktrees/D-T0-WORKBENCH-01；任务记录 docs/tasks/D-T0-WORKBENCH-01.md。代码与既有62fc7b5dd568e5f53354382dd189d09e96b7e0bc一致，新增签名构建来自8c40e968c61f4ee661efdb6c92ffe77cd7b91cff，之后仅任务记录6bf7eef9be37036e06b96dd3dbcb364ceee8a712。现有配置正常签名、完整性和entitlements已核对；GUI仅库存查询响应，未绑定/启动实例。当前空闲/GPU/GUI窗口请求未获答复，真实改写/IME/取消释放/签名保存及合成v1/v2迁移仍待。证据 D-Development/AgentTrials/D-T0-WORKBENCH-01/run-v8-20260908/validation-entry.json。
+- 后续选择META-PNG：目录 /Volumes/CodexProjects/Codex/D-Worktrees/D-META-PNG-01；任务记录 docs/tasks/D-META-PNG-01.md。受测ea1c19abf89ca8fdc6339df904aba0c0c7c59a98，137 CPU方法通过，完整禁止签名编译通过；新副本/离线读取/新草稿为合成文件与会话实测，不是GUI。非实现者复审仍要求4个精确尺寸边界夹具；Lead自查预览校验在界面线程，尚需移出。Terra初交+2修复、Lead一次有界夹具接管已用；未自动追加轮次，保留候选和真实产品门槛。曾出现旧项目移位锁测试1次异常，定向及最终组合通过但根因unknown，不声称修复。最终候选SHA/模型/进程/证据由 D-Development/AgentTrials/D-META-PNG-01/run-v8-20260908/final-receipt.json 索引。
+- HUM-ENTRY的具体依赖：现有ProjectStore仅接纳image/png及固定图片结果路径；原声素材需独立持久化增量，不能悄悄扩大schema。音乐/HUM下一出口仍是原声导入、保存和普通试听，然后明确的真实哼唱转录验证，不等全部T0增强或META平台。没有启动模型/声库下载、手机或完整音乐编辑器。
+
+最小剩余动作：协调本轮实际GUI/GPU窗口；META另需上述限定收尾的追加预算后再复验，不重新全库审计或重新试验协作机制。当前所有本轮自有子进程已结束；用户D/GPU空闲未知，不关闭用户D腾资源。scheme当前内容/摘要/索引/未暂存状态保持；恢复时重新核对真实仓库，不只相信本段历史状态。
