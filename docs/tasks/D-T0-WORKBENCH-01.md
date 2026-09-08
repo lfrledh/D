@@ -25,3 +25,5 @@ CPU：原工作台117/核心17回归＋新增存储/选区/协调/保存失败�
 证据 /Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-T0-WORKBENCH-01/run-20260908；普通源个人scheme不入任务树。输出/缓存/临时归各自run。无网络下载/签名/权限/依赖修改/推送/main操作/清理。只对自有进程限时回收。到此产品检查点停止；音乐/HUM紧接独立数据/普通试听路线，不等文字高级功能，META PNG另包。
 
 Lead实现清单补充：新增DWorkbench/Text/ProjectTextController.swift及其CPU协调测试；新增DWorkbench/Models/FixedTextModel.swift与已存在fixtures/text-model.json的资源副本，用于固定本地模型只读校验，不引入下载/依赖/新精度。Lead负责选择代次、写入排队和关闭保护，后续非实现者审核这部分重要实现。
+
+Lead组合初验24afbd6共139方法中有1方法4断言失败：保存失败夹具只追加JSON空白，verifyUnchangedManifest现有语义以decoded manifest比较，空白不构成外部内容变化。本轮将夹具改为实际改写外部textDraft正文，保留全部保护断言与原失败证据；这是Lead夹具错误，不计Worker逻辑失败。另发现规范等价Unicode外部正文的字节变化可能被合成Equatable忽略，正在以独立反例核验，必要时使用STORE剩余1轮修复。

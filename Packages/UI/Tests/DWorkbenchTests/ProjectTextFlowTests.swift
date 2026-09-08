@@ -134,7 +134,13 @@ struct ProjectTextFlowTests {
         await subject.saveText()
         let file = root.appendingPathComponent("创作.dproject/project.json")
         let original = try Data(contentsOf: file)
-        let external = original + Data("\n ".utf8)
+        var object = try #require(JSONSerialization.jsonObject(with: original) as? [String: Any])
+        var documents = try #require(object["documents"] as? [[String: Any]])
+        let index = try #require(documents.firstIndex { $0["id"] as? String == text.editor.document.id.uuidString })
+        var payload = try #require(documents[index]["textDraft"] as? [String: Any])
+        payload["text"] = "另一位作者的正文"
+        documents[index]["textDraft"] = payload; object["documents"] = documents
+        let external = try JSONSerialization.data(withJSONObject: object, options: .sortedKeys)
         try external.write(to: file, options: .atomic)
         let id = text.editor.document.id
         subject.editText("保留未保存正文", documentID: id)
