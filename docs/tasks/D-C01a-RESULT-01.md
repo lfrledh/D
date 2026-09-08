@@ -128,3 +128,13 @@ Lead 在合并 SHA 上重跑 12 项原测试和 39 个原 Lead CLI 场景通过�
 Astra Lead 修补单次输入读取中的证据传递、显式 null 校验、直接文件描述符 best-effort 错误提示（包括参数错误）。没有 os._exit、吞全部程序异常或修改验收标准。新增回归调用真实 CLI 等待完整结束；既有 12 方法和 39 场景不改。来源：Terra 初步实现及一次修复，Astra Lead 定点接管；非 Terra 独立通过，尚待本次完整复验与非实现者审核。历史权限未停报和 Lead 延迟审核事实不变；后续修订不追溯生效。
 
 本轮证据：../D-Development/AgentTrials/D-C01a-RESULT-01/run-20260908T033837Z-v7-restore（实际为主仓库同级 D-Development，非本工作树相对目录）。start-protection.json、merge-command.json、merged-candidate.json、candidate-unit-execution.json、candidate-probes.json、extra-before.json、lead-regressions-before.json。运行全程不触碰 D.app、签名、模型或用户 scheme。当前待完整复验；后续实际 SHA 见运行回执。
+
+### v7 本地接纳（2026-09-08）
+
+状态：已本地集成并通过本任务验收；未推送。固定代码／源入口受测 SHA：653c09cd2e526c7e8cc0f09b925232f85826ee46。候选与源目录各运行 15 测试方法（原 12＋新增 3，新增含 7 场景）和同一套 39 Lead 场景通过；不将两次运行相加。历史原生第 5／6 轮只读导出分别仍为 FAIL（6 过 2 失败）／INCOMPLETE（2 过 6 缺失），不代表新 GUI 8/8。新回归先失败后通过，真实进程完成退出码为 2。
+
+非实现者 Terra/medium 只读审阅（线程 01a07f22-334b-7692-8886-e74e863813f4；实际 turn_context read-only）未发现阻塞问题。审阅者读取证据，没有独立运行测试；Lead 实施、执行复验和集成，不把它们混为独立测试。review-process.json 确认任务结束，未归档或中断冒充结束。所有本轮自有测试进程已等待结束，D.app 未操作。源 scheme 摘要／内容／未暂存状态、索引与 start-protection.json 一致。
+
+初次＋一次 Worker 修复历史不变，本轮改用一次 Lead 接管，已用完此接管机会；不再把最后一轮 Worker 额度作为本次接管失败后的追加救援。任务来源为 Terra 初步实现及一次修复、Astra Lead 修补并复验；另有只读非实现者审核。历史费用不重算，本轮 Lead 完整消耗及订阅费用 unknown，单一样本不证明最优经济性。
+
+恢复点：源已包含固定代码 SHA；候选保留 codex/d-c01a-result-01，原候选及两端历史均保留。随后结案提交只改本文与 CURRENT_ACTIONS；最终 SHA 在本轮外部 final-receipt.json。源个人 scheme 保持未暂存。D-C01a 整阶段／签名版完整 UI 验收仍未完成；v7 另行准备 T0/META 批次，不由本工具隐含批准。
