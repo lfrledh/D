@@ -135,7 +135,7 @@ public struct TextWorkbenchView: View {
             GroupBox(comparisonSourceLabel) {
                 ScrollView {
                     Text(comparisonSourceText).frame(maxWidth: .infinity, alignment: .leading).textSelection(.enabled)
-                }.frame(maxHeight: 90)
+                }.frame(minHeight: 44, maxHeight: 90)
             }
             GroupBox("替换候选") {
                 ScrollView {

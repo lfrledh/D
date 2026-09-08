@@ -351,8 +351,16 @@ final class DUITests: XCTestCase {
         app.buttons["open-project"].click()
         let panel = try nativePanel(in: app, identifier: "open-panel")
         app.typeKey("g", modifierFlags: [.command, .shift])
-        app.typeText(url.path)
+        let goTo = app.descendants(matching: .any).matching(identifier: "GoToWindow").firstMatch
+        let path = app.textFields["PathTextField"]
+        XCTAssertTrue(path.waitForExistence(timeout: 8))
+        path.click()
+        app.typeKey("a", modifierFlags: .command)
+        path.typeText(url.path)
+        XCTAssertEqual(path.value as? String, url.path, "The native path field must contain the complete fixture path.")
         app.typeKey(.return, modifierFlags: [])
+        XCTAssertTrue(goTo.waitForNonExistence(timeout: 8), "Finish native path navigation before confirming the parent panel.")
+        XCTAssertTrue(panel.buttons["OKButton"].isEnabled)
         panel.buttons["OKButton"].click()
         guard panel.waitForNonExistence(timeout: 8) else {
             recordScreenshot(app, name: "Project open panel remained visible")
