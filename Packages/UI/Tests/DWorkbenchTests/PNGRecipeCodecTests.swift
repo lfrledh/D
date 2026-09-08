@@ -50,6 +50,8 @@ struct PNGRecipeCodecTests {
         #expect(throws: PNGRecipeError.duplicateRecipe) { try PNGRecipeCodec.inspect(duplicate) }
         let text = inserting(chunk("tEXt", Data("org.d.generation-recipe\0not-json".utf8)), beforeIENDIn: png())
         #expect(throws: PNGRecipeError.unsupportedRecipe) { try PNGRecipeCodec.inspect(text) }
+        let zText = inserting(chunk("zTXt", Data("org.d.generation-recipe\0".utf8) + Data([0, 0])), beforeIENDIn: png())
+        #expect(throws: PNGRecipeError.unsupportedRecipe) { try PNGRecipeCodec.inspect(zText) }
         let compressed = inserting(chunk("iTXt", Data("org.d.generation-recipe\0".utf8) + Data([1, 0, 0, 0]) + Data("{}".utf8)), beforeIENDIn: png())
         #expect(throws: PNGRecipeError.unsupportedRecipe) { try PNGRecipeCodec.inspect(compressed) }
         let textFirst = png(chunks: [chunk("tEXt", Data("org.d.generation-recipe\0x".utf8)), chunk("iTXt", recipeText(Data("{}".utf8))), chunk("IDAT", Data([0]))])
@@ -62,6 +64,9 @@ struct PNGRecipeCodecTests {
         #expect(throws: PNGRecipeError.invalidPNG) { try PNGRecipeCodec.inspect(Data(png().dropLast())) }
         #expect(throws: PNGRecipeError.invalidPNG) { try PNGRecipeCodec.inspect(png() + Data([0])) }
         #expect(throws: PNGRecipeError.invalidPNG) { try PNGRecipeCodec.inspect(png(idat: Data())) }
+        #expect(throws: PNGRecipeError.invalidPNG) { try PNGRecipeCodec.inspect(png(chunks: [])) }
+        let declaredMaximumLength = Data([137, 80, 78, 71, 13, 10, 26, 10, 255, 255, 255, 255])
+        #expect(throws: PNGRecipeError.sizeLimitExceeded) { try PNGRecipeCodec.inspect(declaredMaximumLength) }
         let split = Data([1]); let separated = png(chunks: [chunk("IDAT", split), chunk("tIME", Data(repeating: 0, count: 7)), chunk("IDAT", split)])
         #expect(throws: PNGRecipeError.invalidPNG) { try PNGRecipeCodec.inspect(separated) }
         #expect(throws: PNGRecipeError.unsupportedPNG) { try PNGRecipeCodec.inspect(png(extra: [chunk("acTL", Data(repeating: 0, count: 8))])) }
@@ -73,6 +78,8 @@ struct PNGRecipeCodecTests {
         #expect(throws: PNGRecipeError.invalidPNG) { try PNGRecipeCodec.inspect(png(ihdr: invalidIHDR)) }
         invalidIHDR = Data([0, 0, 32, 1, 0, 0, 32, 1, 8, 0, 0, 0, 0])
         #expect(throws: PNGRecipeError.invalidPNG) { try PNGRecipeCodec.inspect(png(ihdr: invalidIHDR)) }
+        let excessiveArea = Data([0, 0, 32, 0, 0, 0, 32, 0, 8, 0, 0, 0, 0])
+        #expect(throws: PNGRecipeError.invalidPNG) { try PNGRecipeCodec.inspect(png(ihdr: excessiveArea)) }
         let indexed = Data([0, 0, 0, 1, 0, 0, 0, 1, 1, 3, 0, 0, 0])
         #expect(throws: PNGRecipeError.invalidPNG) { try PNGRecipeCodec.inspect(png(ihdr: indexed)) }
         let badPalette = png(ihdr: indexed, chunks: [chunk("PLTE", Data([1, 2, 3, 4, 5, 6, 7, 8, 9])), chunk("IDAT", Data([0]))])
@@ -112,8 +119,31 @@ struct PNGRecipeCodecTests {
         let colorOnly = png(extra: [chunk("iCCP", Data([1, 2]))])
         _ = try PNGRecipeCodec.embedding(recipe(), in: colorOnly, disclosure: .publicShare)
         #expect(throws: PNGRecipeError.sizeLimitExceeded) { try PNGRecipeCodec.inspect(Data(repeating: 0, count: 32 * 1024 * 1024 + 1)) }
-        let many = png(chunks: Array(repeating: chunk("tIME", Data(repeating: 0, count: 7)), count: 4096) + [chunk("IDAT", Data([0]))])
-        #expect(throws: PNGRecipeError.sizeLimitExceeded) { try PNGRecipeCodec.inspect(many) }
+        let time = chunk("tIME", Data(repeating: 0, count: 7))
+        let exactCount = png(chunks: Array(repeating: time, count: 4093) + [chunk("IDAT", Data([0]))])
+        _ = try PNGRecipeCodec.inspect(exactCount)
+        let tooMany = png(chunks: Array(repeating: time, count: 4094) + [chunk("IDAT", Data([0]))])
+        #expect(throws: PNGRecipeError.sizeLimitExceeded) { try PNGRecipeCodec.inspect(tooMany) }
+    }
+
+    @Test func recipeJSONBoundaryAndOutputLimitAreContainerOnlyChecks() throws {
+        let source = png()
+        var known = recipe()
+        let sourceInspection = try PNGRecipeCodec.inspect(source)
+        known.mediaPayloadSHA256 = .value(sourceInspection.mediaPayloadSHA256)
+        known.width = .value(1); known.height = .value(1)
+        let encoded = try GenerationRecipeCodec.encode(known, disclosure: .privateArchive)
+        let padded = encoded + Data(repeating: 32, count: 128 * 1024 - encoded.count)
+        let atLimit = inserting(chunk("iTXt", recipeText(padded)), beforeIENDIn: source)
+        _ = try PNGRecipeCodec.inspect(atLimit)
+        let overLimit = inserting(chunk("iTXt", recipeText(padded + Data([32]))), beforeIENDIn: source)
+        #expect(throws: PNGRecipeError.sizeLimitExceeded) { try PNGRecipeCodec.inspect(overLimit) }
+
+        // These bytes exercise only the bounded PNG container; they are not decoded pixels.
+        let nearLimitIDAT = Data(repeating: 0, count: 32 * 1024 * 1024 - 300)
+        let nearLimit = png(idat: nearLimitIDAT)
+        #expect(nearLimit.count <= 32 * 1024 * 1024)
+        #expect(throws: PNGRecipeError.sizeLimitExceeded) { try PNGRecipeCodec.embedding(recipe(), in: nearLimit, disclosure: .privateArchive) }
     }
 
     @Test func acceptsAValidDataSliceWithoutAssumingZeroIndex() throws {
@@ -130,7 +160,11 @@ struct PNGRecipeCodecTests {
         png(ihdr: ihdr, chunks: middle ?? [chunk("IDAT", idat)] + extra)
     }
     private func png(ihdr: Data, chunks: [Data]) -> Data {
-        Data([137, 80, 78, 71, 13, 10, 26, 10]) + chunk("IHDR", ihdr) + chunks.reduce(Data(), +) + chunk("IEND", Data())
+        var data = Data([137, 80, 78, 71, 13, 10, 26, 10])
+        data.append(chunk("IHDR", ihdr))
+        for item in chunks { data.append(item) }
+        data.append(chunk("IEND", Data()))
+        return data
     }
     private func chunk(_ type: String, _ payload: Data) -> Data {
         var data = Data(); append(UInt32(payload.count), to: &data); let name = Data(type.utf8); data += name; data += payload
