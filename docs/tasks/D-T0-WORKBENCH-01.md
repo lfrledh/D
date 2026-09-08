@@ -1,5 +1,7 @@
 # T0 工作台有限闭环
 
+最新状态（2026-09-08）：本有限产品闭环已本地集成并通过任务验收，未推送。下文旧候选/停止点为保留的历史；最终结案与回执见文末。
+
 2026-09-08 用户本轮目标已批准；source_base=6735266933773adaee33b3a66a01b09c0b1f7d9b，prior_tested=c3197ad9cdade3d486a4153418cacc39af85bc81。旧审核/完整回执已核对，最后仅10份文档变化，scheme未暂存原内容不变。batch_id=D-T0-WORKBENCH-01，contract_revision=1。Lead独占本记录和共享接线，使用当前已验收受限CLI机制，不再做机制试点。
 
 ## 最小行为表（冻结）
@@ -136,3 +138,15 @@ At cb997eb, real normal-signed GUI proved narrow/expanded reflow, real Qwen repl
 来源：Terra既有初步实现/历史返工原样保留；本轮Astra Lead亲自修复，Sol/high非实现者仅只读审核差异，非独立测试执行。观察上下文四次均Sol/high/read-only，隐藏服务端解析unknown；各阶段耗时/usage原始快照保留，未将累计/缓存快照盲目相加，完整Lead与订阅费用unknown。没有新Terra第三轮、签名方案变更、安装、推送或权限扩大。CUA一次粘贴超时后核对正文/磁盘，改用原生输入；界面AX旧状态与截图不一致后以实际启动作业核实，不推断应用拒绝生成。
 
 恢复：先核对真实源/组合HEAD、scheme内容/摘要/index/未暂存状态和自有进程；源本轮文档新增属于已批准清单维护，之后可在隔离组合分支保留历史合入该明确源快照，核对仅文档差异，再按既定验收门槛接纳。下一动作只是上述新产物恢复，不能再重复真人IME、模型下载或整套协作试验。音乐/HUM原声导入保存与普通试听仍是明确后续出口，不等全部文字增强，本轮不启动。
+
+## 最终本地接纳与恢复检查点（2026-09-08）
+
+用户批准解除本阶段时间窗口限制，Lead只补剩余新构建恢复与集成，没有新增产品实现或刷新Worker预算。gui3以正常签名的新DerivedData产物运行：既有图像项目/模型访问、实际作品显示、PNG独立草稿最大seed/Unicode、v2与中文正文重开全部通过；无新安全提示。应用正常退出0；v1/v2原始清单备份、原图片、用户普通D四个文件以及源个人scheme均保持。详见final-fresh-restore.json、final-fresh-restore-files.json、gui3-signature.json和gui3-exit.json。
+
+版本链：真实GUI/8项UI/前轮165方法代码a6c516ad6b52c944ce70a0bd764d68a94fd0f3bc → 仅任务文档05d5ffd3c4815d2c7b83889aa0ceca08a10ff682 → 在隔离树保留历史合入已批准源文档1d290a847766e69324d9b999ed8cc49425e2d07e，组合685ef0502586bc5785826a3dc938622d8401f0e7。后者代码/测试/工程/入口与a6相同；组合165方法/22套件通过后，源从1d290快进至685ef，源目录同一165方法再次通过。各轮独立记录，不累加场景；之后仅本轮结案文档变化，最终源SHA由外部final-stage-receipt.json关联，不为自引用amend。
+
+本次续办0轮代码修复；Terra原实现/有限修复，Astra共享接线/前轮有界收尾及真实验收，Sol非实现者静态审核归因不变。本轮另复用同一Sol/high/read-only链路只读汇总历史，非新增代码审阅或测试。完整Lead消耗及订阅扣费unknown，不重算历史样本。工具一次click参数形状拒绝和本机Git帮助拼写检查失败均发生在对应动作之前；更正有明确依据，没有权限扩大或修改冻结验收。
+
+当前源分支codex/inference-foundation，唯一scheme orderHint1→6个人差异未暂存，索引干净。原普通D.app保留，已验收的新产物仍在human-finish/signed-build/DerivedData-fresh，未安装替换或推送。本轮自有GUI/构建/测试/只读任务已结束；候选分支和证据保留，无系统写锁声明。下次恢复先核对Git/用户差异/任务进程，不只相信本记录。
+
+证据根：/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-T0-WORKBENCH-01/run-20260908T125225Z-human-finish；总索引final-stage-receipt.json，source-ff-result、final-merged-acceptance、final-source-acceptance记录实际入口、版本、环境与退出状态。本阶段结束，下一声音灵感工作台仅建议，不开始HUM/音乐模型/手机/新增元数据平台。

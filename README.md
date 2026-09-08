@@ -1,8 +1,8 @@
 # D
 
-原生 macOS 本地 AI 工作站原型，使用 SwiftUI、MLX Swift 和 Hugging Face 模型。
+开发中的原生 macOS 本地 AI 创作工作台，使用 SwiftUI、MLX Swift 和 Hugging Face 模型。
 
-原生 SwiftUI／Liquid Glass 工作台通过 DRuntime 与 DMLXBackend 运行图像任务，使用自包含 `.dproject` 保存作品和生成条件。已支持项目内多份独立创作、候选整理、两图比较和条件复用，见 [最新验收](docs/EXPLORATION_STAGE_ACCEPTANCE.zh-CN.md)。当前行动与验收状态集中在 [行动指南](docs/CURRENT_ACTIONS.zh-CN.md)。已完成的单项目检查点见 [工作台验收](docs/WORKBENCH_ACCEPTANCE.zh-CN.md)，后续目标统一维护在 [产品目标清单](docs/PRODUCT_GOALS.zh-CN.md)。文本后端与命令行仍然保留；旧文本和占位模态界面已退出应用入口。
+原生 SwiftUI／Liquid Glass 工作台通过 DRuntime 与 DMLXBackend 运行图像任务，使用自包含 `.dproject` 保存作品和生成条件。已支持项目内多份独立创作、候选整理、两图比较和条件复用，见 [最新验收](docs/EXPLORATION_STAGE_ACCEPTANCE.zh-CN.md)。当前行动与验收状态集中在 [行动指南](docs/CURRENT_ACTIONS.zh-CN.md)。已完成的单项目检查点见 [工作台验收](docs/WORKBENCH_ACCEPTANCE.zh-CN.md)，后续目标统一维护在 [产品目标清单](docs/PRODUCT_GOALS.zh-CN.md)。文字现已接入同一项目的有限创作闭环：选段改写、候选接受/拒绝、受保护撤销、安全保存重开；旧文本和占位界面已退出。PNG支持实际任务配方公开/私有预览、新副本内嵌、离线读回并显式恢复为新草稿。两者已本地验收，范围及真实运行证据见 [T0任务](docs/tasks/D-T0-WORKBENCH-01.md) 和 [PNG任务](docs/tasks/D-META-PNG-01.md)；CLI继续保留。
 
 单仓整合与真实文本推理基础的四项工作已完成，最终验收结果和边界见 [基础阶段验收](docs/FOUNDATION_STAGE_ACCEPTANCE.zh-CN.md)。
 
@@ -17,7 +17,7 @@
 - 纯框架与 MLX 集成构建缓存：`/Volumes/CodexProjects/Codex/BuildCaches/D-Foundation`、`/Volumes/CodexProjects/Codex/BuildCaches/D-MLX`
 - 模型下载设置：`/Volumes/CodexProjects/Codex/D-Development/Models`
 - Apple M4 / 16 GiB；macOS 26.6.2；Xcode 26.6。
-- 打开 `D.xcworkspace`，应用选择 `D` / `My Mac`；CLI 使用 `d-infer`，真实后端测试使用 `DMLXTests`。Debug 使用本机 ad-hoc 签名。
+- 打开 `D.xcworkspace`，应用选择 `D` / `My Mac`；CLI 使用 `d-infer`，真实后端测试使用 `DMLXTests`。本机稳定开发签名通过下述脚本/外盘xcconfig生效；直接Xcode GUI默认构建仍可能是ad-hoc，不能混用后假定授权连续。
 - 命令行重建：`./scripts/build-local.sh`。默认缓存位于项目同级的 `D-Development`，可用 `D_DEVELOPMENT_ROOT` 覆盖。
 - 新 workspace 的本用户 WorkspaceSettings 将 GUI DerivedData 放在外盘 `D-Development/DerivedData-Workspace`，该偏好不提交。命令行的依赖检出分别位于 `SourcePackages-App` 与 `SourcePackages-MLX`，避免并行构建互相清理检出目录。首次环境设置留下的约 636 MB 内置盘临时缓存未删除。
 - 外盘需要保持挂载。系统工具、用户偏好及部分系统管理缓存仍位于内置盘。
@@ -54,7 +54,7 @@ git clone --branch codex/inference-foundation https://github.com/lfrledh/D.git
 
 根目录 Swift package 含 DInference（纯契约）和 DRuntime（串行任务生命周期）两个 target，零远程依赖、Swift 6 严格模式。Backends/MLX 中的 DMLXBackend 提供文本与图像后端，d-infer 是宿主入口。现有 Packages/UI 包内包含两个实际 target：DWorkbench 拥有项目、任务、资产及模型安装服务，只依赖 DInference；UI 依赖这些服务，负责展示和原生交互。D 应用装配具体 runtime／backend。其他旧 Packages/* 暂留源代码，不在新应用依赖路径中。
 
-逻辑导航确定为“项目 → 创作文档”，模型是共享资源，任务是运行状态。已支持单项目内多份创作文档，v1 备份后安全迁移为 v2；快速草稿仍待排期。结构与服务演进规则见 [信息架构](docs/decisions/0007-project-information-architecture.md) 和 [服务边界](docs/decisions/0008-application-services-and-provider-evolution.md)。远程 API、对外推理服务和 RAW 媒体按目标清单后续启动，没有空的产品入口。
+逻辑导航确定为“项目 → 创作文档”，模型是共享资源，任务是运行状态。已支持单项目内多份创作文档，项目现为schema3，v1/v2先保留原字节备份再安全迁移，原媒体不改写；快速草稿仍待排期。结构与服务演进规则见 [信息架构](docs/decisions/0007-project-information-architecture.md) 和 [服务边界](docs/decisions/0008-application-services-and-provider-evolution.md)。远程 API、对外推理服务和 RAW 媒体按目标清单后续启动，没有空的产品入口。
 
 运行 `./scripts/test-foundation.sh` 验证框架；运行 `./scripts/build-local.sh` 构建新应用，`./scripts/test-workbench.sh` 验证无 GPU 的项目与任务服务。二者默认使用外置SSD缓存：应用在D-Development，新核心测试在同级BuildCaches/D-Foundation；日志都保存在D-Development/Logs。详见 [框架调用与限制](docs/FOUNDATION_USAGE.md)、[架构决策](docs/decisions/0001-inference-boundary.md)、[任务生命周期决策](docs/decisions/0002-run-lifecycle.md)。
 

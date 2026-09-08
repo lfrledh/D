@@ -1,6 +1,6 @@
 # D 的 Mac 授权与无人值守开发方案
 
-日期：2026-09-07。状态：本机稳定开发签名、私钥调用与首次重开恢复已验证；完整 UI／真实生成／再次签名重建后的连续验收仍待执行。下文方案保留背景，最新实测见文末。历史失败归档见 [审计清单](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md)。
+更新：2026-09-08。状态：本机开发签名连续验收已通过，包括同次完整UI、普通签名真实生成/导出和全新构建后的项目/模型恢复。下文2026-09-07段落保留历史背景，最新结论见文末；不是永久免授权或发行验收。历史失败归档见 [审计清单](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md)。
 
 目标是让**已授权位置内的常规构建、测试、生成和保存能够连续运行**。不能承诺一次操作永久消除系统授权：新增资源、权限撤销、应用身份变化及部分系统安全界面仍可能需要本人确认。
 
@@ -81,3 +81,13 @@ Xcode GUI 的工程 Debug 设置没有更改，直接点击 GUI Build 仍可能�
 持久目录：`/Volumes/CodexProjects/Codex/D-Development/PermissionSetup/run-20260907T134650Z`。关键索引：`artifact-incident.json`、`artifact-recovery.json`、`signing-access-probe-result.json`、`stable-build-result.json`、`stable-signature-checks.json`、`signed-app-install.json`、`installed-app-diagnostic.json`、`permission-setup-checkpoint.json`。保留构建日志、xcresult、应用和约 2.1 MB 已知项目备份，不默认入 Git。
 
 D-C01a 尚未整体结案：完整 8 项 UI XCTest、真实签名版生成／导出、再次签名重建后恢复均待验证；D-C01a-RESULT-01 的既有候选仍暂停、未在本轮接纳或集成。没有启动 D-P01、双 Worker 或推送。主会话恢复时先核对 Git 状态、已安装签名、运行进程与本机配置，再进行下一项验证。
+
+## 2026-09-08 连续验收结案
+
+用户本轮确认普通D保存退出、GUI/GPU空闲并随后取消本阶段时间限制。只在独立测试项目、会话与完整独立DerivedData中执行；原D.app未替换。代码a6c516ad6b52c944ce70a0bd764d68a94fd0f3bc：同一结果包8项UI全部通过，之后重新普通签名构建，确认App Sandbox和既有授权entitlements，无测试临时例外；真实Qwen改写、FLUX q8 512²生成及原生新文件导出通过。再用全新DerivedData构建，二进制/签名资源摘要确有变化；同一开发身份和bundle ID的产物自动恢复测试项目/蓝杯图片/FLUX模型可访问状态，PNG草稿、旧v2及文字正文/Qwen选择均恢复，没有新系统授权提示。
+
+模型可访问结论来自应用实际恢复书签、检查目录身份/文件条目及GUI状态；本次重开没有重新跑模型数值基准或逐字节权重摘要，也不声称未来所有系统/证书/路径变化都可免授权。首次真实模型生成和历史数值验收另有独立证据。只有现有脚本/本机xcconfig签名入口被验证，直接Xcode GUI默认设置并未因此改变。
+
+代码通过后以固定组合685ef0502586bc5785826a3dc938622d8401f0e7本地接纳，源目录165方法复验通过。证据与最终文档SHA见D-Development/AgentTrials/D-T0-WORKBENCH-01/run-20260908T125225Z-human-finish/final-stage-receipt.json；具体final-fresh-restore、gui3-signature/exit、uitests-refined、image-normal-signed-result及normal-fresh-rebuild。上述旧段落“仍待UI/生成/重建恢复”和“RESULT未接纳”为历史停点，本节覆盖。
+
+当前无待人工安全弹窗，后续统一维护FAILURE_AND_PERMISSION_AUDIT的人工清单。通用默认工作根/批量自动导出授权、物理拔盘断电、完整可访问性与发行公证仍按各自后续范围处理，不把它们算作本轮未完成事项，也不提前标记已实现。

@@ -10,14 +10,14 @@
 
 | ID／类别 | 遗留原因与实际状态 | 需要用户做什么／Lead 下一动作 | 关闭标准与证据 |
 | --- | --- | --- | --- |
-| H01 测试窗口 | 用户批准的本轮一小时已结束；所有自有应用/构建/审核均正常结束。 | 追加15分钟仅用于新构建恢复的协调请求尚待回复；不启动前台/GPU，不永久推定空闲。 | 下一次确认空闲后，仅执行剩余恢复；已通过项目不重跑。 |
-| H02 T0 界面及外盘访问 | **已验证解决**：明确正常签名产物/独立会话、外盘模型校验、真实改写、取消/失效保护、接受撤销保存和跨构建文本/模型恢复通过。 | 不需要重复全盘授权、模型下载或凭据。产品代码仍在候选，最终集成门槛见当前动作。 | human-finish/gui-progress-1/2、text-save-after-undo、gui1/2-signature。 |
+| H01 测试窗口 | **本轮已关闭**：用户随后取消本阶段时间限制，最后新构建恢复已完成，测试实例正常退出。 | 无待批准窗口；未来实际测试再核对当时资源，不推定永久空闲。 | final-fresh-restore.json、gui3-exit.json。 |
+| H02 T0 界面及外盘访问 | **已验证解决并本地接纳**：真实改写、接受/撤销/保存、取消和失效保护，新构建中文正文与模型恢复通过。 | 不需要重复全盘授权、模型下载或凭据。 | final-fresh-restore.json；T0任务验收。 |
 | H03 中文输入法 | **已验证解决**：初次真人检查通过；布局修复后用户再次明确“输入与缩放均正常”，包括尚在组字时缩放。 | 本项关闭，不再重复要求中文检查。 | human-finish/human-ime-final.json，最终代码a6c516…；非自动粘贴替代。 |
-| H04 签名后连续验收 | 已批准并完成同一结果包UI8/8、普通签名真实图像生成/导出；独立新DerivedData真实重编译通过。 | **待执行复验**：只剩新产物重开图像、模型授权与草稿；协调短暂前台窗口。不是缺少证书授权。 | uitests-refined.xcresult、image-normal-signed-result、normal-fresh-rebuild；恢复未执行不算通过。 |
-| H05 PNG 有界收尾 | 用户已批准；4个精确边界、移出MainActor、CPU/编译/非实现者复核及正常面板跨项目离线交接已通过。 | 不再请求同一收尾预算；只剩配方草稿的新构建重开与组合接纳。保留Terra历史失败/两轮预算。 | png-native-crosscheck.json、migration-and-recipe-before-rebuild.json；详见候选任务记录。 |
+| H04 签名后连续验收 | **已验证解决**：同次UI8/8、普通签名真实图像生成/导出、全新DerivedData重编译及项目/模型授权恢复均通过。 | 本项关闭；不是永久TCC/发行公证证明，普通旧D未替换。 | uitests-refined.xcresult、image-normal-signed-result.json、normal-fresh-rebuild.json、final-fresh-restore.json。 |
+| H05 PNG 有界收尾 | **已完成并本地接纳**：获准尺寸夹具/后台检查、CPU与只读复核、正常面板私有/公开交接、新构建草稿重开通过。 | 不再请求同一预算，保留Terra初交/两轮修复和Lead接管历史。 | PNG任务记录、png-native-crosscheck.json、final-fresh-restore-files.json。 |
 | H06 实际系统安全提示 | 历史 SecurityAgent／系统通知界面曾被工具安全规则拒绝；用户处理后签名／测试成功。本轮尚未观察到新的待点提示。 | 只有提示实际出现时，指出请求应用、资源和用途交用户确认；密码本人输入，不传给 Lead。无提示时不制造弹窗、不改钥匙串 ACL/TCC。 | 实际操作恢复且证据关联对应应用；“已设置”不代替复验。历史 A03、PermissionSetup 20260907 记录。 |
 
-已修复的本轮新增问题 H07：文字窗口约束使侧栏/工具栏在缩窄时截断，Lead在隔离组合中修复宽度反馈、分栏、工具栏与选段预览高度；最终真实缩放和真人IME通过。修复尚未进入普通D，源此次仍仅文档。证据根：`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-T0-WORKBENCH-01/run-20260908T125225Z-human-finish`；受测代码 `a6c516ad6b52c944ce70a0bd764d68a94fd0f3bc`。
+已修复的本轮新增问题 H07：文字窗口约束使侧栏/工具栏在缩窄时截断，Lead在隔离组合中修复宽度反馈、分栏、工具栏与选段预览高度；最终真实缩放和真人IME通过。修复已进入本地源工作分支并复验通过；原普通D.app保留，未被替换。证据根：`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-T0-WORKBENCH-01/run-20260908T125225Z-human-finish`；受测代码 `a6c516ad6b52c944ce70a0bd764d68a94fd0f3bc`。
 
 ### 已排除的重复欠账与工程观察
 
@@ -96,3 +96,7 @@ Lead 遇到因用户不在场而暂停的真实事件，即在本队列追加稳
 | 完整 VoiceOver、硬件／屏幕矩阵、Release 长时与发布升级 | 目前只有本机基础矩阵及限定推理证据，未承诺完整发行。 | D-U01／D-C01 发行门槛；新的模态与参数按目标表逐场景验证。 |
 
 本次审计不重新宣布历史测试通过，也不增加新的推理测量。最新实现验收仍以 [探索阶段报告](EXPLORATION_STAGE_ACCEPTANCE.zh-CN.md) 和 [机器证据](research/EXPLORATION_EVIDENCE.json) 为准。
+
+### 2026-09-08 本阶段集中处理结案
+
+H01/H02/H03/H04/H05/H07已按实际验收关闭，当前没有待点击的系统安全提示。新提示才加入具体应用、资源、阻塞操作、所需人工动作和关闭证据；不重复列旧失败为待授权。完整回执见本轮human-finish/final-stage-receipt.json与CURRENT_ACTIONS。原有阶段失败、Lead时序及已知偶发锁异常仍保留，不因本次通过追改历史。
