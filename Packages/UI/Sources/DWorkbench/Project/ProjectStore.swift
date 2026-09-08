@@ -14,6 +14,7 @@ public actor ProjectStore {
     public nonisolated var artifactDirectory: URL { rootURL.appendingPathComponent("Tasks", isDirectory: true) }
     public static let manifestFilename = "project.json"
     public static let versionOneBackupFilename = "project.v1.backup.json"
+    public static let versionTwoBackupFilename = "project.v2.backup.json"
     private let rootFD: Int32
     private let lockFD: Int32
     private var manifest: ProjectManifest
@@ -74,7 +75,7 @@ public actor ProjectStore {
         let header: Header
         do { header = try decoder.decode(Header.self, from: data) }
         catch { throw ProjectStoreError.invalidProject("项目清单不是有效的 JSON。") }
-        guard header.schemaVersion == 1 || header.schemaVersion == ProjectManifest.currentSchemaVersion else {
+        guard (1...ProjectManifest.currentSchemaVersion).contains(header.schemaVersion) else {
             throw ProjectStoreError.unsupportedSchema(header.schemaVersion)
         }
         var loaded: ProjectManifest
@@ -84,6 +85,9 @@ public actor ProjectStore {
         Darwin.close(tasks)
         if loaded.schemaVersion == 1 {
             loaded = try ProjectFiles.migrateVersionOne(loaded, original: data, in: descriptor,
+                                                      checkpoint: migrationCheckpoint)
+        } else if loaded.schemaVersion == 2 {
+            loaded = try ProjectFiles.migrateVersionTwo(loaded, original: data, in: descriptor,
                                                       checkpoint: migrationCheckpoint)
         } else { try ProjectFiles.validate(loaded) }
         let store = ProjectStore(rootURL: root, rootFD: descriptor, lockFD: lock, manifest: loaded)
@@ -96,6 +100,9 @@ public actor ProjectStore {
 
     public func saveDraft(_ draft: ProjectDraft, documentID: UUID? = nil) throws -> ProjectManifest {
         let index = try documentIndex(documentID ?? manifest.activeDocumentID)
+        guard manifest.documents[index].kind == .image else {
+            throw ProjectStoreError.invalidProject("文字文档不能保存图像创作条件。")
+        }
         guard manifest.documents[index].draft != draft else { return manifest }
         var candidate = manifest
         candidate.documents[index].draft = draft
@@ -113,6 +120,38 @@ public actor ProjectStore {
         var candidate = manifest
         candidate.documents.append(document)
         candidate.activeDocumentID = document.id
+        try commit(candidate)
+        return manifest
+    }
+
+    public func createTextDocument(name: String = "新文稿", text: String = "") throws -> ProjectManifest {
+        try checkLocation()
+        let textDraft = try TextDraftDocument(text: text)
+        let document = ProjectDocument(id: textDraft.id, name: name, kind: .text, textDraft: textDraft)
+        var candidate = manifest
+        candidate.documents.append(document)
+        candidate.activeDocumentID = document.id
+        try commit(candidate)
+        return manifest
+    }
+
+    public func saveTextDraft(_ draft: TextDraftDocument, documentID: UUID,
+                              expectedRevision: UUID) throws -> ProjectManifest {
+        let index = try documentIndex(documentID)
+        guard manifest.documents[index].kind == .text,
+              let current = manifest.documents[index].textDraft,
+              current.id == documentID,
+              draft.id == documentID else {
+            throw ProjectStoreError.invalidProject("文字稿与文字文档编号不匹配。")
+        }
+        guard current.revision == expectedRevision else { throw ProjectStoreError.externalModification }
+        try TextDraftDocument.validate(draft.text)
+        guard current.text.utf8.elementsEqual(draft.text.utf8) == false else { return manifest }
+        guard draft.revision != current.revision else {
+            throw ProjectStoreError.invalidProject("文字内容已改变，修订编号不能重复。")
+        }
+        var candidate = manifest
+        candidate.documents[index].textDraft = draft
         try commit(candidate)
         return manifest
     }
@@ -137,6 +176,9 @@ public actor ProjectStore {
 
     public func setSelectedAsset(_ id: UUID?, documentID: UUID) throws -> ProjectManifest {
         let index = try documentIndex(documentID)
+        guard manifest.documents[index].kind == .image else {
+            throw ProjectStoreError.invalidProject("文字文档不能选择图像作品。")
+        }
         guard manifest.documents[index].selectedAssetID != id else { return manifest }
         var candidate = manifest
         candidate.documents[index].selectedAssetID = id
@@ -148,6 +190,9 @@ public actor ProjectStore {
     /// a candidate never silently replaces the document's adopted result.
     public func adoptAsset(id: UUID?, documentID: UUID) throws -> ProjectManifest {
         let index = try documentIndex(documentID)
+        guard manifest.documents[index].kind == .image else {
+            throw ProjectStoreError.invalidProject("文字文档不能采用图像作品。")
+        }
         guard manifest.documents[index].adoptedAssetID != id else { return manifest }
         var candidate = manifest
         candidate.documents[index].adoptedAssetID = id
@@ -207,6 +252,9 @@ public actor ProjectStore {
     public func enqueue(request: InferenceRequest, documentID: UUID? = nil) throws -> ProjectManifest {
         try request.validate()
         let index = try documentIndex(documentID ?? manifest.activeDocumentID)
+        guard manifest.documents[index].kind == .image else {
+            throw ProjectStoreError.invalidProject("文字文档不能创建图像任务。")
+        }
         guard !manifest.jobs.contains(where: { $0.id == request.id }) else {
             throw ProjectStoreError.invalidProject("任务编号重复。")
         }
@@ -567,6 +615,19 @@ private enum ProjectFiles {
     /// publication leaves a readable v1 project, and a crash afterwards leaves valid v2.
     static func migrateVersionOne(_ legacy: ProjectManifest, original: Data, in root: Int32,
                                   checkpoint: (@Sendable (ProjectMigrationCheckpoint) throws -> Void)?) throws -> ProjectManifest {
+        try migrate(legacy, original: original, in: root, backup: ProjectStore.versionOneBackupFilename,
+                    checkpoint: checkpoint)
+    }
+
+    static func migrateVersionTwo(_ legacy: ProjectManifest, original: Data, in root: Int32,
+                                  checkpoint: (@Sendable (ProjectMigrationCheckpoint) throws -> Void)?) throws -> ProjectManifest {
+        try migrate(legacy, original: original, in: root, backup: ProjectStore.versionTwoBackupFilename,
+                    checkpoint: checkpoint)
+    }
+
+    private static func migrate(_ legacy: ProjectManifest, original: Data, in root: Int32, backup: String,
+                                checkpoint: (@Sendable (ProjectMigrationCheckpoint) throws -> Void)?) throws -> ProjectManifest {
+        try validate(legacy, allowingLegacySchema: true)
         var migrated = legacy
         migrated.schemaVersion = ProjectManifest.currentSchemaVersion
         guard migrated.revision < UInt64.max else {
@@ -575,11 +636,10 @@ private enum ProjectFiles {
         migrated.revision += 1
         migrated.updatedAt = Date()
         try validate(migrated)
-        let backup = ProjectStore.versionOneBackupFilename
         var info = stat()
         if fstatat(root, backup, &info, AT_SYMLINK_NOFOLLOW) == 0 {
             guard try read(relative: backup, in: root, limit: 32 * 1_024 * 1_024) == original else {
-                throw ProjectStoreError.invalidProject("已有的 v1 备份与当前项目不同，已保留两者；请检查后再升级。")
+                throw ProjectStoreError.invalidProject("已有的格式升级备份与当前项目不同，已保留两者；请检查后再升级。")
             }
         } else {
             guard errno == ENOENT else { throw error() }
@@ -719,8 +779,11 @@ private enum ProjectFiles {
         return result
     }
 
-    static func validate(_ value: ProjectManifest) throws {
-        guard value.schemaVersion == ProjectManifest.currentSchemaVersion else { throw ProjectStoreError.unsupportedSchema(value.schemaVersion) }
+    static func validate(_ value: ProjectManifest, allowingLegacySchema: Bool = false) throws {
+        guard value.schemaVersion == ProjectManifest.currentSchemaVersion ||
+              (allowingLegacySchema && (value.schemaVersion == 1 || value.schemaVersion == 2)) else {
+            throw ProjectStoreError.unsupportedSchema(value.schemaVersion)
+        }
         guard !value.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               !value.documents.isEmpty,
               Set(value.documents.map(\.id)).count == value.documents.count,
@@ -735,6 +798,7 @@ private enum ProjectFiles {
         let assets = Dictionary(uniqueKeysWithValues: value.assets.map { ($0.id, $0) })
         for job in value.jobs {
             guard documents.contains(job.documentID), job.id == job.request.id,
+                  value.documents.first(where: { $0.id == job.documentID })?.kind == .image,
                   Set(job.artifactIDs).count == job.artifactIDs.count,
                   job.artifactIDs.allSatisfy({ assets[$0]?.jobID == job.id }),
                   job.state != .completed || !job.artifactIDs.isEmpty else {
@@ -766,6 +830,19 @@ private enum ProjectFiles {
         for document in value.documents {
             guard !document.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                 throw ProjectStoreError.invalidProject("探索文档名称不能为空。")
+            }
+            switch document.kind {
+            case .image:
+                guard document.textDraft == nil else {
+                    throw ProjectStoreError.invalidProject("图像文档不能包含文字稿。")
+                }
+            case .text:
+                guard let textDraft = document.textDraft, textDraft.id == document.id,
+                      document.sourceAssetID == nil, document.adoptedAssetID == nil,
+                      document.selectedAssetID == nil else {
+                    throw ProjectStoreError.invalidProject("文字文档包含无效内容或图像引用。")
+                }
+                try TextDraftDocument.validate(textDraft.text)
             }
             if let source = document.sourceAssetID, assets[source] == nil {
                 throw ProjectStoreError.invalidProject("探索文档引用的来源作品不存在。")
