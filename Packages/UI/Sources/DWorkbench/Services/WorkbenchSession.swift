@@ -3,6 +3,8 @@ import Foundation
 
 /// Application-facing runtime bridge. The composition root owns backend-specific types.
 public struct WorkbenchSession: Sendable {
+    public let textBackendID: String?
+    public let validateTextModel: (@Sendable (URL) async throws -> ModelReference)?
     public let engine: any InferenceEngine
     public let backendID: String
     public let status: @Sendable () async -> WorkbenchRuntimeStatus
@@ -14,7 +16,11 @@ public struct WorkbenchSession: Sendable {
                 status: @escaping @Sendable () async -> WorkbenchRuntimeStatus,
                 shutdown: @escaping @Sendable () async -> Void,
                 cleanup: @escaping @Sendable () async throws -> Void,
-                validateModel: @escaping @Sendable (URL) async throws -> Void) {
+                validateModel: @escaping @Sendable (URL) async throws -> Void,
+                textBackendID: String? = nil,
+                validateTextModel: (@Sendable (URL) async throws -> ModelReference)? = nil) {
+        self.textBackendID = textBackendID
+        self.validateTextModel = validateTextModel
         self.engine = engine
         self.backendID = backendID
         self.status = status

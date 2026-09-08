@@ -1,4 +1,5 @@
 import AppKit
+import DWorkbench
 import SwiftUI
 import UI
 
@@ -66,9 +67,18 @@ private struct WorkbenchCommands: Commands {
                 .disabled(modalResourceOperation || bootstrap.isTerminating || bootstrap.model?.selectedAsset == nil)
         }
         CommandMenu("创作") {
-            Button("生成图片") { Task { await bootstrap.model?.generate() } }
-                .keyboardShortcut(.return, modifiers: [.command])
-                .disabled(modalResourceOperation || bootstrap.isTerminating || bootstrap.model?.canGenerate != true)
+            Button(bootstrap.model?.projectSession.text == nil ? "生成图片" : "改写所选文字") {
+                Task {
+                    if let project = bootstrap.model?.projectSession, project.text != nil { await project.rewriteText() }
+                    else { await bootstrap.model?.generate() }
+                }
+            }
+            .keyboardShortcut(.return, modifiers: [.command])
+            .disabled(modalResourceOperation || bootstrap.isTerminating ||
+                (bootstrap.model?.projectSession.text == nil ? bootstrap.model?.canGenerate != true : bootstrap.model?.projectSession.canRewriteText != true))
+            Button("保存文稿") { Task { await bootstrap.model?.projectSession.saveText() } }
+                .keyboardShortcut("s")
+                .disabled(modalResourceOperation || bootstrap.isTerminating || bootstrap.model?.projectSession.text == nil)
         }
         CommandMenu("资源") {
             Button("管理模型…") {

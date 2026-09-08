@@ -25,7 +25,7 @@ struct ProjectMigrationTests {
             try original.write(to: manifestURL)
             let migrated = try await ProjectStore.open(at: fixture.project)
             let after = await migrated.snapshot()
-            #expect(after.schemaVersion == 2)
+            #expect(after.schemaVersion == ProjectManifest.currentSchemaVersion)
             #expect(after.id == before.id)
             #expect(after.name == before.name)
             #expect(after.createdAt == before.createdAt)
@@ -91,7 +91,7 @@ struct ProjectMigrationTests {
             #expect(try Data(contentsOf: fixture.project.appendingPathComponent(ProjectStore.versionOneBackupFilename)) == original)
             try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: fixture.project.path)
             let reopened = try await ProjectStore.open(at: fixture.project)
-            #expect(await reopened.snapshot().schemaVersion == 2)
+            #expect(await reopened.snapshot().schemaVersion == ProjectManifest.currentSchemaVersion)
             try await reopened.close()
         }
     }

@@ -135,7 +135,7 @@ public struct ProjectDraft: Codable, Sendable, Equatable {
 }
 
 public struct ProjectManifest: Codable, Sendable, Equatable, Identifiable {
-    public static let currentSchemaVersion = 2
+    public static let currentSchemaVersion = 3
     public var schemaVersion: Int
     /// Monotonic committed state version lets the UI discard a late, stale actor response.
     public var revision: UInt64
@@ -221,23 +221,49 @@ public struct ProjectManifest: Codable, Sendable, Equatable, Identifiable {
 }
 
 /// A named exploration owns editable settings and references candidates without copying media.
+public enum ProjectDocumentKind: String, Codable, Sendable {
+    case image, text
+}
+
 public struct ProjectDocument: Codable, Sendable, Equatable, Identifiable {
     public var id: UUID
     public var name: String
+    public var kind: ProjectDocumentKind
     public var draft: ProjectDraft
+    public var textDraft: TextDraftDocument?
     /// A reference for the creator, not an implicit image-to-image inference input.
     public var sourceAssetID: UUID?
     public var adoptedAssetID: UUID?
     public var selectedAssetID: UUID?
 
-    public init(id: UUID = UUID(), name: String, draft: ProjectDraft = .init(), sourceAssetID: UUID? = nil,
-                adoptedAssetID: UUID? = nil, selectedAssetID: UUID? = nil) {
+    public init(id: UUID = UUID(), name: String, kind: ProjectDocumentKind = .image,
+                draft: ProjectDraft = .init(), textDraft: TextDraftDocument? = nil,
+                sourceAssetID: UUID? = nil, adoptedAssetID: UUID? = nil, selectedAssetID: UUID? = nil) {
         self.id = id
         self.name = name
+        self.kind = kind
         self.draft = draft
+        self.textDraft = textDraft
         self.sourceAssetID = sourceAssetID
         self.adoptedAssetID = adoptedAssetID
         self.selectedAssetID = selectedAssetID
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, name, kind, draft, textDraft, sourceAssetID, adoptedAssetID, selectedAssetID
+    }
+
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        id = try values.decode(UUID.self, forKey: .id)
+        name = try values.decode(String.self, forKey: .name)
+        // v2 records did not declare a kind and are image explorations.
+        kind = try values.decodeIfPresent(ProjectDocumentKind.self, forKey: .kind) ?? .image
+        draft = try values.decode(ProjectDraft.self, forKey: .draft)
+        textDraft = try values.decodeIfPresent(TextDraftDocument.self, forKey: .textDraft)
+        sourceAssetID = try values.decodeIfPresent(UUID.self, forKey: .sourceAssetID)
+        adoptedAssetID = try values.decodeIfPresent(UUID.self, forKey: .adoptedAssetID)
+        selectedAssetID = try values.decodeIfPresent(UUID.self, forKey: .selectedAssetID)
     }
 }
 
