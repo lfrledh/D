@@ -116,7 +116,13 @@ public final class TextDraftSession {
 
             if Task.isCancelled { cancellationRequested = true }
             if cancellationRequested { await cancelRunIfNeeded(run, operationID: request.id) }
-            let outcome = await run.outcome()
+            let outcome = await withTaskCancellationHandler(operation: {
+                await run.outcome()
+            }, onCancel: { [weak self] in
+                Task { @MainActor [weak self] in
+                    await self?.requestCancellation(operationID: request.id)
+                }
+            })
             let wasCancelled = cancellationRequested || Task.isCancelled
             activeRun = nil
             finishRun(operationID: request.id)
@@ -142,9 +148,7 @@ public final class TextDraftSession {
 
     public func cancel() async {
         guard isRunning, let operationID = activeOperationID else { return }
-        cancellationRequested = true
-        isCancelling = true
-        if let activeRun { await cancelRunIfNeeded(activeRun, operationID: operationID) }
+        await requestCancellation(operationID: operationID)
         await waitForRunCompletion(operationID: operationID)
     }
 
@@ -181,6 +185,13 @@ public final class TextDraftSession {
         cancellationSent = true
         isCancelling = true
         await run.cancel()
+    }
+
+    private func requestCancellation(operationID: UUID) async {
+        guard activeOperationID == operationID else { return }
+        cancellationRequested = true
+        isCancelling = true
+        if let activeRun { await cancelRunIfNeeded(activeRun, operationID: operationID) }
     }
 
     private func waitForRunCompletion(operationID: UUID) async {

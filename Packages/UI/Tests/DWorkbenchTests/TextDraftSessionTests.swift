@@ -286,6 +286,25 @@ struct TextDraftSessionTests {
         #expect(await engine.cancellationCount == 1)
     }
 
+    @Test func callerCancellationDuringOutcomeWaitCancelsBeforeCleanupRelease() async throws {
+        let gate = TextDraftGate()
+        let engine = OutcomeGatedTextDraftEngine(gate: gate)
+        let subject = TextDraftSession(document: try TextDraftDocument(text: "draft"), engine: engine, backendID: "fixture")
+        let selection = try subject.selection(inUTF16: NSRange(location: 0, length: 5))
+        let rewrite = Task { try await subject.requestRewrite(selection: selection, instruction: "Change", model: model) }
+        let deadline = ContinuousClock.now + .seconds(2)
+        while !(await gate.hasReached()) {
+            if ContinuousClock.now >= deadline { throw CancellationError() }
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        rewrite.cancel()
+        try await waitUntil { await engine.cancellationCount == 1 }
+        #expect(subject.isRunning)
+        await gate.release()
+        await #expect(throws: CancellationError.self) { try await rewrite.value }
+        #expect(!subject.isRunning)
+    }
+
     @Test func acceptRejectsReplacementThatWouldExceedDocumentLimit() async throws {
         let original = String(repeating: "a", count: TextDraftDocument.maximumUTF8Bytes)
         let engine = ImmediateTextDraftEngine(outputs: [.textDelta("bb")])
