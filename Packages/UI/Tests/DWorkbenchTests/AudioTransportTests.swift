@@ -1,3 +1,4 @@
+import AudioToolbox
 import Foundation
 import Testing
 @testable import DWorkbench
@@ -204,6 +205,43 @@ struct AudioTransportTests {
         return url
     }
 
+    private func syntheticCAF(in directory: URL, name: String = UUID().uuidString) throws -> URL {
+        let url = directory.appendingPathComponent(name).appendingPathExtension("caf")
+        var description = AudioStreamBasicDescription(
+            mSampleRate: 48_000,
+            mFormatID: kAudioFormatLinearPCM,
+            mFormatFlags: kAudioFormatFlagIsSignedInteger | kAudioFormatFlagIsPacked,
+            mBytesPerPacket: 2,
+            mFramesPerPacket: 1,
+            mBytesPerFrame: 2,
+            mChannelsPerFrame: 1,
+            mBitsPerChannel: 16,
+            mReserved: 0
+        )
+        var fileID: AudioFileID?
+        let createStatus = AudioFileCreateWithURL(
+            url as CFURL,
+            kAudioFileCAFType,
+            &description,
+            .eraseFile,
+            &fileID
+        )
+        guard createStatus == noErr, let fileID else {
+            throw AudioMediaError.io("Unable to create native CAF fixture: \(createStatus)")
+        }
+        defer { AudioFileClose(fileID) }
+
+        let samples = [Int16](repeating: 0, count: 480)
+        var byteCount = UInt32(samples.count * MemoryLayout<Int16>.size)
+        let writeStatus = samples.withUnsafeBytes { buffer in
+            AudioFileWriteBytes(fileID, false, 0, &byteCount, buffer.baseAddress!)
+        }
+        guard writeStatus == noErr else {
+            throw AudioMediaError.io("Unable to write native CAF fixture: \(writeStatus)")
+        }
+        return url
+    }
+
     private func waitForPermissionRequest(_ subject: AudioTransport) async throws {
         for _ in 0..<100 where subject.state != .requestingPermission {
             await Task.yield()
@@ -301,6 +339,110 @@ struct AudioTransportTests {
             try subject.preparePlayback(url: url, format: wrong)
         }
         #expect(subject.state == .idle)
+    }
+
+    @Test
+    func nativeReaderUsesRenamedWAVAndCAFContentAndAcceptsSignedPCM() throws {
+        let root = try uniqueDirectory()
+        let wav = try syntheticWAV(in: root, name: "native-wave")
+        let renamedWAV = root.appendingPathComponent("native-wave.caf")
+        try FileManager.default.moveItem(at: wav, to: renamedWAV)
+
+        let wavSubject = AudioTransport()
+        try wavSubject.preparePlayback(url: renamedWAV, format: format)
+        #expect(wavSubject.state == .recorded)
+
+        let conflictingCAF = AudioFormatInfo(
+            container: .caf,
+            sampleRate: format.sampleRate,
+            channelCount: format.channelCount,
+            frameCount: format.frameCount,
+            bitDepth: format.bitDepth,
+            floatingPoint: format.floatingPoint
+        )
+        let wavConflict = AudioTransport()
+        #expect(throws: AudioMediaError.self) {
+            try wavConflict.preparePlayback(url: renamedWAV, format: conflictingCAF)
+        }
+
+        let caf = try syntheticCAF(in: root, name: "native-caf")
+        let renamedCAF = root.appendingPathComponent("native-caf.wav")
+        try FileManager.default.moveItem(at: caf, to: renamedCAF)
+        let cafSubject = AudioTransport()
+        try cafSubject.preparePlayback(url: renamedCAF, format: conflictingCAF)
+        #expect(cafSubject.state == .recorded)
+
+        let cafConflict = AudioTransport()
+        #expect(throws: AudioMediaError.self) {
+            try cafConflict.preparePlayback(url: renamedCAF, format: format)
+        }
+    }
+
+    @Test
+    func injectedASBDRejectsUnsignedIntegerWithoutClaimingNativeUnsignedDecode() throws {
+        var signedPCM = AudioStreamBasicDescription(
+            mSampleRate: format.sampleRate,
+            mFormatID: kAudioFormatLinearPCM,
+            mFormatFlags: kAudioFormatFlagIsSignedInteger | kAudioFormatFlagIsPacked,
+            mBytesPerPacket: 2,
+            mFramesPerPacket: 1,
+            mBytesPerFrame: 2,
+            mChannelsPerFrame: 1,
+            mBitsPerChannel: 16,
+            mReserved: 0
+        )
+        try NativePCMFileValidator.validate(
+            container: .wav,
+            streamDescription: signedPCM,
+            frameCount: format.frameCount,
+            expected: format
+        )
+
+        signedPCM.mFormatFlags = kAudioFormatFlagIsPacked
+        #expect(throws: AudioMediaError.self) {
+            try NativePCMFileValidator.validate(
+                container: .wav,
+                streamDescription: signedPCM,
+                frameCount: format.frameCount,
+                expected: format
+            )
+        }
+    }
+
+    @Test
+    func nativeReaderRejectsFractionalSampleRateMismatchBelowHalfAHertz() throws {
+        let url = try syntheticWAV(in: uniqueDirectory())
+        let fractionallyWrong = AudioFormatInfo(
+            container: .wav,
+            sampleRate: 48_000.25,
+            channelCount: 1,
+            frameCount: 480,
+            bitDepth: 16,
+            floatingPoint: false
+        )
+        let subject = AudioTransport()
+        #expect(throws: AudioMediaError.self) {
+            try subject.preparePlayback(url: url, format: fractionallyWrong)
+        }
+        #expect(subject.state == .idle)
+    }
+
+    @Test
+    func replayStartFailureWhilePlayingLeavesTransportPaused() throws {
+        let root = try uniqueDirectory()
+        let url = try syntheticWAV(in: root)
+        let factory = FakeAudioFactory()
+        let subject = AudioTransport(deviceFactory: factory)
+        try subject.preparePlayback(url: url, format: format)
+        try subject.play()
+        #expect(subject.state == .playing)
+
+        let playback = try #require(factory.playbacks.first)
+        playback.startResult = false
+        #expect(throws: AudioMediaError.self) { try subject.play() }
+        #expect(playback.segments.count == 2)
+        #expect(subject.state == .paused)
+        #expect(subject.errorMessage == nil)
     }
 
     @Test

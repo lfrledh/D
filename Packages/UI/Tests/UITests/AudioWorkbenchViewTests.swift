@@ -63,12 +63,37 @@ struct AudioWorkbenchViewTests {
     private func settle(
         _ host: NSHostingView<AudioWorkbenchView>,
         width: CGFloat,
-        height: CGFloat = 580
+        height: CGFloat = 580,
+        until condition: () -> Bool = { true }
     ) {
+        host.window?.setContentSize(NSSize(width: width, height: height))
         host.frame = NSRect(x: 0, y: 0, width: width, height: height)
+        let deadline = Date().addingTimeInterval(0.25)
+        repeat {
+            host.window?.contentView?.layoutSubtreeIfNeeded()
+            host.layoutSubtreeIfNeeded()
+            RunLoop.main.run(until: Date().addingTimeInterval(0.01))
+            host.window?.contentView?.layoutSubtreeIfNeeded()
+            host.layoutSubtreeIfNeeded()
+            if condition() { return }
+        } while Date() < deadline
+        host.window?.contentView?.layoutSubtreeIfNeeded()
         host.layoutSubtreeIfNeeded()
-        RunLoop.main.run(until: Date().addingTimeInterval(0.03))
-        host.layoutSubtreeIfNeeded()
+    }
+
+    private func enclosingEditorScroll(in host: NSView) -> NSScrollView? {
+        descendants(host)
+            .compactMap { $0 as? NSScrollView }
+            .filter { scroll in
+                guard let document = scroll.documentView else { return false }
+                let height = max(document.bounds.height, document.frame.height)
+                return height > scroll.contentSize.height + 1
+            }
+            .max { lhs, rhs in
+                let lhsHeight = max(lhs.documentView?.bounds.height ?? 0, lhs.documentView?.frame.height ?? 0)
+                let rhsHeight = max(rhs.documentView?.bounds.height ?? 0, rhs.documentView?.frame.height ?? 0)
+                return lhsHeight < rhsHeight
+            }
     }
 
     @Test
@@ -95,6 +120,14 @@ struct AudioWorkbenchViewTests {
             actions: actions { saves.append(($0, $1)) }
         ).observingLayout { rectangles[$0] = $1 }
         let host = NSHostingView(rootView: view)
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 1000, height: 580),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        window.contentView = host
+        defer { window.contentView = nil }
 
         settle(host, width: 1000)
         let originalEditor = try #require(
@@ -116,17 +149,30 @@ struct AudioWorkbenchViewTests {
                 #expect(rectangle.minX >= viewport.minX && rectangle.maxX <= viewport.maxX)
             }
             #expect(viewport.intersects(try #require(rectangles["audio-export-original"])))
-            let scroll = try #require(views.compactMap { $0 as? NSScrollView }.first)
+            let scroll = try #require(enclosingEditorScroll(in: host))
             let content = try #require(scroll.documentView)
-            scroll.contentView.scroll(to: NSPoint(x: 0, y: max(0, content.bounds.height - scroll.contentSize.height)))
+            let documentHeight = max(content.bounds.height, content.frame.height)
+            #expect(documentHeight > scroll.contentSize.height + 1)
+            let topOrigin = scroll.contentView.bounds.origin
+            #expect(abs(topOrigin.y) <= 1)
+            let finalRowID = "audio-clip-row-\(clips.last!.id.uuidString)"
+            scroll.contentView.scroll(to: NSPoint(
+                x: 0,
+                y: max(0, documentHeight - scroll.contentSize.height)
+            ))
             scroll.reflectScrolledClipView(scroll.contentView)
-            settle(host, width: width)
-            let lastClip = try #require(rectangles["audio-clip-row-\(clips.last!.id.uuidString)"])
+            settle(host, width: width) {
+                scroll.contentView.bounds.origin.y > topOrigin.y + 1
+                    && rectangles[finalRowID].map(viewport.intersects) == true
+            }
+            #expect(scroll.contentView.bounds.origin.y > topOrigin.y + 1)
+            let lastClip = try #require(rectangles[finalRowID])
             #expect(lastClip.minX >= viewport.minX && lastClip.maxX <= viewport.maxX)
             #expect(viewport.intersects(lastClip), "The final supported clip must be reachable by scrolling.")
             scroll.contentView.scroll(to: NSPoint.zero)
             scroll.reflectScrolledClipView(scroll.contentView)
-            settle(host, width: width)
+            settle(host, width: width) { abs(scroll.contentView.bounds.origin.y) <= 1 }
+            #expect(abs(scroll.contentView.bounds.origin.y) <= 1)
         }
         #expect(saves.isEmpty)
         #expect(originalEditor.stringValue.utf8.elementsEqual(document.note.utf8))
@@ -234,5 +280,94 @@ struct AudioWorkbenchViewTests {
 
         #expect(suppliedName.utf8.elementsEqual(unicode.utf8))
         #expect(suppliedRange == original)
+    }
+
+    @Test
+    func hostedUnicodeEditorValuesReachSharedButtonHandlerWithoutClaimingGUIActivation() throws {
+        let document = AudioDraftDocument(
+            id: UUID(),
+            assetID: UUID(),
+            note: "注释 e\u{301} 👩‍💻"
+        )
+        var saves: [(UUID, String)] = []
+        var additions: [(AudioFrameRange, String)] = []
+        var rejections: [AudioMediaError] = []
+        let callbacks = AudioWorkbenchActions(
+            importOriginal: {},
+            startRecording: {},
+            finishRecording: {},
+            saveNote: { saves.append(($0, $1)) },
+            selectClip: { _ in },
+            addClip: { additions.append(($0, $1)) },
+            exportOriginal: {},
+            exportRange: { _ in }
+        )
+        let host = NSHostingView(rootView: AudioWorkbenchView(
+            document: document,
+            metadata: metadata,
+            waveform: [],
+            transport: AudioTransport(),
+            actions: callbacks
+        ))
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 700, height: 580),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        window.contentView = host
+        defer { window.contentView = nil }
+        settle(host, width: 700)
+
+        let fields = descendants(host).compactMap { $0 as? NSTextField }
+        let noteEditor = try #require(fields.first { $0.placeholderString == "原始媒体注释" })
+        let clipEditor = try #require(fields.first { $0.placeholderString == "片段名称" })
+        let clipUnicode = "片段 e\u{301} 🎵"
+        clipEditor.stringValue = clipUnicode
+        let range = AudioFrameRange(startFrame: 7, endFrame: 19)
+
+        #expect(AudioWorkbenchButtonHandler.saveNote(
+            documentID: document.id,
+            editingDocumentID: document.id,
+            note: noteEditor.stringValue,
+            actions: callbacks,
+            reject: { rejections.append($0) }
+        ))
+        #expect(AudioWorkbenchButtonHandler.addClip(
+            documentID: document.id,
+            editingDocumentID: document.id,
+            existingClipCount: document.clips.count,
+            name: clipEditor.stringValue,
+            range: { range },
+            actions: callbacks,
+            reject: { rejections.append($0) }
+        ))
+        #expect(saves.count == 1)
+        #expect(saves[0].0 == document.id)
+        #expect(saves[0].1.utf8.elementsEqual(document.note.utf8))
+        #expect(additions.count == 1)
+        #expect(additions[0].0 == range)
+        #expect(additions[0].1.utf8.elementsEqual(clipUnicode.utf8))
+        #expect(rejections.isEmpty)
+
+        #expect(!AudioWorkbenchButtonHandler.saveNote(
+            documentID: document.id,
+            editingDocumentID: UUID(),
+            note: noteEditor.stringValue,
+            actions: callbacks,
+            reject: { rejections.append($0) }
+        ))
+        #expect(!AudioWorkbenchButtonHandler.addClip(
+            documentID: document.id,
+            editingDocumentID: document.id,
+            existingClipCount: AudioLimits.maximumClips,
+            name: clipEditor.stringValue,
+            range: { range },
+            actions: callbacks,
+            reject: { rejections.append($0) }
+        ))
+        #expect(saves.count == 1)
+        #expect(additions.count == 1)
+        #expect(rejections == [.limitExceeded])
     }
 }

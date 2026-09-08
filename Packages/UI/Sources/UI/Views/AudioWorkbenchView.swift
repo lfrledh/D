@@ -22,6 +22,48 @@ public struct AudioWorkbenchActions {
     }
 }
 
+@MainActor
+enum AudioWorkbenchButtonHandler {
+    @discardableResult
+    static func saveNote(
+        documentID: UUID,
+        editingDocumentID: UUID?,
+        note: String,
+        actions: AudioWorkbenchActions,
+        reject: (AudioMediaError) -> Void
+    ) -> Bool {
+        guard editingDocumentID == documentID else { return false }
+        guard note.utf8.count <= AudioLimits.maximumNoteBytes else {
+            reject(.limitExceeded)
+            return false
+        }
+        actions.saveNote(documentID, note)
+        return true
+    }
+
+    @discardableResult
+    static func addClip(
+        documentID: UUID,
+        editingDocumentID: UUID?,
+        existingClipCount: Int,
+        name: String,
+        range: () -> AudioFrameRange?,
+        actions: AudioWorkbenchActions,
+        reject: (AudioMediaError) -> Void
+    ) -> Bool {
+        guard editingDocumentID == documentID else { return false }
+        guard !name.isEmpty,
+              name.utf8.count <= AudioLimits.maximumNameBytes,
+              existingClipCount < AudioLimits.maximumClips else {
+            reject(.limitExceeded)
+            return false
+        }
+        guard let range = range() else { return false }
+        actions.addClip(range, name)
+        return true
+    }
+}
+
 public struct AudioWorkbenchView: View {
     public let document: AudioDraftDocument?
     public let metadata: AudioAssetMetadata?
@@ -155,26 +197,27 @@ public struct AudioWorkbenchView: View {
             TextField("原始媒体注释", text: $note, axis: .vertical).lineLimit(3...6).textFieldStyle(.roundedBorder).accessibilityIdentifier("audio-note")
                     .audioMeasured("audio-note", probe: layoutProbe)
             Button("保存注释") {
-                guard editingDocumentID == document.id,
-                      note.utf8.count <= AudioLimits.maximumNoteBytes else {
-                    transport.present(AudioMediaError.limitExceeded)
-                    return
-                }
-                actions.saveNote(document.id, note)
+                AudioWorkbenchButtonHandler.saveNote(
+                    documentID: document.id,
+                    editingDocumentID: editingDocumentID,
+                    note: note,
+                    actions: actions,
+                    reject: { transport.present($0) }
+                )
             }
                 .accessibilityIdentifier("audio-save-note")
             Divider()
             HStack { TextField("片段名称", text: $clipName).accessibilityIdentifier("audio-clip-name")
                 Button("添加片段") {
-                    guard editingDocumentID == document.id else { return }
-                    guard !clipName.isEmpty,
-                          clipName.utf8.count <= AudioLimits.maximumNameBytes,
-                          document.clips.count < AudioLimits.maximumClips else {
-                        transport.present(AudioMediaError.limitExceeded)
-                        return
-                    }
-                    guard let range = range(format: format) else { return }
-                    actions.addClip(range, clipName)
+                    AudioWorkbenchButtonHandler.addClip(
+                        documentID: document.id,
+                        editingDocumentID: editingDocumentID,
+                        existingClipCount: document.clips.count,
+                        name: clipName,
+                        range: { range(format: format) },
+                        actions: actions,
+                        reject: { transport.present($0) }
+                    )
                 }.accessibilityIdentifier("audio-add-clip")
                     .audioMeasured("audio-add-clip", probe: layoutProbe) }
             HStack { TextField("开始秒", value: $startSeconds, format: .number).accessibilityIdentifier("audio-range-start")

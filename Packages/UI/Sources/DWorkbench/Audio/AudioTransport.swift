@@ -1,4 +1,5 @@
 @preconcurrency import AVFoundation
+import AudioToolbox
 import Darwin
 import Foundation
 import Observation
@@ -420,10 +421,6 @@ public final class AudioTransport: NSObject {
               Double(format.frameCount) / format.sampleRate <= AudioLimits.maximumSeconds else {
             throw AudioMediaError.unsupportedFormat
         }
-        let expectedExtension = format.container == .wav ? "wav" : "caf"
-        guard url.pathExtension.lowercased() == expectedExtension else {
-            throw AudioMediaError.invalidMedia("文件容器与已检查的格式不一致")
-        }
         if let range,
            (range.startFrame < 0
             || range.startFrame >= range.endFrame
@@ -460,6 +457,75 @@ public final class AudioTransport: NSObject {
     }
 }
 
+struct NativeAudioFileDescription {
+    let container: AudioContainer
+    let streamDescription: AudioStreamBasicDescription
+
+    init(url: URL) throws {
+        var fileID: AudioFileID?
+        let openStatus = AudioFileOpenURL(url as CFURL, .readPermission, 0, &fileID)
+        guard openStatus == noErr, let fileID else {
+            throw AudioMediaError.invalidMedia("系统无法读取音频文件类型（\(openStatus)）")
+        }
+        defer { AudioFileClose(fileID) }
+
+        var fileType: AudioFileTypeID = 0
+        var fileTypeSize = UInt32(MemoryLayout.size(ofValue: fileType))
+        let typeStatus = AudioFileGetProperty(
+            fileID,
+            kAudioFilePropertyFileFormat,
+            &fileTypeSize,
+            &fileType
+        )
+        guard typeStatus == noErr else {
+            throw AudioMediaError.invalidMedia("系统无法读取音频容器（\(typeStatus)）")
+        }
+        switch fileType {
+        case kAudioFileWAVEType:
+            container = .wav
+        case kAudioFileCAFType:
+            container = .caf
+        default:
+            throw AudioMediaError.unsupportedFormat
+        }
+
+        var stream = AudioStreamBasicDescription()
+        var streamSize = UInt32(MemoryLayout.size(ofValue: stream))
+        let streamStatus = AudioFileGetProperty(
+            fileID,
+            kAudioFilePropertyDataFormat,
+            &streamSize,
+            &stream
+        )
+        guard streamStatus == noErr else {
+            throw AudioMediaError.invalidMedia("系统无法读取 PCM 流格式（\(streamStatus)）")
+        }
+        streamDescription = stream
+    }
+}
+
+enum NativePCMFileValidator {
+    static func validate(
+        container: AudioContainer,
+        streamDescription actual: AudioStreamBasicDescription,
+        frameCount: Int64,
+        expected: AudioFormatInfo
+    ) throws {
+        let isFloat = actual.mFormatFlags & kAudioFormatFlagIsFloat != 0
+        let isSignedInteger = actual.mFormatFlags & kAudioFormatFlagIsSignedInteger != 0
+        guard container == expected.container,
+              actual.mFormatID == kAudioFormatLinearPCM,
+              actual.mSampleRate == expected.sampleRate,
+              Int(actual.mChannelsPerFrame) == expected.channelCount,
+              frameCount == expected.frameCount,
+              Int(actual.mBitsPerChannel) == expected.bitDepth,
+              isFloat == expected.floatingPoint,
+              expected.floatingPoint || isSignedInteger else {
+            throw AudioMediaError.invalidMedia("文件内容与已检查的 PCM 格式不一致")
+        }
+    }
+}
+
 @MainActor
 private final class AVFoundationAudioDeviceFactory: AudioTransportDeviceFactory {
     func requestRecordPermission() async -> Bool {
@@ -489,21 +555,14 @@ private final class AVFoundationPlaybackDevice: AudioPlaybackDevice {
     private var pausedFrame: Int64 = 0
 
     init(url: URL, expected: AudioFormatInfo) throws {
+        let native = try NativeAudioFileDescription(url: url)
         let file = try AVAudioFile(forReading: url)
-        let actual = file.fileFormat
-        let settings = actual.settings
-        let actualBits = (settings[AVLinearPCMBitDepthKey] as? NSNumber)?.intValue
-        let actualFloat = (settings[AVLinearPCMIsFloatKey] as? NSNumber)?.boolValue
-            ?? (actual.commonFormat == .pcmFormatFloat32)
-        let actualFormatID = (settings[AVFormatIDKey] as? NSNumber)?.uint32Value
-        guard actualFormatID == kAudioFormatLinearPCM,
-              actual.sampleRate == expected.sampleRate,
-              Int(actual.channelCount) == expected.channelCount,
-              file.length == expected.frameCount,
-              actualBits == expected.bitDepth,
-              actualFloat == expected.floatingPoint else {
-            throw AudioMediaError.invalidMedia("文件内容与已检查的 PCM 格式不一致")
-        }
+        try NativePCMFileValidator.validate(
+            container: native.container,
+            streamDescription: native.streamDescription,
+            frameCount: file.length,
+            expected: expected
+        )
         self.file = file
     }
 
