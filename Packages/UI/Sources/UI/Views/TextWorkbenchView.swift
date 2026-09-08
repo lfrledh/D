@@ -120,9 +120,13 @@ public struct TextWorkbenchView: View {
                 Text(comparisonSourceText).frame(maxWidth: .infinity, alignment: .leading).textSelection(.enabled)
             }
             GroupBox("替换候选") {
-                candidateContent.frame(maxWidth: .infinity, alignment: .leading).textSelection(.enabled)
+                ScrollView {
+                    candidateContent.frame(maxWidth: .infinity, alignment: .leading).textSelection(.enabled)
+                }
+                .frame(minHeight: 120, maxHeight: .infinity, alignment: .top)
                     .accessibilityIdentifier("text-candidate-output")
             }
+            .layoutPriority(1)
             if session.candidate != nil && !canAccept {
                 Label("原稿或选区已改变，不能接受此候选。", systemImage: "exclamationmark.triangle")
                     .font(.caption).foregroundStyle(.orange)
@@ -167,7 +171,11 @@ public struct TextWorkbenchView: View {
                 Label("正在生成候选…", systemImage: "ellipsis")
                     .foregroundStyle(.secondary)
             } else {
-                Text(session.partialText)
+                VStack(alignment: .leading, spacing: 8) {
+                    Label("正在生成候选…", systemImage: "ellipsis")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Text(session.partialText)
+                }
             }
         } else if let candidate = session.candidate {
             Text(candidate.replacement)

@@ -17,7 +17,9 @@ enum TextSelectionEditorState {
 
     static func validCursorRange(_ range: NSRange, in document: TextDraftDocument) -> NSRange? {
         guard range.location != NSNotFound, range.location >= 0, range.length == 0,
-              Range(range, in: document.text) != nil else { return nil }
+              range.location <= document.text.utf16.count else { return nil }
+        let index = String.Index(utf16Offset: range.location, in: document.text)
+        guard index == document.text.endIndex || document.text.indices.contains(index) else { return nil }
         return range
     }
 
@@ -59,12 +61,12 @@ public struct TextSelectionEditor: NSViewRepresentable {
         textView.backgroundColor = .textBackgroundColor
         textView.textContainerInset = NSSize(width: 10, height: 10)
         textView.minSize = .zero
-        textView.maxSize = NSSize(width: .greatestFiniteMagnitude, height: .greatestFiniteMagnitude)
+        textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
         textView.isVerticallyResizable = true
         textView.isHorizontallyResizable = false
         textView.autoresizingMask = [.width]
-        textView.textContainer?.containerSize = NSSize(width: .greatestFiniteMagnitude,
-                                                        height: .greatestFiniteMagnitude)
+        textView.textContainer?.containerSize = NSSize(width: CGFloat.greatestFiniteMagnitude,
+                                                        height: CGFloat.greatestFiniteMagnitude)
         textView.textContainer?.widthTracksTextView = true
         textView.delegate = context.coordinator
 
