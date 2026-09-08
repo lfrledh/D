@@ -14,6 +14,18 @@ enum TextSelectionEditorState {
         guard (try? TextRewriteSelection(document: document, range: range)) != nil else { return nil }
         return range
     }
+
+    static func validCursorRange(_ range: NSRange, in document: TextDraftDocument) -> NSRange? {
+        guard range.location != NSNotFound, range.location >= 0, range.length == 0,
+              Range(range, in: document.text) != nil else { return nil }
+        return range
+    }
+
+    static func validRange(_ range: NSRange, inNativeText text: String, document: TextDraftDocument) -> NSRange? {
+        guard let nativeDocument = try? TextDraftDocument(id: document.id, revision: document.revision, text: text),
+              (try? TextRewriteSelection(document: nativeDocument, range: range)) != nil else { return nil }
+        return range
+    }
 }
 
 /// An AppKit text view keeps IME composition and selection handling out of the
@@ -46,6 +58,13 @@ public struct TextSelectionEditor: NSViewRepresentable {
         textView.textColor = .labelColor
         textView.backgroundColor = .textBackgroundColor
         textView.textContainerInset = NSSize(width: 10, height: 10)
+        textView.minSize = .zero
+        textView.maxSize = NSSize(width: .greatestFiniteMagnitude, height: .greatestFiniteMagnitude)
+        textView.isVerticallyResizable = true
+        textView.isHorizontallyResizable = false
+        textView.autoresizingMask = [.width]
+        textView.textContainer?.containerSize = NSSize(width: .greatestFiniteMagnitude,
+                                                        height: .greatestFiniteMagnitude)
         textView.textContainer?.widthTracksTextView = true
         textView.delegate = context.coordinator
 
@@ -76,20 +95,21 @@ public struct TextSelectionEditor: NSViewRepresentable {
         private var onSelection: ((NSRange) -> Void)?
         private var currentDocument: TextDraftDocument?
 
-        fileprivate func install(document: TextDraftDocument, selection: NSRange, in textView: NSTextView,
-                                 edit: @escaping (String) -> Void, select: @escaping (NSRange) -> Void) {
+        func install(document: TextDraftDocument, selection: NSRange, in textView: NSTextView,
+                     edit: @escaping (String) -> Void, select: @escaping (NSRange) -> Void) {
             onEdit = edit
             onSelection = select
             replace(document: document, selection: selection, in: textView, clearSelection: true)
         }
 
-        fileprivate func update(document: TextDraftDocument, requestedSelection: NSRange, in textView: NSTextView,
-                                edit: @escaping (String) -> Void, select: @escaping (NSRange) -> Void) {
+        func update(document: TextDraftDocument, requestedSelection: NSRange, in textView: NSTextView,
+                    edit: @escaping (String) -> Void, select: @escaping (NSRange) -> Void) {
+            let changedDocument = documentID != document.id
+            // Keep both callbacks and identity frozen during composition. In particular,
+            // a cross-document SwiftUI update must not route old marked text to the new document.
+            guard !textView.hasMarkedText() else { return }
             onEdit = edit
             onSelection = select
-            let changedDocument = documentID != document.id
-            // Never replace an active marked range with an asynchronous SwiftUI value.
-            guard !textView.hasMarkedText() else { return }
             if changedDocument {
                 replace(document: document, selection: requestedSelection, in: textView, clearSelection: true)
                 return
@@ -101,7 +121,8 @@ public struct TextSelectionEditor: NSViewRepresentable {
             documentRevision = document.revision
             currentDocument = document
             if requestedSelection != lastReportedSelection,
-               let valid = TextSelectionEditorState.validRange(requestedSelection, in: document) {
+               let valid = TextSelectionEditorState.validRange(requestedSelection, in: document)
+                ?? TextSelectionEditorState.validCursorRange(requestedSelection, in: document) {
                 suppressCallbacks = true
                 textView.setSelectedRange(valid)
                 suppressCallbacks = false
@@ -114,7 +135,9 @@ public struct TextSelectionEditor: NSViewRepresentable {
             suppressCallbacks = true
             textView.string = document.text
             let nextSelection = clearSelection ? NSRange(location: 0, length: 0)
-                : (TextSelectionEditorState.validRange(selection, in: document) ?? NSRange(location: 0, length: 0))
+                : (TextSelectionEditorState.validRange(selection, in: document)
+                    ?? TextSelectionEditorState.validCursorRange(selection, in: document)
+                    ?? NSRange(location: 0, length: 0))
             textView.setSelectedRange(nextSelection)
             suppressCallbacks = false
             documentID = document.id
@@ -138,7 +161,8 @@ public struct TextSelectionEditor: NSViewRepresentable {
             lastReportedSelection = range
             if range.length == 0 {
                 onSelection?(range) // A collapsed selection clears a previous rewrite target.
-            } else if TextSelectionEditorState.validRange(range, in: currentDocument) != nil {
+            } else if TextSelectionEditorState.validRange(range, inNativeText: textView.string,
+                                                           document: currentDocument) != nil {
                 onSelection?(range)
             } else {
                 onSelection?(NSRange(location: NSNotFound, length: 0))

@@ -6,6 +6,7 @@ import SwiftUI
 @MainActor
 public struct TextWorkbenchView: View {
     @Bindable private var session: TextDraftSession
+    @State private var runningSelectionText: String?
     private let selection: NSRange
     @Binding private var instruction: String
     private let modelStatus: String
@@ -97,7 +98,7 @@ public struct TextWorkbenchView: View {
                 .lineLimit(2...5).textFieldStyle(.roundedBorder)
                 .accessibilityIdentifier("text-instruction")
             HStack {
-                Button(action: onGenerate) { Label("改写", systemImage: "sparkles") }
+                Button(action: generate) { Label("改写", systemImage: "sparkles") }
                     .keyboardShortcut(.return, modifiers: .command)
                     .disabled(!canGenerate || session.isRunning)
                     .accessibilityIdentifier("text-rewrite")
@@ -115,8 +116,8 @@ public struct TextWorkbenchView: View {
     private var comparisonPanel: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("选段与候选").font(.headline)
-            GroupBox("原选段") {
-                Text(selectedText).frame(maxWidth: .infinity, alignment: .leading).textSelection(.enabled)
+            GroupBox(comparisonSourceLabel) {
+                Text(comparisonSourceText).frame(maxWidth: .infinity, alignment: .leading).textSelection(.enabled)
             }
             GroupBox("替换候选") {
                 candidateContent.frame(maxWidth: .infinity, alignment: .leading).textSelection(.enabled)
@@ -136,12 +137,28 @@ public struct TextWorkbenchView: View {
         .background(Color(nsColor: .underPageBackgroundColor).opacity(0.45))
     }
 
-    private var selectedText: String {
+    private var currentSelectedText: String {
         guard (try? TextRewriteSelection(document: session.document, range: selection)) != nil,
               let range = Range(selection, in: session.document.text) else {
             return "请在原稿中选择要改写的文字。"
         }
         return String(session.document.text[range])
+    }
+
+    private var comparisonSourceText: String {
+        if let candidate = session.candidate { return candidate.selection.selectedText }
+        return session.isRunning ? (runningSelectionText ?? "生成中的原选段已固定。") : currentSelectedText
+    }
+
+    private var comparisonSourceLabel: String {
+        if session.candidate != nil { return "候选的原选段" }
+        return session.isRunning ? "生成中的原选段" : "原选段"
+    }
+
+    private func generate() {
+        // Keep the request's source visible if editing or selecting continues while it streams.
+        runningSelectionText = currentSelectedText
+        onGenerate()
     }
 
     @ViewBuilder private var candidateContent: some View {
