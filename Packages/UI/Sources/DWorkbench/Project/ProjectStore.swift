@@ -2,6 +2,7 @@ import DInference
 import Darwin
 import Foundation
 import ImageIO
+import zlib
 
 /// Internal fault injection points exercise actual durable migration boundaries in CPU tests.
 enum ProjectMigrationCheckpoint: Sendable { case backupDurable, beforePublication, publicationDurable }
@@ -351,6 +352,143 @@ public actor ProjectStore {
                 try buffer.withUnsafeBytes { bytes in
                     try ProjectFiles.writeAll(UnsafeRawBufferPointer(rebasing: bytes[..<count]), to: target)
                 }
+            }
+        }
+    }
+
+    /// Capture a persisted run, never the current parameter panel. This version identifies
+    /// the new export snapshot; schema2 did not record historical asset versions.
+    public func prepareRecipePNG(assetID: UUID, disclosure: RecipeDisclosure) throws -> Data {
+        try checkLocation()
+        try verifyUnchangedManifest()
+        guard let asset = manifest.assets.first(where: { $0.id == assetID }),
+              let job = manifest.jobs.first(where: { $0.id == asset.jobID }),
+              job.state == .completed, job.artifactIDs.contains(asset.id),
+              case .image(let input) = job.request.input else { throw ProjectStoreError.missingAsset }
+        let png = try ProjectFiles.read(relative: asset.relativePath, in: rootFD, limit: 32 * 1024 * 1024)
+        _ = try Self.validateRecipePNG(png)
+        func field(_ value: String?) -> RecipeField<String> {
+            guard let value, !value.isEmpty, value != "unrecorded" else { return .unknown }
+            return .value(value)
+        }
+        let recipe = GenerationRecipe(assetID: asset.id, assetVersion: UUID(), runID: job.id,
+            modelSource: field(job.resultMetadata["modelRepository"]),
+            modelRevision: field(job.resultMetadata["modelRevision"] ?? job.request.model.revision),
+            weightsManifestSHA256: .unknown, prompt: .value(input.prompt), structuredInputRevision: .notApplicable,
+            seed: .value(String(input.seed)), steps: .value(input.steps), guidance: .value(Double(input.guidanceScale)),
+            width: .value(input.width), height: .value(input.height), scheduler: .unknown,
+            computePrecision: .unknown, quantization: .unknown, implementationVersion: .unknown,
+            mediaPayloadSHA256: .unknown, parents: [], claim: .callerDeclared)
+        return try PNGRecipeCodec.embedding(recipe, in: png, disclosure: disclosure)
+    }
+
+    /// Open only the explicitly selected regular file, with the same no-follow walk as projects.
+    public static func readRecipePNG(at url: URL) throws -> (Data, PNGRecipeInspection) {
+        guard url.isFileURL else { throw ProjectStoreError.unsafePath(url.path) }
+        let parent = try ProjectFiles.openDirectory(url.deletingLastPathComponent())
+        defer { Darwin.close(parent) }
+        let data = try ProjectFiles.read(relative: url.lastPathComponent, in: parent, limit: 32 * 1024 * 1024)
+        return (data, try validateRecipePNG(data))
+    }
+
+    public static func publishRecipePNG(_ data: Data, to destination: URL) throws {
+        try publishRecipePNG(data, to: destination, checkpoint: nil)
+    }
+
+    static func publishRecipePNG(_ data: Data, to destination: URL,
+                                 checkpoint: (@Sendable (ProjectExportCheckpoint) throws -> Void)?) throws {
+        let inspection = try validateRecipePNG(data)
+        guard inspection.recipe != nil else { throw PNGRecipeError.invalidRecipe }
+        guard destination.isFileURL, destination.path.hasPrefix("/"), !destination.lastPathComponent.isEmpty else {
+            throw ProjectStoreError.unsafePath(destination.path)
+        }
+        let parent = try ProjectFiles.openDirectory(destination.deletingLastPathComponent())
+        defer { Darwin.close(parent) }
+        try ProjectFiles.publishExport(to: destination, parent: parent, checkpoint: checkpoint) { target in
+            try data.withUnsafeBytes { try ProjectFiles.writeAll($0, to: target) }
+        }
+    }
+
+    /// Source metadata is displayed separately. Only editable prompt/seed enter a NEW draft.
+    public func createRecipeDocument(_ recipe: GenerationRecipe) throws -> ProjectManifest {
+        _ = try GenerationRecipeCodec.encode(recipe, disclosure: .privateArchive)
+        guard case .value(let prompt) = recipe.prompt else { throw PNGRecipeError.invalidRecipe }
+        let seed: String?
+        if case .value(let value) = recipe.seed { seed = value } else { seed = nil }
+        return try createDocument(name: "来自 PNG 配方", draft: .init(prompt: prompt, randomSeed: seed == nil, seedText: seed ?? "0"))
+    }
+
+    private static func validateRecipePNG(_ data: Data) throws -> PNGRecipeInspection {
+        let inspection = try PNGRecipeCodec.inspect(data)
+        // Decode bounded pixels without sending compressed profiles, EXIF or arbitrary text
+        // to ImageIO. Original chunks remain byte-exact in the actual exported data.
+        let bytes = [UInt8](data)
+        var pixels = Data(bytes.prefix(8)); var compressed = Data(); var header: [UInt8] = []; var offset = 8
+        while offset < bytes.count {
+            let length = bytes[offset..<offset+4].reduce(0) { ($0 << 8) | Int($1) }
+            let type = String(bytes: bytes[offset+4..<offset+8], encoding: .ascii)!
+            let end = offset + 12 + length
+            if type == "IHDR" { header = Array(bytes[offset+8..<end-4]) }
+            if type == "IDAT" { compressed.append(contentsOf: bytes[offset+8..<end-4]) }
+            if ["IHDR", "PLTE", "IDAT", "IEND", "tRNS"].contains(type) { pixels.append(contentsOf: bytes[offset..<end]) }
+            offset = end
+        }
+        try verifyPNGScanlines(compressed, header: header)
+        guard let source = CGImageSourceCreateWithData(pixels as CFData, nil),
+              CGImageSourceGetCount(source) == 1, CGImageSourceGetStatus(source) == .statusComplete,
+              let image = CGImageSourceCreateImageAtIndex(source, 0, [kCGImageSourceShouldCacheImmediately: true] as CFDictionary),
+              CGImageSourceGetStatusAtIndex(source, 0) == .statusComplete,
+              image.width == inspection.width, image.height == inspection.height else {
+            throw ProjectStoreError.invalidImage("PNG")
+        }
+        return inspection
+    }
+
+    /// ImageIO can repair invalid zlib streams. Require exact filtered scanline bytes first,
+    /// with a 64KiB output window, declared pixel budget and no compressed metadata parsing.
+    private static func verifyPNGScanlines(_ compressed: Data, header: [UInt8]) throws {
+        let width = header[0..<4].reduce(0) { $0 << 8 | Int($1) }
+        let height = header[4..<8].reduce(0) { $0 << 8 | Int($1) }
+        let channels = [0: 1, 2: 3, 3: 1, 4: 2, 6: 4][Int(header[9])]!
+        let bits = channels * Int(header[8])
+        let passes: [(Int, Int, Int, Int)] = header[12] == 0
+            ? [(0, 0, 1, 1)]
+            : [(0, 0, 8, 8), (4, 0, 8, 8), (0, 4, 4, 8), (2, 0, 4, 4), (0, 2, 2, 4), (1, 0, 2, 2), (0, 1, 1, 2)]
+        var rowStarts = Set<Int>(); var expected = 0
+        for (x, y, dx, dy) in passes where width > x && height > y {
+            let columns = (width - x + dx - 1) / dx
+            let rows = (height - y + dy - 1) / dy
+            let rowBytes = (columns * bits + 7) / 8 + 1
+            for _ in 0..<rows { rowStarts.insert(expected); expected += rowBytes }
+        }
+        var stream = z_stream()
+        guard inflateInit_(&stream, ZLIB_VERSION, Int32(MemoryLayout<z_stream>.size)) == Z_OK else {
+            throw ProjectStoreError.invalidImage("PNG 压缩流")
+        }
+        defer { inflateEnd(&stream) }
+        var output = [UInt8](repeating: 0, count: 64 * 1024)
+        try compressed.withUnsafeBytes { raw in
+            stream.next_in = UnsafeMutablePointer(mutating: raw.bindMemory(to: UInt8.self).baseAddress)
+            stream.avail_in = uInt(raw.count)
+            var produced = 0
+            while true {
+                let previousIn = stream.avail_in
+                let status: Int32 = output.withUnsafeMutableBytes { buffer in
+                    stream.next_out = buffer.bindMemory(to: UInt8.self).baseAddress
+                    stream.avail_out = uInt(buffer.count)
+                    return inflate(&stream, Z_NO_FLUSH)
+                }
+                let count = output.count - Int(stream.avail_out)
+                guard produced + count <= expected else { throw ProjectStoreError.invalidImage("PNG 像素数据超长") }
+                for offset in 0..<count where rowStarts.contains(produced + offset) {
+                    guard output[offset] <= 4 else { throw ProjectStoreError.invalidImage("PNG 滤波数据") }
+                }
+                produced += count
+                if status == Z_STREAM_END {
+                    guard stream.avail_in == 0, produced == expected else { throw ProjectStoreError.invalidImage("PNG 压缩流长度") }
+                    break
+                }
+                guard status == Z_OK, count > 0 || stream.avail_in < previousIn else { throw ProjectStoreError.invalidImage("PNG 压缩流损坏") }
             }
         }
     }
