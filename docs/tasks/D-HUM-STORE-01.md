@@ -51,3 +51,7 @@ Sol/high initial and repair1 each reached the controlled900s timeout. Repair2 co
 Original import/hash/bounded decode/waveform, schema4 backup migration, persisted capture reservation/explicit recovery, immutable original and frame clips/save/export implemented. No hardware recording/playback, GUI or production session assembly is claimed. Fractional-rate CAF originals remain supported but WAV clip export rejects nonintegral rate. Expanded float32 outputs over64MiB also reject without publishing a partial file; assembly must show these limits.
 
 Latest CLI stderr contains durable-thread-projection ordinal warnings; independent event stream/final response and tested files are preserved. This does not prove the internal thread database healthy. No observed task tool permission rejection, widened roots or unauthorized project write. Hidden service routing/cost unknown. No push.
+
+## Isolated batch regression
+
+The preserved store candidate30a2298 was merged without rewriting history into b27a969caf63b7b75d9edb8b25ba58df0cde7e8c. The actual UI package test run reports186 methods/25 suites passed, including18 new store/inspector and3 separate Lead counterexamples. One existing optional installed-weights check was explicitly skipped; no real inference/hardware/GUI claim. Existing compiler warnings remain. Evidence: store/lead-tests-combination-store/request.json, output.log and result.json. Later changes in this integration tree are records only. The full audio workbench batch remains blocked; source product code is unchanged.

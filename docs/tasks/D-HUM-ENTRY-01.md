@@ -35,3 +35,15 @@ Only preflight until Lead explicitly sends IMPLEMENT with same spec revision and
 Lead另编写AudioLeadContractTests三项独立反例，采用手工RIFF而非被测编码器：移走合成源后原件导出/定帧导出/重开，截断PCM拒绝入库且输入不变，规范等价Unicode外部备注拒绝覆盖。此处仅冻结反例，等待组合实际编译/执行；不记为已通过。准备源码只含共享值类型，后续产品实现由Worker承担。
 
 音频初交已结束，syntax parse通过但Lead实际编译失败；未运行行为测试。静态审核发现片段播放未实际限定末帧、录音设备错误与迟到回调缺少覆盖等，已同一任务第一轮返工，剩余第二轮，详见audio/initial-lead-review.json及repair1-prompt。未出现观察到的权限事件或越界写入；原失败记录保留。存储初交继续，不因音频返工停下。所有CPU构建串行，未使用音频设备或GUI。
+
+## 当前停止点：首波部分通过，音频接纳受阻（2026-09-09 JST）
+
+本段覆盖此前“准备/待派工”的执行状态，不改变冻结要求。两个真实受限实施任务初交运行重叠264.14234秒；源代码仍为a406af9cd8908a77ae2f013d29121164d6fc0745。源方本次后续仅保存CURRENT_ACTIONS与人工队列的停止记录，完整最终SHA在外部final-receipt.json。
+
+- STORE：Sol/high初交+2轮；候选30a2298d8789f3daeb9d50d70d76b09931d6482c。Lead未改其产品实现。18局部方法通过，隔离组合b27a969caf63b7b75d9edb8b25ba58df0cde7e8c含Lead独立3项反例，测试报告186方法/25套件通过；其中现有可选权重只读检查明确跳过，未设置其路径，不宣称零跳过或真实推理。既有TextSelectionEditor等编译警告保留。本次结案后此组合仅文档变化。
+- AUDIO：Terra/medium初交与修复1，显式复核路由后Sol/high修复2，Lead一次有界收尾；候选1c1ee15b69339f0fc538dc460143e00c6ec84e27。实际编译/9项设备生命周期CPU/3项UI方法通过；64片段滚动方法有2项可达性断言失败。非实现者Sol/high只读复核还确认播放入口未完整核对实际容器/整数编码；Unicode视图激活及Lead两项修补的反例覆盖不足。具体证据audio-review/review-response.md，复核没有独立执行测试。
+- 停止规则：AUDIO普通返工与有界Lead接管已耗尽；不再修补、不更换任务编号追加预算、不把测试定位不明误报成确定布局缺陷。批次未整体接纳，未派装配Worker，没有把schema4或音频入口启用到源应用。
+
+最小追加提案：只为AUDIO批准一次定点收尾（实际容器/有符号PCM检查及反例、确定正确滚动表面并保留可达性断言、补Unicode真实控件与状态反例），冻结标准不变，通过后再非实现者复核。当前不需要Mac权限。此提案未实施；其后装配Worker独占ProjectSession/WorkbenchModel/WorkbenchView及必要音频协调器，先按assembly-dirty-state-clarification.json冻结未保存备注/片段输入、迟到结果、录音结束后保存/失败阻止导航。麦克风能力/真人窗口到可审阅装配时再明确，不请求全盘访问。
+
+恢复检查点：三个候选工作树与本轮证据保留；全部本轮实施、复核和CPU进程均结束，仅依据自有句柄，不是系统写锁。个人scheme字节/完整差异/索引/未暂存状态保持，普通D.app四个关键文件摘要/大小/mtime保持。未触碰真实作品、模型、签名、系统授权，无推送。外部索引final-receipt.json；测试版本/源码摘要、每轮请求/运行设置、过程与返工原因位于run-20260908T153243Z。费用和完整Lead归因unknown；初交/修复900秒停止、代码错误、夹具问题与CLI线程投影ordinal警告分别记录，不能都归因为模型能力。
