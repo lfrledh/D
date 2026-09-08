@@ -35,3 +35,11 @@
 模型请求 gpt-5.6-terra / medium。仅本工作树和该 run 的 worker-output、tmp 可写；输出/caches/temp 全归此 run，TMPDIR、D_TEST_TEMP_DIR、PYTHONDONTWRITEBYTECODE、CLANG_MODULE_CACHE_PATH 由 Lead 固定。允许局部 swift test --package-path Packages/UI --scratch-path <run>/tmp/build --cache-path <run>/tmp/spm-cache --config-path <run>/tmp/spm-config --security-path <run>/tmp/spm-security --skip-update --filter 'TextDraft'；只依赖本地 package，不下载。不运行已有 ModelLibrary 网络夹具。Python 检查只能内存 compile，不 py_compile。若 SwiftPM 内层 sandbox/工具默认目录拒绝，暂停该检查并报告，不自行加 --disable-sandbox 或提权；Lead 可承担定向编译。只预先允许缓存已由任务变量指向的同一路径；不创造替代目录。
 
 先仅预检并回传定位／理解，Lead 发 IMPLEMENT 后实施。初交＋最多两轮普通修复，每轮15分钟；达到预算可一次 Lead 接管仍失败停。改规格先问 Lead。不 commit、不改任务单。回传文件、测试命令／数量／失败与限制、所有权限或工具异常、自有进程结束状态到 worker-output。Lead 每轮查异常再派工。本任务与 META 无写入重叠、无代码依赖。
+
+## 初交审核与修订 2（冻结行为不变；2026-09-08）
+
+初交文件由 Terra/medium 完成，Lead 尚未改实现。Worker 按调度未编译；Lead 在固定初交提交上串行验证，结果见 run-v7-initial/lead-initial-tests.json/log。T0 初交测试有 Swift await 语法错误；META 初交测试有真实版本接受缺陷及未实际变更输入的负例夹具。测试代码缺陷、产品实现和环境分别归因。
+
+Lead 已检查初次执行事件：修改只在允许文件和自有输出，静态命令退出0，未观察到越界/权限拒绝/网络/安装；子 CLI 结束并交回写入权。Lead 新增只读验收夹具 Packages/UI/Tests/DWorkbenchTests/TextDraftLeadContractTests.swift；不扩大 Worker 修改清单，Worker 不可修改该文件。反例来自原契约，新增的是真实覆盖而非新的产品需求。修复1后仍最多余一次普通修复；不换编号重置。
+
+Lead 帮助为语义说明、反例和测试，未代写实现；具体修复消息/请求SHA/模型写根在 repair-1-prompt.txt/request.json。Swift package 测试仍由 Lead 串行承担；Worker 不得把未执行测试报为通过。
