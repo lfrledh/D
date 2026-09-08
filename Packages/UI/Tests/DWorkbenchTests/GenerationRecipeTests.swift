@@ -54,7 +54,11 @@ struct GenerationRecipeTests {
     }
 
     @Test func rejectsConflictingAndUnknownFieldStateShapes() throws {
-        let archive = try GenerationRecipeCodec.encode(fixture(), disclosure: .privateArchive)
+        // JSON object order is not a codec contract. Sort this valid fixture before
+        // constructing malformed field shapes; keep the mutation/rejection guards.
+        let original = try GenerationRecipeCodec.encode(fixture(), disclosure: .privateArchive)
+        let object = try JSONSerialization.jsonObject(with: original)
+        let archive = try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
         try rejects(try replacing(archive, "\"state\":\"value\",\"value\":4", with: "\"state\":\"unknown\",\"value\":4"))
         try rejects(try replacing(archive, "\"state\":\"value\",\"value\":4", with: "\"state\":\"invalid\""))
         try rejects(try replacing(archive, "\"state\":\"value\",\"value\":4", with: "\"state\":\"SECRET_EXAMPLE_NEVER_ECHO\",\"value\":4"))
