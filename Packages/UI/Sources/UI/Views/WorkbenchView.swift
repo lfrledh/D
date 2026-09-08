@@ -105,6 +105,7 @@ public struct WorkbenchView: View {
                     .help("项目操作")
                 }
                 ToolbarItemGroup(placement: .primaryAction) {
+                    RecipeHandoffButton(model: model)
                     if let library {
                         Button {
                             library.isPresented = true

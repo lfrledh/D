@@ -629,6 +629,24 @@ public final class ProjectSession {
         } catch { report(error, context: "无法新建创作；当前输入已保留") }
     }
 
+    public func prepareRecipePNG(assetID: UUID, disclosure: RecipeDisclosure) async throws -> Data {
+        guard let store, !isChangingProject, !closePending else { throw ProjectStoreError.invalidTransition }
+        return try await store.prepareRecipePNG(assetID: assetID, disclosure: disclosure)
+    }
+
+    public func createRecipeDocument(_ recipe: GenerationRecipe, expectedProjectID: UUID) async -> Bool {
+        guard let store, manifest?.id == expectedProjectID, !isChangingProject, !closePending else { return false }
+        isChangingProject = true
+        defer { isChangingProject = false }
+        do {
+            try await flushDraft(to: store)
+            applyManifest(try await store.createRecipeDocument(recipe))
+            showingAllArtworks = false
+            loadActiveDocument()
+            return true
+        } catch { report(error, context: "无法从配方新建创作；当前输入已保留"); return false }
+    }
+
     public func renameDocument(id: UUID, name: String) async {
         guard let store, !isChangingProject, !closePending else { return }
         isChangingProject = true

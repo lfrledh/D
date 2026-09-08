@@ -306,6 +306,91 @@ public actor ProjectStore {
         }
     }
 
+    /// Capture a persisted run, never the current parameter panel. This version identifies
+    /// the new export snapshot; schema2 did not record historical asset versions.
+    public func prepareRecipePNG(assetID: UUID, disclosure: RecipeDisclosure) throws -> Data {
+        try checkLocation()
+        try verifyUnchangedManifest()
+        guard let asset = manifest.assets.first(where: { $0.id == assetID }),
+              let job = manifest.jobs.first(where: { $0.id == asset.jobID }),
+              job.state == .completed, job.artifactIDs.contains(asset.id),
+              case .image(let input) = job.request.input else { throw ProjectStoreError.missingAsset }
+        let png = try ProjectFiles.read(relative: asset.relativePath, in: rootFD, limit: 32 * 1024 * 1024)
+        _ = try Self.validateRecipePNG(png)
+        func field(_ value: String?) -> RecipeField<String> {
+            guard let value, !value.isEmpty, value != "unrecorded" else { return .unknown }
+            return .value(value)
+        }
+        let recipe = GenerationRecipe(assetID: asset.id, assetVersion: UUID(), runID: job.id,
+            modelSource: field(job.resultMetadata["modelRepository"]),
+            modelRevision: field(job.resultMetadata["modelRevision"] ?? job.request.model.revision),
+            weightsManifestSHA256: .unknown, prompt: .value(input.prompt), structuredInputRevision: .notApplicable,
+            seed: .value(String(input.seed)), steps: .value(input.steps), guidance: .value(Double(input.guidanceScale)),
+            width: .value(input.width), height: .value(input.height), scheduler: .unknown,
+            computePrecision: .unknown, quantization: .unknown, implementationVersion: .unknown,
+            mediaPayloadSHA256: .unknown, parents: [], claim: .callerDeclared)
+        return try PNGRecipeCodec.embedding(recipe, in: png, disclosure: disclosure)
+    }
+
+    /// Open only the explicitly selected regular file, with the same no-follow walk as projects.
+    public static func readRecipePNG(at url: URL) throws -> (Data, PNGRecipeInspection) {
+        guard url.isFileURL else { throw ProjectStoreError.unsafePath(url.path) }
+        let parent = try ProjectFiles.openDirectory(url.deletingLastPathComponent())
+        defer { Darwin.close(parent) }
+        let data = try ProjectFiles.read(relative: url.lastPathComponent, in: parent, limit: 32 * 1024 * 1024)
+        return (data, try validateRecipePNG(data))
+    }
+
+    public static func publishRecipePNG(_ data: Data, to destination: URL) throws {
+        try publishRecipePNG(data, to: destination, checkpoint: nil)
+    }
+
+    static func publishRecipePNG(_ data: Data, to destination: URL,
+                                 checkpoint: (@Sendable (ProjectExportCheckpoint) throws -> Void)?) throws {
+        let inspection = try validateRecipePNG(data)
+        guard inspection.recipe != nil else { throw PNGRecipeError.invalidRecipe }
+        guard destination.isFileURL, destination.path.hasPrefix("/"), !destination.lastPathComponent.isEmpty else {
+            throw ProjectStoreError.unsafePath(destination.path)
+        }
+        let parent = try ProjectFiles.openDirectory(destination.deletingLastPathComponent())
+        defer { Darwin.close(parent) }
+        try ProjectFiles.publishExport(to: destination, parent: parent, checkpoint: checkpoint) { target in
+            try data.withUnsafeBytes { try ProjectFiles.writeAll($0, to: target) }
+        }
+    }
+
+    /// Source metadata is displayed separately. Only editable prompt/seed enter a NEW draft.
+    public func createRecipeDocument(_ recipe: GenerationRecipe) throws -> ProjectManifest {
+        _ = try GenerationRecipeCodec.encode(recipe, disclosure: .privateArchive)
+        guard case .value(let prompt) = recipe.prompt else { throw PNGRecipeError.invalidRecipe }
+        let seed: String?
+        if case .value(let value) = recipe.seed { seed = value } else { seed = nil }
+        return try createDocument(name: "来自 PNG 配方", draft: .init(prompt: prompt, randomSeed: seed == nil, seedText: seed ?? "0"))
+    }
+
+    private static func validateRecipePNG(_ data: Data) throws -> PNGRecipeInspection {
+        let inspection = try PNGRecipeCodec.inspect(data)
+        // Decode bounded pixels without sending compressed profiles, EXIF or arbitrary text
+        // to ImageIO. Original chunks remain byte-exact in the actual exported data.
+        let bytes = [UInt8](data)
+        var pixels = Data(bytes.prefix(8)); var offset = 8
+        while offset < bytes.count {
+            let length = bytes[offset..<offset+4].reduce(0) { ($0 << 8) | Int($1) }
+            let type = String(bytes: bytes[offset+4..<offset+8], encoding: .ascii)!
+            let end = offset + 12 + length
+            if ["IHDR", "PLTE", "IDAT", "IEND", "tRNS"].contains(type) { pixels.append(contentsOf: bytes[offset..<end]) }
+            offset = end
+        }
+        guard let source = CGImageSourceCreateWithData(pixels as CFData, nil),
+              CGImageSourceGetCount(source) == 1, CGImageSourceGetStatus(source) == .statusComplete,
+              let image = CGImageSourceCreateImageAtIndex(source, 0, [kCGImageSourceShouldCacheImmediately: true] as CFDictionary),
+              CGImageSourceGetStatusAtIndex(source, 0) == .statusComplete,
+              image.width == inspection.width, image.height == inspection.height else {
+            throw ProjectStoreError.invalidImage("PNG")
+        }
+        return inspection
+    }
+
     public func flush() throws {
         try checkLocation()
         // Each mutation is already durable. Verify the manifest still exists; a disconnected
