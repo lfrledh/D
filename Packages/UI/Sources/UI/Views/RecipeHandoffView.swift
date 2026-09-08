@@ -119,7 +119,9 @@ private struct RecipeHandoffView: View {
             let data = try await model.projectSession.prepareRecipePNG(assetID: assetID,
                 disclosure: privateArchive ? .privateArchive : .publicShare)
             guard expectedProjectID == model.manifest?.id else { return }
-            inspection = try PNGRecipeCodec.inspect(data); prepared = data
+            let result = try await Task.detached { try PNGRecipeCodec.inspect(data) }.value
+            guard expectedProjectID == model.manifest?.id else { return }
+            inspection = result; prepared = data
             message = privateArchive ? "将包含提示词。请检查上方实际字段，再另存副本。" : "公开配方已隐藏提示词和结构化输入来源；不会遮盖图像本身。"
         } catch { message = errorText(error) }
     }

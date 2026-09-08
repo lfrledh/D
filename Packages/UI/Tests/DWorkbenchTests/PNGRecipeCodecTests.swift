@@ -153,6 +153,24 @@ struct PNGRecipeCodecTests {
         #expect(inspection.recipe == nil)
     }
 
+    @Test func exactDimensionAndAreaBoundariesAreContainerOnlyChecks() throws {
+        // IDAT is intentionally a container fixture, not a decoded 16-million-pixel image.
+        for (width, height, accepted): (UInt32, UInt32, Bool) in [
+            (0, 1, false), (8192, 1, true), (8192, 2048, true), (8192, 2049, false)
+        ] {
+            var header = Data()
+            append(width, to: &header); append(height, to: &header)
+            header.append(contentsOf: [8, 0, 0, 0, 0])
+            let input = png(ihdr: header)
+            if accepted {
+                let inspection = try PNGRecipeCodec.inspect(input)
+                #expect(inspection.width == Int(width) && inspection.height == Int(height))
+            } else {
+                #expect(throws: PNGRecipeError.invalidPNG) { try PNGRecipeCodec.inspect(input) }
+            }
+        }
+    }
+
     private func recipe() -> GenerationRecipe {
         GenerationRecipe(assetID: UUID(), assetVersion: UUID(), runID: UUID(), modelSource: .value("owner/model"), modelRevision: .unknown, weightsManifestSHA256: .unknown, prompt: .value("森の猫 🌊"), structuredInputRevision: .value("input"), seed: .value("18446744073709551615"), steps: .value(4), guidance: .value(1), width: .unknown, height: .unknown, scheduler: .unknown, computePrecision: .unknown, quantization: .unknown, implementationVersion: .unknown, mediaPayloadSHA256: .unknown, parents: [UUID()], claim: .captured)
     }

@@ -69,3 +69,8 @@ Sol/high非实现者只读审核，线程01a080b7-0012-73e2-8180-32e80ab413a1。
 新范围不会以新编号或换模型重置预算。本次只选META，未启动HUM原型/转录/移动端/第三个目标。全部实现/审核和CPU/构建自有进程结束后才更新本记录；系统与用户D/GPU活动不作空闲证明。所有候选/证据保留，无push/fetch/main操作/清理。可观察单轮时间和CLI usage快照见runtime-observations.json；未重新核算历史样本，完整Lead与订阅费用unknown，不据此宣称低成本最优。
 
 恢复：先核对源/两候选HEAD、用户scheme未暂存内容/摘要/index、任务状态与权限。T0仅待真实窗口与隔离操作；META仍待上述有限收尾和真实产品检查。源码未启用，任何仅文档的源检查点不等于接纳代码。
+
+
+## Explicitly approved narrow Lead finish (2026-09-08)
+
+User approved H05: only four exact container dimension fixtures (0x1 reject,8192x1 accept,8192x2048 accept,8192x2049 reject) in PNGRecipeCodecTests.swift and moving RecipeHandoffView.prepare preview inspection off MainActor, rechecking expected project identity after the await. No frozen threshold/contract/schema changes, no third Terra repair or reset of historical budgets. Lead implements/tests, non-implementer inspects the diff; related CPU/compile then real native panels and offline PNG/new-draft loop in an isolated project. Current actual source baseline and protection are in run/start.json; unrelated T0 candidate remains independent until each gate passes. Persistent run: /Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-META-PNG-01/run-20260908T125225Z-human-finish.
