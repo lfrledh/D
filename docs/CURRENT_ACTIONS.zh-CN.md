@@ -104,3 +104,20 @@ D-C01a-RESULT-01 已保留历史合并、由 Lead 有界修补、非实现者只
 本轮源起点 `188662d79f5283db97e5a928deae4f346b219a3a`；本次只接纳文档清单，不接纳 T0/META 产品代码。用户已确认当前约 30 分钟 GUI/GPU 空闲窗口，T0 固定签名候选按完整产物路径成功控制，并用独立 `D_UI_TEST_SESSION` 在本轮外盘目录通过原生面板创建项目和新文稿，未恢复真实项目、未出现新的系统授权提示。中文输入法已交给本人操作，等待回报；模型访问、真实改写、保存重开及迁移不因这一小步记为通过。
 
 保留的待办：H03 真人 IME；H02 后续模型／保存等实际验证；H04 同次完整 UI 与稳定签名跨构建连续验收；H05 PNG 两项有界收尾需额外预算批准。旧 GitHub／外盘 runner／RESULT 缓存事故已有后续处理，不能再次当作待设置权限。源个人 scheme 保持原内容和未暂存状态；没有改真实作品、签名、系统权限、模型或推送。当前进程、检查结果、最终文档 SHA 与恢复点以外部 `D-Development/PermissionSetup/run-20260908T122903Z-return/receipt.json` 为准，恢复先核对，不能仅相信此历史段落。
+
+## 2026-09-08 人工集中收尾检查点
+
+候选实际受测代码 `a6c516ad6b52c944ce70a0bd764d68a94fd0f3bc`，组合目录 `/Volumes/CodexProjects/Codex/D-Worktrees/D-HUMAN-FINISH-01`、分支 `codex/d-human-finish-01`。源当前只更新待办文档，产品代码尚未接纳；不存在仍运行的本轮测试应用、构建或审核进程。本次源提交仅CURRENT_ACTIONS与FAILURE_AND_PERMISSION_AUDIT文档变化，最终SHA见外部 `human-checkpoint-receipt.json`。用户一小时窗口已结束，追加15分钟协调尚无回复，不能视作已同意。
+
+- 165方法/22套件组合CPU通过（显式启用既有文字权重只读检查）；8项UI在同一个 `uitests-refined.xcresult` 中全部通过。此前第一次8项有2项原生GoTo面板失败保留，测试只增强完整路径和面板消失的同步断言，未降低原验收。
+- Lead修复文字窗口宽度反馈/分栏约束：窄窗口上下布局、工具栏换行，AnyLayout保留原生编辑器身份，原选段有44pt最小高度。窄/宽实际往返、真实候选与失效警告可达；用户在最终构建上明确回复“输入与缩放均正常”。离屏回归的窄布局断言经历旧实现先失败后通过；早期仅bounds的探针曾通过，不能冒充完整复现。
+- 正常签名Qwen真实改写证明原文接受前不变，接受只替换选段、撤销恢复、取消后下一任务可运行，校验中变选区明确拒绝、完成后变选区禁用接受且可拒绝。旧构建保存的测试正文与模型选择在新构建恢复；中文输入法人工结果单列。最终a6实测再次真实生成“阳光明媚。”并接受/撤销/保存。模型文风和标点不宣称专业质量。
+- 正常面板打开合成v1/v2，均迁移schema3且原清单备份逐字节一致、图片未变；v1另已GUI重开。真实作品未迁移。PNG私有/公开新副本由正常面板保存，在另一项目离线读回；公开提示词withheld导致新草稿不可用，私有明确接受生成独立草稿801488BE-1237-41E1-A15C-B8343E8DBAEC并落盘，原文档不变、没有自动生成。独立CRC/JSON检查确认全部非配方PNG块字节保持、Unicode和最大UInt64 seed准确。
+- 正常开发签名FLUX.2 Klein4B q8，512²/4步/guidance1/seed42真实完成；作业6A86F463-F611-4C45-9B39-493C38C56191，原生导出436021字节且与项目图片SHA256一致，sips解码512²，CUA看图为蓝色陶杯。estimatedPeakBytes为预算估计，不冒充本轮峰值实测或数值基准。
+- 真实编译已在新的DerivedData-fresh完成；二进制和签名资源摘要与前产物不同，Info.plist相同。**尚待这个全新产物重开图像/模型授权、配方草稿及v2/T0最终恢复检查；不提前记整个里程碑或D-C01a完成。**
+
+证据根 `/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-T0-WORKBENCH-01/run-20260908T125225Z-human-finish`：verified-checks-before-human-ime、human-ime-final、gui-progress-1/2、migration-after-native-open、migration-and-recipe-before-rebuild、png-native-crosscheck、image-normal-signed-result、normal-fresh-rebuild、checkpoint-await-final-window（JSON）；review/gui-delta-response.md。GUI截图/操作另在本会话，JSON明确区分用户报告、CUA与文件检查。
+
+来源：Terra既有初步实现/历史返工原样保留；本轮Astra Lead亲自修复，Sol/high非实现者仅只读审核差异，非独立测试执行。观察上下文四次均Sol/high/read-only，隐藏服务端解析unknown；各阶段耗时/usage原始快照保留，未将累计/缓存快照盲目相加，完整Lead与订阅费用unknown。没有新Terra第三轮、签名方案变更、安装、推送或权限扩大。CUA一次粘贴超时后核对正文/磁盘，改用原生输入；界面AX旧状态与截图不一致后以实际启动作业核实，不推断应用拒绝生成。
+
+恢复：先核对真实源/组合HEAD、scheme内容/摘要/index/未暂存状态和自有进程；源本轮文档新增属于已批准清单维护，之后可在隔离组合分支保留历史合入该明确源快照，核对仅文档差异，再按既定验收门槛接纳。下一动作只是上述新产物恢复，不能再重复真人IME、模型下载或整套协作试验。音乐/HUM原声导入保存与普通试听仍是明确后续出口，不等全部文字增强，本轮不启动。
