@@ -21,6 +21,14 @@ struct TextDraftArchiveTests {
         #expect(throws: TextDraftError.malformedArchive) { try TextDraftArchive.decode(Data("not json".utf8)) }
     }
 
+    @Test(arguments: ["1.0", "1e0"])
+    func archiveRejectsNonIntegerNumericVersionTokens(_ token: String) throws {
+        let document = try TextDraftDocument(text: "draft")
+        let encoded = String(decoding: try TextDraftArchive.encode(document), as: UTF8.self)
+        let malformed = Data(encoded.replacingOccurrences(of: "\"schema_version\":1", with: "\"schema_version\":" + token).utf8)
+        #expect(throws: TextDraftError.malformedArchive) { try TextDraftArchive.decode(malformed) }
+    }
+
     @Test func archiveAndDocumentEnforceSeparateInputAndTextLimits() throws {
         let oversizedText = String(repeating: "a", count: TextDraftDocument.maximumUTF8Bytes + 1)
         #expect(throws: TextDraftError.textTooLarge) { try TextDraftDocument(text: oversizedText) }

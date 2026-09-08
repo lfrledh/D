@@ -14,8 +14,10 @@ public final class TextDraftSession {
     private let engine: any InferenceEngine
     private let backendID: String
     private var activeRun: InferenceRun?
+    private var activeOperationID: UUID?
     private var cancellationRequested = false
-    private var completionWaiters: [CheckedContinuation<Void, Never>] = []
+    private var cancellationSent = false
+    private var completionWaiters: [UUID: [CheckedContinuation<Void, Never>]] = [:]
     private var undoRecord: UndoRecord?
 
     private struct UndoRecord {
@@ -43,7 +45,7 @@ public final class TextDraftSession {
 
     public func editText(_ text: String) throws {
         try TextDraftDocument.validate(text)
-        guard text != document.text else { return }
+        guard !text.utf8.elementsEqual(document.text.utf8) else { return }
         document = try TextDraftDocument(id: document.id, text: text)
         undoRecord = nil
     }
@@ -70,44 +72,54 @@ public final class TextDraftSession {
         isRunning = true
         isCancelling = false
         cancellationRequested = false
+        cancellationSent = false
+        activeOperationID = request.id
 
         do {
             let run = try await engine.submit(request, backendID: backendID)
             activeRun = run
-            if cancellationRequested || Task.isCancelled { await run.cancel() }
+            if Task.isCancelled { cancellationRequested = true }
+            if cancellationRequested { await cancelRunIfNeeded(run, operationID: request.id) }
 
             var replacement = ""
             var localError: TextDraftError?
             do {
-                stream: for try await output in run.events {
+                for try await output in run.events {
                     if cancellationRequested || Task.isCancelled {
-                        await run.cancel()
-                        break stream
+                        cancellationRequested = true
+                        await cancelRunIfNeeded(run, operationID: request.id)
+                        continue
+                    }
+                    if localError != nil {
+                        await cancelRunIfNeeded(run, operationID: request.id)
+                        continue
                     }
                     guard case .textDelta(let delta) = output else {
                         localError = .nonTextOutput
-                        await run.cancel()
-                        break stream
+                        await cancelRunIfNeeded(run, operationID: request.id)
+                        continue
                     }
                     replacement.append(delta)
                     guard replacement.utf8.count <= TextDraftDocument.maximumUTF8Bytes else {
                         localError = .replacementTooLarge
-                        await run.cancel()
-                        break stream
+                        await cancelRunIfNeeded(run, operationID: request.id)
+                        continue
                     }
                     partialText = replacement
                 }
             } catch {
                 if !cancellationRequested && !Task.isCancelled {
                     localError = .inferenceFailed(error.localizedDescription)
+                    await cancelRunIfNeeded(run, operationID: request.id)
                 }
             }
 
-            if cancellationRequested || Task.isCancelled { await run.cancel() }
+            if Task.isCancelled { cancellationRequested = true }
+            if cancellationRequested { await cancelRunIfNeeded(run, operationID: request.id) }
             let outcome = await run.outcome()
             let wasCancelled = cancellationRequested || Task.isCancelled
             activeRun = nil
-            finishRun()
+            finishRun(operationID: request.id)
 
             if wasCancelled { throw CancellationError() }
             if let localError { throw localError }
@@ -122,18 +134,18 @@ public final class TextDraftSession {
                 throw TextDraftError.inferenceFailed(failure.localizedDescription)
             }
         } catch {
-            if activeRun == nil { finishRun() }
+            if activeRun == nil { finishRun(operationID: request.id) }
             if !(error is CancellationError) { errorMessage = error.localizedDescription }
             throw error
         }
     }
 
     public func cancel() async {
-        guard isRunning else { return }
+        guard isRunning, let operationID = activeOperationID else { return }
         cancellationRequested = true
         isCancelling = true
-        if let activeRun { await activeRun.cancel() }
-        await waitForRunCompletion()
+        if let activeRun { await cancelRunIfNeeded(activeRun, operationID: operationID) }
+        await waitForRunCompletion(operationID: operationID)
     }
 
     public func acceptCandidate() throws {
@@ -164,17 +176,25 @@ public final class TextDraftSession {
         self.undoRecord = nil
     }
 
-    private func waitForRunCompletion() async {
-        guard isRunning else { return }
-        await withCheckedContinuation { completionWaiters.append($0) }
+    private func cancelRunIfNeeded(_ run: InferenceRun, operationID: UUID) async {
+        guard activeOperationID == operationID, run.id == operationID, !cancellationSent else { return }
+        cancellationSent = true
+        isCancelling = true
+        await run.cancel()
     }
 
-    private func finishRun() {
-        guard isRunning else { return }
+    private func waitForRunCompletion(operationID: UUID) async {
+        guard activeOperationID == operationID else { return }
+        await withCheckedContinuation { completionWaiters[operationID, default: []].append($0) }
+    }
+
+    private func finishRun(operationID: UUID) {
+        guard activeOperationID == operationID else { return }
         isRunning = false
         isCancelling = false
         cancellationRequested = false
-        completionWaiters.forEach { $0.resume() }
-        completionWaiters.removeAll()
+        cancellationSent = false
+        activeOperationID = nil
+        completionWaiters.removeValue(forKey: operationID)?.forEach { $0.resume() }
     }
 }
