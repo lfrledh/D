@@ -59,7 +59,7 @@ struct ProjectStoreTests {
             try bytes.write(to: file, options: .atomic)
             let reopened = try await ProjectStore.open(at: fixture.project)
             #expect(await reopened.snapshot().draft == .init())
-            #expect(await reopened.snapshot().schemaVersion == 2)
+            #expect(await reopened.snapshot().schemaVersion == ProjectManifest.currentSchemaVersion)
             #expect(try Data(contentsOf: fixture.project.appendingPathComponent(ProjectStore.versionOneBackupFilename)) == bytes)
             try await reopened.close()
         }

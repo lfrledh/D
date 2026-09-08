@@ -1,0 +1,179 @@
+import Foundation
+import Testing
+@testable import DWorkbench
+
+@Suite("Project text document durability")
+struct ProjectTextStoreTests {
+    // Lead counterexample: accepting the same text still produces a new document revision.
+    @Test func identicalTextWithNewRevisionPersistsAndAllowsFollowingSave() async throws {
+        try await withTextFixture { fixture in
+            let store = try await ProjectStore.create(at: fixture.project, name: "版本保全")
+            let created = try await store.createTextDocument(text: "原稿")
+            let current = try #require(created.activeDocument?.textDraft)
+            let sameText = try TextDraftDocument(id: current.id, text: current.text)
+            let saved = try await store.saveTextDraft(sameText, documentID: current.id, expectedRevision: current.revision)
+            #expect(saved.activeDocument?.textDraft?.revision == sameText.revision)
+            let following = try TextDraftDocument(id: current.id, text: "后续人工编辑")
+            let latest = try await store.saveTextDraft(following, documentID: current.id, expectedRevision: sameText.revision)
+            #expect(latest.activeDocument?.textDraft == following)
+            try await store.close()
+        }
+    }
+
+    @Test func unicodeAndEmptyTextDraftsRoundTripWithStableRevision() async throws {
+        try await withTextFixture { fixture in
+            let store = try await ProjectStore.create(at: fixture.project, name: "文稿项目")
+            let created = try await store.createTextDocument(text: "")
+            let document = try #require(created.activeDocument)
+            let empty = try #require(document.textDraft)
+            #expect(document.kind == .text)
+            #expect(document.id == empty.id)
+            let revision = empty.revision
+            let changed = try TextDraftDocument(id: document.id, text: "咖啡\nCafe\u{301} ☕️")
+            _ = try await store.saveTextDraft(changed, documentID: document.id, expectedRevision: revision)
+            try await store.close()
+            let reopened = try await ProjectStore.open(at: fixture.project)
+            let reopenedManifest = await reopened.snapshot()
+            let saved = try #require(reopenedManifest.activeDocument?.textDraft)
+            #expect(saved == changed)
+            try await reopened.close()
+        }
+    }
+
+    @Test func rejectsStaleMismatchedAndOversizedTextDraftsWithoutChangingManifest() async throws {
+        try await withTextFixture { fixture in
+            let store = try await ProjectStore.create(at: fixture.project, name: "检查文字保存")
+            let created = try await store.createTextDocument()
+            let document = try #require(created.activeDocument)
+            let current = try #require(document.textDraft)
+            let changed = try TextDraftDocument(id: document.id, text: "新版")
+            await #expect(throws: ProjectStoreError.externalModification) {
+                try await store.saveTextDraft(changed, documentID: document.id, expectedRevision: UUID())
+            }
+            await #expect(throws: ProjectStoreError.self) {
+                try await store.saveTextDraft(try TextDraftDocument(text: "错误编号"), documentID: document.id,
+                                              expectedRevision: current.revision)
+            }
+            await #expect(throws: TextDraftError.textTooLarge) {
+                _ = try TextDraftDocument(text: String(repeating: "x", count: TextDraftDocument.maximumUTF8Bytes + 1))
+            }
+            let unchanged = await store.snapshot()
+            #expect(unchanged.documents.last?.textDraft == current)
+            try await store.close()
+        }
+    }
+
+    @Test func imageOperationsAndImageJobsCannotUseTextDocument() async throws {
+        try await withTextFixture { fixture in
+            let store = try await ProjectStore.create(at: fixture.project, name: "隔离")
+            let created = try await store.createTextDocument()
+            let text = try #require(created.activeDocument)
+            await #expect(throws: ProjectStoreError.self) { try await store.saveDraft(.init(), documentID: text.id) }
+            await #expect(throws: ProjectStoreError.self) { try await store.setSelectedAsset(nil, documentID: text.id) }
+            await #expect(throws: ProjectStoreError.self) { try await store.adoptAsset(id: nil, documentID: text.id) }
+            await #expect(throws: ProjectStoreError.self) { try await store.enqueue(request: fixture.request(), documentID: text.id) }
+            try await store.close()
+        }
+    }
+
+    @Test func versionTwoBytesAreBackedUpBeforeVersionThreePublication() async throws {
+        try await withTextFixture { fixture in
+            let store = try await ProjectStore.create(at: fixture.project, name: "v2 项目")
+            try await store.close()
+            let file = fixture.project.appendingPathComponent(ProjectStore.manifestFilename)
+            var object = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any])
+            object["schemaVersion"] = 2
+            var documents = try #require(object["documents"] as? [[String: Any]])
+            for index in documents.indices {
+                documents[index].removeValue(forKey: "kind")
+                documents[index].removeValue(forKey: "textDraft")
+            }
+            object["documents"] = documents
+            let original = try JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys])
+            try original.write(to: file)
+            let reopened = try await ProjectStore.open(at: fixture.project)
+            #expect(await reopened.snapshot().schemaVersion == ProjectManifest.currentSchemaVersion)
+            #expect(try Data(contentsOf: fixture.project.appendingPathComponent(ProjectStore.versionTwoBackupFilename)) == original)
+            try await reopened.close()
+        }
+    }
+    @Test func interruptedVersionTwoMigrationKeepsRawBytesAndCanRetry() async throws {
+        try await withTextFixture { fixture in
+            let original = try await writeVersionTwoManifest(at: fixture.project)
+            await #expect(throws: MigrationInterrupted.self) {
+                try await ProjectStore.open(at: fixture.project, migrationCheckpoint: { point in
+                    if point == .backupDurable { throw MigrationInterrupted.afterBackup }
+                })
+            }
+            let file = fixture.project.appendingPathComponent(ProjectStore.manifestFilename)
+            #expect(try Data(contentsOf: file) == original)
+            #expect(try Data(contentsOf: fixture.project.appendingPathComponent(ProjectStore.versionTwoBackupFilename)) == original)
+            let reopened = try await ProjectStore.open(at: fixture.project)
+            #expect(await reopened.snapshot().schemaVersion == ProjectManifest.currentSchemaVersion)
+            try await reopened.close()
+        }
+    }
+
+    @Test func versionTwoMissingRequiredImageDraftIsRejectedWithoutChangingRawBytes() async throws {
+        try await withTextFixture { fixture in
+            _ = try await writeVersionTwoManifest(at: fixture.project)
+            let file = fixture.project.appendingPathComponent(ProjectStore.manifestFilename)
+            var object = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any])
+            var documents = try #require(object["documents"] as? [[String: Any]])
+            documents[0].removeValue(forKey: "draft")
+            object["documents"] = documents
+            let damaged = try JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys])
+            try damaged.write(to: file)
+            await #expect(throws: ProjectStoreError.self) { try await ProjectStore.open(at: fixture.project) }
+            #expect(try Data(contentsOf: file) == damaged)
+            #expect(!FileManager.default.fileExists(atPath: fixture.project.appendingPathComponent(ProjectStore.versionTwoBackupFilename).path))
+        }
+    }
+
+    @Test func externalTextManifestChangeRejectsSaveWithoutOverwritingIt() async throws {
+        try await withTextFixture { fixture in
+            let store = try await ProjectStore.create(at: fixture.project, name: "外部编辑")
+            let created = try await store.createTextDocument(text: "原稿")
+            let document = try #require(created.activeDocument)
+            let draft = try #require(document.textDraft)
+            let file = fixture.project.appendingPathComponent(ProjectStore.manifestFilename)
+            var object = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any])
+            object["name"] = "外部修改"
+            let externalBytes = try JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys])
+            try externalBytes.write(to: file, options: .atomic)
+            let replacement = try TextDraftDocument(id: document.id, text: "不得覆盖")
+            await #expect(throws: ProjectStoreError.externalModification) {
+                try await store.saveTextDraft(replacement, documentID: document.id, expectedRevision: draft.revision)
+            }
+            #expect(try Data(contentsOf: file) == externalBytes)
+            try await store.close(preserveExternalChanges: true)
+        }
+    }
+}
+
+private enum MigrationInterrupted: Error { case afterBackup }
+
+private func writeVersionTwoManifest(at project: URL) async throws -> Data {
+    let store = try await ProjectStore.create(at: project, name: "v2 中断")
+    try await store.close()
+    let file = project.appendingPathComponent(ProjectStore.manifestFilename)
+    var object = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any])
+    object["schemaVersion"] = 2
+    var documents = try #require(object["documents"] as? [[String: Any]])
+    for index in documents.indices {
+        documents[index].removeValue(forKey: "kind")
+        documents[index].removeValue(forKey: "textDraft")
+    }
+    object["documents"] = documents
+    let original = try JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys])
+    try original.write(to: file)
+    return original
+}
+
+private func withTextFixture(_ body: @Sendable (ProjectFixture) async throws -> Void) async throws {
+    let path = try #require(ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"])
+    let directory = URL(fileURLWithPath: path, isDirectory: true).appendingPathComponent(UUID().uuidString, isDirectory: true)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try await body(ProjectFixture(directory: directory.resolvingSymlinksInPath()))
+}
