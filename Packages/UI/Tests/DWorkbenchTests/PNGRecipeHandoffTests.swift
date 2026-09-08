@@ -53,7 +53,7 @@ struct PNGRecipeHandoffTests {
     }
 
     @Test func publicProjectionCannotCreateFakePromptAndProtectsTargets() async throws {
-        try await preparedFixture { fixture, store, asset, original in
+        try await preparedFixture(publicFixture: true) { fixture, store, asset, original in
             let data = try await store.prepareRecipePNG(assetID: asset.id, disclosure: .publicShare)
             let recipe = try #require(PNGRecipeCodec.inspect(data).recipe)
             #expect(recipe.prompt == .withheld && recipe.structuredInputRevision == .withheld)
@@ -129,11 +129,24 @@ struct PNGRecipeHandoffTests {
         #expect(throws: ProjectStoreError.self) { try ProjectStore.readRecipePNG(at: file) }
     }
 
-    private func preparedFixture(_ body: @Sendable (ProjectFixture, ProjectStore, ProjectAsset, URL) async throws -> Void) async throws {
+    private func preparedFixture(publicFixture: Bool = false, _ body: @Sendable (ProjectFixture, ProjectStore, ProjectAsset, URL) async throws -> Void) async throws {
         try await withFixture { fixture in
             let store = try await ProjectStore.create(at: fixture.project, name: "fixture")
             let request = fixture.request(); _ = try await store.enqueue(request: request)
             let url = try fixture.publishPNG(jobID: request.id)
+            if publicFixture {
+                // ImageIO emits additional metadata. This explicitly synthetic fixture only
+                // retains critical image chunks; production public rejection stays unchanged.
+                let input = [UInt8](try Data(contentsOf: url)); var output = Data(input.prefix(8)); var offset = 8
+                while offset < input.count {
+                    let length = input[offset..<offset+4].reduce(0) { $0 << 8 | Int($1) }
+                    let type = String(bytes: input[offset+4..<offset+8], encoding: .ascii)!
+                    let end = offset + length + 12
+                    if ["IHDR", "PLTE", "IDAT", "IEND", "tRNS"].contains(type) { output.append(contentsOf: input[offset..<end]) }
+                    offset = end
+                }
+                try output.write(to: url)
+            }
             let manifest = try await store.complete(id: request.id, result: .init(artifacts: [.init(url: url, mediaType: "image/png")]))
             let asset = try #require(manifest.assets.first)
             try await body(fixture, store, asset, url)
