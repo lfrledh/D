@@ -95,3 +95,9 @@ OpenAI 官方说明，用量与模型、推理强度、上下文、工具调用�
 [D-T0-META-01](tasks/D-T0-META-01.md)已本地接纳；两个独立受限Terra/medium实现实际重叠229.3338秒，Lead负责契约/反例/审核/串行验证与历史合并。T0经两轮修复通过；META两轮仍有测试顺序缺陷，Lead有界修补夹具后通过，生产实现未由Lead重写。默认按就绪度0—2 Worker现已启用，取代上方首个DIAG样本当时“暂不扩大并行”的状态。
 
 新批八次CLI（每方预检/初交/修复1/修复2）各终态用量只记一次，见外部usage-observation.json；resume调用间计数重置，不跨调用作累计快照差值，缓存输入含于输入、推理输出含于输出。未重算DIAG/RESULT旧费用；完整Lead耗费与订阅扣费unknown。这个样本证明受控交付/双分支组合可行，不证明成本最优。边界明确的Swift服务仍暴露取消时机和序列化夹具缺陷，路由按风险/规格清晰度，不按行数/文件后缀；类似所有权工作保留强Lead验收和针对性反例。模型/工具/规格改变后需重新取样。
+
+## T0 工作台候选样本（未产品接纳）
+
+[D-T0-WORKBENCH-01](tasks/D-T0-WORKBENCH-01.md)：两名Terra/medium分别实现存储和文字视图，各初交+2修复；Lead实质完成共享状态/运行时/生产保存接线与独立反例，另由非实现者Terra/medium只读审核重要Lead改动。142 CPU/离屏、核心17和无签名App编译通过；真实改写/GUI尚未验收，候选未合入源。不要把它计作已交付的完整产品样本。
+
+每轮实际请求、上下文、耗时和原始终态用量字段仅按本批保存到runtime-observations.json；未将同一调用累计快照反复相加，未重算DIAG/RESULT或上一批。完整Lead耗时/token和订阅费用unknown。Store反例揭示同正文新revision及Unicode外部字节保护；View返工涉及IME/选区与AppKit编译。Lead自己的错误夹具、应用import和管理文件兼容分开归因，不归Worker，也不宣称全部Terra独立成功。该样本仍不能证明成本最优或任意Swift任务胜任。

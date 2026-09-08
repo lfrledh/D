@@ -25,3 +25,7 @@ Lead 已确认 implementation 结束、模型/写根不变，静态审核无权�
 
 ## 修订3：编译反例与第二次修复
 修订3，第二次/最后一次普通修复。Lead先审查了repair1事件，无权限拒绝/未知副作用；同一Terra/medium及写根。Lead真实swift test在64ceb4de180a799a75807eddf0a7467c9604948e编译失败：TextSelectionEditor.swift第62、66行NSSize(width:.greatestFiniteMagnitude,height:.greatestFiniteMagnitude)对CGFloat/Double歧义。请按AppKit实际类型修正。静态审核同时要求validCursorRange明确保证Character边界，不以Range(NSRange,in:)可转换就默认为组合字符边界；保留当前Unicode断言。候选长文本需要滚动查看，不让比较区长稿挤出接受/拒绝按钮。流出非空后仍明确生成中（上一修复要求）。只改原3文件，不变接口/验收/文档，不运行Swift。修复后Lead编译/离屏测试；剩余预算0，若还有明确局部问题只能按规则Lead有界接管。请回传异常、实际改动、未执行测试。
+
+## Candidate handoff, 2026-09-08
+
+Terra/medium initial delivery + two repairs completed; no ordinary repair budget remains. Final local worker candidate 5047fe41bfa39bce8723d1cfca74dd5f32985b02 passed 7 related CPU/offscreen methods via Lead. Combined actual tested code 62fc7b5dd568e5f53354382dd189d09e96b7e0bc passed142 workbench methods,17 core methods and isolated unsigned app compilation. Lead reviewed Worker implementation; a separate read-only reviewer checked important Lead integration. This is not real model/GUI acceptance and is not integrated into the source branch. Processes ended; worktree and evidence retained. See [batch checkpoint](D-T0-WORKBENCH-01.md) and external final-receipt.json for version/protection/recovery details.

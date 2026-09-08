@@ -21,3 +21,7 @@ Lead已确认implementation结束、实际Terra/medium及受限写根，事件�
 ## 修订3：Unicode外部编辑字节反例
 修订3；第二次/最后一次普通修复。上一轮实际Terra/medium/受限写根、事件与保护已查，无未知权限事件；b59ceac通过40相关方法。Lead新持久反例externalCanonicalUnicodeChangeCannotBeOverwritten已在b59ceac真实失败：同id/revision外部将正文é改为e+combining acute，Swift合成Equatable认为manifest未变，后续本地save覆盖外部字节（日志run-20260908/store-unicode-counterexample.log；1方法2断言失败）。这是冻结文本字节保全和原件保护的遗漏，不降低旧契约。
 限定原ProjectStore.swift和对应ProjectTextStoreTests.swift做最小修补；不改已接纳TextDraft核心，不泛化重写整个存储框架。verifyUnchangedManifest在保留现有decoded manifest equality外，需对textDraft正文的实际UTF8字节确认未变，规范等价不能掩盖外部内容改动；仅无意义JSON空白仍按已有语义允许。保留全部Lead反例。相同bytes新revision逻辑/旧v1v2迁移不退化。静态自检，Swift由Lead串行运行。禁止其他文件、网络/commit/文档修改/递归。回传实际改动/异常/未测项。
+
+## Candidate handoff, 2026-09-08
+
+Terra/medium initial delivery + two repairs completed; no ordinary repair budget remains. Final local worker candidate fd1bbc22bf849ca9d4c09fa6d79f001ac938df79 passed 41 related CPU/offscreen methods via Lead. Combined actual tested code 62fc7b5dd568e5f53354382dd189d09e96b7e0bc passed142 workbench methods,17 core methods and isolated unsigned app compilation. Lead reviewed Worker implementation; a separate read-only reviewer checked important Lead integration. This is not real model/GUI acceptance and is not integrated into the source branch. Processes ended; worktree and evidence retained. See [batch checkpoint](D-T0-WORKBENCH-01.md) and external final-receipt.json for version/protection/recovery details.
