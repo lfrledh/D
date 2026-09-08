@@ -1,4 +1,6 @@
 import DInference
+import DRuntime
+import zlib
 import Foundation
 import Testing
 @testable import DWorkbench
@@ -153,5 +155,105 @@ struct PNGRecipeHandoffTests {
             // Some cases deliberately leave an external change; don't overwrite it to close.
             if (try? await store.flush()) != nil { try await store.close() }
         }
+    }
+}
+
+@Suite("PNG stream and session boundaries")
+struct PNGRecipeBoundaryTests {
+    @Test func exactStreamsAdam7AndWindowBoundaries() throws {
+        // Independent known sizes: 8x8 grayscale is 72 filtered bytes, Adam7 is79.
+        let valid: [(Int, Int, UInt8, Data)] = [
+            (8,8,0,Data(repeating:0,count:72)), (8,8,1,Data(repeating:0,count:79)),
+            (256,256,0,Data(repeating:0,count:257*256))]
+        let base = ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"].map { URL(fileURLWithPath:$0, isDirectory:true) } ?? FileManager.default.temporaryDirectory.resolvingSymlinksInPath()
+        try FileManager.default.createDirectory(at:base,withIntermediateDirectories:true)
+        for (width,height,interlace,raw) in valid {
+            let stream = try compress(raw)
+            let path=base.appendingPathComponent("streams-\(UUID()).png")
+            defer { try? FileManager.default.removeItem(at:path) }
+            try png(width:width,height:height,interlace:interlace,stream:stream).write(to:path)
+            #expect(try ProjectStore.readRecipePNG(at:path).1.width == width)
+            var badFilter=raw
+            // For256wide rows, the next row starts at65792, beyond64KiB output window.
+            badFilter[width==256 ? 65792 : 0]=5
+            var badChecksum=stream; badChecksum[badChecksum.count-1] ^= 1
+            let badStreams = [try compress(Data(raw.dropLast())), try compress(raw+Data([0])),
+                              try compress(badFilter), badChecksum, stream+Data([0]), Data(stream.dropLast()),
+                              try compress(raw+Data(repeating:0,count:65536))]
+            for bad in badStreams {
+                try png(width:width,height:height,interlace:interlace,stream:bad).write(to:path)
+                #expect(throws:ProjectStoreError.self) { try ProjectStore.readRecipePNG(at:path) }
+            }
+        }
+    }
+
+    @MainActor @Test func sessionRejectsWrongProjectAndFlushesLatestDraftBeforeCreating() async throws {
+        try await withFixture { @MainActor fixture in
+            let session = makeSession()
+            await session.createProject(at:fixture.project)
+            let initial = try #require(session.manifest)
+            let manifestURL=fixture.project.appendingPathComponent(ProjectStore.manifestFilename)
+            let bytes=try Data(contentsOf:manifestURL)
+            session.prompt="latest draft e\u{301} 👩🏽‍🎨"
+            #expect(await session.createRecipeDocument(recipe(),expectedProjectID:UUID()) == false)
+            #expect(try Data(contentsOf:manifestURL) == bytes)
+            #expect(session.activeDocumentID == initial.activeDocumentID)
+            #expect(await session.createRecipeDocument(recipe(),expectedProjectID:initial.id))
+            let after=try #require(session.manifest)
+            #expect(after.documents.count == initial.documents.count+1)
+            #expect(after.documents.first?.draft.prompt == "latest draft e\u{301} 👩🏽‍🎨")
+            #expect(after.activeDocument?.draft.prompt == "imported proposal")
+            #expect(await session.requestClose())
+            let reopened=try await ProjectStore.open(at:fixture.project)
+            #expect(await reopened.snapshot() == after)
+            try await reopened.close()
+        }
+    }
+
+    @MainActor @Test func sessionCreationFailurePreservesNavigationAndUnsavedInput() async throws {
+        try await withFixture { @MainActor fixture in
+            let session=makeSession(); await session.createProject(at:fixture.project)
+            let before=try #require(session.manifest)
+            let url=fixture.project.appendingPathComponent(ProjectStore.manifestFilename)
+            var external=before;external.name="external-author-change"
+            let externalBytes=try JSONEncoder().encode(external);try externalBytes.write(to:url)
+            session.prompt="unsaved input must survive"
+            #expect(await session.createRecipeDocument(recipe(),expectedProjectID:before.id) == false)
+            #expect(session.manifest == before)
+            #expect(session.activeDocumentID == before.activeDocumentID)
+            #expect(session.prompt == "unsaved input must survive")
+            #expect(!session.isChangingProject && session.errorMessage != nil)
+            #expect(try Data(contentsOf:url) == externalBytes)
+            #expect(await session.requestClose() == false)
+            #expect(try Data(contentsOf:url) == externalBytes)
+        }
+    }
+
+    @MainActor private func makeSession() -> ProjectSession {
+        ProjectSession(sessionFactory:{ _ in
+            let runtime=try InferenceRuntime(backends:[],configuration:.init(memoryBudgetBytes:1024))
+            return WorkbenchSession(engine:runtime,backendID:"no-generation",
+                status:{ .init(activeRunID:nil,phase:nil,queuedRunIDs:[]) },shutdown:{await runtime.shutdown()},cleanup:{},validateModel:{_ in})
+        }, settings:UserDefaults(suiteName:"D.PNGSessionTests.\(UUID())")!)
+    }
+    private func recipe() -> GenerationRecipe {
+        .init(assetID:UUID(),assetVersion:UUID(),runID:UUID(),modelSource:.unknown,modelRevision:.unknown,weightsManifestSHA256:.unknown,prompt:.value("imported proposal"),structuredInputRevision:.unknown,seed:.value("18446744073709551615"),steps:.unknown,guidance:.unknown,width:.unknown,height:.unknown,scheduler:.unknown,computePrecision:.unknown,quantization:.unknown,implementationVersion:.unknown,mediaPayloadSHA256:.unknown,parents:[],claim:.callerDeclared)
+    }
+    private func compress(_ raw:Data) throws -> Data {
+        var count=compressBound(uLong(raw.count));var output=Data(count:Int(count))
+        let result=raw.withUnsafeBytes { source in output.withUnsafeMutableBytes { target in
+            compress2(target.bindMemory(to:UInt8.self).baseAddress,&count,source.bindMemory(to:UInt8.self).baseAddress,uLong(raw.count),Z_BEST_SPEED)
+        }}
+        #expect(result==Z_OK);output.count=Int(count);return output
+    }
+    private func png(width:Int,height:Int,interlace:UInt8,stream:Data) -> Data {
+        func word(_ n:UInt32)->Data {Data([UInt8(truncatingIfNeeded:n>>24),UInt8(truncatingIfNeeded:n>>16),UInt8(truncatingIfNeeded:n>>8),UInt8(truncatingIfNeeded:n)])}
+        func chunk(_ type:String,_ data:Data)->Data {
+            let checked=Data(type.utf8)+data
+            let crc=checked.withUnsafeBytes { zlib.crc32(0,$0.bindMemory(to:UInt8.self).baseAddress,uInt($0.count)) }
+            return word(UInt32(data.count))+checked+word(UInt32(crc))
+        }
+        let header=word(UInt32(width))+word(UInt32(height))+Data([8,0,0,0,interlace])
+        return Data([137,80,78,71,13,10,26,10])+chunk("IHDR",header)+chunk("IDAT",stream)+chunk("IEND",Data())
     }
 }
