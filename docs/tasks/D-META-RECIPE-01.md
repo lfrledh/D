@@ -46,3 +46,11 @@ repair-1 已结束并交回写入；Lead 复验 ec374a9b4790ebe573fef693946327e1
 Terra 初交＋两轮修复结束；f49c5c45179d0eee025081e802cba96559240c1f 的15方法仍一方法失败。seed 负例已修正；另一个字段状态反例依赖 JSON 对象输出顺序，前次偶然通过，本次 missingNeedle。Lead 接管仅该测试：先将有效夹具按键排序，再构造原来四个坏状态；原 mutation guard、断言及产品代码不改。此为测试确定性修补，不以修改解析语义或验收标准消除失败，不记录为 Terra 独立通过。Lead 对生产实现仍为非实现者审核；没有另一个独立模型执行本次测试。
 
 有界接管后完整定向复验若仍失败则停止；不得追加修复。证据 lead-takeover-tests.json/log；剩余普通修复0。
+
+## 候选验收（2026-09-08，待批次接纳）
+
+严格配方编解码、公开隐私投影、输入类型/预算与错误脱敏；不是 PNG 内嵌。 固定代码/测试 `e9003174729b23ff4f45faf5776d56d9a4e18c62`，Lead 串行定向测试 15 方法通过，证据 `/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-META-RECIPE-01/run-v7-initial/lead-takeover-tests.json` 及同名 log。真实模型/GUI/生产文件事务未执行，不默认替换现有界面。本记录提交仅追加文档，候选最终 SHA 见外部 final-candidate-review.json，不声称在后来的文档提交上重测。
+
+Terra 初步实现及两轮修复；Lead 最后修补测试夹具字段顺序并复验，不能记为 Terra 原预算独立通过；生产代码仍由 Terra 实现。 任务修订3/契约1，初次＋两轮修复额度已消耗，全部 CLI 已结束并交回写入权。请求及全部可见 turn_context 为 gpt-5.6-terra / medium、workspace-write、网络关闭、独立任务目录及自有输出/tmp；共享 Git 写入由 Lead 完成。隐藏服务解析未知。执行异常及允许路径已复核，无未处理权限/来源事件；没有全系统写锁或全系统进程检查。
+
+原始源 c808293692eb7be90b7c9de73667c9d7bc327e3a，共同准备 e4e39b404a9d0d83c92bae285b12b961976de438。实际每轮执行 SHA、模型/写根、终止和用量见 final-candidate-review.json；逐 CLI 终态用量仅记一次，缓存输入已含于输入，不把累计快照反复相加。完整 Lead 归因/订阅费用 unknown。下一步仅 Lead 保留历史合入 D-T0-META-01，验证组合和源入口；候选不是默认 UI 已启用。
