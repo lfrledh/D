@@ -114,6 +114,22 @@ struct ProjectTextStoreTests {
         }
     }
 
+    @Test func versionTwoMissingRequiredImageDraftIsRejectedWithoutChangingRawBytes() async throws {
+        try await withTextFixture { fixture in
+            _ = try await writeVersionTwoManifest(at: fixture.project)
+            let file = fixture.project.appendingPathComponent(ProjectStore.manifestFilename)
+            var object = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any])
+            var documents = try #require(object["documents"] as? [[String: Any]])
+            documents[0].removeValue(forKey: "draft")
+            object["documents"] = documents
+            let damaged = try JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys])
+            try damaged.write(to: file)
+            await #expect(throws: ProjectStoreError.self) { try await ProjectStore.open(at: fixture.project) }
+            #expect(try Data(contentsOf: file) == damaged)
+            #expect(!FileManager.default.fileExists(atPath: fixture.project.appendingPathComponent(ProjectStore.versionTwoBackupFilename).path))
+        }
+    }
+
     @Test func externalTextManifestChangeRejectsSaveWithoutOverwritingIt() async throws {
         try await withTextFixture { fixture in
             let store = try await ProjectStore.create(at: fixture.project, name: "外部编辑")

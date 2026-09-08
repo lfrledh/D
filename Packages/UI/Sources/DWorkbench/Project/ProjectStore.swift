@@ -146,7 +146,8 @@ public actor ProjectStore {
         }
         guard current.revision == expectedRevision else { throw ProjectStoreError.externalModification }
         try TextDraftDocument.validate(draft.text)
-        guard current.text.utf8.elementsEqual(draft.text.utf8) == false else { return manifest }
+        let bytesChanged = !current.text.utf8.elementsEqual(draft.text.utf8)
+        if !bytesChanged, draft.revision == current.revision { return manifest }
         guard draft.revision != current.revision else {
             throw ProjectStoreError.invalidProject("文字内容已改变，修订编号不能重复。")
         }

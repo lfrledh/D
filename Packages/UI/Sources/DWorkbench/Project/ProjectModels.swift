@@ -259,7 +259,7 @@ public struct ProjectDocument: Codable, Sendable, Equatable, Identifiable {
         name = try values.decode(String.self, forKey: .name)
         // v2 records did not declare a kind and are image explorations.
         kind = try values.decodeIfPresent(ProjectDocumentKind.self, forKey: .kind) ?? .image
-        draft = try values.decodeIfPresent(ProjectDraft.self, forKey: .draft) ?? .init()
+        draft = try values.decode(ProjectDraft.self, forKey: .draft)
         textDraft = try values.decodeIfPresent(TextDraftDocument.self, forKey: .textDraft)
         sourceAssetID = try values.decodeIfPresent(UUID.self, forKey: .sourceAssetID)
         adoptedAssetID = try values.decodeIfPresent(UUID.self, forKey: .adoptedAssetID)
