@@ -13,6 +13,23 @@ private actor TextLeadFixtureEngine: InferenceEngine {
     private func cancelled() { cancellations += 1 }
 }
 
+private actor TextLeadOutcomeEngine: InferenceEngine {
+    private(set) var enteredOutcome = false
+    private(set) var cancellations = 0
+    private var release: CheckedContinuation<Void, Never>?
+    func submit(_ request: InferenceRequest, backendID: String) async throws -> InferenceRun {
+        InferenceRun(id: request.id, events: AsyncThrowingStream { $0.finish() },
+                     cancel: { await self.recordCancel() }, outcome: { await self.waitForCleanup() })
+    }
+    private func recordCancel() { cancellations += 1 }
+    private func waitForCleanup() async -> RunOutcome {
+        enteredOutcome = true
+        await withCheckedContinuation { release = $0 }
+        return .cancelled
+    }
+    func finishCleanup() { release?.resume(); release = nil }
+}
+
 @Suite("TextDraft Lead contract", .serialized) @MainActor
 struct TextDraftLeadContractTests {
     @Test(arguments: ["1.0", "1e0"])
@@ -52,4 +69,33 @@ struct TextDraftLeadContractTests {
         #expect(reopened.id == original.id && reopened.revision == original.revision)
         #expect(Array(reopened.text.utf8) == Array(original.text.utf8))
     }
+    @Test func callerCancellationWhileAwaitingOutcomeReachesBackendBeforeCleanup() async throws {
+        let engine = TextLeadOutcomeEngine()
+        let session = TextDraftSession(document: try TextDraftDocument(text: "draft"), engine: engine, backendID: "fixture")
+        let selection = try session.selection(inUTF16: NSRange(location: 0, length: 5))
+        let rewrite = Task {
+            try await session.requestRewrite(selection: selection, instruction: "revise",
+                model: ModelReference(directory: URL(fileURLWithPath: "/declared/model")))
+        }
+        let admissionDeadline = ContinuousClock.now + .seconds(2)
+        while !(await engine.enteredOutcome), ContinuousClock.now < admissionDeadline {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        let entered = await engine.enteredOutcome
+        #expect(entered)
+        rewrite.cancel()
+        let cancelDeadline = ContinuousClock.now + .seconds(2)
+        while await engine.cancellations == 0, ContinuousClock.now < cancelDeadline {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        let countBeforeCleanup = await engine.cancellations
+        #expect(session.isRunning)
+        // Release our own gate even when assertions fail; never leave a test run waiting.
+        await engine.finishCleanup()
+        await #expect(throws: CancellationError.self) { try await rewrite.value }
+        #expect(countBeforeCleanup == 1)
+        #expect(!session.isRunning)
+        #expect(session.candidate == nil)
+    }
+
 }

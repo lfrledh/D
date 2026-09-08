@@ -43,3 +43,9 @@
 Lead 已检查初次执行事件：修改只在允许文件和自有输出，静态命令退出0，未观察到越界/权限拒绝/网络/安装；子 CLI 结束并交回写入权。Lead 新增只读验收夹具 Packages/UI/Tests/DWorkbenchTests/TextDraftLeadContractTests.swift；不扩大 Worker 修改清单，Worker 不可修改该文件。反例来自原契约，新增的是真实覆盖而非新的产品需求。修复1后仍最多余一次普通修复；不换编号重置。
 
 Lead 帮助为语义说明、反例和测试，未代写实现；具体修复消息/请求SHA/模型写根在 repair-1-prompt.txt/request.json。Swift package 测试仍由 Lead 串行承担；Worker 不得把未执行测试报为通过。
+
+## 修订 3：消费者在 outcome 等待期间取消（2026-09-08）
+
+repair-1 的18方法已通过；Lead 非实现者代码审核发现，流结束后等待 outcome 期间没有消费者取消处理。原契约要求消费者取消到达原 run 并等待清理，不能只在最后丢弃候选。新增 Lead 只读反例：先进入 outcome gate，取消消费者，确认在手动释放清理 gate 前后端收到一次取消；即使断言失败也释放自有 gate。它覆盖既有要求，不改变产品范围，也不声称真实 MLX 生命周期已重测。
+
+修复2为最后普通修复，仅允许 TextDraftSession.swift 及 TextDraftSessionTests.swift。修复需以每运行身份隔离迟到取消，仍待权威 outcome 结束、不 shutdown 引擎、不暴露新公共 API。Lead 契约测试不可修改。前轮执行结束；事件和保护核对未见越界／拒绝。
