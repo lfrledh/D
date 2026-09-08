@@ -65,7 +65,7 @@ struct PNGRecipeCodecTests {
         #expect(throws: PNGRecipeError.invalidPNG) { try PNGRecipeCodec.inspect(png() + Data([0])) }
         #expect(throws: PNGRecipeError.invalidPNG) { try PNGRecipeCodec.inspect(png(idat: Data())) }
         #expect(throws: PNGRecipeError.invalidPNG) { try PNGRecipeCodec.inspect(png(chunks: [])) }
-        let declaredMaximumLength = Data([137, 80, 78, 71, 13, 10, 26, 10, 255, 255, 255, 255])
+        let declaredMaximumLength = Data([137, 80, 78, 71, 13, 10, 26, 10, 255, 255, 255, 255, 73, 72, 68, 82, 0, 0, 0, 0])
         #expect(throws: PNGRecipeError.sizeLimitExceeded) { try PNGRecipeCodec.inspect(declaredMaximumLength) }
         let split = Data([1]); let separated = png(chunks: [chunk("IDAT", split), chunk("tIME", Data(repeating: 0, count: 7)), chunk("IDAT", split)])
         #expect(throws: PNGRecipeError.invalidPNG) { try PNGRecipeCodec.inspect(separated) }
