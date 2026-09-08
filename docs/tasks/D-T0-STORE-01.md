@@ -11,3 +11,9 @@ ProjectStore新增public createTextDocument(name:String="新文稿", text:String
 可选择局部实现方式，不重构ProjectFiles或创造通用存储框架。已有publish fsync失败后的行为不以吞错掩盖；新增测试覆盖真实自有temp目录：v2原字节备份/失败点重开、Unicode/空稿/重开原revision、stale/错误id/错误kind、超限、外部修改/失联导致保存失败且原文件不坏、混合image/text恢复。新测试全部使用D_TEST_TEMP_DIR下唯一目录；不写系统用户默认缓存，不网络/模型/GUI。不要把测试成功说成真实App验收。
 
 模型gpt-5.6-terra/medium；只写本工作树+run/worker-output+run/tmp；网络关闭。Lead承担所有Swift编译/测试串行槽位，本Worker仅静态检查git diff --check/读代码，不运行Swift/Xcode。Python语法只tokenize.open+compile内存，不py_compile。权限拒绝按已落地规程暂停并报Lead；不自己禁用沙箱/改缓存/提升权限。初交+2修复，每轮15分钟，禁止递归、commit、修改规则。结果回传实际文件/自检与未执行测试/异常/自有进程状态。
+
+## 修订2：初次审核反例与第一次修复
+Lead已确认implementation结束、实际Terra/medium及受限写根，事件无未知权限失败；初次候选1a98c5e19fdb4c103c3478f0520253e7577b9633保留。修复1/2，仅原允许文件。Lead已添加counterexample，禁止删除/弱化它。
+冻结契约仅精确同id/revision/bytes可no-op。saveTextDraft现在只比较bytes就直接return，因此sameText/newUUID未持久化，后续expectedRevision新UUID被当外部修改。请修复该判断，保留changedbytes复用旧UUID拒绝与externalModification语义。相同bytes但新revision必须存储。
+另外ProjectDocument.decode把原required draft改decodeIfPresent默认值；schema2原本没有draft即损坏，不应默默制造默认图像配方。请保持旧必需字段严格性（实际v1由独立legacy路径迁移）。新schema3你创建的text文档仍有兼容draft字段。补缺少draft的损坏v2反例，保持raw原件不改变。
+新测试CPU由Lead运行，Worker只静态检查。不要修改其他行为、声明通过未执行测试。

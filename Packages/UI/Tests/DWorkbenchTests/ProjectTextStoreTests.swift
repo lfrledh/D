@@ -4,6 +4,22 @@ import Testing
 
 @Suite("Project text document durability")
 struct ProjectTextStoreTests {
+    // Lead counterexample: accepting the same text still produces a new document revision.
+    @Test func identicalTextWithNewRevisionPersistsAndAllowsFollowingSave() async throws {
+        try await withTextFixture { fixture in
+            let store = try await ProjectStore.create(at: fixture.project, name: "版本保全")
+            let created = try await store.createTextDocument(text: "原稿")
+            let current = try #require(created.activeDocument?.textDraft)
+            let sameText = try TextDraftDocument(id: current.id, text: current.text)
+            let saved = try await store.saveTextDraft(sameText, documentID: current.id, expectedRevision: current.revision)
+            #expect(saved.activeDocument?.textDraft?.revision == sameText.revision)
+            let following = try TextDraftDocument(id: current.id, text: "后续人工编辑")
+            let latest = try await store.saveTextDraft(following, documentID: current.id, expectedRevision: sameText.revision)
+            #expect(latest.activeDocument?.textDraft == following)
+            try await store.close()
+        }
+    }
+
     @Test func unicodeAndEmptyTextDraftsRoundTripWithStableRevision() async throws {
         try await withTextFixture { fixture in
             let store = try await ProjectStore.create(at: fixture.project, name: "文稿项目")
