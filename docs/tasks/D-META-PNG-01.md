@@ -74,3 +74,6 @@ Sol/high非实现者只读审核，线程01a080b7-0012-73e2-8180-32e80ab413a1。
 ## Explicitly approved narrow Lead finish (2026-09-08)
 
 User approved H05: only four exact container dimension fixtures (0x1 reject,8192x1 accept,8192x2048 accept,8192x2049 reject) in PNGRecipeCodecTests.swift and moving RecipeHandoffView.prepare preview inspection off MainActor, rechecking expected project identity after the await. No frozen threshold/contract/schema changes, no third Terra repair or reset of historical budgets. Lead implements/tests, non-implementer inspects the diff; related CPU/compile then real native panels and offline PNG/new-draft loop in an isolated project. Current actual source baseline and protection are in run/start.json; unrelated T0 candidate remains independent until each gate passes. Persistent run: /Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-META-PNG-01/run-20260908T125225Z-human-finish.
+
+## 2026-09-08 人工集中收尾
+H05获准的4个精确容器尺寸夹具和后台预览检查已完成；138方法在META候选通过，165方法在a6c516ad6b52c944ce70a0bd764d68a94fd0f3bc组合通过，Sol/high只读复核无静态阻塞。普通签名面板私有/公开导出、另一项目离线读取、提示词脱敏保护、明确创建新草稿及独立原媒体字节检查均通过。最终重建后的草稿重开仍待测试窗口，未源接纳。详细事实/失败/来源/进程与证据复用同批D-T0-WORKBENCH-01任务末尾，勿复制或改写Terra已用预算。
