@@ -371,6 +371,21 @@ public actor ProjectStore {
         guard current == manifest else {
             throw ProjectStoreError.externalModification
         }
+        // Swift String equality accepts canonically equivalent Unicode. That is useful for
+        // structural JSON equivalence, but a text draft is user-authored bytes: an external
+        // normalization change must not be overwritten by this session's next save.
+        for (persisted, expected) in zip(current.documents, manifest.documents) {
+            switch (persisted.textDraft, expected.textDraft) {
+            case let (.some(actual), .some(saved)):
+                guard actual.text.utf8.elementsEqual(saved.text.utf8) else {
+                    throw ProjectStoreError.externalModification
+                }
+            case (.none, .none):
+                break
+            default:
+                throw ProjectStoreError.externalModification
+            }
+        }
     }
 
     /// The host calls this only after all jobs have drained and terminal records are saved.

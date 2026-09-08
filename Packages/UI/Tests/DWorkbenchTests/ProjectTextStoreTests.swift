@@ -4,6 +4,29 @@ import Testing
 
 @Suite("Project text document durability")
 struct ProjectTextStoreTests {
+    // Lead: canonical equivalence must not hide external byte edits to a text draft.
+    @Test func externalCanonicalUnicodeChangeCannotBeOverwritten() async throws {
+        try await withTextFixture { fixture in
+            let store = try await ProjectStore.create(at: fixture.project, name: "字节保护")
+            let created = try await store.createTextDocument(text: "é")
+            let current = try #require(created.activeDocument?.textDraft)
+            let file = fixture.project.appendingPathComponent(ProjectStore.manifestFilename)
+            var json = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any])
+            var docs = try #require(json["documents"] as? [[String: Any]])
+            let index = try #require(docs.firstIndex { $0["id"] as? String == current.id.uuidString })
+            var payload = try #require(docs[index]["textDraft"] as? [String: Any])
+            payload["text"] = "e\u{301}"; docs[index]["textDraft"] = payload; json["documents"] = docs
+            let external = try JSONSerialization.data(withJSONObject: json, options: .sortedKeys)
+            try external.write(to: file, options: .atomic)
+            let local = try TextDraftDocument(id: current.id, text: "不能覆盖外部字节")
+            await #expect(throws: ProjectStoreError.externalModification) {
+                try await store.saveTextDraft(local, documentID: current.id, expectedRevision: current.revision)
+            }
+            #expect(try Data(contentsOf: file) == external)
+            try await store.close(preserveExternalChanges: true)
+        }
+    }
+
     // Lead counterexample: accepting the same text still produces a new document revision.
     @Test func identicalTextWithNewRevisionPersistsAndAllowsFollowingSave() async throws {
         try await withTextFixture { fixture in
