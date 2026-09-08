@@ -22,9 +22,11 @@ assetID、assetVersion、生成 runID、物理文件摘要分开；模型来源/
 
 | 切片 | 状态 | 前置/验收 |
 | --- | --- | --- |
-| META-1 Data 编码/隐私投影 | 本批获准，待实际验收 | 严格版本/状态、最大 seed、Unicode、公开投影、恶意输入预算和无副作用 |
+| META-1 Data 编码/隐私投影 | 组件已本地CPU验收，未启用导出UI | 严格版本/状态、最大 seed、Unicode、公开投影、恶意输入预算和无副作用 |
 | META-2 PNG 离线往返 | 用户要求，未实施 | PNG/XMP 字段策略、原件保护、负载/色彩/方向一致、脱离数据库恢复新草稿 |
 | META-3 其他容器/协作策略 | 远期 | 以真实模态/格式任务触发，不做全媒体抽象 |
 | META-4 C2PA 来源签署 | 后置候选 | 单独信任模型、证书/签名授权、互操作与移除后的状态；不阻塞 META-1/2 |
 
 一手索引（采用时再核实当前版本/许可）：[PNG](https://www.w3.org/TR/png-3/)、[IPTC](https://www.iptc.org/std/photometadata/specification/IPTC-PhotoMetadata)、[XMP](https://developer.adobe.com/xmp/docs/XMPSpecifications/)、[C2PA](https://spec.c2pa.org/)。当前未执行第三方解析器安装、C2PA 签名或用户素材导出。
+
+组件验收记录：[D-T0-META-01](tasks/D-T0-META-01.md)；15项定向方法及117项组合/源回归通过，不能据此宣称PNG往返、规范互操作、真实执行快照接线或内容真实性已经验证。
