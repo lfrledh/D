@@ -105,3 +105,12 @@ CUA仅getState有界响应0.32秒，发现两个同名同bundle D记录，没有
 v8后续选择META-PNG，独立从已接纳schema2源开发，不依赖此T0候选。HUM因当前ProjectStore只接纳image/png结果，需要独立音频持久化增量；下一出口仍为原声导入/试听及随后真实转录，不等全部文本增强。
 
 环境事件补记：本次一次混有中文长文本的stdin Python准备命令在解析期报告Non-UTF-8，未执行其正文。沿用已知处理方式将文档与ASCII脚本分开；没有重试原失败方式，未把事件计为模型实现修复，具体根因未知。
+
+
+## Human return / responsive layout finish (2026-09-08)
+
+User approved signed continuity checks and reported reproducible window clipping after a successful real Chinese IME check. Lead reproduced by shrinking the explicit signed test app: left sidebar and right toolbar extend outside the window while inner text panes retain their wide size. Normal exit of owned PID81299 returned0; no user D was stopped. This is a layout defect, not an authorization failure.
+
+Current scope: Lead changes TextWorkbenchView.swift, TextSelectionEditor.swift, necessary WorkbenchView.swift/DApp.swift layout only, direct Packages/UI/Tests/UITests/TextWorkbenchLayoutTests.swift and this task record. Preserve all text/version/selection/async/undo/storage contracts, document migration, model identity, signature and user scheme. Narrow/detail width must reflow, controls stay reachable at the existing minimum window size; growing then shrinking cannot freeze old width. Keep the native editor identity, composition and selection across width changes. New layout regression and manual resize/IME/inference checks; no substitute mock for real product acceptance. Source docs-only updates will be merged into candidate before integrated validation.
+
+Original STORE/VIEW repair budgets remain exhausted. This is the approved bounded Lead finish plus the specifically reported layout defect, not another Worker implementation. Non-implementer reviews Lead diff; significant new architectural/data/permission risk or failed bounded finish stops the affected candidate. Persistent run: /Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-T0-WORKBENCH-01/run-20260908T125225Z-human-finish.

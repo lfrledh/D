@@ -82,6 +82,14 @@ public struct TextSelectionEditor: NSViewRepresentable {
         return scroll
     }
 
+    // A scrollable editor has no content-driven minimum viewport. Reporting the
+    // last AppKit frame as its fitting size would feed a wide size back into SwiftUI.
+    public func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSScrollView, context: Context) -> CGSize? {
+        let width = proposal.width.flatMap { $0.isFinite ? max(0, $0) : nil } ?? 320
+        let height = proposal.height.flatMap { $0.isFinite ? max(0, $0) : nil } ?? 240
+        return CGSize(width: width, height: height)
+    }
+
     public func updateNSView(_ scroll: NSScrollView, context: Context) {
         guard let textView = scroll.documentView as? NSTextView else { return }
         context.coordinator.update(document: document, requestedSelection: selection,

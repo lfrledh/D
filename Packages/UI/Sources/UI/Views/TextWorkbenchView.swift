@@ -53,34 +53,49 @@ public struct TextWorkbenchView: View {
     }
 
     public var body: some View {
-        VStack(spacing: 0) {
-            toolbar
-            Divider()
-            HSplitView {
-                editorPanel
-                    .frame(minWidth: 360, minHeight: 360)
-                comparisonPanel
-                    .frame(minWidth: 300, minHeight: 360)
+        GeometryReader { viewport in
+            // AnyLayout changes arrangement without replacing the native IME editor.
+            let panels = viewport.size.width < 760
+                ? AnyLayout(VStackLayout(spacing: 0))
+                : AnyLayout(HStackLayout(spacing: 0))
+            VStack(spacing: 0) {
+                toolbar(compact: viewport.size.width < 680)
+                Divider()
+                panels {
+                    editorPanel
+                        .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
+                    Divider()
+                    comparisonPanel
+                        .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
+            .frame(width: viewport.size.width, height: viewport.size.height)
         }
         .background(Color(nsColor: .windowBackgroundColor))
     }
 
-    private var toolbar: some View {
-        HStack(spacing: 10) {
+    private func toolbar(compact: Bool) -> some View {
+        let arrangement = compact
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
+            : AnyLayout(HStackLayout(spacing: 10))
+        return arrangement {
             VStack(alignment: .leading, spacing: 2) {
                 Text("文字草稿").font(.headline)
                 Text(modelStatus).font(.caption).foregroundStyle(.secondary).lineLimit(2)
                     .accessibilityIdentifier("text-model-status")
             }
-            Spacer()
-            Button(action: onChooseModel) { Label("选择模型", systemImage: "cube.transparent") }
-                .buttonStyle(.glass)
-                .accessibilityIdentifier("text-model-select")
-            Button(action: onUndo) { Label("撤销", systemImage: "arrow.uturn.backward") }
-                .disabled(!canUndo).accessibilityIdentifier("text-undo")
-            Button(action: onSave) { Label(isSaving ? "正在保存" : "保存", systemImage: "square.and.arrow.down") }
-                .disabled(isSaving).accessibilityIdentifier("text-save")
+            .frame(maxWidth: .infinity, alignment: .leading)
+            HStack(spacing: 10) {
+                Button(action: onChooseModel) { Label("选择模型", systemImage: "cube.transparent") }
+                    .buttonStyle(.glass)
+                    .accessibilityIdentifier("text-model-select")
+                Button(action: onUndo) { Label("撤销", systemImage: "arrow.uturn.backward") }
+                    .disabled(!canUndo).accessibilityIdentifier("text-undo")
+                Button(action: onSave) { Label(isSaving ? "正在保存" : "保存", systemImage: "square.and.arrow.down") }
+                    .disabled(isSaving).accessibilityIdentifier("text-save")
+            }
+            .fixedSize(horizontal: true, vertical: false)
         }
         .padding(12)
         .background(.bar)
@@ -90,6 +105,7 @@ public struct TextWorkbenchView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("原稿").font(.headline)
             TextSelectionEditor(document: session.document, selection: selection, onEdit: onEdit, onSelection: onSelection)
+                .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
                 .accessibilityIdentifier("text-draft-editor")
                 .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 10))
                 .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(nsColor: .separatorColor)))
@@ -117,13 +133,15 @@ public struct TextWorkbenchView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("选段与候选").font(.headline)
             GroupBox(comparisonSourceLabel) {
-                Text(comparisonSourceText).frame(maxWidth: .infinity, alignment: .leading).textSelection(.enabled)
+                ScrollView {
+                    Text(comparisonSourceText).frame(maxWidth: .infinity, alignment: .leading).textSelection(.enabled)
+                }.frame(maxHeight: 90)
             }
             GroupBox("替换候选") {
                 ScrollView {
                     candidateContent.frame(maxWidth: .infinity, alignment: .leading).textSelection(.enabled)
                 }
-                .frame(minHeight: 120, maxHeight: .infinity, alignment: .top)
+                .frame(minHeight: 0, maxHeight: .infinity, alignment: .top)
                     .accessibilityIdentifier("text-candidate-output")
             }
             .layoutPriority(1)
@@ -135,7 +153,6 @@ public struct TextWorkbenchView: View {
                 Button("接受", action: onAccept).disabled(!canAccept).accessibilityIdentifier("text-accept")
                 Button("拒绝", action: onReject).disabled(session.candidate == nil).accessibilityIdentifier("text-reject")
             }
-            Spacer()
         }
         .padding(16)
         .background(Color(nsColor: .underPageBackgroundColor).opacity(0.45))
