@@ -16,7 +16,7 @@
 | H04 签名后连续验收 | **已验证解决**：同次UI8/8、普通签名真实图像生成/导出、全新DerivedData重编译及项目/模型授权恢复均通过。 | 本项关闭；不是永久TCC/发行公证证明，普通旧D未替换。 | uitests-refined.xcresult、image-normal-signed-result.json、normal-fresh-rebuild.json、final-fresh-restore.json。 |
 | H05 PNG 有界收尾 | **已完成并本地接纳**：获准尺寸夹具/后台检查、CPU与只读复核、正常面板私有/公开交接、新构建草稿重开通过。 | 不再请求同一预算，保留Terra初交/两轮修复和Lead接管历史。 | PNG任务记录、png-native-crosscheck.json、final-fresh-restore-files.json。 |
 | H06 实际系统安全提示 | 历史 SecurityAgent／系统通知界面曾被工具安全规则拒绝；用户处理后签名／测试成功。本轮尚未观察到新的待点提示。 | 只有提示实际出现时，指出请求应用、资源和用途交用户确认；密码本人输入，不传给 Lead。无提示时不制造弹窗、不改钥匙串 ACL/TCC。 | 实际操作恢复且证据关联对应应用；“已设置”不代替复验。历史 A03、PermissionSetup 20260907 记录。 |
-| H08 音频任务追加预算（2026-09-09） | **待具体批准，非Mac权限问题**：D-HUM-AUDIO-01初交+两次返工及Lead一次收尾后，滚动可达性仍未验收；只读复核发现实际容器/整数编码检查缺项和直接反例缺口。 | 最小提案：批准同任务一次定点收尾与复验/只读复核，保持冻结要求，不重编号或重置历史预算；通过后才派共享装配。无须全盘访问或密码。 | 候选1c1ee15b69339f0fc538dc460143e00c6ec84e27；HUM批次外部audio-review/review-response.md及final-receipt.json；真实录音/试听另有后续门槛。 |
+| H08 音频限定收尾（2026-09-09） | **已获批准并执行，仍受阻；非Mac权限问题**：Sol/high唯一追加交付后，Lead真实编译发现测试中AudioFormatInfo与系统同名类型冲突，行为测试未运行。新只读审核预检另有git启动器缓存写入被拒绝，正式复核未启动；未发现成功越界或权限扩大证据。 | 最小提案：同任务由Lead仅限定测试类型名，再执行原验收/只读复核；尚未实施，不重置历史预算、不派装配。无需密码/全盘访问。下一只读入口明确Xcode git实际路径。 | 候选7a60178287e021521c7c94bdbe8804779296c0dd；HUM run-20260908T172827Z-h08中的validation/lead-tests-h08、observable-runtime-and-events.json及final-receipt.json。编译通过后仍需完整原检查；真实录音/试听属于之后门槛。 |
 
 已修复的本轮新增问题 H07：文字窗口约束使侧栏/工具栏在缩窄时截断，Lead在隔离组合中修复宽度反馈、分栏、工具栏与选段预览高度；最终真实缩放和真人IME通过。修复已进入本地源工作分支并复验通过；原普通D.app保留，未被替换。证据根：`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-T0-WORKBENCH-01/run-20260908T125225Z-human-finish`；受测代码 `a6c516ad6b52c944ce70a0bd764d68a94fd0f3bc`。
 

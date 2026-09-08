@@ -4,15 +4,21 @@
 
 更新：2026-09-09。只记录当前执行所需信息；历史依据按需读取，不默认加载全部报告。
 
-## 当前批次：声音灵感工作台首波部分完成（2026-09-09）
+## 当前批次：H08追加收尾已执行，音频候选仍未接纳（2026-09-09）
 
-用户已批准下一阶段按多子代理并行执行，覆盖下文“下一建议仅为提案”的旧停点。默认仍为Lead规划/验收、按就绪度0—2受限Worker，未重新做协作机制试验。两项真实实施初交重叠264.14234秒，存储Sol/high与音频Terra/medium独立工作树；音频最后一轮显式切换Sol/high，Lead一次有界收尾与另一Sol只读复核另记来源。
+用户已经批准H08，不再将其写成“尚未授权”。默认Lead规划/验收、按就绪度0—2受限Worker；本次按依赖只有一个Sol/high实现者，没有为并行制造任务，也没有重新试验协作机制。
 
-**本批未完成产品接纳。** 源产品基线a406af9cd8908a77ae2f013d29121164d6fc0745保持，本次源提交只更新本行动指南与人工队列。存储候选30a2298d8789f3daeb9d50d70d76b09931d6482c已在隔离组合b27a969caf63b7b75d9edb8b25ba58df0cde7e8c通过186方法/25套件报告（现有可选权重检查1项跳过）；原声导入/保存/片段导出为CPU合成文件验收。音频候选1c1ee15b69339f0fc538dc460143e00c6ec84e27编译与9项transport、3项UI通过，但滚动方法仍失败；只读审核另发现实际容器/整数编码交叉检查缺项，普通返工和一次Lead收尾额度耗尽。
+**本批未完成产品接纳。** 已接纳产品代码仍为a406af9cd8908a77ae2f013d29121164d6fc0745；本轮源分支只更新四份规划/状态文档。存储候选30a2298d8789f3daeb9d50d70d76b09931d6482c及其隔离组合b27a969caf63b7b75d9edb8b25ba58df0cde7e8c的186方法/25套件结果复用（现有可选权重检查1项跳过），没有把音频失败拼入通过数。
 
-下一动作仅为H08的明确追加决定；尚未派出共享装配Worker，未启用音频/schema4，未做真实麦克风/试听/GUI。受控音乐、哼唱转谱和手机仍按既有路线紧接原声闭环，不因本停点取消或扩展范围。源个人scheme与普通D.app保持；本批实施、CPU和审核进程已结束，不推送。
+H08限定修补交回于候选7a60178287e021521c7c94bdbe8804779296c0dd：实际容器/有符号PCM交叉检查、隐藏窗口滚动测试与Unicode处理器反例已提交，但Lead实际SwiftPM检查在测试模块编译处失败，行为测试没有运行。原因是新增AudioToolbox与DWorkbench都定义AudioFormatInfo，测试中的未限定类型重名；语法parse通过没有证明类型正确。没有继续修补、派装配或启用schema4/音频入口。H08唯一追加交付已用，旧初交/两次修复/Lead接管历史保留。
 
-记录在批次分支codex/d-hum-entry-01：[任务与恢复检查点](/Volumes/CodexProjects/Codex/D-Worktrees/D-HUM-ENTRY-01/docs/tasks/D-HUM-ENTRY-01.md)。持久证据目录`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-HUM-ENTRY-01/run-20260908T153243Z`，最终完整版本索引`final-receipt.json`。恢复时先核对源/候选HEAD及个人修改，不依赖短SHA或旧聊天。
+新只读审核仅完成预检，未执行正式REVIEW。预检使用系统git启动器导致xcrun缓存写入被只读沙箱拒绝，命令返回0；记录为工具副作用/命令边界事件，不说成权限已扩大或毫无异常。Lead未重试、未改权限；后续应明确使用已安装的Xcode git实际路径。实现者没有观察到权限拒绝，二者分开记载。
+
+最小下一动作：在同一任务内只限定测试引用为DWorkbench.AudioFormatInfo，再重跑既有CPU和只读复核；目前仅提案，未执行。不需要Mac密码、全盘授权或新模型。通过后再按已准备的生命周期/持久化契约安排共享服务、界面接线两个依赖顺序工作包；不是换编号绕过音频预算。
+
+用户要求的音频推理生成已正式落实到[音乐路线](MUSIC_ROADMAP.zh-CN.md)：原声保全/普通试听→可编辑音符与八小节→一个受控器乐后端→紧接歌声，TTS单列。不等待全部文字/图像/META增强；本轮未选型、下载或运行音乐模型。
+
+源个人scheme保留原内容/索引/未暂存状态，普通D.app四个关键文件保持；所有本轮自有实施、预检、CPU进程已结束，不推送。任务记录保留在批次目录：[/Volumes/CodexProjects/Codex/D-Worktrees/D-HUM-ENTRY-01/docs/tasks/D-HUM-ENTRY-01.md](/Volumes/CodexProjects/Codex/D-Worktrees/D-HUM-ENTRY-01/docs/tasks/D-HUM-ENTRY-01.md)。最新完整版本、保护及证据索引为`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-HUM-ENTRY-01/run-20260908T172827Z-h08/final-receipt.json`；恢复先核对真实HEAD和状态。本轮源更新仅文档，不宣称运行过最终文档提交的测试。
 
 ## 最新结案：T0 工作台、PNG 配方交接与人工遗留项
 
