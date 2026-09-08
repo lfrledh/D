@@ -47,3 +47,11 @@ Lead另编写AudioLeadContractTests三项独立反例，采用手工RIFF而非�
 最小追加提案：只为AUDIO批准一次定点收尾（实际容器/有符号PCM检查及反例、确定正确滚动表面并保留可达性断言、补Unicode真实控件与状态反例），冻结标准不变，通过后再非实现者复核。当前不需要Mac权限。此提案未实施；其后装配Worker独占ProjectSession/WorkbenchModel/WorkbenchView及必要音频协调器，先按assembly-dirty-state-clarification.json冻结未保存备注/片段输入、迟到结果、录音结束后保存/失败阻止导航。麦克风能力/真人窗口到可审阅装配时再明确，不请求全盘访问。
 
 恢复检查点：三个候选工作树与本轮证据保留；全部本轮实施、复核和CPU进程均结束，仅依据自有句柄，不是系统写锁。个人scheme字节/完整差异/索引/未暂存状态保持，普通D.app四个关键文件摘要/大小/mtime保持。未触碰真实作品、模型、签名、系统授权，无推送。外部索引final-receipt.json；测试版本/源码摘要、每轮请求/运行设置、过程与返工原因位于run-20260908T153243Z。费用和完整Lead归因unknown；初交/修复900秒停止、代码错误、夹具问题与CLI线程投影ordinal警告分别记录，不能都归因为模型能力。
+
+## H08 authorized continuation (2026-09-09 JST)
+
+User approved one bounded H08 finish and reinforced eventual audio inference/generation. Previous stop/budget remains history. Evidence run-20260908T172827Z-h08; AUDIO execution preparation c792df14058fe862f6799111aeab705d720a2d1f, spec_revision2/HUM1 unchanged. Fresh minimal Sol/high thread01a0821a-1f4b-7e61-a175-de5adfbe3141 was independently verified at same physical tree with workspace-write/approval-never/no network/only task roots, then IMPLEMENT sent. Not a new ordinary repair budget.
+
+Lead isolated probe identified the scroll-test cause: an unattached host has zero document extent, while the same view in an undisplayed NSWindow lays out and scrolls the final row into view at both widths. No real GUI/hardware claim. Unicode handler tests must not masquerade as physical UI activation; ordinary product GUI remains a later gate. Audio generation milestones clarified in existing MUSIC_ROADMAP/PRODUCT_GOALS, no model selected or installed.
+
+Assembly preparation will use two sequential ownership scopes if H08 passes: shared project/audio lifecycle and read-only store inspection first, then UI/native-panel wiring against that accepted interface. This is practical decomposition of the already approved assembly, not a new product goal or a way to repair AUDIO under a new ID. No assembly writer dispatched yet. Detailed failure/ownership cases in this run/assembly-preparation.json; finalize task contracts before dispatch.
