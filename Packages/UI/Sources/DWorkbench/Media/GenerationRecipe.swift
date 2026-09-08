@@ -118,12 +118,19 @@ public enum GenerationRecipeCodec {
 
     public static func decode(_ data: Data) throws -> GenerationRecipe {
         guard data.count <= 128 * 1024 else { throw GenerationRecipeError.sizeLimitExceeded }
-        try StrictJSON.check(data)
-        let envelope = try JSONDecoder().decode(Envelope.self, from: data)
-        guard envelope.namespace == "org.d.generation-recipe", envelope.schemaVersion == 1 else { throw GenerationRecipeError.invalidStructure }
-        var recipe = try envelope.recipe.validated()
-        recipe.claim = .callerDeclared
-        return recipe
+        do {
+            try StrictJSON.check(data)
+            let envelope = try JSONDecoder().decode(Envelope.self, from: data)
+            guard envelope.namespace == "org.d.generation-recipe", envelope.schemaVersion == 1 else { throw GenerationRecipeError.invalidStructure }
+            var recipe = try envelope.recipe.validated()
+            recipe.claim = .callerDeclared
+            return recipe
+        } catch let error as GenerationRecipeError {
+            throw error
+        } catch {
+            // Decoder diagnostics can include attacker-controlled JSON; do not expose them.
+            throw GenerationRecipeError.invalidStructure
+        }
     }
 }
 
@@ -160,12 +167,12 @@ private func validateIdentifier(_ field: RecipeField<String>) throws {
 }
 private func validateSHA256(_ field: RecipeField<String>) throws {
     guard let value = stringValue(field) else { return }
-    guard value.count == 64, value.allSatisfy({ $0.isNumber || ("a"..."f").contains($0) }) else { throw GenerationRecipeError.invalidValue }
+    guard value.utf8.count == 64, value.utf8.allSatisfy({ ($0 >= 48 && $0 <= 57) || ($0 >= 97 && $0 <= 102) }) else { throw GenerationRecipeError.invalidValue }
 }
 private func validatePrompt(_ field: RecipeField<String>) throws { if let value = stringValue(field), value.utf8.count > 64 * 1024 { throw GenerationRecipeError.sizeLimitExceeded } }
 private func validateSeed(_ field: RecipeField<String>) throws {
     guard let value = stringValue(field) else { return }
-    guard value == "0" || (value.first != "0" && value.allSatisfy(\.isNumber) && UInt64(value) != nil) else { throw GenerationRecipeError.invalidValue }
+    guard value == "0" || (value.first != "0" && value.utf8.allSatisfy({ $0 >= 48 && $0 <= 57 }) && UInt64(value) != nil) else { throw GenerationRecipeError.invalidValue }
 }
 
 private enum StrictJSON {
@@ -176,13 +183,14 @@ private enum StrictJSON {
     private struct Parser {
         let bytes: [UInt8]; var index = 0
         mutating func space() { while index < bytes.count && [9, 10, 13, 32].contains(bytes[index]) { index += 1 } }
-        mutating func value(depth: Int) throws {
+        mutating func value(depth: Int, exactSchemaVersion: Bool = false) throws {
             space(); guard index < bytes.count else { throw GenerationRecipeError.invalidStructure }
+            if exactSchemaVersion { try schemaVersionOne(); return }
             switch bytes[index] { case 123: try object(depth: depth + 1); case 91: try array(depth: depth + 1); case 34: _ = try string(); case 116: try literal("true"); case 102: try literal("false"); case 110: try literal("null"); default: try number() }
         }
         mutating func object(depth: Int) throws {
             guard depth <= 16 else { throw GenerationRecipeError.depthLimitExceeded }; index += 1; space(); if take(125) { return }; var keys = Set<String>()
-            while true { space(); let key = try string(); guard keys.insert(key).inserted else { throw GenerationRecipeError.invalidStructure }; space(); guard take(58) else { throw GenerationRecipeError.invalidStructure }; try value(depth: depth); space(); if take(125) { return }; guard take(44) else { throw GenerationRecipeError.invalidStructure } }
+            while true { space(); let key = try string(); guard keys.insert(key).inserted else { throw GenerationRecipeError.invalidStructure }; space(); guard take(58) else { throw GenerationRecipeError.invalidStructure }; try value(depth: depth, exactSchemaVersion: depth == 1 && key == "schema_version"); space(); if take(125) { return }; guard take(44) else { throw GenerationRecipeError.invalidStructure } }
         }
         mutating func array(depth: Int) throws {
             guard depth <= 16 else { throw GenerationRecipeError.depthLimitExceeded }; index += 1; space(); if take(93) { return }
@@ -205,6 +213,12 @@ private enum StrictJSON {
         }
         mutating func literal(_ text: String) throws { let expected = Array(text.utf8); guard bytes.dropFirst(index).starts(with: expected) else { throw GenerationRecipeError.invalidStructure }; index += expected.count }
         mutating func number() throws { let start = index; if take(45) {}; guard index < bytes.count else { throw GenerationRecipeError.invalidStructure }; if take(48) {} else { guard bytes[index] >= 49 && bytes[index] <= 57 else { throw GenerationRecipeError.invalidStructure }; while index < bytes.count && bytes[index] >= 48 && bytes[index] <= 57 { index += 1 } }; if take(46) { let fraction = index; while index < bytes.count && bytes[index] >= 48 && bytes[index] <= 57 { index += 1 }; guard index > fraction else { throw GenerationRecipeError.invalidStructure } }; if index < bytes.count && (bytes[index] == 69 || bytes[index] == 101) { index += 1; _ = take(43) || take(45); let exponent = index; while index < bytes.count && bytes[index] >= 48 && bytes[index] <= 57 { index += 1 }; guard index > exponent else { throw GenerationRecipeError.invalidStructure } }; guard index > start else { throw GenerationRecipeError.invalidStructure } }
+        mutating func schemaVersionOne() throws {
+            guard take(49) else { throw GenerationRecipeError.invalidStructure }
+            let saved = index; space()
+            guard index == bytes.count || bytes[index] == 44 || bytes[index] == 125 else { throw GenerationRecipeError.invalidStructure }
+            index = saved
+        }
         mutating func take(_ byte: UInt8) -> Bool { guard index < bytes.count, bytes[index] == byte else { return false }; index += 1; return true }
     }
 }
