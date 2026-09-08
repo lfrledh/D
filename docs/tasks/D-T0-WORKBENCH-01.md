@@ -27,3 +27,5 @@ CPU：原工作台117/核心17回归＋新增存储/选区/协调/保存失败�
 Lead实现清单补充：新增DWorkbench/Text/ProjectTextController.swift及其CPU协调测试；新增DWorkbench/Models/FixedTextModel.swift与已存在fixtures/text-model.json的资源副本，用于固定本地模型只读校验，不引入下载/依赖/新精度。Lead负责选择代次、写入排队和关闭保护，后续非实现者审核这部分重要实现。
 
 Lead组合初验24afbd6共139方法中有1方法4断言失败：保存失败夹具只追加JSON空白，verifyUnchangedManifest现有语义以decoded manifest比较，空白不构成外部内容变化。本轮将夹具改为实际改写外部textDraft正文，保留全部保护断言与原失败证据；这是Lead夹具错误，不计Worker逻辑失败。另发现规范等价Unicode外部正文的字节变化可能被合成Equatable忽略，正在以独立反例核验，必要时使用STORE剩余1轮修复。
+
+Lead装配复验c215：完整141CPU/离屏方法通过。额外外层禁网Seatbelt与SwiftPM自带sandbox_apply冲突(exit74)，移除仅本任务额外包装、保留原生SwiftPM沙箱/固定离线副本/skipPackageUpdates/Git protocol.allow=never后，实际编译发现DApp漏import DWorkbench(exit65)。一次局部Lead修复并记录；不归Terra。只读核实既有scripts/download-test-model.py第24/25行及已批准目录包含.download.lock(0B)、.provenance.json(2120B)，FixedTextModel现仅显式容许这两份有界regular/no-follow管理文件，不把它们当权重或身份依据，全部固定模型文件及摘要仍强制校验、其他额外文件仍拒绝。新增显式D_TEST_TEXT_MODEL环境启用的CPU校验方法；未提供路径的其他机器应明确跳过，不是推理验收。本机本轮提供现有路径，绝不下载。

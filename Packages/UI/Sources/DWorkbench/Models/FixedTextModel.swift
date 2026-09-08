@@ -17,9 +17,23 @@ public enum FixedTextModel {
             }
             let manifest = try JSONDecoder().decode(Manifest.self, from: Data(contentsOf: resource))
             let allowed = Set(manifest.files.map(\.name))
-            let names = try FileManager.default.contentsOfDirectory(atPath: directory.path)
-            guard Set(names) == allowed else {
+            // The existing download-test-model.py owns exactly these two bookkeeping files.
+            // They are not inference inputs; never treat them as a weight/provenance authority.
+            let bookkeeping: Set<String> = [".download.lock", ".provenance.json"]
+            let names = Set(try FileManager.default.contentsOfDirectory(atPath: directory.path))
+            guard allowed.isSubset(of: names), names.isSubset(of: allowed.union(bookkeeping)) else {
                 throw InferenceFailure.invalidRequest("模型目录文件清单不符，请选择已批准的固定文字模型。")
+            }
+            for name in names.intersection(bookkeeping) {
+                let fd = Darwin.open(directory.appendingPathComponent(name).path,
+                                     O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC)
+                guard fd >= 0 else { throw InferenceFailure.invalidRequest("模型管理文件不可读取。") }
+                defer { Darwin.close(fd) }
+                var info = stat()
+                guard fstat(fd, &info) == 0, info.st_mode & S_IFMT == S_IFREG,
+                      info.st_size >= 0, info.st_size <= 65_536 else {
+                    throw InferenceFailure.invalidRequest("模型管理文件的类型或大小不符。")
+                }
             }
             for file in manifest.files {
                 guard !file.name.contains("/"), file.name != ".." else { throw InferenceFailure.invalidRequest("校验清单路径无效。") }
