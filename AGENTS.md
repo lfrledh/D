@@ -46,3 +46,7 @@ D-F03／D-M01 已验收：现有 UI package 内含真实 DWorkbench 服务 targe
 - XCTest 会临时修改宿主签名；之后重新普通 build，确认没有测试权限例外再验收真实沙盒。CUA 实测不能冒充 XCTest UI 通过。
 - 修改推理算法／生命周期时验证输出、峰值、取消后停止与重复加载释放；仅 cacheBytes 为零或短期阈值不证明无泄漏。按实际活跃分配趋势解释残留。
 - 已验收基线见 docs/FOUNDATION_STAGE_ACCEPTANCE.zh-CN.md、docs/IMAGE_RUNTIME_ACCEPTANCE.zh-CN.md、docs/WORKBENCH_ACCEPTANCE.zh-CN.md 和 docs/MODEL_LIBRARY_ACCEPTANCE.zh-CN.md。B1 独立实验的残留是历史证据，不能代替 B2 测量。
+
+## 2026-09-08 v7 有限切换批次（覆盖旧并行／阶段待批描述）
+
+用户已批准 RESULT 恢复及 T0/META 首组有限产品实施。Lead 单一管理契约、源集成和共享文件；独立 CLI Worker 各有核验工作树／模型／受限写根，最多两个子执行或审核任务活跃，不递归。先读当前任务规格，再按需读 [协作规程](docs/MULTI_AGENT_WORKFLOW.zh-CN.md) 的副作用／停止／集成规则。普通新任务初交＋两轮修复，既有任务预算不刷新；重要 Lead 实现需非实现者检查。未知权限事件暂停并报 Lead，预先限定的安全降级才可恢复一次。当前只批准本地提交／集成，不 push、安装或更改签名／权限。切换状态以 CURRENT_ACTIONS 证据为准，未证明双执行和组合验收前不宣称默认已启用。
