@@ -22,3 +22,6 @@ Lead 已确认 implementation 结束、模型/写根不变，静态审核无权�
 4. textDidChange后、下一次SwiftUI update前 selection回调以旧currentDocument验证新的字符串，会误拒绝新Unicode输入。用当前原生文本验证选区，身份仍按当前document绑定，不能改成字节索引。
 5. configure可纵向伸展的NSTextView及宽度/滚动尺寸，确保长稿可滚动；禁止启动真实窗口/GUI。补真实桥行为的离屏AppKit单元测试（无window/no activation）覆盖程序更新无回声、文档切换、空选区、IME保留。若AppKit需启动GUI才可验证，保留明确未测，不伪造helper镜像测试。Lead串行执行，Worker不运行swift。
 这些是初次冻结契约的反例/实现检查，不是新增功能。允许局部设计选择，不重写整个UI。回传具体修改、异常、自检与未覆盖项。
+
+## 修订3：编译反例与第二次修复
+修订3，第二次/最后一次普通修复。Lead先审查了repair1事件，无权限拒绝/未知副作用；同一Terra/medium及写根。Lead真实swift test在64ceb4de180a799a75807eddf0a7467c9604948e编译失败：TextSelectionEditor.swift第62、66行NSSize(width:.greatestFiniteMagnitude,height:.greatestFiniteMagnitude)对CGFloat/Double歧义。请按AppKit实际类型修正。静态审核同时要求validCursorRange明确保证Character边界，不以Range(NSRange,in:)可转换就默认为组合字符边界；保留当前Unicode断言。候选长文本需要滚动查看，不让比较区长稿挤出接受/拒绝按钮。流出非空后仍明确生成中（上一修复要求）。只改原3文件，不变接口/验收/文档，不运行Swift。修复后Lead编译/离屏测试；剩余预算0，若还有明确局部问题只能按规则Lead有界接管。请回传异常、实际改动、未执行测试。
