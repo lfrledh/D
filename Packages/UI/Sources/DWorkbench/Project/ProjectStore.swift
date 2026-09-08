@@ -16,6 +16,7 @@ public actor ProjectStore {
     public static let manifestFilename = "project.json"
     public static let versionOneBackupFilename = "project.v1.backup.json"
     public static let versionTwoBackupFilename = "project.v2.backup.json"
+    public static let versionThreeBackupFilename = "project.v3.backup.json"
     private let rootFD: Int32
     private let lockFD: Int32
     private var manifest: ProjectManifest
@@ -47,6 +48,7 @@ public actor ProjectStore {
             let lock = try ProjectFiles.lock(in: descriptor)
             do {
                 guard mkdirat(descriptor, "Tasks", 0o700) == 0 else { throw ProjectFiles.error() }
+                guard mkdirat(descriptor, "Audio", 0o700) == 0 else { throw ProjectFiles.error() }
                 let initial = ProjectManifest(name: name)
                 try ProjectFiles.writeManifest(initial, in: descriptor, replacing: false)
                 return ProjectStore(rootURL: root, rootFD: descriptor, lockFD: lock, manifest: initial)
@@ -90,6 +92,9 @@ public actor ProjectStore {
         } else if loaded.schemaVersion == 2 {
             loaded = try ProjectFiles.migrateVersionTwo(loaded, original: data, in: descriptor,
                                                       checkpoint: migrationCheckpoint)
+        } else if loaded.schemaVersion == 3 {
+            loaded = try ProjectFiles.migrateVersionThree(loaded, original: data, in: descriptor,
+                                                        checkpoint: migrationCheckpoint)
         } else { try ProjectFiles.validate(loaded) }
         let store = ProjectStore(rootURL: root, rootFD: descriptor, lockFD: lock, manifest: loaded)
         // Ownership of both descriptors has moved to the actor before recovery can throw.
@@ -323,6 +328,173 @@ public actor ProjectStore {
         return rootURL.appendingPathComponent(asset.relativePath)
     }
 
+    /// Copies the selected inode into project ownership before validating the owned bytes.
+    /// A failed import may leave only that unregistered file for manual recovery; opening a
+    /// project never scans for or guesses ownership of such files.
+    public func importAudio(at source: URL, name: String,
+                            origin: AudioOrigin = .importedFile) throws -> ProjectManifest {
+        try ProjectFiles.validateAudioName(name)
+        try checkLocation()
+        let imported = try AudioMediaInspector.withOriginalSource(at: source) { sourceFD, byteCount in
+            let (assetID, directory) = try ProjectFiles.createAudioDirectory(in: rootFD)
+            defer { Darwin.close(directory) }
+            let pendingName = "source.pending"
+            let destination = openat(directory, pendingName,
+                                     O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0o600)
+            guard destination >= 0 else { throw ProjectFiles.error() }
+            do {
+                try AudioMediaInspector.copyOriginal(from: sourceFD, byteCount: byteCount, to: destination)
+                guard fsync(destination) == 0 else { throw ProjectFiles.error() }
+                Darwin.close(destination)
+            } catch {
+                Darwin.close(destination)
+                throw error
+            }
+            let pendingURL = rootURL.appendingPathComponent("Audio/\(assetID.uuidString)/\(pendingName)")
+            let inspection = try AudioMediaInspector.inspect(at: pendingURL)
+            let finalName = inspection.format.container == .wav ? "source.wav" : "source.caf"
+            guard renameatx_np(directory, pendingName, directory, finalName, UInt32(RENAME_EXCL)) == 0 else {
+                if errno == EEXIST { throw ProjectStoreError.alreadyExists(finalName) }
+                throw ProjectFiles.error()
+            }
+            guard fsync(directory) == 0 else { throw ProjectFiles.error() }
+            return (assetID, inspection, finalName)
+        }
+        let (assetID, inspection, finalName) = imported
+        let directoryName = assetID.uuidString
+        let relative = "Audio/\(directoryName)/\(finalName)"
+        let audio = AudioAssetMetadata(format: inspection.format, contentSHA256: inspection.contentSHA256,
+                                       origin: origin)
+        let asset = ProjectAsset(id: assetID, jobID: nil, relativePath: relative,
+                                 mediaType: ProjectFiles.audioMediaType(inspection.format.container),
+                                 role: .original, metadata: .init(audio: audio), name: name)
+        let documentID = UUID()
+        let draft = AudioDraftDocument(id: documentID, assetID: assetID)
+        let document = ProjectDocument(id: documentID, name: name, kind: .audio, audioDraft: draft)
+        var candidate = manifest
+        candidate.assets.append(asset)
+        candidate.documents.append(document)
+        candidate.activeDocumentID = documentID
+        try commit(candidate)
+        return manifest
+    }
+
+    /// Persists the exact capture destination before returning it to a recorder.
+    public func reserveAudioCapture(name: String) throws -> AudioCaptureReservation {
+        try ProjectFiles.validateAudioName(name)
+        try checkLocation()
+        let (id, directory) = try ProjectFiles.createAudioDirectory(in: rootFD)
+        defer { Darwin.close(directory) }
+        var info = stat()
+        guard fstatat(directory, "source.caf", &info, AT_SYMLINK_NOFOLLOW) != 0, errno == ENOENT else {
+            throw ProjectStoreError.alreadyExists("Audio/\(id.uuidString)/source.caf")
+        }
+        let reservation = AudioCaptureReservation(id: id,
+            relativePath: "Audio/\(id.uuidString)/source.caf", name: name)
+        var candidate = manifest
+        candidate.pendingAudioCaptures.append(reservation)
+        try commit(candidate)
+        return reservation
+    }
+
+    public func audioCaptureURL(id: UUID) throws -> URL {
+        guard let reservation = manifest.pendingAudioCaptures.first(where: { $0.id == id }) else {
+            throw ProjectStoreError.invalidProject("找不到待录制的音频预约。")
+        }
+        try checkLocation()
+        let directory = try ProjectFiles.openRelativeDirectory("Audio/\(id.uuidString)", in: rootFD)
+        defer { Darwin.close(directory) }
+        var info = stat()
+        let status = fstatat(directory, "source.caf", &info, AT_SYMLINK_NOFOLLOW)
+        guard status != 0, errno == ENOENT else {
+            throw ProjectStoreError.alreadyExists(reservation.relativePath)
+        }
+        return rootURL.appendingPathComponent(reservation.relativePath)
+    }
+
+    /// Finalization never removes or rewrites the capture. Any validation or save failure keeps
+    /// both the persisted reservation and its raw file available for an explicit retry.
+    public func finalizeAudioCapture(id: UUID) throws -> ProjectManifest {
+        guard let reservationIndex = manifest.pendingAudioCaptures.firstIndex(where: { $0.id == id }) else {
+            throw ProjectStoreError.invalidProject("找不到待恢复的音频预约。")
+        }
+        try checkLocation()
+        let reservation = manifest.pendingAudioCaptures[reservationIndex]
+        let source = rootURL.appendingPathComponent(reservation.relativePath)
+        let inspection = try AudioMediaInspector.inspect(at: source)
+        guard inspection.format.container == .caf else { throw AudioMediaError.unsupportedFormat }
+        let file = try ProjectFiles.openRelativeFile(reservation.relativePath, in: rootFD)
+        defer { Darwin.close(file) }
+        guard fsync(file) == 0 else { throw ProjectFiles.error() }
+
+        let metadata = AudioAssetMetadata(format: inspection.format,
+                                          contentSHA256: inspection.contentSHA256,
+                                          origin: .microphone)
+        let asset = ProjectAsset(id: id, jobID: nil, relativePath: reservation.relativePath,
+                                 mediaType: ProjectFiles.audioMediaType(.caf), role: .original,
+                                 metadata: .init(audio: metadata), name: reservation.name)
+        let documentID = UUID()
+        let document = ProjectDocument(id: documentID, name: reservation.name, kind: .audio,
+                                       audioDraft: .init(id: documentID, assetID: id))
+        var candidate = manifest
+        candidate.pendingAudioCaptures.remove(at: reservationIndex)
+        candidate.assets.append(asset)
+        candidate.documents.append(document)
+        candidate.activeDocumentID = documentID
+        try commit(candidate)
+        return manifest
+    }
+
+    public func saveAudioDraft(_ draft: AudioDraftDocument, documentID: UUID,
+                               expectedRevision: UInt64) throws -> ProjectManifest {
+        let index = try documentIndex(documentID)
+        guard manifest.documents[index].kind == .audio,
+              let current = manifest.documents[index].audioDraft,
+              current.id == documentID, draft.id == documentID,
+              current.assetID == draft.assetID else {
+            throw ProjectStoreError.invalidProject("原声稿与原声文档或原件编号不匹配。")
+        }
+        guard current.revision == expectedRevision else { throw ProjectStoreError.externalModification }
+        guard expectedRevision < UInt64.max, draft.revision == expectedRevision + 1 else {
+            throw ProjectStoreError.invalidProject("原声稿修订编号必须连续递增且不能溢出。")
+        }
+        try ProjectFiles.validateAudioDraft(draft, asset: manifest.assets.first { $0.id == draft.assetID })
+        var candidate = manifest
+        candidate.documents[index].audioDraft = draft
+        try commit(candidate)
+        return manifest
+    }
+
+    public func exportAudioClip(documentID: UUID, range: AudioFrameRange,
+                                to destination: URL) throws {
+        let index = try documentIndex(documentID)
+        guard manifest.documents[index].kind == .audio,
+              let draft = manifest.documents[index].audioDraft,
+              let asset = manifest.assets.first(where: { $0.id == draft.assetID }),
+              let audio = asset.metadata.audio else { throw ProjectStoreError.missingAsset }
+        try ProjectFiles.validateAudioRange(range, frameCount: audio.format.frameCount)
+        try checkLocation()
+        guard destination.isFileURL, destination.path.hasPrefix("/"),
+              !destination.lastPathComponent.isEmpty else { throw ProjectStoreError.unsafePath(destination.path) }
+        let source = try assetURL(for: asset)
+        let sourceInspection = try AudioMediaInspector.inspect(at: source)
+        try ProjectFiles.requireRegisteredAudio(sourceInspection, matches: audio)
+        let parent = try ProjectFiles.openDirectory(destination.deletingLastPathComponent())
+        defer { Darwin.close(parent) }
+        try ProjectFiles.publishExport(to: destination, parent: parent, checkpoint: nil, validate: { temporary in
+            let output = try AudioMediaInspector.inspect(at: temporary)
+            guard output.format.container == .wav, output.format.floatingPoint,
+                  output.format.bitDepth == 32, output.format.sampleRate == audio.format.sampleRate,
+                  output.format.channelCount == audio.format.channelCount,
+                  output.format.frameCount == range.endFrame - range.startFrame else {
+                throw AudioMediaError.invalidMedia("选区导出文件的格式或帧数验证失败")
+            }
+        }) { target in
+            try AudioMediaInspector.writeFloat32WAV(from: source, registered: audio,
+                                                    range: range, to: target)
+        }
+    }
+
     /// Export is a byte-for-byte copy staged in the system's same-volume replacement
     /// directory. A Save panel grants the destination file, not permission to create siblings.
     /// RENAME_EXCL publishes atomically without replacing a destination that appeared meanwhile.
@@ -336,6 +508,10 @@ public actor ProjectStore {
         try checkLocation()
         guard destination.isFileURL, destination.path.hasPrefix("/"),
               !destination.lastPathComponent.isEmpty else { throw ProjectStoreError.unsafePath(destination.path) }
+        if let audio = asset.metadata.audio {
+            let inspection = try AudioMediaInspector.inspect(at: rootURL.appendingPathComponent(asset.relativePath))
+            try ProjectFiles.requireRegisteredAudio(inspection, matches: audio)
+        }
         let source = try ProjectFiles.openRelativeFile(asset.relativePath, in: rootFD)
         defer { Darwin.close(source) }
         let parent = try ProjectFiles.openDirectory(destination.deletingLastPathComponent())
@@ -521,6 +697,40 @@ public actor ProjectStore {
             case (.none, .none):
                 break
             default:
+                throw ProjectStoreError.externalModification
+            }
+            switch (persisted.audioDraft, expected.audioDraft) {
+            case let (.some(actual), .some(saved)):
+                guard actual.note.utf8.elementsEqual(saved.note.utf8),
+                      actual.clips.count == saved.clips.count else {
+                    throw ProjectStoreError.externalModification
+                }
+                for (actualClip, savedClip) in zip(actual.clips, saved.clips) {
+                    guard actualClip.name.utf8.elementsEqual(savedClip.name.utf8),
+                          actualClip.note.utf8.elementsEqual(savedClip.note.utf8) else {
+                        throw ProjectStoreError.externalModification
+                    }
+                }
+            case (.none, .none):
+                break
+            default:
+                throw ProjectStoreError.externalModification
+            }
+        }
+        guard current.assets.count == manifest.assets.count else {
+            throw ProjectStoreError.externalModification
+        }
+        for (persisted, expected) in zip(current.assets, manifest.assets) {
+            guard persisted.name.utf8.elementsEqual(expected.name.utf8),
+                  persisted.note.utf8.elementsEqual(expected.note.utf8) else {
+                throw ProjectStoreError.externalModification
+            }
+        }
+        guard current.pendingAudioCaptures.count == manifest.pendingAudioCaptures.count else {
+            throw ProjectStoreError.externalModification
+        }
+        for (persisted, expected) in zip(current.pendingAudioCaptures, manifest.pendingAudioCaptures) {
+            guard persisted.name.utf8.elementsEqual(expected.name.utf8) else {
                 throw ProjectStoreError.externalModification
             }
         }
@@ -779,6 +989,12 @@ private enum ProjectFiles {
                     checkpoint: checkpoint)
     }
 
+    static func migrateVersionThree(_ legacy: ProjectManifest, original: Data, in root: Int32,
+                                    checkpoint: (@Sendable (ProjectMigrationCheckpoint) throws -> Void)?) throws -> ProjectManifest {
+        try migrate(legacy, original: original, in: root, backup: ProjectStore.versionThreeBackupFilename,
+                    checkpoint: checkpoint)
+    }
+
     private static func migrate(_ legacy: ProjectManifest, original: Data, in root: Int32, backup: String,
                                 checkpoint: (@Sendable (ProjectMigrationCheckpoint) throws -> Void)?) throws -> ProjectManifest {
         try validate(legacy, allowingLegacySchema: true)
@@ -844,6 +1060,7 @@ private enum ProjectFiles {
 
     static func publishExport(to destination: URL, parent: Int32,
                               checkpoint: (@Sendable (ProjectExportCheckpoint) throws -> Void)?,
+                              validate: ((URL) throws -> Void)? = nil,
                               write: (Int32) throws -> Void) throws {
         _ = try components(destination.lastPathComponent)
         // Apple documents this API for atomic safe-save on the destination's volume:
@@ -880,7 +1097,9 @@ private enum ProjectFiles {
         defer { Darwin.close(descriptor); _ = unlinkat(directory, name, 0) }
         try write(descriptor)
         guard fsync(descriptor) == 0 else { throw error() }
-        try checkpoint?(.contentDurable(location.appendingPathComponent(name)))
+        let temporaryFile = location.appendingPathComponent(name)
+        try validate?(temporaryFile)
+        try checkpoint?(.contentDurable(temporaryFile))
         guard renameatx_np(directory, name, parent, destination.lastPathComponent, UInt32(RENAME_EXCL)) == 0 else {
             if errno == EEXIST { throw ProjectStoreError.alreadyExists(destination.path) }
             throw error()
@@ -933,9 +1152,88 @@ private enum ProjectFiles {
         return result
     }
 
+    static func createAudioDirectory(in root: Int32) throws -> (UUID, Int32) {
+        var info = stat()
+        if fstatat(root, "Audio", &info, AT_SYMLINK_NOFOLLOW) != 0 {
+            guard errno == ENOENT else { throw error() }
+            if mkdirat(root, "Audio", 0o700) != 0, errno != EEXIST { throw error() }
+            guard fsync(root) == 0 else { throw error() }
+        }
+        let audio = try openRelativeDirectory("Audio", in: root)
+        defer { Darwin.close(audio) }
+        for _ in 0..<128 {
+            let id = UUID()
+            guard mkdirat(audio, id.uuidString, 0o700) == 0 else {
+                if errno == EEXIST { continue }
+                throw error()
+            }
+            guard fsync(audio) == 0 else { throw error() }
+            let directory = try openRelativeDirectory(id.uuidString, in: audio)
+            return (id, directory)
+        }
+        throw ProjectStoreError.io("无法分配唯一的音频目录")
+    }
+
+    static func audioMediaType(_ container: AudioContainer) -> String {
+        container == .wav ? "audio/wav" : "audio/x-caf"
+    }
+
+    static func requireRegisteredAudio(_ inspection: AudioInspection,
+                                       matches metadata: AudioAssetMetadata) throws {
+        guard inspection.format == metadata.format,
+              inspection.contentSHA256 == metadata.contentSHA256 else {
+            throw ProjectStoreError.externalModification
+        }
+    }
+
+    static func validateAudioName(_ name: String) throws {
+        guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              name.utf8.count <= AudioLimits.maximumNameBytes else {
+            throw ProjectStoreError.invalidProject("原声名称不能为空且不能超过 256 个 UTF-8 字节。")
+        }
+    }
+
+    static func validateAudioRange(_ range: AudioFrameRange, frameCount: Int64) throws {
+        guard range.startFrame >= 0, range.startFrame < range.endFrame,
+              range.endFrame <= frameCount else { throw AudioMediaError.invalidRange }
+    }
+
+    static func validateAudioFormat(_ format: AudioFormatInfo) throws {
+        guard format.sampleRate.isFinite, (8_000...96_000).contains(format.sampleRate),
+              format.channelCount == 1 || format.channelCount == 2,
+              (format.floatingPoint && format.bitDepth == 32) ||
+                (!format.floatingPoint && [16, 24, 32].contains(format.bitDepth)),
+              format.frameCount > 0 else {
+            throw ProjectStoreError.invalidProject("原声音频格式元数据无效。")
+        }
+        let duration = Double(format.frameCount) / format.sampleRate
+        guard duration.isFinite, duration <= AudioLimits.maximumSeconds else {
+            throw ProjectStoreError.invalidProject("原声音频时长元数据超出限制。")
+        }
+    }
+
+    static func validateAudioDraft(_ draft: AudioDraftDocument, asset: ProjectAsset?) throws {
+        guard let asset, let audio = asset.metadata.audio, asset.role == .original, asset.jobID == nil else {
+            throw ProjectStoreError.invalidProject("原声稿引用的原件不存在或类型不正确。")
+        }
+        guard draft.note.utf8.count <= AudioLimits.maximumNoteBytes,
+              draft.clips.count <= AudioLimits.maximumClips,
+              Set(draft.clips.map(\.id)).count == draft.clips.count,
+              draft.selectedClipID == nil || draft.clips.contains(where: { $0.id == draft.selectedClipID }) else {
+            throw ProjectStoreError.invalidProject("原声稿的备注、片段数量、编号或选择无效。")
+        }
+        for clip in draft.clips {
+            try validateAudioName(clip.name)
+            guard clip.note.utf8.count <= AudioLimits.maximumNoteBytes else {
+                throw ProjectStoreError.invalidProject("原声片段备注超过 16 KiB UTF-8 上限。")
+            }
+            try validateAudioRange(clip.range, frameCount: audio.format.frameCount)
+        }
+    }
+
     static func validate(_ value: ProjectManifest, allowingLegacySchema: Bool = false) throws {
         guard value.schemaVersion == ProjectManifest.currentSchemaVersion ||
-              (allowingLegacySchema && (value.schemaVersion == 1 || value.schemaVersion == 2)) else {
+              (allowingLegacySchema && (1...3).contains(value.schemaVersion)) else {
             throw ProjectStoreError.unsupportedSchema(value.schemaVersion)
         }
         guard !value.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
@@ -944,12 +1242,22 @@ private enum ProjectFiles {
               value.documents.contains(where: { $0.id == value.activeDocumentID }),
               Set(value.jobs.map(\.id)).count == value.jobs.count,
               Set(value.assets.map(\.id)).count == value.assets.count,
-              Set(value.assets.map(\.relativePath)).count == value.assets.count else {
+              Set(value.assets.map(\.relativePath)).count == value.assets.count,
+              Set(value.pendingAudioCaptures.map(\.id)).count == value.pendingAudioCaptures.count,
+              Set(value.pendingAudioCaptures.map(\.relativePath)).count == value.pendingAudioCaptures.count else {
             throw ProjectStoreError.invalidProject("项目名称为空，文档选择无效，或包含重复的文档、任务、作品编号。")
         }
         let documents = Set(value.documents.map(\.id))
         let jobs = Dictionary(uniqueKeysWithValues: value.jobs.map { ($0.id, $0) })
         let assets = Dictionary(uniqueKeysWithValues: value.assets.map { ($0.id, $0) })
+        let assetPaths = Set(value.assets.map(\.relativePath))
+        for reservation in value.pendingAudioCaptures {
+            try validateAudioName(reservation.name)
+            guard reservation.relativePath == "Audio/\(reservation.id.uuidString)/source.caf",
+                  assets[reservation.id] == nil, !assetPaths.contains(reservation.relativePath) else {
+                throw ProjectStoreError.invalidProject("待录音预约路径、编号或作品登记冲突。")
+            }
+        }
         for job in value.jobs {
             guard documents.contains(job.documentID), job.id == job.request.id,
                   value.documents.first(where: { $0.id == job.documentID })?.kind == .image,
@@ -977,6 +1285,29 @@ private enum ProjectFiles {
                     throw ProjectStoreError.unsafePath(asset.relativePath)
                 }
             }
+            let isDeclaredAudio = asset.metadata.audio != nil || asset.mediaType == "audio/wav" ||
+                asset.mediaType == "audio/x-caf" || asset.relativePath.hasPrefix("Audio/")
+            if isDeclaredAudio {
+                guard let audio = asset.metadata.audio, asset.jobID == nil, asset.role == .original,
+                      asset.metadata.width == nil, asset.metadata.height == nil,
+                      asset.metadata.bitDepth == nil, asset.metadata.colorSpace == nil else {
+                    throw ProjectStoreError.invalidProject("原声作品不能伪装为图片、任务结果或缺少音频元数据。")
+                }
+                try validateAudioName(asset.name)
+                guard asset.note.utf8.count <= AudioLimits.maximumNoteBytes else {
+                    throw ProjectStoreError.invalidProject("原声作品备注超过 16 KiB UTF-8 上限。")
+                }
+                try validateAudioFormat(audio.format)
+                let expectedExtension = audio.format.container == .wav ? "wav" : "caf"
+                guard asset.relativePath == "Audio/\(asset.id.uuidString)/source.\(expectedExtension)",
+                      asset.mediaType == audioMediaType(audio.format.container),
+                      audio.contentSHA256.count == 64,
+                      audio.contentSHA256.utf8.allSatisfy({ ($0 >= 48 && $0 <= 57) || ($0 >= 97 && $0 <= 102) }) else {
+                    throw ProjectStoreError.invalidProject("原声作品路径、媒体类型或 SHA-256 元数据无效。")
+                }
+            } else if asset.metadata.audio != nil {
+                throw ProjectStoreError.invalidProject("非音频作品不能包含音频元数据。")
+            }
             for dimension in [asset.metadata.width, asset.metadata.height, asset.metadata.bitDepth].compactMap({ $0 }) {
                 guard dimension > 0 else { throw ProjectStoreError.invalidProject("媒体元数据包含无效尺寸或位深。") }
             }
@@ -987,16 +1318,25 @@ private enum ProjectFiles {
             }
             switch document.kind {
             case .image:
-                guard document.textDraft == nil else {
+                guard document.textDraft == nil, document.audioDraft == nil,
+                      document.sourceAssetID.flatMap({ assets[$0]?.metadata.audio }) == nil else {
                     throw ProjectStoreError.invalidProject("图像文档不能包含文字稿。")
                 }
             case .text:
                 guard let textDraft = document.textDraft, textDraft.id == document.id,
+                      document.audioDraft == nil,
                       document.sourceAssetID == nil, document.adoptedAssetID == nil,
                       document.selectedAssetID == nil else {
                     throw ProjectStoreError.invalidProject("文字文档包含无效内容或图像引用。")
                 }
                 try TextDraftDocument.validate(textDraft.text)
+            case .audio:
+                guard document.textDraft == nil, let draft = document.audioDraft,
+                      draft.id == document.id, document.sourceAssetID == nil,
+                      document.adoptedAssetID == nil, document.selectedAssetID == nil else {
+                    throw ProjectStoreError.invalidProject("原声文档包含文字稿、图像引用或编号不匹配。")
+                }
+                try validateAudioDraft(draft, asset: assets[draft.assetID])
             }
             if let source = document.sourceAssetID, assets[source] == nil {
                 throw ProjectStoreError.invalidProject("探索文档引用的来源作品不存在。")
