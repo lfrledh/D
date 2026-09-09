@@ -77,3 +77,49 @@ Sol/high nonimplementer readonly review (thread01a08393-923b-7603-820c-e61b92c93
 Both reviewer contexts are observed Sol/high/read-only/approval-never; actual Xcode Git path avoided previous shim cache refusals. No failed/permission command or unpaired command in this reviewer chain, all own processes ended. Implementation attribution remains historical Terra/Sol + earlier Lead contributions; this turn Lead only qualified types, executed tests/diagnostic and maintained docs, Sol only reviewed. Full Lead/subscription cost unknown; no recalculation of history.
 
 Evidence run-20260909T002916Z-h08-type-finish includes qualified-test-proof.json, review-and-observation.json, timer-probe.log and final-receipt.json. Current source gets only four status/route documents; product baselinea406 remains. This batch's STORE code/fixtures still match its earlier b27 verified version; no new combined pass claimed. Source scheme and ordinary D four-file protection preserved; no push/signing/permission/model change. Full source/batch/candidate versions and source/index/uncommitted state in external final receipt.
+
+## 第一波基础验收完成与下一阶段计划（2026-09-09 JST）
+
+本节覆盖先前H08停点，不改写其失败和预算事实。用户批准本阶段直至验收/本地提交；H08 spec_revision4 / HUM1保持。本阶段验收出口为AUDIO组件收尾与STORE组合验证，声音工作台完整使用闭环仍是下一阶段。本轮没有派出新的实现Worker或重新证明并行；第一波真实双实施重叠264.14234秒的既有记录保留。
+
+### 实际完成与证据
+
+- AUDIO：Lead先在1fe3debe409fb2f3474624a18966609b691e4ee1保留旧生产实现，增加三项真实Timer回归；两种失败路径共四断言先失败。939b522e038fb74a3c640ff85db84956e7959f88仅增加重播前stopProgressTimer()一行，测试字节不再改动，21方法/2套件通过、无跳过。此前类型限定、容器/整数编码、精确采样率、滚动和Unicode组件要求继续通过；不将处理器/离屏覆盖写成真人控件操作。
+- 非实现者Sol/high只读复核接受timer差异，无剩余直接证据支持的组件阻塞；未独立执行测试。实际请求/turn_context/read-only目录一致，无本轮失败/未配对命令。历史Terra初交与修复1、Sol修复2/H08、Lead早期接管/类型修补和本次定时器修补分别归因；不是Terra独立通过。
+- STORE原候选30a2298d8789f3daeb9d50d70d76b09931d6482c及既有Lead非实现者审核复用。AUDIO939b522与本批26af2b6e9218696a85abae6bc77f6ada9996bd23保留历史合并为3a71327606bf9abb8a87f6bc2a4a384d7c7dc5be。仅AUDIO任务记录冲突，Lead核验新记录为旧文本完整超集后保留，产品/测试无冲突，不用整树ours/theirs。
+- 211ae96ec508e086d6ff901936cc524f02a20aa3增加现有Lead互通方法内的断言：导入并移走源→原件和片段导出→保存重开→持久化格式交给原生播放准备→帧边界seek→shutdown，重查原件字节不变。只有准备，没有调用play或录音；没有新增方法数量。该测试增量由Lead编写/执行，不属于之前AUDIO差异审核的独立覆盖。
+- 该组合实际UI包207方法/27套件，206通过、1项既有approvedInstalledWeightsRemainUnchanged可选检查跳过、零失败，rc0，62.324s。核心root package17方法/2套件，rc0，6.175s进程耗时。21定向包含在207内，不相加。旧图像/文字/PNG和迁移的CPU检查包含在组合中，真实模型/GUI并未重跑。测试入口是当前组合绝对路径/完整SHA，独立scratch/cache/config/security/TMPDIR在本run；没有目标py_compile或新依赖。
+
+持久证据：/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-HUM-ENTRY-01/run-20260909T040308Z-h08-acceptance。按需读start/pre-document-gates、regression-before-fix、timer-fix、review/lead-final-verification与review-response、candidate-merge、combination-test-subject、combination/lead-tests-full和foundation各request/result/output。final-receipt关联最终完整SHA和只文档变化；不为自引用amend，也不声称测试在之后文档提交重跑。
+
+### 下一阶段：声音工作台接线与真实使用闭环
+
+目标为用户能在独立项目导入或录制短原声，查看波形/试听/定位，保存帧范围片段与原样Unicode备注，安全关闭重开，分别导出原件与明确的片段副本。固定HUM1格式/时长/资源限制保持，不新增模型、手机、记谱或完整DAW；不以所有文字/图像增强为前置。以下是下一阶段任务边界，尚未派工；实施前在任务记录冻结实际API修订与允许文件、验收反例。
+
+| 顺序/所有者 | 具体范围 | 交付和依赖 |
+| --- | --- | --- |
+| 1，唯一服务Worker，建议Sol/high | Packages/UI/Sources/DWorkbench/State/ProjectSession.swift；必要的具体Audio/ProjectAudioController.swift；Project/ProjectStore.swift中有界只读检查接口及相应测试。Lead管理共享值类型与契约。 | 协调项目租约、原声导入/录音预留、异步身份、串行保存与关闭。先稳定接口再交UI，避免两人同时修改会话/存储。新增controller只承载已有设备与项目协调，不建新框架库。 |
+| 2，UI Worker，实际风险确定Terra或Sol | Packages/UI/Sources/UI/State/WorkbenchModel.swift、Views/WorkbenchView.swift、Views/AudioWorkbenchView.swift与对应测试；D/WorkbenchBootstrap.swift隔离调试入口由Lead统一装配。 | 依赖已接纳服务契约；波形/片段/备注与原生面板，明确保存回执和失败保留。不另写存储/设备/推理路径。非独立任务不为凑并行同时启动。 |
+| 3，Lead串行验收/集成 | 两个固定候选在隔离批次保留历史合并，相关CPU/完整隔离编译、非实现者复核和普通签名独立项目验证。 | 导入/录制各一份、试听/定位/片段/备注/原件与片段导出/关闭重开；既有图文PNG路径与旧schema安全迁移。实测前核对当前音频/GPU/GUI资源，保护普通D/真实作品。 |
+
+最小行为表与反例，供下一契约冻结：
+
+| 行为 | 必须遵守的结果/反例 |
+| --- | --- |
+| 项目和异步身份 | 每次open独立context UUID并携带项目ID/URL。关闭重开同一路径也不能接纳旧导入/波形/许可结果；取消后的迟到许可不得触发录音。 |
+| 导入与原声 | 在自有复制完成前保有来源授权；以实际文件格式/摘要验证，不从界面标签猜测。新原声创建新文档，图片/文字原件不替换。 |
+| 录音/关闭顺序 | 录音预留先持久化，再请求许可/启设备；麦克风能力未启用时不发请求。关闭先取消待许可或停止并完成录音文件/写入，再等待通用忙状态，避免等待自己。失败/非法部分素材保留并明确阻止或进入可见恢复，不猜测清理。 |
+| 草稿版本/保存 | 每次串行落盘revision为已持久化版本+1；不因多个视图事件跳号。未保存备注/片段输入阻止导航/关闭或要求显式放弃。保存失败保留缓冲；成功只确认该提交快照，不清除等待期间新输入。 |
+| UI保存回执 | 当前同步AudioWorkbenchActions不能假装异步保存已成功；如需Bool/async回执由Lead先冻结新装配契约，属于下一阶段要求，不追罚H08。原生面板等待前冻结片段/文档/context，回来重核。 |
+| 线程和试听 | 只读媒体检查放store actor，回到MainActor后核context/epoch才prepare；视图出现不得自动播放。单一播放/录音所有者，关闭完成前不泄漏定时器/设备或丢终态。 |
+| 其他模态 | 音频不能进入图片图库/PNG配方恢复与导出，显式image-only过滤；新schema迁移保留旧清单原字节，错误不覆盖既有作品。 |
+
+设备能力与真实门槛：当前未添加NSMicrophoneUsageDescription或audio-input entitlement，不修改Team/签名身份/TCC。先准备具体最小宿主能力与拒绝路径，再按用户已有范围/实际系统提示集中核对；用户密码本人输入，无全盘授权替代。真实录音/耳听/GUI需要独立项目、明确测试产物及当前窗口，旧测试空闲不能当永久授权。若暂无法执行，组件/编译/真实产品分别记录，未验收新路径保持隔离且不自动迁移用户项目。本次未运行App全构建或这些真实检查。
+
+### 恢复与提交检查点
+
+完成：H08关闭，STORE/AUDIO基础组件和组合CPU验收，历史/来源/人工清单/下一计划更新。未完成：以上共享接线、产品UI、宿主录音能力及真实产品验收。源本轮起点692ac43dc470f57f0be7ab868f0d943618099a03；源仅更新四份全局文档，产品仍a406af9cd8908a77ae2f013d29121164d6fc0745，不能把当前批次整体快进源而默认启用尚未产品验收的schema4。AUDIO受测939b522，文档结案19aa520ace3003af977de7b2957189cffce31e81；本批受测211ae96，其后只文档及保留历史合并，最终SHA写外部回执。
+
+个人scheme SHA256 ca3635d88aa5a15397b90e528667c66c0e6db7e596176e885c79d194b544206c，完整差异/索引/未暂存状态保持；普通D.app四个关键文件内容/大小/mtime保持，未动真实作品/模型/系统授权。自有测试/只读审核进程结束，未关闭用户D，未建立系统写锁。候选/证据均保留，本地未推送。本轮 reviewer precheck40.820s/review134.865s的逐阶段原始CLI turn.completed用量另存；缓存输入属于总输入，不重复加和，隐藏服务解析/完整Lead消耗/订阅费用unknown，不重算历史。
+
+下一动作是在已完成基础上细化并签发上述装配工作包，不再申请同一H08修补预算。到本检查点停止本轮；后续产品路径仍为原声→人工可改音符/八小节MUS0→一个受控器乐MUS1→紧接歌词演唱MUS2，TTS另列。音乐后端固定版本/精度、许可与M4/16GiB实测门槛按MUSIC_ROADMAP，当前没有模型研发或下载。
