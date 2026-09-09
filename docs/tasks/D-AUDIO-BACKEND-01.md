@@ -64,3 +64,19 @@ H10用户最初已保存退出且空闲。首个自有测试PID37620创建本轮
 下一动作：收到退出/当前空闲证据后，重新以专属UUID启动已复核测试版，在真实“开始录音”入口交用户点击麦克风提示；完成短录音/试听与H10保存导出恢复。同时按单重任务顺序完成SA3生成/变体/重绘/取消与重复释放，以及1.5B剩余验证。许可和下载无需重复审批；当前资源拒绝不是全盘权限缺口。全部原预算/失败/来源保留，不启动新产品批次。
 
 证据：H09 `/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-HUM-ENTRY-01/run-20260909T152120Z-h09-authorized`（preparation/label-fix、signed-build2、review/routing及两次review、app-run/result、protection-checkpoint）；H11 `/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-AUDIO-BACKEND-01/run-20260909T152406Z-h11-authorized`（authorization、download/environment/copies、environment-launch-diagnosis、generate失败、inspect-copies、retry-resource-rejection）；H12 `/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-AUDIO-BACKEND-01/run-20260909T151340Z-h12-authorized`（download-result、normal/report）。开发与用户媒体来源分开；本次Lead实施与实测，Sol只读审核；完整Lead/订阅消耗unknown。
+
+## 2026-09-10 真实设备续验：局部通过，两个独立停点
+
+最新用户“已退出且空闲”与启动前CUA全部D未运行核对后，恢复已批准串行验收。实际audio/text CLI仍为d1a5c26e3d2eda84ad7641a98b5aa33ce7f55407；当前候选d63cd39仅后续记录，不把新文档当重新测试。
+
+H11：固定SA3 small music6秒/8步/guidance1/seed42真实generate完成，首次进程6.82354秒；44100Hz双声道float32，264600帧，WAV SHA256 0aa169b29af568128b0c0f65e497b24f830a3699d77f363302dc3904f0f6a59b。MLX峰值1,611,041,742bytes；FP16 DiT/T5、FP32 codec/master未降精度。另一个实际repeat进程的两轮生成、variation和inpaint均完成，原始输入未变；重绘[88200,176400)范围内改变、外部PCM逐字节一致。独立两次同Python进程engine诊断清理后active18bytes/cache0，2轮未增长；18字节精确归属unknown，不写成0或常驻无泄漏保证。以上检查不是听感/专业质量验收。
+
+取消验收未通过：观察CLI真实progress1/8发送TERM，CLI终态130，但进度在provider已经发布output.wav后才集中交付。保持合法产物与原失败，不把“130”单独算通过；后续after-cancel/timeout/after-timeout入口尚未执行。单管道CPU对照反驳“一切FileHandle.bytes都会缓冲”的早期猜测；双管道且stderr暂时无内容时，bytes首stdout1.230秒，POSIX读0.227秒（子进程约0.2秒写出，约1.23秒结束）。现象与真实失败一致；Foundation内部调度细节未取证。此轮仅诊断，无生产代码修补。
+
+H12：既有两次真实中文改写之后，本轮同一Runtime两次生成1chunk后取消均完成，延迟0.03433/0.03685秒，每次release active/cache0，第二任务确在释放后启动。独立正常2次与取消2次分别记录，不混成同一测试通过率；1.5B模型库GUI、7/32B硬件/专业质量未验收。
+
+H09/H10：修正版普通签名实例到达Start后被AudioTransport祖先路径检查拒绝，未请求麦克风/未录音。另一次实际GUI成功导入上述WAV、播放、保存精确Unicode注释和片段1..<264599、原件导出字节一致、片段导出PCM对应264598帧；随后正常退出0。重启实例时Mac锁定，GUI重开与真人听感仍待确认；精确核对自有PID40236后TERM退出-15，项目字节不变，没有关闭普通D。旧reservation保留，不猜测删除。
+
+预算停点/待批准有界方案：Runtime原初交+两修复+一次Lead接管已消耗，本次真实双管道问题不是偷偷追加第三轮。建议仅AudioProviderProcess.swift及直接AudioBackendTests回归，改为各自及时且有界的管道读取，保留事件/解析/输出预算、完整drain、TERM/KILL和租约语义。增加silentstderr/分段stdout在退出前被消费的真实子进程反例，复验取消/下一任务/timeout/输出失败及既有CPU；真实SA3保持同配置复验。H09另在原HUM任务记录列出路径检查限定方案。两项均需明确额外收尾授权，不重置原预算；若有界修补后仍失败停报，重要实现由非实现者只读复核。不改精度/签名/权限/公共推理契约，不默认源集成。
+
+证据：AUDIO run-20260909T152406Z-h11-authorized/live-acceptance-checkpoint.json，generate-copies、real-operations、memory-lifetime、cancel-handoff/cancel-denoising、progress-pipe-diagnosis和progress-two-pipe-diagnosis；H12 run-20260909T151340Z-h12-authorized/cancel/lead-verification.json；HUM run-20260909T152120Z-h09-authorized/h10-import-export-verification.json、recording-path-failure.json、review/path-response.md、path-routing.json、live-protection-checkpoint.json。本次Lead实测与诊断，无生产重写；Sol/high只读路径诊断433.486秒（不等于独立执行测试），完整Lead/订阅费用unknown，未重算历史用量。所有当前自有子进程结束；未宣称系统写锁。个人scheme未暂存且内容/索引、普通D四文件保持。最终文档提交/推送和恢复版本见本run live-final-receipt.json。
