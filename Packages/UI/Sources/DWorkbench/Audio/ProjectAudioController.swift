@@ -37,6 +37,8 @@ public final class ProjectAudioController {
     public private(set) var clipNameInput = ""
     public private(set) var clipNoteInput = ""
     public private(set) var clipRangeInput: AudioFrameRange?
+    /// Byte-sensitive editor generation also provides an Observation invalidation token.
+    public private(set) var editorRevision: UInt64 = 0
 
     public var waveform: [AudioPeak] { inspection?.waveform ?? [] }
     public var metadata: AudioAssetMetadata? { inspection?.metadata }
@@ -46,6 +48,7 @@ public final class ProjectAudioController {
             || transport.state == .requestingPermission || transport.state == .recording
     }
     public var hasUnsubmittedInput: Bool {
+        _ = editorRevision
         guard let document else { return false }
         return !sameUTF8(noteInput, document.note) || !clipNameInput.isEmpty
             || !clipNoteInput.isEmpty || clipRangeInput != nil
@@ -71,7 +74,6 @@ public final class ProjectAudioController {
     @ObservationIgnored private var activeCaptureID: UUID?
     @ObservationIgnored private var activeCaptureURL: URL?
     @ObservationIgnored private var captureGeneration: UInt64 = 0
-    @ObservationIgnored private var editorGeneration: UInt64 = 0
     @ObservationIgnored private var isActive = true
     @ObservationIgnored private var captureFailureBlocksNavigation = false
     @ObservationIgnored private var isStartingRecording = false
@@ -104,7 +106,7 @@ public final class ProjectAudioController {
             clipNameInput = ""
             clipNoteInput = ""
             clipRangeInput = nil
-            editorGeneration &+= 1
+            editorRevision &+= 1
         } else if let next {
             document = next
         }
@@ -121,7 +123,7 @@ public final class ProjectAudioController {
     public func setNoteInput(_ value: String, contextID: UUID, documentID: UUID) -> Bool {
         guard admissionsOpen, matches(contextID: contextID, documentID: documentID) else { return false }
         noteInput = value
-        editorGeneration &+= 1
+        editorRevision &+= 1
         errorMessage = nil
         return true
     }
@@ -134,7 +136,7 @@ public final class ProjectAudioController {
         clipNameInput = name
         clipRangeInput = range
         clipNoteInput = note
-        editorGeneration &+= 1
+        editorRevision &+= 1
         errorMessage = nil
         return true
     }
@@ -147,7 +149,7 @@ public final class ProjectAudioController {
         clipNameInput = ""
         clipNoteInput = ""
         clipRangeInput = nil
-        editorGeneration &+= 1
+        editorRevision &+= 1
         errorMessage = nil
         return true
     }
@@ -157,7 +159,7 @@ public final class ProjectAudioController {
             rejectStaleEditor(); return false
         }
         let snapshot = noteInput
-        let generation = editorGeneration
+        let generation = editorRevision
         return await enqueue(.note(snapshot), contextID: contextID, documentID: documentID,
                              editorGeneration: generation)
     }
@@ -169,7 +171,7 @@ public final class ProjectAudioController {
             return false
         }
         let clip = AudioClip(name: clipNameInput, range: range, note: clipNoteInput)
-        let generation = editorGeneration
+        let generation = editorRevision
         return await enqueue(.addClip(clip), contextID: contextID, documentID: documentID,
                              editorGeneration: generation)
     }
@@ -327,13 +329,22 @@ public final class ProjectAudioController {
 
     public func finishRecording() async -> Bool {
         guard isActive else { return false }
+        let wasRequestingPermission = transport.state == .requestingPermission
         do {
-            let wasRequestingPermission = transport.state == .requestingPermission
             _ = try transport.finishRecording()
             if wasRequestingPermission { permissionRequestDetached = true }
         } catch {
             report(error, context: "录音设备已停止，但文件需要稍后恢复")
             captureFailureBlocksNavigation = true
+        }
+        if wasRequestingPermission, finalizeTask == nil {
+            // AudioTransport may restore an older recordedURL and `.recorded` state. This
+            // cancellation owns no device result, so detach only the new durable reservation.
+            permissionRequestDetached = true
+            captureGeneration &+= 1
+            activeCaptureID = nil
+            activeCaptureURL = nil
+            return true
         }
         guard let task = finalizeTask else {
             if transport.state == .idle, activeCaptureID != nil {
@@ -355,6 +366,26 @@ public final class ProjectAudioController {
             return false
         }
         return await awaitFinalize(scheduleFinalize(id: id, expectedURL: nil))
+    }
+
+    /// A narrow transition lane for retrying one already registered failed capture.
+    func prepareForRecovery(id: UUID) async -> Bool {
+        guard isActive, admissionsOpen,
+              pendingCaptures.contains(where: { $0.id == id }),
+              !isStartingRecording, finalizeTask == nil,
+              transport.state != .recording, transport.state != .requestingPermission else {
+            errorMessage = "待恢复录音当前不能安全重试；请先提交编辑并停止其他音频操作。"
+            return false
+        }
+        admissionsOpen = false
+        transport.stopPlayback()
+        await writeTail?.value
+        guard !hasUnsubmittedInput else {
+            admissionsOpen = true
+            errorMessage = navigationBlockMessage
+            return false
+        }
+        return true
     }
 
     /// Allows close while retaining the registered reservation and raw bytes for later recovery.
@@ -477,11 +508,11 @@ public final class ProjectAudioController {
                   saved == next else { return false }
             document = saved
             publish(updated)
-            if case .addClip = mutation, acknowledgedGeneration == editorGeneration {
+            if case .addClip = mutation, acknowledgedGeneration == editorRevision {
                 clipNameInput = ""
                 clipNoteInput = ""
                 clipRangeInput = nil
-                editorGeneration &+= 1
+                editorRevision &+= 1
             }
             errorMessage = nil
             return true

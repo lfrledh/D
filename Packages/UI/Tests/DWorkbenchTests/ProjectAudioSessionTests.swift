@@ -1,5 +1,7 @@
 import DInference
 import Foundation
+import Observation
+import Synchronization
 import Testing
 @testable import DWorkbench
 
@@ -216,15 +218,25 @@ struct ProjectAudioSessionTests {
         #expect(!composed.utf8.elementsEqual(decomposed.utf8))
 
         #expect(subject.setAudioNoteInput(composed, contextID: context, documentID: documentID))
+        #expect(await subject.saveAudioNote(contextID: context, documentID: documentID))
+        let observed = Mutex(false)
+        withObservationTracking {
+            _ = audio.hasUnsubmittedInput
+        } onChange: {
+            observed.withLock { $0 = true }
+        }
+        #expect(subject.setAudioNoteInput(decomposed, contextID: context, documentID: documentID))
+        #expect(observed.withLock { $0 })
+        #expect(audio.isDirty)
         let first = Task { await subject.saveAudioNote(contextID: context, documentID: documentID) }
         await Task.yield()
-        #expect(subject.setAudioNoteInput(decomposed, contextID: context, documentID: documentID))
-        #expect(audio.isDirty)
+        let newest = decomposed + "!"
+        #expect(subject.setAudioNoteInput(newest, contextID: context, documentID: documentID))
         let second = Task { await subject.saveAudioNote(contextID: context, documentID: documentID) }
         #expect(await first.value)
         #expect(await second.value)
-        #expect(audio.document?.revision == 2)
-        #expect(audio.document?.note.utf8.elementsEqual(decomposed.utf8) == true)
+        #expect(audio.document?.revision == 3)
+        #expect(audio.document?.note.utf8.elementsEqual(newest.utf8) == true)
         #expect(!audio.isDirty)
     }
 
@@ -344,6 +356,41 @@ struct ProjectAudioSessionTests {
     }
 
     @Test
+    func cancellingSecondPermissionAfterSuccessfulRecordingKeepsOldRecordedURLButNotNewOwnership() async throws {
+        let f = try fixture("SecondPermission")
+        defer { cleanup(f) }
+        let factory = SessionAudioFactory()
+        let subject = session(f, factory: factory, recording: true)
+        await subject.createProject(at: f.project)
+
+        #expect(await subject.startAudioRecording(name: "first"))
+        #expect(await subject.finishAudioRecording())
+        let controller = try #require(subject.audio)
+        let oldContext = controller.contextID
+        let oldRecordedURL = try #require(controller.transport.recordedURL)
+        #expect(controller.transport.state == .recorded)
+        #expect(factory.recordings.count == 1)
+
+        factory.suspendPermission = true
+        let second = Task { await subject.startAudioRecording(name: "second pending") }
+        try await waitUntil { controller.transport.state == .requestingPermission }
+        let secondReservation = try #require(subject.manifest?.pendingAudioCaptures.first)
+        #expect(secondReservation.id != subject.manifest?.assets.first?.id)
+        #expect(await subject.finishAudioRecording())
+        #expect(controller.transport.state == .recorded)
+        #expect(controller.transport.recordedURL == oldRecordedURL)
+        #expect(await subject.requestClose())
+
+        factory.resolvePermission(true)
+        #expect(!(await second.value))
+        #expect(factory.recordings.count == 1)
+        await subject.openProject(at: f.project)
+        #expect(subject.audio?.contextID != oldContext)
+        #expect(subject.manifest?.pendingAudioCaptures.contains(secondReservation) == true)
+        #expect(subject.manifest?.assets.contains { $0.id == secondReservation.id } == false)
+    }
+
+    @Test
     func recordingStopsBeforeNavigationAndPreparedPlaybackIsReleasedBeforeRecording() async throws {
         let f = try fixture("Navigation")
         defer { cleanup(f) }
@@ -399,6 +446,16 @@ struct ProjectAudioSessionTests {
         #expect(try Data(contentsOf: raw) == Data("truncated".utf8))
         #expect(subject.manifest?.pendingAudioCaptures.contains(reservation) == true)
         #expect(!(await subject.requestClose()))
+
+        let controller = try #require(subject.audio)
+        let currentDocument = try #require(controller.documentID)
+        #expect(subject.setAudioNoteInput("blocks recovery", contextID: controller.contextID,
+                                          documentID: currentDocument))
+        #expect(!(await subject.retryPendingAudioCapture(id: reservation.id)))
+        #expect(subject.manifest?.pendingAudioCaptures.contains(reservation) == true)
+        #expect(!(await subject.retryPendingAudioCapture(id: UUID())))
+        #expect(subject.discardAudioEditorInput(contextID: controller.contextID,
+                                                documentID: currentDocument))
 
         try AudioTestMedia.writePCM(to: raw, samples: [[0, 0.1, 0.2, 0.3]],
                                     sampleRate: 8_000, bitDepth: 32, floatingPoint: true)

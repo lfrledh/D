@@ -772,11 +772,20 @@ public final class ProjectSession {
     }
 
     public func retryPendingAudioCapture(id: UUID) async -> Bool {
-        guard navigationReady(), let store, let audio, !isChangingProject, !closePending else { return false }
+        guard !isTextWorking, !isRegisteringTextModel, text?.hasPendingCandidate != true,
+              let store, let audio, !isChangingProject, !closePending else { return false }
         isChangingProject = true
         defer { isChangingProject = false }
-        do { try await prepareAudioNavigation(); try await flushDraft(to: store) }
-        catch { audio.resumeAdmissions(); report(error, context: "当前文档尚未安全保存，不能恢复录音"); return false }
+        guard await audio.prepareForRecovery(id: id) else {
+            if let message = audio.errorMessage { errorMessage = message }
+            return false
+        }
+        do { try await flushDraft(to: store) }
+        catch {
+            audio.resumeAdmissions()
+            report(error, context: "当前文档尚未安全保存，不能恢复录音")
+            return false
+        }
         let result = await audio.retryPendingCapture(id: id)
         if !result {
             audio.resumeAdmissions()
