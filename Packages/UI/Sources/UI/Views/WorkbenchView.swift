@@ -211,8 +211,10 @@ public struct WorkbenchView: View {
     }
 
     private var audioActions: AudioWorkbenchProductionActions {
-        AudioWorkbenchProductionActions(
-            importOriginal: { Task { await model.importAudio() } },
+        let contextID = model.projectSession.audio?.contextID
+        let documentID = model.activeDocumentID
+        return AudioWorkbenchProductionActions(
+            importOriginal: contextID.map { model.audioImportAction(contextID: $0, documentID: documentID) } ?? {},
             startRecording: { Task { await model.startAudioRecording() } },
             finishRecording: { Task { await model.finishAudioRecording() } },
             refreshInspection: { contextID, documentID in
@@ -413,9 +415,7 @@ private struct ArtworkSidebar: View {
         let contextID = audio.contextID
         let renderDocumentID = model.activeDocumentID
         sidebarHeading("声音")
-        Button {
-            Task { await model.importAudio() }
-        } label: {
+        Button(action: model.audioImportAction(contextID: contextID, documentID: renderDocumentID)) {
             Label("导入原声…", systemImage: "waveform.badge.plus")
                 .frame(maxWidth: .infinity, alignment: .leading).padding(8)
         }

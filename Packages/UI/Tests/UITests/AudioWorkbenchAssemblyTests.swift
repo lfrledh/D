@@ -51,6 +51,7 @@ private final class NoHardwareAudioFactory: AudioTransportDeviceFactory {
 
 @MainActor
 private final class AssemblyPanels: AudioWorkbenchPanelProviding {
+    private(set) var importRequests = 0
     var nextImport: URL?
     var nextExport: URL?
     var suspendImport = false
@@ -60,6 +61,7 @@ private final class AssemblyPanels: AudioWorkbenchPanelProviding {
     private(set) var exportContinuation: CheckedContinuation<URL?, Never>?
 
     func chooseAudioImport() async -> URL? {
+        importRequests += 1
         if suspendImport {
             return await withCheckedContinuation { importContinuation = $0 }
         }
@@ -424,6 +426,34 @@ struct AudioWorkbenchAssemblyTests {
         let identifiers = Set(descendants(host).compactMap { $0.accessibilityIdentifier() })
         #expect(identifiers.contains("audio-waveform"))
         #expect(identifiers.contains("audio-prepared-range"))
+    }
+
+    @Test
+    func staleRenderedImportDoesNotOpenPanelOrAttachToReplacementDocument() async throws {
+        let root = try root()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let panels = AssemblyPanels()
+        let factory = NoHardwareAudioFactory()
+        let model = model(panels: panels, factory: factory)
+        await model.createProject(at: root.appendingPathComponent("Origin.dproject"))
+        let contextID = try #require(model.projectSession.audio?.contextID)
+        let originalID = try #require(model.activeDocumentID)
+        let staleAction = model.audioImportAction(contextID: contextID, documentID: originalID)
+        await model.projectSession.createDocument(name: "替代文档")
+        let replacementID = try #require(model.activeDocumentID)
+        #expect(replacementID != originalID)
+        let source = root.appendingPathComponent("should-not-import.wav")
+        let bytes = makePCM16WAV()
+        try bytes.write(to: source)
+        panels.nextImport = source
+        let priorCount = panels.importRequests
+        staleAction()
+        let settled = await waitUntil { panels.importRequests != priorCount || model.errorMessage != nil }
+        #expect(settled)
+        #expect(panels.importRequests == priorCount)
+        #expect(model.activeDocumentID == replacementID)
+        #expect(model.documents.allSatisfy { $0.kind != .audio })
+        #expect(try Data(contentsOf: source) == bytes)
     }
 
     @Test

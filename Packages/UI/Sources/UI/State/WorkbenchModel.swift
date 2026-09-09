@@ -194,6 +194,11 @@ public final class WorkbenchModel {
 
     public func clearError() { projectSession.clearError() }
 
+    /// Shared native import action; the rendered origin is supplied by the caller.
+    func audioImportAction(contextID: UUID, documentID: UUID?) -> () -> Void {
+        { [weak self] in Task { await self?.importAudio() } }
+    }
+
     public func importAudio() async {
         guard !isChoosingLocation, let projectID = manifest?.id, let projectURL,
               let activeDocumentID,
