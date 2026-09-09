@@ -34,9 +34,13 @@ public final class ProjectSession {
     }
     public var visibleAssets: [ProjectAsset] {
         guard let manifest else { return [] }
-        if showingAllArtworks { return manifest.assets }
+        guard activeDocument?.kind == .image || showingAllArtworks else { return [] }
+        if showingAllArtworks { return manifest.assets.filter { $0.mediaType == "image/png" } }
         let jobs = Set(documentJobs.map(\.id))
-        return manifest.assets.filter { $0.id == activeDocument?.sourceAssetID || $0.jobID.map(jobs.contains) == true }
+        return manifest.assets.filter {
+            $0.mediaType == "image/png"
+                && ($0.id == activeDocument?.sourceAssetID || $0.jobID.map(jobs.contains) == true)
+        }
     }
     public var errorMessage: String?
     public private(set) var isChangingProject = false
@@ -46,6 +50,7 @@ public final class ProjectSession {
     public private(set) var assetURLs: [UUID: URL] = [:]
     public private(set) var activeJobIDs: Set<UUID> = []
     public private(set) var text: ProjectTextController?
+    public private(set) var audio: ProjectAudioController?
     public private(set) var textModelStatus = "选择已安装的 Qwen2.5 0.5B Instruct 4-bit 文件夹。"
     public private(set) var isTextWorking = false
     public private(set) var isRegisteringTextModel = false
@@ -57,7 +62,7 @@ public final class ProjectSession {
     @ObservationIgnored private var textModelLease: LocationAccess.Lease?
     @ObservationIgnored private var textWork: Task<Void, Never>?
     @ObservationIgnored private var textContextID = UUID()
-    public var isBusy: Bool { !activeJobIDs.isEmpty || isTextWorking }
+    public var isBusy: Bool { !activeJobIDs.isEmpty || isTextWorking || audio?.isBusy == true }
     public var canGenerate: Bool {
         manifest != nil && activeDocument?.kind == .image && !isTextWorking && ((selectedModelID != nil && selectedModelReady) || modelLease != nil)
         && !isChangingProject && !showingAllArtworks && !closePending && pendingSaves.isEmpty
@@ -73,6 +78,9 @@ public final class ProjectSession {
     @ObservationIgnored private let closeDecision: @MainActor @Sendable () async -> ProjectCloseDecision
     @ObservationIgnored public let modelLibrary: ModelLibrary?
     @ObservationIgnored private let settings: UserDefaults
+    @ObservationIgnored private let audioEnabled: Bool
+    @ObservationIgnored private let audioRecordingEnabled: Bool
+    @ObservationIgnored private let injectedAudioTransport: AudioTransport?
     @ObservationIgnored private let access = LocationAccess()
     @ObservationIgnored private var projectLease: LocationAccess.Lease?
     @ObservationIgnored private var modelLease: LocationAccess.Lease?
@@ -103,11 +111,17 @@ public final class ProjectSession {
     public init(sessionFactory: @escaping @Sendable (URL) async throws -> WorkbenchSession,
                 settings: UserDefaults = .standard,
                 modelLibrary: ModelLibrary? = nil,
+                audioEnabled: Bool = false,
+                audioRecordingEnabled: Bool = false,
+                audioTransport: AudioTransport? = nil,
                 closeDecision: @escaping @MainActor @Sendable () async -> ProjectCloseDecision = { .keepOpen }) {
         self.closeDecision = closeDecision
         self.factory = sessionFactory
         self.settings = settings
         self.modelLibrary = modelLibrary
+        self.audioEnabled = audioEnabled
+        self.audioRecordingEnabled = audioRecordingEnabled
+        self.injectedAudioTransport = audioTransport
         if modelLibrary != nil { modelStatus = "请在模型库中安装或选择可用模型。" }
     }
 
@@ -157,6 +171,12 @@ public final class ProjectSession {
         await selectionWriteTail?.value
         await metadataWriteTail?.value
         if activeDocument?.kind == .text { return }
+        if activeDocument?.kind == .audio {
+            guard await audio?.prepareForNavigation() != false else {
+                throw ProjectStoreError.invalidTransition
+            }
+            return
+        }
         guard let documentID = activeDocumentID else { return }
         draftWriter?.cancel()
         await draftWriter?.value
@@ -185,6 +205,7 @@ public final class ProjectSession {
                 }
             }
         } else { text = nil }
+        if let manifest { audio?.synchronize(manifest) }
         applyingDraft = true
         defer { applyingDraft = false }
         let value = activeDocument?.draft ?? .init()
@@ -280,7 +301,8 @@ public final class ProjectSession {
     }
 
     private func relocateOpenProject(_ previousStore: ProjectStore, lease: LocationAccess.Lease) async {
-        guard !isRegisteringTextModel, await drainForClose(), text?.hasPendingCandidate != true else {
+        guard !isRegisteringTextModel, text?.hasPendingCandidate != true,
+              await audio?.prepareForNavigation() != false, await drainForClose() else {
             await access.release(lease)
             errorMessage = "请先完成模型校验并处理文字候选，再重新定位项目。"
             return
@@ -342,6 +364,21 @@ public final class ProjectSession {
         projectURL = lease.url
         settings.set(lease.bookmark, forKey: Self.projectBookmarkKey)
         manifest = await candidate.snapshot()
+        if audioEnabled {
+            let contextID = UUID()
+            let transport = injectedAudioTransport ?? AudioTransport(recordingEnabled: audioRecordingEnabled)
+            audio = ProjectAudioController(contextID: contextID, store: candidate,
+                                           transport: transport,
+                                           recordingEnabled: audioRecordingEnabled) { [weak self] updated in
+                guard let self, self.audio?.contextID == contextID else { return }
+                let previousDocumentID = self.activeDocumentID
+                self.applyManifest(updated)
+                if previousDocumentID != self.activeDocumentID { self.loadActiveDocument() }
+            }
+            audio?.synchronize(manifest!)
+        } else {
+            audio = nil
+        }
         showingAllArtworks = false
         automaticResultSelectionEnabled = true
         loadActiveDocument()
@@ -665,7 +702,7 @@ public final class ProjectSession {
     }
 
     public func createDocument(name: String = "新创作") async {
-        guard textNavigationReady() else { return }
+        guard navigationReady() else { return }
         guard let store, !isChangingProject, !closePending else { return }
         isChangingProject = true
         defer { isChangingProject = false }
@@ -677,13 +714,116 @@ public final class ProjectSession {
         } catch { report(error, context: "无法新建创作；当前输入已保留") }
     }
 
+    /// Imports into project ownership and switches only after all current editor state is safe.
+    public func importAudio(at url: URL, name: String) async -> Bool {
+        guard navigationReady(), let store, let audio, !isChangingProject, !closePending else { return false }
+        isChangingProject = true
+        defer { isChangingProject = false }
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        do {
+            try await flushDraft(to: store)
+            let contextID = audio.contextID
+            let updated = try await store.importAudio(at: url, name: name)
+            guard self.store === store, self.audio?.contextID == contextID else { return false }
+            applyManifest(updated)
+            showingAllArtworks = false
+            loadActiveDocument()
+            guard let documentID = activeDocumentID else { return false }
+            return await audio.refreshInspection(contextID: contextID, documentID: documentID)
+        } catch {
+            report(error, context: "原声导入失败；来源和当前文档均已保留")
+            return false
+        }
+    }
+
+    public func startAudioRecording(name: String) async -> Bool {
+        guard audioRecordingEnabled else {
+            errorMessage = "无法开始录音。\n当前项目会话未启用录音能力。"
+            return false
+        }
+        guard navigationReady(), let store, let audio, !isChangingProject, !closePending else { return false }
+        do { try await flushDraft(to: store) }
+        catch { report(error, context: "当前文档尚未安全保存，不能开始录音"); return false }
+        let result = await audio.startRecording(name: name)
+        if !result, let message = audio.errorMessage { errorMessage = message }
+        return result
+    }
+
+    public func finishAudioRecording() async -> Bool {
+        guard let audio, !closePending else { return false }
+        let result = await audio.finishRecording()
+        if !result, let message = audio.errorMessage { errorMessage = message }
+        return result
+    }
+
+    public func retryPendingAudioCapture(id: UUID) async -> Bool {
+        guard navigationReady(), let store, let audio, !isChangingProject, !closePending else { return false }
+        do { try await flushDraft(to: store) }
+        catch { report(error, context: "当前文档尚未安全保存，不能恢复录音"); return false }
+        let result = await audio.retryPendingCapture(id: id)
+        if !result, let message = audio.errorMessage { errorMessage = message }
+        return result
+    }
+
+    @discardableResult
+    public func keepPendingAudioCaptureForRecovery(id: UUID) -> Bool {
+        audio?.keepPendingCaptureForRecovery(id: id) ?? false
+    }
+
+    @discardableResult
+    public func setAudioNoteInput(_ value: String, contextID: UUID, documentID: UUID) -> Bool {
+        audio?.setNoteInput(value, contextID: contextID, documentID: documentID) ?? false
+    }
+
+    @discardableResult
+    public func setAudioClipInput(name: String, range: AudioFrameRange?, note: String = "",
+                                  contextID: UUID, documentID: UUID) -> Bool {
+        audio?.setClipInput(name: name, range: range, note: note,
+                            contextID: contextID, documentID: documentID) ?? false
+    }
+
+    @discardableResult
+    public func discardAudioEditorInput(contextID: UUID, documentID: UUID) -> Bool {
+        audio?.discardUnsubmittedInput(contextID: contextID, documentID: documentID) ?? false
+    }
+
+    public func saveAudioNote(contextID: UUID, documentID: UUID) async -> Bool {
+        await audio?.saveNote(contextID: contextID, documentID: documentID) ?? false
+    }
+
+    public func addAudioClip(contextID: UUID, documentID: UUID) async -> Bool {
+        await audio?.addClip(contextID: contextID, documentID: documentID) ?? false
+    }
+
+    public func selectFullAudio(contextID: UUID, documentID: UUID) async -> Bool {
+        await audio?.selectFullAudio(contextID: contextID, documentID: documentID) ?? false
+    }
+
+    public func selectAudioClip(id: UUID, contextID: UUID, documentID: UUID) async -> Bool {
+        await audio?.selectClip(id: id, contextID: contextID, documentID: documentID) ?? false
+    }
+
+    public func refreshActiveAudioInspection(contextID: UUID, documentID: UUID) async -> Bool {
+        await audio?.refreshInspection(contextID: contextID, documentID: documentID) ?? false
+    }
+
+    public func exportOriginalAudio(to url: URL, contextID: UUID, documentID: UUID) async -> Bool {
+        await audio?.exportOriginal(to: url, contextID: contextID, documentID: documentID) ?? false
+    }
+
+    public func exportAudioClip(id: UUID, to url: URL,
+                                contextID: UUID, documentID: UUID) async -> Bool {
+        await audio?.exportClip(id: id, to: url, contextID: contextID, documentID: documentID) ?? false
+    }
+
     public func prepareRecipePNG(assetID: UUID, disclosure: RecipeDisclosure) async throws -> Data {
         guard let store, !isChangingProject, !closePending else { throw ProjectStoreError.invalidTransition }
         return try await store.prepareRecipePNG(assetID: assetID, disclosure: disclosure)
     }
 
     public func createRecipeDocument(_ recipe: GenerationRecipe, expectedProjectID: UUID) async -> Bool {
-        guard textNavigationReady() else { return false }
+        guard navigationReady() else { return false }
         guard let store, manifest?.id == expectedProjectID, !isChangingProject, !closePending else { return false }
         isChangingProject = true
         defer { isChangingProject = false }
@@ -705,7 +845,7 @@ public final class ProjectSession {
     }
 
     public func selectDocument(id: UUID) async {
-        guard textNavigationReady() else { return }
+        guard navigationReady() else { return }
         guard let store, !isChangingProject, !closePending else { return }
         isChangingProject = true
         defer { isChangingProject = false }
@@ -718,7 +858,7 @@ public final class ProjectSession {
     }
 
     public func showAllArtworks() async {
-        guard textNavigationReady() else { return }
+        guard navigationReady() else { return }
         guard let store, !isChangingProject, !closePending else { return }
         isChangingProject = true
         defer { isChangingProject = false }
@@ -804,7 +944,7 @@ public final class ProjectSession {
     }
 
     public func forkDocument(from assetID: UUID, acknowledgeCurrentModel: Bool = false) async {
-        guard textNavigationReady() else { return }
+        guard navigationReady() else { return }
         guard let store, !isChangingProject, !closePending,
               let asset = manifest?.assets.first(where: { $0.id == assetID }),
               let job = manifest?.jobs.first(where: { $0.id == asset.jobID }),
@@ -857,6 +997,7 @@ public final class ProjectSession {
         // hide a later saved artwork or queued request.
         guard manifest?.id == updated.id, updated.revision >= (manifest?.revision ?? 0) else { return }
         manifest = updated
+        audio?.synchronize(updated)
     }
 
     public func closeProject() async { _ = await requestClose() }
@@ -872,6 +1013,10 @@ public final class ProjectSession {
         closePending = true
         isChangingProject = true
         defer { closePending = false; isChangingProject = false }
+        guard await audio?.prepareForNavigation() != false else {
+            if let message = audio?.errorMessage { errorMessage = message }
+            return false
+        }
         guard await drainForClose(decision: decision) else { return false }
         return await closeDrainedProject()
     }
@@ -895,6 +1040,10 @@ public final class ProjectSession {
         closePending = true
         isChangingProject = true
         defer { closePending = false; isChangingProject = false }
+        guard await audio?.prepareForNavigation() != false else {
+            if let message = audio?.errorMessage { errorMessage = message }
+            return false
+        }
         await cancelTextRewrite()
         for id in activeJobIDs { await cancel(id) }
         while isBusy { try? await Task.sleep(for: .milliseconds(100)) }
@@ -926,6 +1075,8 @@ public final class ProjectSession {
             // Admission stays closed during this entire operation. Preserve a usable runtime
             // if a preceding disk/cleanup operation fails and the user needs to retry.
             if let session { await session.shutdown() }
+            audio?.deactivateAfterClose()
+            audio = nil
             self.store = nil
             session = nil
             await access.release(textModelLease)
@@ -962,16 +1113,20 @@ public final class ProjectSession {
     }
 
 
-    private func textNavigationReady() -> Bool {
+    private func navigationReady() -> Bool {
         guard !isTextWorking, !isRegisteringTextModel, text?.hasPendingCandidate != true else {
             errorMessage = "请先取消并等待改写结束，或接受／拒绝文字候选，再切换文档。"
+            return false
+        }
+        if let message = audio?.navigationBlockMessage {
+            errorMessage = message
             return false
         }
         return true
     }
 
     public func createTextDocument(name: String = "新文稿") async {
-        guard textNavigationReady(), let store, !isChangingProject, !closePending,
+        guard navigationReady(), let store, !isChangingProject, !closePending,
               session?.textBackendID != nil else { return }
         isChangingProject = true
         defer { isChangingProject = false }

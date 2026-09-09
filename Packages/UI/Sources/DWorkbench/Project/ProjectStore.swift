@@ -328,6 +328,25 @@ public actor ProjectStore {
         return rootURL.appendingPathComponent(asset.relativePath)
     }
 
+    /// Re-reads and verifies the registered original before returning display-only audio data.
+    /// The service exposes a resource URL plus bounded metadata, never the media bytes themselves.
+    public func inspectAudio(documentID: UUID) throws -> ProjectAudioInspection {
+        let index = try documentIndex(documentID)
+        guard manifest.documents[index].kind == .audio,
+              let draft = manifest.documents[index].audioDraft,
+              draft.id == documentID,
+              let asset = manifest.assets.first(where: { $0.id == draft.assetID }),
+              asset.role == .original, asset.jobID == nil,
+              let metadata = asset.metadata.audio else {
+            throw ProjectStoreError.invalidProject("原声文档没有有效的已登记原件。")
+        }
+        let url = try assetURL(for: asset)
+        let inspected = try AudioMediaInspector.inspect(at: url)
+        try ProjectFiles.requireRegisteredAudio(inspected, matches: metadata)
+        return ProjectAudioInspection(document: draft, asset: asset, url: url,
+                                      metadata: metadata, waveform: inspected.waveform)
+    }
+
     /// Copies the selected inode into project ownership before validating the owned bytes.
     /// A failed import may leave only that unregistered file for manual recovery; opening a
     /// project never scans for or guesses ownership of such files.
