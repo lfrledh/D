@@ -463,6 +463,17 @@ struct ProjectAudioSessionTests {
         #expect(await subject.retryPendingAudioCapture(id: reservation.id))
         #expect(subject.manifest?.pendingAudioCaptures.contains(reservation) == false)
         #expect(subject.manifest?.assets.contains { $0.id == reservation.id } == true)
+        let recoveredDocument = try #require(controller.documentID)
+        #expect(recoveredDocument != currentDocument)
+        #expect(controller.canEdit)
+        #expect(subject.setAudioNoteInput("editable after recovery", contextID: controller.contextID,
+                                          documentID: recoveredDocument))
+        #expect(await subject.saveAudioNote(contextID: controller.contextID, documentID: recoveredDocument))
+        #expect(controller.document?.note == "editable after recovery")
+        #expect(await subject.requestClose())
+        await subject.openProject(at: f.project)
+        #expect(subject.audio?.documentID == recoveredDocument)
+        #expect(subject.audio?.document?.note == "editable after recovery")
     }
 
     @Test
