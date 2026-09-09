@@ -7,6 +7,11 @@ import Testing
 
 @Suite("Pinned image model admission (offline, no MLX allocation)")
 struct LocalImageModelInventoryTests {
+    struct Dimensions: Sendable {
+        let width: Int
+        let height: Int
+    }
+
     @Test("Production resource pins all 18 files and four weight shards")
     func bundledManifest() throws {
         let manifest = try LocalImageModelInventory.Manifest.bundled()
@@ -28,6 +33,21 @@ struct LocalImageModelInventoryTests {
         #expect(inventory.weightBytes == fixture.manifest.files.filter { $0.path.hasSuffix(".safetensors") }
             .reduce(UInt64(0)) { $0 + $1.size })
         try inventory.verifyContents()
+        try inventory.verifyContents()
+    }
+
+    @Test("The scalable profile preserves pinned installation admission", arguments: [
+        Dimensions(width: 512, height: 256), Dimensions(width: 768, height: 512),
+        Dimensions(width: 1024, height: 1024), Dimensions(width: 2048, height: 2048),
+    ])
+    func scalableInstallation(dimensions: Dimensions) throws {
+        let fixture = try ImageInventoryFixture()
+        defer { fixture.remove() }
+        let inventory = try LocalImageModelInventory.inspect(
+            fixture.request(width: dimensions.width, height: dimensions.height), manifest: fixture.manifest,
+            profile: .scalableKlein4B)
+        #expect(inventory.directory == fixture.directory)
+        #expect(inventory.estimatedPeakBytes >= 8 * 1024 * 1024 * 1024)
         try inventory.verifyContents()
     }
 
@@ -256,10 +276,11 @@ private struct ImageInventoryFixture {
     }
 
     func request(directory: URL? = nil, revision: String? = LocalImageModelInventory.revision,
-                 seed: UInt64 = 42) -> InferenceRequest {
+                 seed: UInt64 = 42, width: Int = 512, height: Int = 512,
+                 steps: Int = 4, guidanceScale: Float = 1) -> InferenceRequest {
         .init(model: .init(directory: directory ?? self.directory, revision: revision),
-              input: .image(.init(prompt: "A red teapot.", width: 512, height: 512,
-                                  steps: 4, guidanceScale: 1, seed: seed)))
+              input: .image(.init(prompt: "A red teapot.", width: width, height: height,
+                                  steps: steps, guidanceScale: guidanceScale, seed: seed)))
     }
 
     func remove() { try? FileManager.default.removeItem(at: base) }

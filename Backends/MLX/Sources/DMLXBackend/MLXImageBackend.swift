@@ -8,9 +8,22 @@ public struct MLXImageBackendConfiguration: Sendable {
     /// Existing, host-owned local directory. Each execution creates its own unique child.
     public let artifactDirectory: URL
     public let cacheLimitBytes: Int
-    public init(artifactDirectory: URL, cacheLimitBytes: Int = 256 * 1024 * 1024) {
+    public let profile: ImageExecutionProfile
+    public let memoryLimitBytes: Int?
+    public init(artifactDirectory: URL, cacheLimitBytes: Int = 256 * 1024 * 1024,
+                profile: ImageExecutionProfile = .verified512, memoryLimitBytes: Int? = nil) {
         self.artifactDirectory = artifactDirectory.standardizedFileURL
         self.cacheLimitBytes = cacheLimitBytes
+        self.profile = profile
+        self.memoryLimitBytes = memoryLimitBytes
+    }
+
+    func allocatorMemoryLimit(estimatedPeakBytes: UInt64) throws -> Int {
+        if let memoryLimitBytes { return memoryLimitBytes }
+        guard estimatedPeakBytes <= UInt64(Int.max) else {
+            throw InferenceFailure.invalidRequest("The image allocator limit exceeds platform Int capacity.")
+        }
+        return Int(estimatedPeakBytes)
     }
 }
 
@@ -31,8 +44,9 @@ public actor MLXImageBackend: InferenceBackend {
 
     public init(configuration: MLXImageBackendConfiguration,
                 observer: @escaping @Sendable (MLXLifecycleEvent) async -> Void = { _ in }) throws {
-        guard (0...1024 * 1024 * 1024).contains(configuration.cacheLimitBytes) else {
-            throw InferenceFailure.invalidRequest("Invalid image backend cache limit.")
+        guard (0...1024 * 1024 * 1024).contains(configuration.cacheLimitBytes),
+              configuration.memoryLimitBytes.map({ $0 > 0 }) ?? true else {
+            throw InferenceFailure.invalidRequest("Invalid image backend cache or memory limit.")
         }
         try ImageArtifactTransaction.validateRoot(configuration.artifactDirectory)
         self.configuration = configuration
@@ -41,7 +55,7 @@ public actor MLXImageBackend: InferenceBackend {
 
     public func estimate(_ request: InferenceRequest) async throws -> ResourceEstimate {
         try Task.checkCancellation()
-        let inventory = try LocalImageModelInventory.inspect(request)
+        let inventory = try LocalImageModelInventory.inspect(request, profile: configuration.profile)
         try ImageArtifactTransaction.validateRoot(configuration.artifactDirectory, model: inventory.directory)
         return ResourceEstimate(peakBytes: inventory.estimatedPeakBytes)
     }
@@ -54,11 +68,13 @@ public actor MLXImageBackend: InferenceBackend {
         executing = true
         defer { executing = false }
         try Task.checkCancellation()
-        let inventory = try LocalImageModelInventory.inspect(request)
+        let inventory = try LocalImageModelInventory.inspect(request, profile: configuration.profile)
         try ImageArtifactTransaction.validateRoot(configuration.artifactDirectory, model: inventory.directory)
         guard case .image(let input) = request.input else {
             throw InferenceFailure.unsupportedCapability(request.input.capability)
         }
+        let allocatorMemoryLimit = try configuration.allocatorMemoryLimit(
+            estimatedPeakBytes: inventory.estimatedPeakBytes)
         let token = UUID()
         try await MLXExecutionLease.shared.acquire(token)
         lease = token
@@ -67,7 +83,7 @@ public actor MLXImageBackend: InferenceBackend {
         previousMemoryLimit = Memory.memoryLimit
         Memory.cacheLimit = configuration.cacheLimitBytes
         // This is an allocator scheduling limit, not a hard process RSS cap.
-        Memory.memoryLimit = 10 * 1024 * 1024 * 1024
+        Memory.memoryLimit = allocatorMemoryLimit
         Memory.peakMemory = 0
         let result: InferenceResult
         do {
@@ -130,7 +146,8 @@ public actor MLXImageBackend: InferenceBackend {
         let denoised = try await generateLatents(input: input, directory: inventory.directory, state: state, emit: emit)
         Self.synchronize()
         Memory.clearCache()
-        let rgb = try await decodeRGB(directory: inventory.directory, denoised: denoised, state: state)
+        let rgb = try await decodeRGB(directory: inventory.directory, denoised: denoised,
+                                      width: input.width, height: input.height, state: state)
         try await checkpoint(.publishing)
         let data = try ImagePNG.encode(rgb: rgb, width: input.width, height: input.height)
         let transaction = try ImageArtifactTransaction(root: configuration.artifactDirectory, requestID: request.id)
@@ -143,6 +160,7 @@ public actor MLXImageBackend: InferenceBackend {
         return InferenceResult(artifacts: [artifact], metadata: [
             "modelRepository": LocalImageModelInventory.repository,
             "modelRevision": LocalImageModelInventory.revision,
+            "imageExecutionProfile": configuration.profile.identifier,
             "flux2SourceRevision": "959a4af7c0721c800851c84431ffd3fa1f353f1f",
             "width": String(input.width), "height": String(input.height), "steps": String(input.steps),
             "guidanceScale": String(input.guidanceScale), "seed": String(input.seed),
@@ -186,7 +204,7 @@ public actor MLXImageBackend: InferenceBackend {
     }
 
     @inline(never)
-    private func prepare(directory: URL, inChannels: Int, dtype: DType,
+    private func prepare(directory: URL, inChannels: Int, width: Int, height: Int, dtype: DType,
                          state: MLXRandom.RandomState, seed: UInt64) throws -> Flux2PreparedLatents {
         try Task.checkCancellation()
         // The upstream preparation API uses VAE configuration. Its small model is scoped here,
@@ -200,7 +218,8 @@ public actor MLXImageBackend: InferenceBackend {
         state.seed(seed)
         let prepared = try withRandomState(state) {
             try Flux2LatentPreparation.prepareLatents(
-                batchSize: 1, numLatentChannels: inChannels / patchArea, height: 512, width: 512, vae: vae, dtype: dtype)
+                batchSize: 1, numLatentChannels: inChannels / patchArea,
+                height: height, width: width, vae: vae, dtype: dtype)
         }
         MLX.eval(prepared.latents, prepared.ids)
         return prepared
@@ -225,6 +244,7 @@ public actor MLXImageBackend: InferenceBackend {
         try await checkpoint(.transformerLoaded)
         let scheduler = try FlowMatchEulerDiscreteScheduler.load(from: directory)
         let prepared = try prepare(directory: directory, inChannels: transformer.configuration.inChannels,
+                                   width: input.width, height: input.height,
                                    dtype: encoding.promptEmbeds.dtype, state: state, seed: input.seed)
         Self.synchronize()
         Memory.clearCache()
@@ -246,7 +266,8 @@ public actor MLXImageBackend: InferenceBackend {
     }
 
     @inline(never)
-    private func decodeRGB(directory: URL, denoised: Denoised, state: MLXRandom.RandomState) async throws -> [UInt8] {
+    private func decodeRGB(directory: URL, denoised: Denoised, width: Int, height: Int,
+                           state: MLXRandom.RandomState) async throws -> [UInt8] {
         try await checkpoint(.loadingVAE)
         let vae = try withRandomState(state) { try Flux2AutoencoderKL.load(from: directory, dtype: .bfloat16) }
         MLX.eval(vae)
@@ -255,8 +276,9 @@ public actor MLXImageBackend: InferenceBackend {
         let decoded = try withRandomState(state) {
             try Flux2ImageMath.decode(vae: vae, latents: denoised.latents, ids: denoised.ids)
         }
-        guard decoded.shape == [1, 3, 512, 512] else {
-            throw InferenceFailure.backendFailed("Expected decoded image shape [1, 3, 512, 512].")
+        let expectedShape = [1, 3, height, width]
+        guard decoded.shape == expectedShape else {
+            throw InferenceFailure.backendFailed("Expected decoded image shape \(expectedShape).")
         }
         try await checkpoint(.decoded)
         return (MLX.clip(decoded[0].asType(.float32) / 2 + 0.5, min: 0, max: 1) * 255)
