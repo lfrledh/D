@@ -12,6 +12,7 @@ from dataclasses import dataclass
 import gc
 import hashlib
 import importlib
+from importlib import abc as importlib_abc
 from importlib import util as importlib_util
 import json
 import math
@@ -95,8 +96,10 @@ def _mx_value(mx: Any, name: str) -> int | None:
     if getter is None:
         return None
     try:
-        value = int(getter())
-        return max(0, value)
+        value = getter()
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            return None
+        return value
     except Exception:
         return None
 
@@ -105,14 +108,24 @@ def _measure(mx: Any, peak: int | None, phase: str) -> tuple[dict[str, Any], int
     active = _mx_value(mx, "get_active_memory")
     cache = _mx_value(mx, "get_cache_memory")
     reported_peak = _mx_value(mx, "get_peak_memory")
-    observed = [value for value in (peak, active, reported_peak) if value is not None]
-    peak = max(observed) if observed else None
+    # A true MLX peak is reported only from the dedicated getter. Active
+    # snapshots are a separately labelled lower bound and never promoted.
+    peak = reported_peak
+    if peak is not None and active is not None and peak < active:
+        peak = None
+        reported_peak = None
+    available = sum(value is not None for value in (active, cache, reported_peak))
     return {
-        "measurementKind": "mlx-allocator" if any(value is not None for value in (active, cache, reported_peak)) else "unavailable",
+        "measurementKind": (
+            "mlx-allocator" if available == 3 else
+            "partial-mlx-allocator" if available else
+            "unavailable"
+        ),
         "measurementPhase": phase,
         "activeBytes": active,
         "cacheBytes": cache,
         "peakBytes": peak,
+        "observedActiveLowerBoundBytes": active,
     }, peak
 
 
@@ -128,41 +141,99 @@ def _release(mx: Any) -> None:
     clear()
 
 
-def _vendor_import(name: str, vendor_directory: Path, checked: dict[str, str]) -> Any:
-    relative = name.replace(".", "/")
-    package_path = f"{relative}/__init__.py"
-    file_path = f"{relative}.py"
-    if package_path in checked:
-        relative = package_path
-        search = [str(vendor_directory.joinpath(*PurePosixPath(relative).parts).parent)]
-    elif file_path in checked:
-        relative = file_path
-        search = None
-    else:
-        raise ContractError(f"vendor module {name} is not listed in provenance", "configuration")
-    expected_path = vendor_directory.joinpath(*PurePosixPath(relative).parts)
-    module = sys.modules.get(name)
-    if module is None:
-        spec = importlib_util.spec_from_file_location(name, expected_path, submodule_search_locations=search)
-        if spec is None or spec.loader is None:
-            raise ContractError(f"cannot create loader for vendor module {name}", "configuration")
-        module = importlib_util.module_from_spec(spec)
-        sys.modules[name] = module
+class _VerifiedVendorLoader(importlib_abc.MetaPathFinder, importlib_abc.Loader):
+    """Bounded source-only importer for the provenance-listed Python subset."""
+
+    def __init__(self, vendor_directory: Path, checked: dict[str, str]) -> None:
+        self.vendor_directory = vendor_directory
+        self.checked = checked
+        self.modules: dict[str, tuple[str, bool]] = {}
+        self.owned: dict[str, Any] = {}
+        for relative in checked:
+            if not relative.endswith(".py"):
+                continue
+            pure = PurePosixPath(relative)
+            if pure.name == "__init__.py":
+                name = ".".join(pure.parts[:-1])
+                is_package = True
+            else:
+                name = ".".join((*pure.parts[:-1], pure.stem))
+                is_package = False
+            if not name or name in self.modules:
+                raise ContractError("vendor provenance has ambiguous Python module names", "configuration")
+            self.modules[name] = (relative, is_package)
+        self.roots = {name.split(".", 1)[0] for name in self.modules}
+        self.active = False
+
+    def start(self) -> None:
+        conflicts = sorted(
+            name for name in sys.modules
+            if name in self.modules or name == "models" or name.startswith("models.")
+        )
+        if conflicts:
+            raise ContractError(f"preloaded vendor module is forbidden: {conflicts[0]}", "configuration")
+        sys.meta_path.insert(0, self)
+        self.active = True
+
+    def close(self) -> None:
+        if self.active:
+            try:
+                sys.meta_path.remove(self)
+            except ValueError:
+                pass
+            self.active = False
+        for name, module in sorted(self.owned.items(), key=lambda item: item[0].count("."), reverse=True):
+            if sys.modules.get(name) is module:
+                del sys.modules[name]
+        self.owned.clear()
+
+    def find_spec(self, fullname: str, path: Any = None, target: Any = None) -> Any:
+        entry = self.modules.get(fullname)
+        if entry is None:
+            if any(fullname == root or fullname.startswith(root + ".") for root in self.roots):
+                raise ModuleNotFoundError(f"unlisted vendor module is forbidden: {fullname}")
+            return None
+        relative, is_package = entry
+        origin = str(self.vendor_directory.joinpath(*PurePosixPath(relative).parts))
+        return importlib_util.spec_from_loader(fullname, self, origin=origin, is_package=is_package)
+
+    def create_module(self, spec: Any) -> None:
+        return None
+
+    def exec_module(self, module: Any) -> None:
+        entry = self.modules.get(module.__name__)
+        if entry is None:
+            raise ImportError(f"unlisted vendor module: {module.__name__}")
+        relative, is_package = entry
+        source_path = self.vendor_directory.joinpath(*PurePosixPath(relative).parts)
+        raw, _ = read_regular_file(source_path, max_bytes=1024 * 1024, label=f"vendor source {relative}")
+        if hashlib.sha256(raw).hexdigest() != self.checked[relative]:
+            raise ContractError(f"vendor source changed before execution: {relative}", "configuration")
         try:
-            spec.loader.exec_module(module)
-        except Exception:
-            sys.modules.pop(name, None)
-            raise
-    origin_text = getattr(module, "__file__", None)
-    if not isinstance(origin_text, str):
-        raise ContractError(f"vendor module {name} has no regular-file origin", "configuration")
+            code = compile(raw, str(source_path), "exec", dont_inherit=True)
+        except (SyntaxError, ValueError, OverflowError) as exc:
+            raise ContractError(f"cannot compile verified vendor source {relative}: {exc}", "configuration") from exc
+        module.__file__ = str(source_path)
+        module.__cached__ = None
+        if is_package:
+            module.__path__ = [str(source_path.parent)]
+        self.owned[module.__name__] = module
+        exec(code, module.__dict__)
+
+    def import_module(self, name: str) -> Any:
+        if name not in self.modules:
+            raise ContractError(f"vendor module {name} is not listed in provenance", "configuration")
+        return importlib.import_module(name)
+
+
+def _vendor_import(name: str, vendor_directory: Path, checked: dict[str, str]) -> Any:
+    """One-shot source-only import used by bounded CPU provenance probes."""
+    loader = _VerifiedVendorLoader(vendor_directory, checked)
+    loader.start()
     try:
-        relative = Path(origin_text).resolve().relative_to(vendor_directory).as_posix()
-    except ValueError:
-        raise ContractError(f"vendor module {name} resolved outside pinned root", "configuration") from None
-    if relative not in checked:
-        raise ContractError(f"vendor module {name} is not listed in provenance", "configuration")
-    return module
+        return loader.import_module(name)
+    finally:
+        loader.close()
 
 
 def run_inference(
@@ -181,6 +252,7 @@ def run_inference(
         raise ContractError("vendor directory is already present in import path", "configuration")
     checked_vendor = verify_vendor(vendor_directory)
     mx = None
+    vendor_loader: _VerifiedVendorLoader | None = None
     timings: dict[str, float] = {}
     allocations: dict[str, Any] = {
         "measurementKind": "unavailable", "measurementPhase": "notMeasured",
@@ -196,22 +268,19 @@ def run_inference(
         importlib.import_module("sentencepiece")
         if any(name == "models" or name.startswith("models.") for name in sys.modules):
             raise ContractError("a models package was loaded before pinned vendor activation", "configuration")
-        _vendor_import("models", vendor_directory, checked_vendor)
-        _vendor_import("models.defs", vendor_directory, checked_vendor)
-        sys.path.insert(0, vendor_text)
-        pipeline = _vendor_import("models.defs.sa3_pipeline", vendor_directory, checked_vendor)
-        t5_module = _vendor_import("models.defs.t5gemma_mlx", vendor_directory, checked_vendor)
+        vendor_loader = _VerifiedVendorLoader(vendor_directory, checked_vendor)
+        vendor_loader.start()
+        pipeline = vendor_loader.import_module("models.defs.sa3_pipeline")
+        t5_module = vendor_loader.import_module("models.defs.t5gemma_mlx")
         _cap, dit_name, codec = PROFILES[next(
             profile for profile, values in PROFILES.items()
             if f"MLX/{values[1]}" == manifest.entries[0].relative_path
         )]
-        dit_module = _vendor_import(
+        dit_module = vendor_loader.import_module(
             "models.defs.dit_mlx_medium" if codec == "same_l" else "models.defs.dit_mlx",
-            vendor_directory,
-            checked_vendor,
         )
-        decoder_module = _vendor_import(f"models.defs.{codec}_decoder", vendor_directory, checked_vendor)
-        encoder_module = _vendor_import(f"models.defs.{codec}_encoder", vendor_directory, checked_vendor)
+        decoder_module = vendor_loader.import_module(f"models.defs.{codec}_decoder")
+        encoder_module = vendor_loader.import_module(f"models.defs.{codec}_encoder")
         paths = {item.relative_path: model_directory.joinpath(*PurePosixPath(item.relative_path).parts)
                  for item in manifest.entries}
         dit_path = paths[f"MLX/{dit_name}"]
@@ -378,7 +447,7 @@ def run_inference(
                     result.mlx_allocations["postCleanup"] = after_cleanup
             except Exception as cleanup_exc:
                 cleanup_failure = cleanup_exc
-        if sys.path and sys.path[0] == vendor_text:
-            del sys.path[0]
+        if vendor_loader is not None:
+            vendor_loader.close()
         if cleanup_failure is not None:
             raise RuntimeError(f"MLX cleanup failure: {cleanup_failure}") from cleanup_failure

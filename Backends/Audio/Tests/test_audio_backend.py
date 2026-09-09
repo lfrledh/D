@@ -4,14 +4,17 @@ from array import array
 import contextlib
 import hashlib
 import io
+import importlib.util
 import json
 import math
+import marshal
 import os
 from pathlib import Path
 import struct
 import subprocess
 import sys
 import tempfile
+import types
 import unittest
 from unittest import mock
 
@@ -316,6 +319,77 @@ class AudioBackendTests(unittest.TestCase):
         self.assertIsNone(measured["activeBytes"])
         self.assertIsNone(measured["cacheBytes"])
         self.assertIsNone(measured["peakBytes"])
+        self.assertIsNone(measured["observedActiveLowerBoundBytes"])
+
+        class PartialMetrics:
+            def get_active_memory(self):
+                return 17
+            def get_cache_memory(self):
+                return -1
+            def get_peak_memory(self):
+                return "99"
+        measured, peak = sa3._measure(PartialMetrics(), None, "partialFixture")
+        self.assertIsNone(peak)
+        self.assertEqual(measured["measurementKind"], "partial-mlx-allocator")
+        self.assertEqual(measured["observedActiveLowerBoundBytes"], 17)
+        self.assertIsNone(measured["peakBytes"])
+
+    def test_cleanup_failure_cpu_standin_is_reported(self):
+        class BrokenCleanup:
+            def synchronize(self):
+                raise RuntimeError("fixture synchronize failure")
+            def clear_cache(self):
+                raise AssertionError("must not continue after failed synchronize")
+        with self.assertRaisesRegex(RuntimeError, "fixture synchronize failure"):
+            sa3._release(BrokenCleanup())
+
+    def test_verified_source_loader_ignores_stale_pyc_and_cleans_owned_module(self):
+        vendor = self.root / "vendor-probe"
+        vendor.mkdir()
+        source = vendor / "probe.py"
+        source.write_text("VALUE = 1\n", encoding="utf-8")
+        digest = hashlib.sha256(source.read_bytes()).hexdigest()
+        cache = Path(importlib.util.cache_from_source(str(source)))
+        cache.parent.mkdir(parents=True)
+        wrong = compile("VALUE = 99\n", str(source), "exec", dont_inherit=True)
+        cache.write_bytes(
+            importlib.util.MAGIC_NUMBER
+            + struct.pack("<III", 0, int(source.stat().st_mtime), source.stat().st_size)
+            + marshal.dumps(wrong)
+        )
+        module = sa3._vendor_import("probe", vendor, {"probe.py": digest})
+        self.assertEqual(module.VALUE, 1)
+        self.assertNotIn("probe", sys.modules)
+        self.assertEqual(hashlib.sha256(source.read_bytes()).hexdigest(), digest)
+        sys.modules["probe"] = types.ModuleType("probe")
+        try:
+            with self.assertRaisesRegex(contract.ContractError, "preloaded"):
+                sa3._vendor_import("probe", vendor, {"probe.py": digest})
+        finally:
+            del sys.modules["probe"]
+
+    def test_verified_source_loader_supports_listed_relative_imports_only(self):
+        vendor = self.root / "vendor-package"
+        package = vendor / "fixturepkg"
+        package.mkdir(parents=True)
+        files = {
+            "fixturepkg/__init__.py": "",
+            "fixturepkg/value.py": "VALUE = 7\n",
+            "fixturepkg/consumer.py": "from .value import VALUE\nRESULT = VALUE + 1\n",
+        }
+        checked = {}
+        for relative, text in files.items():
+            path = vendor.joinpath(*relative.split("/"))
+            path.write_text(text, encoding="utf-8")
+            checked[relative] = hashlib.sha256(path.read_bytes()).hexdigest()
+        module = sa3._vendor_import("fixturepkg.consumer", vendor, checked)
+        self.assertEqual(module.RESULT, 8)
+        self.assertFalse(any(name == "fixturepkg" or name.startswith("fixturepkg.") for name in sys.modules))
+        (package / "unlisted.py").write_text("VALUE = 99\n", encoding="utf-8")
+        (package / "consumer.py").write_text("from .unlisted import VALUE\n", encoding="utf-8")
+        checked["fixturepkg/consumer.py"] = hashlib.sha256((package / "consumer.py").read_bytes()).hexdigest()
+        with self.assertRaises(ModuleNotFoundError):
+            sa3._vendor_import("fixturepkg.consumer", vendor, checked)
 
     def test_full_mock_orchestration_and_result_identity(self):
         args, job, request_value, _source = self.make_launch()
