@@ -16,7 +16,7 @@
 | H04 签名后连续验收 | **已验证解决**：同次UI8/8、普通签名真实图像生成/导出、全新DerivedData重编译及项目/模型授权恢复均通过。 | 本项关闭；不是永久TCC/发行公证证明，普通旧D未替换。 | uitests-refined.xcresult、image-normal-signed-result.json、normal-fresh-rebuild.json、final-fresh-restore.json。 |
 | H05 PNG 有界收尾 | **已完成并本地接纳**：获准尺寸夹具/后台检查、CPU与只读复核、正常面板私有/公开交接、新构建草稿重开通过。 | 不再请求同一预算，保留Terra初交/两轮修复和Lead接管历史。 | PNG任务记录、png-native-crosscheck.json、final-fresh-restore-files.json。 |
 | H06 实际系统安全提示 | 历史 SecurityAgent／系统通知界面曾被工具安全规则拒绝；用户处理后签名／测试成功。本轮尚未观察到新的待点提示。 | 只有提示实际出现时，指出请求应用、资源和用途交用户确认；密码本人输入，不传给 Lead。无提示时不制造弹窗、不改钥匙串 ACL/TCC。 | 实际操作恢复且证据关联对应应用；“已设置”不代替复验。历史 A03、PermissionSetup 20260907 记录。 |
-| H08 音频限定收尾（2026-09-09） | **已获批准并执行，仍受阻；非Mac权限问题**：Sol/high唯一追加交付后，Lead真实编译发现测试中AudioFormatInfo与系统同名类型冲突，行为测试未运行。新只读审核预检另有git启动器缓存写入被拒绝，正式复核未启动；未发现成功越界或权限扩大证据。 | 最小提案：同任务由Lead仅限定测试类型名，再执行原验收/只读复核；尚未实施，不重置历史预算、不派装配。无需密码/全盘访问。下一只读入口明确Xcode git实际路径。 | 候选7a60178287e021521c7c94bdbe8804779296c0dd；HUM run-20260908T172827Z-h08中的validation/lead-tests-h08、observable-runtime-and-events.json及final-receipt.json。编译通过后仍需完整原检查；真实录音/试听属于之后门槛。 |
+| H08 音频限定收尾（2026-09-09） | **类型修补已批准并通过，资源清理仍受阻；非Mac权限问题**：五处类型限定后18方法通过。新只读审核发现重播false/抛错后旧定时器仍调度；Lead两路径诊断确认，shutdown才清理。本轮明确Git入口，无新增缓存拒绝。 | 最小提案：同任务定点修正重播定时器清理并补直接反例，再原验收/复核/组合；尚未实施，不重置历史预算、不派装配。无需密码或全盘访问。 | 受测0328a75a47491ca89b5960069e07987729829df6，最终候选02a85a9abb755a59a9e7e9f3126d534ebd70f5c6仅文档；HUM run-20260909T002916Z-h08-type-finish中的qualified-test-proof、review/review-response、timer-probe.log和final-receipt。真实录音/试听仍为后续门槛。 |
 
 已修复的本轮新增问题 H07：文字窗口约束使侧栏/工具栏在缩窄时截断，Lead在隔离组合中修复宽度反馈、分栏、工具栏与选段预览高度；最终真实缩放和真人IME通过。修复已进入本地源工作分支并复验通过；原普通D.app保留，未被替换。证据根：`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-T0-WORKBENCH-01/run-20260908T125225Z-human-finish`；受测代码 `a6c516ad6b52c944ce70a0bd764d68a94fd0f3bc`。
 
