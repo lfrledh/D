@@ -7,10 +7,12 @@ have been verified by the CLI.
 
 from __future__ import annotations
 
+from array import array
 from dataclasses import dataclass
 import gc
 import hashlib
 import importlib
+from importlib import util as importlib_util
 import json
 import math
 import os
@@ -46,7 +48,7 @@ class CancelledError(Exception):
 class InferenceResult:
     samples: Any
     timings_seconds: dict[str, float]
-    mlx_allocations: dict[str, int]
+    mlx_allocations: dict[str, Any]
 
 
 def verify_vendor(vendor_directory: Path) -> dict[str, str]:
@@ -88,33 +90,79 @@ def _check_cancel(cancelled: Callable[[], bool]) -> None:
         raise CancelledError("audio generation cancelled")
 
 
-def _mx_value(mx: Any, name: str) -> int:
+def _mx_value(mx: Any, name: str) -> int | None:
     getter = getattr(mx, name, None)
     if getter is None:
-        return 0
+        return None
     try:
         value = int(getter())
         return max(0, value)
     except Exception:
-        return 0
+        return None
 
 
-def _measure(mx: Any, peak: int) -> tuple[dict[str, int], int]:
+def _measure(mx: Any, peak: int | None, phase: str) -> tuple[dict[str, Any], int | None]:
     active = _mx_value(mx, "get_active_memory")
     cache = _mx_value(mx, "get_cache_memory")
     reported_peak = _mx_value(mx, "get_peak_memory")
-    peak = max(peak, active, reported_peak)
-    return {"activeBytes": active, "cacheBytes": cache, "peakBytes": peak}, peak
+    observed = [value for value in (peak, active, reported_peak) if value is not None]
+    peak = max(observed) if observed else None
+    return {
+        "measurementKind": "mlx-allocator" if any(value is not None for value in (active, cache, reported_peak)) else "unavailable",
+        "measurementPhase": phase,
+        "activeBytes": active,
+        "cacheBytes": cache,
+        "peakBytes": peak,
+    }, peak
 
 
 def _release(mx: Any) -> None:
     gc.collect()
     synchronize = getattr(mx, "synchronize", None)
-    if synchronize is not None:
-        synchronize()
+    if synchronize is None:
+        raise RuntimeError("MLX synchronize is unavailable during cleanup")
+    synchronize()
     clear = getattr(mx, "clear_cache", None)
-    if clear is not None:
-        clear()
+    if clear is None:
+        raise RuntimeError("MLX clear_cache is unavailable during cleanup")
+    clear()
+
+
+def _vendor_import(name: str, vendor_directory: Path, checked: dict[str, str]) -> Any:
+    relative = name.replace(".", "/")
+    package_path = f"{relative}/__init__.py"
+    file_path = f"{relative}.py"
+    if package_path in checked:
+        relative = package_path
+        search = [str(vendor_directory.joinpath(*PurePosixPath(relative).parts).parent)]
+    elif file_path in checked:
+        relative = file_path
+        search = None
+    else:
+        raise ContractError(f"vendor module {name} is not listed in provenance", "configuration")
+    expected_path = vendor_directory.joinpath(*PurePosixPath(relative).parts)
+    module = sys.modules.get(name)
+    if module is None:
+        spec = importlib_util.spec_from_file_location(name, expected_path, submodule_search_locations=search)
+        if spec is None or spec.loader is None:
+            raise ContractError(f"cannot create loader for vendor module {name}", "configuration")
+        module = importlib_util.module_from_spec(spec)
+        sys.modules[name] = module
+        try:
+            spec.loader.exec_module(module)
+        except Exception:
+            sys.modules.pop(name, None)
+            raise
+    origin_text = getattr(module, "__file__", None)
+    if not isinstance(origin_text, str):
+        raise ContractError(f"vendor module {name} has no regular-file origin", "configuration")
+    try:
+        relative = Path(origin_text).resolve().relative_to(vendor_directory).as_posix()
+    except ValueError:
+        raise ContractError(f"vendor module {name} resolved outside pinned root", "configuration") from None
+    if relative not in checked:
+        raise ContractError(f"vendor module {name} is not listed in provenance", "configuration")
+    return module
 
 
 def run_inference(
@@ -131,26 +179,39 @@ def run_inference(
     vendor_text = str(vendor_directory)
     if vendor_text in sys.path:
         raise ContractError("vendor directory is already present in import path", "configuration")
-    sys.path.insert(0, vendor_text)
+    checked_vendor = verify_vendor(vendor_directory)
     mx = None
     timings: dict[str, float] = {}
-    allocations = {"activeBytes": 0, "cacheBytes": 0, "peakBytes": 0}
-    peak = 0
+    allocations: dict[str, Any] = {
+        "measurementKind": "unavailable", "measurementPhase": "notMeasured",
+        "activeBytes": None, "cacheBytes": None, "peakBytes": None,
+    }
+    peak: int | None = None
+    result: InferenceResult | None = None
     try:
-        # These are the first non-stdlib imports in the provider.
+        # External dependencies are resolved before vendor code is importable,
+        # preventing an unlisted file in the vendor root from shadowing them.
         np = importlib.import_module("numpy")
         mx = importlib.import_module("mlx.core")
-        pipeline = importlib.import_module("models.defs.sa3_pipeline")
-        t5_module = importlib.import_module("models.defs.t5gemma_mlx")
+        importlib.import_module("sentencepiece")
+        if any(name == "models" or name.startswith("models.") for name in sys.modules):
+            raise ContractError("a models package was loaded before pinned vendor activation", "configuration")
+        _vendor_import("models", vendor_directory, checked_vendor)
+        _vendor_import("models.defs", vendor_directory, checked_vendor)
+        sys.path.insert(0, vendor_text)
+        pipeline = _vendor_import("models.defs.sa3_pipeline", vendor_directory, checked_vendor)
+        t5_module = _vendor_import("models.defs.t5gemma_mlx", vendor_directory, checked_vendor)
         _cap, dit_name, codec = PROFILES[next(
             profile for profile, values in PROFILES.items()
             if f"MLX/{values[1]}" == manifest.entries[0].relative_path
         )]
-        dit_module = importlib.import_module(
-            "models.defs.dit_mlx_medium" if codec == "same_l" else "models.defs.dit_mlx"
+        dit_module = _vendor_import(
+            "models.defs.dit_mlx_medium" if codec == "same_l" else "models.defs.dit_mlx",
+            vendor_directory,
+            checked_vendor,
         )
-        encoder_module = importlib.import_module(f"models.defs.{codec}_encoder")
-        decoder_module = importlib.import_module(f"models.defs.{codec}_decoder")
+        decoder_module = _vendor_import(f"models.defs.{codec}_decoder", vendor_directory, checked_vendor)
+        encoder_module = _vendor_import(f"models.defs.{codec}_encoder", vendor_directory, checked_vendor)
         paths = {item.relative_path: model_directory.joinpath(*PurePosixPath(item.relative_path).parts)
                  for item in manifest.entries}
         dit_path = paths[f"MLX/{dit_name}"]
@@ -178,7 +239,7 @@ def run_inference(
         timings["encodingText"] = time.monotonic() - started
         progress("encodingText", 1, 1)
         del text_encoder, embeds, mask, padded, padding, seconds_embedder
-        allocations, peak = _measure(mx, peak)
+        allocations, peak = _measure(mx, peak, "afterTextEncodingBeforeCacheCleanup")
         _release(mx)
         _check_cancel(cancelled)
 
@@ -206,7 +267,7 @@ def run_inference(
             timings["encodingSource"] = time.monotonic() - started
             progress("encodingSource", 1, 1)
             del encoder, audio, patches
-            allocations, peak = _measure(mx, peak)
+            allocations, peak = _measure(mx, peak, "afterSourceEncodingBeforeCacheCleanup")
             _release(mx)
             _check_cancel(cancelled)
 
@@ -257,7 +318,7 @@ def run_inference(
         mx.eval(latents)
         timings["denoising"] = time.monotonic() - started
         del dit, model_fn, noise, pure_noise, sigmas
-        allocations, peak = _measure(mx, peak)
+        allocations, peak = _measure(mx, peak, "afterDenoisingBeforeCacheCleanup")
         _release(mx)
         _check_cancel(cancelled)
 
@@ -289,18 +350,35 @@ def run_inference(
             generated = preserved
         timings["decoding"] = time.monotonic() - started
         progress("decoding", 1, 1)
-        allocations, peak = _measure(mx, peak)
-        allocations["peakBytes"] = peak
-        return InferenceResult(generated.reshape(-1), timings, allocations)
+        allocations, peak = _measure(mx, peak, "afterDecodeBeforeFinalCleanup")
+        output_samples = array("f")
+        output_samples.frombytes(generated.astype(np.float32, copy=False).reshape(-1).tobytes())
+        result = InferenceResult(output_samples, timings, allocations)
+        return result
     except (ContractError, CancelledError):
         raise
     except Exception as exc:
         raise RuntimeError(f"SA3 engine failure: {exc}") from exc
     finally:
+        cleanup_failure: Exception | None = None
         if mx is not None:
             try:
+                # Drop all final MLX/model/NumPy references before synchronize
+                # and cache release. The stdlib output array remains owned.
+                text_encoder = embeds = mask = padded = padding = seconds_embedder = None
+                cross_attn = global_cond = null_cross = seconds = None
+                encoder = audio = patches = init_latents = None
+                dit = sigmas = key = pure_noise = noise = local_add = paste_back = None
+                latent_mask = masked = latents = latents_fp32 = None
+                decoder = decoded_patches = decoded = generated = preserved = even = None
                 _release(mx)
-            except Exception:
-                pass
+                after_cleanup, peak = _measure(mx, peak, "afterFinalCleanup")
+                if result is not None:
+                    result.mlx_allocations["cleanupStatus"] = "completed"
+                    result.mlx_allocations["postCleanup"] = after_cleanup
+            except Exception as cleanup_exc:
+                cleanup_failure = cleanup_exc
         if sys.path and sys.path[0] == vendor_text:
             del sys.path[0]
+        if cleanup_failure is not None:
+            raise RuntimeError(f"MLX cleanup failure: {cleanup_failure}") from cleanup_failure

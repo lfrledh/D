@@ -42,6 +42,22 @@ class OutputDeliveryError(Exception):
     pass
 
 
+def _neutralize_descriptor(descriptor: int) -> None:
+    """Make interpreter shutdown flushing harmless after a stream write fails."""
+    replacement = None
+    try:
+        replacement = os.open(os.devnull, os.O_WRONLY | getattr(os, "O_CLOEXEC", 0))
+        os.dup2(replacement, descriptor)
+    except OSError:
+        return
+    finally:
+        if replacement is not None:
+            try:
+                os.close(replacement)
+            except OSError:
+                pass
+
+
 class EventWriter:
     def __init__(self) -> None:
         self.broken = False
@@ -58,10 +74,7 @@ class EventWriter:
             sys.stdout.flush()
         except (BrokenPipeError, OSError, UnicodeError, ValueError) as exc:
             self.broken = True
-            try:
-                sys.stdout = open(os.devnull, "w", encoding="utf-8")
-            except OSError:
-                pass
+            _neutralize_descriptor(1)
             raise OutputDeliveryError(f"stdout delivery failed: {exc}") from exc
         if terminal:
             self.terminal = True
@@ -76,7 +89,7 @@ def _diagnostic(message: str) -> None:
         sys.stderr.write(message + "\n")
         sys.stderr.flush()
     except (BrokenPipeError, OSError, UnicodeError):
-        pass
+        _neutralize_descriptor(2)
 
 
 def _parser() -> argparse.ArgumentParser:

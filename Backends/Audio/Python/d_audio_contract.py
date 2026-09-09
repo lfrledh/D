@@ -116,6 +116,13 @@ def _reject_constant(value: str) -> None:
     raise ValueError(f"non-finite JSON number {value!r} is forbidden")
 
 
+def _finite_float(value: str) -> float:
+    result = float(value)
+    if not math.isfinite(result):
+        raise ValueError(f"non-finite JSON number {value!r} is forbidden")
+    return result
+
+
 def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     result: dict[str, Any] = {}
     for key, value in pairs:
@@ -131,11 +138,24 @@ def decode_strict_json(raw: bytes, *, label: str) -> dict[str, Any]:
             raw.decode("utf-8", errors="strict"),
             object_pairs_hook=_unique_object,
             parse_constant=_reject_constant,
+            parse_float=_finite_float,
         )
-    except (UnicodeDecodeError, json.JSONDecodeError, DuplicateKeyError, ValueError) as exc:
+    except (UnicodeDecodeError, json.JSONDecodeError, DuplicateKeyError, ValueError,
+            OverflowError, RecursionError) as exc:
         raise ContractError(f"invalid {label} JSON: {exc}") from exc
     if not isinstance(value, dict):
         raise ContractError(f"{label} root must be an object")
+    stack: list[tuple[Any, int]] = [(value, 1)]
+    while stack:
+        current, depth = stack.pop()
+        if depth > 32:
+            raise ContractError(f"invalid {label} JSON: nesting exceeds 32 containers")
+        if isinstance(current, dict):
+            stack.extend((child, depth + 1) for child in current.values()
+                         if isinstance(child, (dict, list)))
+        elif isinstance(current, list):
+            stack.extend((child, depth + 1) for child in current
+                         if isinstance(child, (dict, list)))
     return value
 
 
@@ -166,7 +186,10 @@ def _integer(value: Any, label: str, low: int, high: int) -> int:
 def _number(value: Any, label: str, low: float, high: float | None = None) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ContractError(f"{label} must be a finite number")
-    result = float(value)
+    try:
+        result = float(value)
+    except (OverflowError, ValueError) as exc:
+        raise ContractError(f"{label} cannot be represented as a finite number") from exc
     if not math.isfinite(result) or result < low or (high is not None and result > high):
         raise ContractError(f"{label} is outside its finite allowed range")
     return result
@@ -207,7 +230,10 @@ def _identity(info: os.stat_result) -> tuple[int, int, int, int, int]:
 
 def read_regular_file(path: Path, *, max_bytes: int | None, label: str) -> tuple[bytes, tuple[int, int, int, int, int]]:
     ensure_no_symlink_components(path, label=label)
-    flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+    if not stat.S_ISREG(os.lstat(path).st_mode):
+        raise ContractError(f"{label} must be a regular file", "configuration")
+    flags = (os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) |
+             getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0))
     try:
         descriptor = os.open(path, flags)
     except OSError as exc:
@@ -238,7 +264,10 @@ def read_regular_file(path: Path, *, max_bytes: int | None, label: str) -> tuple
 
 def hash_regular_file(path: Path, *, expected_size: int | None, label: str) -> str:
     ensure_no_symlink_components(path, label=label)
-    flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+    if not stat.S_ISREG(os.lstat(path).st_mode):
+        raise ContractError(f"{label} must be a regular file", "configuration")
+    flags = (os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) |
+             getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0))
     try:
         descriptor = os.open(path, flags)
     except OSError as exc:
@@ -377,6 +406,7 @@ def validate_request(value: dict[str, Any], *, profile: str) -> AudioRequest:
     if source is not None:
         if abs(duration * SAMPLE_RATE - source.frame_count) > 0.5:
             raise ContractError("durationSeconds does not match source frames within half a sample")
+        requested_frames = source.frame_count
         if region is not None and region.end_frame > source.frame_count:
             raise ContractError("editRegion is outside source")
     latent_count = max(1, math.ceil(duration * SAMPLE_RATE / SAMPLES_PER_LATENT))

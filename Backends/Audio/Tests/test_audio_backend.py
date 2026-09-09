@@ -21,6 +21,7 @@ sys.path.insert(0, str(PYTHON_DIR))
 
 import d_audio_backend as backend
 import d_audio_contract as contract
+import d_audio_sa3 as sa3
 from d_audio_sa3 import InferenceResult, VENDOR_PROVENANCE_SHA256, verify_vendor
 
 
@@ -134,9 +135,37 @@ class AudioBackendTests(unittest.TestCase):
             contract.validate_request(request, profile="sm-music")
 
     def test_json_malformed_duplicate_and_nonfinite(self):
-        for raw in (b"{", b'{"a":1,"a":2}', b'{"a":NaN}'):
+        for raw in (b"{", b'{"a":1,"a":2}', b'{"a":NaN}', b'{"a":1e100000}'):
             with self.subTest(raw=raw), self.assertRaises(contract.ContractError):
                 contract.decode_strict_json(raw, label="fixture")
+
+    def test_json_depth_and_numeric_conversion_overflow(self):
+        def nested(containers):
+            raw = b"{}"
+            for _ in range(containers - 1):
+                raw = b'{"x":' + raw + b"}"
+            return raw
+        self.assertIsInstance(contract.decode_strict_json(nested(32), label="fixture"), dict)
+        with self.assertRaisesRegex(contract.ContractError, "nesting"):
+            contract.decode_strict_json(nested(33), label="fixture")
+        request = self.base_request()
+        request["durationSeconds"] = 10**10_000
+        with self.assertRaises(contract.ContractError):
+            contract.validate_request(request, profile="sm-music")
+
+    def test_generation_ties_even_and_edit_uses_source_frames(self):
+        request = self.base_request(frames=2)
+        request["durationSeconds"] = 2.5 / 44_100
+        self.assertEqual(contract.validate_request(request, profile="sm-music").requested_frames, 2)
+        request["durationSeconds"] = 3.5 / 44_100
+        self.assertEqual(contract.validate_request(request, profile="sm-music").requested_frames, 4)
+        source = self.make_source(frames=10)
+        edit = self.base_request("variation", frames=10, source_path=source)
+        edit["durationSeconds"] = 10.5 / 44_100
+        self.assertEqual(contract.validate_request(edit, profile="sm-music").requested_frames, 10)
+        edit["durationSeconds"] = 10.5001 / 44_100
+        with self.assertRaises(contract.ContractError):
+            contract.validate_request(edit, profile="sm-music")
 
     def test_prompt_utf8_limit_and_empty_latent_region(self):
         request = self.base_request()
@@ -224,8 +253,16 @@ class AudioBackendTests(unittest.TestCase):
             contract.read_regular_file(link, max_bytes=1024, label="link")
         fifo = self.root / "fifo"
         os.mkfifo(fifo)
-        with self.assertRaises(contract.ContractError):
-            contract.read_regular_file(fifo, max_bytes=1024, label="fifo")
+        probe = (
+            "from pathlib import Path; import sys; "
+            f"sys.path.insert(0,{str(PYTHON_DIR)!r}); import d_audio_contract as c; "
+            "\ntry: c.read_regular_file(Path(sys.argv[1]),max_bytes=1024,label='fifo')"
+            "\nexcept c.ContractError: raise SystemExit(0)"
+            "\nraise SystemExit(1)"
+        )
+        completed = subprocess.run([sys.executable, "-B", "-c", probe, str(fifo)],
+                                   stdin=subprocess.DEVNULL, capture_output=True, timeout=5)
+        self.assertEqual(completed.returncode, 0, completed.stderr)
         self.assertEqual(list(job.iterdir()), [])
 
     def test_atomic_publication_no_overwrite_and_failure_cleanup(self):
@@ -268,8 +305,17 @@ class AudioBackendTests(unittest.TestCase):
         self.assertEqual(completed.returncode, 0, completed.stderr)
         events = [json.loads(line) for line in completed.stdout.splitlines()]
         self.assertEqual(events[-1]["type"], "inspection")
-        self.assertEqual(events[-1]["requiredWeightBytes"], sum(range(8, 12)))
+        self.assertEqual(events[-1]["requiredWeightBytes"], 32)
         self.assertEqual(list(job.iterdir()), [])
+
+    def test_missing_mlx_measurements_are_unavailable_not_zero(self):
+        measured, peak = sa3._measure(object(), None, "fixturePhase")
+        self.assertIsNone(peak)
+        self.assertEqual(measured["measurementKind"], "unavailable")
+        self.assertEqual(measured["measurementPhase"], "fixturePhase")
+        self.assertIsNone(measured["activeBytes"])
+        self.assertIsNone(measured["cacheBytes"])
+        self.assertIsNone(measured["peakBytes"])
 
     def test_full_mock_orchestration_and_result_identity(self):
         args, job, request_value, _source = self.make_launch()
@@ -277,7 +323,10 @@ class AudioBackendTests(unittest.TestCase):
             progress("encodingText", 0, 1)
             progress("encodingText", 1, 1)
             return InferenceResult(array("f", [0.125] * request.requested_frames * 2),
-                                   {"mock": 0.0}, {"activeBytes": 0, "cacheBytes": 0, "peakBytes": 0})
+                                   {"mock": 0.0}, {"measurementKind": "unavailable",
+                                                    "measurementPhase": "mock",
+                                                    "activeBytes": None, "cacheBytes": None,
+                                                    "peakBytes": None})
         output = io.StringIO()
         with contextlib.redirect_stdout(output):
             code = backend.main(args, engine=fake_engine)
@@ -287,7 +336,7 @@ class AudioBackendTests(unittest.TestCase):
         self.assertEqual(terminal["runID"], request_value["runID"])
         self.assertTrue((job / "output.wav").is_file())
 
-    def test_cli_invalid_and_stdout_broken_pipe_controlled(self):
+    def test_cli_invalid_and_readonly_streams_full_process(self):
         environment = os.environ.copy()
         environment["PYTHONDONTWRITEBYTECODE"] = "1"
         completed = subprocess.run(
@@ -296,13 +345,26 @@ class AudioBackendTests(unittest.TestCase):
         )
         self.assertEqual(completed.returncode, 2)
         self.assertEqual(json.loads(completed.stdout.splitlines()[-1])["kind"], "configuration")
-        class Broken:
-            def write(self, _value):
-                raise BrokenPipeError("fixture")
-            def flush(self):
-                raise BrokenPipeError("fixture")
-        with mock.patch.object(sys, "stdout", Broken()):
-            self.assertEqual(backend.main([]), 2)
+        protected = self.root / "readonly-descriptor"
+        protected.write_bytes(b"unchanged")
+        before = protected.read_bytes()
+        for stdout_readonly, stderr_readonly in ((True, False), (False, True), (True, True)):
+            stdout_fd = os.open(protected, os.O_RDONLY) if stdout_readonly else subprocess.PIPE
+            stderr_fd = os.open(protected, os.O_RDONLY) if stderr_readonly else subprocess.PIPE
+            try:
+                child = subprocess.run(
+                    [sys.executable, "-B", str(PYTHON_DIR / "d_audio_backend.py")],
+                    stdin=subprocess.DEVNULL, stdout=stdout_fd, stderr=stderr_fd,
+                    timeout=10, env=environment,
+                )
+            finally:
+                if stdout_readonly:
+                    os.close(stdout_fd)
+                if stderr_readonly:
+                    os.close(stderr_fd)
+            with self.subTest(stdout=stdout_readonly, stderr=stderr_readonly):
+                self.assertEqual(child.returncode, 2)
+                self.assertEqual(protected.read_bytes(), before)
 
 
 if __name__ == "__main__":
