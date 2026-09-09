@@ -45,7 +45,7 @@ final class WorkbenchBootstrap {
             let library = try await ModelLibrary(stateDirectory: libraryDirectory)
             let model = WorkbenchModel(sessionFactory: AppSessionFactory.makeSession,
                 settings: settings, modelLibrary: library,
-                audioEnabled: audioWorkbenchEnabled, audioRecordingEnabled: false)
+                audioEnabled: audioWorkbenchEnabled, audioRecordingEnabled: audioWorkbenchEnabled)
             let observer = ModelLibraryModel(library: library)
             self.library = library
             self.model = model

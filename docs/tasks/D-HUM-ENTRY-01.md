@@ -143,3 +143,7 @@ UI代码b042c7ebefca0798c671a6c277254e13a1c2b7bb：原生文件面板/渲染身�
 恢复/来源：run-20260909T055825Z-assembly/final-receipt.json给最终完整源/批次SHA、仅文档差异、远端确认和保护；从ui/acceptance-integration、ui-review/lead-final-verification、combination/lead-tests-ui-integrated、app-build/final-assembly按需读证据。所有自有子执行/审核/编译/CPU/探针进程结束；不代表系统写锁或用户所有程序退出。分支/工作树/旧证据保留。每个服务/界面任务初交+2修+1有界Lead均已消耗，不更名刷新；代码主体Sol，Lead实际修补分别标记，非实现者审核不冒充实际测试。当前run耗时/原始usage逐次保留，超时未完整发出的用量及完整Lead/订阅费用unknown，缓存不重复相加；协作可交付不等于经济最优。
 
 下一产品出口保持：先完成H09/H10并决定源默认接纳，再优先可编辑音符/八小节普通试听/MIDI；一个受控本地器乐生成候选及紧接的歌词演唱各需显式模型/许可/精度/16GiB资源验证。授权问题集中处理，不用辅助脚本任务替代用户产品价值，不要求先完善全部文字/图像/META。
+
+## H09/H10 authorized host preparation (2026-09-10 JST)
+
+User approved the exact microphone purpose/capabilities for a separately built test D, retaining existing identity and bundle ID; user saved/exited ordinary D and approved foreground short recording/listening. Lead adds the approved two capabilities and purpose string, and enables recording only with the existing DEBUG UUID + audio isolation gate. Normal/release remains disabled. This is a new explicitly approved host increment, not another prior Worker repair. Actual permission/recording/listening remain pending. Source/personal scheme and ordinary D untouched. Evidence: `/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-HUM-ENTRY-01/run-20260909T152120Z-h09-authorized`; previous failures/budgets and schema4 source-integration gate remain.
