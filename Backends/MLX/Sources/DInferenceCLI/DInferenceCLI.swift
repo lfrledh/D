@@ -38,10 +38,32 @@ struct DInferenceCLI {
                 }
                 let directory = URL(fileURLWithPath: path, isDirectory: true)
                 try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-                let image = try MLXImageBackend(configuration: .init(artifactDirectory: directory),
+                let image = try MLXImageBackend(configuration: .init(
+                                                   artifactDirectory: directory,
+                                                   profile: options.selectedImageProfile),
                                                observer: { event in await recorder.append(event) })
                 imageBackend = image
                 backend = image
+            case .audio:
+                guard let artifactPath = options.artifacts,
+                      let python = options.audioPython,
+                      let script = options.audioScript,
+                      let vendor = options.audioVendor,
+                      let manifest = options.audioManifest,
+                      let profile = options.audioProfile else {
+                    throw CLIArgumentError("Audio launch configuration is incomplete.")
+                }
+                let directory = URL(fileURLWithPath: artifactPath, isDirectory: true)
+                try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+                backend = try MLXAudioBackend(configuration: AudioBackendConfiguration(
+                    pythonExecutable: URL(fileURLWithPath: python),
+                    providerScript: URL(fileURLWithPath: script),
+                    vendorDirectory: URL(fileURLWithPath: vendor, isDirectory: true),
+                    modelManifest: URL(fileURLWithPath: manifest),
+                    artifactDirectory: directory,
+                    profile: profile,
+                    licenseAcknowledged: options.audioLicenseAcknowledged,
+                    timeoutSeconds: options.timeoutSeconds))
             }
             report.backend = backend.descriptor
             let engine = try InferenceRuntime(
@@ -61,7 +83,7 @@ struct DInferenceCLI {
                 } else if runReport.outcome == "cancelled", report.exitCode == 0 {
                     report.exitCode = 130
                 }
-                if options.capability == .image, report.exitCode != 0 { break }
+                if options.capability != .text, report.exitCode != 0 { break }
             }
         } catch let error as CLIArgumentError {
             report.failure = error.localizedDescription
@@ -114,6 +136,22 @@ struct DInferenceCLI {
             input = .image(ImageRequest(prompt: options.prompt, width: options.width,
                                         height: options.height, steps: options.steps,
                                         guidanceScale: options.guidance, seed: options.seed))
+        case .audio:
+            let source: AudioSourceReference? = options.audioSource.map {
+                AudioSourceReference(
+                    url: URL(fileURLWithPath: $0),
+                    sha256: options.audioSourceSHA256!,
+                    frameCount: options.audioSourceFrames!, sampleRate: 44_100, channels: 2)
+            }
+            let region: AudioEditRegion?
+            if let start = options.audioEditStartFrame, let end = options.audioEditEndFrame {
+                region = AudioEditRegion(startFrame: start, endFrame: end)
+            } else { region = nil }
+            input = .audio(AudioRequest(
+                operation: options.audioOperation, prompt: options.prompt,
+                durationSeconds: options.durationSeconds, seed: options.seed,
+                steps: options.steps, guidanceScale: options.guidance,
+                strength: options.audioStrength, source: source, editRegion: region))
         }
         let request = InferenceRequest(
             model: ModelReference(directory: URL(fileURLWithPath: options.model), revision: options.revision),
@@ -188,7 +226,7 @@ struct DInferenceCLI {
                     if report.firstArtifactSeconds == nil {
                         report.firstArtifactSeconds = ProcessInfo.processInfo.systemUptime - started
                     }
-                    if outputFailure == nil, options.capability == .image {
+                    if outputFailure == nil, options.capability != .text {
                         do { try CLIOutput.artifact(artifact, runID: request.id) }
                         catch { outputFailure = error.localizedDescription }
                     }
