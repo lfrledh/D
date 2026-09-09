@@ -1,5 +1,18 @@
 # D 当前行动指南
 
+## 2026-09-10 集中实测新停点（覆盖下面上一续办状态，历史保留）
+
+本轮文档推送在执行前被自动审批拒绝（包含本机路径/模型与测试审计内容的对外发布范围）；仅保存本地文档提交，无上传重试。具体H14与live-push-rejection.json保留，不把待办说成已推送。
+
+H11真实SA3 small music6秒生成、repeat、变体、区间重绘已完成，固定精度保持；重绘范围外PCM一致。H12 1.5B除既有两次短改写外，本次两次真实取消/释放/下一任务通过。音频新取消检查未通过：双管道并发读取时进度被延迟至子进程结束附近；CLI130不能代替真实提前取消。两次同Python进程清理active18bytes/cache0且未增长，18bytes精确归属unknown。
+
+H09仍未到系统麦克风提示，实际Start被祖先路径检查拒绝；建议在原项目rootFD内校验，原件不覆盖/许可前后重查均保留。H10真实GUI导入/播放动作/Unicode注释与帧片段保存/原件和片段安全导出通过；真人听感未答，重开检查时Mac锁定。自有实例已结束，普通D和源个人scheme未变。需要解锁后继续真人项；不重新要求下载/条款/全盘授权。
+
+两个新生产修补超出既有原任务修复预算，保持提案等待额外有界授权：H09路径验证与H11双管道及时读取，均保持原标准、直接回归和非实现者审核；没有新Worker/生产修改/默认启用。源产品仍beaaaf82d845e672c6a3b661d928654affc00518；本轮源起点5e7e024f7194e5a7a15424c5254b1837ac8efee4，音频受测d1a5c26e3d2eda84ad7641a98b5aa33ce7f55407，HUM受测372a8acadf39b92faf4b17b6315f0f63774e4cff。候选未源接纳，不把候选实测写成用户普通D已具备。
+
+证据入口：`D-Development/AgentTrials/D-AUDIO-BACKEND-01/run-20260909T152406Z-h11-authorized/live-acceptance-checkpoint.json`、`live-final-receipt.json`（最终版本/保护）；HUM同级`run-20260909T152120Z-h09-authorized/h10-import-export-verification.json`、`review/path-response.md`；H12 `run-20260909T151340Z-h12-authorized/cancel/lead-verification.json`。持续人工队列见[清单](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md#人工协作待办持续维护入口)。下一步只是完成当前验收与限定修补，不开始新产品批次。
+
+
 ## 2026-09-10 集中授权续办检查点
 
 H09/H10/H11/H12均已明确获用户批准，不再等待原授权。H12固定1.5B权重10文件880,170,545bytes完整核验；实际统一CLI连续两次中文改写完成，每轮release active/cache=0，峰值966,847,960bytes。受测二进制来自d1a5c26e3d2eda84ad7641a98b5aa33ce7f55407，候选03798abfe17229f7678f9fcd611df87da7c775ac仅后续文档；不是1.5B完整模型库GUI/取消/专业质量验收。
