@@ -163,3 +163,15 @@ H10用户最初已保存退出且空闲。首个自有测试PID37620创建本轮
 下一动作：收到退出/当前空闲证据后，重新以专属UUID启动已复核测试版，在真实“开始录音”入口交用户点击麦克风提示；完成短录音/试听与H10保存导出恢复。同时按单重任务顺序完成SA3生成/变体/重绘/取消与重复释放，以及1.5B剩余验证。许可和下载无需重复审批；当前资源拒绝不是全盘权限缺口。全部原预算/失败/来源保留，不启动新产品批次。
 
 证据：H09 `/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-HUM-ENTRY-01/run-20260909T152120Z-h09-authorized`（preparation/label-fix、signed-build2、review/routing及两次review、app-run/result、protection-checkpoint）；H11 `/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-AUDIO-BACKEND-01/run-20260909T152406Z-h11-authorized`（authorization、download/environment/copies、environment-launch-diagnosis、generate失败、inspect-copies、retry-resource-rejection）；H12 `/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-AUDIO-BACKEND-01/run-20260909T151340Z-h12-authorized`（download-result、normal/report）。开发与用户媒体来源分开；本次Lead实施与实测，Sol只读审核；完整Lead/订阅消耗unknown。
+
+## 2026-09-10 H09/H10真实续验与路径检查停点
+
+实际普通签名产物代码372a8acadf39b92faf4b17b6315f0f63774e4cff，候选985d0e14仅后续记录；麦克风用途/两项能力仍正确，普通D未替换。最新用户确认已退出空闲，启动前全部D未运行。Start已真实点击，但AudioTransport.validateRecordingDestination在请求OS许可前报“录音目标目录不可经符号链接”；新reservation7DCD6BFC-29D2-4DB3-AAB4-D28BFA035377持久保留，无音频/系统提示。外部lstat所有祖先是目录，不能代替沙盒内errno；源码把任意lstat失败混报为符号链接，疑似越出项目授权根检查。不要以Full Disk Access解决。
+
+Sol/high同一已核验只读链路完成路径诊断433.486秒，未实现/未执行应用测试。建议额外一次限定H09/H10主机互通修补：AudioTransport.swift、ProjectAudioController.swift及直接测试，复用ProjectStore.audioCaptureURL已有rootFD/O_NOFOLLOW校验；只验证获授权项目内部，保留CAF形状/原件不覆盖/目标碰撞/项目身份和迟到许可取消。在许可前及许可后建recorder前必须重新验证原reservation路径；不允许在修补中用resolvingSymlinks或删文件规避。先补最小沙盒诊断记录真实失败组件/errno，再以原语义根因修正。须保留权限等待期间出现普通文件或symlink、关闭/切换、失败保留、重复完成等原回归；新回归验证授权根之外不被遍历，最后签名隔离实例实际到系统提示/短录音/保存。原AUDIO和H08预算均已消耗，此段是待批准提案，不重命名/追加普通修复次数；有界修补复验不通过则停报。
+
+独立H10已执行：从本轮SA3 CLI生成样本经原生面板导入，2ch44100Hz/6秒；点击播放，AX观察0.31s正在播放后结束。精确Unicode注释“H10 钢琴试听｜é｜👩🏽‍🎨；原件保留。”与片段“验收片段 🎹”范围1..<264599保存；原件面板导出逐字节一致，片段float32 PCM对应源264598帧；原始文件/旧图片文档与失败reservation未变。CUA typeText漏Unicode，改系统paste后直接检查项目字节一致；第二paste报告工具超时但实际字段已完整，查看后才保存，没有盲重试。这是工具输入事件，不是已证实产品IME缺陷，不重复此前真人IME验收。
+
+PID40013正常退出0；重开PID40236后CUA报Maclocked，未能观察重开界面。随后精确核对自有命令路径，TERM返回-15；项目清单摘要与退出前一致。真人听感问题已发、此检查点未收到回答；重开/录音/后续设备回归未通过，不能接纳schema4或宣称H10全闭环。PID39222也已正常退出0，当前自有测试进程全结束；不保证全系统状态，普通D四文件/签名未变。
+
+证据均在run-20260909T152120Z-h09-authorized：recording-path-failure、review/path-response及path-routing、h10-import-export-verification、h10-project-checkpoint、app-run2/3/4和live-protection-checkpoint。音频管道独立停点见AUDIO run-20260909T152406Z-h11-authorized/live-acceptance-checkpoint。没有新生产修改、修复预算不变；下一步集中确认额外两项修补和解锁/听感，恢复前核对真实HEAD/个人scheme/资源。最终文档版本在上述AUDIO run/live-final-receipt.json，不将文档提交当已重新实测。
