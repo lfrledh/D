@@ -1,0 +1,22 @@
+{
+  "repository": "https://github.com/Stability-AI/stable-audio-3",
+  "revision": "779434a908193105335fd8d833418603625b2859",
+  "license": "MIT (code only; no model rights implied)",
+  "files": {
+    "LICENSE": "16bd922f0deee6f11a76f5582258fdc3abdf67c6b8719dbcafbc34dee31979a6",
+    "models/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "models/defs/sa3_pipeline.py": "e8aca5225eeda40e1d3f53c04968bbce9df6290021f4bdc5c1a67d6d68013de8",
+    "models/defs/t5gemma_mlx.py": "ec8f9c088c72174c75aabf9e54ce410d53ff306244ccd397657ac961683a11e3",
+    "models/defs/same_s_decoder.py": "2733dc254a67c133489108616652f353aec21566e900169b15d8d871ec57c88c",
+    "models/defs/same_s_encoder.py": "d6785bb4ed549158d7dd2a3a13b85c2ec9cccf7f6ff05e9af58120ebbfd3e1df",
+    "models/defs/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "models/defs/lora_merge.py": "7fdc736b3cddc062672d8a954193a9478789e5af30ccf59b7710eab87c916533",
+    "models/defs/same_l_decoder.py": "c9c4922169423407ee6acbf6e7c88a46761d75cacecdac4de24d4a484e762622",
+    "models/defs/dit_mlx_medium.py": "12f4e0743f0c00f010f7e6b962e1de921378d1f4b3a3b77e6f106ece15e3ee4a",
+    "models/defs/lora.py": "85464d21291d8ba8d9b1d281260ededc926d7fe91271945c7611cdef46fb30a0",
+    "models/defs/dit_mlx.py": "7a57f7140c1c2ecde477c1029770f05adf1b77f8dd876a1231c5255da509e75a",
+    "models/defs/same_l_encoder.py": "71338711802fb5c7aaf15fea3852110c0a828cdbe94c643c553d4332944c5722"
+  },
+  "patches": [],
+  "weights": "not bundled or downloaded; Stability/Gemma permission pending"
+}
