@@ -4,6 +4,20 @@
 
 更新：2026-09-09。只记录当前执行所需信息；历史依据按需读取，不默认加载全部报告。
 
+## 声音工作台装配：工程验收通过，真实使用门槛待集中处理（2026-09-09）
+
+用户授权本阶段至推送，普通派工/修复/审核已自主完成。服务与生产UI已在隔离批次接通：限定WAV/CAF PCM导入、波形/普通播放控制、原始帧范围片段与Unicode注释、安全保存重开、原件和明确float32 WAV片段导出。导入按钮冻结渲染时的项目上下文/文档，文件面板前后校验；失效操作不写入后来的文档。录音结束/待恢复文件处理已有服务与界面接线，实际设备尚未验收。
+
+**准确的验证范围：** UI修补代码/测试b042c7ebefca0798c671a6c277254e13a1c2b7bb，定向11方法全部通过；隔离组合40ec0d7b6b1525c3a0c12cab7e00f3a6773ab63d（比b042仅UI任务记录）从组合目录运行全UI包226方法/29套件，225通过/1既有可选权重检查跳过、零失败。该组合完整独立DerivedData应用编译通过，CODE_SIGNING_ALLOWED=NO/CODE_SIGNING_REQUIRED=NO，仅编译未启动，不证明签名/沙盒/麦克风/GUI。没有重跑真实文字/图像推理；旧路径CPU回归包含在组合中，定向方法不重复相加。
+
+**版本与交付边界：** 候选在`codex/d-hum-entry-01`，本轮获准推送以保存进度；源`codex/inference-foundation`产品仍与已验收a406af9cd8908a77ae2f013d29121164d6fc0745相同，本轮源起点55e31bd0827ca63ea23cd5b3de39bd9535637c9c之后只更新四份状态/路线文档。未把schema4或新声音路径接管源入口：UIflag不是Store迁移开关。音频DEBUG入口须有效D_UI_TEST_SESSION UUID与D_AUDIO_WORKBENCH_TEST=1，录音仍关闭。最终完整源/候选SHA和实际推送确认见外部final-receipt.json；本节覆盖较早“接线待开始”记录，但不追改当时事实。
+
+**审核与恢复：** 服务/界面分别由Sol/high受限CLI实现，顺序执行以保护共享存储；各自初交和两轮修复后，Lead各一次限定收尾，非实现者只读审核接受相应Lead差异。不是Sol独立通过，也没有重做协作机制试验。所有本轮子执行/审核/构建/测试进程已结束；源scheme内容/摘要/索引/未暂存状态与普通D.app四关键文件保护保持，既有作品未改，工作树/证据保留。用量只保留本run逐次原始记录，完整Lead与订阅费用unknown，不宣称成本最优。
+
+**停点与下一动作：** [人工清单H09/H10](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md#人工协作待办持续维护入口)等待用户回到Mac后集中处理：批准具体麦克风能力增量及测试入口，再完成当前独立窗口的实际录音/人耳试听/导入导出/保存重开/旧项目副本迁移与界面检查。没有新音乐模型/依赖/签名身份/TCC授权。通过后再决定源默认接纳；不能把工程编译或合成PCM当作声音闭环已交付。随后优先HUM可编辑音符/MUS-0普通试听与MIDI，再接一个MUS-1受控器乐候选、紧接MUS-2歌声，TTS单列，不等全部文字/图像/META增强。
+
+批次记录：[声音装配候选](https://github.com/lfrledh/D/blob/codex/d-hum-entry-01/docs/tasks/D-HUM-ENTRY-01.md)。持久证据：`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-HUM-ENTRY-01/run-20260909T055825Z-assembly`，从final-receipt.json按需读ui/acceptance-integration、ui-review/lead-final-verification、combination/lead-tests-ui-integrated、app-build/final-assembly及保护/推送记录。恢复先核对真实HEAD/索引/个人修改，不仅相信摘要。
+
 ## 当前检查点：H08与原声基础组件已验收，本地批次保留（2026-09-09）
 
 用户批准本阶段直到验收和本地提交，不再逐项询问普通修补。H08已关闭：类型限定、实际容器/有符号PCM检查、宽窄滚动/Unicode组件覆盖均通过；本次Lead补齐重播false/抛错后的旧进度定时器释放。原18项断言保留，新增3项真实Timer所有权反例先在未修补实现失败、再通过；不是改接受标准。
