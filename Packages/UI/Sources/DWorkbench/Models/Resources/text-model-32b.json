@@ -1,0 +1,87 @@
+{
+  "schemaVersion": 1,
+  "repository": "mlx-community/Qwen2.5-32B-Instruct-4bit",
+  "revision": "2938092373e5f97b95538884112085364c2da315",
+  "directoryName": "Qwen2.5-32B-Instruct-4bit",
+  "source": "https://huggingface.co/mlx-community/Qwen2.5-32B-Instruct-4bit/tree/2938092373e5f97b95538884112085364c2da315",
+  "files": [
+    {
+      "name": "README.md",
+      "size": 740,
+      "algorithm": "git-blob-sha1",
+      "checksum": "67f4f5b95e3e5f69a6be8e3f0cff0eb17804c49c"
+    },
+    {
+      "name": "added_tokens.json",
+      "size": 605,
+      "algorithm": "git-blob-sha1",
+      "checksum": "482ced4679301bf287ebb310bdd1790eb4514232"
+    },
+    {
+      "name": "config.json",
+      "size": 787,
+      "algorithm": "git-blob-sha1",
+      "checksum": "898bd81a540a54dfbd50e052e60ed01d10244a8a"
+    },
+    {
+      "name": "merges.txt",
+      "size": 1671853,
+      "algorithm": "git-blob-sha1",
+      "checksum": "31349551d90c7606f325fe0f11bbb8bd5fa0d7c7"
+    },
+    {
+      "name": "model-00001-of-00004.safetensors",
+      "size": 5366582717,
+      "algorithm": "sha256",
+      "checksum": "3187f89267bdebe362410a3b23c2767d9d0707f4ffbbf7a945e5cd0abf535a21"
+    },
+    {
+      "name": "model-00002-of-00004.safetensors",
+      "size": 5335712920,
+      "algorithm": "sha256",
+      "checksum": "31547d7a3e6583eea8bcc1b7230680f8132143c43c19cab3eab75f6b31d33e33"
+    },
+    {
+      "name": "model-00003-of-00004.safetensors",
+      "size": 5366641934,
+      "algorithm": "sha256",
+      "checksum": "d00aec153b1ea6540446c1769ef76004e4ee11855844919f48434f0d4f77b33f"
+    },
+    {
+      "name": "model-00004-of-00004.safetensors",
+      "size": 2362540888,
+      "algorithm": "sha256",
+      "checksum": "4dae2dd0355ac7ad5440ccd4d5f60a08084cda924c058402b979654359150743"
+    },
+    {
+      "name": "model.safetensors.index.json",
+      "size": 143017,
+      "algorithm": "git-blob-sha1",
+      "checksum": "7949fa6067e06f908f1c2ec24cc73fc3c74bd9c7"
+    },
+    {
+      "name": "special_tokens_map.json",
+      "size": 613,
+      "algorithm": "git-blob-sha1",
+      "checksum": "ac23c0aaa2434523c494330aeb79c58395378103"
+    },
+    {
+      "name": "tokenizer.json",
+      "size": 7031673,
+      "algorithm": "git-blob-sha1",
+      "checksum": "d24314ef7f0afd1b678c2e24c767e19f24f86b0e"
+    },
+    {
+      "name": "tokenizer_config.json",
+      "size": 7308,
+      "algorithm": "git-blob-sha1",
+      "checksum": "482ccbc1096b0e9400e86e33f189681c2aebdab9"
+    },
+    {
+      "name": "vocab.json",
+      "size": 2776833,
+      "algorithm": "git-blob-sha1",
+      "checksum": "4783fe10ac3adce15ac8f358ef5462739852c569"
+    }
+  ]
+}
