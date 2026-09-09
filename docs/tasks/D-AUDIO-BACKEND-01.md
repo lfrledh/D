@@ -1,6 +1,6 @@
 # D-AUDIO-BACKEND-01 — 音频推理与跨配置扩展
 
-状态：准备中，2026-09-09。用户授权本阶段实施、测试、集成与 GitHub 工作分支推送。源基线 beaaaf82d845e672c6a3b661d928654affc00518；本文件后续记录完整执行版本。
+状态：组合工程与既有图文回归通过；真实音频待许可/环境验收，保留候选，2026-09-10。用户授权本阶段实施、测试、集成与 GitHub 工作分支推送。源基线 beaaaf82d845e672c6a3b661d928654affc00518；本文件后续记录完整执行版本。
 
 目标：模型驱动的音频生成／参考变体／区间重绘后端；将本机测试规格与产品可扩展模型/资源政策分离。优先小模型本机真实验收，大配置必须标明适配与待实测，不更改既有 FLUX q8、Qwen 4-bit 精度。音频具体模型及精度在核实官方代码/许可后冻结，不把研究资料当本机实测。
 
@@ -10,7 +10,7 @@
 
 证据：D-Development/AgentTrials/D-AUDIO-BACKEND-01/run-20260909T123045Z。保护/源快照见 preparation.json。进程枚举被当前沙箱拒绝，旧任务终止依据已有回执；未声称全系统空闲或写锁。
 
-下一动作：SCALE 预检→实现，Lead 冻结音频模型与数据契约，再派后端。所有未验收项与实际限制留在本记录。
+初始计划（历史）：SCALE 预检→实现，Lead 冻结音频模型与数据契约，再派后端。所有未验收项与实际限制留在本记录。
 
 ## Shared audio value contract (Lead, AUDIO1)
 AudioRequest/AudioSourceReference/AudioEditRegion add a value-only audioGeneration input. Source-frame half-open coordinates, immutable hash/metadata and operation-dependent validation; backend must still validate actual media/model limits. Existing tasks view exhaustiveness is updated only to return prompt, not enable audio submission or project schema4. This code needs core/combined tests and nonimplementer review.
@@ -27,3 +27,26 @@ Resume: sourceHEADbeaaaf82d845e672c6a3b661d928654affc00518, schemeSHAca3635d88aa
 User confirmed currentD/AI/GPUidle. IsolatedCLI built from c57bb6c388771b2d041f0736a001563d7b073cf0, no signing/settings/application changes. Existing text0.5B verifier complete=true/passed=true,10 cases including5 repeatedruns/cancel/signals/brokenpipe; MLX active/cache0 afterallreleases, no growth. Existingimageq8 verifier complete=true/passed=true,17 cases including3 repeated512² outputs/cancel/signals/brokenpipe. Three generatedPNG identicalSHA1743b94c4aab0365a131de5c82d6b5df46eafe3857e78497feff395a0044d8d9, elapsed43.024/40.931/40.987s, peakMLX6,207,522,060bytes, active/cache0 afterrelease. Lead viewedfox/snow image and observed plausible orientation/color/content; this is not artisticqualitycertification. These are actualmodel runs, notaudio proof; upstreamfixed image+textprecision maintained. Both verifierparentandownedchildrenended, no userDclosed. H13 currentwindow resolved, H11/H12 stillpending.
 CPU nativeAVAudioFile crosscheck decoded all4410 stereo44.1kHzfloat32 frames exactly, sourceSHA unchanged; syntheticfixtureonly/noplayback (wav-native-cpu/result.json). Existing0.5B CPUchecksum test11methods passed, no skipped, weightsunchanged. Common30methods passed at9e546ebfa3e0bf8b05186694d298a2e212179b3d; runtimeWorker was active but only backend/CLI changes, common/test inputs retained exact committed hash (AudioRequestTests bd60121f81072e87ed7f34f32a1efa385eed8259be8a416a4bb2f7e526bb37a4); combination will be rechecked after pause.
 Audio repair1CPU18 passed642413934880ae2d06237b05ea847740328dd351, but independent cachedcodefixture loaded99 insteadverifiedsource1 under-B whileSHA unchanged. Preservedfailure, spec5 grants finalordinaryrepair on exactsource execution and honestunknownmetrics. Runtime repair1productiontypecheckpassedbutfulltestbuildfailed selfcapture initializer; finalordinaryrepair spec4 also clarifies frozenmetadata comparison andframe rounding. NoLeadproductionrewrite yet. Source remainsbeaaaf82d845e672c6a3b661d928654affc00518 withschemeSHAca3635d88aa5a15397b90e528667c66c0e6db7e596176e885c79d194b544206c unstaged/indexclean. This checkpoint is not acceptance of pendingaudio or currentbatch-sourceintegration.
+
+## Final candidate checkpoint (2026-09-10 JST; real test timestamps 2026-09-09 UTC)
+Combined testedcode d1a5c26e3d2eda84ad7641a98b5aa33ce7f55407 contains reviewed SCALE3f18d6c, TEXT tested7ef7f8a/docs e21e45d (fullsource in text/lead-integration.json), Python tested d9def7ce5a56e10e853a76407aa50548da8f6af0/docs ae02af00, Runtime tested d610184fa2a484d1da89cf5f3543ea347fc34df3/docs e887e55. Full candidates in per-task lead-integration.json and Git parents, not invented shortSHA expansions. Final candidate after this entry is docs-only, fullSHA in external final-candidate-receipt.json; no claim tests ran on a not-yet-created doccommit.
+
+| Check on combined code | Actual result | Evidence relative to this run |
+|---|---|---|
+| Python memory compile / unittest | 4 source files compile;21 methods passed | combined-acceptance/python-*-result.json / python-tests.stderr |
+| Core |30 methods/4 suites passed|combined-acceptance/swift-core-*|
+| UI/workbench package |174 methods reported;173 executed passed,1 optional existingweights check skipped,0 failures|combined-acceptance/swift-workbench-*|
+| Swift host/image CPU |42 methods/3 suites,100 expanded passed;0 fail/skip|combined-cpu-complete-selection/{summary.json,result.json}|
+| Cross-language AUDIO1 | actualSwiftCLI→actualPythonvalidation/publication with explicit synthetic engine/fourfakeweights;generate/variation/inpaint3 pass,large seed/Unicode/frozenmetadata/12288frames/source unchanged/outsideinterval samples exact |combined-audio-bridge/results.json; no real MLX/model |
+| Application/CLI assembly |offlinecached dependencies, no-signing builds passed, no launch|combined-acceptance/{app-build,cli-build}-result.json|
+| Existing0.5B4-bit text CLI |10 cases complete/pass,fullprocess cancellation/signals/repeats|combined-existing-models/text/summary.json|
+| Existing4Bq8 image CLI |17 cases complete/pass,512² repetitions/reference/cancellation/signals/release|combined-existing-models/image/summary.json|
+| Expanded image |768x512 truePNG,4steps/guidance1/seed42,52.710s,MLXpeak6309409880bytes,releaseactive/cache0;PNGsha f65f041fe9145298fed3065c65c1ac7f759de62d4c8432b3f1852464ba074a47,Leadvisualchecked|combined-existing-models/{wide-report.json,wide-check.json,wide-visual-review.json}|
+
+Validation harness correction: first combined selector used LocalImageInventoryTests instead of actual LocalImageModelInventoryTests, therefore only27 methods were selected/passed. Lead compared xcresult count, corrected selector and reran full42 on identicalcode afterGPU ended; no assertion/source change. Prior standalone20/40/22 and current27/42 results overlap and are not summed. Optionalweighttest already independently passed on exactunchanged textcode with actual0.5B path (text-existing-check11methods); current174 report still honestly retains skip. No history failure rerun/count inflation.
+
+Source attribution: Sol/high initial implementations; SCALE831.582s andTEXT1342.690s no ordinary repairs/noLeadprodrewrites. Python retained initial900s timeout and2repairs759.631/500.011s (plus earlier531.267s clarification attempt). Runtime initial900s timeout,2repairs1455.988/1205.292s then oneboundedLeadfix of missinginpaintmetadata+partialmetric coordination; nonimplementerSol/high read-only229.699s ACCEPT. Initialdevelopment failures/Leadclarifications/deniedcache/macro events remain per-taskrecord. Main Lead compiled/tested/reviewed/integrated; no claim independentReviewer ran tests. Request/observablemodel+effort+roots in per-runrecords; hiddenserverresolutionunknown. Raw per-turn usage events preserved, not summed as if every resume snapshot were incremental; fullLead/subscriptioncostunknown, no cost-optimal claim.
+
+H11 stillpending: no realSA3weights/import/inference/installation; knownbundlePython lacksmlx/sentencepiece, propose explicitisolatedtaskenvironment after rightsconfirmed. No legalterms acceptance/registration byLead. H12 exact1.5Bdownload command rejected byauto-review beforeexecution; no alternatepath/tool retry, no7B/32Bweightsdownload. H13 userconfirmedidle, all finalLeadCPU/CLI/GPU processes awaited; no newWorkeractive. OriginaloldFIFOchild exitunknown remains, not falselycleanedup. OriginalD/works untouched bytaskoperations; noGUI/signing/TCC/keys/globalCodexsettings changes.
+
+Recovery: sourceinitialbeaaaf82d845e672c6a3b661d928654affc00518, onlyschemeunstaged sha ca3635d88aa5a15397b90e528667c66c0e6db7e596176e885c79d194b544206c, indexblob9c76916bdc97c2d4298cefe64e0b0fae3380573e. Candidate codex/d-audio-backend-01 remains unacceptedforrealSA3; source may receive onlystatus/checklistdocs to preserve recoveryindex, never audio/UI/schema4default integration. Finalactualsource/candidate/push/protection in final-candidate-receipt.json; retainworktrees/branches/evidence, noreset/stash/rewrite/mainpush. Nextaction: userH11/H12 answers, verifycurrenthardware/taskstate then real6sSA3 generate/repeat/cancel-next/variation/inpaint with unchangedprecision+sourceprotection; largerMacmatrix later. Do not restartproductbatch or repeatedly retrydenieddownload.

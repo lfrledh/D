@@ -10,6 +10,10 @@
 
 此前的 B1 是独立硬件实验：同进程三轮各约 35 秒，MLX 分配峰值约 5.78 GiB，释放后约 0.5 MiB 残留。该实验及其 [原始报告](docs/IMAGE_PROBE_RESULTS.zh-CN.md) 保留为历史对照，不能用它代替 B2 的运行时与资源验收。
 
+## 音频后端与跨配置候选（2026-09-10）
+
+`codex/d-audio-backend-01` 增加SA3本地进程后端、统一音频任务与WAV产物，三操作跨语言CPU验证及组合编译通过；真实音频权重/环境验收尚待许可，不代表普通D已能生成音乐。文本较大固定4-bit型号登记、主机预算政策与显式FLUX尺寸profile已实现，既有图文CLI及一次768×512真图通过；高配Mac/更大型号仍逐项待测。源工作分支不默认接纳该未完成音频验收候选。调用、精度、来源与能力矩阵见[音频后端指南](docs/AUDIO_BACKEND_GUIDE.zh-CN.md)，恢复从[批次记录](docs/tasks/D-AUDIO-BACKEND-01.md)开始。
+
 ## 本机开发环境（2026-09-07）
 
 - 项目：`/Volumes/CodexProjects/Codex/D`
