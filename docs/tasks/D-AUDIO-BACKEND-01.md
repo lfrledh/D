@@ -50,3 +50,17 @@ Source attribution: Sol/high initial implementations; SCALE831.582s andTEXT1342.
 H11 stillpending: no realSA3weights/import/inference/installation; knownbundlePython lacksmlx/sentencepiece, propose explicitisolatedtaskenvironment after rightsconfirmed. No legalterms acceptance/registration byLead. H12 exact1.5Bdownload command rejected byauto-review beforeexecution; no alternatepath/tool retry, no7B/32Bweightsdownload. H13 userconfirmedidle, all finalLeadCPU/CLI/GPU processes awaited; no newWorkeractive. OriginaloldFIFOchild exitunknown remains, not falselycleanedup. OriginalD/works untouched bytaskoperations; noGUI/signing/TCC/keys/globalCodexsettings changes.
 
 Recovery: sourceinitialbeaaaf82d845e672c6a3b661d928654affc00518, onlyschemeunstaged sha ca3635d88aa5a15397b90e528667c66c0e6db7e596176e885c79d194b544206c, indexblob9c76916bdc97c2d4298cefe64e0b0fae3380573e. Candidate codex/d-audio-backend-01 remains unacceptedforrealSA3; source may receive onlystatus/checklistdocs to preserve recoveryindex, never audio/UI/schema4default integration. Finalactualsource/candidate/push/protection in final-candidate-receipt.json; retainworktrees/branches/evidence, noreset/stash/rewrite/mainpush. Nextaction: userH11/H12 answers, verifycurrenthardware/taskstate then real6sSA3 generate/repeat/cancel-next/variation/inpaint with unchangedprecision+sourceprotection; largerMacmatrix later. Do not restartproductbatch or repeatedly retrydenieddownload.
+
+## 2026-09-10 集中授权续办检查点
+
+H09/H10/H11/H12均已明确获用户批准，不再等待原授权。H12固定1.5B权重10文件880,170,545bytes完整核验；实际统一CLI连续两次中文改写完成，每轮release active/cache=0，峰值966,847,960bytes。受测二进制来自d1a5c26e3d2eda84ad7641a98b5aa33ce7f55407，候选03798abfe17229f7678f9fcd611df87da7c775ac仅后续文档；不是1.5B完整模型库GUI/取消/专业质量验收。
+
+H11用户确认适用资格并授权固定small music四权重1,919,674,322bytes及独立依赖；下载完整核验，未代接受/注册。mlx/mlx-metal0.32.2、numpy2.3.5、sentencepiece0.2.2安装于新外盘venv，使用固定预编译wheel，原全局Python未变。首个6秒请求在计算前失败：当前Swift启动器解析python符号链接后运行基础解释器，丢失venv依赖。对照sys.prefix/find_spec确认；新建标准venv --copies保留明确真实可执行路径，CPU --inspect和完整固定权重/Vendor核对通过，未改实现/精度或注入PYTHONPATH。原环境/失败保留；此兼容限制不是SA3数值通过。
+
+H09在独立HUM候选增加批准的用途说明和两个麦克风能力，并仅将DEBUG有效UUID+audio测试门传给recordingEnabled。Lead补正启用后仍显示“未启用”的旧侧栏文字；Sol/high受限只读复核先指出反例、后接受修正，未替代真实测试。候选372a8acadf39b92faf4b17b6315f0f63774e4cff普通既有身份签名构建成功；首版已核对Sandbox/Hardened Runtime及麦克风能力，修正版尚待重新启动/实际提示。没有替换普通D、变更Team/bundleID/钥匙串/TCC，schema4仍未源接纳。
+
+H10用户最初已保存退出且空闲。首个自有测试PID37620创建本轮新项目后正常退出0；退出后CUA getAXState重新定位到“Model Library Acceptance”旧D窗口，尚不能确认其进程身份，未继续操作/关闭。已请用户保存退出该窗口；不能把它当本轮隔离实例。后续音频generate-copies启动被自动审批明确拒绝（仍有D运行、GPU空闲未重确认），命令未执行；没有换路径绕过。暂停GUI/GPU依赖项，独立CPU检查继续。不要再在Quit后调用D对象getAXState（工具可能重启/重定位）；用自有进程退出回执及仅枚举状态确认。
+
+下一动作：收到退出/当前空闲证据后，重新以专属UUID启动已复核测试版，在真实“开始录音”入口交用户点击麦克风提示；完成短录音/试听与H10保存导出恢复。同时按单重任务顺序完成SA3生成/变体/重绘/取消与重复释放，以及1.5B剩余验证。许可和下载无需重复审批；当前资源拒绝不是全盘权限缺口。全部原预算/失败/来源保留，不启动新产品批次。
+
+证据：H09 `/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-HUM-ENTRY-01/run-20260909T152120Z-h09-authorized`（preparation/label-fix、signed-build2、review/routing及两次review、app-run/result、protection-checkpoint）；H11 `/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-AUDIO-BACKEND-01/run-20260909T152406Z-h11-authorized`（authorization、download/environment/copies、environment-launch-diagnosis、generate失败、inspect-copies、retry-resource-rejection）；H12 `/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-AUDIO-BACKEND-01/run-20260909T151340Z-h12-authorized`（download-result、normal/report）。开发与用户媒体来源分开；本次Lead实施与实测，Sol只读审核；完整Lead/订阅消耗unknown。
