@@ -442,7 +442,7 @@ enum AudioProviderProtocol {
         }
         let kind = try allocation["measurementKind"]!.requiredString(context: "allocation measurement kind")
         let phase = try allocation["measurementPhase"]!.requiredString(context: "allocation measurement phase")
-        guard ["unavailable", "mlx-allocator"].contains(kind), !phase.isEmpty else {
+        guard ["unavailable", "partial-mlx-allocator", "mlx-allocator"].contains(kind), !phase.isEmpty else {
             throw InferenceFailure.backendFailed("\(context) has an invalid kind or phase.")
         }
         for key in ["activeBytes", "cacheBytes", "peakBytes"] {
@@ -481,9 +481,13 @@ enum AudioProviderProtocol {
 
         let inpaintKeys = ["requestedRegionFrames", "effectiveLatentRegion", "inpaintBoundaryPolicy"]
         if let region = expected.region {
-            let requested = try metadata[inpaintKeys[0]]!.object(
+            guard let requestedValue = metadata[inpaintKeys[0]],
+                  let effectiveValue = metadata[inpaintKeys[1]] else {
+                throw InferenceFailure.backendFailed("Audio inpaint metadata is missing its requested or effective region.")
+            }
+            let requested = try requestedValue.object(
                 exactKeys: ["startFrame", "endFrame"], context: "requested inpaint region")
-            let effective = try metadata[inpaintKeys[1]]!.object(
+            let effective = try effectiveValue.object(
                 exactKeys: ["start", "end"], context: "effective inpaint region")
             guard requested["startFrame"] == .integer(region.requestedStart),
                   requested["endFrame"] == .integer(region.requestedEnd),

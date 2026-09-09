@@ -267,6 +267,16 @@ struct AudioBackendTests {
         #expect(next.artifacts.count == 1)
     }
 
+    @Test("Partially available MLX measurements retain null unknown values")
+    func partialMeasurementMetadata() async throws {
+        let fixture = try AudioFixture()
+        defer { fixture.remove() }
+        let backend = try MLXAudioBackend(configuration: fixture.configuration())
+        let result = try await backend.execute(fixture.request(prompt: "partial-measurements")) { _ in }
+        await backend.release()
+        #expect(result.artifacts.count == 1)
+    }
+
     @Test("Semantically equal integer and decimal result snapshots are accepted")
     func semanticResultCopies() async throws {
         let fixture = try AudioFixture()
@@ -514,6 +524,8 @@ if r['operation']=='inpaint':
     metadata['inpaintBoundaryPolicy']='no-crossfade; exact float32 source conversion outside requested frames'
 if mode=='missing-requested-region': metadata.pop('requestedRegionFrames',None)
 if mode=='missing-effective-region': metadata.pop('effectiveLatentRegion',None)
+if mode=='partial-measurements':
+    metadata['mlxAllocations'].update(measurementKind='partial-mlx-allocator',activeBytes=1,observedActiveLowerBoundBytes=1)
 if mode=='bad-request-prompt': metadata['request']['prompt']='corrupted'
 if mode=='bad-request-seed': metadata['request']['seed']=metadata['request']['seed']+1
 if mode=='bad-request-boolean': metadata['request']['seed']=True
