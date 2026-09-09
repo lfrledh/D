@@ -11,6 +11,7 @@ public enum AudioBackendProfile: String, CaseIterable, Codable, Sendable {
 /// Explicit host-owned launch configuration. Constructing this value performs no I/O and
 /// does not imply that model terms have been accepted.
 public struct AudioBackendConfiguration: Sendable {
+    public static let registeredModelRevision = "da6edc54ddba10bfd79a077102ded687f80e882b"
     public let pythonExecutable: URL
     public let providerScript: URL
     public let vendorDirectory: URL
@@ -106,6 +107,9 @@ enum AudioFileSystem {
         try validateDirectory(artifacts, label: "Audio artifact directory")
         let model = try absoluteLocal(modelDirectory, label: "Audio model directory")
         try validateDirectory(model, label: "Audio model directory")
+        guard !overlaps(model, vendor) else {
+            throw InferenceFailure.invalidRequest("Audio model and vendor directories must be separate.")
+        }
 
         var protectedInputs = [model, vendor, provider, manifest]
         if let source {
@@ -131,6 +135,7 @@ enum AudioFileSystem {
 
     static func absoluteLocal(_ url: URL, label: String) throws -> URL {
         guard url.isFileURL, url.path.hasPrefix("/"), !url.path.contains("\0"),
+              !url.pathComponents.contains(".."),
               url.host == nil || url.host == "" || url.host == "localhost" else {
             throw InferenceFailure.invalidRequest("\(label) must be an absolute local path.")
         }

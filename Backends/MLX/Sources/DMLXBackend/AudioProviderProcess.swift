@@ -159,7 +159,7 @@ private final class AudioProcessExit: @unchecked Sendable {
     }
 }
 
-private final class AudioOwnedProcessControl: @unchecked Sendable {
+fileprivate final class AudioOwnedProcessControl: @unchecked Sendable {
     enum StopReason: Sendable, Equatable {
         case cancelled
         case timeout
@@ -254,7 +254,7 @@ enum AudioProviderProtocol {
         "decoding", "publishing", "cleanup",
     ]
 
-    static func readStdout(
+    fileprivate static func readStdout(
         _ handle: FileHandle,
         runID: UUID,
         control: AudioOwnedProcessControl,
@@ -479,7 +479,8 @@ enum AudioWAV {
             throw InferenceFailure.backendFailed("Invalid or truncated RIFF/WAVE container.")
         }
         var offset = 12
-        var format: (code: UInt16, channels: UInt16, rate: UInt32, align: UInt16, bits: UInt16)?
+        var format: (code: UInt16, channels: UInt16, rate: UInt32, byteRate: UInt32,
+                     align: UInt16, bits: UInt16)?
         var pcmRange: Range<Int>?
         while offset < data.count {
             guard offset + 8 <= data.count else { throw InferenceFailure.backendFailed("Truncated WAV chunk header.") }
@@ -494,7 +495,7 @@ enum AudioWAV {
                     throw InferenceFailure.backendFailed("Missing or duplicate WAV format chunk.")
                 }
                 format = (u16(data, body), u16(data, body + 2), u32(data, body + 4),
-                          u16(data, body + 12), u16(data, body + 14))
+                          u32(data, body + 8), u16(data, body + 12), u16(data, body + 14))
             } else if id == Data("data".utf8) {
                 guard pcmRange == nil else { throw InferenceFailure.backendFailed("Duplicate WAV data chunk.") }
                 pcmRange = body..<(body + length)
@@ -510,6 +511,7 @@ enum AudioWAV {
         let bytesPerSample = Int(format.bits / 8)
         guard format.bits.isMultiple(of: 8), bytesPerSample > 0,
               Int(format.align) == Int(format.channels) * bytesPerSample,
+              UInt64(format.byteRate) == UInt64(format.rate) * UInt64(format.align),
               pcmRange.count.isMultiple(of: Int(format.align)) else {
             throw InferenceFailure.backendFailed("WAV block alignment or sample width is invalid.")
         }

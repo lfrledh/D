@@ -74,7 +74,6 @@ public actor MLXAudioBackend: InferenceBackend {
             let job = runDirectory.appendingPathComponent("job", isDirectory: true)
             let temporary = runDirectory.appendingPathComponent("tmp", isDirectory: true)
             let cache = runDirectory.appendingPathComponent("cache", isDirectory: true)
-            let home = runDirectory.appendingPathComponent("home", isDirectory: true)
             let requestURL = runDirectory.appendingPathComponent("request.json")
             let requestData = try Self.encodeRequest(request, audio: audio)
             try AudioFileSystem.writeExclusive(requestData, to: requestURL)
@@ -88,7 +87,6 @@ public actor MLXAudioBackend: InferenceBackend {
                 "PYTHONPYCACHEPREFIX": cache.appendingPathComponent("pycache").path,
                 "TMPDIR": temporary.path,
                 "XDG_CACHE_HOME": cache.path,
-                "HOME": home.path,
             ]
             let process = AudioProviderProcess(
                 executable: inventory.configuration.pythonExecutable,
@@ -174,7 +172,7 @@ public actor MLXAudioBackend: InferenceBackend {
             throw InferenceFailure.backendFailed("Cannot open the newly created audio run directory.")
         }
         defer { Darwin.close(runDescriptor) }
-        for child in ["job", "tmp", "cache", "home"] {
+        for child in ["job", "tmp", "cache"] {
             guard Darwin.mkdirat(runDescriptor, child, 0o700) == 0 else {
                 throw InferenceFailure.backendFailed(
                     "Cannot create owned audio \(child) directory: \(String(cString: strerror(errno)))")

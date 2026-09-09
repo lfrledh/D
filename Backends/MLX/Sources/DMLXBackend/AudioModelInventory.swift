@@ -3,7 +3,7 @@ import Foundation
 
 struct AudioModelInventory: Sendable {
     static let repository = "stabilityai/stable-audio-3-optimized"
-    static let revision = "da6edc54ddba10bfd79a077102ded687f80e882b"
+    static let revision = AudioBackendConfiguration.registeredModelRevision
 
     struct Weight: Sendable, Equatable {
         let path: String
@@ -87,7 +87,7 @@ struct AudioModelInventory: Sendable {
         }
     }
 
-    private static func estimate(largestWeight: UInt64, durationSeconds: Double) throws -> UInt64 {
+    static func estimate(largestWeight: UInt64, durationSeconds: Double) throws -> UInt64 {
         guard largestWeight > 0, durationSeconds.isFinite, durationSeconds > 0,
               durationSeconds.rounded(.up) <= Double(UInt64.max) else {
             throw InferenceFailure.invalidRequest("Audio resource estimate inputs are invalid.")
