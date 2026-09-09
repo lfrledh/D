@@ -4,21 +4,21 @@
 
 更新：2026-09-09。只记录当前执行所需信息；历史依据按需读取，不默认加载全部报告。
 
-## 当前批次：H08追加收尾已执行，音频候选仍未接纳（2026-09-09）
+## 当前批次：H08类型修补通过，音频资源清理缺项待处理（2026-09-09）
 
-用户已经批准H08，不再将其写成“尚未授权”。默认Lead规划/验收、按就绪度0—2受限Worker；本次按依赖只有一个Sol/high实现者，没有为并行制造任务，也没有重新试验协作机制。
+用户已批准H08及其测试类型名定点收尾。Lead完成五处DWorkbench.AudioFormatInfo限定；源产品代码仍为a406af9cd8908a77ae2f013d29121164d6fc0745，未接纳HUM/schema4/新音频入口。本次源仍只维护规划和停点文档，不把辅助修补完成写成声音工作台已完成。
 
-**本批未完成产品接纳。** 已接纳产品代码仍为a406af9cd8908a77ae2f013d29121164d6fc0745；本轮源分支只更新四份规划/状态文档。存储候选30a2298d8789f3daeb9d50d70d76b09931d6482c及其隔离组合b27a969caf63b7b75d9edb8b25ba58df0cde7e8c的186方法/25套件结果复用（现有可选权重检查1项跳过），没有把音频失败拼入通过数。
+**本轮通过：** 受测候选0328a75a47491ca89b5960069e07987729829df6，18个不同方法/2套件零失败零跳过，包括实际合成WAV/CAF容器、采样率/编码反例、取消/迟到回调、64片段宽窄滚动、Unicode组件处理。仅五个测试类型引用改变，原断言/参数/产品代码保持；之前编译失败保留，不重跑历史失败版。最终候选02a85a9abb755a59a9e7e9f3126d534ebd70f5c6仅增加任务记录，不能说测试在此文档提交上重跑。
 
-H08限定修补交回于候选7a60178287e021521c7c94bdbe8804779296c0dd：实际容器/有符号PCM交叉检查、隐藏窗口滚动测试与Unicode处理器反例已提交，但Lead实际SwiftPM检查在测试模块编译处失败，行为测试没有运行。原因是新增AudioToolbox与DWorkbench都定义AudioFormatInfo，测试中的未限定类型重名；语法parse通过没有证明类型正确。没有继续修补、派装配或启用schema4/音频入口。H08唯一追加交付已用，旧初交/两次修复/Lead接管历史保留。
+**接纳仍受阻：** 非实现者Sol/high只读复核确认其余H08修改与契约相符，但发现播放中再次启动返回false或抛错时，状态虽回到暂停，旧进度定时器仍有效。Lead独立CPU观察两条路径均有30Hz旧定时器继续调度，显式shutdown后才失效。单独诊断不是第19项产品通过，也没有测真实声音/耗电量。当前18项回归只覆盖暂停状态，未覆盖这个资源条件。没有偷偷修改产品代码、合并候选或派出装配Worker。
 
-新只读审核仅完成预检，未执行正式REVIEW。预检使用系统git启动器导致xcrun缓存写入被只读沙箱拒绝，命令返回0；记录为工具副作用/命令边界事件，不说成权限已扩大或毫无异常。Lead未重试、未改权限；后续应明确使用已安装的Xcode git实际路径。实现者没有观察到权限拒绝，二者分开记载。
+新只读预检与复核均完成，使用明确的Xcode git实际路径，无新增缓存拒绝、权限或未配对命令事件；旧系统git启动器拒绝记录不追改。请求与观察设置均Sol/high/read-only/approval-never，隐藏服务路由与完整费用unknown。Lead是本轮类型修补实施者和实际测试执行者，Sol为非实现者只读审核，不混记为它独立运行测试。
 
-最小下一动作：在同一任务内只限定测试引用为DWorkbench.AudioFormatInfo，再重跑既有CPU和只读复核；目前仅提案，未执行。不需要Mac密码、全盘授权或新模型。通过后再按已准备的生命周期/持久化契约安排共享服务、界面接线两个依赖顺序工作包；不是换编号绕过音频预算。
+最小下一动作提案：在同一AUDIO任务修正重播失败的定时器清理，补false/throw与成功重播的直接反例，再完成原测试/复核和隔离组合检查。此前历史及本次次数不重置；最新授权仅类型修补与验证，生产定时器修复尚未执行。无需Mac密码、全盘权限、麦克风或新模型。通过后才继续已准备的共享生命周期/存储接线与界面接线；不更换任务编号修复当前缺陷。
 
-用户要求的音频推理生成已正式落实到[音乐路线](MUSIC_ROADMAP.zh-CN.md)：原声保全/普通试听→可编辑音符与八小节→一个受控器乐后端→紧接歌声，TTS单列。不等待全部文字/图像/META增强；本轮未选型、下载或运行音乐模型。
+存储候选30a2298d8789f3daeb9d50d70d76b09931d6482c及组合b27a969caf63b7b75d9edb8b25ba58df0cde7e8c历史186方法/25套件结果复用（可选权重检查1项跳过），本轮未重新组合测试。音频生成仍按[音乐路线](MUSIC_ROADMAP.zh-CN.md)：原声保全/试听→可编辑音符与八小节→受控器乐→歌声，TTS单列；没有音乐模型实施或下载，不等待所有文本/图像/META增强。
 
-源个人scheme保留原内容/索引/未暂存状态，普通D.app四个关键文件保持；所有本轮自有实施、预检、CPU进程已结束，不推送。任务记录保留在批次目录：[/Volumes/CodexProjects/Codex/D-Worktrees/D-HUM-ENTRY-01/docs/tasks/D-HUM-ENTRY-01.md](/Volumes/CodexProjects/Codex/D-Worktrees/D-HUM-ENTRY-01/docs/tasks/D-HUM-ENTRY-01.md)。最新完整版本、保护及证据索引为`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-HUM-ENTRY-01/run-20260908T172827Z-h08/final-receipt.json`；恢复先核对真实HEAD和状态。本轮源更新仅文档，不宣称运行过最终文档提交的测试。
+源个人scheme完整内容/索引/未暂存状态与普通D.app保持，所有本轮自有CPU/诊断/复核进程结束，无推送。候选与批次记录保留于[/Volumes/CodexProjects/Codex/D-Worktrees/D-HUM-ENTRY-01/docs/tasks/D-HUM-ENTRY-01.md](/Volumes/CodexProjects/Codex/D-Worktrees/D-HUM-ENTRY-01/docs/tasks/D-HUM-ENTRY-01.md)。最新完整版本与恢复索引：`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-HUM-ENTRY-01/run-20260909T002916Z-h08-type-finish/final-receipt.json`；上轮run-20260908T172827Z-h08继续保留，恢复核对真实HEAD而非只信本段。
 
 ## 最新结案：T0 工作台、PNG 配方交接与人工遗留项
 
