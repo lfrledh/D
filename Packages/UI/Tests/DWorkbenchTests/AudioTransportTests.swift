@@ -17,6 +17,7 @@ private final class FakePlaybackDevice: AudioPlaybackDevice {
     private(set) var segments: [(Int64, Int64)] = []
     private(set) var callbacks: [@MainActor @Sendable (String?) -> Void] = []
     var startResult = true
+    var throwOnPlay = false
 
     init(name: String, log: AudioTestLog) {
         self.name = name
@@ -29,6 +30,7 @@ private final class FakePlaybackDevice: AudioPlaybackDevice {
         completion: @escaping @MainActor @Sendable (String?) -> Void
     ) throws -> Bool {
         log.entries.append("play:\(name):\(startFrame)+\(frameCount)")
+        if throwOnPlay { throw AudioMediaError.unavailable("injected replay error") }
         guard prepared else { return false }
         currentFrame = startFrame
         segments.append((startFrame, frameCount))
@@ -443,6 +445,65 @@ struct AudioTransportTests {
         #expect(playback.segments.count == 2)
         #expect(subject.state == .paused)
         #expect(subject.errorMessage == nil)
+    }
+
+    /// Observe the actual owned timer without adding a production API or using audio hardware.
+    private func ownedProgressTimer(_ transport: AudioTransport) -> Timer? {
+        for child in Mirror(reflecting: transport).children
+            where child.label?.hasSuffix("progressTimer") == true {
+            if let timer = child.value as? Timer { return timer }
+            if let timer = Mirror(reflecting: child.value).children.first?.value as? Timer { return timer }
+        }
+        return nil
+    }
+
+    private func verifyReplayFailureReleasesProgress(throwing: Bool) throws {
+        let url = try syntheticWAV(in: uniqueDirectory())
+        let factory = FakeAudioFactory()
+        let subject = AudioTransport(deviceFactory: factory)
+        defer { subject.shutdown() }
+        try subject.preparePlayback(url: url, format: format)
+        try subject.play()
+        let oldTimer = try #require(ownedProgressTimer(subject))
+        #expect(oldTimer.isValid)
+        let device = try #require(factory.playbacks.first)
+        device.startResult = false
+        device.throwOnPlay = throwing
+        #expect(throws: AudioMediaError.self) { try subject.play() }
+        #expect(subject.state == .paused)
+        #expect(!oldTimer.isValid)
+        #expect(ownedProgressTimer(subject) == nil)
+    }
+
+    @Test
+    func replayReturningFalseReleasesOldProgressTimer() throws {
+        try verifyReplayFailureReleasesProgress(throwing: false)
+    }
+
+    @Test
+    func replayThrowingReleasesOldProgressTimer() throws {
+        try verifyReplayFailureReleasesProgress(throwing: true)
+    }
+
+    @Test
+    func successfulReplayOwnsOneNewTimerAndPauseReleasesIt() throws {
+        let url = try syntheticWAV(in: uniqueDirectory())
+        let factory = FakeAudioFactory()
+        let subject = AudioTransport(deviceFactory: factory)
+        defer { subject.shutdown() }
+        try subject.preparePlayback(url: url, format: format)
+        try subject.play()
+        let first = try #require(ownedProgressTimer(subject))
+        try subject.play()
+        let second = try #require(ownedProgressTimer(subject))
+        #expect(subject.state == .playing)
+        #expect(second !== first)
+        #expect(!first.isValid)
+        #expect(second.isValid)
+        subject.pause()
+        #expect(subject.state == .paused)
+        #expect(!second.isValid)
+        #expect(ownedProgressTimer(subject) == nil)
     }
 
     @Test
