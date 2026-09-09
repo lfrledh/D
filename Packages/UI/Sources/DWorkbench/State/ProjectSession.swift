@@ -46,7 +46,7 @@ public final class ProjectSession {
     public private(set) var assetURLs: [UUID: URL] = [:]
     public private(set) var activeJobIDs: Set<UUID> = []
     public private(set) var text: ProjectTextController?
-    public private(set) var textModelStatus = "选择已安装的 Qwen2.5 0.5B Instruct 4-bit 文件夹。"
+    public private(set) var textModelStatus = "选择已注册的 Qwen2.5 Instruct 4-bit 模型（0.5B／1.5B／7B／32B）"
     public private(set) var isTextWorking = false
     public private(set) var isRegisteringTextModel = false
     public var canRewriteText: Bool {
@@ -354,7 +354,7 @@ public final class ProjectSession {
                     textReference = try await createdSession.validateTextModel?(lease.url)
                     textModelLease = lease
                     settings.set(lease.bookmark, forKey: "workbench.textModelBookmark.v1")
-                    textModelStatus = FixedTextModel.title + " · 已校验"
+                    textModelStatus = (try? TextModelProfiles.status(for: textReference)) ?? "文字模型 · 版本未登记"
                 } catch { await access.release(lease); throw error }
             } catch { textModelStatus = "文字模型暂不可用，请重新选择原模型文件夹。" }
         }
@@ -933,7 +933,7 @@ public final class ProjectSession {
             textReference = nil
             textContextID = UUID()
             text = nil
-            textModelStatus = "选择已安装的 Qwen2.5 0.5B Instruct 4-bit 文件夹。"
+            textModelStatus = "选择已注册的 Qwen2.5 Instruct 4-bit 模型（0.5B／1.5B／7B／32B）"
             await access.release(modelLease)
             await access.release(projectLease)
             projectLease = nil
@@ -1008,7 +1008,7 @@ public final class ProjectSession {
                 textModelLease = lease
                 textReference = reference
                 settings.set(lease.bookmark, forKey: "workbench.textModelBookmark.v1")
-                textModelStatus = FixedTextModel.title + " · 已校验"
+                textModelStatus = (try? TextModelProfiles.status(for: reference)) ?? "文字模型 · 版本未登记"
             } catch { await access.release(lease); throw error }
         } catch { report(error, context: "文字模型未能登记，未下载或更改任何权重") }
     }

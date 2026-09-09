@@ -66,7 +66,7 @@ public final class WorkbenchModel {
         isChoosingLocation = true
         defer { isChoosingLocation = false }
         let panel = NSOpenPanel()
-        panel.title = "选择已有 Qwen2.5 0.5B Instruct 4-bit 模型"
+        panel.title = "选择已注册的 Qwen2.5 Instruct 4-bit 模型（0.5B／1.5B／7B／32B）"
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = false
