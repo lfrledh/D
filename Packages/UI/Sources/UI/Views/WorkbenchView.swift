@@ -446,12 +446,15 @@ private struct ArtworkSidebar: View {
             Button {
                 Task { await model.startAudioRecording() }
             } label: {
-                Label("录音尚未启用", systemImage: "mic.slash")
+                Label(model.audioRecordingEnabled ? "开始录音" : "录音尚未启用",
+                      systemImage: model.audioRecordingEnabled ? "mic.fill" : "mic.slash")
                     .frame(maxWidth: .infinity, alignment: .leading).padding(8)
             }
             .disabled(!model.audioRecordingEnabled)
             .accessibilityIdentifier("sidebar-audio-record-start")
-            Text("麦克风录音暂未启用；不会申请系统许可。")
+            Text(model.audioRecordingEnabled
+                 ? "点击开始录音后请求麦克风许可；结束后保存在本地项目。"
+                 : "麦克风录音暂未启用；不会申请系统许可。")
                 .font(.caption).foregroundStyle(.secondary).padding(.horizontal, 8)
         }
         ForEach(audio.pendingCaptures) { capture in
