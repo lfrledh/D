@@ -76,6 +76,8 @@ public actor MLXAudioBackend: InferenceBackend {
             let cache = runDirectory.appendingPathComponent("cache", isDirectory: true)
             let requestURL = runDirectory.appendingPathComponent("request.json")
             let requestData = try Self.encodeRequest(request, audio: audio)
+            let metadataExpectation = try AudioMetadataExpectation(
+                requestData: requestData, inventory: inventory, audio: audio, sourceInfo: sourceInfo)
             try AudioFileSystem.writeExclusive(requestData, to: requestURL)
 
             let environment = [
@@ -117,15 +119,17 @@ public actor MLXAudioBackend: InferenceBackend {
             }
             let output = job.appendingPathComponent("output.wav")
             let recordURL = job.appendingPathComponent("result.json")
-            let expectedFrames = Int64((audio.durationSeconds * 44_100).rounded())
-            let artifact = try AudioWAV.validateOutput(output, claim: terminal.artifact,
-                                                       expectedFrames: expectedFrames)
+            let expectedFrames = audio.source?.frameCount
+                ?? Int64((audio.durationSeconds * 44_100).rounded(.toNearestOrEven))
             let recordData = try AudioFileSystem.readRegularFile(
                 recordURL, label: "Audio result record", maximumBytes: 2 * 1024 * 1024).0
             let record = try AudioProviderProtocol.parseResultSnapshot(recordData, runID: request.id)
             guard record == terminal else {
                 throw InferenceFailure.backendFailed("result.json differs from the provider terminal result.")
             }
+            try AudioProviderProtocol.validateMetadata(terminal, expected: metadataExpectation)
+            let artifact = try AudioWAV.validateOutput(output, claim: terminal.artifact,
+                                                       expectedFrames: expectedFrames)
             try Task.checkCancellation()
             try await emit(.artifact(artifact))
             return InferenceResult(

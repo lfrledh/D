@@ -69,8 +69,9 @@ struct CLIOptions: Sendable, Codable {
       --width N --height N         Image dimensions (default: 512 x 512)
       --image-profile verified512|scalableKlein4B
                                    Image-only execution envelope (default: verified512)
-      --steps N --guidance FLOAT --seed N --artifacts PATH --cancel-after-steps N
+      --steps N --guidance FLOAT --seed N --artifacts PATH
                                    Image/audio controls; artifacts is required for both
+      --cancel-after-steps N       Image-only cancellation control
       --audio-operation generate|variation|inpaint
       --duration-seconds FLOAT     Audio duration (default: 6)
       --audio-source PATH --audio-source-sha256 HEX --audio-source-frames N
@@ -127,8 +128,8 @@ struct CLIOptions: Sendable, Codable {
         options.repeatCount = try positiveInt(values, "--repeat", fallback: 1)
 
         let textFlags = ["--max-tokens", "--temperature", "--top-p", "--cancel-after-chunks"]
-        let imageOnly = ["--width", "--height", "--image-profile"]
-        let sharedMedia = ["--steps", "--guidance", "--seed", "--artifacts", "--cancel-after-steps"]
+        let imageOnly = ["--width", "--height", "--image-profile", "--cancel-after-steps"]
+        let sharedMedia = ["--steps", "--guidance", "--seed", "--artifacts"]
         let audioOnly = [
             "--audio-operation", "--duration-seconds", "--audio-source", "--audio-source-sha256",
             "--audio-source-frames", "--audio-edit-start-frame", "--audio-edit-end-frame",

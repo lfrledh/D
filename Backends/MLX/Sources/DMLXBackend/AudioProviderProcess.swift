@@ -18,6 +18,67 @@ struct AudioProviderResult: Sendable, Equatable {
     let snapshot: AudioJSONValue
 }
 
+struct AudioMetadataExpectation: Sendable {
+    struct Region: Sendable {
+        let requestedStart: Int64
+        let requestedEnd: Int64
+        let effectiveStart: Int64
+        let effectiveEnd: Int64
+    }
+
+    let requestSnapshot: AudioJSONValue
+    let profile: String
+    let weights: [AudioModelInventory.Weight]
+    let sourceEncoding: String?
+    let sourceConversion: String?
+    let operation: AudioOperation
+    let region: Region?
+
+    init(requestData: Data, inventory: AudioModelInventory, audio: AudioRequest,
+         sourceInfo: AudioWAV.SourceInfo?) throws {
+        var parser = AudioJSONParser(data: requestData, maximumDepth: 32)
+        var requestObject = try parser.parse().objectAny(context: "frozen audio request")
+        if case .object(var source)? = requestObject["source"] {
+            source.removeValue(forKey: "path")
+            requestObject["source"] = .object(source)
+        }
+        requestSnapshot = .object(requestObject)
+        profile = inventory.profile.rawValue
+        weights = inventory.weights
+        sourceEncoding = sourceInfo?.sampleEncoding
+        switch sourceInfo?.sampleEncoding {
+        case "int16"?: sourceConversion = "signed-int16-to-IEEE-float32-exact"
+        case "int24"?: sourceConversion = "signed-int24-to-IEEE-float32-exact"
+        case "int32"?: sourceConversion = "signed-int32-to-IEEE-float32-rounded"
+        case "float32"?: sourceConversion = "IEEE-float32-preserved"
+        case nil: sourceConversion = nil
+        default: throw InferenceFailure.backendFailed("Unsupported admitted source encoding.")
+        }
+        operation = audio.operation
+        if let edit = audio.editRegion {
+            let divisor: Int64 = 4_096
+            func nearestEven(_ frames: Int64) -> Int64 {
+                let quotient = frames / divisor
+                let remainder = frames % divisor
+                if remainder * 2 < divisor { return quotient }
+                if remainder * 2 > divisor { return quotient + 1 }
+                return quotient.isMultiple(of: 2) ? quotient : quotient + 1
+            }
+            let durationFrames = audio.durationSeconds * 44_100
+            let latentCount = max(1, Int64((durationFrames / Double(divisor)).rounded(.up)))
+            let start = max(0, nearestEven(edit.startFrame))
+            let end = min(latentCount, nearestEven(edit.endFrame))
+            guard start < end else {
+                throw InferenceFailure.invalidRequest("Audio edit region rounds to an empty latent interval.")
+            }
+            region = Region(requestedStart: edit.startFrame, requestedEnd: edit.endFrame,
+                            effectiveStart: start, effectiveEnd: end)
+        } else {
+            region = nil
+        }
+    }
+}
+
 struct AudioProviderProcess: Sendable {
     let executable: URL
     let arguments: [String]
@@ -76,7 +137,7 @@ struct AudioProviderProcess: Sendable {
         }
         control.markExited()
         let stdoutResult = await stdoutTask.value
-        let retainedStderr = await stderrTask.value
+        let stderrResult = await stderrTask.value
         stdout.fileHandleForReading.closeFile()
         stderr.fileHandleForReading.closeFile()
 
@@ -88,15 +149,19 @@ struct AudioProviderProcess: Sendable {
                 throw InferenceFailure.backendFailed(
                     "Audio provider timed out after \(timeoutSeconds) seconds; the owned child exited and pipes drained.")
             case .protocolFailure(let message):
-                throw InferenceFailure.backendFailed(message + Self.stderrSuffix(retainedStderr))
+                throw InferenceFailure.backendFailed(message + Self.stderrSuffix(stderrResult.retained))
             }
         }
         if let failure = stdoutResult.failure {
-            throw InferenceFailure.backendFailed(failure + Self.stderrSuffix(retainedStderr))
+            throw InferenceFailure.backendFailed(failure + Self.stderrSuffix(stderrResult.retained))
+        }
+        if let failure = stderrResult.failure {
+            throw InferenceFailure.backendFailed(
+                "Cannot drain audio provider stderr: \(failure)." + Self.stderrSuffix(stderrResult.retained))
         }
         guard status == 0 else {
             throw InferenceFailure.backendFailed(
-                "Audio provider exited with status \(status)." + Self.stderrSuffix(retainedStderr))
+                "Audio provider exited with status \(status)." + Self.stderrSuffix(stderrResult.retained))
         }
         guard let terminal = stdoutResult.terminal else {
             throw InferenceFailure.backendFailed("Audio provider exited without one result terminal event.")
@@ -108,19 +173,21 @@ struct AudioProviderProcess: Sendable {
         }
     }
 
-    private static func readStderr(_ handle: FileHandle) async -> Data {
+    private struct StderrResult: Sendable {
+        var retained = Data()
+        var failure: String?
+    }
+
+    private static func readStderr(_ handle: FileHandle) async -> StderrResult {
         var retained = Data()
         do {
             for try await byte in handle.bytes {
                 if retained.count < 1_048_576 { retained.append(byte) }
             }
         } catch {
-            if retained.count < 1_048_576 {
-                retained.append(contentsOf: Data("\n[stderr drain failed: \(error.localizedDescription)]".utf8)
-                    .prefix(1_048_576 - retained.count))
-            }
+            return StderrResult(retained: retained, failure: error.localizedDescription)
         }
-        return retained
+        return StderrResult(retained: retained)
     }
 
     private static func stderrSuffix(_ data: Data) -> String {
@@ -298,6 +365,147 @@ enum AudioProviderProtocol {
             throw InferenceFailure.backendFailed("result.json does not contain the result terminal object.")
         }
         return result
+    }
+
+    static func validateMetadata(_ result: AudioProviderResult,
+                                 expected: AudioMetadataExpectation) throws {
+        let terminal = try result.snapshot.objectAny(context: "result terminal")
+        let metadata = try terminal["metadata"]!.objectAny(context: "result metadata")
+        let required = Set([
+            "request", "profile", "modelRepository", "modelRevision", "weightManifest",
+            "vendorRevision", "precision", "timingsSeconds", "mlxAllocations",
+        ])
+        guard required.isSubset(of: Set(metadata.keys)),
+              metadata["request"] == expected.requestSnapshot,
+              try metadata["profile"]?.requiredString(context: "metadata profile") == expected.profile,
+              try metadata["modelRepository"]?.requiredString(context: "metadata repository")
+                == AudioModelInventory.repository,
+              try metadata["modelRevision"]?.requiredString(context: "metadata revision")
+                == AudioModelInventory.revision,
+              try metadata["vendorRevision"]?.requiredString(context: "metadata vendor revision")
+                == "779434a908193105335fd8d833418603625b2859" else {
+            throw InferenceFailure.backendFailed("Audio result metadata does not match the admitted request and revisions.")
+        }
+
+        let precision = try metadata["precision"]!.object(
+            exactKeys: ["dit", "text", "encoder", "decoder", "master"],
+            context: "audio precision metadata")
+        let requiredPrecision = [
+            "dit": "float16", "text": "float16", "encoder": "float32",
+            "decoder": "float32", "master": "float32",
+        ]
+        for (name, value) in requiredPrecision {
+            guard try precision[name]?.requiredString(context: "audio \(name) precision") == value else {
+                throw InferenceFailure.backendFailed("Audio result precision metadata is incorrect.")
+            }
+        }
+        try validateWeights(metadata["weightManifest"]!, expected: expected.weights)
+        try validateMeasurements(metadata)
+        try validateOperationMetadata(metadata, expected: expected)
+    }
+
+    private static func validateWeights(_ value: AudioJSONValue,
+                                        expected: [AudioModelInventory.Weight]) throws {
+        guard case .array(let entries) = value, entries.count == 4 else {
+            throw InferenceFailure.backendFailed("Audio result must identify exactly four weights.")
+        }
+        var actual: [String: (UInt64, String)] = [:]
+        for entry in entries {
+            let object = try entry.object(exactKeys: ["path", "size", "sha256"],
+                                          context: "audio weight provenance")
+            let path = try object["path"]!.requiredString(context: "audio weight path")
+            let size = try object["size"]!.requiredUInt64(context: "audio weight size")
+            let digest = try object["sha256"]!.requiredString(context: "audio weight digest")
+            guard actual.updateValue((size, digest), forKey: path) == nil else {
+                throw InferenceFailure.backendFailed("Audio result contains duplicate weight provenance.")
+            }
+        }
+        guard actual.count == expected.count,
+              expected.allSatisfy({ actual[$0.path]?.0 == $0.size && actual[$0.path]?.1 == $0.sha256 }) else {
+            throw InferenceFailure.backendFailed("Audio result weight provenance does not match admission.")
+        }
+    }
+
+    private static func validateMeasurements(_ metadata: [String: AudioJSONValue]) throws {
+        let timings = try metadata["timingsSeconds"]!.objectAny(context: "audio timing metadata")
+        guard timings.values.allSatisfy(\.nonnegativeNumber) else {
+            throw InferenceFailure.backendFailed("Audio timing metadata must contain nonnegative numbers, not Booleans.")
+        }
+        try validateAllocation(metadata["mlxAllocations"]!, context: "audio allocation metadata")
+    }
+
+    private static func validateAllocation(_ value: AudioJSONValue, context: String) throws {
+        let allocation = try value.objectAny(context: context)
+        let required = Set(["measurementKind", "measurementPhase", "activeBytes", "cacheBytes", "peakBytes"])
+        guard required.isSubset(of: Set(allocation.keys)) else {
+            throw InferenceFailure.backendFailed("\(context) is missing required measurement fields.")
+        }
+        let kind = try allocation["measurementKind"]!.requiredString(context: "allocation measurement kind")
+        let phase = try allocation["measurementPhase"]!.requiredString(context: "allocation measurement phase")
+        guard ["unavailable", "mlx-allocator"].contains(kind), !phase.isEmpty else {
+            throw InferenceFailure.backendFailed("\(context) has an invalid kind or phase.")
+        }
+        for key in ["activeBytes", "cacheBytes", "peakBytes"] {
+            let measurement = allocation[key]!
+            if kind == "unavailable" {
+                guard case .null = measurement else {
+                    throw InferenceFailure.backendFailed("Unavailable allocation values must be null, not fabricated zeroes.")
+                }
+            } else if case .null = measurement {
+                continue
+            } else if !measurement.nonnegativeNumber {
+                throw InferenceFailure.backendFailed("Measured allocation values must be nonnegative numbers, not Booleans.")
+            }
+        }
+        if let cleanup = allocation["cleanupStatus"] {
+            guard !(try cleanup.requiredString(context: "allocation cleanup status")).isEmpty else {
+                throw InferenceFailure.backendFailed("Allocation cleanup status cannot be empty.")
+            }
+        }
+        if let postCleanup = allocation["postCleanup"] {
+            try validateAllocation(postCleanup, context: "post-cleanup allocation metadata")
+        }
+    }
+
+    private static func validateOperationMetadata(_ metadata: [String: AudioJSONValue],
+                                                  expected: AudioMetadataExpectation) throws {
+        let sourceKeys = ["sourceSampleEncoding", "sourceToMasterConversion"]
+        if let encoding = expected.sourceEncoding, let conversion = expected.sourceConversion {
+            guard try metadata[sourceKeys[0]]?.requiredString(context: "source sample encoding") == encoding,
+                  try metadata[sourceKeys[1]]?.requiredString(context: "source conversion") == conversion else {
+                throw InferenceFailure.backendFailed("Audio source conversion metadata does not match the admitted WAV.")
+            }
+        } else if sourceKeys.contains(where: { metadata[$0] != nil }) {
+            throw InferenceFailure.backendFailed("Generation metadata unexpectedly claims a source conversion.")
+        }
+
+        let inpaintKeys = ["requestedRegionFrames", "effectiveLatentRegion", "inpaintBoundaryPolicy"]
+        if let region = expected.region {
+            let requested = try metadata[inpaintKeys[0]]!.object(
+                exactKeys: ["startFrame", "endFrame"], context: "requested inpaint region")
+            let effective = try metadata[inpaintKeys[1]]!.object(
+                exactKeys: ["start", "end"], context: "effective inpaint region")
+            guard requested["startFrame"] == .integer(region.requestedStart),
+                  requested["endFrame"] == .integer(region.requestedEnd),
+                  effective["start"] == .integer(region.effectiveStart),
+                  effective["end"] == .integer(region.effectiveEnd),
+                  try metadata[inpaintKeys[2]]?.requiredString(context: "inpaint boundary policy")
+                    == "no-crossfade; exact float32 source conversion outside requested frames" else {
+                throw InferenceFailure.backendFailed("Audio inpaint metadata does not match the requested/effective regions.")
+            }
+        } else if inpaintKeys.contains(where: { metadata[$0] != nil }) {
+            throw InferenceFailure.backendFailed("Non-inpaint metadata unexpectedly claims an edit region.")
+        }
+
+        let variationKey = "variationGuarantee"
+        if expected.operation == .variation {
+            guard try metadata[variationKey]?.requiredString(context: "variation guarantee")
+                == "approximate reference; no exact melody guarantee" else {
+                throw InferenceFailure.backendFailed("Audio variation guarantee metadata is missing or incorrect.")
+            }
+        } else if metadata[variationKey] != nil {
+            throw InferenceFailure.backendFailed("Non-variation metadata unexpectedly claims a variation guarantee.")
+        }
     }
 
     private static func processLine(

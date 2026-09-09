@@ -101,6 +101,53 @@ struct AudioBackendTests {
         #expect(throws: (any Error).self) { _ = try AudioWAV.validateSource(fixture.source, reference: badDigest) }
     }
 
+    @Test("Frame conversion uses ties-to-even and edit output is source-sized")
+    func frameRoundingAndSourceBoundary() async throws {
+        let fixture = try AudioFixture()
+        defer { fixture.remove() }
+        expectInvalid {
+            _ = try AudioModelInventory.inspect(
+                fixture.request(duration: 0.5 / 44_100), configuration: fixture.configuration())
+        }
+        _ = try AudioModelInventory.inspect(
+            fixture.request(duration: 2.5 / 44_100), configuration: fixture.configuration())
+        _ = try AudioModelInventory.inspect(
+            try fixture.editRequest(operation: .variation, duration: 44.5 / 44_100),
+            configuration: fixture.configuration())
+        expectInvalid {
+            _ = try AudioModelInventory.inspect(
+                try fixture.editRequest(operation: .variation, duration: 44.500_001 / 44_100),
+                configuration: fixture.configuration())
+        }
+        let backend = try MLXAudioBackend(configuration: fixture.configuration())
+        let generation = try await backend.execute(fixture.request(duration: 2.5 / 44_100)) { _ in }
+        await backend.release()
+        #expect(generation.artifacts.count == 1)
+        let result = try await backend.execute(
+            try fixture.editRequest(operation: .variation, duration: 44.5 / 44_100)) { _ in }
+        await backend.release()
+        #expect(result.artifacts.count == 1)
+    }
+
+    @Test("Protocol numbers compare semantically without losing UInt64 and never treat Boolean as numeric")
+    func protocolNumberSemantics() throws {
+        var integers = AudioJSONParser(
+            data: Data(#"{"value":18446744073709551615}"#.utf8), maximumDepth: 8)
+        var adjacent = AudioJSONParser(
+            data: Data(#"{"value":18446744073709551614}"#.utf8), maximumDepth: 8)
+        let large = try integers.parse()
+        let preceding = try adjacent.parse()
+        #expect(large != preceding)
+
+        var oneInteger = AudioJSONParser(data: Data(#"{"value":1}"#.utf8), maximumDepth: 8)
+        var oneFloat = AudioJSONParser(data: Data(#"{"value":1.0}"#.utf8), maximumDepth: 8)
+        let integerValue = try oneInteger.parse()
+        let floatValue = try oneFloat.parse()
+        #expect(integerValue == floatValue)
+        var boolean = AudioJSONParser(data: Data(#"{"value":true}"#.utf8), maximumDepth: 8)
+        #expect(try integerValue != boolean.parse())
+    }
+
     @Test("Malformed, symlinked, and special source files fail before child launch",
           arguments: ["malformed", "symlink", "fifo"])
     func unsafeSource(kind: String) throws {
@@ -185,6 +232,32 @@ struct AudioBackendTests {
         await backend.release()
         // Failed provider runs remain for diagnostics and release never scans or deletes them.
         #expect(try FileManager.default.contentsOfDirectory(atPath: fixture.artifacts.path).count == 1)
+    }
+
+    @Test("Independent metadata validation rejects request and provenance corruption in both result copies",
+          .timeLimit(.minutes(1)),
+          arguments: ["bad-request-prompt", "bad-request-seed", "bad-request-boolean",
+                      "bad-source-digest", "bad-profile", "bad-revision", "bad-precision",
+                      "bad-weight-hash"])
+    func metadataCounterexamples(mode: String) async throws {
+        let fixture = try AudioFixture()
+        defer { fixture.remove() }
+        let backend = try MLXAudioBackend(configuration: fixture.configuration())
+        let request = mode == "bad-source-digest"
+            ? try fixture.editRequest(operation: .variation, prompt: mode)
+            : fixture.request(prompt: mode)
+        await expectBackendFailure { try await backend.execute(request) { _ in } }
+        await backend.release()
+    }
+
+    @Test("Semantically equal integer and decimal result snapshots are accepted")
+    func semanticResultCopies() async throws {
+        let fixture = try AudioFixture()
+        defer { fixture.remove() }
+        let backend = try MLXAudioBackend(configuration: fixture.configuration())
+        let result = try await backend.execute(fixture.request(prompt: "semantic-number")) { _ in }
+        await backend.release()
+        #expect(result.artifacts.count == 1)
     }
 
     @Test("Throwing emit terminates only the owned child and releases the shared lease",
@@ -280,7 +353,7 @@ private struct AudioFixture {
         source = root.appendingPathComponent("source.wav")
         script = root.appendingPathComponent("fake-provider.py")
         manifest = root.appendingPathComponent("manifest.json")
-        weightSize = 257
+        let fixtureWeightSize = 257
         try FileManager.default.createDirectory(at: model.appendingPathComponent("MLX"), withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: vendor, withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: artifacts, withIntermediateDirectories: true)
@@ -290,7 +363,7 @@ private struct AudioFixture {
             "same_l_encoder_f32.npz", "same_l_decoder_f32.npz",
         ]
         for name in names {
-            try Data(repeating: UInt8(name.utf8.first!), count: weightSize)
+            try Data(repeating: UInt8(name.utf8.first!), count: fixtureWeightSize)
                 .write(to: model.appendingPathComponent("MLX/\(name)"))
         }
         let digest = String(repeating: "a", count: 64)
@@ -302,9 +375,10 @@ private struct AudioFixture {
         }
         let codec = profile == .medium ? "same_l" : "same_s"
         let files = [dit, "t5gemma_f16.npz", "\(codec)_encoder_f32.npz", "\(codec)_decoder_f32.npz"].map {
-            "{\"path\":\"MLX/\($0)\",\"size\":\(weightSize),\"sha256\":\"\(digest)\"}"
+            "{\"path\":\"MLX/\($0)\",\"size\":\(fixtureWeightSize),\"sha256\":\"\(digest)\"}"
         }.joined(separator: ",")
         manifestText = "{\"schemaVersion\":1,\"repository\":\"stabilityai/stable-audio-3-optimized\",\"revision\":\"\(AudioBackendConfiguration.registeredModelRevision)\",\"files\":[\(files)]}"
+        weightSize = fixtureWeightSize
         try Data(manifestText.utf8).write(to: manifest)
         try Self.floatWAV(frames: 44).write(to: source)
         try Data(Self.providerScript.utf8).write(to: script)
@@ -329,8 +403,8 @@ private struct AudioFixture {
                                                     steps: steps, guidanceScale: guidance)))
     }
 
-    func editRequest(operation: AudioOperation, sampleRate: Int = 44_100,
-                     frames: Int64 = 44) throws -> InferenceRequest {
+    func editRequest(operation: AudioOperation, prompt: String = "valid", sampleRate: Int = 44_100,
+                     frames: Int64 = 44, duration: Double = 0.001) throws -> InferenceRequest {
         let data = try Data(contentsOf: source)
         let digest = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
         let reference = AudioSourceReference(url: source, sha256: digest, frameCount: frames,
@@ -338,7 +412,7 @@ private struct AudioFixture {
         let region = operation == .inpaint ? AudioEditRegion(startFrame: 1, endFrame: frames) : nil
         return InferenceRequest(
             model: ModelReference(directory: model, revision: AudioBackendConfiguration.registeredModelRevision),
-            input: .audio(AudioRequest(operation: operation, prompt: "valid", durationSeconds: 0.001,
+            input: .audio(AudioRequest(operation: operation, prompt: prompt, durationSeconds: duration,
                                        seed: 42, steps: 8, source: reference, editRegion: region)))
     }
 
@@ -362,7 +436,7 @@ private struct AudioFixture {
     }
 
     private static let providerScript = #"""
-import argparse, hashlib, json, os, signal, struct, sys, time
+import argparse, hashlib, json, math, os, signal, struct, sys, time
 p=argparse.ArgumentParser()
 for name in ('request','job-directory','model-directory','profile','manifest','vendor-directory'):
     p.add_argument('--'+name, required=True)
@@ -383,7 +457,7 @@ if mode=='ignore-term':
     signal.signal(signal.SIGTERM, lambda *_: None)
     time.sleep(5)
 if mode=='stderr': print('fixture diagnostic only',file=sys.stderr,flush=True)
-frames=round(r['durationSeconds']*44100)
+frames=r.get('source',{}).get('frameCount',round(r['durationSeconds']*44100))
 pcm=b''.join(struct.pack('<f',0.0) for _ in range(frames*2))
 wav=b'RIFF'+struct.pack('<I',36+len(pcm))+b'WAVEfmt '+struct.pack('<IHHIIHH',16,3,2,44100,352800,8,32)+b'data'+struct.pack('<I',len(pcm))+pcm
 if mode=='bad-wav': wav=b'not a wave'
@@ -394,9 +468,45 @@ artifact={'path':out,'sha256':sha,'byteCount':len(wav),'frameCount':frames,'samp
 if mode=='stale': artifact['path']=os.path.join(a.job_directory,'..','stale.wav')
 if mode=='bad-hash': artifact['sha256']='0'*64
 if mode=='bad-metadata': artifact['frameCount']=frames+1
-event={'schemaVersion':1,'type':'result','runID':run,'artifact':artifact,'metadata':{}}
+with open(a.manifest,'r',encoding='utf-8') as f: manifest=json.load(f)
+snapshot=json.loads(json.dumps(r))
+if 'source' in snapshot: snapshot['source'].pop('path',None)
+metadata={
+    'request':snapshot,
+    'profile':a.profile,
+    'modelRepository':'stabilityai/stable-audio-3-optimized',
+    'modelRevision':manifest['revision'],
+    'weightManifest':manifest['files'],
+    'vendorRevision':'779434a908193105335fd8d833418603625b2859',
+    'precision':{'dit':'float16','text':'float16','encoder':'float32','decoder':'float32','master':'float32'},
+    'timingsSeconds':{'fixture':0.0},
+    'mlxAllocations':{'measurementKind':'unavailable','measurementPhase':'notMeasured',
+                      'activeBytes':None,'cacheBytes':None,'peakBytes':None},
+}
+if 'source' in r:
+    metadata['sourceSampleEncoding']='float32'
+    metadata['sourceToMasterConversion']='IEEE-float32-preserved'
+if r['operation']=='variation':
+    metadata['variationGuarantee']='approximate reference; no exact melody guarantee'
+if r['operation']=='inpaint':
+    region=r['editRegion']
+    latent_count=max(1,math.ceil(r['durationSeconds']*44100/4096))
+    metadata['requestedRegionFrames']={'startFrame':region['startFrame'],'endFrame':region['endFrame']}
+    metadata['effectiveLatentRegion']={'start':max(0,round(region['startFrame']/4096)),
+                                       'end':min(latent_count,round(region['endFrame']/4096))}
+    metadata['inpaintBoundaryPolicy']='no-crossfade; exact float32 source conversion outside requested frames'
+if mode=='bad-request-prompt': metadata['request']['prompt']='corrupted'
+if mode=='bad-request-seed': metadata['request']['seed']=metadata['request']['seed']+1
+if mode=='bad-request-boolean': metadata['request']['seed']=True
+if mode=='bad-source-digest': metadata['request']['source']['sha256']='0'*64
+if mode=='bad-profile': metadata['profile']='sm-sfx'
+if mode=='bad-revision': metadata['modelRevision']='wrong-revision'
+if mode=='bad-precision': metadata['precision']['dit']='float32'
+if mode=='bad-weight-hash': metadata['weightManifest'][0]['sha256']='0'*64
+event={'schemaVersion':1,'type':'result','runID':run,'artifact':artifact,'metadata':metadata}
 with open(os.path.join(a.job_directory,'result.json'),'x',encoding='utf-8') as f: json.dump(event,f,separators=(',',':'))
 if mode=='wrong-run': event['runID']='00000000-0000-0000-0000-000000000000'
+if mode=='semantic-number': event['metadata']['request']['seed']=42.0
 print(json.dumps(event,separators=(',',':')),flush=True)
 if mode=='duplicate': print(json.dumps(event,separators=(',',':')),flush=True)
 """#

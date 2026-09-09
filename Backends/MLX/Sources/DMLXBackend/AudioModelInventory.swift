@@ -39,14 +39,15 @@ struct AudioModelInventory: Sendable {
             throw InferenceFailure.invalidRequest(
                 "Audio duration exceeds the \(supplied.profile.rawValue) profile limit.")
         }
-        let roundedFrames = audio.durationSeconds * 44_100
-        guard roundedFrames.isFinite, roundedFrames > 0,
-              roundedFrames <= Double(Int64.max), roundedFrames.rounded() > 0 else {
+        let durationFrames = audio.durationSeconds * 44_100
+        guard durationFrames.isFinite, durationFrames > 0,
+              durationFrames <= Double(Int64.max),
+              durationFrames.rounded(.toNearestOrEven) > 0 else {
             throw InferenceFailure.invalidRequest("Audio duration cannot be represented in the 44100 Hz frame clock.")
         }
         if let source = audio.source {
             guard source.sampleRate == 44_100, source.channels == 2,
-                  abs(roundedFrames - Double(source.frameCount)) <= 0.5 else {
+                  abs(durationFrames - Double(source.frameCount)) <= 0.5 else {
                 throw InferenceFailure.invalidRequest(
                     "Audio edit sources must be stereo 44100 Hz and match duration within half a frame.")
             }
@@ -169,9 +170,34 @@ enum AudioJSONValue: Sendable, Equatable {
     case array([AudioJSONValue])
     case string(String)
     case integer(Int64)
-    case number(Double)
+    case unsignedInteger(UInt64)
+    case number(Decimal)
     case bool(Bool)
     case null
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        if let left = lhs.decimalNumber, let right = rhs.decimalNumber {
+            return left == right
+        }
+        switch (lhs, rhs) {
+        case (.object(let left), .object(let right)): return left == right
+        case (.array(let left), .array(let right)): return left == right
+        case (.string(let left), .string(let right)): return left == right
+        case (.bool(let left), .bool(let right)): return left == right
+        case (.null, .null): return true
+        default: return false
+        }
+    }
+
+    private var decimalNumber: Decimal? {
+        switch self {
+        case .integer(let value): return Decimal(value)
+        case .unsignedInteger(let value):
+            return Decimal(string: String(value), locale: Locale(identifier: "en_US_POSIX"))
+        case .number(let value): return value
+        default: return nil
+        }
+    }
 
     func object(exactKeys: Set<String>, context: String) throws -> [String: AudioJSONValue] {
         guard case .object(let value) = self, Set(value.keys) == exactKeys else {
@@ -188,10 +214,26 @@ enum AudioJSONValue: Sendable, Equatable {
     }
 
     func requiredInteger(context: String) throws -> Int64 {
-        guard case .integer(let value) = self else {
-            throw InferenceFailure.invalidRequest("\(context) must be an integer, not a Boolean or floating value.")
+        switch self {
+        case .integer(let value): return value
+        case .unsignedInteger(let value) where value <= UInt64(Int64.max): return Int64(value)
+        default:
+            throw InferenceFailure.invalidRequest("\(context) must be a representable integer, not a Boolean or floating value.")
         }
-        return value
+    }
+
+    func requiredUInt64(context: String) throws -> UInt64 {
+        switch self {
+        case .integer(let value) where value >= 0: return UInt64(value)
+        case .unsignedInteger(let value): return value
+        default:
+            throw InferenceFailure.invalidRequest("\(context) must be an unsigned integer, not a Boolean or floating value.")
+        }
+    }
+
+    var nonnegativeNumber: Bool {
+        guard let decimalNumber else { return false }
+        return decimalNumber >= 0
     }
 }
 
@@ -335,8 +377,13 @@ struct AudioJSONParser {
         guard let text = String(bytes: bytes[start..<index], encoding: .utf8) else {
             throw ParseError(message: "Invalid JSON number encoding.")
         }
-        if integral, let value = Int64(text) { return .integer(value) }
-        guard let value = Double(text), value.isFinite else {
+        if integral {
+            if let value = Int64(text) { return .integer(value) }
+            if let value = UInt64(text) { return .unsignedInteger(value) }
+            throw ParseError(message: "JSON integer is outside the signed/unsigned 64-bit range.")
+        }
+        guard let value = Decimal(string: text, locale: Locale(identifier: "en_US_POSIX")),
+              !value.isNaN else {
             throw ParseError(message: "JSON number is not finite or representable.")
         }
         return .number(value)
