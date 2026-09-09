@@ -146,6 +146,7 @@ public struct AudioWorkbenchView: View {
             refreshInspectionIfNeeded()
         }
         .accessibilityIdentifier("audio-workbench")
+        .audioMeasured("audio-workbench", probe: layoutProbe)
     }
 
     private var emptyState: some View {
@@ -251,6 +252,7 @@ public struct AudioWorkbenchView: View {
             }
             .frame(minHeight: 180)
             .accessibilityIdentifier("audio-waveform")
+            .audioMeasured("audio-waveform", probe: layoutProbe)
             HStack {
                 Button(transport.state == .playing ? "暂停" : "播放",
                        systemImage: transport.state == .playing ? "pause.fill" : "play.fill") {
@@ -271,6 +273,7 @@ public struct AudioWorkbenchView: View {
                 Text("已准备试听：\(time(preparedRange.startFrame, format: format)) – \(time(preparedRange.endFrame, format: format))")
                     .font(.caption).foregroundStyle(.secondary)
                     .accessibilityIdentifier("audio-prepared-range")
+                    .audioMeasured("audio-prepared-range", probe: layoutProbe)
             }
         }
         .padding(16)
@@ -762,7 +765,7 @@ private struct WaveformView: View {
     }
 }
 
-private extension View {
+extension View {
     func audioMeasured(_ id: String, probe: ((String, CGRect) -> Void)?) -> some View {
         onGeometryChange(for: CGRect.self) { geometry in
             geometry.frame(in: .named("audio-workbench-layout"))

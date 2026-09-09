@@ -367,14 +367,37 @@ struct AudioWorkbenchAssemblyTests {
         #expect(factory.recordingDevices == 0)
         #expect(model.errorMessage?.contains("录音") == true)
 
-        let workbenchHost = NSHostingView(rootView: WorkbenchView(model: model))
-        window.contentView = workbenchHost
-        settle(workbenchHost, width: 1_000)
-        let identifiers = Set(descendants(workbenchHost).compactMap { $0.accessibilityIdentifier() })
+        model.clearError() // The disabled-recording error was asserted above; do not present an alert.
+        var audioRectangles: [String: CGRect] = [:]
+        let workbenchHost = NSHostingController(rootView: WorkbenchView(model: model)
+            .observingLayout { audioRectangles[$0] = $1 })
+        let workbenchWindow = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1_000, height: 580),
+                                      styleMask: [.titled, .resizable], backing: .buffered, defer: false)
+        workbenchWindow.contentViewController = workbenchHost
+        defer { workbenchWindow.contentViewController = nil }
+        settle(workbenchHost.view, width: 1_000)
+        let identifiers = Set(audioRectangles.filter { $0.value.width > 0 && $0.value.height > 0 }.keys)
         #expect(identifiers.contains("audio-workbench"))
         #expect(!identifiers.contains("export-artwork"))
         #expect(!identifiers.contains("toggle-inspector"))
         #expect(!identifiers.contains("copy-settings"))
+
+        // Positive controls prevent an empty collector from pretending image actions are absent.
+        let imageModel = self.model(panels: AssemblyPanels(), factory: NoHardwareAudioFactory())
+        await imageModel.createProject(at: root.appendingPathComponent("ImageControls.dproject"))
+        var imageRectangles: [String: CGRect] = [:]
+        let imageHost = NSHostingController(rootView: WorkbenchView(model: imageModel)
+            .observingLayout { imageRectangles[$0] = $1 })
+        let imageWindow = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1_000, height: 580),
+                                  styleMask: [.titled, .resizable], backing: .buffered, defer: false)
+        imageWindow.contentViewController = imageHost
+        defer { imageWindow.contentViewController = nil }
+        settle(imageHost.view, width: 1_000)
+        let imageIDs = Set(imageRectangles.filter { $0.value.width > 0 && $0.value.height > 0 }.keys)
+        #expect(imageIDs.contains("export-artwork"))
+        #expect(imageIDs.contains("toggle-inspector"))
+        #expect(imageIDs.contains("copy-settings"))
+        #expect(!imageIDs.contains("audio-workbench"))
     }
 
     @Test
@@ -401,10 +424,11 @@ struct AudioWorkbenchAssemblyTests {
                 contextID: contextID, documentID: documentID
             )
         }
+        var rectangles: [String: CGRect] = [:]
         let host = NSHostingView(rootView: AudioWorkbenchView(
             controller: controller, recordingEnabled: false,
             navigationInProgress: true, actions: actions
-        ))
+        ).observingLayout { rectangles[$0] = $1 })
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 700, height: 580),
             styleMask: [.borderless], backing: .buffered, defer: false
@@ -418,12 +442,13 @@ struct AudioWorkbenchAssemblyTests {
         host.rootView = AudioWorkbenchView(
             controller: controller, recordingEnabled: false,
             navigationInProgress: false, actions: actions
-        )
+        ).observingLayout { rectangles[$0] = $1 }
         settle(host, width: 700)
         let refreshed = await waitUntil { controller.metadata != nil }
         #expect(refreshed)
         #expect(refreshCount == 1)
-        let identifiers = Set(descendants(host).compactMap { $0.accessibilityIdentifier() })
+        settle(host, width: 700)
+        let identifiers = Set(rectangles.filter { $0.value.width > 0 && $0.value.height > 0 }.keys)
         #expect(identifiers.contains("audio-waveform"))
         #expect(identifiers.contains("audio-prepared-range"))
     }
@@ -533,7 +558,7 @@ struct AudioWorkbenchAssemblyTests {
         return condition()
     }
 
-    private func settle<Content: View>(_ host: NSHostingView<Content>, width: CGFloat) {
+    private func settle(_ host: NSView, width: CGFloat) {
         host.frame = NSRect(x: 0, y: 0, width: width, height: 580)
         let deadline = Date().addingTimeInterval(0.2)
         repeat {

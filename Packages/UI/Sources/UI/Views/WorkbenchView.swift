@@ -6,6 +6,7 @@ import SwiftUI
 public struct WorkbenchView: View {
     @Bindable private var model: WorkbenchModel
     private let library: ModelLibraryModel?
+    private var layoutProbe: ((String, CGRect) -> Void)?
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @State private var showInspector = true
     @State private var showTasks = true
@@ -14,6 +15,13 @@ public struct WorkbenchView: View {
     public init(model: WorkbenchModel, library: ModelLibraryModel? = nil) {
         self.model = model
         self.library = library
+    }
+
+    /// Internal rendered-geometry observation; no foreground or accessibility claim.
+    func observingLayout(_ observer: @escaping (String, CGRect) -> Void) -> Self {
+        var copy = self
+        copy.layoutProbe = observer
+        return copy
     }
 
     public var body: some View {
@@ -128,6 +136,7 @@ public struct WorkbenchView: View {
                         }
                         .disabled(model.selectedJob == nil)
                         .accessibilityIdentifier("copy-settings")
+                        .audioMeasured("copy-settings", probe: layoutProbe)
                         .help("将实际提示词与 seed 复制到独立创作；不使用图片作为输入")
 
                         Button {
@@ -137,6 +146,7 @@ public struct WorkbenchView: View {
                         }
                         .disabled(model.selectedAsset == nil)
                         .accessibilityIdentifier("export-artwork")
+                        .audioMeasured("export-artwork", probe: layoutProbe)
                         .help("导出原始 PNG")
 
                         Button {
@@ -145,6 +155,7 @@ public struct WorkbenchView: View {
                             Label("创作参数", systemImage: "sidebar.right")
                         }
                         .accessibilityIdentifier("toggle-inspector")
+                        .audioMeasured("toggle-inspector", probe: layoutProbe)
                         .help("显示或隐藏创作参数")
                     }
                 }
@@ -165,6 +176,7 @@ public struct WorkbenchView: View {
                                recordingEnabled: model.audioRecordingEnabled,
                                navigationInProgress: model.projectSession.isChangingProject,
                                actions: audioActions)
+                .observingLayout { id, rectangle in layoutProbe?(id, rectangle) }
                 .id(audio.contextID)
         } else if !model.showingAllArtworks, let text = model.projectSession.text {
             let project = model.projectSession

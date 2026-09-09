@@ -196,11 +196,23 @@ public final class WorkbenchModel {
 
     /// Shared native import action; the rendered origin is supplied by the caller.
     func audioImportAction(contextID: UUID, documentID: UUID?) -> () -> Void {
-        { [weak self] in Task { await self?.importAudio() } }
+        { [weak self] in
+            Task { await self?.importAudio(contextID: contextID, documentID: documentID) }
+        }
     }
 
     public func importAudio() async {
-        guard !isChoosingLocation, let projectID = manifest?.id, let projectURL,
+        guard let contextID = projectSession.audio?.contextID else { return }
+        await importAudio(contextID: contextID, documentID: activeDocumentID)
+    }
+
+    private func importAudio(contextID originContextID: UUID, documentID originDocumentID: UUID?) async {
+        guard projectSession.audio?.contextID == originContextID,
+              activeDocumentID == originDocumentID else {
+            errorMessage = "文档已改变，未打开旧的导入操作。请在当前文档重新选择。"
+            return
+        }
+        guard !projectSession.isChangingProject, !isChoosingLocation, let projectID = manifest?.id, let projectURL,
               let activeDocumentID,
               let controller = projectSession.audio else {
             rejectConcurrentAudioPanel()
