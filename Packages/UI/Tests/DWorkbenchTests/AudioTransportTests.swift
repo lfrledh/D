@@ -133,7 +133,7 @@ private final class FakeAudioFactory: AudioTransportDeviceFactory {
 
     func makePlayback(
         url: URL,
-        expected: AudioFormatInfo
+        expected: DWorkbench.AudioFormatInfo
     ) throws -> any AudioPlaybackDevice {
         log.entries.append("prepare-playback")
         if failNextPlayback {
@@ -161,7 +161,7 @@ private final class FakeAudioFactory: AudioTransportDeviceFactory {
 @Suite("Audio transport", .serialized)
 @MainActor
 struct AudioTransportTests {
-    private let format = AudioFormatInfo(
+    private let format = DWorkbench.AudioFormatInfo(
         container: .wav,
         sampleRate: 48_000,
         channelCount: 1,
@@ -326,7 +326,7 @@ struct AudioTransportTests {
     @Test
     func realReaderRejectsMetadataMismatchWithoutStartingOutput() throws {
         let url = try syntheticWAV(in: uniqueDirectory())
-        let wrong = AudioFormatInfo(
+        let wrong = DWorkbench.AudioFormatInfo(
             container: .wav,
             sampleRate: 44_100,
             channelCount: 1,
@@ -352,7 +352,7 @@ struct AudioTransportTests {
         try wavSubject.preparePlayback(url: renamedWAV, format: format)
         #expect(wavSubject.state == .recorded)
 
-        let conflictingCAF = AudioFormatInfo(
+        let conflictingCAF = DWorkbench.AudioFormatInfo(
             container: .caf,
             sampleRate: format.sampleRate,
             channelCount: format.channelCount,
@@ -412,7 +412,7 @@ struct AudioTransportTests {
     @Test
     func nativeReaderRejectsFractionalSampleRateMismatchBelowHalfAHertz() throws {
         let url = try syntheticWAV(in: uniqueDirectory())
-        let fractionallyWrong = AudioFormatInfo(
+        let fractionallyWrong = DWorkbench.AudioFormatInfo(
             container: .wav,
             sampleRate: 48_000.25,
             channelCount: 1,
