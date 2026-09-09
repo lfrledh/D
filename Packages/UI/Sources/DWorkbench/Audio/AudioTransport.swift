@@ -114,6 +114,7 @@ public final class AudioTransport: NSObject {
         let frameCount = range.endFrame - startFrame
         guard frameCount > 0 else { throw AudioMediaError.invalidRange }
 
+        stopProgressTimer()
         playbackEpoch &+= 1
         let epoch = playbackEpoch
         let playbackID = ObjectIdentifier(playback)
