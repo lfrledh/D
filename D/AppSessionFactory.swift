@@ -11,9 +11,11 @@ enum AppSessionFactory {
         let backend = try MLXImageBackend(configuration: .init(artifactDirectory: artifactDirectory),
                                          observer: { await stages.record($0) })
         let textBackend = try MLXTextBackend()
+        let memoryBudgetBytes = ResourceBudgetPolicy().inferenceBudgetBytes(
+            physicalMemoryBytes: ProcessInfo.processInfo.physicalMemory)
         let runtime = try InferenceRuntime(
             backends: [backend, textBackend],
-            configuration: try RuntimeConfiguration(memoryBudgetBytes: ImageModelProfile.flux2Klein.estimatedPeakBytes,
+            configuration: try RuntimeConfiguration(memoryBudgetBytes: memoryBudgetBytes,
                                                     maximumQueuedRuns: 8))
         return WorkbenchSession(
             engine: runtime,
