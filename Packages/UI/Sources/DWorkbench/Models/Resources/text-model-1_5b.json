@@ -1,0 +1,69 @@
+{
+  "schemaVersion": 1,
+  "repository": "mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+  "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+  "directoryName": "Qwen2.5-1.5B-Instruct-4bit",
+  "source": "https://huggingface.co/mlx-community/Qwen2.5-1.5B-Instruct-4bit/tree/8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+  "files": [
+    {
+      "name": "README.md",
+      "size": 748,
+      "algorithm": "git-blob-sha1",
+      "checksum": "0a8005b4dede12c63ec8edfaa107c2e5af23cdef"
+    },
+    {
+      "name": "added_tokens.json",
+      "size": 605,
+      "algorithm": "git-blob-sha1",
+      "checksum": "482ced4679301bf287ebb310bdd1790eb4514232"
+    },
+    {
+      "name": "config.json",
+      "size": 784,
+      "algorithm": "git-blob-sha1",
+      "checksum": "d2741b5d6d48fa6f2ada841a2d6deb8a20137e5f"
+    },
+    {
+      "name": "merges.txt",
+      "size": 1671853,
+      "algorithm": "git-blob-sha1",
+      "checksum": "31349551d90c7606f325fe0f11bbb8bd5fa0d7c7"
+    },
+    {
+      "name": "model.safetensors",
+      "size": 868628559,
+      "algorithm": "sha256",
+      "checksum": "0979f33d1bc58afcf696d13f57977644e7b11a6f0eec3e631d8e9463d18c0717"
+    },
+    {
+      "name": "model.safetensors.index.json",
+      "size": 51569,
+      "algorithm": "git-blob-sha1",
+      "checksum": "87eb58d416654c6c0ef987be30f6981a3176ffae"
+    },
+    {
+      "name": "special_tokens_map.json",
+      "size": 613,
+      "algorithm": "git-blob-sha1",
+      "checksum": "ac23c0aaa2434523c494330aeb79c58395378103"
+    },
+    {
+      "name": "tokenizer.json",
+      "size": 7031673,
+      "algorithm": "git-blob-sha1",
+      "checksum": "d24314ef7f0afd1b678c2e24c767e19f24f86b0e"
+    },
+    {
+      "name": "tokenizer_config.json",
+      "size": 7308,
+      "algorithm": "git-blob-sha1",
+      "checksum": "482ccbc1096b0e9400e86e33f189681c2aebdab9"
+    },
+    {
+      "name": "vocab.json",
+      "size": 2776833,
+      "algorithm": "git-blob-sha1",
+      "checksum": "4783fe10ac3adce15ac8f358ef5462739852c569"
+    }
+  ]
+}

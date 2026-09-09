@@ -11,8 +11,7 @@ struct LocalImageModelInventory: Sendable {
     static let revision = "ef52ee019fd1d0e75ae4deb40476ba65989716d7"
 
     let directory: URL
-    // B1 measured the phased workload; this includes headroom and remains an estimate.
-    let estimatedPeakBytes: UInt64 = 8 * 1024 * 1024 * 1024
+    let estimatedPeakBytes: UInt64
     let weightBytes: UInt64
     private let manifest: Manifest
     private let identities: [String: FileIdentity]
@@ -69,19 +68,20 @@ struct LocalImageModelInventory: Sendable {
         "vae/config.json", "vae/diffusion_pytorch_model.safetensors",
     ]
 
-    static func inspect(_ request: InferenceRequest) throws -> Self {
-        try inspect(request, manifest: Manifest.bundled())
+    static func inspect(_ request: InferenceRequest,
+                        profile: ImageExecutionProfile = .verified512) throws -> Self {
+        try inspect(request, manifest: Manifest.bundled(), profile: profile)
     }
 
-    static func inspect(_ request: InferenceRequest, manifest: Manifest) throws -> Self {
+    static func inspect(_ request: InferenceRequest, manifest: Manifest,
+                        profile: ImageExecutionProfile = .verified512) throws -> Self {
         try Task.checkCancellation()
         try request.validate()
         guard case .image(let image) = request.input else {
             throw InferenceFailure.unsupportedCapability(request.input.capability)
         }
-        guard image.width == 512, image.height == 512, image.steps == 4, image.guidanceScale == 1 else {
-            throw InferenceFailure.invalidRequest("This image backend supports only 512 x 512, 4 steps, guidance 1.")
-        }
+        try profile.validate(image)
+        let estimatedPeakBytes = try profile.estimatedPeakBytes(width: image.width, height: image.height)
         guard image.prompt.utf8.count <= 1_048_576,
               !image.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw InferenceFailure.invalidRequest("Image prompt must be nonempty and no larger than 1 MiB of UTF-8.")
@@ -113,7 +113,8 @@ struct LocalImageModelInventory: Sendable {
             }
         }
         let weightBytes = manifest.files.filter { $0.path.hasSuffix(".safetensors") }.reduce(UInt64(0)) { $0 + $1.size }
-        return Self(directory: directory, weightBytes: weightBytes, manifest: manifest, identities: identities)
+        return Self(directory: directory, estimatedPeakBytes: estimatedPeakBytes,
+                    weightBytes: weightBytes, manifest: manifest, identities: identities)
     }
 
     /// Rehash every manifest file, including all four weight files, using bounded memory.
