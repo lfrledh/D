@@ -29,6 +29,7 @@ public final class ProjectAudioController {
     public private(set) var pendingCaptures: [AudioCaptureReservation] = []
     public private(set) var isInspecting = false
     public private(set) var isSaving = false
+    public private(set) var isFinalizing = false
     public private(set) var errorMessage: String?
 
     /// Editor-owned input. These values are intentionally separate from the persisted draft.
@@ -41,12 +42,12 @@ public final class ProjectAudioController {
     public var metadata: AudioAssetMetadata? { inspection?.metadata }
     public var documentID: UUID? { document?.id }
     public var isBusy: Bool {
-        isSaving || isInspecting || (isStartingRecording && !permissionRequestDetached) || finalizeTask != nil
+        isSaving || isInspecting || (isStartingRecording && !permissionRequestDetached) || isFinalizing
             || transport.state == .requestingPermission || transport.state == .recording
     }
     public var hasUnsubmittedInput: Bool {
         guard let document else { return false }
-        return noteInput != document.note || !clipNameInput.isEmpty
+        return !sameUTF8(noteInput, document.note) || !clipNameInput.isEmpty
             || !clipNoteInput.isEmpty || clipRangeInput != nil
     }
     public var isDirty: Bool { hasUnsubmittedInput || isSaving }
@@ -75,6 +76,8 @@ public final class ProjectAudioController {
     @ObservationIgnored private var captureFailureBlocksNavigation = false
     @ObservationIgnored private var isStartingRecording = false
     @ObservationIgnored private var permissionRequestDetached = false
+    @ObservationIgnored private var admissionsOpen = true
+    @ObservationIgnored private var navigationPreparing = false
 
     init(contextID: UUID = UUID(), store: ProjectStore, transport: AudioTransport,
          recordingEnabled: Bool,
@@ -107,12 +110,16 @@ public final class ProjectAudioController {
         }
     }
 
+    func resumeAdmissions() {
+        if isActive, !navigationPreparing { admissionsOpen = true }
+    }
+
     public func clearError() { errorMessage = nil }
 
     /// UI binding entry point. Identity makes a stale view unable to edit a replacement document.
     @discardableResult
     public func setNoteInput(_ value: String, contextID: UUID, documentID: UUID) -> Bool {
-        guard matches(contextID: contextID, documentID: documentID) else { return false }
+        guard admissionsOpen, matches(contextID: contextID, documentID: documentID) else { return false }
         noteInput = value
         editorGeneration &+= 1
         errorMessage = nil
@@ -123,7 +130,7 @@ public final class ProjectAudioController {
     @discardableResult
     public func setClipInput(name: String, range: AudioFrameRange?, note: String = "",
                              contextID: UUID, documentID: UUID) -> Bool {
-        guard matches(contextID: contextID, documentID: documentID) else { return false }
+        guard admissionsOpen, matches(contextID: contextID, documentID: documentID) else { return false }
         clipNameInput = name
         clipRangeInput = range
         clipNoteInput = note
@@ -135,7 +142,7 @@ public final class ProjectAudioController {
     /// Explicitly discards only editor input; persisted media, drafts and captures are untouched.
     @discardableResult
     public func discardUnsubmittedInput(contextID: UUID, documentID: UUID) -> Bool {
-        guard matches(contextID: contextID, documentID: documentID), let document else { return false }
+        guard admissionsOpen, matches(contextID: contextID, documentID: documentID), let document else { return false }
         noteInput = document.note
         clipNameInput = ""
         clipNoteInput = ""
@@ -146,7 +153,7 @@ public final class ProjectAudioController {
     }
 
     public func saveNote(contextID: UUID, documentID: UUID) async -> Bool {
-        guard matches(contextID: contextID, documentID: documentID) else {
+        guard admissionsOpen, matches(contextID: contextID, documentID: documentID) else {
             rejectStaleEditor(); return false
         }
         let snapshot = noteInput
@@ -156,7 +163,7 @@ public final class ProjectAudioController {
     }
 
     public func addClip(contextID: UUID, documentID: UUID) async -> Bool {
-        guard matches(contextID: contextID, documentID: documentID),
+        guard admissionsOpen, matches(contextID: contextID, documentID: documentID),
               let range = clipRangeInput else {
             errorMessage = "片段范围尚未设置，原声稿没有改变。"
             return false
@@ -168,7 +175,7 @@ public final class ProjectAudioController {
     }
 
     public func selectFullAudio(contextID: UUID, documentID: UUID) async -> Bool {
-        guard matches(contextID: contextID, documentID: documentID) else {
+        guard admissionsOpen, matches(contextID: contextID, documentID: documentID) else {
             rejectStaleEditor(); return false
         }
         guard await enqueue(.selection(nil), contextID: contextID, documentID: documentID,
@@ -177,7 +184,7 @@ public final class ProjectAudioController {
     }
 
     public func selectClip(id: UUID, contextID: UUID, documentID: UUID) async -> Bool {
-        guard matches(contextID: contextID, documentID: documentID),
+        guard admissionsOpen, matches(contextID: contextID, documentID: documentID),
               document?.clips.contains(where: { $0.id == id }) == true else {
             errorMessage = "找不到要选择的已保存片段。"
             return false
@@ -188,7 +195,7 @@ public final class ProjectAudioController {
     }
 
     public func refreshInspection(contextID: UUID, documentID: UUID) async -> Bool {
-        guard matches(contextID: contextID, documentID: documentID), !isInspecting else {
+        guard admissionsOpen, matches(contextID: contextID, documentID: documentID), !isInspecting else {
             return false
         }
         isInspecting = true
@@ -198,6 +205,7 @@ public final class ProjectAudioController {
             guard matches(contextID: contextID, documentID: documentID),
                   value.document == document else { return false }
             inspection = value
+            guard preparePlayback(value, range: selectedRange(in: value.document)) else { return false }
             errorMessage = nil
             return true
         } catch {
@@ -207,7 +215,7 @@ public final class ProjectAudioController {
     }
 
     public func exportOriginal(to destination: URL, contextID: UUID, documentID: UUID) async -> Bool {
-        guard matches(contextID: contextID, documentID: documentID), let assetID = document?.assetID else {
+        guard admissionsOpen, matches(contextID: contextID, documentID: documentID), let assetID = document?.assetID else {
             rejectStaleEditor(); return false
         }
         let scoped = destination.startAccessingSecurityScopedResource()
@@ -225,7 +233,7 @@ public final class ProjectAudioController {
 
     public func exportClip(id: UUID, to destination: URL,
                            contextID: UUID, documentID: UUID) async -> Bool {
-        guard matches(contextID: contextID, documentID: documentID),
+        guard admissionsOpen, matches(contextID: contextID, documentID: documentID),
               let range = document?.clips.first(where: { $0.id == id })?.range else {
             errorMessage = "找不到要导出的已保存片段。"
             return false
@@ -243,8 +251,40 @@ public final class ProjectAudioController {
         }
     }
 
+    /// Exports an explicit half-open original-frame range without changing saved selection.
+    public func exportRange(_ range: AudioFrameRange, to destination: URL,
+                            contextID: UUID, documentID: UUID) async -> Bool {
+        guard admissionsOpen, matches(contextID: contextID, documentID: documentID) else {
+            rejectStaleEditor(); return false
+        }
+        let scoped = destination.startAccessingSecurityScopedResource()
+        defer { if scoped { destination.stopAccessingSecurityScopedResource() } }
+        do {
+            try await store.exportAudioClip(documentID: documentID, range: range, to: destination)
+            guard matches(contextID: contextID, documentID: documentID) else { return false }
+            errorMessage = nil
+            return true
+        } catch {
+            report(error, context: "原声范围导出失败；已保存选区没有改变")
+            return false
+        }
+    }
+
+    /// Re-validates and prepares an explicit range for playback, without autoplay or persistence.
+    public func preparePlayback(range: AudioFrameRange? = nil,
+                                contextID: UUID, documentID: UUID) async -> Bool {
+        guard admissionsOpen, matches(contextID: contextID, documentID: documentID) else {
+            rejectStaleEditor(); return false
+        }
+        if inspection?.document.id != documentID {
+            guard await refreshInspection(contextID: contextID, documentID: documentID) else { return false }
+        }
+        guard let inspection else { return false }
+        return preparePlayback(inspection, range: range ?? selectedRange(in: document))
+    }
+
     public func startRecording(name: String) async -> Bool {
-        guard recordingEnabled else {
+        guard admissionsOpen, recordingEnabled else {
             report(AudioMediaError.unavailable("当前项目会话未启用录音能力"), context: "无法开始录音")
             return false
         }
@@ -258,6 +298,7 @@ public final class ProjectAudioController {
         isStartingRecording = true
         permissionRequestDetached = false
         defer { isStartingRecording = false; permissionRequestDetached = false }
+        transport.stopPlayback()
         do {
             // The reservation is durable before a permission request can suspend.
             let reservation = try await store.reserveAudioCapture(name: name)
@@ -319,7 +360,9 @@ public final class ProjectAudioController {
     /// Allows close while retaining the registered reservation and raw bytes for later recovery.
     @discardableResult
     public func keepPendingCaptureForRecovery(id: UUID) -> Bool {
-        guard pendingCaptures.contains(where: { $0.id == id }), finalizingCaptureID == nil else { return false }
+        guard admissionsOpen, pendingCaptures.contains(where: { $0.id == id }),
+              finalizingCaptureID == nil, transport.state != .recording,
+              transport.state != .requestingPermission else { return false }
         captureGeneration &+= 1
         activeCaptureID = nil
         activeCaptureURL = nil
@@ -335,18 +378,34 @@ public final class ProjectAudioController {
             errorMessage = message
             return false
         }
+        admissionsOpen = false
+        navigationPreparing = true
+        defer { navigationPreparing = false }
         transport.stopPlayback()
         // Wait only for reservation persistence, never for a suspended system permission dialog.
-        while isStartingRecording && transport.state != .requestingPermission {
+        while isStartingRecording && !permissionRequestDetached
+                && transport.state != .requestingPermission {
             await Task.yield()
         }
         if transport.state == .requestingPermission || transport.state == .recording {
-            guard await finishRecording() else { return false }
+            guard await finishRecording() else { admissionsOpen = true; return false }
         }
-        if let task = finalizeTask, !(await awaitFinalize(task)) { return false }
+        if let task = finalizeTask, !(await awaitFinalize(task)) { admissionsOpen = true; return false }
         await writeTail?.value
         if let message = navigationBlockMessage {
             errorMessage = message
+            admissionsOpen = true
+            return false
+        }
+        admissionsOpen = false
+        return true
+    }
+
+    /// Drains already admitted draft writes without changing playback or admission state.
+    func flushPendingWrites() async -> Bool {
+        await writeTail?.value
+        if hasUnsubmittedInput {
+            errorMessage = navigationBlockMessage
             return false
         }
         return true
@@ -354,6 +413,7 @@ public final class ProjectAudioController {
 
     func deactivateAfterClose() {
         isActive = false
+        admissionsOpen = false
         captureGeneration &+= 1
         transport.shutdown()
         transport.recordingDidFinish = nil
@@ -392,7 +452,16 @@ public final class ProjectAudioController {
         case .selection(let id):
             next.selectedClipID = id
         }
-        if next == document { return true }
+        let changed: Bool
+        switch mutation {
+        case .note(let note):
+            changed = !sameUTF8(note, document?.note ?? "")
+        case .addClip:
+            changed = true
+        case .selection(let id):
+            changed = id != document?.selectedClipID
+        }
+        if !changed { return true }
         guard expectedRevision < UInt64.max else {
             report(ProjectStoreError.invalidProject("原声稿修订编号已耗尽。"), context: "原声稿未保存")
             return false
@@ -428,16 +497,7 @@ public final class ProjectAudioController {
             guard await refreshInspection(contextID: contextID, documentID: documentID) else { return false }
         }
         guard let inspection else { return false }
-        let range = document.selectedClipID.flatMap { selected in
-            document.clips.first(where: { $0.id == selected })?.range
-        }
-        do {
-            try transport.preparePlayback(url: inspection.url, format: inspection.metadata.format, range: range)
-            return true
-        } catch {
-            report(error, context: "已保存选区，但无法准备播放")
-            return false
-        }
+        return preparePlayback(inspection, range: selectedRange(in: document))
     }
 
     private func recordingFinished(url: URL, error: String?) {
@@ -457,8 +517,17 @@ public final class ProjectAudioController {
         let token = UUID()
         finalizingCaptureID = id
         finalizeToken = token
+        isFinalizing = true
         let task = Task { @MainActor [weak self] () -> Bool in
             guard let self else { return false }
+            defer {
+                if self.finalizeToken == token {
+                    self.finalizeTask = nil
+                    self.finalizeToken = nil
+                    self.finalizingCaptureID = nil
+                    self.isFinalizing = false
+                }
+            }
             if let expectedURL, self.activeCaptureURL?.standardizedFileURL != expectedURL.standardizedFileURL {
                 return false
             }
@@ -509,5 +578,28 @@ public final class ProjectAudioController {
     private func report(_ error: Error, context: String) {
         errorMessage = "\(context)。\n\(error.localizedDescription)"
         transport.present(error)
+    }
+
+    private func selectedRange(in document: AudioDraftDocument?) -> AudioFrameRange? {
+        guard let document, let selected = document.selectedClipID else { return nil }
+        return document.clips.first(where: { $0.id == selected })?.range
+    }
+
+    @discardableResult
+    private func preparePlayback(_ inspection: ProjectAudioInspection,
+                                 range: AudioFrameRange?) -> Bool {
+        do {
+            try transport.preparePlayback(url: inspection.url,
+                                          format: inspection.metadata.format,
+                                          range: range)
+            return true
+        } catch {
+            report(error, context: "原声已检查，但无法准备播放")
+            return false
+        }
+    }
+
+    private func sameUTF8(_ lhs: String, _ rhs: String) -> Bool {
+        lhs.utf8.elementsEqual(rhs.utf8)
     }
 }
