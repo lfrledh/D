@@ -163,6 +163,7 @@ public struct WorkbenchView: View {
            let audio = model.projectSession.audio {
             AudioWorkbenchView(controller: audio,
                                recordingEnabled: model.audioRecordingEnabled,
+                               navigationInProgress: model.projectSession.isChangingProject,
                                actions: audioActions)
                 .id(audio.contextID)
         } else if !model.showingAllArtworks, let text = model.projectSession.text {

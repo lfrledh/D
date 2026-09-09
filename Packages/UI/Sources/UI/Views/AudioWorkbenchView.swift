@@ -71,6 +71,7 @@ public struct AudioWorkbenchView: View {
     private let legacyActions: AudioWorkbenchActions?
     private let productionActions: AudioWorkbenchProductionActions?
     private let recordingEnabled: Bool
+    private let navigationInProgress: Bool
     @Bindable public var transport: AudioTransport
 
     @State private var previewNote = ""
@@ -98,10 +99,12 @@ public struct AudioWorkbenchView: View {
         legacyActions = actions
         productionActions = nil
         recordingEnabled = true
+        navigationInProgress = false
         self.transport = transport
     }
 
     public init(controller: ProjectAudioController, recordingEnabled: Bool,
+                navigationInProgress: Bool = false,
                 actions: AudioWorkbenchProductionActions) {
         previewDocument = nil
         previewMetadata = nil
@@ -110,6 +113,7 @@ public struct AudioWorkbenchView: View {
         legacyActions = nil
         productionActions = actions
         self.recordingEnabled = recordingEnabled
+        self.navigationInProgress = navigationInProgress
         transport = controller.transport
     }
 
@@ -134,6 +138,9 @@ public struct AudioWorkbenchView: View {
             refreshInspectionIfNeeded()
         }
         .onChange(of: metadata?.contentSHA256) { _, _ in initializeRangeIfAvailable() }
+        .onChange(of: navigationInProgress) { wasInProgress, isInProgress in
+            if wasInProgress && !isInProgress { refreshInspectionIfNeeded() }
+        }
         .onAppear {
             load(documentID: document?.id)
             refreshInspectionIfNeeded()
@@ -160,7 +167,7 @@ public struct AudioWorkbenchView: View {
                 }
                 recordingControl
                 if !recordingEnabled && !isRecordingOrRequesting {
-                    Text("麦克风宿主设置尚未完成；录音保持关闭，也不会请求系统许可。")
+                    Text("麦克风录音尚未启用；录音保持关闭，也不会请求系统许可。")
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 captureRecovery
@@ -206,8 +213,12 @@ public struct AudioWorkbenchView: View {
                 recordingControl.buttonStyle(.glass)
             }
             if !recordingEnabled && !isRecordingOrRequesting {
-                Text("麦克风宿主设置尚未完成；录音保持关闭，也不会请求系统许可。")
+                Text("麦克风录音尚未启用；录音保持关闭，也不会请求系统许可。")
                     .font(.caption).foregroundStyle(.secondary)
+            }
+            if controller?.errorMessage != nil {
+                Button("重新读取原声", action: refreshInspection)
+                    .accessibilityIdentifier("audio-refresh")
             }
         }
         .accessibilityIdentifier("audio-header")
@@ -357,7 +368,7 @@ public struct AudioWorkbenchView: View {
         if let controller, !controller.pendingCaptures.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
                 Text("待恢复录音").font(.headline)
-                Text("录音最终化尚未完成。可重试；也可保留文件供以后恢复。原件不会被删除。")
+                Text("录音保存尚未完成。可重试；也可保留文件供以后恢复。原件不会被删除。")
                     .font(.caption).foregroundStyle(.secondary)
                 ForEach(controller.pendingCaptures) { capture in
                     HStack {
@@ -594,11 +605,16 @@ public struct AudioWorkbenchView: View {
 
     private func refreshInspection() {
         refreshRequestedDocumentID = nil
-        refreshInspectionIfNeeded()
+        requestInspectionRefresh(force: true)
     }
 
     private func refreshInspectionIfNeeded() {
-        guard metadata == nil, let controller, let productionActions,
+        requestInspectionRefresh(force: false)
+    }
+
+    private func requestInspectionRefresh(force: Bool) {
+        guard !navigationInProgress, (force || metadata == nil),
+              let controller, let productionActions,
               let documentID = controller.documentID,
               refreshRequestedDocumentID != documentID else { return }
         let contextID = controller.contextID
@@ -607,7 +623,12 @@ public struct AudioWorkbenchView: View {
             let refreshed = await productionActions.refreshInspection(contextID, documentID)
             guard matches(controller: controller, contextID: contextID, documentID: documentID) else { return }
             refreshRequestedDocumentID = nil
-            if refreshed { initializeRangeIfAvailable() }
+            if refreshed {
+                initializeRangeIfAvailable()
+                if let document = controller.document, let metadata = controller.metadata {
+                    preparedRange = selectedRange(document: document, format: metadata.format)
+                }
+            }
         }
     }
 
@@ -638,7 +659,9 @@ public struct AudioWorkbenchView: View {
               rangeInitializedDocumentID != document.id else { return }
         let range = controller?.clipRangeInput ?? selectedRange(document: document, format: metadata.format)
         setDisplayedRange(range)
-        preparedRange = selectedRange(document: document, format: metadata.format)
+        if transportHasPreparedPlayback {
+            preparedRange = selectedRange(document: document, format: metadata.format)
+        }
         rangeInitializedDocumentID = document.id
     }
 
@@ -676,13 +699,20 @@ public struct AudioWorkbenchView: View {
         if let message = controller?.errorMessage ?? transport.errorMessage ?? actionStatus {
             return message
         }
-        switch transport.state {
+        return switch transport.state {
         case .requestingPermission: "等待录音许可"
         case .recording: "正在录音"
         case .recorded: "已准备"
         case .playing: "正在播放"
         case .paused: "已暂停"
         case .idle, .failed: ""
+        }
+    }
+
+    private var transportHasPreparedPlayback: Bool {
+        switch transport.state {
+        case .recorded, .playing, .paused: true
+        case .idle, .requestingPermission, .recording, .failed: false
         }
     }
 

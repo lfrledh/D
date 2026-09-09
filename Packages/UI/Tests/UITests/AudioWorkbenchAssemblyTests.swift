@@ -183,6 +183,10 @@ struct AudioWorkbenchAssemblyTests {
         #expect(model.projectSession.setAudioNoteInput(
             firstNote, contextID: contextID, documentID: documentID
         ))
+        #expect(!(await model.projectSession.saveAudioNote(
+            contextID: UUID(), documentID: documentID
+        )))
+        #expect(controller.noteInput == firstNote)
         let firstSave = Task {
             await model.projectSession.saveAudioNote(
                 contextID: contextID, documentID: documentID
@@ -245,7 +249,7 @@ struct AudioWorkbenchAssemblyTests {
         panels.nextExport = existing
         await model.exportOriginalAudio(contextID: reopened.contextID, documentID: reopenedID)
         #expect(try Data(contentsOf: existing) == marker)
-        #expect(model.errorMessage != nil)
+        #expect(reopened.errorMessage != nil)
         #expect(factory.permissionRequests == 0)
         #expect(factory.recordingDevices == 0)
     }
@@ -280,7 +284,9 @@ struct AudioWorkbenchAssemblyTests {
         try makePCM16WAV().write(to: source)
         panels.suspendImport = true
         let importTask = Task { await model.importAudio() }
-        while panels.importContinuation == nil { await Task.yield() }
+        let importPanelOpened = await waitUntil { panels.importContinuation != nil }
+        if !importPanelOpened { panels.resumeImport(with: nil) }
+        try #require(importPanelOpened)
         await model.projectSession.createDocument(name: "面板期间的新文档")
         panels.resumeImport(with: source)
         await importTask.value
@@ -305,7 +311,9 @@ struct AudioWorkbenchAssemblyTests {
                 contextID: controller.contextID, documentID: documentID
             )
         }
-        while panels.exportContinuation == nil { await Task.yield() }
+        let exportPanelOpened = await waitUntil { panels.exportContinuation != nil }
+        if !exportPanelOpened { panels.resumeExport(with: nil) }
+        try #require(exportPanelOpened)
         #expect(controller.setClipInput(
             name: "更新范围", range: .init(startFrame: 3, endFrame: 14),
             contextID: controller.contextID, documentID: documentID
@@ -358,12 +366,64 @@ struct AudioWorkbenchAssemblyTests {
         #expect(model.errorMessage?.contains("录音") == true)
 
         let workbenchHost = NSHostingView(rootView: WorkbenchView(model: model))
+        window.contentView = workbenchHost
         settle(workbenchHost, width: 1_000)
         let identifiers = Set(descendants(workbenchHost).compactMap { $0.accessibilityIdentifier() })
         #expect(identifiers.contains("audio-workbench"))
         #expect(!identifiers.contains("export-artwork"))
         #expect(!identifiers.contains("toggle-inspector"))
         #expect(!identifiers.contains("copy-settings"))
+    }
+
+    @Test
+    func productionViewRefreshesWhenNavigationGateReleases() async throws {
+        let root = try root()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let panels = AssemblyPanels()
+        let factory = NoHardwareAudioFactory()
+        let (model, _, _, _) = try await openImportedAudio(
+            root: root, panels: panels, factory: factory
+        )
+        let projectURL = try #require(model.projectURL)
+        #expect(await model.requestClose())
+        await model.openProject(at: projectURL)
+        let controller = try #require(model.projectSession.audio)
+        try #require(controller.documentID != nil)
+        #expect(controller.metadata == nil)
+
+        var refreshCount = 0
+        var actions = productionActions(model)
+        actions.refreshInspection = { contextID, documentID in
+            refreshCount += 1
+            return await model.projectSession.refreshActiveAudioInspection(
+                contextID: contextID, documentID: documentID
+            )
+        }
+        let host = NSHostingView(rootView: AudioWorkbenchView(
+            controller: controller, recordingEnabled: false,
+            navigationInProgress: true, actions: actions
+        ))
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 700, height: 580),
+            styleMask: [.borderless], backing: .buffered, defer: false
+        )
+        window.contentView = host
+        defer { window.contentView = nil }
+        settle(host, width: 700)
+        #expect(refreshCount == 0)
+        #expect(controller.metadata == nil)
+
+        host.rootView = AudioWorkbenchView(
+            controller: controller, recordingEnabled: false,
+            navigationInProgress: false, actions: actions
+        )
+        settle(host, width: 700)
+        let refreshed = await waitUntil { controller.metadata != nil }
+        #expect(refreshed)
+        #expect(refreshCount == 1)
+        let identifiers = Set(descendants(host).compactMap { $0.accessibilityIdentifier() })
+        #expect(identifiers.contains("audio-waveform"))
+        #expect(identifiers.contains("audio-prepared-range"))
     }
 
     @Test
@@ -431,6 +491,16 @@ struct AudioWorkbenchAssemblyTests {
 
     private func descendants(_ parent: NSView) -> [NSView] {
         parent.subviews.flatMap { [$0] + descendants($0) }
+    }
+
+    private func waitUntil(timeout: Duration = .seconds(2),
+                           _ condition: @escaping @MainActor () -> Bool) async -> Bool {
+        let deadline = ContinuousClock.now + timeout
+        while ContinuousClock.now < deadline {
+            if condition() { return true }
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        return condition()
     }
 
     private func settle<Content: View>(_ host: NSHostingView<Content>, width: CGFloat) {
