@@ -1,7 +1,9 @@
+import DWorkbench
 import Foundation
 import SwiftUI
-import DWorkbench
 
+/// Stateless callbacks retained for previews and the accepted component tests. Production uses
+/// `AudioWorkbenchProductionActions` and controller-owned editor input below.
 public struct AudioWorkbenchActions {
     public var importOriginal: () -> Void
     public var startRecording: () -> Void
@@ -14,24 +16,27 @@ public struct AudioWorkbenchActions {
 
     public init(importOriginal: @escaping () -> Void, startRecording: @escaping () -> Void,
                 finishRecording: @escaping () -> Void, saveNote: @escaping (UUID, String) -> Void,
-                selectClip: @escaping (UUID?) -> Void, addClip: @escaping (AudioFrameRange, String) -> Void,
-                exportOriginal: @escaping () -> Void, exportRange: @escaping (AudioFrameRange) -> Void) {
-        self.importOriginal = importOriginal; self.startRecording = startRecording; self.finishRecording = finishRecording
-        self.saveNote = saveNote; self.selectClip = selectClip; self.addClip = addClip
-        self.exportOriginal = exportOriginal; self.exportRange = exportRange
+                selectClip: @escaping (UUID?) -> Void,
+                addClip: @escaping (AudioFrameRange, String) -> Void,
+                exportOriginal: @escaping () -> Void,
+                exportRange: @escaping (AudioFrameRange) -> Void) {
+        self.importOriginal = importOriginal
+        self.startRecording = startRecording
+        self.finishRecording = finishRecording
+        self.saveNote = saveNote
+        self.selectClip = selectClip
+        self.addClip = addClip
+        self.exportOriginal = exportOriginal
+        self.exportRange = exportRange
     }
 }
 
 @MainActor
 enum AudioWorkbenchButtonHandler {
     @discardableResult
-    static func saveNote(
-        documentID: UUID,
-        editingDocumentID: UUID?,
-        note: String,
-        actions: AudioWorkbenchActions,
-        reject: (AudioMediaError) -> Void
-    ) -> Bool {
+    static func saveNote(documentID: UUID, editingDocumentID: UUID?, note: String,
+                         actions: AudioWorkbenchActions,
+                         reject: (AudioMediaError) -> Void) -> Bool {
         guard editingDocumentID == documentID else { return false }
         guard note.utf8.count <= AudioLimits.maximumNoteBytes else {
             reject(.limitExceeded)
@@ -42,18 +47,12 @@ enum AudioWorkbenchButtonHandler {
     }
 
     @discardableResult
-    static func addClip(
-        documentID: UUID,
-        editingDocumentID: UUID?,
-        existingClipCount: Int,
-        name: String,
-        range: () -> AudioFrameRange?,
-        actions: AudioWorkbenchActions,
-        reject: (AudioMediaError) -> Void
-    ) -> Bool {
+    static func addClip(documentID: UUID, editingDocumentID: UUID?, existingClipCount: Int,
+                        name: String, range: () -> AudioFrameRange?,
+                        actions: AudioWorkbenchActions,
+                        reject: (AudioMediaError) -> Void) -> Bool {
         guard editingDocumentID == documentID else { return false }
-        guard !name.isEmpty,
-              name.utf8.count <= AudioLimits.maximumNameBytes,
+        guard !name.isEmpty, name.utf8.count <= AudioLimits.maximumNameBytes,
               existingClipCount < AudioLimits.maximumClips else {
             reject(.limitExceeded)
             return false
@@ -65,33 +64,66 @@ enum AudioWorkbenchButtonHandler {
 }
 
 public struct AudioWorkbenchView: View {
-    public let document: AudioDraftDocument?
-    public let metadata: AudioAssetMetadata?
-    public let waveform: [AudioPeak]
+    private let previewDocument: AudioDraftDocument?
+    private let previewMetadata: AudioAssetMetadata?
+    private let previewWaveform: [AudioPeak]
+    private let controller: ProjectAudioController?
+    private let legacyActions: AudioWorkbenchActions?
+    private let productionActions: AudioWorkbenchProductionActions?
+    private let recordingEnabled: Bool
     @Bindable public var transport: AudioTransport
-    public let actions: AudioWorkbenchActions
-    @State private var note = ""
-    @State private var clipName = ""
-    @State private var startSeconds = 0.0
-    @State private var endSeconds = 0.0
+
+    @State private var previewNote = ""
+    @State private var previewClipName = ""
+    @State private var startFrame: Int64 = 0
+    @State private var endFrame: Int64 = 0
     @State private var editingDocumentID: UUID?
-    // Internal, inert when absent: observe actual rendered controls in offscreen layout tests.
+    @State private var preparedRange: AudioFrameRange?
+    @State private var actionStatus: String?
     private var layoutProbe: ((String, CGRect) -> Void)?
 
-    func observingLayout(_ observer: @escaping (String, CGRect) -> Void) -> Self {
-        var copy = self; copy.layoutProbe = observer; return copy
-    }
+    private var document: AudioDraftDocument? { controller?.document ?? previewDocument }
+    private var metadata: AudioAssetMetadata? { controller?.metadata ?? previewMetadata }
+    private var waveform: [AudioPeak] { controller?.waveform ?? previewWaveform }
+    private var canEdit: Bool { controller?.canEdit ?? true }
 
     public init(document: AudioDraftDocument?, metadata: AudioAssetMetadata?, waveform: [AudioPeak],
                 transport: AudioTransport, actions: AudioWorkbenchActions) {
-        self.document = document; self.metadata = metadata; self.waveform = waveform
-        self.transport = transport; self.actions = actions
+        previewDocument = document
+        previewMetadata = metadata
+        previewWaveform = waveform
+        controller = nil
+        legacyActions = actions
+        productionActions = nil
+        recordingEnabled = true
+        self.transport = transport
+    }
+
+    public init(controller: ProjectAudioController, recordingEnabled: Bool,
+                actions: AudioWorkbenchProductionActions) {
+        previewDocument = nil
+        previewMetadata = nil
+        previewWaveform = []
+        self.controller = controller
+        legacyActions = nil
+        productionActions = actions
+        self.recordingEnabled = recordingEnabled
+        transport = controller.transport
+    }
+
+    func observingLayout(_ observer: @escaping (String, CGRect) -> Void) -> Self {
+        var copy = self
+        copy.layoutProbe = observer
+        return copy
     }
 
     public var body: some View {
         Group {
-            if let document, let metadata { editor(document: document, metadata: metadata) }
-            else { emptyState }
+            if let document, let metadata {
+                editor(document: document, metadata: metadata)
+            } else {
+                emptyState
+            }
         }
         .padding(20)
         .coordinateSpace(name: "audio-workbench-layout")
@@ -103,17 +135,19 @@ public struct AudioWorkbenchView: View {
     private var emptyState: some View {
         ContentUnavailableView {
             Label("尚未添加音频", systemImage: "waveform")
-        } description: { Text("导入原始 WAV/CAF PCM，或由应用明确开始一次录音。") } actions: {
-            VStack {
-                Button("导入音频…", action: actions.importOriginal).accessibilityIdentifier("audio-import")
-                if transport.state == .recording || transport.state == .requestingPermission {
-                    Button("结束录音", action: actions.finishRecording).accessibilityIdentifier("audio-record-finish")
-                    .audioMeasured("audio-record-finish", probe: layoutProbe)
-                } else {
-                    Button("开始录音", action: actions.startRecording).accessibilityIdentifier("audio-record-start")
-                    .audioMeasured("audio-record-start", probe: layoutProbe)
+        } description: {
+            Text("导入一个原始 WAV/CAF PCM。原件会保留不变。")
+        } actions: {
+            VStack(spacing: 8) {
+                Button("导入音频…", action: importOriginal)
+                    .accessibilityIdentifier("audio-import")
+                recordingControl
+                if !recordingEnabled && !isRecordingOrRequesting {
+                    Text("麦克风宿主设置尚未完成；录音保持关闭，也不会请求系统许可。")
+                        .font(.caption).foregroundStyle(.secondary)
                 }
-                Text(statusText).font(.caption).foregroundStyle(transport.state == .failed ? .red : .secondary)
+                captureRecovery
+                statusLabel
             }
         }
     }
@@ -131,7 +165,9 @@ public struct AudioWorkbenchView: View {
                         media(format: format).frame(maxWidth: .infinity).frame(height: 260)
                         details(document: document, format: format)
                     }
-                }.frame(maxWidth: .infinity, alignment: .leading)
+                    captureRecovery
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
             .accessibilityIdentifier("audio-editor-scroll")
         }
@@ -144,137 +180,469 @@ public struct AudioWorkbenchView: View {
                 Text("原件保持不变；片段只记录起止位置。\(format.channelCount) 声道 · \(Int(format.sampleRate)) Hz")
                     .font(.caption).foregroundStyle(.secondary)
             }
-            LazyVGrid(
-                columns: [GridItem(.adaptive(minimum: 126, maximum: 210), spacing: 8)],
-                alignment: .leading,
-                spacing: 8
-            ) {
-                Button("导出原件", systemImage: "square.and.arrow.up", action: actions.exportOriginal)
-                    .buttonStyle(.glass).accessibilityIdentifier("audio-export-original")
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 126, maximum: 210), spacing: 8)],
+                      alignment: .leading, spacing: 8) {
+                Button("导出原件", systemImage: "square.and.arrow.up", action: exportOriginal)
+                    .buttonStyle(.glass)
+                    .accessibilityIdentifier("audio-export-original")
                     .audioMeasured("audio-export-original", probe: layoutProbe)
-                if transport.state == .recording || transport.state == .requestingPermission {
-                    Button(
-                        transport.state == .recording ? "结束录音" : "取消等待",
-                        systemImage: "stop.fill",
-                        action: actions.finishRecording
-                    )
-                    .buttonStyle(.glass).accessibilityIdentifier("audio-record-finish")
-                    .audioMeasured("audio-record-finish", probe: layoutProbe)
-                } else {
-                    Button("开始录音", systemImage: "mic.fill", action: actions.startRecording)
-                        .buttonStyle(.glass).accessibilityIdentifier("audio-record-start")
-                    .audioMeasured("audio-record-start", probe: layoutProbe)
-                }
+                recordingControl.buttonStyle(.glass)
+            }
+            if !recordingEnabled && !isRecordingOrRequesting {
+                Text("麦克风宿主设置尚未完成；录音保持关闭，也不会请求系统许可。")
+                    .font(.caption).foregroundStyle(.secondary)
             }
         }
         .accessibilityIdentifier("audio-header")
     }
 
+    @ViewBuilder private var recordingControl: some View {
+        if isRecordingOrRequesting {
+            Button(transport.state == .recording ? "结束录音" : "取消等待",
+                   systemImage: "stop.fill", action: finishRecording)
+                .accessibilityIdentifier("audio-record-finish")
+                .audioMeasured("audio-record-finish", probe: layoutProbe)
+        } else {
+            Button("开始录音", systemImage: "mic.fill", action: startRecording)
+                .disabled(!recordingEnabled)
+                .accessibilityIdentifier("audio-record-start")
+                .audioMeasured("audio-record-start", probe: layoutProbe)
+        }
+    }
+
+    private var isRecordingOrRequesting: Bool {
+        transport.state == .recording || transport.state == .requestingPermission
+    }
+
     private func media(format: AudioFormatInfo) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            WaveformView(peaks: waveform, position: transport.positionFrame, frameCount: format.frameCount) { frame in
-                do { try transport.seek(toFrame: frame) } catch { transport.present(error) }
+            WaveformView(peaks: waveform, position: transport.positionFrame,
+                         frameCount: format.frameCount) { frame in
+                do { try transport.seek(toFrame: frame) }
+                catch { transport.present(error) }
             }
-                .frame(minHeight: 180).accessibilityIdentifier("audio-waveform")
+            .frame(minHeight: 180)
+            .accessibilityIdentifier("audio-waveform")
             HStack {
-                Button(transport.state == .playing ? "暂停" : "播放", systemImage: transport.state == .playing ? "pause.fill" : "play.fill") {
-                    if transport.state == .playing { transport.pause() } else {
-                        do { try transport.play() } catch { transport.present(error) }
+                Button(transport.state == .playing ? "暂停" : "播放",
+                       systemImage: transport.state == .playing ? "pause.fill" : "play.fill") {
+                    if transport.state == .playing {
+                        transport.pause()
+                    } else {
+                        do { try transport.play() }
+                        catch { transport.present(error) }
                     }
-                }.buttonStyle(.glass).accessibilityIdentifier("audio-play-pause")
+                }
+                .buttonStyle(.glass)
+                .accessibilityIdentifier("audio-play-pause")
                 Text(time(transport.positionFrame, format: format)).monospacedDigit()
                 Spacer()
-                Text(statusText).font(.caption)
-                    .foregroundStyle(transport.errorMessage == nil ? Color.secondary : Color.red)
-                    .accessibilityIdentifier("audio-status")
+                statusLabel
             }
-        }.padding(16).background(.quaternary, in: RoundedRectangle(cornerRadius: 16))
+            if let preparedRange {
+                Text("已准备试听：\(time(preparedRange.startFrame, format: format)) – \(time(preparedRange.endFrame, format: format))")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .accessibilityIdentifier("audio-prepared-range")
+            }
+        }
+        .padding(16)
+        .background(.quaternary, in: RoundedRectangle(cornerRadius: 16))
     }
 
     private func details(document: AudioDraftDocument, format: AudioFormatInfo) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("注释与片段").font(.headline)
-            TextField("原始媒体注释", text: $note, axis: .vertical).lineLimit(3...6).textFieldStyle(.roundedBorder).accessibilityIdentifier("audio-note")
-                    .audioMeasured("audio-note", probe: layoutProbe)
-            Button("保存注释") {
-                AudioWorkbenchButtonHandler.saveNote(
-                    documentID: document.id,
-                    editingDocumentID: editingDocumentID,
-                    note: note,
-                    actions: actions,
-                    reject: { transport.present($0) }
-                )
+            TextField("原始媒体注释", text: noteBinding(document), axis: .vertical)
+                .lineLimit(3...6)
+                .textFieldStyle(.roundedBorder)
+                .disabled(!canEdit)
+                .accessibilityIdentifier("audio-note")
+                .audioMeasured("audio-note", probe: layoutProbe)
+            Button(controller?.isSaving == true ? "正在保存…" : "保存注释") {
+                saveNote(document)
             }
-                .accessibilityIdentifier("audio-save-note")
+            .disabled(!canEdit || controller?.isSaving == true)
+            .accessibilityIdentifier("audio-save-note")
             Divider()
-            HStack { TextField("片段名称", text: $clipName).accessibilityIdentifier("audio-clip-name")
-                Button("添加片段") {
-                    AudioWorkbenchButtonHandler.addClip(
-                        documentID: document.id,
-                        editingDocumentID: editingDocumentID,
-                        existingClipCount: document.clips.count,
-                        name: clipName,
-                        range: { range(format: format) },
-                        actions: actions,
-                        reject: { transport.present($0) }
-                    )
-                }.accessibilityIdentifier("audio-add-clip")
-                    .audioMeasured("audio-add-clip", probe: layoutProbe) }
-            HStack { TextField("开始秒", value: $startSeconds, format: .number).accessibilityIdentifier("audio-range-start")
-                TextField("结束秒", value: $endSeconds, format: .number).accessibilityIdentifier("audio-range-end") }
             HStack {
-                Button("完整音频") { actions.selectClip(nil) }
+                TextField("片段名称", text: clipNameBinding(document))
+                    .disabled(!canEdit)
+                    .accessibilityIdentifier("audio-clip-name")
+                Button("添加片段") { addClip(document, format: format) }
+                    .disabled(!canEdit || document.clips.count >= AudioLimits.maximumClips)
+                    .accessibilityIdentifier("audio-add-clip")
+                    .audioMeasured("audio-add-clip", probe: layoutProbe)
+            }
+            rangeEditors(document: document, format: format)
+            HStack {
+                Button("完整音频") { select(nil, document: document, format: format) }
                     .accessibilityIdentifier("audio-select-full")
                     .accessibilityAddTraits(document.selectedClipID == nil ? .isSelected : [])
-                Button("导出当前范围") {
-                    guard editingDocumentID == document.id, let range = range(format: format) else { return }
-                    actions.exportRange(range)
-                }
-                .accessibilityIdentifier("audio-export-range")
+                Button("试听当前范围") { auditionCurrentRange(document: document, format: format) }
+                    .disabled(!canEdit)
+                    .accessibilityIdentifier("audio-audition-range")
+                Button("导出编辑范围") { exportCurrentRange(format: format) }
+                    .disabled(controller != nil && controller?.clipRangeInput == nil)
+                    .accessibilityIdentifier("audio-export-range")
             }
             ForEach(document.clips) { clip in
-                HStack { Button(clip.name) { guard editingDocumentID == document.id else { return }; actions.selectClip(clip.id) }
+                HStack {
+                    Button(clip.name) { select(clip, document: document, format: format) }
                         .accessibilityIdentifier("audio-clip-\(clip.id.uuidString)")
                         .accessibilityAddTraits(document.selectedClipID == clip.id ? .isSelected : [])
-                    Spacer(); Text("\(time(clip.range.startFrame, format: format)) – \(time(clip.range.endFrame, format: format))").font(.caption)
-                    Button("导出") { guard editingDocumentID == document.id else { return }; actions.exportRange(clip.range) }.accessibilityIdentifier("audio-export-clip-\(clip.id.uuidString)") }
+                    Spacer()
+                    Text("\(time(clip.range.startFrame, format: format)) – \(time(clip.range.endFrame, format: format))")
+                        .font(.caption)
+                    Button("导出") { export(clip: clip) }
+                        .accessibilityIdentifier("audio-export-clip-\(clip.id.uuidString)")
+                }
                 .audioMeasured("audio-clip-row-\(clip.id.uuidString)", probe: layoutProbe)
             }
-        }.frame(maxWidth: .infinity, alignment: .topLeading)
+            if controller?.hasUnsubmittedInput == true {
+                HStack {
+                    Text("有尚未提交的原声输入。")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Button("放弃输入", role: .destructive) { discardInput(document, format: format) }
+                        .disabled(!canEdit)
+                        .accessibilityIdentifier("audio-discard-input")
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
     }
 
-    private var statusText: String { transport.errorMessage ?? { switch transport.state { case .requestingPermission: "等待录音许可"; case .recording: "正在录音"; case .recorded: "已准备"; default: "" } }() }
-    private func load(documentID: UUID?) { editingDocumentID = documentID; note = document?.note ?? ""; clipName = ""; startSeconds = 0; endSeconds = Double(metadata?.format.frameCount ?? 0) / (metadata?.format.sampleRate ?? 1) }
-    private func range(format: AudioFormatInfo) -> AudioFrameRange? {
-        guard startSeconds.isFinite, endSeconds.isFinite, startSeconds >= 0, endSeconds >= 0,
-              startSeconds <= Double(format.frameCount) / format.sampleRate,
-              endSeconds <= Double(format.frameCount) / format.sampleRate else {
-            transport.present(AudioMediaError.invalidRange); return nil
+    private func rangeEditors(document: AudioDraftDocument, format: AudioFormatInfo) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Stepper(value: startBinding(document: document, format: format),
+                    in: Int64(0)...max(Int64(0), format.frameCount - 1), step: 1) {
+                Text("开始：\(startFrame) 帧（\(time(startFrame, format: format))）")
+                    .monospacedDigit()
+            }
+            .disabled(!canEdit)
+            .accessibilityIdentifier("audio-range-start")
+            Stepper(value: endBinding(document: document, format: format),
+                    in: min(Int64(1), format.frameCount)...max(Int64(1), format.frameCount), step: 1) {
+                Text("结束：\(endFrame) 帧（\(time(endFrame, format: format))）")
+                    .monospacedDigit()
+            }
+            .disabled(!canEdit)
+            .accessibilityIdentifier("audio-range-end")
+            Text("按原始帧调整，每次一步；范围包含开始帧，不包含结束帧。")
+                .font(.caption).foregroundStyle(.secondary)
         }
-        let start = Int64((startSeconds * format.sampleRate).rounded(.down))
-        let end = Int64((endSeconds * format.sampleRate).rounded(.down))
-        guard start < end else { transport.present(AudioMediaError.invalidRange); return nil }
-        return AudioFrameRange(startFrame: start, endFrame: end)
     }
-    private func time(_ frame: Int64, format: AudioFormatInfo) -> String { String(format: "%.2fs", Double(frame) / format.sampleRate) }
+
+    @ViewBuilder private var captureRecovery: some View {
+        if let controller, !controller.pendingCaptures.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("待恢复录音").font(.headline)
+                Text("录音最终化尚未完成。可重试；也可保留文件供以后恢复。原件不会被删除。")
+                    .font(.caption).foregroundStyle(.secondary)
+                ForEach(controller.pendingCaptures) { capture in
+                    HStack {
+                        Text(capture.name).lineLimit(1)
+                        Spacer()
+                        Button("重试") { productionActions?.retryCapture(capture.id) }
+                            .disabled(controller.isFinalizing || isRecordingOrRequesting)
+                        Button("保留待恢复") { productionActions?.keepCapture(capture.id) }
+                            .disabled(controller.isFinalizing || isRecordingOrRequesting)
+                    }
+                    .accessibilityIdentifier("audio-recovery-\(capture.id.uuidString)")
+                }
+            }
+            .padding(12)
+            .background(.quaternary, in: RoundedRectangle(cornerRadius: 12))
+        }
+    }
+
+    private var statusLabel: some View {
+        Text(statusText)
+            .font(.caption)
+            .foregroundStyle((controller?.errorMessage ?? transport.errorMessage) == nil ? Color.secondary : Color.red)
+            .accessibilityIdentifier("audio-status")
+    }
+
+    private func noteBinding(_ document: AudioDraftDocument) -> Binding<String> {
+        Binding(get: { controller?.noteInput ?? previewNote }, set: { value in
+            if let controller {
+                _ = controller.setNoteInput(value, contextID: controller.contextID,
+                                            documentID: document.id)
+            } else {
+                previewNote = value
+            }
+        })
+    }
+
+    private func clipNameBinding(_ document: AudioDraftDocument) -> Binding<String> {
+        Binding(get: { controller?.clipNameInput ?? previewClipName }, set: { value in
+            if let controller {
+                _ = controller.setClipInput(name: value, range: controller.clipRangeInput,
+                                            note: controller.clipNoteInput,
+                                            contextID: controller.contextID,
+                                            documentID: document.id)
+            } else {
+                previewClipName = value
+            }
+        })
+    }
+
+    private func startBinding(document: AudioDraftDocument,
+                              format: AudioFormatInfo) -> Binding<Int64> {
+        Binding(get: { startFrame }, set: { proposed in
+            let upper = max(Int64(0), format.frameCount - 1)
+            startFrame = min(max(0, proposed), upper)
+            if endFrame <= startFrame { endFrame = min(format.frameCount, startFrame + 1) }
+            publishRangeEdit(document: document, format: format)
+        })
+    }
+
+    private func endBinding(document: AudioDraftDocument,
+                            format: AudioFormatInfo) -> Binding<Int64> {
+        Binding(get: { endFrame }, set: { proposed in
+            endFrame = min(max(1, proposed), format.frameCount)
+            if startFrame >= endFrame { startFrame = max(0, endFrame - 1) }
+            publishRangeEdit(document: document, format: format)
+        })
+    }
+
+    private func publishRangeEdit(document: AudioDraftDocument, format: AudioFormatInfo) {
+        guard let controller, editingDocumentID == document.id,
+              let range = admittedRange(format: format) else { return }
+        _ = controller.setClipInput(name: controller.clipNameInput, range: range,
+                                    note: controller.clipNoteInput,
+                                    contextID: controller.contextID, documentID: document.id)
+    }
+
+    private func saveNote(_ document: AudioDraftDocument) {
+        if let legacyActions {
+            _ = AudioWorkbenchButtonHandler.saveNote(
+                documentID: document.id, editingDocumentID: editingDocumentID,
+                note: previewNote, actions: legacyActions,
+                reject: { transport.present($0) }
+            )
+            return
+        }
+        guard let controller, let productionActions, editingDocumentID == document.id,
+              controller.noteInput.utf8.count <= AudioLimits.maximumNoteBytes else {
+            transport.present(AudioMediaError.limitExceeded)
+            return
+        }
+        let contextID = controller.contextID
+        Task {
+            actionStatus = await productionActions.saveNote(contextID, document.id)
+                ? "注释已保存。" : nil
+        }
+    }
+
+    private func addClip(_ document: AudioDraftDocument, format: AudioFormatInfo) {
+        if let legacyActions {
+            _ = AudioWorkbenchButtonHandler.addClip(
+                documentID: document.id, editingDocumentID: editingDocumentID,
+                existingClipCount: document.clips.count, name: previewClipName,
+                range: { admittedRange(format: format) }, actions: legacyActions,
+                reject: { transport.present($0) }
+            )
+            return
+        }
+        guard let controller, let productionActions, editingDocumentID == document.id,
+              !controller.clipNameInput.isEmpty,
+              controller.clipNameInput.utf8.count <= AudioLimits.maximumNameBytes,
+              document.clips.count < AudioLimits.maximumClips,
+              let range = admittedRange(format: format), controller.clipRangeInput == range else {
+            transport.present(AudioMediaError.invalidRange)
+            return
+        }
+        let contextID = controller.contextID
+        Task {
+            actionStatus = await productionActions.addClip(contextID, document.id)
+                ? "片段已保存。" : nil
+        }
+    }
+
+    private func select(_ clip: AudioClip?, document: AudioDraftDocument,
+                        format: AudioFormatInfo) {
+        if let legacyActions {
+            legacyActions.selectClip(clip?.id)
+            setDisplayedRange(clip?.range ?? fullRange(format))
+            return
+        }
+        guard let controller, let productionActions else { return }
+        let contextID = controller.contextID
+        Task {
+            guard await productionActions.selectClip(clip?.id, contextID, document.id) else { return }
+            let range = clip?.range ?? fullRange(format)
+            setDisplayedRange(range)
+            preparedRange = range
+        }
+    }
+
+    private func select(_ id: UUID?, document: AudioDraftDocument,
+                        format: AudioFormatInfo) {
+        select(id.flatMap { target in document.clips.first { $0.id == target } },
+               document: document, format: format)
+    }
+
+    private func auditionCurrentRange(document: AudioDraftDocument, format: AudioFormatInfo) {
+        guard let range = admittedRange(format: format) else {
+            transport.present(AudioMediaError.invalidRange)
+            return
+        }
+        guard let controller, let productionActions else {
+            legacyActions?.selectClip(nil)
+            return
+        }
+        let contextID = controller.contextID
+        Task {
+            guard await productionActions.prepareRange(range, contextID, document.id) else { return }
+            preparedRange = range
+            do { try transport.play() }
+            catch { transport.present(error) }
+        }
+    }
+
+    private func exportCurrentRange(format: AudioFormatInfo) {
+        guard let range = admittedRange(format: format) else {
+            transport.present(AudioMediaError.invalidRange)
+            return
+        }
+        if let controller, let productionActions {
+            productionActions.exportRange(range, controller.editorRevision)
+        } else {
+            legacyActions?.exportRange(range)
+        }
+    }
+
+    private func export(clip: AudioClip) {
+        if let productionActions { productionActions.exportSavedClip(clip.id) }
+        else { legacyActions?.exportRange(clip.range) }
+    }
+
+    private func discardInput(_ document: AudioDraftDocument, format: AudioFormatInfo) {
+        guard let controller, let productionActions,
+              productionActions.discardInput(controller.contextID, document.id) else { return }
+        setDisplayedRange(selectedRange(document: document, format: format))
+        actionStatus = "未提交输入已放弃；原件和已保存内容未改变。"
+    }
+
+    private func importOriginal() {
+        if let productionActions { productionActions.importOriginal() }
+        else { legacyActions?.importOriginal() }
+    }
+
+    private func startRecording() {
+        if let productionActions { productionActions.startRecording() }
+        else { legacyActions?.startRecording() }
+    }
+
+    private func finishRecording() {
+        if let productionActions { productionActions.finishRecording() }
+        else { legacyActions?.finishRecording() }
+    }
+
+    private func exportOriginal() {
+        if let productionActions { productionActions.exportOriginal() }
+        else { legacyActions?.exportOriginal() }
+    }
+
+    private func load(documentID: UUID?) {
+        guard editingDocumentID != documentID else { return }
+        editingDocumentID = documentID
+        previewNote = document?.note ?? ""
+        previewClipName = ""
+        actionStatus = nil
+        guard let document, let metadata else {
+            startFrame = 0
+            endFrame = 0
+            preparedRange = nil
+            return
+        }
+        let range = controller?.clipRangeInput ?? selectedRange(document: document, format: metadata.format)
+        setDisplayedRange(range)
+        preparedRange = selectedRange(document: document, format: metadata.format)
+    }
+
+    private func selectedRange(document: AudioDraftDocument,
+                               format: AudioFormatInfo) -> AudioFrameRange {
+        document.selectedClipID.flatMap { selected in
+            document.clips.first { $0.id == selected }?.range
+        } ?? fullRange(format)
+    }
+
+    private func fullRange(_ format: AudioFormatInfo) -> AudioFrameRange {
+        AudioFrameRange(startFrame: 0, endFrame: format.frameCount)
+    }
+
+    private func setDisplayedRange(_ range: AudioFrameRange) {
+        startFrame = range.startFrame
+        endFrame = range.endFrame
+    }
+
+    private func admittedRange(format: AudioFormatInfo) -> AudioFrameRange? {
+        guard format.frameCount > 0,
+              startFrame >= 0, endFrame <= format.frameCount, startFrame < endFrame else {
+            return nil
+        }
+        return AudioFrameRange(startFrame: startFrame, endFrame: endFrame)
+    }
+
+    private var statusText: String {
+        if let message = controller?.errorMessage ?? transport.errorMessage ?? actionStatus {
+            return message
+        }
+        switch transport.state {
+        case .requestingPermission: "等待录音许可"
+        case .recording: "正在录音"
+        case .recorded: "已准备"
+        case .playing: "正在播放"
+        case .paused: "已暂停"
+        case .idle, .failed: ""
+        }
+    }
+
+    private func time(_ frame: Int64, format: AudioFormatInfo) -> String {
+        String(format: "%.2fs", Double(frame) / format.sampleRate)
+    }
 }
 
 private struct WaveformView: View {
-    let peaks: [AudioPeak]; let position: Int64; let frameCount: Int64; let seek: (Int64) -> Void
-    var body: some View { GeometryReader { proxy in
-        Canvas { context, size in
-            let count: Int = max(peaks.count, 1)
-            let width: CGFloat = size.width / CGFloat(count)
-            for (index, peak) in peaks.enumerated() { let x = (CGFloat(index) + 0.5) * width; let top = size.height * (0.5 - CGFloat(peak.maximum) * 0.45); let bottom = size.height * (0.5 - CGFloat(peak.minimum) * 0.45); context.stroke(Path { $0.move(to: CGPoint(x: x, y: top)); $0.addLine(to: CGPoint(x: x, y: bottom)) }, with: .color(.accentColor), lineWidth: max(1, width * 0.55)) }
-            if frameCount > 0 { let x = size.width * CGFloat(position) / CGFloat(frameCount); context.stroke(Path { $0.move(to: CGPoint(x: x, y: 0)); $0.addLine(to: CGPoint(x: x, y: size.height)) }, with: .color(.primary), lineWidth: 1) }
-        }.contentShape(Rectangle()).gesture(SpatialTapGesture().onEnded { value in
-            guard frameCount > 0 else { return }
-            let availableWidth: CGFloat = max(proxy.size.width, 1)
-            let fraction: Double = min(1, max(0, Double(value.location.x / availableWidth)))
-            let frame: Int64 = min(frameCount - 1, max(0, Int64((fraction * Double(frameCount)).rounded(.down))))
-            seek(frame)
-        })
-    } }
+    let peaks: [AudioPeak]
+    let position: Int64
+    let frameCount: Int64
+    let seek: (Int64) -> Void
+
+    var body: some View {
+        GeometryReader { proxy in
+            Canvas { context, size in
+                let count = max(peaks.count, 1)
+                let width = size.width / CGFloat(count)
+                for (index, peak) in peaks.enumerated() {
+                    let x = (CGFloat(index) + 0.5) * width
+                    let top = size.height * (0.5 - CGFloat(peak.maximum) * 0.45)
+                    let bottom = size.height * (0.5 - CGFloat(peak.minimum) * 0.45)
+                    context.stroke(Path {
+                        $0.move(to: CGPoint(x: x, y: top))
+                        $0.addLine(to: CGPoint(x: x, y: bottom))
+                    }, with: .color(.accentColor), lineWidth: max(1, width * 0.55))
+                }
+                if frameCount > 0 {
+                    let x = size.width * CGFloat(position) / CGFloat(frameCount)
+                    context.stroke(Path {
+                        $0.move(to: CGPoint(x: x, y: 0))
+                        $0.addLine(to: CGPoint(x: x, y: size.height))
+                    }, with: .color(.primary), lineWidth: 1)
+                }
+            }
+            .contentShape(Rectangle())
+            .gesture(SpatialTapGesture().onEnded { value in
+                guard frameCount > 0 else { return }
+                let availableWidth = max(proxy.size.width, 1)
+                let fraction = min(1, max(0, Double(value.location.x / availableWidth)))
+                let frame = min(frameCount - 1,
+                                max(0, Int64((fraction * Double(frameCount)).rounded(.down))))
+                seek(frame)
+            })
+        }
+    }
 }
 
 private extension View {
