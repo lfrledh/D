@@ -60,7 +60,9 @@ public final class NativeAudioWorkbenchPanels: AudioWorkbenchPanelProviding {
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = false
-        panel.allowedContentTypes = ["wav", "caf"].compactMap(UTType.init(filenameExtension:))
+        panel.allowedContentTypes = ["wav", "caf"].compactMap { extensionName in
+            UTType(filenameExtension: extensionName)
+        }
         guard await panel.begin() == .OK else { return nil }
         return panel.url
     }
@@ -84,33 +86,36 @@ public struct AudioWorkbenchProductionActions {
     public var importOriginal: () -> Void
     public var startRecording: () -> Void
     public var finishRecording: () -> Void
+    public var refreshInspection: (UUID, UUID) async -> Bool
     public var saveNote: (UUID, UUID) async -> Bool
     public var addClip: (UUID, UUID) async -> Bool
     public var discardInput: (UUID, UUID) -> Bool
     public var selectClip: (UUID?, UUID, UUID) async -> Bool
     public var prepareRange: (AudioFrameRange, UUID, UUID) async -> Bool
-    public var exportOriginal: () -> Void
-    public var exportSavedClip: (UUID) -> Void
-    public var exportRange: (AudioFrameRange, UInt64) -> Void
-    public var retryCapture: (UUID) -> Void
-    public var keepCapture: (UUID) -> Void
+    public var exportOriginal: (UUID, UUID) -> Void
+    public var exportSavedClip: (UUID, UUID, UUID) -> Void
+    public var exportRange: (AudioFrameRange, UInt64, UUID, UUID) -> Void
+    public var retryCapture: (UUID, UUID, UUID?) -> Void
+    public var keepCapture: (UUID, UUID, UUID?) -> Void
 
     public init(importOriginal: @escaping () -> Void,
                 startRecording: @escaping () -> Void,
                 finishRecording: @escaping () -> Void,
+                refreshInspection: @escaping (UUID, UUID) async -> Bool,
                 saveNote: @escaping (UUID, UUID) async -> Bool,
                 addClip: @escaping (UUID, UUID) async -> Bool,
                 discardInput: @escaping (UUID, UUID) -> Bool,
                 selectClip: @escaping (UUID?, UUID, UUID) async -> Bool,
                 prepareRange: @escaping (AudioFrameRange, UUID, UUID) async -> Bool,
-                exportOriginal: @escaping () -> Void,
-                exportSavedClip: @escaping (UUID) -> Void,
-                exportRange: @escaping (AudioFrameRange, UInt64) -> Void,
-                retryCapture: @escaping (UUID) -> Void,
-                keepCapture: @escaping (UUID) -> Void) {
+                exportOriginal: @escaping (UUID, UUID) -> Void,
+                exportSavedClip: @escaping (UUID, UUID, UUID) -> Void,
+                exportRange: @escaping (AudioFrameRange, UInt64, UUID, UUID) -> Void,
+                retryCapture: @escaping (UUID, UUID, UUID?) -> Void,
+                keepCapture: @escaping (UUID, UUID, UUID?) -> Void) {
         self.importOriginal = importOriginal
         self.startRecording = startRecording
         self.finishRecording = finishRecording
+        self.refreshInspection = refreshInspection
         self.saveNote = saveNote
         self.addClip = addClip
         self.discardInput = discardInput

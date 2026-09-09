@@ -78,6 +78,8 @@ public struct AudioWorkbenchView: View {
     @State private var startFrame: Int64 = 0
     @State private var endFrame: Int64 = 0
     @State private var editingDocumentID: UUID?
+    @State private var rangeInitializedDocumentID: UUID?
+    @State private var refreshRequestedDocumentID: UUID?
     @State private var preparedRange: AudioFrameRange?
     @State private var actionStatus: String?
     private var layoutProbe: ((String, CGRect) -> Void)?
@@ -127,20 +129,35 @@ public struct AudioWorkbenchView: View {
         }
         .padding(20)
         .coordinateSpace(name: "audio-workbench-layout")
-        .onChange(of: document?.id) { _, id in load(documentID: id) }
-        .onAppear { load(documentID: document?.id) }
+        .onChange(of: document?.id) { _, id in
+            load(documentID: id)
+            refreshInspectionIfNeeded()
+        }
+        .onChange(of: metadata?.contentSHA256) { _, _ in initializeRangeIfAvailable() }
+        .onAppear {
+            load(documentID: document?.id)
+            refreshInspectionIfNeeded()
+        }
         .accessibilityIdentifier("audio-workbench")
     }
 
     private var emptyState: some View {
         ContentUnavailableView {
-            Label("尚未添加音频", systemImage: "waveform")
+            Label(document == nil ? "尚未添加音频" : "原声暂时无法读取",
+                  systemImage: document == nil ? "waveform" : "waveform.badge.exclamationmark")
         } description: {
-            Text("导入一个原始 WAV/CAF PCM。原件会保留不变。")
+            Text(document == nil
+                 ? "导入一个原始 WAV/CAF PCM。原件会保留不变。"
+                 : "已登记的原声仍在项目中。请重新读取；失败时原件和输入都不会改变。")
         } actions: {
             VStack(spacing: 8) {
-                Button("导入音频…", action: importOriginal)
-                    .accessibilityIdentifier("audio-import")
+                if document == nil {
+                    Button("导入音频…", action: importOriginal)
+                        .accessibilityIdentifier("audio-import")
+                } else {
+                    Button("重新读取原声", action: refreshInspection)
+                        .accessibilityIdentifier("audio-refresh")
+                }
                 recordingControl
                 if !recordingEnabled && !isRecordingOrRequesting {
                     Text("麦克风宿主设置尚未完成；录音保持关闭，也不会请求系统许可。")
@@ -275,7 +292,10 @@ public struct AudioWorkbenchView: View {
             }
             rangeEditors(document: document, format: format)
             HStack {
-                Button("完整音频") { select(nil, document: document, format: format) }
+                Button("完整音频") {
+                    select(Optional<AudioClip>.none, document: document, format: format)
+                }
+                    .disabled(!canEdit)
                     .accessibilityIdentifier("audio-select-full")
                     .accessibilityAddTraits(document.selectedClipID == nil ? .isSelected : [])
                 Button("试听当前范围") { auditionCurrentRange(document: document, format: format) }
@@ -288,6 +308,7 @@ public struct AudioWorkbenchView: View {
             ForEach(document.clips) { clip in
                 HStack {
                     Button(clip.name) { select(clip, document: document, format: format) }
+                        .disabled(!canEdit)
                         .accessibilityIdentifier("audio-clip-\(clip.id.uuidString)")
                         .accessibilityAddTraits(document.selectedClipID == clip.id ? .isSelected : [])
                     Spacer()
@@ -342,9 +363,17 @@ public struct AudioWorkbenchView: View {
                     HStack {
                         Text(capture.name).lineLimit(1)
                         Spacer()
-                        Button("重试") { productionActions?.retryCapture(capture.id) }
+                        Button("重试") {
+                            productionActions?.retryCapture(
+                                capture.id, controller.contextID, editingDocumentID
+                            )
+                        }
                             .disabled(controller.isFinalizing || isRecordingOrRequesting)
-                        Button("保留待恢复") { productionActions?.keepCapture(capture.id) }
+                        Button("保留待恢复") {
+                            productionActions?.keepCapture(
+                                capture.id, controller.contextID, editingDocumentID
+                            )
+                        }
                             .disabled(controller.isFinalizing || isRecordingOrRequesting)
                     }
                     .accessibilityIdentifier("audio-recovery-\(capture.id.uuidString)")
@@ -428,9 +457,12 @@ public struct AudioWorkbenchView: View {
             return
         }
         let contextID = controller.contextID
+        let editorRevision = controller.editorRevision
         Task {
-            actionStatus = await productionActions.saveNote(contextID, document.id)
-                ? "注释已保存。" : nil
+            let saved = await productionActions.saveNote(contextID, document.id)
+            guard matches(controller: controller, contextID: contextID, documentID: document.id),
+                  controller.editorRevision == editorRevision else { return }
+            actionStatus = saved ? "注释已保存。" : nil
         }
     }
 
@@ -453,9 +485,14 @@ public struct AudioWorkbenchView: View {
             return
         }
         let contextID = controller.contextID
+        let editorRevision = controller.editorRevision
         Task {
-            actionStatus = await productionActions.addClip(contextID, document.id)
-                ? "片段已保存。" : nil
+            let saved = await productionActions.addClip(contextID, document.id)
+            guard matches(controller: controller, contextID: contextID, documentID: document.id) else { return }
+            let acknowledgedOriginalInput = controller.editorRevision == editorRevision + 1
+                && controller.clipNameInput.isEmpty && controller.clipRangeInput == nil
+            guard controller.editorRevision == editorRevision || acknowledgedOriginalInput else { return }
+            actionStatus = saved ? "片段已保存。" : nil
         }
     }
 
@@ -468,11 +505,17 @@ public struct AudioWorkbenchView: View {
         }
         guard let controller, let productionActions else { return }
         let contextID = controller.contextID
+        let editorRevision = controller.editorRevision
+        let pendingRange = controller.clipRangeInput
         Task {
             guard await productionActions.selectClip(clip?.id, contextID, document.id) else { return }
+            guard matches(controller: controller, contextID: contextID, documentID: document.id) else { return }
             let range = clip?.range ?? fullRange(format)
-            setDisplayedRange(range)
             preparedRange = range
+            if pendingRange == nil, controller.editorRevision == editorRevision,
+               controller.clipRangeInput == nil {
+                setDisplayedRange(range)
+            }
         }
     }
 
@@ -492,8 +535,13 @@ public struct AudioWorkbenchView: View {
             return
         }
         let contextID = controller.contextID
+        let editorRevision = controller.editorRevision
+        let pendingRange = controller.clipRangeInput
         Task {
             guard await productionActions.prepareRange(range, contextID, document.id) else { return }
+            guard matches(controller: controller, contextID: contextID, documentID: document.id),
+                  controller.editorRevision == editorRevision,
+                  controller.clipRangeInput == pendingRange else { return }
             preparedRange = range
             do { try transport.play() }
             catch { transport.present(error) }
@@ -506,14 +554,19 @@ public struct AudioWorkbenchView: View {
             return
         }
         if let controller, let productionActions {
-            productionActions.exportRange(range, controller.editorRevision)
+            guard let documentID = controller.documentID else { return }
+            productionActions.exportRange(
+                range, controller.editorRevision, controller.contextID, documentID
+            )
         } else {
             legacyActions?.exportRange(range)
         }
     }
 
     private func export(clip: AudioClip) {
-        if let productionActions { productionActions.exportSavedClip(clip.id) }
+        if let productionActions, let controller, let documentID = controller.documentID {
+            productionActions.exportSavedClip(clip.id, controller.contextID, documentID)
+        }
         else { legacyActions?.exportRange(clip.range) }
     }
 
@@ -539,26 +592,60 @@ public struct AudioWorkbenchView: View {
         else { legacyActions?.finishRecording() }
     }
 
+    private func refreshInspection() {
+        refreshRequestedDocumentID = nil
+        refreshInspectionIfNeeded()
+    }
+
+    private func refreshInspectionIfNeeded() {
+        guard metadata == nil, let controller, let productionActions,
+              let documentID = controller.documentID,
+              refreshRequestedDocumentID != documentID else { return }
+        let contextID = controller.contextID
+        refreshRequestedDocumentID = documentID
+        Task {
+            let refreshed = await productionActions.refreshInspection(contextID, documentID)
+            guard matches(controller: controller, contextID: contextID, documentID: documentID) else { return }
+            refreshRequestedDocumentID = nil
+            if refreshed { initializeRangeIfAvailable() }
+        }
+    }
+
     private func exportOriginal() {
-        if let productionActions { productionActions.exportOriginal() }
+        if let productionActions, let controller, let documentID = controller.documentID {
+            productionActions.exportOriginal(controller.contextID, documentID)
+        }
         else { legacyActions?.exportOriginal() }
     }
 
     private func load(documentID: UUID?) {
-        guard editingDocumentID != documentID else { return }
-        editingDocumentID = documentID
-        previewNote = document?.note ?? ""
-        previewClipName = ""
-        actionStatus = nil
-        guard let document, let metadata else {
+        if editingDocumentID != documentID {
+            editingDocumentID = documentID
+            rangeInitializedDocumentID = nil
+            refreshRequestedDocumentID = nil
+            previewNote = document?.note ?? ""
+            previewClipName = ""
+            actionStatus = nil
             startFrame = 0
             endFrame = 0
             preparedRange = nil
-            return
         }
+        initializeRangeIfAvailable()
+    }
+
+    private func initializeRangeIfAvailable() {
+        guard let document, let metadata,
+              rangeInitializedDocumentID != document.id else { return }
         let range = controller?.clipRangeInput ?? selectedRange(document: document, format: metadata.format)
         setDisplayedRange(range)
         preparedRange = selectedRange(document: document, format: metadata.format)
+        rangeInitializedDocumentID = document.id
+    }
+
+    private func matches(controller: ProjectAudioController, contextID: UUID,
+                         documentID: UUID) -> Bool {
+        self.controller === controller && controller.contextID == contextID
+            && controller.documentID == documentID && editingDocumentID == documentID
     }
 
     private func selectedRange(document: AudioDraftDocument,

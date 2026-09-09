@@ -196,6 +196,7 @@ public final class WorkbenchModel {
 
     public func importAudio() async {
         guard !isChoosingLocation, let projectID = manifest?.id, let projectURL,
+              let activeDocumentID,
               let controller = projectSession.audio else {
             rejectConcurrentAudioPanel()
             return
@@ -205,6 +206,7 @@ public final class WorkbenchModel {
         defer { isChoosingLocation = false }
         guard let source = await audioPanels.chooseAudioImport() else { return }
         guard manifest?.id == projectID, self.projectURL == projectURL,
+              self.activeDocumentID == activeDocumentID,
               projectSession.audio === controller, controller.contextID == contextID else {
             errorMessage = "项目已改变，未导入所选音频。请在当前项目中重新选择。"
             return
@@ -227,19 +229,23 @@ public final class WorkbenchModel {
         _ = await projectSession.finishAudioRecording()
     }
 
-    public func retryPendingAudioCapture(id: UUID) async {
+    public func retryPendingAudioCapture(id: UUID, contextID: UUID,
+                                         renderDocumentID: UUID?) async {
+        guard validateRenderContext(contextID: contextID, documentID: renderDocumentID) else { return }
         _ = await projectSession.retryPendingAudioCapture(id: id)
     }
 
-    public func keepPendingAudioCaptureForRecovery(id: UUID) {
+    public func keepPendingAudioCaptureForRecovery(id: UUID, contextID: UUID,
+                                                   renderDocumentID: UUID?) {
+        guard validateRenderContext(contextID: contextID, documentID: renderDocumentID) else { return }
         guard projectSession.keepPendingAudioCaptureForRecovery(id: id) else {
             errorMessage = "无法保留这项待恢复录音；请等待当前音频操作结束后重试。"
             return
         }
     }
 
-    public func exportOriginalAudio() async {
-        guard let identity = activeAudioIdentity(),
+    public func exportOriginalAudio(contextID: UUID, documentID: UUID) async {
+        guard let identity = activeAudioIdentity(contextID: contextID, documentID: documentID),
               let container = projectSession.audio?.metadata?.format.container else { return }
         let name = exportBaseName()
         let kind = AudioExportPanelKind.original(container)
@@ -250,14 +256,16 @@ public final class WorkbenchModel {
             explanation: "保持已登记的 \(kind.filenameExtension.uppercased()) 容器和原始字节；不会覆盖已有文件。"
         )
         guard let destination = await chooseAudioDestination(request),
-              validate(identity), validateExtension(destination, kind: kind) else { return }
+              validate(identity),
+              projectSession.audio?.metadata?.format.container == container,
+              validateExtension(destination, kind: kind) else { return }
         _ = await projectSession.exportOriginalAudio(
             to: destination, contextID: identity.contextID, documentID: identity.documentID
         )
     }
 
-    public func exportSavedAudioClip(id: UUID) async {
-        guard let identity = activeAudioIdentity(),
+    public func exportSavedAudioClip(id: UUID, contextID: UUID, documentID: UUID) async {
+        guard let identity = activeAudioIdentity(contextID: contextID, documentID: documentID),
               let range = projectSession.audio?.document?.clips.first(where: { $0.id == id })?.range else {
             return
         }
@@ -276,8 +284,10 @@ public final class WorkbenchModel {
         )
     }
 
-    public func exportAudioRange(_ range: AudioFrameRange, editorRevision: UInt64) async {
-        guard let identity = activeAudioIdentity(), let controller = projectSession.audio,
+    public func exportAudioRange(_ range: AudioFrameRange, editorRevision: UInt64,
+                                 contextID: UUID, documentID: UUID) async {
+        guard let identity = activeAudioIdentity(contextID: contextID, documentID: documentID),
+              let controller = projectSession.audio,
               controller.editorRevision == editorRevision,
               controller.clipRangeInput == range else {
             errorMessage = "当前范围已经改变，请确认新范围后再导出。"
@@ -307,9 +317,10 @@ public final class WorkbenchModel {
         let documentID: UUID
     }
 
-    private func activeAudioIdentity() -> AudioIdentity? {
+    private func activeAudioIdentity(contextID: UUID, documentID: UUID) -> AudioIdentity? {
         guard let projectID = manifest?.id, let projectURL, let controller = projectSession.audio,
-              let documentID = controller.documentID, activeDocumentID == documentID,
+              controller.contextID == contextID, controller.documentID == documentID,
+              activeDocumentID == documentID,
               activeDocument?.kind == .audio else { return nil }
         return AudioIdentity(projectID: projectID, projectURL: projectURL, controller: controller,
                              contextID: controller.contextID, documentID: documentID)
@@ -322,6 +333,14 @@ public final class WorkbenchModel {
               projectSession.audio?.contextID == identity.contextID,
               projectSession.audio?.documentID == identity.documentID else {
             errorMessage = "项目或原声文档已改变，未执行旧操作。请在当前文档中重试。"
+            return false
+        }
+        return true
+    }
+
+    private func validateRenderContext(contextID: UUID, documentID: UUID?) -> Bool {
+        guard projectSession.audio?.contextID == contextID, activeDocumentID == documentID else {
+            errorMessage = "当前文档已改变，未执行旧的原声操作。"
             return false
         }
         return true
