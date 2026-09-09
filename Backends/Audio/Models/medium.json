@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "repository": "stabilityai/stable-audio-3-optimized",
+  "revision": "da6edc54ddba10bfd79a077102ded687f80e882b",
+  "files": [
+    {
+      "path": "MLX/dit_medium_f16.npz",
+      "size": 2907300946,
+      "sha256": "f9e5647ea3225818657d47d47ae4b34afa29c0568206ca89566c1a758944a38e"
+    },
+    {
+      "path": "MLX/t5gemma_f16.npz",
+      "size": 567443068,
+      "sha256": "8deb20489f36d9aec539f26c9c67321f99bc5fe300d470435ed6e76be4f16bbd"
+    },
+    {
+      "path": "MLX/same_l_encoder_f32.npz",
+      "size": 1704313504,
+      "sha256": "c5caafc6bd29fc3d4cb7a08b0d3725041fa2100711f86a4f05d2638c532871d2"
+    },
+    {
+      "path": "MLX/same_l_decoder_f32.npz",
+      "size": 1704311976,
+      "sha256": "84924be2122d3a20fce443f40b782d9cd88e8e73707476326003ac47659a2287"
+    }
+  ]
+}
