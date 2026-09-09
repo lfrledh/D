@@ -38,7 +38,7 @@ enum AppSessionFactory {
                     ImageModelProfile.flux2Klein.request(prompt: "Model registration", seed: 0)))
                 _ = try await backend.estimate(request)
             }, textBackendID: textBackend.descriptor.id, validateTextModel: { directory in
-                let reference = try await FixedTextModel.verify(at: directory)
+                let reference = try await TextModelProfiles.verify(at: directory)
                 _ = try await textBackend.estimate(InferenceRequest(model: reference, input: .text(TextRequest(prompt: "Registration", maxTokens: 256))))
                 return reference
             })
