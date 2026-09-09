@@ -11,3 +11,6 @@
 证据：D-Development/AgentTrials/D-AUDIO-BACKEND-01/run-20260909T123045Z。保护/源快照见 preparation.json。进程枚举被当前沙箱拒绝，旧任务终止依据已有回执；未声称全系统空闲或写锁。
 
 下一动作：SCALE 预检→实现，Lead 冻结音频模型与数据契约，再派后端。所有未验收项与实际限制留在本记录。
+
+## Shared audio value contract (Lead, AUDIO1)
+AudioRequest/AudioSourceReference/AudioEditRegion add a value-only audioGeneration input. Source-frame half-open coordinates, immutable hash/metadata and operation-dependent validation; backend must still validate actual media/model limits. Existing tasks view exhaustiveness is updated only to return prompt, not enable audio submission or project schema4. This code needs core/combined tests and nonimplementer review.

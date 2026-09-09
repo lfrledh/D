@@ -109,6 +109,7 @@ struct WorkbenchTasks: View {
         switch job.request.input {
         case .image(let request): request.prompt
         case .text(let request): request.prompt
+        case .audio(let request): request.prompt
         }
     }
 

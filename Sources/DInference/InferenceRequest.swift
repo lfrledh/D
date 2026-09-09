@@ -3,6 +3,7 @@ import Foundation
 public enum InferenceCapability: String, Sendable, Codable, Hashable {
     case textGeneration
     case imageGeneration
+    case audioGeneration
 }
 
 /// A resolved local model. Downloading and obtaining sandbox access belong to the host.
@@ -55,11 +56,13 @@ public struct ImageRequest: Sendable, Codable, Equatable {
 public enum InferenceInput: Sendable, Codable, Equatable {
     case text(TextRequest)
     case image(ImageRequest)
+    case audio(AudioRequest)
 
     public var capability: InferenceCapability {
         switch self {
         case .text: .textGeneration
         case .image: .imageGeneration
+        case .audio: .audioGeneration
         }
     }
 }
@@ -86,6 +89,8 @@ public struct InferenceRequest: Sendable, Codable, Equatable, Identifiable {
                   text.temperature >= 0, text.topP.isFinite, text.topP > 0, text.topP <= 1 else {
                 throw InferenceFailure.invalidRequest("Invalid text generation parameters.")
             }
+        case .audio(let audio):
+            try audio.validate()
         case .image(let image):
             guard image.width > 0, image.height > 0, image.steps > 0,
                   image.guidanceScale.isFinite, image.guidanceScale >= 0 else {
