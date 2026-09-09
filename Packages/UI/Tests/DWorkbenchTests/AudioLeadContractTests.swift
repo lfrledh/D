@@ -47,6 +47,21 @@ struct AudioLeadContractTests {
         #expect(restored.activeDocument?.audioDraft?.assetID == asset.id)
         let owned = try await reopened.assetURL(for: asset)
         #expect(try Data(contentsOf: owned) == original)
+        let restoredAsset = try #require(restored.assets.first { $0.id == asset.id })
+        let persistedFormat = try #require(restoredAsset.metadata.audio).format
+        // Cross-component check: consume persisted store metadata through the native playback reader.
+        // Preparation and seek do not start the output device.
+        try await MainActor.run {
+            let transport = AudioTransport()
+            defer { transport.shutdown() }
+            try transport.preparePlayback(url: owned, format: persistedFormat,
+                                          range: .init(startFrame: 1, endFrame: 4))
+            #expect(transport.state == .recorded && transport.positionFrame == 1)
+            try transport.seek(toFrame: 3)
+            #expect(transport.positionFrame == 3)
+            #expect(throws: AudioMediaError.invalidRange) { try transport.seek(toFrame: 4) }
+        }
+        #expect(try Data(contentsOf: owned) == original)
         try await reopened.close()
     }
 
