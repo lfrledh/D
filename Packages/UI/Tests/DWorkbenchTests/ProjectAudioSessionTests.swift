@@ -542,4 +542,32 @@ struct ProjectAudioSessionTests {
         #expect(try AudioMediaInspector.inspect(at: target).format.frameCount == 2)
         #expect(audio.document?.selectedClipID == selectedBefore)
     }
+    @Test
+    func recordingPublicationCannotAcceptThenDropEditsFromThePreviousDocument() async throws {
+        let f = try fixture("CaptureEditorAdmission")
+        defer { cleanup(f) }
+        let factory = SessionAudioFactory()
+        let subject = session(f, factory: factory, recording: true)
+        await subject.createProject(at: f.project)
+        let sourceURL = try source(in: f)
+        let originalBytes = try Data(contentsOf: sourceURL)
+        #expect(await subject.importAudio(at: sourceURL, name: "previous original"))
+        let controller = try #require(subject.audio)
+        let context = controller.contextID
+        let previous = try #require(controller.documentID)
+        #expect(await subject.startAudioRecording(name: "new capture"))
+        #expect(!subject.setAudioNoteInput("must not be accepted then discarded", contextID: context, documentID: previous))
+        #expect(!subject.setAudioClipInput(name: "must not disappear", range: .init(startFrame: 0, endFrame: 2), contextID: context, documentID: previous))
+        #expect(controller.noteInput.isEmpty)
+        #expect(controller.clipNameInput.isEmpty)
+        let recorder = try #require(factory.recordings.last)
+        recorder.finishFromDevice()
+        try await waitUntil { controller.isBusy == false }
+        #expect(controller.documentID != previous)
+        #expect(subject.manifest?.documents.first(where: { $0.id == previous })?.audioDraft?.note.isEmpty == true)
+        #expect(try Data(contentsOf: sourceURL) == originalBytes)
+        #expect(subject.manifest?.pendingAudioCaptures.isEmpty == true)
+        #expect(await subject.requestClose())
+    }
+
 }

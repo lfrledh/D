@@ -47,6 +47,12 @@ public final class ProjectAudioController {
         isSaving || isInspecting || (isStartingRecording && !permissionRequestDetached) || isFinalizing
             || transport.state == .requestingPermission || transport.state == .recording
     }
+    /// Capture publication creates another document; never admit edits it could replace.
+    public var canEdit: Bool {
+        isActive && admissionsOpen && (!isStartingRecording || permissionRequestDetached)
+            && !isFinalizing && transport.state != .requestingPermission
+            && transport.state != .recording
+    }
     public var hasUnsubmittedInput: Bool {
         _ = editorRevision
         guard let document else { return false }
@@ -76,8 +82,8 @@ public final class ProjectAudioController {
     @ObservationIgnored private var captureGeneration: UInt64 = 0
     @ObservationIgnored private var isActive = true
     @ObservationIgnored private var captureFailureBlocksNavigation = false
-    @ObservationIgnored private var isStartingRecording = false
-    @ObservationIgnored private var permissionRequestDetached = false
+    private var isStartingRecording = false
+    private var permissionRequestDetached = false
     @ObservationIgnored private var admissionsOpen = true
     @ObservationIgnored private var navigationPreparing = false
 
@@ -121,7 +127,7 @@ public final class ProjectAudioController {
     /// UI binding entry point. Identity makes a stale view unable to edit a replacement document.
     @discardableResult
     public func setNoteInput(_ value: String, contextID: UUID, documentID: UUID) -> Bool {
-        guard admissionsOpen, matches(contextID: contextID, documentID: documentID) else { return false }
+        guard canEdit, matches(contextID: contextID, documentID: documentID) else { return false }
         noteInput = value
         editorRevision &+= 1
         errorMessage = nil
@@ -132,7 +138,7 @@ public final class ProjectAudioController {
     @discardableResult
     public func setClipInput(name: String, range: AudioFrameRange?, note: String = "",
                              contextID: UUID, documentID: UUID) -> Bool {
-        guard admissionsOpen, matches(contextID: contextID, documentID: documentID) else { return false }
+        guard canEdit, matches(contextID: contextID, documentID: documentID) else { return false }
         clipNameInput = name
         clipRangeInput = range
         clipNoteInput = note
@@ -144,7 +150,7 @@ public final class ProjectAudioController {
     /// Explicitly discards only editor input; persisted media, drafts and captures are untouched.
     @discardableResult
     public func discardUnsubmittedInput(contextID: UUID, documentID: UUID) -> Bool {
-        guard admissionsOpen, matches(contextID: contextID, documentID: documentID), let document else { return false }
+        guard canEdit, matches(contextID: contextID, documentID: documentID), let document else { return false }
         noteInput = document.note
         clipNameInput = ""
         clipNoteInput = ""
@@ -155,7 +161,7 @@ public final class ProjectAudioController {
     }
 
     public func saveNote(contextID: UUID, documentID: UUID) async -> Bool {
-        guard admissionsOpen, matches(contextID: contextID, documentID: documentID) else {
+        guard canEdit, matches(contextID: contextID, documentID: documentID) else {
             rejectStaleEditor(); return false
         }
         let snapshot = noteInput
@@ -165,7 +171,7 @@ public final class ProjectAudioController {
     }
 
     public func addClip(contextID: UUID, documentID: UUID) async -> Bool {
-        guard admissionsOpen, matches(contextID: contextID, documentID: documentID),
+        guard canEdit, matches(contextID: contextID, documentID: documentID),
               let range = clipRangeInput else {
             errorMessage = "片段范围尚未设置，原声稿没有改变。"
             return false
@@ -177,7 +183,7 @@ public final class ProjectAudioController {
     }
 
     public func selectFullAudio(contextID: UUID, documentID: UUID) async -> Bool {
-        guard admissionsOpen, matches(contextID: contextID, documentID: documentID) else {
+        guard canEdit, matches(contextID: contextID, documentID: documentID) else {
             rejectStaleEditor(); return false
         }
         guard await enqueue(.selection(nil), contextID: contextID, documentID: documentID,
@@ -186,7 +192,7 @@ public final class ProjectAudioController {
     }
 
     public func selectClip(id: UUID, contextID: UUID, documentID: UUID) async -> Bool {
-        guard admissionsOpen, matches(contextID: contextID, documentID: documentID),
+        guard canEdit, matches(contextID: contextID, documentID: documentID),
               document?.clips.contains(where: { $0.id == id }) == true else {
             errorMessage = "找不到要选择的已保存片段。"
             return false
