@@ -250,6 +250,23 @@ struct AudioBackendTests {
         await backend.release()
     }
 
+    @Test("Incomplete inpaint metadata fails without trapping and permits the next task",
+          .timeLimit(.minutes(1)), arguments: ["missing-requested-region", "missing-effective-region"])
+    func incompleteInpaintMetadata(mode: String) async throws {
+        let fixture = try AudioFixture(frames: 8192)
+        defer { fixture.remove() }
+        let sourceBefore = try Data(contentsOf: fixture.source)
+        let backend = try MLXAudioBackend(configuration: fixture.configuration())
+        let request = try fixture.editRequest(operation: .inpaint, prompt: mode,
+                                             frames: 8192, duration: 8192.0 / 44_100.0)
+        await expectBackendFailure { try await backend.execute(request) { _ in } }
+        await backend.release()
+        #expect(try Data(contentsOf: fixture.source) == sourceBefore)
+        let next = try await backend.execute(fixture.request()) { _ in }
+        await backend.release()
+        #expect(next.artifacts.count == 1)
+    }
+
     @Test("Semantically equal integer and decimal result snapshots are accepted")
     func semanticResultCopies() async throws {
         let fixture = try AudioFixture()
@@ -343,7 +360,7 @@ private struct AudioFixture {
     let manifestText: String
     let weightSize: Int
 
-    init(profile: AudioBackendProfile = .smMusic) throws {
+    init(profile: AudioBackendProfile = .smMusic, frames: Int = 44) throws {
         let parent = ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"]
             .map { URL(fileURLWithPath: $0, isDirectory: true) } ?? FileManager.default.temporaryDirectory
         root = parent.resolvingSymlinksInPath().appendingPathComponent("D-audio-fixture-\(UUID().uuidString)")
@@ -380,7 +397,7 @@ private struct AudioFixture {
         manifestText = "{\"schemaVersion\":1,\"repository\":\"stabilityai/stable-audio-3-optimized\",\"revision\":\"\(AudioBackendConfiguration.registeredModelRevision)\",\"files\":[\(files)]}"
         weightSize = fixtureWeightSize
         try Data(manifestText.utf8).write(to: manifest)
-        try Self.floatWAV(frames: 44).write(to: source)
+        try Self.floatWAV(frames: frames).write(to: source)
         try Data(Self.providerScript.utf8).write(to: script)
     }
 
@@ -495,6 +512,8 @@ if r['operation']=='inpaint':
     metadata['effectiveLatentRegion']={'start':max(0,round(region['startFrame']/4096)),
                                        'end':min(latent_count,round(region['endFrame']/4096))}
     metadata['inpaintBoundaryPolicy']='no-crossfade; exact float32 source conversion outside requested frames'
+if mode=='missing-requested-region': metadata.pop('requestedRegionFrames',None)
+if mode=='missing-effective-region': metadata.pop('effectiveLatentRegion',None)
 if mode=='bad-request-prompt': metadata['request']['prompt']='corrupted'
 if mode=='bad-request-seed': metadata['request']['seed']=metadata['request']['seed']+1
 if mode=='bad-request-boolean': metadata['request']['seed']=True
