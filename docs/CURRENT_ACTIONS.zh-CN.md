@@ -1,5 +1,17 @@
 # D 当前行动指南
 
+## 2026-09-11 AW1第一阶段检查点：服务通过，产品尚未整体验收
+
+D-AUDIO-WORKBENCH-01获准第一阶段已完成可独立推进的录音所有权、生成存储和共享服务；新界面仍未接纳，真实产品闭环未完成。源本轮只追加状态/待办文档，生产代码继续633150477de90d30c1f44c915b1f10e13acd246d，schema5与新AI界面未默认启用。
+
+录音受测971a669c70d3148f65693701182c8ae3721b25f6，CPU251项报告/1既有可选跳过，非实现者复核接受；存储受测690408ed2e786b9470cef1dfcce522e022751ab0，全UI包CPU260项报告/1既有可选跳过；共享服务最终受测d6b7d1ea5df72730ed9c198d8df56d5c17bb6d5c，219项报告/1既有可选跳过、零失败。集合重叠不相加；新视图不在该全包版本内，未做完整App装配编译。生成/变体/重绘服务验证使用真实DRuntime和合成音频，不能当作真实模型/GUI验收。
+
+批次候选 `0295618cb851511c8aa3c207a3a4b887913d7501` 位于`/Volumes/CodexProjects/Codex/D-Worktrees/D-AUDIO-WORKBENCH-01`；相对最终受测版本仅交付文档变化。详细[阶段记录](/Volumes/CodexProjects/Codex/D-Worktrees/D-AUDIO-WORKBENCH-01/docs/tasks/D-AUDIO-WORKBENCH-01.md)。外部持久索引：`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-AUDIO-WORKBENCH-01/run-20260910T140156Z/final-receipt.json`；最终源文档SHA写回执，不自引用提交。
+
+E-AW-VIEW-01：Terra初交/两修、Astra一次有界测试接管后仍有来源切换旧区间残留、禁用原因提示不一致、离屏布局验收失败；预算为0，未合入。需要明确限定UI收尾，不是缺Mac授权。H09/H15为之后的实际麦克风及新音频工作台真人闭环；当前未获得新的资源窗口，未启动GPU/GUI。当前普通沙盒与隔离Python/provider访问、48k单声道CAF到44.1k双声道WAV的显式转换仍未验证/未实现，不静默转换或靠Full Disk Access代替。
+
+来源：录音Sol实现后Astra有界修补及Sol复核；存储Sol初交/两修、Astra审核实测，无Lead代写；VIEW Terra及Lead失败测试收尾；共享服务Astra实现、Sol限定非实现者复核。费用和完整Lead消耗unknown。本轮不推送未验收实现、不修改普通D/个人scheme、不启动下一音乐/HUM/META任务。[持续待办](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md#当前队列)区分工程问题与真人事项；旧阶段条目按其日期保留，不作为最新状态。
+
 ## 2026-09-10 收尾：音频后端已本地接纳；录音仍隔离
 
 D-AUDIO-BACKEND-01有限后端阶段已通过真实验收并快进源工作分支。源接入前9b20e0f20039027ce75b2bae00bffa215bc1789e → 实际源受测 `59c3225f3b48ecc6f4fd26e94463d6787b8ec116`；真实修补代码 `a0bfd0ec47ec40f93c7342934fc82dfd0ac754d0`，二者仅3份合并文档差异。此后本次结案仅文档，最终HEAD和实际push结果写外部final-receipt.json，不宣称测试跑在尚未产生的文档提交。
