@@ -11,10 +11,13 @@ enum AppSessionFactory {
         let backend = try MLXImageBackend(configuration: .init(artifactDirectory: artifactDirectory),
                                          observer: { await stages.record($0) })
         let textBackend = try MLXTextBackend()
+        let audioBackend = try makeAudioBackend(artifactDirectory: artifactDirectory)
+        var backends: [any InferenceBackend] = [backend, textBackend]
+        if let audioBackend { backends.append(audioBackend) }
         let memoryBudgetBytes = ResourceBudgetPolicy().inferenceBudgetBytes(
             physicalMemoryBytes: ProcessInfo.processInfo.physicalMemory)
         let runtime = try InferenceRuntime(
-            backends: [backend, textBackend],
+            backends: backends,
             configuration: try RuntimeConfiguration(memoryBudgetBytes: memoryBudgetBytes,
                                                     maximumQueuedRuns: 8))
         return WorkbenchSession(
@@ -41,7 +44,50 @@ enum AppSessionFactory {
                 let reference = try await TextModelProfiles.verify(at: directory)
                 _ = try await textBackend.estimate(InferenceRequest(model: reference, input: .text(TextRequest(prompt: "Registration", maxTokens: 256))))
                 return reference
+            }, audioBackendID: audioBackend?.descriptor.id,
+            validateAudioModel: audioBackend.map { audio in
+                { directory in
+                    let reference = ModelReference(directory: directory,
+                        revision: AudioBackendConfiguration.registeredModelRevision)
+                    _ = try await audio.estimate(InferenceRequest(model: reference, input: .audio(
+                        AudioRequest(operation: .generate, prompt: "Model registration", durationSeconds: 6,
+                                     seed: 42, steps: 8))))
+                    return reference
+                }
             })
+    }
+
+    /// Only an explicitly isolated development session can supply an existing local engine.
+    /// This is not a shipping installer or an implicit license acceptance path.
+    nonisolated private static func makeAudioBackend(artifactDirectory: URL) throws -> MLXAudioBackend? {
+        #if DEBUG
+        let environment = ProcessInfo.processInfo.environment
+        guard AudioWorkbenchIsolation.isEnabled(environment: environment),
+              let path = environment["D_AUDIO_BACKEND_CONFIGURATION"] else { return nil }
+        struct HostAudioConfiguration: Decodable {
+            let pythonExecutable: URL
+            let providerScript: URL
+            let vendorDirectory: URL
+            let modelManifest: URL
+            let profile: AudioBackendProfile
+            let licenseAcknowledged: Bool
+        }
+        let url = URL(fileURLWithPath: path)
+        let data = try Data(contentsOf: url)
+        guard data.count <= 64 * 1024 else {
+            throw InferenceFailure.invalidRequest("Local audio engine configuration is too large.")
+        }
+        let host = try JSONDecoder().decode(HostAudioConfiguration.self, from: data)
+        guard host.licenseAcknowledged else {
+            throw InferenceFailure.invalidRequest("The configured audio model usage has not been acknowledged.")
+        }
+        return try MLXAudioBackend(configuration: .init(pythonExecutable: host.pythonExecutable,
+            providerScript: host.providerScript, vendorDirectory: host.vendorDirectory,
+            modelManifest: host.modelManifest, artifactDirectory: artifactDirectory,
+            profile: host.profile, licenseAcknowledged: host.licenseAcknowledged))
+        #else
+        return nil
+        #endif
     }
 
     nonisolated private static func jobState(_ phase: RuntimeSnapshot.Phase?,
