@@ -63,6 +63,8 @@ public final class ProjectSession {
     @ObservationIgnored private var audioCreationDocumentID: UUID?
     @ObservationIgnored private var audioCreationPersistedRevision: UUID?
     @ObservationIgnored private var audioCreationWriteTail: Task<Void, Never>?
+    @ObservationIgnored private var audioAdmissions: [UUID: Task<Void, Never>] = [:]
+    @ObservationIgnored private var audioAdmissionDocuments: [UUID: UUID] = [:]
     @ObservationIgnored private var audioModelLease: LocationAccess.Lease?
     @ObservationIgnored private var audioReference: ModelReference?
     public private(set) var textModelStatus = "选择已注册的 Qwen2.5 Instruct 4-bit 模型（0.5B／1.5B／7B／32B）"
@@ -208,6 +210,7 @@ public final class ProjectSession {
 
     private func loadActiveDocument() {
         if audioCreationDocumentID != activeDocumentID || activeDocument?.audioCreation == nil {
+            audioCreationContextID = UUID()
             audioCreationTransport.stopPlayback()
             audioCreationDocumentID = activeDocument?.audioCreation == nil ? nil : activeDocumentID
             audioCreationDraft = activeDocument?.audioCreation
@@ -323,13 +326,16 @@ public final class ProjectSession {
     }
 
     private func relocateOpenProject(_ previousStore: ProjectStore, lease: LocationAccess.Lease) async {
-        guard !isRegisteringTextModel, text?.hasPendingCandidate != true,
+        guard !isRegisteringTextModel, !isRegisteringAudioModel, text?.hasPendingCandidate != true,
               await audio?.prepareForNavigation() != false, await drainForClose() else {
             audio?.resumeAdmissions()
             await access.release(lease)
             errorMessage = "请先完成模型校验并处理文字候选，再重新定位项目。"
             return
         }
+        audioCreationTransport.stopPlayback()
+        await audioCreationWriteTail?.value
+        audioCreationContextID = UUID()
         let previousURL = projectURL
         do {
             let replacement = try await factory(lease.url.appendingPathComponent("Tasks", isDirectory: true))
@@ -653,6 +659,7 @@ public final class ProjectSession {
     public func cancel(_ id: UUID) async {
         guard activeJobIDs.contains(id) else { return }
         cancellationRequests.insert(id)
+        audioAdmissions[id]?.cancel()
         liveStates[id] = .cancelling
         phases[id] = "正在取消，等待计算结束并释放资源"
         if let run = handles[id] { await run.cancel() }
@@ -1433,16 +1440,24 @@ public final class ProjectSession {
         audioCreationTransport.stopPlayback()
         startPolling()
         let preceding = admissionTail
+        audioAdmissionDocuments[id] = documentID
         let admission = Task { [self] in
+            defer {
+                audioAdmissions.removeValue(forKey: id)
+                audioAdmissionDocuments.removeValue(forKey: id)
+            }
             if let preceding { await preceding.value }
             do {
+                try Task.checkCancellation()
                 _ = try await saved.value
+                try Task.checkCancellation()
                 let source: AudioSourceReference?
                 if value.operation == .generate { source = nil }
                 else {
                     guard let sourceID else { throw AudioMediaError.unavailable("此操作需要参考原声") }
                     source = try await store.prepareAudioCreationSource(assetID: sourceID, runID: id)
                 }
+                try Task.checkCancellation()
                 let input = try value.makeRequest(source: source)
                 let request = InferenceRequest(id: id, model: reference, input: .audio(input))
                 await admit(request, documentID: documentID, savedDraft: saved, store: store,
@@ -1454,18 +1469,18 @@ public final class ProjectSession {
                 report(error, context: "声音任务未提交，原声和已有候选没有改变")
             }
         }
+        audioAdmissions[id] = admission
         admissionTail = admission
         await admission.value
     }
 
     public func cancelAudioCreation(contextID: UUID, documentID: UUID) async {
         guard contextID == audioCreationContextID, documentID == activeDocumentID else { return }
-        let ids = documentJobs.filter { activeJobIDs.contains($0.id) }.map(\.id)
-        // A request being saved may not yet appear in the journal; only one audio admission
-        // is allowed while busy, so include its pending identifier before enqueue as well.
-        for id in activeJobIDs where ids.contains(id) || manifest?.jobs.contains(where: { $0.id == id }) == false {
-            await cancel(id)
+        let journalIDs = Set(documentJobs.map(\.id))
+        let ids = activeJobIDs.filter {
+            journalIDs.contains($0) || audioAdmissionDocuments[$0] == documentID
         }
+        for id in ids { await cancel(id) }
     }
 
     public func mutateAudioCreationCandidate(_ action: AudioCreationCandidateAction,
@@ -1502,7 +1517,8 @@ public final class ProjectSession {
             guard contextID == audioCreationContextID, documentID == activeDocumentID, self.store === store,
                   !isChangingProject, !closePending else { return }
             audio?.transport.stopPlayback()
-            try audioCreationTransport.preparePlayback(url: url, format: inspection.format)
+            try audioCreationTransport.preparePlayback(url: url, format: inspection.format,
+                policy: asset.metadata.audio?.origin == .modelGenerated ? .generated : .original)
             try audioCreationTransport.play()
         } catch { report(error, context: "试听未开始；文件没有改变") }
     }

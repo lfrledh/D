@@ -1,0 +1,146 @@
+import DInference
+import DRuntime
+import Foundation
+import Testing
+@testable import DWorkbench
+
+private actor AudioCreationCPUBackend: InferenceBackend {
+    nonisolated let descriptor = BackendDescriptor(id: "fixture.audio", version: "1", capabilities: [.audioGeneration])
+    let root: URL
+    init(root: URL) { self.root = root }
+    func estimate(_ request: InferenceRequest) throws -> ResourceEstimate { .init(peakBytes: 1) }
+    func execute(_ request: InferenceRequest,
+                 emit: @escaping @Sendable (InferenceOutput) async throws -> Void) async throws -> InferenceResult {
+        try Task.checkCancellation()
+        guard case .audio(let input) = request.input else { throw ProjectStoreError.invalidTransition }
+        let folder = root.appendingPathComponent("\(request.id.uuidString.lowercased())-\(UUID().uuidString)/job")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let url = folder.appendingPathComponent("output.wav")
+        let samples = [Float](repeating: 0.125, count: Int((input.durationSeconds * 44_100).rounded()))
+        try AudioTestMedia.writePCM(to: url, samples: [samples, samples], sampleRate: 44_100,
+                                   bitDepth: 32, floatingPoint: true)
+        let artifact = ArtifactReference(url: url, mediaType: "audio/wav")
+        try await emit(.artifact(artifact))
+        return .init(artifacts: [artifact], metadata: ["evidence": "CPU fixture, not model or acoustic validation"])
+    }
+    func release() async {}
+}
+
+@Suite("Audio creation session assembly", .serialized) @MainActor
+struct AudioCreationSessionTests {
+    private func fixture() throws -> (URL, UserDefaults, String) {
+        let base = ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"]
+            .map { URL(fileURLWithPath: $0) } ?? FileManager.default.temporaryDirectory
+        let root = base.appendingPathComponent("audio-creation-session-\(UUID().uuidString)").resolvingSymlinksInPath()
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let suite = "D.AudioCreationCPU.\(UUID().uuidString)"
+        return (root, try #require(UserDefaults(suiteName: suite)), suite)
+    }
+    private func session(settings: UserDefaults) -> ProjectSession {
+        ProjectSession(sessionFactory: { artifacts in
+            let backend = AudioCreationCPUBackend(root: artifacts)
+            let runtime = try InferenceRuntime(backends: [backend], configuration: .init(memoryBudgetBytes: 100))
+            return WorkbenchSession(engine: runtime, backendID: "fixture.image", status: {
+                let state = await runtime.snapshot()
+                return .init(activeRunID: state.activeRunID, phase: state.phase?.rawValue, queuedRunIDs: state.queuedRunIDs)
+            }, shutdown: { await runtime.shutdown() }, cleanup: {}, validateModel: { _ in },
+            audioBackendID: backend.descriptor.id,
+            validateAudioModel: { .init(directory: $0, revision: "CPU fixture; no weights loaded") })
+        }, settings: settings, audioEnabled: true)
+    }
+    private func waitForIdle(_ subject: ProjectSession) async throws {
+        let deadline = ContinuousClock.now + .seconds(10)
+        while subject.isBusy {
+            try #require(ContinuousClock.now < deadline, "Audio task did not reach an authoritative terminal state")
+            try await Task.sleep(for: .milliseconds(10))
+        }
+    }
+    @Test func generatedCandidateNeedsExplicitAdoptionAndDecisionsSurviveReopen() async throws {
+        let (root, settings, suite) = try fixture()
+        defer { settings.removePersistentDomain(forName: suite); try? FileManager.default.removeItem(at: root) }
+        let project = root.appendingPathComponent("Composition.dproject")
+        let model = root.appendingPathComponent("FixtureModel")
+        try FileManager.default.createDirectory(at: model, withIntermediateDirectories: false)
+        let subject = session(settings: settings)
+        await subject.createProject(at: project)
+        await subject.createAudioCreation()
+        await subject.registerAudioModel(at: model)
+        let document = try #require(subject.activeDocumentID)
+        let context = subject.audioCreationContextID
+        var draft = try #require(subject.audioCreationDraft)
+        draft.prompt = "中文 e\u{301} 👩‍💻 钢琴"
+        draft.durationText = "0.02"
+        draft.seedText = "4294967294"
+        subject.updateAudioCreationDraft(draft, contextID: context, documentID: document)
+        try #require(subject.canGenerateAudioCreation)
+        await subject.generateAudioCreation(contextID: context, documentID: document)
+        try await waitForIdle(subject)
+        let job = try #require(subject.documentJobs.first)
+        #expect(job.state == .completed)
+        guard case .audio(let request) = job.request.input else { Issue.record("Wrong modality"); return }
+        #expect(request.prompt == draft.prompt && request.seed == 4_294_967_294)
+        let asset = try #require(subject.audioCreationCandidates.first)
+        #expect(subject.activeDocument?.adoptedAssetID == nil)
+        #expect(subject.activeDocument?.selectedAssetID == nil)
+        await subject.mutateAudioCreationCandidate(.select(asset.id), contextID: context, documentID: document)
+        #expect(subject.activeDocument?.adoptedAssetID == nil)
+        await subject.mutateAudioCreationCandidate(.adopt(asset.id), contextID: context, documentID: document)
+        #expect(subject.activeDocument?.adoptedAssetID == asset.id)
+        await subject.mutateAudioCreationCandidate(.reject(asset.id, true), contextID: context, documentID: document)
+        #expect(subject.activeDocument?.adoptedAssetID == nil)
+        #expect(subject.audioCreationCandidates.count == 1)
+        #expect(await subject.saveAudioCreation(contextID: context, documentID: document))
+        #expect(await subject.cancelAndCloseProject())
+        await subject.openProject(at: project)
+        #expect(subject.activeDocumentID == document)
+        #expect(subject.audioCreationDraft?.prompt == draft.prompt)
+        #expect(subject.audioCreationDraft?.rejectedAssetIDs == [asset.id])
+        #expect(subject.audioCreationCandidates.first?.id == asset.id)
+        let newContext = subject.audioCreationContextID
+        await subject.mutateAudioCreationCandidate(.reject(asset.id, false), contextID: newContext, documentID: document)
+        await subject.mutateAudioCreationCandidate(.adopt(asset.id), contextID: newContext, documentID: document)
+        let destination = root.appendingPathComponent("作品.wav")
+        await subject.exportAudioCreationAsset(id: asset.id, to: destination, contextID: newContext, documentID: document)
+        #expect(try Data(contentsOf: destination) == Data(contentsOf: project.appendingPathComponent(asset.relativePath)))
+        #expect(await subject.cancelAndCloseProject())
+    }
+    @Test func oldDocumentInputCannotOverwriteNewDocumentAndSaveFailurePreservesBothVersions() async throws {
+        let (root, settings, suite) = try fixture()
+        defer { settings.removePersistentDomain(forName: suite); try? FileManager.default.removeItem(at: root) }
+        let project = root.appendingPathComponent("Protected.dproject")
+        let subject = session(settings: settings)
+        await subject.createProject(at: project)
+        await subject.createAudioCreation()
+        let oldID = try #require(subject.activeDocumentID)
+        let context = subject.audioCreationContextID
+        var oldDraft = try #require(subject.audioCreationDraft)
+        oldDraft.prompt = "旧文档不能覆盖新文档"
+        await subject.createAudioCreation()
+        let newID = try #require(subject.activeDocumentID)
+        let newDraft = try #require(subject.audioCreationDraft)
+        subject.updateAudioCreationDraft(oldDraft, contextID: context, documentID: oldID)
+        #expect(subject.audioCreationDraft == newDraft)
+        await subject.selectDocument(id: oldID)
+        let reloaded = subject.audioCreationDraft
+        #expect(subject.audioCreationContextID != context)
+        subject.updateAudioCreationDraft(oldDraft, contextID: context, documentID: oldID)
+        #expect(subject.audioCreationDraft == reloaded)
+        await subject.selectDocument(id: newID)
+        let currentContext = subject.audioCreationContextID
+        var edited = newDraft
+        edited.prompt = "需要保留的未保存内容"
+        subject.updateAudioCreationDraft(edited, contextID: currentContext, documentID: newID)
+        let manifestURL = project.appendingPathComponent("project.json")
+        let original = try Data(contentsOf: manifestURL)
+        let changed = original + Data("\n".utf8)
+        try changed.write(to: manifestURL)
+        #expect(!(await subject.saveAudioCreation(contextID: currentContext, documentID: newID)))
+        #expect(subject.audioCreationDraft?.prompt == edited.prompt)
+        #expect(try Data(contentsOf: manifestURL) == changed)
+        #expect(subject.errorMessage != nil)
+        // Restore only this test-owned simulated external edit so teardown can drain safely.
+        try original.write(to: manifestURL)
+        #expect(await subject.saveAudioCreation(contextID: currentContext, documentID: newID))
+        #expect(await subject.cancelAndCloseProject())
+    }
+}
