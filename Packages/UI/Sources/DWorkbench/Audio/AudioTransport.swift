@@ -447,9 +447,13 @@ public final class AudioTransport: NSObject {
         var cursor = parent
         while true {
             var info = stat()
-            guard lstat(cursor.path, &info) == 0,
-                  (info.st_mode & S_IFMT) != S_IFLNK else {
-                throw AudioMediaError.io("录音目标目录不可经符号链接")
+            let status = lstat(cursor.path, &info)
+            let savedErrno = errno
+            guard status == 0 else {
+                throw AudioMediaError.io("录音路径检查失败：\(cursor.path)，errno \(savedErrno)")
+            }
+            guard (info.st_mode & S_IFMT) != S_IFLNK else {
+                throw AudioMediaError.io("录音目标目录不可经符号链接：\(cursor.path)")
             }
             let next = cursor.deletingLastPathComponent()
             if next.path == cursor.path { break }
