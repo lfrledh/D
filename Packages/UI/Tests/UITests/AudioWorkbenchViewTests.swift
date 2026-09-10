@@ -16,7 +16,7 @@ private final class PendingPermissionFactory: AudioTransportDeviceFactory {
     ) throws -> any AudioPlaybackDevice {
         throw AudioMediaError.unavailable("unused")
     }
-    func makeRecording(url: URL) throws -> any AudioRecordingDevice {
+    func makeRecording(capture: AudioCaptureFile) throws -> any AudioRecordingDevice {
         throw AudioMediaError.unavailable("unused")
     }
     func resolve() {
@@ -229,7 +229,9 @@ struct AudioWorkbenchViewTests {
         let transport = AudioTransport(recordingEnabled: true, deviceFactory: factory)
         let request = Task {
             try await transport.requestAndStartRecording(
-                to: root.appendingPathComponent("pending.caf")
+                to: root.appendingPathComponent("pending.caf"),
+                revalidate: {},
+                createCapture: { throw AudioMediaError.unavailable("cancelled fixture") }
             )
         }
         defer { transport.shutdown(); factory.resolve(); request.cancel() }

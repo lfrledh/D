@@ -36,7 +36,7 @@ struct AudioRecordingResult: Sendable, Equatable {
 @MainActor protocol AudioTransportDeviceFactory: AnyObject {
     func requestRecordPermission() async -> Bool
     func makePlayback(url: URL, expected: AudioFormatInfo) throws -> any AudioPlaybackDevice
-    func makeRecording(url: URL) throws -> any AudioRecordingDevice
+    func makeRecording(capture: AudioCaptureFile) throws -> any AudioRecordingDevice
 }
 
 @MainActor @Observable
@@ -198,9 +198,10 @@ public final class AudioTransport: NSObject {
 
     /// The project owner must validate the reserved destination relative to its retained
     /// authorized directory, before permission and again immediately before device creation.
-    public func requestAndStartRecording(
+    func requestAndStartRecording(
         to url: URL,
-        revalidate: @MainActor @Sendable () async throws -> Void
+        revalidate: @MainActor @Sendable () async throws -> Void,
+        createCapture: @MainActor @Sendable () async throws -> AudioCaptureFile
     ) async throws {
         guard recordingEnabled else {
             throw AudioMediaError.unavailable("录音功能尚未启用")
@@ -245,7 +246,13 @@ public final class AudioTransport: NSObject {
             try Task.checkCancellation()
             guard recordingEpoch == epoch, state == .requestingPermission else { return }
             try validateRecordingDestination(url)
-            let candidate = try deviceFactory.makeRecording(url: url)
+            let capture = try await createCapture()
+            try Task.checkCancellation()
+            guard capture.url.standardizedFileURL == url.standardizedFileURL else {
+                throw AudioMediaError.io("录音文件所有者返回了不同目标")
+            }
+            guard recordingEpoch == epoch, state == .requestingPermission else { return }
+            let candidate = try deviceFactory.makeRecording(capture: capture)
             guard recordingEpoch == epoch, state == .requestingPermission else {
                 _ = candidate.stop(error: "录音请求已取消")
                 return
@@ -538,8 +545,8 @@ private final class AVFoundationAudioDeviceFactory: AudioTransportDeviceFactory 
         try AVFoundationPlaybackDevice(url: url, expected: expected)
     }
 
-    func makeRecording(url: URL) throws -> any AudioRecordingDevice {
-        try AVFoundationRecordingDevice(url: url)
+    func makeRecording(capture: AudioCaptureFile) throws -> any AudioRecordingDevice {
+        try AudioQueueRecordingDevice(capture: capture)
     }
 }
 
@@ -648,118 +655,5 @@ private final class AVFoundationPlaybackDevice: AudioPlaybackDevice {
     private func stopOperation() {
         operationID = nil
         node?.stop()
-    }
-}
-
-@MainActor
-private final class AVFoundationRecordingDevice: NSObject, AudioRecordingDevice, AVAudioRecorderDelegate {
-    let url: URL
-    private var recorder: AVAudioRecorder?
-    private var recorderID: ObjectIdentifier?
-    private var operationID: UUID?
-    private var completion: (@MainActor @Sendable (AudioRecordingResult) -> Void)?
-
-    init(url: URL) throws {
-        self.url = url
-        let descriptor = open(url.path, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0o600)
-        guard descriptor >= 0 else {
-            throw AudioMediaError.io("无法独占创建录音目标：\(String(cString: strerror(errno)))")
-        }
-        close(descriptor)
-
-        let settings: [String: Any] = [
-            AVFormatIDKey: kAudioFormatLinearPCM,
-            AVSampleRateKey: 48_000,
-            AVNumberOfChannelsKey: 1,
-            AVLinearPCMBitDepthKey: 32,
-            AVLinearPCMIsFloatKey: true,
-            AVLinearPCMIsBigEndianKey: false
-        ]
-        let recorder = try AVAudioRecorder(url: url, settings: settings)
-        guard recorder.format.sampleRate == 48_000,
-              recorder.format.channelCount == 1,
-              recorder.format.commonFormat == .pcmFormatFloat32 else {
-            recorder.stop()
-            throw AudioMediaError.unavailable(
-                "录音设备不能提供要求的 48 kHz 单声道 float32 PCM"
-            )
-        }
-        self.recorder = recorder
-        self.recorderID = ObjectIdentifier(recorder)
-        super.init()
-        recorder.delegate = self
-        guard recorder.prepareToRecord() else {
-            self.recorder = nil
-            self.recorderID = nil
-            recorder.stop()
-            throw AudioMediaError.unavailable("录音设备未能准备")
-        }
-    }
-
-    var currentSeconds: Double { recorder?.currentTime ?? 0 }
-
-    func start(
-        completion: @escaping @MainActor @Sendable (AudioRecordingResult) -> Void
-    ) throws -> Bool {
-        guard let recorder else { return false }
-        let operationID = UUID()
-        self.operationID = operationID
-        self.completion = completion
-        let started = recorder.record(forDuration: AudioLimits.maximumSeconds)
-        if !started {
-            self.operationID = nil
-            self.completion = nil
-        }
-        return started
-    }
-
-    func stop(error: String?) -> AudioRecordingResult {
-        guard let recorder else {
-            return AudioRecordingResult(
-                url: url,
-                error: error ?? "录音设备已关闭，无法确认刷新结果"
-            )
-        }
-        operationID = nil
-        completion = nil
-        recorder.stop()
-        self.recorder = nil
-        recorderID = nil
-        return AudioRecordingResult(url: url, error: error)
-    }
-
-    nonisolated func audioRecorderDidFinishRecording(
-        _ recorder: AVAudioRecorder,
-        successfully flag: Bool
-    ) {
-        let identity = ObjectIdentifier(recorder)
-        let message = flag ? nil : "录音设备提前停止"
-        Task { @MainActor [weak self] in
-            self?.finishFromDevice(recorderID: identity, error: message)
-        }
-    }
-
-    nonisolated func audioRecorderEncodeErrorDidOccur(
-        _ recorder: AVAudioRecorder,
-        error: Error?
-    ) {
-        let identity = ObjectIdentifier(recorder)
-        let message = error?.localizedDescription ?? "录音设备编码失败"
-        Task { @MainActor [weak self] in
-            self?.finishFromDevice(recorderID: identity, error: message)
-        }
-    }
-
-    private func finishFromDevice(recorderID: ObjectIdentifier, error: String?) {
-        guard self.recorderID == recorderID,
-              operationID != nil,
-              let recorder,
-              let callback = completion else { return }
-        operationID = nil
-        completion = nil
-        recorder.stop()
-        self.recorder = nil
-        self.recorderID = nil
-        callback(AudioRecordingResult(url: url, error: error))
     }
 }

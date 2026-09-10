@@ -62,6 +62,73 @@ public enum AudioMediaInspector {
         }
     }
 
+    /// Inspects one already-owned capture inode without resolving its display URL again.
+    /// Captures are frozen to little-endian mono Float32 CAF, so decoding the data chunk
+    /// directly also keeps validation and hashing on the exact descriptor supplied by the store.
+    struct DescriptorInspection: Sendable {
+        let inspection: AudioInspection
+        let fingerprint: AudioCaptureFingerprint
+    }
+
+    static func inspectCapture(descriptor: Int32) throws -> DescriptorInspection {
+        let initialFingerprint = try AudioSafeFile.captureFingerprint(descriptor)
+        let identity = try AudioSafeFile.identity(descriptor: descriptor,
+                                                  maximumBytes: AudioLimits.maximumBytes)
+        let layout = try AudioSafeFile.layout(descriptor: descriptor, byteCount: identity.size)
+        try validateLayoutLimits(layout)
+        guard layout.container == .caf, layout.channelCount > 0,
+              layout.bitDepth == 32, layout.floatingPoint, !layout.bigEndian,
+              layout.bytesPerFrame == layout.channelCount * 4 else {
+            throw AudioMediaError.invalidMedia("录音不是受支持的 float32 PCM CAF")
+        }
+        let contentSHA256 = try AudioSafeFile.sha256(descriptor: descriptor,
+                                                     byteCount: identity.size)
+        let bucketCount = min(AudioLimits.maximumWaveformBuckets, Int(layout.frameCount))
+        var minima = [Float](repeating: .infinity, count: bucketCount)
+        var maxima = [Float](repeating: -.infinity, count: bucketCount)
+        var frame: Int64 = 0
+        var bytes = [UInt8](repeating: 0, count: layout.bytesPerFrame * 4_096)
+        while frame < layout.frameCount {
+            try Task.checkCancellation()
+            let frames = min(4_096, Int(layout.frameCount - frame))
+            try AudioSafeFile.readExact(descriptor: descriptor,
+                                        offset: layout.audioDataOffset + Int(frame) * layout.bytesPerFrame,
+                                        into: &bytes, count: frames * layout.bytesPerFrame)
+            for index in 0..<frames {
+                let absolute = frame + Int64(index)
+                let bucket = min(bucketCount - 1,
+                                 Int(absolute * Int64(bucketCount) / layout.frameCount))
+                for channel in 0..<layout.channelCount {
+                    let offset = index * layout.bytesPerFrame + channel * 4
+                    let bits = UInt32(bytes[offset]) | UInt32(bytes[offset + 1]) << 8
+                        | UInt32(bytes[offset + 2]) << 16 | UInt32(bytes[offset + 3]) << 24
+                    let sample = Float(bitPattern: bits)
+                    guard sample.isFinite else {
+                        throw AudioMediaError.invalidMedia("PCM 包含非有限采样值")
+                    }
+                    minima[bucket] = min(minima[bucket], sample)
+                    maxima[bucket] = max(maxima[bucket], sample)
+                }
+            }
+            frame += Int64(frames)
+        }
+        _ = try AudioSafeFile.identity(descriptor: descriptor,
+                                       maximumBytes: AudioLimits.maximumBytes)
+        let finalFingerprint = try AudioSafeFile.captureFingerprint(descriptor)
+        guard finalFingerprint == initialFingerprint else {
+            throw AudioMediaError.unavailable("录音在读取期间发生改变")
+        }
+        let format = AudioFormatInfo(container: .caf, sampleRate: layout.sampleRate,
+                                     channelCount: layout.channelCount,
+                                     frameCount: layout.frameCount, bitDepth: layout.bitDepth,
+                                     floatingPoint: layout.floatingPoint)
+        let inspection = AudioInspection(format: format, contentSHA256: contentSHA256,
+                                         waveform: zip(minima, maxima).map {
+                                             AudioPeak(minimum: $0.0, maximum: $0.1)
+                                         })
+        return DescriptorInspection(inspection: inspection, fingerprint: finalFingerprint)
+    }
+
     /// Copies the already-opened selected inode exactly once. Validation is intentionally done
     /// on the owned result, while the source identity is compared before this method returns.
     static func withOriginalSource<T>(at source: URL,
@@ -243,6 +310,9 @@ private struct AudioContainerLayout {
     let frameCount: Int64
     let bitDepth: Int
     let floatingPoint: Bool
+    let audioDataOffset: Int
+    let bytesPerFrame: Int
+    let bigEndian: Bool
 }
 
 private enum AudioSafeFile {
@@ -318,14 +388,17 @@ private enum AudioSafeFile {
         guard offset == byteCount, let format, let dataBytes, dataBytes > 0,
               dataBytes % format.4 == 0 else { throw AudioMediaError.invalidMedia("WAV PCM 帧未完整对齐") }
         return .init(container: .wav, sampleRate: format.0, channelCount: format.1,
-                     frameCount: Int64(dataBytes / format.4), bitDepth: format.2, floatingPoint: format.3)
+                     frameCount: Int64(dataBytes / format.4), bitDepth: format.2,
+                     floatingPoint: format.3, audioDataOffset: 0,
+                     bytesPerFrame: format.4, bigEndian: false)
     }
 
     private static func cafLayout(_ descriptor: Int32, byteCount: Int) throws -> AudioContainerLayout {
         guard byteCount >= 8 else { throw AudioMediaError.invalidMedia("CAF 文件头被截断") }
         var offset = 8
-        var format: (Double, Int, Int, Bool, Int, Int)?
+        var format: (Double, Int, Int, Bool, Int, Int, Bool)?
         var audioBytes: Int?
+        var audioDataOffset: Int?
         while offset < byteCount {
             guard byteCount - offset >= 12 else { throw AudioMediaError.invalidMedia("CAF 数据块头被截断") }
             let chunk = try readExact(descriptor, offset: offset, count: 12)
@@ -348,20 +421,30 @@ private enum AudioSafeFile {
                 let bits = Int(big32(bytes, 28))
                 guard formatID == "lpcm", bytesPerPacket > 0, framesPerPacket > 0,
                       channels > 0, bits > 0 else { throw AudioMediaError.unsupportedFormat }
-                format = (rate, channels, bits, flags & UInt32(kAudioFormatFlagIsFloat) != 0,
-                          bytesPerPacket, framesPerPacket)
+                // CAF LPCM uses bit 1 for LITTLE endian; ASBD uses that bit for BIG endian.
+                // CAFFile.h / Apple CAF specification define these container masks as 1 and 2.
+                format = (rate, channels, bits, flags & 1 != 0,
+                          bytesPerPacket, framesPerPacket, flags & 2 == 0)
             } else if type == "data" {
                 guard audioBytes == nil, size >= 4 else { throw AudioMediaError.invalidMedia("CAF data 数据块无效") }
                 audioBytes = size - 4
+                audioDataOffset = payload + 4
             }
             offset = payload + size
         }
-        guard offset == byteCount, let format, let audioBytes, audioBytes > 0,
-              audioBytes % format.4 == 0 else { throw AudioMediaError.invalidMedia("CAF PCM 帧未完整对齐") }
+        guard offset == byteCount, let format, let audioBytes, let audioDataOffset, audioBytes > 0,
+              format.4 % format.5 == 0,
+              format.4 / format.5 == format.1 * ((format.2 + 7) / 8),
+              audioBytes % format.4 == 0 else {
+            throw AudioMediaError.invalidMedia("CAF PCM 帧未完整对齐")
+        }
         let packets = audioBytes / format.4
         guard packets <= Int(Int64.max) / format.5 else { throw AudioMediaError.limitExceeded }
         return .init(container: .caf, sampleRate: format.0, channelCount: format.1,
-                     frameCount: Int64(packets * format.5), bitDepth: format.2, floatingPoint: format.3)
+                     frameCount: Int64(packets * format.5), bitDepth: format.2,
+                     floatingPoint: format.3, audioDataOffset: audioDataOffset,
+                     bytesPerFrame: format.4 / format.5,
+                     bigEndian: format.6)
     }
 
     private static func readExact(_ descriptor: Int32, offset: Int, count: Int) throws -> [UInt8] {
@@ -378,6 +461,41 @@ private enum AudioSafeFile {
             completed += readCount
         }
         return result
+    }
+
+    static func readExact(descriptor: Int32, offset: Int,
+                          into buffer: inout [UInt8], count: Int) throws {
+        guard count >= 0, count <= buffer.count else {
+            throw AudioMediaError.invalidMedia("无效读取长度")
+        }
+        var completed = 0
+        while completed < count {
+            let readCount = buffer.withUnsafeMutableBytes { raw in
+                Darwin.pread(descriptor, raw.baseAddress!.advanced(by: completed), count - completed,
+                             off_t(offset + completed))
+            }
+            if readCount < 0, errno == EINTR { continue }
+            guard readCount > 0 else { throw AudioMediaError.invalidMedia("容器结构被截断") }
+            completed += readCount
+        }
+    }
+
+    static func identity(descriptor: Int32, maximumBytes: Int) throws -> AudioFileIdentity {
+        var info = stat()
+        guard fstat(descriptor, &info) == 0 else {
+            throw AudioMediaError.io(String(cString: strerror(errno)))
+        }
+        let identity = try AudioFileIdentity(info)
+        guard identity.size <= maximumBytes else { throw AudioMediaError.limitExceeded }
+        return identity
+    }
+
+    static func captureFingerprint(_ descriptor: Int32) throws -> AudioCaptureFingerprint {
+        var info = stat()
+        guard fstat(descriptor, &info) == 0 else {
+            throw AudioMediaError.io(String(cString: strerror(errno)))
+        }
+        return AudioCaptureFingerprint(info)
     }
 
     private static func little16(_ bytes: [UInt8], _ offset: Int) -> UInt16 {
