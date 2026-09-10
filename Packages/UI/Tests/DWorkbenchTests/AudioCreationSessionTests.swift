@@ -132,7 +132,14 @@ struct AudioCreationSessionTests {
         subject.updateAudioCreationDraft(edited, contextID: currentContext, documentID: newID)
         let manifestURL = project.appendingPathComponent("project.json")
         let original = try Data(contentsOf: manifestURL)
-        let changed = original + Data("\n".utf8)
+        var external = try #require(JSONSerialization.jsonObject(with: original) as? [String: Any])
+        var documents = try #require(external["documents"] as? [[String: Any]])
+        let index = try #require(documents.firstIndex { ($0["id"] as? String)?.lowercased() == newID.uuidString.lowercased() })
+        var storedDraft = try #require(documents[index]["audioCreation"] as? [String: Any])
+        storedDraft["prompt"] = "另一个编辑器保存的作品条件"
+        documents[index]["audioCreation"] = storedDraft
+        external["documents"] = documents
+        let changed = try JSONSerialization.data(withJSONObject: external, options: [.sortedKeys])
         try changed.write(to: manifestURL)
         #expect(!(await subject.saveAudioCreation(contextID: currentContext, documentID: newID)))
         #expect(subject.audioCreationDraft?.prompt == edited.prompt)
