@@ -1,5 +1,18 @@
 # D 当前行动指南
 
+## 2026-09-10 集中实测新停点（覆盖下面上一续办状态，历史保留）
+
+本轮文档推送在执行前被自动审批拒绝（包含本机路径/模型与测试审计内容的对外发布范围）；仅保存本地文档提交，无上传重试。具体H14与live-push-rejection.json保留，不把待办说成已推送。
+
+H11真实SA3 small music6秒生成、repeat、变体、区间重绘已完成，固定精度保持；重绘范围外PCM一致。H12 1.5B除既有两次短改写外，本次两次真实取消/释放/下一任务通过。音频新取消检查未通过：双管道并发读取时进度被延迟至子进程结束附近；CLI130不能代替真实提前取消。两次同Python进程清理active18bytes/cache0且未增长，18bytes精确归属unknown。
+
+H09仍未到系统麦克风提示，实际Start被祖先路径检查拒绝；建议在原项目rootFD内校验，原件不覆盖/许可前后重查均保留。H10真实GUI导入/播放动作/Unicode注释与帧片段保存/原件和片段安全导出通过；真人听感未答，重开检查时Mac锁定。自有实例已结束，普通D和源个人scheme未变。需要解锁后继续真人项；不重新要求下载/条款/全盘授权。
+
+两个新生产修补超出既有原任务修复预算，保持提案等待额外有界授权：H09路径验证与H11双管道及时读取，均保持原标准、直接回归和非实现者审核；没有新Worker/生产修改/默认启用。源产品仍beaaaf82d845e672c6a3b661d928654affc00518；本轮源起点5e7e024f7194e5a7a15424c5254b1837ac8efee4，音频受测d1a5c26e3d2eda84ad7641a98b5aa33ce7f55407，HUM受测372a8acadf39b92faf4b17b6315f0f63774e4cff。候选未源接纳，不把候选实测写成用户普通D已具备。
+
+证据入口：`D-Development/AgentTrials/D-AUDIO-BACKEND-01/run-20260909T152406Z-h11-authorized/live-acceptance-checkpoint.json`、`live-final-receipt.json`（最终版本/保护）；HUM同级`run-20260909T152120Z-h09-authorized/h10-import-export-verification.json`、`review/path-response.md`；H12 `run-20260909T151340Z-h12-authorized/cancel/lead-verification.json`。持续人工队列见[清单](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md#人工协作待办持续维护入口)。下一步只是完成当前验收与限定修补，不开始新产品批次。
+
+
 ## 2026-09-10 集中授权续办检查点
 
 H09/H10/H11/H12均已明确获用户批准，不再等待原授权。H12固定1.5B权重10文件880,170,545bytes完整核验；实际统一CLI连续两次中文改写完成，每轮release active/cache=0，峰值966,847,960bytes。受测二进制来自d1a5c26e3d2eda84ad7641a98b5aa33ce7f55407，候选03798abfe17229f7678f9fcd611df87da7c775ac仅后续文档；不是1.5B完整模型库GUI/取消/专业质量验收。
@@ -15,19 +28,17 @@ H10用户最初已保存退出且空闲。首个自有测试PID37620创建本轮
 证据：H09 `/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-HUM-ENTRY-01/run-20260909T152120Z-h09-authorized`（preparation/label-fix、signed-build2、review/routing及两次review、app-run/result、protection-checkpoint）；H11 `/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-AUDIO-BACKEND-01/run-20260909T152406Z-h11-authorized`（authorization、download/environment/copies、environment-launch-diagnosis、generate失败、inspect-copies、retry-resource-rejection）；H12 `/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-AUDIO-BACKEND-01/run-20260909T151340Z-h12-authorized`（download-result、normal/report）。开发与用户媒体来源分开；本次Lead实施与实测，Sol只读审核；完整Lead/订阅消耗unknown。
 
 
-## 当前检查点：音频后端候选与跨配置验证（2026-09-10）
+## 2026-09-10：音频后端候选与待授权清单
 
-源产品基线 beaaaf82d845e672c6a3b661d928654affc00518；实现保留在 `codex/d-audio-backend-01`。**组合工程验证和既有图文实推通过，真实音频未验收，尚未把候选代码接入源分支或普通 D。** 后续源若有本批状态记录提交，仅为文档；完整最终SHA/推送状态见任务回执。
+本次源产品仍保持已验收 beaaaf82d845e672c6a3b661d928654affc00518 的代码；本提交仅更新当前状态和人工清单。音频后端/跨配置实现与证据在 [候选批次](https://github.com/lfrledh/D/blob/03798abfe17229f7678f9fcd611df87da7c775ac/docs/tasks/D-AUDIO-BACKEND-01.md)，候选 `codex/d-audio-backend-01` / `03798abfe17229f7678f9fcd611df87da7c775ac`，实际受测 `d1a5c26e3d2eda84ad7641a98b5aa33ce7f55407`，两者只有七份文档差异。实际推送状态及最终源SHA见下述外部回执，不把本段写成尚未完成的推送证明。
 
-- 音频：AudioRequest → 统一任务/重推理许可 → 本地 Python SA3适配 → 44.1kHz双声道float32 WAV及冻结记录。generate/variation/inpaint、独立子进程停止/排空、文件校验与原件保护已实现；实际跨语言CLI三种操作CPU夹具通过。SA3真实权重/依赖未就绪，不能称已出声、听感通过或普通工作台可用。
-- 跨配置：预算由主机内存政策计算；Qwen2.5 0.5/1.5/7/32B固定4-bit版本可分别登记校验；FLUX4Bq8显式尺寸profile贯穿张量到PNG，普通UI仍原512预设。1.5/7/32B与1024/2048实推待验证，不等于任意模型/Intel兼容。
-- 完整组合受测 `d1a5c26e3d2eda84ad7641a98b5aa33ce7f55407`：Python21方法、核心30方法通过；全UI包174方法报告，其中173执行通过/1既有可选权重项跳过；三个后端CPU套件42方法/100展开执行通过；CLI和无签名应用编译通过。三种真实跨语言CPU夹具通过。原27方法选择漏了一个类，已按实际类名完整重跑42，不相加为69。
-- 实际模型：上述组合的既有0.5B文本10类和512²图像17类CLI回归完整通过；另768×512/4步/guidance1/seed42真图52.710秒，MLX峰值6,309,409,880bytes，释放active/cache均0，PNG可解码，Lead目视无明显方向/颜色异常。不是大模型、长时负载或音频推理证明。
-- 阻塞：H11待用户确认SA3/Gemma条款/适用登记，随后才准备独立mlx/sentencepiece环境及固定音频权重；H12新1.5B下载被自动审批拒绝待明确答复。当前H13资源窗口已确认并完成串行图文回归。H09/H10保留旧音频UI候选的独立人工门槛。
+组合Python21、核心30方法通过；全UI包174方法报告（173通过/1既有可选权重检查跳过）；完整后端CPU42方法/100展开通过，三种实际跨语言音频CPU夹具通过；应用/CLI无签名编译通过。既有文本10类和图像17类CLI真实回归完整通过，另768×512 q8真图52.710秒、MLX峰值6309409880bytes、释放active/cache0。音频仍未真实出声，较大文字型号及高配Mac矩阵待验证，候选代码尚未默认接纳；原声音UI/schema4候选亦未混入。
 
-四个实现工作包由Sol/high受限CLI完成，Lead审查/整合/实际验证；Python和运行时各耗用两轮普通修复，运行时另一次有界Lead修补并经非实现者只读审核接受。共享契约/清晰化错误与测试启动问题另记，不把最终结果全归为Worker独立通过。当前新实现/审核/验证进程已结束；最初超时旧FIFO测试子进程最终退出码unknown，原证据保留，未发现剩余已知源写入者，不能声称全系统写锁或完整进程审计。
+下一动作集中于人工清单H11/H12：SA3/Gemma使用条款/适用登记确认与后续独立环境；被自动审批拒绝的新1.5B下载明确范围答复。H13当前空闲确认及串行图文实测已完成；H09/H10继续是原录音/声音UI独立门槛。不要重做已完成协作试验或为CPU工程问题要求全盘权限。
 
-保护：个人scheme完整摘要ca3635d88aa5a15397b90e528667c66c0e6db7e596176e885c79d194b544206c保持未暂存、索引无夹带；没有打开/关闭/重签/改写普通D或操作既有作品。复用 [任务记录](tasks/D-AUDIO-BACKEND-01.md)、[调用/硬件指南](AUDIO_BACKEND_GUIDE.zh-CN.md)、外盘run-20260909T123045Z/final-candidate-receipt.json恢复。下一步仅完成音频真实生成/变体/重绘/取消释放与听感验收；通过后再接创作者候选比较/采用/保存。传统DAW、文字高级功能、全部META不是前置。
+Lead协调四个Sol/high工作包，Python/运行时各两轮普通修复；运行时另一次有界Lead修补经过非实现者只读审核。真实音频验收未完成，不能宣布本阶段全部完成或普通D已能生成音乐。源scheme未暂存排序修改保持，普通D/用户作品未操作；当前新实现/审核/验证进程均已结束，最初FIFO超时子进程最终退出码unknown的历史保留。现有证据不等于全系统进程审计。恢复先核对仓库/权限/活动任务，而非只信摘要。
+
+外盘持久回执：`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-AUDIO-BACKEND-01/run-20260909T123045Z/final-candidate-receipt.json`。内含候选/源版本、保护与推送证据；音频真实验收通过后再接候选比较/采用/安全保存，传统DAW与文字高级功能不是前置。
 
 人工协作事项的持续入口：[待办与已解决记录](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md#人工协作待办持续维护入口)。用户回到 Mac 时先读此处；不把旧失败重复算作未处理。
 

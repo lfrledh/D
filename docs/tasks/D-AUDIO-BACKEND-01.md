@@ -80,3 +80,22 @@ H09/H10：修正版普通签名实例到达Start后被AudioTransport祖先路径
 预算停点/待批准有界方案：Runtime原初交+两修复+一次Lead接管已消耗，本次真实双管道问题不是偷偷追加第三轮。建议仅AudioProviderProcess.swift及直接AudioBackendTests回归，改为各自及时且有界的管道读取，保留事件/解析/输出预算、完整drain、TERM/KILL和租约语义。增加silentstderr/分段stdout在退出前被消费的真实子进程反例，复验取消/下一任务/timeout/输出失败及既有CPU；真实SA3保持同配置复验。H09另在原HUM任务记录列出路径检查限定方案。两项均需明确额外收尾授权，不重置原预算；若有界修补后仍失败停报，重要实现由非实现者只读复核。不改精度/签名/权限/公共推理契约，不默认源集成。
 
 证据：AUDIO run-20260909T152406Z-h11-authorized/live-acceptance-checkpoint.json，generate-copies、real-operations、memory-lifetime、cancel-handoff/cancel-denoising、progress-pipe-diagnosis和progress-two-pipe-diagnosis；H12 run-20260909T151340Z-h12-authorized/cancel/lead-verification.json；HUM run-20260909T152120Z-h09-authorized/h10-import-export-verification.json、recording-path-failure.json、review/path-response.md、path-routing.json、live-protection-checkpoint.json。本次Lead实测与诊断，无生产重写；Sol/high只读路径诊断433.486秒（不等于独立执行测试），完整Lead/订阅费用unknown，未重算历史用量。所有当前自有子进程结束；未宣称系统写锁。个人scheme未暂存且内容/索引、普通D四文件保持。最终文档提交/推送和恢复版本见本run live-final-receipt.json。
+
+## 2026-09-10 源状态同步：仅文档冲突整合
+
+源快照 9b20e0f20039027ce75b2bae00bffa215bc1789e 与音频候选 a0bfd0ec47ec40f93c7342934fc82dfd0ac754d0 保留历史合并。仅 CURRENT_ACTIONS/FAILURE_AND_PERMISSION_AUDIT 内容冲突；逐项对照后，全局入口保留源较新的 H09-H14 状态。候选特有的较早说明完整保存在下方作为历史，不作为本轮验收结论。产品、签名、权限和测试代码无冲突/无改动；未引入 HUM/schema4。
+
+## 当前检查点：音频后端候选与跨配置验证（2026-09-10）
+
+源产品基线 beaaaf82d845e672c6a3b661d928654affc00518；实现保留在 `codex/d-audio-backend-01`。**组合工程验证和既有图文实推通过，真实音频未验收，尚未把候选代码接入源分支或普通 D。** 后续源若有本批状态记录提交，仅为文档；完整最终SHA/推送状态见任务回执。
+
+- 音频：AudioRequest → 统一任务/重推理许可 → 本地 Python SA3适配 → 44.1kHz双声道float32 WAV及冻结记录。generate/variation/inpaint、独立子进程停止/排空、文件校验与原件保护已实现；实际跨语言CLI三种操作CPU夹具通过。SA3真实权重/依赖未就绪，不能称已出声、听感通过或普通工作台可用。
+- 跨配置：预算由主机内存政策计算；Qwen2.5 0.5/1.5/7/32B固定4-bit版本可分别登记校验；FLUX4Bq8显式尺寸profile贯穿张量到PNG，普通UI仍原512预设。1.5/7/32B与1024/2048实推待验证，不等于任意模型/Intel兼容。
+- 完整组合受测 `d1a5c26e3d2eda84ad7641a98b5aa33ce7f55407`：Python21方法、核心30方法通过；全UI包174方法报告，其中173执行通过/1既有可选权重项跳过；三个后端CPU套件42方法/100展开执行通过；CLI和无签名应用编译通过。三种真实跨语言CPU夹具通过。原27方法选择漏了一个类，已按实际类名完整重跑42，不相加为69。
+- 实际模型：上述组合的既有0.5B文本10类和512²图像17类CLI回归完整通过；另768×512/4步/guidance1/seed42真图52.710秒，MLX峰值6,309,409,880bytes，释放active/cache均0，PNG可解码，Lead目视无明显方向/颜色异常。不是大模型、长时负载或音频推理证明。
+- 阻塞：H11待用户确认SA3/Gemma条款/适用登记，随后才准备独立mlx/sentencepiece环境及固定音频权重；H12新1.5B下载被自动审批拒绝待明确答复。当前H13资源窗口已确认并完成串行图文回归。H09/H10保留旧音频UI候选的独立人工门槛。
+
+四个实现工作包由Sol/high受限CLI完成，Lead审查/整合/实际验证；Python和运行时各耗用两轮普通修复，运行时另一次有界Lead修补并经非实现者只读审核接受。共享契约/清晰化错误与测试启动问题另记，不把最终结果全归为Worker独立通过。当前新实现/审核/验证进程已结束；最初超时旧FIFO测试子进程最终退出码unknown，原证据保留，未发现剩余已知源写入者，不能声称全系统写锁或完整进程审计。
+
+保护：个人scheme完整摘要ca3635d88aa5a15397b90e528667c66c0e6db7e596176e885c79d194b544206c保持未暂存、索引无夹带；没有打开/关闭/重签/改写普通D或操作既有作品。复用 [任务记录](tasks/D-AUDIO-BACKEND-01.md)、[调用/硬件指南](AUDIO_BACKEND_GUIDE.zh-CN.md)、外盘run-20260909T123045Z/final-candidate-receipt.json恢复。下一步仅完成音频真实生成/变体/重绘/取消释放与听感验收；通过后再接创作者候选比较/采用/保存。传统DAW、文字高级功能、全部META不是前置。
+
