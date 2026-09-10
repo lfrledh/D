@@ -17,6 +17,7 @@ public actor ProjectStore {
     public static let versionOneBackupFilename = "project.v1.backup.json"
     public static let versionTwoBackupFilename = "project.v2.backup.json"
     public static let versionThreeBackupFilename = "project.v3.backup.json"
+    public static let versionFourBackupFilename = "project.v4.backup.json"
     private let rootFD: Int32
     private let lockFD: Int32
     private var manifest: ProjectManifest
@@ -99,6 +100,9 @@ public actor ProjectStore {
         } else if loaded.schemaVersion == 3 {
             loaded = try ProjectFiles.migrateVersionThree(loaded, original: data, in: descriptor,
                                                         checkpoint: migrationCheckpoint)
+        } else if loaded.schemaVersion == 4 {
+            loaded = try ProjectFiles.migrateVersionFour(loaded, original: data, in: descriptor,
+                                                       checkpoint: migrationCheckpoint)
         } else { try ProjectFiles.validate(loaded) }
         let store = ProjectStore(rootURL: root, rootFD: descriptor, lockFD: lock, manifest: loaded)
         // Ownership of both descriptors has moved to the actor before recovery can throw.
@@ -145,6 +149,95 @@ public actor ProjectStore {
         return manifest
     }
 
+    public func createAudioCreation(name: String = "声音创作",
+                                    sourceAssetID: UUID? = nil) throws -> ProjectManifest {
+        try checkLocation()
+        if let sourceAssetID {
+            guard let source = manifest.assets.first(where: { $0.id == sourceAssetID }),
+                  source.metadata.audio != nil else { throw ProjectStoreError.missingAsset }
+        }
+        let draft = AudioCreationDraft(operation: sourceAssetID == nil ? .generate : .variation)
+        let document = ProjectDocument(name: name, kind: .audio, audioCreation: draft,
+                                       sourceAssetID: sourceAssetID)
+        var candidate = manifest
+        candidate.documents.append(document)
+        candidate.activeDocumentID = document.id
+        try commit(candidate)
+        return manifest
+    }
+
+    public func saveAudioCreation(_ draft: AudioCreationDraft, documentID: UUID,
+                                  expectedRevision: UUID) throws -> ProjectManifest {
+        let index = try documentIndex(documentID)
+        guard manifest.documents[index].kind == .audio,
+              let current = manifest.documents[index].audioCreation,
+              manifest.documents[index].audioDraft == nil else {
+            throw ProjectStoreError.invalidProject("声音创作稿与文档不匹配。")
+        }
+        guard current.revision == expectedRevision else { throw ProjectStoreError.externalModification }
+        guard current.rejectedAssetIDs == draft.rejectedAssetIDs else {
+            throw ProjectStoreError.invalidProject("候选拒绝状态必须通过独立操作修改。")
+        }
+        if current == draft { return manifest }
+        guard current.revision != draft.revision else {
+            throw ProjectStoreError.invalidProject("声音创作内容已改变，修订编号不能重复。")
+        }
+        var candidate = manifest
+        candidate.documents[index].audioCreation = draft
+        try commit(candidate)
+        return manifest
+    }
+
+    public func prepareAudioCreationSource(assetID: UUID, runID: UUID) throws -> AudioSourceReference {
+        guard let asset = manifest.assets.first(where: { $0.id == assetID }),
+              let registered = asset.metadata.audio else { throw ProjectStoreError.missingAsset }
+        try checkLocation()
+        let policy = try ProjectFiles.inspectionPolicy(for: asset, jobs: manifest.jobs)
+        let sourceURL = try assetURL(for: asset)
+        let sourceInspection = try AudioMediaInspector.inspect(at: sourceURL, policy: policy)
+        try ProjectFiles.requireRegisteredAudio(sourceInspection, matches: registered)
+        try ProjectFiles.validateCreationSource(sourceInspection.format)
+
+        let inputRoot = try ProjectFiles.openOrCreateDirectory("AudioInputs", in: rootFD)
+        defer { Darwin.close(inputRoot) }
+        let runName = runID.uuidString
+        guard mkdirat(inputRoot, runName, 0o700) == 0 else {
+            if errno == EEXIST { throw ProjectStoreError.alreadyExists("AudioInputs/\(runName)") }
+            throw ProjectFiles.error()
+        }
+        guard fsync(inputRoot) == 0 else { throw ProjectFiles.error() }
+        let runDirectory = try ProjectFiles.openRelativeDirectory(runName, in: inputRoot)
+        defer { Darwin.close(runDirectory) }
+        let destination = openat(runDirectory, "source.wav",
+                                 O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0o600)
+        guard destination >= 0 else {
+            if errno == EEXIST { throw ProjectStoreError.alreadyExists("AudioInputs/\(runName)/source.wav") }
+            throw ProjectFiles.error()
+        }
+        do {
+            try AudioMediaInspector.withOriginalSource(at: sourceURL, policy: policy) { source, byteCount in
+                try AudioMediaInspector.copyOriginal(from: source, byteCount: byteCount, to: destination)
+            }
+            guard fsync(destination) == 0 else { throw ProjectFiles.error() }
+            Darwin.close(destination)
+        } catch {
+            Darwin.close(destination)
+            throw error
+        }
+        guard fsync(runDirectory) == 0 else { throw ProjectFiles.error() }
+
+        let frozenURL = rootURL.appendingPathComponent("AudioInputs/\(runName)/source.wav")
+        let frozen = try AudioMediaInspector.inspect(at: frozenURL, policy: policy)
+        try ProjectFiles.requireRegisteredAudio(frozen, matches: registered)
+        try ProjectFiles.validateCreationSource(frozen.format)
+        let finalSource = try AudioMediaInspector.inspect(at: sourceURL, policy: policy)
+        try ProjectFiles.requireRegisteredAudio(finalSource, matches: registered)
+        return AudioSourceReference(url: frozenURL, sha256: frozen.contentSHA256,
+                                    frameCount: frozen.format.frameCount,
+                                    sampleRate: Int(frozen.format.sampleRate),
+                                    channels: frozen.format.channelCount)
+    }
+
     public func saveTextDraft(_ draft: TextDraftDocument, documentID: UUID,
                               expectedRevision: UUID) throws -> ProjectManifest {
         let index = try documentIndex(documentID)
@@ -187,10 +280,11 @@ public actor ProjectStore {
 
     public func setSelectedAsset(_ id: UUID?, documentID: UUID) throws -> ProjectManifest {
         let index = try documentIndex(documentID)
-        guard manifest.documents[index].kind == .image else {
-            throw ProjectStoreError.invalidProject("文字文档不能选择图像作品。")
+        let document = manifest.documents[index]
+        guard document.kind == .image || document.audioCreation != nil else {
+            throw ProjectStoreError.invalidProject("该文档不能选择候选作品。")
         }
-        guard manifest.documents[index].selectedAssetID != id else { return manifest }
+        guard document.selectedAssetID != id else { return manifest }
         var candidate = manifest
         candidate.documents[index].selectedAssetID = id
         try commit(candidate)
@@ -201,12 +295,39 @@ public actor ProjectStore {
     /// a candidate never silently replaces the document's adopted result.
     public func adoptAsset(id: UUID?, documentID: UUID) throws -> ProjectManifest {
         let index = try documentIndex(documentID)
-        guard manifest.documents[index].kind == .image else {
-            throw ProjectStoreError.invalidProject("文字文档不能采用图像作品。")
+        let document = manifest.documents[index]
+        guard document.kind == .image || document.audioCreation != nil else {
+            throw ProjectStoreError.invalidProject("该文档不能采用候选作品。")
         }
-        guard manifest.documents[index].adoptedAssetID != id else { return manifest }
+        guard document.adoptedAssetID != id else { return manifest }
         var candidate = manifest
         candidate.documents[index].adoptedAssetID = id
+        try commit(candidate)
+        return manifest
+    }
+
+    public func setAudioCandidateRejected(id: UUID, rejected: Bool,
+                                          documentID: UUID) throws -> ProjectManifest {
+        let index = try documentIndex(documentID)
+        guard var draft = manifest.documents[index].audioCreation,
+              let asset = manifest.assets.first(where: { $0.id == id }),
+              asset.role == .result, let jobID = asset.jobID,
+              manifest.jobs.first(where: { $0.id == jobID })?.documentID == documentID else {
+            throw ProjectStoreError.invalidProject("候选不属于该声音创作文档。")
+        }
+        let contains = draft.rejectedAssetIDs.contains(id)
+        guard contains != rejected else { return manifest }
+        if rejected { draft.rejectedAssetIDs.append(id) }
+        else { draft.rejectedAssetIDs.removeAll { $0 == id } }
+        draft.revision = UUID()
+        var candidate = manifest
+        candidate.documents[index].audioCreation = draft
+        if rejected, candidate.documents[index].selectedAssetID == id {
+            candidate.documents[index].selectedAssetID = nil
+        }
+        if rejected, candidate.documents[index].adoptedAssetID == id {
+            candidate.documents[index].adoptedAssetID = nil
+        }
         try commit(candidate)
         return manifest
     }
@@ -263,8 +384,47 @@ public actor ProjectStore {
     public func enqueue(request: InferenceRequest, documentID: UUID? = nil) throws -> ProjectManifest {
         try request.validate()
         let index = try documentIndex(documentID ?? manifest.activeDocumentID)
-        guard manifest.documents[index].kind == .image else {
-            throw ProjectStoreError.invalidProject("文字文档不能创建图像任务。")
+        let document = manifest.documents[index]
+        switch request.input {
+        case .image:
+            guard document.kind == .image else {
+                throw ProjectStoreError.invalidProject("只有图像文档能创建图像任务。")
+            }
+        case .audio(let audio):
+            guard document.kind == .audio, let draft = document.audioCreation,
+                  document.audioDraft == nil else {
+                throw ProjectStoreError.invalidProject("只有声音创作文档能创建音频任务。")
+            }
+            try ProjectFiles.validateCurrentAudioProfile(audio)
+            if let sourceID = document.sourceAssetID {
+                guard let asset = manifest.assets.first(where: { $0.id == sourceID }),
+                      let metadata = asset.metadata.audio, let source = audio.source else {
+                    throw ProjectStoreError.invalidProject("声音创作来源不存在或请求未携带来源快照。")
+                }
+                let expectedURL = rootURL.appendingPathComponent(
+                    "AudioInputs/\(request.id.uuidString)/source.wav")
+                guard source.url.path == expectedURL.path,
+                      source.url.standardizedFileURL == expectedURL.standardizedFileURL else {
+                    throw ProjectStoreError.unsafePath(source.url.path)
+                }
+                let policy = try ProjectFiles.inspectionPolicy(for: asset, jobs: manifest.jobs)
+                let inspection = try AudioMediaInspector.inspect(at: expectedURL, policy: policy)
+                try ProjectFiles.requireRegisteredAudio(inspection, matches: metadata)
+                try ProjectFiles.validateCreationSource(inspection.format)
+                guard source.sha256 == inspection.contentSHA256,
+                      source.frameCount == inspection.format.frameCount,
+                      source.sampleRate == Int(inspection.format.sampleRate),
+                      source.channels == inspection.format.channelCount else {
+                    throw ProjectStoreError.externalModification
+                }
+            } else if audio.source != nil {
+                throw ProjectStoreError.invalidProject("无来源的声音创作文档不能提交参考音频。")
+            }
+            guard try draft.makeRequest(source: audio.source) == audio else {
+                throw ProjectStoreError.invalidProject("音频请求与当前声音创作条件不一致。")
+            }
+        case .text:
+            throw ProjectStoreError.invalidProject("文字任务不由项目作品队列持久化。")
         }
         guard !manifest.jobs.contains(where: { $0.id == request.id }) else {
             throw ProjectStoreError.invalidProject("任务编号重复。")
@@ -292,22 +452,51 @@ public actor ProjectStore {
     public func complete(id: UUID, result: InferenceResult) throws -> ProjectManifest {
         guard let index = manifest.jobs.firstIndex(where: { $0.id == id }) else { throw ProjectStoreError.missingJob }
         guard !manifest.jobs[index].state.isTerminal else { throw ProjectStoreError.invalidTransition }
-        guard !result.artifacts.isEmpty else { throw ProjectStoreError.invalidProject("生成任务没有交付图片。") }
         try checkLocation()
         var candidate = manifest
-        for artifact in result.artifacts {
-            guard artifact.mediaType == "image/png" else {
-                throw ProjectStoreError.invalidProject("当前工作台只登记 PNG 生成结果。")
+        switch candidate.jobs[index].request.input {
+        case .image:
+            guard !result.artifacts.isEmpty else { throw ProjectStoreError.invalidProject("生成任务没有交付图片。") }
+            for artifact in result.artifacts {
+                guard artifact.mediaType == "image/png" else {
+                    throw ProjectStoreError.invalidProject("当前图像任务只登记 PNG 生成结果。")
+                }
+                let relative = try ProjectFiles.relativeArtifact(artifact.url, root: rootURL, jobID: id)
+                guard !candidate.assets.contains(where: { $0.relativePath == relative }) else {
+                    throw ProjectStoreError.invalidProject("图片已登记，不能重复引用。")
+                }
+                let metadata = try readPNG(relative: relative, job: candidate.jobs[index])
+                let asset = ProjectAsset(jobID: id, relativePath: relative, metadata: metadata,
+                                         name: "候选 \(candidate.assets.count + 1)")
+                candidate.assets.append(asset)
+                candidate.jobs[index].artifactIDs.append(asset.id)
             }
-            let relative = try ProjectFiles.relativeArtifact(artifact.url, root: rootURL, jobID: id)
+        case .audio(let audio):
+            guard result.artifacts.count == 1, let artifact = result.artifacts.first,
+                  artifact.mediaType == "audio/wav" else {
+                throw ProjectStoreError.invalidProject("音频任务必须交付唯一 WAV 结果。")
+            }
+            let relative = try ProjectFiles.relativeAudioArtifact(artifact.url, root: rootURL, jobID: id)
             guard !candidate.assets.contains(where: { $0.relativePath == relative }) else {
-                throw ProjectStoreError.invalidProject("图片已登记，不能重复引用。")
+                throw ProjectStoreError.invalidProject("音频结果已登记，不能重复引用。")
             }
-            let metadata = try readPNG(relative: relative, job: candidate.jobs[index])
-            let asset = ProjectAsset(jobID: id, relativePath: relative, metadata: metadata,
+            let inspection = try AudioMediaInspector.inspect(at: artifact.url, policy: .generated)
+            let expectedFrames = try ProjectFiles.expectedAudioFrames(audio)
+            guard inspection.format.container == .wav, inspection.format.sampleRate == 44_100,
+                  inspection.format.channelCount == 2, inspection.format.floatingPoint,
+                  inspection.format.bitDepth == 32, inspection.format.frameCount == expectedFrames else {
+                throw AudioMediaError.invalidMedia("生成音频格式或帧数与固定请求不一致")
+            }
+            let metadata = AudioAssetMetadata(format: inspection.format,
+                                              contentSHA256: inspection.contentSHA256,
+                                              origin: .modelGenerated)
+            let asset = ProjectAsset(jobID: id, relativePath: relative, mediaType: "audio/wav",
+                                     role: .result, metadata: .init(audio: metadata),
                                      name: "候选 \(candidate.assets.count + 1)")
             candidate.assets.append(asset)
             candidate.jobs[index].artifactIDs.append(asset.id)
+        case .text:
+            throw ProjectStoreError.invalidProject("文字任务不产生项目媒体作品。")
         }
         candidate.jobs[index].state = .completed
         candidate.jobs[index].error = nil
@@ -349,6 +538,22 @@ public actor ProjectStore {
         try ProjectFiles.requireRegisteredAudio(inspected, matches: metadata)
         return ProjectAudioInspection(document: draft, asset: asset, url: url,
                                       metadata: metadata, waveform: inspected.waveform)
+    }
+
+    public func inspectAudioAsset(id: UUID) throws -> AudioInspection {
+        guard let asset = manifest.assets.first(where: { $0.id == id }),
+              let metadata = asset.metadata.audio else { throw ProjectStoreError.missingAsset }
+        let policy = try ProjectFiles.inspectionPolicy(for: asset, jobs: manifest.jobs)
+        let inspection = try AudioMediaInspector.inspect(at: try assetURL(for: asset), policy: policy)
+        try ProjectFiles.requireRegisteredAudio(inspection, matches: metadata)
+        return inspection
+    }
+
+    public func exportAudioAsset(id: UUID, to destination: URL) throws {
+        guard manifest.assets.first(where: { $0.id == id })?.metadata.audio != nil else {
+            throw ProjectStoreError.missingAsset
+        }
+        try export(assetID: id, to: destination)
     }
 
     /// Copies the selected inode into project ownership before validating the owned bytes.
@@ -690,7 +895,9 @@ public actor ProjectStore {
         guard destination.isFileURL, destination.path.hasPrefix("/"),
               !destination.lastPathComponent.isEmpty else { throw ProjectStoreError.unsafePath(destination.path) }
         if let audio = asset.metadata.audio {
-            let inspection = try AudioMediaInspector.inspect(at: rootURL.appendingPathComponent(asset.relativePath))
+            let policy = try ProjectFiles.inspectionPolicy(for: asset, jobs: manifest.jobs)
+            let inspection = try AudioMediaInspector.inspect(
+                at: rootURL.appendingPathComponent(asset.relativePath), policy: policy)
             try ProjectFiles.requireRegisteredAudio(inspection, matches: audio)
         }
         let source = try ProjectFiles.openRelativeFile(asset.relativePath, in: rootFD)
@@ -897,6 +1104,21 @@ public actor ProjectStore {
             default:
                 throw ProjectStoreError.externalModification
             }
+            switch (persisted.audioCreation, expected.audioCreation) {
+            case let (.some(actual), .some(saved)):
+                guard actual.prompt.utf8.elementsEqual(saved.prompt.utf8),
+                      actual.durationText.utf8.elementsEqual(saved.durationText.utf8),
+                      actual.seedText.utf8.elementsEqual(saved.seedText.utf8),
+                      actual.stepsText.utf8.elementsEqual(saved.stepsText.utf8),
+                      actual.guidanceText.utf8.elementsEqual(saved.guidanceText.utf8),
+                      actual.strengthText.utf8.elementsEqual(saved.strengthText.utf8) else {
+                    throw ProjectStoreError.externalModification
+                }
+            case (.none, .none):
+                break
+            default:
+                throw ProjectStoreError.externalModification
+            }
         }
         guard current.assets.count == manifest.assets.count else {
             throw ProjectStoreError.externalModification
@@ -955,32 +1177,73 @@ public actor ProjectStore {
         for name in names.sorted() {
             guard let jobID = ProjectFiles.taskOwner(name),
                   let index = candidate.jobs.firstIndex(where: { $0.id == jobID }) else { continue }
-            let relative = "Tasks/\(name)/image.png"
+            let isAudio: Bool
+            switch candidate.jobs[index].request.input {
+            case .audio: isAudio = true
+            default: isAudio = false
+            }
+            let relative = isAudio ? "Tasks/\(name)/job/output.wav" : "Tasks/\(name)/image.png"
             guard !candidate.assets.contains(where: { $0.relativePath == relative }) else { continue }
             do {
                 // Inspect the final entry through a safely opened directory descriptor as well;
                 // AT_SYMLINK_NOFOLLOW alone does not protect intermediate path components.
                 let publishedDirectory = try ProjectFiles.openRelativeDirectory(name, in: taskFD)
+                var leafDirectory = publishedDirectory
+                if isAudio {
+                    guard name == name.lowercased() else {
+                        Darwin.close(publishedDirectory)
+                        throw ProjectStoreError.unsafePath(relative)
+                    }
+                    leafDirectory = try ProjectFiles.openRelativeDirectory("job", in: publishedDirectory)
+                    Darwin.close(publishedDirectory)
+                }
                 var info = stat()
-                let status = fstatat(publishedDirectory, "image.png", &info, AT_SYMLINK_NOFOLLOW)
+                let leaf = isAudio ? "output.wav" : "image.png"
+                let status = fstatat(leafDirectory, leaf, &info, AT_SYMLINK_NOFOLLOW)
                 let failure = errno
-                Darwin.close(publishedDirectory)
-                // Partial directories are normal after interruption. Missing image.png is not an error.
+                Darwin.close(leafDirectory)
+                // Partial directories are normal after interruption. A missing final leaf is not an error.
                 if status != 0, failure == ENOENT { continue }
                 guard status == 0 else { throw ProjectStoreError.io(String(cString: strerror(failure))) }
-                let metadata = try readPNG(relative: relative, job: candidate.jobs[index])
-                let asset = ProjectAsset(jobID: jobID, relativePath: relative, metadata: metadata,
+                let asset: ProjectAsset
+                if case .audio(let audio) = candidate.jobs[index].request.input {
+                    let url = rootURL.appendingPathComponent(relative)
+                    let inspection = try AudioMediaInspector.inspect(at: url, policy: .generated)
+                    guard inspection.format.container == .wav,
+                          inspection.format.sampleRate == 44_100,
+                          inspection.format.channelCount == 2,
+                          inspection.format.floatingPoint, inspection.format.bitDepth == 32,
+                          inspection.format.frameCount == (try ProjectFiles.expectedAudioFrames(audio)) else {
+                        throw AudioMediaError.invalidMedia("恢复的生成音频与固定请求不一致")
+                    }
+                    let audioMetadata = AudioAssetMetadata(format: inspection.format,
+                                                           contentSHA256: inspection.contentSHA256,
+                                                           origin: .modelGenerated)
+                    asset = ProjectAsset(jobID: jobID, relativePath: relative,
+                                         mediaType: "audio/wav", role: .result,
+                                         metadata: .init(audio: audioMetadata),
                                          name: "候选 \(candidate.assets.count + 1)")
+                } else {
+                    let metadata = try readPNG(relative: relative, job: candidate.jobs[index])
+                    asset = ProjectAsset(jobID: jobID, relativePath: relative, metadata: metadata,
+                                         name: "候选 \(candidate.assets.count + 1)")
+                }
                 candidate.assets.append(asset)
                 candidate.jobs[index].artifactIDs.append(asset.id)
                 if candidate.jobs[index].state != .completed {
-                    candidate.jobs[index].state = .interrupted
-                    candidate.jobs[index].error = "已恢复生成后尚未登记的图片；任务完整结束记录缺失，请检查作品。"
+                    if !candidate.jobs[index].state.isTerminal {
+                        candidate.jobs[index].state = .interrupted
+                    }
+                    candidate.jobs[index].error = isAudio
+                        ? "已恢复生成后尚未登记的音频；权威完成记录缺失，不能采用为成功候选。"
+                        : "已恢复生成后尚未登记的图片；任务完整结束记录缺失，请检查作品。"
                 }
             } catch {
                 // Keep both the original file and job record for diagnosis. Never turn corrupt
                 // or redirected files into artwork just to make project opening succeed.
-                candidate.jobs[index].error = "发现未登记的图片，但无法安全恢复：\(error.localizedDescription)"
+                candidate.jobs[index].error = isAudio
+                    ? "发现未登记的音频，但无法安全恢复：\(error.localizedDescription)"
+                    : "发现未登记的图片，但无法安全恢复：\(error.localizedDescription)"
             }
         }
         if candidate != manifest { try commit(candidate) }
@@ -1098,6 +1361,16 @@ private enum ProjectFiles {
         try descend(components(relative), from: root)
     }
 
+    static func openOrCreateDirectory(_ name: String, in root: Int32) throws -> Int32 {
+        guard components(name).count == 1 else { throw ProjectStoreError.unsafePath(name) }
+        if mkdirat(root, name, 0o700) == 0 {
+            guard fsync(root) == 0 else { throw error() }
+        } else if errno != EEXIST {
+            throw error()
+        }
+        return try openRelativeDirectory(name, in: root)
+    }
+
     static func openRelativeFile(_ relative: String, in root: Int32) throws -> Int32 {
         var parts = try components(relative)
         let filename = parts.removeLast()
@@ -1175,6 +1448,12 @@ private enum ProjectFiles {
     static func migrateVersionThree(_ legacy: ProjectManifest, original: Data, in root: Int32,
                                     checkpoint: (@Sendable (ProjectMigrationCheckpoint) throws -> Void)?) throws -> ProjectManifest {
         try migrate(legacy, original: original, in: root, backup: ProjectStore.versionThreeBackupFilename,
+                    checkpoint: checkpoint)
+    }
+
+    static func migrateVersionFour(_ legacy: ProjectManifest, original: Data, in root: Int32,
+                                   checkpoint: (@Sendable (ProjectMigrationCheckpoint) throws -> Void)?) throws -> ProjectManifest {
+        try migrate(legacy, original: original, in: root, backup: ProjectStore.versionFourBackupFilename,
                     checkpoint: checkpoint)
     }
 
@@ -1315,6 +1594,22 @@ private enum ProjectFiles {
         return relative
     }
 
+    static func relativeAudioArtifact(_ url: URL, root: URL, jobID: UUID) throws -> String {
+        let prefix = root.path + "/"
+        guard url.isFileURL, url.path.hasPrefix(prefix),
+              url.standardizedFileURL.path == url.path else {
+            throw ProjectStoreError.unsafePath(url.path)
+        }
+        let relative = String(url.path.dropFirst(prefix.count))
+        let parts = try components(relative)
+        guard parts.count == 4, parts[0] == "Tasks",
+              parts[1] == parts[1].lowercased(), taskOwner(parts[1]) == jobID,
+              parts[2] == "job", parts[3] == "output.wav" else {
+            throw ProjectStoreError.unsafePath(relative)
+        }
+        return relative
+    }
+
     static func directoryNames(_ descriptor: Int32) throws -> [String] {
         let duplicate = dup(descriptor)
         guard duplicate >= 0 else { throw error() }
@@ -1369,6 +1664,50 @@ private enum ProjectFiles {
         }
     }
 
+    static func inspectionPolicy(for asset: ProjectAsset,
+                                 jobs: [ProjectJob]) throws -> AudioInspectionPolicy {
+        guard let audio = asset.metadata.audio else { throw ProjectStoreError.missingAsset }
+        switch audio.origin {
+        case .importedFile, .microphone:
+            guard asset.role == .original, asset.jobID == nil else {
+                throw ProjectStoreError.invalidProject("原声音频登记关系无效。")
+            }
+            return .original
+        case .modelGenerated:
+            guard asset.role == .result, let jobID = asset.jobID,
+                  let job = jobs.first(where: { $0.id == jobID }),
+                  job.artifactIDs.contains(asset.id) else {
+                throw ProjectStoreError.invalidProject("生成音频缺少可信任务关系。")
+            }
+            guard case .audio = job.request.input else {
+                throw ProjectStoreError.invalidProject("生成音频对应的任务类型无效。")
+            }
+            return .generated
+        }
+    }
+
+    static func validateCreationSource(_ format: AudioFormatInfo) throws {
+        guard format.container == .wav, format.sampleRate == 44_100,
+              format.channelCount == 2 else { throw AudioMediaError.unsupportedFormat }
+    }
+
+    static func validateCurrentAudioProfile(_ request: AudioRequest) throws {
+        guard request.seed <= UInt64(UInt32.max) - 1,
+              (1...100).contains(request.steps), request.guidanceScale.isFinite,
+              (1...15).contains(request.guidanceScale) else {
+            throw ProjectStoreError.invalidProject("音频请求超出当前支持的 seed、steps 或 guidance 范围。")
+        }
+    }
+
+    static func expectedAudioFrames(_ request: AudioRequest) throws -> Int64 {
+        if let source = request.source { return source.frameCount }
+        let value = request.durationSeconds * 44_100
+        guard value.isFinite, value > 0, value <= Double(Int64.max) else {
+            throw ProjectStoreError.invalidProject("音频请求帧数不可表示。")
+        }
+        return Int64(value.rounded(.toNearestOrEven))
+    }
+
     static func validateAudioName(_ name: String) throws {
         guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               name.utf8.count <= AudioLimits.maximumNameBytes else {
@@ -1381,7 +1720,8 @@ private enum ProjectFiles {
               range.endFrame <= frameCount else { throw AudioMediaError.invalidRange }
     }
 
-    static func validateAudioFormat(_ format: AudioFormatInfo) throws {
+    static func validateAudioFormat(_ format: AudioFormatInfo,
+                                    policy: AudioInspectionPolicy = .original) throws {
         guard format.sampleRate.isFinite, (8_000...96_000).contains(format.sampleRate),
               format.channelCount == 1 || format.channelCount == 2,
               (format.floatingPoint && format.bitDepth == 32) ||
@@ -1390,7 +1730,7 @@ private enum ProjectFiles {
             throw ProjectStoreError.invalidProject("原声音频格式元数据无效。")
         }
         let duration = Double(format.frameCount) / format.sampleRate
-        guard duration.isFinite, duration <= AudioLimits.maximumSeconds else {
+        guard duration.isFinite, duration <= policy.maximumSeconds else {
             throw ProjectStoreError.invalidProject("原声音频时长元数据超出限制。")
         }
     }
@@ -1416,7 +1756,7 @@ private enum ProjectFiles {
 
     static func validate(_ value: ProjectManifest, allowingLegacySchema: Bool = false) throws {
         guard value.schemaVersion == ProjectManifest.currentSchemaVersion ||
-              (allowingLegacySchema && (1...3).contains(value.schemaVersion)) else {
+              (allowingLegacySchema && (1...4).contains(value.schemaVersion)) else {
             throw ProjectStoreError.unsupportedSchema(value.schemaVersion)
         }
         guard !value.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
@@ -1443,13 +1783,44 @@ private enum ProjectFiles {
         }
         for job in value.jobs {
             guard documents.contains(job.documentID), job.id == job.request.id,
-                  value.documents.first(where: { $0.id == job.documentID })?.kind == .image,
                   Set(job.artifactIDs).count == job.artifactIDs.count,
                   job.artifactIDs.allSatisfy({ assets[$0]?.jobID == job.id }),
                   job.state != .completed || !job.artifactIDs.isEmpty else {
                 throw ProjectStoreError.invalidProject("任务与作品的对应关系已损坏。")
             }
             try job.request.validate()
+            guard let document = value.documents.first(where: { $0.id == job.documentID }) else {
+                throw ProjectStoreError.invalidProject("任务缺少文档。")
+            }
+            switch job.request.input {
+            case .image:
+                guard document.kind == .image else {
+                    throw ProjectStoreError.invalidProject("图像任务不属于图像文档。")
+                }
+            case .audio(let request):
+                guard document.kind == .audio, document.audioCreation != nil else {
+                    throw ProjectStoreError.invalidProject("音频任务不属于声音创作文档。")
+                }
+                try validateCurrentAudioProfile(request)
+                if let sourceID = document.sourceAssetID {
+                    guard let sourceAsset = assets[sourceID], let metadata = sourceAsset.metadata.audio,
+                          let source = request.source,
+                          source.url.path.hasSuffix("/AudioInputs/\(request.id.uuidString)/source.wav"),
+                          source.sha256 == metadata.contentSHA256,
+                          source.frameCount == metadata.format.frameCount,
+                          source.sampleRate == Int(metadata.format.sampleRate),
+                          source.channels == metadata.format.channelCount,
+                          request.operation != .generate else {
+                        throw ProjectStoreError.invalidProject("音频任务的来源快照关系无效。")
+                    }
+                } else {
+                    guard request.source == nil, request.operation == .generate else {
+                        throw ProjectStoreError.invalidProject("无来源声音创作包含参考音频任务。")
+                    }
+                }
+            case .text:
+                throw ProjectStoreError.invalidProject("项目媒体任务不能登记文字请求。")
+            }
         }
         for asset in value.assets {
             guard !asset.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
@@ -1461,35 +1832,56 @@ private enum ProjectFiles {
                     throw ProjectStoreError.invalidProject("作品缺少对应的任务记录。")
                 }
             }
-            if asset.role == .result {
-                let parts = try components(asset.relativePath)
-                guard asset.jobID != nil, parts.count == 3, parts[0] == "Tasks", taskOwner(parts[1]) == asset.jobID,
-                      parts[2] == "image.png", asset.mediaType == "image/png" else {
-                    throw ProjectStoreError.unsafePath(asset.relativePath)
-                }
-            }
             let isDeclaredAudio = asset.metadata.audio != nil || asset.mediaType == "audio/wav" ||
                 asset.mediaType == "audio/x-caf" || asset.relativePath.hasPrefix("Audio/")
             if isDeclaredAudio {
-                guard let audio = asset.metadata.audio, asset.jobID == nil, asset.role == .original,
+                guard let audio = asset.metadata.audio,
                       asset.metadata.width == nil, asset.metadata.height == nil,
                       asset.metadata.bitDepth == nil, asset.metadata.colorSpace == nil else {
-                    throw ProjectStoreError.invalidProject("原声作品不能伪装为图片、任务结果或缺少音频元数据。")
+                    throw ProjectStoreError.invalidProject("音频作品不能伪装为图片或缺少音频元数据。")
                 }
                 try validateAudioName(asset.name)
                 guard asset.note.utf8.count <= AudioLimits.maximumNoteBytes else {
                     throw ProjectStoreError.invalidProject("原声作品备注超过 16 KiB UTF-8 上限。")
                 }
-                try validateAudioFormat(audio.format)
-                let expectedExtension = audio.format.container == .wav ? "wav" : "caf"
-                guard asset.relativePath == "Audio/\(asset.id.uuidString)/source.\(expectedExtension)",
-                      asset.mediaType == audioMediaType(audio.format.container),
-                      audio.contentSHA256.count == 64,
+                guard audio.contentSHA256.count == 64,
                       audio.contentSHA256.utf8.allSatisfy({ ($0 >= 48 && $0 <= 57) || ($0 >= 97 && $0 <= 102) }) else {
-                    throw ProjectStoreError.invalidProject("原声作品路径、媒体类型或 SHA-256 元数据无效。")
+                    throw ProjectStoreError.invalidProject("音频作品 SHA-256 元数据无效。")
+                }
+                switch audio.origin {
+                case .importedFile, .microphone:
+                    let expectedExtension = audio.format.container == .wav ? "wav" : "caf"
+                    guard asset.jobID == nil, asset.role == .original,
+                          asset.relativePath == "Audio/\(asset.id.uuidString)/source.\(expectedExtension)",
+                          asset.mediaType == audioMediaType(audio.format.container) else {
+                        throw ProjectStoreError.invalidProject("原声音频路径、角色或媒体类型无效。")
+                    }
+                    try validateAudioFormat(audio.format)
+                case .modelGenerated:
+                    let parts = try components(asset.relativePath)
+                    guard asset.role == .result, let jobID = asset.jobID,
+                          jobs[jobID].map({ if case .audio = $0.request.input { true } else { false } }) == true,
+                          asset.mediaType == "audio/wav",
+                          parts.count == 4, parts[0] == "Tasks",
+                          parts[1] == parts[1].lowercased(), taskOwner(parts[1]) == jobID,
+                          parts[2] == "job", parts[3] == "output.wav",
+                          audio.format.container == .wav, audio.format.sampleRate == 44_100,
+                          audio.format.channelCount == 2, audio.format.floatingPoint,
+                          audio.format.bitDepth == 32 else {
+                        throw ProjectStoreError.invalidProject("生成音频路径、角色或格式无效。")
+                    }
+                    try validateAudioFormat(audio.format, policy: .generated)
                 }
             } else if asset.metadata.audio != nil {
                 throw ProjectStoreError.invalidProject("非音频作品不能包含音频元数据。")
+            } else if asset.role == .result {
+                let parts = try components(asset.relativePath)
+                guard asset.jobID != nil, parts.count == 3, parts[0] == "Tasks",
+                      taskOwner(parts[1]) == asset.jobID, parts[2] == "image.png",
+                      asset.mediaType == "image/png",
+                      asset.jobID.flatMap({ jobs[$0] }).map({ if case .image = $0.request.input { true } else { false } }) == true else {
+                    throw ProjectStoreError.unsafePath(asset.relativePath)
+                }
             }
             for dimension in [asset.metadata.width, asset.metadata.height, asset.metadata.bitDepth].compactMap({ $0 }) {
                 guard dimension > 0 else { throw ProjectStoreError.invalidProject("媒体元数据包含无效尺寸或位深。") }
@@ -1502,31 +1894,62 @@ private enum ProjectFiles {
             switch document.kind {
             case .image:
                 guard document.textDraft == nil, document.audioDraft == nil,
+                      document.audioCreation == nil,
                       document.sourceAssetID.flatMap({ assets[$0]?.metadata.audio }) == nil else {
                     throw ProjectStoreError.invalidProject("图像文档不能包含文字稿。")
                 }
             case .text:
                 guard let textDraft = document.textDraft, textDraft.id == document.id,
-                      document.audioDraft == nil,
+                      document.audioDraft == nil, document.audioCreation == nil,
                       document.sourceAssetID == nil, document.adoptedAssetID == nil,
                       document.selectedAssetID == nil else {
                     throw ProjectStoreError.invalidProject("文字文档包含无效内容或图像引用。")
                 }
                 try TextDraftDocument.validate(textDraft.text)
             case .audio:
-                guard document.textDraft == nil, let draft = document.audioDraft,
-                      draft.id == document.id, document.sourceAssetID == nil,
-                      document.adoptedAssetID == nil, document.selectedAssetID == nil else {
-                    throw ProjectStoreError.invalidProject("原声文档包含文字稿、图像引用或编号不匹配。")
+                guard document.textDraft == nil,
+                      (document.audioDraft == nil) != (document.audioCreation == nil) else {
+                    throw ProjectStoreError.invalidProject("音频文档必须且只能包含原声稿或声音创作稿。")
                 }
-                try validateAudioDraft(draft, asset: assets[draft.assetID])
+                if let draft = document.audioDraft {
+                    guard draft.id == document.id, document.sourceAssetID == nil,
+                          document.adoptedAssetID == nil, document.selectedAssetID == nil else {
+                        throw ProjectStoreError.invalidProject("原声文档包含创作引用或编号不匹配。")
+                    }
+                    try validateAudioDraft(draft, asset: assets[draft.assetID])
+                } else if let creation = document.audioCreation {
+                    guard Set(creation.rejectedAssetIDs).count == creation.rejectedAssetIDs.count else {
+                        throw ProjectStoreError.invalidProject("声音创作包含重复的拒绝候选。")
+                    }
+                    if let sourceID = document.sourceAssetID {
+                        guard let source = assets[sourceID], source.metadata.audio != nil,
+                              source.role == .original || (source.role == .result &&
+                                source.jobID.flatMap({ jobs[$0]?.state }) == .completed),
+                              creation.operation != .generate else {
+                            throw ProjectStoreError.invalidProject("声音创作来源或操作无效。")
+                        }
+                    } else if creation.operation != .generate {
+                        throw ProjectStoreError.invalidProject("参考音频操作缺少固定来源。")
+                    }
+                }
             }
             if let source = document.sourceAssetID, assets[source] == nil {
                 throw ProjectStoreError.invalidProject("探索文档引用的来源作品不存在。")
             }
             func isCandidate(_ id: UUID) -> Bool {
                 guard let asset = assets[id], asset.role == .result, let jobID = asset.jobID else { return false }
-                return jobs[jobID]?.documentID == document.id
+                guard jobs[jobID]?.documentID == document.id else { return false }
+                if let creation = document.audioCreation {
+                    return jobs[jobID]?.state == .completed && !creation.rejectedAssetIDs.contains(id)
+                }
+                return true
+            }
+            if let creation = document.audioCreation,
+               creation.rejectedAssetIDs.contains(where: { id in
+                   guard let asset = assets[id], asset.role == .result, let jobID = asset.jobID else { return true }
+                   return jobs[jobID]?.documentID != document.id
+               }) {
+                throw ProjectStoreError.invalidProject("拒绝候选不属于声音创作文档。")
             }
             if let adopted = document.adoptedAssetID, !isCandidate(adopted) {
                 throw ProjectStoreError.invalidProject("采用的作品不属于该探索文档。")

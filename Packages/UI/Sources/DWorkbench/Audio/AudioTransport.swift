@@ -80,12 +80,13 @@ public final class AudioTransport: NSObject {
     public func preparePlayback(
         url: URL,
         format: AudioFormatInfo,
-        range: AudioFrameRange? = nil
+        range: AudioFrameRange? = nil,
+        policy: AudioInspectionPolicy = .original
     ) throws {
         guard recording == nil, state != .requestingPermission else {
             throw AudioMediaError.unavailable("录音正在进行")
         }
-        try validatePlayback(url: url, format: format, range: range)
+        try validatePlayback(url: url, format: format, range: range, policy: policy)
 
         // Construct and validate the replacement before disturbing the current usable source.
         let candidate = try deviceFactory.makePlayback(url: url, expected: format)
@@ -425,7 +426,8 @@ public final class AudioTransport: NSObject {
     private func validatePlayback(
         url: URL,
         format: AudioFormatInfo,
-        range: AudioFrameRange?
+        range: AudioFrameRange?,
+        policy: AudioInspectionPolicy
     ) throws {
         guard url.isFileURL, !url.hasDirectoryPath,
               let values = try? url.resourceValues(
@@ -434,7 +436,7 @@ public final class AudioTransport: NSObject {
               values.isRegularFile == true,
               values.isSymbolicLink != true,
               let size = values.fileSize,
-              size > 0, size <= AudioLimits.maximumBytes else {
+              size > 0, size <= policy.maximumBytes else {
             throw AudioMediaError.invalidMedia("需要一个不经符号链接的普通文件")
         }
         guard (8_000...96_000).contains(format.sampleRate),
@@ -443,7 +445,7 @@ public final class AudioTransport: NSObject {
               format.frameCount > 0,
               ((format.floatingPoint && format.bitDepth == 32)
                 || (!format.floatingPoint && [16, 24, 32].contains(format.bitDepth))),
-              Double(format.frameCount) / format.sampleRate <= AudioLimits.maximumSeconds else {
+              Double(format.frameCount) / format.sampleRate <= policy.maximumSeconds else {
             throw AudioMediaError.unsupportedFormat
         }
         if let range,

@@ -2,14 +2,33 @@ import Foundation
 
 /// HUM1: original media and frame-based editing data, independent of inference and views.
 public enum AudioContainer: String, Codable, Sendable { case wav, caf }
-public enum AudioOrigin: String, Codable, Sendable { case importedFile, microphone }
+public enum AudioOrigin: String, Codable, Sendable { case importedFile, microphone, modelGenerated }
+public enum AudioInspectionPolicy: Sendable { case original, generated }
 public enum AudioLimits {
     public static let maximumBytes = 64 * 1024 * 1024
     public static let maximumSeconds: Double = 120
+    public static let maximumGeneratedBytes = 256 * 1024 * 1024
+    public static let maximumGeneratedSeconds: Double = 380
     public static let maximumWaveformBuckets = 1024
     public static let maximumClips = 64
     public static let maximumNameBytes = 256
     public static let maximumNoteBytes = 16 * 1024
+}
+
+extension AudioInspectionPolicy {
+    var maximumBytes: Int {
+        switch self {
+        case .original: AudioLimits.maximumBytes
+        case .generated: AudioLimits.maximumGeneratedBytes
+        }
+    }
+
+    var maximumSeconds: Double {
+        switch self {
+        case .original: AudioLimits.maximumSeconds
+        case .generated: AudioLimits.maximumGeneratedSeconds
+        }
+    }
 }
 public struct AudioFormatInfo: Codable, Sendable, Equatable {
     public let container: AudioContainer

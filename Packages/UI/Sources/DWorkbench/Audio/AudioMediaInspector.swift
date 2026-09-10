@@ -5,13 +5,14 @@ import Foundation
 
 /// Bounded validation for the original PCM formats admitted by HUM1.
 public enum AudioMediaInspector {
-    public static func inspect(at url: URL) throws -> AudioInspection {
-        try AudioSafeFile.withOpen(url, maximumBytes: AudioLimits.maximumBytes) { descriptor, identity in
+    public static func inspect(at url: URL, policy: AudioInspectionPolicy = .original) throws -> AudioInspection {
+        try AudioSafeFile.withOpen(url, maximumBytes: policy.maximumBytes) { descriptor, identity in
             let contentSHA256 = try AudioSafeFile.sha256(descriptor: descriptor, byteCount: identity.size)
             let layout = try AudioSafeFile.layout(descriptor: descriptor, byteCount: identity.size)
-            try validateLayoutLimits(layout)
+            try validateLayoutLimits(layout, policy: policy)
             let file = try AVAudioFile(forReading: url, commonFormat: .pcmFormatFloat32, interleaved: false)
-            let format = try validatedFormat(file.fileFormat, container: layout.container, frameCount: file.length)
+            let format = try validatedFormat(file.fileFormat, container: layout.container,
+                                             frameCount: file.length, policy: policy)
             guard format.frameCount == layout.frameCount,
                   format.channelCount == layout.channelCount,
                   format.bitDepth == layout.bitDepth,
@@ -75,7 +76,7 @@ public enum AudioMediaInspector {
         let identity = try AudioSafeFile.identity(descriptor: descriptor,
                                                   maximumBytes: AudioLimits.maximumBytes)
         let layout = try AudioSafeFile.layout(descriptor: descriptor, byteCount: identity.size)
-        try validateLayoutLimits(layout)
+        try validateLayoutLimits(layout, policy: .original)
         guard layout.container == .caf, layout.channelCount > 0,
               layout.bitDepth == 32, layout.floatingPoint, !layout.bigEndian,
               layout.bytesPerFrame == layout.channelCount * 4 else {
@@ -132,8 +133,9 @@ public enum AudioMediaInspector {
     /// Copies the already-opened selected inode exactly once. Validation is intentionally done
     /// on the owned result, while the source identity is compared before this method returns.
     static func withOriginalSource<T>(at source: URL,
+                                      policy: AudioInspectionPolicy = .original,
                                       body: (Int32, Int) throws -> T) throws -> T {
-        try AudioSafeFile.withOpen(source, maximumBytes: AudioLimits.maximumBytes) { descriptor, identity in
+        try AudioSafeFile.withOpen(source, maximumBytes: policy.maximumBytes) { descriptor, identity in
             try body(descriptor, identity.size)
         }
     }
@@ -227,7 +229,8 @@ public enum AudioMediaInspector {
     }
 
     private static func validatedFormat(_ audioFormat: AVAudioFormat, container: AudioContainer,
-                                        frameCount: Int64) throws -> AudioFormatInfo {
+                                        frameCount: Int64,
+                                        policy: AudioInspectionPolicy = .original) throws -> AudioFormatInfo {
         let description = audioFormat.streamDescription.pointee
         guard description.mFormatID == kAudioFormatLinearPCM else { throw AudioMediaError.unsupportedFormat }
         let floatingPoint = description.mFormatFlags & kAudioFormatFlagIsFloat != 0
@@ -243,14 +246,15 @@ public enum AudioMediaInspector {
             throw AudioMediaError.limitExceeded
         }
         let duration = Double(frameCount) / sampleRate
-        guard duration.isFinite, duration <= AudioLimits.maximumSeconds else {
+        guard duration.isFinite, duration <= policy.maximumSeconds else {
             throw AudioMediaError.limitExceeded
         }
         return AudioFormatInfo(container: container, sampleRate: sampleRate, channelCount: channelCount,
                                frameCount: frameCount, bitDepth: bitDepth, floatingPoint: floatingPoint)
     }
 
-    private static func validateLayoutLimits(_ layout: AudioContainerLayout) throws {
+    private static func validateLayoutLimits(_ layout: AudioContainerLayout,
+                                             policy: AudioInspectionPolicy) throws {
         guard (layout.floatingPoint && layout.bitDepth == 32) ||
                 (!layout.floatingPoint && [16, 24, 32].contains(layout.bitDepth)) else {
             throw AudioMediaError.unsupportedFormat
@@ -260,7 +264,7 @@ public enum AudioMediaInspector {
             throw AudioMediaError.limitExceeded
         }
         let duration = Double(layout.frameCount) / layout.sampleRate
-        guard duration.isFinite, duration <= AudioLimits.maximumSeconds else {
+        guard duration.isFinite, duration <= policy.maximumSeconds else {
             throw AudioMediaError.limitExceeded
         }
     }
