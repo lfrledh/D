@@ -40,8 +40,9 @@ public struct AudioCreationActions {
 enum AudioCreationButtonHandler {
     @discardableResult
     static func submit(_ draft: AudioCreationDraft, source: ProjectAsset?, hostAllowsGeneration: Bool,
-                       actions: AudioCreationActions) -> Bool {
-        guard hostAllowsGeneration, canGenerate(draft, source: source) else { return false }
+                       hasPendingRangeInput: Bool = false, actions: AudioCreationActions) -> Bool {
+        guard canSubmit(draft, source: source, hostAllowsGeneration: hostAllowsGeneration,
+                        hasPendingRangeInput: hasPendingRangeInput) else { return false }
         actions.generate()
         return true
     }
@@ -98,6 +99,12 @@ enum AudioCreationButtonHandler {
         }
     }
 
+    static func canSubmit(_ draft: AudioCreationDraft, source: ProjectAsset?, hostAllowsGeneration: Bool,
+                          hasPendingRangeInput: Bool) -> Bool {
+        guard hostAllowsGeneration, canGenerate(draft, source: source) else { return false }
+        return draft.operation != .inpaint || !hasPendingRangeInput
+    }
+
     static func sourceIsEditable(_ source: ProjectAsset?) -> Bool {
         guard let format = source?.metadata.audio?.format else { return false }
         return format.container == .wav && format.sampleRate == 44_100 && format.channelCount == 2
@@ -106,15 +113,14 @@ enum AudioCreationButtonHandler {
     static func numericInputsAreValid(_ draft: AudioCreationDraft) -> Bool {
         guard let seed = UInt64(draft.seedText), seed <= 4_294_967_294,
               let steps = Int(draft.stepsText), (1...100).contains(steps),
-              let guidance = Double(draft.guidanceText), guidance.isFinite, (1...15).contains(guidance),
-              let strength = Double(draft.strengthText), strength.isFinite,
-              strength > 0, strength <= 1 else { return false }
+              let guidance = Double(draft.guidanceText), guidance.isFinite, (1...15).contains(guidance) else { return false }
         switch draft.operation {
         case .generate:
             guard let duration = Double(draft.durationText), duration.isFinite, duration > 0 else { return false }
-            return strength == 1
-        case .variation, .inpaint:
             return true
+        case .variation, .inpaint:
+            guard let strength = Double(draft.strengthText), strength.isFinite else { return false }
+            return strength > 0 && strength <= 1
         }
     }
 
@@ -125,9 +131,8 @@ enum AudioCreationButtonHandler {
         let startFrames = (startSeconds * format.sampleRate).rounded()
         let endFrames = (endSeconds * format.sampleRate).rounded()
         guard startFrames.isFinite, endFrames.isFinite,
-              startFrames >= Double(Int64.min), startFrames <= Double(Int64.max),
-              endFrames >= Double(Int64.min), endFrames <= Double(Int64.max) else { return nil }
-        let range = AudioFrameRange(startFrame: Int64(startFrames), endFrame: Int64(endFrames))
+              let startFrame = Int64(exactly: startFrames), let endFrame = Int64(exactly: endFrames) else { return nil }
+        let range = AudioFrameRange(startFrame: startFrame, endFrame: endFrame)
         guard range.startFrame >= 0, range.endFrame > range.startFrame,
               range.endFrame <= format.frameCount else { return nil }
         return range

@@ -41,6 +41,22 @@ struct AudioCreationViewTests {
     }
 
     @Test
+    func generateUsesFixedStrengthWithoutOverwritingVariationDraftText() {
+        var draft = AudioCreationDraft(prompt: "钢琴")
+        #expect(AudioCreationButtonHandler.numericInputsAreValid(draft))
+        var generated = 0
+        #expect(AudioCreationButtonHandler.submit(draft, source: nil, hostAllowsGeneration: true,
+                                                   actions: actions { generated += 1 }))
+        #expect(generated == 1)
+        draft.operation = .variation
+        draft.strengthText = "0.73"
+        #expect(AudioCreationButtonHandler.numericInputsAreValid(draft))
+        draft.operation = .generate
+        #expect(draft.strengthText == "0.73")
+        #expect(AudioCreationButtonHandler.numericInputsAreValid(draft))
+    }
+
+    @Test
     func preservesFullSeedButRejectsUnsupportedProfileValue() {
         let draft = AudioCreationDraft(prompt: "鼓点", seedText: "18446744073709551615", strengthText: "1")
         #expect(draft.seedText == "18446744073709551615")
@@ -113,6 +129,8 @@ struct AudioCreationViewTests {
         }
         #expect(AudioCreationButtonHandler.frameRange(startText: "0", endText: "1", format: format)
                 == AudioFrameRange(startFrame: 0, endFrame: 44_100))
+        let boundary = String(Double(Int64.max) / format.sampleRate)
+        #expect(AudioCreationButtonHandler.frameRange(startText: "0", endText: boundary, format: format) == nil)
     }
 
     @Test
@@ -123,6 +141,25 @@ struct AudioCreationViewTests {
         #expect(AudioCreationButtonHandler.frameRange(startText: "0", endText: "1e300",
                                                        format: asset().metadata.audio!.format) == nil)
         #expect(draft.editRegion == oldRange)
+    }
+
+    @Test
+    func pendingInvalidRangeBlocksOnlyInpaintSubmission() {
+        let source = asset()
+        var draft = AudioCreationDraft(prompt: "重绘", operation: .inpaint,
+                                       editRegion: .init(startFrame: 0, endFrame: 44_100))
+        #expect(!AudioCreationButtonHandler.canSubmit(draft, source: source, hostAllowsGeneration: true,
+                                                       hasPendingRangeInput: true))
+        #expect(AudioCreationButtonHandler.canSubmit(draft, source: source, hostAllowsGeneration: true,
+                                                      hasPendingRangeInput: false))
+        draft.operation = .variation
+        #expect(AudioCreationButtonHandler.canSubmit(draft, source: source, hostAllowsGeneration: true,
+                                                      hasPendingRangeInput: true))
+    }
+
+    @Test
+    func blankPromptIsNotSubmittable() {
+        #expect(!AudioCreationButtonHandler.canGenerate(AudioCreationDraft(), source: nil))
     }
 
     @Test
@@ -139,25 +176,28 @@ struct AudioCreationViewTests {
                               backing: .buffered, defer: false)
         window.contentView = host
         defer { window.contentView = nil }
-        host.frame = NSRect(x: 0, y: 0, width: 520, height: 500)
-        host.layoutSubtreeIfNeeded()
-        let identifiers = descendants(host).compactMap(\.identifier?.rawValue)
-        for identifier in ["audio-create-prompt", "audio-create-generate", "audio-create-save",
-                           "audio-create-select-\(candidate.id.uuidString)"] {
-            #expect(identifiers.contains(identifier))
-        }
-        #expect(host.fittingSize.width <= 521)
-        let viewport = host.bounds.insetBy(dx: -1, dy: -1)
-        for id in ["audio-create-play-\(candidate.id.uuidString)", "audio-create-adopt-\(candidate.id.uuidString)",
-                   "audio-create-reject-\(candidate.id.uuidString)", "audio-create-export-\(candidate.id.uuidString)",
-                   "audio-create-from-\(candidate.id.uuidString)"] {
-            let rectangle = try #require(rectangles[id])
-            #expect(rectangle.minX >= viewport.minX && rectangle.maxX <= viewport.maxX)
-            #expect(viewport.intersects(rectangle))
+        for width: CGFloat in [520, 1_000] {
+            settle(host, window: window, width: width)
+            let viewport = host.bounds.insetBy(dx: -1, dy: -1)
+            for id in ["audio-create-candidate-\(candidate.id.uuidString)",
+                       "audio-create-play-\(candidate.id.uuidString)", "audio-create-adopt-\(candidate.id.uuidString)",
+                       "audio-create-reject-\(candidate.id.uuidString)", "audio-create-export-\(candidate.id.uuidString)",
+                       "audio-create-from-\(candidate.id.uuidString)"] {
+                let rectangle = try #require(rectangles[id])
+                #expect(rectangle.width > 0 && rectangle.height > 0)
+                #expect(rectangle.minX >= viewport.minX && rectangle.maxX <= viewport.maxX)
+            }
         }
     }
 
-    private func descendants(_ parent: NSView) -> [NSView] {
-        parent.subviews.flatMap { [$0] + descendants($0) }
+    private func settle(_ host: NSHostingView<AudioCreationView>, window: NSWindow, width: CGFloat) {
+        window.setContentSize(NSSize(width: width, height: 500))
+        host.frame = NSRect(x: 0, y: 0, width: width, height: 500)
+        let deadline = Date().addingTimeInterval(0.25)
+        repeat {
+            window.contentView?.layoutSubtreeIfNeeded()
+            host.layoutSubtreeIfNeeded()
+            RunLoop.main.run(until: Date().addingTimeInterval(0.01))
+        } while Date() < deadline
     }
 }

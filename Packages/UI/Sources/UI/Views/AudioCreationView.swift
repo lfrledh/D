@@ -1,5 +1,6 @@
 import DInference
 import DWorkbench
+import Foundation
 import SwiftUI
 
 public struct AudioCreationView: View {
@@ -109,7 +110,9 @@ public struct AudioCreationView: View {
 
     private var parameterFields: some View {
         Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
-            parameterRow("时长（秒）", text: $draft.durationText, id: "duration", disabled: isBusy || sourceOperation)
+            if !sourceOperation {
+                parameterRow("时长（秒）", text: $draft.durationText, id: "duration", disabled: isBusy)
+            }
             parameterRow("Seed", text: $draft.seedText, id: "seed", disabled: isBusy)
             parameterRow("步数", text: $draft.stepsText, id: "steps", disabled: isBusy)
             parameterRow("Guidance", text: $draft.guidanceText, id: "guidance", disabled: isBusy)
@@ -144,7 +147,7 @@ public struct AudioCreationView: View {
                     .disabled(isBusy).accessibilityIdentifier("audio-create-range-apply")
             }
             Text(rangeInputMessage ?? rangeMessage).font(.caption)
-                .foregroundStyle(rangeInputMessage == nil ? .secondary : .orange)
+                .foregroundStyle(rangeInputMessage == nil ? Color.secondary : Color.orange)
         }
     }
 
@@ -157,6 +160,7 @@ public struct AudioCreationView: View {
                 Button("生成") {
                     _ = AudioCreationButtonHandler.submit(draft, source: source,
                                                           hostAllowsGeneration: canGenerate,
+                                                          hasPendingRangeInput: draft.operation == .inpaint && rangeInputMessage != nil,
                                                           actions: actions)
                 }
                     .buttonStyle(.glass)
@@ -257,14 +261,15 @@ public struct AudioCreationView: View {
         VStack(alignment: .leading, spacing: 4) {
             if let progress { ProgressView(value: progress).accessibilityIdentifier("audio-create-progress") }
             Text(status ?? validationMessage).font(.caption)
-                .foregroundStyle(status == nil && !canSubmit ? .orange : .secondary)
+                .foregroundStyle(status == nil && !canSubmit ? Color.orange : Color.secondary)
                 .accessibilityIdentifier("audio-create-status")
         }
     }
 
     private var sourceOperation: Bool { draft.operation != .generate }
     private var canSubmit: Bool {
-        canGenerate && rangeInputMessage == nil && AudioCreationButtonHandler.canGenerate(draft, source: source)
+        AudioCreationButtonHandler.canSubmit(draft, source: source, hostAllowsGeneration: canGenerate,
+                                             hasPendingRangeInput: draft.operation == .inpaint && rangeInputMessage != nil)
     }
     private var validationMessage: String {
         if draft.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return "请输入提示词。" }
