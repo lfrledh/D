@@ -16,3 +16,15 @@ Lead冻结反例：1正常批准+合成PCM可解码CAF且保留预约至提交�
 
 ## Lead 修订 R1.1（预检后、实施前生效）
 接受 Worker 的 AudioQueue + AudioFileInitializeWithCallbacks 持有 FD 方案。为避免重写已有 CAF parser，额外允许 AudioMediaInspector.swift 仅新增/抽取描述符级只读检查入口（读取同一 inode，保持既有URL检查行为与限额不变）；另允许 UITests/AudioWorkbenchAssemblyTests.swift 仅适配受影响设备factory签名，原断言不删。已核对该fake factory与三个原已允许文件合计4处。最终化媒体检查不得重新依赖URL文件身份。保留目录/file FD的deinit/close/失败恢复及被替换路径反例都属于本任务。没有新增权限/签名/依赖变化。准备commit SHA见implement request；Worker先核对此完整SHA，然后实施。
+
+## 2026-09-11 组件验收与来源
+
+组件代码通过，真实录音/GUI仍待H09/H15；未单独推动源工作分支。
+
+- 实现：Sol/high受限CLI初交、修复1各900秒超时，修复2正常交回；初交及两轮修复后仍未通过。编译修正后85f795b36aa46f29ee711a29eb92c91641664b08全包248项报告存在8个失败方法、16个问题和1既有可选跳过，主要来自CAF标记解析；只读审核另发现AudioFileClose及初始化失败清理缺口。
+- 一次有界Astra Lead接管：新增真实AudioFile回调反例，红版7847c7b23b4bc7a880f78cff400457cce50bf0ba证明LE被拒、BE错误解码和关闭失败放行。按[Apple CAF规范](https://developer.apple.com/library/archive/documentation/MusicAudio/Reference/CAFSpec/CAF_spec/CAF_spec.html)修正CAF位含义；不把CAF bit1的小端含义混用为ASBD的大端。修补不确定关闭的持有/禁止再次录音规则，并统一nil-queue初始化失败的关闭与fsync路径。
+- 受测代码971a669c70d3148f65693701182c8ae3721b25f6：checks/record-lead-full实际离线全包exit0，251项报告，1既有可选权重检查跳过。直接CAF数值、封存拒写、stop尾部PCM、父/leaf替换、指纹、恢复及旧图文CPU回归通过。不是实际麦克风/GPU/UI验收。
+- Sol/high非实现者只读复核record-review/lead-response.md接受该SHA的限定代码；审核者没有执行测试，不能把它称为独立测试复跑。
+- AudioFile关闭结果不确定时不再次调用可能失效的ID，保留最多一份回调/文件资源并阻止新原生录音，待进程退出；受控夹具已关闭自己的真实AudioFile后模拟错误返回，无真实AudioQueue。证据保留到测试进程结束，不宣称错误native状态可原地修复。
+- 全部证据：D-Development/AgentTrials/D-AUDIO-WORKBENCH-01/run-20260910T140156Z 下record、record-review、checks/record-{initial,r1,r2,lead-red,lead-full}。两个超时、missing-path读尝试、Worker报告的进程枚举拒绝分别保留；无权限扩大或成功越界写入证据。已持有的runner子进程均有结束回执，不以此证明整个Mac空闲。
+- 本追加仅文档；最终候选SHA由外部回执给出，实际代码/测试仍971a669…，不为自引用改写提交。归因为Sol初步实现及两轮修复，Astra Lead修补/复验，Sol只读复核；订阅货币费用与完整Lead归因unknown。
