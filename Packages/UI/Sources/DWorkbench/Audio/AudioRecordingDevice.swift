@@ -5,18 +5,35 @@ private let captureSampleRate: Double = 48_000
 private let captureBytesPerFrame: UInt32 = 4
 private let captureMaximumFrames = Int64(captureSampleRate * AudioLimits.maximumSeconds)
 
+struct AudioQueueLifecycleOperations: @unchecked Sendable {
+    let stop: (AudioQueueRef, Bool) -> OSStatus
+    let dispose: (AudioQueueRef, Bool) -> OSStatus
+    let closeFile: (AudioFileID) -> OSStatus
+
+    static let live = AudioQueueLifecycleOperations(
+        stop: { AudioQueueStop($0, $1) },
+        dispose: { AudioQueueDispose($0, $1) },
+        closeFile: { AudioFileClose($0) }
+    )
+}
+
 /// AudioQueue invokes this object on its private callback thread. The lock owns all packet,
 /// terminal, and re-enqueue decisions; the main-actor device performs the actual shutdown.
 private final class AudioQueueCaptureContext: @unchecked Sendable {
     private let lock = NSLock()
+    private let capture: AudioCaptureFile
     private let audioFile: AudioFileID
-    private var accepting = true
+    private var acceptsWrites = true
+    private var reenqueues = true
     private var nextPacket: Int64 = 0
     private var firstError: String?
     private var terminalReported = false
     private var terminal: (@Sendable (String?) -> Void)?
 
-    init(audioFile: AudioFileID) { self.audioFile = audioFile }
+    init(capture: AudioCaptureFile, audioFile: AudioFileID) {
+        self.capture = capture
+        self.audioFile = audioFile
+    }
 
     var recordedFrames: Int64 { lock.withLock { nextPacket } }
 
@@ -24,9 +41,19 @@ private final class AudioQueueCaptureContext: @unchecked Sendable {
         lock.withLock { self.terminal = terminal }
     }
 
-    func clearTerminalAndStopAccepting() -> String? {
+    /// Synchronous AudioQueueStop can deliver filled buffers before returning. Stop future
+    /// enqueue/notification work first, while deliberately leaving those writes enabled.
+    func beginDrain() {
         lock.withLock {
-            accepting = false
+            reenqueues = false
+            terminal = nil
+        }
+    }
+
+    func callbacksDidTerminate() -> String? {
+        lock.withLock {
+            acceptsWrites = false
+            reenqueues = false
             terminal = nil
             return firstError
         }
@@ -36,11 +63,12 @@ private final class AudioQueueCaptureContext: @unchecked Sendable {
         var report: (@Sendable (String?) -> Void)?
         var reportError: String?
         lock.lock()
-        if accepting {
+        if acceptsWrites {
             let available = Int64(buffer.pointee.mAudioDataByteSize / captureBytesPerFrame)
             let supplied = packetCount == 0 ? available : min(available, Int64(packetCount))
             let frames = max(0, min(supplied, captureMaximumFrames - nextPacket))
-            if frames > 0, let data = buffer.pointee.mAudioData {
+            if frames > 0 {
+                let data = buffer.pointee.mAudioData
                 var packets = UInt32(frames)
                 let status = AudioFileWritePackets(audioFile, false,
                                                    UInt32(frames) * captureBytesPerFrame,
@@ -49,19 +77,19 @@ private final class AudioQueueCaptureContext: @unchecked Sendable {
                     nextPacket += frames
                 } else {
                     firstError = "录音写入失败（\(status)）"
-                    accepting = false
+                    acceptsWrites = false
                 }
             }
-            if accepting, nextPacket < captureMaximumFrames {
+            if acceptsWrites, reenqueues, nextPacket < captureMaximumFrames {
                 let status = AudioQueueEnqueueBuffer(queue, buffer, 0, nil)
                 if status != noErr {
                     firstError = "录音缓冲区回收失败（\(status)）"
-                    accepting = false
+                    acceptsWrites = false
                 }
             } else if nextPacket >= captureMaximumFrames {
-                accepting = false
+                acceptsWrites = false
             }
-            if !accepting, !terminalReported {
+            if !acceptsWrites, !terminalReported {
                 terminalReported = true
                 report = terminal
                 reportError = firstError
@@ -69,6 +97,26 @@ private final class AudioQueueCaptureContext: @unchecked Sendable {
         }
         lock.unlock()
         report?(reportError)
+    }
+
+    func consumeStopBufferForTesting(_ samples: [Float]) -> OSStatus {
+        lock.withLock {
+            guard acceptsWrites, nextPacket + Int64(samples.count) <= captureMaximumFrames else {
+                return kAudioFileUnspecifiedError
+            }
+            var copy = samples
+            var packets = UInt32(copy.count)
+            let status = copy.withUnsafeMutableBytes {
+                AudioFileWritePackets(audioFile, false, UInt32($0.count), nil,
+                                      nextPacket, &packets, $0.baseAddress!)
+            }
+            if status == noErr, packets == UInt32(copy.count) {
+                nextPacket += Int64(copy.count)
+            } else if firstError == nil {
+                firstError = "录音写入失败（\(status)）"
+            }
+            return status
+        }
     }
 }
 
@@ -79,17 +127,82 @@ private let captureInputCallback: AudioQueueInputCallback = {
     context.consume(queue: queue, buffer: buffer, packetCount: packetCount)
 }
 
+/// Owns the queue, AudioFileID, retained callback context, and capture as one release unit.
+/// A failed dispose keeps all four alive; deinit retries once, then the retained callback
+/// context safely quarantines that single failed native operation if disposal still fails.
+private final class AudioQueueOwnedResources: @unchecked Sendable {
+    let context: AudioQueueCaptureContext
+    private let capture: AudioCaptureFile
+    private let lifecycle: AudioQueueLifecycleOperations
+    private let lock = NSLock()
+    private var queue: AudioQueueRef?
+    private var audioFile: AudioFileID?
+    private var callbackOwner: UnsafeMutableRawPointer?
+
+    init(capture: AudioCaptureFile, context: AudioQueueCaptureContext,
+         queue: AudioQueueRef, audioFile: AudioFileID,
+         callbackOwner: UnsafeMutableRawPointer,
+         lifecycle: AudioQueueLifecycleOperations) {
+        self.capture = capture
+        self.context = context
+        self.queue = queue
+        self.audioFile = audioFile
+        self.callbackOwner = callbackOwner
+        self.lifecycle = lifecycle
+    }
+
+    var activeQueue: AudioQueueRef? { lock.withLock { queue } }
+
+    func shutdown() -> [String] {
+        lock.lock()
+        var failures: [String] = []
+        context.beginDrain()
+        if let queue {
+            let stopStatus = lifecycle.stop(queue, true)
+            if stopStatus != noErr { failures.append("录音停止失败（\(stopStatus)）") }
+            if let callbackError = context.callbacksDidTerminate() { failures.append(callbackError) }
+            let disposeStatus = lifecycle.dispose(queue, true)
+            if disposeStatus == noErr {
+                self.queue = nil
+                closeFileAndReleaseOwner(failures: &failures)
+            } else {
+                failures.append("录音资源释放失败（\(disposeStatus)）；回调与文件所有权已保留")
+            }
+        } else {
+            _ = context.callbacksDidTerminate()
+            closeFileAndReleaseOwner(failures: &failures)
+        }
+        if let synchronizationError = capture.synchronize() { failures.append(synchronizationError) }
+        lock.unlock()
+        return failures
+    }
+
+    private func closeFileAndReleaseOwner(failures: inout [String]) {
+        if let audioFile {
+            let closeStatus = lifecycle.closeFile(audioFile)
+            if closeStatus != noErr { failures.append("CAF 刷新失败（\(closeStatus)）") }
+            self.audioFile = nil
+        }
+        if let callbackOwner {
+            Unmanaged<AudioQueueCaptureContext>.fromOpaque(callbackOwner).release()
+            self.callbackOwner = nil
+        }
+    }
+
+    deinit { _ = shutdown() }
+}
+
 @MainActor
 final class AudioQueueRecordingDevice: AudioRecordingDevice {
     let url: URL
     private let capture: AudioCaptureFile
     private let context: AudioQueueCaptureContext
-    private var queue: AudioQueueRef?
-    private var audioFile: AudioFileID?
+    private let resources: AudioQueueOwnedResources
     private var completion: (@MainActor @Sendable (AudioRecordingResult) -> Void)?
     private var settledResult: AudioRecordingResult?
 
-    init(capture: AudioCaptureFile) throws {
+    init(capture: AudioCaptureFile,
+         lifecycle: AudioQueueLifecycleOperations = .live) throws {
         self.capture = capture
         self.url = capture.url
         var format = AudioStreamBasicDescription(
@@ -104,18 +217,22 @@ final class AudioQueueRecordingDevice: AudioRecordingDevice {
             mReserved: 0
         )
         let file = try capture.initializeAudioFile(format: &format)
-        self.audioFile = file
-        self.context = AudioQueueCaptureContext(audioFile: file)
+        let context = AudioQueueCaptureContext(capture: capture, audioFile: file)
+        let callbackOwner = Unmanaged.passRetained(context).toOpaque()
         var candidate: AudioQueueRef?
         let status = AudioQueueNewInput(&format, captureInputCallback,
-                                        Unmanaged.passUnretained(context).toOpaque(),
+                                        callbackOwner,
                                         nil, nil, 0, &candidate)
         guard status == noErr, let candidate else {
-            AudioFileClose(file)
-            self.audioFile = nil
+            lifecycle.closeFile(file)
+            Unmanaged<AudioQueueCaptureContext>.fromOpaque(callbackOwner).release()
             throw AudioMediaError.unavailable("无法创建 48 kHz 单声道输入队列（\(status)）")
         }
-        self.queue = candidate
+        self.context = context
+        self.resources = AudioQueueOwnedResources(
+            capture: capture, context: context, queue: candidate, audioFile: file,
+            callbackOwner: callbackOwner, lifecycle: lifecycle
+        )
         do {
             var actual = AudioStreamBasicDescription()
             var size = UInt32(MemoryLayout<AudioStreamBasicDescription>.size)
@@ -141,19 +258,43 @@ final class AudioQueueRecordingDevice: AudioRecordingDevice {
                 }
             }
         } catch {
-            AudioQueueDispose(candidate, true)
-            self.queue = nil
-            AudioFileClose(file)
-            self.audioFile = nil
-            _ = capture.synchronize()
+            let failures = resources.shutdown()
+            if !failures.isEmpty {
+                throw AudioMediaError.unavailable(
+                    "\(error.localizedDescription)；\(failures.joined(separator: "；"))"
+                )
+            }
             throw error
         }
+    }
+
+    /// CPU-only lifecycle fixture: the injected operations must not dereference `queue`.
+    init(testing capture: AudioCaptureFile, queue: AudioQueueRef,
+         lifecycle: AudioQueueLifecycleOperations) throws {
+        self.capture = capture
+        self.url = capture.url
+        var format = AudioStreamBasicDescription(
+            mSampleRate: captureSampleRate, mFormatID: kAudioFormatLinearPCM,
+            mFormatFlags: kAudioFormatFlagsNativeFloatPacked,
+            mBytesPerPacket: captureBytesPerFrame, mFramesPerPacket: 1,
+            mBytesPerFrame: captureBytesPerFrame, mChannelsPerFrame: 1,
+            mBitsPerChannel: 32, mReserved: 0
+        )
+        let file = try capture.initializeAudioFile(format: &format)
+        let context = AudioQueueCaptureContext(capture: capture, audioFile: file)
+        let callbackOwner = Unmanaged.passRetained(context).toOpaque()
+        self.context = context
+        self.resources = AudioQueueOwnedResources(
+            capture: capture, context: context, queue: queue, audioFile: file,
+            callbackOwner: callbackOwner, lifecycle: lifecycle
+        )
     }
 
     var currentSeconds: Double { Double(context.recordedFrames) / captureSampleRate }
 
     func start(completion: @escaping @MainActor @Sendable (AudioRecordingResult) -> Void) throws -> Bool {
-        guard let queue, settledResult == nil, self.completion == nil else { return false }
+        guard let queue = resources.activeQueue,
+              settledResult == nil, self.completion == nil else { return false }
         self.completion = completion
         context.setTerminal { [weak self] error in
             Task { @MainActor [weak self] in self?.finishFromDevice(error: error) }
@@ -161,7 +302,7 @@ final class AudioQueueRecordingDevice: AudioRecordingDevice {
         let status = AudioQueueStart(queue, nil)
         guard status == noErr else {
             self.completion = nil
-            _ = context.clearTerminalAndStopAccepting()
+            context.beginDrain()
             throw AudioMediaError.unavailable("录音设备未能启动（\(status)）")
         }
         return true
@@ -172,20 +313,7 @@ final class AudioQueueRecordingDevice: AudioRecordingDevice {
         completion = nil
         var failures: [String] = []
         if let requestedError { failures.append(requestedError) }
-        if let callbackError = context.clearTerminalAndStopAccepting() { failures.append(callbackError) }
-        if let queue {
-            let stopStatus = AudioQueueStop(queue, true)
-            if stopStatus != noErr { failures.append("录音停止失败（\(stopStatus)）") }
-            let disposeStatus = AudioQueueDispose(queue, true)
-            if disposeStatus != noErr { failures.append("录音资源释放失败（\(disposeStatus)）") }
-            self.queue = nil
-        }
-        if let audioFile {
-            let closeStatus = AudioFileClose(audioFile)
-            if closeStatus != noErr { failures.append("CAF 刷新失败（\(closeStatus)）") }
-            self.audioFile = nil
-        }
-        if let synchronizationError = capture.synchronize() { failures.append(synchronizationError) }
+        failures.append(contentsOf: resources.shutdown())
         let result = AudioRecordingResult(url: url,
                                           error: failures.isEmpty ? nil : failures.joined(separator: "；"))
         settledResult = result
@@ -197,4 +325,9 @@ final class AudioQueueRecordingDevice: AudioRecordingDevice {
         let result = stop(error: error)
         callback(result)
     }
+
+    func deliverStopBufferForTesting(_ samples: [Float]) -> OSStatus {
+        context.consumeStopBufferForTesting(samples)
+    }
+
 }

@@ -49,7 +49,7 @@ struct AudioProjectStoreTests {
             let reservation = try await store.reserveAudioCapture(name: "现场录音")
             let capture = try await store.audioCaptureURL(id: reservation.id)
             #expect(await store.snapshot().pendingAudioCaptures == [reservation])
-            try AudioTestMedia.writePCM(to: capture, samples: [[-0.5, 0, 0.5]], sampleRate: 48_000,
+            try AudioTestMedia.writePCM(to: capture, samples: [[-0.5, 0, 0.5]], sampleRate: 8_000,
                                         bitDepth: 32, floatingPoint: true)
             try await store.close()
 
@@ -249,6 +249,58 @@ struct AudioProjectStoreTests {
         }
     }
 
+    @Test func descriptorCaptureFinalizesAndReopensWithoutURLWriter() async throws {
+        try await withAudioProjectFixture { _, project in
+            let store = try await ProjectStore.create(at: project, name: "Descriptor")
+            let reservation = try await store.reserveAudioCapture(name: "descriptor")
+            let capture = try await store.createAudioCaptureFile(id: reservation.id)
+            try writeCaptureFixture(capture)
+            let finalized = try await store.finalizeAudioCapture(id: reservation.id, capture: capture)
+            #expect(finalized.pendingAudioCaptures.isEmpty)
+            #expect(finalized.assets.first(where: { $0.id == reservation.id })?.metadata.audio?.format.sampleRate == 48_000)
+            try await store.close()
+            let reopened = try await ProjectStore.open(at: project)
+            #expect(await reopened.snapshot().assets.contains(where: { $0.id == reservation.id }))
+            try await reopened.close()
+        }
+    }
+
+    @Test func malformedCAFPacketFrameAlignmentNeverPublishesCapture() async throws {
+        try await withAudioProjectFixture { _, project in
+            let store = try await ProjectStore.create(at: project, name: "Malformed")
+            let reservation = try await store.reserveAudioCapture(name: "malformed")
+            let capture = try await store.createAudioCaptureFile(id: reservation.id)
+            try overwrite(capture, with: malformedNineByteCAF())
+            await #expect(throws: AudioMediaError.self) {
+                try await store.finalizeAudioCapture(id: reservation.id, capture: capture)
+            }
+            #expect(await store.snapshot().pendingAudioCaptures == [reservation])
+            #expect(await store.snapshot().assets.isEmpty)
+            try await store.close()
+        }
+    }
+
+    @Test func sameInodeMutationAfterInspectionFailsFingerprintPublication() async throws {
+        try await withAudioProjectFixture { _, project in
+            let store = try await ProjectStore.create(at: project, name: "Fingerprint")
+            let reservation = try await store.reserveAudioCapture(name: "fingerprint")
+            let capture = try await store.createAudioCaptureFile(id: reservation.id)
+            try writeCaptureFixture(capture)
+            await #expect(throws: ProjectStoreError.self) {
+                try await store.finalizeAudioCapture(id: reservation.id, capture: capture) { descriptor in
+                    var info = stat()
+                    guard fstat(descriptor, &info) == 0,
+                          ftruncate(descriptor, info.st_size + 4) == 0 else {
+                        throw AudioMediaError.io("controlled fingerprint mutation failed")
+                    }
+                }
+            }
+            #expect(await store.snapshot().pendingAudioCaptures == [reservation])
+            #expect(await store.snapshot().assets.isEmpty)
+            try await store.close()
+        }
+    }
+
     @Test(arguments: [2, 3])
     func schemaTwoAndThreeMigrationKeepExactBackupsAndDefaultNewFields(version: Int) async throws {
         try await withAudioProjectFixture { _, project in
@@ -361,6 +413,38 @@ private func writeCaptureFixture(_ capture: AudioCaptureFile) throws {
           capture.synchronize() == nil else {
         throw AudioMediaError.io("无法写入合成录音 fixture")
     }
+}
+
+private func overwrite(_ capture: AudioCaptureFile, with data: Data) throws {
+    let descriptor = try capture.duplicateDescriptor()
+    defer { Darwin.close(descriptor) }
+    guard ftruncate(descriptor, 0) == 0 else { throw AudioMediaError.io("fixture truncate") }
+    try data.withUnsafeBytes { bytes in
+        var offset = 0
+        while offset < bytes.count {
+            let count = pwrite(descriptor, bytes.baseAddress!.advanced(by: offset),
+                               bytes.count - offset, off_t(offset))
+            guard count > 0 else { throw AudioMediaError.io("fixture write") }
+            offset += count
+        }
+    }
+}
+
+private func malformedNineByteCAF() -> Data {
+    var data = Data("caff".utf8)
+    func appendBig<T: FixedWidthInteger>(_ value: T) {
+        var big = value.bigEndian
+        Swift.withUnsafeBytes(of: &big) { data.append(contentsOf: $0) }
+    }
+    appendBig(UInt16(1)); appendBig(UInt16(0))
+    data.append(Data("desc".utf8)); appendBig(UInt64(32))
+    appendBig(Double(48_000).bitPattern)
+    data.append(Data("lpcm".utf8))
+    appendBig(UInt32(kAudioFormatFlagIsFloat | kAudioFormatFlagIsPacked))
+    appendBig(UInt32(9)); appendBig(UInt32(2)); appendBig(UInt32(1)); appendBig(UInt32(32))
+    data.append(Data("data".utf8)); appendBig(UInt64(13)); appendBig(UInt32(0))
+    data.append(Data(repeating: 0, count: 9))
+    return data
 }
 
 private func legacyManifest(_ manifest: ProjectManifest, schemaVersion: Int) throws -> Data {

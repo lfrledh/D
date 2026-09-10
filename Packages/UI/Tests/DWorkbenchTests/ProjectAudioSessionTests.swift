@@ -111,7 +111,7 @@ private final class SessionAudioFactory: AudioTransportDeviceFactory {
             AudioFileWritePackets(file, false, UInt32($0.count), nil, 0, &packets, $0.baseAddress!)
         }
         let closeStatus = AudioFileClose(file)
-        guard status == noErr, packets == samples.count, closeStatus == noErr,
+        guard status == noErr, packets == UInt32(samples.count), closeStatus == noErr,
               capture.synchronize() == nil else {
             throw AudioMediaError.io("无法写入合成录音 fixture")
         }

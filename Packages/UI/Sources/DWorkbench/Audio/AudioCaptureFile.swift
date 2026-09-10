@@ -12,6 +12,24 @@ struct AudioCaptureIdentity: Sendable, Equatable {
     }
 }
 
+struct AudioCaptureFingerprint: Sendable, Equatable {
+    let identity: AudioCaptureIdentity
+    let size: Int64
+    let modificationSeconds: Int64
+    let modificationNanoseconds: Int64
+    let changeSeconds: Int64
+    let changeNanoseconds: Int64
+
+    init(_ info: stat) {
+        identity = AudioCaptureIdentity(info)
+        size = Int64(info.st_size)
+        modificationSeconds = Int64(info.st_mtimespec.tv_sec)
+        modificationNanoseconds = Int64(info.st_mtimespec.tv_nsec)
+        changeSeconds = Int64(info.st_ctimespec.tv_sec)
+        changeNanoseconds = Int64(info.st_ctimespec.tv_nsec)
+    }
+}
+
 /// Owns the exact inode created by ProjectStore. The unchecked conformance is deliberately
 /// confined to this C-callback bridge: every descriptor operation and close is serialized by
 /// `lock`, and AudioFileID never outlives the strong owner held by the recording device.
@@ -26,10 +44,15 @@ final class AudioCaptureFile: @unchecked Sendable {
     private var fileDescriptor: Int32
     private var directoryDescriptor: Int32
     private var firstCallbackError: String?
+    private var sealed = false
+    private let synchronizeFile: (Int32) -> Int32
+    private let synchronizeDirectory: (Int32) -> Int32
 
     init(id: UUID, url: URL, fileDescriptor: Int32, directoryDescriptor: Int32,
          rootIdentity: AudioCaptureIdentity, directoryIdentity: AudioCaptureIdentity,
-         fileIdentity: AudioCaptureIdentity) {
+         fileIdentity: AudioCaptureIdentity,
+         synchronizeFile: @escaping (Int32) -> Int32 = { fsync($0) },
+         synchronizeDirectory: @escaping (Int32) -> Int32 = { fsync($0) }) {
         self.id = id
         self.url = url
         self.fileDescriptor = fileDescriptor
@@ -37,6 +60,8 @@ final class AudioCaptureFile: @unchecked Sendable {
         self.rootIdentity = rootIdentity
         self.directoryIdentity = directoryIdentity
         self.fileIdentity = fileIdentity
+        self.synchronizeFile = synchronizeFile
+        self.synchronizeDirectory = synchronizeDirectory
     }
 
     deinit {
@@ -76,7 +101,38 @@ final class AudioCaptureFile: @unchecked Sendable {
         }
     }
 
+    func sealAndFingerprint() throws -> AudioCaptureFingerprint {
+        try lock.withLock {
+            sealed = true
+            guard fileDescriptor >= 0 else { throw AudioMediaError.io("录音文件已经关闭") }
+            var info = stat()
+            guard fstat(fileDescriptor, &info) == 0 else {
+                throw AudioMediaError.io(String(cString: strerror(errno)))
+            }
+            guard info.st_mode & S_IFMT == S_IFREG, info.st_nlink == 1 else {
+                throw AudioMediaError.invalidMedia("录音必须是单链接普通文件")
+            }
+            return AudioCaptureFingerprint(info)
+        }
+    }
+
+    func fingerprint() throws -> AudioCaptureFingerprint {
+        try lock.withLock {
+            guard sealed, fileDescriptor >= 0 else {
+                throw AudioMediaError.io("录音尚未完成封存")
+            }
+            var info = stat()
+            guard fstat(fileDescriptor, &info) == 0 else {
+                throw AudioMediaError.io(String(cString: strerror(errno)))
+            }
+            return AudioCaptureFingerprint(info)
+        }
+    }
+
     func initializeAudioFile(format: inout AudioStreamBasicDescription) throws -> AudioFileID {
+        try lock.withLock {
+            guard !sealed, fileDescriptor >= 0 else { throw AudioMediaError.io("录音文件已经封存") }
+        }
         var result: AudioFileID?
         let status = AudioFileInitializeWithCallbacks(
             Unmanaged.passUnretained(self).toOpaque(),
@@ -91,19 +147,35 @@ final class AudioCaptureFile: @unchecked Sendable {
 
     func synchronize() -> String? {
         lock.withLock {
-            if let firstCallbackError { return firstCallbackError }
-            guard fileDescriptor >= 0, directoryDescriptor >= 0 else { return "录音文件已经关闭" }
-            if fsync(fileDescriptor) != 0 { return String(cString: strerror(errno)) }
-            if fsync(directoryDescriptor) != 0 { return String(cString: strerror(errno)) }
-            return firstCallbackError
+            var failures: [String] = []
+            if let firstCallbackError { failures.append(firstCallbackError) }
+            if fileDescriptor >= 0 {
+                if synchronizeFile(fileDescriptor) != 0 {
+                    failures.append("录音文件同步失败：\(String(cString: strerror(errno)))")
+                }
+            } else {
+                failures.append("录音文件已经关闭")
+            }
+            if directoryDescriptor >= 0 {
+                if synchronizeDirectory(directoryDescriptor) != 0 {
+                    failures.append("录音目录同步失败：\(String(cString: strerror(errno)))")
+                }
+            } else {
+                failures.append("录音目录已经关闭")
+            }
+            return failures.isEmpty ? nil : failures.joined(separator: "；")
         }
+    }
+
+    func injectCallbackErrorForTesting(_ message: String) {
+        lock.withLock { if firstCallbackError == nil { firstCallbackError = message } }
     }
 
     fileprivate func read(at position: Int64, count: UInt32, into buffer: UnsafeMutableRawPointer,
                           actualCount: UnsafeMutablePointer<UInt32>) -> OSStatus {
         lock.withLock {
             actualCount.pointee = 0
-            guard fileDescriptor >= 0, position >= 0,
+            guard !sealed, fileDescriptor >= 0, position >= 0,
                   position <= Int64(AudioLimits.maximumBytes),
                   Int64(count) <= Int64(AudioLimits.maximumBytes) - position else {
                 return fail("录音读取越过 64 MiB 边界")
@@ -159,7 +231,7 @@ final class AudioCaptureFile: @unchecked Sendable {
 
     fileprivate func resize(to size: Int64) -> OSStatus {
         lock.withLock {
-            guard fileDescriptor >= 0, size >= 0, size <= Int64(AudioLimits.maximumBytes) else {
+            guard !sealed, fileDescriptor >= 0, size >= 0, size <= Int64(AudioLimits.maximumBytes) else {
                 return fail("录音文件大小越过 64 MiB 边界")
             }
             guard ftruncate(fileDescriptor, off_t(size)) == 0 else {
@@ -181,12 +253,12 @@ private func capture(_ clientData: UnsafeMutableRawPointer?) -> AudioCaptureFile
 }
 
 private let audioCaptureRead: AudioFile_ReadProc = { clientData, position, count, buffer, actual in
-    guard let owner = capture(clientData), let actual else { return kAudioFileUnspecifiedError }
+    guard let owner = capture(clientData) else { return kAudioFileUnspecifiedError }
     return owner.read(at: position, count: count, into: buffer, actualCount: actual)
 }
 
 private let audioCaptureWrite: AudioFile_WriteProc = { clientData, position, count, buffer, actual in
-    guard let owner = capture(clientData), let actual else { return kAudioFileUnspecifiedError }
+    guard let owner = capture(clientData) else { return kAudioFileUnspecifiedError }
     return owner.write(at: position, count: count, from: buffer, actualCount: actual)
 }
 

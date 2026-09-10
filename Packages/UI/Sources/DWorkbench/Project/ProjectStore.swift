@@ -490,19 +490,26 @@ public actor ProjectStore {
         return try finalizeAudioCapture(id: id, capture: capture)
     }
 
-    func finalizeAudioCapture(id: UUID, capture: AudioCaptureFile) throws -> ProjectManifest {
+    func finalizeAudioCapture(
+        id: UUID,
+        capture: AudioCaptureFile,
+        afterInspection: (@Sendable (Int32) throws -> Void)? = nil
+    ) throws -> ProjectManifest {
         guard let reservationIndex = manifest.pendingAudioCaptures.firstIndex(where: { $0.id == id }) else {
             throw ProjectStoreError.invalidProject("找不到待恢复的音频预约。")
         }
         guard capture.id == id else { throw ProjectStoreError.unsafePath("capture identity") }
-        try verifyCapture(capture)
+        try verifyCapture(capture, expectedFingerprint: nil)
+        _ = try capture.sealAndFingerprint()
         if let error = capture.synchronize() { throw AudioMediaError.io(error) }
         let reservation = manifest.pendingAudioCaptures[reservationIndex]
         let descriptor = try capture.duplicateDescriptor()
         defer { Darwin.close(descriptor) }
-        let inspection = try AudioMediaInspector.inspectCapture(descriptor: descriptor)
+        let checked = try AudioMediaInspector.inspectCapture(descriptor: descriptor)
+        let inspection = checked.inspection
         guard inspection.format.container == .caf else { throw AudioMediaError.unsupportedFormat }
-        try verifyCapture(capture)
+        try afterInspection?(descriptor)
+        try verifyCapture(capture, expectedFingerprint: checked.fingerprint)
 
         let metadata = AudioAssetMetadata(format: inspection.format,
                                           contentSHA256: inspection.contentSHA256,
@@ -518,6 +525,9 @@ public actor ProjectStore {
         candidate.assets.append(asset)
         candidate.documents.append(document)
         candidate.activeDocumentID = documentID
+        // This is the observed-boundary seal: the inode fingerprint used for metadata is
+        // checked again immediately before publishing the manifest mutation.
+        try verifyCapture(capture, expectedFingerprint: checked.fingerprint)
         try commit(candidate)
         if let directory = captureDirectories.removeValue(forKey: id) { Darwin.close(directory) }
         return manifest
@@ -578,7 +588,8 @@ public actor ProjectStore {
         return capture
     }
 
-    private func verifyCapture(_ capture: AudioCaptureFile) throws {
+    private func verifyCapture(_ capture: AudioCaptureFile,
+                               expectedFingerprint: AudioCaptureFingerprint?) throws {
         try checkLocation()
         var rootInfo = stat()
         guard fstat(rootFD, &rootInfo) == 0,
@@ -589,6 +600,10 @@ public actor ProjectStore {
         try verifyRootedCaptureDirectory(id: capture.id, retained: retained)
         let held = try capture.currentIdentities()
         guard held.0 == capture.directoryIdentity, held.1 == capture.fileIdentity else {
+            throw ProjectStoreError.externalModification
+        }
+        if let expectedFingerprint,
+           try capture.fingerprint() != expectedFingerprint {
             throw ProjectStoreError.externalModification
         }
         var directoryInfo = stat()
@@ -603,6 +618,10 @@ public actor ProjectStore {
         guard fstat(rootedFile, &fileInfo) == 0,
               fileInfo.st_mode & S_IFMT == S_IFREG, fileInfo.st_nlink == 1,
               AudioCaptureIdentity(fileInfo) == capture.fileIdentity else {
+            throw ProjectStoreError.externalModification
+        }
+        if let expectedFingerprint,
+           AudioCaptureFingerprint(fileInfo) != expectedFingerprint {
             throw ProjectStoreError.externalModification
         }
     }

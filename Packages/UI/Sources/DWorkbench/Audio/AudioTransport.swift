@@ -198,7 +198,7 @@ public final class AudioTransport: NSObject {
 
     /// The project owner must validate the reserved destination relative to its retained
     /// authorized directory, before permission and again immediately before device creation.
-    public func requestAndStartRecording(
+    func requestAndStartRecording(
         to url: URL,
         revalidate: @MainActor @Sendable () async throws -> Void,
         createCapture: @MainActor @Sendable () async throws -> AudioCaptureFile

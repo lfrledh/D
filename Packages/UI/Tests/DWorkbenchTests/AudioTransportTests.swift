@@ -201,8 +201,7 @@ private func fixtureCapture(at url: URL) throws -> AudioCaptureFile {
     let directory = Darwin.open(url.deletingLastPathComponent().path,
                                 O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
     guard directory >= 0 else { throw AudioMediaError.io("fixture directory") }
-    var transferred = false
-    defer { if !transferred { Darwin.close(directory) } }
+    defer { Darwin.close(directory) }
     let descriptor = openat(directory, url.lastPathComponent,
                             O_RDWR | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0o600)
     guard descriptor >= 0 else { throw AudioMediaError.io("fixture capture") }
@@ -220,7 +219,6 @@ private func fixtureCapture(at url: URL) throws -> AudioCaptureFile {
                                    rootIdentity: AudioCaptureIdentity(rootInfo),
                                    directoryIdentity: AudioCaptureIdentity(rootInfo),
                                    fileIdentity: AudioCaptureIdentity(fileInfo))
-    transferred = true
     fileTransferred = true
     return capture
 }
