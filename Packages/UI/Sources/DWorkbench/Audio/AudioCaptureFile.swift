@@ -175,7 +175,8 @@ final class AudioCaptureFile: @unchecked Sendable {
                           actualCount: UnsafeMutablePointer<UInt32>) -> OSStatus {
         lock.withLock {
             actualCount.pointee = 0
-            guard !sealed, fileDescriptor >= 0, position >= 0,
+            guard !sealed else { return fail("录音文件已经封存") }
+            guard fileDescriptor >= 0, position >= 0,
                   position <= Int64(AudioLimits.maximumBytes),
                   Int64(count) <= Int64(AudioLimits.maximumBytes) - position else {
                 return fail("录音读取越过 64 MiB 边界")
@@ -198,6 +199,7 @@ final class AudioCaptureFile: @unchecked Sendable {
                            actualCount: UnsafeMutablePointer<UInt32>) -> OSStatus {
         lock.withLock {
             actualCount.pointee = 0
+            guard !sealed else { return fail("录音文件已经封存") }
             guard fileDescriptor >= 0, position >= 0,
                   position <= Int64(AudioLimits.maximumBytes),
                   Int64(count) <= Int64(AudioLimits.maximumBytes) - position else {

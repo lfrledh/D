@@ -18,6 +18,27 @@ private final class SynchronizeProbe: @unchecked Sendable {
     var counts: (Int, Int) { lock.withLock { (values.file, values.directory) } }
 }
 
+private final class LifecycleProbe: @unchecked Sendable {
+    private let lock = NSLock()
+    private var disposeResults: [OSStatus]
+    private var closeCountValue = 0
+    init(disposeResults: [OSStatus]) { self.disposeResults = disposeResults }
+    func stop(_ queue: AudioQueueRef, _ immediate: Bool) -> OSStatus { noErr }
+    func dispose(_ queue: AudioQueueRef, _ immediate: Bool) -> OSStatus {
+        lock.withLock { disposeResults.isEmpty ? noErr : disposeResults.removeFirst() }
+    }
+    func close(_ file: AudioFileID) -> OSStatus {
+        lock.withLock { closeCountValue += 1 }
+        return AudioFileClose(file)
+    }
+    var closeCount: Int { lock.withLock { closeCountValue } }
+}
+
+private final class WeakCaptureBox {
+    weak var value: AudioCaptureFile?
+    init(_ value: AudioCaptureFile?) { self.value = value }
+}
+
 @Suite("Descriptor-backed audio capture file")
 struct AudioCaptureFileTests {
     @Test func callbackFailureStillAttemptsFileAndDirectoryDurability() throws {
@@ -51,6 +72,42 @@ struct AudioCaptureFileTests {
         #expect(probe.counts.1 == 1)
     }
 
+    @Test func sealedCaptureRejectsRealAudioFilePacketCallbackWithoutMutation() throws {
+        let root = try captureFileTestDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let capture = try makeCaptureFile(in: root)
+        var format = AudioStreamBasicDescription(
+            mSampleRate: 48_000, mFormatID: kAudioFormatLinearPCM,
+            mFormatFlags: kAudioFormatFlagsNativeFloatPacked,
+            mBytesPerPacket: 4, mFramesPerPacket: 1, mBytesPerFrame: 4,
+            mChannelsPerFrame: 1, mBitsPerChannel: 32, mReserved: 0
+        )
+        let audioFile = try capture.initializeAudioFile(format: &format)
+        var first: Float = 0.25
+        var firstPackets: UInt32 = 1
+        let firstStatus = withUnsafeMutableBytes(of: &first) {
+            AudioFileWritePackets(audioFile, false, UInt32($0.count), nil,
+                                  0, &firstPackets, $0.baseAddress!)
+        }
+        #expect(firstStatus == noErr)
+        #expect(firstPackets == 1)
+
+        let sealed = try capture.sealAndFingerprint()
+        let sealedBytes = try captureBytes(capture)
+        var second: Float = -0.5
+        var secondPackets: UInt32 = 1
+        let rejected = withUnsafeMutableBytes(of: &second) {
+            AudioFileWritePackets(audioFile, false, UInt32($0.count), nil,
+                                  1, &secondPackets, $0.baseAddress!)
+        }
+        #expect(rejected != noErr)
+        #expect(try capture.fingerprint() == sealed)
+        #expect(try captureBytes(capture) == sealedBytes)
+        _ = AudioFileClose(audioFile)
+        #expect(try capture.fingerprint() == sealed)
+        #expect(try captureBytes(capture) == sealedBytes)
+    }
+
 
     @MainActor
     @Test func synchronousStopDeliveredPCMIsWrittenBeforeAudioFileClose() throws {
@@ -79,28 +136,55 @@ struct AudioCaptureFileTests {
     }
 
     @MainActor
-    @Test func failedQueueDisposeRetainsCallbackCaptureAndDoesNotCloseAudioFile() throws {
+    @Test func failedQueueDisposeBlocksSecondAdmissionUntilKnownRelease() throws {
         let root = try captureFileTestDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
+        let gate = AudioRecordingAdmissionGate()
+        let probe = LifecycleProbe(disposeResults: [-1, noErr, noErr])
+        let lifecycle = AudioQueueLifecycleOperations(stop: probe.stop,
+                                                      dispose: probe.dispose,
+                                                      closeFile: probe.close)
         var capture: AudioCaptureFile? = try makeCaptureFile(in: root)
-        weak var retainedCapture = capture
-        let closeProbe = SynchronizeProbe()
-        let lifecycle = AudioQueueLifecycleOperations(
-            stop: { _, _ in noErr },
-            dispose: { _, _ in -1 },
-            closeFile: { _ in _ = closeProbe.file(0); return noErr }
-        )
+        let retainedCapture = WeakCaptureBox(capture)
         var device: AudioQueueRecordingDevice? = try AudioQueueRecordingDevice(
             testing: try #require(capture), queue: try #require(OpaquePointer(bitPattern: 2)),
-            lifecycle: lifecycle
+            lifecycle: lifecycle, admissionGate: gate
         )
         capture = nil
         let result = try #require(device).stop(error: nil)
         #expect(result.error?.contains("所有权已保留") == true)
-        #expect(closeProbe.counts.0 == 0)
+        #expect(probe.closeCount == 0)
+
+        let refusedCapture = try makeCaptureFile(in: root)
+        var refusal: String?
+        do {
+            _ = try AudioQueueRecordingDevice(
+                testing: refusedCapture, queue: try #require(OpaquePointer(bitPattern: 3)),
+                lifecycle: lifecycle, admissionGate: gate
+            )
+            Issue.record("termination-unknown gate admitted a second native recording")
+        } catch {
+            refusal = error.localizedDescription
+        }
+        #expect(refusal?.contains("重启应用后再录音") == true)
+        #expect(try captureBytes(refusedCapture).isEmpty)
+        #expect(probe.closeCount == 0)
+
+        // Resource deinit retries the same native operation. The controlled second dispose
+        // succeeds, so AudioFile closes and the process admission gate becomes available.
         device = nil
-        #expect(retainedCapture != nil)
-        #expect(closeProbe.counts.0 == 0)
+        #expect(retainedCapture.value == nil)
+        #expect(probe.closeCount == 1)
+
+        let recoveredCapture = try makeCaptureFile(in: root)
+        var recovered: AudioQueueRecordingDevice? = try AudioQueueRecordingDevice(
+            testing: recoveredCapture, queue: try #require(OpaquePointer(bitPattern: 4)),
+            lifecycle: lifecycle, admissionGate: gate
+        )
+        let recoveredDevice = try #require(recovered)
+        #expect(recoveredDevice.stop(error: nil).error == nil)
+        recovered = nil
+        #expect(probe.closeCount == 2)
     }
 }
 
@@ -122,6 +206,27 @@ private func makeCaptureFile(in root: URL) throws -> AudioCaptureFile {
                             rootIdentity: AudioCaptureIdentity(directoryInfo),
                             directoryIdentity: AudioCaptureIdentity(directoryInfo),
                             fileIdentity: AudioCaptureIdentity(fileInfo))
+}
+
+private func captureBytes(_ capture: AudioCaptureFile) throws -> Data {
+    let descriptor = try capture.duplicateDescriptor()
+    defer { Darwin.close(descriptor) }
+    var info = stat()
+    guard fstat(descriptor, &info) == 0, info.st_size >= 0,
+          info.st_size <= AudioLimits.maximumBytes else {
+        throw AudioMediaError.io("fixture stat")
+    }
+    var data = Data(count: Int(info.st_size))
+    let byteCount = data.count
+    var offset = 0
+    while offset < byteCount {
+        let count = data.withUnsafeMutableBytes {
+            pread(descriptor, $0.baseAddress!.advanced(by: offset), byteCount - offset, off_t(offset))
+        }
+        guard count > 0 else { throw AudioMediaError.io("fixture read") }
+        offset += count
+    }
+    return data
 }
 
 private func captureFileTestDirectory() throws -> URL {

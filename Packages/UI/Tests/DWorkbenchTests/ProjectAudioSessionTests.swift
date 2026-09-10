@@ -92,7 +92,7 @@ private final class SessionAudioFactory: AudioTransportDeviceFactory {
         permissionContinuation?.resume(returning: value)
         permissionContinuation = nil
     }
-    func makePlayback(url: URL, expected: AudioFormatInfo) throws -> any AudioPlaybackDevice {
+    func makePlayback(url: URL, expected: DWorkbench.AudioFormatInfo) throws -> any AudioPlaybackDevice {
         let device = SessionPlaybackDevice()
         playbacks.append(device)
         return device

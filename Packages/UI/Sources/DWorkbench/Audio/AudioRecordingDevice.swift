@@ -17,6 +17,51 @@ struct AudioQueueLifecycleOperations: @unchecked Sendable {
     )
 }
 
+final class AudioRecordingAdmissionGate: @unchecked Sendable {
+    static let shared = AudioRecordingAdmissionGate()
+
+    private enum State { case available, active(UUID), terminationUnknown(UUID) }
+    private let lock = NSLock()
+    private var state: State = .available
+
+    func acquire() throws -> UUID {
+        try lock.withLock {
+            switch state {
+            case .available:
+                let token = UUID()
+                state = .active(token)
+                return token
+            case .active:
+                throw AudioMediaError.unavailable("另一原生录音仍持有进程级输入所有权")
+            case .terminationUnknown:
+                throw AudioMediaError.unavailable(
+                    "先前录音回调是否终止仍未知；已保留录音文件，请重启应用后再录音"
+                )
+            }
+        }
+    }
+
+    func markTerminationUnknown(_ token: UUID) {
+        lock.withLock {
+            if case .active(let active) = state, active == token {
+                state = .terminationUnknown(token)
+            }
+        }
+    }
+
+    func releaseAfterKnownTermination(_ token: UUID) {
+        lock.withLock {
+            switch state {
+            case .active(let active) where active == token:
+                state = .available
+            case .terminationUnknown(let retained) where retained == token:
+                state = .available
+            default: break
+            }
+        }
+    }
+}
+
 /// AudioQueue invokes this object on its private callback thread. The lock owns all packet,
 /// terminal, and re-enqueue decisions; the main-actor device performs the actual shutdown.
 private final class AudioQueueCaptureContext: @unchecked Sendable {
@@ -138,17 +183,23 @@ private final class AudioQueueOwnedResources: @unchecked Sendable {
     private var queue: AudioQueueRef?
     private var audioFile: AudioFileID?
     private var callbackOwner: UnsafeMutableRawPointer?
+    private let admissionGate: AudioRecordingAdmissionGate
+    private let admissionToken: UUID
 
     init(capture: AudioCaptureFile, context: AudioQueueCaptureContext,
          queue: AudioQueueRef, audioFile: AudioFileID,
          callbackOwner: UnsafeMutableRawPointer,
-         lifecycle: AudioQueueLifecycleOperations) {
+         lifecycle: AudioQueueLifecycleOperations,
+         admissionGate: AudioRecordingAdmissionGate,
+         admissionToken: UUID) {
         self.capture = capture
         self.context = context
         self.queue = queue
         self.audioFile = audioFile
         self.callbackOwner = callbackOwner
         self.lifecycle = lifecycle
+        self.admissionGate = admissionGate
+        self.admissionToken = admissionToken
     }
 
     var activeQueue: AudioQueueRef? { lock.withLock { queue } }
@@ -165,12 +216,15 @@ private final class AudioQueueOwnedResources: @unchecked Sendable {
             if disposeStatus == noErr {
                 self.queue = nil
                 closeFileAndReleaseOwner(failures: &failures)
+                admissionGate.releaseAfterKnownTermination(admissionToken)
             } else {
+                admissionGate.markTerminationUnknown(admissionToken)
                 failures.append("录音资源释放失败（\(disposeStatus)）；回调与文件所有权已保留")
             }
         } else {
             _ = context.callbacksDidTerminate()
             closeFileAndReleaseOwner(failures: &failures)
+            admissionGate.releaseAfterKnownTermination(admissionToken)
         }
         if let synchronizationError = capture.synchronize() { failures.append(synchronizationError) }
         lock.unlock()
@@ -202,9 +256,11 @@ final class AudioQueueRecordingDevice: AudioRecordingDevice {
     private var settledResult: AudioRecordingResult?
 
     init(capture: AudioCaptureFile,
-         lifecycle: AudioQueueLifecycleOperations = .live) throws {
+         lifecycle: AudioQueueLifecycleOperations = .live,
+         admissionGate: AudioRecordingAdmissionGate = .shared) throws {
         self.capture = capture
         self.url = capture.url
+        let admissionToken = try admissionGate.acquire()
         var format = AudioStreamBasicDescription(
             mSampleRate: captureSampleRate,
             mFormatID: kAudioFormatLinearPCM,
@@ -216,22 +272,42 @@ final class AudioQueueRecordingDevice: AudioRecordingDevice {
             mBitsPerChannel: 32,
             mReserved: 0
         )
-        let file = try capture.initializeAudioFile(format: &format)
+        let file: AudioFileID
+        do { file = try capture.initializeAudioFile(format: &format) }
+        catch {
+            admissionGate.releaseAfterKnownTermination(admissionToken)
+            throw error
+        }
         let context = AudioQueueCaptureContext(capture: capture, audioFile: file)
         let callbackOwner = Unmanaged.passRetained(context).toOpaque()
         var candidate: AudioQueueRef?
         let status = AudioQueueNewInput(&format, captureInputCallback,
                                         callbackOwner,
                                         nil, nil, 0, &candidate)
+        if status != noErr, let candidate {
+            self.context = context
+            self.resources = AudioQueueOwnedResources(
+                capture: capture, context: context, queue: candidate, audioFile: file,
+                callbackOwner: callbackOwner, lifecycle: lifecycle,
+                admissionGate: admissionGate, admissionToken: admissionToken
+            )
+            let failures = resources.shutdown()
+            throw AudioMediaError.unavailable(
+                "无法创建 48 kHz 单声道输入队列（\(status)）"
+                    + (failures.isEmpty ? "" : "；\(failures.joined(separator: "；"))")
+            )
+        }
         guard status == noErr, let candidate else {
-            lifecycle.closeFile(file)
+            _ = lifecycle.closeFile(file)
             Unmanaged<AudioQueueCaptureContext>.fromOpaque(callbackOwner).release()
+            admissionGate.releaseAfterKnownTermination(admissionToken)
             throw AudioMediaError.unavailable("无法创建 48 kHz 单声道输入队列（\(status)）")
         }
         self.context = context
         self.resources = AudioQueueOwnedResources(
             capture: capture, context: context, queue: candidate, audioFile: file,
-            callbackOwner: callbackOwner, lifecycle: lifecycle
+            callbackOwner: callbackOwner, lifecycle: lifecycle,
+            admissionGate: admissionGate, admissionToken: admissionToken
         )
         do {
             var actual = AudioStreamBasicDescription()
@@ -270,9 +346,11 @@ final class AudioQueueRecordingDevice: AudioRecordingDevice {
 
     /// CPU-only lifecycle fixture: the injected operations must not dereference `queue`.
     init(testing capture: AudioCaptureFile, queue: AudioQueueRef,
-         lifecycle: AudioQueueLifecycleOperations) throws {
+         lifecycle: AudioQueueLifecycleOperations,
+         admissionGate: AudioRecordingAdmissionGate = AudioRecordingAdmissionGate()) throws {
         self.capture = capture
         self.url = capture.url
+        let admissionToken = try admissionGate.acquire()
         var format = AudioStreamBasicDescription(
             mSampleRate: captureSampleRate, mFormatID: kAudioFormatLinearPCM,
             mFormatFlags: kAudioFormatFlagsNativeFloatPacked,
@@ -280,13 +358,19 @@ final class AudioQueueRecordingDevice: AudioRecordingDevice {
             mBytesPerFrame: captureBytesPerFrame, mChannelsPerFrame: 1,
             mBitsPerChannel: 32, mReserved: 0
         )
-        let file = try capture.initializeAudioFile(format: &format)
+        let file: AudioFileID
+        do { file = try capture.initializeAudioFile(format: &format) }
+        catch {
+            admissionGate.releaseAfterKnownTermination(admissionToken)
+            throw error
+        }
         let context = AudioQueueCaptureContext(capture: capture, audioFile: file)
         let callbackOwner = Unmanaged.passRetained(context).toOpaque()
         self.context = context
         self.resources = AudioQueueOwnedResources(
             capture: capture, context: context, queue: queue, audioFile: file,
-            callbackOwner: callbackOwner, lifecycle: lifecycle
+            callbackOwner: callbackOwner, lifecycle: lifecycle,
+            admissionGate: admissionGate, admissionToken: admissionToken
         )
     }
 

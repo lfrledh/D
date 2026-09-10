@@ -756,7 +756,8 @@ struct AudioTransportTests {
         let subject = AudioTransport(recordingEnabled: true, deviceFactory: factory)
         let task = Task {
             try await subject.requestAndStartRecording(to: target) {
-                #expect(try await store.audioCaptureURL(id: reservation.id) == target)
+                let checked = try await store.audioCaptureURL(id: reservation.id)
+                #expect(checked == target)
             }
         }
         try await waitForPermissionRequest(subject, factory: factory)
