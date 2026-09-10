@@ -228,8 +228,8 @@ struct AudioCreationStoreTests {
         }
     }
 
-    @Test(arguments: [false, true])
-    func recoveredOutputNeverFabricatesSuccessfulAdoption(cancelled: Bool) async throws {
+    @Test(arguments: [JobState.queued, .cancelled, .failed])
+    func recoveredOutputNeverFabricatesSuccessfulAdoption(requestedState: JobState) async throws {
         try await withCreationFixture { _, project in
             let store = try await ProjectStore.create(at: project, name: "recover")
             let created = try await store.createAudioCreation()
@@ -243,14 +243,22 @@ struct AudioCreationStoreTests {
                 model: .init(directory: URL(fileURLWithPath: "/fixture-model")),
                 input: .audio(try draft.makeRequest(source: nil)))
             _ = try await store.enqueue(request: request, documentID: document.id)
-            if cancelled { _ = try await store.updateJob(id: runID, state: .cancelled) }
-            try tinyWAV(try publishedOutput(project: project, runID: runID))
+            if requestedState != .queued {
+                _ = try await store.updateJob(id: runID, state: requestedState,
+                                              error: "fixture terminal state")
+            }
+            let output = try publishedOutput(project: project, runID: runID)
+            try tinyWAV(output)
+            let outputBytes = try Data(contentsOf: output)
             try await store.close()
             let reopened = try await ProjectStore.open(at: project)
             let recovered = await reopened.snapshot()
             let job = try #require(recovered.jobs.first(where: { $0.id == runID }))
-            #expect(job.state == (cancelled ? .cancelled : .interrupted))
+            let expectedState: JobState = requestedState == .queued ? .interrupted : requestedState
+            #expect(job.state == expectedState)
             let asset = try #require(recovered.assets.first(where: { $0.jobID == runID }))
+            #expect(job.artifactIDs == [asset.id])
+            #expect(try Data(contentsOf: output) == outputBytes)
             await #expect(throws: ProjectStoreError.self) {
                 try await reopened.adoptAsset(id: asset.id, documentID: document.id)
             }
@@ -320,6 +328,53 @@ struct AudioCreationStoreTests {
         }
     }
 
+    @Test func audioCompleteExternalManifestChangePreservesManifestOutputAndMemoryState() async throws {
+        try await withCreationFixture { _, project in
+            let store = try await ProjectStore.create(at: project, name: "complete conflict")
+            let created = try await store.createAudioCreation()
+            let document = try #require(created.activeDocument)
+            var draft = try #require(document.audioCreation)
+            let oldRevision = draft.revision
+            draft.revision = UUID(); draft.prompt = "fixed request"
+            draft.durationText = String(Double(4) / 44_100)
+            _ = try await store.saveAudioCreation(draft, documentID: document.id,
+                                                  expectedRevision: oldRevision)
+            let runID = UUID()
+            let request = InferenceRequest(id: runID,
+                model: .init(directory: URL(fileURLWithPath: "/fixture-model")),
+                input: .audio(try draft.makeRequest(source: nil)))
+            _ = try await store.enqueue(request: request, documentID: document.id)
+            let before = await store.snapshot()
+            let output = try publishedOutput(project: project, runID: runID)
+            try tinyWAV(output)
+            let outputBytes = try Data(contentsOf: output)
+
+            let manifestURL = project.appendingPathComponent(ProjectStore.manifestFilename)
+            let ownedManifestBytes = try Data(contentsOf: manifestURL)
+            var object = try #require(JSONSerialization.jsonObject(with: ownedManifestBytes) as? [String: Any])
+            object["name"] = "external writer content"
+            let externalBytes = try JSONSerialization.data(withJSONObject: object,
+                                                            options: [.prettyPrinted, .sortedKeys])
+            try externalBytes.write(to: manifestURL)
+            await #expect(throws: ProjectStoreError.externalModification) {
+                try await store.complete(id: runID, result: .init(
+                    artifacts: [.init(url: output, mediaType: "audio/wav")],
+                    metadata: ["profile": "CPU fixture only"]))
+            }
+            #expect(try Data(contentsOf: manifestURL) == externalBytes)
+            #expect(try Data(contentsOf: output) == outputBytes)
+            let after = await store.snapshot()
+            #expect(after == before)
+            #expect(after.assets.isEmpty)
+            #expect(after.jobs.first(where: { $0.id == runID })?.state == .queued)
+
+            // Restore only this fixture's deliberate external edit so normal close can verify it.
+            try ownedManifestBytes.write(to: manifestURL)
+            #expect(try Data(contentsOf: manifestURL) == ownedManifestBytes)
+            try await store.close()
+        }
+    }
+
     @Test func malformedPublishedResultsRemainErrorsAndBytesArePreserved() async throws {
         try await withCreationFixture { _, project in
             let store = try await ProjectStore.create(at: project, name: "malformed")
@@ -343,7 +398,7 @@ struct AudioCreationStoreTests {
 
             let (_, wrongPathID) = try await enqueue(frames: 4)
             let wrongPath = project.appendingPathComponent(
-                "Tasks/\(wrongPathID.uuidString.lowercased())-\(UUID().uuidString)/job/output.wav")
+                "Tasks/\(wrongPathID.uuidString.lowercased())-AAAAAAAA-AAAA-4AAA-8AAA-AAAAAAAAAAAA/job/output.wav")
             try tinyWAV(wrongPath)
             let wrongPathBytes = try Data(contentsOf: wrongPath)
             await #expect(throws: ProjectStoreError.self) {

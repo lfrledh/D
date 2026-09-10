@@ -1271,7 +1271,7 @@ public actor ProjectStore {
                 candidate.assets.append(asset)
                 candidate.jobs[index].artifactIDs.append(asset.id)
                 if candidate.jobs[index].state != .completed {
-                    if !candidate.jobs[index].state.isTerminal {
+                    if !isAudio || !candidate.jobs[index].state.isTerminal {
                         candidate.jobs[index].state = .interrupted
                     }
                     candidate.jobs[index].error = isAudio
