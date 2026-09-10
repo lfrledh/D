@@ -341,7 +341,7 @@ struct ProjectAudioSessionTests {
         await subject.createProject(at: f.project)
         let oldContext = try #require(subject.audio?.contextID)
         let starting = Task { await subject.startAudioRecording(name: "pending") }
-        try await waitUntil { subject.audio?.transport.state == .requestingPermission }
+        try await waitUntil { factory.permissionContinuation != nil }
         #expect(subject.manifest?.pendingAudioCaptures.count == 1)
         #expect(await subject.finishAudioRecording())
         #expect(await subject.requestClose())
@@ -373,7 +373,7 @@ struct ProjectAudioSessionTests {
 
         factory.suspendPermission = true
         let second = Task { await subject.startAudioRecording(name: "second pending") }
-        try await waitUntil { controller.transport.state == .requestingPermission }
+        try await waitUntil { factory.permissionContinuation != nil }
         let secondReservation = try #require(subject.manifest?.pendingAudioCaptures.first)
         #expect(secondReservation.id != subject.manifest?.assets.first?.id)
         #expect(await subject.finishAudioRecording())

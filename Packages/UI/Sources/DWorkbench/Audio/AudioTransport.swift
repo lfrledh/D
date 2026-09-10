@@ -196,7 +196,12 @@ public final class AudioTransport: NSObject {
         }
     }
 
-    public func requestAndStartRecording(to url: URL) async throws {
+    /// The project owner must validate the reserved destination relative to its retained
+    /// authorized directory, before permission and again immediately before device creation.
+    public func requestAndStartRecording(
+        to url: URL,
+        revalidate: @MainActor @Sendable () async throws -> Void
+    ) async throws {
         guard recordingEnabled else {
             throw AudioMediaError.unavailable("录音功能尚未启用")
         }
@@ -212,6 +217,10 @@ public final class AudioTransport: NSObject {
 
         let permitted: Bool
         do {
+            try Task.checkCancellation()
+            try await revalidate()
+            try Task.checkCancellation()
+            guard recordingEpoch == epoch, state == .requestingPermission else { return }
             permitted = await deviceFactory.requestRecordPermission()
             try Task.checkCancellation()
         } catch {
@@ -232,6 +241,9 @@ public final class AudioTransport: NSObject {
         }
 
         do {
+            try await revalidate()
+            try Task.checkCancellation()
+            guard recordingEpoch == epoch, state == .requestingPermission else { return }
             try validateRecordingDestination(url)
             let candidate = try deviceFactory.makeRecording(url: url)
             guard recordingEpoch == epoch, state == .requestingPermission else {
@@ -267,7 +279,12 @@ public final class AudioTransport: NSObject {
             }
         } catch {
             if recordingEpoch == epoch, state == .requestingPermission {
-                state = .failed
+                if error is CancellationError {
+                    recordingEpoch &+= 1
+                    state = recordedURL == nil ? .idle : .recorded
+                } else {
+                    state = .failed
+                }
                 errorMessage = error.localizedDescription
             } else if recordingEpoch == epoch, let active = recording {
                 let result = active.stop(error: error.localizedDescription)
@@ -434,31 +451,8 @@ public final class AudioTransport: NSObject {
         guard url.isFileURL, !url.hasDirectoryPath, url.pathExtension.lowercased() == "caf" else {
             throw AudioMediaError.io("录音目标必须是尚不存在的本地 CAF 文件")
         }
-        var leafInfo = stat()
-        guard lstat(url.path, &leafInfo) != 0, errno == ENOENT else {
-            throw AudioMediaError.io("录音目标已存在或是符号链接")
-        }
-
-        let parent = url.deletingLastPathComponent().standardizedFileURL
-        guard let values = try? parent.resourceValues(forKeys: [.isDirectoryKey]),
-              values.isDirectory == true else {
-            throw AudioMediaError.io("录音目标目录不可用")
-        }
-        var cursor = parent
-        while true {
-            var info = stat()
-            let status = lstat(cursor.path, &info)
-            let savedErrno = errno
-            guard status == 0 else {
-                throw AudioMediaError.io("录音路径检查失败：\(cursor.path)，errno \(savedErrno)")
-            }
-            guard (info.st_mode & S_IFMT) != S_IFLNK else {
-                throw AudioMediaError.io("录音目标目录不可经符号链接：\(cursor.path)")
-            }
-            let next = cursor.deletingLastPathComponent()
-            if next.path == cursor.path { break }
-            cursor = next
-        }
+        // Filesystem admission belongs to the required project-owner callback. Walking
+        // absolute URL parents here can escape the granted root and need not converge at /.
     }
 }
 

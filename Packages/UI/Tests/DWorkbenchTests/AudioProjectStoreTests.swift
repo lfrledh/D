@@ -200,6 +200,27 @@ struct AudioProjectStoreTests {
         }
     }
 
+
+    @Test func captureDirectorySymlinkCannotEscapeRetainedProjectRoot() async throws {
+        try await withAudioProjectFixture { directory, project in
+            let store = try await ProjectStore.create(at: project, name: "Symlink")
+            let reservation = try await store.reserveAudioCapture(name: "capture")
+            let target = try await store.audioCaptureURL(id: reservation.id)
+            let captureDirectory = target.deletingLastPathComponent()
+            let savedDirectory = directory.appendingPathComponent("saved-reservation")
+            try FileManager.default.moveItem(at: captureDirectory, to: savedDirectory)
+            let outside = directory.appendingPathComponent("outside")
+            try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)
+            let sentinel = Data("protected".utf8)
+            try sentinel.write(to: outside.appendingPathComponent("source.caf"))
+            try FileManager.default.createSymbolicLink(at: captureDirectory, withDestinationURL: outside)
+            await #expect(throws: (any Error).self) { _ = try await store.audioCaptureURL(id: reservation.id) }
+            #expect(try Data(contentsOf: outside.appendingPathComponent("source.caf")) == sentinel)
+            #expect(await store.snapshot().pendingAudioCaptures == [reservation])
+            try await store.close()
+        }
+    }
+
     @Test(arguments: [2, 3])
     func schemaTwoAndThreeMigrationKeepExactBackupsAndDefaultNewFields(version: Int) async throws {
         try await withAudioProjectFixture { _, project in

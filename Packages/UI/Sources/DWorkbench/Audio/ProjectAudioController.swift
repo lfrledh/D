@@ -320,7 +320,18 @@ public final class ProjectAudioController {
             activeCaptureURL = url
             captureFailureBlocksNavigation = false
             errorMessage = nil
-            try await transport.requestAndStartRecording(to: url)
+            try await transport.requestAndStartRecording(to: url) { [weak self] in
+                guard let self, self.isActive, self.admissionsOpen,
+                      self.captureGeneration == generation,
+                      self.activeCaptureID == reservation.id else { throw CancellationError() }
+                let checkedURL = try await self.store.audioCaptureURL(id: reservation.id)
+                guard self.isActive, self.admissionsOpen,
+                      self.captureGeneration == generation,
+                      self.activeCaptureID == reservation.id else { throw CancellationError() }
+                guard checkedURL == url else {
+                    throw AudioMediaError.io("录音预约位置已改变；原文件和预约已保留")
+                }
+            }
             guard isActive, generation == captureGeneration else { return false }
             return transport.state == .recording || finalizingCaptureID == reservation.id
         } catch is CancellationError {

@@ -1,4 +1,5 @@
 import AudioToolbox
+import Darwin
 import Foundation
 import Testing
 @testable import DWorkbench
@@ -160,6 +161,21 @@ private final class FakeAudioFactory: AudioTransportDeviceFactory {
     }
 }
 
+
+// Existing device tests supply a fixture-only leaf validator. Production callers must
+// provide ProjectStore's descriptor-anchored validator; there is no production default.
+@MainActor
+private extension AudioTransport {
+    func requestAndStartRecording(to url: URL) async throws {
+        try await requestAndStartRecording(to: url) {
+            var info = stat()
+            guard lstat(url.path, &info) != 0, errno == ENOENT else {
+                throw AudioMediaError.io("fixture destination already exists")
+            }
+        }
+    }
+}
+
 @Suite("Audio transport", .serialized)
 @MainActor
 struct AudioTransportTests {
@@ -244,11 +260,12 @@ struct AudioTransportTests {
         return url
     }
 
-    private func waitForPermissionRequest(_ subject: AudioTransport) async throws {
-        for _ in 0..<100 where subject.state != .requestingPermission {
+    private func waitForPermissionRequest(_ subject: AudioTransport, factory: FakeAudioFactory) async throws {
+        for _ in 0..<1000 where factory.permissionContinuation == nil {
             await Task.yield()
         }
         #expect(subject.state == .requestingPermission)
+        #expect(factory.permissionContinuation != nil)
     }
 
     @Test
@@ -518,7 +535,7 @@ struct AudioTransportTests {
                 to: root.appendingPathComponent("cancelled.caf")
             )
         }
-        try await waitForPermissionRequest(cancelled)
+        try await waitForPermissionRequest(cancelled, factory: cancelledFactory)
         cancelledTask.cancel()
         cancelledFactory.resolvePermission(true)
         await #expect(throws: CancellationError.self) { try await cancelledTask.value }
@@ -533,7 +550,7 @@ struct AudioTransportTests {
                 to: root.appendingPathComponent("shutdown.caf")
             )
         }
-        try await waitForPermissionRequest(shutdown)
+        try await waitForPermissionRequest(shutdown, factory: shutdownFactory)
         shutdown.shutdown()
         shutdownFactory.resolvePermission(false)
         try await shutdownTask.value
@@ -549,7 +566,7 @@ struct AudioTransportTests {
         factory.suspendPermission = true
         let subject = AudioTransport(recordingEnabled: true, deviceFactory: factory)
         let task = Task { try await subject.requestAndStartRecording(to: target) }
-        try await waitForPermissionRequest(subject)
+        try await waitForPermissionRequest(subject, factory: factory)
         let existing = Data("reserved elsewhere".utf8)
         try existing.write(to: target, options: .withoutOverwriting)
         factory.resolvePermission(true)
@@ -629,4 +646,80 @@ struct AudioTransportTests {
         try await synchronous.requestAndStartRecording(to: target)
         #expect(synchronous.state == .recorded)
     }
+    @Test func ownerValidationRunsBeforePermissionAndDeviceCreation() async throws {
+        let root = try uniqueDirectory()
+        let target = root.appendingPathComponent("owner.caf")
+        let factory = FakeAudioFactory()
+        let subject = AudioTransport(recordingEnabled: true, deviceFactory: factory)
+        defer { subject.shutdown() }
+        try await subject.requestAndStartRecording(to: target) { factory.log.entries.append("validate") }
+        #expect(Array(factory.log.entries.prefix(4)) == ["validate", "permission", "validate", "prepare-recording"])
+        #expect(subject.state == .recording)
+    }
+
+    @Test func failedOwnerValidationNeverRequestsPermissionOrCreatesAudio() async throws {
+        let target = try uniqueDirectory().appendingPathComponent("reject.caf")
+        let factory = FakeAudioFactory()
+        let subject = AudioTransport(recordingEnabled: true, deviceFactory: factory)
+        await #expect(throws: AudioMediaError.self) {
+            try await subject.requestAndStartRecording(to: target) { throw AudioMediaError.io("owner rejected") }
+        }
+        #expect(factory.permissionRequests == 0)
+        #expect(factory.recordings.isEmpty)
+        #expect(!FileManager.default.fileExists(atPath: target.path))
+        #expect(subject.state == .idle)
+    }
+
+    @Test(arguments: [1, 2])
+    func shutdownDuringOwnerValidationCannotStartLateRecording(validationToSuspend: Int) async throws {
+        let target = try uniqueDirectory().appendingPathComponent("late.caf")
+        let factory = FakeAudioFactory()
+        let subject = AudioTransport(recordingEnabled: true, deviceFactory: factory)
+        var continuation: CheckedContinuation<Void, Never>?
+        var validations = 0
+        let task = Task {
+            try await subject.requestAndStartRecording(to: target) {
+                validations += 1
+                if validations == validationToSuspend {
+                    await withCheckedContinuation { continuation = $0 }
+                }
+            }
+        }
+        for _ in 0..<1000 where continuation == nil { await Task.yield() }
+        let gate = try #require(continuation)
+        subject.shutdown()
+        gate.resume()
+        try await task.value
+        #expect(factory.permissionRequests == validationToSuspend - 1)
+        #expect(factory.recordings.isEmpty)
+        #expect(subject.state == .idle)
+    }
+
+    @Test func ownerRevalidationRejectsSymlinkAppearingDuringPermission() async throws {
+        let root = try uniqueDirectory()
+        let project = root.appendingPathComponent("owned.dproject")
+        let store = try await ProjectStore.create(at: project, name: "owned")
+        let reservation = try await store.reserveAudioCapture(name: "reserved")
+        let target = try await store.audioCaptureURL(id: reservation.id)
+        let outside = root.appendingPathComponent("protected.caf")
+        let sentinel = Data("keep-original".utf8)
+        try sentinel.write(to: outside, options: .withoutOverwriting)
+        let factory = FakeAudioFactory()
+        factory.suspendPermission = true
+        let subject = AudioTransport(recordingEnabled: true, deviceFactory: factory)
+        let task = Task {
+            try await subject.requestAndStartRecording(to: target) {
+                #expect(try await store.audioCaptureURL(id: reservation.id) == target)
+            }
+        }
+        try await waitForPermissionRequest(subject, factory: factory)
+        try FileManager.default.createSymbolicLink(at: target, withDestinationURL: outside)
+        factory.resolvePermission(true)
+        await #expect(throws: ProjectStoreError.self) { try await task.value }
+        #expect(factory.recordings.isEmpty)
+        #expect(try Data(contentsOf: outside) == sentinel)
+        #expect(await store.snapshot().pendingAudioCaptures == [reservation])
+        try await store.close()
+    }
+
 }
