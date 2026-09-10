@@ -29,12 +29,9 @@ public struct AudioCreationDraft: Codable, Sendable, Equatable {
         guard !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw InferenceFailure.invalidRequest("Audio prompt must not be blank.")
         }
-        guard let requestedDuration = Double(durationText), requestedDuration.isFinite, requestedDuration > 0,
-              let seed = UInt64(seedText), seed <= UInt64(UInt32.max) - 1,
+        guard let seed = UInt64(seedText), seed <= UInt64(UInt32.max) - 1,
               let steps = Int(stepsText), (1...100).contains(steps),
-              let guidance = Float(guidanceText), guidance.isFinite, (1...15).contains(guidance),
-              let requestedStrength = Float(strengthText), requestedStrength.isFinite,
-              requestedStrength > 0, requestedStrength <= 1 else {
+              let guidance = Float(guidanceText), guidance.isFinite, (1...15).contains(guidance) else {
             throw InferenceFailure.invalidRequest("Invalid current audio profile parameters.")
         }
 
@@ -46,12 +43,20 @@ public struct AudioCreationDraft: Codable, Sendable, Equatable {
             guard source == nil, editRegion == nil else {
                 throw InferenceFailure.invalidRequest("Generation does not accept a source or edit region.")
             }
+            guard let requestedDuration = Double(durationText), requestedDuration.isFinite,
+                  requestedDuration > 0 else {
+                throw InferenceFailure.invalidRequest("Invalid generation duration.")
+            }
             duration = requestedDuration
             strength = 1
             region = nil
         case .variation:
             guard let source, editRegion == nil else {
                 throw InferenceFailure.invalidRequest("Variation requires a source and no edit region.")
+            }
+            guard let requestedStrength = Float(strengthText), requestedStrength.isFinite,
+                  requestedStrength > 0, requestedStrength <= 1 else {
+                throw InferenceFailure.invalidRequest("Invalid variation strength.")
             }
             duration = Double(source.frameCount) / Double(source.sampleRate)
             strength = requestedStrength
@@ -61,6 +66,10 @@ public struct AudioCreationDraft: Codable, Sendable, Equatable {
                   editRegion.startFrame >= 0, editRegion.startFrame < editRegion.endFrame,
                   editRegion.endFrame <= source.frameCount else {
                 throw InferenceFailure.invalidRequest("Inpainting requires a valid half-open source region.")
+            }
+            guard let requestedStrength = Float(strengthText), requestedStrength.isFinite,
+                  requestedStrength > 0, requestedStrength <= 1 else {
+                throw InferenceFailure.invalidRequest("Invalid inpaint strength.")
             }
             duration = Double(source.frameCount) / Double(source.sampleRate)
             strength = requestedStrength

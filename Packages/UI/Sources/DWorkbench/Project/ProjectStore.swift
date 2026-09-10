@@ -550,10 +550,45 @@ public actor ProjectStore {
     }
 
     public func exportAudioAsset(id: UUID, to destination: URL) throws {
-        guard manifest.assets.first(where: { $0.id == id })?.metadata.audio != nil else {
-            throw ProjectStoreError.missingAsset
+        try exportAudioAsset(id: id, to: destination, checkpoint: nil)
+    }
+
+    func exportAudioAsset(id: UUID, to destination: URL,
+                          checkpoint: (@Sendable (ProjectExportCheckpoint) throws -> Void)?) throws {
+        guard let asset = manifest.assets.first(where: { $0.id == id }),
+              let registered = asset.metadata.audio else { throw ProjectStoreError.missingAsset }
+        try checkLocation()
+        guard destination.isFileURL, destination.path.hasPrefix("/"),
+              !destination.lastPathComponent.isEmpty else {
+            throw ProjectStoreError.unsafePath(destination.path)
         }
-        try export(assetID: id, to: destination)
+        let policy = try ProjectFiles.inspectionPolicy(for: asset, jobs: manifest.jobs)
+        let sourceURL = rootURL.appendingPathComponent(asset.relativePath)
+        let sourceInspection = try AudioMediaInspector.inspect(at: sourceURL, policy: policy)
+        try ProjectFiles.requireRegisteredAudio(sourceInspection, matches: registered)
+        let source = try ProjectFiles.openRelativeFile(asset.relativePath, in: rootFD)
+        defer { Darwin.close(source) }
+        let parent = try ProjectFiles.openDirectory(destination.deletingLastPathComponent())
+        defer { Darwin.close(parent) }
+        try ProjectFiles.publishExport(to: destination, parent: parent, checkpoint: checkpoint,
+                                       validate: { temporary in
+            let staged = try AudioMediaInspector.inspect(at: temporary, policy: policy)
+            try ProjectFiles.requireRegisteredAudio(staged, matches: registered)
+        }) { target in
+            var buffer = [UInt8](repeating: 0, count: 64 * 1_024)
+            while true {
+                let count = Darwin.read(source, &buffer, buffer.count)
+                if count == 0 { break }
+                if count < 0 {
+                    if errno == EINTR { continue }
+                    throw ProjectFiles.error()
+                }
+                try buffer.withUnsafeBytes { bytes in
+                    try ProjectFiles.writeAll(
+                        UnsafeRawBufferPointer(rebasing: bytes[..<count]), to: target)
+                }
+            }
+        }
     }
 
     /// Copies the selected inode into project ownership before validating the owned bytes.
@@ -1194,7 +1229,12 @@ public actor ProjectStore {
                         Darwin.close(publishedDirectory)
                         throw ProjectStoreError.unsafePath(relative)
                     }
-                    leafDirectory = try ProjectFiles.openRelativeDirectory("job", in: publishedDirectory)
+                    do {
+                        leafDirectory = try ProjectFiles.openRelativeDirectory("job", in: publishedDirectory)
+                    } catch {
+                        Darwin.close(publishedDirectory)
+                        throw error
+                    }
                     Darwin.close(publishedDirectory)
                 }
                 var info = stat()
@@ -1362,7 +1402,7 @@ private enum ProjectFiles {
     }
 
     static func openOrCreateDirectory(_ name: String, in root: Int32) throws -> Int32 {
-        guard components(name).count == 1 else { throw ProjectStoreError.unsafePath(name) }
+        guard try components(name).count == 1 else { throw ProjectStoreError.unsafePath(name) }
         if mkdirat(root, name, 0o700) == 0 {
             guard fsync(root) == 0 else { throw error() }
         } else if errno != EEXIST {
@@ -1562,6 +1602,7 @@ private enum ProjectFiles {
         let temporaryFile = location.appendingPathComponent(name)
         try validate?(temporaryFile)
         try checkpoint?(.contentDurable(temporaryFile))
+        try validate?(temporaryFile)
         guard renameatx_np(directory, name, parent, destination.lastPathComponent, UInt32(RENAME_EXCL)) == 0 else {
             if errno == EEXIST { throw ProjectStoreError.alreadyExists(destination.path) }
             throw error()
@@ -1702,10 +1743,12 @@ private enum ProjectFiles {
     static func expectedAudioFrames(_ request: AudioRequest) throws -> Int64 {
         if let source = request.source { return source.frameCount }
         let value = request.durationSeconds * 44_100
-        guard value.isFinite, value > 0, value <= Double(Int64.max) else {
+        let rounded = value.rounded(.toNearestOrEven)
+        guard value.isFinite, value > 0, rounded.isFinite,
+              rounded > 0, rounded < Double(Int64.max) else {
             throw ProjectStoreError.invalidProject("音频请求帧数不可表示。")
         }
-        return Int64(value.rounded(.toNearestOrEven))
+        return Int64(rounded)
     }
 
     static func validateAudioName(_ name: String) throws {
@@ -1804,8 +1847,14 @@ private enum ProjectFiles {
                 try validateCurrentAudioProfile(request)
                 if let sourceID = document.sourceAssetID {
                     guard let sourceAsset = assets[sourceID], let metadata = sourceAsset.metadata.audio,
+                          metadata.format.sampleRate.isFinite else {
+                        throw ProjectStoreError.invalidProject("音频任务的来源元数据无效。")
+                    }
+                    try validateAudioFormat(metadata.format,
+                        policy: metadata.origin == .modelGenerated ? .generated : .original)
+                    guard metadata.format.sampleRate.rounded() == metadata.format.sampleRate,
                           let source = request.source,
-                          source.url.path.hasSuffix("/AudioInputs/\(request.id.uuidString)/source.wav"),
+                          source.url.path.hasSuffix("/AudioInputs/\(job.id.uuidString)/source.wav"),
                           source.sha256 == metadata.contentSHA256,
                           source.frameCount == metadata.format.frameCount,
                           source.sampleRate == Int(metadata.format.sampleRate),
