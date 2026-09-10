@@ -41,6 +41,70 @@ private final class WeakCaptureBox {
 
 @Suite("Descriptor-backed audio capture file")
 struct AudioCaptureFileTests {
+    @Test(arguments: [false, true])
+    func nativeCAFFlagsAreNotASBDByteOrderFlags(bigEndian: Bool) throws {
+        let root = try captureFileTestDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let capture = try makeCaptureFile(in: root)
+        var format = AudioStreamBasicDescription(
+            mSampleRate: 48_000, mFormatID: kAudioFormatLinearPCM,
+            mFormatFlags: kAudioFormatFlagIsFloat | kAudioFormatFlagIsPacked
+                | (bigEndian ? kAudioFormatFlagIsBigEndian : 0),
+            mBytesPerPacket: 4, mFramesPerPacket: 1, mBytesPerFrame: 4,
+            mChannelsPerFrame: 1, mBitsPerChannel: 32, mReserved: 0)
+        let file = try capture.initializeAudioFile(format: &format)
+        var words = [Float(0.25), Float(-0.5)].map {
+            bigEndian ? $0.bitPattern.bigEndian : $0.bitPattern.littleEndian
+        }
+        var packets: UInt32 = 2
+        let status = words.withUnsafeMutableBytes {
+            AudioFileWritePackets(file, false, UInt32($0.count), nil, 0, &packets, $0.baseAddress!)
+        }
+        #expect(status == noErr && packets == 2)
+        #expect(AudioFileClose(file) == noErr)
+        _ = try capture.sealAndFingerprint()
+        let bytes = try captureBytes(capture)
+        let flags = bytes[32..<36].reduce(UInt32(0)) { ($0 << 8) | UInt32($1) }
+        #expect(flags == (bigEndian ? 1 : 3))
+        let descriptor = try capture.duplicateDescriptor()
+        defer { Darwin.close(descriptor) }
+        if bigEndian {
+            #expect(throws: AudioMediaError.self) { try AudioMediaInspector.inspectCapture(descriptor: descriptor) }
+        } else {
+            let checked = try AudioMediaInspector.inspectCapture(descriptor: descriptor)
+            #expect(checked.inspection.format.frameCount == 2)
+            #expect(checked.inspection.waveform.map(\.minimum) == [0.25, -0.5])
+            #expect(checked.inspection.waveform.map(\.maximum) == [0.25, -0.5])
+        }
+    }
+
+    @MainActor @Test
+    func fileCloseFailureDoesNotReleaseNativeAdmission() throws {
+        let root = try captureFileTestDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let capture = try makeCaptureFile(in: root)
+        let gate = AudioRecordingAdmissionGate()
+        let lifecycle = AudioQueueLifecycleOperations(stop: { _, _ in noErr },
+            dispose: { _, _ in noErr }, closeFile: { file in
+                // The fixture closes its real AudioFile, then simulates an uncertain report.
+                // Production cannot assume a close succeeded just because this fixture did.
+                #expect(AudioFileClose(file) == noErr)
+                return -1
+            })
+        var device: AudioQueueRecordingDevice? = try AudioQueueRecordingDevice(
+            testing: capture, queue: try #require(OpaquePointer(bitPattern: 17)),
+            lifecycle: lifecycle, admissionGate: gate)
+        #expect(try #require(device).stop(error: nil).error != nil)
+        do {
+            let unexpected = try gate.acquire()
+            gate.releaseAfterKnownTermination(unexpected)
+            Issue.record("Uncertain AudioFileClose incorrectly released native admission")
+        } catch { #expect(error.localizedDescription.contains("重启")) }
+        // Unknown-close quarantine may retain one callback context until this CPU test
+        // process exits. No real AudioQueue or live AudioFile remains in this fixture.
+        device = nil
+    }
+
     @Test func callbackFailureStillAttemptsFileAndDirectoryDurability() throws {
         let root = try captureFileTestDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
