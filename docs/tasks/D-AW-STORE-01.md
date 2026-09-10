@@ -31,3 +31,15 @@ Clarifications before task dispatch: blank/whitespace prompt must reject at make
 操作字段澄清：生成只解析适用时长、实际strength固定1，保留的隐藏strengthText不阻塞；变体/重绘只解析适用strength、实际时长来自固定源，隐藏durationText不阻塞。这是Lead明确的适用字段语义，不追罚初稿为权限/指令事故。原字符串仍完整保存。实际后端将任务UUID和分配UUID均小写，夹具遵循其真实命名；Lead最初关于第二UUID大写的猜测已撤回，不用它判错。
 
 允许直接更新AudioProjectStoreTests中随schema5变化的原迁移版本期望（已落入原规格的minimal migration expectations），不得弱化其他断言。其余原允许文件、输入保护和预算不变。新增反例包括异常数值元数据/时长安全报错、暂存导出回读、来源外盘快照、无覆盖与权威任务状态；完整返工输入与期望见本run/store/repair1-prompt.txt，执行SHA在request中。
+
+## 2026-09-11 存储组件验收（产品装配另验）
+
+受测代码690408ed2e786b9470cef1dfcce522e022751ab0通过Lead外层离线全UI包CPU检查：260项报告、32套件、1项既有可选权重检查跳过、零失败。检查运行于本任务目录，未包含停用的AW1新视图/Lead共享装配，不是实际麦克风、GUI或模型验收。
+
+来源：Sol/high受限CLI初交超时保存d445496、修复1交回2115c945（新音频测试过，但旧图像恢复1方法2例失败）、修复2交回690408ed恢复既有图像行为并补失败音频/完成保存冲突/确定性路径反例。普通修复2次均已用，未用Lead实现接管。Astra负责契约澄清、逐轮异常审核、实际CPU与非实现者代码检查，没有代写Store实现。额外Sol只读审核在900秒结束且无结论，记录websocket idle断开重试；不能列为已审核通过。
+
+验收依据：schema1..4备份逐字节保留、真实微型WAV检查、固定source快照/哈希/冲突/软链接、无自动采用、候选状态重开、输出路径/帧数/NaN拒绝、异常数值安全错误、导出暂存回读/不覆盖、完成保存失败保留输出、失败/取消/中断恢复不假称成功，以及原图文/录音CPU回归。现有后端两UUID均小写，未改其行为；生成上限380秒/256MiB是当前显式媒体校验策略，不是本机6秒样本限制或无限时长承诺。
+
+证据根：本批run-20260910T140156Z下store、store-review、checks/store-{initial,r1,r2}。known SwiftPM嵌套沙盒拒绝后停止并交Lead，未扩大权限；patch上下文不匹配为工具编辑错误，原始stderr保留。最终角色/权限按各turn_context核对，隐藏服务解析unknown。日志/fixture留外盘不进Git，费用和完整Lead归因unknown。
+
+本追加只文档；最终本地候选SHA写外部回执。仅允许合入隔离AW1批次继续装配，不默认启用schema5或更新源产品；Source633150477de90d30c1f44c915b1f10e13acd246d和个人scheme保护仍须批次结束核对。
