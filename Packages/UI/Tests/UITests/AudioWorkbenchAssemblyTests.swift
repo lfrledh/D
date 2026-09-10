@@ -43,7 +43,7 @@ private final class NoHardwareAudioFactory: AudioTransportDeviceFactory {
         AssemblyPlaybackDevice()
     }
 
-    func makeRecording(url: URL) throws -> any AudioRecordingDevice {
+    func makeRecording(capture: AudioCaptureFile) throws -> any AudioRecordingDevice {
         recordingDevices += 1
         throw AudioMediaError.unavailable("测试不打开录音设备")
     }

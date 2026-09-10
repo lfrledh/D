@@ -1,3 +1,4 @@
+import AudioToolbox
 import AVFoundation
 import CryptoKit
 import Foundation
@@ -48,7 +49,7 @@ struct AudioProjectStoreTests {
             let reservation = try await store.reserveAudioCapture(name: "现场录音")
             let capture = try await store.audioCaptureURL(id: reservation.id)
             #expect(await store.snapshot().pendingAudioCaptures == [reservation])
-            try AudioTestMedia.writePCM(to: capture, samples: [[-0.5, 0, 0.5]], sampleRate: 8_000,
+            try AudioTestMedia.writePCM(to: capture, samples: [[-0.5, 0, 0.5]], sampleRate: 48_000,
                                         bitDepth: 32, floatingPoint: true)
             try await store.close()
 
@@ -221,6 +222,33 @@ struct AudioProjectStoreTests {
         }
     }
 
+    @Test func retainedCaptureWritesOriginalInodeAndFinalizationRejectsReplacedDirectory() async throws {
+        try await withAudioProjectFixture { directory, project in
+            let store = try await ProjectStore.create(at: project, name: "Retained")
+            let reservation = try await store.reserveAudioCapture(name: "retained")
+            let capture = try await store.createAudioCaptureFile(id: reservation.id)
+            let originalDirectory = capture.url.deletingLastPathComponent()
+            let movedDirectory = directory.appendingPathComponent("moved-capture")
+            try FileManager.default.moveItem(at: originalDirectory, to: movedDirectory)
+            let outside = directory.appendingPathComponent("outside-capture")
+            try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)
+            let sentinel = Data("outside-must-not-change".utf8)
+            let outsideLeaf = outside.appendingPathComponent("source.caf")
+            try sentinel.write(to: outsideLeaf)
+            try FileManager.default.createSymbolicLink(at: originalDirectory, withDestinationURL: outside)
+
+            try writeCaptureFixture(capture)
+            #expect(try Data(contentsOf: outsideLeaf) == sentinel)
+            await #expect(throws: (any Error).self) {
+                try await store.finalizeAudioCapture(id: reservation.id, capture: capture)
+            }
+            #expect(await store.snapshot().pendingAudioCaptures == [reservation])
+            let retainedBytes = try Data(contentsOf: movedDirectory.appendingPathComponent("source.caf"))
+            #expect(retainedBytes.starts(with: Data("caff".utf8)))
+            try await store.close()
+        }
+    }
+
     @Test(arguments: [2, 3])
     func schemaTwoAndThreeMigrationKeepExactBackupsAndDefaultNewFields(version: Int) async throws {
         try await withAudioProjectFixture { _, project in
@@ -313,6 +341,26 @@ private func encodedManifest(_ manifest: ProjectManifest) throws -> Data {
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
     return try encoder.encode(manifest)
+}
+
+private func writeCaptureFixture(_ capture: AudioCaptureFile) throws {
+    var format = AudioStreamBasicDescription(
+        mSampleRate: 48_000, mFormatID: kAudioFormatLinearPCM,
+        mFormatFlags: kAudioFormatFlagsNativeFloatPacked,
+        mBytesPerPacket: 4, mFramesPerPacket: 1, mBytesPerFrame: 4,
+        mChannelsPerFrame: 1, mBitsPerChannel: 32, mReserved: 0
+    )
+    let file = try capture.initializeAudioFile(format: &format)
+    var samples: [Float] = [-0.5, 0, 0.5, 1]
+    var packets = UInt32(samples.count)
+    let status = samples.withUnsafeMutableBytes {
+        AudioFileWritePackets(file, false, UInt32($0.count), nil, 0, &packets, $0.baseAddress!)
+    }
+    let closeStatus = AudioFileClose(file)
+    guard status == noErr, packets == UInt32(samples.count), closeStatus == noErr,
+          capture.synchronize() == nil else {
+        throw AudioMediaError.io("无法写入合成录音 fixture")
+    }
 }
 
 private func legacyManifest(_ manifest: ProjectManifest, schemaVersion: Int) throws -> Data {

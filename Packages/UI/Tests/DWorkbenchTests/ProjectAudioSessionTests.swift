@@ -1,3 +1,4 @@
+import AudioToolbox
 import DInference
 import Foundation
 import Observation
@@ -41,20 +42,27 @@ private final class SessionPlaybackDevice: AudioPlaybackDevice {
 @MainActor
 private final class SessionRecordingDevice: AudioRecordingDevice {
     let url: URL
+    let capture: AudioCaptureFile
     var currentSeconds = 0.01
     var stopError: String?
     var corruptOnStop = false
     private(set) var stopCount = 0
     private var completion: (@MainActor @Sendable (AudioRecordingResult) -> Void)?
 
-    init(url: URL) { self.url = url }
+    init(capture: AudioCaptureFile) { self.capture = capture; self.url = capture.url }
     func start(completion: @escaping @MainActor @Sendable (AudioRecordingResult) -> Void) throws -> Bool {
         self.completion = completion
         return true
     }
     func stop(error: String?) -> AudioRecordingResult {
         stopCount += 1
-        if corruptOnStop { try? Data("truncated".utf8).write(to: url) }
+        if corruptOnStop, let descriptor = try? capture.duplicateDescriptor() {
+            defer { Darwin.close(descriptor) }
+            _ = ftruncate(descriptor, 0)
+            _ = Data("truncated".utf8).withUnsafeBytes {
+                Darwin.pwrite(descriptor, $0.baseAddress, $0.count, 0)
+            }
+        }
         return .init(url: url, error: error ?? stopError)
     }
     func finishFromDevice(error: String? = nil) {
@@ -89,10 +97,25 @@ private final class SessionAudioFactory: AudioTransportDeviceFactory {
         playbacks.append(device)
         return device
     }
-    func makeRecording(url: URL) throws -> any AudioRecordingDevice {
-        try AudioTestMedia.writePCM(to: url, samples: [[0, 0.25, -0.25, 0.5]],
-                                    sampleRate: 8_000, bitDepth: 32, floatingPoint: true)
-        let device = SessionRecordingDevice(url: url)
+    func makeRecording(capture: AudioCaptureFile) throws -> any AudioRecordingDevice {
+        var format = AudioStreamBasicDescription(
+            mSampleRate: 48_000, mFormatID: kAudioFormatLinearPCM,
+            mFormatFlags: kAudioFormatFlagsNativeFloatPacked,
+            mBytesPerPacket: 4, mFramesPerPacket: 1, mBytesPerFrame: 4,
+            mChannelsPerFrame: 1, mBitsPerChannel: 32, mReserved: 0
+        )
+        let file = try capture.initializeAudioFile(format: &format)
+        var samples: [Float] = [0, 0.25, -0.25, 0.5]
+        var packets = UInt32(samples.count)
+        let status = samples.withUnsafeMutableBytes {
+            AudioFileWritePackets(file, false, UInt32($0.count), nil, 0, &packets, $0.baseAddress!)
+        }
+        let closeStatus = AudioFileClose(file)
+        guard status == noErr, packets == samples.count, closeStatus == noErr,
+              capture.synchronize() == nil else {
+            throw AudioMediaError.io("无法写入合成录音 fixture")
+        }
+        let device = SessionRecordingDevice(capture: capture)
         configureRecording?(device)
         recordings.append(device)
         return device
