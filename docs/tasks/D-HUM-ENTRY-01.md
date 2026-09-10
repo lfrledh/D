@@ -178,3 +178,19 @@ PID40013正常退出0；重开PID40236后CUA报Maclocked，未能观察重开界
 
 ## H09 approved bounded path finish, spec H09-LIVE1 / 2026-09-10
 User explicitly approved proposed path correction plus directCPU/signedrecording checks, nonimplementer review, and existing fourdoc publication. Original AUDIO/H08 budgets remain historical; ONE extra bounded Lead implementation, not new ordinary rounds. Allowed AudioTransport.swift, ProjectAudioController.swift and directly related AudioTransportTests/ProjectAudioControllerTests/AudioProjectStoreTests. No Store implementation/signature/entitlement/bundleID/permission changes. First record actual signed lstat failure component/errno, then reuse authorized project-root descriptor validation before permission and after grant; mandatory callback binds original reservation and checks context across awaits. Transport sets request identity before first await, cancellation suppresses late permission/device creation. Retain no-overwrite, no symlinks, saved reservation, active capture identity and all old tests; record producer fixture/test-adapter changes separately. User-facing microphone request still requires explicit Start; own test project only. Sol/high read-only nonimplementer review, no claim reviewer ran tests. Finish fails after full verification -> preserve and stop, no budget reset. User approved one-shot short alert for actual manual steps. External run/base references in this turn's start.json.
+
+## H09-LIVE1 结果：录音候选未接纳；H10听感与旧项目重开部分补齐（2026-09-10）
+
+本次“全部批准”批准一次新增有界收尾；原初交/两修复/Lead接管历史不重置。Lead签名诊断版本d1b9246293e9c9f14fc40461ffa5bcef33432569实际运行发现路径向上遍历未收敛：341个../，lstat errno63（ENAMETOOLONG）。此前“真实symlink/越过授权根拒绝”的猜测未被该观察支持，不能请求全盘权限掩盖；仍未到OS麦克风提示。原失败reservation和新增95BA1B4D-A64C-4E3A-972F-CF164E1EB208保留。
+
+Lead修补7184e6d4602b90390c93d0e9422de4c4db57b61b将验证交回ProjectStore现有rootFD接口，经controller在许可前后重查身份和同一URL，transport先冻结epoch再await。仅2个生产/3个直接测试文件；原清单所称ProjectAudioControllerTests实际为ProjectAudioSessionTests，按真实调用点落实，无Store/签名/权限变更。
+
+**未通过，不继续放大本次修补：** focused CPU只运行到测试编译，17.017秒rc1，0方法执行，新增#expect内throwing await不编译。Sol/high非实现者只读审核又指出UITests旧调用点遗漏mandatory callback，以及owner验证后到AVAudioRecorder按绝对URL创建之间仍可被父目录替换。Lead核对AVFoundationRecordingDevice与原d9d85版本字节完全一致：这是原有潜在文件保护缺陷，不能说本次新引入，也不能说已经解决。最小根因路径修补不足以关闭该缺口。保留候选，不修补到另一预算轮次，不运行固定候选真实录音/不接纳schema4。
+
+后续具体范围提案（尚未执行）：修正直接测试/调用点，明确预留文件从验证、创建到录音写入的持续所有权，必要时调整ProjectStore及录音设备边界，补父目录在验证后被替换的受控反例与原件不覆盖测试。当前授权排除了Store实现变更，故需明确追加这一契约范围后才实现；不是补一次Mac授权或降低保护要求。密码、TCC、普通D均未动。
+
+H10补齐：诊断版重开已有独立测试项目，GUI看见原Unicode备注及命名片段/原帧范围；不是最终修补版的完整验收。用户本轮明确确认一次提示音与SA3六秒样本“都听到了，播放正常”；两个afplay均自行退出0，样本字节不变。此前GUI导入/播放/安全导出证据继续有效，真实录音、录音后保存/恢复及新版本完整GUI仍未完成，不重复真人IME。
+
+来源：此轮H09生产/测试由Astra Lead实现并执行编译；Sol/high仅只读审查，476.326秒rc0，不称独立运行测试。请求和可观察turn_context为gpt-5.6-sol/high/read-only/approval-never。审核发现的Lead遗漏和编译错误保留；没有新Worker实现成功。审核Python shim曾触发非预期缓存诊断，未观察到工作树写入/权限扩大；Lead最初外盘launcher准备在默认沙箱被拒后留下事件，再使用逐命令范围内审批，无全局权限修改。完整Lead消耗/订阅费用unknown。
+
+外部证据run-20260910T111515Z-approved-finish（D-AUDIO-BACKEND-01目录）：recording/root-cause-and-fix、cpu-focused、finish-stop；review/h09-response及h09-process；evidence/human-listen-confirmed；原诊断应用PID51690正常退出0。候选源码仍7184，之后仅本任务记录，最终SHA见外部hum-stopped-checkpoint.json。源和普通D保护另由总回执复核；候选/失败证据保留，不删除、不默认合入，当前没有自有D或H09写入者。
