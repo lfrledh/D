@@ -4,15 +4,31 @@ import Foundation
 import Testing
 @testable import DWorkbench
 
+private actor AudioCreationCPUProbe {
+    var started: Set<String> = []
+    var releaseCount = 0
+    func begin(_ prompt: String) { started.insert(prompt) }
+    func didRelease() { releaseCount += 1 }
+}
+
 private actor AudioCreationCPUBackend: InferenceBackend {
     nonisolated let descriptor = BackendDescriptor(id: "fixture.audio", version: "1", capabilities: [.audioGeneration])
     let root: URL
-    init(root: URL) { self.root = root }
+    let probe: AudioCreationCPUProbe
+    init(root: URL, probe: AudioCreationCPUProbe) { self.root = root; self.probe = probe }
     func estimate(_ request: InferenceRequest) throws -> ResourceEstimate { .init(peakBytes: 1) }
     func execute(_ request: InferenceRequest,
                  emit: @escaping @Sendable (InferenceOutput) async throws -> Void) async throws -> InferenceResult {
         try Task.checkCancellation()
         guard case .audio(let input) = request.input else { throw ProjectStoreError.invalidTransition }
+        await probe.begin(input.prompt)
+        // Explicit synthetic modes exercise the host's cancellation/error wiring, not a model.
+        if input.prompt == "CPU wait for cancellation" {
+            while true { try await Task.sleep(for: .milliseconds(10)) }
+        }
+        if input.prompt == "CPU fail without output" {
+            throw InferenceFailure.backendFailed("Controlled CPU fixture failure")
+        }
         let folder = root.appendingPathComponent("\(request.id.uuidString.lowercased())-\(UUID().uuidString.lowercased())/job")
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let url = folder.appendingPathComponent("output.wav")
@@ -23,7 +39,7 @@ private actor AudioCreationCPUBackend: InferenceBackend {
         try await emit(.artifact(artifact))
         return .init(artifacts: [artifact], metadata: ["evidence": "CPU fixture, not model or acoustic validation"])
     }
-    func release() async {}
+    func release() async { await probe.didRelease() }
 }
 
 @Suite("Audio creation session assembly", .serialized) @MainActor
@@ -36,9 +52,9 @@ struct AudioCreationSessionTests {
         let suite = "D.AudioCreationCPU.\(UUID().uuidString)"
         return (root, try #require(UserDefaults(suiteName: suite)), suite)
     }
-    private func session(settings: UserDefaults) -> ProjectSession {
+    private func session(settings: UserDefaults, probe: AudioCreationCPUProbe = .init()) -> ProjectSession {
         ProjectSession(sessionFactory: { artifacts in
-            let backend = AudioCreationCPUBackend(root: artifacts)
+            let backend = AudioCreationCPUBackend(root: artifacts, probe: probe)
             let runtime = try InferenceRuntime(backends: [backend], configuration: .init(memoryBudgetBytes: 100))
             return WorkbenchSession(engine: runtime, backendID: "fixture.image", status: {
                 let state = await runtime.snapshot()
@@ -104,6 +120,60 @@ struct AudioCreationSessionTests {
         #expect(try Data(contentsOf: destination) == Data(contentsOf: project.appendingPathComponent(asset.relativePath)))
         #expect(await subject.cancelAndCloseProject())
     }
+    @Test func cancellationAndBackendErrorKeepAdoptedAudioAndReachReleasedTerminalState() async throws {
+        let (root, settings, suite) = try fixture()
+        defer { settings.removePersistentDomain(forName: suite); try? FileManager.default.removeItem(at: root) }
+        let project = root.appendingPathComponent("Cancellation.dproject")
+        let model = root.appendingPathComponent("FixtureModel")
+        try FileManager.default.createDirectory(at: model, withIntermediateDirectories: false)
+        let probe = AudioCreationCPUProbe()
+        let subject = session(settings: settings, probe: probe)
+        await subject.createProject(at: project)
+        await subject.createAudioCreation()
+        await subject.registerAudioModel(at: model)
+        let document = try #require(subject.activeDocumentID)
+        let context = subject.audioCreationContextID
+        var draft = try #require(subject.audioCreationDraft)
+        draft.prompt = "Keep this adopted audio"
+        draft.durationText = "0.02"
+        subject.updateAudioCreationDraft(draft, contextID: context, documentID: document)
+        await subject.generateAudioCreation(contextID: context, documentID: document)
+        try await waitForIdle(subject)
+        let original = try #require(subject.audioCreationCandidates.first)
+        let originalURL = project.appendingPathComponent(original.relativePath)
+        let originalBytes = try Data(contentsOf: originalURL)
+        await subject.mutateAudioCreationCandidate(.adopt(original.id), contextID: context, documentID: document)
+
+        draft = try #require(subject.audioCreationDraft)
+        draft.prompt = "CPU wait for cancellation"
+        subject.updateAudioCreationDraft(draft, contextID: context, documentID: document)
+        await subject.generateAudioCreation(contextID: context, documentID: document)
+        let deadline = ContinuousClock.now + .seconds(10)
+        while !(await probe.started.contains(draft.prompt)) {
+            try #require(ContinuousClock.now < deadline, "Synthetic backend never started")
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        await subject.cancelAudioCreation(contextID: context, documentID: document)
+        try await waitForIdle(subject)
+        #expect(subject.documentJobs.contains { $0.state == .cancelled })
+        #expect(await probe.releaseCount == 2)
+        #expect(subject.activeDocument?.adoptedAssetID == original.id)
+        #expect(subject.audioCreationCandidates.map(\.id) == [original.id])
+        #expect(try Data(contentsOf: originalURL) == originalBytes)
+
+        draft = try #require(subject.audioCreationDraft)
+        draft.prompt = "CPU fail without output"
+        subject.updateAudioCreationDraft(draft, contextID: context, documentID: document)
+        await subject.generateAudioCreation(contextID: context, documentID: document)
+        try await waitForIdle(subject)
+        #expect(subject.documentJobs.contains { $0.state == .failed })
+        #expect(await probe.releaseCount == 3)
+        #expect(subject.activeDocument?.adoptedAssetID == original.id)
+        #expect(subject.audioCreationCandidates.map(\.id) == [original.id])
+        #expect(try Data(contentsOf: originalURL) == originalBytes)
+        #expect(await subject.cancelAndCloseProject())
+    }
+
     @Test func oldDocumentInputCannotOverwriteNewDocumentAndSaveFailurePreservesBothVersions() async throws {
         let (root, settings, suite) = try fixture()
         defer { settings.removePersistentDomain(forName: suite); try? FileManager.default.removeItem(at: root) }
