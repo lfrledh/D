@@ -13,3 +13,6 @@ Lead冻结反例：1正常批准+合成PCM可解码CAF且保留预约至提交�
 独立工作树 D-Worktrees/D-AW-RECORD-01，分支 codex/d-aw-record-01。gpt-5.6-sol/high（原生录音回调及文件生命周期高风险）；受限CLI workspace-write/no network，只本树+本run worker-output/tmp，Git共享目录不可写。只CPU测试，无mic/device/GUI/GPU/下载/依赖更新。SwiftPM内部沙箱拒绝时停该检查交Lead，不自行降级。Python只tokenize.open+内存compile；所有缓存/临时文件用所给唯一目录。未知权限拒绝立即报Lead；受控失败夹具单列。初交+2修复，一次有界Lead接管后仍失败停止；每次900秒，禁止递归。
 
 回传：实际改动/编译测试/原始证据路径/未覆盖/风险/自有进程状态；不commit。Lead审阅并在停止写入后显式提交。真实身份以请求与turn_context为证，不自述替代。
+
+## Lead 修订 R1.1（预检后、实施前生效）
+接受 Worker 的 AudioQueue + AudioFileInitializeWithCallbacks 持有 FD 方案。为避免重写已有 CAF parser，额外允许 AudioMediaInspector.swift 仅新增/抽取描述符级只读检查入口（读取同一 inode，保持既有URL检查行为与限额不变）；另允许 UITests/AudioWorkbenchAssemblyTests.swift 仅适配受影响设备factory签名，原断言不删。已核对该fake factory与三个原已允许文件合计4处。最终化媒体检查不得重新依赖URL文件身份。保留目录/file FD的deinit/close/失败恢复及被替换路径反例都属于本任务。没有新增权限/签名/依赖变化。准备commit SHA见implement request；Worker先核对此完整SHA，然后实施。
