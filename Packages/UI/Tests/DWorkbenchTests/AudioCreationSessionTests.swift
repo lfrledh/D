@@ -13,7 +13,7 @@ private actor AudioCreationCPUBackend: InferenceBackend {
                  emit: @escaping @Sendable (InferenceOutput) async throws -> Void) async throws -> InferenceResult {
         try Task.checkCancellation()
         guard case .audio(let input) = request.input else { throw ProjectStoreError.invalidTransition }
-        let folder = root.appendingPathComponent("\(request.id.uuidString.lowercased())-\(UUID().uuidString)/job")
+        let folder = root.appendingPathComponent("\(request.id.uuidString.lowercased())-\(UUID().uuidString.lowercased())/job")
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let url = folder.appendingPathComponent("output.wav")
         let samples = [Float](repeating: 0.125, count: Int((input.durationSeconds * 44_100).rounded()))
