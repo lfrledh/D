@@ -312,7 +312,7 @@ struct AudioProjectStoreTests {
             try original.write(to: file)
             let reopened = try await ProjectStore.open(at: project)
             let migrated = await reopened.snapshot()
-            #expect(migrated.schemaVersion == 4)
+            #expect(migrated.schemaVersion == ProjectManifest.currentSchemaVersion)
             #expect(migrated.pendingAudioCaptures.isEmpty)
             #expect(migrated.documents[0].audioDraft == nil)
             let backupName = version == 2 ? ProjectStore.versionTwoBackupFilename : ProjectStore.versionThreeBackupFilename

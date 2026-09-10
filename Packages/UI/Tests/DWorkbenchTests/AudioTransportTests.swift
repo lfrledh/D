@@ -390,6 +390,39 @@ struct AudioTransportTests {
     }
 
     @Test
+    func generatedPlaybackPolicyExpandsOnlyToExplicitBound() throws {
+        let root = try uniqueDirectory()
+        let url = root.appendingPathComponent("bounded-generated.wav")
+        try Data([0]).write(to: url, options: .withoutOverwriting)
+        let handle = try FileHandle(forWritingTo: url)
+        try handle.truncate(atOffset: UInt64(AudioLimits.maximumBytes + 1))
+        try handle.close()
+        let generated = DWorkbench.AudioFormatInfo(
+            container: .wav, sampleRate: 44_100, channelCount: 2,
+            frameCount: 121 * 44_100, bitDepth: 32, floatingPoint: true)
+
+        let originalFactory = FakeAudioFactory()
+        let original = AudioTransport(deviceFactory: originalFactory)
+        #expect(throws: AudioMediaError.self) {
+            try original.preparePlayback(url: url, format: generated)
+        }
+        #expect(originalFactory.playbacks.isEmpty)
+
+        let generatedFactory = FakeAudioFactory()
+        let bounded = AudioTransport(deviceFactory: generatedFactory)
+        try bounded.preparePlayback(url: url, format: generated, policy: .generated)
+        #expect(generatedFactory.playbacks.count == 1)
+
+        let tooLong = DWorkbench.AudioFormatInfo(
+            container: .wav, sampleRate: 44_100, channelCount: 2,
+            frameCount: 381 * 44_100, bitDepth: 32, floatingPoint: true)
+        #expect(throws: AudioMediaError.self) {
+            try AudioTransport(deviceFactory: FakeAudioFactory())
+                .preparePlayback(url: url, format: tooLong, policy: .generated)
+        }
+    }
+
+    @Test
     func realReaderRejectsMetadataMismatchWithoutStartingOutput() throws {
         let url = try syntheticWAV(in: uniqueDirectory())
         let wrong = DWorkbench.AudioFormatInfo(

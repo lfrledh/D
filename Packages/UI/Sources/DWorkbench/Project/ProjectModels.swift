@@ -148,7 +148,7 @@ public struct ProjectDraft: Codable, Sendable, Equatable {
 }
 
 public struct ProjectManifest: Codable, Sendable, Equatable, Identifiable {
-    public static let currentSchemaVersion = 4
+    public static let currentSchemaVersion = 5
     public var schemaVersion: Int
     /// Monotonic committed state version lets the UI discard a late, stale actor response.
     public var revision: UInt64
@@ -252,6 +252,7 @@ public struct ProjectDocument: Codable, Sendable, Equatable, Identifiable {
     public var draft: ProjectDraft
     public var textDraft: TextDraftDocument?
     public var audioDraft: AudioDraftDocument?
+    public var audioCreation: AudioCreationDraft?
     /// A reference for the creator, not an implicit image-to-image inference input.
     public var sourceAssetID: UUID?
     public var adoptedAssetID: UUID?
@@ -260,6 +261,7 @@ public struct ProjectDocument: Codable, Sendable, Equatable, Identifiable {
     public init(id: UUID = UUID(), name: String, kind: ProjectDocumentKind = .image,
                 draft: ProjectDraft = .init(), textDraft: TextDraftDocument? = nil,
                 audioDraft: AudioDraftDocument? = nil,
+                audioCreation: AudioCreationDraft? = nil,
                 sourceAssetID: UUID? = nil, adoptedAssetID: UUID? = nil, selectedAssetID: UUID? = nil) {
         self.id = id
         self.name = name
@@ -267,13 +269,14 @@ public struct ProjectDocument: Codable, Sendable, Equatable, Identifiable {
         self.draft = draft
         self.textDraft = textDraft
         self.audioDraft = audioDraft
+        self.audioCreation = audioCreation
         self.sourceAssetID = sourceAssetID
         self.adoptedAssetID = adoptedAssetID
         self.selectedAssetID = selectedAssetID
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, kind, draft, textDraft, audioDraft, sourceAssetID, adoptedAssetID, selectedAssetID
+        case id, name, kind, draft, textDraft, audioDraft, audioCreation, sourceAssetID, adoptedAssetID, selectedAssetID
     }
 
     public init(from decoder: Decoder) throws {
@@ -285,6 +288,7 @@ public struct ProjectDocument: Codable, Sendable, Equatable, Identifiable {
         draft = try values.decode(ProjectDraft.self, forKey: .draft)
         textDraft = try values.decodeIfPresent(TextDraftDocument.self, forKey: .textDraft)
         audioDraft = try values.decodeIfPresent(AudioDraftDocument.self, forKey: .audioDraft)
+        audioCreation = try values.decodeIfPresent(AudioCreationDraft.self, forKey: .audioCreation)
         sourceAssetID = try values.decodeIfPresent(UUID.self, forKey: .sourceAssetID)
         adoptedAssetID = try values.decodeIfPresent(UUID.self, forKey: .adoptedAssetID)
         selectedAssetID = try values.decodeIfPresent(UUID.self, forKey: .selectedAssetID)
