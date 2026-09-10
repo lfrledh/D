@@ -34,3 +34,24 @@ VIEW任务已停止实现：Terra初交/两修后，Astra一次有界测试修�
 STORE已从包含受测录音代码的df37a610d407e84ac4f9850a7084021c7af86652完成真实受限Sol/high预检并进入初次实现，独立目录D-AW-STORE-01，详情store/preflight-gate.json和implement-request.json。候选/采用/拒绝/导出和schema5持久化可独立推进，未将未验收VIEW当作门禁。Lead共享会话接线已有只读问题审查和局部修正，尚待实际Store接口编译/复验；不声称装配通过。
 
 人工验收H09/H15与上述工程停点分开：当前没有新的空闲/前台窗口确认，未运行GPU/实际录音/GUI。不需要重新确认已经批准的模型许可或下载。源633150477de90d30c1f44c915b1f10e13acd246d、个人scheme和普通D保持；最终状态还须本轮结束时再次核对。
+
+## 2026-09-11 本轮交付检查点：服务通过，第一阶段尚未整体验收
+
+|部分|实际状态与受测版本|能证明与剩余边界|
+|---|---|---|
+|录音文件所有权|971a669c70d3148f65693701182c8ae3721b25f6；全UI包CPU251项报告/1既有可选跳过；Sol非实现者只读复核接受|固定句柄写入、停止/失败/替换路径与恢复保护；没有真实麦克风验收|
+|生成存储|690408ed2e786b9470cef1dfcce522e022751ab0；全UI包CPU260项报告/1既有可选跳过，零失败|schema1..4备份、真实微型WAV、候选/采用拒绝、精确输入快照、恢复/导出保护；不包含AW1新视图|
+|共享服务组合|9a3f066cbabd8d219875700949f0bff227fbd152上218项；最终d6b7d1ea5df72730ed9c198d8df56d5c17bb6d5c上219项，均1既有可选跳过、零失败|直接运行真实DWorkbench源码与服务测试；真实DRuntime+合成音频证明生成/变体/帧区间重绘的请求归属、候选决策、取消/失败释放、原件保护、保存重开/导出，不代表模型声音质量|
+|新视图|候选0daf36b6f4f3922c1d052b6cb08de6bf31cb3ddd未接纳、未合入；12方法11过1失败|另有来源切换后旧区间文字残留、禁用状态提示不一致；离屏布局检查未成立，不说已证明真实裁切或已修好|
+
+各测试集合有重叠，不相加为总通过率。最终服务检查的外部harness只选DWorkbench产品，Tests链接真实批次Tests目录，未复制/改弱断言。UI/App全装配没有执行：被拒的视图未合入，不能为凑编译绕过其停点。Sol/high于9a3f066对Lead共享状态四项修正及三项当时测试作限定非实现者复核；到d6b7d1仅新增参考变体/重绘服务测试，生产代码相同，新增测试由Lead执行，未称审核模型复跑。
+
+工程停点E-AW-VIEW-01：Terra初交+两修以及Astra一次有界接管均已用，仍有上述三项问题；不改名重置、不追加未经批准修补、不将其放入普通D。建议后续明确一次限定UI收尾（清空失效来源区间、统一禁用原因、可靠布局验证），复用本次已通过服务，不重写引擎。Stage仍未完成，不能仅靠用户回来点权限结案。
+
+人工H09/H15：工程候选通过后再确认当时D/其他GPU空闲及独立前台窗口，实际麦克风提示出现时本人点击、短录音/试听、AI生成-参考变体-重绘-比较采用拒绝-保存重开-安全导出。无需重下权重/接受已确认条款或重做旧IME。普通沙盒能否访问隔离Python/provider与既有模型目录尚未实测，不以Full Disk Access代替；未建新依赖、未开云端、未动Team/bundleID/TCC。48kHz单声道CAF录音仍不能直接当作当前44.1kHz双声道WAV模型输入；未实现自动转换。
+
+来源与预算：RECORD为Sol初交/两修后Astra限定修补+Sol只读复核；STORE为Sol初交/两修，Astra契约/审核/实测，没有Lead代写实现；VIEW有Terra实现及Lead失败的测试收尾；共享接线和四项服务测试由Astra实现，Sol限定只读复核生产代码。STORE初稿超时和额外只读审核的连接超时、已知SwiftPM嵌套沙盒拒绝、补丁上下文错误分别记录，不都算成模型能力不足。模型可观察设置与写根各自核对；隐藏解析、订阅实际费用和完整Lead消耗unknown。只保留本run逐次墙钟/原始usage，不累计为费用、不重算旧批次。
+
+持久索引：run-20260910T140156Z下checks/{record-lead-full,store-r2,service-integration,service-final}、record-review/lead-response.md、assembly-review/combined-response.md和combined-audit.json、view/stopped.json、各子任务handback/routing、execution-summary.json。父批次最终SHA及源文档检查点写final-receipt.json，文档提交不冒充重新运行测试。最后保护见protection-before-final-docs.json/final-protection.json。全部本轮持有的子执行/审核/测试已结束；没有声称建立全系统写锁或确认Mac当前GPU空闲。
+
+本次候选与证据保留在外盘，不推进源产品、不默认迁移schema5、不替换普通D、不推送未验收实现。源开始633150477de90d30c1f44c915b1f10e13acd246d及个人scheme完整差异/索引/摘要不变；若源随后只有本轮状态文档提交，以最终回执为准。下一动作是上述有限工程收尾和已有H09/H15人工门槛，不启动下一音乐模型/歌声/HUM转谱/META任务。
