@@ -120,14 +120,21 @@ struct AudioProviderProcess: Sendable {
         stderr.fileHandleForWriting.closeFile()
         control.scheduleTimeout(after: timeoutSeconds)
 
-        // Detached readers do not inherit cancellation and therefore continue draining both
-        // pipes until the owned child really exits. They are retained and awaited below.
+        // Each blocking POSIX reader owns a dedicated serial queue. The detached consumers
+        // only await bounded, acknowledged chunks, so neither pipe can block the other or a
+        // Swift cooperative executor while the owned child is still alive.
+        let stdoutReader = AudioDedicatedPipeReader(
+            handle: stdout.fileHandleForReading, label: "audio-provider.stdout")
+        let stderrReader = AudioDedicatedPipeReader(
+            handle: stderr.fileHandleForReading, label: "audio-provider.stderr")
+        stdoutReader.start()
+        stderrReader.start()
         let stdoutTask = Task.detached(priority: .userInitiated) {
-            await AudioProviderProtocol.readStdout(stdout.fileHandleForReading, runID: runID,
+            await AudioProviderProtocol.readStdout(stdoutReader, runID: runID,
                                                    control: control, emit: emit)
         }
         let stderrTask = Task.detached(priority: .utility) {
-            await Self.readStderr(stderr.fileHandleForReading)
+            await Self.readStderr(stderrReader)
         }
 
         let status = await withTaskCancellationHandler {
@@ -178,22 +185,115 @@ struct AudioProviderProcess: Sendable {
         var failure: String?
     }
 
-    private static func readStderr(_ handle: FileHandle) async -> StderrResult {
+    private static func readStderr(_ reader: AudioDedicatedPipeReader) async -> StderrResult {
         var retained = Data()
-        do {
-            for try await byte in handle.bytes {
-                if retained.count < 1_048_576 { retained.append(byte) }
+        while true {
+            switch await reader.next() {
+            case .data(let data):
+                let available = 1_048_576 - retained.count
+                if available > 0 { retained.append(data.prefix(available)) }
+                reader.acknowledge()
+            case .end:
+                return StderrResult(retained: retained)
+            case .failure(let code, let message):
+                return StderrResult(
+                    retained: retained,
+                    failure: "POSIX read failed with errno \(code): \(message)")
             }
-        } catch {
-            return StderrResult(retained: retained, failure: error.localizedDescription)
         }
-        return StderrResult(retained: retained)
     }
 
     private static func stderrSuffix(_ data: Data) -> String {
         guard !data.isEmpty else { return "" }
         let text = String(decoding: data, as: UTF8.self)
         return " Stderr: " + text
+    }
+}
+
+fileprivate enum AudioPipeRead: Sendable {
+    case data(Data)
+    case end
+    case failure(code: Int32, message: String)
+}
+
+// The lock protects the single-slot rendezvous; the queue is the sole POSIX reader.
+// @unchecked is limited to this ownership bridge because DispatchQueue requires a
+// Sendable capture while FileHandle itself does not model that ownership in Swift.
+fileprivate final class AudioDedicatedPipeReader: @unchecked Sendable {
+    private let fileDescriptor: Int32
+    private let queue: DispatchQueue
+    private let lock = NSLock()
+    private let consumed = DispatchSemaphore(value: 0)
+    private var pending: AudioPipeRead?
+    private var waiter: CheckedContinuation<AudioPipeRead, Never>?
+    private var started = false
+
+    init(handle: FileHandle, label: String) {
+        fileDescriptor = handle.fileDescriptor
+        queue = DispatchQueue(label: "com.d.audio.\(label).\(UUID().uuidString)", qos: .userInitiated)
+    }
+
+    func start() {
+        let shouldStart = lock.withLock { () -> Bool in
+            guard !started else { return false }
+            started = true
+            return true
+        }
+        guard shouldStart else { return }
+        queue.async { [self] in drain() }
+    }
+
+    func next() async -> AudioPipeRead {
+        await withCheckedContinuation { continuation in
+            lock.lock()
+            if let pending {
+                self.pending = nil
+                lock.unlock()
+                continuation.resume(returning: pending)
+            } else {
+                precondition(waiter == nil, "Audio pipe reader has more than one consumer")
+                waiter = continuation
+                lock.unlock()
+            }
+        }
+    }
+
+    func acknowledge() {
+        consumed.signal()
+    }
+
+    private func drain() {
+        var buffer = [UInt8](repeating: 0, count: 64 * 1024)
+        while true {
+            let count = buffer.withUnsafeMutableBytes { bytes in
+                Darwin.read(fileDescriptor, bytes.baseAddress, bytes.count)
+            }
+            if count > 0 {
+                offer(.data(Data(buffer.prefix(count))))
+                consumed.wait()
+            } else if count == 0 {
+                offer(.end)
+                return
+            } else {
+                let code = errno
+                if code == EINTR { continue }
+                offer(.failure(code: code, message: String(cString: strerror(code))))
+                return
+            }
+        }
+    }
+
+    private func offer(_ value: AudioPipeRead) {
+        lock.lock()
+        if let waiter {
+            self.waiter = nil
+            lock.unlock()
+            waiter.resume(returning: value)
+        } else {
+            precondition(pending == nil, "Audio pipe reader exceeded its single-slot buffer")
+            pending = value
+            lock.unlock()
+        }
     }
 }
 
@@ -322,7 +422,7 @@ enum AudioProviderProtocol {
     ]
 
     fileprivate static func readStdout(
-        _ handle: FileHandle,
+        _ reader: AudioDedicatedPipeReader,
         runID: UUID,
         control: AudioOwnedProcessControl,
         emit: @escaping @Sendable (InferenceOutput) async throws -> Void
@@ -330,31 +430,38 @@ enum AudioProviderProtocol {
         var result = AudioStdoutResult()
         var line = Data()
         var totalBytes = 0
-        do {
-            for try await byte in handle.bytes {
-                totalBytes += 1
-                if totalBytes > 16 * 1024 * 1024 {
-                    fail(&result, "Audio provider stdout exceeded 16 MiB.", control: control)
-                    continue
-                }
-                if result.failure != nil { continue }
-                if byte == 0x0A {
-                    await processLine(line, runID: runID, result: &result, control: control, emit: emit)
-                    line.removeAll(keepingCapacity: true)
-                } else {
-                    line.append(byte)
-                    if line.count > 2 * 1024 * 1024 {
-                        fail(&result, "Audio provider emitted a JSON line larger than 2 MiB.", control: control)
+        while true {
+            switch await reader.next() {
+            case .data(let data):
+                for byte in data {
+                    totalBytes += 1
+                    if totalBytes > 16 * 1024 * 1024 {
+                        fail(&result, "Audio provider stdout exceeded 16 MiB.", control: control)
+                        continue
+                    }
+                    if result.failure != nil { continue }
+                    if byte == 0x0A {
+                        await processLine(line, runID: runID, result: &result, control: control, emit: emit)
+                        line.removeAll(keepingCapacity: true)
+                    } else {
+                        line.append(byte)
+                        if line.count > 2 * 1024 * 1024 {
+                            fail(&result, "Audio provider emitted a JSON line larger than 2 MiB.", control: control)
+                        }
                     }
                 }
+                reader.acknowledge()
+            case .end:
+                if result.failure == nil, !line.isEmpty {
+                    await processLine(line, runID: runID, result: &result, control: control, emit: emit)
+                }
+                return result
+            case .failure(let code, let message):
+                fail(&result, "Cannot drain audio provider stdout: POSIX read failed with errno \(code): \(message)",
+                     control: control)
+                return result
             }
-            if result.failure == nil, !line.isEmpty {
-                await processLine(line, runID: runID, result: &result, control: control, emit: emit)
-            }
-        } catch {
-            fail(&result, "Cannot drain audio provider stdout: \(error.localizedDescription)", control: control)
         }
-        return result
     }
 
     static func parseResultSnapshot(_ data: Data, runID: UUID) throws -> AudioProviderResult {

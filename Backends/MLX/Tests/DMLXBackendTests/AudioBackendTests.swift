@@ -220,6 +220,40 @@ struct AudioBackendTests {
         #expect(FileManager.default.fileExists(atPath: try #require(result.metadata["recordPath"])))
     }
 
+    @Test("Progress is delivered while the child lives with independently drained pipes",
+          .timeLimit(.minutes(1)), arguments: ["silent-stderr", "large-stderr"])
+    func liveProgressWithIndependentPipeDrain(mode: String) async throws {
+        let fixture = try AudioFixture()
+        defer { fixture.remove() }
+        let acknowledgement = fixture.root.appendingPathComponent("progress-ack-\(mode)")
+        let backend = try MLXAudioBackend(configuration: fixture.configuration(timeout: 6))
+        let recorder = AudioEventRecorder()
+        let prompt = "live-progress-\(mode)|\(acknowledgement.path)"
+
+        let result: InferenceResult
+        do {
+            result = try await backend.execute(fixture.request(prompt: prompt)) { output in
+                await recorder.append(output)
+                if output == .progress(completed: 1, total: 2) {
+                    try Data("acknowledged\n".utf8).write(to: acknowledgement, options: .withoutOverwriting)
+                }
+            }
+        } catch {
+            await backend.release()
+            throw error
+        }
+        await backend.release()
+
+        let events = await recorder.snapshot()
+        let progressIndex = try #require(events.firstIndex(of: .progress(completed: 1, total: 2)))
+        let artifactIndex = try #require(events.firstIndex {
+            if case .artifact = $0 { true } else { false }
+        })
+        #expect(FileManager.default.fileExists(atPath: acknowledgement.path))
+        #expect(progressIndex < artifactIndex)
+        #expect(result.artifacts.count == 1)
+    }
+
     @Test("Malformed, stale, wrong-run, duplicate-terminal, nonzero, WAV, hash, and metadata failures drain",
           .timeLimit(.minutes(1)),
           arguments: ["malformed", "long-line", "excess-stdout", "missing-terminal", "stale", "wrong-run",
@@ -476,7 +510,20 @@ if mode=='malformed': print('{'); sys.exit(0)
 if mode=='long-line': print('x'*(2*1024*1024+1)); sys.exit(0)
 if mode=='excess-stdout': sys.stdout.write('x'*(16*1024*1024+1)); sys.stdout.flush(); sys.exit(0)
 if mode=='nonzero': print(json.dumps({'schemaVersion':1,'type':'error','runID':run,'kind':'engine','message':'fixture failure'})); sys.exit(1)
+ack_path=None
+if mode.startswith('live-progress-'):
+    mode,ack_path=mode.split('|',1)
+    time.sleep(0.2)
 print(json.dumps({'schemaVersion':1,'type':'progress','runID':run,'phase':'validating','completed':1,'total':2}),flush=True)
+if mode=='live-progress-large-stderr':
+    sys.stderr.buffer.write(b'e'*(512*1024))
+    sys.stderr.buffer.flush()
+if ack_path is not None:
+    deadline=time.monotonic()+2.0
+    while not os.path.exists(ack_path) and time.monotonic()<deadline: time.sleep(0.01)
+    if not os.path.exists(ack_path):
+        print('progress acknowledgement timed out',file=sys.stderr,flush=True)
+        sys.exit(3)
 if mode=='missing-terminal': sys.exit(0)
 if mode=='slow-after-progress': time.sleep(5)
 if mode=='slow': time.sleep(5)
