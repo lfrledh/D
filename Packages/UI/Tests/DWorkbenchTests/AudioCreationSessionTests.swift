@@ -174,6 +174,64 @@ struct AudioCreationSessionTests {
         #expect(await subject.cancelAndCloseProject())
     }
 
+    @Test func referenceVariationAndInpaintKeepOriginalAndPersistExactFrameInput() async throws {
+        let (root, settings, suite) = try fixture()
+        defer { settings.removePersistentDomain(forName: suite); try? FileManager.default.removeItem(at: root) }
+        let project = root.appendingPathComponent("Reference.dproject")
+        let model = root.appendingPathComponent("FixtureModel")
+        try FileManager.default.createDirectory(at: model, withIntermediateDirectories: false)
+        let sourceURL = root.appendingPathComponent("原始参考.wav")
+        let samples = (0..<882).map { Float($0 % 20) / 40 }
+        try AudioTestMedia.writePCM(to: sourceURL, samples: [samples, samples], sampleRate: 44_100,
+                                   bitDepth: 32, floatingPoint: true)
+        let subject = session(settings: settings)
+        await subject.createProject(at: project)
+        await subject.registerAudioModel(at: model)
+        try #require(await subject.importAudio(at: sourceURL, name: "原声"))
+        let sourceAsset = try #require(subject.manifest?.assets.first(where: { $0.role == .original }))
+        let ownedURL = project.appendingPathComponent(sourceAsset.relativePath)
+        let originalBytes = try Data(contentsOf: ownedURL)
+        var lastDocument: UUID?
+        for operation in [AudioOperation.variation, .inpaint] {
+            await subject.createAudioCreation(sourceAssetID: sourceAsset.id)
+            let document = try #require(subject.activeDocumentID)
+            lastDocument = document
+            let context = subject.audioCreationContextID
+            var draft = try #require(subject.audioCreationDraft)
+            draft.operation = operation
+            draft.prompt = "CPU reference \(operation.rawValue)"
+            draft.durationText = "hidden, not an operative parameter"
+            draft.strengthText = "0.4"
+            draft.editRegion = operation == .inpaint ? .init(startFrame: 100, endFrame: 400) : nil
+            subject.updateAudioCreationDraft(draft, contextID: context, documentID: document)
+            await subject.generateAudioCreation(contextID: context, documentID: document)
+            try await waitForIdle(subject)
+            let job = try #require(subject.documentJobs.first)
+            #expect(job.state == .completed)
+            guard case .audio(let input) = job.request.input else { Issue.record("Wrong modality"); return }
+            let frozen = try #require(input.source)
+            #expect(input.operation == operation && input.durationSeconds == Double(882) / 44_100)
+            #expect(input.strength == Float(0.4))
+            #expect(frozen.sha256 == sourceAsset.metadata.audio?.contentSHA256)
+            #expect(frozen.url.path == project.appendingPathComponent("AudioInputs/\(job.id.uuidString)/source.wav").path)
+            #expect(try Data(contentsOf: frozen.url) == originalBytes)
+            if operation == .inpaint {
+                #expect(input.editRegion == AudioEditRegion(startFrame: 100, endFrame: 400))
+            } else { #expect(input.editRegion == nil) }
+            #expect(subject.activeDocument?.adoptedAssetID == nil)
+            #expect(try Data(contentsOf: ownedURL) == originalBytes)
+        }
+        #expect(await subject.cancelAndCloseProject())
+        await subject.openProject(at: project)
+        #expect(subject.activeDocumentID == lastDocument)
+        #expect(subject.audioCreationDraft?.operation == .inpaint)
+        #expect(subject.audioCreationDraft?.editRegion == AudioFrameRange(startFrame: 100, endFrame: 400))
+        #expect(subject.activeDocument?.sourceAssetID == sourceAsset.id)
+        #expect(try Data(contentsOf: ownedURL) == originalBytes)
+        #expect(await subject.cancelAndCloseProject())
+        // This proves host/request/file ownership; synthetic output is not model inpaint quality evidence.
+    }
+
     @Test func oldDocumentInputCannotOverwriteNewDocumentAndSaveFailurePreservesBothVersions() async throws {
         let (root, settings, suite) = try fixture()
         defer { settings.removePersistentDomain(forName: suite); try? FileManager.default.removeItem(at: root) }
