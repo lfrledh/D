@@ -21,6 +21,7 @@ public actor ProjectStore {
     private let lockFD: Int32
     private var manifest: ProjectManifest
     private var isClosed = false
+    private var captureDirectories: [UUID: Int32] = [:]
 
     private init(rootURL: URL, rootFD: Int32, lockFD: Int32, manifest: ProjectManifest) {
         self.rootURL = rootURL
@@ -29,7 +30,10 @@ public actor ProjectStore {
         self.manifest = manifest
     }
 
-    deinit { if !isClosed { Darwin.close(lockFD); Darwin.close(rootFD) } }
+    deinit {
+        for descriptor in captureDirectories.values { Darwin.close(descriptor) }
+        if !isClosed { Darwin.close(lockFD); Darwin.close(rootFD) }
+    }
 
     public static func create(at url: URL, name: String) async throws -> ProjectStore {
         let root = try ProjectFiles.projectURL(url)
@@ -403,7 +407,8 @@ public actor ProjectStore {
         try ProjectFiles.validateAudioName(name)
         try checkLocation()
         let (id, directory) = try ProjectFiles.createAudioDirectory(in: rootFD)
-        defer { Darwin.close(directory) }
+        var retained = false
+        defer { if !retained { Darwin.close(directory) } }
         var info = stat()
         guard fstatat(directory, "source.caf", &info, AT_SYMLINK_NOFOLLOW) != 0, errno == ENOENT else {
             throw ProjectStoreError.alreadyExists("Audio/\(id.uuidString)/source.caf")
@@ -413,6 +418,8 @@ public actor ProjectStore {
         var candidate = manifest
         candidate.pendingAudioCaptures.append(reservation)
         try commit(candidate)
+        captureDirectories[id] = directory
+        retained = true
         return reservation
     }
 
@@ -421,8 +428,8 @@ public actor ProjectStore {
             throw ProjectStoreError.invalidProject("找不到待录制的音频预约。")
         }
         try checkLocation()
-        let directory = try ProjectFiles.openRelativeDirectory("Audio/\(id.uuidString)", in: rootFD)
-        defer { Darwin.close(directory) }
+        let directory = try retainedCaptureDirectory(id: id)
+        try verifyRootedCaptureDirectory(id: id, retained: directory)
         var info = stat()
         let status = fstatat(directory, "source.caf", &info, AT_SYMLINK_NOFOLLOW)
         guard status != 0, errno == ENOENT else {
@@ -431,20 +438,78 @@ public actor ProjectStore {
         return rootURL.appendingPathComponent(reservation.relativePath)
     }
 
+    /// Creates the recording leaf exactly once beneath the retained reservation directory.
+    /// The returned owner keeps both the leaf and its original parent open through flush.
+    func createAudioCaptureFile(id: UUID) throws -> AudioCaptureFile {
+        guard let reservation = manifest.pendingAudioCaptures.first(where: { $0.id == id }) else {
+            throw ProjectStoreError.invalidProject("找不到待录制的音频预约。")
+        }
+        try Task.checkCancellation()
+        try checkLocation()
+        let directory = try retainedCaptureDirectory(id: id)
+        try verifyRootedCaptureDirectory(id: id, retained: directory)
+        try Task.checkCancellation()
+        let descriptor = openat(directory, "source.caf",
+                                O_RDWR | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0o600)
+        guard descriptor >= 0 else {
+            if errno == EEXIST { throw ProjectStoreError.alreadyExists(reservation.relativePath) }
+            throw ProjectFiles.error()
+        }
+        var transferred = false
+        var parentDuplicate: Int32 = -1
+        defer {
+            if !transferred {
+                if parentDuplicate >= 0 { Darwin.close(parentDuplicate) }
+                Darwin.close(descriptor)
+            }
+        }
+        var rootInfo = stat(), directoryInfo = stat(), fileInfo = stat()
+        guard fstat(rootFD, &rootInfo) == 0, fstat(directory, &directoryInfo) == 0,
+              fstat(descriptor, &fileInfo) == 0 else { throw ProjectFiles.error() }
+        guard fileInfo.st_mode & S_IFMT == S_IFREG, fileInfo.st_nlink == 1 else {
+            throw ProjectStoreError.unsafePath(reservation.relativePath)
+        }
+        parentDuplicate = dup(directory)
+        guard parentDuplicate >= 0 else { throw ProjectFiles.error() }
+        guard fsync(directory) == 0 else { throw ProjectFiles.error() }
+        let capture = AudioCaptureFile(
+            id: id, url: rootURL.appendingPathComponent(reservation.relativePath),
+            fileDescriptor: descriptor, directoryDescriptor: parentDuplicate,
+            rootIdentity: AudioCaptureIdentity(rootInfo),
+            directoryIdentity: AudioCaptureIdentity(directoryInfo),
+            fileIdentity: AudioCaptureIdentity(fileInfo)
+        )
+        transferred = true
+        return capture
+    }
+
     /// Finalization never removes or rewrites the capture. Any validation or save failure keeps
     /// both the persisted reservation and its raw file available for an explicit retry.
     public func finalizeAudioCapture(id: UUID) throws -> ProjectManifest {
+        let capture = try openExistingAudioCapture(id: id)
+        return try finalizeAudioCapture(id: id, capture: capture)
+    }
+
+    func finalizeAudioCapture(
+        id: UUID,
+        capture: AudioCaptureFile,
+        afterInspection: (@Sendable (Int32) throws -> Void)? = nil
+    ) throws -> ProjectManifest {
         guard let reservationIndex = manifest.pendingAudioCaptures.firstIndex(where: { $0.id == id }) else {
             throw ProjectStoreError.invalidProject("找不到待恢复的音频预约。")
         }
-        try checkLocation()
+        guard capture.id == id else { throw ProjectStoreError.unsafePath("capture identity") }
+        try verifyCapture(capture, expectedFingerprint: nil)
+        _ = try capture.sealAndFingerprint()
+        if let error = capture.synchronize() { throw AudioMediaError.io(error) }
         let reservation = manifest.pendingAudioCaptures[reservationIndex]
-        let source = rootURL.appendingPathComponent(reservation.relativePath)
-        let inspection = try AudioMediaInspector.inspect(at: source)
+        let descriptor = try capture.duplicateDescriptor()
+        defer { Darwin.close(descriptor) }
+        let checked = try AudioMediaInspector.inspectCapture(descriptor: descriptor)
+        let inspection = checked.inspection
         guard inspection.format.container == .caf else { throw AudioMediaError.unsupportedFormat }
-        let file = try ProjectFiles.openRelativeFile(reservation.relativePath, in: rootFD)
-        defer { Darwin.close(file) }
-        guard fsync(file) == 0 else { throw ProjectFiles.error() }
+        try afterInspection?(descriptor)
+        try verifyCapture(capture, expectedFingerprint: checked.fingerprint)
 
         let metadata = AudioAssetMetadata(format: inspection.format,
                                           contentSHA256: inspection.contentSHA256,
@@ -460,8 +525,105 @@ public actor ProjectStore {
         candidate.assets.append(asset)
         candidate.documents.append(document)
         candidate.activeDocumentID = documentID
+        // This is the observed-boundary seal: the inode fingerprint used for metadata is
+        // checked again immediately before publishing the manifest mutation.
+        try verifyCapture(capture, expectedFingerprint: checked.fingerprint)
         try commit(candidate)
+        if let directory = captureDirectories.removeValue(forKey: id) { Darwin.close(directory) }
         return manifest
+    }
+
+    private func retainedCaptureDirectory(id: UUID) throws -> Int32 {
+        if let descriptor = captureDirectories[id] { return descriptor }
+        let descriptor = try ProjectFiles.openRelativeDirectory("Audio/\(id.uuidString)", in: rootFD)
+        captureDirectories[id] = descriptor
+        return descriptor
+    }
+
+    private func verifyRootedCaptureDirectory(id: UUID, retained: Int32) throws {
+        let rooted = try ProjectFiles.openRelativeDirectory("Audio/\(id.uuidString)", in: rootFD)
+        defer { Darwin.close(rooted) }
+        var expected = stat(), actual = stat()
+        guard fstat(retained, &expected) == 0, fstat(rooted, &actual) == 0 else {
+            throw ProjectFiles.error()
+        }
+        guard AudioCaptureIdentity(expected) == AudioCaptureIdentity(actual) else {
+            throw ProjectStoreError.unsafePath("Audio/\(id.uuidString)")
+        }
+    }
+
+    private func openExistingAudioCapture(id: UUID) throws -> AudioCaptureFile {
+        guard let reservation = manifest.pendingAudioCaptures.first(where: { $0.id == id }) else {
+            throw ProjectStoreError.invalidProject("找不到待恢复的音频预约。")
+        }
+        try checkLocation()
+        let directory = try retainedCaptureDirectory(id: id)
+        try verifyRootedCaptureDirectory(id: id, retained: directory)
+        let descriptor = openat(directory, "source.caf", O_RDWR | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC)
+        guard descriptor >= 0 else { throw ProjectFiles.error() }
+        var transferred = false
+        var parentDuplicate: Int32 = -1
+        defer {
+            if !transferred {
+                if parentDuplicate >= 0 { Darwin.close(parentDuplicate) }
+                Darwin.close(descriptor)
+            }
+        }
+        var rootInfo = stat(), directoryInfo = stat(), fileInfo = stat()
+        guard fstat(rootFD, &rootInfo) == 0, fstat(directory, &directoryInfo) == 0,
+              fstat(descriptor, &fileInfo) == 0 else { throw ProjectFiles.error() }
+        guard fileInfo.st_mode & S_IFMT == S_IFREG, fileInfo.st_nlink == 1 else {
+            throw ProjectStoreError.unsafePath(reservation.relativePath)
+        }
+        parentDuplicate = dup(directory)
+        guard parentDuplicate >= 0 else { throw ProjectFiles.error() }
+        let capture = AudioCaptureFile(
+            id: id, url: rootURL.appendingPathComponent(reservation.relativePath),
+            fileDescriptor: descriptor, directoryDescriptor: parentDuplicate,
+            rootIdentity: AudioCaptureIdentity(rootInfo),
+            directoryIdentity: AudioCaptureIdentity(directoryInfo),
+            fileIdentity: AudioCaptureIdentity(fileInfo)
+        )
+        transferred = true
+        return capture
+    }
+
+    private func verifyCapture(_ capture: AudioCaptureFile,
+                               expectedFingerprint: AudioCaptureFingerprint?) throws {
+        try checkLocation()
+        var rootInfo = stat()
+        guard fstat(rootFD, &rootInfo) == 0,
+              AudioCaptureIdentity(rootInfo) == capture.rootIdentity else {
+            throw ProjectStoreError.unsafePath("project root")
+        }
+        let retained = try retainedCaptureDirectory(id: capture.id)
+        try verifyRootedCaptureDirectory(id: capture.id, retained: retained)
+        let held = try capture.currentIdentities()
+        guard held.0 == capture.directoryIdentity, held.1 == capture.fileIdentity else {
+            throw ProjectStoreError.externalModification
+        }
+        if let expectedFingerprint,
+           try capture.fingerprint() != expectedFingerprint {
+            throw ProjectStoreError.externalModification
+        }
+        var directoryInfo = stat()
+        guard fstat(retained, &directoryInfo) == 0,
+              AudioCaptureIdentity(directoryInfo) == capture.directoryIdentity else {
+            throw ProjectStoreError.unsafePath("Audio/\(capture.id.uuidString)")
+        }
+        let rootedFile = openat(retained, "source.caf", O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC)
+        guard rootedFile >= 0 else { throw ProjectFiles.error() }
+        defer { Darwin.close(rootedFile) }
+        var fileInfo = stat()
+        guard fstat(rootedFile, &fileInfo) == 0,
+              fileInfo.st_mode & S_IFMT == S_IFREG, fileInfo.st_nlink == 1,
+              AudioCaptureIdentity(fileInfo) == capture.fileIdentity else {
+            throw ProjectStoreError.externalModification
+        }
+        if let expectedFingerprint,
+           AudioCaptureFingerprint(fileInfo) != expectedFingerprint {
+            throw ProjectStoreError.externalModification
+        }
     }
 
     public func saveAudioDraft(_ draft: AudioDraftDocument, documentID: UUID,
@@ -766,6 +928,8 @@ public actor ProjectStore {
             try checkLocation()
             guard fsync(rootFD) == 0 else { throw ProjectFiles.error() }
         }
+        for descriptor in captureDirectories.values { Darwin.close(descriptor) }
+        captureDirectories.removeAll()
         Darwin.close(lockFD)
         Darwin.close(rootFD)
         isClosed = true

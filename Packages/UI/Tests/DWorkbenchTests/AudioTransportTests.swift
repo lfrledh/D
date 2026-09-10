@@ -148,13 +148,13 @@ private final class FakeAudioFactory: AudioTransportDeviceFactory {
         return device
     }
 
-    func makeRecording(url: URL) throws -> any AudioRecordingDevice {
+    func makeRecording(capture: AudioCaptureFile) throws -> any AudioRecordingDevice {
         log.entries.append("prepare-recording")
-        try Data([0x43, 0x41, 0x46, 0x21]).write(
-            to: url,
-            options: .withoutOverwriting
-        )
-        let device = FakeRecordingDevice(name: "r\(recordings.count)", url: url, log: log)
+        let descriptor = try capture.duplicateDescriptor()
+        defer { Darwin.close(descriptor) }
+        let marker = Data([0x43, 0x41, 0x46, 0x21])
+        try marker.withUnsafeBytes { try AudioSafeTestWrite.all($0, descriptor: descriptor) }
+        let device = FakeRecordingDevice(name: "r\(recordings.count)", url: capture.url, log: log)
         configureRecording?(device)
         recordings.append(device)
         return device
@@ -167,13 +167,60 @@ private final class FakeAudioFactory: AudioTransportDeviceFactory {
 @MainActor
 private extension AudioTransport {
     func requestAndStartRecording(to url: URL) async throws {
-        try await requestAndStartRecording(to: url) {
+        try await requestAndStartRecording(to: url, revalidate: {
             var info = stat()
             guard lstat(url.path, &info) != 0, errno == ENOENT else {
                 throw AudioMediaError.io("fixture destination already exists")
             }
+        }, createCapture: { try fixtureCapture(at: url) })
+    }
+
+    func requestAndStartRecording(
+        to url: URL,
+        revalidate: @MainActor @Sendable () async throws -> Void
+    ) async throws {
+        try await requestAndStartRecording(to: url, revalidate: revalidate,
+                                           createCapture: { try fixtureCapture(at: url) })
+    }
+}
+
+private enum AudioSafeTestWrite {
+    static func all(_ bytes: UnsafeRawBufferPointer, descriptor: Int32) throws {
+        guard ftruncate(descriptor, 0) == 0 else { throw AudioMediaError.io("fixture truncate") }
+        var offset = 0
+        while offset < bytes.count {
+            let count = Darwin.pwrite(descriptor, bytes.baseAddress!.advanced(by: offset),
+                                      bytes.count - offset, off_t(offset))
+            guard count > 0 else { throw AudioMediaError.io("fixture write") }
+            offset += count
         }
     }
+}
+
+private func fixtureCapture(at url: URL) throws -> AudioCaptureFile {
+    let directory = Darwin.open(url.deletingLastPathComponent().path,
+                                O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+    guard directory >= 0 else { throw AudioMediaError.io("fixture directory") }
+    defer { Darwin.close(directory) }
+    let descriptor = openat(directory, url.lastPathComponent,
+                            O_RDWR | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0o600)
+    guard descriptor >= 0 else { throw AudioMediaError.io("fixture capture") }
+    var fileTransferred = false
+    defer { if !fileTransferred { Darwin.close(descriptor) } }
+    let parent = dup(directory)
+    guard parent >= 0 else { throw AudioMediaError.io("fixture duplicate") }
+    var rootInfo = stat(), fileInfo = stat()
+    guard fstat(directory, &rootInfo) == 0, fstat(descriptor, &fileInfo) == 0 else {
+        Darwin.close(parent)
+        throw AudioMediaError.io("fixture identity")
+    }
+    let capture = AudioCaptureFile(id: UUID(), url: url, fileDescriptor: descriptor,
+                                   directoryDescriptor: parent,
+                                   rootIdentity: AudioCaptureIdentity(rootInfo),
+                                   directoryIdentity: AudioCaptureIdentity(rootInfo),
+                                   fileIdentity: AudioCaptureIdentity(fileInfo))
+    fileTransferred = true
+    return capture
 }
 
 @Suite("Audio transport", .serialized)
@@ -709,7 +756,8 @@ struct AudioTransportTests {
         let subject = AudioTransport(recordingEnabled: true, deviceFactory: factory)
         let task = Task {
             try await subject.requestAndStartRecording(to: target) {
-                #expect(try await store.audioCaptureURL(id: reservation.id) == target)
+                let checked = try await store.audioCaptureURL(id: reservation.id)
+                #expect(checked == target)
             }
         }
         try await waitForPermissionRequest(subject, factory: factory)

@@ -79,6 +79,7 @@ public final class ProjectAudioController {
     @ObservationIgnored private var finalizingCaptureID: UUID?
     @ObservationIgnored private var activeCaptureID: UUID?
     @ObservationIgnored private var activeCaptureURL: URL?
+    @ObservationIgnored private var activeCaptureFile: AudioCaptureFile?
     @ObservationIgnored private var captureGeneration: UInt64 = 0
     @ObservationIgnored private var isActive = true
     @ObservationIgnored private var captureFailureBlocksNavigation = false
@@ -320,18 +321,32 @@ public final class ProjectAudioController {
             activeCaptureURL = url
             captureFailureBlocksNavigation = false
             errorMessage = nil
-            try await transport.requestAndStartRecording(to: url) { [weak self] in
-                guard let self, self.isActive, self.admissionsOpen,
-                      self.captureGeneration == generation,
-                      self.activeCaptureID == reservation.id else { throw CancellationError() }
-                let checkedURL = try await self.store.audioCaptureURL(id: reservation.id)
-                guard self.isActive, self.admissionsOpen,
-                      self.captureGeneration == generation,
-                      self.activeCaptureID == reservation.id else { throw CancellationError() }
-                guard checkedURL == url else {
-                    throw AudioMediaError.io("录音预约位置已改变；原文件和预约已保留")
+            try await transport.requestAndStartRecording(
+                to: url,
+                revalidate: { [weak self] in
+                    guard let self, self.isActive, self.admissionsOpen,
+                          self.captureGeneration == generation,
+                          self.activeCaptureID == reservation.id else { throw CancellationError() }
+                    let checkedURL = try await self.store.audioCaptureURL(id: reservation.id)
+                    guard self.isActive, self.admissionsOpen,
+                          self.captureGeneration == generation,
+                          self.activeCaptureID == reservation.id else { throw CancellationError() }
+                    guard checkedURL == url else {
+                        throw AudioMediaError.io("录音预约位置已改变；原文件和预约已保留")
+                    }
+                },
+                createCapture: { [weak self] in
+                    guard let self, self.isActive, self.admissionsOpen,
+                          self.captureGeneration == generation,
+                          self.activeCaptureID == reservation.id else { throw CancellationError() }
+                    let capture = try await self.store.createAudioCaptureFile(id: reservation.id)
+                    guard self.isActive, self.admissionsOpen,
+                          self.captureGeneration == generation,
+                          self.activeCaptureID == reservation.id else { throw CancellationError() }
+                    self.activeCaptureFile = capture
+                    return capture
                 }
-            }
+            )
             guard isActive, generation == captureGeneration else { return false }
             return transport.state == .recording || finalizingCaptureID == reservation.id
         } catch is CancellationError {
@@ -361,6 +376,7 @@ public final class ProjectAudioController {
             captureGeneration &+= 1
             activeCaptureID = nil
             activeCaptureURL = nil
+            activeCaptureFile = nil
             return true
         }
         guard let task = finalizeTask else {
@@ -369,6 +385,7 @@ public final class ProjectAudioController {
                 captureGeneration &+= 1
                 activeCaptureID = nil
                 activeCaptureURL = nil
+                activeCaptureFile = nil
                 return true
             }
             return activeCaptureID == nil && !captureFailureBlocksNavigation
@@ -382,7 +399,7 @@ public final class ProjectAudioController {
             errorMessage = "找不到可恢复的录音预约，或另一音频操作尚未结束。"
             return false
         }
-        return await awaitFinalize(scheduleFinalize(id: id, expectedURL: nil))
+        return await awaitFinalize(scheduleFinalize(id: id, expectedURL: nil, capture: nil))
     }
 
     /// A narrow transition lane for retrying one already registered failed capture.
@@ -414,6 +431,7 @@ public final class ProjectAudioController {
         captureGeneration &+= 1
         activeCaptureID = nil
         activeCaptureURL = nil
+        activeCaptureFile = nil
         captureFailureBlocksNavigation = false
         errorMessage = nil
         return true
@@ -556,11 +574,12 @@ public final class ProjectAudioController {
             captureFailureBlocksNavigation = true
             return
         }
-        _ = scheduleFinalize(id: id, expectedURL: expected)
+        _ = scheduleFinalize(id: id, expectedURL: expected, capture: activeCaptureFile)
     }
 
     @discardableResult
-    private func scheduleFinalize(id: UUID, expectedURL: URL?) -> Task<Bool, Never> {
+    private func scheduleFinalize(id: UUID, expectedURL: URL?,
+                                  capture: AudioCaptureFile?) -> Task<Bool, Never> {
         if finalizingCaptureID == id, let finalizeTask { return finalizeTask }
         let token = UUID()
         finalizingCaptureID = id
@@ -580,12 +599,18 @@ public final class ProjectAudioController {
                 return false
             }
             do {
-                let updated = try await self.store.finalizeAudioCapture(id: id)
+                let updated: ProjectManifest
+                if let capture {
+                    updated = try await self.store.finalizeAudioCapture(id: id, capture: capture)
+                } else {
+                    updated = try await self.store.finalizeAudioCapture(id: id)
+                }
                 guard self.isActive, self.finalizeToken == token else { return false }
                 self.publish(updated)
                 self.pendingCaptures = updated.pendingAudioCaptures
                 self.activeCaptureID = nil
                 self.activeCaptureURL = nil
+                self.activeCaptureFile = nil
                 self.captureFailureBlocksNavigation = false
                 self.synchronize(updated)
                 if let documentID = self.document?.id {
