@@ -73,7 +73,9 @@ enum AppSessionFactory {
             let licenseAcknowledged: Bool
         }
         let url = URL(fileURLWithPath: path)
-        let data = try Data(contentsOf: url)
+        let handle = try FileHandle(forReadingFrom: url)
+        defer { try? handle.close() }
+        let data = try handle.read(upToCount: 64 * 1024 + 1) ?? Data()
         guard data.count <= 64 * 1024 else {
             throw InferenceFailure.invalidRequest("Local audio engine configuration is too large.")
         }
@@ -122,7 +124,7 @@ enum AppSessionFactory {
             case .decoding: "正在解码图像"
             case .decoded, .publishing: "正在写入图像文件"
             case .drained, .released: "正在释放计算资源"
-            case nil: "正在准备模型"
+            case nil: "正在执行推理"
             }
         case .cancelling: "正在取消"
         case .releasing: "正在释放资源"

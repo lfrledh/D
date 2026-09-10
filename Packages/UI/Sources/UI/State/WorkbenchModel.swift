@@ -63,6 +63,66 @@ public final class WorkbenchModel {
         await endComparison()
         await projectSession.createTextDocument()
     }
+    public func createAudioCreation(sourceAssetID: UUID? = nil) async {
+        guard !isChangingProject, !refuseEditorClose() else { return }
+        await endComparison()
+        await projectSession.createAudioCreation(sourceAssetID: sourceAssetID)
+    }
+
+    public func chooseAudioCreationModel(contextID: UUID, documentID: UUID) async {
+        guard !isChangingProject, !isBusy,
+              projectSession.audioCreationContextID == contextID, activeDocumentID == documentID else { return }
+        isChoosingLocation = true
+        defer { isChoosingLocation = false }
+        let panel = NSOpenPanel()
+        panel.title = "选择已安装的本地声音模型"
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        guard await panel.begin() == .OK, let url = panel.url,
+              projectSession.audioCreationContextID == contextID, activeDocumentID == documentID else { return }
+        await projectSession.registerAudioModel(at: url)
+    }
+
+    public func exportAudioCreation(id: UUID, contextID: UUID, documentID: UUID) async {
+        guard !isChangingProject, !isBusy,
+              projectSession.audioCreationContextID == contextID, activeDocumentID == documentID,
+              let asset = manifest?.assets.first(where: { $0.id == id }),
+              let format = asset.metadata.audio?.format else { return }
+        isChoosingLocation = true
+        defer { isChoosingLocation = false }
+        let panel = NSSavePanel()
+        panel.title = "导出声音副本"
+        panel.allowedContentTypes = [format.container == .caf ? UTType(filenameExtension: "caf")! : .wav]
+        panel.nameFieldStringValue = "声音副本." + (format.container == .caf ? "caf" : "wav")
+        guard await panel.begin() == .OK, let url = panel.url,
+              projectSession.audioCreationContextID == contextID, activeDocumentID == documentID else { return }
+        await projectSession.exportAudioCreationAsset(id: id, to: url, contextID: contextID, documentID: documentID)
+    }
+
+    /// Every callback captures the rendered project/document identity before any file panel or await.
+    public func audioCreationActions(contextID: UUID, documentID: UUID) -> AudioCreationActions {
+        let session = projectSession
+        return AudioCreationActions(
+            generate: { Task { await session.generateAudioCreation(contextID: contextID, documentID: documentID) } },
+            cancel: { Task { await session.cancelAudioCreation(contextID: contextID, documentID: documentID) } },
+            save: { Task { _ = await session.saveAudioCreation(contextID: contextID, documentID: documentID) } },
+            select: { id in Task { await session.mutateAudioCreationCandidate(.select(id), contextID: contextID, documentID: documentID) } },
+            play: { id in Task { await session.playAudioCreationAsset(id: id, contextID: contextID, documentID: documentID) } },
+            stop: {
+                guard session.audioCreationContextID == contextID, session.activeDocumentID == documentID else { return }
+                session.audioCreationTransport.stopPlayback()
+            },
+            adopt: { id in Task { await session.mutateAudioCreationCandidate(.adopt(id), contextID: contextID, documentID: documentID) } },
+            reject: { id, rejected in Task { await session.mutateAudioCreationCandidate(.reject(id, rejected), contextID: contextID, documentID: documentID) } },
+            export: { id in Task { await self.exportAudioCreation(id: id, contextID: contextID, documentID: documentID) } },
+            createFrom: { id in Task {
+                guard session.audioCreationContextID == contextID, session.activeDocumentID == documentID else { return }
+                await self.createAudioCreation(sourceAssetID: id)
+            } },
+            chooseModel: { Task { await self.chooseAudioCreationModel(contextID: contextID, documentID: documentID) } })
+    }
+
     public func chooseTextModel() async {
         guard !isChangingProject, !isBusy else { return }
         isChoosingLocation = true

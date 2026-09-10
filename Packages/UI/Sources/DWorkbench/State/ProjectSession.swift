@@ -2,6 +2,10 @@ import DInference
 import Foundation
 import Observation
 
+public enum AudioCreationCandidateAction: Sendable {
+    case select(UUID?), adopt(UUID?), reject(UUID, Bool)
+}
+
 public enum ProjectCloseDecision: Sendable {
     case wait, cancel, keepOpen
 }
@@ -51,6 +55,16 @@ public final class ProjectSession {
     public private(set) var activeJobIDs: Set<UUID> = []
     public private(set) var text: ProjectTextController?
     public private(set) var audio: ProjectAudioController?
+    public private(set) var audioCreationContextID = UUID()
+    public private(set) var audioCreationDraft: AudioCreationDraft?
+    public private(set) var audioModelStatus = "选择已安装的本地声音模型"
+    public private(set) var isRegisteringAudioModel = false
+    public let audioCreationTransport = AudioTransport(recordingEnabled: false)
+    @ObservationIgnored private var audioCreationDocumentID: UUID?
+    @ObservationIgnored private var audioCreationPersistedRevision: UUID?
+    @ObservationIgnored private var audioCreationWriteTail: Task<Void, Never>?
+    @ObservationIgnored private var audioModelLease: LocationAccess.Lease?
+    @ObservationIgnored private var audioReference: ModelReference?
     public private(set) var textModelStatus = "选择已注册的 Qwen2.5 Instruct 4-bit 模型（0.5B／1.5B／7B／32B）"
     public private(set) var isTextWorking = false
     public private(set) var isRegisteringTextModel = false
@@ -172,6 +186,7 @@ public final class ProjectSession {
         await metadataWriteTail?.value
         if activeDocument?.kind == .text { return }
         if activeDocument?.kind == .audio {
+            try await flushAudioCreation(to: store)
             guard await audio?.flushPendingWrites() != false else {
                 throw ProjectStoreError.invalidTransition
             }
@@ -192,6 +207,12 @@ public final class ProjectSession {
     }
 
     private func loadActiveDocument() {
+        if audioCreationDocumentID != activeDocumentID || activeDocument?.audioCreation == nil {
+            audioCreationTransport.stopPlayback()
+            audioCreationDocumentID = activeDocument?.audioCreation == nil ? nil : activeDocumentID
+            audioCreationDraft = activeDocument?.audioCreation
+            audioCreationPersistedRevision = audioCreationDraft?.revision
+        }
         if let value = activeDocument?.textDraft, let session, let backendID = session.textBackendID {
             if text?.editor.document.id != value.id {
                 let identity = textContextID
@@ -364,6 +385,9 @@ public final class ProjectSession {
     private func activate(_ candidate: ProjectStore, lease: LocationAccess.Lease) async throws {
         let createdSession = try await factory(candidate.artifactDirectory)
         textContextID = UUID()
+        audioCreationContextID = UUID()
+        audioCreationDocumentID = nil
+        audioCreationDraft = nil
         text = nil
         store = candidate
         session = createdSession
@@ -387,6 +411,20 @@ public final class ProjectSession {
                     textModelStatus = (try? TextModelProfiles.status(for: textReference)) ?? "文字模型 · 版本未登记"
                 } catch { await access.release(lease); throw error }
             } catch { textModelStatus = "文字模型暂不可用，请重新选择原模型文件夹。" }
+        }
+        if let bookmark = settings.data(forKey: "workbench.audioModelBookmark.v1"),
+           let validate = createdSession.validateAudioModel {
+            do {
+                let lease = try await access.restore(bookmark)
+                do {
+                    audioReference = try await validate(lease.url)
+                    audioModelLease = lease
+                    settings.set(lease.bookmark, forKey: "workbench.audioModelBookmark.v1")
+                    audioModelStatus = "本地声音模型已恢复并校验"
+                } catch { await access.release(lease); throw error }
+            } catch { audioModelStatus = "声音模型暂不可用，请重新选择原模型文件夹" }
+        } else if createdSession.audioBackendID == nil {
+            audioModelStatus = "本地声音引擎尚未配置；已有作品仍可查看和导出"
         }
     }
 
@@ -572,7 +610,8 @@ public final class ProjectSession {
     }
 
     private func admit(_ request: InferenceRequest, documentID: UUID,
-                       savedDraft: Task<ProjectManifest, Error>, store: ProjectStore, session: WorkbenchSession) async {
+                       savedDraft: Task<ProjectManifest, Error>, store: ProjectStore, session: WorkbenchSession,
+                       backendID: String? = nil) async {
         do {
             applyManifest(try await savedDraft.value)
             applyManifest(try await store.enqueue(request: request, documentID: documentID))
@@ -580,7 +619,7 @@ public final class ProjectSession {
                 await finish(id: request.id, outcome: .cancelled, store: store)
                 return
             }
-            let run = try await session.engine.submit(request, backendID: session.backendID)
+            let run = try await session.engine.submit(request, backendID: backendID ?? session.backendID)
             handles[run.id] = run
             phases[run.id] = cancellationRequests.contains(run.id) ? "正在取消" : "排队中"
             // This task belongs to the workbench, not to a SwiftUI view's lifetime.
@@ -641,7 +680,7 @@ public final class ProjectSession {
             let origin = manifest?.jobs.first(where: { $0.id == id })?.documentID
             let selection = selectionVersion
             applyManifest(try await store.complete(id: id, result: result))
-            if automaticResultSelectionEnabled, !showingAllArtworks, origin == activeDocumentID, selection == selectionVersion,
+            if automaticResultSelectionEnabled, activeDocument?.kind == .image, !showingAllArtworks, origin == activeDocumentID, selection == selectionVersion,
                let assetID = manifest?.jobs.first(where: { $0.id == id })?.artifactIDs.first {
                 await selectAsset(assetID)
             }
@@ -1062,7 +1101,7 @@ public final class ProjectSession {
 
     /// Used by project switching and native window/application close delegates.
     public func requestClose(decision: ProjectCloseDecision? = nil) async -> Bool {
-        if isRegisteringTextModel { return false }
+        if isRegisteringTextModel || isRegisteringAudioModel { return false }
         if text?.hasPendingCandidate == true {
             errorMessage = "请先接受或拒绝文字候选，再关闭项目。正文可以随时保存。"
             return false
@@ -1094,7 +1133,7 @@ public final class ProjectSession {
 
     /// A deterministic action for harnesses/tests that have already chosen to cancel.
     public func cancelAndCloseProject() async -> Bool {
-        guard !isRegisteringTextModel, !isChangingProject, !closePending else { return false }
+        guard !isRegisteringTextModel, !isRegisteringAudioModel, !isChangingProject, !closePending else { return false }
         closePending = true
         isChangingProject = true
         defer { closePending = false; isChangingProject = false }
@@ -1134,6 +1173,15 @@ public final class ProjectSession {
             // if a preceding disk/cleanup operation fails and the user needs to retry.
             if let session { await session.shutdown() }
             audio?.deactivateAfterClose()
+            audioCreationTransport.shutdown()
+            await access.release(audioModelLease)
+            audioModelLease = nil
+            audioReference = nil
+            audioCreationContextID = UUID()
+            audioCreationDocumentID = nil
+            audioCreationDraft = nil
+            audioCreationPersistedRevision = nil
+            audioModelStatus = "选择已安装的本地声音模型"
             audio = nil
             self.store = nil
             session = nil
@@ -1173,7 +1221,7 @@ public final class ProjectSession {
 
 
     private func navigationReady() -> Bool {
-        guard !isTextWorking, !isRegisteringTextModel, text?.hasPendingCandidate != true else {
+        guard !isTextWorking, !isRegisteringTextModel, !isRegisteringAudioModel, text?.hasPendingCandidate != true else {
             errorMessage = "请先取消并等待改写结束，或接受／拒绝文字候选，再切换文档。"
             return false
         }
@@ -1185,6 +1233,7 @@ public final class ProjectSession {
     }
 
     private func prepareAudioNavigation() async throws {
+        audioCreationTransport.stopPlayback()
         guard await audio?.prepareForNavigation() != false else {
             throw ProjectStoreError.invalidTransition
         }
@@ -1251,6 +1300,221 @@ public final class ProjectSession {
         work?.cancel()
         await text?.cancel()
         await work?.value
+    }
+
+    // AW1: generation documents share the authoritative runtime and project task journal.
+    public var audioCreationCandidates: [ProjectAsset] {
+        guard activeDocument?.audioCreation != nil, let manifest else { return [] }
+        let jobs = Set(documentJobs.map(\.id))
+        return manifest.assets.filter { $0.mediaType == "audio/wav" && $0.jobID.map(jobs.contains) == true }
+    }
+    public var audioCreationSource: ProjectAsset? {
+        guard let id = activeDocument?.sourceAssetID else { return nil }
+        return manifest?.assets.first { $0.id == id && $0.metadata.audio != nil }
+    }
+    public var canGenerateAudioCreation: Bool {
+        audioEnabled && audioCreationDraft != nil && audioReference != nil && session?.audioBackendID != nil
+            && !isBusy && !isChangingProject && !closePending && !isRegisteringAudioModel && pendingSaves.isEmpty
+            && !showingAllArtworks
+    }
+    public var audioCreationSaveStatus: String {
+        audioCreationDraft?.revision == audioCreationPersistedRevision ? "创作条件已保存" : "创作条件尚未保存"
+    }
+
+    public func updateAudioCreationDraft(_ value: AudioCreationDraft, contextID: UUID, documentID: UUID) {
+        guard contextID == audioCreationContextID, documentID == activeDocumentID,
+              activeDocument?.audioCreation != nil, !isBusy, !isChangingProject, !closePending,
+              var previous = audioCreationDraft else { return }
+        let decisions = previous.rejectedAssetIDs
+        previous = value
+        previous.rejectedAssetIDs = decisions
+        previous.revision = UUID()
+        audioCreationDraft = previous
+    }
+
+    private func queueAudioCreationSave(_ value: AudioCreationDraft, documentID: UUID,
+                                       store: ProjectStore) -> Task<ProjectManifest, Error> {
+        let preceding = audioCreationWriteTail
+        let context = audioCreationContextID
+        let write = Task { [self] in
+            if let preceding { await preceding.value }
+            guard self.store === store, context == audioCreationContextID else { throw CancellationError() }
+            let snapshot = await store.snapshot()
+            guard let current = snapshot.documents.first(where: { $0.id == documentID })?.audioCreation else {
+                throw ProjectStoreError.missingDocument
+            }
+            // A previously accepted decision cannot be overwritten by stale editor input.
+            guard current.rejectedAssetIDs == value.rejectedAssetIDs else {
+                throw ProjectStoreError.externalModification
+            }
+            let result: ProjectManifest
+            if current == value { result = snapshot }
+            else {
+                guard documentID == audioCreationDocumentID,
+                      current.revision == audioCreationPersistedRevision else {
+                    throw ProjectStoreError.externalModification
+                }
+                result = try await store.saveAudioCreation(value, documentID: documentID,
+                                                          expectedRevision: current.revision)
+            }
+            guard self.store === store, context == audioCreationContextID else { throw CancellationError() }
+            applyManifest(result)
+            if audioCreationDocumentID == documentID { audioCreationPersistedRevision = value.revision }
+            return result
+        }
+        audioCreationWriteTail = Task { _ = try? await write.value }
+        return write
+    }
+
+    private func flushAudioCreation(to store: ProjectStore) async throws {
+        guard let documentID = audioCreationDocumentID, documentID == activeDocumentID else { return }
+        repeat {
+            guard let value = audioCreationDraft else { return }
+            _ = try await queueAudioCreationSave(value, documentID: documentID, store: store).value
+            if audioCreationDraft?.revision == value.revision { return }
+        } while self.store === store && activeDocumentID == documentID
+    }
+
+    @discardableResult public func saveAudioCreation(contextID: UUID, documentID: UUID) async -> Bool {
+        guard contextID == audioCreationContextID, documentID == activeDocumentID,
+              let store, !isChangingProject, !closePending else { return false }
+        do { try await flushAudioCreation(to: store); return true }
+        catch { report(error, context: "声音创作尚未保存，原件与输入均保留"); return false }
+    }
+
+    public func createAudioCreation(sourceAssetID: UUID? = nil) async {
+        guard audioEnabled, navigationReady(), let store, !isChangingProject, !closePending else { return }
+        isChangingProject = true
+        defer { isChangingProject = false }
+        do {
+            audioCreationTransport.stopPlayback()
+            try await prepareAudioNavigation()
+            try await flushDraft(to: store)
+            applyManifest(try await store.createAudioCreation(sourceAssetID: sourceAssetID))
+            showingAllArtworks = false
+            loadActiveDocument()
+        } catch { audio?.resumeAdmissions(); report(error, context: "声音创作未能新建；已有作品未改变") }
+    }
+
+    public func registerAudioModel(at url: URL) async {
+        guard let session, let validate = session.validateAudioModel, !isBusy,
+              !isChangingProject, !closePending, !isRegisteringAudioModel else {
+            errorMessage = "本地声音引擎尚未就绪，当前没有开始加载或生成。"
+            return
+        }
+        isRegisteringAudioModel = true
+        defer { isRegisteringAudioModel = false }
+        let context = audioCreationContextID
+        do {
+            let lease = try await access.acquire(selected: url)
+            do {
+                let reference = try await validate(lease.url)
+                guard context == audioCreationContextID else { throw CancellationError() }
+                await access.release(audioModelLease)
+                audioModelLease = lease
+                audioReference = reference
+                settings.set(lease.bookmark, forKey: "workbench.audioModelBookmark.v1")
+                audioModelStatus = "本地声音模型已校验；支持提示生成、参考变体和区间重绘"
+            } catch { await access.release(lease); throw error }
+        } catch { report(error, context: "声音模型未能就绪，已有作品保持不变") }
+    }
+
+    public func generateAudioCreation(contextID: UUID, documentID: UUID) async {
+        guard contextID == audioCreationContextID, documentID == activeDocumentID,
+              canGenerateAudioCreation, let value = audioCreationDraft,
+              let reference = audioReference, let store, let session,
+              let backendID = session.audioBackendID else { return }
+        let sourceID = activeDocument?.sourceAssetID
+        let id = UUID()
+        let saved = queueAudioCreationSave(value, documentID: documentID, store: store)
+        activeJobIDs.insert(id)
+        liveStates[id] = .queued
+        phases[id] = "正在保存声音任务"
+        audioCreationTransport.stopPlayback()
+        startPolling()
+        let preceding = admissionTail
+        let admission = Task { [self] in
+            if let preceding { await preceding.value }
+            do {
+                _ = try await saved.value
+                let source: AudioSourceReference?
+                if value.operation == .generate { source = nil }
+                else {
+                    guard let sourceID else { throw AudioMediaError.unavailable("此操作需要参考原声") }
+                    source = try await store.prepareAudioCreationSource(assetID: sourceID, runID: id)
+                }
+                let input = try value.makeRequest(source: source)
+                let request = InferenceRequest(id: id, model: reference, input: .audio(input))
+                await admit(request, documentID: documentID, savedDraft: saved, store: store,
+                            session: session, backendID: backendID)
+            } catch {
+                await removeActive(id)
+                phases.removeValue(forKey: id)
+                liveStates.removeValue(forKey: id)
+                report(error, context: "声音任务未提交，原声和已有候选没有改变")
+            }
+        }
+        admissionTail = admission
+        await admission.value
+    }
+
+    public func cancelAudioCreation(contextID: UUID, documentID: UUID) async {
+        guard contextID == audioCreationContextID, documentID == activeDocumentID else { return }
+        let ids = documentJobs.filter { activeJobIDs.contains($0.id) }.map(\.id)
+        // A request being saved may not yet appear in the journal; only one audio admission
+        // is allowed while busy, so include its pending identifier before enqueue as well.
+        for id in activeJobIDs where ids.contains(id) || manifest?.jobs.contains(where: { $0.id == id }) == false {
+            await cancel(id)
+        }
+    }
+
+    public func mutateAudioCreationCandidate(_ action: AudioCreationCandidateAction,
+                                             contextID: UUID, documentID: UUID) async {
+        guard contextID == audioCreationContextID, documentID == activeDocumentID,
+              activeDocument?.audioCreation != nil, let store, !isBusy,
+              !isChangingProject, !closePending else { return }
+        isChangingProject = true
+        defer { isChangingProject = false }
+        do {
+            try await flushAudioCreation(to: store)
+            let updated: ProjectManifest
+            switch action {
+            case .select(let id): updated = try await store.setSelectedAsset(id, documentID: documentID)
+            case .adopt(let id): updated = try await store.adoptAsset(id: id, documentID: documentID)
+            case .reject(let id, let rejected):
+                updated = try await store.setAudioCandidateRejected(id: id, rejected: rejected, documentID: documentID)
+            }
+            guard contextID == audioCreationContextID, self.store === store else { return }
+            applyManifest(updated)
+            audioCreationDraft = activeDocument?.audioCreation
+            audioCreationPersistedRevision = audioCreationDraft?.revision
+            selectedAssetID = activeDocument?.selectedAssetID
+        } catch { report(error, context: "候选选择未保存，原件与已有作品均保留") }
+    }
+
+    public func playAudioCreationAsset(id: UUID, contextID: UUID, documentID: UUID) async {
+        guard contextID == audioCreationContextID, documentID == activeDocumentID,
+              !isBusy, !isChangingProject, !closePending, let store,
+              let asset = ([audioCreationSource].compactMap { $0 } + audioCreationCandidates).first(where: { $0.id == id }) else { return }
+        do {
+            let inspection = try await store.inspectAudioAsset(id: id)
+            let url = try await store.assetURL(for: asset)
+            guard contextID == audioCreationContextID, documentID == activeDocumentID, self.store === store,
+                  !isChangingProject, !closePending else { return }
+            audio?.transport.stopPlayback()
+            try audioCreationTransport.preparePlayback(url: url, format: inspection.format)
+            try audioCreationTransport.play()
+        } catch { report(error, context: "试听未开始；文件没有改变") }
+    }
+
+    public func exportAudioCreationAsset(id: UUID, to url: URL, contextID: UUID, documentID: UUID) async {
+        guard contextID == audioCreationContextID, documentID == activeDocumentID, let store,
+              !isChangingProject, !closePending,
+              id == audioCreationSource?.id || audioCreationCandidates.contains(where: { $0.id == id }) else { return }
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        do { try await store.exportAudioAsset(id: id, to: url) }
+        catch { report(error, context: "声音导出未完成，原件与已有目标未被覆盖") }
     }
 
     private func report(_ error: Error, context: String) {

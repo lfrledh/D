@@ -170,14 +170,43 @@ public struct WorkbenchView: View {
     }
 
     @ViewBuilder private var canvas: some View {
-        if !model.showingAllArtworks, model.activeDocument?.kind == .audio,
+        if !model.showingAllArtworks, let document = model.activeDocument,
+           let draft = model.projectSession.audioCreationDraft, document.audioCreation != nil {
+            let session = model.projectSession
+            let context = session.audioCreationContextID
+            let jobID = session.documentJobs.last(where: { session.activeJobIDs.contains($0.id) })?.id
+            AudioCreationView(draft: Binding(
+                get: { session.audioCreationDraft ?? draft },
+                set: { session.updateAudioCreationDraft($0, contextID: context, documentID: document.id) }),
+                source: session.audioCreationSource, candidates: session.audioCreationCandidates,
+                selectedAssetID: document.selectedAssetID, adoptedAssetID: document.adoptedAssetID,
+                modelStatus: session.audioModelStatus, canGenerate: session.canGenerateAudioCreation,
+                isBusy: session.isBusy || session.isRegisteringAudioModel,
+                progress: jobID.flatMap { session.progress[$0] },
+                status: jobID.flatMap { session.phases[$0] } ?? session.audioCreationSaveStatus,
+                transport: session.audioCreationTransport,
+                actions: model.audioCreationActions(contextID: context, documentID: document.id))
+                .id(document.id)
+        } else if !model.showingAllArtworks, model.activeDocument?.kind == .audio,
            let audio = model.projectSession.audio {
-            AudioWorkbenchView(controller: audio,
+            VStack(spacing: 0) {
+                if let assetID = model.activeDocument?.audioDraft?.assetID {
+                    HStack {
+                        Button("基于原声创建 AI 候选", systemImage: "waveform.badge.plus") {
+                            Task { await model.createAudioCreation(sourceAssetID: assetID) }
+                        }
+                        .disabled(model.isBusy)
+                        .accessibilityIdentifier("audio-create-from-original")
+                        Spacer()
+                    }.padding(.horizontal, 20).padding(.top, 12)
+                }
+                AudioWorkbenchView(controller: audio,
                                recordingEnabled: model.audioRecordingEnabled,
                                navigationInProgress: model.projectSession.isChangingProject,
                                actions: audioActions)
                 .observingLayout { id, rectangle in layoutProbe?(id, rectangle) }
                 .id(audio.contextID)
+            }
         } else if !model.showingAllArtworks, let text = model.projectSession.text {
             let project = model.projectSession
             let id = text.editor.document.id
@@ -372,6 +401,15 @@ private struct ArtworkSidebar: View {
                 }
                 .accessibilityIdentifier("new-text-document")
                 if let audio = model.projectSession.audio {
+                    Button {
+                        Task { await model.createAudioCreation() }
+                    } label: {
+                        Label("新建声音创作", systemImage: "waveform.badge.plus")
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .padding(.horizontal, 16)
+                    .disabled(model.isBusy)
+                    .accessibilityIdentifier("audio-create-new")
                     audioSidebar(audio)
                 }
                 HStack {
