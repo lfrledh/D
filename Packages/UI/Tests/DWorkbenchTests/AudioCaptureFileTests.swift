@@ -105,6 +105,44 @@ struct AudioCaptureFileTests {
         device = nil
     }
 
+    @MainActor @Test(arguments: [false, true])
+    func queueCreationFailureUsesDurabilityAndCloseUncertaintyPolicy(closeFails: Bool) throws {
+        let root = try captureFileTestDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let sync = SynchronizeProbe()
+        let capture = try makeCaptureFile(in: root, synchronizeFile: sync.file,
+                                         synchronizeDirectory: sync.directory)
+        let gate = AudioRecordingAdmissionGate()
+        var closeCount = 0
+        let lifecycle = AudioQueueLifecycleOperations(stop: { _, _ in
+            Issue.record("Nil queue must not be stopped"); return noErr
+        }, dispose: { _, _ in
+            Issue.record("Nil queue must not be disposed"); return noErr
+        }, closeFile: { file in
+            closeCount += 1
+            #expect(AudioFileClose(file) == noErr)
+            return closeFails ? -1 : noErr
+        })
+        var message: String?
+        do {
+            _ = try AudioQueueRecordingDevice(capture: capture, lifecycle: lifecycle,
+                admissionGate: gate, createQueue: { _, _ in (-7, nil) })
+            Issue.record("Controlled queue-creation failure was accepted")
+        } catch { message = error.localizedDescription }
+        #expect(message?.contains("-7") == true)
+        #expect(message?.contains("同步失败") == true)
+        #expect(closeCount == 1)
+        #expect(sync.counts.0 >= 1 && sync.counts.1 >= 1)
+        #expect(!(try captureBytes(capture)).isEmpty)
+        if closeFails {
+            #expect(message?.contains("关闭失败") == true)
+            #expect(throws: AudioMediaError.self) { try gate.acquire() }
+        } else {
+            let token = try gate.acquire()
+            gate.releaseAfterKnownTermination(token)
+        }
+    }
+
     @Test func callbackFailureStillAttemptsFileAndDirectoryDurability() throws {
         let root = try captureFileTestDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
@@ -252,7 +290,9 @@ struct AudioCaptureFileTests {
     }
 }
 
-private func makeCaptureFile(in root: URL) throws -> AudioCaptureFile {
+private func makeCaptureFile(in root: URL,
+                             synchronizeFile: @escaping (Int32) -> Int32 = { fsync($0) },
+                             synchronizeDirectory: @escaping (Int32) -> Int32 = { fsync($0) }) throws -> AudioCaptureFile {
     let directory = Darwin.open(root.path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
     try #require(directory >= 0)
     defer { Darwin.close(directory) }
@@ -269,7 +309,8 @@ private func makeCaptureFile(in root: URL) throws -> AudioCaptureFile {
                             fileDescriptor: descriptor, directoryDescriptor: parent,
                             rootIdentity: AudioCaptureIdentity(directoryInfo),
                             directoryIdentity: AudioCaptureIdentity(directoryInfo),
-                            fileIdentity: AudioCaptureIdentity(fileInfo))
+                            fileIdentity: AudioCaptureIdentity(fileInfo),
+                            synchronizeFile: synchronizeFile, synchronizeDirectory: synchronizeDirectory)
 }
 
 private func captureBytes(_ capture: AudioCaptureFile) throws -> Data {

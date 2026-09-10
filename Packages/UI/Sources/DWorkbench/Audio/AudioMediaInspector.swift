@@ -421,9 +421,10 @@ private enum AudioSafeFile {
                 let bits = Int(big32(bytes, 28))
                 guard formatID == "lpcm", bytesPerPacket > 0, framesPerPacket > 0,
                       channels > 0, bits > 0 else { throw AudioMediaError.unsupportedFormat }
-                format = (rate, channels, bits, flags & UInt32(kAudioFormatFlagIsFloat) != 0,
-                          bytesPerPacket, framesPerPacket,
-                          flags & UInt32(kAudioFormatFlagIsBigEndian) != 0)
+                // CAF LPCM uses bit 1 for LITTLE endian; ASBD uses that bit for BIG endian.
+                // CAFFile.h / Apple CAF specification define these container masks as 1 and 2.
+                format = (rate, channels, bits, flags & 1 != 0,
+                          bytesPerPacket, framesPerPacket, flags & 2 == 0)
             } else if type == "data" {
                 guard audioBytes == nil, size >= 4 else { throw AudioMediaError.invalidMedia("CAF data 数据块无效") }
                 audioBytes = size - 4

@@ -172,6 +172,13 @@ private let captureInputCallback: AudioQueueInputCallback = {
     context.consume(queue: queue, buffer: buffer, packetCount: packetCount)
 }
 
+private func makeCaptureQueue(_ format: inout AudioStreamBasicDescription,
+                              _ context: UnsafeMutableRawPointer) -> (OSStatus, AudioQueueRef?) {
+    var queue: AudioQueueRef?
+    let status = AudioQueueNewInput(&format, captureInputCallback, context, nil, nil, 0, &queue)
+    return (status, queue)
+}
+
 /// Owns the queue, AudioFileID, retained callback context, and capture as one release unit.
 /// A failed dispose keeps all four alive; deinit retries once, then the retained callback
 /// context safely quarantines that single failed native operation if disposal still fails.
@@ -182,12 +189,13 @@ private final class AudioQueueOwnedResources: @unchecked Sendable {
     private let lock = NSLock()
     private var queue: AudioQueueRef?
     private var audioFile: AudioFileID?
+    private var fileCloseUncertain = false
     private var callbackOwner: UnsafeMutableRawPointer?
     private let admissionGate: AudioRecordingAdmissionGate
     private let admissionToken: UUID
 
     init(capture: AudioCaptureFile, context: AudioQueueCaptureContext,
-         queue: AudioQueueRef, audioFile: AudioFileID,
+         queue: AudioQueueRef?, audioFile: AudioFileID,
          callbackOwner: UnsafeMutableRawPointer,
          lifecycle: AudioQueueLifecycleOperations,
          admissionGate: AudioRecordingAdmissionGate,
@@ -215,32 +223,49 @@ private final class AudioQueueOwnedResources: @unchecked Sendable {
             let disposeStatus = lifecycle.dispose(queue, true)
             if disposeStatus == noErr {
                 self.queue = nil
-                closeFileAndReleaseOwner(failures: &failures)
-                admissionGate.releaseAfterKnownTermination(admissionToken)
+                if closeFileAndReleaseOwner(failures: &failures) {
+                    admissionGate.releaseAfterKnownTermination(admissionToken)
+                } else {
+                    admissionGate.markTerminationUnknown(admissionToken)
+                }
             } else {
                 admissionGate.markTerminationUnknown(admissionToken)
                 failures.append("录音资源释放失败（\(disposeStatus)）；回调与文件所有权已保留")
             }
         } else {
             _ = context.callbacksDidTerminate()
-            closeFileAndReleaseOwner(failures: &failures)
-            admissionGate.releaseAfterKnownTermination(admissionToken)
+            if closeFileAndReleaseOwner(failures: &failures) {
+                admissionGate.releaseAfterKnownTermination(admissionToken)
+            } else {
+                admissionGate.markTerminationUnknown(admissionToken)
+            }
         }
         if let synchronizationError = capture.synchronize() { failures.append(synchronizationError) }
         lock.unlock()
         return failures
     }
 
-    private func closeFileAndReleaseOwner(failures: inout [String]) {
+    private func closeFileAndReleaseOwner(failures: inout [String]) -> Bool {
+        if fileCloseUncertain {
+            failures.append("CAF 关闭结果仍不确定；保留回调与文件所有权，重启后再录音")
+            return false
+        }
         if let audioFile {
             let closeStatus = lifecycle.closeFile(audioFile)
-            if closeStatus != noErr { failures.append("CAF 刷新失败（\(closeStatus)）") }
+            guard closeStatus == noErr else {
+                // Close can report an error after partially releasing its native object.
+                // Never retry an uncertain AudioFileID or release its unretained callback data.
+                fileCloseUncertain = true
+                failures.append("CAF 关闭失败（\(closeStatus)）；文件已保留，重启后再录音")
+                return false
+            }
             self.audioFile = nil
         }
         if let callbackOwner {
             Unmanaged<AudioQueueCaptureContext>.fromOpaque(callbackOwner).release()
             self.callbackOwner = nil
         }
+        return true
     }
 
     deinit { _ = shutdown() }
@@ -257,7 +282,9 @@ final class AudioQueueRecordingDevice: AudioRecordingDevice {
 
     init(capture: AudioCaptureFile,
          lifecycle: AudioQueueLifecycleOperations = .live,
-         admissionGate: AudioRecordingAdmissionGate = .shared) throws {
+         admissionGate: AudioRecordingAdmissionGate = .shared,
+         createQueue: (inout AudioStreamBasicDescription, UnsafeMutableRawPointer)
+            -> (OSStatus, AudioQueueRef?) = makeCaptureQueue) throws {
         self.capture = capture
         self.url = capture.url
         let admissionToken = try admissionGate.acquire()
@@ -275,40 +302,31 @@ final class AudioQueueRecordingDevice: AudioRecordingDevice {
         let file: AudioFileID
         do { file = try capture.initializeAudioFile(format: &format) }
         catch {
+            let syncError = capture.synchronize()
             admissionGate.releaseAfterKnownTermination(admissionToken)
+            if let syncError {
+                throw AudioMediaError.io("\(error.localizedDescription)；\(syncError)")
+            }
             throw error
         }
         let context = AudioQueueCaptureContext(capture: capture, audioFile: file)
         let callbackOwner = Unmanaged.passRetained(context).toOpaque()
-        var candidate: AudioQueueRef?
-        let status = AudioQueueNewInput(&format, captureInputCallback,
-                                        callbackOwner,
-                                        nil, nil, 0, &candidate)
-        if status != noErr, let candidate {
-            self.context = context
-            self.resources = AudioQueueOwnedResources(
-                capture: capture, context: context, queue: candidate, audioFile: file,
-                callbackOwner: callbackOwner, lifecycle: lifecycle,
-                admissionGate: admissionGate, admissionToken: admissionToken
-            )
-            let failures = resources.shutdown()
-            throw AudioMediaError.unavailable(
-                "无法创建 48 kHz 单声道输入队列（\(status)）"
-                    + (failures.isEmpty ? "" : "；\(failures.joined(separator: "；"))")
-            )
-        }
-        guard status == noErr, let candidate else {
-            _ = lifecycle.closeFile(file)
-            Unmanaged<AudioQueueCaptureContext>.fromOpaque(callbackOwner).release()
-            admissionGate.releaseAfterKnownTermination(admissionToken)
-            throw AudioMediaError.unavailable("无法创建 48 kHz 单声道输入队列（\(status)）")
-        }
+        let (status, candidate) = createQueue(&format, callbackOwner)
         self.context = context
         self.resources = AudioQueueOwnedResources(
             capture: capture, context: context, queue: candidate, audioFile: file,
             callbackOwner: callbackOwner, lifecycle: lifecycle,
             admissionGate: admissionGate, admissionToken: admissionToken
         )
+        guard status == noErr, let candidate else {
+            // Even the nil-queue path owns a possibly partially written CAF. Apply the same
+            // close/uncertainty/durability policy used after a fully initialized recording.
+            let failures = resources.shutdown()
+            throw AudioMediaError.unavailable(
+                "无法创建 48 kHz 单声道输入队列（\(status)）"
+                    + (failures.isEmpty ? "" : "；\(failures.joined(separator: "；"))")
+            )
+        }
         do {
             var actual = AudioStreamBasicDescription()
             var size = UInt32(MemoryLayout<AudioStreamBasicDescription>.size)
@@ -361,7 +379,11 @@ final class AudioQueueRecordingDevice: AudioRecordingDevice {
         let file: AudioFileID
         do { file = try capture.initializeAudioFile(format: &format) }
         catch {
+            let syncError = capture.synchronize()
             admissionGate.releaseAfterKnownTermination(admissionToken)
+            if let syncError {
+                throw AudioMediaError.io("\(error.localizedDescription)；\(syncError)")
+            }
             throw error
         }
         let context = AudioQueueCaptureContext(capture: capture, audioFile: file)
