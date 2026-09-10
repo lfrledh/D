@@ -18,3 +18,11 @@ macOS26原生Liquid Glass控件/工具栏语汇、减弱动态透明尊重系统
 验收：纯回调路由且无隐式adopt；空source/非法范围可见状态且不发generate；seed完整大整数文本和Unicode保留；busy取消/按钮状态正确；宽窄离屏布局/控件存在；已拒绝候选可恢复；不声称离屏等于真人GUI。测试必须直接针对new view/handler，真实播放不在Worker范围。
 
 受限CLI只own worktree +run/worker-output,tmp；网络关闭，无GPU/构建完整app/安装。尽量只swift CPU；SwiftPM内部沙箱拒绝暂停交Lead，不禁沙箱。其他权限异常停报。不要commit或编辑任务记录。开始只预检，Lead核验运行上下文后IMPLEMENT。
+
+## 2026-09-11 Lead 结案停点：不接纳
+- 真实执行为 Terra/medium，独立受限 CLI；初交及两轮普通修复已结束，未达到全部契约。路由、命令和进程回执见批次 `run-20260910T140156Z/view`。不把 nested SwiftPM 拒绝描述为已完成自测；Lead 另行在批准的 CPU 环境运行。
+- Terra 最后候选 `c58f756342563fee7f0e10bb5c054a76438b4e18` 的精确新测试在外部 harness 编译/执行：12 个方法中 11 通过、1 个布局失败。容器有布局数据，屏外 LazyVGrid 按钮尚未产生测量；不能直接称产品裁切。
+- 一次有界 Astra Lead 接管仅修改布局测试，候选/实际受测代码 `8c1ccb6daeecfaf371f3bd360a4d136c032186f8`。新增真实滚动前提寻找 NSScrollView 得到 nil；同样 11 通过、1 失败，未绕过断言。Lead 接管未通过，停止进一步实现，不追加 Terra 第三轮。
+- Sol/high 非实现者只读复核 `view-review/initial-response.md` 不接纳：来源/区间变化为 nil 时旧区间文本未清空；宿主拒绝或区间未应用时就绪文案不准确；离屏布局仍无合格证据。复核未执行测试，未修改代码。
+- 此分支保留候选，不合入源工作分支、不启用新界面。真正 GUI/模型/听觉验收另见 H15；上述缺陷属于工程/预算停点，不属于用户授权不足。
+- 最后代码受测 SHA 为 8c1ccb6…；本追加提交只含任务记录。完整 SHA 与证据收据在批次外部记录，最终提交不自引用。恢复须核对源/候选/保护文件及有效预算，不能仅因换日或换任务编号自动恢复实现。
