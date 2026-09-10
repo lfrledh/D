@@ -177,17 +177,31 @@ struct AudioCreationViewTests {
         window.contentView = host
         defer { window.contentView = nil }
         for width: CGFloat in [520, 1_000] {
+            rectangles.removeAll()
+            settle(host, window: window, width: width)
+            // Candidate actions are lazily materialized below the input form. Scroll the
+            // real native viewport before measuring them; do not treat absence as passing.
+            let scrollView = try #require(scrollViews(in: host).first {
+                ($0.documentView?.bounds.height ?? 0) > $0.contentSize.height
+            })
+            let document = try #require(scrollView.documentView)
+            document.scroll(NSPoint(x: 0, y: max(0, document.bounds.height - scrollView.contentSize.height)))
+            scrollView.reflectScrolledClipView(scrollView.contentView)
             settle(host, window: window, width: width)
             let viewport = host.bounds.insetBy(dx: -1, dy: -1)
             for id in ["audio-create-candidate-\(candidate.id.uuidString)",
                        "audio-create-play-\(candidate.id.uuidString)", "audio-create-adopt-\(candidate.id.uuidString)",
                        "audio-create-reject-\(candidate.id.uuidString)", "audio-create-export-\(candidate.id.uuidString)",
                        "audio-create-from-\(candidate.id.uuidString)"] {
-                let rectangle = try #require(rectangles[id])
+                let rectangle = try #require(rectangles[id], "missing \(id)")
                 #expect(rectangle.width > 0 && rectangle.height > 0)
                 #expect(rectangle.minX >= viewport.minX && rectangle.maxX <= viewport.maxX)
             }
         }
+    }
+
+    private func scrollViews(in view: NSView) -> [NSScrollView] {
+        (view as? NSScrollView).map { [$0] } ?? view.subviews.flatMap { scrollViews(in: $0) }
     }
 
     private func settle(_ host: NSHostingView<AudioCreationView>, window: NSWindow, width: CGFloat) {
