@@ -9,6 +9,8 @@ import UniformTypeIdentifiers
 @MainActor @Observable
 public final class WorkbenchModel {
     public let projectSession: ProjectSession
+    public let audioRecordingEnabled: Bool
+    private let audioPanels: any AudioWorkbenchPanelProviding
     private var isChoosingLocation = false
     public private(set) var hasPendingEditor = false
     public private(set) var editorCloseAttempted = false
@@ -169,15 +171,235 @@ public final class WorkbenchModel {
     public var activeJobIDs: Set<UUID> { projectSession.activeJobIDs }
 
     public init(sessionFactory: @escaping @Sendable (URL) async throws -> WorkbenchSession,
-                settings: UserDefaults = .standard, modelLibrary: ModelLibrary? = nil) {
+                settings: UserDefaults = .standard, modelLibrary: ModelLibrary? = nil,
+                audioEnabled: Bool = false, audioRecordingEnabled: Bool = false,
+                audioTransport: AudioTransport? = nil,
+                audioPanels: any AudioWorkbenchPanelProviding = NativeAudioWorkbenchPanels()) {
+        self.audioRecordingEnabled = audioRecordingEnabled
+        self.audioPanels = audioPanels
         projectSession = ProjectSession(sessionFactory: sessionFactory, settings: settings,
-                                        modelLibrary: modelLibrary, closeDecision: Self.chooseCloseDecision)
+                                        modelLibrary: modelLibrary, audioEnabled: audioEnabled,
+                                        audioRecordingEnabled: audioRecordingEnabled,
+                                        audioTransport: audioTransport,
+                                        closeDecision: Self.chooseCloseDecision)
     }
 
     /// A headless service can outlive or be presented by a new facade without transferring tasks.
-    public init(projectSession: ProjectSession) { self.projectSession = projectSession }
+    public init(projectSession: ProjectSession, audioRecordingEnabled: Bool = false,
+                audioPanels: any AudioWorkbenchPanelProviding = NativeAudioWorkbenchPanels()) {
+        self.projectSession = projectSession
+        self.audioRecordingEnabled = audioRecordingEnabled
+        self.audioPanels = audioPanels
+    }
 
     public func clearError() { projectSession.clearError() }
+
+    /// Shared native import action; the rendered origin is supplied by the caller.
+    func audioImportAction(contextID: UUID, documentID: UUID?) -> () -> Void {
+        { [weak self] in
+            Task { await self?.importAudio(contextID: contextID, documentID: documentID) }
+        }
+    }
+
+    public func importAudio() async {
+        guard let contextID = projectSession.audio?.contextID else { return }
+        await importAudio(contextID: contextID, documentID: activeDocumentID)
+    }
+
+    private func importAudio(contextID originContextID: UUID, documentID originDocumentID: UUID?) async {
+        guard projectSession.audio?.contextID == originContextID,
+              activeDocumentID == originDocumentID else {
+            errorMessage = "文档已改变，未打开旧的导入操作。请在当前文档重新选择。"
+            return
+        }
+        guard !projectSession.isChangingProject, !isChoosingLocation, let projectID = manifest?.id, let projectURL,
+              let activeDocumentID,
+              let controller = projectSession.audio else {
+            rejectConcurrentAudioPanel()
+            return
+        }
+        let contextID = controller.contextID
+        isChoosingLocation = true
+        defer { isChoosingLocation = false }
+        guard let source = await audioPanels.chooseAudioImport() else { return }
+        guard manifest?.id == projectID, self.projectURL == projectURL,
+              self.activeDocumentID == activeDocumentID,
+              projectSession.audio === controller, controller.contextID == contextID else {
+            errorMessage = "项目已改变，未导入所选音频。请在当前项目中重新选择。"
+            return
+        }
+        let name = source.deletingPathExtension().lastPathComponent
+        if await projectSession.importAudio(at: source, name: name) {
+            clearComparisonState()
+        }
+    }
+
+    public func startAudioRecording() async {
+        guard audioRecordingEnabled else {
+            errorMessage = "当前版本尚未启用麦克风录音；不会申请系统许可。请先导入 WAV 或 CAF PCM。"
+            return
+        }
+        _ = await projectSession.startAudioRecording(name: "新录音")
+    }
+
+    public func finishAudioRecording() async {
+        _ = await projectSession.finishAudioRecording()
+    }
+
+    public func retryPendingAudioCapture(id: UUID, contextID: UUID,
+                                         renderDocumentID: UUID?) async {
+        guard validateRenderContext(contextID: contextID, documentID: renderDocumentID) else { return }
+        _ = await projectSession.retryPendingAudioCapture(id: id)
+    }
+
+    public func keepPendingAudioCaptureForRecovery(id: UUID, contextID: UUID,
+                                                   renderDocumentID: UUID?) {
+        guard validateRenderContext(contextID: contextID, documentID: renderDocumentID) else { return }
+        guard projectSession.keepPendingAudioCaptureForRecovery(id: id) else {
+            errorMessage = "无法保留这项待恢复录音；请等待当前音频操作结束后重试。"
+            return
+        }
+    }
+
+    public func exportOriginalAudio(contextID: UUID, documentID: UUID) async {
+        guard let identity = activeAudioIdentity(contextID: contextID, documentID: documentID),
+              let container = projectSession.audio?.metadata?.format.container else { return }
+        let name = exportBaseName()
+        let kind = AudioExportPanelKind.original(container)
+        let request = AudioExportPanelRequest(
+            kind: kind,
+            suggestedName: "\(name).\(kind.filenameExtension)",
+            title: "导出原声原件",
+            explanation: "保持已登记的 \(kind.filenameExtension.uppercased()) 容器和原始字节；不会覆盖已有文件。"
+        )
+        guard let destination = await chooseAudioDestination(request),
+              validate(identity),
+              projectSession.audio?.metadata?.format.container == container,
+              validateExtension(destination, kind: kind) else { return }
+        _ = await projectSession.exportOriginalAudio(
+            to: destination, contextID: identity.contextID, documentID: identity.documentID
+        )
+    }
+
+    public func exportSavedAudioClip(id: UUID, contextID: UUID, documentID: UUID) async {
+        guard let identity = activeAudioIdentity(contextID: contextID, documentID: documentID),
+              let range = projectSession.audio?.document?.clips.first(where: { $0.id == id })?.range else {
+            return
+        }
+        let kind = AudioExportPanelKind.float32WAVRange
+        let request = rangeExportRequest(name: exportBaseName())
+        guard let destination = await chooseAudioDestination(request), validate(identity),
+              projectSession.audio?.document?.clips.first(where: { $0.id == id })?.range == range,
+              validateExtension(destination, kind: kind) else {
+            if validate(identity), projectSession.audio?.document?.clips.first(where: { $0.id == id })?.range != range {
+                errorMessage = "片段已改变，未导出旧范围。请重新选择片段。"
+            }
+            return
+        }
+        _ = await projectSession.exportAudioClip(
+            id: id, to: destination, contextID: identity.contextID, documentID: identity.documentID
+        )
+    }
+
+    public func exportAudioRange(_ range: AudioFrameRange, editorRevision: UInt64,
+                                 contextID: UUID, documentID: UUID) async {
+        guard let identity = activeAudioIdentity(contextID: contextID, documentID: documentID),
+              let controller = projectSession.audio,
+              controller.editorRevision == editorRevision,
+              controller.clipRangeInput == range else {
+            errorMessage = "当前范围已经改变，请确认新范围后再导出。"
+            return
+        }
+        let kind = AudioExportPanelKind.float32WAVRange
+        let request = rangeExportRequest(name: exportBaseName())
+        guard let destination = await chooseAudioDestination(request), validate(identity),
+              controller.editorRevision == editorRevision, controller.clipRangeInput == range,
+              validateExtension(destination, kind: kind) else {
+            if validate(identity),
+               controller.editorRevision != editorRevision || controller.clipRangeInput != range {
+                errorMessage = "面板打开期间范围已改变，未导出旧范围。"
+            }
+            return
+        }
+        _ = await projectSession.exportAudioRange(
+            range, to: destination, contextID: identity.contextID, documentID: identity.documentID
+        )
+    }
+
+    private struct AudioIdentity {
+        let projectID: UUID
+        let projectURL: URL
+        let controller: ProjectAudioController
+        let contextID: UUID
+        let documentID: UUID
+    }
+
+    private func activeAudioIdentity(contextID: UUID, documentID: UUID) -> AudioIdentity? {
+        guard let projectID = manifest?.id, let projectURL, let controller = projectSession.audio,
+              controller.contextID == contextID, controller.documentID == documentID,
+              activeDocumentID == documentID,
+              activeDocument?.kind == .audio else { return nil }
+        return AudioIdentity(projectID: projectID, projectURL: projectURL, controller: controller,
+                             contextID: controller.contextID, documentID: documentID)
+    }
+
+    private func validate(_ identity: AudioIdentity) -> Bool {
+        guard manifest?.id == identity.projectID, projectURL == identity.projectURL,
+              activeDocumentID == identity.documentID, activeDocument?.kind == .audio,
+              projectSession.audio === identity.controller,
+              projectSession.audio?.contextID == identity.contextID,
+              projectSession.audio?.documentID == identity.documentID else {
+            errorMessage = "项目或原声文档已改变，未执行旧操作。请在当前文档中重试。"
+            return false
+        }
+        return true
+    }
+
+    private func validateRenderContext(contextID: UUID, documentID: UUID?) -> Bool {
+        guard projectSession.audio?.contextID == contextID, activeDocumentID == documentID else {
+            errorMessage = "当前文档已改变，未执行旧的原声操作。"
+            return false
+        }
+        return true
+    }
+
+    private func chooseAudioDestination(_ request: AudioExportPanelRequest) async -> URL? {
+        guard !isChoosingLocation else {
+            rejectConcurrentAudioPanel()
+            return nil
+        }
+        isChoosingLocation = true
+        defer { isChoosingLocation = false }
+        return await audioPanels.chooseAudioExport(request)
+    }
+
+    private func validateExtension(_ url: URL, kind: AudioExportPanelKind) -> Bool {
+        guard url.pathExtension.caseInsensitiveCompare(kind.filenameExtension) == .orderedSame else {
+            errorMessage = "导出文件扩展名必须是 .\(kind.filenameExtension)。未写入任何文件。"
+            return false
+        }
+        return true
+    }
+
+    private func rangeExportRequest(name: String) -> AudioExportPanelRequest {
+        AudioExportPanelRequest(
+            kind: .float32WAVRange,
+            suggestedName: "\(name)-片段.wav",
+            title: "导出原声范围",
+            explanation: "所选帧范围会转换为原采样率和声道数的 32 位浮点 WAV；不会覆盖已有文件。"
+        )
+    }
+
+    private func exportBaseName() -> String {
+        let candidate = activeDocument?.name.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return candidate.isEmpty ? "D-原声" : candidate
+    }
+
+    private func rejectConcurrentAudioPanel() {
+        if isChoosingLocation {
+            errorMessage = "另一个文件选择窗口尚未结束，请先完成或取消它。"
+        }
+    }
     public func canCancel(_ id: UUID) -> Bool { projectSession.canCancel(id) }
     public func cancel(_ id: UUID) async { await projectSession.cancel(id) }
     public func copySettings(from id: UUID) async {
