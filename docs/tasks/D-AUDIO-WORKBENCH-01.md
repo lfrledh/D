@@ -24,3 +24,13 @@ CPU：缺失/损坏/替换路径、无覆盖、权限等待取消、写盘失败
 
 ## 恢复
 证据根：`D-Development/AgentTrials/D-AUDIO-WORKBENCH-01/run-20260910T140156Z`。源唯一未暂存 scheme 排序修改，开始摘要 ca3635d88aa5a15397b90e528667c66c0e6db7e596176e885c79d194b544206c；普通 D 四文件保存在 protection-before.json。保留候选和旧证据，无 reset/stash/清理。源只接纳通过的具体组合 SHA；阶段推送按既有工作分支授权，不推进 main/master。
+
+## 2026-09-11 中途检查点（不构成阶段验收）
+
+RECORD组件代码971a669c70d3148f65693701182c8ae3721b25f6已通过全包CPU检查（251项报告，1既有可选权重跳过）及Sol/high非实现者只读复核。候选284b38a47862a14b185f6ee4d7691d5da3ab1807仅追加该任务记录，已保留历史合入本隔离批次5695f5c4c665eb7a9ba6f66016f83b19f3860075；不是源集成或真实麦克风验收。来源为Sol初交/两修后Astra一次有界接管，详见[D-AW-RECORD-01](D-AW-RECORD-01.md)。
+
+VIEW任务已停止实现：Terra初交/两修后，Astra一次有界测试修补仍未通过离屏布局用例（12方法，11过1失败）；不把看不到虚拟化控件直接称为真实窗口裁切。非实现者另指出切换来源后旧重绘区间文字未清理、禁用生成时状态提示不一致。原契约不降，剩余预算为0。候选0daf36b6f4f3922c1d052b6cb08de6bf31cb3ddd保留在codex/d-aw-view-01，未合入；新修补需要明确后续授权，不是需要用户点击Mac权限。证据view/stopped.json、view-review/initial-response.md、checks/view-lead-unit。
+
+STORE已从包含受测录音代码的df37a610d407e84ac4f9850a7084021c7af86652完成真实受限Sol/high预检并进入初次实现，独立目录D-AW-STORE-01，详情store/preflight-gate.json和implement-request.json。候选/采用/拒绝/导出和schema5持久化可独立推进，未将未验收VIEW当作门禁。Lead共享会话接线已有只读问题审查和局部修正，尚待实际Store接口编译/复验；不声称装配通过。
+
+人工验收H09/H15与上述工程停点分开：当前没有新的空闲/前台窗口确认，未运行GPU/实际录音/GUI。不需要重新确认已经批准的模型许可或下载。源633150477de90d30c1f44c915b1f10e13acd246d、个人scheme和普通D保持；最终状态还须本轮结束时再次核对。
