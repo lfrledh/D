@@ -23,3 +23,11 @@ Lead acceptance: schema1/2/3/4 backup byte preservation; empty creation/reopen; 
 Read this spec, AudioCreationDraft.swift, ProjectModels/ProjectStore relevant methods and existing audio/migration tests; no full historical audit. New specification side effects must be reported before changing scope. All temp/cache/output in own granted run directories. SwiftPM sandbox denied=>stop check/report Lead, never disable/expand. No commits/docs/other task writes.
 
 Clarifications before task dispatch: blank/whitespace prompt must reject at makeRequest; new revision must differ when content changes; malformed metadata cannot gain generated bounds just by exporting. Preserve original existing instance-level failure-injection hooks and safe publishing checks. No input/output directory scanning. DInference.AudioRequest.validate is shape-only; this current app adapter must truthfully enforce current supported shape without claiming all future models use these ranges.
+
+## S1.1 Lead澄清及首次返工入口（2026-09-11）
+
+初交d4454964a36a7bf73edef355abd4a57adc61f6f5到900秒结束，工具事件配对，无权限拒绝；无新增完整性测试，首次CPU编译失败未执行用例。Sol只读审核也到900秒终止，无最终结论，期间记录模型服务连接超时重试；不能称其已审阅通过。首次返工根据Astra非实现者检查与实际编译证据发出，普通修复1/2。
+
+操作字段澄清：生成只解析适用时长、实际strength固定1，保留的隐藏strengthText不阻塞；变体/重绘只解析适用strength、实际时长来自固定源，隐藏durationText不阻塞。这是Lead明确的适用字段语义，不追罚初稿为权限/指令事故。原字符串仍完整保存。实际后端将任务UUID和分配UUID均小写，夹具遵循其真实命名；Lead最初关于第二UUID大写的猜测已撤回，不用它判错。
+
+允许直接更新AudioProjectStoreTests中随schema5变化的原迁移版本期望（已落入原规格的minimal migration expectations），不得弱化其他断言。其余原允许文件、输入保护和预算不变。新增反例包括异常数值元数据/时长安全报错、暂存导出回读、来源外盘快照、无覆盖与权威任务状态；完整返工输入与期望见本run/store/repair1-prompt.txt，执行SHA在request中。
