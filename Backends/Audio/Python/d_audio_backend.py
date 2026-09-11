@@ -12,6 +12,9 @@ import signal
 import sys
 import time
 from typing import Any, Callable, Sequence
+import uuid
+
+from d_audio_access import AudioAccessError, acquire_file_access
 
 from d_audio_contract import (
     CHANNELS,
@@ -84,6 +87,30 @@ class EventWriter:
                    "phase": phase, "completed": completed, "total": total})
 
 
+class _DeferredTerminalWriter:
+    """Hold one terminal event until security-scoped access has been released."""
+
+    def __init__(self, writer: EventWriter) -> None:
+        self.writer = writer
+        self.pending: dict[str, Any] | None = None
+
+    def emit(self, value: dict[str, Any], *, terminal: bool = False) -> None:
+        if not terminal:
+            self.writer.emit(value)
+            return
+        if self.pending is not None:
+            raise OutputDeliveryError("terminal event already deferred")
+        self.pending = value
+
+    def progress(self, run_id: str, phase: str, completed: int, total: int) -> None:
+        self.writer.progress(run_id, phase, completed, total)
+
+    def deliver(self) -> None:
+        if self.pending is None:
+            raise OutputDeliveryError("terminal event was not produced")
+        self.writer.emit(self.pending, terminal=True)
+
+
 def _diagnostic(message: str) -> None:
     try:
         sys.stderr.write(message + "\n")
@@ -101,6 +128,9 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--manifest", required=True)
     parser.add_argument("--vendor-directory", required=True)
     parser.add_argument("--inspect", action="store_true")
+    parser.add_argument("--access-manifest")
+    parser.add_argument("--access-run-id")
+    parser.add_argument("--access-source-directory")
     return parser
 
 
@@ -154,27 +184,41 @@ def _metadata(
     return metadata
 
 
-def _execute(
-    argv: Sequence[str] | None,
-    writer: EventWriter,
+def _run(
+    arguments: argparse.Namespace,
+    request_path: Path,
+    job: Path,
+    model: Path,
+    manifest_path: Path,
+    vendor: Path,
+    writer: Any,
     engine: Callable[..., InferenceResult],
     cancelled: Callable[[], bool],
+    *,
+    access_run_id: uuid.UUID | None = None,
+    access_source_directory: Path | None = None,
 ) -> int:
     run_id: str | None = None
     try:
-        try:
-            arguments = _parser().parse_args(argv)
-        except (argparse.ArgumentError, SystemExit) as exc:
-            raise ContractError(f"invalid CLI arguments: {exc}", "configuration") from exc
-        request_path = checked_absolute_path(arguments.request, label="--request")
-        job = checked_absolute_path(arguments.job_directory, label="--job-directory")
-        model = checked_absolute_path(arguments.model_directory, label="--model-directory")
-        manifest_path = checked_absolute_path(arguments.manifest, label="--manifest")
-        vendor = checked_absolute_path(arguments.vendor_directory, label="--vendor-directory")
         validate_launch_paths(request_path, job, model, manifest_path, vendor)
         request_value = load_strict_json(request_path, label="request")
         request = validate_request(request_value, profile=arguments.profile)
         run_id = request.run_id
+        if access_run_id is not None:
+            if uuid.UUID(request.run_id) != access_run_id:
+                raise ContractError("access run ID does not match request runID", "configuration")
+            if (request.source is None) != (access_source_directory is None):
+                raise ContractError(
+                    "access source directory must be supplied exactly when request has a source",
+                    "configuration",
+                )
+            if request.source is not None:
+                assert access_source_directory is not None
+                if request.source.path.parent != access_source_directory:
+                    raise ContractError(
+                        "request source parent does not match --access-source-directory",
+                        "configuration",
+                    )
         writer.progress(run_id, "validating", 0, 1)
         manifest_value = load_strict_json(manifest_path, label="manifest")
         try:
@@ -266,6 +310,121 @@ def _execute(
         except OutputDeliveryError as output_exc:
             _diagnostic(str(output_exc))
         return 1
+
+
+def _paths_overlap(first: Path, second: Path) -> bool:
+    return first == second or first in second.parents or second in first.parents
+
+
+def _access_arguments(
+    arguments: argparse.Namespace,
+    request_path: Path,
+    job: Path,
+    model: Path,
+) -> tuple[Path, uuid.UUID, Path | None, tuple[Path, ...]] | None:
+    manifest_raw = arguments.access_manifest
+    run_id_raw = arguments.access_run_id
+    source_raw = arguments.access_source_directory
+    if manifest_raw is None and run_id_raw is None:
+        if source_raw is not None:
+            raise ContractError(
+                "--access-source-directory requires access mode", "configuration"
+            )
+        return None
+    if manifest_raw is None or run_id_raw is None:
+        raise ContractError(
+            "--access-manifest and --access-run-id must be supplied together",
+            "configuration",
+        )
+    try:
+        parsed_run_id = uuid.UUID(run_id_raw)
+    except (ValueError, AttributeError, TypeError) as exc:
+        raise ContractError("--access-run-id must be a UUID", "configuration") from exc
+    access_manifest = checked_absolute_path(manifest_raw, label="--access-manifest")
+    source_directory = (
+        checked_absolute_path(source_raw, label="--access-source-directory")
+        if source_raw is not None else None
+    )
+    run_directory = request_path.parent
+    if job.name != "job" or job.parent != run_directory:
+        raise ContractError(
+            "access mode requires request and job to share a parent and job to be named 'job'",
+            "configuration",
+        )
+    allowed = (model, run_directory) + ((source_directory,) if source_directory is not None else ())
+    if any(path == Path(path.anchor) for path in allowed):
+        raise ContractError("access grants must not name a filesystem root", "configuration")
+    for index, first in enumerate(allowed):
+        for second in allowed[index + 1:]:
+            if _paths_overlap(first, second):
+                raise ContractError(
+                    "model, run, and source access directories must be separate",
+                    "configuration",
+                )
+    if any(path == access_manifest or path in access_manifest.parents for path in allowed):
+        raise ContractError(
+            "access manifest must remain outside granted model/run/source directories",
+            "configuration",
+        )
+    return access_manifest, parsed_run_id, source_directory, allowed
+
+
+def _emit_configuration_error(writer: EventWriter, message: str) -> int:
+    try:
+        writer.emit(_error_event(None, "configuration", message), terminal=True)
+    except OutputDeliveryError as output_exc:
+        _diagnostic(str(output_exc))
+    return 2
+
+
+def _execute(
+    argv: Sequence[str] | None,
+    writer: EventWriter,
+    engine: Callable[..., InferenceResult],
+    cancelled: Callable[[], bool],
+) -> int:
+    try:
+        try:
+            arguments = _parser().parse_args(argv)
+        except (argparse.ArgumentError, SystemExit) as exc:
+            raise ContractError(f"invalid CLI arguments: {exc}", "configuration") from exc
+        request_path = checked_absolute_path(arguments.request, label="--request")
+        job = checked_absolute_path(arguments.job_directory, label="--job-directory")
+        model = checked_absolute_path(arguments.model_directory, label="--model-directory")
+        manifest_path = checked_absolute_path(arguments.manifest, label="--manifest")
+        vendor = checked_absolute_path(arguments.vendor_directory, label="--vendor-directory")
+        access = _access_arguments(arguments, request_path, job, model)
+    except ContractError as exc:
+        return _emit_configuration_error(writer, str(exc))
+
+    if access is None:
+        return _run(
+            arguments, request_path, job, model, manifest_path, vendor,
+            writer, engine, cancelled,
+        )
+
+    access_manifest, access_run_id, source_directory, allowed = access
+    deferred = _DeferredTerminalWriter(writer)
+    try:
+        with acquire_file_access(
+            access_manifest,
+            run_id=str(access_run_id),
+            allowed_paths=allowed,
+        ):
+            code = _run(
+                arguments, request_path, job, model, manifest_path, vendor,
+                deferred, engine, cancelled,
+                access_run_id=access_run_id,
+                access_source_directory=source_directory,
+            )
+    except AudioAccessError:
+        return _emit_configuration_error(writer, "file access configuration failed")
+    try:
+        deferred.deliver()
+    except OutputDeliveryError as exc:
+        _diagnostic(str(exc))
+        return 2
+    return code
 
 
 def main(argv: Sequence[str] | None = None, *, engine: Callable[..., InferenceResult] = run_inference) -> int:
