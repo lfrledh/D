@@ -405,6 +405,20 @@ final class DUITests: XCTestCase {
         path.click()
         app.typeKey("a", modifierFlags: .command)
         path.typeText(url.path)
+        // Native path processing and its accessibility snapshot may settle after typing.
+        // Observe only: never retype, truncate the fixture path, or confirm a partial path.
+        let initiallyObservedPath = String(describing: path.value)
+        let pathWaitStarted = Date()
+        let completePath = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "value == %@", url.path), object: path)
+        let pathWaitResult = XCTWaiter.wait(for: [completePath], timeout: 2)
+        XCTContext.runActivity(named: "Native fixture path synchronization") { activity in
+            let evidence = XCTAttachment(string:
+                "Expected: \(url.path)\nInitial: \(initiallyObservedPath)\nFinal: \(String(describing: path.value))\nElapsed: \(Date().timeIntervalSince(pathWaitStarted))")
+            evidence.lifetime = .keepAlways
+            activity.add(evidence)
+        }
+        XCTAssertEqual(pathWaitResult, .completed, "Wait for the complete native fixture path without retyping.")
         XCTAssertEqual(path.value as? String, url.path, "The native path field must contain the complete fixture path.")
         app.typeKey(.return, modifierFlags: [])
         XCTAssertTrue(goTo.waitForNonExistence(timeout: 8), "Finish native path navigation before confirming the parent panel.")
