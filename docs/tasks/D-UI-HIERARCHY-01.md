@@ -117,3 +117,14 @@ Liquid Glass采用Apple原生导航、工具栏、按钮材质；画布、正文
 新需求覆盖ADR0007“模态不作为项目内一级工作区”的旧呈现选择；项目保存边界、文档独立、资产共享和任务归属继续有效。ADR和总体规划只追加替代关系，不倒改2026-09-07的历史决定。后续Lead先核对源码状态与本计划当前修订，再从契约准备开始，不从会话草图直接跳到真实作品迁移。
 
 本轮实际证据目录：`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-UI-HIERARCHY-01/run-20260910T233410Z`。只读审查线程01a08dac-478a-70e1-acdf-e6d0f59a3a11，可观察gpt-5.6-sol/high/read-only，与请求一致；无构建/设备操作。草图检查18组组合（3模态×3宽度×浅/深色）和7项导航交互通过，0脚本异常；仅无界面浏览器结构检查，非D产品验证。草图SHA256 `fe9c5194cfe9118fade01b50c829b7d9f972bcbbdb1dd9bef74398fbfcbaf8d5`，原件副本和截图位于prototype。后续产品任务规格需从新源HEAD签发，不把本设计SHA永久硬编码。
+
+
+## 2026-09-11 实施授权 NAV2 / 批次 NAV-20260911
+
+用户批准上述结构实装、测试通过后推送，并当前确认普通D已保存退出、其他AI/GPU空闲、隔离测试窗口可用。源基线fee074c70fb39bd9a99d146b708d6d80fd2d820e，集成树D-UI-HIERARCHY-01；AW1服务和旧VIEW候选仅保留历史合入，未因此接纳。NAV2包含一次针对旧VIEW三项缺口的限定Lead收尾，旧预算/失败历史不刷新；重要Lead差异由非实现者检查。
+
+冻结契约NAV2：CreatorMode为项目内展示枚举；真正activeDocumentID由ProjectSession拥有。导航先检查编辑/候选门槛并保存，再提交可见mode；空模态不改原文档、不创建作品，编辑器不显示其他模态。异步操作捕获上下文，模式切换期间禁止重入；每次成功导航增加代次。资产浏览不调用selectAsset/revealAsset/showAllArtworks。媒体与文稿行ID分离，按已记录MIME分类，unknown不推测；打开来源是显式动作。普通启动项目选择，Finder打开保持明确动作；最近项只取已记录授权，无扫描。
+
+所有权：Lead修改共享ProjectSession/WorkbenchModel/WorkbenchView/Bootstrap/DApp及契约/验收/全局文档。NAV-S只写新壳层视图和其测试；NAV-A只写资源投影/视图/其测试。两个Worker不改公共契约、旧代码、任务规格、存储或运行时。各自初交+两次修复，允许一次有界Lead接管，网络关闭，无GPU/GUI/依赖安装；受限CLI预检后才IMPLEMENT。重构建/原生GUI由Lead串行独立目录；未通过路径不默认接管已验收功能。
+
+验收：导航保存失败留原现场；文字生成/候选不得隐式丢弃；空模态、返回/重新打开、Unicode、A-B-A和菜单路由；资产跨模态浏览不改编辑状态/采用/参考，未知媒体/无来源可见；860×580、1024/1440及长中文emoji布局；图文已有行为回归。音频VIEW先修源区间/禁用提示/可信布局后非实现者审核；真实音频应用能力单列，不以合成音频证明。证据放本任务run-20260911T001411Z-implementation；用户scheme和普通D摘要前后核对。完成具体SHA组合验收后源固定SHA快进与复验，再按授权推送工作分支。
