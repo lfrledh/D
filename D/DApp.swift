@@ -8,10 +8,27 @@ struct DApp: App {
     @NSApplicationDelegateAdaptor(WorkbenchApplicationDelegate.self) private var applicationDelegate
     @State private var bootstrap = WorkbenchBootstrap()
 
+    private var deploymentProbeEnabled: Bool {
+        #if DEBUG
+        let env = ProcessInfo.processInfo.environment
+        return UUID(uuidString: env["D_UI_TEST_SESSION"] ?? "") != nil
+            && env["D_AUDIO_DEPLOYMENT_CHECK"] == "1"
+            && env["D_AUDIO_PROBE_PYTHON"]?.hasPrefix("/") == true
+            && env["D_AUDIO_PROBE_SHA256"]?.count == 64
+        #else
+        return false
+        #endif
+    }
+
     var body: some Scene {
         Window("D", id: "workbench") {
             Group {
-                if let model = bootstrap.model, let library = bootstrap.libraryModel {
+                if deploymentProbeEnabled {
+                    #if DEBUG
+                    AudioDeploymentCheck(expectedExecutable: ProcessInfo.processInfo.environment["D_AUDIO_PROBE_PYTHON"]!,
+                        expectedDigest: ProcessInfo.processInfo.environment["D_AUDIO_PROBE_SHA256"]!)
+                    #endif
+                } else if let model = bootstrap.model, let library = bootstrap.libraryModel {
                     WorkbenchView(model: model, library: library)
                         .background(WorkbenchWindowConnection(delegate: applicationDelegate, model: model,
                             prepareLibraryForTermination: bootstrap.prepareLibraryForTermination))
@@ -28,7 +45,7 @@ struct DApp: App {
                 }
             }
             .disabled(bootstrap.isTerminating)
-            .task { await bootstrap.start() }
+            .task { if !deploymentProbeEnabled { await bootstrap.start() } }
             .onOpenURL { url in Task { await bootstrap.openProject(at: url) } }
         }
         .defaultSize(width: 1280, height: 820)
