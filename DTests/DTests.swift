@@ -1,5 +1,7 @@
 import CryptoKit
 import Foundation
+import DWorkbench
+import DInference
 import Testing
 @testable import D
 
@@ -118,7 +120,8 @@ private struct TinyBundledEngine {
             "pythonExecutable": "python/bin/python3", "providerScript": "provider/d_audio_backend.py",
             "vendorDirectory": "vendor", "modelManifestsDirectory": "model-manifests", "files": records]
         try JSONSerialization.data(withJSONObject: manifest).write(to: bundle.appendingPathComponent("engine.json"))
-        engine = try #require(BundledAudioEngine.resolve(resourceDirectory: resources))
+        let resolved = try BundledAudioEngine.resolve(resourceDirectory: resources)
+        engine = try #require(resolved)
     }
     func remove() { try? FileManager.default.removeItem(at: root) }
 }
