@@ -58,7 +58,7 @@ struct AudioDeploymentCheck: View {
         }
     }
 
-    private static func execute(_ executable: URL, digest: String) throws -> String {
+    nonisolated private static func execute(_ executable: URL, digest: String) throws -> String {
         let fm = FileManager.default
         let parent = try fm.url(for: .applicationSupportDirectory, in: .userDomainMask,
                                 appropriateFor: nil, create: true)
