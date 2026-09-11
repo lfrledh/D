@@ -52,3 +52,17 @@ PACK初交与两修已接受（14CPU与8独立反例，未相加），实际打�
 
 ## APP1 resumed 2026-09-12: ordinary sandbox entry passed
 User confirmed ordinary D exited, GPU idle and test foreground available. Fixed signed-gate code1730078 ran Python3.12 isolated no-site module discovery under ordinary sandbox, exit0, executable unchanged; no weights/imports. Parent process PID2000 exited0. Evidence run-20260911T155257Z-app-resume/native-deployment-report.json. This is deployment entry only. BRIDGE1 owns provider integration; Lead owns Swift/App integration. Recording remains disabled. Source and ordinary D hashes/index preserved.
+
+## 2026-09-12 APP1 装配与验证进行中
+
+源码候选88a2655377bebbf54e3e4f75a89504f8f15ba265。BRIDGE1（Sol/high）70079bece712e79b3e87465a94a1e06fdeef56fa与DEPLOY1（Terra/medium）bc5c382d5e436c4f8e52fed2641e03e645c316dc已在隔离批次保留历史合并；各初交+一轮Lead定向返工，无Lead代写组件。来源/模型/实际受限写根见本轮routing-and-usage.json，过程已结束；每组件余一轮普通修复，不刷新PACK/ACCESS旧预算。隐藏服务端解析和订阅费用unknown，原始逐turn用量保留，不重新核算旧批次。
+
+Lead实现Swift/App装配b538061；Sol/high只读审查发现音频部署失败会挡住其他模态。Lead在5ec8b2f5a39c0237a47efbde7475426d257012b4局部隔离错误并补两项宿主回归，Sol复核接受；88a2655仅修测试模块导入与宏内部throw处理。此次非实现者审核不等于独立测试执行。
+
+验证事实：5ec8b2普通App离线构建成功；组合Python3.12共62方法通过；DMLX音频24方法/47展开、零失败/跳过通过，其中新增私有授权transport、取消后回收/交接、动态资格及部署拒绝。DEPLOY独立19CPU通过，Lead两个原失败反例先红后绿；BRIDGE独立48方法通过，真实Swift/CF书签+CLI正常/readonly-stdout两场景通过（无真实模型）。上述集合重叠不累计。一次Lead CF检查工具缺少swiftc -parse-as-library导致编译失败，修工具后通过，原证据保留。
+
+宿主检查：首编译测试缺DWorkbench导入与嵌套throw，已修；第二次测试构建成功，运行定位工具误用D_macosx名，改读实际D_D测试计划后执行。两项既有关闭测试过，两项新回归在创建外盘fixture/python/bin时遭普通沙盒拒绝；未扩大权限/修改断言。准备把唯一测试夹具目录限定到App自己的task tmp，产品代码不改。原运行在方法结束后收尾滞留，期间Mac锁定，Lead核对精确PID/产物路径后仅SIGTERM任务宿主8575与xcodebuild8566；实际driver返回-15，不能将此轮计为成功。新的容器测试还未执行。
+
+CUA在本轮16:40UTC报告Mac锁定。已异步请求解锁；默认沙箱提示音AudioQueueStart(-66680)，同一授权音效由受控外层播放后exit0，不更改音量/系统权限、不循环。原gate父进程2000退出0，所有Worker/Reviewer均结束；新普通构建仍按本轮process/result核对。旧CUA App API会在目标关闭后自动重启，故退出后不用getAXState判断是否退出，改读取所持句柄；曾短暂重开任务gate项目选择页，未打开/修改作品。
+
+状态仍为候选，源7510015bafc0a8b33c463dba11b1a7d54a93b073未推进。普通沙盒真正MLX执行、文件目录访问、三个音频操作/取消、试听比较/采用拒绝、保存重开/导出尚待当前原生闭环，不以组件通过代替。H09等待设备。本轮证据run-20260911T155257Z-app-resume；后续从最新完整HEAD、源/个人scheme/普通D摘要、实际进程和解锁答复恢复。无下载、普通D替换、签名方案变更或推送。
