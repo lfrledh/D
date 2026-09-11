@@ -21,7 +21,8 @@ class PackagingError(Exception):
 
 
 IGNORED_SITE_ENTRIES = {"pip", "_distutils_hack", "distutils-precedence.pth"}
-REQUIRED_PACKAGES = ("mlx", "mlx_metal", "numpy", "sentencepiece")
+REQUIRED_PACKAGES = ("mlx", "numpy", "sentencepiece")
+REQUIRED_DISTRIBUTIONS = ("mlx", "mlx_metal", "numpy", "sentencepiece")
 SKIPPED_NAMES = {"__pycache__", ".DS_Store", ".git"}
 
 
@@ -36,6 +37,7 @@ def _absolute_directory(value: str, label: str) -> Path:
     path = Path(os.path.abspath(value))
     if path.is_symlink() or not path.is_dir():
         raise PackagingError(f"{label} must be an existing absolute, non-symlink directory: {path}")
+    _reject_symlink_ancestors(path, label)
     return path
 
 
@@ -48,7 +50,19 @@ def _absolute_output(value: str) -> Path:
     parent = path.parent
     if parent.is_symlink() or not parent.is_dir():
         raise PackagingError(f"output parent must be an existing non-symlink directory: {parent}")
+    _reject_symlink_ancestors(parent, "output parent")
     return path
+
+
+def _reject_symlink_ancestors(path: Path, label: str) -> None:
+    current = Path(path.anchor)
+    for part in path.parts[1:]:
+        current /= part
+        info = current.lstat()
+        if stat.S_ISLNK(info.st_mode):
+            raise PackagingError(f"{label} has symlink ancestor: {current}")
+        if not stat.S_ISDIR(info.st_mode):
+            raise PackagingError(f"{label} has non-directory ancestor: {current}")
 
 
 def _is_ancestor_or_same(first: Path, second: Path) -> bool:
@@ -65,13 +79,17 @@ def _reject_overlap(output: Path, roots: list[Path]) -> None:
             raise PackagingError(f"output overlaps input root: {output} and {root}")
 
 
-def _validate_tree(root: Path, label: str) -> None:
+def _validate_tree(root: Path, label: str, *, skip: bool = False) -> None:
     for current, directories, files in os.walk(root, followlinks=False):
         current_path = Path(current)
+        relative_current = current_path.relative_to(root)
         if current_path.is_symlink():
             raise PackagingError(f"{label} contains symlink: {current_path}")
+        directories[:] = [name for name in directories if not (skip and _stdlib_excluded(relative_current / name))]
         for name in directories + files:
             path = current_path / name
+            if skip and _stdlib_excluded(path.relative_to(root)):
+                continue
             info = path.lstat()
             if stat.S_ISLNK(info.st_mode):
                 raise PackagingError(f"{label} contains symlink: {path}")
@@ -83,17 +101,23 @@ def _should_skip(relative: Path) -> bool:
     return any(part in SKIPPED_NAMES for part in relative.parts) or relative.suffix in {".pyc", ".pyo"}
 
 
+def _stdlib_excluded(relative: Path) -> bool:
+    return _should_skip(relative) or (relative.parts and relative.parts[0] == "site-packages")
+
+
 def _copy_tree(source: Path, destination: Path, *, exclude_site_packages: bool = False) -> None:
     for current, directories, files in os.walk(source, followlinks=False):
         current_path = Path(current)
         relative_current = current_path.relative_to(source)
-        directories[:] = [name for name in directories if not _should_skip(relative_current / name)]
+        directories[:] = [
+            name for name in directories
+            if not _should_skip(relative_current / name)
+            and not (exclude_site_packages and _stdlib_excluded(relative_current / name))
+        ]
         (destination / relative_current).mkdir(parents=True, exist_ok=True)
         for filename in files:
             relative = relative_current / filename
-            if _should_skip(relative):
-                continue
-            if exclude_site_packages and relative.parts and relative.parts[0] == "site-packages":
+            if _should_skip(relative) or (exclude_site_packages and _stdlib_excluded(relative)):
                 continue
             target = destination / relative
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -108,9 +132,11 @@ def _dist_info_matches(entry: str, package: str) -> bool:
 def _site_entry_allowed(entry: str) -> bool:
     if entry in REQUIRED_PACKAGES:
         return True
+    if entry == "mlx_metal":
+        return True
     if entry.endswith(".libs") and entry[:-5] in REQUIRED_PACKAGES:
         return True
-    if any(_dist_info_matches(entry, package) for package in REQUIRED_PACKAGES):
+    if any(_dist_info_matches(entry, package) for package in REQUIRED_DISTRIBUTIONS):
         return True
     if entry in IGNORED_SITE_ENTRIES or entry.startswith("pip-") and entry.endswith(".dist-info"):
         return True
@@ -121,7 +147,7 @@ def _copy_site_packages(source: Path, destination: Path) -> None:
     entries = sorted(source.iterdir(), key=lambda item: item.name)
     missing = [package for package in REQUIRED_PACKAGES if not (source / package).exists()]
     missing_metadata = [
-        package for package in REQUIRED_PACKAGES
+        package for package in REQUIRED_DISTRIBUTIONS
         if not any(_dist_info_matches(entry.name, package) for entry in entries)
     ]
     if missing or missing_metadata:
@@ -214,17 +240,20 @@ def prepare(args: argparse.Namespace) -> None:
     output = _absolute_output(args.output)
     roots = [python_root, site_packages, provider, vendor, manifests]
     _reject_overlap(output, roots)
-    for root, label in zip(roots, ("python-root", "site-packages", "provider-directory", "vendor-directory", "model-manifests")):
+    for root, label in zip(roots[1:], ("site-packages", "provider-directory", "vendor-directory", "model-manifests")):
         _validate_tree(root, label)
 
     interpreter = python_root / "bin" / "python3.12"
     stdlib = python_root / "lib" / "python3.12"
+    _reject_symlink_ancestors(interpreter.parent, "python interpreter")
     if interpreter.is_symlink() or not interpreter.is_file():
         raise PackagingError("python-root must contain regular file bin/python3.12")
-    if not stdlib.is_dir() or stdlib.is_symlink() or not (stdlib / "LICENSE.txt").is_file():
-        raise PackagingError("python-root must contain lib/python3.12/LICENSE.txt")
-    if not (provider / "d_audio_backend.py").is_file():
-        raise PackagingError("provider-directory must contain d_audio_backend.py")
+    if not stdlib.is_dir() or stdlib.is_symlink() or not (stdlib / "LICENSE.txt").is_file() or not (stdlib / "encodings/__init__.py").is_file():
+        raise PackagingError("python-root must contain lib/python3.12/LICENSE.txt and encodings/__init__.py")
+    _validate_tree(stdlib, "stdlib", skip=True)
+    required_provider = ("d_audio_backend.py", "d_audio_contract.py", "d_audio_sa3.py")
+    if any(not (provider / name).is_file() for name in required_provider):
+        raise PackagingError("provider-directory must contain d_audio_backend.py, d_audio_contract.py, and d_audio_sa3.py")
 
     staging: Path | None = None
     try:
@@ -261,13 +290,34 @@ def parse_arguments(argv: list[str]) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def _safe_message(stream: object, message: str) -> bool:
+    try:
+        stream.write(message + "\n")  # type: ignore[attr-defined]
+        stream.flush()  # type: ignore[attr-defined]
+        return True
+    except (OSError, ValueError):
+        # Restore the descriptor so interpreter shutdown cannot turn this controlled
+        # reporting failure into Python's special exit status 120.
+        try:
+            descriptor = stream.fileno()  # type: ignore[attr-defined]
+            replacement = os.open(os.devnull, os.O_WRONLY)
+            try:
+                os.dup2(replacement, descriptor)
+            finally:
+                os.close(replacement)
+        except (OSError, ValueError):
+            pass
+        return False
+
+
 def main(argv: list[str] | None = None) -> int:
     try:
         prepare(parse_arguments(sys.argv[1:] if argv is None else argv))
     except (PackagingError, OSError, shutil.Error) as error:
-        print(f"prepare_engine: {error}", file=sys.stderr)
+        _safe_message(sys.stderr, f"prepare_engine: {error}")
         return 2
-    print("Prepared D audio engine candidate; runtime/import/signature verification: unverified.")
+    if not _safe_message(sys.stdout, "Prepared D audio engine candidate; runtime/import/signature verification: unverified."):
+        return 2
     return 0
 
 
