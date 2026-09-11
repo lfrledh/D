@@ -73,6 +73,7 @@ struct AudioDeploymentIsolationTests {
             bundledAudioEngine: availability.engine)
         #expect(session.textBackendID != nil)
         #expect(session.audioBackendID == nil)
+        await session.shutdown()
     }
 
     @Test func engineChangedAfterStartupDoesNotPreventProjectSession() async throws {
@@ -91,6 +92,7 @@ struct AudioDeploymentIsolationTests {
         // The bundled engine remains rejected at audio admission, before model reads.
         let validate = try #require(session.validateAudioModel)
         await #expect(throws: (any Error).self) { _ = try await validate(fixture.root.appendingPathComponent("missing-model")) }
+        await session.shutdown()
     }
 }
 
@@ -101,6 +103,7 @@ private struct TinyBundledEngine {
         let base = ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"].map { URL(fileURLWithPath: $0) }
             ?? FileManager.default.temporaryDirectory
         root = base.appendingPathComponent("D-audio-deployment-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: root.appendingPathComponent("tasks"), withIntermediateDirectories: true)
         let resources = root.appendingPathComponent("Resources")
         let bundle = resources.appendingPathComponent("AudioEngine.dengine")
         let files = ["python/bin/python3", "provider/d_audio_backend.py", "provider/d_audio_contract.py",
