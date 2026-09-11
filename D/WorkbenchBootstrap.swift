@@ -43,23 +43,18 @@ final class WorkbenchBootstrap {
                 )
             }
             #endif
-            let engine: BundledAudioEngine?
-            do {
-                if let resources = Bundle.main.resourceURL {
-                    engine = try BundledAudioEngine.resolve(resourceDirectory: resources)
-                } else { engine = nil }
-                audioEngineIssue = nil
-            } catch {
-                engine = nil
-                audioEngineIssue = "声音引擎暂不可用；图像、文稿与已有作品仍可使用。\n" + error.localizedDescription
-            }
             let consent = AudioModelUsePermission(settings: settings)
             let accessRoot = libraryDirectory.deletingLastPathComponent()
                 .appendingPathComponent("AudioProcessAccess", isDirectory: true)
-            if engine != nil {
+            let availability = Self.prepareAudioEngine(resolve: {
+                guard let resources = Bundle.main.resourceURL else { return nil }
+                return try BundledAudioEngine.resolve(resourceDirectory: resources)
+            }, prepareAccess: {
                 try FileManager.default.createDirectory(at: accessRoot, withIntermediateDirectories: true,
                     attributes: [.posixPermissions: 0o700])
-            }
+            })
+            let engine = availability.engine
+            audioEngineIssue = availability.issue
             let library = try await ModelLibrary(stateDirectory: libraryDirectory)
             let model = WorkbenchModel(sessionFactory: { artifacts in
                 try await AppSessionFactory.makeSession(artifactDirectory: artifacts,
@@ -82,6 +77,19 @@ final class WorkbenchBootstrap {
             // after an explicit selection; Finder open requests above retain their meaning.
         } catch {
             startupError = "无法准备工作台或内嵌引擎：\(error.localizedDescription)\n已有项目与模型文件未被删除。请检查存储后重试。"
+        }
+    }
+
+    /// Audio deployment failure must leave projects and other modalities available.
+    static func prepareAudioEngine(resolve: () throws -> BundledAudioEngine?,
+                                   prepareAccess: () throws -> Void)
+        -> (engine: BundledAudioEngine?, issue: String?) {
+        do {
+            guard let engine = try resolve() else { return (nil, nil) }
+            try prepareAccess()
+            return (engine, nil)
+        } catch {
+            return (nil, "声音引擎暂不可用；图像、文稿与已有作品仍可使用。\n" + error.localizedDescription)
         }
     }
 

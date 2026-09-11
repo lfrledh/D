@@ -17,7 +17,6 @@ enum AppSessionFactory {
         let textBackend = try MLXTextBackend()
         let audioBackend: MLXAudioBackend?
         if let engine = bundledAudioEngine, let consent = audioConsent, let accessRoot = audioAccessRoot {
-            try engine.confirmUnchanged()
             audioBackend = try MLXAudioBackend(configuration: .init(
                 pythonExecutable: engine.pythonExecutable, providerScript: engine.providerScript,
                 vendorDirectory: engine.vendorDirectory, modelManifest: engine.modelManifest,
