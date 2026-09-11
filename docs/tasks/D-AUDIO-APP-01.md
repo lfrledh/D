@@ -49,3 +49,6 @@ PACK初交与两修已接受（14CPU与8独立反例，未相加），实际打�
 当次仅保存本地候选及文档检查点；不快进源、不推送未验收产品，不另起下一音乐/HUM/META任务。需要真人时已播放一次Glass短音效；未收到资源答复，未假设用户已听到或已授权。自有Worker/Reviewer/构建/CPU进程均已结束；这不是全系统进程审计。
 
 持久证据根：`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-AUDIO-APP-01/run-20260911T125328Z`。优先读取final-receipt.json；分项为pack/、access/、review/、host-access/real-cf-roundtrip/、combination-cpu[-python312]/、native/combined-components/、deployment/{inspect,runtime-check,signed-gate}/。命令/输入/产物和保护索引保存在外盘工作树生命周期之外，私有书签已删除，不进入Git或一般日志；权重/大包/图片不入Git。各CLI阶段原始用量事件保留但不在这里推算订阅费用；实际费用、完整Lead归因及成本最优均unknown，模型贡献不因最后由Lead提交而覆盖。
+
+## APP1 resumed 2026-09-12: ordinary sandbox entry passed
+User confirmed ordinary D exited, GPU idle and test foreground available. Fixed signed-gate code1730078 ran Python3.12 isolated no-site module discovery under ordinary sandbox, exit0, executable unchanged; no weights/imports. Parent process PID2000 exited0. Evidence run-20260911T155257Z-app-resume/native-deployment-report.json. This is deployment entry only. BRIDGE1 owns provider integration; Lead owns Swift/App integration. Recording remains disabled. Source and ordinary D hashes/index preserved.
