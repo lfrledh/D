@@ -147,7 +147,7 @@ public struct WorkbenchView: View {
                         .accessibilityAddTraits(pane == item ? .isSelected : [])
                         .accessibilityIdentifier("workspace-\(item.rawValue)")
                 }
-            }.padding([.horizontal, .top], 10).accessibilityIdentifier("workspace-pane")
+            }.padding([.horizontal, .top], 10)
             if pane == .assets, let manifest = model.manifest {
                 ProjectResourceBrowser(manifest: manifest, mode: model.creatorMode,
                     availableModes: model.availableCreatorModes,

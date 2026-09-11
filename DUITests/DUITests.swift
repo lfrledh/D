@@ -165,7 +165,7 @@ final class DUITests: XCTestCase {
                        (before["documents"] as? [[String: Any]])?.count,
                        "Selecting an empty modality must not create a document.")
         app.buttons["new-text-document"].click()
-        let editor = app.descendants(matching: .any).matching(identifier: "text-draft-editor").firstMatch
+        let editor = app.scrollViews["text-draft-editor"].textViews.firstMatch
         XCTAssertTrue(editor.waitForExistence(timeout: 8))
         replaceText(editor, with: "Navigation draft: keep this original while browsing assets.")
         app.buttons["text-save"].click()
