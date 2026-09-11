@@ -250,6 +250,7 @@ final class DUITests: XCTestCase {
         app.buttons["adopt-candidate"].click()
         waitForUI(NSPredicate(format: "label == %@", "取消采用"), element: app.buttons["adopt-candidate"],
                   message: "Adoption did not complete", in: app)
+        dismissInspectorPopover(in: app)
         app.buttons["document-\(fixtureSecondDocument)"].click()
         XCTAssertTrue(app.buttons["artwork-\(fixtureSecondAsset)"].waitForNonExistence(timeout: 8))
         app.buttons["workspace-assets"].click()
@@ -323,6 +324,7 @@ final class DUITests: XCTestCase {
         XCTAssertEqual(continueButtons.count, 1)
         proceed.click()
         XCTAssertTrue(proceed.waitForNonExistence(timeout: 8))
+        showInspector(in: app)
         let forkedPrompt = XCTNSPredicateExpectation(
             predicate: NSPredicate(format: "value == %@", "Warm illustrated landscape"),
             object: app.textViews["prompt-editor"])
@@ -407,14 +409,17 @@ final class DUITests: XCTestCase {
         path.typeText(url.path)
         // Native path processing and its accessibility snapshot may settle after typing.
         // Observe only: never retype, truncate the fixture path, or confirm a partial path.
-        let initiallyObservedPath = String(describing: path.value)
+        let initiallyObservedPath = path.value as? String
         let pathWaitStarted = Date()
-        let completePath = XCTNSPredicateExpectation(
-            predicate: NSPredicate(format: "value == %@", url.path), object: path)
-        let pathWaitResult = XCTWaiter.wait(for: [completePath], timeout: 2)
+        var pathWaitResult: XCTWaiter.Result = .completed
+        if initiallyObservedPath != url.path {
+            let completePath = XCTNSPredicateExpectation(
+                predicate: NSPredicate(format: "value == %@", url.path), object: path)
+            pathWaitResult = XCTWaiter.wait(for: [completePath], timeout: 8)
+        }
         XCTContext.runActivity(named: "Native fixture path synchronization") { activity in
             let evidence = XCTAttachment(string:
-                "Expected: \(url.path)\nInitial: \(initiallyObservedPath)\nFinal: \(String(describing: path.value))\nElapsed: \(Date().timeIntervalSince(pathWaitStarted))")
+                "Expected: \(url.path)\nInitial: \(String(describing: initiallyObservedPath))\nFinal: \(String(describing: path.value))\nElapsed: \(Date().timeIntervalSince(pathWaitStarted))")
             evidence.lifetime = .keepAlways
             activity.add(evidence)
         }
@@ -456,8 +461,11 @@ final class DUITests: XCTestCase {
 
     @MainActor
     private func expectCandidateName(_ name: String, in app: XCUIApplication) {
-        let label = app.descendants(matching: .any).matching(identifier: "candidate-saved-name").firstMatch
-        let expected = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == true AND label == %@", name), object: label)
+        // Selection is visible in the candidate strip even when parameters are collapsed.
+        let label = app.buttons.matching(NSPredicate(
+            format: "identifier BEGINSWITH %@ AND label == %@", "artwork-", name)).firstMatch
+        let expected = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == true AND selected == true AND label == %@", name), object: label)
         guard XCTWaiter.wait(for: [expected], timeout: 8) == .completed else {
             recordScreenshot(app, name: "Candidate selection did not settle")
             XCTFail("Expected selected candidate \(name).\n\(app.debugDescription)")
@@ -466,8 +474,29 @@ final class DUITests: XCTestCase {
     }
 
     @MainActor
+    private func showInspector(in app: XCUIApplication) {
+        let scroll = app.scrollViews["generation-inspector-scroll"]
+        if !scroll.exists {
+            let toggle = app.buttons["toggle-inspector"]
+            XCTAssertTrue(toggle.waitForExistence(timeout: 8))
+            toggle.click()
+        }
+        XCTAssertTrue(scroll.waitForExistence(timeout: 8))
+    }
+
+    @MainActor
+    private func dismissInspectorPopover(in app: XCUIApplication) {
+        let scroll = app.scrollViews["generation-inspector-scroll"]
+        if app.buttons["toggle-inspector"].label == "打开创作参数", scroll.exists {
+            app.typeKey(.escape, modifierFlags: [])
+            XCTAssertTrue(scroll.waitForNonExistence(timeout: 8))
+        }
+    }
+
+    @MainActor
     private func revealInInspector(_ element: XCUIElement, in app: XCUIApplication) {
         app.activate()
+        showInspector(in: app)
         let scroll = app.scrollViews["generation-inspector-scroll"]
         XCTAssertTrue(scroll.waitForExistence(timeout: 8))
         for _ in 0..<8 {
