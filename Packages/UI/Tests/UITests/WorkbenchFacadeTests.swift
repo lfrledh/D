@@ -51,6 +51,39 @@ struct WorkbenchFacadeTests {
         #expect(service.seedText == "-")
     }
 
+    @Test func scheduledGenerationRejectsNavigationABAEvenWhenGenerationIsStillAvailable() async throws {
+        let base = try #require(ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"])
+        let folder = URL(fileURLWithPath: base).appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let outcomeGate = PresentationOutcomeGate()
+        let service = session(gate: outcomeGate)
+        await service.createProject(at: folder.appendingPathComponent("Navigation.dproject"))
+        await service.registerModel(at: folder)
+        service.prompt = "A remains available"
+        let facade = WorkbenchModel(projectSession: service)
+        let epoch = service.navigationEpoch, id = try #require(service.activeDocumentID)
+        #expect(facade.canRunVisibleGeneration)
+        let dispatchGate = PresentationOutcomeGate()
+        let scheduled = Task {
+            await dispatchGate.wait()
+            return await facade.generateCaptured(mode: .image, epoch: epoch, documentID: id)
+        }
+        await service.createDocument(name: "B")
+        await service.selectDocument(id: id)
+        #expect(facade.canRunVisibleGeneration && service.navigationEpoch != epoch)
+        await dispatchGate.open()
+        #expect(!(await scheduled.value))
+        #expect(service.manifest?.jobs.isEmpty == true)
+        await outcomeGate.open()
+        #expect(await facade.generateCaptured(mode: .image, epoch: service.navigationEpoch, documentID: id))
+        let deadline = ContinuousClock.now + .seconds(5)
+        while service.isBusy, ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(service.manifest?.jobs.count == 1)
+        #expect(!service.isBusy)
+        #expect(await service.requestClose())
+    }
+
     @Test func removingPresentationDoesNotCancelOrAbandonAnOwnedTask() async throws {
         let base = ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"]
             .map { URL(fileURLWithPath: $0, isDirectory: true) } ?? FileManager.default.temporaryDirectory

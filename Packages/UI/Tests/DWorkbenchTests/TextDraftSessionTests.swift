@@ -182,9 +182,13 @@ struct TextDraftSessionTests {
             if ContinuousClock.now >= deadline { throw CancellationError() }
             try await Task.sleep(for: .milliseconds(5))
         }
+        #expect(subject.runningSelection == selection)
         try subject.editText("author edit during generation")
+        #expect(subject.runningSelection?.selectedText == "two")
         await engine.finish()
         try await rewrite.value
+        #expect(subject.runningSelection == nil)
+        #expect(subject.candidate?.selection == selection)
         #expect(subject.candidate != nil)
         #expect(!subject.canAcceptCandidate)
         #expect(throws: TextDraftError.noAcceptableCandidate) { try subject.acceptCandidate() }

@@ -58,6 +58,20 @@ public final class WorkbenchModel {
         guard presentedDocument != nil, !isChangingProject, !hasPendingEditor else { return false }
         return switch creatorMode { case .image: projectSession.canGenerate; case .text: projectSession.canRewriteText; case .audio: projectSession.canGenerateAudioCreation }
     }
+    /// Checks at actual async execution, not when the menu closure was first rendered.
+    @discardableResult public func generateCaptured(mode: CreatorMode, epoch: UInt64, documentID: UUID?) async -> Bool {
+        guard mode == creatorMode, epoch == projectSession.navigationEpoch,
+              documentID == presentedDocument?.id, canRunVisibleGeneration else { return false }
+        switch mode {
+        case .image: await generate()
+        case .text: await projectSession.rewriteText()
+        case .audio:
+            guard let documentID else { return false }
+            await projectSession.generateAudioCreation(contextID: projectSession.audioCreationContextID, documentID: documentID)
+        }
+        return true
+    }
+
     public func generateVisible() async {
         guard canRunVisibleGeneration else { return }
         switch creatorMode {

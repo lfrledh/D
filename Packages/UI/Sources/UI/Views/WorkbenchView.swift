@@ -79,20 +79,25 @@ public struct WorkbenchView: View {
         }
     }
 
+    private var visibleGenerationEnabled: Bool {
+        guard model.canRunVisibleGeneration else { return false }
+        guard model.creatorMode == .audio else { return true }
+        guard let draft = model.projectSession.audioCreationDraft,
+              audioRangeState.contextID == model.projectSession.audioCreationContextID else { return false }
+        return AudioCreationButtonHandler.canSubmit(draft, source: model.projectSession.audioCreationSource,
+            hostAllowsGeneration: model.projectSession.canGenerateAudioCreation,
+            hasPendingRangeInput: draft.operation == .inpaint && audioRangeState.pendingMessage != nil)
+    }
+
     private var visibleGenerationCommand: WorkbenchGenerationCommand {
         let epoch = model.projectSession.navigationEpoch
-        let audio = model.creatorMode == .audio
-        let validAudioRange: Bool
-        if audio, let draft = model.projectSession.audioCreationDraft {
-            validAudioRange = audioRangeState.contextID == model.projectSession.audioCreationContextID &&
-                AudioCreationButtonHandler.canSubmit(draft, source: model.projectSession.audioCreationSource,
-                    hostAllowsGeneration: model.projectSession.canGenerateAudioCreation,
-                    hasPendingRangeInput: draft.operation == .inpaint && audioRangeState.pendingMessage != nil)
-        } else { validAudioRange = !audio }
-        let enabled = model.canRunVisibleGeneration && validAudioRange
-        return WorkbenchGenerationCommand(title: model.visibleGenerationTitle, isEnabled: enabled) {
-            guard enabled, epoch == model.projectSession.navigationEpoch else { return }
-            Task { await model.generateVisible() }
+        let mode = model.creatorMode
+        let documentID = model.presentedDocument?.id
+        return WorkbenchGenerationCommand(title: model.visibleGenerationTitle, isEnabled: visibleGenerationEnabled) {
+            Task {
+                guard visibleGenerationEnabled else { return }
+                await model.generateCaptured(mode: mode, epoch: epoch, documentID: documentID)
+            }
         }
     }
 

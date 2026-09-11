@@ -3,6 +3,7 @@ import DMLXBackend
 import DRuntime
 import DWorkbench
 import Foundation
+import UI
 
 /// The application is the only layer that chooses a concrete compute backend.
 enum AppSessionFactory {

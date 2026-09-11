@@ -8,6 +8,8 @@ public final class TextDraftSession {
     public private(set) var candidate: TextRewriteCandidate?
     public private(set) var partialText = ""
     public private(set) var isRunning = false
+    /// Immutable admitted selection shared by every presentation of this session.
+    public private(set) var runningSelection: TextRewriteSelection?
     public private(set) var isCancelling = false
     public private(set) var errorMessage: String?
 
@@ -69,6 +71,7 @@ public final class TextDraftSession {
         candidate = nil
         partialText = ""
         errorMessage = nil
+        runningSelection = selection
         isRunning = true
         isCancelling = false
         cancellationRequested = false
@@ -202,6 +205,7 @@ public final class TextDraftSession {
     private func finishRun(operationID: UUID) {
         guard activeOperationID == operationID else { return }
         isRunning = false
+        runningSelection = nil
         isCancelling = false
         cancellationRequested = false
         cancellationSent = false

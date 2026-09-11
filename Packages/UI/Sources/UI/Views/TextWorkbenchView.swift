@@ -9,7 +9,6 @@ public enum TextWorkbenchPresentation: Sendable { case complete, editor, paramet
 public struct TextWorkbenchView: View {
     private var presentation: TextWorkbenchPresentation = .complete
     @Bindable private var session: TextDraftSession
-    @State private var runningSelectionText: String?
     private let selection: NSRange
     @Binding private var instruction: String
     private let modelStatus: String
@@ -197,7 +196,7 @@ public struct TextWorkbenchView: View {
 
     private var comparisonSourceText: String {
         if let candidate = session.candidate { return candidate.selection.selectedText }
-        return session.isRunning ? (runningSelectionText ?? "生成中的原选段已固定。") : currentSelectedText
+        return session.isRunning ? (session.runningSelection?.selectedText ?? "生成中的原选段已固定。") : currentSelectedText
     }
 
     private var comparisonSourceLabel: String {
@@ -206,8 +205,6 @@ public struct TextWorkbenchView: View {
     }
 
     private func generate() {
-        // Keep the request's source visible if editing or selecting continues while it streams.
-        runningSelectionText = currentSelectedText
         onGenerate()
     }
 
