@@ -166,6 +166,18 @@ class EnginePackagingTests(unittest.TestCase):
         output = linked_parent / "output"
         self.assert_rejected(output)
 
+    def test_stdlib_symlink_ancestor_is_refused(self) -> None:
+        original = self.python_root / "lib"
+        actual = self.base / "actual-lib"
+        shutil.move(original, actual)
+        original.symlink_to("../actual-lib", target_is_directory=True)
+        self.assert_rejected(self.base / "bad-stdlib-ancestor")
+
+    def test_required_package_file_is_refused(self) -> None:
+        shutil.rmtree(self.site / "mlx")
+        (self.site / "mlx").write_text("not a package directory", encoding="utf-8")
+        self.assert_rejected(self.base / "bad-package-file")
+
     def test_output_overlap_existing_and_dangling_are_refused(self) -> None:
         overlap = self.python_root / "inside"
         result = self.run_cli(overlap)
@@ -210,6 +222,22 @@ class EnginePackagingTests(unittest.TestCase):
             if process.poll() is None:
                 process.kill()
             process.communicate(timeout=15)
+
+    def test_actual_copy_failure_cleans_staging_and_preserves_input(self) -> None:
+        # Real CLI fixture: a task-owned source file becomes unreadable only for copying.
+        protected = self.vendor / "LICENSE"
+        before = digest_tree(self.vendor)
+        original_mode = stat.S_IMODE(protected.stat().st_mode)
+        protected.chmod(0)
+        output = self.base / "actual-copy-failure"
+        try:
+            result = self.run_cli(output)
+        finally:
+            protected.chmod(original_mode)
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertFalse(os.path.lexists(output))
+        self.assertEqual(before, digest_tree(self.vendor))
+        self.assertFalse(any(item.name.startswith(".d-audio-engine-") for item in self.base.iterdir()))
 
 
 if __name__ == "__main__":

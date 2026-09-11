@@ -145,10 +145,10 @@ def _site_entry_allowed(entry: str) -> bool:
 
 def _copy_site_packages(source: Path, destination: Path) -> None:
     entries = sorted(source.iterdir(), key=lambda item: item.name)
-    missing = [package for package in REQUIRED_PACKAGES if not (source / package).exists()]
+    missing = [package for package in REQUIRED_PACKAGES if not (source / package).is_dir()]
     missing_metadata = [
         package for package in REQUIRED_DISTRIBUTIONS
-        if not any(_dist_info_matches(entry.name, package) for entry in entries)
+        if not any(_dist_info_matches(entry.name, package) and entry.is_dir() for entry in entries)
     ]
     if missing or missing_metadata:
         raise PackagingError(
@@ -157,6 +157,8 @@ def _copy_site_packages(source: Path, destination: Path) -> None:
     for entry in entries:
         if not _site_entry_allowed(entry.name):
             raise PackagingError(f"unknown site-packages component refused: {entry.name}")
+        if entry.name == "mlx_metal" and not entry.is_dir():
+            raise PackagingError("optional mlx_metal package must be a directory")
     for entry in entries:
         if entry.name in IGNORED_SITE_ENTRIES or entry.name.startswith("pip-") and entry.name.endswith(".dist-info") or entry.name.startswith("setuptools"):
             continue
@@ -248,6 +250,7 @@ def prepare(args: argparse.Namespace) -> None:
     _reject_symlink_ancestors(interpreter.parent, "python interpreter")
     if interpreter.is_symlink() or not interpreter.is_file():
         raise PackagingError("python-root must contain regular file bin/python3.12")
+    _reject_symlink_ancestors(stdlib, "stdlib")
     if not stdlib.is_dir() or stdlib.is_symlink() or not (stdlib / "LICENSE.txt").is_file() or not (stdlib / "encodings/__init__.py").is_file():
         raise PackagingError("python-root must contain lib/python3.12/LICENSE.txt and encodings/__init__.py")
     _validate_tree(stdlib, "stdlib", skip=True)
