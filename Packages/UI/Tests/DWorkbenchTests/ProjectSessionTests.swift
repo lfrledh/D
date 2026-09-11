@@ -67,6 +67,16 @@ private actor WorkbenchTestBackend: InferenceBackend {
     }
 }
 
+private final class NavigationTestDefaults: UserDefaults, @unchecked Sendable {
+    private let lock = NSLock()
+    private var values: [String: Any] = [:]
+    override func set(_ value: Any?, forKey key: String) { lock.withLock { values[key] = value } }
+    override func object(forKey key: String) -> Any? { lock.withLock { values[key] } }
+    override func data(forKey key: String) -> Data? { object(forKey: key) as? Data }
+    override func string(forKey key: String) -> String? { object(forKey: key) as? String }
+    override func removeObject(forKey key: String) { lock.withLock { _ = values.removeValue(forKey: key) } }
+}
+
 @Suite(.serialized) @MainActor
 struct ProjectSessionTests {
     private func temporaryDirectory() throws -> URL {
@@ -112,6 +122,54 @@ struct ProjectSessionTests {
         let library = try await ModelLibrary(stateDirectory: folder.appendingPathComponent("ModelLibraryState"), catalog: [catalog])
         let id = try await library.registerExisting(at: original, catalogID: catalog.id)
         return (library, id, replacement)
+    }
+
+    @Test func navigationModeFailureAndRecentProjectsPreserveDrafts() async throws {
+        let folder = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let project = folder.appendingPathComponent("中文 e\u{301} 👩‍💻.dproject")
+        let backend = WorkbenchTestBackend(root: project.appendingPathComponent("Tasks"))
+        let settings = NavigationTestDefaults()
+        let subject = ProjectSession(sessionFactory: { _ in
+            let runtime = try InferenceRuntime(backends: [backend], configuration: .init(memoryBudgetBytes: 100))
+            return WorkbenchSession(engine: runtime, backendID: backend.descriptor.id,
+                status: { .init(activeRunID: nil, phase: nil, queuedRunIDs: []) },
+                shutdown: { await runtime.shutdown() }, cleanup: {}, validateModel: { _ in })
+        }, settings: settings, audioEnabled: true)
+        await subject.createProject(at: project)
+        let first = try #require(subject.activeDocumentID)
+        let projectID = try #require(subject.manifest?.id)
+        subject.prompt = "保留中文 e\u{301} 👩‍💻"
+        let initialEpoch = subject.navigationEpoch
+        let count = subject.documents.count
+        #expect(await subject.selectCreatorMode(.audio))
+        #expect(subject.creatorMode == .audio && subject.presentedDocument == nil)
+        #expect(subject.activeDocumentID == first && subject.documents.count == count)
+        #expect(!subject.canGenerate && !subject.canRewriteText && !subject.canGenerateAudioCreation)
+        #expect(subject.navigationEpoch > initialEpoch)
+        #expect(await subject.selectCreatorMode(.image))
+        #expect(subject.presentedDocument?.id == first)
+        #expect(subject.prompt == "保留中文 e\u{301} 👩‍💻")
+        #expect(subject.navigationEpoch > initialEpoch + 1)
+        let epoch = subject.navigationEpoch
+        subject.prompt = "存盘失败不能跳走"
+        let moved = folder.appendingPathComponent("Moved.dproject")
+        try FileManager.default.moveItem(at: project, to: moved)
+        #expect(!(await subject.selectCreatorMode(.audio)))
+        #expect(subject.creatorMode == .image && subject.presentedDocument?.id == first)
+        #expect(subject.navigationEpoch == epoch && subject.prompt == "存盘失败不能跳走")
+        try FileManager.default.moveItem(at: moved, to: project)
+        subject.clearError()
+        #expect(!(await subject.selectDocument(id: UUID())))
+        #expect(subject.creatorMode == .image)
+        #expect(subject.recentProjects.map(\.id) == [projectID])
+        #expect(await subject.requestClose())
+        #expect(subject.manifest == nil)
+        await subject.openRecentProject(id: projectID)
+        #expect(subject.manifest?.id == projectID)
+        #expect(subject.prompt == "存盘失败不能跳走")
+        #expect(subject.recentProjects.count == 1)
+        #expect(await subject.requestClose())
     }
 
     @Test func modelLibraryPinsQueuedAndCancellingTasksUntilAuthoritativeRelease() async throws {

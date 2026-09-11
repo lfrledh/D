@@ -73,6 +73,27 @@ struct ProjectTextFlowTests {
         return text
     }
 
+    @Test func modeNavigationCannotDiscardPendingCandidateAndRestoresPerModeDocument() async throws {
+        let root = try folder(); defer { try? FileManager.default.removeItem(at: root) }
+        let subject = host(engine: FlowEngine())
+        let text = try await prepare(subject, at: root)
+        let id = text.editor.document.id
+        let original = text.editor.document
+        let epoch = subject.navigationEpoch
+        await subject.rewriteText()
+        #expect(text.hasPendingCandidate)
+        #expect(!(await subject.selectCreatorMode(.image)))
+        #expect(subject.creatorMode == .text && subject.presentedDocument?.id == id)
+        #expect(subject.navigationEpoch == epoch && text.editor.document == original)
+        text.reject()
+        #expect(await subject.selectCreatorMode(.image))
+        #expect(subject.creatorMode == .image && subject.text == nil)
+        #expect(await subject.selectCreatorMode(.text))
+        #expect(subject.presentedDocument?.id == id && subject.text?.editor.document == original)
+        #expect(subject.navigationEpoch > epoch + 1)
+        #expect(await subject.requestClose())
+    }
+
     @Test func recipeHandoffCannotDiscardPendingTextCandidateAndFlushesAfterRejection() async throws {
         let root = try folder(); defer { try? FileManager.default.removeItem(at: root) }
         let subject = host(engine: FlowEngine()), text = try await prepare(subject, at: root)

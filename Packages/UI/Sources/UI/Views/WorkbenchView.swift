@@ -7,9 +7,10 @@ public struct WorkbenchView: View {
     @Bindable private var model: WorkbenchModel
     private let library: ModelLibraryModel?
     private var layoutProbe: ((String, CGRect) -> Void)?
-    @State private var columnVisibility: NavigationSplitViewVisibility = .all
-    @State private var showInspector = true
-    @State private var showTasks = true
+    @State private var pane: WorkspacePane = .creations
+    @State private var showTasks = false
+    @State private var expandTasks = true
+    @State private var namingContext: DocumentNameContext?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     public init(model: WorkbenchModel, library: ModelLibraryModel? = nil) {
@@ -29,7 +30,11 @@ public struct WorkbenchView: View {
             if model.manifest != nil {
                 projectWorkbench
             } else {
-                WorkbenchWelcome(model: model, library: library)
+                ProjectChooserView(recentProjects: model.recentProjects, isBusy: model.isChangingProject,
+                    onNew: { Task { await model.newProject() } },
+                    onOpen: { Task { await model.openProject() } },
+                    onRecent: { id in Task { await model.openRecentProject(id: id) } },
+                    onModels: { library?.isPresented = true })
             }
         }
         .frame(minWidth: 860, minHeight: 580)
@@ -59,7 +64,7 @@ public struct WorkbenchView: View {
         )) {
             if let library {
                 ModelLibraryView(model: library, selectedModelID: model.selectedModelID,
-                    canSelect: model.manifest != nil && !model.isChangingProject) { id in
+                    canSelect: model.manifest != nil && model.creatorMode == .image && !model.isChangingProject) { id in
                     await model.selectModel(id: id)
                     if model.selectedModelID == id {
                         library.isPresented = false
@@ -73,98 +78,109 @@ public struct WorkbenchView: View {
     }
 
     private var projectWorkbench: some View {
-        NavigationSplitView(columnVisibility: $columnVisibility) {
-            ArtworkSidebar(model: model)
-                .navigationSplitViewColumnWidth(min: 190, ideal: 225, max: 320)
-        } detail: {
-            VStack(spacing: 0) {
-                canvas.frame(maxWidth: .infinity, maxHeight: .infinity)
-                if model.activeDocument?.kind == .image,
-                   let jobs = model.manifest?.jobs, !jobs.isEmpty {
-                    Divider()
-                    WorkbenchTasks(model: model, isExpanded: $showTasks)
-                }
-            }
-            .navigationTitle(model.manifest?.name ?? "D")
-            .inspector(isPresented: Binding(
-                get: { showInspector && model.activeDocument?.kind == .image },
-                set: { showInspector = $0 }
-            )) {
+        ProjectWorkspaceShell(projectName: model.manifest?.name ?? "D", mode: model.creatorMode,
+            availableModes: model.availableCreatorModes,
+            hasInspector: model.creatorMode == .image && model.presentedDocument != nil,
+            taskCount: model.projectSession.activeJobIDs.count,
+            onMode: { mode in Task { await model.switchCreatorMode(mode) } },
+            onBack: { Task { await model.closeProject() } },
+            onTasks: { showTasks = true }, onModels: { library?.isPresented = true }) {
+                workspaceSidebar
+            } editor: {
+                workspaceEditor
+            } inspector: {
                 GenerationInspector(model: model, library: library)
-                    .inspectorColumnWidth(min: 280, ideal: 310, max: 400)
             }
-            .toolbar {
-                ToolbarItem(placement: .navigation) {
-                    Menu {
-                        Button("新建项目…", systemImage: "doc.badge.plus") {
-                            Task { await model.newProject() }
-                        }
-                        Button("打开项目…", systemImage: "folder") {
-                            Task { await model.openProject() }
-                        }
-                        Divider()
-                        Button("检查可恢复作品", systemImage: "arrow.clockwise") {
-                            Task { await model.recoverArtifacts() }
-                        }
-                        .disabled(model.isBusy)
-                        Button("关闭项目", systemImage: "xmark") {
-                            Task { await model.closeProject() }
-                        }
-                    } label: {
-                        Label("项目", systemImage: "folder")
+        .onChange(of: model.projectURL) { _, _ in
+            model.invalidateComparison(); pane = .creations
+        }
+        .onChange(of: model.creatorMode) { _, _ in pane = .creations }
+        .popover(isPresented: $showTasks) {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("项目任务").font(.headline)
+                if model.manifest?.jobs.isEmpty == true { Text("还没有生成任务。").foregroundStyle(.secondary) }
+                WorkbenchTasks(model: model, isExpanded: $expandTasks)
+                Button("检查可恢复作品") { Task { await model.recoverArtifacts() } }.disabled(model.isBusy)
+            }.padding(16).frame(width: 600)
+        }
+        .sheet(item: $namingContext, onDismiss: { model.endEditing() }) { context in
+            DocumentNameEditor(model: model, context: context)
+        }
+    }
+
+    private var workspaceSidebar: some View {
+        VStack(spacing: 8) {
+            Picker("面板", selection: $pane) {
+                ForEach(WorkspacePane.allCases) { Text($0.title).tag($0) }
+            }.pickerStyle(.segmented).padding([.horizontal, .top], 10)
+                .accessibilityIdentifier("workspace-pane")
+            if pane == .assets, let manifest = model.manifest {
+                ProjectResourceBrowser(manifest: manifest, mode: model.creatorMode,
+                    availableModes: model.availableCreatorModes,
+                    assetURL: { model.assetURLs[$0] },
+                    onOpenDocument: { id in Task { await model.switchDocument(to: id) } })
+            } else {
+                ModalityDocumentList(documents: model.documents, mode: model.creatorMode,
+                    selectedDocumentID: model.presentedDocument?.id,
+                    onSelect: { id in Task { await model.switchDocument(to: id) } }, onCreate: createDocument)
+                if let document = model.presentedDocument {
+                    Button("重命名当前创作…") {
+                        model.beginEditing()
+                        namingContext = DocumentNameContext(documentID: document.id, name: document.name)
                     }
-                    .accessibilityIdentifier("project-menu")
-                    .help("项目操作")
+                    .accessibilityIdentifier("rename-document-\(document.id.uuidString)")
+                    .padding(.horizontal, 10)
                 }
-                ToolbarItemGroup(placement: .primaryAction) {
-                    if model.activeDocument?.kind != .audio {
+                if model.creatorMode == .audio, let audio = model.projectSession.audio {
+                    AudioCaptureEntry(model: model, audio: audio)
+                        .frame(maxHeight: 240)
+                }
+            }
+        }.frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func createDocument() {
+        if model.creatorMode == .image {
+            model.beginEditing()
+            namingContext = DocumentNameContext(documentID: nil, name: "新创作")
+        } else { Task { await model.createVisibleDocument() } }
+    }
+
+    @ViewBuilder private var workspaceEditor: some View {
+        if model.presentedDocument == nil {
+            ContentUnavailableView {
+                Label("开始\(model.creatorMode.title)创作", systemImage: model.creatorMode.symbol)
+            } description: {
+                Text("这个项目还没有此类创作。切换模态不会自动创建文档。")
+            } actions: {
+                Button(model.creatorMode.newDocumentTitle, action: createDocument).buttonStyle(.glassProminent)
+            }
+        } else {
+            VStack(spacing: 0) {
+                HStack(spacing: 10) {
+                    Text(model.presentedDocument?.name ?? "").font(.headline).lineLimit(1)
+                    Spacer(minLength: 0)
+                    if model.creatorMode == .image {
                         RecipeHandoffButton(model: model)
-                        if let library {
-                            Button {
-                                library.isPresented = true
-                            } label: {
-                                Label("模型库", systemImage: "cube.transparent")
-                            }
-                            .accessibilityIdentifier("open-model-library")
-                            .help(library.hasActiveWork ? "模型库有 \(library.activityCount) 项安装操作进行中" : "管理、安装和选择模型")
-                        }
                         Button {
                             guard let job = model.selectedJob else { return }
                             Task { await model.copySettings(from: job.id) }
-                        } label: {
-                            Label("基于条件新建创作", systemImage: "arrow.branch")
-                        }
-                        .disabled(model.selectedJob == nil)
-                        .accessibilityIdentifier("copy-settings")
+                        } label: { Image(systemName: "arrow.branch") }
+                        .disabled(model.selectedJob == nil).help("基于条件新建创作")
+                        .accessibilityLabel("基于条件新建创作").accessibilityIdentifier("copy-settings")
                         .audioMeasured("copy-settings", probe: layoutProbe)
-                        .help("将实际提示词与 seed 复制到独立创作；不使用图片作为输入")
-
-                        Button {
-                            Task { await model.exportSelected() }
-                        } label: {
-                            Label("导出作品…", systemImage: "square.and.arrow.up")
-                        }
-                        .disabled(model.selectedAsset == nil)
-                        .accessibilityIdentifier("export-artwork")
-                        .audioMeasured("export-artwork", probe: layoutProbe)
-                        .help("导出原始 PNG")
-
-                        Button {
-                            withAnimation(reduceMotion ? nil : .default) { showInspector.toggle() }
-                        } label: {
-                            Label("创作参数", systemImage: "sidebar.right")
-                        }
-                        .accessibilityIdentifier("toggle-inspector")
-                        .audioMeasured("toggle-inspector", probe: layoutProbe)
-                        .help("显示或隐藏创作参数")
+                        Button { Task { await model.exportSelected() } } label: { Image(systemName: "square.and.arrow.up") }
+                            .disabled(model.selectedAsset == nil).help("导出原始 PNG")
+                            .accessibilityLabel("导出作品").accessibilityIdentifier("export-artwork")
+                            .audioMeasured("export-artwork", probe: layoutProbe)
                     }
+                }.padding(12)
+                Divider()
+                canvas.frame(maxWidth: .infinity, maxHeight: .infinity)
+                if model.creatorMode == .image && !model.visibleAssets.isEmpty {
+                    Divider()
+                    ImageCandidateTray(model: model).frame(height: 130)
                 }
-            }
-        }
-        .onChange(of: model.projectURL) { _, _ in model.invalidateComparison() }
-        .onChange(of: model.manifest?.jobs.count) { oldValue, newValue in
-            if (newValue ?? 0) > (oldValue ?? 0) {
-                withAnimation(reduceMotion ? nil : .default) { showTasks = true }
             }
         }
     }
@@ -210,6 +226,7 @@ public struct WorkbenchView: View {
         } else if !model.showingAllArtworks, let text = model.projectSession.text {
             let project = model.projectSession
             let id = text.editor.document.id
+            let epoch = project.navigationEpoch
             VStack(spacing: 0) {
                 if project.isTextWorking && !text.editor.isRunning {
                     HStack {
@@ -223,8 +240,8 @@ public struct WorkbenchView: View {
                     modelStatus: project.textModelStatus, canGenerate: project.canRewriteText,
                     canAccept: text.canAccept, canUndo: text.canUndo,
                     isSaving: text.isSaving, saveStatus: text.saveStatus,
-                    onEdit: { project.editText($0, documentID: id) },
-                    onSelection: { project.selectText($0, documentID: id) },
+                    onEdit: { if project.navigationEpoch == epoch { project.editText($0, documentID: id) } },
+                    onSelection: { if project.navigationEpoch == epoch { project.selectText($0, documentID: id) } },
                     onGenerate: { Task { await project.rewriteText() } },
                     onCancel: { Task { await project.cancelTextRewrite() } },
                     onAccept: { text.accept() }, onReject: { text.reject() }, onUndo: { text.undo() },
@@ -334,137 +351,14 @@ public struct WorkbenchView: View {
     }
 }
 
-private struct ArtworkSidebar: View {
+private struct AudioCaptureEntry: View {
     @Bindable var model: WorkbenchModel
-    @State private var namingContext: DocumentNameContext?
-
-    var body: some View {
-        // A sidebar List combines custom multi-action rows into one accessibility
-        // element on macOS. Keep navigation and secondary actions as real buttons.
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 8) {
-                sidebarHeading("项目")
-                Button {
-                    Task { await model.showAllArtworks() }
-                } label: {
-                    Label("全部作品", systemImage: "square.grid.2x2")
-                        .fontWeight(model.showingAllArtworks ? .semibold : .regular)
-                        .frame(maxWidth: .infinity, alignment: .leading).padding(8)
-                        .contentShape(Rectangle())
-                }
-                .background(model.showingAllArtworks ? Color.accentColor.opacity(0.12) : .clear,
-                            in: RoundedRectangle(cornerRadius: 7))
-                .accessibilityIdentifier("all-artworks")
-                .accessibilityAddTraits(model.showingAllArtworks ? .isSelected : [])
-                sidebarHeading("创作")
-                ForEach(model.documents, id: \.id) { document in
-                    HStack(spacing: 4) {
-                        Button {
-                            Task { await model.switchDocument(to: document.id) }
-                        } label: {
-                            Label(document.name, systemImage: documentIcon(document.kind))
-                                .lineLimit(2)
-                                .fontWeight(!model.showingAllArtworks && model.activeDocumentID == document.id ? .semibold : .regular)
-                                .frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 8)
-                                .contentShape(Rectangle())
-                        }
-                        .accessibilityIdentifier("document-\(document.id.uuidString)")
-                        .accessibilityAddTraits(!model.showingAllArtworks && model.activeDocumentID == document.id ? .isSelected : [])
-                        Button {
-                            model.beginEditing()
-                            namingContext = DocumentNameContext(documentID: document.id, name: document.name)
-                        } label: { Image(systemName: "pencil").frame(width: 24, height: 28) }
-                        .help("重命名创作")
-                        .accessibilityLabel("重命名 \(document.name)")
-                        .accessibilityIdentifier("rename-document-\(document.id.uuidString)")
-                    }
-                    .padding(.horizontal, 8)
-                    .background(!model.showingAllArtworks && model.activeDocumentID == document.id
-                                ? Color.accentColor.opacity(0.12) : .clear, in: RoundedRectangle(cornerRadius: 7))
-                    .accessibilityElement(children: .contain)
-                }
-                Button {
-                    model.beginEditing()
-                    namingContext = DocumentNameContext(documentID: nil, name: "新创作")
-                } label: {
-                    Label("新建创作", systemImage: "plus")
-                        .frame(maxWidth: .infinity, alignment: .leading).padding(8)
-                        .contentShape(Rectangle())
-                }
-                .keyboardShortcut("n", modifiers: [.command, .shift])
-                .accessibilityIdentifier("new-document")
-                Button {
-                    Task { await model.createTextDocument() }
-                } label: {
-                    Label("新建文稿", systemImage: "text.badge.plus")
-                        .frame(maxWidth: .infinity, alignment: .leading).padding(8)
-                }
-                .accessibilityIdentifier("new-text-document")
-                if let audio = model.projectSession.audio {
-                    Button {
-                        Task { await model.createAudioCreation() }
-                    } label: {
-                        Label("新建声音创作", systemImage: "waveform.badge.plus")
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    .padding(.horizontal, 16)
-                    .disabled(model.isBusy)
-                    .accessibilityIdentifier("audio-create-new")
-                    audioSidebar(audio)
-                }
-                HStack {
-                    sidebarHeading(model.showingAllArtworks ? "全部作品" : "候选作品")
-                    Spacer()
-                    Text("\(model.visibleAssets.count)").font(.caption).foregroundStyle(.secondary).monospacedDigit()
-                }
-                ForEach(model.visibleAssets.reversed(), id: \.id) { asset in candidateRow(asset) }
-                if model.visibleAssets.isEmpty {
-                    Text("完成的图片会出现在这里。")
-                        .font(.caption).foregroundStyle(.secondary).padding(8)
-                }
-            }.padding(10)
-        }
-        .buttonStyle(.borderless)
-        .accessibilityIdentifier("artwork-list")
-        .safeAreaInset(edge: .bottom) {
-            VStack(alignment: .leading, spacing: 8) {
-                Button {
-                    model.beginComparison()
-                } label: {
-                    Label("比较已选 \(model.comparisonSelection.count)/2", systemImage: "rectangle.split.2x1")
-                }
-                .buttonStyle(.bordered)
-                .disabled(model.comparisonSelection.count != 2)
-                .accessibilityIdentifier("compare-artworks")
-                Label("保存在项目中", systemImage: "externaldrive")
-                    .font(.caption).foregroundStyle(.secondary)
-                    .help(model.projectURL?.path ?? "")
-            }
-            .padding(14).frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .sheet(item: $namingContext, onDismiss: { model.endEditing() }) { context in
-            DocumentNameEditor(model: model, context: context)
-        }
-    }
-
-    private func sidebarHeading(_ name: String) -> some View {
-        Text(name).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-            .padding(.horizontal, 8).padding(.top, 10)
-            .accessibilityAddTraits(.isHeader)
-    }
-
-    private func documentIcon(_ kind: ProjectDocumentKind) -> String {
-        switch kind {
-        case .image: "doc.text.image"
-        case .text: "doc.text"
-        case .audio: "waveform"
-        }
-    }
-
-    @ViewBuilder private func audioSidebar(_ audio: ProjectAudioController) -> some View {
+    let audio: ProjectAudioController
+    var body: some View { ScrollView { VStack(alignment: .leading, spacing: 8) { entries }.padding(10) } }
+    @ViewBuilder private var entries: some View {
         let contextID = audio.contextID
         let renderDocumentID = model.activeDocumentID
-        sidebarHeading("声音")
+        Text("原声素材").font(.caption.weight(.semibold))
         Button(action: model.audioImportAction(contextID: contextID, documentID: renderDocumentID)) {
             Label("导入原声…", systemImage: "waveform.badge.plus")
                 .frame(maxWidth: .infinity, alignment: .leading).padding(8)
@@ -520,6 +414,24 @@ private struct ArtworkSidebar: View {
         }
     }
 
+}
+
+private struct ImageCandidateTray: View {
+    @Bindable var model: WorkbenchModel
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text("当前创作的候选").font(.caption.weight(.semibold))
+                Spacer()
+                Button("比较已选 \(model.comparisonSelection.count)/2") { model.beginComparison() }
+                    .disabled(model.comparisonSelection.count != 2)
+                    .accessibilityIdentifier("compare-artworks")
+            }
+            ScrollView(.horizontal) {
+                LazyHStack(spacing: 8) { ForEach(model.visibleAssets) { asset in candidateRow(asset).frame(width: 240) } }
+            }.accessibilityIdentifier("artwork-list")
+        }.padding(10)
+    }
     private func candidateRow(_ asset: ProjectAsset) -> some View {
         HStack(spacing: 8) {
             Button {
@@ -626,66 +538,5 @@ private struct DocumentNameEditor: View {
             }
         }.padding(24).frame(width: 320)
             .disabled(saving).interactiveDismissDisabled()
-    }
-}
-
-private struct WorkbenchWelcome: View {
-    @Bindable var model: WorkbenchModel
-    let library: ModelLibraryModel?
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
-
-    var body: some View {
-        VStack(spacing: 28) {
-            VStack(spacing: 14) {
-                Image(systemName: "square.stack.3d.up.fill")
-                    .font(.system(size: 46, weight: .light))
-                    .foregroundStyle(.tint)
-                    .padding(.bottom, 8)
-                    .accessibilityHidden(true)
-                Text("你的创作，留在你的 Mac")
-                    .font(.largeTitle.weight(.semibold))
-                Text("用 D 将想法变成作品。\n从一个项目开始，保存每一张图片和它的生成条件。")
-                    .font(.body).foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center).lineSpacing(5)
-            }
-            if reduceTransparency {
-                actions.buttonStyle(.bordered).controlSize(.large)
-            } else {
-                GlassEffectContainer(spacing: 20) {
-                    actions.buttonStyle(.glass).controlSize(.large)
-                }
-            }
-            Text("本地生成 · 项目自动保存")
-                .font(.caption).foregroundStyle(.tertiary)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(nsColor: .windowBackgroundColor))
-        .navigationTitle("D")
-    }
-
-    private var actions: some View {
-        HStack(spacing: 16) {
-            Button {
-                Task { await model.newProject() }
-            } label: {
-                Label("新建项目…", systemImage: "plus").padding(.horizontal, 9)
-            }
-            .accessibilityIdentifier("new-project")
-            Button {
-                Task { await model.openProject() }
-            } label: {
-                Label("打开项目…", systemImage: "folder").padding(.horizontal, 9)
-            }
-            .accessibilityIdentifier("open-project")
-            if let library {
-                Button {
-                    library.isPresented = true
-                } label: {
-                    Label("模型库", systemImage: "cube.transparent").padding(.horizontal, 9)
-                }
-                .accessibilityIdentifier("open-model-library")
-                .help("安装或登记模型，无需先打开项目")
-            }
-        }
     }
 }

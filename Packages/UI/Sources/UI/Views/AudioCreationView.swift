@@ -19,6 +19,7 @@ public struct AudioCreationView: View {
     @State private var rangeStartText = ""
     @State private var rangeEndText = ""
     @State private var rangeInputMessage: String?
+    private var scrollToCandidatesForCheck = false
     private var layoutProbe: ((String, CGRect) -> Void)?
 
     public init(draft: Binding<AudioCreationDraft>, source: ProjectAsset?, candidates: [ProjectAsset],
@@ -41,7 +42,8 @@ public struct AudioCreationView: View {
 
     public var body: some View {
         GeometryReader { viewport in
-            ScrollView {
+            ScrollViewReader { reader in
+              ScrollView {
                 let layout = viewport.size.width >= 720
                     ? AnyLayout(HStackLayout(alignment: .top, spacing: 16))
                     : AnyLayout(VStackLayout(alignment: .leading, spacing: 16))
@@ -49,12 +51,19 @@ public struct AudioCreationView: View {
                     header
                     layout {
                         controls.frame(maxWidth: .infinity, alignment: .topLeading)
-                        sourceAndCandidates.frame(maxWidth: .infinity, alignment: .topLeading)
+                        sourceAndCandidates.frame(maxWidth: .infinity, alignment: .topLeading).id("audio-candidates")
                     }
                     statusArea
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(20)
+              }
+              .task(id: viewport.size.width) {
+                  if scrollToCandidatesForCheck {
+                      await Task.yield()
+                      reader.scrollTo("audio-candidates", anchor: .bottom)
+                  }
+              }
             }
         }
         .onAppear(perform: loadRangeText)
@@ -73,6 +82,11 @@ public struct AudioCreationView: View {
         var copy = self
         copy.layoutProbe = observer
         return copy
+    }
+
+    /// Exercises the real SwiftUI viewport without assuming its private AppKit hierarchy.
+    func scrollingToCandidatesForLayoutCheck() -> Self {
+        var copy = self; copy.scrollToCandidatesForCheck = true; return copy
     }
 
     private var header: some View {
@@ -260,9 +274,12 @@ public struct AudioCreationView: View {
     private var statusArea: some View {
         VStack(alignment: .leading, spacing: 4) {
             if let progress { ProgressView(value: progress).accessibilityIdentifier("audio-create-progress") }
-            Text(status ?? validationMessage).font(.caption)
-                .foregroundStyle(status == nil && !canSubmit ? Color.orange : Color.secondary)
-                .accessibilityIdentifier("audio-create-status")
+            if let status { Text(status).font(.caption).foregroundStyle(.secondary) }
+            if !isBusy {
+                Text(validationMessage).font(.caption)
+                    .foregroundStyle(canSubmit ? Color.secondary : Color.orange)
+                    .accessibilityIdentifier("audio-create-status")
+            }
         }
     }
 
@@ -272,12 +289,8 @@ public struct AudioCreationView: View {
                                              hasPendingRangeInput: draft.operation == .inpaint && rangeInputMessage != nil)
     }
     private var validationMessage: String {
-        if draft.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return "请输入提示词。" }
-        if !AudioCreationButtonHandler.numericInputsAreValid(draft) { return "参数不受当前模型支持；输入保持不变。" }
-        if sourceOperation && source == nil { return "参考变体和区间重绘需要原声。" }
-        if sourceOperation && !AudioCreationButtonHandler.sourceIsEditable(source) { return "当前来源不能由该模型编辑。" }
-        if draft.operation == .inpaint && !AudioCreationButtonHandler.canGenerate(draft, source: source) { return "区间必须在原声内且结束大于开始。" }
-        return "准备就绪。"
+        AudioCreationButtonHandler.submissionMessage(draft, source: source, hostAllowsGeneration: canGenerate,
+            hasPendingRangeInput: draft.operation == .inpaint && rangeInputMessage != nil)
     }
     private var sourceDuration: String? { source.flatMap(assetDuration) }
     private func assetDuration(_ asset: ProjectAsset) -> String? {
@@ -289,9 +302,9 @@ public struct AudioCreationView: View {
         return "44.1 kHz 帧边界；有效范围为 0–\(format.frameCount)。"
     }
     private func loadRangeText() {
-        guard let range = draft.editRegion, let format = source?.metadata.audio?.format, format.sampleRate > 0 else { return }
-        rangeStartText = String(Double(range.startFrame) / format.sampleRate)
-        rangeEndText = String(Double(range.endFrame) / format.sampleRate)
+        let display = AudioCreationButtonHandler.displayedRange(draft.editRegion, source: source)
+        rangeStartText = display.0
+        rangeEndText = display.1
     }
     private func applyRange() {
         guard let format = source?.metadata.audio?.format,

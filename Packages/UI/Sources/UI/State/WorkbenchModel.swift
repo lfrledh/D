@@ -24,6 +24,51 @@ public final class WorkbenchModel {
         return true
     }
 
+    public var creatorMode: CreatorMode { projectSession.creatorMode }
+    public var availableCreatorModes: [CreatorMode] { projectSession.availableCreatorModes }
+    public var presentedDocument: ProjectDocument? { projectSession.presentedDocument }
+    public var recentProjects: [RecentProjectSummary] {
+        let entries = projectSession.recentProjects.map { RecentProjectSummary(id: $0.id.uuidString, name: $0.name, detail: "打开已保存项目") }
+        if entries.isEmpty && projectSession.hasLegacyRecentProject {
+            return [RecentProjectSummary(id: "last-project", name: "上次项目", detail: "打开原有项目记录")]
+        }
+        return entries
+    }
+    public func openRecentProject(id: String) async {
+        guard !isChangingProject, !refuseEditorClose() else { return }
+        if id == "last-project" { await projectSession.restoreLastProject() }
+        else if let id = UUID(uuidString: id) { await projectSession.openRecentProject(id: id) }
+    }
+    public func switchCreatorMode(_ mode: CreatorMode) async {
+        guard !isChangingProject, !refuseEditorClose() else { return }
+        if await projectSession.selectCreatorMode(mode) { invalidateComparison() }
+    }
+    public func createVisibleDocument() async {
+        guard !isChangingProject, !refuseEditorClose() else { return }
+        switch creatorMode {
+        case .image: await createDocument()
+        case .text: await createTextDocument()
+        case .audio: await createAudioCreation()
+        }
+    }
+    public var visibleGenerationTitle: String {
+        switch creatorMode { case .image: "生成图片"; case .text: "改写所选文字"; case .audio: "生成声音候选" }
+    }
+    public var canRunVisibleGeneration: Bool {
+        guard presentedDocument != nil, !isChangingProject, !hasPendingEditor else { return false }
+        return switch creatorMode { case .image: projectSession.canGenerate; case .text: projectSession.canRewriteText; case .audio: projectSession.canGenerateAudioCreation }
+    }
+    public func generateVisible() async {
+        guard canRunVisibleGeneration else { return }
+        switch creatorMode {
+        case .image: await generate()
+        case .text: await projectSession.rewriteText()
+        case .audio:
+            guard let id = presentedDocument?.id else { return }
+            await projectSession.generateAudioCreation(contextID: projectSession.audioCreationContextID, documentID: id)
+        }
+    }
+
     public var manifest: ProjectManifest? { projectSession.manifest }
     public var projectURL: URL? { projectSession.projectURL }
     public var modelName: String? { projectSession.modelName }
@@ -103,28 +148,33 @@ public final class WorkbenchModel {
     /// Every callback captures the rendered project/document identity before any file panel or await.
     public func audioCreationActions(contextID: UUID, documentID: UUID) -> AudioCreationActions {
         let session = projectSession
+        let epoch = session.navigationEpoch
+        let current = { session.navigationEpoch == epoch && session.audioCreationContextID == contextID && session.activeDocumentID == documentID }
         return AudioCreationActions(
-            generate: { Task { await session.generateAudioCreation(contextID: contextID, documentID: documentID) } },
-            cancel: { Task { await session.cancelAudioCreation(contextID: contextID, documentID: documentID) } },
+            generate: { Task { guard current() else { return }; await session.generateAudioCreation(contextID: contextID, documentID: documentID) } },
+            cancel: { Task { guard current() else { return }; await session.cancelAudioCreation(contextID: contextID, documentID: documentID) } },
             save: { Task { _ = await session.saveAudioCreation(contextID: contextID, documentID: documentID) } },
-            select: { id in Task { await session.mutateAudioCreationCandidate(.select(id), contextID: contextID, documentID: documentID) } },
-            play: { id in Task { await session.playAudioCreationAsset(id: id, contextID: contextID, documentID: documentID) } },
+            select: { id in Task { guard current() else { return }; await session.mutateAudioCreationCandidate(.select(id), contextID: contextID, documentID: documentID) } },
+            play: { id in Task { guard current() else { return }; await session.playAudioCreationAsset(id: id, contextID: contextID, documentID: documentID) } },
             stop: {
+                guard current() else { return }
                 guard session.audioCreationContextID == contextID, session.activeDocumentID == documentID else { return }
                 session.audioCreationTransport.stopPlayback()
             },
-            adopt: { id in Task { await session.mutateAudioCreationCandidate(.adopt(id), contextID: contextID, documentID: documentID) } },
-            reject: { id, rejected in Task { await session.mutateAudioCreationCandidate(.reject(id, rejected), contextID: contextID, documentID: documentID) } },
-            export: { id in Task { await self.exportAudioCreation(id: id, contextID: contextID, documentID: documentID) } },
+            adopt: { id in Task { guard current() else { return }; await session.mutateAudioCreationCandidate(.adopt(id), contextID: contextID, documentID: documentID) } },
+            reject: { id, rejected in Task { guard current() else { return }; await session.mutateAudioCreationCandidate(.reject(id, rejected), contextID: contextID, documentID: documentID) } },
+            export: { id in Task { guard current() else { return }; await self.exportAudioCreation(id: id, contextID: contextID, documentID: documentID) } },
             createFrom: { id in Task {
+                guard current() else { return }
                 guard session.audioCreationContextID == contextID, session.activeDocumentID == documentID else { return }
                 await self.createAudioCreation(sourceAssetID: id)
             } },
-            chooseModel: { Task { await self.chooseAudioCreationModel(contextID: contextID, documentID: documentID) } })
+            chooseModel: { Task { guard current() else { return }; await self.chooseAudioCreationModel(contextID: contextID, documentID: documentID) } })
     }
 
     public func chooseTextModel() async {
         guard !isChangingProject, !isBusy else { return }
+        let epoch = projectSession.navigationEpoch
         isChoosingLocation = true
         defer { isChoosingLocation = false }
         let panel = NSOpenPanel()
@@ -132,7 +182,7 @@ public final class WorkbenchModel {
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = false
-        guard await panel.begin() == .OK, let url = panel.url else { return }
+        guard await panel.begin() == .OK, let url = panel.url, projectSession.navigationEpoch == epoch else { return }
         await projectSession.registerTextModel(at: url)
     }
 
@@ -144,8 +194,8 @@ public final class WorkbenchModel {
         await projectSession.renameDocument(id: id, name: name)
     }
     public func switchDocument(to id: UUID) async {
-        await endComparison()
-        await projectSession.selectDocument(id: id)
+        guard !isChangingProject, !refuseEditorClose() else { return }
+        if await projectSession.selectDocument(id: id) { invalidateComparison() }
     }
     public func showAllArtworks() async { await endComparison(); await projectSession.showAllArtworks() }
     public func selectAsset(_ id: UUID?) async { await projectSession.selectAsset(id) }

@@ -70,8 +70,74 @@ public final class ProjectSession {
     public private(set) var textModelStatus = "选择已注册的 Qwen2.5 Instruct 4-bit 模型（0.5B／1.5B／7B／32B）"
     public private(set) var isTextWorking = false
     public private(set) var isRegisteringTextModel = false
+    public private(set) var creatorMode: CreatorMode = .image
+    public private(set) var navigationEpoch: UInt64 = 0
+    private var lastDocuments: [CreatorMode: UUID] = [:]
+    public var availableCreatorModes: [CreatorMode] {
+        [.image] + (session?.textBackendID == nil ? [] : [.text]) + (audioEnabled ? [.audio] : [])
+    }
+    /// The retained active document remains a storage fact while an empty workspace is visible.
+    public var presentedDocument: ProjectDocument? {
+        activeDocument.flatMap { CreatorMode($0.kind) == creatorMode ? $0 : nil }
+    }
+    public struct RecentProject: Identifiable, Codable, Sendable {
+        public let id: UUID
+        public let name: String
+        fileprivate let bookmark: Data
+    }
+    public var recentProjects: [RecentProject] {
+        guard let data = settings.data(forKey: "workbench.recentProjects.v1"), data.count <= 262_144,
+              let entries = try? JSONDecoder().decode([RecentProject].self, from: data) else { return [] }
+        return Array(entries.prefix(10))
+    }
+    public var hasLegacyRecentProject: Bool { settings.data(forKey: Self.projectBookmarkKey) != nil }
+    private func rememberProject() {
+        guard let manifest, let bookmark = projectLease?.bookmark else { return }
+        var entries = recentProjects.filter { $0.id != manifest.id }
+        entries.insert(RecentProject(id: manifest.id, name: manifest.name, bookmark: bookmark), at: 0)
+        if let data = try? JSONEncoder().encode(Array(entries.prefix(10))), data.count <= 262_144 {
+            settings.set(data, forKey: "workbench.recentProjects.v1")
+        }
+    }
+    public func openRecentProject(id: UUID) async {
+        guard let entry = recentProjects.first(where: { $0.id == id }), !isChangingProject,
+              await requestClose() else { return }
+        isChangingProject = true
+        defer { isChangingProject = false }
+        do {
+            let lease = try await access.restore(entry.bookmark)
+            do {
+                let candidate = try await ProjectStore.open(at: lease.url)
+                try await activate(candidate, lease: lease)
+            } catch { await access.release(lease); throw error }
+        } catch { report(error, context: "最近项目暂不可用；请连接原磁盘或使用打开项目重新定位") }
+    }
+
+    @discardableResult public func selectCreatorMode(_ mode: CreatorMode) async -> Bool {
+        guard manifest != nil, availableCreatorModes.contains(mode), navigationReady(),
+              let store, !isChangingProject, !closePending else { return false }
+        if let current = presentedDocument { lastDocuments[creatorMode] = current.id }
+        if let id = lastDocuments[mode], documents.contains(where: { $0.id == id && CreatorMode($0.kind) == mode }) {
+            return await selectDocument(id: id)
+        }
+        if let document = documents.first(where: { CreatorMode($0.kind) == mode }) {
+            return await selectDocument(id: document.id)
+        }
+        isChangingProject = true
+        defer { isChangingProject = false }
+        do {
+            try await prepareAudioNavigation()
+            try await flushDraft(to: store)
+            creatorMode = mode
+            navigationEpoch &+= 1
+            showingAllArtworks = false
+            audio?.resumeAdmissions()
+            return true
+        } catch { audio?.resumeAdmissions(); report(error, context: "草稿未能安全保存，仍留在当前模态"); return false }
+    }
+
     public var canRewriteText: Bool {
-        text?.canRewrite == true && textReference != nil && !isBusy && !isChangingProject
+        creatorMode == .text && text?.canRewrite == true && textReference != nil && !isBusy && !isChangingProject
             && !closePending && !showingAllArtworks && !isRegisteringTextModel
     }
     @ObservationIgnored private var textReference: ModelReference?
@@ -80,7 +146,7 @@ public final class ProjectSession {
     @ObservationIgnored private var textContextID = UUID()
     public var isBusy: Bool { !activeJobIDs.isEmpty || isTextWorking || audio?.isBusy == true }
     public var canGenerate: Bool {
-        manifest != nil && activeDocument?.kind == .image && !isTextWorking && ((selectedModelID != nil && selectedModelReady) || modelLease != nil)
+        creatorMode == .image && manifest != nil && activeDocument?.kind == .image && !isTextWorking && ((selectedModelID != nil && selectedModelReady) || modelLease != nil)
         && !isChangingProject && !showingAllArtworks && !closePending && pendingSaves.isEmpty
         && !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && activeJobIDs.count < 8
     }
@@ -209,6 +275,11 @@ public final class ProjectSession {
     }
 
     private func loadActiveDocument() {
+        if let document = activeDocument {
+            creatorMode = CreatorMode(document.kind)
+            lastDocuments[creatorMode] = document.id
+        }
+        navigationEpoch &+= 1
         if audioCreationDocumentID != activeDocumentID || activeDocument?.audioCreation == nil {
             audioCreationContextID = UUID()
             audioCreationTransport.stopPlayback()
@@ -401,6 +472,8 @@ public final class ProjectSession {
         projectURL = lease.url
         settings.set(lease.bookmark, forKey: Self.projectBookmarkKey)
         manifest = await candidate.snapshot()
+        lastDocuments = [:]
+        rememberProject()
         installAudioController(for: candidate)
         showingAllArtworks = false
         automaticResultSelectionEnabled = true
@@ -944,9 +1017,10 @@ public final class ProjectSession {
         catch { report(error, context: "创作名称未能保存") }
     }
 
-    public func selectDocument(id: UUID) async {
-        guard navigationReady() else { return }
-        guard let store, !isChangingProject, !closePending else { return }
+    @discardableResult public func selectDocument(id: UUID) async -> Bool {
+        guard navigationReady(), let target = documents.first(where: { $0.id == id }),
+              availableCreatorModes.contains(CreatorMode(target.kind)),
+              let store, !isChangingProject, !closePending else { return false }
         isChangingProject = true
         defer { isChangingProject = false }
         do {
@@ -955,7 +1029,8 @@ public final class ProjectSession {
             applyManifest(try await store.selectDocument(id: id))
             showingAllArtworks = false
             loadActiveDocument()
-        } catch { audio?.resumeAdmissions(); report(error, context: "草稿未能安全保存，仍留在当前创作") }
+            return true
+        } catch { audio?.resumeAdmissions(); report(error, context: "草稿未能安全保存，仍留在当前创作"); return false }
     }
 
     public func showAllArtworks() async {
@@ -1211,6 +1286,8 @@ public final class ProjectSession {
             imageProfile = .flux2Klein
             modelStatus = modelLibrary == nil ? "请选择已安装的 FLUX.2 Klein 4B q8 模型文件夹。" : "请在模型库中安装或选择可用模型。"
             manifest = nil
+            lastDocuments = [:]
+            navigationEpoch &+= 1
             showingAllArtworks = false
             projectURL = nil
             selectedAssetID = nil
@@ -1320,7 +1397,7 @@ public final class ProjectSession {
         return manifest?.assets.first { $0.id == id && $0.metadata.audio != nil }
     }
     public var canGenerateAudioCreation: Bool {
-        audioEnabled && audioCreationDraft != nil && audioReference != nil && session?.audioBackendID != nil
+        creatorMode == .audio && audioEnabled && audioCreationDraft != nil && audioReference != nil && session?.audioBackendID != nil
             && !isBusy && !isChangingProject && !closePending && !isRegisteringAudioModel && pendingSaves.isEmpty
             && !showingAllArtworks
     }

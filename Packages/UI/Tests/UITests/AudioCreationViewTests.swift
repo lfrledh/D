@@ -163,7 +163,7 @@ struct AudioCreationViewTests {
     }
 
     @Test
-    func narrowViewKeepsRequiredControlsAndUnicodeAsset() throws {
+    func narrowViewKeepsRequiredControlsAndUnicodeAsset() async throws {
         let candidate = asset(name: "这是一个特别特别长的中文候选名称 e\u{301} 👩‍💻，不能在窄窗口被截断")
         var draft = AudioCreationDraft(prompt: "很长的中文提示 e\u{301} 👩‍💻")
         var rectangles: [String: CGRect] = [:]
@@ -171,23 +171,17 @@ struct AudioCreationViewTests {
             draft: Binding(get: { draft }, set: { draft = $0 }), source: nil, candidates: [candidate],
             selectedAssetID: candidate.id, adoptedAssetID: nil, modelStatus: "模型已就绪", canGenerate: true,
             isBusy: false, progress: nil, status: nil, transport: AudioTransport(), actions: actions()
-        ).observingLayout { rectangles[$0] = $1 })
+        ).scrollingToCandidatesForLayoutCheck().observingLayout { rectangles[$0] = $1 })
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 520, height: 500), styleMask: [.borderless],
                               backing: .buffered, defer: false)
         window.contentView = host
         defer { window.contentView = nil }
         for width: CGFloat in [520, 1_000] {
             rectangles.removeAll()
-            settle(host, window: window, width: width)
-            // Candidate actions are lazily materialized below the input form. Scroll the
-            // real native viewport before measuring them; do not treat absence as passing.
-            let scrollView = try #require(scrollViews(in: host).first {
-                ($0.documentView?.bounds.height ?? 0) > $0.contentSize.height
-            })
-            let document = try #require(scrollView.documentView)
-            document.scroll(NSPoint(x: 0, y: max(0, document.bounds.height - scrollView.contentSize.height)))
-            scrollView.reflectScrolledClipView(scrollView.contentView)
-            settle(host, window: window, width: width)
+            await settle(host, window: window, width: width)
+            // Drive the real SwiftUI ScrollViewReader above. SwiftUI on macOS 26 need not
+            // expose an NSScrollView in NSHostingView.subviews; absence was a test assumption,
+            // not evidence of a missing or a working viewport. Require actual geometry below.
             let viewport = host.bounds.insetBy(dx: -1, dy: -1)
             for id in ["audio-create-candidate-\(candidate.id.uuidString)",
                        "audio-create-play-\(candidate.id.uuidString)", "audio-create-adopt-\(candidate.id.uuidString)",
@@ -196,22 +190,40 @@ struct AudioCreationViewTests {
                 let rectangle = try #require(rectangles[id], "missing \(id)")
                 #expect(rectangle.width > 0 && rectangle.height > 0)
                 #expect(rectangle.minX >= viewport.minX && rectangle.maxX <= viewport.maxX)
+                if id != "audio-create-candidate-\(candidate.id.uuidString)" {
+                    #expect(rectangle.minY >= viewport.minY && rectangle.maxY <= viewport.maxY)
+                }
             }
         }
     }
 
-    private func scrollViews(in view: NSView) -> [NSScrollView] {
-        (view as? NSScrollView).map { [$0] } ?? view.subviews.flatMap { scrollViews(in: $0) }
+    @Test func sourceWithoutRangeClearsDisplayedInterval() {
+        let range = AudioFrameRange(startFrame: 0, endFrame: 44_100)
+        #expect(AudioCreationButtonHandler.displayedRange(range, source: asset()).1 == "1.0")
+        let cleared = AudioCreationButtonHandler.displayedRange(nil, source: asset())
+        #expect(cleared.0.isEmpty && cleared.1.isEmpty)
+        #expect(AudioCreationButtonHandler.displayedRange(range, source: nil).0.isEmpty)
     }
 
-    private func settle(_ host: NSHostingView<AudioCreationView>, window: NSWindow, width: CGFloat) {
+    @Test func disabledSubmissionNeverSaysReady() {
+        let draft = AudioCreationDraft(prompt: "钢琴")
+        #expect(AudioCreationButtonHandler.submissionMessage(draft, source: nil,
+            hostAllowsGeneration: false, hasPendingRangeInput: false).contains("尚不能生成"))
+        #expect(AudioCreationButtonHandler.submissionMessage(draft, source: nil,
+            hostAllowsGeneration: true, hasPendingRangeInput: false) == "准备就绪。")
+        var inpaint = draft; inpaint.operation = .inpaint; inpaint.editRegion = .init(startFrame: 0, endFrame: 44_100)
+        #expect(AudioCreationButtonHandler.submissionMessage(inpaint, source: asset(),
+            hostAllowsGeneration: true, hasPendingRangeInput: true).contains("应用有效区间"))
+    }
+
+    private func settle(_ host: NSHostingView<AudioCreationView>, window: NSWindow, width: CGFloat) async {
         window.setContentSize(NSSize(width: width, height: 500))
         host.frame = NSRect(x: 0, y: 0, width: width, height: 500)
         let deadline = Date().addingTimeInterval(0.25)
         repeat {
             window.contentView?.layoutSubtreeIfNeeded()
             host.layoutSubtreeIfNeeded()
-            RunLoop.main.run(until: Date().addingTimeInterval(0.01))
+            try? await Task.sleep(for: .milliseconds(10))
         } while Date() < deadline
     }
 }

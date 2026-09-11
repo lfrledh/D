@@ -64,21 +64,17 @@ private struct WorkbenchCommands: Commands {
         CommandGroup(after: .importExport) {
             Button("导出所选作品…") { Task { await bootstrap.model?.exportSelected() } }
                 .keyboardShortcut("e", modifiers: [.command, .shift])
-                .disabled(modalResourceOperation || bootstrap.isTerminating || bootstrap.model?.selectedAsset == nil)
+                .disabled(modalResourceOperation || bootstrap.isTerminating || bootstrap.model?.selectedAsset == nil || bootstrap.model?.creatorMode != .image)
         }
         CommandMenu("创作") {
-            Button(bootstrap.model?.projectSession.text == nil ? "生成图片" : "改写所选文字") {
-                Task {
-                    if let project = bootstrap.model?.projectSession, project.text != nil { await project.rewriteText() }
-                    else { await bootstrap.model?.generate() }
-                }
+            Button(bootstrap.model?.visibleGenerationTitle ?? "生成") {
+                Task { await bootstrap.model?.generateVisible() }
             }
             .keyboardShortcut(.return, modifiers: [.command])
-            .disabled(modalResourceOperation || bootstrap.isTerminating ||
-                (bootstrap.model?.projectSession.text == nil ? bootstrap.model?.canGenerate != true : bootstrap.model?.projectSession.canRewriteText != true))
+            .disabled(modalResourceOperation || bootstrap.isTerminating || bootstrap.model?.canRunVisibleGeneration != true)
             Button("保存文稿") { Task { await bootstrap.model?.projectSession.saveText() } }
                 .keyboardShortcut("s")
-                .disabled(modalResourceOperation || bootstrap.isTerminating || bootstrap.model?.projectSession.text == nil)
+                .disabled(modalResourceOperation || bootstrap.isTerminating || bootstrap.model?.projectSession.text == nil || bootstrap.model?.creatorMode != .text)
         }
         CommandMenu("资源") {
             Button("管理模型…") {

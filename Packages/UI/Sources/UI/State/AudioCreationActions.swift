@@ -124,6 +124,23 @@ enum AudioCreationButtonHandler {
         }
     }
 
+    static func displayedRange(_ range: AudioFrameRange?, source: ProjectAsset?) -> (String, String) {
+        guard let range, let format = source?.metadata.audio?.format, format.sampleRate > 0 else { return ("", "") }
+        return (String(Double(range.startFrame) / format.sampleRate), String(Double(range.endFrame) / format.sampleRate))
+    }
+
+    static func submissionMessage(_ draft: AudioCreationDraft, source: ProjectAsset?,
+                                  hostAllowsGeneration: Bool, hasPendingRangeInput: Bool) -> String {
+        if draft.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return "请输入提示词。" }
+        if !numericInputsAreValid(draft) { return "参数不受当前模型支持；输入保持不变。" }
+        if draft.operation != .generate && source == nil { return "参考变体和区间重绘需要原声。" }
+        if draft.operation != .generate && !sourceIsEditable(source) { return "当前来源不能由该模型编辑。" }
+        if draft.operation == .inpaint && hasPendingRangeInput { return "请先应用有效区间，再生成。" }
+        if !canGenerate(draft, source: source) { return "区间必须在原声内且结束大于开始。" }
+        if !hostAllowsGeneration { return "尚不能生成，请检查模型状态或等待当前任务结束。" }
+        return "准备就绪。"
+    }
+
     static func frameRange(startText: String, endText: String, format: AudioFormatInfo) -> AudioFrameRange? {
         guard format.sampleRate.isFinite, format.sampleRate > 0,
               let startSeconds = Double(startText), startSeconds.isFinite,

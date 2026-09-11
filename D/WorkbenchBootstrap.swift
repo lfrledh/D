@@ -54,9 +54,9 @@ final class WorkbenchBootstrap {
             if let pendingProjectURL {
                 self.pendingProjectURL = nil
                 await model.openProject(at: pendingProjectURL)
-            } else {
-                await model.restoreLastProject()
             }
+            // Ordinary launch remains at the project chooser. A recent project opens only
+            // after an explicit selection; Finder open requests above retain their meaning.
         } catch {
             startupError = "无法打开模型库记录：\(error.localizedDescription)\n已有项目与模型文件未被删除。请检查存储后重试。"
         }
