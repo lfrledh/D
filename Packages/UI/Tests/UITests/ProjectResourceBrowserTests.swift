@@ -64,13 +64,18 @@ struct ProjectResourceBrowserTests {
                                              onOpenDocument: { opened.append($0) })
             .observingLayout { rectangles[$0] = $1 }
             .observingActions { actions = $0 }
-        let host = NSHostingView(rootView: browser)
+        var host = NSHostingView(rootView: browser)
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 210, height: 520), styleMask: [.borderless],
                               backing: .buffered, defer: false)
         window.contentView = host
         defer { window.contentView = nil }
         for width: CGFloat in [210, 260] {
+            // A geometry observer emits changes, not a new sample on every layout pass.
+            // Use a fresh host for each independent width so unchanged button rectangles
+            // cannot disappear merely because the evidence dictionary was cleared.
             rectangles.removeAll()
+            host = NSHostingView(rootView: browser)
+            window.contentView = host
             await settle(host, window: window, width: width)
             for id in ["assets-filter-other", "resource-document-\(text.id.uuidString)", "asset-preview"] {
                 let rectangle = try #require(rectangles[id], "missing real control \(id)")
@@ -86,6 +91,10 @@ struct ProjectResourceBrowserTests {
         actual.setIncludeOtherModes(true)
         await settle(host, window: window, width: 260)
         #expect(opened.isEmpty)
+        actual.openSelected()
+        #expect(opened.isEmpty, "Changing the scope clears the preview selection.")
+        actual.select(.document(text.id))
+        await settle(host, window: window, width: 260)
         actual.openSelected()
         #expect(opened == [text.id])
     }
@@ -115,6 +124,7 @@ struct ProjectResourceBrowserTests {
         #expect(actual.selectedAudioDescription()?.contains("44100 Hz") == true)
         #expect(resolvedURLs == 0)
         actual.setIncludeOtherModes(true)
+        await settle(host, window: window, width: 260)
         actual.select(.media(unknown.id))
         await settle(host, window: window, width: 260)
         #expect(resolvedURLs == 0)
@@ -126,7 +136,7 @@ struct ProjectResourceBrowserTests {
         for _ in 0..<8 {
             window.contentView?.layoutSubtreeIfNeeded()
             host.layoutSubtreeIfNeeded()
-            await Task.yield()
+            try? await Task.sleep(for: .milliseconds(10))
         }
     }
 }
