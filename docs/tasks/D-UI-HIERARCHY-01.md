@@ -128,3 +128,28 @@ Liquid Glass采用Apple原生导航、工具栏、按钮材质；画布、正文
 所有权：Lead修改共享ProjectSession/WorkbenchModel/WorkbenchView/Bootstrap/DApp及契约/验收/全局文档。NAV-S只写新壳层视图和其测试；NAV-A只写资源投影/视图/其测试。两个Worker不改公共契约、旧代码、任务规格、存储或运行时。各自初交+两次修复，允许一次有界Lead接管，网络关闭，无GPU/GUI/依赖安装；受限CLI预检后才IMPLEMENT。重构建/原生GUI由Lead串行独立目录；未通过路径不默认接管已验收功能。
 
 验收：导航保存失败留原现场；文字生成/候选不得隐式丢弃；空模态、返回/重新打开、Unicode、A-B-A和菜单路由；资产跨模态浏览不改编辑状态/采用/参考，未知媒体/无来源可见；860×580、1024/1440及长中文emoji布局；图文已有行为回归。音频VIEW先修源区间/禁用提示/可信布局后非实现者审核；真实音频应用能力单列，不以合成音频证明。证据放本任务run-20260911T001411Z-implementation；用户scheme和普通D摘要前后核对。完成具体SHA组合验收后源固定SHA快进与复验，再按授权推送工作分支。
+
+
+## NAV2 实施恢复检查点：组件/装配通过，原生完整验收受阻
+
+2026-09-11。原源分支/HEAD仍为codex/inference-foundation / fee074c70fb39bd9a99d146b708d6d80fd2d820e；本轮没有接纳源或推送。隔离候选codex/d-ui-hierarchy-01，代码/测试受测8c326f858ed9e6c908e144f9f3da49f579209b14；本次结案仅追加有限记录，最终完整SHA写同run外部回执，不自引用提交。实现已完成，不能将原生验收缺口写成阶段完成。
+
+实现：普通启动项目页；最近项目显式打开；项目内顶部模态、左侧创作/资产、中央编辑/候选、右侧可收起参数。资产默认当前模态，跨模态预览不导航/采用；文字文稿与媒体文件分别投影。ProjectSession持有导航代次和各模态最近文档，保留保存/候选离开门槛；异步主操作捕获mode/epoch/document，A-B-A旧命令拒绝。文字生成冻结选段由共享TextDraftSession持有，拆分参数/正文后仍指同一真实请求。窄窗折叠参数，保持原NSTextView；图像/文字精度、型号和生成参数契约未改变。
+
+版本与来源：保留历史合入AW1服务0295618cb851511c8aa3c207a3a4b887913d7501与旧VIEW0daf36b6f4f3922c1d052b6cb08de6bf31cb3ddd；共同契约37c32370c7bab5ec725764e106f0d40124a9c136。Sol/high壳层73414889839f44fe7ead3c2f51e25996834f1799与Terra/medium资产7d411f279fe99dad83b93c8ab8dcc9ef94b9f6d6，分别独立受限外盘树、禁网，实际实施重叠约225秒；不重做机制试验。资产初交/两修后测试仍失败，Lead一次测试收尾；生产主体仍Terra，不能记为Terra独立通过。Lead统一共享接线、旧VIEW三缺口有限修补、原生装配修正；Sol/high线程01a08deb-6a0a-7360-9182-97a3fd9e5d45只读复核，按review/followup/final-check/native-delta逐项发现并确认修正，没有独立执行测试。
+
+|检查|具体结果与版本|
+|---|---|
+|工作台CPU/离屏|最终8c326f858ed9e6c908e144f9f3da49f579209b14，native-final-cpu报告291项/36套件、零失败；其中一个既有可选固定文字权重检查禁用，不能当真实推理。74.303秒含编译；其他阶段集合重叠，不叠加。|
+|原生应用/测试编译|test-build-4在同SHA通过，现有开发签名、独立DerivedData和既有离线依赖。前两次App装配失败分别缺UI导入和optional异步闭包推断，Lead明确@Sendable闭包后通过。未改签名方案。|
+|XCTest|首轮d790660fea6490366f8f0b720a31a21365017417在enabling automation mode超时，UI用例未执行；宿主关闭协调2项通过不能替代UI。一次有界重试在最新SHA仍未形成完整通过，具体退出/阶段见native/uitest-navigation-retry/result.json。未拼接各批次为9/9。|
+|CUA真实窗口|普通签名d790660：项目页、新建中文emoji项目、文字空态/编辑/保存、本模态资产、图文切换保留原文、约862px窄窗保留选区、文字/音频参数弹窗及返回最近列表已观察。最近项目点击后控制管道关闭，一次重连仍失败，重开不记通过。|
+|源/普通D保护|源个人scheme未暂存顺序修改、内容/大小/mtime/index保持；普通D四关键文件相同。候选源码在本轮记录前干净；源未接收新路径。|
+
+原生输入事件独立记录：一次Lead未等待GoToWindow确认便继续键入，使路径拼进项目名，原生Save在旧H09的UserTest目录创建一个唯一空测试项目（0资产、1空图像文档）；未覆盖/移动/删除旧项目。后续逐步核对面板目录/文件名/Save，在本run gui/projects创建正确项目。原空项目保留，不清理旧证据。另一次粘贴超时未当作中文输入成功；通过setValue且分别观察确认的中文项目名才记通过。保存文稿经真实manifest读取核对。CUA管道关闭后只结束确认为本run的PID84173，exit -15；不是通过退出菜单的验收证据，不碰普通D。详见gui/checkpoint.json、gui/result.json；系统级锁或全部进程结束未知。
+
+音频：旧VIEW来源切换区间/禁用提示/可信离屏布局三项已在NAV2有界收尾并通过CPU及非实现者检查，历史Terra两修和旧Lead失败不改写。AW1完整新音频、普通沙盒provider/解释器授权路径、麦克风/录音和显式格式转换仍未验收/完成；普通启动audioWorkbenchEnabled仍false，仅DEBUG隔离会话显示音频。不得凭本次参数页面宣称已能在普通D生成/录音。
+
+恢复：先核对源/候选完整SHA、个人修改、索引、控制工具与自有运行状态；本候选代码不再重写。下一动作只恢复真实UI连接，完成既有9个原生场景及近期项目/新标识实际检查；通过后按固定SHA快进源、源入口相关回归、有限文档收尾、获准push工作分支。音频H09/H15单列后续门槛，不将音乐/HUM/META另开新批。本次用量仅保留可观察CLI各轮墙钟，隐藏服务端解析、完整Lead归因及订阅实际费用unknown，不宣称成本最优。
+
+持久证据：D-Development/AgentTrials/D-UI-HIERARCHY-01/run-20260911T001411Z-implementation，索引final-receipt.json；worker-baseline/两Worker请求与运行结果、checks/native-final-cpu、shared-review、native、gui、protection-before/最终保护。大日志、截图和测试项目不入Git。

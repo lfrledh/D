@@ -17,3 +17,7 @@ Packages/UI/Tests/UITests/WorkbenchNavigationViewsTests.swift
 目录：/Volumes/CodexProjects/Codex/D-Worktrees/D-NAV-SHELL-01。仅本工作树及/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-UI-HIERARCHY-01/run-20260911T001411Z-implementation/D-NAV-SHELL-01/worker-output、/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-UI-HIERARCHY-01/run-20260911T001411Z-implementation/D-NAV-SHELL-01/tmp可写，网络false。不写共享.git、源树/应用/模型/旧证据。正常输出worker-output；TMPDIR/CLANG_MODULE_CACHE_PATH/PYTHONPYCACHEPREFIX/XDG_CACHE_HOME都在此tmp。无需全包构建；可CPU静态检查/本文件Swift解析，测试由Lead串行跑原SwiftPM离线入口。SwiftPM内层沙箱拒绝则停报，不禁用/提权。Python仅tokenize.open+compile内存检查，不默认py_compile。预授权安全降级仅同一已授权tmp内路径；未知权限事件立即暂停Lead，不能自行绕行。
 
 首次仅PRECHECK：返回任务修订、实际cwd/root/commonGit/HEAD/branch、允许文件和验收摘要，暂停。Lead核对CLI实际模型/effort/workspace-write/networkfalse/writeRoots后同线程IMPLEMENT。实现初交+最多2修；最多900秒，阻塞及时返回。结果在回传消息/worker-output：文件、变更原因、检查/异常、剩余风险、自有进程状态。规格和验收不许降级。
+
+
+## NAV2 候选交付
+Sol/high线程01a08dd8-f3cb-7a91-bf65-81b173c77816从共同基线37c32370c7bab5ec725764e106f0d40124a9c136实施，候选73414889839f44fe7ead3c2f51e25996834f1799已合入隔离NAV树。初交6方法/8展开通过；Lead非实现者检查，未追加普通修复。请求与turn_context的模型/强度/cwd/受限写根/禁网匹配。实施00:26:11—00:34:12 UTC，与资产Worker重叠。最终ps枚举被拒绝后停止该动作，无绕过；自有执行回执rc0，系统级进程结论unknown。整体NAV原生完整验收尚有环境缺口，见主任务最新检查点；不是独立发布。

@@ -20,3 +20,8 @@ Packages/UI/Tests/UITests/ProjectResourceBrowserTests.swift
 目录：/Volumes/CodexProjects/Codex/D-Worktrees/D-NAV-ASSET-01。仅本工作树及/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-UI-HIERARCHY-01/run-20260911T001411Z-implementation/D-NAV-ASSET-01/worker-output、/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-UI-HIERARCHY-01/run-20260911T001411Z-implementation/D-NAV-ASSET-01/tmp可写，网络false。不写共享.git、源树/应用/模型/旧证据。正常输出worker-output；TMPDIR/CLANG_MODULE_CACHE_PATH/PYTHONPYCACHEPREFIX/XDG_CACHE_HOME都在此tmp。无需全包构建；可CPU静态检查/本文件Swift解析，测试由Lead串行跑原SwiftPM离线入口。SwiftPM内层沙箱拒绝则停报，不禁用/提权。Python仅tokenize.open+compile内存检查，不默认py_compile。预授权安全降级仅同一已授权tmp内路径；未知权限事件立即暂停Lead，不能自行绕行。
 
 首次仅PRECHECK：返回任务修订、实际cwd/root/commonGit/HEAD/branch、允许文件和验收摘要，暂停。Lead核对CLI实际模型/effort/workspace-write/networkfalse/writeRoots后同线程IMPLEMENT。实现初交+最多2修；最多900秒，阻塞及时返回。结果在回传消息/worker-output：文件、变更原因、检查/异常、剩余风险、自有进程状态。规格和验收不许降级。
+
+
+## NAV2 候选交付与预算结果
+Terra/medium线程01a08dd8-edd5-7960-a480-1564cffa5b49，实际请求/上下文目录、受限写根和禁网匹配。初交后Lead指出边界/覆盖缺口；修复1测试夹具参数错误导致编译失败；修复2类型问题解决但窄窗几何测试失败。普通两修用尽，失败候选8f6d10cd6467661b1288cf4992d18f244db2c6c3保留。
+Lead一次限定测试收尾采用每个宽度独立NSHostingView，并按筛选真实重置先清空后显式选择；断言未删、生产代码未重写，3方法通过。候选7d411f279fe99dad83b93c8ab8dcc9ef94b9f6d6已合入隔离NAV树；Sol/high followup非实现者检查接受该测试差异。归因为Terra生产实现及两修、Lead测试收尾，不是Terra独立成功。初实施00:26:01—00:29:56 UTC，与壳层Worker真实重叠；各轮耗时保存process.json，实际订阅费用unknown。原生最终资源筛选/预览仍等待完整NAV GUI验收，不以离屏测试替代。
