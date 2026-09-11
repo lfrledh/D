@@ -153,3 +153,20 @@ Liquid Glass采用Apple原生导航、工具栏、按钮材质；画布、正文
 恢复：先核对源/候选完整SHA、个人修改、索引、控制工具与自有运行状态；本候选代码不再重写。下一动作只恢复真实UI连接，完成既有9个原生场景及近期项目/新标识实际检查；通过后按固定SHA快进源、源入口相关回归、有限文档收尾、获准push工作分支。音频H09/H15单列后续门槛，不将音乐/HUM/META另开新批。本次用量仅保留可观察CLI各轮墙钟，隐藏服务端解析、完整Lead归因及订阅实际费用unknown，不宣称成本最优。
 
 持久证据：D-Development/AgentTrials/D-UI-HIERARCHY-01/run-20260911T001411Z-implementation，索引final-receipt.json；worker-baseline/两Worker请求与运行结果、checks/native-final-cpu、shared-review、native、gui、protection-before/最终保护。大日志、截图和测试项目不入Git。
+
+
+## 2026-09-11 真人返回验收与源接纳
+
+任务仍D-UI-HIERARCHY-01 / NAV2。本轮run为`D-Development/AgentTrials/D-UI-HIERARCHY-01/run-20260911T110719Z-human-return`，没有新产品任务或实现Worker；Astra Lead执行原生验证并作测试入口修正，同一受限Sol/high只读CLI非实现者审核。源/候选起点fee074c70fb39bd9a99d146b708d6d80fd2d820e / d8c738cc82edd905219c3e30933a36ae3382444a，与8c326f858ed9e6c908e144f9f3da49f579209b14的原有产品及CPU证据逐文件核对。
+
+用户报告xctest提示已输入密码批准，具体资源文字unknown。随后首次实际运行9项UI，7通过/2在完整路径前置检查失败；宿主因普通签名恢复后未重新build-for-testing而未加载。本轮没有修改签名配置。Lead的fba3c94e38f586fc4be3a09d2b6fcefe8f2ea2f4只增加有界路径等待/诊断，重新准备宿主后UI6/9、宿主2/2；并未验收成功。附件显示一项失败的initial/final路径都完整而2秒waiter超时（总观测约4.91秒），因此不能沿用“路径持续缺字”推断。另一个实际产品流程失败是旧测试查找已折叠参数栏中的标签，862px窗口的候选缩略条实际上显示了所选候选。
+
+最终测试代码bbfc72d3d4606ca96dc3c53b08fd59a602796f6f：已有完整路径直接使用，否则按原有8秒等待惯例等完整值；最终精确匹配断言保留，不重新键入、不用剪贴板/短路径、不确认部分路径。候选检查改从真实缩略条要求同名且selected，编辑/派生参数经真实toggle打开，窄窗popover通过Escape关闭后再操作外部导航。没有产品、精度、模型、存储或签名实现变更；原始失败与新诊断保留，没有靠改编号/换模型刷新Worker预算。最后一次有证据依据的适配完成后整体复验通过。
+
+验收：native/uitest-harness-finish/result.json，bbfc72…同一attempt UI9/9、宿主2/2、exit0；实际图像候选编辑/收藏/采用/比较/实际条件派生和重开、新项目/模态/资产只读浏览/文字保存/最近重开均执行。ordinary-after-acceptance恢复普通隔离构建并核对Sandbox、无测试例外。源码快进至bbfc72…后checks/source-after-integration从源路径重新编译/执行，291项报告、1既有可选权重跳过、零失败；无GPU/模型。源入口与候选的代码/测试一致，scheme例外按授权保留。其后四份获准文档结案与实际最终SHA、push结果关联final-receipt.json；不声称UI曾在该后续文档提交重新运行。
+
+H09真实检查：CUA创建唯一外盘项目H09-录音验收.dproject，点击Start后报AudioQueueStart InvalidDevice(-66680)。只读系统设备报告无输入，afinfo确认48kHz单声道float32 CAF但0帧/0音频字节，manifest资产0、pending预约1；点击保留后正常Quit，进程90339 exit0。没有把文件头当成功录音。H09还需输入设备及真人录音/试听/保存重开；普通沙盒完整音频provider和转换仍未验收，不启用普通音频入口。用户未对接入设备给出完成答复时，不假定已就绪。
+
+来源：原壳层Sol、资产Terra初交/两修与Lead收尾、共享Lead和既有非实现者审核保持；本轮仅Lead测试适配，Sol/high线程01a08deb-6a0a-7360-9182-97a3fd9e5d45三次只读诊断/差异审查（非独立执行测试），请求和可见turn_context均Sol/high/read-only，隐藏服务端解析unknown。review/model-evidence.json及各request/process/events为索引。首次审核Git wrapper的缓存拒绝与后续绝对Git改用分开保留；无可见成功越界/提权，源保护始终核对。原样记录本轮各CLI usage和墙钟，不重算旧样本、不混加缓存输入；完整Lead归因/订阅费用unknown。
+
+恢复：NAV2源已接纳，候选分支/旧证据保留；个人scheme的1→6、sha256 ca3635d88aa5a15397b90e528667c66c0e6db7e596176e885c79d194b544206c、原索引及未暂存状态保持，普通D四文件未改。全部自有任务退出状态以本run最终回执为准，不声称系统写锁。后续先读源CURRENT_ACTIONS与本回执核对真实HEAD；H09等待设备，H15仍工程/真人门槛，本次不启动下一产品批次。
