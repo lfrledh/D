@@ -27,6 +27,7 @@ final class WorkbenchBootstrap {
                 in: .userDomainMask, appropriateFor: nil, create: true)
             var settings = UserDefaults.standard
             var libraryDirectory = support.appendingPathComponent("D/ModelLibrary", isDirectory: true)
+            var audioWorkbenchEnabled = false
             #if DEBUG
             // UI fixtures exercise the real services and native file panels, while keeping
             // project bookmarks and installation recovery separate from the user's session.
@@ -36,11 +37,15 @@ final class WorkbenchBootstrap {
                 settings = isolated
                 libraryDirectory = support.appendingPathComponent("D/UITests/\(id.uuidString)/ModelLibrary",
                     isDirectory: true)
+                audioWorkbenchEnabled = AudioWorkbenchIsolation.isEnabled(
+                    environment: ProcessInfo.processInfo.environment
+                )
             }
             #endif
             let library = try await ModelLibrary(stateDirectory: libraryDirectory)
             let model = WorkbenchModel(sessionFactory: AppSessionFactory.makeSession,
-                settings: settings, modelLibrary: library)
+                settings: settings, modelLibrary: library,
+                audioEnabled: audioWorkbenchEnabled, audioRecordingEnabled: audioWorkbenchEnabled)
             let observer = ModelLibraryModel(library: library)
             self.library = library
             self.model = model

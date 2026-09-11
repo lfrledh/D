@@ -6,6 +6,7 @@ import SwiftUI
 public struct WorkbenchView: View {
     @Bindable private var model: WorkbenchModel
     private let library: ModelLibraryModel?
+    private var layoutProbe: ((String, CGRect) -> Void)?
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
     @State private var showInspector = true
     @State private var showTasks = true
@@ -14,6 +15,13 @@ public struct WorkbenchView: View {
     public init(model: WorkbenchModel, library: ModelLibraryModel? = nil) {
         self.model = model
         self.library = library
+    }
+
+    /// Internal rendered-geometry observation; no foreground or accessibility claim.
+    func observingLayout(_ observer: @escaping (String, CGRect) -> Void) -> Self {
+        var copy = self
+        copy.layoutProbe = observer
+        return copy
     }
 
     public var body: some View {
@@ -71,13 +79,17 @@ public struct WorkbenchView: View {
         } detail: {
             VStack(spacing: 0) {
                 canvas.frame(maxWidth: .infinity, maxHeight: .infinity)
-                if let jobs = model.manifest?.jobs, !jobs.isEmpty {
+                if model.activeDocument?.kind == .image,
+                   let jobs = model.manifest?.jobs, !jobs.isEmpty {
                     Divider()
                     WorkbenchTasks(model: model, isExpanded: $showTasks)
                 }
             }
             .navigationTitle(model.manifest?.name ?? "D")
-            .inspector(isPresented: Binding(get: { showInspector && model.activeDocument?.kind != .text }, set: { showInspector = $0 })) {
+            .inspector(isPresented: Binding(
+                get: { showInspector && model.activeDocument?.kind == .image },
+                set: { showInspector = $0 }
+            )) {
                 GenerationInspector(model: model, library: library)
                     .inspectorColumnWidth(min: 280, ideal: 310, max: 400)
             }
@@ -105,42 +117,47 @@ public struct WorkbenchView: View {
                     .help("项目操作")
                 }
                 ToolbarItemGroup(placement: .primaryAction) {
-                    RecipeHandoffButton(model: model)
-                    if let library {
-                        Button {
-                            library.isPresented = true
-                        } label: {
-                            Label("模型库", systemImage: "cube.transparent")
+                    if model.activeDocument?.kind != .audio {
+                        RecipeHandoffButton(model: model)
+                        if let library {
+                            Button {
+                                library.isPresented = true
+                            } label: {
+                                Label("模型库", systemImage: "cube.transparent")
+                            }
+                            .accessibilityIdentifier("open-model-library")
+                            .help(library.hasActiveWork ? "模型库有 \(library.activityCount) 项安装操作进行中" : "管理、安装和选择模型")
                         }
-                        .accessibilityIdentifier("open-model-library")
-                        .help(library.hasActiveWork ? "模型库有 \(library.activityCount) 项安装操作进行中" : "管理、安装和选择模型")
-                    }
-                    Button {
-                        guard let job = model.selectedJob else { return }
-                        Task { await model.copySettings(from: job.id) }
-                    } label: {
-                        Label("基于条件新建创作", systemImage: "arrow.branch")
-                    }
-                    .disabled(model.selectedJob == nil)
-                    .accessibilityIdentifier("copy-settings")
-                    .help("将实际提示词与 seed 复制到独立创作；不使用图片作为输入")
+                        Button {
+                            guard let job = model.selectedJob else { return }
+                            Task { await model.copySettings(from: job.id) }
+                        } label: {
+                            Label("基于条件新建创作", systemImage: "arrow.branch")
+                        }
+                        .disabled(model.selectedJob == nil)
+                        .accessibilityIdentifier("copy-settings")
+                        .audioMeasured("copy-settings", probe: layoutProbe)
+                        .help("将实际提示词与 seed 复制到独立创作；不使用图片作为输入")
 
-                    Button {
-                        Task { await model.exportSelected() }
-                    } label: {
-                        Label("导出作品…", systemImage: "square.and.arrow.up")
-                    }
-                    .disabled(model.selectedAsset == nil)
-                    .accessibilityIdentifier("export-artwork")
-                    .help("导出原始 PNG")
+                        Button {
+                            Task { await model.exportSelected() }
+                        } label: {
+                            Label("导出作品…", systemImage: "square.and.arrow.up")
+                        }
+                        .disabled(model.selectedAsset == nil)
+                        .accessibilityIdentifier("export-artwork")
+                        .audioMeasured("export-artwork", probe: layoutProbe)
+                        .help("导出原始 PNG")
 
-                    Button {
-                        withAnimation(reduceMotion ? nil : .default) { showInspector.toggle() }
-                    } label: {
-                        Label("创作参数", systemImage: "sidebar.right")
+                        Button {
+                            withAnimation(reduceMotion ? nil : .default) { showInspector.toggle() }
+                        } label: {
+                            Label("创作参数", systemImage: "sidebar.right")
+                        }
+                        .accessibilityIdentifier("toggle-inspector")
+                        .audioMeasured("toggle-inspector", probe: layoutProbe)
+                        .help("显示或隐藏创作参数")
                     }
-                    .accessibilityIdentifier("toggle-inspector")
-                    .help("显示或隐藏创作参数")
                 }
             }
         }
@@ -153,7 +170,44 @@ public struct WorkbenchView: View {
     }
 
     @ViewBuilder private var canvas: some View {
-        if !model.showingAllArtworks, let text = model.projectSession.text {
+        if !model.showingAllArtworks, let document = model.activeDocument,
+           let draft = model.projectSession.audioCreationDraft, document.audioCreation != nil {
+            let session = model.projectSession
+            let context = session.audioCreationContextID
+            let jobID = session.documentJobs.last(where: { session.activeJobIDs.contains($0.id) })?.id
+            AudioCreationView(draft: Binding(
+                get: { session.audioCreationDraft ?? draft },
+                set: { session.updateAudioCreationDraft($0, contextID: context, documentID: document.id) }),
+                source: session.audioCreationSource, candidates: session.audioCreationCandidates,
+                selectedAssetID: document.selectedAssetID, adoptedAssetID: document.adoptedAssetID,
+                modelStatus: session.audioModelStatus, canGenerate: session.canGenerateAudioCreation,
+                isBusy: session.isBusy || session.isRegisteringAudioModel,
+                progress: jobID.flatMap { session.progress[$0] },
+                status: jobID.flatMap { session.phases[$0] } ?? session.audioCreationSaveStatus,
+                transport: session.audioCreationTransport,
+                actions: model.audioCreationActions(contextID: context, documentID: document.id))
+                .id(document.id)
+        } else if !model.showingAllArtworks, model.activeDocument?.kind == .audio,
+           let audio = model.projectSession.audio {
+            VStack(spacing: 0) {
+                if let assetID = model.activeDocument?.audioDraft?.assetID {
+                    HStack {
+                        Button("基于原声创建 AI 候选", systemImage: "waveform.badge.plus") {
+                            Task { await model.createAudioCreation(sourceAssetID: assetID) }
+                        }
+                        .disabled(model.isBusy)
+                        .accessibilityIdentifier("audio-create-from-original")
+                        Spacer()
+                    }.padding(.horizontal, 20).padding(.top, 12)
+                }
+                AudioWorkbenchView(controller: audio,
+                               recordingEnabled: model.audioRecordingEnabled,
+                               navigationInProgress: model.projectSession.isChangingProject,
+                               actions: audioActions)
+                .observingLayout { id, rectangle in layoutProbe?(id, rectangle) }
+                .id(audio.contextID)
+            }
+        } else if !model.showingAllArtworks, let text = model.projectSession.text {
             let project = model.projectSession
             let id = text.editor.document.id
             VStack(spacing: 0) {
@@ -196,6 +250,88 @@ public struct WorkbenchView: View {
             }
         }
     }
+
+    private var audioActions: AudioWorkbenchProductionActions {
+        let contextID = model.projectSession.audio?.contextID
+        let documentID = model.activeDocumentID
+        return AudioWorkbenchProductionActions(
+            importOriginal: contextID.map { model.audioImportAction(contextID: $0, documentID: documentID) } ?? {},
+            startRecording: { Task { await model.startAudioRecording() } },
+            finishRecording: { Task { await model.finishAudioRecording() } },
+            refreshInspection: { contextID, documentID in
+                await model.projectSession.refreshActiveAudioInspection(
+                    contextID: contextID, documentID: documentID
+                )
+            },
+            saveNote: { contextID, documentID in
+                await model.projectSession.saveAudioNote(
+                    contextID: contextID, documentID: documentID
+                )
+            },
+            addClip: { contextID, documentID in
+                await model.projectSession.addAudioClip(
+                    contextID: contextID, documentID: documentID
+                )
+            },
+            discardInput: { contextID, documentID in
+                model.projectSession.discardAudioEditorInput(
+                    contextID: contextID, documentID: documentID
+                )
+            },
+            selectClip: { id, contextID, documentID in
+                if let id {
+                    await model.projectSession.selectAudioClip(
+                        id: id, contextID: contextID, documentID: documentID
+                    )
+                } else {
+                    await model.projectSession.selectFullAudio(
+                        contextID: contextID, documentID: documentID
+                    )
+                }
+            },
+            prepareRange: { range, contextID, documentID in
+                await model.projectSession.prepareAudioPlayback(
+                    range: range, contextID: contextID, documentID: documentID
+                )
+            },
+            exportOriginal: { contextID, documentID in
+                Task {
+                    await model.exportOriginalAudio(
+                        contextID: contextID, documentID: documentID
+                    )
+                }
+            },
+            exportSavedClip: { id, contextID, documentID in
+                Task {
+                    await model.exportSavedAudioClip(
+                        id: id, contextID: contextID, documentID: documentID
+                    )
+                }
+            },
+            exportRange: { range, revision, contextID, documentID in
+                Task {
+                    await model.exportAudioRange(
+                        range, editorRevision: revision,
+                        contextID: contextID, documentID: documentID
+                    )
+                }
+            },
+            retryCapture: { id, contextID, renderDocumentID in
+                Task {
+                    await model.retryPendingAudioCapture(
+                        id: id, contextID: contextID,
+                        renderDocumentID: renderDocumentID
+                    )
+                }
+            },
+            keepCapture: { id, contextID, renderDocumentID in
+                model.keepPendingAudioCaptureForRecovery(
+                    id: id, contextID: contextID,
+                    renderDocumentID: renderDocumentID
+                )
+            }
+        )
+    }
 }
 
 private struct ArtworkSidebar: View {
@@ -226,7 +362,7 @@ private struct ArtworkSidebar: View {
                         Button {
                             Task { await model.switchDocument(to: document.id) }
                         } label: {
-                            Label(document.name, systemImage: document.kind == .text ? "doc.text" : "doc.text.image")
+                            Label(document.name, systemImage: documentIcon(document.kind))
                                 .lineLimit(2)
                                 .fontWeight(!model.showingAllArtworks && model.activeDocumentID == document.id ? .semibold : .regular)
                                 .frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 8)
@@ -264,6 +400,18 @@ private struct ArtworkSidebar: View {
                         .frame(maxWidth: .infinity, alignment: .leading).padding(8)
                 }
                 .accessibilityIdentifier("new-text-document")
+                if let audio = model.projectSession.audio {
+                    Button {
+                        Task { await model.createAudioCreation() }
+                    } label: {
+                        Label("新建声音创作", systemImage: "waveform.badge.plus")
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .padding(.horizontal, 16)
+                    .disabled(model.isBusy)
+                    .accessibilityIdentifier("audio-create-new")
+                    audioSidebar(audio)
+                }
                 HStack {
                     sidebarHeading(model.showingAllArtworks ? "全部作品" : "候选作品")
                     Spacer()
@@ -303,6 +451,73 @@ private struct ArtworkSidebar: View {
         Text(name).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
             .padding(.horizontal, 8).padding(.top, 10)
             .accessibilityAddTraits(.isHeader)
+    }
+
+    private func documentIcon(_ kind: ProjectDocumentKind) -> String {
+        switch kind {
+        case .image: "doc.text.image"
+        case .text: "doc.text"
+        case .audio: "waveform"
+        }
+    }
+
+    @ViewBuilder private func audioSidebar(_ audio: ProjectAudioController) -> some View {
+        let contextID = audio.contextID
+        let renderDocumentID = model.activeDocumentID
+        sidebarHeading("声音")
+        Button(action: model.audioImportAction(contextID: contextID, documentID: renderDocumentID)) {
+            Label("导入原声…", systemImage: "waveform.badge.plus")
+                .frame(maxWidth: .infinity, alignment: .leading).padding(8)
+        }
+        .disabled(model.isChangingProject || audio.isBusy)
+        .accessibilityIdentifier("sidebar-audio-import")
+        if audio.transport.state == .recording || audio.transport.state == .requestingPermission {
+            Button {
+                Task { await model.finishAudioRecording() }
+            } label: {
+                Label(audio.transport.state == .recording ? "结束录音" : "取消等待",
+                      systemImage: "stop.fill")
+                    .frame(maxWidth: .infinity, alignment: .leading).padding(8)
+            }
+            .accessibilityIdentifier("sidebar-audio-record-finish")
+        } else {
+            Button {
+                Task { await model.startAudioRecording() }
+            } label: {
+                Label(model.audioRecordingEnabled ? "开始录音" : "录音尚未启用",
+                      systemImage: model.audioRecordingEnabled ? "mic.fill" : "mic.slash")
+                    .frame(maxWidth: .infinity, alignment: .leading).padding(8)
+            }
+            .disabled(!model.audioRecordingEnabled)
+            .accessibilityIdentifier("sidebar-audio-record-start")
+            Text(model.audioRecordingEnabled
+                 ? "点击开始录音后请求麦克风许可；结束后保存在本地项目。"
+                 : "麦克风录音暂未启用；不会申请系统许可。")
+                .font(.caption).foregroundStyle(.secondary).padding(.horizontal, 8)
+        }
+        ForEach(audio.pendingCaptures) { capture in
+            VStack(alignment: .leading, spacing: 4) {
+                Text("待恢复：\(capture.name)").font(.caption).lineLimit(1)
+                HStack {
+                    Button("重试") {
+                        Task {
+                            await model.retryPendingAudioCapture(
+                                id: capture.id, contextID: contextID,
+                                renderDocumentID: renderDocumentID
+                            )
+                        }
+                    }
+                    Button("保留") {
+                        model.keepPendingAudioCaptureForRecovery(
+                            id: capture.id, contextID: contextID,
+                            renderDocumentID: renderDocumentID
+                        )
+                    }
+                }
+            }
+            .padding(.horizontal, 8)
+            .accessibilityIdentifier("sidebar-audio-recovery-\(capture.id.uuidString)")
+        }
     }
 
     private func candidateRow(_ asset: ProjectAsset) -> some View {
