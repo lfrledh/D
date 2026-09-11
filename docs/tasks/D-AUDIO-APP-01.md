@@ -27,3 +27,25 @@ CPU局部与组合、离线独立App编译、普通沙盒部署、真实SA3三�
 
 ## APP1 接线细化（Lead，2026-09-11）
 PACK初交与两修已接受（14CPU与8独立反例，未相加），实际打包/迁移导入/--inspect通过，不是App部署。ACCESS1由独立Sol/high实现隐式授权接收，仅两个Python文件。Lead新增AudioProviderAccess.swift及独立CPU夹具，生产者只向固定子进程传model/run及必要源资产目录，私有0600清单不进入项目/日志/媒体来源；模型与项目lease仍由应用保有。原CLI保持可用；普通App激活/部署、GPU与GUI未通过前不默认接管。父端不增加授权、签名或网络权限，不扫描目录；manifest只在实际子进程退出后按身份删除，未知替换保留并报错。原始provider请求/签名/精度规则不改。用户当前资源窗口答复待收；已播放一次提示音，不反复打扰。
+
+## 2026-09-11 本轮工程检查点：组件通过，普通沙盒及产品闭环待验收
+
+这不是阶段完成或源接纳。受测组合 `1730078b566ca7d0c90344f56dc6ef2ada456c25` 位于 `codex/d-audio-app-01`；最后候选提交自身SHA写外部final-receipt，不自引用。源仍 `7510015bafc0a8b33c463dba11b1a7d54a93b073`，唯一个人scheme未暂存1→6、内容/摘要/时间/index与开始一致。普通D四关键文件保持；未启动或关闭普通D，未启动本批GUI/GPU/模型。当前资源确认问答尚未收到答复，不外推旧窗口，也不称新增TCC权限阻塞。H09按无设备继续保留。
+
+### 已完成与来源
+- PACK1.2：Terra/medium初交+两轮Lead修复，剩余普通修复0。Lead审查、14CPU及8独立CLI反例通过（有重叠不相加），未代写。代码c64c785c0ddcd221e0f46caae6e9354b324079c2、组件记录8d24daf29987c5562dd3d5b677c044c4a98c8b84。打包脚本仅构造未验收候选，不承诺完整原生部署。
+- ACCESS1：Sol/high初交+一次Lead修复，剩余普通修复1。Lead复验16CPU与2独立反例通过；代码7220286、记录e632a5ccc7c98b5866a43e62130fa2e7aa1a946d（完整受测SHA在access/component-acceptance.json）。没有Lead代写接收端；真实路由/权限上下文已另存，隐藏服务端解析unknown。
+- 父端私有清单与开发检查界面：Astra Lead实现。Sol/high只读非实现者先指出错误路径可能遗留授权清单，再接受有界修补；父端11CPU通过。初版8项不能覆盖创建后的失败，现补部分/完整写失败与替换保护。Lead同时实施与测试，不冒充另一独立模型执行测试。
+- Swift→Python真实CoreFoundation互操作通过：只对本任务新建空目录生成/解析临时书签，子进程退出0，清单删除，中文/组合字符/emoji路径通过；这不是沙盒应用的动态授权证明。
+
+### 组合验证与部署准备
+组合代码：App普通既有身份离线构建通过；Python3.12.14实际打包解释器上旧音频21项、打包14项、接收16项分别通过，父端独立11CPU通过。CPU与模型/GUI分列。Lead首次误用系统3.9执行旧音频套件，readonly-stderr两个子例返回1：本机源码核实3.9 argparse._print_message不捕获OSError、3.12捕获。未改旧断言或provider，以既定打包ABI3.12重跑全部通过；失败保留，不新增3.9运行兼容承诺。一次内联提交脚本输入解码SyntaxError发生在任何操作前，核对候选未变后使用文件脚本完成；不是权限事件。Worker自检setup/flag/缩进错误与正式返工分别记录。
+
+实际离线引擎约266MB、2140文件：NumPy/SentencePiece迁移导入及固定权重--inspect通过，未加载MLX/权重。独立signed-gate/D.app副本嵌入既有引擎；沿用当次Xcode的身份、Team、bundle ID、应用xcent，27原生文件正常签名、应用deep/strict校验通过，非原生2113文件不变；未改普通D/全局配置/钥匙串设置，时间戳网络关闭。签名改变的文件使用新的构建产物清单摘要，未拿原包hash冒充新包。检查版只用于部署门槛，不是已发布的引擎安装器/生产接线；打包中的可选Tk依赖闭包仍未验收，不提供Tk功能。该检查包尚未包含后续provider授权调用装配，不能宣称普通音频已启用。
+
+### 下一动作及停止边界
+收到当时普通D退出/其他GPU空闲/前台可用确认后：先用明确signed-gate路径与已记录Python摘要执行普通沙盒部署检查；确认执行/依赖和目录授权后，再装配provider调用、应用内引擎解析、隔离资源/配置与文件输入UI。后续真实生成/变体/区间重绘、取消交接、采用拒绝、保存重开和不覆盖导出均未完成，不以CLI/CPU或此检查页代替。若部署需新权限/签名方案，按真实问题停报，不改Team/entitlements或启用全访问服务。
+
+当次仅保存本地候选及文档检查点；不快进源、不推送未验收产品，不另起下一音乐/HUM/META任务。需要真人时已播放一次Glass短音效；未收到资源答复，未假设用户已听到或已授权。自有Worker/Reviewer/构建/CPU进程均已结束；这不是全系统进程审计。
+
+持久证据根：`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-AUDIO-APP-01/run-20260911T125328Z`。优先读取final-receipt.json；分项为pack/、access/、review/、host-access/real-cf-roundtrip/、combination-cpu[-python312]/、native/combined-components/、deployment/{inspect,runtime-check,signed-gate}/。命令/输入/产物和保护索引保存在外盘工作树生命周期之外，私有书签已删除，不进入Git或一般日志；权重/大包/图片不入Git。各CLI阶段原始用量事件保留但不在这里推算订阅费用；实际费用、完整Lead归因及成本最优均unknown，模型贡献不因最后由Lead提交而覆盖。
