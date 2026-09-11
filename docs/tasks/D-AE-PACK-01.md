@@ -1,12 +1,12 @@
 # D-AE-PACK-01：既有音频引擎离线封装
 
-APP1/PACK1；batch D-AUDIO-APP-01。用户批准文件输入音频闭环；Lead 的只读部署审查确定先准备自包含引擎，普通GUI仍待资源窗口。只负责构建时把明确输入的现有文件封装为可测候选，不是安装器、下载器或签名工具，不改变现有引擎/精度。普通沙盒可执行/动态授权/模型仍另行验收，不因本包CPU通过默认启用。
+APP1/PACK1.1；batch D-AUDIO-APP-01。用户批准文件输入音频闭环；Lead 的只读部署审查确定先准备自包含引擎，普通GUI仍待资源窗口。只负责构建时把明确输入的现有文件封装为可测候选，不是安装器、下载器或签名工具，不改变现有引擎/精度。普通沙盒可执行/动态授权/模型仍另行验收，不因本包CPU通过默认启用。
 
 ## 所有权与运行
 请求 Terra/medium。仅改 `Backends/Audio/Packaging/prepare_engine.py` 和 `Backends/Audio/Tests/test_engine_packaging.py`，两路径当前不存在，允许新增；不要改其他文件、任务规格、Git元数据、签名、工程配置、依赖锁或现有Python/provider。独立worktree D-AE-PACK-01，分支codex/d-ae-pack-01。源基线7510015bafc0a8b33c463dba11b1a7d54a93b073；执行基线由Lead准备提交后以完整SHA写request。输出/cache/tmp路径在request中明确；网络关闭，无递归、模型/GPU/GUI/全App或包构建。使用系统Python3运行夹具CPU；tokenize.open+compile(...,dont_inherit=True)做无字节码语法检查，不导入被检目标。行为测试缓存固定任务tmp，PYTHONDONTWRITEBYTECODE=1。
 
 ## 冻结CLI与布局
-标准库Python实现，命令参数必须显式：`--python-root`（含bin/python3与lib/python3.12的已安装基础Python目录）、`--site-packages`（已授权venv的lib/python3.12/site-packages）、`--provider-directory`（项目Backends/Audio/Python）、`--vendor-directory`（固定Vendor/stable-audio3-mlx）、`--model-manifests`（Backends/Audio/Models）、`--output`（不存在的最终目录）。不自动搜索/下载/调用输入可执行文件，不访问keychain。支持本次CPython3.12 arm64准备；其他版本明确拒绝不偷偷猜。
+标准库Python实现，命令参数必须显式：`--python-root`（含常规文件bin/python3.12与lib/python3.12的已安装基础Python目录）、`--site-packages`（已授权venv的lib/python3.12/site-packages）、`--provider-directory`（项目Backends/Audio/Python）、`--vendor-directory`（固定Vendor/stable-audio3-mlx）、`--model-manifests`（Backends/Audio/Models）、`--output`（不存在的最终目录）。不自动搜索/下载/调用输入可执行文件，不访问keychain。支持本次CPython3.12 arm64准备；其他版本明确拒绝不偷偷猜。
 
 输出固定相对布局：`python/bin/python3`、`python/lib/python3.12/`（基础stdlib，不含其site-packages）、`python/lib/python3.12/site-packages/`（从给定venv复制mlx、mlx_metal、numpy、sentencepiece及其对应dist-info、必要同名.libs/数据目录；pip不打包）、`provider/`、`vendor/`、`model-manifests/`、`engine.json`。不复制pyvenv.cfg，不保留原Codex基础路径；输出解释器自行找到布局内stdlib。源码/许可证/模型manifest保留；不复制模型权重。不得擅自重命名native扩展或修改二进制rpath/签名；Mach-O闭包与实际导入由Lead后续核验，manifest不能声称已通过。
 
@@ -21,3 +21,5 @@ engine.json: schemaVersion=1, kind="d-audio-engine", pythonABI="3.12", pythonExe
 临时独立微型文件树，不运行夹具python。正常布局/manifest/摘要/Unicode空格，重复输入确定性；缺关键组件、错误Python布局、未知site组件、symlink/特殊文件、输入输出重叠、已存在/悬空输出拒绝；复制失败、发布竞争不覆盖；原件摘要前后相同。真实CLI完整进程返回码，stdout/错误流不可写边界沿现有输出失败契约返回2。受控预期拒绝不是权限事故。仅夹具CPU不代替真实环境封装/导入/签名。
 
 初交+最多两轮针对性修复；遇未允许权限/身份/契约不清立即停报Lead；不主动越界测试或放宽写根。首次仅预检，返回task/spec/run/真实cwd/root/common Git/HEAD/branch/允许路径/验收与边界，等待IMPLEMENT。Worker不commit，不改此任务单；回传改动、命令/结果、保护、异常、自有进程及未覆盖项。
+
+PACK1.1派工前澄清：本机基础Python的bin/python3是符号链接，bin/python3.12为同目录常规文件；仅从明确的bin/python3.12复制到输出python/bin/python3，不追随前者，不放宽拒绝symlink规则。基础lib/python3.12/LICENSE.txt存在，随stdlib保留；各依赖dist-info许可证原样保留，不声称完成全发行许可审计。此修订发生在初次IMPLEMENT之前，不属于返工或预算重置。
