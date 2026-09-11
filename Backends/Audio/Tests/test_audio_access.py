@@ -439,18 +439,38 @@ class AudioAccessTests(unittest.TestCase):
                 ):
                     pass
 
+    def test_manifest_ancestors_need_search_but_not_read_directory_access(self):
+        expected = self.write_manifest().read_bytes()
+        real_open = os.open
+        expected_search = os.O_SEARCH | os.O_NOFOLLOW | os.O_CLOEXEC
+        traversal_flags = []
+
+        def search_only(path, flags, *args, **kwargs):
+            if flags & getattr(os, "O_NONBLOCK", 0):
+                return real_open(path, flags, *args, **kwargs)
+            if flags != expected_search:
+                raise PermissionError("controlled read-directory denial")
+            traversal_flags.append(flags)
+            return real_open(path, flags, *args, **kwargs)
+
+        with mock.patch.object(access.os, "open", side_effect=search_only):
+            self.assertEqual(access._read_manifest(self.manifest), expected)
+        self.assertEqual(len(traversal_flags), len(self.manifest.parts) - 1)
+        for flags in traversal_flags:
+            self.assertEqual(flags, expected_search)
+
     def test_core_foundation_bindings_release_data_error_url_and_use_fixed_options(self):
-        library = FakeCFLibrary(error=30)
+        library = FakeCFLibrary(error=0)
         adapter = access._CoreFoundationAdapter(library)
         url, path = adapter.resolve(b"synthetic")
         self.assertEqual((url, path), (20, "/tmp/grant"))
         self.assertEqual(library.options, access._RESOLUTION_OPTIONS)
-        self.assertEqual(library.released, [10, 30])
+        self.assertEqual(library.released, [10])
         self.assertTrue(adapter.start(url))
         adapter.stop(url)
         adapter.release_url(url)
         self.assertEqual(library.stopped, [20])
-        self.assertEqual(library.released, [10, 30, 20])
+        self.assertEqual(library.released, [10, 20])
         for name in (
             "CFDataCreate", "CFURLCreateByResolvingBookmarkData",
             "CFURLGetFileSystemRepresentation",
@@ -467,7 +487,8 @@ class AudioAccessTests(unittest.TestCase):
         cases = [
             ("data", FakeCFLibrary(data=0), []),
             ("url", FakeCFLibrary(url=0, error=30), [10, 30]),
-            ("stale", FakeCFLibrary(stale=True, error=30), [10, 30, 20]),
+            ("error-and-url", FakeCFLibrary(url=20, error=30), [10, 30, 20]),
+            ("stale", FakeCFLibrary(stale=True, error=0), [10, 20]),
             ("path", FakeCFLibrary(path=""), [10, 20]),
         ]
         for label, library, released in cases:

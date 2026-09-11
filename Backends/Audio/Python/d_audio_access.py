@@ -104,10 +104,9 @@ def _file_identity(info: os.stat_result) -> tuple[int, int, int, int, int, int]:
 
 
 def _open_manifest_without_symlinks(path: Path) -> tuple[int, os.stat_result]:
-    directory_flags = (
-        os.O_RDONLY
+    search_flags = (
+        os.O_SEARCH
         | getattr(os, "O_CLOEXEC", 0)
-        | getattr(os, "O_DIRECTORY", 0)
         | getattr(os, "O_NOFOLLOW", 0)
     )
     leaf_flags = (
@@ -117,13 +116,13 @@ def _open_manifest_without_symlinks(path: Path) -> tuple[int, os.stat_result]:
         | getattr(os, "O_NONBLOCK", 0)
     )
     try:
-        directory = os.open(path.anchor, directory_flags)
+        directory = os.open(path.anchor, search_flags)
     except OSError as exc:
         raise AudioAccessError("manifest path could not be traversed safely") from exc
     try:
         for part in path.parts[1:-1]:
             try:
-                child = os.open(part, directory_flags, dir_fd=directory)
+                child = os.open(part, search_flags, dir_fd=directory)
             except OSError as exc:
                 raise AudioAccessError(
                     "manifest path contains a symbolic link or unavailable component"
@@ -296,7 +295,10 @@ class _CoreFoundationAdapter:
             )
         finally:
             self._release(data)
+        if error.value:
             self._release(error.value)
+            self._release(url)
+            raise AudioAccessError("bookmark resolver reported an error")
         if not url:
             raise AudioAccessError("bookmark could not be resolved")
         if stale.value:
