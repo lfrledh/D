@@ -46,7 +46,7 @@ struct AudioDeploymentCheck: View {
                 throw NSError(domain: "D.AudioDeployment", code: 2,
                     userInfo: [NSLocalizedDescriptionKey: "执行文件摘要与本次准备不符，未执行。"])
             }
-            result = "正在检查；最长约 17 秒。"
+            result = "正在检查；软期限约 17 秒，等待实际退出后报告。"
             let report = try await Task.detached(priority: .utility) {
                 try Self.execute(selected, digest: digest)
             }.value
@@ -71,10 +71,10 @@ struct AudioDeploymentCheck: View {
         }
         let stdout = try FileHandle(forWritingTo: out), stderr = try FileHandle(forWritingTo: err)
         defer { try? stdout.close(); try? stderr.close() }
-        let script = "import sys,json,importlib.util; print(json.dumps({'version':sys.version,'prefix':sys.prefix,'base_prefix':sys.base_prefix,'modules':{n:importlib.util.find_spec(n) is not None for n in ['mlx','numpy','sentencepiece']}}))"
+        let script = "import sys,json,pathlib,importlib.machinery; site=str(pathlib.Path(sys.executable).parent.parent/'lib'/'python3.12'/'site-packages'); print(json.dumps({'version':sys.version,'prefix':sys.prefix,'base_prefix':sys.base_prefix,'site':site,'modules':{n:importlib.machinery.PathFinder.find_spec(n,[site]) is not None for n in ['mlx','numpy','sentencepiece']}}))"
         let process = Process()
         process.executableURL = executable
-        process.arguments = ["-B", "-c", script]
+        process.arguments = ["-I", "-S", "-B", "-c", script]
         process.currentDirectoryURL = directory
         process.environment = ["PATH":"/usr/bin:/bin", "LANG":"en_US.UTF-8", "LC_ALL":"en_US.UTF-8",
             "PYTHONDONTWRITEBYTECODE":"1", "PYTHONNOUSERSITE":"1",
@@ -82,18 +82,26 @@ struct AudioDeploymentCheck: View {
             "PYTHONPYCACHEPREFIX":directory.appendingPathComponent("pycache").path]
         process.standardOutput = stdout
         process.standardError = stderr
-        let start = Date()
+        func identity() throws -> [String: String] {
+            var value = stat()
+            guard Darwin.lstat(executable.path, &value) == 0 else { throw CocoaError(.fileReadUnknown) }
+            return ["device":String(value.st_dev), "inode":String(value.st_ino), "size":String(value.st_size),
+                "mtimeSeconds":String(value.st_mtimespec.tv_sec), "mtimeNanos":String(value.st_mtimespec.tv_nsec),
+                "ctimeSeconds":String(value.st_ctimespec.tv_sec), "ctimeNanos":String(value.st_ctimespec.tv_nsec)]
+        }
+        let before = try identity()
+        let start = DispatchTime.now().uptimeNanoseconds
         var launchError: String?
         var timedOut = false
         do {
             try process.run()
-            let deadline = Date().addingTimeInterval(15)
-            while process.isRunning && Date() < deadline { Thread.sleep(forTimeInterval: 0.02) }
+            let deadline = DispatchTime.now().uptimeNanoseconds + 15_000_000_000
+            while process.isRunning && DispatchTime.now().uptimeNanoseconds < deadline { Thread.sleep(forTimeInterval: 0.02) }
             if process.isRunning {
                 timedOut = true
                 process.terminate()
-                let grace = Date().addingTimeInterval(2)
-                while process.isRunning && Date() < grace { Thread.sleep(forTimeInterval: 0.02) }
+                let grace = DispatchTime.now().uptimeNanoseconds + 2_000_000_000
+                while process.isRunning && DispatchTime.now().uptimeNanoseconds < grace { Thread.sleep(forTimeInterval: 0.02) }
                 if process.isRunning { Darwin.kill(process.processIdentifier, SIGKILL) }
             }
             process.waitUntilExit()
@@ -104,12 +112,19 @@ struct AudioDeploymentCheck: View {
             let h = try FileHandle(forReadingFrom: url); defer { try? h.close() }
             return String(decoding: try h.read(upToCount: 65536) ?? Data(), as: UTF8.self)
         }
-        var object: [String: Any] = ["executable":executable.path, "sha256":digest,
+        var object: [String: Any] = ["executable":executable.path, "selectedExecutableSHA256":digest,
             "arguments":process.arguments ?? [], "environment":process.environment ?? [:],
-            "timeout":timedOut, "elapsed":Date().timeIntervalSince(start), "directory":directory.path,
-            "stdout":try boundedText(out), "stderr":try boundedText(err), "weightsLoaded":false]
+            "timeout":timedOut, "elapsed":Double(DispatchTime.now().uptimeNanoseconds - start) / 1_000_000_000, "directory":directory.path,
+            "stdout":try boundedText(out), "stderr":try boundedText(err), "weightsRequested":false, "targetModulesImported":false,
+            "runtimeMode":"isolated-no-site diagnostic; not inference environment", "identityBefore":before,
+            "cleanupCompleted":true]
         if let launchError { object["launchError"] = launchError }
         else { object["exitCode"] = process.terminationStatus; object["terminationReason"] = process.terminationReason.rawValue }
+        let after = try identity()
+        object["identityAfter"] = after
+        object["identityUnchanged"] = before == after
+        object["outcome"] = launchError == nil && !timedOut && process.terminationStatus == 0 && before == after ? "diagnosticCompleted" : "failed"
+        object["engineAccepted"] = false
         let data = try JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys])
         try data.write(to: directory.appendingPathComponent("report.json"), options: .withoutOverwriting)
         return String(decoding: data, as: UTF8.self)

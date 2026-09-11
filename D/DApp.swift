@@ -46,7 +46,10 @@ struct DApp: App {
             }
             .disabled(bootstrap.isTerminating)
             .task { if !deploymentProbeEnabled { await bootstrap.start() } }
-            .onOpenURL { url in Task { await bootstrap.openProject(at: url) } }
+            .onOpenURL { url in
+                if deploymentProbeEnabled { print("D_AUDIO_DEPLOYMENT_IGNORED_OPEN_REQUEST") }
+                else { Task { await bootstrap.openProject(at: url) } }
+            }
         }
         .defaultSize(width: 1280, height: 820)
         .windowResizability(.contentMinSize)
