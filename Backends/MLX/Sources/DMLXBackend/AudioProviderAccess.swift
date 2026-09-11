@@ -15,7 +15,7 @@ struct AudioProviderAccess: Sendable {
                         bookmark: (URL) throws -> Data = {
                             try $0.bookmarkData(options: [], includingResourceValuesForKeys: nil,
                                                 relativeTo: nil)
-                        }) throws -> AudioProviderAccess {
+                        }, write: ((Int32, Data) throws -> Void)? = nil) throws -> AudioProviderAccess {
         struct Grant: Encodable { let path: String; let bookmark: String }
         struct Manifest: Encodable { let schemaVersion = 1; let runID: String; let grants: [Grant] }
         let root = try AudioFileSystem.absoluteLocal(root, label: "Audio access bootstrap root")
@@ -56,25 +56,72 @@ struct AudioProviderAccess: Sendable {
         }
         let directory = root.appendingPathComponent(name, isDirectory: true)
         let manifest = directory.appendingPathComponent("access.json")
-        let fd = Darwin.openat(rootFD, name, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
-        guard fd >= 0 else {
-            throw InferenceFailure.backendFailed("Cannot open the private audio access bootstrap.")
+        var directoryStat = stat()
+        guard Darwin.fstatat(rootFD, name, &directoryStat, AT_SYMLINK_NOFOLLOW) == 0,
+              directoryStat.st_mode & S_IFMT == S_IFDIR else {
+            throw InferenceFailure.backendFailed("Private audio bootstrap identity is unavailable; retained at \(directory.path).")
         }
-        defer { Darwin.close(fd) }
-        var statValue = stat()
-        guard Darwin.fstat(fd, &statValue) == 0 else {
-            throw InferenceFailure.backendFailed("Cannot identify the private audio access bootstrap.")
+        var fd: Int32 = -1
+        var fileFD: Int32 = -1
+        defer {
+            if fileFD >= 0 { Darwin.close(fileFD) }
+            if fd >= 0 { Darwin.close(fd) }
         }
-        // The parent is private and exclusively created; the writer itself refuses replacement.
-        try AudioFileSystem.writeExclusive(data, to: manifest)
-        let identity = try AudioFileSystem.regularFile(manifest, label: "Audio access manifest",
-                                                       maximumBytes: 64 * 1024)
-        guard identity.mode & 0o777 == 0o600 else {
-            throw InferenceFailure.backendFailed("Audio access manifest is not private.")
+        do {
+            fd = Darwin.openat(rootFD, name, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+            var opened = stat()
+            guard fd >= 0, Darwin.fstat(fd, &opened) == 0,
+                  opened.st_dev == directoryStat.st_dev, opened.st_ino == directoryStat.st_ino else {
+                throw InferenceFailure.backendFailed("Cannot open the owned audio access bootstrap.")
+            }
+            fileFD = Darwin.openat(fd, "access.json", O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0o600)
+            guard fileFD >= 0 else {
+                throw InferenceFailure.backendFailed("Cannot create the private audio access manifest.")
+            }
+            if let write { try write(fileFD, data) } else { try writeManifest(fileFD, data: data) }
+            var file = stat()
+            guard Darwin.fstat(fileFD, &file) == 0, file.st_mode & 0o777 == 0o600,
+                  file.st_mode & S_IFMT == S_IFREG, file.st_size == data.count else {
+                throw InferenceFailure.backendFailed("Audio access manifest failed its private-file checks.")
+            }
+            return AudioProviderAccess(directory: directory, manifest: manifest,
+                directoryDevice: Int64(directoryStat.st_dev), directoryInode: UInt64(directoryStat.st_ino),
+                manifestIdentity: AudioFileSystem.Identity(file))
+        } catch {
+            var named = stat()
+            var safe = Darwin.fstatat(rootFD, name, &named, AT_SYMLINK_NOFOLLOW) == 0
+                && named.st_dev == directoryStat.st_dev && named.st_ino == directoryStat.st_ino
+                && named.st_mode & S_IFMT == S_IFDIR
+            if safe, fileFD >= 0 {
+                var owned = stat(), namedFile = stat()
+                safe = fd >= 0 && Darwin.fstat(fileFD, &owned) == 0
+                    && Darwin.fstatat(fd, "access.json", &namedFile, AT_SYMLINK_NOFOLLOW) == 0
+                    && namedFile.st_dev == owned.st_dev && namedFile.st_ino == owned.st_ino
+                    && namedFile.st_mode & S_IFMT == S_IFREG
+                if safe { safe = Darwin.unlinkat(fd, "access.json", 0) == 0 }
+            }
+            if safe { safe = Darwin.unlinkat(rootFD, name, AT_REMOVEDIR) == 0 }
+            if !safe {
+                throw InferenceFailure.backendFailed("Audio access preparation failed; changed or nonempty bootstrap retained at \(directory.path).")
+            }
+            // Do not forward arbitrary bookmark/FFI or injected writer details to diagnostics.
+            throw InferenceFailure.backendFailed("Cannot prepare private audio access; owned bootstrap was removed.")
         }
-        return AudioProviderAccess(directory: directory, manifest: manifest,
-            directoryDevice: Int64(statValue.st_dev), directoryInode: UInt64(statValue.st_ino),
-            manifestIdentity: identity)
+    }
+
+    private static func writeManifest(_ fd: Int32, data: Data) throws {
+        try data.withUnsafeBytes { bytes in
+            var offset = 0
+            while offset < bytes.count {
+                let count = Darwin.write(fd, bytes.baseAddress!.advanced(by: offset), bytes.count - offset)
+                if count < 0, errno == EINTR { continue }
+                guard count > 0 else { throw InferenceFailure.backendFailed("Cannot write audio access manifest.") }
+                offset += count
+            }
+        }
+        guard Darwin.fsync(fd) == 0 else {
+            throw InferenceFailure.backendFailed("Cannot flush audio access manifest.")
+        }
     }
 
     /// Call only after the owned provider and its pipe readers have actually stopped.

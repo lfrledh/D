@@ -65,6 +65,35 @@ import Foundation
         try require(try fm.contentsOfDirectory(atPath: bootstrap.path) == beforeFailure, "preparation before publication")
         checks.append("bookmark-failure-redacted-no-publication")
 
+        for complete in [false, true] {
+            let before = try fm.contentsOfDirectory(atPath: bootstrap.path)
+            try expectFailure(complete ? "complete-write-failure-rollback" : "partial-write-failure-rollback") {
+                _ = try AudioProviderAccess.prepare(root: bootstrap, runID: id, directories: [model],
+                    bookmark: factory, write: { fd, data in
+                        let bytes = complete ? data : Data(data.prefix(4))
+                        _ = bytes.withUnsafeBytes { Darwin.write(fd, $0.baseAddress, $0.count) }
+                        throw NSError(domain: "controlled IO failure", code: 1)
+                    })
+            }
+            try require(try fm.contentsOfDirectory(atPath: bootstrap.path) == before,
+                        "failed publication removed only owned objects")
+        }
+        var replacement: URL?
+        try expectFailure("replaced-rollback-object-preserved") {
+            _ = try AudioProviderAccess.prepare(root: bootstrap, runID: id, directories: [model],
+                bookmark: factory, write: { _, _ in
+                    let names = try fm.contentsOfDirectory(atPath: bootstrap.path)
+                    guard names.count == 1 else { throw NSError(domain: "fixture state", code: 1) }
+                    let url = bootstrap.appendingPathComponent(names[0]).appendingPathComponent("access.json")
+                    try fm.removeItem(at: url)
+                    try Data("keep replacement".utf8).write(to: url)
+                    replacement = url
+                    throw NSError(domain: "controlled write failure after replacement", code: 1)
+                })
+        }
+        try require(replacement != nil, "fixture actually replaced manifest")
+        try require(try Data(contentsOf: replacement!) == Data("keep replacement".utf8), "rollback protected replacement")
+
         let changed = try AudioProviderAccess.prepare(root: bootstrap, runID: id, directories: [model], bookmark: factory)
         try Data("replacement".utf8).write(to: changed.manifest)
         try expectFailure("changed-manifest-preserved") { try changed.finish() }
@@ -75,6 +104,7 @@ import Foundation
         try Data("keep".utf8).write(to: foreign)
         try expectFailure("foreign-file-preserved") { try nonempty.finish() }
         try require(try Data(contentsOf: foreign) == Data("keep".utf8), "foreign file protected")
+        try require(!fm.fileExists(atPath: nonempty.manifest.path), "owned manifest removed despite foreign-file refusal")
 
         let moved = try AudioProviderAccess.prepare(root: bootstrap, runID: id, directories: [model], bookmark: factory)
         let retained = root.appendingPathComponent("retained-original-bootstrap")
