@@ -39,6 +39,7 @@ struct DApp: App {
 
 private struct WorkbenchCommands: Commands {
     let bootstrap: WorkbenchBootstrap
+    @FocusedValue(\.workbenchGeneration) private var generationCommand
     @Environment(\.openWindow) private var openWindow
     private var modalResourceOperation: Bool {
         bootstrap.libraryModel?.isPresented == true || bootstrap.libraryModel?.isChoosingLocation == true
@@ -67,11 +68,11 @@ private struct WorkbenchCommands: Commands {
                 .disabled(modalResourceOperation || bootstrap.isTerminating || bootstrap.model?.selectedAsset == nil || bootstrap.model?.creatorMode != .image)
         }
         CommandMenu("创作") {
-            Button(bootstrap.model?.visibleGenerationTitle ?? "生成") {
-                Task { await bootstrap.model?.generateVisible() }
+            Button(generationCommand?.title ?? bootstrap.model?.visibleGenerationTitle ?? "生成") {
+                generationCommand?.action()
             }
             .keyboardShortcut(.return, modifiers: [.command])
-            .disabled(modalResourceOperation || bootstrap.isTerminating || bootstrap.model?.canRunVisibleGeneration != true)
+            .disabled(modalResourceOperation || bootstrap.isTerminating || generationCommand?.isEnabled != true)
             Button("保存文稿") { Task { await bootstrap.model?.projectSession.saveText() } }
                 .keyboardShortcut("s")
                 .disabled(modalResourceOperation || bootstrap.isTerminating || bootstrap.model?.projectSession.text == nil || bootstrap.model?.creatorMode != .text)

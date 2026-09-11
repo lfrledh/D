@@ -169,6 +169,15 @@ struct ProjectSessionTests {
         #expect(subject.manifest?.id == projectID)
         #expect(subject.prompt == "存盘失败不能跳走")
         #expect(subject.recentProjects.count == 1)
+        let recentBeforeMove = settings.data(forKey: "workbench.recentProjects.v1")
+        try FileManager.default.moveItem(at: project, to: moved)
+        await subject.openProject(at: moved)
+        #expect(subject.projectURL?.path == moved.resolvingSymlinksInPath().path)
+        #expect(settings.data(forKey: "workbench.recentProjects.v1") != recentBeforeMove)
+        #expect(await subject.requestClose())
+        await subject.openRecentProject(id: projectID)
+        #expect(subject.projectURL?.path == moved.resolvingSymlinksInPath().path)
+        #expect(subject.prompt == "存盘失败不能跳走")
         #expect(await subject.requestClose())
     }
 

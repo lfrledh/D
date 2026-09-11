@@ -2,9 +2,12 @@ import DWorkbench
 import Foundation
 import SwiftUI
 
+public enum TextWorkbenchPresentation: Sendable { case complete, editor, parameters }
+
 /// Presentation for a text draft. Business operations remain owned by the caller.
 @MainActor
 public struct TextWorkbenchView: View {
+    private var presentation: TextWorkbenchPresentation = .complete
     @Bindable private var session: TextDraftSession
     @State private var runningSelectionText: String?
     private let selection: NSRange
@@ -52,7 +55,21 @@ public struct TextWorkbenchView: View {
         self.onChooseModel = onChooseModel
     }
 
+    public func presenting(_ presentation: TextWorkbenchPresentation) -> Self {
+        var copy = self; copy.presentation = presentation; return copy
+    }
+
     public var body: some View {
+      if presentation == .parameters {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("改写参数").font(.headline)
+                Text(modelStatus).font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("text-model-status")
+                Button("选择文字模型…", action: onChooseModel).accessibilityIdentifier("text-model-select")
+                rewriteControls
+            }.padding(16)
+        }
+      } else {
         GeometryReader { viewport in
             // AnyLayout changes arrangement without replacing the native IME editor.
             let panels = viewport.size.width < 760
@@ -73,6 +90,7 @@ public struct TextWorkbenchView: View {
             .frame(width: viewport.size.width, height: viewport.size.height)
         }
         .background(Color(nsColor: .windowBackgroundColor))
+      }
     }
 
     private func toolbar(compact: Bool) -> some View {
@@ -82,14 +100,17 @@ public struct TextWorkbenchView: View {
         return arrangement {
             VStack(alignment: .leading, spacing: 2) {
                 Text("文字草稿").font(.headline)
-                Text(modelStatus).font(.caption).foregroundStyle(.secondary).lineLimit(2)
-                    .accessibilityIdentifier("text-model-status")
+                if presentation == .complete {
+                    Text(modelStatus).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                        .accessibilityIdentifier("text-model-status")
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             HStack(spacing: 10) {
-                Button(action: onChooseModel) { Label("选择模型", systemImage: "cube.transparent") }
-                    .buttonStyle(.glass)
-                    .accessibilityIdentifier("text-model-select")
+                if presentation == .complete {
+                    Button(action: onChooseModel) { Label("选择模型", systemImage: "cube.transparent") }
+                        .buttonStyle(.glass).accessibilityIdentifier("text-model-select")
+                }
                 Button(action: onUndo) { Label("撤销", systemImage: "arrow.uturn.backward") }
                     .disabled(!canUndo).accessibilityIdentifier("text-undo")
                 Button(action: onSave) { Label(isSaving ? "正在保存" : "保存", systemImage: "square.and.arrow.down") }
@@ -109,6 +130,15 @@ public struct TextWorkbenchView: View {
                 .accessibilityIdentifier("text-draft-editor")
                 .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 10))
                 .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(nsColor: .separatorColor)))
+            if presentation == .complete { rewriteControls }
+            else { Text(saveStatus).font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("text-save-status") }
+
+        }
+        .padding(16)
+    }
+
+    private var rewriteControls: some View {
+        VStack(alignment: .leading, spacing: 12) {
             Text("选中文字后描述修改意图").font(.caption).foregroundStyle(.secondary)
             TextField("修改要求", text: $instruction, axis: .vertical)
                 .lineLimit(2...5).textFieldStyle(.roundedBorder)
@@ -126,7 +156,6 @@ public struct TextWorkbenchView: View {
                     .accessibilityIdentifier("text-save-status")
             }
         }
-        .padding(16)
     }
 
     private var comparisonPanel: some View {

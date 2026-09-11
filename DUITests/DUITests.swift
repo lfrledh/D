@@ -150,6 +150,51 @@ final class DUITests: XCTestCase {
     }
 
     @MainActor
+    func testProjectFirstModalityNavigationAndAssetScopePreserveText() throws {
+        let fixture = try makeExplorationFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.deletingLastPathComponent()) }
+        let token = UUID().uuidString
+        let app = launchWithoutRestoringProject(sessionID: token)
+        defer { app.terminate() }
+        XCTAssertTrue(app.buttons["open-project"].waitForExistence(timeout: 10))
+        try openFixture(fixture, in: app)
+        let before = try readFixtureManifest(fixture)
+        app.buttons["creator-mode-text"].click()
+        XCTAssertTrue(app.buttons["new-text-document"].waitForExistence(timeout: 8))
+        XCTAssertEqual((try readFixtureManifest(fixture)["documents"] as? [[String: Any]])?.count,
+                       (before["documents"] as? [[String: Any]])?.count,
+                       "Selecting an empty modality must not create a document.")
+        app.buttons["new-text-document"].click()
+        let editor = app.descendants(matching: .any).matching(identifier: "text-draft-editor").firstMatch
+        XCTAssertTrue(editor.waitForExistence(timeout: 8))
+        replaceText(editor, with: "Navigation draft: keep this original while browsing assets.")
+        app.buttons["text-save"].click()
+        app.buttons["workspace-assets"].click()
+        XCTAssertFalse(app.descendants(matching: .any).matching(identifier: "resource-media-\(fixtureFirstAsset)").firstMatch.exists,
+                       "Text assets start with the current modality only.")
+        app.checkBoxes["assets-filter-other"].click()
+        let image = app.descendants(matching: .any).matching(identifier: "resource-media-\(fixtureFirstAsset)").firstMatch
+        XCTAssertTrue(image.waitForExistence(timeout: 8)); image.click()
+        XCTAssertEqual(editor.value as? String, "Navigation draft: keep this original while browsing assets.")
+        let saved = try readFixtureManifest(fixture)
+        let textID = try XCTUnwrap(saved["activeDocumentID"] as? String)
+        app.buttons["creator-mode-image"].click()
+        XCTAssertTrue(app.buttons["new-document"].waitForExistence(timeout: 8))
+        app.buttons["creator-mode-text"].click()
+        XCTAssertTrue(editor.waitForExistence(timeout: 8))
+        XCTAssertEqual(try readFixtureManifest(fixture)["activeDocumentID"] as? String, textID)
+        XCTAssertEqual(editor.value as? String, "Navigation draft: keep this original while browsing assets.")
+        app.buttons["back-to-projects"].click()
+        XCTAssertTrue(app.buttons["open-project"].waitForExistence(timeout: 8))
+        let projectID = try XCTUnwrap(saved["id"] as? String)
+        let recent = app.buttons["recent-project-\(projectID)"]
+        XCTAssertTrue(recent.waitForExistence(timeout: 8)); recent.click()
+        XCTAssertTrue(editor.waitForExistence(timeout: 8))
+        XCTAssertEqual(editor.value as? String, "Navigation draft: keep this original while browsing assets.")
+        recordScreenshot(app, name: "Project modality text save reopen and isolated asset preview")
+    }
+
+    @MainActor
     func testDocumentsCandidateEditsPersistThroughReopen() throws {
         let fixture = try makeExplorationFixture()
         defer { try? FileManager.default.removeItem(at: fixture.deletingLastPathComponent()) }
@@ -207,10 +252,13 @@ final class DUITests: XCTestCase {
                   message: "Adoption did not complete", in: app)
         app.buttons["document-\(fixtureSecondDocument)"].click()
         XCTAssertTrue(app.buttons["artwork-\(fixtureSecondAsset)"].waitForNonExistence(timeout: 8))
-        app.buttons["all-artworks"].click()
-        XCTAssertTrue(app.buttons["artwork-\(fixtureSecondAsset)"].waitForExistence(timeout: 8))
-        app.buttons["artwork-\(fixtureFirstAsset)"].click()
-        expectCandidateName("Warm candidate", in: app)
+        app.buttons["workspace-assets"].click()
+        let resource = app.descendants(matching: .any).matching(identifier: "resource-media-\(fixtureSecondAsset)").firstMatch
+        XCTAssertTrue(resource.waitForExistence(timeout: 8))
+        resource.click()
+        XCTAssertEqual(try readFixtureManifest(fixture)["activeDocumentID"] as? String, fixtureSecondDocument,
+                       "Asset preview must not change the active creation.")
+        app.buttons["workspace-creations"].click()
         app.buttons["document-\(fixtureFirstDocument)"].click()
         expectCandidateName("Blue choice", in: app)
         recordScreenshot(app, name: "D document candidates and adoption")
@@ -367,7 +415,7 @@ final class DUITests: XCTestCase {
             XCTFail("Native project panel did not close.\n\(app.debugDescription)")
             throw NativePanelError.notFound
         }
-        guard app.buttons["new-document"].waitForExistence(timeout: 10) else {
+        guard app.buttons["back-to-projects"].waitForExistence(timeout: 10) else {
             recordScreenshot(app, name: "Project opened without accessible creation controls")
             XCTFail("Project creation controls missing after native open.\n\(app.debugDescription)")
             throw NativePanelError.notFound

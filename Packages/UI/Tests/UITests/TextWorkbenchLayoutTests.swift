@@ -14,14 +14,15 @@ private actor LayoutOnlyEngine: InferenceEngine {
 
 @Suite @MainActor
 struct TextWorkbenchLayoutTests {
-    @Test func shrinkingAfterExpansionKeepsNativeEditorInsideViewportAndPreservesSelection() throws {
+    @Test(arguments: [TextWorkbenchPresentation.complete, .editor])
+    func shrinkingAfterExpansionKeepsNativeEditorInsideViewportAndPreservesSelection(presentation: TextWorkbenchPresentation) throws {
         let document = try TextDraftDocument(text: "中文 e\u{301} 👩‍💻 🇯🇵")
         let session = TextDraftSession(document: document, engine: LayoutOnlyEngine(), backendID: "layout.fixture")
         let view = TextWorkbenchView(session: session, selection: NSRange(location: 0, length: 2),
             instruction: .constant("简洁改写"), modelStatus: "Qwen2.5 0.5B Instruct 4-bit — 已准备好",
             canGenerate: true, canAccept: false, canUndo: false, isSaving: false, saveStatus: "正文已保存在项目中",
             onEdit: { _ in }, onSelection: { _ in }, onGenerate: {}, onCancel: {}, onAccept: {},
-            onReject: {}, onUndo: {}, onSave: {}, onChooseModel: {})
+            onReject: {}, onUndo: {}, onSave: {}, onChooseModel: {}).presenting(presentation)
         let host = NSHostingView(rootView: view)
         func settle(_ width: CGFloat, _ height: CGFloat) {
             host.frame = NSRect(x: 0, y: 0, width: width, height: height)

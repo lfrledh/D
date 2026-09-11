@@ -7,6 +7,7 @@ public struct WorkbenchView: View {
     @Bindable private var model: WorkbenchModel
     private let library: ModelLibraryModel?
     private var layoutProbe: ((String, CGRect) -> Void)?
+    @State private var audioRangeState = AudioCreationRangeState()
     @State private var pane: WorkspacePane = .creations
     @State private var showTasks = false
     @State private var expandTasks = true
@@ -38,6 +39,7 @@ public struct WorkbenchView: View {
             }
         }
         .frame(minWidth: 860, minHeight: 580)
+        .focusedSceneValue(\.workbenchGeneration, visibleGenerationCommand)
         .disabled(model.isChangingProject)
         .overlay {
             if model.isChangingProject {
@@ -77,11 +79,28 @@ public struct WorkbenchView: View {
         }
     }
 
+    private var visibleGenerationCommand: WorkbenchGenerationCommand {
+        let epoch = model.projectSession.navigationEpoch
+        let audio = model.creatorMode == .audio
+        let validAudioRange: Bool
+        if audio, let draft = model.projectSession.audioCreationDraft {
+            validAudioRange = audioRangeState.contextID == model.projectSession.audioCreationContextID &&
+                AudioCreationButtonHandler.canSubmit(draft, source: model.projectSession.audioCreationSource,
+                    hostAllowsGeneration: model.projectSession.canGenerateAudioCreation,
+                    hasPendingRangeInput: draft.operation == .inpaint && audioRangeState.pendingMessage != nil)
+        } else { validAudioRange = !audio }
+        let enabled = model.canRunVisibleGeneration && validAudioRange
+        return WorkbenchGenerationCommand(title: model.visibleGenerationTitle, isEnabled: enabled) {
+            guard enabled, epoch == model.projectSession.navigationEpoch else { return }
+            Task { await model.generateVisible() }
+        }
+    }
+
     private var projectWorkbench: some View {
         ProjectWorkspaceShell(projectName: model.manifest?.name ?? "D", mode: model.creatorMode,
             availableModes: model.availableCreatorModes,
-            hasInspector: model.creatorMode == .image && model.presentedDocument != nil,
-            taskCount: model.projectSession.activeJobIDs.count,
+            hasInspector: model.presentedDocument != nil && (model.creatorMode != .audio || model.projectSession.audioCreationDraft != nil),
+            taskCount: model.projectSession.activeJobIDs.count + (model.projectSession.isTextWorking ? 1 : 0),
             onMode: { mode in Task { await model.switchCreatorMode(mode) } },
             onBack: { Task { await model.closeProject() } },
             onTasks: { showTasks = true }, onModels: { library?.isPresented = true }) {
@@ -89,8 +108,13 @@ public struct WorkbenchView: View {
             } editor: {
                 workspaceEditor
             } inspector: {
-                GenerationInspector(model: model, library: library)
+                switch model.creatorMode {
+                case .image: GenerationInspector(model: model, library: library)
+                case .text: textWorkspace(presentation: .parameters)
+                case .audio: audioWorkspace(presentation: .parameters)
+                }
             }
+        .observingLayout { layoutProbe?($0, $1) }
         .onChange(of: model.projectURL) { _, _ in
             model.invalidateComparison(); pane = .creations
         }
@@ -110,10 +134,15 @@ public struct WorkbenchView: View {
 
     private var workspaceSidebar: some View {
         VStack(spacing: 8) {
-            Picker("面板", selection: $pane) {
-                ForEach(WorkspacePane.allCases) { Text($0.title).tag($0) }
-            }.pickerStyle(.segmented).padding([.horizontal, .top], 10)
-                .accessibilityIdentifier("workspace-pane")
+            HStack(spacing: 4) {
+                ForEach(WorkspacePane.allCases) { item in
+                    Button { pane = item } label: { Text(item.title).frame(maxWidth: .infinity).padding(.vertical, 6) }
+                        .buttonStyle(.borderless)
+                        .background(pane == item ? Color.accentColor.opacity(0.14) : .clear, in: RoundedRectangle(cornerRadius: 7))
+                        .accessibilityAddTraits(pane == item ? .isSelected : [])
+                        .accessibilityIdentifier("workspace-\(item.rawValue)")
+                }
+            }.padding([.horizontal, .top], 10).accessibilityIdentifier("workspace-pane")
             if pane == .assets, let manifest = model.manifest {
                 ProjectResourceBrowser(manifest: manifest, mode: model.creatorMode,
                     availableModes: model.availableCreatorModes,
@@ -186,23 +215,9 @@ public struct WorkbenchView: View {
     }
 
     @ViewBuilder private var canvas: some View {
-        if !model.showingAllArtworks, let document = model.activeDocument,
-           let draft = model.projectSession.audioCreationDraft, document.audioCreation != nil {
-            let session = model.projectSession
-            let context = session.audioCreationContextID
-            let jobID = session.documentJobs.last(where: { session.activeJobIDs.contains($0.id) })?.id
-            AudioCreationView(draft: Binding(
-                get: { session.audioCreationDraft ?? draft },
-                set: { session.updateAudioCreationDraft($0, contextID: context, documentID: document.id) }),
-                source: session.audioCreationSource, candidates: session.audioCreationCandidates,
-                selectedAssetID: document.selectedAssetID, adoptedAssetID: document.adoptedAssetID,
-                modelStatus: session.audioModelStatus, canGenerate: session.canGenerateAudioCreation,
-                isBusy: session.isBusy || session.isRegisteringAudioModel,
-                progress: jobID.flatMap { session.progress[$0] },
-                status: jobID.flatMap { session.phases[$0] } ?? session.audioCreationSaveStatus,
-                transport: session.audioCreationTransport,
-                actions: model.audioCreationActions(contextID: context, documentID: document.id))
-                .id(document.id)
+        if !model.showingAllArtworks, model.activeDocument?.audioCreation != nil,
+           model.projectSession.audioCreationDraft != nil {
+            audioWorkspace(presentation: .content)
         } else if !model.showingAllArtworks, model.activeDocument?.kind == .audio,
            let audio = model.projectSession.audio {
             VStack(spacing: 0) {
@@ -223,7 +238,50 @@ public struct WorkbenchView: View {
                 .observingLayout { id, rectangle in layoutProbe?(id, rectangle) }
                 .id(audio.contextID)
             }
-        } else if !model.showingAllArtworks, let text = model.projectSession.text {
+        } else if !model.showingAllArtworks, model.projectSession.text != nil {
+            textWorkspace(presentation: .editor)
+        } else if model.isComparing {
+            ArtworkComparison(model: model)
+        } else if let asset = model.selectedAsset, let url = model.assetURLs[asset.id] {
+            ArtworkCanvas(url: url, label: "已保存的作品")
+        } else if model.selectedAsset != nil {
+            ContentUnavailableView("作品暂时无法访问", systemImage: "externaldrive.badge.exclamationmark",
+                description: Text("请连接项目所在的磁盘，然后重新打开项目。已保存的作品不会被移除。"))
+        } else {
+            ZStack {
+                Color(nsColor: .underPageBackgroundColor)
+                ContentUnavailableView {
+                    Label("从一个想法开始", systemImage: "photo.on.rectangle.angled")
+                } description: {
+                    Text("在右侧描述你想创作的画面。\n作品会自动保存在这个项目中。")
+                }
+            }
+        }
+    }
+
+    @ViewBuilder private func audioWorkspace(presentation: AudioCreationPresentation) -> some View {
+        if let document = model.presentedDocument, let draft = model.projectSession.audioCreationDraft {
+            let session = model.projectSession
+            let context = session.audioCreationContextID
+            let jobID = session.documentJobs.last(where: { session.activeJobIDs.contains($0.id) })?.id
+            AudioCreationView(draft: Binding(
+                get: { session.audioCreationDraft ?? draft },
+                set: { session.updateAudioCreationDraft($0, contextID: context, documentID: document.id) }),
+                source: session.audioCreationSource, candidates: session.audioCreationCandidates,
+                selectedAssetID: document.selectedAssetID, adoptedAssetID: document.adoptedAssetID,
+                modelStatus: session.audioModelStatus, canGenerate: session.canGenerateAudioCreation,
+                isBusy: session.isBusy || session.isRegisteringAudioModel,
+                progress: jobID.flatMap { session.progress[$0] },
+                status: jobID.flatMap { session.phases[$0] } ?? session.audioCreationSaveStatus,
+                transport: session.audioCreationTransport,
+                actions: model.audioCreationActions(contextID: context, documentID: document.id))
+                .presenting(presentation, rangeState: audioRangeState, contextID: context)
+                .id(document.id)
+        }
+    }
+
+    @ViewBuilder private func textWorkspace(presentation: TextWorkbenchPresentation) -> some View {
+        if let text = model.projectSession.text {
             let project = model.projectSession
             let id = text.editor.document.id
             let epoch = project.navigationEpoch
@@ -247,23 +305,8 @@ public struct WorkbenchView: View {
                     onAccept: { text.accept() }, onReject: { text.reject() }, onUndo: { text.undo() },
                     onSave: { Task { await project.saveText() } },
                     onChooseModel: { Task { await model.chooseTextModel() } })
-                    .id(id)
-            }
-        } else if model.isComparing {
-            ArtworkComparison(model: model)
-        } else if let asset = model.selectedAsset, let url = model.assetURLs[asset.id] {
-            ArtworkCanvas(url: url, label: "已保存的作品")
-        } else if model.selectedAsset != nil {
-            ContentUnavailableView("作品暂时无法访问", systemImage: "externaldrive.badge.exclamationmark",
-                description: Text("请连接项目所在的磁盘，然后重新打开项目。已保存的作品不会被移除。"))
-        } else {
-            ZStack {
-                Color(nsColor: .underPageBackgroundColor)
-                ContentUnavailableView {
-                    Label("从一个想法开始", systemImage: "photo.on.rectangle.angled")
-                } description: {
-                    Text("在右侧描述你想创作的画面。\n作品会自动保存在这个项目中。")
-                }
+                    .presenting(presentation)
+                .id(id)
             }
         }
     }

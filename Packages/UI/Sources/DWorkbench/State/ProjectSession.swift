@@ -334,6 +334,7 @@ public final class ProjectSession {
                 await access.release(projectLease)
                 projectLease = renewed
                 settings.set(renewed.bookmark, forKey: Self.projectBookmarkKey)
+                rememberProject()
                 isChangingProject = false
                 await recoverArtifacts()
             } catch { report(error, context: "无法恢复项目访问权，请连接磁盘并重新选择项目") }
@@ -427,6 +428,7 @@ public final class ProjectSession {
             await access.release(projectLease)
             projectLease = lease
             settings.set(lease.bookmark, forKey: Self.projectBookmarkKey)
+            rememberProject()
             if let previousURL {
                 for (id, outcome) in pendingSaves {
                     guard case .completed(let result) = outcome else { continue }

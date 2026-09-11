@@ -167,17 +167,20 @@ struct AudioCreationViewTests {
         let candidate = asset(name: "这是一个特别特别长的中文候选名称 e\u{301} 👩‍💻，不能在窄窗口被截断")
         var draft = AudioCreationDraft(prompt: "很长的中文提示 e\u{301} 👩‍💻")
         var rectangles: [String: CGRect] = [:]
-        let host = NSHostingView(rootView: AudioCreationView(
+        let view = AudioCreationView(
             draft: Binding(get: { draft }, set: { draft = $0 }), source: nil, candidates: [candidate],
             selectedAssetID: candidate.id, adoptedAssetID: nil, modelStatus: "模型已就绪", canGenerate: true,
             isBusy: false, progress: nil, status: nil, transport: AudioTransport(), actions: actions()
-        ).scrollingToCandidatesForLayoutCheck().observingLayout { rectangles[$0] = $1 })
+        ).scrollingToCandidatesForLayoutCheck().observingLayout { rectangles[$0] = $1 }
+        var host = NSHostingView(rootView: view)
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 520, height: 500), styleMask: [.borderless],
                               backing: .buffered, defer: false)
         window.contentView = host
         defer { window.contentView = nil }
         for width: CGFloat in [520, 1_000] {
             rectangles.removeAll()
+            host = NSHostingView(rootView: view)
+            window.contentView = host
             await settle(host, window: window, width: width)
             // Drive the real SwiftUI ScrollViewReader above. SwiftUI on macOS 26 need not
             // expose an NSScrollView in NSHostingView.subviews; absence was a test assumption,
@@ -214,6 +217,18 @@ struct AudioCreationViewTests {
         var inpaint = draft; inpaint.operation = .inpaint; inpaint.editRegion = .init(startFrame: 0, endFrame: 44_100)
         #expect(AudioCreationButtonHandler.submissionMessage(inpaint, source: asset(),
             hostAllowsGeneration: true, hasPendingRangeInput: true).contains("应用有效区间"))
+    }
+
+    @Test func parameterPopoverStatePreservesUnappliedRangeAndResetsForNewContext() {
+        let state = AudioCreationRangeState()
+        let context = UUID(), source = asset()
+        let range = AudioFrameRange(startFrame: 0, endFrame: 44_100)
+        state.synchronize(contextID: context, range: range, source: source)
+        state.startText = "-"; state.pendingMessage = "无效区间"
+        state.synchronize(contextID: context, range: range, source: source)
+        #expect(state.startText == "-" && state.pendingMessage != nil)
+        state.synchronize(contextID: UUID(), range: nil, source: nil)
+        #expect(state.startText.isEmpty && state.endText.isEmpty && state.pendingMessage == nil)
     }
 
     private func settle(_ host: NSHostingView<AudioCreationView>, window: NSWindow, width: CGFloat) async {

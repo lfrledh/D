@@ -2,6 +2,29 @@ import DInference
 import DWorkbench
 import Foundation
 import SwiftUI
+import Observation
+
+public enum AudioCreationPresentation { case complete, content, parameters }
+
+/// Shared by the editor and its collapsible parameter surface. Closing a popover must
+/// not silently lose an unapplied interval; changing document/source resets it explicitly.
+@MainActor @Observable public final class AudioCreationRangeState {
+    var startText = ""
+    var endText = ""
+    var pendingMessage: String?
+    private(set) var contextID: UUID?
+    private var sourceID: UUID?
+    private var appliedRange: AudioFrameRange?
+    private var initialized = false
+    public init() {}
+    func synchronize(contextID: UUID?, range: AudioFrameRange?, source: ProjectAsset?) {
+        guard !initialized || self.contextID != contextID || sourceID != source?.id || appliedRange != range else { return }
+        initialized = true
+        self.contextID = contextID; sourceID = source?.id; appliedRange = range
+        let values = AudioCreationButtonHandler.displayedRange(range, source: source)
+        startText = values.0; endText = values.1; pendingMessage = nil
+    }
+}
 
 public struct AudioCreationView: View {
     @Binding private var draft: AudioCreationDraft
@@ -16,9 +39,17 @@ public struct AudioCreationView: View {
     private let status: String?
     @Bindable private var transport: AudioTransport
     private let actions: AudioCreationActions
-    @State private var rangeStartText = ""
-    @State private var rangeEndText = ""
-    @State private var rangeInputMessage: String?
+    @State private var ownedRangeState = AudioCreationRangeState()
+    private var suppliedRangeState: AudioCreationRangeState?
+    private var presentation: AudioCreationPresentation = .complete
+    private var presentationContextID: UUID?
+    private var rangeState: AudioCreationRangeState { suppliedRangeState ?? ownedRangeState }
+    private var rangeStartText: String { rangeState.startText }
+    private var rangeEndText: String { rangeState.endText }
+    private var rangeInputMessage: String? {
+        get { rangeState.pendingMessage }
+        nonmutating set { rangeState.pendingMessage = newValue }
+    }
     private var scrollToCandidatesForCheck = false
     private var layoutProbe: ((String, CGRect) -> Void)?
 
@@ -40,6 +71,11 @@ public struct AudioCreationView: View {
         self.actions = actions
     }
 
+    public func presenting(_ presentation: AudioCreationPresentation, rangeState: AudioCreationRangeState, contextID: UUID) -> Self {
+        var copy = self; copy.presentation = presentation; copy.suppliedRangeState = rangeState
+        copy.presentationContextID = contextID; return copy
+    }
+
     public var body: some View {
         GeometryReader { viewport in
             ScrollViewReader { reader in
@@ -48,12 +84,18 @@ public struct AudioCreationView: View {
                     ? AnyLayout(HStackLayout(alignment: .top, spacing: 16))
                     : AnyLayout(VStackLayout(alignment: .leading, spacing: 16))
                 VStack(alignment: .leading, spacing: 16) {
-                    header
-                    layout {
+                    if presentation != .content { header }
+                    if presentation == .parameters {
                         controls.frame(maxWidth: .infinity, alignment: .topLeading)
+                    } else if presentation == .content {
                         sourceAndCandidates.frame(maxWidth: .infinity, alignment: .topLeading).id("audio-candidates")
+                    } else {
+                        layout {
+                            controls.frame(maxWidth: .infinity, alignment: .topLeading)
+                            sourceAndCandidates.frame(maxWidth: .infinity, alignment: .topLeading).id("audio-candidates")
+                        }
                     }
-                    statusArea
+                    if presentation != .content { statusArea }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(20)
@@ -67,6 +109,7 @@ public struct AudioCreationView: View {
             }
         }
         .onAppear(perform: loadRangeText)
+        .onChange(of: presentationContextID) { _, _ in loadRangeText() }
         .onChange(of: source?.id) { _, _ in
             rangeInputMessage = nil
             loadRangeText()
@@ -94,7 +137,7 @@ public struct AudioCreationView: View {
             Text("音频创作").font(.title2.weight(.semibold))
             Text("提示或参考音频可生成候选；采用、拒绝和保存都需要明确操作。")
                 .font(.caption).foregroundStyle(.secondary)
-            HStack {
+            VStack(alignment: .leading, spacing: 6) {
                 Text(modelStatus).font(.caption).foregroundStyle(.secondary)
                 Button("选择模型…", action: actions.chooseModel).disabled(isBusy)
                     .accessibilityIdentifier("audio-create-choose-model")
@@ -112,7 +155,7 @@ public struct AudioCreationView: View {
                 Text("参考变体").tag(AudioOperation.variation).disabled(source == nil)
                 Text("区间重绘").tag(AudioOperation.inpaint).disabled(source == nil)
             }
-            .pickerStyle(.segmented).disabled(isBusy)
+            .pickerStyle(.menu).disabled(isBusy)
             .accessibilityIdentifier("audio-create-operation")
             parameterFields
             if draft.operation == .inpaint { rangeEditor }
@@ -152,10 +195,10 @@ public struct AudioCreationView: View {
     private var rangeEditor: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("重绘区间（秒，含开始不含结束）").font(.headline)
-            HStack {
-                TextField("开始", text: $rangeStartText).textFieldStyle(.roundedBorder).disabled(isBusy)
+            VStack(alignment: .leading, spacing: 8) {
+                TextField("开始", text: Binding(get: { rangeState.startText }, set: { rangeState.startText = $0 })).textFieldStyle(.roundedBorder).disabled(isBusy)
                     .accessibilityIdentifier("audio-create-range-start")
-                TextField("结束", text: $rangeEndText).textFieldStyle(.roundedBorder).disabled(isBusy)
+                TextField("结束", text: Binding(get: { rangeState.endText }, set: { rangeState.endText = $0 })).textFieldStyle(.roundedBorder).disabled(isBusy)
                     .accessibilityIdentifier("audio-create-range-end")
                 Button("应用区间", action: applyRange)
                     .disabled(isBusy).accessibilityIdentifier("audio-create-range-apply")
@@ -302,9 +345,7 @@ public struct AudioCreationView: View {
         return "44.1 kHz 帧边界；有效范围为 0–\(format.frameCount)。"
     }
     private func loadRangeText() {
-        let display = AudioCreationButtonHandler.displayedRange(draft.editRegion, source: source)
-        rangeStartText = display.0
-        rangeEndText = display.1
+        rangeState.synchronize(contextID: presentationContextID, range: draft.editRegion, source: source)
     }
     private func applyRange() {
         guard let format = source?.metadata.audio?.format,
