@@ -10,6 +10,7 @@ final class WorkbenchBootstrap {
     private(set) var model: WorkbenchModel?
     private(set) var libraryModel: ModelLibraryModel?
     private(set) var startupError: String?
+    private(set) var audioEngineIssue: String?
     private(set) var isTerminating = false
     private var library: ModelLibrary?
     private var loading = false
@@ -42,10 +43,32 @@ final class WorkbenchBootstrap {
                 )
             }
             #endif
+            let engine: BundledAudioEngine?
+            do {
+                if let resources = Bundle.main.resourceURL {
+                    engine = try BundledAudioEngine.resolve(resourceDirectory: resources)
+                } else { engine = nil }
+                audioEngineIssue = nil
+            } catch {
+                engine = nil
+                audioEngineIssue = "声音引擎暂不可用；图像、文稿与已有作品仍可使用。\n" + error.localizedDescription
+            }
+            let consent = AudioModelUsePermission(settings: settings)
+            let accessRoot = libraryDirectory.deletingLastPathComponent()
+                .appendingPathComponent("AudioProcessAccess", isDirectory: true)
+            if engine != nil {
+                try FileManager.default.createDirectory(at: accessRoot, withIntermediateDirectories: true,
+                    attributes: [.posixPermissions: 0o700])
+            }
             let library = try await ModelLibrary(stateDirectory: libraryDirectory)
-            let model = WorkbenchModel(sessionFactory: AppSessionFactory.makeSession,
-                settings: settings, modelLibrary: library,
-                audioEnabled: audioWorkbenchEnabled, audioRecordingEnabled: audioWorkbenchEnabled)
+            let model = WorkbenchModel(sessionFactory: { artifacts in
+                try await AppSessionFactory.makeSession(artifactDirectory: artifacts,
+                    bundledAudioEngine: engine, audioConsent: consent, audioAccessRoot: accessRoot)
+            }, settings: settings, modelLibrary: library,
+                audioEnabled: engine != nil || audioWorkbenchEnabled,
+                // File-input audio does not depend on the deferred microphone acceptance.
+                // Retain the old explicit, unbundled DEBUG recording fixture path.
+                audioRecordingEnabled: engine == nil && audioWorkbenchEnabled)
             let observer = ModelLibraryModel(library: library)
             self.library = library
             self.model = model
@@ -58,7 +81,7 @@ final class WorkbenchBootstrap {
             // Ordinary launch remains at the project chooser. A recent project opens only
             // after an explicit selection; Finder open requests above retain their meaning.
         } catch {
-            startupError = "无法打开模型库记录：\(error.localizedDescription)\n已有项目与模型文件未被删除。请检查存储后重试。"
+            startupError = "无法准备工作台或内嵌引擎：\(error.localizedDescription)\n已有项目与模型文件未被删除。请检查存储后重试。"
         }
     }
 

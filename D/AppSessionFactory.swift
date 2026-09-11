@@ -7,12 +7,25 @@ import UI
 
 /// The application is the only layer that chooses a concrete compute backend.
 enum AppSessionFactory {
-    nonisolated static func makeSession(artifactDirectory: URL) async throws -> WorkbenchSession {
+    nonisolated static func makeSession(artifactDirectory: URL,
+        bundledAudioEngine: BundledAudioEngine? = nil,
+        audioConsent: AudioModelUsePermission? = nil,
+        audioAccessRoot: URL? = nil) async throws -> WorkbenchSession {
         let stages = BackendStageMonitor()
         let backend = try MLXImageBackend(configuration: .init(artifactDirectory: artifactDirectory),
                                          observer: { await stages.record($0) })
         let textBackend = try MLXTextBackend()
-        let audioBackend = try makeAudioBackend(artifactDirectory: artifactDirectory)
+        let audioBackend: MLXAudioBackend?
+        if let engine = bundledAudioEngine, let consent = audioConsent, let accessRoot = audioAccessRoot {
+            try engine.confirmUnchanged()
+            audioBackend = try MLXAudioBackend(configuration: .init(
+                pythonExecutable: engine.pythonExecutable, providerScript: engine.providerScript,
+                vendorDirectory: engine.vendorDirectory, modelManifest: engine.modelManifest,
+                artifactDirectory: artifactDirectory, profile: .smMusic,
+                accessBootstrapRoot: accessRoot,
+                confirmDeployment: { try engine.confirmUnchanged() },
+                modelUseAcknowledged: { await consent.isAcknowledged }))
+        } else { audioBackend = try makeAudioBackend(artifactDirectory: artifactDirectory) }
         var backends: [any InferenceBackend] = [backend, textBackend]
         if let audioBackend { backends.append(audioBackend) }
         let memoryBudgetBytes = ResourceBudgetPolicy().inferenceBudgetBytes(
@@ -29,6 +42,9 @@ enum AppSessionFactory {
                 let request = AudioRequest(operation: .generate, prompt: "Model registration",
                                            durationSeconds: 6, seed: 42, steps: 8)
                 _ = try await audioBackend.estimate(InferenceRequest(model: reference, input: .audio(request)))
+                if bundledAudioEngine != nil, let audioConsent {
+                    guard await audioConsent.confirm() else { throw CancellationError() }
+                }
                 return reference
             }
         } else {

@@ -368,6 +368,85 @@ struct AudioBackendTests {
         await backend.release()
     }
 
+    @Test("Private access transport uses a static cwd and cleans after successful or failed child",
+          .timeLimit(.minutes(1)))
+    func privateAccessTransport() async throws {
+        for mode in ["valid", "nonzero", "ignore-term"] {
+            let fixture = try AudioFixture()
+            defer { fixture.remove() }
+            let bootstrap = fixture.root.appendingPathComponent("private-access")
+            try FileManager.default.createDirectory(at: bootstrap, withIntermediateDirectories: false)
+            try fixture.installAccessAssertions()
+            let originalSource = try Data(contentsOf: fixture.source)
+            let backend = try MLXAudioBackend(configuration: fixture.accessConfiguration(
+                root: bootstrap, timeout: mode == "ignore-term" ? 0.2 : 5))
+            if mode == "valid" {
+                let result = try await backend.execute(fixture.request()) { _ in }
+                #expect(result.artifacts.count == 1)
+            } else {
+                do { _ = try await backend.execute(fixture.request(prompt: mode)) { _ in }; Issue.record("Expected child failure") }
+                catch {}
+            }
+            #expect(try FileManager.default.contentsOfDirectory(atPath: bootstrap.path).isEmpty)
+            #expect(try Data(contentsOf: fixture.source) == originalSource)
+            await backend.release()
+        }
+    }
+
+    @Test("Cancellation removes private access only after the child stops and next run works",
+          .timeLimit(.minutes(1)))
+    func privateAccessCancellation() async throws {
+        let fixture = try AudioFixture(); defer { fixture.remove() }
+        let bootstrap = fixture.root.appendingPathComponent("private-access")
+        try FileManager.default.createDirectory(at: bootstrap, withIntermediateDirectories: false)
+        try fixture.installAccessAssertions()
+        let backend = try MLXAudioBackend(configuration: fixture.accessConfiguration(root: bootstrap))
+        let started = AudioEventRecorder()
+        let task = Task {
+            try await backend.execute(fixture.request(prompt: "slow")) { await started.append($0) }
+        }
+        for _ in 0..<100 {
+            if !(await started.snapshot()).isEmpty { break }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        #expect(!(await started.snapshot()).isEmpty)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: bootstrap.path).count == 1)
+        task.cancel()
+        do { _ = try await task.value; Issue.record("Expected cancellation") }
+        catch is CancellationError {} catch { Issue.record("Unexpected cancellation result: \(error)") }
+        #expect(try FileManager.default.contentsOfDirectory(atPath: bootstrap.path).isEmpty)
+        await backend.release()
+        _ = try await backend.execute(fixture.request()) { _ in }
+        await backend.release()
+        #expect(try FileManager.default.contentsOfDirectory(atPath: bootstrap.path).isEmpty)
+    }
+
+    @Test("Dynamic model acknowledgement and deployment failure reject before creating run data")
+    func applicationAdmissionChecks() async throws {
+        let fixture = try AudioFixture(); defer { fixture.remove() }
+        let bootstrap = fixture.root.appendingPathComponent("private-access")
+        try FileManager.default.createDirectory(at: bootstrap, withIntermediateDirectories: false)
+        let denied = try MLXAudioBackend(configuration: fixture.accessConfiguration(
+            root: bootstrap, acknowledged: false, check: { false }))
+        do { _ = try await denied.execute(fixture.request()) { _ in }; Issue.record("Expected acknowledgement refusal") }
+        catch InferenceFailure.invalidRequest {} catch { Issue.record("Unexpected error: \(error)") }
+        await denied.release()
+        #expect(try FileManager.default.contentsOfDirectory(atPath: fixture.artifacts.path).isEmpty)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: bootstrap.path).isEmpty)
+        let invalid = try MLXAudioBackend(configuration: fixture.accessConfiguration(
+            root: bootstrap, deployment: { throw FixtureError.consumer }))
+        do { _ = try await invalid.execute(fixture.request()) { _ in }; Issue.record("Expected deployment refusal") }
+        catch {}
+        await invalid.release()
+        #expect(try FileManager.default.contentsOfDirectory(atPath: fixture.artifacts.path).isEmpty)
+        try fixture.installAccessAssertions()
+        let granted = try MLXAudioBackend(configuration: fixture.accessConfiguration(
+            root: bootstrap, acknowledged: false, check: { true }))
+        _ = try await granted.execute(fixture.request()) { _ in }
+        await granted.release()
+        #expect(try FileManager.default.contentsOfDirectory(atPath: bootstrap.path).isEmpty)
+    }
+
     @Test("Provider cannot mutate protected source/model and publications survive release",
           .timeLimit(.minutes(1)))
     func protectedInputsAndPublication() async throws {
@@ -453,6 +532,33 @@ private struct AudioFixture {
             vendorDirectory: vendor, modelManifest: manifest,
             artifactDirectory: artifactDirectory ?? artifacts, profile: profile,
             licenseAcknowledged: true, timeoutSeconds: timeout, cancellationGraceSeconds: grace)
+    }
+
+    func accessConfiguration(root: URL, timeout: Double = 5, acknowledged: Bool = true,
+                             check: (@Sendable () async -> Bool)? = nil,
+                             deployment: (@Sendable () throws -> Void)? = nil) -> AudioBackendConfiguration {
+        AudioBackendConfiguration(pythonExecutable: URL(fileURLWithPath: "/usr/bin/python3"),
+            providerScript: script, vendorDirectory: vendor, modelManifest: manifest,
+            artifactDirectory: artifacts, profile: .smMusic, licenseAcknowledged: acknowledged,
+            timeoutSeconds: timeout, cancellationGraceSeconds: 0.1,
+            accessBootstrapRoot: root, confirmDeployment: deployment, modelUseAcknowledged: check)
+    }
+
+    func installAccessAssertions() throws {
+        var body = try String(contentsOf: script, encoding: .utf8)
+        body = body.replacingOccurrences(of: "a=p.parse_args()", with: #"""
+for flag in ('access-manifest','access-run-id','access-source-directory'):
+    p.add_argument('--'+flag)
+a=p.parse_args()
+assert a.access_manifest and a.access_run_id
+assert os.getcwd() == os.path.dirname(a.access_manifest)
+assert os.stat(a.access_manifest).st_mode & 0o777 == 0o600
+with open(a.access_manifest,'r',encoding='utf-8') as f: capability=json.load(f)
+assert capability['runID']==a.access_run_id
+assert {item['path'] for item in capability['grants']} == {a.model_directory,os.path.dirname(a.request)}
+assert all(item['bookmark'] for item in capability['grants'])
+"""#)
+        try Data(body.utf8).write(to: script)
     }
 
     func request(prompt: String = "valid", seed: UInt64 = 42, steps: Int = 8,

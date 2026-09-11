@@ -21,6 +21,11 @@ public struct AudioBackendConfiguration: Sendable {
     public let licenseAcknowledged: Bool
     public let timeoutSeconds: Double
     public let cancellationGraceSeconds: Double
+    /// Private application-container root; nil retains the standalone CLI launch path.
+    public let accessBootstrapRoot: URL?
+    /// Host-owned checks; neither closure requests new system permissions.
+    public let confirmDeployment: (@Sendable () throws -> Void)?
+    public let modelUseAcknowledged: (@Sendable () async -> Bool)?
 
     public init(
         pythonExecutable: URL,
@@ -31,7 +36,10 @@ public struct AudioBackendConfiguration: Sendable {
         profile: AudioBackendProfile,
         licenseAcknowledged: Bool = false,
         timeoutSeconds: Double = 600,
-        cancellationGraceSeconds: Double = 15
+        cancellationGraceSeconds: Double = 15,
+        accessBootstrapRoot: URL? = nil,
+        confirmDeployment: (@Sendable () throws -> Void)? = nil,
+        modelUseAcknowledged: (@Sendable () async -> Bool)? = nil
     ) {
         self.pythonExecutable = pythonExecutable
         self.providerScript = providerScript
@@ -42,6 +50,9 @@ public struct AudioBackendConfiguration: Sendable {
         self.licenseAcknowledged = licenseAcknowledged
         self.timeoutSeconds = timeoutSeconds
         self.cancellationGraceSeconds = cancellationGraceSeconds
+        self.accessBootstrapRoot = accessBootstrapRoot
+        self.confirmDeployment = confirmDeployment
+        self.modelUseAcknowledged = modelUseAcknowledged
     }
 }
 

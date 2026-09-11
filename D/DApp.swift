@@ -44,6 +44,13 @@ struct DApp: App {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
+            .safeAreaInset(edge: .bottom) {
+                if let issue = bootstrap.audioEngineIssue {
+                    Text(issue).font(.caption).textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading).padding(12)
+                        .background(.regularMaterial)
+                }
+            }
             .disabled(bootstrap.isTerminating)
             .task { if !deploymentProbeEnabled { await bootstrap.start() } }
             .onOpenURL { url in

@@ -25,6 +25,7 @@ public actor MLXAudioBackend: InferenceBackend {
 
     public func estimate(_ request: InferenceRequest) async throws -> ResourceEstimate {
         try Task.checkCancellation()
+        try configuration.confirmDeployment?()
         let inventory = try AudioModelInventory.inspect(request, configuration: configuration)
         return ResourceEstimate(peakBytes: inventory.estimatedPeakBytes, confidence: .estimated)
     }
@@ -40,8 +41,14 @@ public actor MLXAudioBackend: InferenceBackend {
         defer { executing = false }
         try Task.checkCancellation()
 
+        try configuration.confirmDeployment?()
         let inventory = try AudioModelInventory.inspect(request, configuration: configuration)
-        guard inventory.configuration.licenseAcknowledged else {
+        var acknowledged = inventory.configuration.licenseAcknowledged
+        if !acknowledged, let check = configuration.modelUseAcknowledged {
+            acknowledged = await check()
+        }
+        try Task.checkCancellation()
+        guard acknowledged else {
             throw InferenceFailure.invalidRequest(
                 "Audio model license acknowledgement must be explicitly supplied by a caller that already has rights.")
         }
@@ -90,22 +97,49 @@ public actor MLXAudioBackend: InferenceBackend {
                 "TMPDIR": temporary.path,
                 "XDG_CACHE_HOME": cache.path,
             ]
-            let process = AudioProviderProcess(
-                executable: inventory.configuration.pythonExecutable,
-                arguments: [
-                    "-B", inventory.configuration.providerScript.path,
-                    "--request", requestURL.path,
-                    "--job-directory", job.path,
-                    "--model-directory", inventory.directory.path,
-                    "--profile", inventory.profile.rawValue,
-                    "--manifest", inventory.configuration.modelManifest.path,
-                    "--vendor-directory", inventory.configuration.vendorDirectory.path,
-                ],
-                environment: environment,
-                currentDirectory: runDirectory,
-                timeoutSeconds: inventory.configuration.timeoutSeconds,
-                cancellationGraceSeconds: inventory.configuration.cancellationGraceSeconds)
-            let terminal = try await process.run(runID: request.id, emit: emit)
+            var arguments = [
+                "-B", inventory.configuration.providerScript.path,
+                "--request", requestURL.path,
+                "--job-directory", job.path,
+                "--model-directory", inventory.directory.path,
+                "--profile", inventory.profile.rawValue,
+                "--manifest", inventory.configuration.modelManifest.path,
+                "--vendor-directory", inventory.configuration.vendorDirectory.path,
+            ]
+            let access: AudioProviderAccess?
+            if let root = configuration.accessBootstrapRoot {
+                var directories = [inventory.directory, runDirectory]
+                if let source = audio.source {
+                    let directory = source.url.deletingLastPathComponent().standardizedFileURL
+                    directories.append(directory)
+                    arguments += ["--access-source-directory", directory.path]
+                }
+                access = try AudioProviderAccess.prepare(root: root, runID: request.id,
+                                                         directories: directories)
+                arguments += ["--access-manifest", access!.manifest.path,
+                              "--access-run-id", request.id.uuidString.lowercased()]
+            } else { access = nil }
+            let terminal: AudioProviderResult
+            do {
+                try configuration.confirmDeployment?()
+                let process = AudioProviderProcess(
+                    executable: inventory.configuration.pythonExecutable, arguments: arguments,
+                    environment: environment,
+                    // The child acquires dynamic external directory access before opening
+                    // request/model/source files. Initial cwd is already statically accessible.
+                    currentDirectory: access?.directory ?? runDirectory,
+                    timeoutSeconds: inventory.configuration.timeoutSeconds,
+                    cancellationGraceSeconds: inventory.configuration.cancellationGraceSeconds)
+                terminal = try await process.run(runID: request.id, emit: emit)
+            } catch {
+                // run() throws only after the owned child and both readers actually stop.
+                // Keep the global compute lease until runtime release, including cleanup failure.
+                do { try access?.finish() }
+                catch { throw InferenceFailure.backendFailed("Audio stopped but private access cleanup failed: \(error.localizedDescription)") }
+                throw error
+            }
+            try access?.finish()
+            try configuration.confirmDeployment?()
 
             // The process and both pipe readers have exited before any artifact becomes visible
             // through the runtime event stream.
