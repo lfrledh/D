@@ -66,3 +66,15 @@ Lead实现Swift/App装配b538061；Sol/high只读审查发现音频部署失败�
 CUA在本轮16:40UTC报告Mac锁定。已异步请求解锁；默认沙箱提示音AudioQueueStart(-66680)，同一授权音效由受控外层播放后exit0，不更改音量/系统权限、不循环。原gate父进程2000退出0，所有Worker/Reviewer均结束；新普通构建仍按本轮process/result核对。旧CUA App API会在目标关闭后自动重启，故退出后不用getAXState判断是否退出，改读取所持句柄；曾短暂重开任务gate项目选择页，未打开/修改作品。
 
 状态仍为候选，源7510015bafc0a8b33c463dba11b1a7d54a93b073未推进。普通沙盒真正MLX执行、文件目录访问、三个音频操作/取消、试听比较/采用拒绝、保存重开/导出尚待当前原生闭环，不以组件通过代替。H09等待设备。本轮证据run-20260911T155257Z-app-resume；后续从最新完整HEAD、源/个人scheme/普通D摘要、实际进程和解锁答复恢复。无下载、普通D替换、签名方案变更或推送。
+
+## 2026-09-12 APP1 当前恢复点：组件/装配通过，原生音频闭环等待解锁
+
+本轮资源授权已收到并执行，不能再写“尚未确认退出/空闲”。普通签名gate已实际启动包内Python3.12，标准库/模块发现成功且完整退出；后续APP1生产接线与组合组件完成。62 Python方法、24音频后端方法/47展开、19引擎resolver检查、4宿主方法分别通过；集合重叠不相加。真实模型操作不能用这些结果替代。
+
+宿主最终受测6125d11a4b9dee138a6a106c1444ce654e7eee13：两项错误隔离与两项既有关闭检查均过，整个xcodebuild退出0。此前容器fixture遗漏已存在产物目录的要求，Lead只补测试准备及shutdown；不是模型或权限改变。先前失败与两个受控终止留存。随后同版本普通构建通过，XCTest注入由构建系统正常移除。
+
+已准备独立signed-app/D.app，App代码88a2655377bebbf54e3e4f75a89504f8f15ba265、engine源码5ec8b2f5a39c0237a47efbde7475426d257012b4；前者到6125d11仅DTests和本记录，后者到前者仅测试文件。27 Mach-O沿用既有身份签名，2114非原生文件未改；真实包resolver全清单摘要与confirmUnchanged、deep/strict签名和旧普通xcent一致性通过。未启动这个生产接线包/未加载真实模型。旧gate成功不是此产品路径已验收。
+
+Mac在继续原生操作前锁定；16:40及16:47UTC的CUA读取明确返回locked，异步解锁问题待答。单次Glass提示音在默认沙箱失败后按原授权受控播放exit0，没有音量或权限变化。H15最小人工动作仅解锁并回复；当前没有新的下载/模型条款/麦克风权限请求。H09继续等设备，不重复探测。
+
+源仍7510015bafc0a8b33c463dba11b1a7d54a93b073，用户scheme及普通D四文件保持；候选未源接纳/推送。恢复先核对final-receipt、保护和运行状态，再做signed-app生产文件输入路径的真实生成/变体/重绘、取消交接、试听/采用拒绝、保存重开和安全导出；不启动新批次。证据run-20260911T155257Z-app-resume，优先final-receipt.json、native/host-fixture-fixed、native/backend-first、deployment/signed-app和resolver-actual。未收到解锁答复时不后台无限执行。
