@@ -21,6 +21,19 @@ enum AppSessionFactory {
             backends: backends,
             configuration: try RuntimeConfiguration(memoryBudgetBytes: memoryBudgetBytes,
                                                     maximumQueuedRuns: 8))
+        let validateAudioModel: (@Sendable (URL) async throws -> ModelReference)?
+        if let audioBackend {
+            validateAudioModel = { directory in
+                let reference = ModelReference(directory: directory,
+                    revision: AudioBackendConfiguration.registeredModelRevision)
+                let request = AudioRequest(operation: .generate, prompt: "Model registration",
+                                           durationSeconds: 6, seed: 42, steps: 8)
+                _ = try await audioBackend.estimate(InferenceRequest(model: reference, input: .audio(request)))
+                return reference
+            }
+        } else {
+            validateAudioModel = nil
+        }
         return WorkbenchSession(
             engine: runtime,
             backendID: backend.descriptor.id,
@@ -46,16 +59,7 @@ enum AppSessionFactory {
                 _ = try await textBackend.estimate(InferenceRequest(model: reference, input: .text(TextRequest(prompt: "Registration", maxTokens: 256))))
                 return reference
             }, audioBackendID: audioBackend?.descriptor.id,
-            validateAudioModel: audioBackend.map { audio in
-                { directory in
-                    let reference = ModelReference(directory: directory,
-                        revision: AudioBackendConfiguration.registeredModelRevision)
-                    _ = try await audio.estimate(InferenceRequest(model: reference, input: .audio(
-                        AudioRequest(operation: .generate, prompt: "Model registration", durationSeconds: 6,
-                                     seed: 42, steps: 8))))
-                    return reference
-                }
-            })
+            validateAudioModel: validateAudioModel)
     }
 
     /// Only an explicitly isolated development session can supply an existing local engine.
