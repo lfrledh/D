@@ -32,3 +32,6 @@ PACK1.1派工前澄清：本机基础Python的bin/python3是符号链接，bin/p
 +全路径祖先不跟随symlink；独立缺失/特殊文件/输出竞争夹具必须分别构建干净输入，并确保超时/异常时回收自有进程。需保留三个provider入口d_audio_backend.py/d_audio_contract.py/d_audio_sa3.py；基础stdlib至少验证encodings/__init__.py与LICENSE.txt，版本真实性仍待实际解释器检查。确定性注入复制失败可作为单元检查，输出/退出和发布竞争必须调用真实CLI并等待退出；不得以允许0吞掉失败或放宽阈值。
 
 +第一轮针对性修复发出后普通修复剩余1轮。证据pack/lead-initial/result.json；环境/范围事件由Lead先核对后派修复。
+
+## PACK1.2 CPU候选接纳（并非普通App引擎验收）
+受测代码提交 c64c785c0ddcd221e0f46caae6e9354b324079c2。Terra初交+两轮修复，Lead非实现者代码审查和独立CPU复验，无Lead代写封装实现。原14项CPU测试通过；Lead8个直接CLI场景按各自期望通过（与原套件重叠，不相加）；初稿输出120与路径/夹具缺口及PACK1.2澄清保留。只接纳至批次集成树；真实环境封装、迁移解释器、Mach-O/签名、沙盒、GUI/模型尚未验收。后续同规则缺陷不能重置已用普通修复预算；若需要有界Lead接管，单独记实现/非实现者复核。证据pack/lead-repair-2/result.json。
