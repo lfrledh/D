@@ -1,4 +1,5 @@
 import CryptoKit
+import Darwin
 import DInference
 import Foundation
 
@@ -274,5 +275,141 @@ enum MRT2ProviderValidation {
 
     private static func decimal(_ text: String) -> AudioJSONValue {
         .number(Decimal(string: text, locale: Locale(identifier: "en_US_POSIX"))!)
+    }
+}
+
+/// Commits an already validated private-access report without granting the child any
+/// additional path. All operations are anchored to the existing, no-follow job descriptor.
+enum MRT2ReportCommit {
+    static let pendingName = "pending-result.json"
+    static let finalName = "result.json"
+
+    static func observedURL(job: URL, accessConfigured: Bool) -> URL {
+        job.appendingPathComponent(accessConfigured ? pendingName : finalName)
+    }
+
+    static func promotePending(
+        in job: URL,
+        expectedData: Data,
+        expectedIdentity: AudioFileSystem.Identity
+    ) throws -> URL {
+        let jobDescriptor = try AudioFileSystem.openDirectory(
+            job, label: "MRT2 job directory")
+        defer { Darwin.close(jobDescriptor) }
+
+        try validateFile(
+            named: pendingName, in: jobDescriptor, expectedData: expectedData,
+            expectedIdentity: expectedIdentity, requireFullIdentity: true,
+            checkCancellation: true)
+
+        var destination = stat()
+        guard Darwin.fstatat(
+            jobDescriptor, finalName, &destination, AT_SYMLINK_NOFOLLOW) != 0 else {
+            throw InferenceFailure.backendFailed(
+                "MRT2 result promotion refuses to overwrite an existing result.json.")
+        }
+        guard errno == ENOENT else {
+            throw ioFailure("Inspect MRT2 result promotion destination")
+        }
+
+        var currentPending = stat()
+        guard Darwin.fstatat(
+            jobDescriptor, pendingName, &currentPending, AT_SYMLINK_NOFOLLOW) == 0,
+              currentPending.st_mode & S_IFMT == S_IFREG,
+              AudioFileSystem.Identity(currentPending) == expectedIdentity else {
+            throw InferenceFailure.backendFailed(
+                "MRT2 pending result changed immediately before promotion.")
+        }
+
+        try Task.checkCancellation()
+        guard renameatx_np(
+            jobDescriptor, pendingName, jobDescriptor, finalName,
+            UInt32(RENAME_EXCL)) == 0 else {
+            throw ioFailure("Promote MRT2 pending result without overwriting")
+        }
+        do {
+            guard Darwin.fsync(jobDescriptor) == 0 else {
+                throw ioFailure("Flush MRT2 result promotion")
+            }
+            try validateFile(
+                named: finalName, in: jobDescriptor, expectedData: expectedData,
+                expectedIdentity: expectedIdentity, requireFullIdentity: false,
+                checkCancellation: false)
+        } catch {
+            // The rename is the commit point. Never delete or replace a committed result
+            // merely because durability/readback verification subsequently failed.
+            throw InferenceFailure.backendFailed(
+                "MRT2 result was promoted but final verification failed; the file was preserved: "
+                + error.localizedDescription)
+        }
+        return job.appendingPathComponent(finalName)
+    }
+
+    private static func validateFile(
+        named name: String,
+        in directory: Int32,
+        expectedData: Data,
+        expectedIdentity: AudioFileSystem.Identity,
+        requireFullIdentity: Bool,
+        checkCancellation: Bool
+    ) throws {
+        let descriptor = Darwin.openat(
+            directory, name, O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC)
+        guard descriptor >= 0 else { throw ioFailure("Open MRT2 \(name)") }
+        defer { Darwin.close(descriptor) }
+
+        var beforeValue = stat()
+        guard Darwin.fstat(descriptor, &beforeValue) == 0,
+              beforeValue.st_mode & S_IFMT == S_IFREG,
+              beforeValue.st_size >= 0,
+              UInt64(beforeValue.st_size) == UInt64(expectedData.count) else {
+            throw InferenceFailure.backendFailed(
+                "MRT2 \(name) is not the expected bounded regular file.")
+        }
+        let before = AudioFileSystem.Identity(beforeValue)
+        if requireFullIdentity {
+            guard before == expectedIdentity else {
+                throw InferenceFailure.backendFailed(
+                    "MRT2 pending result changed before promotion.")
+            }
+        } else {
+            guard before.device == expectedIdentity.device,
+                  before.inode == expectedIdentity.inode else {
+                throw InferenceFailure.backendFailed(
+                    "MRT2 promoted result does not retain the pending file identity.")
+            }
+        }
+
+        var data = Data()
+        data.reserveCapacity(expectedData.count)
+        var buffer = [UInt8](repeating: 0, count: min(max(expectedData.count, 1), 64 * 1024))
+        while data.count < expectedData.count {
+            if checkCancellation { try Task.checkCancellation() }
+            let requested = min(buffer.count, expectedData.count - data.count)
+            let count = buffer.withUnsafeMutableBytes {
+                Darwin.read(descriptor, $0.baseAddress, requested)
+            }
+            if count < 0, errno == EINTR { continue }
+            guard count > 0 else { throw ioFailure("Read complete MRT2 \(name)") }
+            data.append(contentsOf: buffer.prefix(count))
+        }
+        var extra: UInt8 = 0
+        var trailing: Int
+        repeat { trailing = Darwin.read(descriptor, &extra, 1) }
+        while trailing < 0 && errno == EINTR
+        guard trailing == 0 else {
+            throw InferenceFailure.backendFailed("MRT2 \(name) grew while being verified.")
+        }
+        var afterValue = stat()
+        guard Darwin.fstat(descriptor, &afterValue) == 0,
+              AudioFileSystem.Identity(afterValue) == before,
+              data == expectedData else {
+            throw InferenceFailure.backendFailed(
+                "MRT2 \(name) identity or content changed during verification.")
+        }
+    }
+
+    private static func ioFailure(_ action: String) -> InferenceFailure {
+        .backendFailed("\(action): \(String(cString: strerror(errno)))")
     }
 }

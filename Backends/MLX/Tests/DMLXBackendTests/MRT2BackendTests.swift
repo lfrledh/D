@@ -157,6 +157,88 @@ struct MRT2BackendTests {
         #expect(first["pitch"] == .integer(60))
     }
 
+    @Test("Pending report promotion is exclusive and validates source and job identities",
+          arguments: ["valid", "missing", "tampered", "existing", "source-symlink", "job-symlink"])
+    func pendingReportPromotion(mode: String) throws {
+        let fixture = try MRT2Fixture()
+        defer { fixture.remove() }
+        let actualJob = fixture.root.appendingPathComponent("promotion-job")
+        try FileManager.default.createDirectory(at: actualJob, withIntermediateDirectories: false)
+        let pending = actualJob.appendingPathComponent(MRT2ReportCommit.pendingName)
+        let expected = Data("validated-terminal".utf8)
+        try expected.write(to: pending)
+        let (_, identity) = try AudioFileSystem.readRegularFile(
+            pending, label: "test pending result", maximumBytes: 1_024)
+        var suppliedJob = actualJob
+
+        switch mode {
+        case "missing":
+            try FileManager.default.removeItem(at: pending)
+        case "tampered":
+            try FileManager.default.removeItem(at: pending)
+            try expected.write(to: pending)
+        case "existing":
+            try Data("existing-result".utf8).write(
+                to: actualJob.appendingPathComponent(MRT2ReportCommit.finalName))
+        case "source-symlink":
+            let outside = fixture.root.appendingPathComponent("outside-pending")
+            try expected.write(to: outside)
+            try FileManager.default.removeItem(at: pending)
+            try FileManager.default.createSymbolicLink(at: pending, withDestinationURL: outside)
+        case "job-symlink":
+            let link = fixture.root.appendingPathComponent("promotion-job-link")
+            try FileManager.default.createSymbolicLink(at: link, withDestinationURL: actualJob)
+            suppliedJob = link
+        default: break
+        }
+
+        if mode == "valid" {
+            let result = try MRT2ReportCommit.promotePending(
+                in: suppliedJob, expectedData: expected, expectedIdentity: identity)
+            #expect(result == actualJob.appendingPathComponent(MRT2ReportCommit.finalName))
+            #expect(!FileManager.default.fileExists(atPath: pending.path))
+            #expect(try Data(contentsOf: result) == expected)
+        } else {
+            expectMRT2ReportFailure {
+                _ = try MRT2ReportCommit.promotePending(
+                    in: suppliedJob, expectedData: expected, expectedIdentity: identity)
+            }
+            let final = actualJob.appendingPathComponent(MRT2ReportCommit.finalName)
+            if mode == "existing" {
+                #expect(try Data(contentsOf: final) == Data("existing-result".utf8))
+                #expect(try Data(contentsOf: pending) == expected)
+            } else {
+                #expect(!FileManager.default.fileExists(atPath: final.path))
+            }
+        }
+    }
+
+    @Test("Access-mode selection and failed post-exit check leave only pending")
+    func accessFailureDoesNotCommit() throws {
+        let fixture = try MRT2Fixture()
+        defer { fixture.remove() }
+        let job = fixture.root.appendingPathComponent("failed-access-job")
+        try FileManager.default.createDirectory(at: job, withIntermediateDirectories: false)
+        let pending = MRT2ReportCommit.observedURL(job: job, accessConfigured: true)
+        let standalone = MRT2ReportCommit.observedURL(job: job, accessConfigured: false)
+        #expect(pending.lastPathComponent == "pending-result.json")
+        #expect(standalone.lastPathComponent == "result.json")
+        try Data("pending".utf8).write(to: pending)
+
+        let postExitCheck: () throws -> Void = { throw MRT2FixtureError.accessFinish }
+        do {
+            try postExitCheck()
+            // Production reaches promotion only after the same post-exit barrier succeeds.
+            let (_, identity) = try AudioFileSystem.readRegularFile(
+                pending, label: "pending", maximumBytes: 1_024)
+            _ = try MRT2ReportCommit.promotePending(
+                in: job, expectedData: Data("pending".utf8),
+                expectedIdentity: identity)
+        } catch MRT2FixtureError.accessFinish {}
+        #expect(FileManager.default.fileExists(atPath: pending.path))
+        #expect(!FileManager.default.fileExists(atPath: standalone.path))
+    }
+
     @Test("48 kHz float WAV validation rejects frame, channel, sample, and expectation errors")
     func wavValidation() throws {
         let fixture = try MRT2Fixture()
@@ -278,7 +360,7 @@ struct MRT2BackendTests {
     }
 }
 
-private enum MRT2FixtureError: Error { case consumer }
+private enum MRT2FixtureError: Error { case consumer, accessFinish }
 
 private actor MRT2EventRecorder {
     private var events: [InferenceOutput] = []
@@ -339,7 +421,9 @@ private struct MRT2Fixture {
         acknowledgement: (@Sendable () async -> Bool)? = nil
     ) -> MRT2BackendConfiguration {
         MRT2BackendConfiguration(
-            pythonExecutable: URL(fileURLWithPath: "/usr/bin/python3"),
+            pythonExecutable: URL(fileURLWithPath:
+                "/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-MRT2-CONDITIONS-01/"
+                + "run-20260912T150154Z/venv-dev/bin/python3"),
             providerScript: script, vendorDirectory: vendor, modelManifest: manifest,
             artifactDirectory: suppliedArtifacts ?? artifacts,
             licenseAcknowledged: acknowledged, timeoutSeconds: timeout,
@@ -397,6 +481,7 @@ private struct MRT2Fixture {
         withUnsafeBytes(of: &little) { data.append(contentsOf: $0) }
     }
 
+    // MRT2_FIXTURE_PYTHON_BEGIN
     private static let providerScript = #"""
 import argparse,hashlib,json,os,signal,struct,sys,time
 p=argparse.ArgumentParser()
@@ -404,6 +489,7 @@ for name in ('request','job-directory','model-directory','manifest','vendor-dire
     p.add_argument('--'+name,required=True)
 p.add_argument('--access-manifest');p.add_argument('--access-run-id')
 a=p.parse_args()
+if (a.access_manifest is None)!=(a.access_run_id is None):raise SystemExit(2)
 with open(a.request,'r',encoding='utf-8') as f:r=json.load(f)
 run=r['runID'];mode=r['prompt'];seq=r['parameters']['sequence']
 print(json.dumps({'schemaVersion':1,'type':'progress','runID':run,'phase':'denoising','completed':1,'total':1}),flush=True)
@@ -431,9 +517,11 @@ if mode=='bad-engine-phase':metadata['engineIdentity']['closed']=True
 if mode=='bad-cleanup':metadata['cleanup']['released']=False
 if mode=='bad-diagnostics':metadata['timingsSeconds']['total']=-1.0
 event={'schemaVersion':1,'type':'result','runID':run,'artifact':artifact,'metadata':metadata}
-with open(os.path.join(a.job_directory,'result.json'),'x',encoding='utf-8') as f:json.dump(event,f,separators=(',',':'))
+record_name='pending-result.json' if a.access_manifest is not None else 'result.json'
+with open(os.path.join(a.job_directory,record_name),'x',encoding='utf-8') as f:json.dump(event,f,separators=(',',':'))
 print(json.dumps(event,separators=(',',':')),flush=True)
 """#
+    // MRT2_FIXTURE_PYTHON_END
 }
 
 private extension InferenceRequest {
@@ -454,6 +542,13 @@ private func expectMRT2BackendFailure(_ operation: () throws -> Void) {
     do { try operation(); Issue.record("Invalid MRT2 output was accepted") }
     catch InferenceFailure.backendFailed {} catch {
         Issue.record("Expected backendFailed, received \(error)")
+    }
+}
+
+private func expectMRT2ReportFailure(_ operation: () throws -> Void) {
+    do { try operation(); Issue.record("Unsafe MRT2 report promotion succeeded") }
+    catch InferenceFailure.backendFailed {} catch InferenceFailure.invalidRequest {} catch {
+        Issue.record("Expected report promotion failure, received \(error)")
     }
 }
 
