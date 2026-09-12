@@ -6,6 +6,7 @@ from __future__ import annotations
 import fcntl
 import hashlib
 import importlib.util
+import io
 import json
 import os
 import signal
@@ -13,11 +14,13 @@ import struct
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 import urllib.parse
 import uuid
 import zipfile
 import zlib
+import contextlib
 from pathlib import Path
 from unittest import mock
 
@@ -115,7 +118,8 @@ else:
     if "--audio-source" in args: source={"url":__import__("pathlib").Path(value("--audio-source")).resolve().as_uri(),"sha256":value("--audio-source-sha256"),"frameCount":int(value("--audio-source-frames")),"sampleRate":44100,"channels":2}
     input_value={"prompt":p["prompt"],"durationSeconds":p["durationSeconds"],"steps":p["steps"],"guidanceScale":p["guidance"],"seed":p["seed"],"strength":p["audioStrength"],"operation":p["audioOperation"],"source":source}
 request = {"id":run_id,"model":{"directory":__import__("pathlib").Path(model).resolve().as_uri(),"revision":revision},"input":{capability:{"_0":input_value}}}
-if MODE in ("graceful-cancel", "text-cancel", "audio-cancel", "audio-cancel-unknown-error"):
+if MODE in ("graceful-cancel", "text-cancel", "audio-cancel", "audio-cancel-unknown-error",
+            "audio-progress-cancel", "audio-fragmented-progress-cancel"):
     def stop(sig, frame):
         run={"iteration":1,"runID":run_id,"startedAt":"2026-01-01T00:00:00Z","request":request,"outcome":"cancelled",
              "text":"","artifacts":[],"elapsedSeconds":.2,"progress":[],"lifecycle":[
@@ -124,7 +128,8 @@ if MODE in ("graceful-cancel", "text-cancel", "audio-cancel", "audio-cancel-unkn
         if capability == "audio":
             run.update(lifecycle=[], cancellationRequestedSeconds=.1, cancellationLatencySeconds=.1,
                        streamError="The operation couldn’t be completed. (Swift.CancellationError error 1.)"
-                       if MODE == "audio-cancel" else "Unexpected provider failure")
+                       if MODE in ("audio-cancel", "audio-progress-cancel", "audio-fragmented-progress-cancel")
+                       else "Unexpected provider failure")
         elif MODE == "text-cancel":
             run.update(cancellationRequestedSeconds=.1, cancellationLatencySeconds=.1,
                        streamError="The operation couldn’t be completed. (Swift.CancellationError error 1.)")
@@ -133,8 +138,19 @@ if MODE in ("graceful-cancel", "text-cancel", "audio-cancel", "audio-cancel-unkn
         if capability == "text": os.write(1, b"\n")
         raise SystemExit(130)
     signal.signal(signal.SIGINT, stop)
+    if MODE == "audio-progress-cancel":
+        os.write(2, ("["+run_id+"] progress 1/8\n").encode("ascii"))
+    elif MODE == "audio-fragmented-progress-cancel":
+        progress=("["+run_id+"] progress 2/8\n").encode("ascii")
+        os.write(2, progress[:11]); time.sleep(.02); os.write(2, progress[11:]); time.sleep(.1)
     if MARKER: open(MARKER,"a",encoding="utf-8").write("ready\n")
     while True: time.sleep(.1)
+if MODE == "audio-terminal-progress":
+    os.write(2, ("["+run_id+"] progress 8/8\n").encode("ascii"))
+if MODE == "audio-other-progress":
+    os.write(2, ("["+run_id+"] loading 1/8\n").encode("ascii"))
+if MODE == "audio-malicious-progress":
+    os.write(2, ("\x1b[31m["+run_id+"] progress 1/8\x1b[0m\n").encode("ascii"))
 artifacts = []
 text = "模拟输出✅"
 if MODE == "text-trailing-newline": text += "\n"
@@ -308,6 +324,268 @@ class RunnerTests(unittest.TestCase):
         profiles["cases"][0].update(expected="cancelled", cancelAfterSeconds=.3)
         write_json(path, profiles)
         return fixture.runner().run("quick")["summary"]["attempts"][0]["cases"][0]
+
+    def audio_event_cancel_case(self, mode):
+        fixture = self.fixture(mode=mode)
+        fixture.configure_audio()
+        path = self.root / "Profiles/profiles.json"
+        profiles = json.loads(path.read_text())
+        profiles["profiles"][0]["caseIDs"] = ["source"]
+        profiles["cases"] = profiles["cases"][:1]
+        profiles["cases"][0].update(expected="cancelled", cancelWhen="audio_denoising_started")
+        write_json(path, profiles)
+        return fixture.runner().run("quick")["summary"]["attempts"][0]["cases"][0]
+
+    def test_audio_progress_event_requests_immediate_cancellation(self):
+        case = self.audio_event_cancel_case("audio-progress-cancel")
+        self.assertEqual(case["status"], "passed", case.get("message"))
+        process = case["publicProcess"]
+        self.assertEqual(process["cancellationTrigger"], "audio_denoising_started")
+        self.assertTrue(process["cancellationTriggerObserved"])
+        self.assertTrue(process["cancellationSignalSent"])
+        self.assertTrue(process["nativeProgressObserved"])
+
+    def test_fragmented_audio_progress_event_is_recognized(self):
+        case = self.audio_event_cancel_case("audio-fragmented-progress-cancel")
+        self.assertEqual(case["status"], "passed", case.get("message"))
+        self.assertTrue(case["publicProcess"]["cancellationSignalSent"])
+
+    def test_non_denoising_terminal_and_malicious_lines_do_not_trigger(self):
+        for index, mode in enumerate(("audio-terminal-progress", "audio-other-progress", "audio-malicious-progress")):
+            if index:
+                self.temporary.cleanup()
+                self.temporary = tempfile.TemporaryDirectory(prefix="d-testkit-", dir=os.environ["D_TEST_TEMP_DIR"])
+                self.root = Path(self.temporary.name) / f"case-{index}"
+                self.root.mkdir()
+            case = self.audio_event_cancel_case(mode)
+            self.assertEqual(case["status"], "failed", (mode, case))
+            self.assertFalse(case["publicProcess"]["cancellationSignalSent"], mode)
+            self.assertIn("本次未测到取消", case["message"])
+
+    def test_progress_parser_is_bounded_strict_and_recovers_after_long_line(self):
+        run_id = "12345678-1234-1234-1234-123456789abc"
+        observer = runner_module._StreamObserver(8)
+        observer.feed_stderr(b"x" * (runner_module.MAX_PROGRESS_LINE_BYTES + 10))
+        observer.feed_stderr(b"[" + run_id.encode() + b"] progress 1/8\n")
+        self.assertFalse(observer.snapshot()[2])
+        observer.feed_stderr(b"[" + run_id.encode() + b"] progress 3/8\n")
+        self.assertTrue(observer.snapshot()[2])
+        wrong = runner_module._StreamObserver(8)
+        wrong.feed_stderr(b"\x1b[31m[" + run_id.encode() + b"] progress 1/8\x1b[0m\n")
+        wrong.feed_stderr(b"[" + run_id.encode() + b"] progress 8/8\n")
+        wrong.feed_stderr(b"[" + run_id.encode() + b"] progress 1/7\n")
+        self.assertFalse(wrong.snapshot()[2])
+
+    def test_menu_q_invalid_input_confirmation_and_human_ending_are_subprocess_driven(self):
+        fixture = self.fixture(mode="normal")
+        kit = json.loads((self.root / "kit.json").read_text())
+        kit["cli"] = "fake-cli"
+        write_json(self.root / "kit.json", kit)
+        command = [sys.executable, "-B", str(MODULE_PATH), "menu", "--kit", str(self.root)]
+
+        quit_result = subprocess.run(command, input="q\n", text=True, stdout=subprocess.PIPE,
+                                     stderr=subprocess.PIPE, timeout=10, check=False)
+        self.assertEqual(quit_result.returncode, 0, quit_result.stderr)
+        self.assertIn("未校验模型", quit_result.stdout)
+        self.assertNotIn("校验模型", quit_result.stderr)
+
+        cancel_result = subprocess.run(command, input="无效\n1\n\n", text=True, stdout=subprocess.PIPE,
+                                       stderr=subprocess.PIPE, timeout=10, check=False)
+        self.assertEqual(cancel_result.returncode, 0, cancel_result.stderr)
+        self.assertIn("输入无效", cancel_result.stdout)
+        self.assertIn("已取消，未校验模型", cancel_result.stdout)
+        self.assertNotIn("校验模型", cancel_result.stderr)
+
+        completed = subprocess.run(command, input="1\nRUN\n", text=True, stdout=subprocess.PIPE,
+                                   stderr=subprocess.PIPE, timeout=10, check=False)
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("结果概览：通过 1", completed.stdout)
+        self.assertIn("当前结果位置：", completed.stdout)
+        self.assertNotIn('"schemaVersion"', completed.stdout)
+        self.assertIn("校验模型 text", completed.stderr)
+
+    def test_machine_run_stdout_remains_one_json_document(self):
+        fixture = self.fixture(mode="normal")
+        kit = json.loads((self.root / "kit.json").read_text())
+        kit["cli"] = "fake-cli"
+        write_json(self.root / "kit.json", kit)
+        completed = subprocess.run(
+            [sys.executable, "-B", str(MODULE_PATH), "run", "--kit", str(self.root), "--profile", "quick"],
+            text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=10, check=False)
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        payload = json.loads(completed.stdout)
+        self.assertEqual(payload["summary"]["overall"], "complete")
+        self.assertNotIn("结果概览", completed.stdout)
+
+    def test_heartbeat_is_visible_before_silent_process_exits_without_relaying_logs(self):
+        fixture = self.fixture()
+        quiet = self.root / "quiet-cli"
+        quiet.write_text(
+            f"#!{sys.executable}\nimport os,time\nos.write(2,b'secret prompt\\n')\ntime.sleep(.2)\n",
+            encoding="utf-8")
+        quiet.chmod(0o755)
+        display = io.StringIO()
+        with mock.patch.object(runner_module, "HEARTBEAT_SECONDS", .05), \
+             mock.patch.object(runner_module, "PROCESS_POLL_SECONDS", .01), \
+             contextlib.redirect_stderr(display):
+            result = fixture.runner()._run_process([str(quiet)], self.root / "heartbeat-process", 2)
+        self.assertEqual(result.return_code, 0)
+        self.assertIn("仍在运行：已等待", display.getvalue())
+        self.assertNotIn("secret prompt", display.getvalue())
+        self.assertIn(b"secret prompt", (self.root / "heartbeat-process/private/stderr.log").read_bytes())
+
+    def test_real_menu_process_sigint_persists_diagnostics_and_later_not_started(self):
+        cases = [text_case("one", "Inputs/one.txt"), text_case("two", "Inputs/two.txt")]
+        fixture = self.fixture(cases=cases, mode="graceful-cancel")
+        kit = json.loads((self.root / "kit.json").read_text())
+        kit["cli"] = "fake-cli"
+        write_json(self.root / "kit.json", kit)
+        process = subprocess.Popen(
+            [sys.executable, "-B", str(MODULE_PATH), "menu", "--kit", str(self.root)],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        assert process.stdin is not None
+        process.stdin.write("1\nRUN\n")
+        process.stdin.flush()
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            if fixture.marker.exists() and "ready" in fixture.marker.read_text(encoding="utf-8"):
+                break
+            time.sleep(.02)
+        else:
+            process.kill()
+            self.fail("fake CLI did not reach its cancellable execution state")
+        process.send_signal(signal.SIGINT)
+        stdout, stderr = process.communicate(timeout=10)
+        self.assertEqual(process.returncode, 130, stderr)
+        self.assertIn("结果概览：", stdout)
+        self.assertIn("主动中断 1", stdout)
+        self.assertIn("未启动 1", stdout)
+        self.assertIn("当前结果位置：", stdout)
+        self.assertNotIn('"schemaVersion"', stdout)
+        run_roots = [path for path in (self.root / "Results").iterdir() if path.is_dir()]
+        self.assertEqual(len(run_roots), 1)
+        summary = json.loads((run_roots[0] / "summary.json").read_text())
+        observed = summary["attempts"][0]["cases"]
+        self.assertEqual([item["status"] for item in observed],
+                         ["interrupted", "not_started_after_interruption"])
+        current = observed[0]
+        self.assertEqual(current["reportStatus"], "readable")
+        self.assertTrue(current["publicProcess"]["interruptedByUser"])
+        self.assertTrue(current["publicProcess"]["cancellationSignalSent"])
+        self.assertEqual(current["publicProcess"]["returnCode"], 130)
+        process_record = next(run_roots[0].glob("attempts/*/cases/001-one/execution-process/process.json"))
+        raw_report = next(run_roots[0].glob("attempts/*/cases/001-one/cli-report.json"))
+        self.assertTrue(process_record.is_file())
+        self.assertIn("runs", json.loads(raw_report.read_text()))
+
+    def legacy_interrupted_fixture(self):
+        cases = [text_case("one", "Inputs/one.txt"), text_case("two", "Inputs/two.txt")]
+        fixture = self.fixture(cases=cases)
+        runner = fixture.runner()
+        run_id = str(uuid.uuid4())
+        attempt_id = str(uuid.uuid4())
+        run_root = self.root / "Results" / run_id
+        attempt_root = run_root / "attempts" / attempt_id
+        attempt_root.mkdir(parents=True)
+        write_json(run_root / "run.json", {
+            "schemaVersion": 1, "runID": run_id, "kitID": runner.config.raw["kitID"],
+            "sourceSHA": runner.config.raw["sourceSHA"], "profileID": "quick",
+            "profileDigest": runner.profile_set.digest, "selectedCaseIDs": ["one", "two"],
+            "admissionPolicy": "guarded", "createdAt": "2026-01-01T00:00:00Z",
+            "attempts": [{"attemptID": attempt_id, "startedAt": "2026-01-01T00:00:00Z"}],
+        })
+        attempt_path = attempt_root / "attempt.json"
+        write_json(attempt_path, {
+            "schemaVersion": 1, "attemptID": attempt_id, "startedAt": "2026-01-01T00:00:00Z",
+            "state": "interrupted", "selectedCaseIDs": ["one", "two"], "preflight": {},
+            "cases": [], "admissionPolicy": "guarded", "lineage": [],
+        })
+        return runner, run_root, attempt_root
+
+    def test_legacy_interrupted_summary_infers_only_the_case_with_raw_evidence(self):
+        runner, run_root, attempt_root = self.legacy_interrupted_fixture()
+        raw_log = attempt_root / "cases/001-one/execution-process/private/stderr.log"
+        raw_log.parent.mkdir(parents=True)
+        raw_log.write_bytes(b"partial backend output")
+        protected = [run_root / "run.json", attempt_root / "attempt.json", raw_log]
+        before = {path: hashlib.sha256(path.read_bytes()).hexdigest() for path in protected}
+        summary = runner.summarize(run_root.name)
+        observed = summary["attempts"][0]["cases"]
+        self.assertEqual([item["status"] for item in observed],
+                         ["interrupted", "not_started_after_interruption"])
+        self.assertIn("raw process/CLI evidence", observed[0]["message"])
+        self.assertEqual(before, {path: hashlib.sha256(path.read_bytes()).hexdigest() for path in protected})
+
+    def test_legacy_lost_index_recovers_both_valid_case_results_without_rewriting_them(self):
+        cases = [text_case("one", "Inputs/one.txt"), text_case("two", "Inputs/two.txt")]
+        fixture = self.fixture(cases=cases)
+        runner = fixture.runner()
+        result = runner.run("quick")
+        run_root = self.root / "Results" / result["runID"]
+        attempt_root = run_root / "attempts" / result["attemptID"]
+        attempt_path = attempt_root / "attempt.json"
+        attempt = json.loads(attempt_path.read_text())
+        attempt["state"] = "interrupted"
+        attempt["cases"] = []
+        attempt.pop("stoppedCaseID", None)
+        write_json(attempt_path, attempt)
+        protected = [run_root / "run.json", attempt_path,
+                     attempt_root / "cases/001-one/case.json",
+                     attempt_root / "cases/002-two/case.json",
+                     attempt_root / "cases/001-one/cli-report.json",
+                     attempt_root / "cases/002-two/cli-report.json"]
+        before = {path: hashlib.sha256(path.read_bytes()).hexdigest() for path in protected}
+        summary = runner.summarize(result["runID"])
+        self.assertEqual([item["status"] for item in summary["attempts"][0]["cases"]],
+                         ["passed", "passed"])
+        self.assertEqual(summary["overall"], "complete")
+        self.assertEqual(before, {path: hashlib.sha256(path.read_bytes()).hexdigest() for path in protected})
+
+    def test_legacy_multiple_raw_only_cases_are_explicitly_ambiguous(self):
+        runner, run_root, attempt_root = self.legacy_interrupted_fixture()
+        protected = [run_root / "run.json", attempt_root / "attempt.json"]
+        for index, case_id in enumerate(("one", "two"), 1):
+            raw = attempt_root / "cases" / f"{index:03d}-{case_id}" / "execution-process/process.json"
+            write_json(raw, {"return_code": 130})
+            protected.append(raw)
+        before = {path: hashlib.sha256(path.read_bytes()).hexdigest() for path in protected}
+        summary = runner.summarize(run_root.name)
+        observed = summary["attempts"][0]["cases"]
+        self.assertEqual([item["status"] for item in observed], ["invalid", "invalid"])
+        self.assertTrue(all("ambiguous" in item["message"] for item in observed))
+        self.assertEqual(before, {path: hashlib.sha256(path.read_bytes()).hexdigest() for path in protected})
+
+    def test_legacy_raw_evidence_rejects_symlinked_ancestor_without_touching_sentinel(self):
+        runner, run_root, attempt_root = self.legacy_interrupted_fixture()
+        outside = self.root.parent / "outside-legacy"
+        outside.mkdir()
+        sentinel = outside / "process.json"
+        sentinel.write_text("keep", encoding="utf-8")
+        case_root = attempt_root / "cases/001-one"
+        case_root.mkdir(parents=True)
+        (case_root / "execution-process").symlink_to(outside, target_is_directory=True)
+        protected = [run_root / "run.json", attempt_root / "attempt.json", sentinel]
+        before = {path: hashlib.sha256(path.read_bytes()).hexdigest() for path in protected}
+        with self.assertRaisesRegex(runner_module.KitError, "symbolic link"):
+            runner.summarize(run_root.name)
+        self.assertEqual(before, {path: hashlib.sha256(path.read_bytes()).hexdigest() for path in protected})
+
+    def test_cancel_when_schema_is_audio_only_exact_and_mutually_exclusive(self):
+        invalid_cases = []
+        wrong_value = text_case(); wrong_value.update(expected="cancelled", cancelWhen="loading")
+        invalid_cases.append(wrong_value)
+        wrong_capability = text_case(); wrong_capability.update(expected="cancelled", cancelWhen="audio_denoising_started")
+        invalid_cases.append(wrong_capability)
+        both = text_case(); both.update(expected="cancelled", cancelWhen="audio_denoising_started", cancelAfterSeconds=.2)
+        invalid_cases.append(both)
+        for index, case in enumerate(invalid_cases):
+            if index:
+                self.temporary.cleanup()
+                self.temporary = tempfile.TemporaryDirectory(prefix="d-testkit-", dir=os.environ["D_TEST_TEMP_DIR"])
+                self.root = Path(self.temporary.name) / f"invalid-{index}"
+                self.root.mkdir()
+            with self.assertRaisesRegex(runner_module.KitError, "cancelWhen"):
+                self.fixture(cases=[case]).runner()
 
     def test_audio_cancellation_stream_error_matches_formal_cli(self):
         case = self.audio_cancel_case("audio-cancel")

@@ -153,14 +153,15 @@ Generated result bundles exclude model weights and are a separate export.
 set -uo pipefail
 KIT_ROOT="$(cd -- "$(dirname -- "$0")" && pwd -P)"
 if [[ -e "$KIT_ROOT/PREPARATION-INCOMPLETE.txt" ]]; then
-  echo "Test kit preparation is incomplete. Please read README.zh-CN.md."
-  read -r -p "Press Enter to close." _
+  echo "测试包尚未准备完成，请阅读 README.zh-CN.md；没有开始测试。"
+  read -r -p "按回车关闭窗口。" _
   exit 2
 fi
 export PYTHONDONTWRITEBYTECODE=1
 "$KIT_ROOT/Runtime/AudioEngine.dengine/python/bin/python3" -I -B "$KIT_ROOT/Tools/d_testkit.py" menu --kit "$KIT_ROOT"
 STATUS=$?
-read -r -p "Press Enter to close this window." _
+echo "测试工具已结束。请先等待清理完成；需要测试另一组时可重新打开入口。"
+read -r -p "记下结果位置并确认可以安全推出 SSD 后，按回车关闭窗口。" _
 exit "$STATUS"
 '''
     # Last artifact installed; preparation marker is removed only after all copies verified.

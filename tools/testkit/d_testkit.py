@@ -27,7 +27,7 @@ import wave
 import zipfile
 import zlib
 from pathlib import Path
-from typing import Any, BinaryIO, Iterable, Mapping, Sequence
+from typing import Any, BinaryIO, Callable, Iterable, Mapping, Sequence
 
 
 SCHEMA_VERSION = 1
@@ -40,6 +40,8 @@ MAX_PROFILES = 32
 MAX_CASES = 256
 MAX_MANIFEST_FILES = 10000
 PROCESS_POLL_SECONDS = 0.5
+HEARTBEAT_SECONDS = 5.0
+MAX_PROGRESS_LINE_BYTES = 1024
 MAX_RSS_SAMPLES = 7200
 MAX_FAILURE_DIAGNOSTICS = 4
 MAX_FAILURE_DIAGNOSTIC_CHARS = 2048
@@ -50,6 +52,13 @@ TERM_GRACE_SECONDS = 5.0
 ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 HEX40 = re.compile(r"^[0-9a-f]{40}$")
 HEX64 = re.compile(r"^[0-9a-f]{64}$")
+CASE_STATUSES = {
+    "passed", "blocked", "blocked_budget", "blocked_dependency", "failed", "cancelled",
+    "interrupted", "not_started_after_failure", "not_started_after_interruption", "invalid",
+}
+NATIVE_PROGRESS_PATTERN = re.compile(
+    rb"^\[[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}\] progress ([0-9]+)/([0-9]+)\r?$"
+)
 
 
 class KitError(Exception):
@@ -58,6 +67,14 @@ class KitError(Exception):
     def __init__(self, message: str, *, kind: str = "invalid") -> None:
         super().__init__(message)
         self.kind = kind
+
+
+class RunInterrupted(KeyboardInterrupt):
+    """A user interruption whose durable run summary is already available."""
+
+    def __init__(self, result: dict[str, Any]) -> None:
+        super().__init__()
+        self.result = result
 
 
 def _utc_now() -> str:
@@ -114,20 +131,28 @@ def _atomic_bytes(path: Path, data: bytes) -> None:
             temporary.unlink()
 
 
-def _sha256_file(path: Path) -> str:
+def _sha256_file(path: Path, progress: Callable[[int], None] | None = None) -> str:
     digest = hashlib.sha256()
+    completed = 0
     with path.open("rb") as handle:
         for block in iter(lambda: handle.read(MIB), b""):
             digest.update(block)
+            completed += len(block)
+            if progress is not None:
+                progress(completed)
     return digest.hexdigest()
 
 
-def _git_blob_sha1(path: Path, size: int) -> str:
+def _git_blob_sha1(path: Path, size: int, progress: Callable[[int], None] | None = None) -> str:
     digest = hashlib.sha1(usedforsecurity=False)
     digest.update(f"blob {size}\0".encode("ascii"))
+    completed = 0
     with path.open("rb") as handle:
         for block in iter(lambda: handle.read(MIB), b""):
             digest.update(block)
+            completed += len(block)
+            if progress is not None:
+                progress(completed)
     return digest.hexdigest()
 
 
@@ -170,6 +195,14 @@ def _relative_path(root: Path, raw: Any, label: str, *, kind: str, must_exist: b
     elif kind == "directory" and must_exist:
         _ordinary_directory(joined, label)
     return joined
+
+
+def _optional_relative_file(root: Path, raw: str, label: str) -> Path | None:
+    """Resolve one explicit optional file while checking every path component."""
+    candidate = _relative_path(root, raw, label, kind="file", must_exist=False)
+    if not os.path.lexists(candidate):
+        return None
+    return _relative_path(root, raw, label, kind="file", must_exist=True)
 
 
 def _identifier(value: Any, label: str) -> str:
@@ -225,10 +258,79 @@ class ProcessResult:
     rss_samples_kib: list[dict[str, Any]]
     rss_samples_truncated: bool
     child_rss: str = "unknown"
+    cancellation_trigger: str | None = None
+    cancellation_trigger_observed: bool = False
+    cancellation_signal_sent: bool = False
+    interrupted_by_user: bool = False
+    stdout_activity_observed: bool = False
+    stderr_activity_observed: bool = False
+    native_progress_observed: bool = False
+
+
+class _StreamObserver:
+    """Observe bounded stream facts without decoding or relaying untrusted output."""
+
+    def __init__(self, expected_progress_total: int | None = None) -> None:
+        self.expected_progress_total = expected_progress_total
+        self.wake = threading.Event()
+        self._lock = threading.Lock()
+        self._stderr_line = bytearray()
+        self._discarding_stderr_line = False
+        self.stdout_activity = False
+        self.stderr_activity = False
+        self.native_progress = False
+
+    def feed_stdout(self, block: bytes) -> None:
+        if block:
+            with self._lock:
+                self.stdout_activity = True
+            self.wake.set()
+
+    def feed_stderr(self, block: bytes) -> None:
+        if not block:
+            return
+        with self._lock:
+            self.stderr_activity = True
+            for byte in block:
+                if self._discarding_stderr_line:
+                    if byte == 10:
+                        self._discarding_stderr_line = False
+                    continue
+                if byte == 10:
+                    self._observe_stderr_line(bytes(self._stderr_line))
+                    self._stderr_line.clear()
+                elif len(self._stderr_line) < MAX_PROGRESS_LINE_BYTES:
+                    self._stderr_line.append(byte)
+                else:
+                    self._stderr_line.clear()
+                    self._discarding_stderr_line = True
+        self.wake.set()
+
+    def finish_stderr(self) -> None:
+        with self._lock:
+            if self._stderr_line and not self._discarding_stderr_line:
+                self._observe_stderr_line(bytes(self._stderr_line))
+            self._stderr_line.clear()
+            self._discarding_stderr_line = False
+        self.wake.set()
+
+    def _observe_stderr_line(self, line: bytes) -> None:
+        match = NATIVE_PROGRESS_PATTERN.fullmatch(line)
+        if match is None or self.expected_progress_total is None:
+            return
+        completed, total = int(match.group(1)), int(match.group(2))
+        if total == self.expected_progress_total and 1 <= completed < total:
+            self.native_progress = True
+
+    def snapshot(self) -> tuple[bool, bool, bool]:
+        with self._lock:
+            return self.stdout_activity, self.stderr_activity, self.native_progress
 
 
 class _BoundedDrain(threading.Thread):
-    def __init__(self, source: BinaryIO, destination: BinaryIO, limit: int) -> None:
+    def __init__(self, source: BinaryIO, destination: BinaryIO, limit: int,
+                 observer: Callable[[bytes], None] | None = None,
+                 finish_observer: Callable[[], None] | None = None) -> None:
         super().__init__(daemon=True)
         self.source = source
         self.destination = destination
@@ -236,13 +338,20 @@ class _BoundedDrain(threading.Thread):
         self.total = 0
         self.exceeded = False
         self.error: str | None = None
+        self.observer = observer
+        self.finish_observer = finish_observer
 
     def run(self) -> None:
         try:
             while True:
-                block = self.source.read(65536)
+                # BufferedReader.read(size) may wait for its requested size on a
+                # live pipe. os.read returns the bytes currently available, so a
+                # short progress line reaches the cancellation observer at once.
+                block = os.read(self.source.fileno(), 65536)
                 if not block:
                     break
+                if self.observer is not None:
+                    self.observer(block)
                 self.total += len(block)
                 remaining = self.limit - self.destination.tell()
                 if remaining > 0:
@@ -252,6 +361,9 @@ class _BoundedDrain(threading.Thread):
                     self.exceeded = True
         except Exception as error:  # recorded rather than abandoning the child pipe
             self.error = f"{type(error).__name__}: {error}"
+        finally:
+            if self.finish_observer is not None:
+                self.finish_observer()
 
 
 class KitRunner:
@@ -326,7 +438,8 @@ class KitRunner:
         _require(isinstance(raw["cases"], list) and 0 < len(raw["cases"]) <= MAX_CASES, "cases must be a bounded array")
         cases: dict[str, dict[str, Any]] = {}
         case_allowed = {"id", "title", "model", "capability", "promptFile", "parameters",
-                        "timeoutSeconds", "expected", "repeatCount", "sourceCase", "cancelAfterSeconds"}
+                        "timeoutSeconds", "expected", "repeatCount", "sourceCase", "cancelAfterSeconds",
+                        "cancelWhen"}
         case_required = {"id", "title", "model", "capability", "promptFile", "parameters",
                          "timeoutSeconds", "expected", "repeatCount"}
         for entry in raw["cases"]:
@@ -355,6 +468,14 @@ class KitRunner:
                 _require(_is_number(entry["cancelAfterSeconds"]) and 0 < float(entry["cancelAfterSeconds"]) < float(entry["timeoutSeconds"]),
                          f"case {case_id} cancelAfterSeconds is invalid")
                 _require(entry["expected"] == "cancelled", f"case {case_id} cancellation must expect cancelled")
+            if "cancelWhen" in entry:
+                _require(isinstance(entry["cancelWhen"], str)
+                         and entry["cancelWhen"] == "audio_denoising_started",
+                         f"case {case_id} cancelWhen is invalid")
+                _require(capability == "audio" and entry["expected"] == "cancelled",
+                         f"case {case_id} cancelWhen requires an audio cancellation case")
+                _require("cancelAfterSeconds" not in entry,
+                         f"case {case_id} cancelWhen and cancelAfterSeconds are mutually exclusive")
             if "sourceCase" in entry:
                 _identifier(entry["sourceCase"], f"case {case_id} sourceCase")
                 _require(capability == "audio", f"case {case_id} sourceCase is audio-only")
@@ -495,7 +616,8 @@ class KitRunner:
         seen: set[str] = set()
         total = 0
         checked = []
-        for entry in files:
+        print(f"校验模型 {model.model_id}：共 {len(files)} 个文件。", file=sys.stderr, flush=True)
+        for file_index, entry in enumerate(files, 1):
             _require(isinstance(entry, dict), f"manifest file for {model.model_id} must be an object")
             if model.format == "text":
                 _strict_keys(entry, {"name", "size", "algorithm", "checksum"},
@@ -517,10 +639,26 @@ class KitRunner:
             path = _relative_path(model.directory, relative, f"model file {model.model_id}/{relative}", kind="file")
             actual_size = path.stat().st_size
             _require(actual_size == size, f"model file size mismatch: {model.model_id}/{relative}", kind="blocked")
-            actual = _sha256_file(path) if algorithm == "sha256" else _git_blob_sha1(path, actual_size)
+            print(f"校验模型 {model.model_id} [{file_index}/{len(files)}]：0/{actual_size} 字节。",
+                  file=sys.stderr, flush=True)
+            last_report = time.monotonic()
+
+            def report_progress(completed: int) -> None:
+                nonlocal last_report
+                now = time.monotonic()
+                if completed == actual_size or now - last_report >= HEARTBEAT_SECONDS:
+                    print(f"校验模型 {model.model_id} [{file_index}/{len(files)}]："
+                          f"{completed}/{actual_size} 字节（这是文件校验，不是推理进度）。",
+                          file=sys.stderr, flush=True)
+                    last_report = now
+
+            actual = (_sha256_file(path, report_progress) if algorithm == "sha256"
+                      else _git_blob_sha1(path, actual_size, report_progress))
             _require(actual == expected, f"model file digest mismatch: {model.model_id}/{relative}", kind="blocked")
             total += actual_size
             checked.append({"path": relative, "size": actual_size, "algorithm": algorithm, "digest": actual})
+        print(f"模型 {model.model_id} 校验完成：{len(checked)}/{len(files)} 个文件，{total} 字节。",
+              file=sys.stderr, flush=True)
         return {"model": model.model_id, "revision": model.revision, "files": checked,
                 "fileCount": len(checked), "totalBytes": total}
 
@@ -625,25 +763,32 @@ class KitRunner:
         return command
 
     @staticmethod
-    def _terminate_group(process: subprocess.Popen[bytes], first_signal: int = signal.SIGINT) -> bool:
+    def _terminate_group(process: subprocess.Popen[bytes], first_signal: int = signal.SIGINT) -> tuple[bool, bool]:
         if process.poll() is not None:
-            return False
+            return False, False
         forced = False
+        first_signal_sent = False
         for sent, grace in ((first_signal, INTERRUPT_GRACE_SECONDS), (signal.SIGTERM, TERM_GRACE_SECONDS)):
-            with contextlib.suppress(ProcessLookupError):
+            try:
                 os.killpg(process.pid, sent)
+                if sent == first_signal:
+                    first_signal_sent = True
+            except ProcessLookupError:
+                pass
             try:
                 process.wait(timeout=grace)
-                return forced
+                return forced, first_signal_sent
             except subprocess.TimeoutExpired:
                 forced = True
         with contextlib.suppress(ProcessLookupError):
             os.killpg(process.pid, signal.SIGKILL)
         process.wait()
-        return True
+        return True, first_signal_sent
 
     def _run_process(self, command: Sequence[str], directory: Path, timeout: float,
-                     cancel_after: float | None = None, *, _test_ready: Path | None = None) -> ProcessResult:
+                     cancel_after: float | None = None, *, cancel_when: str | None = None,
+                     expected_progress_total: int | None = None,
+                     _test_ready: Path | None = None) -> ProcessResult:
         _require(not directory.exists() and not directory.is_symlink(), f"process output already exists: {directory}", kind="failed")
         directory.mkdir(parents=True, exist_ok=False)
         private = directory / "private"
@@ -663,54 +808,106 @@ class KitRunner:
             environment["HOME"] = os.environ["HOME"]
         stdout_path, stderr_path = private / "stdout.log", private / "stderr.log"
         started = time.monotonic()
-        timed_out = cancelled = forced = False
+        timed_out = cancelled = forced = interrupted = False
+        trigger = "timer" if cancel_after is not None else cancel_when
+        trigger_observed = cancellation_signal_sent = False
         samples: list[dict[str, Any]] = []
+        observer = _StreamObserver(expected_progress_total)
         with stdout_path.open("xb") as stdout_file, stderr_path.open("xb") as stderr_file:
             try:
                 process = subprocess.Popen(list(command), cwd=directory, env=environment, stdout=subprocess.PIPE,
-                                           stderr=subprocess.PIPE, start_new_session=True)
+                                           stderr=subprocess.PIPE, start_new_session=True, bufsize=0)
             except OSError as error:
                 raise KitError(f"cannot start bundled CLI: {error}", kind="failed") from error
             assert process.stdout is not None and process.stderr is not None
-            stdout_drain = _BoundedDrain(process.stdout, stdout_file, MAX_STREAM_BYTES)
-            stderr_drain = _BoundedDrain(process.stderr, stderr_file, MAX_STREAM_BYTES)
+            stdout_drain = _BoundedDrain(
+                process.stdout, stdout_file, MAX_STREAM_BYTES, observer.feed_stdout)
+            stderr_drain = _BoundedDrain(
+                process.stderr, stderr_file, MAX_STREAM_BYTES,
+                observer.feed_stderr, observer.finish_stderr)
             stdout_drain.start(); stderr_drain.start()
+            last_sample = started - PROCESS_POLL_SECONDS
+            last_heartbeat = started
             try:
                 while process.poll() is None:
                     elapsed = time.monotonic() - started
-                    rss = _rss_kib(process.pid)
-                    if len(samples) < MAX_RSS_SAMPLES:
-                        samples.append({"elapsedSeconds": round(elapsed, 3), "pid": process.pid, "rssKiB": rss})
+                    now = time.monotonic()
+                    if now - last_sample >= PROCESS_POLL_SECONDS:
+                        rss = _rss_kib(process.pid)
+                        if len(samples) < MAX_RSS_SAMPLES:
+                            samples.append({"elapsedSeconds": round(elapsed, 3), "pid": process.pid, "rssKiB": rss})
+                        last_sample = now
                     if stdout_drain.error or stderr_drain.error or stdout_drain.exceeded or stderr_drain.exceeded:
-                        forced = self._terminate_group(process) or forced
+                        stopped_forced, _ = self._terminate_group(process)
+                        forced = stopped_forced or forced
                         break
                     ready = _test_ready is None or _test_ready.exists()
+                    # Clear first, then read sticky observer state. An event that
+                    # arrives before/during the snapshot is represented by state;
+                    # one arriving after it wakes the wait below.
+                    observer.wake.clear()
+                    stdout_seen, stderr_seen, progress_seen = observer.snapshot()
+                    if ready and cancel_when is not None and progress_seen:
+                        trigger_observed = True
+                        print("已观察到音频去噪进度，正在请求取消并等待清理。", file=sys.stderr, flush=True)
+                        stopped_forced, cancellation_signal_sent = self._terminate_group(process)
+                        cancelled = cancellation_signal_sent
+                        forced = stopped_forced or forced
+                        break
                     if ready and cancel_after is not None and elapsed >= cancel_after:
-                        cancelled = True
-                        forced = self._terminate_group(process) or forced
+                        trigger_observed = True
+                        print("已到取消时点，正在请求取消并等待清理。", file=sys.stderr, flush=True)
+                        stopped_forced, cancellation_signal_sent = self._terminate_group(process)
+                        cancelled = cancellation_signal_sent
+                        forced = stopped_forced or forced
                         break
                     if ready and elapsed >= timeout:
                         timed_out = True
-                        forced = self._terminate_group(process) or forced
+                        print("已到停止上限，正在停止并等待清理。", file=sys.stderr, flush=True)
+                        stopped_forced, _ = self._terminate_group(process)
+                        forced = stopped_forced or forced
                         break
-                    time.sleep(PROCESS_POLL_SECONDS)
+                    if now - last_heartbeat >= HEARTBEAT_SECONDS:
+                        if progress_seen:
+                            activity = "已收到模型进度"
+                        elif stdout_seen:
+                            activity = "已收到文字或输出数据"
+                        elif stderr_seen:
+                            activity = "后端已有日志，但尚未报告生成进度"
+                        else:
+                            activity = "后端运行中，尚未报告生成进度"
+                        print(f"仍在运行：已等待 {int(elapsed)} 秒；{activity}。", file=sys.stderr, flush=True)
+                        last_heartbeat = now
+                    observer.wake.wait(PROCESS_POLL_SECONDS)
             except KeyboardInterrupt:
-                cancelled = True
-                forced = self._terminate_group(process) or forced
-                raise
+                interrupted = True
+                print("收到停止请求，正在取消并等待后端清理。", file=sys.stderr, flush=True)
+                stopped_forced, cancellation_signal_sent = self._terminate_group(process)
+                cancelled = cancellation_signal_sent
+                forced = stopped_forced or forced
             finally:
                 if process.poll() is None:
-                    forced = self._terminate_group(process) or forced
+                    stopped_forced, _ = self._terminate_group(process)
+                    forced = stopped_forced or forced
                 stdout_drain.join(timeout=5); stderr_drain.join(timeout=5)
                 process.stdout.close(); process.stderr.close()
                 stdout_drain.join(timeout=1); stderr_drain.join(timeout=1)
-                _require(not stdout_drain.is_alive() and not stderr_drain.is_alive(), "CLI stream drain did not finish", kind="failed")
-            _require(not stdout_drain.error and not stderr_drain.error,
-                     f"CLI stream drain failed: {stdout_drain.error or stderr_drain.error}", kind="failed")
-        result = ProcessResult(process.returncode, time.monotonic() - started, stdout_drain.total, stderr_drain.total,
-                               stdout_drain.exceeded, stderr_drain.exceeded, timed_out, cancelled, forced, samples,
-                               len(samples) >= MAX_RSS_SAMPLES)
+            stdout_seen, stderr_seen, progress_seen = observer.snapshot()
+        result = ProcessResult(
+            process.returncode, time.monotonic() - started, stdout_drain.total, stderr_drain.total,
+            stdout_drain.exceeded, stderr_drain.exceeded, timed_out, cancelled, forced, samples,
+            len(samples) >= MAX_RSS_SAMPLES, cancellation_trigger=trigger,
+            cancellation_trigger_observed=trigger_observed or (cancel_when is not None and progress_seen),
+            cancellation_signal_sent=cancellation_signal_sent, interrupted_by_user=interrupted,
+            stdout_activity_observed=stdout_seen, stderr_activity_observed=stderr_seen,
+            native_progress_observed=progress_seen)
         _atomic_json(directory / "process.json", dataclasses.asdict(result))
+        _require(not stdout_drain.is_alive() and not stderr_drain.is_alive(),
+                 "CLI stream drain did not finish", kind="failed")
+        _require(not stdout_drain.error and not stderr_drain.error,
+                 f"CLI stream drain failed: {stdout_drain.error or stderr_drain.error}", kind="failed")
+        if interrupted:
+            raise KeyboardInterrupt
         return result
 
     def _inspect_case(self, case: dict[str, Any], directory: Path, budget_mib: int,
@@ -753,6 +950,10 @@ class KitRunner:
     def run(self, profile_id: str, requested: Sequence[str] | None = None, resume: str | None = None) -> dict[str, Any]:
         selected = self._select_cases(profile_id, requested)
         preflight = self.preflight(selected)
+        return self._run_selected(profile_id, selected, preflight, resume)
+
+    def _run_selected(self, profile_id: str, selected: list[str], preflight: dict[str, Any],
+                      resume: str | None = None) -> dict[str, Any]:
         results_root = self.root / "Results"
         _require(not results_root.is_symlink(), "Results must not be a symbolic link", kind="failed")
         results_root.mkdir(exist_ok=True)
@@ -852,9 +1053,13 @@ class KitRunner:
         budget_mib = preflight["budget"]["admissionBudgetMiB"]
         interrupted = False
         stopped_after_failure = False
+        print(f"结果目录：{run_root}", file=sys.stderr, flush=True)
+        print("停止方法：在此终端按一次 Control-C，然后等待取消、清理和保存完成。", file=sys.stderr, flush=True)
         for index, case_id in enumerate(selected_for_attempt):
             case = self.profile_set.cases[case_id]
-            print(f"开始 [{index + 1}/{len(selected_for_attempt)}] {case_id}", file=sys.stderr, flush=True)
+            parameter_summary = json.dumps(case["parameters"], ensure_ascii=False, sort_keys=True)
+            print(f"开始 [{index + 1}/{len(selected_for_attempt)}] {case['title']} ({case_id})；实际参数 {parameter_summary}",
+                  file=sys.stderr, flush=True)
             case_root = attempt_root / "cases" / f"{index + 1:03d}-{case_id}"
             _require(not case_root.exists() and not case_root.is_symlink(), "case output already exists", kind="failed")
             case_root.mkdir(parents=True)
@@ -878,6 +1083,27 @@ class KitRunner:
                 except KeyboardInterrupt:
                     result = self._case_record(case, "interrupted", "user interrupted the batch")
                     interrupted = True
+                    attempt["stoppedCaseID"] = case_id
+                    attempt["stopReason"] = "user interrupted; current process was cleaned up and later cases were not started"
+                    result["systemBefore"] = preflight.get("system", {})
+                    result["systemAfter"] = self._system_observation()
+                    execution_process = case_root / "execution-process" / "process.json"
+                    inspection_process = case_root / "inspection-process" / "process.json"
+                    if execution_process.is_file() and not execution_process.is_symlink():
+                        _, process_value = _read_json(execution_process, "interrupted execution process")
+                        result["publicProcess"] = _public_process_dict(process_value)
+                        diagnostic_report = case_root / "cli-report.json"
+                    elif inspection_process.is_file() and not inspection_process.is_symlink():
+                        _, process_value = _read_json(inspection_process, "interrupted inspection process")
+                        result["inspectionProcess"] = _public_process_dict(process_value)
+                        diagnostic_report = case_root / "inspection.json"
+                    else:
+                        diagnostic_report = case_root / "cli-report.json"
+                    diagnostics, report_status = _failure_diagnostics(
+                        diagnostic_report, "user interrupted after requesting bounded cleanup")
+                    result["failureDiagnostics"] = diagnostics
+                    result["reportStatus"] = report_status
+                    result["failureCause"] = "user_interruption"
                 except KitError as error:
                     status = "blocked" if error.kind == "blocked" else "failed"
                     result = self._case_record(case, status, str(error))
@@ -917,6 +1143,21 @@ class KitRunner:
                     successful_sources[case_id] = source_info
             print(f"结束 {case_id}: {result['status']}", file=sys.stderr, flush=True)
             if interrupted:
+                for later_index, later_id in enumerate(selected_for_attempt[index + 1:], index + 2):
+                    later_case = self.profile_set.cases[later_id]
+                    later_root = attempt_root / "cases" / f"{later_index:03d}-{later_id}"
+                    _require(not later_root.exists() and not later_root.is_symlink(),
+                             "case output already exists", kind="failed")
+                    later_root.mkdir(parents=True)
+                    later_result = self._case_record(
+                        later_case, "not_started_after_interruption",
+                        f"not started after user interrupted case {case_id}")
+                    later_result["admissionPolicy"] = admission_policy
+                    _atomic_json(later_root / "case.json", _public_case(later_result, self.root, run_root))
+                    attempt["cases"].append({"caseID": later_id,
+                                             "path": str((later_root / "case.json").relative_to(attempt_root)),
+                                             "status": later_result["status"]})
+                _atomic_json(attempt_root / "attempt.json", attempt)
                 break
             if admission_policy == "probe" and result["status"] != "passed":
                 stopped_after_failure = True
@@ -944,6 +1185,8 @@ class KitRunner:
         attempt["finishedAt"] = _utc_now()
         _atomic_json(attempt_root / "attempt.json", attempt)
         summary = self.summarize(run_id)
+        if interrupted:
+            raise RunInterrupted({"runID": run_id, "attemptID": attempt_id, "summary": summary})
         return {"runID": run_id, "attemptID": attempt_id, "summary": summary}
 
     def _materialize_source(self, run_root: Path, source: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
@@ -996,7 +1239,10 @@ class KitRunner:
             artifacts.mkdir()
         command = self._command(case, report, artifacts, budget_mib, inspect=False, source=source)
         process = self._run_process(command, case_root / "execution-process", float(case["timeoutSeconds"]),
-                                    float(case["cancelAfterSeconds"]) if "cancelAfterSeconds" in case else None)
+                                    float(case["cancelAfterSeconds"]) if "cancelAfterSeconds" in case else None,
+                                    cancel_when=case.get("cancelWhen"),
+                                    expected_progress_total=(case["parameters"]["steps"]
+                                                             if case.get("cancelWhen") else None))
         result = self._case_record(case, "failed")
         result["inspection"] = inspection
         result["process"] = dataclasses.asdict(process)
@@ -1018,6 +1264,17 @@ class KitRunner:
             result["failureDiagnostics"] = diagnostics
             result["reportStatus"] = report_status
             result["failureCause"] = "unknown"
+            return result
+        if (case.get("cancelWhen") == "audio_denoising_started"
+                and not process.cancellation_signal_sent and process.return_code == 0):
+            if process.cancellation_trigger_observed:
+                result["message"] = "生成已先完成，本次未测到取消；已看到去噪信号但未能在完成前发出取消"
+            else:
+                result["message"] = "生成已先完成，本次未测到取消；未观察到有效的去噪进度"
+            diagnostics, report_status = _failure_diagnostics(report, result["message"])
+            result["failureDiagnostics"] = diagnostics
+            result["reportStatus"] = report_status
+            result["failureCause"] = "cancellation_not_exercised"
             return result
         _require(report.exists() and report.is_file() and not report.is_symlink(),
                  f"CLI report is missing or unsafe for {case['id']}", kind="failed")
@@ -1242,8 +1499,17 @@ class KitRunner:
             _require(isinstance(attempt_selected, list) and attempt_selected and len(attempt_selected) == len(set(attempt_selected))
                      and all(item in selected_ids for item in attempt_selected), "attempt selection is invalid")
             _require(isinstance(attempt.get("cases"), list), "attempt cases must be an array")
-            cases = []
+            cases_by_id: dict[str, dict[str, Any]] = {}
             observed: set[str] = set()
+
+            def record_case(clean: dict[str, Any]) -> None:
+                case_id = clean["caseID"]
+                cases_by_id[case_id] = clean
+                observed.add(case_id)
+                status = clean["status"]
+                statuses[status] = statuses.get(status, 0) + 1
+                latest_by_case[case_id] = status
+
             for reference in attempt.get("cases", []):
                 _require(isinstance(reference, dict) and reference.get("caseID") in attempt_selected
                          and reference.get("caseID") not in observed, "duplicate or unknown attempt case")
@@ -1253,20 +1519,70 @@ class KitRunner:
                          and case_result.get("schemaVersion") == 1 and case_result.get("caseID") == reference.get("caseID"),
                          "case result identity mismatch")
                 clean = _public_case(case_result, self.root, run_root)
-                _require(clean.get("status") in ("passed", "blocked", "blocked_budget", "blocked_dependency",
-                                                  "failed", "cancelled", "interrupted",
-                                                  "not_started_after_failure"), "unknown case status")
-                cases.append(clean)
-                observed.add(clean["caseID"])
-                statuses[clean["status"]] = statuses.get(clean["status"], 0) + 1
-                latest_by_case[clean["caseID"]] = clean["status"]
+                _require(clean.get("status") in CASE_STATUSES, "unknown case status")
+                record_case(clean)
+
+            raw_only_evidence: dict[str, bool] = {}
+            for case_index, case_id in enumerate(attempt_selected, 1):
+                if case_id in observed:
+                    continue
+                case_base = f"cases/{case_index:03d}-{case_id}"
+                recovered_path = _optional_relative_file(
+                    attempt_root, f"{case_base}/case.json", f"unindexed case result {case_id}")
+                if recovered_path is not None:
+                    _, recovered = _read_json(recovered_path, f"unindexed case result {case_id}")
+                    _require(isinstance(recovered, dict) and _is_int(recovered.get("schemaVersion"))
+                             and recovered.get("schemaVersion") == 1
+                             and recovered.get("caseID") == case_id,
+                             f"unindexed case result identity mismatch for {case_id}")
+                    clean = _public_case(recovered, self.root, run_root)
+                    _require(clean.get("status") in CASE_STATUSES,
+                             f"unknown unindexed case status for {case_id}")
+                    record_case(clean)
+                    continue
+                raw_relatives = (
+                    "cli-report.json", "inspection.json", "execution-process/process.json",
+                    "execution-process/private/stdout.log", "execution-process/private/stderr.log",
+                    "inspection-process/process.json", "inspection-process/private/stdout.log",
+                    "inspection-process/private/stderr.log",
+                )
+                # Resolve every explicit candidate even after finding one, so a
+                # later symlinked ancestor cannot be hidden by short-circuiting.
+                raw_files = [
+                    _optional_relative_file(
+                        attempt_root, f"{case_base}/{relative}",
+                        f"unindexed raw evidence {case_id}/{relative}")
+                    for relative in raw_relatives
+                ]
+                raw_only_evidence[case_id] = any(path is not None for path in raw_files)
+
+            ambiguous_raw = (attempt.get("state") != "finished"
+                             and sum(raw_only_evidence.values()) > 1)
             for case_id in attempt_selected:
-                if case_id not in observed:
-                    missing_status = "interrupted" if attempt.get("state") != "finished" else "failed"
-                    cases.append({"caseID": case_id, "status": missing_status, "qualityAssessment": "pending",
-                                  "message": "case evidence is missing"})
-                    statuses[missing_status] = statuses.get(missing_status, 0) + 1
-                    latest_by_case[case_id] = missing_status
+                if case_id in observed:
+                    continue
+                raw_evidence = raw_only_evidence.get(case_id, False)
+                if attempt.get("state") == "finished":
+                    missing_status = "failed"
+                    missing_message = "case evidence is missing from a finished attempt"
+                elif attempt.get("stoppedCaseID") == case_id:
+                    missing_status = "interrupted"
+                    missing_message = "attempt metadata identifies this case as interrupted; case result is missing"
+                elif ambiguous_raw and raw_evidence:
+                    missing_status = "invalid"
+                    missing_message = "multiple cases have raw execution evidence but no case results; active case is ambiguous"
+                elif raw_evidence and attempt.get("stoppedCaseID") is not None:
+                    missing_status = "invalid"
+                    missing_message = "raw execution evidence conflicts with the attempt's identified interrupted case"
+                elif raw_evidence:
+                    missing_status = "interrupted"
+                    missing_message = "raw process/CLI evidence shows this case was active when the old attempt was interrupted"
+                else:
+                    missing_status = "not_started_after_interruption"
+                    missing_message = "no case evidence shows that this case started before interruption"
+                record_case({"caseID": case_id, "status": missing_status, "qualityAssessment": "pending",
+                             "message": missing_message})
+            cases = [cases_by_id[case_id] for case_id in attempt_selected]
             attempts.append({"attemptID": attempt_id, "state": attempt.get("state", "interrupted"),
                              "admissionPolicy": admission_policy,
                              "preflight": _public_case(attempt.get("preflight", {}), self.root, run_root),
@@ -1600,7 +1916,14 @@ def _public_process_dict(value: Mapping[str, Any]) -> dict[str, Any]:
             "timedOut": value.get("timed_out"), "cancellationRequested": value.get("cancellation_requested"),
             "forcedStop": value.get("forced_stop"), "rssSampleIntervalSeconds": PROCESS_POLL_SECONDS,
             "rssSamples": samples, "rssSamplesTruncated": value.get("rss_samples_truncated", False),
-            "childRSS": value.get("child_rss", "unknown"), "rssAggregation": "not-summed"}
+            "childRSS": value.get("child_rss", "unknown"), "rssAggregation": "not-summed",
+            "cancellationTrigger": value.get("cancellation_trigger"),
+            "cancellationTriggerObserved": value.get("cancellation_trigger_observed", False),
+            "cancellationSignalSent": value.get("cancellation_signal_sent", False),
+            "interruptedByUser": value.get("interrupted_by_user", False),
+            "stdoutActivityObserved": value.get("stdout_activity_observed", False),
+            "stderrActivityObserved": value.get("stderr_activity_observed", False),
+            "nativeProgressObserved": value.get("native_progress_observed", False)}
 
 
 def _public_process(value: ProcessResult) -> dict[str, Any]:
@@ -1806,14 +2129,16 @@ def _summary_html(summary: dict[str, Any]) -> str:
     for attempt in summary["attempts"]:
         for case in attempt["cases"]:
             diagnostics = " | ".join(str(item) for item in case.get("failureDiagnostics", []))
-            rows.append("<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>".format(
+            message = case.get("message", "")
+            rows.append("<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>".format(
                 html.escape(str(attempt["attemptID"])), html.escape(str(case["caseID"])),
-                html.escape(str(case["status"])), html.escape(diagnostics)))
+                html.escape(str(case["status"])), html.escape(str(message)), html.escape(diagnostics)))
+    counts = "；".join(f"{key}={value}" for key, value in sorted(summary.get("statusCounts", {}).items())) or "无"
     return ("<!doctype html><meta charset=\"utf-8\"><title>D Test Kit Summary</title>"
             f"<h1>D Test Kit: {html.escape(str(summary['runID']))}</h1>"
-            f"<p>Profile: {html.escape(str(summary['profileTitle']))}</p>"
-            f"<p>Overall: {html.escape(str(summary['overall']))}; quality: pending</p>"
-            "<table><thead><tr><th>Attempt</th><th>Case</th><th>Status</th><th>Diagnostics</th></tr></thead><tbody>"
+            f"<p>测试组：{html.escape(str(summary['profileTitle']))}</p>"
+            f"<p>总体状态：{html.escape(str(summary['overall']))}；结构状态计数：{html.escape(counts)}；质量待人工确认。</p>"
+            "<table><thead><tr><th>批次</th><th>用例</th><th>机器状态</th><th>原因</th><th>原始诊断</th></tr></thead><tbody>"
             + "".join(rows) + "</tbody></table>\n")
 
 
@@ -1843,20 +2168,74 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def _menu(runner: KitRunner) -> dict[str, Any] | None:
-    preflight = runner.preflight()
-    print(f"预检：{preflight['status']}；可用预算 {preflight['budget']['admissionBudgetMiB']} MiB")
+    system = runner._system_observation()
+    budget = runner._budget()
+    physical_gib = system["physicalMemoryBytes"] / GIB if system["physicalMemoryBytes"] else 0
+    print("D 离线测试工具：先选择一组；选择前不会读取或校验模型。")
+    print(f"系统芯片：{system['chip']}；物理内存：{physical_gib:.1f} GiB。")
+    print(f"推荐准入参考：{budget['admissionBudgetMiB']} MiB；这是保守参考，不保证当前可用内存。")
+    print("组名只说明用途，不代表这台机器的实际内存，也不会自动连续运行多组。")
+    notes = {
+        "quick": "建议首先运行；快速检查文字、图像和短音频",
+        "common": "用于机器间共同参数对照",
+        "capacity": "扩展容量尝试；与 showroom 有部分重叠",
+        "reliability": "重复、取消、恢复与音频编辑",
+        "showroom": "较大配置展示；与 capacity 有部分重叠",
+        "boundary96": "96 GiB 及以上机器优先的边界检查",
+        "boundary72": "最后按需尝试 72B；不是内存保证",
+    }
     profiles = list(runner.profile_set.profiles.values())
     for index, profile_entry in enumerate(profiles, 1):
-        policy = profile_entry.get("admissionPolicy", "guarded")
-        print(f"{index}. {profile_entry['title']} ({profile_entry['id']})；策略 {policy}")
-    raw = input("选择配置（q 退出）：").strip()
-    if raw.lower() == "q": return None
-    _require(raw.isdigit() and 1 <= int(raw) <= len(profiles), "无效选择")
+        note = notes.get(profile_entry["id"], "仅运行此组中列出的固定用例")
+        print(f"{index}. {profile_entry['title']} ({profile_entry['id']})：{note}")
+    while True:
+        raw = input("选择测试组（输入数字；q 退出）：").strip()
+        if raw.lower() == "q":
+            print("已退出，未校验模型，也未开始测试。")
+            return None
+        if raw.isdigit() and 1 <= int(raw) <= len(profiles):
+            break
+        print("输入无效，请输入菜单中的数字，或输入 q 退出。")
     selected = profiles[int(raw) - 1]
+    selected_ids = runner._select_cases(selected["id"], None)
     print(f"已选择：{selected['title']}；准入策略：{selected.get('admissionPolicy', 'guarded')}")
-    print("请确认其他 GPU 任务已停止。本次仅运行所选固定配置。")
-    _require(input("输入 RUN 开始：").strip() == "RUN", "用户取消")
-    return runner.run(selected["id"])
+    print(f"本组共 {len(selected_ids)} 项。请确认其他 GPU 任务已停止；本次只运行这一组。")
+    confirmation = input("输入 s、开始 或 RUN 才会校验所选模型并运行；其他输入取消：").strip()
+    if confirmation.lower() not in {"s", "run"} and confirmation != "开始":
+        print("已取消，未校验模型，也未开始测试。")
+        return None
+    print("开始预检：只校验本组选中的模型；文件校验会完整读取，不是推理进度。", file=sys.stderr, flush=True)
+    preflight = runner.preflight(selected_ids)
+    print("所选模型预检完成，开始运行。", file=sys.stderr, flush=True)
+    return runner._run_selected(selected["id"], selected_ids, preflight)
+
+
+def _print_human_summary(runner: KitRunner, result: dict[str, Any]) -> None:
+    summary = result.get("summary", {})
+    counts = summary.get("statusCounts", {}) if isinstance(summary, dict) else {}
+    labels = {
+        "passed": "通过", "failed": "失败", "cancelled": "主动中断",
+        "interrupted": "主动中断", "not_started_after_interruption": "未启动",
+        "not_started_after_failure": "未启动", "blocked": "失败",
+        "blocked_budget": "失败", "blocked_dependency": "未启动",
+    }
+    totals: dict[str, int] = {"通过": 0, "失败": 0, "主动中断": 0, "未启动": 0}
+    if isinstance(counts, dict):
+        for status, count in counts.items():
+            if status in labels and _is_int(count):
+                totals[labels[status]] += count
+    elapsed = 0.0
+    for attempt in summary.get("attempts", []) if isinstance(summary, dict) else []:
+        for case in attempt.get("cases", []) if isinstance(attempt, dict) else []:
+            process = case.get("publicProcess") if isinstance(case, dict) else None
+            if isinstance(process, dict) and _is_number(process.get("elapsedSeconds")):
+                elapsed += float(process["elapsedSeconds"])
+    run_id = result.get("runID", "unknown")
+    print("测试结束。")
+    print("结果概览：" + "；".join(f"{label} {count}" for label, count in totals.items()) + "。")
+    print(f"已记录的子进程耗时约 {elapsed:.1f} 秒；质量仍待人工确认。")
+    print(f"当前结果位置：{runner.root / 'Results' / str(run_id)}")
+    print("下一步：可重新打开入口选择另一组，或带回整个 Results；确认清理完成后再推出 SSD。")
 
 
 def main(arguments: Sequence[str] | None = None) -> int:
@@ -1867,7 +2246,9 @@ def main(arguments: Sequence[str] | None = None) -> int:
         elif args.command == "run": result = runner.run(args.profile, _parse_cases(args.cases), args.resume)
         elif args.command == "summarize": result = runner.summarize(args.run)
         else: result = _menu(runner)
-        if result is not None:
+        if args.command == "menu" and isinstance(result, dict):
+            _print_human_summary(runner, result)
+        elif result is not None:
             print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
         if args.command in ("run", "menu") and isinstance(result, dict):
             summary = result.get("summary")
@@ -1876,8 +2257,18 @@ def main(arguments: Sequence[str] | None = None) -> int:
                 return 1
         return 0
     except KitError as error:
-        print(json.dumps({"schemaVersion": 1, "status": error.kind, "error": str(error)}, ensure_ascii=False), file=sys.stderr)
+        if "args" in locals() and args.command == "menu":
+            print(f"无法继续：{error}。请保留 Results；不要修改模型或结果文件。", file=sys.stderr)
+        else:
+            print(json.dumps({"schemaVersion": 1, "status": error.kind, "error": str(error)}, ensure_ascii=False), file=sys.stderr)
         return 2 if error.kind == "invalid" else 1
+    except RunInterrupted as interruption:
+        if "runner" in locals() and "args" in locals() and args.command == "menu":
+            _print_human_summary(runner, interruption.result)
+        else:
+            print(json.dumps(interruption.result, ensure_ascii=False, indent=2, sort_keys=True))
+        print("已停止；当前用例的诊断已保存，后续用例未启动。", file=sys.stderr)
+        return 130
     except KeyboardInterrupt:
         print("已停止；当前用例已请求清理，后续用例未启动。", file=sys.stderr)
         return 130
