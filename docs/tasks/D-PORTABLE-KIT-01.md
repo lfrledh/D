@@ -91,3 +91,5 @@ Runner两轮普通修复已耗尽；第二修复876c33ee9f7c321e5ec56f2a7e7940e5
 根因与澄清：正式CLI每轮终态追加一个LF，必须精确核对“生成文本+LF”，不能strip后比较；audio正常取消可将Swift.CancellationError记入streamError，只有明确请求取消、终态cancelled/exit130/信号2、无产物/结果且有取消时间记录时才接受已识别的取消域，其他流错误仍失败。保留该诊断和provider/清理证据，不把取消记录当生成成功。旧短提示在2秒前完成，不证明取消；改用独立长输出提示，保持模型、精度、计时及取消要求。快速机器仍可能提前完成，手册明确这种情况不算取消通过。
 
 新增持久回归：真实CLI换行形状和模型自带末尾换行、缺/多LF拒绝；音频标准取消与无关异常区分。lead-framing-before.log和lead-cancellation-before.log均先失败；导出的summary补全已存在的preflight校验/机器信息。后续需非实现者只读检查本差异和最终整包复验；不得以历史模拟通过代替。
+
+同次有界收尾的移位反例发现：首次导出已脱敏，但原case记录保留旧绝对路径，移动整包后重新汇总会重现旧路径。lead-result-relocation-before.log先失败；改为case首次持久化时保存可移位投影，原始CLI/process证据另存不导出，实时音频依赖继续用内存中的经过校验引用。1be50b84cef6e1b7226b6521efd3b5b89a1f56d4差异已获Sol/high只读非实现者检查，无确认阻断；本条额外局部差异仍需复核，不能由前次审核替代。

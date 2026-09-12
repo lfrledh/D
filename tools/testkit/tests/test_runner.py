@@ -276,6 +276,18 @@ class RunnerTests(unittest.TestCase):
         case = self.audio_cancel_case("audio-cancel-unknown-error")
         self.assertEqual(case["status"], "failed")
 
+    def test_relocated_results_can_be_resummarized_without_old_absolute_paths(self):
+        fixture = self.fixture()
+        result = fixture.runner().run("quick")
+        original = str(self.root)
+        moved = self.root.with_name("另一台 Mac 的测试包")
+        self.root.rename(moved)
+        runner = runner_module.KitRunner(moved, test_cli=moved / "fake-cli",
+                                         physical_memory_bytes=16*runner_module.GIB, os_version="99.0")
+        summary = runner.summarize(result["runID"])
+        self.assertNotIn(original, json.dumps(summary, ensure_ascii=False))
+        self.assertEqual(summary["overall"], "complete")
+
     def test_formal_framing_preserves_generated_trailing_newline(self):
         fixture = self.fixture(mode="text-trailing-newline")
         result = fixture.runner().run("quick")

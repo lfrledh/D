@@ -855,7 +855,10 @@ class KitRunner:
                     if inspection_process_path.is_file() and not inspection_process_path.is_symlink():
                         _, inspection_process = _read_json(inspection_process_path, "inspection process")
                         result["inspectionProcess"] = _public_process_dict(inspection_process)
-            _atomic_json(case_root / "case.json", result)
+            # Persist portable case evidence now, while the original roots are known.
+            # Raw CLI/process reports stay separate; re-export after moving the kit
+            # must not reintroduce an old machine's absolute paths.
+            _atomic_json(case_root / "case.json", _public_case(result, self.root, run_root))
             attempt["cases"].append({"caseID": case_id, "path": str((case_root / "case.json").relative_to(attempt_root)),
                                      "status": result["status"]})
             _atomic_json(attempt_root / "attempt.json", attempt)
