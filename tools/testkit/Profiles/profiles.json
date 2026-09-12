@@ -78,7 +78,7 @@
         "text72-short-repeat",
         "text72-long-repeat",
         "text72-long-cancel",
-        "text72-after-cancel"
+        "text72-postprobe-short"
       ]
     }
   ],
@@ -614,8 +614,8 @@
       "cancelAfterSeconds": 2
     },
     {
-      "id": "text72-after-cancel",
-      "title": "72B取消实验后：新进程短输入恢复",
+      "id": "text72-postprobe-short",
+      "title": "72B新进程短输入（独立检查）",
       "model": "text72",
       "capability": "text",
       "promptFile": "Inputs/text-short.txt",

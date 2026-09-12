@@ -103,3 +103,5 @@ f1bbf5bbd95b484a3c46c005e889ab83e6748fb4移位差异经Sol/high只读检查无�
 ## 用户追加：96 GiB 及以上边界（spec_revision=4，执行协议仍为2）
 
 用户批准额外下载 mlx-community/Qwen2.5-72B-Instruct-4bit 固定 revision 36a74b07390031bb18c9f12fb7c06699bc6273c4，确认适用Qwen许可；仅离线开发测试，不在本机16 GiB加载，不公开上传。选取模型必要清单40,912,220,408bytes（原API目录总量另含1519bytes的.gitattributes）。保留现有qwen2/4bit/group64及32768上下文边界，不引入YaRN、8bit或额外后端。新增数据/profile以96/128/192 GiB准入矩阵、真实长输入、同进程重复加载、受控取消后恢复，以及2048图像/medium380秒支持上界为目标；不修改保守内存估算以迫使72B在96 GiB通过。自动预算仍为物理内存减max(4 GiB,25%)，blocked_budget是边界证据而非生成成功。高配置本机只完整文件校验与inspect；长输入token数可用相同tokenizer的小模型校准并标明方法，字符数不能冒充tokens。Lead准备profile/数据，既有runner两轮修复预算不重置。
+
+新增profile审查：Sol/high read-only先前大范围设计检查240秒到期，无结论；缩小到明确差异的boundary-profile-review在41a2009811a218a95ac348427beb1a210885b770发现“取消后短输入”在前项预算拒绝时仍会运行，名称可能误报恢复。Lead将新72B后项命名为text72-postprobe-short／独立新进程检查；不改runner、不加虚假的取消依赖，不减少旧断言。只有同attempt前项实际cancelled且后项成功，组合证据才支持新进程恢复；该规则直接进入手册，128 GiB长输入被拒绝时不会称恢复已通过。profile-only澄清不重置Runner修复预算。原生第三方许可证按本次实际native/SourcePackages与Vendor只读提取，保留在可复制Manifests内，不新增执行代码。
