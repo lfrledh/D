@@ -415,6 +415,7 @@ class MRT2BackendTests(unittest.TestCase):
         self.assertEqual((code, errors), (0, ""))
         terminal = events[-1]
         self.assertEqual(terminal, json.loads((job / "result.json").read_text()))
+        self.assertFalse((job / "pending-result.json").exists())
         self.assertEqual([event["type"] for event in events].count("result"), 1)
         self.assertEqual(terminal["artifact"]["frameCount"], 3_840)
         self.assertEqual(terminal["artifact"]["sampleRate"], 48_000)
@@ -547,7 +548,7 @@ class MRT2BackendTests(unittest.TestCase):
         self.assertLessEqual(len(writer.terminals), 1)
 
     def test_access_acquires_before_reads_and_releases_before_terminal(self):
-        args, _job, model, run, access_manifest, spec = self.make_launch()
+        args, job, model, run, access_manifest, spec = self.make_launch()
         args += ["--access-manifest", str(access_manifest), "--access-run-id", RUN_ID]
         lifecycle = []
         factory, _box = self.factory_box(lifecycle=lifecycle)
@@ -578,11 +579,15 @@ class MRT2BackendTests(unittest.TestCase):
         self.assertLess(lifecycle.index("close"), lifecycle.index("release"))
         self.assertEqual(lifecycle[-1], "terminal:result")
         self.assertEqual([event["type"] for event in writer.terminals], ["result"])
+        self.assertEqual(
+            json.loads((job / "pending-result.json").read_text()), writer.terminals[0]
+        )
+        self.assertFalse((job / "result.json").exists())
 
     def test_access_failure_and_release_failure_never_emit_success_first(self):
         for mode in ("acquire", "release"):
             with self.subTest(mode=mode):
-                args, _job, _model, _run, access_manifest, spec = self.make_launch()
+                args, job, _model, _run, access_manifest, spec = self.make_launch()
                 args += [
                     "--access-manifest",
                     str(access_manifest),
@@ -608,10 +613,44 @@ class MRT2BackendTests(unittest.TestCase):
                 self.assertEqual([event["type"] for event in writer.terminals], ["error"])
                 self.assertEqual(writer.terminals[0]["kind"], "configuration")
                 self.assertNotIn("private", json.dumps(writer.terminals))
+                self.assertFalse((job / "result.json").exists())
                 if mode == "acquire":
                     self.assertNotIn("engine", box)
+                    self.assertFalse((job / "pending-result.json").exists())
                 else:
+                    self.assertEqual(
+                        json.loads((job / "pending-result.json").read_text())["type"],
+                        "result",
+                    )
                     self.assertEqual(lifecycle[-1], "terminal:error")
+
+    def test_access_pending_result_publish_is_exclusive_and_never_creates_final(self):
+        args, job, _model, _run, access_manifest, spec = self.make_launch()
+        args += ["--access-manifest", str(access_manifest), "--access-run-id", RUN_ID]
+        factory, box = self.factory_box()
+        original_publish = backend.publish_exclusive
+
+        @contextlib.contextmanager
+        def receiver(*_args, **_kwargs):
+            yield
+
+        def race(target_job, filename, content, **kwargs):
+            if filename == "pending-result.json":
+                (target_job / filename).write_bytes(b"existing-pending")
+            return original_publish(target_job, filename, content, **kwargs)
+
+        writer = RecordingWriter()
+        with (
+            mock.patch.object(backend, "acquire_file_access", receiver),
+            mock.patch.object(backend, "publish_exclusive", side_effect=race),
+        ):
+            code = backend._execute(args, writer, factory, lambda: False, spec)
+        self.assertEqual(code, 2)
+        self.assertTrue(box["engine"].closed)
+        self.assertEqual((job / "pending-result.json").read_bytes(), b"existing-pending")
+        self.assertFalse((job / "result.json").exists())
+        self.assertEqual([event["type"] for event in writer.terminals], ["error"])
+        self.assertEqual(writer.terminals[0]["kind"], "output")
 
     def test_cli_partial_access_flags_and_profile_or_source_flags_reject(self):
         args, _job, _model, _run, access_manifest, spec = self.make_launch()

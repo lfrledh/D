@@ -469,7 +469,10 @@ def _run(
                 request, manifest, timings, allocations, cleanup, engine_identity
             ),
         }
-        publish_exclusive(job, "result.json", json_bytes(result))
+        result_filename = (
+            "pending-result.json" if access_run_id is not None else "result.json"
+        )
+        publish_exclusive(job, result_filename, json_bytes(result))
         writer.progress(run_id, "publishing", 2, 2)
         writer.emit(result, terminal=True)
         return 0
