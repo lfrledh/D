@@ -41,6 +41,9 @@ MAX_CASES = 256
 MAX_MANIFEST_FILES = 10000
 PROCESS_POLL_SECONDS = 0.5
 MAX_RSS_SAMPLES = 7200
+MAX_FAILURE_DIAGNOSTICS = 4
+MAX_FAILURE_DIAGNOSTIC_CHARS = 2048
+UINT64_MAX = (1 << 64) - 1
 INTERRUPT_GRACE_SECONDS = 30.0
 TERM_GRACE_SECONDS = 5.0
 ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
@@ -363,7 +366,8 @@ class KitRunner:
         profiles: dict[str, dict[str, Any]] = {}
         for entry in raw["profiles"]:
             _require(isinstance(entry, dict), "profile entry must be an object")
-            _strict_keys(entry, {"id", "title", "caseIDs"}, {"id", "title", "caseIDs"}, "profile")
+            _strict_keys(entry, {"id", "title", "caseIDs", "admissionPolicy"},
+                         {"id", "title", "caseIDs"}, "profile")
             profile_id = _identifier(entry["id"], "profile ID")
             _require(profile_id not in profiles, f"duplicate profile ID: {profile_id}")
             _require(isinstance(entry["title"], str) and entry["title"], f"profile {profile_id} title is invalid")
@@ -371,6 +375,9 @@ class KitRunner:
             _require(isinstance(ids, list) and 0 < len(ids) <= MAX_CASES, f"profile {profile_id} caseIDs is invalid")
             _require(all(isinstance(item, str) and item in cases for item in ids), f"profile {profile_id} has unknown case IDs")
             _require(len(ids) == len(set(ids)), f"profile {profile_id} has duplicate case IDs")
+            policy = entry.get("admissionPolicy", "guarded")
+            _require(isinstance(policy, str) and policy in ("guarded", "probe"),
+                     f"profile {profile_id} admissionPolicy must be guarded or probe")
             seen: set[str] = set()
             for case_id in ids:
                 source = cases[case_id].get("sourceCase")
@@ -570,6 +577,9 @@ class KitRunner:
         _require(all(item in profile_cases for item in requested), "--cases must be members of the selected profile")
         return [item for item in profile_cases if item in requested]
 
+    def _admission_policy(self, profile_id: str) -> str:
+        return self.profile_set.profiles[profile_id].get("admissionPolicy", "guarded")
+
     def _engine_arguments(self, model: CatalogModel) -> list[str]:
         if model.format != "audio":
             return []
@@ -758,6 +768,12 @@ class KitRunner:
 
     def _run_locked(self, profile_id: str, selected: list[str], preflight: dict[str, Any],
                     results_root: Path, resume: str | None) -> dict[str, Any]:
+        admission_policy = self._admission_policy(profile_id)
+        budget_value = preflight.get("budget")
+        _require(isinstance(budget_value, dict), "preflight budget is missing", kind="failed")
+        for field in ("physicalMemoryBytes", "admissionBudgetBytes", "admissionBudgetMiB"):
+            _require(_is_int(budget_value.get(field)) and 0 <= budget_value[field] <= UINT64_MAX,
+                     f"preflight {field} is outside UInt64 range", kind="failed")
         if resume is None:
             run_id = str(uuid.uuid4())
             run_root = results_root / run_id
@@ -768,7 +784,7 @@ class KitRunner:
             run_record = {"schemaVersion": 1, "runID": run_id, "kitID": self.config.raw["kitID"],
                           "sourceSHA": self.config.raw["sourceSHA"], "profileID": profile_id,
                           "profileDigest": self.profile_set.digest, "selectedCaseIDs": selected,
-                          "createdAt": _utc_now(), "attempts": []}
+                          "admissionPolicy": admission_policy, "createdAt": _utc_now(), "attempts": []}
         else:
             _identifier(resume, "resume run ID")
             run_root = _relative_path(results_root, resume, "resume run", kind="directory")
@@ -779,6 +795,17 @@ class KitRunner:
             _require(run_record.get("profileDigest") == self.profile_set.digest, "resume profile digest differs")
             _require(run_record.get("profileID") == profile_id, "resume profile differs")
             _require(run_record.get("selectedCaseIDs") == selected, "resume selection differs")
+            _require(run_record.get("admissionPolicy", "guarded") == admission_policy,
+                     "resume admission policy differs")
+            summary_path = run_root / "summary.json"
+            if summary_path.exists():
+                _, prior_summary = _read_json(summary_path, "resume summary.json")
+                _require(isinstance(prior_summary, dict) and _is_int(prior_summary.get("schemaVersion"))
+                         and prior_summary.get("schemaVersion") == 1
+                         and prior_summary.get("runID") == resume,
+                         "invalid resume summary")
+                _require(prior_summary.get("admissionPolicy", "guarded") == admission_policy,
+                         "resume summary admission policy differs")
             run_id = resume
         successful_sources: dict[str, dict[str, Any]] = {}
         completed: set[str] = set()
@@ -811,6 +838,7 @@ class KitRunner:
         attempt_root.mkdir(parents=True)
         attempt = {"schemaVersion": 1, "attemptID": attempt_id, "startedAt": _utc_now(),
                    "state": "running", "selectedCaseIDs": selected_for_attempt, "preflight": preflight, "cases": [],
+                   "admissionPolicy": admission_policy,
                    "lineage": [{"dependent": item, "source": self.profile_set.cases[item]["sourceCase"],
                                 "policy": "same-attempt-rerun"} for item in selected_for_attempt
                                if "sourceCase" in self.profile_set.cases[item]]}
@@ -819,6 +847,7 @@ class KitRunner:
         _atomic_json(run_root / "run.json", run_record)
         budget_mib = preflight["budget"]["admissionBudgetMiB"]
         interrupted = False
+        stopped_after_failure = False
         for index, case_id in enumerate(selected_for_attempt):
             case = self.profile_set.cases[case_id]
             print(f"开始 [{index + 1}/{len(selected_for_attempt)}] {case_id}", file=sys.stderr, flush=True)
@@ -827,6 +856,7 @@ class KitRunner:
             case_root.mkdir(parents=True)
             source_case = case.get("sourceCase")
             inspection = None
+            admission = None
             if source_case is not None and source_case not in successful_sources:
                 result = self._case_record(case, "blocked_dependency", "source case did not complete successfully")
             else:
@@ -835,11 +865,12 @@ class KitRunner:
                     if source is not None:
                         source = self._materialize_source(run_root, source, case)
                     inspection = self._inspect_case(case, case_root, budget_mib, source)
-                    if not inspection["withinBudget"]:
+                    admission = _admission_record(admission_policy, preflight["budget"], inspection)
+                    if admission_policy == "guarded" and not inspection["withinBudget"]:
                         result = self._case_record(case, "blocked_budget", "inspection exceeds admission budget")
                         result["inspection"] = inspection
                     else:
-                        result = self._execute_case(case, case_root, budget_mib, inspection, source)
+                        result = self._execute_case(case, case_root, admission["executionBudgetMiB"], inspection, source)
                 except KeyboardInterrupt:
                     result = self._case_record(case, "interrupted", "user interrupted the batch")
                     interrupted = True
@@ -847,6 +878,13 @@ class KitRunner:
                     status = "blocked" if error.kind == "blocked" else "failed"
                     result = self._case_record(case, status, str(error))
                     if inspection is not None: result["inspection"] = inspection
+                    result["systemBefore"] = preflight.get("system", {})
+                    result["systemAfter"] = self._system_observation()
+                    diagnostic_report = case_root / ("cli-report.json" if inspection is not None else "inspection.json")
+                    diagnostics, report_status = _failure_diagnostics(diagnostic_report, str(error))
+                    result["failureDiagnostics"] = diagnostics
+                    result["reportStatus"] = report_status
+                    result["failureCause"] = "unknown"
                     process_path = case_root / "execution-process" / "process.json"
                     if process_path.is_file() and not process_path.is_symlink():
                         _, process_value = _read_json(process_path, "case process")
@@ -855,6 +893,9 @@ class KitRunner:
                     if inspection_process_path.is_file() and not inspection_process_path.is_symlink():
                         _, inspection_process = _read_json(inspection_process_path, "inspection process")
                         result["inspectionProcess"] = _public_process_dict(inspection_process)
+            result["admissionPolicy"] = admission_policy
+            if admission is not None:
+                result["admission"] = admission
             # Persist portable case evidence now, while the original roots are known.
             # Raw CLI/process reports stay separate; re-export after moving the kit
             # must not reintroduce an old machine's absolute paths.
@@ -873,7 +914,29 @@ class KitRunner:
             print(f"结束 {case_id}: {result['status']}", file=sys.stderr, flush=True)
             if interrupted:
                 break
+            if admission_policy == "probe" and result["status"] != "passed":
+                stopped_after_failure = True
+                attempt["stoppedCaseID"] = case_id
+                attempt["stopReason"] = "probe case did not pass; remaining cases were not started"
+                for later_index, later_id in enumerate(selected_for_attempt[index + 1:], index + 2):
+                    later_case = self.profile_set.cases[later_id]
+                    later_root = attempt_root / "cases" / f"{later_index:03d}-{later_id}"
+                    _require(not later_root.exists() and not later_root.is_symlink(),
+                             "case output already exists", kind="failed")
+                    later_root.mkdir(parents=True)
+                    later_result = self._case_record(
+                        later_case, "not_started_after_failure",
+                        f"not started after probe case {case_id} did not pass")
+                    later_result["admissionPolicy"] = admission_policy
+                    _atomic_json(later_root / "case.json", _public_case(later_result, self.root, run_root))
+                    attempt["cases"].append({"caseID": later_id,
+                                             "path": str((later_root / "case.json").relative_to(attempt_root)),
+                                             "status": later_result["status"]})
+                _atomic_json(attempt_root / "attempt.json", attempt)
+                break
         attempt["state"] = "interrupted" if interrupted else "finished"
+        if stopped_after_failure:
+            attempt["stoppedAfterFailure"] = True
         attempt["finishedAt"] = _utc_now()
         _atomic_json(attempt_root / "attempt.json", attempt)
         summary = self.summarize(run_id)
@@ -901,12 +964,33 @@ class KitRunner:
 
     def _execute_case(self, case: dict[str, Any], case_root: Path, budget_mib: int,
                       inspection: dict[str, Any], source: dict[str, Any] | None) -> dict[str, Any]:
+        system_before = self._system_observation()
+        try:
+            return self._execute_case_validated(
+                case, case_root, budget_mib, inspection, source, system_before)
+        except KitError as error:
+            result = self._case_record(case, "failed", str(error))
+            result["inspection"] = inspection
+            result["systemBefore"] = system_before
+            result["systemAfter"] = self._system_observation()
+            process_path = case_root / "execution-process" / "process.json"
+            if process_path.is_file() and not process_path.is_symlink():
+                _, process_value = _read_json(process_path, "case process")
+                result["publicProcess"] = _public_process_dict(process_value)
+            diagnostics, report_status = _failure_diagnostics(case_root / "cli-report.json", str(error))
+            result["failureDiagnostics"] = diagnostics
+            result["reportStatus"] = report_status
+            result["failureCause"] = "unknown"
+            return result
+
+    def _execute_case_validated(self, case: dict[str, Any], case_root: Path, budget_mib: int,
+                                inspection: dict[str, Any], source: dict[str, Any] | None,
+                                system_before: dict[str, Any]) -> dict[str, Any]:
         report = case_root / "cli-report.json"
         artifacts = case_root / "artifacts"
         if case["capability"] in ("image", "audio"):
             artifacts.mkdir()
         command = self._command(case, report, artifacts, budget_mib, inspect=False, source=source)
-        system_before = self._system_observation()
         process = self._run_process(command, case_root / "execution-process", float(case["timeoutSeconds"]),
                                     float(case["cancelAfterSeconds"]) if "cancelAfterSeconds" in case else None)
         result = self._case_record(case, "failed")
@@ -917,9 +1001,15 @@ class KitRunner:
         result["systemAfter"] = self._system_observation()
         if process.timed_out or process.forced_stop:
             result["message"] = "case timed out"
+            result["failureDiagnostics"] = ["case timed out or required forced termination"]
+            result["reportStatus"] = "missing" if not report.exists() else "present"
+            result["failureCause"] = "unknown"
             return result
         if process.stdout_limited or process.stderr_limited:
             result["message"] = "case output exceeded the configured limit"
+            result["failureDiagnostics"] = ["case output exceeded the configured limit"]
+            result["reportStatus"] = "missing" if not report.exists() else "present"
+            result["failureCause"] = "unknown"
             return result
         _require(report.exists() and report.is_file() and not report.is_symlink(),
                  f"CLI report is missing or unsafe for {case['id']}", kind="failed")
@@ -1112,6 +1202,10 @@ class KitRunner:
                  and run.get("profileDigest") == self.profile_set.digest, "run does not match the current kit/profile source")
         profile_id = run.get("profileID")
         _require(profile_id in self.profile_set.profiles, "run names an unknown profile")
+        admission_policy = run.get("admissionPolicy", "guarded")
+        _require(admission_policy in ("guarded", "probe")
+                 and admission_policy == self._admission_policy(profile_id),
+                 "run admission policy differs from the current profile")
         selected_ids = run.get("selectedCaseIDs")
         _require(isinstance(selected_ids, list) and selected_ids and len(selected_ids) == len(set(selected_ids))
                  and all(item in self.profile_set.profiles[profile_id]["caseIDs"] for item in selected_ids),
@@ -1134,6 +1228,8 @@ class KitRunner:
             _require(isinstance(attempt, dict) and _is_int(attempt.get("schemaVersion"))
                      and attempt.get("schemaVersion") == 1 and attempt.get("attemptID") == attempt_id
                      and attempt.get("state") in ("running", "finished", "interrupted"), "invalid attempt record")
+            _require(attempt.get("admissionPolicy", "guarded") == admission_policy,
+                     "attempt admission policy differs")
             attempt_selected = attempt.get("selectedCaseIDs")
             _require(isinstance(attempt_selected, list) and attempt_selected and len(attempt_selected) == len(set(attempt_selected))
                      and all(item in selected_ids for item in attempt_selected), "attempt selection is invalid")
@@ -1150,7 +1246,8 @@ class KitRunner:
                          "case result identity mismatch")
                 clean = _public_case(case_result, self.root, run_root)
                 _require(clean.get("status") in ("passed", "blocked", "blocked_budget", "blocked_dependency",
-                                                  "failed", "cancelled", "interrupted"), "unknown case status")
+                                                  "failed", "cancelled", "interrupted",
+                                                  "not_started_after_failure"), "unknown case status")
                 cases.append(clean)
                 observed.add(clean["caseID"])
                 statuses[clean["status"]] = statuses.get(clean["status"], 0) + 1
@@ -1163,12 +1260,17 @@ class KitRunner:
                     statuses[missing_status] = statuses.get(missing_status, 0) + 1
                     latest_by_case[case_id] = missing_status
             attempts.append({"attemptID": attempt_id, "state": attempt.get("state", "interrupted"),
+                             "admissionPolicy": admission_policy,
                              "preflight": _public_case(attempt.get("preflight", {}), self.root, run_root),
-                             "cases": cases})
+                             "cases": cases,
+                             **({"stopReason": attempt["stopReason"],
+                                 "stoppedCaseID": attempt.get("stoppedCaseID")}
+                                if "stopReason" in attempt else {})})
         overall = "complete" if all(latest_by_case.get(item) == "passed" for item in selected_ids) else "incomplete"
         summary = {"schemaVersion": 1, "runID": run_id, "kitID": run.get("kitID"),
                    "sourceSHA": run.get("sourceSHA"), "profileID": profile_id,
                    "profileTitle": self.profile_set.profiles[profile_id]["title"],
+                   "admissionPolicy": admission_policy,
                    "selectedCaseIDs": run.get("selectedCaseIDs"), "overall": overall,
                    "qualityAssessment": "pending", "statusCounts": statuses, "attempts": attempts,
                    "generatedAt": _utc_now()}
@@ -1200,6 +1302,38 @@ class KitRunner:
                 temporary.unlink()
         _atomic_bytes(run_root / "summary.zip.sha256", (_sha256_file(zip_path) + "  summary.zip\n").encode("ascii"))
         return summary
+
+
+def _admission_record(policy: str, budget: Mapping[str, Any], inspection: Mapping[str, Any]) -> dict[str, Any]:
+    _require(isinstance(policy, str) and policy in ("guarded", "probe"), "invalid admission policy")
+    recommended_bytes = budget.get("admissionBudgetBytes")
+    recommended_mib = budget.get("admissionBudgetMiB")
+    physical_bytes = budget.get("physicalMemoryBytes")
+    _require(_is_int(recommended_bytes) and 0 <= recommended_bytes <= UINT64_MAX,
+             "recommended admission budget is outside UInt64 range", kind="failed")
+    _require(_is_int(recommended_mib) and 0 <= recommended_mib <= UINT64_MAX,
+             "recommended admission MiB is outside UInt64 range", kind="failed")
+    _require(_is_int(physical_bytes) and 0 <= physical_bytes <= UINT64_MAX,
+             "physical memory observation is outside UInt64 range", kind="failed")
+    estimate = inspection.get("estimate")
+    peak_bytes = estimate.get("peakBytes") if isinstance(estimate, Mapping) else None
+    within = inspection.get("withinBudget")
+    _require(_is_int(peak_bytes) and 0 <= peak_bytes <= UINT64_MAX,
+             "estimated peak bytes are outside UInt64 range", kind="failed")
+    _require(type(within) is bool, "inspection budget conclusion is invalid", kind="failed")
+    estimated_mib = max(1, (peak_bytes + MIB - 1) // MIB)
+    execution_mib = max(1, recommended_mib)
+    override = policy == "probe" and not within
+    if override:
+        execution_mib = max(execution_mib, estimated_mib)
+    _require(execution_mib <= UINT64_MAX, "execution admission MiB is outside UInt64 range", kind="failed")
+    return {"policy": policy,
+            "physicalMemoryBytes": physical_bytes if physical_bytes > 0 else "unknown",
+            "recommendedBudgetBytes": recommended_bytes,
+            "estimatedPeakBytes": peak_bytes,
+            "withinRecommendedBudget": within,
+            "executionBudgetMiB": execution_mib,
+            "overrideApplied": override}
 
 
 def _same_number(actual: Any, expected: Any) -> bool:
@@ -1388,10 +1522,70 @@ def _validate_audio_provider(cli_metadata: Any, artifact: dict[str, Any], case: 
             "measurementSource": "provider"}
 
 
+def _diagnostic_text(label: str, value: Any) -> str | None:
+    if value is None or value is False or value == "":
+        return None
+    if isinstance(value, str):
+        rendered = value
+    else:
+        try:
+            rendered = json.dumps(value, ensure_ascii=False, sort_keys=True)
+        except (TypeError, ValueError):
+            rendered = f"<{type(value).__name__}>"
+    return f"{label}: {rendered}"[:MAX_FAILURE_DIAGNOSTIC_CHARS]
+
+
+def _failure_diagnostics(report: Path, fallback: str) -> tuple[list[str], str]:
+    diagnostics: list[str] = []
+    fallback_text = _diagnostic_text("runner", fallback)
+    if fallback_text:
+        diagnostics.append(fallback_text)
+    if not report.exists():
+        return diagnostics[:MAX_FAILURE_DIAGNOSTICS], "missing"
+    if report.is_symlink() or not report.is_file():
+        unsafe = _diagnostic_text("report", "CLI report is not a regular file")
+        if unsafe: diagnostics.append(unsafe)
+        return diagnostics[:MAX_FAILURE_DIAGNOSTICS], "unsafe"
+    try:
+        if report.stat().st_size > MAX_STREAM_BYTES:
+            raise ValueError(f"CLI report exceeds {MAX_STREAM_BYTES} bytes")
+        payload = json.loads(report.read_bytes().decode("utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError) as error:
+        damaged = _diagnostic_text("report", f"unreadable or invalid: {type(error).__name__}: {error}")
+        if damaged: diagnostics.append(damaged)
+        return diagnostics[:MAX_FAILURE_DIAGNOSTICS], "damaged"
+    if not isinstance(payload, dict):
+        invalid = _diagnostic_text("report", "root is not an object")
+        if invalid: diagnostics.append(invalid)
+        return diagnostics[:MAX_FAILURE_DIAGNOSTICS], "damaged"
+    candidates = [("failure", payload.get("failure")),
+                  ("artifactCleanupError", payload.get("artifactCleanupError")),
+                  ("run.errorMessage", payload.get("errorMessage"))]
+    runs = payload.get("runs")
+    if isinstance(runs, list):
+        for run in runs:
+            if isinstance(run, dict):
+                candidates.extend((("run.failure", run.get("failure")),
+                                   ("run.artifactCleanupError", run.get("artifactCleanupError")),
+                                   ("run.errorMessage", run.get("errorMessage")),
+                                   ("run.outputError", run.get("outputError"))))
+    for label, value in candidates:
+        item = _diagnostic_text(label, value)
+        if item and item not in diagnostics:
+            diagnostics.append(item)
+        if len(diagnostics) >= MAX_FAILURE_DIAGNOSTICS:
+            break
+    return diagnostics[:MAX_FAILURE_DIAGNOSTICS], "readable"
+
+
 def _public_process_dict(value: Mapping[str, Any]) -> dict[str, Any]:
     samples = [{"elapsedSeconds": item.get("elapsedSeconds"), "rssKiB": item.get("rssKiB")}
                for item in value.get("rss_samples_kib", []) if isinstance(item, dict)]
-    return {"returnCode": value.get("return_code"), "elapsedSeconds": value.get("elapsed_seconds"),
+    return_code = value.get("return_code")
+    termination_signal = -return_code if _is_int(return_code) and return_code < 0 else None
+    process_status = "signaled" if termination_signal is not None else ("exited" if _is_int(return_code) else "unknown")
+    return {"returnCode": return_code, "terminationSignal": termination_signal, "processStatus": process_status,
+            "elapsedSeconds": value.get("elapsed_seconds"),
             "stdoutBytes": value.get("stdout_bytes"), "stderrBytes": value.get("stderr_bytes"),
             "stdoutLimited": value.get("stdout_limited"), "stderrLimited": value.get("stderr_limited"),
             "timedOut": value.get("timed_out"), "cancellationRequested": value.get("cancellation_requested"),
@@ -1602,13 +1796,15 @@ def _summary_html(summary: dict[str, Any]) -> str:
     rows = []
     for attempt in summary["attempts"]:
         for case in attempt["cases"]:
-            rows.append("<tr><td>{}</td><td>{}</td><td>{}</td></tr>".format(
-                html.escape(str(attempt["attemptID"])), html.escape(str(case["caseID"])), html.escape(str(case["status"]))))
+            diagnostics = " | ".join(str(item) for item in case.get("failureDiagnostics", []))
+            rows.append("<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>".format(
+                html.escape(str(attempt["attemptID"])), html.escape(str(case["caseID"])),
+                html.escape(str(case["status"])), html.escape(diagnostics)))
     return ("<!doctype html><meta charset=\"utf-8\"><title>D Test Kit Summary</title>"
             f"<h1>D Test Kit: {html.escape(str(summary['runID']))}</h1>"
             f"<p>Profile: {html.escape(str(summary['profileTitle']))}</p>"
             f"<p>Overall: {html.escape(str(summary['overall']))}; quality: pending</p>"
-            "<table><thead><tr><th>Attempt</th><th>Case</th><th>Status</th></tr></thead><tbody>"
+            "<table><thead><tr><th>Attempt</th><th>Case</th><th>Status</th><th>Diagnostics</th></tr></thead><tbody>"
             + "".join(rows) + "</tbody></table>\n")
 
 
@@ -1621,7 +1817,7 @@ def _parse_cases(raw: str | None) -> list[str] | None:
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="D portable offline test-kit runner",
-        epilog="Exit 0 means the requested runner command completed; inspect summary.overall and each case status for generation success. Exit 1 is blocked/runtime/output failure, 2 invalid input, 130 user interruption.")
+        epilog="For probe run/menu, exit 0 requires summary.overall=complete and exit 1 reports failed or unstarted cases. Guarded and summarize retain report-generation exit semantics. Exit 2 is invalid input; 130 is user interruption.")
     subparsers = parser.add_subparsers(dest="command", required=True)
     for name in ("preflight", "menu"):
         command = subparsers.add_parser(name)
@@ -1642,13 +1838,16 @@ def _menu(runner: KitRunner) -> dict[str, Any] | None:
     print(f"预检：{preflight['status']}；可用预算 {preflight['budget']['admissionBudgetMiB']} MiB")
     profiles = list(runner.profile_set.profiles.values())
     for index, profile_entry in enumerate(profiles, 1):
-        print(f"{index}. {profile_entry['title']} ({profile_entry['id']})")
+        policy = profile_entry.get("admissionPolicy", "guarded")
+        print(f"{index}. {profile_entry['title']} ({profile_entry['id']})；策略 {policy}")
     raw = input("选择配置（q 退出）：").strip()
     if raw.lower() == "q": return None
     _require(raw.isdigit() and 1 <= int(raw) <= len(profiles), "无效选择")
+    selected = profiles[int(raw) - 1]
+    print(f"已选择：{selected['title']}；准入策略：{selected.get('admissionPolicy', 'guarded')}")
     print("请确认其他 GPU 任务已停止。本次仅运行所选固定配置。")
     _require(input("输入 RUN 开始：").strip() == "RUN", "用户取消")
-    return runner.run(profiles[int(raw) - 1]["id"])
+    return runner.run(selected["id"])
 
 
 def main(arguments: Sequence[str] | None = None) -> int:
@@ -1661,6 +1860,11 @@ def main(arguments: Sequence[str] | None = None) -> int:
         else: result = _menu(runner)
         if result is not None:
             print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
+        if args.command in ("run", "menu") and isinstance(result, dict):
+            summary = result.get("summary")
+            if (isinstance(summary, dict) and summary.get("admissionPolicy") == "probe"
+                    and summary.get("overall") != "complete"):
+                return 1
         return 0
     except KitError as error:
         print(json.dumps({"schemaVersion": 1, "status": error.kind, "error": str(error)}, ensure_ascii=False), file=sys.stderr)
