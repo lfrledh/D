@@ -156,3 +156,23 @@ CPU可显式注入fake engine/小清单，不给正常CLI增加fake环境变量�
 提示“近似旋律控制，每次生成新的完整片段；48kHz混音，不是分轨；时间按0.04秒对齐”。音符行音名或MIDI整数/开始秒/持续秒，可同起点和弦；增删/示例/高级文件入口，最多512行，非法文本保持。普通按旋律生成空行由ButtonHandler拒绝；高级文件nil/[]保存保留，不承诺空条件静音。isBusy时编辑/导入/profile/model禁用，取消可用。视图不执行文件或模型操作。
 
 保留候选试听/采用/拒绝/撤销采用/导出与原按钮ID。48kHz候选不显示会进入SA3参考路径的“基于此新建”；44.1kHz原行为保留。窄参数面板/最小窗口要响应布局，不截断；稳定accessibilityIdentifiers供Lead验收。状态只走Binding/actions，不手改revision或decisions。Worker仅局部CPU逻辑反例/显式typecheck，无SwiftPM/GUI。Lead组合编译与真实窗口验收。初交+2修复900秒/轮；权限、冻结契约和来源规则不变。
+
+#### W1-S：D-MRT2-BRIDGE-01（Sol/high，contract-r3）
+
+允许仅新增 Backends/MLX/Sources/DMLXBackend/{MRT2BackendConfiguration.swift,MLXMRT2Backend.swift,MRT2ModelInventory.swift,MRT2ProviderValidation.swift} 和 Backends/MLX/Tests/DMLXBackendTests/MRT2BackendTests.swift。禁止改已有 SA3／共享进程、App／Workbench、包与工程、清单、Python 和任务规格。Lead 提供 AudioWAV.validateOutput(...expectedFrames:,expectedSampleRate: Int = 44_100)，MRT2明确传48_000，SA3默认不变；非正 expectedFrames 应报错不能 UInt64 陷阱。
+
+公开 MRT2BackendConfiguration:Sendable 的 initializer 参数为 pythonExecutable/providerScript/vendorDirectory/modelManifest/artifactDirectory（URL），licenseAcknowledged=false、timeoutSeconds=600、cancellationGraceSeconds=15、accessBootstrapRoot:URL?=nil、confirmDeployment:(@Sendable()throws->Void)?=nil、modelUseAcknowledged:(@Sendable()async->Bool)?=nil；公开固定 registeredModelRevision=010aa0dcb0dfd27b24f0ad07b4dad63e8f9521cc。MLXMRT2Backend actor 遵循 InferenceBackend，descriptor id=mlx.audio.mrt2/version1/audioGeneration，init(configuration:) throws；estimate 不加载权重或询问许可，execute 真正计算前检查明确使用许可。只接 AudioRequest.mrt2FixedV1，reject SA3/source/inpaint/wrong revision；nil与[]不合并。不把 MRT2 伪装为 SA3 profile 来复用其 validator。
+
+模型清单严格六项，schema/profile/repo/revision/path/size/SHA与固定 Backends/Audio/Models/mrt2-small.json 一致（license仅记录原文）；使用 AudioJSONParser 拒绝重复/布尔/错误版本。正常 admission 检查六项大小/regular identity，实际 SHA 由正式 Python 校验；execute 前后 confirmUnchanged 防止混用。可单独实现解析 API 注入明确小夹具测试，但正常配置不得有跳过固定清单开关。请求/layout验证复用 AudioFileSystem 的基础安全函数，不改共享函数。root必须现有absolute local、无symlink、artifact与model/vendor/provider/manifest互不重叠；timeout/grace有限正。保守估计为3 GiB加3倍PCM字节，标estimated，并非本机测量或额外内存硬上限。
+
+复用 AudioProviderProcess（完整等待子进程和两读端结束）、AudioProviderAccess、MLXExecutionLease.shared。execute/release状态与旧MLXAudioBackend相同；全局许可持有至runtime release，取消/消费者异常仍drain，终态和清理失败不得success。独占run目录 UUID-UUID，0700 job/tmp/cache与exclusive request.json，不扫描删除原件或已发布产物。配置书签时仅 model/run 目录、成对access参数；初始cwd access目录。环境冻结TMPDIR/缓存/PYTHONDONTWRITEBYTECODE等到自有run，PATH=/usr/bin:/bin。配置确认在launch前和退出后，access.finish在失败和成功都调用，异常不吞。
+
+请求 JSON 使用 AudioRequest 音乐编码加 schemaVersion1、runID小写UUID，其余不改；CLI参数严格沿W1-P，不传profile/source。result.json由 AudioProviderProtocol.parseResultSnapshot独立解析，等于 stdout terminal，再逐项核对request快照、profile/repo/revision、六项weightManifest、sdkRevision=694a545e4ba0b88bf1150137b129582166d3e07f。condition形状明确为{sequence:{schemaVersion:1,frameRate:25,durationFrames,可选notes规范pitch/start/end排序},notesMode:absent|explicitEmpty|notes}；缺省不含notes，空为[]。conditionSHA256为该对象sortedKeys无空白UTF8（全ASCII字段/整数，不涉及浮点规范化）。engineIdentity至少核验固定profile/model_revision/sdk_revision、prompt、sampling_seed=请求seed、mapper_seed=0、state_leaf_count165、sampling_state_index2、warmup_steps5、temperature1.3、top_k40、cfg_scales及输出转换/真实版本、closed/released；具体既有key和值以已接纳 d_mrt2_export.identity 为准，不能凭名称猜。禁止残留绝对模型路径key。cleanup必须released=true且无error，timings/allocations仅校验存在、有限非负或明确unknown，不拿它们推导准确内存承诺。允许真实工具附加诊断字段，不允许已核验关键事实缺省成通过。
+
+WAV完整字节/有限float32/48k立体声/帧数durationFrames*1920/SHA核对后才emit.artifact。结果metadata记录profile/modelRevision/conditionSHA256/precision（内部graph精度unknown，输出float32）/recordPath。不能给出未观察的内部精度承诺。
+
+CPU至少严格请求/清单/布局、nil与[]、版本/请求/seed/condition/cleanup元数据反例、48k WAV以及错误声道/帧数/非有限/负expectedFrames、完整进程成功/取消/超时/消费者失败与release后再次运行。可用受控fixture和已有进程测试辅助，不加载真实MLX；任何新fake hook只能内部测试注入，生产无开关。所有输出缓存在本任务写根。Worker不运行SwiftPM/嵌套沙箱或完整构建，不尝试当前宏typecheck已知权限失败；可交编译未验收代码由Lead执行批准的编译/CPU检查。静态diff与内存内Python compile可用。禁止GPU/GUI/network/Git写入，初交+2针对性修复各900秒；其他停止规则不变。Lead按具体SHA补真实模型/运行时/普通沙盒App验收。
+
+#### implementation-r3 检查点
+
+c1335110262a44cef1b7f5e681b105779cc38cad 已通过38核心、302工作台、10导出适配、8打包CPU检查，证据 prepared-r2-checks.json；不同类别不合并为产品通过率。Sol/high非实现者共享审查01a096a1-2482-7573-92bc-4c7b4de36bec未发现阻断，运行上下文只读已核验。W3 Terra初交仅三允许文件，显式typecheck遇嵌套编译器sandbox_apply拒绝并立即停报；Lead预置macOS14目标也与现有26模块不符。无权限扩大、无Worker重试，此为环境准备缺口，代码尚待Lead编译/GUI，不占普通修复次数。源974和个人scheme未变。

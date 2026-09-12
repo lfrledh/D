@@ -763,7 +763,10 @@ enum AudioWAV {
     }
 
     static func validateOutput(_ url: URL, claim: AudioProviderArtifact,
-                               expectedFrames: Int64) throws -> ArtifactReference {
+                               expectedFrames: Int64, expectedSampleRate: Int = 44_100) throws -> ArtifactReference {
+        guard expectedFrames > 0, [44_100, 48_000].contains(expectedSampleRate) else {
+            throw InferenceFailure.backendFailed("Invalid expected audio frame count or unregistered sample rate.")
+        }
         let expectedPCM = UInt64(expectedFrames).multipliedReportingOverflow(by: 8)
         guard expectedFrames > 0, !expectedPCM.overflow,
               expectedPCM.partialValue <= UInt64.max - 1_048_576 else {
@@ -776,8 +779,8 @@ enum AudioWAV {
         let digest = sha256(data)
         guard claim.path == url.path, claim.sha256 == digest,
               claim.byteCount == UInt64(data.count), claim.frameCount == expectedFrames,
-              claim.sampleRate == 44_100, claim.channels == 2, claim.encoding == "float32",
-              parsed.frameCount == expectedFrames, parsed.sampleRate == 44_100,
+              claim.sampleRate == expectedSampleRate, claim.channels == 2, claim.encoding == "float32",
+              parsed.frameCount == expectedFrames, parsed.sampleRate == expectedSampleRate,
               parsed.channels == 2, parsed.encoding == "float32" else {
             throw InferenceFailure.backendFailed("Generated WAV or provider artifact metadata failed independent validation.")
         }
