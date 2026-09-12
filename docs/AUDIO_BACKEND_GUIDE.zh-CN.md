@@ -1,5 +1,33 @@
 # 音频后端与跨配置验证指南
 
+## APP1 工作台验收（2026-09-12）
+
+普通开发签名/沙盒的内嵌引擎版已经真实运行SA3 small，无D_AUDIO_BACKEND_CONFIGURATION或D_AUDIO_WORKBENCH_TEST覆盖。D_UI_TEST_SESSION只隔离测试设置/项目索引；引擎启用走生产Bundle解析。项目保存/重开、模型恢复后再次生成、WAV导入变体、候选采用拒绝、不覆盖导出已验证；详情及当前版本见[APP1任务](tasks/D-AUDIO-APP-01.md)。源受测 `dd530e320df3fecaa3d23421151c000d384c652a`；下文旧“普通应用未启用/依赖尚缺”仅代表历史。
+
+当前交付物位于外盘 `D-Development/AgentTrials/D-AUDIO-APP-01/run-20260911T155257Z-app-resume/deployment/signed-app/D.app`，普通D未替换。保持SA3固定revision、FP16 DiT/T5与FP32编解码/主文件；本机6秒是测试配置，不是所有Mac上限。源CPU和真实GUI/GPU分列，Tk、公证、长期TCC/高配型号及麦克风不由本结果证明。
+
+## 应用内引擎的重建与保护
+
+`./scripts/build-local.sh`仍只构建应用，不自动安装或嵌入Python依赖。普通Bundle仅在`Contents/Resources/AudioEngine.dengine/engine.json`完整校验通过后启用文件输入音频；缺失时保留图文，损坏时显示音频问题，不自动调用外部全访问服务。当前支持已装CPython3.12 arm64源，输入依赖必须事先获准。
+
+离线封装入口如下，五个输入路径和一个输出路径须显式提供，输出必须不存在；这是构建准备命令，不是签名或验收器：
+
+```sh
+"$D_ENGINE_PYTHON_ROOT/bin/python3.12" -B Backends/Audio/Packaging/prepare_engine.py \
+  --python-root "$D_ENGINE_PYTHON_ROOT" \
+  --site-packages "$D_ENGINE_SITE_PACKAGES" \
+  --provider-directory "$PWD/Backends/Audio/Python" \
+  --vendor-directory "$PWD/Vendor/stable-audio3-mlx" \
+  --model-manifests "$PWD/Backends/Audio/Models" \
+  --output "$D_ENGINE_OUTPUT"
+```
+
+本机通过的源为已安装基础Python3.12.14和独立`D-Audio-SA3-20260909T152406Z-copies`环境；完整输入路径/命令、输出清单见上述run的`deployment/pack-result.json`。打包保留Python/依赖许可证与固定Vendor，不含权重、用户书签或私有素材；完整商业分发审计另行进行。
+
+部署顺序须保持：正常构建 → 复制到不存在的专属D.app → 将封装复制到固定Resources路径 → 按原构建批准的identity逐个签署清单里的Mach-O（本机27个，`-o runtime --timestamp=none`，不是用文件扩展名猜） → 仅重算这些实际签名副本的sizeBytes/sha256并更新engine.json → 用原构建xcent与同identity签署外层App → deep/strict校验、实际Bundle resolver全文件摘要核对及entitlements与原构建对照。不要改原Python/普通App，不把签名前摘要称作签名后摘要，不用`codesign --deep --force`代替逐层处理。具体可复核命令/签名输入与脚本在run的`deployment/signed-app/commands.json`、`run-tools/d-audio-app-resume-sign.py`；这些是本机执行证据，迁移机器需提供该机明确获准的路径/身份，不能照搬个人identity。
+
+封装产物约266MB，不进入Git；新建输出目录保留历史。应用实际从原生面板登记已许可固定模型，动态访问清单只放自有容器0700目录/0600文件，子进程实际退出后回收，不进入项目/媒体来源。普通运行不要求用户手填调试环境变量。当前没有一键跨机器安装器或通用Python插件系统。
+
 ## 最新实测与接纳（2026-09-10）
 
 音频后端/CLI现已本地接入源工作分支，实际受测59c3225f3b48ecc6f4fd26e94463d6787b8ec116；旧“真实音频/许可未就绪”段落仅为此前状态。现有独立--copies环境与已授权small music权重已真实完成6秒生成/变体/区间重绘、取消和超时后恢复；人耳样本正常。源CLI输出44.1kHz双声道float32 WAV，调用参数/模型版本与产物记录一致，详见批次最新节。用户普通D未替换，音频生成工作台和录音仍未交付。

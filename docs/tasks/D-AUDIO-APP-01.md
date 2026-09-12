@@ -78,3 +78,31 @@ CUA在本轮16:40UTC报告Mac锁定。已异步请求解锁；默认沙箱提示
 Mac在继续原生操作前锁定；16:40及16:47UTC的CUA读取明确返回locked，异步解锁问题待答。单次Glass提示音在默认沙箱失败后按原授权受控播放exit0，没有音量或权限变化。H15最小人工动作仅解锁并回复；当前没有新的下载/模型条款/麦克风权限请求。H09继续等设备，不重复探测。
 
 源仍7510015bafc0a8b33c463dba11b1a7d54a93b073，用户scheme及普通D四文件保持；候选未源接纳/推送。恢复先核对final-receipt、保护和运行状态，再做signed-app生产文件输入路径的真实生成/变体/重绘、取消交接、试听/采用拒绝、保存重开和安全导出；不启动新批次。证据run-20260911T155257Z-app-resume，优先final-receipt.json、native/host-fixture-fixed、native/backend-first、deployment/signed-app和resolver-actual。未收到解锁答复时不后台无限执行。
+
+## 2026-09-12 APP1 文件输入真实验收与本地集成
+
+状态：**本任务文件输入范围已本地集成并通过验收**；最后文档提交/推送结果以本run `stage-final-receipt.json`及Git为准，不将当前文件自引用SHA反复写回。上一锁屏回执保留历史。用户已解锁并批准继续；六秒钢琴样本本人回答“听到了，播放正常”。H09继续等麦克风，本批没有录音。
+
+版本对应：原生App代码88a2655377bebbf54e3e4f75a89504f8f15ba265，内嵌engine源码5ec8b2f5a39c0237a47efbde7475426d257012b4；5ec→88仅测试变化；88→6125d11a4b9dee138a6a106c1444ce654e7eee13仅DTests及文档；至`dd530e320df3fecaa3d23421151c000d384c652a`仍仅测试/文档。源从7510015bafc0a8b33c463dba11b1a7d54a93b073快进至dd530e3，完整范围26路径符合APP1组件/装配/测试/记录，无签名工程/精度/模型变化。当前结案仅任务/行动/目标/路线/指南/人工清单和README，代码不再修改；最终SHA写外部回执。
+
+### 真实产品结果（CUA，不冒充XCTest）
+
+独立项目`APP1 音频验收 🎹.dproject`，schema5，项目ID4113254D-E358-477B-B1FD-34F88FD9A0BF；同批准普通签名与sandbox，只有独立设置suite，无调试音频后端覆盖。SA3 revision da6edc54ddba10bfd79a077102ded687f80e882b、既有精度，6秒/8步/guidance1；seed42生成、43变体、44重绘。重绘2..4秒为[88200,176400)帧，所有区外float32 PCM逐字节一致。
+
+本轮8个真实任务：6完成、2取消；包含早取消和计算中取消，后者仅为便于观测使用80步/strength1，观察进度0.9375，子进程15563实际消失、无发布产物。之后恢复8步/strength0.5，seed47在同一App运行时成功。不是保证GPU瞬间中断。子进程内MLX清理active18bytes/cache0，18bytes归属仍unknown；本轮子进程全部退出，不宣称常驻零泄漏。
+
+原生候选1采用，候选2拒绝，候选3采用；生成不改采用，拒绝不删媒体。候选3导出到专属Unicode/空格文件，SHA256 b95f7c95e8a5a27626dc0c5c6a73841eb407b4863ae4c34db09b6b98f92c2610与项目一致；再经原生面板导入为独立原件，seed48变体成功并采用。把不同候选导出到这个本任务自有文件，原生面板确认后应用明确拒绝覆盖，目标摘要仍相同。
+
+实例15166正常退出0；同suite重启16212，从最近项目恢复来源、已采用/拒绝、提示、seed/步数/强度及重绘区间，模型显示恢复并校验；seed49再次真实重绘成功，实例正常退出0。七个WAV资产（含一份导入原件）均44100Hz/双声道/float32/264600帧、有限数值、摘要与记录一致；以前媒体/决策保持。任务容器私有访问目录空，无残留授权清单。签名与全引擎清单在原生测试后重新只读通过，普通D四文件及scheme保持。
+
+### 复验、来源和事件
+
+源目录dd530e3：Python3.12原62方法通过；工作台291方法通过（显式既有0.5B只读模型检查，未新运行图文模型）。源全新任务scratch构建，不调用旧候选代码；语法使用tokenize.open+内存compile，其他缓存限任务目录。此前24后端方法/47展开、19 resolver、4宿主、普通构建与非实现者审查复用其原版本证据，集合不相加。新原生测试不替代新的XCTest全模态测试、公证、TCC持久、真实录音或高配/长音频。
+
+来源保持：PACK Terra初交+两修；ACCESS Sol初交+一修；BRIDGE Sol与DEPLOY Terra各初交+一修；Astra Lead实现共享装配/隔离修补及实际验收，Sol/high非实现者已复核重要差异。没有新Worker轮次、模型切换或全由Terra独立交付的说法。本次继续阶段没有生产代码修补。路由观察见routing-and-usage.json；隐藏服务端解析、完整Lead/token归因和订阅费用仍unknown，不重算旧五次用量，也不以单样本宣称成本最优。
+
+本次Lead事件：旧AX索引自动审批拒绝后先刷新核对再执行；证据助手按错误的source.path读脱敏记录，保留失败并改按实际摘要比对；小写return键名不可用，正确Return后继续。Lead误用默认py_compile触发系统Python缓存写入拒绝，目标pyc不存在，随后用预定无字节码检查恢复；未扩权限，不追记为合规。Git帮助预检误读stderr/选项格式，两次在任何仓库修改前失败；直接检查确认stdout的[no-]形式后修正，原固定快进策略不变。失误记录与产品、Worker代码质量分别归因。可复用经验：即使是Lead临时证据脚本，也必须用冻结的无缓存检查；外部命令语义同时核对退出码及实际输出流。
+
+持久证据：`D-Development/AgentTrials/D-AUDIO-APP-01/run-20260911T155257Z-app-resume`。本次入口`gui/acceptance/result.json`，分项`gui/evidence/final-reopen`、`gui/child-watch`、`gui/{launch,exit}.json`、`gui/reopen/`；签名包`deployment/signed-app`；源集成`integration/`，回归`integration/source-cpu/`，最终`stage-final-receipt.json`。先前final-receipt是锁屏停点。小摘要/来源入Git，模型、应用包、声音、原始日志与私有书签不入Git。
+
+恢复检查点：源当前受测dd530e3，候选分支保持dd530e3且干净；个人scheme未暂存1→6、sha256 ca3635d88aa5a15397b90e528667c66c0e6db7e596176e885c79d194b544206c/index原blob，普通D未替换。自有原生/模型/检查进程结束，不声称全系统写锁。原交付应用保留在run的deployment/signed-app/D.app；plain构建需要指南中的显式封装。最后仅文档提交并按授权推送现有工作分支；成功后停止，不开新批次。下一音乐条件控制提案/HUM/歌声仍按MUSIC_ROADMAP，麦克风仅集中办理时提醒设备。

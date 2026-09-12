@@ -12,7 +12,7 @@
 
 ## 音频后端与跨配置（2026-09-10）
 
-统一音频后端现已接入源工作分支。SA3 small music真实完成6秒提示生成、参考变体、区间重绘和取消/超时恢复；输出44.1kHz双声道float32 WAV及实际执行记录，样本经用户试听正常。普通D.app未替换，音频生成界面/录音仍有独立产品门槛。Qwen1.5B短改写与取消、FLUX768×512已实测；更大型号和高配Mac仍逐项待测，不改既有量化精度。调用与限制见[后端指南](docs/AUDIO_BACKEND_GUIDE.zh-CN.md)，版本、失败与证据见[批次记录](docs/tasks/D-AUDIO-BACKEND-01.md)。
+统一音频后端现已接入源工作分支。SA3 small music真实完成6秒提示生成、参考变体、区间重绘和取消/超时恢复；输出44.1kHz双声道float32 WAV及实际执行记录，样本经用户试听正常。2026-09-12 APP1内嵌引擎版的普通沙盒音频界面已通过真实生成/参考变体/区间重绘、取消交接、试听采用拒绝及安全导出/退出重开；[任务与证据](docs/tasks/D-AUDIO-APP-01.md)。普通D.app未替换，麦克风仍等设备；plain build-local不自动封装引擎，见[离线部署步骤](docs/AUDIO_BACKEND_GUIDE.zh-CN.md#应用内引擎的重建与保护)。Qwen1.5B短改写与取消、FLUX768×512已实测；更大型号和高配Mac仍逐项待测，不改既有量化精度。调用与限制见[后端指南](docs/AUDIO_BACKEND_GUIDE.zh-CN.md)，版本、失败与证据见[批次记录](docs/tasks/D-AUDIO-BACKEND-01.md)。
 
 ## 本机开发环境（2026-09-07）
 
@@ -58,7 +58,7 @@ git clone --branch codex/inference-foundation https://github.com/lfrledh/D.git
 
 根目录 Swift package 含 DInference（纯契约）和 DRuntime（串行任务生命周期）两个 target，零远程依赖、Swift 6 严格模式。Backends/MLX 中的 DMLXBackend 提供文本与图像后端，d-infer 是宿主入口。现有 Packages/UI 包内包含两个实际 target：DWorkbench 拥有项目、任务、资产及模型安装服务，只依赖 DInference；UI 依赖这些服务，负责展示和原生交互。D 应用装配具体 runtime／backend。其他旧 Packages/* 暂留源代码，不在新应用依赖路径中。
 
-逻辑导航确定为“项目 → 创作文档”，模型是共享资源，任务是运行状态。已支持单项目内多份创作文档，项目现为schema3，v1/v2先保留原字节备份再安全迁移，原媒体不改写；快速草稿仍待排期。结构与服务演进规则见 [信息架构](docs/decisions/0007-project-information-architecture.md) 和 [服务边界](docs/decisions/0008-application-services-and-provider-evolution.md)。远程 API、对外推理服务和 RAW 媒体按目标清单后续启动，没有空的产品入口。
+逻辑导航为“项目 → 模态 → 创作/参数/资产”，模型是共享资源，任务是运行状态。单项目支持多份创作文档，当前schema5含音频候选；旧格式迁移先保留原清单备份，原媒体不改写，真实用户项目未在本批迁移；快速草稿仍待排期。结构与服务演进规则见 [信息架构](docs/decisions/0007-project-information-architecture.md) 和 [服务边界](docs/decisions/0008-application-services-and-provider-evolution.md)。远程 API、对外推理服务和 RAW 媒体按目标清单后续启动，没有空的产品入口。
 
 运行 `./scripts/test-foundation.sh` 验证框架；运行 `./scripts/build-local.sh` 构建新应用，`./scripts/test-workbench.sh` 验证无 GPU 的项目与任务服务。二者默认使用外置SSD缓存：应用在D-Development，新核心测试在同级BuildCaches/D-Foundation；日志都保存在D-Development/Logs。详见 [框架调用与限制](docs/FOUNDATION_USAGE.md)、[架构决策](docs/decisions/0001-inference-boundary.md)、[任务生命周期决策](docs/decisions/0002-run-lifecycle.md)。
 
