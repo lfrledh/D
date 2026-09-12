@@ -10,6 +10,7 @@ import json
 import os
 import signal
 import struct
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -68,6 +69,35 @@ if "--inspect" in args:
     Path = __import__("pathlib").Path
     Path(report_path).write_text(json.dumps(report), encoding="utf-8")
     raise SystemExit(0)
+if LOG: open(LOG,"a",encoding="utf-8").write("execute "+" ".join(args)+"\n")
+if MODE == "missing-report":
+    raise SystemExit(7)
+if MODE == "corrupt-report":
+    __import__("pathlib").Path(report_path).write_bytes(b"not-json-\xff")
+    raise SystemExit(3)
+if MODE == "signal":
+    os.kill(os.getpid(), signal.SIGTERM)
+if MODE == "deep-report":
+    deep = "[" * 10000 + "0" + "]" * 10000
+    __import__("pathlib").Path(report_path).write_text(
+        '{"schemaVersion":1,"tool":"d-infer","exitCode":1,"failure":' + deep + '}', encoding="utf-8")
+    raise SystemExit(1)
+if MODE in ("reported-timeout", "reported-output-limit"):
+    report={"schemaVersion":1,"tool":"d-infer","backend":backend,"exitCode":1,"options":options,
+            "failure":"simulated load failure at "+model,
+            "artifactCleanupError":"simulated cleanup detail",
+            "runs":[{"errorMessage":"simulated backend detail"}]}
+    __import__("pathlib").Path(report_path).write_text(json.dumps(report),encoding="utf-8")
+    if MODE == "reported-output-limit":
+        os.write(1, b"x" * (17 * 1024 * 1024))
+    time.sleep(60)
+if MODE == "load-failure":
+    report={"schemaVersion":1,"tool":"d-infer","backend":backend,"exitCode":1,"options":options,
+            "failure":"simulated load failure at "+model+" "+("x"*3000),
+            "artifactCleanupError":"simulated cleanup detail",
+            "runs":[{"errorMessage":"simulated backend detail","outputError":"simulated output detail"}]}
+    __import__("pathlib").Path(report_path).write_text(json.dumps(report),encoding="utf-8")
+    raise SystemExit(1)
 if MODE == "sleep":
     signal.signal(signal.SIGINT, signal.SIG_IGN); signal.signal(signal.SIGTERM, signal.SIG_IGN)
 if MARKER:
@@ -182,8 +212,10 @@ def text_case(case_id: str = "text-one", prompt: str = "Inputs/prompt.txt") -> d
 
 
 class Fixture:
-    def __init__(self, root: Path, *, cases: list[dict] | None = None, mode: str = "normal") -> None:
+    def __init__(self, root: Path, *, cases: list[dict] | None = None, mode: str = "normal",
+                 admission_policy: str | None = None) -> None:
         self.root = root
+        self.admission_policy = admission_policy
         for name in ("Bin", "Runtime/AudioEngine.dengine", "Manifests", "Profiles", "Models/text", "Inputs"):
             (root / name).mkdir(parents=True, exist_ok=True)
         payload = b"model payload"
@@ -198,8 +230,11 @@ class Fixture:
             prompt = root / case["promptFile"]
             prompt.parent.mkdir(parents=True, exist_ok=True)
             if not prompt.exists(): prompt.write_text("hello", encoding="utf-8")
+        profile = {"id": "quick", "title": "Quick <safe>", "caseIDs": [c["id"] for c in actual_cases]}
+        if admission_policy is not None:
+            profile["admissionPolicy"] = admission_policy
         write_json(root / "Profiles/profiles.json", {"schemaVersion": 1,
-                   "profiles": [{"id": "quick", "title": "Quick <safe>", "caseIDs": [c["id"] for c in actual_cases]}],
+                   "profiles": [profile],
                    "cases": actual_cases})
         self.marker = root / "execution-marker"
         self.log = root / "fake-cli.log"
@@ -221,7 +256,9 @@ class Fixture:
         case={"id":"image","title":"image","model":"text","capability":"image","promptFile":"Inputs/prompt.txt",
               "parameters":{"width":256,"height":256,"steps":4,"guidance":1,"seed":"18446744073709551615","imageProfile":"scalableKlein4B"},
               "timeoutSeconds":5,"expected":"completed","repeatCount":1}
-        write_json(self.root/"Profiles/profiles.json",{"schemaVersion":1,"profiles":[{"id":"quick","title":"image","caseIDs":["image"]}],"cases":[case]})
+        profile={"id":"quick","title":"image","caseIDs":["image"]}
+        if self.admission_policy is not None: profile["admissionPolicy"]=self.admission_policy
+        write_json(self.root/"Profiles/profiles.json",{"schemaVersion":1,"profiles":[profile],"cases":[case]})
 
     def configure_audio(self, mode: str = "normal") -> None:
         catalog=json.loads((self.root/"Manifests/catalog.json").read_text()); item=catalog["models"]["text"]
@@ -241,7 +278,9 @@ class Fixture:
           "parameters":base,"timeoutSeconds":6,"expected":"completed","repeatCount":1}
         edit={"id":"edit","title":"edit","model":"text","capability":"audio","promptFile":"Inputs/prompt.txt",
           "parameters":dict(base,audioOperation="variation",audioStrength=.5),"timeoutSeconds":6,"expected":"completed","repeatCount":1,"sourceCase":"source"}
-        write_json(self.root/"Profiles/profiles.json",{"schemaVersion":1,"profiles":[{"id":"quick","title":"audio","caseIDs":["source","edit"]}],"cases":[generate,edit]})
+        profile={"id":"quick","title":"audio","caseIDs":["source","edit"]}
+        if self.admission_policy is not None: profile["admissionPolicy"]=self.admission_policy
+        write_json(self.root/"Profiles/profiles.json",{"schemaVersion":1,"profiles":[profile],"cases":[generate,edit]})
 
     def runner(self, fake: Path | None = None):
         return runner_module.KitRunner(self.root, test_cli=fake or self.fake,
@@ -410,7 +449,227 @@ class RunnerTests(unittest.TestCase):
         result = fixture.runner().run("quick")
         case = result["summary"]["attempts"][0]["cases"][0]
         self.assertEqual(case["status"], "blocked_budget")
+        self.assertEqual(case["admission"]["policy"], "guarded")
+        self.assertFalse(case["admission"]["overrideApplied"])
         self.assertFalse(fixture.marker.exists())
+
+    def test_profile_admission_policy_defaults_and_rejects_invalid_values(self):
+        fixture = self.fixture()
+        self.assertEqual(fixture.runner().profile_set.profiles["quick"].get("admissionPolicy", "guarded"), "guarded")
+        path = self.root / "Profiles/profiles.json"
+        value = json.loads(path.read_text(encoding="utf-8"))
+        for invalid in (True, "unguarded"):
+            value["profiles"][0]["admissionPolicy"] = invalid
+            write_json(path, value)
+            with self.subTest(invalid=invalid), self.assertRaisesRegex(runner_module.KitError, "admissionPolicy"):
+                fixture.runner()
+
+    def test_probe_executes_over_recommended_budget_with_ceil_override(self):
+        fixture = self.fixture(mode="blocked", admission_policy="probe")
+        result = fixture.runner().run("quick")
+        case = result["summary"]["attempts"][0]["cases"][0]
+        admission = case["admission"]
+        self.assertEqual(case["status"], "passed")
+        self.assertFalse(case["inspection"]["withinBudget"])
+        self.assertTrue(admission["overrideApplied"])
+        self.assertEqual(admission["estimatedPeakBytes"], admission["recommendedBudgetBytes"] + 1)
+        self.assertEqual(admission["executionBudgetMiB"], admission["recommendedBudgetBytes"] // runner_module.MIB + 1)
+        self.assertEqual(case["actualOptions"]["memoryBudgetMiB"], admission["executionBudgetMiB"])
+        self.assertTrue(fixture.marker.exists())
+        self.assertEqual(result["summary"]["admissionPolicy"], "probe")
+
+    def test_admission_range_and_unknown_physical_memory_are_explicit(self):
+        budget = {"physicalMemoryBytes": 0, "admissionBudgetBytes": runner_module.MIB,
+                  "admissionBudgetMiB": 1}
+        inspection = {"estimate": {"peakBytes": runner_module.MIB + 1}, "withinBudget": False}
+        admission = runner_module._admission_record("probe", budget, inspection)
+        self.assertEqual(admission["physicalMemoryBytes"], "unknown")
+        self.assertEqual(admission["executionBudgetMiB"], 2)
+        last_representable_bytes = runner_module.MAX_CLI_MEMORY_BUDGET_MIB * runner_module.MIB
+        inspection["estimate"]["peakBytes"] = last_representable_bytes
+        accepted = runner_module._admission_record("probe", budget, inspection)
+        self.assertEqual(accepted["executionBudgetMiB"], runner_module.MAX_CLI_MEMORY_BUDGET_MIB)
+        for rejected_peak in (last_representable_bytes + 1, runner_module.UINT64_MAX,
+                              runner_module.UINT64_MAX + 1):
+            inspection["estimate"]["peakBytes"] = rejected_peak
+            with self.subTest(rejected_peak=rejected_peak), \
+                 self.assertRaisesRegex(runner_module.KitError, "UInt64 bytes|UInt64 range"):
+                runner_module._admission_record("probe", budget, inspection)
+        inspection["estimate"]["peakBytes"] = 1
+        budget["admissionBudgetMiB"] = runner_module.MAX_CLI_MEMORY_BUDGET_MIB
+        self.assertEqual(runner_module._admission_record("probe", budget, inspection)["executionBudgetMiB"],
+                         runner_module.MAX_CLI_MEMORY_BUDGET_MIB)
+        budget["admissionBudgetMiB"] += 1
+        with self.assertRaisesRegex(runner_module.KitError, "recommended admission MiB.*UInt64 bytes"):
+            runner_module._admission_record("probe", budget, inspection)
+
+    def test_normal_probe_success_is_complete(self):
+        result = self.fixture(admission_policy="probe").runner().run("quick")
+        self.assertEqual(result["summary"]["overall"], "complete")
+        self.assertEqual(result["summary"]["attempts"][0]["admissionPolicy"], "probe")
+
+    def test_probe_image_allocator_uses_execution_admission(self):
+        fixture = self.fixture(mode="blocked", admission_policy="probe")
+        fixture.configure_image()
+        result = fixture.runner().run("quick")
+        case = result["summary"]["attempts"][0]["cases"][0]
+        self.assertEqual(case["status"], "passed")
+        self.assertEqual(case["actualOptions"]["imageMemoryLimitMiB"],
+                         case["admission"]["executionBudgetMiB"])
+
+    def test_probe_failure_keeps_bounded_diagnostics_and_stops_later_cases(self):
+        cases = [text_case("one", "Inputs/one.txt"), text_case("two", "Inputs/two.txt")]
+        fixture = self.fixture(cases=cases, mode="load-failure", admission_policy="probe")
+        result = fixture.runner().run("quick")
+        attempt = result["summary"]["attempts"][0]
+        first, second = attempt["cases"]
+        self.assertEqual(first["status"], "failed")
+        self.assertEqual(first["publicProcess"]["returnCode"], 1)
+        self.assertEqual(first["reportStatus"], "readable")
+        self.assertEqual(first["failureCause"], "unknown")
+        self.assertLessEqual(len(first["failureDiagnostics"]), 4)
+        self.assertTrue(all(len(item) <= 2048 for item in first["failureDiagnostics"]))
+        self.assertIn("systemBefore", first)
+        self.assertIn("systemAfter", first)
+        self.assertEqual(second["status"], "not_started_after_failure")
+        self.assertEqual(attempt["stoppedCaseID"], "one")
+        self.assertIn("execute ", fixture.log.read_text(encoding="utf-8"))
+        self.assertFalse(fixture.marker.exists())
+        serialized = json.dumps(result["summary"], ensure_ascii=False)
+        self.assertNotIn(str(self.root), serialized)
+        run_root = self.root / "Results" / result["runID"]
+        rendered = (run_root / "summary.html").read_text(encoding="utf-8")
+        self.assertIn("simulated load failure", rendered)
+        self.assertNotIn(str(self.root), rendered)
+        with zipfile.ZipFile(run_root / "summary.zip") as archive:
+            self.assertNotIn(str(self.root).encode(), archive.read("summary.json"))
+        reread = fixture.runner().summarize(result["runID"])
+        self.assertEqual(reread["statusCounts"]["not_started_after_failure"], 1)
+
+    def test_probe_missing_report_preserves_real_exit(self):
+        result = self.fixture(mode="missing-report", admission_policy="probe").runner().run("quick")
+        case = result["summary"]["attempts"][0]["cases"][0]
+        self.assertEqual(case["status"], "failed")
+        self.assertEqual(case["reportStatus"], "missing")
+        self.assertEqual(case["publicProcess"]["returnCode"], 7)
+
+    def test_probe_corrupt_report_is_distinct_from_missing(self):
+        result = self.fixture(mode="corrupt-report", admission_policy="probe").runner().run("quick")
+        case = result["summary"]["attempts"][0]["cases"][0]
+        self.assertEqual(case["reportStatus"], "damaged")
+        self.assertTrue(any("invalid" in item for item in case["failureDiagnostics"]))
+
+    def test_probe_deep_failure_report_is_bounded_and_stops_group(self):
+        deep_value: object = 0
+        for _ in range(10000):
+            deep_value = [deep_value]
+        self.assertEqual(runner_module._diagnostic_text("deep", deep_value), "deep: <list>")
+        cases = [text_case("one", "Inputs/one.txt"), text_case("two", "Inputs/two.txt")]
+        result = self.fixture(cases=cases, mode="deep-report", admission_policy="probe").runner().run("quick")
+        first, second = result["summary"]["attempts"][0]["cases"]
+        self.assertEqual(first["status"], "failed")
+        self.assertEqual(first["publicProcess"]["returnCode"], 1)
+        self.assertEqual(first["publicProcess"]["processStatus"], "exited")
+        self.assertEqual(first["reportStatus"], "damaged")
+        self.assertTrue(first["failureDiagnostics"])
+        self.assertLessEqual(len(first["failureDiagnostics"]), 4)
+        self.assertTrue(all(len(item) <= 2048 for item in first["failureDiagnostics"]))
+        self.assertEqual(second["status"], "not_started_after_failure")
+
+    def test_probe_signal_records_signal_without_calling_it_oom(self):
+        result = self.fixture(mode="signal", admission_policy="probe").runner().run("quick")
+        case = result["summary"]["attempts"][0]["cases"][0]
+        self.assertEqual(case["publicProcess"]["terminationSignal"], signal.SIGTERM)
+        self.assertEqual(case["publicProcess"]["processStatus"], "signaled")
+        self.assertEqual(case["failureCause"], "unknown")
+        self.assertNotIn("OOM", json.dumps(case))
+
+    def test_probe_timeout_stops_following_case(self):
+        cases = [text_case("one", "Inputs/one.txt"), text_case("two", "Inputs/two.txt")]
+        fixture = self.fixture(cases=cases, mode="sleep", admission_policy="probe")
+        with mock.patch.object(runner_module, "PROCESS_POLL_SECONDS", .01), \
+             mock.patch.object(runner_module, "INTERRUPT_GRACE_SECONDS", .01), \
+             mock.patch.object(runner_module, "TERM_GRACE_SECONDS", .01):
+            result = fixture.runner().run("quick")
+        observed = result["summary"]["attempts"][0]["cases"]
+        self.assertTrue(observed[0]["publicProcess"]["timedOut"])
+        self.assertEqual(observed[1]["status"], "not_started_after_failure")
+
+    def test_probe_timeout_retains_readable_backend_diagnostics(self):
+        case = text_case()
+        case["timeoutSeconds"] = .5
+        fixture = self.fixture(cases=[case], mode="reported-timeout", admission_policy="probe")
+        with mock.patch.object(runner_module, "PROCESS_POLL_SECONDS", .01), \
+             mock.patch.object(runner_module, "INTERRUPT_GRACE_SECONDS", .01), \
+             mock.patch.object(runner_module, "TERM_GRACE_SECONDS", .01):
+            result = fixture.runner().run("quick")
+        observed = result["summary"]["attempts"][0]["cases"][0]
+        self.assertEqual(observed["status"], "failed")
+        self.assertTrue(observed["publicProcess"]["timedOut"])
+        self.assertEqual(observed["reportStatus"], "readable")
+        self.assertEqual(observed["failureCause"], "unknown")
+        self.assertTrue(any("timed out" in item for item in observed["failureDiagnostics"]))
+        self.assertTrue(any("simulated load failure" in item for item in observed["failureDiagnostics"]))
+
+    def test_probe_output_limit_retains_readable_backend_diagnostics(self):
+        fixture = self.fixture(mode="reported-output-limit", admission_policy="probe")
+        with mock.patch.object(runner_module, "PROCESS_POLL_SECONDS", .01), \
+             mock.patch.object(runner_module, "INTERRUPT_GRACE_SECONDS", .01), \
+             mock.patch.object(runner_module, "TERM_GRACE_SECONDS", .01):
+            result = fixture.runner().run("quick")
+        observed = result["summary"]["attempts"][0]["cases"][0]
+        self.assertEqual(observed["status"], "failed")
+        self.assertTrue(observed["publicProcess"]["stdoutLimited"])
+        self.assertEqual(observed["reportStatus"], "readable")
+        self.assertEqual(observed["failureCause"], "unknown")
+        self.assertTrue(any("output exceeded" in item for item in observed["failureDiagnostics"]))
+        self.assertTrue(any("simulated load failure" in item for item in observed["failureDiagnostics"]))
+
+    def test_probe_expected_cancellation_continues_to_next_case(self):
+        cases = [text_case("one", "Inputs/one.txt"), text_case("two", "Inputs/two.txt")]
+        for case in cases:
+            case.update(expected="cancelled", cancelAfterSeconds=.3)
+        fixture = self.fixture(cases=cases, mode="text-cancel", admission_policy="probe")
+        result = fixture.runner().run("quick")
+        self.assertEqual(result["summary"]["overall"], "complete")
+        self.assertEqual([item["status"] for item in result["summary"]["attempts"][0]["cases"]],
+                         ["passed", "passed"])
+
+    def test_resume_rejects_summary_policy_mismatch(self):
+        fixture = self.fixture(mode="load-failure", admission_policy="probe")
+        runner = fixture.runner()
+        first = runner.run("quick")
+        summary_path = self.root / "Results" / first["runID"] / "summary.json"
+        summary = json.loads(summary_path.read_text(encoding="utf-8"))
+        summary["admissionPolicy"] = "guarded"
+        write_json(summary_path, summary)
+        with self.assertRaisesRegex(runner_module.KitError, "summary admission policy differs"):
+            runner.run("quick", resume=first["runID"])
+
+    def test_probe_runner_cli_subprocess_returns_one_for_failed_cases(self):
+        fixture = self.fixture(mode="load-failure", admission_policy="probe")
+        bundled = self.root / "Bin/d-infer"
+        bundled.write_bytes(fixture.fake.read_bytes())
+        bundled.chmod(0o755)
+        environment = dict(os.environ, PYTHONDONTWRITEBYTECODE="1", D_TEST_TEMP_DIR=os.environ["D_TEST_TEMP_DIR"],
+                           TMPDIR=os.environ["D_TEST_TEMP_DIR"])
+        completed = subprocess.run([sys.executable, str(MODULE_PATH), "run", "--kit", str(self.root),
+                                    "--profile", "quick"], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                   env=environment, check=False, timeout=20)
+        self.assertEqual(completed.returncode, 1, completed.stderr.decode("utf-8", errors="replace"))
+        payload = json.loads(completed.stdout.decode("utf-8"))
+        self.assertEqual(payload["summary"]["overall"], "incomplete")
+        profiles_path = self.root / "Profiles/profiles.json"
+        profiles = json.loads(profiles_path.read_text(encoding="utf-8"))
+        profiles["profiles"][0].pop("admissionPolicy")
+        write_json(profiles_path, profiles)
+        guarded = subprocess.run([sys.executable, str(MODULE_PATH), "run", "--kit", str(self.root),
+                                  "--profile", "quick"], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                 env=environment, check=False, timeout=20)
+        self.assertEqual(guarded.returncode, 0, guarded.stderr.decode("utf-8", errors="replace"))
+        guarded_payload = json.loads(guarded.stdout.decode("utf-8"))
+        self.assertEqual(guarded_payload["summary"]["admissionPolicy"], "guarded")
+        self.assertEqual(guarded_payload["summary"]["overall"], "incomplete")
 
     def test_inspection_rejects_boolean_schema_and_dishonest_budget(self):
         fixture=self.fixture(mode="bool-inspect"); result=fixture.runner().run("quick")
