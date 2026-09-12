@@ -3,7 +3,7 @@
   "profiles": [
     {
       "id": "quick",
-      "title": "快速检查：文字、图像、音频各一项（先选这个）",
+      "title": "快速确认能否运行（第一次先选这个）",
       "caseIDs": [
         "text05-short",
         "image512",
@@ -13,7 +13,7 @@
     },
     {
       "id": "common",
-      "title": "共同对照：7B文字、1024图像、30秒音频",
+      "title": "日常规模对照：7B文字、1024图片、30秒音频",
       "caseIDs": [
         "text7-short",
         "image1024",
@@ -23,7 +23,7 @@
     },
     {
       "id": "capacity",
-      "title": "容量扩展：32B／长上下文、高分辨率、medium音频",
+      "title": "完整大配置：32B文字、大图与长音频",
       "caseIDs": [
         "text32-short",
         "text32-context8k",
@@ -39,7 +39,7 @@
     },
     {
       "id": "reliability",
-      "title": "可靠性：重复运行、取消、音频变体与重绘",
+      "title": "检查重复运行、取消恢复及音频编辑",
       "caseIDs": [
         "text15-repeat",
         "text15-cancel",
@@ -54,7 +54,7 @@
     },
     {
       "id": "showroom",
-      "title": "展示机专用：32B文字、大图、medium长音频（大内存）",
+      "title": "大配置精简组（与第3组重叠，二选一即可）",
       "caseIDs": [
         "text32-short",
         "text32-context8k",
@@ -67,7 +67,7 @@
     },
     {
       "id": "boundary96",
-      "title": "96 GB及以上：真实长输入、重复释放、380秒音频上界",
+      "title": "长输入、重复释放与最长音频（深入测试）",
       "caseIDs": [
         "text32-long-repeat",
         "text32-long-cancel",
@@ -79,7 +79,7 @@
     },
     {
       "id": "boundary72",
-      "title": "96／128／192 GB实际容量试探：72B短／长输入、重复与取消",
+      "title": "72B大模型极限测试（可能很慢，可主动停止）",
       "caseIDs": [
         "text72-short-repeat",
         "text72-long-repeat",
@@ -92,7 +92,7 @@
   "cases": [
     {
       "id": "text05-short",
-      "title": "text05-short",
+      "title": "小文字模型：改写一小段中文（0.5B）",
       "model": "text05",
       "capability": "text",
       "promptFile": "Inputs/text-short.txt",
@@ -110,7 +110,7 @@
     },
     {
       "id": "image512",
-      "title": "image512",
+      "title": "生成512×512图片",
       "model": "image4",
       "capability": "image",
       "promptFile": "Inputs/image.txt",
@@ -128,7 +128,7 @@
     },
     {
       "id": "audio-small6",
-      "title": "audio-small6",
+      "title": "小音频模型：生成6秒钢琴",
       "model": "audio-small",
       "capability": "audio",
       "promptFile": "Inputs/audio.txt",
@@ -146,7 +146,7 @@
     },
     {
       "id": "text7-short",
-      "title": "text7-short",
+      "title": "7B文字模型：改写中文",
       "model": "text7",
       "capability": "text",
       "promptFile": "Inputs/text-short.txt",
@@ -164,7 +164,7 @@
     },
     {
       "id": "image1024",
-      "title": "image1024",
+      "title": "生成1024×1024图片",
       "model": "image4",
       "capability": "image",
       "promptFile": "Inputs/image.txt",
@@ -182,7 +182,7 @@
     },
     {
       "id": "audio-small30",
-      "title": "audio-small30",
+      "title": "小音频模型：生成30秒钢琴",
       "model": "audio-small",
       "capability": "audio",
       "promptFile": "Inputs/audio.txt",
@@ -200,7 +200,7 @@
     },
     {
       "id": "text32-short",
-      "title": "text32-short",
+      "title": "32B文字模型：改写短文",
       "model": "text32",
       "capability": "text",
       "promptFile": "Inputs/text-short.txt",
@@ -218,7 +218,7 @@
     },
     {
       "id": "text32-context8k",
-      "title": "text32-context8k",
+      "title": "32B文字模型：中等输入（配置上限8K）",
       "model": "text32",
       "capability": "text",
       "promptFile": "Inputs/text-long8.txt",
@@ -236,7 +236,7 @@
     },
     {
       "id": "text32-context16k",
-      "title": "text32-context16k",
+      "title": "32B文字模型：较长输入（配置上限16K）",
       "model": "text32",
       "capability": "text",
       "promptFile": "Inputs/text-long16.txt",
@@ -254,7 +254,7 @@
     },
     {
       "id": "image1536",
-      "title": "image1536",
+      "title": "生成1536×1536大图",
       "model": "image4",
       "capability": "image",
       "promptFile": "Inputs/image.txt",
@@ -272,7 +272,7 @@
     },
     {
       "id": "image2048",
-      "title": "image2048",
+      "title": "生成2048×2048大图",
       "model": "image4",
       "capability": "image",
       "promptFile": "Inputs/image.txt",
@@ -290,7 +290,7 @@
     },
     {
       "id": "audio-medium6",
-      "title": "audio-medium6",
+      "title": "中型音频模型：生成6秒钢琴",
       "model": "audio-medium",
       "capability": "audio",
       "promptFile": "Inputs/audio.txt",
@@ -308,7 +308,7 @@
     },
     {
       "id": "audio-medium30",
-      "title": "audio-medium30",
+      "title": "中型音频模型：生成30秒钢琴",
       "model": "audio-medium",
       "capability": "audio",
       "promptFile": "Inputs/audio.txt",
@@ -326,7 +326,7 @@
     },
     {
       "id": "audio-medium120",
-      "title": "audio-medium120",
+      "title": "中型音频模型：生成2分钟钢琴",
       "model": "audio-medium",
       "capability": "audio",
       "promptFile": "Inputs/audio.txt",
@@ -344,7 +344,7 @@
     },
     {
       "id": "audio-small120",
-      "title": "audio-small120",
+      "title": "小音频模型：生成2分钟钢琴",
       "model": "audio-small",
       "capability": "audio",
       "promptFile": "Inputs/audio.txt",
@@ -362,7 +362,7 @@
     },
     {
       "id": "text15-repeat",
-      "title": "text15-repeat",
+      "title": "1.5B文字模型：连续运行两轮",
       "model": "text15",
       "capability": "text",
       "promptFile": "Inputs/text-short.txt",
@@ -380,7 +380,7 @@
     },
     {
       "id": "text15-cancel",
-      "title": "text15-cancel",
+      "title": "1.5B文字模型：运行中取消",
       "model": "text15",
       "capability": "text",
       "promptFile": "Inputs/text-cancel.txt",
@@ -399,7 +399,7 @@
     },
     {
       "id": "text15-after-cancel",
-      "title": "text15-after-cancel",
+      "title": "取消文字任务后：新进程再次生成",
       "model": "text15",
       "capability": "text",
       "promptFile": "Inputs/text-short.txt",
@@ -417,7 +417,7 @@
     },
     {
       "id": "audio-variation6",
-      "title": "audio-variation6",
+      "title": "参考刚才的钢琴：生成6秒变体",
       "model": "audio-small",
       "capability": "audio",
       "promptFile": "Inputs/audio.txt",
@@ -436,7 +436,7 @@
     },
     {
       "id": "audio-inpaint6",
-      "title": "audio-inpaint6",
+      "title": "只修改钢琴中第2至4秒",
       "model": "audio-small",
       "capability": "audio",
       "promptFile": "Inputs/audio.txt",
@@ -457,7 +457,7 @@
     },
     {
       "id": "audio-cancel6",
-      "title": "audio-cancel6",
+      "title": "音频生成：观察去噪进度后取消",
       "model": "audio-small",
       "capability": "audio",
       "promptFile": "Inputs/audio.txt",
@@ -472,11 +472,11 @@
       "timeoutSeconds": 600,
       "expected": "cancelled",
       "repeatCount": 1,
-      "cancelAfterSeconds": 3
+      "cancelWhen": "audio_denoising_started"
     },
     {
       "id": "audio-after-cancel6",
-      "title": "audio-after-cancel6",
+      "title": "取消音频任务后：新进程再次生成",
       "model": "audio-small",
       "capability": "audio",
       "promptFile": "Inputs/audio.txt",
@@ -549,7 +549,7 @@
     },
     {
       "id": "audio-medium380",
-      "title": "medium支持时长上界：380秒",
+      "title": "中型音频模型：生成6分20秒音频",
       "model": "audio-medium",
       "capability": "audio",
       "promptFile": "Inputs/audio.txt",
