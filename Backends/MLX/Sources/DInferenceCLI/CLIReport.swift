@@ -9,6 +9,7 @@ struct CLIReport: Encodable {
     let system = SystemDescription()
     var backend: BackendDescriptor?
     var options: CLIOptions?
+    var inspection: CLIInspection?
     var runs: [CLIRunReport] = []
     var failure: String?
     var artifactCleanupError: String?
@@ -25,6 +26,11 @@ struct CLIReport: Encodable {
                                                 withIntermediateDirectories: true)
         try encoder.encode(self).write(to: destination, options: .atomic)
     }
+}
+
+struct CLIInspection: Codable {
+    let estimate: ResourceEstimate
+    let withinBudget: Bool
 }
 
 struct SystemDescription: Encodable {
