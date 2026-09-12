@@ -41,3 +41,13 @@ Lead先审核Worker差异与异常，再运行相同CPU与反例。已获本机�
 本实验不等于正式DRuntime/Workbench接入；只有真实能力明确后再冻结正式请求扩展。歌声下一里程碑、HUM/手机/META原路线保留。若SDK内部行为与文档不一致，Lead在授权内解释和提出最小补丁，重要Lead实现须非实现者检查；新模型/超预算架构或质量承诺改变停报。
 
 保护：普通D、scheme及源分支状态未动；本批资源/输出仅外盘专属目录。持久run索引`D-Development/AgentTrials/D-MRT2-CONDITIONS-01/run-20260912T150154Z`；下载与环境获明确授权，非重复试点。任务/模型/来源/实际受测版本、剩余限制在末尾追加，最终commit自身SHA写外部回执。
+
+## 2026-09-13 环境与加载门槛
+
+13个固定文件共2,968,913,163bytes已完整下载/摘要核验，位于D-Development/Models/Magenta-RealTime-2-small/magenta-rt-v2，D-MODEL-MANIFEST.json记录每文件来源/大小/摘要。上游694a545及sequence-layers c85a637固定源码独立安装；初次从已签名便携Python建立的venv导入MLX遇不同TeamID拒绝。Lead没有改签名或系统权限，保留失败环境，改用此前已批准研发解释器创建新venv-dev并安装相同锁定依赖，导入通过。该环境属于本机研发实验，不能冒称已经便携封装或普通D内可用。
+
+MLX0.32.2加载官方mlxfn出现Invalid string size；该文件头记录导出版本0.31.1。仅将专属venv-dev的mlx/mlx-metal固定到0.31.1后，同文件加载并生成一帧通过。原始checkpoint以bits=None同样通过一帧；上游实际无条件进行int16输出转换，再除32768返回float32，int16_outputs配置标记未控制该转换，不能称原始路径输出全链FP32。Depthformer loader为BF16，其余精度按源码/可观察值记录。其他模态环境与模型精度未变。
+
+加载门槛的第一帧是零值，不能据此宣布旋律或听感通过。导出路径约4.43秒、MLX峰值528,019,338bytes；原始路径约4.99秒、峰值1,650,534,888bytes；这些是独立SDK单帧探针，不是最终工具验收或实时吞吐。清理后分别8/46bytes活跃、cache0，子进程已结束；微量残留需结合随机状态对照，不声称常驻无泄漏。证据为上述run/evidence/upstream-smoke3.json、upstream-smoke4-raw.json及进程回执。更早smoke因Lead写错导入路径在加载前失败，原记录保留，不算SDK缺陷。
+
+Worker Sol/high线程01a09627-acec-7d32-b48d-97e87d5c78e2，实际预检base e1287e15a2f324b63adbf4ee29e0fe088bc9bb74；独立D-MRT2-PROBE-01工作树、workspace-write/network=false和仅任务输出/tmp附加写根已核验，隐藏解析unknown。Worker只实现标准库条件/实验入口/CPU夹具，不导入SDK或使用GPU；Lead负责环境和真实验证。本节不改变其冻结业务契约。
