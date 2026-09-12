@@ -3,7 +3,7 @@
   "profiles": [
     {
       "id": "quick",
-      "title": "Quick / basic three modalities",
+      "title": "快速检查：文字、图像、音频各一项（先选这个）",
       "caseIDs": [
         "text05-short",
         "image512",
@@ -12,7 +12,7 @@
     },
     {
       "id": "common",
-      "title": "Common comparison across machines",
+      "title": "共同对照：7B文字、1024图像、30秒音频",
       "caseIDs": [
         "text7-short",
         "image1024",
@@ -21,7 +21,7 @@
     },
     {
       "id": "capacity",
-      "title": "Large model and longer outputs",
+      "title": "容量扩展：32B／长上下文、高分辨率、medium音频",
       "caseIDs": [
         "text32-short",
         "text32-context8k",
@@ -36,7 +36,7 @@
     },
     {
       "id": "reliability",
-      "title": "Repeat, cancellation and audio editing",
+      "title": "可靠性：重复运行、取消、音频变体与重绘",
       "caseIDs": [
         "text15-repeat",
         "text15-cancel",
