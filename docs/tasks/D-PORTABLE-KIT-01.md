@@ -1,6 +1,6 @@
 # D-PORTABLE-KIT-01 — 便携离线跨 Mac 验证包
 
-状态：获准实施，尚未验收。spec_revision=1，contract_revision=1，batch_id=D-PORTABLE-KIT-01。
+状态：获准实施，尚未验收。spec_revision=2，contract_revision=2，batch_id=D-PORTABLE-KIT-01。
 source_base=0db7a8fa95fb1ed45be2999c7ab9cfb4d9a96361。执行基线为包含本规格的准备提交，完整 SHA 在每次派工记录中。
 源分支 codex/inference-foundation；集成目录 D-Worktrees/D-PORTABLE-KIT-01。原 scheme 唯一个人未暂存差异受保护。
 证据：D-Development/AgentTrials/D-PORTABLE-KIT-01/run-20260912T030734Z。
@@ -39,7 +39,7 @@ kit.json schemaVersion=1：
   "catalog":"Manifests/catalog.json","profiles":"Profiles/profiles.json",
   "minimumMacOS":"26.2","audioLicenseAcknowledged":true }
 ```
-catalog.json schemaVersion=1：models字典，key为稳定modelID；每项含 `directory`（根相对普通目录）、`manifest`（根相对文件）、`format`（text/image/audio）、`revision`，音频另含`audioProfile`。正式manifest原样保存：text/image files有name,size,algorithm,checksum；audio files有path,size,sha256。完整内容校验必须真实执行，git-blob-sha1含blob头；不能只核对size。只允许已声明相对路径，无`..`、绝对路径或符号链接逃逸。
+catalog.json schemaVersion=1：models字典，key为稳定modelID；每项含 `directory`（根相对普通目录）、`manifest`（根相对文件）、`format`（text/image/audio）、`revision`，音频另含`audioProfile`。正式manifest原样保存：text files有name,size,algorithm,checksum；image/audio files有path,size,sha256。完整内容校验必须真实执行，git-blob-sha1含blob头；不能只核对size。只允许已声明相对路径，无`..`、绝对路径或符号链接逃逸。
 
 profiles.json schemaVersion=1：`profiles:[{id,title,caseIDs:[...]}]`，`cases:[{id,title,model,capability,promptFile,parameters,timeoutSeconds,expected,repeatCount}]`。可选`sourceCase`引用同一profile前面的成功音频用例；若输入依赖失败则blocked_dependency，不拼其他attempt的结果。
 parameters仅白名单：text maxTokens/temperature/topP/maxPromptTokens/maxOutputTokens/cacheLimitMiB；image width/height/steps/guidance/seed/imageProfile；audio durationSeconds/steps/guidance/seed/audioOperation/audioStrength/audioEditStartFrame/audioEditEndFrame。`cancelAfterSeconds`是case可选受控取消实验；expected仅completed/cancelled。repeatCount限制1..3，case/profile数量有界。seed JSON建议十进制字符串传CLI，不经float。未识别字段/布尔冒充数值/非法组合拒绝，不静默更改配置。
@@ -65,3 +65,5 @@ Lead从冻结组合构建，使用独立DerivedData/既有离线依赖；重跑�
 ## 恢复检查点（准备）
 
 源/保护状态已核对；新专属集成工作树从source_base创建。无Worker已实施。已获当前GPU空闲确认。下一动作：准备提交→两个独立Worker预检/路由核验→实施；Lead并行下载/封装准备。待最终追加受测版本、实际产物、失败/修复/来源、进程和人工待办。
+
+规格2（实施前）：纠正图像固定manifest实际使用path/size/sha256，原规格误写为text格式。非新验收要求；两任务开始实现前接入本准备版本。生产文字结果本来包含promptTokens/generationTokens及分阶段时间，应保留实际字段，不用chunkCount冒充tokens。

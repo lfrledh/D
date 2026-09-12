@@ -1,0 +1,69 @@
+{
+  "schemaVersion": 1,
+  "repository": "mlx-community/Qwen2.5-7B-Instruct-4bit",
+  "revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+  "directoryName": "Qwen2.5-7B-Instruct-4bit",
+  "source": "https://huggingface.co/mlx-community/Qwen2.5-7B-Instruct-4bit/tree/c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
+  "files": [
+    {
+      "name": "README.md",
+      "size": 732,
+      "algorithm": "git-blob-sha1",
+      "checksum": "489ab8c8d3cac6fb0d0ac178febdbf39be363e9e"
+    },
+    {
+      "name": "added_tokens.json",
+      "size": 605,
+      "algorithm": "git-blob-sha1",
+      "checksum": "482ced4679301bf287ebb310bdd1790eb4514232"
+    },
+    {
+      "name": "config.json",
+      "size": 787,
+      "algorithm": "git-blob-sha1",
+      "checksum": "f9dd0a512675c68d5d8d18f7e44d9f29141af60d"
+    },
+    {
+      "name": "merges.txt",
+      "size": 1671853,
+      "algorithm": "git-blob-sha1",
+      "checksum": "31349551d90c7606f325fe0f11bbb8bd5fa0d7c7"
+    },
+    {
+      "name": "model.safetensors",
+      "size": 4284346255,
+      "algorithm": "sha256",
+      "checksum": "86110f368236b53cf4c2336f991a85703b17bcc60bb75f292b4002ec0219f071"
+    },
+    {
+      "name": "model.safetensors.index.json",
+      "size": 51711,
+      "algorithm": "git-blob-sha1",
+      "checksum": "669ba50dd3bc0e1ed5f31cd939a54d5dd37c3c85"
+    },
+    {
+      "name": "special_tokens_map.json",
+      "size": 613,
+      "algorithm": "git-blob-sha1",
+      "checksum": "ac23c0aaa2434523c494330aeb79c58395378103"
+    },
+    {
+      "name": "tokenizer.json",
+      "size": 7031673,
+      "algorithm": "git-blob-sha1",
+      "checksum": "d24314ef7f0afd1b678c2e24c767e19f24f86b0e"
+    },
+    {
+      "name": "tokenizer_config.json",
+      "size": 7280,
+      "algorithm": "git-blob-sha1",
+      "checksum": "816372d7ae55ff163ebec9e9d2286c6b462539be"
+    },
+    {
+      "name": "vocab.json",
+      "size": 2776833,
+      "algorithm": "git-blob-sha1",
+      "checksum": "4783fe10ac3adce15ac8f358ef5462739852c569"
+    }
+  ]
+}

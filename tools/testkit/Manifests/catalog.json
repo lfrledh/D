@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "models": {
+    "text05": {
+      "directory": "Models/Qwen2.5-0.5B-Instruct-4bit",
+      "manifest": "Manifests/text05.json",
+      "format": "text",
+      "revision": "a5339a4131f135d0fdc6a5c8b5bbed2753bbe0f3"
+    },
+    "text15": {
+      "directory": "Models/Qwen2.5-1.5B-Instruct-4bit",
+      "manifest": "Manifests/text15.json",
+      "format": "text",
+      "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677"
+    },
+    "text7": {
+      "directory": "Models/Qwen2.5-7B-Instruct-4bit",
+      "manifest": "Manifests/text7.json",
+      "format": "text",
+      "revision": "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed"
+    },
+    "text32": {
+      "directory": "Models/Qwen2.5-32B-Instruct-4bit",
+      "manifest": "Manifests/text32.json",
+      "format": "text",
+      "revision": "2938092373e5f97b95538884112085364c2da315"
+    },
+    "image4": {
+      "directory": "Models/FLUX.2-klein-4B-q8",
+      "manifest": "Manifests/image4.json",
+      "format": "image",
+      "revision": "ef52ee019fd1d0e75ae4deb40476ba65989716d7"
+    },
+    "audio-small": {
+      "directory": "Models/Stable-Audio-3-small-music-MLX",
+      "manifest": "Manifests/audio-small.json",
+      "format": "audio",
+      "revision": "da6edc54ddba10bfd79a077102ded687f80e882b",
+      "audioProfile": "sm-music"
+    },
+    "audio-medium": {
+      "directory": "Models/Stable-Audio-3-medium-MLX",
+      "manifest": "Manifests/audio-medium.json",
+      "format": "audio",
+      "revision": "da6edc54ddba10bfd79a077102ded687f80e882b",
+      "audioProfile": "medium"
+    }
+  }
+}

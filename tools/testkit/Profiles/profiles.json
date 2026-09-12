@@ -1,0 +1,456 @@
+{
+  "schemaVersion": 1,
+  "profiles": [
+    {
+      "id": "quick",
+      "title": "Quick / basic three modalities",
+      "caseIDs": [
+        "text05-short",
+        "image512",
+        "audio-small6"
+      ]
+    },
+    {
+      "id": "common",
+      "title": "Common comparison across machines",
+      "caseIDs": [
+        "text7-short",
+        "image1024",
+        "audio-small30"
+      ]
+    },
+    {
+      "id": "capacity",
+      "title": "Large model and longer outputs",
+      "caseIDs": [
+        "text32-short",
+        "text32-context8k",
+        "text32-context16k",
+        "image1536",
+        "image2048",
+        "audio-medium6",
+        "audio-medium30",
+        "audio-medium120",
+        "audio-small120"
+      ]
+    },
+    {
+      "id": "reliability",
+      "title": "Repeat, cancellation and audio editing",
+      "caseIDs": [
+        "text15-repeat",
+        "text15-cancel",
+        "text15-after-cancel",
+        "audio-small6",
+        "audio-variation6",
+        "audio-inpaint6",
+        "audio-cancel6",
+        "audio-after-cancel6"
+      ]
+    }
+  ],
+  "cases": [
+    {
+      "id": "text05-short",
+      "title": "text05-short",
+      "model": "text05",
+      "capability": "text",
+      "promptFile": "Inputs/text-short.txt",
+      "parameters": {
+        "maxTokens": 128,
+        "temperature": 0,
+        "topP": 0.95,
+        "maxPromptTokens": 2048,
+        "maxOutputTokens": 1024,
+        "cacheLimitMiB": 64
+      },
+      "timeoutSeconds": 600,
+      "expected": "completed",
+      "repeatCount": 1
+    },
+    {
+      "id": "image512",
+      "title": "image512",
+      "model": "image4",
+      "capability": "image",
+      "promptFile": "Inputs/image.txt",
+      "parameters": {
+        "width": 512,
+        "height": 512,
+        "steps": 4,
+        "guidance": 1,
+        "seed": "42",
+        "imageProfile": "verified512"
+      },
+      "timeoutSeconds": 600,
+      "expected": "completed",
+      "repeatCount": 1
+    },
+    {
+      "id": "audio-small6",
+      "title": "audio-small6",
+      "model": "audio-small",
+      "capability": "audio",
+      "promptFile": "Inputs/audio.txt",
+      "parameters": {
+        "durationSeconds": 6,
+        "steps": 8,
+        "guidance": 1,
+        "seed": "42",
+        "audioOperation": "generate",
+        "audioStrength": 1
+      },
+      "timeoutSeconds": 600,
+      "expected": "completed",
+      "repeatCount": 1
+    },
+    {
+      "id": "text7-short",
+      "title": "text7-short",
+      "model": "text7",
+      "capability": "text",
+      "promptFile": "Inputs/text-short.txt",
+      "parameters": {
+        "maxTokens": 128,
+        "temperature": 0,
+        "topP": 0.95,
+        "maxPromptTokens": 2048,
+        "maxOutputTokens": 1024,
+        "cacheLimitMiB": 64
+      },
+      "timeoutSeconds": 600,
+      "expected": "completed",
+      "repeatCount": 1
+    },
+    {
+      "id": "image1024",
+      "title": "image1024",
+      "model": "image4",
+      "capability": "image",
+      "promptFile": "Inputs/image.txt",
+      "parameters": {
+        "width": 1024,
+        "height": 1024,
+        "steps": 4,
+        "guidance": 1,
+        "seed": "42",
+        "imageProfile": "scalableKlein4B"
+      },
+      "timeoutSeconds": 600,
+      "expected": "completed",
+      "repeatCount": 1
+    },
+    {
+      "id": "audio-small30",
+      "title": "audio-small30",
+      "model": "audio-small",
+      "capability": "audio",
+      "promptFile": "Inputs/audio.txt",
+      "parameters": {
+        "durationSeconds": 30,
+        "steps": 8,
+        "guidance": 1,
+        "seed": "42",
+        "audioOperation": "generate",
+        "audioStrength": 1
+      },
+      "timeoutSeconds": 600,
+      "expected": "completed",
+      "repeatCount": 1
+    },
+    {
+      "id": "text32-short",
+      "title": "text32-short",
+      "model": "text32",
+      "capability": "text",
+      "promptFile": "Inputs/text-short.txt",
+      "parameters": {
+        "maxTokens": 128,
+        "temperature": 0,
+        "topP": 0.95,
+        "maxPromptTokens": 2048,
+        "maxOutputTokens": 1024,
+        "cacheLimitMiB": 64
+      },
+      "timeoutSeconds": 600,
+      "expected": "completed",
+      "repeatCount": 1
+    },
+    {
+      "id": "text32-context8k",
+      "title": "text32-context8k",
+      "model": "text32",
+      "capability": "text",
+      "promptFile": "Inputs/text-long8.txt",
+      "parameters": {
+        "maxTokens": 128,
+        "temperature": 0,
+        "topP": 0.95,
+        "maxPromptTokens": 8192,
+        "maxOutputTokens": 1024,
+        "cacheLimitMiB": 64
+      },
+      "timeoutSeconds": 600,
+      "expected": "completed",
+      "repeatCount": 1
+    },
+    {
+      "id": "text32-context16k",
+      "title": "text32-context16k",
+      "model": "text32",
+      "capability": "text",
+      "promptFile": "Inputs/text-long16.txt",
+      "parameters": {
+        "maxTokens": 128,
+        "temperature": 0,
+        "topP": 0.95,
+        "maxPromptTokens": 16384,
+        "maxOutputTokens": 1024,
+        "cacheLimitMiB": 64
+      },
+      "timeoutSeconds": 600,
+      "expected": "completed",
+      "repeatCount": 1
+    },
+    {
+      "id": "image1536",
+      "title": "image1536",
+      "model": "image4",
+      "capability": "image",
+      "promptFile": "Inputs/image.txt",
+      "parameters": {
+        "width": 1536,
+        "height": 1536,
+        "steps": 4,
+        "guidance": 1,
+        "seed": "42",
+        "imageProfile": "scalableKlein4B"
+      },
+      "timeoutSeconds": 900,
+      "expected": "completed",
+      "repeatCount": 1
+    },
+    {
+      "id": "image2048",
+      "title": "image2048",
+      "model": "image4",
+      "capability": "image",
+      "promptFile": "Inputs/image.txt",
+      "parameters": {
+        "width": 2048,
+        "height": 2048,
+        "steps": 4,
+        "guidance": 1,
+        "seed": "42",
+        "imageProfile": "scalableKlein4B"
+      },
+      "timeoutSeconds": 900,
+      "expected": "completed",
+      "repeatCount": 1
+    },
+    {
+      "id": "audio-medium6",
+      "title": "audio-medium6",
+      "model": "audio-medium",
+      "capability": "audio",
+      "promptFile": "Inputs/audio.txt",
+      "parameters": {
+        "durationSeconds": 6,
+        "steps": 8,
+        "guidance": 1,
+        "seed": "42",
+        "audioOperation": "generate",
+        "audioStrength": 1
+      },
+      "timeoutSeconds": 600,
+      "expected": "completed",
+      "repeatCount": 1
+    },
+    {
+      "id": "audio-medium30",
+      "title": "audio-medium30",
+      "model": "audio-medium",
+      "capability": "audio",
+      "promptFile": "Inputs/audio.txt",
+      "parameters": {
+        "durationSeconds": 30,
+        "steps": 8,
+        "guidance": 1,
+        "seed": "42",
+        "audioOperation": "generate",
+        "audioStrength": 1
+      },
+      "timeoutSeconds": 600,
+      "expected": "completed",
+      "repeatCount": 1
+    },
+    {
+      "id": "audio-medium120",
+      "title": "audio-medium120",
+      "model": "audio-medium",
+      "capability": "audio",
+      "promptFile": "Inputs/audio.txt",
+      "parameters": {
+        "durationSeconds": 120,
+        "steps": 8,
+        "guidance": 1,
+        "seed": "42",
+        "audioOperation": "generate",
+        "audioStrength": 1
+      },
+      "timeoutSeconds": 600,
+      "expected": "completed",
+      "repeatCount": 1
+    },
+    {
+      "id": "audio-small120",
+      "title": "audio-small120",
+      "model": "audio-small",
+      "capability": "audio",
+      "promptFile": "Inputs/audio.txt",
+      "parameters": {
+        "durationSeconds": 120,
+        "steps": 8,
+        "guidance": 1,
+        "seed": "42",
+        "audioOperation": "generate",
+        "audioStrength": 1
+      },
+      "timeoutSeconds": 600,
+      "expected": "completed",
+      "repeatCount": 1
+    },
+    {
+      "id": "text15-repeat",
+      "title": "text15-repeat",
+      "model": "text15",
+      "capability": "text",
+      "promptFile": "Inputs/text-short.txt",
+      "parameters": {
+        "maxTokens": 128,
+        "temperature": 0,
+        "topP": 0.95,
+        "maxPromptTokens": 2048,
+        "maxOutputTokens": 1024,
+        "cacheLimitMiB": 64
+      },
+      "timeoutSeconds": 600,
+      "expected": "completed",
+      "repeatCount": 2
+    },
+    {
+      "id": "text15-cancel",
+      "title": "text15-cancel",
+      "model": "text15",
+      "capability": "text",
+      "promptFile": "Inputs/text-short.txt",
+      "parameters": {
+        "maxTokens": 1024,
+        "temperature": 0,
+        "topP": 0.95,
+        "maxPromptTokens": 2048,
+        "maxOutputTokens": 1024,
+        "cacheLimitMiB": 64
+      },
+      "timeoutSeconds": 600,
+      "expected": "cancelled",
+      "repeatCount": 1,
+      "cancelAfterSeconds": 2
+    },
+    {
+      "id": "text15-after-cancel",
+      "title": "text15-after-cancel",
+      "model": "text15",
+      "capability": "text",
+      "promptFile": "Inputs/text-short.txt",
+      "parameters": {
+        "maxTokens": 128,
+        "temperature": 0,
+        "topP": 0.95,
+        "maxPromptTokens": 2048,
+        "maxOutputTokens": 1024,
+        "cacheLimitMiB": 64
+      },
+      "timeoutSeconds": 600,
+      "expected": "completed",
+      "repeatCount": 1
+    },
+    {
+      "id": "audio-variation6",
+      "title": "audio-variation6",
+      "model": "audio-small",
+      "capability": "audio",
+      "promptFile": "Inputs/audio.txt",
+      "parameters": {
+        "durationSeconds": 6,
+        "steps": 8,
+        "guidance": 1,
+        "seed": "42",
+        "audioOperation": "variation",
+        "audioStrength": 0.5
+      },
+      "timeoutSeconds": 600,
+      "expected": "completed",
+      "repeatCount": 1,
+      "sourceCase": "audio-small6"
+    },
+    {
+      "id": "audio-inpaint6",
+      "title": "audio-inpaint6",
+      "model": "audio-small",
+      "capability": "audio",
+      "promptFile": "Inputs/audio.txt",
+      "parameters": {
+        "durationSeconds": 6,
+        "steps": 8,
+        "guidance": 1,
+        "seed": "42",
+        "audioOperation": "inpaint",
+        "audioStrength": 1,
+        "audioEditStartFrame": 88200,
+        "audioEditEndFrame": 176400
+      },
+      "timeoutSeconds": 600,
+      "expected": "completed",
+      "repeatCount": 1,
+      "sourceCase": "audio-small6"
+    },
+    {
+      "id": "audio-cancel6",
+      "title": "audio-cancel6",
+      "model": "audio-small",
+      "capability": "audio",
+      "promptFile": "Inputs/audio.txt",
+      "parameters": {
+        "durationSeconds": 6,
+        "steps": 8,
+        "guidance": 1,
+        "seed": "42",
+        "audioOperation": "generate",
+        "audioStrength": 1
+      },
+      "timeoutSeconds": 600,
+      "expected": "cancelled",
+      "repeatCount": 1,
+      "cancelAfterSeconds": 3
+    },
+    {
+      "id": "audio-after-cancel6",
+      "title": "audio-after-cancel6",
+      "model": "audio-small",
+      "capability": "audio",
+      "promptFile": "Inputs/audio.txt",
+      "parameters": {
+        "durationSeconds": 6,
+        "steps": 8,
+        "guidance": 1,
+        "seed": "42",
+        "audioOperation": "generate",
+        "audioStrength": 1
+      },
+      "timeoutSeconds": 600,
+      "expected": "completed",
+      "repeatCount": 1
+    }
+  ]
+}
