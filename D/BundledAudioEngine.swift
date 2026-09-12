@@ -4,6 +4,18 @@ import Foundation
 
 /// Read-only description of the fixed audio engine bundled with an application.
 struct BundledAudioEngine: Sendable {
+    enum Family: Sendable {
+        case stableAudio, mrt2Music
+        var directory: String { self == .stableAudio ? "AudioEngine.dengine" : "MRT2MusicEngine.dengine" }
+        var kind: String { self == .stableAudio ? "d-audio-engine" : "d-mrt2-music-engine" }
+        var script: String { self == .stableAudio ? "provider/d_audio_backend.py" : "provider/d_audio_mrt2_backend.py" }
+        var model: String { self == .stableAudio ? "model-manifests/sm-music.json" : "model-manifests/mrt2-small.json" }
+        var required: [String] {
+            ["python/bin/python3", script, "provider/d_audio_access.py", "provider/d_audio_contract.py", model] +
+                (self == .stableAudio ? ["provider/d_audio_sa3.py"] : ["provider/d_audio_mrt2_contract.py", "provider/d_mrt2_export.py"])
+        }
+    }
+    let family: Family
     let pythonExecutable: URL
     let providerScript: URL
     let vendorDirectory: URL
@@ -49,8 +61,8 @@ struct BundledAudioEngine: Sendable {
         }
     }
 
-    static func resolve(resourceDirectory: URL) throws -> BundledAudioEngine? {
-        let root = resourceDirectory.appendingPathComponent("AudioEngine.dengine", isDirectory: true)
+    static func resolve(resourceDirectory: URL, family: Family = .stableAudio) throws -> BundledAudioEngine? {
+        let root = resourceDirectory.appendingPathComponent(family.directory, isDirectory: true)
         var rootStatus = stat()
         if Darwin.lstat(root.path, &rootStatus) != 0 {
             if errno == ENOENT { return nil }
@@ -77,10 +89,10 @@ struct BundledAudioEngine: Sendable {
             throw DeploymentError.invalid("engine.json is malformed")
         }
         try requireExact(object, key: "schemaVersion", integer: 1)
-        try requireExact(object, key: "kind", string: "d-audio-engine")
+        try requireExact(object, key: "kind", string: family.kind)
         try requireExact(object, key: "pythonABI", string: "3.12")
         try requireExact(object, key: "pythonExecutable", string: "python/bin/python3")
-        try requireExact(object, key: "providerScript", string: "provider/d_audio_backend.py")
+        try requireExact(object, key: "providerScript", string: family.script)
         try requireExact(object, key: "vendorDirectory", string: "vendor")
         try requireExact(object, key: "modelManifestsDirectory", string: "model-manifests")
         guard let values = object["files"] as? [Any], values.count <= maximumFiles else {
@@ -107,8 +119,7 @@ struct BundledAudioEngine: Sendable {
             declared[path] = DeclaredFile(path: path, size: size, digest: digest, executable: executable)
         }
 
-        let required = ["python/bin/python3", "provider/d_audio_backend.py", "provider/d_audio_contract.py",
-                        "provider/d_audio_sa3.py", "provider/d_audio_access.py", "model-manifests/sm-music.json"]
+        let required = family.required
         for path in required where declared[path] == nil {
             throw DeploymentError.invalid("required engine file is absent from engine.json: \(path)")
         }
@@ -137,10 +148,10 @@ struct BundledAudioEngine: Sendable {
         guard finalRoot == initialRoot, finalManifest == initialManifestEntry else {
             throw DeploymentError.invalid("engine changed while being resolved")
         }
-        return BundledAudioEngine(pythonExecutable: root.appendingPathComponent("python/bin/python3"),
-                                  providerScript: root.appendingPathComponent("provider/d_audio_backend.py"),
+        return BundledAudioEngine(family: family, pythonExecutable: root.appendingPathComponent("python/bin/python3"),
+                                  providerScript: root.appendingPathComponent(family.script),
                                   vendorDirectory: vendor,
-                                  modelManifest: root.appendingPathComponent("model-manifests/sm-music.json"),
+                                  modelManifest: root.appendingPathComponent(family.model),
                                   root: root, manifest: manifest, rootEntry: finalRoot.metadata, manifestEntry: finalManifest.metadata,
                                   manifestDigest: try sha256(manifest, expected: finalManifest.metadata),
                                   entries: finalEntries)

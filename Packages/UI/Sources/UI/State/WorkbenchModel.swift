@@ -159,6 +159,43 @@ public final class WorkbenchModel {
         await projectSession.exportAudioCreationAsset(id: id, to: url, contextID: contextID, documentID: documentID)
     }
 
+    public func importMusicCondition(contextID: UUID, documentID: UUID) async {
+        let session = projectSession
+        guard !isChangingProject, !isBusy, session.audioCreationContextID == contextID,
+              activeDocumentID == documentID, let draft = session.audioCreationDraft,
+              draft.profile == .conditionedMusic else { return }
+        isChoosingLocation = true
+        defer { isChoosingLocation = false }
+        let panel = NSOpenPanel()
+        panel.title = "导入旋律条件（JSON）"
+        panel.canChooseDirectories = false; panel.canChooseFiles = true; panel.allowsMultipleSelection = false
+        guard await panel.begin() == .OK, let url = panel.url else { return }
+        do {
+            let imported = try ProjectStore.readMusicCondition(at: url)
+            guard session.audioCreationContextID == contextID, activeDocumentID == documentID,
+                  session.audioCreationDraft?.revision == draft.revision else { throw CancellationError() }
+            var updated = draft; updated.music = imported.draft; updated.durationText = imported.durationText
+            session.updateAudioCreationDraft(updated, contextID: contextID, documentID: documentID)
+        } catch { errorMessage = "旋律条件未导入，原输入保留：\(error.localizedDescription)" }
+    }
+
+    public func exportMusicCondition(contextID: UUID, documentID: UUID) async {
+        let session = projectSession
+        guard !isChangingProject, !isBusy, session.audioCreationContextID == contextID,
+              activeDocumentID == documentID, let draft = session.audioCreationDraft,
+              draft.profile == .conditionedMusic, let music = draft.music else { return }
+        do {
+            let data = try MusicConditionFile.encode(music, durationText: draft.durationText)
+            isChoosingLocation = true
+            defer { isChoosingLocation = false }
+            let panel = NSSavePanel(); panel.title = "导出旋律条件（不含提示词和模型路径）"
+            panel.nameFieldStringValue = "旋律条件.json"
+            guard await panel.begin() == .OK, let url = panel.url,
+                  session.audioCreationContextID == contextID, activeDocumentID == documentID else { return }
+            try ProjectStore.publishMusicCondition(data, to: url)
+        } catch { errorMessage = "旋律条件未导出；已有文件不会覆盖：\(error.localizedDescription)" }
+    }
+
     /// Every callback captures the rendered project/document identity before any file panel or await.
     public func audioCreationActions(contextID: UUID, documentID: UUID) -> AudioCreationActions {
         let session = projectSession
@@ -183,7 +220,9 @@ public final class WorkbenchModel {
                 guard session.audioCreationContextID == contextID, session.activeDocumentID == documentID else { return }
                 await self.createAudioCreation(sourceAssetID: id)
             } },
-            chooseModel: { Task { guard current() else { return }; await self.chooseAudioCreationModel(contextID: contextID, documentID: documentID) } })
+            chooseModel: { Task { guard current() else { return }; await self.chooseAudioCreationModel(contextID: contextID, documentID: documentID) } },
+            importCondition: { Task { guard current() else { return }; await self.importMusicCondition(contextID: contextID, documentID: documentID) } },
+            exportCondition: { Task { guard current() else { return }; await self.exportMusicCondition(contextID: contextID, documentID: documentID) } })
     }
 
     public func chooseTextModel() async {

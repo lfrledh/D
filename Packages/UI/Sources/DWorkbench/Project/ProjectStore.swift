@@ -375,7 +375,7 @@ public actor ProjectStore {
         }
         try verifyUnchangedManifest()
         guard fsync(rootFD) == 0 else { throw ProjectFiles.error() }
-        let lock = dup(lockFD)
+        let lock = fcntl(lockFD, F_DUPFD_CLOEXEC, 0)
         guard lock >= 0 else { throw ProjectFiles.error() }
         let replacement = ProjectStore(rootURL: location, rootFD: directory, lockFD: lock, manifest: manifest)
         transferred = true
@@ -486,7 +486,7 @@ public actor ProjectStore {
             }
             let inspection = try AudioMediaInspector.inspect(at: artifact.url, policy: .generated)
             let expectedFrames = try ProjectFiles.expectedAudioFrames(audio)
-            guard inspection.format.container == .wav, inspection.format.sampleRate == audio.outputSampleRate,
+            guard inspection.format.container == .wav, inspection.format.sampleRate == Double(audio.outputSampleRate),
                   inspection.format.channelCount == 2, inspection.format.floatingPoint,
                   inspection.format.bitDepth == 32, inspection.format.frameCount == expectedFrames else {
                 throw AudioMediaError.invalidMedia("生成音频格式或帧数与固定请求不一致")
@@ -994,6 +994,32 @@ public actor ProjectStore {
         return (data, try validateRecipePNG(data))
     }
 
+    public static func readMusicCondition(at url: URL) throws -> (draft: MusicCreationDraft, durationText: String) {
+        guard url.isFileURL else { throw ProjectStoreError.unsafePath(url.path) }
+        let parent = try ProjectFiles.openDirectory(url.deletingLastPathComponent())
+        defer { Darwin.close(parent) }
+        let data = try ProjectFiles.read(relative: url.lastPathComponent, in: parent, limit: 128 * 1024)
+        return try MusicConditionFile.decode(data)
+    }
+
+    public static func publishMusicCondition(_ data: Data, to destination: URL) throws {
+        _ = try MusicConditionFile.decode(data)
+        guard destination.isFileURL, destination.path.hasPrefix("/"), !destination.lastPathComponent.isEmpty else {
+            throw ProjectStoreError.unsafePath(destination.path)
+        }
+        let parent = try ProjectFiles.openDirectory(destination.deletingLastPathComponent())
+        defer { Darwin.close(parent) }
+        try ProjectFiles.publishExport(to: destination, parent: parent, checkpoint: nil, validate: { temporary in
+            let directory = try ProjectFiles.openDirectory(temporary.deletingLastPathComponent())
+            defer { Darwin.close(directory) }
+            let actual = try ProjectFiles.read(relative: temporary.lastPathComponent, in: directory, limit: 128 * 1024)
+            guard actual == data else { throw ProjectStoreError.externalModification }
+            _ = try MusicConditionFile.decode(actual)
+        }) { target in
+            try data.withUnsafeBytes { try ProjectFiles.writeAll($0, to: target) }
+        }
+    }
+
     public static func publishRecipePNG(_ data: Data, to destination: URL) throws {
         try publishRecipePNG(data, to: destination, checkpoint: nil)
     }
@@ -1254,7 +1280,7 @@ public actor ProjectStore {
                     let url = rootURL.appendingPathComponent(relative)
                     let inspection = try AudioMediaInspector.inspect(at: url, policy: .generated)
                     guard inspection.format.container == .wav,
-                          inspection.format.sampleRate == audio.outputSampleRate,
+                          inspection.format.sampleRate == Double(audio.outputSampleRate),
                           inspection.format.channelCount == 2,
                           inspection.format.floatingPoint, inspection.format.bitDepth == 32,
                           inspection.format.frameCount == (try ProjectFiles.expectedAudioFrames(audio)) else {
@@ -1448,7 +1474,7 @@ private enum ProjectFiles {
     }
 
     static func lock(in root: Int32) throws -> Int32 {
-        let descriptor = openat(root, ".project.lock", O_RDWR | O_CREAT | O_NOFOLLOW | O_NONBLOCK, 0o600)
+        let descriptor = openat(root, ".project.lock", O_RDWR | O_CREAT | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC, 0o600)
         guard descriptor >= 0 else { throw error() }
         var info = stat()
         guard fstat(descriptor, &info) == 0, info.st_mode & S_IFMT == S_IFREG, info.st_nlink == 1 else {
@@ -1927,7 +1953,7 @@ private enum ProjectFiles {
                           parts.count == 4, parts[0] == "Tasks",
                           parts[1] == parts[1].lowercased(), taskOwner(parts[1]) == jobID,
                           parts[2] == "job", parts[3] == "output.wav",
-                          audio.format.container == .wav, audio.format.sampleRate == request.outputSampleRate,
+                          audio.format.container == .wav, audio.format.sampleRate == Double(request.outputSampleRate),
                           audio.format.channelCount == 2, audio.format.floatingPoint,
                           audio.format.bitDepth == 32,
                           audio.format.frameCount == (try expectedAudioFrames(request)) else {

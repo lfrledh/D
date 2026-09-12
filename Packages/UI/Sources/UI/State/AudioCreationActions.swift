@@ -15,13 +15,18 @@ public struct AudioCreationActions {
     public var export: (UUID) -> Void
     public var createFrom: (UUID) -> Void
     public var chooseModel: () -> Void
+    public var importCondition: (() -> Void)?
+    public var exportCondition: (() -> Void)?
 
     public init(generate: @escaping () -> Void, cancel: @escaping () -> Void,
                 save: @escaping () -> Void, select: @escaping (UUID?) -> Void,
                 play: @escaping (UUID) -> Void, stop: @escaping () -> Void,
                 adopt: @escaping (UUID?) -> Void, reject: @escaping (UUID, Bool) -> Void,
                 export: @escaping (UUID) -> Void, createFrom: @escaping (UUID) -> Void,
-                chooseModel: @escaping () -> Void) {
+                chooseModel: @escaping () -> Void,
+                importCondition: (() -> Void)? = nil, exportCondition: (() -> Void)? = nil) {
+        self.importCondition = importCondition
+        self.exportCondition = exportCondition
         self.generate = generate
         self.cancel = cancel
         self.save = save
@@ -111,6 +116,10 @@ enum AudioCreationButtonHandler {
     }
 
     static func numericInputsAreValid(_ draft: AudioCreationDraft) -> Bool {
+        if draft.profile == .conditionedMusic {
+            if draft.music?.hasNoteCondition == true && draft.music?.notes.isEmpty != false { return false }
+            return (try? draft.makeRequest(source: nil)) != nil
+        }
         guard let seed = UInt64(draft.seedText), seed <= 4_294_967_294,
               let steps = Int(draft.stepsText), (1...100).contains(steps),
               let guidance = Double(draft.guidanceText), guidance.isFinite, (1...15).contains(guidance) else { return false }
@@ -132,6 +141,13 @@ enum AudioCreationButtonHandler {
     static func submissionMessage(_ draft: AudioCreationDraft, source: ProjectAsset?,
                                   hostAllowsGeneration: Bool, hasPendingRangeInput: Bool) -> String {
         if draft.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return "请输入提示词。" }
+        if draft.profile == .conditionedMusic {
+            if draft.music?.hasNoteCondition == true && draft.music?.notes.isEmpty != false {
+                return "按旋律生成需要至少一个音符；也可关闭旋律条件，仅使用风格提示。"
+            }
+            do { _ = try draft.makeRequest(source: nil) }
+            catch { return "音乐条件无效：\(error.localizedDescription) 输入保持不变。" }
+        }
         if !numericInputsAreValid(draft) { return "参数不受当前模型支持；输入保持不变。" }
         if draft.operation != .generate && source == nil { return "参考变体和区间重绘需要原声。" }
         if draft.operation != .generate && !sourceIsEditable(source) { return "当前来源不能由该模型编辑。" }

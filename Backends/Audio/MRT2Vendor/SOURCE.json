@@ -1,0 +1,6 @@
+{
+  "repository": "https://github.com/magenta/magenta-realtime",
+  "revision": "694a545e4ba0b88bf1150137b129582166d3e07f",
+  "license": "Apache-2.0",
+  "scope": "Exported graph and text encoder adaptation; no SDK import; see MRT2_EXPORT_PROVENANCE.md"
+}

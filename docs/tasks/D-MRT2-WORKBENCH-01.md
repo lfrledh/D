@@ -126,3 +126,33 @@ W2线程`01a09681-693a-7e30-b07a-1153dc6d15bb`、P0-E线程`01a09681-64b0-7d92-9
 Lead独立运行环境打包已只选现有固定mlx/metal0.31.1、numpy2.3.5、sentencepiece0.2.2、ai-edge-litert2.2.0，剔除未使用训练SDK及安装来源路径记录；中文空格emoji目录中-I隔离导入通过，sys.path仅新运行目录。尚不代表模型/签名部署通过。新增8打包CPU检查通过，最终日志待固定组合SHA重跑。新打包器不改原SA3打包器行为。
 
 Lead共享接线候选正在实现：AudioCreationProfile区分两类，music草稿独立；WorkbenchSession额外可选music后端注册入口，原SA3不变；按冻结请求44.1/48kHz存储核验。项目schema6通过原安全迁移保存v5字节备份，以免旧App忽略新条件后覆盖；旧1...4迁移仍保留原备份。当前提交为候选准备，W2尚待并入后编译，音乐provider/应用部署/UI/真实验收仍未接纳。源974及个人scheme保持，具体候选SHA写外部记录。
+
+### contract-r2：正式provider与视图就绪边界
+
+P0-E候选`a076c8e38ba22fa127c1defdd2db3ca2395df3ae`在独立移位Python内已真实生成seed42/43，原final-melody同输入同seed逐样本一致、不同seed输出改变；证据deployment-runtime/export-real-results.json。这是当前机器同路径数值对照，不要求跨硬件逐样本一致。MRT2运行实际读取六项graph/state/text资源，共1,042,112,092 bytes；已批准13项下载中的raw/audio编码检查点是实验资源，不是此正式profile必需项。固定六项SHA清单见Backends/Audio/Models/mrt2-small.json，既有下载不删、不改。
+
+全套存储检查发现一次关闭后重开锁未释放；单独检查通过。Lead新增真实posix_spawn短子进程反例，未修补版稳定失败，确认项目锁描述符继承机制。仅给项目锁打开和relocated复制加入close-on-exec，原反例及移位分支通过；证据lock-regression-before/after.log，不以随机重试掩盖。全套待重跑，重要Lead改动需非实现者审核。schema6沿用原持久备份机制，不允许旧App忽略新条件后覆盖。
+
+#### W1-P：D-MRT2-PROVIDER-01（Sol/high）
+
+仅允许新增Backends/Audio/Python/d_audio_mrt2_backend.py、Backends/Audio/Python/d_audio_mrt2_contract.py、Backends/Audio/Tests/test_mrt2_backend.py。不得改导出适配、旧SA3、Swift、模型清单、包装器、规格。依赖准备SHA的d_mrt2_export.ExportedMRT2；可引用d_audio_contract的严格JSON/安全文件/publish_exclusive/json_bytes及d_audio_access.acquire_file_access，不调用旧44.1kHz验证器、不导入SA3入口或完整SDK。Python只用已有依赖。
+
+CLI必需--request、--job-directory、--model-directory、--manifest、--vendor-directory。可选--access-manifest/--access-run-id必须成对；--inspect校验身份/六项SHA后输出inspection，不导入MLX。本入口只mrt2-small-export-v1，无source、access-source-directory或任意profile选择。路径不得重叠，常规非symlink文件，请求≤1MiB、清单≤2MiB；job必须已有且为空。使用原发布防覆盖语义，不扫描其他目录或删除失败产物。
+
+Frozen request是AudioRequest音乐JSON加schemaVersion1/runID（规范小写UUID），完整且仅含schemaVersion/runID/operation/prompt/durationSeconds/seed/parameters。parameters仅kind=mrt2FixedV1和sequence；sequence仅schemaVersion1/frameRate25/durationFrames1...400/可选notes，每项pitch/startFrame/endFrame。同DInference的整数、未知key、nil与[]、UInt32语义；prompt非空非空白无NUL、UTF8≤4096，durationSeconds等于durationFrames/25。拒绝重复key、非有限、布尔冒整数、整数版本写成1.0、深度>16、SA3字段。条件按pitch/start/end排序，128维每音符起始帧=2，后续至end之前=1，其余=0；缺省整帧None，显式空为全零，不输出3。
+
+权重按repo内mrt2-small.json的固定schema/repo/revision/六项path-size-sha256逐项校验，可取消；不得相信自报revision。每任务一实例，构造前后及每条件帧检查取消；记录首PCM/总耗时、进程RSS和MLX active/cache/peak，分项不混淆。任何生成退出都close，close.released非true则失败。SIGINT/SIGTERM请求取消，正常清理后130；契约/配置/输出交付失败2，推理失败1，成功0。不os._exit，不在清理前交付result；stderr正常INFO不是失败。
+
+采用AudioProviderProcess现有schemaVersion1 JSONL envelope与progress阶段名：validating/encodingText/denoising/decoding/publishing/cleanup。denoising此处进度单位是条件帧，不冒充扩散steps。result artifact固定job/output.wav、sha256、byteCount、frameCount=durationFrames*1920、sampleRate48000、channels2、encodingfloat32。标准IEEE float32 WAV，无额外gain/clip/重采样。独立核验有限/帧数/解码后原子发布；result.json与唯一terminal相同。metadata至少request完整快照、profile、modelRepository、modelRevision、weightManifest（固定files数组）、sdkRevision、condition（规范排序sequence和明确notesMode）、conditionSHA256、engineIdentity、timingsSeconds、mlxAllocations、cleanup。condition摘要为sort_keys紧凑UTF8 JSON；engineIdentity去除model_root/graph_path/state_path/resource_paths等绝对路径，其余事实来自已执行实例。close及书签作用域release成功后才交付terminal；release失败不能先报success。
+
+CPU可显式注入fake engine/小清单，不给正常CLI增加fake环境变量或跳过SHA开关。main(argv, *, engine_factory=ExportedMRT2)可作CPU注入入口。测试覆盖类型/边界/重叠/空缺/2与1音符编码、seed冻结、进度取消、构造/生成/close失败、NaN/坏WAV、已有输出、终态唯一、断管和访问release顺序；真实CLI至少缺参/坏请求/不可写输出/坏模型。测试不载入真实MLX。初交+2修复900秒/轮；Lead再做真实验证。工具显示截断可分段只读恢复，不是权限事件豁免。
+
+#### W3：D-MRT2-VIEW-01（Terra/medium）
+
+仅允许Packages/UI/Sources/UI/Views/AudioCreationView.swift、同目录MusicConditionEditor.swift及Packages/UI/Tests/UITests/MusicCreationViewTests.swift。禁止改共享Actions、WorkbenchView/Model、ProjectSession/Store、DInference。依赖AudioCreationDraft.profile（stableAudio/conditionedMusic）和可选music、稳定UUID音符草稿。AudioCreationView新增supportingMusic(_ enabled: Bool)->Self，默认false，由Lead注入实际可用性。Actions的可选importCondition/exportCondition无closure时不显示入口。
+
+在音频创作内部选择“声音生成/编辑（Stable Audio）”或“旋律器乐（MRT2）”，不加顶层模态。音乐不可用时显示说明但不接纳新生成；已有音乐草稿可查看保存/导出。来源文档不允许转音乐profile，提示新建无来源创作。显式切入音乐时operation.generate、editRegion=nil，music缺省才填example，保留prompt/seed及隐藏的旧参数。音乐仅显示提示、seed、时长、音符行和条件开关，隐藏steps/guidance/strength/variation/inpaint。
+
+提示“近似旋律控制，每次生成新的完整片段；48kHz混音，不是分轨；时间按0.04秒对齐”。音符行音名或MIDI整数/开始秒/持续秒，可同起点和弦；增删/示例/高级文件入口，最多512行，非法文本保持。普通按旋律生成空行由ButtonHandler拒绝；高级文件nil/[]保存保留，不承诺空条件静音。isBusy时编辑/导入/profile/model禁用，取消可用。视图不执行文件或模型操作。
+
+保留候选试听/采用/拒绝/撤销采用/导出与原按钮ID。48kHz候选不显示会进入SA3参考路径的“基于此新建”；44.1kHz原行为保留。窄参数面板/最小窗口要响应布局，不截断；稳定accessibilityIdentifiers供Lead验收。状态只走Binding/actions，不手改revision或decisions。Worker仅局部CPU逻辑反例/显式typecheck，无SwiftPM/GUI。Lead组合编译与真实窗口验收。初交+2修复900秒/轮；权限、冻结契约和来源规则不变。

@@ -21,13 +21,17 @@ import Foundation
         let required = ["python/bin/python3": "python", "provider/d_audio_backend.py": "backend",
                         "provider/d_audio_contract.py": "contract", "provider/d_audio_sa3.py": "sa3",
                         "provider/d_audio_access.py": "access", "model-manifests/sm-music.json": "{}"]
-        func engine(_ name: String, mutate: ((URL, inout [[String: Any]]) throws -> Void)? = nil) throws -> URL {
+        func engine(_ name: String, music: Bool = false, mutate: ((URL, inout [[String: Any]]) throws -> Void)? = nil) throws -> URL {
             let resource = root.appendingPathComponent(name + " 模型")
-            let engine = resource.appendingPathComponent("AudioEngine.dengine")
+            let engine = resource.appendingPathComponent(music ? "MRT2MusicEngine.dengine" : "AudioEngine.dengine")
             try fm.createDirectory(at: engine, withIntermediateDirectories: true)
             try fm.createDirectory(at: engine.appendingPathComponent("vendor"), withIntermediateDirectories: false)
             var files: [[String: Any]] = []
-            for (path, text) in required {
+            let content = music ? ["python/bin/python3": "python", "provider/d_audio_mrt2_backend.py": "mrt2",
+                "provider/d_audio_mrt2_contract.py": "mrt2-contract", "provider/d_audio_contract.py": "safe-files",
+                "provider/d_mrt2_export.py": "export", "provider/d_audio_access.py": "access",
+                "model-manifests/mrt2-small.json": "{}"] : required
+            for (path, text) in content {
                 let url = engine.appendingPathComponent(path)
                 try fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
                 let data = Data(text.utf8)
@@ -37,8 +41,8 @@ import Foundation
             }
             files.sort { ($0["path"] as! String) < ($1["path"] as! String) }
             try mutate?(engine, &files)
-            let manifest: [String: Any] = ["schemaVersion": 1, "kind": "d-audio-engine", "pythonABI": "3.12",
-                "pythonExecutable": "python/bin/python3", "providerScript": "provider/d_audio_backend.py",
+            let manifest: [String: Any] = ["schemaVersion": 1, "kind": music ? "d-mrt2-music-engine" : "d-audio-engine", "pythonABI": "3.12",
+                "pythonExecutable": "python/bin/python3", "providerScript": music ? "provider/d_audio_mrt2_backend.py" : "provider/d_audio_backend.py",
                 "vendorDirectory": "vendor", "modelManifestsDirectory": "model-manifests", "files": files]
             try JSONSerialization.data(withJSONObject: manifest, options: [.sortedKeys]).write(to: engine.appendingPathComponent("engine.json"))
             return resource
@@ -51,6 +55,24 @@ import Foundation
         checks.append("valid-unicode-space-path-and-confirm")
         try require(try BundledAudioEngine.resolve(resourceDirectory: root.appendingPathComponent("absent")) == nil, "absent engine")
         checks.append("absent-engine-is-nil")
+
+        let music = try engine("music fixed profile", music: true)
+        let musicResolved = try BundledAudioEngine.resolve(resourceDirectory: music, family: .mrt2Music)
+        try require(musicResolved?.modelManifest.lastPathComponent == "mrt2-small.json", "fixed music model manifest")
+        try musicResolved?.confirmUnchanged()
+        try require(try BundledAudioEngine.resolve(resourceDirectory: music) == nil, "music cannot silently replace SA3")
+        checks.append("music-family-distinct-validated-manifest")
+        let wrongMusic = try engine("wrong music identity", music: true)
+        let wrongManifest = wrongMusic.appendingPathComponent("MRT2MusicEngine.dengine/engine.json")
+        var wrongObject = try JSONSerialization.jsonObject(with: Data(contentsOf: wrongManifest)) as! [String: Any]
+        wrongObject["kind"] = "d-audio-engine"
+        try JSONSerialization.data(withJSONObject: wrongObject).write(to: wrongManifest)
+        try fails("music-rejects-SA3-kind") { _ = try BundledAudioEngine.resolve(resourceDirectory: wrongMusic, family: .mrt2Music) }
+        let missingMusic = try engine("missing music export", music: true, mutate: { engine, files in
+            files.removeAll { $0["path"] as? String == "provider/d_mrt2_export.py" }
+            try fm.removeItem(at: engine.appendingPathComponent("provider/d_mrt2_export.py"))
+        })
+        try fails("music-requires-export-adapter") { _ = try BundledAudioEngine.resolve(resourceDirectory: missingMusic, family: .mrt2Music) }
 
         let malformed = try engine("malformed")
         try Data("[".utf8).write(to: malformed.appendingPathComponent("AudioEngine.dengine/engine.json"))
