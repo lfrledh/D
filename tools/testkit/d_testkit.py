@@ -858,7 +858,11 @@ class KitRunner:
             # Persist portable case evidence now, while the original roots are known.
             # Raw CLI/process reports stay separate; re-export after moving the kit
             # must not reintroduce an old machine's absolute paths.
-            _atomic_json(case_root / "case.json", _public_case(result, self.root, run_root))
+            portable_record = _public_case(result, self.root, run_root)
+            if "sourceForDependents" in result:
+                # Already run-relative, hash-checked lineage; retained locally only.
+                portable_record["sourceForDependents"] = result["sourceForDependents"]
+            _atomic_json(case_root / "case.json", portable_record)
             attempt["cases"].append({"caseID": case_id, "path": str((case_root / "case.json").relative_to(attempt_root)),
                                      "status": result["status"]})
             _atomic_json(attempt_root / "attempt.json", attempt)
