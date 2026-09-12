@@ -1,3 +1,4 @@
+import Darwin
 import DInference
 import DMLXBackend
 import Foundation
@@ -8,13 +9,19 @@ enum CLIImageProfile: String, Sendable, Codable { case verified512, scalableKlei
 struct CLIOptions: Sendable, Codable {
     var model: String
     var prompt: String
+    var promptFile: String?
     var capability: CLICapability = .text
     var maxTokens = 64
+    var maxPromptTokens = 2048
+    var maxOutputTokens = 1024
+    var cacheLimitMiB = 64
     var temperature: Float = 0
     var topP: Float = 0.95
     var memoryBudgetMiB: UInt64 = 2048
+    var imageMemoryLimitMiB: UInt64?
     var revision: String?
     var report: String?
+    var inspect = false
     var cancelAfterChunks: Int?
     var repeatCount = 1
     var width = 512
@@ -42,6 +49,10 @@ struct CLIOptions: Sendable, Codable {
     var timeoutSeconds: Double = 600
 
     var memoryBudgetBytes: UInt64 { memoryBudgetMiB * 1024 * 1024 }
+    var cacheLimitBytes: Int { cacheLimitMiB * 1024 * 1024 }
+    var imageMemoryLimitBytes: Int? {
+        imageMemoryLimitMiB.map { Int($0 * 1024 * 1024) }
+    }
     var backendID: String {
         switch capability {
         case .text: "mlx.text"
@@ -54,21 +65,27 @@ struct CLIOptions: Sendable, Codable {
     }
 
     static let usage = """
-    Usage: d-infer --model ABSOLUTE_PATH --prompt TEXT [options]
+    Usage: d-infer --model ABSOLUTE_PATH (--prompt TEXT | --prompt-file ABSOLUTE_PATH) [options]
 
     Runs a local model; does not download models.
       --model PATH                 Absolute local model directory (required)
-      --prompt TEXT                Prompt, including an empty string (required)
+      --prompt TEXT                Prompt, including an empty string
+      --prompt-file PATH           Read a UTF-8 prompt from a regular file (maximum: 1 MiB)
       --capability text|image|audio
       --memory-budget-mib N        Admission budget (default: text 2048, image/audio 8192)
+      --inspect                    Estimate resources without running inference
       --revision STRING            Required pinned revision for audio
       --report PATH                Atomically write a JSON execution report
       --repeat N                   Sequential runs in this process (default: 1)
       --max-tokens N --temperature FLOAT --top-p FLOAT --cancel-after-chunks N
                                    Text-only generation controls
+      --max-prompt-tokens N        Text prompt token limit (1...32768, default: 2048)
+      --max-output-tokens N        Text output token limit (1...8192, default: 1024)
+      --cache-limit-mib N          Text MLX cache limit (0...1024, default: 64)
       --width N --height N         Image dimensions (default: 512 x 512)
       --image-profile verified512|scalableKlein4B
                                    Image-only execution envelope (default: verified512)
+      --image-memory-limit-mib N   Image allocator limit, at most the admission budget
       --steps N --guidance FLOAT --seed N --artifacts PATH
                                    Image/audio controls; artifacts is required for both
       --cancel-after-steps N       Image-only cancellation control
@@ -89,24 +106,36 @@ struct CLIOptions: Sendable, Codable {
     """
 
     static func parse(_ arguments: [String]) throws -> Self? {
-        let recognized: Set<String> = [
-            "--model", "--prompt", "--max-tokens", "--temperature", "--top-p",
+        let valueOptions: Set<String> = [
+            "--model", "--prompt", "--prompt-file", "--max-tokens", "--temperature", "--top-p",
+            "--max-prompt-tokens", "--max-output-tokens", "--cache-limit-mib",
             "--memory-budget-mib", "--revision", "--report", "--cancel-after-chunks", "--repeat",
             "--capability", "--width", "--height", "--steps", "--guidance", "--seed",
-            "--artifacts", "--cancel-after-steps", "--image-profile", "--audio-operation",
+            "--artifacts", "--cancel-after-steps", "--image-profile", "--image-memory-limit-mib",
+            "--audio-operation",
             "--duration-seconds", "--audio-source", "--audio-source-sha256", "--audio-source-frames",
             "--audio-edit-start-frame", "--audio-edit-end-frame", "--audio-strength", "--audio-profile",
             "--audio-python", "--audio-script", "--audio-vendor", "--audio-manifest",
             "--audio-license-acknowledged", "--timeout-seconds",
         ]
+        let switches: Set<String> = ["--inspect"]
         var values: [String: String] = [:]
+        var enabledSwitches: Set<String> = []
         var index = 0
         while index < arguments.count {
             let argument = arguments[index]
             if argument == "--help" || argument == "-h" { return nil }
             let components = argument.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false)
             let key = String(components[0])
-            guard recognized.contains(key) else { throw CLIArgumentError("Unknown option: \(argument)") }
+            guard valueOptions.contains(key) || switches.contains(key) else {
+                throw CLIArgumentError("Unknown option: \(argument)")
+            }
+            if switches.contains(key) {
+                guard components.count == 1 else { throw CLIArgumentError("\(key) does not take a value.") }
+                guard enabledSwitches.insert(key).inserted else { throw CLIArgumentError("Repeated option: \(key)") }
+                index += 1
+                continue
+            }
             guard values[key] == nil else { throw CLIArgumentError("Repeated option: \(key)") }
             if components.count == 2 { values[key] = String(components[1]) }
             else {
@@ -119,16 +148,40 @@ struct CLIOptions: Sendable, Codable {
         guard let model = absolute(values["--model"]) else {
             throw CLIArgumentError("--model must name an absolute local directory.")
         }
-        guard let prompt = values["--prompt"] else { throw CLIArgumentError("--prompt is required.") }
+        let directPrompt = values["--prompt"]
+        let promptPath = values["--prompt-file"]
+        guard (directPrompt != nil) != (promptPath != nil) else {
+            throw CLIArgumentError("Exactly one of --prompt and --prompt-file is required.")
+        }
+        let promptFile: String?
+        let prompt: String
+        if let directPrompt {
+            prompt = directPrompt
+            promptFile = nil
+        } else {
+            guard let path = absolute(promptPath) else {
+                throw CLIArgumentError("--prompt-file must name an absolute local file.")
+            }
+            prompt = try readPromptFile(path)
+            promptFile = path
+        }
         guard let capability = CLICapability(rawValue: values["--capability"] ?? "text") else {
             throw CLIArgumentError("--capability must be text, image, or audio.")
         }
         var options = Self(model: model, prompt: prompt)
+        options.promptFile = promptFile
         options.capability = capability
+        options.inspect = enabledSwitches.contains("--inspect")
         options.repeatCount = try positiveInt(values, "--repeat", fallback: 1)
 
-        let textFlags = ["--max-tokens", "--temperature", "--top-p", "--cancel-after-chunks"]
-        let imageOnly = ["--width", "--height", "--image-profile", "--cancel-after-steps"]
+        let textFlags = [
+            "--max-tokens", "--temperature", "--top-p", "--cancel-after-chunks",
+            "--max-prompt-tokens", "--max-output-tokens", "--cache-limit-mib",
+        ]
+        let imageOnly = [
+            "--width", "--height", "--image-profile", "--cancel-after-steps",
+            "--image-memory-limit-mib",
+        ]
         let sharedMedia = ["--steps", "--guidance", "--seed", "--artifacts"]
         let audioOnly = [
             "--audio-operation", "--duration-seconds", "--audio-source", "--audio-source-sha256",
@@ -146,7 +199,16 @@ struct CLIOptions: Sendable, Codable {
             throw CLIArgumentError("\(key) cannot be used with --capability \(capability.rawValue).")
         }
 
+        options.maxPromptTokens = try boundedInt(values, "--max-prompt-tokens", fallback: options.maxPromptTokens,
+                                                 range: 1...32768)
+        options.maxOutputTokens = try boundedInt(values, "--max-output-tokens", fallback: options.maxOutputTokens,
+                                                 range: 1...8192)
+        options.cacheLimitMiB = try boundedInt(values, "--cache-limit-mib", fallback: options.cacheLimitMiB,
+                                               range: 0...1024)
         options.maxTokens = try positiveInt(values, "--max-tokens", fallback: options.maxTokens)
+        if capability == .text, options.maxTokens > options.maxOutputTokens {
+            throw CLIArgumentError("--max-tokens must not exceed --max-output-tokens.")
+        }
         options.width = try positiveInt(values, "--width", fallback: options.width)
         options.height = try positiveInt(values, "--height", fallback: options.height)
         options.steps = try positiveInt(values, "--steps", fallback: capability == .audio ? 8 : options.steps)
@@ -183,6 +245,14 @@ struct CLIOptions: Sendable, Codable {
                 throw CLIArgumentError("--image-profile must be verified512 or scalableKlein4B.")
             }
             options.imageProfile = profile
+            if let raw = values["--image-memory-limit-mib"] {
+                guard let value = UInt64(raw), value > 0,
+                      value <= UInt64(Int.max) / (1024 * 1024), value <= options.memoryBudgetMiB else {
+                    throw CLIArgumentError(
+                        "--image-memory-limit-mib must be positive, representable, and no greater than the admission budget.")
+                }
+                options.imageMemoryLimitMiB = value
+            }
         }
         if capability == .image || capability == .audio {
             guard let path = absolute(values["--artifacts"]) else {
@@ -324,6 +394,66 @@ struct CLIOptions: Sendable, Codable {
         guard let raw = values[key] else { return fallback }
         guard let value = Int(raw), value > 0 else { throw CLIArgumentError("\(key) must be a positive integer.") }
         return value
+    }
+
+    private static func boundedInt(_ values: [String: String], _ key: String, fallback: Int,
+                                   range: ClosedRange<Int>) throws -> Int {
+        guard let raw = values[key] else { return fallback }
+        guard let value = Int(raw), range.contains(value) else {
+            throw CLIArgumentError("\(key) must be an integer in \(range.lowerBound)...\(range.upperBound).")
+        }
+        return value
+    }
+
+    private static func readPromptFile(_ path: String) throws -> String {
+        let descriptor = Darwin.open(path, O_RDONLY | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK)
+        guard descriptor >= 0 else {
+            throw CLIArgumentError("--prompt-file must be a readable regular file and not a symbolic link.")
+        }
+        defer { Darwin.close(descriptor) }
+
+        var identity = stat()
+        guard Darwin.fstat(descriptor, &identity) == 0,
+              identity.st_mode & S_IFMT == S_IFREG,
+              identity.st_size >= 0,
+              UInt64(identity.st_size) <= 1_048_576 else {
+            throw CLIArgumentError("--prompt-file must be a regular file no larger than 1 MiB.")
+        }
+
+        let expectedSize = Int(identity.st_size)
+        var data = Data()
+        data.reserveCapacity(expectedSize)
+        var buffer = [UInt8](repeating: 0, count: 64 * 1024)
+        while data.count < expectedSize {
+            let requested = min(buffer.count, expectedSize - data.count)
+            let count = buffer.withUnsafeMutableBytes { bytes in
+                Darwin.read(descriptor, bytes.baseAddress, requested)
+            }
+            if count < 0, errno == EINTR { continue }
+            guard count > 0 else { throw CLIArgumentError("Cannot read the complete --prompt-file.") }
+            data.append(contentsOf: buffer.prefix(count))
+        }
+        var extra: UInt8 = 0
+        var trailing: Int
+        repeat { trailing = Darwin.read(descriptor, &extra, 1) } while trailing < 0 && errno == EINTR
+        guard trailing == 0 else { throw CLIArgumentError("--prompt-file exceeds 1 MiB or changed while being read.") }
+
+        var finalIdentity = stat()
+        guard Darwin.fstat(descriptor, &finalIdentity) == 0,
+              finalIdentity.st_dev == identity.st_dev,
+              finalIdentity.st_ino == identity.st_ino,
+              finalIdentity.st_mode == identity.st_mode,
+              finalIdentity.st_size == identity.st_size,
+              finalIdentity.st_mtimespec.tv_sec == identity.st_mtimespec.tv_sec,
+              finalIdentity.st_mtimespec.tv_nsec == identity.st_mtimespec.tv_nsec,
+              finalIdentity.st_ctimespec.tv_sec == identity.st_ctimespec.tv_sec,
+              finalIdentity.st_ctimespec.tv_nsec == identity.st_ctimespec.tv_nsec else {
+            throw CLIArgumentError("--prompt-file changed while being read.")
+        }
+        guard let prompt = String(data: data, encoding: .utf8) else {
+            throw CLIArgumentError("--prompt-file must contain valid UTF-8.")
+        }
+        return prompt
     }
 
     private static func finiteFloat(_ values: [String: String], _ key: String, fallback: Float,

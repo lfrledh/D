@@ -26,12 +26,17 @@ struct DInferenceCLI {
             }
             report.options = options
             reportPath = options.report
-            signalMonitor = SignalMonitor(control: control)
+            if !options.inspect { signalMonitor = SignalMonitor(control: control) }
             let recorder = LifecycleRecorder()
             let backend: any InferenceBackend
             switch options.capability {
             case .text:
-                backend = try MLXTextBackend(observer: { event in await recorder.append(event) })
+                backend = try MLXTextBackend(
+                    configuration: MLXBackendConfiguration(
+                        maximumPromptTokens: options.maxPromptTokens,
+                        maximumOutputTokens: options.maxOutputTokens,
+                        cacheLimitBytes: options.cacheLimitBytes),
+                    observer: { event in await recorder.append(event) })
             case .image:
                 guard let path = options.artifacts else {
                     throw CLIArgumentError("Image mode requires --artifacts.")
@@ -40,9 +45,10 @@ struct DInferenceCLI {
                 try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
                 let image = try MLXImageBackend(configuration: .init(
                                                    artifactDirectory: directory,
-                                                   profile: options.selectedImageProfile),
+                                                   profile: options.selectedImageProfile,
+                                                   memoryLimitBytes: options.imageMemoryLimitBytes),
                                                observer: { event in await recorder.append(event) })
-                imageBackend = image
+                if !options.inspect { imageBackend = image }
                 backend = image
             case .audio:
                 guard let artifactPath = options.artifacts,
@@ -66,24 +72,30 @@ struct DInferenceCLI {
                     timeoutSeconds: options.timeoutSeconds))
             }
             report.backend = backend.descriptor
-            let engine = try InferenceRuntime(
-                backends: [backend],
-                configuration: RuntimeConfiguration(memoryBudgetBytes: options.memoryBudgetBytes))
-            runtime = engine
+            if options.inspect {
+                let estimate = try await backend.estimate(makeRequest(options: options))
+                report.inspection = CLIInspection(
+                    estimate: estimate, withinBudget: estimate.peakBytes <= options.memoryBudgetBytes)
+            } else {
+                let engine = try InferenceRuntime(
+                    backends: [backend],
+                    configuration: RuntimeConfiguration(memoryBudgetBytes: options.memoryBudgetBytes))
+                runtime = engine
 
-            for iteration in 1...options.repeatCount {
-                if await control.interruption != nil { break }
-                let runReport = await execute(iteration: iteration, options: options,
-                                              runtime: engine, recorder: recorder, control: control,
-                                              imageBackend: imageBackend)
-                report.runs.append(runReport)
-                if runReport.outcome == "failed" || runReport.outputError != nil
-                    || runReport.artifactCleanupError != nil {
-                    report.exitCode = 1
-                } else if runReport.outcome == "cancelled", report.exitCode == 0 {
-                    report.exitCode = 130
+                for iteration in 1...options.repeatCount {
+                    if await control.interruption != nil { break }
+                    let runReport = await execute(iteration: iteration, options: options,
+                                                  runtime: engine, recorder: recorder, control: control,
+                                                  imageBackend: imageBackend)
+                    report.runs.append(runReport)
+                    if runReport.outcome == "failed" || runReport.outputError != nil
+                        || runReport.artifactCleanupError != nil {
+                        report.exitCode = 1
+                    } else if runReport.outcome == "cancelled", report.exitCode == 0 {
+                        report.exitCode = 130
+                    }
+                    if options.capability != .text, report.exitCode != 0 { break }
                 }
-                if options.capability != .text, report.exitCode != 0 { break }
             }
         } catch let error as CLIArgumentError {
             report.failure = error.localizedDescription
@@ -127,35 +139,7 @@ struct DInferenceCLI {
                                 recorder: LifecycleRecorder,
                                 control: ExecutionControl,
                                 imageBackend: MLXImageBackend?) async -> CLIRunReport {
-        let input: InferenceInput
-        switch options.capability {
-        case .text:
-            input = .text(TextRequest(prompt: options.prompt, maxTokens: options.maxTokens,
-                                      temperature: options.temperature, topP: options.topP))
-        case .image:
-            input = .image(ImageRequest(prompt: options.prompt, width: options.width,
-                                        height: options.height, steps: options.steps,
-                                        guidanceScale: options.guidance, seed: options.seed))
-        case .audio:
-            let source: AudioSourceReference? = options.audioSource.map {
-                AudioSourceReference(
-                    url: URL(fileURLWithPath: $0),
-                    sha256: options.audioSourceSHA256!,
-                    frameCount: options.audioSourceFrames!, sampleRate: 44_100, channels: 2)
-            }
-            let region: AudioEditRegion?
-            if let start = options.audioEditStartFrame, let end = options.audioEditEndFrame {
-                region = AudioEditRegion(startFrame: start, endFrame: end)
-            } else { region = nil }
-            input = .audio(AudioRequest(
-                operation: options.audioOperation, prompt: options.prompt,
-                durationSeconds: options.durationSeconds, seed: options.seed,
-                steps: options.steps, guidanceScale: options.guidance,
-                strength: options.audioStrength, source: source, editRegion: region))
-        }
-        let request = InferenceRequest(
-            model: ModelReference(directory: URL(fileURLWithPath: options.model), revision: options.revision),
-            input: input)
+        let request = makeRequest(options: options)
         let started = ProcessInfo.processInfo.systemUptime
         var report = CLIRunReport(iteration: iteration, runID: request.id, startedAt: Date())
         report.request = request
@@ -267,5 +251,37 @@ struct DInferenceCLI {
         if let errorMessage = report.errorMessage { CLIOutput.diagnostic(errorMessage) }
         if let outputError = report.outputError { CLIOutput.diagnostic(outputError) }
         return report
+    }
+
+    private static func makeRequest(options: CLIOptions) -> InferenceRequest {
+        let input: InferenceInput
+        switch options.capability {
+        case .text:
+            input = .text(TextRequest(prompt: options.prompt, maxTokens: options.maxTokens,
+                                      temperature: options.temperature, topP: options.topP))
+        case .image:
+            input = .image(ImageRequest(prompt: options.prompt, width: options.width,
+                                        height: options.height, steps: options.steps,
+                                        guidanceScale: options.guidance, seed: options.seed))
+        case .audio:
+            let source: AudioSourceReference? = options.audioSource.map {
+                AudioSourceReference(
+                    url: URL(fileURLWithPath: $0),
+                    sha256: options.audioSourceSHA256!,
+                    frameCount: options.audioSourceFrames!, sampleRate: 44_100, channels: 2)
+            }
+            let region: AudioEditRegion?
+            if let start = options.audioEditStartFrame, let end = options.audioEditEndFrame {
+                region = AudioEditRegion(startFrame: start, endFrame: end)
+            } else { region = nil }
+            input = .audio(AudioRequest(
+                operation: options.audioOperation, prompt: options.prompt,
+                durationSeconds: options.durationSeconds, seed: options.seed,
+                steps: options.steps, guidanceScale: options.guidance,
+                strength: options.audioStrength, source: source, editRegion: region))
+        }
+        return InferenceRequest(
+            model: ModelReference(directory: URL(fileURLWithPath: options.model), revision: options.revision),
+            input: input)
     }
 }
