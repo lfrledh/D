@@ -51,3 +51,19 @@ MLX0.32.2加载官方mlxfn出现Invalid string size；该文件头记录导出�
 加载门槛的第一帧是零值，不能据此宣布旋律或听感通过。导出路径约4.43秒、MLX峰值528,019,338bytes；原始路径约4.99秒、峰值1,650,534,888bytes；这些是独立SDK单帧探针，不是最终工具验收或实时吞吐。清理后分别8/46bytes活跃、cache0，子进程已结束；微量残留需结合随机状态对照，不声称常驻无泄漏。证据为上述run/evidence/upstream-smoke3.json、upstream-smoke4-raw.json及进程回执。更早smoke因Lead写错导入路径在加载前失败，原记录保留，不算SDK缺陷。
 
 Worker Sol/high线程01a09627-acec-7d32-b48d-97e87d5c78e2，实际预检base e1287e15a2f324b63adbf4ee29e0fe088bc9bb74；独立D-MRT2-PROBE-01工作树、workspace-write/network=false和仅任务输出/tmp附加写根已核验，隐藏解析unknown。Worker只实现标准库条件/实验入口/CPU夹具，不导入SDK或使用GPU；Lead负责环境和真实验证。本节不改变其冻结业务契约。
+
+## 2026-09-13 spec_revision=2：真实采样状态修订及工程验收
+
+原请求/质量/文件保护契约不变；此修订澄清Lead原适配说明遗漏的上游采样语义。初交6ece728经16 CPU与首个4秒真实旋律检查后，Lead发现清理失败仍报取消130、报告失败留下已发布WAV、非法Unicode错误类别和缺实际prompt快照；repair1为0d7762e，Lead21 CPU通过。随后真实11项前的对照发现：seed42/43在导出路径产生完全相同WAV。上游Depthformer把初始采样key写成42+i，exported state也保存了[0,42]，所以仅mx.random.seed不生效。这是Lead规格对依赖语义遗漏，不能全部归为Worker指令遵循失败。
+
+剩余repair2在固定结构且不改SDK/权重的范围，将每任务初始采样key送入真正state；exported固定165叶的[2]，raw沿SDK原初始化state[0][2][0]，均校验uint32/(1,2)/默认42并拒绝不兼容结构，continuation不重新播种。补充上游实际0.5增益/限幅/int16转换与探针无额外处理的区分，修正README真实解释器和首PCM帧不等于首个可听声音的说明。Worker最终2b178a324a23c7156960dd02c412afd7c341bf89，Lead受测组合cb2f1c9fa04521ae14a00b36aa7dfb323c2647df。26 CPU方法（保留原21）与内存compile通过；Astra Lead独立于Worker自检审核固定源码结构、路径/发布/释放/参数语义。没有Lead代写Probe，没有额外独立评审模型；普通修复剩0。
+
+真实最终集合：导出旋律、和弦、显式空notes、缺notes、第二音E→F、seed43、计算中取消、取消后新进程、raw旋律/重复/seed43，共11个具体进程按预期完成（10成功音频＋1取消130）。每个正常产物为4秒、48kHz双声道IEEE float32 WAV，有限值、192000采样帧、大小/摘要与执行快照一致；取消无发布WAV且清理完成。seed42保留原WAV，seed43两路径均改变音频；同机固定条件的重复输出相同，不推论跨系统逐字节确定性。报告先前seed无效的accepted-*记录保留，不能把当时进程exit0写成参数验收通过。最终证据是final-*。
+
+信号分析：单旋律四段主要频率接近C4/E4/G4/C5；E改F时第二段约350Hz，第一秒保持相同、之后声音改变。单和弦样本后半段含目标外主频，空notes也输出非静音；因此只能声明“结构化条件精确送入、音频服从近似”，不能保证精确和声、静音或区间外音频锁定。没有人耳评价或经过校准的识别评分；这属于已跑通的后端实验，不是已启用的工作台能力或专业音乐质量验收。
+
+可复用经验：依赖的公开seed设置不一定控制真正采样state；必须用两种seed的真实输出对照和源码映射检查，不能仅断言参数调用。输出float32文件也不证明全链FP32；上游转换/量化与应用后处理分别记录。新seed修订中的CPU异常用例是预期失败夹具；无新Worker权限拒绝、网络/模型写入或越界。Lead检查事件后再派最后修复，未重置预算。
+
+来源/消耗：初交743.385秒，repair1 435.360秒，repair2 328.893秒为可观察CLI墙钟。实际各轮Sol/high、同受限工作树/专属输出缓存/network=false由turn_context核对，隐藏解析unknown。raw usage保留collaboration-accounting.json，可能为续接会话累计快照，未相加或套用API价格；完整Lead归因与订阅费用unknown。环境安装、真实推理、规格澄清、审核及集成由Astra Lead完成。
+
+持久证据根同上run：evidence/final-code-version.json、lead-repair2-cpu.json/log、final-real-suite.json、final-independent.json、final-*/process.json与job/report.json、pre-repair2-review.json、memory-baseline.json，worker/repair2-route.json及每轮process/response。初始环境/导出版本/seed失败证据保留。最终源接纳与文档版本由收尾回执记录，不把这个候选SHA当成已推送。模型和SDK仅存在独立外盘环境，不并入便携测试包；原始源码/安装版本及下载摘要见resources-ready、source-downloads、pip报告与constraints.txt。
