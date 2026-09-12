@@ -1,5 +1,13 @@
 # D 当前行动指南
 
+## 2026-09-12 便携跨 Mac 测试包制作验收完成
+
+源从0db7a8fa95fb1ed45be2999c7ab9cfb4d9a96361接纳实际受测3fb99d334fc0217191814cc5fb5d04523ea2b1ef。独立`/Volumes/CodexProjects/D-TestKit`包含八组固定模型约83.05GB、预编译CLI/离线音频环境、七组30个用例及[中文手册](../tools/testkit/README.zh-CN.md)。不替换普通D，不重做App参数UI。用户修订已生效：测试组显式probe，估算超推荐仍尝试；真实失败/信号/超时保留，停止当前组后项，不将静态预算拒绝当最终容量验收。
+
+组合和源入口分别通过55 runner+5 builder CPU及30 nativeCLI CPU；真实quick3/3、reliability8/8、common3/3、medium6秒1/1和Unicode移位quick3/3通过。真实0.5B低推荐夹具单列：人为1MiB推荐、真实16GiB物理内存、1158MiB执行准入，不混为硬件基准。媒体独立解码/PCM及结果包隐私检查通过。32B/72B、96GiB及以上、另一台Mac与艺术质量待现场；本机未加载32B/72B。
+
+版本/失败/来源/恢复见[任务结案](tasks/D-PORTABLE-KIT-01.md#2026-09-12-制作验收与交付检查点)，外部`D-Development/AgentTrials/D-PORTABLE-KIT-01/run-20260912T030734Z/stage-final-receipt.json`记录最终文档SHA和实际push。个人scheme唯一未暂存差异、原索引和普通D四文件保持；本批自有子执行/模型进程已结束。下一动作：现场先quick，再按机型/时间运行boundary96、boundary72，带回Results校准。本轮停止；H09继续等麦克风，音乐条件控制/歌声按既有路线，不以测试包或全部文本增强为前置。
+
 ## 2026-09-12 APP1 文件输入闭环已验收并本地接纳
 
 实际源受测 `dd530e320df3fecaa3d23421151c000d384c652a`；源由7510015bafc0a8b33c463dba11b1a7d54a93b073快进。普通沙盒内嵌引擎版已完成提示生成、WAV参考变体、2..4秒区间重绘、计算中取消及同会话下一任务、试听/采用/拒绝、原生导入导出、拒绝覆盖、正常退出重开与恢复后再次真实推理。用户确认6秒钢琴样本“听到了，播放正常”。本次原生为CUA操作，不能称新增UI XCTest全套通过。源CPU：Python62、工作台291方法分别通过，后者启用既有0.5B权重只读检查；不重复累加历史组件计数。

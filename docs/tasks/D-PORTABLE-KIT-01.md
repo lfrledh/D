@@ -1,6 +1,6 @@
 # D-PORTABLE-KIT-01 — 便携离线跨 Mac 验证包
 
-状态：获准实施，尚未验收。spec_revision=2，contract_revision=2，batch_id=D-PORTABLE-KIT-01。
+状态：本机制作验收通过并本地接纳；展示机大配置待现场。当前spec_revision=5、contract_revision=3，batch_id=D-PORTABLE-KIT-01。下文保留原spec2准备及后续修订历史，现行准入以spec5为准。最终文档SHA及推送结果见外部stage-final-receipt.json。
 source_base=0db7a8fa95fb1ed45be2999c7ab9cfb4d9a96361。执行基线为包含本规格的准备提交，完整 SHA 在每次派工记录中。
 源分支 codex/inference-foundation；集成目录 D-Worktrees/D-PORTABLE-KIT-01。原 scheme 唯一个人未暂存差异受保护。
 证据：D-Development/AgentTrials/D-PORTABLE-KIT-01/run-20260912T030734Z。
@@ -126,3 +126,23 @@ f1bbf5bbd95b484a3c46c005e889ab83e6748fb4移位差异经Sol/high只读检查无�
 8. Lead真实验证：现有安全0.5B正常试探；通过独立受控低准入阈值夹具触发override分支、实际仍只运行本机安全的小模型（fixture身份和被下调的推荐值单列，不伪装真实机器内存）；正常媒体/重复/取消回归、包与Unicode移位检查。32B/72B不在本机执行；展示机真正大配置仍待现场。实际受测版本、角色和旧证据的替代关系必须记录。
 
 检查入口：使用本机已有Python3.12（其绝对只读路径由派工消息给出）；D_TEST_TEMP_DIR与TMPDIR均指定任务tmp，PYTHONDONTWRITEBYTECODE=1。语法用tokenize.open后内存compile，不默认py_compile。任何未预授权权限拒绝立即暂停上报；不为可写.git或缓存扩权。外部命令仅必要的Xcode Git只读检查、Python标准库CPU测试/合成fake CLI及受控进程；禁止模型、构建、GUI、网络、下载。Worker回传实际差异、用例结果、异常/保护摘要、自有进程状态，Lead接回写权后才修改/提交工作树。
+
+## 2026-09-12 制作验收与交付检查点
+
+整包、组合及源入口实际受测3fb99d334fc0217191814cc5fb5d04523ea2b1ef。源由0db7a8fa95fb1ed45be2999c7ab9cfb4d9a96361快进接纳；之后仅本文、当前行动和目标表结案。最终文档SHA/实际push写外部回执，不自引用提交。Release原生CLI来自f743909647c83cb99d4d9f0dee0a939f80388576；Backends/MLX、Sources、Vendor源码与二进制对应已核对，此后测试工具/profile变化不伪称为原生重新构建。
+
+交付目录为`/Volumes/CodexProjects/D-TestKit`，含Start.command及[中文使用说明](../../tools/testkit/README.zh-CN.md)。八组固定模型完整校验共83,050,571,478bytes，七组30个用例。72B固定revision 36a74b07390031bb18c9f12fb7c06699bc6273c4已获单独授权并全量校验，未在本机加载。实际长输入经同tokenizer小模型校准26,455 tokens，不能称为32K实际输入或128K支持。现场不安装/下载/登录开发者账号，记录Xcode存在信息但使用随包程序；最低macOS26.2、Apple Silicon，其他Mac真实兼容待现场。
+
+验收分列：组合与源入口分别通过55个runner+5个builder CPU方法及30个nativeCLI CPU场景；旧44方法和断言保留，新能力增加16方法，不累加重跑为总通过率。真实quick3/3、reliability8/8、common3/3、medium6秒1/1通过。独立APFS副本有不同inode，2178个非模型文件摘要核对，中文/空格路径回读旧结果、重新quick3/3通过。PNG完整解码/重编码、WAV有限PCM/帧数、原件摘要及ZIP脱敏另作独立检查，结构通过不代替艺术质量判断。
+
+真实0.5B低推荐夹具另外标记：人为推荐1MiB，实际物理17,179,869,184bytes，估算1,213,586,992bytes，执行1158MiB，override=true且生成通过。该run为f6291f55-d784-4e8c-b57a-9b8a9369848b；推荐值是明确的测试注入，不伪装为正常硬件推荐。正常quick run为1e015797-6552-43bf-bf1b-42fe734c2e7f；reliability为9e1d624e-b731-40ff-97ff-5a5c93522506，common为83a03e20-0c4e-4323-a903-19b51dcc0f74，medium为055b9c12-e924-47df-8b29-9e5774583242，移位quick为d5abea80-20aa-43b0-88fc-f8de602074bd。取消证据只按对应进程/repeat边界解释，不外推同Runtime跨进程排队。
+
+新增D-KIT-PROBE-01由Sol/high受限CLI实现，thread01a0941f-9d2e-72f3-998a-7aa24264ac44，执行基线fc227935bc2a71bf343964b3e7b56b7f4b7ce405。初交2c359e5931a364bb16f9d4e1821f2af5294abd0a；Lead反例发现UInt64/MiB范围及深层错误JSON，修复1 b062def898956b96449bc36f8fd7a4b9458505c4；再确认超时早退丢失已有backend错误，修复2 3063781cc46dc0e88dce6d6828a27d8cc1e35e85。以上反例先失败后通过，普通修复剩0。Lead提供规格/反例、审核/验证/集成，没有代写新增probe实现；原Runner两修+Lead有界接管及Sol复核历史仍保留，不因新需求清零。初交取消夹具初始化竞态只调整新合成夹具，真实取消参数未变。
+
+新三个执行回合均核验gpt-5.6-sol/high、正确工作树、workspace-write、仅任务output/tmp额外写根、network=false；隐藏服务端解析unknown。每次修复前审核异常与保护状态。ps不可用自报及Lead精确AST比较误判新增assert的过程保留在事件记录；没有权限扩大、源/作品写入或提前接纳。Worker结束后Lead才提交/合并；新功能的非实施者审核为Astra Lead，不称另一个独立评审模型。持有的执行/测试进程句柄均已等待结束，不声称系统写锁。
+
+持久索引仍为本任务run目录：probe各轮routing/process/event-review/lead-acceptance、probe-combined-cpu、probe-combined-edges、probe-timeout-diagnostic-before/after、probe-real-small、probe-final-*、probe-relocation.json、probe-relocated-*、probe-package-validation/state.json、probe-source-cpu、probe-integration-result.json、stage-final-receipt.json。旧包/失败证据保留，模型、大日志和媒体不入Git。source scheme内容/摘要/mtime/原索引及未暂存状态、普通D四关键文件前后保持；源只留个人scheme差异，不称完全干净。
+
+用量：新probe初交834.635秒、修复1 256.348秒、修复2 183.648秒为CLI墙钟。逐回合原始usage留在probe/observed-usage-final.json，不把未独立核清的快照相加，缓存输入不再重复加一次。完整Lead归因与订阅任务费用unknown，不据此称成本最优，不重算旧历史。
+
+可复用经验：容量试验须分开推荐预算与执行准入；超时、强停和输出超限分支也须保留已存在的后端错误，诊断不能再次掩盖原始失败。恢复先核对最终Git、个人修改、进程记录与随包Acceptance.json，再按手册现场运行。32B/72B、96/128/192GiB边界、另一台Mac、艺术质量、Gatekeeper跨机允许和麦克风未由本机验收证明。下一动作是带回现场Results校准估算/能力矩阵，本批到此停止。
