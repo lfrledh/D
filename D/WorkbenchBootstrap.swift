@@ -74,7 +74,7 @@ final class WorkbenchBootstrap {
                 audioEnabled: engine != nil || musicEngine != nil || audioWorkbenchEnabled,
                 // File-input audio does not depend on the deferred microphone acceptance.
                 // Retain the old explicit, unbundled DEBUG recording fixture path.
-                audioRecordingEnabled: engine == nil && audioWorkbenchEnabled)
+                audioRecordingEnabled: engine == nil && musicEngine == nil && audioWorkbenchEnabled)
             let observer = ModelLibraryModel(library: library)
             self.library = library
             self.model = model

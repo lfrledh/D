@@ -7,6 +7,35 @@ import Testing
 
 @Suite("AUDIO1 inventory and owned provider process", .serialized)
 struct AudioBackendTests {
+    @Test("Explicit 48 kHz output must decode while the legacy default remains 44.1 kHz")
+    func outputClockIsExplicitAndNegativeFramesThrow() throws {
+        let fixture = try AudioFixture()
+        defer { fixture.remove() }
+        var wave = try Data(contentsOf: fixture.source)
+        func replace(_ value: UInt32, at offset: Int) {
+            var little = value.littleEndian
+            withUnsafeBytes(of: &little) { wave.replaceSubrange(offset..<(offset + 4), with: $0) }
+        }
+        replace(48_000, at: 24)
+        replace(48_000 * 8, at: 28)
+        try wave.write(to: fixture.source)
+        let claim = AudioProviderArtifact(path: fixture.source.path,
+            sha256: SHA256.hash(data: wave).map { String(format: "%02x", $0) }.joined(),
+            byteCount: UInt64(wave.count), frameCount: 44, sampleRate: 48_000,
+            channels: 2, encoding: "float32")
+        #expect(throws: (any Error).self) {
+            _ = try AudioWAV.validateOutput(fixture.source, claim: claim, expectedFrames: 44)
+        }
+        #expect(try AudioWAV.validateOutput(fixture.source, claim: claim, expectedFrames: 44,
+                                           expectedSampleRate: 48_000).url == fixture.source)
+        for invalid in [Int64(-1), 0] {
+            #expect(throws: (any Error).self) {
+                _ = try AudioWAV.validateOutput(fixture.source, claim: claim, expectedFrames: invalid,
+                                               expectedSampleRate: 48_000)
+            }
+        }
+    }
+
     @Test("Each profile uses exactly four weights and the frozen conservative estimate",
           arguments: AudioBackendProfile.allCases)
     func inventoryEstimate(profile: AudioBackendProfile) throws {
