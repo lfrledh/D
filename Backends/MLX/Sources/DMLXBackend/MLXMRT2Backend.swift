@@ -78,6 +78,7 @@ public actor MLXMRT2Backend: InferenceBackend {
 
         do {
             let job = runDirectory.appendingPathComponent("job", isDirectory: true)
+            let jobIdentity = try MRT2ReportCommit.captureJobIdentity(job)
             let temporary = runDirectory.appendingPathComponent("tmp", isDirectory: true)
             let cache = runDirectory.appendingPathComponent("cache", isDirectory: true)
             let requestURL = runDirectory.appendingPathComponent("request.json")
@@ -174,7 +175,8 @@ public actor MLXMRT2Backend: InferenceBackend {
             let recordURL: URL
             if accessConfigured {
                 recordURL = try MRT2ReportCommit.promotePending(
-                    in: job, expectedData: recordData, expectedIdentity: recordIdentity)
+                    in: job, expectedJobIdentity: jobIdentity,
+                    expectedData: recordData, expectedIdentity: recordIdentity)
             } else {
                 recordURL = observedRecordURL
             }

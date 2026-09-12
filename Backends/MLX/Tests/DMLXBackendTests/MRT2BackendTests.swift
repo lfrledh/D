@@ -158,7 +158,8 @@ struct MRT2BackendTests {
     }
 
     @Test("Pending report promotion is exclusive and validates source and job identities",
-          arguments: ["valid", "missing", "tampered", "existing", "source-symlink", "job-symlink"])
+          arguments: ["valid", "missing", "tampered", "existing", "source-symlink", "job-symlink",
+                      "replaced-hardlink-directory"])
     func pendingReportPromotion(mode: String) throws {
         let fixture = try MRT2Fixture()
         defer { fixture.remove() }
@@ -167,9 +168,21 @@ struct MRT2BackendTests {
         let pending = actualJob.appendingPathComponent(MRT2ReportCommit.pendingName)
         let expected = Data("validated-terminal".utf8)
         try expected.write(to: pending)
+        var replacementJob: URL?
+        if mode == "replaced-hardlink-directory" {
+            let replacement = fixture.root.appendingPathComponent("replacement-job")
+            try FileManager.default.createDirectory(
+                at: replacement, withIntermediateDirectories: false)
+            try FileManager.default.linkItem(
+                at: pending,
+                to: replacement.appendingPathComponent(MRT2ReportCommit.pendingName))
+            replacementJob = replacement
+        }
         let (_, identity) = try AudioFileSystem.readRegularFile(
             pending, label: "test pending result", maximumBytes: 1_024)
+        let jobIdentity = try MRT2ReportCommit.captureJobIdentity(actualJob)
         var suppliedJob = actualJob
+        var displacedJob: URL?
 
         switch mode {
         case "missing":
@@ -189,24 +202,36 @@ struct MRT2BackendTests {
             let link = fixture.root.appendingPathComponent("promotion-job-link")
             try FileManager.default.createSymbolicLink(at: link, withDestinationURL: actualJob)
             suppliedJob = link
+        case "replaced-hardlink-directory":
+            let displaced = fixture.root.appendingPathComponent("admitted-job-moved")
+            try FileManager.default.moveItem(at: actualJob, to: displaced)
+            try FileManager.default.moveItem(at: replacementJob!, to: actualJob)
+            displacedJob = displaced
         default: break
         }
 
         if mode == "valid" {
             let result = try MRT2ReportCommit.promotePending(
-                in: suppliedJob, expectedData: expected, expectedIdentity: identity)
+                in: suppliedJob, expectedJobIdentity: jobIdentity,
+                expectedData: expected, expectedIdentity: identity)
             #expect(result == actualJob.appendingPathComponent(MRT2ReportCommit.finalName))
             #expect(!FileManager.default.fileExists(atPath: pending.path))
             #expect(try Data(contentsOf: result) == expected)
         } else {
             expectMRT2ReportFailure {
                 _ = try MRT2ReportCommit.promotePending(
-                    in: suppliedJob, expectedData: expected, expectedIdentity: identity)
+                    in: suppliedJob, expectedJobIdentity: jobIdentity,
+                    expectedData: expected, expectedIdentity: identity)
             }
             let final = actualJob.appendingPathComponent(MRT2ReportCommit.finalName)
             if mode == "existing" {
                 #expect(try Data(contentsOf: final) == Data("existing-result".utf8))
                 #expect(try Data(contentsOf: pending) == expected)
+            } else if mode == "replaced-hardlink-directory" {
+                #expect(!FileManager.default.fileExists(atPath: final.path))
+                let originalPending = try #require(displacedJob).appendingPathComponent(
+                    MRT2ReportCommit.pendingName)
+                #expect(try Data(contentsOf: originalPending) == expected)
             } else {
                 #expect(!FileManager.default.fileExists(atPath: final.path))
             }
@@ -224,6 +249,7 @@ struct MRT2BackendTests {
         #expect(pending.lastPathComponent == "pending-result.json")
         #expect(standalone.lastPathComponent == "result.json")
         try Data("pending".utf8).write(to: pending)
+        let jobIdentity = try MRT2ReportCommit.captureJobIdentity(job)
 
         let postExitCheck: () throws -> Void = { throw MRT2FixtureError.accessFinish }
         do {
@@ -232,7 +258,8 @@ struct MRT2BackendTests {
             let (_, identity) = try AudioFileSystem.readRegularFile(
                 pending, label: "pending", maximumBytes: 1_024)
             _ = try MRT2ReportCommit.promotePending(
-                in: job, expectedData: Data("pending".utf8),
+                in: job, expectedJobIdentity: jobIdentity,
+                expectedData: Data("pending".utf8),
                 expectedIdentity: identity)
         } catch MRT2FixtureError.accessFinish {}
         #expect(FileManager.default.fileExists(atPath: pending.path))

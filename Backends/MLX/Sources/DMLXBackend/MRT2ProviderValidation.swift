@@ -288,14 +288,24 @@ enum MRT2ReportCommit {
         job.appendingPathComponent(accessConfigured ? pendingName : finalName)
     }
 
+    static func captureJobIdentity(_ job: URL) throws -> AudioFileSystem.Identity {
+        let descriptor = try AudioFileSystem.openDirectory(
+            job, label: "MRT2 job directory")
+        defer { Darwin.close(descriptor) }
+        return try directoryIdentity(descriptor, context: "Capture MRT2 job directory")
+    }
+
     static func promotePending(
         in job: URL,
+        expectedJobIdentity: AudioFileSystem.Identity,
         expectedData: Data,
         expectedIdentity: AudioFileSystem.Identity
     ) throws -> URL {
         let jobDescriptor = try AudioFileSystem.openDirectory(
             job, label: "MRT2 job directory")
         defer { Darwin.close(jobDescriptor) }
+        try validateJobPath(
+            job, anchoredDescriptor: jobDescriptor, expected: expectedJobIdentity)
 
         try validateFile(
             named: pendingName, in: jobDescriptor, expectedData: expectedData,
@@ -321,6 +331,8 @@ enum MRT2ReportCommit {
                 "MRT2 pending result changed immediately before promotion.")
         }
 
+        try validateJobPath(
+            job, anchoredDescriptor: jobDescriptor, expected: expectedJobIdentity)
         try Task.checkCancellation()
         guard renameatx_np(
             jobDescriptor, pendingName, jobDescriptor, finalName,
@@ -335,6 +347,8 @@ enum MRT2ReportCommit {
                 named: finalName, in: jobDescriptor, expectedData: expectedData,
                 expectedIdentity: expectedIdentity, requireFullIdentity: false,
                 checkCancellation: false)
+            try validateJobPath(
+                job, anchoredDescriptor: jobDescriptor, expected: expectedJobIdentity)
         } catch {
             // The rename is the commit point. Never delete or replace a committed result
             // merely because durability/readback verification subsequently failed.
@@ -343,6 +357,50 @@ enum MRT2ReportCommit {
                 + error.localizedDescription)
         }
         return job.appendingPathComponent(finalName)
+    }
+
+    private static func validateJobPath(
+        _ job: URL,
+        anchoredDescriptor: Int32,
+        expected: AudioFileSystem.Identity
+    ) throws {
+        let anchored = try directoryIdentity(
+            anchoredDescriptor, context: "Inspect anchored MRT2 job directory")
+        guard sameStableDirectory(anchored, expected) else {
+            throw InferenceFailure.backendFailed(
+                "Anchored MRT2 job directory does not match its admitted identity.")
+        }
+        let freshDescriptor = try AudioFileSystem.openDirectory(
+            job, label: "MRT2 job directory identity recheck")
+        defer { Darwin.close(freshDescriptor) }
+        let fresh = try directoryIdentity(
+            freshDescriptor, context: "Recheck MRT2 job directory path")
+        guard sameStableDirectory(fresh, expected),
+              sameStableDirectory(fresh, anchored) else {
+            throw InferenceFailure.backendFailed(
+                "MRT2 job path no longer names the admitted directory.")
+        }
+    }
+
+    private static func directoryIdentity(
+        _ descriptor: Int32,
+        context: String
+    ) throws -> AudioFileSystem.Identity {
+        var value = stat()
+        guard Darwin.fstat(descriptor, &value) == 0,
+              value.st_mode & S_IFMT == S_IFDIR else {
+            throw ioFailure(context)
+        }
+        return AudioFileSystem.Identity(value)
+    }
+
+    private static func sameStableDirectory(
+        _ lhs: AudioFileSystem.Identity,
+        _ rhs: AudioFileSystem.Identity
+    ) -> Bool {
+        lhs.device == rhs.device && lhs.inode == rhs.inode
+            && lhs.mode == rhs.mode && lhs.mode & UInt32(S_IFMT) == UInt32(S_IFDIR)
+            && rhs.mode & UInt32(S_IFMT) == UInt32(S_IFDIR)
     }
 
     private static func validateFile(
