@@ -56,3 +56,15 @@ Worker预检先返回物理目录/Git根/common/HEAD/分支/规格/允许路径/
 准备基线54f57fc4be01c91ece018ddd5dfa19a4f62e9037；受限Runner Worker Sol/high线程01a09619-5532-7350-ac03-87bf162fd07e，cwd与workspace-write/network=false已从实际turn_context核对，隐藏服务端解析unknown。run-20260912T144755Z/worker保留请求、观察及事件。初交900秒到时由本任务包装器回收，未报告完成；已写四个获准文件，Lead复验65方法中两项即时去噪取消超时，其余63项通过。原因是默认缓冲pipe的read(65536)等待，不是模型失败或新权限。修复1已给出此反例、事件唤醒竞态及未补齐的原冻结菜单/中断/心跳/历史投影测试要求，未改通过标准；普通修复余量在本轮后还剩1。前轮只观察到补丁包装解析失败，无权限扩大事件。
 
 Lead单独修改profile中文标题，以及audio-cancel6使用已冻结cancelWhen，其他生成/模型/精度参数不变。源d6623fd及个人scheme仍保持，原包Results保留671个文件的起始摘要；普通D关键文件单列保护快照。尚未接纳或发布新版包。一次Lead文档追加的系统Python脚本解析失败，未修改文档；随后以文件补丁写入。profile独立提交e168f17已完成，不能把未执行的文档更新混入该提交描述。
+
+## 2026-09-13 有限实现与制作验收
+
+状态：工具候选已通过制作验收，待本批源接纳／发布；不覆盖下面历史停点。实际受测组合 `ec0dcdd0ab2fb55e0b0cb1a027ccfcb35d7c2b5d`，Worker交付 `b933518bacbb9c3a59bd4d40b6b9812d9ce863be`。四个Worker文件、Lead profile与手册组合经Astra Lead非实施者代码检查，73个CPU方法通过（runner68＋builder5）；未改动原生CLI另做30个兼容CPU场景通过，不称重新构建后端。
+
+真实新版包在M4/16GiB串行验证：quick 3/3（faf7fc8b-0cd5-446d-91db-099ae767cc9a），reliability 8/8（da94f288-b823-4dda-88ae-959017734182）；audio-cancel6观察到去噪并已发取消，退出130、无发布音频，后继新进程通过。真实手动SIGINT回收退出130，当前项interrupted、余7项not_started_after_interruption（563a31b3-44e4-4b06-adbe-5b17753b34b7）；不能计作8个执行通过。中文空格独立APFS副本2178个非模型文件摘要/不同inode核对，旧中断结果回读脱敏通过，新quick 3/3（a301157e-67b9-4948-a95b-c0f598a42810）。PNG实际解码、WAV帧/有限PCM、重绘2..4秒之外PCM相同、ZIP排除私有路径另行核对。媒体艺术质量未重新真人确认。
+
+修复历史保留：初交900.022秒被本任务有界包装器结束；repair1 556.553秒修正管道缓冲与事件唤醒，Lead70方法通过后独立旧结果反例仍失败（未索引但已完成case被当未启动）；repair2 310.128秒修正有界证据回读，Lead73方法通过。新分片日志夹具原有调度竞态经明确等待修正，重复5/5与全套通过；没有降低真实取消条件。普通修复剩0。一次Worker ps被沙箱拒绝后停止并报告，无扩大权限；只依据自有进程回执确认结束。Lead为规格、反例、profile/说明及独立验收，没有把runner实现代写后归给Worker。
+
+请求及可观察运行均Sol/high、独立workspace-write写根、网络关闭，原始路由/异常/回合回执见run/worker。初交无turn.completed用量；后两回合usage作为原始快照保存，可能含同会话累计，不相加。缓存输入不额外加到总输入，完整Lead消耗与订阅费用unknown；本样本不证明模型性价比最优。Lead另有两次只读分析脚本误写字段名/空值导致异常，修正分析后原媒体检查通过，不改产品测试断言。
+
+证据根：`D-Development/AgentTrials/D-KIT-USABILITY-01/run-20260912T144755Z`。入口：cpu/combined-kit.log、cpu/native-cli-compat.log、real-quick/real-reliability/real-interrupt/real-relocated各process.json、real-special-checks.json、independent-media/result.json、relocation.json、protection-before-integration.json、collaboration-accounting.json。制作包sourceSHA为ec0dcdd，原生二进制仍对应f743909647c83cb99d4d9f0dee0a939f80388576；依赖与精度未变化。本次没有在16GiB加载32B/72B。普通D、源个人scheme及原671个Results文件内容/大小/mtime核验保持；旧包保留，发布位置与最终源SHA另写收尾回执，不提前声明推送。
