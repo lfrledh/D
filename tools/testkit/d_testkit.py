@@ -952,12 +952,12 @@ class KitRunner:
                      f"CLI run/request type is invalid for {case['id']}")
             _require(not any(run.get(key) for key in ("failure", "errorMessage", "outputError", "artifactCleanupError")),
                      f"CLI run reported an error for {case['id']}")
-            # The audio event stream throws Swift.CancellationError when the runtime
+            # The event stream throws Swift.CancellationError when the runtime
             # drains a requested cancellation. Preserve that diagnostic; it is not
             # a failed inference. Unknown stream errors still reject the case.
             stream_error = run.get("streamError")
             if stream_error:
-                _require(case["capability"] == "audio" and expected_outcome == "cancelled"
+                _require(expected_outcome == "cancelled"
                          and process.cancellation_requested and not process.forced_stop
                          and payload.get("terminationSignal") == 2
                          and run.get("result") is None and run.get("artifacts") == []

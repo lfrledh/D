@@ -93,3 +93,5 @@ Runner两轮普通修复已耗尽；第二修复876c33ee9f7c321e5ec56f2a7e7940e5
 新增持久回归：真实CLI换行形状和模型自带末尾换行、缺/多LF拒绝；音频标准取消与无关异常区分。lead-framing-before.log和lead-cancellation-before.log均先失败；导出的summary补全已存在的preflight校验/机器信息。后续需非实现者只读检查本差异和最终整包复验；不得以历史模拟通过代替。
 
 同次有界收尾的移位反例发现：首次导出已脱敏，但原case记录保留旧绝对路径，移动整包后重新汇总会重现旧路径。lead-result-relocation-before.log先失败；改为case首次持久化时保存可移位投影，原始CLI/process证据另存不导出，实时音频依赖继续用内存中的经过校验引用。1be50b84cef6e1b7226b6521efd3b5b89a1f56d4差异已获Sol/high只读非实现者检查，无确认阻断；本条额外局部差异仍需复核，不能由前次审核替代。
+
+f1bbf5bbd95b484a3c46c005e889ab83e6748fb4移位差异经Sol/high只读检查无确认阻断，43方法通过；其完整包quick真实3/3、reliability真实7/8。唯一未过项是文字取消也由同一DRuntime流抛出Swift.CancellationError；CLI真实exit130、drained/released、active/cache归零均已记录。该事实补齐同次标准取消诊断规则：不限定音频模态，其余全部取消守卫保持；新增文字取消反例先失败，旧无关错误拒绝断言不改。源尚未接纳，前述失败包/结果原样保留。本接管归因始终为Lead，不追加Worker预算。

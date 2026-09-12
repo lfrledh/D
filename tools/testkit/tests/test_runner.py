@@ -85,7 +85,7 @@ else:
     if "--audio-source" in args: source={"url":__import__("pathlib").Path(value("--audio-source")).resolve().as_uri(),"sha256":value("--audio-source-sha256"),"frameCount":int(value("--audio-source-frames")),"sampleRate":44100,"channels":2}
     input_value={"prompt":p["prompt"],"durationSeconds":p["durationSeconds"],"steps":p["steps"],"guidanceScale":p["guidance"],"seed":p["seed"],"strength":p["audioStrength"],"operation":p["audioOperation"],"source":source}
 request = {"id":run_id,"model":{"directory":__import__("pathlib").Path(model).resolve().as_uri(),"revision":revision},"input":{capability:{"_0":input_value}}}
-if MODE in ("graceful-cancel", "audio-cancel", "audio-cancel-unknown-error"):
+if MODE in ("graceful-cancel", "text-cancel", "audio-cancel", "audio-cancel-unknown-error"):
     def stop(sig, frame):
         run={"iteration":1,"runID":run_id,"startedAt":"2026-01-01T00:00:00Z","request":request,"outcome":"cancelled",
              "text":"","artifacts":[],"elapsedSeconds":.2,"progress":[],"lifecycle":[
@@ -95,6 +95,9 @@ if MODE in ("graceful-cancel", "audio-cancel", "audio-cancel-unknown-error"):
             run.update(lifecycle=[], cancellationRequestedSeconds=.1, cancellationLatencySeconds=.1,
                        streamError="The operation couldn’t be completed. (Swift.CancellationError error 1.)"
                        if MODE == "audio-cancel" else "Unexpected provider failure")
+        elif MODE == "text-cancel":
+            run.update(cancellationRequestedSeconds=.1, cancellationLatencySeconds=.1,
+                       streamError="The operation couldn’t be completed. (Swift.CancellationError error 1.)")
         __import__("pathlib").Path(report_path).write_text(json.dumps({"schemaVersion":1,"tool":"d-infer","backend":backend,
           "exitCode":130,"terminationSignal":2,"options":options,"runs":[run],"elapsedSeconds":.2}),encoding="utf-8")
         if capability == "text": os.write(1, b"\n")
@@ -275,6 +278,12 @@ class RunnerTests(unittest.TestCase):
     def test_audio_cancellation_does_not_hide_unrelated_stream_error(self):
         case = self.audio_cancel_case("audio-cancel-unknown-error")
         self.assertEqual(case["status"], "failed")
+
+    def test_text_cancellation_stream_error_matches_formal_runtime(self):
+        case = text_case()
+        case.update(expected="cancelled", cancelAfterSeconds=.3)
+        result = self.fixture(cases=[case], mode="text-cancel").runner().run("quick")
+        self.assertEqual(result["summary"]["overall"], "complete")
 
     def test_relocated_results_can_be_resummarized_without_old_absolute_paths(self):
         fixture = self.fixture()
