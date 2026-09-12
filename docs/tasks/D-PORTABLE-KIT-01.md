@@ -67,3 +67,19 @@ Lead从冻结组合构建，使用独立DerivedData/既有离线依赖；重跑�
 源/保护状态已核对；新专属集成工作树从source_base创建。无Worker已实施。已获当前GPU空闲确认。下一动作：准备提交→两个独立Worker预检/路由核验→实施；Lead并行下载/封装准备。待最终追加受测版本、实际产物、失败/修复/来源、进程和人工待办。
 
 规格2（实施前）：纠正图像固定manifest实际使用path/size/sha256，原规格误写为text格式。非新验收要求；两任务开始实现前接入本准备版本。生产文字结果本来包含promptTokens/generationTokens及分阶段时间，应保留实际字段，不用chunkCount冒充tokens。
+
+## 2026-09-12 制作中检查点
+
+共同执行基线6c655b231f8af6bd2824327347905317230dd451。两个独立CLI Worker均请求并在实际turn_context观察到gpt-5.6-sol/high、workspace-write、network_access=false，仅各自工作树/output/tmp可写；隐藏服务端解析unknown。CLI线程01a09398-fef8-7333-8889-e6dfdba4c646、Runner线程01a09398-feea-79c2-938f-b37316c3f4d1，从03:15:53 UTC有真实实施重叠。不是重新做协作切换试验。
+
+CLI初交1e8c2269bc1f5f76388e29e84665dba146aa6e7f由Sol实现、Lead审查提交；遇到zsh here-document临时文件拒绝后停报，没有改权限或另找写根。一次组合命令仍执行了后续不存在的Swift工具路径及只读diff；不把其最终shell返回0当作前两项通过。Lead用内存compile检查Python，再在隔离DerivedData完成Release构建。原生受测f743909647c83cb99d4d9f0dee0a939f80388576：新CLI CPU30场景、旧文字CLI10类、旧图像CLI17类分别通过；后两者含真实模型，不合并成一个虚构总通过率。
+
+复制后的CLI、四个bundle和AudioEngine已分别完成真实0.5B文字、512图像、small6秒音频（2.059/43.722/4.378秒，单次非性能承诺）；图像另用Apple ImageIO完整解码重编码检查且原文件不变，WAV独立解析264600帧/44100Hz/双声道float32且全部有限。完整kit及其他Mac的证明尚待后续记录。22个固定case正式backend --inspect均exit0/runs=[]；32B等超当前预算只估算，未加载权重。
+
+7B、32B、medium下载已全部完整校验，新增清单约29.622GB；本包七组模型总42138351070bytes。具体固定revision、摘要和耗时见downloads/*/result.json。medium的共同文字编码权重以APFS克隆复用并重新校验；没有新依赖安装或全局环境修改。
+
+打包实现由Lead编写；Sol/high只读非实现者审查发现相对输入漏过重叠检查，Lead以56c10da9a7f3a9177cf4370257d4c8123a212f8f修补；回归修复前失败、之后5方法通过，后续只读审查确认阻断解决。审查上下文均为read-only。复制资源的实际跨主机运行仍待现场，不能由这次静态审查替代。
+
+Runner初交与第一修复均达到既定900秒运行上限，由Lead回收自有进程组并保存候选23e8857a56accf836a0f6d214c9220608d1e2310及06c500f3a04c599e9ac3b8467ef9ebca4f36dd0f，未接纳。Lead复验第一修复末态31方法，10个错误，主要为跨模态字典提前求值；另发现把图文MLX生命周期规则错误套到音频。音频真实CLI生命周期数组为空，清理/内存证据在provider记录中；Lead此前笼统的生命周期要求也有澄清责任。第二次定向修复仍使用原线程/权限，预算不重置。此处不预写其通过。
+
+证据均在本任务run目录：cli-cpu、cli-legacy、image-legacy、relocation-precheck/real、all-profile-inspection、packaging-review及packaging-review-fix、runner各轮。protection-midpoint.json确认源仍0db7a8fa95fb1ed45be2999c7ab9cfb4d9a96361，scheme完整内容/摘要/mtime和普通D四关键文件保持。当前不需要真人操作；H09麦克风仍按原清单等待设备，不重复测试。
