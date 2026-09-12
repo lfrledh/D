@@ -943,8 +943,22 @@ class KitRunner:
         for iteration, run in enumerate(runs, 1):
             _require(isinstance(run, dict) and isinstance(run.get("request"), dict),
                      f"CLI run/request type is invalid for {case['id']}")
-            _require(not any(run.get(key) for key in ("failure", "errorMessage", "outputError", "streamError", "artifactCleanupError")),
+            _require(not any(run.get(key) for key in ("failure", "errorMessage", "outputError", "artifactCleanupError")),
                      f"CLI run reported an error for {case['id']}")
+            # The audio event stream throws Swift.CancellationError when the runtime
+            # drains a requested cancellation. Preserve that diagnostic; it is not
+            # a failed inference. Unknown stream errors still reject the case.
+            stream_error = run.get("streamError")
+            if stream_error:
+                _require(case["capability"] == "audio" and expected_outcome == "cancelled"
+                         and process.cancellation_requested and not process.forced_stop
+                         and payload.get("terminationSignal") == 2
+                         and run.get("result") is None and run.get("artifacts") == []
+                         and isinstance(stream_error, str)
+                         and stream_error.endswith("(Swift.CancellationError error 1.)")
+                         and all(_is_number(run.get(key)) and run[key] >= 0 for key in
+                                 ("cancellationRequestedSeconds", "cancellationLatencySeconds")),
+                         f"CLI run reported an unexpected stream error for {case['id']}")
             _require(_is_int(run.get("iteration")) and run["iteration"] == iteration
                      and isinstance(run.get("runID"), str) and run["runID"] not in seen_run_ids,
                      f"CLI run identity/iteration is invalid for {case['id']}")
@@ -982,7 +996,7 @@ class KitRunner:
                     mlx_peaks.append(peak)
             run_evidence.append({key: run.get(key) for key in ("iteration", "runID", "startedAt", "elapsedSeconds",
                                  "firstChunkSeconds", "firstProgressSeconds", "firstArtifactSeconds",
-                                 "cancellationRequestedSeconds", "cancellationLatencySeconds", "progress", "lifecycle")})
+                                 "cancellationRequestedSeconds", "cancellationLatencySeconds", "streamError", "progress", "lifecycle")})
             run_evidence[-1]["metadata"] = run.get("result", {}).get("metadata", {}) if isinstance(run.get("result"), dict) else {}
             run_evidence[-1]["computeObserved"] = bool(lifecycle)
         execution_stdout = case_root / "execution-process" / "private" / "stdout.log"
@@ -1010,7 +1024,10 @@ class KitRunner:
                                  f"text {key} is invalid for {case['id']}")
                     _require(isinstance(metadata.get("randomSeed"), str) and metadata["randomSeed"].isascii()
                              and metadata["randomSeed"].isdigit(), f"text randomSeed is invalid for {case['id']}")
-            _require(stdout_text == "".join(texts), f"text stdout/report mismatch for {case['id']}")
+            # Formal CLI writes one LF after each terminal text run (including cancellation).
+            # Keep exact framing: strip()/rstrip() would hide corrupted or extra output.
+            _require(stdout_text == "".join(text + "\n" for text in texts),
+                     f"text stdout/report mismatch for {case['id']}")
             text_path = case_root / "text.txt"
             _require(not text_path.exists() and not text_path.is_symlink(), "text output already exists", kind="failed")
             with text_path.open("xb") as handle: handle.write(raw)
@@ -1138,7 +1155,9 @@ class KitRunner:
                                   "message": "case evidence is missing"})
                     statuses[missing_status] = statuses.get(missing_status, 0) + 1
                     latest_by_case[case_id] = missing_status
-            attempts.append({"attemptID": attempt_id, "state": attempt.get("state", "interrupted"), "cases": cases})
+            attempts.append({"attemptID": attempt_id, "state": attempt.get("state", "interrupted"),
+                             "preflight": _public_case(attempt.get("preflight", {}), self.root, run_root),
+                             "cases": cases})
         overall = "complete" if all(latest_by_case.get(item) == "passed" for item in selected_ids) else "incomplete"
         summary = {"schemaVersion": 1, "runID": run_id, "kitID": run.get("kitID"),
                    "sourceSHA": run.get("sourceSHA"), "profileID": profile_id,

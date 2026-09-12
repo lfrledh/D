@@ -83,3 +83,11 @@ CLI初交1e8c2269bc1f5f76388e29e84665dba146aa6e7f由Sol实现、Lead审查提交
 Runner初交与第一修复均达到既定900秒运行上限，由Lead回收自有进程组并保存候选23e8857a56accf836a0f6d214c9220608d1e2310及06c500f3a04c599e9ac3b8467ef9ebca4f36dd0f，未接纳。Lead复验第一修复末态31方法，10个错误，主要为跨模态字典提前求值；另发现把图文MLX生命周期规则错误套到音频。音频真实CLI生命周期数组为空，清理/内存证据在provider记录中；Lead此前笼统的生命周期要求也有澄清责任。第二次定向修复仍使用原线程/权限，预算不重置。此处不预写其通过。
 
 证据均在本任务run目录：cli-cpu、cli-legacy、image-legacy、relocation-precheck/real、all-profile-inspection、packaging-review及packaging-review-fix、runner各轮。protection-midpoint.json确认源仍0db7a8fa95fb1ed45be2999c7ab9cfb4d9a96361，scheme完整内容/摘要/mtime和普通D四关键文件保持。当前不需要真人操作；H09麦克风仍按原清单等待设备，不重复测试。
+
+## Lead 有界协议收尾
+
+Runner两轮普通修复已耗尽；第二修复876c33ee9f7c321e5ec56f2a7e7940e5b08cc951的32方法自测及Lead组合37方法通过，但4e72cfea967de687275431de5c67a3b5b87e5929首个完整包实测未满足契约。原包与kit-quick/kit-reliability-before证据保留，不追写为通过。由Astra执行一次有界接管，不再派第三轮实现。
+
+根因与澄清：正式CLI每轮终态追加一个LF，必须精确核对“生成文本+LF”，不能strip后比较；audio正常取消可将Swift.CancellationError记入streamError，只有明确请求取消、终态cancelled/exit130/信号2、无产物/结果且有取消时间记录时才接受已识别的取消域，其他流错误仍失败。保留该诊断和provider/清理证据，不把取消记录当生成成功。旧短提示在2秒前完成，不证明取消；改用独立长输出提示，保持模型、精度、计时及取消要求。快速机器仍可能提前完成，手册明确这种情况不算取消通过。
+
+新增持久回归：真实CLI换行形状和模型自带末尾换行、缺/多LF拒绝；音频标准取消与无关异常区分。lead-framing-before.log和lead-cancellation-before.log均先失败；导出的summary补全已存在的preflight校验/机器信息。后续需非实现者只读检查本差异和最终整包复验；不得以历史模拟通过代替。

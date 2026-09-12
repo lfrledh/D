@@ -85,20 +85,26 @@ else:
     if "--audio-source" in args: source={"url":__import__("pathlib").Path(value("--audio-source")).resolve().as_uri(),"sha256":value("--audio-source-sha256"),"frameCount":int(value("--audio-source-frames")),"sampleRate":44100,"channels":2}
     input_value={"prompt":p["prompt"],"durationSeconds":p["durationSeconds"],"steps":p["steps"],"guidanceScale":p["guidance"],"seed":p["seed"],"strength":p["audioStrength"],"operation":p["audioOperation"],"source":source}
 request = {"id":run_id,"model":{"directory":__import__("pathlib").Path(model).resolve().as_uri(),"revision":revision},"input":{capability:{"_0":input_value}}}
-if MODE == "graceful-cancel":
+if MODE in ("graceful-cancel", "audio-cancel", "audio-cancel-unknown-error"):
     def stop(sig, frame):
         run={"iteration":1,"runID":run_id,"startedAt":"2026-01-01T00:00:00Z","request":request,"outcome":"cancelled",
              "text":"","artifacts":[],"elapsedSeconds":.2,"progress":[],"lifecycle":[
              {"runID":run_id,"phase":"drained","uptimeSeconds":1,"memory":{"activeBytes":1,"cacheBytes":0,"peakBytes":10}},
              {"runID":run_id,"phase":"released","uptimeSeconds":2,"memory":{"activeBytes":0,"cacheBytes":0,"peakBytes":10}}]}
+        if capability == "audio":
+            run.update(lifecycle=[], cancellationRequestedSeconds=.1, cancellationLatencySeconds=.1,
+                       streamError="The operation couldn’t be completed. (Swift.CancellationError error 1.)"
+                       if MODE == "audio-cancel" else "Unexpected provider failure")
         __import__("pathlib").Path(report_path).write_text(json.dumps({"schemaVersion":1,"tool":"d-infer","backend":backend,
-          "exitCode":130,"options":options,"runs":[run],"elapsedSeconds":.2}),encoding="utf-8")
+          "exitCode":130,"terminationSignal":2,"options":options,"runs":[run],"elapsedSeconds":.2}),encoding="utf-8")
+        if capability == "text": os.write(1, b"\n")
         raise SystemExit(130)
     signal.signal(signal.SIGINT, stop)
     if MARKER: open(MARKER,"a",encoding="utf-8").write("ready\n")
     while True: time.sleep(.1)
 artifacts = []
 text = "模拟输出✅"
+if MODE == "text-trailing-newline": text += "\n"
 if capability == "image":
     root = __import__("pathlib").Path(value("--artifacts")); root.mkdir(parents=True, exist_ok=True)
     width, height = int(value("--width")), int(value("--height"))
@@ -146,7 +152,11 @@ for i in range(repeat):
                  "firstProgressSeconds":.02 if capability!="text" else None,"firstArtifactSeconds":.08 if artifacts else None,
                  "progress":[],"lifecycle":[] if capability=="audio" else [{"runID":run_id,"phase":"drained","uptimeSeconds":1,"memory":{"activeBytes":1,"cacheBytes":0,"peakBytes":4321}},
                                             {"runID":run_id,"phase":"released","uptimeSeconds":2,"memory":{"activeBytes":0,"cacheBytes":0,"peakBytes":4321}}]})
-if capability == "text": os.write(1, (text*repeat).encode("utf-8"))
+if capability == "text":
+    framed = (text+"\n")*repeat
+    if MODE == "missing-frame": framed = framed[:-1]
+    if MODE == "extra-frame": framed += "\n"
+    os.write(1, framed.encode("utf-8"))
 else:
     for artifact in artifacts: os.write(1,(json.dumps({"type":"wrong" if MODE=="invalid-artifact-line" else "artifact","runID":run_id,"artifact":artifact})+"\n").encode())
 report={"schemaVersion":1,"tool":"d-infer","backend":backend,"exitCode":exit_code,"options":options,"runs":runs,"elapsedSeconds":.2}
@@ -245,6 +255,45 @@ class RunnerTests(unittest.TestCase):
 
     def tearDown(self) -> None:
         self.temporary.cleanup()
+
+    def audio_cancel_case(self, mode):
+        fixture = self.fixture(mode=mode)
+        fixture.configure_audio()
+        path = self.root / "Profiles/profiles.json"
+        profiles = json.loads(path.read_text())
+        profiles["profiles"][0]["caseIDs"] = ["source"]
+        profiles["cases"] = profiles["cases"][:1]
+        profiles["cases"][0].update(expected="cancelled", cancelAfterSeconds=.3)
+        write_json(path, profiles)
+        return fixture.runner().run("quick")["summary"]["attempts"][0]["cases"][0]
+
+    def test_audio_cancellation_stream_error_matches_formal_cli(self):
+        case = self.audio_cancel_case("audio-cancel")
+        self.assertEqual(case["status"], "passed", case.get("message"))
+        self.assertIn("Swift.CancellationError", case["runs"][0]["streamError"])
+
+    def test_audio_cancellation_does_not_hide_unrelated_stream_error(self):
+        case = self.audio_cancel_case("audio-cancel-unknown-error")
+        self.assertEqual(case["status"], "failed")
+
+    def test_formal_framing_preserves_generated_trailing_newline(self):
+        fixture = self.fixture(mode="text-trailing-newline")
+        result = fixture.runner().run("quick")
+        attempt = result["summary"]["attempts"][0]
+        self.assertEqual(result["summary"]["overall"], "complete")
+        artifact = attempt["cases"][0]["artifacts"][0]
+        text = (self.root / "Results" / result["runID"] / artifact["path"]).read_text()
+        self.assertEqual(text, "模拟输出✅\n\n")
+        checked = attempt["preflight"]["models"][0]["files"][0]
+        self.assertEqual(checked["digest"], hashlib.sha256(b"model payload").hexdigest())
+
+    def test_missing_cli_framing_is_not_silently_accepted(self):
+        result = self.fixture(mode="missing-frame").runner().run("quick")
+        self.assertEqual(result["summary"]["attempts"][0]["cases"][0]["status"], "failed")
+
+    def test_extra_stdout_is_not_silently_stripped(self):
+        result = self.fixture(mode="extra-frame").runner().run("quick")
+        self.assertEqual(result["summary"]["attempts"][0]["cases"][0]["status"], "failed")
 
     def fixture(self, **kwargs) -> Fixture:
         return Fixture(self.root, **kwargs)

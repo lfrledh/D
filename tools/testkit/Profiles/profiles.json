@@ -343,7 +343,7 @@
       "title": "text15-cancel",
       "model": "text15",
       "capability": "text",
-      "promptFile": "Inputs/text-short.txt",
+      "promptFile": "Inputs/text-cancel.txt",
       "parameters": {
         "maxTokens": 1024,
         "temperature": 0,
