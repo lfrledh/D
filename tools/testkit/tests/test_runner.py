@@ -33,6 +33,7 @@ FAKE_CLI = r'''#!/usr/bin/python3
 import json, os, signal, struct, sys, time, urllib.parse, uuid, zlib
 MODE = __MODE__
 MARKER = __MARKER__
+LOG = __LOG__
 args = sys.argv[1:]
 def value(name, default=None):
     return args[args.index(name)+1] if name in args else default
@@ -42,22 +43,58 @@ model = value("--model")
 revision = value("--revision")
 repeat = int(value("--repeat", "1"))
 options = {"capability": capability, "model": model, "revision": revision, "repeatCount": repeat}
+prompt_path=value("--prompt-file")
+options["prompt"] = __import__("pathlib").Path(prompt_path).read_text(encoding="utf-8") if prompt_path else ""
+options["memoryBudgetMiB"] = int(value("--memory-budget-mib", "1"))
+mapping = {"--max-tokens":("maxTokens",int),"--temperature":("temperature",float),"--top-p":("topP",float),
+ "--max-prompt-tokens":("maxPromptTokens",int),"--max-output-tokens":("maxOutputTokens",int),
+ "--cache-limit-mib":("cacheLimitMiB",int),"--width":("width",int),"--height":("height",int),
+ "--steps":("steps",int),"--guidance":("guidance",float),"--seed":("seed",int),
+ "--image-profile":("imageProfile",str),"--image-memory-limit-mib":("imageMemoryLimitMiB",int),
+ "--audio-operation":("audioOperation",str),"--duration-seconds":("durationSeconds",float),
+ "--audio-strength":("audioStrength",float),"--audio-edit-start-frame":("audioEditStartFrame",int),
+ "--audio-edit-end-frame":("audioEditEndFrame",int),"--audio-profile":("audioProfile",str)}
+for flag,(name,convert) in mapping.items(): options[name]=convert(value(flag)) if flag in args else None
+if MODE == "wrong-parameter" and options.get("maxTokens") is not None: options["maxTokens"] += 1
+backend={"id":"fake."+capability,"version":"1","capabilities":[]}
 if "--inspect" in args:
-    report = {"schemaVersion":1,"exitCode":0,"options":options,"runs":[],
-              "inspection":{"estimate":{"peakBytes":1234,"confidence":"estimated"},
+    if LOG: open(LOG,"a",encoding="utf-8").write("inspect "+" ".join(args)+"\n")
+    peak = options["memoryBudgetMiB"]*1024*1024+1 if MODE == "blocked" else 1234
+    report = {"schemaVersion":1,"tool":"d-infer","exitCode":0,"options":options,"backend":backend,"runs":[],
+              "inspection":{"estimate":{"peakBytes":peak,"confidence":"estimated"},
                             "withinBudget": MODE != "blocked"}}
     Path = __import__("pathlib").Path
     Path(report_path).write_text(json.dumps(report), encoding="utf-8")
     raise SystemExit(0)
+if MODE == "sleep":
+    signal.signal(signal.SIGINT, signal.SIG_IGN); signal.signal(signal.SIGTERM, signal.SIG_IGN)
 if MARKER:
     open(MARKER, "a", encoding="utf-8").write("executed\n")
 if MODE == "sleep":
-    signal.signal(signal.SIGINT, signal.SIG_IGN); signal.signal(signal.SIGTERM, signal.SIG_IGN)
     time.sleep(30)
 if MODE == "output-limit":
     os.write(1, b"x" * (17 * 1024 * 1024)); time.sleep(30)
 run_id = str(uuid.uuid4())
-request = {"id":run_id,"model":{"directory":model,"revision":revision}}
+p=options
+if capability=="text": input_value={"prompt":p["prompt"],"maxTokens":p["maxTokens"],"temperature":p["temperature"],"topP":p["topP"]}
+elif capability=="image": input_value={"prompt":p["prompt"],"width":p["width"],"height":p["height"],"steps":p["steps"],"guidanceScale":p["guidance"],"seed":p["seed"]}
+else:
+    source=None
+    if "--audio-source" in args: source={"url":__import__("pathlib").Path(value("--audio-source")).resolve().as_uri(),"sha256":value("--audio-source-sha256"),"frameCount":int(value("--audio-source-frames")),"sampleRate":44100,"channels":2}
+    input_value={"prompt":p["prompt"],"durationSeconds":p["durationSeconds"],"steps":p["steps"],"guidanceScale":p["guidance"],"seed":p["seed"],"strength":p["audioStrength"],"operation":p["audioOperation"],"source":source}
+request = {"id":run_id,"model":{"directory":__import__("pathlib").Path(model).resolve().as_uri(),"revision":revision},"input":{capability:{"_0":input_value}}}
+if MODE == "graceful-cancel":
+    def stop(sig, frame):
+        run={"iteration":1,"runID":run_id,"startedAt":"2026-01-01T00:00:00Z","request":request,"outcome":"cancelled",
+             "text":"","artifacts":[],"elapsedSeconds":.2,"progress":[],"lifecycle":[
+             {"runID":run_id,"phase":"drained","uptimeSeconds":1,"memory":{"activeBytes":1,"cacheBytes":0,"peakBytes":10}},
+             {"runID":run_id,"phase":"released","uptimeSeconds":2,"memory":{"activeBytes":0,"cacheBytes":0,"peakBytes":10}}]}
+        __import__("pathlib").Path(report_path).write_text(json.dumps({"schemaVersion":1,"tool":"d-infer","backend":backend,
+          "exitCode":130,"options":options,"runs":[run],"elapsedSeconds":.2}),encoding="utf-8")
+        raise SystemExit(130)
+    signal.signal(signal.SIGINT, stop)
+    if MARKER: open(MARKER,"a",encoding="utf-8").write("ready\n")
+    while True: time.sleep(.1)
 artifacts = []
 text = "模拟输出✅"
 if capability == "image":
@@ -71,22 +108,28 @@ if capability == "image":
 elif capability == "audio":
     root = __import__("pathlib").Path(value("--artifacts")); root.mkdir(parents=True, exist_ok=True)
     frames = int(float(value("--duration-seconds"))*44100/2+0.5)*2
-    data = struct.pack("<"+"f"*(frames*2), *([0.0]*(frames*2)))
+    data = b"\0" * (frames * 8)
     fmt=struct.pack("<HHIIHH",3,2,44100,352800,8,32)
     raw=b"RIFF"+struct.pack("<I",4+8+len(fmt)+8+len(data))+b"WAVE"+b"fmt "+struct.pack("<I",len(fmt))+fmt+b"data"+struct.pack("<I",len(data))+data
     path=root/"audio.wav"; path.write_bytes(raw)
     artifacts=[{"url":path.resolve().as_uri(),"mediaType":"audio/wav"}]
-outcome = "failed" if MODE == "failed" else "completed"
+if MODE == "missing-artifact": artifacts=[]
+outcome = "failed" if MODE == "failed" or (MODE == "fail-edit" and options.get("audioOperation") in ("variation","inpaint")) else "completed"
 exit_code = 1 if outcome == "failed" else 0
-result = {"artifacts":artifacts,"metadata":{"promptTokens":"3","generationTokens":"4"}}
+result = {"artifacts":artifacts,"metadata":{"promptTokens":"3","generationTokens":"4","promptSeconds":"0.01",
+          "generationSeconds":"0.02","randomSeed":"42","modelRevision":revision}}
 runs=[]
 for i in range(repeat):
-    runs.append({"iteration":i+1,"runID":run_id,"request":request,"outcome":outcome,"text":text if capability=="text" else "",
-                 "artifacts":artifacts,"result":result,"lifecycle":[{"memory":{"peakBytes":4321}}]})
+    runs.append({"iteration":i+1,"runID":run_id,"startedAt":"2026-01-01T00:00:00Z","request":request,
+                 "outcome":outcome,"text":text if capability=="text" else "","artifacts":artifacts,"result":result,
+                 "elapsedSeconds":.1,"firstChunkSeconds":.01 if capability=="text" else None,
+                 "firstProgressSeconds":.02 if capability!="text" else None,"firstArtifactSeconds":.08 if artifacts else None,
+                 "progress":[],"lifecycle":[{"runID":run_id,"phase":"drained","uptimeSeconds":1,"memory":{"activeBytes":1,"cacheBytes":0,"peakBytes":4321}},
+                                            {"runID":run_id,"phase":"released","uptimeSeconds":2,"memory":{"activeBytes":0,"cacheBytes":0,"peakBytes":4321}}]})
 if capability == "text": os.write(1, (text*repeat).encode("utf-8"))
 else:
-    for artifact in artifacts: os.write(1,(json.dumps({"type":"artifact","runID":run_id,"artifact":artifact})+"\n").encode())
-report={"schemaVersion":1,"exitCode":exit_code,"options":options,"runs":runs}
+    for artifact in artifacts: os.write(1,(json.dumps({"type":"wrong" if MODE=="invalid-artifact-line" else "artifact","runID":run_id,"artifact":artifact})+"\n").encode())
+report={"schemaVersion":1,"tool":"d-infer","backend":backend,"exitCode":exit_code,"options":options,"runs":runs,"elapsedSeconds":.2}
 if MODE == "mismatch": report["exitCode"] = 1
 __import__("pathlib").Path(report_path).write_text(json.dumps(report),encoding="utf-8")
 raise SystemExit(exit_code)
@@ -126,8 +169,9 @@ class Fixture:
                    "profiles": [{"id": "quick", "title": "Quick <safe>", "caseIDs": [c["id"] for c in actual_cases]}],
                    "cases": actual_cases})
         self.marker = root / "execution-marker"
+        self.log = root / "fake-cli.log"
         self.fake = root / "fake-cli"
-        script = FAKE_CLI.replace("__MODE__", repr(mode)).replace("__MARKER__", repr(str(self.marker)))
+        script = FAKE_CLI.replace("__MODE__", repr(mode)).replace("__MARKER__", repr(str(self.marker))).replace("__LOG__", repr(str(self.log)))
         self.fake.write_text(script, encoding="utf-8")
         self.fake.chmod(0o755)
         bundled = root / "Bin/d-infer"; bundled.write_text("placeholder", encoding="utf-8"); bundled.chmod(0o755)
@@ -135,6 +179,36 @@ class Fixture:
                    "buildConfiguration": "Debug", "cli": "Bin/d-infer", "engine": "Runtime/AudioEngine.dengine",
                    "catalog": "Manifests/catalog.json", "profiles": "Profiles/profiles.json",
                    "minimumMacOS": "0", "audioLicenseAcknowledged": True})
+
+    def configure_image(self) -> None:
+        catalog=json.loads((self.root/"Manifests/catalog.json").read_text()); catalog["models"]["text"]["format"]="image"
+        write_json(self.root/"Manifests/catalog.json",catalog)
+        manifest=json.loads((self.root/"Manifests/text.json").read_text()); old=manifest["files"][0]
+        manifest["files"]=[{"path":old["name"],"size":old["size"],"sha256":old["checksum"]}]; write_json(self.root/"Manifests/text.json",manifest)
+        case={"id":"image","title":"image","model":"text","capability":"image","promptFile":"Inputs/prompt.txt",
+              "parameters":{"width":256,"height":256,"steps":4,"guidance":1,"seed":"18446744073709551615","imageProfile":"scalableKlein4B"},
+              "timeoutSeconds":5,"expected":"completed","repeatCount":1}
+        write_json(self.root/"Profiles/profiles.json",{"schemaVersion":1,"profiles":[{"id":"quick","title":"image","caseIDs":["image"]}],"cases":[case]})
+
+    def configure_audio(self, mode: str = "normal") -> None:
+        catalog=json.loads((self.root/"Manifests/catalog.json").read_text()); item=catalog["models"]["text"]
+        item["format"]="audio"; item["audioProfile"]="sm-music"; write_json(self.root/"Manifests/catalog.json",catalog)
+        manifest=json.loads((self.root/"Manifests/text.json").read_text()); old=manifest["files"][0]
+        manifest["files"]=[{"path":old["name"],"size":old["size"],"sha256":old["checksum"]}]; write_json(self.root/"Manifests/text.json",manifest)
+        engine=self.root/"Runtime/AudioEngine.dengine"; files=[]
+        for relative,data,executable in (("python/bin/python3",b"python",True),("provider/d_audio_backend.py",b"provider",False)):
+            path=engine/relative; path.parent.mkdir(parents=True,exist_ok=True); path.write_bytes(data); path.chmod(0o755 if executable else 0o644)
+            files.append({"path":relative,"sizeBytes":len(data),"sha256":hashlib.sha256(data).hexdigest(),"executable":executable})
+        (engine/"vendor").mkdir(); (engine/"model-manifests").mkdir()
+        write_json(engine/"engine.json",{"schemaVersion":1,"kind":"d-audio-engine","pythonABI":"3.12",
+          "pythonExecutable":"python/bin/python3","providerScript":"provider/d_audio_backend.py","vendorDirectory":"vendor",
+          "modelManifestsDirectory":"model-manifests","files":files})
+        base={"durationSeconds":1,"steps":8,"guidance":1,"seed":"42","audioOperation":"generate","audioStrength":1}
+        generate={"id":"source","title":"source","model":"text","capability":"audio","promptFile":"Inputs/prompt.txt",
+          "parameters":base,"timeoutSeconds":6,"expected":"completed","repeatCount":1}
+        edit={"id":"edit","title":"edit","model":"text","capability":"audio","promptFile":"Inputs/prompt.txt",
+          "parameters":dict(base,audioOperation="variation",audioStrength=.5),"timeoutSeconds":6,"expected":"completed","repeatCount":1,"sourceCase":"source"}
+        write_json(self.root/"Profiles/profiles.json",{"schemaVersion":1,"profiles":[{"id":"quick","title":"audio","caseIDs":["source","edit"]}],"cases":[generate,edit]})
 
     def runner(self, fake: Path | None = None):
         return runner_module.KitRunner(self.root, test_cli=fake or self.fake,
@@ -165,6 +239,39 @@ class RunnerTests(unittest.TestCase):
         self.assertEqual(case["status"], "passed")
         self.assertEqual(case["qualityAssessment"], "pending")
         self.assertNotIn(str(self.root), json.dumps(result["summary"]))
+
+    def test_normal_image_simulation_is_structurally_valid(self):
+        fixture=self.fixture(); fixture.configure_image(); result=fixture.runner().run("quick")
+        artifact=result["summary"]["attempts"][0]["cases"][0]["artifacts"][0]
+        self.assertEqual((artifact["width"],artifact["height"]),(256,256))
+
+    def test_completed_image_requires_one_valid_artifact_line(self):
+        fixture=self.fixture(mode="missing-artifact"); fixture.configure_image(); result=fixture.runner().run("quick")
+        self.assertEqual(result["summary"]["attempts"][0]["cases"][0]["status"],"failed")
+        self.temporary.cleanup(); self.temporary=tempfile.TemporaryDirectory(prefix="d-testkit-",dir=os.environ["D_TEST_TEMP_DIR"])
+        self.root=Path(self.temporary.name)/"second"; self.root.mkdir(); fixture=Fixture(self.root,mode="invalid-artifact-line"); fixture.configure_image()
+        result=fixture.runner().run("quick"); self.assertEqual(result["summary"]["attempts"][0]["cases"][0]["status"],"failed")
+
+    def test_audio_edit_inspection_receives_same_attempt_source(self):
+        fixture=self.fixture(); fixture.configure_audio(); result=fixture.runner().run("quick")
+        self.assertEqual(result["summary"]["overall"],"complete")
+        inspect_lines=[line for line in fixture.log.read_text().splitlines() if "--inspect" in line]
+        self.assertEqual(len(inspect_lines),2); self.assertIn("--audio-source",inspect_lines[1])
+
+    def test_audio_resume_reruns_source_in_same_attempt(self):
+        fixture=self.fixture(mode="fail-edit"); fixture.configure_audio(); runner=fixture.runner(); first=runner.run("quick")
+        run_root=self.root/"Results"/first["runID"]; old_attempt=run_root/"attempts"/first["attemptID"]; old_hash=hashlib.sha256((old_attempt/"attempt.json").read_bytes()).hexdigest()
+        normal=self.root/"normal-cli"; normal.write_text(FAKE_CLI.replace("__MODE__",repr("normal")).replace("__MARKER__",repr(str(fixture.marker))).replace("__LOG__",repr(str(fixture.log))),encoding="utf-8"); normal.chmod(0o755)
+        runner._test_cli=normal; resumed=runner.run("quick",resume=first["runID"])
+        new_attempt=json.loads((run_root/"attempts"/resumed["attemptID"]/"attempt.json").read_text())
+        self.assertEqual(new_attempt["selectedCaseIDs"],["source","edit"]); self.assertEqual(new_attempt["lineage"][0]["policy"],"same-attempt-rerun")
+        self.assertEqual(hashlib.sha256((old_attempt/"attempt.json").read_bytes()).hexdigest(),old_hash)
+
+    def test_graceful_expected_cancellation_passes_without_force(self):
+        case=text_case(); case["expected"]="cancelled"; case["cancelAfterSeconds"]=2
+        fixture=self.fixture(cases=[case],mode="graceful-cancel"); result=fixture.runner().run("quick")
+        observed=result["summary"]["attempts"][0]["cases"][0]
+        self.assertEqual(observed["status"],"passed"); self.assertFalse(observed["publicProcess"]["forcedStop"])
 
     def test_missing_model_is_blocked(self):
         fixture = self.fixture(); (self.root / "Models/text/model.bin").unlink()
@@ -215,14 +322,23 @@ class RunnerTests(unittest.TestCase):
         result = fixture.runner().run("quick")
         self.assertEqual(result["summary"]["attempts"][0]["cases"][0]["status"], "failed")
 
+    def test_wrong_actual_parameter_is_rejected(self):
+        fixture = self.fixture(mode="wrong-parameter")
+        result = fixture.runner().run("quick")
+        self.assertEqual(result["summary"]["attempts"][0]["cases"][0]["status"], "failed")
+
     def test_timeout_force_stops_its_process_group(self):
         fixture = self.fixture(mode="sleep"); runner = fixture.runner()
-        result = runner._run_process([str(fixture.fake), "--report", str(self.root/"unused")], self.root/"process", .15)
+        with mock.patch.object(runner_module, "INTERRUPT_GRACE_SECONDS", .1), mock.patch.object(runner_module, "TERM_GRACE_SECONDS", .1):
+            result = runner._run_process([str(fixture.fake), "--report", str(self.root/"unused")], self.root/"process", .01,
+                                         _test_ready=fixture.marker)
         self.assertTrue(result.timed_out, result); self.assertTrue(result.forced_stop, result); self.assertIsNotNone(result.return_code)
 
     def test_cancel_force_stops_its_process_group(self):
         fixture = self.fixture(mode="sleep"); runner = fixture.runner()
-        result = runner._run_process([str(fixture.fake), "--report", str(self.root/"unused")], self.root/"process", 20, .15)
+        with mock.patch.object(runner_module, "INTERRUPT_GRACE_SECONDS", .1), mock.patch.object(runner_module, "TERM_GRACE_SECONDS", .1):
+            result = runner._run_process([str(fixture.fake), "--report", str(self.root/"unused")], self.root/"process", 20, .01,
+                                         _test_ready=fixture.marker)
         self.assertTrue(result.cancellation_requested, result); self.assertTrue(result.forced_stop, result)
 
     def test_output_limit_stops_child(self):
@@ -257,12 +373,37 @@ class RunnerTests(unittest.TestCase):
         fixture = self.fixture(); result = fixture.runner().run("quick")
         run_root = self.root/"Results"/result["runID"]
         rendered = (run_root/"summary.html").read_text(encoding="utf-8")
-        self.assertIn("Quick", rendered if "Quick" in rendered else "Quick")
+        self.assertIn("Quick &lt;safe&gt;", rendered)
         self.assertNotIn("<safe>", rendered)
         with zipfile.ZipFile(run_root/"summary.zip") as archive:
             names = archive.namelist(); self.assertFalse(any("private" in name for name in names))
             joined = b"".join(archive.read(name) for name in names if name.endswith((".json",".html")))
             self.assertNotIn(str(self.root).encode(), joined)
+
+    def test_results_symlink_is_rejected_without_touching_sentinel(self):
+        fixture = self.fixture(); outside = self.root.parent / "outside-results"; outside.mkdir()
+        sentinel = outside / "sentinel"; sentinel.write_text("keep", encoding="utf-8")
+        (self.root / "Results").symlink_to(outside, target_is_directory=True)
+        with self.assertRaisesRegex(runner_module.KitError, "symbolic link"):
+            fixture.runner().run("quick")
+        self.assertEqual(sentinel.read_text(encoding="utf-8"), "keep")
+
+    def test_export_rejects_altered_public_artifact(self):
+        fixture = self.fixture(); runner = fixture.runner(); result = runner.run("quick")
+        run_root = self.root / "Results" / result["runID"]
+        artifact = result["summary"]["attempts"][0]["cases"][0]["artifacts"][0]
+        (run_root / artifact["path"]).write_bytes(b"altered")
+        with self.assertRaisesRegex(runner_module.KitError, "changed"):
+            runner.summarize(result["runID"])
+
+    def test_summary_rejects_duplicate_attempt_and_missing_models_do_not_block_valid_summary(self):
+        fixture = self.fixture(); runner = fixture.runner(); result = runner.run("quick")
+        run_root = self.root / "Results" / result["runID"]
+        (self.root / "Models/text/model.bin").unlink(); (self.root / "Models/text").rmdir()
+        self.assertEqual(fixture.runner().summarize(result["runID"])["overall"], "complete")
+        run_path = run_root / "run.json"; run = json.loads(run_path.read_text()); run["attempts"].append(dict(run["attempts"][0])); write_json(run_path, run)
+        with self.assertRaisesRegex(runner_module.KitError, "duplicate attempt"):
+            fixture.runner().summarize(result["runID"])
 
     def test_damaged_png_and_dimensions_are_rejected(self):
         root = self.root/"artifacts"; root.mkdir(); path=root/"bad.png"; path.write_bytes(b"not png")

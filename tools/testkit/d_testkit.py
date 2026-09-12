@@ -40,8 +40,8 @@ MAX_PROFILES = 32
 MAX_CASES = 256
 MAX_MANIFEST_FILES = 10000
 PROCESS_POLL_SECONDS = 0.05
-INTERRUPT_GRACE_SECONDS = 3.0
-TERM_GRACE_SECONDS = 2.0
+INTERRUPT_GRACE_SECONDS = 30.0
+TERM_GRACE_SECONDS = 5.0
 ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 HEX40 = re.compile(r"^[0-9a-f]{40}$")
 HEX64 = re.compile(r"^[0-9a-f]{64}$")
@@ -91,9 +91,13 @@ def _read_json(path: Path, label: str, maximum: int = MAX_JSON_BYTES) -> tuple[b
 
 
 def _atomic_json(path: Path, value: Any) -> None:
+    _atomic_bytes(path, (json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True) + "\n").encode("utf-8"))
+
+
+def _atomic_bytes(path: Path, data: bytes) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
+    _ordinary_directory(path.parent, f"output parent for {path.name}")
     temporary = path.parent / f".{path.name}.{uuid.uuid4().hex}.tmp"
-    data = (json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True) + "\n").encode("utf-8")
     try:
         with temporary.open("xb") as handle:
             handle.write(data)
@@ -139,6 +143,7 @@ def _relative_path(root: Path, raw: Any, label: str, *, kind: str, must_exist: b
     candidate = Path(raw)
     _require(not candidate.is_absolute(), f"{label} must be relative")
     _require(all(part not in ("", ".", "..") for part in candidate.parts), f"{label} contains a forbidden path component")
+    _ordinary_directory(root, f"{label} root")
     root_real = root.resolve(strict=True)
     joined = root / candidate
     cursor = root
@@ -301,7 +306,7 @@ class KitRunner:
                 _require(audio_profile is None, f"non-audio model {model_id} cannot have audioProfile")
             models[model_id] = CatalogModel(
                 model_id,
-                _relative_path(self.root, entry["directory"], f"model {model_id} directory", kind="directory"),
+                _relative_path(self.root, entry["directory"], f"model {model_id} directory", kind="directory", must_exist=False),
                 _relative_path(self.root, entry["manifest"], f"model {model_id} manifest", kind="file"),
                 format_name, revision, audio_profile)
         return models
@@ -347,6 +352,11 @@ class KitRunner:
             if "sourceCase" in entry:
                 _identifier(entry["sourceCase"], f"case {case_id} sourceCase")
                 _require(capability == "audio", f"case {case_id} sourceCase is audio-only")
+            operation = entry["parameters"].get("audioOperation") if capability == "audio" else None
+            if operation in ("variation", "inpaint"):
+                _require("sourceCase" in entry, f"case {case_id} editing requires sourceCase")
+            if operation == "generate":
+                _require("sourceCase" not in entry, f"case {case_id} generation cannot have sourceCase")
             cases[case_id] = entry
         profiles: dict[str, dict[str, Any]] = {}
         for entry in raw["profiles"]:
@@ -464,6 +474,7 @@ class KitRunner:
         return {"python": python, "provider": provider, "vendor": vendor, "manifests": manifests}
 
     def _verify_model(self, model: CatalogModel) -> dict[str, Any]:
+        _ordinary_directory(model.directory, f"model {model.model_id} directory")
         _, manifest = _read_json(model.manifest, f"manifest for {model.model_id}")
         _require(isinstance(manifest, dict) and _is_int(manifest.get("schemaVersion"))
                  and manifest["schemaVersion"] == 1, f"manifest for {model.model_id} has unsupported schema")
@@ -522,9 +533,12 @@ class KitRunner:
                 "admissionBudgetMiB": available // MIB}
 
     def _system_observation(self) -> dict[str, Any]:
+        chip = _sysctl("machdep.cpu.brand_string")
+        memory = _sysctl("hw.memsize")
+        physical = int(memory) if memory and memory.isascii() and memory.isdigit() else self._memory_bytes()
         return {"operatingSystem": platform.platform(), "macOSVersion": self._current_os_version(),
-                "architecture": platform.machine() or "unknown", "chip": platform.processor() or "unknown",
-                "physicalMemoryBytes": self._memory_bytes(), "swap": "unknown",
+                "architecture": platform.machine() or "unknown", "chip": chip or "unknown",
+                "physicalMemoryBytes": physical, "swap": _sysctl("vm.swapusage") or "unknown",
                 "xcodeAvailable": Path("/Applications/Xcode.app/Contents/Developer").is_dir()}
 
     def preflight(self, case_ids: Sequence[str] | None = None) -> dict[str, Any]:
@@ -614,18 +628,24 @@ class KitRunner:
         return True
 
     def _run_process(self, command: Sequence[str], directory: Path, timeout: float,
-                     cancel_after: float | None = None) -> ProcessResult:
+                     cancel_after: float | None = None, *, _test_ready: Path | None = None) -> ProcessResult:
+        _require(not directory.exists() and not directory.is_symlink(), f"process output already exists: {directory}", kind="failed")
         directory.mkdir(parents=True, exist_ok=False)
         private = directory / "private"
         private.mkdir()
-        child_home = private / "home"
         child_tmp = private / "tmp"
         child_cache = private / "cache"
-        for path in (child_home, child_tmp, child_cache):
+        child_hf = private / "huggingface"
+        child_pyc = private / "pycache"
+        for path in (child_tmp, child_cache, child_hf, child_pyc):
             path.mkdir()
-        environment = {"PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "HOME": str(child_home),
+        environment = {"PATH": "/usr/bin:/bin:/usr/sbin:/sbin",
                        "TMPDIR": str(child_tmp), "XDG_CACHE_HOME": str(child_cache),
-                       "PYTHONDONTWRITEBYTECODE": "1", "LC_ALL": "en_US.UTF-8", "LANG": "en_US.UTF-8"}
+                       "HF_HOME": str(child_hf), "HUGGINGFACE_HUB_CACHE": str(child_hf / "hub"),
+                       "PYTHONPYCACHEPREFIX": str(child_pyc), "PYTHONDONTWRITEBYTECODE": "1",
+                       "HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1", "LC_ALL": "C.UTF-8", "LANG": "C.UTF-8"}
+        if "HOME" in os.environ:
+            environment["HOME"] = os.environ["HOME"]
         stdout_path, stderr_path = private / "stdout.log", private / "stderr.log"
         started = time.monotonic()
         timed_out = cancelled = forced = False
@@ -645,14 +665,15 @@ class KitRunner:
                     elapsed = time.monotonic() - started
                     rss = _rss_kib(process.pid)
                     samples.append({"elapsedSeconds": round(elapsed, 3), "pid": process.pid, "rssKiB": rss})
-                    if stdout_drain.exceeded or stderr_drain.exceeded:
+                    if stdout_drain.error or stderr_drain.error or stdout_drain.exceeded or stderr_drain.exceeded:
                         forced = self._terminate_group(process) or forced
                         break
-                    if cancel_after is not None and elapsed >= cancel_after:
+                    ready = _test_ready is None or _test_ready.exists()
+                    if ready and cancel_after is not None and elapsed >= cancel_after:
                         cancelled = True
                         forced = self._terminate_group(process) or forced
                         break
-                    if elapsed >= timeout:
+                    if ready and elapsed >= timeout:
                         timed_out = True
                         forced = self._terminate_group(process) or forced
                         break
@@ -666,39 +687,63 @@ class KitRunner:
                     forced = self._terminate_group(process) or forced
                 stdout_drain.join(timeout=5); stderr_drain.join(timeout=5)
                 process.stdout.close(); process.stderr.close()
+                stdout_drain.join(timeout=1); stderr_drain.join(timeout=1)
+                _require(not stdout_drain.is_alive() and not stderr_drain.is_alive(), "CLI stream drain did not finish", kind="failed")
             _require(not stdout_drain.error and not stderr_drain.error,
                      f"CLI stream drain failed: {stdout_drain.error or stderr_drain.error}", kind="failed")
-        return ProcessResult(process.returncode, time.monotonic() - started, stdout_drain.total, stderr_drain.total,
-                             stdout_drain.exceeded, stderr_drain.exceeded, timed_out, cancelled, forced, samples)
+        result = ProcessResult(process.returncode, time.monotonic() - started, stdout_drain.total, stderr_drain.total,
+                               stdout_drain.exceeded, stderr_drain.exceeded, timed_out, cancelled, forced, samples)
+        _atomic_json(directory / "process.json", dataclasses.asdict(result))
+        return result
 
-    def _inspect_case(self, case: dict[str, Any], directory: Path, budget_mib: int) -> dict[str, Any]:
+    def _inspect_case(self, case: dict[str, Any], directory: Path, budget_mib: int,
+                      source: dict[str, Any] | None = None) -> dict[str, Any]:
         report = directory / "inspection.json"
         artifacts = directory / "inspection-artifacts"
         if case["capability"] in ("image", "audio"):
             artifacts.mkdir(parents=True)
-        command = self._command(case, report, artifacts, budget_mib, inspect=True)
+        command = self._command(case, report, artifacts, budget_mib, inspect=True, source=source)
         process = self._run_process(command, directory / "inspection-process", min(float(case["timeoutSeconds"]), 300))
         _require(not process.timed_out and not process.stdout_limited and not process.stderr_limited,
                  f"inspection failed operationally for {case['id']}", kind="failed")
         _, payload = _read_json(report, f"inspection report for {case['id']}")
-        _require(isinstance(payload, dict) and payload.get("schemaVersion") == 1, f"invalid inspection report for {case['id']}")
-        _require(payload.get("exitCode") == process.return_code, f"inspection exit/report mismatch for {case['id']}")
+        _require(isinstance(payload, dict) and _is_int(payload.get("schemaVersion")) and payload.get("schemaVersion") == 1
+                 and payload.get("tool") == "d-infer" and payload.get("runs") == [],
+                 f"invalid inspection report for {case['id']}")
+        _require(_is_int(payload.get("exitCode")) and payload.get("exitCode") == process.return_code,
+                 f"inspection exit/report mismatch for {case['id']}")
+        _require(not process.forced_stop and not payload.get("failure") and not payload.get("artifactCleanupError"),
+                 f"inspection reported an execution/cleanup error for {case['id']}")
         _require(process.return_code == 0, f"inspection failed for {case['id']}", kind="blocked")
+        _require(process.stdout_bytes == 0 and not any(path.is_file() for path in artifacts.rglob("*")),
+                 f"inspection produced generation output for {case['id']}")
+        options = payload.get("options"); model = self.catalog[case["model"]]
+        _require(isinstance(options, dict) and isinstance(payload.get("backend"), dict),
+                 f"inspection options/backend missing for {case['id']}")
+        _validate_actual_options(options, case, model, self.root, budget_mib)
         inspection = payload.get("inspection")
         _require(isinstance(inspection, dict) and type(inspection.get("withinBudget")) is bool,
                  f"inspection fields missing for {case['id']}")
         estimate = inspection.get("estimate")
         _require(isinstance(estimate, dict) and _is_int(estimate.get("peakBytes")) and estimate["peakBytes"] >= 0
                  and isinstance(estimate.get("confidence"), str), f"inspection estimate invalid for {case['id']}")
+        _require(inspection["withinBudget"] == (estimate["peakBytes"] <= budget_mib * MIB),
+                 f"inspection budget conclusion is dishonest for {case['id']}")
         return {"report": "inspection.json", "process": dataclasses.asdict(process),
+                "publicProcess": _public_process(process),
                 "estimate": estimate, "withinBudget": inspection["withinBudget"]}
 
     def run(self, profile_id: str, requested: Sequence[str] | None = None, resume: str | None = None) -> dict[str, Any]:
         selected = self._select_cases(profile_id, requested)
         preflight = self.preflight(selected)
         results_root = self.root / "Results"
+        _require(not results_root.is_symlink(), "Results must not be a symbolic link", kind="failed")
         results_root.mkdir(exist_ok=True)
-        with (results_root / ".d-testkit.lock").open("a+b") as lock:
+        _ordinary_directory(results_root, "Results")
+        lock_path = results_root / ".d-testkit.lock"
+        _require(not lock_path.is_symlink() and (not lock_path.exists() or lock_path.is_file()),
+                 "run lock is not a regular file", kind="failed")
+        with lock_path.open("a+b") as lock:
             try:
                 fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
             except BlockingIOError as error:
@@ -743,27 +788,25 @@ class KitRunner:
                         old_case_id = old_case.get("caseID")
                         if old_case_id in selected:
                             completed.add(old_case_id)
-                            source_info = old_case.get("sourceForDependents")
-                            if source_info is not None:
-                                _require(isinstance(source_info, dict) and set(source_info) == {"path", "sha256", "frames"},
-                                         "previous source evidence is invalid")
-                                source_path = Path(source_info["path"])
-                                _regular_file(source_path, "previous audio source")
-                                try:
-                                    source_path.resolve(strict=True).relative_to(run_root.resolve(strict=True))
-                                except ValueError as error:
-                                    raise KitError("previous audio source escapes the run") from error
-                                _require(_sha256_file(source_path) == source_info["sha256"], "previous audio source digest changed")
-                                successful_sources[old_case_id] = source_info
-            selected_for_attempt = [case_id for case_id in selected if case_id not in completed]
+            needed = {case_id for case_id in selected if case_id not in completed}
+            for case_id in tuple(needed):
+                source_id = self.profile_set.cases[case_id].get("sourceCase")
+                if source_id is not None:
+                    needed.add(source_id)  # same-attempt lineage; never reuse an old attempt's source
+            selected_for_attempt = [case_id for case_id in selected if case_id in needed]
             _require(selected_for_attempt, "resume run has no unfinished cases")
         else:
             selected_for_attempt = selected
         attempt_id = str(uuid.uuid4())
         attempt_root = run_root / "attempts" / attempt_id
+        _require(not (run_root / "attempts").is_symlink() and not attempt_root.exists() and not attempt_root.is_symlink(),
+                 "attempt output path is unsafe or already exists", kind="failed")
         attempt_root.mkdir(parents=True)
         attempt = {"schemaVersion": 1, "attemptID": attempt_id, "startedAt": _utc_now(),
-                   "state": "running", "selectedCaseIDs": selected_for_attempt, "preflight": preflight, "cases": []}
+                   "state": "running", "selectedCaseIDs": selected_for_attempt, "preflight": preflight, "cases": [],
+                   "lineage": [{"dependent": item, "source": self.profile_set.cases[item]["sourceCase"],
+                                "policy": "same-attempt-rerun"} for item in selected_for_attempt
+                               if "sourceCase" in self.profile_set.cases[item]]}
         _atomic_json(attempt_root / "attempt.json", attempt)
         run_record["attempts"].append({"attemptID": attempt_id, "startedAt": attempt["startedAt"]})
         _atomic_json(run_root / "run.json", run_record)
@@ -771,26 +814,36 @@ class KitRunner:
         interrupted = False
         for index, case_id in enumerate(selected_for_attempt):
             case = self.profile_set.cases[case_id]
+            print(f"开始 [{index + 1}/{len(selected_for_attempt)}] {case_id}", file=sys.stderr, flush=True)
             case_root = attempt_root / "cases" / f"{index + 1:03d}-{case_id}"
+            _require(not case_root.exists() and not case_root.is_symlink(), "case output already exists", kind="failed")
             case_root.mkdir(parents=True)
             source_case = case.get("sourceCase")
+            inspection = None
             if source_case is not None and source_case not in successful_sources:
                 result = self._case_record(case, "blocked_dependency", "source case did not complete successfully")
             else:
                 try:
-                    inspection = self._inspect_case(case, case_root, budget_mib)
+                    source = successful_sources.get(source_case) if source_case else None
+                    if source is not None:
+                        source = self._materialize_source(run_root, source, case)
+                    inspection = self._inspect_case(case, case_root, budget_mib, source)
                     if not inspection["withinBudget"]:
                         result = self._case_record(case, "blocked_budget", "inspection exceeds admission budget")
                         result["inspection"] = inspection
                     else:
-                        result = self._execute_case(case, case_root, budget_mib, inspection,
-                                                    successful_sources.get(source_case) if source_case else None)
+                        result = self._execute_case(case, case_root, budget_mib, inspection, source)
                 except KeyboardInterrupt:
                     result = self._case_record(case, "interrupted", "user interrupted the batch")
                     interrupted = True
                 except KitError as error:
                     status = "blocked" if error.kind == "blocked" else "failed"
                     result = self._case_record(case, status, str(error))
+                    if inspection is not None: result["inspection"] = inspection
+                    process_path = case_root / "execution-process" / "process.json"
+                    if process_path.is_file() and not process_path.is_symlink():
+                        _, process_value = _read_json(process_path, "case process")
+                        result["publicProcess"] = _public_process_dict(process_value)
             _atomic_json(case_root / "case.json", result)
             attempt["cases"].append({"caseID": case_id, "path": str((case_root / "case.json").relative_to(attempt_root)),
                                      "status": result["status"]})
@@ -799,6 +852,7 @@ class KitRunner:
                 source_info = result.get("sourceForDependents")
                 if source_info:
                     successful_sources[case_id] = source_info
+            print(f"结束 {case_id}: {result['status']}", file=sys.stderr, flush=True)
             if interrupted:
                 break
         attempt["state"] = "interrupted" if interrupted else "finished"
@@ -806,6 +860,17 @@ class KitRunner:
         _atomic_json(attempt_root / "attempt.json", attempt)
         summary = self.summarize(run_id)
         return {"runID": run_id, "attemptID": attempt_id, "summary": summary}
+
+    def _materialize_source(self, run_root: Path, source: dict[str, Any], case: dict[str, Any]) -> dict[str, Any]:
+        _require(isinstance(source, dict) and set(source) == {"path", "sha256", "frames"}, "source evidence is invalid")
+        path = _relative_path(run_root, source["path"], "same-attempt audio source", kind="file")
+        _require(isinstance(source["sha256"], str) and HEX64.fullmatch(source["sha256"])
+                 and _sha256_file(path) == source["sha256"], "source digest changed")
+        _require(_is_int(source["frames"]) and source["frames"] > 0, "source frame count is invalid")
+        parameters = case["parameters"]
+        if parameters["audioOperation"] == "inpaint":
+            _require(parameters["audioEditEndFrame"] <= source["frames"], "audio edit bounds exceed source frames")
+        return {"path": str(path), "sha256": source["sha256"], "frames": source["frames"]}
 
     @staticmethod
     def _case_record(case: dict[str, Any], status: str, message: str | None = None) -> dict[str, Any]:
@@ -829,8 +894,10 @@ class KitRunner:
         result = self._case_record(case, "failed")
         result["inspection"] = inspection
         result["process"] = dataclasses.asdict(process)
+        result["publicProcess"] = _public_process(process)
         result["systemBefore"] = system_before
-        if process.timed_out:
+        result["systemAfter"] = self._system_observation()
+        if process.timed_out or process.forced_stop:
             result["message"] = "case timed out"
             return result
         if process.stdout_limited or process.stderr_limited:
@@ -838,13 +905,19 @@ class KitRunner:
             return result
         _regular_file(report, f"CLI report for {case['id']}")
         _, payload = _read_json(report, f"CLI report for {case['id']}", MAX_STREAM_BYTES)
-        _require(isinstance(payload, dict) and payload.get("schemaVersion") == 1, f"invalid CLI report for {case['id']}")
-        _require(payload.get("exitCode") == process.return_code, f"CLI exit/report mismatch for {case['id']}")
+        _require(isinstance(payload, dict) and _is_int(payload.get("schemaVersion")) and payload.get("schemaVersion") == 1
+                 and payload.get("tool") == "d-infer", f"invalid CLI report for {case['id']}")
+        _require(_is_int(payload.get("exitCode")) and payload.get("exitCode") == process.return_code,
+                 f"CLI exit/report mismatch for {case['id']}")
+        _require(not payload.get("failure") and not payload.get("artifactCleanupError"),
+                 f"CLI reported a failure/cleanup error for {case['id']}")
         options = payload.get("options")
         model = self.catalog[case["model"]]
         _require(isinstance(options, dict) and options.get("capability") == case["capability"]
                  and options.get("model") == str(model.directory) and options.get("revision") == model.revision
-                 and options.get("repeatCount") == case["repeatCount"], f"CLI options differ from the request for {case['id']}")
+                 and _is_int(options.get("repeatCount")) and options.get("repeatCount") == case["repeatCount"],
+                 f"CLI options differ from the request for {case['id']}")
+        _validate_actual_options(options, case, model, self.root, budget_mib)
         runs = payload.get("runs")
         _require(isinstance(runs, list) and len(runs) == case["repeatCount"], f"CLI run count mismatch for {case['id']}")
         expected_outcome = case["expected"]
@@ -853,17 +926,46 @@ class KitRunner:
         expected_exit = 0 if expected_outcome == "completed" else 130
         _require(process.return_code == expected_exit, f"CLI exit code differs from expected for {case['id']}")
         mlx_peaks = []
-        for run in runs:
+        run_evidence = []
+        seen_run_ids: set[str] = set()
+        for iteration, run in enumerate(runs, 1):
+            _require(not any(run.get(key) for key in ("failure", "errorMessage", "outputError", "streamError", "artifactCleanupError")),
+                     f"CLI run reported an error for {case['id']}")
+            _require(_is_int(run.get("iteration")) and run["iteration"] == iteration
+                     and isinstance(run.get("runID"), str) and run["runID"] not in seen_run_ids,
+                     f"CLI run identity/iteration is invalid for {case['id']}")
+            seen_run_ids.add(run["runID"])
+            _require(_is_number(run.get("elapsedSeconds")) and float(run["elapsedSeconds"]) >= 0,
+                     f"CLI elapsedSeconds is invalid for {case['id']}")
             _require(run.get("request", {}).get("id") == run.get("runID"), f"CLI request/run identity mismatch for {case['id']}")
             _require(run.get("request", {}).get("model", {}).get("revision") == model.revision,
                      f"CLI request revision mismatch for {case['id']}")
+            _validate_request_payload(run["request"], case, model, self.root, source)
             if expected_outcome == "completed":
                 _require(run.get("result", {}).get("artifacts", []) == run.get("artifacts", []),
                          f"CLI result artifacts differ for {case['id']}")
-            for event in run.get("lifecycle", []):
-                peak = event.get("memory", {}).get("peakBytes") if isinstance(event, dict) else None
+            lifecycle = run.get("lifecycle")
+            _require(isinstance(lifecycle, list), f"CLI lifecycle is invalid for {case['id']}")
+            phases = [event.get("phase") for event in lifecycle if isinstance(event, dict)]
+            _require("drained" in phases and phases and phases[-1] == "released",
+                     f"CLI lifecycle lacks drain/release for {case['id']}")
+            previous_uptime = -1.0
+            for event in lifecycle:
+                _require(isinstance(event, dict) and event.get("runID") == run["runID"]
+                         and _is_number(event.get("uptimeSeconds")) and float(event["uptimeSeconds"]) >= previous_uptime,
+                         f"CLI lifecycle identity/time is invalid for {case['id']}")
+                previous_uptime = float(event["uptimeSeconds"])
+                memory = event.get("memory")
+                _require(isinstance(memory, dict) and all(_is_int(memory.get(key)) and memory[key] >= 0
+                         for key in ("activeBytes", "cacheBytes", "peakBytes"))
+                         and memory["peakBytes"] >= memory["activeBytes"], f"CLI lifecycle memory is invalid for {case['id']}")
+                peak = memory["peakBytes"]
                 if _is_int(peak) and peak >= 0:
                     mlx_peaks.append(peak)
+            run_evidence.append({key: run.get(key) for key in ("iteration", "runID", "startedAt", "elapsedSeconds",
+                                 "firstChunkSeconds", "firstProgressSeconds", "firstArtifactSeconds",
+                                 "cancellationRequestedSeconds", "cancellationLatencySeconds", "progress", "lifecycle")})
+            run_evidence[-1]["metadata"] = run.get("result", {}).get("metadata", {}) if isinstance(run.get("result"), dict) else {}
         execution_stdout = case_root / "execution-process" / "private" / "stdout.log"
         public: list[dict[str, Any]] = []
         if case["capability"] == "text":
@@ -879,21 +981,37 @@ class KitRunner:
                 result_object = run.get("result")
                 if expected_outcome == "completed":
                     _require(isinstance(result_object, dict), f"text result object missing for {case['id']}")
+                    metadata = result_object.get("metadata")
+                    _require(isinstance(metadata, dict), f"text metadata missing for {case['id']}")
+                    for key in ("promptTokens", "generationTokens"):
+                        _require(isinstance(metadata.get(key), str) and metadata[key].isascii() and metadata[key].isdigit(),
+                                 f"text {key} is invalid for {case['id']}")
+                    for key in ("promptSeconds", "generationSeconds"):
+                        _require(isinstance(metadata.get(key), str) and _finite_decimal(metadata[key]),
+                                 f"text {key} is invalid for {case['id']}")
+                    _require(isinstance(metadata.get("randomSeed"), str) and metadata["randomSeed"].isascii()
+                             and metadata["randomSeed"].isdigit(), f"text randomSeed is invalid for {case['id']}")
             _require(stdout_text == "".join(texts), f"text stdout/report mismatch for {case['id']}")
             text_path = case_root / "text.txt"
-            text_path.write_bytes(raw)
-            public.append({"type": "text/plain", "path": "text.txt", "bytes": len(raw),
+            _require(not text_path.exists() and not text_path.is_symlink(), "text output already exists", kind="failed")
+            with text_path.open("xb") as handle: handle.write(raw)
+            public.append({"type": "text/plain", "path": "text.txt", "absoluteValidatedPath": str(text_path), "bytes": len(raw),
                            "sha256": hashlib.sha256(raw).hexdigest()})
         else:
             lines = [line for line in execution_stdout.read_text(encoding="utf-8").splitlines() if line]
             expected_artifacts = [artifact for run in runs for artifact in run.get("artifacts", [])]
+            if expected_outcome == "completed":
+                _require(all(len(run.get("artifacts", [])) == 1 for run in runs),
+                         f"completed media run must publish exactly one artifact for {case['id']}")
             _require(len(lines) == len(expected_artifacts), f"artifact stdout count mismatch for {case['id']}")
-            for line, reference in zip(lines, expected_artifacts):
+            artifact_runs = [(run["runID"], artifact) for run in runs for artifact in run.get("artifacts", [])]
+            for line, (artifact_run_id, reference) in zip(lines, artifact_runs):
                 try:
                     emitted = json.loads(line)
                 except json.JSONDecodeError as error:
                     raise KitError(f"artifact stdout is invalid JSON for {case['id']}") from error
-                _require(emitted.get("artifact") == reference, f"artifact stdout/report mismatch for {case['id']}")
+                _require(emitted.get("type") == "artifact" and emitted.get("runID") == artifact_run_id
+                         and emitted.get("artifact") == reference, f"artifact stdout/report mismatch for {case['id']}")
                 if case["capability"] == "image":
                     public.append(_validate_png_reference(reference, artifacts, case["parameters"]["width"],
                                                           case["parameters"]["height"]))
@@ -904,15 +1022,24 @@ class KitRunner:
         result.pop("message", None)
         result["artifacts"] = public
         result["actualOptions"] = options
+        result["backend"] = payload.get("backend")
+        _require(isinstance(result["backend"], dict) and isinstance(result["backend"].get("id"), str),
+                 f"backend descriptor missing for {case['id']}")
+        result["runs"] = run_evidence
         result["measurements"] = {"mlxPeakBytes": max(mlx_peaks) if mlx_peaks else "unknown",
                                   "processRSS": {"samples": process.rss_samples_kib,
                                                  "children": process.child_rss,
                                                  "aggregation": "not-summed"}}
-        result["systemAfter"] = self._system_observation()
         if case["capability"] == "audio" and public:
             first = public[0]
-            result["sourceForDependents"] = {"path": first["absoluteValidatedPath"], "sha256": first["sha256"],
+            run_root = case_root.parents[3]
+            result["sourceForDependents"] = {"path": str(Path(first["absoluteValidatedPath"]).relative_to(run_root)), "sha256": first["sha256"],
                                              "frames": first["frames"]}
+        run_root = case_root.parents[3]
+        for artifact in result["artifacts"]:
+            absolute = artifact.get("absoluteValidatedPath")
+            if absolute:
+                artifact["path"] = str(Path(absolute).relative_to(run_root))
         return result
 
     def summarize(self, run_id: str) -> dict[str, Any]:
@@ -921,61 +1048,214 @@ class KitRunner:
         _, run = _read_json(run_root / "run.json", "run.json")
         _require(isinstance(run, dict) and run.get("schemaVersion") == 1 and run.get("runID") == run_id,
                  "invalid run.json")
+        _require(run.get("kitID") == self.config.raw["kitID"] and run.get("sourceSHA") == self.config.raw["sourceSHA"]
+                 and run.get("profileDigest") == self.profile_set.digest, "run does not match the current kit/profile source")
+        profile_id = run.get("profileID")
+        _require(profile_id in self.profile_set.profiles, "run names an unknown profile")
+        selected_ids = run.get("selectedCaseIDs")
+        _require(isinstance(selected_ids, list) and selected_ids and len(selected_ids) == len(set(selected_ids))
+                 and all(item in self.profile_set.profiles[profile_id]["caseIDs"] for item in selected_ids),
+                 "run selection is empty, duplicate, or unknown")
+        _require(selected_ids == [item for item in self.profile_set.profiles[profile_id]["caseIDs"] if item in selected_ids],
+                 "run selection order differs from the profile")
+        _require(isinstance(run.get("attempts"), list), "run attempts must be an array")
         statuses: dict[str, int] = {}
         attempts = []
         latest_by_case: dict[str, str] = {}
+        seen_attempts: set[str] = set()
         for attempt_ref in run.get("attempts", []):
+            _require(isinstance(attempt_ref, dict), "attempt reference must be an object")
             attempt_id = attempt_ref.get("attemptID")
             _identifier(attempt_id, "attempt ID")
+            _require(attempt_id not in seen_attempts, "duplicate attempt ID")
+            seen_attempts.add(attempt_id)
             attempt_root = _relative_path(run_root / "attempts", attempt_id, "attempt", kind="directory")
             _, attempt = _read_json(attempt_root / "attempt.json", "attempt.json")
+            _require(attempt.get("schemaVersion") == 1 and attempt.get("attemptID") == attempt_id
+                     and attempt.get("state") in ("running", "finished", "interrupted"), "invalid attempt record")
+            attempt_selected = attempt.get("selectedCaseIDs")
+            _require(isinstance(attempt_selected, list) and attempt_selected and len(attempt_selected) == len(set(attempt_selected))
+                     and all(item in selected_ids for item in attempt_selected), "attempt selection is invalid")
+            _require(isinstance(attempt.get("cases"), list), "attempt cases must be an array")
             cases = []
             observed: set[str] = set()
             for reference in attempt.get("cases", []):
+                _require(isinstance(reference, dict) and reference.get("caseID") in attempt_selected
+                         and reference.get("caseID") not in observed, "duplicate or unknown attempt case")
                 case_path = _relative_path(attempt_root, reference.get("path"), "case result", kind="file")
                 _, case_result = _read_json(case_path, "case result")
                 _require(case_result.get("schemaVersion") == 1 and case_result.get("caseID") == reference.get("caseID"),
                          "case result identity mismatch")
                 clean = _public_case(case_result, self.root, run_root)
+                _require(clean.get("status") in ("passed", "blocked", "blocked_budget", "blocked_dependency",
+                                                  "failed", "cancelled", "interrupted"), "unknown case status")
                 cases.append(clean)
                 observed.add(clean["caseID"])
                 statuses[clean["status"]] = statuses.get(clean["status"], 0) + 1
                 latest_by_case[clean["caseID"]] = clean["status"]
-            if attempt.get("state") != "finished":
-                for case_id in attempt.get("selectedCaseIDs", []):
-                    if case_id not in observed:
-                        cases.append({"caseID": case_id, "status": "interrupted", "qualityAssessment": "pending"})
-                        statuses["interrupted"] = statuses.get("interrupted", 0) + 1
-                        latest_by_case[case_id] = "interrupted"
+            for case_id in attempt_selected:
+                if case_id not in observed:
+                    missing_status = "interrupted" if attempt.get("state") != "finished" else "failed"
+                    cases.append({"caseID": case_id, "status": missing_status, "qualityAssessment": "pending",
+                                  "message": "case evidence is missing"})
+                    statuses[missing_status] = statuses.get(missing_status, 0) + 1
+                    latest_by_case[case_id] = missing_status
             attempts.append({"attemptID": attempt_id, "state": attempt.get("state", "interrupted"), "cases": cases})
-        selected_count = len(run.get("selectedCaseIDs", []))
-        selected_ids = run.get("selectedCaseIDs", [])
-        overall = "complete" if len(selected_ids) == selected_count and all(latest_by_case.get(item) == "passed" for item in selected_ids) else "incomplete"
+        overall = "complete" if all(latest_by_case.get(item) == "passed" for item in selected_ids) else "incomplete"
         summary = {"schemaVersion": 1, "runID": run_id, "kitID": run.get("kitID"),
-                   "sourceSHA": run.get("sourceSHA"), "profileID": run.get("profileID"),
+                   "sourceSHA": run.get("sourceSHA"), "profileID": profile_id,
+                   "profileTitle": self.profile_set.profiles[profile_id]["title"],
                    "selectedCaseIDs": run.get("selectedCaseIDs"), "overall": overall,
                    "qualityAssessment": "pending", "statusCounts": statuses, "attempts": attempts,
                    "generatedAt": _utc_now()}
         _atomic_json(run_root / "summary.json", summary)
         html_text = _summary_html(summary)
-        (run_root / "summary.html").write_bytes(html_text.encode("utf-8"))
+        _atomic_bytes(run_root / "summary.html", html_text.encode("utf-8"))
         zip_path = run_root / "summary.zip"
         temporary = run_root / f".summary.{uuid.uuid4().hex}.zip"
         try:
             with zipfile.ZipFile(temporary, "x", compression=zipfile.ZIP_DEFLATED) as archive:
-                for path in sorted(run_root.rglob("*")):
-                    if not path.is_file() or path.is_symlink() or path == temporary or path.name in ("summary.zip", "summary.zip.sha256"):
-                        continue
-                    relative = path.relative_to(run_root)
-                    if path.name not in ("summary.json", "summary.html", "text.txt") and "artifacts" not in relative.parts:
-                        continue
-                    archive.write(path, relative.as_posix())
+                archive.write(run_root / "summary.json", "summary.json")
+                archive.write(run_root / "summary.html", "summary.html")
+                exported: set[str] = set()
+                for attempt in summary["attempts"]:
+                    for case in attempt["cases"]:
+                        for artifact in case.get("artifacts", []):
+                            relative_raw = artifact.get("path")
+                            path = _relative_path(run_root, relative_raw, "recorded public artifact", kind="file")
+                            _require("private" not in Path(relative_raw).parts and relative_raw not in exported,
+                                     "private or duplicate artifact cannot be exported")
+                            _require(_is_int(artifact.get("bytes")) and path.stat().st_size == artifact["bytes"]
+                                     and isinstance(artifact.get("sha256"), str) and HEX64.fullmatch(artifact["sha256"])
+                                     and _sha256_file(path) == artifact["sha256"], "recorded artifact changed before export")
+                            exported.add(relative_raw)
+                            archive.write(path, relative_raw)
             os.replace(temporary, zip_path)
         finally:
             with contextlib.suppress(FileNotFoundError):
                 temporary.unlink()
-        (run_root / "summary.zip.sha256").write_text(_sha256_file(zip_path) + "  summary.zip\n", encoding="ascii")
+        _atomic_bytes(run_root / "summary.zip.sha256", (_sha256_file(zip_path) + "  summary.zip\n").encode("ascii"))
         return summary
+
+
+def _same_number(actual: Any, expected: Any) -> bool:
+    return _is_number(actual) and _is_number(expected) and float(actual) == float(expected)
+
+
+def _finite_decimal(value: str) -> bool:
+    try: return math.isfinite(float(value)) and float(value) >= 0
+    except ValueError: return False
+
+
+def _validate_actual_options(options: dict[str, Any], case: dict[str, Any], model: CatalogModel,
+                             kit_root: Path, budget_mib: int) -> None:
+    prompt = _relative_path(kit_root, case["promptFile"], f"case {case['id']} prompt", kind="file").read_text(encoding="utf-8")
+    _require(options.get("prompt") == prompt, f"CLI prompt differs from frozen input for {case['id']}")
+    _require(_is_int(options.get("memoryBudgetMiB")) and options["memoryBudgetMiB"] == max(1, budget_mib),
+             f"CLI memory budget differs for {case['id']}")
+    parameters = case["parameters"]
+    fields = {"text": ("maxTokens", "temperature", "topP", "maxPromptTokens", "maxOutputTokens", "cacheLimitMiB"),
+              "image": ("imageProfile", "width", "height", "steps", "guidance", "seed"),
+              "audio": ("audioOperation", "durationSeconds", "audioStrength", "audioEditStartFrame", "audioEditEndFrame")
+              }[case["capability"]]
+    for field in fields:
+        expected = parameters.get(field)
+        actual = options.get(field)
+        if field == "seed":
+            _require(_is_int(actual) and actual >= 0 and actual == int(expected), f"CLI seed differs for {case['id']}")
+        elif expected is None:
+            _require(actual is None, f"CLI {field} unexpectedly set for {case['id']}")
+        elif _is_number(expected):
+            _require(_same_number(actual, expected), f"CLI {field} differs for {case['id']}")
+        else:
+            _require(actual == expected, f"CLI {field} differs for {case['id']}")
+    if case["capability"] == "audio":
+        _require(options.get("audioProfile") == model.audio_profile, f"CLI audioProfile differs for {case['id']}")
+    if case["capability"] == "image":
+        _require(_is_int(options.get("imageMemoryLimitMiB"))
+                 and options["imageMemoryLimitMiB"] == max(1, budget_mib), f"CLI image memory limit differs for {case['id']}")
+
+
+def _find_mapping_with_key(value: Any, key: str) -> dict[str, Any] | None:
+    if isinstance(value, dict):
+        if key in value: return value
+        for child in value.values():
+            found = _find_mapping_with_key(child, key)
+            if found is not None: return found
+    elif isinstance(value, list):
+        for child in value:
+            found = _find_mapping_with_key(child, key)
+            if found is not None: return found
+    return None
+
+
+def _validate_request_payload(request: dict[str, Any], case: dict[str, Any], model: CatalogModel,
+                              root: Path, source: dict[str, Any] | None) -> None:
+    model_url = request.get("model", {}).get("directory")
+    parsed = urllib.parse.urlparse(model_url) if isinstance(model_url, str) else None
+    _require(parsed is not None and parsed.scheme == "file"
+             and Path(urllib.parse.unquote(parsed.path)).resolve(strict=False) == model.directory.resolve(strict=False),
+             f"CLI request model differs for {case['id']}")
+    payload = _find_mapping_with_key(request.get("input"), "prompt")
+    _require(payload is not None, f"CLI request input missing for {case['id']}")
+    prompt = _relative_path(root, case["promptFile"], f"case {case['id']} prompt", kind="file").read_text(encoding="utf-8")
+    _require(payload.get("prompt") == prompt, f"CLI request prompt differs for {case['id']}")
+    p = case["parameters"]
+    expected = ({"text": {"maxTokens": p["maxTokens"], "temperature": p["temperature"], "topP": p["topP"]},
+                 "image": {"width": p["width"], "height": p["height"], "steps": p["steps"],
+                           "guidanceScale": p["guidance"], "seed": int(p["seed"])},
+                 "audio": {"durationSeconds": p["durationSeconds"], "steps": p["steps"],
+                           "guidanceScale": p["guidance"], "seed": int(p["seed"]),
+                           "strength": p["audioStrength"], "operation": p["audioOperation"]}})[case["capability"]]
+    for key, wanted in expected.items():
+        actual = payload.get(key)
+        if key == "seed": _require(_is_int(actual) and actual == wanted, f"CLI request seed differs for {case['id']}")
+        elif _is_number(wanted): _require(_same_number(actual, wanted), f"CLI request {key} differs for {case['id']}")
+        else: _require(actual == wanted, f"CLI request {key} differs for {case['id']}")
+    if case["capability"] == "audio":
+        if source is None: _require(payload.get("source") is None, f"CLI request has an unexpected source for {case['id']}")
+        else:
+            observed_source = payload.get("source")
+            _require(isinstance(observed_source, dict) and observed_source.get("sha256") == source["sha256"]
+                     and _is_int(observed_source.get("frameCount")) and observed_source["frameCount"] == source["frames"],
+                     f"CLI request source differs for {case['id']}")
+            parsed_source = urllib.parse.urlparse(observed_source.get("url", ""))
+            _require(parsed_source.scheme == "file" and Path(urllib.parse.unquote(parsed_source.path)).resolve(strict=False)
+                     == Path(source["path"]).resolve(strict=False), f"CLI request source path differs for {case['id']}")
+        region = payload.get("editRegion")
+        if p["audioOperation"] == "inpaint":
+            _require(isinstance(region, dict) and _is_int(region.get("startFrame")) and _is_int(region.get("endFrame"))
+                     and region["startFrame"] == p["audioEditStartFrame"] and region["endFrame"] == p["audioEditEndFrame"],
+                     f"CLI request edit region differs for {case['id']}")
+        else:
+            _require(region is None, f"CLI request has unexpected edit region for {case['id']}")
+
+
+def _public_process_dict(value: Mapping[str, Any]) -> dict[str, Any]:
+    samples = [{"elapsedSeconds": item.get("elapsedSeconds"), "rssKiB": item.get("rssKiB")}
+               for item in value.get("rss_samples_kib", []) if isinstance(item, dict)]
+    return {"returnCode": value.get("return_code"), "elapsedSeconds": value.get("elapsed_seconds"),
+            "stdoutBytes": value.get("stdout_bytes"), "stderrBytes": value.get("stderr_bytes"),
+            "stdoutLimited": value.get("stdout_limited"), "stderrLimited": value.get("stderr_limited"),
+            "timedOut": value.get("timed_out"), "cancellationRequested": value.get("cancellation_requested"),
+            "forcedStop": value.get("forced_stop"), "rssSampleIntervalSeconds": PROCESS_POLL_SECONDS,
+            "rssSamples": samples, "childRSS": value.get("child_rss", "unknown"), "rssAggregation": "not-summed"}
+
+
+def _public_process(value: ProcessResult) -> dict[str, Any]:
+    return _public_process_dict(dataclasses.asdict(value))
+
+
+def _sysctl(key: str) -> str | None:
+    tool = Path("/usr/sbin/sysctl")
+    if not tool.is_file(): return None
+    try:
+        result = subprocess.run([str(tool), "-n", key], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                timeout=1, check=False, env={"PATH": "/usr/bin:/bin", "LC_ALL": "C"})
+        value = result.stdout.decode("utf-8", errors="strict").strip()
+        return value if result.returncode == 0 and value else None
+    except (OSError, UnicodeDecodeError, subprocess.TimeoutExpired):
+        return None
 
 
 def _rss_kib(pid: int) -> int | None:
@@ -993,6 +1273,7 @@ def _rss_kib(pid: int) -> int | None:
 
 
 def _artifact_path(reference: Any, root: Path, media_type: str) -> Path:
+    _ordinary_directory(root, "artifact root")
     _require(isinstance(reference, dict) and reference.get("mediaType") == media_type, "artifact media type is invalid")
     url = reference.get("url")
     _require(isinstance(url, str), "artifact URL is missing")
@@ -1001,6 +1282,11 @@ def _artifact_path(reference: Any, root: Path, media_type: str) -> Path:
     path = Path(urllib.parse.unquote(parsed.path))
     _require(path.is_absolute() and path.exists() and path.is_file() and not path.is_symlink(), "artifact is not a regular file")
     try:
+        relative = path.relative_to(root)
+        cursor = root
+        for part in relative.parts:
+            cursor /= part
+            _require(not cursor.is_symlink(), "artifact path crosses a symbolic link")
         path.resolve(strict=True).relative_to(root.resolve(strict=True))
     except ValueError as error:
         raise KitError("artifact escapes its case directory") from error
@@ -1009,10 +1295,11 @@ def _artifact_path(reference: Any, root: Path, media_type: str) -> Path:
 
 def _validate_png_reference(reference: Any, root: Path, expected_width: int, expected_height: int) -> dict[str, Any]:
     path = _artifact_path(reference, root, "image/png")
+    _require(path.stat().st_size <= expected_width * expected_height * 8 + 16 * MIB, "PNG exceeds its bounded size")
     raw = path.read_bytes()
     _require(raw.startswith(b"\x89PNG\r\n\x1a\n"), "PNG signature is invalid")
     offset = 8; width = height = None; idat = bytearray(); ended = False
-    bit_depth = color_type = interlace = None
+    bit_depth = color_type = interlace = None; chunk_index = 0; saw_idat = False; idat_ended = False
     while offset + 12 <= len(raw):
         length = struct.unpack(">I", raw[offset:offset + 4])[0]
         _require(length <= len(raw) - offset - 12, "PNG chunk length is invalid")
@@ -1021,49 +1308,98 @@ def _validate_png_reference(reference: Any, root: Path, expected_width: int, exp
         expected_crc = struct.unpack(">I", raw[offset + 8 + length:offset + 12 + length])[0]
         _require(zlib.crc32(chunk_type + data) & 0xFFFFFFFF == expected_crc, "PNG CRC is invalid")
         if chunk_type == b"IHDR":
-            _require(length == 13 and width is None, "PNG IHDR is invalid")
+            _require(length == 13 and width is None and chunk_index == 0, "PNG IHDR is invalid")
             width, height, bit_depth, color_type, compression, filtering, interlace = struct.unpack(">IIBBBBB", data)
             _require(compression == 0 and filtering == 0 and interlace == 0, "unsupported PNG encoding")
         elif chunk_type == b"IDAT":
+            _require(not idat_ended, "PNG IDAT chunks must be contiguous")
+            saw_idat = True
             idat.extend(data)
         elif chunk_type == b"IEND":
-            _require(length == 0, "PNG IEND is invalid"); ended = True; offset += 12; break
+            _require(length == 0 and saw_idat, "PNG IEND is invalid"); ended = True; offset += 12; break
+        else:
+            if saw_idat: idat_ended = True
+            _require(not (65 <= chunk_type[0] <= 90),
+                     f"unsupported PNG critical chunk: {chunk_type!r}")
         offset += 12 + length
+        chunk_index += 1
     _require(ended and offset == len(raw), "PNG is truncated or has trailing bytes")
     _require((width, height) == (expected_width, expected_height), "PNG dimensions differ from the request")
-    channels = {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}.get(color_type)
+    channels = {0: 1, 2: 3, 4: 2, 6: 4}.get(color_type)
     _require(channels is not None and bit_depth in (8, 16), "unsupported PNG pixel format")
+    row_bytes = math.ceil(expected_width * channels * bit_depth / 8)
+    decoded_limit = expected_height * (row_bytes + 1)
     try:
-        pixels = zlib.decompress(bytes(idat))
+        decoder = zlib.decompressobj()
+        pixels = decoder.decompress(bytes(idat), decoded_limit + 1)
     except zlib.error as error:
         raise KitError(f"PNG pixels cannot be decoded: {error}") from error
-    row_bytes = math.ceil(expected_width * channels * bit_depth / 8)
-    _require(len(pixels) == expected_height * (row_bytes + 1), "PNG decoded pixel length is invalid")
-    _require(all(pixels[row * (row_bytes + 1)] <= 4 for row in range(expected_height)), "PNG filter is invalid")
+    _require(decoder.eof and not decoder.unused_data and len(pixels) == decoded_limit, "PNG decoded pixel length is invalid")
+    bpp = max(1, math.ceil(channels * bit_depth / 8)); previous = bytearray(row_bytes)
+    for row in range(expected_height):
+        start = row * (row_bytes + 1); filter_type = pixels[start]; encoded = pixels[start + 1:start + 1 + row_bytes]
+        _require(filter_type <= 4, "PNG filter is invalid")
+        decoded = bytearray(row_bytes)
+        for index, byte in enumerate(encoded):
+            left = decoded[index - bpp] if index >= bpp else 0
+            up = previous[index]; upper_left = previous[index - bpp] if index >= bpp else 0
+            if filter_type == 0: predictor = 0
+            elif filter_type == 1: predictor = left
+            elif filter_type == 2: predictor = up
+            elif filter_type == 3: predictor = (left + up) // 2
+            else:
+                p = left + up - upper_left; pa, pb, pc = abs(p-left), abs(p-up), abs(p-upper_left)
+                predictor = left if pa <= pb and pa <= pc else (up if pb <= pc else upper_left)
+            decoded[index] = (byte + predictor) & 255
+        previous = decoded
     return {"type": "image/png", "path": str(path.relative_to(root)), "absoluteValidatedPath": str(path),
             "bytes": len(raw), "sha256": hashlib.sha256(raw).hexdigest(), "width": width, "height": height}
 
 
-def _wav_payload(path: Path) -> tuple[bytes, int, list[float]]:
-    raw = path.read_bytes()
-    _require(len(raw) >= 12 and raw[:4] == b"RIFF" and raw[8:12] == b"WAVE", "WAV RIFF header is invalid")
-    _require(struct.unpack("<I", raw[4:8])[0] + 8 == len(raw), "WAV RIFF size is invalid")
-    offset = 12; fmt = None; data = None
-    while offset + 8 <= len(raw):
-        kind, size = raw[offset:offset + 4], struct.unpack("<I", raw[offset + 4:offset + 8])[0]
-        start, end = offset + 8, offset + 8 + size
-        _require(end <= len(raw), "WAV chunk is truncated")
-        if kind == b"fmt ": fmt = raw[start:end]
-        elif kind == b"data": data = raw[start:end]
-        offset = end + (size & 1)
-    _require(fmt is not None and len(fmt) >= 16 and data is not None, "WAV fmt/data chunks are missing")
+def _wav_info(path: Path) -> dict[str, Any]:
+    size_total = path.stat().st_size
+    _require(size_total <= 512 * MIB, "WAV exceeds the bounded artifact limit")
+    with path.open("rb") as handle:
+        header = handle.read(12)
+        _require(len(header) == 12 and header[:4] == b"RIFF" and header[8:12] == b"WAVE", "WAV RIFF header is invalid")
+        _require(struct.unpack("<I", header[4:8])[0] + 8 == size_total, "WAV RIFF size is invalid")
+        offset = 12; fmt = None; data_offset = data_size = None; seen: set[bytes] = set()
+        while offset < size_total:
+            _require(offset + 8 <= size_total, "WAV has a trailing malformed chunk")
+            handle.seek(offset); chunk_header = handle.read(8); kind, size = chunk_header[:4], struct.unpack("<I", chunk_header[4:])[0]
+            start, end = offset + 8, offset + 8 + size
+            _require(end <= size_total, "WAV chunk is truncated")
+            if kind in (b"fmt ", b"data"):
+                _require(kind not in seen, "WAV contains duplicate fmt/data chunks"); seen.add(kind)
+            if kind == b"fmt ":
+                handle.seek(start); fmt = handle.read(size)
+            elif kind == b"data": data_offset, data_size = start, size
+            offset = end + (size & 1)
+        _require(offset == size_total and fmt is not None and len(fmt) >= 16 and data_offset is not None,
+                 "WAV fmt/data chunks are missing or malformed")
     tag, channels, rate, byte_rate, alignment, bits = struct.unpack("<HHIIHH", fmt[:16])
     _require((tag, channels, rate, byte_rate, alignment, bits) == (3, 2, 44100, 352800, 8, 32),
              "WAV must be 44100 Hz stereo float32")
-    _require(len(data) % 8 == 0, "WAV data is not frame aligned")
-    values = list(struct.unpack(f"<{len(data) // 4}f", data))
-    _require(all(math.isfinite(value) for value in values), "WAV contains non-finite samples")
-    return raw, len(data) // 8, values
+    assert data_size is not None
+    _require(data_size % 8 == 0, "WAV data is not frame aligned")
+    with path.open("rb") as handle:
+        handle.seek(data_offset); remaining = data_size
+        while remaining:
+            block = handle.read(min(1024 * 1024, remaining)); remaining -= len(block)
+            _require(block and len(block) % 4 == 0 and all(math.isfinite(value[0]) for value in struct.iter_unpack("<f", block)),
+                     "WAV contains non-finite or truncated samples")
+    return {"bytes": size_total, "frames": data_size // 8, "dataOffset": data_offset,
+            "dataBytes": data_size, "sha256": _sha256_file(path)}
+
+
+def _compare_ranges(first: Path, first_offset: int, second: Path, second_offset: int, byte_count: int) -> bool:
+    with first.open("rb") as left, second.open("rb") as right:
+        left.seek(first_offset); right.seek(second_offset); remaining = byte_count
+        while remaining:
+            amount = min(MIB, remaining)
+            if left.read(amount) != right.read(amount): return False
+            remaining -= amount
+    return True
 
 
 def _expected_audio_frames(duration: Any) -> int:
@@ -1073,20 +1409,21 @@ def _expected_audio_frames(duration: Any) -> int:
 def _validate_wav_reference(reference: Any, root: Path, duration: Any,
                             source: dict[str, Any] | None, parameters: dict[str, Any]) -> dict[str, Any]:
     path = _artifact_path(reference, root, "audio/wav")
-    raw, frames, values = _wav_payload(path)
+    info = _wav_info(path); frames = info["frames"]
     if source is None:
         _require(frames == _expected_audio_frames(duration), "WAV frame count differs from the request")
     else:
         _require(frames == source["frames"], "edited WAV frame count differs from its source")
         if parameters["audioOperation"] == "inpaint":
-            source_raw, source_frames, source_values = _wav_payload(Path(source["path"]))
-            del source_raw
-            _require(source_frames == frames, "inpaint source frame count changed")
+            source_path = Path(source["path"]); source_info = _wav_info(source_path)
+            _require(source_info["frames"] == frames, "inpaint source frame count changed")
             start, end = parameters["audioEditStartFrame"], parameters["audioEditEndFrame"]
-            _require(values[:start * 2] == source_values[:start * 2]
-                     and values[end * 2:] == source_values[end * 2:], "inpaint changed PCM outside its edit interval")
+            _require(_compare_ranges(path, info["dataOffset"], source_path, source_info["dataOffset"], start * 8)
+                     and _compare_ranges(path, info["dataOffset"] + end * 8, source_path,
+                                         source_info["dataOffset"] + end * 8, (frames - end) * 8),
+                     "inpaint changed PCM outside its edit interval")
     return {"type": "audio/wav", "path": str(path.relative_to(root)), "absoluteValidatedPath": str(path),
-            "bytes": len(raw), "sha256": hashlib.sha256(raw).hexdigest(), "frames": frames,
+            "bytes": info["bytes"], "sha256": info["sha256"], "frames": frames,
             "sampleRate": 44100, "channels": 2, "format": "float32"}
 
 
@@ -1111,6 +1448,7 @@ def _summary_html(summary: dict[str, Any]) -> str:
                 html.escape(str(attempt["attemptID"])), html.escape(str(case["caseID"])), html.escape(str(case["status"]))))
     return ("<!doctype html><meta charset=\"utf-8\"><title>D Test Kit Summary</title>"
             f"<h1>D Test Kit: {html.escape(str(summary['runID']))}</h1>"
+            f"<p>Profile: {html.escape(str(summary['profileTitle']))}</p>"
             f"<p>Overall: {html.escape(str(summary['overall']))}; quality: pending</p>"
             "<table><thead><tr><th>Attempt</th><th>Case</th><th>Status</th></tr></thead><tbody>"
             + "".join(rows) + "</tbody></table>\n")
@@ -1124,7 +1462,8 @@ def _parse_cases(raw: str | None) -> list[str] | None:
 
 
 def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="D portable offline test-kit runner")
+    parser = argparse.ArgumentParser(description="D portable offline test-kit runner",
+        epilog="Exit 0 means the requested runner command completed; inspect summary.overall and each case status for generation success. Exit 1 is blocked/runtime/output failure, 2 invalid input, 130 user interruption.")
     subparsers = parser.add_subparsers(dest="command", required=True)
     for name in ("preflight", "menu"):
         command = subparsers.add_parser(name)
