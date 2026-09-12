@@ -34,6 +34,7 @@ public struct AudioCreationView: View {
     private let adoptedAssetID: UUID?
     private let modelStatus: String
     private let canGenerate: Bool
+    private var musicSupported = false
     private let isBusy: Bool
     private let progress: Double?
     private let status: String?
@@ -74,6 +75,12 @@ public struct AudioCreationView: View {
     public func presenting(_ presentation: AudioCreationPresentation, rangeState: AudioCreationRangeState, contextID: UUID) -> Self {
         var copy = self; copy.presentation = presentation; copy.suppliedRangeState = rangeState
         copy.presentationContextID = contextID; return copy
+    }
+
+    /// The host alone knows whether the MRT2 provider is currently available.  Keeping this
+    /// opt-in preserves the existing Stable Audio surface for callers which have not wired it.
+    public func supportingMusic(_ enabled: Bool) -> Self {
+        var copy = self; copy.musicSupported = enabled; return copy
     }
 
     public var body: some View {
@@ -147,9 +154,60 @@ public struct AudioCreationView: View {
 
     private var controls: some View {
         VStack(alignment: .leading, spacing: 12) {
-            TextField("描述想要的声音", text: $draft.prompt, axis: .vertical)
+            profilePicker
+            TextField(draft.profile == .conditionedMusic ? "描述想要的器乐风格" : "描述想要的声音", text: $draft.prompt, axis: .vertical)
                 .lineLimit(3...6).textFieldStyle(.roundedBorder)
                 .disabled(isBusy).accessibilityIdentifier("audio-create-prompt")
+            if draft.profile == .conditionedMusic {
+                musicControls
+            } else {
+                stableAudioControls
+            }
+            actionRow
+        }
+        .padding(16)
+        .background(.quaternary, in: RoundedRectangle(cornerRadius: 16))
+    }
+
+    private var profilePicker: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Picker("创作类型", selection: profileBinding) {
+                Text("声音生成／编辑（Stable Audio）").tag(AudioCreationProfile.stableAudio)
+                Text("旋律器乐（MRT2）").tag(AudioCreationProfile.conditionedMusic)
+                    .disabled(source != nil || !musicSupported)
+            }
+            .pickerStyle(.menu)
+            .disabled(isBusy || (source != nil && draft.profile != .conditionedMusic))
+            .accessibilityIdentifier("audio-create-profile")
+            if source != nil && draft.profile == .stableAudio {
+                Text("来源文档不能转换为旋律器乐；请新建没有来源的创作。")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            if draft.profile == .conditionedMusic && !musicSupported {
+                Text("旋律器乐当前不可用；可查看、保存或导出已有条件，但不能接纳新的生成。")
+                    .font(.caption).foregroundStyle(.orange)
+                    .accessibilityIdentifier("audio-create-music-unavailable")
+            }
+        }
+    }
+
+    private var profileBinding: Binding<AudioCreationProfile> {
+        Binding(get: { draft.profile }, set: { profile in
+            guard profile != draft.profile else { return }
+            if profile == .conditionedMusic {
+                guard source == nil, musicSupported else { return }
+                draft.profile = .conditionedMusic
+                draft.operation = .generate
+                draft.editRegion = nil
+                if draft.music == nil { draft.music = .example }
+            } else {
+                draft.profile = .stableAudio
+            }
+        })
+    }
+
+    private var stableAudioControls: some View {
+        Group {
             Picker("操作", selection: $draft.operation) {
                 Text("新建").tag(AudioOperation.generate)
                 Text("参考变体").tag(AudioOperation.variation).disabled(source == nil)
@@ -159,10 +217,24 @@ public struct AudioCreationView: View {
             .accessibilityIdentifier("audio-create-operation")
             parameterFields
             if draft.operation == .inpaint { rangeEditor }
-            actionRow
         }
-        .padding(16)
-        .background(.quaternary, in: RoundedRectangle(cornerRadius: 16))
+    }
+
+    private var musicControls: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("近似旋律控制，每次生成新的完整片段；48kHz 混音，不是分轨；时间按 0.04 秒对齐。")
+                .font(.caption).foregroundStyle(.secondary)
+                .accessibilityIdentifier("audio-create-music-guidance")
+            parameterRow("时长（秒）", text: $draft.durationText, id: "duration", disabled: isBusy)
+            parameterRow("Seed", text: $draft.seedText, id: "seed", disabled: isBusy)
+            MusicConditionEditor(draft: musicBinding, isBusy: isBusy,
+                                 importCondition: actions.importCondition,
+                                 exportCondition: actions.exportCondition)
+        }
+    }
+
+    private var musicBinding: Binding<MusicCreationDraft> {
+        Binding(get: { draft.music ?? .example }, set: { draft.music = $0 })
     }
 
     private var parameterFields: some View {
@@ -304,9 +376,11 @@ public struct AudioCreationView: View {
                 Button("导出") { _ = AudioCreationButtonHandler.export(asset.id, isBusy: isBusy, actions: actions) }.disabled(isBusy)
                     .accessibilityIdentifier("audio-create-export-\(asset.id.uuidString)")
                     .audioMeasured("audio-create-export-\(asset.id.uuidString)", probe: layoutProbe)
-                Button("基于此新建") { actions.createFrom(asset.id) }.disabled(isBusy)
-                    .accessibilityIdentifier("audio-create-from-\(asset.id.uuidString)")
-                    .audioMeasured("audio-create-from-\(asset.id.uuidString)", probe: layoutProbe)
+                if asset.metadata.audio?.format.sampleRate != 48_000 {
+                    Button("基于此新建") { actions.createFrom(asset.id) }.disabled(isBusy)
+                        .accessibilityIdentifier("audio-create-from-\(asset.id.uuidString)")
+                        .audioMeasured("audio-create-from-\(asset.id.uuidString)", probe: layoutProbe)
+                }
             }
             if rejected { Text("拒绝不会删除原件或候选。").font(.caption).foregroundStyle(.secondary) }
         }
@@ -328,11 +402,11 @@ public struct AudioCreationView: View {
 
     private var sourceOperation: Bool { draft.operation != .generate }
     private var canSubmit: Bool {
-        AudioCreationButtonHandler.canSubmit(draft, source: source, hostAllowsGeneration: canGenerate,
+        AudioCreationButtonHandler.canSubmit(draft, source: source, hostAllowsGeneration: canGenerate && (draft.profile != .conditionedMusic || musicSupported),
                                              hasPendingRangeInput: draft.operation == .inpaint && rangeInputMessage != nil)
     }
     private var validationMessage: String {
-        AudioCreationButtonHandler.submissionMessage(draft, source: source, hostAllowsGeneration: canGenerate,
+        AudioCreationButtonHandler.submissionMessage(draft, source: source, hostAllowsGeneration: canGenerate && (draft.profile != .conditionedMusic || musicSupported),
             hasPendingRangeInput: draft.operation == .inpaint && rangeInputMessage != nil)
     }
     private var sourceDuration: String? { source.flatMap(assetDuration) }
