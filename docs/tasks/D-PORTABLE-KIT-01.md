@@ -99,3 +99,7 @@ f1bbf5bbd95b484a3c46c005e889ab83e6748fb4移位差异经Sol/high只读检查无�
 ## 用户追加：展示机专用组（spec_revision=3，执行协议仍为contract_revision=2）
 
 用户要求明确准备本机不能安全运行、利用大内存展示机才能测的项目。新增showroom菜单组，仅引用已经冻结的6个case：text32-short/context8k/context16k、image1536/2048、audio-medium120。无新增模型、参数、精度变化或后端实现。88828896765f90ec3a0e182acc99fa1477b20589的22项真实inspect已证明这6项全部超出本机12288MiB预算；不得试图加载或以降低阈值通过。新增组须本机验证6项blocked_budget且没有执行阶段，现场仍按真实机器预算决定。此前8882889完整包reliability8/8、common3/3、medium6秒1/1通过；新profile摘要与旧包不同，旧结果保留旧包，不伪装成新版运行。CLI/runner代码完全相同，其已测代码证据可复用；最终整包和移位快速组另验。
+
+## 用户追加：96 GiB 及以上边界（spec_revision=4，执行协议仍为2）
+
+用户批准额外下载 mlx-community/Qwen2.5-72B-Instruct-4bit 固定 revision 36a74b07390031bb18c9f12fb7c06699bc6273c4，确认适用Qwen许可；仅离线开发测试，不在本机16 GiB加载，不公开上传。选取模型必要清单40,912,220,408bytes（原API目录总量另含1519bytes的.gitattributes）。保留现有qwen2/4bit/group64及32768上下文边界，不引入YaRN、8bit或额外后端。新增数据/profile以96/128/192 GiB准入矩阵、真实长输入、同进程重复加载、受控取消后恢复，以及2048图像/medium380秒支持上界为目标；不修改保守内存估算以迫使72B在96 GiB通过。自动预算仍为物理内存减max(4 GiB,25%)，blocked_budget是边界证据而非生成成功。高配置本机只完整文件校验与inspect；长输入token数可用相同tokenizer的小模型校准并标明方法，字符数不能冒充tokens。Lead准备profile/数据，既有runner两轮修复预算不重置。

@@ -59,6 +59,27 @@
         "image2048",
         "audio-medium120"
       ]
+    },
+    {
+      "id": "boundary96",
+      "title": "96 GB及以上：真实长输入、重复释放、380秒音频上界",
+      "caseIDs": [
+        "text32-long-repeat",
+        "text32-long-cancel",
+        "text32-short",
+        "image2048-repeat",
+        "audio-medium380"
+      ]
+    },
+    {
+      "id": "boundary72",
+      "title": "96／128／192 GB准入边界：72B短／长输入、重复与取消",
+      "caseIDs": [
+        "text72-short-repeat",
+        "text72-long-repeat",
+        "text72-long-cancel",
+        "text72-after-cancel"
+      ]
     }
   ],
   "cases": [
@@ -461,6 +482,152 @@
         "audioStrength": 1
       },
       "timeoutSeconds": 600,
+      "expected": "completed",
+      "repeatCount": 1
+    },
+    {
+      "id": "text32-long-repeat",
+      "title": "32B真实长输入：同进程重复两轮",
+      "model": "text32",
+      "capability": "text",
+      "promptFile": "Inputs/text-boundary-long.txt",
+      "parameters": {
+        "maxTokens": 256,
+        "temperature": 0,
+        "topP": 0.95,
+        "maxPromptTokens": 32768,
+        "maxOutputTokens": 1024,
+        "cacheLimitMiB": 64
+      },
+      "timeoutSeconds": 1800,
+      "expected": "completed",
+      "repeatCount": 2
+    },
+    {
+      "id": "text32-long-cancel",
+      "title": "32B长输入：2秒后请求取消",
+      "model": "text32",
+      "capability": "text",
+      "promptFile": "Inputs/text-boundary-long.txt",
+      "parameters": {
+        "maxTokens": 256,
+        "temperature": 0,
+        "topP": 0.95,
+        "maxPromptTokens": 32768,
+        "maxOutputTokens": 1024,
+        "cacheLimitMiB": 64
+      },
+      "timeoutSeconds": 600,
+      "expected": "cancelled",
+      "repeatCount": 1,
+      "cancelAfterSeconds": 2
+    },
+    {
+      "id": "image2048-repeat",
+      "title": "2048图像：同进程重复两轮",
+      "model": "image4",
+      "capability": "image",
+      "promptFile": "Inputs/image.txt",
+      "parameters": {
+        "width": 2048,
+        "height": 2048,
+        "steps": 4,
+        "guidance": 1,
+        "seed": "42",
+        "imageProfile": "scalableKlein4B"
+      },
+      "timeoutSeconds": 1800,
+      "expected": "completed",
+      "repeatCount": 2
+    },
+    {
+      "id": "audio-medium380",
+      "title": "medium支持时长上界：380秒",
+      "model": "audio-medium",
+      "capability": "audio",
+      "promptFile": "Inputs/audio.txt",
+      "parameters": {
+        "durationSeconds": 380,
+        "steps": 8,
+        "guidance": 1,
+        "seed": "42",
+        "audioOperation": "generate",
+        "audioStrength": 1
+      },
+      "timeoutSeconds": 1800,
+      "expected": "completed",
+      "repeatCount": 1
+    },
+    {
+      "id": "text72-short-repeat",
+      "title": "72B短输入：同进程重复两轮",
+      "model": "text72",
+      "capability": "text",
+      "promptFile": "Inputs/text-short.txt",
+      "parameters": {
+        "maxTokens": 128,
+        "temperature": 0,
+        "topP": 0.95,
+        "maxPromptTokens": 2048,
+        "maxOutputTokens": 1024,
+        "cacheLimitMiB": 64
+      },
+      "timeoutSeconds": 1800,
+      "expected": "completed",
+      "repeatCount": 2
+    },
+    {
+      "id": "text72-long-repeat",
+      "title": "72B真实长输入：同进程重复两轮",
+      "model": "text72",
+      "capability": "text",
+      "promptFile": "Inputs/text-boundary-long.txt",
+      "parameters": {
+        "maxTokens": 256,
+        "temperature": 0,
+        "topP": 0.95,
+        "maxPromptTokens": 32768,
+        "maxOutputTokens": 1024,
+        "cacheLimitMiB": 64
+      },
+      "timeoutSeconds": 2400,
+      "expected": "completed",
+      "repeatCount": 2
+    },
+    {
+      "id": "text72-long-cancel",
+      "title": "72B长输入：2秒后请求取消",
+      "model": "text72",
+      "capability": "text",
+      "promptFile": "Inputs/text-boundary-long.txt",
+      "parameters": {
+        "maxTokens": 256,
+        "temperature": 0,
+        "topP": 0.95,
+        "maxPromptTokens": 32768,
+        "maxOutputTokens": 1024,
+        "cacheLimitMiB": 64
+      },
+      "timeoutSeconds": 600,
+      "expected": "cancelled",
+      "repeatCount": 1,
+      "cancelAfterSeconds": 2
+    },
+    {
+      "id": "text72-after-cancel",
+      "title": "72B取消实验后：新进程短输入恢复",
+      "model": "text72",
+      "capability": "text",
+      "promptFile": "Inputs/text-short.txt",
+      "parameters": {
+        "maxTokens": 128,
+        "temperature": 0,
+        "topP": 0.95,
+        "maxPromptTokens": 2048,
+        "maxOutputTokens": 1024,
+        "cacheLimitMiB": 64
+      },
+      "timeoutSeconds": 900,
       "expected": "completed",
       "repeatCount": 1
     }

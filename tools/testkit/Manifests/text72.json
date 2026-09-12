@@ -1,0 +1,111 @@
+{
+  "schemaVersion": 1,
+  "repository": "mlx-community/Qwen2.5-72B-Instruct-4bit",
+  "revision": "36a74b07390031bb18c9f12fb7c06699bc6273c4",
+  "directoryName": "Qwen2.5-72B-Instruct-4bit",
+  "source": "https://huggingface.co/mlx-community/Qwen2.5-72B-Instruct-4bit/tree/36a74b07390031bb18c9f12fb7c06699bc6273c4",
+  "files": [
+    {
+      "name": "README.md",
+      "size": 1030,
+      "algorithm": "git-blob-sha1",
+      "checksum": "4d2cfa0d1a0ae2b371cfcbbaeb6c9271b5c37a34"
+    },
+    {
+      "name": "added_tokens.json",
+      "size": 605,
+      "algorithm": "git-blob-sha1",
+      "checksum": "482ced4679301bf287ebb310bdd1790eb4514232"
+    },
+    {
+      "name": "config.json",
+      "size": 867,
+      "algorithm": "git-blob-sha1",
+      "checksum": "271f6015cea40672f77518257e443e8b8ed0714d"
+    },
+    {
+      "name": "merges.txt",
+      "size": 1671853,
+      "algorithm": "git-blob-sha1",
+      "checksum": "31349551d90c7606f325fe0f11bbb8bd5fa0d7c7"
+    },
+    {
+      "name": "model-00001-of-00008.safetensors",
+      "size": 5365567669,
+      "algorithm": "sha256",
+      "checksum": "bb2d1b4a13922b9cf8f678cf4038fe0029a8e82b6a3f62f0ddd2ef465aa7bfcd"
+    },
+    {
+      "name": "model-00002-of-00008.safetensors",
+      "size": 5294878254,
+      "algorithm": "sha256",
+      "checksum": "2f3d8ec00ac84f8b0974c8f8bd0ffaf52eea03389bce8c9b7dbfe1fbced8dc69"
+    },
+    {
+      "name": "model-00003-of-00008.safetensors",
+      "size": 5346171097,
+      "algorithm": "sha256",
+      "checksum": "a7298c0f9bd50bae89b88e0f756c2cea72153708a5c7c7e180167fcdfc4fb776"
+    },
+    {
+      "name": "model-00004-of-00008.safetensors",
+      "size": 5294845297,
+      "algorithm": "sha256",
+      "checksum": "a451751db86b2bca11b11fcb75e7f334c292a14b11b1c3ef7b73030112c8d617"
+    },
+    {
+      "name": "model-00005-of-00008.safetensors",
+      "size": 5294878217,
+      "algorithm": "sha256",
+      "checksum": "9944e778df5d838cf5b6db7efbfaed20a950147ab7301348e47f507c9e1a5ff1"
+    },
+    {
+      "name": "model-00006-of-00008.safetensors",
+      "size": 5294878204,
+      "algorithm": "sha256",
+      "checksum": "7c2f81a0fe416672d1402c32ce6c5bab7839ebf928a187c69752f0e5b830e826"
+    },
+    {
+      "name": "model-00007-of-00008.safetensors",
+      "size": 5346171091,
+      "algorithm": "sha256",
+      "checksum": "18e695fb046211557b6488763f0199f46f0e7fb043b174334090532ae09f3425"
+    },
+    {
+      "name": "model-00008-of-00008.safetensors",
+      "size": 3663161100,
+      "algorithm": "sha256",
+      "checksum": "9ca0704db10d4933fbed678e9546594ce5851a5b605014c5972d3eeda28cb885"
+    },
+    {
+      "name": "model.safetensors.index.json",
+      "size": 178697,
+      "algorithm": "git-blob-sha1",
+      "checksum": "58cd021523883d798fd7fa85020fc72c14c05bfb"
+    },
+    {
+      "name": "special_tokens_map.json",
+      "size": 613,
+      "algorithm": "git-blob-sha1",
+      "checksum": "ac23c0aaa2434523c494330aeb79c58395378103"
+    },
+    {
+      "name": "tokenizer.json",
+      "size": 7031673,
+      "algorithm": "git-blob-sha1",
+      "checksum": "d24314ef7f0afd1b678c2e24c767e19f24f86b0e"
+    },
+    {
+      "name": "tokenizer_config.json",
+      "size": 7308,
+      "algorithm": "git-blob-sha1",
+      "checksum": "482ccbc1096b0e9400e86e33f189681c2aebdab9"
+    },
+    {
+      "name": "vocab.json",
+      "size": 2776833,
+      "algorithm": "git-blob-sha1",
+      "checksum": "4783fe10ac3adce15ac8f358ef5462739852c569"
+    }
+  ]
+}

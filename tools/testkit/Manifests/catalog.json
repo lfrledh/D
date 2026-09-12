@@ -44,6 +44,12 @@
       "format": "audio",
       "revision": "da6edc54ddba10bfd79a077102ded687f80e882b",
       "audioProfile": "medium"
+    },
+    "text72": {
+      "directory": "Models/Qwen2.5-72B-Instruct-4bit",
+      "manifest": "Manifests/text72.json",
+      "format": "text",
+      "revision": "36a74b07390031bb18c9f12fb7c06699bc6273c4"
     }
   }
 }

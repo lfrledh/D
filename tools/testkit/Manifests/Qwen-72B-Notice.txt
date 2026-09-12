@@ -1,0 +1,6 @@
+Qwen is licensed under the Qwen LICENSE AGREEMENT, Copyright (c) Alibaba Cloud. All Rights Reserved.
+
+License source: https://huggingface.co/Qwen/Qwen2.5-72B-Instruct/raw/0df185c2cf66ca6fd745a154e25b8e15975358dd/LICENSE
+License SHA-256: 8aff84e2629edb092f195c1d91bc368d8bb40eeb5fcedce2df19e405ee2cc876
+72B weights fixed at mlx-community/Qwen2.5-72B-Instruct-4bit / 36a74b07390031bb18c9f12fb7c06699bc6273c4.
+This private validation kit is not a public model redistribution.
