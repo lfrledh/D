@@ -47,6 +47,18 @@
         "audio-cancel6",
         "audio-after-cancel6"
       ]
+    },
+    {
+      "id": "showroom",
+      "title": "展示机专用：32B文字、大图、medium长音频（大内存）",
+      "caseIDs": [
+        "text32-short",
+        "text32-context8k",
+        "text32-context16k",
+        "image1536",
+        "image2048",
+        "audio-medium120"
+      ]
     }
   ],
   "cases": [
