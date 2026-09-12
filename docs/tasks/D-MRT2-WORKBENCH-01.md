@@ -176,3 +176,17 @@ CPU至少严格请求/清单/布局、nil与[]、版本/请求/seed/condition/cl
 #### implementation-r3 检查点
 
 c1335110262a44cef1b7f5e681b105779cc38cad 已通过38核心、302工作台、10导出适配、8打包CPU检查，证据 prepared-r2-checks.json；不同类别不合并为产品通过率。Sol/high非实现者共享审查01a096a1-2482-7573-92bc-4c7b4de36bec未发现阻断，运行上下文只读已核验。W3 Terra初交仅三允许文件，显式typecheck遇嵌套编译器sandbox_apply拒绝并立即停报；Lead预置macOS14目标也与现有26模块不符。无权限扩大、无Worker重试，此为环境准备缺口，代码尚待Lead编译/GUI，不占普通修复次数。源974和个人scheme未变。
+
+### contract-r4：私有授权模式的结果提交边界（Lead修订）
+
+非实现者审阅01a096b2-dea7-7db3-a482-ea56ac82924e在固定a914发现：44.1kHz私有WAV parser遗漏（Lead已在0fcad修补并加回归）；另在access释放失败时，stdout报错但job/result.json已是成功。Lead受控反例 `provider-lead/release-record-before.json` 复现第二点。应用当前会因失败终态拒绝产物，但磁盘正式记录仍须修正，不能以UI没采用掩盖记录歧义。
+
+保持原产品验收、数值、退出码、无覆盖与结果独立核对，不扩大权限。仅调整私有书签模式内部交接：Python已获准访问期间，完整校验后原子发布`job/pending-result.json`（固定新文件名，明确待确认），绝不写`job/result.json`。WAV沿用既有output.wav，可作为失败诊断保留。engine.close和所有书签释放均成功才发唯一success terminal；释放失败只发error，pending可留，不产生正式result.json。无access参数的独立CLI仍按原协议发布result.json，不增开关、不改已经通过的普通CLI语义。
+
+Swift在access模式子进程和读端完全退出、AudioProviderAccess.finish及deployment检查成功后，读取pending-result.json并与stdout terminal比较，再核对冻结请求/模型/条件/cleanup/WAV。全部通过且无取消，才以父进程原有项目/任务授权在同一已核验job目录把pending-result.json原子RENAME_EXCL为result.json；未知/已有目标拒绝，原件不覆盖，目录/文件身份和发布后字节需复核，失败不得emit artifact。父进程不新增grant。无access时仍读取独立CLI的result.json，不改其他后端。真实App必须验证这条路径；不能假定子进程撤销书签后仍可写外盘，因此不采用在已释放作用域外直接发布到job的做法。
+
+W1-P修复1仅原三允许文件：实现有/无access的文件名区别；新增释放失败磁盘反例、正常access仅pending且terminal一致、无access原语义、拒绝覆盖、输出流失败/唯一终态回归。W1-S修复1仅原五文件：按配置选择报告、独立验证后原子提升及相关CPU反例，兼收初次编译/CPU明确问题。这是Lead为正确保留原成功契约而细化的内部提交协议，来源单列，不能全归于Worker实现错误；不重置初交或修复预算。
+
+初版W1-P d442eec初交达到900秒时限，20项CPU已跑过，最终叙述未完成；已核验同进程组结束，未观察到权限扩大。W1-S 1634917初交正确停报系统Python包装器DVT缓存/FSEvents警告及嵌入夹具提取SyntaxError；无Swift构建/模型执行，Lead之后完成实际组合编译。后续Worker内存编译显式用已批准独立Python `D-Development/AgentTrials/D-MRT2-CONDITIONS-01/run-20260912T150154Z/venv-dev/bin/python3`，不使用/usr/bin/python3包装器，不改全局缓存或权限。
+
+84ed工作台304测试、0fcad旧音频进程24方法/零跳过、a914正式独立音乐CLI九个真实进程（六个生成，三取消）已通过，各有独立证据；当前尚未普通沙盒App验收。model前后六项SHA及普通D四文件保护不变。真实4秒音频同seed与既有参考一致；8/16秒、缺省/显式空、加载/生成/清理边界取消及恢复通过。新协议须另验，历史通过不自动移给新版本。H17听感和App完整流程仍待完成；源974及个人scheme保持。
