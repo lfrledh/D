@@ -10,6 +10,8 @@ enum AppSessionFactory {
     nonisolated static func makeSession(artifactDirectory: URL,
         bundledAudioEngine: BundledAudioEngine? = nil,
         audioConsent: AudioModelUsePermission? = nil,
+        bundledMusicEngine: BundledAudioEngine? = nil,
+        musicConsent: AudioModelUsePermission? = nil,
         audioAccessRoot: URL? = nil) async throws -> WorkbenchSession {
         let stages = BackendStageMonitor()
         let backend = try MLXImageBackend(configuration: .init(artifactDirectory: artifactDirectory),
@@ -25,7 +27,17 @@ enum AppSessionFactory {
                 confirmDeployment: { try engine.confirmUnchanged() },
                 modelUseAcknowledged: { await consent.isAcknowledged }))
         } else { audioBackend = try makeAudioBackend(artifactDirectory: artifactDirectory) }
+        let musicBackend: MLXMRT2Backend?
+        if let engine = bundledMusicEngine, let consent = musicConsent, let accessRoot = audioAccessRoot {
+            musicBackend = try MLXMRT2Backend(configuration: .init(
+                pythonExecutable: engine.pythonExecutable, providerScript: engine.providerScript,
+                vendorDirectory: engine.vendorDirectory, modelManifest: engine.modelManifest,
+                artifactDirectory: artifactDirectory, accessBootstrapRoot: accessRoot,
+                confirmDeployment: { try engine.confirmUnchanged() },
+                modelUseAcknowledged: { await consent.isAcknowledged }))
+        } else { musicBackend = nil }
         var backends: [any InferenceBackend] = [backend, textBackend]
+        if let musicBackend { backends.append(musicBackend) }
         if let audioBackend { backends.append(audioBackend) }
         let memoryBudgetBytes = ResourceBudgetPolicy().inferenceBudgetBytes(
             physicalMemoryBytes: ProcessInfo.processInfo.physicalMemory)
@@ -49,6 +61,17 @@ enum AppSessionFactory {
         } else {
             validateAudioModel = nil
         }
+        let validateMusicModel: (@Sendable (URL) async throws -> ModelReference)?
+        if let musicBackend {
+            validateMusicModel = { directory in
+                let reference = ModelReference(directory: directory, revision: MRT2BackendConfiguration.registeredModelRevision)
+                let audio = AudioRequest(prompt: "Model registration", seed: 42,
+                                         noteSequence: .init(durationFrames: 100, notes: nil))
+                _ = try await musicBackend.estimate(InferenceRequest(model: reference, input: .audio(audio)))
+                if let musicConsent { guard await musicConsent.confirm() else { throw CancellationError() } }
+                return reference
+            }
+        } else { validateMusicModel = nil }
         return WorkbenchSession(
             engine: runtime,
             backendID: backend.descriptor.id,
@@ -74,7 +97,8 @@ enum AppSessionFactory {
                 _ = try await textBackend.estimate(InferenceRequest(model: reference, input: .text(TextRequest(prompt: "Registration", maxTokens: 256))))
                 return reference
             }, audioBackendID: audioBackend?.descriptor.id,
-            validateAudioModel: validateAudioModel)
+            validateAudioModel: validateAudioModel, musicBackendID: musicBackend?.descriptor.id,
+            validateMusicModel: validateMusicModel)
     }
 
     /// Only an explicitly isolated development session can supply an existing local engine.

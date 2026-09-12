@@ -281,6 +281,7 @@ public struct WorkbenchView: View {
                 transport: session.audioCreationTransport,
                 actions: model.audioCreationActions(contextID: context, documentID: document.id))
                 .presenting(presentation, rangeState: audioRangeState, contextID: context)
+                .supportingMusic(session.musicCreationAvailable)
                 .id(document.id)
         }
     }

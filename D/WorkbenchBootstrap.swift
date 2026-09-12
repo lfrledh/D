@@ -54,13 +54,24 @@ final class WorkbenchBootstrap {
                     attributes: [.posixPermissions: 0o700])
             })
             let engine = availability.engine
-            audioEngineIssue = availability.issue
+            let musicConsent = AudioModelUsePermission(settings: settings, model: .mrt2Music)
+            let musicAvailability = Self.prepareAudioEngine(resolve: {
+                guard let resources = Bundle.main.resourceURL else { return nil }
+                return try BundledAudioEngine.resolve(resourceDirectory: resources, family: .mrt2Music)
+            }, prepareAccess: {
+                try FileManager.default.createDirectory(at: accessRoot, withIntermediateDirectories: true,
+                    attributes: [.posixPermissions: 0o700])
+            })
+            let musicEngine = musicAvailability.engine
+            let issues = [availability.issue, musicAvailability.issue].compactMap { $0 }
+            audioEngineIssue = issues.isEmpty ? nil : issues.joined(separator: "\n")
             let library = try await ModelLibrary(stateDirectory: libraryDirectory)
             let model = WorkbenchModel(sessionFactory: { artifacts in
                 try await AppSessionFactory.makeSession(artifactDirectory: artifacts,
-                    bundledAudioEngine: engine, audioConsent: consent, audioAccessRoot: accessRoot)
+                    bundledAudioEngine: engine, audioConsent: consent,
+                    bundledMusicEngine: musicEngine, musicConsent: musicConsent, audioAccessRoot: accessRoot)
             }, settings: settings, modelLibrary: library,
-                audioEnabled: engine != nil || audioWorkbenchEnabled,
+                audioEnabled: engine != nil || musicEngine != nil || audioWorkbenchEnabled,
                 // File-input audio does not depend on the deferred microphone acceptance.
                 // Retain the old explicit, unbundled DEBUG recording fixture path.
                 audioRecordingEnabled: engine == nil && audioWorkbenchEnabled)
