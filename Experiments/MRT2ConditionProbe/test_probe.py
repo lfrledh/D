@@ -67,6 +67,89 @@ class FakeWaveform:
         self.samples = samples or FakeSamples()
 
 
+class FakeStateArray:
+    def __init__(self, values, dtype, shape):
+        self._values = values
+        self.dtype = dtype
+        self.shape = shape
+
+    def tolist(self):
+        if isinstance(self._values, list):
+            return [list(value) if isinstance(value, list) else value for value in self._values]
+        return self._values
+
+
+class FakeRandom:
+    def __init__(self, owner):
+        self.owner = owner
+
+    def key(self, seed):
+        return FakeStateArray([0, seed], self.owner.uint32, (2,))
+
+
+class FakeMx:
+    uint32 = "uint32"
+    int32 = "int32"
+
+    def __init__(self):
+        self.random = FakeRandom(self)
+
+    @staticmethod
+    def stack(values):
+        return FakeStateArray(
+            [value.tolist() for value in values],
+            values[0].dtype,
+            (len(values), 2),
+        )
+
+    @staticmethod
+    def eval(*_values):
+        return None
+
+
+class FakeSequenceLayers:
+    class ChannelSpec:
+        def __init__(self, *, shape, dtype):
+            self.shape = shape
+            self.dtype = dtype
+
+
+def fake_raw_state(mx):
+    rng = FakeStateArray([[0, 42]], mx.uint32, (1, 2))
+    decoder_state = (rng, object(), (object(),), object())
+    sampler_state = ((object(),), object(), decoder_state, object())
+    return (sampler_state, (), (), (), ())
+
+
+class FakeRawSampler:
+    def __init__(self, state):
+        self.state = state
+        self.calls = []
+
+    def get_initial_state(self, *args, **kwargs):
+        self.calls.append((args, kwargs))
+        return self.state
+
+
+class FakeRawModel:
+    def __init__(self, state):
+        self._num_channels = 140
+        self._sampler = FakeRawSampler(state)
+
+
+class CapturingGenerateModel:
+    def __init__(self, continuation=None, error=None):
+        self.continuation = continuation
+        self.error = error
+        self.states = []
+
+    def generate(self, **arguments):
+        self.states.append(arguments["state"])
+        if self.error is not None:
+            raise self.error
+        return FakeWaveform(), self.continuation
+
+
 class FakeAdapter:
     def __init__(
         self,
@@ -276,6 +359,145 @@ class ProbeTests(unittest.TestCase):
         self.assertNotIn("magenta_rt", sys.modules)
         self.assertNotIn("numpy", sys.modules)
 
+    def test_exported_sampling_state_seed_mapping_and_boundaries(self):
+        mx = FakeMx()
+        marker = object()
+        base = [object() for _ in range(165)]
+        base[2] = FakeStateArray([[0, 42]], mx.uint32, (1, 2))
+        base[3] = marker
+        model = type("ExportedModel", (), {"_initial_state": base})()
+
+        seeded_42, metadata = probe._initialize_sampling_state(
+            "exported", model, 42, mx
+        )
+        self.assertEqual(seeded_42[2].tolist(), [[0, 42]])
+        self.assertIs(seeded_42[3], marker)
+        self.assertIs(base[3], marker)
+        self.assertEqual(metadata["rngLeaf"], "MagentaRT2StdMlxfn._initial_state[2]")
+
+        seeded_43, _ = probe._initialize_sampling_state("exported", model, 43, mx)
+        self.assertEqual(seeded_43[2].tolist(), [[0, 43]])
+        for index in range(165):
+            if index != 2:
+                self.assertIs(seeded_43[index], base[index])
+
+        for seed in (0, (1 << 32) - 1):
+            with self.subTest(seed=seed):
+                state, _ = probe._initialize_sampling_state(
+                    "exported", model, seed, mx
+                )
+                self.assertEqual(state[2].tolist(), [[0, seed]])
+
+    def test_raw_sampling_state_seed_mapping_and_boundaries(self):
+        mx = FakeMx()
+        source = fake_raw_state(mx)
+        model = FakeRawModel(source)
+        for seed in (0, 42, 43, (1 << 32) - 1):
+            with self.subTest(seed=seed):
+                state, metadata = probe._initialize_sampling_state(
+                    "unquantized", model, seed, mx, FakeSequenceLayers
+                )
+                self.assertEqual(state[0][2][0].tolist(), [[0, seed]])
+                self.assertIs(state[0][2][1], source[0][2][1])
+                self.assertIs(state[0][1], source[0][1])
+                self.assertEqual(
+                    metadata["rngLeaf"],
+                    "MagentaRT2Mlx._sampler initial state[0][2][0]",
+                )
+        args, kwargs = model._sampler.calls[0]
+        self.assertEqual(args[0], 1)
+        self.assertEqual(args[1].shape, (140,))
+        self.assertEqual(args[1].dtype, mx.int32)
+        self.assertEqual(kwargs, {"constants": {}, "training": False})
+
+    def test_sampling_state_structure_dtype_shape_and_default_value_are_guarded(self):
+        mx = FakeMx()
+        valid = [object() for _ in range(165)]
+        valid[2] = FakeStateArray([[0, 42]], mx.uint32, (1, 2))
+        invalid_exported = [
+            valid[:-1],
+            valid[:2] + [FakeStateArray([[0, 42]], "int32", (1, 2))] + valid[3:],
+            valid[:2] + [FakeStateArray([0, 42], mx.uint32, (2,))] + valid[3:],
+            valid[:2] + [FakeStateArray([[1, 42]], mx.uint32, (1, 2))] + valid[3:],
+        ]
+        for index, state in enumerate(invalid_exported):
+            with self.subTest(exported=index), self.assertRaises(RuntimeError):
+                model = type("ExportedModel", (), {"_initial_state": state})()
+                probe._initialize_sampling_state("exported", model, 43, mx)
+
+        invalid_raw = list(fake_raw_state(mx))
+        invalid_raw[0] = (object(), object(), (object(),), object())
+        with self.assertRaises(RuntimeError):
+            probe._initialize_sampling_state(
+                "unquantized",
+                FakeRawModel(tuple(invalid_raw)),
+                43,
+                mx,
+                FakeSequenceLayers,
+            )
+        for label, bad_leaf in (
+            ("dtype", FakeStateArray([[0, 42]], "int32", (1, 2))),
+            ("shape", FakeStateArray([0, 42], mx.uint32, (2,))),
+            ("value", FakeStateArray([[0, 41]], mx.uint32, (1, 2))),
+        ):
+            with self.subTest(raw=label), self.assertRaises(RuntimeError):
+                source = fake_raw_state(mx)
+                decoder = list(source[0][2])
+                decoder[0] = bad_leaf
+                sampler = list(source[0])
+                sampler[2] = tuple(decoder)
+                outer = list(source)
+                outer[0] = tuple(sampler)
+                probe._initialize_sampling_state(
+                    "unquantized",
+                    FakeRawModel(tuple(outer)),
+                    43,
+                    mx,
+                    FakeSequenceLayers,
+                )
+
+    def test_adapter_uses_initialized_state_once_and_forwards_continuation(self):
+        initial = object()
+        continuation = object()
+        second_continuation = object()
+        model = CapturingGenerateModel(continuation=continuation)
+        adapter = object.__new__(probe._SDKAdapter)
+        adapter._state_started = False
+        adapter._initial_sampling_state = initial
+        adapter._model = model
+        adapter._embedding = object()
+        adapter._musiccoca_key = "style"
+        adapter._notes_key = "notes"
+
+        _waveform, returned = adapter.generate_frame(None, None)
+        self.assertIs(model.states[0], initial)
+        self.assertIs(returned, continuation)
+        self.assertIsNone(adapter._initial_sampling_state)
+
+        model.continuation = second_continuation
+        _waveform, returned = adapter.generate_frame((0,) * 128, continuation)
+        self.assertIs(model.states[1], continuation)
+        self.assertIs(returned, second_continuation)
+        self.assertIsNone(adapter._initial_sampling_state)
+
+    def test_adapter_does_not_retain_or_reseed_after_first_frame_error(self):
+        initial = object()
+        model = CapturingGenerateModel(error=RuntimeError("frame failure"))
+        adapter = object.__new__(probe._SDKAdapter)
+        adapter._state_started = False
+        adapter._initial_sampling_state = initial
+        adapter._model = model
+        adapter._embedding = object()
+        adapter._musiccoca_key = "style"
+        adapter._notes_key = "notes"
+        with self.assertRaises(RuntimeError):
+            adapter.generate_frame(None, None)
+        self.assertIs(model.states[0], initial)
+        self.assertIsNone(adapter._initial_sampling_state)
+        self.assertTrue(adapter._state_started)
+        with self.assertRaises(RuntimeError):
+            adapter.generate_frame(None, None)
+
     def test_success_writes_exact_float32_wav_and_report(self):
         adapter = FakeAdapter()
         code, output = self.run_with(adapter)
@@ -299,6 +521,11 @@ class ProbeTests(unittest.TestCase):
         self.assertEqual(report["requestSha256"], hashlib.sha256(self.request_raw).hexdigest())
         self.assertEqual(report["condition"]["mode"], "explicit")
         self.assertEqual(report["output"]["sampleFormat"], "IEEE_FLOAT32_LE")
+        self.assertEqual(report["output"]["upstreamTransformation"]["gain"], 0.5)
+        self.assertFalse(
+            report["output"]["probePostprocessing"]["additionalGainApplied"]
+        )
+        self.assertIn("may be silence", report["timing"]["firstAudioMeaning"])
         self.assertEqual(report["model"]["revision"], probe.EXPECTED_MODEL_REVISION)
         self.assertEqual(
             report["executedRequest"],

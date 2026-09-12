@@ -32,7 +32,7 @@
 `model-root/D-MODEL-MANIFEST.json` 必须且只能有 `repository`、`revision`、`license`、`files`、`totalBytes`。其中 repository 固定为 `google/magenta-realtime-2`，revision 固定为 `010aa0dcb0dfd27b24f0ad07b4dad63e8f9521cc`。每个 `files` 项只能包含规范化相对 `path`、非负 `size` 和小写 SHA-256。探针只读取并校验清单列举的文件，不扫描或修复模型目录。
 
 ```sh
-/Volumes/CodexProjects/D-TestKit/Runtime/AudioEngine.dengine/python/bin/python3 -B \
+/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-MRT2-CONDITIONS-01/run-20260912T150154Z/venv-dev/bin/python3 -B \
   Experiments/MRT2ConditionProbe/probe.py \
   --model-root /absolute/model/root \
   --request /absolute/request.json \
@@ -50,9 +50,11 @@
 
 两者都固定使用 temperature 1.3、top-k 40、MusicCoCa CFG 3.0、notes CFG 1.0、drums CFG 1.0，并在模型构造前设置 MLX seed。`timeout-seconds` 最大 600，只在模型加载前后或逐帧边界生效，不能中断正在执行的 GPU 调用。
 
+全局 MLX seed 不会覆盖上游 state 中固定的采样 key。本探针对 exported 的 165-leaf state 只替换 `_initial_state[2]`，对 raw 则用 SDK 自身 `_sampler.get_initial_state(...)` 构造 state 后只替换嵌套路径 `[0][2][0]`。两者都要求原叶子为 uint32 `(1,2)` 且默认值为 `[0,42]`；结构不匹配立即失败。每个 adapter 只建立并消费一次任务初始 state，后续帧只转发后端返回的 continuation state，不重新播种。报告记录方法版本、固定源码 revision 和具体布局；seed 不承诺跨硬件 bitwise 一致。
+
 成功后目录含原子、无覆盖发布的 `output.wav` 和 `report.json`。报告保存请求原文 SHA-256、包含 prompt/seed/notes/时间基的已执行请求快照、规范化条件 SHA-256、模型逐文件证据、可观察 SDK 身份、采样参数、逐帧耗时、输出摘要和可获得的清理指标。快照来自已经严格校验的本地不可变请求值，不上传外部服务。SIGINT 只设置取消请求；当前调用返回后在边界清理，清理完整的取消返回 130、运行错误返回 1、输入错误返回 2、成功返回 0。取消时若释放、同步或 cache 清理失败，会保留原取消上下文，但终态改为失败并返回 1。
 
-WAV 与成功报告按一个发布事务处理：两者均原子且不覆盖；成功报告无法完成时，只在设备号、inode、大小及 SHA-256 仍与本进程发布物一致的情况下回滚 WAV。已经被替换或改变的文件会保留并报告所有权丢失，绝不按名称猜测删除。失败报告的 `output` 不会把候选文件描述成已接受成功。
+WAV 与成功报告按一个发布事务处理：两者均原子且不覆盖；成功报告无法完成时，只在设备号、inode、大小及 SHA-256 仍与本进程发布物一致的情况下回滚 WAV。已经被替换或改变的文件会保留并报告所有权丢失，绝不按名称猜测删除。失败报告的 `output` 不会把候选文件描述成已接受成功。`firstAudioSeconds` 表示第一帧 PCM 返回的时间；该帧可能是静音，不表示第一次可听声音，也不包含 GUI 监听延迟。
 
 ## CPU 测试
 
@@ -67,4 +69,4 @@ TMPDIR=/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-MRT2-CONDITIONS-
 
 CPU 测试不证明模型可加载、GPU 内存可释放、音质可接受或音频服从条件。条件输入是精确的，但模型输出服从程度仍是 `pending/approximate`，必须由 Lead 进行真实推理、听感和独立信号分析。导出图内部精度仍为 unknown。
 
-Lead 已确认的当前环境事实：官方 `.mlxfn` header 为 0.31.1，在 MLX 0.32.2 会以 `Invalid string size` 导入失败；同一已校验文件在 MLX/metal 0.31.1 可以导入。raw baseline 的 `bits=None` 可以加载，但 Depthformer 实际为 BF16，不能称为全 FP32；SDK 的 exported 与 raw 两条路径都包含 int16 到 float32 的转换。这些是兼容性和实际 dtype 记录，不构成最终音质、条件服从或生命周期验收。
+Lead 已确认的当前环境事实：真实 CLI 必须使用上述任务隔离 `venv-dev`；签名 test-kit Python 仅用于 CPU 测试，无法加载这些新库。官方 `.mlxfn` header 为 0.31.1，在 MLX 0.32.2 会以 `Invalid string size` 导入失败；同一已校验文件在 MLX/metal 0.31.1 可以导入。raw baseline 的 `bits=None` 可以加载，但 Depthformer 实际为 BF16，不能称为全 FP32。SDK 的 exported 与 raw 两条路径都会先应用 gain 0.5、clamp `[-1,1]`、round 到 int16，再以 `/32768` 返回 float32；报告将此前置上游变换与探针自身未追加 gain/clipping/resampling 分开记录。这些事实不构成最终音质、条件服从或生命周期验收。
