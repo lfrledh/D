@@ -39,7 +39,8 @@ MAX_STREAM_BYTES = 16 * MIB
 MAX_PROFILES = 32
 MAX_CASES = 256
 MAX_MANIFEST_FILES = 10000
-PROCESS_POLL_SECONDS = 0.05
+PROCESS_POLL_SECONDS = 0.5
+MAX_RSS_SAMPLES = 7200
 INTERRUPT_GRACE_SECONDS = 30.0
 TERM_GRACE_SECONDS = 5.0
 ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
@@ -218,6 +219,7 @@ class ProcessResult:
     cancellation_requested: bool
     forced_stop: bool
     rss_samples_kib: list[dict[str, Any]]
+    rss_samples_truncated: bool
     child_rss: str = "unknown"
 
 
@@ -602,6 +604,8 @@ class KitRunner:
         if case["capability"] == "image":
             command.extend(["--image-memory-limit-mib", str(max(1, budget_mib))])
         command.extend(self._engine_arguments(model))
+        if case["capability"] == "audio":
+            command.extend(["--timeout-seconds", str(case["timeoutSeconds"])])
         if source is not None:
             command.extend(["--audio-source", source["path"], "--audio-source-sha256", source["sha256"],
                             "--audio-source-frames", str(source["frames"])])
@@ -664,7 +668,8 @@ class KitRunner:
                 while process.poll() is None:
                     elapsed = time.monotonic() - started
                     rss = _rss_kib(process.pid)
-                    samples.append({"elapsedSeconds": round(elapsed, 3), "pid": process.pid, "rssKiB": rss})
+                    if len(samples) < MAX_RSS_SAMPLES:
+                        samples.append({"elapsedSeconds": round(elapsed, 3), "pid": process.pid, "rssKiB": rss})
                     if stdout_drain.error or stderr_drain.error or stdout_drain.exceeded or stderr_drain.exceeded:
                         forced = self._terminate_group(process) or forced
                         break
@@ -692,7 +697,8 @@ class KitRunner:
             _require(not stdout_drain.error and not stderr_drain.error,
                      f"CLI stream drain failed: {stdout_drain.error or stderr_drain.error}", kind="failed")
         result = ProcessResult(process.returncode, time.monotonic() - started, stdout_drain.total, stderr_drain.total,
-                               stdout_drain.exceeded, stderr_drain.exceeded, timed_out, cancelled, forced, samples)
+                               stdout_drain.exceeded, stderr_drain.exceeded, timed_out, cancelled, forced, samples,
+                               len(samples) >= MAX_RSS_SAMPLES)
         _atomic_json(directory / "process.json", dataclasses.asdict(result))
         return result
 
@@ -720,7 +726,7 @@ class KitRunner:
         options = payload.get("options"); model = self.catalog[case["model"]]
         _require(isinstance(options, dict) and isinstance(payload.get("backend"), dict),
                  f"inspection options/backend missing for {case['id']}")
-        _validate_actual_options(options, case, model, self.root, budget_mib)
+        _validate_actual_options(options, case, model, self.root, budget_mib, source)
         inspection = payload.get("inspection")
         _require(isinstance(inspection, dict) and type(inspection.get("withinBudget")) is bool,
                  f"inspection fields missing for {case['id']}")
@@ -767,7 +773,8 @@ class KitRunner:
             _identifier(resume, "resume run ID")
             run_root = _relative_path(results_root, resume, "resume run", kind="directory")
             _, run_record = _read_json(run_root / "run.json", "resume run.json")
-            _require(run_record.get("schemaVersion") == 1 and run_record.get("runID") == resume, "invalid resume run")
+            _require(isinstance(run_record, dict) and _is_int(run_record.get("schemaVersion"))
+                     and run_record.get("schemaVersion") == 1 and run_record.get("runID") == resume, "invalid resume run")
             _require(run_record.get("sourceSHA") == self.config.raw["sourceSHA"], "resume sourceSHA differs")
             _require(run_record.get("profileDigest") == self.profile_set.digest, "resume profile digest differs")
             _require(run_record.get("profileID") == profile_id, "resume profile differs")
@@ -844,6 +851,10 @@ class KitRunner:
                     if process_path.is_file() and not process_path.is_symlink():
                         _, process_value = _read_json(process_path, "case process")
                         result["publicProcess"] = _public_process_dict(process_value)
+                    inspection_process_path = case_root / "inspection-process" / "process.json"
+                    if inspection_process_path.is_file() and not inspection_process_path.is_symlink():
+                        _, inspection_process = _read_json(inspection_process_path, "inspection process")
+                        result["inspectionProcess"] = _public_process_dict(inspection_process)
             _atomic_json(case_root / "case.json", result)
             attempt["cases"].append({"caseID": case_id, "path": str((case_root / "case.json").relative_to(attempt_root)),
                                      "status": result["status"]})
@@ -903,7 +914,8 @@ class KitRunner:
         if process.stdout_limited or process.stderr_limited:
             result["message"] = "case output exceeded the configured limit"
             return result
-        _regular_file(report, f"CLI report for {case['id']}")
+        _require(report.exists() and report.is_file() and not report.is_symlink(),
+                 f"CLI report is missing or unsafe for {case['id']}", kind="failed")
         _, payload = _read_json(report, f"CLI report for {case['id']}", MAX_STREAM_BYTES)
         _require(isinstance(payload, dict) and _is_int(payload.get("schemaVersion")) and payload.get("schemaVersion") == 1
                  and payload.get("tool") == "d-infer", f"invalid CLI report for {case['id']}")
@@ -917,7 +929,7 @@ class KitRunner:
                  and options.get("model") == str(model.directory) and options.get("revision") == model.revision
                  and _is_int(options.get("repeatCount")) and options.get("repeatCount") == case["repeatCount"],
                  f"CLI options differ from the request for {case['id']}")
-        _validate_actual_options(options, case, model, self.root, budget_mib)
+        _validate_actual_options(options, case, model, self.root, budget_mib, source)
         runs = payload.get("runs")
         _require(isinstance(runs, list) and len(runs) == case["repeatCount"], f"CLI run count mismatch for {case['id']}")
         expected_outcome = case["expected"]
@@ -929,6 +941,8 @@ class KitRunner:
         run_evidence = []
         seen_run_ids: set[str] = set()
         for iteration, run in enumerate(runs, 1):
+            _require(isinstance(run, dict) and isinstance(run.get("request"), dict),
+                     f"CLI run/request type is invalid for {case['id']}")
             _require(not any(run.get(key) for key in ("failure", "errorMessage", "outputError", "streamError", "artifactCleanupError")),
                      f"CLI run reported an error for {case['id']}")
             _require(_is_int(run.get("iteration")) and run["iteration"] == iteration
@@ -942,13 +956,17 @@ class KitRunner:
                      f"CLI request revision mismatch for {case['id']}")
             _validate_request_payload(run["request"], case, model, self.root, source)
             if expected_outcome == "completed":
-                _require(run.get("result", {}).get("artifacts", []) == run.get("artifacts", []),
+                _require(isinstance(run.get("result"), dict)
+                         and run["result"].get("artifacts", []) == run.get("artifacts", []),
                          f"CLI result artifacts differ for {case['id']}")
             lifecycle = run.get("lifecycle")
             _require(isinstance(lifecycle, list), f"CLI lifecycle is invalid for {case['id']}")
+            if case["capability"] == "audio":
+                _require(lifecycle == [], f"audio must not fabricate Swift MLX lifecycle for {case['id']}")
             phases = [event.get("phase") for event in lifecycle if isinstance(event, dict)]
-            _require("drained" in phases and phases and phases[-1] == "released",
-                     f"CLI lifecycle lacks drain/release for {case['id']}")
+            if lifecycle:
+                _require("drained" in phases and phases[-1] == "released",
+                         f"CLI lifecycle lacks drain/release for {case['id']}")
             previous_uptime = -1.0
             for event in lifecycle:
                 _require(isinstance(event, dict) and event.get("runID") == run["runID"]
@@ -966,6 +984,7 @@ class KitRunner:
                                  "firstChunkSeconds", "firstProgressSeconds", "firstArtifactSeconds",
                                  "cancellationRequestedSeconds", "cancellationLatencySeconds", "progress", "lifecycle")})
             run_evidence[-1]["metadata"] = run.get("result", {}).get("metadata", {}) if isinstance(run.get("result"), dict) else {}
+            run_evidence[-1]["computeObserved"] = bool(lifecycle)
         execution_stdout = case_root / "execution-process" / "private" / "stdout.log"
         public: list[dict[str, Any]] = []
         if case["capability"] == "text":
@@ -1005,6 +1024,7 @@ class KitRunner:
                          f"completed media run must publish exactly one artifact for {case['id']}")
             _require(len(lines) == len(expected_artifacts), f"artifact stdout count mismatch for {case['id']}")
             artifact_runs = [(run["runID"], artifact) for run in runs for artifact in run.get("artifacts", [])]
+            audio_provider_records = []
             for line, (artifact_run_id, reference) in zip(lines, artifact_runs):
                 try:
                     emitted = json.loads(line)
@@ -1016,8 +1036,14 @@ class KitRunner:
                     public.append(_validate_png_reference(reference, artifacts, case["parameters"]["width"],
                                                           case["parameters"]["height"]))
                 else:
-                    public.append(_validate_wav_reference(reference, artifacts, case["parameters"]["durationSeconds"],
-                                                          source, case["parameters"]))
+                    validated = _validate_wav_reference(reference, artifacts, case["parameters"]["durationSeconds"],
+                                                        source, case["parameters"])
+                    public.append(validated)
+                    if expected_outcome == "completed":
+                        matching_run = next(item for item in runs if item["runID"] == artifact_run_id)
+                        audio_provider_records.append(_validate_audio_provider(
+                            matching_run["result"].get("metadata"), validated, case, model, artifact_run_id,
+                            artifacts, options["prompt"], source))
         result["status"] = "passed"
         result.pop("message", None)
         result["artifacts"] = public
@@ -1026,6 +1052,15 @@ class KitRunner:
         _require(isinstance(result["backend"], dict) and isinstance(result["backend"].get("id"), str),
                  f"backend descriptor missing for {case['id']}")
         result["runs"] = run_evidence
+        if case["capability"] == "audio":
+            if expected_outcome == "cancelled":
+                _require(process.cancellation_requested and not process.forced_stop
+                         and all(run.get("result") is None and run.get("lifecycle") == [] for run in runs),
+                         f"audio cancellation evidence is invalid for {case['id']}")
+                result["memoryMeasurement"] = {"source": "unavailable", "reason": "cancelled-before-provider-result"}
+            else:
+                result["audioProviderRecords"] = audio_provider_records
+                result["memoryMeasurement"] = {"source": "provider", "records": len(audio_provider_records)}
         result["measurements"] = {"mlxPeakBytes": max(mlx_peaks) if mlx_peaks else "unknown",
                                   "processRSS": {"samples": process.rss_samples_kib,
                                                  "children": process.child_rss,
@@ -1046,7 +1081,8 @@ class KitRunner:
         _identifier(run_id, "run ID")
         run_root = _relative_path(self.root / "Results", run_id, "run", kind="directory")
         _, run = _read_json(run_root / "run.json", "run.json")
-        _require(isinstance(run, dict) and run.get("schemaVersion") == 1 and run.get("runID") == run_id,
+        _require(isinstance(run, dict) and _is_int(run.get("schemaVersion")) and run.get("schemaVersion") == 1
+                 and run.get("runID") == run_id,
                  "invalid run.json")
         _require(run.get("kitID") == self.config.raw["kitID"] and run.get("sourceSHA") == self.config.raw["sourceSHA"]
                  and run.get("profileDigest") == self.profile_set.digest, "run does not match the current kit/profile source")
@@ -1071,7 +1107,8 @@ class KitRunner:
             seen_attempts.add(attempt_id)
             attempt_root = _relative_path(run_root / "attempts", attempt_id, "attempt", kind="directory")
             _, attempt = _read_json(attempt_root / "attempt.json", "attempt.json")
-            _require(attempt.get("schemaVersion") == 1 and attempt.get("attemptID") == attempt_id
+            _require(isinstance(attempt, dict) and _is_int(attempt.get("schemaVersion"))
+                     and attempt.get("schemaVersion") == 1 and attempt.get("attemptID") == attempt_id
                      and attempt.get("state") in ("running", "finished", "interrupted"), "invalid attempt record")
             attempt_selected = attempt.get("selectedCaseIDs")
             _require(isinstance(attempt_selected, list) and attempt_selected and len(attempt_selected) == len(set(attempt_selected))
@@ -1084,7 +1121,8 @@ class KitRunner:
                          and reference.get("caseID") not in observed, "duplicate or unknown attempt case")
                 case_path = _relative_path(attempt_root, reference.get("path"), "case result", kind="file")
                 _, case_result = _read_json(case_path, "case result")
-                _require(case_result.get("schemaVersion") == 1 and case_result.get("caseID") == reference.get("caseID"),
+                _require(isinstance(case_result, dict) and _is_int(case_result.get("schemaVersion"))
+                         and case_result.get("schemaVersion") == 1 and case_result.get("caseID") == reference.get("caseID"),
                          "case result identity mismatch")
                 clean = _public_case(case_result, self.root, run_root)
                 _require(clean.get("status") in ("passed", "blocked", "blocked_budget", "blocked_dependency",
@@ -1148,7 +1186,7 @@ def _finite_decimal(value: str) -> bool:
 
 
 def _validate_actual_options(options: dict[str, Any], case: dict[str, Any], model: CatalogModel,
-                             kit_root: Path, budget_mib: int) -> None:
+                             kit_root: Path, budget_mib: int, source: dict[str, Any] | None = None) -> None:
     prompt = _relative_path(kit_root, case["promptFile"], f"case {case['id']} prompt", kind="file").read_text(encoding="utf-8")
     _require(options.get("prompt") == prompt, f"CLI prompt differs from frozen input for {case['id']}")
     _require(_is_int(options.get("memoryBudgetMiB")) and options["memoryBudgetMiB"] == max(1, budget_mib),
@@ -1156,7 +1194,8 @@ def _validate_actual_options(options: dict[str, Any], case: dict[str, Any], mode
     parameters = case["parameters"]
     fields = {"text": ("maxTokens", "temperature", "topP", "maxPromptTokens", "maxOutputTokens", "cacheLimitMiB"),
               "image": ("imageProfile", "width", "height", "steps", "guidance", "seed"),
-              "audio": ("audioOperation", "durationSeconds", "audioStrength", "audioEditStartFrame", "audioEditEndFrame")
+              "audio": ("audioOperation", "durationSeconds", "audioStrength", "audioEditStartFrame", "audioEditEndFrame",
+                        "steps", "guidance", "seed")
               }[case["capability"]]
     for field in fields:
         expected = parameters.get(field)
@@ -1171,6 +1210,14 @@ def _validate_actual_options(options: dict[str, Any], case: dict[str, Any], mode
             _require(actual == expected, f"CLI {field} differs for {case['id']}")
     if case["capability"] == "audio":
         _require(options.get("audioProfile") == model.audio_profile, f"CLI audioProfile differs for {case['id']}")
+        _require(_same_number(options.get("timeoutSeconds"), case["timeoutSeconds"]), f"CLI audio timeout differs for {case['id']}")
+        if source is None:
+            _require(options.get("audioSource") is None and options.get("audioSourceSHA256") is None
+                     and options.get("audioSourceFrames") is None, f"CLI has unexpected audio source for {case['id']}")
+        else:
+            _require(options.get("audioSource") == source["path"] and options.get("audioSourceSHA256") == source["sha256"]
+                     and _is_int(options.get("audioSourceFrames")) and options["audioSourceFrames"] == source["frames"],
+                     f"CLI audio source options differ for {case['id']}")
     if case["capability"] == "image":
         _require(_is_int(options.get("imageMemoryLimitMiB"))
                  and options["imageMemoryLimitMiB"] == max(1, budget_mib), f"CLI image memory limit differs for {case['id']}")
@@ -1201,12 +1248,15 @@ def _validate_request_payload(request: dict[str, Any], case: dict[str, Any], mod
     prompt = _relative_path(root, case["promptFile"], f"case {case['id']} prompt", kind="file").read_text(encoding="utf-8")
     _require(payload.get("prompt") == prompt, f"CLI request prompt differs for {case['id']}")
     p = case["parameters"]
-    expected = ({"text": {"maxTokens": p["maxTokens"], "temperature": p["temperature"], "topP": p["topP"]},
-                 "image": {"width": p["width"], "height": p["height"], "steps": p["steps"],
-                           "guidanceScale": p["guidance"], "seed": int(p["seed"])},
-                 "audio": {"durationSeconds": p["durationSeconds"], "steps": p["steps"],
-                           "guidanceScale": p["guidance"], "seed": int(p["seed"]),
-                           "strength": p["audioStrength"], "operation": p["audioOperation"]}})[case["capability"]]
+    if case["capability"] == "text":
+        expected = {"maxTokens": p["maxTokens"], "temperature": p["temperature"], "topP": p["topP"]}
+    elif case["capability"] == "image":
+        expected = {"width": p["width"], "height": p["height"], "steps": p["steps"],
+                    "guidanceScale": p["guidance"], "seed": int(p["seed"])}
+    else:
+        expected = {"durationSeconds": p["durationSeconds"], "steps": p["steps"],
+                    "guidanceScale": p["guidance"], "seed": int(p["seed"]),
+                    "strength": p["audioStrength"], "operation": p["audioOperation"]}
     for key, wanted in expected.items():
         actual = payload.get(key)
         if key == "seed": _require(_is_int(actual) and actual == wanted, f"CLI request seed differs for {case['id']}")
@@ -1231,6 +1281,87 @@ def _validate_request_payload(request: dict[str, Any], case: dict[str, Any], mod
             _require(region is None, f"CLI request has unexpected edit region for {case['id']}")
 
 
+def _validate_audio_provider(cli_metadata: Any, artifact: dict[str, Any], case: dict[str, Any],
+                             model: CatalogModel, run_id: str, artifact_root: Path, frozen_prompt: str,
+                             source: dict[str, Any] | None) -> dict[str, Any]:
+    _require(isinstance(cli_metadata, dict) and cli_metadata.get("modelRevision") == model.revision
+             and cli_metadata.get("profile") == model.audio_profile, f"audio CLI metadata is invalid for {case['id']}")
+    record_raw = cli_metadata.get("recordPath")
+    _require(isinstance(record_raw, str), f"audio provider record path is missing for {case['id']}")
+    record_path = Path(record_raw)
+    _require(record_path.is_absolute() and record_path.exists() and record_path.is_file() and not record_path.is_symlink(),
+             f"audio provider record is missing or unsafe for {case['id']}")
+    try:
+        relative = record_path.relative_to(artifact_root)
+    except ValueError as error:
+        raise KitError(f"audio provider record escapes artifacts for {case['id']}") from error
+    cursor = artifact_root
+    for part in relative.parts:
+        cursor /= part
+        _require(not cursor.is_symlink(), f"audio provider record crosses a symlink for {case['id']}")
+    _, provider = _read_json(record_path, f"audio provider record for {case['id']}", MAX_JSON_BYTES)
+    _require(isinstance(provider, dict) and _is_int(provider.get("schemaVersion")) and provider["schemaVersion"] == 1
+             and provider.get("type") == "result" and isinstance(provider.get("runID"), str)
+             and provider["runID"].lower() == run_id.lower(), f"audio provider identity is invalid for {case['id']}")
+    published_path = Path(artifact["absoluteValidatedPath"]).resolve(strict=True)
+    provider_artifact = provider.get("artifact")
+    _require(isinstance(provider_artifact, dict) and isinstance(provider_artifact.get("path"), str)
+             and Path(provider_artifact["path"]).resolve(strict=True) == published_path
+             and provider_artifact.get("sha256") == artifact["sha256"]
+             and _is_int(provider_artifact.get("byteCount")) and provider_artifact["byteCount"] == artifact["bytes"]
+             and _is_int(provider_artifact.get("frameCount")) and provider_artifact["frameCount"] == artifact["frames"]
+             and provider_artifact.get("sampleRate") == 44100 and provider_artifact.get("channels") == 2
+             and provider_artifact.get("encoding") == "float32", f"audio provider artifact differs for {case['id']}")
+    metadata = provider.get("metadata")
+    _require(isinstance(metadata, dict) and metadata.get("profile") == model.audio_profile
+             and metadata.get("modelRevision") == model.revision, f"audio provider metadata differs for {case['id']}")
+    request = metadata.get("request"); parameters = case["parameters"]
+    _require(isinstance(request, dict) and _is_int(request.get("schemaVersion")) and request["schemaVersion"] == 1
+             and isinstance(request.get("runID"), str) and request["runID"].lower() == run_id.lower()
+             and request.get("prompt") == frozen_prompt,
+             f"audio provider request identity is invalid for {case['id']}")
+    expected = {"durationSeconds": parameters["durationSeconds"], "guidanceScale": parameters["guidance"],
+                "operation": parameters["audioOperation"], "seed": int(parameters["seed"]),
+                "steps": parameters["steps"], "strength": parameters["audioStrength"]}
+    for key, wanted in expected.items():
+        actual = request.get(key)
+        if key in ("seed", "steps"): _require(_is_int(actual) and actual == wanted, f"audio provider {key} differs")
+        elif _is_number(wanted): _require(_same_number(actual, wanted), f"audio provider {key} differs")
+        else: _require(actual == wanted, f"audio provider {key} differs")
+    provider_source = request.get("source")
+    if source is None:
+        _require(provider_source is None, f"audio provider has unexpected source for {case['id']}")
+    else:
+        _require(isinstance(provider_source, dict) and provider_source.get("sha256") == source["sha256"]
+                 and _is_int(provider_source.get("frameCount")) and provider_source["frameCount"] == source["frames"]
+                 and provider_source.get("sampleRate") == 44100 and provider_source.get("channels") == 2,
+                 f"audio provider source differs for {case['id']}")
+    region = request.get("editRegion")
+    if parameters["audioOperation"] == "inpaint":
+        _require(isinstance(region, dict) and region.get("startFrame") == parameters["audioEditStartFrame"]
+                 and region.get("endFrame") == parameters["audioEditEndFrame"],
+                 f"audio provider edit region differs for {case['id']}")
+    else:
+        _require(region is None, f"audio provider has unexpected edit region for {case['id']}")
+    timings = metadata.get("timingsSeconds"); allocations = metadata.get("mlxAllocations"); precision = metadata.get("precision")
+    _require(isinstance(timings, dict) and all(isinstance(key, str) and _is_number(value) and value >= 0
+             for key, value in timings.items()), f"audio provider timings are invalid for {case['id']}")
+    _require(isinstance(precision, dict) and all(isinstance(key, str) and isinstance(value, str)
+             for key, value in precision.items()), f"audio provider precision is invalid for {case['id']}")
+    _require(isinstance(allocations, dict), f"audio provider allocations are invalid for {case['id']}")
+    for key in ("activeBytes", "cacheBytes", "peakBytes", "observedActiveLowerBoundBytes"):
+        _require(_is_int(allocations.get(key)) and allocations[key] >= 0, f"audio provider allocation {key} is invalid")
+    post = allocations.get("postCleanup")
+    _require(isinstance(post, dict) and all(_is_int(post.get(key)) and post[key] >= 0
+             for key in ("activeBytes", "cacheBytes", "peakBytes", "observedActiveLowerBoundBytes")),
+             f"audio provider post-cleanup observation is invalid for {case['id']}")
+    return {"record": str(relative), "runID": provider["runID"], "profile": metadata["profile"],
+            "modelRevision": metadata["modelRevision"], "vendorRevision": metadata.get("vendorRevision"),
+            "source": provider_source,
+            "precision": precision, "timingsSeconds": timings, "mlxAllocations": allocations,
+            "measurementSource": "provider"}
+
+
 def _public_process_dict(value: Mapping[str, Any]) -> dict[str, Any]:
     samples = [{"elapsedSeconds": item.get("elapsedSeconds"), "rssKiB": item.get("rssKiB")}
                for item in value.get("rss_samples_kib", []) if isinstance(item, dict)]
@@ -1239,7 +1370,8 @@ def _public_process_dict(value: Mapping[str, Any]) -> dict[str, Any]:
             "stdoutLimited": value.get("stdout_limited"), "stderrLimited": value.get("stderr_limited"),
             "timedOut": value.get("timed_out"), "cancellationRequested": value.get("cancellation_requested"),
             "forcedStop": value.get("forced_stop"), "rssSampleIntervalSeconds": PROCESS_POLL_SECONDS,
-            "rssSamples": samples, "childRSS": value.get("child_rss", "unknown"), "rssAggregation": "not-summed"}
+            "rssSamples": samples, "rssSamplesTruncated": value.get("rss_samples_truncated", False),
+            "childRSS": value.get("child_rss", "unknown"), "rssAggregation": "not-summed"}
 
 
 def _public_process(value: ProcessResult) -> dict[str, Any]:
