@@ -90,6 +90,9 @@ def verify_model_file(path, entry):
 
 
 def build(args):
+    # Compare all inputs in the same coordinate system before creating anything.
+    if not all(path.is_absolute() for path in (args.cli_products, args.engine, args.models_root, args.output)):
+        raise ValueError('All input and output paths must be absolute physical paths')
     output = args.output.absolute()
     inputs = [args.cli_products, args.engine, args.models_root, ROOT]
     for path in inputs + [output.parent]:

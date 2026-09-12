@@ -4,6 +4,7 @@ import hashlib
 import os
 import tempfile
 import unittest
+from types import SimpleNamespace
 
 SPEC = importlib.util.spec_from_file_location('kit_builder', Path(__file__).resolve().parents[1] / 'build_kit.py')
 BUILDER = importlib.util.module_from_spec(SPEC)
@@ -58,6 +59,22 @@ class PackagingProtectionTests(unittest.TestCase):
         link.symlink_to(src)
         with self.assertRaises(ValueError):
             BUILDER.copy_file(link, self.root / 'dst')
+
+    def test_relative_input_cannot_hide_overlapping_output(self):
+        for name in ('engine', 'products', 'models'):
+            (self.root / name).mkdir()
+        args = SimpleNamespace(engine=Path('engine'), cli_products=Path('products'),
+                               models_root=Path('models'), output=Path('engine/kit'),
+                               source_sha='a' * 40, configuration='Release')
+        previous = Path.cwd()
+        try:
+            os.chdir(self.root)
+            with self.assertRaises(ValueError):
+                BUILDER.build(args)
+        finally:
+            os.chdir(previous)
+        self.assertFalse((self.root / 'engine/kit').exists())
+        self.assertEqual(list((self.root / 'engine').iterdir()), [])
 
 
 if __name__ == '__main__':
