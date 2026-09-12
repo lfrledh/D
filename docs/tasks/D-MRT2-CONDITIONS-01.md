@@ -67,3 +67,11 @@ Worker Sol/high线程01a09627-acec-7d32-b48d-97e87d5c78e2，实际预检base e12
 来源/消耗：初交743.385秒，repair1 435.360秒，repair2 328.893秒为可观察CLI墙钟。实际各轮Sol/high、同受限工作树/专属输出缓存/network=false由turn_context核对，隐藏解析unknown。raw usage保留collaboration-accounting.json，可能为续接会话累计快照，未相加或套用API价格；完整Lead归因与订阅费用unknown。环境安装、真实推理、规格澄清、审核及集成由Astra Lead完成。
 
 持久证据根同上run：evidence/final-code-version.json、lead-repair2-cpu.json/log、final-real-suite.json、final-independent.json、final-*/process.json与job/report.json、pre-repair2-review.json、memory-baseline.json，worker/repair2-route.json及每轮process/response。初始环境/导出版本/seed失败证据保留。最终源接纳与文档版本由收尾回执记录，不把这个候选SHA当成已推送。模型和SDK仅存在独立外盘环境，不并入便携测试包；原始源码/安装版本及下载摘要见resources-ready、source-downloads、pip报告与constraints.txt。
+
+## 2026-09-13 测量解释与源接纳检查点
+
+最终导出4秒片段端到端约4.47～4.79秒、第一PCM帧约2.47～2.79秒，生成帧中位约19毫秒；raw约6.50～6.65秒、首PCM约3.39～3.46秒、帧中位约30～31毫秒。测量包含本次文件缓存/机器状态，不归因于seed修补带来加速，也不承诺实时交互延迟。MLX峰值导出约528MB、raw约1.65GB，仅allocator分配，非整机RSS或最低内存要求。
+
+仅导入MLX/设置随机状态即有8bytes活跃分配；导出任务清理后同为8/cache0。raw两次独立进程以及额外同进程两轮均为46/cache0，无本轮持续增长；其中额外38bytes归属尚未完全定位，不靠扩大阈值称零残留或永久无泄漏。实验按任务进程退出；常驻优化不在本轮。evidence/memory-baseline.json、same-process-raw/result.json及process回执保留此限制。
+
+源入口受测08cea85634f10d9af9f154586797ea5ded8d1029：26 CPU通过，真实4秒旋律返回0，输出与cb2f1c9最终样例完全相同，见evidence/source-entry-accepted.json。源已接纳实验代码，未默认启用工作台；后续六份文档收尾不改变实现/测试。最终完整HEAD和push位于KIT批次stage-final-receipt.json，本run有对应回执索引。来源固定为Sol初步实现及两轮修复，Astra Lead澄清/验收/集成；seed问题含Lead原规格遗漏，不能全归Worker。所有自有执行已结束，H17听感和正式部署/能力门槛保留；到此停止。

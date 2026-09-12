@@ -1,5 +1,16 @@
 # D 当前行动指南
 
+## 2026-09-13 测试包可用性与受控音乐实验已接纳
+
+实际组合／源入口受测 `08cea85634f10d9af9f154586797ea5ded8d1029`，源由d6623fd5e9308893f99ecf1b54b5c2c0f7e17c87快进；之后只追加本次六份状态/路线/任务文档。最终完整HEAD、保护及push状态由 `D-Development/AgentTrials/D-KIT-USABILITY-01/run-20260912T144755Z/stage-final-receipt.json` 核验，不自引用尚未创建的文档提交。
+
+- [D-KIT-USABILITY-01](tasks/D-KIT-USABILITY-01.md)：菜单先选组，再s确认；中文校验/等待/取消与结果说明；中断保全及未启动分类；音频去噪事件触发取消。组合和源分别73 CPU方法，另30 native CLI兼容检查；新包quick3/3、reliability8/8、真实手动停止和中文空格移位quick3/3通过。`/Volumes/CodexProjects/D-TestKit/Start.command`为新版入口，手册同目录README.zh-CN.md。旧包和原671个结果文件保留在`/Volumes/CodexProjects/D-TestKit-Archive-20260912`，内容/大小/mtime核对不变。kit代码ec0dcdd，原生二进制f743909，不含MRT2。
+- [D-MRT2-CONDITIONS-01](tasks/D-MRT2-CONDITIONS-01.md)：独立后端实验和26 CPU通过，真实最终11个进程按预期（10个4秒音频、1取消），另有同进程raw两轮和源入口真实旋律验证。明确音符/和弦→48kHz双声道WAV，实际seed修补经过先失败后通过；精确和声/静音/区间外音频锁定、真人听感和正式工作台接入未验收。既有SA3/文本/图像精度、普通D产物不变。
+
+现场历史：同一M4Max的8次运行、32条通过覆盖24种case；日志为36GiB物理内存，与用户记忆48GB有差异。72B已加载并少量输出后用户中断，不能说整项通过或OOM；96GiB以上仍无实机证据。旧现场报告只读保留，不用重跑计数掩盖重复。
+
+本批自有CLI Worker、模型/测试进程均已结束；源索引干净，仅个人scheme未暂存修改。下一产品提案：正式接入一个短旋律条件器乐后端，完成输入条件→生成/取消→比较采用→保存导出，沿用现有音频工作台，不先做完整谱面编辑器。先解决固定SDK状态/部署与能力声明，再分配独立Worker。紧接专门歌声，HUM文件转录可独立推进；H09等麦克风，H17记录本批音乐样本听感待确认。到当前提交/推送检查点停止，不自动启动下一批。
+
 ## 2026-09-12 便携跨 Mac 测试包制作验收完成
 
 源从0db7a8fa95fb1ed45be2999c7ab9cfb4d9a96361接纳实际受测3fb99d334fc0217191814cc5fb5d04523ea2b1ef。独立`/Volumes/CodexProjects/D-TestKit`包含八组固定模型约83.05GB、预编译CLI/离线音频环境、七组30个用例及[中文手册](../tools/testkit/README.zh-CN.md)。不替换普通D，不重做App参数UI。用户修订已生效：测试组显式probe，估算超推荐仍尝试；真实失败/信号/超时保留，停止当前组后项，不将静态预算拒绝当最终容量验收。

@@ -68,3 +68,9 @@ Lead单独修改profile中文标题，以及audio-cancel6使用已冻结cancelWh
 请求及可观察运行均Sol/high、独立workspace-write写根、网络关闭，原始路由/异常/回合回执见run/worker。初交无turn.completed用量；后两回合usage作为原始快照保存，可能含同会话累计，不相加。缓存输入不额外加到总输入，完整Lead消耗与订阅费用unknown；本样本不证明模型性价比最优。Lead另有两次只读分析脚本误写字段名/空值导致异常，修正分析后原媒体检查通过，不改产品测试断言。
 
 证据根：`D-Development/AgentTrials/D-KIT-USABILITY-01/run-20260912T144755Z`。入口：cpu/combined-kit.log、cpu/native-cli-compat.log、real-quick/real-reliability/real-interrupt/real-relocated各process.json、real-special-checks.json、independent-media/result.json、relocation.json、protection-before-integration.json、collaboration-accounting.json。制作包sourceSHA为ec0dcdd，原生二进制仍对应f743909647c83cb99d4d9f0dee0a939f80388576；依赖与精度未变化。本次没有在16GiB加载32B/72B。普通D、源个人scheme及原671个Results文件内容/大小/mtime核验保持；旧包保留，发布位置与最终源SHA另写收尾回执，不提前声明推送。
+
+## 2026-09-13 源接纳与交付检查点
+
+状态：已本地集成并通过本任务验收；推送结果见外部stage-final-receipt.json。源由d6623fd5e9308893f99ecf1b54b5c2c0f7e17c87快进08cea85634f10d9af9f154586797ea5ded8d1029；组合与源分别73工具CPU、26音乐实验CPU通过，代码分别与真实受测ec0dcdd/cb2f1c9完全相同，之后仅本次六份文档收尾。只读帮助拼写误判曾令Lead前置检查停止，修正来自实际Git输出，未改合并策略/测试标准，见integration-helper-event.json。
+
+新版已置于/Volumes/CodexProjects/D-TestKit，旧包/全部现场Results完整归档/Volumes/CodexProjects/D-TestKit-Archive-20260912；原671文件摘要/大小/mtime保持。2179非模型文件（含Acceptance.json）封存核对、移动后菜单q退出通过，见publication.json。没有删除旧权重/结果，不将音乐实验混入portable runtime。普通D关键文件、scheme内容/摘要/mtime/未暂存状态保持；所有自有Worker/CPU/GPU进程结束。恢复先核对最终Git和stage-final-receipt，再按CURRENT_ACTIONS决定新批；本批停止，不自动运行下一阶段。
