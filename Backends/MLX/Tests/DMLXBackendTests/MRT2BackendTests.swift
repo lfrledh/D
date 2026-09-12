@@ -449,8 +449,8 @@ private struct MRT2Fixture {
     ) -> MRT2BackendConfiguration {
         MRT2BackendConfiguration(
             pythonExecutable: URL(fileURLWithPath:
-                "/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-MRT2-CONDITIONS-01/"
-                + "run-20260912T150154Z/venv-dev/bin/python3"),
+                ProcessInfo.processInfo.environment["D_TEST_PYTHON_EXECUTABLE"]
+                ?? "/usr/bin/python3"),
             providerScript: script, vendorDirectory: vendor, modelManifest: manifest,
             artifactDirectory: suppliedArtifacts ?? artifacts,
             licenseAcknowledged: acknowledged, timeoutSeconds: timeout,

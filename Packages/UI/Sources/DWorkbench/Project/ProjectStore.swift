@@ -34,7 +34,12 @@ public actor ProjectStore {
 
     deinit {
         for descriptor in captureDirectories.values { Darwin.close(descriptor) }
-        if !isClosed { Darwin.close(lockFD); Darwin.close(rootFD) }
+        if !isClosed {
+            // A child may temporarily hold a pre-exec copy even with CLOEXEC. This
+            // session owns the lock; descriptor lifetime alone is not its lifetime.
+            try? ProjectFiles.unlock(lockFD)
+            Darwin.close(lockFD); Darwin.close(rootFD)
+        }
     }
 
     public static func create(at url: URL, name: String) async throws -> ProjectStore {
@@ -1217,6 +1222,7 @@ public actor ProjectStore {
         }
         for descriptor in captureDirectories.values { Darwin.close(descriptor) }
         captureDirectories.removeAll()
+        try ProjectFiles.unlock(lockFD)
         Darwin.close(lockFD)
         Darwin.close(rootFD)
         isClosed = true
@@ -1470,6 +1476,12 @@ private enum ProjectFiles {
             }
             guard result.count <= limit - count else { throw ProjectStoreError.invalidProject("文件超过当前工作台的安全读取上限。") }
             result.append(contentsOf: buffer[..<count])
+        }
+    }
+
+    static func unlock(_ descriptor: Int32) throws {
+        while flock(descriptor, LOCK_UN) != 0 {
+            if errno != EINTR { throw error() }
         }
     }
 

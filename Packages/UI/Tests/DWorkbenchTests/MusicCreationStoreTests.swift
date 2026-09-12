@@ -29,6 +29,36 @@ struct MusicCreationStoreTests {
         }
     }
 
+    @Test(arguments: [false, true]) func closeReleasesLockWhilePreExecDuplicateExists(relocated: Bool) async throws {
+        try await fixture { _, project in
+            let original = try await ProjectStore.create(at: project, name: "explicit lock release")
+            let store = relocated ? try await original.relocated(to: project) : original
+            // Model the short posix_spawn pre-exec descriptor copy deterministically. Inspect
+            // only metadata of this process's descriptors; never read any other file content.
+            var lockInfo = stat()
+            let lockURL = project.appendingPathComponent(".project.lock")
+            #expect(lstat(lockURL.path, &lockInfo) == 0)
+            let maximum = getdtablesize() - 1
+            var duplicate: Int32 = -1
+            if maximum >= 0 {
+                for descriptor in 0...maximum {
+                    var info = stat()
+                    if fstat(descriptor, &info) == 0,
+                       info.st_dev == lockInfo.st_dev, info.st_ino == lockInfo.st_ino {
+                        duplicate = fcntl(descriptor, F_DUPFD_CLOEXEC, 0)
+                        break
+                    }
+                }
+            }
+            #expect(duplicate >= 0)
+            guard duplicate >= 0 else { try await store.close(); return }
+            defer { Darwin.close(duplicate) }
+            try await store.close()
+            let reopened = try await ProjectStore.open(at: project)
+            try await reopened.close()
+        }
+    }
+
     @Test func conditionsCandidateDecisionsAndExportSurviveReopen() async throws {
         try await fixture { root, project in
             let store = try await ProjectStore.create(at: project, name: "旋律 🎹")
