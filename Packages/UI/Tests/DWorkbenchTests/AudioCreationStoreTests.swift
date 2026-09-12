@@ -32,7 +32,7 @@ struct AudioCreationStoreTests {
         #expect(throws: InferenceFailure.self) { try generate.makeRequest(source: source) }
     }
 
-    @Test(arguments: [1, 2, 3, 4])
+    @Test(arguments: [1, 2, 3, 4, 5])
     func everyLegacySchemaKeepsExactBackup(version: Int) async throws {
         try await withCreationFixture { root, project in
             let source = root.appendingPathComponent("legacy.wav")
@@ -49,9 +49,9 @@ struct AudioCreationStoreTests {
             let legacy = try JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys])
             try legacy.write(to: manifestURL)
             let reopened = try await ProjectStore.open(at: project)
-            #expect(await reopened.snapshot().schemaVersion == 5)
+            #expect(await reopened.snapshot().schemaVersion == ProjectManifest.currentSchemaVersion)
             let names = [ProjectStore.versionOneBackupFilename, ProjectStore.versionTwoBackupFilename,
-                         ProjectStore.versionThreeBackupFilename, ProjectStore.versionFourBackupFilename]
+                         ProjectStore.versionThreeBackupFilename, ProjectStore.versionFourBackupFilename, ProjectStore.versionFiveBackupFilename]
             #expect(try Data(contentsOf: project.appendingPathComponent(names[version - 1])) == legacy)
             #expect(try Data(contentsOf: project.appendingPathComponent(asset.relativePath)) == mediaBytes)
             try await reopened.close()

@@ -115,3 +115,14 @@ P0已由Lead实现值型参数分族：`AudioRequest.parameters`为`AudioSynthes
 验收至少覆盖中文/组合字符原样草稿、合法C4/升降音/和弦/相邻音、0.04与0.03/0.0400000001、负/巨大数溢出、跨界/重叠/513行、坏输入仍可Codable保存、缺省/空条件、8层以上/重复key/布尔/1.0版本/未知字段/过大/坏UTF8、安全roundtrip。Worker可写Tests但不改标准。已知SwiftPM嵌套沙箱由Lead执行，不让Worker先撞权限；Worker只可用显式swiftc及任务module-cache做局部typecheck（有就绪DInference模块时），或只交代码及未执行测试。初交+2修复，900秒/轮；外部模型/GUI/network禁止。
 
 每个写Worker先从本任务準备提交建不同外盘工作树/分支，precheck只读动作→Lead核验turn_context模型/effort/workspace-write实际写根及源保护→同线程IMPLEMENT；输出/tmp和缓存仅本run的该Worker目录，common Git不可写，Worker不commit。精确路径/基线/runtime证据写外部request，不猜工具参数。当前两实现均未派出，下一动作是完成P0准备检查与签发。
+
+
+### 实施检查点：P0准备与W2接纳前
+
+P0受测提交`1bf4017e6f63049deed139dcd9e797b8e253c664`：38核心、291工作台CPU通过，证据implementation/prepared-checks.json。Sol/high非实现者审查thread `01a09682-4fc6-7180-9ccd-549c16eb2448`无阻断发现，建议独立513合法事件反例与source/region/wire断言；Lead已补测试，待组合重跑。该审查request的base字段误沿用父974，实际prompt/查询对象为1bf，route-observation已明确纠正元数据，不改旧记录。
+
+W2线程`01a09681-693a-7e30-b07a-1153dc6d15bb`、P0-E线程`01a09681-64b0-7d92-93c4-2a374b49e0a8`均独立Sol/high受限workspace-write，网络关闭；实际policy将cwd列为隐含写根，extras仅各自output/tmp，源和common Git未授写。W2初交只三新文件，已完成生产/测试typecheck，未自称执行SwiftPM；初次Testing/framework宏路径错误经只读定位后在自有缓存通过，无权限拒绝。P0-E预检因Lead PATH缺少rg正确停报，一次显式rg重预检通过；初次实现因工具显示输出截断暂停，Lead确认是显示上限而非进程警告，批准窄范围分段只读恢复，延续剩余初交时间，不重置实现预算。
+
+Lead独立运行环境打包已只选现有固定mlx/metal0.31.1、numpy2.3.5、sentencepiece0.2.2、ai-edge-litert2.2.0，剔除未使用训练SDK及安装来源路径记录；中文空格emoji目录中-I隔离导入通过，sys.path仅新运行目录。尚不代表模型/签名部署通过。新增8打包CPU检查通过，最终日志待固定组合SHA重跑。新打包器不改原SA3打包器行为。
+
+Lead共享接线候选正在实现：AudioCreationProfile区分两类，music草稿独立；WorkbenchSession额外可选music后端注册入口，原SA3不变；按冻结请求44.1/48kHz存储核验。项目schema6通过原安全迁移保存v5字节备份，以免旧App忽略新条件后覆盖；旧1...4迁移仍保留原备份。当前提交为候选准备，W2尚待并入后编译，音乐provider/应用部署/UI/真实验收仍未接纳。源974及个人scheme保持，具体候选SHA写外部记录。

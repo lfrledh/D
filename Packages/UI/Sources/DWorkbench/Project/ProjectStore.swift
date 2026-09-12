@@ -18,6 +18,7 @@ public actor ProjectStore {
     public static let versionTwoBackupFilename = "project.v2.backup.json"
     public static let versionThreeBackupFilename = "project.v3.backup.json"
     public static let versionFourBackupFilename = "project.v4.backup.json"
+    public static let versionFiveBackupFilename = "project.v5.backup.json"
     private let rootFD: Int32
     private let lockFD: Int32
     private var manifest: ProjectManifest
@@ -102,6 +103,9 @@ public actor ProjectStore {
                                                         checkpoint: migrationCheckpoint)
         } else if loaded.schemaVersion == 4 {
             loaded = try ProjectFiles.migrateVersionFour(loaded, original: data, in: descriptor,
+                                                       checkpoint: migrationCheckpoint)
+        } else if loaded.schemaVersion == 5 {
+            loaded = try ProjectFiles.migrateVersionFive(loaded, original: data, in: descriptor,
                                                        checkpoint: migrationCheckpoint)
         } else { try ProjectFiles.validate(loaded) }
         let store = ProjectStore(rootURL: root, rootFD: descriptor, lockFD: lock, manifest: loaded)
@@ -482,7 +486,7 @@ public actor ProjectStore {
             }
             let inspection = try AudioMediaInspector.inspect(at: artifact.url, policy: .generated)
             let expectedFrames = try ProjectFiles.expectedAudioFrames(audio)
-            guard inspection.format.container == .wav, inspection.format.sampleRate == 44_100,
+            guard inspection.format.container == .wav, inspection.format.sampleRate == audio.outputSampleRate,
                   inspection.format.channelCount == 2, inspection.format.floatingPoint,
                   inspection.format.bitDepth == 32, inspection.format.frameCount == expectedFrames else {
                 throw AudioMediaError.invalidMedia("生成音频格式或帧数与固定请求不一致")
@@ -1250,7 +1254,7 @@ public actor ProjectStore {
                     let url = rootURL.appendingPathComponent(relative)
                     let inspection = try AudioMediaInspector.inspect(at: url, policy: .generated)
                     guard inspection.format.container == .wav,
-                          inspection.format.sampleRate == 44_100,
+                          inspection.format.sampleRate == audio.outputSampleRate,
                           inspection.format.channelCount == 2,
                           inspection.format.floatingPoint, inspection.format.bitDepth == 32,
                           inspection.format.frameCount == (try ProjectFiles.expectedAudioFrames(audio)) else {
@@ -1497,6 +1501,12 @@ private enum ProjectFiles {
                     checkpoint: checkpoint)
     }
 
+    static func migrateVersionFive(_ legacy: ProjectManifest, original: Data, in root: Int32,
+                                   checkpoint: (@Sendable (ProjectMigrationCheckpoint) throws -> Void)?) throws -> ProjectManifest {
+        try migrate(legacy, original: original, in: root, backup: ProjectStore.versionFiveBackupFilename,
+                    checkpoint: checkpoint)
+    }
+
     private static func migrate(_ legacy: ProjectManifest, original: Data, in root: Int32, backup: String,
                                 checkpoint: (@Sendable (ProjectMigrationCheckpoint) throws -> Void)?) throws -> ProjectManifest {
         try validate(legacy, allowingLegacySchema: true)
@@ -1733,6 +1743,8 @@ private enum ProjectFiles {
     }
 
     static func validateCurrentAudioProfile(_ request: AudioRequest) throws {
+        try request.validate()
+        if request.noteSequence != nil { return }
         guard let diffusion = request.diffusion, request.seed <= UInt64(UInt32.max) - 1,
               (1...100).contains(diffusion.steps), diffusion.guidanceScale.isFinite,
               (1...15).contains(diffusion.guidanceScale) else {
@@ -1742,6 +1754,7 @@ private enum ProjectFiles {
 
     static func expectedAudioFrames(_ request: AudioRequest) throws -> Int64 {
         if let source = request.source { return source.frameCount }
+        if let sequence = request.noteSequence { return Int64(sequence.durationFrames) * 1_920 }
         let value = request.durationSeconds * 44_100
         let rounded = value.rounded(.toNearestOrEven)
         guard value.isFinite, value > 0, rounded.isFinite,
@@ -1799,7 +1812,7 @@ private enum ProjectFiles {
 
     static func validate(_ value: ProjectManifest, allowingLegacySchema: Bool = false) throws {
         guard value.schemaVersion == ProjectManifest.currentSchemaVersion ||
-              (allowingLegacySchema && (1...4).contains(value.schemaVersion)) else {
+              (allowingLegacySchema && (1...5).contains(value.schemaVersion)) else {
             throw ProjectStoreError.unsupportedSchema(value.schemaVersion)
         }
         guard !value.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
@@ -1909,14 +1922,15 @@ private enum ProjectFiles {
                 case .modelGenerated:
                     let parts = try components(asset.relativePath)
                     guard asset.role == .result, let jobID = asset.jobID,
-                          jobs[jobID].map({ if case .audio = $0.request.input { true } else { false } }) == true,
+                          let job = jobs[jobID], case .audio(let request) = job.request.input,
                           asset.mediaType == "audio/wav",
                           parts.count == 4, parts[0] == "Tasks",
                           parts[1] == parts[1].lowercased(), taskOwner(parts[1]) == jobID,
                           parts[2] == "job", parts[3] == "output.wav",
-                          audio.format.container == .wav, audio.format.sampleRate == 44_100,
+                          audio.format.container == .wav, audio.format.sampleRate == request.outputSampleRate,
                           audio.format.channelCount == 2, audio.format.floatingPoint,
-                          audio.format.bitDepth == 32 else {
+                          audio.format.bitDepth == 32,
+                          audio.format.frameCount == (try expectedAudioFrames(request)) else {
                         throw ProjectStoreError.invalidProject("生成音频路径、角色或格式无效。")
                     }
                     try validateAudioFormat(audio.format, policy: .generated)

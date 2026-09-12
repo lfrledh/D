@@ -57,7 +57,18 @@ public final class ProjectSession {
     public private(set) var audio: ProjectAudioController?
     public private(set) var audioCreationContextID = UUID()
     public private(set) var audioCreationDraft: AudioCreationDraft?
-    public private(set) var audioModelStatus = "选择已安装的本地声音模型"
+    private var musicModelStatus = "选择已安装的 Magenta RealTime 2 small 模型"
+    public var audioModelStatus: String {
+        audioCreationDraft?.profile == .conditionedMusic ? musicModelStatus : stableAudioModelStatus
+    }
+    public var musicCreationAvailable: Bool { session?.musicBackendID != nil }
+    private var selectedAudioReference: ModelReference? {
+        audioCreationDraft?.profile == .conditionedMusic ? musicReference : audioReference
+    }
+    private var selectedAudioBackendID: String? {
+        audioCreationDraft?.profile == .conditionedMusic ? session?.musicBackendID : session?.audioBackendID
+    }
+    private var stableAudioModelStatus = "选择已安装的本地声音模型"
     public private(set) var isRegisteringAudioModel = false
     public let audioCreationTransport = AudioTransport(recordingEnabled: false)
     @ObservationIgnored private var audioCreationDocumentID: UUID?
@@ -67,6 +78,8 @@ public final class ProjectSession {
     @ObservationIgnored private var audioAdmissionDocuments: [UUID: UUID] = [:]
     @ObservationIgnored private var audioModelLease: LocationAccess.Lease?
     @ObservationIgnored private var audioReference: ModelReference?
+    @ObservationIgnored private var musicModelLease: LocationAccess.Lease?
+    @ObservationIgnored private var musicReference: ModelReference?
     public private(set) var textModelStatus = "选择已注册的 Qwen2.5 Instruct 4-bit 模型（0.5B／1.5B／7B／32B）"
     public private(set) var isTextWorking = false
     public private(set) var isRegisteringTextModel = false
@@ -501,11 +514,25 @@ public final class ProjectSession {
                     audioReference = try await validate(lease.url)
                     audioModelLease = lease
                     settings.set(lease.bookmark, forKey: "workbench.audioModelBookmark.v1")
-                    audioModelStatus = "本地声音模型已恢复并校验"
+                    stableAudioModelStatus = "本地声音模型已恢复并校验"
                 } catch { await access.release(lease); throw error }
-            } catch { audioModelStatus = "声音模型暂不可用，请重新选择原模型文件夹" }
+            } catch { stableAudioModelStatus = "声音模型暂不可用，请重新选择原模型文件夹" }
         } else if createdSession.audioBackendID == nil {
-            audioModelStatus = "本地声音引擎尚未配置；已有作品仍可查看和导出"
+            stableAudioModelStatus = "本地声音引擎尚未配置；已有作品仍可查看和导出"
+        }
+        if let bookmark = settings.data(forKey: "workbench.musicModelBookmark.v1"),
+           let validate = createdSession.validateMusicModel {
+            do {
+                let lease = try await access.restore(bookmark)
+                do {
+                    musicReference = try await validate(lease.url)
+                    musicModelLease = lease
+                    settings.set(lease.bookmark, forKey: "workbench.musicModelBookmark.v1")
+                    musicModelStatus = "旋律器乐模型已恢复并校验 · 近似旋律控制"
+                } catch { await access.release(lease); throw error }
+            } catch { musicModelStatus = "旋律器乐模型暂不可用，请重新选择原模型文件夹" }
+        } else if createdSession.musicBackendID == nil {
+            musicModelStatus = "旋律器乐引擎尚未配置；已有作品仍可查看和导出"
         }
     }
 
@@ -1261,11 +1288,15 @@ public final class ProjectSession {
             await access.release(audioModelLease)
             audioModelLease = nil
             audioReference = nil
+            await access.release(musicModelLease)
+            musicModelLease = nil
+            musicReference = nil
+            musicModelStatus = "选择已安装的 Magenta RealTime 2 small 模型"
             audioCreationContextID = UUID()
             audioCreationDocumentID = nil
             audioCreationDraft = nil
             audioCreationPersistedRevision = nil
-            audioModelStatus = "选择已安装的本地声音模型"
+            stableAudioModelStatus = "选择已安装的本地声音模型"
             audio = nil
             self.store = nil
             session = nil
@@ -1399,7 +1430,7 @@ public final class ProjectSession {
         return manifest?.assets.first { $0.id == id && $0.metadata.audio != nil }
     }
     public var canGenerateAudioCreation: Bool {
-        creatorMode == .audio && audioEnabled && audioCreationDraft != nil && audioReference != nil && session?.audioBackendID != nil
+        creatorMode == .audio && audioEnabled && audioCreationDraft != nil && selectedAudioReference != nil && selectedAudioBackendID != nil
             && !isBusy && !isChangingProject && !closePending && !isRegisteringAudioModel && pendingSaves.isEmpty
             && !showingAllArtworks
     }
@@ -1483,7 +1514,9 @@ public final class ProjectSession {
     }
 
     public func registerAudioModel(at url: URL) async {
-        guard let session, let validate = session.validateAudioModel, !isBusy,
+        let profile = audioCreationDraft?.profile ?? .stableAudio
+        guard let session,
+              let validate = (profile == .conditionedMusic ? session.validateMusicModel : session.validateAudioModel), !isBusy,
               !isChangingProject, !closePending, !isRegisteringAudioModel else {
             errorMessage = "本地声音引擎尚未就绪，当前没有开始加载或生成。"
             return
@@ -1495,12 +1528,21 @@ public final class ProjectSession {
             let lease = try await access.acquire(selected: url)
             do {
                 let reference = try await validate(lease.url)
-                guard context == audioCreationContextID else { throw CancellationError() }
-                await access.release(audioModelLease)
-                audioModelLease = lease
-                audioReference = reference
-                settings.set(lease.bookmark, forKey: "workbench.audioModelBookmark.v1")
-                audioModelStatus = "本地声音模型已校验；支持提示生成、参考变体和区间重绘"
+                guard context == audioCreationContextID,
+                      profile == (audioCreationDraft?.profile ?? .stableAudio) else { throw CancellationError() }
+                if profile == .conditionedMusic {
+                    await access.release(musicModelLease)
+                    musicModelLease = lease
+                    musicReference = reference
+                    settings.set(lease.bookmark, forKey: "workbench.musicModelBookmark.v1")
+                    musicModelStatus = "旋律器乐模型已校验 · 近似旋律控制 · 48 kHz"
+                } else {
+                    await access.release(audioModelLease)
+                    audioModelLease = lease
+                    audioReference = reference
+                    settings.set(lease.bookmark, forKey: "workbench.audioModelBookmark.v1")
+                    stableAudioModelStatus = "本地声音模型已校验；支持提示生成、参考变体和区间重绘"
+                }
             } catch { await access.release(lease); throw error }
         } catch { report(error, context: "声音模型未能就绪，已有作品保持不变") }
     }
@@ -1508,8 +1550,8 @@ public final class ProjectSession {
     public func generateAudioCreation(contextID: UUID, documentID: UUID) async {
         guard contextID == audioCreationContextID, documentID == activeDocumentID,
               canGenerateAudioCreation, let value = audioCreationDraft,
-              let reference = audioReference, let store, let session,
-              let backendID = session.audioBackendID else { return }
+              let reference = selectedAudioReference, let store, let session,
+              let backendID = selectedAudioBackendID else { return }
         let sourceID = activeDocument?.sourceAssetID
         let id = UUID()
         let saved = queueAudioCreationSave(value, documentID: documentID, store: store)

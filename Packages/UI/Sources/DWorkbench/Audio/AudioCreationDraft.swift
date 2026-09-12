@@ -1,9 +1,16 @@
 import DInference
 import Foundation
 
+public enum AudioCreationProfile: String, Codable, Sendable, CaseIterable {
+    case stableAudio
+    case conditionedMusic
+}
+
 /// AW1 editable creation options. Invalid/incomplete numeric input is saved verbatim;
 /// submission validation creates a separate immutable AudioRequest.
 public struct AudioCreationDraft: Codable, Sendable, Equatable {
+    public var profile: AudioCreationProfile
+    public var music: MusicCreationDraft?
     public var revision: UUID
     public var prompt: String
     public var operation: AudioOperation
@@ -18,14 +25,49 @@ public struct AudioCreationDraft: Codable, Sendable, Equatable {
     public init(revision: UUID = UUID(), prompt: String = "", operation: AudioOperation = .generate,
                 durationText: String = "6", seedText: String = "42", stepsText: String = "8",
                 guidanceText: String = "1", strengthText: String = "0.5",
-                editRegion: AudioFrameRange? = nil, rejectedAssetIDs: [UUID] = []) {
+                editRegion: AudioFrameRange? = nil, rejectedAssetIDs: [UUID] = [],
+                profile: AudioCreationProfile = .stableAudio, music: MusicCreationDraft? = nil) {
+        self.profile = profile; self.music = music
         self.revision = revision; self.prompt = prompt; self.operation = operation
         self.durationText = durationText; self.seedText = seedText; self.stepsText = stepsText
         self.guidanceText = guidanceText; self.strengthText = strengthText
         self.editRegion = editRegion; self.rejectedAssetIDs = rejectedAssetIDs
     }
 
+    private enum CodingKeys: String, CodingKey {
+        case profile, music, revision, prompt, operation, durationText, seedText, stepsText,
+             guidanceText, strengthText, editRegion, rejectedAssetIDs
+    }
+
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        profile = try values.decodeIfPresent(AudioCreationProfile.self, forKey: .profile) ?? .stableAudio
+        music = try values.decodeIfPresent(MusicCreationDraft.self, forKey: .music)
+        revision = try values.decode(UUID.self, forKey: .revision)
+        prompt = try values.decode(String.self, forKey: .prompt)
+        operation = try values.decode(AudioOperation.self, forKey: .operation)
+        durationText = try values.decode(String.self, forKey: .durationText)
+        seedText = try values.decode(String.self, forKey: .seedText)
+        stepsText = try values.decode(String.self, forKey: .stepsText)
+        guidanceText = try values.decode(String.self, forKey: .guidanceText)
+        strengthText = try values.decode(String.self, forKey: .strengthText)
+        editRegion = try values.decodeIfPresent(AudioFrameRange.self, forKey: .editRegion)
+        rejectedAssetIDs = try values.decode([UUID].self, forKey: .rejectedAssetIDs)
+    }
+
     public func makeRequest(source: AudioSourceReference?) throws -> AudioRequest {
+        if profile == .conditionedMusic {
+            guard operation == .generate, source == nil, editRegion == nil, let music else {
+                throw InferenceFailure.invalidRequest("旋律条件会生成新的完整片段；不接受参考重绘区间。")
+            }
+            guard let seed = UInt64(seedText), seed <= UInt64(UInt32.max) else {
+                throw InferenceFailure.invalidRequest("音乐 Seed 需要 0 到 4294967295 的整数。")
+            }
+            let sequence = try music.makeSequence(durationText: durationText)
+            let request = AudioRequest(prompt: prompt, seed: seed, noteSequence: sequence)
+            try request.validate()
+            return request
+        }
         guard !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw InferenceFailure.invalidRequest("Audio prompt must not be blank.")
         }

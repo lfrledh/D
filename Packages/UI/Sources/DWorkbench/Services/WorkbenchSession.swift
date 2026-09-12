@@ -3,6 +3,8 @@ import Foundation
 
 /// Application-facing runtime bridge. The composition root owns backend-specific types.
 public struct WorkbenchSession: Sendable {
+    public let musicBackendID: String?
+    public let validateMusicModel: (@Sendable (URL) async throws -> ModelReference)?
     public let audioBackendID: String?
     public let validateAudioModel: (@Sendable (URL) async throws -> ModelReference)?
     public let textBackendID: String?
@@ -22,7 +24,11 @@ public struct WorkbenchSession: Sendable {
                 textBackendID: String? = nil,
                 validateTextModel: (@Sendable (URL) async throws -> ModelReference)? = nil,
                 audioBackendID: String? = nil,
-                validateAudioModel: (@Sendable (URL) async throws -> ModelReference)? = nil) {
+                validateAudioModel: (@Sendable (URL) async throws -> ModelReference)? = nil,
+                musicBackendID: String? = nil,
+                validateMusicModel: (@Sendable (URL) async throws -> ModelReference)? = nil) {
+        self.musicBackendID = musicBackendID
+        self.validateMusicModel = validateMusicModel
         self.audioBackendID = audioBackendID
         self.validateAudioModel = validateAudioModel
         self.textBackendID = textBackendID

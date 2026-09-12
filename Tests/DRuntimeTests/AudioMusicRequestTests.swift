@@ -13,6 +13,11 @@ struct AudioMusicRequestTests {
         let data = try JSONEncoder().encode(value)
         let json = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
         #expect(json["steps"] == nil && json["guidanceScale"] == nil && json["strength"] == nil)
+        let parameters = try #require(json["parameters"] as? [String: Any])
+        #expect(parameters["kind"] as? String == "mrt2FixedV1")
+        let sequence = try #require(parameters["sequence"] as? [String: Any])
+        #expect(sequence["frameRate"] as? Int == 25)
+        #expect(sequence["durationFrames"] as? Int == 100)
         #expect(try JSONDecoder().decode(AudioRequest.self, from: data) == value)
         #expect(value.diffusion == nil && value.outputSampleRate == 48_000)
     }
@@ -57,7 +62,7 @@ struct AudioMusicRequestTests {
                    .init(durationFrames: 10, notes: [.init(pitch: 60, startFrame: 1, endFrame: 1)]),
                    .init(durationFrames: 10, notes: [.init(pitch: 60, startFrame: 0, endFrame: 11)]),
                    .init(durationFrames: 10, notes: [.init(pitch: 60, startFrame: 0, endFrame: 5), .init(pitch: 60, startFrame: 4, endFrame: 6)]),
-                   .init(durationFrames: 10, notes: Array(repeating: .init(pitch: 60, startFrame: 0, endFrame: 1), count: 513))]
+                   .init(durationFrames: 10, notes: (0..<513).map { .init(pitch: $0 % 128, startFrame: $0 / 128, endFrame: $0 / 128 + 1) })]
         for value in bad { #expect(throws: (any Error).self) { try value.validate() } }
     }
 
@@ -65,7 +70,9 @@ struct AudioMusicRequestTests {
         let request = AudioRequest(prompt: "piano", seed: 42, noteSequence: .init(durationFrames: 100, notes: notes))
         let base = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(request)) as? [String: Any])
         for changes: [String: Any] in [ ["steps": 8], ["durationSeconds": 5], ["operation": "variation"],
-                                      ["seed": UInt64(UInt32.max) + 1], ["seed": true], ["prompt": " "]] {
+                                      ["seed": UInt64(UInt32.max) + 1], ["seed": true], ["prompt": " "],
+                                      ["source": ["url": "file:///tmp/source.wav", "sha256": String(repeating: "a", count: 64), "frameCount": 44100, "sampleRate": 44100, "channels": 2]],
+                                      ["editRegion": ["startFrame": 0, "endFrame": 44100]]] {
             let object = base.merging(changes) { _, new in new }
             #expect(throws: (any Error).self) {
                 try JSONDecoder().decode(AudioRequest.self, from: JSONSerialization.data(withJSONObject: object))
