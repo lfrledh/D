@@ -78,6 +78,7 @@ public actor MLXMRT2Backend: InferenceBackend {
 
         do {
             let job = runDirectory.appendingPathComponent("job", isDirectory: true)
+            let jobIdentity = try MRT2ReportCommit.captureJobIdentity(job)
             let temporary = runDirectory.appendingPathComponent("tmp", isDirectory: true)
             let cache = runDirectory.appendingPathComponent("cache", isDirectory: true)
             let requestURL = runDirectory.appendingPathComponent("request.json")
@@ -146,20 +147,24 @@ public actor MLXMRT2Backend: InferenceBackend {
             // every independently observed request, model, result, and WAV fact agrees.
             try inventory.confirmUnchanged()
             let output = job.appendingPathComponent("output.wav")
-            let recordURL = job.appendingPathComponent("result.json")
+            let accessConfigured = access != nil
+            let observedRecordURL = MRT2ReportCommit.observedURL(
+                job: job, accessConfigured: accessConfigured)
             let (expectedFrames, frameOverflow) = Int64(sequence.durationFrames)
                 .multipliedReportingOverflow(by: 1_920)
             guard expectedFrames > 0, !frameOverflow else {
                 throw InferenceFailure.backendFailed(
                     "MRT2 expected frame count is not representable.")
             }
-            let recordData = try AudioFileSystem.readRegularFile(
-                recordURL, label: "MRT2 result record", maximumBytes: 2 * 1024 * 1024).0
+            let (recordData, recordIdentity) = try AudioFileSystem.readRegularFile(
+                observedRecordURL,
+                label: accessConfigured ? "MRT2 pending result record" : "MRT2 result record",
+                maximumBytes: 2 * 1024 * 1024)
             let record = try AudioProviderProtocol.parseResultSnapshot(
                 recordData, runID: request.id)
             guard record == terminal else {
                 throw InferenceFailure.backendFailed(
-                    "MRT2 result.json differs from the provider terminal result.")
+                    "MRT2 result record differs from the provider terminal result.")
             }
             try MRT2ProviderValidation.validateMetadata(
                 terminal, expected: metadataExpectation)
@@ -167,6 +172,14 @@ public actor MLXMRT2Backend: InferenceBackend {
                 output, claim: terminal.artifact, expectedFrames: expectedFrames,
                 expectedSampleRate: 48_000)
             try Task.checkCancellation()
+            let recordURL: URL
+            if accessConfigured {
+                recordURL = try MRT2ReportCommit.promotePending(
+                    in: job, expectedJobIdentity: jobIdentity,
+                    expectedData: recordData, expectedIdentity: recordIdentity)
+            } else {
+                recordURL = observedRecordURL
+            }
             try await emit(.artifact(artifact))
             return InferenceResult(
                 artifacts: [artifact],
