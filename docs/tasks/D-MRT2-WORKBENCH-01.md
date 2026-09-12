@@ -1,6 +1,6 @@
 # D-MRT2-WORKBENCH-01：短旋律条件器乐工作台
 
-日期：2026-09-13。计划修订 planning-r1；状态：规划与协作规则已形成，产品实现/部署/GUI尚未开始。用户要求规划继续下一阶段，并取消项目层面的子代理人数上限；不是音乐所有远期能力、无限执行或新依赖下载授权。本文确定阶段范围与验收，不把拟议接口签名当作已存在代码。
+日期：2026-09-13。原始计划 planning-r1；当前实现 implementation-r4 / contract-r4。状态：工程候选和普通沙盒隔离产物已准备，真实App验收因锁屏暂停；未集成/推送。下方原始计划保留历史，最新证据和恢复点见末尾。用户要求规划继续下一阶段，并取消项目层面的子代理人数上限；不是音乐所有远期能力、无限执行或新依赖下载授权。本文确定阶段范围与验收，不把拟议接口签名当作已存在代码。
 
 ## 1. 基线与可复用成果
 
@@ -190,3 +190,19 @@ W1-P修复1仅原三允许文件：实现有/无access的文件名区别；新�
 初版W1-P d442eec初交达到900秒时限，20项CPU已跑过，最终叙述未完成；已核验同进程组结束，未观察到权限扩大。W1-S 1634917初交正确停报系统Python包装器DVT缓存/FSEvents警告及嵌入夹具提取SyntaxError；无Swift构建/模型执行，Lead之后完成实际组合编译。后续Worker内存编译显式用已批准独立Python `D-Development/AgentTrials/D-MRT2-CONDITIONS-01/run-20260912T150154Z/venv-dev/bin/python3`，不使用/usr/bin/python3包装器，不改全局缓存或权限。
 
 84ed工作台304测试、0fcad旧音频进程24方法/零跳过、a914正式独立音乐CLI九个真实进程（六个生成，三取消）已通过，各有独立证据；当前尚未普通沙盒App验收。model前后六项SHA及普通D四文件保护不变。真实4秒音频同seed与既有参考一致；8/16秒、缺省/显式空、加载/生成/清理边界取消及恢复通过。新协议须另验，历史通过不自动移给新版本。H17听感和App完整流程仍待完成；源974及个人scheme保持。
+
+
+### 2026-09-13 implementation-r4：组合复核与真实App前恢复点
+
+代码候选 `5949745b5e09508de1b39e03680e4440fa779f88`。源仍 `974477ef34a6708b9b4b90f7c79c19ae23ff716c`，没有接纳或push。普通D及个人scheme的内容、SHA、索引/未暂存差异仍与启动保护记录相同。证据根继续本run，不覆盖历史失败。
+
+- W1-P repair1 `e97b6527957817fe8fe1df2bfaa2958afdb4841c` 由Sol/high完成，21项CPU及Lead原释放失败反例通过；一次普通修复已用。无access的旧真实九进程证据仍绑定a914；r4的真实沙盒路径尚待App验收。
+- W1-S repair1 `b30e39e3ab4c898f16ef63bf06a831e3c4bf3006` 加入排他发布；Lead审核发现job路径身份未绑定。repair2 `a01156d`（完整SHA见bridge/repair2-lead-check.json）由同一Sol/high核验链路完成，补入生成前目录identity、锚定fd/路径前后核验及同inode硬链接目录替换反例。初交+两修预算已用尽，没有再开Worker重置；组合提交为 `33f1f0a4fa575fe27dec67c25bb02f79fd21d605`。真实任务进程和独立读端均已结束，无本轮新拒绝/扩大写根。
+- Sol/high非实现者审阅33f确认之前两项P1已解决（final-review/response.md）；指出测试Python指向历史trial，Lead在594改为 `D_TEST_PYTHON_EXECUTABLE` 显式注入、缺省沿旧测试 `/usr/bin/python3`。它仅影响CPU测试，不改变产品运行配置。审核runner的request.base误留a914，实际prompt和审阅结论均指33f；route-observation明确更正，原记录不改写。
+- 完整Workbench在33f首次304方法出现1项保存重开锁失败。Lead确认CLOEXEC只在exec时生效，posix_spawn启动短窗口仍可持有复制描述符。外部C对照30,000次close-only有26次锁未及时释放，显式unlock为0；持久Swift反例（普通/relocated两种）在旧代码稳定失败。594由Lead显式解锁再关闭，relocated只转移不解锁；同一反例通过，最终完整305方法/39套件通过。首次反例编译用了本机不存在的F_MAXFD，已改getdtablesize；编译失败不冒充运行失败。证据lock-race/和combined-cpu/，非实现者lockfix-review检查三文件无阻断。
+- 分项证据：纯核心38（33f，594未改核心）；Workbench305/39套件（594）；MLX音频CPU38/零失败零跳过（594，含旧SA3）；App宿主6/零失败零跳过（594）；Python provider21、export10、packaging8（33f，其文件在594未变）；四源码内存compile检查不执行模块。完整测试清单与版本不混合成产品通过率。普通build首次误带仅测试允许的-enableCodeCoverage，exit64；去掉调用参数后普通build成功，不改工程设置。
+- 普通App编译与内嵌两种引擎隔离打包/签名已完成，沿既有Team/bundle/entitlements；42个MRT2 native文件逐个签名和验证，签名后清单更新，非native保持原摘要；SA3取自既有验收产物的副本。产物 `deployment-v2/signed-app/D.app`，App代码594，MRT2资源33f。没有重签/替换普通D，没有新下载/许可/TCC或全局配置变化。
+
+**恢复检查点**：用户已确认普通D退出/其他GPU空闲/允许前台与短试听；隔离App以独立 `D_UI_TEST_SESSION=7f685a8d-a915-4c86-b9ab-7bec39d422a7` 启动，PID41649（恢复时核验，不当作永恒身份），启动器工具session98319。CUA首次访问明确报告Mac锁定，未进入UI、未启动App内生成。已播放一次Glass并发解锁请求。所有Worker/Reviewer和测试进程结束；只有本任务隔离App保持空闲等待，没有假称它已关闭。GUI/听感H17/正式书签条件下r4提交/源接纳/源复验/push仍未完成。
+
+下一动作：解锁后重新核对本任务App身份和资源，再用专属gui/test-projects创建测试项目，通过模型选择/两个条件候选/试听/采用拒绝撤销/保存重开/安全导出完成真实验收。不得因CPU通过把未验收路径写成已发布。若当前无法配合，保留候选和本证据，不启动下一产品阶段。普通D四文件与scheme最新保护见gui/locked-checkpoint.json；不再重复已给模型、环境、签名授权。H09仍独立等待麦克风设备。
