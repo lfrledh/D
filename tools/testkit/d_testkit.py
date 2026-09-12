@@ -1005,14 +1005,18 @@ class KitRunner:
         result["systemAfter"] = self._system_observation()
         if process.timed_out or process.forced_stop:
             result["message"] = "case timed out"
-            result["failureDiagnostics"] = ["case timed out or required forced termination"]
-            result["reportStatus"] = "missing" if not report.exists() else "present"
+            diagnostics, report_status = _failure_diagnostics(
+                report, "case timed out or required forced termination")
+            result["failureDiagnostics"] = diagnostics
+            result["reportStatus"] = report_status
             result["failureCause"] = "unknown"
             return result
         if process.stdout_limited or process.stderr_limited:
             result["message"] = "case output exceeded the configured limit"
-            result["failureDiagnostics"] = ["case output exceeded the configured limit"]
-            result["reportStatus"] = "missing" if not report.exists() else "present"
+            diagnostics, report_status = _failure_diagnostics(
+                report, "case output exceeded the configured limit")
+            result["failureDiagnostics"] = diagnostics
+            result["reportStatus"] = report_status
             result["failureCause"] = "unknown"
             return result
         _require(report.exists() and report.is_file() and not report.is_symlink(),

@@ -82,6 +82,15 @@ if MODE == "deep-report":
     __import__("pathlib").Path(report_path).write_text(
         '{"schemaVersion":1,"tool":"d-infer","exitCode":1,"failure":' + deep + '}', encoding="utf-8")
     raise SystemExit(1)
+if MODE in ("reported-timeout", "reported-output-limit"):
+    report={"schemaVersion":1,"tool":"d-infer","backend":backend,"exitCode":1,"options":options,
+            "failure":"simulated load failure at "+model,
+            "artifactCleanupError":"simulated cleanup detail",
+            "runs":[{"errorMessage":"simulated backend detail"}]}
+    __import__("pathlib").Path(report_path).write_text(json.dumps(report),encoding="utf-8")
+    if MODE == "reported-output-limit":
+        os.write(1, b"x" * (17 * 1024 * 1024))
+    time.sleep(60)
 if MODE == "load-failure":
     report={"schemaVersion":1,"tool":"d-infer","backend":backend,"exitCode":1,"options":options,
             "failure":"simulated load failure at "+model+" "+("x"*3000),
@@ -585,6 +594,36 @@ class RunnerTests(unittest.TestCase):
         observed = result["summary"]["attempts"][0]["cases"]
         self.assertTrue(observed[0]["publicProcess"]["timedOut"])
         self.assertEqual(observed[1]["status"], "not_started_after_failure")
+
+    def test_probe_timeout_retains_readable_backend_diagnostics(self):
+        case = text_case()
+        case["timeoutSeconds"] = .5
+        fixture = self.fixture(cases=[case], mode="reported-timeout", admission_policy="probe")
+        with mock.patch.object(runner_module, "PROCESS_POLL_SECONDS", .01), \
+             mock.patch.object(runner_module, "INTERRUPT_GRACE_SECONDS", .01), \
+             mock.patch.object(runner_module, "TERM_GRACE_SECONDS", .01):
+            result = fixture.runner().run("quick")
+        observed = result["summary"]["attempts"][0]["cases"][0]
+        self.assertEqual(observed["status"], "failed")
+        self.assertTrue(observed["publicProcess"]["timedOut"])
+        self.assertEqual(observed["reportStatus"], "readable")
+        self.assertEqual(observed["failureCause"], "unknown")
+        self.assertTrue(any("timed out" in item for item in observed["failureDiagnostics"]))
+        self.assertTrue(any("simulated load failure" in item for item in observed["failureDiagnostics"]))
+
+    def test_probe_output_limit_retains_readable_backend_diagnostics(self):
+        fixture = self.fixture(mode="reported-output-limit", admission_policy="probe")
+        with mock.patch.object(runner_module, "PROCESS_POLL_SECONDS", .01), \
+             mock.patch.object(runner_module, "INTERRUPT_GRACE_SECONDS", .01), \
+             mock.patch.object(runner_module, "TERM_GRACE_SECONDS", .01):
+            result = fixture.runner().run("quick")
+        observed = result["summary"]["attempts"][0]["cases"][0]
+        self.assertEqual(observed["status"], "failed")
+        self.assertTrue(observed["publicProcess"]["stdoutLimited"])
+        self.assertEqual(observed["reportStatus"], "readable")
+        self.assertEqual(observed["failureCause"], "unknown")
+        self.assertTrue(any("output exceeded" in item for item in observed["failureDiagnostics"]))
+        self.assertTrue(any("simulated load failure" in item for item in observed["failureDiagnostics"]))
 
     def test_probe_expected_cancellation_continues_to_next_case(self):
         cases = [text_case("one", "Inputs/one.txt"), text_case("two", "Inputs/two.txt")]
