@@ -17,7 +17,7 @@ Worker允许路径严格为：
 - `tools/testkit/tests/test_runner.py`
 - `tools/testkit/README.zh-CN.md`
 - `tools/testkit/build_kit.py`（仅现有launcher的中文提示/结束操作文字，不改复制、摘要、路径或打包行为）
-- `tools/testkit/tests/test_builder.py`（仅确需验证launcher文案）
+- `tools/testkit/tests/test_runner.py` 内可补 launcher 文案检查；已有 `test_packaging.py` 只读/运行。准备规格误写为 test_builder.py，repair1 已澄清，不要求额外建文件。
 
 Lead拥有`Profiles/profiles.json`、本任务记录、CURRENT_ACTIONS/目标/人工清单和外部封装输出。Worker不能修改这些文件、Swift/后端/应用/工程/依赖/签名/模型/原SSD包/Results/个人scheme。不得用全库格式化或删除断言消除失败。
 
@@ -50,3 +50,9 @@ Lead在Worker停写后独立review；使用隔离新kit/独立Results，串行�
 Worker预检先返回物理目录/Git根/common/HEAD/分支/规格/允许路径/验收；Lead从实际turn_context核对Sol/high与workspace-write、network=false、仅本树/output/tmp可写再发IMPLEMENT。意外权限拒绝/不明副作用停报，预期失败夹具按测试记录；每轮修复前审核异常。全过程每次子执行≤15分钟；Lead只回收自有句柄。
 
 恢复点：源仍上述基线，个人scheme唯一未暂存差异；原包及现场Results未动。先规格准备提交→受限Worker→Lead复核／封装／真实验证。下一产品准备按MUSIC_ROADMAP顶部条件控制入口；新资源/依赖须单独具体确认，不用SA3冒称支持精确音符。
+
+## 2026-09-13 执行中检查点
+
+准备基线54f57fc4be01c91ece018ddd5dfa19a4f62e9037；受限Runner Worker Sol/high线程01a09619-5532-7350-ac03-87bf162fd07e，cwd与workspace-write/network=false已从实际turn_context核对，隐藏服务端解析unknown。run-20260912T144755Z/worker保留请求、观察及事件。初交900秒到时由本任务包装器回收，未报告完成；已写四个获准文件，Lead复验65方法中两项即时去噪取消超时，其余63项通过。原因是默认缓冲pipe的read(65536)等待，不是模型失败或新权限。修复1已给出此反例、事件唤醒竞态及未补齐的原冻结菜单/中断/心跳/历史投影测试要求，未改通过标准；普通修复余量在本轮后还剩1。前轮只观察到补丁包装解析失败，无权限扩大事件。
+
+Lead单独修改profile中文标题，以及audio-cancel6使用已冻结cancelWhen，其他生成/模型/精度参数不变。源d6623fd及个人scheme仍保持，原包Results保留671个文件的起始摘要；普通D关键文件单列保护快照。尚未接纳或发布新版包。一次Lead文档追加的系统Python脚本解析失败，未修改文档；随后以文件补丁写入。profile独立提交e168f17已完成，不能把未执行的文档更新混入该提交描述。
