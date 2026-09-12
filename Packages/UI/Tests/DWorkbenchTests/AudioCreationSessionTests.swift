@@ -211,7 +211,7 @@ struct AudioCreationSessionTests {
             guard case .audio(let input) = job.request.input else { Issue.record("Wrong modality"); return }
             let frozen = try #require(input.source)
             #expect(input.operation == operation && input.durationSeconds == Double(882) / 44_100)
-            #expect(input.strength == Float(0.4))
+            #expect(input.diffusion?.strength == Float(0.4))
             #expect(frozen.sha256 == sourceAsset.metadata.audio?.contentSHA256)
             #expect(frozen.url.path == project.appendingPathComponent("AudioInputs/\(job.id.uuidString)/source.wav").path)
             #expect(try Data(contentsOf: frozen.url) == originalBytes)

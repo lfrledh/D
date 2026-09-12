@@ -1733,9 +1733,9 @@ private enum ProjectFiles {
     }
 
     static func validateCurrentAudioProfile(_ request: AudioRequest) throws {
-        guard request.seed <= UInt64(UInt32.max) - 1,
-              (1...100).contains(request.steps), request.guidanceScale.isFinite,
-              (1...15).contains(request.guidanceScale) else {
+        guard let diffusion = request.diffusion, request.seed <= UInt64(UInt32.max) - 1,
+              (1...100).contains(diffusion.steps), diffusion.guidanceScale.isFinite,
+              (1...15).contains(diffusion.guidanceScale) else {
             throw ProjectStoreError.invalidProject("音频请求超出当前支持的 seed、steps 或 guidance 范围。")
         }
     }

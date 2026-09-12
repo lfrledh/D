@@ -13,14 +13,14 @@ struct AudioCreationStoreTests {
             durationText: "1.25", seedText: "4294967294", stepsText: "100",
             guidanceText: "15", strengthText: "unfinished")
         let generated = try generate.makeRequest(source: nil)
-        #expect(generated.durationSeconds == 1.25 && generated.strength == 1)
+        #expect(generated.durationSeconds == 1.25 && generated.diffusion?.strength == 1)
         #expect(generated.seed == UInt64(UInt32.max) - 1)
 
         var variation = AudioCreationDraft(prompt: "variation", operation: .variation,
             durationText: "unfinished", seedText: "0", stepsText: "1",
             guidanceText: "1", strengthText: "0.25")
         let varied = try variation.makeRequest(source: source)
-        #expect(varied.durationSeconds == 1 && varied.strength == 0.25)
+        #expect(varied.durationSeconds == 1 && varied.diffusion?.strength == 0.25)
         variation.strengthText = "nan"
         #expect(throws: InferenceFailure.self) { try variation.makeRequest(source: source) }
 

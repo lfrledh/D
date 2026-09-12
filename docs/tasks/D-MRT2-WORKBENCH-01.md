@@ -83,3 +83,35 @@
 - Lead核对44.1kHz限定和专用参数，采纳事实定位；未采纳Terra的“可把条件并入prompt”建议（不满足用户已明确的结构化控制），也未采纳所有工作必须串行的建议。后续任务直接写“禁止降为prompt”和冻结状态接口，减少执行者需要猜的决策；规划建议偏差不混记为已实现代码失败。
 - 本轮无产品代码/测试/模型/GUI变化；没有重算历史费用。规划耗时/进程结束证据逐份记录；完整Lead归因和订阅费用unknown，不以本次两个审查任务推断成本最优。
 - 下一动作：恢复时核对源/个人修改/进程与本计划；先落实P0公共契约及独立部署门槛，再签发明确IMPLEMENT任务。H09/H17及高配边界仍保留；不把计划提交当作正式MRT2工作台已经交付。最终文档SHA写外部回执，不在本文自引用提交。
+
+## 2026-09-13 实施启动：implementation-r1 / contract-r1
+
+用户已批准继续直到本阶段完成，并确认本阶段真实验收前普通D已保存退出、其他AI/GPU空闲、隔离版可间歇使用前台及播放短样本。源和集成树均从`974477ef34a6708b9b4b90f7c79c19ae23ff716c`恢复；源个人修改与索引核对一致。新证据目录为`D-Development/AgentTrials/D-MRT2-WORKBENCH-01/run-20260912T163022Z-implementation`，旧规划证据不覆盖。
+
+P0已由Lead实现值型参数分族：`AudioRequest.parameters`为`AudioSynthesisParameters.diffusion(AudioDiffusionParameters)`或`.mrt2FixedV1(AudioNoteSequence)`；旧初始化器及flat JSON保持，原字段读取改用明确的`diffusion`，MRT2不提供伪steps/guidance/strength。新增`init(prompt:seed:noteSequence:)`，`noteSequence`可查询，`outputSampleRate`按族为44100/48000。`AudioNoteSequence`含schemaVersion1、frameRate25、durationFrames1...400、可缺省notes；元素pitch/startFrame/endFrame，canonicalNotes按pitch/start/end排序，与原probe一致。新请求JSON额外`parameters:{kind:"mrt2FixedV1",sequence:{...}}`，禁止混入旧扩散字段；旧编码不增加该key。原SA3准入显式要求diffusion。上述源码是共同契约事实，不复制成另一套Worker类型。
+
+核心首轮37通过；工作台首次编译发现3处旧测试直接读strength，已仅迁到diffusion.strength保留期望。随后增加“旧请求不得丢弃notes”反例/严格字段检查，最终准备SHA及重新检查结果写外部准备回执，不冒称先前37绑定新增代码。
+
+部署只读Sol/high thread `01a09675-0e52-7b83-85aa-169f7e5ee9f7`的可观察身份见本run/deployment/route-observation.json；其结论已复核：开发环境非editable、无pth/link，但导入闭包带入JAX/Flax/librosa等，本阶段采用固定源码导出路径的轻量适配，独立引擎，不放宽原SA3包校验。只读查询误用了系统Git包装器，一个命令块触发7条`/tmp/xcrun_db-*`拒绝后仍继续读取，未遵循立即停报规则；未观察到提权/成功越界，实际readonly沙箱保留，Lead也遗漏了在此临时任务重复写明已知显式Git入口。该事实记录在permission-event-audit，不追改合规。后续任务显式使用`/Applications/Xcode.app/Contents/Developer/usr/bin/git`；不得再用包装器或探测越界写。
+
+### P0-E：导出运行路径适配（就绪后独立Sol/high）
+
+这是部署前置的有限实现，和W2条件数据可独立进行；不假称尚未过部署的W1正式桥接已就绪。允许路径仅`Backends/Audio/Python/d_mrt2_export.py`、`Backends/Audio/Tests/test_mrt2_export.py`、`Backends/Audio/MRT2_EXPORT_PROVENANCE.md`。固定来源为先前已批准的本机SDK源码`.../D-MRT2-CONDITIONS-01/run-20260912T150154Z/source/magenta-realtime/magenta_rt/{mlx/system.py,musiccoca.py,config.py,mlx/model.py}`；保留Apache来源/改动说明，Lead另提供LICENSE。不得修改SDK/依赖环境、Experiments、其他provider或任何Swift文件。
+
+冻结API：`ExportedMRT2(model_root: pathlib.Path, prompt: str, seed: int)`每实例一个任务，导出`generate_frame(note_frame: tuple[int,...] | None) -> numpy.ndarray`（1920×2、float32）、`identity() -> dict`、`close() -> dict`。导入模块不初始化MLX/模型；无全局模型/随机state缓存。构造只支持固定small官方导出、warmup5、temperature1.3/top_k40、cfg musiccoca3/notes1/drums1。仅依赖已有NumPy/MLX/LiteRT/SentencePiece与标准库；不得带入magenta_rt/JAX/Flax/sequence_layers/librosa。按原SDK text encoder/mapper(seed0)/RVQ与graph参数次序精确移植；先前proto可能截断超127个小写SentencePiece token，本适配必须明确拒绝，不能记录完整提示而只算前段。mapper seed0与请求采样seed分别记录。
+
+固定export state共有165个leaf，采样key为index2、uint32(1,2)默认[0,42]；先核对结构，再仅对每任务初始state置请求seed，续帧不重置。warmup使用独立默认state不污染实际初态。原图已经gain/clamp/int16；仅按SDK转float32/32768，不额外增益/裁剪/重采样。输出形状、dtype、有限性检查；close同步、释放引用和cache，失败保留错误不宣称released；不能用os._exit或吞异常。identity包含固定源/图路径配置、模型revision、MLX版本/实际转换和未知内部精度。路径不得隐式下载或fallback到另一个model root。
+
+验收：CPU可用受控fake模块检查参数顺序/shape/负条件、缺省与全零差别、seed/state guard、跨帧state、长prompt拒绝和close失败，不导入真实MLX。实际MLX/同seed参考输出对照/不同seed/取消由Lead独占执行，CPU不能替代。运行Python使用-B与task tmp；语法仅tokenize.open+compile内存检查。初交+2针对性修复，900秒每轮；未预期权限/模型/目录差异立即停报，不能因只读查询退出0忽略拒绝提示。
+
+### W2：条件草稿与严格条件文件（就绪后独立Sol/high）
+
+允许仅`Packages/UI/Sources/DWorkbench/Audio/MusicCreationDraft.swift`、`Packages/UI/Sources/DWorkbench/Audio/MusicConditionFile.swift`、`Packages/UI/Tests/DWorkbenchTests/MusicCreationDraftTests.swift`。禁止改AudioCreationDraft、ProjectStore/ProjectSession、导航/应用/后端/任务规格。共享接线Lead负责。
+
+冻结API：`MusicNoteDraft: Codable,Sendable,Equatable,Identifiable`有可变`id:UUID,pitchText:String,startText:String,durationText:String`及默认id初始化器。`MusicCreationDraft: Codable,Sendable,Equatable`有`notes:[MusicNoteDraft]`、`hasNoteCondition:Bool`（false→absent，true空rows→explicit empty），`init(notes:hasNoteCondition:)`、`static var example:Self`、`func makeSequence(durationText:String) throws -> AudioNoteSequence`。文字字段与UUID序列原样保存，编辑草稿可暂时无效；提交才校验。pitch输入只接0...127整数或音名如C4/C#4/Db4，固定C4=60，不猜八度；时间为秒的十进制字符串，仅允许非负/正且精确40ms倍数，以十进制整数运算检查，不Double近似或四舍五入。有限字符串长度、最多512行，不溢出、不接受NaN/Infinity/符号花样；按既定条件边界核验同音高重叠。
+
+`MusicConditionFile.decode(_ data:Data) throws -> (draft:MusicCreationDraft,durationText:String)`；`encode(_ draft:MusicCreationDraft,durationText:String) throws -> Data`。外部文件仅schemaVersion/frameRate/durationFrames/可选notes（元素pitch/startFrame/endFrame），无prompt/seed/路径/URI，不执行/联网；≤128KiB、深度≤8，拒绝重复key/未知字段/布尔冒数值/小数冒整数/坏UTF8/null notes/坏版本/越界。可以实现局部小型严格解析，不能建立通用新JSON框架。解码后UUID新建，保存重开UUID保持；语义encode→decode完整，nil与[]区别保留；禁止把音符并到普通prompt。
+
+验收至少覆盖中文/组合字符原样草稿、合法C4/升降音/和弦/相邻音、0.04与0.03/0.0400000001、负/巨大数溢出、跨界/重叠/513行、坏输入仍可Codable保存、缺省/空条件、8层以上/重复key/布尔/1.0版本/未知字段/过大/坏UTF8、安全roundtrip。Worker可写Tests但不改标准。已知SwiftPM嵌套沙箱由Lead执行，不让Worker先撞权限；Worker只可用显式swiftc及任务module-cache做局部typecheck（有就绪DInference模块时），或只交代码及未执行测试。初交+2修复，900秒/轮；外部模型/GUI/network禁止。
+
+每个写Worker先从本任务準备提交建不同外盘工作树/分支，precheck只读动作→Lead核验turn_context模型/effort/workspace-write实际写根及源保护→同线程IMPLEMENT；输出/tmp和缓存仅本run的该Worker目录，common Git不可写，Worker不commit。精确路径/基线/runtime证据写外部request，不猜工具参数。当前两实现均未派出，下一动作是完成P0准备检查与签发。

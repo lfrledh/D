@@ -32,9 +32,7 @@ public struct AudioRequest: Codable, Sendable, Equatable {
     public let prompt: String
     public let durationSeconds: Double
     public let seed: UInt64
-    public let steps: Int
-    public let guidanceScale: Float
-    public let strength: Float
+    public let parameters: AudioSynthesisParameters
     public let source: AudioSourceReference?
     public let editRegion: AudioEditRegion?
 
@@ -42,18 +40,82 @@ public struct AudioRequest: Codable, Sendable, Equatable {
                 seed: UInt64, steps: Int, guidanceScale: Float = 1, strength: Float = 1,
                 source: AudioSourceReference? = nil, editRegion: AudioEditRegion? = nil) {
         self.operation = operation; self.prompt = prompt; self.durationSeconds = durationSeconds
-        self.seed = seed; self.steps = steps; self.guidanceScale = guidanceScale; self.strength = strength
+        self.seed = seed; self.parameters = .diffusion(.init(steps: steps, guidanceScale: guidanceScale, strength: strength))
         self.source = source; self.editRegion = editRegion
+    }
+
+    public init(prompt: String, seed: UInt64, noteSequence: AudioNoteSequence) {
+        operation = .generate; self.prompt = prompt; self.seed = seed
+        durationSeconds = noteSequence.durationSeconds
+        parameters = .mrt2FixedV1(noteSequence); source = nil; editRegion = nil
+    }
+
+    public var diffusion: AudioDiffusionParameters? {
+        if case .diffusion(let value) = parameters { return value }; return nil
+    }
+    public var noteSequence: AudioNoteSequence? {
+        if case .mrt2FixedV1(let value) = parameters { return value }; return nil
+    }
+    public var outputSampleRate: Int { noteSequence == nil ? 44_100 : 48_000 }
+
+    private enum CodingKeys: String, CodingKey {
+        case operation, prompt, durationSeconds, seed, steps, guidanceScale, strength, source, editRegion, parameters
+    }
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        operation = try c.decode(AudioOperation.self, forKey: .operation)
+        prompt = try c.decode(String.self, forKey: .prompt)
+        durationSeconds = try c.decode(Double.self, forKey: .durationSeconds)
+        seed = try c.decode(UInt64.self, forKey: .seed)
+        source = try c.decodeIfPresent(AudioSourceReference.self, forKey: .source)
+        editRegion = try c.decodeIfPresent(AudioEditRegion.self, forKey: .editRegion)
+        if c.contains(.parameters) {
+            try requireAudioKeys(decoder, allowed: ["operation", "prompt", "durationSeconds", "seed", "source", "editRegion", "parameters"])
+            parameters = try c.decode(AudioSynthesisParameters.self, forKey: .parameters)
+        } else {
+            // Old project snapshots retain their exact flat diffusion representation.
+            try requireAudioKeys(decoder, allowed: ["operation", "prompt", "durationSeconds", "seed", "source", "editRegion", "steps", "guidanceScale", "strength"])
+            parameters = .diffusion(.init(steps: try c.decode(Int.self, forKey: .steps),
+                guidanceScale: try c.decode(Float.self, forKey: .guidanceScale),
+                strength: try c.decode(Float.self, forKey: .strength)))
+        }
+        try validate()
+    }
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(operation, forKey: .operation); try c.encode(prompt, forKey: .prompt)
+        try c.encode(durationSeconds, forKey: .durationSeconds); try c.encode(seed, forKey: .seed)
+        try c.encodeIfPresent(source, forKey: .source); try c.encodeIfPresent(editRegion, forKey: .editRegion)
+        switch parameters {
+        case .diffusion(let value):
+            try c.encode(value.steps, forKey: .steps); try c.encode(value.guidanceScale, forKey: .guidanceScale)
+            try c.encode(value.strength, forKey: .strength)
+        case .mrt2FixedV1:
+            try c.encode(parameters, forKey: .parameters)
+        }
     }
 
     /// Common shape checks only; profile-specific duration, precision, seed and codec limits
     /// are enforced by the selected backend before loading. No hidden conversions here.
     public func validate() throws {
         guard prompt.utf8.count <= 1_048_576, !prompt.contains("\0"),
-              durationSeconds.isFinite, durationSeconds > 0, steps > 0,
-              guidanceScale.isFinite, guidanceScale >= 0,
-              strength.isFinite, strength > 0, strength <= 1 else {
+              durationSeconds.isFinite, durationSeconds > 0 else {
             throw InferenceFailure.invalidRequest("Invalid audio generation parameters.")
+        }
+        if let sequence = noteSequence {
+            try sequence.validate()
+            guard operation == .generate, source == nil, editRegion == nil,
+                  durationSeconds == sequence.durationSeconds, seed <= UInt64(UInt32.max),
+                  !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  prompt.utf8.count <= 4096 else {
+                throw InferenceFailure.invalidRequest("Invalid MRT2 generation parameters.")
+            }
+            return
+        }
+        guard let diffusion, diffusion.steps > 0, diffusion.guidanceScale.isFinite,
+              diffusion.guidanceScale >= 0, diffusion.strength.isFinite,
+              diffusion.strength > 0, diffusion.strength <= 1 else {
+            throw InferenceFailure.invalidRequest("Invalid audio diffusion parameters.")
         }
         if let source {
             guard source.url.isFileURL, source.url.path.hasPrefix("/"),
@@ -66,7 +128,7 @@ public struct AudioRequest: Codable, Sendable, Equatable {
         }
         switch operation {
         case .generate:
-            guard source == nil, editRegion == nil, strength == 1 else {
+            guard source == nil, editRegion == nil, diffusion.strength == 1 else {
                 throw InferenceFailure.invalidRequest("Generation does not accept a source or edit region.")
             }
         case .variation:

@@ -243,6 +243,9 @@ public actor MLXAudioBackend: InferenceBackend {
     }
 
     private static func encodeRequest(_ request: InferenceRequest, audio: AudioRequest) throws -> Data {
+        guard let diffusion = audio.diffusion else {
+            throw InferenceFailure.invalidRequest("SA3 requires diffusion parameters; note conditioning is not supported by this provider.")
+        }
         let frozenSource = audio.source.map {
             FrozenRequest.Source(path: $0.url.standardizedFileURL.path, sha256: $0.sha256,
                                  frameCount: $0.frameCount, sampleRate: $0.sampleRate, channels: $0.channels)
@@ -253,7 +256,7 @@ public actor MLXAudioBackend: InferenceBackend {
         let frozen = FrozenRequest(
             runID: request.id.uuidString.lowercased(), operation: audio.operation.rawValue,
             prompt: audio.prompt, durationSeconds: audio.durationSeconds, seed: audio.seed,
-            steps: audio.steps, guidanceScale: audio.guidanceScale, strength: audio.strength,
+            steps: diffusion.steps, guidanceScale: diffusion.guidanceScale, strength: diffusion.strength,
             source: frozenSource, editRegion: frozenRegion)
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]

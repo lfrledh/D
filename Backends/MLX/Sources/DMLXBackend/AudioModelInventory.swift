@@ -29,9 +29,9 @@ struct AudioModelInventory: Sendable {
             throw InferenceFailure.invalidRequest(
                 "Audio execution requires the registered SA3 revision \(revision).")
         }
-        guard audio.seed <= UInt64(UInt32.max) - 1,
-              (1...100).contains(audio.steps),
-              audio.guidanceScale.isFinite, (1...15).contains(audio.guidanceScale) else {
+        guard let diffusion = audio.diffusion, audio.seed <= UInt64(UInt32.max) - 1,
+              (1...100).contains(diffusion.steps),
+              diffusion.guidanceScale.isFinite, (1...15).contains(diffusion.guidanceScale) else {
             throw InferenceFailure.invalidRequest("Audio seed, steps, or guidance is outside the AUDIO1 profile limits.")
         }
         let maximumDuration: Double = supplied.profile == .medium ? 380 : 120
