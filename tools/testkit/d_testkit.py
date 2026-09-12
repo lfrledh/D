@@ -44,6 +44,7 @@ MAX_RSS_SAMPLES = 7200
 MAX_FAILURE_DIAGNOSTICS = 4
 MAX_FAILURE_DIAGNOSTIC_CHARS = 2048
 UINT64_MAX = (1 << 64) - 1
+MAX_CLI_MEMORY_BUDGET_MIB = UINT64_MAX // MIB
 INTERRUPT_GRACE_SECONDS = 30.0
 TERM_GRACE_SECONDS = 5.0
 ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
@@ -90,7 +91,7 @@ def _read_json(path: Path, label: str, maximum: int = MAX_JSON_BYTES) -> tuple[b
     raw = path.read_bytes()
     try:
         return raw, json.loads(raw.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+    except (UnicodeDecodeError, json.JSONDecodeError, RecursionError) as error:
         raise KitError(f"{label} is not valid UTF-8 JSON: {error}") from error
 
 
@@ -771,9 +772,12 @@ class KitRunner:
         admission_policy = self._admission_policy(profile_id)
         budget_value = preflight.get("budget")
         _require(isinstance(budget_value, dict), "preflight budget is missing", kind="failed")
-        for field in ("physicalMemoryBytes", "admissionBudgetBytes", "admissionBudgetMiB"):
+        for field in ("physicalMemoryBytes", "admissionBudgetBytes"):
             _require(_is_int(budget_value.get(field)) and 0 <= budget_value[field] <= UINT64_MAX,
                      f"preflight {field} is outside UInt64 range", kind="failed")
+        _require(_is_int(budget_value.get("admissionBudgetMiB"))
+                 and 0 <= budget_value["admissionBudgetMiB"] <= MAX_CLI_MEMORY_BUDGET_MIB,
+                 "preflight admissionBudgetMiB cannot be represented by CLI UInt64 bytes", kind="failed")
         if resume is None:
             run_id = str(uuid.uuid4())
             run_root = results_root / run_id
@@ -1311,8 +1315,8 @@ def _admission_record(policy: str, budget: Mapping[str, Any], inspection: Mappin
     physical_bytes = budget.get("physicalMemoryBytes")
     _require(_is_int(recommended_bytes) and 0 <= recommended_bytes <= UINT64_MAX,
              "recommended admission budget is outside UInt64 range", kind="failed")
-    _require(_is_int(recommended_mib) and 0 <= recommended_mib <= UINT64_MAX,
-             "recommended admission MiB is outside UInt64 range", kind="failed")
+    _require(_is_int(recommended_mib) and 0 <= recommended_mib <= MAX_CLI_MEMORY_BUDGET_MIB,
+             "recommended admission MiB cannot be represented by CLI UInt64 bytes", kind="failed")
     _require(_is_int(physical_bytes) and 0 <= physical_bytes <= UINT64_MAX,
              "physical memory observation is outside UInt64 range", kind="failed")
     estimate = inspection.get("estimate")
@@ -1326,7 +1330,8 @@ def _admission_record(policy: str, budget: Mapping[str, Any], inspection: Mappin
     override = policy == "probe" and not within
     if override:
         execution_mib = max(execution_mib, estimated_mib)
-    _require(execution_mib <= UINT64_MAX, "execution admission MiB is outside UInt64 range", kind="failed")
+    _require(execution_mib <= MAX_CLI_MEMORY_BUDGET_MIB,
+             "execution admission MiB cannot be represented by CLI UInt64 bytes", kind="failed")
     return {"policy": policy,
             "physicalMemoryBytes": physical_bytes if physical_bytes > 0 else "unknown",
             "recommendedBudgetBytes": recommended_bytes,
@@ -1530,7 +1535,7 @@ def _diagnostic_text(label: str, value: Any) -> str | None:
     else:
         try:
             rendered = json.dumps(value, ensure_ascii=False, sort_keys=True)
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, RecursionError):
             rendered = f"<{type(value).__name__}>"
     return f"{label}: {rendered}"[:MAX_FAILURE_DIAGNOSTIC_CHARS]
 
@@ -1550,7 +1555,7 @@ def _failure_diagnostics(report: Path, fallback: str) -> tuple[list[str], str]:
         if report.stat().st_size > MAX_STREAM_BYTES:
             raise ValueError(f"CLI report exceeds {MAX_STREAM_BYTES} bytes")
         payload = json.loads(report.read_bytes().decode("utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError) as error:
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError, RecursionError) as error:
         damaged = _diagnostic_text("report", f"unreadable or invalid: {type(error).__name__}: {error}")
         if damaged: diagnostics.append(damaged)
         return diagnostics[:MAX_FAILURE_DIAGNOSTICS], "damaged"

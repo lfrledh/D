@@ -77,6 +77,11 @@ if MODE == "corrupt-report":
     raise SystemExit(3)
 if MODE == "signal":
     os.kill(os.getpid(), signal.SIGTERM)
+if MODE == "deep-report":
+    deep = "[" * 10000 + "0" + "]" * 10000
+    __import__("pathlib").Path(report_path).write_text(
+        '{"schemaVersion":1,"tool":"d-infer","exitCode":1,"failure":' + deep + '}', encoding="utf-8")
+    raise SystemExit(1)
 if MODE == "load-failure":
     report={"schemaVersion":1,"tool":"d-infer","backend":backend,"exitCode":1,"options":options,
             "failure":"simulated load failure at "+model+" "+("x"*3000),
@@ -471,8 +476,22 @@ class RunnerTests(unittest.TestCase):
         admission = runner_module._admission_record("probe", budget, inspection)
         self.assertEqual(admission["physicalMemoryBytes"], "unknown")
         self.assertEqual(admission["executionBudgetMiB"], 2)
-        inspection["estimate"]["peakBytes"] = runner_module.UINT64_MAX + 1
-        with self.assertRaisesRegex(runner_module.KitError, "UInt64"):
+        last_representable_bytes = runner_module.MAX_CLI_MEMORY_BUDGET_MIB * runner_module.MIB
+        inspection["estimate"]["peakBytes"] = last_representable_bytes
+        accepted = runner_module._admission_record("probe", budget, inspection)
+        self.assertEqual(accepted["executionBudgetMiB"], runner_module.MAX_CLI_MEMORY_BUDGET_MIB)
+        for rejected_peak in (last_representable_bytes + 1, runner_module.UINT64_MAX,
+                              runner_module.UINT64_MAX + 1):
+            inspection["estimate"]["peakBytes"] = rejected_peak
+            with self.subTest(rejected_peak=rejected_peak), \
+                 self.assertRaisesRegex(runner_module.KitError, "UInt64 bytes|UInt64 range"):
+                runner_module._admission_record("probe", budget, inspection)
+        inspection["estimate"]["peakBytes"] = 1
+        budget["admissionBudgetMiB"] = runner_module.MAX_CLI_MEMORY_BUDGET_MIB
+        self.assertEqual(runner_module._admission_record("probe", budget, inspection)["executionBudgetMiB"],
+                         runner_module.MAX_CLI_MEMORY_BUDGET_MIB)
+        budget["admissionBudgetMiB"] += 1
+        with self.assertRaisesRegex(runner_module.KitError, "recommended admission MiB.*UInt64 bytes"):
             runner_module._admission_record("probe", budget, inspection)
 
     def test_normal_probe_success_is_complete(self):
@@ -530,6 +549,23 @@ class RunnerTests(unittest.TestCase):
         case = result["summary"]["attempts"][0]["cases"][0]
         self.assertEqual(case["reportStatus"], "damaged")
         self.assertTrue(any("invalid" in item for item in case["failureDiagnostics"]))
+
+    def test_probe_deep_failure_report_is_bounded_and_stops_group(self):
+        deep_value: object = 0
+        for _ in range(10000):
+            deep_value = [deep_value]
+        self.assertEqual(runner_module._diagnostic_text("deep", deep_value), "deep: <list>")
+        cases = [text_case("one", "Inputs/one.txt"), text_case("two", "Inputs/two.txt")]
+        result = self.fixture(cases=cases, mode="deep-report", admission_policy="probe").runner().run("quick")
+        first, second = result["summary"]["attempts"][0]["cases"]
+        self.assertEqual(first["status"], "failed")
+        self.assertEqual(first["publicProcess"]["returnCode"], 1)
+        self.assertEqual(first["publicProcess"]["processStatus"], "exited")
+        self.assertEqual(first["reportStatus"], "damaged")
+        self.assertTrue(first["failureDiagnostics"])
+        self.assertLessEqual(len(first["failureDiagnostics"]), 4)
+        self.assertTrue(all(len(item) <= 2048 for item in first["failureDiagnostics"]))
+        self.assertEqual(second["status"], "not_started_after_failure")
 
     def test_probe_signal_records_signal_without_calling_it_oom(self):
         result = self.fixture(mode="signal", admission_policy="probe").runner().run("quick")
