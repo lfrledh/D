@@ -523,6 +523,102 @@ def _runtime_identity() -> dict[str, Any]:
     }
 
 
+def _require_rng_leaf(leaf: Any, mx: Any, expected_seed: int, path: str) -> None:
+    shape = tuple(getattr(leaf, "shape", ()))
+    dtype = getattr(leaf, "dtype", None)
+    if shape != (1, 2) or dtype != mx.uint32:
+        raise RuntimeError(
+            f"{path} 必须是 uint32 shape=(1, 2)，实际 dtype={dtype}, shape={shape}"
+        )
+    try:
+        mx.eval(leaf)
+        values = leaf.tolist()
+    except Exception as error:
+        raise RuntimeError(f"无法读取 {path}：{type(error).__name__}: {error}") from error
+    if values != [[0, expected_seed]]:
+        raise RuntimeError(
+            f"{path} 默认/目标 PRNG key 不符合 [0, seed] 结构：{values}"
+        )
+
+
+def _seed_key(mx: Any, seed: int, path: str) -> Any:
+    key = mx.random.key(seed)
+    replacement = mx.stack([key])
+    _require_rng_leaf(replacement, mx, seed, path)
+    return replacement
+
+
+def _initialize_sampling_state(
+    backend: str,
+    model: Any,
+    seed: int,
+    mx: Any,
+    sequence_layers: Any | None = None,
+) -> tuple[Any, dict[str, Any]]:
+    """Build one guarded per-task state and replace only its sampler RNG leaf."""
+    if backend == "exported":
+        source = getattr(model, "_initial_state", None)
+        if not isinstance(source, list) or len(source) != 165:
+            raise RuntimeError(
+                "exported state 结构不兼容：要求 _initial_state 为 165-leaf list"
+            )
+        rng_path = "MagentaRT2StdMlxfn._initial_state[2]"
+        _require_rng_leaf(source[2], mx, 42, rng_path)
+        initial_state = list(source)
+        initial_state[2] = _seed_key(mx, seed, rng_path)
+        layout = "exported-flat-v1: _initial_state[2] of 165 leaves"
+    elif backend == "unquantized":
+        if sequence_layers is None:
+            raise RuntimeError("raw state 初始化需要 sequence_layers.mlx")
+        sampler = getattr(model, "_sampler", None)
+        num_channels = getattr(model, "_num_channels", None)
+        if sampler is None or isinstance(num_channels, bool) or not isinstance(num_channels, int):
+            raise RuntimeError("raw state 结构不兼容：缺少 _sampler/_num_channels")
+        input_spec = sequence_layers.ChannelSpec(
+            shape=(num_channels,), dtype=mx.int32
+        )
+        source = sampler.get_initial_state(
+            1,
+            input_spec,
+            constants={},
+            training=False,
+        )
+        if not isinstance(source, tuple) or len(source) != 5:
+            raise RuntimeError("raw state 结构不兼容：顶层 sampler state 必须是 5-tuple")
+        sampler_state = source[0]
+        if not isinstance(sampler_state, tuple) or len(sampler_state) != 4:
+            raise RuntimeError("raw state 结构不兼容：state[0] 必须是 4-tuple")
+        decoder_state = sampler_state[2]
+        if not isinstance(decoder_state, tuple) or len(decoder_state) != 4:
+            raise RuntimeError("raw state 结构不兼容：state[0][2] 必须是 4-tuple")
+        rng_path = "MagentaRT2Mlx._sampler initial state[0][2][0]"
+        _require_rng_leaf(decoder_state[0], mx, 42, rng_path)
+        rebuilt_decoder = list(decoder_state)
+        rebuilt_decoder[0] = _seed_key(mx, seed, rng_path)
+        rebuilt_sampler = list(sampler_state)
+        rebuilt_sampler[2] = tuple(rebuilt_decoder)
+        rebuilt_source = list(source)
+        rebuilt_source[0] = tuple(rebuilt_sampler)
+        initial_state = tuple(rebuilt_source)
+        layout = "raw-nested-v1: sampler state[0][2][0]"
+    else:
+        raise RuntimeError(f"未知 backend state 布局：{backend}")
+
+    return initial_state, {
+        "applied": True,
+        "seed": seed,
+        "methodVersion": 1,
+        "method": "replace explicit per-task initial sampling PRNG key",
+        "layout": layout,
+        "rngLeaf": rng_path,
+        "rngDType": "uint32",
+        "rngShape": [1, 2],
+        "defaultSeedGuard": 42,
+        "sourceRevision": EXPECTED_SOURCE_REVISION,
+        "crossHardwareBitwiseGuarantee": False,
+    }
+
+
 class _SDKAdapter:
     """Imports MLX/Magenta only when a real run explicitly constructs it."""
 
@@ -534,6 +630,8 @@ class _SDKAdapter:
         self._musiccoca_key = "unknown"
         self._notes_key = "unknown"
         self._identity: dict[str, Any] = {}
+        self._initial_sampling_state: Any = None
+        self._state_started = False
         try:
             import mlx.core as mx
             from magenta_rt import MagentaRT2Mlx, MagentaRT2StdMlxfn, paths
@@ -552,18 +650,30 @@ class _SDKAdapter:
             }
             if backend == "exported":
                 self._model = MagentaRT2StdMlxfn(warmup_steps=5, **arguments)
+                sequence_layers = None
                 precision = (
-                    "exported graph internal precision unknown; graph int16 output "
-                    "is converted by the SDK to float32 using division by 32768"
+                    "exported graph internal precision unknown; upstream applies "
+                    "gain 0.5, clamps to [-1,1], rounds to int16, then the SDK "
+                    "returns float32 using division by 32768"
                 )
             else:
+                import sequence_layers.mlx as sequence_layers
+
                 self._model = MagentaRT2Mlx(bits=None, **arguments)
                 precision = (
                     "bits=None disables additional quantization; Depthformer loader "
-                    "uses BF16, codec dtype remains observed/unknown"
+                    "uses BF16; upstream applies gain 0.5, clamps to [-1,1], "
+                    "rounds to int16, then the SDK returns float32 / 32768"
                 )
             self._embedding = self._model.embed_style(
                 request.prompt, use_mapper=True
+            )
+            self._initial_sampling_state, seed_application = _initialize_sampling_state(
+                backend,
+                self._model,
+                request.seed,
+                mx,
+                sequence_layers,
             )
             self._identity = {
                 "backendClass": type(self._model).__name__,
@@ -572,10 +682,12 @@ class _SDKAdapter:
                 "magentaRtVersion": self._package_version("magenta-rt"),
                 "mlxVersion": self._package_version("mlx"),
                 "precision": precision,
+                "seedApplication": seed_application,
             }
         except BaseException as error:
             self._model = None
             self._embedding = None
+            self._initial_sampling_state = None
             gc.collect()
             attempted_cleanup = self._best_effort_sync_and_clear()
             cleanup = {
@@ -599,6 +711,16 @@ class _SDKAdapter:
     def generate_frame(
         self, note_frame: tuple[int, ...] | None, state: Any
     ) -> tuple[Any, Any]:
+        if not self._state_started:
+            if state is not None:
+                raise RuntimeError("首帧不得同时传入外部 continuation state")
+            state = self._initial_sampling_state
+            self._initial_sampling_state = None
+            self._state_started = True
+            if state is None:
+                raise RuntimeError("每任务初始 sampling state 不可用")
+        elif state is None:
+            raise RuntimeError("后端 continuation state 丢失；拒绝重新播种")
         conditioning: dict[str, Any] = {self._musiccoca_key: self._embedding}
         if note_frame is not None:
             conditioning[self._notes_key] = list(note_frame)
@@ -675,6 +797,10 @@ class _SDKAdapter:
         before = self._memory()
         if isinstance(state, list):
             state.clear()
+        initial_state = self._initial_sampling_state
+        if isinstance(initial_state, list):
+            initial_state.clear()
+        self._initial_sampling_state = None
         self._embedding = None
         self._model = None
         return {"memoryBeforeRelease": before, "releaseRequested": True}
@@ -742,6 +868,10 @@ def _base_report(
         "timing": {
             "loadSeconds": None,
             "firstAudioSeconds": None,
+            "firstAudioMeaning": (
+                "first returned PCM frame; may be silence and is not first audible "
+                "sound or GUI monitoring latency"
+            ),
             "frameSeconds": [],
             "totalSeconds": None,
         },
@@ -917,9 +1047,18 @@ def run_probe(
             "samplesPerConditionFrame": SAMPLES_PER_FRAME,
             "sizeBytes": wav_size,
             "sha256": wav_sha,
-            "gainApplied": False,
-            "clipped": False,
-            "resampled": False,
+            "upstreamTransformation": {
+                "gain": 0.5,
+                "clamp": [-1.0, 1.0],
+                "roundTo": "int16",
+                "sdkReturn": "float32 divided by 32768",
+                "appliesTo": ["exported", "unquantized"],
+            },
+            "probePostprocessing": {
+                "additionalGainApplied": False,
+                "additionalClipping": False,
+                "resampled": False,
+            },
         }
         report["outcome"] = "completed"
         report["timing"]["totalSeconds"] = clock() - started
