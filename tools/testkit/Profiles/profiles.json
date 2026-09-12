@@ -79,7 +79,7 @@
     },
     {
       "id": "boundary72",
-      "title": "96／128／192 GB准入边界：72B短／长输入、重复与取消",
+      "title": "96／128／192 GB实际容量试探：72B短／长输入、重复与取消",
       "caseIDs": [
         "text72-short-repeat",
         "text72-long-repeat",
