@@ -105,3 +105,24 @@ f1bbf5bbd95b484a3c46c005e889ab83e6748fb4移位差异经Sol/high只读检查无�
 用户批准额外下载 mlx-community/Qwen2.5-72B-Instruct-4bit 固定 revision 36a74b07390031bb18c9f12fb7c06699bc6273c4，确认适用Qwen许可；仅离线开发测试，不在本机16 GiB加载，不公开上传。选取模型必要清单40,912,220,408bytes（原API目录总量另含1519bytes的.gitattributes）。保留现有qwen2/4bit/group64及32768上下文边界，不引入YaRN、8bit或额外后端。新增数据/profile以96/128/192 GiB准入矩阵、真实长输入、同进程重复加载、受控取消后恢复，以及2048图像/medium380秒支持上界为目标；不修改保守内存估算以迫使72B在96 GiB通过。自动预算仍为物理内存减max(4 GiB,25%)，blocked_budget是边界证据而非生成成功。高配置本机只完整文件校验与inspect；长输入token数可用相同tokenizer的小模型校准并标明方法，字符数不能冒充tokens。Lead准备profile/数据，既有runner两轮修复预算不重置。
 
 新增profile审查：Sol/high read-only先前大范围设计检查240秒到期，无结论；缩小到明确差异的boundary-profile-review在41a2009811a218a95ac348427beb1a210885b770发现“取消后短输入”在前项预算拒绝时仍会运行，名称可能误报恢复。Lead将新72B后项命名为text72-postprobe-short／独立新进程检查；不改runner、不加虚假的取消依赖，不减少旧断言。只有同attempt前项实际cancelled且后项成功，组合证据才支持新进程恢复；该规则直接进入手册，128 GiB长输入被拒绝时不会称恢复已通过。profile-only澄清不重置Runner修复预算。原生第三方许可证按本次实际native/SourcePackages与Vendor只读提取，保留在可复制Manifests内，不新增执行代码。
+
+## 用户修订：实际容量试探（spec_revision=5，contract_revision=3）
+
+2026-09-12用户明确修订：测试不能只因估算超物理内存推荐预算而拒绝，应该尝试加载/推理并报告实际错误。本节取代本包“高配预检拒绝即最终验收”的决策；模型/精度、作品保护、完整结果校验、旧修复历史不变。72B已下载并全量校验；本机不执行32B/72B或其他已判明高风险大配置，现场按新模式运行。旧08cc7313cb5508db4a53eb0082b34d99546e5c29包及其quick3/3、静态预算结果保留为修订前证据，不伪称新模式通过。Lead已停止旧验证调度器；当时gate96子步骤正常结束、未启动大模型；没有源集成。
+
+### D-KIT-PROBE-01：新增能力工作包（不是旧Runner第三轮修复）
+
+源基线仍0db7a8fa95fb1ed45be2999c7ab9cfb4d9a96361；本包修订前08cc7313cb5508db4a53eb0082b34d99546e5c29。执行基线为本规格准备提交的完整SHA，另写run记录。Lead负责策略、profile/手册、构建/真实小模型验证/集成；一个Sol/high受限独立CLI Worker负责新策略实现。仅允许tools/testkit/d_testkit.py、tools/testkit/tests/test_runner.py；禁止改CLI、DRuntime、MLX/音频后端、旧数值/取消/换行断言、打包器、任务文档、profile/模型、权限/签名/用户数据/源分支。Worker不访问实际模型或执行真实CLI/GPU；测试仅自己声明的合成夹具。网络关闭、独立工作树/output/tmp写根，共享.git只读。不递归。旧Runner两修+Lead接管不清零；本次预算只用于用户新批准的试探/失败报告功能：初交+最多两次定向修复，旧范围问题不得借此循环补救。
+
+### 最小冻结行为
+
+1. profile新增可选admissionPolicy，只接受guarded/probe，缺失为guarded（旧profile兼容，布尔/未知值拒绝）。Lead把本包七个显式选择的测试组标为probe。原生App、CLI默认和核心生产保护不变，不改系统内存/交换参数。menu先明确显示选中组策略，RUN表示开始本次串行试探，不另设隐藏或交互确认环节。
+2. 每项仍先正式--inspect验证模型/输入及取得原始estimate。probe不把withinBudget=false视为跳过理由；只在测试工具中使用现有CLI显式准入参数进入后端。实际执行准入MiB=max(1,推荐预算MiB,ceil(estimate.peakBytes/MiB))。不得修改estimate、虚构physicalMemory或称该阈值是实际可用内存/进程RSS硬上限。整数换算必须在CLI UInt64/MiB可表示范围内；无效估计/模型/参数仍明确失败。image既有allocator选项随实际执行准入值走并如实记录；它不是整机内存保证。
+3. run/attempt/summary标明admissionPolicy；每个已检查case持久保存admission对象，至少policy、physicalMemoryBytes、recommendedBudgetBytes、estimatedPeakBytes、withinRecommendedBudget、executionBudgetMiB、overrideApplied（仅probe且估算超推荐为true）。inspection保留原始推荐预算下的withinBudget。执行报告options必须与实际执行准入值一致，不能对照旧推荐值或放松其他参数/终态/媒体检查。失败记录也不能丢掉admission。未知物理内存保持unknown语义，不伪称取得内存。
+4. guarded维持既有行为及反例。probe实际执行失败/未知阻塞后停止本组后续用例，保存stopReason/停止case，未启动项明确not_started_after_failure，不说它们已执行失败或通过，不自动重试。有效预期取消仍是通过并可继续；取消未满足原契约仍失败。后项独立短输入只有同attempt取消成功时才能联合证明新进程恢复。未知/损坏run状态不借新停止状态伪装成有证据。
+5. 失败同时保留真实进程退出/信号、超时/强停/输出上限、可得的内存/交换前后信息。若CLI可读报告含failure、artifactCleanupError或run.errorMessage等，保存有界(每条最多2048字符、最多4条)诊断摘要；无报告/损坏报告也记录明确错误和进程终态，不能只说未通过。不得由SIGKILL推断必为OOM；原因不足标unknown。原始stdout/stderr继续留private且不默认导出；新增诊断经过既有脱敏/HTML转义及路径保护。不吞异常、不改成功条件、不修改阈值使既有错误通过。父监控自身被系统终止时不承诺实时抛错，已有未完成记录回读不得报通过。
+6. probe模式run/menu在overall complete时exit0，报告已生成但用例失败/未启动时exit1，仍区分报告产出和用例成功。受控取消用例通过可exit0；用户Ctrl-C沿用既有中断语义。guarded旧退出语义及summarize“报告生成成功”语义保留；报告/写盘错误不能伪报成功。仅扩展新policy，不重写整套运行器。
+7. CPU验收：旧44方法不删不降；新增超推荐的guarded不执行、probe确实执行且保留两种预算、ceil/范围边界、非法policy、正常成功、加载失败诊断、异常信号/缺失或损坏报告、超时、probe失败停止后项、预期取消后继续、summary/HTML/ZIP脱敏及重读、策略/摘要不同拒绝resume。至少一次真实runner CLI子进程测试exit1与完整结束，不只断言run()返回。受控CPU夹具要明确标为模拟；不得为生成failure修改真实模型/原件。
+8. Lead真实验证：现有安全0.5B正常试探；通过独立受控低准入阈值夹具触发override分支、实际仍只运行本机安全的小模型（fixture身份和被下调的推荐值单列，不伪装真实机器内存）；正常媒体/重复/取消回归、包与Unicode移位检查。32B/72B不在本机执行；展示机真正大配置仍待现场。实际受测版本、角色和旧证据的替代关系必须记录。
+
+检查入口：使用本机已有Python3.12（其绝对只读路径由派工消息给出）；D_TEST_TEMP_DIR与TMPDIR均指定任务tmp，PYTHONDONTWRITEBYTECODE=1。语法用tokenize.open后内存compile，不默认py_compile。任何未预授权权限拒绝立即暂停上报；不为可写.git或缓存扩权。外部命令仅必要的Xcode Git只读检查、Python标准库CPU测试/合成fake CLI及受控进程；禁止模型、构建、GUI、网络、下载。Worker回传实际差异、用例结果、异常/保护摘要、自有进程状态，Lead接回写权后才修改/提交工作树。

@@ -8,7 +8,8 @@
         "text05-short",
         "image512",
         "audio-small6"
-      ]
+      ],
+      "admissionPolicy": "probe"
     },
     {
       "id": "common",
@@ -17,7 +18,8 @@
         "text7-short",
         "image1024",
         "audio-small30"
-      ]
+      ],
+      "admissionPolicy": "probe"
     },
     {
       "id": "capacity",
@@ -32,7 +34,8 @@
         "audio-medium30",
         "audio-medium120",
         "audio-small120"
-      ]
+      ],
+      "admissionPolicy": "probe"
     },
     {
       "id": "reliability",
@@ -46,7 +49,8 @@
         "audio-inpaint6",
         "audio-cancel6",
         "audio-after-cancel6"
-      ]
+      ],
+      "admissionPolicy": "probe"
     },
     {
       "id": "showroom",
@@ -58,7 +62,8 @@
         "image1536",
         "image2048",
         "audio-medium120"
-      ]
+      ],
+      "admissionPolicy": "probe"
     },
     {
       "id": "boundary96",
@@ -69,7 +74,8 @@
         "text32-short",
         "image2048-repeat",
         "audio-medium380"
-      ]
+      ],
+      "admissionPolicy": "probe"
     },
     {
       "id": "boundary72",
@@ -79,7 +85,8 @@
         "text72-long-repeat",
         "text72-long-cancel",
         "text72-postprobe-short"
-      ]
+      ],
+      "admissionPolicy": "probe"
     }
   ],
   "cases": [
