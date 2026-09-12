@@ -61,12 +61,31 @@ class ProbeTimedOut(RuntimeError):
     pass
 
 
+class CleanupFailure(RuntimeError):
+    pass
+
+
+class AdapterConstructionError(RuntimeError):
+    def __init__(self, original: BaseException, cleanup: dict[str, Any]):
+        super().__init__(f"{type(original).__name__}: {original}")
+        self.original_type = type(original).__name__
+        self.cleanup = cleanup
+
+
 @dataclass
 class Cancellation:
     requested: bool = False
 
     def request(self) -> None:
         self.requested = True
+
+
+@dataclass(frozen=True)
+class OwnedPublication:
+    device: int
+    inode: int
+    size: int
+    sha256: str
 
 
 class Adapter(Protocol):
@@ -314,23 +333,103 @@ def _directory_fsync(directory: Path) -> None:
         os.close(descriptor)
 
 
-def _publish_no_replace(temporary: Path, destination: Path) -> None:
+def _owned_publication(path: Path, expected_sha256: str) -> OwnedPublication:
+    info = os.lstat(path)
+    if stat.S_ISLNK(info.st_mode) or not stat.S_ISREG(info.st_mode):
+        raise RuntimeError(f"发布对象不是普通文件：{path}")
+    return OwnedPublication(
+        device=info.st_dev,
+        inode=info.st_ino,
+        size=info.st_size,
+        sha256=expected_sha256,
+    )
+
+
+def _remove_if_owned(path: Path, owned: OwnedPublication) -> dict[str, Any]:
+    """Remove only the exact regular file this process published."""
+    try:
+        info = os.lstat(path)
+    except FileNotFoundError:
+        return {"removed": False, "reason": "alreadyMissing"}
+    except OSError as error:
+        return {"removed": False, "reason": "lstatFailed", "error": str(error)}
+    if (
+        stat.S_ISLNK(info.st_mode)
+        or not stat.S_ISREG(info.st_mode)
+        or info.st_dev != owned.device
+        or info.st_ino != owned.inode
+        or info.st_size != owned.size
+    ):
+        return {"removed": False, "reason": "identityChanged", "preserved": True}
+    try:
+        if _sha256_file(path) != owned.sha256:
+            return {"removed": False, "reason": "contentChanged", "preserved": True}
+        # Recheck identity after hashing before unlinking by name.
+        current = os.lstat(path)
+        if (
+            current.st_dev != owned.device
+            or current.st_ino != owned.inode
+            or stat.S_ISLNK(current.st_mode)
+            or not stat.S_ISREG(current.st_mode)
+        ):
+            return {"removed": False, "reason": "identityChanged", "preserved": True}
+        os.unlink(path)
+        _directory_fsync(path.parent)
+        return {"removed": True, "reason": "ownedPublicationRolledBack"}
+    except OSError as error:
+        return {"removed": False, "reason": "rollbackFailed", "error": str(error)}
+
+
+def _publish_no_replace(
+    temporary: Path, destination: Path, *, expected_sha256: str
+) -> OwnedPublication:
     if os.path.lexists(destination):
         raise FileExistsError(f"拒绝覆盖：{destination}")
-    os.link(temporary, destination, follow_symlinks=False)
-    os.unlink(temporary)
-    _directory_fsync(destination.parent)
+    owned: OwnedPublication | None = None
+    try:
+        os.link(temporary, destination, follow_symlinks=False)
+        owned = _owned_publication(destination, expected_sha256)
+        os.unlink(temporary)
+        _directory_fsync(destination.parent)
+        return owned
+    except BaseException:
+        if owned is not None:
+            _remove_if_owned(destination, owned)
+        raise
 
 
-def _write_report(path: Path, document: dict[str, Any]) -> None:
-    temporary = path.parent / "report.partial.json"
-    payload = json.dumps(
+def _report_payload(document: dict[str, Any]) -> bytes:
+    return json.dumps(
         document,
         ensure_ascii=False,
         allow_nan=False,
         sort_keys=True,
         indent=2,
     ).encode("utf-8") + b"\n"
+
+
+def _remove_if_matching_payload(path: Path, payload: bytes) -> dict[str, Any]:
+    """Roll back a report only when its identity and full content are ours."""
+    try:
+        info = os.lstat(path)
+    except FileNotFoundError:
+        return {"removed": False, "reason": "alreadyMissing"}
+    except OSError as error:
+        return {"removed": False, "reason": "lstatFailed", "error": str(error)}
+    if stat.S_ISLNK(info.st_mode) or not stat.S_ISREG(info.st_mode):
+        return {"removed": False, "reason": "identityChanged", "preserved": True}
+    owned = OwnedPublication(
+        device=info.st_dev,
+        inode=info.st_ino,
+        size=len(payload),
+        sha256=hashlib.sha256(payload).hexdigest(),
+    )
+    return _remove_if_owned(path, owned)
+
+
+def _write_report(path: Path, document: dict[str, Any]) -> None:
+    temporary = path.parent / "report.partial.json"
+    payload = _report_payload(document)
     descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     try:
         offset = 0
@@ -346,7 +445,11 @@ def _write_report(path: Path, document: dict[str, Any]) -> None:
     finally:
         os.close(descriptor)
     try:
-        _publish_no_replace(temporary, path)
+        _publish_no_replace(
+            temporary,
+            path,
+            expected_sha256=hashlib.sha256(payload).hexdigest(),
+        )
     except BaseException:
         try:
             os.unlink(temporary)
@@ -470,12 +573,18 @@ class _SDKAdapter:
                 "mlxVersion": self._package_version("mlx"),
                 "precision": precision,
             }
-        except BaseException:
+        except BaseException as error:
             self._model = None
             self._embedding = None
             gc.collect()
-            self._best_effort_sync_and_clear()
-            raise
+            attempted_cleanup = self._best_effort_sync_and_clear()
+            cleanup = {
+                "status": "unknownAfterConstructorFailure",
+                "released": False,
+                "constructorError": f"{type(error).__name__}: {error}",
+                "attemptedSynchronizationAndCacheClear": attempted_cleanup,
+            }
+            raise AdapterConstructionError(error, cleanup) from error
 
     @staticmethod
     def _package_version(distribution: str) -> str:
@@ -508,18 +617,28 @@ class _SDKAdapter:
             "cacheBytes": "unknown",
             "peakBytes": "unknown",
         }
+        errors: dict[str, str] = {}
         metal = getattr(self._mx, "metal", None)
         for key, name in (
             ("activeBytes", "get_active_memory"),
             ("cacheBytes", "get_cache_memory"),
             ("peakBytes", "get_peak_memory"),
         ):
-            function = getattr(metal, name, None)
+            function = getattr(self._mx, name, None)
+            api = f"mlx.core.{name}"
+            if not callable(function):
+                function = getattr(metal, name, None)
+                api = f"mlx.core.metal.{name}"
             if callable(function):
                 try:
                     result[key] = int(function())
-                except Exception:
-                    pass
+                    result[f"{key}API"] = api
+                except Exception as error:
+                    errors[key] = f"{type(error).__name__}: {error}"
+            else:
+                errors[key] = "API unavailable"
+        if errors:
+            result["observationErrors"] = errors
         return result
 
     def _best_effort_sync_and_clear(self) -> dict[str, Any]:
@@ -532,15 +651,24 @@ class _SDKAdapter:
                 synchronize()
                 outcome["synchronized"] = True
             except Exception as error:
-                outcome["synchronizeError"] = str(error)
+                outcome["synchronizeError"] = f"{type(error).__name__}: {error}"
+        else:
+            outcome["synchronizeError"] = "mlx.core.synchronize API unavailable"
         metal = getattr(self._mx, "metal", None)
-        clear_cache = getattr(metal, "clear_cache", None)
+        clear_cache = getattr(self._mx, "clear_cache", None)
+        clear_cache_api = "mlx.core.clear_cache"
+        if not callable(clear_cache):
+            clear_cache = getattr(metal, "clear_cache", None)
+            clear_cache_api = "mlx.core.metal.clear_cache"
         if callable(clear_cache):
             try:
                 clear_cache()
                 outcome["cacheCleared"] = True
             except Exception as error:
-                outcome["clearCacheError"] = str(error)
+                outcome["clearCacheError"] = f"{type(error).__name__}: {error}"
+            outcome["clearCacheAPI"] = clear_cache_api
+        else:
+            outcome["clearCacheError"] = "MLX clear_cache API unavailable"
         return outcome
 
     def close(self, state: Any) -> dict[str, Any]:
@@ -599,6 +727,7 @@ def _base_report(
         "outcome": "running",
         "startedAt": started_wall,
         "requestSha256": request.source_sha256,
+        "executedRequest": request.executed_snapshot(),
         "condition": summary,
         "backendMode": backend,
         "runtime": _runtime_identity(),
@@ -635,6 +764,28 @@ def _finish_adapter(adapter: Adapter, state_holder: list[Any]) -> dict[str, Any]
     return result
 
 
+def _mark_cleanup_failure(
+    report: dict[str, Any], cancellation: Cancellation, message: str
+) -> None:
+    prior_outcome = report.get("outcome")
+    prior_error = report.get("error")
+    report["failureContext"] = {
+        "priorOutcome": prior_outcome,
+        "priorError": prior_error,
+        "cancellationRequested": cancellation.requested,
+    }
+    report["outcome"] = "failed"
+    report["error"] = {"type": "CleanupFailure", "message": message}
+
+
+def _cleanup_complete(cleanup: dict[str, Any]) -> bool:
+    return (
+        cleanup.get("released") is True
+        and cleanup.get("synchronized") is True
+        and cleanup.get("cacheCleared") is True
+    )
+
+
 def run_probe(
     *,
     model_root_text: str,
@@ -657,6 +808,9 @@ def run_probe(
     adapter: Adapter | None = None
     state: Any = None
     adapter_finished = False
+    published_wav: OwnedPublication | None = None
+    published_wav_path: Path | None = None
+    attempted_success_report: bytes | None = None
     exit_code = 1
     try:
         if backend not in {"exported", "unquantized"}:
@@ -685,7 +839,12 @@ def run_probe(
 
         load_started = clock()
         print("阶段：验证完成，加载后端", flush=True)
+        report["cleanup"] = {
+            "status": "unknownDuringConstruction",
+            "released": False,
+        }
         adapter = adapter_factory(backend, model_root, request)
+        report["cleanup"] = {"status": "pending", "released": False}
         report["timing"]["loadSeconds"] = clock() - load_started
         report["sdk"] = adapter.identity()
         _check_stop(cancellation, deadline, clock)
@@ -734,8 +893,8 @@ def run_probe(
         state = None
         report["cleanup"] = _finish_adapter(adapter, state_holder)
         adapter_finished = True
-        if not report["cleanup"].get("released", False):
-            raise RuntimeError("后端未确认释放")
+        if not _cleanup_complete(report["cleanup"]):
+            raise CleanupFailure("后端释放、同步或 cache 清理未完成")
         _check_stop(cancellation, deadline, clock)
 
         wav_size, wav_sha = _hash_file(temporary_wav)
@@ -743,7 +902,10 @@ def run_probe(
         if wav_size != expected_file_size:
             raise RuntimeError("WAV 文件大小不符")
         destination = output_root / "output.wav"
-        _publish_no_replace(temporary_wav, destination)
+        published_wav = _publish_no_replace(
+            temporary_wav, destination, expected_sha256=wav_sha
+        )
+        published_wav_path = destination
         temporary_wav = None
         report["output"] = {
             "path": "output.wav",
@@ -761,6 +923,7 @@ def run_probe(
         }
         report["outcome"] = "completed"
         report["timing"]["totalSeconds"] = clock() - started
+        attempted_success_report = _report_payload(report)
         report_writer(output_root / "report.json", report)
         print(f"完成：{destination}", flush=True)
         print(f"报告：{output_root / 'report.json'}", flush=True)
@@ -782,6 +945,24 @@ def run_probe(
             report["error"] = {"type": type(error).__name__, "message": str(error)}
         else:
             print(f"输入错误：{error}", file=sys.stderr, flush=True)
+    except AdapterConstructionError as error:
+        exit_code = 1
+        if report is not None:
+            report["outcome"] = "failed"
+            report["error"] = {
+                "type": "AdapterConstructionError",
+                "causeType": error.original_type,
+                "message": str(error),
+            }
+            report["cleanup"] = error.cleanup
+        else:
+            print(f"后端构造失败：{error}", file=sys.stderr, flush=True)
+    except CleanupFailure as error:
+        exit_code = 1
+        if report is not None:
+            _mark_cleanup_failure(report, cancellation, str(error))
+        else:
+            print(f"清理失败：{error}", file=sys.stderr, flush=True)
     except BaseException as error:
         exit_code = 1
         if report is not None:
@@ -804,17 +985,41 @@ def run_probe(
                 cleanup = _finish_adapter(adapter, state_holder)
                 if report is not None:
                     report["cleanup"] = cleanup
+                    if not _cleanup_complete(cleanup):
+                        _mark_cleanup_failure(
+                            report,
+                            cancellation,
+                            "后端释放、同步或 cache 清理未完成",
+                        )
+                        exit_code = 1
             except BaseException as error:
                 if report is not None:
                     report["cleanup"] = {
                         "released": False,
                         "error": f"{type(error).__name__}: {error}",
                     }
-                exit_code = 1 if exit_code == 0 else exit_code
+                    _mark_cleanup_failure(
+                        report,
+                        cancellation,
+                        "后端清理抛出异常",
+                    )
+                exit_code = 1
         if report is not None and output_root is not None and exit_code != 0:
+            report_path = output_root / "report.json"
+            if attempted_success_report is not None:
+                report["acceptedSuccessReportRollback"] = _remove_if_matching_payload(
+                    report_path, attempted_success_report
+                )
+            if published_wav is not None and published_wav_path is not None:
+                rollback = _remove_if_owned(published_wav_path, published_wav)
+                report["publication"] = {
+                    "accepted": False,
+                    "ownedWavRollback": rollback,
+                }
+                report["output"] = None
             report["timing"]["totalSeconds"] = clock() - started
             try:
-                report_writer(output_root / "report.json", report)
+                report_writer(report_path, report)
             except BaseException as error:
                 print(
                     f"报告写入失败：{type(error).__name__}: {error}",

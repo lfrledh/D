@@ -75,11 +75,15 @@ class FakeAdapter:
         fail_at=None,
         waveform_factory=FakeWaveform,
         released=True,
+        synchronized=True,
+        cache_cleared=True,
     ):
         self.cancellation = cancellation
         self.fail_at = fail_at
         self.waveform_factory = waveform_factory
         self.released = released
+        self.synchronized = synchronized
+        self.cache_cleared = cache_cleared
         self.note_frames = []
         self.close_called = False
         self.final_cleanup_called = False
@@ -107,8 +111,8 @@ class FakeAdapter:
         self.final_cleanup_called = True
         return {
             "released": self.released,
-            "synchronized": True,
-            "cacheCleared": True,
+            "synchronized": self.synchronized,
+            "cacheCleared": self.cache_cleared,
             "memoryAfterRelease": "fixture",
         }
 
@@ -174,6 +178,11 @@ class ConditionsTests(unittest.TestCase):
             conditions.parse_request(
                 b'{"schemaVersion":1,"frameRate":25,"durationFrames":1,'
                 b'"prompt":"x","seed":NaN}'
+            )
+        with self.assertRaises(conditions.RequestError):
+            conditions.parse_request(
+                b'{"schemaVersion":1,"frameRate":25,"durationFrames":1,'
+                b'"prompt":"\\ud800","seed":0}'
             )
 
     def test_rejects_bounds_float_time_overlap_and_bad_prompt(self):
@@ -291,6 +300,18 @@ class ProbeTests(unittest.TestCase):
         self.assertEqual(report["condition"]["mode"], "explicit")
         self.assertEqual(report["output"]["sampleFormat"], "IEEE_FLOAT32_LE")
         self.assertEqual(report["model"]["revision"], probe.EXPECTED_MODEL_REVISION)
+        self.assertEqual(
+            report["executedRequest"],
+            {
+                "schemaVersion": 1,
+                "frameRate": 25,
+                "durationFrames": 2,
+                "prompt": "dry piano trio",
+                "seed": 7,
+                "notesMode": "explicit",
+                "notes": [],
+            },
+        )
         self.assertEqual(self.request_path.read_bytes(), self.request_raw)
 
     def test_absent_does_not_send_note_condition_and_empty_sends_zeros(self):
@@ -339,13 +360,39 @@ class ProbeTests(unittest.TestCase):
         self.assertFalse((output / "output.wav").exists())
 
     def test_incomplete_cleanup_is_failure_without_publish(self):
-        adapter = FakeAdapter(released=False)
-        code, output = self.run_with(adapter, "cleanup-failure")
+        fixtures = (
+            ("release", {"released": False}),
+            ("synchronize", {"released": True, "synchronized": False}),
+            ("cache", {"released": True, "cache_cleared": False}),
+        )
+        for label, arguments in fixtures:
+            with self.subTest(label=label):
+                adapter = FakeAdapter(**arguments)
+                code, output = self.run_with(adapter, f"cleanup-failure-{label}")
+                self.assertEqual(code, 1)
+                self.assertFalse((output / "output.wav").exists())
+                report = json.loads((output / "report.json").read_text())
+                self.assertEqual(report["outcome"], "failed")
+
+    def test_cancellation_with_incomplete_cleanup_is_execution_failure(self):
+        cancellation = probe.Cancellation()
+        adapter = FakeAdapter(cancellation=cancellation, released=False)
+        code, output = self.run_with(
+            adapter,
+            "cancel-cleanup-failure",
+            cancellation=cancellation,
+        )
         self.assertEqual(code, 1)
         self.assertFalse((output / "output.wav").exists())
         report = json.loads((output / "report.json").read_text())
         self.assertEqual(report["outcome"], "failed")
+        self.assertEqual(report["error"]["type"], "CleanupFailure")
         self.assertFalse(report["cleanup"]["released"])
+        self.assertEqual(report["failureContext"]["priorOutcome"], "cancelled")
+        self.assertTrue(report["failureContext"]["cancellationRequested"])
+        self.assertEqual(
+            report["failureContext"]["priorError"]["type"], "ProbeCancelled"
+        )
 
     def test_report_failure_cannot_return_success(self):
         adapter = FakeAdapter()
@@ -357,8 +404,76 @@ class ProbeTests(unittest.TestCase):
             adapter, "report-failure", report_writer=fail_report
         )
         self.assertEqual(code, 1)
-        self.assertTrue((output / "output.wav").exists())
+        self.assertFalse((output / "output.wav").exists())
         self.assertFalse((output / "report.json").exists())
+
+    def test_partial_success_report_is_removed_on_transaction_failure(self):
+        adapter = FakeAdapter()
+        calls = 0
+
+        def write_then_fail(path, document):
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                path.write_bytes(probe._report_payload(document))
+            raise OSError("failure after report file creation")
+
+        code, output = self.run_with(
+            adapter, "partial-report-failure", report_writer=write_then_fail
+        )
+        self.assertEqual(code, 1)
+        self.assertFalse((output / "output.wav").exists())
+        self.assertFalse((output / "report.json").exists())
+
+    def test_report_failure_preserves_replaced_output_file(self):
+        adapter = FakeAdapter()
+        calls = 0
+        foreign = b"replacement-not-owned-by-probe"
+
+        def replace_output_then_fail(_path, _document):
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                output_wav = self.root / "replaced-output" / "output.wav"
+                output_wav.unlink()
+                output_wav.write_bytes(foreign)
+            raise OSError("fixture report failure after replacement")
+
+        code, output = self.run_with(
+            adapter,
+            "replaced-output",
+            report_writer=replace_output_then_fail,
+        )
+        self.assertEqual(code, 1)
+        self.assertEqual((output / "output.wav").read_bytes(), foreign)
+        self.assertFalse((output / "report.json").exists())
+
+    def test_constructor_failure_reports_cleanup_unknown(self):
+        def fail_constructor(_backend, _root, _request):
+            raise RuntimeError("constructor fixture")
+
+        code, output = self.run_with(
+            FakeAdapter(),
+            "constructor-failure",
+            adapter_factory=fail_constructor,
+        )
+        self.assertEqual(code, 1)
+        self.assertFalse((output / "output.wav").exists())
+        report = json.loads((output / "report.json").read_text())
+        self.assertEqual(report["outcome"], "failed")
+        self.assertEqual(report["cleanup"]["status"], "unknownDuringConstruction")
+        self.assertFalse(report["cleanup"]["released"])
+
+    def test_surrogate_prompt_is_input_error(self):
+        self.request_path.write_bytes(
+            b'{"schemaVersion":1,"frameRate":25,"durationFrames":1,'
+            b'"prompt":"\\ud800","seed":0}'
+        )
+        adapter = FakeAdapter()
+        code, output = self.run_with(adapter, "surrogate-prompt")
+        self.assertEqual(code, 2)
+        self.assertFalse(output.exists())
+        self.assertFalse(adapter.note_frames)
 
     def test_rejects_request_symlink_existing_output_and_overlap(self):
         request_link = self.root / "request-link.json"

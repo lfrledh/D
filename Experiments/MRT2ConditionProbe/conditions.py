@@ -59,6 +59,18 @@ class ProbeRequest:
             self.frame_rate, self.duration_frames, self.notes
         )
 
+    def executed_snapshot(self) -> dict[str, Any]:
+        """Return the bounded, immutable validated request as JSON data."""
+        return {
+            "schemaVersion": self.schema_version,
+            "frameRate": self.frame_rate,
+            "durationFrames": self.duration_frames,
+            "prompt": self.prompt,
+            "seed": self.seed,
+            "notesMode": self.notes_mode,
+            "notes": None if self.notes is None else [note.as_json() for note in self.notes],
+        }
+
 
 def _object_without_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     result: dict[str, Any] = {}
@@ -156,7 +168,11 @@ def parse_request(raw: bytes) -> ProbeRequest:
         raise RequestError("prompt 必须是非空字符串")
     if "\x00" in prompt:
         raise RequestError("prompt 不允许 NUL")
-    if len(prompt.encode("utf-8")) > MAX_PROMPT_BYTES:
+    try:
+        prompt_bytes = prompt.encode("utf-8", errors="strict")
+    except UnicodeEncodeError as error:
+        raise RequestError("prompt 必须只包含可编码为 UTF-8 的 Unicode 标量值") from error
+    if len(prompt_bytes) > MAX_PROMPT_BYTES:
         raise RequestError(f"prompt 的 UTF-8 长度不得超过 {MAX_PROMPT_BYTES} bytes")
 
     notes: tuple[Note, ...] | None

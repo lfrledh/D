@@ -50,7 +50,9 @@
 
 两者都固定使用 temperature 1.3、top-k 40、MusicCoCa CFG 3.0、notes CFG 1.0、drums CFG 1.0，并在模型构造前设置 MLX seed。`timeout-seconds` 最大 600，只在模型加载前后或逐帧边界生效，不能中断正在执行的 GPU 调用。
 
-成功后目录含原子、无覆盖发布的 `output.wav` 和 `report.json`。报告保存请求原文 SHA-256、规范化条件 SHA-256、条件时间基与音符摘要、模型逐文件证据、可观察 SDK 身份、采样参数、逐帧耗时、输出摘要和可获得的清理指标。SIGINT 只设置取消请求；当前调用返回后在边界清理，取消返回 130、运行错误返回 1、输入错误返回 2、成功返回 0。失败或取消不会发布 WAV；若成功 WAV 发布后报告写入失败，进程仍返回错误且保留已发布结果。
+成功后目录含原子、无覆盖发布的 `output.wav` 和 `report.json`。报告保存请求原文 SHA-256、包含 prompt/seed/notes/时间基的已执行请求快照、规范化条件 SHA-256、模型逐文件证据、可观察 SDK 身份、采样参数、逐帧耗时、输出摘要和可获得的清理指标。快照来自已经严格校验的本地不可变请求值，不上传外部服务。SIGINT 只设置取消请求；当前调用返回后在边界清理，清理完整的取消返回 130、运行错误返回 1、输入错误返回 2、成功返回 0。取消时若释放、同步或 cache 清理失败，会保留原取消上下文，但终态改为失败并返回 1。
+
+WAV 与成功报告按一个发布事务处理：两者均原子且不覆盖；成功报告无法完成时，只在设备号、inode、大小及 SHA-256 仍与本进程发布物一致的情况下回滚 WAV。已经被替换或改变的文件会保留并报告所有权丢失，绝不按名称猜测删除。失败报告的 `output` 不会把候选文件描述成已接受成功。
 
 ## CPU 测试
 
@@ -63,4 +65,6 @@ TMPDIR=/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-MRT2-CONDITIONS-
   -m unittest -v Experiments/MRT2ConditionProbe/test_probe.py
 ```
 
-CPU 测试不证明模型可加载、GPU 内存可释放、音质可接受或音频服从条件。条件输入是精确的，但模型输出服从程度仍是 `pending/approximate`，必须由 Lead 进行真实推理、听感和独立信号分析。导出图内部精度仍为 unknown；上游导出路径的 int16 到 float32 转换会被如实记录。
+CPU 测试不证明模型可加载、GPU 内存可释放、音质可接受或音频服从条件。条件输入是精确的，但模型输出服从程度仍是 `pending/approximate`，必须由 Lead 进行真实推理、听感和独立信号分析。导出图内部精度仍为 unknown。
+
+Lead 已确认的当前环境事实：官方 `.mlxfn` header 为 0.31.1，在 MLX 0.32.2 会以 `Invalid string size` 导入失败；同一已校验文件在 MLX/metal 0.31.1 可以导入。raw baseline 的 `bits=None` 可以加载，但 Depthformer 实际为 BF16，不能称为全 FP32；SDK 的 exported 与 raw 两条路径都包含 int16 到 float32 的转换。这些是兼容性和实际 dtype 记录，不构成最终音质、条件服从或生命周期验收。
