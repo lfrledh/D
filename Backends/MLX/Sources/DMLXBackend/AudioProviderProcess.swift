@@ -775,7 +775,7 @@ enum AudioWAV {
         let maximum = expectedPCM.partialValue + 1_048_576
         let (data, _) = try AudioFileSystem.readRegularFile(url, label: "Generated audio WAV",
                                                             maximumBytes: maximum)
-        let parsed = try parse(data, outputOnly: true)
+        let parsed = try parse(data, outputOnly: true, expectedSampleRate: expectedSampleRate)
         let digest = sha256(data)
         guard claim.path == url.path, claim.sha256 == digest,
               claim.byteCount == UInt64(data.count), claim.frameCount == expectedFrames,
@@ -794,7 +794,8 @@ enum AudioWAV {
         let encoding: String
     }
 
-    private static func parse(_ data: Data, outputOnly: Bool) throws -> Parsed {
+    private static func parse(_ data: Data, outputOnly: Bool,
+                              expectedSampleRate: Int = 44_100) throws -> Parsed {
         guard data.count >= 12, data.prefix(4) == Data("RIFF".utf8),
               data[8..<12] == Data("WAVE".utf8),
               UInt64(u32(data, 4)) + 8 == UInt64(data.count) else {
@@ -827,8 +828,8 @@ enum AudioWAV {
             offset = body + padded
         }
         guard offset == data.count, let format, let pcmRange,
-              format.channels == 2, format.rate == 44_100 else {
-            throw InferenceFailure.backendFailed("WAV must contain one stereo 44100 Hz PCM stream.")
+              format.channels == 2, format.rate == expectedSampleRate else {
+            throw InferenceFailure.backendFailed("WAV must contain one stereo \(expectedSampleRate) Hz PCM stream.")
         }
         let bytesPerSample = Int(format.bits / 8)
         guard format.bits.isMultiple(of: 8), bytesPerSample > 0,
