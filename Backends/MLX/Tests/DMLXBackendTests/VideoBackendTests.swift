@@ -50,10 +50,13 @@ struct VideoBackendTests {
         time.sleep(30)
         """
         try source.write(to: provider, atomically: false, encoding: .utf8)
-        let config = process(provider, root: root, arguments: [id.uuidString.lowercased()], timeout: 0.5)
+        let slowProvider = root.appendingPathComponent("slow-provider.py")
+        try source.replacingOccurrences(of: "import json,time,sys\n", with: "import json,time,sys\ntime.sleep(0.6)\n")
+            .write(to: slowProvider, atomically: false, encoding: .utf8)
+        let consumerConfig = process(slowProvider, root: root, arguments: [id.uuidString.lowercased()], timeout: 10)
         let started = Date()
         do {
-            _ = try await config.run { reader, control in
+            _ = try await consumerConfig.run { reader, control in
                 await VideoProviderProtocol.read(reader, control: control, runID: id, steps: 1) { _ in
                     throw InferenceFailure.backendFailed("controlled consumer failure")
                 }
@@ -61,8 +64,9 @@ struct VideoBackendTests {
             Issue.record("consumer failure unexpectedly succeeded")
         } catch { #expect(error.localizedDescription.contains("controlled consumer failure")) }
         #expect(Date().timeIntervalSince(started) < 5)
+        let timeoutConfig = process(provider, root: root, arguments: [id.uuidString.lowercased()], timeout: 0.5)
         do {
-            _ = try await config.run { reader, control in
+            _ = try await timeoutConfig.run { reader, control in
                 await VideoProviderProtocol.read(reader, control: control, runID: id, steps: 1) { _ in }
             }
             Issue.record("timeout unexpectedly succeeded")
