@@ -2,7 +2,7 @@ import DInference
 
 enum AudioExecutionCapabilities {
     static func sa3(profile: AudioBackendProfile) -> AudioExecutionCapability {
-        let maximumDurationSeconds = profile == .medium ? 380 : 120
+        let maximumDurationSeconds: Double = profile == .medium ? 380 : 120
         return AudioExecutionCapability(
             profile: .init(identifier: profile.rawValue),
             contract: .init(
