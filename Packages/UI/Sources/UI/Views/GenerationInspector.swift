@@ -5,9 +5,18 @@ import SwiftUI
 struct GenerationInspector: View {
     @Bindable var model: WorkbenchModel
     var library: ModelLibraryModel? = nil
+    private let parameterDocumentID: UUID?
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @FocusState private var promptFocused: Bool
     @State private var editingAsset: ProjectAsset?
+    @State private var rawImageWidth: String?
+    @State private var rawImageHeight: String?
+
+    init(model: WorkbenchModel, library: ModelLibraryModel? = nil) {
+        self.model = model
+        self.library = library
+        parameterDocumentID = model.activeDocumentID
+    }
 
     private var selectedLibraryRecord: ModelRecord? {
         guard let id = model.selectedModelID else { return nil }
@@ -158,12 +167,12 @@ struct GenerationInspector: View {
             sectionTitle("生成规格", systemImage: "slider.horizontal.3")
             VStack(alignment: .leading, spacing: 8) {
                 Text("宽度（像素）").font(.caption).foregroundStyle(.secondary)
-                TextField("宽度（像素）", value: imageWidth, format: .number)
+                TextField("宽度（像素）", text: imageWidth)
                     .textFieldStyle(.roundedBorder)
                     .accessibilityLabel("宽度（像素）")
                     .accessibilityIdentifier("image-width")
                 Text("高度（像素）").font(.caption).foregroundStyle(.secondary)
-                TextField("高度（像素）", value: imageHeight, format: .number)
+                TextField("高度（像素）", text: imageHeight)
                     .textFieldStyle(.roundedBorder)
                     .accessibilityLabel("高度（像素）")
                     .accessibilityIdentifier("image-height")
@@ -188,14 +197,21 @@ struct GenerationInspector: View {
             }
         }
         .accessibilityIdentifier("image-parameter-section")
+        .onDisappear(perform: discardUnfinishedImageEdit)
     }
 
-    private var imageWidth: Binding<Int> {
-        Binding(get: { model.imageSettings.width }, set: { updateImageSettings(width: $0, height: model.imageSettings.height) })
+    private var imageWidth: Binding<String> {
+        Binding(get: { rawImageWidth ?? String(model.imageSettings.width) }, set: { value in
+            rawImageWidth = value
+            publishImageEditIfComplete()
+        })
     }
 
-    private var imageHeight: Binding<Int> {
-        Binding(get: { model.imageSettings.height }, set: { updateImageSettings(width: model.imageSettings.width, height: $0) })
+    private var imageHeight: Binding<String> {
+        Binding(get: { rawImageHeight ?? String(model.imageSettings.height) }, set: { value in
+            rawImageHeight = value
+            publishImageEditIfComplete()
+        })
     }
 
     @ViewBuilder private var presetButtons: some View {
@@ -203,10 +219,12 @@ struct GenerationInspector: View {
         if !sizes.isEmpty {
             Menu("尺寸预设") {
                 ForEach(sizes, id: \.self) { size in
-                    Button("\(size) × \(size)") { updateImageSettings(width: size, height: size) }
+                    Button("\(size) × \(size)") { applyImagePreset(width: size, height: size) }
                 }
             }
             .controlSize(.small)
+            Text("选择预设会采用当前支持的生成配置。")
+                .font(.caption).foregroundStyle(.secondary)
         }
     }
 
@@ -216,9 +234,49 @@ struct GenerationInspector: View {
             executionProfile: capability.profile).request(prompt: "preset", seed: 0, capability: capability)) != nil
     }
 
-    private func updateImageSettings(width: Int, height: Int) {
+    private func publishImageEditIfComplete() {
+        let widthText = rawImageWidth ?? String(model.imageSettings.width)
+        let heightText = rawImageHeight ?? String(model.imageSettings.height)
+        if let error = numericEditingError(widthText, label: "宽度")
+            ?? numericEditingError(heightText, label: "高度") {
+            setImageEditingError(error)
+            return
+        }
+        guard let width = Int(widthText), let height = Int(heightText) else { return }
+        let currentProfile = model.imageSettings.executionProfile
+        let profile = Self.profileForManualDimensionEdit(currentProfile, capability: model.imageCapability)
+        model.imageSettings = ImageGenerationSettings(width: width, height: height,
+            executionProfile: profile)
+        rawImageWidth = nil; rawImageHeight = nil
+        setImageEditingError(nil)
+    }
+
+    private func applyImagePreset(width: Int, height: Int) {
         model.imageSettings = ImageGenerationSettings(width: width, height: height,
             executionProfile: model.imageCapability.profile)
+        rawImageWidth = nil; rawImageHeight = nil
+        setImageEditingError(nil)
+    }
+
+    private func discardUnfinishedImageEdit() {
+        guard rawImageWidth != nil || rawImageHeight != nil else { return }
+        rawImageWidth = nil; rawImageHeight = nil
+        setImageEditingError(nil)
+    }
+
+    private func setImageEditingError(_ error: String?) {
+        model.projectSession.setParameterEditingError(error, for: .image, documentID: parameterDocumentID)
+    }
+
+    private func numericEditingError(_ raw: String, label: String) -> String? {
+        if raw.isEmpty { return "\(label)必须填写整数。" }
+        if Int(raw) == nil { return "\(label)必须是可表示的整数。" }
+        return nil
+    }
+
+    static func profileForManualDimensionEdit(_ current: ExecutionProfileReference,
+                                               capability: ImageExecutionCapability) -> ExecutionProfileReference {
+        current == ImageExecutionCapability.verified512.profile ? capability.profile : current
     }
 
     @ViewBuilder private var generateButton: some View {

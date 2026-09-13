@@ -203,10 +203,10 @@ public struct AudioCreationView: View {
 
     private static func profileName(_ identifier: String) -> String {
         switch identifier {
-        case "sm-music": "Stable Audio 小型音乐"
-        case "sm-sfx": "Stable Audio 小型音效"
-        case "medium": "Stable Audio Medium"
-        case "mrt2-small-export-v1": "MRT2 小型"
+        case "sm-music": return "Stable Audio 小型音乐"
+        case "sm-sfx": return "Stable Audio 小型音效"
+        case "medium": return "Stable Audio Medium"
+        case "mrt2-small-export-v1": return "MRT2 小型"
         default: return "已部署配置（\(identifier)）"
         }
     }
