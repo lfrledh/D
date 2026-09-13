@@ -15,7 +15,13 @@ class T5LayerNorm(nn.Module):
         self.weight = mx.ones((dim,))
 
     def __call__(self, x: mx.array) -> mx.array:
-        return mx.fast.rms_norm(x, self.weight, self.eps)
+        # Match the official T5 rounding order: reduce and normalize in
+        # float32, cast to the stored weight dtype, then apply the weight.
+        x_fp32 = x.astype(mx.float32)
+        variance = mx.mean(mx.square(x_fp32), axis=-1, keepdims=True)
+        normalized = x_fp32 * mx.rsqrt(variance + self.eps)
+        normalized = normalized.astype(self.weight.dtype)
+        return self.weight * normalized
 
 
 class T5RelativeEmbedding(nn.Module):
@@ -113,12 +119,14 @@ class T5Attention(nn.Module):
         k = k.transpose(0, 2, 1, 3)
         v = v.transpose(0, 2, 1, 3)
 
-        # QK^T (no scaling) — compute in float32 for precision
-        attn = q.astype(mx.float32) @ k.astype(mx.float32).transpose(0, 1, 3, 2)
+        # QK^T (no scaling) stays in the projection dtype. The official
+        # implementation rounds the BF16 matmul and bias before promoting
+        # only the softmax to float32.
+        attn = q @ k.transpose(0, 1, 3, 2)
 
         # Add position bias
         if pos_bias is not None:
-            attn = attn + pos_bias.astype(mx.float32)
+            attn = attn + pos_bias.astype(attn.dtype)
 
         # Apply attention mask (use dtype min like official, not -1e9)
         if mask is not None:
@@ -126,11 +134,15 @@ class T5Attention(nn.Module):
                 mask = mask[:, None, None, :]  # [B, 1, 1, Lk]
             elif mask.ndim == 3:
                 mask = mask[:, None, :, :]  # [B, 1, Lq, Lk]
-            additive_mask = mx.where(mask == 0, -3.389e38, 0.0).astype(mx.float32)
+            additive_mask = mx.where(
+                mask == 0,
+                mx.array(-3.3895313892515355e38, dtype=attn.dtype),
+                mx.array(0.0, dtype=attn.dtype),
+            )
             attn = attn + additive_mask
 
         # Softmax in float32 (matches official), then cast back
-        attn = mx.softmax(attn, axis=-1).astype(q.dtype)
+        attn = mx.softmax(attn.astype(mx.float32), axis=-1).astype(attn.dtype)
 
         # Attention @ V
         out = (attn @ v).transpose(0, 2, 1, 3).reshape(b, -1, n * c)

@@ -22,10 +22,14 @@ def sinusoidal_embedding_1d(dim: int, position: mx.array) -> mx.array:
     """
     assert dim % 2 == 0
     half = dim // 2
-    pos = position.astype(mx.float32)
-    inv_freq = mx.power(10000.0, -mx.arange(half).astype(mx.float32) / half)
-    sinusoid = pos[..., None] * inv_freq  # [..., half]
-    return mx.concatenate([mx.cos(sinusoid), mx.sin(sinusoid)], axis=-1)
+    positions = np.asarray(position.tolist(), dtype=np.float64)
+    inv_freq = np.power(
+        10000.0,
+        -np.arange(half, dtype=np.float64) / half,
+    )
+    sinusoid = positions[..., None] * inv_freq
+    embedding = np.concatenate([np.cos(sinusoid), np.sin(sinusoid)], axis=-1)
+    return mx.array(embedding.astype(np.float32))
 
 
 class Head(nn.Module):
@@ -123,14 +127,6 @@ class WanModel(nn.Module):
             axis=1,
         )
 
-        # Precompute sinusoidal inv_freq for time embedding.
-        half = config.freq_dim // 2
-        self._inv_freq = mx.array(
-            np.power(10000.0, -np.arange(half, dtype=np.float64) / half).astype(
-                np.float32
-            )
-        )
-
     def _patchify(self, x: mx.array) -> tuple:
         """Convert video tensor to patch embeddings.
 
@@ -153,9 +149,9 @@ class WanModel(nn.Module):
         x = x.transpose(1, 3, 5, 0, 2, 4, 6)  # [F', H', W', C, pt, ph, pw]
         x = x.reshape(f_out * h_out * w_out, -1)  # [L, C*pt*ph*pw]
 
-        # Project and cast to model dtype to prevent float32 cascade from input latents
-        patches = self.patch_embedding_proj(x)  # [L, dim]
-        patches = patches.astype(_linear_dtype(self.patch_embedding_proj))
+        # Match autocast by rounding the input before the BF16 projection.
+        projection_dtype = _linear_dtype(self.patch_embedding_proj)
+        patches = self.patch_embedding_proj(x.astype(projection_dtype))  # [L, dim]
         patches = patches[None, :, :]  # [1, L, dim]
 
         return patches, (f_out, h_out, w_out)
@@ -203,8 +199,12 @@ class WanModel(nn.Module):
                 )
             context_padded.append(ctx)
         context_batch = mx.stack(context_padded)  # [B, text_len, text_dim]
+        context_batch = self.text_embedding_0(
+            context_batch.astype(_linear_dtype(self.text_embedding_0))
+        )
+        context_batch = self.text_embedding_act(context_batch)
         context_batch = self.text_embedding_1(
-            self.text_embedding_act(self.text_embedding_0(context_batch))
+            context_batch.astype(_linear_dtype(self.text_embedding_1))
         )
         return context_batch.astype(model_dtype)
 
@@ -237,8 +237,7 @@ class WanModel(nn.Module):
         Returns:
             (cos_f, sin_f) precomputed frequency tensors
         """
-        w_dtype = _linear_dtype(self.patch_embedding_proj)
-        return rope_precompute_cos_sin(grid_sizes, self.freqs, dtype=w_dtype)
+        return rope_precompute_cos_sin(grid_sizes, self.freqs, dtype=mx.float32)
 
     def __call__(
         self,
@@ -321,14 +320,11 @@ class WanModel(nn.Module):
                 axis=0,
             )  # [B, seq_len, dim]
 
-        # Time embedding: sinusoidal from precomputed inv_freq.
-        # inv_freq was computed in float64 for precision, stored as float32.
-        # With integer timesteps (matching reference), float32 sin/cos is fine.
+        # Time embedding: official FP64 angles, materialized as FP32 values.
         if t.ndim == 0:
             t = t[None]
 
-        sinusoid = t[..., None].astype(mx.float32) * self._inv_freq
-        sin_emb = mx.concatenate([mx.cos(sinusoid), mx.sin(sinusoid)], axis=-1)
+        sin_emb = sinusoidal_embedding_1d(self.freq_dim, t)
 
         if t.ndim == 1:
             # Standard T2V: scalar timestep per batch element [B]

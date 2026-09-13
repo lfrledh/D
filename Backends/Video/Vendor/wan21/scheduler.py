@@ -1,8 +1,7 @@
-"""Flow matching schedulers for Wan2.2 inference.
+"""Frozen Wan T2V flow-matching numerics.
 
-Provides Euler, DPM++2M, and UniPC solvers for flow matching diffusion.
-Higher-order solvers (DPM++, UniPC) converge faster, needing fewer steps
-for the same quality as Euler.
+Only ``FlowUniPCScheduler`` is part of the validated public surface. Legacy
+Euler and DPM++ helpers remain private to this pinned source file.
 """
 
 import math
@@ -10,10 +9,12 @@ import math
 import mlx.core as mx
 import numpy as np
 
+__all__ = ["FlowUniPCScheduler"]
 
-def _compute_sigmas(
+
+def _compute_schedule(
     num_steps: int, shift: float = 1.0, num_train_timesteps: int = 1000
-) -> np.ndarray:
+) -> tuple[np.ndarray, np.ndarray]:
     """Compute shifted sigma schedule matching official Wan2.2 scheduler.
 
     The reference creates FlowUniPCMultistepScheduler with shift=1 (identity)
@@ -23,17 +24,28 @@ def _compute_sigmas(
 
     Returns num_steps+1 values (the last being 0.0 for the terminal state).
     """
-    # sigma bounds from unshifted training schedule (constructor uses shift=1)
-    alphas = np.linspace(1.0, 1.0 / num_train_timesteps, num_train_timesteps)[::-1]
-    sigmas_unshifted = 1.0 - alphas
-    sigma_max = float(sigmas_unshifted[0])  # (N-1)/N
-    sigma_min = float(sigmas_unshifted[-1])  # 0.0
+    # The official constructor converts its training sigmas to float32 before
+    # saving sigma_min/sigma_max as Python scalars.
+    alphas = np.linspace(
+        1.0, 1.0 / num_train_timesteps, num_train_timesteps
+    )[::-1].copy()
+    sigmas_unshifted = (1.0 - alphas).astype(np.float32)
+    sigma_max = float(sigmas_unshifted[0])
+    sigma_min = float(sigmas_unshifted[-1])
 
     # Interpolate, then apply shift once (matching set_timesteps)
-    sigmas = np.linspace(sigma_max, sigma_min, num_steps + 1)[:-1]
+    sigmas = np.linspace(sigma_max, sigma_min, num_steps + 1).copy()[:-1]
     sigmas = shift * sigmas / (1.0 + (shift - 1.0) * sigmas)
+    timesteps = (sigmas * num_train_timesteps).astype(np.int64)
+    sigmas = np.concatenate([sigmas, [0.0]]).astype(np.float32)
+    return sigmas, timesteps
 
-    return np.append(sigmas, 0.0).astype(np.float32)
+
+def _compute_sigmas(
+    num_steps: int, shift: float = 1.0, num_train_timesteps: int = 1000
+) -> np.ndarray:
+    """Compatibility helper returning the official float32 sigma schedule."""
+    return _compute_schedule(num_steps, shift, num_train_timesteps)[0]
 
 
 class FlowMatchEulerScheduler:
@@ -45,12 +57,11 @@ class FlowMatchEulerScheduler:
         self.sigmas = None
 
     def set_timesteps(self, num_steps: int, shift: float = 1.0):
-        sigmas = _compute_sigmas(num_steps, shift, self.num_train_timesteps)
-        self.sigmas = mx.array(sigmas)
-        # Integer timesteps to match reference (model trained with int timesteps)
-        self.timesteps = mx.array(
-            (sigmas[:-1] * self.num_train_timesteps).astype(np.int64).astype(np.float32)
+        sigmas, timesteps = _compute_schedule(
+            num_steps, shift, self.num_train_timesteps
         )
+        self.sigmas = mx.array(sigmas)
+        self.timesteps = mx.array(timesteps)
         # Store as Python floats to avoid .item() sync in step()
         self._sigmas_float = sigmas.tolist()
         self._step_index = 0
@@ -93,11 +104,11 @@ class FlowDPMPP2MScheduler:
         self.sigmas = None
 
     def set_timesteps(self, num_steps: int, shift: float = 1.0):
-        sigmas = _compute_sigmas(num_steps, shift, self.num_train_timesteps)
-        self.sigmas = mx.array(sigmas)
-        self.timesteps = mx.array(
-            (sigmas[:-1] * self.num_train_timesteps).astype(np.int64).astype(np.float32)
+        sigmas, timesteps = _compute_schedule(
+            num_steps, shift, self.num_train_timesteps
         )
+        self.sigmas = mx.array(sigmas)
+        self.timesteps = mx.array(timesteps)
         # Store sigmas as Python floats for scalar math
         self._sigmas_float = sigmas.tolist()
         self._step_index = 0
@@ -215,11 +226,11 @@ class FlowUniPCScheduler:
         self.sigmas = None
 
     def set_timesteps(self, num_steps: int, shift: float = 1.0):
-        sigmas = _compute_sigmas(num_steps, shift, self.num_train_timesteps)
-        self.sigmas = mx.array(sigmas)
-        self.timesteps = mx.array(
-            (sigmas[:-1] * self.num_train_timesteps).astype(np.int64).astype(np.float32)
+        sigmas, timesteps = _compute_schedule(
+            num_steps, shift, self.num_train_timesteps
         )
+        self.sigmas = mx.array(sigmas)
+        self.timesteps = mx.array(timesteps)
         self._sigmas_float = sigmas.tolist()
         self._step_index = 0
         self._num_steps = num_steps

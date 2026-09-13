@@ -82,9 +82,12 @@ def rope_apply(
                 outputs.append(x_rotated)
             return mx.stack(outputs)
 
-    # Cast freqs to input dtype to prevent float32 promotion cascade
-    if freqs.dtype != x.dtype:
-        freqs = freqs.astype(x.dtype)
+    # Official RoPE forms angles in float64 and returns float32 rotated Q/K.
+    # The cached representation must therefore never follow BF16 model dtype.
+    if freqs.dtype != mx.float32:
+        freqs = freqs.astype(mx.float32)
+    if x.dtype != mx.float32:
+        x = x.astype(mx.float32)
 
     # Split frequency dimensions: temporal gets more capacity
     d_t = half_d - 2 * (half_d // 3)
@@ -148,13 +151,15 @@ def rope_precompute_cos_sin(
     Args:
         grid_sizes: List of (F, H, W) tuples (must be same for all batch elements)
         freqs: Precomputed frequencies [1024, d//2, 2]
-        dtype: Target dtype for the output tensors
+        dtype: Retained for call compatibility; only float32 is accepted.
 
     Returns:
         (cos_f, sin_f) each [seq_len, 1, half_d]
     """
-    if freqs.dtype != dtype:
-        freqs = freqs.astype(dtype)
+    if dtype != mx.float32:
+        raise ValueError("Wan RoPE cos/sin cache must remain float32")
+    if freqs.dtype != mx.float32:
+        freqs = freqs.astype(mx.float32)
 
     f, h, w = grid_sizes[0]
     seq_len = f * h * w
