@@ -1,6 +1,6 @@
 # D-ALIGN-01：能力声明与既有工作台对接
 
-- 状态：**2026-09-14有限阶段候选验收通过：组件、普通沙盒图文音频、取消恢复、保存重开与原生UI通过；待下方记录源接纳与推送结果。**
+- 状态：**2026-09-14已本地集成并通过本阶段验收；最终工作分支推送状态/提交见外部stage-final-receipt.json。**
 - task_id：D-ALIGN-01；spec_revision：implementation-r1（UI歧义补充implementation-r2）；contract_revision：ALIGN1。
 - 规划核查基线：`88227688d5ba1e27670fe5972f83f980b978df02`；指导修订：P2026-09-13.1。
 - 实施source_base：`aa277f965629591a23f80f7f4baf3b081cd8de2a`；初始执行基线：`6228a26b38c3835e768a0d2c5ee9ce0adc306bf7`；run_id：`run-20260913T104905Z`。恢复按末尾停点，不再从规划基线启动。
@@ -213,3 +213,14 @@ XCTest nativeUI本次未进入测试：系统coreautha要求“XCTest 正在尝�
 来源仍为Sol/high文字/图像、Terra/medium音频/UI初步实现；Lead负责共享接线、独立反例、音频提前校验、窗口测试与原生输入驱动收尾、真实验收。旧UI预算耗尽事实不变，用户续行后由Lead收尾，不追记Terra独立通过；当前只读复核是非实现者代码审查，不是独立测试运行。订阅费用及完整Lead耗用unknown，不重算历史累计usage。
 
 失败经验：原生长路径输入应保持完整路径断言，以有界分段事件发送改善驱动可靠性；控件几何测试应在真实缩放后验证可达性。系统确认、测试输入失败与产品缺陷分别记录，不以绿色计数覆盖先前失败。源集成/推送版本与恢复点追加下方，最终提交自身SHA仅存外部回执。
+
+
+### 源接纳、复验与最终恢复检查点（2026-09-14）
+
+在源/候选身份、源索引、个人scheme、祖先关系、完整差异、无活动写入者/自动化越界和新增路径碰撞均核对后，以固定 `d3a80942df49f7719a6ea335a05cb7dfc273c812` 快进 `codex/inference-foundation`。原源基线 `aa277f965629591a23f80f7f4baf3b081cd8de2a`；测试驱动 `7632d06084e1499a01a8b2223e939d9491d75151` 到接入版只改五份文档。
+
+从源目录实际运行：`source-core`53/8套件通过；`source-workbench`329/43套件通过，零失败/跳过，约67.8秒含重编译。后者显式设置已有0.5B权重路径，补齐前次可选CPU完整校验；没有推理/下载，权重名称/大小/mtime保持。两份request/result明确绑定d3a80942完整SHA及源package路径，不沿用旧工作树执行。
+
+本次最后提交只更新README、CURRENT_ACTIONS、PRODUCT_GOALS和本记录，产品代码/测试/夹具与受测d3a80942一致；并非在尚未产生的文档提交上重跑测试。最终源SHA与推送/remote实际对应写在同证据根 `stage-final-receipt.json`，不为自引用amend；候选仍留d3a80942完整历史。所有Worker、只读复核和自有测试/GUI进程已结束，源索引空，仅个人scheme未暂存（SHA256 ca3635d88aa5a15397b90e528667c66c0e6db7e596176e885c79d194b544206c，原完整差异及索引保持）；普通D与隔离App四关键文件摘要/大小/mtime未变。证据 `integration-preflight.json`、`integration-command.json`、`source-core`、`source-workbench`、`protection/final.json`。
+
+恢复时核对实际源HEAD、工作分支/索引/个人文件和远端回执，再开始获准的新目标；不从旧等待密码/布局停点重跑。没有当前待运行任务或需用户补授权的ALIGN事项，H09仍等待麦克风设备。下一建议是视频V0薄后端有限方案与完整编码链验证；本批未启动视频、歌声/HUM或另一批开发。源接纳不替换用户普通D，可复核的独立普通沙盒产物留在本证据根artifacts/D ALIGN.app。

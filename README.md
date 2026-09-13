@@ -2,7 +2,7 @@
 
 开发中的原生 macOS 本地 AI 创作工作台，使用 SwiftUI、MLX Swift 和 Hugging Face 模型。
 
-当前指导以[产品与架构原则](docs/PRODUCT_PRINCIPLES.zh-CN.md)为准：项目下按主要产物模态组织，跨模态复用数据、操作和原生UI组件，工作方式与布局分开；开发机16GiB不作为能力上限。旧视觉首批/固定小规格保留为阶段历史，不限制后续产品方向。[D-ALIGN-01](docs/tasks/D-ALIGN-01.md)已完成有限候选验收：统一能力来源并接通文字/图像配置，音频按实际部署声明与验证；接纳和推送见行动指南。完整可组合平台仍未实现。
+当前指导以[产品与架构原则](docs/PRODUCT_PRINCIPLES.zh-CN.md)为准：项目下按主要产物模态组织，跨模态复用数据、操作和原生UI组件，工作方式与布局分开；开发机16GiB不作为能力上限。旧视觉首批/固定小规格保留为阶段历史，不限制后续产品方向。[D-ALIGN-01](docs/tasks/D-ALIGN-01.md)已本地集成并完成有限阶段验收：统一能力来源并接通文字/图像配置，音频按实际部署声明与验证；接纳和推送见行动指南。完整可组合平台仍未实现。
 
 原生 SwiftUI／Liquid Glass 工作台通过 DRuntime 与 DMLXBackend 运行图像任务，使用自包含 `.dproject` 保存作品和生成条件。已支持项目内多份独立创作、候选整理、两图比较和条件复用，见 [最新验收](docs/EXPLORATION_STAGE_ACCEPTANCE.zh-CN.md)。当前行动与验收状态集中在 [行动指南](docs/CURRENT_ACTIONS.zh-CN.md)。已完成的单项目检查点见 [工作台验收](docs/WORKBENCH_ACCEPTANCE.zh-CN.md)，后续目标统一维护在 [产品目标清单](docs/PRODUCT_GOALS.zh-CN.md)。文字现已接入同一项目的有限创作闭环：选段改写、候选接受/拒绝、受保护撤销、安全保存重开；旧文本和占位界面已退出。PNG支持实际任务配方公开/私有预览、新副本内嵌、离线读回并显式恢复为新草稿。两者已本地验收，范围及真实运行证据见 [T0任务](docs/tasks/D-T0-WORKBENCH-01.md) 和 [PNG任务](docs/tasks/D-META-PNG-01.md)；CLI继续保留。
 
