@@ -7,6 +7,7 @@ import Foundation
 public actor MLXMRT2Backend: InferenceBackend {
     public nonisolated let descriptor = BackendDescriptor(
         id: "mlx.audio.mrt2", version: "1", capabilities: [.audioGeneration])
+    public nonisolated let executionCapability = AudioExecutionCapabilities.mrt2
 
     private let configuration: MRT2BackendConfiguration
     private var lease: UUID?
