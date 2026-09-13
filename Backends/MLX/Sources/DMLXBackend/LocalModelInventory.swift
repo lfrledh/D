@@ -55,6 +55,9 @@ struct LocalModelInventory: Sendable {
 
     static func inspect(_ request: InferenceRequest, capability: TextExecutionCapability,
                         cacheLimitBytes: Int) throws -> Self {
+        guard (0...1024 * 1024 * 1024).contains(cacheLimitBytes) else {
+            throw InferenceFailure.invalidRequest("Invalid MLX backend limits.")
+        }
         try request.validate()
         guard case .text(let input) = request.input else {
             throw InferenceFailure.unsupportedCapability(request.input.capability)
@@ -157,5 +160,21 @@ struct LocalModelInventory: Sendable {
         return Self(directory: directory, weightBytes: weightBytes,
                     estimatedPeakBytes: estimate, contextLimit: config.max_position_embeddings,
                     profile: capability.profile, maximumPromptTokens: maximumPromptTokens)
+    }
+
+    /// Retains the original metadata-inspection entry point for callers that own a
+    /// backend configuration. Resolution still flows through TextExecutionCapability.
+    static func inspect(_ request: InferenceRequest, limits: MLXBackendConfiguration) throws -> Self {
+        guard (1...32768).contains(limits.maximumPromptTokens),
+              (1...8192).contains(limits.maximumOutputTokens),
+              (0...1024 * 1024 * 1024).contains(limits.cacheLimitBytes) else {
+            throw InferenceFailure.invalidRequest("Invalid MLX backend limits.")
+        }
+        return try inspect(
+            request,
+            capability: TextExecutionCapability(
+                maximumPromptTokens: limits.maximumPromptTokens,
+                maximumOutputTokens: limits.maximumOutputTokens),
+            cacheLimitBytes: limits.cacheLimitBytes)
     }
 }

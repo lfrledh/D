@@ -334,6 +334,44 @@ struct ProjectSessionTests {
         #expect(await subject.cancelAndCloseProject())
     }
 
+    @Test func incompatibleHistoryCannotSilentlyDiscardStepsOrGuidance() async throws {
+        let folder = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let project = folder.appendingPathComponent("History.dproject")
+        let backend = WorkbenchTestBackend(root: project.appendingPathComponent("Tasks"))
+        let subject = model(root: folder, backend: backend)
+        await subject.createProject(at: project)
+        await subject.registerModel(at: folder)
+        subject.prompt = "Historical image"
+        await subject.generate()
+        try await waitUntil { !subject.isBusy }
+        let assetID = try #require(subject.manifest?.assets.first?.id)
+        #expect(await subject.cancelAndCloseProject())
+        let file = project.appendingPathComponent(ProjectStore.manifestFilename)
+        let original = try Data(contentsOf: file)
+        // A historical, otherwise valid project produced with different fixed parameters.
+        var object = try #require(JSONSerialization.jsonObject(with: original) as? [String: Any])
+        var jobs = try #require(object["jobs"] as? [[String: Any]])
+        var request = try #require(jobs[0]["request"] as? [String: Any])
+        var input = try #require(request["input"] as? [String: Any])
+        var imageCase = try #require(input["image"] as? [String: Any])
+        var image = try #require(imageCase["_0"] as? [String: Any])
+        image["steps"] = 8; image["guidanceScale"] = 2.0
+        imageCase["_0"] = image; input["image"] = imageCase; request["input"] = input
+        jobs[0]["request"] = request; object["jobs"] = jobs
+        let historic = try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
+        try historic.write(to: file)
+        await subject.openProject(at: project)
+        #expect(subject.errorMessage == nil)
+        let before = try #require(subject.manifest)
+        await subject.forkDocument(from: assetID, acknowledgeCurrentModel: true)
+        #expect(subject.errorMessage?.contains("暂不能直接复用") == true)
+        #expect(subject.documents == before.documents)
+        #expect(subject.manifest?.jobs == before.jobs)
+        #expect(try Data(contentsOf: file) == historic)
+        #expect(await subject.cancelAndCloseProject())
+    }
+
     @Test func cancelRetainsOwnershipThroughReleaseAndQueuedWorkDoesNotStart() async throws {
         let folder = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: folder) }

@@ -75,6 +75,8 @@ struct TextExecutionSettingsTests {
 
         let missing = Data(#"{"schema_version":2,"document":{"id":"11111111-1111-1111-1111-111111111111","revision":"22222222-2222-2222-2222-222222222222","text":"malformed"}}"#.utf8)
         #expect(throws: TextDraftError.malformedArchive) { try TextDraftArchive.decode(missing) }
+        let presentNull = Data(#"{"schema_version":1,"document":{"id":"11111111-1111-1111-1111-111111111111","revision":"22222222-2222-2222-2222-222222222222","text":"malformed","generationSettings":null}}"#.utf8)
+        #expect(throws: TextDraftError.malformedArchive) { try TextDraftArchive.decode(presentNull) }
         let fractional = Data(#"{"schema_version":2.0,"document":{}}"#.utf8)
         #expect(throws: TextDraftError.malformedArchive) { try TextDraftArchive.decode(fractional) }
     }

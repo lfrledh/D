@@ -29,11 +29,22 @@ public final class ProjectSession {
     public var textCapability: TextExecutionCapability? { session?.textCapability }
     public var audioCapability: AudioExecutionCapability? { session?.audioCapability }
     public var musicCapability: AudioExecutionCapability? { session?.musicCapability }
+    private var parameterEditingErrors: [CreatorMode: String] = [:]
+
+    /// Transient field parsing errors block all submission paths, including shortcuts.
+    /// They are not project content and must not leak across document navigation.
+    public func setParameterEditingError(_ error: String?, for mode: CreatorMode, documentID: UUID?) {
+        guard let documentID, activeDocumentID == documentID else { return }
+        parameterEditingErrors[mode] = error
+    }
+
     public var imageConfigurationError: String? {
+        if let error = parameterEditingErrors[.image] { return error }
         do { _ = try imageSettings.request(prompt: "validation", seed: 0, capability: imageCapability); return nil }
         catch { return error.localizedDescription }
     }
     public var textConfigurationError: String? {
+        if let error = parameterEditingErrors[.text] { return error }
         guard let text, let capability = textCapability else { return nil }
         let settings = text.editor.document.generationSettings
         do {
@@ -313,6 +324,7 @@ public final class ProjectSession {
     }
 
     private func loadActiveDocument() {
+        parameterEditingErrors.removeAll()
         if let document = activeDocument {
             creatorMode = CreatorMode(document.kind)
             lastDocuments[creatorMode] = document.id

@@ -61,8 +61,12 @@ public struct TextDraftDocument: Codable, Sendable, Equatable, Identifiable {
         let id = try values.decode(UUID.self, forKey: .id)
         let revision = try values.decode(UUID.self, forKey: .revision)
         let text = try values.decode(String.self, forKey: .text)
-        let generationSettings = try values.decodeIfPresent(TextGenerationSettings.self, forKey: .generationSettings)
-            ?? .legacy
+        let generationSettings: TextGenerationSettings
+        if values.contains(.generationSettings) {
+            generationSettings = try values.decode(TextGenerationSettings.self, forKey: .generationSettings)
+        } else {
+            generationSettings = .legacy
+        }
         try self.init(id: id, revision: revision, text: text, generationSettings: generationSettings)
     }
 }

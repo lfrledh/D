@@ -167,16 +167,27 @@ struct ProjectSessionConcurrencyTests {
         let subject = ProjectSession(sessionFactory: { _ in
             WorkbenchSession(engine: engine, backendID: "test.document", status: {
                 WorkbenchRuntimeStatus(activeRunID: nil, phase: nil, queuedRunIDs: [])
-            }, shutdown: {}, cleanup: {}, validateModel: { _ in })
+            }, shutdown: {}, cleanup: {}, validateModel: { _ in }, imageCapability: .scalableKlein4B)
         }, settings: settings)
         await subject.createProject(at: folder.appendingPathComponent("Admission.dproject"))
         await subject.registerModel(at: folder)
         let origin = try #require(subject.activeDocumentID)
+        subject.imageSettings = .init(width: 768, height: 512, executionProfile: ImageExecutionCapability.scalableKlein4B.profile)
         subject.prompt = "Captured origin request"
+        let currentID = try #require(subject.activeDocumentID)
+        subject.setParameterEditingError("请输入完整整数", for: .image, documentID: currentID)
+        #expect(!subject.canGenerate)
+        await subject.generate()
+        #expect(subject.manifest?.jobs.isEmpty == true)
+        subject.setParameterEditingError(nil, for: .image, documentID: UUID())
+        #expect(!subject.canGenerate)
+        subject.setParameterEditingError(nil, for: .image, documentID: currentID)
+        #expect(subject.canGenerate)
         subject.randomSeed = false
         subject.seedText = "0"
         let generating = Task { await subject.generate() }
         try await waitUntil { await gate.reached }
+        subject.imageSettings = .init(width: 512, height: 768, executionProfile: ImageExecutionCapability.scalableKlein4B.profile)
         subject.prompt = "Later origin draft"
         await subject.createDocument(name: "Another document")
         let other = try #require(subject.activeDocumentID)
@@ -190,8 +201,12 @@ struct ProjectSessionConcurrencyTests {
         #expect(subject.seedText == "-")
         #expect(subject.manifest?.jobs.first?.documentID == origin)
         #expect(subject.documents.first(where: { $0.id == origin })?.draft.prompt == "Later origin draft")
+        #expect(subject.documents.first(where: { $0.id == origin })?.draft.imageSettings.width == 512)
+        #expect(subject.documents.first(where: { $0.id == origin })?.draft.imageSettings.height == 768)
         if case .image(let image) = subject.manifest?.jobs.first?.request.input {
             #expect(image.prompt == "Captured origin request")
+            #expect(image.width == 768 && image.height == 512)
+            #expect(image.executionProfile == ImageExecutionCapability.scalableKlein4B.profile)
             #expect(image.seed == 0)
         } else { Issue.record("Missing image input") }
         #expect(subject.manifest?.jobs.first?.state == .cancelled)
