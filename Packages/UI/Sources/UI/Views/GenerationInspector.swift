@@ -42,7 +42,7 @@ struct GenerationInspector: View {
                 Divider()
                 promptSection
                 seedSection
-                fixedSettings
+                generationSettings
 
                 if let asset = model.selectedAsset {
                     Divider()
@@ -153,19 +153,72 @@ struct GenerationInspector: View {
         }
     }
 
-    private var fixedSettings: some View {
+    private var generationSettings: some View {
         VStack(alignment: .leading, spacing: 10) {
             sectionTitle("生成规格", systemImage: "slider.horizontal.3")
-            HStack(spacing: 0) {
-                settingValue("尺寸", value: "\(model.imageProfile.width) × \(model.imageProfile.height)")
-                Spacer()
-                settingValue("步数", value: "\(model.imageProfile.steps)")
-                Spacer()
-                settingValue("Guidance", value: model.imageProfile.guidanceScale.formatted())
+            VStack(alignment: .leading, spacing: 8) {
+                Text("宽度（像素）").font(.caption).foregroundStyle(.secondary)
+                TextField("宽度（像素）", value: imageWidth, format: .number)
+                    .textFieldStyle(.roundedBorder)
+                    .accessibilityLabel("宽度（像素）")
+                    .accessibilityIdentifier("image-width")
+                Text("高度（像素）").font(.caption).foregroundStyle(.secondary)
+                TextField("高度（像素）", value: imageHeight, format: .number)
+                    .textFieldStyle(.roundedBorder)
+                    .accessibilityLabel("高度（像素）")
+                    .accessibilityIdentifier("image-height")
             }
-            Text("当前模型使用这一组已验证的固定规格。")
+            HStack(spacing: 18) {
+                settingValue("步数", value: "\(model.imageCapability.steps)")
+                settingValue("Guidance", value: model.imageCapability.guidanceScale.formatted())
+            }
+            Text("支持宽度 \(model.imageCapability.minimumWidth)–\(model.imageCapability.maximumWidth)，高度 \(model.imageCapability.minimumHeight)–\(model.imageCapability.maximumHeight)，均为 \(model.imageCapability.dimensionMultiple) 的倍数。")
                 .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            if let recommendation = model.executionRecommendations {
+                Text("这是依据当前内存的未实测起始建议：\(recommendation.imageDimension) × \(recommendation.imageDimension)；不代表已验证能力或保证当前准入，也不会改变当前设置。")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            presetButtons
+            if let error = model.imageConfigurationError {
+                Text(error).font(.caption).foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("image-settings-error")
+            }
         }
+        .accessibilityIdentifier("image-parameter-section")
+    }
+
+    private var imageWidth: Binding<Int> {
+        Binding(get: { model.imageSettings.width }, set: { updateImageSettings(width: $0, height: model.imageSettings.height) })
+    }
+
+    private var imageHeight: Binding<Int> {
+        Binding(get: { model.imageSettings.height }, set: { updateImageSettings(width: model.imageSettings.width, height: $0) })
+    }
+
+    @ViewBuilder private var presetButtons: some View {
+        let sizes = [512, 768, 1024].filter { accepts(width: $0, height: $0) }
+        if !sizes.isEmpty {
+            Menu("尺寸预设") {
+                ForEach(sizes, id: \.self) { size in
+                    Button("\(size) × \(size)") { updateImageSettings(width: size, height: size) }
+                }
+            }
+            .controlSize(.small)
+        }
+    }
+
+    private func accepts(width: Int, height: Int) -> Bool {
+        let capability = model.imageCapability
+        return (try? ImageGenerationSettings(width: width, height: height,
+            executionProfile: capability.profile).request(prompt: "preset", seed: 0, capability: capability)) != nil
+    }
+
+    private func updateImageSettings(width: Int, height: Int) {
+        model.imageSettings = ImageGenerationSettings(width: width, height: height,
+            executionProfile: model.imageCapability.profile)
     }
 
     @ViewBuilder private var generateButton: some View {
