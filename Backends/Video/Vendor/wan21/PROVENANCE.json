@@ -37,7 +37,7 @@
   },
   "reference": "Wan-Video/Wan2.1",
   "referenceRevision": "9737cba9c1c3c4d04b33fcad41c111989865d315",
-  "status": "VAE causal patch passed 7 tiny CPU reference checks; other numerical components awaiting reference checks; full model not yet run.",
+  "status": "VAE 7 and numerical 13 CPU reference tests passed; production full-model execution acceptance is recorded separately in the task.",
   "patches": [
     {
       "file": "vae.py",
@@ -48,6 +48,42 @@
     {
       "file": "config.py",
       "reason": "Remove unrelated LTX configuration inheritance; local dataclass field access only. No model settings altered."
+    },
+    {
+      "file": "text_encoder.py",
+      "sha256": "5a2f197f69b076957b877e218be5a9cbd54bda961b0d6adef489c4940ed822a4",
+      "reason": "Official T5 norm and BF16 QK/bias rounding, FP32 softmax only.",
+      "evidence": "D-VIDEO-V0-01/numeric-lead-r3/result.json"
+    },
+    {
+      "file": "attention.py",
+      "sha256": "a03e77a84bc563fe8b1669dedf780735a5ba49bf8bdc21bb1580dc9bf329ae3c",
+      "reason": "Official FP32 normalization; explicit BF16 projection/SDPA/output boundaries including cached KV.",
+      "evidence": "D-VIDEO-V0-01/numeric-lead-r3/result.json"
+    },
+    {
+      "file": "rope.py",
+      "sha256": "92bc90eb982f56544d7da6f1adc1552fef0d6f3a7a809bf084b4f4ddfb5f7340",
+      "reason": "FP64 NumPy angles with FP32 rotary tables; no BF16 cache.",
+      "evidence": "D-VIDEO-V0-01/numeric-lead-r3/result.json"
+    },
+    {
+      "file": "transformer.py",
+      "sha256": "3991d4e9eb023d98ad97bba25f5016938f8c39f85afb88028064712196cba93d",
+      "reason": "Explicit official FP32 modulation/residual arithmetic.",
+      "evidence": "D-VIDEO-V0-01/numeric-lead-r3/result.json"
+    },
+    {
+      "file": "wan_2.py",
+      "sha256": "bf2aca9649da19b0ca8e22e88ae60b4507a35cf051ea3c59b2bb7f6d6c2070ea",
+      "reason": "Pre-linear BF16 casts and FP64 time angles; preserve original learned parameter names.",
+      "evidence": "D-VIDEO-V0-01/numeric-lead-r3/result.json"
+    },
+    {
+      "file": "scheduler.py",
+      "sha256": "ca29e8e145db0d10ecac4a29a263e22dfcc02ee174efb08d7acf53a9d5478f22",
+      "reason": "Official UniPC order2/shift schedule rounding and FP32 endpoint; no other sampler exposed.",
+      "evidence": "D-VIDEO-V0-01/numeric-lead-r3/result.json"
     }
   ]
 }

@@ -123,3 +123,15 @@ Lead额外核查真实命令和API语义、检查是否以函数返回替代完�
 - UniPC完整50steps/shift8/order2与短4steps：完全相同timesteps，sigma atol1e-7，共享每步小FP32模型输出和初始噪声，逐步样本atol/rtol3e-5；重复新scheduler不串状态。不用同seed声称跨框架噪声一致。
 
 如果容差不满足，交真实失败和实现/官方差异，不改容差不改参考。不运行真实权重、不执行CUDA wrapper，Worker自身仅检查语法；Lead独立执行/审核。正常缓存/临时输出仅R/numeric/output和tmp，预先已确定；未知权限/副作用暂停，不重复pgrep。回传代码、解释、内存编译、异常与自有命令状态。
+
+## 2026-09-14 中间恢复点（未验收/未源接入）
+
+模型17,567,083,322字节已逐文件校验，外盘环境已建立；原件未改。转换候选完成，真实转换86.70秒、峰值RSS约7.5GiB，见R/preparation/real-result.json；不代表已推理成功。
+
+MEDIA Sol/high初交＋两次修复后，Lead发现3处边界缺陷并做一次有界接管；旧失败证据保留。严格时间/目录身份写入/码率溢出回归经历旧版失败→71断言通过，非实现者只读复核关闭，见R/media-lead-takeover。VAE Sol/high初交7个小Torch/MLX CPU对照通过，无返工。NUMERIC Sol/high初交＋两次修复，13个CPU对照通过，完整BF16投影/FP32norm block最大绝对差6.36e-5，见R/numeric-lead-r3；仅官方CPU SDPA fallback，不声称CUDA FlashAttention相同。
+
+NUMERIC初交发生heredoc临时文件创建被沙箱拒绝exit1后未按规则停报；准确路径不可见。Lead在首次返工前查明拒绝和后续直接内存编译，未观察到提权/成功越界，源保护未变；违规不追溯为合规。两次修复使用明确外盘解释器，无新权限/警告事件。事件摘要R/numeric/lead-event-review.json及repair1/2-event-review.json。此前已耗预算不刷新。
+
+Lead负责转换/runner/契约/共享进程提取/CLI和工作台明确拒绝视频任务。两个非实现者分别审核数值与媒体/接线，未声称另行跑测试。共享进程及音频/MRT2/视频CPU首轮44，增加媒体失败保护后45个测试通过、零失败/跳过，见R/swift-cpu-r2；视频5项直接调用backend，不是runtime真实模型验收。71媒体断言与45套件不相加。Python runner12项、基础与工作台回归另记各自日志。
+
+执行组合e26c6eaa395fe371512269c5fc97b5fa7bba86e6包含NUMERIC137e67d930946675a21b7249cea767e865f981de和Lead接线eea6a833f847c438a919085559847be4641b6449。W分支codex/d-video-v0-01，源仍cc663f7a9e54bb9506b4fdb40e8e7d7198742a8f、个人scheme未暂存且摘要与开始一致。R/real-video-r1正在执行指定832×480/17帧/50步真实CLI；恢复时检查该result/process文件，不自动重复启动。所有写Worker已结束，修复额度MEDIA/NUMERIC用尽，VAE未用；原生审核只读已结束。下一步是真实生成/取消/文件验证，不进入视频UI。
