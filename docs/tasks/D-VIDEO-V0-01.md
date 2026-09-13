@@ -19,7 +19,7 @@
 
 候选Wan2.1 T2V-1.3B，官方权重revision `37ec512624d61f7aa208f7ea8140a131f93afc9a`，完整必要文件17,567,083,322字节。来源 [官方权重](https://huggingface.co/Wan-AI/Wan2.1-T2V-1.3B/tree/37ec512624d61f7aa208f7ea8140a131f93afc9a)，Apache2；适配参考 [mlx-video固定MIT源码](https://github.com/Blaizzy/mlx-video/tree/87db56a51758fefb748a359b90a5283bb8ba4837)；官方算法参考Wan2.1 `9737cba9c1c3c4d04b33fcad41c111989865d315`。
 
-下载、独立环境安装及真实资源窗口已集中询问，尚无批准回复；不提前下载/安装/加载。不把以往音频下载授权外推到视频。媒体CPU工作不依赖这项批准。
+2026-09-14用户已分别批准指定下载/独立环境/视频BF16与FP32数值验证，并确认普通D退出、其他AI/GPU空闲；批准来源见R/authorization.json。现正在下载/安装，尚未加载。不把以往音频下载授权外推到视频。媒体CPU工作不依赖这项批准。
 
 已核实源码风险（不是本机推理结果）：
 1. 参考MLX实现把T5 BF16全权重升FP32，单编码器临时约22.7GB；转换又保留源副本。需保留BF16存储，按层转换/释放并测峰值，禁止静默Q8降级。
@@ -81,3 +81,27 @@ Lead额外核查真实命令和API语义、检查是否以函数返回替代完�
 ## 恢复检查点
 
 已完成：起点/历史结案/保护核对、隔离Lead树、固定上游只读调查、媒体接口与冻结任务。未完成：实施Worker预检/代码/CPU验收；模型下载审批/适配/数值与真实生成；组合审核/源接纳/push。源与普通D不变。模型/资源问题已集中询问，未答复不执行相关操作。下一动作：准备提交、媒体受限CLI预检；Lead推进可独立契约。最终SHA及各运行时间/可观察模型/用量仅按证据填写，隐藏解析和订阅费用unknown。
+
+
+## VAE：冻结实施规格 vae-r1
+
+任务 `D-VIDEO-V0-01/VAE`，stage-r1，独立工作树/完整基线见R/vae/job.json。Sol/high，初交+2针对性修复，15分钟每轮；Lead负责真正MLX数值执行，不能通过改容差/参考消除失败。
+
+只可改 `Backends/Video/Vendor/wan21/vae.py`，只可新增 `Backends/Video/Tests/test_wan_vae_reference.py`。禁止改任何其他文件、原始参考源码、权重、规格、Git元数据、环境/依赖/权限；不联网/下载/安装/派工。读取该固定vendor，按需只读R/source/wan-official/wan/modules/vae.py 与本节。不导入整个上游包。源码许可证/来源由Lead保存，Worker仅回传改动摘要，Lead补patch manifest。
+
+目标：修复Wan2.1 T2V的因果解码，与官方首帧/跨latent缓存匹配，保留原参数key与FP32运算。不是Wan2.2、编码/I2V或新VAE框架。
+
+冻结接口：保留 `WanVAE.decode(z)` -> `[B,3,4T-3,H*8,W*8]` clipped [-1,1]；新增 `WanVAE.decode_chunks(z)` iterator，T>=1，每次给首块1帧、以后4帧，单次调用cache私有，不跨任务复用，提前关闭生成器时释放缓存。`decode`可组合这些块，正式runner使用chunks以减少完整帧驻留。层级 `Decoder3d.__call__(x, feat_cache=None, feat_idx=None)` 支持官方缓存；Resample上采样首块sentinel/后续cache语义按官方实现，不能把全量4T裁到4T−3。RMS_norm的F.normalize等价规则也需核对极小输入：norm=max(sqrt(sum(x*x)),1e-12)，不是sqrt(max(sum,1e-12))。
+
+`decode_tiled`旧非因果假设不得继续被误用：该入口在这个窄T2V vendor明确抛NotImplementedError说明空间/时间tiling尚未数值验收，不静默忽略配置或保留4T错误。正式V0不依赖tiling；后续更大尺寸可独立实现，不以本机RAM作为模型上限。不得修改未纳入T2V的encode逻辑或宣称I2V已修复。
+
+测试仅生成小合成张量/小层参数，固定随机输入，从官方Torch CPU实现得到独立参考，经轴转换载入MLX。不得让参考调用待测函数。脚本通过显式 `D_WAN_REFERENCE_VAE` 读固定官方文件；MLX vendor路径显式 `D_WAN_VENDOR`，避免加载旧工作树。测试命令由Lead在已批准独立venv执行，Worker仅用tokenize.open+compile内存语法检查，不运行MLX/模型/GPU；所有测试代码须设Torch CPU、MLX CPU及小线程数以便Lead先做小对照。不加载真实权重。
+
+冻结断言：
+- `CausalConv3d`/上采样Resample/ResidualBlock/Decoder3d的cache首步及后续，权重按真实O,I,D,H,W→O,D,H,W,I及Conv2d轴顺序转换；不能为通过倒改官方文件。
+- 1/2/5 latent帧分别产出1/5/17帧；独立相同输入对照全部帧而不只shape。小维度Decoder与官方，FP32 `atol=3e-4, rtol=3e-4`，显式记录最大绝对误差；零/极小norm另按期望验证。
+- 一次decode与chunks组合一致；重复调用/提前停止后新调用不串cache；帧间连续性与官方输出一致，不以音视频播放器肉眼代替。
+- T=0、无效rank/channel拒绝，不返回假空片；NaN/Inf若触发异常需明确，不把坏帧作为数值通过。
+- 测试用官方导入不执行CUDA训练/预训练加载；依赖若缺由Lead处理，不Worker安装。
+
+回传修改、内存编译结果、未执行数值门槛、风险/异常与本任务进程状态。只有Lead实际对照后才可接纳。该任务不是整个video runner；模型转换/T5/DiT/采样器/媒体/Swift接线归Lead或后续明确包，不改它们。

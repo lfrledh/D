@@ -1,0 +1,13 @@
+{
+  "source": "Blaizzy/mlx-video",
+  "revision": "87db56a51758fefb748a359b90a5283bb8ba4837",
+  "originalFiles": {
+    "vae.py": {
+      "upstreamPath": "mlx_video/models/wan_2/vae.py",
+      "sha256": "83c355a2a1d8829b1e020c1e7389782f9d15e08b259bab3323496d371e718cee"
+    }
+  },
+  "reference": "Wan-Video/Wan2.1",
+  "referenceRevision": "9737cba9c1c3c4d04b33fcad41c111989865d315",
+  "status": "Unmodified decoder snapshot. Awaiting causal decode repair and numerical validation. Not enabled."
+}
