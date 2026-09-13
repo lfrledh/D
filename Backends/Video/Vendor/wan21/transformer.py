@@ -55,7 +55,7 @@ class WanAttentionBlock(nn.Module):
         # which keeps residual x in float32 via torch.amp.autocast(dtype=float32).
         # By keeping modulation in float32, type promotion ensures the residual
         # stream stays float32 throughout all 30 layers (gate * output + x → float32).
-        mod = self.modulation + e  # float32
+        mod = self.modulation.astype(mx.float32) + e.astype(mx.float32)
         e0, e1, e2, e3, e4, e5 = (
             mod[:, :, 0, :],  # shift for self-attn
             mod[:, :, 1, :],  # scale for self-attn
@@ -75,16 +75,19 @@ class WanAttentionBlock(nn.Module):
             rope_cos_sin=rope_cos_sin,
             attn_mask=attn_mask,
         )
-        x = x + y * e2
+        x = x.astype(mx.float32) + y.astype(mx.float32) * e2
 
         # Cross-attention (no modulation, just norm)
         x_cross = self.norm3(x) if self.norm3 is not None else x
-        x = x + self.cross_attn(x_cross, context, context_lens, kv_cache=cross_kv_cache)
+        cross = self.cross_attn(
+            x_cross, context, context_lens, kv_cache=cross_kv_cache
+        )
+        x = x.astype(mx.float32) + cross.astype(mx.float32)
 
         # FFN with modulation
         x_mod = self.norm2(x) * (1 + e4) + e3
         y = self.ffn(x_mod)
-        x = x + y * e5
+        x = x.astype(mx.float32) + y.astype(mx.float32) * e5
 
         return x
 

@@ -13,6 +13,14 @@ def _linear_dtype(layer) -> mx.Dtype:
     return inner.weight.dtype
 
 
+def _attention_compute_dtype(layer) -> mx.Dtype:
+    """Return the validated SDPA dtype selected by the V projection."""
+    dtype = _linear_dtype(layer)
+    if dtype not in (mx.float16, mx.bfloat16, mx.float32):
+        raise TypeError(f"unsupported Wan attention compute dtype: {dtype}")
+    return dtype
+
+
 class WanRMSNorm(nn.Module):
     """RMS normalization with learnable scale."""
 
@@ -22,7 +30,10 @@ class WanRMSNorm(nn.Module):
         self.weight = mx.ones((dim,))
 
     def __call__(self, x: mx.array) -> mx.array:
-        return mx.fast.rms_norm(x, self.weight, self.eps)
+        x_fp32 = x.astype(mx.float32)
+        variance = mx.mean(mx.square(x_fp32), axis=-1, keepdims=True)
+        normalized = x_fp32 * mx.rsqrt(variance + self.eps)
+        return normalized.astype(x.dtype) * self.weight
 
 
 class WanLayerNorm(nn.Module):
@@ -37,10 +48,15 @@ class WanLayerNorm(nn.Module):
             self.bias = mx.zeros((dim,))
 
     def __call__(self, x: mx.array) -> mx.array:
+        x_fp32 = x.astype(mx.float32)
+        mean = mx.mean(x_fp32, axis=-1, keepdims=True)
+        centered = x_fp32 - mean
+        variance = mx.mean(mx.square(centered), axis=-1, keepdims=True)
+        normalized = centered * mx.rsqrt(variance + self.eps)
         if self.elementwise_affine:
-            return mx.fast.layer_norm(x, self.weight, self.bias, self.eps)
-        else:
-            return mx.fast.layer_norm(x, None, None, self.eps)
+            normalized = normalized * self.weight.astype(mx.float32)
+            normalized = normalized + self.bias.astype(mx.float32)
+        return normalized.astype(x.dtype)
 
 
 class WanSelfAttention(nn.Module):
@@ -82,12 +98,8 @@ class WanSelfAttention(nn.Module):
         b, s, _ = x.shape
         n, d = self.num_heads, self.head_dim
 
-        # Cast to compute dtype for efficient matmul (bfloat16 matching official autocast)
-        w_dtype = _linear_dtype(self.q)
-        x_w = x.astype(w_dtype)
-
-        q = self.q(x_w)
-        k = self.k(x_w)
+        q = self.q(x.astype(_linear_dtype(self.q)))
+        k = self.k(x.astype(_linear_dtype(self.k)))
         if self.norm_q is not None:
             q = self.norm_q(q)
         if self.norm_k is not None:
@@ -95,7 +107,7 @@ class WanSelfAttention(nn.Module):
 
         q = q.reshape(b, s, n, d)
         k = k.reshape(b, s, n, d)
-        v = self.v(x_w).reshape(b, s, n, d)
+        v = self.v(x.astype(_linear_dtype(self.v))).reshape(b, s, n, d)
 
         # RoPE in float32 for precision (official uses float64)
         q = rope_apply(
@@ -105,17 +117,21 @@ class WanSelfAttention(nn.Module):
             k.astype(mx.float32), grid_sizes, freqs, precomputed_cos_sin=rope_cos_sin
         )
 
-        # Cast back to weight dtype for efficient attention (matching official q.to(v.dtype))
-        q = q.astype(w_dtype).transpose(0, 2, 1, 3)
-        k = k.astype(w_dtype).transpose(0, 2, 1, 3)
-        v = v.transpose(0, 2, 1, 3)
+        # Official flash_attention converts Q/K to V's half precision before
+        # the kernel. Keep the same explicit boundary for MLX SDPA.
+        attention_dtype = _attention_compute_dtype(self.v)
+        q = q.astype(attention_dtype).transpose(0, 2, 1, 3)
+        k = k.astype(attention_dtype).transpose(0, 2, 1, 3)
+        v = v.astype(attention_dtype).transpose(0, 2, 1, 3)
 
         # Use precomputed mask or build from seq_lens
         mask = attn_mask
         if mask is None and any(sl < s for sl in seq_lens):
-            mask = mx.zeros((b, 1, 1, s), dtype=q.dtype)
+            mask = mx.zeros((b, 1, 1, s), dtype=attention_dtype)
             for i, sl in enumerate(seq_lens):
                 mask[i, :, :, sl:] = -1e9
+        elif mask is not None:
+            mask = mask.astype(attention_dtype)
 
         # Use memory-efficient scaled dot-product attention
         # mx.fast.scaled_dot_product_attention expects [B, N, L, D]
@@ -127,7 +143,7 @@ class WanSelfAttention(nn.Module):
             out = mx.fast.scaled_dot_product_attention(q, k, v, scale=self.scale)
 
         out = out.transpose(0, 2, 1, 3).reshape(b, s, -1)
-        return self.o(out)
+        return self.o(out.astype(_linear_dtype(self.o)))
 
 
 class WanCrossAttention(nn.Module):
@@ -165,15 +181,14 @@ class WanCrossAttention(nn.Module):
         """
         b = context.shape[0]
         n, d = self.num_heads, self.head_dim
-        # Cast to compute dtype for efficient matmul
-        w_dtype = _linear_dtype(self.k)
-        ctx = context.astype(w_dtype)
-        k = self.k(ctx)
+        k = self.k(context.astype(_linear_dtype(self.k)))
         if self.norm_k is not None:
             k = self.norm_k(k)
         k = k.reshape(b, -1, n, d).transpose(0, 2, 1, 3)
-        v = self.v(ctx).reshape(b, -1, n, d).transpose(0, 2, 1, 3)
-        return k, v
+        v = self.v(context.astype(_linear_dtype(self.v)))
+        v = v.reshape(b, -1, n, d).transpose(0, 2, 1, 3)
+        attention_dtype = _attention_compute_dtype(self.v)
+        return k.astype(attention_dtype), v.astype(attention_dtype)
 
     def __call__(
         self,
@@ -185,9 +200,7 @@ class WanCrossAttention(nn.Module):
         b = x.shape[0]
         n, d = self.num_heads, self.head_dim
 
-        # Cast to compute dtype for efficient matmul (bfloat16 matching official autocast)
-        w_dtype = _linear_dtype(self.q)
-        q = self.q(x.astype(w_dtype))
+        q = self.q(x.astype(_linear_dtype(self.q)))
         if self.norm_q is not None:
             q = self.norm_q(q)
         q = q.reshape(b, -1, n, d).transpose(0, 2, 1, 3)
@@ -195,18 +208,23 @@ class WanCrossAttention(nn.Module):
         if kv_cache is not None:
             k, v = kv_cache
         else:
-            ctx = context.astype(w_dtype)
-            k = self.k(ctx)
+            k = self.k(context.astype(_linear_dtype(self.k)))
             if self.norm_k is not None:
                 k = self.norm_k(k)
             k = k.reshape(b, -1, n, d).transpose(0, 2, 1, 3)
-            v = self.v(ctx).reshape(b, -1, n, d).transpose(0, 2, 1, 3)
+            v = self.v(context.astype(_linear_dtype(self.v)))
+            v = v.reshape(b, -1, n, d).transpose(0, 2, 1, 3)
+
+        attention_dtype = _attention_compute_dtype(self.v)
+        q = q.astype(attention_dtype)
+        k = k.astype(attention_dtype)
+        v = v.astype(attention_dtype)
 
         # Optional context masking
         mask = None
         if context_lens is not None:
             ctx_len = k.shape[2]
-            mask = mx.zeros((b, 1, 1, ctx_len), dtype=q.dtype)
+            mask = mx.zeros((b, 1, 1, ctx_len), dtype=attention_dtype)
             for i, cl in enumerate(context_lens):
                 mask[i, :, :, cl:] = -1e9
 
@@ -218,4 +236,4 @@ class WanCrossAttention(nn.Module):
             out = mx.fast.scaled_dot_product_attention(q, k, v, scale=self.scale)
 
         out = out.transpose(0, 2, 1, 3).reshape(b, -1, n * d)
-        return self.o(out)
+        return self.o(out.astype(_linear_dtype(self.o)))
