@@ -1442,6 +1442,9 @@ public final class ProjectSession {
         guard contextID == audioCreationContextID, documentID == activeDocumentID,
               activeDocument?.audioCreation != nil, !isBusy, !isChangingProject, !closePending,
               var previous = audioCreationDraft else { return }
+        // A native panel can cause a field to commit the same input again. Preserve
+        // the captured revision for a true no-op, but never for actual edits or ABA.
+        guard !previous.hasSameEditableRepresentation(as: value) else { return }
         let decisions = previous.rejectedAssetIDs
         previous = value
         previous.rejectedAssetIDs = decisions

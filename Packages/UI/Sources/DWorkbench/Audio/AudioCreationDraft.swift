@@ -34,6 +34,30 @@ public struct AudioCreationDraft: Codable, Sendable, Equatable {
         self.editRegion = editRegion; self.rejectedAssetIDs = rejectedAssetIDs
     }
 
+    /// Native field focus commits can repeat unchanged input. Compare editing bytes,
+    /// not canonical String equality; revision and candidate decisions are host-owned.
+    func hasSameEditableRepresentation(as other: Self) -> Bool {
+        guard profile == other.profile, operation == other.operation, editRegion == other.editRegion,
+              prompt.utf8.elementsEqual(other.prompt.utf8),
+              durationText.utf8.elementsEqual(other.durationText.utf8),
+              seedText.utf8.elementsEqual(other.seedText.utf8),
+              stepsText.utf8.elementsEqual(other.stepsText.utf8),
+              guidanceText.utf8.elementsEqual(other.guidanceText.utf8),
+              strengthText.utf8.elementsEqual(other.strengthText.utf8) else { return false }
+        switch (music, other.music) {
+        case (nil, nil): return true
+        case let (left?, right?):
+            guard left.hasNoteCondition == right.hasNoteCondition,
+                  left.notes.count == right.notes.count else { return false }
+            return zip(left.notes, right.notes).allSatisfy { a, b in
+                a.id == b.id && a.pitchText.utf8.elementsEqual(b.pitchText.utf8)
+                    && a.startText.utf8.elementsEqual(b.startText.utf8)
+                    && a.durationText.utf8.elementsEqual(b.durationText.utf8)
+            }
+        default: return false
+        }
+    }
+
     private enum CodingKeys: String, CodingKey {
         case profile, music, revision, prompt, operation, durationText, seedText, stepsText,
              guidanceText, strengthText, editRegion, rejectedAssetIDs

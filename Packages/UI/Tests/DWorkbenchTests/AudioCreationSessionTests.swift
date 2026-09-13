@@ -71,6 +71,73 @@ struct AudioCreationSessionTests {
             try await Task.sleep(for: .milliseconds(10))
         }
     }
+    @Test(arguments: [false, true]) func repeatedFieldCommitDoesNotInvalidateImportRevision(music: Bool) async throws {
+        let (root, settings, suite) = try fixture()
+        defer { settings.removePersistentDomain(forName: suite); try? FileManager.default.removeItem(at: root) }
+        let subject = session(settings: settings)
+        await subject.createProject(at: root.appendingPathComponent("Focus.dproject"))
+        await subject.createAudioCreation()
+        let document = try #require(subject.activeDocumentID), context = subject.audioCreationContextID
+        var value = try #require(subject.audioCreationDraft)
+        value.durationText = "0.01"; value.prompt = "é 🎹"
+        if music { value.profile = .conditionedMusic; value.music = .example }
+        subject.updateAudioCreationDraft(value, contextID: context, documentID: document)
+        #expect(await subject.saveAudioCreation(contextID: context, documentID: document))
+        let captured = try #require(subject.audioCreationDraft)
+        var repeated = captured; repeated.revision = UUID(); repeated.rejectedAssetIDs = [UUID()]
+        subject.updateAudioCreationDraft(repeated, contextID: context, documentID: document)
+        #expect(subject.audioCreationDraft?.revision == captured.revision)
+        #expect(subject.audioCreationDraft?.rejectedAssetIDs == captured.rejectedAssetIDs)
+        #expect(subject.audioCreationDraft?.durationText == "0.01")
+        #expect(await subject.cancelAndCloseProject())
+    }
+
+    @Test func actualEditsABAAndCanonicalUnicodeStillInvalidateCapturedRevision() async throws {
+        let (root, settings, suite) = try fixture()
+        defer { settings.removePersistentDomain(forName: suite); try? FileManager.default.removeItem(at: root) }
+        let subject = session(settings: settings)
+        await subject.createProject(at: root.appendingPathComponent("Bytes.dproject"))
+        await subject.createAudioCreation()
+        let document = try #require(subject.activeDocumentID), context = subject.audioCreationContextID
+        var first = try #require(subject.audioCreationDraft); first.prompt = "é"
+        first.profile = .conditionedMusic; first.music = .example
+        subject.updateAudioCreationDraft(first, contextID: context, documentID: document)
+        let a = try #require(subject.audioCreationDraft)
+        var b = a; b.prompt = "é"
+        #expect(a.prompt == b.prompt)
+        subject.updateAudioCreationDraft(b, contextID: context, documentID: document)
+        let bSaved = try #require(subject.audioCreationDraft)
+        #expect(bSaved.revision != a.revision)
+        #expect(bSaved.prompt.utf8.elementsEqual(b.prompt.utf8))
+        subject.updateAudioCreationDraft(a, contextID: context, documentID: document)
+        let aAgain = try #require(subject.audioCreationDraft)
+        #expect(aAgain.revision != a.revision && aAgain.revision != bSaved.revision)
+        var changed = aAgain; changed.durationText = "0.04"
+        subject.updateAudioCreationDraft(changed, contextID: context, documentID: document)
+        #expect(subject.audioCreationDraft?.revision != aAgain.revision)
+        let changes: [(inout AudioCreationDraft) -> Void] = [
+            { $0.seedText = "7" }, { $0.stepsText = "9" }, { $0.guidanceText = "2" },
+            { $0.strengthText = "0.6" }, { $0.music?.notes[0].id = UUID() },
+            { $0.music?.notes.reverse() }, { $0.music?.notes[0].pitchText = "é" },
+            { $0.music?.notes[0].pitchText = "é" },
+            { $0.music?.notes[0].startText = "0.04" },
+            { $0.music?.notes[0].durationText = "0.08" },
+            { $0.music = nil }, { $0.music = .init() },
+            { $0.music?.hasNoteCondition = true }
+        ]
+        for change in changes {
+            let before = try #require(subject.audioCreationDraft)
+            var value = before; change(&value)
+            subject.updateAudioCreationDraft(value, contextID: context, documentID: document)
+            #expect(subject.audioCreationDraft?.revision != before.revision)
+        }
+        await subject.createAudioCreation()
+        let newID = subject.activeDocumentID, newDraft = subject.audioCreationDraft
+        subject.updateAudioCreationDraft(a, contextID: context, documentID: document)
+        #expect(subject.activeDocumentID == newID && subject.audioCreationDraft == newDraft)
+        #expect(await subject.cancelAndCloseProject())
+    }
+
     @Test func generatedCandidateNeedsExplicitAdoptionAndDecisionsSurviveReopen() async throws {
         let (root, settings, suite) = try fixture()
         defer { settings.removePersistentDomain(forName: suite); try? FileManager.default.removeItem(at: root) }
