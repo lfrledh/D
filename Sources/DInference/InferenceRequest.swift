@@ -23,12 +23,15 @@ public struct TextRequest: Sendable, Codable, Equatable {
     public let maxTokens: Int
     public let temperature: Float
     public let topP: Float
+    public let execution: TextExecutionSelection?
 
-    public init(prompt: String, maxTokens: Int = 256, temperature: Float = 0.7, topP: Float = 0.95) {
+    public init(prompt: String, maxTokens: Int = 256, temperature: Float = 0.7, topP: Float = 0.95,
+                execution: TextExecutionSelection? = nil) {
         self.prompt = prompt
         self.maxTokens = maxTokens
         self.temperature = temperature
         self.topP = topP
+        self.execution = execution
     }
 }
 
@@ -39,15 +42,17 @@ public struct ImageRequest: Sendable, Codable, Equatable {
     public let steps: Int
     public let guidanceScale: Float
     public let seed: UInt64
+    public let executionProfile: ExecutionProfileReference?
 
     public init(prompt: String, width: Int, height: Int, steps: Int,
-                guidanceScale: Float, seed: UInt64) {
+                guidanceScale: Float, seed: UInt64, executionProfile: ExecutionProfileReference? = nil) {
         self.prompt = prompt
         self.width = width
         self.height = height
         self.steps = steps
         self.guidanceScale = guidanceScale
         self.seed = seed
+        self.executionProfile = executionProfile
     }
 }
 

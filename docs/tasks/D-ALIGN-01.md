@@ -1,6 +1,6 @@
 # D-ALIGN-01：能力声明与既有工作台对接
 
-- 状态：**下一阶段计划，待用户批准实施；本轮只固化指导与规划**。
+- 状态：**2026-09-13用户已批准实施；A0准备中，尚未验收/接纳**。
 - task_id：D-ALIGN-01；spec_revision：1（计划）；contract_revision：ALIGN1（语义提案，Swift符号派工前冻结）。
 - 规划核查基线：`88227688d5ba1e27670fe5972f83f980b978df02`；指导修订：P2026-09-13.1。
 - 实施source_base/base_sha/run_id：尚未建立。开始时核对本轮文档结案后的真实完整HEAD，不用本段旧基线自动开始，不创建实施Worker。
@@ -94,3 +94,28 @@ UI和提交校验使用同一来源；backend继续独立检验，描述与执�
 当前仅计划完成：没有实施、构建、GPU/GUI测试或新模型。恢复先读CURRENT_ACTIONS与D-GUIDANCE-01结案，核对真实源HEAD、索引/个人修改、活动任务、当前授权和ALIGN1准备状态。批准后先A0，未批准不发IMPLEMENT。
 
 阶段最终交付应包含：用户可操作的变化、能力/推荐/实测区别、代码和组合/源受测版本、文档后最终SHA、保护状态、未验收配置、非实现者审核、来源/返工与下一单一产品出口。证据存于外盘任务目录，不只保留在工作树。
+
+
+## 2026-09-13 实施记录（当前有效）
+
+用户已批准本阶段，覆盖上文历史待批语句。source_base为 `aa277f965629591a23f80f7f4baf3b081cd8de2a`；集成工作树 `D-Worktrees/D-ALIGN-01`，分支 `codex/d-align-01`。run_id为 `run-20260913T104905Z`，外盘证据 `D-Development/AgentTrials/D-ALIGN-01/run-20260913T104905Z`。源仅有个人scheme未暂存修改，开始摘要 `ca3635d88aa5a15397b90e528667c66c0e6db7e596176e885c79d194b544206c`，不转入任务分支。
+
+### ALIGN1 / spec_revision implementation-r1
+
+公共请求冻结：`ExecutionProfileReference(identifier:revision:)`；`TextExecutionSelection(profile:maximumPromptTokens:)`。TextRequest末尾新增可选execution，ImageRequest末尾新增可选executionProfile；缺字段旧调用沿用宿主旧配置，未知引用可查看但不可执行。新工作台提交一律显式填入选择。输出长度仍只由maxTokens表达。
+
+新增值型声明按各模态分文件，Worker不得修改共享ExecutionProfileReference或InferenceRequest。`ExecutionContractDescription`只承载语义ID、输入输出角色、控制保真与取消需drain；不是执行器/插件框架。
+
+文字：`TextExecutionCapability`公开profile、maximumPromptTokens、maximumOutputTokens、contract，init(maximumPromptTokens:maximumOutputTokens:)；static profile引用 `qwen2-text` revision1；validate(TextRequest) throws和resolvedPromptTokens(for:) throws由相同规则实现。后端property `public nonisolated let executionCapability: TextExecutionCapability`。最大适配32768/8192仍为实现保护；宿主配置2048/1024保持旧默认，新App显式最大宿主+每请求较小选择。
+
+图像：`ImageExecutionCapability`公开profile、minimumWidth/maximumWidth/minimumHeight/maximumHeight/dimensionMultiple/maximumPixelCount/steps/guidanceScale/maximumTextTokens/contract；static verified512、scalableKlein4B及validate(ImageRequest) throws、estimatedPeakBytes(width:height:) throws。沿用已有profile标识和全部数值/估算规则，定义成为单一源；ImageExecutionProfile兼容包装。后端同名executionCapability为宿主范围，请求在范围内解析独立profile；strict宿主不得承诺scalable。结果记录实际解析profile。纯值生成选择 `ImageGenerationSettings(width:height:executionProfile:)` 在DWorkbench/Models下，默认512/verified512，request(prompt:seed:capability:) throws先校验。不得添加模型/步数/精度开关。
+
+音频：在DInference建立`AudioExecutionCapability`，profile、contract、maximumDurationSeconds、sampleRate、channelCount、operations、noteControlFidelity（类型复用现有AudioOperation，若名称不符先报Lead）；两个后端公开executionCapability，来自当前configuration。宿主未注入实例则不宣称部署。SA3参考变体/局部重绘和MRT2音符条件是近似控制，不宣称严格锁音/和弦。不得改实际音频执行协议/算法/模型部署。
+
+文稿配置 `TextGenerationSettings` 为DWorkbench值型，maximumPromptTokens、maximumOutputTokens、profile、static legacy=2048/256/qwen2-text r1；TextDraftDocument增加generationSettings默认legacy。配置改变生成新文档revision，使旧选区/异步候选失效；所有edit/accept/undo正文重建保留配置。controller公开updateGenerationSettings(_:)并走既有串行保存；保存失败保持正文/旧文件。候选仍会话内存，退出前接受/拒绝原规则不变；不宣称候选跨重开恢复。旧archive缺字段向后读取，保留未知profile供查看，执行时拒绝；不得弱化现有archive/schema检查。
+
+共享ProjectSession/ProjectStore/ProjectModels/WorkbenchModel/AppSessionFactory/CLI由Lead单一维护。Worker不改UI/其他任务文档、工程配置、锁文件、Vendor、签名权限、runtime、脚本入口、源树及保护文件。分工精确允许路径在各子任务记录中。
+
+预先声明工具：只读显式Xcode Git；不调用系统git包装器。CPU编译由Lead串行；Worker允许无输出的Swift frontend parse检查（不是类型检查）、Python以tokenize.open+compile内存检查，不导入/执行目标。禁止默认py_compile。所有输出、TMPDIR、D_TEST_TEMP_DIR、缓存固定每任务output/tmp；未知权限拒绝暂停报Lead，预授权唯一缓存切换可记录后恢复一次；不禁用沙箱/网络/质量规则。初交+最多两轮有因修复，必要一次有界Lead接管，超限停报。
+
+Lead验收不依赖Worker自测，需核心/工作台CPU、离线MLX/App装配、组合实际模型/GUI及非作者审查。真实资源另询问用户当前空闲窗口。缺关键真实验收时留候选，不默认启用源新路径。
