@@ -16,7 +16,7 @@ struct ImageExecutionCapabilityTests {
         #expect(verified.contract.operationID == "image.generate")
         #expect(verified.contract.inputRoles == [.prompt])
         #expect(verified.contract.outputRole == .image)
-        #expect(verified.contract.controlFidelity == .exact)
+        #expect(verified.contract.controlFidelity == .approximate)
         #expect(verified.contract.cancellation == .drainBeforeRelease)
 
         let scalable = ImageExecutionCapability.scalableKlein4B

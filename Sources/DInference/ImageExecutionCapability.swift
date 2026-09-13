@@ -45,7 +45,7 @@ public struct ImageExecutionCapability: Sendable, Equatable {
         self.maximumTextTokens = maximumTextTokens
         contract = ExecutionContractDescription(
             operationID: "image.generate", inputRoles: [.prompt], outputRole: .image,
-            controlFidelity: .exact)
+            controlFidelity: .approximate)
     }
 
     /// Validates both the requested profile identity and the strict resolved envelope.
