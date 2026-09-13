@@ -1,4 +1,4 @@
-"""3D VAE Decoder for Wan2.1/2.2 (compression 4×8×8).
+"""3D VAE decoder for Wan2.1 T2V (compression 4×8×8).
 
 Module structure mirrors original PyTorch checkpoint key hierarchy
 so weights load directly without key sanitization.
@@ -8,6 +8,7 @@ import mlx.core as mx
 import mlx.nn as nn
 
 CACHE_T = 2
+_CACHE_REPEATED = object()
 
 # Per-channel normalization statistics for z_dim=16
 VAE_MEAN = [
@@ -154,10 +155,10 @@ class RMS_norm(nn.Module):
     def __call__(self, x: mx.array) -> mx.array:
         norm_dim = 1 if self.channel_first else -1
         # L2 normalize along channel dim (matches F.normalize)
-        norm = mx.sqrt(
-            mx.clip(
-                mx.sum(x * x, axis=norm_dim, keepdims=True), a_min=1e-12, a_max=None
-            )
+        norm = mx.clip(
+            mx.sqrt(mx.sum(x * x, axis=norm_dim, keepdims=True)),
+            a_min=1e-12,
+            a_max=None,
         )
         return (x / norm) * self.scale * self.gamma
 
@@ -282,11 +283,45 @@ class Resample(nn.Module):
         b, c, t, h, w = x.shape
 
         if self.mode == "upsample3d":
-            # Temporal upsample via learned conv
-            x_t = self.time_conv(x)  # [B, 2C, T, H, W]
-            x_t = x_t.reshape(b, 2, c, t, h, w)
-            x = mx.stack([x_t[:, 0], x_t[:, 1]], axis=3).reshape(b, c, t * 2, h, w)
-            t = t * 2
+            temporal_upsampled = feat_cache is None
+
+            if feat_cache is not None:
+                idx = feat_idx[0]
+                previous = feat_cache[idx]
+                if previous is None:
+                    # The first latent is the first video frame. The official
+                    # decoder records a sentinel and does not duplicate it.
+                    feat_cache[idx] = _CACHE_REPEATED
+                    feat_idx[0] += 1
+                else:
+                    cache_x = x[:, :, -CACHE_T:]
+                    if cache_x.shape[2] < CACHE_T:
+                        if previous is _CACHE_REPEATED:
+                            cache_x = mx.concatenate(
+                                [mx.zeros_like(cache_x), cache_x], axis=2
+                            )
+                        else:
+                            cache_x = mx.concatenate(
+                                [previous[:, :, -1:], cache_x], axis=2
+                            )
+
+                    if previous is _CACHE_REPEATED:
+                        x = self.time_conv(x)
+                    else:
+                        x = self.time_conv(x, cache_x=previous)
+                    feat_cache[idx] = cache_x
+                    feat_idx[0] += 1
+                    temporal_upsampled = True
+
+            if feat_cache is None:
+                x = self.time_conv(x)
+
+            if temporal_upsampled:
+                x = x.reshape(b, 2, c, t, h, w)
+                x = mx.stack([x[:, 0], x[:, 1]], axis=3).reshape(
+                    b, c, t * 2, h, w
+                )
+                t *= 2
 
         if self.mode.startswith("upsample"):
             # Per-frame spatial upsample: nearest 2x + Conv2d
@@ -375,19 +410,60 @@ class Decoder3d(nn.Module):
             CausalConv3d(dims[-1], 3, 3, padding=1),  # [2]
         ]
 
-    def __call__(self, x: mx.array) -> mx.array:
+    def __call__(self, x: mx.array, feat_cache=None, feat_idx=None) -> mx.array:
         """x: [B, z_dim, T, H, W] -> [B, 3, T_out, H_out, W_out]"""
-        x = self.conv1(x)
+        if feat_cache is not None:
+            idx = feat_idx[0]
+            cache_x = x[:, :, -CACHE_T:]
+            if cache_x.shape[2] < CACHE_T and feat_cache[idx] is not None:
+                cache_x = mx.concatenate(
+                    [feat_cache[idx][:, :, -1:], cache_x], axis=2
+                )
+            x = self.conv1(x, cache_x=feat_cache[idx])
+            feat_cache[idx] = cache_x
+            feat_idx[0] += 1
+        else:
+            x = self.conv1(x)
 
         for layer in self.middle:
-            x = layer(x)
+            if feat_cache is not None and isinstance(layer, ResidualBlock):
+                x = layer(x, feat_cache=feat_cache, feat_idx=feat_idx)
+            else:
+                x = layer(x)
 
         for layer in self.upsamples:
-            x = layer(x)
+            if feat_cache is not None:
+                x = layer(x, feat_cache=feat_cache, feat_idx=feat_idx)
+            else:
+                x = layer(x)
 
         x = nn.silu(self.head[0](x))
-        x = self.head[2](x)
+        if feat_cache is not None:
+            idx = feat_idx[0]
+            cache_x = x[:, :, -CACHE_T:]
+            if cache_x.shape[2] < CACHE_T and feat_cache[idx] is not None:
+                cache_x = mx.concatenate(
+                    [feat_cache[idx][:, :, -1:], cache_x], axis=2
+                )
+            x = self.head[2](x, cache_x=feat_cache[idx])
+            feat_cache[idx] = cache_x
+            feat_idx[0] += 1
+        else:
+            x = self.head[2](x)
         return x
+
+    def cache_slot_count(self) -> int:
+        """Return the number of cache entries consumed by one cached call."""
+        count = 2  # conv1 and head
+        for layer in self.middle:
+            if isinstance(layer, ResidualBlock):
+                count += 2
+        for layer in self.upsamples:
+            if isinstance(layer, ResidualBlock):
+                count += 2
+            elif isinstance(layer, Resample) and layer.mode == "upsample3d":
+                count += 1
+        return count
 
 
 class Encoder3d(nn.Module):
@@ -486,7 +562,8 @@ class Encoder3d(nn.Module):
 class WanVAE(nn.Module):
     """Wan2.1 VAE wrapper with per-channel normalization.
 
-    Supports both encode (for I2V) and decode (for all models).
+    T2V decoding is the accepted scope here. Encoding remains unchanged and is
+    not claimed as an accepted I2V implementation by this vendor.
     """
 
     def __init__(self, z_dim: int = 16, encoder: bool = False):
@@ -565,65 +642,58 @@ class WanVAE(nn.Module):
             z: Normalized latent [B, z_dim, T, H, W]
 
         Returns:
-            Video [B, 3, T_out, H_out, W_out] clamped to [-1, 1]
+            Video [B, 3, 4T-3, H*8, W*8] clamped to [-1, 1]
         """
-        mean = self.mean.reshape(1, -1, 1, 1, 1)
-        inv_std = self.inv_std.reshape(1, -1, 1, 1, 1)
-        z = z / inv_std + mean
+        return mx.concatenate(list(self.decode_chunks(z)), axis=2)
 
-        x = self.conv2(z)
-        out = self.decoder(x)
-        return mx.clip(out, -1, 1)
+    def decode_chunks(self, z: mx.array):
+        """Decode as one first-frame chunk followed by four-frame chunks.
+
+        Cache state belongs to the returned iterator and is never stored on the
+        model. Closing the iterator releases all private cache references.
+        """
+        self._validate_decode_input(z)
+        z = z.astype(mx.float32)
+
+        mean = self.mean.astype(mx.float32).reshape(1, -1, 1, 1, 1)
+        inv_std = self.inv_std.astype(mx.float32).reshape(1, -1, 1, 1, 1)
+        x = self.conv2(z / inv_std + mean)
+
+        def chunks():
+            feat_cache = [None] * self.decoder.cache_slot_count()
+            try:
+                for latent_idx in range(x.shape[2]):
+                    feat_idx = [0]
+                    out = self.decoder(
+                        x[:, :, latent_idx : latent_idx + 1],
+                        feat_cache=feat_cache,
+                        feat_idx=feat_idx,
+                    )
+                    if feat_idx[0] != len(feat_cache):
+                        raise RuntimeError(
+                            "Wan VAE decoder cache traversal did not consume all slots"
+                        )
+                    yield mx.clip(out, -1, 1)
+            finally:
+                for idx in range(len(feat_cache)):
+                    feat_cache[idx] = None
+                feat_cache.clear()
+
+        return chunks()
+
+    def _validate_decode_input(self, z: mx.array) -> None:
+        if z.ndim != 5:
+            raise ValueError("WanVAE.decode expects rank-5 [B, C, T, H, W] latents")
+        if z.shape[1] != self.z_dim:
+            raise ValueError(
+                f"WanVAE.decode expects {self.z_dim} latent channels, got {z.shape[1]}"
+            )
+        if z.shape[2] < 1:
+            raise ValueError("WanVAE.decode requires at least one latent frame")
+        if not mx.all(mx.isfinite(z)).item():
+            raise ValueError("WanVAE.decode requires finite latent values")
 
     def decode_tiled(self, z: mx.array, tiling_config=None) -> mx.array:
-        """Decode latent to video using tiling to reduce memory usage.
-
-        Splits the latent tensor into overlapping spatial/temporal tiles,
-        decodes each tile independently, and blends them with trapezoidal
-        masks. Reuses the LTX-2 tiling infrastructure.
-
-        Args:
-            z: Normalized latent [B, z_dim, T, H, W]
-            tiling_config: Optional TilingConfig. If None, uses default.
-
-        Returns:
-            Video [B, 3, T_out, H_out, W_out] clamped to [-1, 1]
-        """
-        from mlx_video.models.wan_2.tiling import TilingConfig, decode_with_tiling
-
-        if tiling_config is None:
-            tiling_config = TilingConfig.default()
-
-        # Check if tiling is actually needed
-        _, _, f, h, w = z.shape
-        needs_tiling = False
-        if tiling_config.spatial_config is not None:
-            s_tile = tiling_config.spatial_config.tile_size_in_pixels // 8
-            if h > s_tile or w > s_tile:
-                needs_tiling = True
-        if tiling_config.temporal_config is not None:
-            t_tile = tiling_config.temporal_config.tile_size_in_frames // 4
-            if f > t_tile:
-                needs_tiling = True
-
-        if not needs_tiling:
-            return self.decode(z)
-
-        # Denormalize once (small tensor), then tile the denormalized latents
-        mean = self.mean.reshape(1, -1, 1, 1, 1)
-        inv_std = self.inv_std.reshape(1, -1, 1, 1, 1)
-        z_denorm = z / inv_std + mean
-
-        def tile_decode(tile_latents, **kwargs):
-            x = self.conv2(tile_latents)
-            out = self.decoder(x)
-            return mx.clip(out, -1, 1)
-
-        return decode_with_tiling(
-            decoder_fn=tile_decode,
-            latents=z_denorm,
-            tiling_config=tiling_config,
-            spatial_scale=8,  # 3× spatial 2× upsamples = 8×
-            temporal_scale=4,  # 2× temporal upsamples × 2 = 4×
-            causal_temporal=False,  # Wan2.1 uses non-causal temporal (T → 4T)
+        raise NotImplementedError(
+            "Wan2.1 VAE spatial/temporal tiling has not passed numerical acceptance"
         )
