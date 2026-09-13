@@ -13,6 +13,7 @@ struct LocalImageModelInventory: Sendable {
     let directory: URL
     let estimatedPeakBytes: UInt64
     let weightBytes: UInt64
+    let executionProfile: ExecutionProfileReference
     private let manifest: Manifest
     private let identities: [String: FileIdentity]
 
@@ -80,8 +81,9 @@ struct LocalImageModelInventory: Sendable {
         guard case .image(let image) = request.input else {
             throw InferenceFailure.unsupportedCapability(request.input.capability)
         }
-        try profile.validate(image)
-        let estimatedPeakBytes = try profile.estimatedPeakBytes(width: image.width, height: image.height)
+        let resolvedCapability = try profile.resolvedCapability(for: image)
+        let estimatedPeakBytes = try resolvedCapability.estimatedPeakBytes(
+            width: image.width, height: image.height)
         guard image.prompt.utf8.count <= 1_048_576,
               !image.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw InferenceFailure.invalidRequest("Image prompt must be nonempty and no larger than 1 MiB of UTF-8.")
@@ -114,7 +116,8 @@ struct LocalImageModelInventory: Sendable {
         }
         let weightBytes = manifest.files.filter { $0.path.hasSuffix(".safetensors") }.reduce(UInt64(0)) { $0 + $1.size }
         return Self(directory: directory, estimatedPeakBytes: estimatedPeakBytes,
-                    weightBytes: weightBytes, manifest: manifest, identities: identities)
+                    weightBytes: weightBytes, executionProfile: resolvedCapability.profile,
+                    manifest: manifest, identities: identities)
     }
 
     /// Rehash every manifest file, including all four weight files, using bounded memory.

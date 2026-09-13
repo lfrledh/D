@@ -32,6 +32,7 @@ public struct MLXImageBackendConfiguration: Sendable {
 public actor MLXImageBackend: InferenceBackend {
     public nonisolated let descriptor = BackendDescriptor(
         id: "mlx.image.flux2-klein", version: "0.1.0+flux2-959a4af.d1", capabilities: [.imageGeneration])
+    public nonisolated let executionCapability: ImageExecutionCapability
     private let configuration: MLXImageBackendConfiguration
     private let observer: @Sendable (MLXLifecycleEvent) async -> Void
     private var lease: UUID?
@@ -50,6 +51,7 @@ public actor MLXImageBackend: InferenceBackend {
         }
         try ImageArtifactTransaction.validateRoot(configuration.artifactDirectory)
         self.configuration = configuration
+        executionCapability = configuration.profile.executionCapability
         self.observer = observer
     }
 
@@ -157,17 +159,23 @@ public actor MLXImageBackend: InferenceBackend {
         // Publication precedes notification: an error from the consumer must not delete the image.
         try await emit(.artifact(artifact))
         try Task.checkCancellation()
-        return InferenceResult(artifacts: [artifact], metadata: [
+        var metadata = Self.executionProfileMetadata(inventory.executionProfile)
+        metadata.merge([
             "modelRepository": LocalImageModelInventory.repository,
             "modelRevision": LocalImageModelInventory.revision,
-            "imageExecutionProfile": configuration.profile.identifier,
             "flux2SourceRevision": "959a4af7c0721c800851c84431ffd3fa1f353f1f",
             "width": String(input.width), "height": String(input.height), "steps": String(input.steps),
             "guidanceScale": String(input.guidanceScale), "seed": String(input.seed),
             "textSequenceLength": "512", "promptTruncated": "false", "modelTimestepScale": "0.001",
             "weightBytes": String(inventory.weightBytes), "estimatedPeakBytes": String(inventory.estimatedPeakBytes),
             "pngBytes": String(data.count), "pngDecodedAndValidated": "true",
-        ])
+        ], uniquingKeysWith: { _, new in new })
+        return InferenceResult(artifacts: [artifact], metadata: metadata)
+    }
+
+    static func executionProfileMetadata(_ profile: ExecutionProfileReference) -> [String: String] {
+        ["imageExecutionProfile": profile.identifier,
+         "imageExecutionProfileRevision": String(profile.revision)]
     }
 
     private struct Denoised {
