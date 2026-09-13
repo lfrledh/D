@@ -2,7 +2,7 @@ import Foundation
 import CoreFoundation
 
 public enum TextDraftArchive {
-    public static let schemaVersion = 1
+    public static let schemaVersion = 2
     public static let maximumInputBytes = 8 * 1_024 * 1_024
 
     private struct Envelope: Codable {
@@ -23,9 +23,15 @@ public enum TextDraftArchive {
     public static func decode(_ data: Data) throws -> TextDraftDocument {
         guard data.count <= maximumInputBytes else { throw TextDraftError.archiveTooLarge }
         do {
-            try validateSchemaVersionToken(in: data)
+            let schemaVersion = try validateSchemaVersionToken(in: data)
+            guard schemaVersion == 1 || schemaVersion == Self.schemaVersion else {
+                throw TextDraftError.unsupportedArchiveVersion
+            }
+            if schemaVersion == Self.schemaVersion {
+                try validateCurrentDocumentFields(in: data)
+            }
             let envelope = try JSONDecoder().decode(Envelope.self, from: data)
-            guard envelope.schemaVersion == schemaVersion else { throw TextDraftError.unsupportedArchiveVersion }
+            guard envelope.schemaVersion == schemaVersion else { throw TextDraftError.malformedArchive }
             try TextDraftDocument.validate(envelope.document.text)
             return envelope.document
         } catch let error as TextDraftError {
@@ -36,7 +42,7 @@ public enum TextDraftArchive {
     }
 
     /// JSONDecoder accepts 1.0 and 1e0 while decoding Int; this archive requires an integer token.
-    private static func validateSchemaVersionToken(in data: Data) throws {
+    private static func validateSchemaVersionToken(in data: Data) throws -> Int {
         guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let number = object["schema_version"] as? NSNumber,
               CFGetTypeID(number) != CFBooleanGetTypeID() else {
@@ -45,5 +51,14 @@ public enum TextDraftArchive {
         let encoding = String(cString: number.objCType)
         let integerEncodings: Set<String> = ["c", "s", "i", "l", "q", "C", "S", "I", "L", "Q"]
         guard integerEncodings.contains(encoding) else { throw TextDraftError.malformedArchive }
+        return number.intValue
+    }
+
+    private static func validateCurrentDocumentFields(in data: Data) throws {
+        guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let document = object["document"] as? [String: Any],
+              let settings = document["generationSettings"], !(settings is NSNull) else {
+            throw TextDraftError.malformedArchive
+        }
     }
 }

@@ -9,6 +9,7 @@ import MLXLMCommon
 public actor MLXTextBackend: InferenceBackend {
     public nonisolated let descriptor = BackendDescriptor(
         id: "mlx.text", version: "0.1.1+mlx-0.30.6.d1.lm-2.30.6", capabilities: [.textGeneration])
+    public nonisolated let executionCapability: TextExecutionCapability
 
     private let configuration: MLXBackendConfiguration
     private let observer: @Sendable (MLXLifecycleEvent) async -> Void
@@ -26,13 +27,18 @@ public actor MLXTextBackend: InferenceBackend {
               (0...1024 * 1024 * 1024).contains(configuration.cacheLimitBytes) else {
             throw InferenceFailure.invalidRequest("Invalid MLX backend limits.")
         }
+        executionCapability = TextExecutionCapability(
+            maximumPromptTokens: configuration.maximumPromptTokens,
+            maximumOutputTokens: configuration.maximumOutputTokens)
         self.configuration = configuration
         self.observer = observer
     }
 
     public func estimate(_ request: InferenceRequest) async throws -> ResourceEstimate {
         try Task.checkCancellation()
-        return ResourceEstimate(peakBytes: try LocalModelInventory.inspect(request, limits: configuration).estimatedPeakBytes)
+        return ResourceEstimate(peakBytes: try LocalModelInventory.inspect(
+            request, capability: executionCapability,
+            cacheLimitBytes: configuration.cacheLimitBytes).estimatedPeakBytes)
     }
 
     public func execute(_ request: InferenceRequest,
@@ -43,7 +49,9 @@ public actor MLXTextBackend: InferenceBackend {
         executing = true
         defer { executing = false }
         try Task.checkCancellation()
-        let inventory = try LocalModelInventory.inspect(request, limits: configuration)
+        let inventory = try LocalModelInventory.inspect(
+            request, capability: executionCapability,
+            cacheLimitBytes: configuration.cacheLimitBytes)
         guard case .text(let input) = request.input else {
             throw InferenceFailure.unsupportedCapability(request.input.capability)
         }
@@ -55,7 +63,6 @@ public actor MLXTextBackend: InferenceBackend {
         Memory.cacheLimit = configuration.cacheLimitBytes
         Memory.peakMemory = 0
         let observer = self.observer
-        let limits = configuration
         let result: InferenceResult
         do {
             try Task.checkCancellation()
@@ -79,7 +86,7 @@ public actor MLXTextBackend: InferenceBackend {
                     let prepared = try await context.processor.prepare(input: UserInput(prompt: input.prompt))
                     try Task.checkCancellation()
                     let promptTokens = prepared.text.tokens.size
-                    guard promptTokens <= limits.maximumPromptTokens,
+                    guard promptTokens <= inventory.maximumPromptTokens,
                           promptTokens + input.maxTokens <= inventory.contextLimit else {
                         throw InferenceFailure.invalidRequest("Tokenized prompt exceeds the model/backend context limit.")
                     }
@@ -125,6 +132,10 @@ public actor MLXTextBackend: InferenceBackend {
                                 "randomSeed": String(randomSeed),
                                 "weightBytes": String(inventory.weightBytes),
                                 "estimatedPeakBytes": String(inventory.estimatedPeakBytes),
+                                "executionProfileIdentifier": inventory.profile.identifier,
+                                "executionProfileRevision": String(inventory.profile.revision),
+                                "maximumPromptTokens": String(inventory.maximumPromptTokens),
+                                "maximumOutputTokens": String(input.maxTokens),
                             ])
                         } catch {
                             generationTask.cancel()
