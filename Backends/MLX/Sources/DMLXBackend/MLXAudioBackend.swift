@@ -7,6 +7,7 @@ import Foundation
 public actor MLXAudioBackend: InferenceBackend {
     public nonisolated let descriptor = BackendDescriptor(
         id: "mlx.audio.sa3", version: "1", capabilities: [.audioGeneration])
+    public nonisolated let executionCapability: AudioExecutionCapability
 
     private let configuration: AudioBackendConfiguration
     private var lease: UUID?
@@ -21,6 +22,7 @@ public actor MLXAudioBackend: InferenceBackend {
             throw InferenceFailure.invalidRequest("Audio timeout and cancellation grace must be finite and positive.")
         }
         self.configuration = configuration
+        self.executionCapability = AudioExecutionCapabilities.sa3(profile: configuration.profile)
     }
 
     public func estimate(_ request: InferenceRequest) async throws -> ResourceEstimate {
