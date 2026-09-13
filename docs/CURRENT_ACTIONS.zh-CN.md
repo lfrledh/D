@@ -1,6 +1,12 @@
 # D 当前行动指南
 
-## 当前检查点：D-ALIGN-01本地集成并通过阶段验收（2026-09-14）
+## 当前执行：D-VIDEO-V0-01 薄视频后端（2026-09-14）
+
+用户批准下一阶段。源/远端起点 `cc663f7a9e54bb9506b4fdb40e8e7d7198742a8f`，上一ALIGN结案已核实；Lead隔离树 `D-Worktrees/D-VIDEO-V0-01`。目标是一条纯文生短视频→运行时→MP4及实际配方的可靠命令行闭环，不启用视频工作台或增加编辑器。跨度扩大为完整后端交付，仍限制一个新模型；媒体与模型独立推进，数值/真实生成设门槛。详见[任务规格与恢复点](tasks/D-VIDEO-V0-01.md)。
+
+新候选Wan2.1 1.3B完整权重/独立环境及GPU窗口已集中询问，未答复不执行。已发现参考实现T5全量FP32临时膨胀、VAE 4T与官方4T−3帧语义差异；不能下载完成就宣称适配成功。媒体CPU入口先实施；普通D及源个人scheme不改。H09继续等待麦克风；HUM/歌声等路线不因视频全部功能完成而延后。
+
+## 上一阶段检查点：D-ALIGN-01本地集成并通过阶段验收（2026-09-14）
 
 工作分支 `codex/inference-foundation` 已从aa277f965629591a23f80f7f4baf3b081cd8de2a快进至完整源受测 `d3a80942df49f7719a6ea335a05cb7dfc273c812`。最后只作结案文档提交；最终HEAD、push及远端核对见 `D-Development/AgentTrials/D-ALIGN-01/run-20260913T131843Z-continuation/stage-final-receipt.json`，恢复先核对真实Git，不依赖短SHA。
 
