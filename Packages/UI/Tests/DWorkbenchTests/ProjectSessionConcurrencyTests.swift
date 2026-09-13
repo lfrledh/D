@@ -174,6 +174,15 @@ struct ProjectSessionConcurrencyTests {
         let origin = try #require(subject.activeDocumentID)
         subject.imageSettings = .init(width: 768, height: 512, executionProfile: ImageExecutionCapability.scalableKlein4B.profile)
         subject.prompt = "Captured origin request"
+        let currentID = try #require(subject.activeDocumentID)
+        subject.setParameterEditingError("请输入完整整数", for: .image, documentID: currentID)
+        #expect(!subject.canGenerate)
+        await subject.generate()
+        #expect(subject.manifest?.jobs.isEmpty == true)
+        subject.setParameterEditingError(nil, for: .image, documentID: UUID())
+        #expect(!subject.canGenerate)
+        subject.setParameterEditingError(nil, for: .image, documentID: currentID)
+        #expect(subject.canGenerate)
         subject.randomSeed = false
         subject.seedText = "0"
         let generating = Task { await subject.generate() }

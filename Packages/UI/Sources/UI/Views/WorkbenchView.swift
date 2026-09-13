@@ -320,6 +320,9 @@ public struct WorkbenchView: View {
                         onChange: { value in
                             guard project.navigationEpoch == epoch else { return }
                             project.updateTextGenerationSettings(value, documentID: id)
+                        }, onEditingError: { error in
+                            guard project.navigationEpoch == epoch else { return }
+                            project.setParameterEditingError(error, for: .text, documentID: id)
                         })
                 .id(id)
             }
