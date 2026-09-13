@@ -1,5 +1,24 @@
 # 音频后端与跨配置验证指南
 
+## MRT2短旋律工作台使用（2026-09-13）
+
+已验证隔离应用：`D-Development/AgentTrials/D-MRT2-WORKBENCH-01/run-20260912T163022Z-implementation/deployment-v3/signed-app/D.app`。App代码c202a7548998cade6c2d1284625c33605fe16f9a，内嵌MRT2资源33f1f0a4fa575fe27dec67c25bb02f79fd21d605（其后相关资源未变）。普通D未替换；这是开发签名产物，不是公证安装包。
+
+1. 打开或新建项目，顶部选“音频”，新建一份没有参考原声的声音创作。右侧创作类型选“旋律器乐（MRT2）”。
+2. “选择模型”指定已有固定MRT2模型根（本机为`D-Development/Models/Magenta-RealTime-2-small/magenta-rt-v2`），其中须有models与resources。无需重复下载；已有书签会在重开时校验恢复。
+3. 填风格、时长、seed和音符，或使用“示例”。例如4秒，C4开始0/持续1.2、E4开始1.2/持续1.2、G4开始2.4/持续1.2。时间必须是0.04秒的整数倍，不暗自取整；当前profile最多16秒/512个音符，seed为0…4294967295。输入错误会保留并说明，生成按钮不会忽略非法字段。参数面板可滚动。
+4. 生成后先试听，再决定采用/拒绝；修改音符后生成的是新的完整候选，原候选保留。拒绝已采用候选会清除采用，恢复被拒绝候选不会自动重新采用。保存后正常退出，重开项目恢复条件、候选及采用状态；导出WAV不会覆盖同名文件。
+
+高级条件文件只含有版本的音符/时长/时间基，不导出风格提示、模型绝对路径、书签或开发记录。导入替换当前条件并保留提示与seed；文件未知字段/坏版本、超界等明确拒绝。缺省音符条件和显式空列表含义不同，均不保证静音。“按旋律生成”的普通入口需要音符。
+
+输出为48kHz双声道float32 WAV；固定图内精度unknown且存在上游int16转换，不称全FP32。声音服从近似：即使提示no drums，本次用户仍听到类似沙锤背景声；不承诺纯钢琴、严格和弦、分轨、歌词演唱或区外波形不变。原SA3仍是独立环境/44.1kHz/原精度，提供提示、兼容WAV参考变体和帧区间重绘。两者共用重任务许可，取消后等待真实退出/清理，再运行下一任务。
+
+### MRT2离线封装
+
+plain `build-local.sh`不自动安装依赖或打包音乐。使用`Backends/Audio/Packaging/prepare_mrt2_engine.py`，显式传入已批准`--python-root`、`--site-packages`、`--provider-directory`（Backends/Audio/Python）、`--vendor-directory`（Backends/Audio/MRT2Vendor）、`--model-manifests`（Backends/Audio/Models）和不存在的`--output`。它只复制固定Python3.12/MLX0.31.1/LiteRT2.2.0等依赖闭包与来源许可证，不下载、签名、加载模型或证明运行通过。输出复制到专属应用的`Contents/Resources/MRT2MusicEngine.dengine`，原SA3的AudioEngine.dengine可并存。
+
+沿用下方原封装/逐个Mach-O签名/更新签名后摘要/外层签名与验证顺序，不放宽库校验；不得照搬另一机器的私人签名identity。完整本机输入、命令和清单见本批deployment-v2/pack.json及deployment-v2/signed-app/commands.json；最终App复制已签好的42个native音乐组件并重新按既有身份签署自己的外层，不改原引擎。权重不入App/Git，商业分发/许可证审计另行。实际部署/普通沙盒生成和恢复证据见[任务结案](tasks/D-MRT2-WORKBENCH-01.md#2026-09-13-阶段验收与本地接纳)。
+
 ## APP1 工作台验收（2026-09-12）
 
 普通开发签名/沙盒的内嵌引擎版已经真实运行SA3 small，无D_AUDIO_BACKEND_CONFIGURATION或D_AUDIO_WORKBENCH_TEST覆盖。D_UI_TEST_SESSION只隔离测试设置/项目索引；引擎启用走生产Bundle解析。项目保存/重开、模型恢复后再次生成、WAV导入变体、候选采用拒绝、不覆盖导出已验证；详情及当前版本见[APP1任务](tasks/D-AUDIO-APP-01.md)。源受测 `dd530e320df3fecaa3d23421151c000d384c652a`；下文旧“普通应用未启用/依赖尚缺”仅代表历史。

@@ -1,6 +1,6 @@
 # D-MRT2-WORKBENCH-01：短旋律条件器乐工作台
 
-日期：2026-09-13。原始计划 planning-r1；当前实现 implementation-r4 / contract-r4。状态：工程候选和普通沙盒隔离产物已准备，真实App验收因锁屏暂停；未集成/推送。下方原始计划保留历史，最新证据和恢复点见末尾。用户要求规划继续下一阶段，并取消项目层面的子代理人数上限；不是音乐所有远期能力、无限执行或新依赖下载授权。本文确定阶段范围与验收，不把拟议接口签名当作已存在代码。
+日期：2026-09-13。原始计划 planning-r1；当前实现 implementation-r4 / contract-r4。当前状态：有限条件音乐工作台已真实验收、本地接纳并完成源入口复验；最终结案SHA和实际push以本批stage-final-receipt.json为准。下方原始计划保留历史，最新证据和恢复点见末尾。用户要求规划继续下一阶段，并取消项目层面的子代理人数上限；不是音乐所有远期能力、无限执行或新依赖下载授权。本文确定阶段范围与验收，不把拟议接口签名当作已存在代码。
 
 ## 1. 基线与可复用成果
 
@@ -206,3 +206,54 @@ W1-P修复1仅原三允许文件：实现有/无access的文件名区别；新�
 **恢复检查点**：用户已确认普通D退出/其他GPU空闲/允许前台与短试听；隔离App以独立 `D_UI_TEST_SESSION=7f685a8d-a915-4c86-b9ab-7bec39d422a7` 启动，PID41649（恢复时核验，不当作永恒身份），启动器工具session98319。CUA首次访问明确报告Mac锁定，未进入UI、未启动App内生成。已播放一次Glass并发解锁请求。所有Worker/Reviewer和测试进程结束；只有本任务隔离App保持空闲等待，没有假称它已关闭。GUI/听感H17/正式书签条件下r4提交/源接纳/源复验/push仍未完成。
 
 下一动作：解锁后重新核对本任务App身份和资源，再用专属gui/test-projects创建测试项目，通过模型选择/两个条件候选/试听/采用拒绝撤销/保存重开/安全导出完成真实验收。不得因CPU通过把未验收路径写成已发布。若当前无法配合，保留候选和本证据，不启动下一产品阶段。普通D四文件与scheme最新保护见gui/locked-checkpoint.json；不再重复已给模型、环境、签名授权。H09仍独立等待麦克风设备。
+
+
+## 2026-09-13 阶段验收与本地接纳
+
+源由 `974477ef34a6708b9b4b90f7c79c19ae23ff716c` 快进到实际最终代码 `c202a7548998cade6c2d1284625c33605fe16f9a`，没有改写双方历史。该代码已在隔离普通沙盒App和源目录分项复验。此后仅七份结案/使用/路线文档；最终文档提交自身SHA和push结果写外部 `stage-final-receipt.json`，不声称在尚未产生的提交上执行测试。
+
+### 用户实际闭环与听感边界
+
+在项目→音频选择“旋律器乐（MRT2）”，输入或导入短音符条件、风格、seed和时长，生成新的完整混音候选，试听/比较、明确采用或拒绝、恢复被拒绝候选、保存退出重开和不覆盖WAV导出。条件/草稿与每次实际请求分别保存；当前固定small导出profile为25Hz条件格、1…400帧（最多16秒），输出原生48kHz双声道float32 WAV。该profile不是所有Mac/后续模型上限，也不是MIDI、分轨、严格逐音符或区外音频锁定。
+
+真实GUI分两段，原生CUA操作不冒称UI XCTest：
+- 5949745上两次4秒/seed42，仅将第二音D4改E4，实际请求/条件摘要和PCM不同；用户试听原文：“听到了，有正常钢琴声，但背景有类似沙锤的别的声音。”H17的本次试听反馈已取得。保留额外背景声这一质量限制，不能宣称纯钢琴、精确配器或已鉴定该声音一定是某种乐器；也不把合法PCM等同专业音质。
+- 同一项目采用A→B、拒绝B清除采用、恢复B不自动采用、再采用A；已有媒体都保留。16秒取消无资产/正式成功记录，随后16秒/seed43恢复成功。执行中切到另一声音文档，结果仍属于原文档，未自动串入/采用。
+- 条件导出成功；WAV导出与原资产SHA一致。随后对另一个候选选择同名导出，在本任务测试目录确认系统替换提示后，应用仍拒绝覆盖，原文件SHA/大小/mtime均不变。
+- c202a75上修复后的真实导入将不合法0.01秒草稿替换为文件的4秒条件，保留风格和seed43；模型书签自动恢复后再次真实生成。随后在另一文档用旧SA3引擎生成6秒/8步/seed42，仍为44.1kHz，原精度不变。退出重开后两文档各自条件、5个候选及采用状态完全恢复，模型均显示已恢复并校验。
+
+本App验收共6个任务：MRT2四成功/一取消，SA3一成功。独立检查5份WAV格式/帧数/有限值/完整摘要/实际参数，取消无产物；四份MRT2正式result均在子进程退出及清理完成后由pending提升，未残留pending。先前独立CLI九进程（六成功/三取消）仍绑定a914，不与App任务累加为产品通过率。对未触及的图文模型不重复全量实推；已有文字权重只读检查在源工作台套件内执行。
+
+### 导入缺陷与修补来源
+
+真实NSOpenPanel导入曾返回CancellationError：打开面板触发相同字段的再次提交，原updateAudioCreationDraft无条件换revision。Lead先加持久反例；旧实现两种profile的无变化提交均失败，再最小修补为比较所有可编辑字段的原始UTF8/值，相同才保留revision。真实编辑、A→B→A、组合Unicode、条件nil/absent/empty、音符UUID/顺序和文档上下文仍失效；没有删除导入revision守卫或接纳过期内容。c202a75仅三文件94行增量。
+
+两新增测试方法（其中一个含两种profile参数）覆盖上述反例；非实现者Sol/high检查该固定diff未发现阻断，未代替Lead执行测试。证据import-review、import-fix-review及gui/acceptance/import-before-executed.log、import-workbench-after.log。首次测试准备和本次审阅runner生成各有一次Python拼接SyntaxError，在目标写入/派工前停止；第一次空过滤测试并未执行反例，不能算先失败证据。只读记录分析也曾混用SA3/MRT2的cleanup字段触发KeyError；按原不同协议核对后再写证据，没有修改实现/断言迎合结果。旧摘要two-candidates中timings/allocations用错key的null已在three-candidates-independent补正，原报告未改。
+
+### 验收矩阵与证据
+
+证据根：`D-Development/AgentTrials/D-MRT2-WORKBENCH-01/run-20260912T163022Z-implementation`。
+
+|检查|实际代码/环境与结果|证据|
+|---|---|---|
+|源核心|c202a75，38方法/5套件，零失败零跳过|source-checks/foundation.log|
+|源工作台|c202a75，307方法/39套件，零失败零跳过；显式既有0.5B权重只读校验|source-checks/workbench.log、summary.json|
+|源Python音频|c202a75，逐模块16/21/11/14旧检查及21/10/8新检查，共101，全部通过；独立CPython3.12、任务tmp/cache|source-checks/checks.json及七日志|
+|语法|四源码由provider解释器tokenize.open+compile(exec,dont_inherit=True)，不执行/导入目标|source-checks/memory-compile-provider-python.json；先前外层解释器检查保留|
+|App宿主|c202a75，6方法/零失败零跳过；之后重新普通build，既有身份/entitlements不变|native/music-host-import-summary.json、app-import-ordinary.json|
+|MLX音频CPU|5949745，38方法/零失败零跳过；到c202a75对应代码/测试未变|native/music-cpu-lockfix-summary.json|
+|最终普通沙盒App|App c202a75；引擎资源33f1f0a，其后未变；真实MRT2/SA3/保存与跨此次重建恢复通过|deployment-v3/signed-app/result.json、gui/acceptance/final-result.json|
+|独立模型/数值/取消|a914九真实进程，固定权重前后SHA；r4书签正式发布另由上述App四份结果覆盖|provider-real-v1/results.json；gui/acceptance/three-candidates-independent.json|
+|实际非实现者审核|共享实现、正式发布修复、锁释放及导入修补分别检查固定版本|shared-review、final-review、lockfix-review、import-fix-review|
+
+本机实查Xcode26.6(17F113)、Swift6.3.3、macOS26.6.2、M4/16GiB。先前候选“307方法套件通过”含一项未启用的可选权重检查（306执行/1跳过）；源复验显式启用后307全部执行，不能倒写旧日志为零跳过。源运行环境和完整命令/退出状态均在source-checks。模型内首次PCM、整个provider耗时、进程峰值RSS和MLX分配分别记录，不以它们声称点击到出声/实时低延迟。MRT2本批清理后MLX active8bytes/cache0，子进程已退出；不宣称常驻零残留或永久无泄漏。SA3仍记录原18bytes而非改阈值。
+
+### 来源、保护与恢复检查点
+
+实现由Sol负责导出适配/正式provider/Swift桥接/条件草稿，Terra负责局部UI；Lead负责公共契约、部署、共享状态/存储/装配，并亲自修补采样率、发布边界、锁释放和本次导入问题。W1-P初交超时(-15)及一修、W1-S初交及两修的事实与预算保留，未新增第三轮或重编号；共享重要实现均有非实现者审阅。最新修补审阅Sol/high，线程01a096b2-dea7-7db3-a482-ea56ac82924e，请求/可观察cwd、read-only和模型档位一致，命令无新权限拒绝。隐藏服务端解析仍unknown。Lead帮助和失败不能算作Terra/Sol独立一次通过。
+
+不重算历史费用；本次只读导入修补审阅67.75秒，用量保留可观察末次增量及其口径，不将长会话累计/缓存重复求和。完整Lead token归因与订阅实际费用unknown，单阶段不能证明成本最优。错误归因区分契约细化、代码、工具准备、环境与遵循，不抹除旧未停报记录。
+
+源保护：个人scheme内容/摘要/原index条目/完整未暂存diff保持；源索引无个人文件。普通D四关键文件大小/mtime/SHA及缺省provisionprofile保持。原模型、已有作品、旧证据未覆盖。候选工作树保留在c202a75；源码/引擎/产物/日志不混放，权重与音频不入Git。集成前49路径逐项核查，hooks仅sample、无filter和未完成Git操作，源固定SHA快进；见integration/pre.json、merge.json、post.json。
+
+本任务三个隔离App实例均正常Quit/启动器exit0，所有受控模型、测试、Worker/Reviewer进程有结束记录；不把系统列表等同全局写锁。最终结案提交及push后保护/远端完整SHA写stage-final-receipt.json。当前已完成有限器乐条件闭环，未启动下一批；下一产品提案为旋律+歌词的专门歌声候选，先确定合法声库/vocoder、语言/可控输入/输出和短样例验收。HUM单声部文件转录独立保留，H09仍等麦克风；高配MRT2/长时/严密和声/分轨/通用MIDI与MusicXML/商用分发不由此阶段证明。恢复先核对真实HEAD、scheme、进程及本回执，再继续获准目标。
