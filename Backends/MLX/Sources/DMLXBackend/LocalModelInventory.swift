@@ -7,6 +7,8 @@ struct LocalModelInventory: Sendable {
     let weightBytes: UInt64
     let estimatedPeakBytes: UInt64
     let contextLimit: Int
+    let profile: ExecutionProfileReference
+    let maximumPromptTokens: Int
 
     private struct Configuration: Decodable {
         let model_type: String
@@ -51,13 +53,15 @@ struct LocalModelInventory: Sendable {
         }
     }
 
-    static func inspect(_ request: InferenceRequest, limits: MLXBackendConfiguration) throws -> Self {
+    static func inspect(_ request: InferenceRequest, capability: TextExecutionCapability,
+                        cacheLimitBytes: Int) throws -> Self {
         try request.validate()
         guard case .text(let input) = request.input else {
             throw InferenceFailure.unsupportedCapability(request.input.capability)
         }
-        guard input.maxTokens <= limits.maximumOutputTokens,
-              input.prompt.utf8.count <= 1_048_576 else {
+        try capability.validate(input)
+        let maximumPromptTokens = try capability.resolvedPromptTokens(for: input)
+        guard input.prompt.utf8.count <= 1_048_576 else {
             throw InferenceFailure.invalidRequest("Text exceeds the backend's configured input/output limits.")
         }
         let directory = request.model.directory.standardizedFileURL
@@ -144,13 +148,14 @@ struct LocalModelInventory: Sendable {
         }
         if let enumerationError { throw enumerationError }
         guard weightBytes > 0 else { throw InferenceFailure.invalidRequest("No safetensors weights found.") }
-        let context = min(limits.maximumPromptTokens + input.maxTokens, config.max_position_embeddings)
+        let context = min(maximumPromptTokens + input.maxTokens, config.max_position_embeddings)
         // Conservative f32 KV accounting plus transient weight copy, workspace and allocator cache.
         // This is an admission estimate, not a hard protection against process/system OOM.
         let kvBytes = UInt64(context) * UInt64(config.num_hidden_layers)
             * UInt64(config.num_key_value_heads) * UInt64(config.hidden_size / config.num_attention_heads) * 2 * 4
-        let estimate = weightBytes * 2 + kvBytes + 512 * 1024 * 1024 + UInt64(limits.cacheLimitBytes)
+        let estimate = weightBytes * 2 + kvBytes + 512 * 1024 * 1024 + UInt64(cacheLimitBytes)
         return Self(directory: directory, weightBytes: weightBytes,
-                    estimatedPeakBytes: estimate, contextLimit: config.max_position_embeddings)
+                    estimatedPeakBytes: estimate, contextLimit: config.max_position_embeddings,
+                    profile: capability.profile, maximumPromptTokens: maximumPromptTokens)
     }
 }

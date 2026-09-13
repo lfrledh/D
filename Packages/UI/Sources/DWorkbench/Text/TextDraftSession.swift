@@ -48,12 +48,19 @@ public final class TextDraftSession {
     public func editText(_ text: String) throws {
         try TextDraftDocument.validate(text)
         guard !text.utf8.elementsEqual(document.text.utf8) else { return }
-        document = try TextDraftDocument(id: document.id, text: text)
+        document = try TextDraftDocument(id: document.id, text: text,
+                                         generationSettings: document.generationSettings)
+        undoRecord = nil
+    }
+
+    public func updateGenerationSettings(_ settings: TextGenerationSettings) throws {
+        guard settings != document.generationSettings else { return }
+        document = try TextDraftDocument(id: document.id, text: document.text, generationSettings: settings)
         undoRecord = nil
     }
 
     public func requestRewrite(selection: TextRewriteSelection, instruction: String,
-                               model: ModelReference, maxTokens: Int = 256,
+                               model: ModelReference, maxTokens: Int? = nil,
                                temperature: Float = 0.7, topP: Float = 0.95) async throws {
         guard !isRunning else { throw TextDraftError.alreadyRunning }
         guard selection.documentID == document.id,
@@ -62,9 +69,14 @@ public final class TextDraftSession {
               String(document.text[range]) == selection.selectedText else {
             throw TextDraftError.invalidSelection
         }
+        let settings = document.generationSettings
         let textRequest = TextRequest(
             prompt: "Rewrite the selected passage according to the instruction. Return only the replacement text.\n\nInstruction:\n\(instruction)\n\nSelected passage:\n\(selection.selectedText)",
-            maxTokens: maxTokens, temperature: temperature, topP: topP)
+            maxTokens: maxTokens ?? settings.maximumOutputTokens,
+            temperature: temperature,
+            topP: topP,
+            execution: TextExecutionSelection(profile: settings.profile,
+                                              maximumPromptTokens: settings.maximumPromptTokens))
         let request = InferenceRequest(model: model, input: .text(textRequest))
         try request.validate()
 
@@ -164,7 +176,8 @@ public final class TextDraftSession {
         var updated = document.text
         updated.replaceSubrange(range, with: candidate.replacement)
         try TextDraftDocument.validate(updated)
-        let accepted = try TextDraftDocument(id: document.id, text: updated)
+        let accepted = try TextDraftDocument(id: document.id, text: updated,
+                                             generationSettings: document.generationSettings)
         document = accepted
         undoRecord = UndoRecord(acceptedDocument: accepted, previousText: previousText)
         self.candidate = nil
@@ -179,7 +192,8 @@ public final class TextDraftSession {
         guard let undoRecord, undoRecord.acceptedDocument.revision == document.revision else {
             throw TextDraftError.noUndoAvailable
         }
-        document = try TextDraftDocument(id: document.id, text: undoRecord.previousText)
+        document = try TextDraftDocument(id: document.id, text: undoRecord.previousText,
+                                         generationSettings: document.generationSettings)
         self.undoRecord = nil
     }
 

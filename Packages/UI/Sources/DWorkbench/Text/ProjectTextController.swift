@@ -53,6 +53,20 @@ public final class ProjectTextController {
         } catch { errorMessage = "正文未改变：\(error.localizedDescription)" }
     }
 
+    public func updateGenerationSettings(_ settings: TextGenerationSettings) {
+        do {
+            let revision = editor.document.revision
+            try editor.updateGenerationSettings(settings)
+            guard revision != editor.document.revision else { return }
+            selectionVersion = UUID()
+            canUndo = false
+            errorMessage = nil
+            scheduleSave()
+        } catch {
+            errorMessage = "生成设置未改变：\(error.localizedDescription)"
+        }
+    }
+
     public func select(_ range: NSRange, documentID: UUID) {
         guard documentID == editor.document.id, selection != range else { return }
         selection = range

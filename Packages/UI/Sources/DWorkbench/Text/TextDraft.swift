@@ -39,26 +39,31 @@ public struct TextDraftDocument: Codable, Sendable, Equatable, Identifiable {
     public let id: UUID
     public let revision: UUID
     public let text: String
+    public let generationSettings: TextGenerationSettings
 
-    public init(id: UUID = UUID(), revision: UUID = UUID(), text: String = "") throws {
+    public init(id: UUID = UUID(), revision: UUID = UUID(), text: String = "",
+                generationSettings: TextGenerationSettings = .legacy) throws {
         try Self.validate(text)
         self.id = id
         self.revision = revision
         self.text = text
+        self.generationSettings = generationSettings
     }
 
     public static func validate(_ text: String) throws {
         guard text.utf8.count <= maximumUTF8Bytes else { throw TextDraftError.textTooLarge }
     }
 
-    private enum CodingKeys: String, CodingKey { case id, revision, text }
+    private enum CodingKeys: String, CodingKey { case id, revision, text, generationSettings }
 
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         let id = try values.decode(UUID.self, forKey: .id)
         let revision = try values.decode(UUID.self, forKey: .revision)
         let text = try values.decode(String.self, forKey: .text)
-        try self.init(id: id, revision: revision, text: text)
+        let generationSettings = try values.decodeIfPresent(TextGenerationSettings.self, forKey: .generationSettings)
+            ?? .legacy
+        try self.init(id: id, revision: revision, text: text, generationSettings: generationSettings)
     }
 }
 
