@@ -4,6 +4,19 @@ import Testing
 
 @Suite("Audio execution capability contract")
 struct AudioCapabilityContractTests {
+    @Test(arguments: [16.0, 120.0, 380.0])
+    func durationUsesDeclaredProfileLimit(limit: Double) throws {
+        let capability = AudioExecutionCapability(profile: .init(identifier: "fixture"),
+            contract: .init(operationID: "audio.fixture", inputRoles: [.prompt], outputRole: .audio,
+                            controlFidelity: .approximate),
+            maximumDurationSeconds: limit, sampleRate: 44_100, channelCount: 2,
+            operations: [.generate], noteControlFidelity: .unsupported)
+        try capability.validateDuration(limit)
+        for invalid in [limit + 1, 0, -1, Double.nan, Double.infinity] {
+            #expect(throws: InferenceFailure.self) { try capability.validateDuration(invalid) }
+        }
+    }
+
     @Test("Note limits are absent only for profiles without note conditioning")
     func optionalNoteLimitsRetainTheirMeaning() {
         let diffusion = AudioExecutionCapability(

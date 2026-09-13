@@ -1474,10 +1474,18 @@ public final class ProjectSession {
         guard let id = activeDocument?.sourceAssetID else { return nil }
         return manifest?.assets.first { $0.id == id && $0.metadata.audio != nil }
     }
+    public var audioCreationConfigurationError: String? {
+        guard let draft = audioCreationDraft,
+              let capability = draft.profile == .conditionedMusic ? musicCapability : audioCapability else { return nil }
+        do {
+            try draft.validateDuration(capability: capability, sourceFormat: audioCreationSource?.metadata.audio?.format)
+            return nil
+        } catch { return error.localizedDescription }
+    }
     public var canGenerateAudioCreation: Bool {
         creatorMode == .audio && audioEnabled && audioCreationDraft != nil && selectedAudioReference != nil && selectedAudioBackendID != nil
             && !isBusy && !isChangingProject && !closePending && !isRegisteringAudioModel && pendingSaves.isEmpty
-            && !showingAllArtworks
+            && !showingAllArtworks && audioCreationConfigurationError == nil
     }
     public var audioCreationSaveStatus: String {
         audioCreationDraft?.revision == audioCreationPersistedRevision ? "创作条件已保存" : "创作条件尚未保存"

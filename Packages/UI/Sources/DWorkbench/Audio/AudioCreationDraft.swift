@@ -79,6 +79,24 @@ public struct AudioCreationDraft: Codable, Sendable, Equatable {
         rejectedAssetIDs = try values.decode([UUID].self, forKey: .rejectedAssetIDs)
     }
 
+    /// Read the same duration that will be submitted, including the full source for edits.
+    /// Does not acquire file access, change the draft, or prepare a task directory.
+    public func validateDuration(capability: AudioExecutionCapability, sourceFormat: AudioFormatInfo?) throws {
+        let seconds: Double
+        if operation == .generate {
+            guard let value = Double(durationText) else {
+                throw InferenceFailure.invalidRequest("请输入有效的音频时长；输入保持不变。")
+            }
+            seconds = value
+        } else {
+            guard let format = sourceFormat, format.sampleRate.isFinite, format.sampleRate > 0 else {
+                throw InferenceFailure.invalidRequest("无法读取原声时长；原件保持不变。")
+            }
+            seconds = Double(format.frameCount) / format.sampleRate
+        }
+        try capability.validateDuration(seconds)
+    }
+
     public func makeRequest(source: AudioSourceReference?) throws -> AudioRequest {
         if profile == .conditionedMusic {
             guard operation == .generate, source == nil, editRegion == nil, let music else {

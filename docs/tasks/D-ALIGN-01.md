@@ -176,3 +176,7 @@ Project schema7、text archive2为必要兼容扩展，v6原字节备份后升�
 Sol/high独立read-only会话 `review2/route-observed.json` 已完成（约549.6秒），固定detached快照 `c59c5e0869687f765e444349fedf602ec456339a` 首尾不变、干净，无构建/测试/写入；报告 `review2/response.md`。共享文档版本/异步候选/图像请求冻结、旧项目保护、真实profile传递未发现其他可行动缺陷；这不是执行验收通过，已失败的布局检查依然阻塞。
 
 审核另发现 **ALIGN-AUDIO-EARLY-VALIDATION / P2**：普通sm-music实例声明最长120秒，但现有AudioCreationButtonHandler只检查正时长，121秒仍可显示准备并提交，后端库存验证才拒绝。本轮对该校验路径没有改动（原基线已有），音频Worker冻结范围明确只显示能力、不改现有验证，因此不追罚Worker或扩大其预算；但它与“前端/提交同源”的总体目标仍有缺口，不能宣称已全部统一。保留为待澄清的有限接续项：把现有120秒拒绝提前到冻结请求/按钮状态，不扩大时长、模型或运算。未经接续范围明确不在本停点偷偷改代码；报告/处置证据 `review2/lead-disposition.json`。
+
+## 2026-09-13 用户续行授权与 Lead 收尾
+
+用户明确要求继续本阶段直到完成。本次沿用 task_id，保留初交、修复预算耗尽与上一停点；不追记 Terra 独立通过。Lead 定点处理文字参数面板真实滚动验证及已知音频时长提前校验缺口，不改变既有模型、精度、操作/时长上限。新证据目录：`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-ALIGN-01/run-20260913T131843Z-continuation`。复用已验证核心/后端的相同代码证据，补组件、普通独立 App、真实工作台及组合审核后才集成/推送。音频校验从实际注入能力读取上限，生成取请求时长，变体/重绘取原声时长，超限不排队、不改变输入或媒体。源基线 aa277f965629591a23f80f7f4baf3b081cd8de2a，续行候选 3ac7be6ebe5cd4c8f7b50180c38045eaefc6c4f5；个人 scheme 与源索引已核对保持。

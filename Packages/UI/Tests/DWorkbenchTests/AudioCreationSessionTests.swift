@@ -52,7 +52,7 @@ struct AudioCreationSessionTests {
         let suite = "D.AudioCreationCPU.\(UUID().uuidString)"
         return (root, try #require(UserDefaults(suiteName: suite)), suite)
     }
-    private func session(settings: UserDefaults, probe: AudioCreationCPUProbe = .init()) -> ProjectSession {
+    private func session(settings: UserDefaults, probe: AudioCreationCPUProbe = .init(), capability: AudioExecutionCapability? = nil) -> ProjectSession {
         ProjectSession(sessionFactory: { artifacts in
             let backend = AudioCreationCPUBackend(root: artifacts, probe: probe)
             let runtime = try InferenceRuntime(backends: [backend], configuration: .init(memoryBudgetBytes: 100))
@@ -61,7 +61,8 @@ struct AudioCreationSessionTests {
                 return .init(activeRunID: state.activeRunID, phase: state.phase?.rawValue, queuedRunIDs: state.queuedRunIDs)
             }, shutdown: { await runtime.shutdown() }, cleanup: {}, validateModel: { _ in },
             audioBackendID: backend.descriptor.id,
-            validateAudioModel: { .init(directory: $0, revision: "CPU fixture; no weights loaded") })
+            validateAudioModel: { .init(directory: $0, revision: "CPU fixture; no weights loaded") },
+            audioCapability: capability)
         }, settings: settings, audioEnabled: true)
     }
     private func waitForIdle(_ subject: ProjectSession) async throws {
@@ -71,6 +72,49 @@ struct AudioCreationSessionTests {
             try await Task.sleep(for: .milliseconds(10))
         }
     }
+    @Test func deployedDurationRejectsBeforeCreatingAJobAndPreservesInput() async throws {
+        let (root, settings, suite) = try fixture()
+        defer { settings.removePersistentDomain(forName: suite); try? FileManager.default.removeItem(at: root) }
+        let capability = AudioExecutionCapability(profile: .init(identifier: "fixture-small"),
+            contract: .init(operationID: "audio.fixture", inputRoles: [.prompt], outputRole: .audio,
+                            controlFidelity: .approximate), maximumDurationSeconds: 120,
+            sampleRate: 44_100, channelCount: 2, operations: [.generate, .variation, .inpaint],
+            noteControlFidelity: .unsupported)
+        let probe = AudioCreationCPUProbe()
+        let subject = session(settings: settings, probe: probe, capability: capability)
+        await subject.createProject(at: root.appendingPathComponent("Duration.dproject"))
+        await subject.createAudioCreation()
+        let model = root.appendingPathComponent("FixtureModel")
+        try FileManager.default.createDirectory(at: model, withIntermediateDirectories: false)
+        await subject.registerAudioModel(at: model)
+        let document = try #require(subject.activeDocumentID), context = subject.audioCreationContextID
+        var draft = try #require(subject.audioCreationDraft)
+        draft.prompt = "duration fixture"; draft.durationText = "120"
+        subject.updateAudioCreationDraft(draft, contextID: context, documentID: document)
+        #expect(subject.canGenerateAudioCreation)
+        draft.durationText = "121"
+        subject.updateAudioCreationDraft(draft, contextID: context, documentID: document)
+        let frozen = subject.audioCreationDraft
+        #expect(!subject.canGenerateAudioCreation)
+        #expect(subject.audioCreationConfigurationError?.contains("120") == true)
+        await subject.generateAudioCreation(contextID: context, documentID: document)
+        #expect(subject.documentJobs.isEmpty && subject.activeJobIDs.isEmpty)
+        #expect(await probe.started.isEmpty)
+        #expect(subject.audioCreationDraft == frozen)
+        // Editing duration is the original audio length, never a stale generation field.
+        draft.operation = .variation; draft.durationText = "unfinished"
+        let validSource = AudioFormatInfo(container: .wav, sampleRate: 44_100, channelCount: 2,
+            frameCount: 120 * 44_100, bitDepth: 32, floatingPoint: true)
+        try draft.validateDuration(capability: capability, sourceFormat: validSource)
+        let longSource = AudioFormatInfo(container: .wav, sampleRate: 44_100, channelCount: 2,
+            frameCount: 121 * 44_100, bitDepth: 32, floatingPoint: true)
+        for operation in [AudioOperation.variation, .inpaint] {
+            draft.operation = operation
+            #expect(throws: InferenceFailure.self) { try draft.validateDuration(capability: capability, sourceFormat: longSource) }
+        }
+        #expect(await subject.cancelAndCloseProject())
+    }
+
     @Test(arguments: [false, true]) func repeatedFieldCommitDoesNotInvalidateImportRevision(music: Bool) async throws {
         let (root, settings, suite) = try fixture()
         defer { settings.removePersistentDomain(forName: suite); try? FileManager.default.removeItem(at: root) }

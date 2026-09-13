@@ -337,6 +337,7 @@ public struct AudioCreationView: View {
                     .accessibilityIdentifier("audio-create-cancel")
             } else {
                 Button("生成") {
+                    guard canSubmit else { return }
                     _ = AudioCreationButtonHandler.submit(draft, source: source,
                                                           hostAllowsGeneration: canGenerate,
                                                           hasPendingRangeInput: draft.operation == .inpaint && rangeInputMessage != nil,
@@ -452,11 +453,19 @@ public struct AudioCreationView: View {
 
     private var sourceOperation: Bool { draft.operation != .generate }
     private var canSubmit: Bool {
-        AudioCreationButtonHandler.canSubmit(draft, source: source, hostAllowsGeneration: canGenerate && (draft.profile != .conditionedMusic || musicSupported),
+        durationConfigurationError == nil && AudioCreationButtonHandler.canSubmit(draft, source: source, hostAllowsGeneration: canGenerate && (draft.profile != .conditionedMusic || musicSupported),
                                              hasPendingRangeInput: draft.operation == .inpaint && rangeInputMessage != nil)
     }
+    private var durationConfigurationError: String? {
+        if let capability = executionCapability {
+            do { try draft.validateDuration(capability: capability, sourceFormat: source?.metadata.audio?.format) }
+            catch { return error.localizedDescription }
+        }
+        return nil
+    }
     private var validationMessage: String {
-        AudioCreationButtonHandler.submissionMessage(draft, source: source, hostAllowsGeneration: canGenerate && (draft.profile != .conditionedMusic || musicSupported),
+        if let error = durationConfigurationError { return error }
+        return AudioCreationButtonHandler.submissionMessage(draft, source: source, hostAllowsGeneration: canGenerate && (draft.profile != .conditionedMusic || musicSupported),
             hasPendingRangeInput: draft.operation == .inpaint && rangeInputMessage != nil)
     }
     private var sourceDuration: String? { source.flatMap(assetDuration) }

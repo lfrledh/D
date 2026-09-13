@@ -86,6 +86,7 @@ public struct TextWorkbenchView: View {
 
     public var body: some View {
       if presentation == .parameters {
+       GeometryReader { viewport in
         ScrollViewReader { reader in
          ScrollView {
             VStack(alignment: .leading, spacing: 16) {
@@ -95,14 +96,15 @@ public struct TextWorkbenchView: View {
                 rewriteControls
             }.padding(16)
          }
-         .coordinateSpace(name: "text-parameters")
-         .task {
+         .task(id: viewport.size) {
              if scrollToOutputForCheck {
                  await Task.yield()
                  reader.scrollTo("text-output-scroll-target", anchor: .bottom)
              }
          }
         }
+       }
+       .coordinateSpace(name: "text-parameters")
       } else {
         GeometryReader { viewport in
             // AnyLayout changes arrangement without replacing the native IME editor.

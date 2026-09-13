@@ -41,4 +41,15 @@ public struct AudioExecutionCapability: Codable, Equatable, Sendable {
         self.maximumNoteCount = maximumNoteCount
         self.maximumSeed = maximumSeed
     }
+
+    /// Check the deployed profile's duration envelope without loading a model.
+    /// Other request constraints and resource admission remain separate checks.
+    public func validateDuration(_ seconds: Double) throws {
+        guard maximumDurationSeconds.isFinite, maximumDurationSeconds > 0 else {
+            throw InferenceFailure.invalidRequest("当前音频配置的时长范围不可用。")
+        }
+        guard seconds.isFinite, seconds > 0, seconds <= maximumDurationSeconds else {
+            throw InferenceFailure.invalidRequest("当前音频配置支持大于 0 且不超过 \(maximumDurationSeconds) 秒；输入保持不变。")
+        }
+    }
 }

@@ -87,7 +87,23 @@ struct ExecutionSettingsViewTests {
         }
         // Scroll the actual SwiftUI viewport; no NSScrollView implementation assumption.
         let output = try #require(rectangles["text-output-limit"])
+        print("TEXT_LAYOUT initial output=\(output) host=\(host.bounds)")
         #expect(output.minY >= -1 && output.maxY <= host.bounds.maxY + 1)
+        // Resize the existing viewport, rather than reconstructing the editor.
+        for size in [NSSize(width: 280, height: 140), NSSize(width: 400, height: 240)] {
+            window.setContentSize(size)
+            host.frame.size = size
+            let resizeDeadline = Date().addingTimeInterval(0.3)
+            repeat {
+                host.layoutSubtreeIfNeeded()
+                try await Task.sleep(for: .milliseconds(10))
+            } while Date() < resizeDeadline
+            let resized = try #require(rectangles["text-output-limit"])
+            print("TEXT_LAYOUT resized output=\(resized) host=\(host.bounds)")
+            #expect(resized.minX >= -1 && resized.maxX <= host.bounds.maxX + 1)
+            #expect(resized.minY >= -1 && resized.maxY <= host.bounds.maxY + 1,
+                    "Output field \(resized) must remain reachable in resized viewport \(host.bounds)")
+        }
     }
 
 }
