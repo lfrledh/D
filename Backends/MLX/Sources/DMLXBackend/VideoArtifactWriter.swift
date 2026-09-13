@@ -25,7 +25,7 @@ internal enum VideoArtifactWriter {
         do {
             try deadline.check()
             let temporaryURL = publication.temporaryURL
-            let assetWriter = try AVAssetWriter(outputURL: temporaryURL, fileType: .mp4)
+            let assetWriter = try AVAssetWriter(outputURL: try publication.identityAddressedWriterURL(), fileType: .mp4)
             writer = assetWriter
             assetWriter.shouldOptimizeForNetworkUse = false
             assetWriter.movieTimeScale = sequence.fpsNumerator
@@ -161,18 +161,14 @@ internal enum VideoArtifactWriter {
         policy: ValidatedVideoPolicy
     ) throws -> [String: Any] {
         let fps = Double(sequence.fpsNumerator) / Double(sequence.fpsDenominator)
-        let derivedBitRate = Double(policy.pixelCount) * fps * 4.0
-        guard fps.isFinite, fps > 0, derivedBitRate.isFinite, derivedBitRate >= 1,
-              derivedBitRate <= Double(Int.max) else {
-            throw VideoMediaError.invalidInput("The requested frame rate or derived H.264 bit rate is not representable.")
-        }
+        let bitRate = try checkedBitRate(pixelCount: policy.pixelCount, fps: fps)
         let softwareEncoderID = try softwareH264EncoderID()
         let encoderSpecification: [String: Any] = [
             kVTVideoEncoderSpecification_EnableHardwareAcceleratedVideoEncoder as String: false,
             kVTVideoEncoderSpecification_EncoderID as String: softwareEncoderID,
         ]
         let compression: [String: Any] = [
-            AVVideoAverageBitRateKey: Int(derivedBitRate.rounded(.up)),
+            AVVideoAverageBitRateKey: bitRate,
             AVVideoExpectedSourceFrameRateKey: fps,
             AVVideoAllowFrameReorderingKey: false,
             AVVideoMaxKeyFrameIntervalKey: sequence.frameCount,
@@ -191,6 +187,15 @@ internal enum VideoArtifactWriter {
             AVVideoColorPropertiesKey: color,
             AVVideoEncoderSpecificationKey: encoderSpecification,
         ]
+    }
+
+    static func checkedBitRate(pixelCount: Int, fps: Double) throws -> Int {
+        let derived = Double(pixelCount) * fps * 4
+        guard pixelCount > 0, fps.isFinite, fps > 0, derived.isFinite, derived >= 1,
+              let result = Int(exactly: derived.rounded(.up)) else {
+            throw VideoMediaError.invalidInput("The derived H.264 bit rate is not representable.")
+        }
+        return result
     }
 
     private static func softwareH264EncoderID() throws -> String {
@@ -339,7 +344,6 @@ internal enum VideoArtifactWriter {
         let track = videoTracks[0]
         let descriptions = try await track.load(.formatDescriptions)
         let transform = try await track.load(.preferredTransform)
-        let naturalTimeScale = try await track.load(.naturalTimeScale)
         let trackTimeRange = try await track.load(.timeRange)
         let assetDuration = try await asset.load(.duration)
         try deadline.check()
@@ -358,7 +362,6 @@ internal enum VideoArtifactWriter {
             throw VideoMediaError.verification("The encoded dimensions do not match the submitted sequence.")
         }
 
-        let tick = CMTime(value: 1, timescale: max(naturalTimeScale, 1))
         let expectedSampleDuration = CMTime(
             value: Int64(sequence.fpsDenominator),
             timescale: sequence.fpsNumerator
@@ -368,11 +371,11 @@ internal enum VideoArtifactWriter {
             timescale: sequence.fpsNumerator
         )
         guard trackTimeRange.start.isNumeric,
-              withinOneTick(trackTimeRange.start, .zero, tick: tick),
+              sameTime(trackTimeRange.start, .zero),
               trackTimeRange.duration.isNumeric,
-              withinOneTick(trackTimeRange.duration, expectedEnd, tick: tick),
+              sameTime(trackTimeRange.duration, expectedEnd),
               assetDuration.isNumeric,
-              withinOneTick(assetDuration, expectedEnd, tick: tick) else {
+              sameTime(assetDuration, expectedEnd) else {
             throw VideoMediaError.verification("The MP4 container or video-track duration is not N*q/p.")
         }
 
@@ -408,14 +411,14 @@ internal enum VideoArtifactWriter {
                     timescale: sequence.fpsNumerator
                 )
                 guard pts.isNumeric, duration.isNumeric, duration > .zero,
-                      withinOneTick(pts, expectedPTS, tick: tick),
-                      withinOneTick(duration, expectedSampleDuration, tick: tick) else {
+                      sameTime(pts, expectedPTS),
+                      sameTime(duration, expectedSampleDuration) else {
                     throw VideoMediaError.verification(
                         "Compressed frame \(timedFrameCount) has an incorrect PTS or sample-table duration."
                     )
                 }
                 let decodeTime = CMSampleBufferGetDecodeTimeStamp(sample)
-                if decodeTime.isNumeric, !withinOneTick(decodeTime, pts, tick: tick) {
+                if decodeTime.isNumeric, !sameTime(decodeTime, pts) {
                     throw VideoMediaError.verification("The compressed video contains reordered/B frames.")
                 }
                 actualEnd = CMTimeAdd(pts, duration)
@@ -435,7 +438,7 @@ internal enum VideoArtifactWriter {
         }
         guard timedFrameCount == sequence.frameCount,
               actualEnd.isNumeric,
-              withinOneTick(actualEnd, expectedEnd, tick: tick) else {
+              sameTime(actualEnd, expectedEnd) else {
             throw VideoMediaError.verification("Compressed samples do not prove the expected frame count and N*q/p end time.")
         }
 
@@ -473,13 +476,13 @@ internal enum VideoArtifactWriter {
                     value: try checkedTimelineValue(index: decodedFrameCount, denominator: sequence.fpsDenominator),
                     timescale: sequence.fpsNumerator
                 )
-                guard pts.isNumeric, withinOneTick(pts, expectedPTS, tick: tick) else {
+                guard pts.isNumeric, sameTime(pts, expectedPTS) else {
                     throw VideoMediaError.verification("Decoded frame \(decodedFrameCount) has an incorrect PTS.")
                 }
                 // A decompressor may omit sample duration. If it provides one, it must agree with
                 // the independently verified compressed sample table; missing is not fabricated.
                 if duration.isNumeric,
-                   (duration <= .zero || !withinOneTick(duration, expectedSampleDuration, tick: tick)) {
+                   (duration <= .zero || !sameTime(duration, expectedSampleDuration)) {
                     throw VideoMediaError.verification("Decoded frame \(decodedFrameCount) reports a contradictory duration.")
                 }
                 decodedFrameCount += 1
@@ -537,8 +540,10 @@ internal enum VideoArtifactWriter {
         return value
     }
 
-    private static func withinOneTick(_ lhs: CMTime, _ rhs: CMTime, tick: CMTime) -> Bool {
-        CMTimeCompare(CMTimeAbsoluteValue(CMTimeSubtract(lhs, rhs)), tick) <= 0
+    private static func sameTime(_ lhs: CMTime, _ rhs: CMTime) -> Bool {
+        // p is our track time scale; all q/p times are exactly representable.
+        // A coarse time base cannot justify accepting a different frame rate.
+        lhs.isNumeric && rhs.isNumeric && CMTimeCompare(lhs, rhs) == 0
     }
 
     private static func writerMessage(_ writer: AVAssetWriter, fallback: String) -> String {
@@ -736,7 +741,7 @@ private final class AnchoredReadFile {
     }
 }
 
-private final class VideoPublication {
+internal final class VideoPublication {
     let temporaryURL: URL
     private let destination: LocalFileLocation
     private let parentFD: Int32
@@ -783,6 +788,26 @@ private final class VideoPublication {
         if completedFD >= 0 { close(completedFD) }
         close(directoryFD)
         close(parentFD)
+    }
+
+    /// Bind AVFoundation's URL-only writer to the held private directory's inode.
+    /// No pathname fallback: unavailable identity paths fail before AV starts.
+    func identityAddressedWriterURL() throws -> URL {
+        try validateLocations()
+        var info = stat(), reopened = stat()
+        guard fstat(directoryFD, &info) == 0 else {
+            throw VideoMediaError.io("Cannot inspect the held media staging directory.")
+        }
+        let path = "/.vol/\(UInt32(bitPattern: info.st_dev))/\(info.st_ino)"
+        let checkFD = open(path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+        guard checkFD >= 0 else {
+            throw VideoMediaError.io("This filesystem cannot provide identity-bound media writing: \(SecurePath.errnoText).")
+        }
+        defer { close(checkFD) }
+        guard fstat(checkFD, &reopened) == 0, SecurePath.same(info, reopened) else {
+            throw VideoMediaError.verification("The inode-addressed directory differs from the held staging directory.")
+        }
+        return URL(fileURLWithPath: path, isDirectory: true).appendingPathComponent(temporaryName)
     }
 
     func captureTemporaryIdentityIfPresent() throws -> Bool {
@@ -832,7 +857,7 @@ private final class VideoPublication {
         completedFD = fd
     }
 
-    func publish(expectedSHA256: String, deadline: Deadline) throws {
+    fileprivate func publish(expectedSHA256: String, deadline: Deadline) throws {
         try validateLocations()
         guard let expected = temporaryIdentity, completedFD >= 0 else {
             throw VideoMediaError.verification("The private MP4 has no publication identity.")

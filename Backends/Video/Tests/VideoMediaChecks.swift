@@ -4,6 +4,7 @@ import CoreVideo
 import CryptoKit
 import Darwin
 import Foundation
+import VideoToolbox
 
 @main
 @MainActor
@@ -24,6 +25,9 @@ private struct VideoMediaChecks {
         }
 
         try await checkFrameCountsAndDurations(root)
+        try await checkDifferentFrameRateRejected(root)
+        try checkBitRateOverflow()
+        try checkWriterDirectoryIdentity(root)
         try await checkRationalTimeColorAndOrientation(root)
         try await checkInputAndDestinationProtection(root)
         try await checkInspectionFailures(root)
@@ -110,6 +114,61 @@ private struct VideoMediaChecks {
                     "top marker stays red")
         try require(channelDifference(orientation.bottom, (0, 0, 255)) <= 12,
                     "bottom marker stays blue")
+    }
+
+    private static func checkDifferentFrameRateRejected(_ root: URL) async throws {
+        let directory = try makeDirectory(root, "different-fps")
+        let sequence = try makeSequence(raw: directory.appendingPathComponent("frames.raw"),
+            frames: [solidFrame(width: 64, height: 64, rgb: (80, 120, 160))],
+            width: 64, height: 64, numerator: 16, denominator: 1)
+        let output = directory.appendingPathComponent("video.mp4")
+        _ = try await VideoArtifactWriter.encode(sequence, to: output, limits: generousLimits)
+        let wrong = VideoFrameSequence(rawURL: sequence.rawURL, width: 64, height: 64, frameCount: 1,
+                                       fpsNumerator: 32, fpsDenominator: 1, sha256: sequence.sha256)
+        try await expectFailure("different fps cannot fit within a whole-frame tolerance") {
+            _ = try await VideoArtifactWriter.inspect(output, matching: wrong, limits: generousLimits)
+        }
+    }
+
+    private static func checkBitRateOverflow() throws {
+        do {
+            _ = try VideoArtifactWriter.checkedBitRate(pixelCount: 1 << 31, fps: Double(1 << 30))
+            throw CheckFailure("2^63 bit rate must throw, never trap or accept")
+        } catch is VideoMediaError { checks += 1 }
+        try require(try VideoArtifactWriter.checkedBitRate(pixelCount: 4096, fps: 16) == 262144,
+                    "normal derived bit rate preserved")
+    }
+
+    private static func checkWriterDirectoryIdentity(_ root: URL) throws {
+        let parent = try makeDirectory(root, "identity-parent")
+        let publication = try VideoPublication(destination: parent.appendingPathComponent("final.mp4"))
+        let stableURL = try publication.identityAddressedWriterURL()
+        let writer = try AVAssetWriter(outputURL: stableURL, fileType: .mp4)
+        let input = AVAssetWriterInput(mediaType: .video, outputSettings: [
+            AVVideoCodecKey: AVVideoCodecType.h264, AVVideoWidthKey: 64, AVVideoHeightKey: 64,
+            AVVideoEncoderSpecificationKey: [
+                kVTVideoEncoderSpecification_EnableHardwareAcceleratedVideoEncoder as String: false,
+                kVTVideoEncoderSpecification_EncoderID as String: "com.apple.videotoolbox.videoencoder.h264"]])
+        writer.add(input)
+        // The writer already exists before the name is exchanged. A later URL
+        // re-resolution must still address the held directory, not this replacement.
+        let moved = root.appendingPathComponent("moved-" + UUID().uuidString)
+        try FileManager.default.moveItem(at: parent, to: moved)
+        let stagingLeaf = publication.temporaryURL.deletingLastPathComponent().lastPathComponent
+        let replacement = parent.appendingPathComponent(stagingLeaf, isDirectory: true)
+        try FileManager.default.createDirectory(at: replacement, withIntermediateDirectories: true)
+        let sentinel = replacement.appendingPathComponent("sentinel")
+        try Data("untouched".utf8).write(to: sentinel)
+        let started = writer.startWriting()
+        defer { if writer.status == .writing || writer.status == .unknown { writer.cancelWriting() } }
+        // cancelWriting can remove the encoder's unfinished file; inspect the
+        // target of the actual write before cancelling this controlled fixture.
+        try require(started, "identity-addressed AV writer starts after parent rename")
+        try require(FileManager.default.fileExists(atPath: moved.appendingPathComponent(stagingLeaf)
+            .appendingPathComponent("video.partial.mp4").path), "AV wrote into the held original directory")
+        try require(try FileManager.default.contentsOfDirectory(atPath: replacement.path) == ["sentinel"],
+                    "replacement staging directory received no AV file")
+        try require(try Data(contentsOf: sentinel) == Data("untouched".utf8), "replacement sentinel unchanged")
     }
 
     private static func checkInputAndDestinationProtection(_ root: URL) async throws {
