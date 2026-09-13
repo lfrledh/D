@@ -139,16 +139,30 @@ public struct ProjectDraft: Codable, Sendable, Equatable {
     public var prompt: String
     public var randomSeed: Bool
     public var seedText: String
+    public var imageSettings: ImageGenerationSettings
 
-    public init(prompt: String = "", randomSeed: Bool = true, seedText: String = "0") {
+    public init(prompt: String = "", randomSeed: Bool = true, seedText: String = "0",
+                imageSettings: ImageGenerationSettings = .legacy) {
         self.prompt = prompt
         self.randomSeed = randomSeed
         self.seedText = seedText
+        self.imageSettings = imageSettings
+    }
+
+    private enum CodingKeys: String, CodingKey { case prompt, randomSeed, seedText, imageSettings }
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        prompt = try values.decode(String.self, forKey: .prompt)
+        randomSeed = try values.decode(Bool.self, forKey: .randomSeed)
+        seedText = try values.decode(String.self, forKey: .seedText)
+        // Only absence is legacy. Malformed or explicit null configuration is not a default.
+        imageSettings = values.contains(.imageSettings)
+            ? try values.decode(ImageGenerationSettings.self, forKey: .imageSettings) : .legacy
     }
 }
 
 public struct ProjectManifest: Codable, Sendable, Equatable, Identifiable {
-    public static let currentSchemaVersion = 6
+    public static let currentSchemaVersion = 7
     public var schemaVersion: Int
     /// Monotonic committed state version lets the UI discard a late, stale actor response.
     public var revision: UInt64
@@ -200,6 +214,10 @@ public struct ProjectManifest: Codable, Sendable, Equatable, Identifiable {
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         schemaVersion = try values.decode(Int.self, forKey: .schemaVersion)
+        if schemaVersion == Self.currentSchemaVersion {
+            // Current-format omissions are corruption, not a request for legacy defaults.
+            _ = try CurrentGenerationFields(from: decoder)
+        }
         revision = try values.decodeIfPresent(UInt64.self, forKey: .revision) ?? 0
         id = try values.decode(UUID.self, forKey: .id)
         name = try values.decode(String.self, forKey: .name)
@@ -338,4 +356,23 @@ public enum ProjectStoreError: Error, LocalizedError, Sendable, Equatable {
         case .io(let reason): "无法访问或保存项目文件：\(reason)。请检查磁盘连接、可用空间和访问权限。"
         }
     }
+}
+
+
+/// Only the versioned manifest determines whether legacy field defaults are legal.
+private struct CurrentGenerationFields: Decodable {
+    let documents: [Document]
+    struct Document: Decodable {
+        let draft: ImageFields
+        private enum CodingKeys: String, CodingKey { case kind, draft, textDraft }
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            draft = try c.decode(ImageFields.self, forKey: .draft)
+            if try c.decode(String.self, forKey: .kind) == "text" {
+                _ = try c.decode(TextFields.self, forKey: .textDraft)
+            }
+        }
+    }
+    struct ImageFields: Decodable { let imageSettings: ImageGenerationSettings }
+    struct TextFields: Decodable { let generationSettings: TextGenerationSettings }
 }

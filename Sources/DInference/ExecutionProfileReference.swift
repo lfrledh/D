@@ -22,7 +22,8 @@ public struct TextExecutionSelection: Codable, Equatable, Sendable {
     }
 }
 
-/// Describes control semantics, not a promise of aesthetic quality or model accuracy.
+/// Describes model adherence to semantic input (prompt/reference/notes).
+/// Exact format, shape and budget constraints are validated separately.
 public enum ExecutionControlFidelity: String, Codable, Sendable {
     case exact, approximate, unsupported, unknown
 }

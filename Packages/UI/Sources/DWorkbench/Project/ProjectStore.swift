@@ -19,6 +19,7 @@ public actor ProjectStore {
     public static let versionThreeBackupFilename = "project.v3.backup.json"
     public static let versionFourBackupFilename = "project.v4.backup.json"
     public static let versionFiveBackupFilename = "project.v5.backup.json"
+    public static let versionSixBackupFilename = "project.v6.backup.json"
     private let rootFD: Int32
     private let lockFD: Int32
     private var manifest: ProjectManifest
@@ -112,6 +113,9 @@ public actor ProjectStore {
         } else if loaded.schemaVersion == 5 {
             loaded = try ProjectFiles.migrateVersionFive(loaded, original: data, in: descriptor,
                                                        checkpoint: migrationCheckpoint)
+        } else if loaded.schemaVersion == 6 {
+            loaded = try ProjectFiles.migrateVersionSix(loaded, original: data, in: descriptor,
+                                                      checkpoint: migrationCheckpoint)
         } else { try ProjectFiles.validate(loaded) }
         let store = ProjectStore(rootURL: root, rootFD: descriptor, lockFD: lock, manifest: loaded)
         // Ownership of both descriptors has moved to the actor before recovery can throw.
@@ -259,7 +263,8 @@ public actor ProjectStore {
         guard current.revision == expectedRevision else { throw ProjectStoreError.externalModification }
         try TextDraftDocument.validate(draft.text)
         let bytesChanged = !current.text.utf8.elementsEqual(draft.text.utf8)
-        if !bytesChanged, draft.revision == current.revision { return manifest }
+        if !bytesChanged, draft.generationSettings == current.generationSettings,
+           draft.revision == current.revision { return manifest }
         guard draft.revision != current.revision else {
             throw ProjectStoreError.invalidProject("文字内容已改变，修订编号不能重复。")
         }
@@ -1545,6 +1550,12 @@ private enum ProjectFiles {
                     checkpoint: checkpoint)
     }
 
+    static func migrateVersionSix(_ legacy: ProjectManifest, original: Data, in root: Int32,
+                                  checkpoint: (@Sendable (ProjectMigrationCheckpoint) throws -> Void)?) throws -> ProjectManifest {
+        try migrate(legacy, original: original, in: root, backup: ProjectStore.versionSixBackupFilename,
+                    checkpoint: checkpoint)
+    }
+
     private static func migrate(_ legacy: ProjectManifest, original: Data, in root: Int32, backup: String,
                                 checkpoint: (@Sendable (ProjectMigrationCheckpoint) throws -> Void)?) throws -> ProjectManifest {
         try validate(legacy, allowingLegacySchema: true)
@@ -1850,7 +1861,7 @@ private enum ProjectFiles {
 
     static func validate(_ value: ProjectManifest, allowingLegacySchema: Bool = false) throws {
         guard value.schemaVersion == ProjectManifest.currentSchemaVersion ||
-              (allowingLegacySchema && (1...5).contains(value.schemaVersion)) else {
+              (allowingLegacySchema && (1...6).contains(value.schemaVersion)) else {
             throw ProjectStoreError.unsupportedSchema(value.schemaVersion)
         }
         guard !value.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,

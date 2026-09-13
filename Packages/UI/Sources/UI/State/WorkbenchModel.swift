@@ -1,5 +1,6 @@
 import AppKit
 import DWorkbench
+import DInference
 import Foundation
 import Observation
 import UniformTypeIdentifiers
@@ -89,6 +90,16 @@ public final class WorkbenchModel {
     public var modelStatus: String { projectSession.modelStatus }
     public var selectedModelID: ModelID? { projectSession.selectedModelID }
     public var imageProfile: ImageModelProfile { projectSession.imageProfile }
+    public var imageCapability: ImageExecutionCapability { projectSession.imageCapability }
+    public var imageSettings: ImageGenerationSettings {
+        get { projectSession.imageSettings }
+        set { projectSession.imageSettings = newValue }
+    }
+    public var imageConfigurationError: String? { projectSession.imageConfigurationError }
+    public var executionRecommendations: ExecutionRecommendations? {
+        .forMemory(bytes: ProcessInfo.processInfo.physicalMemory)
+    }
+
     public var prompt: String {
         get { projectSession.prompt }
         set { projectSession.prompt = newValue }

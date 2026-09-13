@@ -32,12 +32,12 @@ private actor TextLeadOutcomeEngine: InferenceEngine {
 
 @Suite("TextDraft Lead contract", .serialized) @MainActor
 struct TextDraftLeadContractTests {
-    @Test(arguments: ["1.0", "1e0"])
+    @Test(arguments: ["1.0", "1e0", "2.0", "2e0"])
     func fractionalAndExponentVersionsAreNotIntegerTokens(_ token: String) throws {
         let data = try TextDraftArchive.encode(TextDraftDocument(text: "original"))
         let original = String(decoding: data, as: UTF8.self)
-        try #require(original.contains("\"schema_version\":1"))
-        let malformed = Data(original.replacingOccurrences(of: "\"schema_version\":1", with: "\"schema_version\":" + token).utf8)
+        try #require(original.contains("\"schema_version\":\(TextDraftArchive.schemaVersion)"))
+        let malformed = Data(original.replacingOccurrences(of: "\"schema_version\":\(TextDraftArchive.schemaVersion)", with: "\"schema_version\":" + token).utf8)
         #expect(throws: Error.self) { try TextDraftArchive.decode(malformed) }
     }
     @Test func visuallyEquivalentEditStillPreservesAuthorsActualUnicode() throws {

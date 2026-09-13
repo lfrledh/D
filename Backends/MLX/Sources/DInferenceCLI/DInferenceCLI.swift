@@ -258,11 +258,13 @@ struct DInferenceCLI {
         switch options.capability {
         case .text:
             input = .text(TextRequest(prompt: options.prompt, maxTokens: options.maxTokens,
-                                      temperature: options.temperature, topP: options.topP))
+                                      temperature: options.temperature, topP: options.topP,
+                                      execution: .init(profile: .init(identifier: "qwen2-text"), maximumPromptTokens: options.maxPromptTokens)))
         case .image:
             input = .image(ImageRequest(prompt: options.prompt, width: options.width,
                                         height: options.height, steps: options.steps,
-                                        guidanceScale: options.guidance, seed: options.seed))
+                                        guidanceScale: options.guidance, seed: options.seed,
+                                        executionProfile: .init(identifier: options.selectedImageProfile.identifier)))
         case .audio:
             let source: AudioSourceReference? = options.audioSource.map {
                 AudioSourceReference(

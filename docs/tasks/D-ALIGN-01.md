@@ -119,3 +119,12 @@ UI和提交校验使用同一来源；backend继续独立检验，描述与执�
 预先声明工具：只读显式Xcode Git；不调用系统git包装器。CPU编译由Lead串行；Worker允许无输出的Swift frontend parse检查（不是类型检查）、Python以tokenize.open+compile内存检查，不导入/执行目标。禁止默认py_compile。所有输出、TMPDIR、D_TEST_TEMP_DIR、缓存固定每任务output/tmp；未知权限拒绝暂停报Lead，预授权唯一缓存切换可记录后恢复一次；不禁用沙箱/网络/质量规则。初交+最多两轮有因修复，必要一次有界Lead接管，超限停报。
 
 Lead验收不依赖Worker自测，需核心/工作台CPU、离线MLX/App装配、组合实际模型/GUI及非作者审查。真实资源另询问用户当前空闲窗口。缺关键真实验收时留候选，不默认启用源新路径。
+
+
+### A0准备复核/语义澄清
+
+三Worker以 `6228a26b38c3835e768a0d2c5ee9ce0adc306bf7` 共同执行基线启动，实际CLI上下文验证了请求模型/档位与各任务cwd+output/tmp受限写根、network=false；服务端隐藏解析unknown。文字/图像Sol high，音频Terra medium。2026-09-13用户新确认已保存退出普通D且空闲，可测试；原始答复与时间另存本run。
+
+controlFidelity明确表示语义输入的服从程度，文字/图像提示均approximate；宽高/预算的严格校验另表述。此前字段粒度不足属于Lead规格澄清，不追罚Worker。音频初稿Int→Double类型问题修复1；文字初稿旧inventory入口兼容和null不能视为缺字段的反例进入修复1。所有旧预算延续。
+
+Project schema7、text archive2为必要兼容扩展，v6原字节备份后升级，当前格式缺配置不伪装旧数据。旧archive测试未知版本改成99、浮点/指数版本拒绝在1和2上均保留，未降低验收。文字候选只在会话内，当前接受/拒绝后离开语义不变。准备只读复核指出不兼容步数/guidance的fork会丢值：Lead改为明确阻止直接复用，保留原作品；不增加新参数支持。

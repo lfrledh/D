@@ -14,9 +14,9 @@ enum AppSessionFactory {
         musicConsent: AudioModelUsePermission? = nil,
         audioAccessRoot: URL? = nil) async throws -> WorkbenchSession {
         let stages = BackendStageMonitor()
-        let backend = try MLXImageBackend(configuration: .init(artifactDirectory: artifactDirectory),
+        let backend = try MLXImageBackend(configuration: .init(artifactDirectory: artifactDirectory, profile: .scalableKlein4B),
                                          observer: { await stages.record($0) })
-        let textBackend = try MLXTextBackend()
+        let textBackend = try MLXTextBackend(configuration: .init(maximumPromptTokens: 32768, maximumOutputTokens: 8192))
         let audioBackend: MLXAudioBackend?
         if let engine = bundledAudioEngine, let consent = audioConsent, let accessRoot = audioAccessRoot {
             audioBackend = try MLXAudioBackend(configuration: .init(
@@ -94,11 +94,14 @@ enum AppSessionFactory {
                 _ = try await backend.estimate(request)
             }, textBackendID: textBackend.descriptor.id, validateTextModel: { directory in
                 let reference = try await TextModelProfiles.verify(at: directory)
-                _ = try await textBackend.estimate(InferenceRequest(model: reference, input: .text(TextRequest(prompt: "Registration", maxTokens: 256))))
+                _ = try await textBackend.estimate(InferenceRequest(model: reference, input: .text(TextRequest(prompt: "Registration", maxTokens: 256,
+                    execution: .init(profile: .init(identifier: "qwen2-text"), maximumPromptTokens: 2048)))))
                 return reference
             }, audioBackendID: audioBackend?.descriptor.id,
             validateAudioModel: validateAudioModel, musicBackendID: musicBackend?.descriptor.id,
-            validateMusicModel: validateMusicModel)
+            validateMusicModel: validateMusicModel,
+            imageCapability: backend.executionCapability, textCapability: textBackend.executionCapability,
+            audioCapability: audioBackend?.executionCapability, musicCapability: musicBackend?.executionCapability)
     }
 
     /// Only an explicitly isolated development session can supply an existing local engine.

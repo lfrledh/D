@@ -24,6 +24,30 @@ public final class ProjectSession {
     public var prompt = "" { didSet { scheduleDraftSave() } }
     public var randomSeed = true { didSet { scheduleDraftSave() } }
     public var seedText = "0" { didSet { scheduleDraftSave() } }
+    public var imageSettings: ImageGenerationSettings = .legacy { didSet { scheduleDraftSave() } }
+    public var imageCapability: ImageExecutionCapability { session?.imageCapability ?? .verified512 }
+    public var textCapability: TextExecutionCapability? { session?.textCapability }
+    public var audioCapability: AudioExecutionCapability? { session?.audioCapability }
+    public var musicCapability: AudioExecutionCapability? { session?.musicCapability }
+    public var imageConfigurationError: String? {
+        do { _ = try imageSettings.request(prompt: "validation", seed: 0, capability: imageCapability); return nil }
+        catch { return error.localizedDescription }
+    }
+    public var textConfigurationError: String? {
+        guard let text, let capability = textCapability else { return nil }
+        let settings = text.editor.document.generationSettings
+        do {
+            try capability.validate(TextRequest(prompt: "validation", maxTokens: settings.maximumOutputTokens,
+                execution: .init(profile: settings.profile, maximumPromptTokens: settings.maximumPromptTokens)))
+            return nil
+        } catch { return error.localizedDescription }
+    }
+
+    public func updateTextGenerationSettings(_ value: TextGenerationSettings, documentID: UUID) {
+        guard activeDocumentID == documentID, let text, text.editor.document.id == documentID,
+              !isChangingProject, !closePending else { return }
+        text.updateGenerationSettings(value)
+    }
     public private(set) var selectedAssetID: UUID?
     public private(set) var showingAllArtworks = false
     /// Hosts can keep inspection/comparison stable while new results are published.
@@ -151,7 +175,7 @@ public final class ProjectSession {
 
     public var canRewriteText: Bool {
         creatorMode == .text && text?.canRewrite == true && textReference != nil && !isBusy && !isChangingProject
-            && !closePending && !showingAllArtworks && !isRegisteringTextModel
+            && !closePending && !showingAllArtworks && !isRegisteringTextModel && textConfigurationError == nil
     }
     @ObservationIgnored private var textReference: ModelReference?
     @ObservationIgnored private var textModelLease: LocationAccess.Lease?
@@ -162,6 +186,7 @@ public final class ProjectSession {
         creatorMode == .image && manifest != nil && activeDocument?.kind == .image && !isTextWorking && ((selectedModelID != nil && selectedModelReady) || modelLease != nil)
         && !isChangingProject && !showingAllArtworks && !closePending && pendingSaves.isEmpty
         && !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && activeJobIDs.count < 8
+        && imageConfigurationError == nil
     }
     public var selectedAsset: ProjectAsset? { manifest?.assets.first { $0.id == selectedAssetID } }
     public var selectedJob: ProjectJob? {
@@ -222,7 +247,7 @@ public final class ProjectSession {
 
     public func clearError() { errorMessage = nil }
 
-    private var draft: ProjectDraft { ProjectDraft(prompt: prompt, randomSeed: randomSeed, seedText: seedText) }
+    private var draft: ProjectDraft { ProjectDraft(prompt: prompt, randomSeed: randomSeed, seedText: seedText, imageSettings: imageSettings) }
 
     private func scheduleDraftSave() {
         guard !applyingDraft else { return }
@@ -320,6 +345,7 @@ public final class ProjectSession {
         prompt = value.prompt
         randomSeed = value.randomSeed
         seedText = value.seedText
+        imageSettings = value.imageSettings
         selectedAssetID = activeDocument?.selectedAssetID
         selectionVersion &+= 1
         audio?.resumeAdmissions()
@@ -681,7 +707,9 @@ public final class ProjectSession {
         else if let parsed = UInt64(seedText.trimmingCharacters(in: .whitespacesAndNewlines)) { seed = parsed }
         else { errorMessage = "Seed 必须是 0 到 18446744073709551615 之间的整数。"; return }
         let id = UUID()
-        let input = imageProfile.request(prompt: prompt, seed: seed)
+        let input: ImageRequest
+        do { input = try imageSettings.request(prompt: prompt, seed: seed, capability: imageCapability) }
+        catch { report(error, context: "生成配置暂不可执行；输入已保留"); return }
         let savedDraft = queueDraftWrite(draft, documentID: documentID, store: store)
         draftWriter?.cancel()
         let selectedID = selectedModelID
@@ -1142,10 +1170,9 @@ public final class ProjectSession {
               case .image(let image) = job.request.input else {
             return "此作品缺少可复用的图像生成条件。"
         }
-        guard image.width == imageProfile.width, image.height == imageProfile.height,
-              image.steps == imageProfile.steps, image.guidanceScale == imageProfile.guidanceScale,
+        guard (try? imageCapability.validate(image)) != nil,
               let revision = job.request.model.revision, revision == selectedModelRevision else {
-            return "原作品的模型版本或参数与当前模型不同，或无法确认。继续将只复用提示词和实际 Seed，并使用当前模型及其参数；不能保证得到相同图片。"
+            return "原作品的模型版本或参数与当前模型不同，或无法确认。继续将保留提示词、Seed和尺寸条件；不兼容项需要明确调整，不能保证得到相同图片。"
         }
         return nil
     }
@@ -1156,6 +1183,10 @@ public final class ProjectSession {
               let asset = manifest?.assets.first(where: { $0.id == assetID }),
               let job = manifest?.jobs.first(where: { $0.id == asset.jobID }),
               case .image(let image) = job.request.input else { return }
+        guard image.steps == imageCapability.steps, image.guidanceScale == imageCapability.guidanceScale else {
+            errorMessage = "原作品使用 \(image.steps) 步、guidance \(image.guidanceScale)，当前实现使用 \(imageCapability.steps) 步、guidance \(imageCapability.guidanceScale)。暂不能直接复用这组条件；原作品保持不变。"
+            return
+        }
         if let warning = forkCompatibilityWarning(for: assetID), !acknowledgeCurrentModel {
             errorMessage = warning
             return
@@ -1165,7 +1196,9 @@ public final class ProjectSession {
         do {
             try await prepareAudioNavigation()
             try await flushDraft(to: store)
-            let value = ProjectDraft(prompt: image.prompt, randomSeed: false, seedText: String(image.seed))
+            let value = ProjectDraft(prompt: image.prompt, randomSeed: false, seedText: String(image.seed),
+                imageSettings: .init(width: image.width, height: image.height,
+                    executionProfile: image.executionProfile ?? .init(identifier: "verified512")))
             applyManifest(try await store.createDocument(name: "从作品继续", draft: value, sourceAssetID: assetID))
             showingAllArtworks = false
             loadActiveDocument()

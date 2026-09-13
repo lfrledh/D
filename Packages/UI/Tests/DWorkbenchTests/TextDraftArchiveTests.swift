@@ -13,7 +13,7 @@ struct TextDraftArchiveTests {
     }
 
     @Test func archiveRejectsUnknownBooleanAndMalformedSchemaVersions() throws {
-        let unknown = Data(#"{"schema_version":2,"document":{"id":"11111111-1111-1111-1111-111111111111","revision":"22222222-2222-2222-2222-222222222222","text":"draft"}}"#.utf8)
+        let unknown = Data(#"{"schema_version":99,"document":{"id":"11111111-1111-1111-1111-111111111111","revision":"22222222-2222-2222-2222-222222222222","text":"draft"}}"#.utf8)
         #expect(throws: TextDraftError.unsupportedArchiveVersion) { try TextDraftArchive.decode(unknown) }
 
         let boolean = Data(#"{"schema_version":true,"document":{"id":"11111111-1111-1111-1111-111111111111","revision":"22222222-2222-2222-2222-222222222222","text":"draft"}}"#.utf8)
@@ -21,11 +21,11 @@ struct TextDraftArchiveTests {
         #expect(throws: TextDraftError.malformedArchive) { try TextDraftArchive.decode(Data("not json".utf8)) }
     }
 
-    @Test(arguments: ["1.0", "1e0"])
+    @Test(arguments: ["1.0", "1e0", "2.0", "2e0"])
     func archiveRejectsNonIntegerNumericVersionTokens(_ token: String) throws {
         let document = try TextDraftDocument(text: "draft")
         let encoded = String(decoding: try TextDraftArchive.encode(document), as: UTF8.self)
-        let malformed = Data(encoded.replacingOccurrences(of: "\"schema_version\":1", with: "\"schema_version\":" + token).utf8)
+        let malformed = Data(encoded.replacingOccurrences(of: "\"schema_version\":\(TextDraftArchive.schemaVersion)", with: "\"schema_version\":" + token).utf8)
         #expect(throws: TextDraftError.malformedArchive) { try TextDraftArchive.decode(malformed) }
     }
 
