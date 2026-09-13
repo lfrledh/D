@@ -1,9 +1,9 @@
 # D-ALIGN-01：能力声明与既有工作台对接
 
-- 状态：**2026-09-13用户已批准实施；A0准备中，尚未验收/接纳**。
-- task_id：D-ALIGN-01；spec_revision：1（计划）；contract_revision：ALIGN1（语义提案，Swift符号派工前冻结）。
+- 状态：**2026-09-13隔离候选已实现；组合仍有1项布局验收失败，UI修复预算已用完；未接纳/未推送。**
+- task_id：D-ALIGN-01；spec_revision：implementation-r1（UI歧义补充implementation-r2）；contract_revision：ALIGN1。
 - 规划核查基线：`88227688d5ba1e27670fe5972f83f980b978df02`；指导修订：P2026-09-13.1。
-- 实施source_base/base_sha/run_id：尚未建立。开始时核对本轮文档结案后的真实完整HEAD，不用本段旧基线自动开始，不创建实施Worker。
+- 实施source_base：`aa277f965629591a23f80f7f4baf3b081cd8de2a`；初始执行基线：`6228a26b38c3835e768a0d2c5ee9ce0adc306bf7`；run_id：`run-20260913T104905Z`。恢复按末尾停点，不再从规划基线启动。
 - 权威方向：[指导原则](../PRODUCT_PRINCIPLES.zh-CN.md)；实际源码与历史通过分开，本文不改变已验收精度、签名或权限。
 
 ## 目标与有限出口
@@ -89,7 +89,7 @@ UI和提交校验使用同一来源；backend继续独立检验，描述与执�
 - 可组合下一切片：用已有操作做一个可保存的小组合与两种呈现，验证布局改变不改执行；在有实际复用证据后再增加步骤编辑。图像局部修改、视频镜头、资料研读是设计反例，不要求本阶段实现三套界面。
 - 音乐/歌声/HUM、资料检索、RAW和跨工具交换保留在目标表。只有新增实际能力时扩自己的类型/适配/控件；不以图像或文本全部远期功能为前置。
 
-## 恢复与交付
+## 规划时的恢复与交付说明（已由下方实施停点替代）
 
 当前仅计划完成：没有实施、构建、GPU/GUI测试或新模型。恢复先读CURRENT_ACTIONS与D-GUIDANCE-01结案，核对真实源HEAD、索引/个人修改、活动任务、当前授权和ALIGN1准备状态。批准后先A0，未批准不发IMPLEMENT。
 
@@ -128,3 +128,51 @@ Lead验收不依赖Worker自测，需核心/工作台CPU、离线MLX/App装配�
 controlFidelity明确表示语义输入的服从程度，文字/图像提示均approximate；宽高/预算的严格校验另表述。此前字段粒度不足属于Lead规格澄清，不追罚Worker。音频初稿Int→Double类型问题修复1；文字初稿旧inventory入口兼容和null不能视为缺字段的反例进入修复1。所有旧预算延续。
 
 Project schema7、text archive2为必要兼容扩展，v6原字节备份后升级，当前格式缺配置不伪装旧数据。旧archive测试未知版本改成99、浮点/指数版本拒绝在1和2上均保留，未降低验收。文字候选只在会话内，当前接受/拒绝后离开语义不变。准备只读复核指出不兼容步数/guidance的fork会丢值：Lead改为明确阻止直接复用，保留原作品；不增加新参数支持。
+
+
+## 2026-09-13 候选停点与验收证据
+
+本轮用户重新确认普通D已保存退出、其他AI/GPU空闲，可串行测试；没有新增下载、权限、签名或模态。source_base与源HEAD仍为 `aa277f965629591a23f80f7f4baf3b081cd8de2a`。集成候选实际最新受测代码 `c59c5e0869687f765e444349fedf602ec456339a`，目录/分支同上。只文档收尾后的完整SHA在本run的 `final-receipt.json`，不自引用反复提交。**本阶段尚未通过出口，原工作分支未启用这些新路径。**
+
+实现已覆盖：DInference类型化能力与显式profile；现有backend按每请求预算/尺寸验证、估算、执行并记录；工作台配置跟随草稿及schema7/text archive2安全恢复；音频只显示所注入实例的真实范围；UI数字编辑错误阻止按钮和快捷键经共享服务提交。推荐只为未实测内存启发式，不改用户值/量化或模型。
+
+| 检查 | 实际版本/结果 | 本run证据 |
+| --- | --- | --- |
+| 核心CPU | `c5c7f3848aa1f3c10264ce0529b4e336de53c82d`，51项通过；后续仅UI/相关测试/记录变化，核心源码一致 | cpu-combined-core/result.json、stdout.log |
+| 完整MLX构建及真实图文回归 | `3cf32168f643bfab7ac0113693038b3e9ab2dcb3`，121项、零失败/跳过/预期失败，约629秒；含固定512数值、12个分阶段取消用例、图文交接、consumer/损坏恢复/释放对照 | mlx-build、mlx-regression/summary.json、marker-check.json、results.xcresult |
+| CLI构建/原文字进程回归 | `c5c7f384…`，构建通过，10类原冻结CLI进程验证通过 | cli-build-r2、cli-text-regression/reports/summary.json |
+| 新文字配置真实执行 | 同CLI代码，原输入实际2564 token；4096输入限额完成16token输出，同输入2048限额明确失败，无截断 | text-expanded、text-existing-limit、selected-profiles/lead-checks.json |
+| 新图像尺寸真实执行 | 同CLI代码，scalableKlein4B、512×768、4步/guidance1/seed42；PNG实际解码通过，约52秒，峰值6,309,409,880 bytes，release active/cache均0。Lead看图为正常竖幅狐狸/雪景；不是用户审美验收 | image-portrait/report.json、selected-profiles/lead-checks.json |
+| 初始工作台CPU | f4e957d完整SHA见request，322项通过；不移用为后续UI版本通过 | cpu-initial-workbench |
+| UI初次组合/修复 | 7915f6d构建失败：profileName混合return；repair2后1ec0a2d编译通过，328项中1项私有NSTextField层级假设失败 | cpu-combined-workbench、cpu-combined-workbench-r2 |
+| Lead接管后完整工作台 | **`c59c5e0869687f765e444349fedf602ec456339a`：编译通过，328项中1项失败**。已改为真实SwiftUI控件几何/滚动检查，输出字段未完全进入180高测试视口（ExecutionSettingsViewTests第90行）；未判明是滚动触发同步、坐标测量还是产品布局，不能说仅为测试问题 | cpu-final-workbench/result.json、stdout.log、stderr.log |
+| 普通App装配/GUI/本轮音频真实生成 | **未执行**；因组合门槛失败留候选。已备独立离线App缓存和构建请求，未启动本轮应用/打包，不借用此前音频GUI通过 | native/request.json标PENDING；resource-confirmation.json |
+
+本机M4/16GiB；没有把合成64/96/128/192GiB推荐或枚举能力当作跨机验收。`3cf32168…`到最新候选的backend/core/CLI代码相同，具体blob比较见最终receipt；工作台失败状态单独保留，不叠加历史测试制造总通过率。CLI初次构建参数误带仅测试支持的-enableCodeCoverage，Lead改正调用后成功；属于Lead编排错误，不是实现失败。
+
+### 来源、预算与审核边界
+
+- 三个初始独立实施包真实时间重叠（UTC10:54:23…10:56:53）：文字Sol/high、图像Sol/high、音频Terra/medium；UI在共享契约就绪后由独立Terra/medium接续，未为并行共享存储写入。记录见四份任务文档和 `worker-execution-summary.json`。
+- 文字初交+repair1，仍余1轮；图像初交+一次语义澄清修复，仍余1轮；音频初交+类型修复1，仍余1轮。UI初交+2轮修复+**一次Lead有界接管**已用完；不以本次暂停/新名字恢复预算。UI repair2一次cwd拼写错误在进程创建前被拒绝，Worker按规则暂停，Lead核查后在同轮剩余时间内改正路径；无成功越界或扩大权限。
+- Lead亲自完成共享接口、App/CLI/状态/保存接线、独立反例及UI最后修补，不记作Worker独立完成。没有改Git人类作者或逐函数模型标签。
+- 首次独立CLI审核因Lead在其读取期间推进集成HEAD而作废，没有有效结论；记录审核调度责任。随后在固定detached `D-ALIGN-REVIEW-01` 重做read-only Sol/high审核，最终结果追加下方；不再修改该审核树。原生只读建议记录不冒充构建或实际操作验收。
+- 本批每次运行耗时、模型与可观察受限路径有记录；resume终端usage为可能累计快照，未盲目相加。完整Lead归因及订阅货币成本unknown；不据此宣布多代理已更便宜。
+
+### 当前限制的准确表述（候选实现，未默认启用）
+
+文字宿主32768/8192为当前适配器保护，还须满足实际模型总context；普通模型目录仍Qwen2.5 0.5/1.5/7/32B 4-bit，未新增72B。图像宿主256…2048、32倍数；菜单512/768/1024仅快捷预设，仍Klein4Bq8/4步/guidance1/512文本token。普通SA3仍sm-music120秒/44.1kHz双声道；medium380秒属于可配置后端范围，不代表普通App已部署。MRT2当前small导出16秒/400条件帧/512音符/48kHz，近似控制，不代表模型理论天花板。16GiB不是产品上限，≥96GiB和范围全组合仍未验收。
+
+内存准入仍物理内存减max(4GiB,25%)，单重任务；估算拒绝不同于实际加载失败。提示/权重/媒体文件读取保护、600秒音频默认超时、现有macOS部署目标未改，不以解除固定UI默认值为由删除安全约束。
+
+### 恢复检查点与最小下一动作
+
+停止产品代码修改，保留所有候选/工作树/证据；不接纳源、不push、不启动视频或新一批。原个人scheme摘要/内容/索引/未暂存状态和普通D四文件在最终receipt核对；普通D未关闭或替换，本轮没有启动GUI实例。所有写Worker和测试父进程已结束；最终只读审核结束状态随receipt核对，不能仅凭归档推断进程结束。
+
+下一动作须针对剩余布局失败取得新的有限修补授权：先复现并解释确切视口/滚动证据，再最小修补，保持几何/可达性标准及修复范围；通过CPU、非作者审阅后才继续隔离普通App、真实图文音频/GUI保存重开验收和接纳。不要重做已通过模型基准、扩展前端或重置旧Worker预算。当前故障不是Mac权限不足，不需要用户提供密码/全盘访问。
+
+
+### 固定候选非实现者审核结论
+
+Sol/high独立read-only会话 `review2/route-observed.json` 已完成（约549.6秒），固定detached快照 `c59c5e0869687f765e444349fedf602ec456339a` 首尾不变、干净，无构建/测试/写入；报告 `review2/response.md`。共享文档版本/异步候选/图像请求冻结、旧项目保护、真实profile传递未发现其他可行动缺陷；这不是执行验收通过，已失败的布局检查依然阻塞。
+
+审核另发现 **ALIGN-AUDIO-EARLY-VALIDATION / P2**：普通sm-music实例声明最长120秒，但现有AudioCreationButtonHandler只检查正时长，121秒仍可显示准备并提交，后端库存验证才拒绝。本轮对该校验路径没有改动（原基线已有），音频Worker冻结范围明确只显示能力、不改现有验证，因此不追罚Worker或扩大其预算；但它与“前端/提交同源”的总体目标仍有缺口，不能宣称已全部统一。保留为待澄清的有限接续项：把现有120秒拒绝提前到冻结请求/按钮状态，不扩大时长、模型或运算。未经接续范围明确不在本停点偷偷改代码；报告/处置证据 `review2/lead-disposition.json`。

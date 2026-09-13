@@ -1,5 +1,7 @@
 # D-ALIGN-AUDIO-01 / implementation-r1 / ALIGN1
 
+> 当前：本子任务写入已交回，组合候选未接纳；以下冻结派工说明保留，最新结果/预算见文末及阶段停点。
+
 Status: issued for PRECHECK, implementation only after Lead routing acceptance. Batch D-ALIGN-01. Source base aa277f965629591a23f80f7f4baf3b081cd8de2a; execution base is exact preparation commit reported in launch metadata (contains this record). run_id run-20260913T104905Z-audio. Model gpt-5.6-terra / medium.
 
 Read AGENTS current safety, docs/tasks/D-ALIGN-01.md section `2026-09-13 实施记录` and files necessary below, not all history.
@@ -21,3 +23,9 @@ No other file edits, including this task record. No shared InferenceRequest/Exec
 Worktree /Volumes/CodexProjects/Codex/D-Worktrees/D-ALIGN-AUDIO-01. Git explicit /Applications/Xcode.app/Contents/Developer/usr/bin/git. Sandbox workspace-write implicit task root + only /Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-ALIGN-01/run-20260913T104905Z/audio/output and /Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-ALIGN-01/run-20260913T104905Z/audio/tmp; network false. TMPDIR/D_TEST_TEMP_DIR/Python cache already fixed there. Precheck no edits/tests. After IMPLEMENT: read and edit authorized files; lightweight Swift syntax via explicit /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swift-frontend -frontend -parse [owned files] only (does not prove type checking). No SwiftPM/xcrun/full build/GPU/GUI/MLX runtime/model load/network/download/config/keys. Lead runs types/full CPU suites independently. Python syntax if needed tokenize.open + compile in memory (no exec/import target). Unknown permission refusal/runtime warning: pause that action and report; do not find bypass. Only predeclared fallback is own tmp or no-bytecode check for cache; actual successful escape/identity/source protection failure stops task.
 
 Initial implementation max900s plus at most two targeted fixes; no task/model renaming to refresh. Return exact changed paths, behavior/test evidence, remaining uncertainty, process state, implementation choices/Lead help. Output report under own output or final message; don't edit frozen record. Worker handback needed before Lead writes/commits this tree.
+
+
+## 2026-09-13 交回与阶段停点
+来源：gpt-5.6-terra / medium，独立受限CLI，实际目录 `/Volumes/CodexProjects/Codex/D-Worktrees/D-ALIGN-AUDIO-01`。预检/实现/修复的请求、可观察turn_context及写根在阶段证据 `run-20260913T104905Z/audio`；隐藏服务端解析unknown。所有本任务写入执行已结束。
+本任务过程耗时（含预检、串行修复，各进程墙钟相加；不是批次墙钟）：200.2秒。终端usage含resume累计快照，未直接相加为阶段token/费用；完整Lead成本与订阅实际扣费unknown。
+当前组合状态为候选，未进入源分支、未推送；验收版本及本任务剩余额度以[D-ALIGN-01停点](D-ALIGN-01.md#2026-09-13-候选停点与验收证据)为准。不能把Worker parse通过或CLI进程exit0视为产品完成。

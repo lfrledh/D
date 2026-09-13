@@ -1,5 +1,7 @@
 # D-ALIGN-UI-01 / implementation-r1 / ALIGN1
 
+> 当前：本子任务写入已交回，组合候选未接纳；以下冻结派工说明保留，最新结果/预算见文末及阶段停点。
+
 Status PRECHECK only until Lead IMPLEMENT. Batch D-ALIGN-01; source aa277f965629591a23f80f7f4baf3b081cd8de2a; execution base launch metadata (contains this record). run run-20260913T104905Z-ui. gpt-5.6-terra / medium. Current backend workers implemented typed capabilities; full combined checks pending. No inference/UI test claims yet.
 
 ## Scope and exact interfaces
@@ -36,3 +38,9 @@ Image individual dimension edit may advance only known verified512 r1 to current
 ### Lead bounded takeover (2026-09-13)
 Initial + repair1 + repair2 completed, no third Worker repair. repair2 paused correctly after mistyping tool cwd without D-Worktrees; rejected before process creation. Lead checked clean worktree/protected source, corrected only cwd and resumed same round within remaining840sec. No permission expansion.
 Combined 1ec0a2d754f14c961a9daa150aaf138fb08b4633 compiled; 328 tests yielded one failure: hosting assertion could not locate private NSTextField/identifier. Actual SwiftUI implementation need not expose that AppKit hierarchy. Lead replaces the hierarchy assumption with actual TextField geometry and real SwiftUI scrolling, preserving nonzero/horizontal/vertical-reachability requirements. Raw parser test is renamed honestly: it checks parse error callback, not simulated non-submission; production submission blocking is independently covered by ProjectSession tests and real GUI still required. Lead also clears unfinished image raw field text when document identity changes, preventing cross-document presentation leakage. These changes are attributed to Lead and require non-implementer review; not Terra independent completion.
+
+
+## 2026-09-13 交回与阶段停点
+来源：gpt-5.6-terra / medium，独立受限CLI，实际目录 `/Volumes/CodexProjects/Codex/D-Worktrees/D-ALIGN-UI-01`。预检/实现/修复的请求、可观察turn_context及写根在阶段证据 `run-20260913T104905Z/ui`；隐藏服务端解析unknown。所有本任务写入执行已结束。
+本任务过程耗时（含预检、串行修复，各进程墙钟相加；不是批次墙钟）：571.2秒。终端usage含resume累计快照，未直接相加为阶段token/费用；完整Lead成本与订阅实际扣费unknown。
+当前组合状态为候选，未进入源分支、未推送；验收版本及本任务剩余额度以[D-ALIGN-01停点](D-ALIGN-01.md#2026-09-13-候选停点与验收证据)为准。不能把Worker parse通过或CLI进程exit0视为产品完成。
