@@ -8,6 +8,7 @@ public struct VideoBackendConfiguration: Sendable {
     public let providerScript: URL
     public let tokenizerDirectory: URL
     public let artifactDirectory: URL
+    /// MLX graph-evaluation guideline; not an RSS/physical-memory hard cap.
     public let memoryLimitBytes: UInt64
     public let timeoutSeconds: Double
     public let cancellationGraceSeconds: Double
@@ -34,10 +35,13 @@ public struct VideoBackendConfiguration: Sendable {
 
     static func estimate(_ value: VideoRequest) throws -> UInt64 {
         try validate(value)
-        // T5 BF16 plus workspace; decoder working sets scale with image area.
-        // Conservative estimates, not a statement that the development Mac is a ceiling.
+        // Single-point calibration: 832x480/17 frames measured 18.294 GiB,
+        // predominantly during FP32 VAE decode; the former 13-GiB estimate was low.
+        // This returns 19.28125 GiB there, not a universal conservative guarantee.
+        // Long-sequence DiT working sets remain uncalibrated. Neither estimate
+        // nor the separate MLX allocation guideline is a physical-memory ceiling.
         let pixels = UInt64(value.width) * UInt64(value.height)
-        let (workspace, overflow) = pixels.multipliedReportingOverflow(by: 4 * 384 * 4 * 4)
+        let (workspace, overflow) = pixels.multipliedReportingOverflow(by: 4 * 384 * 4 * 8)
         let (decoder, extraOverflow) = workspace.addingReportingOverflow(1024 * 1024 * 1024)
         guard !overflow, !extraOverflow else { throw InferenceFailure.invalidResourceEstimate }
         return max(13 * 1024 * 1024 * 1024, decoder)

@@ -23,6 +23,10 @@ struct VideoBackendTests {
         for value in [video(width: 65), video(frames: 6), video(steps: 1001), video(seed: UInt64.max)] {
             #expect(throws: (any Error).self) { try VideoBackendConfiguration.validate(value) }
         }
+        let measuredProfile = try VideoBackendConfiguration.estimate(video(width: 832, height: 480, frames: 17))
+        #expect(measuredProfile >= 19_642_860_430) // Recorded MLX peak, not system RSS.
+        #expect(measuredProfile > 14 * 1024 * 1024 * 1024)
+        #expect(try VideoBackendConfiguration.estimate(video(width: 1920, height: 1088, frames: 81)) > measuredProfile)
     }
 
     @Test("Serialized request preserves Unicode, explicit seed and exact rational time")
@@ -84,7 +88,7 @@ struct VideoBackendTests {
         }
     }
 
-    @Test("Runtime result is validated, can repeat after release, and published files survive consumer/report failure")
+    @Test("Backend result is validated, can repeat after release, and published files survive consumer/report failure")
     func runtimePublication() async throws {
         let root = try root()
         let model = root.appendingPathComponent("model"), tokenizer = root.appendingPathComponent("tokenizer")
@@ -132,12 +136,79 @@ struct VideoBackendTests {
         }
     }
 
+    @Test("Runtime cancels promptly and queued video starts after the cancelled provider exits")
+    func runtimeCancelHandoff() async throws {
+        let root = try root()
+        let model = root.appendingPathComponent("model"), tokenizer = root.appendingPathComponent("tokenizer")
+        let code = root.appendingPathComponent("code"), outputs = root.appendingPathComponent("outputs")
+        for d in [model, tokenizer, code, outputs] { try FileManager.default.createDirectory(at: d, withIntermediateDirectories: true) }
+        try JSONSerialization.data(withJSONObject: ["complete": true, "revision": VideoBackendConfiguration.revision])
+            .write(to: model.appendingPathComponent("D-VIDEO-PREPARED.json"))
+        let script = code.appendingPathComponent("fixture.py")
+        try Self.fixture.replacingOccurrences(of: "MODE_VALUE", with: "normal")
+            .write(to: script, atomically: false, encoding: .utf8)
+        let backend = try MLXVideoBackend(configuration: .init(
+            pythonExecutable: URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_VIDEO_TEST_PYTHON"]!),
+            providerScript: script, tokenizerDirectory: tokenizer, artifactDirectory: outputs,
+            memoryLimitBytes: 14 * 1024 * 1024 * 1024, timeoutSeconds: 10, cancellationGraceSeconds: 0.2))
+        let runtime = try InferenceRuntime(backends: [backend], configuration: .init(memoryBudgetBytes: 14 * 1024 * 1024 * 1024))
+        let waiting = VideoRequest(prompt: "WAIT", negativePrompt: "", width: 64, height: 48, frameCount: 5,
+            frameRate: .init(numerator: 16), steps: 1, guidanceScale: 6, scheduleShift: 8, seed: 42,
+            executionProfile: VideoBackendConfiguration.profile)
+        let reference = ModelReference(directory: model, revision: VideoBackendConfiguration.revision)
+        do {
+            let first = try await runtime.submit(.init(model: reference, input: .video(waiting)), backendID: backend.descriptor.id)
+            let second = try await runtime.submit(.init(model: reference, input: .video(video())), backendID: backend.descriptor.id)
+            var cancellationStarted: ContinuousClock.Instant?
+            do {
+                for try await event in first.events {
+                    if case .progress = event, cancellationStarted == nil {
+                        cancellationStarted = ContinuousClock.now
+                        await first.cancel()
+                    }
+                }
+            } catch { /* Outcome below is the authoritative cancellation state. */ }
+            if case .cancelled = await first.outcome() {} else { Issue.record("first run was not cancelled") }
+            // The fixture's 30-second sleep and provider's 10-second deadline must
+            // not satisfy this test merely because the runtime remembers cancellation.
+            if let cancellationStarted {
+                #expect(cancellationStarted.duration(to: .now) < .seconds(5))
+            } else { Issue.record("cancellation progress boundary was never observed") }
+            for try await _ in second.events {}
+            if case .completed(let result) = await second.outcome() {
+                #expect(result.artifacts.count == 1)
+            } else { Issue.record("queued video did not recover after cancellation") }
+            await runtime.shutdown()
+            #expect(try String(contentsOf: code.appendingPathComponent("previous-process-ended"), encoding: .utf8) == "confirmed")
+            let runs = try FileManager.default.contentsOfDirectory(at: outputs, includingPropertiesForKeys: nil)
+            let cancelled = runs.filter { $0.lastPathComponent.hasPrefix(first.id.uuidString.lowercased()) }
+            #expect(cancelled.count == 1)
+            let cancelledDirectory = try #require(cancelled.first)
+            #expect(!FileManager.default.fileExists(atPath: cancelledDirectory.appendingPathComponent("output.mp4").path))
+        } catch {
+            await runtime.shutdown()
+            throw error
+        }
+    }
+
     private static let fixture = #"""
     import json,hashlib,pathlib,argparse
     p=argparse.ArgumentParser()
     for k in ("request","model","tokenizer","output"):p.add_argument("--"+k,required=True)
     a=p.parse_args();r=pathlib.Path(a.request);data=r.read_bytes();q=json.loads(data)
     o=pathlib.Path(a.output);o.mkdir();mode="MODE_VALUE"
+    if q["prompt"]=="WAIT":
+        import time,os
+        pathlib.Path(__file__).with_name("waiting-pid").write_text(str(os.getpid()))
+        print(json.dumps(dict(schema="d.video.frames.v1",type="progress",runID=q["runID"],stage="denoise",completed=0,total=1)),flush=True)
+        time.sleep(30)
+    else:
+        owned_pid=pathlib.Path(__file__).with_name("waiting-pid")
+        if owned_pid.exists():
+            import os
+            try:os.kill(int(owned_pid.read_text()),0)
+            except ProcessLookupError:pathlib.Path(__file__).with_name("previous-process-ended").write_text("confirmed")
+            else:raise RuntimeError("Queued provider started while previous owned provider still exists")
     raw=bytes([180,40,20])*q["width"]*q["height"]*q["frameCount"];(o/"frames.rgb").write_bytes(raw)
     if mode=="report-collision":(o.parent/"media.json").write_text("preserve")
     m=(pathlib.Path(a.model)/"D-VIDEO-PREPARED.json").read_bytes()

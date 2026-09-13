@@ -83,7 +83,7 @@ struct CLIOptions: Sendable, Codable {
       --capability text|image|audio|video
       --memory-budget-mib N        Admission budget (default: text 2048, image/audio 8192)
       --inspect                    Estimate resources without running inference
-      --revision STRING            Required pinned revision for audio
+      --revision STRING            Required pinned revision for audio/video
       --report PATH                Atomically write a JSON execution report
       --repeat N                   Sequential runs in this process (default: 1)
       --max-tokens N --temperature FLOAT --top-p FLOAT --cancel-after-chunks N
@@ -96,8 +96,8 @@ struct CLIOptions: Sendable, Codable {
                                    Image-only execution envelope (default: verified512)
       --image-memory-limit-mib N   Image allocator limit, at most the admission budget
       --steps N --guidance FLOAT --seed N --artifacts PATH
-                                   Image/audio controls; artifacts is required for both
-      --cancel-after-steps N       Image-only cancellation control
+                               Image/audio/video controls; artifacts is required for media
+      --cancel-after-steps N       Image/video cancellation control
       --audio-operation generate|variation|inpaint
       --duration-seconds FLOAT     Audio duration (default: 6)
       --audio-source PATH --audio-source-sha256 HEX --audio-source-frames N
@@ -106,7 +106,7 @@ struct CLIOptions: Sendable, Codable {
       --audio-python PATH --audio-script PATH --audio-vendor PATH --audio-manifest PATH
       --audio-license-acknowledged true
                                    Caller explicitly confirms it already has model rights
-      --timeout-seconds FLOAT      Audio child timeout (default: 600)
+      --timeout-seconds FLOAT      Audio/video child timeout (default: 600/3600)
       --video-python PATH --video-script PATH --video-tokenizer PATH
       --negative-prompt TEXT       Required explicit video negative condition (may be empty)
       --frames N --fps-numerator N --fps-denominator N --shift FLOAT
@@ -114,7 +114,7 @@ struct CLIOptions: Sendable, Codable {
                                    Explicit revision, memory budget, artifacts and local runtime required
       --help, -h
 
-    Text writes generated text to stdout. Image/audio write artifact JSON lines to stdout;
+    Text writes generated text to stdout. Image/audio/video write artifact JSON lines to stdout;
     progress and diagnostics go to stderr. Exit status: 0 completed, 1 execution/report
     failure, 2 invalid arguments, 130 cancelled.
     """

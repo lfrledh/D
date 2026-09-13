@@ -11,6 +11,7 @@ D-VIDEO-V0-01 的命令行后端；工作台视频入口尚未开放。阶段验
 - 模型形状要求：宽高为16倍数，帧数4n+1；本适配器各latent轴不超过1024，1...1000步、UInt32 seed，正的引导及shift。模型条件格式512token，超长明确拒绝，不截断。
 - 请求的帧率是有理数 p/q；N帧容器时长=Nq/p。采样器固定 UniPC order2/bh2；几何、参数和精度不随开发机偷偷改变。
 - M4/16GiB不是能力上限。调用方明确给内存预算；运行时报告预算拒绝或实际加载/计算失败。更大模型需要独立适配/授权，不能仅改文件夹名。
+- MLX的`memoryLimitBytes`是计算调度指导值，可能超过并使用可用swap，不是RSS或物理内存硬上限。准入估计与真实峰值分别记录；不能把预算检查通过当成不会OOM。
 - 软件编码/独立完整解码后才发布；不覆盖旧文件。RGB8明确解释为full-range Rec.709，压缩不是无损。目录身份路径在不支持的文件系统上明确失败，无危险普通路径回退。
 
 ## 目录与准备
@@ -38,11 +39,13 @@ D-VIDEO-V0-01 的命令行后端；工作台视频入口尚未开放。阶段验
   --prompt 'A small red toy car slowly rolling across a wooden desk, fixed camera, natural daylight, simple background.' \
   --negative-prompt 'blurry, overexposed, distorted, low quality, watermark' \
   --width 832 --height 480 --frames 17 --fps-numerator 16 --fps-denominator 1 \
-  --steps 50 --guidance 6 --shift 8 --seed 42 --memory-budget-mib 14336 \
+  --steps 50 --guidance 6 --shift 8 --seed 42 --memory-budget-mib 20480 \
   --artifacts "$NEW_RUN/artifacts" --report "$NEW_RUN/cli-report.json" --timeout-seconds 3600
 ```
 
 `--inspect`仅估计，不证明可生成。Ctrl+C请求取消，等待当前计算结束和进程/管道清理；不是按键后立即强杀GPU。`--cancel-after-steps`可作受控去噪边界检查。文本、图像、音频、视频共用进程内重任务许可；调用方仍须协调不同D进程之间的硬件使用。
+
+2026-09-14首次真实样本在M4/16GiB完成上述几何/50步，CLI耗时1669秒，MLX峰值18.294GiB，最终子进程退出前active18bytes/cache0；swap使用量未知。该次实际使用旧估计13GiB及14GiB指导值，已保留原记录。校准后本几何估计19.28125GiB，旧14GiB准入会明确拒绝；上面的20GiB是调用方显式预算示例，**不是已在20GiB设置下重复完成的完整样本**。校准仅来自这个短片配置，长序列DiT及其他机器峰值仍待测，不据此承诺24/32GiB机型性能。完整样本可见红色玩具车运动，也存在车身形变和末段背景噪点；文件/数值验收不等于专业成片画质验收。
 
 成功的任务目录含request.json、frames/result.json、frames/frames.rgb、output.mp4、media.json，以及任务自己的tmp/cache。发布后的文件不会被release删除；失败私有目录保留用于诊断，应用拥有其清理权。大raw文件/权重/批量结果不入Git。media.json保存最终MP4摘要，避免把全文件摘要写回文件形成自引用。
 
