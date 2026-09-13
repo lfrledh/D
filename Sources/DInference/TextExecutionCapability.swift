@@ -18,7 +18,7 @@ public struct TextExecutionCapability: Codable, Equatable, Sendable {
             operationID: "text.generate",
             inputRoles: [.prompt],
             outputRole: .text,
-            controlFidelity: .exact)
+            controlFidelity: .approximate)
     }
 
     public func validate(_ request: TextRequest) throws {
@@ -32,7 +32,8 @@ public struct TextExecutionCapability: Codable, Equatable, Sendable {
     }
 
     private func resolve(_ request: TextRequest) throws -> Int {
-        guard maximumPromptTokens > 0, maximumOutputTokens > 0 else {
+        guard (1...32768).contains(maximumPromptTokens),
+              (1...8192).contains(maximumOutputTokens) else {
             throw InferenceFailure.invalidRequest("Invalid text execution capability limits.")
         }
         guard request.maxTokens > 0, request.maxTokens <= maximumOutputTokens,

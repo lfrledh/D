@@ -14,7 +14,7 @@ struct TextExecutionCapabilityTests {
         #expect(capability.contract.operationID == "text.generate")
         #expect(capability.contract.inputRoles == [.prompt])
         #expect(capability.contract.outputRole == .text)
-        #expect(capability.contract.controlFidelity == .exact)
+        #expect(capability.contract.controlFidelity == .approximate)
         #expect(capability.contract.cancellation == .drainBeforeRelease)
 
         let legacy = TextRequest(prompt: "legacy", maxTokens: 256)
@@ -58,7 +58,17 @@ struct TextExecutionCapabilityTests {
     @Test func invalidCapabilityLimitsCannotAdmitRequests() {
         let invalidPrompt = TextExecutionCapability(maximumPromptTokens: 0, maximumOutputTokens: 256)
         let invalidOutput = TextExecutionCapability(maximumPromptTokens: 2048, maximumOutputTokens: 0)
+        let unadaptedPrompt = TextExecutionCapability(maximumPromptTokens: 32769, maximumOutputTokens: 256)
+        let unadaptedOutput = TextExecutionCapability(maximumPromptTokens: 2048, maximumOutputTokens: 8193)
         #expect(throws: (any Error).self) { try invalidPrompt.validate(TextRequest(prompt: "x")) }
         #expect(throws: (any Error).self) { try invalidOutput.validate(TextRequest(prompt: "x")) }
+        #expect(throws: (any Error).self) { try unadaptedPrompt.validate(TextRequest(prompt: "x")) }
+        #expect(throws: (any Error).self) { try unadaptedOutput.resolvedPromptTokens(for: TextRequest(prompt: "x")) }
+    }
+
+    @Test func promptFidelityDoesNotClaimExactCreativeAdherence() {
+        #expect(capability.contract.controlFidelity == .approximate)
+        #expect(capability.maximumPromptTokens == 2048)
+        #expect(capability.maximumOutputTokens == 256)
     }
 }
