@@ -26,6 +26,10 @@ public struct TextWorkbenchView: View {
     private let onUndo: () -> Void
     private let onSave: () -> Void
     private let onChooseModel: () -> Void
+    private var generationCapability: TextExecutionCapability?
+    private var generationRecommendation: ExecutionRecommendations?
+    private var generationConfigurationError: String?
+    private var onGenerationSettingsChange: ((TextGenerationSettings) -> Void)?
 
     public init(session: TextDraftSession, selection: NSRange, instruction: Binding<String>, modelStatus: String,
                 canGenerate: Bool, canAccept: Bool, canUndo: Bool, isSaving: Bool, saveStatus: String,
@@ -56,6 +60,15 @@ public struct TextWorkbenchView: View {
 
     public func presenting(_ presentation: TextWorkbenchPresentation) -> Self {
         var copy = self; copy.presentation = presentation; return copy
+    }
+
+    public func generationControls(capability: TextExecutionCapability?, recommendation: ExecutionRecommendations?, configurationError: String?, onChange: @escaping (TextGenerationSettings) -> Void) -> Self {
+        var copy = self
+        copy.generationCapability = capability
+        copy.generationRecommendation = recommendation
+        copy.generationConfigurationError = configurationError
+        copy.onGenerationSettingsChange = onChange
+        return copy
     }
 
     public var body: some View {
@@ -138,6 +151,7 @@ public struct TextWorkbenchView: View {
 
     private var rewriteControls: some View {
         VStack(alignment: .leading, spacing: 12) {
+            generationSettingsControls
             Text("选中文字后描述修改意图").font(.caption).foregroundStyle(.secondary)
             TextField("修改要求", text: $instruction, axis: .vertical)
                 .lineLimit(2...5).textFieldStyle(.roundedBorder)
@@ -155,6 +169,70 @@ public struct TextWorkbenchView: View {
                     .accessibilityIdentifier("text-save-status")
             }
         }
+    }
+
+    @ViewBuilder private var generationSettingsControls: some View {
+        if let capability = generationCapability {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("生成额度").font(.subheadline.weight(.semibold))
+                TextField("输入 token 上限", value: promptTokenLimit, format: .number)
+                    .textFieldStyle(.roundedBorder)
+                    .accessibilityIdentifier("text-input-limit")
+                TextField("输出 token 上限", value: outputTokenLimit, format: .number)
+                    .textFieldStyle(.roundedBorder)
+                    .accessibilityIdentifier("text-output-limit")
+                Text("Token 不是字数；输入包括改写包装和模板。真实超限会报错，原文不会被截断。")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text("当前能力支持：输入最多 \(capability.maximumPromptTokens) token，输出最多 \(capability.maximumOutputTokens) token。")
+                    .font(.caption).foregroundStyle(.secondary)
+                if let recommendation = generationRecommendation {
+                    Text("此设备的起始建议：输入 \(recommendation.maximumPromptTokens)，输出 \(recommendation.maximumOutputTokens)；不会改变当前设置。")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                if capability.maximumPromptTokens >= 2048, capability.maximumOutputTokens >= 256 {
+                    Button("重设为短文本预设（2048 / 256）") {
+                        publishGenerationSettings(.init(maximumPromptTokens: 2048, maximumOutputTokens: 256,
+                            profile: capability.profile))
+                    }
+                    .controlSize(.small)
+                }
+                if let error = generationConfigurationError {
+                    Text(error).font(.caption).foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("text-settings-error")
+                }
+            }
+            .accessibilityIdentifier("text-parameter-section")
+        }
+    }
+
+    private var promptTokenLimit: Binding<Int> {
+        Binding(get: { session.document.generationSettings.maximumPromptTokens }, set: { value in
+            publishGenerationSettings(Self.settings(session.document.generationSettings, maximumPromptTokens: value))
+        })
+    }
+
+    private var outputTokenLimit: Binding<Int> {
+        Binding(get: { session.document.generationSettings.maximumOutputTokens }, set: { value in
+            publishGenerationSettings(Self.settings(session.document.generationSettings, maximumOutputTokens: value))
+        })
+    }
+
+    static func settings(_ current: TextGenerationSettings, maximumPromptTokens: Int? = nil,
+                         maximumOutputTokens: Int? = nil) -> TextGenerationSettings {
+        .init(maximumPromptTokens: maximumPromptTokens ?? current.maximumPromptTokens,
+              maximumOutputTokens: maximumOutputTokens ?? current.maximumOutputTokens,
+              profile: current.profile)
+    }
+
+    private func publishGenerationSettings(_ settings: TextGenerationSettings) {
+        Self.publish(settings, to: onGenerationSettingsChange)
+    }
+
+    static func publish(_ settings: TextGenerationSettings,
+                        to onChange: ((TextGenerationSettings) -> Void)?) {
+        onChange?(settings)
     }
 
     private var comparisonPanel: some View {

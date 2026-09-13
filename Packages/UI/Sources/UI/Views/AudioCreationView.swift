@@ -35,6 +35,7 @@ public struct AudioCreationView: View {
     private let modelStatus: String
     private let canGenerate: Bool
     private var musicSupported = false
+    private var executionCapability: AudioExecutionCapability?
     private let isBusy: Bool
     private let progress: Double?
     private let status: String?
@@ -81,6 +82,10 @@ public struct AudioCreationView: View {
     /// opt-in preserves the existing Stable Audio surface for callers which have not wired it.
     public func supportingMusic(_ enabled: Bool) -> Self {
         var copy = self; copy.musicSupported = enabled; return copy
+    }
+
+    public func capabilitySummary(_ capability: AudioExecutionCapability?) -> Self {
+        var copy = self; copy.executionCapability = capability; return copy
     }
 
     public var body: some View {
@@ -154,6 +159,7 @@ public struct AudioCreationView: View {
 
     private var controls: some View {
         VStack(alignment: .leading, spacing: 12) {
+            capabilitySummaryContent
             profilePicker
             TextField(draft.profile == .conditionedMusic ? "描述想要的器乐风格" : "描述想要的声音", text: $draft.prompt, axis: .vertical)
                 .lineLimit(3...6).textFieldStyle(.roundedBorder)
@@ -167,6 +173,32 @@ public struct AudioCreationView: View {
         }
         .padding(16)
         .background(.quaternary, in: RoundedRectangle(cornerRadius: 16))
+    }
+
+    @ViewBuilder private var capabilitySummaryContent: some View {
+        if let capability = executionCapability {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("当前生成能力").font(.subheadline.weight(.semibold))
+                Text(Self.capabilitySummaryText(capability))
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if capability.noteControlFidelity == .approximate {
+                    Text("音符条件为近似控制；风格和伴奏可能不同，不承诺严格和弦或锁定音频。")
+                        .font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .accessibilityIdentifier("audio-capability-summary")
+        } else {
+            Text("当前工作环境未提供生成能力声明")
+                .font(.caption).foregroundStyle(.secondary)
+                .accessibilityIdentifier("audio-capability-summary")
+        }
+    }
+
+    static func capabilitySummaryText(_ capability: AudioExecutionCapability) -> String {
+        let operations = capability.operations.map(\.rawValue).joined(separator: "、")
+        return "\(capability.profile.identifier)（rev \(capability.profile.revision)）：最长 \(capability.maximumDurationSeconds.formatted()) 秒，\(capability.sampleRate) Hz，\(capability.channelCount) 声道；支持 \(operations)。"
     }
 
     private var profilePicker: some View {
