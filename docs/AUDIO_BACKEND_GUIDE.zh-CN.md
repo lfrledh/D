@@ -1,6 +1,8 @@
 # 音频后端与跨配置验证指南
 
-## 2026-09-13 薄封装入口（本批验收结果见任务记录）
+## 2026-09-13 薄封装入口已验收
+
+本批实际受测/本地接纳 `48d65f8ca76c992c62d4233c343a85d19ed1079b`；新普通沙盒包位于 `D-Development/AgentTrials/D-AUDIO-CLOSE-VIDEO-01/run-20260913T050442Z/artifacts/D Audio Closure.app`，已真实验证SA3/MRT2短生成、取消后恢复、候选处理及保存重开。音频CPU113方法、源目录重新封装及完整清单/签名检查通过，详见[本任务结案](tasks/D-AUDIO-CLOSE-VIDEO-01.md#2026-09-13-验收本地接纳与收尾检查点)。后续仅文档，最终完整SHA/推送见同run的stage-final-receipt.json；普通D未替换，这是开发产物，不是公证安装包。以下历史阶段产物继续保留。
 
 后端公共接口已满足当前音频有限出口，不增加通用编辑或工作流框架。新入口 `Backends/Audio/Packaging/package_audio_app.py` 只编排两个既有准备器：从**当前源码**与已安装Python/依赖重建SA3和MRT2引擎，附入普通构建的**新副本**，沿用输入开发签名/entitlements，并校验后独占发布。它不使用旧阶段App里的引擎副本，不下载模型或依赖，不修改原始App；plain build-local仍只编译，不暗中触发签名封装。
 

@@ -1,6 +1,6 @@
 # D-AUDIO-CLOSE-VIDEO-01：音频薄封装收尾与视频后端研究
 
-状态：准备，尚未接纳。日期：2026-09-13。规格 close-r1 / contract packaging-r1。
+状态：音频收尾及视频研究已验收、本地接纳；推送结果与最终文档SHA见末尾外部回执。日期：2026-09-13。规格 close-r1 / contract packaging-r1 未改。
 用户授权：收齐必要后端接口便转下一模态；音频仅交付收尾，视频本轮研究，不下载/安装/运行新模型，不扩写编辑器、HUM、歌声、TTS。复杂创作操作属于工作台。上一阶段 `c202a7548998cade6c2d1284625c33605fe16f9a` 已完成真实 SA3/MRT2 工作台验证，最终源 `ec7c6eff989dbff501db470838448cc4e793258e` 为七份文档之后版本；历史不重算。
 
 源基线：`ec7c6eff989dbff501db470838448cc4e793258e`，codex/inference-foundation。Lead候选：外盘 D-Worktrees/D-AUDIO-CLOSE-VIDEO-01，codex/d-audio-close-video-01。执行基线是包含本规格的准备提交完整SHA，由派工记录给出，不自引用。外部证据：D-Development/AgentTrials/D-AUDIO-CLOSE-VIDEO-01/run-20260913T050442Z。源个人scheme的内容、摘要、索引及未暂存状态在protection/start.json和副本保存；每次源更新前后核对。普通D/历史产物/模型保持只读。
@@ -45,3 +45,52 @@ P1写入交回后：审查+CPU+一次非实现者只读复核；普通隔离构�
 ## 恢复检查点
 
 已做：源身份/保护及无活动hooks检查、音频接口只读审计、建立独立Lead工作树。未做：P1预检/实现/测试/封装/真实运行/视频文档/集成。原阶段已验收，不重标为欠缺；新封装入口需本批验收。GPU/GUI资源确认待用户答复。Lead证据目录paths.json/protection记录完整路径和SHA。模型来源和各轮失败随后追加，不覆盖历史。
+
+## 2026-09-13 验收、本地接纳与收尾检查点
+
+上面的恢复点是开始时记录。用户随后确认普通D及其他AI空闲、Mac解锁；本批已完成薄封装和视频设计研究，停止于此，不启动视频实现或追加音频功能。
+
+### 版本与职责
+
+- 源起点 `ec7c6eff989dbff501db470838448cc4e793258e`；准备/执行基线 `1d405bda9c838fa016f7acb2fd7cc2a360ec9dc1`。
+- P1实现/独立审阅版本 `2b8127c21fc106f3b19157adb3840408ca68b5f2`；Lead文档与保留历史合并后的组合/源实际受测版本 `48d65f8ca76c992c62d4233c343a85d19ed1079b`。源已以固定SHA快进到该版本。完整差异为两份Python实现/测试与六份文档，无Swift、推理算法、运行时、prepare工具、工程/依赖/签名方案改动。
+- 普通新App在准备基线构建；App代码、模型清单、provider/vendor到组合版本逐路径相同。两套引擎均由组合版本的入口从当前源码和已安装依赖重建，不使用旧App内的引擎。
+- 本次结案提交仅修改获准文档；其自身SHA和最终远端核对写外部 `stage-final-receipt.json`，不把测试记在尚未产生的文档SHA上。
+
+P1为受限独立CLI `gpt-5.6-sol/high`，线程 `01a09928-c585-70b1-8efa-be4d6e85f5ce`：实际turn_context与请求一致，cwd为P1独立工作树，仅该目录及本run的p1/output、p1/tmp可写，network=false，共享Git不授予写入。初次交付完成，无交付后返工，Lead未实质重写实现；Lead审核后代提交。非实现者只读审阅为另一个Sol/high CLI，线程 `01a09936-81aa-70d0-91ba-5a8f83b626b2`，未发现阻断项；该审阅没有运行测试。Lead另行执行下面所有集成、真实命令及产品复验。隐藏服务端解析仍unknown；角色标签不作为质量证明。
+
+### 验收证据
+
+证据根 **R** 为 `/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-AUDIO-CLOSE-VIDEO-01/run-20260913T050442Z`。2026-09-13，M4/16GiB、macOS26.6.2、Xcode26.6/Swift6.3.3，已有外盘Python3.12；实际命令、cwd、解释器、完整版本和退出状态均见各子目录request/result。未下载或安装依赖。
+
+|检查|实际结果与边界|R下证据|
+|---|---|---|
+|新测试与原音频CPU|新增12、原101，组合及源入口各113方法，零失败/零跳过；是同一集合，不累加成226。两份源码经tokenize.open与内存compile检查，无目标pyc。|cpu-combined、cpu-source、source-validation|
+|独立命令反例|成功命令的stderr文字不误判失败；真实自有Python子进程超时后杀组并回收。不是签名服务真实超时或GPU取消证明。|lead-command-checks.py、lead-command-result.json|
+|新普通构建|独立DerivedData、离线已解析依赖、既有开发身份，构建exit0（80.24秒）。无XCTest签名例外。|native/build-request.json、build-result.json|
+|真实双引擎封装|组合入口9.92秒、源入口9.84秒，均exit0；新副本69个Mach-O组件签名后更新清单；独立codesign和生产BundledAudioEngine resolve/confirmUnchanged通过。初次还逐文件交叉核对两份清单。|package-real、direct-validation、package-source、source-validation|
+|普通沙盒真实生成|隔离新包SA3生成6秒一次；MRT2生成4秒两次；三个float32双声道WAV独立解析、帧数/采样率/有限数/摘要与记录相符。|gui/observations.json、real-validation.json|
+|取消和下一任务|一次MRT2任务确实取消，无已发布资产；同会话seed43的新任务成功。未测精确GPU内核中断时点。另一次拟取消任务已先完成，按成功计，不冒充取消。|gui/real-validation.json及测试项目Tasks|
+|候选/持久化|播放入口、采用/拒绝、保存、正常退出重开；文档/任务/资产相同，SA3/MRT2模型恢复校验，音符/seed和候选状态保留。|gui/before-reopen.json、observations.json、real-validation.json、reopen/exit.json|
+
+真实运行包为 `R/artifacts/D Audio Closure.app`；源入口第二次封装为 `R/artifacts/source-entry/D.app`，后者只做清单/签名/resolve路径复验，没有重复GPU/GUI。真实运行用相同生产代码和资源，区别清楚保留。普通D从未替换。`D_UI_TEST_SESSION`只隔离设置和测试项目索引，无后端测试覆盖；测试项目为 `R/gui/projects/音频封装回归 🎹.dproject`。
+
+实际SA3参数：固定revision `da6edc54ddba10bfd79a077102ded687f80e882b`，6秒/seed42/8步/guidance1，输出44100Hz/264600帧；MLX峰值约1.61GB、最终active18B/cache0。MRT2固定revision `010aa0dcb0dfd27b24f0ad07b4dad63e8f9521cc`，small-export、4秒/C4-D4-G4/seed42与43，48000Hz/192000帧；两次首PCM1.23/0.79秒、总5.60/5.27秒，MLX峰值约0.528GB、进程峰值RSS约1.52GB、清理后active8B/cache0。计量口径不同，不把这些值相加或据此宣称无泄漏；固定图内部精度仍unknown。完整参数、阶段、清理、输出摘要在real-validation及原始运行记录。
+
+SA3变体/重绘与安全导出沿用上阶段未改实现的已验收证据，本批不重跑并冒称新增通过；图文代码不变，没有全模型回归。未新增真人音质判定、GUI XCTest、麦克风、公证、TCC持续性或其他Mac验证。此前用户“正常钢琴但背景类似沙锤”反馈保持，音符条件精确传递不等于声音精确服从。
+
+### 失败、环境事件与来源口径
+
+1. P1初交前一个符号链接夹具错误地创建绝对目标，第一次新测试11/12；修正夹具为预期内部相对链接后12/12。其他校验加固也在初交内完成，不计作Lead第三方修补。
+2. P1尝试删除自己tmp中的pyc，执行工具在启动前拒绝rm命令；Worker停报且未重试/提权。三份受控pyc夹具留在授权目录，不清理以追求表面干净。关键词扫描的其他命中是测试/源码文本，不等同实际权限事故。原事件与可观察权限证据保存在p1，不追溯改写。
+3. Lead首次选MRT2父目录，缺models/resources，界面明确拒绝且未提交任务；纠正为已有 `magenta-rt-v2` 根后通过。属于测试操作错误，不归给Worker实现。
+4. 正常退出后调用CUA状态查询自动重启了同一隔离产物；该实例环境未核验、没有打开用户项目或执行模型，立即正常退出。之后显式使用原隔离UUID启动并完成重开。普通D路径未启动。经验：退出后只核对持有的进程句柄/退出记录，不再调用可能重新启动App的状态API。详情gui/auto-relaunch-event.json；不声称自动实例的环境或用户偏好逐字节已验证。
+5. 集成只读预检最初未识别本机Git帮助的 `--[no-]` 呈现方式；核对本机帮助后修正证据检查，无Git写入、契约或代码改动。最终祖先、路径、hooks/attributes、碰撞和保护门槛通过后才快进。
+
+可观察CLI预检100.55秒、实现686.81秒、只读审阅268.65秒。usage-observed.json逐条保存本批turn.completed字段，不累加可能重叠的会话累计快照；缓存输入是总输入的子集，不能再加一次。完整Lead归因、订阅实际费用和经济性仍unknown；本样本只证明此明确规格下可交付，不认定Sol适合所有后端。来源为Sol初次实现、独立Sol只读检查、Astra Lead契约/文档/实际验证与集成。
+
+### 恢复与下一动作
+
+源 `codex/inference-foundation` 已接纳上述受测组合；后续仅结案文档，最终完整HEAD与push状态查R/stage-final-receipt.json。源scheme仍为唯一未暂存修改，SHA256 `ca3635d88aa5a15397b90e528667c66c0e6db7e596176e885c79d194b544206c`，原索引blob/diff保持；普通D四个关键文件及新构建输入41文件的摘要/大小/mtime未变。保护快照在protection及integration，不建立系统写锁，不删除任何工作树/旧证据。
+
+P1、只读审阅、构建/CPU/封装和本批应用均结束；两个显式启动的App有exit0，自动重启实例另有定点退出记录。无后续后台任务。恢复先检查实际HEAD/个人修改/进程，再按[视频设计](../VIDEO_BACKEND_DESIGN.zh-CN.md)签发V0：先确认完整文本编码器的精度/内存和固定依赖，再做短静音视频后端；新增权重/依赖具体授权另行。H09设备继续保留，歌声/HUM/TTS不阻塞V0。本任务不等于音频全部远期功能或视频已交付。
