@@ -1,5 +1,7 @@
 # D 架构研究与推理框架基线
 
+适用性补充（2026-09-13）：本文为早期研究和当时框架基线，未在本轮重做外部调研。冲突的长期方向由[产品与架构指导原则](PRODUCT_PRINCIPLES.zh-CN.md)替代；当前实现/验收看CURRENT_ACTIONS，下一对接看[D-ALIGN-01](tasks/D-ALIGN-01.md)。旧测试和数值事实不因方向更新而改写。
+
 **日期：2026-09-06 · 面向：D 的产品发起人与后续开发协作者**
 
 依据用户最新定位、[原愿景](history/ORIGINAL_VISION.md)、[旧技术规划](history/PROJECT_PLAN_2026-02-25.md)、[旧协作指南](history/PROJECT_GUIDE_2026-02-25.md)、当前仓库，以及 Swift、MLX、ComfyUI、Diffusers、llama.cpp 官方资料。目标是建立可持续的原生 Mac 专业 AI 创作工作站；本报告不进行模型效果排名或完整竞品评测。

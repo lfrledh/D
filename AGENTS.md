@@ -1,12 +1,18 @@
 # D 项目协作与架构规则
 
+## 当前产品指导（P2026-09-13.1）
+
+用户已确认[产品与架构指导原则](docs/PRODUCT_PRINCIPLES.zh-CN.md)，冲突的旧方向以其替代表为准；旧验收、权限/数据/精度约束和修复预算不改。D按“项目→主要产物模态→作品/工作方式→操作/条件”组织，输入可跨模态。复用数据、操作和UI积木；执行依赖与界面布局分开，调整布局不生成任务。复杂创作组合放DWorkbench，backend保持模型执行与生命周期职责，不新增每用途一套系统或万能参数袋。
+
+模型真实要求、适配支持、实测范围、硬件推荐和用户选择/准入分别表达；M4/16GiB只代表开发验收机，small/512/2048不作为产品永久上限。声明必须对应实际执行，不能静默忽略条件或改变精度。当前只完成思想固化和下一阶段规划；[D-ALIGN-01](docs/tasks/D-ALIGN-01.md)尚待实施批准，不沿旧“下一步视频/歌声”文字自动开工。
+
 ## 2026-09-13 当前协作规则（覆盖下方历史人数上限）
 
-用户取消项目层面的子代理数量上限，由 Lead 按任务就绪度、耦合、风险、实际工具额度及审核吞吐决定每批人数与模型；不是无限同时执行、无限返工或新增产品授权。沿用独立受限 CLI、逐任务工作树/写根/模型核验、禁止递归、原修复预算和组合验收。重型构建、GPU 和 GUI 仍由 Lead 排队。较低成本模型只接收到已消除关键歧义的任务：直接给出输入输出、状态/错误、关键反例、独立验收依据与允许路径，而非整份项目历史或逐函数答案。当前细则见 [协作规程](docs/MULTI_AGENT_WORKFLOW.zh-CN.md#2026-09-13-按任务就绪度分配人数与模型当前有效)；下一阶段范围见 [D-MRT2-WORKBENCH-01](docs/tasks/D-MRT2-WORKBENCH-01.md)。下面按日期保留的 0—2 限制是历史，不再作为当前人数政策。
+用户取消项目层面的子代理数量上限，由 Lead 按任务就绪度、耦合、风险、实际工具额度及审核吞吐决定每批人数与模型；不是无限同时执行、无限返工或新增产品授权。沿用独立受限 CLI、逐任务工作树/写根/模型核验、禁止递归、原修复预算和组合验收。重型构建、GPU 和 GUI 仍由 Lead 排队。较低成本模型只接收到已消除关键歧义的任务：直接给出输入输出、状态/错误、关键反例、独立验收依据与允许路径，而非整份项目历史或逐函数答案。当前细则见 [协作规程](docs/MULTI_AGENT_WORKFLOW.zh-CN.md#2026-09-13-按任务就绪度分配人数与模型当前有效)；实际停点和下一阶段以CURRENT_ACTIONS为准。下面按日期保留的 0—2 限制是历史，不再作为当前人数政策。
 
 ## 阅读与范围
 
-D 是面向专业 AI 创作者、兼顾初学者的原生 Mac 本地推理工作站。先读 docs/CURRENT_ACTIONS.zh-CN.md，再读 docs/PRODUCT_GOALS.zh-CN.md 的相关目标行、相关 ADR 和源码。历史研究、测试数量与旧规划只按需加载；它们不是当前执行状态。不要每轮重读全部 docs/history 或原始计划。
+D 是面向专业 AI 创作者、艺术家和学生、兼顾初学者的原生 Mac 本地推理工作站。先读 docs/CURRENT_ACTIONS.zh-CN.md；产品/架构工作读PRODUCT_PRINCIPLES的相关节及替代表，再读PRODUCT_GOALS相关行、当前任务、相关ADR和源码。历史研究、测试数量与旧规划只按需加载；它们不是当前执行状态。不要每轮重读全部 docs/history 或原始计划。
 
 D-F03／D-M01 已验收：现有 UI package 内含真实 DWorkbench 服务 target 和模型安装管理，保留单项目流程。已确认总体战略见 docs/PRODUCT_STRATEGY.zh-CN.md；D-W02 / D-W04a 多文档探索与比较已验收，见 docs/EXPLORATION_STAGE_ACCEPTANCE.zh-CN.md；后续工作包尚待审批。快速草稿、远程 API、对外服务、RAW 等按目标表启动，不因规划存在就实现空入口或框架。信息架构见 ADR 0007，服务演进见 ADR 0008。
 
@@ -39,7 +45,7 @@ D-F03／D-M01 已验收：现有 UI package 内含真实 DWorkbench 服务 targe
 
 主项目 /Volumes/CodexProjects/Codex/D；产物、模型、日志使用同级 D-Development；纯核心 scratch 同级 BuildCaches/D-Foundation，MLX 同级 BuildCaches/D-MLX，工作台同级 BuildCaches/D-Workbench。统一入口 D.xcworkspace。App／MLX 的 SwiftPM checkout 分别 SourcePackages-App／SourcePackages-MLX，不链接到同一可变检出目录。
 
-用户已授权下载模型和真实推理。M4／16 GiB：评估权重、上下文／KV、工作区和系统余量，默认单重任务；外盘容量不等于运行内存。保持 Metal 资源随二进制部署。
+已有模型下载/推理授权按具体记录复用，不外推到新模型/条款/依赖。M4／16 GiB是本机验证配置：评估权重、上下文／KV、工作区、媒体和系统余量；支持范围与推荐/实测分开，不限制其他Mac的产品上限。当前默认单重任务属于资源所有权规则；外盘容量不等于运行内存。保持 Metal 资源随二进制部署，真实GPU/GUI按当前可隔离窗口安排。
 
 - `./scripts/test-foundation.sh`：纯核心，无模型。
 - `./scripts/test-workbench.sh`：工作台／应用服务／模型库 CPU 测试，外盘缓存。

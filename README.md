@@ -2,11 +2,13 @@
 
 开发中的原生 macOS 本地 AI 创作工作台，使用 SwiftUI、MLX Swift 和 Hugging Face 模型。
 
+当前指导以[产品与架构原则](docs/PRODUCT_PRINCIPLES.zh-CN.md)为准：项目下按主要产物模态组织，跨模态复用数据、操作和原生UI组件，工作方式与布局分开；开发机16GiB不作为能力上限。旧视觉首批/固定小规格保留为阶段历史，不限制后续产品方向。下一阶段[D-ALIGN-01](docs/tasks/D-ALIGN-01.md)仅规划、待批准：统一能力来源并接通已有文字/图像配置，尚未实现完整可组合平台。
+
 原生 SwiftUI／Liquid Glass 工作台通过 DRuntime 与 DMLXBackend 运行图像任务，使用自包含 `.dproject` 保存作品和生成条件。已支持项目内多份独立创作、候选整理、两图比较和条件复用，见 [最新验收](docs/EXPLORATION_STAGE_ACCEPTANCE.zh-CN.md)。当前行动与验收状态集中在 [行动指南](docs/CURRENT_ACTIONS.zh-CN.md)。已完成的单项目检查点见 [工作台验收](docs/WORKBENCH_ACCEPTANCE.zh-CN.md)，后续目标统一维护在 [产品目标清单](docs/PRODUCT_GOALS.zh-CN.md)。文字现已接入同一项目的有限创作闭环：选段改写、候选接受/拒绝、受保护撤销、安全保存重开；旧文本和占位界面已退出。PNG支持实际任务配方公开/私有预览、新副本内嵌、离线读回并显式恢复为新草稿。两者已本地验收，范围及真实运行证据见 [T0任务](docs/tasks/D-T0-WORKBENCH-01.md) 和 [PNG任务](docs/tasks/D-META-PNG-01.md)；CLI继续保留。
 
 单仓整合与真实文本推理基础的四项工作已完成，最终验收结果和边界见 [基础阶段验收](docs/FOUNDATION_STAGE_ACCEPTANCE.zh-CN.md)。
 
-图像 B2 已将分阶段加载、图像生成、进度、取消和产物引用接入现有核心，并完成图文总验收。当前固定支持 FLUX.2 Klein 4B q8、512×512、4 步、guidance 1。调用与限制见 [图像运行时使用说明](docs/IMAGE_RUNTIME_GUIDE.zh-CN.md)，最终检查点的运行证据与验收结论集中记录在 [图像运行时验收](docs/IMAGE_RUNTIME_ACCEPTANCE.zh-CN.md)。
+图像 B2 已将分阶段加载、图像生成、进度、取消和产物引用接入现有核心，并完成当时图文验收。普通App仍固定 FLUX.2 Klein 4B q8、512×512、4步、guidance 1；同模型后端/CLI已有显式256…2048、32倍数的尺寸profile，尚未接回普通界面。这是当前适配/接线范围，不是所有Mac的上限。调用见[图像运行时说明](docs/IMAGE_RUNTIME_GUIDE.zh-CN.md)及[D-SCALE-01](docs/tasks/D-SCALE-01.md)，历史B2证据见[验收](docs/IMAGE_RUNTIME_ACCEPTANCE.zh-CN.md)，后续实机矩阵以CURRENT_ACTIONS为准。
 
 此前的 B1 是独立硬件实验：同进程三轮各约 35 秒，MLX 分配峰值约 5.78 GiB，释放后约 0.5 MiB 残留。该实验及其 [原始报告](docs/IMAGE_PROBE_RESULTS.zh-CN.md) 保留为历史对照，不能用它代替 B2 的运行时与资源验收。
 
@@ -58,7 +60,7 @@ git clone --branch codex/inference-foundation https://github.com/lfrledh/D.git
 
 ## 架构研究与新框架（2026-09-07）
 
-最新定位：面向视觉探索与创作，独立完成 AI 关键流程并与专业软件协作的 Mac 工作台。已确认的场景、范围与证据见 [总体产品规划](docs/PRODUCT_STRATEGY.zh-CN.md)；节点不是必经阶段。研究结论和框架基线见 [架构研究报告](docs/ARCHITECTURE_RESEARCH.zh-CN.md)。
+当前定位：面向创作者、艺术家和学生的可组合多模态Mac工作台，独立完成有限AI流程并与专业工具协作。[总体战略](docs/PRODUCT_STRATEGY.zh-CN.md)和[指导原则](docs/PRODUCT_PRINCIPLES.zh-CN.md)维护方向；节点不是必经阶段。下述模块是已有实现，通用组合/可编辑布局仍未完成；早期研究与基线见[架构研究报告](docs/ARCHITECTURE_RESEARCH.zh-CN.md)。
 
 根目录 Swift package 含 DInference（纯契约）和 DRuntime（串行任务生命周期）两个 target，零远程依赖、Swift 6 严格模式。Backends/MLX 中的 DMLXBackend 提供文本与图像后端，d-infer 是宿主入口。现有 Packages/UI 包内包含两个实际 target：DWorkbench 拥有项目、任务、资产及模型安装服务，只依赖 DInference；UI 依赖这些服务，负责展示和原生交互。D 应用装配具体 runtime／backend。其他旧 Packages/* 暂留源代码，不在新应用依赖路径中。
 
