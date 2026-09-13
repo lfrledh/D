@@ -282,6 +282,8 @@ public struct WorkbenchView: View {
                 actions: model.audioCreationActions(contextID: context, documentID: document.id))
                 .presenting(presentation, rangeState: audioRangeState, contextID: context)
                 .supportingMusic(session.musicCreationAvailable)
+                .capabilitySummary(session.audioCreationDraft?.profile == .conditionedMusic
+                    ? session.musicCapability : session.audioCapability)
                 .id(document.id)
         }
     }
@@ -312,6 +314,13 @@ public struct WorkbenchView: View {
                     onSave: { Task { await project.saveText() } },
                     onChooseModel: { Task { await model.chooseTextModel() } })
                     .presenting(presentation)
+                    .generationControls(capability: project.textCapability,
+                        recommendation: model.executionRecommendations,
+                        configurationError: project.textConfigurationError,
+                        onChange: { value in
+                            guard project.navigationEpoch == epoch else { return }
+                            project.updateTextGenerationSettings(value, documentID: id)
+                        })
                 .id(id)
             }
         }
