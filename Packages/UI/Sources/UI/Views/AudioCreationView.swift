@@ -197,8 +197,26 @@ public struct AudioCreationView: View {
     }
 
     static func capabilitySummaryText(_ capability: AudioExecutionCapability) -> String {
-        let operations = capability.operations.map(\.rawValue).joined(separator: "、")
-        return "\(capability.profile.identifier)（rev \(capability.profile.revision)）：最长 \(capability.maximumDurationSeconds.formatted()) 秒，\(capability.sampleRate) Hz，\(capability.channelCount) 声道；支持 \(operations)。"
+        let operations = capability.operations.map(operationName).joined(separator: "、")
+        return "\(profileName(capability.profile.identifier))：最长 \(capability.maximumDurationSeconds.formatted()) 秒，\(capability.sampleRate) Hz，\(capability.channelCount) 声道；支持 \(operations)。"
+    }
+
+    private static func profileName(_ identifier: String) -> String {
+        switch identifier {
+        case "sm-music": "Stable Audio 小型音乐"
+        case "sm-sfx": "Stable Audio 小型音效"
+        case "medium": "Stable Audio Medium"
+        case "mrt2-small-export-v1": "MRT2 小型"
+        default: return "已部署配置（\(identifier)）"
+        }
+    }
+
+    private static func operationName(_ operation: AudioOperation) -> String {
+        switch operation {
+        case .generate: "生成"
+        case .variation: "参考变体"
+        case .inpaint: "局部重绘"
+        }
     }
 
     private var profilePicker: some View {

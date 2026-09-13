@@ -157,11 +157,15 @@ struct GenerationInspector: View {
         VStack(alignment: .leading, spacing: 10) {
             sectionTitle("生成规格", systemImage: "slider.horizontal.3")
             VStack(alignment: .leading, spacing: 8) {
-                TextField("宽度", value: imageWidth, format: .number)
+                Text("宽度（像素）").font(.caption).foregroundStyle(.secondary)
+                TextField("宽度（像素）", value: imageWidth, format: .number)
                     .textFieldStyle(.roundedBorder)
+                    .accessibilityLabel("宽度（像素）")
                     .accessibilityIdentifier("image-width")
-                TextField("高度", value: imageHeight, format: .number)
+                Text("高度（像素）").font(.caption).foregroundStyle(.secondary)
+                TextField("高度（像素）", value: imageHeight, format: .number)
                     .textFieldStyle(.roundedBorder)
+                    .accessibilityLabel("高度（像素）")
                     .accessibilityIdentifier("image-height")
             }
             HStack(spacing: 18) {
@@ -172,8 +176,9 @@ struct GenerationInspector: View {
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             if let recommendation = model.executionRecommendations {
-                Text("此设备的起始建议为 \(recommendation.imageDimension) × \(recommendation.imageDimension)；建议不会改变当前设置。")
+                Text("这是依据当前内存的未实测起始建议：\(recommendation.imageDimension) × \(recommendation.imageDimension)；不代表已验证能力或保证当前准入，也不会改变当前设置。")
                     .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             presetButtons
             if let error = model.imageConfigurationError {
@@ -196,25 +201,19 @@ struct GenerationInspector: View {
     @ViewBuilder private var presetButtons: some View {
         let sizes = [512, 768, 1024].filter { accepts(width: $0, height: $0) }
         if !sizes.isEmpty {
-            HStack(spacing: 8) {
-                Text("预设").font(.caption).foregroundStyle(.secondary)
+            Menu("尺寸预设") {
                 ForEach(sizes, id: \.self) { size in
                     Button("\(size) × \(size)") { updateImageSettings(width: size, height: size) }
-                        .controlSize(.small)
                 }
             }
+            .controlSize(.small)
         }
     }
 
     private func accepts(width: Int, height: Int) -> Bool {
         let capability = model.imageCapability
-        guard width >= capability.minimumWidth, width <= capability.maximumWidth,
-              height >= capability.minimumHeight, height <= capability.maximumHeight,
-              width.isMultiple(of: capability.dimensionMultiple), height.isMultiple(of: capability.dimensionMultiple) else {
-            return false
-        }
-        let (pixels, overflow) = UInt64(width).multipliedReportingOverflow(by: UInt64(height))
-        return !overflow && pixels <= capability.maximumPixelCount
+        return (try? ImageGenerationSettings(width: width, height: height,
+            executionProfile: capability.profile).request(prompt: "preset", seed: 0, capability: capability)) != nil
     }
 
     private func updateImageSettings(width: Int, height: Int) {

@@ -1,3 +1,4 @@
+import DInference
 import DWorkbench
 import Foundation
 import SwiftUI
@@ -175,11 +176,15 @@ public struct TextWorkbenchView: View {
         if let capability = generationCapability {
             VStack(alignment: .leading, spacing: 8) {
                 Text("生成额度").font(.subheadline.weight(.semibold))
+                Text("输入 token 上限").font(.caption).foregroundStyle(.secondary)
                 TextField("输入 token 上限", value: promptTokenLimit, format: .number)
                     .textFieldStyle(.roundedBorder)
+                    .accessibilityLabel("输入 token 上限")
                     .accessibilityIdentifier("text-input-limit")
+                Text("输出 token 上限").font(.caption).foregroundStyle(.secondary)
                 TextField("输出 token 上限", value: outputTokenLimit, format: .number)
                     .textFieldStyle(.roundedBorder)
+                    .accessibilityLabel("输出 token 上限")
                     .accessibilityIdentifier("text-output-limit")
                 Text("Token 不是字数；输入包括改写包装和模板。真实超限会报错，原文不会被截断。")
                     .font(.caption).foregroundStyle(.secondary)
@@ -187,8 +192,9 @@ public struct TextWorkbenchView: View {
                 Text("当前能力支持：输入最多 \(capability.maximumPromptTokens) token，输出最多 \(capability.maximumOutputTokens) token。")
                     .font(.caption).foregroundStyle(.secondary)
                 if let recommendation = generationRecommendation {
-                    Text("此设备的起始建议：输入 \(recommendation.maximumPromptTokens)，输出 \(recommendation.maximumOutputTokens)；不会改变当前设置。")
+                    Text("这是依据当前内存的未实测起始建议：输入 \(recommendation.maximumPromptTokens)，输出 \(recommendation.maximumOutputTokens)；不代表已验证能力或保证当前准入，也不会改变当前设置。")
                         .font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 if capability.maximumPromptTokens >= 2048, capability.maximumOutputTokens >= 256 {
                     Button("重设为短文本预设（2048 / 256）") {
