@@ -1,6 +1,6 @@
 # D-VIDEO-V0-01：一条可靠的短视频薄后端
 
-状态：2026-09-14用户批准实施；隔离准备中，未接入源、未验收、未推送。规格 `stage-r1`；媒体契约 `media-r1`。源基线 `cc663f7a9e54bb9506b4fdb40e8e7d7198742a8f`，执行准备SHA由外部派工记录填写，避免自引用。
+状态：2026-09-14已本地集成并通过薄后端阶段验收；最终文档提交及推送以R/stage-final-receipt.json为准。规格 `stage-r1`；媒体契约 `media-r1`。原源基线 `cc663f7a9e54bb9506b4fdb40e8e7d7198742a8f`，执行/受测/最终SHA分别记录，避免自引用。下方中间停点按当时事实保留。
 
 ## 终点与阶段跨度
 
@@ -135,3 +135,34 @@ NUMERIC初交发生heredoc临时文件创建被沙箱拒绝exit1后未按规则�
 Lead负责转换/runner/契约/共享进程提取/CLI和工作台明确拒绝视频任务。两个非实现者分别审核数值与媒体/接线，未声称另行跑测试。共享进程及音频/MRT2/视频CPU首轮44，增加媒体失败保护后45个测试通过、零失败/跳过，见R/swift-cpu-r2；视频5项直接调用backend，不是runtime真实模型验收。71媒体断言与45套件不相加。Python runner12项、基础与工作台回归另记各自日志。
 
 执行组合e26c6eaa395fe371512269c5fc97b5fa7bba86e6包含NUMERIC137e67d930946675a21b7249cea767e865f981de和Lead接线eea6a833f847c438a919085559847be4641b6449。W分支codex/d-video-v0-01，源仍cc663f7a9e54bb9506b4fdb40e8e7d7198742a8f、个人scheme未暂存且摘要与开始一致。R/real-video-r1正在执行指定832×480/17帧/50步真实CLI；恢复时检查该result/process文件，不自动重复启动。所有写Worker已结束，修复额度MEDIA/NUMERIC用尽，VAE未用；原生审核只读已结束。下一步是真实生成/取消/文件验证，不进入视频UI。
+
+## 2026-09-14 真实验收、资源校准与本地接纳
+
+范围完成：不可变正/负文本条件与显式参数→已有运行时/共享重推理许可→本地Python模型→逐帧RGB→软件H.264/独立完整解码→MP4与实际配方。源与候选均为 `1530e92584f2a36680e8c350b803e9338897dd32` 时完成组合/源入口检查；普通视频UI、I2V、音轨和编辑器未实施。源只快进指定工作分支，未推进main；最后仅结案文档，最终SHA由外部回执记录。
+
+| 验收 | 实际结果与边界 | R内证据 |
+|---|---|---|
+| 完整真实视频 | 代码e26c6eaa395fe371512269c5fc97b5fa7bba86e6；832×480、17帧/16fps、50步、UniPC order2/shift8/CFG6/seed42。CLI1669.325秒；MP4完整17帧/17÷16秒、H.264、无音轨，404777字节，SHA256 `02e9acbfc55caac556a8fdca42e007c2b89f881d6746a420dcbe5239516dee9c`。未裁切/补帧/改精度。 | real-video-r1/process.json、cli-report.json、lead-acceptance.json；artifacts下frames/result.json、media.json、output.mp4 |
+| 取消、错误、恢复 | 真Python加载/编码/解码边界退出130；编码同步计算边界本次等待44.94秒，不承诺瞬停。自有缺失/坏权重夹具通过正式CLI明确失败/无MP4/输入不变。正式运行时取消后另次CLI可连续两轮生成。64²/5帧/2步仅为生命周期诊断，不计作50步画质样本；另有同一Runtime排队/PID退出CPU检查。 | real-lifecycle-r1/summary.json、memory-comparison.json |
+| 既有模态真实回归 | 同e26二进制：SA3取消后同进程连续两轮6秒/8步，独立检查44.1kHz双声道float32/264600帧/有限数值；FLUX512²/4步/q8后active/cache归零；文字10类CLI通过。MRT2算法未改，本轮复用已验收真实基线和固定桥接CPU，不称新MRT2/听感/GUI实测。 | real-regressions-r1/summary.json、audio-recovery/independent-wav-check.json、image/report.json、text-cli/reports/summary.json |
+| 数值与媒体 | VAE7、NUMERIC13组小CPU官方对照；原容差不变；媒体71断言，包括时间/颜色/身份/不覆盖/消费者与发布失败。转换8、runner12项亦通过。不同检查单列，不相加为总通过率。 | lead-vae-r1、numeric-lead-r3、media-lead-takeover、preparation、runner-contract-r2 |
+| 新组合与编译 | 1530e92584f2a36680e8c350b803e9338897dd32：音频/MRT2/视频46方法、零失败/跳过；CLI与独立App装配编译通过。App禁用签名、未启动，不代表普通沙盒/GUI验收。 | swift-cpu-r4/summary.json、swift-build-r5、app-compile-r1、final-checks-summary.json |
+| 源目录复验 | 同1530：58核心、329工作台（含可选已装文字权重检查）、零失败/跳过；生产Python入口改为源目录，真实64²/5帧/2步通过。CLI二进制来自相同1530候选构建；不谎称再次执行完整50步样本。 | source-checks/summary.json及各result.json |
+
+维护者查看原始帧0/8/16：红色玩具车在桌面移动，方向正常；车身局部形变、末段背景噪点仍可见。它证明可用的模型/文件链路，不等于专业成片画质或用户亲自验收。
+
+### 内存与测试修正（不改模型契约）
+
+完整样本MLX峰值 `19,642,860,430 bytes`（18.294GiB），发生在FP32 VAE解码；14GiB参数为MLX0.31.1图计算指导值，不是RSS/物理内存硬上限，swap使用量未知。初始active8、结束active18/cache0，随后整个自有进程退出；两轮小配置同样结束active18/cache0，没有此样本内持续增长，不据此宣称长期无泄漏。安装版API文档与本地0.30.6 C++源码对应边界见R/research/memory-guideline-review.json，不能把后者当成0.31.1二进制逐行证明。
+
+原估计13GiB低于实测，Lead在660302842ee1c6a78ba65a06010987bdb1172d85仅将解码工作区系数4→8，当前该几何估计19.28125GiB；仅单点校准，长序列DiT未校准。14GiB真实准入拒绝、20GiB inspect预算内已核实（R/admission14、admission20）；**未在20GiB设置下重复完整生成**。用户可显式选择预算，开发机不成为产品上限。e26之后的生产差异只有该估计和帮助文字，Python/数值/媒体/进程实现不变。
+
+660组合CPU有一次消费者测试失败：0.5秒期限先于消费者错误发生。Lead把消费者与超时夹具分开：前者明确0.6秒启动延迟、10秒保险期限，仍要求指定错误且总耗时<5秒；后者保留原fixture和0.5秒期限。1530只改此测试，46项重跑通过；R/swift-cpu-r3失败与review.json保留。非实现者只读审核同意测试隔离，不是降低超时标准，也未重开Worker预算。
+
+### 来源、集成和恢复检查点
+
+三包实现为Sol/high（请求/可观察turn_context与受限写根见R/media、vae、numeric）；MEDIA初交+两修后由Lead一次有界修补，VAE初交通过，NUMERIC初交+两修后通过。Lead负责公共契约、逐张量准备器、Python执行/Swift接线、校准和上述测试隔离；不记作Worker独立完成全部工程。非实现者分别检查数值及媒体/接线，测试由Lead执行；来源/新审核见R/closing-review-index.json。历史NUMERIC拒绝后未停报和审核时序事实继续保留。原始用量快照不累加，完整Lead归因与订阅实际费用unknown，不能据单阶段认定成本最优。
+
+源从cc663f7a9e54bb9506b4fdb40e8e7d7198742a8f快进1530。完整差异/祖先/自动化/输入保护/实际命令见R/integration-final；两个早期预检因Git帮助的可选no拼写及stdout位置判断失误而停在实际合并之前，修正只涉及Lead证据工具，记录保留于R/integration和integration-r2。源个人scheme的内容/完整diff/摘要/索引与未暂存状态不变；普通D四个关键文件的大小/mtime/摘要不变，原Wan10文件完整SHA复核通过。候选及全部历史证据保留。
+
+已完成：本阶段实现、非实现者审核、组合与源复验、本地接纳。最终文档提交、远端SHA、保护复核和自有进程结束状态写R/stage-final-receipt.json；恢复先读该回执并核对真实Git。没有新的待用户授权事项；H09仍待麦克风，高内存/长视频/20GiB完整样本/视频GUI尚未验收。下一建议是复用现有作品/资产/预览积木接入有限视频工作台，先另立范围；不自动开工、不扩时间线，HUM/歌声等不以视频高级功能全部完成为前置。
