@@ -5,9 +5,49 @@
     "vae.py": {
       "upstreamPath": "mlx_video/models/wan_2/vae.py",
       "sha256": "83c355a2a1d8829b1e020c1e7389782f9d15e08b259bab3323496d371e718cee"
+    },
+    "config.py": {
+      "upstreamPath": "mlx_video/models/wan_2/config.py",
+      "sha256": "4da2f5b9cd8c5a8cdbb08945d00900522ea97a51321ce803dc0744a77f862b30"
+    },
+    "text_encoder.py": {
+      "upstreamPath": "mlx_video/models/wan_2/text_encoder.py",
+      "sha256": "ffb42d6f31aa0a84cb8de85129716f59d57aa69e2b60bc79ea2d312a84749dcd"
+    },
+    "attention.py": {
+      "upstreamPath": "mlx_video/models/wan_2/attention.py",
+      "sha256": "4914c09e969510689eaa57bcddbb05ce8fcc5a881177ce9a2a5fc85200069d74"
+    },
+    "rope.py": {
+      "upstreamPath": "mlx_video/models/wan_2/rope.py",
+      "sha256": "d998945afea1ae3df15440bdd554d9a01dc2fbdf3b25eb4bd1418b4f25cb1d52"
+    },
+    "transformer.py": {
+      "upstreamPath": "mlx_video/models/wan_2/transformer.py",
+      "sha256": "41f6fa412bfe9f4f576d6967f453a1a4d157a8a17758f5e30bb0508a92d7b666"
+    },
+    "wan_2.py": {
+      "upstreamPath": "mlx_video/models/wan_2/wan_2.py",
+      "sha256": "3767db5fc687a5c6874c7a1ed6a6b45993564df40956b010b92fba3726acf68c"
+    },
+    "scheduler.py": {
+      "upstreamPath": "mlx_video/models/wan_2/scheduler.py",
+      "sha256": "bc2db7de2bb6f52298ee5b5d66bd86294635441b98972943f19a5412b6d98597"
     }
   },
   "reference": "Wan-Video/Wan2.1",
   "referenceRevision": "9737cba9c1c3c4d04b33fcad41c111989865d315",
-  "status": "Unmodified decoder snapshot. Awaiting causal decode repair and numerical validation. Not enabled."
+  "status": "VAE causal patch passed 7 tiny CPU reference checks; other numerical components awaiting reference checks; full model not yet run.",
+  "patches": [
+    {
+      "file": "vae.py",
+      "sha256": "a2413614c18f922ccdfa59ba3dcbbf5f1dad76ed177558047ab9649743f398ab",
+      "reason": "Official causal cache, 4T-3 output, private chunk cache, tiny-norm fidelity; unsupported tiled decode rejects.",
+      "evidence": "D-VIDEO-V0-01/lead-vae-r1/result.json"
+    },
+    {
+      "file": "config.py",
+      "reason": "Remove unrelated LTX configuration inheritance; local dataclass field access only. No model settings altered."
+    }
+  ]
 }

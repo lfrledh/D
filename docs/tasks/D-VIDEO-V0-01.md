@@ -105,3 +105,21 @@ Lead额外核查真实命令和API语义、检查是否以函数返回替代完�
 - 测试用官方导入不执行CUDA训练/预训练加载；依赖若缺由Lead处理，不Worker安装。
 
 回传修改、内存编译结果、未执行数值门槛、风险/异常与本任务进程状态。只有Lead实际对照后才可接纳。该任务不是整个video runner；模型转换/T5/DiT/采样器/媒体/Swift接线归Lead或后续明确包，不改它们。
+
+## NUMERIC：冻结实施规格 numeric-r1
+
+任务D-VIDEO-V0-01/NUMERIC，stage-r1，Sol/high。只改Vendor/wan21下text_encoder.py、attention.py、rope.py、transformer.py、wan_2.py、scheduler.py；只新增Backends/Video/Tests/test_wan_numerics.py。config.py、vae.py、PROVENANCE、转换器及其他文件禁写。准确前缀Backends/Video/Vendor/wan21/。独立工作树/完整SHA/运行根见R/numeric/job.json。无GPU/真实模型/环境/网络/安装/Git写；Worker只做tokenize.open+compile内存检查，Lead执行小Torch/MLX CPU对照。初交+2修复，重要边界问题先问Lead。
+
+目标是固定1.3B纯T2V数值，保持现有调用形状与参数名称，不增加模型家族或采样器功能。T5权重BF16；DiT主体BF16、时间分支/Head/modulation/原FP32 norm保留FP32；VAE不在此包。Lead负责严格加载与生命周期。
+
+已确认待改：T5 norm采用官方先FP32归约/乘输入、转weight dtype后乘weight的舍入顺序；QK及bias遵守BF16层的舍入，softmax单独FP32，再转回，不将整个T5升精度。DiT patch与text Linear在调用前转权重dtype。RoPE cos/sin保持FP32，从小NumPy FP64角度生成，不引入MLX float64或BF16缓存；时间sinusoid同官方FP64角度后FP32。UniPC order2/flow/bh2/shift8，schedule按官方取整顺序，未经验证的其他scheduler不对外暴露。
+
+测试读固定官方R/source/wan-official/wan/modules/{t5,model}.py及wan/utils/fm_solvers_unipc.py。可用AST抽取所需官方定义(避开CUDA wrapper及无关依赖)，或只对非数值ConfigMixin/register_to_config/SchedulerOutput做小stub；不得重写数学公式作为参考，也不能改官方文件。依赖已安装Torch/MLX/numpy/einops；不增加diffusers依赖。测试通过D_WAN_VENDOR和D_WAN_REFERENCE_ROOT显式路径，设Torch CPU/MLX CPU、小线程，固定小张量共享输入/权重。
+
+冻结验收组：
+- patchify与官方Conv3d坐标/权重、unpatchify顺序，包含非对称输入；FP32 atol/rtol3e-5。BF16应保持输入前转cast，不以形状测试代替值。
+- RoPE三个轴、Head/time/norm小共享权重对照；FP32 atol/rtol3e-5，时间整数0/1/499/999，RoPE含非零不同轴。cached/uncached crossKV等价。
+- T5小norm/attention/完整block：两种mask维度、posbias、FP32与BF16及极小值；FP32 atol/rtol3e-5，BF16 atol/rtol0.02，报告各组maxabs/relative/dtype和finite。BF16原生舍入差异不等于可静默用FP32 logits代替。
+- UniPC完整50steps/shift8/order2与短4steps：完全相同timesteps，sigma atol1e-7，共享每步小FP32模型输出和初始噪声，逐步样本atol/rtol3e-5；重复新scheduler不串状态。不用同seed声称跨框架噪声一致。
+
+如果容差不满足，交真实失败和实现/官方差异，不改容差不改参考。不运行真实权重、不执行CUDA wrapper，Worker自身仅检查语法；Lead独立执行/审核。正常缓存/临时输出仅R/numeric/output和tmp，预先已确定；未知权限/副作用暂停，不重复pgrep。回传代码、解释、内存编译、异常与自有命令状态。

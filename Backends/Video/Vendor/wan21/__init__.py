@@ -1,1 +1,1 @@
-"""Pinned Wan 2.1 decoder implementation; no eager engine imports."""
+"""Pinned Wan numerical components; only D-validated T2V paths are supported."""
