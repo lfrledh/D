@@ -1,6 +1,6 @@
 # D-ALIGN-01：能力声明与既有工作台对接
 
-- 状态：**2026-09-13隔离候选已实现；组合仍有1项布局验收失败，UI修复预算已用完；未接纳/未推送。**
+- 状态：**2026-09-13用户批准续行；Lead收尾与非实现者复核通过，普通构建/封装完成；真实GUI验收等待系统XCTest身份验证，未接纳/未推送。**
 - task_id：D-ALIGN-01；spec_revision：implementation-r1（UI歧义补充implementation-r2）；contract_revision：ALIGN1。
 - 规划核查基线：`88227688d5ba1e27670fe5972f83f980b978df02`；指导修订：P2026-09-13.1。
 - 实施source_base：`aa277f965629591a23f80f7f4baf3b081cd8de2a`；初始执行基线：`6228a26b38c3835e768a0d2c5ee9ce0adc306bf7`；run_id：`run-20260913T104905Z`。恢复按末尾停点，不再从规划基线启动。
@@ -180,3 +180,9 @@ Sol/high独立read-only会话 `review2/route-observed.json` 已完成（约549.6
 ## 2026-09-13 用户续行授权与 Lead 收尾
 
 用户明确要求继续本阶段直到完成。本次沿用 task_id，保留初交、修复预算耗尽与上一停点；不追记 Terra 独立通过。Lead 定点处理文字参数面板真实滚动验证及已知音频时长提前校验缺口，不改变既有模型、精度、操作/时长上限。新证据目录：`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-ALIGN-01/run-20260913T131843Z-continuation`。复用已验证核心/后端的相同代码证据，补组件、普通独立 App、真实工作台及组合审核后才集成/推送。音频校验从实际注入能力读取上限，生成取请求时长，变体/重绘取原声时长，超限不排队、不改变输入或媒体。源基线 aa277f965629591a23f80f7f4baf3b081cd8de2a，续行候选 3ac7be6ebe5cd4c8f7b50180c38045eaefc6c4f5；个人 scheme 与源索引已核对保持。
+
+### 续行工程结果与当前人工停点
+
+固定受测代码 `a2d7aa2f3ed3ec74cdfa9dd501a83ddc3062fe36`：53核心、329工作台方法通过；普通App/测试构建通过，6宿主方法通过。新增缩放反例在未修代码中280×140视口下字段仍156..180而失败，修后116..140通过；原320×180检查单独/全套重跑本身可过，不能把原偶发失败描述成已证实的生产滚动缺陷。音频120/121、无排队与输入保护通过。非实现者 `/root/align_continuation_review` 在独立detached快照完成只读审阅，无新增发现；未执行独立测试。前次Sol审核与所有失败保留。
+
+XCTest nativeUI本次未进入测试：系统coreautha要求“XCTest 正在尝试 Enable UI Automation”密码确认，runner初始化超时，退出65。未算UI0/0通过，不改变测试标准/系统权限；已单次Glass并请求用户只在系统窗口确认。普通沙盒重建与内嵌音频封装、codesign完整性及诊断通过；真实GUI和音频本轮仍待执行。新产物/独立launch已准备但尚未启动。证据目录 `/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-ALIGN-01/run-20260913T131843Z-continuation`，原普通D四文件与源scheme/索引保持。

@@ -1,6 +1,12 @@
 # D 当前行动指南
 
-## 当前检查点：D-ALIGN-01 候选未接纳，布局验收阻塞（2026-09-13）
+## 当前检查点：D-ALIGN-01 工程收尾通过，等待系统原生测试确认（2026-09-13）
+
+用户已明确批准继续本阶段直到完成。Lead定点续补实际受测 `a2d7aa2f3ed3ec74cdfa9dd501a83ddc3062fe36`：53核心、329工作台及6宿主检查通过；普通应用、测试构建、音频内嵌封装和固定快照非实现者审阅通过。文字参数缩放回归与音频超时长提前拒绝已补齐，不改变已支持模型/精度/时长。源仍aa277f965629591a23f80f7f4baf3b081cd8de2a，个人scheme未暂存保持，尚未接纳/推送。
+
+原生UI本次未启动：系统“XCTest 正在尝试 Enable UI Automation”要求本机密码，已提示用户本人确认，不索取密码、不提权。真实工作台参数、图文音频、保存重开仍须在本次普通隔离产物验收。恢复证据 `D-Development/AgentTrials/D-ALIGN-01/run-20260913T131843Z-continuation`；[续行记录](tasks/D-ALIGN-01.md#续行工程结果与当前人工停点)。本轮没有新产品任务，完成后再提视频V0。
+
+## 历史检查点：D-ALIGN-01 候选未接纳，布局验收阻塞（2026-09-13）
 
 源仍为 `aa277f965629591a23f80f7f4baf3b081cd8de2a` / `codex/inference-foundation`；仅原个人scheme未暂存。隔离候选在 `D-Worktrees/D-ALIGN-01` / `codex/d-align-01`，最新实际组合受测 `c59c5e0869687f765e444349fedf602ec456339a`。最终文档SHA、进程与保护状态以外盘 `D-Development/AgentTrials/D-ALIGN-01/run-20260913T104905Z/final-receipt.json` 为准。
 
