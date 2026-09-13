@@ -1,6 +1,10 @@
 # 历史失败与权限审计
 
-## 2026-09-13 H16：ALIGN原生UI请求系统身份验证（待本人）
+## 2026-09-14 H16：ALIGN系统确认已解决
+
+用户回复“已确认”后，UI用例实际启动。r2两项因原生长路径输入未完整而失败，Lead修补测试事件分段发送，保留完整路径及项目打开断言；r3同次9/9通过。随后普通隔离沙盒图文音频、取消恢复、导出防覆盖与重开通过；两实例正常退出0。证据为continuation/native-tests-r2、native-tests-r3、gui/acceptance.json。无新权限请求或TCC/签名变更，不能据此承诺以后永久免授权。H09仍待麦克风，当前不阻塞其他路线。
+
+## 历史：2026-09-13 H16：ALIGN原生UI请求系统身份验证（当时待本人）
 
 XCTest在独立产物运行时再次要求“Enable UI Automation”，coreautha密码窗口已直接观察。首轮6宿主通过，UI runner初始化超时，未开始9个UI用例；不能算UI通过。已播放一次Glass并请求本人在系统窗口输入密码，不在聊天发送。不更改TCC/全盘权限/签名或关闭普通D。完成确认后对同一代码重跑原有完整UI集合，再验证独立普通工作台；证据 `D-Development/AgentTrials/D-ALIGN-01/run-20260913T131843Z-continuation/native-tests` 与 `gui/authorization-pending.json`。旧H16解决记录不代表此次提示已经处理。H09仍等麦克风，本轮未探测。
 
