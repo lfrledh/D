@@ -31,6 +31,9 @@ public struct TextWorkbenchView: View {
     private var generationRecommendation: ExecutionRecommendations?
     private var generationConfigurationError: String?
     private var onGenerationSettingsChange: ((TextGenerationSettings) -> Void)?
+    private var onGenerationEditingError: ((String?) -> Void)?
+    @State private var rawPromptTokenLimit: String?
+    @State private var rawOutputTokenLimit: String?
 
     public init(session: TextDraftSession, selection: NSRange, instruction: Binding<String>, modelStatus: String,
                 canGenerate: Bool, canAccept: Bool, canUndo: Bool, isSaving: Bool, saveStatus: String,
@@ -63,12 +66,13 @@ public struct TextWorkbenchView: View {
         var copy = self; copy.presentation = presentation; return copy
     }
 
-    public func generationControls(capability: TextExecutionCapability?, recommendation: ExecutionRecommendations?, configurationError: String?, onChange: @escaping (TextGenerationSettings) -> Void) -> Self {
+    public func generationControls(capability: TextExecutionCapability?, recommendation: ExecutionRecommendations?, configurationError: String?, onChange: @escaping (TextGenerationSettings) -> Void, onEditingError: @escaping (String?) -> Void = { _ in }) -> Self {
         var copy = self
         copy.generationCapability = capability
         copy.generationRecommendation = recommendation
         copy.generationConfigurationError = configurationError
         copy.onGenerationSettingsChange = onChange
+        copy.onGenerationEditingError = onEditingError
         return copy
     }
 
@@ -177,12 +181,12 @@ public struct TextWorkbenchView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text("生成额度").font(.subheadline.weight(.semibold))
                 Text("输入 token 上限").font(.caption).foregroundStyle(.secondary)
-                TextField("输入 token 上限", value: promptTokenLimit, format: .number)
+                TextField("输入 token 上限", text: promptTokenLimit)
                     .textFieldStyle(.roundedBorder)
                     .accessibilityLabel("输入 token 上限")
                     .accessibilityIdentifier("text-input-limit")
                 Text("输出 token 上限").font(.caption).foregroundStyle(.secondary)
-                TextField("输出 token 上限", value: outputTokenLimit, format: .number)
+                TextField("输出 token 上限", text: outputTokenLimit)
                     .textFieldStyle(.roundedBorder)
                     .accessibilityLabel("输出 token 上限")
                     .accessibilityIdentifier("text-output-limit")
@@ -198,8 +202,7 @@ public struct TextWorkbenchView: View {
                 }
                 if capability.maximumPromptTokens >= 2048, capability.maximumOutputTokens >= 256 {
                     Button("重设为短文本预设（2048 / 256）") {
-                        publishGenerationSettings(.init(maximumPromptTokens: 2048, maximumOutputTokens: 256,
-                            profile: capability.profile))
+                        applyShortTextPreset(capability)
                     }
                     .controlSize(.small)
                 }
@@ -210,18 +213,21 @@ public struct TextWorkbenchView: View {
                 }
             }
             .accessibilityIdentifier("text-parameter-section")
+            .onDisappear(perform: discardUnfinishedGenerationEdit)
         }
     }
 
-    private var promptTokenLimit: Binding<Int> {
-        Binding(get: { session.document.generationSettings.maximumPromptTokens }, set: { value in
-            publishGenerationSettings(Self.settings(session.document.generationSettings, maximumPromptTokens: value))
+    private var promptTokenLimit: Binding<String> {
+        Binding(get: { rawPromptTokenLimit ?? String(session.document.generationSettings.maximumPromptTokens) }, set: { value in
+            rawPromptTokenLimit = value
+            publishGenerationEditIfComplete()
         })
     }
 
-    private var outputTokenLimit: Binding<Int> {
-        Binding(get: { session.document.generationSettings.maximumOutputTokens }, set: { value in
-            publishGenerationSettings(Self.settings(session.document.generationSettings, maximumOutputTokens: value))
+    private var outputTokenLimit: Binding<String> {
+        Binding(get: { rawOutputTokenLimit ?? String(session.document.generationSettings.maximumOutputTokens) }, set: { value in
+            rawOutputTokenLimit = value
+            publishGenerationEditIfComplete()
         })
     }
 
@@ -236,9 +242,48 @@ public struct TextWorkbenchView: View {
         Self.publish(settings, to: onGenerationSettingsChange)
     }
 
+    private func publishGenerationEditIfComplete() {
+        let current = session.document.generationSettings
+        let promptText = rawPromptTokenLimit ?? String(current.maximumPromptTokens)
+        let outputText = rawOutputTokenLimit ?? String(current.maximumOutputTokens)
+        if let error = Self.numericEditingError(promptText, label: "输入 token 上限")
+            ?? Self.numericEditingError(outputText, label: "输出 token 上限") {
+            Self.reportEditingError(error, to: onGenerationEditingError)
+            return
+        }
+        guard let promptTokens = Int(promptText), let outputTokens = Int(outputText) else { return }
+        publishGenerationSettings(.init(maximumPromptTokens: promptTokens,
+            maximumOutputTokens: outputTokens, profile: current.profile))
+        rawPromptTokenLimit = nil; rawOutputTokenLimit = nil
+        Self.reportEditingError(nil, to: onGenerationEditingError)
+    }
+
+    private func discardUnfinishedGenerationEdit() {
+        guard rawPromptTokenLimit != nil || rawOutputTokenLimit != nil else { return }
+        rawPromptTokenLimit = nil; rawOutputTokenLimit = nil
+        Self.reportEditingError(nil, to: onGenerationEditingError)
+    }
+
+    private func applyShortTextPreset(_ capability: TextExecutionCapability) {
+        rawPromptTokenLimit = nil; rawOutputTokenLimit = nil
+        publishGenerationSettings(.init(maximumPromptTokens: 2048, maximumOutputTokens: 256,
+            profile: capability.profile))
+        Self.reportEditingError(nil, to: onGenerationEditingError)
+    }
+
     static func publish(_ settings: TextGenerationSettings,
                         to onChange: ((TextGenerationSettings) -> Void)?) {
         onChange?(settings)
+    }
+
+    static func numericEditingError(_ raw: String, label: String) -> String? {
+        if raw.isEmpty { return "\(label)必须填写整数。" }
+        if Int(raw) == nil { return "\(label)必须是可表示的整数。" }
+        return nil
+    }
+
+    static func reportEditingError(_ error: String?, to callback: ((String?) -> Void)?) {
+        callback?(error)
     }
 
     private var comparisonPanel: some View {
