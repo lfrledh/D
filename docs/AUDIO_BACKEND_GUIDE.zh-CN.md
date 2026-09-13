@@ -1,5 +1,29 @@
 # 音频后端与跨配置验证指南
 
+## 2026-09-13 薄封装入口（本批验收结果见任务记录）
+
+后端公共接口已满足当前音频有限出口，不增加通用编辑或工作流框架。新入口 `Backends/Audio/Packaging/package_audio_app.py` 只编排两个既有准备器：从**当前源码**与已安装Python/依赖重建SA3和MRT2引擎，附入普通构建的**新副本**，沿用输入开发签名/entitlements，并校验后独占发布。它不使用旧阶段App里的引擎副本，不下载模型或依赖，不修改原始App；plain build-local仍只编译，不暗中触发签名封装。
+
+开发者步骤：
+
+1. 用现有 `scripts/build-local.sh` 普通构建；验收产物设置独立的 `D_DEVELOPMENT_ROOT` 和现有 `D_SIGNING_CONFIG`，依赖使用已有离线副本。不要向用户正在使用的普通D目录构建。
+2. 准备已安装的Python3.12根和两套site-packages；MRT2固定依赖版本由prepare_mrt2_engine.py验证，SA3保持原验证配置。输出父目录须已存在，输出.app不得存在；不要混用两套MLX或改变精度。
+3. 在仓库根执行下面入口，参数均为本机显式绝对路径。IDENTITY是已获准的现有开发证书指纹；不要把私钥、账号或机器路径提交Git。此步骤会正常使用既有签名服务，不能把它交给仅允许CPU的Worker。
+
+```sh
+python3 -B Backends/Audio/Packaging/package_audio_app.py \
+  --app "$INPUT_APP" \
+  --python-root "$PYTHON_ROOT" \
+  --sa3-site-packages "$SA3_SITE_PACKAGES" \
+  --mrt2-site-packages "$MRT2_SITE_PACKAGES" \
+  --identity "$EXISTING_IDENTITY" \
+  --output "$NEW_OUTPUT_APP"
+```
+
+成功0、输入/封装/命令/验证或报告错误2；观察完整进程结束。失败不覆盖输入或既有目标，不能通过移除沙盒、放宽manifest或覆盖旧包来解决。报告成功只证明封装、清单和签名检查，**不证明**本机推理、Gatekeeper、公证、TCC、录音或其他Mac部署。最后应从新包普通路径验证两套引擎；精度、生成参数和取消释放沿用既有验收。目录变动时重新给出依赖路径，不从旧trial绝对路径猜测恢复。
+
+本机本批的实际命令、输入/输出保护、具体受测版本及真实回归见 [D-AUDIO-CLOSE-VIDEO-01](tasks/D-AUDIO-CLOSE-VIDEO-01.md)。外部持久证据保留所用依赖/解释器路径，不把它们写死在脚本中。推理模型权重另由模型安装/授权管理，不塞入App。以下旧封装手法是历史；新入口不把旧候选产物作为源。
+
 ## MRT2短旋律工作台使用（2026-09-13）
 
 已验证隔离应用：`D-Development/AgentTrials/D-MRT2-WORKBENCH-01/run-20260912T163022Z-implementation/deployment-v3/signed-app/D.app`。App代码c202a7548998cade6c2d1284625c33605fe16f9a，内嵌MRT2资源33f1f0a4fa575fe27dec67c25bb02f79fd21d605（其后相关资源未变）。普通D未替换；这是开发签名产物，不是公证安装包。
