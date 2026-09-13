@@ -50,6 +50,17 @@ struct DInferenceCLI {
                                                observer: { event in await recorder.append(event) })
                 if !options.inspect { imageBackend = image }
                 backend = image
+            case .video:
+                guard let artifacts = options.artifacts, let python = options.videoPython,
+                      let script = options.videoScript, let tokenizer = options.videoTokenizer else {
+                    throw CLIArgumentError("Incomplete video launch configuration.")
+                }
+                let directory = URL(fileURLWithPath: artifacts, isDirectory: true)
+                try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+                backend = try MLXVideoBackend(configuration: .init(
+                    pythonExecutable: URL(fileURLWithPath: python), providerScript: URL(fileURLWithPath: script),
+                    tokenizerDirectory: URL(fileURLWithPath: tokenizer), artifactDirectory: directory,
+                    memoryLimitBytes: options.memoryBudgetBytes, timeoutSeconds: options.timeoutSeconds))
             case .audio:
                 guard let artifactPath = options.artifacts,
                       let python = options.audioPython,
@@ -265,6 +276,8 @@ struct DInferenceCLI {
                                         height: options.height, steps: options.steps,
                                         guidanceScale: options.guidance, seed: options.seed,
                                         executionProfile: .init(identifier: options.selectedImageProfile.identifier)))
+        case .video:
+            input = .video(options.videoRequest)
         case .audio:
             let source: AudioSourceReference? = options.audioSource.map {
                 AudioSourceReference(

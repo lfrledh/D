@@ -57,6 +57,8 @@ def validate_request(value: dict) -> dict:
     for key in ("width", "height", "frameCount", "fpsNumerator", "fpsDenominator", "steps", "memoryLimitBytes"):
         if type(value[key]) is not int or not 0 < value[key] <= 2**63 - 1:
             raise ValueError("Invalid positive integer: " + key)
+    if value["steps"] > 1000:
+        raise ValueError("This adapter supports 1...1000 diffusion steps")
     if value["width"] % 16 or value["height"] % 16 or (value["frameCount"] - 1) % 4:
         raise ValueError("Wan requires width/height multiples of 16 and frameCount = 4n+1")
     if (value["fpsNumerator"] > 2**31-1 or value["fpsDenominator"] > 2**31-1
@@ -79,7 +81,8 @@ def clean_text(value: str) -> str:
 
 
 def tokenize_conditions(directory: Path, request: dict):
-    from transformers import AutoTokenizer
+    from tokenizers import Tokenizer
+    import numpy as np
     directory = checked_local(directory)
     # Required local tokenizer resources are explicit. Nothing may trigger remote code.
     required = TOKENIZER_DIGESTS
@@ -87,16 +90,24 @@ def tokenize_conditions(directory: Path, request: dict):
     for name, expected in TOKENIZER_DIGESTS.items():
         if digest(directory / name) != expected or identity(directory / name) != snapshots[name]:
             raise ValueError("Tokenizer differs from the pinned model revision: " + name)
-    tokenizer = AutoTokenizer.from_pretrained(str(directory), local_files_only=True, trust_remote_code=False)
+    # Open precisely the pinned serialized tokenizer, never a directory-based
+    # loader that may consult additional config/custom-code/remote resources.
+    serialized = (directory / "tokenizer.json").read_bytes()
+    if hashlib.sha256(serialized).hexdigest() != TOKENIZER_DIGESTS["tokenizer.json"]:
+        raise ValueError("Tokenizer changed before parsing")
+    tokenizer = Tokenizer.from_str(serialized.decode("utf-8"))
+    tokenizer.no_truncation(); tokenizer.no_padding()
+    if tokenizer.token_to_id("<pad>") != 0 or tokenizer.token_to_id("</s>") != 1:
+        raise ValueError("Pinned tokenizer special-token identities differ")
     results = []
     for field in ("prompt", "negativePrompt"):
         cleaned = clean_text(request[field])
-        unpadded = tokenizer(cleaned, truncation=False, padding=False, add_special_tokens=True)
-        count = len(unpadded["input_ids"])
+        unpadded = tokenizer.encode(cleaned, add_special_tokens=True)
+        count = len(unpadded.ids)
         if count > 512:
             raise ValueError(field + " exceeds the model's 512-token condition format; no truncation performed")
-        tokens = tokenizer(cleaned, truncation=False, padding="max_length", max_length=512,
-                           add_special_tokens=True, return_tensors="np")
+        tokens = {"input_ids": np.array([unpadded.ids + [0] * (512 - count)], dtype=np.int32),
+                  "attention_mask": np.array([[1] * count + [0] * (512 - count)], dtype=np.int32)}
         if tokens["input_ids"].shape != (1, 512) or int(tokens["attention_mask"].sum()) != count:
             raise ValueError("Local tokenizer produced an inconsistent condition")
         results.append((tokens, count, cleaned))

@@ -110,6 +110,7 @@ struct WorkbenchTasks: View {
         case .image(let request): request.prompt
         case .text(let request): request.prompt
         case .audio(let request): request.prompt
+        case .video(let request): request.prompt
         }
     }
 

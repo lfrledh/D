@@ -89,319 +89,22 @@ struct AudioProviderProcess: Sendable {
 
     func run(runID: UUID,
              emit: @escaping @Sendable (InferenceOutput) async throws -> Void) async throws -> AudioProviderResult {
-        try Task.checkCancellation()
-        let process = Process()
-        let stdout = Pipe(), stderr = Pipe()
-        process.executableURL = executable
-        process.arguments = arguments
-        process.environment = environment
-        process.currentDirectoryURL = currentDirectory
-        process.standardInput = FileHandle.nullDevice
-        process.standardOutput = stdout
-        process.standardError = stderr
-
-        let exit = AudioProcessExit()
-        let control = AudioOwnedProcessControl(graceSeconds: cancellationGraceSeconds)
-        process.terminationHandler = { process in
-            exit.finish(process.terminationStatus)
-            control.markExited()
+        let transport = LocalProviderProcess(executable: executable, arguments: arguments,
+            environment: environment, currentDirectory: currentDirectory,
+            timeoutSeconds: timeoutSeconds, cancellationGraceSeconds: cancellationGraceSeconds,
+            label: "Audio provider")
+        let result = try await transport.run { reader, control in
+            await AudioProviderProtocol.readStdout(reader, runID: runID, control: control, emit: emit)
         }
-        do {
-            try process.run()
-            control.attach(process)
-        } catch {
-            stdout.fileHandleForWriting.closeFile()
-            stderr.fileHandleForWriting.closeFile()
-            stdout.fileHandleForReading.closeFile()
-            stderr.fileHandleForReading.closeFile()
-            throw InferenceFailure.backendFailed("Cannot launch the owned audio provider: \(error.localizedDescription)")
-        }
-        stdout.fileHandleForWriting.closeFile()
-        stderr.fileHandleForWriting.closeFile()
-        control.scheduleTimeout(after: timeoutSeconds)
-
-        // Each blocking POSIX reader owns a dedicated serial queue. The detached consumers
-        // only await bounded, acknowledged chunks, so neither pipe can block the other or a
-        // Swift cooperative executor while the owned child is still alive.
-        let stdoutReader = AudioDedicatedPipeReader(
-            handle: stdout.fileHandleForReading, label: "audio-provider.stdout")
-        let stderrReader = AudioDedicatedPipeReader(
-            handle: stderr.fileHandleForReading, label: "audio-provider.stderr")
-        stdoutReader.start()
-        stderrReader.start()
-        let stdoutTask = Task.detached(priority: .userInitiated) {
-            await AudioProviderProtocol.readStdout(stdoutReader, runID: runID,
-                                                   control: control, emit: emit)
-        }
-        let stderrTask = Task.detached(priority: .utility) {
-            await Self.readStderr(stderrReader)
-        }
-
-        let status = await withTaskCancellationHandler {
-            await exit.wait()
-        } onCancel: {
-            control.requestStop(.cancelled)
-        }
-        control.markExited()
-        let stdoutResult = await stdoutTask.value
-        let stderrResult = await stderrTask.value
-        stdout.fileHandleForReading.closeFile()
-        stderr.fileHandleForReading.closeFile()
-
-        if let reason = control.stopReason {
-            switch reason {
-            case .cancelled:
-                throw CancellationError()
-            case .timeout:
-                throw InferenceFailure.backendFailed(
-                    "Audio provider timed out after \(timeoutSeconds) seconds; the owned child exited and pipes drained.")
-            case .protocolFailure(let message):
-                throw InferenceFailure.backendFailed(message + Self.stderrSuffix(stderrResult.retained))
-            }
-        }
-        if let failure = stdoutResult.failure {
-            throw InferenceFailure.backendFailed(failure + Self.stderrSuffix(stderrResult.retained))
-        }
-        if let failure = stderrResult.failure {
-            throw InferenceFailure.backendFailed(
-                "Cannot drain audio provider stderr: \(failure)." + Self.stderrSuffix(stderrResult.retained))
-        }
-        guard status == 0 else {
-            throw InferenceFailure.backendFailed(
-                "Audio provider exited with status \(status)." + Self.stderrSuffix(stderrResult.retained))
-        }
-        guard let terminal = stdoutResult.terminal else {
+        if let failure = result.failure { throw InferenceFailure.backendFailed(failure) }
+        guard let terminal = result.terminal else {
             throw InferenceFailure.backendFailed("Audio provider exited without one result terminal event.")
         }
         switch terminal {
-        case .result(let result): return result
+        case .result(let value): return value
         case .error(let kind, let message):
             throw InferenceFailure.backendFailed("Audio provider reported \(kind): \(message)")
         }
-    }
-
-    private struct StderrResult: Sendable {
-        var retained = Data()
-        var failure: String?
-    }
-
-    private static func readStderr(_ reader: AudioDedicatedPipeReader) async -> StderrResult {
-        var retained = Data()
-        while true {
-            switch await reader.next() {
-            case .data(let data):
-                let available = 1_048_576 - retained.count
-                if available > 0 { retained.append(data.prefix(available)) }
-                reader.acknowledge()
-            case .end:
-                return StderrResult(retained: retained)
-            case .failure(let code, let message):
-                return StderrResult(
-                    retained: retained,
-                    failure: "POSIX read failed with errno \(code): \(message)")
-            }
-        }
-    }
-
-    private static func stderrSuffix(_ data: Data) -> String {
-        guard !data.isEmpty else { return "" }
-        let text = String(decoding: data, as: UTF8.self)
-        return " Stderr: " + text
-    }
-}
-
-fileprivate enum AudioPipeRead: Sendable {
-    case data(Data)
-    case end
-    case failure(code: Int32, message: String)
-}
-
-// The lock protects the single-slot rendezvous; the queue is the sole POSIX reader.
-// @unchecked is limited to this ownership bridge because DispatchQueue requires a
-// Sendable capture while FileHandle itself does not model that ownership in Swift.
-fileprivate final class AudioDedicatedPipeReader: @unchecked Sendable {
-    private let fileDescriptor: Int32
-    private let queue: DispatchQueue
-    private let lock = NSLock()
-    private let consumed = DispatchSemaphore(value: 0)
-    private var pending: AudioPipeRead?
-    private var waiter: CheckedContinuation<AudioPipeRead, Never>?
-    private var started = false
-
-    init(handle: FileHandle, label: String) {
-        fileDescriptor = handle.fileDescriptor
-        queue = DispatchQueue(label: "com.d.audio.\(label).\(UUID().uuidString)", qos: .userInitiated)
-    }
-
-    func start() {
-        let shouldStart = lock.withLock { () -> Bool in
-            guard !started else { return false }
-            started = true
-            return true
-        }
-        guard shouldStart else { return }
-        queue.async { [self] in drain() }
-    }
-
-    func next() async -> AudioPipeRead {
-        await withCheckedContinuation { continuation in
-            lock.lock()
-            if let pending {
-                self.pending = nil
-                lock.unlock()
-                continuation.resume(returning: pending)
-            } else {
-                precondition(waiter == nil, "Audio pipe reader has more than one consumer")
-                waiter = continuation
-                lock.unlock()
-            }
-        }
-    }
-
-    func acknowledge() {
-        consumed.signal()
-    }
-
-    private func drain() {
-        var buffer = [UInt8](repeating: 0, count: 64 * 1024)
-        while true {
-            let count = buffer.withUnsafeMutableBytes { bytes in
-                Darwin.read(fileDescriptor, bytes.baseAddress, bytes.count)
-            }
-            if count > 0 {
-                offer(.data(Data(buffer.prefix(count))))
-                consumed.wait()
-            } else if count == 0 {
-                offer(.end)
-                return
-            } else {
-                let code = errno
-                if code == EINTR { continue }
-                offer(.failure(code: code, message: String(cString: strerror(code))))
-                return
-            }
-        }
-    }
-
-    private func offer(_ value: AudioPipeRead) {
-        lock.lock()
-        if let waiter {
-            self.waiter = nil
-            lock.unlock()
-            waiter.resume(returning: value)
-        } else {
-            precondition(pending == nil, "Audio pipe reader exceeded its single-slot buffer")
-            pending = value
-            lock.unlock()
-        }
-    }
-}
-
-private final class AudioProcessExit: @unchecked Sendable {
-    private let lock = NSLock()
-    private var status: Int32?
-    private var waiters: [CheckedContinuation<Int32, Never>] = []
-
-    func wait() async -> Int32 {
-        await withCheckedContinuation { continuation in
-            lock.lock()
-            if let status {
-                lock.unlock()
-                continuation.resume(returning: status)
-            } else {
-                waiters.append(continuation)
-                lock.unlock()
-            }
-        }
-    }
-
-    func finish(_ status: Int32) {
-        lock.lock()
-        guard self.status == nil else { lock.unlock(); return }
-        self.status = status
-        let pending = waiters
-        waiters.removeAll()
-        lock.unlock()
-        for waiter in pending { waiter.resume(returning: status) }
-    }
-}
-
-fileprivate final class AudioOwnedProcessControl: @unchecked Sendable {
-    enum StopReason: Sendable, Equatable {
-        case cancelled
-        case timeout
-        case protocolFailure(String)
-    }
-
-    private let lock = NSLock()
-    private let graceSeconds: Double
-    private var process: Process?
-    private var exited = false
-    private var reason: StopReason?
-    private var timeoutItem: DispatchWorkItem?
-    private var killItem: DispatchWorkItem?
-
-    init(graceSeconds: Double) { self.graceSeconds = graceSeconds }
-
-    var stopReason: StopReason? {
-        lock.withLock { reason }
-    }
-
-    func attach(_ process: Process) {
-        let shouldTerminate = lock.withLock { () -> Bool in
-            self.process = process
-            return reason != nil && !exited
-        }
-        if shouldTerminate { process.terminate() }
-    }
-
-    func scheduleTimeout(after seconds: Double) {
-        let item = DispatchWorkItem { [weak self] in self?.requestStop(.timeout) }
-        lock.withLock {
-            guard !exited, reason == nil else { return }
-            timeoutItem = item
-            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + seconds, execute: item)
-        }
-    }
-
-    func requestStop(_ requested: StopReason) {
-        var target: Process?
-        var escalation: DispatchWorkItem?
-        lock.lock()
-        if reason == nil { reason = requested }
-        timeoutItem?.cancel()
-        timeoutItem = nil
-        if !exited, killItem == nil {
-            target = process
-            let item = DispatchWorkItem { [weak self] in self?.forceKillIfRunning() }
-            killItem = item
-            escalation = item
-        }
-        lock.unlock()
-        target?.terminate()
-        if let escalation {
-            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + graceSeconds,
-                                                           execute: escalation)
-        }
-    }
-
-    func markExited() {
-        lock.withLock {
-            exited = true
-            timeoutItem?.cancel()
-            killItem?.cancel()
-            timeoutItem = nil
-            killItem = nil
-            process = nil
-        }
-    }
-
-    private func forceKillIfRunning() {
-        let pid: Int32? = lock.withLock {
-            guard !exited, let process, process.isRunning else { return nil }
-            return process.processIdentifier
-        }
-        if let pid { _ = Darwin.kill(pid, SIGKILL) }
     }
 }
 
@@ -422,9 +125,9 @@ enum AudioProviderProtocol {
     ]
 
     fileprivate static func readStdout(
-        _ reader: AudioDedicatedPipeReader,
+        _ reader: LocalDedicatedPipeReader,
         runID: UUID,
-        control: AudioOwnedProcessControl,
+        control: LocalOwnedProcessControl,
         emit: @escaping @Sendable (InferenceOutput) async throws -> Void
     ) async -> AudioStdoutResult {
         var result = AudioStdoutResult()
@@ -623,7 +326,7 @@ enum AudioProviderProtocol {
         _ line: Data,
         runID: UUID,
         result: inout AudioStdoutResult,
-        control: AudioOwnedProcessControl,
+        control: LocalOwnedProcessControl,
         emit: @escaping @Sendable (InferenceOutput) async throws -> Void
     ) async {
         guard !line.isEmpty else {
@@ -724,7 +427,7 @@ enum AudioProviderProtocol {
     }
 
     private static func fail(_ result: inout AudioStdoutResult, _ message: String,
-                             control: AudioOwnedProcessControl) {
+                             control: LocalOwnedProcessControl) {
         if result.failure == nil {
             result.failure = message
             control.requestStop(.protocolFailure(message))

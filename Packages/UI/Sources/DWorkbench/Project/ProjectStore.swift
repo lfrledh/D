@@ -400,6 +400,7 @@ public actor ProjectStore {
         let index = try documentIndex(documentID ?? manifest.activeDocumentID)
         let document = manifest.documents[index]
         switch request.input {
+        case .video: throw ProjectStoreError.invalidProject("视频工作台尚未开放；不能把后端实验任务写入现有作品。")
         case .image:
             guard document.kind == .image else {
                 throw ProjectStoreError.invalidProject("只有图像文档能创建图像任务。")
@@ -469,6 +470,7 @@ public actor ProjectStore {
         try checkLocation()
         var candidate = manifest
         switch candidate.jobs[index].request.input {
+        case .video: throw ProjectStoreError.invalidProject("视频工作台尚未开放；不能把后端实验任务写入现有作品。")
         case .image:
             guard !result.artifacts.isEmpty else { throw ProjectStoreError.invalidProject("生成任务没有交付图片。") }
             for artifact in result.artifacts {
@@ -1898,6 +1900,7 @@ private enum ProjectFiles {
                 throw ProjectStoreError.invalidProject("任务缺少文档。")
             }
             switch job.request.input {
+            case .video: throw ProjectStoreError.invalidProject("视频工作台尚未开放；不能加载为已支持的创作任务。")
             case .image:
                 guard document.kind == .image else {
                     throw ProjectStoreError.invalidProject("图像任务不属于图像文档。")

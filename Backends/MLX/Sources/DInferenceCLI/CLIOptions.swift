@@ -3,7 +3,7 @@ import DInference
 import DMLXBackend
 import Foundation
 
-enum CLICapability: String, Sendable, Codable { case text, image, audio }
+enum CLICapability: String, Sendable, Codable { case text, image, audio, video }
 enum CLIImageProfile: String, Sendable, Codable { case verified512, scalableKlein4B }
 
 struct CLIOptions: Sendable, Codable {
@@ -46,6 +46,14 @@ struct CLIOptions: Sendable, Codable {
     var audioVendor: String?
     var audioManifest: String?
     var audioLicenseAcknowledged = false
+    var videoPython: String?
+    var videoScript: String?
+    var videoTokenizer: String?
+    var negativePrompt = ""
+    var frames = 17
+    var fpsNumerator: Int32 = 16
+    var fpsDenominator: Int32 = 1
+    var shift: Float = 8
     var timeoutSeconds: Double = 600
 
     var memoryBudgetBytes: UInt64 { memoryBudgetMiB * 1024 * 1024 }
@@ -58,6 +66,7 @@ struct CLIOptions: Sendable, Codable {
         case .text: "mlx.text"
         case .image: "mlx.image.flux2-klein"
         case .audio: "mlx.audio.sa3"
+        case .video: "mlx.video.wan21"
         }
     }
     var selectedImageProfile: ImageExecutionProfile {
@@ -71,7 +80,7 @@ struct CLIOptions: Sendable, Codable {
       --model PATH                 Absolute local model directory (required)
       --prompt TEXT                Prompt, including an empty string
       --prompt-file PATH           Read a UTF-8 prompt from a regular file (maximum: 1 MiB)
-      --capability text|image|audio
+      --capability text|image|audio|video
       --memory-budget-mib N        Admission budget (default: text 2048, image/audio 8192)
       --inspect                    Estimate resources without running inference
       --revision STRING            Required pinned revision for audio
@@ -98,6 +107,11 @@ struct CLIOptions: Sendable, Codable {
       --audio-license-acknowledged true
                                    Caller explicitly confirms it already has model rights
       --timeout-seconds FLOAT      Audio child timeout (default: 600)
+      --video-python PATH --video-script PATH --video-tokenizer PATH
+      --negative-prompt TEXT       Required explicit video negative condition (may be empty)
+      --frames N --fps-numerator N --fps-denominator N --shift FLOAT
+                                   Video: 832x480, 17 frames at 16 fps, 50 steps, guidance 6, shift 8
+                                   Explicit revision, memory budget, artifacts and local runtime required
       --help, -h
 
     Text writes generated text to stdout. Image/audio write artifact JSON lines to stdout;
@@ -107,6 +121,8 @@ struct CLIOptions: Sendable, Codable {
 
     static func parse(_ arguments: [String]) throws -> Self? {
         let valueOptions: Set<String> = [
+            "--video-python", "--video-script", "--video-tokenizer", "--negative-prompt",
+            "--frames", "--fps-numerator", "--fps-denominator", "--shift",
             "--model", "--prompt", "--prompt-file", "--max-tokens", "--temperature", "--top-p",
             "--max-prompt-tokens", "--max-output-tokens", "--cache-limit-mib",
             "--memory-budget-mib", "--revision", "--report", "--cancel-after-chunks", "--repeat",
@@ -166,7 +182,7 @@ struct CLIOptions: Sendable, Codable {
             promptFile = path
         }
         guard let capability = CLICapability(rawValue: values["--capability"] ?? "text") else {
-            throw CLIArgumentError("--capability must be text, image, or audio.")
+            throw CLIArgumentError("--capability must be text, image, audio, or video.")
         }
         var options = Self(model: model, prompt: prompt)
         options.promptFile = promptFile
@@ -189,11 +205,14 @@ struct CLIOptions: Sendable, Codable {
             "--audio-strength", "--audio-profile", "--audio-python", "--audio-script",
             "--audio-vendor", "--audio-manifest", "--audio-license-acknowledged", "--timeout-seconds",
         ]
+        let videoOnly = ["--video-python", "--video-script", "--video-tokenizer", "--negative-prompt",
+                         "--frames", "--fps-numerator", "--fps-denominator", "--shift"]
         let forbidden: [String]
         switch capability {
-        case .text: forbidden = imageOnly + sharedMedia + audioOnly
-        case .image: forbidden = textFlags + audioOnly
-        case .audio: forbidden = textFlags + imageOnly
+        case .text: forbidden = imageOnly + sharedMedia + audioOnly + videoOnly
+        case .image: forbidden = textFlags + audioOnly + videoOnly
+        case .audio: forbidden = textFlags + imageOnly + videoOnly
+        case .video: forbidden = textFlags + ["--image-profile", "--image-memory-limit-mib"] + audioOnly.filter { $0 != "--timeout-seconds" }
         }
         if let key = forbidden.first(where: { values[$0] != nil }) {
             throw CLIArgumentError("\(key) cannot be used with --capability \(capability.rawValue).")
@@ -208,6 +227,9 @@ struct CLIOptions: Sendable, Codable {
         options.maxTokens = try positiveInt(values, "--max-tokens", fallback: options.maxTokens)
         if capability == .text, options.maxTokens > options.maxOutputTokens {
             throw CLIArgumentError("--max-tokens must not exceed --max-output-tokens.")
+        }
+        if capability == .video {
+            options.width = 832; options.height = 480; options.steps = 50; options.guidance = 6
         }
         options.width = try positiveInt(values, "--width", fallback: options.width)
         options.height = try positiveInt(values, "--height", fallback: options.height)
@@ -254,15 +276,47 @@ struct CLIOptions: Sendable, Codable {
                 options.imageMemoryLimitMiB = value
             }
         }
-        if capability == .image || capability == .audio {
+        if capability != .text {
             guard let path = absolute(values["--artifacts"]) else {
                 throw CLIArgumentError("\(capability.rawValue.capitalized) mode requires --artifacts as an absolute task directory.")
             }
             options.artifacts = path
         }
         if capability == .audio { try parseAudio(values, into: &options) }
+        if capability == .video { try parseVideo(values, into: &options) }
         try validateDestinations(options)
         return options
+    }
+
+    var videoRequest: VideoRequest {
+        VideoRequest(prompt: prompt, negativePrompt: negativePrompt, width: width, height: height,
+            frameCount: frames, frameRate: .init(numerator: fpsNumerator, denominator: fpsDenominator),
+            steps: steps, guidanceScale: guidance, scheduleShift: shift, seed: seed,
+            executionProfile: VideoBackendConfiguration.profile)
+    }
+
+    private static func parseVideo(_ values: [String: String], into options: inout Self) throws {
+        guard let python = absolute(values["--video-python"]), let script = absolute(values["--video-script"]),
+              let tokenizer = absolute(values["--video-tokenizer"]), let negative = values["--negative-prompt"],
+              options.revision == VideoBackendConfiguration.revision,
+              values["--memory-budget-mib"] != nil, options.memoryBudgetBytes <= Int64.max else {
+            throw CLIArgumentError("Video requires explicit runtime/tokenizer, negative prompt, pinned revision and representable memory budget.")
+        }
+        options.videoPython = python; options.videoScript = script; options.videoTokenizer = tokenizer
+        options.negativePrompt = negative
+        options.frames = try positiveInt(values, "--frames", fallback: 17)
+        let numerator = try positiveInt(values, "--fps-numerator", fallback: 16)
+        let denominator = try positiveInt(values, "--fps-denominator", fallback: 1)
+        guard let n = Int32(exactly: numerator), let d = Int32(exactly: denominator) else {
+            throw CLIArgumentError("Video rational fps must fit Int32.")
+        }
+        options.fpsNumerator = n; options.fpsDenominator = d
+        options.shift = try finiteFloat(values, "--shift", fallback: 8, where: { $0 > 0 }, description: "finite and positive")
+        guard let timeout = Double(values["--timeout-seconds"] ?? "3600"), timeout.isFinite, timeout > 0 else {
+            throw CLIArgumentError("Video timeout must be finite and positive.")
+        }
+        options.timeoutSeconds = timeout
+        do { try options.videoRequest.validate() } catch { throw CLIArgumentError(error.localizedDescription) }
     }
 
     private static func parseAudio(_ values: [String: String], into options: inout Self) throws {
@@ -342,7 +396,11 @@ struct CLIOptions: Sendable, Codable {
 
     private static func validateDestinations(_ options: Self) throws {
         guard options.capability != .text else { return }
-        let protectedDirectories = [options.model, options.audioVendor].compactMap { $0 }.map {
+        let videoRuntimeDirectories = [options.videoScript, options.videoPython].compactMap { $0 }.map {
+            URL(fileURLWithPath: $0).deletingLastPathComponent().path
+        }
+        let protectedDirectories = ([options.model, options.audioVendor, options.videoTokenizer].compactMap { $0 }
+            + videoRuntimeDirectories).map {
             URL(fileURLWithPath: $0).standardizedFileURL.resolvingSymlinksInPath()
         }
         if let artifacts = options.artifacts {
@@ -358,7 +416,7 @@ struct CLIOptions: Sendable, Codable {
         if let report = options.report {
             let output = URL(fileURLWithPath: report).standardizedFileURL.resolvingSymlinksInPath()
             guard protectedDirectories.allSatisfy({ !contains($0, output) }),
-                  [options.audioSource, options.audioManifest, options.audioScript].compactMap({ $0 }).allSatisfy({
+                  [options.audioSource, options.audioManifest, options.audioScript, options.videoScript, options.videoPython, options.promptFile].compactMap({ $0 }).allSatisfy({
                       URL(fileURLWithPath: $0).standardizedFileURL.resolvingSymlinksInPath() != output
                   }) else {
                 throw CLIArgumentError("--report must not target model, vendor, or audio input.")
@@ -376,14 +434,20 @@ struct CLIOptions: Sendable, Codable {
         }
         guard let destination = raw("--report"), !destination.isEmpty, !destination.contains("\0") else { return nil }
         let capability = raw("--capability") ?? "text"
-        guard capability == "image" || capability == "audio" else { return destination }
+        guard capability == "image" || capability == "audio" || capability == "video" else { return destination }
         let output = URL(fileURLWithPath: destination).standardizedFileURL.resolvingSymlinksInPath()
-        for key in ["--model", "--audio-vendor"] {
+        for key in ["--model", "--audio-vendor", "--video-tokenizer"] {
             if let path = raw(key), contains(URL(fileURLWithPath: path).standardizedFileURL.resolvingSymlinksInPath(), output) {
                 return nil
             }
         }
-        for key in ["--audio-source", "--audio-manifest", "--audio-script"] {
+        if capability == "video" {
+            for key in ["--video-script", "--video-python"] {
+                if let path = raw(key), contains(URL(fileURLWithPath: path).deletingLastPathComponent()
+                    .standardizedFileURL.resolvingSymlinksInPath(), output) { return nil }
+            }
+        }
+        for key in ["--audio-source", "--audio-manifest", "--audio-script", "--video-script", "--video-python", "--prompt-file"] {
             if let input = raw(key),
                URL(fileURLWithPath: input).standardizedFileURL.resolvingSymlinksInPath() == output { return nil }
         }

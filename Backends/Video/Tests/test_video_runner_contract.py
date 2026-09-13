@@ -111,6 +111,19 @@ class RunnerContract(unittest.TestCase):
         too_long = request(); too_long["negativePrompt"] = "cat " * 1024
         with self.assertRaisesRegex(ValueError, "no truncation"): tokenize_conditions(directory, too_long)
 
+    def test_pinned_tokenizer_matches_official_local_loader(self):
+        from transformers import AutoTokenizer
+        import numpy as np
+        directory = Path(os.environ["D_VIDEO_TOKENIZER"])
+        reference = AutoTokenizer.from_pretrained(str(directory), local_files_only=True, trust_remote_code=False)
+        for text in ("白猫 &amp; 🎞️ é", "A white cat walks slowly.", "<extra_id_0> rain", "cat " * 500):
+            r = request(); r["prompt"] = text
+            actual = tokenize_conditions(directory, r)[0][0]
+            expected = reference(clean_text(text), truncation=False, padding="max_length", max_length=512,
+                                 add_special_tokens=True, return_tensors="np")
+            np.testing.assert_array_equal(actual["input_ids"], expected["input_ids"])
+            np.testing.assert_array_equal(actual["attention_mask"], expected["attention_mask"])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

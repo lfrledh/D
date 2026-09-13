@@ -4,6 +4,7 @@ public enum InferenceCapability: String, Sendable, Codable, Hashable {
     case textGeneration
     case imageGeneration
     case audioGeneration
+    case videoGeneration
 }
 
 /// A resolved local model. Downloading and obtaining sandbox access belong to the host.
@@ -62,12 +63,14 @@ public enum InferenceInput: Sendable, Codable, Equatable {
     case text(TextRequest)
     case image(ImageRequest)
     case audio(AudioRequest)
+    case video(VideoRequest)
 
     public var capability: InferenceCapability {
         switch self {
         case .text: .textGeneration
         case .image: .imageGeneration
         case .audio: .audioGeneration
+        case .video: .videoGeneration
         }
     }
 }
@@ -89,6 +92,8 @@ public struct InferenceRequest: Sendable, Codable, Equatable, Identifiable {
             throw InferenceFailure.invalidRequest("Model directory must be a local absolute file URL.")
         }
         switch input {
+        case .video(let video):
+            try video.validate()
         case .text(let text):
             guard text.maxTokens > 0, text.temperature.isFinite,
                   text.temperature >= 0, text.topP.isFinite, text.topP > 0, text.topP <= 1 else {
