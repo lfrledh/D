@@ -34,6 +34,14 @@ public struct TextWorkbenchView: View {
     private var onGenerationEditingError: ((String?) -> Void)?
     @State private var rawPromptTokenLimit: String?
     @State private var rawOutputTokenLimit: String?
+    private var parameterLayoutProbe: ((String, CGRect) -> Void)?
+    private var scrollToOutputForCheck = false
+
+    /// Inspect actual SwiftUI geometry; do not depend on its private AppKit implementation.
+    func observingParameterLayout(scrollToOutput: Bool = false, _ probe: @escaping (String, CGRect) -> Void) -> Self {
+        var copy = self; copy.parameterLayoutProbe = probe; copy.scrollToOutputForCheck = scrollToOutput
+        return copy
+    }
 
     public init(session: TextDraftSession, selection: NSRange, instruction: Binding<String>, modelStatus: String,
                 canGenerate: Bool, canAccept: Bool, canUndo: Bool, isSaving: Bool, saveStatus: String,
@@ -78,13 +86,22 @@ public struct TextWorkbenchView: View {
 
     public var body: some View {
       if presentation == .parameters {
-        ScrollView {
+        ScrollViewReader { reader in
+         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 Text("改写参数").font(.headline)
                 Text(modelStatus).font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("text-model-status")
                 Button("选择文字模型…", action: onChooseModel).accessibilityIdentifier("text-model-select")
                 rewriteControls
             }.padding(16)
+         }
+         .coordinateSpace(name: "text-parameters")
+         .task {
+             if scrollToOutputForCheck {
+                 await Task.yield()
+                 reader.scrollTo("text-output-scroll-target", anchor: .bottom)
+             }
+         }
         }
       } else {
         GeometryReader { viewport in
@@ -185,11 +202,14 @@ public struct TextWorkbenchView: View {
                     .textFieldStyle(.roundedBorder)
                     .accessibilityLabel("输入 token 上限")
                     .accessibilityIdentifier("text-input-limit")
+                    .textParameterMeasured("text-input-limit", probe: parameterLayoutProbe)
                 Text("输出 token 上限").font(.caption).foregroundStyle(.secondary)
                 TextField("输出 token 上限", text: outputTokenLimit)
                     .textFieldStyle(.roundedBorder)
                     .accessibilityLabel("输出 token 上限")
                     .accessibilityIdentifier("text-output-limit")
+                    .textParameterMeasured("text-output-limit", probe: parameterLayoutProbe)
+                    .id("text-output-scroll-target")
                 Text("Token 不是字数；输入包括改写包装和模板。真实超限会报错，原文不会被截断。")
                     .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -355,5 +375,11 @@ public struct TextWorkbenchView: View {
             Text("尚无候选。改写结果会在此处显示，原稿不会被自动替换。")
                 .foregroundStyle(.secondary)
         }
+    }
+}
+
+private extension View {
+    func textParameterMeasured(_ id: String, probe: ((String, CGRect) -> Void)?) -> some View {
+        onGeometryChange(for: CGRect.self) { $0.frame(in: .named("text-parameters")) } action: { probe?(id, $0) }
     }
 }

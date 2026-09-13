@@ -67,6 +67,10 @@ struct GenerationInspector: View {
             }
             .padding(20)
         }
+        .onChange(of: model.activeDocumentID) { _, _ in
+            // Uncommitted field text belongs to its previous document, never the next one.
+            rawImageWidth = nil; rawImageHeight = nil
+        }
         .accessibilityIdentifier("generation-inspector-scroll")
         .safeAreaInset(edge: .bottom, spacing: 0) {
             generateButton
