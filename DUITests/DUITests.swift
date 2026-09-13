@@ -406,7 +406,16 @@ final class DUITests: XCTestCase {
         XCTAssertTrue(path.waitForExistence(timeout: 8))
         path.click()
         app.typeKey("a", modifierFlags: .command)
-        path.typeText(url.path)
+        // XCTest's long single typeText event can lose its trailing keystrokes in
+        // the native Go To field. Send bounded consecutive chunks, letting XCTest
+        // wait for application idleness between calls. Never retype a lost suffix
+        // or accept a prefix: the full-path and opened-project assertions below stay.
+        var remaining = url.path[...]
+        while !remaining.isEmpty {
+            let chunk = remaining.prefix(32)
+            path.typeText(String(chunk))
+            remaining = remaining.dropFirst(chunk.count)
+        }
         // Native path processing and its accessibility snapshot may settle after typing.
         // Observe only: never retype, truncate the fixture path, or confirm a partial path.
         let initiallyObservedPath = path.value as? String

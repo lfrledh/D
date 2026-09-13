@@ -186,3 +186,7 @@ Sol/high独立read-only会话 `review2/route-observed.json` 已完成（约549.6
 固定受测代码 `a2d7aa2f3ed3ec74cdfa9dd501a83ddc3062fe36`：53核心、329工作台方法通过；普通App/测试构建通过，6宿主方法通过。新增缩放反例在未修代码中280×140视口下字段仍156..180而失败，修后116..140通过；原320×180检查单独/全套重跑本身可过，不能把原偶发失败描述成已证实的生产滚动缺陷。音频120/121、无排队与输入保护通过。非实现者 `/root/align_continuation_review` 在独立detached快照完成只读审阅，无新增发现；未执行独立测试。前次Sol审核与所有失败保留。
 
 XCTest nativeUI本次未进入测试：系统coreautha要求“XCTest 正在尝试 Enable UI Automation”密码确认，runner初始化超时，退出65。未算UI0/0通过，不改变测试标准/系统权限；已单次Glass并请求用户只在系统窗口确认。普通沙盒重建与内嵌音频封装、codesign完整性及诊断通过；真实GUI和音频本轮仍待执行。新产物/独立launch已准备但尚未启动。证据目录 `/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-ALIGN-01/run-20260913T131843Z-continuation`，原普通D四文件与源scheme/索引保持。
+
+### 系统确认后原生复验（2026-09-13）
+
+用户回复“已确认”，同版UI九项实际执行：七项通过，两项在原生GoToWindow的长路径输入失败。保留`native-tests-r2`实际7/9；附件显示完整路径128字符仅输入至UUID中间，8秒后仍缺尾部，并非项目读写/迁移失败。Lead只调整`DUITests.swift/openFixture`的事件发送：同一路径连续分32个Character发送，利用XCTest每次调用的idle同步；不重试丢失尾部、不改原完整路径相等和打开项目断言、不用剪贴板、不改App。该新增测试驱动文件属于本次必要验收修正；真实输入法/用户交互仍单列。
