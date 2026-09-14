@@ -17,7 +17,17 @@ public enum TextSourcesArchive {
         try unique(notebook.excerpts.map(\.id), "片段 ID 重复。")
         try unique(notebook.records.map(\.id), "回答 ID 重复。")
         try validateSources(notebook.sources, excerpts: notebook.excerpts)
-        for record in notebook.records { try validateSubmission(record.submission) }
+        for record in notebook.records {
+            guard record.completedAt.timeIntervalSinceReferenceDate.isFinite else {
+                throw TextSourcesError.invalid("历史回答时间无效。")
+            }
+            try validateMetrics(record.metrics)
+            try validateSubmission(record.submission)
+        }
+        let data = try JSONEncoder().encode(Envelope(schema_version: schemaVersion, notebook: notebook))
+        guard data.count <= TextSourcesLimits.archiveBytes else {
+            throw TextSourcesError.limit("资料归档超过 8 MiB 限制。")
+        }
     }
 
     public static func encode(_ notebook: TextSourcesNotebook) throws -> Data {
@@ -53,15 +63,20 @@ public enum TextSourcesArchive {
               !submission.sources.isEmpty, !submission.excerpts.isEmpty else {
             throw TextSourcesError.invalid("历史提交缺少问题、资料或片段。")
         }
+        try unique(submission.sources.map(\.id), "历史资料 ID 重复。")
+        try unique(submission.excerpts.map(\.id), "历史片段 ID 重复。")
         try validateSources(submission.sources, excerpts: submission.excerpts)
         try TextSourcesContext.validateModelIdentity(submission.modelID, revision: submission.modelRevision)
         let rebuilt = try TextSourcesContext.makePrompt(question: submission.question, sources: submission.sources,
                                                          excerpts: submission.excerpts)
         guard submission.request.prompt.utf8.elementsEqual(rebuilt.utf8),
               submission.request.prompt.utf8.count <= TextSourcesLimits.promptBytes,
-              submission.request.maxTokens > 0, submission.request.maxTokens <= 8_192,
-              submission.request.temperature == 0.2, submission.request.topP == 0.95,
-              submission.request.execution?.maximumPromptTokens ?? 0 > 0 else {
+              submission.request.maxTokens > 0,
+              submission.request.temperature.isFinite, submission.request.temperature == 0.2,
+              submission.request.topP.isFinite, submission.request.topP == 0.95,
+              submission.request.execution?.maximumPromptTokens ?? 0 > 0,
+              validExecutionProfileIdentifier(submission.request.execution?.profile.identifier),
+              submission.request.execution?.profile.revision ?? 0 > 0 else {
             throw TextSourcesError.invalid("历史提交的请求与冻结资料不一致。")
         }
     }
@@ -77,6 +92,23 @@ public enum TextSourcesArchive {
 
     private static func unique(_ ids: [UUID], _ message: String) throws {
         guard Set(ids).count == ids.count else { throw TextSourcesError.invalid(message) }
+    }
+
+    private static func validateMetrics(_ metrics: [String: String]) throws {
+        let allowed: Set<String> = [
+            "promptTokens", "generationTokens", "promptSeconds", "generationSeconds", "stopReason",
+            "upstreamStopReason", "modelRevision", "randomSeed", "weightBytes", "estimatedPeakBytes",
+            "executionProfileIdentifier", "executionProfileRevision", "maximumPromptTokens", "maximumOutputTokens"
+        ]
+        guard metrics.keys.allSatisfy(allowed.contains),
+              metrics.allSatisfy({ $0.key.utf8.count <= 512 && $0.value.utf8.count <= 512 }) else {
+            throw TextSourcesError.invalid("历史执行指标包含未允许或过长字段。")
+        }
+    }
+
+    private static func validExecutionProfileIdentifier(_ value: String?) -> Bool {
+        guard let value, !value.isEmpty, value.utf8.count <= 512 else { return false }
+        return !value.unicodeScalars.contains { $0.properties.generalCategory == .control }
     }
 
     private static func jsonDepth(_ data: Data) -> Int {

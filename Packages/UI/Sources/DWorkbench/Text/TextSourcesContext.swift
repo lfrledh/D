@@ -47,8 +47,9 @@ public enum TextSourcesContext {
         var valid: [String] = []
         var invalid: [String] = []
         for label in labels {
-            let number = Int(label.dropFirst(2).dropLast()) ?? 0
-            if (1...submission.excerpts.count).contains(number) {
+            let digits = String(label.dropFirst(2).dropLast())
+            let number = Int(digits)
+            if let number, String(number) == digits, number >= 1, number <= submission.excerpts.count {
                 if !valid.contains(label) { valid.append(label) }
             } else if !invalid.contains(label) {
                 invalid.append(label)
@@ -93,11 +94,11 @@ public enum TextSourcesContext {
         let scalars = Array(answer.unicodeScalars)
         var labels: [String] = []
         var index = 0
-        while index + 3 < scalars.count {
+        while index + 2 < scalars.count {
             guard scalars[index] == "[", scalars[index + 1] == "S" else { index += 1; continue }
             var cursor = index + 2
-            while cursor < scalars.count, (48...57).contains(scalars[cursor].value) { cursor += 1 }
-            guard cursor > index + 2, cursor < scalars.count, scalars[cursor] == "]" else { index += 1; continue }
+            while cursor < scalars.count, scalars[cursor] != "]" { cursor += 1 }
+            guard cursor < scalars.count else { index += 1; continue }
             labels.append(String(String.UnicodeScalarView(scalars[index...cursor])))
             index = cursor + 1
         }

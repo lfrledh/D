@@ -67,4 +67,52 @@ struct TextSourcesContextTests {
         stored.sources = []
         #expect(throws: TextSourcesError.self) { try TextSourcesArchive.validate(stored) }
     }
+
+    @Test func citationsRejectMalformedLabelsAndHandleEmptySubmission() throws {
+        let (notebook, target) = try fixture()
+        let submission = try TextSourcesContext.makeSubmission(notebook: notebook, target: target,
+                                                                modelID: "local-qwen", modelRevision: nil)
+        let checked = TextSourcesContext.citations(in: "[S1] [S01] [Sbad] [S0] [S]", submission: submission)
+        #expect(checked.validLabels == ["[S1]"])
+        #expect(checked.invalidLabels == ["[S01]", "[Sbad]", "[S0]", "[S]"])
+        let empty = TextSourcesSubmission(notebookRevision: UUID(), targetDocumentID: UUID(),
+                                          targetDocumentRevision: UUID(), question: "", sources: [], excerpts: [],
+                                          request: TextRequest(prompt: "", maxTokens: 1), modelID: "model", modelRevision: nil)
+        let emptyResult = TextSourcesContext.citations(in: "[S1]", submission: empty)
+        #expect(emptyResult.validLabels.isEmpty)
+        #expect(emptyResult.invalidLabels == ["[S1]"])
+    }
+
+    @Test func archiveRejectsHistoricalCorruptionMetricsAndWholeNotebookOverflow() throws {
+        var (notebook, target) = try fixture()
+        let submission = try TextSourcesContext.makeSubmission(notebook: notebook, target: target,
+                                                                modelID: "local-qwen", modelRevision: "r1")
+        notebook.records = [.init(submission: submission, answer: "answer", metrics: ["unknown": "value"])]
+        #expect(throws: TextSourcesError.self) { try TextSourcesArchive.validate(notebook) }
+
+        let altered = try TextSourceSnapshot(id: submission.sources[0].id, revision: UUID(),
+                                              displayName: submission.sources[0].displayName,
+                                              bytes: submission.sources[0].bytes)
+        let corrupt = TextSourcesSubmission(notebookRevision: submission.notebookRevision,
+                                             targetDocumentID: submission.targetDocumentID,
+                                             targetDocumentRevision: submission.targetDocumentRevision,
+                                             question: submission.question, sources: [altered], excerpts: submission.excerpts,
+                                             request: submission.request, modelID: submission.modelID,
+                                             modelRevision: submission.modelRevision)
+        notebook.records = [.init(submission: corrupt, answer: "answer")]
+        #expect(throws: TextSourcesError.self) { try TextSourcesArchive.validate(notebook) }
+
+        notebook.records = Array(repeating: TextSourceAnswerRecord(submission: submission, answer: "answer"),
+                                 count: TextSourcesLimits.records + 1)
+        #expect(throws: TextSourcesError.self) { try TextSourcesArchive.validate(notebook) }
+
+        let submissions = try (0..<TextSourcesLimits.records).map { _ in
+            try TextSourcesContext.makeSubmission(notebook: TextSourcesNotebook(question: notebook.question,
+                                                                                  sources: notebook.sources,
+                                                                                  excerpts: notebook.excerpts),
+                                                   target: target, modelID: "local-qwen", modelRevision: "r1")
+        }
+        notebook.records = submissions.map { .init(submission: $0, answer: String(repeating: "x", count: 600_000)) }
+        #expect(throws: TextSourcesError.self) { try TextSourcesArchive.validate(notebook) }
+    }
 }
