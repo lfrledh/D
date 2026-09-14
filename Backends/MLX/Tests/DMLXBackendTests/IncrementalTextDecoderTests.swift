@@ -111,7 +111,8 @@ struct IncrementalTextDecoderTests {
     func incompleteToolTailLimitation() throws {
         var decoder = IncrementalTextDecoder()
         let processor = ToolCallProcessor(format: .json)
-        let delta = try #require(decoder.consume("<tool"))
+        let pending = try decoder.consume("<tool")
+        let delta = try #require(pending)
         #expect(processor.processChunk(delta) == nil)
         #expect(try decoder.consume("<tool", final: true) == nil)
         #expect(processor.toolCalls.isEmpty)
