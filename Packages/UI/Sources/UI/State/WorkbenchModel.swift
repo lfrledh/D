@@ -447,7 +447,7 @@ public final class WorkbenchModel {
                 settings: UserDefaults = .standard, modelLibrary: ModelLibrary? = nil,
                 audioEnabled: Bool = false, audioRecordingEnabled: Bool = false,
                 audioTransport: AudioTransport? = nil,
-                textSourcesEnabled: Bool = ProcessInfo.processInfo.environment["D_ENABLE_TEXT_SOURCES"] == "1",
+                textSourcesEnabled: Bool = true,
                 audioPanels: any AudioWorkbenchPanelProviding = NativeAudioWorkbenchPanels()) {
         self.audioRecordingEnabled = audioRecordingEnabled
         self.audioPanels = audioPanels

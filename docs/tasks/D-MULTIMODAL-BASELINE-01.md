@@ -89,3 +89,9 @@ MB-BUILD2保持原输出/验收/权限，**允许第五路径 Backends/Audio/Pac
 M从8b0303e6be9b728ad3d51502b9b076391dbbf51d合T f58f40c6636b80f4b1fbdac7acc7d2f25c5377fe，保留历史提交71bfbf2a4bf620875d1307bc64c420d073a2749d；随后以固定I14af48c22e9dbe7ee715b171308276347fab0f68未提交合并。共享4生产文件按MB1合成，文档冲突保留双方历史并新建明确当前短段；测试迁移目标改11，原10黄金夹具不变。新增5个迁移方法，参数化场景另计；未通过前不接源。图像原可选参考nil仍合法，“拒绝空值”仅对应必需sources/非法值，不改变合法无参考契约。
 
 Lead首次预检错误地把源relative `.git`相对宿主cwd解析而触发断言，编排中后一条孤立merge命令仍执行了（仅M且no-commit）。立即核两端SHA/索引/真实commonDir、已知源scheme、hooks/忽略碰撞及实际暂存差异；确认为检查脚本路径错误而非仓库漂移。合并内容全部与固定T对应，源未变；保存R/merge-preflight-incident.json后才提交。后续依赖操作改为同一检查脚本成功后执行，避免失败检查后继续mutation；不自动reset/abort或掩盖事件。
+
+### 组合检查与候选可见入口
+
+组合17dd2dd38e0cd0c2baa768615a54ac3b383e6746：447方法/65套件零失败，3条件检查跳过；64核心/11套件零失败零跳过。非实现者审核4共享文件无阻塞；新增迁移5方法经review补齐RGB原字节、Unicode正文UTF8和publicationDurable中断恢复，定向5方法已通过。R/old-reader-probe在专属外部package依赖真实旧T/I库，分别实际以schema10/schema9 reader拒绝当前生成的schema11项目且原清单字节不变；三次进程exit0，未改旧源码或用户项目。这一检查是新普通项目的版本拒绝，不冒充所有旧格式跨机矩阵。
+
+H19已经过独立候选验收，本组合候选将WorkbenchModel的文字资料入口默认值设true，显式false注入仍可用；**只在此隔离候选编译/验收，源默认入口须组合GUI通过才接纳**。不再要求用户设置D_ENABLE_TEXT_SOURCES才能看到已获准功能。生产其他控制器/后端不改，随后普通App以不带该环境变量的方式验证。不可将17dd上旧默认的测试写成新默认已经测试；新固定版本与检查见下一回执。

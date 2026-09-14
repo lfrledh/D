@@ -15,6 +15,7 @@ struct MultimodalSchemaTests {
             let original = try Data(contentsOf: fixture.project.appendingPathComponent(asset.relativePath))
             let run = UUID()
             let input = try await store.prepareImageReference(assetID: asset.id, runID: run)
+            let inputBytes = try Data(contentsOf: input.url)
             let request = ImageReferenceProjectTests().request(input, id: run, fixture: fixture)
             _ = try await store.enqueue(request: request, documentID: imageID, capturedImageReferenceAssetID: asset.id)
             let output = try fixture.publishPNG(jobID: run, size: 512)
@@ -34,10 +35,13 @@ struct MultimodalSchemaTests {
             #expect(current.assets == legacy.assets)
             #expect(current.documents.first { $0.id == imageID } == legacy.documents.first { $0.id == imageID })
             #expect(current.documents.first { $0.id == textID }?.textDraft == legacy.documents.first { $0.id == textID }?.textDraft)
+            let beforeText = try #require(legacy.documents.first { $0.id == textID }?.textDraft?.text)
+            let afterText = try #require(current.documents.first { $0.id == textID }?.textDraft?.text)
+            #expect(beforeText.utf8.elementsEqual(afterText.utf8))
             #expect(current.documents.first { $0.id == textID }?.textSources?.sources.isEmpty == true)
             #expect(try Data(contentsOf: fixture.project.appendingPathComponent(ProjectStore.versionNineBackupFilename)) == raw)
             #expect(try Data(contentsOf: fixture.project.appendingPathComponent(asset.relativePath)) == original)
-            #expect(try Data(contentsOf: input.url).count == 512 * 512 * 3)
+            #expect(try Data(contentsOf: input.url) == inputBytes)
             try await reopened.close()
         }
     }
@@ -61,6 +65,9 @@ struct MultimodalSchemaTests {
             #expect(migrated.schemaVersion == 11)
             #expect(migrated.activeDocument?.textSources == original)
             #expect(migrated.activeDocument?.textDraft == old.activeDocument?.textDraft)
+            let oldBody = try #require(old.activeDocument?.textDraft?.text)
+            let newBody = try #require(migrated.activeDocument?.textDraft?.text)
+            #expect(oldBody.utf8.elementsEqual(newBody.utf8))
             #expect(try Data(contentsOf: fixture.project.appendingPathComponent(ProjectStore.versionTenBackupFilename)) == rawTen)
             #expect(migrated.activeDocument?.textSources?.records.map(\.submission.promptTemplate) == [.v1, .v2])
             for (before, after) in zip(original.records, migrated.activeDocument?.textSources?.records ?? []) {
@@ -118,9 +125,18 @@ struct MultimodalSchemaTests {
                 #expect(try Data(contentsOf: file) == original)
                 #expect(try Data(contentsOf: backup) == original)
             }
+            await #expect(throws: Interrupted.self) {
+                _ = try await ProjectStore.open(at: fixture.project, migrationCheckpoint: { checkpoint in
+                    if checkpoint == .publicationDurable { throw Interrupted() }
+                })
+            }
+            let published = try Data(contentsOf: file)
+            #expect(try JSONDecoder().decode(ProjectManifest.self, from: published).schemaVersion == 11)
+            #expect(try Data(contentsOf: backup) == original)
             let reopened = try await ProjectStore.open(at: fixture.project)
             #expect(await reopened.snapshot().schemaVersion == 11)
             try await reopened.close()
+            #expect(try Data(contentsOf: file) == published)
         }
     }
 
