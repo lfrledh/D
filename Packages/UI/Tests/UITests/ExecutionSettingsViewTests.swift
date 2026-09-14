@@ -54,6 +54,46 @@ struct ExecutionSettingsViewTests {
         #expect(!summary.contains("Stable Audio Medium"))
     }
 
+    @Test func lateParameterTargetIsReachableAfterModelCapabilityArrives() async throws {
+        let state = DelayedParameterState()
+        let document = try TextDraftDocument(text: "迟到参数 👩‍💻")
+        let session = TextDraftSession(document: document, engine: ParameterLayoutEngine(), backendID: "layout.fixture")
+        var rectangles: [String: CGRect] = [:]
+        let view = TextWorkbenchView(session: session, selection: .init(location: 0, length: 1),
+            instruction: .constant("简洁改写"), modelStatus: "等待模型能力", canGenerate: true,
+            canAccept: false, canUndo: false, isSaving: false, saveStatus: "正文已保存",
+            onEdit: { _ in }, onSelection: { _ in }, onGenerate: {}, onCancel: {}, onAccept: {},
+            onReject: {}, onUndo: {}, onSave: {}, onChooseModel: {})
+            .presenting(.parameters).questionParameters(true)
+            .observingParameterLayout(scrollToOutput: true) { rectangles[$0] = $1 }
+        let host = NSHostingView(rootView: DelayedParameterView(state: state, content: view))
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 320, height: 180),
+                              styleMask: [.titled], backing: .buffered, defer: false)
+        window.contentView = host
+        defer { window.contentView = nil }
+        host.frame = NSRect(x: 0, y: 0, width: 320, height: 180)
+        let firstDeadline = Date().addingTimeInterval(0.3)
+        repeat {
+            host.layoutSubtreeIfNeeded()
+            try await Task.sleep(for: .milliseconds(10))
+        } while !state.appeared && Date() < firstDeadline
+        #expect(state.appeared)
+        // Controlled delayed input, not a wait intended to declare scrolling complete.
+        try await Task.sleep(for: .milliseconds(30))
+        #expect(rectangles["text-output-limit"] == nil)
+        state.capability = .init(maximumPromptTokens: 2048, maximumOutputTokens: 256)
+        let deadline = Date().addingTimeInterval(0.3)
+        repeat {
+            host.layoutSubtreeIfNeeded()
+            try await Task.sleep(for: .milliseconds(10))
+        } while Date() < deadline
+        let output = try #require(rectangles["text-output-limit"])
+        print("TEXT_LAYOUT late target=\(output) viewport=\(host.bounds)")
+        #expect(output.width > 80 && output.height > 10)
+        #expect(output.minX >= -1 && output.maxX <= host.bounds.maxX + 1)
+        #expect(output.minY >= -1 && output.maxY <= host.bounds.maxY + 1)
+    }
+
     @Test(arguments: [false, true])
     func narrowTextParametersKeepBothNumericFieldsInsideTheHostingView(questionMode: Bool) async throws {
         let document = try TextDraftDocument(text: "中文 e\u{301} 👩‍💻")
@@ -112,5 +152,22 @@ struct ExecutionSettingsViewTests {
 private actor ParameterLayoutEngine: InferenceEngine {
     func submit(_ request: InferenceRequest, backendID: String) -> InferenceRun {
         InferenceRun(id: request.id, events: AsyncThrowingStream { $0.finish() }, cancel: {}, outcome: { .cancelled })
+    }
+}
+
+@Observable @MainActor
+private final class DelayedParameterState {
+    var capability: TextExecutionCapability?
+    var appeared = false
+}
+
+@MainActor
+private struct DelayedParameterView: View {
+    let state: DelayedParameterState
+    let content: TextWorkbenchView
+    var body: some View {
+        content.generationControls(capability: state.capability, recommendation: nil,
+            configurationError: nil, onChange: { _ in })
+            .onAppear { state.appeared = true }
     }
 }
