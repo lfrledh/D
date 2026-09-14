@@ -32,11 +32,12 @@ public actor ProjectStore {
     private var captureDirectories: [UUID: Int32] = [:]
     private var preparedImageReferences: [UUID: (assetID: UUID, reference: ImageReference)] = [:]
 
-    private init(rootURL: URL, rootFD: Int32, lockFD: Int32, manifest: ProjectManifest) {
+    private init(rootURL: URL, rootFD: Int32, lockFD: Int32, manifest: ProjectManifest, invalidatedPitchRuns: Set<UUID> = []) {
         self.rootURL = rootURL
         self.rootFD = rootFD
         self.lockFD = lockFD
         self.manifest = manifest
+        self.invalidatedPitchRuns = invalidatedPitchRuns
     }
 
     deinit {
@@ -728,7 +729,8 @@ public actor ProjectStore {
         guard fsync(rootFD) == 0 else { throw ProjectFiles.error() }
         let lock = fcntl(lockFD, F_DUPFD_CLOEXEC, 0)
         guard lock >= 0 else { throw ProjectFiles.error() }
-        let replacement = ProjectStore(rootURL: location, rootFD: directory, lockFD: lock, manifest: manifest)
+        let replacement = ProjectStore(rootURL: location, rootFD: directory, lockFD: lock, manifest: manifest,
+                                       invalidatedPitchRuns: invalidatedPitchRuns)
         transferred = true
         Darwin.close(lockFD)
         Darwin.close(rootFD)
@@ -2673,7 +2675,8 @@ private enum ProjectFiles {
         for document in value.documents {
             if let pitch = document.pitchAnalysis {
                 guard value.schemaVersion >= 12, document.audioDraft != nil,
-                      pitch.acceptedAssetIDs.count <= 64, pitch.rejectedAssetIDs.count <= 64, pitch.expiredAssetIDs.count <= 128,
+                      pitch.acceptedAssetIDs.count <= value.assets.count, pitch.rejectedAssetIDs.count <= value.assets.count,
+                      pitch.expiredAssetIDs.count <= value.assets.count,
                       Set(pitch.expiredAssetIDs).count == pitch.expiredAssetIDs.count,
                       Set(pitch.expiredAssetIDs).isDisjoint(with: pitch.acceptedAssetIDs),
                       Set(pitch.acceptedAssetIDs).count == pitch.acceptedAssetIDs.count,

@@ -6,6 +6,39 @@ import Testing
 
 @Suite("Pitch original ownership and durable decisions", .serialized)
 struct PitchWorkflowTests {
+    @Test func relocationTransfersInvalidationBeforePendingResultSave() async throws {
+        try await withPitchFixture { root, store, document, _ in
+            let project = root.appendingPathComponent("Pitch.dproject"), id = UUID()
+            let input = try await store.preparePitchInput(documentID: document.id, runID: id)
+            _ = try await store.enqueue(request: .init(id: id, model: pitchModel, input: .pitch(input)), documentID: document.id)
+            _ = try await store.invalidatePitchCandidates(documentID: document.id)
+            let replacement = try await store.relocated(to: project)
+            let output = project.appendingPathComponent("Tasks/\(id.uuidString)/pitch.json")
+            try FileManager.default.createDirectory(at: output.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try JSONEncoder().encode(pitchResult(request: input, id: id)).write(to: output)
+            let saved = try await replacement.complete(id: id, result: .init(artifacts: [.init(url: output, mediaType: PitchAnalysisResult.mediaType)]))
+            let asset = try #require(saved.assets.last)
+            #expect(saved.documents.last?.pitchAnalysis?.expiredAssetIDs == [asset.id])
+            await #expect(throws: ProjectStoreError.self) { try await replacement.decidePitchAnalysis(assetID: asset.id, documentID: document.id, accept: true) }
+            _ = try await replacement.decidePitchAnalysis(assetID: asset.id, documentID: document.id, accept: false)
+            try await replacement.close()
+        }
+    }
+
+    @Test func sixtyFifthRejectedCandidateDoesNotTrapOrDeleteHistory() async throws {
+        try await withPitchFixture { root, store, document, _ in
+            for index in 0..<65 {
+                let (_, asset) = try await pitchCandidate(store: store, documentID: document.id, project: root.appendingPathComponent("Pitch.dproject"))
+                if index == 64 { _ = try await store.invalidatePitchCandidates(documentID: document.id) }
+                _ = try await store.decidePitchAnalysis(assetID: asset.id, documentID: document.id, accept: false)
+            }
+            let saved = await store.snapshot()
+            #expect(saved.documents.last?.pitchAnalysis?.rejectedAssetIDs.count == 65)
+            #expect(saved.documents.last?.pitchAnalysis?.selectedAssetID == nil)
+            #expect(saved.jobs.count == 65 && saved.assets.count == 66)
+        }
+    }
+
     @Test func strictFileAndRoundedSourceTailAreIndependentOfProvider() throws {
         let source = PitchSourceIdentity(assetID: UUID(), documentID: UUID(), documentRevision: 0,
             contentSHA256: String(repeating: "a", count: 64), sampleRate: 16_000,
