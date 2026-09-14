@@ -57,3 +57,16 @@ Lead串行：迁移正常/严格/中断/锁回归、组合完整工作台CPU/核
 默认普通签名方案保持；直接 Xcode Run 目前只是原生构建，不隐式打包三个Python引擎。本批统一入口和说明解决完整开发版重建，不擅自更换Debug签名配置。H09、复杂长文质量、真实硬件高容量及精确图像局部服从仍单列，不因本批通过而关闭。
 
 当前已完成：H18、本次H19自动原生操作/真实7B、初始保护、只读组合和封装范围核查；待真人IME、实施、审核、组合/源验收与提交同步。本次按独立性先1写Worker负责构建入口，Lead共享兼容；不为并行制造任务。旧候选审核按未改代码复用，新合并差异另审。模型来源/耗时以运行证据为准，订阅扣费与完整Lead归因unknown。
+
+
+## H19 真人失败与恢复检查点（2026-09-14，MB1语义未变）
+
+用户原文：“缩窄后文字候选还在，但按空格不会输入，而是会输入空格。放宽后也一样。”固定CLOSE2 App代码1348aa7a87ae741c1a292ec43d6beafb54f2b078、候选606d0c6c51cc3effe3a5ac87b0e4fc9c9f5f27aa；H19不通过，不以原CPU/布局对象身份通过抵销真人失败。详情R/text-gui-r3-ime/human-ime-failure.json，当前AX问题文本和自有project.json快照同目录保存；R/text-native-acceptance.json分列已通过实际操作与阻塞。原产品文字/候选代码未改，原VIEW初交+两修复+一次Lead接管历史保留，剩余原预算为零。
+
+Lead及candidate_compatibility_scope只读核查：问题框是SwiftUI TextEditor，Binding同步回读控制器已接受的问题；没有T0原生编辑桥的hasMarkedText屏障。原测试用固定notebook与空修改回调，不覆盖真实控制器/firstResponder/markedRange/空格确认；完整壳层测试只数编辑器。尚不能证明根因；可能是组字回写或输入上下文/焦点变化，不能因缺显式屏障就判TextEditor必错。只读审核未修改、运行测试或GUI。
+
+提案仅一次新增有界Lead收尾：先记录缩放前后原生对象、焦点、markedRange/selectedRange及原生/控制器文字；根因驱动最小问题编辑桥修补和直接回归，保持原字节、跨文档归属、非法输入拒绝、取消/保存语义；非实现者审核后构建并真人验证拼音空格确认及宽窄往返。不能强制提交/取消组字、吞编辑事件、改模型/存储/签名或绕过原契约；需要扩大范围或仍不通过时停报。当前未获这次额外修补决定，未实施，不以MB或新编号刷新VIEW预算。
+
+BUILD预检线程01a09fe3-d696-7af3-8749-65f83fa981bf，实际294cd99efc470801cbac2dd0729230cbcf4d8c73；客户端turn_context确认为gpt-5.6-sol/high、任务cwd、workspace-write和network=false，共享Git不授权写；源是本run/build/preflight-observed.json。CLI预检79.40秒、exit0已结束；未发IMPLEMENT。bare rg缺PATH的exit127、可选目录不存在exit1是预检工具问题，未观察到权限拒绝或实现写入；后续显式使用已安装rg路径，不更改全局PATH。隐藏服务解析及实际费用unknown。
+
+保护结果R/protection/ime-pause.json差异为空；源仍ac39b73d64793bed9dd7089e32dcd43c0db2a2c1及原scheme唯一未暂存修改。文字测试实例PID57800/句柄23196仍运行并保留失败现场、无生成；此前两文字/两图像实例已正常退出，BUILD预检结束，非实现者只读任务结束。恢复先核实际Git/索引/用户文件/持有进程，再读R/ime-pause-checkpoint.json；不要据聊天摘要自动扩大额度。H18通过、H19失败、H09无设备分别保持；无merge/push，不关闭普通D。

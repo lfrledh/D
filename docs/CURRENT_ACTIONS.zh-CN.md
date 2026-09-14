@@ -1,5 +1,14 @@
 # D 当前行动指南
 
+## 2026-09-14 集中验收停点：参考图已过，问题框中文组字失败
+
+本节为 `codex/d-multimodal-baseline-01` 隔离准备记录，尚未接入源。源仍 `ac39b73d64793bed9dd7089e32dcd43c0db2a2c1`，文字候选 `606d0c6c51cc3effe3a5ac87b0e4fc9c9f5f27aa` 与图像候选 `14af48c22e9dbe7ee715b171308276347fab0f68` 均未修改/合并。详细证据 R=`D-Development/AgentTrials/D-MULTIMODAL-BASELINE-01/run-20260914T115845Z-human-return`，恢复读 `ime-pause-checkpoint.json`、[批次记录](tasks/D-MULTIMODAL-BASELINE-01.md)及[集中清单](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md#当前集中待办2026-09-14)。
+
+H18普通沙盒参考生成、采用/复用条件、保存冷重开与PNG文件保护通过。H19真实7B来源问答及候选/保存保护已执行，但用户在问题框组字中缩窄后报告“候选还在，空格却输入空格，放宽仍失败”，因此产品门槛未通过。现有布局测试只保留对象/内容，未验证完整输入法确认；回写或焦点/输入上下文仅为假说，未定根因。原VIEW初交+2修复+一次Lead接管预算已耗尽，尚未追加实现。H09用户仍无麦克风。
+
+独立统一构建入口只完成契约准备和受限CLI预检：D-MB-BUILD-01 / Sol high / workspace-write网络关闭，运行结束，未发IMPLEMENT。没有新的源码、构建、模型、GUI或签名修改。隔离文字测试实例PID57800仍保留失败现场、无生成；恢复核对持有句柄23196，不以重新读已关闭App的方式检查退出。源scheme内容/索引/未暂存状态及普通D四文件均与开始一致，见R/protection/ime-pause.json。下一动作是额外一次有界IME修补的明确决定；不依赖它的构建准备保留，不把未验收文字路径默认启用。
+
+
 ## 当前检查点：资料问答可靠性收尾通过，等待集中前台验收（2026-09-14 CLOSE2）
 
 用户批准下一有限可靠性阶段，离开Mac期间不探测锁屏或启动D。源起点3ae61f252621f0629f89d8546474f818bf565867；本轮源仅接纳本指南、目标状态与集中待办三份文档，产品候选仍隔离、不推送。完整受测代码为1348aa7a87ae741c1a292ec43d6beafb54f2b078；最终源/候选SHA与保护检查见 `D-Development/AgentTrials/D-TEXT-SOURCES-01/run-20260914T101555Z-reliability/final-receipt.json`（R）。任务规格TS1-CLOSE2-R1及详细结案在候选 `D-Worktrees/D-TEXT-SOURCES-01/docs/tasks/D-TEXT-SOURCES-01.md`。
