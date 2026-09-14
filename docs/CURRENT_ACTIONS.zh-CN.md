@@ -1,6 +1,12 @@
 # D 当前行动指南
 
-## 当前检查点：D-VIDEO-WORKBENCH-01已本地接纳并完成有限验收（2026-09-14）
+## 当前检查点：D-IMAGE-REFERENCE-01工程候选已备妥，真实验收待窗口（2026-09-14）
+
+用户已批准下一阶段：单参考图基础编辑。隔离分支codex/d-image-reference-01代码2a34f12c3bc6d47b6b8bf93db339659b0da4d480通过64核心、379工作台CPU、6后端输入CPU和独立普通签名App构建/封装；不等于真实模型或GUI已通过。首个适配仅单PNG参考，无mask/strength/多参考/LoRA/隐式缩放，原图保留、显式输入与浏览/采用分开。详细范围、来源/修复预算、测试及恢复见[当前任务](tasks/D-IMAGE-REFERENCE-01.md#2026-09-14-组合工程检查点等待本阶段真实资源窗口)。
+
+源仍b15be1175b80f265752f79eb45c6f3981ca13283，scheme仍唯一未暂存原差异；候选未源接纳、未推送。所有3个受限实施包及只读审核已结束；Lead共享状态/存储单一维护。当前等待本阶段普通D退出、其他GPU空闲和前台使用确认，已发一次短提示音；确认后直接恢复同任务实际图文/参考数值、资源生命周期与普通沙盒完整闭环，再源接纳/推送，不重复实现或重设预算。候选/外部证据R=D-Development/AgentTrials/D-IMAGE-REFERENCE-01/run-20260914T034346Z；最终仅文档HEAD见engineering-checkpoint.json。普通D四关键文件不变，未启动/关闭用户App，未增权限/模型/依赖。H09继续等麦克风，集中办理时提醒；HUM/歌声/研读保留独立后续位置。
+
+## 历史检查点：D-VIDEO-WORKBENCH-01已本地接纳并完成有限验收（2026-09-14）
 
 源 `codex/inference-foundation` 已从 `8d42433f65540509633515333d9549d3465ffd1a` 快进至 `2b4675cd7837532b77be4f1850c257e0458d2e09`。该SHA用于App构建/真实GUI及源复验，代码与组合受测`86a3d6c6db9e3da88e43558cfaba053ff3fd153d`相同，仅两份记录/指南差异；最终仅文档HEAD及push/远端以 `D-Development/AgentTrials/D-VIDEO-WORKBENCH-01/run-20260914T002821Z/stage-final-receipt.json` 为准。完整入口见[本阶段记录](tasks/D-VIDEO-WORKBENCH-01.md)、[使用指南](../Backends/Video/README.md)。
 
