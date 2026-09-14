@@ -1,6 +1,20 @@
 # D 当前行动指南
 
-## 当前检查点：D-VIDEO-WORKBENCH-01已本地接纳并完成有限验收（2026-09-14）
+## 当前安排：集中人工待办＋文字资料基础规划（2026-09-14）
+
+本轮只记录人工待办、核对依赖并规划下一阶段，没有新增产品实现或运行构建/模型/GUI。代码基线仍为b15be1175b80f265752f79eb45c6f3981ca13283；此轮仅文档本地集成，最终源HEAD见D-Development/AgentTrials/D-OFFLINE-PLAN-01/run-20260914T061406Z/final-receipt.json。机器默认由Lead调度；用户下次明确说回到Mac旁时，先汇总[当前集中待办](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md#当前集中待办2026-09-14)，不现在重复催解锁。
+
+**H18参考图GUI保留**：候选codex/d-image-reference-01 / 14af48c22e9dbe7ee715b171308276347fab0f68独立冻结。141/18suite同次真实后端通过、App已构建，实际受测15bea8585e53dcf731b2282b7744c37aa2f68604；最终候选其后仅五份Markdown。普通沙盒参考生成、比较采用/拒绝、冷重开、安全导出尚未因锁屏执行，未接纳/推送。恢复索引D-Development/AgentTrials/D-IMAGE-REFERENCE-01/run-20260914T034346Z/real-finish-checkpoint.json。无需以此冻结不依赖参考图schema9的新工作。H09仍等麦克风，只在回来集中处理时提醒设备。
+
+下一阶段安排为[D-TEXT-SOURCES-01：文字资料问答基础](tasks/D-TEXT-SOURCES-01.md)，归D-P08。复用已装文字模型和既有推理/调度，先完成明确TXT/Markdown来源快照、有界上下文、回答/引用记录、取消与过期保护及归档往返。资料操作在DWorkbench，不将知识库放进MLX后端。先实现可离线验证的基础服务，再完成唯一协调的生产保存/前台接线；不伪称T0现在已能保存回答来源。
+
+本轮是规划，不是已签发IMPLEMENT。实施前Lead从包含本计划的实际源完整SHA冻结共享契约、精确文件所有权和归档兼容策略；按就绪度先开两个独立Worker，后续运行/存储包在接口就绪后安排，重构建与GPU串行。实际Qwen测试允许使用已有授权/本机模型，不下载新权重；小模型证明流程与具体样例，不代表专业研读质量。新界面最终也需解锁验收，未验收路径不默认启用；只通过CPU不能宣称新产品闭环完成。
+
+边界：本阶段不做OCR、PDF/Office、embedding/向量库、联网检索、代理自动操作、音乐/歌声模型、I2V或任意组合编辑器。此后优先评估HUM短单声部文件识别的固定候选/许可，再排专门歌声；视频I2V需独立模型能力与资源验证，不能把图片塞进现有T2V请求冒充支持。它们不以文字高级功能全部完成为前置，下一具体实施仍按对应范围确定。
+
+源个人scheme唯一未暂存修改保持；参考图候选/原应用/既有作品不动。后续整合参考图时会遇到本轮已批准的纯文档分叉，应在隔离区保留历史合入明确源快照，不重选旧基线或丢弃这份待办/规划。
+
+## 历史检查点：D-VIDEO-WORKBENCH-01已本地接纳并完成有限验收（2026-09-14）
 
 源 `codex/inference-foundation` 已从 `8d42433f65540509633515333d9549d3465ffd1a` 快进至 `2b4675cd7837532b77be4f1850c257e0458d2e09`。该SHA用于App构建/真实GUI及源复验，代码与组合受测`86a3d6c6db9e3da88e43558cfaba053ff3fd153d`相同，仅两份记录/指南差异；最终仅文档HEAD及push/远端以 `D-Development/AgentTrials/D-VIDEO-WORKBENCH-01/run-20260914T002821Z/stage-final-receipt.json` 为准。完整入口见[本阶段记录](tasks/D-VIDEO-WORKBENCH-01.md)、[使用指南](../Backends/Video/README.md)。
 
