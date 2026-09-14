@@ -30,7 +30,7 @@ public struct PitchSourceIdentity: Sendable, Codable, Equatable {
 
 public struct PitchAnalysisRequest: Sendable, Codable, Equatable {
     public static let profile = "swift-f0-0.1.2-cpu-v1"
-    public static let preprocessing = "avconverter-mono16k-prime-none-v1"
+    public static let preprocessing = "avconverter-mono16k-prime-normal-v1"
     public static let modelSHA256 = "fa91bb45512b90339cf4b00a599ba8fe3a253c46419fcfe6b46df77a8a8336a5"
     public let source: PitchSourceIdentity
     /// Host-owned derived raw little-endian mono float32, exactly 16000 samples/sec.
