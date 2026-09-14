@@ -30,7 +30,7 @@ struct TextSourcesPromptVersionTests {
             let original = try Data(contentsOf: root.appendingPathComponent("project.json"))
             let store = try await ProjectStore.open(at: root)
             let current = await store.snapshot()
-            #expect(current.schemaVersion == 11)
+            #expect(current.schemaVersion == ProjectManifest.currentSchemaVersion)
             #expect(current.activeDocument?.textSources?.records.count == 1)
             try await store.close()
             #expect(try Data(contentsOf: root.appendingPathComponent(ProjectStore.versionTenBackupFilename)) == original)

@@ -24,7 +24,7 @@ public enum PitchInputPreparer {
               let output = AVAudioPCMBuffer(pcmFormat: target, frameCapacity: 4096) else {
             throw AudioMediaError.unavailable("无法准备16kHz音高分析输入")
         }
-        converter.primeMethod = .none
+        converter.primeMethod = .normal
         converter.sampleRateConverterQuality = AVAudioQuality.max.rawValue
         file.framePosition = source.startFrame
         let inputState = Mutex(PitchConversionInput(file: file, remaining: source.endFrame - source.startFrame))
@@ -56,7 +56,7 @@ public enum PitchInputPreparer {
             guard status != .error else { throw AudioMediaError.invalidMedia("分析重采样失败") }
             let count = Int(output.frameLength)
             guard bytes.count / 4 + count <= maximumOutput, let channel = output.floatChannelData?[0] else {
-                throw AudioMediaError.limitExceeded
+                throw AudioMediaError.invalidMedia("Converter produced \(bytes.count / 4)+\(count) samples; expected \(expected), status \(status.rawValue)")
             }
             for i in 0..<count {
                 let value = channel[i]

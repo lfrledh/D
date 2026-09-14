@@ -116,7 +116,8 @@ public final class ProjectSession {
         }
     }
     public var pitchIsStale: Bool {
-        guard let result = pitchResult, let draft = activeDocument?.audioDraft else { return pitchResult != nil }
+        guard let result = pitchResult, let draft = audio?.document ?? activeDocument?.audioDraft else { return pitchResult != nil }
+        if audio?.isDirty == true { return true }
         return (pitchResultAssetID.map { activeDocument?.pitchAnalysis?.expiredAssetIDs.contains($0) == true } ?? false)
             || result.source.documentID != draft.id || result.source.assetID != draft.assetID
             || result.source.documentRevision != draft.revision
@@ -191,22 +192,32 @@ public final class ProjectSession {
 
     public func decidePitchAnalysis(accept: Bool) async {
         guard !isChangingProject, !pitchIsBusy, let store, let id = pitchResultAssetID,
-              let documentID = activeDocumentID else { return }
+              let documentID = activeDocumentID, !accept || !pitchIsStale else { return }
         do {
             let saved = try await store.decidePitchAnalysis(assetID: id, documentID: documentID, accept: accept)
             guard self.store === store, documentID == activeDocumentID else { return }
             applyManifest(saved)
             pitchStatus = accept ? "分析已保留，原始录音未改变。" : "候选已拒绝，原声与已保留分析未改变。"
             await refreshPitchAnalysis()
-        } catch { pitchStatus = error.localizedDescription; report(error, context: "候选决定未保存，可重试") }
+        } catch {
+            guard self.store === store, documentID == activeDocumentID else { return }
+            pitchStatus = error.localizedDescription; report(error, context: "候选决定未保存，可重试")
+        }
     }
 
     public func exportPitchAnalysis(to url: URL) async {
         guard !isChangingProject, !pitchIsBusy, let store, let id = pitchResultAssetID else { return }
+        let documentID = activeDocumentID
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-        do { try await store.exportPitchAnalysis(assetID: id, to: url); pitchStatus = "分析JSON已导出。" }
-        catch { pitchStatus = error.localizedDescription; report(error, context: "分析未导出；已有文件保持不变") }
+        do {
+            try await store.exportPitchAnalysis(assetID: id, to: url)
+            guard self.store === store, documentID == activeDocumentID, pitchResultAssetID == id else { return }
+            pitchStatus = "分析JSON已导出。"
+        } catch {
+            guard self.store === store, documentID == activeDocumentID else { return }
+            pitchStatus = error.localizedDescription; report(error, context: "分析未导出；已有文件保持不变")
+        }
     }
 
     public private(set) var audio: ProjectAudioController?

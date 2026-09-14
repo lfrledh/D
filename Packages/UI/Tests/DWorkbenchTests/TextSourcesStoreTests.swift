@@ -126,7 +126,7 @@ struct TextSourcesStoreTests {
         }
     }
 
-    @Test func legacyEightBacksUpOriginalAndRejectsFutureTwelve() async throws {
+    @Test func legacyEightBacksUpOriginalAndRejectsFutureSchema() async throws {
         try await fixture { url in
             let store = try await ProjectStore.create(at: url, name: "旧版")
             _ = try await store.createTextDocument(text: "旧原稿")
@@ -135,10 +135,10 @@ struct TextSourcesStoreTests {
             var object = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any])
             var docs = try #require(object["documents"] as? [[String: Any]])
             for index in docs.indices { docs[index].removeValue(forKey: "textSources") }
-            object["documents"] = docs; object["schemaVersion"] = 12
+            object["documents"] = docs; object["schemaVersion"] = ProjectManifest.currentSchemaVersion + 1
             let future = try JSONSerialization.data(withJSONObject: object)
             try future.write(to: file)
-            await #expect(throws: ProjectStoreError.unsupportedSchema(12)) { try await ProjectStore.open(at: url) }
+            await #expect(throws: ProjectStoreError.unsupportedSchema(ProjectManifest.currentSchemaVersion + 1)) { try await ProjectStore.open(at: url) }
             #expect(try Data(contentsOf: file) == future)
             object["schemaVersion"] = 8
             let eight = try JSONSerialization.data(withJSONObject: object)
