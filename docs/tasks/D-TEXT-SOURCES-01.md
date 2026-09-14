@@ -72,3 +72,29 @@ H18 参考图 GUI 与 H09 麦克风仍由集中清单管理，不因本任务重
 下一独立音乐入口保留 HUM 短单声部文件→可编辑音符/普通试听：先核定候选、许可证、已授权素材和本机资源，新下载另列具体批准；不以麦克风或文字高级功能为前置。随后安排歌词/旋律控制的专门歌声里程碑，TTS 不替代演唱。I2V 需要独立模型支持，现有 Wan T2V 不能只新增参考字段冒充支持。此处只明确依赖出口，不启动这些任务。
 
 本轮没有产品实现、修复或测试运行；Lead 使用两项只读核查确认可复用入口和替代方向，没有把模型自述算作实现路由验收。规划恢复时读 CURRENT_ACTIONS 和本文，再核实源 HEAD/索引/个人 scheme、图像候选、已知任务进程和实际权限；实施前补齐未冻结的类型/存储决策和精确工作包，不直接把此草案当运行手册。
+
+
+## 2026-09-14 实施授权与冻结契约 TS1
+
+用户已批准本阶段开始。本节覆盖上方“规划/未实施”状态；保留原计划作为历史。源77396f45fdd741c0f05f1d39cde95b23e353c4a0，Lead候选codex/d-text-sources-01；R=D-Development/AgentTrials/D-TEXT-SOURCES-01/run-20260914T063313Z。准确准备SHA见各Worker request，避免自引用。H18候选不改；用户离机，GUI留集中待办。
+
+### 共享决策
+
+- TextSourcesTypes.swift是Lead维护的最小值型契约。资料UTF-8原字节内嵌保存；可去BOM解码但不改原字节、不正规化Unicode/CRLF。范围沿用Character对齐UTF-16，排除空选区。明确选择文件/片段，不读取链接、URI、Markdown代码或外部指令。
+- 每源1…512KiB、最多8源/32片段/16回答，问题16KiB、组装prompt512KiB、来源归档8MiB、项目原32MiB上限继续。超限明确拒绝，不静默删资料/历史；这些是存储/解析保护，不是模型token额度。实际token由既有后端核定，不在工作台用字符估计冒充。
+- 资料与回答记录作为ProjectDocument.textSources与textDraft并列，正式仍一次原子提交project.json。T0正文/归档v2不改。项目文字版本10，明确接受1…8、10且拒绝未实现9；v8升级前保留原字节project.v8.backup.json。v10文字缺textSources/null是损坏，旧版才可迁移为空。未来图像9合并必须另协调新版本，不能悄悄扩充已经发出的10语义。
+- 资料問答采用=向当前正文末尾添加回答（非选段替换），有非空原文时用两个换行分隔。请求冻结目标正文id/revision、来源/片段/问题、输入修订与实际TextRequest。任一输入/正文改变，旧回答仍可保存查看但不可采用；生成结果返回不能覆盖新问题。拒绝保持历史标记；撤销只针对本会话最近一次且正文仍是其采用修订，撤销和状态一次保存；重开保留历史，不承诺跨会话撤销栈。
+- 引用语法[S1]…[Sn]按提交片段顺序；只声明与本次实际输入位置相符，不声明语义真实。无引用/未知引用均明确未验证；有无效引用禁止采用，可查看/拒绝。合法引用也不自动采用。模型温度0.2/topP0.95，输出和输入token额度沿正文的实际配置。模型身份保存profile ID+精确revision，不保存本机绝对路径。metrics白名单：promptTokens/generationTokens/promptSeconds/generationSeconds/stopReason/upstreamStopReason/modelRevision/randomSeed/weightBytes/estimatedPeakBytes/executionProfileIdentifier/executionProfileRevision/maximumPromptTokens/maximumOutputTokens；最多各512 UTF8字节，其他provider字段不进入一般记录。
+- 生产归档encode与decode必须调用完整验证：所有当前和历史来源摘要/UTF8/名称、片段坐标和原文、ID唯一、数量/大小、请求prompt须重建逐字节一致；请求参数有限且合法，modelID不为路径/URL，历史targetDocumentID与所属文字文档一致（Store校验）。严格整数schema1；布尔/浮点不能冒充版本，未知版本/null/漏必需字段拒绝，JSON嵌套深度32预算。JSONDecoder合成decode本身不代表验证通过。
+
+### 首组Worker冻结授权
+
+所有任务读本节、AGENTS安全/资源规则、TextSourcesTypes.swift，以及各自列出的必要参照；不要重读所有历史。初交+最多两轮定点修复；遇权限异常先停报，只有预先声明的唯一输出/缓存入口可恢复一次。公共类型/本文/Store/Session/工程/依赖/源和图像候选均禁写，不递归，不commit。每次受限CLI的cwd、model/effort、写根、实际运行设置由Lead核验再发IMPLEMENT。
+
+SOURCES（D-TS-SOURCES-01 spec1 TS1，Sol/high）：仅可新增Packages/UI/Sources/DWorkbench/Text/TextSourceReader.swift、Packages/UI/Tests/DWorkbenchTests/TextSourceReaderTests.swift。公开API `TextSourceReader.read(at: URL) throws -> TextSourceSnapshot`，`TextSourceReader.excerpt(from: TextSourceSnapshot, range: NSRange? = nil) throws -> TextSourceExcerpt`（nil=全篇）。read仅明确绝对本地txt/md/markdown扩展，大小写不敏感；拒绝URL query/fragment、软链（含父路径）、目录/FIFO/设备、非法UTF8、空/超限；逐级文件描述符O_NOFOLLOW/O_CLOEXEC只读，不扫描父目录、不写原件、不取得系统权限；读前后文件身份/大小/修改时间变化明确失败，封闭自有FD。现有只读文件安全写法可参考ProjectStore.swift私有ProjectFiles，不修改它。测试真实临时文件、Unicode/空格路径/BOM/CRLF、损坏编码/边界/链/特殊文件、源未变和重复读取身份；不更改真实文件权限。Snapshot及Excerpt验证已由共享值提供，仍须调用，不复制弱实现。
+
+CONTEXT（D-TS-CONTEXT-01 spec1 TS1，Terra/medium）：仅可新增Packages/UI/Sources/DWorkbench/Text/TextSourcesContext.swift、TextSourcesArchive.swift，以及Packages/UI/Tests/DWorkbenchTests/TextSourcesContextTests.swift（后二路径分别沿前述Sources/Text与Tests目录）。公开API：`TextSourcesContext.makeSubmission(notebook: TextSourcesNotebook, target: TextDraftDocument, modelID: String, modelRevision: String?) throws -> TextSourcesSubmission`；`TextSourcesContext.citations(in: String, submission: TextSourcesSubmission) -> TextCitationAssessment`（公开value含validLabels:[String]、invalidLabels:[String]、summary:String，未引用必须summary明确未验证）；`TextSourcesArchive.validate(_ notebook: TextSourcesNotebook) throws`、`encode(_:) throws -> Data`、`decode(_:) throws -> TextSourcesNotebook`。独立纯值/标准库实现，不依赖Reader、不运行模型。prompt依输入顺序有清晰指令/资料数据边界并要求[S序号]，问题/片段按原字节拼入，绝不静默截断。无源/片段/问题不能submit；空notebook可以归档。归档采用schema_version1有界envelope而非另建项目格式。上节验证底线全部覆盖，反例至少含假引用、无引用、同名异源/错revision/摘要/片段、Unicode和prompt篡改、错版本类型/漏字段、数量/字节限制、不规范化输入。来源解析后的码点位置用共享Excerpt.validate；不要创建shell/URI/文件读取或第三方依赖。
+
+局部检查：Worker允许已有swiftc对自己代码/测试作typecheck，模块缓存只能自有tmp；需要导入DInference可只读R/Build-UI/arm64-apple-macosx/debug/Modules。用相同模块编译时包含共享TextSourcesTypes/TextDraft/TextGenerationSettings及自己的文件。可在自有output生成enable-testing模块再typecheck Testing测试；不运行SwiftPM内层沙箱/完整构建/GPU/GUI。行为测试由Lead在交回之后用现有swift test生产入口执行，Worker回传必须准确标注typecheck不等于测试执行。无字节码检查只用内存compile；禁止默认py_compile和安装下载。
+
+Lead接线/组合待首组交回后按TS1推进，共享存储、迁移、控制器与最小UI单一协调。所有输出独立R/<worker>/output、tmp，不写共享Git。需要变更公共契约先停报；Lead提供明确修订，旧迟到结果不自动集成。阶段完整GUI不可运行时保存候选及明确入口、不开默认产品开关、不合并未经完整门槛的新路径。
