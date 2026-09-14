@@ -99,6 +99,12 @@ public struct TextSourceExcerpt: Codable, Sendable, Equatable, Identifiable {
     }
 }
 
+/// Identifies the exact instruction template used at submission time, not the archive schema.
+public enum TextSourcesPromptTemplate: String, Codable, Sendable {
+    case v1 = "sources.v1"
+    case v2 = "sources.v2"
+}
+
 public struct TextSourcesSubmission: Codable, Sendable, Equatable, Identifiable {
     public let id: UUID
     public let notebookRevision: UUID
@@ -111,14 +117,39 @@ public struct TextSourcesSubmission: Codable, Sendable, Equatable, Identifiable 
     /// Installed profile identity and exact revision; never the local model path.
     public let modelID: String
     public let modelRevision: String?
+    public let promptTemplate: TextSourcesPromptTemplate
 
     public init(id: UUID = UUID(), notebookRevision: UUID, targetDocumentID: UUID,
                 targetDocumentRevision: UUID, question: String, sources: [TextSourceSnapshot],
-                excerpts: [TextSourceExcerpt], request: TextRequest, modelID: String, modelRevision: String?) {
+                excerpts: [TextSourceExcerpt], request: TextRequest, modelID: String, modelRevision: String?,
+                promptTemplate: TextSourcesPromptTemplate = .v1) {
         self.id = id; self.notebookRevision = notebookRevision; self.targetDocumentID = targetDocumentID
         self.targetDocumentRevision = targetDocumentRevision; self.question = question
         self.sources = sources; self.excerpts = excerpts; self.request = request
         self.modelID = modelID; self.modelRevision = modelRevision
+        self.promptTemplate = promptTemplate
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, notebookRevision, targetDocumentID, targetDocumentRevision, question, sources, excerpts
+        case request, modelID, modelRevision, promptTemplate
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        notebookRevision = try container.decode(UUID.self, forKey: .notebookRevision)
+        targetDocumentID = try container.decode(UUID.self, forKey: .targetDocumentID)
+        targetDocumentRevision = try container.decode(UUID.self, forKey: .targetDocumentRevision)
+        question = try container.decode(String.self, forKey: .question)
+        sources = try container.decode([TextSourceSnapshot].self, forKey: .sources)
+        excerpts = try container.decode([TextSourceExcerpt].self, forKey: .excerpts)
+        request = try container.decode(TextRequest.self, forKey: .request)
+        modelID = try container.decode(String.self, forKey: .modelID)
+        modelRevision = try container.decodeIfPresent(String.self, forKey: .modelRevision)
+        // Only an absent field denotes historical v1. Explicit null and unknown values are corruption.
+        promptTemplate = container.contains(.promptTemplate)
+            ? try container.decode(TextSourcesPromptTemplate.self, forKey: .promptTemplate) : .v1
     }
 }
 

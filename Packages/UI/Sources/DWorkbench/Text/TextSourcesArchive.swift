@@ -71,7 +71,7 @@ public enum TextSourcesArchive {
         try validateSources(submission.sources, excerpts: submission.excerpts)
         try TextSourcesContext.validateModelIdentity(submission.modelID, revision: submission.modelRevision)
         let rebuilt = try TextSourcesContext.makePrompt(question: submission.question, sources: submission.sources,
-                                                         excerpts: submission.excerpts)
+                                                         excerpts: submission.excerpts, template: submission.promptTemplate)
         guard submission.request.prompt.utf8.elementsEqual(rebuilt.utf8),
               submission.request.prompt.utf8.count <= TextSourcesLimits.promptBytes,
               submission.request.maxTokens > 0,

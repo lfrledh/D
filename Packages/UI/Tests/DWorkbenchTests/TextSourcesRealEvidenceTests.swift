@@ -67,7 +67,7 @@ struct TextSourcesRealEvidenceTests {
             let rebound = TextSourcesSubmission(id: request.id, notebookRevision: submission.notebookRevision,
                 targetDocumentID: target.id, targetDocumentRevision: target.revision, question: submission.question,
                 sources: submission.sources, excerpts: submission.excerpts, request: submission.request,
-                modelID: submission.modelID, modelRevision: submission.modelRevision)
+                modelID: submission.modelID, modelRevision: submission.modelRevision, promptTemplate: submission.promptTemplate)
             let note = TextSourcesNotebook(inputRevision: submission.notebookRevision, question: submission.question,
                 sources: submission.sources, excerpts: submission.excerpts,
                 records: [.init(submission: rebound, answer: answer,

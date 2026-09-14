@@ -58,7 +58,7 @@ struct TextSourcesContextTests {
                                              targetDocumentRevision: submission.targetDocumentRevision,
                                              question: submission.question, sources: submission.sources,
                                              excerpts: submission.excerpts, request: changedRequest,
-                                             modelID: submission.modelID, modelRevision: submission.modelRevision)
+                                             modelID: submission.modelID, modelRevision: submission.modelRevision, promptTemplate: submission.promptTemplate)
         var stored = notebook
         stored.records = [TextSourceAnswerRecord(submission: changed, answer: "answer")]
         #expect(throws: TextSourcesError.self) { try TextSourcesArchive.validate(stored) }
@@ -98,7 +98,7 @@ struct TextSourcesContextTests {
                                              targetDocumentRevision: submission.targetDocumentRevision,
                                              question: submission.question, sources: [altered], excerpts: submission.excerpts,
                                              request: submission.request, modelID: submission.modelID,
-                                             modelRevision: submission.modelRevision)
+                                             modelRevision: submission.modelRevision, promptTemplate: submission.promptTemplate)
         notebook.records = [.init(submission: corrupt, answer: "answer")]
         #expect(throws: TextSourcesError.self) { try TextSourcesArchive.validate(notebook) }
 
