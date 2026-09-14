@@ -54,22 +54,24 @@ public final class WorkbenchModel {
         }
     }
     public var visibleGenerationTitle: String {
-        switch creatorMode { case .image: "生成图片"; case .text: "改写所选文字"; case .audio: "生成声音候选"; case .video: "生成视频候选" }
+        switch creatorMode { case .image: "生成图片"; case .text: showingTextSources ? "根据资料回答" : "改写所选文字"; case .audio: "生成声音候选"; case .video: "生成视频候选" }
     }
+    public var showingTextSources = false
     public var canRunVisibleGeneration: Bool {
         guard presentedDocument != nil, !isChangingProject, !hasPendingEditor else { return false }
-        return switch creatorMode { case .image: projectSession.canGenerate; case .text: projectSession.canRewriteText; case .audio: projectSession.canGenerateAudioCreation; case .video: projectSession.canGenerateVideoCreation }
+        return switch creatorMode { case .image: projectSession.canGenerate; case .text: showingTextSources ? projectSession.canAskTextSources : projectSession.canRewriteText; case .audio: projectSession.canGenerateAudioCreation; case .video: projectSession.canGenerateVideoCreation }
     }
     /// Checks at actual async execution, not when the menu closure was first rendered.
-    @discardableResult public func generateCaptured(mode: CreatorMode, epoch: UInt64, documentID: UUID?) async -> Bool {
+    @discardableResult public func generateCaptured(mode: CreatorMode, epoch: UInt64, documentID: UUID?, sourcesMode: Bool? = nil) async -> Bool {
         guard mode == creatorMode, epoch == projectSession.navigationEpoch,
               documentID == presentedDocument?.id, canRunVisibleGeneration else { return false }
+        if let sourcesMode, mode == .text, sourcesMode != showingTextSources { return false }
         switch mode {
         case .video:
             guard let documentID else { return false }
             await projectSession.generateVideoCreation(contextID: projectSession.videoCreationContextID, documentID: documentID)
         case .image: await generate()
-        case .text: await projectSession.rewriteText()
+        case .text: if showingTextSources { await projectSession.askTextSources() } else { await projectSession.rewriteText() }
         case .audio:
             guard let documentID else { return false }
             await projectSession.generateAudioCreation(contextID: projectSession.audioCreationContextID, documentID: documentID)
@@ -84,7 +86,7 @@ public final class WorkbenchModel {
             guard let id = presentedDocument?.id else { return }
             await projectSession.generateVideoCreation(contextID: projectSession.videoCreationContextID, documentID: id)
         case .image: await generate()
-        case .text: await projectSession.rewriteText()
+        case .text: if showingTextSources { await projectSession.askTextSources() } else { await projectSession.rewriteText() }
         case .audio:
             guard let id = presentedDocument?.id else { return }
             await projectSession.generateAudioCreation(contextID: projectSession.audioCreationContextID, documentID: id)
@@ -304,6 +306,18 @@ public final class WorkbenchModel {
         await projectSession.registerTextModel(at: url)
     }
 
+    public func importTextSource(documentID: UUID, epoch: UInt64) async {
+        guard !isChangingProject, projectSession.textSourcesEnabled, projectSession.navigationEpoch == epoch,
+              projectSession.activeDocumentID == documentID, projectSession.textSources?.isSaving != true else { return }
+        isChoosingLocation = true
+        defer { isChoosingLocation = false }
+        let panel = NSOpenPanel()
+        panel.title = "选择 UTF-8 TXT 或 Markdown 资料"
+        panel.canChooseFiles = true; panel.canChooseDirectories = false; panel.allowsMultipleSelection = false
+        guard await panel.begin() == .OK, let url = panel.url else { return }
+        await projectSession.importTextSource(at: url, documentID: documentID, epoch: epoch)
+    }
+
     public func createDocument(name: String = "新创作") async {
         await endComparison()
         await projectSession.createDocument(name: name)
@@ -402,6 +416,7 @@ public final class WorkbenchModel {
                 settings: UserDefaults = .standard, modelLibrary: ModelLibrary? = nil,
                 audioEnabled: Bool = false, audioRecordingEnabled: Bool = false,
                 audioTransport: AudioTransport? = nil,
+                textSourcesEnabled: Bool = ProcessInfo.processInfo.environment["D_ENABLE_TEXT_SOURCES"] == "1",
                 audioPanels: any AudioWorkbenchPanelProviding = NativeAudioWorkbenchPanels()) {
         self.audioRecordingEnabled = audioRecordingEnabled
         self.audioPanels = audioPanels
@@ -409,6 +424,7 @@ public final class WorkbenchModel {
                                         modelLibrary: modelLibrary, audioEnabled: audioEnabled,
                                         audioRecordingEnabled: audioRecordingEnabled,
                                         audioTransport: audioTransport,
+                                        textSourcesEnabled: textSourcesEnabled,
                                         closeDecision: Self.chooseCloseDecision)
     }
 

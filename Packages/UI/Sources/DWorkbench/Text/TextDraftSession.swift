@@ -45,6 +45,12 @@ public final class TextDraftSession {
         try TextRewriteSelection(document: document, range: range)
     }
 
+    func synchronizeCommitted(_ value: TextDraftDocument, expectedRevision: UUID) -> Bool {
+        guard !isRunning, value.id == document.id, document.revision == expectedRevision else { return false }
+        document = value; undoRecord = nil
+        return true
+    }
+
     public func editText(_ text: String) throws {
         try TextDraftDocument.validate(text)
         guard !text.utf8.elementsEqual(document.text.utf8) else { return }

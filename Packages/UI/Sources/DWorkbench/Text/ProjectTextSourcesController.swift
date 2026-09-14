@@ -12,9 +12,10 @@ public final class ProjectTextSourcesController {
     public private(set) var isCancelling = false
     public private(set) var isSaving = false
     public private(set) var errorMessage: String?
-    public var isDirty: Bool { notebook.revision != persistedRevision }
+    public private(set) var unsavedCompletedRecord: TextSourceAnswerRecord?
+    public var isDirty: Bool { notebook.revision != persistedRevision || unsavedCompletedRecord != nil }
     public var canAsk: Bool {
-        !isRunning && !isSaving && !notebook.excerpts.isEmpty &&
+        !isRunning && !isSaving && unsavedCompletedRecord == nil && !notebook.excerpts.isEmpty &&
         !notebook.question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
         notebook.records.count < TextSourcesLimits.records
     }
@@ -28,7 +29,7 @@ public final class ProjectTextSourcesController {
     private var operationID: UUID?
     private var cancelled = false
     private var cancellationSent = false
-    private var waiters: [CheckedContinuation<Void, Never>] = []
+    private var waiters: [UUID: [CheckedContinuation<Void, Never>]] = [:]
     private var undoRecord: (recordID: UUID, acceptedRevision: UUID, previous: TextDraftDocument)?
 
     public init(notebook: TextSourcesNotebook, document: TextDraftDocument, engine: any InferenceEngine,
@@ -101,9 +102,10 @@ public final class ProjectTextSourcesController {
     public func ask(using model: ModelReference, modelID: String,
                     validate: @Sendable (ModelReference) async throws -> ModelReference = { $0 }) async {
         guard canAsk else { return }
+        let operation = UUID(); operationID = operation
         isRunning = true; isCancelling = false; cancelled = false; cancellationSent = false
         partialAnswer = ""; errorMessage = nil
-        defer { finishOperation() }
+        defer { finishOperation(operation) }
         do {
             let capturedNotebook = notebook, capturedTarget = document
             let verified = try await validate(model)
@@ -114,7 +116,7 @@ public final class ProjectTextSourcesController {
             let submission = try TextSourcesContext.makeSubmission(notebook: capturedNotebook, target: capturedTarget,
                 modelID: modelID, modelRevision: verified.revision)
             let request = InferenceRequest(id: submission.id, model: verified, input: .text(submission.request))
-            try request.validate(); operationID = request.id
+            try request.validate()
             let run = try await engine.submit(request, backendID: backendID)
             activeRun = run
             if cancelled || Task.isCancelled { cancelled = true; await sendCancellation() }
@@ -136,7 +138,7 @@ public final class ProjectTextSourcesController {
             } catch { streamError = error; await sendCancellation() }
             let result = await withTaskCancellationHandler(operation: { await run.outcome() }, onCancel: { [weak self] in
                 Task { @MainActor [weak self] in
-                    guard let self, self.operationID == request.id else { return }
+                    guard let self, self.operationID == operation else { return }
                     self.cancelled = true; await self.sendCancellation()
                 }
             })
@@ -150,11 +152,7 @@ public final class ProjectTextSourcesController {
             case .failed(let failure): throw failure
             }
             guard !answer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw TextDraftError.emptyReplacement }
-            var updated = notebook
-            updated.records.append(.init(submission: submission, answer: answer, metrics: metrics))
-            updated.revision = UUID()
-            try TextSourcesArchive.validate(updated)
-            notebook = updated
+            unsavedCompletedRecord = .init(submission: submission, answer: answer, metrics: metrics)
             // The task remains busy until both runtime outcome and this save have resolved.
             do { try await flush() }
             catch { errorMessage = "回答已生成，但尚未保存；原文未改变，请重试保存：\(error.localizedDescription)" }
@@ -164,10 +162,10 @@ public final class ProjectTextSourcesController {
     }
 
     public func cancel() async {
-        guard isRunning else { return }
+        guard isRunning, let operation = operationID else { return }
         cancelled = true; isCancelling = true
         await sendCancellation()
-        if isRunning { await withCheckedContinuation { waiters.append($0) } }
+        if operationID == operation { await withCheckedContinuation { waiters[operation, default: []].append($0) } }
     }
 
     private func sendCancellation() async {
@@ -176,18 +174,25 @@ public final class ProjectTextSourcesController {
         await activeRun.cancel()
     }
 
-    private func finishOperation() {
+    private func finishOperation(_ operation: UUID) {
+        guard operationID == operation else { return }
         activeRun = nil; operationID = nil; isRunning = false; isCancelling = false
         cancelled = false; cancellationSent = false
-        let completed = waiters; waiters.removeAll(); completed.forEach { $0.resume() }
+        let completed = waiters.removeValue(forKey: operation) ?? []; completed.forEach { $0.resume() }
     }
 
     public func flush() async throws {
         guard !isSaving else { throw TextSourcesError.busy }
         guard isDirty else { return }
         isSaving = true; defer { isSaving = false }
-        let snapshot = notebook
         do {
+            if let record = unsavedCompletedRecord {
+                var updated = notebook
+                updated.records.append(record); updated.revision = UUID()
+                try TextSourcesArchive.validate(updated)
+                notebook = updated; unsavedCompletedRecord = nil
+            }
+            let snapshot = notebook
             try await persist(snapshot, persistedRevision, nil, document.revision)
             persistedRevision = snapshot.revision; errorMessage = nil
         } catch { errorMessage = "资料/回答尚未保存，当前内容已保留：\(error.localizedDescription)"; throw error }
@@ -206,7 +211,7 @@ public final class ProjectTextSourcesController {
             let accepted = try TextDraftDocument(id: document.id, text: text, generationSettings: document.generationSettings)
             var updated = notebook; updated.records[index].disposition = .accepted; updated.revision = UUID()
             try await commitDecision(updated, replacement: accepted)
-            undoRecord = (id, accepted.revision, previous)
+            if document.revision == accepted.revision { undoRecord = (id, accepted.revision, previous) }
         } catch { errorMessage = "未采用回答，原文已保留：\(error.localizedDescription)" }
     }
 
@@ -237,9 +242,10 @@ public final class ProjectTextSourcesController {
     private func commitDecision(_ updated: TextSourcesNotebook, replacement: TextDraftDocument?) async throws {
         try TextSourcesArchive.validate(updated)
         isSaving = true; defer { isSaving = false }
-        try await persist(updated, persistedRevision, replacement, document.revision)
+        let targetRevision = document.revision
+        try await persist(updated, persistedRevision, replacement, targetRevision)
         notebook = updated; persistedRevision = updated.revision
-        if let replacement { document = replacement }
+        if let replacement, document.revision == targetRevision { document = replacement }
         errorMessage = nil
     }
 
