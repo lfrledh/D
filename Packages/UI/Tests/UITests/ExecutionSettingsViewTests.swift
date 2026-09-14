@@ -54,8 +54,8 @@ struct ExecutionSettingsViewTests {
         #expect(!summary.contains("Stable Audio Medium"))
     }
 
-    @Test
-    func narrowTextParametersKeepBothNumericFieldsInsideTheHostingView() async throws {
+    @Test(arguments: [false, true])
+    func narrowTextParametersKeepBothNumericFieldsInsideTheHostingView(questionMode: Bool) async throws {
         let document = try TextDraftDocument(text: "中文 e\u{301} 👩‍💻")
         let session = TextDraftSession(document: document, engine: ParameterLayoutEngine(), backendID: "layout.fixture")
         let capability = TextExecutionCapability(maximumPromptTokens: 2048, maximumOutputTokens: 256)
@@ -66,6 +66,7 @@ struct ExecutionSettingsViewTests {
             onEdit: { _ in }, onSelection: { _ in }, onGenerate: {}, onCancel: {}, onAccept: {},
             onReject: {}, onUndo: {}, onSave: {}, onChooseModel: {})
             .presenting(.parameters)
+            .questionParameters(questionMode)
             .generationControls(capability: capability, recommendation: nil, configurationError: nil, onChange: { _ in })
             .observingParameterLayout(scrollToOutput: true) { rectangles[$0] = $1 }
         let host = NSHostingView(rootView: view)

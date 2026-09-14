@@ -319,13 +319,13 @@ public struct WorkbenchView: View {
             let id = text.editor.document.id
             let epoch = project.navigationEpoch
             VStack(spacing: 0) {
-                if project.textSourcesEnabled {
+                if project.textSourcesEnabled && presentation != .parameters {
                     Picker("文字工作", selection: $model.showingTextSources) {
                         Text("选段改写").tag(false)
                         Text("资料问答").tag(true)
                     }.pickerStyle(.segmented).padding(8)
                 }
-                if model.showingTextSources, let sources = project.textSources {
+                if model.showingTextSources && presentation != .parameters, let sources = project.textSources {
                     HStack {
                         Text(project.textModelStatus).font(.caption)
                         Spacer()
@@ -354,7 +354,7 @@ public struct WorkbenchView: View {
                             save: { Task { if project.navigationEpoch == epoch { await project.saveText() } } }))
                     .id(id)
                 } else {
-                if project.isTextWorking && !text.editor.isRunning {
+                if !model.showingTextSources && project.isTextWorking && !text.editor.isRunning {
                     HStack {
                         ProgressView().controlSize(.small)
                         Text("正在校验本地文字模型…")
@@ -374,6 +374,7 @@ public struct WorkbenchView: View {
                     onSave: { Task { await project.saveText() } },
                     onChooseModel: { Task { await model.chooseTextModel() } })
                     .presenting(presentation)
+                    .questionParameters(model.showingTextSources)
                     .generationControls(capability: project.textCapability,
                         recommendation: model.executionRecommendations,
                         configurationError: project.textConfigurationError,
