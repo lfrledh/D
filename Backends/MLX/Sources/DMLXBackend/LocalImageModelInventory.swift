@@ -82,8 +82,7 @@ struct LocalImageModelInventory: Sendable {
             throw InferenceFailure.unsupportedCapability(request.input.capability)
         }
         let resolvedCapability = try profile.resolvedCapability(for: image)
-        let estimatedPeakBytes = try resolvedCapability.estimatedPeakBytes(
-            width: image.width, height: image.height)
+        let estimatedPeakBytes = try resolvedCapability.estimatedPeakBytes(for: image)
         guard image.prompt.utf8.count <= 1_048_576,
               !image.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw InferenceFailure.invalidRequest("Image prompt must be nonempty and no larger than 1 MiB of UTF-8.")

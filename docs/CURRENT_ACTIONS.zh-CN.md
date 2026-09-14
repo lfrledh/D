@@ -1,6 +1,14 @@
 # D 当前行动指南
 
-## 2026-09-14 集中验收停点：参考图已过，问题框中文组字失败
+## 当前检查点：集中验收完成，统一开发基线组合中（2026-09-14）
+
+源仍 `ac39b73d64793bed9dd7089e32dcd43c0db2a2c1`、`codex/inference-foundation` 及个人scheme唯一未暂存改动。H18参考图真实闭环已过；H19在原实际7B问答/保存保护基础上，额外有界Lead修补问题框中文组字，用户确认缩放后的空格选字/文字/光标正常；新App原生undo/redo/安全保存冷重开通过。受测703dd146426435990b345f3ef03ee7a97ea1618a，文字候选f58f40c6636b80f4b1fbdac7acc7d2f25c5377fe（仅追加记录）。H09仍无麦克风，不阻塞本批。
+
+正在 `D-Worktrees/D-MULTIMODAL-BASELINE-01` 保留双方历史整合schema9/10为11，**未源接纳或推送**。资料问答的组合入口需组合验证后才默认启用。独立构建工具Sol/high初交9项合成检查通过但Lead发现5项边界缺陷，原受限CLI修复1进行中；允许路径/剩余预算见[批次规格MB-BUILD2](tasks/D-MULTIMODAL-BASELINE-01.md)。本轮不新增模型/依赖/签名方案，不启动HUM/演唱/I2V。音乐与HUM下一位置仍按已落地路线，不等文字高级功能全部完成。
+
+证据 R=`D-Development/AgentTrials/D-MULTIMODAL-BASELINE-01/run-20260914T115845Z-human-return`：`text-ime-handoff.json`、`text-native-acceptance-after-ime.json`、`image-native-acceptance.json`、BUILD各轮记录。所有IME App实例已正常退出；旧暂停段下方保留当时事实，不能作为当前状态。
+
+## 历史：2026-09-14 集中验收停点：参考图已过，问题框中文组字失败
 
 本节为 `codex/d-multimodal-baseline-01` 隔离准备记录，尚未接入源。源仍 `ac39b73d64793bed9dd7089e32dcd43c0db2a2c1`，文字候选 `606d0c6c51cc3effe3a5ac87b0e4fc9c9f5f27aa` 与图像候选 `14af48c22e9dbe7ee715b171308276347fab0f68` 均未修改/合并。详细证据 R=`D-Development/AgentTrials/D-MULTIMODAL-BASELINE-01/run-20260914T115845Z-human-return`，恢复读 `ime-pause-checkpoint.json`、[批次记录](tasks/D-MULTIMODAL-BASELINE-01.md)及[集中清单](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md#当前集中待办2026-09-14)。
 
@@ -64,6 +72,16 @@ Lead本轮实施并验证，非实现者只读复核；CONTEXT旧预算不清零
 边界：本阶段不做OCR、PDF/Office、embedding/向量库、联网检索、代理自动操作、音乐/歌声模型、I2V或任意组合编辑器。此后优先评估HUM短单声部文件识别的固定候选/许可，再排专门歌声；视频I2V需独立模型能力与资源验证，不能把图片塞进现有T2V请求冒充支持。它们不以文字高级功能全部完成为前置，下一具体实施仍按对应范围确定。
 
 源个人scheme唯一未暂存修改保持；参考图候选/原应用/既有作品不动。后续整合参考图时会遇到本轮已批准的纯文档分叉，应在隔离区保留历史合入明确源快照，不重选旧基线或丢弃这份待办/规划。
+
+## 历史检查点：D-IMAGE-REFERENCE-01真实后端已过，GUI仅待解锁（2026-09-14）
+
+用户明确本Mac默认由Lead使用/调度，不再询问普通D/GPU空闲或前台窗口，用户需要时主动通知。当前等待的是系统解锁，不是资源或已有模型授权。单参考PNG的后端/组件/应用装配已通过：real-mlx-r3同次141测试/18suite、零失败/跳过，真实参考编码/数值、生成差异、取消恢复、重复释放及原图文回归均有执行证据。音视频桥接部分是CPU夹具，不宣称本阶段真实音视频生成；64核心和379工作台CPU复用已核对完全未变的源码集。
+
+实际完整受测HEAD=15bea8585e53dcf731b2282b7744c37aa2f68604；App/后端构建代码=fcaf931d8de11c45f5a66a795708c8a4b3b99f19，差别仅公共测试入口补两个既有环境字段。之后仅状态/指南文档变化，最终候选完整SHA以本run/real-finish-checkpoint.json为准。独立普通签名产物R/D Reference Workbench r2.app构建/音视频封装/签名完整性通过，尚未前台启动。详细来源、失败与修复预算见[当前任务](tasks/D-IMAGE-REFERENCE-01.md#2026-09-14-真实后端通过界面因锁屏保留)。
+
+源仍b15be1175b80f265752f79eb45c6f3981ca13283，个人scheme唯一未暂存，普通D四关键文件内容/大小/修改时间不变；**本阶段尚未源接纳、未推送**。全部实施/只读审核/本轮构建与模型测试已结束，无任务App或后台生成遗留。证据R=`D-Development/AgentTrials/D-IMAGE-REFERENCE-01/run-20260914T034346Z`；关键入口real-acceptance.json、real-mlx-r3-summary.json、app-r2-pre-gui.json、protection/real-finish.json。旧失败与中断不计作通过。
+
+下一动作：用户解锁后，Lead按R/gui-acceptance-plan.json与launch-isolated.py显式UUID启动测试App，完成参考图生成、比较采用、保存冷重开/普通PNG导出防覆盖和配方边界；退出后只查持有进程回执，避免工具自动重启。现有代码/资源授权保留，不重问空闲，不重新派工或重置预算。GUI通过后再固定SHA源快进、源相关复验及按授权推送。候选未通过GUI前不默认接入普通源。H09等麦克风，集中办理时提醒；音乐/HUM/歌声/研读保留独立后续位置，不等待所有图像高级功能。
 
 ## 历史检查点：D-VIDEO-WORKBENCH-01已本地接纳并完成有限验收（2026-09-14）
 

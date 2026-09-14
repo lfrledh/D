@@ -45,6 +45,8 @@ def configure(node):
             node.setdefault('EnvironmentVariables', {}).update({
                 'D_TEST_MODEL_DIR': str(pathlib.Path(sys.argv[2]).resolve()),
                 'D_TEST_TEMP_DIR': sys.argv[3],
+                'D_VIDEO_TEST_OUTPUT': str((pathlib.Path(sys.argv[3]) / 'video').resolve()),
+                'D_VIDEO_TEST_PYTHON': sys.executable,
                 'D_TEST_IMAGE_MODEL_DIR': str(pathlib.Path(sys.argv[4]).resolve()),
                 'D_TEST_FLUX_FIXTURE': str(pathlib.Path(sys.argv[5]).resolve()),
             })

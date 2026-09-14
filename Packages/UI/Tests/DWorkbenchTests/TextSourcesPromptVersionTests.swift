@@ -24,16 +24,16 @@ struct TextSourcesPromptVersionTests {
         #expect(Array(reopened.records[0].submission.request.prompt.utf8) == Array(record.submission.request.prompt.utf8))
     }
 
-    @Test("A real previously saved project opens without changing original manifest bytes")
+    @Test("A real previously saved v10 project preserves original manifest in its immutable backup")
     func frozenLegacyProject() async throws {
         try await withLegacyProject { root in
             let original = try Data(contentsOf: root.appendingPathComponent("project.json"))
             let store = try await ProjectStore.open(at: root)
             let current = await store.snapshot()
-            #expect(current.schemaVersion == 10)
+            #expect(current.schemaVersion == 11)
             #expect(current.activeDocument?.textSources?.records.count == 1)
             try await store.close()
-            #expect(try Data(contentsOf: root.appendingPathComponent("project.json")) == original)
+            #expect(try Data(contentsOf: root.appendingPathComponent(ProjectStore.versionTenBackupFilename)) == original)
         }
     }
 

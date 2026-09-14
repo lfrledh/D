@@ -1,4 +1,5 @@
 import DInference
+import CryptoKit
 import Darwin
 import Foundation
 import ImageIO
@@ -22,11 +23,14 @@ public actor ProjectStore {
     public static let versionSixBackupFilename = "project.v6.backup.json"
     public static let versionSevenBackupFilename = "project.v7.backup.json"
     public static let versionEightBackupFilename = "project.v8.backup.json"
+    public static let versionNineBackupFilename = "project.v9.backup.json"
+    public static let versionTenBackupFilename = "project.v10.backup.json"
     private let rootFD: Int32
     private let lockFD: Int32
     private var manifest: ProjectManifest
     private var isClosed = false
     private var captureDirectories: [UUID: Int32] = [:]
+    private var preparedImageReferences: [UUID: (assetID: UUID, reference: ImageReference)] = [:]
 
     private init(rootURL: URL, rootFD: Int32, lockFD: Int32, manifest: ProjectManifest) {
         self.rootURL = rootURL
@@ -131,6 +135,10 @@ public actor ProjectStore {
             loaded = try ProjectFiles.migrateVersionSeven(loaded, original: data, in: descriptor, checkpoint: migrationCheckpoint)
         } else if loaded.schemaVersion == 8 {
             loaded = try ProjectFiles.migrateVersionEight(loaded, original: data, in: descriptor, checkpoint: migrationCheckpoint)
+        } else if loaded.schemaVersion == 9 {
+            loaded = try ProjectFiles.migrateVersionNine(loaded, original: data, in: descriptor, checkpoint: migrationCheckpoint)
+        } else if loaded.schemaVersion == 10 {
+            loaded = try ProjectFiles.migrateVersionTen(loaded, original: data, in: descriptor, checkpoint: migrationCheckpoint)
         } else { try ProjectFiles.validate(loaded) }
         let store = ProjectStore(rootURL: root, rootFD: descriptor, lockFD: lock, manifest: loaded)
         // Ownership of both descriptors has moved to the actor before recovery can throw.
@@ -139,6 +147,97 @@ public actor ProjectStore {
     }
 
     public func snapshot() -> ProjectManifest { manifest }
+
+    /// Copies one immutable original into project ownership before attaching it.
+    public func importImageReference(at source: URL, name: String, documentID: UUID) throws -> ProjectManifest {
+        try checkLocation()
+        let index = try documentIndex(documentID)
+        guard manifest.documents[index].kind == .image, source.isFileURL,
+              !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw ProjectStoreError.invalidProject("请选择图像文档和本地参考 PNG。")
+        }
+        let parent = try ProjectFiles.openDirectory(source.deletingLastPathComponent())
+        defer { Darwin.close(parent) }
+        let data = try ProjectFiles.read(relative: source.lastPathComponent, in: parent, limit: 64 * 1024 * 1024)
+        let pixels = try ImageReferencePixels.decodePNG(data)
+        let id = UUID()
+        let root = try ProjectFiles.openOrCreateDirectory("Images", in: rootFD)
+        defer { Darwin.close(root) }
+        guard mkdirat(root, id.uuidString, 0o700) == 0 else { throw ProjectFiles.error() }
+        let directory = try ProjectFiles.openRelativeDirectory(id.uuidString, in: root)
+        defer { Darwin.close(directory) }
+        try ProjectFiles.publish(in: directory, name: "original.png", replacing: false) { fd in
+            try data.withUnsafeBytes { try ProjectFiles.writeAll($0, to: fd) }
+        }
+        guard fsync(root) == 0 else { throw ProjectFiles.error() }
+        var candidate = manifest
+        candidate.assets.append(ProjectAsset(id: id, relativePath: "Images/\(id.uuidString)/original.png",
+            role: .original, metadata: .init(width: pixels.width, height: pixels.height,
+                                           imageContentSHA256: pixels.sourceSHA256), name: name))
+        clearDetachedReferenceSelection(in: &candidate, index: index)
+        candidate.documents[index].draft.referenceImageAssetID = id
+        try commit(candidate)
+        return manifest
+    }
+
+    public func setImageReference(_ assetID: UUID?, documentID: UUID) throws -> ProjectManifest {
+        try checkLocation()
+        let index = try documentIndex(documentID)
+        guard manifest.documents[index].kind == .image else { throw ProjectStoreError.missingAsset }
+        var candidate = manifest
+        clearDetachedReferenceSelection(in: &candidate, index: index)
+        if let assetID {
+            let (assetIndex, pixels) = try imageReferencePixels(assetID)
+            candidate.assets[assetIndex].metadata.imageContentSHA256 = pixels.sourceSHA256
+        }
+        candidate.documents[index].draft.referenceImageAssetID = assetID
+        try commit(candidate)
+        return manifest
+    }
+
+    private func imageReferencePixels(_ assetID: UUID) throws -> (Int, ImageReferencePixels) {
+        guard let index = manifest.assets.firstIndex(where: { $0.id == assetID }),
+              manifest.assets[index].mediaType == "image/png" else { throw ProjectStoreError.missingAsset }
+        let asset = manifest.assets[index]
+        let bytes = try ProjectFiles.read(relative: asset.relativePath, in: rootFD, limit: 64 * 1024 * 1024)
+        let pixels = try ImageReferencePixels.decodePNG(bytes)
+        if let expected = asset.metadata.imageContentSHA256, pixels.sourceSHA256 != expected {
+            throw ProjectStoreError.externalModification
+        }
+        return (index, pixels)
+    }
+
+    private func clearDetachedReferenceSelection(in candidate: inout ProjectManifest, index: Int) {
+        let document = candidate.documents[index]
+        if let selected = document.selectedAssetID, selected == document.draft.referenceImageAssetID,
+           selected != document.sourceAssetID,
+           !candidate.jobs.contains(where: { $0.documentID == document.id && $0.artifactIDs.contains(selected) }) {
+            candidate.documents[index].selectedAssetID = nil
+        }
+    }
+
+    /// One request owns one derivative. Never replace a previous job's input.
+    public func prepareImageReference(assetID: UUID, runID: UUID) throws -> ImageReference {
+        try checkLocation()
+        let (index, pixels) = try imageReferencePixels(assetID)
+        guard manifest.assets[index].metadata.imageContentSHA256 == pixels.sourceSHA256 else {
+            throw ProjectStoreError.invalidProject("请重新显式选择参考图，再生成。")
+        }
+        let inputs = try ProjectFiles.openOrCreateDirectory("ImageInputs", in: rootFD)
+        defer { Darwin.close(inputs) }
+        guard mkdirat(inputs, runID.uuidString, 0o700) == 0 else { throw ProjectFiles.error() }
+        let directory = try ProjectFiles.openRelativeDirectory(runID.uuidString, in: inputs)
+        defer { Darwin.close(directory) }
+        try ProjectFiles.publish(in: directory, name: "reference.rgb", replacing: false) { fd in
+            try pixels.rgb.withUnsafeBytes { try ProjectFiles.writeAll($0, to: fd) }
+        }
+        guard fsync(inputs) == 0 else { throw ProjectFiles.error() }
+        let reference = ImageReference(url: rootURL.appendingPathComponent("ImageInputs/\(runID.uuidString)/reference.rgb"),
+            sha256: SHA256.hash(data: pixels.rgb).map { String(format: "%02x", $0) }.joined(),
+            byteCount: UInt64(pixels.rgb.count), width: pixels.width, height: pixels.height)
+        preparedImageReferences[runID] = (assetID, reference)
+        return reference
+    }
 
     public func saveDraft(_ draft: ProjectDraft, documentID: UUID? = nil) throws -> ProjectManifest {
         let index = try documentIndex(documentID ?? manifest.activeDocumentID)
@@ -504,7 +603,8 @@ public actor ProjectStore {
     /// The captured document must be the result of a successful host save. Later
     /// draft edits cannot replace this immutable admission snapshot.
     public func enqueue(request: InferenceRequest, documentID: UUID? = nil,
-                        capturedVideoDocument: ProjectDocument? = nil) throws -> ProjectManifest {
+                        capturedVideoDocument: ProjectDocument? = nil,
+                        capturedImageReferenceAssetID: UUID? = nil) throws -> ProjectManifest {
         try request.validate()
         let index = try documentIndex(documentID ?? manifest.activeDocumentID)
         let document = manifest.documents[index]
@@ -516,9 +616,30 @@ public actor ProjectStore {
                   try draft.selectedMemoryBudgetBytes() == request.memoryBudgetBytes else {
                 throw ProjectStoreError.invalidProject("视频请求与保存的创作条件或预算不一致。")
             }
-        case .image:
+        case .image(let image):
             guard document.kind == .image else {
                 throw ProjectStoreError.invalidProject("只有图像文档能创建图像任务。")
+            }
+            if image.referenceImage != nil || image.executionProfile == ImageExecutionCapability.referenceKlein4B.profile {
+                try ImageExecutionCapability.scalableKlein4B.validate(image)
+            }
+            if let reference = image.referenceImage {
+                guard let sourceID = capturedImageReferenceAssetID,
+                      let prepared = preparedImageReferences[request.id],
+                      prepared.assetID == sourceID, prepared.reference == reference,
+                      let source = manifest.assets.first(where: { $0.id == sourceID }),
+                      source.mediaType == "image/png", source.metadata.imageContentSHA256 != nil,
+                      reference.url == rootURL.appendingPathComponent("ImageInputs/\(request.id.uuidString)/reference.rgb") else {
+                    throw ProjectStoreError.invalidProject("参考任务缺少已冻结的项目来源。")
+                }
+                let bytes = try ProjectFiles.read(relative: "ImageInputs/\(request.id.uuidString)/reference.rgb", in: rootFD,
+                                                  limit: Int(reference.byteCount))
+                guard bytes.count == reference.byteCount,
+                      SHA256.hash(data: bytes).map({ String(format: "%02x", $0) }).joined() == reference.sha256 else {
+                    throw ProjectStoreError.externalModification
+                }
+            } else if capturedImageReferenceAssetID != nil {
+                throw ProjectStoreError.invalidProject("不能忽略已指定的参考图。")
             }
         case .audio(let audio):
             guard document.kind == .audio, let draft = document.audioCreation,
@@ -560,8 +681,10 @@ public actor ProjectStore {
             throw ProjectStoreError.invalidProject("任务编号重复。")
         }
         var candidate = manifest
-        candidate.jobs.append(ProjectJob(id: request.id, documentID: manifest.documents[index].id, request: request))
+        candidate.jobs.append(ProjectJob(id: request.id, documentID: manifest.documents[index].id, request: request,
+                                        imageReferenceAssetID: capturedImageReferenceAssetID))
         try commit(candidate)
+        preparedImageReferences.removeValue(forKey: request.id)
         return manifest
     }
 
@@ -1195,6 +1318,10 @@ public actor ProjectStore {
     /// Capture a persisted run, never the current parameter panel. This version identifies
     /// the new export snapshot; schema2 did not record historical asset versions.
     public func prepareRecipePNG(assetID: UUID, disclosure: RecipeDisclosure) throws -> Data {
+        if let asset = manifest.assets.first(where: { $0.id == assetID }),
+           let job = manifest.jobs.first(where: { $0.id == asset.jobID }), job.imageReferenceAssetID != nil {
+            throw ProjectStoreError.invalidProject("此候选需要项目内的参考图，当前 PNG 配方不能完整携带该依赖。请保存项目；仍可普通导出 PNG。")
+        }
         try checkLocation()
         try verifyUnchangedManifest()
         guard let asset = manifest.assets.first(where: { $0.id == assetID }),
@@ -1824,13 +1951,29 @@ private enum ProjectFiles {
                     checkpoint: checkpoint)
     }
 
+    static func migrateVersionNine(_ legacy: ProjectManifest, original: Data, in root: Int32,
+                                   checkpoint: (@Sendable (ProjectMigrationCheckpoint) throws -> Void)?) throws -> ProjectManifest {
+        try migrate(legacy, original: original, in: root, backup: ProjectStore.versionNineBackupFilename,
+                    checkpoint: checkpoint)
+    }
+
+    static func migrateVersionTen(_ legacy: ProjectManifest, original: Data, in root: Int32,
+                                  checkpoint: (@Sendable (ProjectMigrationCheckpoint) throws -> Void)?) throws -> ProjectManifest {
+        try migrate(legacy, original: original, in: root, backup: ProjectStore.versionTenBackupFilename,
+                    checkpoint: checkpoint)
+    }
+
     private static func migrate(_ legacy: ProjectManifest, original: Data, in root: Int32, backup: String,
                                 checkpoint: (@Sendable (ProjectMigrationCheckpoint) throws -> Void)?) throws -> ProjectManifest {
         try validate(legacy, allowingLegacySchema: true)
         var migrated = legacy
         migrated.schemaVersion = ProjectManifest.currentSchemaVersion
-        for index in migrated.documents.indices where migrated.documents[index].kind == .text {
-            migrated.documents[index].textSources = TextSourcesNotebook()
+        // Only formats predating text-sources lack notebooks. Schema10 already owns
+        // authoritative snapshots and immutable prompt history, which must survive.
+        if legacy.schemaVersion <= 9 {
+            for index in migrated.documents.indices where migrated.documents[index].kind == .text {
+                migrated.documents[index].textSources = TextSourcesNotebook()
+            }
         }
         guard migrated.revision < UInt64.max else {
             throw ProjectStoreError.invalidProject("项目修订编号已经达到上限，无法安全升级。")
@@ -2143,7 +2286,7 @@ private enum ProjectFiles {
 
     static func validate(_ value: ProjectManifest, allowingLegacySchema: Bool = false) throws {
         guard value.schemaVersion == ProjectManifest.currentSchemaVersion ||
-              (allowingLegacySchema && (1...8).contains(value.schemaVersion)) else {
+              (allowingLegacySchema && ProjectManifest.readableSchemaVersions.contains(value.schemaVersion)) else {
             throw ProjectStoreError.unsupportedSchema(value.schemaVersion)
         }
         guard !value.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
@@ -2172,6 +2315,11 @@ private enum ProjectFiles {
             }
         }
         for job in value.jobs {
+            if job.imageReferenceAssetID != nil {
+                guard case .image = job.request.input else {
+                    throw ProjectStoreError.invalidProject("非图像任务不能包含参考图来源。")
+                }
+            }
             guard documents.contains(job.documentID), job.id == job.request.id,
                   Set(job.artifactIDs).count == job.artifactIDs.count,
                   job.artifactIDs.allSatisfy({ assets[$0]?.jobID == job.id }),
@@ -2187,9 +2335,20 @@ private enum ProjectFiles {
                 guard value.schemaVersion >= 8, document.kind == .video, document.videoCreation != nil,
                       job.artifactIDs.count <= 1 else { throw ProjectStoreError.invalidProject("视频任务归属无效。") }
                 try VideoExecutionCapability.wan21.validate(request)
-            case .image:
+            case .image(let image):
                 guard document.kind == .image else {
                     throw ProjectStoreError.invalidProject("图像任务不属于图像文档。")
+                }
+                if let reference = image.referenceImage {
+                    guard [9, 11].contains(value.schemaVersion), let id = job.imageReferenceAssetID,
+                          let asset = assets[id], asset.mediaType == "image/png",
+                          asset.metadata.imageContentSHA256 != nil,
+                          reference.url.path.hasSuffix("/ImageInputs/\(job.id.uuidString)/reference.rgb") else {
+                        throw ProjectStoreError.invalidProject("参考图片任务的来源或输入路径无效。")
+                    }
+                    try ImageExecutionCapability.scalableKlein4B.validate(image)
+                } else if job.imageReferenceAssetID != nil || image.executionProfile == ImageExecutionCapability.referenceKlein4B.profile {
+                    throw ProjectStoreError.invalidProject("参考图片任务不能省略输入。")
                 }
             case .audio(let request):
                 guard document.kind == .audio, document.audioCreation != nil else {
@@ -2286,6 +2445,12 @@ private enum ProjectFiles {
                 }
             } else if asset.metadata.audio != nil {
                 throw ProjectStoreError.invalidProject("非音频作品不能包含音频元数据。")
+            } else if asset.role == .original && asset.metadata.imageContentSHA256 != nil {
+                // Explicitly selecting a legacy original pins its digest without relocating it.
+                // Safe relative paths are validated above; only new import publication owns the UUID layout.
+                guard [9, 11].contains(value.schemaVersion), asset.jobID == nil, asset.mediaType == "image/png" else {
+                    throw ProjectStoreError.invalidProject("原参考图的路径或身份无效。")
+                }
             } else if asset.role == .result {
                 let parts = try components(asset.relativePath)
                 guard asset.jobID != nil, parts.count == 3, parts[0] == "Tasks",
@@ -2298,8 +2463,21 @@ private enum ProjectFiles {
             for dimension in [asset.metadata.width, asset.metadata.height, asset.metadata.bitDepth].compactMap({ $0 }) {
                 guard dimension > 0 else { throw ProjectStoreError.invalidProject("媒体元数据包含无效尺寸或位深。") }
             }
+            if let digest = asset.metadata.imageContentSHA256 {
+                guard [9, 11].contains(value.schemaVersion), asset.mediaType == "image/png", digest.utf8.count == 64,
+                      digest.utf8.allSatisfy({ (48...57).contains($0) || (97...102).contains($0) }) else {
+                    throw ProjectStoreError.invalidProject("参考图摘要无效。")
+                }
+            }
         }
         for document in value.documents {
+            if let reference = document.draft.referenceImageAssetID {
+                guard [9, 11].contains(value.schemaVersion), document.kind == .image,
+                      let asset = assets[reference], asset.mediaType == "image/png",
+                      asset.metadata.imageContentSHA256 != nil else {
+                    throw ProjectStoreError.invalidProject("图像草稿的参考来源无效。")
+                }
+            }
             guard !document.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                 throw ProjectStoreError.invalidProject("探索文档名称不能为空。")
             }
@@ -2335,7 +2513,7 @@ private enum ProjectFiles {
                     throw ProjectStoreError.invalidProject("文字文档包含无效内容或图像引用。")
                 }
                 try TextDraftDocument.validate(textDraft.text)
-                if value.schemaVersion == 10 {
+                if [10, 11].contains(value.schemaVersion) {
                     guard let sources = document.textSources else {
                         throw ProjectStoreError.invalidProject("文字资料记录缺失。")
                     }
@@ -2398,7 +2576,7 @@ private enum ProjectFiles {
                 throw ProjectStoreError.invalidProject("采用的作品不属于该探索文档。")
             }
             if let selected = document.selectedAssetID,
-               !(isCandidate(selected) || selected == document.sourceAssetID) {
+               !(isCandidate(selected) || selected == document.sourceAssetID || selected == document.draft.referenceImageAssetID) {
                 throw ProjectStoreError.invalidProject("选中的作品不属于该探索文档或其来源。")
             }
         }

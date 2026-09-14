@@ -17,11 +17,12 @@ public struct ImageGenerationSettings: Codable, Equatable, Sendable {
     }
 
     public func request(prompt: String, seed: UInt64,
-                        capability: ImageExecutionCapability) throws -> ImageRequest {
+                        capability: ImageExecutionCapability, referenceImage: ImageReference? = nil) throws -> ImageRequest {
         let request = ImageRequest(
             prompt: prompt, width: width, height: height,
             steps: capability.steps, guidanceScale: capability.guidanceScale,
-            seed: seed, executionProfile: executionProfile)
+            seed: seed, executionProfile: referenceImage == nil ? executionProfile : ImageExecutionCapability.referenceKlein4B.profile,
+            referenceImage: referenceImage)
         try capability.validate(request)
         return request
     }

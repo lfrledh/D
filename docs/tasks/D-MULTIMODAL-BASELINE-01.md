@@ -83,3 +83,9 @@ MB-BUILD2保持原输出/验收/权限，**允许第五路径 Backends/Audio/Pac
 其余修复：SwiftPM复制前后检查软链/每checkout gitdir/common-dir均在独立树内（git metadata分离/外逃/损坏拒绝，不能禁用校验）；必要输入文件按现有preparer要求在构建前只读核查；来源摘要覆盖tracked/untracked/index内容及同名脏文件变化；报告写/flush/fsync和stdout/退出再刷错误保持2并说明保留App/证据路径，不用os._exit。预期失败用例不能只验函数返回，需完整CLI及已知子PID终态；与本机真实封装验收分开。
 
 原Worker进程枚举被沙箱拒绝后已停报，没有再试/提权，所有工具返回；不声称全系统无进程。Lead只核任务回执/子PID、保护与允许文件摘要；修复使用同线程Sol/high、原受限写根和network=false。新范围在既有任务worktree内，不改沙箱。源码目录/身份/配置不符即停，剩余预算不重置。
+
+## Lead组合执行事件（2026-09-14）
+
+M从8b0303e6be9b728ad3d51502b9b076391dbbf51d合T f58f40c6636b80f4b1fbdac7acc7d2f25c5377fe，保留历史提交71bfbf2a4bf620875d1307bc64c420d073a2749d；随后以固定I14af48c22e9dbe7ee715b171308276347fab0f68未提交合并。共享4生产文件按MB1合成，文档冲突保留双方历史并新建明确当前短段；测试迁移目标改11，原10黄金夹具不变。新增5个迁移方法，参数化场景另计；未通过前不接源。图像原可选参考nil仍合法，“拒绝空值”仅对应必需sources/非法值，不改变合法无参考契约。
+
+Lead首次预检错误地把源relative `.git`相对宿主cwd解析而触发断言，编排中后一条孤立merge命令仍执行了（仅M且no-commit）。立即核两端SHA/索引/真实commonDir、已知源scheme、hooks/忽略碰撞及实际暂存差异；确认为检查脚本路径错误而非仓库漂移。合并内容全部与固定T对应，源未变；保存R/merge-preflight-incident.json后才提交。后续依赖操作改为同一检查脚本成功后执行，避免失败检查后继续mutation；不自动reset/abort或掩盖事件。

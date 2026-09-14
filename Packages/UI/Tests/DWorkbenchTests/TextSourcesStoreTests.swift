@@ -37,7 +37,7 @@ struct TextSourcesStoreTests {
             if !conflict {
                 let reopened = try await ProjectStore.open(at: url)
                 #expect(await reopened.snapshot().activeDocument?.textDraft?.text == "保留原稿")
-                #expect(await reopened.snapshot().schemaVersion == 10)
+                #expect(await reopened.snapshot().schemaVersion == ProjectManifest.currentSchemaVersion)
                 try await reopened.close()
             }
         }
@@ -126,7 +126,7 @@ struct TextSourcesStoreTests {
         }
     }
 
-    @Test func legacyEightBacksUpOriginalAndRejectsUnimplementedNine() async throws {
+    @Test func legacyEightBacksUpOriginalAndRejectsFutureTwelve() async throws {
         try await fixture { url in
             let store = try await ProjectStore.create(at: url, name: "旧版")
             _ = try await store.createTextDocument(text: "旧原稿")
@@ -135,16 +135,16 @@ struct TextSourcesStoreTests {
             var object = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any])
             var docs = try #require(object["documents"] as? [[String: Any]])
             for index in docs.indices { docs[index].removeValue(forKey: "textSources") }
-            object["documents"] = docs; object["schemaVersion"] = 9
-            let nine = try JSONSerialization.data(withJSONObject: object)
-            try nine.write(to: file)
-            await #expect(throws: ProjectStoreError.unsupportedSchema(9)) { try await ProjectStore.open(at: url) }
-            #expect(try Data(contentsOf: file) == nine)
+            object["documents"] = docs; object["schemaVersion"] = 12
+            let future = try JSONSerialization.data(withJSONObject: object)
+            try future.write(to: file)
+            await #expect(throws: ProjectStoreError.unsupportedSchema(12)) { try await ProjectStore.open(at: url) }
+            #expect(try Data(contentsOf: file) == future)
             object["schemaVersion"] = 8
             let eight = try JSONSerialization.data(withJSONObject: object)
             try eight.write(to: file)
             let reopened = try await ProjectStore.open(at: url)
-            #expect(await reopened.snapshot().schemaVersion == 10)
+            #expect(await reopened.snapshot().schemaVersion == ProjectManifest.currentSchemaVersion)
             #expect(await reopened.snapshot().activeDocument?.textDraft?.text == "旧原稿")
             #expect(await reopened.snapshot().activeDocument?.textSources?.records.isEmpty == true)
             #expect(try Data(contentsOf: url.appendingPathComponent(ProjectStore.versionEightBackupFilename)) == eight)
