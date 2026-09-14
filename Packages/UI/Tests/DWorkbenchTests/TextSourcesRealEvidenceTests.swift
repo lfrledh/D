@@ -51,7 +51,8 @@ struct TextSourcesRealEvidenceTests {
             let answer = try #require(run["text"] as? String)
             let result = try #require(run["result"] as? [String: Any])
             let metrics = try #require(result["metadata"] as? [String: String])
-            let started = try #require(run["startedAt"] as? Double)
+            let startedString = try #require(run["startedAt"] as? String)
+            let started = try #require(ISO8601DateFormatter().date(from: startedString))
             let elapsed = try #require(run["elapsedSeconds"] as? Double)
             #expect(!answer.isEmpty)
             let check = TextSourcesContext.citations(in: answer, submission: submission)
@@ -70,7 +71,7 @@ struct TextSourcesRealEvidenceTests {
             let note = TextSourcesNotebook(inputRevision: submission.notebookRevision, question: submission.question,
                 sources: submission.sources, excerpts: submission.excerpts,
                 records: [.init(submission: rebound, answer: answer,
-                    completedAt: Date(timeIntervalSinceReferenceDate: started + elapsed), metrics: metrics)])
+                    completedAt: started.addingTimeInterval(elapsed), metrics: metrics)])
             _ = try await store.saveTextSources(note, documentID: target.id,
                 expectedRevision: try #require(manifest.activeDocument?.textSources?.revision), expectedDocumentRevision: target.revision)
             try await store.close()
