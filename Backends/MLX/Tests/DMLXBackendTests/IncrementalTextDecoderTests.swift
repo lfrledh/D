@@ -1,6 +1,8 @@
 import DInference
 @testable import DMLXBackend
 import Foundation
+import MLXLMCommon
+import Tokenizers
 import Testing
 
 @Suite("Text stream exact Unicode delivery")
@@ -58,4 +60,63 @@ struct IncrementalTextDecoderTests {
         #expect(try decoder.consume("原文") == nil)
         #expect(try decoder.consume("原文", final: true) == nil)
     }
+    @Test("Fixed local tokenizer delivers the whole Unicode text without loading weights")
+    func actualTokenizerRoundtrip() async throws {
+        let tokenizer = try await AutoTokenizer.from(modelFolder: realModelDirectory())
+        for text in ["Cafe\u{0301} 👩‍💻 👍🏽 🇯🇵", "第一行\r\n第二行\n第三行", "甲 < 乙，原文保持", "replacement: \u{fffd}"] {
+            let tokens = tokenizer.encode(text: text, addSpecialTokens: false)
+            let full = tokenizer.decode(tokens: tokens)
+            #expect(Array(full.utf8) == Array(text.utf8))
+            var decoder = IncrementalTextDecoder()
+            var joined = ""
+            for end in 1...tokens.count {
+                joined += try decoder.consume(tokenizer.decode(tokens: Array(tokens.prefix(end)))) ?? ""
+            }
+            joined += try decoder.consume(full, final: true) ?? ""
+            #expect(Array(joined.utf8) == Array(full.utf8))
+        }
+    }
+
+    @Test("Decoder retains ordinary text through the same SDK tool processor")
+    func ordinaryToolPipeline() throws {
+        let parts = ["甲 ", "<", " 乙 e", "\u{0301}", " 👩", "\u{200d}", "💻", "。"]
+        var decoder = IncrementalTextDecoder()
+        let processor = ToolCallProcessor(format: .json)
+        var prefix = "", output = ""
+        for part in parts {
+            prefix += part
+            if let delta = try decoder.consume(prefix) { output += processor.processChunk(delta) ?? "" }
+        }
+        if let delta = try decoder.consume(prefix, final: true) { output += processor.processChunk(delta) ?? "" }
+        #expect(Array(output.utf8) == Array(prefix.utf8))
+        #expect(processor.toolCalls.isEmpty)
+    }
+
+    @Test("A split complete tool call remains detectable; no tool is invoked")
+    func splitToolCall() throws {
+        let parts = ["<tool", "_call>", #"{"name":"fixture","arguments":{}}"#, "</tool", "_call>"]
+        var decoder = IncrementalTextDecoder()
+        let processor = ToolCallProcessor(format: .json)
+        var prefix = "", output = ""
+        for part in parts {
+            prefix += part
+            if let delta = try decoder.consume(prefix) { output += processor.processChunk(delta) ?? "" }
+        }
+        #expect(processor.toolCalls.count == 1)
+        #expect(processor.toolCalls.first?.function.name == "fixture")
+        #expect(output.isEmpty)
+    }
+
+    @Test("Unclosed tool prefix remains an upstream buffering limitation")
+    func incompleteToolTailLimitation() throws {
+        var decoder = IncrementalTextDecoder()
+        let processor = ToolCallProcessor(format: .json)
+        let delta = try #require(decoder.consume("<tool"))
+        #expect(processor.processChunk(delta) == nil)
+        #expect(try decoder.consume("<tool", final: true) == nil)
+        #expect(processor.toolCalls.isEmpty)
+        // The SDK exposes no tail flush. This preserves its prior behavior, not a
+        // promise that literal incomplete tool markup is faithfully delivered.
+    }
+
 }
