@@ -17,7 +17,8 @@ public enum TextSourcesContext {
     public static func makeSubmission(notebook: TextSourcesNotebook, target: TextDraftDocument,
                                       modelID: String, modelRevision: String?) throws -> TextSourcesSubmission {
         try TextSourcesArchive.validate(notebook)
-        guard !notebook.question.isEmpty, !notebook.sources.isEmpty, !notebook.excerpts.isEmpty else {
+        guard !notebook.question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              !notebook.sources.isEmpty, !notebook.excerpts.isEmpty else {
             throw TextSourcesError.invalid("提交需要问题、资料和至少一个非空片段。")
         }
         try validateModelIdentity(modelID, revision: modelRevision)
@@ -46,12 +47,14 @@ public enum TextSourcesContext {
         }
         var valid: [String] = []
         var invalid: [String] = []
+        var seenValid: Set<String> = []
+        var seenInvalid: Set<String> = []
         for label in labels {
             let digits = String(label.dropFirst(2).dropLast())
             let number = Int(digits)
             if let number, String(number) == digits, number >= 1, number <= submission.excerpts.count {
-                if !valid.contains(label) { valid.append(label) }
-            } else if !invalid.contains(label) {
+                if seenValid.insert(label).inserted { valid.append(label) }
+            } else if seenInvalid.insert(label).inserted {
                 invalid.append(label)
             }
         }
@@ -98,7 +101,7 @@ public enum TextSourcesContext {
             guard scalars[index] == "[", scalars[index + 1] == "S" else { index += 1; continue }
             var cursor = index + 2
             while cursor < scalars.count, scalars[cursor] != "]" { cursor += 1 }
-            guard cursor < scalars.count else { index += 1; continue }
+            guard cursor < scalars.count else { break }
             labels.append(String(String.UnicodeScalarView(scalars[index...cursor])))
             index = cursor + 1
         }
