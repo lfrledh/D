@@ -220,7 +220,9 @@ struct ProjectSessionTests {
         #expect(subject.manifest?.jobs.last?.state == .completed)
         try await library.rebind(id, to: replacement)
         try await library.remove(id)
-        try await waitUntil { !subject.canGenerate }
+        // Removing/rebinding already disables generation before the 500 ms readiness poll
+        // observes the final absent record. Wait for that same postcondition we assert below.
+        try await waitUntil { !subject.canGenerate && subject.modelStatus.contains("移除") }
         #expect(subject.selectedModelID == id)
         #expect(subject.modelStatus.contains("移除"))
         #expect(await subject.cancelAndCloseProject())
