@@ -8,7 +8,7 @@ import MLXLMCommon
 /// The runtime owns cancellation and calls release after execute has completely drained.
 public actor MLXTextBackend: InferenceBackend {
     public nonisolated let descriptor = BackendDescriptor(
-        id: "mlx.text", version: "0.1.1+mlx-0.30.6.d1.lm-2.30.6", capabilities: [.textGeneration])
+        id: "mlx.text", version: "0.1.2+mlx-0.30.6.d1.lm-2.30.6", capabilities: [.textGeneration])
     public nonisolated let executionCapability: TextExecutionCapability
 
     private let configuration: MLXBackendConfiguration
@@ -97,26 +97,43 @@ public actor MLXTextBackend: InferenceBackend {
                     // This initializer can synchronously prefill. Cancellation is cooperative;
                     // bounded context and measurement are necessary, not a promise of instant interruption.
                     let iterator = try TokenIterator(input: prepared, model: context.model, parameters: parameters)
-                    let (stream, generationTask) = MLXLMCommon.generateTask(
+                    // Keep the upstream token loop/task ownership, but avoid its Character-count
+                    // detokenizer (2.30.6), which drops combining scalars and ZWJ sequences.
+                    let (stream, generationTask) = MLXLMCommon.generateTokenTask(
                         promptTokenCount: promptTokens, modelConfiguration: context.configuration,
                         tokenizer: context.tokenizer, iterator: iterator)
                     return try await withTaskCancellationHandler {
                         do {
                             var completion: GenerateCompletionInfo?
+                            var tokens = [Int]()
+                            var decoder = IncrementalTextDecoder()
+                            let toolCalls = ToolCallProcessor(format: context.configuration.toolCallFormat ?? .json)
                             for await item in stream {
                                 try Task.checkCancellation()
                                 switch item {
-                                case .chunk(let text):
-                                    if !text.isEmpty { try await emit(.textDelta(text)) }
+                                case .token(let token):
+                                    tokens.append(token)
+                                    if let delta = try decoder.consume(context.tokenizer.decode(tokens: tokens)),
+                                       let text = toolCalls.processChunk(delta), !text.isEmpty {
+                                        try await emit(.textDelta(text))
+                                    }
+                                    if !toolCalls.toolCalls.isEmpty {
+                                        throw InferenceFailure.backendFailed("Tool calls are not supported by this text-only backend.")
+                                    }
                                 case .info(let info): completion = info
-                                case .toolCall:
-                                    throw InferenceFailure.backendFailed("Tool calls are not supported by this text-only backend.")
                                 }
                             }
                             await generationTask.value
                             try Task.checkCancellation()
                             guard let completion else {
                                 throw InferenceFailure.backendFailed("Generation ended without completion information.")
+                            }
+                            if let delta = try decoder.consume(context.tokenizer.decode(tokens: tokens), final: true),
+                               let text = toolCalls.processChunk(delta), !text.isEmpty {
+                                try await emit(.textDelta(text))
+                            }
+                            if !toolCalls.toolCalls.isEmpty {
+                                throw InferenceFailure.backendFailed("Tool calls are not supported by this text-only backend.")
                             }
                             let stopReason = try GenerationTermination.resolve(
                                 completion, requestedTokens: input.maxTokens,
