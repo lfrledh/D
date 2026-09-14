@@ -237,27 +237,24 @@ public struct TextSourcesView: View {
     public var body: some View {
         GeometryReader { viewport in
             let width = viewport.size.width
-            if TextSourcesLayoutPolicy.usesWholePanelScroll(width: width) {
-                ScrollView {
-                    VStack(spacing: 0) {
-                        toolbar(compact: width < 620)
-                        Divider()
-                        sourcesContent(compactActions: TextSourcesLayoutPolicy.stacksSourceActions(width: width))
-                        Divider()
-                        answersContent
-                    }
-                }
-            } else {
+            let narrow = TextSourcesLayoutPolicy.usesWholePanelScroll(width: width)
+            let panels = narrow ? AnyLayout(VStackLayout(spacing: 0)) : AnyLayout(HStackLayout(spacing: 0))
+            let panelWidth = narrow ? width : width / 2
+            // Keep the same native editor subtree across layout changes. The outer
+            // scroll makes stacked panels reachable even in a short detail viewport.
+            ScrollView {
                 VStack(spacing: 0) {
-                    toolbar(compact: false)
+                    toolbar(compact: width < 620)
                     Divider()
-                    HStack(spacing: 0) {
-                        sourcesPanel(compactActions: false).frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
+                    panels {
+                        sourcesPanel(compactActions: TextSourcesLayoutPolicy.stacksSourceActions(width: panelWidth))
+                            .frame(minWidth: 0, maxWidth: .infinity)
+                            .frame(height: narrow ? 300 : max(160, viewport.size.height - 90))
                         Divider()
-                        answersPanel.frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
+                        answersPanel.frame(minWidth: 0, maxWidth: .infinity)
+                            .frame(height: narrow ? 300 : max(160, viewport.size.height - 90))
                     }
                 }
-                .frame(width: width, height: viewport.size.height)
             }
         }
         .background(Color(nsColor: .windowBackgroundColor))
