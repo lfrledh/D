@@ -71,9 +71,10 @@ internal enum Flux2ImageMath {
             throw InferenceFailure.invalidRequest("The frozen image reference RGB payload has an invalid length.")
         }
         let bytes = MLXArray(input.rgb, [1, input.height, input.width, 3], dtype: .uint8)
-        let scale = MLXArray(Float(127.5)).asType(dtype)
-        let image = (bytes.asType(dtype) / scale - MLXArray(Float(1)).asType(dtype))
-            .transposed(0, 3, 1, 2)
+        // Match the pinned preprocessing exactly: normalization arithmetic is FP32.
+        // Casting bytes first changes mid-range values such as 128 under BF16 rounding.
+        let normalized = bytes.asType(.float32) / MLXArray(Float(127.5)) - MLXArray(Float(1))
+        let image = normalized.transposed(0, 3, 1, 2).asType(dtype)
         MLX.eval(image)
         try requireFinite(image, name: "Reference pixels")
         return image
