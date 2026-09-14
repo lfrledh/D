@@ -102,6 +102,25 @@ class PitchProviderValidationTests(unittest.TestCase):
         self.assertEqual(len(frames), 1)
         self.assertEqual(detector.sample_rate, 16000)
 
+    def test_real_numpy_boolean_scalars_and_numeric_type_boundaries(self) -> None:
+        import numpy as np
+
+        frames = provider._validated_frames(
+            np.array([440.0, 440.0]), np.array([0.95, 0.1]),
+            np.array([True, False], dtype=np.bool_), 2)
+        self.assertEqual([item["voiced"] for item in frames], [True, False])
+        fake_boolean = type("bool_", (), {"__bool__": lambda self: True})()
+        for pitch, confidence, voicing in (
+            (np.bool_(True), 0.95, True),
+            (440.0, np.bool_(True), True),
+            (440.0, 0.95, 1),
+            (440.0, 0.95, fake_boolean),
+        ):
+            with self.subTest(pitch=repr(pitch), confidence=repr(confidence),
+                              voicing=repr(voicing)):
+                with self.assertRaises(provider.ProtocolError):
+                    provider._validated_frames([pitch], [confidence], [voicing], 1)
+
     def test_access_arguments_are_all_or_nothing(self) -> None:
         args = types.SimpleNamespace(access_manifest="/tmp/access.json", access_run_id=None,
                                      model_directory=None, input_directory=None, run_directory=None)

@@ -245,6 +245,9 @@ def _load_core(model_directory: Path) -> type[Any]:
 
 def _validated_frames(raw_pitch: Sequence[Any], raw_confidence: Sequence[Any],
                       raw_voicing: Sequence[Any], expected_count: int) -> list[dict[str, Any]]:
+    import numpy as np
+
+    boolean_types = (bool, np.bool_)
     for values in (raw_pitch, raw_confidence, raw_voicing):
         if getattr(values, "ndim", 1) != 1:
             raise ProtocolError("model outputs must be one-dimensional")
@@ -252,13 +255,13 @@ def _validated_frames(raw_pitch: Sequence[Any], raw_confidence: Sequence[Any],
         raise ProtocolError("model output shape does not match floor(sampleCount/256)")
     frames: list[dict[str, Any]] = []
     for pitch_value, confidence_value, voicing_value in zip(raw_pitch, raw_confidence, raw_voicing):
-        if isinstance(pitch_value, bool) or isinstance(confidence_value, bool):
+        if isinstance(pitch_value, boolean_types) or isinstance(confidence_value, boolean_types):
             raise ProtocolError("model pitch and confidence outputs must be numeric, not Boolean")
         pitch = float(pitch_value)
         confidence = float(confidence_value)
         if not math.isfinite(pitch) or not math.isfinite(confidence) or not 0 <= confidence <= 1:
             raise ProtocolError("model output contains a non-finite pitch or invalid confidence")
-        if not isinstance(voicing_value, (bool,)) and type(voicing_value).__name__ != "bool_":
+        if not isinstance(voicing_value, boolean_types):
             raise ProtocolError("model voicing output is not Boolean")
         voiced = confidence > THRESHOLD and FMIN <= pitch <= FMAX
         if bool(voicing_value) != voiced:
