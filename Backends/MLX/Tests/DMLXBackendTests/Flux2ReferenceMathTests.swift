@@ -26,7 +26,9 @@ struct Flux2ReferenceMathTests {
     func fixedReferenceParity(reference: Reference) async throws {
         let root = try Self.fixtureDirectory()
         let comparisons = try await Self.withExecutionLease {
-            try autoreleasepool { try Self.evaluateFixture(root: root) }
+            try autoreleasepool {
+                try Self.withFixtureRandomState { try Self.evaluateFixture(root: root) }
+            }
         }
         let check = try #require(comparisons.first { $0.reference == reference })
         #expect(check.actualShape == check.expectedShape, "\(reference.rawValue) shape")
@@ -305,7 +307,8 @@ struct Flux2ReferenceMathTests {
 
         // This helper boundary drops the encoder VAE before the transformer is loaded.
         let reference = try prepareFixtureReference(
-            root: root, image: tensor("image", in: inputs).asType(.float32))
+            root: root, image: tensor("image", in: inputs).asType(.float32),
+            targetBatch: rawLatents.dim(0))
         let combinedIDs = try Flux2ImageMath.appendReferenceIDs(
             outputIDs: outputIDs, reference: reference)
         let packed = try denoiseFixture(
@@ -331,12 +334,14 @@ struct Flux2ReferenceMathTests {
     }
 
     @inline(never)
-    private static func prepareFixtureReference(root: URL, image: MLXArray) throws
+    private static func prepareFixtureReference(root: URL, image: MLXArray,
+                                                targetBatch: Int) throws
         -> Flux2ImageMath.ReferenceConditioning {
         let vae = try Flux2AutoencoderKL.load(from: root, dtype: .float32)
         try Flux2ImageMath.validateVAEEncoderWeightCoverage(
             vae: vae, snapshot: root, expectedDType: .float32)
-        return try Flux2ImageMath.prepareReference(vae: vae, image: image, dtype: .float32)
+        return try Flux2ImageMath.prepareReference(
+            vae: vae, image: image, dtype: .float32, targetBatch: targetBatch)
     }
 
     @inline(never)
@@ -539,11 +544,15 @@ struct Flux2ReferenceMathTests {
 
     private static func expectBefore(_ entries: [MLXTraceEntry], first: UUID, second: UUID) throws {
         let released = try #require(entries.firstIndex {
-            if case .lifecycle(let event) = $0 { event.runID == first && event.phase == .released }
+            if case .lifecycle(let event) = $0 {
+                return event.runID == first && event.phase == .released
+            }
             return false
         })
         let verifying = try #require(entries.firstIndex {
-            if case .lifecycle(let event) = $0 { event.runID == second && event.phase == .verifying }
+            if case .lifecycle(let event) = $0 {
+                return event.runID == second && event.phase == .verifying
+            }
             return false
         })
         #expect(released < verifying)
@@ -616,6 +625,12 @@ struct Flux2ReferenceMathTests {
             await MLXExecutionLease.shared.relinquish(token)
             throw error
         }
+    }
+
+    @inline(never)
+    private static func withFixtureRandomState<Value>(_ body: () throws -> Value) rethrows -> Value {
+        let state = MLXRandom.RandomState(seed: 0)
+        return try withRandomState(state, body: body)
     }
 
     private static func cleanup() {
