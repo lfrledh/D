@@ -70,3 +70,16 @@ Lead及candidate_compatibility_scope只读核查：问题框是SwiftUI TextEdito
 BUILD预检线程01a09fe3-d696-7af3-8749-65f83fa981bf，实际294cd99efc470801cbac2dd0729230cbcf4d8c73；客户端turn_context确认为gpt-5.6-sol/high、任务cwd、workspace-write和network=false，共享Git不授权写；源是本run/build/preflight-observed.json。CLI预检79.40秒、exit0已结束；未发IMPLEMENT。bare rg缺PATH的exit127、可选目录不存在exit1是预检工具问题，未观察到权限拒绝或实现写入；后续显式使用已安装rg路径，不更改全局PATH。隐藏服务解析及实际费用unknown。
 
 保护结果R/protection/ime-pause.json差异为空；源仍ac39b73d64793bed9dd7089e32dcd43c0db2a2c1及原scheme唯一未暂存修改。文字测试实例PID57800/句柄23196仍运行并保留失败现场、无生成；此前两文字/两图像实例已正常退出，BUILD预检结束，非实现者只读任务结束。恢复先核实际Git/索引/用户文件/持有进程，再读R/ime-pause-checkpoint.json；不要据聊天摘要自动扩大额度。H18通过、H19失败、H09无设备分别保持；无merge/push，不关闭普通D。
+
+
+## 续行与 BUILD 定点修复规格 MB-BUILD2（2026-09-14，现行）
+
+用户“请继续之前的工作”批准一次额外有界Lead IME修补，原预算/失败史不改。T受测703dd146426435990b345f3ef03ee7a97ea1618a，文档候选f58f40c6636b80f4b1fbdac7acc7d2f25c5377fe；真人拼音缩放空格选字通过，原生Unicode输入/undo/redo/生产保存/冷重开通过。H19候选门槛完成，H18已通过，H09仍无设备。新索引R/text-ime-handoff.json与text-native-acceptance-after-ime.json。旧暂停段保留历史，当前可继续组合。
+
+BUILD初交9项合成CPU由Lead重跑通过，但独立反例确认：空依赖树/外逃SwiftPM链接仍进入构建，坏stdout完整进程退出120，leader退出后忽略TERM的孩子仍活。Lead只杀本次夹具记录的孩子63485并观察PID消失；首次自有探针引号语法错误未执行目标，修正后运行，分别保留两次日志。只读复核另指出脏文件内容变化漏检、报告flush/fsync失败不完整。故初交未接纳；原内部调试不伪写为Lead返工，此次为正式修复1，修复2仍最多一次。
+
+MB-BUILD2保持原输出/验收/权限，**允许第五路径 Backends/Audio/Packaging/package_audio_app.py，仅_run_command及其必要私有生命周期协作**。原因：它为Audio/Video复用的原生命令另开会话，原四文件无法可靠回收；Lead已核定扩充，非Worker越界。不得改变签名参数、身份、entitlements、清单、发布语义或引擎实现。显式内部监督标记仅在父PID/阶段自身session与PGID匹配时启用：原生命令继承外层已持有阶段组；默认独立调用仍自建组。helper默认/监督两模式均有界处理取消、超时、管道和重复信号；外层不因leader先退就跳过组清理，全部已持有组完成或明确cleanupIncomplete后停止，不扫描系统/杀未知PID。运行规则详见R/build/repair1-prompt.txt，其参数与MB-BUILD2同冻结。
+
+其余修复：SwiftPM复制前后检查软链/每checkout gitdir/common-dir均在独立树内（git metadata分离/外逃/损坏拒绝，不能禁用校验）；必要输入文件按现有preparer要求在构建前只读核查；来源摘要覆盖tracked/untracked/index内容及同名脏文件变化；报告写/flush/fsync和stdout/退出再刷错误保持2并说明保留App/证据路径，不用os._exit。预期失败用例不能只验函数返回，需完整CLI及已知子PID终态；与本机真实封装验收分开。
+
+原Worker进程枚举被沙箱拒绝后已停报，没有再试/提权，所有工具返回；不声称全系统无进程。Lead只核任务回执/子PID、保护与允许文件摘要；修复使用同线程Sol/high、原受限写根和network=false。新范围在既有任务worktree内，不改沙箱。源码目录/身份/配置不符即停，剩余预算不重置。
