@@ -115,4 +115,37 @@ struct TextSourcesContextTests {
         notebook.records = submissions.map { .init(submission: $0, answer: String(repeating: "x", count: 600_000)) }
         #expect(throws: TextSourcesError.self) { try TextSourcesArchive.validate(notebook) }
     }
+
+    @Test func rejectsWhitespaceSubmissionAndHistoricalSourceCountOverflow() throws {
+        var (notebook, target) = try fixture()
+        notebook.question = " \n\t"
+        #expect(throws: TextSourcesError.self) {
+            try TextSourcesContext.makeSubmission(notebook: notebook, target: target, modelID: "local-qwen", modelRevision: nil)
+        }
+
+        let sources = try (0..<TextSourcesLimits.sources + 1).map {
+            try TextSourceSnapshot(displayName: "\($0).txt", bytes: Data("x".utf8))
+        }
+        let excerpt = try TextSourceExcerpt(source: sources[0], range: NSRange(location: 0, length: 1))
+        let prompt = try TextSourcesContext.makePrompt(question: "q", sources: sources, excerpts: [excerpt])
+        let historical = TextSourcesSubmission(notebookRevision: UUID(), targetDocumentID: UUID(),
+                                               targetDocumentRevision: UUID(), question: "q", sources: sources,
+                                               excerpts: [excerpt], request: TextRequest(prompt: prompt, maxTokens: 1,
+                                               temperature: 0.2, topP: 0.95,
+                                               execution: .init(profile: TextExecutionCapability.qwen2Profile,
+                                                                maximumPromptTokens: 1)),
+                                               modelID: "local-qwen", modelRevision: nil)
+        #expect(throws: TextSourcesError.self) {
+            try TextSourcesArchive.validate(TextSourcesNotebook(records: [.init(submission: historical, answer: "x")]))
+        }
+    }
+
+    @Test func citationScannerDoesNotTreatUnclosedOrRepeatedMalformedInputAsValid() throws {
+        let empty = TextSourcesSubmission(notebookRevision: UUID(), targetDocumentID: UUID(),
+                                          targetDocumentRevision: UUID(), question: "", sources: [], excerpts: [],
+                                          request: TextRequest(prompt: "", maxTokens: 1), modelID: "model", modelRevision: nil)
+        let result = TextSourcesContext.citations(in: String(repeating: "[S", count: 2_048), submission: empty)
+        #expect(result.validLabels.isEmpty)
+        #expect(result.invalidLabels.isEmpty)
+    }
 }

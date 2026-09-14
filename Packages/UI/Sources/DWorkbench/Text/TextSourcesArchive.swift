@@ -59,7 +59,10 @@ public enum TextSourcesArchive {
     }
 
     private static func validateSubmission(_ submission: TextSourcesSubmission) throws {
-        guard !submission.question.isEmpty, submission.question.utf8.count <= TextSourcesLimits.questionBytes,
+        guard !submission.question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              submission.question.utf8.count <= TextSourcesLimits.questionBytes,
+              submission.sources.count <= TextSourcesLimits.sources,
+              submission.excerpts.count <= TextSourcesLimits.excerpts,
               !submission.sources.isEmpty, !submission.excerpts.isEmpty else {
             throw TextSourcesError.invalid("历史提交缺少问题、资料或片段。")
         }
