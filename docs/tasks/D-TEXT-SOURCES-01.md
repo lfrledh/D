@@ -197,3 +197,50 @@ Lead亲自写共享契约、Store/Controller/Session接线、独立反例和最�
 本轮由Lead亲自修补与运行，非实现者只读复核，不重新派实施Worker，也不把它写成Terra独立成功。CONTEXT此前初交+两次修复不清零，本段使用一次有界Lead收尾；不追加无限提示/模型试错。先固定CPU反例与旧归档，修补后检查组合Unicode/tokenizer与实际CLI、旧文本取消/恢复/终态、归档迁移及普通App编译；若完整范围无法通过，保留停点。新依赖/权重/权限、签名改变、其他模态模型或GUI不在此收尾执行中。原产物、源个人文件、旧证据保护不变。
 
 CLOSE1测试澄清：首轮新路径23方法中22过/1失败，失败是新增tokenizer往返测试误要求声明NFC的模型保留输入分解音符字节；流拼接与整段decode检查本身通过。Lead核固定0.5/1.5/7B tokenizer.json的NFC声明，非实现者candidate_compatibility_scope同意将该新测试首例预期明确为预组合Café，并保留字节比较、分解标量/ZWJ/前缀回写的所有独立反例；没有修改原TS1保存/引用/接受或既有测试标准。原失败日志保留为失败，不回写通过。源码/提示保存仍原字节，模型normalizer不得写回原文。
+
+### CLOSE1-L 结果与停止点（2026-09-14）
+
+状态：**质量/解码/历史兼容候选已完成有限验证；完整默认调度仍有两项问题，H19未执行，因此不接纳产品代码、不推送。** 不再追加CONTEXT/VIEW实现轮，也不将有界Lead收尾重记为Terra独立通过。源仅接纳四份规划/状态文档到3ae61f252621f0629f89d8546474f818bf565867；候选保留这个源快照的合并历史，最终候选自身SHA写R/final-receipt.json。
+
+#### 原因、修补与精度边界
+
+固定mlx-swift-lm 2.30.6（7e19e09027923d89ac47dd087d9627f610e5a91a）的NaiveStreamingDetokenizer用String字符数量截增量，码点追加进已有组合字符时被漏掉。直接抽取旧类型的CPU反例实际失败：分解重音和👩‍💻分别丢码点；证据R/upstream-detokenizer-proof、upstream-proof-run。本地薄适配改用同一SDK公开generateTokenTask和全前缀decode，按UTF-8前缀提交完整新增标量，等待未完成FFFD尾，不能解释的前缀回写明确失败；保留ToolCallProcessor、原生成任务取消/drain、终态和资源清理。没有改SwiftPM检出、固定依赖、模型权重、精度或产品长度上限。backend版本0.1.2。
+
+解码器不正规化保存内容。固定Qwen tokenizer自身声明NFC，相关模型编码/解码预期与原文件字节保存分别验。完整前缀每token重解码会增加长输出CPU成本；当前短回归不证明8192长输出性能。SDK generationSeconds现不包含下游解码/工具处理，旧/新该值不能直接当端到端吞吐比较；CLI墙钟仍记录全链。既有ToolCallProcessor对未闭合工具标记的缓冲行为未改，本次没有把它宣传为所有可能文本的全字节交付认证。
+
+sources.v2只采用先于实现冻结的EVAL2模板；按excerpts顺序标记和列出可用来源，不后处理或补造引用。每份submission保存模板身份，新v2明确编码；缺字段仅legacyv1，null/未知/错类型拒绝。v1沿用原prompt并省略新增字段，避免原来接近8MiB的合法历史因版本字段膨胀而超限。Archive1/项目10仍是未接纳候选；旧读者不能读新v2，但会明确拒绝而非丢新字段后保存。未来图像schema9与文字10只有各自产品门槛通过后才用新11组合，本轮没有合并它们。
+
+#### 版本与实际证据
+
+| 检查 | 版本/实际结果 | R下证据 |
+| --- | --- | --- |
+| 固定模板原型/容量评估 | 原CLI595cc561…；1.5B八类各两次，五类内容/来源失败；0.5B两诊断保留；7B同样八类各两次，旧解码Unicode未全，七类满足 | evaluation-r2-plan/summary、capacity-r2-plan/summary及逐次原报告；旧结果不重写 |
+| 修补后真实7B | CLI构建96547971db6383ac7f0f02f05fc844bcfb30dd91；16次正常结束，八类内容/来源预期各两次满足，Unicode标题完整；MLX最终active/cache均0；峰值约4.31–4.37GiB，非整机峰值 | postdecoder-plan.json、postdecoder-summary.json、postdecoder-results；全部原答案由Lead与只读非实现者核对 |
+| 字符/终态/真实0.5B生命周期 | 8dcde88df5c7f1a822740537a8f28b978433efd5：23方法/4套件通过；包含真实tokenizer、工具边界、取消交接、重复加载释放、加载失败和接收方抛错后清理 | mlx-decoder-final、text-decoder-final.xcresult、text-decoder-summary.json；保留原22通过/1错误新预期的失败轮 |
+| 新版资料/历史定点 | f1e43f9f39ec44e855ef45fad96ccb7818317f45定点通过；此前复制SwiftPM模块缓存绝对路径不匹配在编译前失败，改独立新scratch，未清理旧证据 | ui-version-tests（失败）、ui-version-fresh（通过） |
+| 完整工作台默认调度 | ec5ef2fe7a7be4f337a349f8918c1bd5d1a3432f：414方法/58套件，两项失败，三opt-in跳过 | ui-full-final，原日志保留 |
+| 同码显式串行完整工作台 | ec5ef2f：414方法/58套件零失败，三opt-in跳过；日志核对方法及布局参数确实依次运行。不能称默认并发通过或两缺陷已修 | ui-full-serial；只读review核调度而非只凭help默认值 |
+| 生产prompt与保存 | ec5ef2f：八固定prompt摘要全部对应评估前模板；16真实CLI的TextRequest/提示字节与生产提交一致，原答案/真实seed指标与旧v1回答经ProjectStore保存冷重开；原稿不变 | actual-answer-persistence、production-persistence；这是CLI结果绑定/导入，不是GUI生成 |
+| 实际旧新读者 | OLD/Build-UI的388a227构建对象写8MiB合法旧归档，当前读者仍读/编；旧读者拒绝v2和混合archive/project，输入清单字节不变 | old-boundary-write、old-boundary.json、old-reader-compatibility；compile-probe的源/对象摘要留档 |
+| 普通隔离App | ec5ef2f构建/签名完整性通过，与前候选entitlements相同；R/D Text Sources CLOSE1.app未启动，无新音视频引擎封装声明 | app-assembly-final、app-artifact.json |
+
+代码路径：MLX改动b02e521e3a6376e4a365870adcc10376f0a81baa；MLX最终测试8dcde88；CLI实际9654797，SHA256 a7bcffe40909b4714f29a5d6bc0ee472e3d918301e31a3010d11a9f65479899c；生产prompt/完整工作台/App受测ec5ef2f。后续至最终候选仅四份来源文档合并及本文追加，不再宣称新文档SHA重跑全部测试。完整SHA/文件对应在R/close-acceptance-summary.json和final-receipt.json。
+
+7B是已批准便携测试包现有固定revision c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed，未新增下载或安装。一次8GiB任务预算低于9.422GB估计在加载前拒绝，依据既有显式预算机制改12GiB后串行验证，未改精度/输入输出额度，M4/16GiB不是产品上限。文字实际randomSeed取result.metadata；旧CLI options.seed默认42不是文字实际seed（显式--seed被文本CLI拒绝）。没有以选seed排除失败样本。
+
+**质量不是自动保证**：7B八类短合成样例内容/来源预期满足；冲突回答最后“无法确定”总结句未逐句带标签，标点位置也不完全照示例，不宣称严格逐句格式100%。0.5B幻觉、1.5B串引用/信息缺失原样保留；专业研读、复杂长资料、广泛注入防御、全部Unicode/模型/Mac未由这些样例验收。引用结构校验和采用门槛未放宽，仍提示语义未验证。
+
+#### 默认完整回归的剩余风险（不是缺用户授权）
+
+1. AlignmentPersistenceTests.schemaSixBacksUpRawBytesAndDefaultsOnlyMissingFields在故意中断迁移后立即重开报“此项目已被另一窗口或应用实例打开”。现有ProjectStore.open的transfer=false失败路径只close锁FD，正常close/deinit已有显式LOCK_UN以防子进程pre-exec副本延长锁；日志紧邻另一个posix_spawn测试，符合竞争假说，但没有故障瞬间FD/errno证据，不能把具体因果写成已实测。相关代码/fixture不在本次diff。
+2. ExecutionSettingsViewTests问答参数模式首次测量底部237超过180视口。原实现一次yield后scroll，测试固定0.3秒；并发MainActor异步测试可能交错。后续缩放及同码串行通过，支持首次布局时序问题，未证明根因或修补。没有放宽等待、删断言或将串行结果回填首轮。
+
+本轮有界范围不扩为ProjectStore/布局重写，不再重复跑绿色样例掩盖失败。下一有限收口需针对失败锁所有权/首次滚动分别做确定反例、最小修补、非实现者审核与默认组合回归；通过后再恢复H19普通沙盒。H18可独立按已有图像候选验收，不被这两个文字问题冻结。用户回来集中只需解锁办理实际前台/新系统提示及确认H09设备是否已到；不要让用户为工程问题扩大权限。
+
+#### 来源、消耗与恢复
+
+本轮Lead实施及验证，candidate_compatibility_scope、hum_backend_readiness只读核代码/样例/HUM方案；没有新的实施Worker、独立运行的评审模型测试或旧预算重置。审核发现旧编码容量膨胀已由Lead收口并以实际旧writer验证；保留原初实现/修复/接管链。新测试错误预期、缓存路径、命令参数/选项和一次只读证据字段误读均见R/operational-events.json，不能混算为Worker实现缺陷。各运行墙钟/实际seed/工具摘要可观察；完整Lead token、模型隐藏解析与订阅实际扣费unknown，不重算历史费用或据此认定成本最优。
+
+恢复检查点：源仅文档3ae61f2、候选代码ec5ef2f及后续仅文档完整SHA见R/final-receipt；H18仍14af48c22e9dbe7ee715b171308276347fab0f68。源scheme摘要ca3635d88aa5a15397b90e528667c66c0e6db7e596176e885c79d194b544206c、索引blob9c76916bdc97c2d4298cefe64e0b0fae3380573e/未暂存保持；普通D四关键文件/已批准7B及旧证据保护在R/protection。所有自有测试/构建进程结束，未启动任何GUI或关闭用户应用；恢复仍须核实际状态。
+
+HUM准备已写入源MUSIC_ROADMAP：短单声部文件→连续音高/自由时间音符候选→保存冷重开/导出；SwiftF0优先评估、Basic Pitch备用，具体固定revision/权重/依赖与许可核定及单独授权后才实施。H09不是文件识别的前置，专门歌声独立紧接，不以文字高级功能全部完成为条件。本轮没有新增识别模型、音符编辑器或组合平台。
