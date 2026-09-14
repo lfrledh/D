@@ -4,6 +4,10 @@
 
 当前指导以[产品与架构原则](docs/PRODUCT_PRINCIPLES.zh-CN.md)为准：项目下按主要产物模态组织，跨模态复用数据、操作和原生UI组件，工作方式与布局分开；开发机16GiB不作为能力上限。旧视觉首批/固定小规格保留为阶段历史，不限制后续产品方向。[D-ALIGN-01](docs/tasks/D-ALIGN-01.md)已本地集成并完成有限阶段验收：统一能力来源并接通文字/图像配置，音频按实际部署声明与验证；接纳和推送见行动指南。完整可组合平台仍未实现。
 
+当前统一候选把单参考PNG改图与文字资料问答接入同一项目格式11。参考图支持显式导入、修改条件、生成候选、比较采用与安全导出；资料问答支持TXT/Markdown快照、选择片段、带来源记录的回答、接受/拒绝/撤销及安全保存。引用标记核对位置，不证明回答内容一定正确。两条独立候选已经完成实际模型与界面验收；统一组合的验收、接纳及推送以[当前行动](docs/CURRENT_ACTIONS.zh-CN.md)为准，不能把此描述当作组合已完成证明。
+
+项目升级先保留原清单的 `project.v<旧版本>.backup.json`，再写入11；媒体不改写。版本9的参考来源与版本10的资料/回答历史分别保留。旧版程序会拒绝版本11项目；需要保留旧版使用时，应先复制整个项目作为独立副本。不要手改版本号绕过检查。
+
 原生 SwiftUI／Liquid Glass 工作台通过 DRuntime 与 DMLXBackend 运行图像任务，使用自包含 `.dproject` 保存作品和生成条件。已支持项目内多份独立创作、候选整理、两图比较和条件复用，见 [最新验收](docs/EXPLORATION_STAGE_ACCEPTANCE.zh-CN.md)。当前行动与验收状态集中在 [行动指南](docs/CURRENT_ACTIONS.zh-CN.md)。已完成的单项目检查点见 [工作台验收](docs/WORKBENCH_ACCEPTANCE.zh-CN.md)，后续目标统一维护在 [产品目标清单](docs/PRODUCT_GOALS.zh-CN.md)。文字现已接入同一项目的有限创作闭环：选段改写、候选接受/拒绝、受保护撤销、安全保存重开；旧文本和占位界面已退出。PNG支持实际任务配方公开/私有预览、新副本内嵌、离线读回并显式恢复为新草稿。两者已本地验收，范围及真实运行证据见 [T0任务](docs/tasks/D-T0-WORKBENCH-01.md) 和 [PNG任务](docs/tasks/D-META-PNG-01.md)；CLI继续保留。
 
 单仓整合与真实文本推理基础的四项工作已完成，最终验收结果和边界见 [基础阶段验收](docs/FOUNDATION_STAGE_ACCEPTANCE.zh-CN.md)。
@@ -35,6 +39,24 @@
 - 命令行重建：`./scripts/build-local.sh`。默认缓存位于项目同级的 `D-Development`，可用 `D_DEVELOPMENT_ROOT` 覆盖。
 - 新 workspace 的本用户 WorkspaceSettings 将 GUI DerivedData 放在外盘 `D-Development/DerivedData-Workspace`，该偏好不提交。命令行的依赖检出分别位于 `SourcePackages-App` 与 `SourcePackages-MLX`，避免并行构建互相清理检出目录。首次环境设置留下的约 636 MB 内置盘临时缓存未删除。
 - 外盘需要保持挂载。系统工具、用户偏好及部分系统管理缓存仍位于内置盘。
+
+### 原生构建与完整开发应用
+
+在Xcode打开仓库根目录的 `D.xcworkspace`，选择 `D / My Mac` 即可编辑和编译Swift部分。`scripts/build-local.sh`使用已有本地签名配置构建原生应用；它不会自动把Python音视频环境装入应用。只看原生构建成功，不能判断三个音视频引擎已经部署。
+
+本批统一构建入口的目的，是用**已有离线依赖与既有签名身份**依次构建Swift应用、封装SA3/MRT2、准备及封装视频引擎，得到独立的 `D Development.app`。配置中的运行环境和缓存需由开发者显式指定；工具不下载模型或安装依赖。新操作应使用全新的外盘输出目录，不覆盖普通D或以前的报告。
+
+使用已有 Python 3.12 环境，将 `scripts/development-app-config.example.json` 复制到仓库外的开发目录，填写已批准的本机路径及签名身份。`sourcePackagesTemplate` 必须包含与锁文件一致的干净检出和完整本地 Git 对象，不能依赖其他缓存目录的外部链接。确认全部输入已就绪后，从仓库运行：
+
+```sh
+/path/to/existing/python3.12 -B scripts/build-development-app.py \
+  --config /Volumes/YourSSD/D-Development/development-build.json \
+  --run-root /Volumes/YourSSD/D-Development/Builds/unique-run
+```
+
+`unique-run` 必须尚不存在；输出位于其 `output/D Development.app`，汇总在 `evidence/build-development-report.json`，分阶段日志在 `logs`。模型仍由应用显式登记，不打进App。路径为示例；没有就绪环境时先按音频/视频指南准备，不要把占位值直接运行。工具拒绝缺失或不匹配的输入，并保留失败证据，不自动下载、修复签名或覆盖旧应用。
+
+退出0表示封装完成，2表示输入/工具/报告失败，130表示取消；具体子阶段结果保留在报告中。`packaged`与`runtimeVerification=not-run`只说明封装完成，不代表模型运行、公证或系统隐私授权已验证。当前验收与实际产物索引见[批次记录](docs/tasks/D-MULTIMODAL-BASELINE-01.md)。
 
 ## 版本管理
 
@@ -68,7 +90,7 @@ git clone --branch codex/inference-foundation https://github.com/lfrledh/D.git
 
 根目录 Swift package 含 DInference（纯契约）和 DRuntime（串行任务生命周期）两个 target，零远程依赖、Swift 6 严格模式。Backends/MLX 中的 DMLXBackend 提供文本与图像后端，d-infer 是宿主入口。现有 Packages/UI 包内包含两个实际 target：DWorkbench 拥有项目、任务、资产及模型安装服务，只依赖 DInference；UI 依赖这些服务，负责展示和原生交互。D 应用装配具体 runtime／backend。其他旧 Packages/* 暂留源代码，不在新应用依赖路径中。
 
-逻辑导航为“项目 → 模态 → 创作/参数/资产”，模型是共享资源，任务是运行状态。单项目支持多份创作文档，当前schema5含音频候选；旧格式迁移先保留原清单备份，原媒体不改写，真实用户项目未在本批迁移；快速草稿仍待排期。结构与服务演进规则见 [信息架构](docs/decisions/0007-project-information-architecture.md) 和 [服务边界](docs/decisions/0008-application-services-and-provider-evolution.md)。远程 API、对外推理服务和 RAW 媒体按目标清单后续启动，没有空的产品入口。
+逻辑导航为“项目 → 模态 → 创作/参数/资产”，模型是共享资源，任务是运行状态。单项目支持多份创作文档；当前统一候选schema11涵盖图文音视频及两类新来源记录，旧schema5是音频阶段的历史格式。旧格式迁移先保留原清单备份，原媒体不改写，本批只迁移自有验收项目；快速草稿仍待排期。结构与服务演进规则见 [信息架构](docs/decisions/0007-project-information-architecture.md) 和 [服务边界](docs/decisions/0008-application-services-and-provider-evolution.md)。远程 API、对外推理服务和 RAW 媒体按目标清单后续启动，没有空的产品入口。
 
 运行 `./scripts/test-foundation.sh` 验证框架；运行 `./scripts/build-local.sh` 构建新应用，`./scripts/test-workbench.sh` 验证无 GPU 的项目与任务服务。二者默认使用外置SSD缓存：应用在D-Development，新核心测试在同级BuildCaches/D-Foundation；日志都保存在D-Development/Logs。详见 [框架调用与限制](docs/FOUNDATION_USAGE.md)、[架构决策](docs/decisions/0001-inference-boundary.md)、[任务生命周期决策](docs/decisions/0002-run-lifecycle.md)。
 
