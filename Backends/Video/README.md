@@ -59,3 +59,11 @@ D-VIDEO-V0-01 的命令行后端；工作台视频入口尚未开放。阶段验
 - 真实生成必须额外记录固定revision、实际请求/精度、完整进程退出、内存/耗时、全部帧解码和人类/维护者看图；CPU mock不能替代。没有承诺跨框架或跨设备逐像素相同。
 
 语法检查使用 `tokenize.open` 和内存 `compile(..., dont_inherit=True)`，不执行目标模块、不写目标pyc。不要使用默认py_compile；其他缓存和临时文件仍须限定在任务目录。未知权限拒绝先停报，不能自行创造绕行路径。
+
+## 离线工作台部署候选（D-VIDEO-WORKBENCH-01）
+
+`Packaging/prepare_video_engine.py`从已有Python3.12、白名单依赖、固定分词器和源码准备可移动视频引擎；`package_video_app.py`只向新应用副本加入视频并沿既有身份签名，不改输入应用或音频引擎。完整出口以当前任务记录为准。
+
+现有tokenizers 0.22.2 wheel缺少许可证文件。仅此固定版本可使用本仓`Packaging/Licenses/tokenizers-0.22.2-LICENSE.txt`回退：来自[官方v0.22.2标签](https://raw.githubusercontent.com/huggingface/tokenizers/v0.22.2/LICENSE)，SHA-256 `c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4`。有许可证的安装不依赖回退；复制后再次校验。无下载、安装或对原环境写入；其他缺许可证仍拒绝。
+
+便携Python只承诺固定视频provider所需能力。其闲置标准库`_tkinter`无配套Tcl/Tk，不提供Tkinter GUI；视频导入/生成通过不代表通用Python环境或全部扩展闭包通过。
