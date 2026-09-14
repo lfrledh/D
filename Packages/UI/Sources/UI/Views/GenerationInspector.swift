@@ -49,6 +49,12 @@ struct GenerationInspector: View {
 
                 modelSection
                 Divider()
+                ImageReferenceSection(
+                    model: model,
+                    documentID: model.activeDocumentID,
+                    navigationEpoch: model.projectSession.navigationEpoch
+                )
+                Divider()
                 promptSection
                 seedSection
                 generationSettings
@@ -315,13 +321,24 @@ struct GenerationInspector: View {
                 .font(.caption).monospacedDigit().textSelection(.enabled)
             LabeledContent("生成时间", value: job.createdAt.formatted(date: .abbreviated, time: .shortened))
                 .font(.caption)
+            if let provenance = ImageReferenceSection.submittedReferenceText(job: job, manifest: model.manifest) {
+                Text(provenance)
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("submitted-image-reference")
+            } else {
+                Text("此任务未提交参考图；当前草稿的参考设置不会回写到它。")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("submitted-image-reference-none")
+            }
             Button {
                 Task { await model.copySettings(from: job.id) }
             } label: {
                 Label("基于条件新建创作", systemImage: "arrow.branch")
             }
             .accessibilityIdentifier("copy-settings-inspector")
-            Text("复制实际提示词与 seed，不使用这张图片作为输入。")
+            Text("复制实际提示词与 seed；本次提交有参考图时会保留原参考，不会把所查看图片自动作为输入。")
                 .font(.caption).foregroundStyle(.secondary)
         }
     }
