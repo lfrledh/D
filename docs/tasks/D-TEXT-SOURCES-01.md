@@ -308,3 +308,12 @@ TS1-IME1实现证据：composition-before 在原606生产实现上新增真实Co
 实施内新增撤销反例同时发现正常undo后原生值/Controller不同步，以及拒绝超限后旧NSUndoTyping范围导致NSRangeException；composition-undo原日志保留，不只记录最后崩溃。专属问题UndoManager保护消除范围崩溃，但正常undo仍未同步；只读观察确认原生字符串已回到初稿、Controller仍旧。最后使用官方NSTextViewDelegate.undoManager(for:)提供本编辑器管理器，并订阅该对象完成undo/redo通知，通过同一校验回调同步完成后的文字；无需改Controller。程序权威替换/拆卸时仅清本问题框typing历史，普通合法输入/undo/redo不清、工作台回答采用撤销及窗口其他undo不变。代价明确：非法编辑拒绝后的权威恢复会使本问题框先前的键入撤销记录重置，不声称这些旧范围仍可用。完整4项局部反例composition-complete通过，包括有栈拆卸、窗口sentinel保留、非法输入、组字确认；真人Pinyin/Space与完整回归仍待执行。
 
 修补发生于本次额外有界Lead实施/自检中，没有追加Worker修复或重置预算。中间Delegate改用实例UndoManager时漏MainActor声明导致编译错误，按AppKit归属明确标注后继续；没有unsafe/nonisolated绕过。一次在证据目录运行只读git status得到not a git repository，未发生仓库写入。全部日志保留，不用最终绿灯抹去问题。官方依据： https://developer.apple.com/documentation/appkit/nstextviewdelegate/undomanager(for:) 、 https://developer.apple.com/documentation/foundation/nsnotification/name-swift.struct/nsundomanagerdidundochange 。本次仅Lead实现，非实现者只读审核另记，不称独立模型执行了测试。
+
+
+## IME 真人复验完成（2026-09-14，额外有界 Lead 收尾）
+
+受测实现 `703dd146426435990b345f3ef03ee7a97ea1618a`：完整工作台421方法/60套件零失败，3项显式条件跳过；新增4方法包含在421内。普通现有开发身份App构建通过，codesign严格完整性/身份与entitlements对照通过。非实现者 candidate_compatibility_scope 对固定代码及证据只读复核无阻塞，未独立执行测试。
+
+用户对实际系统拼音“组字未确认→缩窄→放宽→空格选字”回答“空格选字、文字和光标均正常”。Lead在同一新App观察 Unicode 问题输入、Cmd-Z/重做、生产保存、正常退出/新PID重开；问题、正文和5条回答历史保留，project.json重开前后逐字节一致。两个实例62966/63510均正常退出0。证据 `D-Development/AgentTrials/D-TEXT-SOURCES-01/run-20260914T124235Z-ime/ime-acceptance.json`；批次入口R的 `text-native-acceptance-after-ime.json` 合并索引原CLOSE2真实7B和本次编辑修补验证，**本次未重跑模型**。H19候选门槛通过，统一schema11组合/源接纳尚未进行。
+
+来源仍为原Worker实现及修复历史＋Astra Lead原收尾＋用户续行授权的一次额外IME修补；不回填成原预算内通过，不宣称Terra独立通过。原失败证据不覆盖。源仍ac39b73d64793bed9dd7089e32dcd43c0db2a2c1、个人scheme唯一未暂存修改，普通App不改；待MB整合后再提交源。此提交仅追加任务记录，代码与受测703一致；最终SHA写外部回执。
