@@ -111,6 +111,7 @@ struct WorkbenchTasks: View {
         case .text(let request): request.prompt
         case .audio(let request): request.prompt
         case .video(let request): request.prompt
+        case .pitch: "原声音高分析"
         }
     }
 
