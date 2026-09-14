@@ -100,3 +100,16 @@ CONTEXT（D-TS-CONTEXT-01 spec1 TS1，Terra/medium）：仅可新增Packages/UI/
 Lead接线/组合待首组交回后按TS1推进，共享存储、迁移、控制器与最小UI单一协调。所有输出独立R/<worker>/output、tmp，不写共享Git。需要变更公共契约先停报；Lead提供明确修订，旧迟到结果不自动集成。阶段完整GUI不可运行时保存候选及明确入口、不开默认产品开关、不合并未经完整门槛的新路径。
 
 TS1派工前澄清：Notebook.revision表示每次持久状态变更，inputRevision只在问题/来源/片段变化时更新；Submission.notebookRevision冻结inputRevision。追加结果/采用/拒绝不改变inputRevision，不能让候选因自身完成而过期。源正文修订另检。持久冲突/无变化比较使用问题/prompt/回答UTF8字节，不能只凭String的规范等价。共享类型非实现者审核发现ZWJ文件名和哈希前预算两项，Lead在派工前修补；不占Worker修复轮。
+
+
+### TS1-VIEW1：独立只读资料/回答界面（2026-09-14，Lead签发）
+
+D-TS-VIEW-01 spec1 TS1-VIEW1，Terra/medium。此任务与Reader/Context实现独立，只依赖已冻结TextSourcesTypes值。只允许新增Packages/UI/Sources/UI/Views/TextSourcesView.swift和Packages/UI/Tests/UITests/TextSourcesViewTests.swift。不修改WorkbenchView/Model、ProjectSession/Store、公共类型、本文、其他任务、签名/工程/依赖。Lead负责最后装配和权限入口。本文件这份额外任务节由Lead单一维护。
+
+提供public @MainActor TextSourcesView及TextSourcesViewActions。init参数：notebook:TextSourcesNotebook, partialAnswer:String, isRunning:Bool, isCancelling:Bool, isSaving:Bool, canAsk:Bool, canUndo:Bool, errorMessage:String?, canAccept:@escaping (TextSourceAnswerRecord)->Bool, citationSummary:@escaping (TextSourceAnswerRecord)->String, actions:TextSourcesViewActions。Actions public init与let closures：importSource:()->Void, removeSource:(UUID)->Void, useExcerpt:(UUID,NSRange?)->Void, changeQuestion:(String)->Void, ask:()->Void, cancel:()->Void, accept:(UUID)->Void, reject:(UUID)->Void, undo:()->Void, save:()->Void。nil范围表示全文，选择片段必须Character对齐UTF16，回调身份对应被展示Source。业务检查/文件面板/模型/保存由caller负责，UI不读文件、不调用后端。
+
+最小面板用于现有文字模态的资料问答工作方式，不增加顶层页面。显示资料列表/原始来源摘要、只读可选中文本（可在此新文件用NSViewRepresentable NSTextView isEditable=false，不改现有编辑器）、“使用全文/使用选中片段/移除资料”，问题输入、生成/取消/保存/撤销，回答候选/采用/拒绝及提交时来源片段。原件只读，历史回答只读；引用summary必须显式显示，不将结构核对说成事实验证。采用按钮必须同时尊重caller.canAccept和未运行/保存；没有来源/问题则callercanAsk=false。不自动触发import/generate/adopt，不将资料/回答Markdown当可执行富内容或打开链接。
+
+沿用原生macOS26玻璃按钮/系统工具栏，内容区清楚可读。窄宽用可换行/纵向和滚动布局，不使用导致裁切的固定总最小宽度，不替换IME问题输入控件来切布局。不要把API/内存预算/UTF16数值放用户主界面。选区在切换资料或版本时失效；禁止一份资料的旧选区触发另一份的操作。可定义同文件纯选择状态帮助器并对中文、组合emoji、旧id/revision及越界写真实行为测试；不写仅匹配文案/实现行数的测试。
+
+仅已有swiftc typecheck、own output/tmp，DInference/DWorkbench模块只读R/Build-UI/arm64-apple-macosx/debug/Modules；SwiftUI/AppKit工具链已有。No SwiftPM/GPU/GUI启动/模型/网络/下载/配置/递归/commit。未知权限或缺失工具先停报；用绝对rg /Applications/ChatGPT.app/Contents/Resources/rg，显式Git /Applications/Xcode.app/Contents/Developer/usr/bin/git。初交+2修复预算，typecheck不是行为/GUI验收；Lead后续运行生产组合测试。原界面接线与真实GUI仍未启用，不能把这个局部View写成产品完成。
