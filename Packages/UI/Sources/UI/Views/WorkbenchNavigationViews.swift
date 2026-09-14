@@ -572,6 +572,7 @@ public struct ModalityDocumentList: View {
         case .image: "new-document"
         case .text: "new-text-document"
         case .audio: "new-audio-creation"
+        case .video: "new-video-creation"
         }
     }
 
@@ -580,6 +581,7 @@ public struct ModalityDocumentList: View {
         case .image: "doc.text.image"
         case .text: "doc.text"
         case .audio: "waveform"
+        case .video: "film"
         }
     }
 }

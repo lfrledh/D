@@ -11,6 +11,7 @@ final class WorkbenchBootstrap {
     private(set) var libraryModel: ModelLibraryModel?
     private(set) var startupError: String?
     private(set) var audioEngineIssue: String?
+    private(set) var videoEngineIssue: String?
     private(set) var isTerminating = false
     private var library: ModelLibrary?
     private var loading = false
@@ -65,11 +66,29 @@ final class WorkbenchBootstrap {
             let musicEngine = musicAvailability.engine
             let issues = [availability.issue, musicAvailability.issue].compactMap { $0 }
             audioEngineIssue = issues.isEmpty ? nil : issues.joined(separator: "\n")
+            let videoAccessRoot = libraryDirectory.deletingLastPathComponent()
+                .appendingPathComponent("VideoProcessAccess", isDirectory: true)
+            var resolvedVideo: BundledAudioEngine?
+            do {
+                resolvedVideo = try Bundle.main.resourceURL.flatMap {
+                    try BundledAudioEngine.resolve(resourceDirectory: $0, family: .video)
+                }
+                if resolvedVideo != nil {
+                    try FileManager.default.createDirectory(at: videoAccessRoot, withIntermediateDirectories: true,
+                        attributes: [.posixPermissions: 0o700])
+                }
+                videoEngineIssue = nil
+            } catch {
+                resolvedVideo = nil
+                videoEngineIssue = "视频引擎暂不可用；已有项目与媒体仍可打开。\n" + error.localizedDescription
+            }
+            let videoEngine = resolvedVideo
             let library = try await ModelLibrary(stateDirectory: libraryDirectory)
             let model = WorkbenchModel(sessionFactory: { artifacts in
                 try await AppSessionFactory.makeSession(artifactDirectory: artifacts,
                     bundledAudioEngine: engine, audioConsent: consent,
-                    bundledMusicEngine: musicEngine, musicConsent: musicConsent, audioAccessRoot: accessRoot)
+                    bundledMusicEngine: musicEngine, musicConsent: musicConsent, audioAccessRoot: accessRoot,
+                    bundledVideoEngine: videoEngine, videoAccessRoot: videoAccessRoot)
             }, settings: settings, modelLibrary: library,
                 audioEnabled: engine != nil || musicEngine != nil || audioWorkbenchEnabled,
                 // File-input audio does not depend on the deferred microphone acceptance.

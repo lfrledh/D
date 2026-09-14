@@ -6,6 +6,10 @@ public enum AudioCreationCandidateAction: Sendable {
     case select(UUID?), adopt(UUID?), reject(UUID, Bool)
 }
 
+public enum VideoCreationCandidateAction: Sendable {
+    case select(UUID?), adopt(UUID?), reject(UUID, Bool)
+}
+
 public enum ProjectCloseDecision: Sendable {
     case wait, cancel, keepOpen
 }
@@ -90,6 +94,21 @@ public final class ProjectSession {
     public private(set) var activeJobIDs: Set<UUID> = []
     public private(set) var text: ProjectTextController?
     public private(set) var audio: ProjectAudioController?
+    public private(set) var videoCreationContextID = UUID()
+    public private(set) var videoCreationDraft: VideoCreationDraft?
+    public private(set) var videoModelStatus = "选择已准备的 Wan2.1 T2V-1.3B 模型"
+    public private(set) var isRegisteringVideoModel = false
+    public private(set) var videoPreviewURL: URL?
+    public private(set) var videoPreviewIdentity = UUID()
+    public var videoCapability: VideoExecutionCapability { session?.videoCapability ?? .wan21 }
+    public var defaultMemoryBudgetBytes: UInt64 { session?.defaultMemoryBudgetBytes ?? 12 * 1024 * 1024 * 1024 }
+    @ObservationIgnored private var videoCreationDocumentID: UUID?
+    @ObservationIgnored private var videoCreationPersistedRevision: UUID?
+    @ObservationIgnored private var videoCreationWriteTail: Task<Void, Never>?
+    @ObservationIgnored private var videoAdmissions: [UUID: Task<Void, Never>] = [:]
+    @ObservationIgnored private var videoAdmissionDocuments: [UUID: UUID] = [:]
+    @ObservationIgnored private var videoModelLease: LocationAccess.Lease?
+    @ObservationIgnored private var videoReference: ModelReference?
     public private(set) var audioCreationContextID = UUID()
     public private(set) var audioCreationDraft: AudioCreationDraft?
     private var musicModelStatus = "选择已安装的 Magenta RealTime 2 small 模型"
@@ -122,7 +141,7 @@ public final class ProjectSession {
     public private(set) var navigationEpoch: UInt64 = 0
     private var lastDocuments: [CreatorMode: UUID] = [:]
     public var availableCreatorModes: [CreatorMode] {
-        [.image] + (session?.textBackendID == nil ? [] : [.text]) + (audioEnabled ? [.audio] : [])
+        [.image] + (session?.textBackendID == nil ? [] : [.text]) + (audioEnabled ? [.audio] : []) + [.video]
     }
     /// The retained active document remains a storage fact while an empty workspace is visible.
     public var presentedDocument: ProjectDocument? {
@@ -302,6 +321,7 @@ public final class ProjectSession {
         await selectionWriteTail?.value
         await metadataWriteTail?.value
         if activeDocument?.kind == .text { return }
+        if activeDocument?.kind == .video { try await flushVideoCreation(to: store); return }
         if activeDocument?.kind == .audio {
             try await flushAudioCreation(to: store)
             guard await audio?.flushPendingWrites() != false else {
@@ -330,6 +350,13 @@ public final class ProjectSession {
             lastDocuments[creatorMode] = document.id
         }
         navigationEpoch &+= 1
+        stopVideoPreview()
+        if videoCreationDocumentID != activeDocumentID || activeDocument?.videoCreation == nil {
+            videoCreationContextID = UUID()
+            videoCreationDocumentID = activeDocument?.videoCreation == nil ? nil : activeDocumentID
+            videoCreationDraft = activeDocument?.videoCreation
+            videoCreationPersistedRevision = videoCreationDraft?.revision
+        }
         if audioCreationDocumentID != activeDocumentID || activeDocument?.audioCreation == nil {
             audioCreationContextID = UUID()
             audioCreationTransport.stopPlayback()
@@ -449,13 +476,16 @@ public final class ProjectSession {
     }
 
     private func relocateOpenProject(_ previousStore: ProjectStore, lease: LocationAccess.Lease) async {
-        guard !isRegisteringTextModel, !isRegisteringAudioModel, text?.hasPendingCandidate != true,
+        guard !isRegisteringTextModel, !isRegisteringAudioModel, !isRegisteringVideoModel, text?.hasPendingCandidate != true,
               await audio?.prepareForNavigation() != false, await drainForClose() else {
             audio?.resumeAdmissions()
             await access.release(lease)
             errorMessage = "请先完成模型校验并处理文字候选，再重新定位项目。"
             return
         }
+        stopVideoPreview()
+        await videoCreationWriteTail?.value
+        videoCreationContextID = UUID()
         audioCreationTransport.stopPlayback()
         await audioCreationWriteTail?.value
         audioCreationContextID = UUID()
@@ -571,6 +601,20 @@ public final class ProjectSession {
             } catch { musicModelStatus = "旋律器乐模型暂不可用，请重新选择原模型文件夹" }
         } else if createdSession.musicBackendID == nil {
             musicModelStatus = "旋律器乐引擎尚未配置；已有作品仍可查看和导出"
+        }
+        if let bookmark = settings.data(forKey: "workbench.videoModelBookmark.v1"),
+           let validate = createdSession.validateVideoModel {
+            do {
+                let lease = try await access.restore(bookmark)
+                do {
+                    videoReference = try await validate(lease.url)
+                    videoModelLease = lease
+                    settings.set(lease.bookmark, forKey: "workbench.videoModelBookmark.v1")
+                    videoModelStatus = "Wan2.1 视频模型已恢复并校验 · BF16/FP32 · 无音轨"
+                } catch { await access.release(lease); throw error }
+            } catch { videoModelStatus = "视频模型暂不可用，请重新选择原模型文件夹" }
+        } else if createdSession.videoBackendID == nil {
+            videoModelStatus = "本地视频引擎尚未配置；已有视频仍可预览和导出"
         }
     }
 
@@ -802,6 +846,7 @@ public final class ProjectSession {
         guard activeJobIDs.contains(id) else { return }
         cancellationRequests.insert(id)
         audioAdmissions[id]?.cancel()
+        videoAdmissions[id]?.cancel()
         liveStates[id] = .cancelling
         phases[id] = "正在取消，等待计算结束并释放资源"
         if let run = handles[id] { await run.cancel() }
@@ -1257,7 +1302,7 @@ public final class ProjectSession {
 
     /// Used by project switching and native window/application close delegates.
     public func requestClose(decision: ProjectCloseDecision? = nil) async -> Bool {
-        if isRegisteringTextModel || isRegisteringAudioModel { return false }
+        if isRegisteringTextModel || isRegisteringAudioModel || isRegisteringVideoModel { return false }
         if text?.hasPendingCandidate == true {
             errorMessage = "请先接受或拒绝文字候选，再关闭项目。正文可以随时保存。"
             return false
@@ -1329,6 +1374,12 @@ public final class ProjectSession {
             // if a preceding disk/cleanup operation fails and the user needs to retry.
             if let session { await session.shutdown() }
             audio?.deactivateAfterClose()
+            stopVideoPreview()
+            await access.release(videoModelLease)
+            videoModelLease = nil; videoReference = nil
+            videoCreationContextID = UUID(); videoCreationDocumentID = nil
+            videoCreationDraft = nil; videoCreationPersistedRevision = nil
+            videoModelStatus = "选择已准备的 Wan2.1 T2V-1.3B 模型"
             audioCreationTransport.shutdown()
             await access.release(audioModelLease)
             audioModelLease = nil
@@ -1383,7 +1434,7 @@ public final class ProjectSession {
 
 
     private func navigationReady() -> Bool {
-        guard !isTextWorking, !isRegisteringTextModel, !isRegisteringAudioModel, text?.hasPendingCandidate != true else {
+        guard !isTextWorking, !isRegisteringTextModel, !isRegisteringAudioModel, !isRegisteringVideoModel, text?.hasPendingCandidate != true else {
             errorMessage = "请先取消并等待改写结束，或接受／拒绝文字候选，再切换文档。"
             return false
         }
@@ -1395,6 +1446,7 @@ public final class ProjectSession {
     }
 
     private func prepareAudioNavigation() async throws {
+        stopVideoPreview()
         audioCreationTransport.stopPlayback()
         guard await audio?.prepareForNavigation() != false else {
             throw ProjectStoreError.invalidTransition
@@ -1615,6 +1667,7 @@ public final class ProjectSession {
         liveStates[id] = .queued
         phases[id] = "正在保存声音任务"
         audioCreationTransport.stopPlayback()
+        stopVideoPreview()
         startPolling()
         let preceding = admissionTail
         audioAdmissionDocuments[id] = documentID
@@ -1693,6 +1746,7 @@ public final class ProjectSession {
             let url = try await store.assetURL(for: asset)
             guard contextID == audioCreationContextID, documentID == activeDocumentID, self.store === store,
                   !isChangingProject, !closePending else { return }
+            stopVideoPreview()
             audio?.transport.stopPlayback()
             try audioCreationTransport.preparePlayback(url: url, format: inspection.format,
                 policy: asset.metadata.audio?.origin == .modelGenerated ? .generated : .original)
@@ -1708,6 +1762,237 @@ public final class ProjectSession {
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         do { try await store.exportAudioAsset(id: id, to: url) }
         catch { report(error, context: "声音导出未完成，原件与已有目标未被覆盖") }
+    }
+
+    public var videoCreationCandidates: [ProjectAsset] {
+        guard let document = presentedDocument, document.kind == .video, let manifest else { return [] }
+        let jobs = Set(manifest.jobs.filter { $0.documentID == document.id }.map(\.id))
+        return manifest.assets.filter { $0.metadata.video != nil && $0.jobID.map(jobs.contains) == true }
+    }
+    public var videoConfigurationError: String? {
+        guard let value = videoCreationDraft else { return "请新建视频创作。" }
+        do {
+            _ = try value.makeRequest(capability: videoCapability)
+            _ = try value.selectedMemoryBudgetBytes()
+            return nil
+        } catch { return error.localizedDescription }
+    }
+    public var canGenerateVideoCreation: Bool {
+        creatorMode == .video && videoCreationDraft != nil && videoReference != nil && session?.videoBackendID != nil
+            && !isBusy && !isChangingProject && !closePending && !isRegisteringVideoModel && pendingSaves.isEmpty
+            && !showingAllArtworks && videoConfigurationError == nil
+    }
+    public func stopVideoPreview() {
+        videoPreviewIdentity = UUID()
+        videoPreviewURL = nil
+    }
+
+    public var videoCreationSaveStatus: String {
+        videoCreationDraft?.revision == videoCreationPersistedRevision ? "创作条件已保存" : "创作条件尚未保存"
+    }
+
+    public func updateVideoCreationDraft(_ value: VideoCreationDraft, contextID: UUID, documentID: UUID) {
+        guard contextID == videoCreationContextID, documentID == activeDocumentID,
+              activeDocument?.videoCreation != nil, !isChangingProject, !closePending,
+              var previous = videoCreationDraft else { return }
+        // A native panel can cause a field to commit the same input again. Preserve
+        // the captured revision for a true no-op, but never for actual edits or ABA.
+        guard !previous.hasSameEditableRepresentation(as: value) else { return }
+        let decisions = previous.rejectedAssetIDs
+        previous = value
+        previous.rejectedAssetIDs = decisions
+        previous.revision = UUID()
+        videoCreationDraft = previous
+    }
+
+    private func queueVideoCreationSave(_ value: VideoCreationDraft, documentID: UUID,
+                                       store: ProjectStore) -> Task<ProjectManifest, Error> {
+        let preceding = videoCreationWriteTail
+        let context = videoCreationContextID
+        let write = Task { [self] in
+            if let preceding { await preceding.value }
+            guard self.store === store, context == videoCreationContextID else { throw CancellationError() }
+            let snapshot = await store.snapshot()
+            guard let current = snapshot.documents.first(where: { $0.id == documentID })?.videoCreation else {
+                throw ProjectStoreError.missingDocument
+            }
+            // A previously accepted decision cannot be overwritten by stale editor input.
+            guard current.rejectedAssetIDs == value.rejectedAssetIDs else {
+                throw ProjectStoreError.externalModification
+            }
+            let result: ProjectManifest
+            if current == value { result = snapshot }
+            else {
+                guard documentID == videoCreationDocumentID,
+                      current.revision == videoCreationPersistedRevision else {
+                    throw ProjectStoreError.externalModification
+                }
+                result = try await store.saveVideoCreation(value, documentID: documentID,
+                                                          expectedRevision: current.revision)
+            }
+            guard self.store === store, context == videoCreationContextID else { throw CancellationError() }
+            applyManifest(result)
+            if videoCreationDocumentID == documentID { videoCreationPersistedRevision = value.revision }
+            return result
+        }
+        videoCreationWriteTail = Task { _ = try? await write.value }
+        return write
+    }
+
+    private func flushVideoCreation(to store: ProjectStore) async throws {
+        guard let documentID = videoCreationDocumentID, documentID == activeDocumentID else { return }
+        repeat {
+            guard let value = videoCreationDraft else { return }
+            _ = try await queueVideoCreationSave(value, documentID: documentID, store: store).value
+            if videoCreationDraft?.revision == value.revision { return }
+        } while self.store === store && activeDocumentID == documentID
+    }
+
+    @discardableResult public func saveVideoCreation(contextID: UUID, documentID: UUID) async -> Bool {
+        guard contextID == videoCreationContextID, documentID == activeDocumentID,
+              let store, !isChangingProject, !closePending else { return false }
+        do { try await flushVideoCreation(to: store); return true }
+        catch { report(error, context: "视频创作尚未保存，原件与输入均保留"); return false }
+    }
+
+    public func createVideoCreation() async {
+        guard navigationReady(), let store, !isChangingProject, !closePending else { return }
+        isChangingProject = true
+        defer { isChangingProject = false }
+        do {
+            stopVideoPreview()
+            try await prepareAudioNavigation()
+            try await flushDraft(to: store)
+            applyManifest(try await store.createVideoCreation())
+            showingAllArtworks = false
+            loadActiveDocument()
+        } catch { audio?.resumeAdmissions(); report(error, context: "视频创作未能新建；已有作品未改变") }
+    }
+
+    public func registerVideoModel(at url: URL) async {
+        guard let runtime = session, let validate = runtime.validateVideoModel,
+              !isBusy, !isChangingProject, !closePending, !isRegisteringVideoModel else {
+            errorMessage = "本地视频引擎尚未就绪或有任务正在运行；没有开始加载模型。"
+            return
+        }
+        isRegisteringVideoModel = true
+        defer { isRegisteringVideoModel = false }
+        let context = videoCreationContextID
+        do {
+            let lease = try await access.acquire(selected: url)
+            do {
+                let reference = try await validate(lease.url)
+                guard context == videoCreationContextID, self.session?.videoBackendID == runtime.videoBackendID else {
+                    throw CancellationError()
+                }
+                await access.release(videoModelLease)
+                videoModelLease = lease; videoReference = reference
+                settings.set(lease.bookmark, forKey: "workbench.videoModelBookmark.v1")
+                videoModelStatus = "Wan2.1 T2V-1.3B · BF16 文本/扩散，FP32 解码 · 无音轨"
+            } catch { await access.release(lease); throw error }
+        } catch { report(error, context: "视频模型未能就绪，已有作品保持不变") }
+    }
+
+    public func generateVideoCreation(contextID: UUID, documentID: UUID) async {
+        guard contextID == videoCreationContextID, documentID == activeDocumentID,
+              canGenerateVideoCreation, let value = videoCreationDraft,
+              let reference = videoReference, let store, let session,
+              let backendID = session.videoBackendID else { return }
+        let id = UUID()
+        let saved = queueVideoCreationSave(value, documentID: documentID, store: store)
+        activeJobIDs.insert(id)
+        liveStates[id] = .queued
+        phases[id] = "正在保存视频任务"
+        stopVideoPreview()
+        audioCreationTransport.stopPlayback()
+        audio?.transport.stopPlayback()
+        startPolling()
+        let preceding = admissionTail
+        videoAdmissionDocuments[id] = documentID
+        let admission = Task { [self] in
+            defer {
+                videoAdmissions.removeValue(forKey: id)
+                videoAdmissionDocuments.removeValue(forKey: id)
+            }
+            if let preceding { await preceding.value }
+            do {
+                try Task.checkCancellation()
+                _ = try await saved.value
+                try Task.checkCancellation()
+                let input = try value.makeRequest(capability: videoCapability)
+                let request = InferenceRequest(id: id, model: reference, input: .video(input),
+                                               memoryBudgetBytes: try value.selectedMemoryBudgetBytes())
+                await admit(request, documentID: documentID, savedDraft: saved, store: store,
+                            session: session, backendID: backendID)
+            } catch {
+                await removeActive(id)
+                phases.removeValue(forKey: id)
+                liveStates.removeValue(forKey: id)
+                report(error, context: "视频任务未提交，原输入和已有候选没有改变")
+            }
+        }
+        videoAdmissions[id] = admission
+        admissionTail = admission
+        await admission.value
+    }
+
+    public func cancelVideoCreation(contextID: UUID, documentID: UUID) async {
+        guard contextID == videoCreationContextID, documentID == activeDocumentID else { return }
+        let journalIDs = Set(documentJobs.map(\.id))
+        let ids = activeJobIDs.filter {
+            journalIDs.contains($0) || videoAdmissionDocuments[$0] == documentID
+        }
+        for id in ids { await cancel(id) }
+    }
+
+    public func mutateVideoCreationCandidate(_ action: VideoCreationCandidateAction,
+                                             contextID: UUID, documentID: UUID) async {
+        guard contextID == videoCreationContextID, documentID == activeDocumentID,
+              activeDocument?.videoCreation != nil, let store, !isBusy,
+              !isChangingProject, !closePending else { return }
+        isChangingProject = true
+        defer { isChangingProject = false }
+        do {
+            try await flushVideoCreation(to: store)
+            let updated: ProjectManifest
+            switch action {
+            case .select(let id): updated = try await store.setSelectedAsset(id, documentID: documentID)
+            case .adopt(let id): updated = try await store.adoptAsset(id: id, documentID: documentID)
+            case .reject(let id, let rejected):
+                updated = try await store.setVideoCandidateRejected(id: id, rejected: rejected, documentID: documentID)
+            }
+            guard contextID == videoCreationContextID, self.store === store else { return }
+            applyManifest(updated)
+            videoCreationDraft = activeDocument?.videoCreation
+            videoCreationPersistedRevision = videoCreationDraft?.revision
+            selectedAssetID = activeDocument?.selectedAssetID
+            stopVideoPreview()
+        } catch { report(error, context: "候选选择未保存，原件与已有作品均保留") }
+    }
+
+    public func previewVideoAsset(id: UUID, contextID: UUID, documentID: UUID) async {
+        guard contextID == videoCreationContextID, documentID == activeDocumentID,
+              !isBusy, !isChangingProject, !closePending, let store,
+              videoCreationCandidates.contains(where: { $0.id == id }) else { return }
+        stopVideoPreview()
+        let preview = videoPreviewIdentity
+        do {
+            let url = try await store.inspectVideoAsset(id: id)
+            guard contextID == videoCreationContextID, documentID == activeDocumentID, self.store === store,
+                  preview == videoPreviewIdentity, !isBusy, !isChangingProject, !closePending else { return }
+            audio?.transport.stopPlayback(); audioCreationTransport.stopPlayback()
+            videoPreviewURL = url
+        } catch { if preview == videoPreviewIdentity { report(error, context: "视频预览未打开；文件没有改变") } }
+    }
+
+    public func exportVideoCreationAsset(id: UUID, to url: URL, contextID: UUID, documentID: UUID) async {
+        guard contextID == videoCreationContextID, documentID == activeDocumentID, let store,
+              !isChangingProject, !closePending,
+              videoCreationCandidates.contains(where: { $0.id == id }) else { return }
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        do { try await store.exportVideoAsset(id: id, to: url) }
+        catch { report(error, context: "视频导出未完成，原件与已有目标未被覆盖") }
     }
 
     private func report(_ error: Error, context: String) {

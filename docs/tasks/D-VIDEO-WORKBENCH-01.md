@@ -70,3 +70,10 @@ Lead逐包审核后提交，隔离合并、组合具体SHA回归：核心/工作
 ## 恢复检查点
 
 准备进行中；实现Worker尚未启动，3个只读规划已结束。用户GPU/GUI窗口已确认。当前Lead拥有W写权，源保持8d42433及个人scheme。下一步准备value contracts/独立CPU、准备提交，然后派工。规格、模型路由、修复、实现/审核来源、组合/源/最终SHA及真实证据逐步追加；不将计划写作已完成。
+
+## 2026-09-14 执行澄清 deployment-r2
+
+DEPLOY初交指出Lead原规格python/Python在默认大小写不敏感APFS冲突，CPU夹具FileExistsError，正确停报。此为规格缺陷，不追罚Worker。仅脚本目录改为provider，providerScript=provider/d_video_run.py；固定runtime python/、Vendor/及其余字段不变。MEDIA/VIEW公共Swift契约video-workbench-r1不变。DEPLOY以repair1完成此有界更正，原历史规格保留。VIEW初交SwiftPM用户clang缓存写入被拒、MEDIA嵌套sandbox被拒，两者均立即停报；Lead使用原授权独立检查入口，不扩大Worker权限。源及scheme保持起点。
+
+## 实施中间检查点 2026-09-14（未接纳/未编译装配）
+Lead共享接线与schema8持久化已形成候选，准备进入三包组合，不是产品验收。核心62方法和访问桥5方法通过；VIEW由Terra初交+两修，Lead一次有限测试接管（SwiftUI导入、任务目录、真实挂载/子树卸载与完整滚动内容横向测量），9方法通过，非实现者只读审核关闭；生产View未由Lead改写。MEDIA由Sol/high初交+repair1，8方法通过，最后普通修复用于加强原契约的身份/取消/超时反例与夹具收尾；新缓存路径拼写错误被拒后已暂停，未提权。DEPLOY最后修复针对精确清单类型、安装记录剔除和合法runner组合：不固定整个runner源码hash，改为显式输入文件复制前后身份/摘要/模式及最终清单一致，tokenizer/模型revision仍固定。全部历史和逐轮事件在外部run目录；未知服务端解析与费用仍unknown。真实App/GPU/GUI尚未执行，本轮用户窗口已确认，源分支及scheme未改变。

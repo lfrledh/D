@@ -20,6 +20,7 @@ public actor ProjectStore {
     public static let versionFourBackupFilename = "project.v4.backup.json"
     public static let versionFiveBackupFilename = "project.v5.backup.json"
     public static let versionSixBackupFilename = "project.v6.backup.json"
+    public static let versionSevenBackupFilename = "project.v7.backup.json"
     private let rootFD: Int32
     private let lockFD: Int32
     private var manifest: ProjectManifest
@@ -116,6 +117,8 @@ public actor ProjectStore {
         } else if loaded.schemaVersion == 6 {
             loaded = try ProjectFiles.migrateVersionSix(loaded, original: data, in: descriptor,
                                                       checkpoint: migrationCheckpoint)
+        } else if loaded.schemaVersion == 7 {
+            loaded = try ProjectFiles.migrateVersionSeven(loaded, original: data, in: descriptor, checkpoint: migrationCheckpoint)
         } else { try ProjectFiles.validate(loaded) }
         let store = ProjectStore(rootURL: root, rootFD: descriptor, lockFD: lock, manifest: loaded)
         // Ownership of both descriptors has moved to the actor before recovery can throw.
@@ -175,6 +178,38 @@ public actor ProjectStore {
         var candidate = manifest
         candidate.documents.append(document)
         candidate.activeDocumentID = document.id
+        try commit(candidate)
+        return manifest
+    }
+
+    public func createVideoCreation(name: String = "视频创作") throws -> ProjectManifest {
+        try checkLocation()
+        let document = ProjectDocument(name: name, kind: .video, videoCreation: .init())
+        var candidate = manifest
+        candidate.documents.append(document)
+        candidate.activeDocumentID = document.id
+        try commit(candidate)
+        return manifest
+    }
+
+    public func saveVideoCreation(_ draft: VideoCreationDraft, documentID: UUID,
+                                  expectedRevision: UUID) throws -> ProjectManifest {
+        let index = try documentIndex(documentID)
+        guard manifest.documents[index].kind == .video,
+              let current = manifest.documents[index].videoCreation,
+              manifest.documents[index].audioDraft == nil else {
+            throw ProjectStoreError.invalidProject("视频创作稿与文档不匹配。")
+        }
+        guard current.revision == expectedRevision else { throw ProjectStoreError.externalModification }
+        guard current.rejectedAssetIDs == draft.rejectedAssetIDs else {
+            throw ProjectStoreError.invalidProject("候选拒绝状态必须通过独立操作修改。")
+        }
+        if current == draft { return manifest }
+        guard current.revision != draft.revision else {
+            throw ProjectStoreError.invalidProject("视频创作内容已改变，修订编号不能重复。")
+        }
+        var candidate = manifest
+        candidate.documents[index].videoCreation = draft
         try commit(candidate)
         return manifest
     }
@@ -295,7 +330,7 @@ public actor ProjectStore {
     public func setSelectedAsset(_ id: UUID?, documentID: UUID) throws -> ProjectManifest {
         let index = try documentIndex(documentID)
         let document = manifest.documents[index]
-        guard document.kind == .image || document.audioCreation != nil else {
+        guard document.kind == .image || document.audioCreation != nil || document.videoCreation != nil else {
             throw ProjectStoreError.invalidProject("该文档不能选择候选作品。")
         }
         guard document.selectedAssetID != id else { return manifest }
@@ -310,7 +345,7 @@ public actor ProjectStore {
     public func adoptAsset(id: UUID?, documentID: UUID) throws -> ProjectManifest {
         let index = try documentIndex(documentID)
         let document = manifest.documents[index]
-        guard document.kind == .image || document.audioCreation != nil else {
+        guard document.kind == .image || document.audioCreation != nil || document.videoCreation != nil else {
             throw ProjectStoreError.invalidProject("该文档不能采用候选作品。")
         }
         guard document.adoptedAssetID != id else { return manifest }
@@ -336,6 +371,32 @@ public actor ProjectStore {
         draft.revision = UUID()
         var candidate = manifest
         candidate.documents[index].audioCreation = draft
+        if rejected, candidate.documents[index].selectedAssetID == id {
+            candidate.documents[index].selectedAssetID = nil
+        }
+        if rejected, candidate.documents[index].adoptedAssetID == id {
+            candidate.documents[index].adoptedAssetID = nil
+        }
+        try commit(candidate)
+        return manifest
+    }
+
+    public func setVideoCandidateRejected(id: UUID, rejected: Bool,
+                                          documentID: UUID) throws -> ProjectManifest {
+        let index = try documentIndex(documentID)
+        guard var draft = manifest.documents[index].videoCreation,
+              let asset = manifest.assets.first(where: { $0.id == id }),
+              asset.role == .result, let jobID = asset.jobID,
+              manifest.jobs.first(where: { $0.id == jobID })?.documentID == documentID else {
+            throw ProjectStoreError.invalidProject("候选不属于该视频创作文档。")
+        }
+        let contains = draft.rejectedAssetIDs.contains(id)
+        guard contains != rejected else { return manifest }
+        if rejected { draft.rejectedAssetIDs.append(id) }
+        else { draft.rejectedAssetIDs.removeAll { $0 == id } }
+        draft.revision = UUID()
+        var candidate = manifest
+        candidate.documents[index].videoCreation = draft
         if rejected, candidate.documents[index].selectedAssetID == id {
             candidate.documents[index].selectedAssetID = nil
         }
@@ -400,7 +461,12 @@ public actor ProjectStore {
         let index = try documentIndex(documentID ?? manifest.activeDocumentID)
         let document = manifest.documents[index]
         switch request.input {
-        case .video: throw ProjectStoreError.invalidProject("视频工作台尚未开放；不能把后端实验任务写入现有作品。")
+        case .video(let video):
+            guard document.kind == .video, let draft = document.videoCreation,
+                  try draft.makeRequest() == video,
+                  try draft.selectedMemoryBudgetBytes() == request.memoryBudgetBytes else {
+                throw ProjectStoreError.invalidProject("视频请求与保存的创作条件或预算不一致。")
+            }
         case .image:
             guard document.kind == .image else {
                 throw ProjectStoreError.invalidProject("只有图像文档能创建图像任务。")
@@ -464,13 +530,16 @@ public actor ProjectStore {
 
     /// Only an authoritative runtime completion may make a task completed. Every PNG is decoded
     /// and the complete candidate manifest is durable before the caller receives success.
-    public func complete(id: UUID, result: InferenceResult) throws -> ProjectManifest {
+    public func complete(id: UUID, result: InferenceResult) async throws -> ProjectManifest {
+        if let job = manifest.jobs.first(where: { $0.id == id }), case .video(let request) = job.request.input {
+            return try await completeVideo(job: job, request: request, result: result)
+        }
         guard let index = manifest.jobs.firstIndex(where: { $0.id == id }) else { throw ProjectStoreError.missingJob }
         guard !manifest.jobs[index].state.isTerminal else { throw ProjectStoreError.invalidTransition }
         try checkLocation()
         var candidate = manifest
         switch candidate.jobs[index].request.input {
-        case .video: throw ProjectStoreError.invalidProject("视频工作台尚未开放；不能把后端实验任务写入现有作品。")
+        case .video: throw ProjectStoreError.invalidTransition
         case .image:
             guard !result.artifacts.isEmpty else { throw ProjectStoreError.invalidProject("生成任务没有交付图片。") }
             for artifact in result.artifacts {
@@ -521,10 +590,61 @@ public actor ProjectStore {
         return manifest
     }
 
+    private func completeVideo(job: ProjectJob, request: VideoRequest,
+                               result: InferenceResult) async throws -> ProjectManifest {
+        guard !job.state.isTerminal, result.artifacts.count == 1,
+              let artifact = result.artifacts.first, artifact.mediaType == "video/mp4" else {
+            throw ProjectStoreError.invalidProject("视频任务必须交付唯一 MP4 结果且尚未结束。")
+        }
+        try checkLocation()
+        let relative = try ProjectFiles.relativeVideoArtifact(artifact.url, root: rootURL, jobID: job.id)
+        let metadata = try await VideoMediaInspector.inspect(at: artifact.url, expected: request)
+        try checkLocation()
+        // Other documents/drafts may change while inspection awaits; the original job
+        // must still be the same nonterminal job. Build from the latest manifest.
+        guard let index = manifest.jobs.firstIndex(where: { $0.id == job.id }),
+              manifest.jobs[index].request == job.request, !manifest.jobs[index].state.isTerminal,
+              !manifest.assets.contains(where: { $0.relativePath == relative }) else {
+            throw ProjectStoreError.invalidTransition
+        }
+        var candidate = manifest
+        let asset = ProjectAsset(jobID: job.id, relativePath: relative, mediaType: "video/mp4",
+            metadata: .init(width: metadata.width, height: metadata.height, video: metadata),
+            name: "视频候选 \(candidate.assets.count + 1)")
+        candidate.assets.append(asset)
+        candidate.jobs[index].artifactIDs = [asset.id]
+        candidate.jobs[index].state = .completed
+        candidate.jobs[index].error = nil
+        var record = result.metadata
+        for key in ["recordPath", "mediaRecordPath"] {
+            if let path = record[key] {
+                let root = artifact.url.deletingLastPathComponent().path + "/"
+                guard path.hasPrefix(root), !path.dropFirst(root.count).split(separator: "/").contains("..") else {
+                    throw ProjectStoreError.unsafePath(path)
+                }
+                record[key] = String(path.dropFirst(rootURL.path.count + 1))
+            }
+        }
+        candidate.jobs[index].resultMetadata = record
+        try commit(candidate)
+        return manifest
+    }
+
+    public func inspectVideoAsset(id: UUID) async throws -> URL {
+        guard let asset = manifest.assets.first(where: { $0.id == id }), let metadata = asset.metadata.video,
+              let job = manifest.jobs.first(where: { $0.id == asset.jobID }),
+              case .video(let request) = job.request.input else { throw ProjectStoreError.missingAsset }
+        let url = try assetURL(for: asset)
+        let actual = try await VideoMediaInspector.inspect(at: url, expected: request)
+        guard actual == metadata else { throw ProjectStoreError.externalModification }
+        _ = try assetURL(for: asset)
+        return url
+    }
+
     /// Reconcile only published PNGs in a recorded task's precisely named private directory.
     /// Never starts inference, deletes media, follows a symlink, or adopts an unknown task.
-    public func recoverPublishedArtifacts() throws -> ProjectManifest {
-        try recover(markInterrupted: false)
+    public func recoverPublishedArtifacts() async throws -> ProjectManifest {
+        try await recover(markInterrupted: false)
     }
 
     public func assetURL(for asset: ProjectAsset) throws -> URL {
@@ -563,6 +683,57 @@ public actor ProjectStore {
         let inspection = try AudioMediaInspector.inspect(at: try assetURL(for: asset), policy: policy)
         try ProjectFiles.requireRegisteredAudio(inspection, matches: metadata)
         return inspection
+    }
+
+    public func exportVideoAsset(id: UUID, to destination: URL) async throws {
+        try await exportVideoAsset(id: id, to: destination, checkpoint: nil)
+    }
+
+    func exportVideoAsset(id: UUID, to destination: URL,
+                          checkpoint: (@Sendable (ProjectExportCheckpoint) throws -> Void)?) async throws {
+        guard let asset = manifest.assets.first(where: { $0.id == id }),
+              let registered = asset.metadata.video else { throw ProjectStoreError.missingAsset }
+        try checkLocation()
+        guard destination.isFileURL, destination.path.hasPrefix("/"),
+              !destination.lastPathComponent.isEmpty else {
+            throw ProjectStoreError.unsafePath(destination.path)
+        }
+        let sourceURL = try await inspectVideoAsset(id: id)
+        guard manifest.assets.first(where: { $0.id == id }) == asset else { throw ProjectStoreError.externalModification }
+        try checkLocation()
+        let source = try ProjectFiles.openRelativeFile(asset.relativePath, in: rootFD)
+        defer { Darwin.close(source) }
+        let parent = try ProjectFiles.openDirectory(destination.deletingLastPathComponent())
+        defer { Darwin.close(parent) }
+        try ProjectFiles.publishExport(to: destination, parent: parent, checkpoint: checkpoint,
+                                       validate: { temporary in
+            guard try VideoMediaInspector.contentSHA256(at: temporary, maximumBytes: registered.byteCount)
+                    == registered.contentSHA256 else { throw ProjectStoreError.externalModification }
+            guard try VideoMediaInspector.contentSHA256(at: sourceURL, maximumBytes: registered.byteCount)
+                    == registered.contentSHA256 else { throw ProjectStoreError.externalModification }
+        }) { target in
+            var buffer = [UInt8](repeating: 0, count: 64 * 1_024)
+            var copied: UInt64 = 0
+            while true {
+                let count = Darwin.read(source, &buffer, buffer.count)
+                if count == 0 {
+                    guard copied == registered.byteCount else { throw ProjectStoreError.externalModification }
+                    break
+                }
+                if count < 0 {
+                    if errno == EINTR { continue }
+                    throw ProjectFiles.error()
+                }
+                guard copied <= registered.byteCount, UInt64(count) <= registered.byteCount - copied else {
+                    throw ProjectStoreError.externalModification
+                }
+                copied += UInt64(count)
+                try buffer.withUnsafeBytes { bytes in
+                    try ProjectFiles.writeAll(
+                        UnsafeRawBufferPointer(rebasing: bytes[..<count]), to: target)
+                }
+            }
+        }
     }
 
     public func exportAudioAsset(id: UUID, to destination: URL) throws {
@@ -943,6 +1114,7 @@ public actor ProjectStore {
                 checkpoint: (@Sendable (ProjectExportCheckpoint) throws -> Void)?) throws {
         guard let asset = manifest.assets.first(where: { $0.id == assetID }) else { throw ProjectStoreError.missingAsset }
         try checkLocation()
+        guard asset.metadata.video == nil else { throw ProjectStoreError.invalidProject("请使用视频安全导出入口。") }
         guard destination.isFileURL, destination.path.hasPrefix("/"),
               !destination.lastPathComponent.isEmpty else { throw ProjectStoreError.unsafePath(destination.path) }
         if let audio = asset.metadata.audio {
@@ -1181,6 +1353,12 @@ public actor ProjectStore {
             default:
                 throw ProjectStoreError.externalModification
             }
+            switch (persisted.videoCreation, expected.videoCreation) {
+            case let (.some(actual), .some(saved)):
+                guard actual.hasSameEditableRepresentation(as: saved) else { throw ProjectStoreError.externalModification }
+            case (.none, .none): break
+            default: throw ProjectStoreError.externalModification
+            }
             switch (persisted.audioCreation, expected.audioCreation) {
             case let (.some(actual), .some(saved)):
                 guard actual.prompt.utf8.elementsEqual(saved.prompt.utf8),
@@ -1235,13 +1413,14 @@ public actor ProjectStore {
         isClosed = true
     }
 
-    private func recoverOnOpen() throws -> ProjectStore {
-        _ = try recover(markInterrupted: true)
+    private func recoverOnOpen() async throws -> ProjectStore {
+        _ = try await recover(markInterrupted: true)
         return self
     }
 
-    private func recover(markInterrupted: Bool) throws -> ProjectManifest {
+    private func recover(markInterrupted: Bool) async throws -> ProjectManifest {
         try checkLocation()
+        let revision = manifest.revision
         var candidate = manifest
         if markInterrupted {
             for index in candidate.jobs.indices where !candidate.jobs[index].state.isTerminal {
@@ -1255,12 +1434,14 @@ public actor ProjectStore {
         for name in names.sorted() {
             guard let jobID = ProjectFiles.taskOwner(name),
                   let index = candidate.jobs.firstIndex(where: { $0.id == jobID }) else { continue }
-            let isAudio: Bool
+            let isAudio: Bool, isVideo: Bool
             switch candidate.jobs[index].request.input {
-            case .audio: isAudio = true
-            default: isAudio = false
+            case .audio: isAudio = true; isVideo = false
+            case .video: isAudio = false; isVideo = true
+            default: isAudio = false; isVideo = false
             }
-            let relative = isAudio ? "Tasks/\(name)/job/output.wav" : "Tasks/\(name)/image.png"
+            let relative = isAudio ? "Tasks/\(name)/job/output.wav" :
+                (isVideo ? "Tasks/\(name)/output.mp4" : "Tasks/\(name)/image.png")
             guard !candidate.assets.contains(where: { $0.relativePath == relative }) else { continue }
             do {
                 // Inspect the final entry through a safely opened directory descriptor as well;
@@ -1281,7 +1462,7 @@ public actor ProjectStore {
                     Darwin.close(publishedDirectory)
                 }
                 var info = stat()
-                let leaf = isAudio ? "output.wav" : "image.png"
+                let leaf = isAudio ? "output.wav" : (isVideo ? "output.mp4" : "image.png")
                 let status = fstatat(leafDirectory, leaf, &info, AT_SYMLINK_NOFOLLOW)
                 let failure = errno
                 Darwin.close(leafDirectory)
@@ -1289,7 +1470,16 @@ public actor ProjectStore {
                 if status != 0, failure == ENOENT { continue }
                 guard status == 0 else { throw ProjectStoreError.io(String(cString: strerror(failure))) }
                 let asset: ProjectAsset
-                if case .audio(let audio) = candidate.jobs[index].request.input {
+                if case .video(let video) = candidate.jobs[index].request.input {
+                    let url = rootURL.appendingPathComponent(relative)
+                    _ = try ProjectFiles.relativeVideoArtifact(url, root: rootURL, jobID: jobID)
+                    let metadata = try await VideoMediaInspector.inspect(at: url, expected: video)
+                    try checkLocation()
+                    guard manifest.revision == revision else { throw ProjectStoreError.externalModification }
+                    asset = ProjectAsset(jobID: jobID, relativePath: relative, mediaType: "video/mp4",
+                        metadata: .init(width: metadata.width, height: metadata.height, video: metadata),
+                        name: "恢复的视频候选")
+                } else if case .audio(let audio) = candidate.jobs[index].request.input {
                     let url = rootURL.appendingPathComponent(relative)
                     let inspection = try AudioMediaInspector.inspect(at: url, policy: .generated)
                     guard inspection.format.container == .wav,
@@ -1314,21 +1504,23 @@ public actor ProjectStore {
                 candidate.assets.append(asset)
                 candidate.jobs[index].artifactIDs.append(asset.id)
                 if candidate.jobs[index].state != .completed {
-                    if !isAudio || !candidate.jobs[index].state.isTerminal {
+                    if (!isAudio && !isVideo) || !candidate.jobs[index].state.isTerminal {
                         candidate.jobs[index].state = .interrupted
                     }
-                    candidate.jobs[index].error = isAudio
+                    candidate.jobs[index].error = isVideo ? "已恢复未登记的视频；权威完成记录缺失，不能采用为成功候选。" : isAudio
                         ? "已恢复生成后尚未登记的音频；权威完成记录缺失，不能采用为成功候选。"
                         : "已恢复生成后尚未登记的图片；任务完整结束记录缺失，请检查作品。"
                 }
             } catch {
                 // Keep both the original file and job record for diagnosis. Never turn corrupt
                 // or redirected files into artwork just to make project opening succeed.
-                candidate.jobs[index].error = isAudio
+                candidate.jobs[index].error = isVideo ? "发现未登记视频，但无法安全恢复：\(error.localizedDescription)" : isAudio
                     ? "发现未登记的音频，但无法安全恢复：\(error.localizedDescription)"
                     : "发现未登记的图片，但无法安全恢复：\(error.localizedDescription)"
             }
         }
+        try checkLocation()
+        guard manifest.revision == revision else { throw ProjectStoreError.externalModification }
         if candidate != manifest { try commit(candidate) }
         return manifest
     }
@@ -1558,6 +1750,12 @@ private enum ProjectFiles {
                     checkpoint: checkpoint)
     }
 
+    static func migrateVersionSeven(_ legacy: ProjectManifest, original: Data, in root: Int32,
+                                    checkpoint: (@Sendable (ProjectMigrationCheckpoint) throws -> Void)?) throws -> ProjectManifest {
+        try migrate(legacy, original: original, in: root, backup: ProjectStore.versionSevenBackupFilename,
+                    checkpoint: checkpoint)
+    }
+
     private static func migrate(_ legacy: ProjectManifest, original: Data, in root: Int32, backup: String,
                                 checkpoint: (@Sendable (ProjectMigrationCheckpoint) throws -> Void)?) throws -> ProjectManifest {
         try validate(legacy, allowingLegacySchema: true)
@@ -1693,6 +1891,17 @@ private enum ProjectFiles {
         guard parts.count == 3, parts[0] == "Tasks", taskOwner(parts[1]) == jobID, parts[2] == "image.png" else {
             throw ProjectStoreError.unsafePath(relative)
         }
+        return relative
+    }
+
+    static func relativeVideoArtifact(_ url: URL, root: URL, jobID: UUID) throws -> String {
+        let prefix = root.path + "/"
+        guard url.isFileURL, url.path.hasPrefix(prefix), url.standardizedFileURL.path == url.path else {
+            throw ProjectStoreError.unsafePath(url.path)
+        }
+        let relative = String(url.path.dropFirst(prefix.count)), parts = try components(relative)
+        guard parts.count == 3, parts[0] == "Tasks", parts[1] == parts[1].lowercased(),
+              taskOwner(parts[1]) == jobID, parts[2] == "output.mp4" else { throw ProjectStoreError.unsafePath(relative) }
         return relative
     }
 
@@ -1863,7 +2072,7 @@ private enum ProjectFiles {
 
     static func validate(_ value: ProjectManifest, allowingLegacySchema: Bool = false) throws {
         guard value.schemaVersion == ProjectManifest.currentSchemaVersion ||
-              (allowingLegacySchema && (1...6).contains(value.schemaVersion)) else {
+              (allowingLegacySchema && (1...7).contains(value.schemaVersion)) else {
             throw ProjectStoreError.unsupportedSchema(value.schemaVersion)
         }
         guard !value.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
@@ -1900,7 +2109,10 @@ private enum ProjectFiles {
                 throw ProjectStoreError.invalidProject("任务缺少文档。")
             }
             switch job.request.input {
-            case .video: throw ProjectStoreError.invalidProject("视频工作台尚未开放；不能加载为已支持的创作任务。")
+            case .video(let request):
+                guard value.schemaVersion >= 8, document.kind == .video, document.videoCreation != nil,
+                      job.artifactIDs.count <= 1 else { throw ProjectStoreError.invalidProject("视频任务归属无效。") }
+                try VideoExecutionCapability.wan21.validate(request)
             case .image:
                 guard document.kind == .image else {
                     throw ProjectStoreError.invalidProject("图像任务不属于图像文档。")
@@ -1948,7 +2160,18 @@ private enum ProjectFiles {
             }
             let isDeclaredAudio = asset.metadata.audio != nil || asset.mediaType == "audio/wav" ||
                 asset.mediaType == "audio/x-caf" || asset.relativePath.hasPrefix("Audio/")
-            if isDeclaredAudio {
+            if asset.metadata.video != nil || asset.mediaType.hasPrefix("video/") {
+                guard value.schemaVersion >= 8, let metadata = asset.metadata.video,
+                      asset.metadata.audio == nil, asset.metadata.bitDepth == nil, asset.metadata.colorSpace == nil,
+                      asset.metadata.width == metadata.width, asset.metadata.height == metadata.height,
+                      asset.mediaType == "video/mp4", asset.role == .result,
+                      let jobID = asset.jobID, let job = jobs[jobID], case .video(let request) = job.request.input else {
+                    throw ProjectStoreError.invalidProject("视频作品格式或任务关系无效。")
+                }
+                _ = try relativeVideoArtifact(URL(fileURLWithPath: "/project/" + asset.relativePath),
+                                              root: URL(fileURLWithPath: "/project"), jobID: jobID)
+                try metadata.validate(matching: request)
+            } else if isDeclaredAudio {
                 guard let audio = asset.metadata.audio,
                       asset.metadata.width == nil, asset.metadata.height == nil,
                       asset.metadata.bitDepth == nil, asset.metadata.colorSpace == nil else {
@@ -2006,11 +2229,28 @@ private enum ProjectFiles {
             guard !document.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                 throw ProjectStoreError.invalidProject("探索文档名称不能为空。")
             }
+            guard document.kind == .video || document.videoCreation == nil else {
+                throw ProjectStoreError.invalidProject("非视频文档不能包含视频创作稿。")
+            }
             switch document.kind {
+            case .video:
+                guard value.schemaVersion >= 8, let creation = document.videoCreation,
+                      document.audioDraft == nil, document.audioCreation == nil, document.textDraft == nil,
+                      document.sourceAssetID == nil,
+                      Set(creation.rejectedAssetIDs).count == creation.rejectedAssetIDs.count else {
+                    throw ProjectStoreError.invalidProject("视频文档内容或候选关系无效。")
+                }
+                for id in creation.rejectedAssetIDs {
+                    guard let asset = assets[id], asset.metadata.video != nil,
+                          let jobID = asset.jobID, jobs[jobID]?.documentID == document.id else {
+                        throw ProjectStoreError.invalidProject("拒绝的视频候选不属于本创作稿。")
+                    }
+                }
             case .image:
                 guard document.textDraft == nil, document.audioDraft == nil,
                       document.audioCreation == nil,
-                      document.sourceAssetID.flatMap({ assets[$0]?.metadata.audio }) == nil else {
+                      document.sourceAssetID.flatMap({ assets[$0]?.metadata.audio }) == nil,
+                      document.sourceAssetID.flatMap({ assets[$0]?.metadata.video }) == nil else {
                     throw ProjectStoreError.invalidProject("图像文档不能包含文字稿。")
                 }
             case .text:
@@ -2054,6 +2294,9 @@ private enum ProjectFiles {
             func isCandidate(_ id: UUID) -> Bool {
                 guard let asset = assets[id], asset.role == .result, let jobID = asset.jobID else { return false }
                 guard jobs[jobID]?.documentID == document.id else { return false }
+                if let creation = document.videoCreation {
+                    return jobs[jobID]?.state == .completed && !creation.rejectedAssetIDs.contains(id)
+                }
                 if let creation = document.audioCreation {
                     return jobs[jobID]?.state == .completed && !creation.rejectedAssetIDs.contains(id)
                 }

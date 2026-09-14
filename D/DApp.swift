@@ -45,7 +45,8 @@ struct DApp: App {
                 }
             }
             .safeAreaInset(edge: .bottom) {
-                if let issue = bootstrap.audioEngineIssue {
+                if bootstrap.audioEngineIssue != nil || bootstrap.videoEngineIssue != nil {
+                    let issue = [bootstrap.audioEngineIssue, bootstrap.videoEngineIssue].compactMap { $0 }.joined(separator: "\n")
                     Text(issue).font(.caption).textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading).padding(12)
                         .background(.regularMaterial)

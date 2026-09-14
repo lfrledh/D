@@ -140,6 +140,52 @@ struct VideoBackendTests {
         }
     }
 
+    @Test("Application access stays narrow, drains on errors, and per-task budgets reach wire and result")
+    func applicationAccessAndBudget() async throws {
+        let root = try root(), model = root.appendingPathComponent("model"), tokenizer = root.appendingPathComponent("tokenizer")
+        let code = root.appendingPathComponent("code"), output = root.appendingPathComponent("outputs"), access = root.appendingPathComponent("access")
+        for directory in [model, tokenizer, code, output, access] {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        }
+        try JSONSerialization.data(withJSONObject: ["complete": true, "revision": VideoBackendConfiguration.revision])
+            .write(to: model.appendingPathComponent("D-VIDEO-PREPARED.json"))
+        let script = code.appendingPathComponent("fixture.py")
+        var fixture = Self.fixture.replacingOccurrences(of: "MODE_VALUE", with: "normal")
+        fixture = fixture.replacingOccurrences(of: "a=p.parse_args();", with: "p.add_argument('--access-manifest');p.add_argument('--access-run-id');a=p.parse_args();")
+        fixture = fixture.replacingOccurrences(of: "o=pathlib.Path(a.output);", with: """
+        if a.access_manifest:
+            grant=json.loads(pathlib.Path(a.access_manifest).read_bytes())
+            assert grant['runID']==q['runID']==a.access_run_id
+            assert [g['path'] for g in grant['grants']]==[a.model,str(r.parent)]
+        o=pathlib.Path(a.output);
+        """)
+        for selected: UInt64? in [nil, 15 * 1024 * 1024 * 1024] {
+            for fail in [false, true] {
+                let source = fail ? fixture.replacingOccurrences(of: "o=pathlib.Path(a.output);", with: "raise RuntimeError('controlled child failure')\no=pathlib.Path(a.output);") : fixture
+                try source.write(to: script, atomically: false, encoding: .utf8)
+                let backend = try MLXVideoBackend(configuration: .init(
+                    pythonExecutable: URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_VIDEO_TEST_PYTHON"]!),
+                    providerScript: script, tokenizerDirectory: tokenizer, artifactDirectory: output,
+                    memoryLimitBytes: 14 * 1024 * 1024 * 1024, timeoutSeconds: 10,
+                    cancellationGraceSeconds: 0.2, accessBootstrapRoot: access))
+                let request = InferenceRequest(model: .init(directory: model, revision: VideoBackendConfiguration.revision),
+                    input: .video(video()), memoryBudgetBytes: selected)
+                do {
+                    let result = try await backend.execute(request) { _ in }
+                    #expect(!fail)
+                    #expect(result.metadata["memoryGuidelineBytes"] == String(selected ?? 14 * 1024 * 1024 * 1024))
+                    let wire = result.artifacts[0].url.deletingLastPathComponent().appendingPathComponent("request.json")
+                    let object = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: wire)) as? [String: Any])
+                    #expect((object["memoryLimitBytes"] as? NSNumber)?.uint64Value == selected ?? 14 * 1024 * 1024 * 1024)
+                } catch {
+                    #expect(fail, "\(error)")
+                }
+                await backend.release()
+                #expect(try FileManager.default.contentsOfDirectory(atPath: access.path).isEmpty)
+            }
+        }
+    }
+
     @Test("Runtime cancels promptly and queued video starts after the cancelled provider exits")
     func runtimeCancelHandoff() async throws {
         let root = try root()

@@ -55,6 +55,7 @@ public enum ProjectResourceCatalog {
 
     private static func mediaMode(_ mediaType: String) -> CreatorMode? {
         switch mediaType.lowercased() {
+        case "video/mp4": .video
         case "image/png", "image/jpeg", "image/tiff": .image
         case "audio/wav", "audio/x-wav", "audio/wave", "audio/x-caf", "audio/mpeg", "audio/flac": .audio
         default: nil

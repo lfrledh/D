@@ -20,6 +20,18 @@ struct RequestBudgetTests {
             #expect(throws: InferenceFailure.self) { try selected(invalid).validate() }
         }
         try selected(UInt64(Int64.max)).validate()
+        let explicit = selected(42)
+        #expect(try JSONDecoder().decode(InferenceRequest.self, from: JSONEncoder().encode(explicit)) == explicit)
+    }
+
+    @Test func defaultHostAcceptsEqualAndLowerBudgetWithoutChangingHost() async throws {
+        let lower = selected(32), equal = selected(64)
+        let backend = ControlledBackend(plans: [lower.id: TestPlan(estimate: 32)])
+        let engine = try runtime([backend], budget: 64)
+        await expectCompleted(try await engine.submit(lower, backendID: "controlled"))
+        await expectCompleted(try await engine.submit(equal, backendID: "controlled"))
+        await expectCompleted(try await engine.submit(selected(nil), backendID: "controlled"))
+        await engine.shutdown()
     }
 
     @Test func hostMustOptIn() async throws {

@@ -12,7 +12,8 @@ enum AppSessionFactory {
         audioConsent: AudioModelUsePermission? = nil,
         bundledMusicEngine: BundledAudioEngine? = nil,
         musicConsent: AudioModelUsePermission? = nil,
-        audioAccessRoot: URL? = nil) async throws -> WorkbenchSession {
+        audioAccessRoot: URL? = nil,
+        bundledVideoEngine: BundledAudioEngine? = nil, videoAccessRoot: URL? = nil) async throws -> WorkbenchSession {
         let stages = BackendStageMonitor()
         let backend = try MLXImageBackend(configuration: .init(artifactDirectory: artifactDirectory, profile: .scalableKlein4B),
                                          observer: { await stages.record($0) })
@@ -36,15 +37,25 @@ enum AppSessionFactory {
                 confirmDeployment: { try engine.confirmUnchanged() },
                 modelUseAcknowledged: { await consent.isAcknowledged }))
         } else { musicBackend = nil }
-        var backends: [any InferenceBackend] = [backend, textBackend]
-        if let musicBackend { backends.append(musicBackend) }
-        if let audioBackend { backends.append(audioBackend) }
         let memoryBudgetBytes = ResourceBudgetPolicy().inferenceBudgetBytes(
             physicalMemoryBytes: ProcessInfo.processInfo.physicalMemory)
+        let videoBackend: MLXVideoBackend?
+        if let engine = bundledVideoEngine, let tokenizer = engine.videoTokenizerDirectory,
+           let accessRoot = videoAccessRoot {
+            videoBackend = try MLXVideoBackend(configuration: .init(
+                pythonExecutable: engine.pythonExecutable, providerScript: engine.providerScript,
+                tokenizerDirectory: tokenizer, artifactDirectory: artifactDirectory,
+                memoryLimitBytes: memoryBudgetBytes, accessBootstrapRoot: accessRoot,
+                confirmDeployment: { try engine.confirmUnchanged() }))
+        } else { videoBackend = nil }
+        var backends: [any InferenceBackend] = [backend, textBackend]
+        if let videoBackend { backends.append(videoBackend) }
+        if let musicBackend { backends.append(musicBackend) }
+        if let audioBackend { backends.append(audioBackend) }
         let runtime = try InferenceRuntime(
             backends: backends,
             configuration: try RuntimeConfiguration(memoryBudgetBytes: memoryBudgetBytes,
-                                                    maximumQueuedRuns: 8))
+                                                    maximumQueuedRuns: 8, allowsRequestBudgetIncrease: true))
         let validateAudioModel: (@Sendable (URL) async throws -> ModelReference)?
         if let audioBackend {
             validateAudioModel = { directory in
@@ -72,6 +83,15 @@ enum AppSessionFactory {
                 return reference
             }
         } else { validateMusicModel = nil }
+        let validateVideoModel: (@Sendable (URL) async throws -> ModelReference)?
+        if let videoBackend {
+            validateVideoModel = { directory in
+                let reference = ModelReference(directory: directory, revision: VideoBackendConfiguration.revision)
+                let video = try VideoCreationDraft(prompt: "Model registration").makeRequest()
+                _ = try await videoBackend.estimate(InferenceRequest(model: reference, input: .video(video)))
+                return reference
+            }
+        } else { validateVideoModel = nil }
         return WorkbenchSession(
             engine: runtime,
             backendID: backend.descriptor.id,
@@ -101,7 +121,9 @@ enum AppSessionFactory {
             validateAudioModel: validateAudioModel, musicBackendID: musicBackend?.descriptor.id,
             validateMusicModel: validateMusicModel,
             imageCapability: backend.executionCapability, textCapability: textBackend.executionCapability,
-            audioCapability: audioBackend?.executionCapability, musicCapability: musicBackend?.executionCapability)
+            audioCapability: audioBackend?.executionCapability, musicCapability: musicBackend?.executionCapability,
+            videoBackendID: videoBackend?.descriptor.id, validateVideoModel: validateVideoModel,
+            videoCapability: videoBackend?.executionCapability, defaultMemoryBudgetBytes: memoryBudgetBytes)
     }
 
     /// Only an explicitly isolated development session can supply an existing local engine.

@@ -80,7 +80,8 @@ public struct InferenceRequest: Sendable, Codable, Equatable, Identifiable {
     public let model: ModelReference
     public let input: InferenceInput
     /// Explicit caller selection, frozen with the job. Nil uses the host's default.
-    /// This is an admission/MLX guidance value, never a measured physical-memory cap.
+    /// This is a runtime admission budget, never a measured physical-memory cap.
+    /// Backends may explicitly map it to a soft guidance value; video currently does.
     public let memoryBudgetBytes: UInt64?
 
     public init(id: UUID = UUID(), model: ModelReference, input: InferenceInput,

@@ -3,6 +3,10 @@ import Foundation
 
 /// Application-facing runtime bridge. The composition root owns backend-specific types.
 public struct WorkbenchSession: Sendable {
+    public let videoCapability: VideoExecutionCapability?
+    public let videoBackendID: String?
+    public let validateVideoModel: (@Sendable (URL) async throws -> ModelReference)?
+    public let defaultMemoryBudgetBytes: UInt64
     public let imageCapability: ImageExecutionCapability
     public let textCapability: TextExecutionCapability?
     public let audioCapability: AudioExecutionCapability?
@@ -34,7 +38,15 @@ public struct WorkbenchSession: Sendable {
                 imageCapability: ImageExecutionCapability = .verified512,
                 textCapability: TextExecutionCapability? = nil,
                 audioCapability: AudioExecutionCapability? = nil,
-                musicCapability: AudioExecutionCapability? = nil) {
+                musicCapability: AudioExecutionCapability? = nil,
+                videoBackendID: String? = nil,
+                validateVideoModel: (@Sendable (URL) async throws -> ModelReference)? = nil,
+                videoCapability: VideoExecutionCapability? = nil,
+                defaultMemoryBudgetBytes: UInt64 = 12 * 1024 * 1024 * 1024) {
+        self.videoBackendID = videoBackendID
+        self.validateVideoModel = validateVideoModel
+        self.videoCapability = videoCapability
+        self.defaultMemoryBudgetBytes = defaultMemoryBudgetBytes
         self.imageCapability = imageCapability
         self.textCapability = textCapability
         self.audioCapability = audioCapability

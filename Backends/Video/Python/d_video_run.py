@@ -6,6 +6,7 @@ download, audio track, UI, nested subprocess or implicit parameter adjustment.
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
 import gc
 import hashlib
 import html
@@ -116,9 +117,12 @@ def tokenize_conditions(directory: Path, request: dict):
     return results
 
 
-def run(request_path: Path, model_path: Path, tokenizer_path: Path, output: Path) -> dict:
+def run(request_path: Path, model_path: Path, tokenizer_path: Path, output: Path,
+        *, access_run_id: str | None = None, emit_result: bool = True) -> dict:
     request, request_digest, request_identity = read_snapshot(request_path)
     request = validate_request(request)
+    if access_run_id is not None and request["runID"] != access_run_id:
+        raise ValueError("Video request differs from the access run identity")
     model = PreparedModel(model_path)
     conditions = tokenize_conditions(tokenizer_path, request)
     output = checked_local(output)
@@ -252,7 +256,8 @@ def run(request_path: Path, model_path: Path, tokenizer_path: Path, output: Path
                          "byteCount": raw_path.stat().st_size},
               "stages": stages, "seconds": time.monotonic() - started}
     exclusive_json(output / "result.json", result)
-    print(json.dumps(result, ensure_ascii=False, allow_nan=False), flush=True)
+    if emit_result:
+        print(json.dumps(result, ensure_ascii=False, allow_nan=False), flush=True)
     return result
 
 
@@ -263,10 +268,41 @@ def validate_chunk_shape(shape, request, delivered):
         raise ValueError("Decoded chunk dimensions/count differ from the immutable request")
 
 
+@contextmanager
+def application_access(args):
+    """Acquire only the two parent-issued directories, before opening their files."""
+    if bool(args.access_manifest) != bool(args.access_run_id):
+        raise ValueError("access-manifest and access-run-id must be supplied together")
+    if args.access_manifest is None:
+        yield
+        return
+    if str(uuid.UUID(args.access_run_id)) != args.access_run_id:
+        raise ValueError("Access run ID must be a canonical UUID")
+    for path in (args.request, args.model, args.tokenizer, args.output, args.access_manifest):
+        if not path.is_absolute() or ".." in path.parts or path == Path("/"):
+            raise ValueError("Application paths must be normalized absolute local paths")
+    directory = args.request.parent
+    if args.request.name != "request.json" or args.output.parent != directory or args.output.name != "frames":
+        raise ValueError("Video request and output must belong to the same private task")
+    # Bundled deployment colocates this reviewed helper. The repository uses the
+    # original audio helper, without copying or changing its capability semantics.
+    if not (Path(__file__).parent / "d_audio_access.py").is_file():
+        sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "Audio" / "Python"))
+    from d_audio_access import acquire_file_access, AudioAccessError
+    try:
+        with acquire_file_access(args.access_manifest, run_id=args.access_run_id,
+                                 allowed_paths=[args.model, directory]):
+            yield
+    except AudioAccessError as error:
+        raise ValueError("Video file access failed: " + str(error)) from error
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ("request", "model", "tokenizer", "output"):
         parser.add_argument("--" + name, required=True, type=Path)
+    parser.add_argument("--access-manifest", type=Path)
+    parser.add_argument("--access-run-id")
     args = parser.parse_args()
     def cancel(signum, frame):
         global _cancelled
@@ -275,7 +311,11 @@ def main():
     signal.signal(signal.SIGINT, cancel)
     os.environ.update(HF_HUB_OFFLINE="1", TRANSFORMERS_OFFLINE="1", TOKENIZERS_PARALLELISM="false")
     try:
-        run(args.request, args.model, args.tokenizer, args.output)
+        with application_access(args):
+            result = run(args.request, args.model, args.tokenizer, args.output,
+                         access_run_id=args.access_run_id, emit_result=False)
+        # A cleanup failure cannot be followed by a successful terminal event.
+        print(json.dumps(result, ensure_ascii=False, allow_nan=False), flush=True)
         return 0
     except (OSError, ValueError, RuntimeError) as error:
         # Process termination and stderr are authoritative on errors; no result event

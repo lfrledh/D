@@ -166,6 +166,7 @@ private struct ResourceRow: View {
         if item.textPreview != nil { return "doc.text" }
         if item.mediaType.hasPrefix("image/") { return "photo" }
         if item.mediaType.hasPrefix("audio/") { return "waveform" }
+        if item.mediaType.hasPrefix("video/") { return "film" }
         return "doc"
     }
 }
@@ -222,6 +223,11 @@ private struct ResourcePreview: View {
                 } else {
                     ProgressView("正在读取本地预览…")
                 }
+            } else if asset.mediaType == "video/mp4", let video = asset.metadata.video {
+                Text("\(video.width) × \(video.height) · \(video.frameCount) 帧 · \(video.frameRate.numerator)/\(video.frameRate.denominator) fps · 无音轨")
+                    .foregroundStyle(.secondary)
+                Text("打开来源创作后可检查、预览和导出视频；资产浏览器不自动播放。")
+                    .font(.caption).foregroundStyle(.secondary)
             } else if isKnownAudio(asset.mediaType) {
                 Text(recordedAudioDescription(asset.metadata.audio))
                     .foregroundStyle(.secondary)
@@ -232,7 +238,7 @@ private struct ResourcePreview: View {
                                        description: Text("只保留记录的 MIME；未知格式不会按扩展名猜测，也不会读取 URL。"))
             }
             if let origin = item.originDocumentID, originIsAvailable(origin) {
-                Button("打开来源文稿") { onOpen(item) }
+                Button("打开来源创作") { onOpen(item) }
                     .accessibilityIdentifier("asset-open-origin-\(origin.uuidString)")
             }
         }

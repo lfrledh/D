@@ -28,6 +28,7 @@ public actor MLXVideoBackend: InferenceBackend {
     }
 
     private func inspect(_ request: InferenceRequest) throws -> (VideoRequest, Data) {
+        try configuration.confirmDeployment?()
         try request.validate()
         guard case .video(let video) = request.input,
               request.model.revision == VideoBackendConfiguration.revision else {
@@ -84,19 +85,39 @@ public actor MLXVideoBackend: InferenceBackend {
         guard data.count <= 1_048_576 else { throw InferenceFailure.invalidRequest("Video request exceeds 1 MiB.") }
         try AudioFileSystem.writeExclusive(data, to: requestURL)
         let cache = run.appendingPathComponent("cache"), tmp = run.appendingPathComponent("tmp")
-        let process = LocalProviderProcess(executable: configuration.pythonExecutable,
-            arguments: ["-B", configuration.providerScript.path, "--request", requestURL.path,
+        var arguments = ["-B", configuration.providerScript.path, "--request", requestURL.path,
                         "--model", request.model.directory.path, "--tokenizer", configuration.tokenizerDirectory.path,
-                        "--output", output.path],
-            environment: ["PATH": "/usr/bin:/bin", "LANG": "en_US.UTF-8", "LC_ALL": "en_US.UTF-8",
-                          "PYTHONDONTWRITEBYTECODE": "1", "PYTHONNOUSERSITE": "1",
-                          "PYTHONPYCACHEPREFIX": cache.path, "TMPDIR": tmp.path, "XDG_CACHE_HOME": cache.path,
-                          "HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1"],
-            currentDirectory: run, timeoutSeconds: configuration.timeoutSeconds,
-            cancellationGraceSeconds: configuration.cancellationGraceSeconds, label: "Video provider")
-        let terminal = try await process.run { reader, control in
-            await VideoProviderProtocol.read(reader, control: control, runID: request.id, steps: video.steps, emit: emit)
+                        "--output", output.path]
+        let access: AudioProviderAccess?
+        if let root = configuration.accessBootstrapRoot {
+            access = try AudioProviderAccess.prepare(root: root, runID: request.id,
+                directories: [request.model.directory, run])
+            arguments += ["--access-manifest", access!.manifest.path,
+                          "--access-run-id", request.id.uuidString.lowercased()]
+        } else { access = nil }
+        let terminal: VideoProviderProtocol.Result
+        do {
+            try configuration.confirmDeployment?()
+            let process = LocalProviderProcess(executable: configuration.pythonExecutable,
+                arguments: arguments,
+                environment: ["PATH": "/usr/bin:/bin", "LANG": "en_US.UTF-8", "LC_ALL": "en_US.UTF-8",
+                              "PYTHONDONTWRITEBYTECODE": "1", "PYTHONNOUSERSITE": "1",
+                              "PYTHONPYCACHEPREFIX": cache.path, "TMPDIR": tmp.path, "XDG_CACHE_HOME": cache.path,
+                              "HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1"],
+                currentDirectory: access?.directory ?? run, timeoutSeconds: configuration.timeoutSeconds,
+                cancellationGraceSeconds: configuration.cancellationGraceSeconds, label: "Video provider")
+            terminal = try await process.run { reader, control in
+                await VideoProviderProtocol.read(reader, control: control, runID: request.id, steps: video.steps, emit: emit)
+            }
+        } catch {
+            // Child and readers have drained before access is revoked; release still
+            // owns the heavy-compute lease even when private cleanup itself fails.
+            do { try access?.finish() }
+            catch { throw InferenceFailure.backendFailed("Video stopped but private access cleanup failed: \(error.localizedDescription)") }
+            throw error
         }
+        try access?.finish()
+        try configuration.confirmDeployment?()
         if let failure = terminal.failure { throw InferenceFailure.backendFailed(failure) }
         guard let snapshot = terminal.snapshot else { throw InferenceFailure.backendFailed("Missing video result.") }
         try Task.checkCancellation()

@@ -50,20 +50,24 @@ public final class WorkbenchModel {
         case .image: await createDocument()
         case .text: await createTextDocument()
         case .audio: await createAudioCreation()
+        case .video: await createVideoCreation()
         }
     }
     public var visibleGenerationTitle: String {
-        switch creatorMode { case .image: "生成图片"; case .text: "改写所选文字"; case .audio: "生成声音候选" }
+        switch creatorMode { case .image: "生成图片"; case .text: "改写所选文字"; case .audio: "生成声音候选"; case .video: "生成视频候选" }
     }
     public var canRunVisibleGeneration: Bool {
         guard presentedDocument != nil, !isChangingProject, !hasPendingEditor else { return false }
-        return switch creatorMode { case .image: projectSession.canGenerate; case .text: projectSession.canRewriteText; case .audio: projectSession.canGenerateAudioCreation }
+        return switch creatorMode { case .image: projectSession.canGenerate; case .text: projectSession.canRewriteText; case .audio: projectSession.canGenerateAudioCreation; case .video: projectSession.canGenerateVideoCreation }
     }
     /// Checks at actual async execution, not when the menu closure was first rendered.
     @discardableResult public func generateCaptured(mode: CreatorMode, epoch: UInt64, documentID: UUID?) async -> Bool {
         guard mode == creatorMode, epoch == projectSession.navigationEpoch,
               documentID == presentedDocument?.id, canRunVisibleGeneration else { return false }
         switch mode {
+        case .video:
+            guard let documentID else { return false }
+            await projectSession.generateVideoCreation(contextID: projectSession.videoCreationContextID, documentID: documentID)
         case .image: await generate()
         case .text: await projectSession.rewriteText()
         case .audio:
@@ -76,6 +80,9 @@ public final class WorkbenchModel {
     public func generateVisible() async {
         guard canRunVisibleGeneration else { return }
         switch creatorMode {
+        case .video:
+            guard let id = presentedDocument?.id else { return }
+            await projectSession.generateVideoCreation(contextID: projectSession.videoCreationContextID, documentID: id)
         case .image: await generate()
         case .text: await projectSession.rewriteText()
         case .audio:
@@ -133,6 +140,53 @@ public final class WorkbenchModel {
         await endComparison()
         await projectSession.createTextDocument()
     }
+    public func createVideoCreation() async {
+        guard !isChangingProject, !refuseEditorClose() else { return }
+        await endComparison()
+        await projectSession.createVideoCreation()
+    }
+    public func chooseVideoCreationModel(contextID: UUID, documentID: UUID) async {
+        guard !isChangingProject, !isBusy,
+              projectSession.videoCreationContextID == contextID, activeDocumentID == documentID else { return }
+        isChoosingLocation = true
+        defer { isChoosingLocation = false }
+        let panel = NSOpenPanel()
+        panel.title = "选择已准备的 Wan2.1 视频模型"
+        panel.canChooseFiles = false; panel.canChooseDirectories = true; panel.allowsMultipleSelection = false
+        guard await panel.begin() == .OK, let url = panel.url,
+              projectSession.videoCreationContextID == contextID, activeDocumentID == documentID else { return }
+        await projectSession.registerVideoModel(at: url)
+    }
+    public func exportVideoCreation(id: UUID, contextID: UUID, documentID: UUID) async {
+        guard !isChangingProject, !isBusy,
+              projectSession.videoCreationContextID == contextID, activeDocumentID == documentID,
+              projectSession.videoCreationCandidates.contains(where: { $0.id == id }) else { return }
+        isChoosingLocation = true
+        defer { isChoosingLocation = false }
+        let panel = NSSavePanel()
+        panel.title = "导出视频副本"; panel.allowedContentTypes = [.mpeg4Movie]
+        panel.nameFieldStringValue = "视频副本.mp4"
+        guard await panel.begin() == .OK, let url = panel.url,
+              projectSession.videoCreationContextID == contextID, activeDocumentID == documentID else { return }
+        await projectSession.exportVideoCreationAsset(id: id, to: url, contextID: contextID, documentID: documentID)
+    }
+    public func videoCreationActions(contextID: UUID, documentID: UUID) -> VideoCreationActions {
+        let session = projectSession, epoch = session.navigationEpoch
+        let current = { session.navigationEpoch == epoch && session.videoCreationContextID == contextID
+            && session.activeDocumentID == documentID && session.creatorMode == .video }
+        return VideoCreationActions(
+            generate: { Task { guard current() else { return }; await session.generateVideoCreation(contextID: contextID, documentID: documentID) } },
+            cancel: { Task { guard current() else { return }; await session.cancelVideoCreation(contextID: contextID, documentID: documentID) } },
+            save: { Task { guard current() else { return }; _ = await session.saveVideoCreation(contextID: contextID, documentID: documentID) } },
+            chooseModel: { Task { guard current() else { return }; await self.chooseVideoCreationModel(contextID: contextID, documentID: documentID) } },
+            stop: { guard current() else { return }; session.stopVideoPreview() },
+            select: { id in Task { guard current() else { return }; await session.mutateVideoCreationCandidate(.select(id), contextID: contextID, documentID: documentID) } },
+            adopt: { id in Task { guard current() else { return }; await session.mutateVideoCreationCandidate(.adopt(id), contextID: contextID, documentID: documentID) } },
+            preview: { id in Task { guard current() else { return }; await session.previewVideoAsset(id: id, contextID: contextID, documentID: documentID) } },
+            export: { id in Task { guard current() else { return }; await self.exportVideoCreation(id: id, contextID: contextID, documentID: documentID) } },
+            reject: { id, value in Task { guard current() else { return }; await session.mutateVideoCreationCandidate(.reject(id, value), contextID: contextID, documentID: documentID) } })
+    }
+
     public func createAudioCreation(sourceAssetID: UUID? = nil) async {
         guard !isChangingProject, !refuseEditorClose() else { return }
         await endComparison()

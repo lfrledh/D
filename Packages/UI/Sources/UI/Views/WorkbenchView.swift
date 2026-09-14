@@ -117,6 +117,7 @@ public struct WorkbenchView: View {
                 case .image: GenerationInspector(model: model, library: library)
                 case .text: textWorkspace(presentation: .parameters)
                 case .audio: audioWorkspace(presentation: .parameters)
+                case .video: videoWorkspace(presentation: .parameters)
                 }
             }
         .observingLayout { layoutProbe?($0, $1) }
@@ -220,7 +221,9 @@ public struct WorkbenchView: View {
     }
 
     @ViewBuilder private var canvas: some View {
-        if !model.showingAllArtworks, model.activeDocument?.audioCreation != nil,
+        if model.creatorMode == .video, model.presentedDocument != nil {
+            videoWorkspace(presentation: .content)
+        } else if !model.showingAllArtworks, model.activeDocument?.audioCreation != nil,
            model.projectSession.audioCreationDraft != nil {
             audioWorkspace(presentation: .content)
         } else if !model.showingAllArtworks, model.activeDocument?.kind == .audio,
@@ -261,6 +264,26 @@ public struct WorkbenchView: View {
                     Text("在右侧描述你想创作的画面。\n作品会自动保存在这个项目中。")
                 }
             }
+        }
+    }
+
+    @ViewBuilder private func videoWorkspace(presentation: VideoCreationPresentation) -> some View {
+        if let document = model.presentedDocument, let draft = model.projectSession.videoCreationDraft {
+            let session = model.projectSession, context = session.videoCreationContextID
+            let jobID = session.documentJobs.last(where: { session.activeJobIDs.contains($0.id) })?.id
+            VideoCreationView(draft: Binding(
+                get: { session.videoCreationDraft ?? draft },
+                set: { session.updateVideoCreationDraft($0, contextID: context, documentID: document.id) }),
+                candidates: session.videoCreationCandidates,
+                selectedAssetID: document.selectedAssetID, adoptedAssetID: document.adoptedAssetID,
+                modelStatus: session.videoModelStatus, canGenerate: session.canGenerateVideoCreation,
+                isBusy: session.isBusy || session.isRegisteringVideoModel || model.isChangingProject,
+                progress: jobID.flatMap { session.progress[$0] },
+                status: jobID.flatMap { session.phases[$0] } ?? session.videoCreationSaveStatus,
+                previewURL: session.videoPreviewURL, previewIdentity: session.videoPreviewIdentity,
+                defaultMemoryBudgetBytes: session.defaultMemoryBudgetBytes,
+                actions: model.videoCreationActions(contextID: context, documentID: document.id))
+                .presenting(presentation).id(document.id)
         }
     }
 
