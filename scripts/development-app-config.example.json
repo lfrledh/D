@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "developerDirectory": "/absolute/path/to/Xcode.app/Contents/Developer",
+  "signingConfig": "/absolute/path/to/existing/DevelopmentSigning.xcconfig",
+  "signingIdentity": "0123456789abcdef0123456789abcdef01234567",
+  "pythonRoot": "/absolute/path/to/python-3.12-runtime-root",
+  "sa3SitePackages": "/absolute/path/to/sa3-site-packages",
+  "mrt2SitePackages": "/absolute/path/to/mrt2-site-packages",
+  "videoSitePackages": "/absolute/path/to/video-site-packages",
+  "tokenizerDirectory": "/absolute/path/to/pinned-tokenizer-directory",
+  "sourcePackagesTemplate": "/absolute/path/to/existing-locked-SourcePackages-App"
+}

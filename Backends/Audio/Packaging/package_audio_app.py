@@ -16,6 +16,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import time
 from typing import Any
 
 import prepare_engine
@@ -25,6 +26,9 @@ import prepare_mrt2_engine
 PackagingError = prepare_engine.PackagingError
 CODESIGN = "/usr/bin/codesign"
 COMMAND_TIMEOUT_SECONDS = 30
+SUPERVISOR_ENVIRONMENT_KEY = "D_BUILD_DEVELOPMENT_SUPERVISOR_PID"
+COMMAND_TERM_GRACE_SECONDS = 1.0
+COMMAND_KILL_GRACE_SECONDS = 1.0
 ENGINE_DIRECTORIES = ("AudioEngine.dengine", "MRT2MusicEngine.dengine")
 MACH_O_MAGICS = {
     b"\xfe\xed\xfa\xce", b"\xce\xfa\xed\xfe",
@@ -34,26 +38,152 @@ MACH_O_MAGICS = {
 }
 
 
-def _run_command(argv: list[str], timeout: int = COMMAND_TIMEOUT_SECONDS) -> subprocess.CompletedProcess[str]:
-    """Run one fixed command and reap its process group on timeout."""
-    process = subprocess.Popen(
-        argv,
-        stdin=subprocess.DEVNULL,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        start_new_session=True,
-    )
+def _supervised_stage() -> bool:
+    marker = os.environ.get(SUPERVISOR_ENVIRONMENT_KEY)
+    if marker is None:
+        return False
     try:
-        stdout, stderr = process.communicate(timeout=timeout)
-    except subprocess.TimeoutExpired as error:
+        supervisor = int(marker)
+    except ValueError as error:
+        raise PackagingError("invalid build supervisor marker") from error
+    own_pid = os.getpid()
+    if (
+        supervisor <= 1
+        or supervisor != os.getppid()
+        or os.getsid(0) != own_pid
+        or os.getpgid(0) != own_pid
+    ):
+        raise PackagingError("build supervisor marker does not match the stage parent/session/group")
+    return True
+
+
+def _command_group_exists(group: int) -> bool:
+    try:
+        os.killpg(group, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def _wait_command_group(group: int, process: subprocess.Popen[Any], seconds: float) -> bool:
+    deadline = time.monotonic() + seconds
+    while _command_group_exists(group):
+        process.poll()
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(0.02)
+    return True
+
+
+def _stop_command(process: subprocess.Popen[Any], *, supervised: bool) -> bool:
+    """Stop only the known direct child, or its owned standalone group."""
+    previous: dict[int, Any] = {}
+    for number in (signal.SIGINT, signal.SIGTERM):
         try:
-            os.killpg(process.pid, signal.SIGKILL)
-        except ProcessLookupError:
+            previous[number] = signal.getsignal(number)
+            signal.signal(number, signal.SIG_IGN)
+        except ValueError:
             pass
-        stdout, stderr = process.communicate()
-        raise PackagingError(f"command timed out after {timeout}s: {argv[0]}") from error
-    return subprocess.CompletedProcess(argv, process.returncode, stdout, stderr)
+    incomplete = False
+    try:
+        if supervised:
+            if process.poll() is None:
+                process.terminate()
+                try:
+                    process.wait(timeout=COMMAND_TERM_GRACE_SECONDS)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    try:
+                        process.wait(timeout=COMMAND_KILL_GRACE_SECONDS)
+                    except subprocess.TimeoutExpired:
+                        incomplete = True
+        elif _command_group_exists(process.pid):
+            try:
+                os.killpg(process.pid, signal.SIGTERM)
+            except (ProcessLookupError, PermissionError):
+                incomplete = True
+            if not incomplete and not _wait_command_group(process.pid, process, COMMAND_TERM_GRACE_SECONDS):
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except (ProcessLookupError, PermissionError):
+                    incomplete = True
+                if not incomplete and not _wait_command_group(process.pid, process, COMMAND_KILL_GRACE_SECONDS):
+                    incomplete = True
+        try:
+            process.wait(timeout=COMMAND_TERM_GRACE_SECONDS + COMMAND_KILL_GRACE_SECONDS)
+        except subprocess.TimeoutExpired:
+            incomplete = True
+    finally:
+        for number, handler in previous.items():
+            signal.signal(number, handler)
+    return incomplete
+
+
+def _run_command(argv: list[str], timeout: int = COMMAND_TIMEOUT_SECONDS) -> subprocess.CompletedProcess[str]:
+    """Run one fixed command with bounded cleanup in standalone or supervised mode."""
+    supervised = _supervised_stage()
+    environment = os.environ.copy()
+    environment.pop(SUPERVISOR_ENVIRONMENT_KEY, None)
+    with tempfile.TemporaryFile(mode="w+", encoding="utf-8", errors="replace") as stdout_file, tempfile.TemporaryFile(
+        mode="w+", encoding="utf-8", errors="replace"
+    ) as stderr_file:
+        process = subprocess.Popen(
+            argv,
+            stdin=subprocess.DEVNULL,
+            stdout=stdout_file,
+            stderr=stderr_file,
+            text=True,
+            start_new_session=not supervised,
+            env=environment,
+        )
+        timed_out = False
+        previous_term: Any | None = None
+        term_handler_installed = False
+
+        def request_cancellation(_signum: int, _frame: Any) -> None:
+            raise KeyboardInterrupt
+
+        try:
+            try:
+                previous_term = signal.getsignal(signal.SIGTERM)
+                signal.signal(signal.SIGTERM, request_cancellation)
+                term_handler_installed = True
+            except ValueError:
+                pass
+            try:
+                process.wait(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                timed_out = True
+            except KeyboardInterrupt as error:
+                incomplete = _stop_command(process, supervised=supervised)
+                if incomplete:
+                    raise PackagingError(f"command cancellation cleanup incomplete: {argv[0]}") from error
+                raise
+        finally:
+            if term_handler_installed:
+                signal.signal(signal.SIGTERM, previous_term)
+
+        leftover = False
+        incomplete = False
+        if timed_out:
+            incomplete = _stop_command(process, supervised=supervised)
+        elif not supervised and _command_group_exists(process.pid):
+            leftover = True
+            incomplete = _stop_command(process, supervised=False)
+
+        stdout_file.seek(0)
+        stderr_file.seek(0)
+        stdout = stdout_file.read()
+        stderr = stderr_file.read()
+        if incomplete:
+            raise PackagingError(f"command cleanup incomplete: {argv[0]}")
+        if timed_out:
+            raise PackagingError(f"command timed out after {timeout}s: {argv[0]}")
+        if leftover:
+            raise PackagingError(f"command left processes in its owned group: {argv[0]}")
+        return subprocess.CompletedProcess(argv, process.returncode, stdout, stderr)
 
 
 def _command(argv: list[str], stage: str) -> subprocess.CompletedProcess[str]:
