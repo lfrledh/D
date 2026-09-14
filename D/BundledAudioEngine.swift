@@ -2,17 +2,59 @@ import CryptoKit
 import Darwin
 import Foundation
 
-/// Read-only description of the fixed audio engine bundled with an application.
+/// Read-only description of a fixed inference engine bundled with an application.
 struct BundledAudioEngine: Sendable {
     enum Family: Sendable {
-        case stableAudio, mrt2Music
-        var directory: String { self == .stableAudio ? "AudioEngine.dengine" : "MRT2MusicEngine.dengine" }
-        var kind: String { self == .stableAudio ? "d-audio-engine" : "d-mrt2-music-engine" }
-        var script: String { self == .stableAudio ? "provider/d_audio_backend.py" : "provider/d_audio_mrt2_backend.py" }
-        var model: String { self == .stableAudio ? "model-manifests/sm-music.json" : "model-manifests/mrt2-small.json" }
+        case stableAudio, mrt2Music, video
+        var directory: String {
+            switch self {
+            case .stableAudio: "AudioEngine.dengine"
+            case .mrt2Music: "MRT2MusicEngine.dengine"
+            case .video: "VideoEngine.dengine"
+            }
+        }
+        var kind: String {
+            switch self {
+            case .stableAudio: "d-audio-engine"
+            case .mrt2Music: "d-mrt2-music-engine"
+            case .video: "d-video-engine"
+            }
+        }
+        var script: String {
+            switch self {
+            case .stableAudio: "provider/d_audio_backend.py"
+            case .mrt2Music: "provider/d_audio_mrt2_backend.py"
+            case .video: "provider/d_video_run.py"
+            }
+        }
+        var model: String {
+            switch self {
+            case .stableAudio: "model-manifests/sm-music.json"
+            case .mrt2Music: "model-manifests/mrt2-small.json"
+            case .video: "model-manifests/wan21.json"
+            }
+        }
+        var vendor: String {
+            switch self {
+            case .stableAudio, .mrt2Music: "vendor"
+            case .video: "Vendor"
+            }
+        }
         var required: [String] {
-            ["python/bin/python3", script, "provider/d_audio_access.py", "provider/d_audio_contract.py", model] +
-                (self == .stableAudio ? ["provider/d_audio_sa3.py"] : ["provider/d_audio_mrt2_contract.py", "provider/d_mrt2_export.py"])
+            switch self {
+            case .stableAudio:
+                ["python/bin/python3", script, "provider/d_audio_access.py", "provider/d_audio_contract.py", model,
+                 "provider/d_audio_sa3.py"]
+            case .mrt2Music:
+                ["python/bin/python3", script, "provider/d_audio_access.py", "provider/d_audio_contract.py", model,
+                 "provider/d_audio_mrt2_contract.py", "provider/d_mrt2_export.py"]
+            case .video:
+                ["python/bin/python3", script, "provider/d_video_model.py", "provider/d_video_prepare.py",
+                 "provider/d_audio_access.py", model, "tokenizer/special_tokens_map.json", "tokenizer/spiece.model",
+                 "tokenizer/tokenizer.json", "tokenizer/tokenizer_config.json", "Vendor/wan21/__init__.py",
+                 "Vendor/wan21/PROVENANCE.json", "Vendor/wan21/LICENSE-MIT.txt",
+                 "Vendor/wan21/LICENSE-WAN-APACHE-2.0.txt"]
+            }
         }
     }
     let family: Family
@@ -27,6 +69,13 @@ struct BundledAudioEngine: Sendable {
     private let manifestEntry: Entry
     private let manifestDigest: String
     private let entries: [String: Entry]
+
+    var videoTokenizerDirectory: URL? {
+        switch family {
+        case .stableAudio, .mrt2Music: nil
+        case .video: root.appendingPathComponent("tokenizer", isDirectory: true)
+        }
+    }
 
     private static let maximumManifestBytes = 4 * 1024 * 1024
     private static let maximumFiles = 10_000
@@ -93,7 +142,7 @@ struct BundledAudioEngine: Sendable {
         try requireExact(object, key: "pythonABI", string: "3.12")
         try requireExact(object, key: "pythonExecutable", string: "python/bin/python3")
         try requireExact(object, key: "providerScript", string: family.script)
-        try requireExact(object, key: "vendorDirectory", string: "vendor")
+        try requireExact(object, key: "vendorDirectory", string: family.vendor)
         try requireExact(object, key: "modelManifestsDirectory", string: "model-manifests")
         guard let values = object["files"] as? [Any], values.count <= maximumFiles else {
             throw DeploymentError.invalid("files list is missing or exceeds the limit")
@@ -123,7 +172,7 @@ struct BundledAudioEngine: Sendable {
         for path in required where declared[path] == nil {
             throw DeploymentError.invalid("required engine file is absent from engine.json: \(path)")
         }
-        let vendor = root.appendingPathComponent("vendor", isDirectory: true)
+        let vendor = root.appendingPathComponent(family.vendor, isDirectory: true)
         guard try entry(at: vendor).isDirectory else { throw DeploymentError.invalid("vendor is not a directory") }
 
         let actual = try treeEntries(root: root)

@@ -1,0 +1,11 @@
+{
+  "precision": {
+    "diffusion": "BF16 with original FP32 time/head/modulation/norm tensors",
+    "text": "BF16",
+    "vae": "F32"
+  },
+  "profile": "wan21-t2v-1.3b-bf16-v1",
+  "repository": "Wan-AI/Wan2.1-T2V-1.3B",
+  "revision": "37ec512624d61f7aa208f7ea8140a131f93afc9a",
+  "schemaVersion": 1
+}
