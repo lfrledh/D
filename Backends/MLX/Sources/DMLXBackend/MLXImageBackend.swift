@@ -31,7 +31,7 @@ public struct MLXImageBackendConfiguration: Sendable {
 /// Encoder, transformer and decoder have separate lifetimes; only evaluated arrays bridge stages.
 public actor MLXImageBackend: InferenceBackend {
     public nonisolated let descriptor = BackendDescriptor(
-        id: "mlx.image.flux2-klein", version: "0.1.0+flux2-959a4af.d1", capabilities: [.imageGeneration])
+        id: "mlx.image.flux2-klein", version: "0.2.0+flux2-959a4af.d1.ir1", capabilities: [.imageGeneration])
     public nonisolated let executionCapability: ImageExecutionCapability
     private let configuration: MLXImageBackendConfiguration
     private let observer: @Sendable (MLXLifecycleEvent) async -> Void
@@ -170,6 +170,20 @@ public actor MLXImageBackend: InferenceBackend {
             "weightBytes": String(inventory.weightBytes), "estimatedPeakBytes": String(inventory.estimatedPeakBytes),
             "pngBytes": String(data.count), "pngDecodedAndValidated": "true",
         ], uniquingKeysWith: { _, new in new })
+        if let reference = input.referenceImage {
+            metadata.merge([
+                "referenceImageSHA256": reference.sha256,
+                "referenceImageByteCount": String(reference.byteCount),
+                "referenceImageWidth": String(reference.width),
+                "referenceImageHeight": String(reference.height),
+                "referenceImageEncoding": reference.encoding,
+                "referenceConditioning": "flux2-klein-image-v1",
+                "referenceConditioningApplied": "true",
+                "referenceImageIDScale": "10",
+                "generatedImageIDScale": "0",
+                "referenceLatentTokenCount": String(denoised.referenceLatentTokenCount ?? 0),
+            ], uniquingKeysWith: { _, new in new })
+        }
         return InferenceResult(artifacts: [artifact], metadata: metadata)
     }
 
@@ -181,6 +195,7 @@ public actor MLXImageBackend: InferenceBackend {
     private struct Denoised {
         let latents: MLXArray
         let ids: MLXArray
+        let referenceLatentTokenCount: Int?
     }
 
     @inline(never)
@@ -236,14 +251,45 @@ public actor MLXImageBackend: InferenceBackend {
     @inline(never)
     private func generateLatents(input: ImageRequest, directory: URL, state: MLXRandom.RandomState,
                                  emit: @escaping @Sendable (InferenceOutput) async throws -> Void) async throws -> Denoised {
+        let reference = try await encodeReference(input.referenceImage, directory: directory, state: state)
+        if reference != nil {
+            Self.synchronize()
+            Memory.clearCache()
+        }
         let encoding = try await encode(input: input, directory: directory, state: state)
         Self.synchronize()
         Memory.clearCache()
-        return try await denoise(input: input, directory: directory, encoding: encoding, state: state, emit: emit)
+        return try await denoise(input: input, directory: directory, encoding: encoding,
+                                 reference: reference, state: state, emit: emit)
+    }
+
+    /// Reference bytes and the encoder VAE remain local to this stage. Only evaluated
+    /// packed latents/IDs cross into transformer loading and denoising.
+    @inline(never)
+    private func encodeReference(_ submitted: ImageReference?, directory: URL,
+                                 state: MLXRandom.RandomState) async throws -> Flux2ImageMath.ReferenceConditioning? {
+        guard let submitted else { return nil }
+        // Descriptor validation, one immutable read and digest verification all finish
+        // before any model object is allocated. A failure cannot fall back to T2I.
+        let frozen = try ImageReferenceInput.load(submitted)
+        try await checkpoint(.loadingVAE)
+        let vae = try withRandomState(state) { try Flux2AutoencoderKL.load(from: directory, dtype: .bfloat16) }
+        try Flux2ImageMath.validateVAEEncoderWeightCoverage(
+            vae: vae, snapshot: directory, expectedDType: .bfloat16)
+        try await checkpoint(.vaeLoaded)
+        try await checkpoint(.encoding)
+        let prepared = try withRandomState(state) {
+            let image = try Flux2ImageMath.referenceTensor(frozen, dtype: .bfloat16)
+            return try Flux2ImageMath.prepareReference(vae: vae, image: image, dtype: .bfloat16)
+        }
+        MLX.eval(prepared.latents, prepared.ids)
+        try await checkpoint(.encoded)
+        return prepared
     }
 
     @inline(never)
     private func denoise(input: ImageRequest, directory: URL, encoding: Flux2PromptEncoding,
+                         reference: Flux2ImageMath.ReferenceConditioning?,
                          state: MLXRandom.RandomState,
                          emit: @escaping @Sendable (InferenceOutput) async throws -> Void) async throws -> Denoised {
         try await checkpoint(.loadingTransformer)
@@ -257,6 +303,7 @@ public actor MLXImageBackend: InferenceBackend {
         Self.synchronize()
         Memory.clearCache()
         try Flux2ImageMath.configure(scheduler: scheduler, latents: prepared.latents, steps: input.steps)
+        let denoisingIDs = try Flux2ImageMath.appendReferenceIDs(outputIDs: prepared.ids, reference: reference)
         let denoiser = Flux2Denoiser(transformer: transformer, scheduler: scheduler)
         var current = prepared.latents
         try await emit(.progress(completed: 0, total: input.steps))
@@ -265,12 +312,13 @@ public actor MLXImageBackend: InferenceBackend {
             current = try withRandomState(state) {
                 try Flux2ImageMath.step(denoiser, current: current, timestep: timestep,
                                        promptEmbeds: encoding.promptEmbeds, textIDs: encoding.textIds,
-                                       imageIDs: prepared.ids)
+                                       imageIDs: denoisingIDs, referenceLatents: reference?.latents)
             }
             try await emit(.progress(completed: index + 1, total: input.steps))
             try Task.checkCancellation()
         }
-        return Denoised(latents: current, ids: prepared.ids)
+        return Denoised(latents: current, ids: prepared.ids,
+                        referenceLatentTokenCount: reference?.latents.dim(1))
     }
 
     @inline(never)
