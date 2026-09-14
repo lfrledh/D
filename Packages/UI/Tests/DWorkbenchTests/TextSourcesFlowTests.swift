@@ -27,6 +27,16 @@ private actor SourcesEngine: InferenceEngine {
     }
     private func cancelled() { cancellations += 1 }
 }
+private actor SourcesCancelRaceEngine: InferenceEngine {
+    let firstOutcome = SourcesGate(), delayedCancel = SourcesGate(), secondOutcome = SourcesGate()
+    private var count = 0
+    func submit(_ request: InferenceRequest, backendID: String) async throws -> InferenceRun {
+        count += 1
+        let first = count == 1, end = first ? firstOutcome : secondOutcome, cancel = delayedCancel
+        return .init(id: request.id, events: AsyncThrowingStream { $0.yield(.textDelta("蓝桉[S1]")); $0.finish() },
+            cancel: { if first { await cancel.wait() } }, outcome: { await end.wait(); return .completed(.init()) })
+    }
+}
 private final class SourcesDefaults: UserDefaults, @unchecked Sendable {
     private let lock = NSLock()
     private var values: [String: Any] = [:]
@@ -39,6 +49,50 @@ private final class SourcesDefaults: UserDefaults, @unchecked Sendable {
 
 @Suite("Text sources lifecycle and production host", .serialized) @MainActor
 struct TextSourcesFlowTests {
+    @Test func lateCancellationReturnCannotWaitForNextOperation() async throws {
+        let engine = SourcesCancelRaceEngine()
+        let controller = try ProjectTextSourcesController(notebook: notebook(), document: TextDraftDocument(text: "原稿"),
+            engine: engine, backendID: "fixture", persist: { _, _, _, _ in })
+        let first = Task { await controller.ask(using: model, modelID: "fixture") }
+        try await wait { await engine.firstOutcome.reached }
+        var returned = false
+        let cancel = Task { await controller.cancel(); returned = true }
+        try await wait { await engine.delayedCancel.reached }
+        await engine.firstOutcome.open(); await first.value
+        let second = Task { await controller.ask(using: model, modelID: "fixture") }
+        try await wait { await engine.secondOutcome.reached }
+        await engine.delayedCancel.open()
+        do { try await wait { returned } }
+        catch { await engine.secondOutcome.open(); await second.value; await cancel.value; throw error }
+        #expect(controller.isRunning && !controller.isCancelling && returned)
+        await engine.secondOutcome.open(); await second.value; await cancel.value
+        #expect(controller.notebook.records.count == 1)
+    }
+
+    @Test func fullCompletedRecordSurvivesArchiveOverflowAndCanBeSavedAfterRemovingCurrentSource() async throws {
+        let source = try TextSourceSnapshot(displayName: "large.txt", bytes: Data(repeating: 120, count: 500_000))
+        let excerpt = try TextSourceReader.excerpt(from: source, range: NSRange(location: 0, length: 1))
+        var note = TextSourcesNotebook(question: "x?", sources: [source], excerpts: [excerpt])
+        let target = try TextDraftDocument(text: "原稿")
+        // Eleven compact answered histories plus the current source fit; a twelfth with a
+        // larger answer does not. All source and per-answer values remain individually valid.
+        for _ in 0..<11 {
+            let submission = try TextSourcesContext.makeSubmission(notebook: TextSourcesNotebook(question: "x?", sources: [source], excerpts: [excerpt]),
+                target: target, modelID: "fixture", modelRevision: nil)
+            note.records.append(.init(submission: submission, answer: "x [S1]"))
+        }
+        try TextSourcesArchive.validate(note)
+        let controller = try ProjectTextSourcesController(notebook: note, document: target,
+            engine: SourcesEngine(answer: String(repeating: "x", count: 100_000) + " [S1]"), backendID: "fixture", persist: { _, _, _, _ in })
+        await controller.ask(using: model, modelID: "fixture")
+        let pending = try #require(controller.unsavedCompletedRecord)
+        #expect(pending.submission.sources[0].bytes == source.bytes && !controller.canAsk && controller.document == target)
+        controller.removeSource(id: source.id)
+        try await controller.flush()
+        #expect(controller.unsavedCompletedRecord == nil && !controller.isDirty && controller.notebook.records.count == 12)
+        #expect(controller.notebook.records.last?.answer == pending.answer)
+    }
+
     private let model = ModelReference(directory: URL(fileURLWithPath: "/fixture-only"), revision: "fixture")
     private func notebook() throws -> TextSourcesNotebook {
         let source = try TextSourceSnapshot(displayName: "代号👩‍💻.md", bytes: Data("代号是蓝桉\r\ne\u{301}👩‍💻".utf8))

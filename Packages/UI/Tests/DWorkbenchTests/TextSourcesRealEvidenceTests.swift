@@ -11,7 +11,7 @@ struct TextSourcesRealEvidenceTests {
         let model = URL(fileURLWithPath: try #require(ProcessInfo.processInfo.environment["D_TEST_TEXT_MODEL"]))
         let verified = try await TextModelProfiles.verify(at: model)
         #expect(verified.revision == "a5339a4131f135d0fdc6a5c8b5bbed2753bbe0f3")
-        let profile = try #require(TextModelProfiles.profile(forRevision: verified.revision))
+        let profile = try #require(try TextModelProfiles.profile(forRevision: verified.revision))
         let source = try TextSourceSnapshot(displayName: "研究记录 👩‍💻.md", bytes: Data("项目代号是蓝桉。会议地点是京都。资料没有说明预算、参与人数或日期。".utf8))
         let excerpt = try TextSourceReader.excerpt(from: source)
         let target = try TextDraftDocument(text: "原始研究草稿", generationSettings: .init(maximumPromptTokens: 2048, maximumOutputTokens: 128))
