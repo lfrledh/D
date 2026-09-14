@@ -64,7 +64,7 @@ struct PitchWorkflowTests {
             let samples = data.withUnsafeBytes { raw in (0..<input.sampleCount).map { i in
                 Float(bitPattern: UInt32(littleEndian: raw.loadUnaligned(fromByteOffset: i * 4, as: UInt32.self)))
             } }
-            #expect(samples.allSatisfy(\.isFinite))
+            #expect(samples.allSatisfy { $0.isFinite })
             let crossings = zip(samples, samples.dropFirst()).filter { $0 < 0 && $1 >= 0 }.count
             #expect(abs(crossings - 220) <= 2)
             let asset = try #require(await store.snapshot().assets.first)
