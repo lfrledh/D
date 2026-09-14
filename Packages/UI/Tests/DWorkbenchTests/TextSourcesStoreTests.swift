@@ -5,6 +5,44 @@ import Testing
 
 @Suite("Text sources production persistence")
 struct TextSourcesStoreTests {
+    private enum Interrupted: Error { case checkpoint }
+
+    @Test(arguments: [false, true])
+    func versionEightMigrationProtectsConflictAndInterruptedBackup(conflict: Bool) async throws {
+        try await fixture { url in
+            let store = try await ProjectStore.create(at: url, name: "升级保护")
+            _ = try await store.createTextDocument(text: "保留原稿")
+            try await store.close()
+            let file = url.appendingPathComponent("project.json")
+            var object = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any])
+            var docs = try #require(object["documents"] as? [[String: Any]])
+            for i in docs.indices { docs[i].removeValue(forKey: "textSources") }
+            object["documents"] = docs; object["schemaVersion"] = 8
+            let original = try JSONSerialization.data(withJSONObject: object)
+            try original.write(to: file)
+            let backup = url.appendingPathComponent(ProjectStore.versionEightBackupFilename)
+            if conflict {
+                let existing = Data("another backup".utf8); try existing.write(to: backup)
+                await #expect(throws: ProjectStoreError.self) { try await ProjectStore.open(at: url) }
+                #expect(try Data(contentsOf: backup) == existing)
+            } else {
+                await #expect(throws: Interrupted.self) {
+                    try await ProjectStore.open(at: url, migrationCheckpoint: { point in
+                        if point == .backupDurable { throw Interrupted.checkpoint }
+                    })
+                }
+                #expect(try Data(contentsOf: backup) == original)
+            }
+            #expect(try Data(contentsOf: file) == original)
+            if !conflict {
+                let reopened = try await ProjectStore.open(at: url)
+                #expect(await reopened.snapshot().activeDocument?.textDraft?.text == "保留原稿")
+                #expect(await reopened.snapshot().schemaVersion == 10)
+                try await reopened.close()
+            }
+        }
+    }
+
     @Test func sourcesAndAnswerPersistBesideBodyAndSurviveReopen() async throws {
         try await fixture { url in
             let store = try await ProjectStore.create(at: url, name: "资料项目")
