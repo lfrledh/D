@@ -40,6 +40,7 @@ public actor InferenceRuntime: InferenceEngine {
         try Task.checkCancellation()
         guard !isClosed else { throw InferenceFailure.runtimeClosed }
         try request.validate()
+        _ = try configuration.budget(for: request)
         guard let backend = backends[backendID] else { throw InferenceFailure.unknownBackend(backendID) }
         guard backend.descriptor.capabilities.contains(request.input.capability) else {
             throw InferenceFailure.unsupportedCapability(request.input.capability)
@@ -141,9 +142,10 @@ public actor InferenceRuntime: InferenceEngine {
             let estimate = try await entry.backend.estimate(entry.request)
             try checkCancellation(id)
             guard estimate.peakBytes > 0 else { throw InferenceFailure.invalidResourceEstimate }
-            guard estimate.peakBytes <= configuration.memoryBudgetBytes else {
+            let budget = try configuration.budget(for: entry.request)
+            guard estimate.peakBytes <= budget else {
                 throw InferenceFailure.memoryBudgetExceeded(
-                    required: estimate.peakBytes, limit: configuration.memoryBudgetBytes)
+                    required: estimate.peakBytes, limit: budget)
             }
             reservedBytes = estimate.peakBytes
             phase = .running

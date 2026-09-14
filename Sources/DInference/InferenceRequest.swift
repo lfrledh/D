@@ -79,15 +79,25 @@ public struct InferenceRequest: Sendable, Codable, Equatable, Identifiable {
     public let id: UUID
     public let model: ModelReference
     public let input: InferenceInput
+    /// Explicit caller selection, frozen with the job. Nil uses the host's default.
+    /// This is an admission/MLX guidance value, never a measured physical-memory cap.
+    public let memoryBudgetBytes: UInt64?
 
-    public init(id: UUID = UUID(), model: ModelReference, input: InferenceInput) {
+    public init(id: UUID = UUID(), model: ModelReference, input: InferenceInput,
+                memoryBudgetBytes: UInt64? = nil) {
         self.id = id
         self.model = model
         self.input = input
+        self.memoryBudgetBytes = memoryBudgetBytes
     }
 
     /// Common validation only. Backends must also validate architecture and capabilities.
     public func validate() throws {
+        if let memoryBudgetBytes {
+            guard memoryBudgetBytes > 0, memoryBudgetBytes <= Int64.max else {
+                throw InferenceFailure.invalidRequest("The explicit memory budget must be positive and representable.")
+            }
+        }
         guard model.directory.isFileURL, model.directory.path.hasPrefix("/") else {
             throw InferenceFailure.invalidRequest("Model directory must be a local absolute file URL.")
         }

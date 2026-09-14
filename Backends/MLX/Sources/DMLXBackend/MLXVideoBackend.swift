@@ -7,6 +7,7 @@ import Foundation
 public actor MLXVideoBackend: InferenceBackend {
     public nonisolated let descriptor = BackendDescriptor(
         id: "mlx.video.wan21", version: "1", capabilities: [.videoGeneration])
+    public nonisolated let executionCapability = VideoExecutionCapability.wan21
     private let configuration: VideoBackendConfiguration
     private var lease: UUID?
     private var executing = false
@@ -79,7 +80,7 @@ public actor MLXVideoBackend: InferenceBackend {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
         let data = try encoder.encode(VideoWireRequest(id: request.id, video: video,
-                                                      memoryLimitBytes: configuration.memoryLimitBytes))
+                                                      memoryLimitBytes: request.memoryBudgetBytes ?? configuration.memoryLimitBytes))
         guard data.count <= 1_048_576 else { throw InferenceFailure.invalidRequest("Video request exceeds 1 MiB.") }
         try AudioFileSystem.writeExclusive(data, to: requestURL)
         let cache = run.appendingPathComponent("cache"), tmp = run.appendingPathComponent("tmp")
@@ -128,7 +129,8 @@ public actor MLXVideoBackend: InferenceBackend {
             "profile": VideoBackendConfiguration.profile.identifier, "modelRevision": VideoBackendConfiguration.revision,
             "recordPath": output.appendingPathComponent("result.json").path,
             "mediaRecordPath": run.appendingPathComponent("media.json").path, "sha256": inspected.sha256,
-            "precision": "T5/DiT BF16 with original FP32 tensors; VAE FP32", "audio": "none"])
+            "precision": "T5/DiT BF16 with original FP32 tensors; VAE FP32", "audio": "none",
+            "memoryGuidelineBytes": String(request.memoryBudgetBytes ?? configuration.memoryLimitBytes)])
     }
 
     public func release() async {
