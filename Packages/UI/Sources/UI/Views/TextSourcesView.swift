@@ -64,6 +64,49 @@ struct TextSourcesSelectionState: Equatable {
               (try? TextSourceExcerpt(source: source, range: range)) != nil else { return nil }
         return range
     }
+
+    /// A notebook revision also changes for questions and answers. Those changes must
+    /// not discard a selection unless its exact source identity has disappeared.
+    mutating func reconcile(with sources: [TextSourceSnapshot]) {
+        guard let sourceID, let sourceRevision,
+              sources.contains(where: { $0.id == sourceID && $0.revision == sourceRevision }) else {
+            select(nil)
+            return
+        }
+    }
+}
+
+enum TextSourcesQuestionPresentation {
+    /// The caller's stored question is the only displayed value. In particular, a
+    /// rejected edit is replaced by the caller's unchanged value on the next render.
+    static func displayedQuestion(_ acceptedQuestion: String) -> String { acceptedQuestion }
+
+    static func needsReplacement(current: String, accepted: String) -> Bool {
+        !current.utf8.elementsEqual(accepted.utf8)
+    }
+}
+
+enum TextSourcesLayoutPolicy {
+    static func stacksVertically(width: CGFloat) -> Bool { width < 760 }
+    static func usesWholePanelScroll(width: CGFloat) -> Bool { stacksVertically(width: width) }
+    static func stacksSourceActions(width: CGFloat) -> Bool { width < 540 }
+}
+
+enum TextSourcesHistoryPresentation {
+    static func disposition(_ value: TextSourceAnswerDisposition) -> String {
+        switch value {
+        case .pending: "等待处理"
+        case .accepted: "已采用"
+        case .rejected: "已拒绝"
+        case .undone: "已撤销"
+        }
+    }
+
+    static func excerpts(for source: TextSourceSnapshot, in excerpts: [TextSourceExcerpt]) -> [TextSourceExcerpt] {
+        excerpts.filter {
+            $0.sourceID == source.id && $0.sourceRevision == source.revision && $0.sourceSHA256 == source.sha256
+        }
+    }
 }
 
 /// A selectable, non-editable AppKit view. It only reports a valid selection.
@@ -155,7 +198,6 @@ public struct TextSourcesView: View {
     private let actions: TextSourcesViewActions
     @State private var selectedSourceID: UUID?
     @State private var selection = TextSourcesSelectionState()
-    @State private var question: String
 
     public init(notebook: TextSourcesNotebook, partialAnswer: String, isRunning: Bool,
                 isCancelling: Bool, isSaving: Bool, canAsk: Bool, canUndo: Bool,
@@ -173,31 +215,38 @@ public struct TextSourcesView: View {
         self.canAccept = canAccept
         self.citationSummary = citationSummary
         self.actions = actions
-        _question = State(initialValue: notebook.question)
     }
 
     public var body: some View {
         GeometryReader { viewport in
-            let isNarrow = viewport.size.width < 760
-            let panels = isNarrow ? AnyLayout(VStackLayout(spacing: 0)) : AnyLayout(HStackLayout(spacing: 0))
-            VStack(spacing: 0) {
-                toolbar(compact: viewport.size.width < 620)
-                Divider()
-                panels {
-                    sourcesPanel.frame(minWidth: 0, maxWidth: .infinity, minHeight: 250, maxHeight: .infinity)
-                    Divider()
-                    answersPanel.frame(minWidth: 0, maxWidth: .infinity, minHeight: 250, maxHeight: .infinity)
+            let width = viewport.size.width
+            if TextSourcesLayoutPolicy.usesWholePanelScroll(width: width) {
+                ScrollView {
+                    VStack(spacing: 0) {
+                        toolbar(compact: width < 620)
+                        Divider()
+                        sourcesContent(compactActions: TextSourcesLayoutPolicy.stacksSourceActions(width: width))
+                        Divider()
+                        answersContent
+                    }
                 }
+            } else {
+                VStack(spacing: 0) {
+                    toolbar(compact: false)
+                    Divider()
+                    HStack(spacing: 0) {
+                        sourcesPanel(compactActions: false).frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
+                        Divider()
+                        answersPanel.frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
+                    }
+                }
+                .frame(width: width, height: viewport.size.height)
             }
-            .frame(width: viewport.size.width, height: viewport.size.height)
         }
         .background(Color(nsColor: .windowBackgroundColor))
-        // Any persisted notebook revision can replace sources. Reset the local native
-        // selection rather than allowing an old range to target a new source/version.
         .onChange(of: notebook.revision) { _, _ in
-            if !question.utf8.elementsEqual(notebook.question.utf8) { question = notebook.question }
-            selection.select(nil)
-            selectedSourceID = nil
+            selection.reconcile(with: notebook.sources)
+            if selectedSource == nil { selectedSourceID = nil }
         }
     }
 
@@ -219,9 +268,15 @@ public struct TextSourcesView: View {
         .padding(12).background(.bar)
     }
 
-    private var sourcesPanel: some View {
+    private func sourcesPanel(compactActions: Bool) -> some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
+            sourcesContent(compactActions: compactActions)
+        }
+        .accessibilityIdentifier("text-sources-panel")
+    }
+
+    private func sourcesContent(compactActions: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
                 HStack {
                     Text("资料").font(.headline)
                     Spacer()
@@ -237,15 +292,13 @@ public struct TextSourcesView: View {
                     }
                     .onChange(of: selectedSourceID) { _, id in selection.select(notebook.sources.first { $0.id == id }) }
                     if let source = selectedSource {
-                        sourceDetail(source)
+                        sourceDetail(source, compactActions: compactActions)
                     }
                 }
-            }.padding(16)
-        }
-        .accessibilityIdentifier("text-sources-panel")
+        }.padding(16)
     }
 
-    @ViewBuilder private func sourceDetail(_ source: TextSourceSnapshot) -> some View {
+    @ViewBuilder private func sourceDetail(_ source: TextSourceSnapshot, compactActions: Bool) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(source.displayName).font(.subheadline.weight(.semibold))
             Text("原始资料只读；可选择一段文字作为本次提交的资料。")
@@ -257,14 +310,15 @@ public struct TextSourcesView: View {
             .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 10))
             .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color(nsColor: .separatorColor)))
             .accessibilityIdentifier("text-sources-source-text")
-            HStack {
+            let actionsLayout = compactActions ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8)) : AnyLayout(HStackLayout(spacing: 8))
+            actionsLayout {
                 Button("使用全文") { actions.useExcerpt(source.id, nil) }
                     .buttonStyle(.glass).disabled(isSaving)
                     .accessibilityIdentifier("text-sources-use-full")
                 Button("使用选中片段") { actions.useExcerpt(source.id, selection.excerptRange(for: source)) }
                     .buttonStyle(.glass).disabled(isSaving || selection.excerptRange(for: source) == nil)
                     .accessibilityIdentifier("text-sources-use-selection")
-                Spacer()
+                if !compactActions { Spacer() }
                 Button(role: .destructive, action: { actions.removeSource(source.id) }) { Label("移除资料", systemImage: "trash") }
                     .buttonStyle(.glass).disabled(isSaving).accessibilityIdentifier("text-sources-remove")
             }
@@ -277,12 +331,16 @@ public struct TextSourcesView: View {
 
     private var answersPanel: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
+            answersContent
+        }
+        .accessibilityIdentifier("text-sources-answers-panel")
+    }
+
+    private var answersContent: some View {
+        VStack(alignment: .leading, spacing: 14) {
                 Text("问题与回答").font(.headline)
-                TextEditor(text: Binding(get: { question }, set: { value in
-                    question = value
-                    actions.changeQuestion(value)
-                }))
+                TextEditor(text: Binding(get: { TextSourcesQuestionPresentation.displayedQuestion(notebook.question) },
+                                         set: { value in actions.changeQuestion(value) }))
                 .font(.body).frame(minHeight: 90).disabled(isSaving)
                 .accessibilityIdentifier("text-sources-question")
                 HStack {
@@ -298,13 +356,11 @@ public struct TextSourcesView: View {
                     Text(errorMessage).font(.caption).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true)
                         .accessibilityIdentifier("text-sources-error")
                 }
-                if !partialAnswer.isEmpty {
+                if isRunning && !partialAnswer.isEmpty {
                     answerBlock(title: "正在生成", answer: partialAnswer, summary: "结果尚未完成，不能采用。")
                 }
                 ForEach(notebook.records) { record in recordBlock(record) }
-            }.padding(16)
-        }
-        .accessibilityIdentifier("text-sources-answers-panel")
+        }.padding(16)
     }
 
     private func answerBlock(title: String, answer: String, summary: String) -> some View {
@@ -318,27 +374,36 @@ public struct TextSourcesView: View {
 
     private func recordBlock(_ record: TextSourceAnswerRecord) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(record.disposition.rawValue).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+            Text(TextSourcesHistoryPresentation.disposition(record.disposition))
+                .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+            Text("问题：\(record.submission.question)").font(.caption).fixedSize(horizontal: false, vertical: true)
             Text(record.answer).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
             Text(citationSummary(record)).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            submittedExcerpts(record.submission.excerpts)
+            submittedSources(record.submission.sources, excerpts: record.submission.excerpts)
             HStack {
                 Button("采用") { actions.accept(record.id) }
                     .buttonStyle(.glass).disabled(!canAccept(record) || isRunning || isSaving)
                     .accessibilityIdentifier("text-sources-accept-\(record.id.uuidString)")
                 Button("拒绝") { actions.reject(record.id) }
-                    .buttonStyle(.glass).disabled(isSaving)
+                    .buttonStyle(.glass).disabled(record.disposition != .pending || isRunning || isSaving)
                     .accessibilityIdentifier("text-sources-reject-\(record.id.uuidString)")
             }
         }
         .padding(10).background(.quaternary, in: RoundedRectangle(cornerRadius: 10))
     }
 
-    @ViewBuilder private func submittedExcerpts(_ excerpts: [TextSourceExcerpt]) -> some View {
-        if !excerpts.isEmpty {
+    @ViewBuilder private func submittedSources(_ sources: [TextSourceSnapshot], excerpts: [TextSourceExcerpt]) -> some View {
+        if !sources.isEmpty {
             VStack(alignment: .leading, spacing: 4) {
                 Text("本次提交的资料片段").font(.caption.weight(.semibold))
-                ForEach(excerpts) { excerpt in Text(excerpt.text).font(.caption).textSelection(.enabled) }
+                ForEach(Array(sources.enumerated()), id: \.element.id) { index, source in
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("[S\(index + 1)] \(source.displayName)").font(.caption.weight(.semibold))
+                        ForEach(TextSourcesHistoryPresentation.excerpts(for: source, in: excerpts)) { excerpt in
+                            Text(excerpt.text).font(.caption).textSelection(.enabled)
+                        }
+                    }
+                }
             }
         }
     }
