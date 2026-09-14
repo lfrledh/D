@@ -81,6 +81,29 @@ struct ImageReferenceSessionTests {
         #expect(session.referenceImageAssetID == nil)
         #expect(await session.cancelAndCloseProject())
     }
+    @Test func staleNavigationAndEmptyModalityCannotChangeReference() async throws {
+        try await withFixture { fixture in try await runStaleNavigation(fixture) }
+    }
+    private func runStaleNavigation(_ fixture: ProjectFixture) async throws {
+        let backend = ReferenceSessionBackend(fixture), session = subject(backend)
+        await session.createProject(at: fixture.project)
+        let source = try fixture.publishPNG(jobID: UUID(), size: 512)
+        let doc = try #require(session.activeDocumentID), epoch = session.navigationEpoch
+        await session.importImageReference(at: source, name: "原图", documentID: doc, navigationEpoch: epoch)
+        let reference = try #require(session.referenceImageAssetID)
+        try #require(await session.selectCreatorMode(.video))
+        await session.setImageReference(nil, documentID: doc, navigationEpoch: session.navigationEpoch)
+        #expect(session.manifest?.documents.first?.draft.referenceImageAssetID == reference)
+        #expect(await session.selectDocument(id: doc))
+        #expect(session.navigationEpoch != epoch)
+        await session.setImageReference(nil, documentID: doc, navigationEpoch: epoch)
+        await session.importImageReference(at: source, name: "过期导入", documentID: doc, navigationEpoch: epoch)
+        #expect(session.referenceImageAssetID == reference)
+        #expect(session.manifest?.assets.count == 1)
+        await session.setImageReference(nil, documentID: doc, navigationEpoch: session.navigationEpoch)
+        #expect(session.referenceImageAssetID == nil)
+        #expect(await session.cancelAndCloseProject())
+    }
     @Test func cancellationPreservesOriginalAndNextRequestRuns() async throws {
         try await withFixture { fixture in try await runCancellation(fixture) }
     }

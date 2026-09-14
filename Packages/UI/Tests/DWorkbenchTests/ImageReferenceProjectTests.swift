@@ -78,6 +78,59 @@ struct ImageReferenceProjectTests {
         }
     }
 
+    @Test func sourceIdentityCannotBeSubstitutedAndReplacingSelectedOriginalIsValid() async throws {
+        try await withFixture { fixture in
+            let store = try await ProjectStore.create(at: fixture.project, name: "来源绑定")
+            let doc = await store.snapshot().activeDocumentID
+            let source = try fixture.publishPNG(jobID: UUID(), size: 512)
+            let a = try await store.importImageReference(at: source, name: "A", documentID: doc)
+            let aid = try #require(a.documents.first?.draft.referenceImageAssetID)
+            _ = try await store.setSelectedAsset(aid, documentID: doc)
+            let b = try await store.importImageReference(at: source, name: "B", documentID: doc)
+            let bid = try #require(b.documents.first?.draft.referenceImageAssetID)
+            #expect(aid != bid)
+            #expect(b.documents.first?.selectedAssetID == nil)
+            let run = UUID(); let ref = try await store.prepareImageReference(assetID: bid, runID: run)
+            // Identical pixels do not license replacing the explicitly captured source identity.
+            await #expect(throws: (any Error).self) {
+                _ = try await store.enqueue(request: request(ref, id: run, fixture: fixture), documentID: doc,
+                                            capturedImageReferenceAssetID: aid)
+            }
+            #expect(await store.snapshot().jobs.isEmpty)
+            _ = try await store.enqueue(request: request(ref, id: run, fixture: fixture), documentID: doc,
+                                        capturedImageReferenceAssetID: bid)
+            #expect(await store.snapshot().jobs.first?.imageReferenceAssetID == bid)
+            try await store.close()
+        }
+    }
+
+    @Test func movedProjectRetainsOriginalAndPreparesNewRunInsideNewRoot() async throws {
+        try await withFixture { fixture in
+            let store = try await ProjectStore.create(at: fixture.project, name: "可移动参考")
+            let doc = await store.snapshot().activeDocumentID
+            let source = try fixture.publishPNG(jobID: UUID(), size: 512)
+            let bytes = try Data(contentsOf: source)
+            let imported = try await store.importImageReference(at: source, name: "原件", documentID: doc)
+            let asset = try #require(imported.assets.first)
+            let oldRun = UUID(); let oldInput = try await store.prepareImageReference(assetID: asset.id, runID: oldRun)
+            _ = try await store.enqueue(request: request(oldInput, id: oldRun, fixture: fixture), documentID: doc,
+                                        capturedImageReferenceAssetID: asset.id)
+            try await store.close()
+            let moved = fixture.directory.appendingPathComponent("移到这里 🎨.dproject")
+            try FileManager.default.moveItem(at: fixture.project, to: moved)
+            let reopened = try await ProjectStore.open(at: moved)
+            #expect(await reopened.snapshot().documents.first?.draft.referenceImageAssetID == asset.id)
+            #expect(try Data(contentsOf: moved.appendingPathComponent(asset.relativePath)) == bytes)
+            let newRun = UUID(); let newInput = try await reopened.prepareImageReference(assetID: asset.id, runID: newRun)
+            #expect(newInput.url.path.hasPrefix(moved.path + "/"))
+            #expect(newInput.sha256 == oldInput.sha256)
+            _ = try await reopened.enqueue(request: request(newInput, id: newRun, fixture: fixture), documentID: doc,
+                                           capturedImageReferenceAssetID: asset.id)
+            #expect(await reopened.snapshot().jobs.last?.imageReferenceAssetID == asset.id)
+            try await reopened.close()
+        }
+    }
+
     @Test func versionEightBackedUpWithoutActivatingBrowsingSource() async throws {
         try await withFixture { fixture in
             let store = try await ProjectStore.create(at: fixture.project, name: "旧项目")
