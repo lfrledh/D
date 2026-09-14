@@ -113,3 +113,71 @@ D-TS-VIEW-01 spec1 TS1-VIEW1，Terra/medium。此任务与Reader/Context实现�
 沿用原生macOS26玻璃按钮/系统工具栏，内容区清楚可读。窄宽用可换行/纵向和滚动布局，不使用导致裁切的固定总最小宽度，不替换IME问题输入控件来切布局。不要把API/内存预算/UTF16数值放用户主界面。选区在切换资料或版本时失效；禁止一份资料的旧选区触发另一份的操作。可定义同文件纯选择状态帮助器并对中文、组合emoji、旧id/revision及越界写真实行为测试；不写仅匹配文案/实现行数的测试。
 
 仅已有swiftc typecheck、own output/tmp，DInference/DWorkbench模块只读R/Build-UI/arm64-apple-macosx/debug/Modules；SwiftUI/AppKit工具链已有。No SwiftPM/GPU/GUI启动/模型/网络/下载/配置/递归/commit。未知权限或缺失工具先停报；用绝对rg /Applications/ChatGPT.app/Contents/Resources/rg，显式Git /Applications/Xcode.app/Contents/Developer/usr/bin/git。初交+2修复预算，typecheck不是行为/GUI验收；Lead后续运行生产组合测试。原界面接线与真实GUI仍未启用，不能把这个局部View写成产品完成。
+
+
+## 2026-09-14 离线候选收尾／H19待验（非整阶段完成）
+
+当前状态：**服务/CPU、离屏装配、真实CLI与普通隔离构建已验；真实工作台用户闭环、引用格式可靠性未验收。候选不默认启用，未合入源产品代码，未推送。** 用户离机期间不再探测锁屏/麦克风，不请求重复空闲授权。本任务不因锁屏重新编号，也不继续下一产品阶段。
+
+### 版本、产物与证据
+
+- R=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-TEXT-SOURCES-01/run-20260914T063313Z`，所有原失败/修复/成功证据保留，不覆盖。最终恢复索引R/final-receipt.json；原任务允许范围延续TS1/TS1-VIEW1。
+- 源起点77396f45fdd741c0f05f1d39cde95b23e353c4a0；源本轮只有三份状态/目标/集中待办文档提交2486d71e48dd02fe06f2dca160e62fde9d878471。源不含本批产品实现、schema10或新默认入口。该已批准文档快照在候选中保留历史合入，未来恢复不用旧源SHA覆盖新状态。
+- 本轮组合最终受测/普通App构建388a227cef10801ce2077889c1a81aecd68d6548。其后只变四份Markdown（本文及三份源状态文档），代码/测试/夹具/工程入口一致；最终候选完整SHA写外部回执，未在文档提交上重跑测试，不为自引用amend。
+- CLI构建595cc561da2b19a9bc414021caff9aed7d5b6980，二进制SHA256 278124e95181dbf66cff8adc9098a854a917d24c22b6c40f10c432dd96a0942f；到最终受测版CLI/后端/核心/Vendor没有差异。资料上下文准备0.5B用fa213a6d1833fb201a060e998350708c944a0ce3，1.5B用eb67932a5bec5314149386b503c7572cd8468e0f；相应资料处理/存储之后未变，后续仅界面装配及测试修正。真实答案归档0.5B实际bf5248df404fce07040a13e1574c40ff760f5631，1.5B为最终受测388a227。
+- 普通隔离产物R/`D Text Sources Workbench.app`，构建沿既有签名配置；完整性验证、读取sandbox=true通过，不触及钥匙串/签名设置、不启动App。此文字测试包未封装新音频/视频引擎，不等于整个多模态分发包。R/app-artifact.json含四关键文件摘要、大小、mtime及签名只读命令。
+
+### 实际实现及边界
+
+Reader通过显式路径/只读文件描述符读取已选UTF-8 TXT/Markdown，拒绝软链/特殊文件/损坏编码/超限/读中变化，保留原字节、名称/ID/修订/摘要及Character对齐UTF16片段。Context生成确定性上下文，不截断、不解析执行Markdown或URI；Archive在编解码时对当前与历史快照、prompt、ID/范围/预算/版本做同一完整验证。
+
+ProjectTextSourcesController复用已有InferenceEngine：提交前冻结输入/目标修订，生成只写候选；取消等待运行时结束，保存失败保留完整未发布回答，不拿截断流当成功。采用=显式追加正文；输入/文档已变或引用缺失/无效不能采用。采用/撤销的正文和状态通过ProjectStore一次发布；保存期间晚到编辑不会被覆盖，未保存大回答保留完整submission/answer/metrics且可清理当前未用资料后重试。单会话撤销有修订保护，不宣称跨会话撤销栈。
+
+ProjectSession集中协调模型lease、输入校验前后的版本、正文flush、资料保存/关闭和项目移动后的runtime重绑。模型profile ID用不含路径的opaque身份及固定revision记录，执行metrics只取TS1白名单，历史不暴露模型绝对路径/书签。新schema10迁移1…8且备份原清单，拒绝候选图像schema9及损坏/漏字段；未来图像+文字组合需统一新版本，不能把两个分支直接视为已兼容产品。
+
+资料问答是文字模态中的工作方式。来源/问题/候选在画布，右侧复用同一模型与输入/输出额度；不复制整套问答到参数栏。问题输入框在宽窄切换时保持原生控件身份，来源选区绑定来源ID/修订；历史引用按提交片段序显示当时名称/修订/摘要。D_ENABLE_TEXT_SOURCES默认非1，现有选段改写入口保持默认。只读NSHostingView布局不是GUI操作或真人IME验收。
+
+### 验收矩阵（每条结果绑定自己版本，不相加成一次总通过）
+
+| 检查 | 实际结果与边界 | R下证据 |
+| --- | --- | --- |
+| 生产工作台SwiftPM完整回归 | 最终388a227：406方法/57套件报告零失败；3个opt-in方法在这一整次跳过，随后/此前独立启用并留版本，不能称同次零跳过 | full-ui-combined-acceptance/{request,result}.json、stdout.log；acceptance-summary.json |
+| 核心DInference/DRuntime | 同版62方法/10套件通过，无模型；后端未改，未机械重跑图像/音频/视频 | core-regression |
+| 来源/归档/生产流程反例 | Unicode/CRLF/BOM/非法编码/软链；当前与历史预算和类型；伪/缺引用、过期、取消竞态、原稿保护、写失败/保存重开/移盘runtime等在完整套件覆盖 | TextSourceReaderTests、TextSourcesLeadContractTests、TextSourcesStoreTests、TextSourcesFlowTests；早期失败保留 |
+| 渲染组件 | 原生问题输入身份、窄宽可滚动、完整Workbench唯一问答控件、旧改写独立、两模式参数可达；未启动前台 | sources-render-check原失败；sources-render-lead-finish、sources-shell-cooperative及最终套件 |
+| 固定权重/真实上下文 | 0.5B/1.5B完整profile.verify；各2问题使用真正Context.makeSubmission。总套件跳过的既有0.5B权重未变检查另1项通过 | real-preparation*实际目录见receipt；fixed-text-protection；real-text*/source、submission、prompt |
+| 真实CLI | 0.5B有依据问答、缺依据、取消、token超限、恢复5场景；1.5B两问2场景。实际退出0/130/1与各自预期一致，drained→released，末次active/cache均0 | real-lifecycle-summary.json；real-text与real-text-1p5各cli-report.json，非全库基准 |
+| 真实回答保存冷重开 | 两个模型各2份实际回答经生产ProjectStore归档/重开，原始CLI request.ID、精确prompt/参数/revision/实际metrics关联；这是真实CLI结果导入，非工作台直接真实调用 | real-answer-persistence2（bf5248）、real-answer-persistence-1p5（388a227）；TextSourcesRealEvidenceTests |
+| 同runtime重任务交接 | 真实首chunk取消，drain/release后下一排队任务才load，1项通过零跳过；资源正常释放 | mlx-queue-build、mlx-queue-enumerate、mlx-test-list.json、text-queue.xctestrun、mlx-queue-real、mlx-queue.summary.json/xcresult |
+| 普通App构建 | 最终388a227既有签名Debug独立构建成功，副本签名完整性和sandbox声明通过 | app-assembly-final、app-artifact.json；不是GUI/TCC/Gatekeeper/公证验收 |
+| 真实GUI/可采用回答/专业质量 | **未通过/未执行**：H19等待前台，真实模型引用缺口另列下文；不以CPU采用夹具或导入CLI结果替代 | gui-acceptance-plan.json；源集中清单H19 |
+
+真实模型固定revision：Qwen2.5-0.5B-Instruct-4bit a5339a4131f135d0fdc6a5c8b5bbed2753bbe0f3；Qwen2.5-1.5B-Instruct-4bit 8b403126fc14f14cfc99bb4cfa72ecbc129ea677。问答用实际2048/128 token、temperature0.2、topP0.95、seed42；这是小样例配置，不是产品永久上限。0.5B正常约1.2—2.4s、峰值约0.39GiB，1.5B约1.1—1.2s、峰值约1.0GiB；CLI加载到完成，不等于GUI首字体验或大模型容量结论。
+
+**质量事实**：有依据时两模型能答出蓝桉/京都，但没有规定的[S1]；缺预算时0.5B编造100000000日元，1.5B说明资料未提供。回答/失败原样保留，不后补引用、改seed筛掉失败或称语义已自动验证。当前真实样例因此不可采用；后续需以版本化提示/样例验证解决引用服从问题，不能把“需要解锁”当作唯一缺口，也不通过放宽采用条件越过TS1。新模型下载另行授权，本轮未下载/安装。
+
+### 协作来源、失败与有限接管
+
+| 工作包 | 请求/可观察运行设置及候选 | 过程 |
+| --- | --- | --- |
+| D-TS-SOURCES-01 | gpt-5.6-sol/high；8e955a97fe0662cc831c4d8467b02ac7c3faa537 | 初交通过；预检针对ZWJ名称询问，Lead按既定字符语义澄清后实施；没有伪造第一轮已跑行为测试 |
+| D-TS-CONTEXT-01 | gpt-5.6-terra/medium；69f429e60cfa09419a4bb6b98a0b1809e4b5a644 | 初交+2修复；先修历史预算/metrics/引用信任，再补历史数量/空问题。repair1因日志文件名与绝对测试路径澄清暂停/续行一次，同一额度；预检rg不在PATH后按已安装实体重试。未提权 |
+| D-TS-VIEW-01 | gpt-5.6-terra/medium；916e7bdc5dad524ab26988108e1464d86a7025c0 | 初交+2修复处理权威问题状态、来源选择/历史引用及布局；Lead在eb67932a5bec5314149386b503c7572cd8468e0f有界接管，修宽窄切换替换原生输入框，原反例先4断言失败后通过；不归为Terra独立通过 |
+
+每Worker独立外盘分支/工作树，workspace-write限定任务+唯一output/tmp，network=false，Git共享管理目录不授权写入；Worker交回后Lead显式提交/串行合并。三个实施包中观察到最高两个同时实施，非三包全程并发。请求与运行turn_context的cwd/model/effort/沙箱核对见R/{sources,context,view}/final-runtime-evidence.json；运行线程、每轮开始/结束/异常/usage见原记录。隐藏服务端解析unknown，不拿模型自述作证。
+
+Lead亲自写共享契约、Store/Controller/Session接线、独立反例和最后装配，非实现者video_contract_review与video_deployment_plan只读检查这些改变，不声称其执行测试或GUI。修正了输入revision与状态revision混用、晚保存覆盖新正文、未保存完整回答丢失、cancel等待者串入下一任务、移盘runtime及宿主首次await前快照。初次类型/测试准备编译错误、真实CLI startedAt误当数值导致解析失败均有原证据，修的是Lead测试/接线，不计入Worker实现成功。
+
+最后装配b673fea修正画布/参数栏重复问答，不属于对VIEW第三轮派工。新布局测试同步RunLoop占用MainActor与已有自动滚动测试产生时序干扰：组合首次两case失败，同一生产代码单测通过；9e15477将新测试等待改为协作式Task.sleep后组合及最终完整回归通过，所有几何/身份断言保留；未证明SwiftUI内部唯一成因。旧ProjectSession模型移除测试遇rebind.verifying中间状态，388a227改等待最终同一“移除”后置条件，原10s超时/lease/数据断言不变；非实现者确认不是放宽标准。R/nonimplementer-reviews.json记录审核边界。
+
+原始每轮usage保存，不把resume累计快照简单相加；没有重算旧批费用。配置/模型路由可观察、隐藏解析/订阅实际费用/完整Lead归因unknown。一次样本只证明可协作交付候选，不证明成本最优。来源标签不改人类Git署名，也不把Lead接管写回Terra独立验收。
+
+### 可复用经验与恢复检查点
+
+同时读取文字画布与参数栏的组合视图不能只靠局部View测试：检查实际控件实例数量，确保同一个编辑操作只有一个权威输入入口。异步测试应等待它最终断言的同一状态，不能用较早的“不能生成”状态代替“删除已观察到”；布局等待不能阻塞其他MainActor任务。正常实现与测试事件分开记录，不全部归为权限问题。
+
+已完成：三个局部包、共享保存/生命周期、组合回归、两个已装模型真实CLI及结果持久化、真实取消交接、普通隔离构建、非实现者审核。未完成：真实工作台到模型操作、真实可采用引用回答、GUI/IME/保存失败前台验证；不存在自动在后台继续跑下一批的承诺。
+
+源2486d71e48dd02fe06f2dca160e62fde9d878471只含新文档；候选位置/最终SHA见回执。源个人scheme ca3635d88aa5a15397b90e528667c66c0e6db7e596176e885c79d194b544206c、索引blob9c76916bdc97c2d4298cefe64e0b0fae3380573e与未暂存orderHint1→6保持；普通D四关键文件、原作品/模型、图像候选14af48c22e9dbe7ee715b171308276347fab0f68保持。本批自有Worker/CPU/构建/模型进程均已结束；没有启动GUI，因此也没有关闭普通D或让工具自动重启它。最后具体保护摘要及代码一致性见R/protection/end.json与final-receipt.json，不声称建立系统写锁。
+
+下一动作：用户回来按集中清单处理H18/H19，H09只提醒设备；先核Git/进程/实际签名产物/隔离UUID及此契约，读R/gui-acceptance-plan.json后执行。引用服从问题按明确剩余质量范围处理，不以未证明的样例默认开放，也不再次派预算耗尽Worker。通过完整门槛后才在隔离区协调图像/文字版本、源复验及按当时授权接纳/推送。HUM文件识别与专门歌声保持独立后续，不以高级文字完工为前置。
