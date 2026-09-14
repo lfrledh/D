@@ -44,3 +44,15 @@ Lead维护Sources/DInference/ImageReference.swift、InferenceRequest/ImageExecut
 ## 恢复检查点
 
 已完成：源身份/历史结案差异/保护核验、两个只读设计核查、外盘隔离目录。未完成：实施/测试/真实验收/集成/push。普通D不操作。模型隐藏服务解析和订阅实际费用unknown，后续按实际角色/返工/源码SHA记录，不把Lead接管计作Worker独立通过。
+
+## 2026-09-14 接线检查点与UI工作包（spec2；后端/像素IR1不变）
+
+IR-PIXELS：Sol/high初交＋修复1。Worker因SwiftPM嵌套sandbox_apply拒绝正确停报；未扩大权限，0项Worker测试。Lead初编译发现try语法错误，独立审阅另发现gamma payload、累计解压和TIFF后继指针问题；修复后Lead9方法CPU通过，非实现者关闭，候选d75213a01c421b7ce7a1176adaf40cd5674da25a。不是实图/模型验收。IR-BACKEND：初交候选87298dc，build-for-testing通过；正在修复1（FP32像素归一化后转BF16、补实际编码及生命周期检查），无GPU执行。
+
+Lead接线候选已与PIXELS保留历史合并；16个匹配ImageReference的工作台/组件方法通过。原图复制、快照任务、取消下一任务、schema8备份、历史浏览原件不激活、派生hash、防覆盖、保存失败/重开均有CPU证据。来源绑定通过每run准备票据验证，不能拿B像素冒充A；所有参考入口携带docID/navigationEpoch，并校验当前image模态。历史原件保留安全相对路径，不强改为新导入目录；导入新文件使用Images/<UUID>/original.png。真实UI/GPU仍待本阶段用户空闲确认。
+
+IR-VIEW：Terra/medium，contract=IR1-UI1。仅允许Packages/UI/Sources/UI/Views/GenerationInspector.swift、新ImageReferenceSection.swift、新Packages/UI/Tests/UITests/ImageReferenceSectionTests.swift。Lead已提供WorkbenchModel.referenceImageAsset、canUseSelectedImageReference和chooseImageReference/useSelectedImageReference/clearImageReference(documentID:navigationEpoch:)；参考ID来自ProjectSession，视图不另存任务/草稿。新section放模型与提示词附近，显示未选/原件名与尺寸/近似服从，按钮导入PNG、使用已选图片、移除参考；保留原图，用新候选，不暗示精确局部编辑。不自动选择asset/采用/生成，不把查看资产改成输入。请求记录显示任务实际参考名/hash/几何，并与当前草稿分别标注。宽参数栏窄时纵向排布/文字换行，继续ScrollView；原生系统控件与现有玻璃外壳，禁额外视觉框架。
+
+UI操作闭包在渲染时捕获activeDocumentID与projectSession.navigationEpoch，Task开始后必须传原捕获值，不能重新读取当前doc作为旧事件目标。模态切换/离开再回来的ABA旧事件无效；文件面板内部也复核代次。isChangingProject时disabled，选中非PNG时“用作参考”disabled；running不意味着草稿不可改，已提交快照保持。Tests按WorkbenchFacadeTests/ExecutionSettingsViewTests既有模式，用独立临时项目、fake engine、NSHostingView离屏布局；不启动App/系统文件面板/GUI自动化/GPU。不重复SwiftPM嵌套拒绝；Worker仅源码解析（swiftc -frontend -parse）及测试编写，由Lead执行CPU suite。
+
+UI独立工作树/base/model/输出在R/view/job.json；预检后才实施。初交+两轮针对修复预算，固定范围/路由规则同上。源仍b15、scheme未暂存保留；源和普通D尚未推进/改写。用户未回复空闲前继续不受影响的CPU/构建，不把旧窗口授权外推。
