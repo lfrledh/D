@@ -244,3 +244,13 @@ sources.v2只采用先于实现冻结的EVAL2模板；按excerpts顺序标记和
 恢复检查点：源仅文档3ae61f2、候选代码ec5ef2f及后续仅文档完整SHA见R/final-receipt；H18仍14af48c22e9dbe7ee715b171308276347fab0f68。源scheme摘要ca3635d88aa5a15397b90e528667c66c0e6db7e596176e885c79d194b544206c、索引blob9c76916bdc97c2d4298cefe64e0b0fae3380573e/未暂存保持；普通D四关键文件/已批准7B及旧证据保护在R/protection。所有自有测试/构建进程结束，未启动任何GUI或关闭用户应用；恢复仍须核实际状态。
 
 HUM准备已写入源MUSIC_ROADMAP：短单声部文件→连续音高/自由时间音符候选→保存冷重开/导出；SwiftF0优先评估、Basic Pitch备用，具体固定revision/权重/依赖与许可核定及单独授权后才实施。H09不是文件识别的前置，专门歌声独立紧接，不以文字高级功能全部完成为条件。本轮没有新增识别模型、音符编辑器或组合平台。
+
+## 2026-09-14 CLOSE2：已批准的两处可靠性收尾
+
+用户批准下一阶段，离开Mac期间只推进非前台工作，解锁/本人操作继续记集中清单。仍task D-TEXT-SOURCES-01，修订TS1-CLOSE2-R1；源3ae61f252621f0629f89d8546474f818bf565867、候选fe11baa3b2ceac7b1733c9de4b24de260fc2dc2c、H18候选14af48c22e9dbe7ee715b171308276347fab0f68已核，旧受测ec5ef2f到候选仅文档。R=D-Development/AgentTrials/D-TEXT-SOURCES-01/run-20260914T101555Z-reliability。
+
+仅修ProjectStore失败且锁已取得、所有权未交给actor时显式释放本次拥有的锁（不可释放其他会话）；TextWorkbenchView内部观察钩子的首次滚动就绪/完成协议。后者默认不在生产自动启用，不改布局/编辑器/参数/模型/保存契约。允许文件：Packages/UI/Sources/DWorkbench/Project/ProjectStore.swift、Packages/UI/Tests/DWorkbenchTests/ProjectLockFailureTests.swift；Packages/UI/Sources/UI/Views/TextWorkbenchView.swift、Packages/UI/Tests/UITests/ExecutionSettingsViewTests.swift；本文及CURRENT_ACTIONS/FAILURE_AND_PERMISSION_AUDIT/PRODUCT_GOALS状态。CLOSE1精度/采用/归档不变，不做HUM实施或schema11整合。
+
+Lead亲自修共享可靠性，原生子代理只读诊断/审核，不追加旧CONTEXT/VIEW轮或重置其预算。本次有界实现/反例/复核至候选检查点，新越界/不明身份/数据风险停止。先固定迁移失败且FD副本仍在的反例证明旧实现失败，再修；失败获取不得解锁其他持有者。滚动检查保留真实NSHostingView、两模式、原三种尺寸及全部bounds/1pt容差，不以加sleep或串行套件绕过；当前viewport和目标geometry就绪后显式请求真实scroll，检查完成回执，覆盖迟到控件和不滚动负控。组合用原默认并发入口；H18/H19前台仍未验，候选不默认启用或接入源产品代码。
+
+输出/临时/缓存仅本R；SwiftPM用新scratch，不复制ModuleCache；Python仅-B/内存compile。重构建串行，受控超时并回收自有进程；不启动D/GUI/模型或网络，不改签名配置/权限/旧产物/证据。沿原签名配置构建独立普通App供解锁后验收；源至多独立接纳状态文档，scheme始终未暂存。
