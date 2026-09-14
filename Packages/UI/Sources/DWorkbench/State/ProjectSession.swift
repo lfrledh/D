@@ -29,6 +29,11 @@ public final class ProjectSession {
     public var randomSeed = true { didSet { scheduleDraftSave() } }
     public var seedText = "0" { didSet { scheduleDraftSave() } }
     public var imageSettings: ImageGenerationSettings = .legacy { didSet { scheduleDraftSave() } }
+    public private(set) var referenceImageAssetID: UUID? { didSet { scheduleDraftSave() } }
+    @ObservationIgnored private var imageAdmissions: [UUID: Task<Void, Never>] = [:]
+    public var referenceImageAsset: ProjectAsset? {
+        manifest?.assets.first { $0.id == referenceImageAssetID }
+    }
     public var imageCapability: ImageExecutionCapability { session?.imageCapability ?? .verified512 }
     public var textCapability: TextExecutionCapability? { session?.textCapability }
     public var audioCapability: AudioExecutionCapability? { session?.audioCapability }
@@ -44,6 +49,9 @@ public final class ProjectSession {
 
     public var imageConfigurationError: String? {
         if let error = parameterEditingErrors[.image] { return error }
+        if referenceImageAssetID != nil && !imageCapability.supportsReferenceImage {
+            return "当前图像后端不支持参考编辑；请切换已支持该能力的模型部署。"
+        }
         do { _ = try imageSettings.request(prompt: "validation", seed: 0, capability: imageCapability); return nil }
         catch { return error.localizedDescription }
     }
@@ -82,7 +90,7 @@ public final class ProjectSession {
         let jobs = Set(documentJobs.map(\.id))
         return manifest.assets.filter {
             $0.mediaType == "image/png"
-                && ($0.id == activeDocument?.sourceAssetID || $0.jobID.map(jobs.contains) == true)
+                && ($0.id == activeDocument?.sourceAssetID || $0.id == referenceImageAssetID || $0.jobID.map(jobs.contains) == true)
         }
     }
     public var errorMessage: String?
@@ -279,7 +287,8 @@ public final class ProjectSession {
 
     public func clearError() { errorMessage = nil }
 
-    private var draft: ProjectDraft { ProjectDraft(prompt: prompt, randomSeed: randomSeed, seedText: seedText, imageSettings: imageSettings) }
+    private var draft: ProjectDraft { ProjectDraft(prompt: prompt, randomSeed: randomSeed, seedText: seedText,
+        imageSettings: imageSettings, referenceImageAssetID: referenceImageAssetID) }
 
     private func scheduleDraftSave() {
         guard !applyingDraft else { return }
@@ -387,6 +396,7 @@ public final class ProjectSession {
         randomSeed = value.randomSeed
         seedText = value.seedText
         imageSettings = value.imageSettings
+        referenceImageAssetID = value.referenceImageAssetID
         selectedAssetID = activeDocument?.selectedAssetID
         selectionVersion &+= 1
         audio?.resumeAdmissions()
@@ -768,6 +778,7 @@ public final class ProjectSession {
         let input: ImageRequest
         do { input = try imageSettings.request(prompt: prompt, seed: seed, capability: imageCapability) }
         catch { report(error, context: "生成配置暂不可执行；输入已保留"); return }
+        let referenceID = referenceImageAssetID
         let savedDraft = queueDraftWrite(draft, documentID: documentID, store: store)
         draftWriter?.cancel()
         let selectedID = selectedModelID
@@ -778,8 +789,10 @@ public final class ProjectSession {
         startPolling()
         let preceding = admissionTail
         let admission = Task { [self] in
+            defer { imageAdmissions.removeValue(forKey: id) }
             if let preceding { await preceding.value }
             do {
+                try Task.checkCancellation()
                 let reference: ModelReference
                 if let selectedID, let modelLibrary {
                     let lease = try await modelLibrary.acquire(selectedID)
@@ -790,22 +803,35 @@ public final class ProjectSession {
                 } else {
                     throw ModelLibraryError.unavailable("尚未选择可用模型。")
                 }
-                let request = InferenceRequest(id: id, model: reference, input: .image(input))
-                await admit(request, documentID: documentID, savedDraft: savedDraft, store: store, session: session)
+                let frozenInput: ImageRequest
+                if let referenceID {
+                    _ = try await savedDraft.value
+                    try Task.checkCancellation()
+                    let pixels = try await store.prepareImageReference(assetID: referenceID, runID: id)
+                    try Task.checkCancellation()
+                    frozenInput = ImageRequest(prompt: input.prompt, width: input.width, height: input.height,
+                        steps: input.steps, guidanceScale: input.guidanceScale, seed: input.seed,
+                        executionProfile: ImageExecutionCapability.referenceKlein4B.profile, referenceImage: pixels)
+                } else { frozenInput = input }
+                let request = InferenceRequest(id: id, model: reference, input: .image(frozenInput))
+                await admit(request, documentID: documentID, savedDraft: savedDraft, store: store, session: session,
+                            imageReferenceAssetID: referenceID)
             } catch {
+                let cancelled = error is CancellationError && cancellationRequests.contains(id)
                 await removeActive(id)
                 phases.removeValue(forKey: id)
                 liveStates.removeValue(forKey: id)
-                report(error, context: "模型当前不可用，因此没有开始生成")
+                if !cancelled { report(error, context: "任务准备失败；草稿和参考原件已保留") }
             }
         }
         admissionTail = admission
+        imageAdmissions[id] = admission
         await admission.value
     }
 
     private func admit(_ request: InferenceRequest, documentID: UUID,
                        savedDraft: Task<ProjectManifest, Error>, store: ProjectStore, session: WorkbenchSession,
-                       backendID: String? = nil) async {
+                       backendID: String? = nil, imageReferenceAssetID: UUID? = nil) async {
         do {
             let saved = try await savedDraft.value
             applyManifest(saved)
@@ -813,7 +839,8 @@ public final class ProjectSession {
             if case .video = request.input { capturedVideo = saved.documents.first { $0.id == documentID } }
             else { capturedVideo = nil }
             applyManifest(try await store.enqueue(request: request, documentID: documentID,
-                                                 capturedVideoDocument: capturedVideo))
+                                                 capturedVideoDocument: capturedVideo,
+                                                 capturedImageReferenceAssetID: imageReferenceAssetID))
             if cancellationRequests.contains(request.id) {
                 await finish(id: request.id, outcome: .cancelled, store: store)
                 return
@@ -862,6 +889,7 @@ public final class ProjectSession {
     public func cancel(_ id: UUID) async {
         guard activeJobIDs.contains(id) else { return }
         cancellationRequests.insert(id)
+        imageAdmissions[id]?.cancel()
         audioAdmissions[id]?.cancel()
         videoAdmissions[id]?.cancel()
         liveStates[id] = .cancelling
@@ -975,6 +1003,53 @@ public final class ProjectSession {
     }
 
     /// Imports into project ownership and switches only after all current editor state is safe.
+    public func importImageReference(at url: URL, name: String, documentID originID: UUID,
+                                     navigationEpoch originEpoch: UInt64) async {
+        guard navigationReady(), let store, let documentID = activeDocumentID,
+              creatorMode == .image, documentID == originID, navigationEpoch == originEpoch,
+              activeDocument?.kind == .image, !isChangingProject, !closePending else { return }
+        isChangingProject = true
+        defer { isChangingProject = false }
+        let selection = selectionVersion
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        do {
+            try await flushDraft(to: store)
+            let updated = try await store.importImageReference(at: url, name: name, documentID: documentID)
+            guard self.store === store, activeDocumentID == documentID else { return }
+            applyManifest(updated)
+            if selection == selectionVersion {
+                selectedAssetID = updated.documents.first { $0.id == documentID }?.selectedAssetID
+                selectionVersion &+= 1
+            }
+            referenceImageAssetID = updated.documents.first { $0.id == documentID }?.draft.referenceImageAssetID
+            try await flushDraft(to: store)
+            await refreshAssets()
+        } catch { report(error, context: "参考图导入失败；原文件和当前输入已保留") }
+    }
+
+    public func setImageReference(_ assetID: UUID?, documentID originID: UUID,
+                                 navigationEpoch originEpoch: UInt64) async {
+        guard let store, let documentID = activeDocumentID, activeDocument?.kind == .image,
+              creatorMode == .image, documentID == originID, navigationEpoch == originEpoch,
+              !isChangingProject, !closePending else { return }
+        isChangingProject = true
+        defer { isChangingProject = false }
+        let selection = selectionVersion
+        do {
+            try await flushDraft(to: store)
+            let updated = try await store.setImageReference(assetID, documentID: documentID)
+            guard self.store === store, activeDocumentID == documentID else { return }
+            applyManifest(updated)
+            if selection == selectionVersion {
+                selectedAssetID = updated.documents.first { $0.id == documentID }?.selectedAssetID
+                selectionVersion &+= 1
+            }
+            referenceImageAssetID = assetID
+            try await flushDraft(to: store)
+        } catch { report(error, context: "无法更换参考图；已有内容保留") }
+    }
+
     public func importAudio(at url: URL, name: String) async -> Bool {
         guard navigationReady(), let store, let audio, !isChangingProject, !closePending else { return false }
         isChangingProject = true
@@ -1272,7 +1347,9 @@ public final class ProjectSession {
             try await flushDraft(to: store)
             let value = ProjectDraft(prompt: image.prompt, randomSeed: false, seedText: String(image.seed),
                 imageSettings: .init(width: image.width, height: image.height,
-                    executionProfile: image.executionProfile ?? .init(identifier: "verified512")))
+                    executionProfile: image.referenceImage == nil
+                        ? (image.executionProfile ?? .init(identifier: "verified512")) : ImageExecutionCapability.scalableKlein4B.profile),
+                referenceImageAssetID: job.imageReferenceAssetID)
             applyManifest(try await store.createDocument(name: "从作品继续", draft: value, sourceAssetID: assetID))
             showingAllArtworks = false
             loadActiveDocument()

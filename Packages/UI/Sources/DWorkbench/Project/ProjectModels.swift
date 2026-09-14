@@ -41,18 +41,21 @@ public struct MediaMetadata: Codable, Sendable, Equatable {
     public var colorSpace: String?
     public var audio: AudioAssetMetadata?
     public var video: VideoAssetMetadata?
+    public var imageContentSHA256: String?
 
     public init(width: Int? = nil, height: Int? = nil, bitDepth: Int? = nil,
-                colorSpace: String? = nil, audio: AudioAssetMetadata? = nil, video: VideoAssetMetadata? = nil) {
+                colorSpace: String? = nil, audio: AudioAssetMetadata? = nil, video: VideoAssetMetadata? = nil,
+                imageContentSHA256: String? = nil) {
         self.width = width
         self.height = height
         self.bitDepth = bitDepth
         self.colorSpace = colorSpace
         self.audio = audio
         self.video = video
+        self.imageContentSHA256 = imageContentSHA256
     }
 
-    private enum CodingKeys: String, CodingKey { case width, height, bitDepth, colorSpace, audio, video }
+    private enum CodingKeys: String, CodingKey { case width, height, bitDepth, colorSpace, audio, video, imageContentSHA256 }
 
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
@@ -62,6 +65,7 @@ public struct MediaMetadata: Codable, Sendable, Equatable {
         colorSpace = try values.decodeIfPresent(String.self, forKey: .colorSpace)
         audio = try values.decodeIfPresent(AudioAssetMetadata.self, forKey: .audio)
         video = try values.decodeIfPresent(VideoAssetMetadata.self, forKey: .video)
+        imageContentSHA256 = try values.decodeIfPresent(String.self, forKey: .imageContentSHA256)
     }
 }
 
@@ -113,6 +117,7 @@ public struct ProjectAsset: Codable, Sendable, Equatable, Identifiable {
 }
 
 public struct ProjectJob: Codable, Sendable, Equatable, Identifiable {
+    public var imageReferenceAssetID: UUID?
     public var id: UUID
     public var documentID: UUID
     public var request: InferenceRequest
@@ -124,7 +129,8 @@ public struct ProjectJob: Codable, Sendable, Equatable, Identifiable {
 
     public init(id: UUID, documentID: UUID, request: InferenceRequest, createdAt: Date = Date(),
                 state: JobState = .queued, error: String? = nil,
-                artifactIDs: [UUID] = [], resultMetadata: [String: String] = [:]) {
+                artifactIDs: [UUID] = [], resultMetadata: [String: String] = [:], imageReferenceAssetID: UUID? = nil) {
+        self.imageReferenceAssetID = imageReferenceAssetID
         self.id = id
         self.documentID = documentID
         self.request = request
@@ -143,21 +149,24 @@ public struct ProjectDraft: Codable, Sendable, Equatable {
     public var randomSeed: Bool
     public var seedText: String
     public var imageSettings: ImageGenerationSettings
+    public var referenceImageAssetID: UUID?
 
     public init(prompt: String = "", randomSeed: Bool = true, seedText: String = "0",
-                imageSettings: ImageGenerationSettings = .legacy) {
+                imageSettings: ImageGenerationSettings = .legacy, referenceImageAssetID: UUID? = nil) {
         self.prompt = prompt
         self.randomSeed = randomSeed
         self.seedText = seedText
         self.imageSettings = imageSettings
+        self.referenceImageAssetID = referenceImageAssetID
     }
 
-    private enum CodingKeys: String, CodingKey { case prompt, randomSeed, seedText, imageSettings }
+    private enum CodingKeys: String, CodingKey { case prompt, randomSeed, seedText, imageSettings, referenceImageAssetID }
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         prompt = try values.decode(String.self, forKey: .prompt)
         randomSeed = try values.decode(Bool.self, forKey: .randomSeed)
         seedText = try values.decode(String.self, forKey: .seedText)
+        referenceImageAssetID = try values.decodeIfPresent(UUID.self, forKey: .referenceImageAssetID)
         // Only absence is legacy. Malformed or explicit null configuration is not a default.
         imageSettings = values.contains(.imageSettings)
             ? try values.decode(ImageGenerationSettings.self, forKey: .imageSettings) : .legacy
@@ -165,7 +174,7 @@ public struct ProjectDraft: Codable, Sendable, Equatable {
 }
 
 public struct ProjectManifest: Codable, Sendable, Equatable, Identifiable {
-    public static let currentSchemaVersion = 8
+    public static let currentSchemaVersion = 9
     public var schemaVersion: Int
     /// Monotonic committed state version lets the UI discard a late, stale actor response.
     public var revision: UInt64

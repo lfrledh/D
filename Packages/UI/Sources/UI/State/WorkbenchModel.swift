@@ -103,6 +103,37 @@ public final class WorkbenchModel {
         set { projectSession.imageSettings = newValue }
     }
     public var imageConfigurationError: String? { projectSession.imageConfigurationError }
+    public var referenceImageAsset: ProjectAsset? { projectSession.referenceImageAsset }
+    public var canUseSelectedImageReference: Bool {
+        !isChangingProject && creatorMode == .image && activeDocument?.kind == .image && selectedAsset?.mediaType == "image/png"
+    }
+    public func useSelectedImageReference(documentID: UUID, navigationEpoch: UInt64) async {
+        guard canUseSelectedImageReference, let id = selectedAsset?.id else { return }
+        await projectSession.setImageReference(id, documentID: documentID, navigationEpoch: navigationEpoch)
+    }
+    public func clearImageReference(documentID: UUID, navigationEpoch: UInt64) async {
+        await projectSession.setImageReference(nil, documentID: documentID, navigationEpoch: navigationEpoch)
+    }
+    public func chooseImageReference(documentID originID: UUID, navigationEpoch originEpoch: UInt64) async {
+        guard !isChangingProject, let projectID = manifest?.id, let projectURL,
+              let documentID = activeDocumentID, activeDocument?.kind == .image, creatorMode == .image,
+              documentID == originID, projectSession.navigationEpoch == originEpoch else { return }
+        isChoosingLocation = true
+        defer { isChoosingLocation = false }
+        let panel = NSOpenPanel()
+        panel.title = "选择参考 PNG"
+        panel.message = "原件会保存在项目中。首版支持 256–2048 像素、宽高为 32 倍数的单帧 PNG；不自动缩放裁切。"
+        panel.allowedContentTypes = [.png]
+        panel.canChooseDirectories = false; panel.allowsMultipleSelection = false
+        guard await panel.begin() == .OK, let url = panel.url else { return }
+        guard manifest?.id == projectID, self.projectURL == projectURL, activeDocumentID == documentID,
+              creatorMode == .image, projectSession.navigationEpoch == originEpoch else {
+            errorMessage = "文档已改变，未导入旧窗口选择的参考图。请重新选择。"
+            return
+        }
+        await projectSession.importImageReference(at: url, name: url.deletingPathExtension().lastPathComponent,
+                                                 documentID: documentID, navigationEpoch: originEpoch)
+    }
     public var executionRecommendations: ExecutionRecommendations? {
         .forMemory(bytes: ProcessInfo.processInfo.physicalMemory)
     }
