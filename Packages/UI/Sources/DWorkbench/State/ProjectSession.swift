@@ -529,6 +529,7 @@ public final class ProjectSession {
             installAudioController(for: relocated)
             if let backendID = replacement.textBackendID {
                 text?.rebind(engine: replacement.engine, backendID: backendID)
+                textSources?.rebind(engine: replacement.engine, backendID: backendID)
             }
             await previousSession?.shutdown()
             // A moved old backend may still own unpublished temporary files. Its path checks
@@ -1588,11 +1589,15 @@ public final class ProjectSession {
     public func askTextSources() async {
         guard canAskTextSources, let controller = textSources, let text, let reference = textReference,
               let validator = session?.validateTextModel else { return }
+        let inputRevision = controller.notebook.inputRevision
+        let targetRevision = text.editor.document.revision
         isTextWorking = true
         let work = Task { [self] in
             defer { isTextWorking = false; textWork = nil }
             do {
                 try await text.flush(); try Task.checkCancellation()
+                guard controller.notebook.inputRevision == inputRevision,
+                      text.editor.document.revision == targetRevision else { throw TextSourcesError.stale }
                 controller.synchronizeTarget(text.editor.document)
                 let profile = try TextModelProfiles.profile(forRevision: reference.revision)
                 let modelID = "registered:" + (profile?.id.replacingOccurrences(of: "/", with: ":") ?? "local-text")

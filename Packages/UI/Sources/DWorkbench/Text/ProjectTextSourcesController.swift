@@ -21,8 +21,8 @@ public final class ProjectTextSourcesController {
     }
     public var canUndo: Bool { undoRecord?.acceptedRevision == document.revision && !isRunning && !isSaving }
 
-    private let engine: any InferenceEngine
-    private let backendID: String
+    private var engine: any InferenceEngine
+    private var backendID: String
     private let persist: @MainActor (TextSourcesNotebook, UUID, TextDraftDocument?, UUID) async throws -> Void
     private var persistedRevision: UUID
     private var activeRun: InferenceRun?
@@ -44,6 +44,11 @@ public final class ProjectTextSourcesController {
         guard value.id == document.id else { return }
         document = value
         if undoRecord?.acceptedRevision != value.revision { undoRecord = nil }
+    }
+
+    func rebind(engine: any InferenceEngine, backendID: String) {
+        guard !isRunning, !isSaving else { return }
+        self.engine = engine; self.backendID = backendID; undoRecord = nil
     }
 
     public func changeQuestion(_ value: String) {
