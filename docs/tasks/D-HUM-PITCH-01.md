@@ -37,3 +37,6 @@ INTERPRET1允许：`Packages/UI/Sources/DWorkbench/Audio/PitchInterpretation.swi
 本批公共暂存适配在ProjectStore显式拒绝pitch，直到Lead接入；不是已支持产品入口。BACKEND与INTERPRET不依赖未完成Store。语法/CPU检查各用本任务output/tmp；SwiftPM重构建Lead串行，Worker可编写测试不自称已执行。禁网络、签名、真实模型/GUI、原声访问；模型实际运行仅Lead。存在明确权限异常先报告。
 
 Lead非实现者审阅后澄清（仍准备HUM1）：原声expected采样数必须严格256…1,920,000，派生仅允许转换舍入±1。voiced谓词是(score>0.9 AND 46.875≤rawHz≤2093.75)，后端在隐藏原始无声Hz前验证完整谓词；无声也可有高score但超频率范围，不把score单独当可靠声音。外部结果边界解码前2MiB，prepared输入读上限7,680,000字节，最多7500frames。result.validate自洽不代表来源已验，后端必须与本次输入精确比对且来源保护由Lead预处理/Store负责。actual model-hop-boundaries.json已覆盖最短及非整hop；不足hop尾部不外推。
+
+### 派工前部署补充 HUM1a（BACKEND1，spec2；INTERPRET1不变）
+普通App的书签不能仅假定子进程继承。BACKEND configuration追加可选`accessBootstrapRoot:URL?=nil`，复用现有AudioProviderAccess创建/释放明确model、preparedInput父目录和本run目录的继承访问，不扩权限。provider支持原`d_audio_access.py`同款`--access-manifest/--access-run-id`参数，复用现有helper（只读，不复制重写）；Python路径传入前核明只读的provider兄弟helper，外盘内部评估部署由Lead复制现有helper。无accessRoot保留受控CLI。无访问时明确失败，不尝试更换全访问启动器。bootstrap由应用容器提供，helper及包需普通代码签名部署/实际验收；这不是新签名方案或新模型分发许可。初次实施前补充，与既有接口向后兼容，非Worker返工。
