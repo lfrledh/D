@@ -6,6 +6,47 @@ import Testing
 
 @Suite("Pitch original ownership and durable decisions", .serialized)
 struct PitchWorkflowTests {
+    @Test func strictFileAndRoundedSourceTailAreIndependentOfProvider() throws {
+        let source = PitchSourceIdentity(assetID: UUID(), documentID: UUID(), documentRevision: 0,
+            contentSHA256: String(repeating: "a", count: 64), sampleRate: 16_000,
+            frameCount: 2000, startFrame: 100, endFrame: 1379)
+        let value = PitchAnalysisResult(runID: UUID(), source: source, inputSHA256: String(repeating: "b", count: 64),
+            sampleCount: 1280, frames: Array(repeating: .init(pitchHz: 440, confidence: 0.99, voiced: true), count: 5))
+        let data = try JSONEncoder().encode(value)
+        #expect(try PitchResultFile.decode(data) == value)
+        var duplicate = Data("{\"schemaVersion\":1,".utf8); duplicate.append(data.dropFirst())
+        #expect(throws: InferenceFailure.self) { try PitchResultFile.decode(duplicate) }
+        let text = String(decoding: data, as: UTF8.self).replacingOccurrences(of: "\"schemaVersion\":1", with: "\"schemaVersion\":true")
+        #expect(throws: (any Error).self) { try PitchResultFile.decode(Data(text.utf8)) }
+        let mapped = try #require(PitchSourceNote.map(value).first)
+        #expect(mapped.startFramePosition == 100)
+        #expect(mapped.endFramePosition == 1379)
+        let unvoiced = PitchFrame(pitchHz: nil, confidence: 0.1, voiced: false)
+        let encoded = try JSONEncoder().encode(unvoiced)
+        #expect(String(decoding: encoded, as: UTF8.self).contains("\"pitchHz\":null"))
+    }
+
+    @Test func unreadablePendingResultCanBeRejectedAndNavigationExpiresAnother() async throws {
+        try await withPitchFixture { root, store, document, original in
+            let project = root.appendingPathComponent("Pitch.dproject")
+            let (_, damaged) = try await pitchCandidate(store: store, documentID: document.id, project: project)
+            let file = project.appendingPathComponent(damaged.relativePath), sentinel = Data("damaged evidence".utf8)
+            try sentinel.write(to: file)
+            await #expect(throws: ProjectStoreError.self) { try await store.readPitchAnalysis(assetID: damaged.id) }
+            _ = try await store.decidePitchAnalysis(assetID: damaged.id, documentID: document.id, accept: false)
+            #expect(try Data(contentsOf: file) == sentinel)
+            let (_, candidate) = try await pitchCandidate(store: store, documentID: document.id, project: project)
+            _ = try await store.invalidatePitchCandidates(documentID: document.id)
+            await #expect(throws: ProjectStoreError.self) { try await store.decidePitchAnalysis(assetID: candidate.id, documentID: document.id, accept: true) }
+            try await store.close()
+            let reopened = try await ProjectStore.open(at: project)
+            await #expect(throws: ProjectStoreError.self) { try await reopened.decidePitchAnalysis(assetID: candidate.id, documentID: document.id, accept: true) }
+            _ = try await reopened.decidePitchAnalysis(assetID: candidate.id, documentID: document.id, accept: false)
+            #expect(try Data(contentsOf: root.appendingPathComponent("source.wav")) == original)
+            try await reopened.close()
+        }
+    }
+
     @Test(arguments: [16_000, 24_000, 44_100, 48_000])
     func conversionPreservesSourceAndSelectedTime(rate: Int) async throws {
         try await withPitchFixture(rate: rate) { root, store, document, original in

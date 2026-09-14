@@ -2,6 +2,7 @@ import AVFoundation
 import CryptoKit
 import DInference
 import Foundation
+import Synchronization
 
 /// Converts only an explicitly selected interval of an already-owned original snapshot.
 /// This derived input never replaces the original. No normalization or pitch correction.
@@ -26,8 +27,7 @@ public enum PitchInputPreparer {
         converter.primeMethod = .none
         converter.sampleRateConverterQuality = AVAudioQuality.max.rawValue
         file.framePosition = source.startFrame
-        var remaining = source.endFrame - source.startFrame
-        var inputFailure: Error?
+        let inputState = Mutex(PitchConversionInput(file: file, remaining: source.endFrame - source.startFrame))
         var bytes = Data(), noProgress = 0
         let maximumOutput = Int(expected.rounded(.up)) + 1
         while true {
@@ -35,21 +35,23 @@ public enum PitchInputPreparer {
             output.frameLength = 0
             var conversionError: NSError?
             let status = converter.convert(to: output, error: &conversionError) { requested, status in
-                if inputFailure != nil || remaining == 0 { status.pointee = .endOfStream; return nil }
-                do {
-                    try Task.checkCancellation()
-                    let frames = AVAudioFrameCount(min(Int64(requested), min(4096, remaining)))
-                    guard let input = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: frames) else {
-                        throw AudioMediaError.unavailable("无法分配分析输入缓冲")
-                    }
-                    try file.read(into: input, frameCount: frames)
-                    guard input.frameLength > 0 else { throw AudioMediaError.invalidMedia("原声在选区结束前中断") }
-                    remaining -= Int64(input.frameLength)
-                    status.pointee = .haveData
-                    return input
-                } catch { inputFailure = error; status.pointee = .endOfStream; return nil }
+                inputState.withLock { state in
+                    if state.failure != nil || state.remaining == 0 { status.pointee = .endOfStream; return nil }
+                    do {
+                        try Task.checkCancellation()
+                        let frames = AVAudioFrameCount(min(Int64(requested), min(4096, state.remaining)))
+                        guard let input = AVAudioPCMBuffer(pcmFormat: state.file.processingFormat, frameCapacity: frames) else {
+                            throw AudioMediaError.unavailable("无法分配分析输入缓冲")
+                        }
+                        try state.file.read(into: input, frameCount: frames)
+                        guard input.frameLength > 0 else { throw AudioMediaError.invalidMedia("原声在选区结束前中断") }
+                        state.remaining -= Int64(input.frameLength)
+                        status.pointee = .haveData
+                        return input
+                    } catch { state.failure = error; status.pointee = .endOfStream; return nil }
+                }
             }
-            if let inputFailure { throw inputFailure }
+            if let failure = inputState.withLock({ $0.failure }) { throw failure }
             if let conversionError { throw AudioMediaError.io(conversionError.localizedDescription) }
             guard status != .error else { throw AudioMediaError.invalidMedia("分析重采样失败") }
             let count = Int(output.frameLength)
@@ -66,7 +68,7 @@ public enum PitchInputPreparer {
             guard noProgress < 8 else { throw AudioMediaError.invalidMedia("分析重采样没有继续输出") }
             if status == .endOfStream { break }
         }
-        guard remaining == 0, abs(Double(bytes.count / 4) - expected) <= 1,
+        guard inputState.withLock({ $0.remaining }) == 0, abs(Double(bytes.count / 4) - expected) <= 1,
               bytes.count / 4 >= 256, bytes.count / 4 <= 1_920_000 else {
             throw AudioMediaError.invalidMedia("分析重采样长度与原帧范围不一致")
         }
@@ -76,4 +78,11 @@ public enum PitchInputPreparer {
         }
         return bytes
     }
+}
+
+// The converter callback and its caller access one explicit lock-owned input state.
+private struct PitchConversionInput {
+    let file: AVAudioFile
+    var remaining: Int64
+    var failure: Error?
 }

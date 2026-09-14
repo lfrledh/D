@@ -61,6 +61,14 @@ public struct PitchFrame: Sendable, Codable, Equatable {
     public init(pitchHz: Double?, confidence: Double, voiced: Bool) {
         self.pitchHz = pitchHz; self.confidence = confidence; self.voiced = voiced
     }
+    private enum CodingKeys: String, CodingKey { case pitchHz, confidence, voiced }
+    public func encode(to encoder: Encoder) throws {
+        var values = encoder.container(keyedBy: CodingKeys.self)
+        if let pitchHz { try values.encode(pitchHz, forKey: .pitchHz) }
+        else { try values.encodeNil(forKey: .pitchHz) }
+        try values.encode(confidence, forKey: .confidence)
+        try values.encode(voiced, forKey: .voiced)
+    }
 }
 
 public struct PitchAnalysisResult: Sendable, Codable, Equatable {
