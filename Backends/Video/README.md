@@ -1,6 +1,16 @@
 # Wan V0 本地视频后端
 
-D-VIDEO-V0-01 的命令行后端；工作台视频入口尚未开放。阶段验收状态、代码版本和实际结果以 `docs/tasks/D-VIDEO-V0-01.md` 为准。
+D-VIDEO-V0-01 的命令行后端已通过 D-VIDEO-WORKBENCH-01 接入基础视频工作台。阶段验收、代码版本与实际结果见 `docs/tasks/D-VIDEO-WORKBENCH-01.md`；最初数值/命令行验收仍保留于 V0 记录。
+
+## 在工作台使用
+
+1. 使用带 `VideoEngine.dengine` 的构建；普通未封装构建不自动下载引擎。打开或新建项目，选择顶部“视频”，再点“新建视频创作”。
+2. 选择**已准备**的 Wan2.1 模型目录（含准备清单与转换权重），不是原始 checkpoint 根目录。登记、恢复和执行分别校验，不会把模型复制进项目。
+3. 填写描述、可选负面描述和实际生成参数。默认832×480/17帧/50步是样本配置，非所有机器的推荐值。内存预算留空使用主机默认；显式MiB值写入任务和运行记录，可能使用swap，不是物理内存硬上限。模型/几何限制与内存建议分开。
+4. 生成后得到未自动采用的候选。预览不自动播放；选择、采用、拒绝/恢复是分别的操作。取消等待计算和进程清理；隐藏参数、切换模态不会取消已提交任务。
+5. 保存并重开可恢复草稿、模型登记与候选决定。修改草稿不会改写旧任务配方。导出创建新的无声MP4，已有文件拒绝覆盖；完整提示词/seed/模型配方仍在项目记录中，当前**没有**将完整配方内嵌到独立MP4。
+
+本批M4/16GiB普通沙盒流程样本：320×192、17帧/16fps、50步、seed42、14GiB显式指导值；后端253.192秒，MLX峰值11.077GiB，进程峰值RSS约4.755GiB，两者不能相加；最终active18bytes/cache0且子进程退出。小画面可见红色车辆，也有明显模糊、形变/色彩瑕疵，不宣称达到成片质量。历史832样本、长序列及其他机器是不同证据范围。
 
 ## 边界
 
@@ -51,7 +61,7 @@ D-VIDEO-V0-01 的命令行后端；工作台视频入口尚未开放。阶段验
 
 ## 验证入口与解释
 
-- 基础运行时：`scripts/test-foundation.sh`；工作台显式拒绝视频任务回归：`scripts/test-workbench.sh`。
+- 基础运行时：`scripts/test-foundation.sh`；工作台草稿/候选/迁移/媒体/取消/导出回归：`scripts/test-workbench.sh`。
 - `Backends/MLX/Tests/DMLXBackendTests/VideoBackendTests.swift`：CPU契约、受控子进程与合成媒体。音频进程提取同时复验AudioBackendTests/MRT2BackendTests。不是实际模型生成。
 - `Backends/Video/Tests/VideoMediaChecks.swift`：软件H.264、完整解码、时间/色彩/文件身份/取消/失败。编译仅需该文件及VideoFrameSequence/VideoArtifactWriter，使用独立输出/模块缓存。
 - `test_video_prepare.py`、`test_video_runner_contract.py`：CPU转换/不可变输入/分词器/参数。`D_VIDEO_PYTHON`指Python代码目录、`D_VIDEO_TOKENIZER`指固定分词器目录；临时文件用D_TEST_TEMP_DIR。
@@ -60,7 +70,7 @@ D-VIDEO-V0-01 的命令行后端；工作台视频入口尚未开放。阶段验
 
 语法检查使用 `tokenize.open` 和内存 `compile(..., dont_inherit=True)`，不执行目标模块、不写目标pyc。不要使用默认py_compile；其他缓存和临时文件仍须限定在任务目录。未知权限拒绝先停报，不能自行创造绕行路径。
 
-## 离线工作台部署候选（D-VIDEO-WORKBENCH-01）
+## 离线工作台部署（D-VIDEO-WORKBENCH-01）
 
 `Packaging/prepare_video_engine.py`从已有Python3.12、白名单依赖、固定分词器和源码准备可移动视频引擎；`package_video_app.py`只向新应用副本加入视频并沿既有身份签名，不改输入应用或音频引擎。完整出口以当前任务记录为准。
 

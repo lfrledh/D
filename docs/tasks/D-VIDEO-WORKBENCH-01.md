@@ -1,6 +1,6 @@
 # D-VIDEO-WORKBENCH-01：视频基础工作台闭环
 
-状态：2026-09-14用户批准本阶段实现、验证至提交；既有阶段验收后工作分支push授权保留。当前准备中，未交付。规格stage-r1，契约video-workbench-r1。源基线8d42433f65540509633515333d9549d3465ffd1a，上一完整视频实测e26c6eaa395fe371512269c5fc97b5fa7bba86e6，组合/源实测1530e92584f2a36680e8c350b803e9338897dd32，二者及四份结案文档差异、审核与远端回执已对应。新执行完整SHA记录在各job.json，避免自引用。
+状态：2026-09-14已完成有限产品验收并本地接纳，最终文档提交/推送见本run/stage-final-receipt.json。规格stage-r1，契约video-workbench-r1及下文deployment-r2澄清。原始源基线8d42433f65540509633515333d9549d3465ffd1a，上一完整视频实测e26c6eaa395fe371512269c5fc97b5fa7bba86e6，上一组合/源实测1530e92584f2a36680e8c350b803e9338897dd32，旧审核与回执已对应。本批完整版本见结案段和各job.json，不为提交自引用改写历史。
 
 R=/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-VIDEO-WORKBENCH-01/run-20260914T002821Z；W=/Volumes/CodexProjects/Codex/D-Worktrees/D-VIDEO-WORKBENCH-01。源scheme唯一未暂存差异，完整内容/diff/index/摘要及普通D四文件起点见R/protection/start.json。当前用户已确认普通D退出、GPU空闲、隔离测试版可用前台。H09仍待麦克风，不重复申请新模型/安装。
 
@@ -87,3 +87,26 @@ Lead补充schema8旧断言、解码暂停期间编辑/取消、重复恢复保�
 三名非实现者仅只读复核，分别关闭VIEW/Store、MEDIA/取消、DEPLOY/清单/许可证问题；不冒充其独立运行测试。R保留每轮检查和产物。运行时已离线准备，安装环境与权重未改；闲置Tkinter不属于视频provider支持范围，实际导入/沙盒App待验。收尾记录第一次写入因系统Python stdin编码失败而未落盘，代码提交已成功；本追加如实补记，不amend。
 
 下一动作是最终组合CPU、独立签名App封装、真实视频闭环，之后才可源接纳。源8d42433及scheme保持；三个实现Worker已结束，无任务写入者等待。当前Lead拥有W写权，模型/GUI资源由Lead串行使用。
+
+## 2026-09-14 有限产品验收与本地接纳
+
+实现/组合受测 `86a3d6c6db9e3da88e43558cfaba053ff3fd153d`；App与源受测 `2b4675cd7837532b77be4f1850c257e0458d2e09`，两者仅README/任务记录变化，代码/测试/依赖一致。源8d42433以固定2b4675快进，未改写历史；integration-command.json记录实际操作与个人文件核验。最后只修改结案指南/目标/任务/协作经验，完整最终SHA及远端见stage-final-receipt.json；不声称测试在尚未产生的文档提交上执行。
+
+| 层次 | 实际结果与证据（相对R） |
+|---|---|
+| 核心 | 源source-core：62方法/10套件通过，零失败/跳过。 |
+| 工作台与UI组件 | source-workbench：358方法/49套件通过，显式D_TEST_TEXT_MODEL启用旧权重只读校验，零失败/跳过。前期combined-ui-r3是357通过/1可选跳过，随后existing-text-checksum单独补验；本行仅指一次源完整执行，不把历史相加。 |
+| 音频/视频桥接 | mlx-test-build-r1及mlx-cpu-r1：48方法/4套件通过，CPU受控子进程/合成媒体；不是48次真实生成。 |
+| Python/清单 | video-python-combined与source-video-python各40方法通过（已包含15封装与5访问检查，不能重复累加）；lead-video-resolver-run 9检查、lead-audio-resolver-run 22检查。未重新跑未改变的Wan数值模块，沿用已验收V0。 |
+| App/部署 | app-build-r1普通签名构建；package-audio-r1/package-video-r1独立产物，原音频引擎字节保持；prepare-video-engine-r3离线白名单、packaged-video-import从重定位后的bundle导入固定provider且全部来源在bundle；codesign显示/严格完整性与entitlement交叉核对通过。未安装/下载，不称公证或全Python/Tkinter可用。 |
+| 真实视频/GUI | gui-r1/acceptance.json：320×192、17帧、16/1fps、50步、CFG6/shift8、seed42、14GiB显式指导值；固定revision/精度。真实取消后进程退出，下一任务完整生成、预览播放/选择采用拒绝恢复、模态切换与中文文稿保存、导出冲突、冷启动恢复通过。CUA操作不是新XCTest UI套件，也不是用户画质认可。 |
+
+真实产物任务 `D5564CF2-8B5B-4B6A-8C38-8DC31DE677B5`，资产 `622BF017-56FE-4430-8A96-FBD87733C876`。视频182728bytes，SHA256 `fdd62ab72a631461e113f584d71811ee443106c29a6574373247b1375270211b`，17/16秒、H264、无音轨。result.json记录后端253.192秒（从任务到资产254.875秒）、MLX峰值11893469474bytes≈11.077GiB、进程峰值RSS5105598464bytes≈4.755GiB；最终MLX active18bytes/cache0且子进程已退出，两种内存不可相加或称跨机保证。短片可见红车但明显模糊/形变/色彩瑕疵，本次不升级成片画质。请求/固定权重清单摘要/精度/seed/逐阶段记录/完整MP4均保留专属项目，输出不入Git。
+
+生成未自动采用。Lead通过CUA执行界面动作：选择/采用，拒绝后清除关系而原件不变，恢复后采用；导出与资产全字节相等。原生同名面板确认后应用仍拒绝覆盖，副本hash/size/mtime不变。修改并保存新的中文/组合字符/emoji视频草稿后，旧任务request不变；冷启动恢复后documents/jobs/assets语义全等，媒体字节不变、模型恢复校验、预览成功。VideoProcessAccess已为空。实际GUI限独立项目/产物；非相关图文音频入口回归不冒充新三模态生成。
+
+三包来源：VIEW Terra/medium线程01a09d5b-3002-7171-99c7-2d2e474f3905；MEDIA Sol/high线程01a09d5b-3001-79b3-8070-a780b916c1e3；DEPLOY Sol/high线程01a09d5b-3002-7772-a1d5-7d313af18110。各自在任务工作树/output/tmp可写、网络关闭、实际turn_context核验，无共享.git写权，基线2a046c70db9c311a7407ce30969c86d15ef42800。各初交+两修已用，Lead有限VIEW测试、MEDIA finish守卫、DEPLOY许可证回退接管分别记录，三名非实现者只读复核关闭，见review-closure.json；共享契约/状态/存储/装配/回归由Lead负责。运行时间/原始用量在逐轮记录中，未将resume累计快照相加，完整Lead费用与订阅费用unknown；本样本不证明低成本模型无需接管或经济性最佳。
+
+保留E-VW-CUA-01隔离事件：首次正常退出11941后读取AX触发自动启动12269，缺隔离环境、仅停项目选择页；普通ModelLibrary启动索引写入（事前无摘要，无法证明元数据未变），两条installed/零lease/无错误，未打开普通项目、无下载或生成。已退出，并以同一隔离UUID26AD1FC9-1792-4093-93D6-6A682B2541F7显式启动12337完成冷重开，期间普通索引摘要保持。不能把普通D产物未变说成所有用户偏好完全未变；没有自动回滚索引。详见gui-auto-relaunch-incident.json与失败清单。后续退出只读进程回执/库存，不对退出App读AX。
+
+恢复检查点：源已接纳2b4675，最终文档SHA/推送/远端见stage-final-receipt.json；候选W与三个Worker工作树/分支、证据保留。源索引干净，唯一未暂存scheme仍orderHint1→6，摘要ca3635d88aa5a15397b90e528667c66c0e6db7e596176e885c79d194b544206c；普通D四文件与独立测试App关键文件前后全等。两个受控GUI进程均退出0，自动启动实例也退出，生成子进程/观察器及所有本批Worker结束。不推进主分支，不替换普通App。H09待麦克风，没有新人工授权项；停止本批，下一建议是图像参考编辑基础闭环，先按实际模型条件确定契约，不启动I2V/时间线/组合/HUM/歌声新实施。
