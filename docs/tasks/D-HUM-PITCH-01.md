@@ -58,3 +58,7 @@ FlatBuffers wheel缺许可证全文，已从官方固定tag对应commit7e163021e
 
 ### BACKEND 一次有界 Lead 接管（2026-09-15 JST）
 真实工作台/运行时 CPU probe 在8f82daa遇到NumPy2.4.3布尔标量兼容缺陷：`np.bool_` 的实际类型名为 `numpy.bool`，Worker按名称 `bool_` 判断误拒绝。R/real-sine440-r2记录真实失败；第一次probe仅因Lead未建立父证据目录失败，R/real-sine440单列为验证环境准备错误，未执行模型。Lead只将模型输出边界改为明确 `isinstance(..., (bool, np.bool_))`，同时拒绝数值字段的NumPy布尔值及冒名类；不改voicing阈值/数值/契约。新增实际NumPy标量回归先失败后通过（R/numpy-bool-regression-before及after，10方法），真实模型及应用仍需后验。归因Sol初步实现+两轮修复，Astra Lead一次局部接管；预算不重置。非实现者定点审阅另记，不称Lead自审为独立模型审阅。
+
+### Lead 共享持久化边界修正（2026-09-15 JST）
+e3e3eff实际普通沙盒GUI已产生pitch.json，但入队后的updateJob/complete误报externalModification。R/url-diagnosis用真实Bundle证实其resource URL含base，而Codable解码返回绝对URL；原合成ModelReference相等比较失败。新增Store回归R/bundle-url-before-r2在未修生产实现上重现externalModification，修后R/bundle-url-after的10方法通过，含既有真实外部修改拒绝；首次before仅因Lead测试误写不存在的JobState.running编译失败，改为实际generating后才形成有效失败证据。
+最小修正只让ModelReference比较directory.absoluteURL与revision，原URL对象/编码/访问保留，不解析符号链接、不折叠文件名大小写、不放宽ProjectStore外部修改和文本字节保护。新增值型roundtrip及不同地址/revision反例。这是Lead原共享装配的持久化缺陷修正，不追记为BACKEND Worker第三轮或第二次接管。旧GUI无法正常关闭，已保留任务清单与生成JSON副本后仅SIGTERM结束本轮已核PID92950（R/gui-r2-stop）；不声称正常退出，不操作用户原声与普通D。新构建/GUI仍需复验。

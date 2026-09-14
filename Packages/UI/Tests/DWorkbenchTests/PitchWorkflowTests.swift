@@ -6,6 +6,28 @@ import Testing
 
 @Suite("Pitch original ownership and durable decisions", .serialized)
 struct PitchWorkflowTests {
+    @Test func bundledModelURLAllowsCompletionAndDurableDecision() async throws {
+        try await withPitchFixture { root, store, document, original in
+            let project = root.appendingPathComponent("Pitch.dproject"), id = UUID()
+            let directory = try #require(URL(string: "测试%20App.app/Contents/Resources/swift_f0/", relativeTo: root))
+            #expect(directory != directory.absoluteURL)
+            let model = ModelReference(directory: directory, revision: PitchAnalysisRequest.modelSHA256)
+            let input = try await store.preparePitchInput(documentID: document.id, runID: id)
+            _ = try await store.enqueue(request: .init(id: id, model: model, input: .pitch(input)), documentID: document.id)
+            _ = try await store.updateJob(id: id, state: .generating)
+            let output = project.appendingPathComponent("Tasks/\(id.uuidString)/pitch.json")
+            try FileManager.default.createDirectory(at: output.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try JSONEncoder().encode(pitchResult(request: input, id: id)).write(to: output)
+            let completed = try await store.complete(id: id, result: .init(artifacts: [.init(url: output, mediaType: PitchAnalysisResult.mediaType)]))
+            let asset = try #require(completed.assets.last)
+            let saved = try await store.decidePitchAnalysis(assetID: asset.id, documentID: document.id, accept: true)
+            try await store.close()
+            let reopened = try await ProjectStore.open(at: project)
+            #expect(await reopened.snapshot() == saved)
+            #expect(try Data(contentsOf: root.appendingPathComponent("source.wav")) == original)
+            try await reopened.close()
+        }
+    }
     @Test func relocationTransfersInvalidationBeforePendingResultSave() async throws {
         try await withPitchFixture { root, store, document, _ in
             let project = root.appendingPathComponent("Pitch.dproject"), id = UUID()

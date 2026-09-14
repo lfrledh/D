@@ -18,6 +18,12 @@ public struct ModelReference: Sendable, Codable, Equatable {
         self.directory = directory
         self.revision = revision
     }
+
+    public static func == (lhs: Self, rhs: Self) -> Bool {
+        // Codable writes absolute URLs. Bundle URLs may retain a base before saving;
+        // compare their locations while preserving the original URL for host access.
+        lhs.directory.absoluteURL == rhs.directory.absoluteURL && lhs.revision == rhs.revision
+    }
 }
 
 public struct TextRequest: Sendable, Codable, Equatable {

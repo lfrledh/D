@@ -2,6 +2,17 @@ import XCTest
 import DInference
 
 final class PitchContractTests: XCTestCase {
+    func testBundledModelReferenceSurvivesCodableRoundTrip() throws {
+        let base = URL(fileURLWithPath: "/fixture/测试 App.app", isDirectory: true)
+        let directory = try XCTUnwrap(URL(string: "Contents/Resources/swift_f0/", relativeTo: base))
+        XCTAssertNotEqual(directory, directory.absoluteURL)
+        let model = ModelReference(directory: directory, revision: "fixed")
+        let decoded = try JSONDecoder().decode(ModelReference.self, from: JSONEncoder().encode(model))
+        XCTAssertEqual(model, decoded)
+        XCTAssertEqual(model.directory, directory) // Preserve the original access-bearing URL.
+        XCTAssertNotEqual(model, ModelReference(directory: directory, revision: "other"))
+        XCTAssertNotEqual(model, ModelReference(directory: base.appendingPathComponent("other"), revision: "fixed"))
+    }
     private func source(end: Int64 = 96000) -> PitchSourceIdentity {
         .init(assetID: UUID(), documentID: UUID(), documentRevision: 0,
               contentSHA256: String(repeating: "a", count: 64), sampleRate: 48000,
