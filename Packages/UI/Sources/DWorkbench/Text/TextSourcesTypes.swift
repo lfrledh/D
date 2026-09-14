@@ -37,6 +37,9 @@ public struct TextSourceSnapshot: Codable, Sendable, Equatable, Identifiable {
     public let sha256: String
 
     public init(id: UUID = UUID(), revision: UUID = UUID(), displayName: String, bytes: Data) throws {
+        guard !bytes.isEmpty, bytes.count <= TextSourcesLimits.sourceBytes else {
+            throw TextSourcesError.limit("单份文字资料必须为 1 字节至 512 KiB。")
+        }
         self.id = id; self.revision = revision; self.displayName = displayName; self.bytes = bytes
         sha256 = SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
         _ = try validatedText()
@@ -49,7 +52,11 @@ public struct TextSourceSnapshot: Codable, Sendable, Equatable, Identifiable {
         guard !displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               displayName.utf8.count <= 512,
               !displayName.contains("/"), !displayName.contains("\\"),
-              !displayName.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }) else {
+              !displayName.unicodeScalars.contains(where: {
+                  $0.properties.generalCategory == .control ||
+                  (0x202A...0x202E).contains($0.value) || (0x2066...0x2069).contains($0.value) ||
+                  [0x061C, 0x200E, 0x200F].contains($0.value)
+              }) else {
             throw TextSourcesError.invalid("资料名称无效；这里只保存文件名，不保存绝对路径。")
         }
         guard sha256 == SHA256.hash(data: bytes).map({ String(format: "%02x", $0) }).joined() else {
@@ -136,14 +143,16 @@ public struct TextSourceAnswerRecord: Codable, Sendable, Equatable, Identifiable
 /// Stored beside textDraft in the same project transaction, not inside the rewrite editor's value.
 public struct TextSourcesNotebook: Codable, Sendable, Equatable {
     public var revision: UUID
+    /// Editable input revision; recording a result does not itself stale that result.
+    public var inputRevision: UUID
     public var question: String
     public var sources: [TextSourceSnapshot]
     public var excerpts: [TextSourceExcerpt]
     public var records: [TextSourceAnswerRecord]
 
-    public init(revision: UUID = UUID(), question: String = "", sources: [TextSourceSnapshot] = [],
+    public init(revision: UUID = UUID(), inputRevision: UUID = UUID(), question: String = "", sources: [TextSourceSnapshot] = [],
                 excerpts: [TextSourceExcerpt] = [], records: [TextSourceAnswerRecord] = []) {
-        self.revision = revision; self.question = question; self.sources = sources
+        self.revision = revision; self.inputRevision = inputRevision; self.question = question; self.sources = sources
         self.excerpts = excerpts; self.records = records
     }
 }

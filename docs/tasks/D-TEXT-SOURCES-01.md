@@ -98,3 +98,5 @@ CONTEXT（D-TS-CONTEXT-01 spec1 TS1，Terra/medium）：仅可新增Packages/UI/
 局部检查：Worker允许已有swiftc对自己代码/测试作typecheck，模块缓存只能自有tmp；需要导入DInference可只读R/Build-UI/arm64-apple-macosx/debug/Modules。用相同模块编译时包含共享TextSourcesTypes/TextDraft/TextGenerationSettings及自己的文件。可在自有output生成enable-testing模块再typecheck Testing测试；不运行SwiftPM内层沙箱/完整构建/GPU/GUI。行为测试由Lead在交回之后用现有swift test生产入口执行，Worker回传必须准确标注typecheck不等于测试执行。无字节码检查只用内存compile；禁止默认py_compile和安装下载。
 
 Lead接线/组合待首组交回后按TS1推进，共享存储、迁移、控制器与最小UI单一协调。所有输出独立R/<worker>/output、tmp，不写共享Git。需要变更公共契约先停报；Lead提供明确修订，旧迟到结果不自动集成。阶段完整GUI不可运行时保存候选及明确入口、不开默认产品开关、不合并未经完整门槛的新路径。
+
+TS1派工前澄清：Notebook.revision表示每次持久状态变更，inputRevision只在问题/来源/片段变化时更新；Submission.notebookRevision冻结inputRevision。追加结果/采用/拒绝不改变inputRevision，不能让候选因自身完成而过期。源正文修订另检。持久冲突/无变化比较使用问题/prompt/回答UTF8字节，不能只凭String的规范等价。共享类型非实现者审核发现ZWJ文件名和哈希前预算两项，Lead在派工前修补；不占Worker修复轮。
