@@ -11,7 +11,7 @@ public enum MusicConditionFile {
             throw InferenceFailure.invalidRequest("Invalid or oversized music condition file.")
         }
 
-        var parser = StrictMusicJSON(text)
+        var parser = StrictAudioJSON(text)
         let value = try parser.parse()
         guard case .object(let root) = value else {
             throw InferenceFailure.invalidRequest("A music condition file must contain one object.")
@@ -78,7 +78,7 @@ public enum MusicConditionFile {
         return data
     }
 
-    private static func requireKeys(_ object: [String: StrictMusicJSON.Value],
+    private static func requireKeys(_ object: [String: StrictAudioJSON.Value],
                                     allowed: Set<String>, required: Set<String>) throws {
         let keys = Set(object.keys)
         guard keys.isSubset(of: allowed), required.isSubset(of: keys) else {
@@ -86,7 +86,7 @@ public enum MusicConditionFile {
         }
     }
 
-    private static func integer(_ value: StrictMusicJSON.Value?, field: String) throws -> Int {
+    private static func integer(_ value: StrictAudioJSON.Value?, field: String) throws -> Int {
         guard case .number(let token)? = value,
               !token.contains("."), !token.contains("e"), !token.contains("E"),
               let result = Int(token) else {
@@ -106,8 +106,8 @@ public enum MusicConditionFile {
     }
 }
 
-/// Deliberately local: enough JSON for this schema, with duplicate-key and depth enforcement.
-private struct StrictMusicJSON {
+/// Shared bounded audio JSON syntax parser. Callers enforce their own schema and byte budget.
+struct StrictAudioJSON {
     indirect enum Value {
         case object([String: Value])
         case array([Value])
@@ -161,7 +161,7 @@ private struct StrictMusicJSON {
             guard position < scalars.count, scalars[position].value == 34 else { throw invalidJSON() }
             let key = try parseString()
             guard object[key] == nil else {
-                throw InferenceFailure.invalidRequest("Duplicate music condition field.")
+                throw InferenceFailure.invalidRequest("Duplicate audio interchange field.")
             }
             skipWhitespace()
             guard take(58) else { throw invalidJSON() }

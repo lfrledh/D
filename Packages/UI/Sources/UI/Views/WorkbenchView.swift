@@ -10,6 +10,7 @@ public struct WorkbenchView: View {
     @State private var audioRangeState = AudioCreationRangeState()
     @State private var pane: WorkspacePane = .creations
     @State private var showTasks = false
+    @State private var showingPitchAnalysis = false
     @State private var expandTasks = true
     @State private var namingContext: DocumentNameContext?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -240,12 +241,47 @@ public struct WorkbenchView: View {
                         Spacer()
                     }.padding(.horizontal, 20).padding(.top, 12)
                 }
-                AudioWorkbenchView(controller: audio,
-                               recordingEnabled: model.audioRecordingEnabled,
-                               navigationInProgress: model.projectSession.isChangingProject,
-                               actions: audioActions)
-                .observingLayout { id, rectangle in layoutProbe?(id, rectangle) }
-                .id(audio.contextID)
+                if model.projectSession.hasPitchEngine || model.presentedDocument?.pitchAnalysis != nil {
+                    Picker("原声工作方式", selection: $showingPitchAnalysis) {
+                        Text("原声与片段").tag(false)
+                        Text("音高识别").tag(true)
+                    }.pickerStyle(.segmented).padding(.horizontal, 20)
+                        .accessibilityIdentifier("audio-analysis-mode")
+                }
+                if showingPitchAnalysis && (model.projectSession.hasPitchEngine || model.presentedDocument?.pitchAnalysis != nil) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(audio.document?.selectedClipID == nil ? "识别范围：完整原声" : "识别范围：当前已保存片段")
+                            .font(.caption).foregroundStyle(.secondary).padding(.horizontal, 20)
+                        if model.projectSession.pitchResult == nil, model.projectSession.pitchResultAssetID != nil,
+                           !model.projectSession.pitchHasSaved {
+                            Button("拒绝不可读取的候选") { Task { await model.projectSession.decidePitchAnalysis(accept: false) } }
+                                .disabled(model.projectSession.pitchIsBusy).padding(.horizontal, 20)
+                                .accessibilityIdentifier("pitch-reject-unreadable")
+                        }
+                        PitchAnalysisView(result: model.projectSession.pitchResult,
+                            isBusy: model.projectSession.pitchIsBusy,
+                            isStale: model.projectSession.pitchIsStale,
+                            status: model.projectSession.pitchStatus,
+                            hasSaved: model.projectSession.pitchHasSaved,
+                            canAnalyze: model.projectSession.canAnalyzePitch,
+                            onAnalyze: { Task { await model.projectSession.analyzePitch() } },
+                            onCancel: { Task { await model.projectSession.cancelPitchAnalysis() } },
+                            onSave: { Task { await model.projectSession.decidePitchAnalysis(accept: true) } },
+                            onReject: { Task { await model.projectSession.decidePitchAnalysis(accept: false) } },
+                            onExport: { Task { await model.exportPitchAnalysis() } })
+                    }
+                } else {
+                    AudioWorkbenchView(controller: audio,
+                                   recordingEnabled: model.audioRecordingEnabled,
+                                   navigationInProgress: model.projectSession.isChangingProject,
+                                   actions: audioActions)
+                    .observingLayout { id, rectangle in layoutProbe?(id, rectangle) }
+                    .id(audio.contextID)
+                }
+                Color.clear.frame(height: 0)
+                    .task(id: model.presentedDocument?.pitchAnalysis?.selectedAssetID) {
+                        await model.projectSession.refreshPitchAnalysis()
+                    }
             }
         } else if !model.showingAllArtworks, model.projectSession.text != nil {
             textWorkspace(presentation: .editor)

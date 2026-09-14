@@ -29,7 +29,6 @@ final class WorkbenchBootstrap {
                 in: .userDomainMask, appropriateFor: nil, create: true)
             var settings = UserDefaults.standard
             var libraryDirectory = support.appendingPathComponent("D/ModelLibrary", isDirectory: true)
-            var audioWorkbenchEnabled = false
             #if DEBUG
             // UI fixtures exercise the real services and native file panels, while keeping
             // project bookmarks and installation recovery separate from the user's session.
@@ -39,9 +38,6 @@ final class WorkbenchBootstrap {
                 settings = isolated
                 libraryDirectory = support.appendingPathComponent("D/UITests/\(id.uuidString)/ModelLibrary",
                     isDirectory: true)
-                audioWorkbenchEnabled = AudioWorkbenchIsolation.isEnabled(
-                    environment: ProcessInfo.processInfo.environment
-                )
             }
             #endif
             let consent = AudioModelUsePermission(settings: settings)
@@ -83,17 +79,27 @@ final class WorkbenchBootstrap {
                 videoEngineIssue = "视频引擎暂不可用；已有项目与媒体仍可打开。\n" + error.localizedDescription
             }
             let videoEngine = resolvedVideo
+            let pitchAvailability = Self.prepareAudioEngine(resolve: {
+                guard let resources = Bundle.main.resourceURL else { return nil }
+                return try BundledAudioEngine.resolve(resourceDirectory: resources, family: .pitch)
+            }, prepareAccess: {
+                try FileManager.default.createDirectory(at: accessRoot, withIntermediateDirectories: true,
+                    attributes: [.posixPermissions: 0o700])
+            })
+            if let issue = pitchAvailability.issue {
+                audioEngineIssue = [audioEngineIssue, "音高识别暂不可用：" + issue].compactMap { $0 }.joined(separator: "\n")
+            }
             let library = try await ModelLibrary(stateDirectory: libraryDirectory)
             let model = WorkbenchModel(sessionFactory: { artifacts in
                 try await AppSessionFactory.makeSession(artifactDirectory: artifacts,
                     bundledAudioEngine: engine, audioConsent: consent,
                     bundledMusicEngine: musicEngine, musicConsent: musicConsent, audioAccessRoot: accessRoot,
-                    bundledVideoEngine: videoEngine, videoAccessRoot: videoAccessRoot)
+                    bundledVideoEngine: videoEngine, videoAccessRoot: videoAccessRoot,
+                    bundledPitchEngine: pitchAvailability.engine)
             }, settings: settings, modelLibrary: library,
-                audioEnabled: engine != nil || musicEngine != nil || audioWorkbenchEnabled,
-                // File-input audio does not depend on the deferred microphone acceptance.
-                // Retain the old explicit, unbundled DEBUG recording fixture path.
-                audioRecordingEnabled: engine == nil && musicEngine == nil && audioWorkbenchEnabled)
+                // Original capture/import/playback are independent of optional model deployment.
+                // H09 hardware recording, playback, export and cold reopen are accepted.
+                audioEnabled: true, audioRecordingEnabled: true)
             let observer = ModelLibraryModel(library: library)
             self.library = library
             self.model = model

@@ -104,6 +104,111 @@ public final class ProjectSession {
     public private(set) var text: ProjectTextController?
     public private(set) var textSources: ProjectTextSourcesController?
     public let textSourcesEnabled: Bool
+    public private(set) var pitchResult: PitchAnalysisResult?
+    public private(set) var pitchResultAssetID: UUID?
+    public private(set) var pitchStatus: String?
+    @ObservationIgnored private var pitchAdmissions: [UUID: Task<Void, Never>] = [:]
+    public var hasPitchEngine: Bool { session?.pitchBackendID != nil && session?.pitchModel != nil }
+    public var pitchIsBusy: Bool {
+        !pitchAdmissions.isEmpty || documentJobs.contains { job in
+            if case .pitch = job.request.input { return activeJobIDs.contains(job.id) || pendingSaves[job.id] != nil }
+            return false
+        }
+    }
+    public var pitchIsStale: Bool {
+        guard let result = pitchResult, let draft = activeDocument?.audioDraft else { return pitchResult != nil }
+        return (pitchResultAssetID.map { activeDocument?.pitchAnalysis?.expiredAssetIDs.contains($0) == true } ?? false)
+            || result.source.documentID != draft.id || result.source.assetID != draft.assetID
+            || result.source.documentRevision != draft.revision
+    }
+    public var pitchHasSaved: Bool {
+        guard let id = pitchResultAssetID else { return false }
+        return activeDocument?.pitchAnalysis?.acceptedAssetIDs.contains(id) == true
+    }
+    public var canAnalyzePitch: Bool {
+        hasPitchEngine && activeDocument?.audioDraft != nil && audio?.canEdit == true
+            && audio?.hasUnsubmittedInput == false && !isChangingProject && !closePending
+            && !isBusy && (activeDocument?.pitchAnalysis?.selectedAssetID == nil || pitchHasSaved)
+    }
+
+    public func analyzePitch() async {
+        guard canAnalyzePitch, let documentID = activeDocumentID, let store, let session,
+              let backendID = session.pitchBackendID, let reference = session.pitchModel,
+              let audio else { return }
+        let contextID = audio.contextID
+        let id = UUID(); let preceding = admissionTail
+        activeJobIDs.insert(id); liveStates[id] = .preparing; phases[id] = "正在准备原声音高分析"
+        pitchStatus = nil
+        audio.transport.stopPlayback(); stopVideoPreview(); startPolling()
+        let admission = Task { [self] in
+            defer { pitchAdmissions.removeValue(forKey: id) }
+            if let preceding { await preceding.value }
+            do {
+                guard await audio.flushPendingWrites() else { throw AudioMediaError.unavailable("请先保存原声输入") }
+                try Task.checkCancellation()
+                guard self.audio?.contextID == contextID, activeDocumentID == documentID else { throw CancellationError() }
+                let input = try await store.preparePitchInput(documentID: documentID, runID: id)
+                try Task.checkCancellation()
+                guard self.audio?.contextID == contextID, activeDocumentID == documentID else { throw CancellationError() }
+                let saved = Task<ProjectManifest, Error> { await store.snapshot() }
+                let request = InferenceRequest(id: id, model: reference, input: .pitch(input))
+                await admit(request, documentID: documentID, savedDraft: saved, store: store,
+                            session: session, backendID: backendID)
+            } catch {
+                let cancelled = error is CancellationError
+                await removeActive(id); phases.removeValue(forKey: id); liveStates.removeValue(forKey: id)
+                pitchStatus = cancelled ? "识别已取消，原声保持不变。" : "识别未开始：" + error.localizedDescription
+                if !cancelled { report(error, context: "音高分析未提交，原声保持不变") }
+            }
+        }
+        pitchAdmissions[id] = admission; admissionTail = admission
+        await admission.value
+    }
+
+    public func cancelPitchAnalysis() async {
+        let ids = Set(pitchAdmissions.keys).union(documentJobs.compactMap { job in
+            if case .pitch = job.request.input, activeJobIDs.contains(job.id) { return job.id }
+            return nil
+        })
+        for id in ids { await cancel(id) }
+    }
+
+    public func refreshPitchAnalysis() async {
+        let documentID = activeDocumentID
+        guard let store, let id = activeDocument?.pitchAnalysis?.selectedAssetID else {
+            pitchResult = nil; pitchResultAssetID = nil; return
+        }
+        do {
+            let result = try await store.readPitchAnalysis(assetID: id)
+            guard documentID == activeDocumentID, activeDocument?.pitchAnalysis?.selectedAssetID == id else { return }
+            pitchResult = result; pitchResultAssetID = id
+        } catch {
+            guard documentID == activeDocumentID else { return }
+            pitchResult = nil; pitchResultAssetID = id
+            pitchStatus = "已保存分析暂不可读取：" + error.localizedDescription
+        }
+    }
+
+    public func decidePitchAnalysis(accept: Bool) async {
+        guard !isChangingProject, !pitchIsBusy, let store, let id = pitchResultAssetID,
+              let documentID = activeDocumentID else { return }
+        do {
+            let saved = try await store.decidePitchAnalysis(assetID: id, documentID: documentID, accept: accept)
+            guard self.store === store, documentID == activeDocumentID else { return }
+            applyManifest(saved)
+            pitchStatus = accept ? "分析已保留，原始录音未改变。" : "候选已拒绝，原声与已保留分析未改变。"
+            await refreshPitchAnalysis()
+        } catch { pitchStatus = error.localizedDescription; report(error, context: "候选决定未保存，可重试") }
+    }
+
+    public func exportPitchAnalysis(to url: URL) async {
+        guard !isChangingProject, !pitchIsBusy, let store, let id = pitchResultAssetID else { return }
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        do { try await store.exportPitchAnalysis(assetID: id, to: url); pitchStatus = "分析JSON已导出。" }
+        catch { pitchStatus = error.localizedDescription; report(error, context: "分析未导出；已有文件保持不变") }
+    }
+
     public private(set) var audio: ProjectAudioController?
     public private(set) var videoCreationContextID = UUID()
     public private(set) var videoCreationDraft: VideoCreationDraft?
@@ -362,6 +467,7 @@ public final class ProjectSession {
     }
 
     private func loadActiveDocument() {
+        pitchResult = nil; pitchResultAssetID = nil; pitchStatus = nil
         parameterEditingErrors.removeAll()
         if let document = activeDocument {
             creatorMode = CreatorMode(document.kind)
@@ -919,6 +1025,7 @@ public final class ProjectSession {
         imageAdmissions[id]?.cancel()
         audioAdmissions[id]?.cancel()
         videoAdmissions[id]?.cancel()
+        pitchAdmissions[id]?.cancel()
         liveStates[id] = .cancelling
         phases[id] = "正在取消，等待计算结束并释放资源"
         if let run = handles[id] { await run.cancel() }
@@ -938,6 +1045,7 @@ public final class ProjectSession {
         await removeActive(id)
         if pendingSaves[id] == nil { phases.removeValue(forKey: id); liveStates.removeValue(forKey: id) }
         await refreshAssets()
+        await refreshPitchAnalysis()
     }
 
     private func persist(id: UUID, outcome: RunOutcome, store: ProjectStore) async throws {
@@ -1489,6 +1597,9 @@ public final class ProjectSession {
             if let session {
                 try await session.cleanup()
             }
+            for document in (await store.snapshot()).documents where document.audioDraft != nil {
+                _ = try await store.invalidatePitchCandidates(documentID: document.id)
+            }
             // There are no unsaved drafts or terminal outcomes now. If another editor changed
             // the manifest, closing preserves their bytes; the next open validates that file.
             try await store.close(preserveExternalChanges: true)
@@ -1571,6 +1682,10 @@ public final class ProjectSession {
     private func prepareAudioNavigation() async throws {
         await drainVideoPreview()
         audioCreationTransport.stopPlayback()
+        await cancelPitchAnalysis()
+        if let id = activeDocumentID, activeDocument?.audioDraft != nil, let store {
+            applyManifest(try await store.invalidatePitchCandidates(documentID: id))
+        }
         guard await audio?.prepareForNavigation() != false else {
             throw ProjectStoreError.invalidTransition
         }

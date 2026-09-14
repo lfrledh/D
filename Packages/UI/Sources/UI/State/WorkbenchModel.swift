@@ -295,6 +295,20 @@ public final class WorkbenchModel {
     }
 
     /// Every callback captures the rendered project/document identity before any file panel or await.
+    public func exportPitchAnalysis() async {
+        let session = projectSession
+        guard !isChangingProject, !isBusy, let documentID = activeDocumentID,
+              let assetID = session.pitchResultAssetID else { return }
+        isChoosingLocation = true
+        defer { isChoosingLocation = false }
+        let panel = NSSavePanel()
+        panel.title = "导出音高与近似音符分析"
+        panel.nameFieldStringValue = "音高分析.json"
+        guard await panel.begin() == .OK, let url = panel.url,
+              activeDocumentID == documentID, session.pitchResultAssetID == assetID else { return }
+        await session.exportPitchAnalysis(to: url)
+    }
+
     public func audioCreationActions(contextID: UUID, documentID: UUID) -> AudioCreationActions {
         let session = projectSession
         let epoch = session.navigationEpoch

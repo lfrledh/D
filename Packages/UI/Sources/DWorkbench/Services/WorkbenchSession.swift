@@ -17,6 +17,8 @@ public struct WorkbenchSession: Sendable {
     public let validateAudioModel: (@Sendable (URL) async throws -> ModelReference)?
     public let textBackendID: String?
     public let validateTextModel: (@Sendable (URL) async throws -> ModelReference)?
+    public let pitchBackendID: String?
+    public let pitchModel: ModelReference?
     public let engine: any InferenceEngine
     public let backendID: String
     public let status: @Sendable () async -> WorkbenchRuntimeStatus
@@ -42,7 +44,10 @@ public struct WorkbenchSession: Sendable {
                 videoBackendID: String? = nil,
                 validateVideoModel: (@Sendable (URL) async throws -> ModelReference)? = nil,
                 videoCapability: VideoExecutionCapability? = nil,
-                defaultMemoryBudgetBytes: UInt64 = 12 * 1024 * 1024 * 1024) {
+                defaultMemoryBudgetBytes: UInt64 = 12 * 1024 * 1024 * 1024,
+                pitchBackendID: String? = nil, pitchModel: ModelReference? = nil) {
+        self.pitchBackendID = pitchBackendID
+        self.pitchModel = pitchModel
         self.videoBackendID = videoBackendID
         self.validateVideoModel = validateVideoModel
         self.videoCapability = videoCapability

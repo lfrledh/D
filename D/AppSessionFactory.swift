@@ -13,7 +13,8 @@ enum AppSessionFactory {
         bundledMusicEngine: BundledAudioEngine? = nil,
         musicConsent: AudioModelUsePermission? = nil,
         audioAccessRoot: URL? = nil,
-        bundledVideoEngine: BundledAudioEngine? = nil, videoAccessRoot: URL? = nil) async throws -> WorkbenchSession {
+        bundledVideoEngine: BundledAudioEngine? = nil, videoAccessRoot: URL? = nil,
+        bundledPitchEngine: BundledAudioEngine? = nil) async throws -> WorkbenchSession {
         let stages = BackendStageMonitor()
         let backend = try MLXImageBackend(configuration: .init(artifactDirectory: artifactDirectory, profile: .scalableKlein4B),
                                          observer: { await stages.record($0) })
@@ -48,7 +49,17 @@ enum AppSessionFactory {
                 memoryLimitBytes: memoryBudgetBytes, accessBootstrapRoot: accessRoot,
                 confirmDeployment: { try engine.confirmUnchanged() }))
         } else { videoBackend = nil }
+        let pitchBackend: PitchAnalysisBackend?
+        let pitchReference: ModelReference?
+        if let engine = bundledPitchEngine {
+            try engine.confirmUnchanged()
+            pitchBackend = try PitchAnalysisBackend(configuration: .init(pythonExecutable: engine.pythonExecutable,
+                providerScript: engine.providerScript, artifactDirectory: artifactDirectory,
+                accessBootstrapRoot: audioAccessRoot))
+            pitchReference = ModelReference(directory: engine.vendorDirectory, revision: PitchAnalysisRequest.modelSHA256)
+        } else { pitchBackend = nil; pitchReference = nil }
         var backends: [any InferenceBackend] = [backend, textBackend]
+        if let pitchBackend { backends.append(pitchBackend) }
         if let videoBackend { backends.append(videoBackend) }
         if let musicBackend { backends.append(musicBackend) }
         if let audioBackend { backends.append(audioBackend) }
@@ -123,7 +134,8 @@ enum AppSessionFactory {
             imageCapability: backend.executionCapability, textCapability: textBackend.executionCapability,
             audioCapability: audioBackend?.executionCapability, musicCapability: musicBackend?.executionCapability,
             videoBackendID: videoBackend?.descriptor.id, validateVideoModel: validateVideoModel,
-            videoCapability: videoBackend?.executionCapability, defaultMemoryBudgetBytes: memoryBudgetBytes)
+            videoCapability: videoBackend?.executionCapability, defaultMemoryBudgetBytes: memoryBudgetBytes,
+            pitchBackendID: pitchBackend?.descriptor.id, pitchModel: pitchReference)
     }
 
     /// Only an explicitly isolated development session can supply an existing local engine.

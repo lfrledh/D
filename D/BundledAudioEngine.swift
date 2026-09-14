@@ -5,11 +5,12 @@ import Foundation
 /// Read-only description of a fixed inference engine bundled with an application.
 struct BundledAudioEngine: Sendable {
     enum Family: Sendable {
-        case stableAudio, mrt2Music, video
+        case stableAudio, mrt2Music, video, pitch
         var directory: String {
             switch self {
             case .stableAudio: "AudioEngine.dengine"
             case .mrt2Music: "MRT2MusicEngine.dengine"
+            case .pitch: "PitchEngine.dengine"
             case .video: "VideoEngine.dengine"
             }
         }
@@ -17,6 +18,7 @@ struct BundledAudioEngine: Sendable {
             switch self {
             case .stableAudio: "d-audio-engine"
             case .mrt2Music: "d-mrt2-music-engine"
+            case .pitch: "d-pitch-engine"
             case .video: "d-video-engine"
             }
         }
@@ -24,6 +26,7 @@ struct BundledAudioEngine: Sendable {
             switch self {
             case .stableAudio: "provider/d_audio_backend.py"
             case .mrt2Music: "provider/d_audio_mrt2_backend.py"
+            case .pitch: "provider/d_pitch_analysis_backend.py"
             case .video: "provider/d_video_run.py"
             }
         }
@@ -31,17 +34,23 @@ struct BundledAudioEngine: Sendable {
             switch self {
             case .stableAudio: "model-manifests/sm-music.json"
             case .mrt2Music: "model-manifests/mrt2-small.json"
+            case .pitch: "model-manifests/swift-f0.json"
             case .video: "model-manifests/wan21.json"
             }
         }
         var vendor: String {
             switch self {
             case .stableAudio, .mrt2Music: "vendor"
+            case .pitch: "python/lib/python3.12/site-packages/swift_f0"
             case .video: "Vendor"
             }
         }
         var required: [String] {
             switch self {
+            case .pitch:
+                ["python/bin/python3", script, "provider/d_audio_access.py", model,
+                 "python/lib/python3.12/site-packages/swift_f0/core.py",
+                 "python/lib/python3.12/site-packages/swift_f0/model.onnx"]
             case .stableAudio:
                 ["python/bin/python3", script, "provider/d_audio_access.py", "provider/d_audio_contract.py", model,
                  "provider/d_audio_sa3.py"]
@@ -72,7 +81,7 @@ struct BundledAudioEngine: Sendable {
 
     var videoTokenizerDirectory: URL? {
         switch family {
-        case .stableAudio, .mrt2Music: nil
+        case .stableAudio, .mrt2Music, .pitch: nil
         case .video: root.appendingPathComponent("tokenizer", isDirectory: true)
         }
     }

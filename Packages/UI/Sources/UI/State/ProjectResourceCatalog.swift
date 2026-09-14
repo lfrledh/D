@@ -35,7 +35,7 @@ public enum ProjectResourceCatalog {
         let documents = Dictionary(uniqueKeysWithValues: manifest.documents.map { ($0.id, $0) })
         let jobs = Dictionary(uniqueKeysWithValues: manifest.jobs.map { ($0.id, $0) })
 
-        var result = manifest.assets.map { asset in
+        var result = manifest.assets.filter { $0.metadata.pitch == nil }.map { asset in
             let originID = originDocumentID(for: asset, documents: documents, jobs: jobs)
             return ProjectResourceItem(id: .media(asset.id), title: asset.name, mode: mediaMode(asset.mediaType),
                                        mediaType: asset.mediaType, originDocumentID: originID)

@@ -139,6 +139,8 @@ public actor ProjectStore {
             loaded = try ProjectFiles.migrateVersionNine(loaded, original: data, in: descriptor, checkpoint: migrationCheckpoint)
         } else if loaded.schemaVersion == 10 {
             loaded = try ProjectFiles.migrateVersionTen(loaded, original: data, in: descriptor, checkpoint: migrationCheckpoint)
+        } else if loaded.schemaVersion == 11 {
+            loaded = try ProjectFiles.migrateVersionEleven(loaded, original: data, in: descriptor, checkpoint: migrationCheckpoint)
         } else { try ProjectFiles.validate(loaded) }
         let store = ProjectStore(rootURL: root, rootFD: descriptor, lockFD: lock, manifest: loaded)
         // Ownership of both descriptors has moved to the actor before recovery can throw.
@@ -345,6 +347,140 @@ public actor ProjectStore {
         candidate.documents[index].audioCreation = draft
         try commit(candidate)
         return manifest
+    }
+
+    private var invalidatedPitchRuns: Set<UUID> = []
+    private var preparedPitchInputs: [UUID: PitchAnalysisRequest] = [:]
+
+    /// Own the original snapshot before converting it; no shared editor URL crosses execution.
+    public func preparePitchInput(documentID: UUID, runID: UUID) throws -> PitchAnalysisRequest {
+        let inspected = try inspectAudio(documentID: documentID)
+        let draft = inspected.document
+        let range = draft.selectedClipID.flatMap { id in draft.clips.first { $0.id == id }?.range }
+            ?? AudioFrameRange(startFrame: 0, endFrame: inspected.metadata.format.frameCount)
+        let source = PitchSourceIdentity(assetID: draft.assetID, documentID: documentID,
+            documentRevision: draft.revision, contentSHA256: inspected.metadata.contentSHA256,
+            sampleRate: inspected.metadata.format.sampleRate, frameCount: inspected.metadata.format.frameCount,
+            startFrame: range.startFrame, endFrame: range.endFrame)
+        try source.validate()
+        let parent = try ProjectFiles.openOrCreateDirectory("PitchInputs", in: rootFD)
+        defer { Darwin.close(parent) }
+        let name = runID.uuidString
+        guard mkdirat(parent, name, 0o700) == 0 else { throw ProjectStoreError.alreadyExists("PitchInputs/" + name) }
+        let directory = try ProjectFiles.openRelativeDirectory(name, in: parent)
+        defer { Darwin.close(directory) }
+        let leaf = "source." + inspected.metadata.format.container.rawValue
+        try ProjectFiles.publish(in: directory, name: leaf, replacing: false) { output in
+            try AudioMediaInspector.withOriginalSource(at: inspected.url) { input, count in
+                try AudioMediaInspector.copyOriginal(from: input, byteCount: count, to: output)
+            }
+        }
+        let location = rootURL.appendingPathComponent("PitchInputs/" + name)
+        let data = try PitchInputPreparer.prepare(at: location.appendingPathComponent(leaf), source: source)
+        try ProjectFiles.publish(in: directory, name: "input.f32", replacing: false) { output in
+            try data.withUnsafeBytes { try ProjectFiles.writeAll($0, to: output) }
+        }
+        let request = PitchAnalysisRequest(source: source, inputURL: location.appendingPathComponent("input.f32"),
+            inputSHA256: SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined(), sampleCount: data.count / 4)
+        try request.validate()
+        // Re-read the registered original and manifest after conversion. Stale source is never admitted.
+        let current = try inspectAudio(documentID: documentID)
+        guard current.document == draft, current.metadata == inspected.metadata else { throw ProjectStoreError.externalModification }
+        preparedPitchInputs[runID] = request
+        return request
+    }
+
+    public func readPitchAnalysis(assetID: UUID) throws -> PitchAnalysisResult {
+        guard let asset = manifest.assets.first(where: { $0.id == assetID }), let metadata = asset.metadata.pitch,
+              let jobID = asset.jobID, let job = manifest.jobs.first(where: { $0.id == jobID }),
+              case .pitch(let request) = job.request.input else { throw ProjectStoreError.missingAsset }
+        try checkLocation()
+        let data = try ProjectFiles.read(relative: asset.relativePath, in: rootFD, limit: PitchAnalysisResult.maximumJSONBytes)
+        guard SHA256.hash(data: data).map({ String(format: "%02x", $0) }).joined() == metadata.contentSHA256 else {
+            throw ProjectStoreError.externalModification
+        }
+        let result = try PitchResultFile.decode(data)
+        try Self.validatePitchResult(result, request: request, runID: jobID)
+        return result
+    }
+
+    public func decidePitchAnalysis(assetID: UUID, documentID: UUID, accept: Bool) throws -> ProjectManifest {
+        let index = try documentIndex(documentID)
+        guard let asset = manifest.assets.first(where: { $0.id == assetID }), let jobID = asset.jobID,
+              let job = manifest.jobs.first(where: { $0.id == jobID }), job.documentID == documentID,
+              job.state == .completed, let draft = manifest.documents[index].audioDraft else {
+            throw ProjectStoreError.missingAsset
+        }
+        var state = manifest.documents[index].pitchAnalysis ?? PitchDocumentState()
+        guard state.selectedAssetID == assetID, !state.acceptedAssetIDs.contains(assetID),
+              !state.rejectedAssetIDs.contains(assetID) else { throw ProjectStoreError.invalidTransition }
+        if accept {
+            let result = try readPitchAnalysis(assetID: assetID)
+            guard !state.expiredAssetIDs.contains(assetID) else { throw ProjectStoreError.invalidTransition }
+            guard result.source.documentRevision == draft.revision, result.source.assetID == draft.assetID else {
+                throw ProjectStoreError.invalidProject("原声备注或片段已改变，请重新识别；原件和历史结果已保留。")
+            }
+            let original = try inspectAudio(documentID: documentID)
+            guard original.metadata.contentSHA256 == result.source.contentSHA256,
+                  original.metadata.format.sampleRate == result.source.sampleRate,
+                  original.metadata.format.frameCount == result.source.frameCount else { throw ProjectStoreError.externalModification }
+            state.acceptedAssetIDs.append(assetID)
+        } else {
+            state.rejectedAssetIDs.append(assetID)
+            state.selectedAssetID = state.acceptedAssetIDs.last
+        }
+        var next = manifest; next.documents[index].pitchAnalysis = state
+        try commit(next)
+        return manifest
+    }
+
+    /// A navigation boundary invalidates pending interpretation, while preserving its evidence.
+    public func invalidatePitchCandidates(documentID: UUID) throws -> ProjectManifest {
+        let index = try documentIndex(documentID)
+        for job in manifest.jobs where job.documentID == documentID && !job.state.isTerminal {
+            if case .pitch = job.request.input { invalidatedPitchRuns.insert(job.id) }
+        }
+        guard var state = manifest.documents[index].pitchAnalysis, let id = state.selectedAssetID,
+              !state.acceptedAssetIDs.contains(id), !state.expiredAssetIDs.contains(id) else { return manifest }
+        state.expiredAssetIDs.append(id)
+        var next = manifest; next.documents[index].pitchAnalysis = state
+        try commit(next)
+        return manifest
+    }
+
+    public func exportPitchAnalysis(assetID: UUID, to destination: URL) throws {
+        let result = try readPitchAnalysis(assetID: assetID)
+        guard destination.isFileURL, destination.path.hasPrefix("/"), !destination.lastPathComponent.isEmpty else {
+            throw ProjectStoreError.unsafePath(destination.path)
+        }
+        struct Export: Encodable {
+            let schemaVersion: Int
+            let result: PitchAnalysisResult
+            let interpretationVersion: String
+            let notes: [PitchNote]
+            let sourceNotes: [PitchSourceNote]
+            let sourceRole: String
+            let meaning: String
+        }
+        let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        let value = Export(schemaVersion: 1, result: result, interpretationVersion: PitchInterpretation.version,
+            notes: try PitchInterpretation(result: result).notes,
+            sourceNotes: try PitchSourceNote.map(result), sourceRole: "original-human-or-imported-audio; machine-analysis",
+            meaning: "Analysis of original source audio; approximate free-time notes, no beat/velocity inference.")
+        let data = try encoder.encode(value)
+        let parent = try ProjectFiles.openDirectory(destination.deletingLastPathComponent())
+        defer { Darwin.close(parent) }
+        try ProjectFiles.publishExport(to: destination, parent: parent, checkpoint: nil, validate: { url in
+            guard try Data(contentsOf: url) == data else { throw ProjectStoreError.externalModification }
+        }) { output in try data.withUnsafeBytes { try ProjectFiles.writeAll($0, to: output) } }
+    }
+
+    private static func validatePitchResult(_ result: PitchAnalysisResult, request: PitchAnalysisRequest, runID: UUID) throws {
+        try result.validate()
+        guard result.runID == runID, result.source == request.source,
+              result.inputSHA256 == request.inputSHA256, result.sampleCount == request.sampleCount else {
+            throw ProjectStoreError.invalidProject("音高结果与冻结的原声、区间或任务不一致。")
+        }
     }
 
     public func prepareAudioCreationSource(assetID: UUID, runID: UUID) throws -> AudioSourceReference {
@@ -609,7 +745,17 @@ public actor ProjectStore {
         let index = try documentIndex(documentID ?? manifest.activeDocumentID)
         let document = manifest.documents[index]
         switch request.input {
-        case .pitch: throw ProjectStoreError.invalidTransition // HUM1 integration follows prepared contract.
+        case .pitch(let pitch):
+            guard document.kind == .audio, let draft = document.audioDraft,
+                  preparedPitchInputs[request.id] == pitch, pitch.source.documentID == document.id,
+                  draft.revision == pitch.source.documentRevision, draft.assetID == pitch.source.assetID else {
+                throw ProjectStoreError.invalidProject("音高任务没有当前原声的冻结输入。")
+            }
+            if let selected = document.pitchAnalysis?.selectedAssetID,
+               document.pitchAnalysis?.acceptedAssetIDs.contains(selected) != true {
+                throw ProjectStoreError.invalidProject("请先保留或拒绝当前音高候选。")
+            }
+            _ = try inspectAudio(documentID: document.id)
         case .video(let video):
             let captured = capturedVideoDocument ?? document
             guard document.kind == .video, captured.kind == .video, captured.id == document.id,
@@ -712,7 +858,27 @@ public actor ProjectStore {
         try checkLocation()
         var candidate = manifest
         switch candidate.jobs[index].request.input {
-        case .video, .pitch: throw ProjectStoreError.invalidTransition
+        case .video: throw ProjectStoreError.invalidTransition
+        case .pitch(let request):
+            guard result.artifacts.count == 1, let artifact = result.artifacts.first,
+                  artifact.mediaType == PitchAnalysisResult.mediaType else { throw ProjectStoreError.invalidTransition }
+            let expected = "Tasks/\(id.uuidString)/pitch.json"
+            guard artifact.url == rootURL.appendingPathComponent(expected) else { throw ProjectStoreError.unsafePath(artifact.url.path) }
+            let data = try ProjectFiles.read(relative: expected, in: rootFD, limit: PitchAnalysisResult.maximumJSONBytes)
+            let analysis = try PitchResultFile.decode(data)
+            try Self.validatePitchResult(analysis, request: request, runID: id)
+            guard !candidate.assets.contains(where: { $0.relativePath == expected }) else { throw ProjectStoreError.invalidTransition }
+            let metadata = PitchAssetMetadata(contentSHA256: SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined(),
+                                               source: analysis.source)
+            let asset = ProjectAsset(jobID: id, relativePath: expected, mediaType: PitchAnalysisResult.mediaType,
+                                     metadata: .init(pitch: metadata), name: "音高分析候选")
+            candidate.assets.append(asset); candidate.jobs[index].artifactIDs.append(asset.id)
+            if let documentIndex = candidate.documents.firstIndex(where: { $0.id == analysis.source.documentID }) {
+                var state = candidate.documents[documentIndex].pitchAnalysis ?? PitchDocumentState()
+                state.selectedAssetID = asset.id
+                if invalidatedPitchRuns.contains(id) { state.expiredAssetIDs.append(asset.id) }
+                candidate.documents[documentIndex].pitchAnalysis = state
+            }
         case .image:
             guard !result.artifacts.isEmpty else { throw ProjectStoreError.invalidProject("生成任务没有交付图片。") }
             for artifact in result.artifacts {
@@ -1609,6 +1775,11 @@ public actor ProjectStore {
         let revision = manifest.revision
         var candidate = manifest
         if markInterrupted {
+            for index in candidate.documents.indices {
+                guard var state = candidate.documents[index].pitchAnalysis, let id = state.selectedAssetID,
+                      !state.acceptedAssetIDs.contains(id), !state.expiredAssetIDs.contains(id) else { continue }
+                state.expiredAssetIDs.append(id); candidate.documents[index].pitchAnalysis = state
+            }
             for index in candidate.jobs.indices where !candidate.jobs[index].state.isTerminal {
                 candidate.jobs[index].state = .interrupted
                 candidate.jobs[index].error = "上次运行未正常结束。已保留记录，不会自动重新生成。"
@@ -1620,6 +1791,7 @@ public actor ProjectStore {
         for name in names.sorted() {
             guard let jobID = ProjectFiles.taskOwner(name),
                   let index = candidate.jobs.firstIndex(where: { $0.id == jobID }) else { continue }
+            if case .pitch = candidate.jobs[index].request.input { continue }
             let isAudio: Bool, isVideo: Bool
             switch candidate.jobs[index].request.input {
             case .audio: isAudio = true; isVideo = false
@@ -1962,6 +2134,11 @@ private enum ProjectFiles {
                                   checkpoint: (@Sendable (ProjectMigrationCheckpoint) throws -> Void)?) throws -> ProjectManifest {
         try migrate(legacy, original: original, in: root, backup: ProjectStore.versionTenBackupFilename,
                     checkpoint: checkpoint)
+    }
+
+    static func migrateVersionEleven(_ legacy: ProjectManifest, original: Data, in root: Int32,
+                                    checkpoint: (@Sendable (ProjectMigrationCheckpoint) throws -> Void)?) throws -> ProjectManifest {
+        try migrate(legacy, original: original, in: root, backup: "project.v11.backup.json", checkpoint: checkpoint)
     }
 
     private static func migrate(_ legacy: ProjectManifest, original: Data, in root: Int32, backup: String,
@@ -2332,6 +2509,18 @@ private enum ProjectFiles {
                 throw ProjectStoreError.invalidProject("任务缺少文档。")
             }
             switch job.request.input {
+            case .pitch(let request):
+                guard value.schemaVersion >= 12, let draft = document.audioDraft, document.kind == .audio,
+                      request.source.documentID == document.id, request.source.assetID == draft.assetID,
+                      request.source.documentRevision <= draft.revision, job.artifactIDs.count <= 1,
+                      let original = assets[draft.assetID], let media = original.metadata.audio,
+                      request.source.contentSHA256 == media.contentSHA256,
+                      request.source.sampleRate == media.format.sampleRate,
+                      request.source.frameCount == media.format.frameCount, media.format.channelCount == 1,
+                      job.request.model.revision == PitchAnalysisRequest.modelSHA256,
+                      request.inputURL.path.hasSuffix("/PitchInputs/\(job.id.uuidString)/input.f32") else {
+                    throw ProjectStoreError.invalidProject("音高分析任务不属于原声文档。")
+                }
             case .video(let request):
                 guard value.schemaVersion >= 8, document.kind == .video, document.videoCreation != nil,
                       job.artifactIDs.count <= 1 else { throw ProjectStoreError.invalidProject("视频任务归属无效。") }
@@ -2341,7 +2530,7 @@ private enum ProjectFiles {
                     throw ProjectStoreError.invalidProject("图像任务不属于图像文档。")
                 }
                 if let reference = image.referenceImage {
-                    guard [9, 11].contains(value.schemaVersion), let id = job.imageReferenceAssetID,
+                    guard [9, 11, 12].contains(value.schemaVersion), let id = job.imageReferenceAssetID,
                           let asset = assets[id], asset.mediaType == "image/png",
                           asset.metadata.imageContentSHA256 != nil,
                           reference.url.path.hasSuffix("/ImageInputs/\(job.id.uuidString)/reference.rgb") else {
@@ -2394,7 +2583,17 @@ private enum ProjectFiles {
             }
             let isDeclaredAudio = asset.metadata.audio != nil || asset.mediaType == "audio/wav" ||
                 asset.mediaType == "audio/x-caf" || asset.relativePath.hasPrefix("Audio/")
-            if asset.metadata.video != nil || asset.mediaType.hasPrefix("video/") {
+            if asset.mediaType == PitchAnalysisResult.mediaType || asset.metadata.pitch != nil {
+                guard value.schemaVersion >= 12, asset.mediaType == PitchAnalysisResult.mediaType,
+                      asset.role == .result, let metadata = asset.metadata.pitch, let jobID = asset.jobID,
+                      let job = jobs[jobID], case .pitch(let request) = job.request.input,
+                      asset.relativePath == "Tasks/\(jobID.uuidString)/pitch.json", metadata.source == request.source,
+                      PitchSourceIdentity.isDigest(metadata.contentSHA256),
+                      metadata.interpretationVersion == "equal-tempered-contiguous-5-v1",
+                      asset.metadata.audio == nil, asset.metadata.video == nil, asset.metadata.width == nil,
+                      asset.metadata.height == nil, asset.metadata.bitDepth == nil, asset.metadata.colorSpace == nil,
+                      asset.metadata.imageContentSHA256 == nil else { throw ProjectStoreError.invalidProject("音高分析资产格式无效。") }
+            } else if asset.metadata.video != nil || asset.mediaType.hasPrefix("video/") {
                 guard value.schemaVersion >= 8, let metadata = asset.metadata.video,
                       asset.metadata.audio == nil, asset.metadata.bitDepth == nil, asset.metadata.colorSpace == nil,
                       asset.metadata.width == metadata.width, asset.metadata.height == metadata.height,
@@ -2449,7 +2648,7 @@ private enum ProjectFiles {
             } else if asset.role == .original && asset.metadata.imageContentSHA256 != nil {
                 // Explicitly selecting a legacy original pins its digest without relocating it.
                 // Safe relative paths are validated above; only new import publication owns the UUID layout.
-                guard [9, 11].contains(value.schemaVersion), asset.jobID == nil, asset.mediaType == "image/png" else {
+                guard [9, 11, 12].contains(value.schemaVersion), asset.jobID == nil, asset.mediaType == "image/png" else {
                     throw ProjectStoreError.invalidProject("原参考图的路径或身份无效。")
                 }
             } else if asset.role == .result {
@@ -2465,15 +2664,36 @@ private enum ProjectFiles {
                 guard dimension > 0 else { throw ProjectStoreError.invalidProject("媒体元数据包含无效尺寸或位深。") }
             }
             if let digest = asset.metadata.imageContentSHA256 {
-                guard [9, 11].contains(value.schemaVersion), asset.mediaType == "image/png", digest.utf8.count == 64,
+                guard [9, 11, 12].contains(value.schemaVersion), asset.mediaType == "image/png", digest.utf8.count == 64,
                       digest.utf8.allSatisfy({ (48...57).contains($0) || (97...102).contains($0) }) else {
                     throw ProjectStoreError.invalidProject("参考图摘要无效。")
                 }
             }
         }
         for document in value.documents {
+            if let pitch = document.pitchAnalysis {
+                guard value.schemaVersion >= 12, document.audioDraft != nil,
+                      pitch.acceptedAssetIDs.count <= 64, pitch.rejectedAssetIDs.count <= 64, pitch.expiredAssetIDs.count <= 128,
+                      Set(pitch.expiredAssetIDs).count == pitch.expiredAssetIDs.count,
+                      Set(pitch.expiredAssetIDs).isDisjoint(with: pitch.acceptedAssetIDs),
+                      Set(pitch.acceptedAssetIDs).count == pitch.acceptedAssetIDs.count,
+                      Set(pitch.rejectedAssetIDs).count == pitch.rejectedAssetIDs.count,
+                      Set(pitch.acceptedAssetIDs).isDisjoint(with: pitch.rejectedAssetIDs) else {
+                    throw ProjectStoreError.invalidProject("音高候选决定记录无效。")
+                }
+                for id in pitch.acceptedAssetIDs + pitch.rejectedAssetIDs + pitch.expiredAssetIDs + [pitch.selectedAssetID].compactMap({ $0 }) {
+                    guard let asset = assets[id], asset.metadata.pitch != nil, let jobID = asset.jobID,
+                          jobs[jobID]?.documentID == document.id, jobs[jobID]?.state == .completed else {
+                        throw ProjectStoreError.invalidProject("音高候选不属于当前原声。")
+                    }
+                }
+                if let selected = pitch.selectedAssetID, pitch.rejectedAssetIDs.contains(selected) {
+                    throw ProjectStoreError.invalidProject("拒绝的音高候选不能选中。")
+                }
+            }
+
             if let reference = document.draft.referenceImageAssetID {
-                guard [9, 11].contains(value.schemaVersion), document.kind == .image,
+                guard [9, 11, 12].contains(value.schemaVersion), document.kind == .image,
                       let asset = assets[reference], asset.mediaType == "image/png",
                       asset.metadata.imageContentSHA256 != nil else {
                     throw ProjectStoreError.invalidProject("图像草稿的参考来源无效。")
@@ -2514,7 +2734,7 @@ private enum ProjectFiles {
                     throw ProjectStoreError.invalidProject("文字文档包含无效内容或图像引用。")
                 }
                 try TextDraftDocument.validate(textDraft.text)
-                if [10, 11].contains(value.schemaVersion) {
+                if [10, 11, 12].contains(value.schemaVersion) {
                     guard let sources = document.textSources else {
                         throw ProjectStoreError.invalidProject("文字资料记录缺失。")
                     }

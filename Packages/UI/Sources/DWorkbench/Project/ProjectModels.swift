@@ -42,10 +42,11 @@ public struct MediaMetadata: Codable, Sendable, Equatable {
     public var audio: AudioAssetMetadata?
     public var video: VideoAssetMetadata?
     public var imageContentSHA256: String?
+    public var pitch: PitchAssetMetadata?
 
     public init(width: Int? = nil, height: Int? = nil, bitDepth: Int? = nil,
                 colorSpace: String? = nil, audio: AudioAssetMetadata? = nil, video: VideoAssetMetadata? = nil,
-                imageContentSHA256: String? = nil) {
+                imageContentSHA256: String? = nil, pitch: PitchAssetMetadata? = nil) {
         self.width = width
         self.height = height
         self.bitDepth = bitDepth
@@ -53,9 +54,10 @@ public struct MediaMetadata: Codable, Sendable, Equatable {
         self.audio = audio
         self.video = video
         self.imageContentSHA256 = imageContentSHA256
+        self.pitch = pitch
     }
 
-    private enum CodingKeys: String, CodingKey { case width, height, bitDepth, colorSpace, audio, video, imageContentSHA256 }
+    private enum CodingKeys: String, CodingKey { case width, height, bitDepth, colorSpace, audio, video, imageContentSHA256, pitch }
 
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
@@ -66,6 +68,7 @@ public struct MediaMetadata: Codable, Sendable, Equatable {
         audio = try values.decodeIfPresent(AudioAssetMetadata.self, forKey: .audio)
         video = try values.decodeIfPresent(VideoAssetMetadata.self, forKey: .video)
         imageContentSHA256 = try values.decodeIfPresent(String.self, forKey: .imageContentSHA256)
+        pitch = try values.decodeIfPresent(PitchAssetMetadata.self, forKey: .pitch)
     }
 }
 
@@ -174,8 +177,8 @@ public struct ProjectDraft: Codable, Sendable, Equatable {
 }
 
 public struct ProjectManifest: Codable, Sendable, Equatable, Identifiable {
-    public static let currentSchemaVersion = 11
-    public static let readableSchemaVersions = Set(1...11)
+    public static let currentSchemaVersion = 12
+    public static let readableSchemaVersions = Set(1...12)
     public var schemaVersion: Int
     /// Monotonic committed state version lets the UI discard a late, stale actor response.
     public var revision: UInt64
@@ -237,7 +240,7 @@ public struct ProjectManifest: Codable, Sendable, Equatable, Identifiable {
             // Current-format omissions are corruption, not a request for legacy defaults.
             _ = try CurrentGenerationFields(from: decoder)
         }
-        if [10, 11].contains(schemaVersion) { _ = try CurrentTextSourcesFields(from: decoder) }
+        if [10, 11, 12].contains(schemaVersion) { _ = try CurrentTextSourcesFields(from: decoder) }
         revision = try values.decodeIfPresent(UInt64.self, forKey: .revision) ?? 0
         id = try values.decode(UUID.self, forKey: .id)
         name = try values.decode(String.self, forKey: .name)
@@ -291,6 +294,7 @@ public struct ProjectDocument: Codable, Sendable, Equatable, Identifiable {
     public var textDraft: TextDraftDocument?
     public var textSources: TextSourcesNotebook?
     public var audioDraft: AudioDraftDocument?
+    public var pitchAnalysis: PitchDocumentState?
     public var audioCreation: AudioCreationDraft?
     public var videoCreation: VideoCreationDraft?
     /// A reference for the creator, not an implicit image-to-image inference input.
@@ -300,7 +304,7 @@ public struct ProjectDocument: Codable, Sendable, Equatable, Identifiable {
 
     public init(id: UUID = UUID(), name: String, kind: ProjectDocumentKind = .image,
                 draft: ProjectDraft = .init(), textDraft: TextDraftDocument? = nil, textSources: TextSourcesNotebook? = nil,
-                audioDraft: AudioDraftDocument? = nil,
+                audioDraft: AudioDraftDocument? = nil, pitchAnalysis: PitchDocumentState? = nil,
                 audioCreation: AudioCreationDraft? = nil,
                 videoCreation: VideoCreationDraft? = nil,
                 sourceAssetID: UUID? = nil, adoptedAssetID: UUID? = nil, selectedAssetID: UUID? = nil) {
@@ -311,6 +315,7 @@ public struct ProjectDocument: Codable, Sendable, Equatable, Identifiable {
         self.textDraft = textDraft
         self.textSources = textSources
         self.audioDraft = audioDraft
+        self.pitchAnalysis = pitchAnalysis
         self.audioCreation = audioCreation
         self.videoCreation = videoCreation
         self.sourceAssetID = sourceAssetID
@@ -319,7 +324,7 @@ public struct ProjectDocument: Codable, Sendable, Equatable, Identifiable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, kind, draft, textDraft, textSources, audioDraft, audioCreation, videoCreation, sourceAssetID, adoptedAssetID, selectedAssetID
+        case id, name, kind, draft, textDraft, textSources, audioDraft, pitchAnalysis, audioCreation, videoCreation, sourceAssetID, adoptedAssetID, selectedAssetID
     }
 
     public init(from decoder: Decoder) throws {
@@ -332,6 +337,7 @@ public struct ProjectDocument: Codable, Sendable, Equatable, Identifiable {
         textDraft = try values.decodeIfPresent(TextDraftDocument.self, forKey: .textDraft)
         textSources = try values.decodeIfPresent(TextSourcesNotebook.self, forKey: .textSources)
         audioDraft = try values.decodeIfPresent(AudioDraftDocument.self, forKey: .audioDraft)
+        pitchAnalysis = try values.decodeIfPresent(PitchDocumentState.self, forKey: .pitchAnalysis)
         audioCreation = try values.decodeIfPresent(AudioCreationDraft.self, forKey: .audioCreation)
         videoCreation = try values.decodeIfPresent(VideoCreationDraft.self, forKey: .videoCreation)
         sourceAssetID = try values.decodeIfPresent(UUID.self, forKey: .sourceAssetID)
