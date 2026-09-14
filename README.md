@@ -4,9 +4,9 @@
 
 当前指导以[产品与架构原则](docs/PRODUCT_PRINCIPLES.zh-CN.md)为准：项目下按主要产物模态组织，跨模态复用数据、操作和原生UI组件，工作方式与布局分开；开发机16GiB不作为能力上限。旧视觉首批/固定小规格保留为阶段历史，不限制后续产品方向。[D-ALIGN-01](docs/tasks/D-ALIGN-01.md)已本地集成并完成有限阶段验收：统一能力来源并接通文字/图像配置，音频按实际部署声明与验证；接纳和推送见行动指南。完整可组合平台仍未实现。
 
-2026-09-14统一开发基线已完成有限真实验收并接入源工作分支：单参考PNG改图与文字资料问答共用项目格式11。参考图支持显式导入、修改条件、生成候选、比较采用与安全导出；资料问答支持TXT/Markdown快照、选择片段、带来源记录的回答、接受/拒绝/撤销及安全保存，入口默认可见。引用标记核对位置，不证明回答内容一定正确。问题框缩放时的中文组字已修补并由用户确认。来自同一新构建的文字、参考图、SA3声音、MRT2器乐及Wan短视频均完成实际生成和相应采用/导出/冷重开检查；受测完整版本与推送回执见[当前行动](docs/CURRENT_ACTIONS.zh-CN.md)。普通D未被替换，真实麦克风录音仍待设备。
+2026-09-14统一开发基线已完成有限真实验收并接入源工作分支：单参考PNG改图与文字资料问答共用项目格式11。参考图支持显式导入、修改条件、生成候选、比较采用与安全导出；资料问答支持TXT/Markdown快照、选择片段、带来源记录的回答、接受/拒绝/撤销及安全保存，入口默认可见。引用标记核对位置，不证明回答内容一定正确。问题框缩放时的中文组字已修补并由用户确认。来自同一新构建的文字、参考图、SA3声音、MRT2器乐及Wan短视频均完成实际生成和相应采用/导出/冷重开检查；受测完整版本与推送回执见[当前行动](docs/CURRENT_ACTIONS.zh-CN.md)。普通D未被替换。麦克风已于9月15日完成真实录制/试听/导出/重开，详见下方音高识别增量。
 
-项目升级先保留原清单的 `project.v<旧版本>.backup.json`，再写入11；媒体不改写。版本9的参考来源与版本10的资料/回答历史分别保留。旧版程序会拒绝版本11项目；需要保留旧版使用时，应先复制整个项目作为独立副本。不要手改版本号绕过检查。
+项目升级先保留原清单的 `project.v<旧版本>.backup.json`，再写入当前版本12；媒体不改写。版本9的参考来源与版本10的资料/回答历史分别保留。旧版程序会拒绝版本12项目；需要保留旧版使用时，应先复制整个项目作为独立副本。不要手改版本号绕过检查。
 
 原生 SwiftUI／Liquid Glass 工作台通过 DRuntime 与 DMLXBackend 运行图像任务，使用自包含 `.dproject` 保存作品和生成条件。已支持项目内多份独立创作、候选整理、两图比较和条件复用，见 [最新验收](docs/EXPLORATION_STAGE_ACCEPTANCE.zh-CN.md)。当前行动与验收状态集中在 [行动指南](docs/CURRENT_ACTIONS.zh-CN.md)。已完成的单项目检查点见 [工作台验收](docs/WORKBENCH_ACCEPTANCE.zh-CN.md)，后续目标统一维护在 [产品目标清单](docs/PRODUCT_GOALS.zh-CN.md)。文字现已接入同一项目的有限创作闭环：选段改写、候选接受/拒绝、受保护撤销、安全保存重开；旧文本和占位界面已退出。PNG支持实际任务配方公开/私有预览、新副本内嵌、离线读回并显式恢复为新草稿。两者已本地验收，范围及真实运行证据见 [T0任务](docs/tasks/D-T0-WORKBENCH-01.md) 和 [PNG任务](docs/tasks/D-META-PNG-01.md)；CLI继续保留。
 
@@ -26,7 +26,7 @@
 
 ## 音频后端与跨配置（2026-09-10）
 
-统一音频后端现已接入源工作分支。SA3 small music真实完成6秒提示生成、参考变体、区间重绘和取消/超时恢复；输出44.1kHz双声道float32 WAV及实际执行记录，样本经用户试听正常。2026-09-12 APP1内嵌引擎版的普通沙盒音频界面已通过真实生成/参考变体/区间重绘、取消交接、试听采用拒绝及安全导出/退出重开；[任务与证据](docs/tasks/D-AUDIO-APP-01.md)。普通D.app未替换，麦克风仍等设备；plain build-local不自动封装引擎，见[离线部署步骤](docs/AUDIO_BACKEND_GUIDE.zh-CN.md#应用内引擎的重建与保护)。Qwen1.5B短改写与取消、FLUX768×512已实测；更大型号和高配Mac仍逐项待测，不改既有量化精度。调用与限制见[后端指南](docs/AUDIO_BACKEND_GUIDE.zh-CN.md)，版本、失败与证据见[批次记录](docs/tasks/D-AUDIO-BACKEND-01.md)。
+统一音频后端现已接入源工作分支。SA3 small music真实完成6秒提示生成、参考变体、区间重绘和取消/超时恢复；输出44.1kHz双声道float32 WAV及实际执行记录，样本经用户试听正常。2026-09-12 APP1内嵌引擎版的普通沙盒音频界面已通过真实生成/参考变体/区间重绘、取消交接、试听采用拒绝及安全导出/退出重开；[任务与证据](docs/tasks/D-AUDIO-APP-01.md)。普通D.app未替换，麦克风旧待设备项现已关闭；plain build-local不自动封装引擎，见[离线部署步骤](docs/AUDIO_BACKEND_GUIDE.zh-CN.md#应用内引擎的重建与保护)。Qwen1.5B短改写与取消、FLUX768×512已实测；更大型号和高配Mac仍逐项待测，不改既有量化精度。调用与限制见[后端指南](docs/AUDIO_BACKEND_GUIDE.zh-CN.md)，版本、失败与证据见[批次记录](docs/tasks/D-AUDIO-BACKEND-01.md)。
 
 ## 本机开发环境（2026-09-07）
 
@@ -54,9 +54,35 @@
   --run-root /Volumes/YourSSD/D-Development/Builds/unique-run
 ```
 
-`unique-run` 必须尚不存在；输出位于其 `output/D Development.app`，汇总在 `evidence/build-development-report.json`，分阶段日志在 `logs`。模型仍由应用显式登记，不打进App。路径为示例；没有就绪环境时先按音频/视频指南准备，不要把占位值直接运行。工具拒绝缺失或不匹配的输入，并保留失败证据，不自动下载、修复签名或覆盖旧应用。
+`unique-run` 必须尚不存在；输出位于其 `output/D Development.app`，汇总在 `evidence/build-development-report.json`，分阶段日志在 `logs`。图文及音视频生成模型仍由应用显式登记，不打进App；下方单独封装的内部音高评估引擎含其固定小型权重，许可边界不同。路径为示例；没有就绪环境时先按音频/视频指南准备，不要把占位值直接运行。工具拒绝缺失或不匹配的输入，并保留失败证据，不自动下载、修复签名或覆盖旧应用。
 
 退出0表示封装完成，2表示输入/工具/报告失败，130表示取消；具体子阶段结果保留在报告中。`packaged`与`runtimeVerification=not-run`只说明封装完成，不代表模型运行、公证或系统隐私授权已验证。当前验收与实际产物索引见[批次记录](docs/tasks/D-MULTIMODAL-BASELINE-01.md)。
+
+## 短原声音高识别：内部评估（2026-09-15）
+
+在包含独立 `PitchEngine.dengine` 的评估构建中，进入项目→音频→已保存原声→音高识别，使用完整原声或已选片段开始分析。可查看连续音高与近似音符、保存或拒绝候选、重开后继续查看、导出JSON。原声和原帧范围保留，不自动量化；当前单声道profile16ms…120秒，实际测试2秒合成声音及约11秒本人录音。尚无音符合成试听、人工修谱、MIDI/MusicXML、歌词演唱或哼唱直接驱动MRT2。
+
+已验收App在外盘 `D-Development/AgentTrials/D-HUM-PITCH-01/run-20260914T152228Z/D Pitch Evaluation r2.app`。这不是替换普通D的发行包。SwiftF0源码/包声明MIT，独立权重许可unknown，**含权重评估App不得据本次授权公开分发**。原始录音、模型和大证据不入Git；[验收与来源](docs/tasks/D-HUM-PITCH-01.md)记录实际版本、限制和已修失败。
+
+上面的统一构建器仍封装SA3/MRT2/视频三引擎，不自动安装识别依赖。识别引擎需在已有批准离线Python3.12/固定依赖/许可证材料齐备时，另执行以下内部评估步骤；各输出必须新建，输入和签名方案保持：
+
+```sh
+/path/to/existing/python3.12 -B Backends/Audio/Packaging/prepare_pitch_engine.py \
+  --python-root /path/to/approved/python-root \
+  --site-packages /path/to/approved/pitch-site-packages \
+  --provider-directory Backends/Audio/Python \
+  --output /Volumes/YourSSD/D-Development/new/PitchEngine.dengine \
+  --internal-evaluation-ack
+/path/to/existing/python3.12 -B Backends/Audio/Packaging/package_pitch_app.py \
+  --app '/path/to/existing/D Development.app' \
+  --engine /Volumes/YourSSD/D-Development/new/PitchEngine.dengine \
+  --identity 'EXISTING_DEVELOPMENT_IDENTITY' \
+  --output '/Volumes/YourSSD/D-Development/new/D Pitch Evaluation.app' \
+  --report /Volumes/YourSSD/D-Development/new/pitch-report.json \
+  --internal-evaluation-ack
+```
+
+路径与身份是示例，不能直接照抄；工具不下载、不接受许可、不配置钥匙串。缺少固定文件/许可证或已有输出时明确失败。当前机器的实际输入与证据在阶段记录R内，原有运行环境不做就地修补。
 
 ## 版本管理
 

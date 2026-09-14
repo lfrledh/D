@@ -2,13 +2,17 @@
 
 ## 当前集中待办（2026-09-14）
 
-用户本次已配合完成H18/H19，统一开发基线也已通过真实组合验收并接入源。没有新权限需要点击。用户返回时只汇报仍需本人处理的事项，不循环询问在场或资源空闲。
+更新于2026-09-15：H09、H18、H19均已关闭，当前没有等待本人操作的事项。用户返回时只汇报新出现且仍有效的本人事项，不重复询问麦克风是否到货或资源空闲。SwiftF0已获内部评估下载授权；独立权重分发许可未定属于后续许可研究，不是待点击的系统授权。
 
 | ID | 当前状态 | 本人最小动作 | 后续/证据 |
 |---|---|---|---|
-| H09 麦克风 | 保留，用户确认暂无设备 | 将来设备就绪时告知 | 短录音/试听/保存重开仍未验收，不阻塞文件/模型生成 |
+| H09 麦克风 | 已关闭：实际录制/停止/原声试听/导出/冷重开通过；本人确认正常 | 无 | 约10.899秒，48kHz单声道CAF；H09证据见下段。无新系统提示，不称新TCC授权；未做强拔设备矩阵 |
 | H18 参考图 | 已关闭：独立及组合真实GUI通过、源已接纳 | 无 | R/image-native-acceptance.json；统一aba1326的参考生成/采用/PNG导出/重开见combined-gui-r1/image-result.json及combined-gui-r2/cold-reopen.json |
 | H19 资料问答/IME | 已关闭：修补后真人确认、组合源接纳 | 无 | R/text-native-acceptance-after-ime.json及text-ime-handoff.json；组合aba1326另完成实际7B问答/采用/撤销/保存重开，见combined-gui-r1/migration-and-undo-check.json及combined-gui-r2/cold-reopen.json |
+
+H09证据：`D-Development/AgentTrials/D-AUDIO-APP-01/run-20260914T151107Z-h09-microphone/h09-acceptance.json`。真人受测代码aba1326，原声SHA/帧数、正常退出、导出与重开已记录；本批9c8e724普通App另验证录音入口不依赖生成引擎、并分析其原声副本。没有重复录制来制造新确认。
+
+HUM阶段两项真实代码问题均由Lead复现、修补与复验：NumPy布尔身份误拒绝、Bundle相对URL写盘后误报外部修改。失败及旧预算保留，见[任务](tasks/D-HUM-PITCH-01.md)。Lead还发生原生面板未就绪操作/剪贴板超时、诊断路径和配置键误写，以及Quit后读AX引起测试App自动重启；这些是工具/操作事件，不转为用户待办。后者只停留项目选择页，正常关闭后显式隔离重开验收通过；没有在误启动实例打开原作品或推理。完整用户偏好副作用未单独量测，不声称系统级无副作用。
 
 R为 `D-Development/AgentTrials/D-MULTIMODAL-BASELINE-01/run-20260914T115845Z-human-return`。IME旧失败和额外Lead授权/预算历史保留。BUILD经Sol/high初交及两轮修复后，由Lead复验接纳；构建/真实五后端与源CPU通过，不是新增权限问题。Lead预检路径/顺序、过早审核和夹具目录遗漏分别保留在merge-preflight-incident.json、build/lead-premature-review.json及protection/combined-live.json，不转嫁为用户待办。
 

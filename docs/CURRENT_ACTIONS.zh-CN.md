@@ -1,6 +1,20 @@
 # D 当前行动指南
 
-## 当前检查点：统一开发基线已真实验收并源接纳（2026-09-14）
+## 当前检查点：H09与有限音高识别已验收并源接纳（2026-09-15）
+
+`D-HUM-PITCH-01`完成。源`codex/inference-foundation`从`07f27b2687d51a1dcccf10d3e81bf956704c7fd9`快进到实际构建/GUI及源目录受测代码`9c8e7247b090f617517d043eda3e3124abd2f2e7`。本次结案仅追加六份Markdown；最终源HEAD与GitHub结果见外部`R/final-receipt.json`，不能把后加文档的版本冒称重新测试。R=`D-Development/AgentTrials/D-HUM-PITCH-01/run-20260914T152228Z`，详细来源/失败/验收见[本阶段任务](tasks/D-HUM-PITCH-01.md#最终验收与本地接纳2026-09-15)。
+
+用户实际录音约10.899秒、原声试听正常、导出与冷重开通过，H09关闭。本批普通构建已解除录音对生成模型配置的耦合；新识别引擎只在显式部署的内部评估版使用。入口为项目→音频→已保存原声→音高识别：原帧选区→CPU识别→连续Hz/近似音符候选→保存或拒绝→重开与JSON导出。真实新App三次分析均完成，采用/拒绝、未提交输入使候选过期、防覆盖及同机冷重开通过。原声和原备注不改；schema12先保留v11原字节备份，旧读者拒绝新格式。
+
+源目录工作台468方法/69套件：465通过、3个既有opt-in跳过；核心4个XCTest与64个Swift Testing通过；Python10项与封装24项分别通过。真实CPU独立样本、实际取消后恢复、普通沙盒GUI分别记载，不累计成一个通过率；本轮未重跑五个既有生成模型的GPU回归，沿未改变路径复用上一统一基线证据。两项真实问题（NumPy布尔类型、Bundle路径持久化）已各有反例及修后复验。
+
+完整测试产物`R/D Pitch Evaluation r2.app`沿原签名和权限，不替换普通D。源码/包声明MIT，独立ONNX许可仍unknown；用户只批准内部评估，**不分发该含权重App**。Git不含权重、录音或原始大日志。重建步骤见[README](../README.md#短原声音高识别内部评估2026-09-15)。H09原始真人证据在`D-Development/AgentTrials/D-AUDIO-APP-01/run-20260914T151107Z-h09-microphone/h09-acceptance.json`，不是本轮重复录制。
+
+恢复点：源索引干净，唯一未暂存仍为个人scheme orderHint1→6，SHA256`ca3635d88aa5a15397b90e528667c66c0e6db7e596176e885c79d194b544206c`。三个受限CLI Worker及本轮构建/分析/GUI已结束；候选和证据保留。源接纳/保护记录见`R/integration`；没有待本人点击的新权限。下一独立产品提案为旋律+歌词的专门歌声薄后端（先定语言、合法声库/vocoder与短样本质量），不以HUM完整谱面/高级文字/组合系统为前置；本次未启动它。音符纠错/普通音源试听/MIDI、I2V、移动捕捉与能力组合继续按目标表排队。
+
+以下旧检查点按原日期保留，不作为当前未完成状态。
+
+## 历史检查点：统一开发基线已真实验收并源接纳（2026-09-14）
 
 `D-MULTIMODAL-BASELINE-01`完成。源`codex/inference-foundation`已从`ac39b73d64793bed9dd7089e32dcd43c0db2a2c1`快进到组合受测代码`aba1326f72f33ada028e35a8e799ef04965e7afa`。随后结案只改五份Markdown，最终源HEAD与GitHub同步结果写外部`R/final-receipt.json`，不把文档提交冒称为重新执行测试的代码版本。R=`D-Development/AgentTrials/D-MULTIMODAL-BASELINE-01/run-20260914T115845Z-human-return`；完整证据和来源见[批次结案](tasks/D-MULTIMODAL-BASELINE-01.md#2026-09-14-最终组合验收与源接纳)。
 

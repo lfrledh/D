@@ -1,6 +1,6 @@
 # D-HUM-PITCH-01：原声到可检查音高候选
 
-状态：契约准备，未接纳；2026-09-15（JST）。spec HUM1 / contract HUM1。
+状态：有限内部评估闭环已真实验收并源接纳，2026-09-15（JST）；当前contract HUM2，HUM1保留历史。最终受测/保护/推送读文末结案与R/final-receipt.json。
 源基线 07f27b2687d51a1dcccf10d3e81bf956704c7fd9，源分支 codex/inference-foundation；集成树 D-Worktrees/D-HUM-PITCH-01 / codex/d-hum-pitch-01。准备 SHA 记外部派工记录，不自引用。
 R=`D-Development/AgentTrials/D-HUM-PITCH-01/run-20260914T152228Z`。
 
@@ -62,3 +62,33 @@ FlatBuffers wheel缺许可证全文，已从官方固定tag对应commit7e163021e
 ### Lead 共享持久化边界修正（2026-09-15 JST）
 e3e3eff实际普通沙盒GUI已产生pitch.json，但入队后的updateJob/complete误报externalModification。R/url-diagnosis用真实Bundle证实其resource URL含base，而Codable解码返回绝对URL；原合成ModelReference相等比较失败。新增Store回归R/bundle-url-before-r2在未修生产实现上重现externalModification，修后R/bundle-url-after的10方法通过，含既有真实外部修改拒绝；首次before仅因Lead测试误写不存在的JobState.running编译失败，改为实际generating后才形成有效失败证据。
 最小修正只让ModelReference比较directory.absoluteURL与revision，原URL对象/编码/访问保留，不解析符号链接、不折叠文件名大小写、不放宽ProjectStore外部修改和文本字节保护。新增值型roundtrip及不同地址/revision反例。这是Lead原共享装配的持久化缺陷修正，不追记为BACKEND Worker第三轮或第二次接管。旧GUI无法正常关闭，已保留任务清单与生成JSON副本后仅SIGTERM结束本轮已核PID92950（R/gui-r2-stop）；不声称正常退出，不操作用户原声与普通D。新构建/GUI仍需复验。
+
+## 最终验收与本地接纳（2026-09-15）
+
+源基线07f27b2687d51a1dcccf10d3e81bf956704c7fd9 → 本地快进受测9c8e7247b090f617517d043eda3e3124abd2f2e7；17个准备/实施/修复/合并提交保留，未改写Worker历史。随后只改README、CURRENT_ACTIONS、PRODUCT_GOALS、MUSIC_ROADMAP、FAILURE_AND_PERMISSION_AUDIT及本任务六份Markdown；最终提交SHA/远端结果外记R/final-receipt.json，避免自引用。整个HUM父目标未完成，当前只是可检查的音高/近似音符内部评估闭环。
+
+### 可复验入口与范围
+
+- 9c8e724普通开发版构建/完整封装通过：R/development-build-r2（100.9秒）、package-pitch-app-r3（10.7秒）；App为R/D Pitch Evaluation r2.app。与输入普通App相同identifier/team/entitlements，直接codesign完整性通过；没有TCC/公证/分发证明。内嵌provider仍为e3e3eff修后相同Python源码/固定ONNX，许可unknown不变。
+- 组合及源目录工作台各468方法/69套件，465通过、3个既有opt-in跳过；R/workbench-url-final与source-workbench。跳过：approvedInstalledWeightsRemainUnchanged、verifiedModelAndProductionContextForExistingCLI、actualCLIAnswersPersistWithExactSubmittedContext。没有把这些跳过说成本轮真实图文模型通过；上一aba1326统一五后端证据按未改路径保留。
+- 源核心4个XCTest及64个Swift Testing通过，R/source-foundation；源Python10项、封装24项分别通过，R/source-python、source-packaging。内存compile检查5个目标，无目标pyc，R/syntax-final；测试自身缓存限本任务目录。
+- 后端生命周期11项/2套件在37b69ef及对应复制源码通过（R/backend-repair2-cpu与inputs）；实际宿主ProjectSession/Runtime/Store21项在8f82daa通过（R/pitch-host-r1），相应源码进入最终组合/新App，未把中间检查冒称在最终SHA重新运行。取消/超时/消费者失败/错误来源/损坏文件/已发布保护和真实外部清单变化的反例仍保留。
+- 真实CPU独立样本7项见R/real-pitch-results.json：440Hz、静音、220→440、带间隙重复音、滑音、噪声、本人约11秒录音。使用8f82daa构建的实际Swift生产probe+e3 Python，七份后端复制文件对应R/real-probe-source-correspondence.json；9c仅改变URL值比较，另有真实最终App复验。440Hz样本median437.55Hz；220低音片段未可靠识别，不藏失败或降低阈值。本人录音含说话，不是准确率基准。实际取消后下一分析通过R/real-cancel-recovery；取消请求在200ms发出，不宣称精确命中ORT内部某一步。进程最大RSS约108MiB只作该probe观测，不等于模型全峰值/永久无泄漏证明。
+- 最终9c普通沙盒App真实三次分析10.899秒原声，各模型分析约0.33–0.36秒；681分析帧、281可靠帧、18个近似音符。先保存一个，再拒绝另一个，未提交原声备注使第三个候选过期/禁保存，拒绝后放弃备注恢复原状态。原生JSON导出后同名Replace仍被应用拒绝，既有导出与输入摘要不变。正常关闭后显式相同隔离UUID新PID重开，项目清单字节相同、已采用候选/备注/原声恢复。证据R/gui-r3/native-acceptance.json与gui-r4/cold-reopen.json。音符列表不是谱面或音符声音。
+- H09真人实际录音/停止、播放、原件导出/冷重开已通过，本人回答均正常，无新系统提示；旧aba1326录音代码证据位于上文H09目录。本批9c另外确认普通App录音入口可见/启用且不依赖生成模型选择，未为该门重复索取真人确认。没有测试强拔设备、中断矩阵或精确旋律人工校正。
+
+### 审核、归因与失败保留
+
+BACKEND Sol/high初交+两轮修复后仍有真实NumPy布尔身份缺陷，Astra Lead一次有界接管修复；INTERPRET Terra/medium初交+两轮修复；PACKAGING Sol/high初交+一轮修复。三者独立受限CLI，网络关闭，共享.git未授写，任务源码由Lead逐项提交。15:59:21…16:01:07 UTC有三条实际实施/修复重叠；不是只读调查充数。请求/turn_context可观察模型档位一致，隐藏服务端解析unknown。
+
+Lead实施共享契约/状态/保存/预处理/装配并执行实际验证，另修Bundle URL比较；非实现者align_continuation_review、candidate_compatibility_scope、video_deployment_plan按明确差异和结果只读审核，无剩余阻塞，见R/nonimplementer-reviews-final.json，不冒充他们运行测试。Lead问题分别归因：AVAudioConverter.none平台选择（HUM2修正）、Swift回调状态/宏编译、schema升级测试版本、URL保存边界；并非都归Worker能力。原默认CPU失败、NumPy真实失败和GUI保存失败均保留。
+
+Lead还发生验证目录/命令键误写、原生面板未就绪输入、剪贴板超时，以及退出后AX观察导致无隔离参数自动重启；后者只在选择页即正常退出，未打开用户项目或生成，随后用显式launcher完成有效冷重开。R/gui-r3/post-quit-observation-relaunch.json记录此操作错误，不称该次自动重启为有效恢复。可复用经验：Quit之后只等待持有进程退出；不要读取已关闭App的AX/getApp，以免观察本身启动新实例。保存边界要覆盖真实Bundle URL，而非只用URL(fileURLWithPath:)夹具。
+
+各Worker每轮wall-clock见R/<worker>/*-process.json，不把等待/并发时间相加当用户耗时；未汇总未经核对的累计token快照，完整Lead归因与实际订阅费用unknown。本样本证明三任务交付和Lead验收链可运作，不证明Sol/Terra普遍胜任或成本最优。
+
+### 恢复检查点与剩余范围
+
+源已接纳并从源入口复验，最终源HEAD/推送保存在R/final-receipt.json。个人scheme内容/完整diff/index/未暂存状态保留，原/新App关键文件与原录音保护见R/integration、R/protection-final.json。Worker、构建、CPU/model、所有本轮GUI实例均结束；gui-r1面板和gui-r2保存失败实例受控SIGTERM而非正常退出，gui-r3/r4有效实例退出0，自动重开选择页实例另正常退出。原生应用、权重、私有录音与旧证据未替换或上传；候选和工作树不删除。用户偏好未做全量副作用证明。
+
+当前无需本人点击的待办；权重分发许可unknown、识别质量/音符纠错/合成试听/MIDI/记谱、长音频与其他Mac实测均明确未完成，不纳入已交付结论。下一建议为旋律+歌词专门歌声的有限模型/声库许可与短样本契约，不自动下载/实施，不以完整HUM编辑或高级文字为前置。本批在提交推送后停止。
