@@ -135,7 +135,7 @@ public final class ProjectTextSourcesController {
                 }
             } catch { streamError = error; await sendCancellation() }
             let result = await withTaskCancellationHandler(operation: { await run.outcome() }, onCancel: { [weak self] in
-                Task { @MainActor in
+                Task { @MainActor [weak self] in
                     guard let self, self.operationID == request.id else { return }
                     self.cancelled = true; await self.sendCancellation()
                 }
