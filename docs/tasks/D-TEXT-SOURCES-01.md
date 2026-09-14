@@ -195,3 +195,5 @@ Lead亲自写共享契约、Store/Controller/Session接线、独立反例和最�
 允许Lead修改：Backends/MLX/Sources/DMLXBackend/MLXTextBackend.swift；新增同目录IncrementalTextDecoder.swift及Backends/MLX/Tests/DMLXBackendTests/IncrementalTextDecoderTests.swift；为实际固定tokenizer/生命周期验证只追加对应MLX测试；TS1的TextSourcesTypes/Context/Archive、直接TextSources测试和必要小fixture；本文、CURRENT_ACTIONS/PRODUCT_GOALS/FAILURE_AND_PERMISSION_AUDIT/MUSIC_ROADMAP。若提示升级，必须逐submission保存模板版本，缺字段仅v1、null/未知/错类型拒绝，v1原字节重建保留；新v2只使用已冻结CAPACITY2模板，保持资料原文/标签按excerpts顺序，不修改采用规则。schema10/归档1尚未接纳，旧读者拒绝新prompt而不能静默丢历史，需实证；图文组合11只规划，未验收前不合并。
 
 本轮由Lead亲自修补与运行，非实现者只读复核，不重新派实施Worker，也不把它写成Terra独立成功。CONTEXT此前初交+两次修复不清零，本段使用一次有界Lead收尾；不追加无限提示/模型试错。先固定CPU反例与旧归档，修补后检查组合Unicode/tokenizer与实际CLI、旧文本取消/恢复/终态、归档迁移及普通App编译；若完整范围无法通过，保留停点。新依赖/权重/权限、签名改变、其他模态模型或GUI不在此收尾执行中。原产物、源个人文件、旧证据保护不变。
+
+CLOSE1测试澄清：首轮新路径23方法中22过/1失败，失败是新增tokenizer往返测试误要求声明NFC的模型保留输入分解音符字节；流拼接与整段decode检查本身通过。Lead核固定0.5/1.5/7B tokenizer.json的NFC声明，非实现者candidate_compatibility_scope同意将该新测试首例预期明确为预组合Café，并保留字节比较、分解标量/ZWJ/前缀回写的所有独立反例；没有修改原TS1保存/引用/接受或既有测试标准。原失败日志保留为失败，不回写通过。源码/提示保存仍原字节，模型normalizer不得写回原文。

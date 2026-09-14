@@ -62,11 +62,23 @@ struct IncrementalTextDecoderTests {
     }
     @Test("Fixed local tokenizer delivers the whole Unicode text without loading weights")
     func actualTokenizerRoundtrip() async throws {
-        let tokenizer = try await AutoTokenizer.from(modelFolder: realModelDirectory())
-        for text in ["Cafe\u{0301} 👩‍💻 👍🏽 🇯🇵", "第一行\r\n第二行\n第三行", "甲 < 乙，原文保持", "replacement: \u{fffd}"] {
+        let directory = try realModelDirectory()
+        let config = try #require(JSONSerialization.jsonObject(with: Data(contentsOf:
+            directory.appendingPathComponent("tokenizer.json"))) as? [String: Any])
+        #expect((config["normalizer"] as? [String: Any])?["type"] as? String == "NFC")
+        let tokenizer = try await AutoTokenizer.from(modelFolder: directory)
+        // The fixed model declares NFC before encoding. Source/prompt storage and
+        // our stream adapter must not normalize; these are different contracts.
+        let examples = [
+            ("Cafe\u{0301} 👩‍💻 👍🏽 🇯🇵", "Caf\u{00e9} 👩‍💻 👍🏽 🇯🇵"),
+            ("第一行\r\n第二行\n第三行", "第一行\r\n第二行\n第三行"),
+            ("甲 < 乙，原文保持", "甲 < 乙，原文保持"),
+            ("replacement: \u{fffd}", "replacement: \u{fffd}")
+        ]
+        for (text, expected) in examples {
             let tokens = tokenizer.encode(text: text, addSpecialTokens: false)
             let full = tokenizer.decode(tokens: tokens)
-            #expect(Array(full.utf8) == Array(text.utf8))
+            #expect(Array(full.utf8) == Array(expected.utf8))
             var decoder = IncrementalTextDecoder()
             var joined = ""
             for end in 1...tokens.count {
