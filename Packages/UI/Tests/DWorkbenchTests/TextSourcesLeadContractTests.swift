@@ -4,6 +4,25 @@ import Testing
 @testable import DWorkbench
 
 struct TextSourcesLeadContractTests {
+    @Test func historicalCountLimitsAlsoApplyAfterCurrentSourcesAreRemoved() throws {
+        let sources = try (0..<9).map { try TextSourceSnapshot(displayName: "\($0).txt", bytes: Data("x".utf8)) }
+        let excerpts = try [TextSourceReader.excerpt(from: sources[0])]
+        let prompt = try TextSourcesContext.makePrompt(question: "question", sources: sources, excerpts: excerpts)
+        let submission = TextSourcesSubmission(notebookRevision: UUID(), targetDocumentID: UUID(), targetDocumentRevision: UUID(),
+            question: "question", sources: sources, excerpts: excerpts,
+            request: TextRequest(prompt: prompt, maxTokens: 64, temperature: 0.2, topP: 0.95,
+                execution: .init(profile: TextExecutionCapability.qwen2Profile, maximumPromptTokens: 2048)), modelID: "qwen", modelRevision: nil)
+        let note = TextSourcesNotebook(records: [.init(submission: submission, answer: "x [S1]")])
+        #expect(throws: (any Error).self) { try TextSourcesArchive.validate(note) }
+    }
+
+    @Test func whitespaceQuestionCannotBeSubmitted() throws {
+        var (note, target) = try fixture(); note.question = " \n\t"
+        #expect(throws: (any Error).self) {
+            try TextSourcesContext.makeSubmission(notebook: note, target: target, modelID: "qwen", modelRevision: nil)
+        }
+    }
+
     private func fixture() throws -> (TextSourcesNotebook, TextDraftDocument) {
         let source = try TextSourceSnapshot(displayName: "资料👩‍💻.md", bytes: Data("代号蓝桉\r\ne\u{301}🎹".utf8))
         let excerpt = try TextSourceExcerpt(source: source, range: NSRange(location: 0, length: try source.validatedText().utf16.count))
