@@ -22,10 +22,10 @@ struct TextSourcesLayoutTests {
             RunLoop.main.run(until: Date().addingTimeInterval(0.06)); host.layoutSubtreeIfNeeded()
         }
         settle(900)
-        let first = try #require(descendants(host).compactMap { $0 as? NSTextView }.first(where: \.isEditable))
+        let first = try #require(descendants(host).compactMap { $0 as? NSTextView }.filter { $0.isEditable }.first)
         for width: CGFloat in [600, 1000, 500, 800] {
             settle(width)
-            let current = try #require(descendants(host).compactMap { $0 as? NSTextView }.first(where: \.isEditable))
+            let current = try #require(descendants(host).compactMap { $0 as? NSTextView }.filter { $0.isEditable }.first)
             #expect(current === first, "Width changes must not replace a question editor that may have an IME composition.")
             #expect(current.string.utf8.elementsEqual(note.question.utf8))
             #expect(host.fittingSize.width <= width + 1)
