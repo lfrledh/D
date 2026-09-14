@@ -1,6 +1,6 @@
 # D-IMAGE-REFERENCE-01 单参考图基础编辑
 
-状态：已获用户本阶段执行/验收/提交授权；隔离候选组件/装配通过，真实模型与GUI待验收，尚未接纳。日期2026-09-14。
+状态：已获用户本阶段执行/验收/提交授权；隔离候选组件/真实后端/装配通过，GUI因锁屏待验收，尚未接纳。日期2026-09-14。
 source_base=b15be1175b80f265752f79eb45c6f3981ca13283；spec_revision=1；contract_revision=IR1。
 W=`D-Worktrees/D-IMAGE-REFERENCE-01`，分支`codex/d-image-reference-01`。
 R=`D-Development/AgentTrials/D-IMAGE-REFERENCE-01/run-20260914T034346Z`。执行基线在准备提交后由Lead以完整SHA写入各任务job/路由记录；不是源漂移。
@@ -89,3 +89,31 @@ UI独立工作树/base/model/输出在R/view/job.json；预检后才实施。初
 ## 2026-09-14 资源授权恢复
 
 用户明确本Mac默认由Lead使用/管理，今后无需再确认空闲，用户需要时主动通知。本任务恢复真实模型与GUI验收，旧等待窗口已解除；工程候选c6ac018/受测代码2a34保持，未重新实施或刷新修复预算。资源授权证据R/resource-policy-authorization.json；新长期规则已写AGENTS/协作规程。恢复核验源b15、candidate c6干净、scheme原hash/未暂存不变，未见实际D/已知推理进程；进程名相似的Dock/DiskManagement不是D。真实模型仍由Lead串行，独立测试App显式UUID启动，保留普通应用与作品。
+
+## 2026-09-14 真实验收修复2（E-IR-MATH-01）
+
+首次real-mlx在代码2a34/c6文档HEAD执行，固定参考batch2遇到硬编码batch1而失败；测试模型初始化未包局部RandomState产生全局8字节，污染其后释放断言；expectBefore辅助谓词漏return使已记录顺序被错判。Lead未修改黄金样例/容差/零分配标准，已保存失败和根因证据。只中断本轮自有xcodebuild，完整退出73，xcresult不完整；不能以该记录汇总通过率。旧T2I生成字节hash仍一致，但那次释放断言失败如实保留。
+
+IR-BACKEND修复2=5bf40ab55247586feca0b4c4118fe16510795a7e，受限Sol/high同任务/同路由，约93.74秒结束0；只改Flux2ImageMath.swift和Flux2ReferenceMathTests.swift。prepareReference显式targetBatch默认1，固定fixture传batch2，生产公开请求没有新增多图批次；测试局部RNG及autoreleasepool封闭资源，顺序谓词显式return。非实现者video_backend_research只读review关闭，不声称执行测试。合入组合fcaf931d8de11c45f5a66a795708c8a4b3b99f19；backend-build-repair2通过，全新real-mlx-r2进程正在验证。Sol初交＋两轮普通修复已经用完，无Lead后端重写；如需接管必须沿用既有一次有界规则，不能追加Worker第三轮。
+
+用户资源授权解除此前空闲等待，但CUA仍返回系统锁屏，已单次提示解锁。尚未启动本阶段测试App，GUI待实际操作。源仍b15及唯一个人scheme，未接纳/推送。后续最终验证与版本以追加结果为准，保留上方各历史停点而不倒改。
+
+### 测试入口环境纠正（Lead，不是Worker修复3）
+
+real-mlx-r2完整进程625.4秒exit65：141方法中135通过、6视频CPU失败、零跳过。参考FP32五固定张量、FP32→BF16归一化、真实BF16权重覆盖/激活、参考取消恢复/重复释放/有无条件对照及原图文检查均实际通过；整套仍判失败。六项原因均是Lead生成xctestrun时漏传既有D_VIDEO_TEST_OUTPUT，未发生越界写入。补专属tmp/video及D_VIDEO_TEST_PYTHON后，video-env-preflight同次8/8零跳过。新完整real-mlx-r3继续执行冻结集合，不拼凑两次为一次通过。
+
+现有公共scripts/test-mlx.sh的同类遗漏由Lead补两字段，候选15bea8585e53dcf731b2282b7744c37aa2f68604；sys.executable复用已有解释器，tmp/video由夹具独立UUID创建，无新依赖/GPU/权限语义。非实现者只读核查、bash -n和实际原配置块在专属小plist上执行通过（R/runner-config-check）。这属于验收入口环境修正，未改产品实现/黄金样例/测试断言，也不重置BACKEND剩余额度。App在fcaf重构建且重新封装为R/D Reference Workbench r2.app，15bea只改脚本而App源码相同；签名诊断通过，四个关键文件及普通D保护证据R/app-r2-pre-gui.json。GUI因锁屏仍未启动。
+
+## 2026-09-14 真实后端通过，界面因锁屏保留
+
+real-mlx-r3完整同次141测试/18suite通过，零失败/跳过/expected failure，619.75秒；结果不是r2与局部预检相加。实际运行HEAD=15bea8585e53dcf731b2282b7744c37aa2f68604，编译的后端/App代码fcaf931d8de11c45f5a66a795708c8a4b3b99f19；两SHA仅scripts/test-mlx.sh两个环境字段有差异。141为方法计数，不与device动态参数执行数相加。证据R/real-mlx-r3/{request,result,stdout,stderr}、real-mlx-r3.xcresult、real-mlx-r3-summary.json及real-acceptance.json；原脚本必需图文标记和新增4个真实参考测试标记均实际存在。
+
+实际证明：固定FP32五种张量/IDs及原有容差、FP32归一化后BF16、真实BF16参考VAE覆盖与有限值；加载参考VAE时取消后释放再启动下一参考任务；两次参考生成PNG可解码且释放计数无增长；同prompt/seed有无参考结果不同。原T2I三轮hash一致、12取消边界、图文交接、损坏权重/写盘和消费者失败恢复、文本五轮释放与取消继续通过。零释放标准保持，测试全局RNG污染已消除，不靠阈值放宽。新参考测试产物按测试既定自有目录teardown清理，不冒充已保存可人工审美验收的作品样本；参考精确区域服从/审美及所有大机型几何仍未证明。
+
+8项视频CPU环境预检也通过，完整r3包含其执行；它不是新视频GPU/GUI验证。64核心和379工作台CPU在2a34执行，至15bea对应源码完全相同（R/validated-source-equivalence.json），不声称本轮重跑。当前App重构建14.79秒、音频封装8.46秒、视频封装7.56秒；R/D Reference Workbench r2.app诊断通过，AppSandbox=true，既有开发签名/权限不改，不等于Gatekeeper/公证/真实沙盒操作已过。
+
+来源保留Sol后端初交＋两修、Sol像素初交＋一修、Terra界面初交＋两修；Lead公共接线与测试入口修正，非实现者分别只读审核，无新增独立测试执行者。后端repair2可观察turn_context确认gpt-5.6-sol/high、正确cwd、workspace-write/限定输出和tmp、network=false；耗时93.74秒与原始单轮token事件见R/backend/repair2-observable-settings-and-usage.json。隐藏服务解析、订阅实际费用和完整Lead归因仍unknown，未重算/叠加历史总数。测试环境遗漏和QoS提示与Worker实现缺陷分别记录。
+
+恢复检查点：源b15be1175b80f265752f79eb45c6f3981ca13283/原工作分支未推进，scheme原摘要ca3635d88aa5a15397b90e528667c66c0e6db7e596176e885c79d194b544206c、原索引blob/完整diff及未暂存状态不变；普通D四关键文件内容/大小/mtime不变。全部本轮自有构建/测试进程有结束回执且PID复查不存活；实施者和只读审核已结束，无本阶段D实例。候选后续提交仅5份Markdown，完整SHA在外部real-finish-checkpoint.json，不为自引用再次提交。
+
+剩余唯一阶段门槛为普通沙盒前台参考闭环：最终库存仍报告系统锁定，未启动App、未绕过解锁，已早先播放一次Glass。R/gui-acceptance-plan.json为计划而非执行证据。用户解锁后按显式隔离UUID继续生成/比较采用/复制条件/冷重开/安全PNG及配方拒绝；不再询问机器空闲。通过后才源快进/源相关复验/推送。本阶段状态为**真实后端与工程候选通过，GUI待解锁验收；未接纳、未推送**；没有自动启动下一任务，所有工作树/证据保留。

@@ -1,5 +1,25 @@
 # 历史失败与权限审计
 
+## 2026-09-14 IMAGE-REFERENCE最终状态：工程事件已复验，GUI仅待解锁
+
+E-IR-MATH-01及E-IR-ENV-01已在real-mlx-r3同次141测试/18suite、零失败/跳过中复验通过；不拼接旧失败记录为一次通过。普通签名测试App已重新构建/封装、诊断通过。最终CUA库存仍明确Mac锁定，未启动本阶段App；全部自有构建/测试进程已结束，源和普通D保护通过。最小本人动作是解锁Mac；资源使用默认由Lead调度，不再要求重复空闲/前台确认，也无新下载/权限请求。最新恢复索引R/real-finish-checkpoint.json，详见任务最后一节。H09仍等麦克风，在集中人工办理时提醒。下方“复验中”均为本日历史过程。
+
+## 2026-09-14 IMAGE-REFERENCE：资源默认授权，锁屏仍需本人解锁
+
+用户明确本Mac默认由Lead使用和调度，不再逐阶段询问普通D/GPU空闲或前台窗口。Lead保护普通产物和未保存数据，使用独立测试项目，重型工作串行。该规则已写入AGENTS和协作规程，不等于新增系统权限。
+
+本任务CUA库存检查明确返回Mac锁定且自动解锁失败，尚未启动图形测试App。已播放一次Glass并请用户方便时解锁；当前只需解锁，无需再次批准资源窗口、既有模型、签名或全盘权限。真实MLX验收不受锁屏阻塞；GUI生成/比较采用/冷重开/安全导出仍待实际操作。H09继续等待麦克风，集中人工办理时提醒。
+
+工程事件E-IR-MATH-01单独记录：首次真实运行暴露固定夹具batch2与参考batch1不匹配、测试构造模型触发全局随机状态残留8字节、测试辅助顺序谓词没有返回比较结果。固定黄金张量、精度与零分配标准未改变。Sol/high使用已剩余修复2处理显式参考batch复制、夹具局部随机状态、谓词return；Lead和非实现者只读复核通过，真实全套在新进程复验中。生产本来使用每任务随机状态，不能把测试污染写成已确认生产泄漏；同样不能凭静态review关闭代替执行通过。
+
+初次污染后的运行由Lead只中断自有xcodebuild，退出73且xcresult未完整收尾；不使用其聚合计数。失败stdout/stderr及停止证据保留，不再无依据重跑失败版。证据根 `D-Development/AgentTrials/D-IMAGE-REFERENCE-01/run-20260914T034346Z`：`gui-locked.json`、`real-initial-diagnosis.json`、`real-initial-stop-result.json`、`backend/repair2-process.json`、`real-mlx-r2`。这三项是工程/测试质量事件，不归因于用户未授权；BACKEND普通修复预算已用完。
+
+### E-IR-ENV-01：Lead遗漏旧视频CPU测试环境
+
+real-mlx-r2实际135/141方法通过、6失败、零跳过；六项均为既有VideoBackendTests缺D_VIDEO_TEST_OUTPUT，在任何输出创建前明确拒绝。补同一任务专属tmp/video及既有Python解释器后，8项视频CPU预检通过。无需权限扩大或安装；应用/测试断言不改，Worker修复额度不消耗。公共scripts/test-mlx.sh也有同样缺口，Lead仅补两环境字段，复用sys.executable及传入临时目录；只读检查确认标准库夹具，实际配置块的受控执行与bash语法检查通过。完整r3复验进行中，不能将r2与局部预检相加成一次全过。证据R/lead-test-environment-event.json、video-env-preflight-summary.json、runner-config-check、runner-review.json。
+
+预检中另观察到Thread Performance Checker提示既有LocalDedicatedPipeReader的QoS等待；测试如期完成、没有失效/超时。本阶段未修改该共享管线或关闭检查器，保留日志供后续性能调查，不把提示等同功能故障或用户权限缺失。
+
 ## 2026-09-14 VIDEO：退出后读取窗口触发自动重启（E-VW-CUA-01）
 
 Lead对隔离App发送退出后继续读取其AX窗口，工具自动以相同产物路径启动新实例，但没有继承D_UI_TEST_SESSION。该实例只到项目选择页，未打开普通项目；确认本轮PID12269后正常退出，没有关闭普通D。普通模型库index.json在初始化时写入，事前没有其摘要，不能声称普通索引/偏好完全未变；事后两条记录仍installed、零lease、无错误，未启动下载或推理。没有自动还原或修改权限，普通D产物四文件及所有本轮作品/模型输入不变。

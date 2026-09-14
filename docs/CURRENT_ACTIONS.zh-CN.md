@@ -1,10 +1,14 @@
 # D 当前行动指南
 
-## 当前检查点：D-IMAGE-REFERENCE-01工程候选已备妥，真实验收待窗口（2026-09-14）
+## 当前检查点：D-IMAGE-REFERENCE-01真实后端已过，GUI仅待解锁（2026-09-14）
 
-用户已批准下一阶段：单参考图基础编辑。隔离分支codex/d-image-reference-01代码2a34f12c3bc6d47b6b8bf93db339659b0da4d480通过64核心、379工作台CPU、6后端输入CPU和独立普通签名App构建/封装；不等于真实模型或GUI已通过。首个适配仅单PNG参考，无mask/strength/多参考/LoRA/隐式缩放，原图保留、显式输入与浏览/采用分开。详细范围、来源/修复预算、测试及恢复见[当前任务](tasks/D-IMAGE-REFERENCE-01.md#2026-09-14-组合工程检查点等待本阶段真实资源窗口)。
+用户明确本Mac默认由Lead使用/调度，不再询问普通D/GPU空闲或前台窗口，用户需要时主动通知。当前等待的是系统解锁，不是资源或已有模型授权。单参考PNG的后端/组件/应用装配已通过：real-mlx-r3同次141测试/18suite、零失败/跳过，真实参考编码/数值、生成差异、取消恢复、重复释放及原图文回归均有执行证据。音视频桥接部分是CPU夹具，不宣称本阶段真实音视频生成；64核心和379工作台CPU复用已核对完全未变的源码集。
 
-源仍b15be1175b80f265752f79eb45c6f3981ca13283，scheme仍唯一未暂存原差异；候选未源接纳、未推送。所有3个受限实施包及只读审核已结束；Lead共享状态/存储单一维护。当前等待本阶段普通D退出、其他GPU空闲和前台使用确认，已发一次短提示音；确认后直接恢复同任务实际图文/参考数值、资源生命周期与普通沙盒完整闭环，再源接纳/推送，不重复实现或重设预算。候选/外部证据R=D-Development/AgentTrials/D-IMAGE-REFERENCE-01/run-20260914T034346Z；最终仅文档HEAD见engineering-checkpoint.json。普通D四关键文件不变，未启动/关闭用户App，未增权限/模型/依赖。H09继续等麦克风，集中办理时提醒；HUM/歌声/研读保留独立后续位置。
+实际完整受测HEAD=15bea8585e53dcf731b2282b7744c37aa2f68604；App/后端构建代码=fcaf931d8de11c45f5a66a795708c8a4b3b99f19，差别仅公共测试入口补两个既有环境字段。之后仅状态/指南文档变化，最终候选完整SHA以本run/real-finish-checkpoint.json为准。独立普通签名产物R/D Reference Workbench r2.app构建/音视频封装/签名完整性通过，尚未前台启动。详细来源、失败与修复预算见[当前任务](tasks/D-IMAGE-REFERENCE-01.md#2026-09-14-真实后端通过界面因锁屏保留)。
+
+源仍b15be1175b80f265752f79eb45c6f3981ca13283，个人scheme唯一未暂存，普通D四关键文件内容/大小/修改时间不变；**本阶段尚未源接纳、未推送**。全部实施/只读审核/本轮构建与模型测试已结束，无任务App或后台生成遗留。证据R=`D-Development/AgentTrials/D-IMAGE-REFERENCE-01/run-20260914T034346Z`；关键入口real-acceptance.json、real-mlx-r3-summary.json、app-r2-pre-gui.json、protection/real-finish.json。旧失败与中断不计作通过。
+
+下一动作：用户解锁后，Lead按R/gui-acceptance-plan.json与launch-isolated.py显式UUID启动测试App，完成参考图生成、比较采用、保存冷重开/普通PNG导出防覆盖和配方边界；退出后只查持有进程回执，避免工具自动重启。现有代码/资源授权保留，不重问空闲，不重新派工或重置预算。GUI通过后再固定SHA源快进、源相关复验及按授权推送。候选未通过GUI前不默认接入普通源。H09等麦克风，集中办理时提醒；音乐/HUM/歌声/研读保留独立后续位置，不等待所有图像高级功能。
 
 ## 历史检查点：D-VIDEO-WORKBENCH-01已本地接纳并完成有限验收（2026-09-14）
 
