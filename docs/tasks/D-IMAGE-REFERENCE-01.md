@@ -85,3 +85,7 @@ UI独立工作树/base/model/输出在R/view/job.json；预检后才实施。初
 恢复前：先核源b15/索引/用户scheme、候选HEAD、worker/test已结束回执和用户本阶段资源确认。R/protection/start.json与pre-gpu.json记录scheme完整差异、索引、内容摘要/mtime，以及普通D四关键文件均不变；初始diff字符串省略终末换行已明确归一，文件字节未改。三个CLI全部写权已交回；无本阶段App/GPU进程启动，没有活跃实现者。
 
 下一步只需确认普通D已保存退出、其他AI/GPU空闲且测试版可用前台，然后Lead串行：固定FP32参考/实际BF16激活/条件对照/取消恢复/重复释放/旧图文回归；真实普通沙盒导入参考、生成、新旧比较/采用、保存冷重开/普通PNG导出防覆盖。使用R/D Reference Workbench.app并由R/launch-isolated.py显式D_UI_TEST_SESSION启动，退出后不用getAXState重新触发启动。数值当前冻结atol1e-4/rtol1e-3、IDs精确，验收失败不能改黄金样例或阈值；BACKEND/PIXELS各尚余1轮普通修复，VIEW已无普通修复。通过才固定SHA源快进/源相关复验/按授权push；本检查点不启动下一产品批次。H09仍待设备，音乐/HUM/歌声与研读不以高级图像完成为前置。
+
+## 2026-09-14 资源授权恢复
+
+用户明确本Mac默认由Lead使用/管理，今后无需再确认空闲，用户需要时主动通知。本任务恢复真实模型与GUI验收，旧等待窗口已解除；工程候选c6ac018/受测代码2a34保持，未重新实施或刷新修复预算。资源授权证据R/resource-policy-authorization.json；新长期规则已写AGENTS/协作规程。恢复核验源b15、candidate c6干净、scheme原hash/未暂存不变，未见实际D/已知推理进程；进程名相似的Dock/DiskManagement不是D。真实模型仍由Lead串行，独立测试App显式UUID启动，保留普通应用与作品。
