@@ -28,6 +28,16 @@ public struct ImageExecutionCapability: Sendable, Equatable {
         dimensionMultiple: 32, maximumPixelCount: 2048 * 2048,
         steps: 4, guidanceScale: 1, maximumTextTokens: 512)
 
+    /// Explicit identity makes older hosts reject, rather than ignore, reference input.
+    public static let referenceKlein4B = ImageExecutionCapability(
+        profile: ExecutionProfileReference(identifier: "referenceKlein4B", revision: 1),
+        minimumWidth: 256, maximumWidth: 2048,
+        minimumHeight: 256, maximumHeight: 2048,
+        dimensionMultiple: 32, maximumPixelCount: 2048 * 2048,
+        steps: 4, guidanceScale: 1, maximumTextTokens: 512)
+
+    public var supportsReferenceImage: Bool { self == .referenceKlein4B || self == .scalableKlein4B }
+
     private init(profile: ExecutionProfileReference,
                  minimumWidth: Int, maximumWidth: Int,
                  minimumHeight: Int, maximumHeight: Int,
@@ -44,7 +54,8 @@ public struct ImageExecutionCapability: Sendable, Equatable {
         self.guidanceScale = guidanceScale
         self.maximumTextTokens = maximumTextTokens
         contract = ExecutionContractDescription(
-            operationID: "image.generate", inputRoles: [.prompt], outputRole: .image,
+            operationID: profile.identifier == "referenceKlein4B" ? "image.referenceEdit" : "image.generate",
+            inputRoles: profile.identifier == "referenceKlein4B" ? [.prompt, .image] : [.prompt], outputRole: .image,
             controlFidelity: .approximate)
     }
 
@@ -63,6 +74,8 @@ public struct ImageExecutionCapability: Sendable, Equatable {
                 resolved = .verified512
             } else if requestedProfile == Self.scalableKlein4B.profile {
                 resolved = .scalableKlein4B
+            } else if requestedProfile == Self.referenceKlein4B.profile {
+                resolved = .referenceKlein4B
             } else {
                 throw InferenceFailure.invalidRequest("Unsupported image execution profile or revision.")
             }
@@ -70,7 +83,7 @@ public struct ImageExecutionCapability: Sendable, Equatable {
             resolved = self
         }
 
-        guard self == .scalableKlein4B || resolved == .verified512 else {
+        guard self == .scalableKlein4B || self == resolved || resolved == .verified512 else {
             throw InferenceFailure.invalidRequest(
                 "The verified 512 image host cannot execute the scalable Klein 4B profile.")
         }
@@ -79,6 +92,14 @@ public struct ImageExecutionCapability: Sendable, Equatable {
     }
 
     private func validateResolved(_ request: ImageRequest) throws {
+        if self == .referenceKlein4B {
+            guard request.executionProfile == Self.referenceKlein4B.profile, let reference = request.referenceImage else {
+                throw InferenceFailure.invalidRequest("The reference profile requires one explicit reference image.")
+            }
+            try reference.validate()
+        } else if request.referenceImage != nil {
+            throw InferenceFailure.invalidRequest("A reference image requires the referenceKlein4B profile.")
+        }
         _ = try validatedPixelCount(width: request.width, height: request.height)
         guard request.steps == steps, request.guidanceScale.isFinite,
               request.guidanceScale == guidanceScale else {
@@ -139,5 +160,14 @@ public struct ImageExecutionCapability: Sendable, Equatable {
             throw InferenceFailure.invalidRequest("The image resource estimate exceeds UInt64 capacity.")
         }
         return estimate
+    }
+
+    /// Conservative incremental reference encoding/attention estimate, not a hardware cap.
+    public func estimatedPeakBytes(for request: ImageRequest) throws -> UInt64 {
+        try validateResolved(request)
+        let baseline = try estimatedPeakBytes(width: request.width, height: request.height)
+        guard let reference = request.referenceImage else { return baseline }
+        let areas = (UInt64(reference.width * reference.height) + 512 * 512 - 1) / (512 * 512)
+        return baseline + areas * 1024 * 1024 * 1024
     }
 }

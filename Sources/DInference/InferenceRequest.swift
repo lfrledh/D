@@ -44,9 +44,11 @@ public struct ImageRequest: Sendable, Codable, Equatable {
     public let guidanceScale: Float
     public let seed: UInt64
     public let executionProfile: ExecutionProfileReference?
+    public let referenceImage: ImageReference?
 
     public init(prompt: String, width: Int, height: Int, steps: Int,
-                guidanceScale: Float, seed: UInt64, executionProfile: ExecutionProfileReference? = nil) {
+                guidanceScale: Float, seed: UInt64, executionProfile: ExecutionProfileReference? = nil,
+                referenceImage: ImageReference? = nil) {
         self.prompt = prompt
         self.width = width
         self.height = height
@@ -54,6 +56,7 @@ public struct ImageRequest: Sendable, Codable, Equatable {
         self.guidanceScale = guidanceScale
         self.seed = seed
         self.executionProfile = executionProfile
+        self.referenceImage = referenceImage
     }
 }
 
@@ -113,6 +116,7 @@ public struct InferenceRequest: Sendable, Codable, Equatable, Identifiable {
         case .audio(let audio):
             try audio.validate()
         case .image(let image):
+            try image.referenceImage?.validate()
             guard image.width > 0, image.height > 0, image.steps > 0,
                   image.guidanceScale.isFinite, image.guidanceScale >= 0 else {
                 throw InferenceFailure.invalidRequest("Invalid image generation parameters.")
