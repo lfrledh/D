@@ -136,8 +136,9 @@ struct ImageReferenceProjectTests {
             let store = try await ProjectStore.create(at: fixture.project, name: "旧项目")
             var old = await store.snapshot(); old.schemaVersion = 8
             let source = try fixture.publishPNG(jobID: UUID(), size: 512)
-            let original = ProjectAsset(relativePath: "Legacy.png", role: .original,
+            let original = ProjectAsset(relativePath: "Images/Legacy.png", role: .original,
                                         metadata: .init(width: 512, height: 512))
+            try FileManager.default.createDirectory(at: fixture.project.appendingPathComponent("Images"), withIntermediateDirectories: false)
             try FileManager.default.copyItem(at: source, to: fixture.project.appendingPathComponent(original.relativePath))
             old.assets = [original]
             old.documents[0].sourceAssetID = original.id

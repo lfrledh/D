@@ -2367,9 +2367,9 @@ private enum ProjectFiles {
             } else if asset.metadata.audio != nil {
                 throw ProjectStoreError.invalidProject("非音频作品不能包含音频元数据。")
             } else if asset.role == .original && asset.metadata.imageContentSHA256 != nil {
-                guard value.schemaVersion >= 9, asset.jobID == nil, asset.mediaType == "image/png",
-                      (!asset.relativePath.hasPrefix("Images/") || asset.relativePath == "Images/\(asset.id.uuidString)/original.png"),
-                      asset.metadata.imageContentSHA256 != nil else {
+                // Explicitly selecting a legacy original pins its digest without relocating it.
+                // Safe relative paths are validated above; only new import publication owns the UUID layout.
+                guard value.schemaVersion >= 9, asset.jobID == nil, asset.mediaType == "image/png" else {
                     throw ProjectStoreError.invalidProject("原参考图的路径或身份无效。")
                 }
             } else if asset.role == .result {

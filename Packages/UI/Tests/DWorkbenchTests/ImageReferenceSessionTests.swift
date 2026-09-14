@@ -28,6 +28,21 @@ private actor ReferenceSessionBackend: InferenceBackend {
     func release() { releases += 1 }
 }
 
+private actor ReferenceAdmissionGate: InferenceEngine {
+    private var opened = false
+    private(set) var requests: [InferenceRequest] = []
+    func open() { opened = true }
+    func submit(_ request: InferenceRequest, backendID: String) async throws -> InferenceRun {
+        requests.append(request)
+        let deadline = ContinuousClock.now + .seconds(10)
+        while !opened {
+            guard ContinuousClock.now < deadline else { throw InferenceFailure.backendFailed("Admission gate timeout") }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        return .init(id: request.id, events: AsyncThrowingStream { $0.finish() }, cancel: {}, outcome: { .cancelled })
+    }
+}
+
 @MainActor @Suite("Reference image session snapshots", .serialized)
 struct ImageReferenceSessionTests {
     private func subject(_ backend: ReferenceSessionBackend) -> ProjectSession {
@@ -102,6 +117,40 @@ struct ImageReferenceSessionTests {
         #expect(session.manifest?.assets.count == 1)
         await session.setImageReference(nil, documentID: doc, navigationEpoch: session.navigationEpoch)
         #expect(session.referenceImageAssetID == nil)
+        #expect(await session.cancelAndCloseProject())
+    }
+    @Test func cancellationWhileWaitingForAdmissionDoesNotPrepareOrSubmitReference() async throws {
+        try await withFixture { fixture in try await runAdmissionCancellation(fixture) }
+    }
+    private func runAdmissionCancellation(_ fixture: ProjectFixture) async throws {
+        let engine = ReferenceAdmissionGate()
+        let session = ProjectSession(sessionFactory: { _ in
+            WorkbenchSession(engine: engine, backendID: "admission.fixture",
+                status: { .init(activeRunID: nil, phase: nil, queuedRunIDs: []) },
+                shutdown: {}, cleanup: {}, validateModel: { _ in }, imageCapability: .scalableKlein4B)
+        }, settings: UserDefaults(suiteName: "D.ReferenceAdmission.\(UUID())")!)
+        await session.createProject(at: fixture.project); await session.registerModel(at: fixture.directory)
+        let source = try fixture.publishPNG(jobID: UUID(), size: 512)
+        let sourceBytes = try Data(contentsOf: source)
+        await session.importImageReference(at: source, name: "原图", documentID: try #require(session.activeDocumentID), navigationEpoch: session.navigationEpoch)
+        session.prompt = "first"
+        let first = Task { await session.generate() }
+        try await wait { await engine.requests.count == 1 }
+        let firstID = try #require(await engine.requests.first?.id)
+        session.prompt = "cancel before prepare"
+        let second = Task { await session.generate() }
+        try await wait { session.activeJobIDs.count == 2 }
+        let secondID = try #require(session.activeJobIDs.first { $0 != firstID })
+        await session.cancel(secondID)
+        await engine.open()
+        await first.value; await second.value
+        try await wait { !session.isBusy }
+        #expect(await engine.requests.count == 1)
+        #expect(session.manifest?.jobs.contains { $0.id == secondID } == false)
+        #expect(!FileManager.default.fileExists(atPath: fixture.project.appendingPathComponent("ImageInputs/\(secondID.uuidString)").path))
+        #expect(try Data(contentsOf: source) == sourceBytes)
+        #expect(session.prompt == "cancel before prepare")
+        #expect(session.errorMessage == nil)
         #expect(await session.cancelAndCloseProject())
     }
     @Test func cancellationPreservesOriginalAndNextRequestRuns() async throws {
