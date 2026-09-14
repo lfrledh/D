@@ -21,6 +21,7 @@ public actor ProjectStore {
     public static let versionFiveBackupFilename = "project.v5.backup.json"
     public static let versionSixBackupFilename = "project.v6.backup.json"
     public static let versionSevenBackupFilename = "project.v7.backup.json"
+    public static let versionEightBackupFilename = "project.v8.backup.json"
     private let rootFD: Int32
     private let lockFD: Int32
     private var manifest: ProjectManifest
@@ -91,7 +92,7 @@ public actor ProjectStore {
         let header: Header
         do { header = try decoder.decode(Header.self, from: data) }
         catch { throw ProjectStoreError.invalidProject("项目清单不是有效的 JSON。") }
-        guard (1...ProjectManifest.currentSchemaVersion).contains(header.schemaVersion) else {
+        guard ProjectManifest.readableSchemaVersions.contains(header.schemaVersion) else {
             throw ProjectStoreError.unsupportedSchema(header.schemaVersion)
         }
         var loaded: ProjectManifest
@@ -119,6 +120,8 @@ public actor ProjectStore {
                                                       checkpoint: migrationCheckpoint)
         } else if loaded.schemaVersion == 7 {
             loaded = try ProjectFiles.migrateVersionSeven(loaded, original: data, in: descriptor, checkpoint: migrationCheckpoint)
+        } else if loaded.schemaVersion == 8 {
+            loaded = try ProjectFiles.migrateVersionEight(loaded, original: data, in: descriptor, checkpoint: migrationCheckpoint)
         } else { try ProjectFiles.validate(loaded) }
         let store = ProjectStore(rootURL: root, rootFD: descriptor, lockFD: lock, manifest: loaded)
         // Ownership of both descriptors has moved to the actor before recovery can throw.
@@ -157,7 +160,7 @@ public actor ProjectStore {
     public func createTextDocument(name: String = "新文稿", text: String = "") throws -> ProjectManifest {
         try checkLocation()
         let textDraft = try TextDraftDocument(text: text)
-        let document = ProjectDocument(id: textDraft.id, name: name, kind: .text, textDraft: textDraft)
+        let document = ProjectDocument(id: textDraft.id, name: name, kind: .text, textDraft: textDraft, textSources: .init())
         var candidate = manifest
         candidate.documents.append(document)
         candidate.activeDocumentID = document.id
@@ -305,6 +308,39 @@ public actor ProjectStore {
         }
         var candidate = manifest
         candidate.documents[index].textDraft = draft
+        try commit(candidate)
+        return manifest
+    }
+
+    /// Compare both authorities and publish the optional accepted answer with its record in one transaction.
+    public func saveTextSources(_ notebook: TextSourcesNotebook, documentID: UUID,
+                                expectedRevision: UUID, expectedDocumentRevision: UUID,
+                                replacingText: TextDraftDocument? = nil) throws -> ProjectManifest {
+        let index = try documentIndex(documentID)
+        guard manifest.documents[index].kind == .text,
+              let current = manifest.documents[index].textSources,
+              let draft = manifest.documents[index].textDraft else {
+            throw ProjectStoreError.invalidProject("文字资料记录与文档不匹配。")
+        }
+        guard current.revision == expectedRevision, draft.revision == expectedDocumentRevision else {
+            throw ProjectStoreError.externalModification
+        }
+        try TextSourcesArchive.validate(notebook)
+        let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
+        let changed = try encoder.encode(current) != encoder.encode(notebook)
+        if changed && current.revision == notebook.revision {
+            throw ProjectStoreError.invalidProject("资料记录改变时必须更新修订编号。")
+        }
+        if let replacingText {
+            guard replacingText.id == documentID, replacingText.revision != draft.revision else {
+                throw ProjectStoreError.invalidProject("采用或撤销回答必须产生本稿的新正文修订。")
+            }
+            try TextDraftDocument.validate(replacingText.text)
+        }
+        guard changed || replacingText != nil else { return manifest }
+        var candidate = manifest
+        candidate.documents[index].textSources = notebook
+        if let replacingText { candidate.documents[index].textDraft = replacingText }
         try commit(candidate)
         return manifest
     }
@@ -1340,6 +1376,15 @@ public actor ProjectStore {
             default:
                 throw ProjectStoreError.externalModification
             }
+            switch (persisted.textSources, expected.textSources) {
+            case let (.some(actual), .some(saved)):
+                let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
+                guard try encoder.encode(actual) == encoder.encode(saved) else {
+                    throw ProjectStoreError.externalModification
+                }
+            case (.none, .none): break
+            default: throw ProjectStoreError.externalModification
+            }
             switch (persisted.audioDraft, expected.audioDraft) {
             case let (.some(actual), .some(saved)):
                 guard actual.note.utf8.elementsEqual(saved.note.utf8),
@@ -1764,11 +1809,20 @@ private enum ProjectFiles {
                     checkpoint: checkpoint)
     }
 
+    static func migrateVersionEight(_ legacy: ProjectManifest, original: Data, in root: Int32,
+                                    checkpoint: (@Sendable (ProjectMigrationCheckpoint) throws -> Void)?) throws -> ProjectManifest {
+        try migrate(legacy, original: original, in: root, backup: ProjectStore.versionEightBackupFilename,
+                    checkpoint: checkpoint)
+    }
+
     private static func migrate(_ legacy: ProjectManifest, original: Data, in root: Int32, backup: String,
                                 checkpoint: (@Sendable (ProjectMigrationCheckpoint) throws -> Void)?) throws -> ProjectManifest {
         try validate(legacy, allowingLegacySchema: true)
         var migrated = legacy
         migrated.schemaVersion = ProjectManifest.currentSchemaVersion
+        for index in migrated.documents.indices where migrated.documents[index].kind == .text {
+            migrated.documents[index].textSources = TextSourcesNotebook()
+        }
         guard migrated.revision < UInt64.max else {
             throw ProjectStoreError.invalidProject("项目修订编号已经达到上限，无法安全升级。")
         }
@@ -2080,7 +2134,7 @@ private enum ProjectFiles {
 
     static func validate(_ value: ProjectManifest, allowingLegacySchema: Bool = false) throws {
         guard value.schemaVersion == ProjectManifest.currentSchemaVersion ||
-              (allowingLegacySchema && (1...7).contains(value.schemaVersion)) else {
+              (allowingLegacySchema && (1...8).contains(value.schemaVersion)) else {
             throw ProjectStoreError.unsupportedSchema(value.schemaVersion)
         }
         guard !value.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
@@ -2093,6 +2147,9 @@ private enum ProjectFiles {
               Set(value.pendingAudioCaptures.map(\.id)).count == value.pendingAudioCaptures.count,
               Set(value.pendingAudioCaptures.map(\.relativePath)).count == value.pendingAudioCaptures.count else {
             throw ProjectStoreError.invalidProject("项目名称为空，文档选择无效，或包含重复的文档、任务、作品编号。")
+        }
+        guard value.documents.allSatisfy({ $0.kind == .text || $0.textSources == nil }) else {
+            throw ProjectStoreError.invalidProject("非文字文档包含文字资料记录。")
         }
         let documents = Set(value.documents.map(\.id))
         let jobs = Dictionary(uniqueKeysWithValues: value.jobs.map { ($0.id, $0) })
@@ -2269,6 +2326,17 @@ private enum ProjectFiles {
                     throw ProjectStoreError.invalidProject("文字文档包含无效内容或图像引用。")
                 }
                 try TextDraftDocument.validate(textDraft.text)
+                if value.schemaVersion == 10 {
+                    guard let sources = document.textSources else {
+                        throw ProjectStoreError.invalidProject("文字资料记录缺失。")
+                    }
+                    try TextSourcesArchive.validate(sources)
+                    guard sources.records.allSatisfy({ $0.submission.targetDocumentID == document.id }) else {
+                        throw ProjectStoreError.invalidProject("回答属于其他文字文档。")
+                    }
+                } else if document.textSources != nil {
+                    throw ProjectStoreError.invalidProject("旧项目包含未经声明的文字资料记录。")
+                }
             case .audio:
                 guard document.textDraft == nil,
                       (document.audioDraft == nil) != (document.audioCreation == nil) else {
