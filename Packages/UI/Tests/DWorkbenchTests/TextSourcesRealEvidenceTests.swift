@@ -49,6 +49,10 @@ struct TextSourcesRealEvidenceTests {
             #expect(actual.prompt.utf8.elementsEqual(submission.request.prompt.utf8))
             #expect(request.model.revision == submission.modelRevision)
             let answer = try #require(run["text"] as? String)
+            let result = try #require(run["result"] as? [String: Any])
+            let metrics = try #require(result["metadata"] as? [String: String])
+            let started = try #require(run["startedAt"] as? Double)
+            let elapsed = try #require(run["elapsedSeconds"] as? Double)
             #expect(!answer.isEmpty)
             let check = TextSourcesContext.citations(in: answer, submission: submission)
             let summary: [String: Any] = ["valid": check.validLabels, "invalid": check.invalidLabels, "summary": check.summary,
@@ -59,12 +63,14 @@ struct TextSourcesRealEvidenceTests {
             let manifest = try await store.createTextDocument(text: "原稿")
             let target = try #require(manifest.activeDocument?.textDraft)
             // This import binds the real CLI input/answer to a new project document; it is not a GUI generation claim.
-            let rebound = TextSourcesSubmission(id: submission.id, notebookRevision: submission.notebookRevision,
+            let rebound = TextSourcesSubmission(id: request.id, notebookRevision: submission.notebookRevision,
                 targetDocumentID: target.id, targetDocumentRevision: target.revision, question: submission.question,
                 sources: submission.sources, excerpts: submission.excerpts, request: submission.request,
                 modelID: submission.modelID, modelRevision: submission.modelRevision)
             let note = TextSourcesNotebook(inputRevision: submission.notebookRevision, question: submission.question,
-                sources: submission.sources, excerpts: submission.excerpts, records: [.init(submission: rebound, answer: answer)])
+                sources: submission.sources, excerpts: submission.excerpts,
+                records: [.init(submission: rebound, answer: answer,
+                    completedAt: Date(timeIntervalSinceReferenceDate: started + elapsed), metrics: metrics)])
             _ = try await store.saveTextSources(note, documentID: target.id,
                 expectedRevision: try #require(manifest.activeDocument?.textSources?.revision), expectedDocumentRevision: target.revision)
             try await store.close()
