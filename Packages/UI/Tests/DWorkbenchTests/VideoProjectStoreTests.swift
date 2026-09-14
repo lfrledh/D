@@ -103,6 +103,24 @@ struct VideoProjectStoreTests {
         try await store.exportVideoAsset(id: asset.id, to: exported)
         await #expect(throws: ProjectStoreError.self) { try await store.exportVideoAsset(id: asset.id, to: exported) }
         #expect(try Data(contentsOf: exported) == original)
+        for mode in ["source", "staged", "published"] {
+            let destination = root.appendingPathComponent("fault-\(mode).mp4")
+            await #expect(throws: (any Error).self) {
+                try await store.exportVideoAsset(id: asset.id, to: destination, checkpoint: { point in
+                    switch point {
+                    case .contentDurable(let staged):
+                        if mode == "source" { try Data("changed source".utf8).write(to: output) }
+                        if mode == "staged" { try Data("changed staging".utf8).write(to: staged) }
+                    case .published:
+                        if mode == "published" { throw ProjectStoreError.invalidTransition }
+                    }
+                })
+            }
+            if mode == "source" { try original.write(to: output) } // Restore only our intentionally modified fixture.
+            if mode == "published" { #expect(try Data(contentsOf: destination) == original) }
+            else { #expect(!FileManager.default.fileExists(atPath: destination.path)) }
+            #expect(try Data(contentsOf: output) == original)
+        }
         let other = try await store.createVideoCreation()
         await #expect(throws: ProjectStoreError.self) { try await store.adoptAsset(id: asset.id, documentID: other.activeDocumentID) }
         _ = try await store.selectDocument(id: document.id)
@@ -140,7 +158,15 @@ struct VideoProjectStoreTests {
         let asset = try #require(recovered.assets.last)
         #expect(recovered.jobs.last?.state == .cancelled)
         await #expect(throws: ProjectStoreError.self) { try await store.adoptAsset(id: asset.id, documentID: created.activeDocumentID) }
+        let duplicate = try VideoProjectFixture.output(project: project, runID: request.id)
+        try await VideoProjectFixture.write(duplicate, input: draft.makeRequest())
+        let duplicateBytes = try Data(contentsOf: duplicate)
+        #expect(try await store.recoverPublishedArtifacts().jobs.last?.artifactIDs == [asset.id])
         try await store.close()
+        let reopened = try await ProjectStore.open(at: project)
+        #expect(await reopened.snapshot().jobs.last?.artifactIDs == [asset.id])
+        #expect(try Data(contentsOf: duplicate) == duplicateBytes)
+        try await reopened.close()
     }
 
     @Test func versionSevenBackupsStrictnessAndInvalidDraftSurvival() async throws {

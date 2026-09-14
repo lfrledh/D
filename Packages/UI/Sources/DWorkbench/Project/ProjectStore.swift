@@ -1440,6 +1440,10 @@ public actor ProjectStore {
             case .video: isAudio = false; isVideo = true
             default: isAudio = false; isVideo = false
             }
+            // One video request publishes at most one candidate. Extra owned task
+            // directories remain untouched for diagnosis; they must not invalidate
+            // a project that already recovered or registered its candidate.
+            if isVideo, !candidate.jobs[index].artifactIDs.isEmpty { continue }
             let relative = isAudio ? "Tasks/\(name)/job/output.wav" :
                 (isVideo ? "Tasks/\(name)/output.mp4" : "Tasks/\(name)/image.png")
             guard !candidate.assets.contains(where: { $0.relativePath == relative }) else { continue }
