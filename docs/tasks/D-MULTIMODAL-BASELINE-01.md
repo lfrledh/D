@@ -1,6 +1,6 @@
 # D-MULTIMODAL-BASELINE-01：统一可运行开发基线
 
-状态：用户已批准集中验收后进入本阶段；独立准备中，未源接纳。2026-09-14，规格 MB1，指导 P2026-09-13.1。
+状态：本阶段有限验收通过，已接入源工作分支；最终结案版本/推送状态见R/final-receipt.json。2026-09-14，组合规格 MB1、构建修订3/MB-BUILD2，指导 P2026-09-13.1。下方按时间保留独立准备、失败和预算记录，最新状态见末节。
 
 源基线 `ac39b73d64793bed9dd7089e32dcd43c0db2a2c1`，源分支 `codex/inference-foundation`。Lead 集成工作树 `D-Worktrees/D-MULTIMODAL-BASELINE-01` / `codex/d-multimodal-baseline-01`。外部证据 R=`D-Development/AgentTrials/D-MULTIMODAL-BASELINE-01/run-20260914T115845Z-human-return`。准备提交后的完整执行基线写各 job/运行回执，避免自引用。
 
@@ -107,3 +107,48 @@ BUILD Sol/high 初交未接纳。正式修复1有一次900秒超时，已结束�
 Lead曾在Worker尚未结束时依据中途结果发只读审核；hash不符后审核正确停止，另一个未被条件保护的测试调用仅因不存在夹具目录在setup失败，未开始行为用例。R/build/lead-premature-review.json记录Lead时序问题，不归为Worker代码失败；后续执行必须等待进程结束并在同一检查脚本成功后运行。无Lead编辑Worker文件。
 
 离线构建输入已静态审查。新自有缓存对12检出离线repack后fsck均通过，旧缓存不改；未锁的argument-parser仅在新副本移到本次保留目录，11实际锁版本的预检通过。无下载/依赖安装/签名改变；R/offline-cache-preparation及build/lead-real-input-preflight记录前后。当前所有App实例已正常退出，源仍ac39及个人scheme不变，统一构建/同App组合GUI/源接纳与push仍未完成。
+
+## 2026-09-14 最终组合验收与源接纳
+
+本节覆盖以上停点，保留失败和预算历史。完整受测代码/产物来源为 `aba1326f72f33ada028e35a8e799ef04965e7afa`；源于2026-09-14 14:37:47 UTC从 `ac39b73d64793bed9dd7089e32dcd43c0db2a2c1` 以固定SHA快进接入。两端共同历史、完整67路径归属、个人文件和自动化均先核对：28文字路径与f58一致、18图像路径与14af一致、4共享生产/4迁移测试与已审3c一致、5构建路径与165一致、8文档；38新增/29修改、无删除。证据R/integration-path-map.json、source-pre-fast-forward.json、source-fast-forward.json。没有工程/签名/权限/依赖或用户文件夹带。
+
+BUILD修复2在原Sol/high受限CLI线程 `01a09fe3-d696-7af3-8749-65f83fa981bf` 完成，338.957秒，模型请求与可观察turn_context一致，workspace-write专属工作树/输出、网络关闭；隐藏服务端解析unknown。Lead在其结束后冻结五文件、复验、读取非实现者审核，再显式提交 `165d4f9798df827d4f69cc1e3c9d8e16954d8625` 并保留历史合入aba。初交加两轮正式修复已用完；构建器没有Lead实质重写。Lead提供契约、失败反例、审核/验收及集成，不能归为Worker无协助一次通过。共享schema、默认入口和额外IME有界修补由Lead负责，相关非实现者审核已完成，无新增常驻Reviewer或后续产品Worker。
+
+### 构建、组件与源入口
+
+同一Mac M4/16GiB、macOS26.6.2、Xcode26.6/SDK26.5，既有Python3.12外盘环境；仅代表本机样例而非产品上限。独立统一构建 `R/combined-development-app-r1/output/D Development.app` 四阶段实际执行通过（93.1086秒），AudioEngine/MRT2/Video三个引擎从既有离线环境封装，未从旧App复制。签名完整性检查通过，沿用现有身份及App Sandbox权限；不证明公证/TCC永久有效。构建报告的 `runtimeVerification=not-run` 是生成时事实，随后运行证据另存，不倒改原报告。三引擎完整文件清单及四关键文件摘要见combined-app-artifact.json。
+
+| 本轮固定入口 | 实际受测版本/目录 | 结果与证据 |
+|---|---|---|
+| `scripts/test-workbench.sh` | aba，源工程目录；独立Build-UI-Source | 447方法/65套件中444通过、3个opt-in跳过；测试51.684秒、含构建总87.065秒；source-workbench/result.json及stdout.log |
+| `scripts/test-foundation.sh` | aba，源工程目录；独立Build-Foundation-Source | 64方法/11套件通过；总9.160秒；source-foundation/result.json及stdout.log |
+| `scripts/tests/test_build_development_app.py -v` | aba，源工程目录；指定任务临时目录 | 20方法通过；总23.928秒；source-builder/result.json及stderr.log |
+| 普通开发构建/封装 | aba，组合工作树；既有离线输入 | 四阶段exit0、没有不完整清理；combined-build-entry-r1/result.json、combined-development-app-r1/evidence/build-development-report.json |
+
+三个跳过为 `actualCLIAnswersPersistWithExactSubmittedContext`、`verifiedModelAndProductionContextForExistingCLI`、`approvedInstalledWeightsRemainUnchanged`，不说本次工作台零跳过；旧显式执行证据与本次实际GUI分别记录。原文字23项MLX、图像141/18套件仍绑定原阶段SHA，不冒称在aba全部重跑。本轮原四CLI故障、真实Git alternate反例及额外报告子进程检查的范围见R/build；报告注入替身不伪称未修改CLI。12音频/15视频封装CPU是修复1未变路径的复验，不与20方法或GPU计数相加。
+
+### 同一新产物的真实用户闭环
+
+固定隔离session `950345B0-C836-4976-9C4A-B79BDF4BD45E`，不设置 `D_ENABLE_TEXT_SOURCES`；独立项目副本位于R/CombinedProjects，导出R/CombinedExports。全部GPU由Lead串行，以下不是mock或只读取已有输出：
+
+| 路径 | 实际模型/条件与结果 | 行为及证据 |
+|---|---|---|
+| 资料问答 | 已有Qwen2.5-7B-Instruct-4bit，revision c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed，输入2048/输出128；本次回答“资料未提供预算。[S1]” | 原稿直到接受前不变；接受追加、撤销恢复；旧五条历史及本次撤销记录保存重开。text-before-accept.json、text-after-accept.json、migration-and-undo-check.json |
+| 参考图 | FLUX.2 Klein4B q8，revision ef52ee019fd1d0e75ae4deb40476ba65989716d7，512²/4步/guidance1/seed42；白杯参考→红杯候选 | Lead看图确认杯色/木桌；采用后PNG导出原字节一致、独立ImageIO真解码；旧参考/蓝杯不变。image-result.json、media-inspection-image-audio.json |
+| 声音 | SA3 small music，revision da6edc54ddba10bfd79a077102ded687f80e882b，6秒/8步/seed42/guidance1；44.1kHz双声道float32、264600帧 | 采用/正常试听/独立WAV解码/安全导出/重开；audio-results.json。点击取消时首任务已完成，不计作有效取消覆盖 |
+| 条件器乐 | MRT2 small，revision010aa0dcb0dfd27b24f0ad07b4dad63e8f9521cc；4秒、C4/D4/G4各1.2秒、seed42；48kHz双声道float32、192000帧 | 采用、试听、WAV导出；第二任务实际早期取消、无产物；下一任务完成并拒绝，原采用结果保留。music-cancel-recovery.json；非全计算边界取消或精确配器证明 |
+| 短视频 | Wan2.1 T2V1.3B，revision37ec512624d61f7aa208f7ea8140a131f93afc9a，320×192/17帧/16fps/50步/guidance6/shift8/seed42，显式14336MiB；后端404.390秒 | 文生红杯短视频；实际预览播放、采用、无声H.264 MP4导出、独立完整17帧解码及重开。video-exact-request.json、video-result.json、video-backend-record.json；不是参考PNG转视频 |
+
+以上短文件名位于R/combined-gui-r1。模型与既有精度保持，实际请求/阶段耗时/内存与输出摘要留各记录；短期cache清零不证明全局无泄漏。SA3/MRT2两样本用户明确“听到了，播放正常”，见human-audio.json；这确认正常播放，不证明音乐完全服从音符/配器。IME额外修补代码703dd146426435990b345f3ef03ee7a97ea1618a及用户“空格选字、文字和光标均正常”见text-ime-handoff.json和IR/ime-acceptance.json（IR为D-TEXT-SOURCES-01/run-20260914T124235Z-ime），不再次重复真人检查。
+
+普通退出PID76944(exit0)后从显式启动器用同一隔离UUID新PID79140冷启动，再正常退出(exit0)。项目9/10按原字节保留project.v9/v10.backup.json后迁移11；旧来源/引用/回答、Unicode正文、图像/声音/视频采用状态、模型选择和全部媒体字节不变。新问答撤销状态、新器乐拒绝记录恢复。独立原项目副本保持原文件摘要。R/combined-gui-r2/cold-reopen.json全部检查通过；只证明同机同身份正常退出重开，不是物理外盘拔除、跨机授权或公证验证。
+
+### 事件、来源和恢复检查点
+
+屏幕控制 -3812 重连未恢复，用户重新解锁后同一PID窗口恢复；没有扩大权限。两次剪贴板超时均先以实际界面确认文本已写入再生成。Lead第一次组合构建器CPU因未建既定临时目录在setup失败；创建自有目录后原代码/测试20方法通过。merge help预检曾只读stderr/错误匹配`--[no-]`选项而拒绝，修正只读检查后再更新源；前面失败均未更新源。既有预检编排/过早审核问题继续保留，不把环境或Lead时序问题全归Worker。
+
+源入口三组复验结束；本批所有Worker/审核/构建/推理/GUI自有进程已结束。源只留个人scheme原字节/摘要ca3635d88aa5a15397b90e528667c66c0e6db7e596176e885c79d194b544206c、索引blob9c76916bdc97c2d4298cefe64e0b0fae3380573e及未暂存orderHint1→6，未纳入任何提交；普通D四文件、原项目与新App关键文件保护核对留R/protection。候选工作树/分支和历史证据保留。未创建系统写锁，也未改签名、全局配置或下载内容。
+
+本次结案只更新README、CURRENT_ACTIONS、PRODUCT_GOALS、FAILURE_AND_PERMISSION_AUDIT及本任务五份Markdown；最终源HEAD/普通工作分支push结果与保护/进程检查写R/final-receipt.json，不为自引用再次提交。最终代码/测试/夹具与aba完全相同，不能宣称测试在其后文档提交上重跑。
+
+工程有限闭环通过；受限CLI协作按原机制完成，重要Lead变化有非实现者检查；经济性仍未知。记录到的Worker各轮墙钟是局部运行，不将累计usage快照相加，不重算历史样本，完整Lead归因及实际订阅费用unknown。H09仅待麦克风；HUM文件薄识别、专门歌声、I2V/高级资料检索仍为分开目标。下一动作只提HUM有限文件闭环，新的依赖/模型具体授权与任务须另行确定，本阶段到此结束。

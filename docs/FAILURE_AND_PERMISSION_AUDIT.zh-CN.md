@@ -2,15 +2,17 @@
 
 ## 当前集中待办（2026-09-14）
 
-用户本次已配合完成H18/H19。没有新权限需要点击；源尚未接纳统一组合。用户返回时只汇报仍需本人处理的事项，不循环询问在场或资源空闲。
+用户本次已配合完成H18/H19，统一开发基线也已通过真实组合验收并接入源。没有新权限需要点击。用户返回时只汇报仍需本人处理的事项，不循环询问在场或资源空闲。
 
 | ID | 当前状态 | 本人最小动作 | 后续/证据 |
 |---|---|---|---|
 | H09 麦克风 | 保留，用户确认暂无设备 | 将来设备就绪时告知 | 短录音/试听/保存重开仍未验收，不阻塞文件/模型生成 |
-| H18 参考图 | 候选真实GUI已通过 | 无 | R/image-native-acceptance.json；候选14af48c22e9dbe7ee715b171308276347fab0f68，统一接纳待组合验证 |
-| H19 资料问答/IME | 候选门槛已通过 | 无 | R/text-native-acceptance-after-ime.json；修补版703与真人空格选字、原生撤销/重做/保存冷重开通过；实际7B证据复用原版本，不重算测试 |
+| H18 参考图 | 已关闭：独立及组合真实GUI通过、源已接纳 | 无 | R/image-native-acceptance.json；统一aba1326的参考生成/采用/PNG导出/重开见combined-gui-r1/image-result.json及combined-gui-r2/cold-reopen.json |
+| H19 资料问答/IME | 已关闭：修补后真人确认、组合源接纳 | 无 | R/text-native-acceptance-after-ime.json及text-ime-handoff.json；组合aba1326另完成实际7B问答/采用/撤销/保存重开，见combined-gui-r1/migration-and-undo-check.json及combined-gui-r2/cold-reopen.json |
 
-R为 `D-Development/AgentTrials/D-MULTIMODAL-BASELINE-01/run-20260914T115845Z-human-return`。IME旧失败和额外Lead授权/预算历史保留。BUILD五项代码边界返工与Lead预检路径断言/顺序问题属于工程事件，详见任务及R/merge-preflight-incident.json；没有因此要求用户扩大权限。阶段组合尚未通过，不能写成四模态统一版已交付。
+R为 `D-Development/AgentTrials/D-MULTIMODAL-BASELINE-01/run-20260914T115845Z-human-return`。IME旧失败和额外Lead授权/预算历史保留。BUILD经Sol/high初交及两轮修复后，由Lead复验接纳；构建/真实五后端与源CPU通过，不是新增权限问题。Lead预检路径/顺序、过早审核和夹具目录遗漏分别保留在merge-preflight-incident.json、build/lead-premature-review.json及protection/combined-live.json，不转嫁为用户待办。
+
+本次屏幕控制曾报SCStreamErrorDomain -3812，重连未恢复；用户重新解锁后同一测试实例恢复控制，未改权限。音频六秒/四秒样本用户确认“听到了，播放正常”。两次统一GUI实例正常退出、冷重开通过，普通D未动。最终源版本/推送与保护状态见R/final-receipt.json；只关闭本次已完成事项，不宣称以后不会锁屏或永久免授权。
 
 ## 历史：本次IME修补前集中待办（2026-09-14）
 
