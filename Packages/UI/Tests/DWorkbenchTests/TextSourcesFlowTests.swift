@@ -13,6 +13,7 @@ private actor SourcesGate {
 private actor SourcesEngine: InferenceEngine {
     private(set) var requests: [InferenceRequest] = []
     private(set) var cancellations = 0
+    private var stopped = false
     let gate: SourcesGate?
     let outcome: RunOutcome
     let answer: String
@@ -20,12 +21,18 @@ private actor SourcesEngine: InferenceEngine {
         self.gate = gate; self.outcome = outcome; self.answer = answer
     }
     func submit(_ request: InferenceRequest, backendID: String) async throws -> InferenceRun {
+        guard !stopped else { throw InferenceFailure.backendFailed("fixture runtime already shut down") }
         requests.append(request)
         let gate = gate, outcome = outcome, answer = answer
         return .init(id: request.id, events: AsyncThrowingStream { $0.yield(.textDelta(answer)); $0.finish() },
             cancel: { await self.cancelled() }, outcome: { if let gate { await gate.wait() }; return outcome })
     }
     private func cancelled() { cancellations += 1 }
+    func shutdown() { stopped = true }
+}
+private actor SourcesRuntimePool {
+    private(set) var engines: [SourcesEngine] = []
+    func make() -> SourcesEngine { let engine = SourcesEngine(); engines.append(engine); return engine }
 }
 private actor SourcesCancelRaceEngine: InferenceEngine {
     let firstOutcome = SourcesGate(), delayedCancel = SourcesGate(), secondOutcome = SourcesGate()
@@ -49,6 +56,35 @@ private final class SourcesDefaults: UserDefaults, @unchecked Sendable {
 
 @Suite("Text sources lifecycle and production host", .serialized) @MainActor
 struct TextSourcesFlowTests {
+    @Test func relocatingAnOpenProjectRetainsSourcesAndUsesReplacementRuntime() async throws {
+        let root = try directory(); defer { try? FileManager.default.removeItem(at: root) }
+        let pool = SourcesRuntimePool()
+        let project = ProjectSession(sessionFactory: { _ in
+            let engine = await pool.make()
+            return WorkbenchSession(engine: engine, backendID: "fixture.image",
+                status: { .init(activeRunID: nil, phase: nil, queuedRunIDs: []) },
+                shutdown: { await engine.shutdown() }, cleanup: {}, validateModel: { _ in }, textBackendID: "fixture.text",
+                validateTextModel: { ModelReference(directory: $0, revision: "fixture") })
+        }, settings: SourcesDefaults(), textSourcesEnabled: true)
+        let original = root.appendingPathComponent("原位置.dproject"), moved = root.appendingPathComponent("新位置.dproject")
+        await project.createProject(at: original); await project.createTextDocument()
+        let controller = try #require(project.textSources), fixture = try notebook()
+        controller.addSource(fixture.sources[0]); controller.changeQuestion(fixture.question)
+        await project.registerTextModel(at: root); await project.askTextSources()
+        #expect(controller.notebook.records.count == 1)
+        controller.changeQuestion("移动之后的提问")
+        try FileManager.default.moveItem(at: original, to: moved)
+        await project.openProject(at: moved)
+        #expect(project.projectURL == moved && project.textSources === controller)
+        await project.askTextSources()
+        #expect(controller.notebook.records.count == 2 && !controller.isDirty)
+        let engines = await pool.engines
+        #expect(engines.count == 2)
+        #expect(await engines[0].requests.count == 1)
+        #expect(await engines[1].requests.count == 1)
+        #expect(await project.requestClose())
+    }
+
     @Test func lateCancellationReturnCannotWaitForNextOperation() async throws {
         let engine = SourcesCancelRaceEngine()
         let controller = try ProjectTextSourcesController(notebook: notebook(), document: TextDraftDocument(text: "原稿"),
