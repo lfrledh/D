@@ -62,12 +62,29 @@ struct TextSourcesViewTests {
         #expect(!TextSourcesQuestionPresentation.needsReplacement(current: accepted, accepted: accepted))
     }
 
-    @Test func historyPresentationUsesExactFrozenSourceIdentityAndLocalizedDisposition() throws {
-        let original = try source(text: "保留的片段", name: "同名.txt")
-        let sameNameReplacement = try TextSourceSnapshot(id: UUID(), revision: UUID(), displayName: "同名.txt", bytes: Data("新资料".utf8))
-        let excerpt = try TextSourceExcerpt(source: original, range: NSRange(location: 0, length: 2))
-        #expect(TextSourcesHistoryPresentation.excerpts(for: original, in: [excerpt]).count == 1)
-        #expect(TextSourcesHistoryPresentation.excerpts(for: sameNameReplacement, in: [excerpt]).isEmpty)
+    @Test func historyRowsFollowFrozenExcerptOrderAndExactSourceIdentity() throws {
+        let first = try source(text: "第一份资料", name: "同名.txt")
+        let second = try source(text: "第二份资料", name: "同名.txt")
+        let secondExcerpt = try TextSourceExcerpt(source: second, range: NSRange(location: 0, length: 2))
+        let firstExcerpt = try TextSourceExcerpt(source: first, range: NSRange(location: 0, length: 2))
+        let rows = TextSourcesHistoryPresentation.excerptRows(sources: [first, second], excerpts: [secondExcerpt, firstExcerpt])
+        #expect(rows.map(\.label) == ["[S1]", "[S2]"])
+        #expect(rows.map(\.sourceDigest) == [second.sha256, first.sha256])
+        #expect(rows.map(\.sourceRevision) == [second.revision, first.revision])
+        #expect(rows.allSatisfy { $0.sourceName == "同名.txt" })
+    }
+
+    @Test func historyRowsKeepMultipleExcerptsForOneSourceInExcerptOrder() throws {
+        let original = try source(text: "甲乙丙丁", name: "one.txt")
+        let first = try TextSourceExcerpt(source: original, range: NSRange(location: 0, length: 1))
+        let second = try TextSourceExcerpt(source: original, range: NSRange(location: 2, length: 1))
+        let rows = TextSourcesHistoryPresentation.excerptRows(sources: [original], excerpts: [first, second])
+        #expect(rows.map(\.label) == ["[S1]", "[S2]"])
+        #expect(rows.map(\.text) == ["甲", "丙"])
+        #expect(rows.allSatisfy { $0.sourceDigest == original.sha256 && $0.sourceRevision == original.revision })
+    }
+
+    @Test func historyPresentationLocalizesDisposition() {
         #expect(TextSourcesHistoryPresentation.disposition(.accepted) == "已采用")
         #expect(TextSourcesHistoryPresentation.disposition(.rejected) == "已拒绝")
     }
