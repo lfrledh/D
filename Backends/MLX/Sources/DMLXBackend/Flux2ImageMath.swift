@@ -82,15 +82,15 @@ internal enum Flux2ImageMath {
 
     @inline(never)
     static func prepareReference(vae: Flux2AutoencoderKL, image: MLXArray,
-                                 dtype: DType) throws -> ReferenceConditioning {
-        guard image.ndim == 4, image.dim(0) == 1, image.dim(1) == 3 else {
+                                 dtype: DType, targetBatch: Int = 1) throws -> ReferenceConditioning {
+        guard targetBatch > 0, image.ndim == 4, image.dim(0) == 1, image.dim(1) == 3 else {
             throw InferenceFailure.invalidRequest("Reference pixels must be one NCHW RGB image.")
         }
         let prepared = try Flux2LatentPreparation.prepareImageLatents(
-            images: [image], batchSize: 1, vae: vae, dtype: dtype, imageIdScale: 10)
+            images: [image], batchSize: targetBatch, vae: vae, dtype: dtype, imageIdScale: 10)
         MLX.eval(prepared.latents, prepared.ids)
         guard prepared.latents.ndim == 3, prepared.ids.ndim == 3,
-              prepared.latents.dim(0) == 1, prepared.ids.dim(0) == 1,
+              prepared.latents.dim(0) == targetBatch, prepared.ids.dim(0) == targetBatch,
               prepared.latents.dim(1) == prepared.ids.dim(1), prepared.ids.dim(2) == 4,
               (prepared.ids[.ellipsis, 0] .== MLXArray(Int32(10))).all().item(Bool.self) else {
             throw InferenceFailure.backendFailed("FLUX.2 produced invalid t10 reference conditioning IDs.")
