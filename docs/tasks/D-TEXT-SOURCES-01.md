@@ -181,3 +181,17 @@ Lead亲自写共享契约、Store/Controller/Session接线、独立反例和最�
 源2486d71e48dd02fe06f2dca160e62fde9d878471只含新文档；候选位置/最终SHA见回执。源个人scheme ca3635d88aa5a15397b90e528667c66c0e6db7e596176e885c79d194b544206c、索引blob9c76916bdc97c2d4298cefe64e0b0fae3380573e与未暂存orderHint1→6保持；普通D四关键文件、原作品/模型、图像候选14af48c22e9dbe7ee715b171308276347fab0f68保持。本批自有Worker/CPU/构建/模型进程均已结束；没有启动GUI，因此也没有关闭普通D或让工具自动重启它。最后具体保护摘要及代码一致性见R/protection/end.json与final-receipt.json，不声称建立系统写锁。
 
 下一动作：用户回来按集中清单处理H18/H19，H09只提醒设备；先核Git/进程/实际签名产物/隔离UUID及此契约，读R/gui-acceptance-plan.json后执行。引用服从问题按明确剩余质量范围处理，不以未证明的样例默认开放，也不再次派预算耗尽Worker。通过完整门槛后才在隔离区协调图像/文字版本、源复验及按当时授权接纳/推送。HUM文件识别与专门歌声保持独立后续，不以高级文字完工为前置。
+
+## 2026-09-14 CLOSE1：有限引用质量、归档兼容与解码缺陷收尾（执行中）
+
+用户批准扩大同一闭环内的内容。源2486d71e48dd02fe06f2dca160e62fde9d878471、本候选864ffd99a6c3f8061d97d15fda444f8c19200182、图像14af48c22e9dbe7ee715b171308276347fab0f68均核对，R=`D-Development/AgentTrials/D-TEXT-SOURCES-01/run-20260914T085345Z-close`。本轮HUM只有薄后端选型/契约规划；GUI仍H18/H19，用户未回来，不重复探测。
+
+固定EVAL2的8类×2次1.5B＋2次0.5B诊断已完成：1.5B仅3类内容/引用归属满足，标签存在不等于语义正确。另用原获准且全清单校验的7B完成同模板8类×2次容量对照（CAPACITY2），7类内容满足，Unicode仍失败；不可据小模型封顶产品。精确prompt、原答案、实际随机seed、退出/释放与失败均在R，未重调提示或删除失败。更正历史口径：文字不接受CLI --seed；实际每任务随机状态在metadata.randomSeed，options默认42并非实际文字seed。首次--seed参数拒绝、7B8GiB估计拒绝与12GiB合理预算恢复分别保留，未改变精度/系统权限。
+
+### CLOSE1-L：Lead一次有界收尾范围和门槛
+
+已完成只读审核并以固定依赖2.30.6的原样NaiveStreamingDetokenizer在CPU复现：e→e+组合音符与👩→👩‍💻被Character计数差分丢字（R/upstream-proof-run，两例失败）。没有原生成token时不把这次模型输出错误全部归因于该缺陷。优先复用既有generateTokenTask（与generateTask共用generateLoopTask、TokenIterator和任务句柄），局部用严格UTF8前缀差分解码；不复制整套模型库、不修改SwiftPM checkout，不另造推理器。保留当前工具调用检测、生成终态/取消/drain/release，前缀回写明确失败；完整结束交付tokenizer实际最后解码结果，临时U+FFFD等待，不以Character边界吞掉组合标量。完整token缓存受实际请求输出额度约束；较长输出性能另测，不缩小已有上限。
+
+允许Lead修改：Backends/MLX/Sources/DMLXBackend/MLXTextBackend.swift；新增同目录IncrementalTextDecoder.swift及Backends/MLX/Tests/DMLXBackendTests/IncrementalTextDecoderTests.swift；为实际固定tokenizer/生命周期验证只追加对应MLX测试；TS1的TextSourcesTypes/Context/Archive、直接TextSources测试和必要小fixture；本文、CURRENT_ACTIONS/PRODUCT_GOALS/FAILURE_AND_PERMISSION_AUDIT/MUSIC_ROADMAP。若提示升级，必须逐submission保存模板版本，缺字段仅v1、null/未知/错类型拒绝，v1原字节重建保留；新v2只使用已冻结CAPACITY2模板，保持资料原文/标签按excerpts顺序，不修改采用规则。schema10/归档1尚未接纳，旧读者拒绝新prompt而不能静默丢历史，需实证；图文组合11只规划，未验收前不合并。
+
+本轮由Lead亲自修补与运行，非实现者只读复核，不重新派实施Worker，也不把它写成Terra独立成功。CONTEXT此前初交+两次修复不清零，本段使用一次有界Lead收尾；不追加无限提示/模型试错。先固定CPU反例与旧归档，修补后检查组合Unicode/tokenizer与实际CLI、旧文本取消/恢复/终态、归档迁移及普通App编译；若完整范围无法通过，保留停点。新依赖/权重/权限、签名改变、其他模态模型或GUI不在此收尾执行中。原产物、源个人文件、旧证据保护不变。
