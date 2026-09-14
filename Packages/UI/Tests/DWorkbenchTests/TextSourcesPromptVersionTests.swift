@@ -16,6 +16,9 @@ struct TextSourcesPromptVersionTests {
         #expect(record.submission.request.prompt.contains("[S序号]"))
         #expect(try note.sources.first?.validatedText() == "项目代号是蓝桉。会议地点是京都。资料没有说明预算、参与人数或日期。")
         let encoded = try TextSourcesArchive.encode(note)
+        let submissionJSON = try JSONEncoder().encode(record.submission)
+        let object = try #require(JSONSerialization.jsonObject(with: submissionJSON) as? [String: Any])
+        #expect(object["promptTemplate"] == nil)
         let reopened = try TextSourcesArchive.decode(encoded)
         #expect(reopened == note)
         #expect(Array(reopened.records[0].submission.request.prompt.utf8) == Array(record.submission.request.prompt.utf8))
@@ -74,6 +77,26 @@ struct TextSourcesPromptVersionTests {
         }
         let explicit = try TextSourcesArchive.decode(changedLegacyTemplate("sources.v1"))
         #expect(explicit.records[0].submission.promptTemplate == .v1)
+    }
+
+    @Test("A legacy archive at the byte budget does not grow just because its template is now versioned")
+    func legacyByteBudget() throws {
+        var note = try TextSourcesArchive.decode(TextSourcesLegacyFixture.archive)
+        let record = note.records[0]
+        note.records[0] = .init(submission: record.submission, answer: "", completedAt: record.completedAt,
+                                metrics: record.metrics, disposition: record.disposition)
+        let overhead = try TextSourcesArchive.encode(note).count
+        note.records[0] = .init(submission: record.submission,
+                                answer: String(repeating: "a", count: TextSourcesLimits.archiveBytes - overhead),
+                                completedAt: record.completedAt, metrics: record.metrics, disposition: record.disposition)
+        let exact = try TextSourcesArchive.encode(note)
+        #expect(exact.count == TextSourcesLimits.archiveBytes)
+        let object = try #require(JSONSerialization.jsonObject(with: exact) as? [String: Any])
+        let notebook = try #require(object["notebook"] as? [String: Any])
+        let records = try #require(notebook["records"] as? [[String: Any]])
+        let submission = try #require(records[0]["submission"] as? [String: Any])
+        #expect(submission["promptTemplate"] == nil)
+        #expect(try TextSourcesArchive.decode(exact) == note)
     }
 
     @Test("Legacy and v2 answers coexist through production save and cold reopen")

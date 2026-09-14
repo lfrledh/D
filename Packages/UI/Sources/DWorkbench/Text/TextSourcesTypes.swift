@@ -151,6 +151,22 @@ public struct TextSourcesSubmission: Codable, Sendable, Equatable, Identifiable 
         promptTemplate = container.contains(.promptTemplate)
             ? try container.decode(TextSourcesPromptTemplate.self, forKey: .promptTemplate) : .v1
     }
+
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(notebookRevision, forKey: .notebookRevision)
+        try container.encode(targetDocumentID, forKey: .targetDocumentID)
+        try container.encode(targetDocumentRevision, forKey: .targetDocumentRevision)
+        try container.encode(question, forKey: .question)
+        try container.encode(sources, forKey: .sources)
+        try container.encode(excerpts, forKey: .excerpts)
+        try container.encode(request, forKey: .request)
+        try container.encode(modelID, forKey: .modelID)
+        try container.encodeIfPresent(modelRevision, forKey: .modelRevision)
+        // Preserve legacy encoded size, including archives already at their storage budget.
+        if promptTemplate != .v1 { try container.encode(promptTemplate, forKey: .promptTemplate) }
+    }
 }
 
 public enum TextSourceAnswerDisposition: String, Codable, Sendable { case pending, accepted, rejected, undone }
