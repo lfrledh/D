@@ -93,6 +93,15 @@ enum TextSourcesLayoutPolicy {
 }
 
 enum TextSourcesHistoryPresentation {
+    struct ExcerptRow: Identifiable, Equatable {
+        let id: UUID
+        let label: String
+        let sourceName: String
+        let sourceRevision: UUID
+        let sourceDigest: String
+        let text: String
+    }
+
     static func disposition(_ value: TextSourceAnswerDisposition) -> String {
         switch value {
         case .pending: "等待处理"
@@ -102,9 +111,17 @@ enum TextSourcesHistoryPresentation {
         }
     }
 
-    static func excerpts(for source: TextSourceSnapshot, in excerpts: [TextSourceExcerpt]) -> [TextSourceExcerpt] {
-        excerpts.filter {
-            $0.sourceID == source.id && $0.sourceRevision == source.revision && $0.sourceSHA256 == source.sha256
+    /// Citation labels are defined by the submission's excerpt order, not source order.
+    /// Source resolution uses the immutable submission snapshot, including revision and digest.
+    static func excerptRows(sources: [TextSourceSnapshot], excerpts: [TextSourceExcerpt]) -> [ExcerptRow] {
+        excerpts.enumerated().map { index, excerpt in
+            let source = sources.first {
+                $0.id == excerpt.sourceID && $0.revision == excerpt.sourceRevision && $0.sha256 == excerpt.sourceSHA256
+            }
+            return ExcerptRow(id: excerpt.id, label: "[S\(index + 1)]",
+                              sourceName: source?.displayName ?? "资料身份不匹配",
+                              sourceRevision: excerpt.sourceRevision, sourceDigest: excerpt.sourceSHA256,
+                              text: excerpt.text)
         }
     }
 }
@@ -379,7 +396,7 @@ public struct TextSourcesView: View {
             Text("问题：\(record.submission.question)").font(.caption).fixedSize(horizontal: false, vertical: true)
             Text(record.answer).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
             Text(citationSummary(record)).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            submittedSources(record.submission.sources, excerpts: record.submission.excerpts)
+            submittedExcerpts(record.submission.sources, excerpts: record.submission.excerpts)
             HStack {
                 Button("采用") { actions.accept(record.id) }
                     .buttonStyle(.glass).disabled(!canAccept(record) || isRunning || isSaving)
@@ -392,16 +409,17 @@ public struct TextSourcesView: View {
         .padding(10).background(.quaternary, in: RoundedRectangle(cornerRadius: 10))
     }
 
-    @ViewBuilder private func submittedSources(_ sources: [TextSourceSnapshot], excerpts: [TextSourceExcerpt]) -> some View {
-        if !sources.isEmpty {
+    @ViewBuilder private func submittedExcerpts(_ sources: [TextSourceSnapshot], excerpts: [TextSourceExcerpt]) -> some View {
+        let rows = TextSourcesHistoryPresentation.excerptRows(sources: sources, excerpts: excerpts)
+        if !rows.isEmpty {
             VStack(alignment: .leading, spacing: 4) {
                 Text("本次提交的资料片段").font(.caption.weight(.semibold))
-                ForEach(Array(sources.enumerated()), id: \.element.id) { index, source in
+                ForEach(rows) { row in
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("[S\(index + 1)] \(source.displayName)").font(.caption.weight(.semibold))
-                        ForEach(TextSourcesHistoryPresentation.excerpts(for: source, in: excerpts)) { excerpt in
-                            Text(excerpt.text).font(.caption).textSelection(.enabled)
-                        }
+                        Text("\(row.label) \(row.sourceName)").font(.caption.weight(.semibold))
+                        Text("修订：\(row.sourceRevision.uuidString)  摘要：\(row.sourceDigest)")
+                            .font(.caption2).foregroundStyle(.secondary).textSelection(.enabled)
+                        Text(row.text).font(.caption).textSelection(.enabled)
                     }
                 }
             }
