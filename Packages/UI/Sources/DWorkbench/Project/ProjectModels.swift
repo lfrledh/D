@@ -165,7 +165,8 @@ public struct ProjectDraft: Codable, Sendable, Equatable {
 }
 
 public struct ProjectManifest: Codable, Sendable, Equatable, Identifiable {
-    public static let currentSchemaVersion = 8
+    public static let currentSchemaVersion = 10
+    public static let readableSchemaVersions = Set(1...8).union([10])
     public var schemaVersion: Int
     /// Monotonic committed state version lets the UI discard a late, stale actor response.
     public var revision: UInt64
@@ -202,7 +203,13 @@ public struct ProjectManifest: Codable, Sendable, Equatable, Identifiable {
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         let initialDocuments = documents ?? [ProjectDocument(name: "图像探索", draft: draft)]
-        self.documents = initialDocuments
+        self.documents = initialDocuments.map { document in
+            var result = document
+            if schemaVersion == Self.currentSchemaVersion, result.kind == .text, result.textSources == nil {
+                result.textSources = TextSourcesNotebook()
+            }
+            return result
+        }
         self.activeDocumentID = activeDocumentID ?? initialDocuments.first?.id ?? UUID()
         self.jobs = jobs
         self.assets = assets
@@ -221,6 +228,7 @@ public struct ProjectManifest: Codable, Sendable, Equatable, Identifiable {
             // Current-format omissions are corruption, not a request for legacy defaults.
             _ = try CurrentGenerationFields(from: decoder)
         }
+        if schemaVersion == 10 { _ = try CurrentTextSourcesFields(from: decoder) }
         revision = try values.decodeIfPresent(UInt64.self, forKey: .revision) ?? 0
         id = try values.decode(UUID.self, forKey: .id)
         name = try values.decode(String.self, forKey: .name)
@@ -272,6 +280,7 @@ public struct ProjectDocument: Codable, Sendable, Equatable, Identifiable {
     public var kind: ProjectDocumentKind
     public var draft: ProjectDraft
     public var textDraft: TextDraftDocument?
+    public var textSources: TextSourcesNotebook?
     public var audioDraft: AudioDraftDocument?
     public var audioCreation: AudioCreationDraft?
     public var videoCreation: VideoCreationDraft?
@@ -281,7 +290,7 @@ public struct ProjectDocument: Codable, Sendable, Equatable, Identifiable {
     public var selectedAssetID: UUID?
 
     public init(id: UUID = UUID(), name: String, kind: ProjectDocumentKind = .image,
-                draft: ProjectDraft = .init(), textDraft: TextDraftDocument? = nil,
+                draft: ProjectDraft = .init(), textDraft: TextDraftDocument? = nil, textSources: TextSourcesNotebook? = nil,
                 audioDraft: AudioDraftDocument? = nil,
                 audioCreation: AudioCreationDraft? = nil,
                 videoCreation: VideoCreationDraft? = nil,
@@ -291,6 +300,7 @@ public struct ProjectDocument: Codable, Sendable, Equatable, Identifiable {
         self.kind = kind
         self.draft = draft
         self.textDraft = textDraft
+        self.textSources = textSources
         self.audioDraft = audioDraft
         self.audioCreation = audioCreation
         self.videoCreation = videoCreation
@@ -300,7 +310,7 @@ public struct ProjectDocument: Codable, Sendable, Equatable, Identifiable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, kind, draft, textDraft, audioDraft, audioCreation, videoCreation, sourceAssetID, adoptedAssetID, selectedAssetID
+        case id, name, kind, draft, textDraft, textSources, audioDraft, audioCreation, videoCreation, sourceAssetID, adoptedAssetID, selectedAssetID
     }
 
     public init(from decoder: Decoder) throws {
@@ -311,6 +321,7 @@ public struct ProjectDocument: Codable, Sendable, Equatable, Identifiable {
         kind = try values.decodeIfPresent(ProjectDocumentKind.self, forKey: .kind) ?? .image
         draft = try values.decode(ProjectDraft.self, forKey: .draft)
         textDraft = try values.decodeIfPresent(TextDraftDocument.self, forKey: .textDraft)
+        textSources = try values.decodeIfPresent(TextSourcesNotebook.self, forKey: .textSources)
         audioDraft = try values.decodeIfPresent(AudioDraftDocument.self, forKey: .audioDraft)
         audioCreation = try values.decodeIfPresent(AudioCreationDraft.self, forKey: .audioCreation)
         videoCreation = try values.decodeIfPresent(VideoCreationDraft.self, forKey: .videoCreation)
@@ -382,4 +393,23 @@ private struct CurrentGenerationFields: Decodable {
     }
     struct ImageFields: Decodable { let imageSettings: ImageGenerationSettings }
     struct TextFields: Decodable { let generationSettings: TextGenerationSettings }
+}
+
+
+/// Only legacy project versions may omit the new authoritative text record.
+private struct CurrentTextSourcesFields: Decodable {
+    private enum Keys: String, CodingKey { case documents }
+    private struct Document: Decodable {
+        private enum Keys: String, CodingKey { case kind, textSources }
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: Keys.self)
+            if try c.decode(ProjectDocumentKind.self, forKey: .kind) == .text {
+                _ = try c.decode(TextSourcesNotebook.self, forKey: .textSources)
+            }
+        }
+    }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: Keys.self)
+        _ = try c.decode([Document].self, forKey: .documents)
+    }
 }

@@ -221,7 +221,7 @@ struct VideoProjectStoreTests {
         try original.write(to: file)
         let upgraded = try await ProjectStore.open(at: project)
         #expect(try Data(contentsOf: project.appendingPathComponent(ProjectStore.versionSevenBackupFilename)) == original)
-        #expect(await upgraded.snapshot().schemaVersion == 8)
+        #expect(await upgraded.snapshot().schemaVersion == ProjectManifest.currentSchemaVersion)
         let created = try await upgraded.createVideoCreation()
         var draft = VideoProjectFixture.draft(); draft.widthText = "未完成"; draft.memoryBudgetMiBText = "-"
         _ = try await upgraded.saveVideoCreation(draft, documentID: created.activeDocumentID,

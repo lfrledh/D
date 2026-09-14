@@ -106,6 +106,13 @@ public final class ProjectTextController {
 
     public func cancel() async { await editor.cancel() }
 
+    /// Another application operation atomically saved this body beside its own record.
+    func synchronizeCommitted(_ document: TextDraftDocument, expectedRevision: UUID) {
+        guard !isDirty, !isSaving, editor.synchronizeCommitted(document, expectedRevision: expectedRevision) else { return }
+        persistedRevision = document.revision
+        selectionVersion = UUID(); selection = NSRange(location: 0, length: 0); canUndo = false
+    }
+
     public func accept() {
         guard canAccept else { errorMessage = "原稿或选区已改变，请拒绝旧候选后重新生成。"; return }
         do {

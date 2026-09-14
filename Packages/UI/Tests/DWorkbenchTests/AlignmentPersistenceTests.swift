@@ -30,6 +30,8 @@ struct AlignmentPersistenceTests {
             json["schemaVersion"] = 6
             var docs = try #require(json["documents"] as? [[String: Any]])
             for i in docs.indices {
+                // A schema-6 fixture cannot carry schema-10 authoritative source records.
+                docs[i].removeValue(forKey: "textSources")
                 if var draft = docs[i]["draft"] as? [String: Any] {
                     draft.removeValue(forKey: "imageSettings"); docs[i]["draft"] = draft
                 }
@@ -49,7 +51,7 @@ struct AlignmentPersistenceTests {
             #expect(try Data(contentsOf: fixture.project.appendingPathComponent(ProjectStore.versionSixBackupFilename)) == raw)
             let opened = try await ProjectStore.open(at: fixture.project)
             let restored = await opened.snapshot()
-            #expect(restored.schemaVersion == 8)
+            #expect(restored.schemaVersion == ProjectManifest.currentSchemaVersion)
             #expect(restored.activeDocumentID == id)
             #expect(restored.activeDocument?.textDraft?.generationSettings == .legacy)
             #expect(restored.activeDocument?.textDraft?.text == "中文 e\u{301} 👩🏽‍🎨")

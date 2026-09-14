@@ -93,10 +93,11 @@ public struct WorkbenchView: View {
         let epoch = model.projectSession.navigationEpoch
         let mode = model.creatorMode
         let documentID = model.presentedDocument?.id
+        let sourcesMode = model.showingTextSources
         return WorkbenchGenerationCommand(title: model.visibleGenerationTitle, isEnabled: visibleGenerationEnabled) {
             Task {
                 guard visibleGenerationEnabled else { return }
-                await model.generateCaptured(mode: mode, epoch: epoch, documentID: documentID)
+                await model.generateCaptured(mode: mode, epoch: epoch, documentID: documentID, sourcesMode: sourcesMode)
             }
         }
     }
@@ -318,7 +319,42 @@ public struct WorkbenchView: View {
             let id = text.editor.document.id
             let epoch = project.navigationEpoch
             VStack(spacing: 0) {
-                if project.isTextWorking && !text.editor.isRunning {
+                if project.textSourcesEnabled && presentation != .parameters {
+                    Picker("文字工作", selection: $model.showingTextSources) {
+                        Text("选段改写").tag(false)
+                        Text("资料问答").tag(true)
+                    }.pickerStyle(.segmented).padding(8)
+                }
+                if model.showingTextSources && presentation != .parameters, let sources = project.textSources {
+                    HStack {
+                        Text(project.textModelStatus).font(.caption)
+                        Spacer()
+                        Button("选择文字模型") { Task { await model.chooseTextModel() } }.buttonStyle(.glass)
+                            .disabled(project.isBusy || project.isRegisteringTextModel)
+                    }.padding(8)
+                    if let pending = sources.unsavedCompletedRecord {
+                        Text("完整回答尚未保存：请移除当前不需要的资料以腾出归档空间，再重试保存。\n" + pending.answer)
+                            .font(.caption).textSelection(.enabled).lineLimit(6).padding(8)
+                    }
+                    TextSourcesView(notebook: sources.notebook, partialAnswer: sources.partialAnswer,
+                        isRunning: project.isTextWorking, isCancelling: sources.isCancelling,
+                        isSaving: sources.isSaving, canAsk: project.canAskTextSources, canUndo: sources.canUndo,
+                        errorMessage: sources.errorMessage,
+                        canAccept: { sources.canAccept($0) && !project.isBusy }, citationSummary: sources.citationSummary,
+                        actions: .init(
+                            importSource: { Task { await model.importTextSource(documentID: id, epoch: epoch) } },
+                            removeSource: { if project.navigationEpoch == epoch { sources.removeSource(id: $0) } },
+                            useExcerpt: { source, range in if project.navigationEpoch == epoch { sources.useExcerpt(sourceID: source, range: range) } },
+                            changeQuestion: { if project.navigationEpoch == epoch { sources.changeQuestion($0) } },
+                            ask: { Task { if project.navigationEpoch == epoch { await project.askTextSources() } } },
+                            cancel: { Task { if project.navigationEpoch == epoch { await project.cancelTextRewrite() } } },
+                            accept: { record in Task { if project.navigationEpoch == epoch { await project.acceptTextSources(id: record) } } },
+                            reject: { record in Task { if project.navigationEpoch == epoch { await sources.reject(id: record) } } },
+                            undo: { Task { if project.navigationEpoch == epoch { await project.undoTextSources() } } },
+                            save: { Task { if project.navigationEpoch == epoch { await project.saveText() } } }))
+                    .id(id)
+                } else {
+                if !model.showingTextSources && project.isTextWorking && !text.editor.isRunning {
                     HStack {
                         ProgressView().controlSize(.small)
                         Text("正在校验本地文字模型…")
@@ -334,10 +370,11 @@ public struct WorkbenchView: View {
                     onSelection: { if project.navigationEpoch == epoch { project.selectText($0, documentID: id) } },
                     onGenerate: { Task { await project.rewriteText() } },
                     onCancel: { Task { await project.cancelTextRewrite() } },
-                    onAccept: { text.accept() }, onReject: { text.reject() }, onUndo: { text.undo() },
+                    onAccept: { project.acceptTextRewrite() }, onReject: { text.reject() }, onUndo: { project.undoTextRewrite() },
                     onSave: { Task { await project.saveText() } },
                     onChooseModel: { Task { await model.chooseTextModel() } })
                     .presenting(presentation)
+                    .questionParameters(model.showingTextSources)
                     .generationControls(capability: project.textCapability,
                         recommendation: model.executionRecommendations,
                         configurationError: project.textConfigurationError,
@@ -349,6 +386,8 @@ public struct WorkbenchView: View {
                             project.setParameterEditingError(error, for: .text, documentID: id)
                         })
                 .id(id)
+                .disabled(project.textSources?.isSaving == true)
+                }
             }
         }
     }

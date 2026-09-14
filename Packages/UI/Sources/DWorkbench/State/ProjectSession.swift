@@ -60,8 +60,9 @@ public final class ProjectSession {
 
     public func updateTextGenerationSettings(_ value: TextGenerationSettings, documentID: UUID) {
         guard activeDocumentID == documentID, let text, text.editor.document.id == documentID,
-              !isChangingProject, !closePending else { return }
+              !isChangingProject, !closePending, textSources?.isSaving != true else { return }
         text.updateGenerationSettings(value)
+        textSources?.synchronizeTarget(text.editor.document)
     }
     public private(set) var selectedAssetID: UUID?
     public private(set) var showingAllArtworks = false
@@ -93,6 +94,8 @@ public final class ProjectSession {
     public private(set) var assetURLs: [UUID: URL] = [:]
     public private(set) var activeJobIDs: Set<UUID> = []
     public private(set) var text: ProjectTextController?
+    public private(set) var textSources: ProjectTextSourcesController?
+    public let textSourcesEnabled: Bool
     public private(set) var audio: ProjectAudioController?
     public private(set) var videoCreationContextID = UUID()
     public private(set) var videoCreationDraft: VideoCreationDraft?
@@ -213,7 +216,7 @@ public final class ProjectSession {
     @ObservationIgnored private var textModelLease: LocationAccess.Lease?
     @ObservationIgnored private var textWork: Task<Void, Never>?
     @ObservationIgnored private var textContextID = UUID()
-    public var isBusy: Bool { !activeJobIDs.isEmpty || isTextWorking || audio?.isBusy == true }
+    public var isBusy: Bool { !activeJobIDs.isEmpty || isTextWorking || textSources?.isSaving == true || audio?.isBusy == true }
     public var canGenerate: Bool {
         creatorMode == .image && manifest != nil && activeDocument?.kind == .image && !isTextWorking && ((selectedModelID != nil && selectedModelReady) || modelLease != nil)
         && !isChangingProject && !showingAllArtworks && !closePending && pendingSaves.isEmpty
@@ -266,6 +269,7 @@ public final class ProjectSession {
                 audioEnabled: Bool = false,
                 audioRecordingEnabled: Bool = false,
                 audioTransport: AudioTransport? = nil,
+                textSourcesEnabled: Bool = false,
                 closeDecision: @escaping @MainActor @Sendable () async -> ProjectCloseDecision = { .keepOpen }) {
         self.closeDecision = closeDecision
         self.factory = sessionFactory
@@ -274,6 +278,7 @@ public final class ProjectSession {
         self.audioEnabled = audioEnabled
         self.audioRecordingEnabled = audioRecordingEnabled
         self.injectedAudioTransport = audioTransport
+        self.textSourcesEnabled = textSourcesEnabled
         if modelLibrary != nil { modelStatus = "请在模型库中安装或选择可用模型。" }
     }
 
@@ -318,6 +323,8 @@ public final class ProjectSession {
 
     private func flushDraft(to store: ProjectStore) async throws {
         try await text?.flush()
+        if let text { textSources?.synchronizeTarget(text.editor.document) }
+        try await textSources?.flush()
         // Admission is closed by navigation/close callers, so this is a stable final tail.
         // A selection already issued by the old view must finish before navigation or close.
         await selectionWriteTail?.value
@@ -378,7 +385,25 @@ public final class ProjectSession {
                     self.applyManifest(updated)
                 }
             }
-        } else { text = nil }
+            if textSourcesEnabled, textSources?.document.id != value.id,
+               let notebook = activeDocument?.textSources {
+                let identity = textContextID
+                do {
+                    textSources = try ProjectTextSourcesController(notebook: notebook, document: value,
+                        engine: session.engine, backendID: backendID) { [weak self] note, revision, replacement, targetRevision in
+                        guard let self, self.textContextID == identity, let currentStore = self.store,
+                              let text = self.text, text.editor.document.id == value.id else { throw TextSourcesError.stale }
+                        try await text.flush()
+                        guard text.editor.document.revision == targetRevision else { throw TextSourcesError.stale }
+                        let updated = try await currentStore.saveTextSources(note, documentID: value.id,
+                            expectedRevision: revision, expectedDocumentRevision: targetRevision, replacingText: replacement)
+                        guard self.textContextID == identity else { return }
+                        self.applyManifest(updated)
+                        if let replacement { text.synchronizeCommitted(replacement, expectedRevision: targetRevision) }
+                    }
+                } catch { textSources = nil; report(error, context: "资料问答记录无法打开") }
+            }
+        } else { text = nil; textSources = nil }
         if let manifest { audio?.synchronize(manifest) }
         applyingDraft = true
         defer { applyingDraft = false }
@@ -504,6 +529,7 @@ public final class ProjectSession {
             installAudioController(for: relocated)
             if let backendID = replacement.textBackendID {
                 text?.rebind(engine: replacement.engine, backendID: backendID)
+                textSources?.rebind(engine: replacement.engine, backendID: backendID)
             }
             await previousSession?.shutdown()
             // A moved old backend may still own unpublished temporary files. Its path checks
@@ -551,6 +577,7 @@ public final class ProjectSession {
         audioCreationDocumentID = nil
         audioCreationDraft = nil
         text = nil
+        textSources = nil
         store = candidate
         session = createdSession
         projectLease = lease
@@ -1419,6 +1446,7 @@ public final class ProjectSession {
             textReference = nil
             textContextID = UUID()
             text = nil
+            textSources = nil
             textModelStatus = "选择已注册的 Qwen2.5 Instruct 4-bit 模型（0.5B／1.5B／7B／32B）"
             await access.release(modelLease)
             await access.release(projectLease)
@@ -1486,15 +1514,20 @@ public final class ProjectSession {
     }
 
     public func editText(_ value: String, documentID: UUID) {
-        guard !isChangingProject, !closePending, activeDocumentID == documentID else { return }
+        guard !isChangingProject, !closePending, activeDocumentID == documentID, textSources?.isSaving != true else { return }
         text?.edit(value, documentID: documentID)
+        if let text { textSources?.synchronizeTarget(text.editor.document) }
     }
     public func selectText(_ range: NSRange, documentID: UUID) {
         guard !isChangingProject, !closePending, activeDocumentID == documentID else { return }
         text?.select(range, documentID: documentID)
     }
     public func saveText() async {
-        do { try await text?.flush() }
+        do {
+            try await text?.flush()
+            if let text { textSources?.synchronizeTarget(text.editor.document) }
+            try await textSources?.flush()
+        }
         catch { report(error, context: "正文尚未保存，输入仍在当前窗口") }
     }
     public func registerTextModel(at url: URL) async {
@@ -1531,8 +1564,62 @@ public final class ProjectSession {
         let work = textWork
         work?.cancel()
         await text?.cancel()
+        await textSources?.cancel()
         await work?.value
     }
+
+    public var canAskTextSources: Bool {
+        textSourcesEnabled && creatorMode == .text && textSources?.canAsk == true && textReference != nil &&
+        !isBusy && !isChangingProject && !closePending && !isRegisteringTextModel &&
+        text?.hasPendingCandidate != true && !showingAllArtworks && textConfigurationError == nil
+    }
+
+    public func importTextSource(at url: URL, documentID: UUID, epoch: UInt64) async {
+        guard textSourcesEnabled, navigationEpoch == epoch, activeDocumentID == documentID,
+              !isChangingProject, !closePending, textSources?.isSaving != true else { return }
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        do {
+            let source = try await Task.detached { try TextSourceReader.read(at: url) }.value
+            guard navigationEpoch == epoch, activeDocumentID == documentID, !isChangingProject, !closePending else { return }
+            textSources?.addSource(source)
+        } catch { report(error, context: "资料未导入，原始文件保持不变") }
+    }
+
+    public func askTextSources() async {
+        guard canAskTextSources, let controller = textSources, let text, let reference = textReference,
+              let validator = session?.validateTextModel else { return }
+        let inputRevision = controller.notebook.inputRevision
+        let targetRevision = text.editor.document.revision
+        isTextWorking = true
+        let work = Task { [self] in
+            defer { isTextWorking = false; textWork = nil }
+            do {
+                try await text.flush(); try Task.checkCancellation()
+                guard controller.notebook.inputRevision == inputRevision,
+                      text.editor.document.revision == targetRevision else { throw TextSourcesError.stale }
+                controller.synchronizeTarget(text.editor.document)
+                let profile = try TextModelProfiles.profile(forRevision: reference.revision)
+                let modelID = "registered:" + (profile?.id.replacingOccurrences(of: "/", with: ":") ?? "local-text")
+                await controller.ask(using: reference, modelID: modelID) { try await validator($0.directory) }
+            } catch { report(error, context: "提问未开始，原稿与资料已保留") }
+        }
+        textWork = work; await work.value
+    }
+
+    public func acceptTextSources(id: UUID) async {
+        guard !isBusy, !isChangingProject, !closePending, let text, let controller = textSources else { return }
+        controller.synchronizeTarget(text.editor.document)
+        await controller.accept(id: id)
+    }
+    public func undoTextSources() async {
+        guard !isBusy, !isChangingProject, !closePending, let text, let controller = textSources else { return }
+        controller.synchronizeTarget(text.editor.document)
+        await controller.undo()
+    }
+    public func acceptTextRewrite() { guard textSources?.isSaving != true else { return }; text?.accept(); synchronizeSourcesTarget() }
+    public func undoTextRewrite() { guard textSources?.isSaving != true else { return }; text?.undo(); synchronizeSourcesTarget() }
+    private func synchronizeSourcesTarget() { if let text { textSources?.synchronizeTarget(text.editor.document) } }
 
     // AW1: generation documents share the authoritative runtime and project task journal.
     public var audioCreationCandidates: [ProjectAsset] {

@@ -9,6 +9,7 @@ public enum TextWorkbenchPresentation: Sendable { case complete, editor, paramet
 @MainActor
 public struct TextWorkbenchView: View {
     private var presentation: TextWorkbenchPresentation = .complete
+    private var isQuestionParameters = false
     @Bindable private var session: TextDraftSession
     private let selection: NSRange
     @Binding private var instruction: String
@@ -35,11 +36,12 @@ public struct TextWorkbenchView: View {
     @State private var rawPromptTokenLimit: String?
     @State private var rawOutputTokenLimit: String?
     private var parameterLayoutProbe: ((String, CGRect) -> Void)?
-    private var scrollToOutputForCheck = false
+    private var parameterScrollProbe: ((ScrollViewProxy) -> Void)?
 
     /// Inspect actual SwiftUI geometry; do not depend on its private AppKit implementation.
-    func observingParameterLayout(scrollToOutput: Bool = false, _ probe: @escaping (String, CGRect) -> Void) -> Self {
-        var copy = self; copy.parameterLayoutProbe = probe; copy.scrollToOutputForCheck = scrollToOutput
+    func observingParameterLayout(scrollProxy: @escaping (ScrollViewProxy) -> Void,
+                                  _ probe: @escaping (String, CGRect) -> Void) -> Self {
+        var copy = self; copy.parameterLayoutProbe = probe; copy.parameterScrollProbe = scrollProxy
         return copy
     }
 
@@ -74,6 +76,11 @@ public struct TextWorkbenchView: View {
         var copy = self; copy.presentation = presentation; return copy
     }
 
+    /// The same generation limits serve both operations; their action controls remain separate.
+    func questionParameters(_ enabled: Bool) -> Self {
+        var copy = self; copy.isQuestionParameters = enabled; return copy
+    }
+
     public func generationControls(capability: TextExecutionCapability?, recommendation: ExecutionRecommendations?, configurationError: String?, onChange: @escaping (TextGenerationSettings) -> Void, onEditingError: @escaping (String?) -> Void = { _ in }) -> Self {
         var copy = self
         copy.generationCapability = capability
@@ -86,25 +93,26 @@ public struct TextWorkbenchView: View {
 
     public var body: some View {
       if presentation == .parameters {
-       GeometryReader { viewport in
+       GeometryReader { _ in
         ScrollViewReader { reader in
          ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                Text("改写参数").font(.headline)
+                Text(isQuestionParameters ? "问答参数" : "改写参数").font(.headline)
                 Text(modelStatus).font(.caption).foregroundStyle(.secondary).accessibilityIdentifier("text-model-status")
                 Button("选择文字模型…", action: onChooseModel).accessibilityIdentifier("text-model-select")
-                rewriteControls
+                if isQuestionParameters { generationSettingsControls }
+                else { rewriteControls }
             }.padding(16)
          }
-         .task(id: viewport.size) {
-             if scrollToOutputForCheck {
-                 await Task.yield()
-                 reader.scrollTo("text-output-scroll-target", anchor: .bottom)
-             }
-         }
+         // Tests request scrolling only after observing actual target geometry.
+         // Viewport appearance alone does not mean a conditional target exists.
+         .onAppear { parameterScrollProbe?(reader) }
         }
        }
        .coordinateSpace(name: "text-parameters")
+       .onGeometryChange(for: CGSize.self) { $0.size } action: {
+           parameterLayoutProbe?("text-parameter-viewport", CGRect(origin: .zero, size: $0))
+       }
       } else {
         GeometryReader { viewport in
             // AnyLayout changes arrangement without replacing the native IME editor.
@@ -212,7 +220,9 @@ public struct TextWorkbenchView: View {
                     .accessibilityIdentifier("text-output-limit")
                     .textParameterMeasured("text-output-limit", probe: parameterLayoutProbe)
                     .id("text-output-scroll-target")
-                Text("Token 不是字数；输入包括改写包装和模板。真实超限会报错，原文不会被截断。")
+                Text(isQuestionParameters
+                    ? "Token 不是字数；输入包括问题、全部所选片段和模板。真实超限会报错，资料不会被截断。"
+                    : "Token 不是字数；输入包括改写包装和模板。真实超限会报错，原文不会被截断。")
                     .font(.caption).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 Text("当前能力支持：输入最多 \(capability.maximumPromptTokens) token，输出最多 \(capability.maximumOutputTokens) token。")
