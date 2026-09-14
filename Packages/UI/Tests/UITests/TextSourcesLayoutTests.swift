@@ -44,7 +44,7 @@ struct TextSourcesLayoutTests {
         #expect(await service.requestClose())
     }
 
-    @Test func resizeKeepsQuestionEditorIdentityAndReachableScrollViewport() throws {
+    @Test func resizeKeepsQuestionEditorIdentityAndReachableScrollViewport() async throws {
         let note = TextSourcesNotebook(question: "中文 e\u{301}👩‍💻")
         let view = TextSourcesView(notebook: note, partialAnswer: "", isRunning: false, isCancelling: false,
             isSaving: false, canAsk: false, canUndo: false, errorMessage: nil, canAccept: { _ in false },
@@ -53,15 +53,16 @@ struct TextSourcesLayoutTests {
                 reject: { _ in }, undo: {}, save: {}))
         let host = NSHostingView(rootView: view)
         func descendants(_ root: NSView) -> [NSView] { root.subviews.flatMap { [$0] + descendants($0) } }
-        func settle(_ width: CGFloat) {
+        func settle(_ width: CGFloat) async throws {
             host.frame = NSRect(x: 0, y: 0, width: width, height: 480)
             host.layoutSubtreeIfNeeded()
-            RunLoop.main.run(until: Date().addingTimeInterval(0.06)); host.layoutSubtreeIfNeeded()
+            // Yield the main actor so other hosted views can finish their scheduled layout tasks.
+            try await Task.sleep(for: .milliseconds(60)); host.layoutSubtreeIfNeeded()
         }
-        settle(900)
+        try await settle(900)
         let first = try #require(descendants(host).compactMap { $0 as? NSTextView }.filter { $0.isEditable }.first)
         for width: CGFloat in [600, 1000, 500, 800] {
-            settle(width)
+            try await settle(width)
             let current = try #require(descendants(host).compactMap { $0 as? NSTextView }.filter { $0.isEditable }.first)
             #expect(current === first, "Width changes must not replace a question editor that may have an IME composition.")
             #expect(current.string.utf8.elementsEqual(note.question.utf8))
