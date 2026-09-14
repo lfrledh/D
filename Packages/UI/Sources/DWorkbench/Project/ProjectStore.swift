@@ -456,14 +456,18 @@ public actor ProjectStore {
         return replacement
     }
 
-    public func enqueue(request: InferenceRequest, documentID: UUID? = nil) throws -> ProjectManifest {
+    /// The captured document must be the result of a successful host save. Later
+    /// draft edits cannot replace this immutable admission snapshot.
+    public func enqueue(request: InferenceRequest, documentID: UUID? = nil,
+                        capturedVideoDocument: ProjectDocument? = nil) throws -> ProjectManifest {
         try request.validate()
         let index = try documentIndex(documentID ?? manifest.activeDocumentID)
         let document = manifest.documents[index]
         switch request.input {
         case .video(let video):
-            guard document.kind == .video, let draft = document.videoCreation,
-                  try draft.makeRequest() == video,
+            let captured = capturedVideoDocument ?? document
+            guard document.kind == .video, captured.kind == .video, captured.id == document.id,
+                  let draft = captured.videoCreation, try draft.makeRequest() == video,
                   try draft.selectedMemoryBudgetBytes() == request.memoryBudgetBytes else {
                 throw ProjectStoreError.invalidProject("视频请求与保存的创作条件或预算不一致。")
             }

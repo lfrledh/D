@@ -109,6 +109,8 @@ public final class ProjectSession {
     @ObservationIgnored private var videoAdmissionDocuments: [UUID: UUID] = [:]
     @ObservationIgnored private var videoModelLease: LocationAccess.Lease?
     @ObservationIgnored private var videoReference: ModelReference?
+    @ObservationIgnored private var videoPreviewInspection: Task<URL, Error>?
+    @ObservationIgnored private var videoPreviewDrain: Task<Void, Never>?
     public private(set) var audioCreationContextID = UUID()
     public private(set) var audioCreationDraft: AudioCreationDraft?
     private var musicModelStatus = "选择已安装的 Magenta RealTime 2 small 模型"
@@ -483,7 +485,7 @@ public final class ProjectSession {
             errorMessage = "请先完成模型校验并处理文字候选，再重新定位项目。"
             return
         }
-        stopVideoPreview()
+        await drainVideoPreview()
         await videoCreationWriteTail?.value
         videoCreationContextID = UUID()
         audioCreationTransport.stopPlayback()
@@ -805,12 +807,18 @@ public final class ProjectSession {
                        savedDraft: Task<ProjectManifest, Error>, store: ProjectStore, session: WorkbenchSession,
                        backendID: String? = nil) async {
         do {
-            applyManifest(try await savedDraft.value)
-            applyManifest(try await store.enqueue(request: request, documentID: documentID))
+            let saved = try await savedDraft.value
+            applyManifest(saved)
+            let capturedVideo: ProjectDocument?
+            if case .video = request.input { capturedVideo = saved.documents.first { $0.id == documentID } }
+            else { capturedVideo = nil }
+            applyManifest(try await store.enqueue(request: request, documentID: documentID,
+                                                 capturedVideoDocument: capturedVideo))
             if cancellationRequests.contains(request.id) {
                 await finish(id: request.id, outcome: .cancelled, store: store)
                 return
             }
+            await drainVideoPreview()
             let run = try await session.engine.submit(request, backendID: backendID ?? session.backendID)
             handles[run.id] = run
             phases[run.id] = cancellationRequests.contains(run.id) ? "正在取消" : "排队中"
@@ -1334,7 +1342,7 @@ public final class ProjectSession {
 
     /// A deterministic action for harnesses/tests that have already chosen to cancel.
     public func cancelAndCloseProject() async -> Bool {
-        guard !isRegisteringTextModel, !isRegisteringAudioModel, !isChangingProject, !closePending else { return false }
+        guard !isRegisteringTextModel, !isRegisteringAudioModel, !isRegisteringVideoModel, !isChangingProject, !closePending else { return false }
         closePending = true
         isChangingProject = true
         defer { closePending = false; isChangingProject = false }
@@ -1349,6 +1357,7 @@ public final class ProjectSession {
     }
 
     private func closeDrainedProject() async -> Bool {
+        await drainVideoPreview()
         if text?.hasPendingCandidate == true {
             errorMessage = "请先接受或拒绝文字候选，再关闭项目。"
             return false
@@ -1446,7 +1455,7 @@ public final class ProjectSession {
     }
 
     private func prepareAudioNavigation() async throws {
-        stopVideoPreview()
+        await drainVideoPreview()
         audioCreationTransport.stopPlayback()
         guard await audio?.prepareForNavigation() != false else {
             throw ProjectStoreError.invalidTransition
@@ -1746,7 +1755,9 @@ public final class ProjectSession {
             let url = try await store.assetURL(for: asset)
             guard contextID == audioCreationContextID, documentID == activeDocumentID, self.store === store,
                   !isChangingProject, !closePending else { return }
-            stopVideoPreview()
+            await drainVideoPreview()
+            guard contextID == audioCreationContextID, documentID == activeDocumentID,
+                  self.store === store, !isChangingProject, !closePending else { return }
             audio?.transport.stopPlayback()
             try audioCreationTransport.preparePlayback(url: url, format: inspection.format,
                 policy: asset.metadata.audio?.origin == .modelGenerated ? .generated : .original)
@@ -1785,14 +1796,30 @@ public final class ProjectSession {
     public func stopVideoPreview() {
         videoPreviewIdentity = UUID()
         videoPreviewURL = nil
+        if let inspection = videoPreviewInspection {
+            inspection.cancel()
+            let preceding = videoPreviewDrain
+            videoPreviewDrain = Task {
+                if let preceding { await preceding.value }
+                _ = await inspection.result
+            }
+            videoPreviewInspection = nil
+        }
+    }
+
+    private func drainVideoPreview() async {
+        stopVideoPreview()
+        if let pending = videoPreviewDrain { await pending.value }
     }
 
     public var videoCreationSaveStatus: String {
         videoCreationDraft?.revision == videoCreationPersistedRevision ? "创作条件已保存" : "创作条件尚未保存"
     }
 
-    public func updateVideoCreationDraft(_ value: VideoCreationDraft, contextID: UUID, documentID: UUID) {
-        guard contextID == videoCreationContextID, documentID == activeDocumentID,
+    public func updateVideoCreationDraft(_ value: VideoCreationDraft, contextID: UUID, documentID: UUID,
+                                         navigationEpoch: UInt64) {
+        guard creatorMode == .video, navigationEpoch == self.navigationEpoch,
+              contextID == videoCreationContextID, documentID == activeDocumentID,
               activeDocument?.videoCreation != nil, !isChangingProject, !closePending,
               var previous = videoCreationDraft else { return }
         // A native panel can cause a field to commit the same input again. Preserve
@@ -1886,6 +1913,8 @@ public final class ProjectSession {
                     throw CancellationError()
                 }
                 await access.release(videoModelLease)
+                guard context == videoCreationContextID, self.session?.videoBackendID == runtime.videoBackendID,
+                      !isChangingProject, !closePending else { throw CancellationError() }
                 videoModelLease = lease; videoReference = reference
                 settings.set(lease.bookmark, forKey: "workbench.videoModelBookmark.v1")
                 videoModelStatus = "Wan2.1 T2V-1.3B · BF16 文本/扩散，FP32 解码 · 无音轨"
@@ -1976,8 +2005,15 @@ public final class ProjectSession {
               videoCreationCandidates.contains(where: { $0.id == id }) else { return }
         stopVideoPreview()
         let preview = videoPreviewIdentity
+        if let pending = videoPreviewDrain { await pending.value }
+        guard preview == videoPreviewIdentity, contextID == videoCreationContextID,
+              documentID == activeDocumentID, self.store === store, !isBusy,
+              !isChangingProject, !closePending else { return }
+        let inspection = Task { try await store.inspectVideoAsset(id: id) }
+        videoPreviewInspection = inspection
+        defer { if preview == videoPreviewIdentity { videoPreviewInspection = nil } }
         do {
-            let url = try await store.inspectVideoAsset(id: id)
+            let url = try await inspection.value
             guard contextID == videoCreationContextID, documentID == activeDocumentID, self.store === store,
                   preview == videoPreviewIdentity, !isBusy, !isChangingProject, !closePending else { return }
             audio?.transport.stopPlayback(); audioCreationTransport.stopPlayback()
@@ -1991,8 +2027,14 @@ public final class ProjectSession {
               videoCreationCandidates.contains(where: { $0.id == id }) else { return }
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        isChangingProject = true
+        defer { isChangingProject = false }
         do { try await store.exportVideoAsset(id: id, to: url) }
-        catch { report(error, context: "视频导出未完成，原件与已有目标未被覆盖") }
+        catch {
+            if contextID == videoCreationContextID, self.store === store {
+                report(error, context: "视频导出未完成，原件与已有目标未被覆盖")
+            }
+        }
     }
 
     private func report(_ error: Error, context: String) {

@@ -221,7 +221,7 @@ public struct WorkbenchView: View {
     }
 
     @ViewBuilder private var canvas: some View {
-        if model.creatorMode == .video, model.presentedDocument != nil {
+        if model.creatorMode == .video, !model.showingAllArtworks, model.presentedDocument != nil {
             videoWorkspace(presentation: .content)
         } else if !model.showingAllArtworks, model.activeDocument?.audioCreation != nil,
            model.projectSession.audioCreationDraft != nil {
@@ -270,10 +270,11 @@ public struct WorkbenchView: View {
     @ViewBuilder private func videoWorkspace(presentation: VideoCreationPresentation) -> some View {
         if let document = model.presentedDocument, let draft = model.projectSession.videoCreationDraft {
             let session = model.projectSession, context = session.videoCreationContextID
+            let epoch = session.navigationEpoch
             let jobID = session.documentJobs.last(where: { session.activeJobIDs.contains($0.id) })?.id
             VideoCreationView(draft: Binding(
                 get: { session.videoCreationDraft ?? draft },
-                set: { session.updateVideoCreationDraft($0, contextID: context, documentID: document.id) }),
+                set: { session.updateVideoCreationDraft($0, contextID: context, documentID: document.id, navigationEpoch: epoch) }),
                 candidates: session.videoCreationCandidates,
                 selectedAssetID: document.selectedAssetID, adoptedAssetID: document.adoptedAssetID,
                 modelStatus: session.videoModelStatus, canGenerate: session.canGenerateVideoCreation,

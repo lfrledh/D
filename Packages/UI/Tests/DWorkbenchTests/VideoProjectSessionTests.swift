@@ -48,7 +48,7 @@ struct VideoProjectSessionTests {
             }, shutdown: { await runtime.shutdown() }, cleanup: {}, validateModel: { _ in },
                 videoBackendID: backend.descriptor.id, validateVideoModel: { .init(directory: $0, revision: "CPU fixture") },
                 videoCapability: .wan21, defaultMemoryBudgetBytes: 64)
-        }, settings: settings)
+        }, settings: settings, audioEnabled: true)
     }
     private func wait(_ condition: () async -> Bool) async throws {
         let deadline = ContinuousClock.now + .seconds(15)
@@ -76,16 +76,25 @@ struct VideoProjectSessionTests {
         try await fixture { session, probe, _ in
             let id = try #require(session.activeDocumentID), context = session.videoCreationContextID
             let draft = VideoProjectFixture.draft("原始中文 e\u{301} 👩‍💻")
-            session.updateVideoCreationDraft(draft, contextID: context, documentID: id)
+            session.updateVideoCreationDraft(draft, contextID: context, documentID: id, navigationEpoch: session.navigationEpoch)
+            let oldEpoch = session.navigationEpoch
+            #expect(await session.selectCreatorMode(.audio))
+            session.updateVideoCreationDraft(VideoProjectFixture.draft("迟到字段"), contextID: context,
+                                             documentID: id, navigationEpoch: oldEpoch)
+            #expect(session.videoCreationDraft?.prompt == draft.prompt)
+            #expect(await session.selectCreatorMode(.video))
+            session.updateVideoCreationDraft(VideoProjectFixture.draft("迟到 ABA"), contextID: context,
+                                             documentID: id, navigationEpoch: oldEpoch)
+            #expect(session.videoCreationDraft?.prompt == draft.prompt)
             await session.generateVideoCreation(contextID: context, documentID: id)
             try await wait { !(await probe.inputs.isEmpty) }
             var edited = draft; edited.prompt = "改变后的草稿"; edited.seedText = "100"
-            session.updateVideoCreationDraft(edited, contextID: context, documentID: id)
+            session.updateVideoCreationDraft(edited, contextID: context, documentID: id, navigationEpoch: session.navigationEpoch)
             await session.createVideoCreation()
             let other = try #require(session.activeDocumentID)
             #expect(other != id)
             let otherContext = session.videoCreationContextID
-            session.updateVideoCreationDraft(draft, contextID: context, documentID: id)
+            session.updateVideoCreationDraft(draft, contextID: context, documentID: id, navigationEpoch: session.navigationEpoch)
             #expect(session.videoCreationDraft?.prompt == "")
             await probe.finish()
             try await wait { !session.isBusy }
@@ -118,12 +127,12 @@ struct VideoProjectSessionTests {
             let id = try #require(session.activeDocumentID), context = session.videoCreationContextID
             var draft = VideoProjectFixture.draft()
             draft.memoryBudgetMiBText = "-"
-            session.updateVideoCreationDraft(draft, contextID: context, documentID: id)
+            session.updateVideoCreationDraft(draft, contextID: context, documentID: id, navigationEpoch: session.navigationEpoch)
             #expect(!session.canGenerateVideoCreation)
             await session.generateVideoCreation(contextID: context, documentID: id)
             #expect(session.documentJobs.isEmpty)
             draft.memoryBudgetMiBText = "1"
-            session.updateVideoCreationDraft(draft, contextID: context, documentID: id)
+            session.updateVideoCreationDraft(draft, contextID: context, documentID: id, navigationEpoch: session.navigationEpoch)
             await session.generateVideoCreation(contextID: context, documentID: id)
             try await wait { !(await probe.inputs.isEmpty) }
             await session.cancelVideoCreation(contextID: context, documentID: id)
@@ -133,7 +142,7 @@ struct VideoProjectSessionTests {
             #expect(session.videoCreationDraft?.prompt == draft.prompt)
             #expect(await probe.releaseCount == 1)
             draft.prompt = "controlled failure"
-            session.updateVideoCreationDraft(draft, contextID: context, documentID: id)
+            session.updateVideoCreationDraft(draft, contextID: context, documentID: id, navigationEpoch: session.navigationEpoch)
             await session.generateVideoCreation(contextID: context, documentID: id)
             try await wait { !session.isBusy }
             #expect(session.documentJobs.last?.state == .failed)
@@ -150,7 +159,7 @@ struct VideoProjectSessionTests {
             let file = project.appendingPathComponent(ProjectStore.manifestFilename)
             let durable = try Data(contentsOf: file), external = Data("controlled external change".utf8)
             try external.write(to: file)
-            session.updateVideoCreationDraft(VideoProjectFixture.draft(), contextID: context, documentID: id)
+            session.updateVideoCreationDraft(VideoProjectFixture.draft(), contextID: context, documentID: id, navigationEpoch: session.navigationEpoch)
             #expect(await session.saveVideoCreation(contextID: context, documentID: id) == false)
             await session.generateVideoCreation(contextID: context, documentID: id)
             #expect(await probe.inputs.isEmpty)
