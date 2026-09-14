@@ -186,6 +186,30 @@ struct VideoBackendTests {
         }
     }
 
+    @Test("Deployment replacement after bootstrap creation revokes private grants without launching")
+    func deploymentConfirmationFailureCleansBootstrap() async throws {
+        let root = try root(), model = root.appendingPathComponent("model"), tokenizer = root.appendingPathComponent("tokenizer")
+        let code = root.appendingPathComponent("code"), output = root.appendingPathComponent("outputs"), access = root.appendingPathComponent("access")
+        for directory in [model, tokenizer, code, output, access] {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        }
+        try JSONSerialization.data(withJSONObject: ["complete": true, "revision": VideoBackendConfiguration.revision])
+            .write(to: model.appendingPathComponent("D-VIDEO-PREPARED.json"))
+        let script = code.appendingPathComponent("never.py"), marker = code.appendingPathComponent("launched")
+        try "from pathlib import Path\nPath(__file__).with_name('launched').write_text('bad')\n".write(to: script, atomically: false, encoding: .utf8)
+        let confirm = VideoDeploymentConfirmationFixture()
+        let backend = try MLXVideoBackend(configuration: .init(
+            pythonExecutable: URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_VIDEO_TEST_PYTHON"]!),
+            providerScript: script, tokenizerDirectory: tokenizer, artifactDirectory: output,
+            memoryLimitBytes: 14 * 1024 * 1024 * 1024, timeoutSeconds: 10,
+            accessBootstrapRoot: access, confirmDeployment: { try confirm.check() }))
+        let request = InferenceRequest(model: .init(directory: model, revision: VideoBackendConfiguration.revision), input: .video(video()))
+        await #expect(throws: InferenceFailure.self) { try await backend.execute(request) { _ in } }
+        await backend.release()
+        #expect(!FileManager.default.fileExists(atPath: marker.path))
+        #expect(try FileManager.default.contentsOfDirectory(atPath: access.path).isEmpty)
+    }
+
     @Test("Runtime cancels promptly and queued video starts after the cancelled provider exits")
     func runtimeCancelHandoff() async throws {
         let root = try root()
@@ -194,13 +218,16 @@ struct VideoBackendTests {
         for d in [model, tokenizer, code, outputs] { try FileManager.default.createDirectory(at: d, withIntermediateDirectories: true) }
         try JSONSerialization.data(withJSONObject: ["complete": true, "revision": VideoBackendConfiguration.revision])
             .write(to: model.appendingPathComponent("D-VIDEO-PREPARED.json"))
+        let access = root.appendingPathComponent("access")
+        try FileManager.default.createDirectory(at: access, withIntermediateDirectories: false)
         let script = code.appendingPathComponent("fixture.py")
         try Self.fixture.replacingOccurrences(of: "MODE_VALUE", with: "normal")
+            .replacingOccurrences(of: "a=p.parse_args();", with: "p.add_argument('--access-manifest');p.add_argument('--access-run-id');a=p.parse_args();")
             .write(to: script, atomically: false, encoding: .utf8)
         let backend = try MLXVideoBackend(configuration: .init(
             pythonExecutable: URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_VIDEO_TEST_PYTHON"]!),
             providerScript: script, tokenizerDirectory: tokenizer, artifactDirectory: outputs,
-            memoryLimitBytes: 14 * 1024 * 1024 * 1024, timeoutSeconds: 10, cancellationGraceSeconds: 0.2))
+            memoryLimitBytes: 14 * 1024 * 1024 * 1024, timeoutSeconds: 10, cancellationGraceSeconds: 0.2, accessBootstrapRoot: access))
         let runtime = try InferenceRuntime(backends: [backend], configuration: .init(memoryBudgetBytes: 14 * 1024 * 1024 * 1024))
         let waiting = VideoRequest(prompt: "WAIT", negativePrompt: "", width: 64, height: 48, frameCount: 5,
             frameRate: .init(numerator: 16), steps: 1, guidanceScale: 6, scheduleShift: 8, seed: 42,
@@ -229,6 +256,7 @@ struct VideoBackendTests {
                 #expect(result.artifacts.count == 1)
             } else { Issue.record("queued video did not recover after cancellation") }
             await runtime.shutdown()
+            #expect(try FileManager.default.contentsOfDirectory(atPath: access.path).isEmpty)
             #expect(try String(contentsOf: code.appendingPathComponent("previous-process-ended"), encoding: .utf8) == "confirmed")
             let runs = try FileManager.default.contentsOfDirectory(at: outputs, includingPropertiesForKeys: nil)
             let cancelled = runs.filter { $0.lastPathComponent.hasPrefix(first.id.uuidString.lowercased()) }
@@ -280,5 +308,14 @@ struct VideoBackendTests {
             arguments: ["-B", script.path] + arguments,
             environment: ["PATH": "/usr/bin:/bin", "PYTHONDONTWRITEBYTECODE": "1", "TMPDIR": root.path],
             currentDirectory: root, timeoutSeconds: timeout, cancellationGraceSeconds: 0.2, label: "Video fixture")
+    }
+}
+
+private final class VideoDeploymentConfirmationFixture: @unchecked Sendable {
+    private let lock = NSLock()
+    private var calls = 0
+    func check() throws {
+        lock.lock(); calls += 1; let fail = calls == 2; lock.unlock()
+        if fail { throw InferenceFailure.backendFailed("controlled deployment change after bootstrap") }
     }
 }

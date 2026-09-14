@@ -122,6 +122,78 @@ struct VideoProjectSessionTests {
         }
     }
 
+    @Test func closingWaitsForCancelledPreviewToActuallyDrain() async throws {
+        try await fixture { session, probe, _ in
+            let id = try #require(session.activeDocumentID), context = session.videoCreationContextID
+            session.updateVideoCreationDraft(VideoProjectFixture.draft(), contextID: context,
+                documentID: id, navigationEpoch: session.navigationEpoch)
+            await probe.finish()
+            await session.generateVideoCreation(contextID: context, documentID: id)
+            try await wait { !session.isBusy }
+            let asset = try #require(session.videoCreationCandidates.first)
+            let gate = VideoProjectInspectionGate(.resourceRead)
+            let preview = Task {
+                await VideoInspectionTestHooks.$checkpoint.withValue({ gate.reach($0) }) {
+                    await session.previewVideoAsset(id: asset.id, contextID: context, documentID: id)
+                }
+            }
+            do { try await gate.waitForArrival() }
+            catch { gate.release(); preview.cancel(); await preview.value; throw error }
+            session.stopVideoPreview()
+            var closed = false
+            let close = Task { let result = await session.cancelAndCloseProject(); closed = true; return result }
+            do {
+                try await wait { session.isChangingProject }
+                try await Task.sleep(for: .milliseconds(30))
+                #expect(!closed)
+                gate.release()
+                await preview.value
+                #expect(await close.value)
+                #expect(session.videoPreviewURL == nil && session.manifest == nil)
+            } catch {
+                gate.release(); preview.cancel(); await preview.value; _ = await close.value
+                throw error
+            }
+        }
+    }
+
+    @Test func cancellationWhileAdmissionDrainsPreviewStaysCancelled() async throws {
+        try await fixture { session, probe, _ in
+            let id = try #require(session.activeDocumentID), context = session.videoCreationContextID
+            let draft = VideoProjectFixture.draft()
+            session.updateVideoCreationDraft(draft, contextID: context, documentID: id, navigationEpoch: session.navigationEpoch)
+            await probe.finish()
+            await session.generateVideoCreation(contextID: context, documentID: id)
+            try await wait { !session.isBusy }
+            let asset = try #require(session.videoCreationCandidates.first)
+            let gate = VideoProjectInspectionGate(.resourceRead)
+            let preview = Task {
+                await VideoInspectionTestHooks.$checkpoint.withValue({ gate.reach($0) }) {
+                    await session.previewVideoAsset(id: asset.id, contextID: context, documentID: id)
+                }
+            }
+            do { try await gate.waitForArrival() }
+            catch { gate.release(); preview.cancel(); await preview.value; throw error }
+            let generation = Task { await session.generateVideoCreation(contextID: context, documentID: id) }
+            do {
+                try await wait { session.documentJobs.count == 2 }
+                let queued = try #require(session.documentJobs.last)
+                #expect(await probe.inputs.count == 1)
+                await session.cancel(queued.id)
+                gate.release()
+                await preview.value; await generation.value
+                try await wait { !session.isBusy }
+                #expect(session.documentJobs.last?.state == .cancelled)
+                #expect(await probe.inputs.count == 1)
+                #expect(session.videoCreationDraft?.hasSameEditableRepresentation(as: draft) == true)
+            } catch {
+                gate.release(); preview.cancel(); generation.cancel()
+                await preview.value; await generation.value
+                throw error
+            }
+        }
+    }
+
     @Test func invalidBudgetCancellationAndFailurePreserveDraft() async throws {
         try await fixture { session, probe, _ in
             let id = try #require(session.activeDocumentID), context = session.videoCreationContextID

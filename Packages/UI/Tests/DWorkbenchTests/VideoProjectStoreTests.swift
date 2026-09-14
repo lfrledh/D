@@ -172,6 +172,44 @@ struct VideoProjectStoreTests {
         try await reopened.close()
     }
 
+    @Test func editsAndCancellationDuringActualInspectionCannotBeOverwritten() async throws {
+        for cancel in [false, true] {
+            let root = try VideoProjectFixture.root(), project = root.appendingPathComponent("Reentrant.dproject")
+            let store = try await ProjectStore.create(at: project, name: "reentrant")
+            let created = try await store.createVideoCreation(), draft = VideoProjectFixture.draft()
+            _ = try await store.saveVideoCreation(draft, documentID: created.activeDocumentID,
+                expectedRevision: created.activeDocument!.videoCreation!.revision)
+            let request = InferenceRequest(model: .init(directory: root), input: .video(try draft.makeRequest()))
+            _ = try await store.enqueue(request: request)
+            let output = try VideoProjectFixture.output(project: project, runID: request.id)
+            try await VideoProjectFixture.write(output, input: draft.makeRequest())
+            let gate = VideoProjectInspectionGate(.afterFullDecode)
+            let task = Task {
+                try await VideoInspectionTestHooks.$checkpoint.withValue({ gate.reach($0) }) {
+                    try await store.complete(id: request.id, result: .init(artifacts: [.init(url: output, mediaType: "video/mp4")]))
+                }
+            }
+            do {
+                try await gate.waitForArrival()
+                var edited = draft; edited.prompt = "检查中保留的新条件"; edited.revision = UUID()
+                _ = try await store.saveVideoCreation(edited, documentID: created.activeDocumentID, expectedRevision: draft.revision)
+                if cancel { _ = try await store.updateJob(id: request.id, state: .cancelled) }
+                gate.release()
+                if cancel { await #expect(throws: ProjectStoreError.self) { try await task.value } }
+                else { _ = try await task.value }
+                let final = await store.snapshot()
+                #expect(final.activeDocument?.videoCreation == edited)
+                #expect(final.jobs.last?.state == (cancel ? .cancelled : .completed))
+                #expect(final.assets.count == (cancel ? 0 : 1))
+                try await store.close()
+            } catch {
+                gate.release(); task.cancel(); _ = await task.result
+                try? await store.close()
+                throw error
+            }
+        }
+    }
+
     @Test func versionSevenBackupsStrictnessAndInvalidDraftSurvival() async throws {
         let root = try VideoProjectFixture.root(), project = root.appendingPathComponent("Legacy.dproject")
         let store = try await ProjectStore.create(at: project, name: "legacy")
@@ -199,5 +237,33 @@ struct VideoProjectStoreTests {
         try corrupt.write(to: file)
         await #expect(throws: ProjectStoreError.self) { _ = try await ProjectStore.open(at: project) }
         #expect(try Data(contentsOf: file) == corrupt)
+    }
+}
+
+/// Synchronous instrumentation gate only; every wait is bounded and every task is drained by its caller.
+final class VideoProjectInspectionGate: @unchecked Sendable {
+    private let condition = NSCondition()
+    private let checkpoint: VideoInspectionTestCheckpoint
+    private var arrived = false, released = false
+    init(_ checkpoint: VideoInspectionTestCheckpoint) { self.checkpoint = checkpoint }
+    func reach(_ point: VideoInspectionTestCheckpoint) {
+        condition.lock(); defer { condition.unlock() }
+        guard point == checkpoint, !arrived else { return }
+        arrived = true
+        let deadline = Date().addingTimeInterval(8)
+        while !released, condition.wait(until: deadline) {}
+    }
+    private var hasArrived: Bool {
+        condition.lock(); defer { condition.unlock() }; return arrived
+    }
+    func waitForArrival() async throws {
+        let deadline = ContinuousClock.now + .seconds(5)
+        while !hasArrived {
+            try #require(ContinuousClock.now < deadline)
+            try await Task.sleep(for: .milliseconds(5))
+        }
+    }
+    func release() {
+        condition.lock(); released = true; condition.broadcast(); condition.unlock()
     }
 }

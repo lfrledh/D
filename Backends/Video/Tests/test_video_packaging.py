@@ -116,6 +116,16 @@ class VideoFixture(unittest.TestCase):
 
 
 class PrepareVideoEngineTests(VideoFixture):
+    def test_official_tokenizers_wheel_without_license_preserves_pinned_source_license(self) -> None:
+        (self.site / "tokenizers-0.22.2.dist-info/LICENSE").unlink()
+        self.prepare()
+        copied = self.output / "python/lib/python3.12/site-packages/tokenizers-0.22.2.dist-info/licenses/D-tokenizers-LICENSE.txt"
+        self.assertEqual(digest(copied), prepare_video_engine.TOKENIZERS_LICENSE_SHA256)
+        self.assertFalse((self.site / "tokenizers-0.22.2.dist-info/LICENSE").exists())
+        with mock.patch.object(prepare_video_engine, "TOKENIZERS_LICENSE", self.base / "missing-license"):
+            with self.assertRaisesRegex(prepare_video_engine.PackagingError, "license"):
+                self.prepare(output=str(self.base / "missing-license-output"))
+
     def test_syntax_without_import_or_bytecode(self) -> None:
         for name in ("prepare_video_engine.py", "package_video_app.py"):
             target = PACKAGING / name

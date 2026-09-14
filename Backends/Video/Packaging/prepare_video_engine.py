@@ -41,6 +41,10 @@ REQUIRED_DISTRIBUTIONS = {
 REQUIRED_PACKAGES = ("mlx", "numpy", "tokenizers", "ftfy", "wcwidth")
 MODEL_DECLARATION = "wan21.json"
 INSTALLATION_RECORDS = {"direct_url.json", "RECORD", "INSTALLER", "REQUESTED"}
+# The official 0.22.2 wheel omits its Apache text. Preserve the matching tagged
+# source license without altering the installed environment or using the network.
+TOKENIZERS_LICENSE = Path(__file__).parent / "Licenses/tokenizers-0.22.2-LICENSE.txt"
+TOKENIZERS_LICENSE_SHA256 = "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
 
 
 def _sha256(path: Path) -> str:
@@ -101,7 +105,10 @@ def _distribution(site: Path, name: str, version: str) -> Path:
         if path.is_file() and path.name.lower().startswith(("license", "copying", "notice"))
     ]
     if not licenses:
-        raise PackagingError(f"{name} dist-info must include license material")
+        if not (name == "tokenizers" and version == "0.22.2"
+                and not TOKENIZERS_LICENSE.is_symlink() and TOKENIZERS_LICENSE.is_file()
+                and _sha256(TOKENIZERS_LICENSE) == TOKENIZERS_LICENSE_SHA256):
+            raise PackagingError(f"{name} dist-info must include license material")
     return result
 
 
@@ -137,6 +144,18 @@ def _copy_selected_site(site: Path, destination: Path) -> None:
             raise PackagingError(f"duplicate selected site-packages entry: {entry.name}")
         prepare_engine._copy_tree(entry, target)
         if entry.name.endswith(".dist-info"):
+            has_license = any(p.is_file() and p.name.lower().startswith(("license", "copying", "notice"))
+                              for p in target.rglob("*"))
+            if entry.name == "tokenizers-0.22.2.dist-info" and not has_license:
+                if (TOKENIZERS_LICENSE.is_symlink() or not TOKENIZERS_LICENSE.is_file()
+                        or _sha256(TOKENIZERS_LICENSE) != TOKENIZERS_LICENSE_SHA256):
+                    raise PackagingError("tokenizers source license is missing or changed")
+                # Use the same protected-copy checks as the explicitly supplied providers.
+                license_target = target / "licenses/D-tokenizers-LICENSE.txt"
+                license_target.parent.mkdir(exist_ok=True)
+                _copy_verified_source(TOKENIZERS_LICENSE, license_target, "tokenizers source license")
+                if _sha256(license_target) != TOKENIZERS_LICENSE_SHA256:
+                    raise PackagingError("tokenizers source license changed while copying")
             for name in INSTALLATION_RECORDS:
                 record = target / name
                 if record.is_file():

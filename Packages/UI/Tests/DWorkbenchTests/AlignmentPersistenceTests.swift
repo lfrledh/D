@@ -49,7 +49,7 @@ struct AlignmentPersistenceTests {
             #expect(try Data(contentsOf: fixture.project.appendingPathComponent(ProjectStore.versionSixBackupFilename)) == raw)
             let opened = try await ProjectStore.open(at: fixture.project)
             let restored = await opened.snapshot()
-            #expect(restored.schemaVersion == 7)
+            #expect(restored.schemaVersion == 8)
             #expect(restored.activeDocumentID == id)
             #expect(restored.activeDocument?.textDraft?.generationSettings == .legacy)
             #expect(restored.activeDocument?.textDraft?.text == "中文 e\u{301} 👩🏽‍🎨")

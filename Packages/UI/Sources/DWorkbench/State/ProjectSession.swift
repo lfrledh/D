@@ -819,6 +819,10 @@ public final class ProjectSession {
                 return
             }
             await drainVideoPreview()
+            if cancellationRequests.contains(request.id) {
+                await finish(id: request.id, outcome: .cancelled, store: store)
+                return
+            }
             let run = try await session.engine.submit(request, backendID: backendID ?? session.backendID)
             handles[run.id] = run
             phases[run.id] = cancellationRequests.contains(run.id) ? "正在取消" : "排队中"
@@ -838,6 +842,11 @@ public final class ProjectSession {
             }
             if cancellationRequests.contains(run.id) { await run.cancel() }
         } catch {
+            if error is CancellationError, cancellationRequests.contains(request.id),
+               (await store.snapshot()).jobs.contains(where: { $0.id == request.id }) {
+                await finish(id: request.id, outcome: .cancelled, store: store)
+                return
+            }
             let failure = (error as? InferenceFailure) ?? .backendFailed(error.localizedDescription)
             if (await store.snapshot()).jobs.contains(where: { $0.id == request.id }) {
                 await finish(id: request.id, outcome: .failed(failure), store: store)
