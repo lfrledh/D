@@ -66,7 +66,11 @@ public actor ProjectStore {
                 let initial = ProjectManifest(name: name)
                 try ProjectFiles.writeManifest(initial, in: descriptor, replacing: false)
                 return ProjectStore(rootURL: root, rootFD: descriptor, lockFD: lock, manifest: initial)
-            } catch { Darwin.close(lock); throw error }
+            } catch {
+                try? ProjectFiles.unlock(lock)
+                Darwin.close(lock)
+                throw error
+            }
         } catch { Darwin.close(descriptor); throw error }
     }
 
@@ -81,7 +85,12 @@ public actor ProjectStore {
         var transferred = false
         defer {
             if !transferred {
-                if lock >= 0 { Darwin.close(lock) }
+                if lock >= 0 {
+                    // A descriptor copy can outlive this failed opener. Release our
+                    // acquired lock explicitly, just as normal close/deinit do.
+                    try? ProjectFiles.unlock(lock)
+                    Darwin.close(lock)
+                }
                 Darwin.close(descriptor)
             }
         }

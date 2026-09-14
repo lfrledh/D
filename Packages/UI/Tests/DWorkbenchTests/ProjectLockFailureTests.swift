@@ -45,6 +45,10 @@ struct ProjectLockFailureTests {
             // not wait for every pre-exec copy of that file description to disappear.
             let reopened = try await ProjectStore.open(at: fixture.project)
             #expect(await reopened.snapshot().schemaVersion == ProjectManifest.currentSchemaVersion)
+            // Successful transfer keeps the reopened actor's lock exclusive.
+            for _ in 0..<2 {
+                await #expect(throws: ProjectStoreError.self) { _ = try await ProjectStore.open(at: fixture.project) }
+            }
             try await reopened.close()
             #expect(try Data(contentsOf: fixture.project.appendingPathComponent(backup)) == raw)
         }

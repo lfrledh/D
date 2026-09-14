@@ -36,11 +36,12 @@ public struct TextWorkbenchView: View {
     @State private var rawPromptTokenLimit: String?
     @State private var rawOutputTokenLimit: String?
     private var parameterLayoutProbe: ((String, CGRect) -> Void)?
-    private var scrollToOutputForCheck = false
+    private var parameterScrollProbe: ((ScrollViewProxy) -> Void)?
 
     /// Inspect actual SwiftUI geometry; do not depend on its private AppKit implementation.
-    func observingParameterLayout(scrollToOutput: Bool = false, _ probe: @escaping (String, CGRect) -> Void) -> Self {
-        var copy = self; copy.parameterLayoutProbe = probe; copy.scrollToOutputForCheck = scrollToOutput
+    func observingParameterLayout(scrollProxy: @escaping (ScrollViewProxy) -> Void,
+                                  _ probe: @escaping (String, CGRect) -> Void) -> Self {
+        var copy = self; copy.parameterLayoutProbe = probe; copy.parameterScrollProbe = scrollProxy
         return copy
     }
 
@@ -92,7 +93,7 @@ public struct TextWorkbenchView: View {
 
     public var body: some View {
       if presentation == .parameters {
-       GeometryReader { viewport in
+       GeometryReader { _ in
         ScrollViewReader { reader in
          ScrollView {
             VStack(alignment: .leading, spacing: 16) {
@@ -103,15 +104,15 @@ public struct TextWorkbenchView: View {
                 else { rewriteControls }
             }.padding(16)
          }
-         .task(id: viewport.size) {
-             if scrollToOutputForCheck {
-                 await Task.yield()
-                 reader.scrollTo("text-output-scroll-target", anchor: .bottom)
-             }
-         }
+         // Tests request scrolling only after observing actual target geometry.
+         // Viewport appearance alone does not mean a conditional target exists.
+         .onAppear { parameterScrollProbe?(reader) }
         }
        }
        .coordinateSpace(name: "text-parameters")
+       .onGeometryChange(for: CGSize.self) { $0.size } action: {
+           parameterLayoutProbe?("text-parameter-viewport", CGRect(origin: .zero, size: $0))
+       }
       } else {
         GeometryReader { viewport in
             // AnyLayout changes arrangement without replacing the native IME editor.
