@@ -295,3 +295,16 @@ Lead准备时局部变量覆盖使首次保护副本路径不存在，未修改�
 已完成：旧实现失败反例、最小修补、原默认完整回归、非实现者复核、新普通隔离构建和文档状态更新。未完成：H18参考图/H19资料问答真实普通沙盒闭环；H09麦克风；图像9与文字10联合迁移11。下一动作是用户返回后按集中清单串行恢复H18/H19，实际出现系统确认再办理；H09只提醒设备。用户未返回不探测锁屏、不启动窗口，不让这次离线进展自动批准HUM/歌声新下载或实施。
 
 源个人scheme的当前内容/摘要ca3635d88aa5a15397b90e528667c66c0e6db7e596176e885c79d194b544206c、索引blob9c76916bdc97c2d4298cefe64e0b0fae3380573e及唯一未暂存状态保持；普通D四关键文件/H18候选14af48c22e9dbe7ee715b171308276347fab0f68不改。自有测试/构建进程均已返回并回收，未启动GUI/模型；最终进程/保护与源文档差异见R/protection/final.json、owned-process-final.json、final-receipt.json。恢复先核Git/产物/进程，不只相信本文。
+
+
+## 2026-09-14 H19 IME定点续行（TS1-IME1）
+
+用户在Lead说明真人失败、原预算已耗尽及有界修补方向后指示“请继续之前的工作”。本次据此执行一次额外有界Lead收尾，原VIEW初交/两修复/Lead接管不清零，不再派VIEW Worker。固定起点606d0c6c51cc3effe3a5ac87b0e4fc9c9f5f27aa；新证据 /Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-TEXT-SOURCES-01/run-20260914T124235Z-ime；原失败证据D-MULTIMODAL-BASELINE-01/run-20260914T115845Z-human-return/text-gui-r3-ime/human-ime-failure.json。
+
+仅问题输入框TextSourcesView/必要局部原生桥及直接UITests、本文记录；不改模型/Controller保存/公共类型/原T0桥/签名权限。先用真实控制器绑定的原生组字与布局反例确认，再一次根因驱动最小修补。必要时稳定编辑视图的组字期间文字/选择/回调身份，不能强制取消组字、吞输入或降低权威校验。保持同一/跨文档归属、中文/组合Unicode、非法输入恢复、保存/旧候选保护。新反例先失败后通过、相关及完整CPU、非实现者审核、独立普通构建、真人拼音空格确认与宽窄往返必需；不能用setMarkedText模拟代替真实输入法通过。如仍失败、根因不明或需越界，保留证据停报，不串联无限接管。源码和旧产物保留固定版本，源尚不接纳未验收路径。
+
+TS1-IME1实现证据：composition-before 在原606生产实现上新增真实Controller/原生markedText反例，900宽组字保留、860宽后同对象/firstResponder但markedRange从{12,5}变{12,0}，12断言失败；不是焦点或对象替换，布局对旧权威值回写可复现。新局部原生桥组字期不回写文字/选区/回调，确认才走旧Controller校验；editEpoch只触发拒绝后权威重绘，不作.id。原反例composition-after通过，连续同错误拒绝/Unicode及相关30方法通过（之后新增undo方法，不能算最终完整回归）。
+
+实施内新增撤销反例同时发现正常undo后原生值/Controller不同步，以及拒绝超限后旧NSUndoTyping范围导致NSRangeException；composition-undo原日志保留，不只记录最后崩溃。专属问题UndoManager保护消除范围崩溃，但正常undo仍未同步；只读观察确认原生字符串已回到初稿、Controller仍旧。最后使用官方NSTextViewDelegate.undoManager(for:)提供本编辑器管理器，并订阅该对象完成undo/redo通知，通过同一校验回调同步完成后的文字；无需改Controller。程序权威替换/拆卸时仅清本问题框typing历史，普通合法输入/undo/redo不清、工作台回答采用撤销及窗口其他undo不变。代价明确：非法编辑拒绝后的权威恢复会使本问题框先前的键入撤销记录重置，不声称这些旧范围仍可用。完整4项局部反例composition-complete通过，包括有栈拆卸、窗口sentinel保留、非法输入、组字确认；真人Pinyin/Space与完整回归仍待执行。
+
+修补发生于本次额外有界Lead实施/自检中，没有追加Worker修复或重置预算。中间Delegate改用实例UndoManager时漏MainActor声明导致编译错误，按AppKit归属明确标注后继续；没有unsafe/nonisolated绕过。一次在证据目录运行只读git status得到not a git repository，未发生仓库写入。全部日志保留，不用最终绿灯抹去问题。官方依据： https://developer.apple.com/documentation/appkit/nstextviewdelegate/undomanager(for:) 、 https://developer.apple.com/documentation/foundation/nsnotification/name-swift.struct/nsundomanagerdidundochange 。本次仅Lead实现，非实现者只读审核另记，不称独立模型执行了测试。

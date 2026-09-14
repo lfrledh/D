@@ -215,6 +215,7 @@ public struct TextSourcesView: View {
     private let actions: TextSourcesViewActions
     @State private var selectedSourceID: UUID?
     @State private var selection = TextSourcesSelectionState()
+    @State private var questionEditEpoch: UInt64 = 0
 
     public init(notebook: TextSourcesNotebook, partialAnswer: String, isRunning: Bool,
                 isCancelling: Bool, isSaving: Bool, canAsk: Bool, canUndo: Bool,
@@ -353,9 +354,14 @@ public struct TextSourcesView: View {
     private var answersContent: some View {
         VStack(alignment: .leading, spacing: 14) {
                 Text("问题与回答").font(.headline)
-                TextEditor(text: Binding(get: { TextSourcesQuestionPresentation.displayedQuestion(notebook.question) },
-                                         set: { value in actions.changeQuestion(value) }))
-                .font(.body).frame(minHeight: 90).disabled(isSaving)
+                TextSourcesQuestionEditor(value: notebook.question, editEpoch: questionEditEpoch,
+                    isEditable: !isSaving) { value in
+                    actions.changeQuestion(value)
+                    // Even a repeated rejected edit must redraw the authoritative value.
+                    // This is a render input, never an editor identity.
+                    questionEditEpoch &+= 1
+                }
+                .frame(minHeight: 90)
                 .accessibilityIdentifier("text-sources-question")
                 HStack {
                     Button(action: actions.ask) { Label("生成", systemImage: "sparkles") }
