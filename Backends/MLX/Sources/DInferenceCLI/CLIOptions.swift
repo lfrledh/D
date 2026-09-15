@@ -485,12 +485,14 @@ struct CLIOptions: Sendable, Codable {
                 $0 == python || $0 == script ? resolved(URL(fileURLWithPath: $0).deletingLastPathComponent().path) : resolved($0)
             }
             let protectedFiles = [request, profile].map(resolved)
-            guard (protectedRoots + protectedFiles).allSatisfy({ !overlaps(root, $0) }) else {
+            guard (protectedRoots + protectedFiles).allSatisfy({
+                !singingContains(root, $0) && !singingContains($0, root)
+            }) else {
                 throw CLIArgumentError("Singing artifacts must be separate from all deployment and request inputs.")
             }
             if let report = options.report {
                 let destination = resolved(report)
-                guard !contains(root, destination), protectedRoots.allSatisfy({ !contains($0, destination) }),
+                guard !singingContains(root, destination), protectedRoots.allSatisfy({ !singingContains($0, destination) }),
                       protectedFiles.allSatisfy({ $0.path != destination.path }) else {
                     throw CLIArgumentError("Singing --report must be outside artifacts and protected inputs.")
                 }
@@ -519,7 +521,11 @@ struct CLIOptions: Sendable, Codable {
         let singingPresent = arguments.contains { argument in
             let key = String(argument.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false)[0])
             return singingKeys.contains(key)
-        } || raw("--capability") == "singing"
+        } || arguments.enumerated().contains { index, argument in
+            argument == "--capability=singing"
+                || (argument == "--capability" && arguments.indices.contains(index + 1)
+                    && arguments[index + 1] == "singing")
+        }
         if singingPresent {
             // Parser errors may still have a safe report, but ambiguity never gets a write.
             var counts: [String: Int] = [:]
@@ -542,7 +548,7 @@ struct CLIOptions: Sendable, Codable {
                 guard absolute(value) != nil, !hasSymlinkComponent(value) else { return nil }
                 let input = parentKeys.contains(key)
                     ? resolved(URL(fileURLWithPath: value).deletingLastPathComponent().path) : resolved(value)
-                if input.path == output.path || contains(input, output) || (key == "--artifacts" && contains(input, output)) { return nil }
+                if singingContains(input, output) { return nil }
             }
             return destination
         }
@@ -720,6 +726,10 @@ struct CLIOptions: Sendable, Codable {
 
     private static func contains(_ directory: URL, _ item: URL) -> Bool {
         item.path == directory.path || item.path.hasPrefix(directory.path + "/")
+    }
+
+    private static func singingContains(_ directory: URL, _ item: URL) -> Bool {
+        directory.path == "/" || contains(directory, item)
     }
     private static func overlaps(_ lhs: URL, _ rhs: URL) -> Bool { contains(lhs, rhs) || contains(rhs, lhs) }
     private static func resolved(_ path: String) -> URL {

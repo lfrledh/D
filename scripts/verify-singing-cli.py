@@ -166,6 +166,8 @@ def main():
         # Negative cases require a real explicit rest in the positive fixture.
         rest_index = next(i for i, n in enumerate(value["phrase"]["notes"]) if n["midiPitch"] is None)
         protected = {p: digest(p) for p in (a.cli, a.request, a.python, a.script, a.profile)}
+        if protected[a.request]["sha256"] != hashlib.sha256(original).hexdigest():
+            raise ValueError("request changed before the verification snapshot")
     except (OSError, ValueError, KeyError, TypeError, StopIteration) as error:
         parser.error(str(error))
     a.output.mkdir(mode=0o700)
@@ -185,7 +187,7 @@ def main():
                    "--artifacts": str(artifacts), "--memory-budget-mib": "8192"}
 
         def check(name, expected, *, replacements=None, extra=(), custom=None,
-                  inspect=False, report_target=None, sentinels=(), reason=None):
+                  inspect=False, report_target=None, sentinels=(), reason=None, expect_report=True):
             report = report_target or a.output / (name + ".json")
             if custom is None:
                 current = dict(options)
@@ -200,27 +202,42 @@ def main():
             protection = all(digest(p) == d for p, d in protected.items())
             protection = protection and all(digest(p) == d for p, d in saved.items())
             valid = inspection_valid(report) if inspect and report.exists() else False
+            error_report_valid = False
+            if not inspect and expect_report and report.is_file() and report.stat().st_size <= LIMIT:
+                saved_report = strict(report.read_bytes())
+                error_report_valid = (type(saved_report.get("schemaVersion")) is int
+                                      and saved_report["schemaVersion"] == 1
+                                      and saved_report.get("tool") == "d-infer"
+                                      and type(saved_report.get("exitCode")) is int
+                                      and saved_report["exitCode"] == expected
+                                      and isinstance(saved_report.get("failure"), str)
+                                      and bool(saved_report["failure"]))
             # A parser case must not pass merely due to a duplicate option or missing setup.
             diagnostic = actual.get("stderr", "")
             reason_ok = reason is None or reason.lower() in diagnostic.lower()
             passed = (actual.get("exit") == expected and actual.get("reaped") is True
                       and "timeout" not in actual and "error" not in actual
                       and protection and not list(artifacts.iterdir())
-                      and (not inspect or valid) and reason_ok)
+                      and (not inspect or valid) and reason_ok
+                      and (inspect or not expect_report or error_report_valid))
             results.append(dict(name=name, expectedExit=expected, actual=actual,
                                 inspectionRequired=inspect, inspectionValid=valid,
                                 protectedUnchanged=protection, expectedReason=reason,
-                                reasonMatched=reason_ok, passed=passed))
+                                reasonMatched=reason_ok, errorReportRequired=expect_report and not inspect,
+                                errorReportValid=error_report_valid, passed=passed))
             return passed
 
         if not check("valid-inspect", 0, inspect=True):
             raise ValueError("positive actual CLI inspection failed; negative matrix not meaningful")
         check("valid-timeout", 0, extra=("--timeout-seconds", "1"), inspect=True)
         for name, extra in (("empty-prompt", ("--prompt", "")), ("repeat", ("--repeat", "2")),
-                            ("timeout-nan", ("--timeout-seconds", "nan")), ("seed", ("--seed", "1")),
+                            ("timeout-nan", ("--timeout-seconds", "nan")),
+                            ("timeout-zero", ("--timeout-seconds", "0")), ("seed", ("--seed", "1")),
                             ("duplicate", ("--singing-profile", str(a.profile))),
                             ("unknown-option", ("--unknown-option", "x"))):
-            check(name, 2, extra=extra)
+            check(name, 2, extra=extra, expect_report=name != "duplicate")
+        check("budget-overflow", 2, replacements={"--memory-budget-mib": "18446744073709551615"})
+        check("missing-request", 2, replacements={"--singing-request": a.output / "missing.json"})
 
         def altered(name, obj, *, raw=None, reason=None):
             p = a.output / (name + "-request.json")
@@ -249,13 +266,21 @@ def main():
         altered("unknown-json-field", mutated, reason="singing request")
         altered("trailing-json", None, raw=original + b" {}", reason="JSON")
         altered("empty-json", None, raw=b"", reason="JSON")
+        compact = json.dumps(value, ensure_ascii=False).encode()
+        altered("duplicate-json-key", None, raw=b'{"schemaVersion":1,' + compact[1:], reason="Duplicate")
         check("wrong-outer-revision", 1, replacements={"--revision": "unverified-revision"})
+        bad_profile = a.output / "bad-profile.json"
+        bad_profile.write_text("{}")
+        check("readable-profile-mismatch", 1, replacements={"--singing-profile": bad_profile}, sentinels=(bad_profile,))
+        bad_bank = a.output / "missing-material-bank"
+        bad_bank.mkdir()
+        check("missing-material", 1, replacements={"--model": bad_bank})
 
         for key in ("--singing-request", "--singing-python", "--singing-script",
                     "--singing-vendor", "--singing-profile", "--singing-vocoder"):
             check("text-rejects-" + key[2:], 2,
                   custom=("--capability", "text", "--model", str(a.model), "--prompt", "x",
-                          key, options[key]), reason=key)
+                          key, options[key]), reason=key, expect_report=False)
         # All dangerous destinations below are disposable fixtures, never original materials.
         for flag in ("--singing-script", "--singing-python"):
             directory = a.output / (flag[2:] + "-fixture")
@@ -265,20 +290,35 @@ def main():
             entry.write_text("controlled unused entry")
             helper.write_text("controlled original helper")
             check(flag[2:] + "-parent-report", 2, replacements={flag: entry},
-                  extra=("--unknown-option", "x"), report_target=helper, sentinels=(entry, helper))
+                  extra=("--unknown-option", "x"), report_target=helper, sentinels=(entry, helper), expect_report=False)
         bank = a.output / "bank-fixture"
         bank.mkdir()
         sentinel = bank / "config.json"
         sentinel.write_text("controlled original bank")
         check("incomplete-bank-report", 2,
               custom=("--capability", "singing", "--model", str(bank)),
-              report_target=sentinel, sentinels=(sentinel,))
-        check("report-is-request", 2, report_target=request, sentinels=(request,))
-        check("report-in-artifacts", 2, report_target=artifacts / "report.json")
-        passed = all(x["passed"] for x in results)
+              report_target=sentinel, sentinels=(sentinel,), expect_report=False)
+        check("incomplete-root-model-report", 2,
+              custom=("--capability", "singing", "--model", "/"),
+              report_target=sentinel, sentinels=(sentinel,), expect_report=False)
+        check("report-is-request", 2, report_target=request, sentinels=(request,), expect_report=False)
+        check("report-in-artifacts", 2, report_target=artifacts / "report.json", expect_report=False)
+        check("report-in-vendor", 2, replacements={"--singing-vendor": bank},
+              extra=("--unknown-option", "x"), report_target=sentinel, sentinels=(sentinel,), expect_report=False)
+        for first, second in (("text", "singing"), ("singing", "text")):
+            check("duplicate-capability-" + first, 2,
+                  custom=("--capability", first, "--capability", second, "--model", str(bank)),
+                  report_target=sentinel, sentinels=(sentinel,), expect_report=False)
+        alias = a.output / "bank-alias"
+        alias.symlink_to(bank, target_is_directory=True)
+        check("duplicate-path-alias", 2, replacements={"--model": bank},
+              extra=("--model=" + str(alias),), report_target=alias / sentinel.name,
+              sentinels=(sentinel,), expect_report=False)
+        final_protection = all(digest(p) == d for p, d in protected.items())
+        passed = all(x["passed"] for x in results) and final_protection
         summary = {"schemaVersion": 1, "passed": passed, "cases": results,
                    "scope": "offline actual CLI parsing/admission, no model inference",
-                   "originalInputsUnchanged": all(digest(p) == d for p, d in protected.items())}
+                   "originalInputsUnchanged": final_protection}
     except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as error:
         summary = {"schemaVersion": 1, "passed": False, "cases": results, "error": str(error)}
     with (a.output / "results.json").open("x", encoding="utf-8") as handle:
@@ -288,4 +328,3 @@ def main():
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
