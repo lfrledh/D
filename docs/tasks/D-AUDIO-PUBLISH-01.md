@@ -1,6 +1,6 @@
 # D-AUDIO-PUBLISH-01：声音产物共享发布可靠性
 
-2026-09-15；状态：规格冻结 AP1-R1，待实施/验收。用户批准继续下一阶段；本任务处理上一阶段明确留下的共享 P2，不重置 SING1/PREP1 预算或宣称整个歌声阶段完成。
+2026-09-15；状态：AP1-R2已完成独立验收、组合与源接纳；推送结果见最终回执。用户批准继续下一阶段；本任务处理上一阶段明确留下的共享 P2，不重置 SING1/PREP1 预算或宣称整个歌声阶段完成。
 
 ## 身份、目标与职责
 
@@ -84,3 +84,34 @@ Lead代码审核发现_close_publication_descriptor在os.close失败后无条件
 依据[Python PEP475](https://peps.python.org/pep-0475/#modified-functions)：close属于不重试的特殊调用，报错并不保证原fd仍开放。本次为跨平台关闭/所有权语义的Lead澄清，原AP1的“不无限重试”不意味着允许一次不安全重试；不追罚旧规格未明确的关闭结果可观测性。原有作品保护/校验错误/JSON/CLI/模型边界不变，不变更21＋17原有断言；初交新增的“必须调用两次close”属错误实现耦合测试，应更正为真实释放/复用/错误优先的断言。
 
 修复1仅允许d_audio_contract.py、test_audio_backend.py；先在初交实现新增永久反例并保留红灯，再作最小修补，重跑同四CPU与所有独立案例。执行基线为287a86ffddffbea6003875d4cfbb9f224253c39d；AP1-R2通过原线程repair1请求显式发出，Worker旧任务文件仍包含原R1历史，不从旧SHA实施；新要求摘要与证据位于其获准output，Lead完整记录只在集成树维护。初交已用，最多两轮修复，本次使用第一轮；旧PREP1预算不改。
+
+## 2026-09-15：验收、源接纳与结案
+
+本有限共享维护已完成，不代表D-MUS02真实歌声后端完成。原共享静态partial碰撞先红后绿；初交另引入/暴露的关闭错误重试风险由Lead独立发现并三场景重现，非实现者复核后修复1关闭。歌声删除重复发布实现，和SA3/MRT2复用唯一共享函数；job=兼容、原请求/模型/精度/输入保护/歌声封装与CLI退出语义不变。完整未知目录/描述符关闭结果、被拒绝清理残留与恶意竞态均不超出AP1-R2声明。
+
+| 版本 | 完整SHA / 对应证据 |
+|---|---|
+| 源起点 | f2eb259d306d3fbcc5e9a3234fa3e514a7b5a406 |
+| Lead准备 / Worker初始执行 | 4be5c8492d3badc182d3a2028cb663ddb8fc5439 |
+| 初交，未接纳 | 287a86ffddffbea6003875d4cfbb9f224253c39d；R/candidate-acceptance.json原范围绿色，另R/candidate-close三项失败 |
+| 修复1候选 | 08cb5aa4abfb18e2771567d8ad7c874c69b39287；R/repaired-acceptance.json及只读非实现者复核 |
+| 组合与源实际受测 | 3186aba2762850152d285afa50dc7ed7e9e3eef6；R/combined-acceptance.json、source-acceptance.json |
+| 最终源 / 远端 | R/final-receipt.json、final-version-map.json；受测版本后仅三份获准Markdown结案，不称在未产生的SHA重新测试 |
+
+| 检查 | 修复候选、组合、源分别执行的结果 |
+|---|---|
+| 四个永久CPU入口 | 音频31、MRT2 21、访问生命周期11、歌声17，合计80方法每次均零失败；原21/17断言未降低 |
+| Lead独立发布 | 33场景通过：目标/临时碰撞、字节/身份/校验、短写、描述符和发布后错误、第一错误保护 |
+| Lead真实fd复用 | 3场景通过：正常文件close、目录close、主错误清理close；另有永久回归先红后绿，不叠加为更多产品场景 |
+| Lead既有歌声/真实CLI | 42场景通过；旧金样例、原输入、错误/退出和Unicode不变；只是实际Python CLI，不是演唱模型 |
+| 语法与范围 | tokenize.open +内存compile、diff检查和精确文件白名单通过；解释器/完整命令/环境/哈希见各result.json |
+
+各版本重复执行不相加成唯一场景总通过率。外部driver仍保留最初独立失败，永久测试也分别先失败再通过。Lead验收方案在运行完整矩阵前按非实现者建议补强5处判定，见R/independent-test-review.json；随后追加close语义反例，未放宽已通过检查。
+
+来源：gpt-5.6-sol/high初交＋修复1实现；Lead任务/平台语义澄清、独立反例、测试与审核/集成，未重写生产代码；非实现者singing_repo_integration_scope只读规格/验收/代码复核，未声称另跑测试。CLI0.154.0-alpha.6.2，线程01a0a2f3-54fd-7cd2-ab7e-d5a5868babb6，3次请求与可观察turn_context模型/强度/写根均一致、network=false，隐藏服务解析unknown。详见R/worker/*-observed.json、lead-*-event-review.json。Worker非零均为预先批准的红灯夹具，没有观察到未处理权限事故或源写入。
+
+本任务使用1次普通修复，剩1次和可选有界Lead接管均未用；SING1/PREP1旧预算不变。Worker预检75.84秒、初交458.03秒、修复182.68秒，合计716.55秒墙钟；token保留逐阶段CLI累计快照，不相加重复计费，缓存输入不再加到输入总量。完整Lead/只读研究消耗与实际订阅扣费unknown；不是成本最优或Sol普遍胜任的结论。详见R/current-run-usage.json。
+
+恢复检查点：源已快进组合SHA并从源入口复验；个人scheme完整内容、SHA256、索引blob与唯一未暂存状态均保持，证据R/protection/pre-source-ff.json、post-source-ff.json和final。普通D、用户作品、模型未被本任务操作，未重建/重签/启动应用，不宣称新App/GPU/真实歌声通过。所有本轮CLI/测试自有进程已终止回收，不删除任何候选/证据，不推进main；最终源/推送只以回执核实。
+
+下一动作：H20由本人确认Xcode协议，H21由本人决定发送已写好的限定询问或提供权利依据；其后仅在适用许可和具体下载授权内继续短歌声薄后端。内部研发许可可与未来分发独立推进。HUM必要纠错/普通试听/MIDI与I2V保留原独立顺序；不为等许可再造无用户价值的外围工作。
