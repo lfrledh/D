@@ -58,6 +58,23 @@
 
 退出0表示封装完成，2表示输入/工具/报告失败，130表示取消；具体子阶段结果保留在报告中。`packaged`与`runtimeVerification=not-run`只说明封装完成，不代表模型运行、公证或系统隐私授权已验证。当前验收与实际产物索引见[批次记录](docs/tasks/D-MULTIMODAL-BASELINE-01.md)。
 
+## 歌声条件离线准备（开发入口，2026-09-15）
+
+`Backends/Audio/Python/d_singing_prepare.py`将SING1乐句与显式发音清单转换成DiffSinger variance输入：保留歌词、一字多音、休止、音高和整数微秒时值。**输出是prepared JSON，不是WAV，也不是App中的歌声生成功能。** 不自动猜读音、不下载声库，不把音高识别候选直接当已确认乐谱。规格、来源及实际验收状态见[任务](docs/tasks/D-SINGING-BACKEND-01.md)。
+
+从源根使用已批准、可正常运行的独立Python3.12环境。先将`D_SINGING_PYTHON`设为其解释器的绝对路径，将`D_SINGING_OUTPUT`设为任务目录中尚不存在的绝对文件路径（父目录必须已存在，所有路径分量不可为符号链接），然后：
+
+```sh
+"$D_SINGING_PYTHON" -B Backends/Audio/Python/d_singing_prepare.py \
+  --phrase "$PWD/Backends/Audio/Fixtures/Singing/phrase-v1.json" \
+  --pronunciations "$PWD/Backends/Audio/Fixtures/Singing/pronunciations-v1.json" \
+  --output "$D_SINGING_OUTPUT"
+```
+
+返回0仅表示条件JSON已安全保存；参数、输入或保存失败返回2并在stderr解释，stdout为空。拒绝覆盖已有输出；若文件已发布而后续同步失败，保留已发布文件并报告失败，不自动删除它。夹具发音表是合成测试数据，不代表绮萱或其他声库字典兼容。完整结果保留原始输入；其中`dsSegments`才是DS条件数组，不能将整个封装冒充模型输入或生成结果。
+
+本机Xcode许可门槛与待核歌声材料见[集中待办H20/H21](docs/FAILURE_AND_PERMISSION_AUDIT.zh-CN.md#当前集中待办2026-09-14)。不通过运行系统Python/安装或接受条款来自动解决；此次无需新依赖、模型或应用构建。
+
 ## 短原声音高识别：内部评估（2026-09-15）
 
 在包含独立 `PitchEngine.dengine` 的评估构建中，进入项目→音频→已保存原声→音高识别，使用完整原声或已选片段开始分析。可查看连续音高与近似音符、保存或拒绝候选、重开后继续查看、导出JSON。原声和原帧范围保留，不自动量化；当前单声道profile16ms…120秒，实际测试2秒合成声音及约11秒本人录音。尚无音符合成试听、人工修谱、MIDI/MusicXML、歌词演唱或哼唱直接驱动MRT2。
