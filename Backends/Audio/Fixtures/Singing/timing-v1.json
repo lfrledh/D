@@ -1,0 +1,290 @@
+{
+  "fixtureVersion": 1,
+  "provenance": {
+    "kind": "self-composed phrase and recorded original-model duration outputs; not fresh inference or waveform acceptance",
+    "sourceRun": "run-20260915T073451Z-r1-continuation",
+    "originalBankArchiveSHA256": "fe8ee7c95883d327a2b7facbbe832a7a53e1344918dc791ca83fc23b08034110",
+    "referenceCommit": "9699944ead5a3b27b59bdf5a35f73fada8c11b7b"
+  },
+  "phrase": {
+    "schemaVersion": 1,
+    "id": "10000000-0000-4000-8000-000000000001",
+    "revision": 1,
+    "ticksPerSecond": 1000000,
+    "language": "zh",
+    "durationTicks": 6000000,
+    "notes": [
+      {
+        "id": "10000000-0000-4000-8000-000000000010",
+        "startTick": 0,
+        "endTick": 500000,
+        "midiPitch": null
+      },
+      {
+        "id": "10000000-0000-4000-8000-000000000011",
+        "startTick": 500000,
+        "endTick": 1500000,
+        "midiPitch": 60
+      },
+      {
+        "id": "10000000-0000-4000-8000-000000000012",
+        "startTick": 1500000,
+        "endTick": 2000000,
+        "midiPitch": 62
+      },
+      {
+        "id": "10000000-0000-4000-8000-000000000013",
+        "startTick": 2000000,
+        "endTick": 2500000,
+        "midiPitch": null
+      },
+      {
+        "id": "10000000-0000-4000-8000-000000000014",
+        "startTick": 2500000,
+        "endTick": 4000000,
+        "midiPitch": 64
+      },
+      {
+        "id": "10000000-0000-4000-8000-000000000015",
+        "startTick": 4000000,
+        "endTick": 5500000,
+        "midiPitch": 67
+      },
+      {
+        "id": "10000000-0000-4000-8000-000000000016",
+        "startTick": 5500000,
+        "endTick": 6000000,
+        "midiPitch": null
+      }
+    ],
+    "lyricUnits": [
+      {
+        "id": "10000000-0000-4000-8000-000000000030",
+        "text": "",
+        "noteIDs": [
+          "10000000-0000-4000-8000-000000000010"
+        ]
+      },
+      {
+        "id": "10000000-0000-4000-8000-000000000031",
+        "text": "啦",
+        "noteIDs": [
+          "10000000-0000-4000-8000-000000000011",
+          "10000000-0000-4000-8000-000000000012"
+        ]
+      },
+      {
+        "id": "10000000-0000-4000-8000-000000000032",
+        "text": "",
+        "noteIDs": [
+          "10000000-0000-4000-8000-000000000013"
+        ]
+      },
+      {
+        "id": "10000000-0000-4000-8000-000000000033",
+        "text": "呀",
+        "noteIDs": [
+          "10000000-0000-4000-8000-000000000014"
+        ]
+      },
+      {
+        "id": "10000000-0000-4000-8000-000000000034",
+        "text": "啦",
+        "noteIDs": [
+          "10000000-0000-4000-8000-000000000015"
+        ]
+      },
+      {
+        "id": "10000000-0000-4000-8000-000000000035",
+        "text": "",
+        "noteIDs": [
+          "10000000-0000-4000-8000-000000000016"
+        ]
+      }
+    ]
+  },
+  "pronunciations": {
+    "schemaVersion": 1,
+    "phraseID": "10000000-0000-4000-8000-000000000001",
+    "phraseRevision": 1,
+    "language": "zh",
+    "inventoryID": "qixuan-v2.7.0-explicit-fixture",
+    "inventoryRevision": "original-phoneme-maps",
+    "symbols": [
+      "SP",
+      "zh/l",
+      "zh/a",
+      "zh/y"
+    ],
+    "silenceToken": "SP",
+    "units": [
+      {
+        "unitID": "10000000-0000-4000-8000-000000000030",
+        "phonemes": [
+          "SP"
+        ]
+      },
+      {
+        "unitID": "10000000-0000-4000-8000-000000000031",
+        "phonemes": [
+          "zh/l",
+          "zh/a"
+        ]
+      },
+      {
+        "unitID": "10000000-0000-4000-8000-000000000032",
+        "phonemes": [
+          "SP"
+        ]
+      },
+      {
+        "unitID": "10000000-0000-4000-8000-000000000033",
+        "phonemes": [
+          "zh/y",
+          "zh/a"
+        ]
+      },
+      {
+        "unitID": "10000000-0000-4000-8000-000000000034",
+        "phonemes": [
+          "zh/l",
+          "zh/a"
+        ]
+      },
+      {
+        "unitID": "10000000-0000-4000-8000-000000000035",
+        "phonemes": [
+          "SP"
+        ]
+      }
+    ]
+  },
+  "vowelIndices": [
+    null,
+    1,
+    null,
+    1,
+    1,
+    null
+  ],
+  "sampleRate": 44100,
+  "hopSize": 512,
+  "contextTicks": 500000,
+  "headFrames": 8,
+  "tailFrames": 8,
+  "predictions": [
+    [
+      34.759521484375,
+      7.257443428039551,
+      129.34861755371094
+    ],
+    [
+      33.14723587036133,
+      8.209335327148438,
+      113.19074249267578,
+      11.28880786895752,
+      131.4102783203125
+    ]
+  ],
+  "expected": {
+    "groupSymbols": [
+      [
+        "SP",
+        "zh/l",
+        "zh/a"
+      ],
+      [
+        "SP",
+        "zh/y",
+        "zh/a",
+        "zh/l",
+        "zh/a"
+      ]
+    ],
+    "wordDiv": [
+      [
+        2,
+        1
+      ],
+      [
+        2,
+        2,
+        1
+      ]
+    ],
+    "wordDur": [
+      [
+        43,
+        129
+      ],
+      [
+        43,
+        129,
+        129
+      ]
+    ],
+    "phMidi": [
+      [
+        60,
+        60,
+        60
+      ],
+      [
+        64,
+        64,
+        64,
+        64,
+        67
+      ]
+    ],
+    "phonemes": [
+      "SP",
+      "SP",
+      "zh/l",
+      "zh/a",
+      "SP",
+      "zh/y",
+      "zh/a",
+      "zh/l",
+      "zh/a",
+      "SP",
+      "SP"
+    ],
+    "phonemeDurations": [
+      8,
+      36,
+      8,
+      129,
+      35,
+      8,
+      117,
+      12,
+      129,
+      43,
+      8
+    ],
+    "noteDurations": [
+      8,
+      44,
+      86,
+      43,
+      43,
+      129,
+      129,
+      43,
+      8
+    ],
+    "noteMidi": [
+      null,
+      null,
+      60,
+      62,
+      null,
+      64,
+      67,
+      null,
+      null
+    ],
+    "frameCount": 533
+  }
+}

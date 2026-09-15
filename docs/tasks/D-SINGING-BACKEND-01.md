@@ -213,3 +213,51 @@ D选择在完整0–6秒作品轴补齐SP，再加首尾各8模型帧；所有�
 **阶段状态：R1上游语义/数值准备推进；完整歌声后端仍受阻，未完成。** 不用相同类别mel探针无限替代真实WAV出口。当前明确缺口为匹配vocoder适用许可、完整短WAV与改歌词/音高/时值对照、取消/错误/重复释放、正式provider与R2；H20本人Xcode协议阻塞Swift/应用，不要求再次批准开发下载。下一事件恢复先核相关回复/材料/源，依据充分后固定质量与失败矩阵、受限Worker实施薄provider、非实现者审核、Lead串行真实验收。R1/R2通过后，下阶段仍是歌声工作台候选试听/采用拒绝/保存重开/安全导出；不启动高级音乐编辑、其他新模态或新的协作试点。
 
 只修改任务、当前行动、音乐路线与集中待办四份现有文档，代码仍对应上次受测 `3186aba2762850152d285afa50dc7ed7e9e3eef6`；新数据实际调用源版本55336d6完整值如上，外部实验按独立脚本摘要关联，最终文档SHA/本地接纳/推送写R/`final-receipt.json`。源个人scheme完整内容/摘要/索引/未暂存状态保持，未暂存它；旧产物/作品与模型原件不动。自有准备CLI和模型进程均已结束，两个本轮只读工作完成；工具另列历史`creative_workflows_research`为pending_init，本轮未派该任务、未观察其写入、没有把它宣称已结束或建立系统写锁，详见恢复回执。
+
+
+## 2026-09-15：R1-TIMING1 离线时序组件（规格1，执行前冻结）
+
+用户暂不能操作Mac，批准先完成当前可独立进行的工作。上游真实接口及两组数值已有依据，现在将其可独立验收的时长逻辑变成后端内部组件；覆盖此前“材料等待期间不做任何实现”的调度结论，不降低R1真实WAV或R2门槛。task_id仍D-SINGING-BACKEND-01，slice/contract R1-TIMING1，spec_revision=1，source_base=1d3305ef0e8b0538aa9f78fc1a9fb9509f9b9d61。run为D-Development/AgentTrials/D-SINGING-BACKEND-01/run-20260915T095325Z-timing；执行基线在timing/job.json记完整SHA。
+
+目标：验证后的作品/显式发音→不可变duration请求→已有预测的锚点对齐→音符/音素共享累计帧表。只用标准库，不新增CLI、序列化协议、模型注册、运行时或UI入口，不加载模型、不写WAV、不猜G2P/音高/音色曲线。六秒/533帧/0.5秒context/8补帧仅为已测样例。组件不是通用所有DiffSinger模型或所有发音法兼容声明；实际tensor IDs、F0、声码器、静音/音频裁切、质量和生命周期仍待R1。
+
+### 文件所有权、入口和不变量
+
+Worker只新增 `Backends/Audio/Python/d_singing_timing.py` 和 `Backends/Audio/Python/tests/test_singing_timing.py`。Lead维护本节及自编/实测记录小夹具 `Backends/Audio/Fixtures/Singing/timing-v1.json`；不改变已有prepare/helper/旧夹具/测试/Swift/工程/依赖/模型。新模块导入复用 `prepare_singing_plan` 和 `ContractError`，不得复制/弱化旧校验；不使用assert作为输入校验。不在模块导入或函数中做文件、环境、网络、子进程或模型操作。
+
+两个冻结函数（具体内部结构由实现者决定）：
+- `build_duration_groups(phrase, pronunciations, vowel_indices, *, sample_rate, hop_size, context_ticks)` 返回不可变plan，公开 `.groups`，每group公开tuple `.symbols/.word_div/.word_dur/.ph_midi`。plan保留不可变源身份/revision、时轴及后续对齐需要的数据；不持有可变原输入别名。一次build捕获的plan供同一推理调用使用，外部异步候选/版本失效由未来runtime负责，不将本函数宣称为候选状态管理。
+- `align_duration_predictions(plan, predictions, *, head_frames, tail_frames)` 返回不可变result，公开tuple `.phonemes/.phoneme_durations/.note_durations/.note_midi`、整数 `.frame_count/.source_duration_ticks` 和 `.source_intervals`。每个source interval公开 `.phoneme/.start_tick/.end_tick/.unit_id`，单位是微秒，允许Fraction精确有理数；SP间隙unit_id=None。source_intervals不含模型首尾补帧；note_midi对真实休止及补帧保留None，禁止为未来pitch模型猜填音高。真实声学静音并未因此获得保证。
+
+复用旧严格phrase/pronunciation校验；vowel_indices是与lyricUnits同长的list，休止恰None，有声恰一个非bool整数索引，落在该unit音素数组内。这表示一个显式元音锚，后继noteIDs属于同字延音；不重复音素、不从音素名字推断锚。多个独立元音锚/自动发音分析不在这个profile内。sample_rate/hop_size是显式正整数，最多Int32.max；context_ticks显式1…600000000整数；head/tail为0…Int64.max整数。bool、等值float、未知类型均拒绝，所有生成帧计数须落在Int64内，不分配逐帧数组。新profile仍须另行实测，参数化不等于支持所有采样率。
+
+### 时长模型请求规则
+
+按源休止拆分连续有声units；每个group首插一个模型context SP，其余符号依unit原序连接。第一个真实元音的音素索引（含SP）及后续每unit元音索引组成锚点；word_div是[0→首元音、相邻元音、末元音→group末尾]的音素数。令anchors为各unit首note的startTick，最后补末unit最后note的endTick；首再插groupStart-context_ticks。定义I(t)=trunc(t*sample_rate/(1000000*hop_size))，向零截断。word_dur是相邻I端点之差，不是独立区间floor，负context起点不可用Python负数整除代替；各项须>0。context只供encoder，不能增加来源可用休止。ph_midi按word_div分段填充：context段（首SP及首元音前的辅音）用首unit首note pitch；其后每个元音锚间段用该起始锚unit的首note pitch。因此下一unit锚前辅音属于前一锚间段，第二实测组为[64,64,64,64,67]；不能按词法所属unit填成[64,64,64,67,67]。延音的后续音高仍留在源notes，不改source。
+
+### 预测对齐与累计帧规则
+
+predictions为与groups同长的list，每项为与symbols同长的list；元素仅Python int/float（非bool），严格正、有限，长度错误/NaN/Infinity/0/负数拒绝。模型数组调用者应显式tolist，不引入numpy依赖。首context SP预测校验后舍去，不占作品轴。
+
+对每组：首元音锚前的真实辅音保持预测帧×hop_size/sample_rate换算的原始时长，反向放在该元音源起点之前；允许窗口仅该组之前连续源休止（或作品0），不能借用虚拟context。超出立即ContractError，不能增加前导作品、裁剪预测、借前组声音或悄悄压短辅音。恰好落在允许窗口起点可接纳；零长剩余SP不生成。
+
+首元音及后续音素按相邻元音锚/组末尾之间的预测权重比例铺满对应源区间（包括下一unit的锚前辅音）；首元音必须仍对齐其unit首note起点，末锚为最后unit最后note的endTick。一字多音仅延长同一元音所在锚区间。各有声组外的原作品空隙补显式SP，保留原作品0…durationTicks覆盖；同组后的源休止不被吞并成音素。
+
+采用精确有理数计算/累计边界：整数预测精确保留，float用as_integer_ratio/Fraction(float)保留传入的二进制精确值，不先str转十进制、不经float中间和/比值。不独立round每段或先用近似秒数再凑总长。定义 `q(t)=round_half_even(t*sample_rate/(1000000*hop_size)+1/2)`；q(0)=0。body音素/音符帧数为相邻q差；任一正源区间压成零帧立即拒绝，不改最短1/合并/排序。head/tail在body量化之后独立加入（为SP与None音符，仅>0才出现）；不能把奇数head放进half-even舍入改变body。总帧=头+q(sourceDuration)+尾，phone与note总和相同，source_intervals不被量化值覆盖。没有FitDurationSum、音频裁切或零F0策略。此D内部装配规则对旧8帧实测例应严格匹配，不声称完整OpenUtau路径等价。
+
+### 验收与反例
+
+- Lead固定timing-v1.json：两组duration输入与已记录实测完全相同；预测对齐的phone[8,36,8,129,35,8,117,12,129,43,8]、note[8,44,86,43,43,129,129,43,8]、总533一致；源六秒与补帧分离。原文件/原dict不变、输出不可变；原dict事后修改不能改变plan结果。
+- 合成边界：无前导休止且首unit为元音可通过；有辅音但无可用休止拒绝；恰占可用休止可通过、超一微小量拒绝；多个/首尾休止、单/多音素、同字多音、音高0/127、Unicode/大小写UUID别名不改原值。
+- context改变仅改变duration encoder context项，不改变源休止或对齐窗口；head/tail=0及奇数值只影响补帧，总长无漂移。参数显式48000/480及长于6秒的输入，不能按开发机内存/固定样例拒绝。
+- 独立截断与累计半偶舍入各有非整数/恰半边界用例；微小音符/音素量化压零拒绝、无最低帧数修补；多个区间不会因逐段舍入累积误差。
+- 参数bool/float/负/0、无元音锚/索引越界/错误组数/预测长度/布尔/非有限/非正值分别作为单错反例；无效原phrase或过期pronunciation仍被旧契约拒绝。失败不改输入、无文件副作用。
+- Worker自行实现局部测试；Lead另用冻结表、真实记录和变形/反例核验，非实现者读代码/证据。源接纳前在具体组合SHA运行新组件+原17方法prepare/真实CLI及相关既有CPU回归，不运行Xcode、GUI、真实模型或再做mel实验。模拟模型输出检查与引用旧真实预测分开。
+
+### 运行与预算
+
+一个受限gpt-5.6-sol/high实现Worker（时轴/兼容/精度边界需要明确处理），另一个现有只读代理核契约/审核；Lead管理共同文件、反例、组合和推送。模型/effort/cwd/sandbox以本次请求及可观察turn_context分别验证。Worker工作树D-Worktrees/D-SINGING-TIMING-01；网络关闭，写根仅该树和R/timing/output、R/timing/tmp，共同Git/源/模型/旧证据只读且禁敏感访问。预检不实现，Lead发IMPLEMENT后写。不得派生/提交/改规格。
+
+只用既有外盘Python3.12：`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-VIDEO-V0-01/run-20260913T152419Z/venv/bin/python -B`；语法tokenize.open＋内存compile，不exec目标、不默认py_compile。实际单元运行的TMPDIR/D_TEST_TEMP_DIR/cache只在本run批准目录，-B/PYTHONDONTWRITEBYTECODE防目标pyc。未知权限/身份/副作用立即停报，预期受控失败夹具另记。每次≤15分钟，初交+最多两轮普通修复、必要一次有界Lead接管；新切片预算不能刷新PREP1已发生的初交/修复1历史。未经许可WAV、音质/取消/生命周期、Swift/provider和App仍未完成，不自动启用歌声能力。
+
+派工前非实现者规格核查发现ph_midi文字与既有实测不一致、float精确解释未写清；Lead在首次IMPLEMENT前固定为锚间赋值与二进制精确Fraction，未改金样例/旧证据，不计Worker返工。两项属于说明歧义，不能记成模型实现失败。
