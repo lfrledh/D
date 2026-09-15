@@ -6,10 +6,12 @@ renderer validates all immutable material before constructing this engine.
 
 from __future__ import annotations
 
+from collections import OrderedDict
 from dataclasses import dataclass
 from contextlib import redirect_stdout
 import gc
 import importlib
+from importlib.machinery import PathFinder
 import io
 import json
 import math
@@ -44,6 +46,10 @@ class QixuanRuntimeError(ContractError):
 
     def __init__(self, message: str) -> None:
         super().__init__(message, "runtime")
+
+
+class RenderCancelled(Exception):
+    """Dedicated cooperative cancellation shared by renderer and model adapter."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -159,10 +165,74 @@ def _validate_vendor_modules(vendor_root: Path) -> None:
             )
 
 
+def _expected_origin(path: Path) -> Path:
+    try:
+        return path.resolve(strict=True)
+    except OSError as exc:
+        raise QixuanRuntimeError(f"cannot resolve bound vendor source {path}: {exc}") from exc
+
+
+def _validate_spec_origin(spec: Any, expected: Path, label: str) -> None:
+    origin = getattr(spec, "origin", None)
+    if spec is None or not origin:
+        raise QixuanRuntimeError(f"bound vendor module {label!r} is not resolvable")
+    try:
+        actual = Path(origin).resolve(strict=True)
+    except OSError as exc:
+        raise QixuanRuntimeError(f"cannot resolve vendor module {label!r}: {exc}") from exc
+    if actual != _expected_origin(expected):
+        raise QixuanRuntimeError(f"vendor module {label!r} resolves outside its bound source")
+
+
+def _preflight_vendor_imports(vendor_root: Path) -> None:
+    """Resolve the exact original module graph without executing vendor code."""
+    root = _expected_origin(vendor_root)
+    alias_root = root / "alias_free_activation"
+    unexpected_initializer = alias_root / "__init__.py"
+    if os.path.lexists(unexpected_initializer):
+        raise QixuanRuntimeError("alias_free_activation must remain the fixed namespace without __init__.py")
+    _validate_vendor_modules(root)
+    direct = {
+        "bigvgan": root / "bigvgan.py",
+        "activations": root / "activations.py",
+        "env": root / "env.py",
+        "utils": root / "utils.py",
+        "meldataset": root / "meldataset.py",
+    }
+    for name, expected in direct.items():
+        _validate_spec_origin(PathFinder.find_spec(name, [str(root)]), expected, name)
+
+    # A namespace portion can otherwise be displaced by a regular package later
+    # on sys.path.  Resolve against the exact future search order and reject any
+    # external portion before import has a chance to execute it.
+    search_path = [str(root), *sys.path]
+    alias_spec = PathFinder.find_spec("alias_free_activation", search_path)
+    if alias_spec is None or alias_spec.origin is not None:
+        raise QixuanRuntimeError("alias_free_activation resolves as an external regular package")
+    locations = getattr(alias_spec, "submodule_search_locations", None)
+    try:
+        resolved_locations = tuple(Path(item).resolve(strict=True) for item in locations or ())
+    except OSError as exc:
+        raise QixuanRuntimeError(f"cannot resolve alias_free_activation namespace: {exc}") from exc
+    if resolved_locations != (_expected_origin(alias_root),):
+        raise QixuanRuntimeError("alias_free_activation namespace has an external search location")
+
+    torch_root = alias_root / "torch"
+    _validate_spec_origin(
+        PathFinder.find_spec("alias_free_activation.torch", [str(alias_root)]),
+        torch_root / "__init__.py", "alias_free_activation.torch",
+    )
+    for leaf in ("act", "filter", "resample"):
+        name = f"alias_free_activation.torch.{leaf}"
+        _validate_spec_origin(
+            PathFinder.find_spec(name, [str(torch_root)]), torch_root / f"{leaf}.py", name,
+        )
+
+
 def _import_bigvgan(vendor_root: Path) -> tuple[Any, Any, Any]:
     """Import bound upstream modules while restoring the caller's sys.path."""
     resolved = vendor_root.resolve(strict=True)
-    _validate_vendor_modules(resolved)
+    _preflight_vendor_imports(resolved)
     original_path = list(sys.path)
     try:
         sys.path.insert(0, str(resolved))
@@ -481,22 +551,42 @@ class QixuanEngine:
                 raise QixuanRuntimeError("BigVGAN config does not match the fixed 44.1 kHz profile")
             checkpoint()
             with torch.inference_mode():
-                model = BigVGAN(AttrDict(config), use_cuda_kernel=False)
+                original_dtype = torch.get_default_dtype()
+                try:
+                    torch.set_default_dtype(torch.float32)
+                    with torch.device("cpu"):
+                        model = BigVGAN(AttrDict(config), use_cuda_kernel=False)
+                finally:
+                    torch.set_default_dtype(original_dtype)
+                model = model.to(device=torch.device("cpu"), dtype=torch.float32)
                 state = torch.load(
                     self.vocoder_directory / "bigvgan_generator.pt",
-                    map_location="cpu",
+                    map_location=torch.device("cpu"),
                     weights_only=True,
                 )
-                if type(state) is not dict or type(state.get("generator")) is not dict:
+                if type(state) is not dict or set(state) != {"generator"}:
                     raise QixuanRuntimeError("BigVGAN checkpoint is not the strict generator state wrapper")
-                model.load_state_dict(state["generator"], strict=True)
+                generator_state = state["generator"]
+                if type(generator_state) not in (dict, OrderedDict) or not generator_state:
+                    raise QixuanRuntimeError("BigVGAN generator state must be a nonempty safe mapping")
+                for name, tensor in generator_state.items():
+                    if type(name) is not str or not name or not torch.is_tensor(tensor):
+                        raise QixuanRuntimeError("BigVGAN generator state contains an invalid entry")
+                    if tensor.device.type != "cpu" or tensor.dtype != torch.float32:
+                        raise QixuanRuntimeError("BigVGAN generator state must be CPU float32")
+                model.load_state_dict(generator_state, strict=True)
                 state = None
                 # Upstream prints a status line here; product stdout is reserved for JSON Lines.
                 with redirect_stdout(io.StringIO()):
                     model.remove_weight_norm()
                 model.eval().requires_grad_(False)
+                for tensor in (*tuple(model.parameters()), *tuple(model.buffers())):
+                    if tensor.device.type != "cpu" or tensor.dtype != torch.float32:
+                        raise QixuanRuntimeError("loaded BigVGAN model is not entirely CPU float32")
                 checkpoint()
-                tensor = torch.from_numpy(mapped)[None]
+                tensor = torch.from_numpy(mapped).to(
+                    device=torch.device("cpu"), dtype=torch.float32
+                )[None]
                 generated = model(tensor).cpu().numpy()
             output = _finite_array(
                 generated, shape=(1, 1, frames * HOP_SIZE), dtype="float32", label="BigVGAN output"
@@ -507,6 +597,8 @@ class QixuanEngine:
                 native_frame_count=frames * HOP_SIZE,
                 projection_relative_residual=residual,
             )
+        except RenderCancelled:
+            raise
         except QixuanRuntimeError:
             raise
         except Exception as exc:

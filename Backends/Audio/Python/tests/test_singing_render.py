@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import select
 import signal
+import shutil
 import stat
 import subprocess
 import sys
@@ -243,7 +244,7 @@ class SingingRenderTests(unittest.TestCase):
         mutations = []
         value = self._request(); value["pronunciations"]["symbols"].append("unknown"); value["pronunciations"]["units"][1]["phonemes"] = ["unknown"]; mutations.append(value)
         value = self._request(); value["pronunciations"]["units"][1]["phonemes"] = []; mutations.append(value)
-        value = self._request(); value["vowelIndices"][1] = 0; mutations.append(value)
+        value = self._request(); value["vowelIndices"][1] = 99; mutations.append(value)
         value = self._request(); value["pronunciations"]["phraseRevision"] = 0; mutations.append(value)
         for candidate in mutations:
             candidate_path = self.directory / f"invalid-{len(list(self.directory.glob('invalid-*')))}.json"
@@ -255,6 +256,36 @@ class SingingRenderTests(unittest.TestCase):
                         str(self.directory / f"out-{candidate_path.stem}"),
                         progress=lambda _event: None, checkpoint=lambda: None,
                     )
+
+    def test_fixed_model_inventories_reject_unknown_phoneme_before_engine(self) -> None:
+        bank = self.directory / "inventory-bank"
+        bank.mkdir()
+        entries = []
+        models = (
+            ("", "0101_qixuan_muon1_acoustic"),
+            ("dsdur", "0102_qixuan_newdict_dur"),
+            ("dspitch", "0102_qixuan_muon1_pitch"),
+            ("dsvariance", "0102_qixuan_muon1_multivar"),
+        )
+        tokens = {name: index for index, name in enumerate(self.request["pronunciations"]["symbols"])}
+        for folder, stem in models:
+            root = bank / folder if folder else bank
+            root.mkdir(exist_ok=True)
+            for kind, value in (("phonemes", tokens), ("languages", {"zh": 1})):
+                path = root / f"{stem}.{kind}.json"
+                raw = ("\ufeff" + json.dumps(value, separators=(",", ":"))).encode("utf-8")
+                path.write_bytes(raw)
+                entries.append({
+                    "path": str(path.relative_to(bank)), "byteCount": len(raw),
+                    "sha256": hashlib.sha256(raw).hexdigest(),
+                })
+        profile = {"bankFiles": entries}
+        singing_render._validate_fixed_inventories(self.request, profile, bank)
+        unknown = copy.deepcopy(self.request)
+        unknown["pronunciations"]["symbols"].append("zh/not-in-bank")
+        unknown["pronunciations"]["units"][1]["phonemes"] = ["zh/not-in-bank"]
+        with self.assertRaisesRegex(singing_render.RenderInputError, "does not contain"):
+            singing_render._validate_fixed_inventories(unknown, profile, bank)
 
     def test_cancel_each_stage_preserves_no_result_and_can_rerun(self) -> None:
         for target in singing_render.STAGE_NAMES[:-1]:
@@ -295,15 +326,40 @@ class SingingRenderTests(unittest.TestCase):
         with self.assertRaises(singing_render.RenderRuntimeError):
             singing_render.encode_mono_float32_wave(bad, 4)
 
-    def _runner(self, *, slow: bool = False, fail_result: bool = False, fail_final_stdout: bool = False) -> Path:
-        runner = self.directory / f"fixture-runner-{slow}-{fail_result}-{fail_final_stdout}.py"
+    def _runner(
+        self, *, slow: bool = False, fail_result: bool = False,
+        fail_final_stdout: bool = False, case: str = "normal",
+        python_dir: Path = PYTHON_DIR,
+    ) -> Path:
+        runner = self.directory / f"fixture-runner-{slow}-{fail_result}-{fail_final_stdout}-{case}.py"
         lines = [
             "import sys",
-            f"sys.path[:0]=[{str(PYTHON_DIR)!r},{str(Path(__file__).resolve().parent)!r}]",
+            f"sys.path[:0]=[{str(python_dir)!r},{str(Path(__file__).resolve().parent)!r}]",
             "import d_singing_render as r",
             "from test_singing_render import FakeEngine,SlowCancelEngine,fixture_materials",
             "r._validate_materials=fixture_materials",
             f"r._ENGINE_CLASS={'SlowCancelEngine' if slow else 'FakeEngine'}",
+            f"fixture_case={case!r}",
+            "if fixture_case=='inner-cancel':",
+            "    class InnerCancelEngine(FakeEngine):",
+            "        def vocoder(self,conditions,checkpoint): raise r.RenderCancelled('fixture inner cancellation')",
+            "    r._ENGINE_CLASS=InnerCancelEngine",
+            "observed_write=r._write_descriptor",
+            "def fixture_observed_write(descriptor,payload):",
+            "    if descriptor==1:",
+            "        event=__import__('json').loads(payload)",
+            "        if fixture_case=='late-cancel' and event.get('type')=='result':",
+            "            __import__('os').kill(__import__('os').getpid(),__import__('signal').SIGTERM)",
+            "        if fixture_case=='early-protection' and event.get('stage')=='validation':",
+            "            with open(r._fixture_request,'a') as handle: handle.write('\\n')",
+            "            __import__('os').kill(__import__('os').getpid(),__import__('signal').SIGTERM)",
+            "        if fixture_case=='runtime-replacement' and event.get('stage')=='publish':",
+            "            runtime=r._fixture_output/'.runtime'",
+            "            runtime.rename(r._fixture_root/'retained-runtime')",
+            "            runtime.mkdir()",
+            "            (runtime/'sentinel').write_text('not-owned')",
+            "    return observed_write(descriptor,payload)",
+            "r._write_descriptor=fixture_observed_write",
         ]
         if fail_result:
             lines.extend([
@@ -324,14 +380,43 @@ class SingingRenderTests(unittest.TestCase):
                 "    return original_write(descriptor,payload)",
                 "r._write_descriptor=fixture_write",
             ])
+        if case in {"result-readback", "wav-symlink"}:
+            lines.extend([
+                "original_altered_publish=r.publish_exclusive",
+                "def fixture_altered_publish(*args,**kwargs):",
+                "    target=original_altered_publish(*args,**kwargs)",
+                "    parent,name=args[:2]",
+                "    if fixture_case=='result-readback' and name=='result.json': (parent/name).write_text('{\\\"broken\\\":true}\\n')",
+                "    if fixture_case=='wav-symlink' and name=='output.wav':",
+                "        original=parent/name",
+                "        original.rename(r._fixture_root/'retained.wav')",
+                "        original.symlink_to(r._fixture_root/'retained.wav')",
+                "    return target",
+                "r.publish_exclusive=fixture_altered_publish",
+            ])
+        if case == "output-io":
+            lines.extend([
+                "original_mkdir=r.os.mkdir",
+                "def fixture_mkdir(path,*args,**kwargs):",
+                "    if __import__('pathlib').Path(path)==r._fixture_output: raise OSError(28,'fixture full')",
+                "    return original_mkdir(path,*args,**kwargs)",
+                "r.os.mkdir=fixture_mkdir",
+            ])
+        lines.extend([
+            "argv=sys.argv[1:]",
+            "if '--request' in argv and '--output-directory' in argv:",
+            "    r._fixture_request=__import__('pathlib').Path(argv[argv.index('--request')+1])",
+            "    r._fixture_output=__import__('pathlib').Path(argv[argv.index('--output-directory')+1])",
+            "    r._fixture_root=r._fixture_output.parent",
+        ])
         lines.append("raise SystemExit(r.main())")
         runner.write_text("\n".join(lines) + "\n", encoding="utf-8")
         return runner
 
-    def _cli_arguments(self, output: Path) -> list[str]:
+    def _cli_arguments(self, output: Path, *, vendor: Path = VENDOR) -> list[str]:
         return [
             "--request", str(self.request_path), "--bank-directory", str(self.bank),
-            "--vocoder-directory", str(self.vocoder), "--vendor-directory", str(VENDOR),
+            "--vocoder-directory", str(self.vocoder), "--vendor-directory", str(vendor),
             "--profile", str(PROFILE), "--output-directory", str(output),
         ]
 
@@ -423,6 +508,65 @@ class SingingRenderTests(unittest.TestCase):
             self._runner(), ["--bad"], preexec_fn=lambda: os.close(2),
         )
         self.assertEqual(result.returncode, 2)
+
+    def test_full_cli_persists_lead_protection_and_commit_regressions(self) -> None:
+        cases = {
+            "inner-cancel": 130,
+            "late-cancel": 0,
+            "early-protection": 1,
+            "runtime-replacement": 1,
+            "result-readback": 1,
+            "wav-symlink": 1,
+            "output-io": 1,
+        }
+        for case, expected in cases.items():
+            output = self.directory / f"lead-{case}"
+            with self.subTest(case=case):
+                result = self._run_child(
+                    self._runner(case=case), self._cli_arguments(output)
+                )
+                self.assertEqual(result.returncode, expected, (result.stdout, result.stderr))
+                if case == "late-cancel":
+                    self.assertTrue((output / "result.json").is_file())
+                if case == "early-protection":
+                    self.assertIn(b"identity changed", result.stderr)
+                    self.assertIn(b"primary failure", result.stderr)
+                if case == "runtime-replacement":
+                    sentinel = output / ".runtime" / "sentinel"
+                    self.assertTrue(sentinel.is_file())
+                    self.assertEqual(sentinel.read_text(encoding="utf-8"), "not-owned")
+                if case == "result-readback":
+                    self.assertEqual(
+                        json.loads((output / "result.json").read_text(encoding="utf-8")),
+                        {"broken": True},
+                    )
+                if case == "wav-symlink":
+                    self.assertTrue((output / "output.wav").is_symlink())
+                    self.assertFalse((output / "result.json").exists())
+                if case == "output-io":
+                    self.assertFalse(output.exists())
+
+    def test_no_bytecode_or_cache_in_owned_cli_source_and_vendor_copies(self) -> None:
+        source_copy = self.directory / "source-copy"
+        source_copy.mkdir()
+        for name in (
+            "d_singing_render.py", "d_singing_qixuan.py", "d_audio_contract.py",
+            "d_singing_prepare.py", "d_singing_timing.py",
+        ):
+            shutil.copy2(PYTHON_DIR / name, source_copy / name)
+        vendor_copy = self.directory / "vendor-copy"
+        shutil.copytree(VENDOR, vendor_copy)
+        output = self.directory / "copy-output"
+        result = self._run_child(
+            self._runner(case="normal", python_dir=source_copy),
+            self._cli_arguments(output, vendor=vendor_copy),
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        forbidden = []
+        for root in (source_copy, vendor_copy, output):
+            forbidden.extend(path for path in root.rglob("*") if path.name == "__pycache__" or path.suffix in {".pyc", ".pyo"})
+        self.assertEqual(forbidden, [])
+        self.assertEqual({path.name for path in output.iterdir()}, {"output.wav", "result.json"})
 
 
 if __name__ == "__main__":

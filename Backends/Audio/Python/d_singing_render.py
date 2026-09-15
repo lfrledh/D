@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 import copy
+from contextvars import ContextVar
 from dataclasses import dataclass
 import gc
 import hashlib
@@ -44,6 +45,7 @@ from d_singing_qixuan import (
     PROJECTION_MAX_ITERATIONS,
     QixuanEngine,
     QixuanRuntimeError,
+    RenderCancelled,
     SAMPLE_RATE,
     TAIL_FRAMES,
     VARIANCE_STEPS,
@@ -95,10 +97,6 @@ class RenderRuntimeError(ContractError):
         super().__init__(message, "runtime")
 
 
-class RenderCancelled(Exception):
-    """Cooperative cancellation observed at a marked checkpoint."""
-
-
 @dataclass(frozen=True, slots=True)
 class FileSeal:
     path: Path
@@ -116,6 +114,16 @@ class MaterialBundle:
     def verify(self) -> None:
         for seal in self.seals:
             _verify_seal(seal)
+
+
+@dataclass(frozen=True, slots=True)
+class RuntimeOwner:
+    path: Path
+    identity: tuple[int, int]
+
+
+_ACTIVE_SEALS: ContextVar[list[FileSeal] | None] = ContextVar("singing_render_active_seals", default=None)
+_ACTIVE_REQUEST: ContextVar[dict[str, Any] | None] = ContextVar("singing_render_active_request", default=None)
 
 
 def _exact_object(value: Any, keys: set[str], label: str) -> dict[str, Any]:
@@ -204,9 +212,13 @@ def _read_and_seal(
         actual_digest = digest.hexdigest()
         if expected_sha256 is not None and actual_digest != expected_sha256:
             raise RenderInputError(f"{label} SHA-256 mismatch")
+        seal = FileSeal(path, label, total, actual_digest, identity)
+        active_seals = _ACTIVE_SEALS.get()
+        if active_seals is not None:
+            active_seals.append(seal)
         return (
             b"".join(chunks) if chunks is not None else None,
-            FileSeal(path, label, total, actual_digest, identity),
+            seal,
         )
     except RenderInputError:
         raise
@@ -432,6 +444,80 @@ def _load_source_manifest(raw: bytes) -> dict[str, Any]:
     return manifest
 
 
+def _unique_inventory_pairs(values: list[tuple[str, Any]], label: str) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in values:
+        if key in result:
+            raise ValueError(f"duplicate key {key!r} in {label}")
+        result[key] = value
+    return result
+
+
+def _decode_inventory(raw: bytes, label: str) -> dict[str, int]:
+    try:
+        value = json.loads(
+            raw.decode("utf-8-sig", errors="strict"),
+            object_pairs_hook=lambda pairs: _unique_inventory_pairs(pairs, label),
+            parse_constant=lambda token: (_ for _ in ()).throw(
+                ValueError(f"non-finite number {token}")
+            ),
+        )
+    except (UnicodeError, ValueError, json.JSONDecodeError, RecursionError) as exc:
+        raise RenderInputError(f"invalid {label}: {exc}") from exc
+    if type(value) is not dict or not value:
+        raise RenderInputError(f"{label} must be a nonempty object")
+    result: dict[str, int] = {}
+    for key, item in value.items():
+        if type(key) is not str or not key or type(item) is not int or item < 0:
+            raise RenderInputError(
+                f"{label} must map nonempty strings to nonnegative integer IDs"
+            )
+        result[key] = item
+    return result
+
+
+def _validate_fixed_inventories(
+    request: dict[str, Any], profile: dict[str, Any], bank_directory: Path
+) -> None:
+    entries = {
+        str(path): (size, digest)
+        for path, size, digest in _parse_file_entries(profile["bankFiles"], "profile.bankFiles")
+    }
+    models = (
+        ("", "0101_qixuan_muon1_acoustic"),
+        ("dsdur", "0102_qixuan_newdict_dur"),
+        ("dspitch", "0102_qixuan_muon1_pitch"),
+        ("dsvariance", "0102_qixuan_muon1_multivar"),
+    )
+    used_phonemes = tuple(
+        phoneme
+        for unit in request["pronunciations"]["units"]
+        for phoneme in unit["phonemes"]
+    )
+    for folder, stem in models:
+        prefix = f"{folder}/" if folder else ""
+        mappings: dict[str, dict[str, int]] = {}
+        for kind in ("phonemes", "languages"):
+            relative = f"{prefix}{stem}.{kind}.json"
+            expected = entries.get(relative)
+            if expected is None:
+                raise RenderInputError(f"fixed profile has no {relative} identity")
+            raw, _seal = _read_and_seal(
+                bank_directory.joinpath(*PurePosixPath(relative).parts),
+                label=f"fixed {stem} {kind}", expected_size=expected[0],
+                expected_sha256=expected[1], max_bytes=MAX_SMALL_CONFIG_BYTES, retain=True,
+            )
+            assert raw is not None
+            mappings[kind] = _decode_inventory(raw, f"fixed {stem} {kind}")
+        if "zh" not in mappings["languages"]:
+            raise RenderInputError(f"fixed {stem} language inventory has no zh ID")
+        unknown = sorted(set(used_phonemes) - mappings["phonemes"].keys())
+        if unknown:
+            raise RenderInputError(
+                f"fixed {stem} phoneme inventory does not contain: {', '.join(unknown)}"
+            )
+
+
 def _validate_materials(
     request_seal: FileSeal,
     profile_seal: FileSeal,
@@ -462,6 +548,10 @@ def _validate_materials(
                 expected_sha256=digest, retain=False,
             )
             seals.append(seal)
+    active_request = _ACTIVE_REQUEST.get()
+    if active_request is None:
+        raise RenderRuntimeError("material validation has no bound request")
+    _validate_fixed_inventories(active_request, profile, bank_directory)
     return MaterialBundle(profile=profile, seals=tuple(seals))
 
 
@@ -472,7 +562,7 @@ def _create_output_directory(path: Path) -> tuple[int, int]:
     except FileExistsError as exc:
         raise RenderInputError("output directory was created concurrently") from exc
     except OSError as exc:
-        raise RenderInputError(f"cannot create output directory: {exc}") from exc
+        raise RenderRuntimeError(f"cannot create output directory: {exc}") from exc
     if not stat.S_ISDIR(info.st_mode) or stat.S_IMODE(info.st_mode) != 0o700:
         raise RenderRuntimeError("owned output directory does not have mode 0700")
     return info.st_dev, info.st_ino
@@ -488,10 +578,18 @@ def _ensure_owned_directory(path: Path, identity: tuple[int, int]) -> None:
 
 
 @contextmanager
-def _runtime_environment(output: Path) -> Iterator[Path]:
+def _runtime_environment(
+    output: Path, output_identity: tuple[int, int]
+) -> Iterator[RuntimeOwner]:
+    _ensure_owned_directory(output, output_identity)
     runtime = output / ".runtime"
     try:
         os.mkdir(runtime, 0o700)
+        runtime_info = os.lstat(runtime)
+        if not stat.S_ISDIR(runtime_info.st_mode):
+            raise RenderRuntimeError("created runtime path is not a directory")
+        owner = RuntimeOwner(runtime, (runtime_info.st_dev, runtime_info.st_ino))
+        _ensure_owned_directory(output, output_identity)
         locations = {
             "TMPDIR": runtime / "tmp",
             "XDG_CACHE_HOME": runtime / "xdg-cache",
@@ -513,7 +611,7 @@ def _runtime_environment(output: Path) -> Iterator[Path]:
         for name, value in updates.items():
             os.environ[name] = value
         sys.dont_write_bytecode = True
-        yield runtime
+        yield owner
     finally:
         sys.dont_write_bytecode = original_bytecode
         for name, value in original.items():
@@ -523,15 +621,21 @@ def _runtime_environment(output: Path) -> Iterator[Path]:
                 os.environ[name] = value
 
 
-def _cleanup_runtime(runtime: Path, output: Path, identity: tuple[int, int]) -> None:
+def _cleanup_runtime(owner: RuntimeOwner, output: Path, identity: tuple[int, int]) -> None:
     _ensure_owned_directory(output, identity)
+    runtime = owner.path
     try:
         info = os.lstat(runtime)
     except FileNotFoundError:
         return
     except OSError as exc:
         raise RenderRuntimeError(f"cannot inspect owned runtime directory: {exc}") from exc
-    if not stat.S_ISDIR(info.st_mode) or stat.S_ISLNK(info.st_mode) or runtime.parent != output:
+    if (
+        not stat.S_ISDIR(info.st_mode)
+        or stat.S_ISLNK(info.st_mode)
+        or runtime.parent != output
+        or (info.st_dev, info.st_ino) != owner.identity
+    ):
         raise RenderRuntimeError("owned runtime directory identity/type changed")
     try:
         shutil.rmtree(runtime)
@@ -700,11 +804,89 @@ def _validate_result_bytes(raw: bytes, expected: dict[str, Any]) -> None:
         raise RenderRuntimeError("published result does not match the committed result")
 
 
-def _protect_primary(bundle: MaterialBundle | None, primary: BaseException) -> None:
-    if bundle is None:
+def _readback_owned_target(
+    output: Path,
+    output_identity: tuple[int, int],
+    filename: str,
+    *,
+    maximum_bytes: int,
+) -> bytes:
+    """Sync and read an ordinary final target without following replacements."""
+    _ensure_owned_directory(output, output_identity)
+    target = output / filename
+    descriptor: int | None = None
+    primary_error: BaseException | None = None
+    primary_traceback = None
+    result: bytes | None = None
+    try:
+        entry = os.lstat(target)
+        if not stat.S_ISREG(entry.st_mode):
+            raise RenderRuntimeError(f"published {filename} is not an ordinary file")
+        if entry.st_size > maximum_bytes:
+            raise RenderRuntimeError(f"published {filename} exceeds its byte bound")
+        descriptor = os.open(
+            target,
+            os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0),
+        )
+        before = os.fstat(descriptor)
+        if not stat.S_ISREG(before.st_mode) or (before.st_dev, before.st_ino) != (entry.st_dev, entry.st_ino):
+            raise RenderRuntimeError(f"published {filename} identity changed before readback")
+        os.fsync(descriptor)
+        chunks: list[bytes] = []
+        total = 0
+        while True:
+            block = os.read(descriptor, min(1024 * 1024, maximum_bytes + 1 - total))
+            if not block:
+                break
+            total += len(block)
+            if total > maximum_bytes:
+                raise RenderRuntimeError(f"published {filename} exceeds its byte bound")
+            chunks.append(block)
+        after = os.fstat(descriptor)
+        if _identity(before) != _identity(after) or total != before.st_size:
+            raise RenderRuntimeError(f"published {filename} changed during readback")
+        result = b"".join(chunks)
+    except BaseException as exc:
+        primary_error = exc
+        primary_traceback = exc.__traceback__
+    close_error: BaseException | None = None
+    if descriptor is not None:
+        try:
+            os.close(descriptor)
+        except OSError as exc:
+            close_error = RenderRuntimeError(f"cannot close published {filename}: {exc}")
+    if primary_error is not None:
+        if close_error is not None and getattr(primary_error, "add_note", None) is not None:
+            primary_error.add_note(f"secondary final-readback close error: {close_error}")
+        if isinstance(primary_error, RenderRuntimeError):
+            raise primary_error.with_traceback(primary_traceback)
+        if isinstance(primary_error, OSError):
+            raise RenderRuntimeError(
+                f"cannot read back published {filename}: {primary_error}"
+            ) from primary_error
+        raise primary_error.with_traceback(primary_traceback)
+    if close_error is not None:
+        raise close_error
+    if result is None:
+        raise RenderRuntimeError(f"published {filename} readback produced no result")
+    return result
+
+
+def _verify_protected_seals(seals: Sequence[FileSeal]) -> None:
+    seen: set[tuple[Path, tuple[int, int, int, int, int], str]] = set()
+    for seal in seals:
+        key = (seal.path, seal.identity, seal.sha256)
+        if key in seen:
+            continue
+        seen.add(key)
+        _verify_seal(seal)
+
+
+def _protect_primary(seals: Sequence[FileSeal], primary: BaseException) -> None:
+    if not seals:
         raise primary
     try:
-        bundle.verify()
+        _verify_protected_seals(seals)
     except BaseException as protection:
         note = getattr(protection, "add_note", None)
         if note is not None:
@@ -729,8 +911,9 @@ def render(
 ) -> dict[str, Any]:
     """Validate, execute once, and commit output.wav followed by result.json."""
     started = time.monotonic()
-    bundle: MaterialBundle | None = None
-    output_created = False
+    protected_seals: list[FileSeal] = []
+    seals_token = _ACTIVE_SEALS.set(protected_seals)
+    request_token = None
     output: Path | None = None
     try:
         request_file, bank, vocoder_dir, vendor, profile_file, output = _validate_paths(
@@ -742,6 +925,7 @@ def render(
         )
         assert request_raw is not None
         request = _load_request(request_raw)
+        request_token = _ACTIVE_REQUEST.set(request)
         run_id = request["runID"]
         stages: list[dict[str, Any]] = []
         _emit(progress, run_id, "validation")
@@ -774,10 +958,16 @@ def render(
         stages.append({"name": "validation", "seconds": validation_seconds})
 
         output_identity = _create_output_directory(output)
-        output_created = True
         engine: Any = _ENGINE_CLASS(bank, vocoder_dir, vendor)
-        runtime: Path | None = None
-        with _runtime_environment(output) as runtime:
+        runtime_owner: RuntimeOwner | None = None
+
+        def execute_vocoder() -> VocoderOutput:
+            # The next operation imports BigVGAN source.  Rebind every source
+            # identity immediately before any vendor code can execute.
+            _verify_protected_seals(protected_seals)
+            return engine.vocoder(acoustic, checkpoint)
+
+        with _runtime_environment(output, output_identity) as runtime_owner:
             alignment = _run_stage(
                 "duration", run_id, stages, progress, checkpoint,
                 lambda: engine.duration(plan, checkpoint),
@@ -796,7 +986,7 @@ def render(
             )
             rendered: VocoderOutput = _run_stage(
                 "vocoder", run_id, stages, progress, checkpoint,
-                lambda: engine.vocoder(acoustic, checkpoint),
+                execute_vocoder,
             )
         engine = None
         gc.collect()
@@ -815,15 +1005,16 @@ def render(
             validate=lambda raw: validate_mono_float32_wave(raw, output_frames),
         )
         _ensure_owned_directory(output, output_identity)
-        with open(output / "output.wav", "rb") as handle:
-            reread_wav = handle.read()
-        if validate_mono_float32_wave(reread_wav, output_frames) != wav_digest:
+        reread_wav = _readback_owned_target(
+            output, output_identity, "output.wav", maximum_bytes=len(wav_bytes)
+        )
+        if reread_wav != wav_bytes or validate_mono_float32_wave(reread_wav, output_frames) != wav_digest:
             raise RenderRuntimeError("published WAV digest changed on final readback")
         if (request["phrase"], request["pronunciations"], request["vowelIndices"]) != original_inputs:
             raise RenderRuntimeError("source request objects changed during rendering")
-        bundle.verify()
-        if runtime is not None:
-            _cleanup_runtime(runtime, output, output_identity)
+        _verify_protected_seals(protected_seals)
+        if runtime_owner is not None:
+            _cleanup_runtime(runtime_owner, output, output_identity)
         checkpoint()  # Last cancellation point: result.json is not yet committed.
         publish_seconds = time.monotonic() - publish_started
         if not math.isfinite(publish_seconds) or publish_seconds < 0:
@@ -840,19 +1031,29 @@ def render(
             output, "result.json", encoded_result,
             validate=lambda raw: _validate_result_bytes(raw, result),
         )
-        # No checkpoint after the commit point.  Late cancellation cannot revoke it.
+        reread_result = _readback_owned_target(
+            output, output_identity, "result.json", maximum_bytes=len(encoded_result)
+        )
+        if reread_result != encoded_result:
+            raise RenderRuntimeError("published result bytes changed on final readback")
+        _validate_result_bytes(reread_result, result)
+        # No checkpoint after publication starts.  The commit point is reached
+        # only after this final target readback and sync complete.
         _ensure_owned_directory(output, output_identity)
         return result
-    except RenderInputError:
-        raise
+    except RenderInputError as exc:
+        _protect_primary(protected_seals, exc)
     except RenderCancelled as exc:
-        _protect_primary(bundle, exc)
+        _protect_primary(protected_seals, exc)
     except BaseException as exc:
-        if bundle is not None:
-            _protect_primary(bundle, exc)
-        if isinstance(exc, (RenderRuntimeError, QixuanRuntimeError, OSError, ContractError)):
-            raise
-        raise RenderRuntimeError(f"unexpected render failure: {type(exc).__name__}: {exc}") from exc
+        primary = exc
+        if not isinstance(exc, (RenderRuntimeError, QixuanRuntimeError, OSError, ContractError)):
+            primary = RenderRuntimeError(f"unexpected render failure: {type(exc).__name__}: {exc}")
+        _protect_primary(protected_seals, primary)
+    finally:
+        if request_token is not None:
+            _ACTIVE_REQUEST.reset(request_token)
+        _ACTIVE_SEALS.reset(seals_token)
 
 
 def _parse_arguments(argv: Sequence[str]) -> dict[str, str]:
@@ -883,7 +1084,12 @@ def _write_descriptor(descriptor: int, payload: bytes) -> None:
         offset += count
 
 
-def _write_error(message: str) -> None:
+def _write_error(error: BaseException | str) -> None:
+    message = str(error)
+    if isinstance(error, BaseException):
+        notes = getattr(error, "__notes__", ())
+        if notes:
+            message = " | ".join((message, *(str(note) for note in notes)))
     compact = " ".join(message.splitlines())[:1000]
     try:
         _write_descriptor(2, f"singing render failed: {compact}\n".encode("utf-8", errors="replace"))
@@ -919,7 +1125,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         arguments = _parse_arguments(sys.argv[1:] if argv is None else argv)
     except RenderInputError as exc:
-        _write_error(str(exc))
+        _write_error(exc)
         return 2
 
     def progress(event: dict[str, str]) -> None:
@@ -933,18 +1139,20 @@ def main(argv: Sequence[str] | None = None) -> int:
                 arguments["--profile"], arguments["--output-directory"],
                 progress=progress, checkpoint=checkpoint,
             )
-        _write_descriptor(1, json_bytes({
-            "type": "result", "runID": result["runID"], "resultPath": "result.json",
-        }))
+            # Keep the signal handler installed through the final notification.
+            # A signal after the commit point merely sets a now-unobserved flag.
+            _write_descriptor(1, json_bytes({
+                "type": "result", "runID": result["runID"], "resultPath": "result.json",
+            }))
         return 0
     except RenderCancelled as exc:
-        _write_error(str(exc))
+        _write_error(exc)
         return 130
     except RenderInputError as exc:
-        _write_error(str(exc))
+        _write_error(exc)
         return 2
     except BaseException as exc:
-        _write_error(str(exc))
+        _write_error(exc)
         return 1
 
 
