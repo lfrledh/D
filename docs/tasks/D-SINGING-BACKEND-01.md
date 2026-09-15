@@ -180,3 +180,36 @@ Lead先冻结R/`numeric-probe-spec.md`，SHA256 `e9a4a8a63218db8423daefc8cdb5ec9
 源/规划树追加前均为 `600411647db4022d9fd77b1cc4ba018f15fc1272`；本次只更新本任务、CURRENT_ACTIONS、MUSIC_ROADMAP与集中待办四份文档。上次生产代码受测仍为 `3186aba2762850152d285afa50dc7ed7e9e3eef6`，不为文档变更重跑旧CPU。最终文档SHA、推送和新增文档审阅在R/`final-receipt.json`，先前`local-integration.json`/`push.json`保留6004116材料快照不覆盖。当前限定邮件一次只读检查尚无外部回复，不承诺后台监控；H20仍待本人Xcode操作，H21是外部许可等待而非再次向用户要下载批准。
 
 恢复检查点：已完成原样声库取得/保全、7接口读取、公开调用核对及一次上游数值链；未完成vocoder/WAV和R1/R2验收。个人scheme原字节/完整差异/索引及未暂存状态保留、源索引干净，当前自有模型子进程已结束；模型、工作树、失败历史和原证据保留。恢复先核源HEAD、许可答复和材料摘要，沿本阶段继续，不自动进入下一产品阶段。
+
+
+## 2026-09-15：R1续行6秒乐句至mel实测与剩余门槛
+
+用户批准继续真实歌声后端。源/既有Lead规划树起点均为 `55336d63d90eff814043f33043dc96318e30d9a7`，未提交差异仅源个人scheme。新证据R=`D-Development/AgentTrials/D-SINGING-BACKEND-01/run-20260915T073451Z-r1-continuation`，旧run不覆盖。H21相关线程一次只读复核无外部回复；限定2个vocoder核查结果在`vocoder-alternatives.json`及MUSIC_ROADMAP最新节，不安装/下载替代、不新增对外联系，不把源码MIT外推至所有权重或把频谱维数相同当兼容。
+
+### 本次实际输入与实现边界
+
+新外部自编样例6秒：0–0.5休止；“啦”C4 0.5–1.5/D4 1.5–2（同字两音）；2–2.5休止；“呀”E4 2.5–4；“啦”G4 4–5.5；5.5–6休止。显式`zh/l zh/a`、`zh/y zh/a`来自原bank各阶段字典，没有自动G2P；原库synthetic金样例不修改。既有源`d_singing_prepare.py`真实CLI输出与Lead事前手写expected逐项相同，原phrase/pronunciation语义及字节保留；见`phrase-fixture/*`、`prepare-result.json`、`prepared/prepared.json`。这是新数据经过旧生产入口，不是修改生产模块。
+
+只读代理核定固定OpenUtau `9699944ead5a3b27b59bdf5a35f73fada8c11b7b`的调用事实，精确位置在`phrase-mapping-review.json`。duration按休止分两组，word_div分别[2,1]/[2,2,1]，word_dur分别[43,129]/[43,129,129]；首SP原始预测舍去，首辅音保留原始时长，其余按作品锚点比例分配。两处前置辅音必须仍落在各自0.5秒预留休止内，否则立即停止，不裁剪或改变源音符。SP的语言为0，中文为3，各模型音素编号独立。
+
+D选择在完整0–6秒作品轴补齐SP，再加首尾各8模型帧；所有边界累计量化，原note/lyric记录不变。全帧pitch_pred原始半音→variance、全帧转Hz→acoustic，包含SP，不误用显示曲线的voiced mask。这些是本次显式实验装配选择，不声称与OpenUtau完整路径等价；没有WAV就不能说休止静音或音频边缘裁剪通过。固定规格`phrase-probe-spec.md`／外部脚本`probe-phrase-upstream.py`的摘要见`phrase-probe-precheck.json`，非实现者预审`phrase-probe-review.json`无阻塞，要求父进程保护并保证PYTHONOPTIMIZE=0；实际执行具备这些条件。
+
+### 实际结果
+
+| 检查 | 证据支持的结果 |
+|---|---|
+| 语法/既有入口 | 源准备CLI exit0、stdout空，手写expected一致；新实验源码用tokenize.open＋内存compile，无目标pyc，不调用Apple工具链。 |
+| 原模型计算 | 一次CPU实验完成两组duration encoder/head共4次、pitch encoder/head、variance encoder/head及acoustic共9次调用；所有声明形状/类型与有限值检查通过。不是9个独立歌声测试。 |
+| 时间保全 | 首“啦”辅音约0.415741秒开始，“呀”约2.404690秒开始；两者均在源预留休止内。元音/后继辅音以作品锚点分配，一字两音只保留一个元音；phone和note总帧均533。原作品6秒；含内部padding模型跨度约6.188118秒，不能写成已交付音频时长。 |
+| 实际输出 | mel `[1,533,128]`，范围约−12.0634至1.03957，标准差约2.49985；仅记录观察值，无音质阈值/唱准保证。Lead另读回9个NPZ核名称/形状/有限值、累计边界和帧总和；不是另一个模型执行测试。 |
+| 资源与保全 | 既有Python3.12.14/ORT1.22.1 CPU、单线程、禁优化文件保存。子进程9.167秒，父进程9.584秒；全子进程RSS高水位832339968字节，含导入/摘要/加载/计算。180秒受控超时预置，本次正常exit0并回收；没有运行取消/强杀/重复释放，不能证明这些路径通过。31原文件、原包、三个fixture及prepared共36个输入后验均不变。 |
+
+运行与完整帧表见R/`model-phrase-run/{launched,process,result,protection-after}.json`；外部脚本SHA256 `36b2cd9fede765ec6ef301e8a700df6e8e72e28265cb55475a4b0eb48450fde7`；父进程环境明确PYTHONOPTIMIZE=0、-B、自有tmp/cache，仅本次子进程终止/回收权限。没有声码器、WAV、扬声器/GUI/GPU、Swift或普通D操作。`lead-phrase-output-check.json`另存输出摘要，原31文件/原包沿用上run固定摘要，未改模型/精度。
+
+### 来源、状态及后续
+
+本轮两个既有代理只读：调用语义核查；替代材料核查及独立预审。Lead负责新数据、一次性外部实验、真实执行、读回复核、文档和集成，没有实施Worker或生产代码重写；一试成功，无修复重试，不刷新PREP1旧初交/修复1预算。可归因实验墙钟如上；本轮完整Lead token/订阅费用unknown，不重算历史费用或由此宣称成本最优。
+
+**阶段状态：R1上游语义/数值准备推进；完整歌声后端仍受阻，未完成。** 不用相同类别mel探针无限替代真实WAV出口。当前明确缺口为匹配vocoder适用许可、完整短WAV与改歌词/音高/时值对照、取消/错误/重复释放、正式provider与R2；H20本人Xcode协议阻塞Swift/应用，不要求再次批准开发下载。下一事件恢复先核相关回复/材料/源，依据充分后固定质量与失败矩阵、受限Worker实施薄provider、非实现者审核、Lead串行真实验收。R1/R2通过后，下阶段仍是歌声工作台候选试听/采用拒绝/保存重开/安全导出；不启动高级音乐编辑、其他新模态或新的协作试点。
+
+只修改任务、当前行动、音乐路线与集中待办四份现有文档，代码仍对应上次受测 `3186aba2762850152d285afa50dc7ed7e9e3eef6`；新数据实际调用源版本55336d6完整值如上，外部实验按独立脚本摘要关联，最终文档SHA/本地接纳/推送写R/`final-receipt.json`。源个人scheme完整内容/摘要/索引/未暂存状态保持，未暂存它；旧产物/作品与模型原件不动。自有准备CLI和模型进程均已结束，两个本轮只读工作完成；工具另列历史`creative_workflows_research`为pending_init，本轮未派该任务、未观察其写入、没有把它宣称已结束或建立系统写锁，详见恢复回执。
