@@ -446,7 +446,7 @@ class SingingPreparationTests(unittest.TestCase):
                 "--pronunciations", str(pronunciations_path),
                 "--output", str(output_path),
             ]
-            with mock.patch.object(d_singing_prepare.secrets, "token_hex", return_value="0123456789abcdef"):
+            with mock.patch.object(d_audio_contract.secrets, "token_hex", return_value="0123456789abcdef"):
                 with self.assertRaises(ContractError):
                     d_singing_prepare._execute_cli(arguments)
             self.assertFalse(output_path.exists())

@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 import copy
-import errno
 import os
 from pathlib import Path
-import secrets
 import stat
 import sys
 from typing import Any, Sequence
@@ -19,6 +17,7 @@ from d_audio_contract import (
     ensure_no_symlink_components,
     json_bytes,
     paths_overlap,
+    publish_exclusive,
     read_regular_file,
 )
 
@@ -338,79 +337,8 @@ def _validated_cli_paths(arguments: dict[str, str]) -> tuple[Path, Path, Path]:
     return phrase_path, pronunciations_path, output_path
 
 
-def _unlink_owned_partial(path: Path, identity: tuple[int, int] | None) -> None:
-    if identity is None:
-        return
-    try:
-        info = os.lstat(path)
-    except OSError:
-        return
-    if not stat.S_ISREG(info.st_mode) or (info.st_dev, info.st_ino) != identity:
-        return
-    try:
-        os.unlink(path)
-    except OSError:
-        pass
-
-
-def _publish_prepared(parent: Path, filename: str, content: bytes) -> Path:
-    """Exclusively publish content, cleaning only a partial inode created here."""
-    if not filename or "/" in filename or filename in (".", ".."):
-        raise ContractError("invalid output filename", "output")
-    target = parent / filename
-    if os.path.lexists(target):
-        raise ContractError("refusing to overwrite output", "output")
-    partial = parent / f".{filename}.{secrets.token_hex(8)}.partial"
-    descriptor: int | None = None
-    owned_identity: tuple[int, int] | None = None
-    try:
-        flags = (
-            os.O_WRONLY | os.O_CREAT | os.O_EXCL
-            | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
-        )
-        descriptor = os.open(partial, flags, 0o600)
-        created = os.fstat(descriptor)
-        if not stat.S_ISREG(created.st_mode):
-            raise ContractError("created output partial is not a regular file", "output")
-        owned_identity = (created.st_dev, created.st_ino)
-        view = memoryview(content)
-        written = 0
-        while written < len(view):
-            count = os.write(descriptor, view[written:])
-            if count <= 0:
-                raise OSError(errno.EIO, "short write")
-            written += count
-        os.fsync(descriptor)
-        os.close(descriptor)
-        descriptor = None
-        reread, reread_identity = read_regular_file(
-            partial, max_bytes=len(content), label=f"partial {filename}"
-        )
-        if reread_identity[:2] != owned_identity or reread != content:
-            raise ContractError("prepared output partial changed before publication", "output")
-        decode_strict_json(reread, label="prepared output")
-        os.link(partial, target, follow_symlinks=False)
-        directory_descriptor = os.open(parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
-        try:
-            os.fsync(directory_descriptor)
-        finally:
-            os.close(directory_descriptor)
-        os.unlink(partial)
-        owned_identity = None
-        return target
-    except FileExistsError as exc:
-        raise ContractError("refusing to overwrite existing output or temporary file", "output") from exc
-    except ContractError:
-        raise
-    except OSError as exc:
-        raise ContractError(f"failed to publish prepared output: {exc}", "output") from exc
-    finally:
-        if descriptor is not None:
-            try:
-                os.close(descriptor)
-            except OSError:
-                pass
-        _unlink_owned_partial(partial, owned_identity)
+def _validate_prepared_output(raw: bytes) -> None:
+    decode_strict_json(raw, label="prepared output")
 
 
 def _execute_cli(argv: Sequence[str]) -> Path:
@@ -424,7 +352,12 @@ def _execute_cli(argv: Sequence[str]) -> Path:
     pronunciations = decode_strict_json(pronunciations_raw, label="pronunciations")
     result = prepare_singing_plan(phrase, pronunciations)
     encoded = json_bytes(result)
-    return _publish_prepared(output_path.parent, output_path.name, encoded)
+    return publish_exclusive(
+        job=output_path.parent,
+        filename=output_path.name,
+        content=encoded,
+        validate=_validate_prepared_output,
+    )
 
 
 def _write_error(message: str) -> None:
