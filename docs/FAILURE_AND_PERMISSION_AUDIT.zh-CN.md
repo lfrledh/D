@@ -7,7 +7,7 @@
 | ID | 当前状态 | 本人最小动作 | 后续/证据 |
 |---|---|---|---|
 | H20 Xcode许可 | 环境阻塞／待本人 | 回到Mac后打开Xcode，阅读并自行确认Apple/Xcode协议；若系统要求密码或组件确认，由本人操作并告知完成。不要把密码发到会话 | `/usr/bin/python3`在脚本执行前退出69并显示未接受Xcode许可；Lead暂停Swift/应用构建，不代接受或改工具链配置。独立外盘Python与Git可继续。记录见`D-Development/AgentTrials/D-SINGING-BACKEND-01/run-20260915T004329Z/xcode-license-block.json`；本人完成后Lead核工具链并补受影响检查才关闭 |
-| H21 歌声材料 | 许可待澄清、下载未授权 | 本次不是可直接点击放行的下载：先由Lead核清vocoder的NC条款是否允许本项目用途；若需对外询问，再由本人授权发送或提供已有权利证明。条件明确后集中批准两个固定包约473.5MB的本地短样本测试 | 绮萱v2.7.0声库420707627字节＋PC-NSF-HiFiGAN2025.02声码器52760610字节，摘要/来源见[任务](tasks/D-SINGING-BACKEND-01.md)。声库自定义条款与vocoder CC BY-NC-SA 4.0分别适用；内部商业研发不自动等同非商业。未下载/安装，不以用户批准代替权利授权；阻塞真实歌声，不阻塞无权重条件准备。完成合法材料/环境准备后另登记真实试听，不提前声称有待听样本 |
+| H21 歌声材料 | 官方许可已核；待权利依据，下载仍未授权 | 回到Mac后决定是否授权发送[限定询问草稿](MUSIC_ROADMAP.zh-CN.md#h21最小询问草稿未发送)，或提供已有授权。先核许可适用范围，再另批固定包/环境；本次没有可代点的系统授权 | 绮萱v2.7.0自定义条款允许部分商业用途，但配套PC-NSF-HiFiGAN2025.02权重仍为CC BY-NC-SA4.0。商业研发、应用支持/分发及输出使用需分别确认；旧版声码器不能直接解除NC。约473.5MB未下载，未发邮件，未有真实歌声样本。[核查和明确下一步](MUSIC_ROADMAP.zh-CN.md#2026-09-15h21许可核查结论与待确认问题)；HUM/I2V无关工作不以此为前置 |
 | H09 麦克风 | 已关闭：实际录制/停止/原声试听/导出/冷重开通过；本人确认正常 | 无 | 约10.899秒，48kHz单声道CAF；H09证据见下段。无新系统提示，不称新TCC授权；未做强拔设备矩阵 |
 | H18 参考图 | 已关闭：独立及组合真实GUI通过、源已接纳 | 无 | R/image-native-acceptance.json；统一aba1326的参考生成/采用/PNG导出/重开见combined-gui-r1/image-result.json及combined-gui-r2/cold-reopen.json |
 | H19 资料问答/IME | 已关闭：修补后真人确认、组合源接纳 | 无 | R/text-native-acceptance-after-ime.json及text-ime-handoff.json；组合aba1326另完成实际7B问答/采用/撤销/保存重开，见combined-gui-r1/migration-and-undo-check.json及combined-gui-r2/cold-reopen.json |

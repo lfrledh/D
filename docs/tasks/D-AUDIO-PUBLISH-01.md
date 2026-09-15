@@ -25,7 +25,7 @@ Lead 单一维护本任务记录与当前动作/许可专题。必读本规格�
 
 ## AP1 冻结行为
 
-保留 public publish_exclusive(parent, filename, content, validate=...) 签名、任意 bytes 输入、可选校验器和 Path 返回；歌声使用共享函数并传严格 JSON 校验，不把 JSON 变为全音频要求。SA3/MRT2 原有“初始空 job”入口验证不改；共享函数本身允许已有其他文件的合法父目录。
+保留 public publish_exclusive(job, filename, content, validate=...) 签名（job是目标父目录，保留job=关键字兼容）、任意 bytes 输入、可选校验器和 Path 返回；歌声使用共享函数并传严格 JSON 校验，不把 JSON 变为全音频要求。SA3/MRT2 原有“初始空 job”入口验证不改；共享函数本身允许已有其他文件的合法父目录。
 
 | 输入/边界 | 必须结果 |
 |---|---|
@@ -66,3 +66,9 @@ CPU通过不等于新普通App/真实模型验收；本阶段无模型算法或S
 源 HEAD/唯一 scheme 与前阶段回执一致，摘要 ca3635d88aa5a15397b90e528667c66c0e6db7e596176e885c79d194b544206c；保护副本/完整差异/索引见 R/protection/before.json。源/任务 hooks、有效过滤/自动化无触发项。首次Git帮助解析只取stderr导致断言，任何写入前停住，读取stdout后修正检查并重核；不是权限/代码事件。
 
 H20 Xcode协议与H21歌声材料许可/下载未解除，详见集中清单。新共享维护初始预算独立，旧SING1/PREP1初交＋repair1及剩余额度不改。许可研究不发送邮件、不下载材料、不据输出JSON声称实际歌声。
+
+## 实施前澄清与许可支线
+
+非实现者只读规格审核未发现行为冲突，指出文中parent是目录角色而非实际公开参数名；IMPLEMENT前已明确保留job=关键字兼容，AP1/R1行为未变。本行文档修正在Lead集成树，Worker使用准备SHA＋明确IMPLEMENT消息，不偷偷漂移执行基线。证据R/spec-review.json、worker/implement-prompt.txt。
+
+H21限定研究已核官方声库、声码器与CC说明；当前无足够依据解除新材料门槛，未发送询问或下载。细节复用MUSIC_ROADMAP最新H21节，不新建许可管理平台。
