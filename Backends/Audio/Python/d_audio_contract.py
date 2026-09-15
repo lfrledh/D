@@ -597,16 +597,11 @@ def _attach_secondary_error(primary: BaseException, secondary: BaseException) ->
 
 
 def _close_publication_descriptor(descriptor: int, *, label: str) -> None:
-    """Close once normally and make at most one bounded recovery attempt."""
+    """Relinquish descriptor bookkeeping and attempt close exactly once."""
     try:
         os.close(descriptor)
-        return
-    except OSError as first:
-        try:
-            os.close(descriptor)
-        except OSError as second:
-            _attach_secondary_error(first, second)
-        raise ContractError(f"failed to close {label}: {first}", "output") from first
+    except OSError as exc:
+        raise ContractError(f"failed to close {label}: {exc}", "output") from exc
 
 
 def _cleanup_owned_partial(path: Path, identity: tuple[int, int]) -> None:

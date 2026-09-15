@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from array import array
 import contextlib
+import errno
 import hashlib
 import io
 import importlib.util
@@ -415,13 +416,14 @@ class AudioBackendTests(unittest.TestCase):
                 elif case == "close":
                     real_close = os.close
 
-                    def fail_first_close(descriptor):
+                    def release_and_fail_close(descriptor):
                         close_calls.append(descriptor)
                         if len(close_calls) == 1:
+                            real_close(descriptor)
                             raise OSError("injected close")
                         return real_close(descriptor)
 
-                    patches.append(mock.patch.object(contract.os, "close", side_effect=fail_first_close))
+                    patches.append(mock.patch.object(contract.os, "close", side_effect=release_and_fail_close))
                 elif case == "reread":
                     patches.append(mock.patch.object(
                         contract, "read_regular_file",
@@ -446,7 +448,7 @@ class AudioBackendTests(unittest.TestCase):
                 self.assertFalse((job / "output.bin").exists())
                 self.assertEqual(list(job.iterdir()), [])
                 if case == "close":
-                    self.assertEqual(len(close_calls), 2)
+                    self.assertEqual(len(close_calls), 1)
 
     def test_publish_preserves_validator_error_and_link_race_target(self):
         validation_job = self.root / "validator-error"
@@ -503,6 +505,7 @@ class AudioBackendTests(unittest.TestCase):
                     if case == "directory-close" and stat.S_ISDIR(os.fstat(descriptor).st_mode) \
                             and not directory_close_failed:
                         directory_close_failed.append(descriptor)
+                        real_close(descriptor)
                         raise OSError("injected directory close")
                     return real_close(descriptor)
 
@@ -523,6 +526,66 @@ class AudioBackendTests(unittest.TestCase):
                 self.assertEqual(len(partials), 1 if case == "partial-unlink" else 0)
                 if case == "partial-unlink":
                     self.assertEqual(partials[0].read_bytes(), content)
+
+    def test_publish_close_error_never_retries_a_reused_descriptor(self):
+        for phase in ("file-close", "directory-close", "error-cleanup-close"):
+            with self.subTest(phase=phase):
+                job = self.root / f"reused-descriptor-{phase}"
+                job.mkdir()
+                sentinel = job / "unrelated"
+                sentinel.write_bytes(b"owned-by-another-operation")
+                real_close = os.close
+                real_open = os.open
+                replacement_descriptors = []
+                calls_after_failure = []
+
+                def release_reuse_and_fail(descriptor):
+                    if replacement_descriptors:
+                        calls_after_failure.append(descriptor)
+                        return real_close(descriptor)
+                    is_directory = stat.S_ISDIR(os.fstat(descriptor).st_mode)
+                    matches_phase = is_directory if phase == "directory-close" else not is_directory
+                    if not matches_phase:
+                        return real_close(descriptor)
+                    real_close(descriptor)
+                    replacement = real_open(sentinel, os.O_RDONLY)
+                    replacement_descriptors.append(replacement)
+                    self.assertEqual(replacement, descriptor, "fixture requires deterministic fd reuse")
+                    raise OSError(errno.EIO, "injected close failure after descriptor released")
+
+                try:
+                    with mock.patch.object(contract.os, "close", side_effect=release_reuse_and_fail):
+                        with self.assertRaises(contract.ContractError) as caught:
+                            if phase == "error-cleanup-close":
+                                with mock.patch.object(
+                                    contract.os, "write", side_effect=OSError("primary write failure")
+                                ):
+                                    contract.publish_exclusive(job=job, filename="output.bin", content=b"complete")
+                            else:
+                                contract.publish_exclusive(job=job, filename="output.bin", content=b"complete")
+                    self.assertEqual(caught.exception.kind, "output")
+                    if phase == "error-cleanup-close":
+                        self.assertIn("primary write failure", str(caught.exception))
+                    else:
+                        self.assertIn("failed to close", str(caught.exception))
+                    self.assertEqual(calls_after_failure, [])
+                    self.assertEqual(
+                        os.read(replacement_descriptors[0], 100), b"owned-by-another-operation"
+                    )
+                    target = job / "output.bin"
+                    if phase == "directory-close":
+                        self.assertEqual(target.read_bytes(), b"complete")
+                        self.assertEqual(set(job.iterdir()), {sentinel, target})
+                    else:
+                        self.assertFalse(target.exists())
+                        self.assertEqual(set(job.iterdir()), {sentinel})
+                finally:
+                    for descriptor in replacement_descriptors:
+                        try:
+                            real_close(descriptor)
+                        except OSError as exc:
+                            if exc.errno != errno.EBADF:
+                                raise
 
     def test_publish_cleanup_identity_rules_and_primary_error_priority(self):
         mismatch_job = self.root / "cleanup-mismatch"
