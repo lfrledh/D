@@ -1,14 +1,20 @@
 # 历史失败与权限审计
 
+## 2026-09-15 本人返回：当前无需本人操作
+
+H20已关闭：本人阅读并确认Xcode协议、完成后续设置；Lead复验Xcode27.0/27A266a、firstLaunch、clang21及实际MLX CPU JIT表达式均成功。证据 `D-Development/AgentTrials/D-VIDEO-I2V-01/run-20260915T132922Z-quality-finish/human-actions.json`、`solver-toolchain.json`。这只关闭已知工具链阻塞，不把未运行的App/GUI测试计为通过。
+
+本人另确认源PRODUCT_PRINCIPLES层级调整为误改，已批准并由Lead精确修正；源个人scheme未动。H21本次仅只读已知询问线程，仍1条SENT、无新回复或发送；为外部许可等待，无需本人重复授权。I2V画面条带为Lead负责的质量定位，不是权限待办。下方旧日期“待本人”均为历史，当前状态以本节和表格为准。
+
 ## 当前集中待办（2026-09-14）
 
-2026-09-15本轮补记：用户暂不能操作Mac，H20继续保留，不重复催办。R1-TIMING1离线时序组件已独立验收/接纳，无需Xcode或声码器；H21既有询问线程本轮仍仅SENT，没有新回复或对外联系。只读审阅者误用系统Git入口触发旧许可提示，管道exit0不代表Git成功，Git子码unknown；未接受协议或执行构建，已停止该入口。限定事件与工程证据见 `D-Development/AgentTrials/D-SINGING-BACKEND-01/run-20260915T095325Z-timing/reviewer-environment-event.json` 及[任务结案](tasks/D-SINGING-BACKEND-01.md#2026-09-15r1-timing1组件验收与源接纳歌声阶段仍进行中)。
+历史（2026-09-15本人返回前）：用户暂不能操作Mac，H20继续保留，不重复催办。R1-TIMING1离线时序组件已独立验收/接纳，无需Xcode或声码器；H21既有询问线程本轮仍仅SENT，没有新回复或对外联系。只读审阅者误用系统Git入口触发旧许可提示，管道exit0不代表Git成功，Git子码unknown；未接受协议或执行构建，已停止该入口。限定事件与工程证据见 `D-Development/AgentTrials/D-SINGING-BACKEND-01/run-20260915T095325Z-timing/reviewer-environment-event.json` 及[任务结案](tasks/D-SINGING-BACKEND-01.md#2026-09-15r1-timing1组件验收与源接纳歌声阶段仍进行中)。
 
-更新于2026-09-15：H09、H18、H19均已关闭；H20工具链协议仍待本人确认。用户已长期批准阶段内开发模型下载及独立环境必要依赖，H21不再等待用户下载批准；限定许可询问已发送，原样声库已取得，配套声码器等待外部适用依据。只在需要Mac附近操作时询问，不重复催解锁/询问空闲。SwiftF0独立权重分发许可仍是后续研究，开发下载授权不等于公开分发权。
+历史（2026-09-15本人返回前）：H09、H18、H19均已关闭；H20工具链协议仍待本人确认。用户已长期批准阶段内开发模型下载及独立环境必要依赖，H21不再等待用户下载批准；限定许可询问已发送，原样声库已取得，配套声码器等待外部适用依据。只在需要Mac附近操作时询问，不重复催解锁/询问空闲。SwiftF0独立权重分发许可仍是后续研究，开发下载授权不等于公开分发权。
 
 | ID | 当前状态 | 本人最小动作 | 后续/证据 |
 |---|---|---|---|
-| H20 Xcode许可 | 环境阻塞／待本人 | 回到Mac后打开Xcode，阅读并自行确认Apple/Xcode协议；若系统要求密码或组件确认，由本人操作并告知完成。不要把密码发到会话 | `/usr/bin/python3`在脚本执行前退出69并显示未接受Xcode许可；Lead暂停Swift/应用构建，不代接受或改工具链配置。独立外盘Python与Git可继续。记录见`D-Development/AgentTrials/D-SINGING-BACKEND-01/run-20260915T004329Z/xcode-license-block.json`；本人完成后Lead核工具链并补受影响检查才关闭 |
+| H20 Xcode许可 | 已关闭：本人确认及受影响CPU编译复验通过 | 无 | 旧退出69/JIT编译失败保留；本次本人完成协议及设置，Xcode27.0/firstLaunch/clang21/实际MLX CPU JIT通过，证据见本页最新记录。不等同完整App构建或GUI验收 |
 | H21 歌声材料 | 外部等待：询问已发送；开发下载已授权；声库已取得，vocoder待适用依据 | 当前无需本人操作或再次批准下载。Lead处理相关许可回复；仅真正需要本人动作时再集中提交，不按无设备/未点系统权限处理 | 绮萱v2.7.0原样包420707627字节及7个模型外部接口已核；先后3秒元音、6秒含休止/同字两音乐句均得到mel，后者9次原模型调用通过；仍无WAV/音质/产品验收。本轮仅两个替代vocoder核查，分别许可未解/输入不直接匹配，未换模型；配套PC-NSF-HiFiGAN2025.02仍为CC BY-NC-SA4.0，未下载。限定询问已发至openvpi@outlook.com，SENT确认；公开商业输出、分发及vocoder研发范围仍未知。证据`D-Development/AgentTrials/D-SINGING-BACKEND-01/run-20260915T060900Z-materials`，最新续行证据`D-Development/AgentTrials/D-SINGING-BACKEND-01/run-20260915T073451Z-r1-continuation`，详细[当前材料进展](MUSIC_ROADMAP.zh-CN.md#2026-09-15有限替代核查与6秒乐句验证)。HUM/I2V无关工作不以此为前置 |
 | H09 麦克风 | 已关闭：实际录制/停止/原声试听/导出/冷重开通过；本人确认正常 | 无 | 约10.899秒，48kHz单声道CAF；H09证据见下段。无新系统提示，不称新TCC授权；未做强拔设备矩阵 |
 | H18 参考图 | 已关闭：独立及组合真实GUI通过、源已接纳 | 无 | R/image-native-acceptance.json；统一aba1326的参考生成/采用/PNG导出/重开见combined-gui-r1/image-result.json及combined-gui-r2/cold-reopen.json |
