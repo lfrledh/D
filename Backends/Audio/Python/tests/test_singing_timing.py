@@ -213,6 +213,17 @@ class SingingTimingTests(unittest.TestCase):
         self.assertEqual(padded.note_midi[0], None)
         self.assertEqual(padded.note_midi[-1], None)
 
+    def test_zero_frame_phoneme_is_rejected_without_repair(self) -> None:
+        phrase, pronunciations, vowels = _profile(phonemes=("v", "c"))
+        plan = d_singing_timing.build_duration_groups(
+            phrase, pronunciations, vowels,
+            sample_rate=2, hop_size=1, context_ticks=1_000_000,
+        )
+        with self.assertRaisesRegex(ContractError, "source phoneme interval quantizes to zero"):
+            d_singing_timing.align_duration_predictions(
+                plan, [[1, 1, 1]], head_frames=0, tail_frames=0
+            )
+
     def test_zero_frame_note_is_rejected_without_repair(self) -> None:
         phrase, pronunciations, vowels = _profile(voiced_duration=1_000_000, pitch=0)
         first_note = phrase["notes"][0]
