@@ -135,3 +135,26 @@ Lead负责材料/质量判断、真实图契约、共享Swift类型和装配；�
 PREP1初交＋修复1的历史及剩余预算不变；新渲染切片在原任务内明确范围与执行记录，不能用它重试已超预算的旧缺陷。当前就绪度：准备器和共享保存已完成；真实图/音质/渲染/Swift接线尚未实现，两门槛解除前不继续造辅助脚本或未测接口。HUM必要音符修订、普通试听/MIDI及I2V保留独立路线，不以全歌声编辑器为前置，也不在等待中自动改换任务。
 
 本次规划基线/保护与审核证据位于 `D-Development/AgentTrials/D-SINGING-BACKEND-01/run-20260915T044415Z-render-plan`，最终文档SHA/推送与恢复状态由其中 `final-receipt.json` 记录。个人scheme原字节、索引和未暂存状态须保持；普通D/用户作品/签名/模型未操作。恢复先核源HEAD和清单答复；最小下一动作是办理H21适用材料依据及具体授权，H20可独立办理，不承诺后台继续运行。
+
+## 2026-09-15：长期开发下载授权与R1材料接口核验
+
+用户明确批准既有H21询问发送，并长期批准阶段内开发模型下载及独立环境必要依赖，只有必须在Mac附近操作的事再询问。阶段目标审批、隔离/数据/精度/原修复预算不变，不代第三方扩展许可。Lead已通过已连接邮箱发送限定询问，返回SENT；没有附件、工程/录音外发或费用承诺。邮件内容/响应与联系元数据仅在外部R=`D-Development/AgentTrials/D-SINGING-BACKEND-01/run-20260915T060900Z-materials`的`h21-sent.json`，不复制个人邮箱/线程ID进Git。
+
+许可只读复核确认：可按绮萱v2.7.0明确允许新推理程序的条款，限定取得原样完整声库并读取调用所需外部接口；不涉及内部图/权重分析、转换/优化文件写出或角色图展示。NC vocoder仍等待相关权利方适用依据，未取得/运行。因此R1“材料检查”部分独立前进，没有以一个配套组件为由冻结全部工作，也没有将下载授权等同使用权。
+
+实收原包420707627字节，SHA256与上文官方资产一致；35条ZIP条目/31文件，解包540817652字节，拒绝异常路径/链接/覆盖，完整原包保留。许可PDF SHA256 `092973bd06414c97593e642bf14e2fbf03d0308f7b2d8ad43d59f7ba03a1f313` 与官方同版资产一致；本次未展示人物图。完整文件摘要/配置分别在`original-file-manifest.json`、`archive-configs.json`，原包和31文件前后摘要均一致。
+
+复用HUM阶段已有Python3.12.14/ONNX Runtime1.22.1/numpy2.4.3；没有安装新依赖或调用Xcode。Lead一次性证据探针使用正常session外部`get_inputs/get_outputs`，CPU单线程、禁图优化/禁保存优化模型、独立进程/任务临时和缓存、每进程45秒受控超时。7进程实际均退出0，未调用`run()`、未读取内部节点/权重参数。源码及每次命令/退出/接口形状证据在R/`inspect-model-interface.py`、`interfaces/*/{process,result}.json`及`interface-probe-summary.json`；该探针不是新增产品工具。
+
+| 实际组件 | 已核实的外部接口摘要 | 不能据此假定的语义 |
+|---|---|---|
+| 时长linguistic → duration | tokens/languages/word_div/word_dur → encoder_out/x_masks；再输入ph_midi → ph_dur_pred浮点 | 字与音素、时长归一与帧舍入/边界补偿仍须核对公开调用实现，不能直接用浮点预测当最终整数时长 |
+| 音高linguistic → pitch | tokens/languages/ph_dur → encoder_out；note_midi/note_rest/note_dur、pitch/expr/retake/steps → pitch_pred | note_midi为float，retake为`[1,n_frames]`bool；输入曲线单位/初值/重复采样行为未实测，不能凭名称填0 |
+| 表现力linguistic → variance | 独立语言编码输入；pitch/breathiness/voicing/retake/steps → breathiness_pred/voicing_pred | retake为`[1,n_frames,2]`bool，与pitch不同；音素表不可跨阶段复用整数编号 |
+| acoustic | tokens/languages/durations、f0/breathiness/voicing/gender/velocity、标量depth/steps → `[1,n_frames,128]`float mel | 配置声明44100Hz/hop512/自然对数Slaney mel、匹配指定vocoder；depth上限0.6不等于应默认0.6；没有实测推理精度/速度/声音 |
+
+7个接口可读不等于7个真实演唱测试；session读取最大RSS约79–673MiB含加载和校验，不是推理峰值或产品内存预算。没有音频输出、音质/取消/重复推理/正式运行时/GUI验收，没有实施Worker或生产重写。两个现有只读代理仅复核许可范围和材料接口；没有重新验证模型路由、重算旧token/费用或消耗PREP1修复轮次。
+
+当前源起点 `31fcaf870248c96883ff10e815a9c81eaac01084`；只在既有Lead隔离规划树更新五份文档，生产代码仍对应已受测`3186aba2762850152d285afa50dc7ed7e9e3eef6`。最终源SHA/推送/保护/进程状态见R/`final-receipt.json`，不将后加文档冒称重新运行CPU回归。邮件和大材料只在外盘证据，不入Git；普通D、原作品、个人scheme原字节/索引/未暂存状态保留。
+
+下一动作仍属本阶段：后续恢复先核相关邮件答复、许可范围、源与材料摘要；允许范围明确后无需再次询问开发下载，取得匹配vocoder、固定公开调用语义和先行质量标准，再派正式provider实现。外部等待项H21与本人Xcode协议H20分开，阶段未完成，不自动进入下一阶段或声称后台已继续。
