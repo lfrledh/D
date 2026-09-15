@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Offline process verifier for frozen singing CLI parsing and inspection."""
-import argparse, json, math, subprocess
+import argparse, json, math, os, signal, subprocess
 from pathlib import Path
 
 def absolute(value):
@@ -13,12 +13,16 @@ def inside(child, root):
     except ValueError: return False
 
 def run(command, timeout):
+    child = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True)
     try:
-        p = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                           timeout=timeout, start_new_session=True, check=False)
-        return {"exit": p.returncode, "stdout": p.stdout.decode("utf-8", "replace"), "stderr": p.stderr.decode("utf-8", "replace")}
-    except subprocess.TimeoutExpired as e:
-        return {"timeout": timeout, "stdout": (e.stdout or b"").decode("utf-8", "replace"), "stderr": (e.stderr or b"").decode("utf-8", "replace")}
+        out, err = child.communicate(timeout=timeout)
+        return {"exit": child.returncode, "stdout": out.decode("utf-8", "replace"), "stderr": err.decode("utf-8", "replace")}
+    except subprocess.TimeoutExpired:
+        os.killpg(child.pid, signal.SIGTERM)
+        try: out, err = child.communicate(timeout=2)
+        except subprocess.TimeoutExpired:
+            os.killpg(child.pid, signal.SIGKILL); out, err = child.communicate()
+        return {"timeout": timeout, "stdout": out.decode("utf-8", "replace"), "stderr": err.decode("utf-8", "replace")}
 
 def main():
     parser = argparse.ArgumentParser()
@@ -35,19 +39,23 @@ def main():
     artifacts = a.output / "artifacts"; artifacts.mkdir(mode=0o700)
     base = [str(a.cli), "--capability", "singing", "--model", str(a.model), "--revision", a.revision, "--singing-request", str(request), "--singing-python", str(a.python), "--singing-script", str(a.script), "--singing-vendor", str(a.vendor), "--singing-profile", str(a.profile), "--singing-vocoder", str(a.vocoder), "--artifacts", str(artifacts), "--memory-budget-mib", "8192"]
     results = []
-    def check(name, extra, expected, inspect=False, protected=()):
-        report = a.output / (name + ".json"); before = {p: p.read_bytes() for p in protected if p.exists()}
-        command = base + extra + ["--report", str(report)]; actual = run(command, a.timeout); valid = False
+    def check(name, extra, expected, category, inspect=False, protected=(), replace=None):
+        replace = dict(replace or {}); report = Path(replace.pop("--report", a.output / (name + ".json"))); before = {p: p.read_bytes() for p in protected if p.exists()}
+        command = list(base)
+        for key, value in replace.items():
+            at = command.index(key); command[at + 1] = str(value)
+        command += extra + ["--report", str(report)]; actual = run(command, a.timeout); valid = False
         if inspect and actual.get("exit") == 0 and report.is_file():
             try:
                 d = json.loads(report.read_text("utf-8")); valid = d.get("schemaVersion") == 1 and d.get("options", {}).get("capability") == "singing" and "inspection" in d and not d.get("runs")
             except (OSError, ValueError): pass
-        results.append({"name": name, "command": command, "actual": actual, "expectedExit": expected, "inspectionValid": valid, "protectedUnchanged": all(p.read_bytes() == v for p, v in before.items()), "artifactChildren": [p.name for p in artifacts.iterdir()]})
-    check("valid-inspect", ["--inspect"], 0, True)
-    for name, extra in [("empty-prompt", ["--inspect", "--prompt", ""]), ("repeat", ["--inspect", "--repeat", "2"]), ("timeout-nan", ["--inspect", "--timeout-seconds", "nan"]), ("wrong-mode", ["--inspect", "--seed", "1"]), ("duplicate", ["--inspect", "--singing-profile", str(a.profile)]), ("unknown", ["--inspect", "--unknown-option", "x"])]: check(name, extra, 2)
-    bad = a.output / "float.json"; bad.write_text('{"schemaVersion":1.0}', encoding="utf-8"); check("float-schema", ["--inspect", "--singing-request", str(bad)], 2)
+        results.append({"name": name, "category": category, "command": command, "actual": actual, "expectedExit": expected, "inspectionValid": valid, "protectedUnchanged": all(p.read_bytes() == v for p, v in before.items()), "artifactChildren": [p.name for p in artifacts.iterdir()]})
+    check("valid-inspect", ["--inspect"], 0, "inspection", True)
+    check("valid-timeout", ["--inspect", "--timeout-seconds", "1"], 0, "inspection", True)
+    for name, extra in [("empty-prompt", ["--inspect", "--prompt", ""]), ("repeat", ["--inspect", "--repeat", "2"]), ("timeout-nan", ["--inspect", "--timeout-seconds", "nan"]), ("wrong-mode", ["--inspect", "--seed", "1"]), ("duplicate", ["--inspect", "--singing-profile", str(a.profile)]), ("unknown", ["--inspect", "--unknown-option", "x"])]: check(name, extra, 2, name)
+    bad = a.output / "float.json"; bad.write_text('{"schemaVersion":1.0}', encoding="utf-8"); check("float-schema", ["--inspect"], 2, "strict-json", replace={"--singing-request": bad})
     fixture = a.output / "provider"; fixture.mkdir(); sentinel = fixture / "keep.py"; sentinel.write_text("sentinel")
-    check("protected-report", ["--inspect", "--singing-script", str(sentinel), "--report", str(fixture / "x")], 2, protected=(sentinel,))
+    check("protected-report", ["--inspect"], 2, "protected-report", protected=(sentinel,), replace={"--singing-script": sentinel, "--report": fixture / "x"})
     passed = all(x["actual"].get("exit") == x["expectedExit"] and x["protectedUnchanged"] and not x["artifactChildren"] and (x["name"] != "valid-inspect" or x["inspectionValid"]) for x in results)
     (a.output / "results.json").write_text(json.dumps(results, indent=2, sort_keys=True), encoding="utf-8")
     return 0 if passed and a.request.read_bytes() == original and request.read_bytes() == original else 1

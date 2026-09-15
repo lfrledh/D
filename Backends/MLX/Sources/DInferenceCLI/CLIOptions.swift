@@ -481,14 +481,17 @@ struct CLIOptions: Sendable, Codable {
                   let vendor = options.singingVendor, let profile = options.singingProfile,
                   let vocoder = options.singingVocoder else { throw CLIArgumentError("Incomplete singing configuration.") }
             let root = resolved(artifacts)
-            let protected = [options.model, request, python, script, vendor, profile, vocoder].map(resolved)
-            guard protected.allSatisfy({ !overlaps(root, $0) }) else {
+            let protectedRoots = [options.model, vendor, vocoder, python, script].map {
+                $0 == python || $0 == script ? resolved(URL(fileURLWithPath: $0).deletingLastPathComponent().path) : resolved($0)
+            }
+            let protectedFiles = [request, profile].map(resolved)
+            guard (protectedRoots + protectedFiles).allSatisfy({ !overlaps(root, $0) }) else {
                 throw CLIArgumentError("Singing artifacts must be separate from all deployment and request inputs.")
             }
             if let report = options.report {
                 let destination = resolved(report)
-                guard !contains(root, destination), protected.allSatisfy({ !contains($0, destination) }),
-                      protected.allSatisfy({ $0.path != destination.path }) else {
+                guard !contains(root, destination), protectedRoots.allSatisfy({ !contains($0, destination) }),
+                      protectedFiles.allSatisfy({ $0.path != destination.path }) else {
                     throw CLIArgumentError("Singing --report must be outside artifacts and protected inputs.")
                 }
             }
@@ -530,12 +533,15 @@ struct CLIOptions: Sendable, Codable {
             guard counts.values.allSatisfy({ $0 == 1 }), raw("--capability") == "singing",
                   let destination = raw("--report"), absolute(destination) != nil,
                   !hasSymlinkComponent(destination) else { return nil }
-            let paths = ["--model", "--artifacts"] + Array(singingKeys)
+            let rootKeys: Set<String> = ["--model", "--artifacts", "--singing-vendor", "--singing-vocoder"]
+            let parentKeys: Set<String> = ["--singing-python", "--singing-script"]
+            let paths = Array(rootKeys.union(parentKeys).union(["--singing-request", "--singing-profile"]))
             let output = resolved(destination)
             for key in paths {
                 guard let value = raw(key) else { continue }
                 guard absolute(value) != nil, !hasSymlinkComponent(value) else { return nil }
-                let input = resolved(value)
+                let input = parentKeys.contains(key)
+                    ? resolved(URL(fileURLWithPath: value).deletingLastPathComponent().path) : resolved(value)
                 if input.path == output.path || contains(input, output) || (key == "--artifacts" && contains(input, output)) { return nil }
             }
             return destination
@@ -640,6 +646,10 @@ struct CLIOptions: Sendable, Codable {
             parent = next
         }
         let name = components[components.count - 1]
+        var parentBefore = stat()
+        guard Darwin.fstat(parent, &parentBefore) == 0, parentBefore.st_mode & S_IFMT == S_IFDIR else {
+            Darwin.close(parent); throw CLIArgumentError("Cannot bind --singing-request parent directory.")
+        }
         let descriptor = Darwin.openat(parent, name, O_RDONLY | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK)
         guard descriptor >= 0 else { Darwin.close(parent); throw CLIArgumentError("--singing-request must be a readable regular file and not a symbolic link.") }
         var openDescriptor = descriptor
@@ -665,16 +675,26 @@ struct CLIOptions: Sendable, Codable {
         let stableFD = Darwin.fstat(descriptor, &after) == 0
         Darwin.close(descriptor)
         openDescriptor = -1
-        var named = stat()
-        let stableName = Darwin.fstatat(parent, name, &named, AT_SYMLINK_NOFOLLOW) == 0
         Darwin.close(parent)
         openParent = -1
-        guard trailing == 0, stableFD, stableName,
+        guard let reboundParent = openAnchoredParent(components) else {
+            throw CLIArgumentError("--singing-request parent changed while being read.")
+        }
+        var parentAfter = stat(); var named = stat()
+        let stableParent = Darwin.fstat(reboundParent, &parentAfter) == 0
+        let stableName = Darwin.fstatat(reboundParent, name, &named, AT_SYMLINK_NOFOLLOW) == 0
+        Darwin.close(reboundParent)
+        guard trailing == 0, stableFD, stableParent, stableName,
+              parentBefore.st_dev == parentAfter.st_dev, parentBefore.st_ino == parentAfter.st_ino,
+              parentBefore.st_mode == parentAfter.st_mode,
               before.st_dev == after.st_dev,
               before.st_ino == after.st_ino, before.st_size == after.st_size,
               before.st_mtimespec.tv_sec == after.st_mtimespec.tv_sec, before.st_mtimespec.tv_nsec == after.st_mtimespec.tv_nsec,
               before.st_ctimespec.tv_sec == after.st_ctimespec.tv_sec, before.st_ctimespec.tv_nsec == after.st_ctimespec.tv_nsec,
-              before.st_dev == named.st_dev, before.st_ino == named.st_ino, named.st_mode & S_IFMT == S_IFREG else {
+              before.st_dev == named.st_dev, before.st_ino == named.st_ino, before.st_mode == named.st_mode,
+              before.st_size == named.st_size, before.st_mtimespec.tv_sec == named.st_mtimespec.tv_sec,
+              before.st_mtimespec.tv_nsec == named.st_mtimespec.tv_nsec, before.st_ctimespec.tv_sec == named.st_ctimespec.tv_sec,
+              before.st_ctimespec.tv_nsec == named.st_ctimespec.tv_nsec, named.st_mode & S_IFMT == S_IFREG else {
             throw CLIArgumentError("--singing-request changed while being read.")
         }
         return data
@@ -710,6 +730,17 @@ struct CLIOptions: Sendable, Codable {
             if Darwin.lstat(current.path, &value) == 0, value.st_mode & S_IFMT == S_IFLNK { return true }
         }
         return false
+    }
+    private static func openAnchoredParent(_ components: [String]) -> Int32? {
+        var parent = Darwin.open("/", O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+        guard parent >= 0 else { return nil }
+        for component in components.dropLast() {
+            let next = Darwin.openat(parent, component, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+            Darwin.close(parent)
+            guard next >= 0 else { return nil }
+            parent = next
+        }
+        return parent
     }
 }
 
