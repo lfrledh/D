@@ -1,5 +1,11 @@
 # 历史失败与权限审计
 
+## 2026-09-16 当前办理方式：H21不再强制等待外部回信
+
+用户要求资格对话框与可并行替代方案。H21的旧询问已发但回信不再是唯一前置；目前无需本人再次批准下载或重复系统操作。资格流程计划在歌声接入时复用现有音频弹窗，按声库/声码器/条款/用途绑定，声明不扩大第三方授权。没有代本人接受条款、下载NC声码器或新增外部联系。
+
+BigVGAN固定MIT材料已取得并校验，原声库mel经明确近似转换后首次生成可播放歌声，本人确认人声/旋律清楚、无明显破音。实际模型、来源、依赖及保护证据见[当前音乐路线](MUSIC_ROADMAP.zh-CN.md#2026-09-16使用资格确认与替代声码器当前有效)；后端完整验收仍进行中，不能把确认对话框写成已经接入歌声App。H20/H09/H18/H19仍已关闭。以下旧等待状态按日期保留，不再代表当前唯一执行路径。
+
 ## 2026-09-15 本人返回：当前无需本人操作
 
 H20已关闭：本人阅读并确认Xcode协议、完成后续设置；Lead复验Xcode27.0/27A266a、firstLaunch、clang21及实际MLX CPU JIT表达式均成功。证据 `D-Development/AgentTrials/D-VIDEO-I2V-01/run-20260915T132922Z-quality-finish/human-actions.json`、`solver-toolchain.json`。这只关闭已知工具链阻塞，不把未运行的App/GUI测试计为通过。
@@ -15,7 +21,7 @@ H20已关闭：本人阅读并确认Xcode协议、完成后续设置；Lead复�
 | ID | 当前状态 | 本人最小动作 | 后续/证据 |
 |---|---|---|---|
 | H20 Xcode许可 | 已关闭：本人确认及受影响CPU编译复验通过 | 无 | 旧退出69/JIT编译失败保留；本次本人完成协议及设置，Xcode27.0/firstLaunch/clang21/实际MLX CPU JIT通过，证据见本页最新记录。不等同完整App构建或GUI验收 |
-| H21 歌声材料 | 外部等待：询问已发送；开发下载已授权；声库已取得，vocoder待适用依据 | 当前无需本人操作或再次批准下载。Lead处理相关许可回复；仅真正需要本人动作时再集中提交，不按无设备/未点系统权限处理 | 绮萱v2.7.0原样包420707627字节及7个模型外部接口已核；先后3秒元音、6秒含休止/同字两音乐句均得到mel，后者9次原模型调用通过；仍无WAV/音质/产品验收。本轮仅两个替代vocoder核查，分别许可未解/输入不直接匹配，未换模型；配套PC-NSF-HiFiGAN2025.02仍为CC BY-NC-SA4.0，未下载。限定询问已发至openvpi@outlook.com，SENT确认；公开商业输出、分发及vocoder研发范围仍未知。证据`D-Development/AgentTrials/D-SINGING-BACKEND-01/run-20260915T060900Z-materials`，最新续行证据`D-Development/AgentTrials/D-SINGING-BACKEND-01/run-20260915T073451Z-r1-continuation`，详细[当前材料进展](MUSIC_ROADMAP.zh-CN.md#2026-09-15有限替代核查与6秒乐句验证)。HUM/I2V无关工作不以此为前置 |
+| H21 歌声材料 | 当前：资格确认路径＋许可清楚替代，不强制等回信；完整后端验收进行中 | 无需重复授权下载。已有MIT替代WAV和本人试听；后续实际系统/资格确认才集中办理。右列早期材料进展保留历史，当前见2026-09-16节 | 绮萱v2.7.0原样包420707627字节及7个模型外部接口已核；先后3秒元音、6秒含休止/同字两音乐句均得到mel，后者9次原模型调用通过；仍无WAV/音质/产品验收。本轮仅两个替代vocoder核查，分别许可未解/输入不直接匹配，未换模型；配套PC-NSF-HiFiGAN2025.02仍为CC BY-NC-SA4.0，未下载。限定询问已发至openvpi@outlook.com，SENT确认；公开商业输出、分发及vocoder研发范围仍未知。证据`D-Development/AgentTrials/D-SINGING-BACKEND-01/run-20260915T060900Z-materials`，最新续行证据`D-Development/AgentTrials/D-SINGING-BACKEND-01/run-20260915T073451Z-r1-continuation`，详细[当前材料进展](MUSIC_ROADMAP.zh-CN.md#2026-09-15有限替代核查与6秒乐句验证)。HUM/I2V无关工作不以此为前置 |
 | H09 麦克风 | 已关闭：实际录制/停止/原声试听/导出/冷重开通过；本人确认正常 | 无 | 约10.899秒，48kHz单声道CAF；H09证据见下段。无新系统提示，不称新TCC授权；未做强拔设备矩阵 |
 | H18 参考图 | 已关闭：独立及组合真实GUI通过、源已接纳 | 无 | R/image-native-acceptance.json；统一aba1326的参考生成/采用/PNG导出/重开见combined-gui-r1/image-result.json及combined-gui-r2/cold-reopen.json |
 | H19 资料问答/IME | 已关闭：修补后真人确认、组合源接纳 | 无 | R/text-native-acceptance-after-ime.json及text-ime-handoff.json；组合aba1326另完成实际7B问答/采用/撤销/保存重开，见combined-gui-r1/migration-and-undo-check.json及combined-gui-r2/cold-reopen.json |

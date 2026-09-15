@@ -285,3 +285,17 @@ predictions为与groups同长的list，每项为与symbols同长的list；元素
 恢复检查点：源本轮受测3940c9c完整值如上，个人scheme内容SHA256 `ca3635d88aa5a15397b90e528667c66c0e6db7e596176e885c79d194b544206c`、完整差异、索引blob与未暂存状态逐项保留，源索引干净且只剩该个人修改。Worker及自有CPU检查进程均正常退出/回收；没有启动模型、GPU、GUI、普通D或操作既有作品。原模型/旧证据与两个工作树均保留；历史creative_workflows_research条目仍pending_init，不宣称已终止或获得系统写锁。证据`source-pre-ff.json`、`source-post-ff.json`、`source-acceptance.json`、最终回执。
 
 H20用户暂不能操作，继续清单；本轮只读复核H21既有线程仍仅SENT，无新联系/声码器下载，不声称已扫描所有邮件。**只完成可独立验收的时序组件，整个歌声阶段未完成、没有默认开放新产品入口。** 下一动作仍为取得匹配vocoder适用依据后完成真实短WAV与歌词/音高/时值对照、取消/失败/资源释放，再经H20恢复后做R2运行时接线。本阶段通过后才提议歌声候选试听/接受拒绝/保存重开/安全导出；不以高级文本或完整歌声编辑器阻塞既定HUM必要纠错/普通试听/MIDI及I2V位置。
+
+## 2026-09-16：R1替代声码器与使用资格方向
+
+用户明确不等待外部回信作为唯一前置，采用实际条款/用途确认与替代路线。详情由MUSIC_ROADMAP最新节单一维护；旧邮件/等待/未许可材料状态不倒改，责任声明不授予新权利。当前原歌声R1/R2范围继续有效，没有自动启动完整歌声UI、音乐编辑器或新产品阶段。
+
+本轮Lead取得固定BigVGAN模型95a9d1dcb12906c03edd938d77b9333d6ded7dfb、MIT及关联许可证；仅generator和必要源码资料共489134059字节（另补上游第三方许可证），不下载训练优化器或改声库。外盘R=`D-Development/AgentTrials/D-SINGING-BACKEND-01/run-20260915T160500Z-vocoder-alternative`的`download-manifest.json`逐文件核官方Git blob/LFS SHA，`dependency-install/pip-report.json`固定实际依赖/下载摘要；全在任务deps，不改既有venv或全局Python。源码加载明确本地、weights_only、CPU FP32、禁用CUDA扩展，不在线加载或上传素材。
+
+先行试验用两种源/目标原STFT对同一自编0.5秒校准WAV；源自然log-mel取exp，以32帧块、NNLS history10/maxiter200还原非负幅度，再投影目标频带。源滤组零支持FFT频段明确填零，目标sqrt(s²+1e-9)和log floor1e-5来自固定参考；欠定和源log floor信息损失保留，不能称无损兼容。非实现者预审发现librosa默认优化历史会用约8.7GB工作区，Lead在首次执行前明确有限块/历史；未发生该超额分配。
+
+CPU实验正常结束60.356秒（含导入/首次缓存/加载等），三次原generator分别输出两个22016帧校准WAV及一个272896帧/44100Hz/单声道float32歌声WAV。最后一次声码器16.741秒；进程RSS高水位2791030784字节，不等于独立模型峰值。533帧保留原头尾补帧，约6.188秒不冒充恰6秒作品。三个文件有限非零、无饱和样本；原模型/源码/输入逐项前后摘要不变，自有子进程正常回收。
+
+本人通过afplay实际试听歌声，回复“能听清人声和旋律，没有明显破音”；`human-listening.json`绑定WAV SHA caa02b185e661f8b535b11811415f41aa48405273765313a31a615835f112a82，播放器正常退出。新模型调用/近似投影/本人听感是本轮真实证据，原准备/时序组件未重写，尚未完成改词/音高/时值、取消/失败/资源恢复及生产provider/统一运行时/GUI。不能将先行结果计作完整歌声阶段或替代整个音质标准。
+
+来源：Lead外部实验与材料准备，两名现有代理只读查许可/入口/公式/资源，没有新实施Worker或消耗旧PREP1/TIMING1修复轮次。生产源仍a892aad21eb325b46d65f9d6818def5b5065495b代码；文档版本另记外部回执。资格对话框计划复用AudioModelUsePermission，但需要在真实歌声运行入口检查，不交付空界面冒充功能。
