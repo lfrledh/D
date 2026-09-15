@@ -670,12 +670,14 @@ struct CLIOptions: Sendable, Codable {
             guard count > 0 else { throw CLIArgumentError("Cannot read complete --singing-request.") }
             data.append(contentsOf: buffer.prefix(count))
         }
-        var byte: UInt8 = 0; let trailing = Darwin.read(descriptor, &byte, 1)
+        var byte: UInt8 = 0
+        var trailing: Int
+        repeat { trailing = Darwin.read(descriptor, &byte, 1) } while trailing < 0 && errno == EINTR
         var after = stat()
         let stableFD = Darwin.fstat(descriptor, &after) == 0
-        Darwin.close(descriptor)
+        let fileClose = Darwin.close(descriptor)
         openDescriptor = -1
-        Darwin.close(parent)
+        let parentClose = Darwin.close(parent)
         openParent = -1
         guard let reboundParent = openAnchoredParent(components) else {
             throw CLIArgumentError("--singing-request parent changed while being read.")
@@ -683,8 +685,9 @@ struct CLIOptions: Sendable, Codable {
         var parentAfter = stat(); var named = stat()
         let stableParent = Darwin.fstat(reboundParent, &parentAfter) == 0
         let stableName = Darwin.fstatat(reboundParent, name, &named, AT_SYMLINK_NOFOLLOW) == 0
-        Darwin.close(reboundParent)
-        guard trailing == 0, stableFD, stableParent, stableName,
+        let reboundClose = Darwin.close(reboundParent)
+        guard trailing == 0, fileClose == 0, parentClose == 0, reboundClose == 0,
+              stableFD, stableParent, stableName, before.st_mode == after.st_mode,
               parentBefore.st_dev == parentAfter.st_dev, parentBefore.st_ino == parentAfter.st_ino,
               parentBefore.st_mode == parentAfter.st_mode,
               before.st_dev == after.st_dev,
