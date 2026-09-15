@@ -120,6 +120,11 @@ struct CLIOptions: Sendable, Codable {
       --frames N --fps-numerator N --fps-denominator N --shift FLOAT
                                    Video: 832x480, 17 frames at 16 fps, 50 steps, guidance 6, shift 8
                                    Explicit revision, memory budget, artifacts and local runtime required
+      --singing-request PATH --singing-python PATH --singing-script PATH
+      --singing-vendor PATH --singing-profile PATH --singing-vocoder PATH
+                                   Singing requires these absolute local paths, --model, nonempty --revision,
+                                   existing --artifacts and explicit --memory-budget-mib. It takes no prompt;
+                                   --inspect performs only an estimate and creates no singing artifacts.
       --help, -h
 
     Text writes generated text to stdout. Image/audio/video write artifact JSON lines to stdout;
@@ -230,7 +235,9 @@ struct CLIOptions: Sendable, Codable {
         case .image: forbidden = textFlags + audioOnly + videoOnly + singingOnly
         case .audio: forbidden = textFlags + imageOnly + videoOnly + singingOnly
         case .video: forbidden = textFlags + ["--image-profile", "--image-memory-limit-mib"] + audioOnly.filter { $0 != "--timeout-seconds" } + singingOnly
-        case .singing: forbidden = textFlags + imageOnly + sharedMedia + audioOnly + videoOnly
+        case .singing:
+            forbidden = textFlags + imageOnly + sharedMedia.filter { $0 != "--artifacts" }
+                + audioOnly.filter { $0 != "--timeout-seconds" } + videoOnly
         }
         if let key = forbidden.first(where: { values[$0] != nil }) {
             throw CLIArgumentError("\(key) cannot be used with --capability \(capability.rawValue).")
@@ -428,8 +435,10 @@ struct CLIOptions: Sendable, Codable {
         if let report = options.report, absolute(report) == nil {
             throw CLIArgumentError("Singing --report must name an absolute local path.")
         }
-        guard FileManager.default.fileExists(atPath: artifacts) else {
-            throw CLIArgumentError("Singing --artifacts must name an existing directory.")
+        var artifactStat = stat()
+        guard Darwin.lstat(artifacts, &artifactStat) == 0, artifactStat.st_mode & S_IFMT == S_IFDIR,
+              !hasSymlinkComponent(artifacts) else {
+            throw CLIArgumentError("Singing --artifacts must name an existing ordinary directory without symbolic links.")
         }
         for path in [request, python, script, vendor, profile, vocoder] where hasSymlinkComponent(path) {
             throw CLIArgumentError("Singing inputs must not use symbolic links: \(path)")
@@ -507,7 +516,7 @@ struct CLIOptions: Sendable, Codable {
         let singingPresent = arguments.contains { argument in
             let key = String(argument.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false)[0])
             return singingKeys.contains(key)
-        }
+        } || raw("--capability") == "singing"
         if singingPresent {
             // Parser errors may still have a safe report, but ambiguity never gets a write.
             var counts: [String: Int] = [:]
@@ -620,9 +629,25 @@ struct CLIOptions: Sendable, Codable {
     }
 
     private static func readSingingRequest(_ path: String) throws -> Data {
-        let descriptor = Darwin.open(path, O_RDONLY | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK)
-        guard descriptor >= 0 else { throw CLIArgumentError("--singing-request must be a readable regular file and not a symbolic link.") }
-        defer { Darwin.close(descriptor) }
+        let components = path.split(separator: "/").map(String.init)
+        guard !components.isEmpty else { throw CLIArgumentError("--singing-request must name a regular file.") }
+        var parent = Darwin.open("/", O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+        guard parent >= 0 else { throw CLIArgumentError("Cannot anchor --singing-request path.") }
+        for component in components.dropLast() {
+            let next = Darwin.openat(parent, component, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+            Darwin.close(parent)
+            guard next >= 0 else { throw CLIArgumentError("--singing-request parent is not an ordinary directory path.") }
+            parent = next
+        }
+        let name = components[components.count - 1]
+        let descriptor = Darwin.openat(parent, name, O_RDONLY | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK)
+        guard descriptor >= 0 else { Darwin.close(parent); throw CLIArgumentError("--singing-request must be a readable regular file and not a symbolic link.") }
+        var openDescriptor = descriptor
+        var openParent = parent
+        defer {
+            if openDescriptor >= 0 { Darwin.close(openDescriptor) }
+            if openParent >= 0 { Darwin.close(openParent) }
+        }
         var before = stat()
         guard Darwin.fstat(descriptor, &before) == 0, before.st_mode & S_IFMT == S_IFREG,
               before.st_size >= 0, before.st_size <= 2 * 1024 * 1024 else {
@@ -637,11 +662,18 @@ struct CLIOptions: Sendable, Codable {
         }
         var byte: UInt8 = 0; let trailing = Darwin.read(descriptor, &byte, 1)
         var after = stat()
+        let stableFD = Darwin.fstat(descriptor, &after) == 0
+        Darwin.close(descriptor)
+        openDescriptor = -1
         var named = stat()
-        guard trailing == 0, Darwin.fstat(descriptor, &after) == 0, Darwin.lstat(path, &named) == 0,
+        let stableName = Darwin.fstatat(parent, name, &named, AT_SYMLINK_NOFOLLOW) == 0
+        Darwin.close(parent)
+        openParent = -1
+        guard trailing == 0, stableFD, stableName,
               before.st_dev == after.st_dev,
               before.st_ino == after.st_ino, before.st_size == after.st_size,
               before.st_mtimespec.tv_sec == after.st_mtimespec.tv_sec, before.st_mtimespec.tv_nsec == after.st_mtimespec.tv_nsec,
+              before.st_ctimespec.tv_sec == after.st_ctimespec.tv_sec, before.st_ctimespec.tv_nsec == after.st_ctimespec.tv_nsec,
               before.st_dev == named.st_dev, before.st_ino == named.st_ino, named.st_mode & S_IFMT == S_IFREG else {
             throw CLIArgumentError("--singing-request changed while being read.")
         }
