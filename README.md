@@ -71,6 +71,8 @@
   --output "$D_SINGING_OUTPUT"
 ```
 
+局部CPU回归使用同一解释器执行 `-B -m unittest -v Backends/Audio/Python/tests/test_singing_prepare.py`；事先把`D_TEST_TEMP_DIR`与`TMPDIR`设为已存在的独立任务临时目录，并使用`PYTHONDONTWRITEBYTECODE=1`。测试只写该目录中的合成夹具，不需要模型。
+
 返回0仅表示条件JSON已安全保存；参数、输入或保存失败返回2并在stderr解释，stdout为空。拒绝覆盖已有输出；若文件已发布而后续同步失败，保留已发布文件并报告失败，不自动删除它。夹具发音表是合成测试数据，不代表绮萱或其他声库字典兼容。完整结果保留原始输入；其中`dsSegments`才是DS条件数组，不能将整个封装冒充模型输入或生成结果。
 
 本机Xcode许可门槛与待核歌声材料见[集中待办H20/H21](docs/FAILURE_AND_PERMISSION_AUDIT.zh-CN.md#当前集中待办2026-09-14)。不通过运行系统Python/安装或接受条款来自动解决；此次无需新依赖、模型或应用构建。
