@@ -58,6 +58,35 @@
 
 退出0表示封装完成，2表示输入/工具/报告失败，130表示取消；具体子阶段结果保留在报告中。`packaged`与`runtimeVerification=not-run`只说明封装完成，不代表模型运行、公证或系统隐私授权已验证。当前验收与实际产物索引见[批次记录](docs/tasks/D-MULTIMODAL-BASELINE-01.md)。
 
+## 歌声渲染（开发CLI，2026-09-16）
+
+统一`d-infer --capability singing`已通过真实歌声与取消恢复验收。输入是有版本乐句、歌词、显式音素和元音锚及材料/用途确认；输出为44.1kHz单声道float32 WAV及JSON来源记录。不是普通App的歌声入口，现有打包器也不自动部署此引擎。固定profile与完整契约见[歌声任务](docs/tasks/D-SINGING-BACKEND-01.md#冻结外部接口)；下节旧prepared JSON不能直接当作完整渲染请求。
+
+使用已有离线Python3.12环境、完整原样绮萱2.7.0、固定BigVGAN原权重与仓库vendor；环境需具备已固定的ONNX Runtime、PyTorch、NumPy/SciPy/Librosa依赖。实际环境版本和摘要在任务证据内。模型和环境不包含在Git内，不自动下载或代用户确认资格。请求必须自行提供合法SING1 JSON，`qualification`绑定材料/条款摘要和用途，不能用样例默认真值替代实际判断。
+
+从仓库根运行。下列变量须事先显式设置为绝对、可读且没有符号链接的路径：`D_INFER`为已构建CLI；`D_SINGING_PYTHON`为独立解释器；`D_SINGING_BANK`为完整声库；`D_SINGING_VOCODER`为固定声码器；`D_SINGING_REQUEST`为完整请求。`D_SINGING_ARTIFACTS`须是已有独立输出目录，`D_SINGING_REPORT`位于全部输入及产物目录之外；预算由调用者明确提供，不是16GiB机器上限。
+
+```sh
+"$D_INFER" --capability singing \
+  --model "$D_SINGING_BANK" \
+  --revision fe8ee7c95883d327a2b7facbbe832a7a53e1344918dc791ca83fc23b08034110 \
+  --singing-request "$D_SINGING_REQUEST" \
+  --singing-python "$D_SINGING_PYTHON" \
+  --singing-script "$PWD/Backends/Audio/Python/d_singing_render.py" \
+  --singing-vendor "$PWD/Backends/Audio/SingingVendor" \
+  --singing-profile "$PWD/Backends/Audio/Fixtures/Singing/qixuan-bigvgan-profile-v1.json" \
+  --singing-vocoder "$D_SINGING_VOCODER" \
+  --artifacts "$D_SINGING_ARTIFACTS" \
+  --memory-budget-mib "$D_SINGING_BUDGET_MIB" --timeout-seconds 600 \
+  --report "$D_SINGING_REPORT"
+```
+
+加`--inspect`只做材料/请求准入与资源估算，不加载模型、不生成WAV；读取到模型不等于真实生成成功。正常0、参数/请求错误2、运行/输出/材料错误1、普通取消130；已观察到输入被修改仍为失败1，不能伪装取消。进度到7/7也须等最终产物验证。保存失败会报告错误；已发布文件保留，不删除已交付作品。
+
+当前为原ONNX CPU和BigVGAN FP32 CPU，频带转换近似；不支持seed、自动猜发音、瞬间中断当前算子或原音频区域精确锁定。6/6.5秒为实测样例，不是产品上限；profile明确最长600秒，尚无长句/所有语言/所有Mac质量承诺。
+
+`"$D_SINGING_PYTHON" -B scripts/verify-singing-cli.py --help`列出46项完整CLI离线回归所需路径；它只读取既有材料及受控夹具，不运行推理，不能替代真实WAV验收。使用独立解释器`-B`，把`TMPDIR`和`D_TEST_TEMP_DIR`设为任务目录；语法检查使用正确解码后的内存`compile`，不默认写目标字节码。最终实测与限制见[任务结案](docs/tasks/D-SINGING-BACKEND-01.md#2026-09-16-r1r2阶段结案与源接纳)。
+
 ## 歌声条件离线准备（开发入口，2026-09-15）
 
 `Backends/Audio/Python/d_singing_prepare.py`将SING1乐句与显式发音清单转换成DiffSinger variance输入：保留歌词、一字多音、休止、音高和整数微秒时值。**输出是prepared JSON，不是WAV，也不是App中的歌声生成功能。** 不自动猜读音、不下载声库，不把音高识别候选直接当已确认乐谱。规格、来源及实际验收状态见[任务](docs/tasks/D-SINGING-BACKEND-01.md)。
@@ -75,7 +104,7 @@
 
 返回0仅表示条件JSON已安全保存；参数、输入或保存失败返回2并在stderr解释，stdout为空。拒绝覆盖已有输出；若文件已发布而后续同步失败，保留已发布文件并报告失败，不自动删除它。夹具发音表是合成测试数据，不代表绮萱或其他声库字典兼容。完整结果保留原始输入；其中`dsSegments`才是DS条件数组，不能将整个封装冒充模型输入或生成结果。
 
-本机Xcode许可门槛与待核歌声材料见[集中待办H20/H21](docs/FAILURE_AND_PERMISSION_AUDIT.zh-CN.md#当前集中待办2026-09-14)。不通过运行系统Python/安装或接受条款来自动解决；此次无需新依赖、模型或应用构建。
+本节仅是旧条件准备器的使用边界；当前工具链/材料状态见[集中待办H20/H21](docs/FAILURE_AND_PERMISSION_AUDIT.zh-CN.md#当前集中待办2026-09-14)，实际歌声渲染使用上节独立入口。
 
 ## 短原声音高识别：内部评估（2026-09-15）
 

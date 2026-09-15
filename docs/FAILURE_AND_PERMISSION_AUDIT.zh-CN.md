@@ -1,5 +1,13 @@
 # 历史失败与权限审计
 
+## 2026-09-16：本阶段已解除的阻塞与仍需区分的边界
+
+H21本阶段已用固定MIT BigVGAN替代完成真实歌声薄后端及统一运行时验收，无需等待回信或再批准下载。本人试听确认只属于R0先行样例。App资格对话框/歌声候选界面仍为下一阶段方案；已发送询问留历史，不继续主动轮询。当前没有需本人点击、密码、解锁或试听才能完成本后端阶段的新事项；分发资格不能由勾选声明替代。
+
+H20本人完成Xcode设置后，本轮实际构建发现SDK升级伴随Metal工具链缺失；Lead在已有开发工具授权内通过Xcode官方组件下载补齐，组合App/CLI编译与后端测试已过。一次冗余import返回70保留，未重复导入或修改签名/权限。Xcode 27 所带 Swift 编译器对旧Mutex捕获的编译诊断由私有受检查Sendable持有者修补，原音高算法未改；非实现者复核与工作台CPU通过。证据 `D-Development/AgentTrials/D-SINGING-BACKEND-01/run-20260915T163855Z-render/lead/toolchain-compatibility.json`。
+
+本轮Worker预算、测试环境/夹具指向错误、Lead调度短暂重叠及更正分别保存在[任务结案](tasks/D-SINGING-BACKEND-01.md#2026-09-16-r1r2阶段结案与源接纳)。这些是工程/执行事件，不转交用户反复授权，不更改既有验收标准；被中止的输出失败测试不计通过，已独立串行重做。
+
 ## 2026-09-16 当前办理方式：H21不再强制等待外部回信
 
 用户要求资格对话框与可并行替代方案。H21的旧询问已发但回信不再是唯一前置；目前无需本人再次批准下载或重复系统操作。资格流程计划在歌声接入时复用现有音频弹窗，按声库/声码器/条款/用途绑定，声明不扩大第三方授权。没有代本人接受条款、下载NC声码器或新增外部联系。
@@ -21,7 +29,7 @@ H20已关闭：本人阅读并确认Xcode协议、完成后续设置；Lead复�
 | ID | 当前状态 | 本人最小动作 | 后续/证据 |
 |---|---|---|---|
 | H20 Xcode许可 | 已关闭：本人确认及受影响CPU编译复验通过 | 无 | 旧退出69/JIT编译失败保留；本次本人完成协议及设置，Xcode27.0/firstLaunch/clang21/实际MLX CPU JIT通过，证据见本页最新记录。不等同完整App构建或GUI验收 |
-| H21 歌声材料 | 当前：资格确认路径＋许可清楚替代，不强制等回信；完整后端验收进行中 | 无需重复授权下载。已有MIT替代WAV和本人试听；后续实际系统/资格确认才集中办理。右列早期材料进展保留历史，当前见2026-09-16节 | 绮萱v2.7.0原样包420707627字节及7个模型外部接口已核；先后3秒元音、6秒含休止/同字两音乐句均得到mel，后者9次原模型调用通过；仍无WAV/音质/产品验收。本轮仅两个替代vocoder核查，分别许可未解/输入不直接匹配，未换模型；配套PC-NSF-HiFiGAN2025.02仍为CC BY-NC-SA4.0，未下载。限定询问已发至openvpi@outlook.com，SENT确认；公开商业输出、分发及vocoder研发范围仍未知。证据`D-Development/AgentTrials/D-SINGING-BACKEND-01/run-20260915T060900Z-materials`，最新续行证据`D-Development/AgentTrials/D-SINGING-BACKEND-01/run-20260915T073451Z-r1-continuation`，详细[当前材料进展](MUSIC_ROADMAP.zh-CN.md#2026-09-15有限替代核查与6秒乐句验证)。HUM/I2V无关工作不以此为前置 |
+| H21 歌声材料 | 本阶段已解除：固定MIT替代后端及真实WAV通过；不强制等回信 | 当前无。实际歌声资格对话框属于下一批准阶段，不重复本人R0试听 | 原样绮萱+BigVGAN固定材料、转换近似性、音准/取消/保护分别记录，见本页最新节和任务结案。PC-NSF未下载；历史邮件保留。公开分发/角色宣传/任意用户用途未据此验收；HUM/I2V不依赖此等待 |
 | H09 麦克风 | 已关闭：实际录制/停止/原声试听/导出/冷重开通过；本人确认正常 | 无 | 约10.899秒，48kHz单声道CAF；H09证据见下段。无新系统提示，不称新TCC授权；未做强拔设备矩阵 |
 | H18 参考图 | 已关闭：独立及组合真实GUI通过、源已接纳 | 无 | R/image-native-acceptance.json；统一aba1326的参考生成/采用/PNG导出/重开见combined-gui-r1/image-result.json及combined-gui-r2/cold-reopen.json |
 | H19 资料问答/IME | 已关闭：修补后真人确认、组合源接纳 | 无 | R/text-native-acceptance-after-ime.json及text-ime-handoff.json；组合aba1326另完成实际7B问答/采用/撤销/保存重开，见combined-gui-r1/migration-and-undo-check.json及combined-gui-r2/cold-reopen.json |

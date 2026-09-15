@@ -449,3 +449,44 @@ Frozen cases: no-prompt valid inspect0/no runs/no artifact contents; runID reten
 Before any repair Lead reviews prior run exceptions/scope. Worker pauses on unknown permission/identity/side effects, reports ambiguity rather than guessing. Results identify actual code hashes, methods/outputs, unexecuted checks, owned process status. Lead accepts only verified versions and explicitly stages scoped files after write handoff.
 
 Lead readonly pre-dispatch review: inspection exposes only estimate, so runID evidence belongs to real execution. Outer revision admission vs shared qualification/reference validation errors explicitly separated. No production changes or acceptance reductions.
+
+
+## 2026-09-16 R1/R2阶段结案与源接纳
+
+**结论：当前获准歌声薄后端阶段已完成本地集成及验收；App歌声闭环仍为下一阶段。** 后端接入SING1值型契约、统一任务运行时和显式开发CLI；无新调度框架，无App歌声注册、项目schema或签名变化。固定绮萱原权重、MIT BigVGAN与近似mel映射保持，不下载/运行PC-NSF非商业包；材料/用途资格必须显式提供，界面确认尚未装配。不把用户声明升级为D的分发依据。
+
+### 版本与证据索引
+
+证据根R=`D-Development/AgentTrials/D-SINGING-BACKEND-01/run-20260915T163855Z-render`，所有大日志/权重/WAV留外盘，不入Git。源基线`9b3932081e48c68ed02593dc1bf64d5b37fdb6c8`；RENDER1四文件`9edd33979e9c5ae12d511907df2feb3e976bd207`；共享准备`df02f6c2e15d97ce5c56193677a74324e9c147d9`；BRIDGE1最终`fd3c2a0e8b4a54bec371b5523c2db3c3dcf1c730`；CLI1最终`c2ac332805a28b49c92326a2759a76068b64251a`。保留历史整合为`91ca5897d0047842b12941c7f4fae55daa9a9762`，也是组合和源入口完整受测代码SHA。后加六份README/任务/状态文档不改变代码测试；其最终SHA及推送回执将在结案时记录于R/final-receipt.json，避免提交自引用。
+
+| 证据 | 实际证明与限制 |
+| --- | --- |
+| `lead/render-acceptance.json` | R1四种真实条件、三边界取消、恢复、53 CPU方法及独立反例通过；同上已固定版本，不重算历史测试总数 |
+| `lead/combined-acceptance/processes.json`、`mlx-tests.log`、`cli-matrix/results.json` | 91ca组合：62方法/5后端套件、46完整CLI离线场景通过；独立未签名CLI/App编译通过。编译/离线不是GUI或模型验收 |
+| `lead/backend-real-baseline/process.json`及`qa/quality.json` | 实际统一运行时6秒歌声，35.77秒宿主进程；完整7阶段、请求/模型/来源关联、WAV帧数/音准/休止/饱和实测通过 |
+| `lead/backend-cancel-acoustic/process.json` | 实际第5阶段请求取消，CLI130，11.55秒后全进程退出/回收；无已发布产物，不承诺C算子瞬时中断 |
+| `lead/backend-real-recovery-serial/{process,qa/quality}.json` | 独立串行重做6.5秒请求，35.83秒，正常完成/原件不变及数值质量通过 |
+| `lead/backend-stdout-failure-serial/{process,qa/quality}.json` | 自有只读stdout描述符，真实CLI1和明确outputError；完整WAV仍保留且读回质量/摘要通过，不改系统权限或真实文件权限 |
+| `lead/combined-legacy-sa3/process.json` | 新组合CLI真实旧SA3 6秒/8步/seed42/guidance1输出，44100Hz双声道float32、帧数/有限非零/摘要与材料保护通过；不是本轮MRT2/图文/视频全模型回归 |
+| `lead/source-acceptance/processes.json`及各日志/`real-singing` | 从源工程真实构建CLI、46项离线检查、核心/工作台/Python CPU及一次真实6秒歌声和数值质量复验。具体计数/跳过单列于stage-acceptance，未把旧候选二进制作为源构建 |
+| `lead/combined-review.json`、`lead/source-integration/{precheck,merge}.json` | 非实现者只读核对组合与已审两端一致；源ff只接固定SHA、个人文件前后保护。审核没有代替Lead实测 |
+
+原R1四类基准/改歌词/改音高/改时值为6/6.5秒，约42.37–44.85秒，全子进程RSS高水位约2.78–2.84GB。它不是纯模型内存、全机器性能或持续无泄漏证明。当前profile最长600秒声明与M4/16GiB实测范围分开；取消/释放采用进程终止及回收隔离生命周期。字/音高/时值真实提交，但近似mel转换与声码器不保证精确声音局部锁定；无可控制seed。本人“能听清人声和旋律，没有明显破音”对应R0的6.188秒先行文件，见另一个run-20260915T160500Z-vocoder-alternative/human-listening.json；不追记为正式R2、四类歌词或长句已逐一人听。App/普通沙盒/公证/TCC及歌声保存重开未在本阶段执行。
+
+### 来源、预算与失败记录
+
+- RENDER1为Sol/high受限CLI，线程`01a0a5ef-b138-7052-baf0-769ce40c4832`。初交900秒超时后同次交付的有限收尾33.17秒、两次针对修复804.08/438.38秒；四文件最终通过，Lead未重写生产渲染器。既有初交延续与修复不互相抹除，原预算不刷新。
+- BRIDGE1为Sol/high，线程`01a0a63d-d13e-7602-a1c1-12c1b5d15d54`；初交900秒超时、修复1约627.16秒、修复2约225.96秒。初交测试遮蔽、修复1输入目录mtime误判/错误夹具、修复2缺switch显式return均保留。一次有界Lead接管仅显式return与完整协议错序/重复反例；fd3实际62项通过。不是Sol独立一次成功。
+- CLI1为Terra/medium，线程`01a0a658-619e-7042-a04f-db9a2d40fcfe`；初交214.57秒、修复1约137.09秒、修复2约93.42秒，原两轮预算已耗，修复2明确未完成冻结矩阵。Lead一次有界接管实质补全verifier、描述符精确读/关闭与错误报告歧义/根路径保护；旧0f版本35行不等于完整验收，c2最终46行通过。最终不能记作Terra独立通过。
+- 两条R2实现有真实时间重叠：BRIDGE修复1为18:32:12–18:42:39 UTC，CLI初交18:35:26–18:39:01 UTC，各独立工作树、限定写根/缓存且网络关闭。配置请求与实际turn_context模型/档位一致，见各`route-accepted.json`和`*-observed.json`；服务端隐藏解析unknown，未追求不存在的模型身份凭据。所有Worker已停止写入并交回，Git由Lead显式提交；无越权成功证据。BRIDGE一次ps被沙箱拒绝即停报，Lead独立检查自己的进程，无提权绕过。
+- Lead在共享契约、素材/profile/vendor固定、测试策略、真实反例和整合中有实质参与；共享取消完整性优先级、mono校验和Xcode27 Mutex修补经非实现者只读复核。BRIDGE/CLI接管差异也由非实现者检查，再由Lead实际复验；这些代理未执行模型/构建，不能称独立测试执行。
+- Lead测试环境事件保留：xctestrun原Format1误按Format2注入导致首次测试无任务临时目录，纠正后才采信；CLI复现场景一度误用外层记录JSON为SING1输入，后改为实际请求；旧verifier结果名非冻结，相关路径误判另记。源合并只读预检一度把Swift diff属性误当自动执行，核无外部filter/merge/textconv后修正检查，无源改动。这些不归咎Worker或用户权限。
+- Lead串行调度曾在恢复任务仍运行时启动输出失败测试，约9秒重叠；停止后启动的自有测试，未触碰普通D。原失败测试记为无效（实际130，无输出失败交付），旧恢复不作串行性能证据；两项已新目录串行重做通过。证据`lead/backend-stdout-failure/invalid-scheduling.json`、两次process.json和带`-serial`的新记录。不得把重跑合成更多机器/独立覆盖；不修改验收阈值。
+
+时间均为各次实际进程墙钟，不能相加冒充计费或纯模型算时；任务级token/额度及完整Lead成本未可靠归因，订阅实际费用unknown，不使用API单价替代、不重算旧试点成本。本样本证明在Lead介入后可交付，不证明模型路由成本最优。所有历史失败、候选和固定源码许可保留，无权重/原始代理日志入Git。
+
+### 下一有限产品提案与恢复点
+
+下一阶段建议将歌声接入项目→音频，复用现有任务/候选/存储和资格弹窗模式：有限旋律歌词与显式发音输入，实际材料/用途确认，真实生成试听，采用/拒绝，修改后新候选，安全保存重开与WAV导出。Lead先冻结乐句修订/候选失效/保存及资格绑定，再按就绪度安排界面与部署/适配任务；共享ProjectStore/状态/模型装配由Lead单一协调。必须实测中文输入、取消/异常/磁盘失败不破坏原文和已有音频、资格取消不运行及材料/用途变化重确认、旧SA3/MRT2不回归；未验收路径不默认启用。用户逐阶段审批，本次仅提出计划，不启动新包/新Worker。
+
+HUM必要纠错/普通音符合成试听/MIDI有独立出口；I2V参考数值仍超原容差，候选隔离未接纳。不要求完整歌声编辑器才能恢复其他模态，也不将I2V质量缺陷变成授权问题。当前无新本人待办，历史H20关闭、H21开发材料阻塞已解除；公开发行材料另核。代码快进后、六份结案文档编辑前的检查点为：源index干净且仅scheme未暂存；文档提交后再次核对此保护状态。scheme SHA256 ca3635d88aa5a15397b90e528667c66c0e6db7e596176e885c79d194b544206c，索引blob 9c76916bdc97c2d4298cefe64e0b0fae3380573e。普通D/原作品未操作，所有本阶段自有实施/模型/构建/测试进程已回收；历史pending_init不是结束证明。恢复先读R/final-receipt.json、stage-acceptance及真实仓库，不仅信聊天摘要。候选/证据不清理，工作分支推送单列回执，不推进main/master。
