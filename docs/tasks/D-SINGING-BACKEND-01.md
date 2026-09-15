@@ -1,6 +1,6 @@
 # D-SINGING-BACKEND-01：旋律与歌词的歌声薄后端
 
-状态：获准推进；本轮先交付可离线验收的输入准备切片，真实歌声仍受声库许可/下载与工具链门槛约束。源基线 `347cdfeafe042b1df8db3657adaa04e11ffba6e5`，源分支 `codex/inference-foundation`。规格 SING1 / PREP1 / spec1；执行基线记录在派工 JSON，不自引用。
+状态：SING1/PREP1输入准备切片已验收并源接纳；真实歌声仍受声库许可/下载与工具链门槛约束，D-MUS02未完成。源基线 `347cdfeafe042b1df8db3657adaa04e11ffba6e5`，源分支 `codex/inference-foundation`。规格 SING1 / PREP1 / spec1；执行基线记录在派工 JSON，不自引用。
 
 证据 R=`D-Development/AgentTrials/D-SINGING-BACKEND-01/run-20260915T004329Z`；Lead 集成树 `D-Worktrees/D-SINGING-BACKEND-01` / `codex/d-singing-backend-01`。
 
@@ -67,3 +67,28 @@ CLI退出0仅表示成功保存prepared JSON，2表示参数/数据/文件错误
 修复1限定新增准备器和直接测试，原通用助手不在Worker修改范围。要求先留下永久反例的失败，再修所有权取得与清理；保留发布后的文件和原输入。同步加强已有数字UUID大写、混杂JSON等持久测试；冻结规格不变。独立测试方案的六处可产生误判/覆盖缺口在执行前经另一只读审阅发现，Lead修正外部driver后才运行；见R/independent-test-plan-review.json。这是验收设计改进，不是实现者放宽规则。
 
 通用助手在其他调用中的所有权前置条件与潜在同类问题仍属已知技术债，本次不声称全库文件发布已修复；后续复用须先核调用目录/所有权，必要另作共享助手的有界修复和调用方回归。不能把这项开发问题列成需要用户授权的Mac权限问题。
+
+## 2026-09-15：条件准备切片验收与源接纳
+
+Sol/high初交＋修复1完成实现，Lead冻结契约/合成金样例、独立反例、审核及集成；未代写生产实现，未使用第二轮修复或Lead接管。非实现者对初交发现静态碰撞缺陷，修复候选`ca4ca4b49a88cbfa9abda22ca9809c3962816fc3`重新只读审阅后无本轮阻塞。请求与可观察运行设置一致；修复执行基线是初交`04fd493...`完整值见上节，runner/job保留的base是最初准备SHA，并非修复从旧代码开始。证据R/prep/lead-repair1-event-review.json、nonimplementer-repair1-review.json。
+
+修复在新模块内以成功排他创建取得临时文件所有权，解决静态重名误删，保留原输出与发布后同步失败时的已交付文件。异常/finally清理核inode；成功路径直接unlink，因此不宣称所有删除均经过inode守卫或能对抗并发恶意目录/文件替换。公共旧助手未改；现有SA3/MRT2要求初始空job，应用宿主另以排他mkdir创建独立0700目录，CLI只检查空目录，故暴露面不同但不是已修复证明。P2共享助手定点修复仍需调用方回归，见R/shared-helper-impact-review.json。
+
+集成树合并保留全部历史，受测组合`790d5dc5230ee229a413505922fc00c1f8d2792c`。源从`347cdfeafe042b1df8db3657adaa04e11ffba6e5`快进到同一SHA，并从源目录真实调用同一代码复验，不仍指向Worker树。最后仅四份文档更新；最终源SHA/推送结果见R/final-receipt.json，不为自身SHA反复提交，不把后续文档版本写成重新测试。
+
+| 检查 | 实际结果与版本 | 独立证据 |
+|---|---|---|
+| 两文件语法 | tokenize.open＋内存compile通过，不生成目标pyc、不使用Apple工具链 | prep/repair1-events.jsonl；Lead独立driver另编译实现 |
+| 永久单元/真实CLI | 修后17方法通过；包含先失败后通过的静态碰撞、Unicode/ID/映射、输出保全与完整CLI退出 | repaired-unit；combined-unit；source-unit，各自独立执行不相加 |
+| Lead独立反例 | 同一42场景修后/组合/源各42通过、0失败；覆盖等值float/bool、单错重复键/非有限/深层、中文空格路径、只读及真正关闭FD、目录/输入/输出保护 | repaired-independent；combined-independent；source-independent/cases/summary.json |
+| 独立碰撞复现 | 初交exit1且哨兵消失；修后/组合/源exit0、哨兵原字节保留且不生成目标 | candidate-collision（保留失败）；repaired-collision；combined-collision；source-collision |
+| 既有音频CPU | 原21方法在组合及源各通过；未修改其断言/助手 | combined-audio-regression；source-audio-regression |
+| 真歌声/应用 | 未运行新模型、WAV生成、音质/取消/资源、Swift构建或GUI；无新App能力 | H20/H21与source-acceptance.json；不算跳过即通过 |
+
+全部检查使用已有外盘Python3.12.14，具体命令、cwd、时间、子进程退出及环境见各目录request/result.json；临时/缓存分别在独立run子目录。组合与源的实现、测试、四份夹具摘要完全一致。四个fixture文件是一组Lead自编金样例，不是四个真实模型样本；42独立检查与17永久测试有语义重叠，不加总成产品通过率。
+
+可观测CLI进程耗时：预检约45.10秒、一次纠正约17.85秒、初交402.35秒、修复1为265.94秒。逐次CLI usage快照保存在R/current-run-usage.json，resume可能报告会话累计，因此不直接累加，cached input不再加到input；未声称任务级精确token增量、完整Lead归因或订阅费用。实现模型路由与有限交付已证实，单个样本不证明最优成本或所有歌声/Swift任务胜任。
+
+恢复检查点：本轮自有CLI/测试进程均已结束，研究/非实现者审核只读任务结束；工作树/分支/历史证据保留，无后台继续承诺。源索引干净，唯一未暂存个人scheme仍orderHint1→6，SHA256`ca3635d88aa5a15397b90e528667c66c0e6db7e596176e885c79d194b544206c`、索引blob`9c76916bdc97c2d4298cefe64e0b0fae3380573e`和完整差异一致；没有暂存该文件。普通D、原作品、签名与既有模型没有被本轮启动/构建/改写；未新增录音、权重或环境。
+
+下一动作：Lead先核H21合法材料边界，再于用户返回时集中办理具体下载/环境授权；H20由本人阅读确认Xcode协议后复核工具链。之后沿本任务继续实际图接口/短WAV/取消与资源验证，不能刷新PREP1已耗修复预算。原发布前/后分类和各模态基础→有限组合→发行收尾顺序保持，不自动开展高级歌声编辑器、I2V或下一批。状态是“准备模块已接纳；完整歌声后端待条件”，不是D-MUS02已完成。
