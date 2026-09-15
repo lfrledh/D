@@ -412,3 +412,40 @@ Lead先编译共享准备和组件测试再派工；Worker在冻结范围实现�
 5. Lead固定版本真实phrase通过InferenceRuntime及开发CLI，取消后恢复、相关旧音频回归，构建App/CLI组件。人听音准/歌词另记，不把CPU fixture/编译当完整App歌声可用。App前端仍下一批准阶段。
 
 后续CLI独立所有权仅在backend API就绪后签发；不让实现者同时改共享状态或让两个互相等待的任务假装并行。Lead共享实现另由非实现者只读复核，最终组合及源入口重验，保留源个人scheme、候选与全部历史证据。
+
+
+## 2026-09-16 CLI1：公共接口已编译，独立入口接线
+
+BRIDGE1初交3d91ab6f7c44ed812890e6c3485f4b020ade00a7的生产公共类型已实际编译；测试因命名遮蔽失败，源码保护阻断由BRIDGE1修复1处理。当前API签名冻结，修复不改变它，故CLI1可从此明确候选并行写独立4文件。这个候选基线不等于已验收或源接纳，组合必须先合入BRIDGE1修补并通过整体验收。执行base/route和写根见R/cli/job.json；R为run-20260915T163855Z-render。CLI执行模型Terra/medium，原有BRIDGE预算不变，CLI自身初交＋两轮修复。
+
+# CLI1/spec1 — frozen developer entry contract
+
+Same D-SINGING-BACKEND-01 R2 stage. Thin explicit developer CLI, no App menu/dialog/storage registration. Source and execution SHA supplied in job; never infer a SHA from this draft. Four allowed paths only: Backends/MLX/Sources/DInferenceCLI/{CLIOptions.swift,DInferenceCLI.swift,CLIReport.swift}, scripts/verify-singing-cli.py. Shared backend/core/Python, signal facility, other tests, package/locks, docs and Git readonly. No recursive work, network/install/models/GPU/GUI/build; Lead handles compilation and real validation. Worker may memory-compile its Python test and Swift parse only with job tmp/module-cache. Initial + two targeted repairs; no resetting budget.
+
+## Behavior
+
+Add capability `singing`, backend ID `audio.singing.qixuan`. Require explicit absolute `--singing-request`, `--singing-python`, `--singing-script`, `--singing-vendor`, `--singing-profile`, `--singing-vocoder`, `--model`, nonempty `--revision`, existing absolute `--artifacts`, explicit positive nonoverflowing `--memory-budget-mib`. Revision/material eligibility belongs to backend admission (execution failure 1), not duplicated strings in CLI. `--repeat` omitted/1 only. `--timeout-seconds` finite positive, default600. Accept report and inspect; inspect means readonly estimate, no child/no new artifact root/run/cache. Singing artifact root must exist; never create it to satisfy an invalid path.
+
+Parse capability before requiring a text prompt. Singing rejects explicitly supplied prompt (including empty), prompt-file, seed, steps, guidance, old text/image/audio/video controls. Other capabilities reject every singing flag, preserving their old options/output behavior. Help remains help. No silent inherited values reported as used.
+
+Read request regular local file with every path component no symlink, <=2MiB, bounded FD read, before/after identity, named-path recheck, valid source encoding handled by strict JSON decode; don't merely Data(contentsOf:) unbounded or JSONDecoder. Pass exact data to SingingRequestWire.decode(model:..., vocoder: ModelReference with fixed vocoderRevision, explicit memoryBudgetBytes). Store typed InferenceRequest, return it unchanged for execution/inspect; keep original runID, phrase/phones/qualification. No auto qualification/pinyin/prompt/seed, no run UUID replacement. The backend freezes exact serialized bytes for its own request digest; don't promise whitespace-equivalent source file SHA is that digest.
+
+Instantiation maps explicit paths to SingingBackendConfiguration. Reuse InferenceRuntime, execution events and shutdown. Do not add another runner. Ordinary invalid args/wire/common semantic errors -> CLIArgumentError ->2; fixed materials/admission/execution/timeout/protection ->1; distinction: nonempty but wrong outer --revision is admission1, while a qualification.vocoderRevision conflicting with the supplied fixed vocoder reference is already rejected by shared validate and therefore2; normal cancellation130. After shutdown, record signal but retain1 when an actual InferenceFailure.inputIntegrityChanged exists in run failure; ordinary signals remain130. Match the typed failure, not its description text. stdout/stderr handling and published-file retention follow existing CLIOutput; no os._exit or bypass.
+
+## Destination protection on success AND error paths
+
+Main computes reportDestination BEFORE parse and may write after parse fails. For singing-related invocation, fail closed on ambiguous/repeated capability, model, report, artifact or singing path flags; don't take the first occurrence and overwrite a later input. Derive protections even if capability missing/invalid or other parse error: whenever any singing option is present, no unsafe failure report.
+
+Singing artifacts disjoint from bank/vocoder/vendor roots; provider/helper directory; interpreter directory; profile and request files. Report outside artifact root and all protected roots, not equal to any explicit input; resolve existing symlink aliases for collision detection, separately reject input symlinks. Both --key=value and separated syntax work. An unsafe report destination means no report write, preserving actual CLI error. Test preexisting sentinel/source bytes before/after. No global change to unrelated modes' destination policy. Do not scan arbitrary parent directories, read keys, mutate model inputs, or use private test bypass in public code.
+
+## Report and tests
+
+Keep schema1 and old capability report shape. Encode singing options with only applicable local deployment fields, capability, explicit budget, timeout, report/inspect and repeat1; exclude inherited prompt, seed42, steps4, image/audio/video defaults. CLIRunReport retains typed request, outcome/failure/artifact/progress. Local CLI reports are development evidence, not media metadata exports; no claim all local paths are stripped from these reports.
+
+New verify-singing-cli.py explicitly takes absolute CLI binary, request, deployment inputs and fresh output directory; no search/download/build. A documented CPU/offline mode runs complete CLI processes using controlled copied requests and existing fixed materials (hash reads, no inference), not wrappers replacing exit codes. Every subprocess timeout bounded, drain/reap own children, record actual command/exit/stdout/stderr and before/after source protections to output dir; no overwrite. Real model checks remain explicit Lead-run and not silently invoked by default.
+
+Frozen cases: no-prompt valid inspect0/no runs/no artifact contents; runID retention checked in actual generation report (inspect deliberately has no runs or typed request; do not claim runID proven by its estimate); explicit empty prompt, seed, wrong-mode singing flag, repeat2, timeout NaN/zero, budget overflow rejected2; schema1.0/1e0/bool and duplicate-key inputs rejected2; missing request/incomplete argv2; readable profile/material mismatch1; parser-error report=input, report under bank/vendor/runtime/artifact, duplicate capability/path aliases preserve originals; safe error report remains allowed; singing report no pseudo defaults. Lead independently verifies real runtime generation, signal cancellation+recovery, output failure retention and old CLI no regression. Do not manufacture fixture claims about real model/rights/Gatekeeper/GUI. If a test cannot exercise an internal typed failure through public CLI without actual unsafe mutation, leave that case to existing backend/runtime CPU fixtures and cite the gap; never expose public fault injection.
+
+Before any repair Lead reviews prior run exceptions/scope. Worker pauses on unknown permission/identity/side effects, reports ambiguity rather than guessing. Results identify actual code hashes, methods/outputs, unexecuted checks, owned process status. Lead accepts only verified versions and explicitly stages scoped files after write handoff.
+
+Lead readonly pre-dispatch review: inspection exposes only estimate, so runID evidence belongs to real execution. Outer revision admission vs shared qualification/reference validation errors explicitly separated. No production changes or acceptance reductions.
