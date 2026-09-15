@@ -69,12 +69,15 @@ class SingingPreparationTests(unittest.TestCase):
         self.assertIsNot(result["pronunciations"], self.pronunciations)
 
     def test_uuid_identity_is_case_insensitive_but_spelling_is_preserved(self) -> None:
-        upper = self.phrase["notes"][0]["id"].upper()
+        lower = "abcdefab-cdef-4abc-8def-abcdefabcdef"
+        upper = lower.upper()
         self.phrase["notes"][0]["id"] = upper
+        self.phrase["lyricUnits"][0]["noteIDs"][0] = lower
         result = d_singing_prepare.prepare_singing_plan(self.phrase, self.pronunciations)
         self.assertEqual(result["sourcePhrase"]["notes"][0]["id"], upper)
+        self.assertEqual(result["sourcePhrase"]["lyricUnits"][0]["noteIDs"][0], lower)
         duplicate = copy.deepcopy(self.phrase)
-        duplicate["lyricUnits"][0]["id"] = duplicate["id"].upper()
+        duplicate["lyricUnits"][0]["id"] = lower
         self.assert_rejected(phrase=duplicate)
 
     def test_unicode_and_pitch_boundaries_are_not_rewritten(self) -> None:
@@ -87,6 +90,71 @@ class SingingPreparationTests(unittest.TestCase):
         self.assertEqual(segment["text"], f"{text} 呀")
         self.assertEqual(segment["note_seq"], "C-1 G9 rest E4")
         self.assertNotIn("seed", result)
+
+    def test_octave_transposition_changes_only_notes_and_preserves_source(self) -> None:
+        transposed = copy.deepcopy(self.phrase)
+        for note in transposed["notes"]:
+            if note["midiPitch"] is not None:
+                note["midiPitch"] += 12
+        source_before = copy.deepcopy(transposed)
+        result = d_singing_prepare.prepare_singing_plan(transposed, self.pronunciations)
+        self.assertEqual(result["dsSegments"][0]["note_seq"], "C5 D5 rest E5")
+        self.assertEqual(result["sourcePhrase"], source_before)
+        self.assertEqual(transposed, source_before)
+        baseline = d_singing_prepare.prepare_singing_plan(self.phrase, self.pronunciations)["dsSegments"][0]
+        for key in ("text", "lang", "ph_seq", "ph_num", "note_dur", "note_slur"):
+            self.assertEqual(result["dsSegments"][0][key], baseline[key])
+
+    def test_extending_last_melisma_note_shifts_later_timeline_exactly(self) -> None:
+        extended = copy.deepcopy(self.phrase)
+        extended["durationTicks"] += 1
+        extended["notes"][1]["endTick"] += 1
+        for note in extended["notes"][2:]:
+            note["startTick"] += 1
+            note["endTick"] += 1
+        result = d_singing_prepare.prepare_singing_plan(extended, self.pronunciations)
+        segment = result["dsSegments"][0]
+        self.assertEqual(segment["note_dur"], "0.500000 0.250001 0.250000 0.250000")
+        self.assertEqual(segment["note_slur"], "0 1 0 0")
+        self.assertEqual(segment["ph_seq"], "l a SP y a")
+
+    def test_splitting_same_lyric_melisma_changes_phonemes_and_slur(self) -> None:
+        split_phrase = copy.deepcopy(self.phrase)
+        split_pronunciations = copy.deepcopy(self.pronunciations)
+        first_unit = split_phrase["lyricUnits"][0]
+        second_id = "abcdefab-cdef-4abc-8def-abcdefabcdea"
+        second_unit = {"id": second_id, "text": first_unit["text"], "noteIDs": [first_unit["noteIDs"][1]]}
+        first_unit["noteIDs"] = [first_unit["noteIDs"][0]]
+        split_phrase["lyricUnits"].insert(1, second_unit)
+        split_pronunciations["units"].insert(1, {"unitID": second_id.upper(), "phonemes": ["a"]})
+        result = d_singing_prepare.prepare_singing_plan(split_phrase, split_pronunciations)
+        segment = result["dsSegments"][0]
+        baseline = d_singing_prepare.prepare_singing_plan(self.phrase, self.pronunciations)["dsSegments"][0]
+        self.assertEqual(segment["text"], "啦 啦 呀")
+        self.assertEqual(segment["ph_seq"], "l a a SP y a")
+        self.assertEqual(segment["ph_num"], "2 1 1 2")
+        self.assertEqual(segment["note_slur"], "0 0 0 0")
+        self.assertNotEqual(segment["ph_seq"], baseline["ph_seq"])
+        self.assertNotEqual(segment["note_slur"], baseline["note_slur"])
+
+    def test_equivalent_float_and_bool_values_are_rejected_by_type(self) -> None:
+        cases = []
+        phrase_bool = copy.deepcopy(self.phrase)
+        phrase_bool["schemaVersion"] = True
+        cases.append((phrase_bool, self.pronunciations))
+        phrase_float = copy.deepcopy(self.phrase)
+        phrase_float["revision"] = 1.0
+        cases.append((phrase_float, self.pronunciations))
+        pronunciations_bool = copy.deepcopy(self.pronunciations)
+        pronunciations_bool["phraseRevision"] = True
+        cases.append((self.phrase, pronunciations_bool))
+        pronunciations_float = copy.deepcopy(self.pronunciations)
+        pronunciations_float["schemaVersion"] = 1.0
+        cases.append((self.phrase, pronunciations_float))
+        for phrase, pronunciations in cases:
+            with self.subTest(phrase=phrase, pronunciations=pronunciations):
+                with self.assertRaisesRegex(ContractError, "must be an integer"):
+                    d_singing_prepare.prepare_singing_plan(phrase, pronunciations)
 
     def test_phrase_contract_rejections(self) -> None:
         mutations = []
@@ -143,13 +211,29 @@ class SingingPreparationTests(unittest.TestCase):
     def _write_json(self, path: Path, value) -> None:
         path.write_text(json.dumps(value, ensure_ascii=False), encoding="utf-8")
 
-    def _run_cli(self, arguments: list[str], *, close_stderr: bool = False) -> subprocess.CompletedProcess:
+    def _run_cli(
+        self,
+        arguments: list[str],
+        *,
+        close_stderr: bool = False,
+        stderr_read_descriptor: int | None = None,
+    ) -> subprocess.CompletedProcess:
         command = [sys.executable, "-B", str(SCRIPT), *arguments]
+        if close_stderr and stderr_read_descriptor is not None:
+            raise ValueError("stderr can be closed or read-only, not both")
+
+        def configure_stderr() -> None:
+            if close_stderr:
+                os.close(2)
+            elif stderr_read_descriptor is not None:
+                os.dup2(stderr_read_descriptor, 2)
+
         process = subprocess.Popen(
             command,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            preexec_fn=(lambda: os.close(2)) if close_stderr else None,
+            preexec_fn=configure_stderr if close_stderr or stderr_read_descriptor is not None else None,
+            pass_fds=(stderr_read_descriptor,) if stderr_read_descriptor is not None else (),
         )
         try:
             stdout, stderr = process.communicate(timeout=10)
@@ -198,13 +282,22 @@ class SingingPreparationTests(unittest.TestCase):
             valid_pronunciations = directory / "pronunciations.json"
             self._write_json(valid_phrase, self.phrase)
             self._write_json(valid_pronunciations, self.pronunciations)
+            valid_text = json.dumps(self.phrase, ensure_ascii=False)
+            duplicate_text = valid_text.replace(
+                '"schemaVersion": 1', '"schemaVersion": 1, "schemaVersion": 1', 1
+            )
+            nan_phrase = copy.deepcopy(self.phrase)
+            nan_phrase["revision"] = float("nan")
             invalid_payloads = {
-                "duplicate.json": b'{"schemaVersion":1,"schemaVersion":1}',
-                "nan.json": b'{"schemaVersion":NaN}',
-                "deep.json": (b'{"schemaVersion":1,"x":' + b'[' * 34 + b'0' + b']' * 34 + b'}'),
-                "oversize.json": b" " * (1024 * 1024 + 1),
+                "duplicate.json": (duplicate_text.encode("utf-8"), b"duplicate JSON key"),
+                "nan.json": (json.dumps(nan_phrase, ensure_ascii=False).encode("utf-8"), b"non-finite JSON number"),
+                "deep.json": (
+                    b'{"schemaVersion":1,"x":' + b'[' * 34 + b'0' + b']' * 34 + b'}',
+                    b"nesting exceeds",
+                ),
+                "oversize.json": (b" " * (1024 * 1024 + 1), b"exceeds 1048576 bytes"),
             }
-            for name, payload in invalid_payloads.items():
+            for name, (payload, expected_error) in invalid_payloads.items():
                 with self.subTest(name=name):
                     invalid = directory / name
                     invalid.write_bytes(payload)
@@ -216,7 +309,7 @@ class SingingPreparationTests(unittest.TestCase):
                     ])
                     self.assertEqual(result.returncode, 2)
                     self.assertEqual(result.stdout, b"")
-                    self.assertNotEqual(result.stderr, b"")
+                    self.assertIn(expected_error, result.stderr)
                     self.assertFalse(output.exists())
 
             sentinel = directory / "sentinel.json"
@@ -239,8 +332,15 @@ class SingingPreparationTests(unittest.TestCase):
             self._write_json(pronunciations_path, self.pronunciations)
             linked_phrase = directory / "linked.json"
             linked_phrase.symlink_to(phrase_path)
+            real_parent = directory / "real-parent"
+            real_parent.mkdir()
+            parent_phrase = real_parent / "phrase.json"
+            self._write_json(parent_phrase, self.phrase)
+            linked_parent = directory / "linked-parent"
+            linked_parent.symlink_to(real_parent, target_is_directory=True)
             for source, output in (
                 (linked_phrase, directory / "linked.out"),
+                (linked_parent / "phrase.json", directory / "linked-parent.out"),
                 (phrase_path, phrase_path),
             ):
                 with self.subTest(source=source, output=output):
@@ -254,12 +354,54 @@ class SingingPreparationTests(unittest.TestCase):
                     self.assertEqual(result.stdout, b"")
                     self.assertEqual(phrase_path.read_bytes(), before)
             self.assertFalse((directory / "linked.out").exists())
+            self.assertFalse((directory / "linked-parent.out").exists())
 
     def test_invalid_cli_with_closed_stderr_still_exits_two(self) -> None:
         result = self._run_cli(["--invalid"], close_stderr=True)
         self.assertEqual(result.returncode, 2)
         self.assertEqual(result.stdout, b"")
         self.assertEqual(result.stderr, b"")
+
+    def test_invalid_cli_with_read_only_stderr_still_exits_two(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="singing-stderr-", dir=self.temp_root) as raw_directory:
+            stderr_path = Path(raw_directory) / "read-only-stderr"
+            stderr_path.write_bytes(b"unchanged")
+            descriptor = os.open(stderr_path, os.O_RDONLY)
+            try:
+                result = self._run_cli(["--invalid"], stderr_read_descriptor=descriptor)
+            finally:
+                os.close(descriptor)
+            self.assertEqual(result.returncode, 2)
+            self.assertEqual(result.stdout, b"")
+            self.assertEqual(result.stderr, b"")
+            self.assertEqual(stderr_path.read_bytes(), b"unchanged")
+
+    def test_task_owned_unwritable_output_parent_is_rejected_and_restored(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="singing-unwritable-", dir=self.temp_root) as raw_directory:
+            directory = Path(raw_directory)
+            phrase_path = directory / "phrase.json"
+            pronunciations_path = directory / "pronunciations.json"
+            self._write_json(phrase_path, self.phrase)
+            self._write_json(pronunciations_path, self.pronunciations)
+            source_bytes = (phrase_path.read_bytes(), pronunciations_path.read_bytes())
+            output_parent = directory / "unwritable"
+            output_parent.mkdir()
+            output_path = output_parent / "output.json"
+            output_parent.chmod(0o500)
+            try:
+                result = self._run_cli([
+                    "--phrase", str(phrase_path),
+                    "--pronunciations", str(pronunciations_path),
+                    "--output", str(output_path),
+                ])
+            finally:
+                output_parent.chmod(0o700)
+            self.assertEqual(result.returncode, 2)
+            self.assertEqual(result.stdout, b"")
+            self.assertNotEqual(result.stderr, b"")
+            self.assertFalse(output_path.exists())
+            self.assertEqual(phrase_path.read_bytes(), source_bytes[0])
+            self.assertEqual(pronunciations_path.read_bytes(), source_bytes[1])
 
     def test_directory_fsync_failure_preserves_published_target(self) -> None:
         with tempfile.TemporaryDirectory(prefix="singing-fsync-", dir=self.temp_root) as raw_directory:
@@ -287,6 +429,29 @@ class SingingPreparationTests(unittest.TestCase):
             self.assertTrue(output_path.is_file())
             self.assertEqual(json.loads(output_path.read_text(encoding="utf-8"))["dsSegments"], self.fixture_segments)
             self.assertEqual(list(directory.glob(".*.partial")), [])
+
+    def test_static_partial_collision_preserves_independent_file(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="singing-collision-", dir=self.temp_root) as raw_directory:
+            directory = Path(raw_directory)
+            phrase_path = directory / "phrase.json"
+            pronunciations_path = directory / "pronunciations.json"
+            output_path = directory / "out.json"
+            self._write_json(phrase_path, self.phrase)
+            self._write_json(pronunciations_path, self.pronunciations)
+            partial_path = directory / ".out.json.0123456789abcdef.partial"
+            sentinel = b"independent existing partial"
+            partial_path.write_bytes(sentinel)
+            arguments = [
+                "--phrase", str(phrase_path),
+                "--pronunciations", str(pronunciations_path),
+                "--output", str(output_path),
+            ]
+            with mock.patch.object(d_singing_prepare.secrets, "token_hex", return_value="0123456789abcdef"):
+                with self.assertRaises(ContractError):
+                    d_singing_prepare._execute_cli(arguments)
+            self.assertFalse(output_path.exists())
+            self.assertTrue(partial_path.is_file())
+            self.assertEqual(partial_path.read_bytes(), sentinel)
 
 
 if __name__ == "__main__":
