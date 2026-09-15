@@ -72,3 +72,15 @@ H20 Xcode协议与H21歌声材料许可/下载未解除，详见集中清单。�
 非实现者只读规格审核未发现行为冲突，指出文中parent是目录角色而非实际公开参数名；IMPLEMENT前已明确保留job=关键字兼容，AP1/R1行为未变。本行文档修正在Lead集成树，Worker使用准备SHA＋明确IMPLEMENT消息，不偷偷漂移执行基线。证据R/spec-review.json、worker/implement-prompt.txt。
 
 H21限定研究已核官方声库、声码器与CC说明；当前无足够依据解除新材料门槛，未发送询问或下载。细节复用MUSIC_ROADMAP最新H21节，不新建许可管理平台。
+
+## AP1-R2：关闭系统调用的平台语义澄清与修复1
+
+初交候选287a86ffddffbea6003875d4cfbb9f224253c39d，Sol/high在同一受限CLI初交；仅四允许文件。Lead独立重跑30音频、21MRT2、11访问生命周期、17歌声，以及33发布故障和42歌声条件/CLI均通过；这些结果不抵消后发现的缺陷。
+
+Lead代码审核发现_close_publication_descriptor在os.close失败后无条件再close同一整数。三个任务自有描述符夹具实证：首次关闭实际释放、同一编号被另一只读文件复用后返回注入EIO，重试误关另一个操作的fd；file-close、directory-close、error-cleanup-close均失败，哨兵文件内容未变。证据R/candidate-close/cases/summary.json、lead-close-check.py；未触及真实应用/作品。
+
+从本修订起明确：**关闭尝试前交出该descriptor的管理资格，os.close报错后不再按该编号重试**，也不以fstat显示同inode作为可安全重试的依据。错误仍报告并保留第一个失败，发布后的目标仍保留；关闭结果无法可靠确认时标为未知，不宣称所有系统关闭失败均已实际释放。若故障夹具故意在系统close之前抛错而保留fd，由夹具在patch结束后回收它，不让实现盲目重试来满足假设。
+
+依据[Python PEP475](https://peps.python.org/pep-0475/#modified-functions)：close属于不重试的特殊调用，报错并不保证原fd仍开放。本次为跨平台关闭/所有权语义的Lead澄清，原AP1的“不无限重试”不意味着允许一次不安全重试；不追罚旧规格未明确的关闭结果可观测性。原有作品保护/校验错误/JSON/CLI/模型边界不变，不变更21＋17原有断言；初交新增的“必须调用两次close”属错误实现耦合测试，应更正为真实释放/复用/错误优先的断言。
+
+修复1仅允许d_audio_contract.py、test_audio_backend.py；先在初交实现新增永久反例并保留红灯，再作最小修补，重跑同四CPU与所有独立案例。执行基线为287a86ffddffbea6003875d4cfbb9f224253c39d；AP1-R2通过原线程repair1请求显式发出，Worker旧任务文件仍包含原R1历史，不从旧SHA实施；新要求摘要与证据位于其获准output，Lead完整记录只在集成树维护。初交已用，最多两轮修复，本次使用第一轮；旧PREP1预算不改。
