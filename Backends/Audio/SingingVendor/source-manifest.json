@@ -1,0 +1,96 @@
+{
+  "schemaVersion": 1,
+  "modelRevision": "95a9d1dcb12906c03edd938d77b9333d6ded7dfb",
+  "sourceFiles": [
+    {
+      "path": "LICENSE",
+      "byteCount": 1076,
+      "sha256": "90459cd52fc41bd723df7c0c76fac1e4dd60e6bfd644a7e2a93f325bed4f6d95"
+    },
+    {
+      "path": "activations.py",
+      "byteCount": 4504,
+      "sha256": "3ba94028aebabfc994bcd746bf9cbe92ecace528434c922c480be6ada182cad6"
+    },
+    {
+      "path": "bigvgan.py",
+      "byteCount": 17483,
+      "sha256": "2b2c5d7bdc818b90ffc2e1a65776823e46030f51a4e0d7a2d42e9b6d05cba101"
+    },
+    {
+      "path": "env.py",
+      "byteCount": 510,
+      "sha256": "54ae665797fbb20ed3fc9b856be688f6b8a903b0bed8ff7edabff81dd9cdcd33"
+    },
+    {
+      "path": "utils.py",
+      "byteCount": 2563,
+      "sha256": "04eee590ca04ca33a6b2b79802a6514bbe7d6867164c72d61f9404ea9b0101c4"
+    },
+    {
+      "path": "meldataset.py",
+      "byteCount": 11420,
+      "sha256": "691e8413fb4c65ee3f603a43b19bdd69652a06a150ce82e72c43363cd268dfc6"
+    },
+    {
+      "path": "alias_free_activation/torch/__init__.py",
+      "byteCount": 200,
+      "sha256": "2e3138e1052e377ba2e51ea59c7d5d255a519559001757af21dbec4cb9c22471"
+    },
+    {
+      "path": "alias_free_activation/torch/act.py",
+      "byteCount": 852,
+      "sha256": "651448005dd5ae0c193da60d1a50c0aa53550a4a3050e29ed7d35cf86410e212"
+    },
+    {
+      "path": "alias_free_activation/torch/filter.py",
+      "byteCount": 3401,
+      "sha256": "acf2257276e617dd3161e53abc0a1582e586a3d2d618a43235c7f83818b4e179"
+    },
+    {
+      "path": "alias_free_activation/torch/resample.py",
+      "byteCount": 1885,
+      "sha256": "4d7e1bf4169d03f59360f34f33d029c04b99364150f6737563ebfbee0ab49d79"
+    },
+    {
+      "path": "incl_licenses/LICENSE_1",
+      "byteCount": 1067,
+      "sha256": "5eec017ce442989e01a46cd9cd6aeb13cd0aa3b3943f681577bda00475afaa23"
+    },
+    {
+      "path": "incl_licenses/LICENSE_2",
+      "byteCount": 1068,
+      "sha256": "7441474b0fe03def0efc41a6340b4818359453c7cb32423c647839f8799e68df"
+    },
+    {
+      "path": "incl_licenses/LICENSE_3",
+      "byteCount": 11355,
+      "sha256": "7339fa418c9ad3e8e12e74ad0fd26a9cc4be8703f9c110728a992b193be85cb2"
+    },
+    {
+      "path": "incl_licenses/LICENSE_4",
+      "byteCount": 1530,
+      "sha256": "9a2fbb788a9d584a2a0766e4bb790c8368911143472d257952581455313cf2c6"
+    },
+    {
+      "path": "incl_licenses/LICENSE_5",
+      "byteCount": 1058,
+      "sha256": "b6234401b9831a86505fbeecad803a0b2fe17b06997f614d5325c6d0e1a6fa7f"
+    },
+    {
+      "path": "incl_licenses/LICENSE_6",
+      "byteCount": 1073,
+      "sha256": "3fb4aef5b76dc0ccb1f57499d75c2fe039df5c9793778ede172f5ac7a4045681"
+    },
+    {
+      "path": "incl_licenses/LICENSE_7",
+      "byteCount": 1069,
+      "sha256": "8f36ba0c214d4f487ffd7ee0b8528da9b67b459bef2d115de9cd001316589f46"
+    },
+    {
+      "path": "incl_licenses/LICENSE_8",
+      "byteCount": 1063,
+      "sha256": "ff474afe15f36bab44711fc45c1a77314a4b9d8c96fa2d333f3fefe719fd76f9"
+    }
+  ]
+}

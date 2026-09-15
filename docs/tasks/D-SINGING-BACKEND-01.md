@@ -299,3 +299,53 @@ CPU实验正常结束60.356秒（含导入/首次缓存/加载等），三次原
 本人通过afplay实际试听歌声，回复“能听清人声和旋律，没有明显破音”；`human-listening.json`绑定WAV SHA caa02b185e661f8b535b11811415f41aa48405273765313a31a615835f112a82，播放器正常退出。新模型调用/近似投影/本人听感是本轮真实证据，原准备/时序组件未重写，尚未完成改词/音高/时值、取消/失败/资源恢复及生产provider/统一运行时/GUI。不能将先行结果计作完整歌声阶段或替代整个音质标准。
 
 来源：Lead外部实验与材料准备，两名现有代理只读查许可/入口/公式/资源，没有新实施Worker或消耗旧PREP1/TIMING1修复轮次。生产源仍a892aad21eb325b46d65f9d6818def5b5065495b代码；文档版本另记外部回执。资格对话框计划复用AudioModelUsePermission，但需要在真实歌声运行入口检查，不交付空界面冒充功能。
+
+## RENDER1/spec1：原歌声阶段的正式Python渲染切片（2026-09-16）
+
+任务仍D-SINGING-BACKEND-01，子工作包RENDER1、contract SING-RENDER1/spec1；源基线9b3932081e48c68ed02593dc1bf64d5b37fdb6c8，准备后执行SHA以run/job.json完整值为准。不是PREP1/TIMING1重试或新歌声App阶段。先行外部四条件研究验证实际输入/输出，生产实现由受限Sol/high Worker负责；Lead准备固定材料/契约/独立反例、审核及后续Swift接线。首次交付+最多两次明确修复，必要一次有界Lead接管，旧预算不刷新。
+
+### 唯一实施所有权
+
+Worker仅可新增 `Backends/Audio/Python/d_singing_render.py`、`d_singing_qixuan.py` 与 `Backends/Audio/Python/tests/test_singing_render.py`、`test_singing_qixuan.py`。不得改既有准备器/时序/共享发布、验收夹具/源manifest/任务规格/Swift/依赖/签名/工程/其他任务。Lead维护 `Backends/Audio/Fixtures/Singing/qixuan-bigvgan-profile-v1.json` 和原样 `Backends/Audio/SingingVendor`。不下载或触碰原权重；真实模型仅Lead运行。测试可以注入受控引擎/manifest校验器，必须标为夹具，不把假hash当真实权重通过。保留实现选择，不要求按外部探针函数逐行抄写。
+
+### 冻结输入与资格，不把声明当新许可
+
+独立CLI参数恰 `--request <file> --bank-directory <dir> --vocoder-directory <dir> --vendor-directory <dir> --profile <file> --output-directory <newdir>`，均显式绝对路径、普通文件/目录、无任意分量symlink；禁止自动发现/下载/启动App。source request最多2MiB，严格JSON（复用d_audio_contract.decode_strict_json）；输出新目录必须不存在、父存在，与任何输入文件/目录及vendor/profile无包含或相交关系。错误不能覆盖既有输出/原件或删除未取得所有权的目录。
+
+request恰键 `schemaVersion,runID,profileID,phrase,pronunciations,vowelIndices,qualification`。version严格整数1非bool/float；runID规范小写UUID字符串；profileID恰qixuan-2.7.0-bigvgan-44k-approx-v1。phrase/pronunciations复用prepare_singing_plan，vowelIndices复用build_duration_groups；不重新弱化其UUID/Unicode/一字多音/休止/数量/600秒准备预算规则。没有自由prompt、自动拼音、seed、任意参数袋或未支持参数；不静默忽略未知字段。作品输入保留原语义、版本和ID；变更另新run/输出，原件不动。
+
+qualification准确键 `confirmedApplicable,purpose,bankArchiveSHA256,bankTermsSHA256,vocoderRevision,vocoderLicenseSHA256`；confirmedApplicable必须真正true，其他材料身份必须匹配固定profile，purpose仅internalDevelopment/personalCreation/commercialCreation。该值由有权调用方在展示适用条款后提供，不由provider生成、代确认或推断；资格不符在重加载前失败。用途/条款/材料变化旧确认失效。当前只是受明确允许使用的绮萱原样包＋MIT BigVGAN；不能把这个字段用于绕过别的NC限制或证明软件分发权。D自身开发/分发与用户作品用途分开。
+
+profile生产信任锚SHA256=15489802b768fdd5c447325d5483b293601e63db54f46e84eb1c7b84df010a39，source-manifest生产信任锚SHA256=e3f9f9eb2a3cad99b5f75501cbc8b5fd6504257d0c26a69c2f1c817d2c7d0000；两者作为实现常量，不能被CLI参数/环境变量/测试选项覆盖。job记录用于审计，不是唯一信任根。--vendor-directory指向SingingVendor；其中source-manifest.json路径相对其bigvgan/。CLI拒绝非同摘要profile/manifest，严格验证列出的每个bank/vocoder/source普通文件大小和SHA（固定源manifest同样绑定），无缺/改/软链；不扫描附加文件或执行模型JSON中的指令。模型原件和请求/配置的身份+摘要在读取前后及结果发布前再次确认；异常/取消也做保护检查。大文件按块读取计算hash，不把多个模型/文件整份复制到内存。源代码来自明确vendor目录，不用配置触发任意代码导入；Python依赖属于已验证调用环境，provider不安装依赖。重库导入前设置sys.dont_write_bytecode及自有TMPDIR/XDG_CACHE_HOME/MPLCONFIGDIR/NUMBA_CACHE_DIR、离线HF变量；实际缓存路径须在本次拥有目录。拒绝既有同名vendor模块来源不符，明确检验bigvgan/activations/env/utils/alias_free_activation子模块的实际__file__/__path__位于绑定原件，不让sys.modules或其他路径抢占；退出恢复本调用改变的临时环境和sys.path。不要求把完整Python依赖环境当不可信插件执行。
+
+### 实际计算契约
+
+公共可测函数建议 `render(request_path, bank_directory, vocoder_directory, vendor_directory, profile_path, output_directory, *, progress, checkpoint) -> dict`，内部结构可自定；`d_singing_qixuan`保持加载/推理职责，不管全局作品/GUI。checkpoint可在任意已标边界抛专用取消异常。运行记录与终态由render单一发布。
+
+复用已验build_duration_groups及align_duration_predictions：44100Hz/hop512/context500000 ticks，head/tail各8模型帧。每个duration group分别原样CPU ORT linguistic→duration；预测须正且有限、shape/dtype/输入输出名称严格匹配，align只处理给定原模型预测，不改作品。pitch/variance/acoustic按先行已核公开接口；分别10/20/20steps、depth0.6为此固定profile，输入/权重不转换或优化另存。ORT1.22.1、CPU单线程、禁图优化/回退/arena/mem pattern/profiling，每段session释放后下一段。字典/语言编号分模型独立查；SP语言0；note_rest单列，未发声的MIDI只作为内部填充值使用最近有效值（开头用首个有效pitch），不能写回源或宣称休止已经静音。原预测pitch全帧转Hz进入acoustic，不编造seed可控或确定性。pitch初值全帧为首个有效MIDI，expr全1、retake[1,N]全true；variance breathiness/voicing初值全0，retake[1,N,2]全true；两路variance预测裁到[-96,0]，acoustic gender全0、velocity全1。steps为int64标量[]，depth为float32标量[]。输入/输出形状与原始接口对照索引为外部conditions_probe.py（SHA256=cdbab7aaace54a42473c4ac90c270f22e7bc212c488aaf0049b4e2147d6560e5），可按任务索引读取，不要求复制其结构。
+
+acoustic mel [1,N,128] float32；vocoder与之不是精确兼容：exp自然logmel→Slaney 40..16000/2048/128非负幅度恢复→Slaney0..22050重投影。冻结NNLS块32帧、history10、maxiter200；零支持FFT频段置0，目标先sqrt(s²+1e-9)再滤组相乘/log(max1e-5)。全段相对残差定义为||A·S-exp(mel)||₂/max(||exp(mel)||₂,1e-20)，平方和跨块累计后开方；S是支持外频段置0后的NNLS幅度。librosa.util.nnls不提供完整优化状态，不能声称已证明收敛；求解异常或运行/收敛告警直接失败。必须记录该残差并在>0.10/非有限时失败，禁止放大迭代/忽略失败以迎合数据。该0.10是先行校准后、实施前的兼容预算，不替代音质/音高门槛。加载原BigVGAN FP32/CPU、use_cuda_kernel=False，weights_only严格state、remove_weight_norm仅运行内存；不修改权重文件/生成优化模型。原源码forward含±1clamp，记录饱和样本数；不额外归一化、拉伸或修音。
+
+输出原模型N*512 samples；去前8*512，保留roundHalfUp(durationTicks*44100/1000000)样本，验证后端确有足量样本，尾部仅去模型补帧/量化多余样本。nativeFrameCount严格指原WAV样本帧数N*512（不是mel帧数）；saturatedSamples统计交付裁剪片段中abs(sample)>=1的样本数。显式记录原/输出帧数与裁剪，不默默把约6.188秒称为6秒作品。不承诺局部改词/音高/时值只影响局部PCM，只有输入条件精准保留。
+
+### 输出、失败、取消与文件安全
+
+输出目录排他创建0700，内部tmp/cache全部自有；任何目录已存在则拒绝，不采用自动清空。进度stdout JSON Lines每条恰type=progress、runID、stage，stage按顺序validation/duration/pitch/variance/acoustic/vocoder/publish，每段计算前后checkpoint，NNLS每块也checkpoint。CLI SIGTERM/SIGINT仅设置取消标志，下一checkpoint退出；当前C计算可能先完成，不能声称瞬断。结果提交点为result.json排他发布且回读/同步完成；最后一次取消检查在发布result之前。提交前取消要资源释放、保护检查后退出130，不发布成功result；提交后迟到取消不撤回结果，不再checkpoint，完成正常通知退出0（通知失败则1）。诊断stderr。正常/错误关闭重库资源，不保留跨任务全局model。
+
+只交付 `output.wav`（44100Hz单声道float32 WAV）与 `result.json`。两文件在自有目录用已验publish_exclusive排他发布并真实回读（WAV格式/精确帧数/有限非零/摘要；JSON严格解析并核源关联），result最后发布；只有完整result才表示可接纳结果。失败保留自有未发布现场供诊断，不扫描/删除作品；已交付result/WAV不因后续stdout通知失败删除。CLI成功stdout最后恰type=result、runID、resultPath="result.json"，exit0同时要求通知完成；stdout错误exit1且文件保留，stderr也不可写不能改变错误码，不os._exit或退出120。
+
+result准确顶层 `schemaVersion,runID,profileID,status,source,model,audio,execution`；version1、status=rendered。source准确 `phraseID,phraseRevision,requestSHA256,durationTicks`；model准确 `bankArchiveSHA256,vocoderRevision,vocoderSHA256,bankTermsSHA256,vocoderLicenseSHA256`。audio准确 `path,encoding,sampleRate,channels,frameCount,sha256`（path output.wav、encoding float32LE-WAV）。execution准确 `precision,seedControl,nativeFrameCount,trimHeadSamples,outputFrameCount,projectionRelativeResidual,saturatedSamples,stages`，precision="Qixuan original ONNX CPU; BigVGAN FP32 CPU"，seedControl="unsupported"；stages数组元素恰name/seconds（有限非负）。不得把input绝对路径/账户/确认信息/Agent日志写入结果。
+
+初始参数/文件/资格/输入契约失败exit2；模型/计算/报告/输出、运行中保护变化或资源收尾错误exit1；取消130；正常0。缺依赖、坏模型不冒充输入静音。内部异常向调用者保留有效错误上下文，不吞掉所有异常或以空输出替代。发布前取消不得成功；完整发布后通知失败保持有效文件，但退出1。checkpoint异常与原文件保护失败同时发生，报告保护失败，不能用取消掩盖。
+
+### 冻结验证入口与范围
+
+Worker用唯一已指定Python -B；tokenize.open+compile内存语法检查，不py_compile。测试cache/tmp仅job.tmp；网络/模型/GPU/GUI/Xcode/全库构建/全局配置/commit禁止。不得导入完整模型库来做纯契约测试；依赖延迟加载。允许stdlib/numpy局部CPU与受控假运行器/最小张量、已有准备/时序测试。完整模型由Lead串行。
+
+必须持久覆盖：金样例/中文空格路径/组合字符/一字两音/休止及输入不变；bool/float版本、未知字段、坏UUID、未知/空音素、不符元音锚、过期版本、资格false/用途或材料身份不符；profile/源/模型变动、坏/缺材料、符号链接/目录相交/已有输出、失败/取消不覆盖输入和哨兵。Fake渲染只证明编排，不能据此测数值或真实声库许可。
+
+完整CLI退出测试覆盖正常、取消、报告不可写、stdout/stderr失效、通知失败后的有效文件保护；不得只测main返回值。取消duration/pitch/variance/acoustic/vocoder边界与NNLS块、取消后可重跑；异常结束/超时由宿主测试，原件保护独立。数值小测试验证幅度而非功率、epsilon位置、目标尺寸/裁剪、有限值/空音频/饱和计数、投影残差超限单独拒绝，不放宽golden。复用之前fixture/冻结条件，不更换测试基准消除失败。
+
+Lead在固定候选上重做真实baseline/改词/改音高/改时值、只听可辨歌词和明显噪声不是全部音质门槛；真实播放/帧数/中段音高及休止噪声分别核验。先行pYIN仅测量不自称校准正确率；四组固定实测使用librosa.pyin(fmin=150,fmax=1000,sr=44100,frame_length=2048,hop_length=512,center=True)，时间坐标按帧中心sample/44100；音符25%..75%半开区间为稳定窗，休止20%..60%为RMS取样窗。音符有finite正Hz且voiced_flag真才有效，每窗有效覆盖≥80%、abs(median(cents))≤50且p95(abs(cents))≤100；cents=1200*log2(measuredHz/440*2**((69-midi)/12))。空窗/无有效帧不能通过，不选取有利子窗。休止窗RMS≤0.005；交付片段不得有连续44个abs(sample)>=1的样本，所有饱和样本数另记。未知语言/表情/所有声库不在本profile承诺。每任务原件前后保持、计算结束、错误/取消恢复必须真测。质量失败不能只靠本条允许的局部CPU通过接纳。
+
+RENDER1仅独立Python生产入口；R2共享Swift契约/统一运行时接线由Lead协调，在RENDER1验收后继续同一阶段，不把文件probe当R2。歌声资格弹窗和正式App产品闭环按真实入口接入，当前不新增空菜单或标记整个歌声完成。
