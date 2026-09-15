@@ -233,15 +233,20 @@ class QixuanNumericTests(unittest.TestCase):
             self.assertEqual(Session.alive, 0)
 
     def test_vocoder_accepts_ordered_state_and_forces_cpu_float32(self) -> None:
-        records = {"constructed": 0, "strict": False, "called": 0, "deleted": 0}
+        records = {
+            "constructed": 0, "strict": False, "called": 0, "deleted": 0,
+            "device_depth": 0,
+        }
 
         class Device:
             type = "cpu"
 
             def __enter__(self):
+                records["device_depth"] += 1
                 return self
 
             def __exit__(self, *_args):
+                records["device_depth"] -= 1
                 return False
 
         float32 = object()
@@ -300,6 +305,8 @@ class QixuanNumericTests(unittest.TestCase):
             def __init__(self, config, *, use_cuda_kernel):
                 records["constructed"] += 1
                 test_case.assertFalse(use_cuda_kernel)
+                test_case.assertEqual(records["device_depth"], 1)
+                test_case.assertIs(Torch.default, float32)
                 self.tensor = Tensor()
 
             def __del__(self): records["deleted"] += 1
@@ -361,6 +368,22 @@ class QixuanNumericTests(unittest.TestCase):
             gc.collect()
             self.assertEqual(records["deleted"], 3)
 
+            caller_dtype = Torch.default
+
+            class FailingModel:
+                def __init__(self, config, *, use_cuda_kernel):
+                    test_case.assertEqual(records["device_depth"], 1)
+                    test_case.assertIs(Torch.default, float32)
+                    raise RuntimeError("fixture constructor failure")
+
+            with mock.patch.object(
+                qixuan, "project_log_mel", return_value=(np.zeros((128, 1), dtype=np.float32), 0.0)
+            ), mock.patch.object(qixuan, "_import_bigvgan", return_value=(Torch, dict, FailingModel)):
+                with self.assertRaisesRegex(qixuan.QixuanRuntimeError, "constructor failure"):
+                    engine.vocoder(conditions, lambda: None)
+            self.assertIs(Torch.default, caller_dtype)
+            self.assertEqual(records["device_depth"], 0)
+
     def test_vocoder_checkpoint_cancellation_remains_dedicated_and_cleans_model(self) -> None:
         # The full fake-interface success test above owns state/load details.  Here
         # a tiny import seam proves cancellation before construction is untouched.
@@ -396,6 +419,30 @@ class QixuanNumericTests(unittest.TestCase):
             for name in ("__init__.py", "act.py", "filter.py", "resample.py"):
                 (torch_root / name).write_text("", encoding="utf-8")
             qixuan._preflight_vendor_imports(root)
+
+            unlisted = root / "unlisted.py"
+            unlisted.write_text("raise AssertionError('must never execute')\n", encoding="utf-8")
+            root_local_wrong = SimpleNamespace(__file__=str(unlisted))
+            with mock.patch.dict(sys.modules, {"bigvgan": root_local_wrong}):
+                with self.assertRaisesRegex(qixuan.QixuanRuntimeError, "exact bound source"):
+                    qixuan._preflight_vendor_imports(root)
+
+            wrong_namespace = root / "wrong-namespace"
+            wrong_namespace.mkdir()
+            cached_namespace = SimpleNamespace(__file__=None, __path__=[str(wrong_namespace)])
+            with mock.patch.dict(sys.modules, {"alias_free_activation": cached_namespace}):
+                with self.assertRaisesRegex(qixuan.QixuanRuntimeError, "search locations"):
+                    qixuan._preflight_vendor_imports(root)
+
+            exact_module = SimpleNamespace(__file__=str(root / "bigvgan.py"))
+            exact_namespace = SimpleNamespace(
+                __file__=None,
+                __path__=[str(root / "alias_free_activation"), str(root / "alias_free_activation")],
+            )
+            with mock.patch.dict(sys.modules, {
+                "bigvgan": exact_module, "alias_free_activation": exact_namespace,
+            }), mock.patch.object(sys, "path", [str(root), str(root), *sys.path]):
+                qixuan._preflight_vendor_imports(root)
 
             sentinel = Path(raw) / "executed"
             initializer = root / "alias_free_activation" / "__init__.py"

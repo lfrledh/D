@@ -326,6 +326,93 @@ class SingingRenderTests(unittest.TestCase):
         with self.assertRaises(singing_render.RenderRuntimeError):
             singing_render.encode_mono_float32_wave(bad, 4)
 
+    def test_close_boundary_replacements_and_static_bad_digest_keep_real_seals(self) -> None:
+        output = self.directory / "readback-output"
+        output.mkdir(mode=0o700)
+        output_identity = (output.stat().st_dev, output.stat().st_ino)
+        target = output / "result.json"
+        target.write_bytes(b'{"original":true}\n')
+        original_identity = (target.stat().st_dev, target.stat().st_ino)
+        original_close = singing_render.os.close
+        injected = False
+
+        def replace_final_on_close(descriptor):
+            nonlocal injected
+            current = os.fstat(descriptor)
+            if not injected and (current.st_dev, current.st_ino) == original_identity:
+                injected = True
+                replacement = output / "replacement.json"
+                replacement.write_bytes(b'{"tampered":true}\n')
+                os.replace(replacement, target)
+            return original_close(descriptor)
+
+        with mock.patch.object(singing_render.os, "close", side_effect=replace_final_on_close):
+            with self.assertRaisesRegex(singing_render.RenderRuntimeError, "named path changed"):
+                singing_render._readback_owned_target(
+                    output, output_identity, "result.json", maximum_bytes=256
+                )
+        self.assertTrue(injected)
+        self.assertEqual(target.read_bytes(), b'{"tampered":true}\n')
+
+        source = self.directory / "sealed-source.bin"
+        source.write_bytes(b"original source")
+        source_identity = (source.stat().st_dev, source.stat().st_ino)
+        injected = False
+
+        def replace_source_on_close(descriptor):
+            nonlocal injected
+            current = os.fstat(descriptor)
+            if not injected and (current.st_dev, current.st_ino) == source_identity:
+                injected = True
+                replacement = self.directory / "source-replacement.bin"
+                replacement.write_bytes(b"changed source!")
+                os.replace(replacement, source)
+            return original_close(descriptor)
+
+        with mock.patch.object(singing_render.os, "close", side_effect=replace_source_on_close):
+            with self.assertRaisesRegex(singing_render.RenderRuntimeError, "named path changed"):
+                singing_render._read_and_seal(source, label="source fixture", retain=False)
+        self.assertTrue(injected)
+
+        protected = self.directory / "protected-source.bin"
+        protected.write_bytes(b"protected")
+        _, seal = singing_render._read_and_seal(protected, label="protected fixture", retain=False)
+        protected_identity = (protected.stat().st_dev, protected.stat().st_ino)
+        injected = False
+
+        def replace_protected_on_close(descriptor):
+            nonlocal injected
+            current = os.fstat(descriptor)
+            if not injected and (current.st_dev, current.st_ino) == protected_identity:
+                injected = True
+                replacement = self.directory / "protected-replacement.bin"
+                replacement.write_bytes(b"protected")
+                os.replace(replacement, protected)
+            return original_close(descriptor)
+
+        with mock.patch.object(singing_render.os, "close", side_effect=replace_protected_on_close):
+            with self.assertRaisesRegex(singing_render.RenderRuntimeError, "named path changed"):
+                singing_render._verify_seal(seal)
+        self.assertTrue(injected)
+
+        wrong = self.directory / "static-wrong-sha.bin"
+        wrong.write_bytes(b"fully stable but unexpected")
+        ledger = []
+        token = singing_render._ACTIVE_SEALS.set(ledger)
+        try:
+            with self.assertRaises(singing_render.RenderInputError) as caught:
+                singing_render._read_and_seal(
+                    wrong, label="static wrong digest", expected_sha256="0" * 64, retain=False
+                )
+        finally:
+            singing_render._ACTIVE_SEALS.reset(token)
+        self.assertEqual(len(ledger), 1)
+        self.assertEqual(ledger[0].sha256, hashlib.sha256(wrong.read_bytes()).hexdigest())
+        wrong.write_bytes(b"changed after the input failure")
+        with self.assertRaises(singing_render.RenderRuntimeError) as protected_error:
+            singing_render._protect_primary(ledger, caught.exception)
+        self.assertTrue(any("SHA-256 mismatch" in note for note in protected_error.exception.__notes__))
+
     def _runner(
         self, *, slow: bool = False, fail_result: bool = False,
         fail_final_stdout: bool = False, case: str = "normal",
@@ -556,6 +643,33 @@ class SingingRenderTests(unittest.TestCase):
             shutil.copy2(PYTHON_DIR / name, source_copy / name)
         vendor_copy = self.directory / "vendor-copy"
         shutil.copytree(VENDOR, vendor_copy)
+
+        no_b_tmp = self.directory / "no-b-tmp"
+        no_b_tmp.mkdir()
+        environment = os.environ.copy()
+        for name in ("PYTHONDONTWRITEBYTECODE", "PYTHONPYCACHEPREFIX", "PYTHONPATH"):
+            environment.pop(name, None)
+        environment["TMPDIR"] = str(no_b_tmp)
+        process = subprocess.Popen(
+            [sys.executable, str(source_copy / "d_singing_render.py")],
+            cwd=self.directory, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            env=environment,
+        )
+        try:
+            stdout, stderr = process.communicate(timeout=15)
+        except subprocess.TimeoutExpired:
+            process.kill(); stdout, stderr = process.communicate(timeout=5)
+            self.fail(f"no-B copied CLI timed out: {stdout!r} {stderr!r}")
+        finally:
+            if process.poll() is None:
+                process.kill(); process.wait(timeout=5)
+        self.assertEqual(process.returncode, 2, (stdout, stderr))
+        early_bytecode = [
+            path for path in source_copy.rglob("*")
+            if path.name == "__pycache__" or path.suffix in {".pyc", ".pyo"}
+        ]
+        self.assertEqual(early_bytecode, [])
+
         output = self.directory / "copy-output"
         result = self._run_child(
             self._runner(case="normal", python_dir=source_copy),

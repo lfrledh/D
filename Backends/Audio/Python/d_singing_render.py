@@ -2,6 +2,13 @@
 
 from __future__ import annotations
 
+import sys
+
+# A direct CLI launch must protect local provider/helper sources even when its
+# caller forgot -B.  Library imports keep the caller's bytecode policy intact.
+if __name__ == "__main__":
+    sys.dont_write_bytecode = True
+
 from contextlib import contextmanager
 import copy
 from contextvars import ContextVar
@@ -16,7 +23,6 @@ import shutil
 import signal
 import stat
 import struct
-import sys
 import time
 from typing import Any, Callable, Iterator, Mapping, Sequence
 import uuid
@@ -165,6 +171,18 @@ def _identity(info: os.stat_result) -> tuple[int, int, int, int, int]:
     return info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns
 
 
+def _ensure_named_regular_identity(
+    path: Path, identity: tuple[int, int, int, int, int], label: str
+) -> None:
+    try:
+        ensure_no_symlink_components(path, label=label)
+        current = os.lstat(path)
+    except (ContractError, OSError) as exc:
+        raise RenderRuntimeError(f"cannot rebind {label} after read: {exc}") from exc
+    if not stat.S_ISREG(current.st_mode) or _identity(current) != identity:
+        raise RenderRuntimeError(f"{label} named path changed after read")
+
+
 def _read_and_seal(
     path: Path,
     *,
@@ -187,11 +205,17 @@ def _read_and_seal(
         raise RenderInputError(f"{label} exceeds {max_bytes} bytes")
     flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
     descriptor: int | None = None
+    primary: BaseException | None = None
+    traceback = None
+    seal: FileSeal | None = None
+    retained: bytes | None = None
     try:
         descriptor = os.open(path, flags)
         before = os.fstat(descriptor)
         if not stat.S_ISREG(before.st_mode):
             raise RenderInputError(f"{label} must be a regular file")
+        if _identity(before) != _identity(info):
+            raise RenderRuntimeError(f"{label} named path changed before read")
         digest = hashlib.sha256()
         chunks: list[bytes] | None = [] if retain else None
         total = 0
@@ -210,29 +234,40 @@ def _read_and_seal(
         if identity != _identity(after) or total != before.st_size:
             raise RenderInputError(f"{label} changed while being verified")
         actual_digest = digest.hexdigest()
-        if expected_sha256 is not None and actual_digest != expected_sha256:
-            raise RenderInputError(f"{label} SHA-256 mismatch")
         seal = FileSeal(path, label, total, actual_digest, identity)
         active_seals = _ACTIVE_SEALS.get()
         if active_seals is not None:
             active_seals.append(seal)
-        return (
-            b"".join(chunks) if chunks is not None else None,
-            seal,
-        )
-    except RenderInputError:
-        raise
-    except OSError as exc:
-        raise RenderInputError(f"cannot verify {label}: {exc}") from exc
-    finally:
-        if descriptor is not None:
-            try:
-                os.close(descriptor)
-            except OSError:
-                pass
+        retained = b"".join(chunks) if chunks is not None else None
+    except BaseException as exc:
+        primary = exc
+        traceback = exc.__traceback__
+    close_error: OSError | None = None
+    if descriptor is not None:
+        try:
+            os.close(descriptor)
+        except OSError as exc:
+            close_error = exc
+    if primary is not None:
+        if close_error is not None and getattr(primary, "add_note", None) is not None:
+            primary.add_note(f"secondary {label} close error: {close_error}")
+        if isinstance(primary, (RenderInputError, RenderRuntimeError)):
+            raise primary.with_traceback(traceback)
+        if isinstance(primary, OSError):
+            raise RenderInputError(f"cannot verify {label}: {primary}") from primary
+        raise primary.with_traceback(traceback)
+    if close_error is not None:
+        raise RenderRuntimeError(f"cannot close verified {label}: {close_error}") from close_error
+    if seal is None:
+        raise RenderRuntimeError(f"{label} verification produced no stable seal")
+    _ensure_named_regular_identity(path, seal.identity, label)
+    if expected_sha256 is not None and seal.sha256 != expected_sha256:
+        raise RenderInputError(f"{label} SHA-256 mismatch")
+    return retained, seal
 
 
 def _verify_seal(seal: FileSeal) -> None:
+    descriptor: int | None = None
     try:
         ensure_no_symlink_components(seal.path, label=seal.label)
         info = os.lstat(seal.path)
@@ -240,19 +275,18 @@ def _verify_seal(seal: FileSeal) -> None:
             raise RenderRuntimeError(f"protected {seal.label} identity changed")
         flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
         descriptor = os.open(seal.path, flags)
-        try:
-            before = os.fstat(descriptor)
-            digest = hashlib.sha256()
-            total = 0
-            while True:
-                block = os.read(descriptor, 1024 * 1024)
-                if not block:
-                    break
-                total += len(block)
-                digest.update(block)
-            after = os.fstat(descriptor)
-        finally:
-            os.close(descriptor)
+        before = os.fstat(descriptor)
+        if _identity(before) != seal.identity:
+            raise RenderRuntimeError(f"protected {seal.label} named path changed before read")
+        digest = hashlib.sha256()
+        total = 0
+        while True:
+            block = os.read(descriptor, 1024 * 1024)
+            if not block:
+                break
+            total += len(block)
+            digest.update(block)
+        after = os.fstat(descriptor)
         if _identity(before) != seal.identity or _identity(after) != seal.identity:
             raise RenderRuntimeError(f"protected {seal.label} metadata changed")
         if total != seal.byte_count or digest.hexdigest() != seal.sha256:
@@ -261,6 +295,13 @@ def _verify_seal(seal: FileSeal) -> None:
         raise
     except (ContractError, OSError) as exc:
         raise RenderRuntimeError(f"cannot reverify protected {seal.label}: {exc}") from exc
+    finally:
+        if descriptor is not None:
+            try:
+                os.close(descriptor)
+            except OSError as exc:
+                raise RenderRuntimeError(f"cannot close protected {seal.label}: {exc}") from exc
+    _ensure_named_regular_identity(seal.path, seal.identity, f"protected {seal.label}")
 
 
 def _relative_file(value: Any, label: str) -> PurePosixPath:
@@ -818,6 +859,7 @@ def _readback_owned_target(
     primary_error: BaseException | None = None
     primary_traceback = None
     result: bytes | None = None
+    verified_identity: tuple[int, int, int, int, int] | None = None
     try:
         entry = os.lstat(target)
         if not stat.S_ISREG(entry.st_mode):
@@ -845,6 +887,7 @@ def _readback_owned_target(
         after = os.fstat(descriptor)
         if _identity(before) != _identity(after) or total != before.st_size:
             raise RenderRuntimeError(f"published {filename} changed during readback")
+        verified_identity = _identity(after)
         result = b"".join(chunks)
     except BaseException as exc:
         primary_error = exc
@@ -855,9 +898,18 @@ def _readback_owned_target(
             os.close(descriptor)
         except OSError as exc:
             close_error = RenderRuntimeError(f"cannot close published {filename}: {exc}")
+    path_error: BaseException | None = None
+    if verified_identity is not None:
+        try:
+            _ensure_owned_directory(output, output_identity)
+            _ensure_named_regular_identity(target, verified_identity, f"published {filename}")
+        except BaseException as exc:
+            path_error = exc
     if primary_error is not None:
         if close_error is not None and getattr(primary_error, "add_note", None) is not None:
             primary_error.add_note(f"secondary final-readback close error: {close_error}")
+        if path_error is not None and getattr(primary_error, "add_note", None) is not None:
+            primary_error.add_note(f"secondary final named-path error: {path_error}")
         if isinstance(primary_error, RenderRuntimeError):
             raise primary_error.with_traceback(primary_traceback)
         if isinstance(primary_error, OSError):
@@ -867,6 +919,8 @@ def _readback_owned_target(
         raise primary_error.with_traceback(primary_traceback)
     if close_error is not None:
         raise close_error
+    if path_error is not None:
+        raise path_error
     if result is None:
         raise RenderRuntimeError(f"published {filename} readback produced no result")
     return result
