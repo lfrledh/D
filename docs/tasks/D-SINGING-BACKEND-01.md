@@ -1,6 +1,6 @@
 # D-SINGING-BACKEND-01：旋律与歌词的歌声薄后端
 
-状态：SING1/PREP1输入准备切片已验收并源接纳；真实歌声仍受声库许可/下载与工具链门槛约束，D-MUS02未完成。源基线 `347cdfeafe042b1df8db3657adaa04e11ffba6e5`，源分支 `codex/inference-foundation`。规格 SING1 / PREP1 / spec1；执行基线记录在派工 JSON，不自引用。
+当前状态：SING1/PREP1输入准备及R1-TIMING1离线时序组件已验收并源接纳；原样声库已取得，匹配声码器适用依据及H20工具链仍待处理，真实WAV/R2与D-MUS02未完成。初始源基线 `347cdfeafe042b1df8db3657adaa04e11ffba6e5`，源分支 `codex/inference-foundation`。规格 SING1 / PREP1 / spec1；执行基线记录在派工 JSON，不自引用。
 
 证据 R=`D-Development/AgentTrials/D-SINGING-BACKEND-01/run-20260915T004329Z`；Lead 集成树 `D-Worktrees/D-SINGING-BACKEND-01` / `codex/d-singing-backend-01`。
 
@@ -261,3 +261,27 @@ predictions为与groups同长的list，每项为与symbols同长的list；元素
 只用既有外盘Python3.12：`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-VIDEO-V0-01/run-20260913T152419Z/venv/bin/python -B`；语法tokenize.open＋内存compile，不exec目标、不默认py_compile。实际单元运行的TMPDIR/D_TEST_TEMP_DIR/cache只在本run批准目录，-B/PYTHONDONTWRITEBYTECODE防目标pyc。未知权限/身份/副作用立即停报，预期受控失败夹具另记。每次≤15分钟，初交+最多两轮普通修复、必要一次有界Lead接管；新切片预算不能刷新PREP1已发生的初交/修复1历史。未经许可WAV、音质/取消/生命周期、Swift/provider和App仍未完成，不自动启用歌声能力。
 
 派工前非实现者规格核查发现ph_midi文字与既有实测不一致、float精确解释未写清；Lead在首次IMPLEMENT前固定为锚间赋值与二进制精确Fraction，未改金样例/旧证据，不计Worker返工。两项属于说明歧义，不能记成模型实现失败。
+
+
+## 2026-09-15：R1-TIMING1组件验收与源接纳（歌声阶段仍进行中）
+
+用户暂不能操作Mac，Lead选择同一R1内已就绪的纯数据实现，不催解锁、不再询问已批准下载。源从 `1d3305ef0e8b0538aa9f78fc1a9fb9509f9b9d61` 经隔离准备 `00674d914fc71cec1e21178478c03063efac6f00`、Worker候选 `08a54960a8619bc16319d3ea93446dda3576b04d`，快进至本轮实际组合/源受测 `3940c9cfa39f89be1feaef8ee1c005f14c2516b1`。后续本次结案仅四份文档，最终SHA及远程结果写R/`final-receipt.json`，不冒称重新测试结案提交。R=`D-Development/AgentTrials/D-SINGING-BACKEND-01/run-20260915T095325Z-timing`。
+
+真正新增的内部能力：两函数构建不可变duration请求并对齐模型预测，复用旧严格准备器；context、真实源休止、最终head/tail分开。音素按显式元音锚排列，锚间音高与词法来源各自保留；正源区间压成零帧或辅音越界明确拒绝。使用二进制精确Fraction与累计边界，输出只到音符/音素时序，不分配逐帧张量。模型采样率/hop、context和补帧由显式参数输入；6秒/533帧与48kHz/24秒为不同层次的夹具验证，不宣称真实声库支持全部配置。plan只限由builder产生的内部对象，不是外部可反序列化可信协议；异步候选/版本失效仍由后续runtime处理。
+
+| 验证入口/类别 | 本轮结果与限制 | 证据 |
+|---|---|---|
+| 新永久测试＋旧prepare真实CLI | 最终10＋17方法通过；初交为9＋17。Lead按非实现者建议新增一个11行phoneme零帧永久反例，生产实现未改 | `candidate-unit`、`combined-unit`、`source-unit`；各次独立执行不累加 |
+| Lead独立检查 | 39场景通过：真实上游预测记录金值、上下文/休止窗口、奇数/零补帧、端点截断与半偶边界、二进制微小越界、不可变和词法来源、48kHz/长于6秒、异常输入。只读取已有预测，不再调用模型 | `lead-timing-check.py`、`{candidate,combined,source}-independent`；函数文件/进程tripwire不等于全系统副作用证明 |
+| 既有音频CPU | 31方法通过，断言和生产助手未修改；没有Swift/真实生成/GUI回归 | `{candidate,combined,source}-audio-regression` |
+| 语法/审阅 | tokenize.open＋内存compile通过，生产代码无assert验证；两份源码及模块顶层/调用副作用由Lead和非实现者检查。新源码目录无本轮pyc | `lead-source-review.json`、`nonimplementer-review.json`、`test-enhancement-review.json` |
+
+一个实际受限CLI实施Worker，线程 `01a0a483-cbbb-7081-86c1-e5d093b3fe1b`，请求及两轮可观察turn_context均为 `gpt-5.6-sol/high`；工作树 `D-Worktrees/D-SINGING-TIMING-01` / `codex/d-singing-timing-01`，写根仅该树及R/timing/output、tmp，网络关闭，共同Git/源不在写根。初交通过，普通修复0；未使用Lead生产接管，PREP1既有初交/修复1历史未改。Lead贡献为契约/夹具、独立检查、一个永久测试、审核与集成；两个现有只读代理分别核查调用/实现及规格/验收设计，没有另一个实现者重写。角色/模型来源不是质量证明，隐藏服务解析unknown。
+
+审阅者派工前找出ph_midi文字歧义和float解释缺口；独立检查预审另改进对象比较、IO证明范围、嵌套不可变/来源和半偶边界，均在首次对应执行前修正。审阅者一次误用系统Git管道触发既有Xcode许可提示：管道退出0，Git子码未单独记录，因此没有把它当成功读取；未接受协议或运行构建，之后停止该入口。见`reviewer-environment-event.json`，与Worker无关。Worker只有rg无缓存匹配返回1的预期检索结果，未观察到权限扩大/越界；Lead另一次/bin/sed路径错误127已用/usr/bin/sed纠正，无副作用。不得把这些环境操作与代码质量或许可解除混算。
+
+可观察Worker预检66.709秒、初交388.418秒。`usage-observation.json`按阶段保留CLI报告的usage，不把缓存输入/推理输出再次加到总计，不将跨阶段快照盲目相加；完整Lead归因和实际订阅费用unknown，不重算旧试点、不由单一样本推断性价比最优。
+
+恢复检查点：源本轮受测3940c9c完整值如上，个人scheme内容SHA256 `ca3635d88aa5a15397b90e528667c66c0e6db7e596176e885c79d194b544206c`、完整差异、索引blob与未暂存状态逐项保留，源索引干净且只剩该个人修改。Worker及自有CPU检查进程均正常退出/回收；没有启动模型、GPU、GUI、普通D或操作既有作品。原模型/旧证据与两个工作树均保留；历史creative_workflows_research条目仍pending_init，不宣称已终止或获得系统写锁。证据`source-pre-ff.json`、`source-post-ff.json`、`source-acceptance.json`、最终回执。
+
+H20用户暂不能操作，继续清单；本轮只读复核H21既有线程仍仅SENT，无新联系/声码器下载，不声称已扫描所有邮件。**只完成可独立验收的时序组件，整个歌声阶段未完成、没有默认开放新产品入口。** 下一动作仍为取得匹配vocoder适用依据后完成真实短WAV与歌词/音高/时值对照、取消/失败/资源释放，再经H20恢复后做R2运行时接线。本阶段通过后才提议歌声候选试听/接受拒绝/保存重开/安全导出；不以高级文本或完整歌声编辑器阻塞既定HUM必要纠错/普通试听/MIDI及I2V位置。
