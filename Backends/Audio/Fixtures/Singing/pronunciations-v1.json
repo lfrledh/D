@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "phraseID": "00000000-0000-4000-8000-000000000001",
+  "phraseRevision": 1,
+  "language": "zh",
+  "inventoryID": "synthetic-test-only",
+  "inventoryRevision": "fixture-v1",
+  "symbols": [
+    "SP",
+    "l",
+    "a",
+    "y"
+  ],
+  "silenceToken": "SP",
+  "units": [
+    {
+      "unitID": "00000000-0000-4000-8000-000000000021",
+      "phonemes": [
+        "l",
+        "a"
+      ]
+    },
+    {
+      "unitID": "00000000-0000-4000-8000-000000000022",
+      "phonemes": [
+        "SP"
+      ]
+    },
+    {
+      "unitID": "00000000-0000-4000-8000-000000000023",
+      "phonemes": [
+        "y",
+        "a"
+      ]
+    }
+  ]
+}
