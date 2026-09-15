@@ -590,6 +590,42 @@ def validate_float32_output(raw: bytes, expected_frames: int) -> str:
     return hashlib.sha256(raw).hexdigest()
 
 
+def _attach_secondary_error(primary: BaseException, secondary: BaseException) -> None:
+    add_note = getattr(primary, "add_note", None)
+    if add_note is not None:
+        add_note(f"secondary publication error: {secondary}")
+
+
+def _close_publication_descriptor(descriptor: int, *, label: str) -> None:
+    """Close once normally and make at most one bounded recovery attempt."""
+    try:
+        os.close(descriptor)
+        return
+    except OSError as first:
+        try:
+            os.close(descriptor)
+        except OSError as second:
+            _attach_secondary_error(first, second)
+        raise ContractError(f"failed to close {label}: {first}", "output") from first
+
+
+def _cleanup_owned_partial(path: Path, identity: tuple[int, int]) -> None:
+    try:
+        current = os.lstat(path)
+    except FileNotFoundError:
+        return
+    except OSError as exc:
+        raise ContractError(f"failed to inspect owned partial {path.name}: {exc}", "output") from exc
+    if not stat.S_ISREG(current.st_mode) or (current.st_dev, current.st_ino) != identity:
+        raise ContractError(f"owned partial {path.name} changed before cleanup", "output")
+    try:
+        os.unlink(path)
+    except FileNotFoundError:
+        return
+    except OSError as exc:
+        raise ContractError(f"failed to remove owned partial {path.name}: {exc}", "output") from exc
+
+
 def publish_exclusive(job: Path, filename: str, content: bytes, *, validate: Callable[[bytes], Any] | None = None) -> Path:
     if not filename or "/" in filename or filename in (".", ".."):
         raise ContractError("invalid owned filename", "output")
@@ -598,45 +634,102 @@ def publish_exclusive(job: Path, filename: str, content: bytes, *, validate: Cal
         raise ContractError(f"refusing to overwrite {filename}", "output")
     partial = job / f".{filename}.{secrets.token_hex(8)}.partial"
     descriptor: int | None = None
+    owned_identity: tuple[int, int] | None = None
+    primary_error: BaseException | None = None
+    primary_traceback = None
     try:
-        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
-        descriptor = os.open(partial, flags, 0o600)
-        view, written = memoryview(content), 0
-        while written < len(view):
-            count = os.write(descriptor, view[written:])
-            if count <= 0:
-                raise OSError(errno.EIO, "short write")
-            written += count
-        os.fsync(descriptor)
-        os.close(descriptor)
-        descriptor = None
-        reread, _ = read_regular_file(partial, max_bytes=len(content), label=f"partial {filename}")
-        if reread != content:
-            raise ContractError(f"partial {filename} byte mismatch", "output")
+        try:
+            flags = (
+                os.O_WRONLY | os.O_CREAT | os.O_EXCL
+                | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+            )
+            descriptor = os.open(partial, flags, 0o600)
+            created = os.fstat(descriptor)
+            if not stat.S_ISREG(created.st_mode):
+                raise ContractError(f"created partial {filename} is not a regular file", "output")
+            owned_identity = (created.st_dev, created.st_ino)
+            view, written = memoryview(content), 0
+            while written < len(view):
+                count = os.write(descriptor, view[written:])
+                if count <= 0:
+                    raise OSError(errno.EIO, "short write")
+                written += count
+            os.fsync(descriptor)
+            closing_descriptor = descriptor
+            descriptor = None
+            _close_publication_descriptor(closing_descriptor, label=f"partial {filename}")
+        except FileExistsError as exc:
+            raise ContractError(f"refusing to overwrite {filename} temporary file", "output") from exc
+        except ContractError:
+            raise
+        except OSError as exc:
+            raise ContractError(f"failed to prepare {filename}: {exc}", "output") from exc
+
+        try:
+            reread, reread_identity = read_regular_file(
+                partial, max_bytes=len(content), label=f"partial {filename}"
+            )
+        except (ContractError, OSError) as exc:
+            raise ContractError(f"failed to verify partial {filename}: {exc}", "output") from exc
+        if reread_identity[:2] != owned_identity or reread != content:
+            raise ContractError(f"partial {filename} identity or byte mismatch", "output")
         if validate is not None:
             validate(reread)
-        os.link(partial, target, follow_symlinks=False)
-        directory_fd = os.open(job, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+
         try:
-            os.fsync(directory_fd)
-        finally:
-            os.close(directory_fd)
-        os.unlink(partial)
-        return target
-    except FileExistsError as exc:
-        raise ContractError(f"refusing to overwrite {filename}", "output") from exc
-    except ContractError:
-        raise
-    except OSError as exc:
-        raise ContractError(f"failed to publish {filename}: {exc}", "output") from exc
-    finally:
-        if descriptor is not None:
-            os.close(descriptor)
-        if os.path.lexists(partial):
+            os.link(partial, target, follow_symlinks=False)
+            directory_fd = os.open(job, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+            directory_error: BaseException | None = None
+            directory_traceback = None
             try:
-                os.unlink(partial)
-            except OSError:
-                pass
+                os.fsync(directory_fd)
+            except BaseException as exc:
+                directory_error = exc
+                directory_traceback = exc.__traceback__
+            try:
+                _close_publication_descriptor(directory_fd, label=f"directory for {filename}")
+            except BaseException as exc:
+                if directory_error is None:
+                    directory_error = exc
+                    directory_traceback = exc.__traceback__
+                else:
+                    _attach_secondary_error(directory_error, exc)
+            if directory_error is not None:
+                raise directory_error.with_traceback(directory_traceback)
+        except FileExistsError as exc:
+            raise ContractError(f"refusing to overwrite {filename}", "output") from exc
+        except ContractError:
+            raise
+        except OSError as exc:
+            raise ContractError(f"failed to publish {filename}: {exc}", "output") from exc
+    except BaseException as exc:
+        primary_error = exc
+        primary_traceback = exc.__traceback__
+
+    secondary_error: BaseException | None = None
+    if descriptor is not None:
+        closing_descriptor = descriptor
+        descriptor = None
+        try:
+            _close_publication_descriptor(closing_descriptor, label=f"partial {filename}")
+        except BaseException as exc:
+            secondary_error = exc
+    if owned_identity is not None:
+        try:
+            _cleanup_owned_partial(partial, owned_identity)
+        except BaseException as exc:
+            if secondary_error is None:
+                secondary_error = exc
+            else:
+                _attach_secondary_error(secondary_error, exc)
+
+    if primary_error is not None:
+        if secondary_error is not None:
+            _attach_secondary_error(primary_error, secondary_error)
+        raise primary_error.with_traceback(primary_traceback)
+    if secondary_error is not None:
+        raise secondary_error
+    return target
 
 
 def json_bytes(value: dict[str, Any]) -> bytes:

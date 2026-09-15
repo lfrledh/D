@@ -10,6 +10,7 @@ import math
 import marshal
 import os
 from pathlib import Path
+import stat
 import struct
 import subprocess
 import sys
@@ -281,6 +282,306 @@ class AudioBackendTests(unittest.TestCase):
             with self.assertRaises(contract.ContractError):
                 contract.publish_exclusive(failing, "result.json", b"{}")
         self.assertEqual(list(failing.iterdir()), [])
+
+    def test_publish_static_partial_collision_preserves_independent_file(self):
+        job = self.root / "static-partial-collision"
+        job.mkdir()
+        partial = job / ".output.wav.0123456789abcdef.partial"
+        sentinel = b"independent existing partial"
+        partial.write_bytes(sentinel)
+
+        with mock.patch.object(contract.secrets, "token_hex", return_value="0123456789abcdef"):
+            with self.assertRaises(contract.ContractError):
+                contract.publish_exclusive(job=job, filename="output.wav", content=b"new output")
+
+        self.assertFalse((job / "output.wav").exists())
+        self.assertTrue(partial.is_file())
+        self.assertEqual(partial.read_bytes(), sentinel)
+        self.assertEqual(set(job.iterdir()), {partial})
+
+    def test_publish_empty_unicode_short_write_and_unrelated_file(self):
+        job = self.root / "publish-success"
+        job.mkdir()
+        unrelated = job / "keep.txt"
+        unrelated.write_bytes(b"keep")
+        empty = contract.publish_exclusive(job=job, filename="空 白.bin", content=b"")
+        self.assertEqual(empty, job / "空 白.bin")
+        self.assertEqual(empty.read_bytes(), b"")
+
+        short_job = self.root / "publish-short-write"
+        short_job.mkdir()
+        content = b"abcdefgh"
+        real_write = os.write
+        write_sizes = []
+
+        def write_two_bytes(descriptor, remaining):
+            count = real_write(descriptor, remaining[:2])
+            write_sizes.append(count)
+            return count
+
+        with mock.patch.object(contract.os, "write", side_effect=write_two_bytes):
+            target = contract.publish_exclusive(job=short_job, filename="output.bin", content=content)
+        self.assertEqual(target.read_bytes(), content)
+        self.assertGreater(len(write_sizes), 1)
+        self.assertEqual(unrelated.read_bytes(), b"keep")
+        self.assertEqual(set(job.iterdir()), {unrelated, empty})
+        self.assertEqual(set(short_job.iterdir()), {target})
+
+    def test_publish_rejects_existing_target_shapes_before_temporary_creation(self):
+        for shape in ("file", "directory", "dangling-link"):
+            with self.subTest(shape=shape):
+                job = self.root / f"existing-{shape}"
+                job.mkdir()
+                target = job / "output.bin"
+                if shape == "file":
+                    target.write_bytes(b"sentinel")
+                elif shape == "directory":
+                    target.mkdir()
+                else:
+                    target.symlink_to(job / "missing-target")
+                before = set(job.iterdir())
+                with mock.patch.object(contract.secrets, "token_hex", side_effect=AssertionError("no partial")):
+                    with self.assertRaises(contract.ContractError) as caught:
+                        contract.publish_exclusive(job=job, filename=target.name, content=b"replacement")
+                self.assertEqual(caught.exception.kind, "output")
+                self.assertEqual(set(job.iterdir()), before)
+                self.assertTrue(os.path.lexists(target))
+
+    def test_publish_partial_symlink_collision_and_create_denial_preserve_others(self):
+        job = self.root / "partial-link-collision"
+        job.mkdir()
+        external = self.root / "external-sentinel"
+        external.write_bytes(b"outside")
+        partial = job / ".output.bin.0123456789abcdef.partial"
+        partial.symlink_to(external)
+        with mock.patch.object(contract.secrets, "token_hex", return_value="0123456789abcdef"):
+            with self.assertRaises(contract.ContractError):
+                contract.publish_exclusive(job=job, filename="output.bin", content=b"replacement")
+        self.assertTrue(partial.is_symlink())
+        self.assertEqual(external.read_bytes(), b"outside")
+        self.assertFalse((job / "output.bin").exists())
+
+        denied = self.root / "partial-create-denied"
+        denied.mkdir()
+        unrelated = denied / "unrelated"
+        unrelated.write_bytes(b"safe")
+        with mock.patch.object(contract.os, "open", side_effect=PermissionError("injected create denial")):
+            with self.assertRaises(contract.ContractError) as caught:
+                contract.publish_exclusive(job=denied, filename="output.bin", content=b"replacement")
+        self.assertEqual(caught.exception.kind, "output")
+        self.assertEqual(set(denied.iterdir()), {unrelated})
+        self.assertEqual(unrelated.read_bytes(), b"safe")
+
+    def test_publish_fstat_failure_closes_descriptor_but_leaves_unknown_partial(self):
+        job = self.root / "fstat-failure"
+        job.mkdir()
+        opened = []
+        real_open = os.open
+
+        def capture_open(path, flags, mode=0o777):
+            descriptor = real_open(path, flags, mode)
+            opened.append(descriptor)
+            return descriptor
+
+        with mock.patch.object(contract.secrets, "token_hex", return_value="0123456789abcdef"), \
+             mock.patch.object(contract.os, "open", side_effect=capture_open), \
+             mock.patch.object(contract.os, "fstat", side_effect=OSError("injected fstat failure")):
+            with self.assertRaises(contract.ContractError) as caught:
+                contract.publish_exclusive(job=job, filename="output.bin", content=b"content")
+        self.assertEqual(caught.exception.kind, "output")
+        self.assertEqual(len(opened), 1)
+        with self.assertRaises(OSError):
+            os.fstat(opened[0])
+        partial = job / ".output.bin.0123456789abcdef.partial"
+        self.assertTrue(partial.is_file())
+        self.assertEqual(partial.read_bytes(), b"")
+        self.assertFalse((job / "output.bin").exists())
+
+    def test_publish_prepublication_faults_clean_only_owned_partial(self):
+        cases = ("zero-write", "write-error", "file-fsync", "close", "reread", "bytes", "identity")
+        for case in cases:
+            with self.subTest(case=case):
+                job = self.root / f"prepublication-{case}"
+                job.mkdir()
+                content = b"fixture-content"
+                patches = []
+                close_calls = []
+                if case == "zero-write":
+                    patches.append(mock.patch.object(contract.os, "write", return_value=0))
+                elif case == "write-error":
+                    patches.append(mock.patch.object(contract.os, "write", side_effect=OSError("injected write")))
+                elif case == "file-fsync":
+                    patches.append(mock.patch.object(contract.os, "fsync", side_effect=OSError("injected fsync")))
+                elif case == "close":
+                    real_close = os.close
+
+                    def fail_first_close(descriptor):
+                        close_calls.append(descriptor)
+                        if len(close_calls) == 1:
+                            raise OSError("injected close")
+                        return real_close(descriptor)
+
+                    patches.append(mock.patch.object(contract.os, "close", side_effect=fail_first_close))
+                elif case == "reread":
+                    patches.append(mock.patch.object(
+                        contract, "read_regular_file",
+                        side_effect=contract.ContractError("injected reread", "configuration"),
+                    ))
+                else:
+                    real_read = contract.read_regular_file
+
+                    def mismatched_read(path, *, max_bytes, label, mismatch=case):
+                        raw, identity = real_read(path, max_bytes=max_bytes, label=label)
+                        if mismatch == "bytes":
+                            return raw + b"!", identity
+                        return raw, (identity[0], identity[1] + 1, *identity[2:])
+
+                    patches.append(mock.patch.object(contract, "read_regular_file", side_effect=mismatched_read))
+                with contextlib.ExitStack() as stack:
+                    for patch in patches:
+                        stack.enter_context(patch)
+                    with self.assertRaises(contract.ContractError) as caught:
+                        contract.publish_exclusive(job=job, filename="output.bin", content=content)
+                self.assertEqual(caught.exception.kind, "output")
+                self.assertFalse((job / "output.bin").exists())
+                self.assertEqual(list(job.iterdir()), [])
+                if case == "close":
+                    self.assertEqual(len(close_calls), 2)
+
+    def test_publish_preserves_validator_error_and_link_race_target(self):
+        validation_job = self.root / "validator-error"
+        validation_job.mkdir()
+        rejection = contract.ContractError("strict validator rejection", "validatorFixture")
+
+        def reject(_raw):
+            raise rejection
+
+        with self.assertRaises(contract.ContractError) as caught:
+            contract.publish_exclusive(
+                job=validation_job, filename="output.json", content=b"{}", validate=reject
+            )
+        self.assertIs(caught.exception, rejection)
+        self.assertEqual(caught.exception.kind, "validatorFixture")
+        self.assertEqual(str(caught.exception), "strict validator rejection")
+        self.assertEqual(list(validation_job.iterdir()), [])
+
+        race_job = self.root / "link-race"
+        race_job.mkdir()
+        target = race_job / "output.bin"
+        sentinel = b"racing target"
+
+        def create_racing_target(_partial, destination, *, follow_symlinks):
+            self.assertFalse(follow_symlinks)
+            Path(destination).write_bytes(sentinel)
+            raise FileExistsError("injected link race")
+
+        with mock.patch.object(contract.os, "link", side_effect=create_racing_target):
+            with self.assertRaises(contract.ContractError) as race_error:
+                contract.publish_exclusive(job=race_job, filename=target.name, content=b"ours")
+        self.assertEqual(race_error.exception.kind, "output")
+        self.assertEqual(target.read_bytes(), sentinel)
+        self.assertEqual(set(race_job.iterdir()), {target})
+
+    def test_publish_postpublication_failures_preserve_complete_target(self):
+        for case in ("directory-open", "directory-close", "partial-unlink"):
+            with self.subTest(case=case):
+                job = self.root / f"postpublication-{case}"
+                job.mkdir()
+                target = job / "output.bin"
+                content = b"complete output"
+                real_open = os.open
+                real_close = os.close
+                real_unlink = os.unlink
+                directory_close_failed = []
+
+                def selective_open(path, flags, mode=0o777):
+                    if case == "directory-open" and Path(path) == job:
+                        raise OSError("injected directory open")
+                    return real_open(path, flags, mode)
+
+                def selective_close(descriptor):
+                    if case == "directory-close" and stat.S_ISDIR(os.fstat(descriptor).st_mode) \
+                            and not directory_close_failed:
+                        directory_close_failed.append(descriptor)
+                        raise OSError("injected directory close")
+                    return real_close(descriptor)
+
+                def selective_unlink(path):
+                    if case == "partial-unlink" and Path(path).name.endswith(".partial"):
+                        raise OSError("injected partial cleanup")
+                    return real_unlink(path)
+
+                with mock.patch.object(contract.os, "open", side_effect=selective_open), \
+                     mock.patch.object(contract.os, "close", side_effect=selective_close), \
+                     mock.patch.object(contract.os, "unlink", side_effect=selective_unlink):
+                    with self.assertRaises(contract.ContractError) as caught:
+                        contract.publish_exclusive(job=job, filename=target.name, content=content)
+                self.assertEqual(caught.exception.kind, "output")
+                self.assertTrue(target.is_file())
+                self.assertEqual(target.read_bytes(), content)
+                partials = list(job.glob(".*.partial"))
+                self.assertEqual(len(partials), 1 if case == "partial-unlink" else 0)
+                if case == "partial-unlink":
+                    self.assertEqual(partials[0].read_bytes(), content)
+
+    def test_publish_cleanup_identity_rules_and_primary_error_priority(self):
+        mismatch_job = self.root / "cleanup-mismatch"
+        mismatch_job.mkdir()
+        mismatch_target = mismatch_job / "output.bin"
+        replacement = b"replacement partial"
+        real_link = os.link
+        real_unlink = os.unlink
+
+        def link_then_replace(source, destination, *, follow_symlinks):
+            real_link(source, destination, follow_symlinks=follow_symlinks)
+            real_unlink(source)
+            Path(source).write_bytes(replacement)
+
+        with mock.patch.object(contract.os, "link", side_effect=link_then_replace):
+            with self.assertRaises(contract.ContractError) as mismatch_error:
+                contract.publish_exclusive(job=mismatch_job, filename=mismatch_target.name, content=b"published")
+        self.assertEqual(mismatch_error.exception.kind, "output")
+        self.assertIn("changed before cleanup", str(mismatch_error.exception))
+        self.assertEqual(mismatch_target.read_bytes(), b"published")
+        partials = list(mismatch_job.glob(".*.partial"))
+        self.assertEqual(len(partials), 1)
+        self.assertEqual(partials[0].read_bytes(), replacement)
+
+        primary_job = self.root / "cleanup-primary"
+        primary_job.mkdir()
+        external = self.root / "cleanup-external"
+        external.write_bytes(b"external sentinel")
+        partial = primary_job / ".output.bin.0123456789abcdef.partial"
+
+        def replace_during_write(_descriptor, _remaining):
+            real_unlink(partial)
+            partial.symlink_to(external)
+            raise OSError("primary write failure")
+
+        with mock.patch.object(contract.secrets, "token_hex", return_value="0123456789abcdef"), \
+             mock.patch.object(contract.os, "write", side_effect=replace_during_write):
+            with self.assertRaises(contract.ContractError) as primary_error:
+                contract.publish_exclusive(job=primary_job, filename="output.bin", content=b"content")
+        self.assertEqual(primary_error.exception.kind, "output")
+        self.assertIn("primary write failure", str(primary_error.exception))
+        self.assertTrue(any("changed before cleanup" in note for note in primary_error.exception.__notes__))
+        self.assertTrue(partial.is_symlink())
+        self.assertEqual(external.read_bytes(), b"external sentinel")
+        self.assertFalse((primary_job / "output.bin").exists())
+
+        missing_job = self.root / "cleanup-missing"
+        missing_job.mkdir()
+        missing_target = missing_job / "output.bin"
+
+        def link_then_remove(source, destination, *, follow_symlinks):
+            real_link(source, destination, follow_symlinks=follow_symlinks)
+            real_unlink(source)
+
+        with mock.patch.object(contract.os, "link", side_effect=link_then_remove):
+            result = contract.publish_exclusive(job=missing_job, filename=missing_target.name, content=b"complete")
+        self.assertEqual(result, missing_target)
+        self.assertEqual(result.read_bytes(), b"complete")
+        self.assertEqual(set(missing_job.iterdir()), {missing_target})
 
     def test_inpaint_preserves_float32_conversion_outside_region(self):
         source = contract.decode_wave_bytes(wave_bytes([-2147483648, 2147483647] * 3, bits=32))
