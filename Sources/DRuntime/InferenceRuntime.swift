@@ -165,7 +165,11 @@ public actor InferenceRuntime: InferenceEngine {
         // No next run may start while cleanup is suspended, even if cancellation arrives again.
         phase = .releasing
         await entry.backend.release()
-        if entries[id]?.cancellationRequested == true { outcome = .cancelled }
+        if entries[id]?.cancellationRequested == true {
+            // Cancellation may supersede ordinary errors, but never conceal a
+            // independently verified mutation of protected input.
+            if case .failed(.inputIntegrityChanged) = outcome {} else { outcome = .cancelled }
+        }
         switch outcome {
         case .completed: entry.continuation.finish()
         case .cancelled: entry.continuation.finish(throwing: CancellationError())

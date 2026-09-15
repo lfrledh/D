@@ -11,6 +11,9 @@ public enum InferenceFailure: Error, Sendable, Codable, Equatable, LocalizedErro
     case memoryBudgetExceeded(required: UInt64, limit: UInt64)
     case consumerTooSlow
     case backendFailed(String)
+    /// Verified input modification is a protection failure even when the caller
+    /// also cancelled. Backends must retain the original stop/error context.
+    case inputIntegrityChanged(String)
 
     public var errorDescription: String? {
         switch self {
@@ -24,6 +27,7 @@ public enum InferenceFailure: Error, Sendable, Codable, Equatable, LocalizedErro
         case .memoryBudgetExceeded(let required, let limit): "Estimated memory \(required) exceeds budget \(limit)."
         case .consumerTooSlow: "Output buffer is full; inference stopped to avoid silently losing output."
         case .backendFailed(let reason): reason
+        case .inputIntegrityChanged(let reason): reason
         }
     }
 }

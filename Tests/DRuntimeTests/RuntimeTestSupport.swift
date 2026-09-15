@@ -44,6 +44,7 @@ struct TestPlan: Sendable {
     var cancellationObserved: TestGate?
     var releaseGate: TestGate?
     var shouldFail = false
+    var failure: InferenceFailure?
     var outputs: [InferenceOutput] = []
 }
 
@@ -103,6 +104,7 @@ actor ControlledBackend: InferenceBackend {
             }
         }
         if plan.shouldFail { throw TestBackendError.controlledFailure }
+        if let failure = plan.failure { throw failure }
         for output in plan.outputs { try await emit(output) }
         return InferenceResult(metadata: ["requestID": request.id.uuidString])
     }

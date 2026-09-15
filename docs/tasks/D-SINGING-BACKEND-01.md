@@ -349,3 +349,66 @@ Worker用唯一已指定Python -B；tokenize.open+compile内存语法检查，�
 Lead在固定候选上重做真实baseline/改词/改音高/改时值、只听可辨歌词和明显噪声不是全部音质门槛；真实播放/帧数/中段音高及休止噪声分别核验。先行pYIN仅测量不自称校准正确率；四组固定实测使用librosa.pyin(fmin=150,fmax=1000,sr=44100,frame_length=2048,hop_length=512,center=True)，时间坐标按帧中心sample/44100；音符25%..75%半开区间为稳定窗，休止20%..60%为RMS取样窗。音符有finite正Hz且voiced_flag真才有效，每窗有效覆盖≥80%、abs(median(cents))≤50且p95(abs(cents))≤100；cents=1200*log2(measuredHz/440*2**((69-midi)/12))。空窗/无有效帧不能通过，不选取有利子窗。休止窗RMS≤0.005；交付片段不得有连续44个abs(sample)>=1的样本，所有饱和样本数另记。未知语言/表情/所有声库不在本profile承诺。每任务原件前后保持、计算结束、错误/取消恢复必须真测。质量失败不能只靠本条允许的局部CPU通过接纳。
 
 RENDER1仅独立Python生产入口；R2共享Swift契约/统一运行时接线由Lead协调，在RENDER1验收后继续同一阶段，不把文件probe当R2。歌声资格弹窗和正式App产品闭环按真实入口接入，当前不新增空菜单或标记整个歌声完成。
+
+## 2026-09-16：RENDER1通过，BRIDGE1统一运行时接线（当前规格）
+
+本节接续原R1/R2，不开新产品阶段、不刷新PREP/TIMING/RENDER预算。用户已实际听到R0替代声码器pilot的人声和旋律、无明显破音；PC-NSF NC材料未下载，外部答复不再是本路径前置。MIT BigVGAN与原样绮萱的mel频带不同，明确为近似重投影，不能宣称原配声码器音质或通用商业分发已获许可。实际使用声明必须绑定材料摘要、条款、用途；普通App将来在真实生成入口显示确认，不加无连接的免责声明菜单。
+
+RENDER1候选 `9edd33979e9c5ae12d511907df2feb3e976bd207` 已通过Lead独立53个CPU方法、七个完整CLI反例加一个直接方法取消检查、两个来源/末端路径反例、真正无-B启动检查，以及四个真实条件、三个阶段边界取消和一次重新生成。结果为6秒或6.5秒单声道44100Hz float32 WAV；六秒约42秒，子进程整体RSS高水位约2.78GB，不能称纯模型占用或通用泄漏证明。输入、原权重及固定vendor前后摘要一致，自有子进程已回收。音准/休止/饱和指标通过不代替歌词咬字听感。证据 `D-Development/AgentTrials/D-SINGING-BACKEND-01/run-20260915T163855Z-render/lead/render-acceptance.json`；完整四文件历史和两轮修复保留，Sol/high实施，Lead制定反例、复验及代提交，两个只读非实现者审查，不冒称其执行了模型测试。
+
+### BRIDGE1/spec1契约及所有权
+
+Lead已准备DInference的独立SING1值类型、`.singing`/`.audioSingingGeneration`、仅对已证实输入修改保留失败的运行时分支、旧工作台明确拒绝尚未装配的歌声任务、可选mono WAV校验。没有App歌声注册/按钮、项目schema或签名变化。SING1值保留九字段pronunciations、原UUID拼写/Unicode和Int64；材料revision/profile/symbol按UTF8身份比较。旧AudioRequest、stereo默认与普通取消行为不改。配置SingingBackendConfiguration是显式本地部署值，不执行I/O或自动确认条款。
+
+一个受限Sol/high Worker：BRIDGE1，网络关闭、独立工作树和output/tmp，执行基线/线程/写根见本run的bridge/job.json及preflight-observed.json。只允许新增：
+
+- `Backends/MLX/Sources/DMLXBackend/SingingRequestWire.swift`
+- `Backends/MLX/Sources/DMLXBackend/SingingModelInventory.swift`
+- `Backends/MLX/Sources/DMLXBackend/SingingProviderProtocol.swift`
+- `Backends/MLX/Sources/DMLXBackend/SingingBackend.swift`
+- `Backends/MLX/Tests/DMLXBackendTests/SingingWireTests.swift`
+- `Backends/MLX/Tests/DMLXBackendTests/SingingBackendTests.swift`
+
+上述是实现所有权，不授权修改既有公共文件/测试、Python、固定profile/vendor、CLI/UI/存储、工程/依赖锁/签名/文档或共享Git。Lead管理共享变更；先只读预检，Lead核实际路由后才IMPLEMENT。初交+两轮针对性修复，必要一次有界Lead接管；每次最多900秒，不因工具延时重置代码预算。未知权限/身份/副作用暂停报告；受控夹具按预期。不得递归、下载、模型或GPU/GUI/全应用构建、提交或push。
+
+必读本节及上方RENDER1/spec1的输入/输出/保护/提交点语义（不用完整历史）；源值SingingRequest/InferenceRequest/InferenceRun、SingingBackendConfiguration、LocalProviderProcess、AudioFileSystem/AudioJSONParser/AudioWAV以及MLXMRT2Backend所有权模式。Task.run输出/缓存固定到bridge/tmp；只读配置/原始输入无副作用；Swift只能在指定module-cache下做新文件parse（不声称typecheck），实际MLX编译/CPU套件由Lead串行运行。无默认py_compile；Python仅既有外盘解释器-B和tokenize.open+内存compile，不执行被检目标。按需参考现有MRT2BackendTests夹具设计，不复制真实模型或整个历史。
+
+### 冻结外部接口
+
+`public enum SingingRequestWire`：
+- `decode(_ data: Data, model: ModelReference, vocoder: ModelReference, memoryBudgetBytes: UInt64? = nil) throws -> InferenceRequest`
+- `encode(_ request: InferenceRequest) throws -> Data`
+
+使用现有AudioJSONParser，whole≤2MiB、depth32，逐对象准确键/逐字段类型；特别是每个整数字段用requiredInteger，不能AudioJSONValue树相等冒充严格数字检查（该相等将1与1.0视同），不能用JSONDecoder默许1.0/1e0。root沿RENDER1准确七键，lowercase canonical runID成为outer UUID，原source ID大小写保留。缺失midiPitch不是null休止；schema/计数/时间/元音索引不能bool。构造后common validate。编码只变JSON空白/键序，不规范化Unicode/ID、不改值；无未知prompt/seed/default确认。输入本身语义与固定profile准入分开。
+
+`public actor SingingBackend: InferenceBackend`，`init(configuration: SingingBackendConfiguration) throws`；descriptor id=`audio.singing.qixuan`、version=`1`、capabilities只audioSingingGeneration。公开init不提供测试跳过开关。内部测试可注入受控已验证夹具inventory/transport边界，但公共执行路径始终做全部固定profile校验，不接受环境变量/CLI绕过。
+
+estimate只读、无模型导入，验证固定profile/manifest摘要和准确声明的31 bank/3 vocoder/18 vendor文件；原包保持完整，不展示人物图。outer model revision等于bankArchiveSHA256，vocoder revision及声明与profile相符，声明confirmedApplicable必须真，purpose必须明确。所有URL为绝对本地且任何分量无symlink；artifact root与所有输入分离，输入根之间可以重叠。源码、助手、解释器文件、profile、vendor manifest及材料必须可读并封存。固定profile与vendor SHA来自Lead配置，不可调用参数覆盖。禁止扫描发现/安装/下载/外部URI访问。
+
+资源估算明确estimated：例如2×声明材料总字节+1GiB框架工作余量+有界逐帧/PCM工作区，以溢出安全算法说明系数；不是实测RSS，无16GiB/6秒上限或按硬件静默改精度。DRuntime沿调用方显式预算处理，不改全局资源政策。
+
+### 运行与交付规则
+
+沿用LocalProviderProcess、共享MLXExecutionLease和executing/releasing/lease状态，CPU歌声也占一个重任务许可，不声称其数学由MLX执行。该现有许可是跨runtime互斥而非等待队列：另一runtime占用时明确失败，释放后可以重试；同一runtime队列等待release。acquire之后即使输出目录创建失败也到release才放行。release不删已交付文件/诊断目录。
+
+一次execute冻结、重新校验输入，再获得许可，排他创建UUID专属run目录及tmp/cache；request.json排他写，子输出root必须尚不存在，命令恰RENDER1六对参数。启动配置-B、PYTHONNOUSERSITE=1、仅必要PATH/LANG、任务TMP/XDG/NUMBA/MPL目录、offline环境，无继承PYTHONPATH。600秒默认timeout，45秒取消grace，参数必须有限正数。
+
+**drain后无条件保护复核**：成功/异常/取消/timeout/消费者错误均对执行前完整读取的输入做FD/内容/命名身份复核，保留原错误上下文。现有AudioFileSystem.readRegularFile内部会Task.checkCancellation，不能原样用于取消后必须完成的保护检查；采用本地窄streaming seal助手（不新建通用I/O框架），所有路径组件no-follow、首尾fstat、关闭后命名路径/目录身份一致，摘要逐块计算，不把全部权重装进Data。封存失败不伪造未读材料证据。真正观察到变化抛`inputIntegrityChanged`，DRuntime和CLI不得将其变成cancelled。普通错误/取消沿既有语义。
+
+stdout读取沿LocalDedicatedPipeReader有界分块ack/drain，协议总≤16MiB、单行≤2MiB、depth32。准确七个progress按序只一次（validation,duration,pitch,variance,acoustic,vocoder,publish），runID匹配；终端准确三键type/result、runID、resultPath=result.json且只一次、不接受之后数据/未知字段。消费者错误应触发stop、排空双管道和child；进度不是成功证据。不要重写共有transport。
+
+child结束后独立读取result.json/WAV，严格键/类型/来源/原始request SHA/材料与精度/seedControl=unsupported/阶段名顺序/有限非负耗时/残差≤.10/实际饱和计数/音频digest。准确44100mono float32、非零、全部有限、字节/frame/sample count一致。native=(Q(durationTicks)+16)*512；Q(t)=ties-even-round(t*44100/(1000000*512)+1/2)，用整数商余数精确实现；head4096；delivered=half-up-round(durationTicks*44100/1000000)。反例5120000ticks→Q442/native234496/delivered225792。不stretch、normalize、pitch-correct。使用AudioWAV expectedChannels1/requireNonzero真，旧默认stereo不变；读回后命名路径仍绑定实际被验证对象。结果中的音频路径仅output.wav，不当路径导航指令。源phraseRevision必须精确Int64，不能Double丢精度。JSON元数据声称成功不是WAV实测。
+
+只有排空、所有保护和产物验证完成才emit artifact与返回InferenceResult。metadata提供profile/precision/sourcePhraseID/sourcePhraseRevision/requestSHA256/recordPath/seedControl，不附账号/条款确认或私密日志到音频产物。最后阶段取消可使host cancelled但已由child提交的文件必须保留；不承诺host/child最终状态永远相同。未经UI装配，不落入ProjectStore旧image默认路径。
+
+### BRIDGE1验收
+
+Lead先编译共享准备和组件测试再派工；Worker在冻结范围实现并交付代码+CPU测试设计，不自行弱化标准。测试要有正常/错误正反例，不能只断言mock预置值或通过跳过固定profile来冒称真实材料校验。
+
+1. 严格wire roundtrip保持9字段、ID拼写/Unicode/Int64.max/null；bool/1.0/1e0/重复键/未知字段/深度大小/过期phrase/混合休止/乱序拒绝；资格不默认。
+2. config/descriptor、固定profile+manifest真实字节准入、material缺失/错摘要/符号链接/输出重叠/零负timeout/无效模型revision；estimate无子进程/无写入，预算随请求规模变化不绑定开发机。
+3. 实际受控子进程协议正例、重复/错序progress、伪成功/缺失/损坏record/WAV、未知path、输出错digest/声道/时长/原request/模型版本/1.0字段拒绝；stdout/stderr/consumer失败和timeout均drain回收。
+4. 原始输入变更+取消明确inputIntegrityChanged；普通取消保持cancelled。自己测试目录内修改，不触碰真实材料。cancel→child drain→release→下一任务；共享许可跨runtime拒绝重叠且释放后可执行。
+5. Lead固定版本真实phrase通过InferenceRuntime及开发CLI，取消后恢复、相关旧音频回归，构建App/CLI组件。人听音准/歌词另记，不把CPU fixture/编译当完整App歌声可用。App前端仍下一批准阶段。
+
+后续CLI独立所有权仅在backend API就绪后签发；不让实现者同时改共享状态或让两个互相等待的任务假装并行。Lead共享实现另由非实现者只读复核，最终组合及源入口重验，保留源个人scheme、候选与全部历史证据。

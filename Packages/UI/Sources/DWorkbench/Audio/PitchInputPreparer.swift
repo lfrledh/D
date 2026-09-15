@@ -27,7 +27,8 @@ public enum PitchInputPreparer {
         converter.primeMethod = .normal
         converter.sampleRateConverterQuality = AVAudioQuality.max.rawValue
         file.framePosition = source.startFrame
-        let inputState = Mutex(PitchConversionInput(file: file, remaining: source.endFrame - source.startFrame))
+        let inputState = PitchConversionState(Mutex(
+            PitchConversionInput(file: file, remaining: source.endFrame - source.startFrame)))
         var bytes = Data(), noProgress = 0
         let maximumOutput = Int(expected.rounded(.up)) + 1
         while true {
@@ -35,7 +36,7 @@ public enum PitchInputPreparer {
             output.frameLength = 0
             var conversionError: NSError?
             let status = converter.convert(to: output, error: &conversionError) { requested, status in
-                inputState.withLock { state in
+                inputState.state.withLock { state in
                     if state.failure != nil || state.remaining == 0 { status.pointee = .endOfStream; return nil }
                     do {
                         try Task.checkCancellation()
@@ -51,7 +52,7 @@ public enum PitchInputPreparer {
                     } catch { state.failure = error; status.pointee = .endOfStream; return nil }
                 }
             }
-            if let failure = inputState.withLock({ $0.failure }) { throw failure }
+            if let failure = inputState.state.withLock({ $0.failure }) { throw failure }
             if let conversionError { throw AudioMediaError.io(conversionError.localizedDescription) }
             guard status != .error else { throw AudioMediaError.invalidMedia("分析重采样失败") }
             let count = Int(output.frameLength)
@@ -68,7 +69,7 @@ public enum PitchInputPreparer {
             guard noProgress < 8 else { throw AudioMediaError.invalidMedia("分析重采样没有继续输出") }
             if status == .endOfStream { break }
         }
-        guard inputState.withLock({ $0.remaining }) == 0, abs(Double(bytes.count / 4) - expected) <= 1,
+        guard inputState.state.withLock({ $0.remaining }) == 0, abs(Double(bytes.count / 4) - expected) <= 1,
               bytes.count / 4 >= 256, bytes.count / 4 <= 1_920_000 else {
             throw AudioMediaError.invalidMedia("分析重采样长度与原帧范围不一致")
         }
@@ -85,4 +86,11 @@ private struct PitchConversionInput {
     let file: AVAudioFile
     var remaining: Int64
     var failure: Error?
+}
+
+// The escaping converter callback captures a shared reference, not the
+// noncopyable Mutex value. All mutable input access still uses the same lock.
+private final class PitchConversionState: Sendable {
+    let state: Mutex<PitchConversionInput>
+    init(_ state: consuming Mutex<PitchConversionInput>) { self.state = state }
 }

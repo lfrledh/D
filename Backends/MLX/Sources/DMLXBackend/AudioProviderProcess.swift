@@ -466,11 +466,12 @@ enum AudioWAV {
     }
 
     static func validateOutput(_ url: URL, claim: AudioProviderArtifact,
-                               expectedFrames: Int64, expectedSampleRate: Int = 44_100) throws -> ArtifactReference {
-        guard expectedFrames > 0, [44_100, 48_000].contains(expectedSampleRate) else {
+                               expectedFrames: Int64, expectedSampleRate: Int = 44_100,
+                               expectedChannels: Int = 2, requireNonzero: Bool = false) throws -> ArtifactReference {
+        guard expectedFrames > 0, [44_100, 48_000].contains(expectedSampleRate), [1, 2].contains(expectedChannels) else {
             throw InferenceFailure.backendFailed("Invalid expected audio frame count or unregistered sample rate.")
         }
-        let expectedPCM = UInt64(expectedFrames).multipliedReportingOverflow(by: 8)
+        let expectedPCM = UInt64(expectedFrames).multipliedReportingOverflow(by: UInt64(expectedChannels * 4))
         guard expectedFrames > 0, !expectedPCM.overflow,
               expectedPCM.partialValue <= UInt64.max - 1_048_576 else {
             throw InferenceFailure.backendFailed("Expected audio output size is not representable.")
@@ -478,13 +479,14 @@ enum AudioWAV {
         let maximum = expectedPCM.partialValue + 1_048_576
         let (data, _) = try AudioFileSystem.readRegularFile(url, label: "Generated audio WAV",
                                                             maximumBytes: maximum)
-        let parsed = try parse(data, outputOnly: true, expectedSampleRate: expectedSampleRate)
+        let parsed = try parse(data, outputOnly: true, expectedSampleRate: expectedSampleRate,
+                               expectedChannels: expectedChannels, requireNonzero: requireNonzero)
         let digest = sha256(data)
         guard claim.path == url.path, claim.sha256 == digest,
               claim.byteCount == UInt64(data.count), claim.frameCount == expectedFrames,
-              claim.sampleRate == expectedSampleRate, claim.channels == 2, claim.encoding == "float32",
+              claim.sampleRate == expectedSampleRate, claim.channels == expectedChannels, claim.encoding == "float32",
               parsed.frameCount == expectedFrames, parsed.sampleRate == expectedSampleRate,
-              parsed.channels == 2, parsed.encoding == "float32" else {
+              parsed.channels == expectedChannels, parsed.encoding == "float32" else {
             throw InferenceFailure.backendFailed("Generated WAV or provider artifact metadata failed independent validation.")
         }
         return ArtifactReference(url: url, mediaType: "audio/wav")
@@ -498,7 +500,8 @@ enum AudioWAV {
     }
 
     private static func parse(_ data: Data, outputOnly: Bool,
-                              expectedSampleRate: Int = 44_100) throws -> Parsed {
+                              expectedSampleRate: Int = 44_100, expectedChannels: Int = 2,
+                              requireNonzero: Bool = false) throws -> Parsed {
         guard data.count >= 12, data.prefix(4) == Data("RIFF".utf8),
               data[8..<12] == Data("WAVE".utf8),
               UInt64(u32(data, 4)) + 8 == UInt64(data.count) else {
@@ -531,8 +534,8 @@ enum AudioWAV {
             offset = body + padded
         }
         guard offset == data.count, let format, let pcmRange,
-              format.channels == 2, format.rate == expectedSampleRate else {
-            throw InferenceFailure.backendFailed("WAV must contain one stereo \(expectedSampleRate) Hz PCM stream.")
+              format.channels == expectedChannels, format.rate == expectedSampleRate else {
+            throw InferenceFailure.backendFailed("WAV must contain one \(expectedChannels)-channel \(expectedSampleRate) Hz PCM stream.")
         }
         let bytesPerSample = Int(format.bits / 8)
         guard format.bits.isMultiple(of: 8), bytesPerSample > 0,
@@ -545,11 +548,17 @@ enum AudioWAV {
         if format.code == 3, format.bits == 32 {
             encoding = "float32"
             var sample = pcmRange.lowerBound
+            var hasNonzero = false
             while sample < pcmRange.upperBound {
-                guard Float(bitPattern: u32(data, sample)).isFinite else {
+                let value = Float(bitPattern: u32(data, sample))
+                guard value.isFinite else {
                     throw InferenceFailure.backendFailed("WAV contains a nonfinite float32 sample.")
                 }
+                hasNonzero = hasNonzero || value != 0
                 sample += 4
+            }
+            guard !requireNonzero || hasNonzero else {
+                throw InferenceFailure.backendFailed("Generated WAV is entirely silent.")
             }
         } else if !outputOnly, format.code == 1, [16, 24, 32].contains(Int(format.bits)) {
             encoding = "int\(format.bits)"

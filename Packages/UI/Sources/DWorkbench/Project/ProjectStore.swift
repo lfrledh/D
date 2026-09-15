@@ -747,6 +747,8 @@ public actor ProjectStore {
         let index = try documentIndex(documentID ?? manifest.activeDocumentID)
         let document = manifest.documents[index]
         switch request.input {
+        case .singing:
+            throw ProjectStoreError.invalidTransition
         case .pitch(let pitch):
             guard document.kind == .audio, let draft = document.audioDraft,
                   preparedPitchInputs[request.id] == pitch, pitch.source.documentID == document.id,
@@ -860,6 +862,7 @@ public actor ProjectStore {
         try checkLocation()
         var candidate = manifest
         switch candidate.jobs[index].request.input {
+        case .singing: throw ProjectStoreError.invalidTransition
         case .video: throw ProjectStoreError.invalidTransition
         case .pitch(let request):
             guard result.artifacts.count == 1, let artifact = result.artifacts.first,
@@ -1794,6 +1797,7 @@ public actor ProjectStore {
             guard let jobID = ProjectFiles.taskOwner(name),
                   let index = candidate.jobs.firstIndex(where: { $0.id == jobID }) else { continue }
             if case .pitch = candidate.jobs[index].request.input { continue }
+            if case .singing = candidate.jobs[index].request.input { continue }
             let isAudio: Bool, isVideo: Bool
             switch candidate.jobs[index].request.input {
             case .audio: isAudio = true; isVideo = false
@@ -2511,6 +2515,8 @@ private enum ProjectFiles {
                 throw ProjectStoreError.invalidProject("任务缺少文档。")
             }
             switch job.request.input {
+            case .singing:
+                throw ProjectStoreError.invalidTransition
             case .pitch(let request):
                 guard value.schemaVersion >= 12, let draft = document.audioDraft, document.kind == .audio,
                       request.source.documentID == document.id, request.source.assetID == draft.assetID,
