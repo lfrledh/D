@@ -1,5 +1,6 @@
 import CryptoKit
 import DInference
+import DRuntime
 @testable import DMLXBackend
 import Foundation
 import Testing
@@ -10,10 +11,10 @@ struct SingingBackendTests {
     func publicSurface() async throws {
         let root = try makeOwnedTestDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
-        let configuration = configuration(root: root)
-        #expect(configuration.timeoutSeconds == 600)
-        #expect(configuration.cancellationGraceSeconds == 45)
-        let backend = try SingingBackend(configuration: configuration)
+        let subjectConfiguration = configuration(root: root)
+        #expect(subjectConfiguration.timeoutSeconds == 600)
+        #expect(subjectConfiguration.cancellationGraceSeconds == 45)
+        let backend = try SingingBackend(configuration: subjectConfiguration)
         #expect(backend.descriptor == BackendDescriptor(
             id: "audio.singing.qixuan", version: "1", capabilities: [.audioSingingGeneration]))
         #expect(throws: (any Error).self) {
@@ -34,6 +35,10 @@ struct SingingBackendTests {
         #expect(profile.bankFiles.count == 31)
         #expect(profile.vocoderFiles.count == 3)
         #expect(try SingingModelInventory.parseSourceManifest(sourceData).count == 18)
+        #expect(SingingModelInventory.requiredProviderHelpers == [
+            "d_audio_contract.py", "d_singing_prepare.py", "d_singing_timing.py",
+            "d_singing_qixuan.py",
+        ])
 
         let profileText = String(decoding: profileData, as: UTF8.self)
         for mutation in [
@@ -65,7 +70,7 @@ struct SingingBackendTests {
         try Data("before".utf8).write(to: input)
         let seal = try SingingSealedFile.capture(
             input, label: "controlled protected input", maximumBytes: 64, cancellable: true)
-        try Data("after!".utf8).write(to: input)
+        try Data("after!!".utf8).write(to: input)
         let task = Task {
             await Task.yield()
             try seal.confirmUnchanged(cancellable: false)
@@ -78,6 +83,64 @@ struct SingingBackendTests {
             guard case .inputIntegrityChanged = failure else {
                 Issue.record("Expected inputIntegrityChanged, received \(failure)")
                 return
+            }
+        }
+    }
+
+    @Test("Sealing rejects post-close file and parent replacement")
+    func postCloseNamedBinding() throws {
+        let root = try makeOwnedTestDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let container = root.appendingPathComponent("container", isDirectory: true)
+        try FileManager.default.createDirectory(at: container, withIntermediateDirectories: false)
+        let input = container.appendingPathComponent("input")
+        try Data("same".utf8).write(to: input)
+        #expect(throws: (any Error).self) {
+            _ = try SingingSealedFile.capture(
+                input, label: "replaced file", maximumBytes: 16, cancellable: false,
+                afterClose: {
+                    try FileManager.default.removeItem(at: input)
+                    try Data("same".utf8).write(to: input)
+                })
+        }
+
+        let second = container.appendingPathComponent("second")
+        try Data("same".utf8).write(to: second)
+        let displaced = root.appendingPathComponent("displaced", isDirectory: true)
+        #expect(throws: (any Error).self) {
+            _ = try SingingSealedFile.capture(
+                second, label: "replaced parent", maximumBytes: 16, cancellable: false,
+                afterClose: {
+                    try FileManager.default.moveItem(at: container, to: displaced)
+                    try FileManager.default.createDirectory(at: container, withIntermediateDirectories: false)
+                    try Data("same".utf8).write(to: container.appendingPathComponent("second"))
+                })
+        }
+    }
+
+    @Test("Removal and symlink replacement are observed integrity changes")
+    func unsafeReplacementKinds() throws {
+        let root = try makeOwnedTestDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        for mode in ["removed", "symlink"] {
+            let input = root.appendingPathComponent("protected-" + mode)
+            let outside = root.appendingPathComponent("outside-" + mode)
+            try Data("input".utf8).write(to: input)
+            try Data("outside".utf8).write(to: outside)
+            let seal = try SingingSealedFile.capture(
+                input, label: mode, maximumBytes: 64, cancellable: false)
+            try FileManager.default.removeItem(at: input)
+            if mode == "symlink" {
+                try FileManager.default.createSymbolicLink(at: input, withDestinationURL: outside)
+            }
+            do {
+                try seal.confirmUnchanged(cancellable: false)
+                Issue.record("Expected \(mode) integrity change")
+            } catch let failure as InferenceFailure {
+                guard case .inputIntegrityChanged = failure else {
+                    Issue.record("Expected inputIntegrityChanged for \(mode), got \(failure)")
+                    continue
+                }
             }
         }
     }
@@ -101,19 +164,127 @@ struct SingingBackendTests {
         #expect(await events.count == 7)
 
         let wrong = "printf '%s\\n' '{\"type\":\"progress\",\"runID\":\"\(runID.uuidString.lowercased())\",\"stage\":\"pitch\"}'"
+        let duplicate = "printf '%s\\n' '\(lines[0])' '\(lines[0])'"
+        let missingTerminal = lines.dropLast().map { "printf '%s\\n' '\($0)'" }.joined(separator: "; ")
+        let postTerminal = script + "; printf '%s\\n' '{}'"
+        for invalidScript in [wrong, duplicate, missingTerminal, postTerminal] {
+            await #expect(throws: (any Error).self) {
+                _ = try await SingingProviderProtocol.run(
+                    executable: URL(fileURLWithPath: "/bin/sh"), arguments: ["-c", invalidScript],
+                    environment: ["PATH": "/usr/bin:/bin"], currentDirectory: root,
+                    timeoutSeconds: 5, cancellationGraceSeconds: 1, runID: runID,
+                    emit: { _ in })
+            }
+        }
+    }
+
+    @Test("Owned process timeout and consumer failure drain and terminate")
+    func processStopsDrain() async throws {
+        let root = try makeOwnedTestDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let runID = UUID(uuidString: "12345678-1234-4234-8234-123456789abc")!
+        do {
+            _ = try await SingingProviderProtocol.run(
+                executable: URL(fileURLWithPath: "/bin/sh"),
+                arguments: ["-c", "while :; do :; done"],
+                environment: ["PATH": "/usr/bin:/bin"], currentDirectory: root,
+                timeoutSeconds: 0.05, cancellationGraceSeconds: 0.05, runID: runID,
+                emit: { _ in })
+            Issue.record("Expected owned singing process timeout")
+        } catch let failure as InferenceFailure {
+            #expect(failure.localizedDescription.contains("timed out"))
+        }
+        let first = "{\"type\":\"progress\",\"runID\":\"\(runID.uuidString.lowercased())\",\"stage\":\"validation\"}"
+        let noisy = "i=0; while [ $i -lt 20000 ]; do printf x >&2; i=$((i+1)); done; printf '%s\\n' '\(first)'; while :; do :; done"
+        let consumerEvents = SingingEventRecorder()
         await #expect(throws: (any Error).self) {
             _ = try await SingingProviderProtocol.run(
-                executable: URL(fileURLWithPath: "/bin/sh"), arguments: ["-c", wrong],
+                executable: URL(fileURLWithPath: "/bin/sh"), arguments: ["-c", noisy],
                 environment: ["PATH": "/usr/bin:/bin"], currentDirectory: root,
-                timeoutSeconds: 5, cancellationGraceSeconds: 1, runID: runID,
-                emit: { _ in })
+                timeoutSeconds: 5, cancellationGraceSeconds: 0.05, runID: runID,
+                emit: { value in
+                    await consumerEvents.append(value)
+                    throw InferenceFailure.consumerTooSlow
+                })
         }
+        #expect(await consumerEvents.count == 1)
     }
 
     @Test("Frame clocks include ties-even model framing and half-up delivery")
     func frameClocks() throws {
         #expect(try SingingProviderProtocol.nativeFrames(5_120_000) == 234_496)
         #expect(try SingingProviderProtocol.deliveredFrames(5_120_000) == 225_792)
+    }
+
+    @Test("Strict result and independent WAV validation reject one-field false claims")
+    func resultAndWAVCounterexamples() throws {
+        let root = try makeOwnedTestDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let request = backendRequest(bank: root.appendingPathComponent("bank"),
+                                     vocoder: root.appendingPathComponent("vocoder"))
+        let inventory = controlledInventory(request: request, configuration: configuration(root: root))
+        let frames = try SingingProviderProtocol.deliveredFrames(request.singingValue.phrase.durationTicks)
+        let wav = controlledWAV(frames: Int(frames))
+        let validData = try controlledResultData(
+            request: request, inventory: inventory, runID: request.id, wav: wav)
+        let valid = try SingingProviderProtocol.parseResult(validData)
+        let requestSHA = SHA256.hash(data: try SingingRequestWire.encode(request))
+            .map { String(format: "%02x", $0) }.joined()
+        try SingingProviderProtocol.validate(
+            valid, runID: request.id, request: request.singingValue,
+            requestSHA256: requestSHA, inventory: inventory)
+
+        let source = String(decoding: validData, as: UTF8.self)
+        let parseFailures = [
+            source.replacingOccurrences(of: "\"runID\":\"\(request.id.uuidString.lowercased())\"",
+                                        with: "\"runID\":null"),
+            source.replacingOccurrences(of: "\"schemaVersion\":1", with: "\"schemaVersion\":1.0"),
+            source.replacingOccurrences(of: "\"phraseRevision\":9", with: "\"phraseRevision\":9e0"),
+        ]
+        for mutation in parseFailures {
+            do {
+                _ = try SingingProviderProtocol.parseResult(Data(mutation.utf8))
+                Issue.record("Expected strict provider result rejection")
+            } catch let failure as InferenceFailure {
+                guard case .backendFailed = failure else {
+                    Issue.record("Provider result error escaped as non-backend failure: \(failure)")
+                    continue
+                }
+            }
+        }
+        let semanticFailures = [
+            source.replacingOccurrences(of: request.id.uuidString.lowercased(),
+                                        with: "55555555-5555-4555-8555-555555555555"),
+            source.replacingOccurrences(of: "\"path\":\"output.wav\"", with: "\"path\":\"../output.wav\""),
+            source.replacingOccurrences(of: "\"channels\":1", with: "\"channels\":2"),
+            source.replacingOccurrences(of: "\"frameCount\":\(frames)", with: "\"frameCount\":1"),
+            source.replacingOccurrences(of: valid.audio.sha256,
+                                        with: String(repeating: "d", count: 64)),
+        ]
+        for mutation in semanticFailures {
+            let record = try SingingProviderProtocol.parseResult(Data(mutation.utf8))
+            #expect(throws: InferenceFailure.self) {
+                try SingingProviderProtocol.validate(
+                    record, runID: request.id, request: request.singingValue,
+                    requestSHA256: requestSHA, inventory: inventory)
+            }
+        }
+
+        let output = root.appendingPathComponent("output.wav")
+        let silent = controlledWAV(frames: Int(frames), sample: 0)
+        try silent.write(to: output)
+        let silentRecord = try SingingProviderProtocol.parseResult(try controlledResultData(
+            request: request, inventory: inventory, runID: request.id, wav: silent))
+        #expect(throws: InferenceFailure.self) {
+            _ = try SingingProviderProtocol.validateWAV(output, record: silentRecord)
+        }
+        let nonfinite = controlledWAV(frames: Int(frames), sample: .nan)
+        try nonfinite.write(to: output)
+        let nonfiniteRecord = try SingingProviderProtocol.parseResult(try controlledResultData(
+            request: request, inventory: inventory, runID: request.id, wav: nonfinite))
+        #expect(throws: InferenceFailure.self) {
+            _ = try SingingProviderProtocol.validateWAV(output, record: nonfiniteRecord)
+        }
     }
 
     @Test("Controlled lifecycle retains the shared lease until release")
@@ -141,6 +312,122 @@ struct SingingBackendTests {
         #expect(retry.artifacts.count == 1)
         await second.release()
     }
+
+    @Test("Runtime cancellation drains owned transport, reports mutation, releases, and runs next")
+    func cancellationIntegrityAndRecovery() async throws {
+        let root = try makeOwnedTestDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let artifacts = root.appendingPathComponent("artifacts", isDirectory: true)
+        let inputRoot = root.appendingPathComponent("inputs", isDirectory: true)
+        let bank = root.appendingPathComponent("bank", isDirectory: true)
+        let vocoder = root.appendingPathComponent("vocoder", isDirectory: true)
+        for directory in [artifacts, inputRoot, bank, vocoder] {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
+        }
+        let protected = inputRoot.appendingPathComponent("protected")
+        try Data("before".utf8).write(to: protected)
+        let firstRequest = backendRequest(bank: bank, vocoder: vocoder)
+        let nextRequest = InferenceRequest(
+            id: UUID(), model: firstRequest.model, input: firstRequest.input)
+        let backendConfiguration = configuration(root: artifacts)
+        let marker = root.appendingPathComponent("child-started")
+        let dependencies = SingingBackendDependencies(
+            inspect: { candidate, configuration in
+                var seal = SingingInputSeal()
+                _ = try seal.addFile(protected, label: "runtime protected input",
+                                     maximumBytes: 64)
+                let base = controlledInventory(request: candidate, configuration: configuration)
+                return SingingModelInventory(
+                    configuration: base.configuration, profile: base.profile,
+                    bankDirectory: base.bankDirectory, vocoderDirectory: base.vocoderDirectory,
+                    protectedInputs: seal, estimatedPeakBytes: base.estimatedPeakBytes)
+            },
+            run: { _, arguments, _, directory, _, _, runID, emit in
+                if runID == firstRequest.id {
+                    return try await SingingProviderProtocol.run(
+                        executable: URL(fileURLWithPath: "/bin/sh"),
+                        arguments: ["-c", "printf started > \"$1\"; while :; do :; done",
+                                    "singing-fixture", marker.path],
+                        environment: ["PATH": "/usr/bin:/bin"], currentDirectory: directory,
+                        timeoutSeconds: 5, cancellationGraceSeconds: 0.05,
+                        runID: runID, emit: emit)
+                }
+                let outputIndex = arguments.firstIndex(of: "--output-directory")!
+                let output = URL(fileURLWithPath: arguments[outputIndex + 1], isDirectory: true)
+                try FileManager.default.createDirectory(at: output, withIntermediateDirectories: false)
+                let frames = try SingingProviderProtocol.deliveredFrames(
+                    nextRequest.singingValue.phrase.durationTicks)
+                let wav = controlledWAV(frames: Int(frames))
+                try wav.write(to: output.appendingPathComponent("output.wav"))
+                try controlledResultData(
+                    request: nextRequest,
+                    inventory: controlledInventory(request: nextRequest,
+                                                   configuration: backendConfiguration),
+                    runID: runID, wav: wav)
+                    .write(to: output.appendingPathComponent("result.json"))
+                return SingingProviderTerminal(resultPath: "result.json")
+            })
+        let backend = try SingingBackend(configuration: backendConfiguration,
+                                         dependencies: dependencies)
+        try await withMLXRuntime(backend) { runtime in
+            let first = try await runtime.submit(firstRequest, backendID: backend.descriptor.id)
+            for _ in 0..<200 where !FileManager.default.fileExists(atPath: marker.path) {
+                try await Task.sleep(for: .milliseconds(5))
+            }
+            #expect(FileManager.default.fileExists(atPath: marker.path))
+            let second = try await runtime.submit(nextRequest, backendID: backend.descriptor.id)
+            let handle = try FileHandle(forWritingTo: protected)
+            try handle.seekToEnd()
+            try handle.write(contentsOf: Data("grown".utf8))
+            try handle.close()
+            await first.cancel()
+            guard case .failed(.inputIntegrityChanged(_)) = await first.outcome() else {
+                Issue.record("Cancelled changed input must finish as inputIntegrityChanged")
+                return
+            }
+            guard case .completed = await second.outcome() else {
+                Issue.record("Following singing task did not run after drain and release")
+                return
+            }
+        }
+    }
+
+    @Test("Unchanged owned-process cancellation remains cancelled")
+    func ordinaryCancellation() async throws {
+        let root = try makeOwnedTestDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let artifacts = root.appendingPathComponent("artifacts", isDirectory: true)
+        let bank = root.appendingPathComponent("bank", isDirectory: true)
+        let vocoder = root.appendingPathComponent("vocoder", isDirectory: true)
+        for directory in [artifacts, bank, vocoder] {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
+        }
+        let request = backendRequest(bank: bank, vocoder: vocoder)
+        let inventory = controlledInventory(request: request, configuration: configuration(root: artifacts))
+        let marker = root.appendingPathComponent("ordinary-child-started")
+        let dependencies = SingingBackendDependencies(
+            inspect: { _, _ in inventory },
+            run: { _, _, _, directory, _, _, runID, emit in
+                try await SingingProviderProtocol.run(
+                    executable: URL(fileURLWithPath: "/bin/sh"),
+                    arguments: ["-c", "printf started > \"$1\"; while :; do :; done",
+                                "singing-fixture", marker.path],
+                    environment: ["PATH": "/usr/bin:/bin"], currentDirectory: directory,
+                    timeoutSeconds: 5, cancellationGraceSeconds: 0.05,
+                    runID: runID, emit: emit)
+            })
+        let backend = try SingingBackend(configuration: configuration(root: artifacts),
+                                         dependencies: dependencies)
+        try await withMLXRuntime(backend) { runtime in
+            let run = try await runtime.submit(request, backendID: backend.descriptor.id)
+            for _ in 0..<200 where !FileManager.default.fileExists(atPath: marker.path) {
+                try await Task.sleep(for: .milliseconds(5))
+            }
+            #expect(FileManager.default.fileExists(atPath: marker.path))
+            await run.cancel()
+            #expect(await run.outcome() == .cancelled)
+        }
+    }
 }
 
 private actor SingingEventRecorder {
@@ -161,17 +448,11 @@ private func controlledDependencies(
             let output = URL(fileURLWithPath: arguments[outputIndex + 1], isDirectory: true)
             try FileManager.default.createDirectory(at: output, withIntermediateDirectories: false)
             let frames = try SingingProviderProtocol.deliveredFrames(request.singingValue.phrase.durationTicks)
-            let native = try SingingProviderProtocol.nativeFrames(request.singingValue.phrase.durationTicks)
             let wav = controlledWAV(frames: Int(frames))
-            let digest = SHA256.hash(data: wav).map { String(format: "%02x", $0) }.joined()
             try wav.write(to: output.appendingPathComponent("output.wav"))
-            let stageJSON = SingingProviderProtocol.stages.map {
-                "{\"name\":\"\($0)\",\"seconds\":0}"
-            }.joined(separator: ",")
-            let value = """
-            {"schemaVersion":1,"runID":"\(runID.uuidString.lowercased())","profileID":"\(SingingBackendConfiguration.profileID)","status":"rendered","source":{"phraseID":"\(request.singingValue.phrase.id)","phraseRevision":\(request.singingValue.phrase.revision),"requestSHA256":"\(requestSHA)","durationTicks":\(request.singingValue.phrase.durationTicks)},"model":{"bankArchiveSHA256":"\(inventory.profile.bankArchiveSHA256)","vocoderRevision":"\(inventory.profile.vocoderRevision)","vocoderSHA256":"\(String(repeating: "c", count: 64))","bankTermsSHA256":"\(inventory.profile.bankTermsSHA256)","vocoderLicenseSHA256":"\(inventory.profile.vocoderLicenseSHA256)"},"audio":{"path":"output.wav","encoding":"float32LE-WAV","sampleRate":44100,"channels":1,"frameCount":\(frames),"sha256":"\(digest)"},"execution":{"precision":"Qixuan original ONNX CPU; BigVGAN FP32 CPU","seedControl":"unsupported","nativeFrameCount":\(native),"trimHeadSamples":4096,"outputFrameCount":\(frames),"projectionRelativeResidual":0.01,"saturatedSamples":0,"stages":[\(stageJSON)]}}
-            """
-            try Data(value.utf8).write(to: output.appendingPathComponent("result.json"))
+            try controlledResultData(request: request, inventory: inventory, runID: runID,
+                                     wav: wav, requestSHA: requestSHA)
+                .write(to: output.appendingPathComponent("result.json"))
             return SingingProviderTerminal(resultPath: "result.json")
         })
 }
@@ -239,7 +520,12 @@ private func configuration(
 }
 
 private func makeOwnedTestDirectory() throws -> URL {
-    let base = URL(fileURLWithPath: "/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-SINGING-BACKEND-01/run-20260915T163855Z-render/bridge/tmp", isDirectory: true)
+    guard let supplied = ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"],
+          supplied.hasPrefix("/"), !supplied.contains("\0") else {
+        throw InferenceFailure.invalidRequest("D_TEST_TEMP_DIR must name the explicit test-owned root.")
+    }
+    let base = URL(fileURLWithPath: supplied, isDirectory: true).standardizedFileURL
+    try AudioFileSystem.validateDirectory(base, label: "D_TEST_TEMP_DIR")
     let root = base.appendingPathComponent("singing-swift-tests-" + UUID().uuidString.lowercased(),
                                           isDirectory: true)
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: false)
@@ -252,7 +538,29 @@ private func repositoryRoot() -> URL {
     return result
 }
 
-private func controlledWAV(frames: Int) -> Data {
+private func controlledResultData(
+    request: InferenceRequest, inventory: SingingModelInventory, runID: UUID, wav: Data,
+    requestSHA suppliedRequestSHA: String? = nil
+) throws -> Data {
+    let requestSHA: String
+    if let suppliedRequestSHA {
+        requestSHA = suppliedRequestSHA
+    } else {
+        requestSHA = SHA256.hash(data: try SingingRequestWire.encode(request))
+            .map { String(format: "%02x", $0) }.joined()
+    }
+    let frames = try SingingProviderProtocol.deliveredFrames(request.singingValue.phrase.durationTicks)
+    let native = try SingingProviderProtocol.nativeFrames(request.singingValue.phrase.durationTicks)
+    let digest = SHA256.hash(data: wav).map { String(format: "%02x", $0) }.joined()
+    let stages = SingingProviderProtocol.stages.map {
+        "{\"name\":\"\($0)\",\"seconds\":0}"
+    }.joined(separator: ",")
+    return Data("""
+    {"schemaVersion":1,"runID":"\(runID.uuidString.lowercased())","profileID":"\(SingingBackendConfiguration.profileID)","status":"rendered","source":{"phraseID":"\(request.singingValue.phrase.id)","phraseRevision":\(request.singingValue.phrase.revision),"requestSHA256":"\(requestSHA)","durationTicks":\(request.singingValue.phrase.durationTicks)},"model":{"bankArchiveSHA256":"\(inventory.profile.bankArchiveSHA256)","vocoderRevision":"\(inventory.profile.vocoderRevision)","vocoderSHA256":"\(String(repeating: "c", count: 64))","bankTermsSHA256":"\(inventory.profile.bankTermsSHA256)","vocoderLicenseSHA256":"\(inventory.profile.vocoderLicenseSHA256)"},"audio":{"path":"output.wav","encoding":"float32LE-WAV","sampleRate":44100,"channels":1,"frameCount":\(frames),"sha256":"\(digest)"},"execution":{"precision":"Qixuan original ONNX CPU; BigVGAN FP32 CPU","seedControl":"unsupported","nativeFrameCount":\(native),"trimHeadSamples":4096,"outputFrameCount":\(frames),"projectionRelativeResidual":0.01,"saturatedSamples":0,"stages":[\(stages)]}}
+    """.utf8)
+}
+
+private func controlledWAV(frames: Int, sample: Float = 0.25) -> Data {
     let payloadBytes = frames * 4
     var data = Data()
     data.append(contentsOf: "RIFF".utf8)
@@ -267,8 +575,8 @@ private func controlledWAV(frames: Int) -> Data {
     append(UInt16(32), to: &data)
     data.append(contentsOf: "data".utf8)
     append(UInt32(payloadBytes), to: &data)
-    let sample = Float(0.25).bitPattern
-    for _ in 0..<frames { append(sample, to: &data) }
+    let bits = sample.bitPattern
+    for _ in 0..<frames { append(bits, to: &data) }
     return data
 }
 

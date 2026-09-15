@@ -43,6 +43,7 @@ struct SingingResultRecord: Sendable {
         let saturatedSamples: Int64
         let stages: [Stage]
     }
+    let runID: String
     let source: Source
     let model: Model
     let audio: Audio
@@ -234,6 +235,7 @@ enum SingingProviderProtocol {
         let sampleRate = try platformInt(audio["sampleRate"]!, context: "audio sampleRate")
         let channels = try platformInt(audio["channels"]!, context: "audio channels")
         return SingingResultRecord(
+            runID: try root["runID"]!.requiredString(context: "result runID"),
             source: .init(
                 phraseID: try source["phraseID"]!.requiredString(context: "source phraseID"),
                 phraseRevision: try source["phraseRevision"]!.requiredInteger(context: "source phraseRevision"),
@@ -267,7 +269,8 @@ enum SingingProviderProtocol {
         requestSHA256: String, inventory: SingingModelInventory
     ) throws {
         let profile = inventory.profile
-        guard exact(record.source.phraseID, request.phrase.id),
+        guard record.runID == runID.uuidString.lowercased(),
+              exact(record.source.phraseID, request.phrase.id),
               record.source.phraseRevision == request.phrase.revision,
               record.source.durationTicks == request.phrase.durationTicks,
               record.source.requestSHA256 == requestSHA256,
@@ -293,7 +296,6 @@ enum SingingProviderProtocol {
               validDigest(record.audio.sha256), validDigest(record.model.vocoderSHA256) else {
             throw InferenceFailure.backendFailed("Singing result frame counts or digests are invalid.")
         }
-        _ = runID
     }
 
     static func validateWAV(

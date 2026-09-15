@@ -70,7 +70,7 @@ public actor SingingBackend: InferenceBackend {
         try await MLXExecutionLease.shared.acquire(token)
         lease = token
         let runDirectory = try Self.makeRunDirectory(
-            root: configuration.artifactDirectory, requestID: request.id)
+            root: inventory.configuration.artifactDirectory, requestID: request.id)
         lastRunDirectory = runDirectory
         var requestSeal: SingingSealedFile?
 
@@ -100,17 +100,17 @@ public actor SingingBackend: InferenceBackend {
                 "HF_DATASETS_OFFLINE": "1",
             ]
             let arguments = [
-                "-B", configuration.providerScript.path,
+                "-B", inventory.configuration.providerScript.path,
                 "--request", requestURL.path,
                 "--bank-directory", inventory.bankDirectory.path,
                 "--vocoder-directory", inventory.vocoderDirectory.path,
-                "--vendor-directory", configuration.vendorDirectory.path,
-                "--profile", configuration.profileManifest.path,
+                "--vendor-directory", inventory.configuration.vendorDirectory.path,
+                "--profile", inventory.configuration.profileManifest.path,
                 "--output-directory", output.path,
             ]
             let terminal = try await dependencies.run(
-                configuration.pythonExecutable, arguments, environment, runDirectory,
-                configuration.timeoutSeconds, configuration.cancellationGraceSeconds,
+                inventory.configuration.pythonExecutable, arguments, environment, runDirectory,
+                inventory.configuration.timeoutSeconds, inventory.configuration.cancellationGraceSeconds,
                 request.id, emit)
             guard terminal.resultPath == "result.json" else {
                 throw InferenceFailure.backendFailed("Singing terminal result path is invalid.")
@@ -121,10 +121,6 @@ public actor SingingBackend: InferenceBackend {
                 resultURL, label: "Singing result record", maximumBytes: 2 * 1024 * 1024,
                 cancellable: true)
             let result = try SingingProviderProtocol.parseResult(resultData)
-            guard let rootRunID = try Self.resultRunID(resultData),
-                  rootRunID == request.id.uuidString.lowercased() else {
-                throw InferenceFailure.backendFailed("Singing result record has the wrong runID.")
-            }
             try SingingProviderProtocol.validate(
                 result, runID: request.id, request: singing, requestSHA256: requestSHA,
                 inventory: inventory)
@@ -138,16 +134,14 @@ public actor SingingBackend: InferenceBackend {
 
             // This check is intentionally non-cancellable: a cancellation or consumer
             // failure may not suppress verification that protected inputs stayed intact.
-            try inventory.confirmUnchanged(cancellable: false)
-            try requestSeal?.confirmUnchanged(cancellable: false)
+            try Task.checkCancellation()
+            try Self.confirmPostDrain(inventory: inventory, requestSeal: requestSeal)
             do {
                 try await emit(.artifact(artifact))
             } catch {
                 let consumerError = error
-                do {
-                    try inventory.confirmUnchanged(cancellable: false)
-                    try requestSeal?.confirmUnchanged(cancellable: false)
-                } catch { throw Self.protectionFailure(error, original: consumerError) }
+                do { try Self.confirmPostDrain(inventory: inventory, requestSeal: requestSeal) }
+                catch { throw Self.protectionFailure(error, original: consumerError) }
                 throw consumerError
             }
             return InferenceResult(artifacts: [artifact], metadata: [
@@ -161,10 +155,8 @@ public actor SingingBackend: InferenceBackend {
             ])
         } catch {
             let original = error
-            do {
-                try inventory.confirmUnchanged(cancellable: false)
-                try requestSeal?.confirmUnchanged(cancellable: false)
-            } catch { throw Self.protectionFailure(error, original: original) }
+            do { try Self.confirmPostDrain(inventory: inventory, requestSeal: requestSeal) }
+            catch { throw Self.protectionFailure(error, original: original) }
             if original is CancellationError { throw CancellationError() }
             if let failure = original as? InferenceFailure { throw failure }
             throw InferenceFailure.backendFailed(
@@ -210,12 +202,6 @@ public actor SingingBackend: InferenceBackend {
         return run
     }
 
-    private static func resultRunID(_ data: Data) throws -> String? {
-        var parser = AudioJSONParser(data: data, maximumDepth: 32)
-        let object = try parser.parse().objectAny(context: "singing result")
-        return try object["runID"]?.requiredString(context: "singing result runID")
-    }
-
     private static func protectionFailure(_ integrity: Error, original: Error) -> InferenceFailure {
         if let failure = integrity as? InferenceFailure,
            case .inputIntegrityChanged(let detail) = failure {
@@ -225,5 +211,26 @@ public actor SingingBackend: InferenceBackend {
         return .backendFailed(
             "Singing input protection verification could not complete: \(integrity.localizedDescription). "
                 + "Original singing stop/error: \(original.localizedDescription)")
+    }
+
+    private static func confirmPostDrain(
+        inventory: SingingModelInventory, requestSeal: SingingSealedFile?
+    ) throws {
+        var observed: InferenceFailure?
+        var unknown: Error?
+        do { try inventory.confirmUnchanged(cancellable: false) }
+        catch let failure as InferenceFailure {
+            if case .inputIntegrityChanged = failure { observed = failure }
+            else { unknown = failure }
+        } catch { unknown = error }
+        if let requestSeal {
+            do { try requestSeal.confirmUnchanged(cancellable: false) }
+            catch let failure as InferenceFailure {
+                if case .inputIntegrityChanged = failure { observed = observed ?? failure }
+                else { unknown = unknown ?? failure }
+            } catch { unknown = unknown ?? error }
+        }
+        if let observed { throw observed }
+        if let unknown { throw unknown }
     }
 }

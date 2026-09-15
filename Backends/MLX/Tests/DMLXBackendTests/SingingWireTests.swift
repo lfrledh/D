@@ -48,6 +48,22 @@ struct SingingWireTests {
         expectInvalidWire(Data(missing.utf8), model: request.model, vocoder: request.singing!.vocoder)
     }
 
+    @Test("Nested integer fields reject decimal, exponent, and Boolean spellings")
+    func nestedLexicalIntegers() throws {
+        let request = makeSingingRequest()
+        let source = String(decoding: try SingingRequestWire.encode(request), as: UTF8.self)
+        let mutations = [
+            source.replacingOccurrences(of: "\"endTick\":1500000", with: "\"endTick\":1500000.0"),
+            source.replacingOccurrences(of: "\"phraseRevision\":7", with: "\"phraseRevision\":7e0"),
+            source.replacingOccurrences(of: "\"vowelIndices\":[1,null]", with: "\"vowelIndices\":[true,null]"),
+        ]
+        for mutation in mutations {
+            #expect(mutation != source)
+            expectInvalidWire(Data(mutation.utf8), model: request.model,
+                              vocoder: request.singing!.vocoder)
+        }
+    }
+
     @Test("Qualification cannot be absent, false, or defaulted")
     func qualificationRequired() throws {
         let request = makeSingingRequest()
