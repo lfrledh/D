@@ -640,7 +640,7 @@ struct SingingSealedFile: Sendable {
 
     private static func unknown(_ message: String, phase: Phase) -> InferenceFailure {
         let detail = message + ": " + String(cString: strerror(errno))
-        switch phase {
+        return switch phase {
         case .admission: .invalidRequest(detail)
         case .integrity: .backendFailed(detail)
         }

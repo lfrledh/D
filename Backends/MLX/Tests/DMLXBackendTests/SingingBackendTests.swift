@@ -238,8 +238,12 @@ struct SingingBackendTests {
         #expect(terminal.resultPath == "result.json")
         #expect(await events.count == 7)
 
-        let wrong = "printf '%s\\n' '{\"type\":\"progress\",\"runID\":\"\(runID.uuidString.lowercased())\",\"stage\":\"pitch\"}'"
-        let duplicate = "printf '%s\\n' '\(lines[0])' '\(lines[0])'"
+        var wrongLines = lines
+        wrongLines.swapAt(1, 2)
+        let wrong = wrongLines.map { "printf '%s\\n' '\($0)'" }.joined(separator: "; ")
+        var duplicateLines = lines
+        duplicateLines.insert(lines[0], at: 1)
+        let duplicate = duplicateLines.map { "printf '%s\\n' '\($0)'" }.joined(separator: "; ")
         let missingTerminal = lines.dropLast().map { "printf '%s\\n' '\($0)'" }.joined(separator: "; ")
         let postTerminal = script + "; printf '%s\\n' '{}'"
         for invalidScript in [wrong, duplicate, missingTerminal, postTerminal] {
