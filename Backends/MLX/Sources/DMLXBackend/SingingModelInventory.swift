@@ -288,11 +288,16 @@ struct SingingModelInventory: Sendable {
 struct SingingInputSeal: Sendable {
     private var directories: [SingingSealedDirectory] = []
     private var files: [SingingSealedFile] = []
+    private var verificationChecks: [@Sendable (Bool) throws -> Void] = []
 
     init() {}
 
     mutating func addDirectory(_ url: URL, label: String) throws {
         directories.append(try SingingSealedDirectory.capture(url, label: label))
+    }
+
+    mutating func addVerification(_ check: @escaping @Sendable (Bool) throws -> Void) {
+        verificationChecks.append(check)
     }
 
     @discardableResult
@@ -326,14 +331,15 @@ struct SingingInputSeal: Sendable {
 
     func confirmUnchanged(cancellable: Bool) throws {
         var observedIntegrityFailure: InferenceFailure?
+        var firstUnknownFailure: Error?
         for directory in directories {
             if cancellable { try Task.checkCancellation() }
             do { try directory.confirmUnchanged() }
             catch let failure as InferenceFailure {
                 if case .inputIntegrityChanged = failure, observedIntegrityFailure == nil {
                     observedIntegrityFailure = failure
-                } else if observedIntegrityFailure == nil { throw failure }
-            }
+                } else if firstUnknownFailure == nil { firstUnknownFailure = failure }
+            } catch { if firstUnknownFailure == nil { firstUnknownFailure = error } }
         }
         for file in files {
             if cancellable { try Task.checkCancellation() }
@@ -341,17 +347,39 @@ struct SingingInputSeal: Sendable {
             catch let failure as InferenceFailure {
                 if case .inputIntegrityChanged = failure, observedIntegrityFailure == nil {
                     observedIntegrityFailure = failure
-                } else if observedIntegrityFailure == nil { throw failure }
-            }
+                } else if firstUnknownFailure == nil { firstUnknownFailure = failure }
+            } catch { if firstUnknownFailure == nil { firstUnknownFailure = error } }
+        }
+        for check in verificationChecks {
+            if cancellable { try Task.checkCancellation() }
+            do { try check(cancellable) }
+            catch let failure as InferenceFailure {
+                if case .inputIntegrityChanged = failure, observedIntegrityFailure == nil {
+                    observedIntegrityFailure = failure
+                } else if firstUnknownFailure == nil { firstUnknownFailure = failure }
+            } catch { if firstUnknownFailure == nil { firstUnknownFailure = error } }
         }
         if let observedIntegrityFailure { throw observedIntegrityFailure }
+        if let firstUnknownFailure { throw firstUnknownFailure }
+    }
+}
+
+struct SingingStableIdentity: Sendable, Equatable {
+    let device: Int64
+    let inode: UInt64
+    let fileType: UInt32
+
+    init(_ identity: AudioFileSystem.Identity) {
+        device = identity.device
+        inode = identity.inode
+        fileType = identity.mode & UInt32(S_IFMT)
     }
 }
 
 private struct SingingSealedDirectory: Sendable {
     let url: URL
     let label: String
-    let identity: AudioFileSystem.Identity
+    let identity: SingingStableIdentity
 
     static func capture(_ url: URL, label: String) throws -> Self {
         let absolute = try AudioFileSystem.absoluteLocal(url, label: label)
@@ -379,7 +407,7 @@ private struct SingingSealedDirectory: Sendable {
         }
     }
 
-    private static func directoryIdentity(_ url: URL, label: String) throws -> AudioFileSystem.Identity {
+    private static func directoryIdentity(_ url: URL, label: String) throws -> SingingStableIdentity {
         let descriptor = try AudioFileSystem.openDirectory(url, label: label)
         var value = stat()
         let status = Darwin.fstat(descriptor, &value)
@@ -387,36 +415,41 @@ private struct SingingSealedDirectory: Sendable {
         guard status == 0, closeStatus == 0 else {
             throw InferenceFailure.invalidRequest("Cannot identify or close \(label).")
         }
-        return AudioFileSystem.Identity(value)
+        return SingingStableIdentity(AudioFileSystem.Identity(value))
     }
 }
 
 struct SingingSealedFile: Sendable {
+    private enum Phase { case admission, integrity }
     let url: URL
     let parentURL: URL
     let label: String
-    let parentIdentity: AudioFileSystem.Identity
+    let parentIdentity: SingingStableIdentity
     let identity: AudioFileSystem.Identity
     let sha256: String
 
     static func capture(
         _ url: URL, label: String, maximumBytes: UInt64?, cancellable: Bool,
-        afterClose: (() throws -> Void)? = nil
+        afterClose: (() throws -> Void)? = nil,
+        beforeFinalObservation: (() throws -> Void)? = nil
     ) throws -> Self {
         try captureData(url, label: label, maximumBytes: maximumBytes, cancellable: cancellable,
-                        retainData: false, afterClose: afterClose).0
+                        retainData: false, phase: .admission, afterClose: afterClose,
+                        beforeFinalObservation: beforeFinalObservation).0
     }
 
     static func captureData(
         _ url: URL, label: String, maximumBytes: UInt64, cancellable: Bool
     ) throws -> (Self, Data) {
         try captureData(url, label: label, maximumBytes: maximumBytes, cancellable: cancellable,
-                        retainData: true, afterClose: nil)
+                        retainData: true, phase: .admission, afterClose: nil,
+                        beforeFinalObservation: nil)
     }
 
     private static func captureData(
         _ url: URL, label: String, maximumBytes: UInt64?, cancellable: Bool,
-        retainData: Bool, afterClose: (() throws -> Void)?
+        retainData: Bool, phase: Phase, afterClose: (() throws -> Void)?,
+        beforeFinalObservation: (() throws -> Void)?
     ) throws -> (Self, Data) {
         let location = try split(url, label: label)
         let parent = try AudioFileSystem.openDirectory(location.parent, label: "parent of \(label)")
@@ -431,7 +464,7 @@ struct SingingSealedFile: Sendable {
         guard Darwin.fstat(parent, &parentValue) == 0 else {
             throw InferenceFailure.invalidRequest("Cannot identify parent of \(label).")
         }
-        let parentIdentity = AudioFileSystem.Identity(parentValue)
+        let parentIdentity = SingingStableIdentity(AudioFileSystem.Identity(parentValue))
         descriptor = Darwin.openat(parent, location.name,
                                    O_RDONLY | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK)
         guard descriptor >= 0 else {
@@ -445,7 +478,7 @@ struct SingingSealedFile: Sendable {
         }
         let before = AudioFileSystem.Identity(beforeValue)
         guard before.size >= 0, maximumBytes.map({ UInt64(before.size) <= $0 }) ?? true else {
-            throw InferenceFailure.invalidRequest("\(label) exceeds its bounded size.")
+            throw change("\(label) exceeds its sealed size.", phase: phase)
         }
         var hash = SHA256(), retained = Data()
         if retainData { retained.reserveCapacity(Int(before.size)) }
@@ -456,13 +489,19 @@ struct SingingSealedFile: Sendable {
             let requested = min(buffer.count, Int(remaining))
             let count = buffer.withUnsafeMutableBytes { Darwin.read(descriptor, $0.baseAddress, requested) }
             if count < 0, errno == EINTR { continue }
-            guard count > 0 else {
-                throw fileFailure("Cannot read complete \(label)")
+            if count <= 0 {
+                var observed = stat()
+                if Darwin.fstat(descriptor, &observed) == 0,
+                   AudioFileSystem.Identity(observed) != before {
+                    throw change("\(label) changed while its sealed bytes were read.", phase: phase)
+                }
+                throw unknown("Cannot read complete \(label)", phase: phase)
             }
             let chunk = Data(buffer.prefix(count)); hash.update(data: chunk)
             if retainData { retained.append(chunk) }
             remaining -= Int64(count)
         }
+        try beforeFinalObservation?()
         var extra: UInt8 = 0
         var trailing: Int
         repeat { trailing = Darwin.read(descriptor, &extra, 1) } while trailing < 0 && errno == EINTR
@@ -472,25 +511,46 @@ struct SingingSealedFile: Sendable {
         descriptorOpen = false
         let parentClose = Darwin.close(parent)
         parentOpen = false
-        guard trailing == 0, afterStatus == 0, AudioFileSystem.Identity(afterValue) == before,
-              fileClose == 0, parentClose == 0 else {
-            throw InferenceFailure.invalidRequest("\(label) changed or could not be closed while being sealed.")
+        let observedChange = trailing > 0
+            || (afterStatus == 0 && AudioFileSystem.Identity(afterValue) != before)
+        if observedChange {
+            throw change("\(label) changed while being sealed.", phase: phase)
+        }
+        guard trailing == 0, afterStatus == 0, fileClose == 0, parentClose == 0 else {
+            throw unknown("Cannot finish reading or closing \(label)", phase: phase)
         }
         try afterClose?()
-        let namedParent = try SingingSealedDirectory.capture(location.parent, label: "parent of \(label)")
-        guard namedParent.identity == parentIdentity else {
-            throw InferenceFailure.invalidRequest("Parent of \(label) was replaced after close.")
+        let namedParent: SingingSealedDirectory
+        do {
+            namedParent = try SingingSealedDirectory.capture(location.parent, label: "parent of \(label)")
+        } catch {
+            if observedUnsafePath(location.parent, finalType: UInt32(S_IFDIR)) {
+                throw change("Parent of \(label) disappeared or became unsafe after close.", phase: phase)
+            }
+            throw unknown("Cannot rebind parent of \(label): \(error.localizedDescription)", phase: phase)
         }
-        let named = try observedIdentity(location, label: label)
+        guard namedParent.identity == parentIdentity else {
+            throw change("Parent of \(label) was replaced after close.", phase: phase)
+        }
+        let named: AudioFileSystem.Identity
+        do { named = try observedIdentity(location, label: label) }
+        catch {
+            if observedUnsafePath(location.url, finalType: UInt32(S_IFREG)) {
+                throw change("Named \(label) disappeared or became unsafe after close.", phase: phase)
+            }
+            throw unknown("Cannot rebind named \(label): \(error.localizedDescription)", phase: phase)
+        }
         guard named == before else {
-            throw InferenceFailure.invalidRequest("Named \(label) was replaced after close.")
+            throw change("Named \(label) was replaced after close.", phase: phase)
         }
         return (Self(url: location.url, parentURL: location.parent, label: label,
                      parentIdentity: parentIdentity, identity: before,
                      sha256: hash.finalize().map { String(format: "%02x", $0) }.joined()), retained)
     }
 
-    func confirmUnchanged(cancellable: Bool) throws {
+    func confirmUnchanged(
+        cancellable: Bool, beforeFinalObservation: (() throws -> Void)? = nil
+    ) throws {
         do {
             let currentParent = try SingingSealedDirectory.capture(parentURL, label: "parent of \(label)")
             guard currentParent.identity == parentIdentity else {
@@ -500,8 +560,10 @@ struct SingingSealedFile: Sendable {
             guard currentIdentity == identity else {
                 throw InferenceFailure.inputIntegrityChanged("Protected \(label) identity, size, or type changed.")
             }
-            let current = try Self.capture(url, label: label, maximumBytes: nil,
-                                           cancellable: cancellable)
+            let current = try Self.captureData(
+                url, label: label, maximumBytes: UInt64(identity.size),
+                cancellable: cancellable, retainData: false, phase: .integrity,
+                afterClose: nil, beforeFinalObservation: beforeFinalObservation).0
             guard current.identity == identity, current.parentIdentity == parentIdentity,
                   current.sha256 == sha256 else {
                 throw InferenceFailure.inputIntegrityChanged("Protected \(label) identity or content changed.")
@@ -567,6 +629,21 @@ struct SingingSealedFile: Sendable {
 
     private static func fileFailure(_ message: String) -> InferenceFailure {
         .invalidRequest("\(message): \(String(cString: strerror(errno)))")
+    }
+
+    private static func change(_ message: String, phase: Phase) -> InferenceFailure {
+        switch phase {
+        case .admission: .invalidRequest(message)
+        case .integrity: .inputIntegrityChanged(message)
+        }
+    }
+
+    private static func unknown(_ message: String, phase: Phase) -> InferenceFailure {
+        let detail = message + ": " + String(cString: strerror(errno))
+        switch phase {
+        case .admission: .invalidRequest(detail)
+        case .integrity: .backendFailed(detail)
+        }
     }
 }
 

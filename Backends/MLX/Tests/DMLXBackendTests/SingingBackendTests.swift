@@ -118,6 +118,81 @@ struct SingingBackendTests {
         }
     }
 
+    @Test("Sibling creation preserves stable parent binding while parent replacement fails")
+    func stableParentBinding() throws {
+        let root = try makeOwnedTestDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let container = root.appendingPathComponent("stable-parent", isDirectory: true)
+        try FileManager.default.createDirectory(at: container, withIntermediateDirectories: false)
+        let input = container.appendingPathComponent("input")
+        try Data("sealed".utf8).write(to: input)
+        let seal = try SingingSealedFile.capture(
+            input, label: "stable parent input", maximumBytes: 64, cancellable: false)
+        try Data("allowed sibling".utf8).write(to: container.appendingPathComponent("sibling"))
+        try seal.confirmUnchanged(cancellable: false)
+    }
+
+    @Test("Growth during bounded reread is an observed integrity change")
+    func growthDuringRead() throws {
+        let root = try makeOwnedTestDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let input = root.appendingPathComponent("growing-input")
+        try Data(repeating: 7, count: 64 * 1024).write(to: input)
+        let seal = try SingingSealedFile.capture(
+            input, label: "growing input", maximumBytes: 128 * 1024, cancellable: false)
+        do {
+            try seal.confirmUnchanged(cancellable: false, beforeFinalObservation: {
+                let handle = try FileHandle(forWritingTo: input)
+                try handle.seekToEnd()
+                try handle.write(contentsOf: Data([8]))
+                try handle.close()
+            })
+            Issue.record("Expected growth during reread to be an integrity change")
+        } catch let failure as InferenceFailure {
+            guard case .inputIntegrityChanged = failure else {
+                Issue.record("Growth was not classified as inputIntegrityChanged: \(failure)")
+                return
+            }
+        }
+    }
+
+    @Test("Integrity outranks unknown verification failures in either order")
+    func sealFailurePriority() throws {
+        for integrityFirst in [false, true] {
+            var seal = SingingInputSeal()
+            let unknown: @Sendable (Bool) throws -> Void = { _ in
+                throw InferenceFailure.backendFailed("controlled unknown EIO")
+            }
+            let changed: @Sendable (Bool) throws -> Void = { _ in
+                throw InferenceFailure.inputIntegrityChanged("controlled observed growth")
+            }
+            seal.addVerification(integrityFirst ? changed : unknown)
+            seal.addVerification(integrityFirst ? unknown : changed)
+            do {
+                try seal.confirmUnchanged(cancellable: false)
+                Issue.record("Expected observed integrity failure")
+            } catch let failure as InferenceFailure {
+                guard case .inputIntegrityChanged = failure else {
+                    Issue.record("Unknown verification failure hid observed change: \(failure)")
+                    continue
+                }
+            }
+        }
+        var unknownOnly = SingingInputSeal()
+        unknownOnly.addVerification { _ in
+            throw InferenceFailure.backendFailed("controlled unknown EIO")
+        }
+        do {
+            try unknownOnly.confirmUnchanged(cancellable: false)
+            Issue.record("Expected unknown-only verification failure")
+        } catch let failure as InferenceFailure {
+            guard case .backendFailed = failure else {
+                Issue.record("Pure unknown I/O was incorrectly called a mutation")
+                return
+            }
+        }
+    }
+
     @Test("Removal and symlink replacement are observed integrity changes")
     func unsafeReplacementKinds() throws {
         let root = try makeOwnedTestDirectory()
@@ -197,7 +272,7 @@ struct SingingBackendTests {
         let first = "{\"type\":\"progress\",\"runID\":\"\(runID.uuidString.lowercased())\",\"stage\":\"validation\"}"
         let noisy = "i=0; while [ $i -lt 20000 ]; do printf x >&2; i=$((i+1)); done; printf '%s\\n' '\(first)'; while :; do :; done"
         let consumerEvents = SingingEventRecorder()
-        await #expect(throws: (any Error).self) {
+        do {
             _ = try await SingingProviderProtocol.run(
                 executable: URL(fileURLWithPath: "/bin/sh"), arguments: ["-c", noisy],
                 environment: ["PATH": "/usr/bin:/bin"], currentDirectory: root,
@@ -206,6 +281,10 @@ struct SingingBackendTests {
                     await consumerEvents.append(value)
                     throw InferenceFailure.consumerTooSlow
                 })
+            Issue.record("Expected consumer failure")
+        } catch let failure as InferenceFailure {
+            #expect(failure.localizedDescription.contains("Output buffer is full"))
+            #expect(!failure.localizedDescription.contains("timed out"))
         }
         #expect(await consumerEvents.count == 1)
     }
@@ -258,8 +337,6 @@ struct SingingBackendTests {
             source.replacingOccurrences(of: "\"path\":\"output.wav\"", with: "\"path\":\"../output.wav\""),
             source.replacingOccurrences(of: "\"channels\":1", with: "\"channels\":2"),
             source.replacingOccurrences(of: "\"frameCount\":\(frames)", with: "\"frameCount\":1"),
-            source.replacingOccurrences(of: valid.audio.sha256,
-                                        with: String(repeating: "d", count: 64)),
         ]
         for mutation in semanticFailures {
             let record = try SingingProviderProtocol.parseResult(Data(mutation.utf8))
@@ -271,6 +348,17 @@ struct SingingBackendTests {
         }
 
         let output = root.appendingPathComponent("output.wav")
+        try wav.write(to: output)
+        _ = try SingingProviderProtocol.validateWAV(output, record: valid)
+        let digestMutation = source.replacingOccurrences(
+            of: valid.audio.sha256, with: String(repeating: "d", count: 64))
+        let digestRecord = try SingingProviderProtocol.parseResult(Data(digestMutation.utf8))
+        try SingingProviderProtocol.validate(
+            digestRecord, runID: request.id, request: request.singingValue,
+            requestSHA256: requestSHA, inventory: inventory)
+        #expect(throws: InferenceFailure.self) {
+            _ = try SingingProviderProtocol.validateWAV(output, record: digestRecord)
+        }
         let silent = controlledWAV(frames: Int(frames), sample: 0)
         try silent.write(to: output)
         let silentRecord = try SingingProviderProtocol.parseResult(try controlledResultData(
@@ -302,15 +390,21 @@ struct SingingBackendTests {
         let dependencies = try controlledDependencies(inventory: inventory, request: request)
         let first = try SingingBackend(configuration: configuration(root: artifacts), dependencies: dependencies)
         let second = try SingingBackend(configuration: configuration(root: artifacts), dependencies: dependencies)
-        let result = try await first.execute(request, emit: { _ in })
-        #expect(result.artifacts.count == 1)
-        await #expect(throws: (any Error).self) {
-            _ = try await second.execute(request, emit: { _ in })
+        do {
+            let result = try await first.execute(request, emit: { _ in })
+            #expect(result.artifacts.count == 1)
+            await #expect(throws: (any Error).self) {
+                _ = try await second.execute(request, emit: { _ in })
+            }
+            await first.release()
+            let retry = try await second.execute(request, emit: { _ in })
+            #expect(retry.artifacts.count == 1)
+            await second.release()
+        } catch {
+            await first.release()
+            await second.release()
+            throw error
         }
-        await first.release()
-        let retry = try await second.execute(request, emit: { _ in })
-        #expect(retry.artifacts.count == 1)
-        await second.release()
     }
 
     @Test("Runtime cancellation drains owned transport, reports mutation, releases, and runs next")

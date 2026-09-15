@@ -203,6 +203,11 @@ public actor SingingBackend: InferenceBackend {
     }
 
     private static func protectionFailure(_ integrity: Error, original: Error) -> InferenceFailure {
+        if let failure = original as? InferenceFailure,
+           case .inputIntegrityChanged(let detail) = failure {
+            return .inputIntegrityChanged(
+                "\(detail) A later protection check could not complete: \(integrity.localizedDescription)")
+        }
         if let failure = integrity as? InferenceFailure,
            case .inputIntegrityChanged(let detail) = failure {
             return .inputIntegrityChanged(
