@@ -16,6 +16,7 @@ struct DInferenceCLI {
         var reportPath = CLIOptions.reportDestination(in: arguments)
         var runtime: InferenceRuntime?
         var imageBackend: MLXImageBackend?
+        var singingBackend: SingingBackend?
         let control = ExecutionControl()
         var signalMonitor: SignalMonitor?
 
@@ -81,6 +82,20 @@ struct DInferenceCLI {
                     profile: profile,
                     licenseAcknowledged: options.audioLicenseAcknowledged,
                     timeoutSeconds: options.timeoutSeconds))
+            case .singing:
+                guard let artifacts = options.artifacts, let python = options.singingPython,
+                      let script = options.singingScript, let vendor = options.singingVendor,
+                      let profile = options.singingProfile else {
+                    throw CLIArgumentError("Incomplete singing launch configuration.")
+                }
+                let singing = try SingingBackend(configuration: SingingBackendConfiguration(
+                    pythonExecutable: URL(fileURLWithPath: python), providerScript: URL(fileURLWithPath: script),
+                    vendorDirectory: URL(fileURLWithPath: vendor, isDirectory: true),
+                    profileManifest: URL(fileURLWithPath: profile),
+                    artifactDirectory: URL(fileURLWithPath: artifacts, isDirectory: true),
+                    timeoutSeconds: options.timeoutSeconds))
+                if !options.inspect { singingBackend = singing }
+                backend = singing
             }
             report.backend = backend.descriptor
             if options.inspect {
@@ -120,6 +135,7 @@ struct DInferenceCLI {
 
         // Outcome awaits per-run cleanup; shutdown also closes admission and drains any residual work.
         await runtime?.shutdown()
+        await singingBackend?.release()
         do { try await imageBackend?.cleanupUnpublishedArtifacts() }
         catch {
             report.artifactCleanupError = error.localizedDescription
@@ -129,7 +145,7 @@ struct DInferenceCLI {
         await signalMonitor?.stop()
         if let interruption = await control.interruption {
             report.terminationSignal = interruption.number
-            report.exitCode = 130
+            if !report.hasInputIntegrityFailure { report.exitCode = 130 }
         }
         report.elapsedSeconds = ProcessInfo.processInfo.systemUptime - started
         if let reportPath {
@@ -294,6 +310,9 @@ struct DInferenceCLI {
                 durationSeconds: options.durationSeconds, seed: options.seed,
                 steps: options.steps, guidanceScale: options.guidance,
                 strength: options.audioStrength, source: source, editRegion: region))
+        case .singing:
+            // The strict wire decoder created this immutable value before backend setup.
+            return options.singingDecodedRequest!
         }
         return InferenceRequest(
             model: ModelReference(directory: URL(fileURLWithPath: options.model), revision: options.revision),

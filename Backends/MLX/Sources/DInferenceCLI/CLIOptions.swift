@@ -3,7 +3,7 @@ import DInference
 import DMLXBackend
 import Foundation
 
-enum CLICapability: String, Sendable, Codable { case text, image, audio, video }
+enum CLICapability: String, Sendable, Codable { case text, image, audio, video, singing }
 enum CLIImageProfile: String, Sendable, Codable { case verified512, scalableKlein4B }
 
 struct CLIOptions: Sendable, Codable {
@@ -55,6 +55,13 @@ struct CLIOptions: Sendable, Codable {
     var fpsDenominator: Int32 = 1
     var shift: Float = 8
     var timeoutSeconds: Double = 600
+    var singingRequest: String?
+    var singingPython: String?
+    var singingScript: String?
+    var singingVendor: String?
+    var singingProfile: String?
+    var singingVocoder: String?
+    var singingDecodedRequest: InferenceRequest?
 
     var memoryBudgetBytes: UInt64 { memoryBudgetMiB * 1024 * 1024 }
     var cacheLimitBytes: Int { cacheLimitMiB * 1024 * 1024 }
@@ -67,6 +74,7 @@ struct CLIOptions: Sendable, Codable {
         case .image: "mlx.image.flux2-klein"
         case .audio: "mlx.audio.sa3"
         case .video: "mlx.video.wan21"
+        case .singing: "audio.singing.qixuan"
         }
     }
     var selectedImageProfile: ImageExecutionProfile {
@@ -80,7 +88,7 @@ struct CLIOptions: Sendable, Codable {
       --model PATH                 Absolute local model directory (required)
       --prompt TEXT                Prompt, including an empty string
       --prompt-file PATH           Read a UTF-8 prompt from a regular file (maximum: 1 MiB)
-      --capability text|image|audio|video
+      --capability text|image|audio|video|singing
       --memory-budget-mib N        Admission budget (default: text 2048, image/audio 8192)
       --inspect                    Estimate resources without running inference
       --revision STRING            Required pinned revision for audio/video
@@ -112,6 +120,11 @@ struct CLIOptions: Sendable, Codable {
       --frames N --fps-numerator N --fps-denominator N --shift FLOAT
                                    Video: 832x480, 17 frames at 16 fps, 50 steps, guidance 6, shift 8
                                    Explicit revision, memory budget, artifacts and local runtime required
+      --singing-request PATH --singing-python PATH --singing-script PATH
+      --singing-vendor PATH --singing-profile PATH --singing-vocoder PATH
+                                   Singing requires these absolute local paths, --model, nonempty --revision,
+                                   existing --artifacts and explicit --memory-budget-mib. It takes no prompt;
+                                   --inspect performs only an estimate and creates no singing artifacts.
       --help, -h
 
     Text writes generated text to stdout. Image/audio/video write artifact JSON lines to stdout;
@@ -133,6 +146,8 @@ struct CLIOptions: Sendable, Codable {
             "--audio-edit-start-frame", "--audio-edit-end-frame", "--audio-strength", "--audio-profile",
             "--audio-python", "--audio-script", "--audio-vendor", "--audio-manifest",
             "--audio-license-acknowledged", "--timeout-seconds",
+            "--singing-request", "--singing-python", "--singing-script", "--singing-vendor",
+            "--singing-profile", "--singing-vocoder",
         ]
         let switches: Set<String> = ["--inspect"]
         var values: [String: String] = [:]
@@ -164,25 +179,30 @@ struct CLIOptions: Sendable, Codable {
         guard let model = absolute(values["--model"]) else {
             throw CLIArgumentError("--model must name an absolute local directory.")
         }
+        guard let capability = CLICapability(rawValue: values["--capability"] ?? "text") else {
+            throw CLIArgumentError("--capability must be text, image, audio, video, or singing.")
+        }
         let directPrompt = values["--prompt"]
         let promptPath = values["--prompt-file"]
-        guard (directPrompt != nil) != (promptPath != nil) else {
-            throw CLIArgumentError("Exactly one of --prompt and --prompt-file is required.")
-        }
         let promptFile: String?
         let prompt: String
-        if let directPrompt {
+        if capability == .singing {
+            guard directPrompt == nil, promptPath == nil else {
+                throw CLIArgumentError("Singing mode does not accept --prompt or --prompt-file.")
+            }
+            prompt = ""; promptFile = nil
+        } else if let directPrompt, promptPath == nil {
             prompt = directPrompt
             promptFile = nil
         } else {
+            guard directPrompt == nil, let promptPath else {
+                throw CLIArgumentError("Exactly one of --prompt and --prompt-file is required.")
+            }
             guard let path = absolute(promptPath) else {
                 throw CLIArgumentError("--prompt-file must name an absolute local file.")
             }
             prompt = try readPromptFile(path)
             promptFile = path
-        }
-        guard let capability = CLICapability(rawValue: values["--capability"] ?? "text") else {
-            throw CLIArgumentError("--capability must be text, image, audio, or video.")
         }
         var options = Self(model: model, prompt: prompt)
         options.promptFile = promptFile
@@ -207,12 +227,17 @@ struct CLIOptions: Sendable, Codable {
         ]
         let videoOnly = ["--video-python", "--video-script", "--video-tokenizer", "--negative-prompt",
                          "--frames", "--fps-numerator", "--fps-denominator", "--shift"]
+        let singingOnly = ["--singing-request", "--singing-python", "--singing-script", "--singing-vendor",
+                           "--singing-profile", "--singing-vocoder"]
         let forbidden: [String]
         switch capability {
-        case .text: forbidden = imageOnly + sharedMedia + audioOnly + videoOnly
-        case .image: forbidden = textFlags + audioOnly + videoOnly
-        case .audio: forbidden = textFlags + imageOnly + videoOnly
-        case .video: forbidden = textFlags + ["--image-profile", "--image-memory-limit-mib"] + audioOnly.filter { $0 != "--timeout-seconds" }
+        case .text: forbidden = imageOnly + sharedMedia + audioOnly + videoOnly + singingOnly
+        case .image: forbidden = textFlags + audioOnly + videoOnly + singingOnly
+        case .audio: forbidden = textFlags + imageOnly + videoOnly + singingOnly
+        case .video: forbidden = textFlags + ["--image-profile", "--image-memory-limit-mib"] + audioOnly.filter { $0 != "--timeout-seconds" } + singingOnly
+        case .singing:
+            forbidden = textFlags + imageOnly + sharedMedia.filter { $0 != "--artifacts" }
+                + audioOnly.filter { $0 != "--timeout-seconds" } + videoOnly
         }
         if let key = forbidden.first(where: { values[$0] != nil }) {
             throw CLIArgumentError("\(key) cannot be used with --capability \(capability.rawValue).")
@@ -284,6 +309,7 @@ struct CLIOptions: Sendable, Codable {
         }
         if capability == .audio { try parseAudio(values, into: &options) }
         if capability == .video { try parseVideo(values, into: &options) }
+        if capability == .singing { try parseSinging(values, into: &options) }
         try validateDestinations(options)
         return options
     }
@@ -394,6 +420,42 @@ struct CLIOptions: Sendable, Codable {
         }
     }
 
+    private static func parseSinging(_ values: [String: String], into options: inout Self) throws {
+        guard let request = absolute(values["--singing-request"]), let python = absolute(values["--singing-python"]),
+              let script = absolute(values["--singing-script"]), let vendor = absolute(values["--singing-vendor"]),
+              let profile = absolute(values["--singing-profile"]), let vocoder = absolute(values["--singing-vocoder"]),
+              let artifacts = options.artifacts, let revision = options.revision, !revision.isEmpty,
+              values["--memory-budget-mib"] != nil else {
+            throw CLIArgumentError("Singing requires explicit request, local deployment, model revision, artifacts, and memory budget.")
+        }
+        guard let timeout = Double(values["--timeout-seconds"] ?? "600"), timeout.isFinite, timeout > 0 else {
+            throw CLIArgumentError("Singing timeout must be finite and positive.")
+        }
+        guard options.repeatCount == 1 else { throw CLIArgumentError("Singing supports --repeat 1 only.") }
+        if let report = options.report, absolute(report) == nil {
+            throw CLIArgumentError("Singing --report must name an absolute local path.")
+        }
+        var artifactStat = stat()
+        guard Darwin.lstat(artifacts, &artifactStat) == 0, artifactStat.st_mode & S_IFMT == S_IFDIR,
+              !hasSymlinkComponent(artifacts) else {
+            throw CLIArgumentError("Singing --artifacts must name an existing ordinary directory without symbolic links.")
+        }
+        for path in [request, python, script, vendor, profile, vocoder] where hasSymlinkComponent(path) {
+            throw CLIArgumentError("Singing inputs must not use symbolic links: \(path)")
+        }
+        options.singingRequest = request; options.singingPython = python; options.singingScript = script
+        options.singingVendor = vendor; options.singingProfile = profile; options.singingVocoder = vocoder
+        options.timeoutSeconds = timeout
+        let data = try readSingingRequest(request)
+        do {
+            options.singingDecodedRequest = try SingingRequestWire.decode(
+                data, model: ModelReference(directory: URL(fileURLWithPath: options.model), revision: revision),
+                vocoder: ModelReference(directory: URL(fileURLWithPath: vocoder),
+                                        revision: SingingBackendConfiguration.vocoderRevision),
+                memoryBudgetBytes: options.memoryBudgetBytes)
+        } catch { throw CLIArgumentError(error.localizedDescription) }
+    }
+
     private static func validateDestinations(_ options: Self) throws {
         guard options.capability != .text else { return }
         let videoRuntimeDirectories = [options.videoScript, options.videoPython].compactMap { $0 }.map {
@@ -411,6 +473,29 @@ struct CLIOptions: Sendable, Codable {
             if let source = options.audioSource {
                 let input = URL(fileURLWithPath: source).standardizedFileURL.resolvingSymlinksInPath()
                 guard !overlaps(output, input) else { throw CLIArgumentError("--artifacts must be separate from audio input.") }
+            }
+        }
+        if options.capability == .singing {
+            guard let artifacts = options.artifacts, let request = options.singingRequest,
+                  let python = options.singingPython, let script = options.singingScript,
+                  let vendor = options.singingVendor, let profile = options.singingProfile,
+                  let vocoder = options.singingVocoder else { throw CLIArgumentError("Incomplete singing configuration.") }
+            let root = resolved(artifacts)
+            let protectedRoots = [options.model, vendor, vocoder, python, script].map {
+                $0 == python || $0 == script ? resolved(URL(fileURLWithPath: $0).deletingLastPathComponent().path) : resolved($0)
+            }
+            let protectedFiles = [request, profile].map(resolved)
+            guard (protectedRoots + protectedFiles).allSatisfy({
+                !singingContains(root, $0) && !singingContains($0, root)
+            }) else {
+                throw CLIArgumentError("Singing artifacts must be separate from all deployment and request inputs.")
+            }
+            if let report = options.report {
+                let destination = resolved(report)
+                guard !singingContains(root, destination), protectedRoots.allSatisfy({ !singingContains($0, destination) }),
+                      protectedFiles.allSatisfy({ $0.path != destination.path }) else {
+                    throw CLIArgumentError("Singing --report must be outside artifacts and protected inputs.")
+                }
             }
         }
         if let report = options.report {
@@ -431,6 +516,41 @@ struct CLIOptions: Sendable, Codable {
                 if argument == key, arguments.indices.contains(index + 1) { return arguments[index + 1] }
             }
             return nil
+        }
+        let singingKeys: Set<String> = ["--singing-request", "--singing-python", "--singing-script", "--singing-vendor", "--singing-profile", "--singing-vocoder"]
+        let singingPresent = arguments.contains { argument in
+            let key = String(argument.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false)[0])
+            return singingKeys.contains(key)
+        } || arguments.enumerated().contains { index, argument in
+            argument == "--capability=singing"
+                || (argument == "--capability" && arguments.indices.contains(index + 1)
+                    && arguments[index + 1] == "singing")
+        }
+        if singingPresent {
+            // Parser errors may still have a safe report, but ambiguity never gets a write.
+            var counts: [String: Int] = [:]
+            for (index, argument) in arguments.enumerated() {
+                let key = String(argument.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false)[0])
+                if key == "--capability" || key == "--model" || key == "--report" || key == "--artifacts" || singingKeys.contains(key) {
+                    counts[key, default: 0] += 1
+                    if !argument.contains("="), index + 1 < arguments.count { /* paired value is intentionally not a key */ }
+                }
+            }
+            guard counts.values.allSatisfy({ $0 == 1 }), raw("--capability") == "singing",
+                  let destination = raw("--report"), absolute(destination) != nil,
+                  !hasSymlinkComponent(destination) else { return nil }
+            let rootKeys: Set<String> = ["--model", "--artifacts", "--singing-vendor", "--singing-vocoder"]
+            let parentKeys: Set<String> = ["--singing-python", "--singing-script"]
+            let paths = Array(rootKeys.union(parentKeys).union(["--singing-request", "--singing-profile"]))
+            let output = resolved(destination)
+            for key in paths {
+                guard let value = raw(key) else { continue }
+                guard absolute(value) != nil, !hasSymlinkComponent(value) else { return nil }
+                let input = parentKeys.contains(key)
+                    ? resolved(URL(fileURLWithPath: value).deletingLastPathComponent().path) : resolved(value)
+                if singingContains(input, output) { return nil }
+            }
+            return destination
         }
         guard let destination = raw("--report"), !destination.isEmpty, !destination.contains("\0") else { return nil }
         let capability = raw("--capability") ?? "text"
@@ -520,6 +640,75 @@ struct CLIOptions: Sendable, Codable {
         return prompt
     }
 
+    private static func readSingingRequest(_ path: String) throws -> Data {
+        let components = path.split(separator: "/").map(String.init)
+        guard !components.isEmpty else { throw CLIArgumentError("--singing-request must name a regular file.") }
+        var parent = Darwin.open("/", O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+        guard parent >= 0 else { throw CLIArgumentError("Cannot anchor --singing-request path.") }
+        for component in components.dropLast() {
+            let next = Darwin.openat(parent, component, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+            Darwin.close(parent)
+            guard next >= 0 else { throw CLIArgumentError("--singing-request parent is not an ordinary directory path.") }
+            parent = next
+        }
+        let name = components[components.count - 1]
+        var parentBefore = stat()
+        guard Darwin.fstat(parent, &parentBefore) == 0, parentBefore.st_mode & S_IFMT == S_IFDIR else {
+            Darwin.close(parent); throw CLIArgumentError("Cannot bind --singing-request parent directory.")
+        }
+        let descriptor = Darwin.openat(parent, name, O_RDONLY | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK)
+        guard descriptor >= 0 else { Darwin.close(parent); throw CLIArgumentError("--singing-request must be a readable regular file and not a symbolic link.") }
+        var openDescriptor = descriptor
+        var openParent = parent
+        defer {
+            if openDescriptor >= 0 { Darwin.close(openDescriptor) }
+            if openParent >= 0 { Darwin.close(openParent) }
+        }
+        var before = stat()
+        guard Darwin.fstat(descriptor, &before) == 0, before.st_mode & S_IFMT == S_IFREG,
+              before.st_size >= 0, before.st_size <= 2 * 1024 * 1024 else {
+            throw CLIArgumentError("--singing-request must be a regular file no larger than 2 MiB.")
+        }
+        var data = Data(); data.reserveCapacity(Int(before.st_size)); var buffer = [UInt8](repeating: 0, count: 64 * 1024)
+        while data.count < Int(before.st_size) {
+            let count = buffer.withUnsafeMutableBytes { Darwin.read(descriptor, $0.baseAddress, min($0.count, Int(before.st_size) - data.count)) }
+            if count < 0, errno == EINTR { continue }
+            guard count > 0 else { throw CLIArgumentError("Cannot read complete --singing-request.") }
+            data.append(contentsOf: buffer.prefix(count))
+        }
+        var byte: UInt8 = 0
+        var trailing: Int
+        repeat { trailing = Darwin.read(descriptor, &byte, 1) } while trailing < 0 && errno == EINTR
+        var after = stat()
+        let stableFD = Darwin.fstat(descriptor, &after) == 0
+        let fileClose = Darwin.close(descriptor)
+        openDescriptor = -1
+        let parentClose = Darwin.close(parent)
+        openParent = -1
+        guard let reboundParent = openAnchoredParent(components) else {
+            throw CLIArgumentError("--singing-request parent changed while being read.")
+        }
+        var parentAfter = stat(); var named = stat()
+        let stableParent = Darwin.fstat(reboundParent, &parentAfter) == 0
+        let stableName = Darwin.fstatat(reboundParent, name, &named, AT_SYMLINK_NOFOLLOW) == 0
+        let reboundClose = Darwin.close(reboundParent)
+        guard trailing == 0, fileClose == 0, parentClose == 0, reboundClose == 0,
+              stableFD, stableParent, stableName, before.st_mode == after.st_mode,
+              parentBefore.st_dev == parentAfter.st_dev, parentBefore.st_ino == parentAfter.st_ino,
+              parentBefore.st_mode == parentAfter.st_mode,
+              before.st_dev == after.st_dev,
+              before.st_ino == after.st_ino, before.st_size == after.st_size,
+              before.st_mtimespec.tv_sec == after.st_mtimespec.tv_sec, before.st_mtimespec.tv_nsec == after.st_mtimespec.tv_nsec,
+              before.st_ctimespec.tv_sec == after.st_ctimespec.tv_sec, before.st_ctimespec.tv_nsec == after.st_ctimespec.tv_nsec,
+              before.st_dev == named.st_dev, before.st_ino == named.st_ino, before.st_mode == named.st_mode,
+              before.st_size == named.st_size, before.st_mtimespec.tv_sec == named.st_mtimespec.tv_sec,
+              before.st_mtimespec.tv_nsec == named.st_mtimespec.tv_nsec, before.st_ctimespec.tv_sec == named.st_ctimespec.tv_sec,
+              before.st_ctimespec.tv_nsec == named.st_ctimespec.tv_nsec, named.st_mode & S_IFMT == S_IFREG else {
+            throw CLIArgumentError("--singing-request changed while being read.")
+        }
+        return data
+    }
+
     private static func finiteFloat(_ values: [String: String], _ key: String, fallback: Float,
                                     where predicate: (Float) -> Bool, description: String) throws -> Float {
         guard let raw = values[key] else { return fallback }
@@ -538,7 +727,34 @@ struct CLIOptions: Sendable, Codable {
     private static func contains(_ directory: URL, _ item: URL) -> Bool {
         item.path == directory.path || item.path.hasPrefix(directory.path + "/")
     }
+
+    private static func singingContains(_ directory: URL, _ item: URL) -> Bool {
+        directory.path == "/" || contains(directory, item)
+    }
     private static func overlaps(_ lhs: URL, _ rhs: URL) -> Bool { contains(lhs, rhs) || contains(rhs, lhs) }
+    private static func resolved(_ path: String) -> URL {
+        URL(fileURLWithPath: path).standardizedFileURL.resolvingSymlinksInPath()
+    }
+    private static func hasSymlinkComponent(_ path: String) -> Bool {
+        var current = URL(fileURLWithPath: "/", isDirectory: true)
+        for component in path.split(separator: "/") {
+            current.appendPathComponent(String(component))
+            var value = stat()
+            if Darwin.lstat(current.path, &value) == 0, value.st_mode & S_IFMT == S_IFLNK { return true }
+        }
+        return false
+    }
+    private static func openAnchoredParent(_ components: [String]) -> Int32? {
+        var parent = Darwin.open("/", O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+        guard parent >= 0 else { return nil }
+        for component in components.dropLast() {
+            let next = Darwin.openat(parent, component, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+            Darwin.close(parent)
+            guard next >= 0 else { return nil }
+            parent = next
+        }
+        return parent
+    }
 }
 
 struct CLIArgumentError: Error, LocalizedError {

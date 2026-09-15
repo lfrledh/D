@@ -17,6 +17,33 @@ struct CLIReport: Encodable {
     var exitCode: Int32 = 0
     var elapsedSeconds: Double = 0
 
+    var hasInputIntegrityFailure: Bool {
+        runs.contains { report in
+            guard let failure = report.failure else { return false }
+            if case .inputIntegrityChanged = failure { return true }
+            return false
+        }
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case schemaVersion, tool, startedAt, system, backend, options, inspection, runs, failure
+        case artifactCleanupError, terminationSignal, exitCode, elapsedSeconds
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(schemaVersion, forKey: .schemaVersion); try c.encode(tool, forKey: .tool)
+        try c.encode(startedAt, forKey: .startedAt); try c.encode(system, forKey: .system)
+        try c.encodeIfPresent(backend, forKey: .backend)
+        if let options, options.capability == .singing {
+            try c.encode(SingingCLIOptionsReport(options), forKey: .options)
+        } else { try c.encodeIfPresent(options, forKey: .options) }
+        try c.encodeIfPresent(inspection, forKey: .inspection); try c.encode(runs, forKey: .runs)
+        try c.encodeIfPresent(failure, forKey: .failure); try c.encodeIfPresent(artifactCleanupError, forKey: .artifactCleanupError)
+        try c.encodeIfPresent(terminationSignal, forKey: .terminationSignal)
+        try c.encode(exitCode, forKey: .exitCode); try c.encode(elapsedSeconds, forKey: .elapsedSeconds)
+    }
+
     func write(to path: String) throws {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
@@ -25,6 +52,33 @@ struct CLIReport: Encodable {
         try FileManager.default.createDirectory(at: destination.deletingLastPathComponent(),
                                                 withIntermediateDirectories: true)
         try encoder.encode(self).write(to: destination, options: .atomic)
+    }
+}
+
+private struct SingingCLIOptionsReport: Encodable {
+    let capability: CLICapability
+    let model: String
+    let revision: String?
+    let memoryBudgetMiB: UInt64
+    let timeoutSeconds: Double
+    let report: String?
+    let inspect: Bool
+    let repeatCount: Int
+    let artifacts: String?
+    let singingRequest: String?
+    let singingPython: String?
+    let singingScript: String?
+    let singingVendor: String?
+    let singingProfile: String?
+    let singingVocoder: String?
+
+    init(_ options: CLIOptions) {
+        capability = options.capability; model = options.model; revision = options.revision
+        memoryBudgetMiB = options.memoryBudgetMiB; timeoutSeconds = options.timeoutSeconds
+        report = options.report; inspect = options.inspect; repeatCount = options.repeatCount
+        artifacts = options.artifacts; singingRequest = options.singingRequest; singingPython = options.singingPython
+        singingScript = options.singingScript; singingVendor = options.singingVendor
+        singingProfile = options.singingProfile; singingVocoder = options.singingVocoder
     }
 }
 
