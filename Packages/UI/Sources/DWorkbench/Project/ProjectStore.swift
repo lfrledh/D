@@ -536,9 +536,9 @@ public actor ProjectStore {
         try requireExternalPitchExportParent(parent)
         try ProjectFiles.publishExport(to: destination, parent: parent, checkpoint: checkpoint, validate: { url in
             try Task.checkCancellation()
-            _ = try currentAcceptedPitch(assetID: assetID, documentID: documentID)
+            _ = try self.currentAcceptedPitch(assetID: assetID, documentID: documentID)
             guard try Data(contentsOf: url) == data else { throw ProjectStoreError.externalModification }
-            try requireExternalPitchExportParent(parent)
+            try self.requireExternalPitchExportParent(parent)
         }) { output in
             try Task.checkCancellation()
             try data.withUnsafeBytes { try ProjectFiles.writeAll($0, to: output) }
