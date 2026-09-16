@@ -527,10 +527,19 @@ public actor ProjectStore {
         // An exact hash of the bounded, registered original proves its admitted format is
         // unchanged. No decoder or cancellation-aware media inspector is needed here.
         // In particular, cancellation cannot skip this finite cleanup verification.
-        let bytes = try ProjectFiles.read(relative: original.relativePath, in: rootFD, limit: AudioLimits.maximumBytes)
-        guard SHA256.hash(data: bytes).map({ String(format: "%02x", $0) }).joined() == metadata.contentSHA256 else {
-            throw ProjectStoreError.externalModification
+        let digest = try AudioMediaInspector.withOriginalSource(at: rootURL.appendingPathComponent(original.relativePath)) { descriptor, byteCount in
+            var hasher = SHA256(), offset = 0
+            var buffer = [UInt8](repeating: 0, count: 64 * 1024)
+            while offset < byteCount {
+                let count = pread(descriptor, &buffer, min(buffer.count, byteCount - offset), off_t(offset))
+                if count < 0, errno == EINTR { continue }
+                guard count > 0 else { throw ProjectStoreError.externalModification }
+                buffer.withUnsafeBytes { hasher.update(bufferPointer: UnsafeRawBufferPointer(rebasing: $0[..<count])) }
+                offset += count
+            }
+            return hasher.finalize().map { String(format: "%02x", $0) }.joined()
         }
+        guard digest == metadata.contentSHA256 else { throw ProjectStoreError.externalModification }
         if checkCancellation { try Task.checkCancellation() }
         return result
     }

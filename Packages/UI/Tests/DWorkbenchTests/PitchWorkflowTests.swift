@@ -319,6 +319,28 @@ struct PitchExchangeWorkflowTests {
         }
     }
 
+    @Test(arguments: [false, true])
+    func reusedOriginalReaderRejectsNamedReplacementEvenInCancelledTask(cancel: Bool) async throws {
+        try await withPitchFixture { root, store, document, _ in
+            let registered = try await store.inspectAudio(documentID: document.id).url
+            let before = try Data(contentsOf: registered)
+            let backup = root.appendingPathComponent("original-backup")
+            let replacement = Data("different inode and invalid audio".utf8)
+            let job = Task {
+                if cancel { withUnsafeCurrentTask { $0?.cancel() } }
+                return try AudioMediaInspector.withOriginalSource(at: registered) { _, count in
+                    #expect(count == before.count)
+                    try FileManager.default.moveItem(at: registered, to: backup)
+                    try replacement.write(to: registered, options: .withoutOverwriting)
+                    return true
+                }
+            }
+            await #expect(throws: AudioMediaError.self) { _ = try await job.value }
+            #expect(try Data(contentsOf: backup) == before)
+            #expect(try Data(contentsOf: registered) == replacement)
+        }
+    }
+
     @Test func maximumMIDIAndMalformedAnalysisStayBounded() throws {
         var frames = Array(repeating: PitchFrame(pitchHz: nil, confidence: 0, voiced: false), count: 7500)
         for i in 7495..<7500 { frames[i] = PitchFrame(pitchHz: 440, confidence: 0.99, voiced: true) }
