@@ -1,0 +1,206 @@
+{
+  "schemaVersion": 1,
+  "profileID": "qixuan-2.7.0-bigvgan-44k-approx-mps-fp32-v1",
+  "bankArchiveSHA256": "fe8ee7c95883d327a2b7facbbe832a7a53e1344918dc791ca83fc23b08034110",
+  "bankTermsSHA256": "092973bd06414c97593e642bf14e2fbf03d0308f7b2d8ad43d59f7ba03a1f313",
+  "bankFiles": [
+    {
+      "path": "0101_qixuan_muon1_acoustic.languages.json",
+      "byteCount": 39,
+      "sha256": "3266061fc2eec2796dca72ca49e9a88c66b932c57ab8ba19cbf17cd366c2f00c"
+    },
+    {
+      "path": "0101_qixuan_muon1_acoustic.phonemes.json",
+      "byteCount": 2339,
+      "sha256": "a2de0d2027f0f7eaf6566b0df02b1b1264c010b03fd3ac1ab09e9a0ed88b80e4"
+    },
+    {
+      "path": "0101_qixuan_muon1_acoustic.qixuan.onnx",
+      "byteCount": 279965524,
+      "sha256": "86c21d6b3a2e60e653af3cd6aa117d68523ea3eefe471a790e85b662bdc9220b"
+    },
+    {
+      "path": "character.txt",
+      "byteCount": 147,
+      "sha256": "3ccf857d209e1a3c3260cb45fe18aabba916bbc8131a92f6f1f9aba591027dc3"
+    },
+    {
+      "path": "character.yaml",
+      "byteCount": 175,
+      "sha256": "bb55546c256665c768ac9ab25caa7b4ae10c94c49edf7bcdab43d77589208b4e"
+    },
+    {
+      "path": "dsconfig.yaml",
+      "byteCount": 708,
+      "sha256": "94dba50da20964c04224dc351dba16feceeada18a755981f90c3bac315951127"
+    },
+    {
+      "path": "dsdur/0102_qixuan_newdict_dur.languages.json",
+      "byteCount": 39,
+      "sha256": "3266061fc2eec2796dca72ca49e9a88c66b932c57ab8ba19cbf17cd366c2f00c"
+    },
+    {
+      "path": "dsdur/0102_qixuan_newdict_dur.phonemes.json",
+      "byteCount": 2306,
+      "sha256": "0fd294a2d994ddd4b02dae705ba6b2f03501f44a51645b2827a6f91f21c44902"
+    },
+    {
+      "path": "dsdur/0102_qixuan_newdict_dur.qixuan.dur.onnx",
+      "byteCount": 14341523,
+      "sha256": "4666ffc57d9405da18c4cb504a9c3470a6baceeefa896836e9b6f6a998ff5478"
+    },
+    {
+      "path": "dsdur/0102_qixuan_newdict_dur.qixuan.linguistic.onnx",
+      "byteCount": 25409976,
+      "sha256": "c58f4af2eab551eab6448bbdd9fe0300543c197000c856ab831e6dadf81aa953"
+    },
+    {
+      "path": "dsdur/dsconfig.yaml",
+      "byteCount": 485,
+      "sha256": "29621ac6e7c3f00786ae1c60a4f37e247a5f057760ad8d652e9ef6f93cee49dc"
+    },
+    {
+      "path": "dsdur/dsdict-en.yaml",
+      "byteCount": 27603157,
+      "sha256": "e30e38a7795dadc8ec81153a237feba65b2204c9d5294119b4f21219bcaf2850"
+    },
+    {
+      "path": "dsdur/dsdict-ja.yaml",
+      "byteCount": 14034528,
+      "sha256": "e9fcd8eaa2525cd86cb650a2958e361396c23c6540b015028ec1ca657a1a2d5a"
+    },
+    {
+      "path": "dsdur/dsdict-zh.yaml",
+      "byteCount": 14056685,
+      "sha256": "416de8864293396775fbaa3f009b96485a32afceb5f93e3248107272bf2586b8"
+    },
+    {
+      "path": "dsdur/dsdict.yaml",
+      "byteCount": 27603157,
+      "sha256": "e30e38a7795dadc8ec81153a237feba65b2204c9d5294119b4f21219bcaf2850"
+    },
+    {
+      "path": "dspitch/0102_qixuan_muon1_pitch.languages.json",
+      "byteCount": 39,
+      "sha256": "3266061fc2eec2796dca72ca49e9a88c66b932c57ab8ba19cbf17cd366c2f00c"
+    },
+    {
+      "path": "dspitch/0102_qixuan_muon1_pitch.phonemes.json",
+      "byteCount": 2300,
+      "sha256": "fc4843be18367a6406e3357c9987c70617310f7a1b6ad25a5e3c7ddbdf4bc39b"
+    },
+    {
+      "path": "dspitch/0102_qixuan_muon1_pitch.qixuan.linguistic.onnx",
+      "byteCount": 25397794,
+      "sha256": "4d16079f1cbff83df7f03327e0fd1b4654f00ec9debf5c605969f7eda00a02df"
+    },
+    {
+      "path": "dspitch/0102_qixuan_muon1_pitch.qixuan.pitch.onnx",
+      "byteCount": 59525074,
+      "sha256": "b4e33ff60f43e1959c9e9e5c0e2a2e8cc394b73b39f4fdb5590a98fdd67dcfc3"
+    },
+    {
+      "path": "dspitch/dsconfig.yaml",
+      "byteCount": 374,
+      "sha256": "62c3fe37c0729ca7a91bf04ae0fd5f78bdddf3f085e197881fb3c94bba9a27c6"
+    },
+    {
+      "path": "dspitch/dsdict.yaml",
+      "byteCount": 4958,
+      "sha256": "f6bcb5e02cc596b5fb277218e7fd695d6d3a2de1fc1b844535d156945d2e55c1"
+    },
+    {
+      "path": "dsvariance/0102_qixuan_muon1_multivar.languages.json",
+      "byteCount": 39,
+      "sha256": "3266061fc2eec2796dca72ca49e9a88c66b932c57ab8ba19cbf17cd366c2f00c"
+    },
+    {
+      "path": "dsvariance/0102_qixuan_muon1_multivar.phonemes.json",
+      "byteCount": 2339,
+      "sha256": "946f7188705017660319a377e8c3c65a8d4db5aea2669b502d615aa289d57d28"
+    },
+    {
+      "path": "dsvariance/0102_qixuan_muon1_multivar.qixuan.linguistic.onnx",
+      "byteCount": 25443762,
+      "sha256": "d6e28df87dbcede6cea1fd4ce45a6e54e030cd7e0c0795e99500408ee0935686"
+    },
+    {
+      "path": "dsvariance/0102_qixuan_muon1_multivar.qixuan.variance.onnx",
+      "byteCount": 23504232,
+      "sha256": "535a36e3b443bdc0b2531620024f1bb9fc9a26b5ec2f1bd310da340259b74c0f"
+    },
+    {
+      "path": "dsvariance/dsconfig.yaml",
+      "byteCount": 452,
+      "sha256": "6bd91504b3aed842e710a8873fead47c16ba41a1ee3744a1d4f5a3a725f30973"
+    },
+    {
+      "path": "dsvariance/dsdict.yaml",
+      "byteCount": 4958,
+      "sha256": "f6bcb5e02cc596b5fb277218e7fd695d6d3a2de1fc1b844535d156945d2e55c1"
+    },
+    {
+      "path": "qixuan.png",
+      "byteCount": 2347581,
+      "sha256": "7f15b00cc1f89fed0c98f44659ec8ec8052213de5999cd1b86b0730cf5232a99"
+    },
+    {
+      "path": "qixuan1000x1000.png",
+      "byteCount": 1116555,
+      "sha256": "5009cedd98ac9f7b74c9aba8b4f319650be584cff634409db42b52322ebaf37d"
+    },
+    {
+      "path": "qixuan256x256.png",
+      "byteCount": 120844,
+      "sha256": "64199fb3b511eeae73b31c511c70b0c7fd2367d92ac91f9641c221e1f184606d"
+    },
+    {
+      "path": "Terms_of_Use.zh-CN.pdf",
+      "byteCount": 325563,
+      "sha256": "092973bd06414c97593e642bf14e2fbf03d0308f7b2d8ad43d59f7ba03a1f313"
+    }
+  ],
+  "vocoderRevision": "95a9d1dcb12906c03edd938d77b9333d6ded7dfb",
+  "vocoderFiles": [
+    {
+      "path": "bigvgan_generator.pt",
+      "byteCount": 489041291,
+      "sha256": "d9fe7ec6bd0b44ed9d66973d5012d8181c1570b01e5c72df51973e241dccd357"
+    },
+    {
+      "path": "config.json",
+      "byteCount": 1403,
+      "sha256": "65b7f487bfaf15256056a75f6667ef5f640214c981922a111927873705ea4ddb"
+    },
+    {
+      "path": "LICENSE",
+      "byteCount": 1076,
+      "sha256": "90459cd52fc41bd723df7c0c76fac1e4dd60e6bfd644a7e2a93f325bed4f6d95"
+    }
+  ],
+  "vocoderLicenseSHA256": "90459cd52fc41bd723df7c0c76fac1e4dd60e6bfd644a7e2a93f325bed4f6d95",
+  "sampleRate": 44100,
+  "hopSize": 512,
+  "headFrames": 8,
+  "tailFrames": 8,
+  "pitchSteps": 10,
+  "varianceSteps": 20,
+  "acousticSteps": 20,
+  "acousticDepth": 0.6,
+  "contextTicks": 500000,
+  "projection": {
+    "kind": "approximate-nonnegative-amplitude-reprojection",
+    "sourceFmin": 40,
+    "sourceFmax": 16000,
+    "targetFmin": 0,
+    "targetFmax": 22050,
+    "nFFT": 2048,
+    "melBands": 128,
+    "norm": "slaney",
+    "logBase": "e",
+    "nnlsBlockFrames": 32,
+    "nnlsHistory": 10,
+    "nnlsMaxIterations": 200,
+    "maximumRelativeResidual": 0.1
+  }
+}
