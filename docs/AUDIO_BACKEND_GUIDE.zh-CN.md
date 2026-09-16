@@ -1,5 +1,20 @@
 # 音频后端与跨配置验证指南
 
+## 2026-09-17 歌声后端的GPU/CPU选择（开发CLI）
+
+旋律/歌词/显式发音沿既有`SingingRequest`和`d-infer --capability singing`执行。复用请求`profileID`与现有`--singing-profile`参数，不另加冲突的设备开关：
+
+| 选择 | 请求profileID | Backends/Audio/Fixtures/Singing下的清单 | 实际网络/结果 |
+| --- | --- | --- | --- |
+| GPU推荐，已在M4验证 | `qixuan-2.7.0-bigvgan-44k-approx-mps-fp32-v1` | `qixuan-bigvgan-mps-fp32-profile-v1.json` | Qixuan原ONNX CPU；BigVGAN FP32 MPS；严格result v2含实际设备/运行版本 |
+| CPU显式兼容 | `qixuan-2.7.0-bigvgan-44k-approx-v1` | `qixuan-bigvgan-profile-v1.json` | 旧CPU FP32和result v1不变，旧配方不自动迁移 |
+
+两处必须匹配，未知ID/错误清单/摘要/设备报告明确拒绝；GPU不可用或不支持算子时失败，不悄悄降为CPU。现有材料、资格、解释器、vendor、vocoder、产物目录等显式参数保持；实际命令与输入示例见`D-Development/AgentTrials/D-SINGING-DEVICE-01/run-20260916T143605Z/lead/source-real/process.json`与对应冻结request。这些本机路径仅作验证证据，不是可搬到其他机器的配置常量。
+
+输出仍44.1kHz单声道float32 WAV，近似频带投影和不支持seed控制的边界不变。GPU结果metadata含`onnxDevice=cpu`、`vocoderDevice=mps`、`deviceFallback=forbidden`及两个运行版本；来自严格核验的实际session/tensor观察，不等同逐算子性能追踪。MPS子进程禁止CPU fallback，完成同步/释放及子进程退出后才交接。六秒只是本机验收输入，不是产品时长上限。
+
+本阶段已完成后端/CLI和源入口验收，详见[任务](tasks/D-SINGING-DEVICE-01.md#2026-09-17-后端设备切片结案)。当前源App没有新歌声GPU按钮，未替换普通D；AP1内嵌资源/no-JIT补丁与新profile仍需单独组合验证，不能复用旧资源清单冒充新包。GPU真人试听H24、普通签名App接线、其他Mac/长时配置分别待验，开发资格不代替分发许可。以下按日期保留旧音频入口及封装历史。
+
 ## 2026-09-13 薄封装入口已验收
 
 本批实际受测/本地接纳 `48d65f8ca76c992c62d4233c343a85d19ed1079b`；新普通沙盒包位于 `D-Development/AgentTrials/D-AUDIO-CLOSE-VIDEO-01/run-20260913T050442Z/artifacts/D Audio Closure.app`，已真实验证SA3/MRT2短生成、取消后恢复、候选处理及保存重开。音频CPU113方法、源目录重新封装及完整清单/签名检查通过，详见[本任务结案](tasks/D-AUDIO-CLOSE-VIDEO-01.md#2026-09-13-验收本地接纳与收尾检查点)。后续仅文档，最终完整SHA/推送见同run的stage-final-receipt.json；普通D未替换，这是开发产物，不是公证安装包。以下历史阶段产物继续保留。

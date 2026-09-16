@@ -2,6 +2,10 @@
 
 修订DEVICE-2026-09-16.1；状态：**用户明确要求，当前有效**。Lead维护。静态核查源`74384bb4c4eddc0fe075f4b705b1a3f2824103a3`；首图视频候选`0f2797cab421e9c5dd52e75f85dddfe5a8414d96`另列，不能当作已接纳App。实际后续版本/结果见CURRENT_ACTIONS、任务与外部回执。
 
+## 2026-09-17 E02的BigVGAN切片已接纳
+
+[D-SINGING-DEVICE-01](tasks/D-SINGING-DEVICE-01.md#2026-09-17-后端设备切片结案)已在源受测`dc849c6327e59f1a297d598362a5d15b09d53279`提供显式MPS FP32/原CPU两个profile；同条件数值、实际设备/禁止回退、重复释放、正式CLI取消恢复与源生成通过。GPU为已验证的推荐后端选择，旧CPU请求不被自动更改；普通App新入口与试听未在本阶段验收。Qixuan原样ONNX仍CPU，ORT/CoreML支持、许可及转换未核完，故不将整个E02或E03关闭。小样速度有改善，但不扩大为所有Mac/时长的排序。性能优化仍按下一节后置，不继续新增全模态设备框架。
+
 ## 2026-09-16 本人返回后的优先级调整（当前有效）
 
 用户要求：GPU功能路径跑通后推进下一产品阶段，性能优化列入待办。DEVICE-r1的GPU功能/取消/数值证据继续有效；E01的端到端速度、跨框架传输、GPU驻留与规模对照转为后续优化，不作为AP1或其他无依赖产品工作的前置。E02—E06继续登记，不因延期被记成已修复；未来模型适配仍遵守GPU首选、CPU显式备选原则。
@@ -36,7 +40,7 @@ P1为优先关闭的契约/硬编码问题；P2为需测量后判断的优化候
 | 项目 | 已核实情况与证据入口 | 处理与状态 |
 | --- | --- | --- |
 | E01 首图视频VAE（P1） | 候选`Backends/Video/Python/d_video_i2v_image.py`的`CPUImageVAE/_create_vae`固定CPU FP32；`d_video_i2v_run.py`两次实例化。T5/DiT已明确MLX GPU，VAE不是普通视频文件解码器。 | 本轮先真实核MPS支持，新增GPU首选/CPU显式profile候选；原CPU工作区修补保留。接线/验收状态见I2V任务，整体画面/运动质量仍未通过，不默认启用App。 |
-| E02 歌声（P1） | 已接纳`Backends/Audio/Python/d_singing_qixuan.py`的ORT会话固定CPU、1线程、顺序执行/禁图优化；BigVGAN权重、输入、网络也固定CPU FP32。App源尚未装配SingingBackend。 | 优先将许可明确的BigVGAN独立计时并验证MPS原精度数值/听感/释放，保留CPU；ORT/CoreML provider另核支持与条款，不能为加速擅自改写/转换受限声库。未修复、未声称GPU可用。 |
+| E02 歌声（P1） | 原ORT会话仍CPU、1线程、顺序执行/禁图优化；BigVGAN已新增显式MPS FP32，与原CPU配方并存。参数/buffer/输入/输出实际设备和ORT provider分别检查，禁止静默CPU回退。 | BigVGAN后端/CLI切片已接纳，数值/生成/取消恢复/释放通过；H24听感与App接线另列。ORT/CoreML provider继续待核支持/条款，不能为加速擅改/转换受限声库；整个E02不标全部完成。 |
 | E03 设备选择/报告（P1） | `Sources/DInference/InferenceRequest.swift`及图文配置无统一设备偏好/实际设备字段；SA3、MRT2、旧T2V依赖MLX默认GPU，没有显式执行设备证据。Swift MLX `Device.swift` TaskLocal默认GPU；未发现图文NN强制CPU。 | 后续窄契约贯通请求→适配器→结果；先固定实际GPU作用域和记录，再开放已验证CPU备选。CPU全模型覆盖和NPU均未验证；不批量加空参数。 |
 | E04 估算准入/硬件容量（P1政策复核） | `Sources/DRuntime/InferenceRuntime.swift`估算超过预算会加载前拒绝；`ResourceBudgetPolicy`是物理内存减余量。App图文无显式覆盖入口，16GiB上1536²可因估算16GiB>12GiB预算被拒绝。 | 旧ALIGN明确保留，不能倒写历史违约。与用户“建议不代表上限、容量测试允许实际尝试”要求重新接线风险提示/显式尝试和真实失败；不删除表示范围/文件保护，也不承诺捕捉系统杀进程。待修。 |
 | E05 缓存/编译/启动（P2待测） | 图文默认cache64/256MiB、配置至1GiB；SA3三阶段`compile_=False`及固定decode分块；MRT2 LiteRT条件编码无显式GPU delegate，5次warmup，每40ms同步/转NumPy。 | 先拆加载/编译/条件编码/推理/拷贝/清理耗时，比较冷启动与重复任务、内存/换页/取消。不直接删同步、扩大常驻或假定compile更快。当前MRT2 MLX导出直接返回PCM，旧raw SDK CPU codec不算现行瓶颈。 |

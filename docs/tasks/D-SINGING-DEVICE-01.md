@@ -1,6 +1,6 @@
 # D-SINGING-DEVICE-01 — E02 GPU 声码器 / CPU 兼容
 
-状态：准备；未接纳。规格 S1，契约 SD1，批次 D-SINGING-DEVICE-01。
+状态：后端/CLI验收完成并源接纳；普通App与真人试听另列，不代表整个E02或歌声产品已完成。规格 S1，契约 SD1，批次 D-SINGING-DEVICE-01。
 源基线：08a3f6263d8848136af8e52d9f27a255d99edff7。执行基线为本准备提交，完整 SHA 记外部 job / 回执，禁止自引用反复 amend。
 运行：run-20260916T143605Z；证据：/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-SINGING-DEVICE-01/run-20260916T143605Z。
 
@@ -50,7 +50,7 @@ SW Worker：仅 Backends/MLX/Sources/DMLXBackend/{SingingBackendConfiguration,Si
 
 源个人scheme SHA ca3635d88aa5a15397b90e528667c66c0e6db7e596176e885c79d194b544206c，未暂存，索引blob9c76916bdc97c2d4298cefe64e0b0fae3380573e；保护副本/完整差异见start.json。不还原、不暂存。源普通D和用户作品只读。候选/分支/证据保留；通过后按既有规则固定SHA快进源工作分支，允许正常本地提交和已授权工作分支push，不推进main。最终SHA写回执，测试版本与后续仅文档差异分开。
 
-待填：Worker route/实际版本、修复与审核、真实检查、集成和最终回执。隐藏服务端解析 unknown，订阅费用和完整Lead归因 unknown；不得重算旧样本。音频GPU设备切片完成不代表AP1/视频或首次发布完成。
+实现、修复、审核与接纳见下方结案。隐藏服务端解析 unknown，订阅费用和完整Lead归因 unknown；不得重算旧样本。音频GPU设备切片完成不代表AP1/视频或首次发布完成。
 
 ### IMPLEMENT 前澄清与预检
 
@@ -59,3 +59,42 @@ SW Worker：仅 Backends/MLX/Sources/DMLXBackend/{SingingBackendConfiguration,Si
 两工作树共同执行基线2a14ad2621b63a3c230d74de9ec2f78588f44fd9：PY在D-SINGING-DEVICE-01-PY / codex/d-singing-device-01-py；SW在对应-SW / -sw。请求和实际turn_context均gpt-5.6-sol/high，workspace-write，网络false，cwd与各包output/tmp为写根，公共Git未授权写。PY thread01a0aab1-69c0-73e2-bd6f-6a51046e061d；SW thread01a0aab1-6e35-79e3-923a-fa9b701fd8fc。服务端隐藏解析unknown。预检均退出0、工作树干净，Lead核验后分别IMPLEMENT；PY的一次rg未在PATH退出127为工具定位问题，随后绝对路径读文件，无权限扩大；清单diff退出1为预期有区别，不算模型测试失败。持久路由证据在各包route-accepted.json / implement-observed.json。
 
 Lead外部真实验收脚本在首次运行前由非实现者审查：补自有进程组完全退出、CLI实际artifact与WAV/metadata绑定、证据写根/无软链/无..限制。数值断言不变，原旧脚本不改。改善验收不记成Worker实现修复。
+
+## 2026-09-17 后端设备切片结案
+
+### 实现、修复与审核来源
+
+两个受限CLI Sol/high包从共同基线并行实施，时间重叠485.50秒。SW固定提交`073a054751bcec6ae82c8e24f634436965e56f49`；PY初交`8a61e7be57cfa21f3bc67494ea1c6579c8cf4f72`，修复1为`26504fe8fa7a269a312974a689184c87d4e029b0`。Lead维护契约、测试及组合，未重写生产实现；非实现者分别静态复核SW、PY和修复差异，不能把静态复核称独立模型实跑。记录见`review-summary.json`、各Worker的route/observed/process及response文件。
+
+初次真实组件运行在Torch版本检查失败，未发布音频：实际`torch.__version__`为`str`子类TorchVersion，精确类型比较错误拒绝。这是静态审阅遗漏的真实兼容问题。PY用掉一轮普通修复：仅接受字符串及子类，以基类方法提取原始字符串并严格检查UTF-8/128字节上界；非字符串不经任意`str()`伪装。反例先失败，最终58项通过，随后完整实跑通过。修复证据在`lead/real-cycles`、`py/repair1-*`与`lead/real-cycles-r1`。没有改数值门槛/权限/模型；PY剩1轮、SW剩2轮普通修复，阶段结束不再自行使用。
+
+### 实际验证与版本
+
+完整组合与源入口受测代码均为`dc849c6327e59f1a297d598362a5d15b09d53279`。本机Apple M4/16GiB、macOS26.6.2、Xcode27.0(27A266a)，既有Python3.12、Torch2.7.1、ORT1.22.1。没有新增下载、依赖安装或GUI操作。
+
+| 检查 | 结果与证据（均相对本run） |
+| --- | --- |
+| Python组件 | 最终58项、0失败/跳过；候选`lead/repair1-python`，源`lead/source-python`。原57项已被本轮新增回归扩充，不把两轮相加。 |
+| Swift及相邻音频契约 | SingingBackend/Wire/WAV、AudioBackend、MRT2Backend五套65方法通过，参数化执行105，0失败/跳过；两者不是可相加的数量。源重新构建/执行见`lead/source-*`及`lead/source/tests.xcresult`。 |
+| CLI离线/保护矩阵 | 原46场景在CPU和MPS各通过一次；不是92种不同场景。源CPU入口46项另复验，见`lead/combined/cli-matrix`、`lead/mps-cli-matrix`、`lead/source/cli-matrix`。 |
+| 同条件实际模型数值 | 实际原声学网络输出固定后，正式QixuanEngine的MPS→CPU→MPS→MPS，最大波形差2.44938e-5，原atol/rtol各1e-4下0超限；FP32、帧数/有限/峰值满足。`lead/cycle-results-r1/summary.json`。 |
+| 实际设备与生命周期 | 逐参数/buffer/输入/输出观察mps，ORT实际providers为CPU；禁MPS fallback。活跃GPU分配每轮释放为0，MPS driver稳定84,164,608字节，记录为保留缓存，不宣称总内存归零或长期无泄漏。实际活跃MPS处取消、污染环境拒绝及恢复通过。 |
+| 正式CLI真实生成 | GPU生成→取消→GPU恢复→显式CPU生成，完成0/取消130，真实子进程组退出后交接；6秒、44.1kHz单声道float32 WAV、来源、音高/休止/饱和旧门槛通过。模型/输入/已发布保护保持；`lead/real-cli/passed.json`及各process/quality记录。 |
+| 源入口真实复验 | 源重新编出的d-infer及源Python/profile完成同一6秒MPS生成和质量/保护检查，实际约25.13秒；`source-acceptance.json`、`lead/source-real`及`lead/source-real-quality.json`。不是仍调用旧候选实现。 |
+| 应用装配 | 最终候选无签名编译通过，`lead/app-compile-r1`；没有运行/替换普通D，没有据此验收签名、沙盒GUI或新入口。 |
+
+候选Swift二进制先在`0c0910571c1a4bb0b9bfb399bb026017471e392f`构建，该提交至完整组合只有四份Python文件变化，Swift/构建输入一致；见`lead/build-version-map.json`。源入口则在完整`dc849…`重新构建并运行，避免目录来源含糊。最终追加结案文档的SHA及工作分支推送状态只写外部`final-receipt.json`，不将文档提交冒称重新跑过模型。
+
+本机正式候选GPU约25.02秒、恢复24.85秒，显式CPU34.49秒；是当前6秒输入、校验/加载/退出均包含的有限观察，不是各Mac/长度/冷暖配置的普遍速度排序。MPS重复实例计时另列，不冒充用户任务常驻。没有吞吐优化、常驻或新调度框架。
+
+### 集成、边界与恢复检查点
+
+Lead核验允许12路径、hooks/新路径碰撞/祖先关系/写入者结束后，将固定`dc849…`快进源`codex/inference-foundation`，此前源为`08a3f6263d8848136af8e52d9f27a255d99edff7`。源复验通过。候选和两个Worker工作树/历史证据保留；仅本任务获准实现与记录接纳，没有合并AP1或I2V。
+
+个人scheme原完整差异、SHA256及索引blob不变，仍未暂存；普通D和既有作品未操作。模型、固定vendor、请求及执行源码前后摘要一致；自有推理/构建/Worker进程已回收，进程检查不是系统写锁。原始日志与WAV在外盘run，不进入Git。源最终索引/剩余差异及远端回执以`final-receipt.json`为准。
+
+已完成：BigVGAN GPU/CPU显式配方、严格实际设备报告、相容性/数值/取消/恢复/保护、源接纳。未完成：Qixuan原ONNX仍CPU、NPU/其他硬件/长输入未测；AP1原普通签名no-JIT资源补丁与本次设备配置需单独组合验收，不能直接复制旧内嵌引擎或忽略不同vendor摘要。MPS CLI通过不证明普通签名应用可直接运行它。H22候选栏定位未关闭，H23已关闭；新MPS声音人工确认登记H24，用户返回集中处理，不在离机期间催问。
+
+用量保留本次两个预检、两次实施和PY一次修复的原始turn usage，见`usage-observation.json`；不把累计/重发字段未经核对相加，缓存输入不另加至总输入。墙钟分别约125/139、564/485、199秒；完整Lead/审阅消耗及实际订阅费用unknown，不据本样本宣称成本最优。无权限拒绝/越界；Lead汇总曾错读quality的字段名，按既有`qualityMetricsPassed`读取纠正，未改检查器或重跑凑数。环境定位、实现缺陷和汇总错误分别保留。
+
+下一提案为有界I2V质量出口：已有320×192/121帧失败与推荐尺寸17帧弱运动均保留；先冻结推荐1216×736/121帧原版参考及噪声时间对应，审核长序列分块验证器，再按首步900秒、扩散4小时/解码1小时上限尝试一次。参考/数值/资源任一门槛不满足就记录退出，不重置旧IMAGE/RUN预算或直接启用App；通过参考后才检查D同输入路径。先完成有限模态，再进入一条文字→图像实际组合及首用/部署/恢复。此处是下一阶段方案，不在本轮继续开工。
