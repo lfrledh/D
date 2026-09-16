@@ -51,3 +51,11 @@ SW Worker：仅 Backends/MLX/Sources/DMLXBackend/{SingingBackendConfiguration,Si
 源个人scheme SHA ca3635d88aa5a15397b90e528667c66c0e6db7e596176e885c79d194b544206c，未暂存，索引blob9c76916bdc97c2d4298cefe64e0b0fae3380573e；保护副本/完整差异见start.json。不还原、不暂存。源普通D和用户作品只读。候选/分支/证据保留；通过后按既有规则固定SHA快进源工作分支，允许正常本地提交和已授权工作分支push，不推进main。最终SHA写回执，测试版本与后续仅文档差异分开。
 
 待填：Worker route/实际版本、修复与审核、真实检查、集成和最终回执。隐藏服务端解析 unknown，订阅费用和完整Lead归因 unknown；不得重算旧样本。音频GPU设备切片完成不代表AP1/视频或首次发布完成。
+
+### IMPLEMENT 前澄清与预检
+
+非实现者指出SD1的兼容歧义，Lead在派工前明确：MPS fallback/预载Torch准入仅约束新MPS profile；CPU profile不因无关MPS环境拒绝，仍显式CPU。缺失环境可在首次Torch导入前设0；已污染1或预载且无法证明禁回退则MPS拒绝。Swift为自有MPS子进程设0。本澄清不追罚旧实现、不改精度/数值/材料，外部S1-clarification.md随两份IMPLEMENT一起送达。
+
+两工作树共同执行基线2a14ad2621b63a3c230d74de9ec2f78588f44fd9：PY在D-SINGING-DEVICE-01-PY / codex/d-singing-device-01-py；SW在对应-SW / -sw。请求和实际turn_context均gpt-5.6-sol/high，workspace-write，网络false，cwd与各包output/tmp为写根，公共Git未授权写。PY thread01a0aab1-69c0-73e2-bd6f-6a51046e061d；SW thread01a0aab1-6e35-79e3-923a-fa9b701fd8fc。服务端隐藏解析unknown。预检均退出0、工作树干净，Lead核验后分别IMPLEMENT；PY的一次rg未在PATH退出127为工具定位问题，随后绝对路径读文件，无权限扩大；清单diff退出1为预期有区别，不算模型测试失败。持久路由证据在各包route-accepted.json / implement-observed.json。
+
+Lead外部真实验收脚本在首次运行前由非实现者审查：补自有进程组完全退出、CLI实际artifact与WAV/metadata绑定、证据写根/无软链/无..限制。数值断言不变，原旧脚本不改。改善验收不记成Worker实现修复。
