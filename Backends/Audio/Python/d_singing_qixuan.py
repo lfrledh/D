@@ -71,12 +71,21 @@ _MPS_FALLBACK_ADMITTED = False
 
 
 def _runtime_version(value: Any, label: str) -> str:
-    if type(value) is not str or not value or len(value) > _MAX_RUNTIME_VERSION_LENGTH:
+    if not isinstance(value, str):
+        raise QixuanRuntimeError(
+            f"{label} runtime version must be text"
+        )
+    normalized = str.__str__(value)
+    try:
+        byte_count = len(normalized.encode("utf-8"))
+    except UnicodeEncodeError as exc:
+        raise QixuanRuntimeError(f"{label} runtime version must be valid UTF-8 text") from exc
+    if not normalized or byte_count > _MAX_RUNTIME_VERSION_LENGTH:
         raise QixuanRuntimeError(
             f"{label} runtime version must be nonempty text no longer than "
-            f"{_MAX_RUNTIME_VERSION_LENGTH} characters"
+            f"{_MAX_RUNTIME_VERSION_LENGTH} UTF-8 bytes"
         )
-    return value
+    return normalized
 
 
 def _normalized_device_type(device: Any, label: str) -> str:
