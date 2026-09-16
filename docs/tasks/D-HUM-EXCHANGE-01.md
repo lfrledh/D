@@ -2,7 +2,7 @@
 
 ## 冻结规格 HX1（2026-09-16）
 
-状态：实施中。用户批准按首次发布目标选择并完成下一有限阶段。本包补首发 HUM01 的普通音符试听材料及 MIDI 交换基础；首发完整 HUM 仍需要必要纠错、界面与本人检查。不是发布授权。
+状态：服务层阶段已本地集成并通过验收，最终文档/推送以 R/final-receipt.json 为准。用户批准按首次发布目标选择并完成下一有限阶段。本包补首发 HUM01 的普通音符试听材料及 MIDI 交换基础；首发完整 HUM 仍需要必要纠错、界面与本人检查。不是发布授权。
 
 - source_base：`a67be67d40da30a0a742d4c109910c0c148b0dea`，`codex/inference-foundation`。
 - Lead 集成树：`/Volumes/CodexProjects/Codex/D-Worktrees/D-HUM-EXCHANGE-01`，分支 `codex/d-hum-exchange-01`。
@@ -55,3 +55,32 @@ CPU验收：Worker局部测试，Lead UI package全套相关回归；Lead用Appl
 ## 恢复与结案
 
 当前：准备；无新模型/本人事项，本人离机，H22仍待集中办理。源个人scheme修改唯一已知差异。R/protection/start.json为起点；请求/可观察路由/轮次/审阅/验证/最终SHA在此追加摘要，日志不入Git。隐藏服务解析、完整Lead token和实际订阅费用unknown。任务完成后提案为HUM有限纠错/试听与MIDI入口接线（需结合H22合并后项目版本），不先启动下一批。
+
+
+## 2026-09-16 服务层阶段结案
+
+**本包完成的是音符交换服务，不是新UI或完整HUM。** 正式ProjectStore现在只为已保留、仍匹配当前原声/版本的识别资产导出单轨MIDI或普通正弦音色WAV；可关闭重开后重复导出。识别算法、模型、项目schema12、既有UI和backend没有改变。H22歌声候选仍隔离，未接纳/推送其代码；SwiftF0权重公开分发许可仍unknown。
+
+### 来源、修复和独立审阅
+
+- 准备基线 `de27902dbb3c16094b0890659474fa9347b4028c`。Terra/medium MIDI初交 `77506f78d208515e61679316da75be386cf624cb`；Sol/high WAV初交 `b492d499eb21515e76b3f864d4e94adaa11e6fae`，一次测试辅助方法资格修复 `7f3ad1f99766de3859fda5c584789a0f6501a471`。转换器生产逻辑没有由Lead重写。MIDI预检一次纠正裸rg/错误读路径，不算普通实现返工。
+- 两个独立CLI实际实现重叠为UTC03:49:31.682—03:51:00.174；各自模型/档位、基线、网络关闭与独立写根已从turn_context核对。线程分别 `01a0a851-9d36-7b82-b56b-785c71e13676`、`01a0a851-9d3a-7072-a2ec-d2126fc35cf2`。隐藏服务端解析仍unknown。
+- 两Worker首次parse经xcrun遇FSEvents/缓存发现fallback警告，均停报，没有增加权限、运行全包或观察到成功写出许可根；不把parse退出0当CPU通过。Lead核对异常/目录后用确切toolchain复验；Sol修复轮直接swiftc无此警告。未称已经证明所有系统内部缓存行为。
+- Lead实现共享存储及独立测试；非实现者分别静态审阅转换器和Lead存储。发现并修正临时链接替换、失败/取消遗漏来源后验、下层取消影响后验、移除decoder后原件身份保护回归。最终复用原有withOriginalSource身份检查＋64KiB分块摘要；有限原件后验不因取消跳过，保留原异常及已发布文件。最后 `8bfca780` 定点复核无阻断。静态审阅不冒称独立执行测试。
+
+### 实际验证及版本
+
+- `red`：Lead闭包self编译诊断；`red2`：Sol测试静态成员诊断。两者不是行为失败证据。
+- `red3`：真正执行新增反例，临时链接能发布、发布后来源改变只报原错误的缺陷均暴露；另有故意损坏fixture未恢复导致的close失败，已在保护断言后恢复自有夹具，未放宽断言。
+- `combined` 在 `c65b8ceb19e57301e031705be3cf58d35edf6bb3` 暴露两项取消类型错误；`861c789aaa7ce74a570cfe0eb9720259ab928519` 全包通过后，审阅又要求保留读取后的具名原件身份。补回保护后完整重验，不沿用旧通过结果冒充新版本。
+- 最终组合及源目录受测均为 **`8bfca7803613a46d78e77bc5fce1462167e92087`**。`lead/acceptance`、`lead/source-cpu` 两次完整UI package：DWorkbench报告379方法，其中3个既有文字模型条件测试跳过、不计通过；UI组件87、模型库23无失败。新增MIDI3/WAV5/存储与独立读取13方法包含参数化反例，不把方法、参数场景或重复运行加总成虚构通过率。
+- Apple MusicSequence独立读MIDI音高/起止/轨长/速度；AVAudioFile读PCM16单声道48kHz/103791帧，独立过零测频及静音/幅度检查通过。首休止/相邻音/重复起音/120s边界、NaN与无音符拒绝、过期/拒绝/跨文档、关闭重开、目标碰撞、链接/身份替换、取消和发布后保留通过。动态取消属于受控时序抽样，未声称命中某个精确循环帧。
+- 合成音符输入及`.mid/.wav`样例在 `lead/acceptance/samples` 和 `lead/source-cpu/samples`；`lead/sample-manifest.json`保存输入角色、摘要、预期与边界。这是合成夹具/真实文件读取，不是新增SwiftF0推理、真人录音准确率、DAW全兼容或真人试听。仅目标文件授权的普通App沙盒体验、按钮操作未在本包验收。
+
+### 接纳、保护与恢复
+
+源分支仅由 `a67be67d40da30a0a742d4c109910c0c148b0dea` 快进到上述受测SHA，源入口全包复验成功。新增结案仅本任务、CURRENT_ACTIONS、PRODUCT_GOALS、MUSIC_ROADMAP和集中待办；最终源HEAD与远端确认写R/final-receipt.json，不自引用amend。scheme `orderHint1→6` 原字节/摘要ca3635d88aa5a15397b90e528667c66c0e6db7e596176e885c79d194b544206c、索引blob9c76916bdc97c2d4298cefe64e0b0fae3380573e和未暂存状态保留。未构建/替换/启动普通D、未使用设备/GPU或改动用户作品/签名/权限。既有候选/证据保留，已知本批CLI/编译测试子进程均完整退出；不据此宣称历史pending代理已清理。
+
+恢复读R/final-receipt.json、lead/check-summary.json、lead/review-summary.json及source-integration.json，再核真实Git。六个CLI运行用途/秒数及原始用量字段在usage-observations.json；不直接累加未核语义的resume计数，缓存包含在输入内，完整Lead归因和订阅实际成本unknown。本包证明局部委派可审核交付，不证明成本最优。
+
+**下一阶段提案（未启动）：** 将识别后的必要纠错（修正错音/删除误识别、撤销）和普通音符试听/MIDI入口接入同一原声工作台，保留版本/来源、保存重开和取消保护；不扩DAW、量化或专业排版。先协调H22歌声候选与项目格式所有权，避免两份schema13；本人返回集中补H22，HUM的界面/试听验收随其实际装配列入清单。首次发布仍需有限I2V缺口、一个真实能力组合和发行收尾；不能以此服务层阶段宣称可上架。
