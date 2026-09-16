@@ -14,6 +14,11 @@ struct SingingBackendTests {
         let subjectConfiguration = configuration(root: root)
         #expect(subjectConfiguration.timeoutSeconds == 600)
         #expect(subjectConfiguration.cancellationGraceSeconds == 45)
+        #expect(SingingBackendConfiguration.profile(for: SingingBackendConfiguration.profileID)
+            == SingingBackendConfiguration.cpuProfile)
+        #expect(SingingBackendConfiguration.profile(for: SingingBackendConfiguration.mpsProfileID)
+            == SingingBackendConfiguration.mpsProfile)
+        #expect(SingingBackendConfiguration.profile(for: "unknown-profile") == nil)
         let backend = try SingingBackend(configuration: subjectConfiguration)
         #expect(backend.descriptor == BackendDescriptor(
             id: "audio.singing.qixuan", version: "1", capabilities: [.audioSingingGeneration]))
@@ -29,11 +34,24 @@ struct SingingBackendTests {
             "Backends/Audio/Fixtures/Singing/qixuan-bigvgan-profile-v1.json")
         let sourceURL = repository.appendingPathComponent(
             "Backends/Audio/SingingVendor/source-manifest.json")
+        let mpsProfileURL = repository.appendingPathComponent(
+            "Backends/Audio/Fixtures/Singing/qixuan-bigvgan-mps-fp32-profile-v1.json")
         let profileData = try Data(contentsOf: profileURL)
+        let mpsProfileData = try Data(contentsOf: mpsProfileURL)
         let sourceData = try Data(contentsOf: sourceURL)
         let profile = try SingingModelInventory.parseProfile(profileData)
         #expect(profile.bankFiles.count == 31)
         #expect(profile.vocoderFiles.count == 3)
+        #expect(try SingingModelInventory.parseProfile(
+            mpsProfileData, deployment: SingingBackendConfiguration.mpsProfile).vocoderFiles.count == 3)
+        #expect(throws: (any Error).self) {
+            _ = try SingingModelInventory.parseProfile(
+                mpsProfileData, deployment: SingingBackendConfiguration.cpuProfile)
+        }
+        #expect(throws: (any Error).self) {
+            _ = try SingingModelInventory.parseProfile(
+                profileData, deployment: SingingBackendConfiguration.mpsProfile)
+        }
         #expect(try SingingModelInventory.parseSourceManifest(sourceData).count == 18)
         #expect(SingingModelInventory.requiredProviderHelpers == [
             "d_audio_contract.py", "d_singing_prepare.py", "d_singing_timing.py",
@@ -379,6 +397,129 @@ struct SingingBackendTests {
         }
     }
 
+    @Test("MPS result requires exact profile, digests, devices, versions, and forbidden fallback")
+    func mpsResultContract() throws {
+        let root = try makeOwnedTestDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let request = backendRequest(
+            bank: root.appendingPathComponent("bank"),
+            vocoder: root.appendingPathComponent("vocoder"),
+            profileID: SingingBackendConfiguration.mpsProfileID)
+        let inventory = controlledInventory(request: request, configuration: configuration(root: root))
+        let frames = try SingingProviderProtocol.deliveredFrames(request.singingValue.phrase.durationTicks)
+        let wav = controlledWAV(frames: Int(frames))
+        let data = try controlledResultData(
+            request: request, inventory: inventory, runID: request.id, wav: wav)
+        let requestSHA = SHA256.hash(data: try SingingRequestWire.encode(request))
+            .map { String(format: "%02x", $0) }.joined()
+        let valid = try SingingProviderProtocol.parseResult(data)
+        try SingingProviderProtocol.validate(
+            valid, runID: request.id, request: request.singingValue,
+            requestSHA256: requestSHA, inventory: inventory)
+        #expect(valid.schemaVersion == 2)
+        #expect(valid.profileID == SingingBackendConfiguration.mpsProfileID)
+        #expect(valid.execution.devices?.onnx.actual == "cpu")
+        #expect(valid.execution.devices?.vocoder.actual == "mps")
+
+        let source = String(decoding: data, as: UTF8.self)
+        for mutation in [
+            source.replacingOccurrences(of: "\"schemaVersion\":2", with: "\"schemaVersion\":1"),
+            source.replacingOccurrences(
+                of: "\"profileID\":\"\(SingingBackendConfiguration.mpsProfileID)\"",
+                with: "\"profileID\":\"\(SingingBackendConfiguration.profileID)\""),
+            source.replacingOccurrences(of: "\"version\":\"1.20.1\"", with: "\"version\":\"\""),
+            source.replacingOccurrences(
+                of: "\"version\":\"2.6.0\"",
+                with: "\"version\":\"\(String(repeating: "x", count: 129))\""),
+            source.replacingOccurrences(
+                of: "\"requested\":\"cpu\"", with: "\"unknown\":0,\"requested\":\"cpu\""),
+        ] {
+            #expect(mutation != source)
+            #expect(throws: InferenceFailure.self) {
+                _ = try SingingProviderProtocol.parseResult(Data(mutation.utf8))
+            }
+        }
+
+        for mutation in [
+            source.replacingOccurrences(
+                of: SingingBackendConfiguration.mpsProfileSHA256,
+                with: String(repeating: "d", count: 64)),
+            source.replacingOccurrences(of: "\"actual\":\"mps\"", with: "\"actual\":\"cpu\""),
+            source.replacingOccurrences(of: "\"fallback\":\"forbidden\"", with: "\"fallback\":\"allowed\""),
+            source.replacingOccurrences(
+                of: "\"provider\":\"CPUExecutionProvider\"",
+                with: "\"provider\":\"CoreMLExecutionProvider\""),
+            source.replacingOccurrences(
+                of: "\"parameterDevice\":\"mps\"", with: "\"parameterDevice\":\"cpu\""),
+        ] {
+            #expect(mutation != source)
+            let record = try SingingProviderProtocol.parseResult(Data(mutation.utf8))
+            #expect(throws: InferenceFailure.self) {
+                try SingingProviderProtocol.validate(
+                    record, runID: request.id, request: request.singingValue,
+                    requestSHA256: requestSHA, inventory: inventory)
+            }
+        }
+
+        let cpuRequest = backendRequest(
+            bank: request.model.directory, vocoder: request.singingValue.vocoder.directory)
+        let cpuInventory = controlledInventory(
+            request: cpuRequest, configuration: configuration(root: root))
+        let cpuData = try controlledResultData(
+            request: cpuRequest, inventory: cpuInventory, runID: request.id, wav: wav,
+            requestSHA: requestSHA)
+        let cpuRecord = try SingingProviderProtocol.parseResult(cpuData)
+        #expect(throws: InferenceFailure.self) {
+            try SingingProviderProtocol.validate(
+                cpuRecord, runID: request.id, request: request.singingValue,
+                requestSHA256: requestSHA, inventory: inventory)
+        }
+        #expect(throws: InferenceFailure.self) {
+            try SingingProviderProtocol.validate(
+                valid, runID: request.id, request: request.singingValue,
+                requestSHA256: requestSHA, inventory: cpuInventory)
+        }
+        #expect(throws: InferenceFailure.self) {
+            try SingingProviderProtocol.validate(
+                valid, runID: cpuRequest.id, request: cpuRequest.singingValue,
+                requestSHA256: requestSHA, inventory: cpuInventory)
+        }
+    }
+
+    @Test("MPS backend forbids child fallback and publishes validated device metadata")
+    func mpsBackendMetadata() async throws {
+        let root = try makeOwnedTestDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let artifacts = root.appendingPathComponent("artifacts", isDirectory: true)
+        let bank = root.appendingPathComponent("bank", isDirectory: true)
+        let vocoder = root.appendingPathComponent("vocoder", isDirectory: true)
+        for directory in [artifacts, bank, vocoder] {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
+        }
+        let request = backendRequest(
+            bank: bank, vocoder: vocoder,
+            profileID: SingingBackendConfiguration.mpsProfileID)
+        let subjectConfiguration = configuration(root: artifacts)
+        let inventory = controlledInventory(
+            request: request, configuration: subjectConfiguration)
+        let dependencies = try controlledDependencies(inventory: inventory, request: request)
+        let backend = try SingingBackend(
+            configuration: subjectConfiguration, dependencies: dependencies)
+        do {
+            let result = try await backend.execute(request, emit: { _ in })
+            #expect(result.metadata["profile"] == SingingBackendConfiguration.mpsProfileID)
+            #expect(result.metadata["onnxDevice"] == "cpu")
+            #expect(result.metadata["vocoderDevice"] == "mps")
+            #expect(result.metadata["deviceFallback"] == "forbidden")
+            #expect(result.metadata["onnxRuntimeVersion"] == "1.20.1")
+            #expect(result.metadata["vocoderRuntimeVersion"] == "2.6.0")
+            await backend.release()
+        } catch {
+            await backend.release()
+            throw error
+        }
+    }
+
     @Test("Controlled lifecycle retains the shared lease until release")
     func lifecycleAndSharedLease() async throws {
         let root = try makeOwnedTestDirectory()
@@ -397,6 +538,9 @@ struct SingingBackendTests {
         do {
             let result = try await first.execute(request, emit: { _ in })
             #expect(result.artifacts.count == 1)
+            #expect(result.metadata["onnxDevice"] == nil)
+            #expect(result.metadata["vocoderDevice"] == nil)
+            #expect(result.metadata["deviceFallback"] == nil)
             await #expect(throws: (any Error).self) {
                 _ = try await second.execute(request, emit: { _ in })
             }
@@ -424,9 +568,12 @@ struct SingingBackendTests {
         }
         let protected = inputRoot.appendingPathComponent("protected")
         try Data("before".utf8).write(to: protected)
-        let firstRequest = backendRequest(bank: bank, vocoder: vocoder)
+        let firstRequest = backendRequest(
+            bank: bank, vocoder: vocoder,
+            profileID: SingingBackendConfiguration.mpsProfileID)
+        let cpuRequest = backendRequest(bank: bank, vocoder: vocoder)
         let nextRequest = InferenceRequest(
-            id: UUID(), model: firstRequest.model, input: firstRequest.input)
+            id: UUID(), model: cpuRequest.model, input: cpuRequest.input)
         let backendConfiguration = configuration(root: artifacts)
         let marker = root.appendingPathComponent("child-started")
         let dependencies = SingingBackendDependencies(
@@ -436,12 +583,17 @@ struct SingingBackendTests {
                                      maximumBytes: 64)
                 let base = controlledInventory(request: candidate, configuration: configuration)
                 return SingingModelInventory(
-                    configuration: base.configuration, profile: base.profile,
+                    configuration: base.configuration, deployment: base.deployment,
+                    profile: base.profile,
                     bankDirectory: base.bankDirectory, vocoderDirectory: base.vocoderDirectory,
                     protectedInputs: seal, estimatedPeakBytes: base.estimatedPeakBytes)
             },
-            run: { _, arguments, _, directory, _, _, runID, emit in
+            run: { _, arguments, environment, directory, _, _, runID, emit in
                 if runID == firstRequest.id {
+                    guard environment["PYTORCH_ENABLE_MPS_FALLBACK"] == "0" else {
+                        throw InferenceFailure.backendFailed(
+                            "MPS owned child did not forbid PyTorch fallback.")
+                    }
                     return try await SingingProviderProtocol.run(
                         executable: URL(fileURLWithPath: "/bin/sh"),
                         arguments: ["-c", "printf started > \"$1\"; while :; do :; done",
@@ -449,6 +601,10 @@ struct SingingBackendTests {
                         environment: ["PATH": "/usr/bin:/bin"], currentDirectory: directory,
                         timeoutSeconds: 5, cancellationGraceSeconds: 0.05,
                         runID: runID, emit: emit)
+                }
+                guard environment["PYTORCH_ENABLE_MPS_FALLBACK"] == nil else {
+                    throw InferenceFailure.backendFailed(
+                        "CPU compatibility child unexpectedly gained an MPS fallback admission setting.")
                 }
                 let outputIndex = arguments.firstIndex(of: "--output-directory")!
                 let output = URL(fileURLWithPath: arguments[outputIndex + 1], isDirectory: true)
@@ -541,7 +697,19 @@ private func controlledDependencies(
     let requestSHA = SHA256.hash(data: requestData).map { String(format: "%02x", $0) }.joined()
     return SingingBackendDependencies(
         inspect: { _, _ in inventory },
-        run: { _, arguments, _, _, _, _, runID, _ in
+        run: { _, arguments, environment, _, _, _, runID, _ in
+            switch inventory.deployment.vocoderDevice {
+            case .cpu:
+                guard environment["PYTORCH_ENABLE_MPS_FALLBACK"] == nil else {
+                    throw InferenceFailure.backendFailed(
+                        "CPU fixture unexpectedly received an MPS fallback setting.")
+                }
+            case .mps:
+                guard environment["PYTORCH_ENABLE_MPS_FALLBACK"] == "0" else {
+                    throw InferenceFailure.backendFailed(
+                        "MPS fixture did not receive the no-fallback setting.")
+                }
+            }
             let outputIndex = arguments.firstIndex(of: "--output-directory")!
             let output = URL(fileURLWithPath: arguments[outputIndex + 1], isDirectory: true)
             try FileManager.default.createDirectory(at: output, withIntermediateDirectories: false)
@@ -558,6 +726,7 @@ private func controlledDependencies(
 private func controlledInventory(
     request: InferenceRequest, configuration: SingingBackendConfiguration
 ) -> SingingModelInventory {
+    let deployment = SingingBackendConfiguration.profile(for: request.singingValue.profileID)!
     let profile = SingingModelInventory.Profile(
         bankArchiveSHA256: SingingBackendConfiguration.bankArchiveSHA256,
         bankTermsSHA256: request.singingValue.qualification.bankTermsSHA256,
@@ -566,12 +735,16 @@ private func controlledInventory(
         vocoderFiles: [.init(path: "bigvgan_generator.pt", byteCount: 1,
                              sha256: String(repeating: "c", count: 64))])
     return SingingModelInventory(
-        configuration: configuration, profile: profile, bankDirectory: request.model.directory,
+        configuration: configuration, deployment: deployment, profile: profile,
+        bankDirectory: request.model.directory,
         vocoderDirectory: request.singingValue.vocoder.directory,
         protectedInputs: SingingInputSeal(), estimatedPeakBytes: 2_000_000_000)
 }
 
-private func backendRequest(bank: URL, vocoder: URL) -> InferenceRequest {
+private func backendRequest(
+    bank: URL, vocoder: URL,
+    profileID: String = SingingBackendConfiguration.profileID
+) -> InferenceRequest {
     let phraseID = "11111111-1111-4111-8111-111111111111"
     let noteID = "22222222-2222-4222-8222-222222222222"
     let unitID = "33333333-3333-4333-8333-333333333333"
@@ -593,7 +766,7 @@ private func backendRequest(bank: URL, vocoder: URL) -> InferenceRequest {
         id: UUID(uuidString: "44444444-4444-4444-8444-444444444444")!,
         model: ModelReference(directory: bank, revision: SingingBackendConfiguration.bankArchiveSHA256),
         input: .singing(SingingRequest(
-            profileID: SingingBackendConfiguration.profileID, phrase: phrase,
+            profileID: profileID, phrase: phrase,
             pronunciations: pronunciation, vowelIndices: [1],
             vocoder: ModelReference(directory: vocoder, revision: SingingBackendConfiguration.vocoderRevision),
             qualification: qualification)))
@@ -653,8 +826,27 @@ private func controlledResultData(
     let stages = SingingProviderProtocol.stages.map {
         "{\"name\":\"\($0)\",\"seconds\":0}"
     }.joined(separator: ",")
+    let deployment = inventory.deployment
+    let modelDeviceIdentity: String
+    let executionDevices: String
+    if deployment.vocoderDevice == .mps {
+        modelDeviceIdentity =
+            ",\"profileSHA256\":\"\(deployment.profileSHA256)\""
+            + ",\"vendorManifestSHA256\":\"\(SingingBackendConfiguration.vendorManifestSHA256)\""
+        executionDevices =
+            ",\"devices\":{\"onnx\":{\"requested\":\"cpu\",\"actual\":\"cpu\","
+            + "\"provider\":\"CPUExecutionProvider\",\"runtime\":\"onnxruntime\","
+            + "\"version\":\"1.20.1\",\"precision\":\"FP32-original\",\"fallback\":\"forbidden\"},"
+            + "\"vocoder\":{\"requested\":\"mps\",\"actual\":\"mps\",\"runtime\":\"torch\","
+            + "\"version\":\"2.6.0\",\"precision\":\"FP32\",\"fallback\":\"forbidden\","
+            + "\"parameterDevice\":\"mps\",\"bufferDevice\":\"mps\",\"inputDevice\":\"mps\","
+            + "\"outputDevice\":\"mps\"}}"
+    } else {
+        modelDeviceIdentity = ""
+        executionDevices = ""
+    }
     return Data("""
-    {"schemaVersion":1,"runID":"\(runID.uuidString.lowercased())","profileID":"\(SingingBackendConfiguration.profileID)","status":"rendered","source":{"phraseID":"\(request.singingValue.phrase.id)","phraseRevision":\(request.singingValue.phrase.revision),"requestSHA256":"\(requestSHA)","durationTicks":\(request.singingValue.phrase.durationTicks)},"model":{"bankArchiveSHA256":"\(inventory.profile.bankArchiveSHA256)","vocoderRevision":"\(inventory.profile.vocoderRevision)","vocoderSHA256":"\(String(repeating: "c", count: 64))","bankTermsSHA256":"\(inventory.profile.bankTermsSHA256)","vocoderLicenseSHA256":"\(inventory.profile.vocoderLicenseSHA256)"},"audio":{"path":"output.wav","encoding":"float32LE-WAV","sampleRate":44100,"channels":1,"frameCount":\(frames),"sha256":"\(digest)"},"execution":{"precision":"Qixuan original ONNX CPU; BigVGAN FP32 CPU","seedControl":"unsupported","nativeFrameCount":\(native),"trimHeadSamples":4096,"outputFrameCount":\(frames),"projectionRelativeResidual":0.01,"saturatedSamples":0,"stages":[\(stages)]}}
+    {"schemaVersion":\(deployment.resultSchemaVersion),"runID":"\(runID.uuidString.lowercased())","profileID":"\(deployment.profileID)","status":"rendered","source":{"phraseID":"\(request.singingValue.phrase.id)","phraseRevision":\(request.singingValue.phrase.revision),"requestSHA256":"\(requestSHA)","durationTicks":\(request.singingValue.phrase.durationTicks)},"model":{"bankArchiveSHA256":"\(inventory.profile.bankArchiveSHA256)","vocoderRevision":"\(inventory.profile.vocoderRevision)","vocoderSHA256":"\(String(repeating: "c", count: 64))","bankTermsSHA256":"\(inventory.profile.bankTermsSHA256)","vocoderLicenseSHA256":"\(inventory.profile.vocoderLicenseSHA256)"\(modelDeviceIdentity)},"audio":{"path":"output.wav","encoding":"float32LE-WAV","sampleRate":44100,"channels":1,"frameCount":\(frames),"sha256":"\(digest)"},"execution":{"precision":"\(deployment.precision)","seedControl":"unsupported","nativeFrameCount":\(native),"trimHeadSamples":4096,"outputFrameCount":\(frames),"projectionRelativeResidual":0.01,"saturatedSamples":0,"stages":[\(stages)]\(executionDevices)}}
     """.utf8)
 }
 

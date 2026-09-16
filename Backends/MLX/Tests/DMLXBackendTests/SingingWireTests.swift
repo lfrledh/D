@@ -19,6 +19,21 @@ struct SingingWireTests {
         #expect(text.contains(String(Int64.max)))
     }
 
+    @Test("MPS profile reuses schema 1 request wire without adding device parameters")
+    func mpsProfileRoundTrip() throws {
+        let request = makeSingingRequest(profileID: SingingBackendConfiguration.mpsProfileID)
+        let encoded = try SingingRequestWire.encode(request)
+        let decoded = try SingingRequestWire.decode(
+            encoded, model: request.model, vocoder: request.singing!.vocoder,
+            memoryBudgetBytes: request.memoryBudgetBytes)
+        #expect(decoded == request)
+        let text = String(decoding: encoded, as: UTF8.self)
+        #expect(text.contains("\"schemaVersion\":1"))
+        #expect(text.contains(SingingBackendConfiguration.mpsProfileID))
+        #expect(!text.contains("vocoderDevice"))
+        #expect(!text.contains("fallback"))
+    }
+
     @Test("Lexical integer, duplicate, unknown, depth, and canonical run rules fail closed")
     func strictFailures() throws {
         let request = makeSingingRequest()
@@ -79,7 +94,10 @@ struct SingingWireTests {
     }
 }
 
-private func makeSingingRequest(revision: Int64 = 7) -> InferenceRequest {
+private func makeSingingRequest(
+    revision: Int64 = 7,
+    profileID: String = SingingBackendConfiguration.profileID
+) -> InferenceRequest {
     let runID = UUID(uuidString: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee")!
     let phraseID = "AAAAAAAA-BBBB-4CCC-8DDD-EEEEEEEEEEE1"
     let voicedNote = "AAAAAAAA-BBBB-4CCC-8DDD-EEEEEEEEEEE2"
@@ -118,7 +136,7 @@ private func makeSingingRequest(revision: Int64 = 7) -> InferenceRequest {
         model: ModelReference(directory: URL(fileURLWithPath: "/nonexistent/只读-bank", isDirectory: true),
                               revision: SingingBackendConfiguration.bankArchiveSHA256),
         input: .singing(SingingRequest(
-            profileID: SingingBackendConfiguration.profileID, phrase: phrase,
+            profileID: profileID, phrase: phrase,
             pronunciations: pronunciations, vowelIndices: [1, nil],
             vocoder: vocoder, qualification: qualification)),
         memoryBudgetBytes: UInt64(Int64.max))
