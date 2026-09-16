@@ -221,3 +221,58 @@ R3=`D-Development/AgentTrials/D-VIDEO-I2V-01/run-20260915T154710Z-numerical-fini
 对照首发总目标：各模态有限基础→一条真实能力组合→首用/部署/恢复/发行收尾的顺序保持。AP1 H22/H23本人返回时独立集中办理；不重复麦克风检查、不让I2V诊断阻塞音频接纳。下一组合优先复用已有文本与图像的稳定候选/保存操作，具体契约独立批准；不扩DAW、时间线、新框架或移动端。本轮没有启动组合或下一批。
 
 恢复点：本轮最终候选/源文档SHA与推送见R的回执（避免提交自引用）；代码未变，没有伪称最终文档SHA重新经过模型验收。源scheme内容、摘要、索引和未暂存状态保留；普通D/旧作品未操作。模型/图像/原日志不入Git，候选/分支/旧失败证据保留。角色归因为Lead外部诊断＋两个只读复核，原三名Sol实现来源不覆盖；本轮token、完整Lead消耗、实际订阅费用unknown，不重算历史费用。
+
+
+## 2026-09-16 IMAGE 最后一轮局部修补：CPU卷积workspace（spec I2V1-IMAGE-r3）
+
+同一D-VIDEO-I2V-01，IMAGE初交及一次修补历史不改；本次消耗剩余一轮普通修补，不刷新RUN预算。原候选74cf41f232df53d43017c3c86bf6cc05f4f510a9；本准备提交为执行基线（完整SHA见外部job.json）。这是新发现的资源执行问题，非追罚原规格：原640×384解码927.7秒、栈为slow_conv3d/SGEMM；meta形状估算1216×736最大展开46.09GiB，估算不是RSS。GPU参考在另一工作树运行，本包禁止Torch/MLX初始化或任何模型执行。
+
+目标：仅CPU FP32 VAE实例内，降低大卷积展开workspace；数学卷积、权重、FP32、padding/cache、模型结构、输出形状/顺序保持。固定内部workspace目标512MiB，不是产品尺寸/物理内存准入；单个输出高度行超过预算时用一行，明确预算非总内存硬上限。小卷积仍原生路径。仅处理本适配器拥有的CausalConv3d实例，放在原cache拼接和全局padding之后；不全局修改Torch/原vendor，不跨块重新padding/cache，不拆norm/attention，不改变time/width/通道求和。按输出高度分块，保持全部时间/宽度及正确halo，支持原stride/dilation/groups/bias；使用单个预分配输出、逐块赋值，不能保留全部块再cat导致峰值复制。输入/权重不变；异常仍上传；close和初始化失败无持久外部patch或资源引用。导入仍不加载Torch。
+
+允许仅：Backends/Video/Python/d_video_i2v_image.py；可选同目录d_video_cpu_conv.py；Backends/Video/Tests/test_video_i2v_image.py；新增Backends/Video/Tests/test_video_cpu_conv.py。任务文档仅Lead维护。禁区：其他源码、vendor、RUN、模型加载/数值公式、Swift、工程/签名、依赖、所有源目录/权重/已有证据和公共Git写入。不得commit、递归派工、网络、安装、构建或GUI。
+
+测试契约由Lead固定：实际CPUFP32分块与原生卷积用原FP32 atol=1e-5/rtol=1e-5逐值比较（不降低）；涵盖原始causal预padding后首/后chunk、非整块尾行、bias有无、groups、stride/dilation、单行超预算、small-native、输入权重不变、异常传播、实例隔离和close；不只断言内部函数调用镜像。实际Torch测试实现由Worker写、仅Lead串行运行；Worker可运行原22项PNG/fakeVAE测试，必要补fake核心接口而不删断言；使用现有Python、任务tmp和-B。新增测试的Torch导入不得污染原独立测试运行。新测试前须通过tokenize.open+compile源码检查，不exec目标、不py_compile。Lead另验真实320/17帧原VAE对照、原首RGB<=1门槛、推荐尺寸完整解码与视觉、实际内存和取消；这不是Worker自测通过可以替代的门槛。
+
+请求gpt-5.6-sol/high；workspace-write，网络禁用，写根仅本任务工作树及本run/output、tmp，公共Git只读；未知权限/来源/副作用立即停报。当前进程执行不得加载Torch/MLX；已有OpenMP沙箱失败不要重试。普通修补仅此次，不自开后续轮次。回传改动、测试/未执行项、异常、实际进程状态和输出证据，停止写入交回Lead。
+
+### IMAGE-r3 验收与一次有界Lead接管（2026-09-16）
+
+执行基线afe8d1f24c1c9700a74a89098e1fc97cfca5b644，Sol/high受限CLI最终候选5bce2d083a4df17721805e86c15a340a629152cd；自检仅14PNG，Lead独立22PNG/合成VAE＋7实际Torch＋3分块执行观察通过。真实320×192/17帧与固定原版CPU VAE完整返回FP32及RGB逐值差0。原生旧适配器同输入峰值10.229GB，本候选7.534GB；单样本而非广泛性能承诺。原规格文字更正：1e-5/1e-5是此次逐卷积新增更严门槛，完整VAE原门槛实际为3e-5/3e-5；已在IMPLEMENT前澄清，未改阈值。
+
+随后推荐1216×736完整解码在原生二维卷积出现同类workspace瓶颈，实际采样slow_conv2d/SGEMM、physical footprint peak25.1G；Lead于约307秒停止自有进程5859，退出-15并回收，原件保护通过，没有完成帧或质量成功。证据R5=`D-Development/AgentTrials/D-VIDEO-I2V-01/run-20260916T090246Z-official-profile`中的recommended-decode-sample.txt及official-recommended-decoded。先前仅约束3D属于Lead资源范围遗漏，不是Worker越界/未遵循，也不重置修复预算。
+
+本次使用IMAGE尚未使用的一次有界Lead接管，保持同四文件范围，另仅追加本记录；没有第三轮Worker，RUN接管不刷新。仅增加适配器所属标准nn.Conv2d零padding的FP32高度分块，512MiB内部列展开目标、单行下界、stride/dilation/groups/bias/整batch通道宽度不变；小卷积仍原生，非零padding_mode或字符串padding先明确拒绝，不静默改变语义。原3D逻辑与所有阈值不动，权重/精度/vendor/模型/主线程规则不变。
+
+冻结新增验证：实际原生对照与真实非整块尾行/调用次数，batch>1、bias有无、groups/stride/dilation、单行超预算、小原生、实例隔离/错误/close恢复；Lead先构造资源路径反例在5bce旧实现失败，再改实现。之后重跑22＋原7及新增2D、独立3D观察、完整原版320/17返回3e-5及首RGB<=1，最后推荐尺寸解码。新增实现由非实现者只读审查。此有限接管复验失败则停止相关接纳，不再连续补救或放宽门槛。
+
+
+## 2026-09-16 推荐几何参考与CPU资源修补收口：I2V仍质量阻塞
+
+本轮按输入参考→资源热点→局部数值/生命周期→画面质量的次序推进。受测资源候选 `10c57ab264fe326ea48cea529b264eafaccc2590`，工作树 `D-Worktrees/D-VIDEO-I2V-01-CPU-CONV`、分支 `codex/d-video-i2v-01-cpu-conv`；源起点 `c3e468ca7d10271b4ab872ff796b659f6d494a24`。原主候选74cf41f保持不动。本节只报告有限修补与失败参考，**整体阶段未完成，代码不源接纳/不推送/不启用App**。最终候选及源文档提交SHA写R5/final-receipt.json，不自引用反复提交。
+
+R5=`D-Development/AgentTrials/D-VIDEO-I2V-01/run-20260916T090246Z-official-profile`。固定官方源码42bf4cfaa384bc21833865abc2f9e6c0e67233dc、权重921dbaf3f1674a56f47e83fb80a34bac8a8f203e，保持普通BF16/敏感FP32扩散及CPU FP32 VAE。Torch2.7.1/MLX0.31.1/Python3.12.14、M4/16GiB，所有重任务串行；16GiB没有变成准入上限。
+
+### 参考链与质量结论
+
+按照官方720面积及原首图比例独立准备1216×736、完整512文字条件、Torch CPU噪声seed2215；保持17帧/50步/shift5/CFG5与同一正负提示。官方MPS注意力全查询执行有明显换页，停止自有进程；仅在查询维度分块、保留完整K/V，实际4370-token QKV和全30层首步839040个输出逐值差0后才跑全程。50步约2072秒完成；属于有明确MPS/分块桥接的固定原版参考，不是未经修改的官方CUDA或121帧README复现。
+
+VAE原生3D卷积形状估计单次展开约46.09GiB（估算非RSS）；3D修补后又实测2D热点，Lead有限接管补齐。最终推荐尺寸解码约404.23秒、峰值RSS9911074816字节，首latent精确保留、首RGB差0。采样工具另报physical-footprint峰值约18.5G，与RSS口径不同，不能混成一个数字或声称总内存512MiB。此前3D-only进程约307秒停止、峰值footprint25.1G的失败记录保留。
+
+Lead与两名非实现者查看全部17帧及原尺寸抽帧：此前大面积条带未出现，主体/背景保留；但红球主要缩小、轮廓变化，不足以确认向右滚向方块。固定颜色分割仅作佐证：中心水平移动约7.35像素、面积降至73.58%，不是运动真值/模型准确率。**本样本运动质量未过**，不启动另一轮昂贵正式MLX推荐尺寸生成、不把换尺寸当已证实唯一根因、不换seed挑结果。320失败与完整T5/DiT跨设备逐元素超差继续保留；原小组件/VAE容差、精度和期望没有降低。
+
+### 资源候选复验
+
+- 最终固定SHA下，10个独立测试进程共133方法通过：IMAGE22、MODEL8、RUN31、prepare8、旧runner12、packaging15、I2V小数值3、旧数值13、旧VAE7、卷积14。无跳过；重复运行不累加，历史全模型失败不包含在这133项中。见`final-components/{counts,code-before,result}.json`。
+- 真实320×192/17帧，生产返回的clamp后FP32及全部RGB与未改原版逐值差0，保持原3e-5/3e-5和首RGB≤1门槛；不外推所有内部张量完全相同。原适配器同输入峰值RSS10.229GB→修后5.856GB，约22.35→19.40秒。另有3个实际分块执行观察；见`full-vae-original`、`full-vae-old-adapter`、`full-vae-final`、`conv-independent-final`。
+- 正式默认编译CLI的小配置320×192/5帧/2步，仅验生命周期。首图编码取消约4.91秒、解码取消约6.42秒后正常退出130，完成释放且无终态成功结果；随后的独立进程恢复生成完成，首RGB差0、完整结果与255项输入保护通过。见`cancel-encode-final`、`cancel-decode-final`、`recovery-final`；不是该小配置质量通过，也不据单次序列声称无泄漏。
+- 恢复校验外壳在产品子进程exit0、输入保护及结果结构检查之后，因把旧首帧参考定位到新run目录而exit1。保留原脚本/失败；单独完成检查只修正外部参考路径，原断言不动，复查同一产物/输入摘要及首帧。见`recovery-verifier-path-error.json`、`verify_completed_recovery.py`、`recovery-final/completion-check.json`。没有编辑执行中脚本或将外壳exit1抹成0。
+
+### 来源、预算与恢复
+
+Sol/high受限独立CLI执行IMAGE最后一轮普通修补，预检约66.6秒、实现约428.7秒；路由/写根/网络禁用证据在`image-final-repair/*-observed.json`，隐藏服务端解析unknown。2D范围遗漏归Lead，Lead使用IMAGE一次有界接管实现，非实现者只读审核；没有新独立模型执行测试。Sol预检/实施的逐次终态用量记录在usage.json，缓存输入属于总输入，不另加；完整Lead消耗/订阅费用unknown，不重算历史或声明成本最优。IMAGE预算已用完，RUN既有预算不刷新；MODEL历史额度不改，不允许以新编号绕过。
+
+两个自有停止实验、Worker及本轮模型/检查进程均已回收。历史原生pending_init不据此声称外部进程结束。只读合并预检曾把Git帮助的`--[no-]overwrite-ignore`误按字面`--overwrite-ignore`搜索而失败；未执行任何合并，后核选项存在，真正停止源接纳的原因是质量门槛。个人scheme原字节/SHA/index/未暂存差异保持，普通D和既有作品未启动/修改，权重原件保护通过。
+
+**下一有限动作提案：** 优先一个固定推荐几何下17→121帧的原版参考控制，先冻结原时间位置噪声对应关系、首帧/文本/精度/步数及受控超时，再判定短时域是否限制可辨运动。它仍是待检验假说，当前没有运行121帧，不宣称更大内存必定解决。参考可用后才进行D正式路径对照；仍不可用则回到模型/profile适用性决策，不继续零散算子试调或超预算修补。通过旧标准或经独立说明的正式验收修订前，I2V阶段不得结案成功。
+
+首发顺序仍为有限模态基础→一条真实创作组合→首用/部署/恢复/发行。AP1的H22/H23保持独立本人待办，用户离机不催解锁；不因这项质量定位新建权限请求，不启动下一模态/界面或更改发布目标。
