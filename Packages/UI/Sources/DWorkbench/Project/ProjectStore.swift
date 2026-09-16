@@ -476,6 +476,100 @@ public actor ProjectStore {
         }) { output in try data.withUnsafeBytes { try ProjectFiles.writeAll($0, to: output) } }
     }
 
+    /// Export a retained interpretation; the original recording and analysis stay authoritative.
+    public func exportPitchMIDI(assetID: UUID, documentID: UUID, to destination: URL) throws {
+        try exportPitchMIDI(assetID: assetID, documentID: documentID, to: destination, checkpoint: nil)
+    }
+
+    func exportPitchMIDI(assetID: UUID, documentID: UUID, to destination: URL,
+                         checkpoint: (@Sendable (ProjectExportCheckpoint) throws -> Void)?) throws {
+        let result = try currentAcceptedPitch(assetID: assetID, documentID: documentID)
+        try publishPitchDerivative(try PitchMIDIFile.encode(result: result), assetID: assetID,
+                                   documentID: documentID, to: destination, checkpoint: checkpoint)
+    }
+
+    /// An ordinary synthetic note preview, never a reconstruction of the singer's voice.
+    public func exportPitchNotePreview(assetID: UUID, documentID: UUID, to destination: URL) throws {
+        try exportPitchNotePreview(assetID: assetID, documentID: documentID, to: destination, checkpoint: nil)
+    }
+
+    func exportPitchNotePreview(assetID: UUID, documentID: UUID, to destination: URL,
+                                checkpoint: (@Sendable (ProjectExportCheckpoint) throws -> Void)?) throws {
+        let result = try currentAcceptedPitch(assetID: assetID, documentID: documentID)
+        try publishPitchDerivative(try PitchNotePreview.encodeWAV(result: result), assetID: assetID,
+                                   documentID: documentID, to: destination, checkpoint: checkpoint)
+    }
+
+    private func currentAcceptedPitch(assetID: UUID, documentID: UUID) throws -> PitchAnalysisResult {
+        try Task.checkCancellation()
+        try checkLocation()
+        try verifyUnchangedManifest()
+        let index = try documentIndex(documentID)
+        guard let state = manifest.documents[index].pitchAnalysis,
+              state.acceptedAssetIDs.contains(assetID), !state.rejectedAssetIDs.contains(assetID),
+              !state.expiredAssetIDs.contains(assetID),
+              let asset = manifest.assets.first(where: { $0.id == assetID }),
+              let job = manifest.jobs.first(where: { $0.id == asset.jobID }),
+              job.documentID == documentID, job.state == .completed else {
+            throw ProjectStoreError.invalidProject("请先保留当前原声的有效音高结果，再导出音符。")
+        }
+        let result = try readPitchAnalysis(assetID: assetID)
+        let original = try inspectAudio(documentID: documentID)
+        guard result.source.documentID == documentID,
+              result.source.assetID == original.document.assetID,
+              result.source.documentRevision == original.document.revision,
+              result.source.contentSHA256 == original.metadata.contentSHA256,
+              result.source.sampleRate == original.metadata.format.sampleRate,
+              result.source.frameCount == original.metadata.format.frameCount else {
+            throw ProjectStoreError.invalidProject("原声或片段已改变，请重新识别并保留结果；历史结果仍保留。")
+        }
+        return result
+    }
+
+    private func publishPitchDerivative(_ data: Data, assetID: UUID, documentID: UUID, to destination: URL,
+                                         checkpoint: (@Sendable (ProjectExportCheckpoint) throws -> Void)?) throws {
+        guard destination.isFileURL, destination.path.hasPrefix("/"),
+              destination.standardizedFileURL.path == destination.path,
+              !destination.lastPathComponent.isEmpty else { throw ProjectStoreError.unsafePath(destination.path) }
+        let parent = try ProjectFiles.openDirectory(destination.deletingLastPathComponent())
+        defer { Darwin.close(parent) }
+        try requireExternalPitchExportParent(parent)
+        try ProjectFiles.publishExport(to: destination, parent: parent, checkpoint: checkpoint, validate: { url in
+            try Task.checkCancellation()
+            _ = try currentAcceptedPitch(assetID: assetID, documentID: documentID)
+            guard try Data(contentsOf: url) == data else { throw ProjectStoreError.externalModification }
+            try requireExternalPitchExportParent(parent)
+        }) { output in
+            try Task.checkCancellation()
+            try data.withUnsafeBytes { try ProjectFiles.writeAll($0, to: output) }
+        }
+        // After atomic publication a subsequent error must not remove the delivered file.
+        _ = try currentAcceptedPitch(assetID: assetID, documentID: documentID)
+    }
+
+    /// Compare directory identities, including on case-insensitive volumes. A textual prefix
+    /// would allow another spelling of the project directory to receive unregistered files.
+    private func requireExternalPitchExportParent(_ parent: Int32) throws {
+        var current = dup(parent)
+        guard current >= 0 else { throw ProjectFiles.error() }
+        defer { Darwin.close(current) }
+        var root = stat()
+        guard fstat(rootFD, &root) == 0 else { throw ProjectFiles.error() }
+        while true {
+            var here = stat()
+            guard fstat(current, &here) == 0 else { throw ProjectFiles.error() }
+            guard here.st_dev != root.st_dev || here.st_ino != root.st_ino else {
+                throw ProjectStoreError.invalidProject("请选择项目包之外的导出位置；项目中的原件和记录不会被改写。")
+            }
+            let ancestor = openat(current, "..", O_SEARCH | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+            guard ancestor >= 0 else { throw ProjectFiles.error() }
+            var above = stat()
+            guard fstat(ancestor, &above) == 0 else { Darwin.close(ancestor); throw ProjectFiles.error() }
+            if here.st_dev == above.st_dev && here.st_ino == above.st_ino { Darwin.close(ancestor); return }
+            Darwin.close(current); current = ancestor
+        }
+    }
+
     private static func validatePitchResult(_ result: PitchAnalysisResult, request: PitchAnalysisRequest, runID: UUID) throws {
         try result.validate()
         guard result.runID == runID, result.source == request.source,
