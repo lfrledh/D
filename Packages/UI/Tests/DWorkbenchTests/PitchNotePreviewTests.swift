@@ -162,23 +162,23 @@ private struct ParsedWave {
         let bytes = [UInt8](data)
         guard bytes.count >= 44,
               Array(bytes[0..<4]) == Array("RIFF".utf8),
-              read32(bytes, 4) == UInt32(bytes.count - 8),
+              Self.read32(bytes, 4) == UInt32(bytes.count - 8),
               Array(bytes[8..<12]) == Array("WAVE".utf8),
               Array(bytes[12..<16]) == Array("fmt ".utf8),
-              read32(bytes, 16) == 16,
+              Self.read32(bytes, 16) == 16,
               Array(bytes[36..<40]) == Array("data".utf8),
-              read32(bytes, 40) == UInt32(bytes.count - 44),
+              Self.read32(bytes, 40) == UInt32(bytes.count - 44),
               (bytes.count - 44).isMultiple(of: 2) else {
             throw ParseError.invalidWave
         }
-        formatTag = read16(bytes, 20)
-        channels = read16(bytes, 22)
-        sampleRate = read32(bytes, 24)
-        byteRate = read32(bytes, 28)
-        blockAlign = read16(bytes, 32)
-        bitsPerSample = read16(bytes, 34)
+        formatTag = Self.read16(bytes, 20)
+        channels = Self.read16(bytes, 22)
+        sampleRate = Self.read32(bytes, 24)
+        byteRate = Self.read32(bytes, 28)
+        blockAlign = Self.read16(bytes, 32)
+        bitsPerSample = Self.read16(bytes, 34)
         samples = stride(from: 44, to: bytes.count, by: 2).map {
-            Int16(bitPattern: read16(bytes, $0))
+            Int16(bitPattern: Self.read16(bytes, $0))
         }
     }
 
@@ -192,13 +192,4 @@ private struct ParsedWave {
         UInt32(bytes[offset]) | UInt32(bytes[offset + 1]) << 8
             | UInt32(bytes[offset + 2]) << 16 | UInt32(bytes[offset + 3]) << 24
     }
-}
-
-private func read16(_ bytes: [UInt8], _ offset: Int) -> UInt16 {
-    UInt16(bytes[offset]) | UInt16(bytes[offset + 1]) << 8
-}
-
-private func read32(_ bytes: [UInt8], _ offset: Int) -> UInt32 {
-    UInt32(bytes[offset]) | UInt32(bytes[offset + 1]) << 8
-        | UInt32(bytes[offset + 2]) << 16 | UInt32(bytes[offset + 3]) << 24
 }
