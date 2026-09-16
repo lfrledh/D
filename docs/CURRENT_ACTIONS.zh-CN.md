@@ -1,5 +1,13 @@
 # D 当前行动指南
 
+## 2026-09-16 当前停点：HUM工作台候选已编译，完整UI回归仍有一项阻断
+
+[D-HUM-WORKBENCH-01](tasks/D-HUM-WORKBENCH-01.md)已实现有限音符纠错/删除/撤销、普通试听、MIDI和安全保存重开。受测`7dcb6aa67c6e15623d1c977297453d04a9595a2f`，App独立无签名构建通过；DWorkbench394报告无失败但3旧模型条件项跳过，ModelLibrary23通过；UI95中1项末行布局几何缺失，组合验收失败。定向9方法通过不抵消它。VIEW两轮修复及Lead有界接管已用，本轮停止相关改动，保存失败证据，不将阶段标完成。
+
+候选分支`codex/d-hum-workbench-01`，最终`5a90f3fdc4a9e9a600390b192b88a1e44a02c4e7`，比受测代码仅任务文档变化；未接纳/未推送。源生产仍`3898e1d020cbc356417e04e7c9f761db1a910725`，本轮源仅本地保存状态文档。完整最终源SHA/保护见`D-Development/AgentTrials/D-HUM-WORKBENCH-01/run-20260916T054351Z/final-receipt.json`。本人离机，不催解锁；[H23](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md#2026-09-16-hum工作台集中待办h23)待工程阻断解除后做普通签名GUI与真人试听。普通D、源scheme个人修改和H22歌声候选不动。
+
+**下一有限计划仍是本阶段收尾**：一次有边界的布局就绪/滚动回报定位，保留矩形断言，重验组合后再处理H23；旧预算不因重编号刷新。H22歌声与H23将集中安排，但schema13/14最终组合需要隔离格式迁移验收。之后按首发优先级处理I2V有限缺口及一个实际创作组合，再做首用/部署/恢复准备，不扩DAW或高级文字。
+
 ## 2026-09-16 当前检查点：HUM音符交换服务已验收接纳
 
 结合首发D-HUM01，完成[D-HUM-EXCHANGE-01](tasks/D-HUM-EXCHANGE-01.md)：已保留识别结果→单轨MIDI/普通音色WAV的正式ProjectStore安全导出，原声/分析/清单不变；过期、跨文档、损坏、取消和覆盖保护均有反例。本包明确是服务层，不增加UI/模型/backend/schema；当前用户界面仍没有新增试听/MIDI按钮，不能称HUM编辑闭环或首发完成。
