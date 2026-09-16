@@ -60,16 +60,39 @@ from d_singing_qixuan import (
 
 
 SCHEMA_VERSION = 1
-PROFILE_ID = "qixuan-2.7.0-bigvgan-44k-approx-v1"
-PROFILE_SHA256 = "15489802b768fdd5c447325d5483b293601e63db54f46e84eb1c7b84df010a39"
+CPU_PROFILE_ID = "qixuan-2.7.0-bigvgan-44k-approx-v1"
+CPU_PROFILE_SHA256 = "15489802b768fdd5c447325d5483b293601e63db54f46e84eb1c7b84df010a39"
+MPS_PROFILE_ID = "qixuan-2.7.0-bigvgan-44k-approx-mps-fp32-v1"
+MPS_PROFILE_SHA256 = "1d7b3fcc0988e4f76c4fe0b8fd7adf62fe943d947482c0878b51e38dfe725705"
+# Compatibility aliases retained for existing CPU callers and fixtures.
+PROFILE_ID = CPU_PROFILE_ID
+PROFILE_SHA256 = CPU_PROFILE_SHA256
 SOURCE_MANIFEST_SHA256 = "e3f9f9eb2a3cad99b5f75501cbc8b5fd6504257d0c26a69c2f1c817d2c7d0000"
 VOCODER_REVISION = "95a9d1dcb12906c03edd938d77b9333d6ded7dfb"
 MAX_REQUEST_BYTES = 2 * 1024 * 1024
 MAX_SMALL_CONFIG_BYTES = 2 * 1024 * 1024
 PURPOSES = {"internalDevelopment", "personalCreation", "commercialCreation"}
 STAGE_NAMES = ("validation", "duration", "pitch", "variance", "acoustic", "vocoder", "publish")
-PRECISION = "Qixuan original ONNX CPU; BigVGAN FP32 CPU"
+CPU_PRECISION = "Qixuan original ONNX CPU; BigVGAN FP32 CPU"
+MPS_PRECISION = "Qixuan original ONNX CPU; BigVGAN FP32 MPS"
+PRECISION = CPU_PRECISION
 SEED_CONTROL = "unsupported"
+MAX_RUNTIME_VERSION_LENGTH = 128
+
+_PROFILE_DESCRIPTIONS = {
+    CPU_PROFILE_ID: {
+        "profileSHA256": CPU_PROFILE_SHA256,
+        "vocoderDevice": "cpu",
+        "precision": CPU_PRECISION,
+        "resultSchemaVersion": 1,
+    },
+    MPS_PROFILE_ID: {
+        "profileSHA256": MPS_PROFILE_SHA256,
+        "vocoderDevice": "mps",
+        "precision": MPS_PRECISION,
+        "resultSchemaVersion": 2,
+    },
+}
 
 _REQUEST_KEYS = {
     "schemaVersion", "runID", "profileID", "phrase", "pronunciations",
@@ -101,6 +124,67 @@ class RenderInputError(ContractError):
 class RenderRuntimeError(ContractError):
     def __init__(self, message: str) -> None:
         super().__init__(message, "runtime")
+
+
+def _profile_description(profile_id: Any) -> dict[str, Any]:
+    if type(profile_id) is not str or profile_id not in _PROFILE_DESCRIPTIONS:
+        raise RenderInputError("profileID is not one of the two fixed singing profiles")
+    return _PROFILE_DESCRIPTIONS[profile_id]
+
+
+def _validated_runtime_version(value: Any, label: str) -> str:
+    if type(value) is not str or not value or len(value) > MAX_RUNTIME_VERSION_LENGTH:
+        raise RenderRuntimeError(
+            f"{label} version must be nonempty text no longer than "
+            f"{MAX_RUNTIME_VERSION_LENGTH} characters"
+        )
+    return value
+
+
+def _validated_mps_devices(value: Any) -> dict[str, dict[str, str]]:
+    if type(value) is not dict or set(value) != {"onnx", "vocoder"}:
+        raise RenderRuntimeError("MPS execution.devices must contain exactly onnx and vocoder")
+    onnx = value["onnx"]
+    vocoder = value["vocoder"]
+    onnx_keys = {
+        "requested", "actual", "provider", "runtime", "version", "precision", "fallback",
+    }
+    vocoder_keys = {
+        "requested", "actual", "runtime", "version", "precision", "fallback",
+        "parameterDevice", "bufferDevice", "inputDevice", "outputDevice",
+    }
+    if type(onnx) is not dict or set(onnx) != onnx_keys:
+        raise RenderRuntimeError("MPS execution.devices.onnx has the wrong exact keys")
+    if type(vocoder) is not dict or set(vocoder) != vocoder_keys:
+        raise RenderRuntimeError("MPS execution.devices.vocoder has the wrong exact keys")
+    expected_onnx = {
+        "requested": "cpu",
+        "actual": "cpu",
+        "provider": "CPUExecutionProvider",
+        "runtime": "onnxruntime",
+        "precision": "FP32-original",
+        "fallback": "forbidden",
+    }
+    expected_vocoder = {
+        "requested": "mps",
+        "actual": "mps",
+        "runtime": "torch",
+        "precision": "FP32",
+        "fallback": "forbidden",
+        "parameterDevice": "mps",
+        "bufferDevice": "mps",
+        "inputDevice": "mps",
+        "outputDevice": "mps",
+    }
+    for key, expected in expected_onnx.items():
+        if onnx[key] != expected:
+            raise RenderRuntimeError(f"MPS ONNX device observation mismatch for {key}")
+    for key, expected in expected_vocoder.items():
+        if vocoder[key] != expected:
+            raise RenderRuntimeError(f"MPS vocoder device observation mismatch for {key}")
+    _validated_runtime_version(onnx["version"], "ONNX runtime")
+    _validated_runtime_version(vocoder["version"], "torch runtime")
+    return {"onnx": dict(onnx), "vocoder": dict(vocoder)}
 
 
 @dataclass(frozen=True, slots=True)
@@ -340,8 +424,7 @@ def _load_request(raw: bytes) -> dict[str, Any]:
     _exact_object(request, _REQUEST_KEYS, "request")
     _exact_int(request["schemaVersion"], SCHEMA_VERSION, "request.schemaVersion")
     _canonical_uuid(request["runID"], "request.runID")
-    if request["profileID"] != PROFILE_ID:
-        raise RenderInputError(f"request.profileID must be {PROFILE_ID}")
+    _profile_description(request["profileID"])
     qualification = _exact_object(request["qualification"], _QUALIFICATION_KEYS, "qualification")
     if qualification["confirmedApplicable"] is not True:
         raise RenderInputError("qualification.confirmedApplicable must be true")
@@ -358,15 +441,16 @@ def _load_request(raw: bytes) -> dict[str, Any]:
     return request
 
 
-def _load_profile(raw: bytes) -> dict[str, Any]:
+def _load_profile(raw: bytes, *, expected_profile_id: str | None = None) -> dict[str, Any]:
     try:
         profile = decode_strict_json(raw, label="singing render profile")
     except ContractError as exc:
         raise RenderInputError(str(exc)) from exc
     _exact_object(profile, _PROFILE_KEYS, "profile")
     _exact_int(profile["schemaVersion"], 1, "profile.schemaVersion")
-    if profile["profileID"] != PROFILE_ID:
-        raise RenderInputError("profile identity mismatch")
+    _profile_description(profile["profileID"])
+    if expected_profile_id is not None and profile["profileID"] != expected_profile_id:
+        raise RenderInputError("profile identity does not match the requested profile")
     frozen_integers = {
         "sampleRate": SAMPLE_RATE, "hopSize": HOP_SIZE, "headFrames": HEAD_FRAMES,
         "tailFrames": TAIL_FRAMES, "pitchSteps": PITCH_STEPS,
@@ -798,15 +882,18 @@ def _build_result(
     vocoder: VocoderOutput, output_frames: int, saturated: int,
     stages: list[dict[str, Any]],
 ) -> dict[str, Any]:
+    description = _profile_description(request["profileID"])
+    if profile["profileID"] != request["profileID"]:
+        raise RenderRuntimeError("result request/profile identity mismatch")
     phrase = request["phrase"]
     vocoder_files = _parse_file_entries(profile["vocoderFiles"], "profile.vocoderFiles")
     weight_digest = next((digest for path, _size, digest in vocoder_files if str(path) == "bigvgan_generator.pt"), None)
     if weight_digest is None:
         raise RenderRuntimeError("fixed profile has no BigVGAN weight identity")
     result = {
-        "schemaVersion": 1,
+        "schemaVersion": description["resultSchemaVersion"],
         "runID": request["runID"],
-        "profileID": PROFILE_ID,
+        "profileID": request["profileID"],
         "status": "rendered",
         "source": {
             "phraseID": phrase["id"], "phraseRevision": phrase["revision"],
@@ -824,7 +911,7 @@ def _build_result(
             "channels": 1, "frameCount": output_frames, "sha256": wav_digest,
         },
         "execution": {
-            "precision": PRECISION, "seedControl": SEED_CONTROL,
+            "precision": description["precision"], "seedControl": SEED_CONTROL,
             "nativeFrameCount": vocoder.native_frame_count,
             "trimHeadSamples": HEAD_FRAMES * HOP_SIZE,
             "outputFrameCount": output_frames,
@@ -833,6 +920,10 @@ def _build_result(
             "stages": stages,
         },
     }
+    if description["vocoderDevice"] == "mps":
+        result["model"]["profileSHA256"] = description["profileSHA256"]
+        result["model"]["vendorManifestSHA256"] = SOURCE_MANIFEST_SHA256
+        result["execution"]["devices"] = _validated_mps_devices(vocoder.devices)
     return result
 
 
@@ -979,17 +1070,18 @@ def render(
         )
         assert request_raw is not None
         request = _load_request(request_raw)
+        description = _profile_description(request["profileID"])
         request_token = _ACTIVE_REQUEST.set(request)
         run_id = request["runID"]
         stages: list[dict[str, Any]] = []
         _emit(progress, run_id, "validation")
         checkpoint()
         profile_raw, profile_seal = _read_and_seal(
-            profile_file, label="profile", expected_sha256=PROFILE_SHA256,
+            profile_file, label="profile", expected_sha256=description["profileSHA256"],
             max_bytes=MAX_SMALL_CONFIG_BYTES, retain=True,
         )
         assert profile_raw is not None
-        profile = _load_profile(profile_raw)
+        profile = _load_profile(profile_raw, expected_profile_id=request["profileID"])
         _validate_qualification(request, profile)
         try:
             prepared = prepare_singing_plan(request["phrase"], request["pronunciations"])
@@ -1012,7 +1104,12 @@ def render(
         stages.append({"name": "validation", "seconds": validation_seconds})
 
         output_identity = _create_output_directory(output)
-        engine: Any = _ENGINE_CLASS(bank, vocoder_dir, vendor)
+        if description["vocoderDevice"] == "cpu":
+            engine: Any = _ENGINE_CLASS(bank, vocoder_dir, vendor)
+        else:
+            engine = _ENGINE_CLASS(
+                bank, vocoder_dir, vendor, vocoder_device=description["vocoderDevice"]
+            )
         runtime_owner: RuntimeOwner | None = None
 
         def execute_vocoder() -> VocoderOutput:
@@ -1042,6 +1139,8 @@ def render(
                 "vocoder", run_id, stages, progress, checkpoint,
                 execute_vocoder,
             )
+            if description["vocoderDevice"] == "mps":
+                _validated_mps_devices(rendered.devices)
         engine = None
         gc.collect()
 

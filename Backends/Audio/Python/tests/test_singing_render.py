@@ -24,6 +24,7 @@ PYTHON_DIR = Path(__file__).resolve().parents[1]
 REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
 FIXTURE_DIR = REPOSITORY_ROOT / "Backends" / "Audio" / "Fixtures" / "Singing"
 PROFILE = FIXTURE_DIR / "qixuan-bigvgan-profile-v1.json"
+MPS_PROFILE = FIXTURE_DIR / "qixuan-bigvgan-mps-fp32-profile-v1.json"
 VENDOR = REPOSITORY_ROOT / "Backends" / "Audio" / "SingingVendor"
 if str(PYTHON_DIR) not in sys.path:
     sys.path.insert(0, str(PYTHON_DIR))
@@ -37,6 +38,23 @@ with (FIXTURE_DIR / "timing-v1.json").open("r", encoding="utf-8") as handle:
     TIMING_FIXTURE = json.load(handle)
 with PROFILE.open("r", encoding="utf-8") as handle:
     FIXED_PROFILE = json.load(handle)
+with MPS_PROFILE.open("r", encoding="utf-8") as handle:
+    FIXED_MPS_PROFILE = json.load(handle)
+
+
+MPS_DEVICES = {
+    "onnx": {
+        "requested": "cpu", "actual": "cpu", "provider": "CPUExecutionProvider",
+        "runtime": "onnxruntime", "version": "1.22.1", "precision": "FP32-original",
+        "fallback": "forbidden",
+    },
+    "vocoder": {
+        "requested": "mps", "actual": "mps", "runtime": "torch",
+        "version": "2.fixture", "precision": "FP32", "fallback": "forbidden",
+        "parameterDevice": "mps", "bufferDevice": "mps", "inputDevice": "mps",
+        "outputDevice": "mps",
+    },
+}
 
 
 def fixture_materials(request_seal, profile_seal, profile, bank, vocoder, vendor):
@@ -87,6 +105,20 @@ class SlowCancelEngine(FakeEngine):
             checkpoint()
             time.sleep(0.005)
         return super().duration(plan, checkpoint)
+
+
+class FakeMPSEngine(FakeEngine):
+    def __init__(self, bank, vocoder, vendor, *, vocoder_device):
+        if vocoder_device != "mps":
+            raise AssertionError("MPS fixture received the wrong device")
+        super().__init__(bank, vocoder, vendor)
+
+    def vocoder(self, conditions, checkpoint):
+        output = super().vocoder(conditions, checkpoint)
+        return VocoderOutput(
+            output.samples, output.native_frame_count,
+            output.projection_relative_residual, copy.deepcopy(MPS_DEVICES),
+        )
 
 
 class SingingRenderTests(unittest.TestCase):
@@ -144,6 +176,101 @@ class SingingRenderTests(unittest.TestCase):
                 progress=events.append, checkpoint=checkpoint,
             )
         return result, events
+
+    def _select_mps_request(self) -> None:
+        self.request["profileID"] = FIXED_MPS_PROFILE["profileID"]
+        for key in (
+            "bankArchiveSHA256", "bankTermsSHA256", "vocoderRevision",
+            "vocoderLicenseSHA256",
+        ):
+            self.request["qualification"][key] = FIXED_MPS_PROFILE[key]
+        self._write_request()
+
+    def _render_mps(self, engine=FakeMPSEngine):
+        self._select_mps_request()
+        events = []
+        with mock.patch.object(
+            singing_render, "_validate_materials", fixture_materials
+        ), mock.patch.object(singing_render, "_ENGINE_CLASS", engine):
+            result = singing_render.render(
+                str(self.request_path), str(self.bank), str(self.vocoder), str(VENDOR),
+                str(MPS_PROFILE), str(self.output), progress=events.append,
+                checkpoint=lambda: None,
+            )
+        return result, events
+
+    def test_mps_profile_produces_strict_v2_result_and_preserves_cpu_v1(self) -> None:
+        mps_result, events = self._render_mps()
+        self.assertEqual([item["stage"] for item in events], list(singing_render.STAGE_NAMES))
+        self.assertEqual(mps_result["schemaVersion"], 2)
+        self.assertEqual(mps_result["profileID"], singing_render.MPS_PROFILE_ID)
+        self.assertEqual(set(mps_result), {
+            "schemaVersion", "runID", "profileID", "status", "source", "model", "audio",
+            "execution",
+        })
+        self.assertEqual(set(mps_result["model"]), {
+            "bankArchiveSHA256", "vocoderRevision", "vocoderSHA256", "bankTermsSHA256",
+            "vocoderLicenseSHA256", "profileSHA256", "vendorManifestSHA256",
+        })
+        self.assertEqual(mps_result["model"]["profileSHA256"], singing_render.MPS_PROFILE_SHA256)
+        self.assertEqual(
+            mps_result["model"]["vendorManifestSHA256"],
+            singing_render.SOURCE_MANIFEST_SHA256,
+        )
+        self.assertEqual(mps_result["execution"]["precision"], singing_render.MPS_PRECISION)
+        self.assertEqual(mps_result["execution"]["devices"], MPS_DEVICES)
+        self.assertEqual(set(mps_result["execution"]["devices"]["onnx"]), {
+            "requested", "actual", "provider", "runtime", "version", "precision", "fallback",
+        })
+        self.assertEqual(set(mps_result["execution"]["devices"]["vocoder"]), {
+            "requested", "actual", "runtime", "version", "precision", "fallback",
+            "parameterDevice", "bufferDevice", "inputDevice", "outputDevice",
+        })
+
+        self.output = self.directory / "cpu-after-mps"
+        self.request = self._request()
+        self._write_request()
+        cpu_result, _ = self._render()
+        self.assertEqual(cpu_result["schemaVersion"], 1)
+        self.assertEqual(cpu_result["profileID"], singing_render.CPU_PROFILE_ID)
+        self.assertNotIn("profileSHA256", cpu_result["model"])
+        self.assertNotIn("devices", cpu_result["execution"])
+
+    def test_profile_and_device_mismatches_reject_before_audio_publication(self) -> None:
+        cpu_raw = PROFILE.read_bytes()
+        with self.assertRaisesRegex(singing_render.RenderInputError, "does not match"):
+            singing_render._load_profile(
+                cpu_raw, expected_profile_id=singing_render.MPS_PROFILE_ID
+            )
+        unknown = self._request()
+        unknown["profileID"] = "unknown-profile"
+        with self.assertRaises(singing_render.RenderInputError):
+            singing_render._load_request(json.dumps(unknown).encode("utf-8"))
+
+        extra_key = copy.deepcopy(MPS_DEVICES)
+        extra_key["onnx"]["unobserved"] = "invented"
+        with self.assertRaisesRegex(singing_render.RenderRuntimeError, "wrong exact keys"):
+            singing_render._validated_mps_devices(extra_key)
+        long_version = copy.deepcopy(MPS_DEVICES)
+        long_version["vocoder"]["version"] = "x" * 129
+        with self.assertRaisesRegex(singing_render.RenderRuntimeError, "no longer than 128"):
+            singing_render._validated_mps_devices(long_version)
+
+        class WrongDeviceEngine(FakeMPSEngine):
+            def vocoder(self, conditions, checkpoint):
+                output = super().vocoder(conditions, checkpoint)
+                devices = copy.deepcopy(output.devices)
+                devices["vocoder"]["actual"] = "cpu"
+                devices["vocoder"]["fallback"] = "allowed"
+                return VocoderOutput(
+                    output.samples, output.native_frame_count,
+                    output.projection_relative_residual, devices,
+                )
+
+        with self.assertRaisesRegex(singing_render.RenderRuntimeError, "mismatch"):
+            self._render_mps(engine=WrongDeviceEngine)
+        self.assertFalse((self.output / "output.wav").exists())
+        self.assertFalse((self.output / "result.json").exists())
 
     def test_fake_golden_unicode_path_exact_result_and_source_preservation(self) -> None:
         before = hashlib.sha256(self.request_path.read_bytes()).hexdigest()

@@ -340,7 +340,11 @@ class QixuanNumericTests(unittest.TestCase):
             )
             with mock.patch.object(
                 qixuan, "project_log_mel", return_value=(np.zeros((128, 1), dtype=np.float32), 0.0)
-            ), mock.patch.object(qixuan, "_import_bigvgan", return_value=(Torch, dict, Model)):
+            ), mock.patch.object(
+                qixuan, "_import_bigvgan", return_value=(Torch, dict, Model)
+            ), mock.patch.dict(
+                os.environ, {"PYTORCH_ENABLE_MPS_FALLBACK": "1"}
+            ), mock.patch.dict(sys.modules, {"torch": object()}):
                 output = engine.vocoder(conditions, lambda: None)
                 for stop_at in (4, 5):
                     calls = 0
@@ -409,6 +413,181 @@ class QixuanNumericTests(unittest.TestCase):
                     qixuan.QixuanEngine(root / "bank", root / "vocoder", root / "vendor").vocoder(
                         conditions, checkpoint
                     )
+
+    def test_mps_admission_rejects_fallback_and_unverifiable_preload_only_for_mps(self) -> None:
+        with mock.patch.dict(os.environ, {}, clear=False), mock.patch.dict(
+            sys.modules, {}, clear=False
+        ), mock.patch.object(qixuan, "_MPS_FALLBACK_ADMITTED", False):
+            os.environ.pop("PYTORCH_ENABLE_MPS_FALLBACK", None)
+            sys.modules.pop("torch", None)
+            qixuan._admit_mps_without_fallback()
+            self.assertEqual(os.environ["PYTORCH_ENABLE_MPS_FALLBACK"], "0")
+
+        with mock.patch.dict(
+            os.environ, {"PYTORCH_ENABLE_MPS_FALLBACK": "1"}
+        ), mock.patch.object(qixuan, "_MPS_FALLBACK_ADMITTED", False):
+            with self.assertRaisesRegex(qixuan.QixuanRuntimeError, "exactly 0"):
+                qixuan._admit_mps_without_fallback()
+
+        with mock.patch.dict(
+            os.environ, {"PYTORCH_ENABLE_MPS_FALLBACK": "0"}
+        ), mock.patch.dict(sys.modules, {"torch": object()}), mock.patch.object(
+            qixuan, "_MPS_FALLBACK_ADMITTED", False
+        ):
+            with self.assertRaisesRegex(qixuan.QixuanRuntimeError, "preloaded torch"):
+                qixuan._admit_mps_without_fallback()
+
+        cpu = qixuan.QixuanEngine(Path("/bank"), Path("/vocoder"), Path("/vendor"))
+        self.assertEqual(cpu.vocoder_device, "cpu")
+        with self.assertRaises(qixuan.QixuanRuntimeError):
+            qixuan.QixuanEngine(
+                Path("/bank"), Path("/vocoder"), Path("/vendor"), vocoder_device="cuda"
+            )
+
+    def test_mps_vocoder_observes_devices_and_synchronizes_on_success_and_cancel(self) -> None:
+        records = {"synchronize": 0, "empty_cache": 0, "calls": 0}
+
+        class Device:
+            def __init__(self, name): self.type = name
+            def __enter__(self): return self
+            def __exit__(self, *_args): return False
+
+        float32 = object()
+
+        class Tensor:
+            def __init__(self, array=None, device="cpu"):
+                self.array = array
+                self.device = Device(device)
+                self.dtype = float32
+
+            def to(self, *, device, dtype):
+                self.device = Device(device.type)
+                self.dtype = dtype
+                return self
+
+            def __getitem__(self, item):
+                return Tensor(self.array[item], self.device.type)
+
+            def cpu(self):
+                self.device = Device("cpu")
+                return self
+
+            def numpy(self): return self.array
+
+        class Inference:
+            def __enter__(self): return self
+            def __exit__(self, *_args): return False
+
+        class MPSRuntime:
+            @staticmethod
+            def synchronize(): records["synchronize"] += 1
+            @staticmethod
+            def empty_cache(): records["empty_cache"] += 1
+
+        class Torch:
+            __version__ = "2.fixture"
+            default = object()
+            mps = MPSRuntime()
+            backends = SimpleNamespace(mps=SimpleNamespace(is_available=lambda: True))
+
+            @staticmethod
+            def inference_mode(): return Inference()
+            @staticmethod
+            def get_default_dtype(): return Torch.default
+            @staticmethod
+            def set_default_dtype(value): Torch.default = value
+            @staticmethod
+            def device(name): return Device(name)
+            @staticmethod
+            def load(_path, *, map_location, weights_only):
+                self.assertEqual(map_location.type, "cpu")
+                self.assertTrue(weights_only)
+                return {"generator": OrderedDict([("weight", Tensor())])}
+            @staticmethod
+            def is_tensor(value): return isinstance(value, Tensor)
+            @staticmethod
+            def from_numpy(value): return Tensor(value)
+
+        Torch.float32 = float32
+        test_case = self
+
+        class Model:
+            def __init__(self, config, *, use_cuda_kernel):
+                test_case.assertFalse(use_cuda_kernel)
+                self.parameter = Tensor()
+                self.buffer = Tensor()
+
+            def to(self, *, device, dtype):
+                self.parameter.to(device=device, dtype=dtype)
+                self.buffer.to(device=device, dtype=dtype)
+                return self
+
+            def load_state_dict(self, state, *, strict):
+                test_case.assertTrue(strict)
+                test_case.assertIs(type(state), OrderedDict)
+
+            def remove_weight_norm(self): pass
+            def eval(self): return self
+            def requires_grad_(self, value):
+                test_case.assertFalse(value)
+                return self
+            def parameters(self): return (self.parameter,)
+            def buffers(self): return (self.buffer,)
+            def __call__(self, tensor):
+                records["calls"] += 1
+                return Tensor(np.full((1, 1, 512), 0.25, dtype=np.float32), tensor.device.type)
+
+        with tempfile.TemporaryDirectory(dir=self.temp_root) as raw:
+            root = Path(raw)
+            (root / "vocoder").mkdir()
+            (root / "vocoder" / "config.json").write_text(json.dumps({
+                "sampling_rate": 44100, "n_fft": 2048, "hop_size": 512, "num_mels": 128,
+            }), encoding="utf-8")
+            conditions = SimpleNamespace(
+                alignment=SimpleNamespace(frame_count=1),
+                mel=np.zeros((1, 1, 128), dtype=np.float32),
+            )
+
+            def make_engine():
+                engine = qixuan.QixuanEngine(
+                    root / "bank", root / "vocoder", root / "vendor", vocoder_device="mps"
+                )
+                engine._onnx_devices = {
+                    "requested": "cpu", "actual": "cpu", "provider": "CPUExecutionProvider",
+                    "runtime": "onnxruntime", "version": "1.22.1",
+                    "precision": "FP32-original", "fallback": "forbidden",
+                }
+                return engine
+
+            with mock.patch.dict(
+                os.environ, {"PYTORCH_ENABLE_MPS_FALLBACK": "0"}
+            ), mock.patch.object(
+                qixuan, "_MPS_FALLBACK_ADMITTED", False
+            ), mock.patch.object(
+                qixuan, "project_log_mel",
+                return_value=(np.zeros((128, 1), dtype=np.float32), 0.0),
+            ), mock.patch.object(qixuan, "_import_bigvgan", return_value=(Torch, dict, Model)):
+                output = make_engine().vocoder(conditions, lambda: None)
+                self.assertEqual(output.devices["onnx"]["provider"], "CPUExecutionProvider")
+                self.assertEqual(output.devices["vocoder"], {
+                    "requested": "mps", "actual": "mps", "runtime": "torch",
+                    "version": "2.fixture", "precision": "FP32", "fallback": "forbidden",
+                    "parameterDevice": "mps", "bufferDevice": "mps", "inputDevice": "mps",
+                    "outputDevice": "mps",
+                })
+                self.assertEqual((records["synchronize"], records["empty_cache"]), (2, 1))
+
+                checkpoints = 0
+
+                def cancel_after_output():
+                    nonlocal checkpoints
+                    checkpoints += 1
+                    if checkpoints == 5:
+                        raise qixuan.RenderCancelled("fixture MPS cancellation")
+
+                with self.assertRaises(qixuan.RenderCancelled):
+                    make_engine().vocoder(conditions, cancel_after_output)
+                self.assertEqual((records["synchronize"], records["empty_cache"]), (4, 2))
 
     def test_vendor_preflight_rejects_initializer_external_namespace_and_preload_without_execution(self) -> None:
         with tempfile.TemporaryDirectory(dir=self.temp_root) as raw:

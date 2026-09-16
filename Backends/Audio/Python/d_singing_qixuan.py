@@ -63,6 +63,50 @@ class VocoderOutput:
     samples: Any
     native_frame_count: int
     projection_relative_residual: float
+    devices: Any | None = None
+
+
+_MAX_RUNTIME_VERSION_LENGTH = 128
+_MPS_FALLBACK_ADMITTED = False
+
+
+def _runtime_version(value: Any, label: str) -> str:
+    if type(value) is not str or not value or len(value) > _MAX_RUNTIME_VERSION_LENGTH:
+        raise QixuanRuntimeError(
+            f"{label} runtime version must be nonempty text no longer than "
+            f"{_MAX_RUNTIME_VERSION_LENGTH} characters"
+        )
+    return value
+
+
+def _normalized_device_type(device: Any, label: str) -> str:
+    value = getattr(device, "type", None)
+    if type(value) is not str or not value:
+        raise QixuanRuntimeError(f"{label} has no observable device.type")
+    normalized = value.strip().lower()
+    if not normalized:
+        raise QixuanRuntimeError(f"{label} has an empty device.type")
+    return normalized
+
+
+def _admit_mps_without_fallback() -> None:
+    """Establish fallback=0 before this process imports torch for MPS work."""
+    global _MPS_FALLBACK_ADMITTED
+    configured = os.environ.get("PYTORCH_ENABLE_MPS_FALLBACK")
+    torch_preloaded = "torch" in sys.modules
+    if configured is None:
+        if torch_preloaded:
+            raise QixuanRuntimeError(
+                "cannot prove MPS fallback was disabled before the preloaded torch runtime"
+            )
+        os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "0"
+    elif configured != "0":
+        raise QixuanRuntimeError("PYTORCH_ENABLE_MPS_FALLBACK must be exactly 0 for MPS")
+    if torch_preloaded and not _MPS_FALLBACK_ADMITTED:
+        raise QixuanRuntimeError(
+            "cannot prove MPS fallback was disabled before the preloaded torch runtime"
+        )
+    _MPS_FALLBACK_ADMITTED = True
 
 
 def _numpy() -> Any:
@@ -310,12 +354,39 @@ _ONNX_TYPES = {
 
 
 class QixuanEngine:
-    """One-shot, CPU-only execution owner.  Instances retain no global model."""
+    """One-shot execution owner.  Instances retain no global model."""
 
-    def __init__(self, bank_directory: Path, vocoder_directory: Path, vendor_directory: Path) -> None:
+    def __init__(
+        self,
+        bank_directory: Path,
+        vocoder_directory: Path,
+        vendor_directory: Path,
+        *,
+        vocoder_device: str = "cpu",
+    ) -> None:
+        if type(vocoder_device) is not str or vocoder_device not in {"cpu", "mps"}:
+            raise QixuanRuntimeError("vocoder_device must be exactly 'cpu' or 'mps'")
         self.bank_directory = bank_directory
         self.vocoder_directory = vocoder_directory
         self.vendor_directory = vendor_directory
+        self.vocoder_device = vocoder_device
+        self._onnx_devices: dict[str, str] | None = None
+
+    def _record_onnx_devices(self, ort: Any, providers: Any) -> None:
+        if type(providers) is not list or providers != ["CPUExecutionProvider"]:
+            raise QixuanRuntimeError("ONNX session did not remain CPU-only")
+        observation = {
+            "requested": "cpu",
+            "actual": "cpu",
+            "provider": providers[0],
+            "runtime": "onnxruntime",
+            "version": _runtime_version(getattr(ort, "__version__", None), "ONNX"),
+            "precision": "FP32-original",
+            "fallback": "forbidden",
+        }
+        if self._onnx_devices is not None and self._onnx_devices != observation:
+            raise QixuanRuntimeError("ONNX runtime observation changed between sessions")
+        self._onnx_devices = observation
 
     def _ids(self, folder: str, stem: str, symbols: tuple[str, ...]) -> dict[str, Any]:
         np = _numpy()
@@ -360,7 +431,7 @@ class QixuanEngine:
             ort = importlib.import_module("onnxruntime")
         except Exception as exc:
             raise QixuanRuntimeError(f"ONNX Runtime is unavailable: {exc}") from exc
-        if getattr(ort, "__version__", None) != "1.22.1":
+        if _runtime_version(getattr(ort, "__version__", None), "ONNX") != "1.22.1":
             raise QixuanRuntimeError("ONNX Runtime 1.22.1 is required")
         session: Any = None
         try:
@@ -370,8 +441,7 @@ class QixuanEngine:
                 providers=["CPUExecutionProvider"],
             )
             session.disable_fallback()
-            if session.get_providers() != ["CPUExecutionProvider"]:
-                raise QixuanRuntimeError("ONNX session did not remain CPU-only")
+            self._record_onnx_devices(ort, session.get_providers())
             inputs = session.get_inputs()
             if {item.name for item in inputs} != set(feeds):
                 raise QixuanRuntimeError(f"{relative_path} input names do not match the fixed interface")
@@ -584,8 +654,23 @@ class QixuanEngine:
         generator_state: Any = None
         input_tensor: Any = None
         generated: Any = None
+        mps_runtime: Any = None
+        devices: dict[str, dict[str, str]] | None = None
+        parameters: tuple[Any, ...] = ()
+        buffers: tuple[Any, ...] = ()
+        loaded_tensor: Any = None
         try:
+            if self.vocoder_device == "mps":
+                _admit_mps_without_fallback()
             torch, AttrDict, BigVGAN = _import_bigvgan(self.vendor_directory / "bigvgan")
+            if self.vocoder_device == "mps":
+                backend = getattr(getattr(torch, "backends", None), "mps", None)
+                if backend is None or getattr(backend, "is_available", None) is None:
+                    raise QixuanRuntimeError("torch does not expose MPS availability")
+                if backend.is_available() is not True:
+                    raise QixuanRuntimeError("MPS is unavailable for the requested vocoder")
+                _runtime_version(getattr(torch, "__version__", None), "torch")
+                mps_runtime = torch
             config_path = self.vocoder_directory / "config.json"
             try:
                 config = json.loads(config_path.read_text(encoding="utf-8"))
@@ -629,14 +714,72 @@ class QixuanEngine:
                 with redirect_stdout(io.StringIO()):
                     model.remove_weight_norm()
                 model.eval().requires_grad_(False)
-                for tensor in (*tuple(model.parameters()), *tuple(model.buffers())):
-                    if tensor.device.type != "cpu" or tensor.dtype != torch.float32:
+                for loaded_tensor in (*tuple(model.parameters()), *tuple(model.buffers())):
+                    if loaded_tensor.device.type != "cpu" or loaded_tensor.dtype != torch.float32:
                         raise QixuanRuntimeError("loaded BigVGAN model is not entirely CPU float32")
+                loaded_tensor = None
                 checkpoint()
+                requested_device = torch.device(self.vocoder_device)
+                actual_requested = _normalized_device_type(
+                    requested_device, "requested BigVGAN device"
+                )
+                if actual_requested != self.vocoder_device:
+                    raise QixuanRuntimeError("torch normalized the requested vocoder device unexpectedly")
+                if self.vocoder_device == "mps":
+                    model = model.to(device=requested_device, dtype=torch.float32)
+                    parameters = tuple(model.parameters())
+                    buffers = tuple(model.buffers())
+                    if not parameters or not buffers:
+                        raise QixuanRuntimeError(
+                            "BigVGAN MPS parameter and buffer devices must both be observable"
+                        )
+                    for loaded_tensor in parameters:
+                        if (
+                            _normalized_device_type(
+                                loaded_tensor.device, "BigVGAN parameter"
+                            ) != "mps"
+                            or loaded_tensor.dtype != torch.float32
+                        ):
+                            raise QixuanRuntimeError("BigVGAN parameters are not entirely MPS FP32")
+                    loaded_tensor = None
+                    for loaded_tensor in buffers:
+                        if (
+                            _normalized_device_type(loaded_tensor.device, "BigVGAN buffer") != "mps"
+                            or loaded_tensor.dtype != torch.float32
+                        ):
+                            raise QixuanRuntimeError("BigVGAN buffers are not entirely MPS FP32")
+                    loaded_tensor = None
                 input_tensor = torch.from_numpy(mapped).to(
-                    device=torch.device("cpu"), dtype=torch.float32
+                    device=requested_device, dtype=torch.float32
                 )[None]
-                generated = model(input_tensor).cpu().numpy()
+                input_device = _normalized_device_type(input_tensor.device, "BigVGAN input")
+                if input_device != self.vocoder_device or input_tensor.dtype != torch.float32:
+                    raise QixuanRuntimeError("BigVGAN input is on the wrong device or precision")
+                generated = model(input_tensor)
+                output_device = _normalized_device_type(generated.device, "BigVGAN output")
+                if output_device != self.vocoder_device or generated.dtype != torch.float32:
+                    raise QixuanRuntimeError("BigVGAN output is on the wrong device or precision")
+                if self.vocoder_device == "mps":
+                    if self._onnx_devices is None:
+                        raise QixuanRuntimeError("MPS result has no complete ONNX device observation")
+                    devices = {
+                        "onnx": dict(self._onnx_devices),
+                        "vocoder": {
+                            "requested": "mps",
+                            "actual": "mps",
+                            "runtime": "torch",
+                            "version": _runtime_version(
+                                getattr(torch, "__version__", None), "torch"
+                            ),
+                            "precision": "FP32",
+                            "fallback": "forbidden",
+                            "parameterDevice": "mps",
+                            "bufferDevice": "mps",
+                            "inputDevice": input_device,
+                            "outputDevice": output_device,
+                        },
+                    }
+                generated = generated.cpu().numpy()
             output = _finite_array(
                 generated, shape=(1, 1, frames * HOP_SIZE), dtype="float32", label="BigVGAN output"
             )[0, 0].copy()
@@ -645,6 +788,7 @@ class QixuanEngine:
                 samples=output,
                 native_frame_count=frames * HOP_SIZE,
                 projection_relative_residual=residual,
+                devices=devices,
             )
         except RenderCancelled:
             raise
@@ -658,10 +802,20 @@ class QixuanEngine:
             generator_state = None
             state = None
             model = None
-            torch = None
+            parameters = ()
+            buffers = ()
+            loaded_tensor = None
             mapped = None
             source = None
             gc.collect()
+            if mps_runtime is not None:
+                try:
+                    mps_runtime.mps.synchronize()
+                    mps_runtime.mps.empty_cache()
+                    mps_runtime.mps.synchronize()
+                except Exception as exc:
+                    raise QixuanRuntimeError(f"cannot synchronize and release MPS vocoder: {exc}") from exc
+            torch = None
 
 
 def project_log_mel(
