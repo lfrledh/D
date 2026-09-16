@@ -20,6 +20,8 @@ struct SingingResultRecord: Sendable {
         let vocoderSHA256: String
         let bankTermsSHA256: String
         let vocoderLicenseSHA256: String
+        let profileSHA256: String?
+        let vendorManifestSHA256: String?
     }
     struct Audio: Sendable {
         let path: String
@@ -34,6 +36,32 @@ struct SingingResultRecord: Sendable {
         let seconds: Double
     }
     struct Execution: Sendable {
+        struct ONNXDevice: Sendable {
+            let requested: String
+            let actual: String
+            let provider: String
+            let runtime: String
+            let version: String
+            let precision: String
+            let fallback: String
+        }
+        struct VocoderDevice: Sendable {
+            let requested: String
+            let actual: String
+            let runtime: String
+            let version: String
+            let precision: String
+            let fallback: String
+            let parameterDevice: String
+            let bufferDevice: String
+            let inputDevice: String
+            let outputDevice: String
+        }
+        struct Devices: Sendable {
+            let onnx: ONNXDevice
+            let vocoder: VocoderDevice
+        }
+
         let precision: String
         let seedControl: String
         let nativeFrameCount: Int64
@@ -42,7 +70,10 @@ struct SingingResultRecord: Sendable {
         let projectionRelativeResidual: Double
         let saturatedSamples: Int64
         let stages: [Stage]
+        let devices: Devices?
     }
+    let schemaVersion: Int64
+    let profileID: String
     let runID: String
     let source: Source
     let model: Model
@@ -198,23 +229,32 @@ enum SingingProviderProtocol {
                 exactKeys: ["schemaVersion", "runID", "profileID", "status", "source", "model", "audio", "execution"],
                 context: "singing result")
         } catch { throw InferenceFailure.backendFailed("Invalid singing result JSON: \(error.localizedDescription)") }
-        guard try root["schemaVersion"]!.requiredInteger(context: "result schemaVersion") == 1,
-              try root["status"]!.requiredString(context: "result status") == "rendered",
-              try root["profileID"]!.requiredString(context: "result profileID")
-                == SingingBackendConfiguration.profileID else {
+        let schemaVersion = try root["schemaVersion"]!.requiredInteger(context: "result schemaVersion")
+        let profileID = try root["profileID"]!.requiredString(context: "result profileID")
+        guard let deployment = SingingBackendConfiguration.profile(for: profileID),
+              schemaVersion == deployment.resultSchemaVersion,
+              try root["status"]!.requiredString(context: "result status") == "rendered" else {
             throw InferenceFailure.backendFailed("Singing result header is unsupported.")
         }
         let source = try root["source"]!.object(
             exactKeys: ["phraseID", "phraseRevision", "requestSHA256", "durationTicks"], context: "result source")
+        let modelKeys: Set<String> = deployment.vocoderDevice == .mps
+            ? ["bankArchiveSHA256", "vocoderRevision", "vocoderSHA256", "bankTermsSHA256",
+               "vocoderLicenseSHA256", "profileSHA256", "vendorManifestSHA256"]
+            : ["bankArchiveSHA256", "vocoderRevision", "vocoderSHA256", "bankTermsSHA256",
+               "vocoderLicenseSHA256"]
         let model = try root["model"]!.object(
-            exactKeys: ["bankArchiveSHA256", "vocoderRevision", "vocoderSHA256", "bankTermsSHA256",
-                        "vocoderLicenseSHA256"], context: "result model")
+            exactKeys: modelKeys, context: "result model")
         let audio = try root["audio"]!.object(
             exactKeys: ["path", "encoding", "sampleRate", "channels", "frameCount", "sha256"],
             context: "result audio")
+        let executionKeys: Set<String> = deployment.vocoderDevice == .mps
+            ? ["precision", "seedControl", "nativeFrameCount", "trimHeadSamples", "outputFrameCount",
+               "projectionRelativeResidual", "saturatedSamples", "stages", "devices"]
+            : ["precision", "seedControl", "nativeFrameCount", "trimHeadSamples", "outputFrameCount",
+               "projectionRelativeResidual", "saturatedSamples", "stages"]
         let execution = try root["execution"]!.object(
-            exactKeys: ["precision", "seedControl", "nativeFrameCount", "trimHeadSamples", "outputFrameCount",
-                        "projectionRelativeResidual", "saturatedSamples", "stages"], context: "result execution")
+            exactKeys: executionKeys, context: "result execution")
         let stageValues = try array(execution["stages"]!, context: "result stages")
         guard stageValues.count == stages.count else {
             throw InferenceFailure.backendFailed("Singing result must report exactly seven stages.")
@@ -234,7 +274,42 @@ enum SingingProviderProtocol {
         }
         let sampleRate = try platformInt(audio["sampleRate"]!, context: "audio sampleRate")
         let channels = try platformInt(audio["channels"]!, context: "audio channels")
+        let devices: SingingResultRecord.Execution.Devices?
+        if deployment.vocoderDevice == .mps {
+            let rootDevices = try execution["devices"]!.object(
+                exactKeys: ["onnx", "vocoder"], context: "execution devices")
+            let onnx = try rootDevices["onnx"]!.object(
+                exactKeys: ["requested", "actual", "provider", "runtime", "version", "precision", "fallback"],
+                context: "ONNX execution device")
+            let vocoder = try rootDevices["vocoder"]!.object(
+                exactKeys: ["requested", "actual", "runtime", "version", "precision", "fallback",
+                            "parameterDevice", "bufferDevice", "inputDevice", "outputDevice"],
+                context: "vocoder execution device")
+            devices = .init(
+                onnx: .init(
+                    requested: try string(onnx, "requested", context: "ONNX requested device"),
+                    actual: try string(onnx, "actual", context: "ONNX actual device"),
+                    provider: try string(onnx, "provider", context: "ONNX provider"),
+                    runtime: try string(onnx, "runtime", context: "ONNX runtime"),
+                    version: try runtimeVersion(onnx["version"]!, context: "ONNX runtime version"),
+                    precision: try string(onnx, "precision", context: "ONNX precision"),
+                    fallback: try string(onnx, "fallback", context: "ONNX fallback")),
+                vocoder: .init(
+                    requested: try string(vocoder, "requested", context: "vocoder requested device"),
+                    actual: try string(vocoder, "actual", context: "vocoder actual device"),
+                    runtime: try string(vocoder, "runtime", context: "vocoder runtime"),
+                    version: try runtimeVersion(vocoder["version"]!, context: "vocoder runtime version"),
+                    precision: try string(vocoder, "precision", context: "vocoder precision"),
+                    fallback: try string(vocoder, "fallback", context: "vocoder fallback"),
+                    parameterDevice: try string(vocoder, "parameterDevice", context: "vocoder parameter device"),
+                    bufferDevice: try string(vocoder, "bufferDevice", context: "vocoder buffer device"),
+                    inputDevice: try string(vocoder, "inputDevice", context: "vocoder input device"),
+                    outputDevice: try string(vocoder, "outputDevice", context: "vocoder output device")))
+        } else {
+            devices = nil
+        }
         return SingingResultRecord(
+            schemaVersion: schemaVersion, profileID: profileID,
             runID: try root["runID"]!.requiredString(context: "result runID"),
             source: .init(
                 phraseID: try source["phraseID"]!.requiredString(context: "source phraseID"),
@@ -246,7 +321,10 @@ enum SingingProviderProtocol {
                 vocoderRevision: try model["vocoderRevision"]!.requiredString(context: "model vocoder revision"),
                 vocoderSHA256: try model["vocoderSHA256"]!.requiredString(context: "model vocoder SHA-256"),
                 bankTermsSHA256: try model["bankTermsSHA256"]!.requiredString(context: "model bank terms"),
-                vocoderLicenseSHA256: try model["vocoderLicenseSHA256"]!.requiredString(context: "model vocoder license")),
+                vocoderLicenseSHA256: try model["vocoderLicenseSHA256"]!.requiredString(context: "model vocoder license"),
+                profileSHA256: try model["profileSHA256"]?.requiredString(context: "model profile SHA-256"),
+                vendorManifestSHA256: try model["vendorManifestSHA256"]?.requiredString(
+                    context: "model vendor manifest SHA-256")),
             audio: .init(
                 path: try audio["path"]!.requiredString(context: "audio path"),
                 encoding: try audio["encoding"]!.requiredString(context: "audio encoding"),
@@ -261,7 +339,7 @@ enum SingingProviderProtocol {
                 outputFrameCount: try execution["outputFrameCount"]!.requiredInteger(context: "outputFrameCount"),
                 projectionRelativeResidual: residual,
                 saturatedSamples: try execution["saturatedSamples"]!.requiredInteger(context: "saturatedSamples"),
-                stages: parsedStages))
+                stages: parsedStages, devices: devices))
     }
 
     static func validate(
@@ -269,7 +347,11 @@ enum SingingProviderProtocol {
         requestSHA256: String, inventory: SingingModelInventory
     ) throws {
         let profile = inventory.profile
-        guard record.runID == runID.uuidString.lowercased(),
+        let deployment = inventory.deployment
+        guard record.schemaVersion == deployment.resultSchemaVersion,
+              record.profileID == request.profileID,
+              request.profileID == deployment.profileID,
+              record.runID == runID.uuidString.lowercased(),
               exact(record.source.phraseID, request.phrase.id),
               record.source.phraseRevision == request.phrase.revision,
               record.source.durationTicks == request.phrase.durationTicks,
@@ -283,10 +365,26 @@ enum SingingProviderProtocol {
               })?.sha256,
               record.audio.path == "output.wav", record.audio.encoding == "float32LE-WAV",
               record.audio.sampleRate == 44_100, record.audio.channels == 1,
-              record.execution.precision == "Qixuan original ONNX CPU; BigVGAN FP32 CPU",
+              record.execution.precision == deployment.precision,
               record.execution.seedControl == "unsupported", record.execution.trimHeadSamples == 4096,
               record.execution.saturatedSamples >= 0 else {
             throw InferenceFailure.backendFailed("Singing result does not match the admitted request or fixed profile.")
+        }
+        switch deployment.vocoderDevice {
+        case .cpu:
+            guard record.model.profileSHA256 == nil,
+                  record.model.vendorManifestSHA256 == nil,
+                  record.execution.devices == nil else {
+                throw InferenceFailure.backendFailed("CPU singing result must retain the strict v1 shape.")
+            }
+        case .mps:
+            guard record.model.profileSHA256 == deployment.profileSHA256,
+                  record.model.vendorManifestSHA256 == SingingBackendConfiguration.vendorManifestSHA256,
+                  let devices = record.execution.devices,
+                  validMPSDevices(devices) else {
+                throw InferenceFailure.backendFailed(
+                    "MPS singing result does not prove the fixed no-fallback device execution.")
+            }
         }
         let delivered = try deliveredFrames(request.phrase.durationTicks)
         let native = try nativeFrames(request.phrase.durationTicks)
@@ -296,6 +394,19 @@ enum SingingProviderProtocol {
               validDigest(record.audio.sha256), validDigest(record.model.vocoderSHA256) else {
             throw InferenceFailure.backendFailed("Singing result frame counts or digests are invalid.")
         }
+    }
+
+    private static func validMPSDevices(_ devices: SingingResultRecord.Execution.Devices) -> Bool {
+        let onnx = devices.onnx
+        let vocoder = devices.vocoder
+        return onnx.requested == "cpu" && onnx.actual == "cpu"
+            && onnx.provider == "CPUExecutionProvider" && onnx.runtime == "onnxruntime"
+            && onnx.precision == "FP32-original" && onnx.fallback == "forbidden"
+            && vocoder.requested == "mps" && vocoder.actual == "mps"
+            && vocoder.runtime == "torch" && vocoder.precision == "FP32"
+            && vocoder.fallback == "forbidden" && vocoder.parameterDevice == "mps"
+            && vocoder.bufferDevice == "mps" && vocoder.inputDevice == "mps"
+            && vocoder.outputDevice == "mps"
     }
 
     static func validateWAV(
@@ -394,6 +505,21 @@ enum SingingProviderProtocol {
             throw InferenceFailure.backendFailed("\(context) must be an array.")
         }
         return values
+    }
+
+    private static func string(
+        _ object: [String: AudioJSONValue], _ key: String, context: String
+    ) throws -> String {
+        try object[key]!.requiredString(context: context)
+    }
+
+    private static func runtimeVersion(_ value: AudioJSONValue, context: String) throws -> String {
+        let version = try value.requiredString(context: context)
+        guard !version.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              version.utf8.count <= 128 else {
+            throw InferenceFailure.backendFailed("\(context) must contain 1...128 UTF-8 bytes.")
+        }
+        return version
     }
 
     private static func finiteNumber(_ value: AudioJSONValue, context: String) throws -> Double {

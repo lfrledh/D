@@ -23,6 +23,7 @@ struct SingingModelInventory: Sendable {
     }
 
     let configuration: SingingBackendConfiguration
+    let deployment: SingingProfileDescription
     let profile: Profile
     let bankDirectory: URL
     let vocoderDirectory: URL
@@ -37,7 +38,7 @@ struct SingingModelInventory: Sendable {
         guard case .singing(let singing) = request.input else {
             throw InferenceFailure.unsupportedCapability(request.input.capability)
         }
-        guard singing.profileID == SingingBackendConfiguration.profileID,
+        guard let deployment = SingingBackendConfiguration.profile(for: singing.profileID),
               request.model.revision == SingingBackendConfiguration.bankArchiveSHA256,
               singing.vocoder.revision == SingingBackendConfiguration.vocoderRevision else {
             throw InferenceFailure.invalidRequest("Singing request does not identify the fixed profile materials.")
@@ -90,10 +91,10 @@ struct SingingModelInventory: Sendable {
         }
         let (profileRecord, profileData) = try seal.addSmallFile(
             profileURL, label: "Singing profile", maximumBytes: 2 * 1024 * 1024)
-        guard profileRecord.sha256 == SingingBackendConfiguration.profileSHA256 else {
+        guard profileRecord.sha256 == deployment.profileSHA256 else {
             throw InferenceFailure.invalidRequest("Singing profile trust-anchor SHA-256 mismatch.")
         }
-        let parsedProfile = try parseProfile(profileData)
+        let parsedProfile = try parseProfile(profileData, deployment: deployment)
         let q = singing.qualification
         guard q.confirmedApplicable,
               q.bankArchiveSHA256 == parsedProfile.bankArchiveSHA256,
@@ -135,8 +136,9 @@ struct SingingModelInventory: Sendable {
             profileManifest: profileURL, artifactDirectory: artifacts,
             timeoutSeconds: configuration.timeoutSeconds,
             cancellationGraceSeconds: configuration.cancellationGraceSeconds)
-        return Self(configuration: validatedConfiguration, profile: parsedProfile, bankDirectory: bank,
-                    vocoderDirectory: vocoder, protectedInputs: seal, estimatedPeakBytes: peak)
+        return Self(configuration: validatedConfiguration, deployment: deployment,
+                    profile: parsedProfile, bankDirectory: bank, vocoderDirectory: vocoder,
+                    protectedInputs: seal, estimatedPeakBytes: peak)
     }
 
     func confirmUnchanged(cancellable: Bool) throws {
@@ -168,7 +170,9 @@ struct SingingModelInventory: Sendable {
         return total.partialValue
     }
 
-    static func parseProfile(_ data: Data) throws -> Profile {
+    static func parseProfile(
+        _ data: Data, deployment: SingingProfileDescription = SingingBackendConfiguration.cpuProfile
+    ) throws -> Profile {
         let root = try parseObject(data, exactKeys: [
             "schemaVersion", "profileID", "bankArchiveSHA256", "bankTermsSHA256", "bankFiles",
             "vocoderRevision", "vocoderFiles", "vocoderLicenseSHA256", "sampleRate", "hopSize",
@@ -176,7 +180,7 @@ struct SingingModelInventory: Sendable {
             "acousticDepth", "contextTicks", "projection",
         ], context: "singing profile")
         guard try root.int("schemaVersion") == 1,
-              try root.string("profileID") == SingingBackendConfiguration.profileID,
+              try root.string("profileID") == deployment.profileID,
               try root.int("sampleRate") == 44_100, try root.int("hopSize") == 512,
               try root.int("headFrames") == 8, try root.int("tailFrames") == 8,
               try root.int("pitchSteps") == 10, try root.int("varianceSteps") == 20,

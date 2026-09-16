@@ -85,7 +85,7 @@ public actor SingingBackend: InferenceBackend {
             requestSeal = try SingingSealedFile.capture(
                 requestURL, label: "Frozen singing request", maximumBytes: 2 * 1024 * 1024,
                 cancellable: true)
-            let environment = [
+            var environment = [
                 "PATH": "/usr/bin:/bin",
                 "LANG": "en_US.UTF-8",
                 "LC_ALL": "en_US.UTF-8",
@@ -99,6 +99,9 @@ public actor SingingBackend: InferenceBackend {
                 "TRANSFORMERS_OFFLINE": "1",
                 "HF_DATASETS_OFFLINE": "1",
             ]
+            if inventory.deployment.vocoderDevice == .mps {
+                environment["PYTORCH_ENABLE_MPS_FALLBACK"] = "0"
+            }
             let arguments = [
                 "-B", inventory.configuration.providerScript.path,
                 "--request", requestURL.path,
@@ -144,15 +147,23 @@ public actor SingingBackend: InferenceBackend {
                 catch { throw Self.protectionFailure(error, original: consumerError) }
                 throw consumerError
             }
-            return InferenceResult(artifacts: [artifact], metadata: [
-                "profile": SingingBackendConfiguration.profileID,
+            var metadata = [
+                "profile": result.profileID,
                 "precision": result.execution.precision,
                 "sourcePhraseID": result.source.phraseID,
                 "sourcePhraseRevision": String(result.source.phraseRevision),
                 "requestSHA256": result.source.requestSHA256,
                 "recordPath": resultURL.path,
                 "seedControl": result.execution.seedControl,
-            ])
+            ]
+            if let devices = result.execution.devices {
+                metadata["onnxDevice"] = devices.onnx.actual
+                metadata["vocoderDevice"] = devices.vocoder.actual
+                metadata["deviceFallback"] = devices.vocoder.fallback
+                metadata["onnxRuntimeVersion"] = devices.onnx.version
+                metadata["vocoderRuntimeVersion"] = devices.vocoder.version
+            }
+            return InferenceResult(artifacts: [artifact], metadata: metadata)
         } catch {
             let original = error
             do { try Self.confirmPostDrain(inventory: inventory, requestSeal: requestSeal) }
