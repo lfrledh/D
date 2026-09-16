@@ -276,3 +276,72 @@ Sol/high受限独立CLI执行IMAGE最后一轮普通修补，预检约66.6秒、
 **下一有限动作提案：** 优先一个固定推荐几何下17→121帧的原版参考控制，先冻结原时间位置噪声对应关系、首帧/文本/精度/步数及受控超时，再判定短时域是否限制可辨运动。它仍是待检验假说，当前没有运行121帧，不宣称更大内存必定解决。参考可用后才进行D正式路径对照；仍不可用则回到模型/profile适用性决策，不继续零散算子试调或超预算修补。通过旧标准或经独立说明的正式验收修订前，I2V阶段不得结案成功。
 
 首发顺序仍为有限模态基础→一条真实创作组合→首用/部署/恢复/发行。AP1的H22/H23保持独立本人待办，用户离机不催解锁；不因这项质量定位新建权限请求，不启动下一模态/界面或更改发布目标。
+
+## 2026-09-16 新用户要求：GPU优先、CPU显式备选（DEVICE-r1）
+
+状态：新设备选择功能候选准备，不改变I2V原数值/质量失败，不刷新旧IMAGE/RUN预算。task_id仍D-VIDEO-I2V-01；子范围DEVICE-r1；run_id为D-DEVICE-AUDIT-01/run-20260916T105115Z/gpu-worker。源74384bb4c4eddc0fe075f4b705b1a3f2824103a3；实现父基线0f2797cab421e9c5dd52e75f85dddfe5a8414d96；本准备提交完整SHA由job.json固定。分支codex/d-video-i2v-01-gpu-vae，物理目录D-Worktrees/D-VIDEO-I2V-01-GPU-VAE。
+
+用户明确：支持范围内首先实现最高有效性能路径；GPU优先，CPU作为可选备选；NPU需真实支持/测量，不加假入口。本子范围只使首图视频CLI的VAE能显式选择MPS FP32/GPU或既有CPU FP32，默认推荐GPU。不是全模型CPU模式；T5/DiT仍MLX GPU。没有App I2V入口/质量接纳，不扩公共Swift契约/签名/打包。
+
+**Worker允许文件**：Backends/Video/Python/d_video_i2v_image.py、d_video_i2v_run.py，以及可选新增d_video_i2v_gpu.py；直接测试Backends/Video/Tests/test_video_i2v_device.py（新增），test_video_i2v_image.py、test_video_i2v_run.py（仅新增用例/必要无语义重构，既有断言和预期不降低）。不改CPU卷积实现、vendor、模型/采样/精度、包清单、其他测试/源码或本文。Lead维护本文与全局文档。Worker不commit、不联网、不派工、不运行真实权重/GPU/GUI/构建、不读凭据、不安装依赖；CPU合成夹具和内存compile允许。
+
+### 冻结契约与行为表
+
+| 输入/情形 | 必须行为 |
+| --- | --- |
+| 原`wan22-ti2v-5b-bf16-cpuvae-v1`请求 | 原CPU FP32语义、工作区修补、精度字段保持；不得暗中GPU执行。旧PROFILE常量可保留兼容别名。 |
+| 新`wan22-ti2v-5b-bf16-gpuvae-v1`请求 | 编码与解码均MPS FP32；新推荐DEFAULT_PROFILE指向它；请求仍显式profile，不缺省改写输入。CLI帮助说明GPU首选及CPU选择方法。 |
+| 其他profile/CPU和GPU混淆 | 原严格校验，不伪造已支持；旧结果SCHEMA兼容，新结果精度必须写GPU/MPS FP32。 |
+| GPU不可用，或PYTORCH_ENABLE_MPS_FALLBACK=1 | 在重模型计算前明确失败，不默默CPU重跑；运行环境未设置时GPU路径在首次Torch导入前显式设0，值非0时拒绝。CPU路径不依赖MPS可用性。已导入Torch但fallback状态无法确认时失败。 |
+| GPU适配器编码/解码 | 与CPU返回同类型/形状/自有contiguous NumPy FP32；输入不变，GPU张量不越过adapter；验证实际参数/输出设备与精度，非有限/形状错误失败。保持VAE权重固定摘要与身份检查。 |
+| 生命周期 | 每次调用finally清模型cache；关闭幂等、同步后释放本实例refs；构造/编码/解码失败均不隐藏异常，不安装CPU卷积分块到GPU，不改全局/vendor；不声称driver保留等于泄漏或已归零。 |
+| 执行记录 | 结果增加窄的executionDevices，记录VAE请求/解析设备、runtime、FP32、fallbackDisabled；text/diffusion明确MLX GPU。记录实际路径；不把requested当observed，不记录NPU支持。旧CPU结果原字段不变，新增字段可追加。 |
+| 取消/输出错误/资源保护 | 沿用已验收检查、错误码及输出保护；drain/release后结束，不能因GPU更换吞错、改first-frame锁定/采样。 |
+
+不要求重写现有适配器或通用设备框架；尽量复用已验证的输入/生命周期校验。GPU路径实现可选择局部组织，避免重复整份CPU适配器。普通CPU文件读取、NumPy/PNG/发布不等于模型CPU回退。
+
+### 验收与预算
+
+1. 旧133方法按原入口回归；新增profile/CPU兼容、GPU能力/回退拒绝、解析设备/精度记录、输入/输出设备形状类型和失败/双close，用合成CPU/受控fake实现，不以mock代替真实GPU。
+2. Lead已完成原版VAE完整MPS解码先行：320x192/17，Torch2.7.1，禁CPU fallback；3133440点满足原atol/rtol各3e-5，首帧和全部RGB最大1。独立证据在run/full-mps-vae-r2。不是本候选实现验收；冷24.14秒不证明GPU更快。
+3. Lead在代码固定后另行做真实GPU编码/解码对CPU参考、冷/重复分开计时、明确错误/取消恢复和最小CLI实际运行。原数值/帧门槛不降，整个I2V运动/跨设备诊断仍未通过。
+4. 受限CLI Sol/high完成初次实现，最多两轮定向修复（只适用这次新DEVICE契约）；Lead/nonimplementer审核。旧IMAGE/RUN既用预算不因此重置；需修其旧数值算法或越界立即停报。
+5. Writer单一；Worker结束交回后Lead才写其目录。运行工作目录即核验worktree；输出/临时为本run/gpu-worker/output及tmp。PYTHONDONTWRITEBYTECODE=1，PYTHONPYCACHEPREFIX/TMPDIR/D_TEST_TEMP_DIR均指向授权tmp；语法用tokenize.open+compile(...,dont_inherit=True)，不exec目标、默认py_compile禁用。未预授权权限拒绝暂停报告，不绕行；预先唯一缓存安全降级按现行规程。
+
+真实解释器：D-Development/AgentTrials/D-VIDEO-V0-01/run-20260913T152419Z/venv/bin/python；直接测试PYTHONPATH指本worktree Backends/Video/Python、Vendor、Tests及已批准Pillow目录D-Development/AgentTrials/D-VIDEO-I2V-01/run-20260915T103902Z/python-deps。只用本地既有依赖。模型/用户应用/源个人文件只读。结果交output/RESULT.md，说明实际diff、测试证据、未测/异常、进程状态；Lead代提交不改作者身份。
+
+### DEVICE-r1 初交复核与第一次修复（2026-09-16）
+
+初交c0b7a50fa9ef5cb4b5c35dcc9a23daa6c6464a39，Sol/high同一受限CLI，未接纳。Worker自检125通过（旧133内108、新12、额外访问5）；未跑的25由Lead负责，不能相加假称完整通过。已保留同进程测试隔离失败、缺环境变量失败、OMP179临时文件警告和ps拒绝。OMP警告未提前停报，属于执行协议缺口/来源待明；未观察到成功越界或权限扩大，源保护保持。后续Worker只做stdlib内存编译，Torch行为测试由Lead在原授权下执行，不能借此扩大Worker写根。
+
+非实现者与Lead独立确认两项：当前env0无法证明Torch首次导入时禁fallback；close在释放本实例及局部core/owner前清allocator。Lead外部review-regressions.py在固定初交上两个反例均真实失败（exit1，代码未变）。第一次DEVICE普通修复只处理这两项及GPU显式驻留入口的预检顺序，新增必要持久反例，不改变旧IMAGE/RUN预算或任何数值/输出标准。已导入且来源未知的Torch即使当前env0也拒绝；同模块在首次导入前设定0并核验的同一实例才可复用；可选注入不能绕过。释放测试需检查弱引用/最后清理的次序，不能仅计调用次数。GPU preflight先于显式驻留的runtime加载，以免依赖变化引入不确定导入时机；没有证明当前runtime必导Torch。
+
+修复写回同一允许六文件；Worker不改本节/Lead外部反例、不执行Torch/MLX/GPU或进程枚举，syntax只用tokenize.open+compile。Lead负责全部原回归、真实GPU/CPU与取消恢复。初次DEVICE交付加本次修复1，之后最多剩1轮普通DEVICE修复；原阶段质量停点不变。
+
+
+## 2026-09-16 DEVICE-r1设备选择收口：功能候选通过，效率与I2V质量未结案
+
+源起点74384bb4c4eddc0fe075f4b705b1a3f2824103a3；本轮固定受测代码`ba978d508c91db55f11fc008bec25ccf6baf0f1a`，在`D-Worktrees/D-VIDEO-I2V-01-GPU-VAE`、`codex/d-video-i2v-01-gpu-vae`。新GPU/既有CPU profile仅选择VAE，T5/DiT仍MLX GPU；GPU首选推荐不暗改旧CPU配方。请求profile仍必填。尚无App I2V入口或全模态设备选择，不将此候选合入/推送源代码。源仅同步设备原则/修复清单/本记录，生产仍3898e1d020cbc356417e04e7c9f761db1a910725。
+
+外部证据E=`D-Development/AgentTrials/D-DEVICE-AUDIT-01/run-20260916T105115Z`，最终候选/源文档SHA与push写E/final-receipt.json，不为自引用反复提交。当前解释器Python3.12.14、Torch2.7.1、MLX0.31.1，M4/16GiB；现有模型/精度/依赖不变。GPU为MPS FP32、显式禁CPU fallback，未知预加载Torch拒绝；原CPU FP32及工作区方案保留。
+
+### 固定版本的验证与明确未通过项
+
+- `components-final`：11个独立进程共151方法，旧133加18新方法，0失败/0跳过；包含原数值、输入/输出保护、profile与生命周期合成检查。`review-red`在初交c0b7a50失败的两个独立反例，`review-green`在本版通过，未改反例。非实现者静态复核无阻断；记录一项非阻断测试缺口：驻留顺序用例当前观察device_info而非_runtime_components调用，实际生产代码顺序正确。
+- `candidate-vae`：真实GPU编码与固定CPU参考最大差8.441507816314697e-6，真实17帧解码最大差2.104043960571289e-5，按原atol/rtol各3e-5均0超限；首/全部RGB最大1。实际参数及编码/解码输出均mps，非mock/请求标签。CPU编码/完整解码float及RGB差0。输入自有拷贝、NaN拒绝后重复编码、双close和关闭后拒绝均通过；输入/代码/权重摘要保持。
+- 同一VAE探针GPU encode约1.94/decode22.01秒、随后CPU约0.33/16.31秒；早先两次warm原版GPU28.39/36.00秒、CPU20.09/19.40秒。顺序/传输/缓存边界不同，不能直接推广硬件排序，但**不能声称GPU已更快**。GPU关闭后active=0、driver仍约6.47GB，随后进程正常结束；不把driver保留断言为泄漏，也不忽略其资源影响。
+- `gpu-cancel-encode-corrected`、`gpu-cancel-decode`：真实GPU边界取消分别约4.11/8.68秒后exit130，无终态成功结果/发布清单，输入255项保护。不是GPU瞬时可中断承诺。
+- `gpu-recovery`：取消后新进程正常生成，CLI全程约121.25秒，首帧原参考最大1，完整帧/请求/摘要/设备记录检查通过。`cpu-explicit`原CPU profile真实生成约104.10秒，首帧差0，VAE记录CPU而T5/DiT仍GPU。均为320x192/5帧/2步/seed2215的生命周期小配置，保留原默认编译和显式10GiB MLX驻留范围，不是运动质量/全机内存上限/多次无泄漏证明。两次独立单样及不同文字阶段耗时不足证明端到端哪种普遍更快。
+- `gpu-cancel-encode`第一次Lead误用事件名encode而非既有encode-reference，未发送取消，子进程完成exit0，外壳正确exit1；保留原结果，**不计取消通过**。核对旧R5事件后，仅用新目录/正确参数重跑，原脚本断言及实现未改，见cancel-trigger-correction.json。这是Lead验证输入错误，不算Worker普通修复。
+
+当前功能候选可供后续集成审核；最高有效性能目标仍待测量/优化，原I2V运动质量及完整T5/DiT数值超差仍未过。没有将这151方法或VAE成功合并成全视频质量通过，也没有换seed/改精度/容差/黄金样例。H22/H23与原作品、普通D保持不动。
+
+### 来源、预算与恢复检查点
+
+Sol/high完成DEVICE初交及1轮修复；请求与可观察上下文一致、同一受限workspace-write CLI、网络禁用，隐藏服务端解析unknown。Lead冻结规则、独立反例/真实测试与提交，没有代写生产实现；两名非实现者分别审代码和政策，未声称另一个模型执行了实测。初交OMP179警告未及时停报的协议缺口保留；未发现成功越界，修复仅stdlib内存编译，不重复碰撞/扩大权限。旧IMAGE/RUN预算不刷新；DEVICE还剩1轮普通修复，未使用Lead实现接管。
+
+E/worker-usage-observed.json核对本次新线程3次调用：预检140.33秒、初实现810.84秒、修复455.26秒。终态CLI用量与同线程累计total_token_usage匹配，**不把三次累计值相加**；按相邻快照保存增量，缓存输入是总输入子集。最终累计输入5418547（缓存5242112）、输出57692；完整Lead消耗/订阅实际费用unknown，不重算历史样本，不据一次交付称成本最优。
+
+本轮自有Worker、GPU/CPU/检查进程已结束并回收；不据此宣称所有历史原生pending任务或系统进程结束。源scheme字节/SHA/index/未暂存状态与起点一致；代码工作树保留、原件/权重未改。最终候选文档提交比受测只加本节，源仅7份指导/任务文档；具体SHA/保护/远端核对见外部回执。
+
+下一有限动作：依设备清单E01先针对实际VAE算子/传输/缓存与代表性几何建立端到端性能对照，保留CPU选择；再承接既有推荐时域/运动质量控制，不启动广泛参数扫描。E02歌声神经声码器GPU路径是下一个高优先修复，ORT/NPU逐项核实，E03设备公共记录与E04预算准入分别安排，不新建万能框架。上述计划不意味着本轮已执行，也不以全部NPU支持阻塞有限首发。
