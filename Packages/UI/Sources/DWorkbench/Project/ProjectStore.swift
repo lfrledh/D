@@ -483,9 +483,8 @@ public actor ProjectStore {
 
     func exportPitchMIDI(assetID: UUID, documentID: UUID, to destination: URL,
                          checkpoint: (@Sendable (ProjectExportCheckpoint) throws -> Void)?) throws {
-        let result = try currentAcceptedPitch(assetID: assetID, documentID: documentID)
-        try publishPitchDerivative(try PitchMIDIFile.encode(result: result), assetID: assetID,
-                                   documentID: documentID, to: destination, checkpoint: checkpoint)
+        try publishPitchDerivative(assetID: assetID, documentID: documentID, to: destination,
+                                   checkpoint: checkpoint, encode: PitchMIDIFile.encode(result:))
     }
 
     /// An ordinary synthetic note preview, never a reconstruction of the singer's voice.
@@ -495,9 +494,8 @@ public actor ProjectStore {
 
     func exportPitchNotePreview(assetID: UUID, documentID: UUID, to destination: URL,
                                 checkpoint: (@Sendable (ProjectExportCheckpoint) throws -> Void)?) throws {
-        let result = try currentAcceptedPitch(assetID: assetID, documentID: documentID)
-        try publishPitchDerivative(try PitchNotePreview.encodeWAV(result: result), assetID: assetID,
-                                   documentID: documentID, to: destination, checkpoint: checkpoint)
+        try publishPitchDerivative(assetID: assetID, documentID: documentID, to: destination,
+                                   checkpoint: checkpoint, encode: PitchNotePreview.encodeWAV(result:))
     }
 
     private func currentAcceptedPitch(assetID: UUID, documentID: UUID, checkCancellation: Bool = true) throws -> PitchAnalysisResult {
@@ -514,28 +512,42 @@ public actor ProjectStore {
             throw ProjectStoreError.invalidProject("请先保留当前原声的有效音高结果，再导出音符。")
         }
         let result = try readPitchAnalysis(assetID: assetID)
-        let original = try inspectAudio(documentID: documentID)
-        guard result.source.documentID == documentID,
-              result.source.assetID == original.document.assetID,
-              result.source.documentRevision == original.document.revision,
-              result.source.contentSHA256 == original.metadata.contentSHA256,
-              result.source.sampleRate == original.metadata.format.sampleRate,
-              result.source.frameCount == original.metadata.format.frameCount else {
+        guard manifest.documents[index].kind == .audio,
+              let draft = manifest.documents[index].audioDraft, draft.id == documentID,
+              let original = manifest.assets.first(where: { $0.id == draft.assetID }),
+              original.role == .original, original.jobID == nil, let metadata = original.metadata.audio,
+              result.source.documentID == documentID,
+              result.source.assetID == draft.assetID,
+              result.source.documentRevision == draft.revision,
+              result.source.contentSHA256 == metadata.contentSHA256,
+              result.source.sampleRate == metadata.format.sampleRate,
+              result.source.frameCount == metadata.format.frameCount else {
             throw ProjectStoreError.invalidProject("原声或片段已改变，请重新识别并保留结果；历史结果仍保留。")
         }
+        // An exact hash of the bounded, registered original proves its admitted format is
+        // unchanged. No decoder or cancellation-aware media inspector is needed here.
+        // In particular, cancellation cannot skip this finite cleanup verification.
+        let bytes = try ProjectFiles.read(relative: original.relativePath, in: rootFD, limit: AudioLimits.maximumBytes)
+        guard SHA256.hash(data: bytes).map({ String(format: "%02x", $0) }).joined() == metadata.contentSHA256 else {
+            throw ProjectStoreError.externalModification
+        }
+        if checkCancellation { try Task.checkCancellation() }
         return result
     }
 
-    private func publishPitchDerivative(_ data: Data, assetID: UUID, documentID: UUID, to destination: URL,
-                                         checkpoint: (@Sendable (ProjectExportCheckpoint) throws -> Void)?) throws {
-        guard destination.isFileURL, destination.path.hasPrefix("/"),
-              destination.standardizedFileURL.path == destination.path,
-              !destination.lastPathComponent.isEmpty else { throw ProjectStoreError.unsafePath(destination.path) }
-        let parent = try ProjectFiles.openDirectory(destination.deletingLastPathComponent())
-        defer { Darwin.close(parent) }
-        try requireExternalPitchExportParent(parent)
-        var temporaryIdentity: (device: dev_t, inode: ino_t)?
+    private func publishPitchDerivative(assetID: UUID, documentID: UUID, to destination: URL,
+                                         checkpoint: (@Sendable (ProjectExportCheckpoint) throws -> Void)?,
+                                         encode: (PitchAnalysisResult) throws -> Data) throws {
+        let result = try currentAcceptedPitch(assetID: assetID, documentID: documentID)
         do {
+            guard destination.isFileURL, destination.path.hasPrefix("/"),
+                  destination.standardizedFileURL.path == destination.path,
+                  !destination.lastPathComponent.isEmpty else { throw ProjectStoreError.unsafePath(destination.path) }
+            let parent = try ProjectFiles.openDirectory(destination.deletingLastPathComponent())
+            defer { Darwin.close(parent) }
+            try requireExternalPitchExportParent(parent)
+            let data = try encode(result)
+            var temporaryIdentity: (device: dev_t, inode: ino_t)?
             try ProjectFiles.publishExport(to: destination, parent: parent, checkpoint: checkpoint, validate: { url in
                 try Task.checkCancellation()
                 _ = try self.currentAcceptedPitch(assetID: assetID, documentID: documentID)

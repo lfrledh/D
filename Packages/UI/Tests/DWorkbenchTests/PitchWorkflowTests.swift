@@ -528,20 +528,21 @@ struct PitchExchangeWorkflowTests {
         }
     }
 
-    @Test(arguments: [false, true])
-    func publicationErrorStillReportsConcurrentInputDamage(cancel: Bool) async throws {
+    @Test(arguments: [false, true], [false, true])
+    func publicationErrorStillReportsConcurrentInputDamage(cancel: Bool, damageOriginal: Bool) async throws {
         try await withPitchFixture { root, store, document, _ in
             let project = root.appendingPathComponent("Pitch.dproject")
             let (_, asset) = try await pitchCandidate(store: store, documentID: document.id, project: project)
             _ = try await store.decidePitchAnalysis(assetID: asset.id, documentID: document.id, accept: true)
             let output = root.appendingPathComponent("published")
             let manifest = project.appendingPathComponent(ProjectStore.manifestFilename)
-            let manifestBefore = try Data(contentsOf: manifest)
+            let damagedURL = damageOriginal ? try await store.inspectAudio(documentID: document.id).url : manifest
+            let before = try Data(contentsOf: damagedURL)
             let job = Task { () -> String in
                 do {
                     try await exchange(store, asset.id, document.id, output, false) { point in
                         if case .published = point {
-                            try Data("concurrent damage".utf8).write(to: manifest)
+                            try Data("concurrent damage".utf8).write(to: damagedURL)
                             if cancel { withUnsafeCurrentTask { $0?.cancel() } }
                             else { throw ProjectStoreError.io("controlled post-publication error") }
                         }
@@ -552,8 +553,8 @@ struct PitchExchangeWorkflowTests {
             let error = await job.value
             #expect(error.contains("来源复核失败"))
             #expect(FileManager.default.fileExists(atPath: output.path))
-            #expect(try Data(contentsOf: manifest) == Data("concurrent damage".utf8))
-            try manifestBefore.write(to: manifest) // Owned fixture cleanup after protection assertions.
+            #expect(try Data(contentsOf: damagedURL) == Data("concurrent damage".utf8))
+            try before.write(to: damagedURL) // Owned fixture cleanup after protection assertions.
         }
     }
 
