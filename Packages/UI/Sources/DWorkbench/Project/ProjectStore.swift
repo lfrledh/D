@@ -500,8 +500,8 @@ public actor ProjectStore {
                                    documentID: documentID, to: destination, checkpoint: checkpoint)
     }
 
-    private func currentAcceptedPitch(assetID: UUID, documentID: UUID) throws -> PitchAnalysisResult {
-        try Task.checkCancellation()
+    private func currentAcceptedPitch(assetID: UUID, documentID: UUID, checkCancellation: Bool = true) throws -> PitchAnalysisResult {
+        if checkCancellation { try Task.checkCancellation() }
         try checkLocation()
         try verifyUnchangedManifest()
         let index = try documentIndex(documentID)
@@ -534,17 +534,45 @@ public actor ProjectStore {
         let parent = try ProjectFiles.openDirectory(destination.deletingLastPathComponent())
         defer { Darwin.close(parent) }
         try requireExternalPitchExportParent(parent)
-        try ProjectFiles.publishExport(to: destination, parent: parent, checkpoint: checkpoint, validate: { url in
-            try Task.checkCancellation()
-            _ = try self.currentAcceptedPitch(assetID: assetID, documentID: documentID)
-            guard try Data(contentsOf: url) == data else { throw ProjectStoreError.externalModification }
-            try self.requireExternalPitchExportParent(parent)
-        }) { output in
-            try Task.checkCancellation()
-            try data.withUnsafeBytes { try ProjectFiles.writeAll($0, to: output) }
+        var temporaryIdentity: (device: dev_t, inode: ino_t)?
+        do {
+            try ProjectFiles.publishExport(to: destination, parent: parent, checkpoint: checkpoint, validate: { url in
+                try Task.checkCancellation()
+                _ = try self.currentAcceptedPitch(assetID: assetID, documentID: documentID)
+                let directory = try ProjectFiles.openDirectory(url.deletingLastPathComponent())
+                defer { Darwin.close(directory) }
+                var before = stat(), after = stat()
+                guard fstatat(directory, url.lastPathComponent, &before, AT_SYMLINK_NOFOLLOW) == 0,
+                      before.st_mode & S_IFMT == S_IFREG, before.st_nlink == 1,
+                      before.st_size == data.count else { throw ProjectStoreError.externalModification }
+                if let identity = temporaryIdentity {
+                    guard before.st_dev == identity.device, before.st_ino == identity.inode else {
+                        throw ProjectStoreError.externalModification
+                    }
+                } else { temporaryIdentity = (before.st_dev, before.st_ino) }
+                guard try ProjectFiles.read(relative: url.lastPathComponent, in: directory, limit: data.count) == data,
+                      fstatat(directory, url.lastPathComponent, &after, AT_SYMLINK_NOFOLLOW) == 0,
+                      after.st_mode & S_IFMT == S_IFREG, after.st_nlink == 1,
+                      after.st_dev == before.st_dev, after.st_ino == before.st_ino,
+                      after.st_size == before.st_size else { throw ProjectStoreError.externalModification }
+                try self.requireExternalPitchExportParent(parent)
+            }) { output in
+                try Task.checkCancellation()
+                try data.withUnsafeBytes { try ProjectFiles.writeAll($0, to: output) }
+            }
+        } catch {
+            let publicationError = error
+            do { _ = try currentAcceptedPitch(assetID: assetID, documentID: documentID, checkCancellation: false) }
+            catch {
+                throw ProjectStoreError.io("导出失败（\(publicationError)）；来源复核失败（\(error)）。若文件已经发布则保留，原件不会被回滚。")
+            }
+            throw publicationError
         }
-        // After atomic publication a subsequent error must not remove the delivered file.
-        _ = try currentAcceptedPitch(assetID: assetID, documentID: documentID)
+        // Check the source even if cancellation arrived just after publication. Neither path
+        // deletes a delivered file; a source failure is reported before a late cancellation.
+        do { _ = try currentAcceptedPitch(assetID: assetID, documentID: documentID, checkCancellation: false) }
+        catch { throw ProjectStoreError.io("导出文件已保留；来源复核失败（\(error)）。请检查项目。") }
+        try Task.checkCancellation()
     }
 
     /// Compare directory identities, including on case-insensitive volumes. A textual prefix

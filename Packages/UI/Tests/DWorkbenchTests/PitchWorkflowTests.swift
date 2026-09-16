@@ -289,6 +289,13 @@ struct PitchExchangeWorkflowTests {
         let url = directory.appendingPathComponent("ordinary-notes.wav")
         let wav = try PitchNotePreview.encodeWAV(result: result)
         try wav.write(to: url)
+        if let evidence = ProcessInfo.processInfo.environment["D_HUM_EXCHANGE_EVIDENCE_DIR"] {
+            let directory = URL(fileURLWithPath: evidence)
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            try midi.write(to: directory.appendingPathComponent("synthetic-notes.mid"), options: .withoutOverwriting)
+            try wav.write(to: directory.appendingPathComponent("synthetic-notes.wav"), options: .withoutOverwriting)
+            try JSONEncoder().encode(result).write(to: directory.appendingPathComponent("synthetic-analysis.json"), options: .withoutOverwriting)
+        }
         let file = try AVAudioFile(forReading: url)
         #expect(file.fileFormat.sampleRate == 48000 && file.fileFormat.channelCount == 1)
         #expect(file.length == count * 3)
@@ -310,6 +317,52 @@ struct PitchExchangeWorkflowTests {
             let measured = Double(crossings.count - 1) * 48000 / (try #require(crossings.last) - #require(crossings.first))
             #expect(abs(measured - frequency) < 0.1)
         }
+    }
+
+    @Test func maximumMIDIAndMalformedAnalysisStayBounded() throws {
+        var frames = Array(repeating: PitchFrame(pitchHz: nil, confidence: 0, voiced: false), count: 7500)
+        for i in 7495..<7500 { frames[i] = PitchFrame(pitchHz: 440, confidence: 0.99, voiced: true) }
+        let source = PitchSourceIdentity(assetID: UUID(), documentID: UUID(), documentRevision: 0,
+            contentSHA256: String(repeating: "a", count: 64), sampleRate: 16000,
+            frameCount: 1_920_000, startFrame: 0, endFrame: 1_920_000)
+        let result = PitchAnalysisResult(runID: UUID(), source: source, inputSHA256: String(repeating: "b", count: 64),
+                                        sampleCount: 1_920_000, frames: frames)
+        let data = try PitchMIDIFile.encode(result: result)
+        #expect(data.count < 1024)
+        var seq: MusicSequence?
+        #expect(NewMusicSequence(&seq) == noErr)
+        let sequence = try #require(seq)
+        defer { DisposeMusicSequence(sequence) }
+        #expect(MusicSequenceFileLoadData(sequence, data as CFData, .midiType, []) == noErr)
+        var track: MusicTrack?
+        #expect(MusicSequenceGetIndTrack(sequence, 0, &track) == noErr)
+        var length: MusicTimeStamp = 0, size = UInt32(MemoryLayout<MusicTimeStamp>.size)
+        #expect(MusicTrackGetProperty(try #require(track), kSequenceTrackProperty_TrackLength, &length, &size) == noErr)
+        var seconds: Float64 = 0
+        #expect(MusicSequenceGetSecondsForBeats(sequence, length, &seconds) == noErr)
+        #expect(abs(seconds - 120) < 0.000_001)
+        frames[0] = PitchFrame(pitchHz: .nan, confidence: 0.99, voiced: true)
+        let bad = PitchAnalysisResult(runID: result.runID, source: source, inputSHA256: result.inputSHA256,
+                                     sampleCount: result.sampleCount, frames: frames)
+        #expect(throws: InferenceFailure.self) { try PitchMIDIFile.encode(result: bad) }
+        #expect(throws: InferenceFailure.self) { try PitchNotePreview.encodeWAV(result: bad) }
+    }
+
+    @Test func runningPreviewRespondsToCancellation() async throws {
+        let source = PitchSourceIdentity(assetID: UUID(), documentID: UUID(), documentRevision: 0,
+            contentSHA256: String(repeating: "a", count: 64), sampleRate: 16000,
+            frameCount: 1_920_000, startFrame: 0, endFrame: 1_920_000)
+        let result = PitchAnalysisResult(runID: UUID(), source: source, inputSHA256: String(repeating: "b", count: 64),
+            sampleCount: 1_920_000, frames: Array(repeating: .init(pitchHz: 440, confidence: 0.99, voiced: true), count: 7500))
+        let (started, continuation) = AsyncStream.makeStream(of: Bool.self)
+        let work = Task.detached {
+            continuation.yield(true); continuation.finish()
+            return try PitchNotePreview.encodeWAV(result: result)
+        }
+        for await _ in started { break }
+        try await Task.sleep(for: .milliseconds(1))
+        work.cancel()
+        await #expect(throws: CancellationError.self) { try await work.value }
     }
 
     @Test(arguments: [false, true])
@@ -371,6 +424,7 @@ struct PitchExchangeWorkflowTests {
             let original = try await store.inspectAudio(documentID: document.id)
             let file = changed == "analysis" ? try await store.assetURL(for: asset) :
                 (changed == "original" ? original.url : project.appendingPathComponent(ProjectStore.manifestFilename))
+            let originalBytes = try Data(contentsOf: file)
             let sentinel = Data("deliberately damaged owned fixture".utf8)
             try sentinel.write(to: file)
             for preview in [false, true] {
@@ -379,6 +433,7 @@ struct PitchExchangeWorkflowTests {
                 #expect(!FileManager.default.fileExists(atPath: output.path))
             }
             #expect(try Data(contentsOf: file) == sentinel)
+            try originalBytes.write(to: file) // Restore only this owned failure fixture for normal close.
         }
     }
 
@@ -481,6 +536,7 @@ struct PitchExchangeWorkflowTests {
             _ = try await store.decidePitchAnalysis(assetID: asset.id, documentID: document.id, accept: true)
             let output = root.appendingPathComponent("published")
             let manifest = project.appendingPathComponent(ProjectStore.manifestFilename)
+            let manifestBefore = try Data(contentsOf: manifest)
             let job = Task { () -> String in
                 do {
                     try await exchange(store, asset.id, document.id, output, false) { point in
@@ -497,6 +553,7 @@ struct PitchExchangeWorkflowTests {
             #expect(error.contains("来源复核失败"))
             #expect(FileManager.default.fileExists(atPath: output.path))
             #expect(try Data(contentsOf: manifest) == Data("concurrent damage".utf8))
+            try manifestBefore.write(to: manifest) // Owned fixture cleanup after protection assertions.
         }
     }
 
