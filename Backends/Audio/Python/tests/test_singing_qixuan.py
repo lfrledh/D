@@ -39,6 +39,20 @@ class QixuanNumericTests(unittest.TestCase):
         result[:128] = target
         return result
 
+    def test_runtime_version_normalizes_str_subclass_and_bounds_utf8_bytes(self) -> None:
+        class TorchVersion(str):
+            def __str__(self):
+                return "must-not-rewrite-version"
+
+        normalized = qixuan._runtime_version(TorchVersion("2.7.1"), "torch")
+        self.assertIs(type(normalized), str)
+        self.assertEqual(normalized, "2.7.1")
+        self.assertEqual(qixuan._runtime_version("é" * 64, "fixture"), "é" * 64)
+        for invalid in (object(), "", "é" * 65):
+            with self.subTest(invalid=repr(invalid)):
+                with self.assertRaises(qixuan.QixuanRuntimeError):
+                    qixuan._runtime_version(invalid, "fixture")
+
     def test_projection_uses_amplitude_epsilon_and_bounded_blocks(self) -> None:
         log_mel = np.full((128, 33), math.log(2.0), dtype=np.float32)
         checkpoints = 0
