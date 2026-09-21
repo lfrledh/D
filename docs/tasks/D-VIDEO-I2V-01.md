@@ -565,3 +565,38 @@ Lead实现外部捕获/E/真实验证器；非实现者`i2v_memory_cause_review`
 当前组件阶段已验收，I2V产品仍未过；H24本人试听已关闭，H22按用户最新决定延期到专项UI重构，不是通过。普通D/作品未操作，scheme原SHA256 `ca3635d88aa5a15397b90e528667c66c0e6db7e596176e885c79d194b544206c`、index blob `9c76916bdc97c2d4298cefe64e0b0fae3380573e`及未暂存1→6差异保护。源仍允许这一个个人差异，不称完全干净。所有自有实测和Worker已结束；源最终接纳/推送与文档差异写回执，不为提交自引用反复提交。
 
 **下一阶段提案（待用户批准）**：围绕一个明确GPU注意力修补候选，保持权重/输入输出精度和旧容差，明确内部运算契约后，先固定全query分区与独立抽样，再真实块；随后把已验三块加载推广为隔离的30块加公共权重调度，仅验证一个完整正负推理步的取消/资源与结果，不直接启动50步。任一关键门失败即停该路径，不恢复旧耗尽预算或搜索seed/chunk。后续50步/解码/运动质量/D适配仍独立门控；首发其他无依赖的有限能力组合和首用/部署/恢复保持位置。UI只保留需求和安全边界，待用户专项设计，不先行重构。
+
+<a id="r9-spec"></a>
+## 2026-09-22 R9：注意力修补与完整流式 forward（冻结 R9.1）
+
+用户批准继续修复及流式实装，并核对全模态模型支持和首发差距。源基线`368751084ab94a58b4d97dc96ad5c7c0948d2419`；执行准备SHA写外部job/回执。证据根`D-Development/AgentTrials/D-VIDEO-I2V-01/run-20260921T161245Z-full-stream`。本轮终点为可执行后端部件＋完整30块正负首步；不直接运行50步，不默认启用App I2V，不合入旧失败的MLX适配/RESOURCE分支。原权重、1216×736/121帧、seed/latent/条件、容差及14GiB本机allocator预算不变；后者只限本次验证，不限产品硬件范围。
+
+公共安全：两个独立受限CLI Sol/high（数值/生命周期风险，不按代码行数选低档），各初交＋最多两轮针对修复＋一次有界Lead收尾；旧R7/IMAGE/RUN耗尽预算不刷新。任务规格、assembly/真实验证器由Lead维护；Worker不改公共记录、其他文件、源、模型、旧证据或共同Git，不commit/派生/联网/安装/构建/GUI/GPU。仅显式解释器`D-Development/AgentTrials/D-VIDEO-V0-01/run-20260913T152419Z/venv/bin/python -B`用tokenize.open+内存compile作语法检查，不导入/exec目标、不py_compile；正常输出/缓存/临时均在job写根。未知权限事件暂停回Lead，预授权无字节码检查是唯一降级。Lead串行行为验证及显式提交，审核后组合；每次修改源前后核验个人scheme内容/索引/未暂存状态，不stash/reset/restore/amend/rebase/cherry-pick/清理。候选代码不等于产品通过。
+
+### R9-ATTN：一个明确的 GPU 运算实现
+
+允许新建且仅改`Backends/Video/Python/d_video_wan_attention.py`、`Backends/Video/Tests/test_wan_attention.py`。API `wan_attention(q,k,v,*,query_chunk_size=64,device="mps",checkpoint=None)`；`AttentionCancelled(RuntimeError)`供回调取消。q/k允许FP32或BF16，v必须BF16，布局[B,Q,H,D]/[B,K,H,D]，同设备，Q与K可不同；全部有限，FP32转BF16后也须有限。先把q/k按原路径量化BF16，再提升FP32；v按既有BF16值提升FP32。每query分区保留全部K/V，以FP32 SDPA数学路径完成累加/softmax，再返回原布局BF16新存储；不改变输入/权重精度、mask/scale/dropout/causal语义，不CPU回退。仅显式device=cpu用于小合成测试；不可隐式搬设备。query_chunk_size正整数且排除bool；dtype/shape/空维度/设备/非有限值/回调错误明确拒绝，真实未知错误不吞掉。无新增后端选择器或万能参数袋。
+
+内部FP32是本次显式修补的运算契约，不把“FP32诊断通过”暗中当开关：PyTorch2.7 SDPA官方文档说明数学后端对half/BF16中间量使用float；R8实测却发现本机BF16路径偏离独立E/F，故显式固定输入量化及FP32数学运算。https://docs.pytorch.org/docs/2.7/generated/torch.nn.functional.scaled_dot_product_attention.html 。不能据此宣称已找到底层kernel bug或所有设备都异常。
+
+inference及SDPA上下文局部设置并恢复；不改全局flags。checkpoint只含只读标量，至少`before_chunk`/`after_chunk`及start/end/total；异常正常退出/释放局部引用，不保存tensor事件、全query logits或输出分块列表。可预分配最终输出、逐块填入；取消不交付部分成功结果。CPU测试独立FP64公式、cross/self、尾块、BF16量化次序、错误/取消/恢复/输入与全局设置保护。Lead真实门：R8冻结QKV全部27094查询Q64/Q31结果均有限，旧`.02/.02`零超限；原13查询E/F独立参考同阈值，输入保护；取消后可再生成且无未解释GPU活跃残留。只比较Q64/Q31不能替代独立参考。
+
+### R9-STREAM：完整权重会话与实际模型 forward
+
+允许新建且仅改`Backends/Video/Python/d_video_wan_weights.py`、`Backends/Video/Tests/test_wan_weight_session.py`。API `StreamingWeights(meta_model,model_root,frozen_manifest,*,device="mps",checkpoint=None)`；`session()`上下文、`resident(block_index)`上下文、`forward(*args,**kwargs)`、`close()`、只读`statistics`。取消异常`WeightLoadCancelled`，poison异常`WeightSessionPoisonedError`。复用R8算法思想/必要局部源码，但生产文件不得import Tests、旧工作树或外部run；旧R8诊断文件及17测试保持原样作为历史回归，不为测试方便改断言。不要复制整份Wan模型、引入新依赖/全局框架。
+
+manifest schemaVersion整数2，字段恰好`schemaVersion,blocks,shared,shards`；blocks每个0…N-1字符串→记录数组，shared为公共记录数组。每记录name/shard/shape/sourceDtype/targetDtype；原FP32、目标普通BF16，time_embedding/time_projection/head前缀及modulation/norm保留FP32；shards与R8同basename→device/inode/size/mtimeNS。参数须与全部meta模型精确覆盖，不遗漏/别名/重复/未知；shared不能含blocks，不能任意前缀扩大范围。MPS真实Wan固定30×27（每块7FP32/20BF16）+15公共=825，公共FP329/BF166；CPU合成模型可更小，但语义相同。源码/元数据预检不读取tensor。全部真实825参数随后由Lead逐值比独立FP32读取转换，原shape不做MLX展平。
+
+一模型一个owner；session进入逐tensor载入15公共参数，resident仅允许活动session中一个块，其余块meta。原FP32逐tensor独立暂存并转换，禁止整模型CPU字典/预取/持久转换权重；每次安全打开/前后身份校验、数据有限/shape/dtype，完整load后才yield。租约退出同步后恢复本实例meta，保留公共；session退出清全部。普通取消/计算异常清理成功可下一session，身份/同步/清理失败poison不可复用，close释放owner但不得把未知真实参数假装清除。close活动session/lease/forward拒绝，关闭幂等。错误保留主因并附清理错误，取消不阻止必要清理。
+
+forward仅活动session/无活动lease可用。局部包装实例当前block.forward（调用捕获的saved_forward，不递归block(...)），按0…N-1顺序每块租约真实执行；结束/异常逆序恢复原实例forward，避免残留闭包/替换别的wrapper；不得改全局模型类。强制inference，拒绝重入/并发session/forward，调用方持有输出不得隐式留住模型参数。捕获已有compact时间wrapper，Lead先装时间适配再由本组件临时包租约，逆序退出。顺序遗漏/重复拒绝，不把未执行块当通过。
+
+checkpoint包含stage/group（shared或block）/block（适用）/name（适用）/completed等只读标量；固定load各阶段沿用R8`before_load,after_read,before_install,after_install,ready,before_release,released`，forward前后可扩展标量。共同参数失败、跨片块取消、body异常、head异常、关闭/重入/双owner、安装一半失败、同步poison/弱引用释放/输入文件保护需CPU覆盖。新反例不改变旧标准。
+
+### R9真实装配、停止门及支持盘点
+
+Lead依次：CPU/静态审阅→固定真实attention独立门→825权重逐值、0/14/29小块独立常驻对照和session重复/取消释放→一完整正/负30块forward+一次CFG/scheduler更新。真实相同输入、全有限、首latent逐值锁定，事件顺序0…29正再0…29负。完整步每种attention首遇独立抽样；若后层出现异常立即留证，禁止换seed/尺寸/步数/容差“通过”。完整步上限1800秒；达到限额记录耗时/资源终态，不换大机假设消除。已有精确原完整形状staged时间表绑定；首时间999原完整形状网络与表重核，不能单独启用已失败的两行time GEMM。CPU FP64时间/RoPE桥是显式参考适配，不称全网络CPU推理。
+
+本轮可执行部件接收调用方构造的Torch模型；固定官方model/许可部署、50步/解码/画质和D原MLX路径的接线仍独立未通过，不把验证harness绝对路径装进产品。一个首步成功只解除该门。14GiB不表示总进程内存或产品上限，GPU active/driver/RSS/系统swap分别记录；逻辑tensor读取≠物理SSD吞吐，哈希预热不宣称冷盘。guard保护所有固定输入、GPU串行、自有进程限时回收，普通D/作品不动。
+
+同时Lead依据现有证据更新一份有限模型支持/发布缺口摘要及CURRENT_ACTIONS/目标索引，区分App、CLI、外机、候选、许可未知；不将历史测试当本轮重验。用户另行UI重构，H22延期仍非通过；UI完成后还需统一部署/模型获取及许可/干净Mac首用/升级恢复，不自动发布。非实现者复核Lead装配和证据，最终只接纳满足其冻结范围的部件，阶段完成按既有授权推送工作分支。
