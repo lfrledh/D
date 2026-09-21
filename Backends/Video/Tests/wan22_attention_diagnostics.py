@@ -158,6 +158,13 @@ def _owned_cpu(tensor: Any) -> Any:
     return tensor.detach().to(device="cpu").contiguous().clone()
 
 
+def _cpu_fp64(torch: Any, tensor: Any) -> Any:
+    """Transfer BF16 values to CPU before requesting unsupported MPS FP64."""
+
+    cpu_bf16 = tensor.to(device="cpu")
+    return cpu_bf16.to(dtype=torch.float64)
+
+
 def _mps_fallback_is_enabled() -> bool:
     value = os.environ.get("PYTORCH_ENABLE_MPS_FALLBACK", "0")
     return value.strip().lower() not in {"", "0", "false", "no", "off"}
@@ -207,6 +214,9 @@ def run_attention_matrix(
         q_bf16 = q.to(device=device, dtype=torch.bfloat16)
         k_bf16 = k.to(device=device, dtype=torch.bfloat16)
         v_bf16 = v.to(device=device, dtype=torch.bfloat16)
+        for name, tensor in (("q", q_bf16), ("k", k_bf16), ("v", v_bf16)):
+            if not bool(torch.isfinite(tensor).all().item()):
+                raise ValueError(f"{name} became non-finite after BF16 quantization")
         k_heads_bf16 = k_bf16.permute(0, 2, 1, 3)
         v_heads_bf16 = v_bf16.permute(0, 2, 1, 3)
 
@@ -251,11 +261,12 @@ def run_attention_matrix(
 
         k_heads_fp32 = k_heads_bf16.to(dtype=torch.float32)
         v_heads_fp32 = v_heads_bf16.to(dtype=torch.float32)
-        scale = 1.0 / math.sqrt(head_dimension)
 
-        def explicit_fp32_window(start: int, end: int) -> Any:
-            query = q_bf16[:, start:end, :, :].permute(0, 2, 1, 3).to(dtype=torch.float32)
-            scores = torch.matmul(query, k_heads_fp32.transpose(-2, -1)) * scale
+        def explicit_fp32_selected() -> Any:
+            query = _selected_queries(torch, q_bf16, checked_positions)
+            query = query.permute(0, 2, 1, 3).to(dtype=torch.float32)
+            scores = torch.matmul(query, k_heads_fp32.transpose(-2, -1))
+            scores = scores / math.sqrt(head_dimension)
             probabilities = torch.softmax(scores, dim=-1)
             value = torch.matmul(probabilities, v_heads_fp32)
             return value.permute(0, 2, 1, 3)
@@ -263,15 +274,13 @@ def run_attention_matrix(
         c_value, c_seconds = _timed(
             torch,
             device,
-            lambda: _collect_window_rows(
-                torch, checked_positions, q64_windows, explicit_fp32_window
-            ),
+            explicit_fp32_selected,
         )
         outputs["C_formula_fp32"] = _owned_cpu(c_value)
         outputs["C_bf16"] = _owned_cpu(c_value.to(dtype=torch.bfloat16))
         stage_metadata["C_formula_fp32_seconds"] = c_seconds
-        stage_metadata["C_formula_fp32_calls"] = len(q64_windows)
-        stage_metadata["C_formula_fp32_query_rows"] = _Q64
+        stage_metadata["C_formula_fp32_calls"] = 1
+        stage_metadata["C_formula_fp32_query_rows"] = len(checked_positions)
         del c_value
 
         def sdpa_fp32_window(start: int, end: int) -> Any:
@@ -302,9 +311,9 @@ def run_attention_matrix(
 
         def cpu_fp64_reference() -> Any:
             query = _selected_queries(torch, q_bf16, checked_positions)
-            query = query.permute(0, 2, 1, 3).to(device="cpu", dtype=torch.float64)
-            keys = k_heads_bf16.to(device="cpu", dtype=torch.float64)
-            values = v_heads_bf16.to(device="cpu", dtype=torch.float64)
+            query = _cpu_fp64(torch, query.permute(0, 2, 1, 3))
+            keys = _cpu_fp64(torch, k_heads_bf16)
+            values = _cpu_fp64(torch, v_heads_bf16)
             value = torch.nn.functional.scaled_dot_product_attention(
                 query,
                 keys,

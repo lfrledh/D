@@ -13,7 +13,7 @@ try:
 except Exception:  # pragma: no cover - the Lead runtime supplies PyTorch.
     torch = None
 
-from Backends.Video.Tests.wan22_attention_diagnostics import run_attention_matrix
+from Backends.Video.Tests.wan22_attention_diagnostics import _cpu_fp64, run_attention_matrix
 
 
 @unittest.skipUnless(torch is not None, "PyTorch is required for behavioral tests")
@@ -92,6 +92,8 @@ class AttentionDiagnosticsTests(unittest.TestCase):
         self.assertTrue(all(isinstance(value, (int, float, str)) for value in result["metadata"].values()))
         self.assertEqual(result["metadata"]["q64_window_count"], 2)
         self.assertEqual(result["metadata"]["q31_window_count"], 4)
+        self.assertEqual(result["metadata"]["C_formula_fp32_calls"], 1)
+        self.assertEqual(result["metadata"]["C_formula_fp32_query_rows"], len(positions))
 
     def test_constant_values_and_hand_calculated_softmax(self):
         q = torch.tensor([[[[1.0, 0.0]], [[0.0, 1.0]]]], dtype=torch.float32)
@@ -108,13 +110,28 @@ class AttentionDiagnosticsTests(unittest.TestCase):
         q2 = torch.arange(15, dtype=torch.float32).reshape(1, 5, 1, 3) / 7.0
         k2 = torch.flip(q2, dims=[1]).contiguous()
         constant_result = run_attention_matrix(q2, k2, constant_v, positions=[0, 4], device="cpu")
-        for output in constant_result["outputs"].values():
+        expected_constant = torch.full((1, 2, 1, 3), 1.5, dtype=torch.float64)
+        for name in ("A_bf16_q64", "B_bf16_q31", "C_bf16", "D_bf16"):
             torch.testing.assert_close(
-                output.to(torch.float64),
-                torch.full((1, 2, 1, 3), 1.5, dtype=torch.float64),
+                constant_result["outputs"][name].to(torch.float64),
+                expected_constant,
                 rtol=0.0,
                 atol=0.0,
             )
+        fp32_tolerance = 2.0 * torch.finfo(torch.float32).eps
+        for name in ("C_formula_fp32", "D_sdpa_fp32"):
+            torch.testing.assert_close(
+                constant_result["outputs"][name].to(torch.float64),
+                expected_constant,
+                rtol=0.0,
+                atol=fp32_tolerance,
+            )
+        torch.testing.assert_close(
+            constant_result["outputs"]["F_cpu_fp64"],
+            expected_constant,
+            rtol=0.0,
+            atol=2.0 * torch.finfo(torch.float64).eps,
+        )
 
     def test_formula_uses_bf16_quantized_values_and_full_keys(self):
         q, k, v = self.make_inputs(length=9, heads=1, dimension=3)
@@ -124,23 +141,43 @@ class AttentionDiagnosticsTests(unittest.TestCase):
         quantized_q = q.to(torch.bfloat16).to(torch.float32)
         quantized_k = k.to(torch.bfloat16).to(torch.float32)
         quantized_v = v.to(torch.float32)
-        expected_rows = []
-        scale = 1.0 / math.sqrt(3.0)
-        for position in positions:
-            scores = torch.matmul(
-                quantized_q[:, position : position + 1].permute(0, 2, 1, 3),
-                quantized_k.permute(0, 2, 1, 3).transpose(-2, -1),
-            ) * scale
-            probabilities = torch.softmax(scores, dim=-1)
-            row = torch.matmul(probabilities, quantized_v.permute(0, 2, 1, 3))
-            expected_rows.append(row.permute(0, 2, 1, 3))
-        expected = torch.cat(expected_rows, dim=1)
+        selected = quantized_q[:, positions].permute(0, 2, 1, 3)
+        scores = torch.matmul(
+            selected,
+            quantized_k.permute(0, 2, 1, 3).transpose(-2, -1),
+        ) / math.sqrt(3.0)
+        probabilities = torch.softmax(scores, dim=-1)
+        expected = torch.matmul(
+            probabilities, quantized_v.permute(0, 2, 1, 3)
+        ).permute(0, 2, 1, 3)
         torch.testing.assert_close(
             result["outputs"]["C_formula_fp32"], expected, rtol=1e-6, atol=1e-6
         )
         torch.testing.assert_close(
             result["outputs"]["C_bf16"], expected.to(torch.bfloat16), rtol=0.0, atol=0.0
         )
+
+    def test_formula_processes_all_thirteen_selected_rows_in_one_pair_of_matmuls(self):
+        q, k, v = self.make_inputs(length=139, heads=2, dimension=128)
+        positions = list(range(13))
+        matmul_shapes = []
+        original_matmul = torch.matmul
+
+        def recording_matmul(left, right, *args, **kwargs):
+            matmul_shapes.append((tuple(left.shape), tuple(right.shape)))
+            return original_matmul(left, right, *args, **kwargs)
+
+        with mock.patch.object(torch, "matmul", side_effect=recording_matmul):
+            result = run_attention_matrix(q, k, v, positions=positions, device="cpu")
+
+        self.assertEqual(
+            matmul_shapes,
+            [
+                ((1, 2, 13, 128), (1, 2, 128, 139)),
+                ((1, 2, 13, 139), (1, 2, 139, 128)),
+            ],
+        )
+        self.assertEqual(tuple(result["outputs"]["C_formula_fp32"].shape), (1, 13, 2, 128))
 
     def test_positions_validation_rejects_empty_order_duplicates_bool_and_bounds(self):
         q, k, v = self.make_inputs(length=5, heads=1, dimension=2)
@@ -180,8 +217,43 @@ class AttentionDiagnosticsTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     run_attention_matrix(*tensors, positions=[0], device="cpu")
 
+        overflow_q = torch.tensor([[[[-1.0]], [[-1.0]]]], dtype=torch.float32)
+        overflow_k = torch.tensor(
+            [[[[torch.finfo(torch.float32).max]], [[0.0]]]], dtype=torch.float32
+        )
+        overflow_v = torch.tensor([[[[1.0]], [[2.0]]]], dtype=torch.bfloat16)
+        with self.assertRaisesRegex(ValueError, "after BF16 quantization"):
+            run_attention_matrix(
+                overflow_q, overflow_k, overflow_v, positions=[0], device="cpu"
+            )
+
         with self.assertRaises(ValueError):
             run_attention_matrix(q, k, v, positions=[0], device="cuda")
+
+    def test_fp64_promotion_transfers_to_cpu_before_dtype_change(self):
+        calls = []
+        float64_token = object()
+
+        class CPUValue:
+            def to(self, **kwargs):
+                calls.append(("cpu", kwargs))
+                return "fp64-result"
+
+        class SourceValue:
+            def to(self, **kwargs):
+                calls.append(("source", kwargs))
+                return CPUValue()
+
+        fake_torch = type("FakeTorch", (), {"float64": float64_token})()
+        result = _cpu_fp64(fake_torch, SourceValue())
+        self.assertEqual(result, "fp64-result")
+        self.assertEqual(
+            calls,
+            [
+                ("source", {"device": "cpu"}),
+                ("cpu", {"dtype": float64_token}),
+            ],
+        )
 
     def test_enabled_mps_fallback_is_rejected_before_device_work(self):
         q, k, v = self.make_inputs(length=2, heads=1, dimension=2)
