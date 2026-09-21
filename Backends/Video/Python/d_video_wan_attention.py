@@ -48,7 +48,9 @@ def _validate(
     if checkpoint is not None and not callable(checkpoint):
         raise TypeError("checkpoint must be callable or None")
     if device == "mps" and _mps_fallback_is_enabled():
-        raise RuntimeError("MPS attention requires PYTORCH_ENABLE_MPS_FALLBACK to be disabled")
+        raise RuntimeError(
+            "MPS attention forbids CPU fallback; disable PYTORCH_ENABLE_MPS_FALLBACK"
+        )
 
     tensors = (("q", q), ("k", k), ("v", v))
     for name, tensor in tensors:
@@ -192,6 +194,10 @@ def wan_attention(
                 if not bool(torch.isfinite(chunk).all().item()):
                     raise RuntimeError("attention produced non-finite values")
                 chunk_bf16 = chunk.permute(0, 2, 1, 3).to(dtype=torch.bfloat16)
+                if not bool(torch.isfinite(chunk_bf16).all().item()):
+                    raise RuntimeError(
+                        "attention became non-finite after BF16 output conversion"
+                    )
                 output[:, start:end, :, :].copy_(chunk_bf16)
                 query = None
                 chunk = None

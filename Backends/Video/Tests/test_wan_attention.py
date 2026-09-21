@@ -296,6 +296,69 @@ class WanAttentionTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "fallback"):
                 wan_attention(q, k, v, device="mps")
 
+    def test_finite_fp32_overflowing_bf16_is_rejected_before_delivery(self):
+        q, k, v = self.make_inputs(
+            query_length=5, key_length=3, batch=1, heads=1, dimension=2
+        )
+        checkpoint_stages = []
+        context_events = []
+        sdpa_calls = []
+        original_context = torch.nn.attention.sdpa_kernel
+
+        def checkpoint(event):
+            checkpoint_stages.append(event["stage"])
+
+        def finite_fp32_max(query, _keys, values, **_kwargs):
+            sdpa_calls.append(int(query.shape[-2]))
+            shape = (*query.shape[:-1], values.shape[-1])
+            return torch.full(
+                shape,
+                torch.finfo(torch.float32).max,
+                dtype=query.dtype,
+                device=query.device,
+            )
+
+        @contextlib.contextmanager
+        def tracking_context(*, backends):
+            context_events.append(("enter", tuple(backends)))
+            try:
+                with original_context(backends=backends):
+                    yield
+            finally:
+                context_events.append(("exit", tuple(backends)))
+
+        grad_before = torch.is_grad_enabled()
+        inference_before = torch.is_inference_mode_enabled()
+        flags_before = self._global_sdp_flags()
+        result = None
+        with mock.patch.object(torch.nn.attention, "sdpa_kernel", new=tracking_context):
+            with mock.patch.object(
+                torch.nn.functional,
+                "scaled_dot_product_attention",
+                side_effect=finite_fp32_max,
+            ):
+                with self.assertRaisesRegex(RuntimeError, "BF16 output conversion"):
+                    result = wan_attention(
+                        q,
+                        k,
+                        v,
+                        query_chunk_size=2,
+                        device="cpu",
+                        checkpoint=checkpoint,
+                    )
+
+        expected_backends = (torch.nn.attention.SDPBackend.MATH,)
+        self.assertIsNone(result)
+        self.assertEqual(sdpa_calls, [2])
+        self.assertEqual(checkpoint_stages, ["before_chunk"])
+        self.assertEqual(
+            context_events,
+            [("enter", expected_backends), ("exit", expected_backends)],
+        )
+        self.assertEqual(torch.is_grad_enabled(), grad_before)
+        self.assertEqual(torch.is_inference_mode_enabled(), inference_before)
+        self.assertEqual(self._global_sdp_flags(), flags_before)
+
     def test_nonfinite_sdpa_result_is_never_delivered(self):
         q, k, v = self.make_inputs(batch=1, heads=1)
 
