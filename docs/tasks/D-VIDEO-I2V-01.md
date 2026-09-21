@@ -474,3 +474,41 @@ Sol初步实现＋两轮修复；Lead提供反例/定位、运行行为检查并
 源本次只接纳任务/当前行动/目标三份文档，生产代码不变；失败诊断文件留在资源候选，未合入/推送该候选。独立结案工作树`D-Worktrees/D-VIDEO-I2V-01-RESOURCE-REPORT`从源14be06f建立，避免把失败实现带入源；最终源/远端SHA写外部回执，不让提交自引用。个人scheme SHA256仍`ca3635d88aa5a15397b90e528667c66c0e6db7e596176e885c79d194b544206c`，原index blob `9c76916bdc97c2d4298cefe64e0b0fae3380573e`与未暂存1→6完整差异须保持。旧候选/证据保留，自有计算和Worker结束。H22/H24不变，H23不重开。
 
 **下一有限阶段提案，尚未实施**：先收敛首个self-attention的独立数值门，抽取固定真实Q/K/V，分开BF16 SDPA、显式FP32与独立高精度抽样参考，定位算术/框架/对照差异，保持原容差；不重新跑全片碰运气。与之独立可准备逐块SSD加载原型，仅block0/14/29固定权重逐值、实际块输出、重复加载/取消/清理与内存/I/O；数值未过时不得将流式整网生成称接纳。阶段应单列新范围/预算，不能刷新已耗尽R7或旧IMAGE/RUN修复额度。完整正负首步→50步→解码/运动→D数值仍逐门触发；首发其他无依赖能力组合/首用/部署继续保留位置，不无限等待I2V。
+
+## 2026-09-22 R8：固定注意力归因与单块流式原型（已获阶段批准）
+
+用户批准上节下一阶段，并返回Mac集中办理。源基线`d2ab56bb7bab15c8745d6ea06a5039bb608f6dea`，规格/契约`R8.1`，batch/task沿用`D-VIDEO-I2V-01`。仅两个独立诊断实施包ATTN/STREAM，Lead掌握共享验收、真实GPU与文件保护；生产后端/GUI/精度/依赖不改。R7初交+两修复+Lead收尾已经结束，旧失败和预算保留；本次新包初交+至多两次普通修复、一次有界Lead接管，超限停止，不能转回修R7或旧完整D算法。执行基线是本节准备提交，完整SHA记录在各job/request，禁止从旧源漏读契约。
+
+两个Sol/high受限独立CLI实施包均仅写自己的两份新文件；只用已知外盘Python执行stdlib内存compile（tokenize.open正确处理编码），行为/CPU/真实模型检查由Lead串行运行。网络关闭、禁止递归/提交/GUI/模型/构建/权限/安装。工作树及专属output/tmp为唯一写根；任务记录、源、原权重、其他任务、共同Git均禁止写。未知权限事件立即停报，先核前轮异常再派修复。worker只读预检，Lead核验实际turn_context的模型/目录/权限后才发IMPLEMENT。运行限15分钟；目录、基线、模型不符不以重试猜测。旧`/usr/bin/python3`会触发Apple启动器，明确禁止，不能再当无副作用检查入口。
+
+### ATTN：形状保真的诊断矩阵
+
+允许仅新增`Backends/Video/Tests/wan22_attention_diagnostics.py`与`test_wan22_attention_diagnostics.py`。最小接口`run_attention_matrix(q,k,v,*,positions,device)`：输入CPU上Q/K FP32、V BF16，单batch `[1,N,H,D]`、全有限、同N/H/D；positions为非空、唯一、升序有效整数且拒绝bool。device显式`cpu`（合成检查）或`mps`（真实检查），禁止隐式回退。不读权重/磁盘、不变更输入或全局配置；返回普通dict，输出为拥有独立CPU存储的tensor，调用者管理保存。用局部inference_mode和SDPA MATH上下文，恢复上下文，不凭MATH名称推断MPS内部精度。原矩阵/位置参数不可搜索择优。
+
+返回`outputs`键至少含`A_bf16_q64`、`B_bf16_q31`、`C_formula_fp32`、`C_bf16`、`D_sdpa_fp32`、`D_bf16`、`F_cpu_fp64`，形状均`[1,len(positions),H,D]`，前三组计算使用相同的BF16量化Q/K/V数值；C/D先保留FP32实际结果再显式BF16。A/B严格调用这些位置所在的完整原64窗口及窗口内31/31/2子窗口（尾块真实长度），之后再取选定行；不得先缩为13行SDPA。C为原验证器语义的显式FP32 `softmax(QK^T/sqrt(D))V`，全K/V；D为相同BF16值升FP32的SDPA（同Q64形状），仅诊断，不能替换产品策略；F为相同BF16数值的CPU FP64 SDPA。计算阶段/窗口/耗时作为标量元数据返回；不得以路径差异本身抛失败掩盖完整结果，输入/非有限/运行错误须明确抛错。
+
+Lead独立实现E：逐头NumPy CPU FP64稳定softmax/点积，从相同BF16量化值升精度，不与Worker共用公式函数。以解析小夹具和E/F在1e-10/1e-10内全部一致确认高精度基准；此门仅验证新FP64参考，不替代原BF16门。每条公共BF16输出与E显式BF16舍入结果及未舍入E分别按原`.02/.02`记录超限/最大误差/坐标，A-C仍保留旧门。只有复现原失败、E/F可靠、A对E通过而C对E失败并有具体运算定位，才能认为验证器有误；A/C都失败或各自对E通过但互差超限都不能这样归因。不得升精度替换生产、放宽阈值或把分区相等当独立正确。
+
+Lead只加载原meta模型首块与必需公共权重，在实际999/positive/首个self-attention的RoPE后、官方BF16转换前捕获完整Q/K/V，然后通过专用捕获终止退出，不执行其他块/全片。固定几何1216×736/121、R6输入/噪声、R7精确原时间表、原权重/桥/精度；Q/K预计FP32，V BF16，保存独立CPU数据与V的uint16原位/shape/stride/hash及来源。固定13位置`[0,1,30,31,63,64,873,874,4369,4370,13547,27092,27093]`，六个Q64窗口起点`[0,64,832,4352,13504,27072]`、全27094 K/V，默认缩放1/sqrt128，无mask/causal/dropout；不能将未量化rawQ/K的高精度结果冒作主基准。捕获不等于完整R7重放；若旧失败未复现，只记录未复现。
+
+CPU反例至少含解析常值V、手算小softmax、原窗口/子窗口与非整除尾部、顺序/重复/越界/bool positions、dtype/device/shape/非有限输入、输入不变与输出独立存储。Lead限一次固定真实矩阵，确有明确待辨原因时最多一次单变量局部控制，先记录依据；不得扫描chunk/seed/换模型/依赖。真实捕获和矩阵各≤1800秒，CPU独立参考同限，不设不可信速度承诺。未复现或无法归因也有明确出口，不因此串入整网修补。本阶段不执行新50步全片。
+
+### STREAM：单块租约，加载/计算/释放独立验收
+
+允许仅新增`Backends/Video/Tests/wan22_streaming_block_reference.py`与`test_wan22_streaming_block_reference.py`。最小接口`BlockLoader(meta_model, model_root, frozen_manifest, *, device="mps", checkpoint=None)`，`with loader.resident(block_index) as block:`及幂等`close()`。只允许0/14/29整数（拒绝bool）；同时一个租约，嵌套/重入/关闭后调用拒绝；调用者在作用域内使用块并负责放弃输出/额外参数引用。close在活动租约内拒绝，退出租约清理后可close。不执行网络/推理、不改attention/time/RoPE/全局类，不管理公共权重；构造时仅元数据，其余块保持meta，不预取、不建全CPU state dict或BF16文件。CPU device仅用于明确合成fixture，真实运行必须MPS，不回退。
+
+Lead提供版本1 manifest：`schemaVersion`、`blocks`（字符串0/14/29映射参数记录数组，字段name/shard/shape/sourceDtype/targetDtype）、`shards`（basename映射device/inode/size/mtimeNS）。sourceDtype固定`float32`，targetDtype=`float32`或`bfloat16`，必须与冻结原精度规则一致：`.modulation`和名称段以norm开头保留FP32，其余BF16。参数名需精确`blocks.<id>.`前缀且与对应meta块完整集合/shape一致；真实每块27个，7 FP32/20 BF16；不能用`blocks.1`误匹配14。分片只接受普通文件basename、禁止路径逃逸/symlink，每次访问前后身份一致。重复/缺字段/非法类型、未批准dtype、shape/offset/非有限值/截断/身份改变明确报错；不从tensor内容推测缺失元数据。文件完整hash由外部guard保护，loader不每次哈希全部20GB然后声称冷盘性能。
+
+租约逐tensor读取原FP32、验证有限/shape/dtype，转换并安装到指定块；完整校验/同步后才yield，异常不暴露半块。退出先同步再移除本实例安装的参数/引用，恢复meta并关闭映射；不修改输入文件。取消异常`BlockLoadCancelled`；checkpoint接收只读标量mapping，固定stage至少`before_load`、`after_read`、`before_install`、`after_install`、`ready`、`before_release`、`released`，含block/name（适用时）/completed。checkpoint异常或取消都清理；释放通知不得阻止必要清理。普通读取/取消且清理成功可再次租约；同步/清理/原件身份失败则poison实例，禁止下一租约。异常保留原原因，不能以清理异常覆盖全部上下文或将异常转成功。
+
+合成CPU测试覆盖正常/跨片、每阶段取消、回调和块执行异常、二次进入、close、原件/manifest错误、精度规则、逐值权重及所有块恢复meta。夹具/缓存只放D_TEST_TEMP_DIR，不能修改真实模型权限或原权重。
+
+Lead真实验收：81参数全部与独立原FP32读取转换逐值相同、名称/shape/dtype/MPS确认。固定小块输入使用确定性CPU生成后上传，`x=[1,128,3072]` FP32、context`[1,32,3072]` BF16、e`[1,128,6,3072]` FP32、grid`[1,8,16]`、全局RoPE CPU FP64桥；种子固定81429，仅本小fixture，不替换R6视频seed。独立常驻同块参考不调用loader，真实0/14/29串行全输出按旧`.02/.02`零超限/全有限，输入保护；这是加载等价，不是其在整网轨迹上的数值/视频质量。两路共用attention不得解除ATTN独立门。
+
+一次预热0/14/29，随后五轮0→14→29加载/释放（至少一轮禁用循环GC）。每次清除本轮调用方别名并同步后，目标/其他块都meta，旧Parameter弱引用消失、活动GPU分配回到加载前基线；driver/cache/RSS另记不冒充总内存。真实取消至少首参数后、转换后安装前、block14跨片点、ready/块执行后，清理后再成功加载。未知残留不能提高阈值；外部guard前后保护、≤1800秒，单重任务。记录逻辑读字节/耗时及能取得的实际读取，无法归因的物理I/O/cache状态为unknown，不能从mmap虚拟量或本fixture推断冷盘全模型速度。
+
+### 组合、交付与本人待办
+
+两个包独立工作树从同一准备SHA派工，文件无重叠；Lead串行提交/审核/普通保留历史合并到R8集成树，最后对组合固定SHA执行相关检查。只有满足冻结门的诊断工具可接纳；失败包隔离，不因另一个通过宣称双包全部通过；无新用户可用I2V入口。源接纳前后核对当前HEAD/个人scheme完整差异和索引，不stash/reset/强推，不触碰普通D/作品。阶段后按既有授权提交/推送工作分支，最终SHA只写外部回执。若需接纳仅通过一包，保留失败分支和事实，不改任务编号。
+
+持久证据`D-Development/AgentTrials/D-VIDEO-I2V-01/run-20260921T151422Z-attention-stream`，各Worker job/route、外部脚本/输入清单、结果/审核/回执关联；不复制大QKV/权重入Git。H24已按原固定source-real样本SHA256 `36e4db23963598f978fc5333f3c54a812c4de264318a06e189a9bb4bc5b230f0`播放，用户确认“听到了，人声和旋律清楚，播放正常”，本人听感事项关闭；不冒称App接线或全歌声网络GPU化。H22仍需工程定位，本阶段不重启旧壳层修复或要求本人重复中文测试。
