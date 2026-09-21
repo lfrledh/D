@@ -18,6 +18,7 @@ import threading
 import time
 from types import MappingProxyType
 from typing import Any
+import weakref
 
 from safetensors import safe_open
 import torch
@@ -28,6 +29,8 @@ _ALLOWED_TARGET_DTYPES = {
     "float32": torch.float32,
     "bfloat16": torch.bfloat16,
 }
+_MODEL_OWNERS_LOCK = threading.Lock()
+_MODEL_OWNERS = weakref.WeakKeyDictionary()
 
 
 class BlockLoadCancelled(RuntimeError):
@@ -174,6 +177,7 @@ class BlockLoader:
         self._active_block: int | None = None
         self._installed: list[_ParameterSlot] = []
         self._active_shards: frozenset[str] = frozenset()
+        self._owns_model = False
         self._statistics = {
             "leases": 0,
             "tensorsRead": 0,
@@ -190,6 +194,7 @@ class BlockLoader:
         self._shards = self._freeze_shards(manifest["shards"])
         self._records = self._freeze_blocks(manifest["blocks"])
         self._validate_all_blocks_are_meta()
+        self._claim_model_ownership()
 
     @staticmethod
     def _model_blocks(meta_model) -> tuple[torch.nn.Module, ...]:
@@ -362,6 +367,27 @@ class BlockLoader:
             self._active_block = None
             self._installed.clear()
             self._active_shards = frozenset()
+        self._release_model_ownership()
+
+    def _claim_model_ownership(self) -> None:
+        with _MODEL_OWNERS_LOCK:
+            existing_reference = _MODEL_OWNERS.get(self._model)
+            existing = (
+                existing_reference() if existing_reference is not None else None
+            )
+            if existing is not None and existing is not self:
+                raise RuntimeError("meta_model already has a BlockLoader owner")
+            _MODEL_OWNERS[self._model] = weakref.ref(self)
+            self._owns_model = True
+
+    def _release_model_ownership(self) -> None:
+        with _MODEL_OWNERS_LOCK:
+            if not self._owns_model:
+                return
+            existing_reference = _MODEL_OWNERS.get(self._model)
+            if existing_reference is not None and existing_reference() is self:
+                del _MODEL_OWNERS[self._model]
+            self._owns_model = False
 
     def _begin_acquire(self, block_index: int) -> None:
         with self._lock:
@@ -379,6 +405,7 @@ class BlockLoader:
         installed: list[_ParameterSlot] = []
         records = self._records[block_index]
         touched_shards: set[str] = set()
+        synchronization_failed = False
         try:
             self._checkpoint("before_load", block_index, completed=0)
             for record in records:
@@ -417,12 +444,20 @@ class BlockLoader:
                     name=record.name,
                     completed=len(installed),
                 )
-            self._synchronize()
+            try:
+                self._synchronize()
+            except BaseException:
+                synchronization_failed = True
+                raise
             self._checkpoint("ready", block_index, completed=len(installed))
         except BaseException as error:
             identity_failure = isinstance(error, _ShardIdentityError)
             cleanup_error = self._cleanup(installed)
-            poisoned = identity_failure or cleanup_error is not None
+            poisoned = (
+                identity_failure
+                or synchronization_failed
+                or cleanup_error is not None
+            )
             with self._lock:
                 self._state = "poisoned" if poisoned else "open"
                 self._active_block = None

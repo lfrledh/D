@@ -290,6 +290,36 @@ class StreamingBlockReferenceTests(unittest.TestCase):
             pass
         self._assert_all_blocks_meta(model)
 
+    def test_same_model_has_one_loader_owner_but_distinct_models_are_independent(self):
+        model_a, manifest_a, _ = self._make_fixture()
+        loader_a = BlockLoader(model_a, self.root, manifest_a, device="cpu")
+        with self.assertRaisesRegex(RuntimeError, "already has a BlockLoader owner"):
+            BlockLoader(model_a, self.root, manifest_a, device="cpu")
+
+        model_b = _TinyModel()
+        manifest_b = copy.deepcopy(manifest_a)
+        loader_b = BlockLoader(model_b, self.root, manifest_b, device="cpu")
+        with loader_a.resident(0) as block_a:
+            self.assertTrue(
+                all(parameter.device.type == "cpu" for parameter in block_a.parameters())
+            )
+            with loader_b.resident(14) as block_b:
+                self.assertTrue(
+                    all(
+                        parameter.device.type == "cpu"
+                        for parameter in block_b.parameters()
+                    )
+                )
+        self._assert_all_blocks_meta(model_a)
+        self._assert_all_blocks_meta(model_b)
+
+        loader_a.close()
+        replacement = BlockLoader(model_a, self.root, manifest_a, device="cpu")
+        with replacement.resident(29):
+            pass
+        replacement.close()
+        loader_b.close()
+
     def test_block_body_and_install_exceptions_restore_meta(self):
         model, manifest, _ = self._make_fixture()
         loader = BlockLoader(model, self.root, manifest, device="cpu")
@@ -457,6 +487,23 @@ class StreamingBlockReferenceTests(unittest.TestCase):
         ):
             with self.assertRaisesRegex(RuntimeError, "sync failed"):
                 context.__exit__(None, None, None)
+        self._assert_all_blocks_meta(model)
+        with self.assertRaises(BlockLoaderPoisonedError):
+            with loader.resident(0):
+                pass
+
+    def test_acquire_synchronization_failure_poisons_after_successful_cleanup(self):
+        model, manifest, _ = self._make_fixture()
+        loader = BlockLoader(model, self.root, manifest, device="cpu")
+        primary = RuntimeError("acquire synchronization failed")
+        with mock.patch.object(
+            loader, "_synchronize", side_effect=(primary, None)
+        ) as synchronize:
+            with self.assertRaisesRegex(RuntimeError, "acquire synchronization failed") as caught:
+                with loader.resident(0):
+                    pass
+        self.assertIs(caught.exception, primary)
+        self.assertEqual(synchronize.call_count, 2)
         self._assert_all_blocks_meta(model)
         with self.assertRaises(BlockLoaderPoisonedError):
             with loader.resident(0):
