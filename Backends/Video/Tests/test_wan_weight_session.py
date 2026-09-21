@@ -501,6 +501,27 @@ class WanWeightSessionTests(unittest.TestCase):
                 pass
         self._assert_all_meta(model)
 
+    def _assert_owned_traceback_locals_released(self, error, required):
+        # CPython 3.12 caches f_locals when the active callback inspects it.
+        # Read it again after unwinding before checking weak references, so the
+        # observer does not itself retain a stale value. Never clear frames,
+        # mutate locals, release the exception, or invoke garbage collection.
+        names = {"_load": ("source", "converted"),
+                 "_install": ("value",), "_run_block": ("result",)}
+        found = set()
+        trace = error.__traceback__
+        while trace is not None:
+            frame = trace.tb_frame
+            function = frame.f_code.co_name
+            if frame.f_code.co_filename == weights.__file__ and function in names:
+                observed = frame.f_locals
+                for name in names[function]:
+                    self.assertIn(name, observed)
+                    self.assertIsNone(observed[name])
+                found.add(function)
+            trace = trace.tb_next
+        self.assertTrue(set(required).issubset(found))
+
     def test_cancelled_load_traceback_does_not_retain_source_or_converted(self):
         for stage, local_name in (("after_read", "source"), ("before_install", "converted")):
             with self.subTest(stage=stage):
@@ -537,6 +558,7 @@ class WanWeightSessionTests(unittest.TestCase):
                     self.assertIsNotNone(held)
                     self.assertIsNotNone(held.__traceback__)
                     self.assertEqual(len(references), 1)
+                    self._assert_owned_traceback_locals_released(held, {"_load"})
                     self.assertIsNone(references[0]())
                     frames = []
                     traceback = held.__traceback__
@@ -582,6 +604,7 @@ class WanWeightSessionTests(unittest.TestCase):
                     held = error
             self.assertIsNotNone(held)
             self.assertEqual(len(references), 1)
+            self._assert_owned_traceback_locals_released(held, {"_load", "_install"})
             self.assertIsNone(references[0]())
             traceback = held.__traceback__
             found_install = False
@@ -627,6 +650,7 @@ class WanWeightSessionTests(unittest.TestCase):
                 except WeightLoadCancelled as error:
                     held = error
                 self.assertIsNotNone(held)
+                self._assert_owned_traceback_locals_released(held, {"_run_block"})
                 self.assertIsNone(references[0]())
                 self._assert_shared_resident(model)
             self.assertIs(input_reference(), caller_input)
