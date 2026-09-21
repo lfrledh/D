@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import copy
 import gc
+import inspect
 import os
 from pathlib import Path
 import tempfile
@@ -405,6 +406,235 @@ class WanWeightSessionTests(unittest.TestCase):
         owner.close()
         replacement = StreamingWeights(model, self.root, manifest, device="cpu")
         replacement.close()
+
+    def test_block_poison_still_releases_outer_shared_session(self):
+        model, manifest, _ = self._fixture()
+        owner = StreamingWeights(model, self.root, manifest, device="cpu")
+        primary = RuntimeError("block synchronization failed")
+        with owner.session():
+            with mock.patch.object(owner, "_synchronize", side_effect=(primary, None)):
+                with self.assertRaisesRegex(RuntimeError, "block synchronization") as caught:
+                    with owner.resident(1):
+                        pass
+            self.assertIs(caught.exception, primary)
+            self._assert_shared_resident(model)
+            self.assertEqual(owner.statistics["state"], "poisoned")
+            with self.assertRaisesRegex(RuntimeError, "active work"):
+                owner.close()
+        self._assert_all_meta(model)
+        self.assertEqual(owner.statistics["state"], "poisoned")
+        owner.close()
+
+    def test_forward_restoration_poison_still_releases_outer_shared_session(self):
+        model, manifest, _ = self._fixture()
+        owner = StreamingWeights(model, self.root, manifest, device="cpu")
+        original_restore = owner._restore_forwards
+
+        def restore_then_fail(installed):
+            self.assertIsNone(original_restore(installed))
+            return RuntimeError("forward restoration failed")
+
+        with owner.session():
+            with mock.patch.object(
+                owner, "_restore_forwards", side_effect=restore_then_fail
+            ):
+                with self.assertRaisesRegex(RuntimeError, "restoration failed"):
+                    owner.forward(torch.zeros(1))
+            self._assert_shared_resident(model)
+            with self.assertRaisesRegex(RuntimeError, "active work"):
+                owner.close()
+        self._assert_all_meta(model)
+        self.assertEqual(owner.statistics["state"], "poisoned")
+
+    def test_outer_session_retries_unresolved_block_cleanup_without_reuse(self):
+        model, manifest, _ = self._fixture()
+        cancelled = {"done": False}
+
+        def checkpoint(event):
+            if event["group"] == "block" and event["stage"] == "ready" and not cancelled["done"]:
+                cancelled["done"] = True
+                raise WeightLoadCancelled("ready cancellation")
+
+        owner = StreamingWeights(
+            model, self.root, manifest, device="cpu", checkpoint=checkpoint
+        )
+        original_cleanup = owner._cleanup
+        cleanup_calls = {"count": 0}
+
+        def fail_first_cleanup(slots):
+            cleanup_calls["count"] += 1
+            if cleanup_calls["count"] == 1:
+                return list(slots), RuntimeError("cleanup failed")
+            return original_cleanup(slots)
+
+        with mock.patch.object(owner, "_cleanup", side_effect=fail_first_cleanup):
+            with owner.session():
+                with self.assertRaisesRegex(WeightLoadCancelled, "ready cancellation"):
+                    with owner.resident(0):
+                        pass
+                self.assertTrue(
+                    any(parameter.device.type == "cpu" for parameter in model.blocks[0].parameters())
+                )
+                with self.assertRaisesRegex(RuntimeError, "active work"):
+                    owner.close()
+        self.assertGreaterEqual(cleanup_calls["count"], 3)
+        self._assert_all_meta(model)
+        self.assertEqual(owner.statistics["state"], "poisoned")
+        with self.assertRaises(WeightSessionPoisonedError):
+            with owner.session():
+                pass
+
+    def test_finite_fp32_that_overflows_bfloat16_is_rejected_before_install(self):
+        name = "blocks.0.proj.weight"
+        overflow = torch.full(
+            (2, 2), torch.finfo(torch.float32).max, dtype=torch.float32
+        )
+        self.assertTrue(bool(torch.isfinite(overflow).all().item()))
+        model, manifest, _ = self._fixture({name: overflow})
+        owner = StreamingWeights(model, self.root, manifest, device="cpu")
+        with owner.session():
+            with self.assertRaisesRegex(ValueError, f"converted tensor {name}.*nonfinite"):
+                with owner.resident(0):
+                    pass
+            self._assert_shared_resident(model)
+            with owner.resident(1):
+                pass
+        self._assert_all_meta(model)
+
+    def test_cancelled_load_traceback_does_not_retain_source_or_converted(self):
+        for stage, local_name in (("after_read", "source"), ("before_install", "converted")):
+            with self.subTest(stage=stage):
+                model, manifest, _ = self._fixture()
+                references = []
+                cancelled = {"done": False}
+
+                def checkpoint(event):
+                    if event["group"] != "shared" or event["stage"] != stage or cancelled["done"]:
+                        return
+                    cancelled["done"] = True
+                    current = inspect.currentframe()
+                    try:
+                        while current is not None and current.f_code.co_name != "_load":
+                            current = current.f_back
+                        self.assertIsNotNone(current)
+                        references.append(weakref.ref(current.f_locals[local_name]))
+                    finally:
+                        current = None
+                    raise WeightLoadCancelled(stage)
+
+                owner = StreamingWeights(
+                    model, self.root, manifest, device="cpu", checkpoint=checkpoint
+                )
+                was_enabled = gc.isenabled()
+                gc.disable()
+                try:
+                    held = None
+                    try:
+                        with owner.session():
+                            pass
+                    except WeightLoadCancelled as error:
+                        held = error
+                    self.assertIsNotNone(held)
+                    self.assertIsNotNone(held.__traceback__)
+                    self.assertEqual(len(references), 1)
+                    self.assertIsNone(references[0]())
+                    frames = []
+                    traceback = held.__traceback__
+                    while traceback is not None:
+                        if traceback.tb_frame.f_code.co_name == "_load":
+                            frames.append(traceback.tb_frame)
+                        traceback = traceback.tb_next
+                    self.assertEqual(len(frames), 1)
+                    self.assertIsNone(frames[0].f_locals.get("source"))
+                    self.assertIsNone(frames[0].f_locals.get("converted"))
+                    self._assert_all_meta(model)
+                finally:
+                    if was_enabled:
+                        gc.enable()
+
+    def test_install_error_traceback_does_not_retain_converted_tensor(self):
+        model, manifest, _ = self._fixture()
+        references = []
+
+        def checkpoint(event):
+            if event["group"] == "shared" and event["stage"] == "before_install" and not references:
+                current = inspect.currentframe()
+                try:
+                    while current is not None and current.f_code.co_name != "_load":
+                        current = current.f_back
+                    self.assertIsNotNone(current)
+                    references.append(weakref.ref(current.f_locals["converted"]))
+                finally:
+                    current = None
+
+        owner = StreamingWeights(
+            model, self.root, manifest, device="cpu", checkpoint=checkpoint
+        )
+        was_enabled = gc.isenabled()
+        gc.disable()
+        try:
+            held = None
+            with mock.patch.object(owner, "_slot", side_effect=RuntimeError("slot failed")):
+                try:
+                    with owner.session():
+                        pass
+                except RuntimeError as error:
+                    held = error
+            self.assertIsNotNone(held)
+            self.assertEqual(len(references), 1)
+            self.assertIsNone(references[0]())
+            traceback = held.__traceback__
+            found_install = False
+            while traceback is not None:
+                if traceback.tb_frame.f_code.co_name == "_install":
+                    found_install = True
+                    self.assertIsNone(traceback.tb_frame.f_locals.get("value"))
+                traceback = traceback.tb_next
+            self.assertTrue(found_install)
+            self._assert_all_meta(model)
+        finally:
+            if was_enabled:
+                gc.enable()
+
+    def test_after_forward_cancellation_traceback_drops_result_but_not_input(self):
+        model, manifest, _ = self._fixture()
+        references = []
+
+        def checkpoint(event):
+            if event["stage"] == "after_forward" and not references:
+                current = inspect.currentframe()
+                try:
+                    while current is not None and current.f_code.co_name != "_run_block":
+                        current = current.f_back
+                    self.assertIsNotNone(current)
+                    references.append(weakref.ref(current.f_locals["result"]))
+                finally:
+                    current = None
+                raise WeightLoadCancelled("after-forward")
+
+        owner = StreamingWeights(
+            model, self.root, manifest, device="cpu", checkpoint=checkpoint
+        )
+        caller_input = torch.tensor([0.75])
+        input_reference = weakref.ref(caller_input)
+        was_enabled = gc.isenabled()
+        gc.disable()
+        try:
+            held = None
+            with owner.session():
+                try:
+                    owner.forward(caller_input)
+                except WeightLoadCancelled as error:
+                    held = error
+                self.assertIsNotNone(held)
+                self.assertIsNone(references[0]())
+                self._assert_shared_resident(model)
+            self.assertIs(input_reference(), caller_input)
+            torch.testing.assert_close(caller_input, torch.tensor([0.75]))
+            self._assert_all_meta(model)
+        finally:
+            if was_enabled:
+                gc.enable()
 
     def test_close_reentry_active_lease_and_double_owner_are_rejected(self):
         model, manifest, _ = self._fixture()

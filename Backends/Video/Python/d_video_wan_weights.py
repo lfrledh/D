@@ -202,6 +202,9 @@ class StreamingWeights:
         self._callback = checkpoint
         self._lock = threading.RLock()
         self._state = "open"
+        self._session_active = False
+        self._lease_active = False
+        self._forward_active = False
         self._owns_model = False
         self._active_block: int | None = None
         self._return_state: str | None = None
@@ -415,6 +418,8 @@ class StreamingWeights:
         with self._lock:
             if self._state == "closed":
                 return
+            if self._session_active or self._lease_active or self._forward_active:
+                raise RuntimeError("cannot close StreamingWeights during active work")
             if self._state not in ("open", "poisoned"):
                 raise RuntimeError("cannot close StreamingWeights during active work")
             self._state = "closed"
@@ -451,22 +456,42 @@ class StreamingWeights:
         with self._lock:
             self._shared_slots = slots
             self._shared_shards = shards
+            self._session_active = True
             self._state = "session-ready"
             self._statistics["sessions"] += 1
         return self._model
 
     def _exit_session(self) -> BaseException | None:
         with self._lock:
-            if self._state != "session-ready":
+            if not self._session_active:
+                return RuntimeError("session exit does not match an active session")
+            if self._lease_active or self._forward_active:
                 return RuntimeError("session exit requires an idle active session")
+            was_poisoned = self._state == "poisoned"
             self._state = "session-releasing"
             slots = self._shared_slots
             shards = self._shared_shards
+            orphaned_block_slots = self._block_slots
+        orphaned_unresolved: list[_Slot] = []
+        orphaned_error: BaseException | None = None
+        if orphaned_block_slots:
+            orphaned_unresolved, orphaned_error = self._cleanup(orphaned_block_slots)
         error, poison, unresolved = self._release(slots, shards, "shared", None)
+        if orphaned_error is not None:
+            if error is None:
+                error = orphaned_error
+            else:
+                _add_note(error, f"orphaned block cleanup also failed: {orphaned_error!r}")
         with self._lock:
+            self._block_slots = orphaned_unresolved
             self._shared_slots = unresolved
             self._shared_shards = frozenset()
-            self._state = "poisoned" if poison else "open"
+            self._session_active = False
+            self._state = (
+                "poisoned"
+                if was_poisoned or poison or unresolved or orphaned_unresolved
+                else "open"
+            )
         return error
 
     def _acquire_block(self, index: int, *, internal: bool):
@@ -475,12 +500,14 @@ class StreamingWeights:
             self._require_state(expected)
             self._return_state = expected
             self._active_block = index
+            self._lease_active = True
             self._state = "block-loading"
         slots, shards, error, poison = self._load(self._block_records[index], "block", index)
         if error is not None:
             with self._lock:
                 self._block_slots = slots
                 self._active_block = None
+                self._lease_active = False
                 self._state = "poisoned" if poison else expected
                 self._return_state = None
             raise error
@@ -493,7 +520,11 @@ class StreamingWeights:
 
     def _release_block(self, index: int) -> BaseException | None:
         with self._lock:
-            if self._state != "block-resident" or self._active_block != index:
+            if (
+                not self._lease_active
+                or self._state != "block-resident"
+                or self._active_block != index
+            ):
                 return RuntimeError("resident lease state is inconsistent")
             self._state = "block-releasing"
             slots = self._block_slots
@@ -504,8 +535,9 @@ class StreamingWeights:
             self._block_slots = unresolved
             self._block_shards = frozenset()
             self._active_block = None
+            self._lease_active = False
             self._return_state = None
-            self._state = "poisoned" if poison else return_state
+            self._state = "poisoned" if poison or unresolved else return_state
         return error
 
     def _load(
@@ -517,26 +549,47 @@ class StreamingWeights:
         try:
             self._checkpoint("before_load", group, block, completed=0)
             for record in records:
-                started = time.perf_counter()
-                source = self._read_source(record)
-                elapsed = time.perf_counter() - started
-                logical_bytes = source.numel() * source.element_size()
-                with self._lock:
-                    self._statistics["tensorsRead"] += 1
-                    self._statistics["logicalBytes"] += logical_bytes
-                    self._statistics["readSeconds"] += elapsed
-                shards.add(record.shard)
-                self._checkpoint(
-                    "after_read", group, block, completed=len(slots), name=record.name,
-                    logicalBytes=logical_bytes, readSeconds=elapsed,
-                )
-                converted = source.to(device=self._device, dtype=_DTYPES[record.target_dtype])
-                del source
-                self._checkpoint("before_install", group, block, completed=len(slots), name=record.name)
-                slot = self._install(record, converted)
-                slots.append(slot)
-                del converted
-                self._checkpoint("after_install", group, block, completed=len(slots), name=record.name)
+                source = None
+                converted = None
+                slot = None
+                try:
+                    started = time.perf_counter()
+                    source = self._read_source(record)
+                    elapsed = time.perf_counter() - started
+                    logical_bytes = source.numel() * source.element_size()
+                    with self._lock:
+                        self._statistics["tensorsRead"] += 1
+                        self._statistics["logicalBytes"] += logical_bytes
+                        self._statistics["readSeconds"] += elapsed
+                    shards.add(record.shard)
+                    self._checkpoint(
+                        "after_read", group, block, completed=len(slots), name=record.name,
+                        logicalBytes=logical_bytes, readSeconds=elapsed,
+                    )
+                    converted = source.to(
+                        device=self._device, dtype=_DTYPES[record.target_dtype]
+                    )
+                    source = None
+                    if not bool(torch.isfinite(converted).all().item()):
+                        raise ValueError(
+                            f"converted tensor {record.name} contains a nonfinite value"
+                        )
+                    self._checkpoint(
+                        "before_install", group, block,
+                        completed=len(slots), name=record.name,
+                    )
+                    slot = self._install(record, converted)
+                    slots.append(slot)
+                    slot = None
+                    converted = None
+                    self._checkpoint(
+                        "after_install", group, block,
+                        completed=len(slots), name=record.name,
+                    )
+                finally:
+                    source = None
+                    converted = None
+                    slot = None
             try:
                 self._synchronize()
             except BaseException:
@@ -594,6 +647,7 @@ class StreamingWeights:
         with self._lock:
             self._require_state("session-ready")
             self._state = "forward"
+            self._forward_active = True
             self._forward_expected = 0
         installed: list[tuple[torch.nn.Module, bool, Any, Any]] = []
         primary: BaseException | None = None
@@ -621,6 +675,7 @@ class StreamingWeights:
 
         restore_error = self._restore_forwards(installed)
         with self._lock:
+            self._forward_active = False
             if restore_error is not None or self._state == "poisoned":
                 self._state = "poisoned"
             elif self._state == "forward":
@@ -633,28 +688,34 @@ class StreamingWeights:
             if primary is None and restore_error is None:
                 self._statistics["forwards"] += 1
         if primary is not None:
+            result = None
             if restore_error is not None:
                 _add_note(primary, f"forward restoration also failed: {restore_error!r}")
             raise primary
         if restore_error is not None:
+            result = None
             raise restore_error
         return result
 
     def _run_block(self, index: int, saved_forward, args: tuple, kwargs: dict):
-        with self._lock:
-            self._require_state("forward")
-            if index != self._forward_expected:
-                raise RuntimeError(
-                    f"model block order differs: expected {self._forward_expected}, got {index}"
-                )
-        self._checkpoint("before_forward", "block", index, completed=index)
-        with _ResidentContext(self, index, True):
-            result = saved_forward(*args, **kwargs)
-        self._checkpoint("after_forward", "block", index, completed=index + 1)
-        with self._lock:
-            self._require_state("forward")
-            self._forward_expected += 1
-        return result
+        result = None
+        try:
+            with self._lock:
+                self._require_state("forward")
+                if index != self._forward_expected:
+                    raise RuntimeError(
+                        f"model block order differs: expected {self._forward_expected}, got {index}"
+                    )
+            self._checkpoint("before_forward", "block", index, completed=index)
+            with _ResidentContext(self, index, True):
+                result = saved_forward(*args, **kwargs)
+            self._checkpoint("after_forward", "block", index, completed=index + 1)
+            with self._lock:
+                self._require_state("forward")
+                self._forward_expected += 1
+            return result
+        finally:
+            result = None
 
     def _restore_forwards(
         self, installed: list[tuple[torch.nn.Module, bool, Any, Any]]
@@ -737,6 +798,8 @@ class StreamingWeights:
         self._verify_shard(record.shard)
         path = self._root / record.shard
         expected = self._shards[record.shard]
+        source = None
+        handle = None
         flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
         try:
             descriptor = os.open(path, flags)
@@ -771,6 +834,8 @@ class StreamingWeights:
             self._verify_shard(record.shard)
             return source
         finally:
+            source = None
+            handle = None
             os.close(descriptor)
 
     def _slot(self, record: _Record) -> _Slot:
@@ -787,15 +852,18 @@ class StreamingWeights:
         return _Slot(parent, leaf, original)
 
     def _install(self, record: _Record, value: torch.Tensor) -> _Slot:
-        if tuple(value.shape) != record.shape:
-            raise ValueError(f"converted tensor shape differs: {record.name}")
-        if value.dtype != _DTYPES[record.target_dtype] or value.device.type != self._device:
-            raise RuntimeError(f"converted tensor placement differs: {record.name}")
-        slot = self._slot(record)
-        slot.module._parameters[slot.name] = torch.nn.Parameter(
-            value, requires_grad=slot.original.requires_grad
-        )
-        return slot
+        try:
+            if tuple(value.shape) != record.shape:
+                raise ValueError(f"converted tensor shape differs: {record.name}")
+            if value.dtype != _DTYPES[record.target_dtype] or value.device.type != self._device:
+                raise RuntimeError(f"converted tensor placement differs: {record.name}")
+            slot = self._slot(record)
+            slot.module._parameters[slot.name] = torch.nn.Parameter(
+                value, requires_grad=slot.original.requires_grad
+            )
+            return slot
+        finally:
+            value = None
 
     def _synchronize(self) -> None:
         if self._device == "mps":
