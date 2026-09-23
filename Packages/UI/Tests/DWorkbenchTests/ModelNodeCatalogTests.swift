@@ -41,19 +41,22 @@ struct ModelNodeCatalogTests {
         #expect(entries.flatMap(\.evidencePaths).allSatisfy { !$0.hasPrefix("/") && !$0.contains("..") })
     }
 
-    @Test func textEntriesKeepRealRevisionsAndDoNotInventTemperatureOrSeed() throws {
-        let expectedRevisions = [
-            "a5339a4131f135d0fdc6a5c8b5bbed2753bbe0f3",
-            "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
-            "c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed",
-            "2938092373e5f97b95538884112085364c2da315"
-        ]
+    @Test func textEntriesMatchSourceRegistryAndDoNotInventA512TokenLimit() throws {
+        let registered = try TextModelProfiles.registered()
         let qwen = ModelNodeCatalog.entries.filter { $0.modality == .text }
-        #expect(qwen.map(\.revision) == expectedRevisions)
-        #expect(qwen.dropLast().allSatisfy { $0.availability == .workbench })
-        #expect(qwen.last?.availability == .backend)
+        #expect(qwen.map(\.id) == registered.map(\.id))
+        #expect(qwen.map(\.revision) == registered.map(\.revision))
+        #expect(qwen.allSatisfy { $0.availability == .workbench })
 
         let generation = try operation("text.generate/1", in: try node("mlx-community/Qwen2.5-0.5B-Instruct-4bit"))
+        let prompt = try #require(generation.inputs.first { $0.id == "prompt" })
+        #expect(prompt.requirement == .required)
+        #expect(prompt.detail.contains("裸 MLX 后端允许空字符串"))
+        let textLimitProjection = ([prompt.detail] + generation.parameters.flatMap {
+            [$0.defaultValue, $0.acceptedValues, $0.detail]
+        }).joined(separator: " ")
+        #expect(!textLimitProjection.contains("512"))
+
         let temperature = try #require(generation.parameters.first { $0.id == "temperature" })
         #expect(temperature.acceptedValues.contains("没有 2.0 上限"))
         #expect(generation.parameters.contains { $0.id == "maximumPromptTokens" && $0.isAdjustable })
@@ -61,6 +64,8 @@ struct ModelNodeCatalogTests {
         #expect(!generation.parameters.contains { $0.id.lowercased().contains("seed") })
         #expect(generation.inputs.map(\.id) == ["prompt"])
         #expect(generation.outputs.map(\.id) == ["textDelta"])
+        #expect(qwen.allSatisfy { $0.notes.contains { $0.contains("approximate") } })
+        #expect(qwen.allSatisfy { $0.evidencePaths.contains("Sources/DInference/TextExecutionCapability.swift") })
     }
 
     @Test func fluxIsOneModelWithThreeProfilesAndFrozenRecipes() throws {
@@ -75,13 +80,24 @@ struct ModelNodeCatalogTests {
             #expect(!operation.parameters.contains { ["strength", "negativePrompt", "mask"].contains($0.id) })
         }
         let reference = try operation("referenceKlein4B/1", in: flux)
-        #expect(reference.inputs.first { $0.id == "referenceImage" }?.requirement == .required)
+        let referenceInput = try #require(reference.inputs.first { $0.id == "referenceImage" })
+        #expect(referenceInput.requirement == .required)
+        #expect(referenceInput.dataType.contains("frozen ImageReference"))
+        #expect(referenceInput.detail.contains("256…2048"))
+        #expect(referenceInput.detail.contains("32 的倍数"))
+        #expect(referenceInput.detail.contains("不必匹配输出尺寸"))
         #expect(reference.outputs.first?.dataType.contains("DeviceRGB") == true)
+        #expect(flux.notes.contains { $0.contains("控制保真度") && $0.contains("approximate") })
+        #expect(flux.notes.contains { $0.contains("不保证未提及区域像素保持不变") })
+        #expect(flux.evidencePaths.contains("Sources/DInference/ImageReference.swift"))
+        #expect(flux.evidencePaths.contains("Packages/UI/Sources/DWorkbench/Media/ImageReferencePixels.swift"))
     }
 
     @Test func audioEntriesPreserveOperationAndPortSemantics() throws {
         for id in ["sm-music", "sm-sfx", "medium"] {
             let stableAudio = try node(id)
+            #expect(stableAudio.device.contains("MLX 默认 GPU 策略"))
+            #expect(stableAudio.device.contains("不是逐次运行"))
             #expect(stableAudio.operations.map(\.id) == [
                 "audio.sa3.diffusion.generate",
                 "audio.sa3.diffusion.variation",
@@ -102,20 +118,37 @@ struct ModelNodeCatalogTests {
         #expect(sequence.requirement == .required)
         #expect(sequence.detail.contains("notes 缺席"))
         #expect(sequence.detail.contains("notes=[]"))
-        #expect(mrt2Operation.parameters.contains { $0.id == "durationFrames" && $0.defaultValue.contains("150") })
+        #expect(mrt2Operation.parameters.contains {
+            $0.id == "durationFrames" && $0.defaultValue.contains("工作台新建默认 150 帧（6 秒）")
+        })
+        #expect((try node("mrt2-small-export-v1")).device.contains("MLX 默认 GPU 策略"))
 
         let analysis = try node("swift-f0-0.1.2-cpu-v1")
         #expect(analysis.operations.map(\.id) == ["audio.pitch.analyze"])
         #expect(analysis.summary.contains("不生成声音"))
+        #expect(analysis.engine.hasPrefix("cpu.pitch.swift-f0"))
+        #expect(!analysis.engine.contains("backendcpu"))
+        #expect(analysis.operations[0].inputs[0].detail.contains("原始来源须为 mono"))
+        #expect(analysis.operations[0].inputs[0].detail.contains("派生 16 kHz 样本"))
         #expect(analysis.operations[0].outputs.first { $0.id == "analysis" }?.requirement == .required)
         #expect(analysis.operations[0].outputs.first { $0.id == "interpretation" }?.requirement == .optional)
+        #expect(analysis.operations[0].outputs.first { $0.id == "interpretation" }?.detail.contains("宿主程序派生") == true)
 
         let singing = try node("audio.singing.qixuan")
         #expect(singing.availability == .backend)
-        #expect(singing.device.contains("声学模型固定 CPU"))
+        #expect(singing.device.contains("Qixuan original ONNX 固定 CPU"))
         #expect(singing.device.contains("MPS"))
+        #expect(singing.device.contains("不自动回退"))
+        #expect(!singing.device.contains("优先"))
         #expect(!singing.operations[0].parameters.contains { $0.id == "seed" })
-        #expect(singing.operations[0].inputs.map(\.id) == ["phrase", "pronunciations"])
+        #expect(singing.operations[0].inputs.map(\.id) == ["phrase", "pronunciations", "vowelIndices"])
+        #expect(singing.operations[0].inputs.first { $0.id == "pronunciations" }?.detail.contains("[\"SP\"]") == true)
+        #expect(singing.operations[0].inputs.first { $0.id == "vowelIndices" }?.requirement == .required)
+        #expect(singing.operations[0].outputs.map(\.id) == ["audio"])
+        let profile = try #require(singing.operations[0].parameters.first { $0.id == "executionProfile" })
+        #expect(profile.defaultValue.contains("须显式选择"))
+        #expect(!profile.defaultValue.contains("优先"))
+        #expect(profile.detail.contains("不做自动回退"))
     }
 
     @Test func videoEntryIsWan21TextToVideoOnlyWithJointGeometryLimit() throws {
@@ -124,10 +157,14 @@ struct ModelNodeCatalogTests {
         #expect(generation.inputs.map(\.id) == ["positivePrompt", "negativePrompt"])
         #expect(generation.inputs[0].requirement == .required)
         #expect(generation.inputs[1].requirement == .optional)
+        #expect(generation.outputs.map(\.id) == ["video"])
         #expect(!generation.inputs.contains { ["firstFrame", "referenceImage", "audio", "mask", "timeline"].contains($0.id) })
         #expect(generation.parameters.first { $0.id == "geometry" }?.acceptedValues.contains("≤ 1024") == true)
         #expect(wan.notes.contains { $0.contains("没有 I2V") })
         #expect(wan.notes.contains { $0.contains("Wan 2.2") && $0.contains("不列为可运行节点") })
+        #expect(wan.notes.contains { $0.contains("frames.rgb") && $0.contains("不是公开节点输出端口") })
+        #expect(wan.device.contains("MLX 默认 GPU 策略"))
+        #expect(wan.device.contains("不是逐次运行"))
     }
 
     @MainActor

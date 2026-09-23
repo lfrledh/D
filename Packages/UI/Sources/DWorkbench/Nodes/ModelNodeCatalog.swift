@@ -30,8 +30,8 @@ public enum ModelNodeCatalog {
             id: "mlx-community/Qwen2.5-32B-Instruct-4bit",
             title: "Qwen2.5 32B Instruct · 4-bit",
             revision: "2938092373e5f97b95538884112085364c2da315",
-            availability: .backend,
-            validation: "源码已登记且有外部 CLI 实测；没有普通工作台的 32B 验证，不据此承诺本机可运行。"
+            availability: .workbench,
+            validation: "与其他 Qwen 共用源码工作台登记入口，且有外部 CLI 实测；32B 普通工作台仍未验证，不据此承诺本机可运行。"
         ),
         stableAudio(profile: "sm-music", title: "Stable Audio 3 · Small Music",
                     maximumDuration: "120 秒", availability: .workbench,
@@ -70,7 +70,7 @@ public enum ModelNodeCatalog {
                     inputs: [
                         ModelNodePort(id: "prompt", title: "提示词", dataType: "String / UTF-8",
                                       requirement: .required,
-                                      detail: "不能为空；最多 1 MiB UTF-8。实际 token 须同时符合输入预算与模型上下文联合上限。")
+                                      detail: "请求字段必选、最多 1 MiB UTF-8；裸 MLX 后端允许空字符串。非空选区、指令或问题属于工作台流程约束。实际 token 仍须符合输入预算与模型上下文联合上限。")
                     ],
                     outputs: [
                         ModelNodePort(id: "textDelta", title: "流式文字增量", dataType: "String stream",
@@ -85,12 +85,18 @@ public enum ModelNodeCatalog {
                 "温度只要求有限且不小于 0，没有 2.0 上限。API／CLI 可调；工作台改写固定 0.7、资料回答固定 0.2。",
                 "top-p 在 (0, 1]，默认 0.95；API／CLI 可调，当前工作台固定。",
                 "后端会记录实际随机种子，但 TextRequest 没有用户可调 seed；也没有 top-k、重复惩罚、工具、图像或多消息端口。",
+                "文字提示的控制保真度为 approximate；生成结果不保证逐字遵循提示。",
                 "登记、已安装、资源足够和本机实测是不同状态；16 GiB 开发机不是产品上限。"
             ],
             evidencePaths: [
                 "Packages/UI/Sources/DWorkbench/Models/TextModelProfiles.swift",
                 "Packages/UI/Sources/DWorkbench/Text/TextGenerationSettings.swift",
-                "Backends/MLX/Sources/DMLXBackend/MLXTextBackend.swift"
+                "Packages/UI/Sources/DWorkbench/Text/TextDraftSession.swift",
+                "Packages/UI/Sources/DWorkbench/Text/TextSourcesContext.swift",
+                "Sources/DInference/TextExecutionCapability.swift",
+                "Backends/MLX/Sources/DMLXBackend/MLXTextBackend.swift",
+                "Backends/MLX/Sources/DMLXBackend/LocalModelInventory.swift",
+                "docs/MODEL_SUPPORT_AND_RELEASE.zh-CN.md"
             ]
         )
     }
@@ -133,7 +139,8 @@ public enum ModelNodeCatalog {
         notes: [
             "verified512/1 与 scalableKlein4B/1 不接受参考图；referenceKlein4B/1 恰好要求一张参考图，不支持多参考。",
             "全部 profile 固定 4 步、guidance 1、conditioning length 512；没有 mask、strength、negative prompt 或 LoRA。",
-            "参考图须为单帧 8-bit RGB／RGBA PNG、最多 64 MiB；校验方向和颜色后冻结为 rgb8-srgb-v1 字节与摘要。参考图几何须合法，但不要求与输出相同。",
+            "工作台接收单帧 8-bit RGB／RGBA PNG（最多 64 MiB）；校验方向和颜色后冻结为 rgb8-srgb-v1 像素、几何与 SHA-256。PNG 是导入容器，不是后端参考对象。",
+            "提示词与参考条件的控制保真度都是 approximate；不会保证提示逐字兑现，也不保证未提及区域像素保持不变。",
             "输出是 8-bit DeviceRGB PNG；不能据此保证文件嵌入 sRGB profile。参考编辑已有源码工作台入口，但 CLI 没有对应 flag。",
             "历史本机覆盖 512×512、768×512、512×768；外部 CLI 覆盖 1024／1536／2048，不表示每台机器都保证这些尺寸。"
         ],
@@ -141,7 +148,11 @@ public enum ModelNodeCatalog {
             "Packages/UI/Sources/DWorkbench/Models/ModelLibraryTypes.swift",
             "Backends/MLX/Sources/DMLXBackend/ImageExecutionProfile.swift",
             "Backends/MLX/Sources/DMLXBackend/MLXImageBackend.swift",
-            "Sources/DInference/ImageExecutionCapability.swift"
+            "Backends/MLX/Sources/DMLXBackend/ImageArtifactStore.swift",
+            "Sources/DInference/ImageExecutionCapability.swift",
+            "Sources/DInference/ImageReference.swift",
+            "Packages/UI/Sources/DWorkbench/Media/ImageReferencePixels.swift",
+            "docs/MODEL_SUPPORT_AND_RELEASE.zh-CN.md"
         ]
     )
 
@@ -154,9 +165,9 @@ public enum ModelNodeCatalog {
                           detail: "去除空白后不能为空；最多 1 MiB，模板化后最多 512 token，不静默截断。")
         ]
         if reference {
-            inputs.append(ModelNodePort(id: "referenceImage", title: "参考图", dataType: "PNG · rgb8-srgb-v1",
+            inputs.append(ModelNodePort(id: "referenceImage", title: "参考图", dataType: "frozen ImageReference · rgb8-srgb-v1 pixels + SHA-256",
                                         requirement: .required,
-                                        detail: "恰好一张单帧 8-bit RGB／RGBA PNG，≤ 64 MiB；不接受多参考。"))
+                                        detail: "工作台从恰好一张单帧 8-bit RGB／RGBA PNG（≤ 64 MiB）冻结得到；像素宽高各 256…2048、均为 32 的倍数、面积 ≤ 2048²，不必匹配输出尺寸；不接受多参考。"))
         }
         return ModelNodeOperation(
             id: id,
@@ -198,7 +209,7 @@ public enum ModelNodeCatalog {
             modelIdentity: "stabilityai/stable-audio-3-optimized / \(profile)",
             revision: "da6edc54ddba10bfd79a077102ded687f80e882b",
             engine: "mlx.audio.sa3 · Python MLX · DiT + T5 Gemma + codec",
-            device: "默认 GPU；请求不提供设备切换",
+            device: "MLX 默认 GPU 策略；请求不提供设备选择；不是逐次运行的设备实测",
             precision: "DiT／T5 Gemma FP16；codec 与音频处理 FP32",
             availability: availability,
             deploymentNote: validation,
@@ -284,7 +295,7 @@ public enum ModelNodeCatalog {
         modelIdentity: "google/magenta-realtime-2 · mrt2_small",
         revision: "010aa0dcb0dfd27b24f0ad07b4dad63e8f9521cc",
         engine: "mlx.audio.mrt2 · 官方 MLX export + LiteRT text + SentencePiece",
-        device: "音频图默认 MLX GPU；LiteRT 文字部分不声明为全 GPU；请求无设备选择",
+        device: "音频图采用 MLX 默认 GPU 策略；LiteRT 文字部分不声明为全 GPU；请求无设备选择，也不是逐次运行实测",
         precision: "图内部精度未知；int16 输出按 /32768 转为 Float32",
         availability: .workbench,
         deploymentNote: "源码工作台已适配并有受限真实闭环；不表示任意音符、时长或机器都已验证。",
@@ -306,7 +317,7 @@ public enum ModelNodeCatalog {
                                   requirement: .required, detail: "成功执行的主音频产物。")
                 ],
                 parameters: [
-                    ModelNodeParameter(id: "durationFrames", title: "时长帧", defaultValue: "150 帧（6 秒）",
+                    ModelNodeParameter(id: "durationFrames", title: "时长帧", defaultValue: "工作台新建默认 150 帧（6 秒）",
                                        acceptedValues: "1…400 帧；25 Hz，即 0.04…16 秒",
                                        detail: "所有音符结束帧不得超过该时长。", isAdjustable: true),
                     ModelNodeParameter(id: "seed", title: "Seed", defaultValue: "42", acceptedValues: "0…4294967295",
@@ -346,7 +357,7 @@ public enum ModelNodeCatalog {
         summary: "对已验证原始音频选区做单声音高分析；这是分析节点，不生成声音，也不等同于 MIDI 转写。",
         modelIdentity: "swift-f0 0.1.2-d1 · sha256 fa91bb45512b90339cf4b00a599ba8fe3a253c46419fcfe6b46df77a8a8336a5",
         revision: "0.1.2-d1",
-        engine: "backendcpu.pitch.swift-f0 · ONNX Runtime CPUExecutionProvider",
+        engine: "cpu.pitch.swift-f0 · ONNX Runtime CPUExecutionProvider",
         device: "CPU",
         precision: "FP32 输入；宿主派生 16 kHz mono Float32",
         availability: .workbench,
@@ -359,7 +370,7 @@ public enum ModelNodeCatalog {
                 inputs: [
                     ModelNodePort(id: "sourceSelection", title: "原始音频选区", dataType: "validated asset + frame range",
                                   requirement: .required,
-                                  detail: "来源 8…192 kHz；选区 16 ms…120 s。派生为 256…1,920,000 个 16 kHz 样本，换算误差 ≤ 1 来源采样。")
+                                  detail: "原始来源须为 mono、8…192 kHz；选区 16 ms…120 s。派生为 256…1,920,000 个 16 kHz 样本，换算误差 ≤ 1 个派生 16 kHz 样本。")
                 ],
                 outputs: [
                     ModelNodePort(id: "analysis", title: "音高分析", dataType: "application/vnd.d.pitch-analysis+json",
@@ -403,8 +414,8 @@ public enum ModelNodeCatalog {
         modelIdentity: "Qixuan 绮萱 2.7.0 DiffSinger/OpenUtau ONNX + nvidia/bigvgan_v2_44khz_128band_512x",
         revision: "BigVGAN 95a9d1dcb12906c03edd938d77b9333d6ded7dfb · Qixuan 2.7.0 fixture-bound",
         engine: "audio.singing.qixuan · Qixuan ONNX acoustic + BigVGAN vocoder",
-        device: "声学模型固定 CPU；声码器可用 CPU，或 MPS FP32 profile 优先且明确回退 CPU",
-        precision: "Qixuan ONNX profile；BigVGAN CPU 或 FP32 MPS；不是全 GPU",
+        device: "Qixuan original ONNX 固定 CPU；BigVGAN 按显式 profile 使用 CPU 或 MPS FP32；不自动回退",
+        precision: "Qixuan original ONNX CPU FP32；BigVGAN FP32 CPU 或 FP32 MPS；不是全 GPU",
         availability: .backend,
         deploymentNote: "仅源码后端与 CLI；普通 App 未由 AppSessionFactory 装配，AP1 UI 候选不在当前源。",
         operations: [
@@ -416,21 +427,22 @@ public enum ModelNodeCatalog {
                     ModelNodePort(id: "phrase", title: "歌唱乐句", dataType: "SingingPhrase",
                                   requirement: .required,
                                   detail: "language=zh；中文歌词与 1…4096 个音符；MIDI 0…127，休止可为 null。音符须无缝覆盖整段。"),
-                    ModelNodePort(id: "pronunciations", title: "发音与元音锚点", dataType: "SingingPronunciations",
+                    ModelNodePort(id: "pronunciations", title: "发音", dataType: "SingingPronunciations",
                                   requirement: .required,
-                                  detail: "须匹配 phrase ID／revision；每个歌词单元显式音素与合法 vowelIndex，休止使用空音素和 null 锚点。")
+                                  detail: "须匹配 phrase ID／revision；每个歌词单元提供显式音素。休止单元使用 [\"SP\"]，发声单元不得包含 SP。"),
+                    ModelNodePort(id: "vowelIndices", title: "元音锚点", dataType: "[Int?]",
+                                  requirement: .required,
+                                  detail: "逐歌词单元对应 pronunciations：发声单元必须指向范围内音素，休止单元必须为 null。")
                 ],
                 outputs: [
                     ModelNodePort(id: "audio", title: "合成歌声", dataType: "44.1 kHz mono Float32 WAV",
-                                  requirement: .required, detail: "成功执行的主音频产物。"),
-                    ModelNodePort(id: "executionRecord", title: "执行记录", dataType: "SingingExecutionRecord",
-                                  requirement: .required, detail: "记录实际 profile、材料绑定与执行条件。")
+                                  requirement: .required, detail: "唯一公开节点产物。后端 JSON 记录可由结果 metadata.recordPath 指向，但不是创作输出端口。")
                 ],
                 parameters: [
                     ModelNodeParameter(id: "executionProfile", title: "执行 profile",
-                                       defaultValue: "MPS 可用时优先 mps-fp32；否则 CPU",
+                                       defaultValue: "须显式选择；CPU profile 为兼容选项",
                                        acceptedValues: "qixuan-2.7.0-bigvgan-44k-approx-v1 / qixuan-2.7.0-bigvgan-44k-approx-mps-fp32-v1",
-                                       detail: "两者都由 CPU 跑 Qixuan；差别是 BigVGAN CPU 或 FP32 MPS。", isAdjustable: true),
+                                       detail: "两者都以 CPU FP32 跑 Qixuan；BigVGAN 分别为 FP32 CPU 或 FP32 MPS。profile 不做自动回退。", isAdjustable: true),
                     ModelNodeParameter(id: "timebase", title: "时基与格式预算", defaultValue: "1,000,000 ticks/s",
                                        acceptedValues: "总时长 1…600,000,000 ticks；1…4096 音符／歌词；总音素 ≤ 8192",
                                        detail: "600 秒是格式预算，不是质量已实测上限。", isAdjustable: false),
@@ -444,6 +456,7 @@ public enum ModelNodeCatalog {
         notes: [
             "模型引用、profile、材料绑定与使用确认是环境准入前提，不是创作输入端口；确认不能创造第三方许可。",
             "休止歌词单元对应一个休止音符、空歌词、仅 SP 音素和 null 元音锚点；发声单元不得包含 SP。",
+            "后端会产生 JSON 执行记录，公开 InferenceResult 通过 metadata.recordPath 描述其位置；它不是节点的第二个创作产物。",
             "没有 seed、文字 prompt、strength 或 guidance。",
             "近似 mel 重投影并非原始 DiffSinger 声码器路径。",
             "MPS profile 只加速 FP32 BigVGAN；不能称整条链路为 GPU。"
@@ -451,6 +464,7 @@ public enum ModelNodeCatalog {
         evidencePaths: [
             "Sources/DInference/SingingRequest.swift",
             "Backends/MLX/Sources/DMLXBackend/SingingBackendConfiguration.swift",
+            "Backends/MLX/Sources/DMLXBackend/SingingProviderProtocol.swift",
             "Backends/MLX/Sources/DMLXBackend/SingingBackend.swift",
             "Backends/Audio/Fixtures/Singing/qixuan-bigvgan-profile-v1.json",
             "Backends/Audio/Fixtures/Singing/qixuan-bigvgan-mps-fp32-profile-v1.json"
@@ -465,7 +479,7 @@ public enum ModelNodeCatalog {
         modelIdentity: "Wan-AI/Wan2.1-T2V-1.3B",
         revision: "37ec512624d61f7aa208f7ea8140a131f93afc9a",
         engine: "mlx.video.wan21 · Python MLX · software H.264 encode",
-        device: "T5／DiT／VAE 默认 GPU；H.264 软件编码在 CPU，不等于模型 CPU 模式",
+        device: "T5／DiT／VAE 采用 MLX 默认 GPU 策略且请求无设备选择；H.264 软件编码在 CPU；不是逐次运行实测",
         precision: "T5／DiT BF16，time/head/modulation/norm 保留 FP32；VAE FP32",
         availability: .workbench,
         deploymentNote: "源码 App 与 CLI 已适配；理论几何上限不是任意硬件的实测承诺。",
@@ -485,10 +499,7 @@ public enum ModelNodeCatalog {
                 outputs: [
                     ModelNodePort(id: "video", title: "无声视频", dataType: "H.264 MP4 · Rec.709",
                                   requirement: .required,
-                                  detail: "全范围 Rec.709 display RGB，编码写入 Rec.709 tags；不含音轨。"),
-                    ModelNodePort(id: "frames", title: "内部帧记录", dataType: "RGB8 frames + execution record",
-                                  requirement: .required,
-                                  detail: "执行记录保留实际 profile 与参数；主交付物仍为 MP4。")
+                                  detail: "唯一公开 artifact；全范围 Rec.709 display RGB，编码写入 Rec.709 tags，不含音轨。")
                 ],
                 parameters: [
                     ModelNodeParameter(id: "geometry", title: "画面尺寸", defaultValue: "832 × 480",
@@ -513,6 +524,7 @@ public enum ModelNodeCatalog {
         ],
         notes: [
             "不接受首帧、参考图、音频、mask 或 timeline；本节点没有 I2V 端口。",
+            "frames.rgb 是编码阶段内部输入；JSON 执行记录可由结果 metadata.recordPath 指向，两者都不是公开节点输出端口。",
             "Wan 2.2 仅有研究性 latent 工作，不属于当前 Wan 2.1 adapter，也不列为可运行节点。",
             "几何公式给出格式边界，不是当前机器的速度、内存或画质保证。"
         ],
