@@ -9,9 +9,11 @@ public struct RecentProjectSummary: Identifiable, Equatable, Sendable {
     public init(id: String, name: String, detail: String) { self.id = id; self.name = name; self.detail = detail }
 }
 public enum WorkspacePane: String, CaseIterable, Identifiable {
-    case creations, assets
+    case creations, assets, nodes
     public var id: Self { self }
-    public var title: String { self == .creations ? "创作" : "资产" }
+    public var title: String {
+        switch self { case .creations: "创作"; case .assets: "资产"; case .nodes: "模型节点" }
+    }
 }
 
 /// The visible UI supplies the exact enabled state, including unapplied parameter edits.

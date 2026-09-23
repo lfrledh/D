@@ -6,6 +6,8 @@ import SwiftUI
 public struct WorkbenchView: View {
     @Bindable private var model: WorkbenchModel
     private let library: ModelLibraryModel?
+    private let nodeTags: ModelNodeTagStore
+    @State private var selectedNodeID: String?
     private var layoutProbe: ((String, CGRect) -> Void)?
     @State private var audioRangeState = AudioCreationRangeState()
     @State private var pane: WorkspacePane = .creations
@@ -15,9 +17,10 @@ public struct WorkbenchView: View {
     @State private var namingContext: DocumentNameContext?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    public init(model: WorkbenchModel, library: ModelLibraryModel? = nil) {
+    public init(model: WorkbenchModel, library: ModelLibraryModel? = nil, nodeTags: ModelNodeTagStore? = nil) {
         self.model = model
         self.library = library
+        self.nodeTags = nodeTags ?? ModelNodeTagStore()
     }
 
     /// Internal rendered-geometry observation; no foreground or accessibility claim.
@@ -81,7 +84,7 @@ public struct WorkbenchView: View {
     }
 
     private var visibleGenerationEnabled: Bool {
-        guard model.canRunVisibleGeneration else { return false }
+        guard pane != .nodes, model.canRunVisibleGeneration else { return false }
         guard model.creatorMode == .audio else { return true }
         guard let draft = model.projectSession.audioCreationDraft,
               audioRangeState.contextID == model.projectSession.audioCreationContextID else { return false }
@@ -106,7 +109,7 @@ public struct WorkbenchView: View {
     private var projectWorkbench: some View {
         ProjectWorkspaceShell(projectName: model.manifest?.name ?? "D", mode: model.creatorMode,
             availableModes: model.availableCreatorModes,
-            hasInspector: model.presentedDocument != nil && (model.creatorMode != .audio || model.projectSession.audioCreationDraft != nil),
+            hasInspector: pane != .nodes && model.presentedDocument != nil && (model.creatorMode != .audio || model.projectSession.audioCreationDraft != nil),
             taskCount: model.projectSession.activeJobIDs.count + (model.projectSession.isTextWorking ? 1 : 0),
             onMode: { mode in Task { await model.switchCreatorMode(mode) } },
             onBack: { Task { await model.closeProject() } },
@@ -124,9 +127,12 @@ public struct WorkbenchView: View {
             }
         .observingLayout { layoutProbe?($0, $1) }
         .onChange(of: model.projectURL) { _, _ in
-            model.invalidateComparison(); pane = .creations
+            model.invalidateComparison(); pane = .creations; selectedNodeID = nil
         }
-        .onChange(of: model.creatorMode) { _, _ in pane = .creations }
+        .onChange(of: model.creatorMode) { _, _ in
+            selectedNodeID = nil
+            if pane != .nodes { pane = .creations }
+        }
         .popover(isPresented: $showTasks) {
             VStack(alignment: .leading, spacing: 12) {
                 Text("项目任务").font(.headline)
@@ -151,7 +157,9 @@ public struct WorkbenchView: View {
                         .accessibilityIdentifier("workspace-\(item.rawValue)")
                 }
             }.padding([.horizontal, .top], 10)
-            if pane == .assets, let manifest = model.manifest {
+            if pane == .nodes {
+                ModelNodeList(entries: visibleNodes, selectedID: selectedNodeID, onSelect: { selectedNodeID = $0 })
+            } else if pane == .assets, let manifest = model.manifest {
                 ProjectResourceBrowser(manifest: manifest, mode: model.creatorMode,
                     availableModes: model.availableCreatorModes,
                     assetURL: { model.assetURLs[$0] },
@@ -176,6 +184,10 @@ public struct WorkbenchView: View {
         }.frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
+    private var visibleNodes: [ModelNodeDescriptor] {
+        ModelNodeCatalog.entries.filter { $0.modality == model.creatorMode }
+    }
+
     private func createDocument() {
         if model.creatorMode == .image {
             model.beginEditing()
@@ -184,7 +196,21 @@ public struct WorkbenchView: View {
     }
 
     @ViewBuilder private var workspaceEditor: some View {
-        if model.presentedDocument == nil {
+        if pane == .nodes {
+            if let node = visibleNodes.first(where: { $0.id == selectedNodeID }) {
+                ModelNodeDetail(node: node, tags: nodeTags.tags(for: node.id), onTagsChange: { tags in
+                    guard pane == .nodes, selectedNodeID == node.id, model.creatorMode == node.modality else {
+                        return "模型页面已改变，请在当前页面重新编辑标签。"
+                    }
+                    do { try nodeTags.setTags(tags, for: node.id); return nil }
+                    catch { return error.localizedDescription }
+                })
+                .id(node.id)
+            } else {
+                ContentUnavailableView("查看模型节点", systemImage: "square.stack.3d.up",
+                    description: Text("从左侧选择一个\(model.creatorMode.title)模型，查看输入、输出、参数与执行来源。此原型不运行推理或下载模型。"))
+            }
+        } else if model.presentedDocument == nil {
             ContentUnavailableView {
                 Label("开始\(model.creatorMode.title)创作", systemImage: model.creatorMode.symbol)
             } description: {

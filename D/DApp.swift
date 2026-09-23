@@ -29,7 +29,7 @@ struct DApp: App {
                         expectedDigest: ProcessInfo.processInfo.environment["D_AUDIO_PROBE_SHA256"]!)
                     #endif
                 } else if let model = bootstrap.model, let library = bootstrap.libraryModel {
-                    WorkbenchView(model: model, library: library)
+                    WorkbenchView(model: model, library: library, nodeTags: bootstrap.nodeTags)
                         .background(WorkbenchWindowConnection(delegate: applicationDelegate, model: model,
                             prepareLibraryForTermination: bootstrap.prepareLibraryForTermination))
                 } else if let error = bootstrap.startupError {
