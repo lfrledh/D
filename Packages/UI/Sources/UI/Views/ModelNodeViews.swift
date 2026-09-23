@@ -7,11 +7,19 @@ public struct ModelNodeList: View {
     private let entries: [ModelNodeDescriptor]
     private let selectedID: String?
     private let onSelect: (String) -> Void
+    private var layoutProbe: ((String, CGRect) -> Void)?
 
     public init(entries: [ModelNodeDescriptor], selectedID: String?, onSelect: @escaping (String) -> Void) {
         self.entries = entries
         self.selectedID = selectedID
         self.onSelect = onSelect
+    }
+
+    /// Internal rendered-geometry observation for native hosting tests.
+    func observingLayout(_ observer: @escaping (String, CGRect) -> Void) -> Self {
+        var copy = self
+        copy.layoutProbe = observer
+        return copy
     }
 
     public var body: some View {
@@ -31,12 +39,16 @@ public struct ModelNodeList: View {
                         .buttonStyle(.plain)
                         .accessibilityIdentifier("model-node-list-\(entry.id)")
                         .accessibilityLabel("\(entry.title)，\(entry.availability.title)")
+                        .accessibilityAddTraits(entry.id == selectedID ? .isSelected : [])
+                        .modelNodeMeasured("model-node-list-\(entry.id)", probe: layoutProbe)
                     }
                 }
             }
             .padding(10)
         }
         .accessibilityIdentifier("model-node-list")
+        .coordinateSpace(name: ModelNodeLayoutSpace.name)
+        .modelNodeMeasured("model-node-list", probe: layoutProbe)
     }
 }
 
@@ -46,12 +58,20 @@ public struct ModelNodeDetail: View {
     private let initialTags: [String]
     private let onTagsChange: ([String]) -> String?
     @State private var tagEditor: ModelNodeTagEditorState
+    private var layoutProbe: ((String, CGRect) -> Void)?
 
     public init(node: ModelNodeDescriptor, tags: [String], onTagsChange: @escaping ([String]) -> String?) {
         self.node = node
         self.initialTags = tags
         self.onTagsChange = onTagsChange
         _tagEditor = State(initialValue: ModelNodeTagEditorState(tags: tags))
+    }
+
+    /// Internal rendered-geometry observation for native hosting tests.
+    func observingLayout(_ observer: @escaping (String, CGRect) -> Void) -> Self {
+        var copy = self
+        copy.layoutProbe = observer
+        return copy
     }
 
     public var body: some View {
@@ -64,8 +84,11 @@ public struct ModelNodeDetail: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(20)
+            .modelNodeMeasured("model-node-detail-content-\(node.id)", probe: layoutProbe)
         }
         .accessibilityIdentifier("model-node-detail-\(node.id)")
+        .coordinateSpace(name: ModelNodeLayoutSpace.name)
+        .modelNodeMeasured("model-node-detail-\(node.id)", probe: layoutProbe)
         .onChange(of: node.id) { _, _ in
             tagEditor = ModelNodeTagEditorState(tags: initialTags)
         }
@@ -98,6 +121,7 @@ public struct ModelNodeDetail: View {
             if tagEditor.tags.isEmpty {
                 Text("尚无标签").foregroundStyle(.secondary)
                     .accessibilityIdentifier("model-node-tags-empty")
+                    .modelNodeMeasured("model-node-tags-empty-\(node.id)", probe: layoutProbe)
             } else {
                 VStack(alignment: .leading, spacing: 7) {
                     ForEach(tagEditor.tags, id: \.self) { tag in
@@ -108,6 +132,7 @@ public struct ModelNodeDetail: View {
                                 .labelStyle(.iconOnly)
                                 .buttonStyle(.borderless)
                                 .accessibilityIdentifier("model-node-tag-remove-\(node.id)-\(tag)")
+                                .modelNodeMeasured("model-node-tag-remove-\(node.id)-\(tag)", probe: layoutProbe)
                         }
                         .padding(.leading, 10).padding(.trailing, 6).padding(.vertical, 6)
                         .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
@@ -120,9 +145,11 @@ public struct ModelNodeDetail: View {
                     .textFieldStyle(.roundedBorder)
                     .accessibilityIdentifier("model-node-tag-draft-\(node.id)")
                     .onSubmit(addDraft)
+                    .modelNodeMeasured("model-node-tag-draft-\(node.id)", probe: layoutProbe)
                 Button("添加", action: addDraft)
                     .buttonStyle(.glass)
                     .accessibilityIdentifier("model-node-tag-add-\(node.id)")
+                    .modelNodeMeasured("model-node-tag-add-\(node.id)", probe: layoutProbe)
             }
             if let error = tagEditor.errorMessage {
                 Text(error).font(.caption).foregroundStyle(.red)
@@ -142,8 +169,10 @@ public struct ModelNodeDetail: View {
                     Text(operation.summary).foregroundStyle(.secondary)
                     ModelNodePortGroup(title: "输入", direction: "输入", ports: operation.inputs,
                                        emptyText: "此操作没有输入端口。")
+                        .modelNodeMeasured("model-node-ports-\(node.id)-\(operation.id)-inputs", probe: layoutProbe)
                     ModelNodePortGroup(title: "输出", direction: "输出", ports: operation.outputs,
                                        emptyText: "此操作没有输出端口。")
+                        .modelNodeMeasured("model-node-ports-\(node.id)-\(operation.id)-outputs", probe: layoutProbe)
                     Text("输出描述的是成功执行后必有或可能产生的结果，不是可勾选的输入。")
                         .font(.caption).foregroundStyle(.secondary)
                 }
@@ -170,7 +199,7 @@ public struct ModelNodeDetail: View {
                             HStack(alignment: .firstTextBaseline) {
                                 Text(parameter.title).font(.callout.weight(.semibold))
                                 Spacer(minLength: 8)
-                                Text(parameter.isAdjustable ? "后端可调" : "固定／原界面未暴露")
+                                Text(parameter.isAdjustable ? "后端可调" : "固定")
                                     .font(.caption).foregroundStyle(.secondary)
                             }
                             ModelNodeMetadataRow("默认", value: parameter.defaultValue)
@@ -180,6 +209,7 @@ public struct ModelNodeDetail: View {
                         .padding(12)
                         .background(.background, in: RoundedRectangle(cornerRadius: 10))
                         .accessibilityIdentifier("model-node-parameter-\(node.id)-\(operation.id)-\(parameter.id)")
+                        .modelNodeMeasured("model-node-parameter-\(node.id)-\(operation.id)-\(parameter.id)", probe: layoutProbe)
                     }
                 }
             }
@@ -329,6 +359,20 @@ private struct ModelNodePortGroup: View {
         case .required: .red
         case .optional: .secondary
         case .conditional: .orange
+        }
+    }
+}
+
+private enum ModelNodeLayoutSpace {
+    static let name = "model-node-layout"
+}
+
+private extension View {
+    func modelNodeMeasured(_ id: String, probe: ((String, CGRect) -> Void)?) -> some View {
+        onGeometryChange(for: CGRect.self) { geometry in
+            geometry.frame(in: .named(ModelNodeLayoutSpace.name))
+        } action: { rectangle in
+            probe?(id, rectangle)
         }
     }
 }

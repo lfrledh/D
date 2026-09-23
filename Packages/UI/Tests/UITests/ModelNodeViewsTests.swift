@@ -7,18 +7,22 @@ import Testing
 @Suite @MainActor
 struct ModelNodeViewsTests {
     @Test
-    func listUsesStableRowsAndRemainsInsideASidebarWidth() {
+    func listRendersSelectedRowsAndReadableStatusAtRealSidebarWidths() {
         let first = descriptor(id: "image.long-id", title: "长模型名称 👩‍💻")
         let second = descriptor(id: "image.other", title: "另一个模型")
         var selected: [String] = []
+        var rectangles: [String: CGRect] = [:]
         let view = ModelNodeList(entries: [first, second], selectedID: first.id) { selected.append($0) }
+            .observingLayout { rectangles[$0] = $1 }
         let host = NSHostingView(rootView: view)
-        settle(host, width: 260, height: 420)
+        for width: CGFloat in [210, 260] {
+            settle(host, width: width, height: 420)
+            for id in ["model-node-list", "model-node-list-\(first.id)", "model-node-list-\(second.id)"] {
+                #expect(isInsideViewport(rectangles[id], of: host), "\(id) is clipped at sidebar width \(width)")
+            }
+            #expect(rectangles["model-node-list-\(first.id)"]?.height ?? 0 > 44)
+        }
 
-        #expect(host.fittingSize.width <= 261)
-        let buttons = descendants(host).compactMap { $0 as? NSButton }
-        #expect(buttons.contains { $0.accessibilityIdentifier() == "model-node-list-\(first.id)" })
-        #expect(buttons.contains { $0.accessibilityIdentifier() == "model-node-list-\(second.id)" })
         #expect(selected.isEmpty)
     }
 
@@ -40,16 +44,29 @@ struct ModelNodeViewsTests {
     }
 
     @Test
-    func detailHostsReadableMetadataAndDoesNotExposeParameterEditors() {
+    func detailRendersTagControlsAndPortAndConstraintDescriptionsAcrossResize() {
         let node = descriptor(id: "text.long-model-id", title: "说明模型")
+        var rectangles: [String: CGRect] = [:]
         let view = ModelNodeDetail(node: node, tags: ["中文", "👩‍💻"], onTagsChange: { _ in nil })
+            .observingLayout { rectangles[$0] = $1 }
         let host = NSHostingView(rootView: view)
-        settle(host, width: 480, height: 560)
+        for width: CGFloat in [480, 640, 480] {
+            settle(host, width: width, height: 560)
+            for id in [
+                "model-node-detail-\(node.id)", "model-node-tag-draft-\(node.id)",
+                "model-node-tag-add-\(node.id)", "model-node-tag-remove-\(node.id)-中文",
+                "model-node-tag-remove-\(node.id)-👩‍💻",
+                "model-node-ports-\(node.id)-generate-inputs",
+                "model-node-ports-\(node.id)-generate-outputs",
+                "model-node-parameter-\(node.id)-generate-steps",
+                "model-node-parameter-\(node.id)-generate-recipe"
+            ] {
+                #expect(isHorizontallyReachable(rectangles[id], of: host), "\(id) is horizontally clipped at detail width \(width)")
+            }
+        }
 
-        #expect(host.fittingSize.width <= 481)
-        let textFields = descendants(host).compactMap { $0 as? NSTextField }
-        #expect(textFields.contains { $0.accessibilityIdentifier() == "model-node-tag-draft-\(node.id)" })
-        #expect(!textFields.contains { $0.accessibilityIdentifier() == "model-node-parameter-\(node.id)-generate-steps" })
+        #expect(rectangles["model-node-detail-content-\(node.id)"]?.height ?? 0 > 560,
+                "Long model ID, evidence, ports, and constraints must remain scrollable rather than truncate.")
     }
 
     private func descriptor(id: String, title: String) -> ModelNodeDescriptor {
@@ -62,10 +79,20 @@ struct ModelNodeViewsTests {
                 id: "generate", title: "生成", summary: "从文本条件生成结果。",
                 inputs: [ModelNodePort(id: "prompt", title: "提示词", dataType: "Text", requirement: .required,
                                        detail: "创作描述。")],
-                outputs: [ModelNodePort(id: "image", title: "图像", dataType: "Image", requirement: .conditional("启用图像输出时"),
-                                        detail: "成功后产生的图像。")],
-                parameters: [ModelNodeParameter(id: "steps", title: "步数", defaultValue: "20", acceptedValues: "1…100",
-                                                 detail: "后端范围。", isAdjustable: true)]
+                outputs: [
+                    ModelNodePort(id: "image", title: "图像", dataType: "Image", requirement: .required,
+                                  detail: "成功后必有的图像。"),
+                    ModelNodePort(id: "preview", title: "预览", dataType: "Image", requirement: .optional,
+                                  detail: "可能产生的预览。"),
+                    ModelNodePort(id: "mask", title: "蒙版", dataType: "Mask", requirement: .conditional("使用局部编辑时"),
+                                  detail: "局部编辑成功后产生的蒙版。")
+                ],
+                parameters: [
+                    ModelNodeParameter(id: "steps", title: "步数", defaultValue: "20", acceptedValues: "1…100",
+                                       detail: "后端范围。", isAdjustable: true),
+                    ModelNodeParameter(id: "recipe", title: "固定配方", defaultValue: "adapter-default",
+                                       acceptedValues: "固定：不得由此说明页作为执行设置提交", detail: "原创作界面未暴露。", isAdjustable: false)
+                ]
             )], notes: ["固定配方仍可能限制某些参数。"], evidencePaths: ["Sources/Adapter.swift"]
         )
     }
@@ -77,7 +104,16 @@ struct ModelNodeViewsTests {
         host.layoutSubtreeIfNeeded()
     }
 
-    private func descendants(_ view: NSView) -> [NSView] {
-        view.subviews.flatMap { [$0] + descendants($0) }
+    private func isInsideViewport<Content: View>(_ rectangle: CGRect?, of host: NSHostingView<Content>) -> Bool {
+        guard let rectangle else { return false }
+        let viewport = host.bounds.insetBy(dx: -1, dy: -1)
+        return rectangle.minX >= viewport.minX && rectangle.maxX <= viewport.maxX
+            && rectangle.minY >= viewport.minY && rectangle.maxY <= viewport.maxY
+    }
+
+    private func isHorizontallyReachable<Content: View>(_ rectangle: CGRect?, of host: NSHostingView<Content>) -> Bool {
+        guard let rectangle else { return false }
+        let viewport = host.bounds.insetBy(dx: -1, dy: -1)
+        return rectangle.width > 0 && rectangle.minX >= viewport.minX && rectangle.maxX <= viewport.maxX
     }
 }
