@@ -15,7 +15,8 @@
 | `Packages/UI/Sources/DWorkbench/State/ProjectSession.swift` | 会话/提交/候选/保存等共享状态；具体text/audio/video控制器参与 | active且有耦合债；不属于本轮退役代码 |
 | `Packages/UI/Sources/DWorkbench/Project` | ProjectModels/ProjectStore、清单及媒体持久化；源schema12 | active；AP1/CORE schema15只在候选，不能用其版本解释源项目 |
 | `Packages/UI/Sources/DWorkbench/{Text,Audio,Video,Media,Models,Services}` | 文稿、音频/视频草稿、播放/派生、配方、安装/租约、值型应用服务 | active；按功能读控制器与对应存储/测试 |
-| `Packages/UI/Sources/UI/{State,Views}` | WorkbenchModel/WorkbenchView及模态视图、原生输入 | active旧模态导航；节点方向未实现 |
+| `Packages/UI/Sources/UI/{State,Views}` | WorkbenchModel/WorkbenchView及模态视图、原生输入 | active四模态导航＋模型节点说明原型；无节点组合执行 |
+| `Packages/UI/Sources/DWorkbench/Nodes`、`UI/Views/ModelNodeViews.swift` | 静态模型能力展示投影、用户标签与详情视图 | 只说明已适配范围，不是推理注册器/安装状态/节点调度；适配变更须同步核对展示和回归 |
 | `D/BundledAudioEngine.swift`、音频/视频`Packaging` | engine.json、provider脚本和资源清单的封装/运行时校验 | active部署入口；普通build-local不自动制齐Python引擎 |
 | `D.xcworkspace`、`D.xcodeproj`、`DTests`、`DUITests` | workspace聚合App/MLX/Vendor；scheme D/d-infer/DMLXTests，自动收集源码 | active；Sources列表为空不表示无源码 |
 
