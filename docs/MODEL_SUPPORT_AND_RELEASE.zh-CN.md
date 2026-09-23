@@ -48,7 +48,7 @@ Qwen固定revision依尺寸0.5/1.5/7/32/72B分别为 `a5339a4131f135d0fdc6a5c8b5
 ## 证据绑定与本轮只读更新
 
 - 表中图文/SA3/MRT2/T2V的统一App证据绑定`aba1326f72f33ada028e35a8e799ef04965e7afa`及[D-MULTIMODAL-BASELINE-01](tasks/D-MULTIMODAL-BASELINE-01.md)，开发机M4/16GiB；表内未列规模不外推。32B/大图/medium等外机CLI另绑定上述便携包/CLI版本，日志36GiB与用户48GB记忆差异保留unknown，不编造高内存实测。
-- 源R9实际验证`8fb7d48e14ba4e140177925905ddb8130751617d`，到b334只有文档。参考full50使用CORE冻结外部脚本/输入清单，guard及data/result位于`D-Development/AgentTrials/D-CORE-CLOSE-01/run-20260921T175000Z/video/full50/`；50步、原attention容差及首步对照、取消恢复通过；约39247.6秒，释放后MLX active为0，driver记录不是整个系统零占用。输出仅FP32 latent，摘要与本轮读取依据在整理任务。
+- 源R9实际验证`8fb7d48e14ba4e140177925905ddb8130751617d`，到b334只有文档。参考full50使用CORE冻结外部脚本/输入清单，guard及data/result位于`D-Development/AgentTrials/D-CORE-CLOSE-01/run-20260921T175000Z/video/full50/`；50步、原attention容差及首步对照、取消恢复通过；约39247.6秒，释放后PyTorch MPS active为0，driver记录不是整个系统零占用。输出仅FP32 latent，摘要与本轮读取依据在整理任务。
 - 歌声/HUM的AP1包与schema15没有源接纳；CORE将AP1和GPU部署组合后的全构建/真实App仍未验。包装夹具、Swift parse、CLI、旧App不能相加成一个不存在的最终产品版本。
 - 已注册、当前宿主可部署、该配置真实通过、进入哪一App分别判断：32B是登记+CLI，72B仅容量试验，SA3 medium是profile+CLI，sm-sfx无真实验收；不存在一张通用“安装完成=可运行”目录可替代这些边界。
 
