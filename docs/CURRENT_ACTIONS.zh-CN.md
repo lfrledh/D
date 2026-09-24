@@ -14,8 +14,8 @@
 
 | 对象 | 固定版本与状态 | 证据能说明什么 |
 | --- | --- | --- |
-| 本轮源受测代码 | `23fc4364c5b04c40db29f25e53a7756611306445`；`codex/inference-foundation`已接纳，后续仅本文/任务结案 | 12模型/变体说明、端口和只读参数、可持久用户标签；不是组合或新推理能力 |
-| 本轮隔离原型App | 本任务run的`cache/DerivedData/Build/Products/Debug/D.app`；代码23fc436… | 普通签名构建及真实原生UI通过，测试项目/偏好隔离；未替换普通D |
+| 上轮模型说明受测代码（历史） | `23fc4364c5b04c40db29f25e53a7756611306445`；到165c544仅两份文档 | 12模型/变体说明、端口和只读参数、可持久用户标签；不是组合或新推理能力 |
+| 上轮隔离原型App（历史） | `D-NODE-CATALOG-01/run-20260923T150725Z/cache/DerivedData/Build/Products/Debug/D.app`；代码23fc436… | 当时普通签名构建及真实原生UI通过；未替换普通D，不是本轮产物 |
 | 上批整理前源与远端（历史） | `codex/inference-foundation`，`b334920907de0324bf3e0146bb78433742356a6c`；上批整理时读远端确认相同 | 整理阶段只改文档；本轮在其上增加节点说明 UI。不可用该旧版本代表本轮 UI 受测代码 |
 | 最近R9源验收代码 | `8fb7d48e14ba4e140177925905ddb8130751617d`；到b334仅4份文档变化 | 58 CPU＋3反例及完整正负首步历史证据；不是全模型本轮重测 |
 | 最近有明确真人链路的隔离App | AP1受测`54721d91a535e71d01c9caeba86c04277fbbb933`；`D-Development/AgentTrials/D-AUDIO-PROJECT-01/run-20260916T120640Z-human/lead/D Audio Guarded.app` | 本轮只核实包存在/关键摘要；不是最新源重建。普通D是否同版unknown，不启动核对 |
@@ -35,6 +35,6 @@
 
 ## 恢复与下一步
 
-先核对 Git、源 scheme、任务目录/进程，再读取[当前任务](tasks/D-NODE-CATALOG-01.md)末尾恢复点。证据在 `D-Development/AgentTrials/D-NODE-CATALOG-01/run-20260923T150725Z/`，任务记录区分初稿、返工、组合 CPU、构建和原生 UI。未提交候选或“构建通过”不等同已源接纳。
+先核对Git、源scheme、任务目录/进程，再读取[当前任务](tasks/D-UI-READINESS-01.md)末尾恢复点。证据根：`D-Development/AgentTrials/D-UI-READINESS-01/run-20260924T065313Z/`。原型历史证据仍在`D-NODE-CATALOG-01/run-20260923T150725Z/final-receipt.json`，不可混称本轮重测。
 
-本阶段模型说明原型已完成并本地接纳；推送最终回执位于上述证据根的`final-receipt.json`。参数只读展示，用户标签可编辑。本阶段到此停止。用户正在研究组合方式和新 UI；下一阶段先由用户审阅模型/端口表达，再冻结其具体方案，不先开发组合器。AP1/I2V/CORE仍为独立候选债，首发范围与历史预算保持原记录，不因新增说明页面被标为已修复。
+本批P0—P4仅标签、说明来源、接线回归与扩展约束；结束后等待用户节点UI/UX方案。AP1/I2V/CORE仍为独立候选债，首发范围与历史预算保持原记录。新UI可复用接口及必须随实施提取的页面依赖见[后端扩展与服务接线](BACKEND_EXTENSION_CONTRACT.zh-CN.md)。说明原型、结构演练与正式节点执行分别报告。

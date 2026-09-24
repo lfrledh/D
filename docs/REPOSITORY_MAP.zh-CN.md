@@ -1,6 +1,6 @@
 # D 实际仓库导航
 
-核实生产快照：`b334920907de0324bf3e0146bb78433742356a6c`，2026-09-23。本文是**现状地图**，不是重构后的结构；本轮没有修改代码。版本、产物、候选见[当前行动](CURRENT_ACTIONS.zh-CN.md)，目标见[原则](PRODUCT_PRINCIPLES.zh-CN.md)。先按所遇问题选一条路线，不通读全库。
+结构核实：`165c54471c4380eb5482312d6c2c70ab97db48a9`，2026-09-24；D-UI-READINESS-01增量涉及Nodes标签、UI呈现状态及对应测试，不改生产推理或项目schema。本文是**现状地图**，不是重构后的结构。版本、产物、候选见[当前行动](CURRENT_ACTIONS.zh-CN.md)，目标见[原则](PRODUCT_PRINCIPLES.zh-CN.md)。先按所遇问题选一条路线，不通读全库。
 
 ## 实际入口与责任
 
@@ -16,13 +16,13 @@
 | `Packages/UI/Sources/DWorkbench/Project` | ProjectModels/ProjectStore、清单及媒体持久化；源schema12 | active；AP1/CORE schema15只在候选，不能用其版本解释源项目 |
 | `Packages/UI/Sources/DWorkbench/{Text,Audio,Video,Media,Models,Services}` | 文稿、音频/视频草稿、播放/派生、配方、安装/租约、值型应用服务 | active；按功能读控制器与对应存储/测试 |
 | `Packages/UI/Sources/UI/{State,Views}` | WorkbenchModel/WorkbenchView及模态视图、原生输入 | active四模态导航＋模型节点说明原型；无节点组合执行 |
-| `Packages/UI/Sources/DWorkbench/Nodes`、`UI/Views/ModelNodeViews.swift` | 静态模型能力展示投影、用户标签与详情视图 | 只说明已适配范围，不是推理注册器/安装状态/节点调度；适配变更须同步核对展示和回归 |
+| `Packages/UI/Sources/DWorkbench/Nodes`、`UI/Views/ModelNodeViews.swift` | 静态模型能力展示投影、缺失/有效/损坏标签状态与详情视图 | 只说明已适配范围，不是推理注册器/安装状态/节点调度；适配变更须同步核对展示和回归 |
 | `D/BundledAudioEngine.swift`、音频/视频`Packaging` | engine.json、provider脚本和资源清单的封装/运行时校验 | active部署入口；普通build-local不自动制齐Python引擎 |
 | `D.xcworkspace`、`D.xcodeproj`、`DTests`、`DUITests` | workspace聚合App/MLX/Vendor；scheme D/d-infer/DMLXTests，自动收集源码 | active；Sources列表为空不表示无源码 |
 
 ## 兼容、参考、研究与候选
 
-| 区域 | 分类 | 本轮决定及证据 |
+| 区域 | 分类 | D-CONTEXT-RESET-01历史保留决定及证据 |
 | --- | --- | --- |
 | `Packages/Core`、`ModelLoading`、`TextInference`、`ImageInference` | 旧公共产品/兼容保留，未在新App/CLI依赖图 | 各自Package.swift仍公开库且旧包相互依赖；仓库外消费者unknown。旧ModelLoading还用注入闭包/目录字符串；不按grep无调用删除 |
 | `Packages/AIAssistant` | 未实现公共包骨架 | 不能称已有助手；公共产品/外部使用未知，保留 |
@@ -35,7 +35,7 @@
 | `Vendor` | 固定源码、补丁、许可与再现责任 | 当前后端使用；保留完整快照/NOTICE/摘要，局部约束`Vendor/flux2-swift/AGENTS.md`有效 |
 | AP1、CORE及视频实验外盘工作树/证据 | 未整合候选或历史证据 | 固定版本在当前行动；不清理、不当作已发布源，不自动续跑 |
 
-**退役删除：0项。** 上述代码未同时满足无入口、无公共兼容、无参考/候选/许可证责任。未知外部调用不是删除依据；活跃代码存在设计债也不叫垃圾。本轮不删除任何测试或失效构建引用。
+**D-CONTEXT-RESET-01历史退役删除：0项。** 上述代码未同时满足无入口、无公共兼容、无参考/候选/许可证责任。未知外部调用不是删除依据；活跃代码存在设计债也不叫垃圾。D-UI-READINESS-01没有重新普查或删除这些代码。
 
 使用关系核查包含：Xcode `PBXFileSystemSynchronizedRootGroup` 对D/DTests/DUITests自动收集及Info.plist例外；SwiftPM target自动收集与`.process`资源；Bundle.module资源查找；ModelLoading注入/通知/目录名；Python import_module/spec_from_file_location/sys.path与引擎清单/Packaging复制。不能只扫静态import。
 
@@ -48,7 +48,7 @@
 5. **执行与应用**：DRuntime与MLXExecutionLease→ModelLibrary/ModelLibraryFiles/ModelRangeDownload→BundledAudioEngine/AppSessionFactory/WorkbenchBootstrap→`Services/WorkbenchSession.swift`。安装与推理、操作与展示分别决定。
 6. **保存与呈现（仅确需时）**：ProjectSession、对应ProjectTextController/ProjectAudioController、ProjectStore、UI/WorkbenchModel/View；不要默认新增一套模态页。相关共享契约由Lead协调。
 
-图像MLX和ModelLibrary各有固定清单，test-workbench.sh要求字节一致；新增模型需同时核对。G5差异表达、联合条件校验、模型事实位置仍有债，见[审计映射](tasks/D-CONTEXT-RESET-01.md#审计状态映射)，本轮没有引入万能registry。
+图像MLX和ModelLibrary各有固定清单，test-workbench.sh要求字节一致；新增模型需同时核对。G5差异表达、联合条件校验、模型事实位置仍有债，见[审计映射](tasks/D-CONTEXT-RESET-01.md#审计状态映射)，没有通用registry；具体应用接线和扩展责任见[后端扩展与服务接线](BACKEND_EXTENSION_CONTRACT.zh-CN.md)。
 
 ## 验证入口（现有，非本轮全部执行）
 

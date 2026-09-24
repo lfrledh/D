@@ -7,10 +7,17 @@ public struct WorkbenchView: View {
     @Bindable private var model: WorkbenchModel
     private let library: ModelLibraryModel?
     private let nodeTags: ModelNodeTagStore
-    @State private var selectedNodeID: String?
+    @State private var nodePresentation = ModelNodePresentation()
     private var layoutProbe: ((String, CGRect) -> Void)?
     @State private var audioRangeState = AudioCreationRangeState()
-    @State private var pane: WorkspacePane = .creations
+    private var pane: WorkspacePane {
+        get { nodePresentation.pane }
+        nonmutating set { nodePresentation.selectPane(newValue) }
+    }
+    private var selectedNodeID: String? {
+        get { nodePresentation.selectedNodeID }
+        nonmutating set { nodePresentation.selectNode(newValue) }
+    }
     @State private var showTasks = false
     @State private var showingPitchAnalysis = false
     @State private var expandTasks = true
@@ -94,16 +101,7 @@ public struct WorkbenchView: View {
     }
 
     private var visibleGenerationCommand: WorkbenchGenerationCommand {
-        let epoch = model.projectSession.navigationEpoch
-        let mode = model.creatorMode
-        let documentID = model.presentedDocument?.id
-        let sourcesMode = model.showingTextSources
-        return WorkbenchGenerationCommand(title: model.visibleGenerationTitle, isEnabled: visibleGenerationEnabled) {
-            Task {
-                guard visibleGenerationEnabled else { return }
-                await model.generateCaptured(mode: mode, epoch: epoch, documentID: documentID, sourcesMode: sourcesMode)
-            }
-        }
+        nodePresentation.generationCommand(model: model, enabled: { visibleGenerationEnabled })
     }
 
     private var projectWorkbench: some View {
@@ -127,11 +125,10 @@ public struct WorkbenchView: View {
             }
         .observingLayout { layoutProbe?($0, $1) }
         .onChange(of: model.projectURL) { _, _ in
-            model.invalidateComparison(); pane = .creations; selectedNodeID = nil
+            model.invalidateComparison(); nodePresentation.projectChanged()
         }
         .onChange(of: model.creatorMode) { _, _ in
-            selectedNodeID = nil
-            if pane != .nodes { pane = .creations }
+            nodePresentation.modalityChanged()
         }
         .popover(isPresented: $showTasks) {
             VStack(alignment: .leading, spacing: 12) {
@@ -198,13 +195,8 @@ public struct WorkbenchView: View {
     @ViewBuilder private var workspaceEditor: some View {
         if pane == .nodes {
             if let node = visibleNodes.first(where: { $0.id == selectedNodeID }) {
-                ModelNodeDetail(node: node, tags: nodeTags.tags(for: node.id), onTagsChange: { tags in
-                    guard pane == .nodes, selectedNodeID == node.id, model.creatorMode == node.modality else {
-                        return "模型页面已改变，请在当前页面重新编辑标签。"
-                    }
-                    do { try nodeTags.setTags(tags, for: node.id); return nil }
-                    catch { return error.localizedDescription }
-                })
+                ModelNodeDetail(node: node, tagState: nodeTags.readState(for: node.id),
+                    onTagsChange: nodePresentation.tagWriter(node: node, store: nodeTags, model: model))
                 .id(node.id)
             } else {
                 ContentUnavailableView("查看模型节点", systemImage: "square.stack.3d.up",
