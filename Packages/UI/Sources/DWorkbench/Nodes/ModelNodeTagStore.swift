@@ -1,6 +1,7 @@
 import Foundation
 
 public enum ModelNodeTagStoreError: Error, Equatable, LocalizedError, Sendable {
+    case corruptRecord
     case emptyTag
     case duplicateTag(String)
     case tooManyTags(maximum: Int)
@@ -8,6 +9,8 @@ public enum ModelNodeTagStoreError: Error, Equatable, LocalizedError, Sendable {
 
     public var errorDescription: String? {
         switch self {
+        case .corruptRecord:
+            "标签记录无法读取，已保留原数据。"
         case .emptyTag:
             "标签不能为空或只包含空白。"
         case .duplicateTag(let tag):
@@ -18,6 +21,12 @@ public enum ModelNodeTagStoreError: Error, Equatable, LocalizedError, Sendable {
             "标签“\(tag)”超过 \(maximumCharacters) 个字符。"
         }
     }
+}
+
+public enum ModelNodeTagReadState: Equatable, Sendable {
+    case missing
+    case valid([String])
+    case corrupt
 }
 
 /// User-authored labels keyed by the catalog's stable model ID.
@@ -35,16 +44,25 @@ public final class ModelNodeTagStore {
         self.settings = settings
     }
 
-    public func tags(for modelID: String) -> [String] {
-        guard let settings else { return memoryTags[modelID] ?? [] }
-        guard let stored = settings.object(forKey: Self.storageKey(for: modelID)) as? [String],
-              let validated = try? Self.validate(stored) else {
-            return []
+    public func readState(for modelID: String) -> ModelNodeTagReadState {
+        guard let settings else {
+            guard let tags = memoryTags[modelID] else { return .missing }
+            return .valid(tags)
         }
-        return validated
+
+        let key = Self.storageKey(for: modelID)
+        guard let rawValue = settings.object(forKey: key) else { return .missing }
+        guard let stored = rawValue as? [String],
+              let validated = try? Self.validate(stored) else {
+            return .corrupt
+        }
+        return .valid(validated)
     }
 
     public func setTags(_ tags: [String], for modelID: String) throws {
+        guard readState(for: modelID) != .corrupt else {
+            throw ModelNodeTagStoreError.corruptRecord
+        }
         let validated = try Self.validate(tags)
         if let settings {
             let key = Self.storageKey(for: modelID)

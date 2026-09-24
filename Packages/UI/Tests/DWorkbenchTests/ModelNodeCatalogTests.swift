@@ -174,10 +174,10 @@ struct ModelNodeCatalogTests {
         #expect(UserDefaults.standard.object(forKey: standardKey) == nil)
 
         let store = ModelNodeTagStore()
-        #expect(store.tags(for: modelID).isEmpty)
+        #expect(store.readState(for: modelID) == .missing)
         try store.setTags(["  人声  ", "🎛️", "e\u{301}"], for: modelID)
-        #expect(store.tags(for: modelID) == ["人声", "🎛️", "e\u{301}"])
-        #expect(store.tags(for: "another-model").isEmpty)
+        #expect(store.readState(for: modelID) == .valid(["人声", "🎛️", "e\u{301}"]))
+        #expect(store.readState(for: "another-model") == .missing)
         #expect(UserDefaults.standard.object(forKey: standardKey) == nil)
     }
 
@@ -195,11 +195,11 @@ struct ModelNodeCatalogTests {
         expectTagError(.tagTooLong(tag: thirtyThree, maximumCharacters: 32)) {
             try store.setTags([thirtyThree], for: "model")
         }
-        #expect(store.tags(for: "model") == ["原有"])
+        #expect(store.readState(for: "model") == .valid(["原有"]))
 
         let thirtyTwoEmoji = String(repeating: "🙂", count: 32)
         try store.setTags([thirtyTwoEmoji], for: "model")
-        #expect(store.tags(for: "model") == [thirtyTwoEmoji])
+        #expect(store.readState(for: "model") == .valid([thirtyTwoEmoji]))
     }
 
     @MainActor
@@ -212,15 +212,15 @@ struct ModelNodeCatalogTests {
         try writer.setTags(["  持久标签  ", "🎵"], for: "good-model")
         let reopenedSettings = try #require(UserDefaults(suiteName: suiteName))
         let reader = ModelNodeTagStore(settings: reopenedSettings)
-        #expect(reader.tags(for: "good-model") == ["持久标签", "🎵"])
+        #expect(reader.readState(for: "good-model") == .valid(["持久标签", "🎵"]))
 
         reopenedSettings.set(Data([0x00, 0x01]), forKey: "D.ModelNodeTags.v1.corrupt-model")
-        #expect(reader.tags(for: "corrupt-model").isEmpty)
-        #expect(reader.tags(for: "good-model") == ["持久标签", "🎵"])
+        #expect(reader.readState(for: "corrupt-model") == .corrupt)
+        #expect(reader.readState(for: "good-model") == .valid(["持久标签", "🎵"]))
         #expect(reopenedSettings.data(forKey: "D.ModelNodeTags.v1.corrupt-model") == Data([0x00, 0x01]))
 
         try reader.setTags([], for: "good-model")
-        #expect(reader.tags(for: "good-model").isEmpty)
+        #expect(reader.readState(for: "good-model") == .missing)
         #expect(reopenedSettings.object(forKey: "D.ModelNodeTags.v1.good-model") == nil)
     }
 

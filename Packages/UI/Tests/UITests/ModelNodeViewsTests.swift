@@ -27,27 +27,140 @@ struct ModelNodeViewsTests {
     }
 
     @Test
-    func tagEditorTrimsRejectsDuplicatesAndPreservesTagsOnFailure() {
-        var editor = ModelNodeTagEditorState(tags: ["收藏"])
+    func tagEditorUsesRealStoreCallbackAndPreservesDraftAccordingToAction() throws {
+        let modelID = "editor-\(UUID().uuidString)"
+        let store = ModelNodeTagStore()
+        let persist: ([String]) -> String? = { tags in
+            do {
+                try store.setTags(tags, for: modelID)
+                return nil
+            } catch {
+                return error.localizedDescription
+            }
+        }
+
+        var editor = ModelNodeTagEditorState(tagState: .missing)
         editor.draft = "  新标签  "
-        #expect(editor.proposedAddition() == .success(["收藏", "新标签"]))
+        #expect(editor.proposedAddition() == .success(["新标签"]))
+        editor.addDraft(using: persist)
+        #expect(editor.tags == ["新标签"])
+        #expect(editor.draft.isEmpty)
+        #expect(store.readState(for: modelID) == .valid(["新标签"]))
+
+        editor.draft = "删除时保留"
+        editor.remove("新标签", using: persist)
+        #expect(editor.tags.isEmpty)
+        #expect(editor.draft == "删除时保留")
+        #expect(store.readState(for: modelID) == .missing)
+
+        editor = ModelNodeTagEditorState(tagState: .valid(["收藏"]))
         editor.draft = " 收藏 "
         #expect(editor.proposedAddition() == .failure("这个标签已经存在。"))
         editor.draft = " \n "
         #expect(editor.proposedAddition() == .failure("请输入标签内容。"))
-        editor.reject("存储不可用")
+
+        let suiteName = "D.ModelNodeViewsTests.\(UUID().uuidString)"
+        let settings = try #require(UserDefaults(suiteName: suiteName))
+        defer { settings.removePersistentDomain(forName: suiteName) }
+        let persistedStore = ModelNodeTagStore(settings: settings)
+        try persistedStore.setTags(["收藏"], for: modelID)
+        #expect(persistedStore.readState(for: modelID) == .valid(["收藏"]))
+        settings.set(Data([0x00, 0x01]), forKey: "D.ModelNodeTags.v1.\(modelID)")
+
+        editor.draft = "候选"
+        editor.addDraft { tags in
+            do {
+                try persistedStore.setTags(tags, for: modelID)
+                return nil
+            } catch {
+                return error.localizedDescription
+            }
+        }
         #expect(editor.tags == ["收藏"])
-        #expect(editor.errorMessage == "存储不可用")
-        editor.accept(tags: ["收藏", "新标签"])
-        #expect(editor.tags == ["收藏", "新标签"])
-        #expect(editor.draft.isEmpty)
+        #expect(editor.draft == "候选")
+        #expect(editor.errorMessage == ModelNodeTagStoreError.corruptRecord.localizedDescription)
+
+        editor.remove("收藏") { tags in
+            do {
+                try persistedStore.setTags(tags, for: modelID)
+                return nil
+            } catch {
+                return error.localizedDescription
+            }
+        }
+        #expect(editor.tags == ["收藏"])
+        #expect(editor.draft == "候选")
+        #expect(editor.errorMessage == ModelNodeTagStoreError.corruptRecord.localizedDescription)
+
+        var corruptEditor = ModelNodeTagEditorState(tagState: .corrupt)
+        corruptEditor.draft = "不会提交"
+        var callbackWasCalled = false
+        corruptEditor.addDraft { _ in
+            callbackWasCalled = true
+            return nil
+        }
+        #expect(!corruptEditor.isEditable)
+        #expect(!callbackWasCalled)
+        #expect(corruptEditor.draft == "不会提交")
+    }
+
+    @Test
+    func sameNodeIncomingCorruptionLocksEditorWithoutResettingLocalState() {
+        var editor = ModelNodeTagEditorState(tagState: .valid(["收藏"]))
+        editor.draft = "保留草稿"
+        editor.reject("保留错误")
+
+        editor.applyIncomingReadState(.valid(["外部刷新不覆盖本地状态"]))
+        editor.applyIncomingReadState(.missing)
+        #expect(editor.isEditable)
+        #expect(editor.tags == ["收藏"])
+        #expect(editor.draft == "保留草稿")
+        #expect(editor.errorMessage == "保留错误")
+
+        editor.applyIncomingReadState(.corrupt)
+        #expect(!editor.isEditable)
+        #expect(editor.tags == ["收藏"])
+        #expect(editor.draft == "保留草稿")
+        #expect(editor.errorMessage == "保留错误")
+
+        var callbackWasCalled = false
+        editor.addDraft { _ in
+            callbackWasCalled = true
+            return nil
+        }
+        editor.remove("收藏") { _ in
+            callbackWasCalled = true
+            return nil
+        }
+        #expect(!callbackWasCalled)
+        #expect(editor.tags == ["收藏"])
+        #expect(editor.draft == "保留草稿")
+    }
+
+    @Test
+    func detailSameNodeIncomingCorruptionReplacesEmptyStateWithReadOnlyWarning() {
+        let node = descriptor(id: "text.same-node", title: "同一模型")
+        var rectangles: [String: CGRect] = [:]
+        let initialView = ModelNodeDetail(node: node, tagState: .missing, onTagsChange: { _ in nil })
+            .observingLayout { rectangles[$0] = $1 }
+        let host = NSHostingView(rootView: initialView)
+        settle(host, width: 480, height: 560)
+        #expect(isHorizontallyReachable(rectangles["model-node-tags-empty-\(node.id)"], of: host))
+
+        rectangles.removeAll()
+        host.rootView = ModelNodeDetail(node: node, tagState: .corrupt, onTagsChange: { _ in nil })
+            .observingLayout { rectangles[$0] = $1 }
+        settle(host, width: 480, height: 560)
+
+        #expect(isHorizontallyReachable(rectangles["model-node-tags-corrupt-\(node.id)"], of: host))
+        #expect(rectangles["model-node-tags-empty-\(node.id)"] == nil)
     }
 
     @Test
     func detailRendersTagControlsAndPortAndConstraintDescriptionsAcrossResize() {
         let node = descriptor(id: "text.long-model-id", title: "说明模型")
         var rectangles: [String: CGRect] = [:]
-        let view = ModelNodeDetail(node: node, tags: ["中文", "👩‍💻"], onTagsChange: { _ in nil })
+        let view = ModelNodeDetail(node: node, tagState: .valid(["中文", "👩‍💻"]), onTagsChange: { _ in nil })
             .observingLayout { rectangles[$0] = $1 }
         let host = NSHostingView(rootView: view)
         for width: CGFloat in [480, 640, 480] {
