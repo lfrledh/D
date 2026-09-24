@@ -55,16 +55,20 @@ public struct ModelNodeList: View {
 @MainActor
 public struct ModelNodeDetail: View {
     public let node: ModelNodeDescriptor
-    private let initialTags: [String]
+    private let tagState: ModelNodeTagReadState
     private let onTagsChange: ([String]) -> String?
     @State private var tagEditor: ModelNodeTagEditorState
     private var layoutProbe: ((String, CGRect) -> Void)?
 
-    public init(node: ModelNodeDescriptor, tags: [String], onTagsChange: @escaping ([String]) -> String?) {
+    public init(
+        node: ModelNodeDescriptor,
+        tagState: ModelNodeTagReadState,
+        onTagsChange: @escaping ([String]) -> String?
+    ) {
         self.node = node
-        self.initialTags = tags
+        self.tagState = tagState
         self.onTagsChange = onTagsChange
-        _tagEditor = State(initialValue: ModelNodeTagEditorState(tags: tags))
+        _tagEditor = State(initialValue: ModelNodeTagEditorState(tagState: tagState))
     }
 
     /// Internal rendered-geometry observation for native hosting tests.
@@ -90,7 +94,10 @@ public struct ModelNodeDetail: View {
         .coordinateSpace(name: ModelNodeLayoutSpace.name)
         .modelNodeMeasured("model-node-detail-\(node.id)", probe: layoutProbe)
         .onChange(of: node.id) { _, _ in
-            tagEditor = ModelNodeTagEditorState(tags: initialTags)
+            tagEditor = ModelNodeTagEditorState(tagState: tagState)
+        }
+        .onChange(of: tagState) { _, newState in
+            tagEditor.applyIncomingReadState(newState)
         }
     }
 
@@ -118,7 +125,12 @@ public struct ModelNodeDetail: View {
         ModelNodeSection("用户标签", identifier: "tags") {
             Text("标签只保存在本机，用于整理；不会改变模型能力、许可或生成设置。")
                 .font(.caption).foregroundStyle(.secondary)
-            if tagEditor.tags.isEmpty {
+            if !tagEditor.isEditable {
+                Text("标签记录无法读取，已保留原数据，暂时不能编辑")
+                    .font(.caption).foregroundStyle(.red)
+                    .accessibilityIdentifier("model-node-tags-corrupt-\(node.id)")
+                    .modelNodeMeasured("model-node-tags-corrupt-\(node.id)", probe: layoutProbe)
+            } else if tagEditor.tags.isEmpty {
                 Text("尚无标签").foregroundStyle(.secondary)
                     .accessibilityIdentifier("model-node-tags-empty")
                     .modelNodeMeasured("model-node-tags-empty-\(node.id)", probe: layoutProbe)
@@ -143,11 +155,13 @@ public struct ModelNodeDetail: View {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 TextField("添加标签", text: $tagEditor.draft)
                     .textFieldStyle(.roundedBorder)
+                    .disabled(!tagEditor.isEditable)
                     .accessibilityIdentifier("model-node-tag-draft-\(node.id)")
                     .onSubmit(addDraft)
                     .modelNodeMeasured("model-node-tag-draft-\(node.id)", probe: layoutProbe)
                 Button("添加", action: addDraft)
                     .buttonStyle(.glass)
+                    .disabled(!tagEditor.isEditable)
                     .accessibilityIdentifier("model-node-tag-add-\(node.id)")
                     .modelNodeMeasured("model-node-tag-add-\(node.id)", probe: layoutProbe)
             }
@@ -217,18 +231,11 @@ public struct ModelNodeDetail: View {
     }
 
     private func addDraft() {
-        switch tagEditor.proposedAddition() {
-        case .failure(let message): tagEditor.reject(message)
-        case .success(let proposed):
-            if let error = onTagsChange(proposed) { tagEditor.reject(error) }
-            else { tagEditor.accept(tags: proposed) }
-        }
+        tagEditor.addDraft(using: onTagsChange)
     }
 
     private func remove(_ tag: String) {
-        let proposed = tagEditor.tags.filter { $0 != tag }
-        if let error = onTagsChange(proposed) { tagEditor.reject(error) }
-        else { tagEditor.accept(tags: proposed) }
+        tagEditor.remove(tag, using: onTagsChange)
     }
 }
 
@@ -241,12 +248,30 @@ struct ModelNodeTagEditorState: Equatable {
     var tags: [String]
     var draft = ""
     var errorMessage: String?
+    var isEditable: Bool
 
-    init(tags: [String]) { self.tags = tags }
+    init(tagState: ModelNodeTagReadState) {
+        switch tagState {
+        case .missing:
+            tags = []
+            isEditable = true
+        case .valid(let tags):
+            self.tags = tags
+            isEditable = true
+        case .corrupt:
+            tags = []
+            isEditable = false
+        }
+    }
 
-    mutating func accept(tags: [String]) {
+    mutating func acceptAddition(tags: [String]) {
         self.tags = tags
         draft = ""
+        errorMessage = nil
+    }
+
+    mutating func acceptRemoval(tags: [String]) {
+        self.tags = tags
         errorMessage = nil
     }
 
@@ -254,11 +279,40 @@ struct ModelNodeTagEditorState: Equatable {
         errorMessage = error
     }
 
+    mutating func applyIncomingReadState(_ state: ModelNodeTagReadState) {
+        guard state == .corrupt else { return }
+        isEditable = false
+    }
+
     func proposedAddition() -> ModelNodeTagProposal {
         let candidate = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !candidate.isEmpty else { return .failure("请输入标签内容。") }
         guard !tags.contains(candidate) else { return .failure("这个标签已经存在。") }
         return .success(tags + [candidate])
+    }
+
+    mutating func addDraft(using persist: ([String]) -> String?) {
+        guard isEditable else { return }
+        switch proposedAddition() {
+        case .failure(let message):
+            reject(message)
+        case .success(let proposed):
+            if let error = persist(proposed) {
+                reject(error)
+            } else {
+                acceptAddition(tags: proposed)
+            }
+        }
+    }
+
+    mutating func remove(_ tag: String, using persist: ([String]) -> String?) {
+        guard isEditable else { return }
+        let proposed = tags.filter { $0 != tag }
+        if let error = persist(proposed) {
+            reject(error)
+        } else {
+            acceptRemoval(tags: proposed)
+        }
     }
 }
 
