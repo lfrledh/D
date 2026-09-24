@@ -93,3 +93,23 @@ Worker异常审计仅发现预期rg无匹配和新文件diff返回1，无观察�
 真实GUI不等于真人输入法验收；本轮未要求用户输入、试听或授权。原生路径框一次剪贴板超时，用已观察PathTextField定点setValue恢复；菜单打开时截图不可用，经已有Cancel动作关闭后恢复。均无权限变化；详见GUI记录。H22候选栏跟随仍保留专项UI处理，不在本轮追修。没有推理流程变化，不重跑GPU/真实模型；三项opt-in跳过与发行/候选未验收界限不变。
 
 `lead/tag-regression-index.json`关联原始失败、持久CPU回归和真实GUI。新上下文接手与源入口复验随后追加，不把上述隔离通过预写为源已接纳。
+
+## P4结案、源集成与恢复检查点
+
+2026-09-24，P0—P4完成。未参与实现的`readiness_fresh_handoff`从无历史fork开始，仅AGENTS→CURRENT_ACTIONS按需读取，绑定`e24552a6de13b38c4f84baec83462f6681795bb7`，九项接手问题均有文档/符号证据，无阻塞；`lead/fresh-handoff.json`保存逐项答案与边界。该代理只读文档/源码/测试/Git，没有重新运行测试或读取外部原始日志；执行通过结论仍来自Lead的实际日志。非实现者另定点确认34ee第二项目激活断言已关闭其覆盖缺口，见`lead/review-summary.json`。
+
+集成前`lead/integration-gate.json`核对源165c544、候选e24552a、共同Git目录、完整18条允许路径差异、无新路径碰撞/未完成Git操作/活跃hook或filter；34ee→e245只有AGENTS、CURRENT_ACTIONS和本文。源索引干净、唯一scheme未暂存。源以完整e245 SHA执行`merge --ff-only --no-autostash --no-overwrite-ignore`成功；候选工作树/分支未移动。每次推进前后`protection/`保留scheme全文diff、SHA256、索引、未暂存状态的精确核对，而非只看status。
+
+源实际受测`e24552a6de13b38c4f84baec83462f6681795bb7`：
+
+- `lead/source-node-regression/`，源cwd、源Packages/UI，独立source-workbench缓存，`swift test --package-path Packages/UI --scratch-path <run>/cache/source-workbench --filter ModelNode`：9项UI/hosting与16项Workbench通过，覆盖原型、N1/N3/N4/N6；没有再次调用旧工作树实现。
+- `lead/source-runtime/`，源cwd、独立source-runtime缓存，`swift test --scratch-path <run>/cache/source-runtime`：70项/13 suites通过，包含本轮四项结构演练。两次进程退出0、未超时，临时文件和日志在本run。
+- `lead/active-doc-links.json`：限定八份活动文档及锚点通过；不遍历全历史。`lead/environment.json`记录arm64、macOS26.6.2/25G83、Xcode27.0/27A266a、Swift6.4和Git2.54。隔离全包记录仍为UI96、ModelLibrary23、Workbench395（含3项跳过），不与源复验叠加成虚构总通过率。
+
+此结案仅修改CURRENT_ACTIONS与本文；最终提交SHA、远端确认、文档限定差异和保护终态写入本run的`final-receipt.json`，不自引用反复提交。工作分支仍为`codex/inference-foundation`，不推进main或发布。AP1 `e5d24f4e1064423238e3c8e1112bc4b3a9a81e2e`、CORE `9d3a503d327a820cb67e399922a07c27f953e903`保持；未删除源码、候选、工作树、模型或历史证据。
+
+保护与进程：scheme仍为orderHint1→6、SHA256 `ca3635d88aa5a15397b90e528667c66c0e6db7e596176e885c79d194b544206c`，索引项保持`9c76916bdc97c2d4298cefe64e0b0fae3380573e`且未暂存；源不称完全干净。普通D/真实项目/模型未操作，本轮测试项目字节与App关键文件保持。全部自有写Worker、检查、GUI进程已结束；只读审核/接手已结束，未声称全系统无进程或获得系统写锁。无新增本人操作待办。
+
+归因：三Worker各初交＋1轮修复，Lead实现共享呈现保护与接线测试并修正自己的两次失败；重要差异经非实现者审阅。测试没有降标、生产推理/项目schema没有变化。既有失败与剩余预算保留，完整Lead消耗及订阅费用unknown；不以一个样本宣布模型普遍胜任或成本最优。
+
+最终状态分别为：原型与上下文收尾完成；UI/UX设计交接就绪；UI生产接线仍需按扩展文档提取明确页面依赖；正式节点执行尚未实现；发布门槛未完成、未授权发布。N1人工说明/模型准备统一、AP1/CORE/I2V、无权重包/首次使用/升级恢复与渠道责任未被本轮关闭。下一动作仅等待用户节点UI/UX方案；恢复时先核对真实HEAD、索引/个人改动和任务进程，再读本页与CURRENT_ACTIONS，不自动续跑旧任务。
