@@ -1,6 +1,6 @@
 # D-UI-READINESS-01：节点UI开发前收尾
 
-spec_revision 1；contract_revision readiness-v1；2026-09-24。source_base `165c54471c4380eb5482312d6c2c70ab97db48a9`。P0—P4同一有限里程碑，当前停点统一以[CURRENT_ACTIONS](../CURRENT_ACTIONS.zh-CN.md)为入口。run `run-20260924T065313Z`，外部证据`D-Development/AgentTrials/D-UI-READINESS-01/`，具体执行base在各job/准备回执记录，不自引用SHA。
+spec_revision 2；contract_revision readiness-v1；2026-09-24。source_base `165c54471c4380eb5482312d6c2c70ab97db48a9`。P0—P4同一有限里程碑，当前停点统一以[CURRENT_ACTIONS](../CURRENT_ACTIONS.zh-CN.md)为入口。run `run-20260924T065313Z`，外部证据`D-Development/AgentTrials/D-UI-READINESS-01/`，具体执行base在各job/准备回执记录，不自引用SHA。
 
 ## 范围与目标
 
@@ -22,9 +22,13 @@ spec_revision 1；contract_revision readiness-v1；2026-09-24。source_base `165
 
 允许仅新增`Tests/DRuntimeTests/BackendExtensionTests.swift`；复用现有ControlledBackend/TestGate/TestPlan等，若必须扩展共享测试支持先报Lead。不修改Sources、Package.swift或既有测试标准。不新建调度器，使用一个真实InferenceRuntime注册两个不同ID的同请求形状受控backend。显式选择只调用选中者；missing/unsupported/invalid与实现专属限制不得fallback。取消时直到execute drain/release完才交接其他实现，错误/排队取消释放同样保持。已有等价测试引用、不机械复制所有场景。同步栅栏而非脆弱sleep，有限timeLimit；本轮是CPU结构演练不是真实模型适配证明。
 
+### CROSS Worker（Sol/high，修订2明确分工）
+
+仅新增`Packages/UI/Tests/DWorkbenchTests/ModelNodeCatalogCrossContractTests.swift`；不改原测试/生产目录。N1文字用TextModelProfiles与TextExecutionCapability，图像用ModelCatalog/三ImageExecutionCapability及固定清单，音视频用已有请求/VideoExecutionCapability或仓库固定JSON。对代表性的模型身份/revision、固定参数/必要端口交叉检查；不存在安全来源的人工字段列缺口，不伪造同值capability作独立证据。预期来自真实资源/值型契约，不把文案parse成执行规则；受控改坏目录副本的revision/必填标签/参数输出，应被相同检查捕获。无MLX依赖，不新造注册平台。Lead负责运行与独立复核。
+
 ### Lead
 
-共享接线与N1/N6、全部文档、验证和集成。允许Nodes目录的已有描述值来源/必要纯值事实投影、`WorkbenchView.swift`及必要当前调用的局部节点浏览状态/命令提取、对应新测试；不新造产品服务包装器。文档仅AGENTS、CURRENT_ACTIONS、PRODUCT_GOALS、REPOSITORY_MAP、MODEL_SUPPORT_AND_RELEASE、MULTI_AGENT_WORKFLOW、本文；确需新增仅`BACKEND_EXTENSION_CONTRACT.zh-CN.md`承载P2/P3接线。具体新增代码路径在实施前追加本任务。
+共享接线与N1/N6、全部文档、验证和集成。允许Nodes目录的已有描述值来源/必要纯值事实投影、`WorkbenchView.swift`及必要当前调用的局部节点浏览状态/命令提取、对应新测试；当前新增允许路径为`Packages/UI/Sources/UI/State/ModelNodePresentation.swift`及`Packages/UI/Tests/UITests/ModelNodeWiringTests.swift`。前者必须由真实WorkbenchView使用，不能成为仅测试替身；不新造产品服务包装器。文档仅AGENTS、CURRENT_ACTIONS、PRODUCT_GOALS、REPOSITORY_MAP、MODEL_SUPPORT_AND_RELEASE、MULTI_AGENT_WORKFLOW、本文；确需新增仅`BACKEND_EXTENSION_CONTRACT.zh-CN.md`承载P2/P3接线。具体新增代码路径在实施前追加本任务。
 
 ## 资源、授权、验收
 
