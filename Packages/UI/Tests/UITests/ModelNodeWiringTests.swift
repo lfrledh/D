@@ -17,7 +17,7 @@ private actor NodePageEngine: InferenceEngine {
 
 @Suite(.serialized) @MainActor
 struct ModelNodeWiringTests {
-    private func withFixture(_ check: (ProjectSession, WorkbenchModel, ModelNodePresentation,
+    private func withFixture(_ check: @MainActor (ProjectSession, WorkbenchModel, ModelNodePresentation,
                                        ModelNodeTagStore, UserDefaults, NodePageEngine, URL) async throws -> Void) async throws {
         let base = try #require(ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"])
         let folder = URL(fileURLWithPath: base).appendingPathComponent("node-wiring-\(UUID())")
