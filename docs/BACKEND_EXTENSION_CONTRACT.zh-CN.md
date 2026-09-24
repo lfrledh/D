@@ -8,7 +8,7 @@
 | --- | --- | --- |
 | 说明卡片ID/标签键 | `ModelNodeDescriptor.id`；原有`D.ModelNodeTags.v1.`＋原ID | 它是现行偏好稳定键，不是未来图中节点实例。`medium`等旧值不升级为全局公共ID；若未来改卡片ID，保留独立旧键或显式兼容映射及迁移测试 |
 | 模型身份/权重版本 | TextModelProfiles、ModelCatalog；Audio/Video Models固定JSON中的repository、revision、文件摘要 | 同名模型不等于相同权重/架构/许可证，catalog标题不是身份 |
-| 操作 | 文字生成、图像生成/参考图、音频生成/变体/重绘等请求语义；部分已有OperationContract | 一个模型可提供多个操作；普通转换/用户选择不必伪装AI模型 |
+| 操作 | 文字生成、图像生成/参考图、音频生成/变体/重绘等请求语义；部分已有ExecutionContractDescription | 一个模型可提供多个操作；普通转换/用户选择不必伪装AI模型 |
 | 后端实现 | InferenceBackend.descriptor.id/version；AppSessionFactory/CLI显式装配 | 同一操作可以有多个实现；不能按Input类型忽略backendID或静默fallback |
 | 执行配方 | ExecutionProfileReference及各模态typed capability；含精度/设备/算法/合法联合条件 | 配方不等于模型，也不等于卡片。例如SA3变体、Wan配方、歌声CPU/MPS路径分别核实 |
 | 未来节点实例 | 用户方案尚未决定，尚无持久类型 | 同一模型可出现多实例，复合节点可协调多个实现；不把卡片ID直接当实例ID，不预定最终粒度/图schema |
@@ -57,7 +57,7 @@
 | --- | --- | --- |
 | PS.generate / WorkbenchModel.generateCaptured读取当前图像页 | 接收显式项目/doc版本、model选择、ImageRequest/引用快照；共用原admit/finish/保存重试 | A排队后切B或A改版：不得把A结果写B；不能在新页面读新参数代替已提交值 |
 | PS.rewriteText/askTextSources及loadActiveDocument保存闭包 | 将显式文稿版本/选区/资料/控制器绑定传入应用操作，保留过期/接受/撤销与Store校验 | 组合字符选区正确；原文修改、换项目、迟到候选不能覆盖；保存失败不丢已存在作品 |
-| PS.generateAudioCreation与mutateAudioCreationDraft | 明确profile、source身份/摘要/帧区间、doc版本；保留两类后端选择及租约 | MRT2变体拒绝；SA3重绘无source/区间拒绝；旧profile回调不抢新模型或改新文档 |
+| PS.generateAudioCreation与updateAudioCreationDraft | 明确profile、source身份/摘要/帧区间、doc版本；保留两类后端选择及租约 | MRT2变体拒绝；SA3重绘无source/区间拒绝；旧profile回调不抢新模型或改新文档 |
 | PS.analyzePitch/decidePitchAnalysis | 显式原声版本/区间/result关联，复用Store派生与采用 | 原声已变/候选来自另一录音拒绝；识别失败仍保全原声 |
 | PS.generateVideoCreation/候选修改 | 显式VideoRequest/doc版本/模型与产物提交；继续复用现有生命周期 | 过期context拒绝；不支持I2V不能降为T2V提示；取消后release完成再排队 |
 | 歌声CLI→App缺口 | 用户UI方案与首发范围下审阅AP1/CORE历史，补真实装配、schema兼容、资格/来源及保存 | 不能用singing伪装普通audio绕过Store拒绝；不能静默GPU失败转CPU，不能仅CLI通过就启用App |

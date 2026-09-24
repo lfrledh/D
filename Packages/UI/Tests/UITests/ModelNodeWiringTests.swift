@@ -29,7 +29,7 @@ struct ModelNodeWiringTests {
         let service = ProjectSession(sessionFactory: { _ in
             WorkbenchSession(engine: engine, backendID: "node.fixture", status: {
                 .init(activeRunID: nil, phase: nil, queuedRunIDs: [])
-            }, shutdown: {}, cleanup: {}, validateModel: { _ in })
+            }, shutdown: {}, cleanup: {}, validateModel: { _ in }, textBackendID: "node.fixture.text")
         }, settings: settings)
         let project = folder.appendingPathComponent("Node.dproject")
         await service.createProject(at: project)
@@ -76,9 +76,9 @@ struct ModelNodeWiringTests {
             #expect(write(["迟到修改"]) != nil)
             #expect(tags.readState(for: node.id) == .valid(["原标签"]))
             let next = page.tagWriter(node: node, store: tags, model: model)
-            await service.selectCreatorMode(.text)
+            try #require(await service.selectCreatorMode(.text))
             #expect(next(["跨模态迟到"]) != nil)
-            await service.selectCreatorMode(.image)
+            try #require(await service.selectCreatorMode(.image))
             #expect(next(["导航 ABA"]) != nil)
             page.modalityChanged(); page.selectNode(node.id)
             let beforeProjectChange = page.tagWriter(node: node, store: tags, model: model)
@@ -121,6 +121,27 @@ struct ModelNodeWiringTests {
             page.selectPane(.assets); page.selectPane(.creations)
             #expect(try Data(contentsOf: project.appendingPathComponent("project.json")) == savedBefore)
             #expect(service.manifest == original)
+            #expect(await engine.submissions.isEmpty)
+        }
+    }
+
+    @Test func actualWorkbenchResetsNodeSelectionWhenClosingAndOpeningAnotherProject() async throws {
+        try await withFixture { service, model, page, tags, _, engine, project in
+            let host = NSHostingView(rootView: WorkbenchView(model: model, nodeTags: tags).withNodePresentation(page))
+            host.frame = NSRect(x: 0, y: 0, width: 1000, height: 720)
+            settle(host)
+            let node = try #require(ModelNodeCatalog.entries.first { $0.modality == .image })
+            page.selectPane(.nodes); page.selectNode(node.id)
+            settle(host)
+            let stale = page.tagWriter(node: node, store: tags, model: model)
+            #expect(await service.requestClose())
+            settle(host)
+            #expect(page.pane == .creations && page.selectedNodeID == nil)
+            await service.createProject(at: project.deletingLastPathComponent().appendingPathComponent("Other.dproject"))
+            settle(host)
+            #expect(page.pane == .creations && page.selectedNodeID == nil)
+            #expect(stale(["late"]) != nil)
+            #expect(tags.readState(for: node.id) == .missing)
             #expect(await engine.submissions.isEmpty)
         }
     }

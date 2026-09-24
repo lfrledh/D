@@ -30,6 +30,13 @@ public struct WorkbenchView: View {
         self.nodeTags = nodeTags ?? ModelNodeTagStore()
     }
 
+    /// Inject the actual presentation owner for hosting regressions; no alternate command path.
+    func withNodePresentation(_ presentation: ModelNodePresentation) -> Self {
+        var copy = self
+        copy._nodePresentation = State(initialValue: presentation)
+        return copy
+    }
+
     /// Internal rendered-geometry observation; no foreground or accessibility claim.
     func observingLayout(_ observer: @escaping (String, CGRect) -> Void) -> Self {
         var copy = self
@@ -50,6 +57,12 @@ public struct WorkbenchView: View {
             }
         }
         .frame(minWidth: 860, minHeight: 580)
+        .onChange(of: model.projectURL) { _, _ in
+            model.invalidateComparison(); nodePresentation.projectChanged()
+        }
+        .onChange(of: model.creatorMode) { _, _ in
+            nodePresentation.modalityChanged()
+        }
         .focusedSceneValue(\.workbenchGeneration, visibleGenerationCommand)
         .disabled(model.isChangingProject)
         .overlay {
@@ -124,12 +137,6 @@ public struct WorkbenchView: View {
                 }
             }
         .observingLayout { layoutProbe?($0, $1) }
-        .onChange(of: model.projectURL) { _, _ in
-            model.invalidateComparison(); nodePresentation.projectChanged()
-        }
-        .onChange(of: model.creatorMode) { _, _ in
-            nodePresentation.modalityChanged()
-        }
         .popover(isPresented: $showTasks) {
             VStack(alignment: .leading, spacing: 12) {
                 Text("项目任务").font(.headline)
