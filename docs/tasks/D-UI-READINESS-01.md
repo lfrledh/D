@@ -41,3 +41,55 @@ Lead：真实缺陷反例、组件/接线/来源交叉和受控反证、root运�
 ## 初始恢复点
 
 P0通过，准备中；源仍165c544且scheme唯一未暂存；暂无写Worker。需要后续：N3/N4实现，N1/N6检查，P2/P3文档及runtime演练，组合/GUI/接手/源接纳。规格和任务修订由Lead单一维护。
+
+## 实施与审核记录（2026-09-24）
+
+源165c544未回退；准备提交`239bb57065ac2d60a8a8cfe8458ea3d72817f72a`，修订2执行基线`af14824f12d7cbaced3d79127bb7fa96fb2ccf35`。三个独立CLI均先只读预检，Lead核对turn_context的模型/effort、cwd、workspace-write写根和network=false；修订2明确CROSS所有权后才实施。共同Git管理目录未授写，Worker未提交；停写后Lead显式暂存。服务端隐藏解析unknown。三者实施在06:59—07:01 UTC有真实时间重叠。
+
+| 子任务/请求与可观察设置 | CLI thread | 候选提交 | 普通返工与归因 |
+| --- | --- | --- | --- |
+| TAGS，gpt-5.6-sol/high | `01a0d232-f43c-7771-b7cd-a4ebc98fb605` | `cb8af3c9f5d88affead516fd29101c9447ea022e` | 1轮：静态key调用编译问题、同ID注入corrupt的禁用态；未Lead重写实现 |
+| RUNTIME，gpt-5.6-terra/medium | `01a0d232-f8d6-7c50-bee2-058155085c0c` | `90dc91769fa0fa76210d622fcbf6eac6a6674c30` | 1轮：观察门闩改有限轮询；保留后端drain门闩和外层进程时限 |
+| CROSS，gpt-5.6-sol/high | `01a0d232-fd65-71e0-bb7a-15a69d468fac` | `5131e319fdf79cea87823550b7979a73e70dfda5` | 1轮：音频默认改取真实AudioCreationDraft，避免手填相同值的循环证明 |
+
+Lead实现`ModelNodePresentation`并接入WorkbenchView、N6接线测试、文档与集成；不是Worker独立交付。非实现者`context_code_map`审阅标签、Lead代码和服务清单，`context_rules_audit`审阅runtime/CROSS；只读审阅不冒称独立测试。Lead初版测试闭包缺MainActor限定导致编译失败，修正后发现假引擎未启用文字入口、实际模态切换未发生，补textBackendID并要求切换成功。审阅另发现旧projectWorkbench子树观察器在关闭项目时可能消失，移到稳定外层，新增实际Workbench hosting关闭/打开第二项目断言；第二项目激活本身亦必须成功。这些Lead修复不归因于Worker。
+
+Worker异常审计仅发现预期rg无匹配和新文件diff返回1，无观察到权限拒绝/越界/网络。最初preflight摘要中复用的一句CROSS说明不适用于另两包，IMPLEMENT按各自冻结规格澄清；CROSS未获明确文件归属前暂停，Lead修订2补齐才实施。不是私自绕过。Lead原缺陷复现使用的编译器路径/SDK两次工具纠正与一次文档编辑stdin编码错误均保留日志/变更核对，未改变权限或工程设置。
+
+## N1—N6与审计状态
+
+| 项目 | 实际处理 | 保留边界 |
+| --- | --- | --- |
+| N3 关闭（代码/持续回归） | missing/valid/corrupt；损坏原值保留，任何普通setTags含清空均拒绝；明确只读提示；nil settings纯内存 | 没有重建或恢复UI，不自动修复未知数据；外部偏好变化不承诺实时跨进程通知，提交必重查 |
+| N4 关闭（代码/持续回归） | 实际View调用addDraft/remove；新增成功才清输入，删除/失败保留草稿；Unicode与重开覆盖 | 不增加跨模型草稿保存系统，切模型仍重置 |
+| N5 关闭（活动文档） | 当前任务/停点唯一CURRENT_ACTIONS；目标表去旧S0/S6开工句；导航区分历史保留决定；协作规程保留授权与安全 | 历史任务正文/候选证据不倒改、不重新扫描清理 |
+| N1 缓解 | text/image直接typed/资源事实、SA3/Wan代表JSON与草稿；图像三项与音频两项受控漂移反证 | 人工设备/精度/范围/其他模型字段仍需维护，不宣称全目录自动同步或统一安装/能力注册 |
+| N2 关闭（本轮身份说明/兼容） | 卡片、模型revision、操作、实现、配方、未来实例分开；原标签键不变 | 未创建实例/图schema或通用标识迁移 |
+| N6 持续回归已增加 | 真实View共享状态、菜单生成门禁、ABA/导航旧回调、损坏/删除草稿、项目不变、关闭重开复位 | CPU/hosting与真实GUI分别记录；不把呈现状态包装成页面无关应用API |
+
+旧审计：A01/A09/A10仅在文档/状态治理进一步收口；A02、A03—A07保持架构演进责任，本轮提供[扩展约束与实际接线](../BACKEND_EXTENSION_CONTRACT.zh-CN.md)，不标全面关闭。A08/A11/A12的兼容、候选/许可、发行责任保持。无删除代码、无AP1/CORE/I2V接纳、无原件/项目schema改动。
+
+## 验证索引与版本
+
+外部证据统一为`D-Development/AgentTrials/D-UI-READINESS-01/run-20260924T065313Z/`；以下均本轮，不与历史通过数相加。
+
+- `lead/baseline-repro/{source,compile,result}.json`：165c原始TagStore及真实UI editor动作片段，坏数组普通添加覆盖、删除清空草稿两项反例退出1。不是GUI证据；持久新测试在修补后通过。
+- `lead/combined-workbench/`：组合ad629ab的Lead测试闭包编译失败；`combined-workbench-r1/`：f8b2968的两条模态断言失败。原输出保留，不删断言；`combined-workbench-r2/`：faca752全包通过。
+- `lead/workbench-final/`：代码/测试`34ee0c5e2172a0bc5479960f7d7660567e657a30`，`scripts/test-workbench.sh`，UI 96项、ModelLibrary 23项、DWorkbench 395项记录，其中3项真实模型opt-in跳过（明确列于日志）。CPU/原生hosting通过，不是GPU。
+- `lead/combined-runtime/`：faca752，`swift test --scratch-path <run>/cache/runtime`，70项通过；到34ee0c5仅N6测试激活断言变化，runtime代码/测试完全相同。四个新增方法：`explicitSelectionUsesOnlySelectedBackend`、`rejectionsDoNotFallback`、`cancellationDoesNotHandOffBeforeDrainAndRelease`、`ordinaryFailureDoesNotFallbackOrMixResults`。
+- `lead/review-summary.json`：非实现者发现、修复和界限；`{tags,runtime,cross}/lead-route-and-scope-audit.json`、phase事件/请求/终态、result.md是路由/权限/返工证据。各包仅一轮修复，无接管，无递归。
+- `lead/active-doc-links.json`：限定活动文档链接/必要锚点检查；不是全史扫描。
+
+后端结构演练只证明既有请求形状、显式实现选择与单运行时生命周期，不证明任意新架构、GPU数值、图执行或应用接口已解耦。生产推理路径未变，不触发全模态模型复跑；既有真实模型3项跳过不升级为通过。真实GUI、普通签名独立构建、源入口回归及新上下文接手在下方结案段记录，未产生结果前不宣称完成。
+
+用量：`lead/worker-run-summary.json`记录逐次墙钟及进程终态；原CLI token快照保留，resume累计语义未另行求证，不相加伪造总量。完整Lead归因和订阅实际费用unknown，本样本不证明成本最优。来源是可追溯记录，不是模型身份的密码学认证或质量保证。
+
+## P4构建与原生交互（集成前）
+
+代码/测试版本`34ee0c5e2172a0bc5479960f7d7660567e657a30`，后续本文/CURRENT_ACTIONS及AGENTS历史链接标题仅文档变化。`lead/build-final/`按既有普通开发签名、离线依赖副本和本run独立DerivedData构建成功；未修改签名配置/真实App/钥匙串，codesign严格完整性检查通过。产物为`<run>/cache/DerivedData/Build/Products/Debug/D.app`，不覆盖普通D。
+
+`lead/gui/acceptance.json`及setup/process/reopen-process、项目前后快照：独立UUID `9DDD498A-F57E-4C13-B00D-CC3AB5DE3943`，仅此测试suite预置medium损坏数组。真实App中验证删除旧标签保留中文、emoji和组合字符草稿、继续添加成功、重复失败保留文本；medium显式保护提示且禁编辑，原坏值未覆盖。四模态切换不串标签，生成菜单禁用，发出生成快捷键后项目jobs仍0；返回选择页再打开复位到创作，正常退出再启动保留Unicode标签。浏览/编辑前后项目文件字节相同（SHA256 `76bbc9d8257c7f00807ad349aa83e2b303bcd40cc9f0bcb3890c8b7da1aea464`），隔离库未安装模型；App四关键文件摘要、大小、mtime前后相同。两个自有进程正常退出0，未关闭/替换普通D。
+
+真实GUI不等于真人输入法验收；本轮未要求用户输入、试听或授权。原生路径框一次剪贴板超时，用已观察PathTextField定点setValue恢复；菜单打开时截图不可用，经已有Cancel动作关闭后恢复。均无权限变化；详见GUI记录。H22候选栏跟随仍保留专项UI处理，不在本轮追修。没有推理流程变化，不重跑GPU/真实模型；三项opt-in跳过与发行/候选未验收界限不变。
+
+`lead/tag-regression-index.json`关联原始失败、持久CPU回归和真实GUI。新上下文接手与源入口复验随后追加，不把上述隔离通过预写为源已接纳。
