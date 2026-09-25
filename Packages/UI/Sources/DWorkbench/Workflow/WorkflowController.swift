@@ -98,6 +98,20 @@ import Observation
         edit({ g in if let i = g.layout.firstIndex(where: { $0.nodeID == id }) { g.layout[i].collapsed.toggle() } }, changesConfiguration: false)
     }
 
+    public func editReviewText(stepID: UUID, text: String) {
+        guard !closed, !closing, !isRunning, readOnlyReason == nil,
+              let ri = runs.firstIndex(where: { $0.steps.contains { $0.id == stepID } }),
+              runs[ri].graph.id == selectedGraphID,
+              let si = runs[ri].steps.firstIndex(where: { $0.id == stepID }),
+              runs[ri].steps[si].node.operationID == "d.text.confirm",
+              runs[ri].steps[si].status == .waiting,
+              runs[ri].steps[si].decision == nil else { return }
+        do {
+            try TextDraftDocument.validate(text)
+            runs[ri].steps[si].reviewTextDraft = text
+        } catch { errorMessage = "确认草稿未改变：\(error.localizedDescription)" }
+    }
+
     private func edit(_ action: (inout WorkflowGraph) throws -> Void, changesConfiguration: Bool = true) {
         guard !closed, !closing, readOnlyReason == nil, let index = graphs.firstIndex(where: { $0.id == selectedGraphID }) else { return }
         do {

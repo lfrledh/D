@@ -290,6 +290,32 @@ struct WorkflowLifecycleTests {
         try await reopened.close()
     }
 
+    @Test func unacceptedReviewDraftSurvivesReopenAndNeverPublishesOrRuns() async throws {
+        let (_, store, engine, c) = try await fixture()
+        c.addExample("template"); let target = try #require(c.graph?.nodes.last?.id)
+        await c.run(target: target, only: false)
+        let run = try #require(c.runs.last); let step = try #require(run.steps.last)
+        let original = await store.snapshot().assets
+        let draft = "未接受 👩🏽‍🎨 e\u{301}"
+        c.editReviewText(stepID: step.id, text: draft)
+        #expect(c.runs.last?.steps.last?.decision == nil)
+        #expect(await store.snapshot().assets == original)
+        #expect(await engine.requests.isEmpty)
+        c.addExample("text")
+        c.editReviewText(stepID: step.id, text: "wrong selected graph")
+        #expect(c.runs.last?.steps.last?.reviewTextDraft == draft)
+        await c.save(); try await c.close(); try await store.close()
+        let reopened = try await ProjectStore.open(at: store.rootURL)
+        let restored = try #require(try await reopened.workflowState().archive)
+        #expect(restored.runs.last?.steps.last?.reviewTextDraft == draft)
+        #expect(restored.runs.last?.status == .waiting)
+        #expect(restored.runs.last?.steps.last?.decision == nil)
+        #expect(await reopened.snapshot().assets == original)
+        c.editReviewText(stepID: step.id, text: "late callback")
+        #expect(c.runs.last?.steps.last?.reviewTextDraft == draft)
+        try await reopened.close()
+    }
+
     @Test func fullGraphPartialRetryAndSelectionAreExplicit() async throws {
         let (_, store, engine, c) = try await fixture()
         await engine.failSecond(); c.addExample("image")

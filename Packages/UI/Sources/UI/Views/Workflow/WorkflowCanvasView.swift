@@ -702,7 +702,7 @@ private struct WorkflowNodeInspector: View {
                                    controller: controller, onReturnText: onReturnText,
                                    allowsReturn: !readOnly)
                 if step.status == .waiting {
-                    WorkflowWaitingDecision(controller: controller, step: step, readOnly: readOnly)
+                    WorkflowWaitingDecision(controller: controller, step: step, readOnly: readOnly, preview: controller.preview)
                         .id(step.id)
                 }
                 if step.status == .partial {
@@ -950,10 +950,11 @@ private struct WorkflowCandidatePreview: View {
     }
 }
 
-private struct WorkflowWaitingDecision: View {
+struct WorkflowWaitingDecision: View {
     let controller: WorkflowController
     let step: WorkflowStepRun
     let readOnly: Bool
+    let preview: @MainActor (WorkflowAssetReference) async throws -> Data
     @State private var draft = ""
     @State private var highlightedCandidateID: UUID?
     @State private var acceptPartial = false
@@ -967,21 +968,30 @@ private struct WorkflowWaitingDecision: View {
         step.outputs.values.compactMap(\.asset).first { $0.kind == .text }
     }
 
+    private var textReady: Bool { textReference != nil && loadedReference == textReference }
+    private var decisionDisabled: Bool { readOnly || controller.isRunning }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
             Text("等待人工决定").font(.headline)
             if step.node.operationID == "d.text.confirm" {
-                TextEditor(text: $draft)
+                TextSourcesQuestionEditor(value: draft, editEpoch: 0,
+                    isEditable: !decisionDisabled && textReady,
+                    accessibilityIdentifier: "workflow-review-text") { value in
+                        guard !decisionDisabled && textReady else { return }
+                        draft = value
+                        controller.editReviewText(stepID: step.id, text: value)
+                    }
                     .frame(minHeight: 100)
                     .overlay { RoundedRectangle(cornerRadius: 6).stroke(.quaternary) }
-                    .disabled(readOnly)
                     .task(id: textReference?.version) { await loadDraft() }
                 HStack {
                     Button("接受文字") { decide(accept: true, text: draft, candidateID: nil) }
                         .buttonStyle(.borderedProminent)
+                        .disabled(!textReady)
                     Button("拒绝", role: .destructive) { decide(accept: false, text: nil, candidateID: nil) }
                 }
-                .disabled(readOnly)
+                .disabled(decisionDisabled)
             } else if step.node.operationID == "d.asset.choose" {
                 ForEach(candidates) { candidate in
                     WorkflowCandidatePreview(
@@ -1017,16 +1027,24 @@ private struct WorkflowWaitingDecision: View {
     private func loadDraft() async {
         guard let reference = textReference, loadedReference != reference else { return }
         do {
-            let data = try await controller.preview(reference)
-            draft = String(data: data, encoding: .utf8) ?? ""
+            if let saved = step.reviewTextDraft {
+                draft = saved
+            } else {
+                let data = try await preview(reference)
+                try Task.checkCancellation()
+                guard let text = String(data: data, encoding: .utf8) else { throw WorkflowIssue("确认文字不是有效 UTF-8。") }
+                draft = text
+            }
             loadedReference = reference
+        } catch is CancellationError {
+            // A removed waiting editor must not write its late load into another selection.
         } catch {
             controller.errorMessage = error.localizedDescription
         }
     }
 
     private func decide(accept: Bool, text: String?, candidateID: UUID?) {
-        guard !readOnly else { return }
+        guard !decisionDisabled, !accept || step.node.operationID != "d.text.confirm" || textReady else { return }
         Task {
             await controller.decide(stepID: step.id, accept: accept, text: text,
                                     candidateID: candidateID, acceptPartial: acceptPartial)

@@ -119,6 +119,8 @@ public struct WorkflowDecision: Codable, Sendable, Equatable {
     }
 }
 public struct WorkflowStepRun: Codable, Sendable, Equatable, Identifiable {
+    /// Human edits at a waiting gate are durable drafts, never an implicit decision.
+    public var reviewTextDraft: String?
     public var repeatRequested: Bool?
     public var inputsBound: Bool?
     public var id: UUID

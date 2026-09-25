@@ -7,6 +7,7 @@ struct TextSourcesQuestionEditor: NSViewRepresentable {
     let value: String
     let editEpoch: UInt64
     let isEditable: Bool
+    var accessibilityIdentifier: String = "text-sources-question"
     let onEdit: (String) -> Void
 
     func makeCoordinator() -> Coordinator { Coordinator() }
@@ -28,7 +29,7 @@ struct TextSourcesQuestionEditor: NSViewRepresentable {
         editor.textContainer?.containerSize = NSSize(width: CGFloat.greatestFiniteMagnitude,
                                                     height: CGFloat.greatestFiniteMagnitude)
         editor.textContainer?.widthTracksTextView = true
-        editor.setAccessibilityIdentifier("text-sources-question")
+        editor.setAccessibilityIdentifier(accessibilityIdentifier)
         editor.delegate = context.coordinator
         let scroll = NSScrollView()
         scroll.hasVerticalScroller = true
