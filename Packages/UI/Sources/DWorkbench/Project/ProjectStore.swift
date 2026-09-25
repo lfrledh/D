@@ -29,6 +29,7 @@ public actor ProjectStore {
     private let lockFD: Int32
     private var manifest: ProjectManifest
     private var isClosed = false
+    private let emptyWorkflowRevision = UUID()
     private var captureDirectories: [UUID: Int32] = [:]
     private var preparedImageReferences: [UUID: (assetID: UUID, reference: ImageReference)] = [:]
 
@@ -142,6 +143,8 @@ public actor ProjectStore {
             loaded = try ProjectFiles.migrateVersionTen(loaded, original: data, in: descriptor, checkpoint: migrationCheckpoint)
         } else if loaded.schemaVersion == 11 {
             loaded = try ProjectFiles.migrateVersionEleven(loaded, original: data, in: descriptor, checkpoint: migrationCheckpoint)
+        } else if loaded.schemaVersion == 12 {
+            loaded = try ProjectFiles.migrateVersionTwelve(loaded, original: data, in: descriptor, checkpoint: migrationCheckpoint)
         } else { try ProjectFiles.validate(loaded) }
         let store = ProjectStore(rootURL: root, rootFD: descriptor, lockFD: lock, manifest: loaded)
         // Ownership of both descriptors has moved to the actor before recovery can throw.
@@ -2290,6 +2293,11 @@ private enum ProjectFiles {
         try migrate(legacy, original: original, in: root, backup: "project.v11.backup.json", checkpoint: checkpoint)
     }
 
+    static func migrateVersionTwelve(_ legacy: ProjectManifest, original: Data, in root: Int32,
+                                     checkpoint: (@Sendable (ProjectMigrationCheckpoint) throws -> Void)?) throws -> ProjectManifest {
+        try migrate(legacy, original: original, in: root, backup: "project.v12.backup.json", checkpoint: checkpoint)
+    }
+
     private static func migrate(_ legacy: ProjectManifest, original: Data, in root: Int32, backup: String,
                                 checkpoint: (@Sendable (ProjectMigrationCheckpoint) throws -> Void)?) throws -> ProjectManifest {
         try validate(legacy, allowingLegacySchema: true)
@@ -2681,7 +2689,7 @@ private enum ProjectFiles {
                     throw ProjectStoreError.invalidProject("图像任务不属于图像文档。")
                 }
                 if let reference = image.referenceImage {
-                    guard [9, 11, 12].contains(value.schemaVersion), let id = job.imageReferenceAssetID,
+                    guard [9, 11, 12, 16].contains(value.schemaVersion), let id = job.imageReferenceAssetID,
                           let asset = assets[id], asset.mediaType == "image/png",
                           asset.metadata.imageContentSHA256 != nil,
                           reference.url.path.hasSuffix("/ImageInputs/\(job.id.uuidString)/reference.rgb") else {
@@ -2734,7 +2742,15 @@ private enum ProjectFiles {
             }
             let isDeclaredAudio = asset.metadata.audio != nil || asset.mediaType == "audio/wav" ||
                 asset.mediaType == "audio/x-caf" || asset.relativePath.hasPrefix("Audio/")
-            if asset.mediaType == PitchAnalysisResult.mediaType || asset.metadata.pitch != nil {
+            if asset.relativePath.hasPrefix("WorkflowAssets/") {
+                guard value.schemaVersion == 16, value.workflowSnapshot != nil,
+                      asset.jobID == nil, asset.role == .original || asset.role == .result,
+                      let suffix = ["text/plain": "txt", "image/png": "png", "image/jpeg": "jpg"][asset.mediaType],
+                      asset.relativePath == "WorkflowAssets/\(asset.id.uuidString)/content.\(suffix)",
+                      asset.metadata.audio == nil, asset.metadata.video == nil, asset.metadata.pitch == nil else {
+                    throw ProjectStoreError.invalidProject("流程资产的路径或类型无效。")
+                }
+            } else if asset.mediaType == PitchAnalysisResult.mediaType || asset.metadata.pitch != nil {
                 guard value.schemaVersion >= 12, asset.mediaType == PitchAnalysisResult.mediaType,
                       asset.role == .result, let metadata = asset.metadata.pitch, let jobID = asset.jobID,
                       let job = jobs[jobID], case .pitch(let request) = job.request.input,
@@ -2799,7 +2815,7 @@ private enum ProjectFiles {
             } else if asset.role == .original && asset.metadata.imageContentSHA256 != nil {
                 // Explicitly selecting a legacy original pins its digest without relocating it.
                 // Safe relative paths are validated above; only new import publication owns the UUID layout.
-                guard [9, 11, 12].contains(value.schemaVersion), asset.jobID == nil, asset.mediaType == "image/png" else {
+                guard [9, 11, 12, 16].contains(value.schemaVersion), asset.jobID == nil, asset.mediaType == "image/png" else {
                     throw ProjectStoreError.invalidProject("原参考图的路径或身份无效。")
                 }
             } else if asset.role == .result {
@@ -2815,7 +2831,7 @@ private enum ProjectFiles {
                 guard dimension > 0 else { throw ProjectStoreError.invalidProject("媒体元数据包含无效尺寸或位深。") }
             }
             if let digest = asset.metadata.imageContentSHA256 {
-                guard [9, 11, 12].contains(value.schemaVersion), asset.mediaType == "image/png", digest.utf8.count == 64,
+                guard [9, 11, 12, 16].contains(value.schemaVersion), asset.mediaType == "image/png", digest.utf8.count == 64,
                       digest.utf8.allSatisfy({ (48...57).contains($0) || (97...102).contains($0) }) else {
                     throw ProjectStoreError.invalidProject("参考图摘要无效。")
                 }
@@ -2845,7 +2861,7 @@ private enum ProjectFiles {
             }
 
             if let reference = document.draft.referenceImageAssetID {
-                guard [9, 11, 12].contains(value.schemaVersion), document.kind == .image,
+                guard [9, 11, 12, 16].contains(value.schemaVersion), document.kind == .image,
                       let asset = assets[reference], asset.mediaType == "image/png",
                       asset.metadata.imageContentSHA256 != nil else {
                     throw ProjectStoreError.invalidProject("图像草稿的参考来源无效。")
@@ -2886,7 +2902,7 @@ private enum ProjectFiles {
                     throw ProjectStoreError.invalidProject("文字文档包含无效内容或图像引用。")
                 }
                 try TextDraftDocument.validate(textDraft.text)
-                if [10, 11, 12].contains(value.schemaVersion) {
+                if [10, 11, 12, 16].contains(value.schemaVersion) {
                     guard let sources = document.textSources else {
                         throw ProjectStoreError.invalidProject("文字资料记录缺失。")
                     }
@@ -2953,5 +2969,332 @@ private enum ProjectFiles {
                 throw ProjectStoreError.invalidProject("选中的作品不属于该探索文档或其来源。")
             }
         }
+    }
+}
+
+// Workflow records extend the existing project owner. There is no second database or project lock.
+extension ProjectStore {
+    private static func workflowHash(_ data: Data) -> String {
+        SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+    }
+
+    public func workflowState() throws -> WorkflowStoredState {
+        try checkLocation(); try verifyUnchangedManifest()
+        guard let pointer = manifest.workflowSnapshot else { return .init(archive: WorkflowArchive(revision: emptyWorkflowRevision)) }
+        guard pointer.byteCount > 0, pointer.byteCount <= 32 * 1_024 * 1_024,
+              PitchSourceIdentity.isDigest(pointer.sha256) else { throw WorkflowIssue("流程快照索引无效。") }
+        let data = try ProjectFiles.read(relative: pointer.relativePath, in: rootFD, limit: 32 * 1_024 * 1_024)
+        guard data.count == pointer.byteCount, Self.workflowHash(data) == pointer.sha256 else {
+            throw WorkflowIssue("流程快照与已保存摘要不符；已停止写入，不覆盖原记录。")
+        }
+        struct Header: Decodable { let version: Int }
+        let decoder = JSONDecoder()
+        guard let header = try? decoder.decode(Header.self, from: data) else { throw WorkflowIssue("流程快照已损坏，原件已保留。") }
+        guard header.version == 1 else {
+            return .init(archive: nil, readOnlyReason: "流程格式 v\(header.version) 尚不支持；原始数据与连接已保留，只读。", originalBytes: data)
+        }
+        // Inspect just identities before full decoding: an unknown node may contain new scalar shapes.
+        struct Identities: Decodable {
+            struct Graph: Decodable {
+                struct Node: Decodable { let operationID: String; let definitionVersion: Int }
+                let nodes: [Node]
+            }
+            struct Run: Decodable {
+                struct Step: Decodable { let node: Graph.Node }
+                let graph: Graph; let steps: [Step]
+            }
+            let graphs: [Graph]; let runs: [Run]
+        }
+        guard let identities = try? decoder.decode(Identities.self, from: data) else { throw WorkflowIssue("流程身份记录损坏，未改写原件。") }
+        for node in (identities.graphs + identities.runs.map(\.graph)).flatMap(\.nodes) + identities.runs.flatMap({ $0.steps.map(\.node) }) {
+            guard let op = WorkflowRegistry.standard.operation(node.operationID), op.definition.version == node.definitionVersion else {
+                return .init(archive: nil, readOnlyReason: "未知操作或版本：\(node.operationID) v\(node.definitionVersion)。保留整份原始流程，只读。", originalBytes: data)
+            }
+        }
+        let archive: WorkflowArchive
+        do { archive = try decoder.decode(WorkflowArchive.self, from: data) }
+        catch { throw WorkflowIssue("流程数据无法解码；原始数据已保留。") }
+        try validateWorkflowArchive(archive, assets: manifest.assets)
+        return .init(archive: archive)
+    }
+
+    private func editableWorkflow() throws -> WorkflowArchive {
+        let state = try workflowState()
+        guard let archive = state.archive else { throw WorkflowIssue(state.readOnlyReason ?? "流程只读。") }
+        return archive
+    }
+
+    /// Draft configuration and execution history are saved together; Store retains all published asset records.
+    public func saveWorkflow(graphs: [WorkflowGraph], runs: [WorkflowRun], expectedRevision: UUID) throws -> WorkflowArchive {
+        var archive = try editableWorkflow()
+        guard archive.revision == expectedRevision else { throw WorkflowIssue("流程已被另一操作修改，请重新读取后保存。") }
+        archive.graphs = graphs; archive.runs = runs; archive.revision = UUID()
+        try commitWorkflow(archive, assets: manifest.assets)
+        return archive
+    }
+
+    private func validateWorkflowArchive(_ archive: WorkflowArchive, assets: [ProjectAsset]) throws {
+        guard archive.version == 1, archive.graphs.count <= 256, archive.runs.count <= 4_096,
+              archive.assets.count <= 32_768, Set(archive.graphs.map(\.id)).count == archive.graphs.count,
+              Set(archive.runs.map(\.id)).count == archive.runs.count,
+              Set(archive.assets.map { $0.reference.assetID }).count == archive.assets.count else {
+            throw WorkflowIssue("流程数量、版本或身份不合法；请另存项目或检查数据。")
+        }
+        let known = Dictionary(uniqueKeysWithValues: assets.map { ($0.id, $0) })
+        for record in archive.assets {
+            let ref = record.reference
+            guard ref.projectID == manifest.id, ref.kind == .text || ref.kind == .image,
+                  PitchSourceIdentity.isDigest(ref.sha256), let asset = known[ref.assetID],
+                  (ref.kind == .text && asset.mediaType == "text/plain") ||
+                  (ref.kind == .image && ["image/png", "image/jpeg"].contains(asset.mediaType)) else {
+                throw WorkflowIssue("流程资产身份或媒体类型不合法。")
+            }
+        }
+        let refs = Set(archive.assets.map(\.reference))
+        func validateRef(_ ref: WorkflowAssetReference) throws {
+            guard refs.contains(ref) else { throw WorkflowIssue("流程引用不属于本项目的已发布版本。") }
+        }
+        func validateValue(_ value: WorkflowValue) throws {
+            switch value {
+            case .asset(let ref): try validateRef(ref)
+            case .collection(let items):
+                guard items.count <= 8, Set(items.map(\.id)).count == items.count else { throw WorkflowIssue("候选集合身份或数量无效。") }
+                for item in items { if let ref = item.asset { try validateRef(ref) } }
+            case .receipt(let receipt):
+                guard receipt.names.count == receipt.hashes.count else { throw WorkflowIssue("导出回执无效。") }
+            }
+        }
+        for record in archive.assets { for parent in record.parents { try validateRef(parent) } }
+        for graph in archive.graphs + archive.runs.map(\.graph) {
+            // Missing values in editable drafts are allowed; topology and identity must remain valid.
+            try WorkflowRegistry.standard.validate(graph)
+            for node in graph.nodes { if let ref = node.assetReference { try validateRef(ref) } }
+        }
+        for run in archive.runs {
+            guard run.graph.nodes.contains(where: { $0.id == run.targetNodeID }),
+                  Set(run.steps.map(\.id)).count == run.steps.count else { throw WorkflowIssue("流程运行快照无效。") }
+            for step in run.steps {
+                guard run.graph.nodes.contains(step.node) else { throw WorkflowIssue("步骤不属于运行快照。") }
+                for v in Array(step.inputs.values) + Array(step.outputs.values) { try validateValue(v) }
+                if let decision = step.decision {
+                    guard decision.waitingStepID == step.id else { throw WorkflowIssue("人工决定不属于此等待点。") }
+                    if let ref = decision.output { try validateRef(ref) }
+                }
+            }
+        }
+    }
+
+    private func commitWorkflow(_ archive: WorkflowArchive, assets: [ProjectAsset],
+                                checkpoint: (@Sendable (WorkflowStoreCheckpoint) throws -> Void)? = nil) throws {
+        try validateWorkflowArchive(archive, assets: assets)
+        let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+        let data = try encoder.encode(archive)
+        guard data.count <= 32 * 1_024 * 1_024 else { throw WorkflowIssue("流程快照超过 32 MiB；未覆盖原记录。") }
+        let pointer = WorkflowSnapshotPointer(generation: UUID(), byteCount: data.count, sha256: Self.workflowHash(data))
+        let directory = try ProjectFiles.openOrCreateDirectory("Workflows", in: rootFD)
+        defer { Darwin.close(directory) }
+        try ProjectFiles.publish(in: directory, name: "\(pointer.generation.uuidString).json", replacing: false) { fd in
+            try data.withUnsafeBytes { try ProjectFiles.writeAll($0, to: fd) }
+        }
+        try checkpoint?(.snapshotDurable)
+        var candidate = manifest; candidate.workflowSnapshot = pointer; candidate.assets = assets
+        try checkpoint?(.beforeManifest)
+        try commit(candidate)
+    }
+
+    public func publishWorkflowAsset(data: Data, mediaType: String, metadata: MediaMetadata = .init(),
+                                      name: String, parents: [WorkflowAssetReference] = [], operationID: String,
+                                      stepID: UUID? = nil, request: InferenceRequest? = nil,
+                                      details: [String: String] = [:], assetID: UUID = UUID()) throws -> WorkflowPublishedAsset {
+        try publishWorkflowAsset(data: data, mediaType: mediaType, metadata: metadata, name: name, parents: parents,
+                                 operationID: operationID, stepID: stepID, request: request, details: details, assetID: assetID, checkpoint: nil)
+    }
+
+    func publishWorkflowAsset(data: Data, mediaType: String, metadata: MediaMetadata, name: String,
+                              parents: [WorkflowAssetReference], operationID: String, stepID: UUID?,
+                              request: InferenceRequest?, details: [String: String], assetID: UUID,
+                              checkpoint: (@Sendable (WorkflowStoreCheckpoint) throws -> Void)?) throws -> WorkflowPublishedAsset {
+        var archive = try editableWorkflow()
+        let hash = Self.workflowHash(data)
+        if let record = archive.assets.first(where: { $0.reference.assetID == assetID }),
+           let asset = manifest.assets.first(where: { $0.id == assetID }) {
+            guard record.reference.sha256 == hash, asset.mediaType == mediaType,
+                  record.operationID == operationID, asset.role == (operationID == "d.asset.import" ? .original : .result) else { throw WorkflowIssue("资产身份重复且内容不符。") }
+            _ = try workflowData(record.reference)
+            return .init(record: record, asset: asset)
+        }
+        guard !manifest.assets.contains(where: { $0.id == assetID }), !name.isEmpty,
+              let suffix = ["text/plain": "txt", "image/png": "png", "image/jpeg": "jpg"][mediaType],
+              data.count <= 64 * 1_024 * 1_024 else { throw WorkflowIssue("发布内容类型、大小或身份不合法。") }
+        if mediaType == "text/plain" {
+            guard data.count <= 1_048_576, String(data: data, encoding: .utf8) != nil else { throw WorkflowIssue("文字必须为不超过 1 MiB 的 UTF-8。") }
+        } else {
+            guard let source = CGImageSourceCreateWithData(data as CFData, nil), CGImageSourceGetCount(source) == 1,
+                  CGImageSourceGetStatus(source) == .statusComplete,
+                  (CGImageSourceGetType(source) as String?) == (mediaType == "image/png" ? "public.png" : "public.jpeg"),
+                  let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [String: Any],
+                  let width = properties[kCGImagePropertyPixelWidth as String] as? Int,
+                  let height = properties[kCGImagePropertyPixelHeight as String] as? Int,
+                  width > 0, height > 0, width <= 8192, height <= 8192, width * height <= 32 * 1_024 * 1_024,
+                  metadata.width == width, metadata.height == height,
+                  CGImageSourceCreateImageAtIndex(source, 0, nil) != nil else { throw WorkflowIssue("图片内容与声明不符或无法完整解码。") }
+        }
+        for parent in parents { _ = try workflowData(parent) }
+        let ref = WorkflowAssetReference(projectID: manifest.id, assetID: assetID,
+                                         kind: mediaType == "text/plain" ? .text : .image, sha256: hash)
+        var media = metadata
+        if mediaType == "image/png" { media.imageContentSHA256 = hash }
+        else { media.imageContentSHA256 = nil }
+        let asset = ProjectAsset(id: assetID, relativePath: "WorkflowAssets/\(assetID.uuidString)/content.\(suffix)",
+                                 mediaType: mediaType, role: operationID == "d.asset.import" ? .original : .result, metadata: media, name: name)
+        let record = WorkflowAssetRecord(reference: ref, parents: parents, operationID: operationID,
+                                          stepID: stepID, request: request, metadata: details)
+        let folder = try ProjectFiles.openOrCreateDirectory("WorkflowAssets", in: rootFD)
+        defer { Darwin.close(folder) }
+        let directory = try ProjectFiles.openOrCreateDirectory(assetID.uuidString, in: folder)
+        defer { Darwin.close(directory) }
+        let filename = "content.\(suffix)"
+        var statInfo = stat()
+        if fstatat(directory, filename, &statInfo, AT_SYMLINK_NOFOLLOW) == 0 {
+            // Retry publication after manifest failure, never overwrite an unrelated orphan.
+            guard try ProjectFiles.read(relative: filename, in: directory, limit: 64 * 1_024 * 1_024) == data else {
+                throw WorkflowIssue("已有未登记资产内容不同，保留原件并停止。")
+            }
+        } else {
+            guard errno == ENOENT else { throw ProjectFiles.error() }
+            try ProjectFiles.publish(in: directory, name: filename, replacing: false) { fd in
+                try data.withUnsafeBytes { try ProjectFiles.writeAll($0, to: fd) }
+            }
+        }
+        try checkpoint?(.assetDurable)
+        archive.assets.append(record); archive.revision = UUID()
+        try commitWorkflow(archive, assets: manifest.assets + [asset], checkpoint: checkpoint)
+        return .init(record: record, asset: asset)
+    }
+
+    public func workflowData(_ ref: WorkflowAssetReference) throws -> Data {
+        let archive = try editableWorkflow()
+        guard ref.projectID == manifest.id, archive.assets.contains(where: { $0.reference == ref }),
+              let asset = manifest.assets.first(where: { $0.id == ref.assetID }) else { throw WorkflowIssue("资产版本不属于当前项目。") }
+        let data = try ProjectFiles.read(relative: asset.relativePath, in: rootFD, limit: 64 * 1_024 * 1_024)
+        guard Self.workflowHash(data) == ref.sha256 else { throw WorkflowIssue("原始资产已改变；停止执行，未重新绑定新内容。") }
+        return data
+    }
+
+    /// Import snapshots approved files. Subsequent source changes do not change the published version.
+    public func importWorkflowFile(at source: URL) throws -> WorkflowPublishedAsset {
+        try checkLocation()
+        let parent = try ProjectFiles.openDirectory(source.deletingLastPathComponent())
+        defer { Darwin.close(parent) }
+        let data = try ProjectFiles.read(relative: source.lastPathComponent, in: parent, limit: 64 * 1_024 * 1_024)
+        if ["txt", "md"].contains(source.pathExtension.lowercased()) {
+            return try publishWorkflowAsset(data: data, mediaType: "text/plain", name: source.lastPathComponent,
+                                             operationID: "d.asset.import", details: ["origin": "explicit-file-snapshot"])
+        }
+        guard let image = CGImageSourceCreateWithData(data as CFData, nil),
+              let type = CGImageSourceGetType(image) as String?, ["public.png", "public.jpeg"].contains(type),
+              let props = CGImageSourceCopyPropertiesAtIndex(image, 0, nil) as? [String: Any] else { throw WorkflowIssue("请选择 TXT、MD、PNG 或 JPEG。") }
+        let media = MediaMetadata(width: props[kCGImagePropertyPixelWidth as String] as? Int,
+                                  height: props[kCGImagePropertyPixelHeight as String] as? Int,
+                                  bitDepth: props[kCGImagePropertyDepth as String] as? Int,
+                                  colorSpace: props[kCGImagePropertyProfileName as String] as? String)
+        return try publishWorkflowAsset(data: data, mediaType: type == "public.png" ? "image/png" : "image/jpeg",
+                                         metadata: media, name: source.lastPathComponent, operationID: "d.asset.import",
+                                         details: ["origin": "explicit-file-snapshot", "sourceName": source.lastPathComponent])
+    }
+}
+
+extension ProjectStore {
+    public func readWorkflowBackendImage(_ artifact: ArtifactReference, runID: UUID) throws -> Data {
+        try checkLocation()
+        // Same backend-owned output convention used by ProjectJob. Never follow an arbitrary backend URL.
+        guard artifact.mediaType == "image/png" else { throw WorkflowIssue("后端媒体类型无效。") }
+        let relative = try ProjectFiles.relativeArtifact(artifact.url, root: rootURL, jobID: runID)
+        return try ProjectFiles.read(relative: relative, in: rootFD, limit: 64 * 1_024 * 1_024)
+    }
+
+    /// A directory package atomically publishes media, a portable recipe and a receipt as one unit.
+    /// Export never includes model paths, bookmarks, account information, or the private inference request.
+    public func exportWorkflowAssets(_ refs: [WorkflowAssetReference], name: String, exportID: UUID,
+                                      directory: URL) throws -> WorkflowExportReceipt {
+        let archive = try editableWorkflow()
+        guard !refs.isEmpty, refs.count <= 8, !name.isEmpty, name.utf8.count <= 128,
+              !name.contains("/"), !name.contains("\\"), !name.contains(".."), !name.contains("\0") else {
+            throw WorkflowIssue("导出名称必须是单个安全文件名。")
+        }
+        let parent = try ProjectFiles.openDirectory(directory); defer { Darwin.close(parent) }
+        let packageName = name + "-" + exportID.uuidString + ".dexport"
+        let destination = directory.appendingPathComponent(packageName, isDirectory: true)
+        struct Recipe: Codable {
+            struct Item: Codable {
+                let reference: WorkflowAssetReference; let filename: String; let parents: [WorkflowAssetReference]
+                let operationID: String; let stepID: UUID?; let modelRevision: String?; let input: InferenceInput?
+                let mediaType: String; let metadata: MediaMetadata
+            }
+            let version: Int; let exportID: UUID; let items: [Item]
+        }
+        var files: [(String, Data)] = []; var recipeItems: [Recipe.Item] = []
+        for (i, ref) in refs.enumerated() {
+            let data = try workflowData(ref)
+            guard let asset = manifest.assets.first(where: { $0.id == ref.assetID }),
+                  let record = archive.assets.first(where: { $0.reference == ref }),
+                  let ext = ["text/plain":"txt", "image/png":"png", "image/jpeg":"jpg"][asset.mediaType] else { throw WorkflowIssue("导出资产类型无效。") }
+            let file = "\(i + 1).\(ext)"; files.append((file, data))
+            // Reference-image requests contain a private normalized-pixel URL; portable recipe retains only source IDs.
+            let input: InferenceInput?
+            if let request = record.request, case .image(let image) = request.input {
+                input = .image(ImageRequest(prompt: image.prompt, width: image.width, height: image.height,
+                    steps: image.steps, guidanceScale: image.guidanceScale, seed: image.seed, executionProfile: image.executionProfile))
+            } else if let request = record.request, case .text = request.input { input = request.input }
+            else { input = nil }
+            recipeItems.append(.init(reference: ref, filename: file, parents: record.parents, operationID: record.operationID,
+                stepID: record.stepID, modelRevision: record.request?.model.revision, input: input,
+                mediaType: asset.mediaType, metadata: asset.metadata))
+        }
+        let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+        let recipe = try encoder.encode(Recipe(version: 1, exportID: exportID, items: recipeItems))
+        files.append(("recipe.json", recipe))
+        let receipt = WorkflowExportReceipt(id: exportID, names: files.map(\.0), hashes: files.map { Self.workflowHash($0.1) })
+        let receiptData = try encoder.encode(receipt)
+        var info = stat()
+        if fstatat(parent, packageName, &info, AT_SYMLINK_NOFOLLOW) == 0 {
+            let existing = try ProjectFiles.openRelativeDirectory(packageName, in: parent); defer { Darwin.close(existing) }
+            let saved = try JSONDecoder().decode(WorkflowExportReceipt.self,
+                from: ProjectFiles.read(relative: "receipt.json", in: existing, limit: 1_048_576))
+            guard saved.id == receipt.id, saved.names == receipt.names, saved.hashes == receipt.hashes else {
+                throw ProjectStoreError.alreadyExists(packageName)
+            }
+            for (filename, data) in files {
+                guard try ProjectFiles.read(relative: filename, in: existing, limit: 64 * 1_024 * 1_024) == data else {
+                    throw WorkflowIssue("同名导出包内容改变，未覆盖。")
+                }
+            }
+            return saved
+        }
+        guard errno == ENOENT else { throw ProjectFiles.error() }
+        let temporary = try FileManager.default.url(for: .itemReplacementDirectory, in: .userDomainMask,
+            appropriateFor: destination, create: true).resolvingSymlinksInPath()
+        let staging = try ProjectFiles.openDirectory(temporary); defer { Darwin.close(staging) }
+        var stagingInfo = stat(), targetInfo = stat()
+        guard fstat(staging, &stagingInfo) == 0, fstat(parent, &targetInfo) == 0,
+              stagingInfo.st_dev == targetInfo.st_dev else { throw WorkflowIssue("导出暂存位置不在目标卷；未发布。") }
+        let content = try ProjectFiles.openOrCreateDirectory("content", in: staging); defer { Darwin.close(content) }
+        for (filename, data) in files + [("receipt.json", receiptData)] {
+            try ProjectFiles.publish(in: content, name: filename, replacing: false) { fd in
+                try data.withUnsafeBytes { try ProjectFiles.writeAll($0, to: fd) }
+            }
+            guard try ProjectFiles.read(relative: filename, in: content, limit: 64 * 1_024 * 1_024) == data else { throw WorkflowIssue("导出回读不一致，未发布。") }
+        }
+        guard fsync(content) == 0 else { throw ProjectFiles.error() }
+        guard renameatx_np(staging, "content", parent, packageName, UInt32(RENAME_EXCL)) == 0 else {
+            if errno == EEXIST { throw ProjectStoreError.alreadyExists(packageName) }
+            throw ProjectFiles.error()
+        }
+        guard fsync(parent) == 0 else { throw WorkflowIssue("导出包已发布，但目录同步失败；请保留并检查，重试不会覆盖。") }
+        // Remove only our now-empty OS-created staging directory. A failed partial package is deliberately retained.
+        if let owner = try? ProjectFiles.openDirectory(temporary.deletingLastPathComponent()) {
+            _ = unlinkat(owner, temporary.lastPathComponent, AT_REMOVEDIR); Darwin.close(owner)
+        }
+        return receipt
     }
 }

@@ -177,8 +177,8 @@ public struct ProjectDraft: Codable, Sendable, Equatable {
 }
 
 public struct ProjectManifest: Codable, Sendable, Equatable, Identifiable {
-    public static let currentSchemaVersion = 12
-    public static let readableSchemaVersions = Set(1...12)
+    public static let currentSchemaVersion = 16
+    public static let readableSchemaVersions = Set(1...12).union([16])
     public var schemaVersion: Int
     /// Monotonic committed state version lets the UI discard a late, stale actor response.
     public var revision: UInt64
@@ -202,6 +202,7 @@ public struct ProjectManifest: Codable, Sendable, Equatable, Identifiable {
     public var jobs: [ProjectJob]
     public var assets: [ProjectAsset]
     public var pendingAudioCaptures: [AudioCaptureReservation]
+    public var workflowSnapshot: WorkflowSnapshotPointer?
 
     public init(schemaVersion: Int = Self.currentSchemaVersion, revision: UInt64 = 0, id: UUID = UUID(),
                 name: String, createdAt: Date = Date(), updatedAt: Date = Date(), draft: ProjectDraft = .init(),
@@ -226,11 +227,12 @@ public struct ProjectManifest: Codable, Sendable, Equatable, Identifiable {
         self.jobs = jobs
         self.assets = assets
         self.pendingAudioCaptures = pendingAudioCaptures
+        self.workflowSnapshot = nil
     }
 
     private enum CodingKeys: String, CodingKey {
         case schemaVersion, revision, id, name, createdAt, updatedAt, draft, jobs, assets, documents, activeDocumentID,
-             pendingAudioCaptures
+             pendingAudioCaptures, workflowSnapshot
     }
 
     public init(from decoder: Decoder) throws {
@@ -240,7 +242,7 @@ public struct ProjectManifest: Codable, Sendable, Equatable, Identifiable {
             // Current-format omissions are corruption, not a request for legacy defaults.
             _ = try CurrentGenerationFields(from: decoder)
         }
-        if [10, 11, 12].contains(schemaVersion) { _ = try CurrentTextSourcesFields(from: decoder) }
+        if [10, 11, 12, 16].contains(schemaVersion) { _ = try CurrentTextSourcesFields(from: decoder) }
         revision = try values.decodeIfPresent(UInt64.self, forKey: .revision) ?? 0
         id = try values.decode(UUID.self, forKey: .id)
         name = try values.decode(String.self, forKey: .name)
@@ -249,6 +251,7 @@ public struct ProjectManifest: Codable, Sendable, Equatable, Identifiable {
         assets = try values.decode([ProjectAsset].self, forKey: .assets)
         pendingAudioCaptures = try values.decodeIfPresent([AudioCaptureReservation].self,
                                                           forKey: .pendingAudioCaptures) ?? []
+        workflowSnapshot = try values.decodeIfPresent(WorkflowSnapshotPointer.self, forKey: .workflowSnapshot)
         if schemaVersion == 1 {
             // Stable across a crash after the backup but before v2 publication. Object
             // categories have separate identity spaces; no existing ID is rewritten.
@@ -278,6 +281,7 @@ public struct ProjectManifest: Codable, Sendable, Equatable, Identifiable {
         try values.encode(jobs, forKey: .jobs)
         try values.encode(assets, forKey: .assets)
         try values.encode(pendingAudioCaptures, forKey: .pendingAudioCaptures)
+        try values.encodeIfPresent(workflowSnapshot, forKey: .workflowSnapshot)
     }
 }
 

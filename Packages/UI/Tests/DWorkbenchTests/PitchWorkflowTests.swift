@@ -206,7 +206,7 @@ struct PitchWorkflowTests {
             object["schemaVersion"] = 11
             let old = try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys, .prettyPrinted]); try old.write(to: file)
             let reopened = try await ProjectStore.open(at: project)
-            #expect(await reopened.snapshot().schemaVersion == 12)
+            #expect(await reopened.snapshot().schemaVersion == ProjectManifest.currentSchemaVersion)
             #expect(await reopened.snapshot().documents == previous.documents)
             #expect(try Data(contentsOf: project.appendingPathComponent("project.v11.backup.json")) == old)
             let asset = try #require(await reopened.snapshot().assets.first)

@@ -101,6 +101,7 @@ public final class ProjectSession {
     public private(set) var liveStates: [UUID: JobState] = [:]
     public private(set) var assetURLs: [UUID: URL] = [:]
     public private(set) var activeJobIDs: Set<UUID> = []
+    public private(set) var workflow: WorkflowController?
     public private(set) var text: ProjectTextController?
     public private(set) var textSources: ProjectTextSourcesController?
     public let textSourcesEnabled: Bool
@@ -340,7 +341,7 @@ public final class ProjectSession {
     @ObservationIgnored private var textModelLease: LocationAccess.Lease?
     @ObservationIgnored private var textWork: Task<Void, Never>?
     @ObservationIgnored private var textContextID = UUID()
-    public var isBusy: Bool { !activeJobIDs.isEmpty || isTextWorking || textSources?.isSaving == true || audio?.isBusy == true }
+    public var isBusy: Bool { workflow?.isRunning == true || workflow?.isSaving == true || !activeJobIDs.isEmpty || isTextWorking || textSources?.isSaving == true || audio?.isBusy == true }
     public var canGenerate: Bool {
         creatorMode == .image && manifest != nil && activeDocument?.kind == .image && !isTextWorking && ((selectedModelID != nil && selectedModelReady) || modelLease != nil)
         && !isChangingProject && !showingAllArtworks && !closePending && pendingSaves.isEmpty
@@ -361,6 +362,7 @@ public final class ProjectSession {
     @ObservationIgnored private let audioRecordingEnabled: Bool
     @ObservationIgnored private let injectedAudioTransport: AudioTransport?
     @ObservationIgnored private let access = LocationAccess()
+    @ObservationIgnored private var workflowDestinationLease: LocationAccess.Lease?
     @ObservationIgnored private var projectLease: LocationAccess.Lease?
     @ObservationIgnored private var modelLease: LocationAccess.Lease?
     @ObservationIgnored private var usageLeases: [UUID: ModelUsageLease] = [:]
@@ -772,6 +774,86 @@ public final class ProjectSession {
         } else if createdSession.videoBackendID == nil {
             videoModelStatus = "本地视频引擎尚未配置；已有视频仍可预览和导出"
         }
+    }
+
+    /// M0 composition uses the same project/store/runtime; it does not construct a second model engine.
+    public func openWorkflow() async {
+        guard workflow == nil, let store, let session, !closePending else { return }
+        let services = WorkflowServices(store: store, session: session, resolveText: { [weak self] in
+            guard let self, self.store === store, let reference = self.textReference,
+                  let backend = session.textBackendID else { throw WorkflowIssue("请先选择已安装的文字模型。") }
+            return WorkflowModelBinding(identity: "text:" + (reference.revision ?? reference.directory.lastPathComponent), reference: reference, backendID: backend)
+        }, resolveImage: { [weak self] in
+            guard let self, self.store === store else { throw WorkflowIssue("项目已切换。") }
+            if let id = self.selectedModelID, let library = self.modelLibrary {
+                let lease = try await library.acquire(id)
+                return WorkflowModelBinding(identity: "image:" + (lease.reference.revision ?? id.description), reference: lease.reference,
+                    backendID: session.backendID, release: { await library.release(lease) })
+            }
+            guard let location = self.modelLease else { throw WorkflowIssue("请先选择已安装的图像模型。") }
+            return WorkflowModelBinding(identity: "image:" + (self.selectedModelRevision ?? location.url.lastPathComponent),
+                reference: .init(directory: location.url, revision: self.selectedModelRevision), backendID: session.backendID)
+        })
+        let controller = WorkflowController(services: services)
+        controller.onChange = { [weak self] in
+            guard let self, self.store === store else { return }
+            self.applyManifest(await store.snapshot()); await self.refreshAssets()
+        }
+        workflow = controller
+        await controller.load()
+        refreshWorkflowModels()
+    }
+
+    public func selectWorkflowDestination(at url: URL) async {
+        guard !isBusy, !isChangingProject, !closePending, let controller = workflow else { return }
+        do {
+            let lease = try await access.acquire(selected: url)
+            guard workflow === controller, !closePending else { await access.release(lease); return }
+            await access.release(workflowDestinationLease); workflowDestinationLease = lease
+            controller.setDestination(lease.url)
+        } catch { report(error, context: "导出目录未能授权") }
+    }
+
+    public func bindSelectedWorkflowModel() {
+        refreshWorkflowModels()
+        guard let controller = workflow, let node = controller.selectedNode, !isBusy else { return }
+        if node.operationID == "d.text.rewrite", let reference = textReference {
+            controller.setParameter(nodeID: node.id, key: "modelID", value: .text("text:" + (reference.revision ?? reference.directory.lastPathComponent)))
+        } else if node.operationID == "d.image.generate" {
+            if let revision = selectedModelRevision {
+                controller.setParameter(nodeID: node.id, key: "modelID", value: .text("image:" + revision))
+            } else if let location = modelLease {
+                controller.setParameter(nodeID: node.id, key: "modelID", value: .text("image:" + location.url.lastPathComponent))
+            }
+        }
+    }
+
+    public func refreshWorkflowModels() {
+        workflow?.textModelDescription = textModelStatus
+        workflow?.imageModelDescription = modelStatus
+    }
+
+    public func publishTextToWorkflow() async {
+        guard let text, let store, !isChangingProject, !closePending else { errorMessage = "请先在文字编辑器打开或创建文稿。"; return }
+        // Snapshot before suspension; later typing cannot modify the publication.
+        let document = text.editor.document
+        await openWorkflow()
+        guard self.store === store, let controller = workflow, controller.services.store === store, !closePending else { return }
+        await controller.publishText(document.text, origin: "text-document:" + document.id.uuidString + ":" + document.revision.uuidString)
+    }
+
+    public func returnWorkflowText(_ reference: WorkflowAssetReference) async {
+        guard !isBusy, !isChangingProject, !closePending, let store, reference.kind == .text else { return }
+        do {
+            let data = try await store.workflowData(reference)
+            guard let value = String(data: data, encoding: .utf8) else { throw WorkflowIssue("资产不是 UTF-8 文字。") }
+            guard self.store === store, !isChangingProject, !closePending else { throw WorkflowIssue("项目已切换；未向另一项目创建文稿。") }
+            // Explicitly create a fresh editable draft; never replace the currently open user's text.
+            await createTextDocument(name: "来自流程的文稿")
+            guard self.store === store, let text else { return }
+            editText(value, documentID: text.editor.document.id)
+            try await flushDraft(to: store)
+        } catch { report(error, context: "流程文字未能返回文稿，原件保留") }
     }
 
     private func installAudioController(for audioStore: ProjectStore) {
@@ -1543,6 +1625,7 @@ public final class ProjectSession {
     /// Used by project switching and native window/application close delegates.
     public func requestClose(decision: ProjectCloseDecision? = nil) async -> Bool {
         if isRegisteringTextModel || isRegisteringAudioModel || isRegisteringVideoModel { return false }
+        if workflow?.hasPendingSaves == true { errorMessage = "流程仍有待保存结果，请恢复保存后关闭。"; return false }
         if text?.hasPendingCandidate == true {
             errorMessage = "请先接受或拒绝文字候选，再关闭项目。正文可以随时保存。"
             return false
@@ -1564,6 +1647,7 @@ public final class ProjectSession {
             let selected = if let decision { decision } else { await closeDecision() }
             if selected == .keepOpen { return false }
             if selected == .cancel {
+                await workflow?.cancel()
                 await cancelTextRewrite()
                 for id in activeJobIDs { await cancel(id) }
             }
@@ -1582,6 +1666,7 @@ public final class ProjectSession {
             if let message = audio?.errorMessage { errorMessage = message }
             return false
         }
+        await workflow?.cancel()
         await cancelTextRewrite()
         for id in activeJobIDs { await cancel(id) }
         while isBusy { try? await Task.sleep(for: .milliseconds(100)) }
@@ -1600,6 +1685,7 @@ public final class ProjectSession {
             return true
         }
         do {
+            try await workflow?.prepareForClose()
             try await flushDraft(to: store)
             for (id, outcome) in pendingSaves {
                 try await persist(id: id, outcome: outcome, store: store)
@@ -1639,6 +1725,8 @@ public final class ProjectSession {
             stableAudioModelStatus = "选择已安装的本地声音模型"
             audio = nil
             self.store = nil
+            workflow?.deactivateAfterClose()
+            workflow = nil
             session = nil
             await access.release(textModelLease)
             textModelLease = nil
@@ -1648,6 +1736,8 @@ public final class ProjectSession {
             textSources = nil
             textModelStatus = "选择已注册的 Qwen2.5 Instruct 4-bit 模型（0.5B／1.5B／7B／32B）"
             await access.release(modelLease)
+            await access.release(workflowDestinationLease)
+            workflowDestinationLease = nil
             await access.release(projectLease)
             projectLease = nil
             modelLease = nil
@@ -1671,6 +1761,7 @@ public final class ProjectSession {
             liveStates = [:]
             return true
         } catch {
+            workflow?.cancelClosing()
             audio?.resumeAdmissions()
             report(error, context: "项目尚未安全保存，暂不能关闭。请恢复磁盘访问后重试")
             return false

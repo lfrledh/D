@@ -18,6 +18,7 @@ public struct WorkbenchView: View {
         get { nodePresentation.selectedNodeID }
         nonmutating set { nodePresentation.selectNode(newValue) }
     }
+    @State private var workflowVisible = false
     @State private var showTasks = false
     @State private var showingPitchAnalysis = false
     @State private var expandTasks = true
@@ -47,7 +48,21 @@ public struct WorkbenchView: View {
     public var body: some View {
         Group {
             if model.manifest != nil {
-                projectWorkbench
+                VStack(spacing: 0) {
+                    HStack {
+                        Text(model.manifest?.name ?? "D").font(.headline)
+                        Spacer()
+                        Picker("工作视图", selection: $workflowVisible) {
+                            Text("流程画布").tag(true)
+                            Text("创作与资料").tag(false)
+                        }.pickerStyle(.segmented).frame(width: 230)
+                        Button("返回项目") { Task { await model.closeProject() } }
+                    }.padding(10).background(.bar)
+                    Divider()
+                    if workflowVisible {
+                        WorkflowHostView(model: model)
+                    } else { projectWorkbench }
+                }
             } else {
                 ProjectChooserView(recentProjects: model.recentProjects, isBusy: model.isChangingProject,
                     onNew: { Task { await model.newProject() } },
@@ -114,7 +129,11 @@ public struct WorkbenchView: View {
     }
 
     private var visibleGenerationCommand: WorkbenchGenerationCommand {
-        nodePresentation.generationCommand(model: model, enabled: { visibleGenerationEnabled })
+        if workflowVisible {
+            WorkbenchGenerationCommand(title: "请在画布中选择运行目标", isEnabled: false, action: {})
+        } else {
+            nodePresentation.generationCommand(model: model, enabled: { visibleGenerationEnabled })
+        }
     }
 
     private var projectWorkbench: some View {
