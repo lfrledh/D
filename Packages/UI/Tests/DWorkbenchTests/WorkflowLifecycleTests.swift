@@ -10,7 +10,8 @@ import UniformTypeIdentifiers
 private actor WorkflowSubmitGate {
     private var waiting: CheckedContinuation<Void, Never>?
     private var opened = false
-    func wait() async { if opened { return }; await withCheckedContinuation { waiting = $0 } }
+    private(set) var entered = false
+    func wait() async { entered = true; if opened { return }; await withCheckedContinuation { waiting = $0 } }
     func open() { opened = true; waiting?.resume(); waiting = nil }
 }
 @MainActor private final class WorkflowSaveSwitch { var fails = true }
@@ -57,7 +58,7 @@ private func workflowFixturePNG(width: Int = 16, height: Int = 12) throws -> Dat
 
 @Suite("M0 workflow durable lifecycle", .serialized) @MainActor
 struct WorkflowLifecycleTests {
-    private func fixture() async throws -> (URL, ProjectStore, WorkflowFixtureEngine, WorkflowController) {
+    private func fixture(release: @escaping @MainActor () async -> Void = {}, prepare: @escaping @MainActor () async -> Void = {}) async throws -> (URL, ProjectStore, WorkflowFixtureEngine, WorkflowController) {
         let root = URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory())
             .appendingPathComponent("M0-" + UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -66,7 +67,7 @@ struct WorkflowLifecycleTests {
         let session = WorkbenchSession(engine: engine, backendID: "fixture.image", status: { .init(activeRunID: nil, phase: nil, queuedRunIDs: []) },
             shutdown: {}, cleanup: {}, validateModel: { _ in }, textBackendID: "fixture.text", imageCapability: .scalableKlein4B)
         let services = WorkflowServices(store: store, session: session,
-            resolveText: { .init(identity: "text:fixture", reference: .init(directory: root, revision: "fixture"), backendID: "fixture.text") },
+            resolveText: { await prepare(); return .init(identity: "text:fixture", reference: .init(directory: root, revision: "fixture"), backendID: "fixture.text", release: release) },
             resolveImage: { .init(identity: "image:fixture", reference: .init(directory: root, revision: "fixture"), backendID: "fixture.image") })
         let controller = WorkflowController(services: services); await controller.load()
         return (root, store, engine, controller)
@@ -116,6 +117,74 @@ struct WorkflowLifecycleTests {
         #expect(run.graph.nodes[0].parameters["text"] == original.nodes[0].parameters["text"])
         #expect(await engine.requests == [submitted])
         #expect(c.graphs.first { $0.id == original.id }?.nodes[0].parameters["text"] == .text("new unsent input"))
+        try await c.close(); try await store.close()
+    }
+
+    @Test(arguments: [false, true])
+    func cancellationPresentationWaitsForReleaseAndPreservesSaveFailure(failHistory: Bool) async throws {
+        let release = WorkflowSubmitGate(), prepare = WorkflowSubmitGate()
+        var pausePreparation = false
+        let (_, store, engine, c) = try await fixture(release: { await release.wait() }, prepare: {
+            if pausePreparation { await prepare.wait() }
+        })
+        let submit = WorkflowSubmitGate(); await engine.suspend(using: submit)
+        c.addExample("text"); let target = try #require(c.graph?.nodes[1].id)
+        c.beforeHistorySave = {
+            if failHistory && c.runs.last?.status == .cancelled { throw WorkflowIssue("cancel history unavailable") }
+        }
+        let work = Task { await c.run(target: target, only: false) }
+        for _ in 0..<2000 {
+            if await submit.entered { break }
+            try await Task.sleep(for: .milliseconds(1))
+        }
+        #expect(await submit.entered)
+        let cancellation = Task { await c.cancel() }
+        for _ in 0..<2000 {
+            if c.runs.last?.status == .cancelling { break }
+            try await Task.sleep(for: .milliseconds(1))
+        }
+        #expect(c.runs.last?.status == .cancelling)
+        await submit.open()
+        for _ in 0..<2000 {
+            if await release.entered { break }
+            try await Task.sleep(for: .milliseconds(1))
+        }
+        #expect(await release.entered)
+        #expect(c.isRunning)
+        #expect(!c.progressMessage.contains("已停止并释放"))
+        await release.open(); await cancellation.value; await work.value
+        #expect(!c.isRunning)
+        if failHistory {
+            #expect(c.hasPendingSaves)
+            #expect(c.runs.last?.status == .saving)
+            #expect(c.errorMessage?.contains("cancel history unavailable") == true)
+            #expect(!c.progressMessage.contains("已停止并释放"))
+            c.beforeHistorySave = {}
+            await c.save()
+        } else {
+            #expect(c.runs.last?.status == .cancelled)
+            #expect(c.errorMessage == nil)
+            #expect(c.progressMessage == "已取消，计算已停止并释放资源。")
+            #expect(c.runs.last?.steps.last?.error == nil)
+            let runID = try #require(c.runs.last?.id)
+            pausePreparation = true
+            let resuming = Task { await c.resume(runID: runID) }
+            for _ in 0..<2000 {
+                if await prepare.entered { break }
+                try await Task.sleep(for: .milliseconds(1))
+            }
+            #expect(await prepare.entered)
+            await c.cancel() // No active backend yet; preparation still must observe cancellation.
+            await prepare.open(); await resuming.value
+            #expect(c.runs.last?.status == .cancelled)
+            #expect(c.errorMessage == nil)
+            #expect(c.progressMessage == "已取消，计算已停止并释放资源。")
+            #expect(await engine.requests.count == 1)
+            pausePreparation = false
+            await c.resume(runID: runID)
+            #expect(c.runs.last?.status == .completed)
+            #expect(c.errorMessage == nil)
+        }
         try await c.close(); try await store.close()
     }
 

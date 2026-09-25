@@ -257,6 +257,7 @@ import Observation
         guard !hasPendingSaves else { errorMessage = "请先恢复保存，避免重复计算。"; return }
         isRunning = true; cancelled = false; errorMessage = nil
         defer { isRunning = false; activeRunID = nil }
+        var failure: (any Error)?
         do {
             let ids = try registry.plan(frozen, target: target, only: only)
             let originalRevision = frozen.revision
@@ -272,8 +273,8 @@ import Observation
             runs.append(run); activeRunID = run.id
             try await persist()
             try await execute(runID: run.id, force: only ? target : nil)
-        } catch { errorMessage = error.localizedDescription }
-        await services.finish(); await onChange()
+        } catch { failure = error }
+        await finishExecution(failure)
     }
 
     private func inputs(for node: WorkflowNode, run: WorkflowRun) throws -> [String: WorkflowValue] {
@@ -339,18 +340,45 @@ import Observation
                     throw WorkflowSaveFailure(reason: error.localizedDescription)
                 }
                 let status: WorkflowStepStatus = error is CancellationError ? .cancelled : error is WorkflowSaveFailure ? .saving : .failed
-                runs[ri].steps[si].status = status; runs[ri].steps[si].error = error.localizedDescription; runs[ri].status = status
+                runs[ri].steps[si].status = status
+                runs[ri].steps[si].error = status == .cancelled ? nil : error.localizedDescription
+                runs[ri].status = status
                 if let retained = services.retainedCandidates(stepID: runs[ri].steps[si].id) { runs[ri].steps[si].outputs = ["output": .collection(retained)] }
-                do { try await persist() } catch { persistenceFailed = true }
+                do { try await persist() }
+                catch {
+                    persistenceFailed = true; runs[ri].status = .saving
+                    throw WorkflowSaveFailure(reason: error.localizedDescription)
+                }
                 throw error
             }
         }
         runs[ri].status = .completed; progressMessage = "此次运行已完成；旧版本与输入快照均保留。"; try await persist()
     }
 
+    /// A cancellation is terminal only after the operation drained and its model leases were released.
+    private func finishExecution(_ failure: (any Error)?) async {
+        await services.finish()
+        if let failure, !(failure is CancellationError) {
+            errorMessage = failure.localizedDescription
+            progressMessage = "运行未完成，请查看错误；已完成的产物仍保留。"
+        }
+        if hasPendingSaves {
+            progressMessage = "运行已停止，但保存尚未完成；请恢复保存。"
+            if errorMessage == nil { errorMessage = "运行记录或结果尚未保存，请恢复保存。" }
+        } else if failure is CancellationError || (failure == nil && runs.first(where: { $0.id == activeRunID })?.status == .cancelled) {
+            errorMessage = nil
+            progressMessage = "已取消，计算已停止并释放资源。"
+        }
+        await onChange()
+    }
+
     public func cancel() async {
-        guard isRunning else { return }; cancelled = true
-        if let id = activeRunID, let i = runs.firstIndex(where: { $0.id == id }) { runs[i].status = .cancelling }
+        guard isRunning else { return }
+        if let id = activeRunID, let i = runs.firstIndex(where: { $0.id == id }) {
+            guard [.running, .queued, .cancelling].contains(runs[i].status) else { return }
+            runs[i].status = .cancelling
+        }
+        cancelled = true
         progressMessage = "正在取消，等待计算停止并释放资源。"
         await services.cancel()
     }
@@ -396,14 +424,16 @@ import Observation
             errorMessage = "当前流程已变化；旧运行保留，请运行新的快照。"; return
         }
         guard runs[i].status != .rejected && runs[i].status != .completed else { return }
-        isRunning = true; cancelled = false; activeRunID = runID
+        isRunning = true; cancelled = false; errorMessage = nil
         defer { isRunning = false; activeRunID = nil }
+        var failure: (any Error)?
         do {
             if persistenceFailed { try await persist() }
             _ = try await services.prepare(runs[i].graph, nodes: runs[i].steps.filter { ![.completed, .partial].contains($0.status) }.map { $0.node.id })
+            activeRunID = runID
             try await execute(runID: runID)
-        } catch { errorMessage = error.localizedDescription }
-        await services.finish(); await onChange()
+        } catch { failure = error }
+        await finishExecution(failure)
     }
     public func retryFailedCandidates(stepID: UUID) async {
         guard !closed, !closing, !isRunning, readOnlyReason == nil,
@@ -415,6 +445,7 @@ import Observation
         guard !isStale(old), old.outputs["output"]?.candidates.contains(where: { $0.asset == nil }) == true else { return }
         isRunning = true; cancelled = false; errorMessage = nil
         defer { isRunning = false; activeRunID = nil }
+        var failure: (any Error)?
         do {
             let frozen = runs[ri].graph
             _ = try await services.prepare(frozen, nodes: [old.node.id])
@@ -427,7 +458,7 @@ import Observation
             try await persist()
             try await execute(runID: retry.id, force: old.node.id, retryCandidates: old.outputs["output"]?.candidates)
             progressMessage = "失败项已重试；成功项保留。重新运行选择节点以查看新集合。"
-        } catch { errorMessage = error.localizedDescription }
-        await services.finish(); await onChange()
+        } catch { failure = error }
+        await finishExecution(failure)
     }
 }
