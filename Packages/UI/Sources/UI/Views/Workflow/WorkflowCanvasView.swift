@@ -474,8 +474,8 @@ private struct WorkflowNodeCard: View {
                         lineWidth: selected ? 3 : 1)
         }
         .shadow(color: .black.opacity(0.12), radius: 8, y: 3)
-        .offset(width: translation.width / max(zoom, 0.01),
-                height: translation.height / max(zoom, 0.01))
+        .offset(x: translation.width / max(zoom, 0.01),
+                y: translation.height / max(zoom, 0.01))
         .contentShape(RoundedRectangle(cornerRadius: 13))
         .onTapGesture { controller.selectedNodeID = node.id }
         .gesture(
