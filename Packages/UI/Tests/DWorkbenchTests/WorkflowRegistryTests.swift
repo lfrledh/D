@@ -108,6 +108,32 @@ struct WorkflowRegistryTests {
         #expect(services.publishCount == 0)
     }
 
+    @Test func templateSubstitutesOriginalPlaceholdersOnceAndKeepsInsertedTextLiteral() async throws {
+        let registry = WorkflowRegistry.standard
+        let operation = try #require(registry.operation("d.text.template"))
+        var node = operation.definition.makeNode()
+        node.parameters["template"] = .text("{{input}} / {{other}}")
+        node.parameters["inputText"] = .text("keep {{other}}")
+        node.parameters["otherText"] = .text("X")
+        let services = RegistryServices()
+
+        _ = try await operation.execute(
+            WorkflowExecutionContext(node: node, stepID: UUID(), inputs: [:]), services
+        )
+        #expect(services.publishedTexts == ["keep {{other}} / X"])
+    }
+
+    @Test func topPRejectsZeroButAcceptsPositiveUnitValues() throws {
+        let registry = WorkflowRegistry.standard
+        var rewrite = try node("d.text.rewrite", in: registry)
+        rewrite.parameters["topP"] = .decimal(0)
+        #expect(throws: WorkflowIssue.self) { try registry.validate(rewrite) }
+        rewrite.parameters["topP"] = .decimal(0.000_001)
+        try registry.validate(rewrite)
+        rewrite.parameters["topP"] = .decimal(1)
+        try registry.validate(rewrite)
+    }
+
     @Test func signatureIgnoresPresentationButIncludesUpstreamConfiguration() throws {
         let registry = WorkflowRegistry.standard
         let original = WorkflowExamples.text()
@@ -196,6 +222,30 @@ struct WorkflowRegistryTests {
         try registry.validate(template)
         #expect(text.nodes.count == 3)
         #expect(image.nodes.count == 8)
+        #expect(image.nodes.map(\.operationID) == [
+            "d.text.input", "d.text.rewrite", "d.text.confirm", "d.image.generate",
+            "d.asset.choose", "d.image.resize", "d.image.convert", "d.asset.export",
+        ])
+        let imageNodes = Dictionary(uniqueKeysWithValues: image.nodes.map { ($0.operationID, $0.id) })
+        let expectedImageEdges: [(String, String, String)] = [
+            ("d.text.input", "d.text.rewrite", "input"),
+            ("d.text.rewrite", "d.text.confirm", "input"),
+            ("d.text.confirm", "d.image.generate", "prompt"),
+            ("d.image.generate", "d.asset.choose", "input"),
+            ("d.asset.choose", "d.image.resize", "input"),
+            ("d.image.resize", "d.image.convert", "input"),
+            ("d.image.convert", "d.asset.export", "input"),
+        ]
+        #expect(image.connections.count == expectedImageEdges.count)
+        for (source, target, port) in expectedImageEdges {
+            let sourceID = try #require(imageNodes[source])
+            let targetID = try #require(imageNodes[target])
+            #expect(image.connections.contains {
+                $0.sourceNode == sourceID && $0.targetNode == targetID && $0.targetPort == port
+            })
+        }
+        #expect(!image.nodes.contains { $0.operationID == "d.asset.reference" })
+        #expect(!image.connections.contains { $0.targetPort == "ref" })
         #expect(file.nodes.map(\.operationID) == [
             "d.asset.reference", "d.image.resize", "d.image.convert", "d.asset.export",
         ])
@@ -231,6 +281,7 @@ struct WorkflowRegistryTests {
 
 @MainActor private final class RegistryServices: WorkflowOperationServices {
     private(set) var publishCount = 0
+    private(set) var publishedTexts: [String] = []
     private(set) var generatedNode: WorkflowNode?
 
     func readText(_ reference: WorkflowAssetReference) async throws -> String { "fixture text" }
@@ -242,6 +293,7 @@ struct WorkflowRegistryTests {
         context: WorkflowExecutionContext
     ) async throws -> WorkflowAssetReference {
         publishCount += 1
+        publishedTexts.append(text)
         return reference(kind: .text)
     }
 

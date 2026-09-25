@@ -18,7 +18,7 @@ public enum WorkflowExamples {
         var prompt = node("d.text.input", title: "图像提示")
         prompt.parameters["text"] = .text("A quiet studio filled with morning light")
         let rewrite = node("d.text.rewrite", title: "整理提示")
-        let reference = node("d.asset.reference", title: "可选参考图")
+        let confirm = node("d.text.confirm", title: "确认提示")
         let generate = node("d.image.generate", title: "生成候选")
         let choose = node("d.asset.choose", title: "选择图像")
         let resize = node("d.image.resize", title: "调整尺寸")
@@ -26,20 +26,20 @@ public enum WorkflowExamples {
         let export = node("d.asset.export", title: "导出图像")
         return WorkflowGraph(
             name: "完整图像流程",
-            nodes: [prompt, rewrite, reference, generate, choose, resize, convert, export],
+            nodes: [prompt, rewrite, confirm, generate, choose, resize, convert, export],
             connections: [
                 connect(prompt, rewrite),
-                connect(rewrite, generate, targetPort: "prompt"),
-                connect(reference, generate, targetPort: "ref"),
+                connect(rewrite, confirm),
+                connect(confirm, generate, targetPort: "prompt"),
                 connect(generate, choose),
                 connect(choose, resize),
                 connect(resize, convert),
                 connect(convert, export),
             ],
             layout: [
-                place(prompt, 0, 0), place(rewrite, 260, 0), place(reference, 260, 180),
-                place(generate, 540, 60), place(choose, 820, 60), place(resize, 1_100, 60),
-                place(convert, 1_380, 60), place(export, 1_660, 60),
+                place(prompt, 0, 0), place(rewrite, 260, 0), place(confirm, 520, 0),
+                place(generate, 780, 0), place(choose, 1_040, 0), place(resize, 1_300, 0),
+                place(convert, 1_560, 0), place(export, 1_820, 0),
             ]
         )
     }

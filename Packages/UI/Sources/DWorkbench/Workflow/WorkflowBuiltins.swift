@@ -55,18 +55,18 @@ enum WorkflowBuiltins {
         execute: { context, services in
             let template = try Scalar.text("template", in: context.node)
             try Template.validate(template, nodeID: context.node.id)
-            var result = template
             var parents: [WorkflowAssetReference] = []
+            var input: (text: String, parent: WorkflowAssetReference?)?
+            var other: (text: String, parent: WorkflowAssetReference?)?
             if template.contains("{{input}}") {
-                let value = try await Template.value(port: "input", fallback: "inputText", context: context, services: services)
-                if let parent = value.parent { parents.append(parent) }
-                result = result.replacingOccurrences(of: "{{input}}", with: value.text)
+                input = try await Template.value(port: "input", fallback: "inputText", context: context, services: services)
+                if let parent = input?.parent { parents.append(parent) }
             }
             if template.contains("{{other}}") {
-                let value = try await Template.value(port: "other", fallback: "otherText", context: context, services: services)
-                if let parent = value.parent { parents.append(parent) }
-                result = result.replacingOccurrences(of: "{{other}}", with: value.text)
+                other = try await Template.value(port: "other", fallback: "otherText", context: context, services: services)
+                if let parent = other?.parent { parents.append(parent) }
             }
+            let result = try Template.render(template, input: input?.text, other: other?.text, nodeID: context.node.id)
             try Execution.ensureTextLimit(result, node: context.node, port: nil)
             let asset = try await services.publishText(result, parents: parents, context: context)
             return .outputs(["output": .asset(asset)])
@@ -92,7 +92,7 @@ enum WorkflowBuiltins {
             try Limits.positive(Scalar.integer("maximumOutputTokens", in: node), field: "maximumOutputTokens", node: node)
             try Limits.positive(Scalar.integer("maximumPromptTokens", in: node), field: "maximumPromptTokens", node: node)
             try Limits.range(Scalar.decimal("temperature", in: node), 0 ... 2, field: "temperature", node: node)
-            try Limits.range(Scalar.decimal("topP", in: node), 0 ... 1, field: "topP", node: node)
+            try Limits.positiveUnit(Scalar.decimal("topP", in: node), field: "topP", node: node)
         },
         execute: { context, services in
             try Execution.requireModel(in: context.node)
@@ -303,6 +303,12 @@ private enum Limits {
     static func nonnegative(_ value: Double, field: String, node: WorkflowNode) throws {
         guard value >= 0 else { throw WorkflowIssue("字段 \(field) 不能为负数。", nodeID: node.id) }
     }
+
+    static func positiveUnit(_ value: Double, field: String, node: WorkflowNode) throws {
+        guard value > 0, value <= 1 else {
+            throw WorkflowIssue("字段 \(field) 必须大于零且不超过 1。", nodeID: node.id)
+        }
+    }
 }
 
 private enum Template {
@@ -313,6 +319,34 @@ private enum Template {
         guard !remainder.contains("{{"), !remainder.contains("}}") else {
             throw WorkflowIssue("模板只允许 {{input}} 和 {{other}}，且不会执行脚本。", nodeID: nodeID)
         }
+    }
+
+    static func render(_ template: String, input: String?, other: String?, nodeID: UUID) throws -> String {
+        var remainder = template[...]
+        var result = ""
+        while !remainder.isEmpty {
+            let inputRange = remainder.range(of: "{{input}}")
+            let otherRange = remainder.range(of: "{{other}}")
+            let selection: (range: Range<String.Index>, value: String?)?
+            switch (inputRange, otherRange) {
+            case (.some(let left), .some(let right)):
+                selection = left.lowerBound < right.lowerBound ? (left, input) : (right, other)
+            case (.some(let range), .none): selection = (range, input)
+            case (.none, .some(let range)): selection = (range, other)
+            case (.none, .none): selection = nil
+            }
+            guard let selection else {
+                result.append(contentsOf: remainder)
+                break
+            }
+            result.append(contentsOf: remainder[..<selection.range.lowerBound])
+            guard let value = selection.value else {
+                throw WorkflowIssue("模板引用的变量缺少值。", nodeID: nodeID)
+            }
+            result.append(value)
+            remainder = remainder[selection.range.upperBound...]
+        }
+        return result
     }
 
     @MainActor static func value(
