@@ -976,9 +976,9 @@ struct WorkflowWaitingDecision: View {
             Text("等待人工决定").font(.headline)
             if step.node.operationID == "d.text.confirm" {
                 TextSourcesQuestionEditor(value: draft, editEpoch: 0,
-                    isEditable: !decisionDisabled && textReady,
+                    isEditable: !readOnly && textReady,
                     accessibilityIdentifier: "workflow-review-text") { value in
-                        guard !decisionDisabled && textReady else { return }
+                        guard !readOnly && textReady else { return }
                         draft = value
                         controller.editReviewText(stepID: step.id, text: value)
                     }

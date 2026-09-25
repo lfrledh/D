@@ -32,7 +32,7 @@ private actor CanvasNoInferenceEngine: InferenceEngine {
 /// This exercises the actual view tree, not screen capture or native human interaction.
 @Suite(.serialized) @MainActor
 struct WorkflowCanvasHostingTests {
-    @Test func waitingEditorDisablesBeforeLoadAndDuringOtherExecution() async throws {
+    @Test func waitingEditorWaitsForLoadAndPreservesCompositionDuringOtherExecution() async throws {
         let root = URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory())
             .appendingPathComponent("canvas-delay-" + UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -85,6 +85,9 @@ struct WorkflowCanvasHostingTests {
         editor.string = draft; editor.didChangeText()
         try await Task.sleep(for: .milliseconds(30))
         #expect(c.runs.last?.steps.last?.reviewTextDraft == draft)
+        editor.setMarkedText("pin", selectedRange: NSRange(location: 3, length: 0),
+                             replacementRange: NSRange(location: editor.string.utf16.count, length: 0))
+        #expect(editor.hasMarkedText())
         c.addExample("text")
         let rewrite = try #require(c.graph?.nodes.first { $0.operationID == "d.text.rewrite" })
         let execution = Task { await c.run(target: rewrite.id, only: false) }
@@ -94,13 +97,15 @@ struct WorkflowCanvasHostingTests {
         }
         #expect(await compute.started)
         c.selectedGraphID = graph.id
-        for _ in 0..<100 {
-            host.layoutSubtreeIfNeeded()
-            if !editor.isEditable { break }
-            try await Task.sleep(for: .milliseconds(10))
-        }
-        #expect(c.isRunning && !editor.isEditable)
-        #expect(editor.string == draft)
+        host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(30))
+        #expect(c.isRunning && editor.isEditable && editor.hasMarkedText())
+        editor.insertText("拼", replacementRange: NSRange(location: NSNotFound, length: 0))
+        editor.didChangeText()
+        try await Task.sleep(for: .milliseconds(30))
+        let composed = editor.string
+        #expect(composed == draft + "拼" && !editor.hasMarkedText())
+        #expect(c.runs.first?.steps.last?.reviewTextDraft == composed)
+        #expect(c.runs.first?.steps.last?.decision == nil)
         await compute.open(); await execution.value
         for _ in 0..<100 {
             host.layoutSubtreeIfNeeded()
@@ -108,8 +113,10 @@ struct WorkflowCanvasHostingTests {
             try await Task.sleep(for: .milliseconds(10))
         }
         #expect(!c.isRunning && editor.isEditable)
-        #expect(c.runs.first?.steps.last?.reviewTextDraft == draft)
+        #expect(c.runs.first?.steps.last?.reviewTextDraft == composed)
         #expect(c.runs.first?.steps.last?.decision == nil)
+        await c.save()
+        #expect(try await store.workflowState().archive?.runs.first?.steps.last?.reviewTextDraft == composed)
         try await c.close(); try await store.close()
     }
 

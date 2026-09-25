@@ -99,7 +99,9 @@ import Observation
     }
 
     public func editReviewText(stepID: UUID, text: String) {
-        guard !closed, !closing, !isRunning, readOnlyReason == nil,
+        // Editing a waiting draft is safe during another run: execute() never
+        // consumes an undecided waiting step, and acceptance still requires idle.
+        guard !closed, !closing, readOnlyReason == nil,
               let ri = runs.firstIndex(where: { $0.steps.contains { $0.id == stepID } }),
               runs[ri].graph.id == selectedGraphID,
               let si = runs[ri].steps.firstIndex(where: { $0.id == stepID }),
