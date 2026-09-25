@@ -283,9 +283,10 @@ import Observation
             let node = runs[ri].steps[si].node
             do {
                 let values: [String: WorkflowValue]
-                if runs[ri].steps[si].status == .saving { values = runs[ri].steps[si].inputs }
+                if runs[ri].steps[si].inputsBound == true { values = runs[ri].steps[si].inputs }
                 else { values = try inputs(for: node, run: runs[ri]) }
                 runs[ri].steps[si].inputs = values
+                runs[ri].steps[si].inputsBound = true
                 if force != node.id, runs[ri].steps[si].repeatRequested != true, runs[ri].steps[si].status == .queued,
                    let cached = reusable(nodeID: node.id, graph: runs[ri].graph, inputs: values), cached.id != runs[ri].steps[si].id {
                     runs[ri].steps[si].outputs = cached.outputs; runs[ri].steps[si].status = cached.status
@@ -403,6 +404,7 @@ import Observation
             _ = try await services.prepare(frozen, nodes: [old.node.id])
             var replacement = WorkflowStepRun(node: old.node, signature: old.signature, inputs: old.inputs)
             replacement.repeatRequested = true
+            replacement.inputsBound = true
             replacement.outputs = old.outputs // Retry set survives save failure, cancellation and cold reopen.
             let retry = WorkflowRun(graph: frozen, targetNodeID: old.node.id, steps: [replacement], status: .running)
             runs.append(retry); activeRunID = retry.id

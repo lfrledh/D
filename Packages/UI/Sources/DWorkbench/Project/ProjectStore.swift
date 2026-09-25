@@ -3184,17 +3184,34 @@ extension ProjectStore {
     /// Pin an existing project asset, without copying it into a second asset system.
     public func pinWorkflowAsset(_ id: UUID) throws -> WorkflowAssetReference {
         var archive = try editableWorkflow()
-        if let record = archive.assets.first(where: { $0.reference.assetID == id }) {
-            _ = try workflowData(record.reference); return record.reference
+        var active = Set<UUID>()
+        func pin(_ assetID: UUID) throws -> WorkflowAssetReference {
+            guard active.count < 128, !active.contains(assetID) else { throw WorkflowIssue("既有素材的来源循环或过深。") }
+            if let record = archive.assets.first(where: { $0.reference.assetID == assetID }) {
+                if let asset = manifest.assets.first(where: { $0.id == assetID }) {
+                    let bytes = try ProjectFiles.read(relative: asset.relativePath, in: rootFD, limit: 64 * 1_024 * 1_024)
+                    guard Self.workflowHash(bytes) == record.reference.sha256 else { throw WorkflowIssue("已发布素材改变，拒绝重新绑定。") }
+                } else { throw WorkflowIssue("素材不存在。") }
+                return record.reference
+            }
+            guard let asset = manifest.assets.first(where: { $0.id == assetID }),
+                  ["text/plain", "image/png", "image/jpeg"].contains(asset.mediaType) else { throw WorkflowIssue("此资产不属于 M0 支持的文字或图像类型。") }
+            let data = try ProjectFiles.read(relative: asset.relativePath, in: rootFD, limit: 64 * 1_024 * 1_024)
+            let digest = Self.workflowHash(data)
+            if let expected = asset.metadata.imageContentSHA256, expected != digest {
+                throw WorkflowIssue("已登记原件的摘要改变；未将新内容冒充原件。")
+            }
+            let ref = WorkflowAssetReference(projectID: manifest.id, assetID: assetID,
+                kind: asset.mediaType == "text/plain" ? .text : .image, sha256: digest)
+            let job = manifest.jobs.first { $0.id == asset.jobID }
+            active.insert(assetID)
+            let parents = try job?.imageReferenceAssetID.map { [try pin($0)] } ?? []
+            active.remove(assetID)
+            archive.assets.append(.init(reference: ref, parents: parents, operationID: "d.asset.existing", request: job?.request,
+                metadata: ["source": "existing-project-asset", "priorDigest": asset.metadata.imageContentSHA256 == nil ? "unknown" : "verified"]))
+            return ref
         }
-        guard let asset = manifest.assets.first(where: { $0.id == id }),
-              ["text/plain", "image/png", "image/jpeg"].contains(asset.mediaType) else { throw WorkflowIssue("此资产不属于 M0 支持的文字或图像类型。") }
-        let data = try ProjectFiles.read(relative: asset.relativePath, in: rootFD, limit: 64 * 1_024 * 1_024)
-        let ref = WorkflowAssetReference(projectID: manifest.id, assetID: id,
-            kind: asset.mediaType == "text/plain" ? .text : .image, sha256: Self.workflowHash(data))
-        let job = manifest.jobs.first { $0.id == asset.jobID }
-        archive.assets.append(.init(reference: ref, parents: [], operationID: "d.asset.existing", request: job?.request,
-                                    metadata: ["source": "existing-project-asset"]))
+        let ref = try pin(id)
         archive.revision = UUID(); try commitWorkflow(archive, assets: manifest.assets)
         return ref
     }

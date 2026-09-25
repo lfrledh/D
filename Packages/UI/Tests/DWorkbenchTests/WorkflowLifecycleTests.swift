@@ -241,11 +241,44 @@ struct WorkflowLifecycleTests {
         #expect(c.runs.last?.steps.last?.outputs["output"]?.candidates == original)
         #expect(await engine.requests.count == 4)
         fail = false; await c.save(); c.errorMessage = nil
-        await c.resume(runID: try #require(c.runs.last?.id))
-        #expect(c.errorMessage == nil); #expect(await engine.requests.count == 5)
-        let retried = try #require(c.runs.last?.steps.last?.outputs["output"]?.candidates)
+        let retryID = try #require(c.runs.last?.id)
+        // Cold recovery after interruption, with a new upstream asset under the same configuration.
+        let newer = try await store.publishWorkflowAsset(data: Data("different prompt v2".utf8), mediaType: "text/plain",
+            name: "new confirmation", operationID: "d.text.confirm")
+        var archive = try #require(try await store.workflowState().archive)
+        let confirmNode = g.nodes[2]
+        let newerStep = WorkflowStepRun(node: confirmNode, signature: try c.registry.signature(confirmNode.id, in: try #require(c.graph)),
+            outputs: ["output": .asset(newer.record.reference)], status: .completed)
+        archive.runs[archive.runs.count - 1].status = .interrupted
+        archive.runs[archive.runs.count - 1].steps[0].status = .interrupted
+        archive.runs.append(.init(graph: try #require(c.graph), targetNodeID: confirmNode.id, steps: [newerStep], status: .completed))
+        _ = try await store.saveWorkflow(graphs: archive.graphs, runs: archive.runs, expectedRevision: archive.revision)
+        c.deactivateAfterClose()
+        let recovered = WorkflowController(services: c.services); await recovered.load()
+        await recovered.resume(runID: retryID)
+        #expect(recovered.errorMessage == nil)
+        let request = try #require(await engine.requests.last)
+        if case .image(let input) = request.input { #expect(input.prompt == "studio") }
+        else { Issue.record("expected image retry") }
+        let recoveredRun = try #require(recovered.runs.first { $0.id == retryID })
+        let retried = try #require(recoveredRun.steps.last?.outputs["output"]?.candidates)
+        #expect(await engine.requests.count == 5)
         #expect(retried[0].asset == original[0].asset && retried[2].asset == original[2].asset)
         #expect(retried.allSatisfy { $0.asset != nil })
+        try await recovered.close(); try await store.close()
+    }
+
+    @Test func pinExistingRegisteredOriginalRejectsChangedBytes() async throws {
+        let (root, store, _, c) = try await fixture()
+        let file = root.appendingPathComponent("reference.png"); try workflowFixturePNG(width: 512, height: 512).write(to: file)
+        let documentID = try #require(await store.snapshot().documents.first?.id)
+        let manifest = try await store.importImageReference(at: file, name: "reference", documentID: documentID)
+        let original = try #require(manifest.assets.first)
+        let before = try Data(contentsOf: store.rootURL.appendingPathComponent("project.json"))
+        try workflowFixturePNG(width: 544, height: 512).write(to: store.rootURL.appendingPathComponent(original.relativePath))
+        await #expect(throws: (any Error).self) { _ = try await store.pinWorkflowAsset(original.id) }
+        #expect(try Data(contentsOf: store.rootURL.appendingPathComponent("project.json")) == before)
+        #expect(try await store.workflowState().archive?.assets.isEmpty == true)
         try await c.close(); try await store.close()
     }
 

@@ -27,6 +27,7 @@ struct WorkflowSaveFailure: LocalizedError {
     private var bindings: [String: WorkflowModelBinding] = [:]
     private var activeRun: InferenceRun?
     private var textSession: TextDraftSession?
+    public var streamedTextCharacterCount: Int { textSession?.partialText.count ?? 0 }
     public private(set) var cancelled = false
     public var progress: @MainActor (String) -> Void = { _ in }
     public var candidatesChanged: @MainActor (UUID, [WorkflowCandidate]) async throws -> Void = { _, _ in }
