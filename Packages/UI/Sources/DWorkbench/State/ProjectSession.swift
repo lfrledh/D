@@ -849,8 +849,11 @@ public final class ProjectSession {
             guard let value = String(data: data, encoding: .utf8) else { throw WorkflowIssue("资产不是 UTF-8 文字。") }
             guard self.store === store, !isChangingProject, !closePending else { throw WorkflowIssue("项目已切换；未向另一项目创建文稿。") }
             // Explicitly create a fresh editable draft; never replace the currently open user's text.
+            let previousDocumentID = text?.editor.document.id
             await createTextDocument(name: "来自流程的文稿")
-            guard self.store === store, let text else { return }
+            guard self.store === store, let text, text.editor.document.id != previousDocumentID else {
+                throw WorkflowIssue("未能创建新文稿；未替换当前文稿。")
+            }
             editText(value, documentID: text.editor.document.id)
             try await flushDraft(to: store)
         } catch { report(error, context: "流程文字未能返回文稿，原件保留") }

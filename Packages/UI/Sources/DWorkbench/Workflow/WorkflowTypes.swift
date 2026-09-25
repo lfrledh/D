@@ -119,6 +119,7 @@ public struct WorkflowDecision: Codable, Sendable, Equatable {
     }
 }
 public struct WorkflowStepRun: Codable, Sendable, Equatable, Identifiable {
+    public var repeatRequested: Bool?
     public var id: UUID
     public var node: WorkflowNode
     public var signature: String

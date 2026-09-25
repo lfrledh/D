@@ -251,7 +251,8 @@ struct WorkflowRegistryTests {
         ])
         #expect(template.connections.contains { $0.targetPort == "input" })
         #expect(template.connections.contains { $0.targetPort == "other" })
-        #expect(registry.definitions.count == 10)
+        #expect(registry.definitions.count == 11) // N01–N10 plus the independent S3 program.
+        #expect(registry.definitions.contains { $0.id == "d.text.remove-blank-lines" })
         #expect(!registry.definitions.contains { $0.id == "d.empty-lines" })
     }
 

@@ -4,6 +4,7 @@ enum WorkflowBuiltins {
     static let operations: [WorkflowOperation] = [
         textInput, assetReference, textTemplate, textRewrite, imageGenerate,
         textConfirm, assetChoose, imageResize, imageConvert, assetExport,
+        WorkflowRemoveBlankLines.operation,
     ]
 
     private static let textInput = WorkflowOperation(
@@ -243,7 +244,7 @@ enum WorkflowBuiltins {
 
     private static let assetExport = WorkflowOperation(
         definition: .init(
-            id: "d.asset.export", title: "导出", detail: "使用运行时明确授权的目的地导出。",
+            id: "d.asset.export", title: "导出", detail: "媒体与来源清单打包；默认不覆盖、不公开提示词。完整配方仍在项目中可查。",
             inputs: [.init("input", "内容", kinds: [.text, .image, .images])],
             outputs: [.init("output", "回执", kinds: [.receipt])],
             fields: [.init("fileName", "文件名", .text(multiline: false), .text("export"))]

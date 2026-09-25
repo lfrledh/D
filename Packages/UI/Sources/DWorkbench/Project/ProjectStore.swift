@@ -3181,6 +3181,24 @@ extension ProjectStore {
         return data
     }
 
+    /// Pin an existing project asset, without copying it into a second asset system.
+    public func pinWorkflowAsset(_ id: UUID) throws -> WorkflowAssetReference {
+        var archive = try editableWorkflow()
+        if let record = archive.assets.first(where: { $0.reference.assetID == id }) {
+            _ = try workflowData(record.reference); return record.reference
+        }
+        guard let asset = manifest.assets.first(where: { $0.id == id }),
+              ["text/plain", "image/png", "image/jpeg"].contains(asset.mediaType) else { throw WorkflowIssue("此资产不属于 M0 支持的文字或图像类型。") }
+        let data = try ProjectFiles.read(relative: asset.relativePath, in: rootFD, limit: 64 * 1_024 * 1_024)
+        let ref = WorkflowAssetReference(projectID: manifest.id, assetID: id,
+            kind: asset.mediaType == "text/plain" ? .text : .image, sha256: Self.workflowHash(data))
+        let job = manifest.jobs.first { $0.id == asset.jobID }
+        archive.assets.append(.init(reference: ref, parents: [], operationID: "d.asset.existing", request: job?.request,
+                                    metadata: ["source": "existing-project-asset"]))
+        archive.revision = UUID(); try commitWorkflow(archive, assets: manifest.assets)
+        return ref
+    }
+
     /// Import snapshots approved files. Subsequent source changes do not change the published version.
     public func importWorkflowFile(at source: URL) throws -> WorkflowPublishedAsset {
         try checkLocation()
@@ -3227,32 +3245,56 @@ extension ProjectStore {
         let destination = directory.appendingPathComponent(packageName, isDirectory: true)
         struct Recipe: Codable {
             struct Item: Codable {
-                let reference: WorkflowAssetReference; let filename: String; let parents: [WorkflowAssetReference]
+                let reference: WorkflowAssetReference; let filename: String?; let parents: [WorkflowAssetReference]
                 let operationID: String; let stepID: UUID?; let modelRevision: String?; let input: InferenceInput?
                 let mediaType: String; let metadata: MediaMetadata
+                let seedDecimal: String?; let processing: [String: String]
             }
-            let version: Int; let exportID: UUID; let items: [Item]
+            let version: Int; let exportID: UUID; let items: [Item]; let provenance: [Item]; let promptDisclosure: String
         }
-        var files: [(String, Data)] = []; var recipeItems: [Recipe.Item] = []
-        for (i, ref) in refs.enumerated() {
-            let data = try workflowData(ref)
+        func item(_ ref: WorkflowAssetReference, filename: String?) throws -> Recipe.Item {
             guard let asset = manifest.assets.first(where: { $0.id == ref.assetID }),
-                  let record = archive.assets.first(where: { $0.reference == ref }),
-                  let ext = ["text/plain":"txt", "image/png":"png", "image/jpeg":"jpg"][asset.mediaType] else { throw WorkflowIssue("导出资产类型无效。") }
-            let file = "\(i + 1).\(ext)"; files.append((file, data))
+                  let record = archive.assets.first(where: { $0.reference == ref }) else { throw WorkflowIssue("来源资产缺失。") }
             // Reference-image requests contain a private normalized-pixel URL; portable recipe retains only source IDs.
             let input: InferenceInput?
+            var seed: String?
             if let request = record.request, case .image(let image) = request.input {
-                input = .image(ImageRequest(prompt: image.prompt, width: image.width, height: image.height,
+                input = .image(ImageRequest(prompt: "[withheld]", width: image.width, height: image.height,
                     steps: image.steps, guidanceScale: image.guidanceScale, seed: image.seed, executionProfile: image.executionProfile))
-            } else if let request = record.request, case .text = request.input { input = request.input }
+                seed = String(image.seed)
+            } else if let request = record.request, case .text(let text) = request.input {
+                input = .text(TextRequest(prompt: "[withheld]", maxTokens: text.maxTokens,
+                    temperature: text.temperature, topP: text.topP, execution: text.execution))
+            }
             else { input = nil }
-            recipeItems.append(.init(reference: ref, filename: file, parents: record.parents, operationID: record.operationID,
+            let permitted: Set<String> = ["scalePolicy", "scale", "backgroundPolicy", "quality", "alpha",
+                "originalFormat", "originalOrientation", "originalColorSpace", "normalizedOrientation", "normalizedColorSpace",
+                "outputEncoding", "processor", "colorConversion", "encoding", "operation"]
+            return .init(reference: ref, filename: filename, parents: record.parents, operationID: record.operationID,
                 stepID: record.stepID, modelRevision: record.request?.model.revision, input: input,
-                mediaType: asset.mediaType, metadata: asset.metadata))
+                mediaType: asset.mediaType, metadata: asset.metadata, seedDecimal: seed,
+                processing: record.metadata.filter { permitted.contains($0.key) })
+        }
+        var files: [(String, Data)] = []; var recipeItems: [Recipe.Item] = []; var provenance: [Recipe.Item] = []
+        var visited = Set<WorkflowAssetReference>(), active = Set<WorkflowAssetReference>()
+        func collect(_ ref: WorkflowAssetReference, depth: Int) throws {
+            guard depth <= 128, visited.count < 4096, !active.contains(ref) else { throw WorkflowIssue("来源链循环或超出导出预算。") }
+            if visited.contains(ref) { return }
+            active.insert(ref)
+            let record = try item(ref, filename: nil)
+            for parent in record.parents.sorted(by: { $0.assetID.uuidString < $1.assetID.uuidString }) { try collect(parent, depth: depth + 1) }
+            active.remove(ref); visited.insert(ref); provenance.append(record)
+        }
+        for (i, ref) in refs.enumerated() {
+            let data = try workflowData(ref)
+            let record = try item(ref, filename: nil)
+            guard let ext = ["text/plain":"txt", "image/png":"png", "image/jpeg":"jpg"][record.mediaType] else { throw WorkflowIssue("导出资产类型无效。") }
+            let file = "\(i + 1).\(ext)"; files.append((file, data)); recipeItems.append(try item(ref, filename: file))
+            try collect(ref, depth: 0)
         }
         let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
-        let recipe = try encoder.encode(Recipe(version: 1, exportID: exportID, items: recipeItems))
+        let recipe = try encoder.encode(Recipe(version: 1, exportID: exportID, items: recipeItems,
+            provenance: provenance, promptDisclosure: "withheld; full requests remain in the private project"))
         files.append(("recipe.json", recipe))
         let receipt = WorkflowExportReceipt(id: exportID, names: files.map(\.0), hashes: files.map { Self.workflowHash($0.1) })
         let receiptData = try encoder.encode(receipt)

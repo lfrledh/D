@@ -6,6 +6,7 @@ import Observation
     public let registry: WorkflowRegistry
     public private(set) var graphs: [WorkflowGraph] = []
     public private(set) var runs: [WorkflowRun] = []
+    public private(set) var availableAssets: [ProjectAsset] = []
     public var selectedGraphID: UUID?
     public var selectedNodeID: UUID?
     public private(set) var isRunning = false
@@ -18,8 +19,8 @@ import Observation
     public private(set) var destinationDescription = "尚未选择导出目录"
     public var graph: WorkflowGraph? { graphs.first { $0.id == selectedGraphID } }
     public var selectedNode: WorkflowNode? { graph?.nodes.first { $0.id == selectedNodeID } }
-    public var canUndo: Bool { !undoStack.isEmpty && readOnlyReason == nil }
-    public var canRedo: Bool { !redoStack.isEmpty && readOnlyReason == nil }
+    public var canUndo: Bool { !closed && !closing && !undoStack.isEmpty && readOnlyReason == nil }
+    public var canRedo: Bool { !closed && !closing && !redoStack.isEmpty && readOnlyReason == nil }
     public var hasPendingSaves: Bool { services.hasPendingSaves || persistenceFailed }
     @ObservationIgnored public let services: WorkflowServices
     @ObservationIgnored private var undoStack: [[WorkflowGraph]] = []
@@ -30,11 +31,21 @@ import Observation
     @ObservationIgnored private var closed = false
     @ObservationIgnored private var closing = false
     @ObservationIgnored private var writeTail: Task<Void, Error>?
+    // Internal fault injection at the actual history transaction, used only by CPU tests.
+    @ObservationIgnored var beforeHistorySave: () throws -> Void = {}
     @ObservationIgnored public var onChange: @MainActor () async -> Void = {}
 
     public init(services: WorkflowServices, registry: WorkflowRegistry = .standard) {
         self.services = services; self.registry = registry
         services.progress = { [weak self] in self?.progressMessage = $0 }
+        services.candidatesChanged = { [weak self] stepID, items in
+            guard let self,
+                  let ri = self.runs.firstIndex(where: { $0.steps.contains { $0.id == stepID } }),
+                  let si = self.runs[ri].steps.firstIndex(where: { $0.id == stepID }) else { return }
+            self.runs[ri].steps[si].outputs = ["output": .collection(items)]
+            do { try await self.persist() }
+            catch { throw WorkflowSaveFailure(reason: error.localizedDescription) }
+        }
     }
     public func load() async {
         do {
@@ -42,6 +53,7 @@ import Observation
             readOnlyReason = state.readOnlyReason
             guard let archive = state.archive else { return }
             graphs = archive.graphs; runs = archive.runs
+            await refreshAssets()
             // Interrupted processes are never silently restarted. Waiting decisions remain valid.
             for i in runs.indices where [.running, .queued, .cancelling].contains(runs[i].status) {
                 runs[i].status = .interrupted
@@ -64,6 +76,27 @@ import Observation
     public func close() async throws { try await prepareForClose(); deactivateAfterClose() }
     public func setDestination(_ url: URL) { services.destination = url; destinationDescription = url.lastPathComponent }
     public func preview(_ ref: WorkflowAssetReference) async throws -> Data { try await services.store.workflowData(ref) }
+    public func metadata(_ ref: WorkflowAssetReference) async throws -> String {
+        let state = try await services.store.workflowState()
+        guard let record = state.archive?.assets.first(where: { $0.reference == ref }) else { throw WorkflowIssue("来源记录不存在。") }
+        let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+        return String(decoding: try encoder.encode(record), as: UTF8.self)
+    }
+    private func refreshAssets() async {
+        availableAssets = await services.store.snapshot().assets.filter { ["text/plain", "image/png", "image/jpeg"].contains($0.mediaType) }
+    }
+    public func bindExistingAsset(_ id: UUID, nodeID: UUID) async {
+        guard !closed, !closing, !isRunning, readOnlyReason == nil else { return }
+        let graphID = selectedGraphID
+        do {
+            let ref = try await services.store.pinWorkflowAsset(id)
+            guard graphID == selectedGraphID, !closed, !closing else { throw WorkflowIssue("流程已切换；素材未绑定到另一流程。") }
+            attach(ref, nodeID: nodeID); try await persist()
+        } catch { errorMessage = error.localizedDescription }
+    }
+    public func toggleCollapsed(_ id: UUID) {
+        edit({ g in if let i = g.layout.firstIndex(where: { $0.nodeID == id }) { g.layout[i].collapsed.toggle() } }, changesConfiguration: false)
+    }
 
     private func edit(_ action: (inout WorkflowGraph) throws -> Void, changesConfiguration: Bool = true) {
         guard !closed, !closing, readOnlyReason == nil, let index = graphs.firstIndex(where: { $0.id == selectedGraphID }) else { return }
@@ -122,6 +155,7 @@ import Observation
         edit { g in guard let i = g.nodes.firstIndex(where: { $0.id == nodeID }), g.nodes[i].operationID == "d.asset.reference" else { throw WorkflowIssue("请选择文件／资产输入节点。") }; g.nodes[i].assetReference = reference }
     }
     public func importFile(_ url: URL, nodeID: UUID) async {
+        guard !closed, !closing, readOnlyReason == nil else { return }
         let graphID = selectedGraphID
         do {
             let asset = try await services.store.importWorkflowFile(at: url)
@@ -191,10 +225,11 @@ import Observation
             if let preceding { _ = try? await preceding.value }
             let state = try await store.workflowState()
             guard let archive = state.archive else { throw WorkflowIssue(state.readOnlyReason ?? "流程只读。") }
+            try self.beforeHistorySave()
             _ = try await store.saveWorkflow(graphs: capturedGraphs, runs: capturedRuns, expectedRevision: archive.revision)
         }
         writeTail = task; isSaving = true
-        do { try await task.value; persistenceFailed = false; isSaving = false }
+        do { try await task.value; persistenceFailed = false; isSaving = false; await refreshAssets() }
         catch { persistenceFailed = true; isSaving = false; throw error }
     }
     public func save() async {
@@ -214,7 +249,9 @@ import Observation
             var run = WorkflowRun(graph: frozen, targetNodeID: target, status: .running)
             for id in ids {
                 let node = frozen.nodes.first { $0.id == id }!
-                run.steps.append(WorkflowStepRun(node: node, signature: try registry.signature(id, in: frozen)))
+                var step = WorkflowStepRun(node: node, signature: try registry.signature(id, in: frozen))
+                step.repeatRequested = only && id == target
+                run.steps.append(step)
             }
             runs.append(run); activeRunID = run.id
             try await persist()
@@ -249,7 +286,7 @@ import Observation
                 if runs[ri].steps[si].status == .saving { values = runs[ri].steps[si].inputs }
                 else { values = try inputs(for: node, run: runs[ri]) }
                 runs[ri].steps[si].inputs = values
-                if force != node.id, runs[ri].steps[si].status == .queued,
+                if force != node.id, runs[ri].steps[si].repeatRequested != true, runs[ri].steps[si].status == .queued,
                    let cached = reusable(nodeID: node.id, graph: runs[ri].graph, inputs: values), cached.id != runs[ri].steps[si].id {
                     runs[ri].steps[si].outputs = cached.outputs; runs[ri].steps[si].status = cached.status
                     try await persist(); continue
@@ -258,7 +295,8 @@ import Observation
                 guard let operation = registry.operation(node.operationID) else { throw WorkflowIssue("操作未注册。") }
                 runs[ri].steps[si].status = .running; progressMessage = node.title
                 try await persist()
-                let context = WorkflowExecutionContext(node: node, stepID: runs[ri].steps[si].id, inputs: values, retryCandidates: retryCandidates)
+                let retained = retryCandidates ?? runs[ri].steps[si].outputs["output"]?.candidates
+                let context = WorkflowExecutionContext(node: node, stepID: runs[ri].steps[si].id, inputs: values, retryCandidates: retained)
                 let result = try await operation.execute(context, services)
                 if cancelled { throw CancellationError() }
                 switch result {
@@ -356,13 +394,16 @@ import Observation
               let si = runs[ri].steps.firstIndex(where: { $0.id == stepID }),
               runs[ri].steps[si].node.operationID == "d.image.generate" else { return }
         let old = runs[ri].steps[si]
+        guard !hasPendingSaves else { errorMessage = "先恢复保存并继续原运行，避免重复生成。"; return }
         guard !isStale(old), old.outputs["output"]?.candidates.contains(where: { $0.asset == nil }) == true else { return }
         isRunning = true; cancelled = false; errorMessage = nil
         defer { isRunning = false; activeRunID = nil }
         do {
             let frozen = runs[ri].graph
             _ = try await services.prepare(frozen, nodes: [old.node.id])
-            let replacement = WorkflowStepRun(node: old.node, signature: old.signature, inputs: old.inputs)
+            var replacement = WorkflowStepRun(node: old.node, signature: old.signature, inputs: old.inputs)
+            replacement.repeatRequested = true
+            replacement.outputs = old.outputs // Retry set survives save failure, cancellation and cold reopen.
             let retry = WorkflowRun(graph: frozen, targetNodeID: old.node.id, steps: [replacement], status: .running)
             runs.append(retry); activeRunID = retry.id
             try await persist()

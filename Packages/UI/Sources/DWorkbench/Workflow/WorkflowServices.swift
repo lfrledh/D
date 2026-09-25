@@ -29,6 +29,7 @@ struct WorkflowSaveFailure: LocalizedError {
     private var textSession: TextDraftSession?
     public private(set) var cancelled = false
     public var progress: @MainActor (String) -> Void = { _ in }
+    public var candidatesChanged: @MainActor (UUID, [WorkflowCandidate]) async throws -> Void = { _, _ in }
     public var destination: URL?
     private struct Publication {
         let id: UUID; let data: Data; let mediaType: String; let metadata: MediaMetadata
@@ -198,6 +199,8 @@ struct WorkflowSaveFailure: LocalizedError {
                 items[i] = WorkflowCandidate(id: old.id, attemptID: attempt, error: error.localizedDescription, seed: old.seed)
             }
             candidateProgress[context.stepID] = items
+            // Each successful candidate is durable before starting the next expensive attempt.
+            try await candidatesChanged(context.stepID, items)
         }
         candidateProgress.removeValue(forKey: context.stepID)
         return items

@@ -432,6 +432,7 @@ private struct WorkflowNodeCard: View {
     let selected: Bool
     let onPlan: (UUID, Bool) -> Void
     @GestureState private var translation = CGSize.zero
+    private var collapsed: Bool { controller.graph?.layout.first(where: { $0.nodeID == node.id })?.collapsed == true }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
@@ -441,12 +442,17 @@ private struct WorkflowNodeCard: View {
                     Text(node.operationID).font(.caption2.monospaced()).foregroundStyle(.secondary)
                 }
                 Spacer(minLength: 6)
+                Button { controller.toggleCollapsed(node.id) } label: {
+                    Image(systemName: collapsed ? "chevron.down" : "chevron.up")
+                }.buttonStyle(.borderless).help(collapsed ? "展开节点" : "折叠节点").disabled(readOnly)
                 if let step = controller.latestStep(for: node.id) {
                     WorkflowStatusBadge(status: step.status, stale: controller.isStale(step))
                 }
             }
 
-            if let definition {
+            if collapsed {
+                Text("端口与参数保留；展开后连接").font(.caption).foregroundStyle(.secondary)
+            } else if let definition {
                 portRows(definition.inputs, input: true)
                 Divider()
                 portRows(definition.outputs, input: false)
@@ -583,6 +589,13 @@ private struct WorkflowNodeInspector: View {
             }
             .disabled(readOnly)
             if node.operationID == "d.asset.reference" {
+                Menu("引用项目已有素材") {
+                    ForEach(controller.availableAssets) { asset in
+                        Button(asset.name + " · " + asset.mediaType) {
+                            Task { await controller.bindExistingAsset(asset.id, nodeID: node.id) }
+                        }
+                    }
+                }.disabled(readOnly || controller.availableAssets.isEmpty)
                 Button("选择导入资产", systemImage: "square.and.arrow.down") { onImport(node.id) }
                     .disabled(readOnly)
                     .accessibilityIdentifier("workflow-import-\(node.id.uuidString)")
@@ -692,6 +705,7 @@ private struct WorkflowNodeInspector: View {
                                    allowsReturn: !readOnly)
                 if step.status == .waiting {
                     WorkflowWaitingDecision(controller: controller, step: step, readOnly: readOnly)
+                        .id(step.id)
                 }
                 if step.status == .partial {
                     Button("重试失败候选", systemImage: "arrow.clockwise") {
@@ -851,6 +865,7 @@ private struct WorkflowAssetPreview: View {
     let reference: WorkflowAssetReference
     @State private var data: Data?
     @State private var failure: String?
+    @State private var sourceMetadata: String?
 
     var body: some View {
         Group {
@@ -876,11 +891,22 @@ private struct WorkflowAssetPreview: View {
                 Text("此引用不能作为单项预览。" ).foregroundStyle(.secondary)
             }
         }
+        .safeAreaInset(edge: .bottom) {
+            if let sourceMetadata {
+                DisclosureGroup("来源与实际执行参数（本地记录）") {
+                    ScrollView { Text(sourceMetadata).font(.caption2.monospaced()).textSelection(.enabled) }
+                        .frame(maxHeight: 180)
+                }
+            }
+        }
         .task(id: reference.version) {
             data = nil
             failure = nil
             do {
-                data = try await controller.preview(reference)
+                let bytes = try await controller.preview(reference)
+                let metadata = try await controller.metadata(reference)
+                try Task.checkCancellation()
+                data = bytes; sourceMetadata = metadata
                 failure = nil
             } catch {
                 data = nil

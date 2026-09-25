@@ -207,4 +207,122 @@ struct WorkflowLifecycleTests {
         try await migrated.close()
         #expect(!ProjectManifest.readableSchemaVersions.contains(13)); #expect(!ProjectManifest.readableSchemaVersions.contains(14)); #expect(!ProjectManifest.readableSchemaVersions.contains(15))
     }
+
+    @Test func deliveredResultHistoryFailureDoesNotRepeatInference() async throws {
+        let (_, store, engine, c) = try await fixture()
+        c.addExample("text"); let rewrite = try #require(c.graph?.nodes[1].id)
+        var fail = true
+        c.beforeHistorySave = {
+            if fail && c.runs.last?.steps.last?.status == .completed { throw WorkflowIssue("history volume unavailable") }
+        }
+        await c.run(target: rewrite, only: false)
+        #expect(c.runs.last?.status == .saving); #expect(c.runs.last?.steps.last?.status == .completed)
+        #expect(await engine.requests.count == 1)
+        fail = false; await c.save(); c.errorMessage = nil
+        await c.resume(runID: try #require(c.runs.last?.id))
+        #expect(c.errorMessage == nil); #expect(c.runs.last?.status == .completed)
+        #expect(await engine.requests.count == 1)
+        try await c.close(); try await store.close()
+    }
+
+    @Test func retryHistoryFailureRetainsOriginalSuccessfulCandidates() async throws {
+        let (_, store, engine, c) = try await fixture(); await engine.failSecond()
+        c.addExample("image"); let g = try #require(c.graph)
+        await c.run(target: g.nodes[2].id, only: false)
+        let waiting = try #require(c.runs.last?.steps.last)
+        await c.decide(stepID: waiting.id, accept: true, text: "studio", candidateID: nil, acceptPartial: false)
+        await c.run(target: g.nodes[3].id, only: false)
+        let generated = try #require(c.runs.last?.steps.last)
+        let original = try #require(generated.outputs["output"]?.candidates)
+        #expect(original.filter { $0.asset != nil }.count == 2)
+        var fail = true
+        c.beforeHistorySave = { if fail { throw WorkflowIssue("retry manifest failure") } }
+        await c.retryFailedCandidates(stepID: generated.id)
+        #expect(c.runs.last?.steps.last?.outputs["output"]?.candidates == original)
+        #expect(await engine.requests.count == 4)
+        fail = false; await c.save(); c.errorMessage = nil
+        await c.resume(runID: try #require(c.runs.last?.id))
+        #expect(c.errorMessage == nil); #expect(await engine.requests.count == 5)
+        let retried = try #require(c.runs.last?.steps.last?.outputs["output"]?.candidates)
+        #expect(retried[0].asset == original[0].asset && retried[2].asset == original[2].asset)
+        #expect(retried.allSatisfy { $0.asset != nil })
+        try await c.close(); try await store.close()
+    }
+
+    @Test func sameConfigurationNewUpstreamVersionInvalidatesDescendants() async throws {
+        let (_, store, _, c) = try await fixture(); c.addExample("template")
+        let g = try #require(c.graph)
+        await c.run(target: g.nodes[3].id, only: false)
+        let waiting = try #require(c.runs.last?.steps.last)
+        #expect(!c.isStale(waiting))
+        await c.run(target: g.nodes[0].id, only: true)
+        #expect(c.isStale(waiting))
+        await c.decide(stepID: waiting.id, accept: true, text: "stale", candidateID: nil, acceptPartial: false)
+        #expect(c.errorMessage?.contains("过期") == true)
+        try await c.close(); try await store.close()
+    }
+
+    @Test func concurrentDecisionIsOneDurablePublicationAndCloseDisablesEdits() async throws {
+        let (_, store, _, c) = try await fixture(); c.addExample("template")
+        await c.run(target: try #require(c.graph?.nodes.last?.id), only: false)
+        let waiting = try #require(c.runs.last?.steps.last)
+        let before = await store.snapshot().assets.count
+        let first = Task { await c.decide(stepID: waiting.id, accept: true, text: "one", candidateID: nil, acceptPartial: false) }
+        await Task.yield()
+        await c.decide(stepID: waiting.id, accept: false, text: nil, candidateID: nil, acceptPartial: false)
+        await first.value
+        let decision = try #require(c.runs.last?.steps.last?.decision)
+        #expect(await store.snapshot().assets.count == before + (decision.accepted ? 1 : 0))
+        try await c.close(); let graphs = c.graphs
+        c.undo(); c.redo(); c.addExample("text")
+        #expect(c.graphs == graphs); try await store.close()
+    }
+
+    @Test func smallProgramExtensionUsesRealStoreWithoutControllerSpecialCase() async throws {
+        let (_, store, engine, c) = try await fixture(); c.addExample("text")
+        let input = try #require(c.graph?.nodes[0].id)
+        c.setParameter(nodeID: input, key: "text", value: .text("\n  中文 👩🏽‍🎨\r\n \t\n e\u{301}\n"))
+        c.addNode(operationID: "d.text.remove-blank-lines")
+        let target = try #require(c.selectedNodeID)
+        c.connect(source: input, sourcePort: "output", target: target, targetPort: "input")
+        await c.run(target: target, only: false)
+        #expect(c.errorMessage == nil); #expect(await engine.requests.isEmpty)
+        let result = try #require(c.runs.last?.steps.last?.outputs["output"]?.asset)
+        #expect(try await c.services.readText(result) == "  中文 👩🏽‍🎨\n e\u{301}")
+        try await c.close(); try await store.close()
+        let reopened = try await ProjectStore.open(at: store.rootURL)
+        #expect(try await reopened.workflowState().archive?.runs.last?.status == .completed)
+        try await reopened.close()
+    }
+
+    @Test func exportDerivedRecipeKeepsAncestryWithoutPrivatePathsAndWillNotOverwrite() async throws {
+        let (root, store, _, c) = try await fixture()
+        let request = InferenceRequest(model: .init(directory: root.appendingPathComponent("secret-model"), revision: "fixed-revision"),
+            input: .image(.init(prompt: "actual prompt", width: 16, height: 12, steps: 4, guidanceScale: 1, seed: UInt64.max)))
+        let original = try await store.publishWorkflowAsset(data: workflowFixturePNG(), mediaType: "image/png",
+            metadata: .init(width: 16, height: 12), name: "source", operationID: "d.image.generate", request: request,
+            details: ["privatePath": root.path])
+        var node = try #require(c.registry.operation("d.image.convert")).definition.makeNode()
+        node.parameters["format"] = .text("jpeg")
+        let ref = try await c.services.transformImage(original.record.reference,
+            context: .init(node: node, stepID: UUID(), inputs: ["input": .asset(original.record.reference)]))
+        let id = UUID()
+        let receipt = try await store.exportWorkflowAssets([ref], name: "recipe", exportID: id, directory: root)
+        let directory = root.appendingPathComponent("recipe-" + id.uuidString + ".dexport")
+        let bytes = try Data(contentsOf: directory.appendingPathComponent("recipe.json"))
+        let text = try #require(String(data: bytes, encoding: .utf8))
+        #expect(!text.contains(root.path)); #expect(text.contains("fixed-revision")); #expect(text.contains(String(UInt64.max)))
+        #expect(!text.contains("actual prompt")); #expect(text.contains("withheld"))
+        let json = try #require(JSONSerialization.jsonObject(with: bytes) as? [String: Any])
+        let history = try #require(json["provenance"] as? [[String: Any]])
+        #expect(history.count == 2)
+        #expect(history.last?["input"] == nil) // conversion is not falsely attributed to the generation request
+        #expect((history.last?["processing"] as? [String: String])?["backgroundPolicy"] == "white")
+        #expect(try await store.exportWorkflowAssets([ref], name: "recipe", exportID: id, directory: root) == receipt)
+        let target = directory.appendingPathComponent("1.jpg"); let unrelated = Data("existing user file".utf8)
+        try unrelated.write(to: target)
+        await #expect(throws: (any Error).self) { _ = try await store.exportWorkflowAssets([ref], name: "recipe", exportID: id, directory: root) }
+        #expect(try Data(contentsOf: target) == unrelated)
+        try await c.close(); try await store.close()
+    }
 }
