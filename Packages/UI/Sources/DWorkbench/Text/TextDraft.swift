@@ -115,6 +115,7 @@ public struct TextRewriteSelection: Sendable, Equatable {
 }
 
 public struct TextRewriteCandidate: Sendable, Equatable {
+    public let backendID: String
     public let runID: UUID
     public let selection: TextRewriteSelection
     public let replacement: String
@@ -122,11 +123,24 @@ public struct TextRewriteCandidate: Sendable, Equatable {
     public let result: InferenceResult
 
     public init(runID: UUID, selection: TextRewriteSelection, replacement: String,
-                request: InferenceRequest, result: InferenceResult) {
+                request: InferenceRequest, result: InferenceResult, backendID: String = "unknown") {
+        self.backendID = backendID
         self.runID = runID
         self.selection = selection
         self.replacement = replacement
         self.request = request
         self.result = result
+    }
+
+    /// Shared provenance for the document and graph entrances. It describes the generated
+    /// replacement, not a claim that later human edits or the whole document were generated.
+    public func executionDetails() -> [String: String] {
+        result.metadata.merging([
+            "backend": backendID, "operation": "TextDraftSession.requestRewrite",
+            "runID": runID.uuidString, "documentID": selection.documentID.uuidString,
+            "documentRevision": selection.documentRevision.uuidString,
+            "selectionUTF16Location": String(selection.utf16Location),
+            "selectionUTF16Length": String(selection.utf16Length)
+        ]) { _, actual in actual }
     }
 }

@@ -121,8 +121,8 @@ struct WorkflowSaveFailure: LocalizedError {
         guard let candidate = editor.candidate else { throw WorkflowIssue("后端没有返回可发布文字。") }
         pending[context.stepID] = Publication(id: UUID(), data: Data(candidate.replacement.utf8), mediaType: "text/plain",
             metadata: .init(), parents: parents, request: candidate.request,
-            details: candidate.result.metadata.merging(["backend": binding.backendID, "modelIdentity": binding.identity,
-                                                        "operation": "TextDraftSession.requestRewrite"]) { _, new in new })
+            details: candidate.executionDetails()
+                .merging(["modelIdentity": binding.identity]) { _, actual in actual })
         return try await publish(context)
     }
 

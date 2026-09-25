@@ -504,7 +504,20 @@ public final class ProjectSession {
         if let value = activeDocument?.textDraft, let session, let backendID = session.textBackendID {
             if text?.editor.document.id != value.id {
                 let identity = textContextID
-                text = ProjectTextController(document: value, engine: session.engine, backendID: backendID) { [weak self] draft, revision in
+                text = ProjectTextController(document: value, engine: session.engine, backendID: backendID,
+                    recordRewrite: { [weak self] candidate in
+                        guard let self, self.textContextID == identity, let currentStore = self.store else {
+                            throw ProjectStoreError.invalidProject("改写所属项目已关闭；不能写入另一项目。")
+                        }
+                        // One immutable result in the existing asset store; no hidden graph or
+                        // automatic publication into a user's workflow, acceptance, or downstream run.
+                        _ = try await currentStore.publishWorkflowAsset(data: Data(candidate.replacement.utf8),
+                            mediaType: "text/plain", name: "文字改写候选", operationID: "d.text.rewrite",
+                            request: candidate.request, details: candidate.executionDetails(),
+                            assetID: candidate.runID)
+                        guard self.textContextID == identity else { return }
+                        self.applyManifest(await currentStore.snapshot()); await self.refreshAssets()
+                    }) { [weak self] draft, revision in
                     guard let self, self.textContextID == identity, let currentStore = self.store else {
                         throw ProjectStoreError.invalidProject("文字文档所属项目已关闭。")
                     }

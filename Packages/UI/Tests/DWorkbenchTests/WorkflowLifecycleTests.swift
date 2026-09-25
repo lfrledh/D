@@ -7,14 +7,25 @@ import Testing
 import UniformTypeIdentifiers
 @testable import DWorkbench
 
+private actor WorkflowSubmitGate {
+    private var waiting: CheckedContinuation<Void, Never>?
+    private var opened = false
+    func wait() async { if opened { return }; await withCheckedContinuation { waiting = $0 } }
+    func open() { opened = true; waiting?.resume(); waiting = nil }
+}
+@MainActor private final class WorkflowSaveSwitch { var fails = true }
+
 private actor WorkflowFixtureEngine: InferenceEngine {
     let directory: URL
     var requests: [InferenceRequest] = []
     var failSecondImage = false
+    var gate: WorkflowSubmitGate?
     init(directory: URL) { self.directory = directory }
     func failSecond() { failSecondImage = true }
+    func suspend(using gate: WorkflowSubmitGate) { self.gate = gate }
     func submit(_ request: InferenceRequest, backendID: String) async throws -> InferenceRun {
         requests.append(request)
+        if let gate { await gate.wait() }
         let result: InferenceResult
         let outputs: [InferenceOutput]
         switch request.input {
@@ -83,6 +94,182 @@ struct WorkflowLifecycleTests {
         let restored = try #require(try await reopened.workflowState().archive)
         #expect(restored.runs == archive.runs); #expect(restored.graphs == archive.graphs)
         try await reopened.close()
+    }
+
+    @Test func editsAndGraphSwitchDuringSubmittedModelRunKeepOriginalSnapshot() async throws {
+        let (_, store, engine, c) = try await fixture()
+        let gate = WorkflowSubmitGate(); await engine.suspend(using: gate)
+        c.addExample("text"); let original = try #require(c.graph)
+        let operation = Task { await c.run(target: original.nodes[1].id, only: false) }
+        for _ in 0..<2000 {
+            if await !engine.requests.isEmpty { break }
+            try await Task.sleep(for: .milliseconds(1))
+        }
+        let submitted = try #require(await engine.requests.first)
+        c.setParameter(nodeID: original.nodes[0].id, key: "text", value: .text("new unsent input"))
+        c.addExample("template"); let other = try #require(c.graph)
+        await gate.open(); await operation.value
+        #expect(c.errorMessage == nil)
+        #expect(c.graph == other)
+        let run = try #require(c.runs.last)
+        #expect(run.graph.id == original.id)
+        #expect(run.graph.nodes[0].parameters["text"] == original.nodes[0].parameters["text"])
+        #expect(await engine.requests == [submitted])
+        #expect(c.graphs.first { $0.id == original.id }?.nodes[0].parameters["text"] == .text("new unsent input"))
+        try await c.close(); try await store.close()
+    }
+
+    @Test func productionProjectSessionBridgePublishesSnapshotAndReturnsFreshDocument() async throws {
+        let root = URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory())
+            .appendingPathComponent("M0-session-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let suite = "D.M0.Bridge." + UUID().uuidString
+        let settings = try #require(UserDefaults(suiteName: suite))
+        defer { settings.removePersistentDomain(forName: suite) }
+        let subject = ProjectSession(sessionFactory: { directory in
+            let engine = WorkflowFixtureEngine(directory: directory)
+            return WorkbenchSession(engine: engine, backendID: "fixture.image", status: { .init(activeRunID: nil, phase: nil, queuedRunIDs: []) },
+                shutdown: {}, cleanup: {}, validateModel: { _ in }, textBackendID: "fixture.text",
+                validateTextModel: { .init(directory: $0, revision: "fixture") })
+        }, settings: settings)
+        let url = root.appendingPathComponent("bridge.dproject")
+        await subject.createProject(at: url); await subject.createTextDocument(name: "原文")
+        let original = try #require(subject.text?.editor.document.id)
+        subject.editText("已发布中文 👩🏽‍🎨", documentID: original); await subject.saveText()
+        await subject.publishTextToWorkflow()
+        let controller = try #require(subject.workflow)
+        let ref = try #require(controller.graph?.nodes.last?.assetReference)
+        subject.editText("聊天继续；不得改变流程快照", documentID: original); await subject.saveText()
+        #expect(try await controller.services.readText(ref) == "已发布中文 👩🏽‍🎨")
+        #expect(controller.runs.isEmpty)
+        await subject.returnWorkflowText(ref)
+        #expect(subject.errorMessage == nil)
+        #expect(subject.text?.editor.document.id != original)
+        #expect(subject.text?.editor.document.text == "已发布中文 👩🏽‍🎨")
+        #expect(await subject.requestClose())
+        #expect(subject.workflow == nil)
+        let before = controller.graphs; controller.addExample("text"); #expect(controller.graphs == before)
+        await subject.openProject(at: url); await subject.openWorkflow()
+        #expect(subject.workflow?.graphs == before)
+        #expect(await subject.requestClose())
+    }
+
+    @Test func documentAndGraphRewriteShareRequestsAndDurableProvenanceWithoutHiddenGraph() async throws {
+        let (root, unused, engine, _) = try await fixture(); try await unused.close()
+        let suite = "D.M0.Rewrite." + UUID().uuidString
+        let settings = try #require(UserDefaults(suiteName: suite)); defer { settings.removePersistentDomain(forName: suite) }
+        let model = ModelReference(directory: root, revision: "fixture")
+        let subject = ProjectSession(sessionFactory: { _ in
+            WorkbenchSession(engine: engine, backendID: "fixture.image", status: { .init(activeRunID: nil, phase: nil, queuedRunIDs: []) },
+                shutdown: {}, cleanup: {}, validateModel: { _ in }, textBackendID: "fixture.text", validateTextModel: { _ in model })
+        }, settings: settings)
+        let url = root.appendingPathComponent("shared-rewrite.dproject")
+        await subject.createProject(at: url); await subject.createTextDocument(name: "独立会话")
+        let editor = try #require(subject.text); let id = editor.editor.document.id
+        let input = "清晨 👩🏽‍🎨 e\u{301}"; let instruction = "Polish this text."
+        subject.editText(input, documentID: id); await subject.saveText()
+        subject.selectText(.init(location: 0, length: input.utf16.count), documentID: id)
+        editor.instruction = instruction; await subject.registerTextModel(at: root)
+        #expect(subject.canRewriteText); await subject.rewriteText()
+        let candidate = try #require(editor.editor.candidate)
+        #expect(editor.canAccept); #expect(subject.workflow == nil)
+        subject.acceptTextRewrite(); await subject.saveText()
+        #expect(await subject.requestClose()); await subject.openProject(at: url); await subject.openWorkflow()
+        let c = try #require(subject.workflow)
+        let archive = try #require(try await c.services.store.workflowState().archive)
+        #expect(archive.graphs.isEmpty && archive.runs.isEmpty) // a shared asset is not a hidden graph
+        let record = try #require(archive.assets.first { $0.reference.assetID == candidate.runID })
+        #expect(record.request == candidate.request)
+        #expect(record.metadata == candidate.executionDetails())
+        #expect(try await c.services.readText(record.reference) == candidate.replacement)
+        c.addExample("text"); let graph = try #require(c.graph)
+        c.setParameter(nodeID: graph.nodes[0].id, key: "text", value: .text(input))
+        c.setParameter(nodeID: graph.nodes[1].id, key: "instruction", value: .text(instruction))
+        c.setParameter(nodeID: graph.nodes[1].id, key: "maximumOutputTokens", value: .integer(editor.editor.document.generationSettings.maximumOutputTokens))
+        c.setParameter(nodeID: graph.nodes[1].id, key: "maximumPromptTokens", value: .integer(editor.editor.document.generationSettings.maximumPromptTokens))
+        await c.run(target: graph.nodes[1].id, only: false)
+        #expect(c.errorMessage == nil)
+        let output = try #require(c.runs.last?.steps.last?.outputs["output"]?.asset)
+        let graphRecord = try #require(try await c.services.store.workflowState().archive?.assets.first { $0.reference == output })
+        #expect(graphRecord.request?.model == record.request?.model)
+        #expect(graphRecord.request?.input == record.request?.input)
+        #expect(graphRecord.metadata["backend"] == record.metadata["backend"])
+        #expect(graphRecord.metadata["operation"] == record.metadata["operation"])
+        #expect(graphRecord.metadata["runID"] != record.metadata["runID"])
+        #expect(await engine.requests.count == 2)
+        #expect(await subject.requestClose())
+    }
+
+    @Test func failedDocumentRewriteRecordRetriesSavingWithoutRepeatingInferenceOrChangingOriginal() async throws {
+        let (root, store, engine, _) = try await fixture()
+        let failure = WorkflowSaveSwitch()
+        let document = try TextDraftDocument(text: "原文 e\u{301}")
+        let editor = ProjectTextController(document: document, engine: engine, backendID: "fixture.text",
+            recordRewrite: { candidate in
+                if failure.fails { throw WorkflowIssue("controlled unavailable output") }
+                _ = try await store.publishWorkflowAsset(data: Data(candidate.replacement.utf8), mediaType: "text/plain",
+                    name: "candidate", operationID: "d.text.rewrite", request: candidate.request,
+                    details: candidate.executionDetails(), assetID: candidate.runID)
+            }, persist: { _, _ in })
+        editor.select(.init(location: 0, length: document.text.utf16.count), documentID: document.id)
+        editor.instruction = "Polish"; await editor.rewrite(using: .init(directory: root))
+        #expect(editor.editor.document == document && !editor.canAccept)
+        #expect(editor.editor.candidate != nil && editor.errorMessage != nil)
+        failure.fails = false; try await editor.flush()
+        #expect(editor.canAccept); #expect(await engine.requests.count == 1)
+        editor.accept(); try await editor.flush()
+        #expect(editor.editor.document.text != document.text)
+        #expect(try await store.workflowState().archive?.assets.count == 1)
+        editor.rebind(engine: engine, backendID: "fixture.rebound")
+        editor.select(.init(location: 0, length: editor.editor.document.text.utf16.count), documentID: document.id)
+        await editor.rewrite(using: .init(directory: root))
+        let rebound = try #require(editor.editor.candidate)
+        #expect(rebound.backendID == "fixture.rebound")
+        let reboundRecord = try #require(try await store.workflowState().archive?.assets.first { $0.reference.assetID == rebound.runID })
+        #expect(reboundRecord.metadata["backend"] == "fixture.rebound")
+        editor.reject()
+        try await store.close()
+    }
+
+    @Test func switchingProjectsWaitsForAdmittedGraphAndNeverWritesIntoNewProject() async throws {
+        let (root, unused, engine, _) = try await fixture(); try await unused.close()
+        let suite = "D.M0.Switch." + UUID().uuidString
+        let settings = try #require(UserDefaults(suiteName: suite)); defer { settings.removePersistentDomain(forName: suite) }
+        let subject = ProjectSession(sessionFactory: { _ in
+            WorkbenchSession(engine: engine, backendID: "fixture.image", status: { .init(activeRunID: nil, phase: nil, queuedRunIDs: []) },
+                shutdown: {}, cleanup: {}, validateModel: { _ in }, textBackendID: "fixture.text",
+                validateTextModel: { .init(directory: $0, revision: "fixture") })
+        }, settings: settings, closeDecision: { .wait })
+        let bURL = root.appendingPathComponent("B.dproject")
+        let b = try await ProjectStore.create(at: bURL, name: "B"); let bID = await b.snapshot().id; try await b.close()
+        let aURL = root.appendingPathComponent("A.dproject")
+        await subject.createProject(at: aURL); await subject.registerTextModel(at: root); await subject.openWorkflow()
+        let c = try #require(subject.workflow); c.addExample("text"); let graph = try #require(c.graph)
+        let gate = WorkflowSubmitGate(); await engine.suspend(using: gate)
+        let run = Task { await c.run(target: graph.nodes[1].id, only: false) }
+        for _ in 0..<2000 {
+            if await !engine.requests.isEmpty { break }
+            try await Task.sleep(for: .milliseconds(1))
+        }
+        #expect(await engine.requests.count == 1)
+        c.setParameter(nodeID: graph.nodes[0].id, key: "text", value: .text("A edited after submission"))
+        let switchProject = Task { await subject.openProject(at: bURL) }
+        for _ in 0..<2000 {
+            if subject.isChangingProject { break }
+            try await Task.sleep(for: .milliseconds(1))
+        }
+        #expect(subject.manifest?.id != bID && subject.isChangingProject)
+        await gate.open(); await run.value; await switchProject.value
+        #expect(subject.manifest?.id == bID)
+        #expect(subject.manifest?.assets.isEmpty == true)
+        #expect(subject.manifest?.workflowSnapshot == nil)
+        let old = try await ProjectStore.open(at: aURL)
+        let history = try #require(try await old.workflowState().archive)
+        #expect(history.runs.last?.status == .completed)
+        #expect(history.runs.last?.graph.nodes[0].parameters["text"] == graph.nodes[0].parameters["text"])
+        #expect(history.graphs[0].nodes[0].parameters["text"] == .text("A edited after submission"))
+        #expect(history.assets.allSatisfy { $0.reference.projectID != bID })
+        try await old.close(); #expect(await subject.requestClose())
     }
 
     @Test func pendingWaitSurvivesCloseAndStaleConfirmationCannotPublish() async throws {
@@ -174,17 +361,25 @@ struct WorkflowLifecycleTests {
     }
 
     @Test func futureWorkflowAndUnknownNodePreserveRawBytes() async throws {
-        for futureNode in [false, true] {
+        for variant in 0..<3 {
             let (_, store, _, c) = try await fixture()
-            c.addExample("text"); await c.save(); let saved = await store.snapshot(); try await store.close()
+            c.addExample("text")
+            if variant == 2 { await c.run(target: try #require(c.graph?.nodes[0].id), only: false) }
+            await c.save(); let saved = await store.snapshot(); try await store.close()
             let pointer = try #require(saved.workflowSnapshot)
             let url = store.rootURL.appendingPathComponent(pointer.relativePath)
             var raw = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
-            if futureNode {
+            if variant == 1 {
                 var graphs = try #require(raw["graphs"] as? [[String: Any]])
                 var nodes = try #require(graphs[0]["nodes"] as? [[String: Any]])
                 nodes[0]["operationID"] = "future.module"; nodes[0]["parameters"] = ["opaque": ["newShape": [1, 2, 3]]]
                 graphs[0]["nodes"] = nodes; raw["graphs"] = graphs
+            } else if variant == 2 {
+                var runs = try #require(raw["runs"] as? [[String: Any]])
+                var steps = try #require(runs[0]["steps"] as? [[String: Any]])
+                var node = try #require(steps[0]["node"] as? [String: Any])
+                node["definitionVersion"] = 999; node["opaque"] = ["must":"survive"]
+                steps[0]["node"] = node; runs[0]["steps"] = steps; raw["runs"] = runs
             } else { raw["version"] = 999; raw["extra"] = ["must":"survive"] }
             let bytes = try JSONSerialization.data(withJSONObject: raw, options: .sortedKeys); try bytes.write(to: url)
             var manifest = saved; manifest.workflowSnapshot = .init(generation: pointer.generation, byteCount: bytes.count,
@@ -326,6 +521,41 @@ struct WorkflowLifecycleTests {
         let reopened = try await ProjectStore.open(at: store.rootURL)
         #expect(try await reopened.workflowState().archive?.runs.last?.status == .completed)
         try await reopened.close()
+    }
+
+    @Test func samePortContractTwoImplementationsPublishDistinctSourceAndRejectWithoutFallback() async throws {
+        let (_, store, engine, c) = try await fixture()
+        let parent = try await store.publishWorkflowAsset(data: Data("hello".utf8), mediaType: "text/plain",
+            name: "input", operationID: "d.text.input").record.reference
+        func implementation(_ id: String, maximum: Int) -> WorkflowOperation {
+            WorkflowOperation(definition: .init(id: id, title: id, detail: "fixture",
+                inputs: [.init("input", "text", kinds: [.text])], outputs: [.init("output", "text", kinds: [.text])]),
+                execute: { context, services in
+                    let input = try #require(context.inputs["input"]?.asset)
+                    let value = try await services.readText(input)
+                    guard value.count <= maximum else { throw WorkflowIssue("fixture capacity") }
+                    return .outputs(["output": .asset(try await services.publishText(id + ":" + value, parents: [input], context: context))])
+                })
+        }
+        let first = implementation("fixture.program.first", maximum: 4)
+        let second = implementation("fixture.program.second", maximum: 10)
+        let registry = try WorkflowRegistry(operations: [first, second])
+        let chosen = try #require(registry.operation(second.definition.id))
+        let input: [String: WorkflowValue] = ["input": .asset(parent)]
+        let context = WorkflowExecutionContext(node: chosen.definition.makeNode(), stepID: UUID(), inputs: input)
+        try registry.validateInputs(input, node: context.node, connectedPorts: ["input"])
+        let result = try await chosen.execute(context, c.services)
+        guard case .outputs(let outputs) = result else { Issue.record("Expected typed text output"); return }
+        let output = try #require(outputs["output"]?.asset)
+        #expect(try await c.services.readText(output) == "fixture.program.second:hello")
+        let record = try #require(try await store.workflowState().archive?.assets.first { $0.reference == output })
+        #expect(record.operationID == second.definition.id && record.parents == [parent])
+        await #expect(throws: WorkflowIssue.self) {
+            _ = try await first.execute(.init(node: first.definition.makeNode(), stepID: UUID(), inputs: input), c.services)
+        }
+        #expect(try await store.workflowState().archive?.assets.count == 2)
+        #expect(await engine.requests.isEmpty); #expect(registry.operation("fixture.missing") == nil)
+        try await store.close()
     }
 
     @Test func exportDerivedRecipeKeepsAncestryWithoutPrivatePathsAndWillNotOverwrite() async throws {

@@ -39,26 +39,22 @@ public struct WorkflowCanvasView: View {
     }
 
     public var body: some View {
+        GeometryReader { viewport in
         VStack(spacing: 0) {
-            toolbar
+            toolbar.frame(width: viewport.size.width)
             Divider()
             statusStrip
             Divider()
             GeometryReader { proxy in
-                let narrow = WorkflowCanvasLayoutPolicy.usesHorizontalPanelScroll(width: proxy.size.width)
-                Group {
-                    if narrow {
-                        ScrollView(.horizontal) {
-                            panels
-                                .frame(width: WorkflowCanvasLayoutPolicy.minimumWorkspaceWidth,
-                                       height: proxy.size.height)
-                        }
-                    } else {
-                        panels
-                    }
+                // Keep the same editor subtree across window sizes and scroll the viewport.
+                ScrollView(.horizontal) {
+                    panels.frame(width: max(proxy.size.width, WorkflowCanvasLayoutPolicy.minimumWorkspaceWidth),
+                                 height: proxy.size.height)
                 }
                 .accessibilityIdentifier("workflow-canvas-workspace")
             }
+        }
+        .frame(width: viewport.size.width, height: viewport.size.height)
         }
         .frame(minWidth: WorkflowCanvasLayoutPolicy.minimumVisibleWidth,
                minHeight: WorkflowCanvasLayoutPolicy.minimumVisibleHeight)
@@ -201,6 +197,8 @@ public struct WorkflowCanvasView: View {
             .padding(.vertical, 9)
             .frame(minWidth: WorkflowCanvasLayoutPolicy.minimumWorkspaceWidth)
         }
+        // The content needs 1100 points; the viewport must still accept the window's width.
+        .frame(minWidth: 0, maxWidth: .infinity)
         .scrollIndicators(.hidden)
         .background(.bar)
     }

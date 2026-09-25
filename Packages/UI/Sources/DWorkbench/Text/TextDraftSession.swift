@@ -154,7 +154,7 @@ public final class TextDraftSession {
             case .completed(let result):
                 guard !replacement.isEmpty else { throw TextDraftError.emptyReplacement }
                 candidate = TextRewriteCandidate(runID: run.id, selection: selection,
-                                                 replacement: replacement, request: request, result: result)
+                                                 replacement: replacement, request: request, result: result, backendID: backendID)
             case .cancelled:
                 throw CancellationError()
             case .failed(let failure):

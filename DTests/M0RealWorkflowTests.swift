@@ -11,15 +11,26 @@ struct M0RealWorkflowTests {
     @Test(.enabled(if: ProcessInfo.processInfo.environment["D_M0_REAL_ROOT"] != nil), .timeLimit(.minutes(20)))
     func productionTextAndThreeImagesThroughDurableWorkflow() async throws {
         let env = ProcessInfo.processInfo.environment
-        let root = URL(fileURLWithPath: try #require(env["D_M0_REAL_ROOT"]))
+        let requestedRoot = try #require(env["D_M0_REAL_ROOT"])
+        let root: URL
+        if requestedRoot == "@container" {
+            root = try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask,
+                appropriateFor: nil, create: true).appendingPathComponent("D/M0Acceptance/" + UUID().uuidString)
+            try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        } else { root = URL(fileURLWithPath: requestedRoot) }
+        print("D_M0_REAL_OUTPUT_ROOT=\(root.path)")
         let textURL = URL(fileURLWithPath: try #require(env["D_M0_TEXT_MODEL"]))
         let imageURL = URL(fileURLWithPath: try #require(env["D_M0_IMAGE_MODEL"]))
         let projectURL = root.appendingPathComponent("real-M0-" + UUID().uuidString + ".dproject")
+        print("D_M0_STAGE=create-project")
         let store = try await ProjectStore.create(at: projectURL, name: "M0 真实图文")
+        print("D_M0_STAGE=production-session")
         let runtime = try await AppSessionFactory.makeSession(artifactDirectory: store.artifactDirectory)
         let start = Date()
+        var documentSession: ProjectSession?
         do {
             let validateText = try #require(runtime.validateTextModel)
+            print("D_M0_STAGE=validate-models")
             let text = try await validateText(textURL)
             try await runtime.validateModel(imageURL)
             let image = ModelReference(directory: imageURL, revision: "ef52ee019fd1d0e75ae4deb40476ba65989716d7")
@@ -30,8 +41,10 @@ struct M0RealWorkflowTests {
             let c = WorkflowController(services: services); await c.load(); c.addExample("image")
             let g = try #require(c.graph)
             let rewrite = try #require(g.nodes.first { $0.operationID == "d.text.rewrite" })
+            let rewriteInstruction = "Rewrite as one short sentence."
+            let originalText = try #require(g.nodes.first?.parameters["text"]?.string)
             c.setParameter(nodeID: rewrite.id, key: "maximumOutputTokens", value: .integer(48))
-            c.setParameter(nodeID: rewrite.id, key: "temperature", value: .decimal(0))
+            c.setParameter(nodeID: rewrite.id, key: "instruction", value: .text(rewriteInstruction))
             let resize = try #require(g.nodes.first { $0.operationID == "d.image.resize" })
             let convert = try #require(g.nodes.first { $0.operationID == "d.image.convert" })
             c.setParameter(nodeID: resize.id, key: "width", value: .integer(384))
@@ -69,18 +82,11 @@ struct M0RealWorkflowTests {
             let decoded = try #require(CGImageSourceCreateImageAtIndex(imageSource, 0, nil))
             #expect(decoded.width == 384 && decoded.height == 256)
             let saved = try #require(try await store.workflowState().archive)
+            let graphTextRecord = try #require(saved.assets.first { $0.operationID == "d.text.rewrite" })
             #expect(saved.assets.filter { $0.request?.model == image }.count == 3)
             #expect(await runtime.status().activeRunID == nil)
             #expect(await runtime.status().queuedRunIDs.isEmpty)
 
-            // Same text operation remains directly callable outside the graph.
-            let draft = TextDraftSession(document: try TextDraftDocument(text: "A peaceful room in morning light."),
-                engine: runtime.engine, backendID: textID)
-            let selection = try draft.selection(inUTF16: NSRange(location: 0, length: draft.document.text.utf16.count))
-            try await draft.requestRewrite(selection: selection, instruction: "Rewrite as one short sentence.", model: text,
-                                           temperature: 0, topP: 0.95)
-            #expect(draft.candidate != nil)
-            #expect(draft.document.text == "A peaceful room in morning light.")
             // Cancel the node path only after real text output / image denoising is observed.
             var cancellations: [[String: Any]] = []
             for imageRun in [false, true] {
@@ -122,7 +128,45 @@ struct M0RealWorkflowTests {
             #expect(try await reopened.workflowState().archive?.runs.first { $0.id == firstRun.id } == saved.runs.first { $0.id == firstRun.id })
             try await reopened.close()
             await runtime.shutdown()
+
+            // Real document entrance, with its production persistence injection, not a hidden graph.
+            let suite = "D.M0.RealSession." + UUID().uuidString
+            let settings = try #require(UserDefaults(suiteName: suite))
+            defer { settings.removePersistentDomain(forName: suite) }
+            let subject = ProjectSession(sessionFactory: { directory in
+                try await AppSessionFactory.makeSession(artifactDirectory: directory)
+            }, settings: settings)
+            documentSession = subject
+            let documentURL = root.appendingPathComponent("real-session.dproject")
+            await subject.createProject(at: documentURL); await subject.createTextDocument(name: "同一改写能力")
+            let editor = try #require(subject.text); let documentID = editor.editor.document.id
+            subject.editText(originalText, documentID: documentID)
+            subject.updateTextGenerationSettings(.init(maximumPromptTokens: 2048, maximumOutputTokens: 48), documentID: documentID)
+            await subject.saveText(); await subject.registerTextModel(at: textURL)
+            subject.selectText(.init(location: 0, length: originalText.utf16.count), documentID: documentID)
+            editor.instruction = rewriteInstruction
+            try #require(subject.canRewriteText); await subject.rewriteText()
+            let candidate = try #require(editor.editor.candidate)
+            #expect(candidate.request.input == graphTextRecord.request?.input)
+            #expect(candidate.request.model == graphTextRecord.request?.model)
+            #expect(candidate.backendID == graphTextRecord.metadata["backend"])
+            #expect(editor.editor.document.text == originalText && subject.workflow == nil)
+            try #require(editor.canAccept); subject.acceptTextRewrite(); await subject.saveText()
+            try #require(await subject.requestClose())
+            await subject.openProject(at: documentURL); await subject.openWorkflow()
+            let restored = try #require(try await subject.workflow?.services.store.workflowState().archive)
+            #expect(restored.graphs.isEmpty && restored.runs.isEmpty)
+            let record = try #require(restored.assets.first { $0.reference.assetID == candidate.runID })
+            #expect(record.request == candidate.request && record.metadata == candidate.executionDetails())
+            let sessionReport: [String: Any] = ["project": documentURL.path, "runID": candidate.runID.uuidString,
+                "backend": candidate.backendID, "requestEqualToGraph": candidate.request.input == graphTextRecord.request?.input,
+                "hiddenGraphCount": restored.graphs.count, "sourceProtectedBeforeAccept": true, "recordSurvivedReopen": true,
+                "guiValidated": false]
+            try JSONSerialization.data(withJSONObject: sessionReport, options: [.prettyPrinted, .sortedKeys])
+                .write(to: root.appendingPathComponent("real-session-result.json"), options: .withoutOverwriting)
+            try #require(await subject.requestClose()); documentSession = nil
         } catch {
+            if let documentSession { await documentSession.cancelTextRewrite(); documentSession.text?.reject(); _ = await documentSession.requestClose() }
             await runtime.shutdown(); try? await store.close(); throw error
         }
     }

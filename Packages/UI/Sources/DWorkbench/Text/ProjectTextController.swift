@@ -11,27 +11,34 @@ public final class ProjectTextController {
     public private(set) var isSaving = false
     public private(set) var errorMessage: String?
     public private(set) var canUndo = false
+    public private(set) var isRecordingRewrite = false
     private var selectionVersion = UUID()
     private var candidateSelectionVersion: UUID?
     private var persistedRevision: UUID
     private let persist: @MainActor (TextDraftDocument, UUID) async throws -> Void
+    private let recordRewrite: @MainActor (TextRewriteCandidate) async throws -> Void
+    private var pendingRewriteRecord: TextRewriteCandidate?
+    @ObservationIgnored private var rewriteRecordTask: Task<Void, Error>?
     @ObservationIgnored private var debounce: Task<Void, Never>?
     @ObservationIgnored private var writeTail: Task<Void, Error>?
 
     public init(document: TextDraftDocument, engine: any InferenceEngine, backendID: String,
+                recordRewrite: @escaping @MainActor (TextRewriteCandidate) async throws -> Void = { _ in },
                 persist: @escaping @MainActor (TextDraftDocument, UUID) async throws -> Void) {
         editor = TextDraftSession(document: document, engine: engine, backendID: backendID)
         persistedRevision = document.revision
         self.persist = persist
+        self.recordRewrite = recordRewrite
     }
 
     public var isDirty: Bool { persistedRevision != editor.document.revision }
     public var hasPendingCandidate: Bool { editor.candidate != nil }
     public var canAccept: Bool {
         editor.canAcceptCandidate && candidateSelectionVersion == selectionVersion && !editor.isRunning
+            && pendingRewriteRecord == nil && !isRecordingRewrite
     }
     public var canRewrite: Bool {
-        !editor.isRunning && !hasPendingCandidate && !instruction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        !editor.isRunning && !isRecordingRewrite && !hasPendingCandidate && !instruction.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && (try? editor.selection(inUTF16: selection)) != nil
     }
     public var saveStatus: String {
@@ -88,11 +95,15 @@ public final class ProjectTextController {
                 throw ProjectStoreError.invalidProject("校验模型期间原稿或选区已改变，请重新改写。")
             }
             try await editor.requestRewrite(selection: captured, instruction: capturedInstruction, model: verified)
+            pendingRewriteRecord = editor.candidate
+            try await saveRewriteRecord()
         } catch is CancellationError {
             candidateSelectionVersion = nil
         } catch {
-            candidateSelectionVersion = nil
-            errorMessage = "改写未完成，原文已保留：\(error.localizedDescription)"
+            if pendingRewriteRecord == nil { candidateSelectionVersion = nil }
+            errorMessage = pendingRewriteRecord == nil
+                ? "改写未完成，原文已保留：\(error.localizedDescription)"
+                : "候选已生成但来源记录尚未保存；原文未改。请点击保存重试，或明确拒绝候选：\(error.localizedDescription)"
         }
     }
 
@@ -129,6 +140,7 @@ public final class ProjectTextController {
     public func reject() {
         editor.rejectCandidate()
         candidateSelectionVersion = nil
+        pendingRewriteRecord = nil
     }
 
     public func undo() {
@@ -175,10 +187,23 @@ public final class ProjectTextController {
 
     /// The host blocks navigation on failure; edits admitted while saving are also flushed.
     public func flush() async throws {
+        try await saveRewriteRecord()
         debounce?.cancel()
         await debounce?.value
         debounce = nil
         if let writeTail { _ = await writeTail.result }
         while isDirty { try await enqueue(editor.document).value }
+    }
+
+    private func saveRewriteRecord() async throws {
+        if let rewriteRecordTask { try await rewriteRecordTask.value; return }
+        guard let candidate = pendingRewriteRecord else { return }
+        isRecordingRewrite = true
+        let task = Task { try await recordRewrite(candidate) }
+        rewriteRecordTask = task
+        defer { rewriteRecordTask = nil; isRecordingRewrite = false }
+        try await task.value
+        if pendingRewriteRecord?.runID == candidate.runID { pendingRewriteRecord = nil }
+        errorMessage = nil
     }
 }
