@@ -23,7 +23,8 @@ struct NodeLanguageRealTests {
         let runtime = try await AppSessionFactory.makeSession(artifactDirectory: store.artifactDirectory)
         let started = Date()
         do {
-            let reference = try await #require(runtime.validateTextModel)(model)
+            let validateModel = try #require(runtime.validateTextModel)
+            let reference = try await validateModel(model)
             let backend = try #require(runtime.textBackendID)
             let identity = "text:" + (reference.revision ?? model.lastPathComponent)
             let services = WorkflowServices(store: store, session: runtime, defaultIdentity: { kind in
@@ -51,10 +52,11 @@ struct NodeLanguageRealTests {
             let run = try #require(controller.runs.last)
             try #require(run.status == .completed && run.steps.count == 2)
             for step in run.steps {
-                try #require(!(step.outputs["output"]?.datum?.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                let generated = (step.outputs["output"]?.datum?.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                try #require(!generated.isEmpty)
                 try #require(step.outputs["raw"]?.asset != nil)
             }
-            #expect(run.steps.last?.inputs["content"] == run.steps.first?.outputs["output"])
+            try #require(run.steps.last?.inputs["content"] == run.steps.first?.outputs["output"])
             // A genuine structured result, validated by the existing operation parser.
             controller.addNode(operationID: "d.model.language")
             let structuredID = try #require(controller.selectedNodeID)
@@ -74,6 +76,8 @@ struct NodeLanguageRealTests {
             try structuredValue.validate(as: schema)
             await controller.save()
             try #require(!controller.hasPendingSaves)
+            let beforeHeadless = try #require(try await store.workflowState().archive)
+            try #require(beforeHeadless.runs.count == 2)
 
             // Same frozen plan, new execution identity and empty call records.
             // No second executor implementation and no silently reused old model result.
@@ -85,41 +89,70 @@ struct NodeLanguageRealTests {
             let executor = WorkflowPlanExecutor(executeCall: { try await services.executeCall($0) }, save: { checkpoint in
                 headlessRun.planCheckpoint = checkpoint
                 headlessRun.steps = checkpoint.records.filter { $0.address.path.count == 1 }.map(\.step)
-                headlessRun.status = checkpoint.state == .completed ? .completed : .running
+                switch checkpoint.state {
+                case .ready: headlessRun.status = .queued
+                case .running: headlessRun.status = .running
+                case .paused, .waiting: headlessRun.status = .waiting
+                case .completed: headlessRun.status = .completed
+                case .failed: headlessRun.status = .failed
+                case .cancelled: headlessRun.status = .cancelled
+                case .saving: headlessRun.status = .saving
+                case .interrupted: headlessRun.status = .interrupted
+                }
                 let saved = try #require(try await store.workflowState().archive)
                 var runs = saved.runs.filter { $0.id != headlessRun.id }; runs.append(headlessRun)
                 _ = try await store.saveWorkflow(graphs: saved.graphs, runs: runs, expectedRevision: saved.revision, tools: saved.tools)
             })
             let finished = try await executor.execute(headless)
             try #require(finished.state == .completed && finished.records.count == 2)
-            #expect(finished.plan == previous.plan)
-            #expect(Set(finished.records.map(\.id)).isDisjoint(with: Set(previous.records.map(\.id))))
+            try #require(finished.plan == previous.plan)
+            try #require(Set(finished.records.map(\.id)).isDisjoint(with: Set(previous.records.map(\.id))))
             for call in finished.records {
                 try #require(!(call.step.outputs["output"]?.datum?.text ?? "").isEmpty)
             }
-            #expect(await runtime.status().activeRunID == nil)
-            #expect(await runtime.status().queuedRunIDs.isEmpty)
+            try #require(await runtime.status().activeRunID == nil)
+            try #require(await runtime.status().queuedRunIDs.isEmpty)
             let archive = try #require(try await store.workflowState().archive)
+            try #require(archive.runs.count == 3)
+            try #require(archive.graphs == beforeHeadless.graphs && archive.tools == beforeHeadless.tools)
+            for original in beforeHeadless.runs {
+                try #require(archive.runs.first { $0.id == original.id } == original)
+            }
+            try #require(archive.runs.first { $0.id == headlessRun.id } == headlessRun)
             let requests = archive.assets.compactMap(\.request)
-            #expect(requests.count == 5)
-            #expect(requests.allSatisfy { $0.model == reference })
+            try #require(requests.count == 5)
+            try #require(requests.allSatisfy { $0.model == reference })
+            let steps = archive.runs.flatMap(\.steps)
+            try #require(steps.count == 5 && Set(steps.map(\.id)).count == 5)
+            try #require(Set(requests.map(\.id)) == Set(steps.map(\.id)))
+            for step in steps {
+                let asset = try #require(archive.assets.first { $0.stepID == step.id && $0.request != nil })
+                try #require(asset.reference == step.outputs["raw"]?.asset)
+                let request = try #require(asset.request)
+                guard case .text(let text) = request.input else { throw WorkflowIssue("Expected persisted text request.") }
+                let task = try #require(step.node.parameters["task"]?.string)
+                let content = step.inputs["content"]?.datum?.text
+                try #require(text.prompt == task + (content.map { "\n\nContent:\n" + $0 } ?? ""))
+                try #require(text.maxTokens == step.node.parameters["maximumOutputTokens"]?.integer)
+                try #require(text.temperature == 0)
+            }
             try JSONEncoder().encode(archive).write(to: root.appendingPathComponent("workflow-evidence.json"), options: .withoutOverwriting)
             let report: [String: Any] = [
                 "case": "text", "driver": "AppSessionFactory + WorkflowController + WorkflowPlanExecutor",
                 "project": project.path, "modelIdentity": identity, "revision": reference.revision ?? "unknown",
                 "controllerRunID": run.id.uuidString, "structuredRunID": structured.id.uuidString,
-                "headlessRunID": finished.runID.uuidString, "realRequests": requests.count,
+                "headlessRunID": finished.runID.uuidString, "persistedRealRequests": requests.count,
                 "elapsedSeconds": Date().timeIntervalSince(started), "guiValidated": false,
                 "outputs": run.steps.compactMap { $0.outputs["output"]?.datum?.text },
             ]
-            try JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys])
-                .write(to: root.appendingPathComponent("real-result.json"), options: .withoutOverwriting)
             controller.deactivateAfterClose() // Do not write an older UI snapshot over the headless history.
             try await store.close()
             let reopened = try await ProjectStore.open(at: project)
-            #expect(try await reopened.workflowState().archive == archive)
+            try #require(try await reopened.workflowState().archive == archive)
             try await reopened.close()
             await runtime.shutdown()
+            try JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys])
+                .write(to: root.appendingPathComponent("real-result.json"), options: .withoutOverwriting)
             print("D_NODE_LANGUAGE_REAL_TEXT_PASS=\(root.path)")
         } catch {
             await runtime.shutdown()
@@ -128,4 +161,3 @@ struct NodeLanguageRealTests {
         }
     }
 }
-
