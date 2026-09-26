@@ -241,3 +241,13 @@ Lead补capture第二await取消、活跃Workflow迁移显式拒绝且可恢复�
 真实文字受测代码7ca59946a0aa51925a5f65fe35199502e2a6306b，build-r2通过。此前Swift6.4在require闭包直接调用上断言崩溃、随后require复杂可选表达式宏编译错误，拆开表达式解决，不改产品语义。lead/node-real-text使用固定Qwen1.5B8b403126fc14f14cfc99bb4cfa72ecbc129ea677，任务生成及改写真实成功，第三次JSON输出带markdown围栏，按原严格契约失败且raw保存。新fixture只澄清首尾括号要求，不剥离围栏或放宽校验。记录request-step逐项身份、prompt、参数、旧历史和重开，全部require后才写PASS；非实现者审阅，不宣称GUI。真实失败项目位于测试容器NodeLanguageAcceptance/6E1A6E6B-00DA-481B-A9B1-5F1E35880739，根路径见lead/node-real-text日志；后续拷贝到外盘证据，不覆盖原件。
 
 lead/scopes-initial九项之前为七项通过；lead/scopes-wiring初轮55项1个Lead夹具查错不存在template失败；修正选真实Map Call并增加保存恢复，scopes-wiring-r1 55项/4suite通过（0ee7b24c加已知Lead修改，非未来提交SHA）。随后只读审核补派生resume归属、来源合法重试、typed/M0人工等待和面板打开时身份冻结，正在scope-derived-lifecycle复验；这些仍是未接纳候选。GUIH27锁屏未重试，后续四模态/样例完整真实验收未完成，不启下一阶段。
+
+
+### MEDIA-CHECKS r1：真实图像和视频节点集成验收（2026-09-27）
+- 属于本轮 A09/A17/A24/A25/A26/A36；不是新产品阶段。Lead 冻结下列验收，Worker仅实现测试；实际模型由Lead串行运行。
+- Worker gpt-5.6-sol/high；仅 `DTests/NodeLanguageImageVideoRealTests.swift`，不修改生产逻辑、工程、断言政策、语言包或本文。初交＋至多两轮定向修复；独立输出/tmp；网络关闭；不接触真实偏好/用户素材/模型内容；不运行构建/GPU/GUI。允许Swift frontend parse（TMPDIR指定、无模块导入）。
+- 图像：opt-in 环境 `D_NODE_LANGUAGE_REAL_CASE=image` 和显式 `D_NODE_LANGUAGE_IMAGE_MODEL`。复用 AppSessionFactory/WorkflowServices/Controller 与现有图像配方。运行实际官方 E02（不是复制隐藏调度器），两组各三图，每候选 request/seed/attempt/归属/PNG真实解码必须检查，随后使用一张本次图片作为单参考再生成一次；在项目保存、重开及来源中核对参考身份，不能只比较prompt。尺寸使用本机已验可缩放配方，512×512/4步/guidance1，不改精度。先启动一个独立取消任务，见运行时活动后取消、等待 drain 后执行正常任务，不能把仅排队取消宣称GPU取消。需保存观察到的取消阶段。
+- 视频：opt-in case=video，显式 `D_NODE_LANGUAGE_VIDEO_MODEL`；由 Bundle.main 解析视频引擎，通过 AppSessionFactory 与同一 Controller 调用 d.video.generate。256×256、17帧、16fps、4步、guidance5、seed42、既有 profile；真实MP4解码检查尺寸、帧数/时长和帧数据，不能只查扩展名。取消及后续恢复同上；T2V明示无图像输入。
+- 每个测试创建全新App容器内自有项目，不修改现有项目；显式资源目录，缺失即失败而非成功skip（未opt-in才disabled）。请参照已有 NodeLanguageRealTests / M0RealWorkflowTests 的生产接线，不碰共享实现；原有模型租约和资源检查不能绕过。模型绑定必须准确，来源必须是实际请求值。
+- 测试结束无论成败 shutdown、关闭自有Store；不停止别人进程。保存根路径、模型revision、请求/运行/输出、耗时和状态到自有项目旁；失败也保留产物。正常结论须保存重开并回读。不得声称普通GUI、人工试听、Xcode Run、系统断网或发布通过。
+- Swift Testing宏对复杂 optional/coalescing表达式有已观察问题，先求局部值再断言；不是放宽条件。只读源码后发现接口/契约不明须报Lead，不能修改生产代码来过测试。完整参数和写根以对应外部job.json/preflight为准；执行基线为本准备提交。
