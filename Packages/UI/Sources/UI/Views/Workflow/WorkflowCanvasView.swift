@@ -33,6 +33,8 @@ public struct WorkflowCanvasView: View {
     @State private var zoom: CGFloat = 1
     @State private var pendingConnection: WorkflowPendingConnection?
     @State private var runPreview: WorkflowRunPreview?
+    @State private var toolsPresented = false
+    @State private var interfacePresented = false
 
     public init(
         controller: WorkflowController,
@@ -84,6 +86,13 @@ public struct WorkflowCanvasView: View {
                     Task { await controller.run(target: preview.nodeID, only: preview.only) }
                 }
             )
+        }
+        .sheet(isPresented: $toolsPresented) { WorkflowToolPanel(controller: controller) }
+        .sheet(isPresented: $interfacePresented) {
+            if let graph = controller.graph {
+                ScrollView { WorkflowGraphInterfaceEditor(graph: Binding(get: { controller.graph?.id == graph.id ? controller.graph! : graph }, set: { controller.updateInterface($0.interface, in: graph.id) }), registry: controller.registry, tools: controller.tools).padding() }
+                    .frame(minWidth: 640, minHeight: 500)
+            }
         }
         .onChange(of: controller.graph?.id) { _, _ in
             pendingConnection = nil
@@ -154,6 +163,8 @@ public struct WorkflowCanvasView: View {
             }
             .disabled(isReadOnly)
 
+            Button(workflowText(languageStore, "workflow.language.tools", fallback: "工具与封装")) { toolsPresented = true }.disabled(isReadOnly)
+            Button(workflowText(languageStore, "workflow.language.interface", fallback: "公开接口")) { interfacePresented = true }.disabled(isReadOnly || controller.graph == nil)
             Button(workflowText(languageStore, "workflow.action.save", fallback: "保存"),
                    systemImage: "square.and.arrow.down") {
                 Task { await controller.save() }
@@ -172,8 +183,10 @@ public struct WorkflowCanvasView: View {
                 .disabled(isReadOnly || !controller.canRedo)
                 .accessibilityIdentifier("workflow-redo")
 
-            Divider().frame(height: 20)
-
+            if !controller.bodyPath.isEmpty {
+                Button(workflowText(languageStore, "workflow.language.control.back", fallback: "返回外层"), systemImage: "arrow.up.backward") { controller.closeBody() }
+                Text(controller.graph?.name ?? "").font(.caption)
+            }
             Menu(workflowText(languageStore, "workflow.toolbar.models", fallback: "模型"), systemImage: "cube") {
                 Button(workflowText(languageStore, "workflow.action.chooseTextModel", fallback: "选择文字模型")) {
                     guarded(onTextModel)()
@@ -207,6 +220,7 @@ public struct WorkflowCanvasView: View {
             Spacer(minLength: 8)
 
             if controller.isRunning {
+                Button(workflowText(languageStore, "workflow.language.control.pause", fallback: "安全暂停"), systemImage: "pause") { controller.pause() }
                 Button(workflowText(languageStore, "workflow.action.cancel", fallback: "取消"),
                        systemImage: "stop.fill", role: .destructive) {
                     Task { await controller.cancel() }
@@ -392,7 +406,7 @@ private struct WorkflowGraphSurface: View {
                                 controller: controller,
                                 node: node,
                                 rawPosition: geometry.rawPosition(node.id),
-                                definition: controller.registry.operation(node.operationID)?.definition,
+                                definition: controller.registry.definition(for: node, tools: controller.tools),
                                 zoom: effectiveZoom,
                                 pendingConnection: $pendingConnection,
                                 readOnly: readOnly,
@@ -535,6 +549,9 @@ private struct WorkflowNodeCard: View {
                     .font(.caption).foregroundStyle(.orange)
             }
 
+            Toggle(workflowText(languageStore, "workflow.language.selection", fallback: "加入封装选区"), isOn: Binding(get: { controller.selectedNodeIDs.contains(node.id) }, set: { checked in
+                if checked { controller.selectedNodeIDs.insert(node.id) } else { controller.selectedNodeIDs.remove(node.id) }
+            })).toggleStyle(.checkbox).disabled(readOnly)
             HStack(spacing: 6) {
                 Button(workflowText(languageStore, "workflow.action.runToHere", fallback: "运行到这里")) {
                     onPlan(node.id, false)
@@ -660,9 +677,15 @@ private struct WorkflowNodeInspector: View {
                     identity(node)
                     parameters(node)
                     if node.operationID.hasPrefix("d.value.") || ["d.model.language", "d.control.human", "d.music.chords"].contains(node.operationID) {
-                        WorkflowNodeDataEditor(node: Binding(get: { node }, set: { edited in
+                        WorkflowNodeDataEditor(node: Binding(get: { controller.graph?.nodes.first(where: { $0.id == node.id }) ?? node }, set: { edited in
                             controller.setDataConfiguration(nodeID: node.id, value: edited.dataConfiguration)
                         })).id(node.id).disabled(readOnly)
+                    }
+                    if node.operationID.hasPrefix("d.control."), node.operationID != "d.control.human", let graphID = controller.graph?.id {
+                        WorkflowControlEditor(node: Binding(get: { controller.graph?.nodes.first(where: { $0.id == node.id }) ?? node }, set: { controller.updateNode($0, in: graphID) }), tools: controller.tools, onOpenBody: { slot in
+                            if slot == "tool", case .invoke(let reference) = node.control { controller.openToolCopy(reference) }
+                            else { controller.openBody(nodeID: node.id, slot: slot) }
+                        }).id(node.id).disabled(readOnly)
                     }
                     ports(node)
                     execution(node)
@@ -847,8 +870,13 @@ private struct WorkflowNodeInspector: View {
                                    controller: controller, onReturnText: onReturnText,
                                    allowsReturn: !readOnly)
                 if step.status == .waiting {
-                    WorkflowWaitingDecision(controller: controller, step: step, readOnly: readOnly, preview: controller.preview)
-                        .id(step.id)
+                    if let task = step.humanTask {
+                        WorkflowHumanTaskForm(task: task, onSaveDraft: { controller.editHumanDraft(stepID: step.id, value: $0) },
+                            onSubmit: { value in Task { await controller.decideHuman(stepID: step.id, value: value, expectedTask: task) } },
+                            onReject: { Task { await controller.decideHuman(stepID: step.id, value: nil, reject: true, expectedTask: task) } }).id(step.id).disabled(readOnly)
+                    } else {
+                        WorkflowWaitingDecision(controller: controller, step: step, readOnly: readOnly, preview: controller.preview).id(step.id)
+                    }
                 }
                 if step.status == .partial {
                     Button(workflowText(languageStore, "workflow.action.retryFailedCandidates", fallback: "重试失败候选"),
@@ -881,6 +909,17 @@ private struct WorkflowNodeInspector: View {
                             .foregroundStyle(.secondary)
                     }
                     Text(run.id.uuidString).font(.caption2.monospaced()).foregroundStyle(.secondary)
+                    ForEach(controller.callRecords(runID: run.id)) { call in
+                        DisclosureGroup(call.step.node.title + " · " + WorkflowCanvasPresentation.statusTitle(call.step.status, language: languageStore)) {
+                            Text(String(describing: call.address.path)).font(.caption2.monospaced()).textSelection(.enabled)
+                            WorkflowStepValues(title: workflowText(languageStore, "workflow.port.outputs", fallback: "输出"), values: call.step.outputs, operationID: call.step.node.operationID, portsAreInputs: false, controller: controller, onReturnText: onReturnText, allowsReturn: !readOnly)
+                            if call.address.path.count > 1, call.step.status == .waiting, let task = call.step.humanTask {
+                                WorkflowHumanTaskForm(task: task, onSaveDraft: { controller.editHumanDraft(stepID: call.id, value: $0) },
+                                    onSubmit: { value in Task { await controller.decideHuman(stepID: call.id, value: value, expectedTask: task) } },
+                                    onReject: { Task { await controller.decideHuman(stepID: call.id, value: nil, reject: true, expectedTask: task) } }).id(call.id).disabled(readOnly)
+                            }
+                        }
+                    }
                     if WorkflowCanvasPresentation.canResume(run.status) {
                         Button(workflowText(languageStore, "workflow.action.resume", fallback: "恢复")) {
                             Task { await controller.resume(runID: run.id) }
@@ -1031,8 +1070,7 @@ private struct WorkflowStepValues: View {
                                                          selected: false, onSelect: nil)
                             }
                         case .data(let value):
-                            Text(String(decoding: (try? JSONEncoder().encode(value)) ?? Data(), as: UTF8.self))
-                                .textSelection(.enabled)
+                            WorkflowDatumEditor(value: .constant(value)).disabled(true)
                         case .receipt(let receipt):
                             Text(receipt.names.joined(separator: "、"))
                             Text(receipt.hashes.joined(separator: "\n"))

@@ -165,6 +165,46 @@ import Observation
         guard graph?.id == graphID else { return }
         edit { $0.interface = interface }
     }
+    public func extractSelection(name: String, inputs: [WorkflowToolInputBinding], outputs: [WorkflowNamedOutput], expectedGraphID: UUID, expectedRevision: UUID) {
+        guard !closed, !closing, !isRunning, readOnlyReason == nil, let graph,
+              graph.id == expectedGraphID, graph.revision == expectedRevision else { errorMessage = "封装期间原图已改变；请重新检查边界。"; return }
+        do {
+            let result = try WorkflowToolEditing.extract(graph, selected: selectedNodeIDs, name: name, inputs: inputs, outputs: outputs, tools: tools, registry: registry)
+            let oldTools = tools; tools.append(result.tool)
+            edit { $0 = result.graph }
+            if self.graph?.nodes.contains(where: { $0.id == result.invocationID }) != true { tools = oldTools; return }
+            selectedNodeID = result.invocationID; selectedNodeIDs = []
+        } catch { errorMessage = error.localizedDescription }
+    }
+    public func addTool(_ tool: WorkflowToolDefinition) {
+        guard let definition = registry.operation("d.control.invoke")?.definition else { return }
+        do {
+            guard tools.contains(tool), let interface = tool.graph.interface else { throw WorkflowIssue("工具版本不在项目中。") }
+            var node = definition.makeNode(); node.title = tool.name
+            node.control = .invoke(.init(id: tool.id, version: tool.version, digest: try WorkflowPlanCompiler.digest(tool)))
+            node.dataConfiguration = .init(fields: interface.inputs)
+            edit { $0.nodes.append(node); $0.layout.append(.init(nodeID: node.id, x: 160, y: 160)) }; selectedNodeID = node.id
+        } catch { errorMessage = error.localizedDescription }
+    }
+    public func openToolCopy(_ reference: WorkflowToolReference) {
+        guard !closed, !closing, !isRunning, readOnlyReason == nil,
+              let tool = tools.first(where: { $0.id == reference.id && $0.version == reference.version }) else { return }
+        do {
+            guard try WorkflowPlanCompiler.digest(tool) == reference.digest else { throw WorkflowIssue("工具内容与引用不一致。") }
+            let draft = WorkflowToolEditing.editableCopy(of: tool)
+            undoStack.append(graphs); redoStack = []; graphs.append(draft); selectedGraphID = draft.id; selectedNodeID = draft.nodes.first?.id
+        } catch { errorMessage = error.localizedDescription }
+    }
+    public func saveGraphAsTool(name: String) {
+        guard !closed, !closing, !isRunning, readOnlyReason == nil, let graph else { return }
+        do {
+            let title = name.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !title.isEmpty, title.utf8.count <= 256, !tools.contains(where: { $0.name == title }), graph.interface?.outputs.isEmpty == false else { throw WorkflowIssue("请填写唯一名称，并在公开接口中指定输出。") }
+            let tool = WorkflowToolDefinition(name: title, graph: graph)
+            _ = try WorkflowPlanCompiler(registry: registry).compile(graph, tools: tools + [tool])
+            tools.append(tool); progressMessage = "工具已加入项目工具箱；保存项目后可重开。"
+        } catch { errorMessage = error.localizedDescription }
+    }
     public func addNode(operationID: String) {
         guard let op = registry.operation(operationID) else { errorMessage = "未知操作。"; return }
         var node = op.definition.makeNode()
@@ -332,7 +372,13 @@ import Observation
             let compiled = try WorkflowPlanCompiler(registry: registry).compile(frozen, tools: tools, target: target, only: only)
             let plan = try WorkflowPlanBinding.freeze(compiled, defaults: defaults, registry: registry)
             if let i = graphs.firstIndex(where: { $0.id == frozen.id }), graphs[i].revision == original.revision { graphs[i] = frozen }
-            var checkpoint = WorkflowPlanCheckpoint(plan: plan)
+            var arguments: [String: WorkflowDatum] = [:]
+            for field in plan.interface.inputs {
+                if let input = frozen.nodes.first(where: { $0.operationID == "d.value.input" && $0.parameters["publicName"]?.string == field.name }), let value = input.dataConfiguration?.value {
+                    try value.validate(as: field.type); arguments[field.name] = value
+                } else if field.required { throw WorkflowIssue("公开输入尚未填写：\(field.name)。") }
+            }
+            var checkpoint = WorkflowPlanCheckpoint(plan: plan, arguments: arguments)
             checkpoint.modelDefaults = defaults
             if only {
                 guard let node = frozen.nodes.first(where: { $0.id == target }) else { throw WorkflowIssue("节点不存在。") }
@@ -450,6 +496,49 @@ import Observation
         progressMessage = "正在取消，等待计算停止并释放资源。"
         activeExecutor?.requestStop()
         await services.cancel()
+    }
+    public func editHumanDraft(stepID: UUID, value: WorkflowDatum?) {
+        guard !closed, !closing, readOnlyReason == nil, !isRunning,
+              let ri = runs.firstIndex(where: { $0.planCheckpoint?.records.contains { $0.step.id == stepID } == true }),
+              let ci = runs[ri].planCheckpoint?.records.firstIndex(where: { $0.step.id == stepID }),
+              runs[ri].planCheckpoint?.records[ci].step.status == .waiting,
+              runs[ri].planCheckpoint?.records[ci].step.humanTask?.decision == nil else { return }
+        do {
+            try value?.validate()
+            runs[ri].planCheckpoint?.records[ci].step.humanTask?.draft = value
+            if let cp = runs[ri].planCheckpoint { capture(cp, runIndex: ri) }
+        } catch { errorMessage = error.localizedDescription }
+    }
+    public func decideHuman(stepID: UUID, value: WorkflowDatum?, reject: Bool = false, expectedTask: WorkflowHumanTask) async {
+        guard !closed, !closing, readOnlyReason == nil, !isRunning else { return }
+        isRunning = true; defer { isRunning = false }
+        do {
+            guard let ri = runs.firstIndex(where: { $0.planCheckpoint?.records.contains { $0.step.id == stepID } == true }),
+                  var cp = runs[ri].planCheckpoint,
+                  let ci = cp.records.firstIndex(where: { $0.step.id == stepID }),
+                  var human = cp.records[ci].step.humanTask, human.id == stepID, human == expectedTask,
+                  cp.records[ci].step.status == .waiting, human.decision == nil, !human.rejected,
+                  rootGraph?.id == runs[ri].graph.id, rootGraph?.revision == runs[ri].graph.revision else {
+                throw WorkflowIssue("等待点或原图已改变；未应用到其他调用。")
+            }
+            if !reject {
+                guard let value else { throw WorkflowIssue("请明确提供人工结果。") }
+                try value.validate(as: human.resultSchema)
+                for ref in value.assetReferences { try await services.verifyAsset(ref) }
+            }
+            guard rootGraph?.id == runs[ri].graph.id, rootGraph?.revision == runs[ri].graph.revision else { throw WorkflowIssue("确认期间流程已改变。") }
+            human.decision = reject ? nil : value; human.rejected = reject
+            cp.records[ci].step.humanTask = human
+            let executor = WorkflowPlanExecutor(registry: registry, executeCall: { _ in throw WorkflowIssue("提交人工结果不执行下游。") }, save: { [unowned self] latest in
+                self.capture(latest, runIndex: ri); try await self.persist()
+            })
+            do { let settled = try await executor.settleWaiting(cp, stepID: stepID); capture(settled, runIndex: ri) }
+            catch { if let latest = executor.checkpoint { capture(latest, runIndex: ri) }; throw error }
+            progressMessage = reject ? "已拒绝；未执行下游。" : "结果已保存；继续原运行才执行下游。"
+        } catch { errorMessage = error.localizedDescription }
+    }
+    public func callRecords(runID: UUID) -> [WorkflowPlanCallRecord] {
+        runs.first { $0.id == runID }?.planCheckpoint?.records ?? []
     }
     public func decide(stepID: UUID, accept: Bool, text: String?, candidateID: UUID?, acceptPartial: Bool) async {
         guard !closed, !closing, !isRunning, readOnlyReason == nil else { return }

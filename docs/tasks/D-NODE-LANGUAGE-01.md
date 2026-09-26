@@ -190,3 +190,9 @@ E03导入/录音asset输入→可编辑截取/格式→SwiftF0识别→typed hum
 E04同一发布文字输入分叉文字/图像/受控音乐/T2V，以Record返回资产并含themeID；至少一模型操作每模态，无I2V假边。视频真实参数短小在现有profile，不为本机限制产品上限。编辑模型/配置不自动执行。
 
 依据当前 operations/plan/types和附件02/03必要段落制作；API缺口报告，不造dummy操作。Tests每样例真实Compiler编译、unique/node counts、tools digest/interfaces、公开工具可在不同图多次Invoke、无默认人工（E03明确人工例外）、文字共享不在图像抽卡重复、E03真实notes连接、V01无image条件。尽量实际Executor+fake服务无模型运行E01验证动态列表/Loop，绝不冒充模型验证。样例语言标签可提供 en/zh建议文件，代码标题暂中文可由Lead本地化。回传例子连接/局限与运行目标，而非“GUI已完成”。
+
+## 工具与人工界面接线中途（非GUI/模型验收）
+
+Lead接入局部body导航、真实ControlEditor/公开接口、选区边界检查后Invoke封装、固定工具展开为独立编辑副本/另存、typed人工决定与安全暂停；所有运行仍同一个Executor。人工决定用完整期望task比对，且同一顶层等待点不再在主/历史创建两个可编辑表单。Control表单更新被Controller拒绝却误标Apply成功、dirty进入丢草稿两个问题交CONTROL-FORMS repair1，预算仍初交+两轮。Loop现在明确提供1起始iteration，UI必填，原临时optional断言随契约修正，不是放宽标准。
+
+EXAMPLES初次实现因旧G01集合到通用List缺口按要求停报，无写入；这是共享接口缺口，不计普通逻辑返工。Lead新增明确 `d.value.candidates` 适配操作：output为全部record列表（id/attemptID/十进制seed/status/optional资产与错误），successful为显式过滤后的图片List；不丢失败、不调用模型、不改变旧G01/选择语义。`tool-candidate-bridge`相应CPU/界面类型检查通过，实际GUI/模型仍未验收。续接初交总1800秒预算扣除已用124.42秒，普通修复仍0/2。预检shell误用了zsh path导致一次127，绝对路径只读补读成功；Lead明确分类后核验实际Sol/high/隔离/禁网，未当成权限通过探针。

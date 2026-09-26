@@ -33,7 +33,7 @@ struct WorkflowControlFormsTests {
         }
         let loopPlan = try compiler.compile(loopBody)
         #expect(loopPlan.interface.inputs.map(\.name) == WorkflowControlFormSupport.loopVariableNames)
-        #expect(loopPlan.interface.inputs.first(where: { $0.name == "iteration" })?.required == false)
+        #expect(loopPlan.interface.inputs.first(where: { $0.name == "iteration" })?.required == true)
         #expect(loopPlan.interface.outputs.map(\.name) == ["nextState"])
         #expect(loopPlan.interface.outputs.first?.schema == schema)
         #expect(maximum == 1)

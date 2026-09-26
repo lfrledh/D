@@ -267,11 +267,10 @@ enum WorkflowControlFormSupport {
                 continueOnFailure: false
             )
         case "d.control.loop":
-            // The current executor supplies `state` but not `iteration`. Keeping iteration optional
-            // exposes the specified body variable without making every generated body fail at entry.
+            // Both state and the one-based iteration are explicit runtime arguments.
             let fields = [
                 WorkflowRecordField("state", .text),
-                WorkflowRecordField("iteration", .number(unit: nil), required: false),
+                WorkflowRecordField("iteration", .number(unit: nil)),
             ]
             return .loop(
                 body: try makeBody(name: "Loop Body", inputs: fields, passthrough: "state", outputName: "nextState", registry: registry),
