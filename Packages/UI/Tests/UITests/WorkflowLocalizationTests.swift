@@ -173,7 +173,7 @@ struct WorkflowLocalizationTests {
                 guard visited.insert(ObjectIdentifier(object)).inserted else { continue }
                 let accessibility: (label: String?, value: Any?, children: [Any])?
                 if let element = object as? any NSAccessibilityProtocol {
-                    accessibility = (element.accessibilityLabel(), element.accessibilityValue(),
+                    accessibility = (element.accessibilityLabel() ?? element.accessibilityTitle(), element.accessibilityValue(),
                                      element.accessibilityChildren() ?? [])
                 } else {
                     accessibility = nil
