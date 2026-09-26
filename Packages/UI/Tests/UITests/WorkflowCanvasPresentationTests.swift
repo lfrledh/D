@@ -127,23 +127,29 @@ struct WorkflowCanvasPresentationTests {
         let target = WorkflowNode(operationID: "d.value.return", title: "target")
         let edge = WorkflowConnection(sourceNode: source.id, sourcePort: "output", targetNode: target.id, targetPort: "input")
         let graph = WorkflowGraph(nodes: [source, target], connections: [edge])
-        let plan = WorkflowPlan(graphID: graph.id, graphRevision: graph.revision, steps: [])
+        let map = WorkflowNode(operationID: "d.control.map", title: "map")
+        let body = WorkflowPlan(graphID: graph.id, graphRevision: graph.revision, steps: [.init(node: target, inputs: [])])
+        let plan = WorkflowPlan(graphID: UUID(), graphRevision: UUID(), steps: [.init(node: map, inputs: [], kind: .map(body: body, continueOnFailure: true))])
         var run = WorkflowRun(graph: graph, targetNodeID: target.id)
         var first = WorkflowStepRun(node: target, signature: "a"), second = WorkflowStepRun(node: target, signature: "b")
         first.inputs = ["input": .data(.text("first item"))]; second.inputs = ["input": .data(.text("second item"))]
         let records: [WorkflowPlanCallRecord] = [
-            .init(address: .init(runID: run.id, path: [.item("a"), .node(target.id)]), step: first),
-            .init(address: .init(runID: run.id, path: [.item("b"), .node(target.id)]), step: second),
+            .init(address: .init(runID: run.id, path: [.node(map.id), .item("a"), .node(target.id)]), step: first),
+            .init(address: .init(runID: run.id, path: [.node(map.id), .item("b"), .node(target.id)]), step: second),
         ]
         run.planCheckpoint = .init(runID: run.id, plan: plan, records: records)
-        let values = WorkflowConnectionPresentation.snapshots(edge, runs: [run])
+        let values = WorkflowConnectionPresentation.snapshots(edge, graphID: graph.id, runs: [run])
         #expect(values.count == 2)
+        #expect(WorkflowConnectionPresentation.snapshots(edge, graphID: UUID(), runs: [run]).isEmpty)
+        // Same node IDs in a copied graph are not the original tool body identity.
+        var copied = graph; copied.id = UUID()
+        #expect(WorkflowConnectionPresentation.snapshots(edge, graphID: copied.id, runs: [run]).isEmpty)
         #expect(values.map(\.value) == [first.inputs["input"]!, second.inputs["input"]!])
         #expect(values.map(\.address) == records.map { $0.address.path })
         #expect(Set(values.map(\.id)).count == 2)
         #expect(WorkflowConnectionPresentation.configuredValue(source: source) == nil)
         var differentPort = edge; differentPort.targetPort = "missing"
-        #expect(WorkflowConnectionPresentation.snapshots(differentPort, runs: [run]).isEmpty)
+        #expect(WorkflowConnectionPresentation.snapshots(differentPort, graphID: graph.id, runs: [run]).isEmpty)
         var literal = WorkflowNode(operationID: "d.value.input", title: "value")
         literal.dataConfiguration = .init(value: .text("new setting"))
         #expect(WorkflowConnectionPresentation.configuredValue(source: literal) == .data(.text("new setting")))

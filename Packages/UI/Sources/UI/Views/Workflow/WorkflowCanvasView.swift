@@ -1085,19 +1085,43 @@ struct WorkflowConnectionSnapshot: Identifiable {
     let value: WorkflowValue
 }
 enum WorkflowConnectionPresentation {
-    static func snapshots(_ connection: WorkflowConnection, runs: [WorkflowRun]) -> [WorkflowConnectionSnapshot] {
+    static func snapshots(_ connection: WorkflowConnection, graphID: UUID, runs: [WorkflowRun]) -> [WorkflowConnectionSnapshot] {
         runs.flatMap { run in
             let records = run.planCheckpoint?.records ?? run.steps.map {
                 WorkflowPlanCallRecord(address: .init(runID: run.id, path: [.node($0.node.id)]), step: $0)
             }
             return records.compactMap { call -> WorkflowConnectionSnapshot? in
+                let owner: WorkflowPlan?
+                if let checkpoint = run.planCheckpoint {
+                    owner = owningPlan(path: call.address.path, in: checkpoint.plan)
+                    guard call.address.runID == run.id, owner?.graphID == graphID else { return nil }
+                } else {
+                    guard run.graph.id == graphID else { return nil }
+                    owner = nil
+                }
                 guard call.step.node.id == connection.targetNode,
                       let value = call.step.inputs[connection.targetPort] else { return nil }
-                return WorkflowConnectionSnapshot(runID: run.id, revision: run.graph.revision,
+                return WorkflowConnectionSnapshot(runID: run.id, revision: owner?.graphRevision ?? run.graph.revision,
                     stepID: call.step.id, address: call.address.path,
                     operationID: call.step.node.operationID, value: value)
             }
         }
+    }
+    private static func owningPlan(path: [WorkflowAddressComponent], in root: WorkflowPlan) -> WorkflowPlan? {
+        var plan = root, offset = 0
+        while offset < path.count {
+            guard case .node(let id) = path[offset], let step = plan.steps.first(where: { $0.id == id }) else { return nil }
+            if offset == path.count - 1 { return plan }
+            switch (step.kind, path[offset + 1]) {
+            case let (.branch(_, yes, no), .branch(selected)): plan = selected ? yes : no
+            case let (.map(body, _), .item): plan = body
+            case let (.loop(body, _, _, _), .iteration): plan = body
+            case let (.invoke(reference, body), .tool(selected)) where reference == selected: plan = body
+            default: return nil
+            }
+            offset += 2
+        }
+        return nil
     }
     static func configuredValue(source: WorkflowNode?) -> WorkflowValue? {
         guard let source else { return nil }
@@ -1119,7 +1143,7 @@ private struct WorkflowConnectionInspection: View {
                     values: [connection.targetPort: value], operationID: "", portsAreInputs: true,
                     controller: controller, onReturnText: { _ in }, allowsReturn: false)
             }
-            let snapshots = WorkflowConnectionPresentation.snapshots(connection, runs: controller.history(for: connection.targetNode))
+            let snapshots = WorkflowConnectionPresentation.snapshots(connection, graphID: controller.graph?.id ?? UUID(), runs: controller.history(for: connection.targetNode))
             Text(workflowText(language, "workflow.connection.history", fallback: "此输入端口的历史快照；不代表当前连线"))
                 .font(.caption).foregroundStyle(.secondary)
             if snapshots.isEmpty {
