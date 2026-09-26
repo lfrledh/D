@@ -63,6 +63,9 @@ struct NodeLanguageMusicRealTests {
         process.arguments = ["-B", "-c", probe, engine.providerScript.deletingLastPathComponent().path, manifest.path]
         process.currentDirectoryURL = root
         process.environment = ["PATH": "/usr/bin:/bin", "PYTHONDONTWRITEBYTECODE": "1", "PYTHONNOUSERSITE": "1", "TMPDIR": root.appendingPathComponent("tmp").path]
+        let homeMode = ProcessInfo.processInfo.environment["D_NODE_LANGUAGE_ACCESS_HOME_MODE"] ?? "baseline"
+        if homeMode == "home" || homeMode == "fixed" { process.environment?["HOME"] = NSHomeDirectory() }
+        if homeMode == "fixed" { process.environment?["CFFIXED_USER_HOME"] = NSHomeDirectory() }
         process.standardOutput = stdout; process.standardError = stderr
         try process.run()
         let timeout = DispatchWorkItem { if process.isRunning { process.terminate() } }
@@ -70,7 +73,7 @@ struct NodeLanguageMusicRealTests {
         process.waitUntilExit(); timeout.cancel()
         let bytes = stdout.fileHandleForReading.readDataToEndOfFile()
         let child = try JSONSerialization.jsonObject(with: bytes)
-        let report = try JSONSerialization.data(withJSONObject: ["parent": parent, "child": child, "exit": process.terminationStatus], options: [.prettyPrinted, .sortedKeys])
+        let report = try JSONSerialization.data(withJSONObject: ["parent": parent, "child": child, "exit": process.terminationStatus, "homeMode": homeMode], options: [.prettyPrinted, .sortedKeys])
         try report.write(to: root.appendingPathComponent("result.json"), options: [.withoutOverwriting])
         print("D_NODE_LANGUAGE_ACCESS_REPORT=\(root.appendingPathComponent("result.json").path)")
         print(String(decoding: report, as: UTF8.self))
