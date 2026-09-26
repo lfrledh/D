@@ -33,11 +33,28 @@ public struct WorkflowRegistry: Sendable {
 
     public func operation(_ id: String) -> WorkflowOperation? { operationsByID[id] }
 
+    /// Project the instance's typed interface; display strings never define validation.
+    public func definition(for node: WorkflowNode) -> WorkflowOperationDefinition? {
+        guard var result = operation(node.operationID)?.definition else { return nil }
+        if ["d.value.record", "d.value.list", "d.control.invoke"].contains(node.operationID) {
+            result.inputs = (node.dataConfiguration?.fields ?? []).map {
+                .init($0.name, $0.name, kinds: $0.type.portKinds, required: $0.required)
+            }
+        }
+        if node.operationID == "d.value.input", let value = node.dataConfiguration?.value {
+            result.outputs = [.init("output", "值", kinds: [value.kind])]
+        }
+        if node.operationID == "d.value.field", let type = node.dataConfiguration?.schema {
+            result.outputs = [.init("output", "字段", kinds: type.portKinds)]
+        }
+        return result
+    }
+
     public func validate(_ node: WorkflowNode) throws {
         guard let operation = operationsByID[node.operationID] else {
             throw WorkflowIssue("未知操作：\(node.operationID)。", nodeID: node.id)
         }
-        let definition = operation.definition
+        let definition = definition(for: node) ?? operation.definition
         guard node.definitionVersion == definition.version else {
             throw WorkflowIssue(
                 "不支持的操作版本：\(node.operationID) v\(node.definitionVersion)，当前为 v\(definition.version)。",
@@ -87,11 +104,11 @@ public struct WorkflowRegistry: Sendable {
             guard let target = nodes[connection.targetNode] else {
                 throw WorkflowIssue("连接目标节点不存在。")
             }
-            guard let sourceDefinition = operationsByID[source.operationID]?.definition,
+            guard let sourceDefinition = definition(for: source),
                   let output = sourceDefinition.outputs.first(where: { $0.id == connection.sourcePort }) else {
                 throw WorkflowIssue("来源端口不存在。", nodeID: source.id, port: connection.sourcePort)
             }
-            guard let targetDefinition = operationsByID[target.operationID]?.definition,
+            guard let targetDefinition = definition(for: target),
                   let input = targetDefinition.inputs.first(where: { $0.id == connection.targetPort }) else {
                 throw WorkflowIssue("目标端口不存在。", nodeID: target.id, port: connection.targetPort)
             }
@@ -172,6 +189,15 @@ public struct WorkflowRegistry: Sendable {
             canonical.append(Self.uuidString(id))
             canonical.append(node.operationID)
             canonical.append(String(node.definitionVersion))
+            let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
+            if let configuration = node.dataConfiguration {
+                canonical.append("dataConfiguration-v1")
+                canonical.append(String(decoding: try encoder.encode(configuration), as: UTF8.self))
+            }
+            if let control = node.control {
+                canonical.append("control-v1")
+                canonical.append(String(decoding: try encoder.encode(control), as: UTF8.self))
+            }
             for key in node.parameters.keys.sorted() {
                 guard let value = node.parameters[key] else { continue }
                 canonical.append("field")
@@ -210,7 +236,7 @@ public struct WorkflowRegistry: Sendable {
         connectedPorts: Set<String>
     ) throws {
         try validate(node)
-        guard let definition = operationsByID[node.operationID]?.definition else {
+        guard let definition = definition(for: node) else {
             throw WorkflowIssue("未知操作：\(node.operationID)。", nodeID: node.id)
         }
         let ports = Dictionary(uniqueKeysWithValues: definition.inputs.map { ($0.id, $0) })

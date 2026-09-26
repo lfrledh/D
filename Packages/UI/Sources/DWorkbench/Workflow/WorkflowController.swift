@@ -344,6 +344,8 @@ import Observation
                     runs[ri].steps[si].status = failed ? .partial : .completed
                 case .reviewText(let ref):
                     runs[ri].steps[si].outputs = ["preview": .asset(ref)]; runs[ri].steps[si].status = .waiting
+                case .humanTask(let task):
+                    runs[ri].steps[si].humanTask = task; runs[ri].steps[si].status = .waiting
                 case .choose(let candidates):
                     runs[ri].steps[si].outputs = ["preview": .collection(candidates)]; runs[ri].steps[si].status = .waiting
                 }

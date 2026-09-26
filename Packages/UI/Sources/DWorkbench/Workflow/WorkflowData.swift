@@ -12,6 +12,10 @@ public indirect enum WorkflowDataSchema: Codable, Sendable, Equatable {
         case .optional: .optional; case .result: .result; case .asset(let kind): kind
         }
     }
+    public var portKinds: [WorkflowDataKind] {
+        if case .optional(let wrapped) = self { return [.optional] + wrapped.portKinds }
+        return [kind]
+    }
 }
 
 public struct WorkflowRecordField: Codable, Sendable, Equatable, Identifiable {

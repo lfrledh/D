@@ -62,3 +62,19 @@ S0已核实外盘/源/索引/无已知执行进程，既有源构建App以全新
 - return：input任意合法Datum，name="result"只是公开输出名元数据，当前output照常传值；不写外部文件。
 
 各节点先验证输入Datum完整性与数量/单位。输出不得调用模型或发布资产；不为纯程序租模型。测试直接execute真实operation，fake services只在任何误调用时失败：Unicode模板、输入包含{{x}}不二次替换、缺字段、嵌套/空列表、异构拒绝、重复itemID/配对键、单位不符、稳定排序、显式选择、report/strict差异、数据无副作用。允许局部实现选择；歧义先回Lead，不自行扩范围。
+
+## PLAN r1：唯一结构化计划编译和解释器
+
+共享类型 `WorkflowPlan.swift`、`WorkflowData.swift`、WorkflowTypes/Operation由Lead持有；使用当前已登记WorkflowOperation，不另建InferenceRuntime/Store/GPU队列。只新增 `Workflow/WorkflowPlanCompiler.swift`、`Workflow/WorkflowPlanExecutor.swift` 与 `Tests/DWorkbenchTests/WorkflowPlanTests.swift`。请求gpt-5.6-sol/high，初交最多1800秒（结构化控制实现），两轮修复上限不变。Worker不编译全包/不GPU/不GUI/网络，前端parse允许，Lead串行测试。源码可读当前Registry/Controller，但不得修改。
+
+冻结接口：`public struct WorkflowPlanCompiler` init(registry:WorkflowRegistry = .standard)，`compile(_ graph: WorkflowGraph, tools:[WorkflowToolDefinition] = [], target: UUID? = nil, only:Bool = false) throws -> WorkflowPlan`；`static func digest(_ tool:WorkflowToolDefinition) throws -> String`用sorted JSON SHA256。compile无任何服务调用；按现有registry.plan拓扑但完整graph时包含所有节点。已知控制节点由node.control准确结构，静态检查所有局部图和工具身份/版本/digest、接口、重复名、schema；仅Call执行时获取资源。递归工具拒绝；合法嵌套至少2层，depth<=16、总体plan steps<=4096、loop1...1000；Map最大输入4096是数据边界。未选分支缺模型安装不能编译阻塞，不验证具体模型文件。
+
+`@MainActor public final class WorkflowPlanExecutor` init(registry:WorkflowRegistry = .standard, executeCall: @escaping @MainActor (WorkflowExecutionContext) async throws -> WorkflowOperationResult, save: @escaping @MainActor (WorkflowPlanCheckpoint) async throws -> Void)。public private(set) checkpoint:WorkflowPlanCheckpoint?；`execute(_ checkpoint:WorkflowPlanCheckpoint) async throws -> WorkflowPlanCheckpoint`，`requestPause()`、`requestStop()`（只置协调标志，实际GPU取消由Lead/controller调用services.cancel，回调在返回前确保drain/release）。不自行另开Task或GPU线程。每节点输入绑定前后、终态、每item/iteration与等待都保存快照。safe pause在当前Call返回/释放后停，不启动下一步；save失败保留内存已完成record与saving状态并throw，再次execute(checkpoint)只补保存，不重做终态。外部输入checkpoint.externalInputs明确提供，缺失不自动运行其他节点。
+
+执行地址 runID + node/branch/item/iteration/tool 的结构数组，实际stepID首次创建后持久不变；同模板各次调用独立，禁止仅nodeUUID缓存。命名body输入由N01节点parameters["publicName"]读取同名arguments，覆盖本次节点dataConfiguration.value；必填interface校验、缺必需参数拒绝，默认literal不改变原图。
+
+控制规则：Branch对input Datum用predicate，选中子图arguments为inputRecord.fields或["input":datum]；只运行一侧。Map input List、shared可选Record；每item body arguments = shared.fields + item/value/index（index单位nil、1起始，保留itemID地址），冲突键拒绝；默认body返回output，或唯一命名输出；每项结果输出List<Result<T>>，稳定父itemID、失败位置，continueOnFailure决定停止；T取body.interface.output.schema，不猜失败值；空列表合法。Loop input State、shared可选；初始及next state验证stateSchema；先判断until，满足可零次；body arguments state/shared；body必须返回state（或唯一output），每轮完成后保存；输出output=终态，exitReason=枚举conditionMet/iterationLimit/failed/cancelled，不能上限冒充条件满足。失败/取消写明确loopExit并停止相应调用。Invoke根据固定reference展开已编译body，把具名inputs映射arguments，返回具名输出，不复制模板UUID作为调用身份。
+
+Call复用executeCall回调；outputs校验并标完成，旧collection有失败则partial；旧reviewText/choose保持waiting，不自动决策；humanTask保存typed task等待。恢复遇到已完成记录直接使用；waiting无decision停止，typed human已明确decision且schema合法才输出，rejected停止不空成功。旧决定解释由Lead接线，Worker不得变旧语义。top-level interface命名outputs从明确node/port收集，无interface时返回最后step outputs。所有缺输入错误定位node/port/address；无字符串eval。对record/schema定义检查用实际类型。source map为每planned node原UUID+graphID/revision，实际调用地址保存在records，不能假称复制图为tool。
+
+CPU测试：未选分支执行计数0；Map不同长度/稳定ID/一失败保位置；同工具双调用和至少一层nested tool不串；坏工具digest/recursive拒绝；Loop零次/满足/耗尽/失败/停止区分；每轮保存重开不重算；暂停不多调、保存失败不重算成功Call；边界外输入缺失拒绝；typed human等待恢复/拒绝不空成功。用受控executeCall，不绕过生产解释器。任何契约缺口回Lead，不改共享文件或降低标准。

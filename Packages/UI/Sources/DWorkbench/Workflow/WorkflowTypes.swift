@@ -60,6 +60,7 @@ public struct WorkflowNode: Codable, Sendable, Equatable, Identifiable {
     public var definitionVersion: Int
     public var title: String
     public var parameters: [String: WorkflowScalar]
+    public var control: WorkflowControlBlock?
     public var dataConfiguration: WorkflowDataConfiguration?
     public var assetReference: WorkflowAssetReference?
     public init(id: UUID = UUID(), operationID: String, definitionVersion: Int = 1, title: String,
@@ -91,6 +92,7 @@ public struct WorkflowGraph: Codable, Sendable, Equatable, Identifiable {
     public var id: UUID
     public var revision: UUID
     public var name: String
+    public var interface: WorkflowGraphInterface?
     public var nodes: [WorkflowNode]
     public var connections: [WorkflowConnection]
     public var layout: [WorkflowLayout]
@@ -122,6 +124,7 @@ public struct WorkflowDecision: Codable, Sendable, Equatable {
 }
 public struct WorkflowStepRun: Codable, Sendable, Equatable, Identifiable {
     /// Human edits at a waiting gate are durable drafts, never an implicit decision.
+    public var humanTask: WorkflowHumanTask?
     public var reviewTextDraft: String?
     public var repeatRequested: Bool?
     public var inputsBound: Bool?
@@ -141,6 +144,7 @@ public struct WorkflowStepRun: Codable, Sendable, Equatable, Identifiable {
 public struct WorkflowRun: Codable, Sendable, Equatable, Identifiable {
     public var id: UUID
     public var graph: WorkflowGraph
+    public var planCheckpoint: WorkflowPlanCheckpoint?
     public var targetNodeID: UUID
     public var steps: [WorkflowStepRun]
     public var status: WorkflowStepStatus
@@ -163,6 +167,7 @@ public struct WorkflowAssetRecord: Codable, Sendable, Equatable {
     }
 }
 public struct WorkflowArchive: Codable, Sendable, Equatable {
+    public var tools: [WorkflowToolDefinition]?
     public var version = 1
     public var revision: UUID
     public var graphs: [WorkflowGraph]

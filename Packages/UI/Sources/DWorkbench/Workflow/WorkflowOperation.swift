@@ -4,13 +4,16 @@ public enum WorkflowOperationResult: Sendable, Equatable {
     case outputs([String: WorkflowValue])
     case reviewText(WorkflowAssetReference)
     case choose([WorkflowCandidate])
+    case humanTask(WorkflowHumanTask)
 }
 public struct WorkflowExecutionContext: Sendable {
+    public let address: WorkflowExecutionAddress?
     public let node: WorkflowNode
     public let stepID: UUID
     public let inputs: [String: WorkflowValue]
     public let retryCandidates: [WorkflowCandidate]?
-    public init(node: WorkflowNode, stepID: UUID, inputs: [String: WorkflowValue], retryCandidates: [WorkflowCandidate]? = nil) {
+    public init(node: WorkflowNode, stepID: UUID, inputs: [String: WorkflowValue], retryCandidates: [WorkflowCandidate]? = nil, address: WorkflowExecutionAddress? = nil) {
+        self.address = address
         self.node = node; self.stepID = stepID; self.inputs = inputs; self.retryCandidates = retryCandidates
     }
 }
