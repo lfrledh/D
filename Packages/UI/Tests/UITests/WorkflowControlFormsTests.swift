@@ -1,5 +1,6 @@
 import DWorkbench
 import Foundation
+import SwiftUI
 import Testing
 @testable import UI
 
@@ -63,6 +64,118 @@ struct WorkflowControlFormsTests {
         #expect(selected.dataConfiguration?.schema == .boolean)
         #expect(selected.dataConfiguration?.path == ["preserve"])
         try WorkflowControlFormSupport.validate(selected, operationID: "d.control.invoke", tools: [tool])
+    }
+
+    @Test
+    func bindingReadbackKeepsRejectedDraftsDirtyAndAcceptsOnlyStoredProjections() throws {
+        let bodyA = try WorkflowControlFormSupport.makeBody(
+            name: "A",
+            inputs: [WorkflowRecordField("a", .text)],
+            passthrough: "a",
+            outputName: "output"
+        )
+        let bodyB = try WorkflowControlFormSupport.makeBody(
+            name: "B",
+            inputs: [WorkflowRecordField("b", .text)],
+            passthrough: "b",
+            outputName: "output"
+        )
+        let toolA = WorkflowToolDefinition(id: UUID(), version: 1, name: "A", graph: bodyA)
+        let toolB = WorkflowToolDefinition(id: UUID(), version: 1, name: "B", graph: bodyB)
+
+        var storedNode = WorkflowRegistry.standard.operation("d.control.invoke")!.definition.makeNode()
+        let original = try WorkflowControlFormSupport.selecting(tool: toolA, in: .init(node: storedNode))
+        storedNode.control = original.control
+        storedNode.dataConfiguration = original.dataConfiguration
+        let proposed = try WorkflowControlFormSupport.selecting(tool: toolB, in: original)
+        var proposedNode = storedNode
+        proposedNode.control = proposed.control
+        proposedNode.dataConfiguration = proposed.dataConfiguration
+
+        do {
+            let rejecting = Binding<WorkflowNode>(get: { storedNode }, set: { _ in })
+            rejecting.wrappedValue = proposedNode
+            #expect(!WorkflowControlFormSupport.controlCommitWasAccepted(proposed, storedNode: rejecting.wrappedValue))
+            #expect(WorkflowControlDraft(node: rejecting.wrappedValue) == original)
+        }
+        do {
+            let accepting = Binding<WorkflowNode>(get: { storedNode }, set: { storedNode = $0 })
+            accepting.wrappedValue = proposedNode
+            #expect(WorkflowControlFormSupport.controlCommitWasAccepted(proposed, storedNode: accepting.wrappedValue))
+        }
+
+        var inputNode = WorkflowRegistry.standard.operation("d.value.input")!.definition.makeNode()
+        inputNode.parameters["publicName"] = .text("a")
+        inputNode.dataConfiguration = .init(value: .text(""))
+        let outputNode = WorkflowRegistry.standard.operation("d.value.return")!.definition.makeNode()
+        let existingConnection = WorkflowConnection(
+            sourceNode: inputNode.id,
+            sourcePort: "output",
+            targetNode: outputNode.id,
+            targetPort: "input"
+        )
+        let originalInterface = WorkflowGraphInterface(outputs: [
+            WorkflowNamedOutput(name: "a", nodeID: outputNode.id, schema: .text),
+        ])
+        let proposedInterface = WorkflowGraphInterface(outputs: [
+            WorkflowNamedOutput(name: "b", nodeID: outputNode.id, schema: .text),
+        ])
+        var storedGraph = WorkflowGraph(
+            nodes: [inputNode, outputNode],
+            connections: [existingConnection]
+        )
+        storedGraph.interface = originalInterface
+        var proposedGraph = storedGraph
+        proposedGraph.interface = proposedInterface
+
+        do {
+            let rejecting = Binding<WorkflowGraph>(get: { storedGraph }, set: { _ in })
+            rejecting.wrappedValue = proposedGraph
+            #expect(!WorkflowControlFormSupport.interfaceCommitWasAccepted(
+                proposedInterface,
+                storedGraph: rejecting.wrappedValue
+            ))
+            #expect(rejecting.wrappedValue.interface == originalInterface)
+        }
+        do {
+            let accepting = Binding<WorkflowGraph>(get: { storedGraph }, set: { storedGraph = $0 })
+            accepting.wrappedValue = proposedGraph
+            #expect(WorkflowControlFormSupport.interfaceCommitWasAccepted(
+                proposedInterface,
+                storedGraph: accepting.wrappedValue
+            ))
+            #expect(accepting.wrappedValue.connections == [existingConnection])
+        }
+    }
+
+    @Test
+    func nestedContentRequiresAnAppliedConflictFreeControlDraft() throws {
+        var node = WorkflowRegistry.standard.operation("d.control.map")!.definition.makeNode()
+        node.control = try WorkflowControlFormSupport.makeDefaultControl(operationID: node.operationID)
+        let baseline = WorkflowControlDraft(node: node)
+
+        #expect(WorkflowControlFormSupport.canOpenNestedContent(
+            draft: baseline,
+            baseline: baseline,
+            conflict: false
+        ))
+
+        var dirty = baseline
+        guard case .map(let body, _) = dirty.control else {
+            Issue.record("Expected map control")
+            return
+        }
+        dirty.control = .map(body: body, continueOnFailure: true)
+        #expect(!WorkflowControlFormSupport.canOpenNestedContent(
+            draft: dirty,
+            baseline: baseline,
+            conflict: false
+        ))
+        #expect(!WorkflowControlFormSupport.canOpenNestedContent(
+            draft: baseline,
+            baseline: baseline,
+            conflict: true
+        ))
     }
 
     @Test
