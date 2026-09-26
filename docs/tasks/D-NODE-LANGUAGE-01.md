@@ -301,3 +301,9 @@ human：N03 fixture→N15 editText→下游N03。produce等待waiting，编辑�
 
 ### A09 实测发现的列表数量约束缺口
 node-real-image-repair-tool在eb691745构建上生成了合法的一主题三图，模型没有遵循两主题提示；验收严格拒绝，没有记6图成功。现有List类型约束元素形状而非特定数量，N11没有显式数量规则。Lead增加原N11/A09范围内的根List expectedItemCount纯值参数（缺失/-1保持原无数量约束；0...4096，类型/配置错误先拒绝），UI沿现有参数表单可编辑；不截断/补造数据、不硬编码执行器主题数、不提高模型。官方E02在普通检查/修复/最终strict三节点显式设2，其他工具默认不限制，List/Map仍可任意受支持数量。先新增实际反例list-count-red于90d091b+测试文件失败8断言，再实现；待非实现者复核、CPU及真实图像重验。此项是实际契约缺口，与先前Worker预算/模型质量分别记录。
+
+## Lead 数量约束兼容收尾（2026-09-27）
+
+- 非实现者复核发现543e6a4给N11新增可选expectedItemCount后，Registry的统一必填检查会拒绝旧v1节点；不是已交付用户图损坏，候选未入源。仅对此operation/field允许缺省，含义为原有不限制数量；不改旧参数、图签名或严格校验字段要求。
+- 新真实Store回归先经历测试代码枚举拼写编译错误（list-count-legacy-red），修正后list-count-legacy-red-r1以“缺少字段：expectedItemCount”真实失败；最小修补后list-count-legacy-green五组相关测试通过，覆盖原参数、签名、编译、保存冷重开及strict缺失/错误count类型拒绝。
+- MUSIC-CANCEL repair1复核只剩原资产完整记录保护断言，发出最后repair2，仍同任务预算。PROCESS-RECOVERY初交只读检查无权限拒绝/成功越界证据；失败命令为猜测rg位置和不存在源码目录，未用于绕过保护，候选待审阅/构建/实际进程实验。

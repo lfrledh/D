@@ -37,6 +37,43 @@ struct WorkflowArchiveInspectionTests {
         try await reopened.close()
     }
 
+    @Test @MainActor func oldValidationNodeWithoutListCountRetainsParametersAcrossStoreReopen() async throws {
+        let registry = WorkflowRegistry.standard
+        var input = try #require(registry.operation("d.value.input")).definition.makeNode()
+        input.dataConfiguration = .init(value: .list(element: .text, items: [.init(id: "一", value: .text("旧内容 👩🏽‍🎨"))]))
+        var validation = try #require(registry.operation("d.value.validate")).definition.makeNode()
+        validation.parameters.removeValue(forKey: "expectedItemCount")
+        validation.dataConfiguration = .init(schema: .list(.text))
+        let oldParameters = validation.parameters
+        #expect(oldParameters == ["strict": .flag(false)])
+        let graph = WorkflowGraph(nodes: [input, validation], connections: [.init(sourceNode: input.id, targetNode: validation.id, targetPort: "input")])
+        try registry.validate(graph)
+        let signature = try registry.signature(validation.id, in: graph)
+        let plan = try WorkflowPlanCompiler().compile(graph, target: validation.id)
+        #expect(plan.steps.last?.node.parameters == oldParameters)
+        var invalid = validation
+        invalid.parameters.removeValue(forKey: "strict")
+        #expect(throws: WorkflowIssue.self) { try registry.validate(invalid) }
+        invalid = validation
+        invalid.parameters["expectedItemCount"] = .flag(true)
+        #expect(throws: WorkflowIssue.self) { try registry.validate(invalid) }
+
+        let root = URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory())
+            .appendingPathComponent("legacy-validation-" + UUID().uuidString + ".dproject")
+        let store = try await ProjectStore.create(at: root, name: "旧校验节点")
+        let revision = try #require(try await store.workflowState().archive).revision
+        let saved = try await store.saveWorkflow(graphs: [graph], runs: [], expectedRevision: revision)
+        try await store.close()
+        let reopened = try await ProjectStore.open(at: root)
+        let loaded = try #require(try await reopened.workflowState().archive)
+        #expect(loaded == saved)
+        let restored = try #require(loaded.graphs.first)
+        #expect(restored.nodes.last?.parameters == oldParameters)
+        #expect(try registry.signature(validation.id, in: restored) == signature)
+        #expect(try WorkflowPlanCompiler().compile(restored, target: validation.id) == plan)
+        try await reopened.close()
+    }
+
     @Test func unknownKeysSurviveAsReadOnlyDetection() throws {
         var archive = WorkflowArchive(graphs: [.init(name: "中文")])
         let encoded = try JSONEncoder().encode(archive)

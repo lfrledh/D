@@ -77,6 +77,9 @@ public struct WorkflowRegistry: Sendable {
         }
         for field in definition.fields {
             guard let value = node.parameters[field.id] else {
+                // Earlier N11 v1 nodes predate the optional cardinality constraint.
+                // Preserve their stored parameters/signatures; missing means unrestricted.
+                if node.operationID == "d.value.validate", field.id == "expectedItemCount" { continue }
                 throw WorkflowIssue("缺少字段：\(field.id)。", nodeID: node.id)
             }
             try Self.validate(value, for: field, nodeID: node.id)
