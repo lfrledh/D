@@ -64,6 +64,46 @@ final class WorkflowMusicProgramsTests: XCTestCase {
         ))
     }
 
+    func testIntegerDecodingRejectsUnrepresentableAndNonIntegerDoublesWithoutTrap() throws {
+        let twoTo63 = 9_223_372_036_854_775_808.0
+        let tempo = WorkflowTempoMap(beatsPerMinute: 120, firstBeatSeconds: 0,
+                                     numerator: 4, denominator: 4)
+        guard case .record(let tempoSchema, let validTempoFields) = try tempo.datum() else {
+            return XCTFail("Expected tempo record")
+        }
+
+        for invalidVersion in [twoTo63, Double(Int.min), 1.5, Double.infinity] {
+            var fields = validTempoFields
+            fields["version"] = .number(invalidVersion, unit: nil)
+            XCTAssertThrowsError(try WorkflowTempoMap(
+                datum: .record(schema: tempoSchema, fields: fields)
+            ))
+        }
+        var numeratorFields = validTempoFields
+        numeratorFields["numerator"] = .number(twoTo63, unit: nil)
+        XCTAssertThrowsError(try WorkflowTempoMap(
+            datum: .record(schema: tempoSchema, fields: numeratorFields)
+        ))
+
+        let sequence = WorkflowNoteSequence(
+            clock: .seconds,
+            notes: [.init(id: "n", pitch: 60, start: 0, end: 1, velocity: 1)],
+            duration: 1
+        )
+        guard case .record(let sequenceSchema, var sequenceFields) = try sequence.datum(),
+              case .list(let element, let items)? = sequenceFields["notes"],
+              case .record(let noteSchema, var noteFields) = items[0].value else {
+            return XCTFail("Expected note record")
+        }
+        noteFields["pitch"] = .number(twoTo63, unit: "MIDI")
+        sequenceFields["notes"] = .list(element: element, items: [
+            .init(id: "n", value: .record(schema: noteSchema, fields: noteFields)),
+        ])
+        XCTAssertThrowsError(try WorkflowNoteSequence(
+            datum: .record(schema: sequenceSchema, fields: sequenceFields)
+        ))
+    }
+
     func testValidationRejectsDuplicateIDsAndOccupiedSpanOverflow() {
         let duplicate = WorkflowNoteSequence(
             clock: .seconds,
@@ -81,6 +121,24 @@ final class WorkflowMusicProgramsTests: XCTestCase {
             duration: 1
         )
         XCTAssertThrowsError(try pickupOverflow.validate())
+    }
+
+    func testMaximumNoteCountDatumValidatesAndRoundTripsWithExpandedValueWalkBudget() throws {
+        let notes = (0..<4_096).map {
+            WorkflowNoteEvent(id: "n\($0)", pitch: $0 % 128,
+                              start: 0, end: 1, velocity: 1)
+        }
+        let sequence = WorkflowNoteSequence(clock: .seconds, notes: notes, duration: 1)
+        let datum = try sequence.datum()
+        try datum.validate(as: WorkflowNoteSequence.schema(clock: .seconds))
+        XCTAssertEqual(try WorkflowNoteSequence(datum: datum), sequence)
+
+        let tooMany = WorkflowNoteSequence(
+            clock: .seconds,
+            notes: notes + [.init(id: "overflow", pitch: 60, start: 0, end: 1, velocity: 1)],
+            duration: 1
+        )
+        XCTAssertThrowsError(try tooMany.validate())
     }
 
     func testAlignUsesTempoOriginAndExposesCollapsedExtension() throws {
@@ -160,6 +218,27 @@ final class WorkflowMusicProgramsTests: XCTestCase {
         XCTAssertEqual(arpeggio.notes.map(\.end), [0.5, 1, 1.2])
     }
 
+    func testChordDerivedIDsAreBoundedDeterministicAndUniqueForMaximumSourceID() throws {
+        let sourceID = String(repeating: "é", count: 128)
+        XCTAssertEqual(sourceID.utf8.count, 256)
+        let track = WorkflowChordTrack(
+            chords: [.init(id: sourceID, root: 0, quality: .major,
+                           octave: 4, inversion: 0, start: 0, end: 1.5)],
+            duration: 1.5
+        )
+
+        let sustained = try WorkflowMusicPrograms.chordNotes(track: track, pattern: .sustained)
+        let sustainedAgain = try WorkflowMusicPrograms.chordNotes(track: track, pattern: .sustained)
+        let arpeggio = try WorkflowMusicPrograms.chordNotes(track: track, pattern: .arpeggio)
+        XCTAssertEqual(sustained.notes.map(\.id), sustainedAgain.notes.map(\.id))
+        XCTAssertEqual(Set(sustained.notes.map(\.id)).count, sustained.notes.count)
+        XCTAssertEqual(Set(arpeggio.notes.map(\.id)).count, arpeggio.notes.count)
+        XCTAssertTrue((sustained.notes + arpeggio.notes).allSatisfy {
+            !$0.id.isEmpty && $0.id.utf8.count <= 256
+        })
+        XCTAssertTrue(Set(sustained.notes.map(\.id)).isDisjoint(with: Set(arpeggio.notes.map(\.id))))
+    }
+
     func testChordRejectsInvalidInversionAndOutOfMIDIVoicing() {
         let badInversion = WorkflowChordTrack(
             chords: [.init(id: "bad", root: 0, quality: .major,
@@ -219,6 +298,26 @@ final class WorkflowMusicProgramsTests: XCTestCase {
         XCTAssertThrowsError(try WorkflowMusicPrograms.render(sequence: expensive, sampleRate: 48_000))
     }
 
+    func testRenderRejectsAlreadyCancelledTaskDeterministically() async {
+        let sequence = WorkflowNoteSequence(
+            clock: .seconds,
+            notes: [.init(id: "n", pitch: 60, start: 0, end: 1, velocity: 1)],
+            duration: 1
+        )
+        let task = Task<Data, Error> {
+            withUnsafeCurrentTask { current in current?.cancel() }
+            return try WorkflowMusicPrograms.render(sequence: sequence)
+        }
+        do {
+            _ = try await task.value
+            XCTFail("Cancelled reference render unexpectedly succeeded")
+        } catch is CancellationError {
+            // Expected: cancellation is observed without timing races.
+        } catch {
+            XCTFail("Expected CancellationError, received \(error)")
+        }
+    }
+
     func testMIDIUsesSMF0TempoVelocityOrderingAndDuration() throws {
         let tempo = WorkflowTempoMap(beatsPerMinute: 100, firstBeatSeconds: 0,
                                      numerator: 4, denominator: 4)
@@ -276,6 +375,43 @@ final class WorkflowMusicProgramsTests: XCTestCase {
         XCTAssertThrowsError(try WorkflowMusicPrograms.midi(sequence: beatWithoutTempo))
     }
 
+    func testBeatTimelineOriginOffsetsMIDIAndWAVAndRejectsNegativeMappedTime() throws {
+        let positiveTempo = WorkflowTempoMap(beatsPerMinute: 120, firstBeatSeconds: 1,
+                                             numerator: 4, denominator: 4)
+        let positive = WorkflowNoteSequence(
+            clock: .quarterNotes,
+            notes: [.init(id: "n", pitch: 60, start: 0, end: 1, velocity: 1)],
+            duration: 1,
+            tempo: positiveTempo
+        )
+        let events = try midiChannelEvents(WorkflowMusicPrograms.midi(sequence: positive))
+        XCTAssertEqual(events.count, 2)
+        XCTAssertEqual(events[0].tick, 1_920)
+        XCTAssertEqual(events[0].status, 0x90)
+        XCTAssertEqual(events[1].tick, 2_880)
+        XCTAssertEqual(events[1].status, 0x80)
+
+        let wav = try WorkflowMusicPrograms.render(sequence: positive, sampleRate: 16_000)
+        XCTAssertEqual(Int(uint32LE(wav, 40)), 24_000 * 4)
+        XCTAssertTrue(stride(from: 44, to: 44 + 16_000 * 4, by: 4).allSatisfy {
+            uint32LE(wav, $0) == 0
+        })
+        XCTAssertTrue(stride(from: 44 + 16_000 * 4, to: wav.count, by: 4).contains {
+            uint32LE(wav, $0) != 0
+        })
+
+        let negativeTempo = WorkflowTempoMap(beatsPerMinute: 120, firstBeatSeconds: -0.25,
+                                             numerator: 4, denominator: 4)
+        let negativeMapped = WorkflowNoteSequence(
+            clock: .quarterNotes,
+            notes: [.init(id: "n", pitch: 60, start: 0, end: 1, velocity: 1)],
+            duration: 2,
+            tempo: negativeTempo
+        )
+        XCTAssertThrowsError(try WorkflowMusicPrograms.midi(sequence: negativeMapped))
+        XCTAssertThrowsError(try WorkflowMusicPrograms.render(sequence: negativeMapped))
+    }
+
     private func makeSource() -> WorkflowAssetReference {
         WorkflowAssetReference(
             projectID: UUID(uuidString: "11111111-1111-1111-1111-111111111111")!,
@@ -297,6 +433,60 @@ final class WorkflowMusicProgramsTests: XCTestCase {
 
     private func uint16BE(_ data: Data, _ offset: Int) -> UInt16 {
         UInt16(data[offset]) << 8 | UInt16(data[offset + 1])
+    }
+
+    private func uint32BE(_ data: Data, _ offset: Int) -> UInt32 {
+        UInt32(data[offset]) << 24 | UInt32(data[offset + 1]) << 16 |
+            UInt32(data[offset + 2]) << 8 | UInt32(data[offset + 3])
+    }
+
+    private func midiChannelEvents(_ data: Data) throws -> [(tick: Int, status: UInt8, pitch: UInt8, velocity: UInt8)] {
+        guard data.count >= 22,
+              String(data: Data(data[14..<18]), encoding: .ascii) == "MTrk" else {
+            throw WorkflowIssue("Test MIDI lacks a track chunk.")
+        }
+        var offset = 22
+        let trackEnd = offset + Int(uint32BE(data, 18))
+        guard trackEnd <= data.count else { throw WorkflowIssue("Test MIDI track length is invalid.") }
+
+        func readVLQ() throws -> Int {
+            var value = 0
+            var count = 0
+            while true {
+                guard offset < trackEnd, count < 4 else { throw WorkflowIssue("Test MIDI VLQ is invalid.") }
+                let byte = data[offset]
+                offset += 1
+                value = (value << 7) | Int(byte & 0x7F)
+                count += 1
+                if byte & 0x80 == 0 { return value }
+            }
+        }
+
+        var tick = 0
+        var events: [(tick: Int, status: UInt8, pitch: UInt8, velocity: UInt8)] = []
+        while offset < trackEnd {
+            tick += try readVLQ()
+            guard offset < trackEnd else { throw WorkflowIssue("Test MIDI event is truncated.") }
+            let status = data[offset]
+            offset += 1
+            if status == 0xFF {
+                guard offset < trackEnd else { throw WorkflowIssue("Test MIDI meta event is truncated.") }
+                offset += 1 // meta type
+                let length = try readVLQ()
+                guard length >= 0, offset <= trackEnd - length else {
+                    throw WorkflowIssue("Test MIDI meta event length is invalid.")
+                }
+                offset += length
+            } else {
+                guard status & 0xF0 == 0x80 || status & 0xF0 == 0x90,
+                      offset <= trackEnd - 2 else {
+                    throw WorkflowIssue("Test MIDI contains an unsupported channel event.")
+                }
+                events.append((tick, status & 0xF0, data[offset], data[offset + 1]))
+                offset += 2
+            }
+        }
+        return events
     }
 
     private func containsBytes(_ data: Data, _ bytes: [UInt8]) -> Bool {
