@@ -43,3 +43,22 @@ A01—A36逐项记录 CPU/hosting、模型、GUI、本人录音/试听，不把�
 S0已核实外盘/源/索引/无已知执行进程，既有源构建App以全新固定隔离UUID启动，实际看见空项目选择页，然后正常退出；只证明基线可启动，不证明新增节点。受限CLI旧可执行路径失效，当前实际入口为 ChatGPT.app 内 codex-cli/CodexCLI.app；需本次预检元数据确认。桌面工作树工具绑定内盘空仓库导致指定SHA无效，未改源；改用已授权真实外盘 Git 创建隔离树，未动源checkout。
 
 下一动作：核定值/控制/存储接口，派限定实现，串行组合验收。当前没有正式产品验收通过；不得提前接入源或称阶段完成。
+
+## DATA r1：标准确定性数据操作
+
+共享契约 `WorkflowData.swift` 与 `WorkflowNode.dataConfiguration` 由Lead冻结。Worker只新增 `Workflow/Operations/WorkflowDataOperations.swift` 和 `Tests/DWorkbenchTests/WorkflowDataOperationsTests.swift`（根均 Packages/UI/Sources/DWorkbench 或 Packages/UI/Tests）；不得改共享类型、Registry、Builtins、UI、Store或任务记录。请求gpt-5.6-sol/high；独立预检后才实现，初交15分钟。只能内存CPU/指定tmp小夹具；不能构建整个Swift包（Lead串行执行）。允许swiftc前端语法解析不产生目标文件，测试命令留给Lead。
+
+接口：`enum WorkflowDataOperations { static let operations: [WorkflowOperation] }`。新ID均version1：`d.value.input/template/record/field/list/filter/select/pair/validate/return`。N02/N03/N18及控制由其他责任方接线，不伪装实现。参数只用现有WorkflowScalar，复杂配置用已冻结WorkflowDataConfiguration。所有输出`.data`，媒体可通过Datum.asset携带。返回端口固定output；配对另返回leftUnmatched/rightUnmatched；report校验固定output Record{valid:Bool,data:Optional<schema>,issues:List<Text>}，失败不包含非法data；strict参数可throw。
+
+- input：无输入，config.value优先，缺失拒绝；公开参数由未来调用绑定替换冻结值，不读UI。definition默认节点应能编辑。
+- template：可选fields Record输入，config.value为后备Record；parameter template 默认空字符串；只`{{field}}`安全代入Text/Number/Bool/Enum，缺字段准确报错，不eval。不得把用户替换值中模板标记再次解释。
+- record：config.fields声明输入端口名/类型/required；实际输入优先，config.value的Record.fields作后备；没有config时空Record合法。动态端口由Lead registry.definition(for:)投影，Worker定义可以inputs空，不建另一注册表。
+- field：input Record，config.path与config.schema声明结果类型；缺字段拒绝，显式none保留，类型不符拒绝；不把不存在当nil。
+- list：config.schema为元素type(不是list type)，config.items为固定成员，config.fields为可连接命名端口。parameters mode=items|concat（默认items）；items每输入作为单成员，稳定ID为端口名；concat只拼一层，各成员ID保留，冲突拒绝；不能隐式展开嵌套列表。
+- filter：input List，config.rules依次全满足，config.path非空才稳定排序，parameters ascending=true、limit=4096；无排序保持输入顺序，允许limit0。缺字段/单位错拒绝（exists规则可判false），未用AI评分；输出保留itemID。
+- select：input List；parameters method=id|index(default id), itemID="", index=1；index为1起始，id空不默认第一项；未知ID/越界拒绝。
+- pair：left/right均Record列表，config.path匹配键，双方唯一且同类型Text/Number/Bool/Enum，重复键拒绝；1对1，按left顺序，不按完成顺序、不笛卡尔积；output列表item record{left,right}，itemID用leftID；leftUnmatched/rightUnmatched分别原类型列表（显式保留未匹配，不静默丢弃）。
+- validate：input值，config.schema必需；strict=false默认；报告失败原始输入不作为合法data，但原context保留可用于修复。issues稳定定位，success data可直接是符合optional的非none值。
+- return：input任意合法Datum，name="result"只是公开输出名元数据，当前output照常传值；不写外部文件。
+
+各节点先验证输入Datum完整性与数量/单位。输出不得调用模型或发布资产；不为纯程序租模型。测试直接execute真实operation，fake services只在任何误调用时失败：Unicode模板、输入包含{{x}}不二次替换、缺字段、嵌套/空列表、异构拒绝、重复itemID/配对键、单位不符、稳定排序、显式选择、report/strict差异、数据无副作用。允许局部实现选择；歧义先回Lead，不自行扩范围。

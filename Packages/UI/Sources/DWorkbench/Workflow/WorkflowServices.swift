@@ -238,6 +238,7 @@ struct WorkflowSaveFailure: LocalizedError {
         case .collection(let candidates):
             guard candidates.allSatisfy({ $0.asset != nil }), !candidates.isEmpty else { throw WorkflowIssue("含失败候选的集合不能直接导出；先明确选择成功结果。") }
             refs = candidates.compactMap(\.asset)
+        case .data: throw WorkflowIssue("结构数据需要明确编码后导出。")
         case .receipt: throw WorkflowIssue("回执不是可导出媒体。")
         }
         return try await store.exportWorkflowAssets(refs, name: context.node.parameters["fileName"]?.string ?? "D作品",

@@ -1017,6 +1017,9 @@ private struct WorkflowStepValues: View {
                                 WorkflowCandidatePreview(controller: controller, candidate: candidate,
                                                          selected: false, onSelect: nil)
                             }
+                        case .data(let value):
+                            Text(String(decoding: (try? JSONEncoder().encode(value)) ?? Data(), as: UTF8.self))
+                                .textSelection(.enabled)
                         case .receipt(let receipt):
                             Text(receipt.names.joined(separator: "、"))
                             Text(receipt.hashes.joined(separator: "\n"))
@@ -1067,7 +1070,7 @@ private struct WorkflowAssetPreview: View {
                         ))
                     }
                 } else if let failure { previewError(failure) } else { ProgressView() }
-            case .images, .receipt:
+            default:
                 Text(workflowText(
                     languageStore,
                     "workflow.preview.unsupported",
@@ -1489,7 +1492,7 @@ enum WorkflowCanvasPresentation {
     static func planLines(_ lines: [String]) -> [String] { lines }
 
     static func kind(_ kind: WorkflowDataKind) -> String {
-        switch kind { case .text: "文字"; case .image: "图像"; case .images: "图像集合"; case .receipt: "导出回执" }
+        switch kind { case .text: "文字"; case .image: "图像"; case .images: "图像集合"; case .receipt: "导出回执"; default: kind.rawValue }
     }
 
     @MainActor static func kind(_ kind: WorkflowDataKind, language: UILanguageStore?) -> String {

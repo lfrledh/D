@@ -1,7 +1,7 @@
 import DInference
 import Foundation
 
-public enum WorkflowDataKind: String, Codable, Sendable, CaseIterable { case text, image, images, receipt }
+public enum WorkflowDataKind: String, Codable, Sendable, CaseIterable { case text, image, images, receipt, number, boolean, enumeration, record, list, optional, result, audio, video, notes, chords, tempo, pitch }
 public enum WorkflowScalar: Codable, Sendable, Equatable {
     case text(String), integer(Int), decimal(Double), flag(Bool)
     public var string: String? { if case .text(let v) = self { v } else { nil } }
@@ -44,10 +44,11 @@ public struct WorkflowExportReceipt: Codable, Sendable, Equatable {
     }
 }
 public enum WorkflowValue: Codable, Sendable, Equatable {
-    case asset(WorkflowAssetReference), collection([WorkflowCandidate]), receipt(WorkflowExportReceipt)
+    case asset(WorkflowAssetReference), collection([WorkflowCandidate]), receipt(WorkflowExportReceipt), data(WorkflowDatum)
     public var kind: WorkflowDataKind {
-        switch self { case .asset(let a): a.kind; case .collection: .images; case .receipt: .receipt }
+        switch self { case .asset(let a): a.kind; case .collection: .images; case .receipt: .receipt; case .data(let value): value.kind }
     }
+    public var datum: WorkflowDatum? { if case .data(let value) = self { value } else if case .asset(let ref) = self { .asset(ref) } else { nil } }
     public var asset: WorkflowAssetReference? { if case .asset(let a) = self { a } else { nil } }
     public var candidates: [WorkflowCandidate] { if case .collection(let a) = self { a } else { [] } }
 }
@@ -59,6 +60,7 @@ public struct WorkflowNode: Codable, Sendable, Equatable, Identifiable {
     public var definitionVersion: Int
     public var title: String
     public var parameters: [String: WorkflowScalar]
+    public var dataConfiguration: WorkflowDataConfiguration?
     public var assetReference: WorkflowAssetReference?
     public init(id: UUID = UUID(), operationID: String, definitionVersion: Int = 1, title: String,
                 parameters: [String: WorkflowScalar] = [:], assetReference: WorkflowAssetReference? = nil) {

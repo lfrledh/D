@@ -3060,6 +3060,9 @@ extension ProjectStore {
             case .collection(let items):
                 guard items.count <= 8, Set(items.map(\.id)).count == items.count else { throw WorkflowIssue("候选集合身份或数量无效。") }
                 for item in items { if let ref = item.asset { try validateRef(ref) } }
+            case .data(let datum):
+                try datum.validate()
+                for ref in datum.assetReferences { try validateRef(ref) }
             case .receipt(let receipt):
                 guard receipt.names.count == receipt.hashes.count else { throw WorkflowIssue("导出回执无效。") }
             }
