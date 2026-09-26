@@ -12,7 +12,6 @@
     "language.import.action": "Import JSON Language Pack…",
     "language.import.footer": "Only plain JSON display text is imported; language packs cannot run code or access the network.",
     "localization.test.message": "Hello {name}: {count} at 100%",
-
     "workflow.toolbar.graph": "Workflow",
     "workflow.toolbar.noGraph": "No Workflow Selected",
     "workflow.toolbar.addExample": "Add Example",
@@ -39,7 +38,6 @@
     "workflow.action.acceptText": "Accept Text",
     "workflow.action.reject": "Reject",
     "workflow.action.acceptHighlighted": "Use Highlighted Candidate",
-
     "workflow.status.savingNow": "Saving",
     "workflow.status.runningNow": "Running",
     "workflow.status.staleInput": "Old Input",
@@ -54,7 +52,6 @@
     "workflow.stepStatus.interrupted": "Interrupted",
     "workflow.stepStatus.rejected": "Rejected",
     "workflow.stepStatus.saving": "Waiting for Save Recovery",
-
     "workflow.library.title": "Operations",
     "workflow.library.search": "Search Operations",
     "workflow.library.noMatches": "No Matching Operations",
@@ -66,7 +63,6 @@
     "workflow.node.collapse": "Collapse Node",
     "workflow.node.collapsedDescription": "Ports and parameters are preserved; expand to connect",
     "workflow.node.unknownOperation": "Unknown operation or version; workflow remains read-only",
-
     "workflow.inspector.empty": "Select a Node",
     "workflow.inspector.emptyDescription": "Inspect parameters, ports, input identity, results, and run history.",
     "workflow.section.node": "Node",
@@ -88,7 +84,6 @@
     "workflow.execution.noRuns": "This node has no run record.",
     "workflow.history.none": "No Run History.",
     "workflow.value.none": "None",
-
     "workflow.port.inputs": "Inputs",
     "workflow.port.outputs": "Outputs",
     "workflow.port.input": "Input",
@@ -105,7 +100,6 @@
     "workflow.kind.image": "Image",
     "workflow.kind.images": "Image Collection",
     "workflow.kind.receipt": "Export Receipt",
-
     "workflow.preview.invalidText": "The text preview is not valid UTF-8.",
     "workflow.preview.invalidImage": "The image preview could not be decoded.",
     "workflow.preview.unsupported": "This reference cannot be previewed as one item.",
@@ -121,12 +115,10 @@
     "workflow.plan.description": "The execution coordinator supplied this plan. The interface displays it unchanged and does not infer or rewrite execution, reuse, or waiting states.",
     "workflow.plan.empty": "The Plan Is Empty",
     "workflow.plan.submit": "Explicitly Submit Run",
-
     "workflow.example.text": "Text",
     "workflow.example.image": "Text and Image",
     "workflow.example.file": "File",
     "workflow.example.template": "Template",
-
     "workflow.operation.d.text.input.title": "Text Input",
     "workflow.operation.d.text.input.detail": "Provide editable text.",
     "workflow.operation.d.text.input.output.output": "Text",
@@ -196,6 +188,20 @@
     "workflow.operation.d.text.remove-blank-lines.title": "Remove Blank Lines",
     "workflow.operation.d.text.remove-blank-lines.detail": "Keep nonblank lines and normalize line endings to LF; publish a new asset without changing the original.",
     "workflow.operation.d.text.remove-blank-lines.input.input": "Text",
-    "workflow.operation.d.text.remove-blank-lines.output.output": "Text"
+    "workflow.operation.d.text.remove-blank-lines.output.output": "Text",
+    "workbench.view": "View",
+    "workbench.canvas": "Workflow Canvas",
+    "workbench.creation": "Create & Sources",
+    "workbench.projects": "Projects",
+    "language.settings": "Display Language",
+    "common.done": "Done",
+    "command.project.new": "New Project…",
+    "command.project.open": "Open Project…",
+    "command.asset.export": "Export Current Asset…",
+    "command.text.save": "Save Draft",
+    "command.models": "Manage Models…",
+    "command.creation": "Create",
+    "command.resources": "Resources",
+    "workflow.model.import": "Choose Local Model Folder…"
   }
 }

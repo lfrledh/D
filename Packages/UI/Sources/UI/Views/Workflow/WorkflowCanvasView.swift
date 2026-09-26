@@ -691,7 +691,7 @@ private struct WorkflowNodeInspector: View {
                        systemImage: "trash", role: .destructive) { controller.deleteSelected() }
             }
             .disabled(readOnly)
-            if node.operationID == "d.asset.reference" {
+            if controller.registry.operation(node.operationID)?.definition.interaction == .assetInput {
                 Menu(workflowText(languageStore, "workflow.asset.referenceExisting", fallback: "引用项目已有素材")) {
                     ForEach(controller.availableAssets) { asset in
                         Button(asset.name + " · " + asset.mediaType) {
@@ -724,7 +724,8 @@ private struct WorkflowNodeInspector: View {
                         operationID: node.operationID,
                         value: node.parameters[field.id] ?? field.defaultValue,
                         readOnly: readOnly,
-                        modelPicker: modelPicker(for: node.operationID),
+                        modelChoices: controller.modelChoices.filter { $0.kind == definition.modelKind },
+                        modelPicker: modelPicker(for: definition.modelKind),
                         onChange: { controller.setParameter(nodeID: node.id, key: field.id, value: $0) }
                     )
                 }
@@ -883,8 +884,12 @@ private struct WorkflowNodeInspector: View {
         }
     }
 
-    private func modelPicker(for operationID: String) -> () -> Void {
-        operationID.hasPrefix("d.image.") ? onImageModel : onTextModel
+    private func modelPicker(for kind: WorkflowModelKind?) -> () -> Void {
+        switch kind {
+        case .image: onImageModel
+        case .text: onTextModel
+        case nil: {}
+        }
     }
 }
 
@@ -893,6 +898,7 @@ private struct WorkflowFieldEditor: View {
     let operationID: String
     let value: WorkflowScalar
     let readOnly: Bool
+    let modelChoices: [WorkflowModelChoice]
     let modelPicker: () -> Void
     let onChange: (WorkflowScalar) -> Void
     @Environment(\.dLanguageStore) private var languageStore
@@ -911,8 +917,14 @@ private struct WorkflowFieldEditor: View {
                         .font(.caption.monospaced())
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                    Button(workflowText(languageStore, "workflow.action.chooseModel", fallback: "选择模型"),
-                           action: modelPicker).disabled(readOnly)
+                    Menu(workflowText(languageStore, "workflow.action.chooseModel", fallback: "选择模型")) {
+                        ForEach(modelChoices) { choice in
+                            Button(choice.displayName) { onChange(.text(choice.id)) }
+                        }
+                        if !modelChoices.isEmpty { Divider() }
+                        Button(workflowText(languageStore, "workflow.model.import", fallback: "选择本地模型文件夹…"),
+                               action: modelPicker)
+                    }.disabled(readOnly)
                 }
             } else {
                 editor
@@ -1158,12 +1170,15 @@ struct WorkflowWaitingDecision: View {
 
     private var textReady: Bool { textReference != nil && loadedReference == textReference }
     private var decisionDisabled: Bool { readOnly || controller.isRunning }
+    private var interaction: WorkflowInteraction {
+        controller.registry.operation(step.node.operationID)?.definition.interaction ?? .none
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
             Text(workflowText(languageStore, "workflow.decision.title", fallback: "等待人工决定"))
                 .font(.headline)
-            if step.node.operationID == "d.text.confirm" {
+            if interaction == .textReview {
                 TextSourcesQuestionEditor(value: draft, editEpoch: 0,
                     isEditable: !readOnly && textReady,
                     accessibilityIdentifier: "workflow-review-text") { value in
@@ -1185,7 +1200,7 @@ struct WorkflowWaitingDecision: View {
                     }
                 }
                 .disabled(decisionDisabled)
-            } else if step.node.operationID == "d.asset.choose" {
+            } else if interaction == .candidateReview {
                 ForEach(candidates) { candidate in
                     WorkflowCandidatePreview(
                         controller: controller,
@@ -1255,7 +1270,7 @@ struct WorkflowWaitingDecision: View {
     }
 
     private func decide(accept: Bool, text: String?, candidateID: UUID?) {
-        guard !decisionDisabled, !accept || step.node.operationID != "d.text.confirm" || textReady else { return }
+        guard !decisionDisabled, !accept || interaction != .textReview || textReady else { return }
         Task {
             await controller.decide(stepID: step.id, accept: accept, text: text,
                                     candidateID: candidateID, acceptPartial: acceptPartial)

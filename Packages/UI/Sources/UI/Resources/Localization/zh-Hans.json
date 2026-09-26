@@ -12,7 +12,6 @@
     "language.import.action": "导入 JSON 语言包…",
     "language.import.footer": "仅导入纯 JSON 显示文字；语言包不能运行代码或访问网络。",
     "localization.test.message": "你好 {name}：{count}，100%",
-
     "workflow.toolbar.graph": "流程",
     "workflow.toolbar.noGraph": "未选择流程",
     "workflow.toolbar.addExample": "添加样例",
@@ -39,7 +38,6 @@
     "workflow.action.acceptText": "接受文字",
     "workflow.action.reject": "拒绝",
     "workflow.action.acceptHighlighted": "采用高亮候选",
-
     "workflow.status.savingNow": "正在保存",
     "workflow.status.runningNow": "正在运行",
     "workflow.status.staleInput": "旧输入",
@@ -54,7 +52,6 @@
     "workflow.stepStatus.interrupted": "已中断",
     "workflow.stepStatus.rejected": "已拒绝",
     "workflow.stepStatus.saving": "等待保存恢复",
-
     "workflow.library.title": "操作",
     "workflow.library.search": "搜索操作",
     "workflow.library.noMatches": "没有匹配的操作",
@@ -66,7 +63,6 @@
     "workflow.node.collapse": "折叠节点",
     "workflow.node.collapsedDescription": "端口与参数保留；展开后连接",
     "workflow.node.unknownOperation": "未知操作或版本；流程保持只读",
-
     "workflow.inspector.empty": "选择节点",
     "workflow.inspector.emptyDescription": "检查参数、端口、输入身份、结果和运行历史。",
     "workflow.section.node": "节点",
@@ -88,7 +84,6 @@
     "workflow.execution.noRuns": "此节点尚无运行记录。",
     "workflow.history.none": "没有历史运行。",
     "workflow.value.none": "无",
-
     "workflow.port.inputs": "输入",
     "workflow.port.outputs": "输出",
     "workflow.port.input": "输入",
@@ -105,7 +100,6 @@
     "workflow.kind.image": "图像",
     "workflow.kind.images": "图像集合",
     "workflow.kind.receipt": "导出回执",
-
     "workflow.preview.invalidText": "文字预览不是有效的 UTF-8。",
     "workflow.preview.invalidImage": "图像预览无法解码。",
     "workflow.preview.unsupported": "此引用不能作为单项预览。",
@@ -121,12 +115,10 @@
     "workflow.plan.description": "以下计划由运行协调器提供；界面原样显示，不推断或改写执行、复用与等待状态。",
     "workflow.plan.empty": "计划为空",
     "workflow.plan.submit": "明确提交运行",
-
     "workflow.example.text": "文字",
     "workflow.example.image": "图文",
     "workflow.example.file": "文件",
     "workflow.example.template": "模板",
-
     "workflow.operation.d.text.input.title": "文字输入",
     "workflow.operation.d.text.input.detail": "提供可编辑文字。",
     "workflow.operation.d.text.input.output.output": "文字",
@@ -196,6 +188,20 @@
     "workflow.operation.d.text.remove-blank-lines.title": "移除空行",
     "workflow.operation.d.text.remove-blank-lines.detail": "保留非空行的文字，统一换行为 LF；发布新资产，不改原件。",
     "workflow.operation.d.text.remove-blank-lines.input.input": "文字",
-    "workflow.operation.d.text.remove-blank-lines.output.output": "文字"
+    "workflow.operation.d.text.remove-blank-lines.output.output": "文字",
+    "workbench.view": "视图",
+    "workbench.canvas": "流程画布",
+    "workbench.creation": "创作与资料",
+    "workbench.projects": "项目",
+    "language.settings": "显示语言",
+    "common.done": "完成",
+    "command.project.new": "新建项目…",
+    "command.project.open": "打开项目…",
+    "command.asset.export": "导出当前作品…",
+    "command.text.save": "保存文字稿",
+    "command.models": "模型管理…",
+    "command.creation": "创作",
+    "command.resources": "资源",
+    "workflow.model.import": "选择本地模型文件夹…"
   }
 }
