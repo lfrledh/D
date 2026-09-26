@@ -17,6 +17,76 @@ private actor WorkflowSubmitGate {
 @MainActor private final class WorkflowSaveSwitch { var fails = true }
 
 extension WorkflowLifecycleTests {
+    @Test func retainedDerivativeDoesNotBlockOriginalFailedCallRetry() async throws {
+        let (_, store, engine, c) = try await fixture()
+        c.addExample("text")
+        let target = try #require(c.graph?.nodes.first { $0.operationID == "d.text.rewrite" })
+        await engine.configure(failure: .invalidRequest("controlled first failure"))
+        await c.run(target: target.id, only: false)
+        let original = try #require(c.runs.last)
+        let call = try #require(original.planCheckpoint?.records.first { $0.step.node.id == target.id })
+        try #require(call.step.status == .failed && call.step.inputsBound == true)
+        await engine.configure()
+        await c.rerunCall(.init(address: call.address, stepID: call.id))
+        try #require(c.errorMessage == nil)
+        let derivative = try #require(c.runs.last)
+        await c.resume(runID: original.id)
+        try #require(c.errorMessage == nil)
+        #expect(c.runs.first?.status == .completed)
+        #expect(c.runs.last == derivative)
+        // Resume may reuse the now-successful matching derivative; it must not deadlock saving provenance.
+        #expect(await engine.requests.count == 2)
+        #expect(c.runs.first?.steps.last?.outputs == derivative.steps.first?.outputs)
+        try await c.close(); try await store.close()
+    }
+
+    @Test(arguments: [false, true])
+    func nestedAndDerivedHumanCallsCanDecideWithoutResumingOriginal(legacy: Bool) async throws {
+        let (_, store, engine, c) = try await fixture()
+        var input = try #require(WorkflowRegistry.standard.operation(legacy ? "d.text.input" : "d.value.input")).definition.makeNode()
+        if legacy { input.parameters["text"] = .text("original") } else { input.dataConfiguration = .init(value: .text("original")) }
+        let human = try #require(WorkflowRegistry.standard.operation(legacy ? "d.text.confirm" : "d.control.human")).definition.makeNode()
+        var body = WorkflowGraph(nodes: [input, human], connections: [.init(sourceNode: input.id, targetNode: human.id)])
+        body.interface = .init(outputs: [.init(name: "output", nodeID: human.id, schema: legacy ? .asset(.text) : .text)])
+        let tool = WorkflowToolDefinition(name: "review tool", graph: body)
+        var invoke = try #require(WorkflowRegistry.standard.operation("d.control.invoke")).definition.makeNode()
+        invoke.control = .invoke(.init(id: tool.id, version: tool.version, digest: try WorkflowPlanCompiler.digest(tool)))
+        let graph = WorkflowGraph(nodes: [invoke])
+        let archive = try #require(try await store.workflowState().archive)
+        _ = try await store.saveWorkflow(graphs: [graph], runs: [], expectedRevision: archive.revision, tools: [tool])
+        await c.load(); await c.run(target: invoke.id, only: false)
+        try #require(c.errorMessage == nil)
+        let waiting = try #require(c.runs.last?.planCheckpoint?.records.first { $0.step.node.id == human.id })
+        try #require(waiting.step.status == .waiting)
+        if legacy {
+            c.editReviewText(stepID: waiting.id, text: "approved")
+            await c.decide(stepID: waiting.id, accept: true, text: "approved", candidateID: nil, acceptPartial: false)
+        } else {
+            await c.decideHuman(stepID: waiting.id, value: .text("approved"), expectedTask: try #require(waiting.step.humanTask))
+        }
+        try #require(c.errorMessage == nil)
+        let original = try #require(c.runs.last)
+        let completed = try #require(original.planCheckpoint?.records.first { $0.id == waiting.id })
+        try #require(completed.step.status == .completed)
+        await c.rerunCall(.init(address: completed.address, stepID: completed.id))
+        try #require(c.errorMessage == nil)
+        let derived = try #require(c.runs.last)
+        let newWaiting = try #require(derived.steps.first)
+        try #require(newWaiting.status == .waiting && newWaiting.id != waiting.id)
+        if legacy {
+            c.editReviewText(stepID: newWaiting.id, text: "new decision")
+            await c.decide(stepID: newWaiting.id, accept: true, text: "new decision", candidateID: nil, acceptPartial: false)
+        } else {
+            await c.decideHuman(stepID: newWaiting.id, value: .text("new decision"), expectedTask: try #require(newWaiting.humanTask))
+        }
+        try #require(c.errorMessage == nil)
+        await c.resume(runID: derived.id)
+        try #require(c.errorMessage == nil)
+        #expect(c.runs.last?.status == .completed && c.runs[0] == original)
+        #expect(await engine.requests.isEmpty)
+        try await c.close(); try await store.close()
+    }
+
     @Test func explicitHistoricalScopeUsesChosenOldOutputAndSurvivesReopen() async throws {
         let (_, store, engine, c) = try await fixture()
         var input = try #require(WorkflowRegistry.standard.operation("d.value.input")).definition.makeNode()
@@ -73,9 +143,14 @@ extension WorkflowLifecycleTests {
         try #require(c.errorMessage == nil)
         let original = try #require(c.runs.last)
         let call = try #require(original.planCheckpoint?.records.first {
-            $0.address.path.count > 1 && $0.step.node.operationID == "d.value.template" && c.canRerunCall($0)
+            $0.address.path.contains { if case .item = $0 { true } else { false } } && c.canRerunCall($0)
         })
+        var fail = true
+        c.beforeHistorySave = { if fail { throw WorkflowIssue("controlled derived history failure") } }
         await c.rerunCall(.init(address: call.address, stepID: call.step.id))
+        try #require(c.hasPendingSaves)
+        let pendingID = try #require(c.runs.last?.id)
+        fail = false; await c.save(); await c.resume(runID: pendingID)
         try #require(c.errorMessage == nil)
         let derived = try #require(c.runs.last)
         #expect(c.runs.count == 2 && c.runs[0] == original)

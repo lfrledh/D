@@ -681,7 +681,7 @@ private struct WorkflowNodeInspector: View {
     let onReturnText: (WorkflowAssetReference) -> Void
     let onPlan: (UUID, Bool) -> Void
     @Environment(\.dLanguageStore) private var languageStore
-    @State private var scopePresented = false
+    @State private var scopePresentation: WorkflowScopePresentation?
     @State private var pendingCall: WorkflowCallReference?
 
     var body: some View {
@@ -704,7 +704,9 @@ private struct WorkflowNodeInspector: View {
                     ports(node)
                     execution(node)
                     if controller.bodyPath.isEmpty {
-                        Button(workflowText(languageStore, "workflow.scope.title", fallback: "选择运行范围与历史输入")) { scopePresented = true }
+                        Button(workflowText(languageStore, "workflow.scope.title", fallback: "选择运行范围与历史输入")) {
+                            if let graph = controller.rootGraph { scopePresentation = .init(graph: graph, nodeID: node.id) }
+                        }
                             .disabled(readOnly)
                     }
                     history(node)
@@ -725,10 +727,8 @@ private struct WorkflowNodeInspector: View {
         }
         .background(.ultraThinMaterial)
         .accessibilityIdentifier("workflow-inspector")
-        .sheet(isPresented: $scopePresented) {
-            if let graph = controller.rootGraph, let node {
-                WorkflowScopePanel(controller: controller, graphID: graph.id, revision: graph.revision, nodeID: node.id)
-            }
+        .sheet(item: $scopePresentation) { request in
+            WorkflowScopePanel(controller: controller, graphID: request.graphID, revision: request.revision, nodeID: request.nodeID)
         }
         .alert(workflowText(languageStore, "workflow.scope.rerunCall", fallback: "重新运行具体调用"),
                isPresented: Binding(get: { pendingCall != nil }, set: { if !$0 { pendingCall = nil } })) {
@@ -954,10 +954,14 @@ private struct WorkflowNodeInspector: View {
                                 }.disabled(readOnly)
                             }
                             WorkflowStepValues(title: workflowText(languageStore, "workflow.port.outputs", fallback: "输出"), values: call.step.outputs, operationID: call.step.node.operationID, portsAreInputs: false, controller: controller, onReturnText: onReturnText, allowsReturn: !readOnly)
-                            if call.address.path.count > 1, call.step.status == .waiting, let task = call.step.humanTask {
-                                WorkflowHumanTaskForm(task: task, onSaveDraft: { controller.editHumanDraft(stepID: call.id, value: $0) },
-                                    onSubmit: { value in Task { await controller.decideHuman(stepID: call.id, value: value, expectedTask: task) } },
-                                    onReject: { Task { await controller.decideHuman(stepID: call.id, value: nil, reject: true, expectedTask: task) } }).id(call.id).disabled(readOnly)
+                            if call.step.id != controller.latestStep(for: node.id)?.id, call.step.status == .waiting {
+                                if let task = call.step.humanTask {
+                                    WorkflowHumanTaskForm(task: task, onSaveDraft: { controller.editHumanDraft(stepID: call.id, value: $0) },
+                                        onSubmit: { value in Task { await controller.decideHuman(stepID: call.id, value: value, expectedTask: task) } },
+                                        onReject: { Task { await controller.decideHuman(stepID: call.id, value: nil, reject: true, expectedTask: task) } }).id(call.id).disabled(readOnly)
+                                } else {
+                                    WorkflowWaitingDecision(controller: controller, step: call.step, readOnly: readOnly, preview: controller.preview).id(call.id)
+                                }
                             }
                         }
                     }

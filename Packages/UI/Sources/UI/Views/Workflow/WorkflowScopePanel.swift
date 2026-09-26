@@ -1,6 +1,16 @@
 import DWorkbench
 import SwiftUI
 
+struct WorkflowScopePresentation: Identifiable {
+    let id = UUID()
+    let graphID: UUID
+    let revision: UUID
+    let nodeID: UUID
+    init(graph: WorkflowGraph, nodeID: UUID) {
+        self.graphID = graph.id; self.revision = graph.revision; self.nodeID = nodeID
+    }
+}
+
 /// Explicit run controls, not another operation or scheduler.
 @MainActor struct WorkflowScopePanel: View {
     let controller: WorkflowController

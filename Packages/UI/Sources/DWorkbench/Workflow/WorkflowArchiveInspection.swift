@@ -95,7 +95,7 @@ enum WorkflowArchiveInspection {
                       let source = sources.first(where: { $0.checkpoint.runID == origin.address.runID }) else {
                     throw WorkflowIssue("具体调用的派生范围或来源不符。")
                 }
-                let resolved = try WorkflowScopePlanner.resolveCall(origin, source: source, tools: tools, registry: registry)
+                let resolved = try WorkflowScopePlanner.resolveRetainedCall(origin, source: source, tools: tools, registry: registry)
                 guard resolved.graph == run.graph, resolved.plan == destination.checkpoint.plan,
                       resolved.arguments == destination.checkpoint.arguments,
                       resolved.externalInputs == destination.checkpoint.externalInputs else {

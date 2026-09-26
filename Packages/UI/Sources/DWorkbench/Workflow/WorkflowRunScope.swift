@@ -187,6 +187,19 @@ public enum WorkflowScopePlanner {
         tools: [WorkflowToolDefinition] = [],
         registry: WorkflowRegistry = .standard
     ) throws -> WorkflowResolvedCall {
+        try resolveCall(reference, source: source, tools: tools, registry: registry, requireTerminal: true)
+    }
+
+    /// Durable provenance stays valid while the original bound Call is explicitly retried.
+    /// This internal path is not admission to create a new derivative from a live Call.
+    static func resolveRetainedCall(_ reference: WorkflowCallReference, source: WorkflowScopeSource,
+                                    tools: [WorkflowToolDefinition], registry: WorkflowRegistry) throws -> WorkflowResolvedCall {
+        try resolveCall(reference, source: source, tools: tools, registry: registry, requireTerminal: false)
+    }
+
+    private static func resolveCall(_ reference: WorkflowCallReference, source: WorkflowScopeSource,
+                                    tools: [WorkflowToolDefinition], registry: WorkflowRegistry,
+                                    requireTerminal: Bool) throws -> WorkflowResolvedCall {
         let defaults = source.checkpoint.modelDefaults ?? [:]
         let trusted = try rebuild(
             graph: source.graph,
@@ -203,7 +216,7 @@ public enum WorkflowScopePlanner {
               record.step.id == reference.stepID else {
             throw WorkflowIssue("找不到完整地址和 stepID 同时匹配的调用记录。")
         }
-        guard [.completed, .partial, .failed, .cancelled].contains(record.step.status) else {
+        guard !requireTerminal || [.completed, .partial, .failed, .cancelled].contains(record.step.status) else {
             throw WorkflowIssue("此调用状态不能派生为新的运行。", nodeID: record.step.node.id)
         }
         guard record.step.inputsBound == true else {

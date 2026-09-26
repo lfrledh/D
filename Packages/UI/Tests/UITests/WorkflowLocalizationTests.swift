@@ -17,6 +17,15 @@ private actor LocalizationNoInferenceEngine: InferenceEngine {
 
 @Suite(.serialized) @MainActor
 struct WorkflowLocalizationTests {
+    @Test func scopePresentationFreezesGraphIdentityAtOpen() {
+        var graph = WorkflowGraph(name: "scope"), node = WorkflowNode(operationID: "d.value.input", title: "input")
+        graph.nodes = [node]
+        let request = WorkflowScopePresentation(graph: graph, nodeID: node.id)
+        let originalRevision = graph.revision
+        graph.revision = UUID(); node.id = UUID(); graph.nodes = [node]
+        #expect(request.graphID == graph.id && request.revision == originalRevision)
+        #expect(request.nodeID != node.id && request.revision != graph.revision)
+    }
     @Test func registeredOperationDisplayKeysHaveBothBuiltInTranslations() throws {
         var inventory: [String: String] = [:]
         for definition in WorkflowRegistry.standard.definitions {

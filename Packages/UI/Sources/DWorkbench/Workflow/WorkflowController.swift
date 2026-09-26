@@ -141,15 +141,14 @@ public struct WorkflowAssetBindingTarget: Sendable, Equatable {
         // Editing a waiting draft is safe during another run: execute() never
         // consumes an undecided waiting step, and acceptance still requires idle.
         guard !closed, !closing, readOnlyReason == nil,
-              let ri = runs.firstIndex(where: { $0.steps.contains { $0.id == stepID } }),
-              runs[ri].graph.id == selectedGraphID,
-              let si = runs[ri].steps.firstIndex(where: { $0.id == stepID }),
-              registry.operation(runs[ri].steps[si].node.operationID)?.definition.interaction == .textReview,
-              runs[ri].steps[si].status == .waiting,
-              runs[ri].steps[si].decision == nil else { return }
+              let ri = runs.firstIndex(where: { $0.steps.contains { $0.id == stepID } || $0.planCheckpoint?.records.contains { $0.id == stepID } == true }),
+              let step = runs[ri].planCheckpoint?.records.first(where: { $0.id == stepID })?.step ?? runs[ri].steps.first(where: { $0.id == stepID }),
+              belongsToSelectedWorkflow(runs[ri]),
+              registry.operation(step.node.operationID)?.definition.interaction == .textReview,
+              step.status == .waiting, step.decision == nil else { return }
         do {
             try TextDraftDocument.validate(text)
-            runs[ri].steps[si].reviewTextDraft = text
+            if let si = runs[ri].steps.firstIndex(where: { $0.id == stepID }) { runs[ri].steps[si].reviewTextDraft = text }
             if let ci = runs[ri].planCheckpoint?.records.firstIndex(where: { $0.step.id == stepID }) { runs[ri].planCheckpoint?.records[ci].step.reviewTextDraft = text }
         } catch { errorMessage = "确认草稿未改变：\(error.localizedDescription)" }
     }
@@ -445,16 +444,21 @@ public struct WorkflowAssetBindingTarget: Sendable, Equatable {
     }
 
     public func history(for nodeID: UUID) -> [WorkflowRun] {
-        func belongs(_ run: WorkflowRun, seen: Set<UUID>) -> Bool {
-            if run.graph.id == rootGraph?.id { return true }
-            guard !seen.contains(run.id), let id = run.scope?.originCall?.address.runID,
-                  let parent = runs.first(where: { $0.id == id }) else { return false }
-            return belongs(parent, seen: seen.union([run.id]))
-        }
         return runs.filter { run in
-            belongs(run, seen: []) && (run.graph.nodes.contains { $0.id == nodeID } ||
+            belongsToSelectedWorkflow(run) && (run.graph.nodes.contains { $0.id == nodeID } ||
                 run.planCheckpoint?.records.contains { $0.step.node.id == nodeID } == true)
         }
+    }
+
+    private func belongsToSelectedWorkflow(_ run: WorkflowRun) -> Bool {
+        var current = run, seen = Set<UUID>()
+        while seen.insert(current.id).inserted {
+            if current.graph.id == selectedGraphID { return true }
+            guard let id = current.scope?.originCall?.address.runID,
+                  let parent = runs.first(where: { $0.id == id }) else { return false }
+            current = parent
+        }
+        return false
     }
 
     public func canRerunCall(_ call: WorkflowPlanCallRecord) -> Bool {
@@ -670,7 +674,7 @@ public struct WorkflowAssetBindingTarget: Sendable, Equatable {
                   let ci = cp.records.firstIndex(where: { $0.step.id == stepID }),
                   var human = cp.records[ci].step.humanTask, human.id == stepID, human == expectedTask,
                   cp.records[ci].step.status == .waiting, human.decision == nil, !human.rejected,
-                  rootGraph?.id == runs[ri].graph.id, rootGraph?.revision == runs[ri].graph.revision else {
+                  waitingSnapshotIsCurrent(runs[ri]) else {
                 throw WorkflowIssue("等待点或原图已改变；未应用到其他调用。")
             }
             if !reject {
@@ -678,7 +682,8 @@ public struct WorkflowAssetBindingTarget: Sendable, Equatable {
                 try value.validate(as: human.resultSchema)
                 for ref in value.assetReferences { try await services.verifyAsset(ref) }
             }
-            guard rootGraph?.id == runs[ri].graph.id, rootGraph?.revision == runs[ri].graph.revision else { throw WorkflowIssue("确认期间流程已改变。") }
+            guard waitingSnapshotIsCurrent(runs[ri]) else { throw WorkflowIssue("确认期间流程已改变。") }
+            try WorkflowArchiveInspection.validateScopeHistory(runs, tools: tools, registry: registry)
             human.decision = reject ? nil : value; human.rejected = reject
             cp.records[ci].step.humanTask = human
             let executor = WorkflowPlanExecutor(registry: registry, executeCall: { _ in throw WorkflowIssue("提交人工结果不执行下游。") }, save: { [unowned self] latest in
@@ -692,16 +697,23 @@ public struct WorkflowAssetBindingTarget: Sendable, Equatable {
     public func callRecords(runID: UUID) -> [WorkflowPlanCallRecord] {
         runs.first { $0.id == runID }?.planCheckpoint?.records ?? []
     }
+    private func waitingSnapshotIsCurrent(_ run: WorkflowRun) -> Bool {
+        if run.scope?.originCall != nil { return belongsToSelectedWorkflow(run) }
+        return rootGraph?.id == run.graph.id && rootGraph?.revision == run.graph.revision
+    }
+    private func canDecide(_ step: WorkflowStepRun, in run: WorkflowRun) -> Bool {
+        if run.scope?.originCall != nil || !run.steps.contains(where: { $0.id == step.id }) { return waitingSnapshotIsCurrent(run) }
+        return belongsToSelectedWorkflow(run) && !isStale(step)
+    }
     public func decide(stepID: UUID, accept: Bool, text: String?, candidateID: UUID?, acceptPartial: Bool) async {
         guard !closed, !closing, !isRunning, readOnlyReason == nil else { return }
         isRunning = true
         defer { isRunning = false }
         do {
-            guard let ri = runs.firstIndex(where: { $0.steps.contains { $0.id == stepID } }),
-                  let si = runs[ri].steps.firstIndex(where: { $0.id == stepID }) else { throw WorkflowIssue("等待点不存在。") }
-            let step = runs[ri].steps[si]
+            guard let ri = runs.firstIndex(where: { $0.steps.contains { $0.id == stepID } || $0.planCheckpoint?.records.contains { $0.id == stepID } == true }),
+                  let step = runs[ri].planCheckpoint?.records.first(where: { $0.id == stepID })?.step ?? runs[ri].steps.first(where: { $0.id == stepID }) else { throw WorkflowIssue("等待点不存在。") }
             if step.decision != nil { return } // Idempotent replay never creates a second derived asset.
-            guard step.status == .waiting, !isStale(step) else { throw WorkflowIssue("此等待点已经过期；原输入或连接已改变，请运行新的快照。") }
+            guard step.status == .waiting, canDecide(step, in: runs[ri]) else { throw WorkflowIssue("此等待点已经过期；原输入或连接已改变，请运行新的快照。") }
             var output: WorkflowAssetReference?
             if accept {
                 if registry.operation(step.node.operationID)?.definition.interaction == .textReview {
@@ -715,9 +727,10 @@ public struct WorkflowAssetBindingTarget: Sendable, Equatable {
                     try await services.verifyAsset(asset); output = asset
                 }
             }
-            guard !isStale(step), runs[ri].steps[si].decision == nil else {
+            guard canDecide(step, in: runs[ri]) else {
                 throw WorkflowIssue("确认期间原输入已改变；派生资产保留，但未采用到新的流程。")
             }
+            try WorkflowArchiveInspection.validateScopeHistory(runs, tools: tools, registry: registry)
             // Do not resume downstream here. Confirmation and expensive continuation are separate user actions.
             let decision = WorkflowDecision(waitingStepID: stepID, accepted: accept, selectedCandidateID: candidateID, output: output)
             if var cp = runs[ri].planCheckpoint, let ci = cp.records.firstIndex(where: { $0.step.id == stepID }) {
@@ -729,6 +742,7 @@ public struct WorkflowAssetBindingTarget: Sendable, Equatable {
                 catch { if let latest = executor.checkpoint { capture(latest, runIndex: ri) }; throw error }
             } else {
                 // Historical checkpoint-free wait: retain its established decision format.
+                guard let si = runs[ri].steps.firstIndex(where: { $0.id == stepID }) else { throw WorkflowIssue("等待点不存在。") }
                 runs[ri].steps[si].decision = decision
                 runs[ri].steps[si].outputs = output.map { ["output": .asset($0)] } ?? [:]
                 runs[ri].steps[si].status = accept ? .completed : .rejected
@@ -742,15 +756,20 @@ public struct WorkflowAssetBindingTarget: Sendable, Equatable {
     public func resume(runID: UUID) async {
         guard !externalOperationBusy() else { errorMessage = "请先结束录音或恢复保存，再恢复流程。"; return }
         guard !closed, !closing, !isRunning, readOnlyReason == nil, let i = runs.firstIndex(where: { $0.id == runID }) else { return }
-        guard runs[i].graph.id == selectedGraphID, let current = graph,
-              (runs[i].planCheckpoint?.plan.steps.map(\.node) ?? runs[i].steps.map(\.node)).allSatisfy({ (try? registry.signature($0.id, in: current, tools: tools)) == (try? registry.signature($0.id, in: runs[i].graph, tools: tools)) }) else {
-            errorMessage = "当前流程已变化；旧运行保留，请运行新的快照。"; return
+        if runs[i].scope?.originCall != nil {
+            guard belongsToSelectedWorkflow(runs[i]) else { errorMessage = "请在原调用所属流程中恢复。"; return }
+        } else {
+            guard runs[i].graph.id == selectedGraphID, let current = rootGraph,
+                  (runs[i].planCheckpoint?.plan.steps.map(\.node) ?? runs[i].steps.map(\.node)).allSatisfy({ (try? registry.signature($0.id, in: current, tools: tools)) == (try? registry.signature($0.id, in: runs[i].graph, tools: tools)) }) else {
+                errorMessage = "当前流程已变化；旧运行保留，请运行新的快照。"; return
+            }
         }
         guard runs[i].status != .rejected && runs[i].status != .completed else { return }
         isRunning = true; cancelled = false; errorMessage = nil
         defer { isRunning = false; activeRunID = nil; activeExecutor = nil }
         var failure: (any Error)?
         do {
+            try WorkflowArchiveInspection.validateScopeHistory(runs, tools: tools, registry: registry)
             if persistenceFailed { try await persist() }
             let resumedCheckpoint = try checkpointForResume(i)
             runs[i].planCheckpoint = resumedCheckpoint

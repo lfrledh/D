@@ -229,3 +229,15 @@ CHECKPOINT repair1在Lead CPU有6/7失败（fixture可选nil==nil误触发故障
 Lead新增AudioCaptureHandle（不同于文件描述符的AudioCaptureIdentity），按context/captureID结束并查本次已发布原声。非实现者发现预约等待取消/关闭残留/预览过期副作用/恢复绕过互斥四项，Lead修补并加实际预约边界、项目关闭重开、拒绝停止别的录音回归。`capture-hosting-integration`68项CPU/5套及2项hosting通过；补`admission-durable-regressions`22项/2套通过，含真实Store独立编译校验与深层未发布资产拒绝。hosting第一次失败因旧fixture未显式设置冻结模型身份（错误“请为节点选择模型”），补fixture的明确身份后通过，未放松生产选择。CHECKPOINT repair2的真实Executor快照测试通过（包含在前述组合），2/2普通修复已用；没有接管重写该Worker算法。
 
 新增LOCALIZATION r1有限包：仅可修改 Packages/UI/Sources/UI/Resources/Localization/en.json 与 zh-Hans.json。复用当前语言架构，不改格式/已有语义/用户数据/模型ID。将FORMS和CONTROL-FORMS建议中实际使用的新键补齐中英，并查本轮Workflow UI新键（Canvas/Host/ToolPanel/DataForms/HumanTaskForm/ControlForms），补匹配键。占位符集合严格一致；语言/工作流ID或用户内容不翻译。可以修准确翻译，不擅自删除旧键、改变schemaVersion/locale/displayName；重复键不允许。现有JSON保留原顺序/格式。无法通过资源解决的硬编码文案与错误另列任务output，不改Swift。验收：JSON解析、两包新键一致、占位符一致、无空翻译/重复键/旧键丢失、关键英文表达保持false/unknown/失败/跳过等差异；Lead跑现有语言与hosting测试。请求gpt-5.6-terra/medium，独立受限CLI新会话，初交1800秒+最多2普通修复，不重置其他任务预算。无网络/build/GPU/GUI/递归/Git写；Python只内存解析无默认py_compile，输出/缓存仅任务根。先只读预检，经Lead核验再IMPLEMENT。两JSON以外只输出局部报告，由Lead维护本记录。
+
+## SCOPES、语言包与真实文字中途（2026-09-27，未完成阶段）
+
+源仍130603d23a4da81ba2a9852766f3589695ec9468，scheme摘要/未暂存状态不变。组合0ee7b24c013d1ec368fa7b0e0fb2bcc12e31313a含SCOPES511b66eb与repair1 e813e56；Lead6118745接线与翻译接管。SCOPES初交657.23秒，repair1 200.46秒，均Sol/high受限同线程01a0def1-58d9-77d3-84b1-1e8f68f4c52d；初交一次no-index diff返回1且无诊断不是权限事件。只读审核发现来源所属图及Loop单位缺口，repair1补实际反例。repair2处理中：裸asset(text)不能冒充结构化Text，保留无schema旧端口兼容。不得把helper或CPU通过称为A16原生验收。
+
+LOCALIZATION Terra/medium线程01a0dee6-0853-7930-b296-f876e1d3c773初交169键/locale，a93c17de保留贡献；repair1/2分别36.74/18.58秒主动结束而未做缺少的176动态字段，2/2普通预算已用。无新增权限拒绝，旧heredoc拒绝和获准恢复历史保留。Lead一次有界接管补176键/locale；非实现者核对已有值不变、两语言键相同，改itemID中文为列表成员ID。真实Registry覆盖由红变绿，证据lead/scopes-wiring-r1中该suite。费用与完整Lead归因仍unknown，不宣称Terra独立通过。
+
+Lead补capture第二await取消、活跃Workflow迁移显式拒绝且可恢复、根externalInputs不污染嵌套同UUID节点；分别lead/capture-second-await 16项、workflow-relocation-owner17项、nested-boundary-green-r1 36项CPU。EXAMPLES repair1 c25d2144补坏项真正失败及音乐出口包含全部条件路径，lead/examples-repair1七项CPU。历史证据与本轮模型结果分开。
+
+真实文字受测代码7ca59946a0aa51925a5f65fe35199502e2a6306b，build-r2通过。此前Swift6.4在require闭包直接调用上断言崩溃、随后require复杂可选表达式宏编译错误，拆开表达式解决，不改产品语义。lead/node-real-text使用固定Qwen1.5B8b403126fc14f14cfc99bb4cfa72ecbc129ea677，任务生成及改写真实成功，第三次JSON输出带markdown围栏，按原严格契约失败且raw保存。新fixture只澄清首尾括号要求，不剥离围栏或放宽校验。记录request-step逐项身份、prompt、参数、旧历史和重开，全部require后才写PASS；非实现者审阅，不宣称GUI。真实失败项目位于测试容器NodeLanguageAcceptance/6E1A6E6B-00DA-481B-A9B1-5F1E35880739，根路径见lead/node-real-text日志；后续拷贝到外盘证据，不覆盖原件。
+
+lead/scopes-initial九项之前为七项通过；lead/scopes-wiring初轮55项1个Lead夹具查错不存在template失败；修正选真实Map Call并增加保存恢复，scopes-wiring-r1 55项/4suite通过（0ee7b24c加已知Lead修改，非未来提交SHA）。随后只读审核补派生resume归属、来源合法重试、typed/M0人工等待和面板打开时身份冻结，正在scope-derived-lifecycle复验；这些仍是未接纳候选。GUIH27锁屏未重试，后续四模态/样例完整真实验收未完成，不启下一阶段。

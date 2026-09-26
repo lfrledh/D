@@ -547,6 +547,22 @@
     "workflow.operation.d.video.generate.field.width": "Width",
     "workflow.operation.d.video.generate.input.prompt": "Prompt",
     "workflow.operation.d.video.generate.output.output": "Video",
-    "workflow.operation.d.video.generate.title": "Text to video"
+    "workflow.operation.d.video.generate.title": "Text to video",
+    "workflow.scope.title": "Choose scope and historical inputs",
+    "workflow.scope.range": "Run scope",
+    "workflow.scope.through": "Run to here",
+    "workflow.scope.only": "Rerun this node only",
+    "workflow.scope.from": "Rerun from here (include this node)",
+    "workflow.scope.after": "Continue after this node (keep its output)",
+    "workflow.scope.explanation": "Choose an explicit saved result for every boundary input. The latest version is not selected automatically. Reruns create new records and preserve old ones.",
+    "workflow.scope.version": "Historical output version",
+    "workflow.scope.choose": "Choose a result",
+    "workflow.scope.identity": "Full source identity",
+    "workflow.scope.cancel": "Cancel",
+    "workflow.scope.run": "Run selected scope",
+    "workflow.scope.invalid": "This scope is empty or cannot compile. Check the graph and anchor.",
+    "workflow.scope.close": "Close",
+    "workflow.scope.rerunCall": "Rerun this concrete call",
+    "workflow.scope.callExplanation": "Create a new run using this call’s frozen parameters and inputs. The original loop is not changed or resumed. Model calls may take time."
   }
 }

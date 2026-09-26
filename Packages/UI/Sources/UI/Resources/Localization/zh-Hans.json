@@ -547,6 +547,22 @@
     "workflow.operation.d.video.generate.field.width": "宽",
     "workflow.operation.d.video.generate.input.prompt": "提示",
     "workflow.operation.d.video.generate.output.output": "视频",
-    "workflow.operation.d.video.generate.title": "文字生成视频"
+    "workflow.operation.d.video.generate.title": "文字生成视频",
+    "workflow.scope.title": "选择运行范围与历史输入",
+    "workflow.scope.range": "运行范围",
+    "workflow.scope.through": "运行到这里",
+    "workflow.scope.only": "仅重新运行此节点",
+    "workflow.scope.from": "从这里重新运行（含此节点）",
+    "workflow.scope.after": "从其输出继续（不重算此节点）",
+    "workflow.scope.explanation": "边界输入必须选择一个明确的已保存结果；不会自动取最新版本。重新运行产生新记录，旧记录不变。",
+    "workflow.scope.version": "历史输出版本",
+    "workflow.scope.choose": "请选择一个结果",
+    "workflow.scope.identity": "完整来源身份",
+    "workflow.scope.cancel": "取消",
+    "workflow.scope.run": "运行所选范围",
+    "workflow.scope.invalid": "该范围不存在或不能编译；请先检查图和锚点。",
+    "workflow.scope.close": "关闭",
+    "workflow.scope.rerunCall": "重新运行具体调用",
+    "workflow.scope.callExplanation": "使用这次调用冻结的参数与输入，创建新的运行。不会改写或继续原有循环；模型调用可能耗时。"
   }
 }
