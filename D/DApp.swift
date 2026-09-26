@@ -63,7 +63,7 @@ struct DApp: App {
         .defaultSize(width: 1280, height: 820)
         .windowResizability(.contentMinSize)
         .commands { WorkbenchCommands(bootstrap: bootstrap) }
-        Settings { LanguageSettingsView(store: bootstrap.languageStore) }
+        Settings { LanguageSettingsView(store: bootstrap.languageStore).frame(width: 540, height: 420) }
     }
 }
 
@@ -76,16 +76,18 @@ private struct WorkbenchCommands: Commands {
             || bootstrap.model?.hasPendingEditor == true
     }
 
+    private func label(_ key: String, _ fallback: String) -> String { bootstrap.languageStore.text(key, fallback: fallback) }
+
     var body: some Commands {
         CommandGroup(replacing: .newItem) {
-            Button("新建项目…") {
+            Button(label("command.project.new", "新建项目…")) {
                 openWindow(id: "workbench")
                 Task { await bootstrap.model?.newProject() }
             }
             .keyboardShortcut("n")
             .disabled(modalResourceOperation || bootstrap.isTerminating || bootstrap.model == nil || bootstrap.model?.isChangingProject == true)
 
-            Button("打开项目…") {
+            Button(label("command.project.open", "打开项目…")) {
                 openWindow(id: "workbench")
                 Task { await bootstrap.model?.openProject() }
             }
@@ -93,22 +95,22 @@ private struct WorkbenchCommands: Commands {
             .disabled(modalResourceOperation || bootstrap.isTerminating || bootstrap.model == nil || bootstrap.model?.isChangingProject == true)
         }
         CommandGroup(after: .importExport) {
-            Button("导出所选作品…") { Task { await bootstrap.model?.exportSelected() } }
+            Button(label("command.asset.export", "导出所选作品…")) { Task { await bootstrap.model?.exportSelected() } }
                 .keyboardShortcut("e", modifiers: [.command, .shift])
                 .disabled(modalResourceOperation || bootstrap.isTerminating || bootstrap.model?.selectedAsset == nil || bootstrap.model?.creatorMode != .image)
         }
-        CommandMenu("创作") {
+        CommandMenu(label("command.creation", "创作")) {
             Button(generationCommand?.title ?? bootstrap.model?.visibleGenerationTitle ?? "生成") {
                 generationCommand?.action()
             }
             .keyboardShortcut(.return, modifiers: [.command])
             .disabled(modalResourceOperation || bootstrap.isTerminating || generationCommand?.isEnabled != true)
-            Button("保存文稿") { Task { await bootstrap.model?.projectSession.saveText() } }
+            Button(label("command.text.save", "保存文稿")) { Task { await bootstrap.model?.projectSession.saveText() } }
                 .keyboardShortcut("s")
                 .disabled(modalResourceOperation || bootstrap.isTerminating || bootstrap.model?.projectSession.text == nil || bootstrap.model?.creatorMode != .text)
         }
-        CommandMenu("资源") {
-            Button("管理模型…") {
+        CommandMenu(label("command.resources", "资源")) {
+            Button(label("command.models", "管理模型…")) {
                 openWindow(id: "workbench")
                 bootstrap.libraryModel?.isPresented = true
             }

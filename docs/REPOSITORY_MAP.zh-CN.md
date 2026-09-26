@@ -2,6 +2,9 @@
 
 结构核实：`165c54471c4380eb5482312d6c2c70ab97db48a9`，2026-09-24；D-UI-READINESS-01增量涉及Nodes标签、UI呈现状态及对应测试，不改生产推理或项目schema。本文是**现状地图**，不是重构后的结构。版本、产物、候选见[当前行动](CURRENT_ACTIONS.zh-CN.md)，目标见[原则](PRODUCT_PRINCIPLES.zh-CN.md)。先按所遇问题选一条路线，不通读全库。
 
+**2026-09-26候选增量导航**：D-NODE-BOUNDARY-01基于M0，源仍为CURRENT_ACTIONS所列版本。工作流的操作定义已分组到`DWorkbench/Workflow/Operations`，模型绑定/配方/私有授权记录到`Workflow/Models`；PNG/JPEG编码扩展在`DWorkbench/Media/ImageCodec{,Registry}.swift`；UI语言数据/校验在`UI/Localization`与`UI/Resources/Localization`。`WorkflowRemoveBlankLines.swift`移入Operations，类型/操作ID未改。`WorkflowController/Services`共用原Store和runtime；原型标签目录Nodes继续独立，用户标签键未迁移。App的Bootstrap注入语言和授权服务。具体已测/待验范围见[本批任务](tasks/D-NODE-BOUNDARY-01.md)，不根据文件存在宣布源已接纳。
+
+
 ## 实际入口与责任
 
 | 入口/区域 | 实际调用与职责 | 状态/何时阅读 |

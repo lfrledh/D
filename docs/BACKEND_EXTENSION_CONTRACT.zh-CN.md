@@ -1,5 +1,33 @@
 # 后端扩展约束与新UI服务接线
 
+## 节点边界整理增量（D-NODE-BOUNDARY-01，候选）
+
+以下是基于M0候选的实现边界，不将旧源或未整合AP1/CORE/I2V升级为已实现。当前版本、测试、锁屏及接纳条件只见[当前行动](CURRENT_ACTIONS.zh-CN.md)。本节替代下文在2026-09-24所作的“尚无节点执行”时态；其未覆盖模态/发行责任继续有效。
+
+- `Workflow/Operations`：文字、图像、资产三个具体操作模块，`WorkflowBuiltins`仅静态装配。共用`WorkflowOperationSupport`校验；`WorkflowRegistry`拥有类型/端口/版本/连接校验。新增同类操作需实现并登记，不修改调度器。操作ID、定义版本、节点实例UUID、模型内容身份、安装ID继续分开。
+- `Workflow/Models`：`WorkflowModelBinding`每运行节点独立绑定identity/reference/backendID/图像recipe及release；`WorkflowModelBookmarks`仅私有授权偏好，不是第二模型安装器。`WorkflowServices`按nodeUUID保存绑定；指定身份缺失时拒绝，不使用当前页面模型。空ID首次明确运行冻结默认，运行中不重读默认。
+- `ProjectSession.openWorkflow/registerWorkflowModel`仍是应用装配与授权协调点：图片复用ModelLibrary安装使用权，文字和旧图片通过LocationAccess独立运行租约。选择回调捕获controller/graph/node及旧绑定，取消/换项目/删节点/更改绑定不误写。相同revision重定位是显式操作；私有书签不进流程与媒体。
+- `WorkflowImageRecipe`将当前Klein请求/参考profile选择移出通用执行服务；增加另一实现仍需真实适配、App注册、能力校验和数值/资源测试。现有WorkbenchSession的音视频入口并未统一为任意模型平台，DInference图像能力仍为已支持Klein家族。
+- `Media/ImageCodec`与`ImageCodecRegistry`独立登记格式签名、UTI、编码/透明度规则；`WorkflowImageProcessor`共用几何、输入预算和编码后回读。默认PNG/JPEG，resize默认PNG属于该操作合同。静态模块化不承诺动态二进制插件/随意安装第三方代码，也不证明RAW已支持。
+- 定义中的`modelKind`/`interaction`供真实调用者选择模型入口、资产输入或人工决定，不根据操作ID前缀或自然语言文案猜执行。值型字段和执行ID不是翻译键。文件重分组不改变已存图、参数、端口和资产身份。
+
+### 显示语言边界
+
+`UI/Localization`负责语言包校验、回退、选择与显示投影；`UI/Resources/Localization/{en,zh-Hans}.json`是内置词表，`LanguageSettingsView`负责显式导入。App的WorkbenchBootstrap注入生产容器或独立测试suite/目录；纯组件默认不写真实偏好。默认跟随系统，也可选择语言；选择改变显示，不设置视图`.id(language)`、不重建工作流、不改变数字参数的输入Locale。
+
+包是UTF-8 JSON：`schemaVersion`整数1、`locale`语言标识、`displayName`名称、`strings`命名键到文字的字典。512KiB/2000项/单值4096字符/键160 ASCII字符；版本、类型、占位、大小不符时拒绝。`system`为保留选择值；内置包和已导入同locale不自动覆盖。缺键依次回退同语言内置、英文、调用方fallback；未知规范键保留并报告但不执行。命名占位如`{count}`只替换一遍，不能传入代码/printf/HTML，不访问包中URI。
+
+译者从内置英文文件复制键与占位到新的locale，修改displayName及显示文字；不要翻译模型/操作ID、参数枚举原值、用户图名/节点名/正文、路径、hash、来源记录。通过“显示语言”显式导入并选择；失败不会覆盖已有包。安装包损坏时保留原文件并提示。正式应用不将授权书签、设备身份或密钥混入语言文件。
+
+本批覆盖画布通用控件、节点定义的显示投影及语言入口。旧模态页、模型说明页、大部分服务String错误和执行计划仍可显示中文，是已列出的逐步迁移责任；不能按中文自然语言反解析错误/计划来假装已全部国际化。新增UI文本应使用稳定命名键并同时补中英词条/占位检查；新增结构化错误可逐项投影，不能把历史错误整套改写成执行协议。RTL、全部语言排版、专业翻译及所有旧页国际化未验收。
+
+### 保留的扩展成本
+
+同类节点增加模块与登记已可局部实现；新模型家族/新控制条件/新媒体类型仍需要窄契约、适配、存储/预览和真实验证。当前流程值类型限于文字/图片/候选集合/回执，不能宣称音视频已能任意连线。普通程序无需伪装模型。模型准备、数值、取消、人工等待、资产发布和失败保存仍复用单一运行时/存储所有者。窗口布局和模块拆分都不能替代这些验证。
+
+---
+
+
 状态：现行工程约束＋源码导航；不是已经实现的统一服务或节点协议。2026-09-24核对源`165c54471c4380eb5482312d6c2c70ab97db48a9`及D-UI-READINESS-01有限增量。当前任务/版本/证据/停点只看[CURRENT_ACTIONS](CURRENT_ACTIONS.zh-CN.md)与[任务记录](tasks/D-UI-READINESS-01.md)。不解析说明字符串执行，不授权正式节点、插件、候选接纳或发布。
 
 ## 身份与事实来源

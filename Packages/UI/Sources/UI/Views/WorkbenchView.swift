@@ -82,7 +82,13 @@ public struct WorkbenchView: View {
             }
         }
         .sheet(isPresented: $languageSettingsVisible) {
-            if let language { LanguageSettingsView(store: language) }
+            if let language {
+                VStack(spacing: 0) {
+                    LanguageSettingsView(store: language)
+                    HStack { Spacer(); Button(label("common.done", "完成")) { languageSettingsVisible = false }.keyboardShortcut(.defaultAction) }
+                        .padding()
+                }.frame(minWidth: 420, idealWidth: 540, minHeight: 380)
+            }
         }
         .frame(minWidth: 860, minHeight: 580)
         .onChange(of: model.projectURL) { _, _ in

@@ -56,6 +56,7 @@ import Foundation
 public struct WorkflowModelSelectionTarget: Sendable, Equatable {
     public let graphID: UUID
     public let nodeID: UUID
+    public let operationID: String
     public let kind: WorkflowModelKind
     public let previousIdentity: String
 }

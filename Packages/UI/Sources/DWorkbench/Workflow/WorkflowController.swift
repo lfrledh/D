@@ -155,12 +155,13 @@ import Observation
     public func modelSelectionTarget() -> WorkflowModelSelectionTarget? {
         guard !isRunning, !closed, !closing, let graph, let node = selectedNode,
               let kind = registry.operation(node.operationID)?.definition.modelKind else { return nil }
-        return .init(graphID: graph.id, nodeID: node.id, kind: kind,
+        return .init(graphID: graph.id, nodeID: node.id, operationID: node.operationID, kind: kind,
                      previousIdentity: node.parameters["modelID"]?.string ?? "")
     }
     public func isCurrent(_ target: WorkflowModelSelectionTarget) -> Bool {
         guard !closed, !closing, !isRunning, graph?.id == target.graphID,
               let node = graph?.nodes.first(where: { $0.id == target.nodeID }),
+              node.operationID == target.operationID,
               registry.operation(node.operationID)?.definition.modelKind == target.kind,
               node.parameters["modelID"]?.string == target.previousIdentity else { return false }
         return true
