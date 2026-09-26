@@ -229,6 +229,7 @@ struct NodeLanguageMusicRealTests {
     }
     /// Independent frame occupancy/onset oracle, not the production condition builder.
     private func verifyCondition(_ actual: AudioNoteSequence, notes: WorkflowNoteSequence, chords: WorkflowChordTrack) throws {
+        try #require(actual.durationFrames == 100)
         var expectedHeld = Set<String>(), expectedOnsets = Set<String>()
         func add(_ pitch: Int, _ start: Double, _ end: Double) {
             let a = Int((start * 25).rounded(.toNearestOrAwayFromZero)), b = Int((end * 25).rounded(.toNearestOrAwayFromZero))
