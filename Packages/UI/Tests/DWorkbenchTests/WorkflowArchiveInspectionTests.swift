@@ -49,6 +49,11 @@ struct WorkflowArchiveInspectionTests {
         step.humanTask = .init(id: step.id, kind: .approve, title: "explicit wait", materials: .text("check"), resultSchema: .boolean)
         archive.runs[0].steps = [step]
         #expect(archive.requiresLanguageVersion)
+        step.humanTask = nil
+        step.node.dataConfiguration = .init(value: .text("frozen"))
+        archive.runs[0].steps = [step]
+        #expect(archive.requiresLanguageVersion)
+        #expect(throws: WorkflowIssue.self) { try WorkflowArchiveInspection.validateStructure(archive) }
     }
 
     @Test func schema16MigrationBacksUpManifestWithoutChangingSnapshot() async throws {

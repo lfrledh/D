@@ -7,3 +7,5 @@ __pycache__/
 *.pyc
 *.profraw
 D.xcworkspace/xcuserdata/
+
+/Development/Development.local.xcconfig

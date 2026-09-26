@@ -83,6 +83,28 @@ struct AudioDeploymentIsolationTests {
         await session.shutdown()
     }
 
+    @Test func groupedAndLegacyEnginesAreExplicitAndNeverAmbiguouslyChosen() throws {
+        let fixture = try TinyBundledEngine()
+        defer { fixture.remove() }
+        let resources = fixture.root.appendingPathComponent("Resources")
+        let original = resources.appendingPathComponent("AudioEngine.dengine")
+        let grouped = resources.appendingPathComponent("Engines")
+        try FileManager.default.createDirectory(at: grouped, withIntermediateDirectories: false)
+        let moved = grouped.appendingPathComponent("AudioEngine.dengine")
+        try FileManager.default.moveItem(at: original, to: moved)
+        #expect(try BundledAudioEngine.resolve(resourceDirectory: resources)?.providerScript.path.hasPrefix(moved.path) == true)
+        try FileManager.default.createDirectory(at: original, withIntermediateDirectories: false)
+        #expect(throws: (any Error).self) { try BundledAudioEngine.resolve(resourceDirectory: resources) }
+    }
+
+    @Test func groupedEngineRootCannotBeASymlink() throws {
+        let fixture = try TinyBundledEngine()
+        defer { fixture.remove() }
+        let resources = fixture.root.appendingPathComponent("Resources")
+        try FileManager.default.createSymbolicLink(at: resources.appendingPathComponent("Engines"), withDestinationURL: resources)
+        #expect(throws: (any Error).self) { try BundledAudioEngine.resolve(resourceDirectory: resources) }
+    }
+
     @Test func audioModelUseAcknowledgementsDoNotCrossModelFamilies() throws {
         let suite = "D.Tests.ModelUse." + UUID().uuidString
         let settings = try #require(UserDefaults(suiteName: suite))

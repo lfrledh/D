@@ -35,6 +35,7 @@
 		ED43658E2F52D7D300430841 /* D.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = D.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		ED43659D2F52D7D400430841 /* DTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		ED4365A72F52D7D400430841 /* DUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		D20260927000000000000001 /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Development/Debug.xcconfig; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -101,6 +102,7 @@
 		ED4365852F52D7D300430841 = {
 			isa = PBXGroup;
 			children = (
+				D20260927000000000000001 /* Debug.xcconfig */,
 				ED4365902F52D7D300430841 /* D */,
 				ED4365A02F52D7D400430841 /* DTests */,
 				ED4365AA2F52D7D400430841 /* DUITests */,
@@ -136,6 +138,7 @@
 				ED43658A2F52D7D300430841 /* Sources */,
 				ED43658B2F52D7D300430841 /* Frameworks */,
 				ED43658C2F52D7D300430841 /* Resources */,
+				D20260927000000000000002 /* Embed development engines */,
 			);
 			buildRules = (
 			);
@@ -275,6 +278,21 @@
 		};
 /* End PBXResourcesBuildPhase section */
 
+/* Begin PBXShellScriptBuildPhase section */
+		D20260927000000000000002 /* Embed development engines */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = ();
+			inputPaths = ("$(SRCROOT)/scripts/embed-development-resources.py", "$(SRCROOT)/scripts/prepare-development-resources.py", "$(D_DEVELOPMENT_RESOURCES)");
+			name = "Embed development engines";
+			outputPaths = ("$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/Engines");
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -eu\nif [ \"$CONFIGURATION\" != Debug ]; then exit 0; fi\nif [ ! -f \"$D_DEVELOPMENT_RESOURCES/development-resources.json\" ]; then\n  echo \"error: D development engines are not prepared. Follow Development/README.md and set Development.local.xcconfig.\" >&2\n  exit 2\nfi\nexport PYTHONDONTWRITEBYTECODE=1\n/usr/bin/python3 \"$SRCROOT/scripts/embed-development-resources.py\" --prepared \"$D_DEVELOPMENT_RESOURCES\" --destination \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/Engines\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		ED43658A2F52D7D300430841 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -353,6 +371,7 @@
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				D_DEVELOPMENT_RESOURCES = "$(SRCROOT)/Development";
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_NO_COMMON_BLOCKS = YES;
@@ -419,6 +438,7 @@
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				D_DEVELOPMENT_RESOURCES = "$(SRCROOT)/Development";
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
@@ -439,17 +459,18 @@
 		};
 		ED4365B22F52D7D400430841 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = D20260927000000000000001 /* Debug.xcconfig */;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = D/D.entitlements;
 				INFOPLIST_FILE = D/Info.plist;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_IDENTITY = "$(D_DEVELOPMENT_SIGNING_IDENTITY)";
 				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
 				DEAD_CODE_STRIPPING = YES;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = "$(D_DEVELOPMENT_TEAM)";
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_FILE_ACCESS_DOWNLOADS_FOLDER = NO;
 				ENABLE_HARDENED_RUNTIME = YES;

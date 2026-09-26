@@ -4,17 +4,23 @@ extension WorkflowArchive {
     var requiresLanguageVersion: Bool {
         tools != nil || runs.contains { run in
             run.planCheckpoint != nil || run.steps.contains { step in
-                step.humanTask != nil || (Array(step.inputs.values) + Array(step.outputs.values)).contains {
+                step.node.requiresLanguageVersion || step.humanTask != nil || (Array(step.inputs.values) + Array(step.outputs.values)).contains {
                     if case .data = $0 { true } else { false }
                 }
             }
         } ||
         (graphs + runs.map(\.graph)).contains { graph in
             graph.interface != nil || graph.nodes.contains {
-                $0.control != nil || $0.dataConfiguration != nil ||
-                $0.operationID.hasPrefix("d.value.") || $0.operationID.hasPrefix("d.control.")
+                $0.requiresLanguageVersion
             }
         }
+    }
+}
+
+private extension WorkflowNode {
+    var requiresLanguageVersion: Bool {
+        control != nil || dataConfiguration != nil || operationID.hasPrefix("d.value.") ||
+        operationID.hasPrefix("d.control.")
     }
 }
 

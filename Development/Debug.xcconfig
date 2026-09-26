@@ -1,0 +1,5 @@
+// Local paths and existing signing identity are opt-in and never checked in.
+D_DEVELOPMENT_RESOURCES = $(SRCROOT)/Development
+D_DEVELOPMENT_SIGNING_IDENTITY = -
+D_DEVELOPMENT_TEAM =
+#include? "Development.local.xcconfig"

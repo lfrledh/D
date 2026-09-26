@@ -120,7 +120,23 @@ struct BundledAudioEngine: Sendable {
     }
 
     static func resolve(resourceDirectory: URL, family: Family = .stableAudio) throws -> BundledAudioEngine? {
-        let root = resourceDirectory.appendingPathComponent(family.directory, isDirectory: true)
+        let legacy = resourceDirectory.appendingPathComponent(family.directory, isDirectory: true)
+        let grouped = resourceDirectory.appendingPathComponent("Engines", isDirectory: true)
+        var groupedStatus = stat()
+        let hasGrouped = Darwin.lstat(grouped.path, &groupedStatus) == 0
+        let root: URL
+        if hasGrouped {
+            let directory = try entry(at: grouped)
+            guard directory.isDirectory else { throw DeploymentError.invalid("Engines must be a regular directory") }
+            var legacyStatus = stat()
+            guard Darwin.lstat(legacy.path, &legacyStatus) != 0, errno == ENOENT else {
+                throw DeploymentError.invalid("ambiguous legacy and grouped engine deployment")
+            }
+            root = grouped.appendingPathComponent(family.directory, isDirectory: true)
+        } else {
+            guard errno == ENOENT else { throw DeploymentError.invalid("cannot inspect Engines directory") }
+            root = legacy
+        }
         var rootStatus = stat()
         if Darwin.lstat(root.path, &rootStatus) != 0 {
             if errno == ENOENT { return nil }
