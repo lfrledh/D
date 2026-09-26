@@ -792,3 +792,44 @@ extension WorkflowLifecycleTests {
         await reopened.closeProject(); #expect(reopened.manifest == nil)
     }
 }
+
+extension WorkflowLifecycleTests {
+    @Test func cancelledModelPreparationReleasesLateLeaseWithoutSubmitting() async throws {
+        let (root, store, engine, _) = try await fixture()
+        let session = WorkbenchSession(engine: engine, backendID: "image", status: { .init(activeRunID: nil, phase: nil, queuedRunIDs: []) },
+            shutdown: {}, cleanup: {}, validateModel: { _ in })
+        let gate = WorkflowSubmitGate(); var released = 0
+        let services = WorkflowServices(store: store, session: session) { _, id in
+            await gate.wait()
+            return .init(identity: id, reference: .init(directory: root), backendID: "fixture", release: { released += 1 })
+        }
+        var node = try #require(WorkflowRegistry.standard.operation("d.text.rewrite")).definition.makeNode()
+        node.parameters["modelID"] = .text("text:A")
+        let graph = WorkflowGraph(nodes: [node])
+        let work = Task { try await services.prepare(graph, nodes: [node.id]) }
+        for _ in 0..<1000 { if await gate.entered { break }; try await Task.sleep(for: .milliseconds(1)) }
+        #expect(await gate.entered)
+        await services.cancel(); await gate.open()
+        do { _ = try await work.value; Issue.record("cancelled preparation accepted") } catch is CancellationError {} catch { Issue.record("unexpected failure") }
+        #expect(released == 1); #expect(await engine.requests.isEmpty)
+        await services.finish(); #expect(released == 1)
+        try await store.close()
+    }
+    @Test func wrongResolverIdentityAndMissingRecipeDoNotLeakOrFallback() async throws {
+        let (root, store, engine, _) = try await fixture()
+        let session = WorkbenchSession(engine: engine, backendID: "image", status: { .init(activeRunID: nil, phase: nil, queuedRunIDs: []) },
+            shutdown: {}, cleanup: {}, validateModel: { _ in })
+        var released = 0
+        let services = WorkflowServices(store: store, session: session) { _, _ in
+            .init(identity: "wrong", reference: .init(directory: root), backendID: "fixture", release: { released += 1 })
+        }
+        var node = try #require(WorkflowRegistry.standard.operation("d.text.rewrite")).definition.makeNode()
+        node.parameters["modelID"] = .text("text:A")
+        do { _ = try await services.prepare(.init(nodes: [node]), nodes: [node.id]); Issue.record("wrong identity accepted") } catch {}
+        #expect(released == 1)
+        let image = try #require(WorkflowRegistry.standard.operation("d.image.generate")).definition.makeNode()
+        do { _ = try await services.prepare(.init(nodes: [image]), nodes: [image.id]); Issue.record("missing image recipe accepted") } catch {}
+        #expect(released == 2); #expect(await engine.requests.isEmpty)
+        try await store.close()
+    }
+}

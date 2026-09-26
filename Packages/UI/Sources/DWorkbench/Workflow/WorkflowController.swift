@@ -106,7 +106,7 @@ import Observation
               let ri = runs.firstIndex(where: { $0.steps.contains { $0.id == stepID } }),
               runs[ri].graph.id == selectedGraphID,
               let si = runs[ri].steps.firstIndex(where: { $0.id == stepID }),
-              runs[ri].steps[si].node.operationID == "d.text.confirm",
+              registry.operation(runs[ri].steps[si].node.operationID)?.definition.interaction == .textReview,
               runs[ri].steps[si].status == .waiting,
               runs[ri].steps[si].decision == nil else { return }
         do {
@@ -187,7 +187,7 @@ import Observation
         undoStack.append(graphs); redoStack = []; graphs.append(next); selectedGraphID = next.id; selectedNodeID = next.nodes.first?.id
     }
     public func attach(_ reference: WorkflowAssetReference, nodeID: UUID) {
-        edit { g in guard let i = g.nodes.firstIndex(where: { $0.id == nodeID }), g.nodes[i].operationID == "d.asset.reference" else { throw WorkflowIssue("请选择文件／资产输入节点。") }; g.nodes[i].assetReference = reference }
+        edit { g in guard let i = g.nodes.firstIndex(where: { $0.id == nodeID }), registry.operation(g.nodes[i].operationID)?.definition.interaction == .assetInput else { throw WorkflowIssue("请选择文件／资产输入节点。") }; g.nodes[i].assetReference = reference }
     }
     public func importFile(_ url: URL, nodeID: UUID) async {
         guard !closed, !closing, readOnlyReason == nil else { return }
@@ -247,7 +247,7 @@ import Observation
                 return "重新执行 \(node.title)；使用已就绪的上游资产版本，不重算上游。" + (old ? " 注意：包含旧输入结果。" : "")
             }
             if let step = reusable(nodeID: id, graph: graph, inputs: nil) { return "检查后复用 \(node.title)（\(step.id.uuidString.prefix(8))）；若输入版本不同则重新执行。" }
-            if ["d.text.confirm", "d.asset.choose"].contains(node.operationID) { return "等待人工确认：\(node.title)；不会自动启动后续生成。" }
+            if registry.operation(node.operationID).map { [.textReview, .candidateReview].contains($0.definition.interaction) } == true { return "等待人工确认：\(node.title)；不会自动启动后续生成。" }
             return "执行：\(node.title)"
         }
     }
@@ -413,7 +413,7 @@ import Observation
             guard step.status == .waiting, !isStale(step) else { throw WorkflowIssue("此等待点已经过期；原输入或连接已改变，请运行新的快照。") }
             var output: WorkflowAssetReference?
             if accept {
-                if step.node.operationID == "d.text.confirm" {
+                if registry.operation(step.node.operationID)?.definition.interaction == .textReview {
                     guard let text, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                           let parent = step.outputs["preview"]?.asset else { throw WorkflowIssue("确认文字不能为空。") }
                     output = try await services.publishText(text, parents: [parent], context: .init(node: step.node, stepID: step.id, inputs: step.inputs))
@@ -458,7 +458,7 @@ import Observation
         guard !closed, !closing, !isRunning, readOnlyReason == nil,
               let ri = runs.firstIndex(where: { $0.steps.contains { $0.id == stepID } }),
               let si = runs[ri].steps.firstIndex(where: { $0.id == stepID }),
-              runs[ri].steps[si].node.operationID == "d.image.generate" else { return }
+              registry.operation(runs[ri].steps[si].node.operationID)?.definition.modelKind == .image else { return }
         let old = runs[ri].steps[si]
         guard !hasPendingSaves else { errorMessage = "先恢复保存并继续原运行，避免重复生成。"; return }
         guard !isStale(old), old.outputs["output"]?.candidates.contains(where: { $0.asset == nil }) == true else { return }

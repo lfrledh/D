@@ -89,7 +89,7 @@ enum WorkflowImageOperations {
             inputs: [.init("input", "图像", kinds: [.image])],
             outputs: [.init("output", "图像", kinds: [.image])],
             fields: [
-                .init("format", "格式", .choice(["png", "jpeg"]), .text("png")),
+                .init("format", "格式", .choice(ImageCodecRegistry.standard.formatIDs), .text("png")),
                 .init("quality", "质量", .decimal, .decimal(0.9)),
                 .init("background", "背景", .choice(["white", "black"]), .text("white")),
             ]

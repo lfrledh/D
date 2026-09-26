@@ -5,7 +5,7 @@ enum WorkflowAssetOperations {
     static let assetReference = WorkflowOperation(
         definition: .init(
             id: "d.asset.reference", title: "项目素材", detail: "引用已发布且不可变的项目素材。", inputs: [],
-            outputs: [.init("output", "素材", kinds: [.text, .image])]
+            outputs: [.init("output", "素材", kinds: [.text, .image])], interaction: .assetInput
         ),
         execute: { context, services in
             guard let reference = context.node.assetReference else {
@@ -23,7 +23,7 @@ enum WorkflowAssetOperations {
         definition: .init(
             id: "d.asset.choose", title: "选择候选", detail: "等待用户从全部候选中选择。",
             inputs: [.init("input", "候选", kinds: [.images])],
-            outputs: [.init("output", "图像", kinds: [.image])]
+            outputs: [.init("output", "图像", kinds: [.image])], interaction: .candidateReview
         ),
         execute: { context, _ in
             guard case .collection(let candidates)? = context.inputs["input"] else {

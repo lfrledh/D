@@ -96,7 +96,7 @@ enum WorkflowTextOperations {
         definition: .init(
             id: "d.text.confirm", title: "确认文字", detail: "等待用户确认文字候选。",
             inputs: [.init("input", "文字", kinds: [.text])],
-            outputs: [.init("output", "文字", kinds: [.text])]
+            outputs: [.init("output", "文字", kinds: [.text])], interaction: .textReview
         ),
         execute: { context, _ in
             let reference = try WorkflowExecution.inputAsset("input", kind: .text, context: context)

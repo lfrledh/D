@@ -204,6 +204,7 @@ public struct WorkflowFieldDefinition: Sendable, Equatable, Identifiable {
         self.id = id; self.title = title; self.kind = kind; self.defaultValue = defaultValue
     }
 }
+public enum WorkflowInteraction: Sendable, Equatable { case none, assetInput, textReview, candidateReview }
 public struct WorkflowOperationDefinition: Sendable, Equatable, Identifiable {
     public var id: String
     public var version: Int
@@ -213,10 +214,11 @@ public struct WorkflowOperationDefinition: Sendable, Equatable, Identifiable {
     public var outputs: [WorkflowPortDefinition]
     public var fields: [WorkflowFieldDefinition]
     public var modelKind: WorkflowModelKind?
+    public var interaction: WorkflowInteraction
     public init(id: String, version: Int = 1, title: String, detail: String, inputs: [WorkflowPortDefinition],
-                outputs: [WorkflowPortDefinition], fields: [WorkflowFieldDefinition] = [], modelKind: WorkflowModelKind? = nil) {
+                outputs: [WorkflowPortDefinition], fields: [WorkflowFieldDefinition] = [], modelKind: WorkflowModelKind? = nil, interaction: WorkflowInteraction = .none) {
         self.id = id; self.version = version; self.title = title; self.detail = detail
-        self.inputs = inputs; self.outputs = outputs; self.fields = fields; self.modelKind = modelKind
+        self.inputs = inputs; self.outputs = outputs; self.fields = fields; self.modelKind = modelKind; self.interaction = interaction
     }
     public func makeNode() -> WorkflowNode {
         WorkflowNode(operationID: id, definitionVersion: version, title: title,
