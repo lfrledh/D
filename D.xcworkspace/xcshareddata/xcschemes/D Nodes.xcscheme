@@ -1,0 +1,19 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<Scheme LastUpgradeVersion="2660" version="1.3">
+   <BuildAction parallelizeBuildables="YES" buildImplicitDependencies="YES">
+      <BuildActionEntries>
+         <BuildActionEntry buildForTesting="NO" buildForRunning="YES" buildForProfiling="NO" buildForArchiving="NO" buildForAnalyzing="YES">
+            <BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="ED43658D2F52D7D300430841" BuildableName="D.app" BlueprintName="D" ReferencedContainer="container:D.xcodeproj" />
+         </BuildActionEntry>
+      </BuildActionEntries>
+   </BuildAction>
+   <LaunchAction buildConfiguration="Debug" selectedDebuggerIdentifier="Xcode.DebuggerFoundation.Debugger.LLDB" selectedLauncherIdentifier="Xcode.IDEFoundation.Launcher.LLDB" launchStyle="0" useCustomWorkingDirectory="NO" ignoresPersistentStateOnLaunch="NO" debugDocumentVersioning="YES" allowLocationSimulation="NO">
+      <BuildableProductRunnable runnableDebuggingMode="0">
+         <BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="ED43658D2F52D7D300430841" BuildableName="D.app" BlueprintName="D" ReferencedContainer="container:D.xcodeproj" />
+      </BuildableProductRunnable>
+      <EnvironmentVariables>
+         <EnvironmentVariable key="D_UI_TEST_SESSION" value="4DFA8D40-45FA-4BA0-934C-F034F36E2D60" isEnabled="YES" />
+      </EnvironmentVariables>
+   </LaunchAction>
+   <AnalyzeAction buildConfiguration="Debug" />
+</Scheme>
