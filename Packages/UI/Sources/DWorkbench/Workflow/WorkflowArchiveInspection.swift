@@ -2,7 +2,7 @@ import Foundation
 
 extension WorkflowArchive {
     var requiresLanguageVersion: Bool {
-        tools != nil || runs.contains { run in
+        assets.contains { ![WorkflowDataKind.text, .image].contains($0.reference.kind) } || tools != nil || runs.contains { run in
             run.planCheckpoint != nil || run.steps.contains { step in
                 step.node.requiresLanguageVersion || step.humanTask != nil || (Array(step.inputs.values) + Array(step.outputs.values)).contains {
                     if case .data = $0 { true } else { false }

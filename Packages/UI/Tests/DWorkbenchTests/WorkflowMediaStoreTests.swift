@@ -20,6 +20,7 @@ struct WorkflowMediaStoreTests {
         let result = try await store.publishWorkflowAsset(data: bytes, mediaType: "audio/wav", name: "合成参考音",
             operationID: "d.music.render")
         #expect(result.record.reference.kind == .audio)
+        #expect(try await store.workflowState().archive?.version == 2)
         #expect(result.asset.metadata.audio?.origin == .programGenerated)
         #expect(result.asset.metadata.audio?.format.frameCount == 1_920)
         #expect(try await store.workflowData(result.record.reference) == bytes)
@@ -67,11 +68,28 @@ struct WorkflowMediaStoreTests {
         try await store.close()
     }
 
-    @Test func rawVideoCannotSkipDecoderAndAudioCannotPretendToBeModelOutput() async throws {
+    @Test func rawVideoCannotSkipDecoder() async throws {
         let store = try await ProjectStore.create(at: location("admission"), name: "admission")
         do {
             _ = try await store.publishWorkflowAsset(data: Data([0, 1, 2]), mediaType: "video/mp4", name: "video", operationID: "d.video.generate")
             Issue.record("Unverified video published")
+        } catch {}
+        #expect(await store.snapshot().assets.isEmpty)
+        try await store.close()
+    }
+
+    @Test func pitchCannotPublishWithMissingOriginalAndRequest() async throws {
+        let store = try await ProjectStore.create(at: location("pitch-source"), name: "pitch")
+        let source = PitchSourceIdentity(assetID: UUID(), documentID: UUID(), documentRevision: 0,
+            contentSHA256: String(repeating: "a", count: 64), sampleRate: 16_000,
+            frameCount: 2000, startFrame: 100, endFrame: 1379)
+        let result = PitchAnalysisResult(runID: UUID(), source: source, inputSHA256: String(repeating: "b", count: 64),
+            sampleCount: 1280, frames: Array(repeating: .init(pitchHz: 440, confidence: 0.99, voiced: true), count: 5))
+        let bytes = try JSONEncoder().encode(result)
+        do {
+            _ = try await store.publishWorkflowAsset(data: bytes, mediaType: PitchAnalysisResult.mediaType,
+                name: "pitch", parents: [], operationID: "d.music.pitch")
+            Issue.record("Unbound pitch original was admitted")
         } catch {}
         #expect(await store.snapshot().assets.isEmpty)
         try await store.close()

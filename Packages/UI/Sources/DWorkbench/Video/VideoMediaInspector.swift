@@ -9,6 +9,52 @@ public enum VideoMediaInspector {
     public static func inspect(at url: URL, expected: VideoRequest,
                                timeoutSeconds: Double = 60) async throws -> VideoAssetMetadata {
         try VideoExecutionCapability.wan21.validate(expected)
+        let result = try await inspectShape(at: url, expected: VideoMediaShape(width: expected.width, height: expected.height,
+            frameCount: expected.frameCount, frameRate: expected.frameRate), timeoutSeconds: timeoutSeconds)
+        try result.validate(matching: expected)
+        return result
+    }
+
+    /// Bounded import of the current silent, constant-rate, non-reordered H264 format.
+    /// Probe values are expectations only; the existing full sample/decode pass proves them.
+    public static func inspectImported(at url: URL, timeoutSeconds: Double = 60) async throws -> VideoAssetMetadata {
+        guard timeoutSeconds.isFinite, timeoutSeconds > 0 else { throw VideoInspectionError.invalid("检查期限无效") }
+        let opened = try VideoSafeFile.open(url, maximumBytes: 512 * 1_024 * 1_024)
+        defer { Darwin.close(opened.descriptor) }
+        try VideoSafeFile.validateMP4(descriptor: opened.descriptor, byteCount: opened.identity.size)
+        let asset = AVURLAsset(url: url, options: [AVURLAssetPreferPreciseDurationAndTimingKey: true])
+        let deadline = Task<Void, Never> {
+            do { try await Task.sleep(for: .seconds(timeoutSeconds)) } catch { return }
+            asset.cancelLoading()
+        }
+        defer { deadline.cancel(); asset.cancelLoading() }
+        let shape = try await withTaskCancellationHandler {
+            let tracks = try await asset.loadTracks(withMediaType: .video)
+            guard tracks.count == 1 else { throw VideoInspectionError.invalid("仅支持单视频轨") }
+            let track = tracks[0]
+            let descriptions = try await track.load(.formatDescriptions)
+            guard let description = descriptions.first else { throw VideoInspectionError.invalid("视频缺少格式声明") }
+            let dimensions = CMVideoFormatDescriptionGetDimensions(description)
+            let frame = try await track.load(.minFrameDuration)
+            let duration = try await asset.load(.duration)
+            guard frame.isNumeric, frame > .zero, frame.value <= Int32.max,
+                  duration.isNumeric, duration > .zero else { throw VideoInspectionError.invalid("需要明确恒定帧时钟") }
+            let count = duration.seconds / frame.seconds
+            guard count.isFinite, count > 0, count <= 7200, abs(count - count.rounded()) < 0.000001 else {
+                throw VideoInspectionError.limit("导入视频帧数必须有界且与时长一致")
+            }
+            let result = VideoMediaShape(width: Int(dimensions.width), height: Int(dimensions.height),
+                frameCount: Int(count.rounded()), frameRate: .init(numerator: frame.timescale, denominator: Int32(frame.value)))
+            try result.validateImportBudget()
+            return result
+        } onCancel: { asset.cancelLoading() }
+        try Task.checkCancellation()
+        try VideoSafeFile.verifyUnchanged(url, descriptor: opened.descriptor, initialIdentity: opened.identity, maximumBytes: 512 * 1_024 * 1_024)
+        return try await inspectShape(at: url, expected: shape, timeoutSeconds: timeoutSeconds)
+    }
+
+    private static func inspectShape(at url: URL, expected: VideoMediaShape,
+                                     timeoutSeconds: Double) async throws -> VideoAssetMetadata {
         guard timeoutSeconds.isFinite, timeoutSeconds > 0 else {
             throw VideoInspectionError.invalid("检查期限必须是正有限秒数")
         }
@@ -58,7 +104,7 @@ public enum VideoMediaInspector {
         return digest
     }
 
-    private static func inspectFile(at url: URL, expected: VideoRequest, maximumBytes: UInt64,
+    private static func inspectFile(at url: URL, expected: VideoMediaShape, maximumBytes: UInt64,
                                     controller: VideoInspectionCancellation) async throws -> VideoAssetMetadata {
         let opened = try VideoSafeFile.open(url, maximumBytes: maximumBytes)
         defer { Darwin.close(opened.descriptor) }
@@ -179,14 +225,13 @@ public enum VideoMediaInspector {
             durationDenominator: expected.frameRate.numerator, codec: "h264", hasAudio: false,
             byteCount: opened.identity.size, contentSHA256: initialHash
         )
-        try metadata.validate(matching: expected)
         VideoInspectionTestHooks.reach(.beforeSuccessfulFinish)
         try controller.check()
         return metadata
     }
 
     private static func decodeEveryFrame(from output: AVAssetReaderTrackOutput,
-                                         reader: AVAssetReader, expected: VideoRequest,
+                                         reader: AVAssetReader, expected: VideoMediaShape,
                                          controller: VideoInspectionCancellation) throws {
         let frameDuration = CMTime(value: Int64(expected.frameRate.denominator),
                                    timescale: expected.frameRate.numerator)
@@ -229,7 +274,7 @@ public enum VideoMediaInspector {
     }
 
     private static func verifyCompressedTiming(asset: AVAsset, track: AVAssetTrack,
-                                               expected: VideoRequest,
+                                               expected: VideoMediaShape,
                                                controller: VideoInspectionCancellation) throws {
         let reader = try AVAssetReader(asset: asset)
         let output = AVAssetReaderTrackOutput(track: track, outputSettings: nil)
@@ -295,7 +340,7 @@ public enum VideoMediaInspector {
             expected.isValid && expected.isNumeric && CMTimeCompare(value, expected) == 0
     }
 
-    private static func readBudget(for expected: VideoRequest) throws -> UInt64 {
+    private static func readBudget(for expected: VideoMediaShape) throws -> UInt64 {
         let (pixels, pixelOverflow) = UInt64(expected.width).multipliedReportingOverflow(by: UInt64(expected.height))
         let (frameBytes, byteOverflow) = pixels.multipliedReportingOverflow(by: 3)
         let (rawBytes, frameOverflow) = frameBytes.multipliedReportingOverflow(by: UInt64(expected.frameCount))
@@ -304,6 +349,24 @@ public enum VideoMediaInspector {
             throw VideoInspectionError.limit("视频读取预算发生整数溢出")
         }
         return budget
+    }
+}
+
+/// Decoded file geometry is separate from a model generation request.
+private struct VideoMediaShape: Sendable {
+    let width: Int
+    let height: Int
+    let frameCount: Int
+    let frameRate: VideoFrameRate
+    func validateImportBudget() throws {
+        try frameRate.validate()
+        guard width > 0, height > 0, width <= 8192, height <= 8192,
+              width * height <= 32 * 1_024 * 1_024,
+              (1...7200).contains(frameCount),
+              Double(frameRate.numerator) / Double(frameRate.denominator) <= 120,
+              Double(frameCount) * Double(frameRate.denominator) / Double(frameRate.numerator) <= 120 else {
+            throw VideoInspectionError.limit("当前导入支持120秒以内、最多7200帧的有界视频；原件未改变")
+        }
     }
 }
 

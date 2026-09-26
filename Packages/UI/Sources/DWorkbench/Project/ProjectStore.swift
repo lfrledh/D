@@ -3118,6 +3118,8 @@ extension ProjectStore {
 
     private func commitWorkflow(_ archive: WorkflowArchive, assets: [ProjectAsset],
                                 checkpoint: (@Sendable (WorkflowStoreCheckpoint) throws -> Void)? = nil) throws {
+        var archive = archive
+        if archive.requiresLanguageVersion { archive.version = 2 }
         try validateWorkflowArchive(archive, assets: assets)
         let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
         let data = try encoder.encode(archive)
@@ -3202,6 +3204,18 @@ extension ProjectStore {
             metadata = .init(width: verifiedVideo.width, height: verifiedVideo.height, video: verifiedVideo)
         } else if [.notes, .chords, .tempo, .pitch].contains(format.kind) {
             let embeddedParents = try WorkflowMediaFormat.validateStructure(data, mediaType: mediaType)
+            if mediaType == PitchAnalysisResult.mediaType {
+                let result = try PitchResultFile.decode(data)
+                guard let request, case .pitch(let pitch) = request.input else { throw WorkflowIssue("音高产物缺少冻结的识别请求。") }
+                try Self.validatePitchResult(result, request: pitch, runID: request.id)
+                guard let parent = parents.first(where: { $0.kind == .audio && $0.assetID == result.source.assetID && $0.sha256 == result.source.contentSHA256 }),
+                      let sourceAsset = manifest.assets.first(where: { $0.id == parent.assetID }),
+                      let audio = sourceAsset.metadata.audio,
+                      audio.contentSHA256 == result.source.contentSHA256,
+                      audio.format.sampleRate == result.source.sampleRate,
+                      audio.format.frameCount == result.source.frameCount else { throw WorkflowIssue("音高来源不属于已发布的原声版本。") }
+                _ = try workflowData(parent)
+            }
             guard Set(embeddedParents).isSubset(of: Set(parents)) else { throw WorkflowIssue("结构数据来源必须保留在资产来源关系中。") }
             metadata = .init()
         }
@@ -3311,6 +3325,24 @@ extension ProjectStore {
         let ref = try pin(id)
         archive.revision = UUID(); try commitWorkflow(archive, assets: manifest.assets)
         return ref
+    }
+
+    /// Explicit MP4 selection uses the same full decoder as generated video; other
+    /// formats retain the synchronous import path. No model request is invented.
+    public func importWorkflowMediaFile(at source: URL) async throws -> WorkflowPublishedAsset {
+        guard source.pathExtension.lowercased() == "mp4" else { return try importWorkflowFile(at: source) }
+        try checkLocation()
+        let format = WorkflowMediaFormat.descriptor("video/mp4")!
+        let parent = try ProjectFiles.openDirectory(source.deletingLastPathComponent())
+        defer { Darwin.close(parent) }
+        let data = try ProjectFiles.read(relative: source.lastPathComponent, in: parent, limit: format.maximumBytes)
+        let id = UUID(), url = try stageWorkflowMedia(data, assetID: id, suffix: format.suffix, limit: format.maximumBytes)
+        let metadata = try await VideoMediaInspector.inspectImported(at: url)
+        try checkLocation()
+        guard metadata.contentSHA256 == Self.workflowHash(data) else { throw ProjectStoreError.externalModification }
+        return try publishWorkflowAsset(data: data, mediaType: "video/mp4", metadata: .init(), name: source.lastPathComponent,
+            parents: [], operationID: "d.asset.import", stepID: nil, request: nil, details: ["origin": "explicit-file-snapshot"],
+            assetID: id, checkpoint: nil, verifiedVideo: metadata)
     }
 
     /// Import snapshots approved files. Subsequent source changes do not change the published version.

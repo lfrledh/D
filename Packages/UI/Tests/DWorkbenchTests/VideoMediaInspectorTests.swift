@@ -35,6 +35,51 @@ struct VideoMediaInspectorTests {
         }
     }
 
+    @Test func importedVideoUsesFullDecoderWithoutInventingModelRequest() async throws {
+        try await withVideoFixtureDirectory { directory in
+            let file = directory.appendingPathComponent("导入.mp4")
+            let rate = VideoFrameRate(numerator: 24, denominator: 1)
+            try await VideoTestMedia.writeMP4(to: file, width: 64, height: 32, frameCount: 5, frameRate: rate)
+            let original = try Data(contentsOf: file)
+            let metadata = try await VideoMediaInspector.inspectImported(at: file)
+            #expect(metadata.frameCount == 5 && metadata.width == 64 && !metadata.hasAudio)
+            let project = directory.appendingPathComponent("Media.dproject")
+            let store = try await ProjectStore.create(at: project, name: "Media")
+            let imported = try await store.importWorkflowMediaFile(at: file)
+            #expect(imported.record.reference.kind == .video)
+            #expect(imported.record.request == nil)
+            #expect(imported.asset.role == .original)
+            #expect(try await store.workflowData(imported.record.reference) == original)
+            try await store.close()
+            let reopened = try await ProjectStore.open(at: project)
+            #expect(try await reopened.workflowData(imported.record.reference) == original)
+            #expect(try Data(contentsOf: file) == original)
+            try await reopened.close()
+        }
+    }
+
+    @Test func workflowGeneratedVideoPublishesOnlyAfterFullInspection() async throws {
+        try await withVideoFixtureDirectory { directory in
+            let file = directory.appendingPathComponent("fixture.mp4")
+            let rate = VideoFrameRate(numerator: 24, denominator: 1)
+            try await VideoTestMedia.writeMP4(to: file, width: 64, height: 32, frameCount: 5, frameRate: rate)
+            let bytes = try Data(contentsOf: file)
+            let store = try await ProjectStore.create(at: directory.appendingPathComponent("Video.dproject"), name: "Video")
+            let expected = videoRequest(width: 64, height: 32, frameCount: 5, frameRate: rate)
+            let item = try await store.publishWorkflowVideo(data: bytes, expected: expected, name: "Video",
+                operationID: "d.video.generate", request: .init(model: .init(directory: directory), input: .video(expected)))
+            #expect(item.asset.metadata.video?.frameCount == 5)
+            #expect(try await store.workflowData(item.record.reference) == bytes)
+            await #expect(throws: (any Error).self) {
+                _ = try await store.publishWorkflowVideo(data: bytes,
+                    expected: videoRequest(width: 80, height: 32, frameCount: 5, frameRate: rate),
+                    name: "wrong", operationID: "d.video.generate")
+            }
+            #expect(await store.snapshot().assets.count == 1)
+            try await store.close()
+        }
+    }
+
     @Test func rejectsWrongDimensionsFrameCountAndFrameRate() async throws {
         try await withVideoFixtureDirectory { directory in
             let file = directory.appendingPathComponent("geometry.mp4")
