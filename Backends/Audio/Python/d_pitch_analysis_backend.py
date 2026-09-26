@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import argparse
-from contextlib import nullcontext
+from contextlib import contextmanager, nullcontext
 import hashlib
 import importlib.util
 import json
@@ -315,6 +315,26 @@ def _analyze(request: dict[str, Any], detector_factory: Callable[[Path], Any] | 
     }
 
 
+def _safe_access_reason(error: BaseException) -> str:
+    reasons = {
+        "manifest path could not be traversed safely", "manifest is unavailable",
+        "manifest path contains a symbolic link", "manifest must be a regular file",
+        "manifest could not be opened safely", "manifest permissions must be 0600",
+        "manifest changed before it could be read", "manifest exceeds 65536 bytes",
+        "manifest changed while being read", "manifest could not be read safely",
+        "manifest is not valid strict UTF-8 JSON", "manifest runID does not match the task",
+        "manifest paths do not equal allowed_paths", "bookmark data could not be represented",
+        "bookmark resolver reported an error", "bookmark could not be resolved", "bookmark is stale",
+        "bookmark has no valid local path", "file access bookmarks are unsupported on this platform",
+        "CoreFoundation file access support is unavailable", "granted directory is not readable",
+        "granted path is not a readable directory", "resolved bookmark path does not match its grant",
+        "file access could not be activated", "file access cleanup did not complete",
+    }
+    message = str(error)
+    return message if message in reasons else "unclassified access failure (details withheld)"
+
+
+@contextmanager
 def _default_access_acquirer(manifest: Path, run_id: str,
                              directories: list[Path]) -> ContextManager[None]:
     helper = Path(__file__).resolve(strict=True).with_name("d_audio_access.py")
@@ -330,7 +350,13 @@ def _default_access_acquirer(manifest: Path, run_id: str,
         raise
     if Path(module.__file__).resolve(strict=True).parent != Path(__file__).resolve(strict=True).parent:
         raise ProtocolError("audio access helper is not the provider sibling")
-    return module.acquire_file_access(manifest, run_id=run_id, allowed_paths=directories)
+    try:
+        with module.acquire_file_access(manifest, run_id=run_id, allowed_paths=directories):
+            yield
+    except module.AudioAccessError as exc:
+        # Only fixed, path-free messages authored by our helper may cross stderr.
+        # Never stringify an underlying CF/OS error or bookmark bytes here.
+        raise ProtocolError("pitch access: " + _safe_access_reason(exc)) from None
 
 
 def _access_context(args: argparse.Namespace,

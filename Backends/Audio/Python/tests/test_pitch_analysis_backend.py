@@ -180,6 +180,16 @@ class PitchProviderValidationTests(unittest.TestCase):
             with self.assertRaises(provider.ProtocolError):
                 provider._bounded_regular_bytes(linked / "input.bin", 4, "linked fixture")
 
+    def test_access_diagnostic_preserves_only_fixed_safe_reasons(self) -> None:
+        self.assertEqual(provider._safe_access_reason(Exception("bookmark is stale")), "bookmark is stale")
+        for private in ("/private/user/model", "bookmark bytes: abc", "private CF error"):
+            self.assertNotIn(private, provider._safe_access_reason(Exception(private)))
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            with self.assertRaisesRegex(provider.ProtocolError, "pitch access: manifest is unavailable"):
+                with provider._default_access_acquirer(root / "missing.json", str(uuid.uuid4()), [root]):
+                    self.fail("Access failure must not execute the provider body")
+
     def test_cli_invalid_request_keeps_stdout_protocol_clean(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             request = Path(temporary) / "request.json"
