@@ -2,11 +2,15 @@
 
 最后核实：2026-09-27。唯一当前任务与停点入口。
 
-## 当前任务：D-NODE-LANGUAGE-01（实施中）
+## 当前任务：D-NODE-LANGUAGE-01（候选已构建，H27原生验收待办）
 
 用户批准 S0—S4：18通用节点、结构化控制与工具、四模态真实节点及哼唱和声样例、Xcode Run/普通开发App。任务范围、隔离、预算与证据见[任务记录](tasks/D-NODE-LANGUAGE-01.md)。不自动发布或恢复 AP1/CORE/I2V。
 
-源 `codex/inference-foundation` = `130603d23a4da81ba2a9852766f3589695ec9468`。Lead隔离树 `D-Worktrees/D-NODE-LANGUAGE-01`，分支 `codex/d-node-language-01`。本轮尚未集成/验收新增产品能力。证据 `D-Development/AgentTrials/D-NODE-LANGUAGE-01/run-20260926T150929Z`，路径根 `/Volumes/CodexProjects/Codex/`。
+源 `codex/inference-foundation` = `130603d23a4da81ba2a9852766f3589695ec9468`。Lead隔离树 `D-Worktrees/D-NODE-LANGUAGE-01`，分支 `codex/d-node-language-01`；组合代码/完整CPU/普通开发构建 = `5b49f6ebea2db24effe2b317aed399ae74cbc068`，后续仅文档提交在外部 `lead/final-receipt.json` 记录。候选未集成、未推送；整阶段不能记通过。证据 `D-Development/AgentTrials/D-NODE-LANGUAGE-01/run-20260926T150929Z`，路径根 `/Volumes/CodexProjects/Codex/`。
+
+本轮18通用节点、类型化记录/列表/条件/Map/状态Loop/人工任务/版本化工具与四套可编辑样例已实现。完整组件/hosting、真实图文音视频宿主、三类跨进程检查点恢复通过；具体模型构建各有版本，不等于同一普通GUI已验。见[逐项记录](tasks/D-NODE-LANGUAGE-01.md#当前交付检查点2026-09-27)及外部 `delivery/acceptance-results.json`。
+
+试用从[通用节点说明](NODE_LANGUAGE_TRY.zh-CN.md)开始：候选 `D.xcworkspace / D Nodes / My Mac`；`R/delivery/D Nodes.app` 与两个启动器已准备，普通Debug重新构建自动校验/复制音视频引擎，无手工补包。Xcode实际点Run、普通App交互、本轮新录音/试听、中日输入法、物理断网尚未验；本轮最后桌面检查仍锁定。源旧工作台试用说明保留如下。
 
 上一批已集中验收并同步，历史最终回执 `D-Development/AgentTrials/D-NODE-BOUNDARY-01/run-20260926T073533Z-acceptance/evidence/final-receipt.json`；H25/H26历史关闭，不冒充本轮新 A35。旧基线组件与原生证据保留，详情[边界任务](tasks/D-NODE-BOUNDARY-01.md)。
 
@@ -23,6 +27,6 @@ M0可编辑图文、文字、文件、模板组合共用原项目Store、文字�
 - 源仅保留个人scheme未暂存修改`orderHint 1→6`；SHA256 `ca3635d88aa5a15397b90e528667c66c0e6db7e596176e885c79d194b544206c`，index blob `9c76916bdc97c2d4298cefe64e0b0fae3380573e`。不暂存、自动还原或清理此文件。
 - AP1 `e5d24f4e1064423238e3c8e1112bc4b3a9a81e2e`、CORE `9d3a503d327a820cb67e399922a07c27f953e903`及I2V研究未合入；未删除分支/工作树/证据。图格式16不代表AP1/CORE13—15迁移已解决。
 - H25/H26和旧设备/协议权限无需重复办理；H22输入法候选窗位置仍按用户决定延期，未改记修复。人不在、锁屏、设备或本人点击引起的新阻塞持续入[集中清单](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md)，返回时集中处理。
-- 当前仍在本轮实施：真实文字5次请求及两和声版本共6次MRT2、SwiftF0、保存导出通过；临时书签问题已定点修补并保留失败对照。图像规划已接可展开有限JSON修复工具，相关CPU通过，完整图像/视频及文字控制真实回归继续。A06与文字控制Worker各在第一轮定向修复；新增音乐取消测试为原A17缺口。H27锁屏仅阻塞GUI，无新录音/试听/系统断网结论。准确受测版本和进程见任务记录与外部run证据。
+- 所有本轮Worker已交还写入，真实模型及恢复测试结束，最终普通包已构建。Qwen7B短JSON规划实际两主题六图通过，1.5B结构失败证据保留；不提高/降低既有精度或删校验。资源/运行时CPU通过，导出MIDI经Apple解析器核对音符。H27仅阻塞对应原生验收，不标为代码通过或阶段完成；准确版本和进程见任务记录与外部run证据。
 
-**下一动作：按任务S0→S4连续实施与验收；仅在试用交付完成后停下。** 对未知候选不自动接纳，正式发布仍需另行批准。
+**下一动作：本人解锁后集中完成H27及同包普通GUI/录音试听/离线验收，再做必要预算内修复与验收后接纳；不启动下一产品批次。** 不再重复非前台模型测试凑通过数；对未知候选不自动接纳，正式发布仍需另行批准。

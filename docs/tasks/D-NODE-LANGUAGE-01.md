@@ -1,5 +1,118 @@
 # D-NODE-LANGUAGE-01：通用节点语言与四模态试用
 
+## 当前交付检查点（2026-09-27）
+
+**有限实现与非前台验收已完成；原生验收受 H27 锁屏阻塞，整阶段尚未通过，候选未接入源/未推送。** 下方各日期的“下一步/待验”保留为历史，不覆盖本段。用户本次批准的全部原生要求未删减。
+
+- 固定源仍 `130603d23a4da81ba2a9852766f3589695ec9468`；组合代码/完整CPU/普通开发构建 `5b49f6ebea2db24effe2b317aed399ae74cbc068`。最终仅文档提交写外部 `lead/final-receipt.json`，不自引用反复提交。
+- 候选分支 `codex/d-node-language-01`，外盘 `D-Worktrees/D-NODE-LANGUAGE-01`。本段结案记录只是可恢复交付点，不标全阶段完成。源个人scheme内容/摘要/index/未暂存状态保持；普通App、模型、既有作品、旧候选未替换。
+- 普通包 `R/delivery/D Nodes.app`；两个 `.command` 启动器、完整版本/资源/摘要 `delivery-manifest.json`，逐项机器记录 `acceptance-results.json`；使用说明 [NODE_LANGUAGE_TRY](../NODE_LANGUAGE_TRY.zh-CN.md)。R见本文件基线段。
+- Xcode 27.0 (27A266a)、macOS 26.6.2 (25G83)、arm64/M4/16 GiB。实际 `D.xcworkspace / D Nodes / Debug / My Mac` 普通构建使用忽略的本机xcconfig；无签名/资源命令行替代，无构建后手补。重新复制四引擎后每一文件/目录/链接均与准备清单一致，正常代码签名完整性通过；不等于公证、普通GUI或Xcode Run已验。
+- 全UI包：161 UI、23独立入口、596 Workbench 的 Swift Testing 各组通过，另30 XCTest通过；运行时70项、资源准备18项通过。按套件分列，不与历史次数累加。证据 `lead/final-ui-cpu`、`final-runtime-cpu`、`final-resource-cpu`、`final-normal-development-build`、`final-app-verification.json`。
+- GUI最后检查 `gui/final-desktop-state.json` 明确Mac锁定；没有新原生截图/录音/试听/输入法/物理断网成功。H27集中办理：解锁后先同包普通GUI和Xcode Run，再本人短录音/试听及中日输入法，最后提醒音＋本人断网A35；不重复请求旧权限，不自动改系统网络。
+
+### 真实运行与版本（各自通过，不伪称同一次前台验收）
+
+| 实测 | 实际构建 | 证据与结论 |
+| --- | --- | --- |
+| 通用文字、同计划双入口 | `f593b051ff483461444317f9d7ad986ca0a2fae9` | `lead/node-real-text-r2`，Qwen1.5B共5次真实请求、raw/来源/保存重开；非GUI |
+| 分支与文字取消 | `eb6917459829e42811f851d4416d5d4be7be3be7` | `lead/node-real-text-control`，未选缺失模型零准备；真实生成取消后下一请求成功 |
+| E02图像与参考/取消 | `f67e1ef51118533bf170c1ea4767b1ee3870e010` | `lead/node-real-image-7b-context`，已有Qwen7B q4、输入上限4096；一次规划、零修复，真实两主题×三图及单参考、尺寸/格式、导出重开通过。1.5B的两次修复失败原文不删除；不改称小模型通过 |
+| E03音高与六次音乐 | `1bc907d8ff7ba2dbcec0499fdc8bdf2c3c79d1c6` | `lead/node-real-music-access-fixed`，已授权录音取4秒，经SwiftF0/分段、修订音符、两和声版本各3次MRT2；实际25Hz条件核对，WAV/JSON/保存重开通过。旧录音非本轮新录音或识别准确率标杆 |
+| 音乐取消 | `f67e1ef51118533bf170c1ea4767b1ee3870e010` | `lead/node-real-music-cancel`，观测generating后取消/drain，下一4秒MRT2成功；原ProjectAsset与WorkflowAsset完整记录及字节保留 |
+| 视频 | `eb6917459829e42811f851d4416d5d4be7be3be7` | `lead/node-real-video-r1`，Wan T2V执行入口取消/释放/后续生成；17帧MP4全解码、导出重开通过，不是I2V |
+| 导出MIDI独立检查 | 导出代码`1bc907d8…`，检查入口`5b49f6e…` | `lead/midi-independent-validation`，Apple AudioToolbox解析3个音符的音高/力度/起止，与持久音符一致；不代表播放听感 |
+| Map/Loop/Human崩溃恢复 | `5b49f6ebea2db24effe2b317aed399ae74cbc068` | `lead/process-recovery-{map,loop,human}-<nonce>`：原PID经ESRCH确认，produce65/reopen0各实际1测试。已完成项不重做，中断项重试；人工草稿/材料/决定保留，明确继续才启动下游。真实Store/Controller、确定性模型替身，不证明真实模型exactly-once/断电一致性 |
+
+`f67e1ef→5b49f6e`仅新增PROCESS测试，生产/图像/音乐实现一致；其他模型证据保留各自构建，不假称在最终SHA重新跑过。完整最新CPU已覆盖共享校验/旧图回归。图片样本Lead另查看为可辨城市场景；不是用户审美或普通GUI验收。
+
+### 节点逐项（组件已实现不等于原生验收）
+
+| ID | 已实现入口 | 当前证据/待验 |
+| --- | --- | --- |
+| N01 输入内容 | `d.value.input` | 组件CPU/接线通过；原生交互待验 |
+| N02 选择素材 | `d.asset.reference` | 组件CPU/接线通过；原生交互待验 |
+| N03 语言模型 | `d.model.language` | 组件与真实模型通过；普通GUI待验 |
+| N04 组合文字 | `d.value.template` | 组件CPU/接线通过；原生交互待验 |
+| N05 组合字段 | `d.value.record` | 组件CPU/接线通过；原生交互待验 |
+| N06 读取字段 | `d.value.field` | 组件CPU/接线通过；原生交互待验 |
+| N07 组成列表 | `d.value.list` | 组件CPU/接线通过；原生交互待验 |
+| N08 筛选与排序 | `d.value.filter` | 组件CPU/接线通过；原生交互待验 |
+| N09 取出一项 | `d.value.select` | 组件CPU/接线通过；原生交互待验 |
+| N10 按编号配对 | `d.value.pair` | 组件CPU/接线通过；原生交互待验 |
+| N11 检查数据 | `d.value.validate` | 组件CPU/接线通过；原生交互待验 |
+| N12 条件选择 | `d.control.branch` | 组件CPU/接线通过；原生交互待验 |
+| N13 逐项执行 | `d.control.map` | 组件CPU/接线通过；原生交互待验 |
+| N14 重复到满足条件 | `d.control.loop` | 组件CPU/接线通过；原生交互待验 |
+| N15 等待用户处理 | `d.control.human` | 组件CPU/接线通过；原生交互待验 |
+| N16 使用自定义工具 | `d.control.invoke` | 组件CPU/接线通过；原生交互待验 |
+| N17 返回结果 | `d.value.return` | 组件CPU/接线通过；原生交互待验 |
+| N18 导出文件 | `d.value.export` | 组件CPU/接线通过；原生交互待验 |
+| G01 图像模型 | `d.image.generate` | 组件与真实模型通过；普通GUI待验 |
+| G02 调整图片尺寸 | `d.image.resize` | 组件CPU/接线通过；原生交互待验 |
+| G03 转换图片格式 | `d.image.convert` | 组件CPU/接线通过；原生交互待验 |
+| V01 视频模型 | `d.video.generate` | 组件与真实模型通过；普通GUI待验 |
+| M01 录一段声音 | `ProjectSession.startWorkflowRecording + d.asset.reference` | 明确开始/结束录音入口已接既有录音服务；本轮新录音未验 |
+| M02 截取音频 | `d.audio.trim` | 组件CPU/接线通过；原生交互待验 |
+| M03 转换音频规格 | `d.audio.convert` | 组件CPU/接线通过；原生交互待验 |
+| M04 识别旋律音符 · SwiftF0 | `d.music.pitch` | 组件与真实模型通过；普通GUI待验 |
+| M05 对齐节拍 | `d.music.align` | 组件CPU/接线通过；原生交互待验 |
+| M06 估计调性 | `d.music.keys` | 组件CPU/接线通过；原生交互待验 |
+| M07 和弦转成音符 | `d.music.chords` | 组件CPU/接线通过；原生交互待验 |
+| M08 播放/渲染音符 | `d.music.render` | 有限确定性正弦参考音/文件回读通过；新试听待验 |
+| M09 音乐生成 · MRT2 | `d.music.generate` | 组件与真实模型通过；普通GUI待验 |
+
+### A01—A36 当前逐项结论
+
+通过仅指该行冻结的证据要求；“部分”不视为整项通过。A13是Controller/无画布同计划，普通画布按钮体验仍在A24/A30；A15用真实保存与进程、替身推理；A29采用独立系统格式解析，不冒充人工试听。
+
+| ID | 状态 | 已证实与剩余 |
+| --- | --- | --- |
+| A01 值与类型 | 部分 | 值型/资产CPU通过；原生连线、空值/失败显示未验 |
+| A02 模板与预设 | 部分 | 模板/预设及真实文字通过；原生编辑未验 |
+| A03 字段与校验 | 部分 | 字段/单位/严格与报告CPU通过；原生菜单未验 |
+| A04 输入冻结与共享引用 | 部分 | 冻结/串结果/文件变化CPU通过；提交后换图GUI未验 |
+| A05 通用语言模型 | 部分 | 真实Qwen创作/改写/记录通过；普通GUI未验 |
+| A06 结构输出与修复 | 通过 | 7B真实结构正例及有界修复反例通过；1.5B失败原文保留，不称其成功 |
+| A07 列表与身份 | 部分 | 稳定ID/嵌套/匹配/拒绝静默取首CPU通过；原生编辑未验 |
+| A08 真正条件分支 | 通过 | 未选模型不解析、不提交；已选真实Qwen执行通过 |
+| A09 动态批处理 | 通过 | 动态Map与真实两主题各三图、完整来源通过 |
+| A10 状态循环 | 部分 | 循环状态/退出原因CPU与进程恢复通过；原生循环编辑未验 |
+| A11 真正子流程 | 部分 | 跨界接口封装、真实工具与嵌套CPU通过；原生封装操作未验 |
+| A12 实例与版本隔离 | 部分 | 双实例、固定版本、另存升级CPU/hosting通过；原生未验 |
+| A13 相同执行计划 | 通过 | 同一冻结计划Controller与无画布入口真实Qwen通过；非普通GUI按钮结论 |
+| A14 人工决定可选 | 部分 | 可选人工、拒绝和旧等待CPU通过；原生预览/确认未验 |
+| A15 检查点与等待恢复 | 通过 | 真实Store正常重开及Map/Loop/Human三处SIGKILL恢复通过；模型为确定性替身 |
+| A16 局部运行边界 | 部分 | 四种范围与历史Call边界CPU通过；原生历史选择未验 |
+| A17 取消与安全暂停 | 通过 | CPU安全暂停及真实文字/图像/音乐/视频取消释放后下一任务通过 |
+| A18 保存与导出副作用 | 部分 | 保存/不覆盖/重试CPU与实际导出通过；原生目录选择/故障反馈未验 |
+| A19 旧流程回归 | 部分 | 原M0相关CPU回归通过；旧T01—T15原生结果不追认为新候选通过 |
+| A20 未知版本/迁移 | 通过 | 旧版本测试副本迁移/重开与未知字段只读保留CPU通过 |
+| A21 图片程序 | 部分 | 尺寸/格式CPU及真实图像导出通过；原生操作未验 |
+| A22 真实哼唱输入 | 部分 | 已授权录音片段经真实SwiftF0识别；本候选原生新录音未验 |
+| A23 音乐时钟与规则 | 通过 | 拍/秒/和声/边界数值夹具及真实音频回读通过 |
+| A24 四模态实际生成 | 部分 | 四模态宿主真实运行各已通过；同一普通画布操作/播放/重开未验 |
+| A25 图像参考与批次 | 部分 | 真实单参考图与两组三候选通过；原生绑定/预览未验 |
+| A26 视频是完整媒体 | 部分 | 真实T2V、全17帧MP4解码/导出/重开通过；原生播放未验 |
+| A27 音乐场景真实闭环 | 部分 | 修订音符、两和声版本各三MRT2候选及导出重开通过；GUI/人工试听未验 |
+| A28 默认不改作曲意图 | 通过 | 默认和弦流程无隐藏LLM；提案/风格开关CPU检查通过 |
+| A29 音乐交付 | 通过 | WAV/JSON回读及Apple AudioToolbox独立MIDI音符/时间解析通过；不是听感结论 |
+| A30 三层UI与端口 | 部分 | 三层UI/端口/数据hosting通过；原生画布未验 |
+| A31 中英与输入法 | 部分 | 中英语言切换/组合字符CPU与hosting通过；原生中日输入法未验，H22未关闭 |
+| A32 模型准备与局部资源 | 部分 | 资源清单/缺失/身份拒绝夹具与普通构建通过；GUI就绪反馈/外盘重选未验 |
+| A33 Xcode Run | 阻塞 | D Nodes常规编译通过；锁屏阻止实际Xcode Run四样例 |
+| A34 直接App试用 | 阻塞 | 普通开发App资源/签名完整性通过；锁屏阻止直接启动后的GUI验收 |
+| A35 准备后离线 | 阻塞 | 本候选未进行物理断网验收；H25/H26历史通过不代替本轮 |
+| A36 可交付与可继续开发 | 部分 | 源码/普通包/两启动器/四可编辑样例/两以上真工具及说明已交；原生自定义工具和完整试用待验 |
+
+### 来源、审核与恢复
+
+- 实现采用受限独立CLI的 `gpt-5.6-sol/high`，Lead提供契约、共享装配及有界修补；没有将Lead补写归给Worker。各任务预检、修订、耗时、工具异常在R对应目录；隐藏服务端模型解析及订阅货币成本仍unknown，不据本批推断最优成本。
+- MUSIC-CANCEL初交＋两轮修复，PROCESS初交＋一轮修复；写权已交还。只读非实现者审查通过，Lead实际执行完整进程实验。XCTest自动重启的报告宿主跑0项、不在账本，未计为恢复成功。MEDIA的T2V来源断言由Lead有界接管；N11列表数量/旧图兼容、JSON工具默认4k与子进程CFFIXED_USER_HOME修补分别受非实现者审阅，保留先失败后通过证据及限制。
+- 所有工作结果留在候选；源未快进，未推送，不开启下一产品批次。各自持久证据不只留worktree。H27之外旧AP1/CORE/I2V、分发许可/部署责任不由本轮关闭。
+- 恢复前核对当前真实HEAD/索引/源scheme/已知进程。下一动作仅集中原生验收和必要预算内修复；同包全门槛满足后才按既有规则集成。若用户当前只试用，先新建试用项目；不迁移真实作品。
+
+
 ## SCOPES r1：A16 局部运行与历史输入（language-v1-scopes1）
 
 有限新增实现包，非旧PLAN/CHECKPOINT修复预算重置。只新增 Packages/UI/Sources/DWorkbench/Workflow/WorkflowRunScope.swift 与 Packages/UI/Tests/DWorkbenchTests/WorkflowRunScopeTests.swift。Lead持有Run/Controller/Store/UI接线。请求gpt-5.6-sol/high，初交1800秒+最多2普通修复；独立受限CLI，禁网/构建/GPU/GUI/Git写/递归，前端parse可用且缓存仅自己output/tmp。禁止heredoc/here-string/process-substitution；Python使用-c或自己output脚本+PYTHONDONTWRITEBYTECODE=1。未知权限拒绝立即停报。按已审阅契约实现，不另造执行器。
@@ -19,7 +132,7 @@ resolveCall只处理已存在、输入已绑定的具体Call记录，不执行�
 验收真实Compiler/Executor CPU夹具：菱形downstream全边界/含不含锚点；缺/重复/内部pin拒绝；新run不能改变指定旧run输出；Map同nodeID不同item、Loop轮次及N01实际参数；工具摘要坏值拒绝；派生调用只运行该Call且无父操作；独立rebuild拒绝伪造plan/inputs；编码回读scope；空/未知范围拒绝。用现有纯操作与假服务计数，不写第二调度器。前端parse只证明语法；Lead串行跑CPU。Worker交差异、测试方法、异常、进程及缺口，无文档写权。
 
 
-状态：实施中，规格 r1 / language-v1，2026-09-27 JST。用户明确批准 S0—S4 连续实施；不公开发布、不推进 main、不自动接纳 AP1/CORE/I2V。
+状态：候选实现及非前台验收完成，H27原生验收待办；规格 r1 / language-v1，2026-09-27 JST。用户明确批准 S0—S4 连续实施；不公开发布、不推进 main、不自动接纳 AP1/CORE/I2V。
 
 ## 基线与证据
 
@@ -27,7 +140,7 @@ resolveCall只处理已存在、输入已绑定的具体Call记录，不执行�
 - Lead：外盘 `D-Worktrees/D-NODE-LANGUAGE-01`，`codex/d-node-language-01`。源工作文件不用于实现。
 - R：`D-Development/AgentTrials/D-NODE-LANGUAGE-01/run-20260926T150929Z/`（相对 `/Volumes/CodexProjects/Codex/`）。用户交接 12 个文件全部摘要核对并保留在 R/attachments；其中 01/02/03 是范围、节点和 A01—A36 验收要求，不是通过记录。
 - 源个人 scheme 仍未暂存，SHA256 `ca3635d88aa5a15397b90e528667c66c0e6db7e596176e885c79d194b544206c`；索引 `9c76916bdc97c2d4298cefe64e0b0fae3380573e`。保护副本和完整差异在 R/evidence/baseline.json。
-- 本轮受测/最终版本尚未产生。旧集中验收以原任务回执为准，不算本轮通过。
+- 当前受测组合见顶部检查点；旧集中验收以原任务回执为准，不算本轮通过。
 
 ## 范围与责任
 
