@@ -159,3 +159,13 @@ API public enum WorkflowCheckpointValidation, static func validate(_ checkpoint:
 
 FORMS两轮修复后CPU通过，AUDIO-PROGRAMS一轮修复后11项通过（补AVAudioFile完整读测试；CAF非整数采样率不显式转换时拒绝，因WAV不能无损表达）。STRUCTURED初交12项通过；非实现者只读审核通过。所有Worker已交还写入权。各实现/失败日志在对应R子目录，不修改历史预算。
 Lead添加实际N03/M04—M09/V01操作与纯条件桥接，尚待产品接线。MRT2条件映射保留0休止/1延续/2起音；同pitch重叠按所有唯一起音分段覆盖；过滤零力度，不编码声部/非零力度。原乐谱不变；条件时间25Hz四舍五入，塌缩/越界拒绝。M09要求显式音符（可空），不以无条件生成冒充受控。此策略和共享时间映射有独立只读审核及新增反例。
+
+## CONTROL-FORMS r1：可编辑控制块与公开接口
+
+Worker仅新增 Packages/UI/Sources/UI/Views/Workflow/WorkflowControlForms.swift 与 Packages/UI/Tests/UITests/WorkflowControlFormsTests.swift。Sol/high，独立受限CLI，初交1800秒+两轮修复；只parse不全包构建，Lead测试。不得改Controller/Canvas/Store/共享类型或任务记录，不网络/GPU/GUI/递归/Git写。
+
+生产视图API（UI模块内，Lead装配）：@MainActor struct WorkflowControlEditor:View init(node:Binding<WorkflowNode>,tools:[WorkflowToolDefinition],onOpenBody:@escaping(String)->Void)。slot字符串仅then/otherwise/body/tool，按钮显式调用，不自动运行。编辑现有node.control：branch条件predicate(path/comparison/value)与两侧进入；map continueOnFailure；loop stateSchema/maximumIterations1...1000/until规则；invoke显式选择固定id/version/digest工具，同步dataConfiguration.fields至接口。缺control提供明确“创建局部流程”动作，用通过字段N01 publicName input→N17 return构造可编辑最小body，合法interface；Map body公开item/value/index，返回output；Loop body公开state/iteration，返回nextState（默认原state，loop上限不自动无限），须以真实Executor键名为准。创建并不启动。不以空卡片冒充body。可新增实际使用的纯helper供测试。对于类型/结构编辑，可复用WorkflowDatumEditor通过示例值得schema，允许Text/Number/Bool/Record/List等，拒绝Asset/Result的随意伪造；无效草稿不写回合法node。
+
+另提供 @MainActor struct WorkflowGraphInterfaceEditor:View init(graph:Binding<WorkflowGraph>,registry:WorkflowRegistry,tools:[WorkflowToolDefinition])。真实公开输入name/schema/required，可增删改；输出name/nodeID/port/schema来自显式选择（候选为此graph节点有效端口），可编辑，不猜同名；重复名/无效schema保留草稿并显示错误。输入声明后同步到该公开输入N01的参数由Lead图操作负责，此表单只定义interface。不要重置用户图节点或连接。字段行身份独立UUID，改名不重建输入；编辑完整验证才发布；Graph revision由Lead的Binding setter维护。支持空输入/输出草稿，但执行缺output错误由Compiler报告，不静默选首项。
+
+新文案用既有语言Environment，键workflow.language.control.*；新增en/zh文本建议只输出任务output JSON。所有edit仅值Binding，文件/执行/模型均无调用。Tests实际helper检查创建body可Compiler编译、Branch两侧/Map/Loop结构和变量键、工具digest固定、切换工具接口显式更新、重复字段/错误类型不毁旧值、Unicode稳定行ID。不造第二执行器。Lead负责树状导航、包装/展开工具和运行按钮接线；Worker不修改这些共享所有权。
