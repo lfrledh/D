@@ -13,6 +13,20 @@ struct LocalProviderProcess: Sendable {
     let cancellationGraceSeconds: Double
     let label: String
 
+    /// Preserve the parent's existing container path context without inheriting
+    /// credentials, search paths, or other process settings. This does not grant
+    /// file access; the provider must still validate and acquire each bookmark.
+    static func childEnvironment(_ configured: [String: String],
+                                 parent: [String: String] = ProcessInfo.processInfo.environment,
+                                 home: String = NSHomeDirectory()) -> [String: String] {
+        var result = configured
+        if result["CFFIXED_USER_HOME"] == nil,
+           let fixedHome = parent["CFFIXED_USER_HOME"], !fixedHome.isEmpty, fixedHome == home {
+            result["CFFIXED_USER_HOME"] = fixedHome
+        }
+        return result
+    }
+
     func run<Output: Sendable>(
         consume: @escaping @Sendable (LocalDedicatedPipeReader, LocalOwnedProcessControl) async -> Output
     ) async throws -> Output {
@@ -21,7 +35,7 @@ struct LocalProviderProcess: Sendable {
         let stdout = Pipe(), stderr = Pipe()
         process.executableURL = executable
         process.arguments = arguments
-        process.environment = environment
+        process.environment = Self.childEnvironment(environment)
         process.currentDirectoryURL = currentDirectory
         process.standardInput = FileHandle.nullDevice
         process.standardOutput = stdout

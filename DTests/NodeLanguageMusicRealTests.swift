@@ -1,7 +1,7 @@
 import AVFoundation
 import CryptoKit
 import DInference
-import DMLXBackend
+@testable import DMLXBackend
 import DWorkbench
 import Foundation
 import Testing
@@ -11,6 +11,16 @@ import Testing
 /// Automated decisions are test actions, not a new user consent or listening verdict.
 @Suite(.serialized) @MainActor
 struct NodeLanguageMusicRealTests {
+    @Test func childEnvironmentPreservesOnlyExistingContainerContext() {
+        let configured = ["TMPDIR": "/task/tmp", "PYTHONDONTWRITEBYTECODE": "1"]
+        let parent = ["CFFIXED_USER_HOME": "/container", "HOME": "/other", "SECRET_TEST_SENTINEL": "not-inherited"]
+        #expect(LocalProviderProcess.childEnvironment(configured, parent: parent, home: "/container") == configured.merging(["CFFIXED_USER_HOME": "/container"]) { _, new in new })
+        #expect(LocalProviderProcess.childEnvironment(configured, parent: [:], home: "/container") == configured)
+        #expect(LocalProviderProcess.childEnvironment(configured, parent: parent, home: "/mismatch") == configured)
+        let explicit = configured.merging(["CFFIXED_USER_HOME": "/explicit"]) { _, new in new }
+        #expect(LocalProviderProcess.childEnvironment(explicit, parent: parent, home: "/container") == explicit)
+    }
+
     @Test(.enabled(if: ProcessInfo.processInfo.environment["D_NODE_LANGUAGE_REAL_CASE"] == "access"), .timeLimit(.minutes(1)))
     func freshPitchAccessParentAndChild() throws {
         let fm = FileManager.default
@@ -66,6 +76,7 @@ struct NodeLanguageMusicRealTests {
         let homeMode = ProcessInfo.processInfo.environment["D_NODE_LANGUAGE_ACCESS_HOME_MODE"] ?? "baseline"
         if homeMode == "home" || homeMode == "fixed" { process.environment?["HOME"] = NSHomeDirectory() }
         if homeMode == "fixed" { process.environment?["CFFIXED_USER_HOME"] = NSHomeDirectory() }
+        if homeMode == "inherited" { process.environment = LocalProviderProcess.childEnvironment(process.environment ?? [:]) }
         process.standardOutput = stdout; process.standardError = stderr
         try process.run()
         let timeout = DispatchWorkItem { if process.isRunning { process.terminate() } }
