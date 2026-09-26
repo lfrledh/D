@@ -15,7 +15,8 @@ struct WorkflowHostView: View {
                     onImport: { id in Task { await importFile(nodeID: id, controller: controller) } },
                     onDestination: { Task { await destination(controller) } },
                     onPublishText: { Task { await model.projectSession.publishTextToWorkflow() } },
-                    onReturnText: { ref in Task { await model.projectSession.returnWorkflowText(ref) } })
+                    onReturnText: { ref in Task { await model.projectSession.returnWorkflowText(ref) } },
+                    onAdditionalModel: { chooseModel(controller: controller, kind: $0) })
             } else { ProgressView("正在读取项目流程…") }
         }
         .task(id: model.manifest?.id) { await model.projectSession.openWorkflow() }
@@ -25,6 +26,7 @@ struct WorkflowHostView: View {
         guard let target = controller.modelSelectionTarget(), target.kind == kind else { return }
         Task {
             guard model.projectSession.workflow === controller, controller.isCurrent(target) else { return }
+            if kind == .pitch { model.projectSession.bindSelectedWorkflowModel(); return }
             let panel = NSOpenPanel(); panel.title = "选择此节点使用的已安装模型"
             panel.canChooseDirectories = true; panel.canChooseFiles = false; panel.allowsMultipleSelection = false
             guard await panel.begin() == .OK, let url = panel.url,

@@ -16,8 +16,10 @@ struct WorkflowSaveFailure: LocalizedError {
     private let registry: WorkflowRegistry
     private var bindings: [UUID: WorkflowModelBinding] = [:]
     private var activeRun: InferenceRun?
+    private var languageCallActive = false
     private var textSession: TextDraftSession?
-    public var streamedTextCharacterCount: Int { textSession?.partialText.count ?? 0 }
+    private var languagePreview = ""
+    public var streamedTextCharacterCount: Int { textSession?.partialText.count ?? languagePreview.count }
     public private(set) var cancelled = false
     public var progress: @MainActor (String) -> Void = { _ in }
     public var candidatesChanged: @MainActor (UUID, [WorkflowCandidate]) async throws -> Void = { _, _ in }
@@ -42,6 +44,7 @@ struct WorkflowSaveFailure: LocalizedError {
                 resolveText: @escaping @MainActor () async throws -> WorkflowModelBinding,
                 resolveImage: @escaping @MainActor () async throws -> WorkflowModelBinding) {
         self.init(store: store, session: session) { kind, _ in
+            guard kind == .text || kind == .image else { throw WorkflowIssue("旧模型解析入口不支持此模态。") }
             let binding = try await (kind == .text ? resolveText() : resolveImage())
             return WorkflowModelBinding(identity: binding.identity, reference: binding.reference,
                 backendID: binding.backendID, imageRecipe: binding.imageRecipe ?? (kind == .image ? .klein(capability: session.imageCapability) : nil),
@@ -54,7 +57,7 @@ struct WorkflowSaveFailure: LocalizedError {
         cancelled = false
         var result = graph
         // Capture defaults before the first suspension; each nonempty node ID remains authoritative.
-        let defaults: [WorkflowModelKind: String] = [.text: defaultIdentity(.text), .image: defaultIdentity(.image)]
+        let defaults = Dictionary(uniqueKeysWithValues: WorkflowModelKind.allCases.map { ($0, defaultIdentity($0)) })
         do {
             for i in result.nodes.indices where nodes.contains(result.nodes[i].id) {
                 try checkCancellation()
@@ -89,6 +92,158 @@ struct WorkflowSaveFailure: LocalizedError {
     }
     private func checkCancellation() throws { if cancelled || Task.isCancelled { throw CancellationError() } }
 
+
+    /// Freeze selected identities without resolving files or acquiring leases in unselected branches.
+    public func freezeModels(in graph: WorkflowGraph) -> WorkflowGraph {
+        var value = graph
+        for i in value.nodes.indices {
+            if let kind = registry.operation(value.nodes[i].operationID)?.definition.modelKind,
+               value.nodes[i].parameters["modelID"]?.string == "" {
+                value.nodes[i].parameters["modelID"] = .text(defaultIdentity(kind))
+            }
+            switch value.nodes[i].control {
+            case .branch(let rule, let yes, let no): value.nodes[i].control = .branch(predicate: rule, then: freezeModels(in: yes), otherwise: freezeModels(in: no))
+            case .map(let body, let keep): value.nodes[i].control = .map(body: freezeModels(in: body), continueOnFailure: keep)
+            case .loop(let body, let schema, let maximum, let rule): value.nodes[i].control = .loop(body: freezeModels(in: body), stateSchema: schema, maximumIterations: maximum, until: rule)
+            default: break
+            }
+        }
+        return value
+    }
+    public func beginPlan() throws {
+        guard bindings.isEmpty, activeRun == nil, !languageCallActive else { throw WorkflowIssue("上一操作尚未释放。") }
+        cancelled = false; languagePreview = ""
+    }
+    /// Plan Call is the only lazy admission point. A branch/tool does not own a model by itself.
+    public func executeCall(_ context: WorkflowExecutionContext) async throws -> WorkflowOperationResult {
+        try checkCancellation()
+        guard !languageCallActive, bindings.isEmpty, let operation = registry.operation(context.node.operationID) else { throw WorkflowIssue("操作未注册或上一模型租约未释放。") }
+        try registry.validate(context.node)
+        languageCallActive = true
+        defer { languageCallActive = false }
+        do {
+            if pending[context.stepID] == nil, let kind = operation.definition.modelKind {
+                let identity = context.node.parameters["modelID"]?.string ?? ""
+                guard !identity.isEmpty else { throw WorkflowIssue("请为节点选择模型。", nodeID: context.node.id) }
+                let binding = try await resolveModel(kind, identity)
+                bindings[context.node.id] = binding
+                guard binding.identity == identity else { throw WorkflowIssue("指定模型身份不一致；不会替换。") }
+                try checkCancellation()
+            }
+            let result = try await operation.execute(context, self)
+            await finish()
+            try checkCancellation()
+            return result
+        } catch { await finish(); throw error }
+    }
+    public func readData(_ reference: WorkflowAssetReference) async throws -> Data { try await store.workflowData(reference) }
+    public func publishMedia(_ data: Data, mediaType: String, parents: [WorkflowAssetReference], context: WorkflowExecutionContext) async throws -> WorkflowAssetReference {
+        if pending[context.stepID] == nil {
+            pending[context.stepID] = Publication(id: UUID(), data: data, mediaType: mediaType, metadata: .init(),
+                parents: parents, request: nil, details: [:])
+        }
+        return try await publish(context)
+    }
+    private func model(for context: WorkflowExecutionContext) throws -> WorkflowModelBinding {
+        guard let binding = bindings[context.node.id], binding.identity == context.node.parameters["modelID"]?.string else {
+            throw WorkflowIssue("模型未绑定到本次操作。")
+        }
+        return binding
+    }
+    private func infer(_ request: InferenceRequest, binding: WorkflowModelBinding) async throws -> (InferenceResult, String) {
+        try request.validate(); try checkCancellation()
+        let run = try await session.engine.submit(request, backendID: binding.backendID)
+        activeRun = run
+        if cancelled || Task.isCancelled { await run.cancel() }
+        var text = "", failure: (any Error)?
+        do {
+            for try await event in run.events {
+                if cancelled || Task.isCancelled { await run.cancel() }
+                switch event {
+                case .textDelta(let delta):
+                    guard text.utf8.count + delta.utf8.count <= 1_048_576 else { throw WorkflowIssue("文字输出超过上限。") }
+                    text += delta; languagePreview = text
+                case .progress(let completed, let total): progress("\(completed)/\(total)")
+                default: break
+                }
+            }
+        } catch { failure = error; await run.cancel() }
+        let outcome = await run.outcome(); activeRun = nil
+        if case .failed(let integrity) = outcome,
+           case .inputIntegrityChanged = integrity { throw integrity }
+        try checkCancellation()
+        if let failure { throw failure }
+        switch outcome {
+        case .completed(let result): return (result, text)
+        case .cancelled: throw CancellationError()
+        case .failed(let error): throw error
+        }
+    }
+    public func generateLanguage(task: String, content: String?, context: WorkflowExecutionContext) async throws -> WorkflowAssetReference {
+        if pending[context.stepID] != nil { return try await publish(context) }
+        let binding = try model(for: context), p = context.node.parameters
+        guard !task.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw WorkflowIssue("任务不能为空。") }
+        let prompt = task + (content.map { "\n\nContent:\n" + $0 } ?? "")
+        let input = TextRequest(prompt: prompt, maxTokens: p["maximumOutputTokens"]?.integer ?? 256,
+            temperature: Float(p["temperature"]?.decimal ?? 0.7), topP: Float(p["topP"]?.decimal ?? 0.95),
+            execution: .init(profile: TextExecutionCapability.qwen2Profile, maximumPromptTokens: p["maximumPromptTokens"]?.integer ?? 2048))
+        try session.textCapability?.validate(input)
+        let request = InferenceRequest(id: context.stepID, model: binding.reference, input: .text(input))
+        languagePreview = ""
+        let (result, text) = try await infer(request, binding: binding)
+        guard !text.isEmpty else { throw WorkflowIssue("语言模型未交付文字。") }
+        pending[context.stepID] = Publication(id: UUID(), data: Data(text.utf8), mediaType: "text/plain", metadata: .init(),
+            parents: context.inputs.values.flatMap { $0.datum?.assetReferences ?? [] }, request: request,
+            details: result.metadata.merging(["backend": binding.backendID, "modelIdentity": binding.identity,
+                "outputValidation": "raw model text; structured parsing is separate"]) { _, new in new })
+        return try await publish(context)
+    }
+    public func generateMusic(_ input: AudioRequest, parents: [WorkflowAssetReference], context: WorkflowExecutionContext) async throws -> WorkflowAssetReference {
+        if pending[context.stepID] != nil { return try await publish(context) }
+        let binding = try model(for: context)
+        guard input.noteSequence != nil, let capability = session.musicCapability else { throw WorkflowIssue("需要 MRT2 的真实音符条件配方。") }
+        try input.validate(); try capability.validateDuration(input.durationSeconds)
+        return try await generateMedia(.audio(input), mediaType: "audio/wav", parents: parents, binding: binding, context: context)
+    }
+    public func generateVideo(context: WorkflowExecutionContext) async throws -> WorkflowAssetReference {
+        if pending[context.stepID] != nil { return try await publish(context) }
+        let binding = try model(for: context), p = context.node.parameters
+        guard let capability = session.videoCapability,
+              let seed = UInt64(p["seed"]?.string ?? ""),
+              let numerator = Int32(exactly: p["frameRate"]?.integer ?? 16) else { throw WorkflowIssue("T2V 配方或 seed 无效。") }
+        let prompt: String
+        if let value = context.inputs["prompt"] {
+            if let text = value.datum?.text { prompt = text }
+            else if let ref = value.datum?.assetReferences.first, ref.kind == .text { prompt = try await readText(ref) }
+            else { throw WorkflowIssue("视频提示输入需要文字。") }
+        } else { prompt = p["promptText"]?.string ?? "" }
+        let input = VideoRequest(prompt: prompt, negativePrompt: p["negativePrompt"]?.string ?? "",
+            width: p["width"]?.integer ?? 256, height: p["height"]?.integer ?? 256, frameCount: p["frameCount"]?.integer ?? 17,
+            frameRate: .init(numerator: numerator), steps: p["steps"]?.integer ?? 4,
+            guidanceScale: Float(p["guidance"]?.decimal ?? 5), scheduleShift: Float(p["scheduleShift"]?.decimal ?? 5),
+            seed: seed, executionProfile: capability.profile)
+        try capability.validate(input)
+        return try await generateMedia(.video(input), mediaType: "video/mp4", parents: context.inputs.values.flatMap { $0.datum?.assetReferences ?? [] },
+            binding: binding, context: context)
+    }
+    public func analyzePitch(_ reference: WorkflowAssetReference, context: WorkflowExecutionContext) async throws -> WorkflowAssetReference {
+        if pending[context.stepID] != nil { return try await publish(context) }
+        let binding = try model(for: context)
+        guard let graphID = context.graphID else { throw WorkflowIssue("音高任务缺少冻结的流程身份。") }
+        let input = try await store.prepareWorkflowPitchInput(reference, graphID: graphID, runID: context.stepID)
+        return try await generateMedia(.pitch(input), mediaType: PitchAnalysisResult.mediaType, parents: [reference], binding: binding, context: context)
+    }
+    private func generateMedia(_ input: InferenceInput, mediaType: String, parents: [WorkflowAssetReference],
+                               binding: WorkflowModelBinding, context: WorkflowExecutionContext) async throws -> WorkflowAssetReference {
+        let request = InferenceRequest(id: context.stepID, model: binding.reference, input: input)
+        let (result, _) = try await infer(request, binding: binding)
+        guard result.artifacts.count == 1, let artifact = result.artifacts.first, artifact.mediaType == mediaType else { throw WorkflowIssue("模型未交付预期的单个完整媒体。") }
+        let data = try await store.readWorkflowBackendMedia(artifact, request: request)
+        pending[context.stepID] = Publication(id: UUID(), data: data, mediaType: mediaType, metadata: .init(), parents: parents, request: request,
+            details: result.metadata.merging(["backend": binding.backendID, "modelIdentity": binding.identity]) { _, new in new })
+        return try await publish(context)
+    }
+
     public func readText(_ reference: WorkflowAssetReference) async throws -> String {
         guard reference.kind == .text, let text = String(data: try await store.workflowData(reference), encoding: .utf8) else {
             throw WorkflowIssue("此端口需要完整 UTF-8 文字资产。")
@@ -100,13 +255,31 @@ struct WorkflowSaveFailure: LocalizedError {
     private func publish(_ context: WorkflowExecutionContext) async throws -> WorkflowAssetReference {
         guard let content = pending[context.stepID] else { throw WorkflowIssue("没有待保存结果。") }
         do {
-            let result = try await store.publishWorkflowAsset(data: content.data, mediaType: content.mediaType,
-                metadata: content.metadata, name: context.node.title, parents: content.parents,
-                operationID: context.node.operationID, stepID: context.stepID, request: content.request,
-                details: content.details, assetID: content.id)
+            let result: WorkflowPublishedAsset
+            if let request = content.request, case .video(let expected) = request.input {
+                result = try await store.publishWorkflowVideo(data: content.data, expected: expected, name: context.node.title,
+                    parents: content.parents, operationID: context.node.operationID, stepID: context.stepID,
+                    request: request, details: content.details, assetID: content.id)
+            } else {
+                result = try await store.publishWorkflowAsset(data: content.data, mediaType: content.mediaType,
+                    metadata: content.metadata, name: context.node.title, parents: content.parents,
+                    operationID: context.node.operationID, stepID: context.stepID, request: content.request,
+                    details: content.details, assetID: content.id)
+            }
             pending.removeValue(forKey: context.stepID)
             return result.record.reference
-        } catch { throw WorkflowSaveFailure(reason: error.localizedDescription) }
+        } catch {
+            if ["audio/wav", "video/mp4", PitchAnalysisResult.mediaType].contains(content.mediaType) {
+                // A corrupt artifact or cancelled decode will not become valid by retrying the disk.
+                let retryable: Bool
+                switch error {
+                case ProjectStoreError.io, AudioMediaError.io, VideoInspectionError.io: retryable = true
+                default: retryable = false
+                }
+                if !retryable { pending.removeValue(forKey: context.stepID); throw error }
+            }
+            throw WorkflowSaveFailure(reason: error.localizedDescription)
+        }
     }
     public func publishText(_ text: String, parents: [WorkflowAssetReference], context: WorkflowExecutionContext) async throws -> WorkflowAssetReference {
         if pending[context.stepID] == nil {

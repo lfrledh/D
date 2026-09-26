@@ -360,7 +360,7 @@ private struct VideoMediaShape: Sendable {
     }
 }
 
-private enum VideoInspectionError: Error, LocalizedError, Sendable {
+enum VideoInspectionError: Error, LocalizedError, Sendable {
     case invalid(String)
     case limit(String)
     case changed(String)

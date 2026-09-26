@@ -823,11 +823,22 @@ public final class ProjectSession {
     private func defaultWorkflowModel(_ kind: WorkflowModelKind) -> String {
         switch kind {
         case .text: textReference.map { "text:" + ($0.revision ?? $0.directory.lastPathComponent) } ?? ""
+        case .music: musicReference.map { "music:" + ($0.revision ?? $0.directory.lastPathComponent) } ?? ""
+        case .video: videoReference.map { "video:" + ($0.revision ?? $0.directory.lastPathComponent) } ?? ""
+        case .pitch: session?.pitchModel.map { "pitch:" + ($0.revision ?? $0.directory.lastPathComponent) } ?? ""
         case .image: selectedModelRevision.map { "image:" + $0 } ?? modelLease.map { "image:" + $0.url.lastPathComponent } ?? ""
         }
     }
     private func rememberCurrentWorkflowModels() throws {
         let bookmarks = WorkflowModelBookmarks(settings: settings)
+        for (kind, ref, lease) in [(WorkflowModelKind.music, musicReference, musicModelLease), (.video, videoReference, videoModelLease)] {
+            if let ref, let lease {
+                let identity = kind.rawValue + ":" + (ref.revision ?? ref.directory.lastPathComponent)
+                if try !bookmarks.entries().contains(where: { $0.identity == identity && $0.kind == kind }) {
+                    try bookmarks.remember(identity: identity, kind: kind, name: ref.directory.lastPathComponent, bookmark: lease.bookmark)
+                }
+            }
+        }
         if let ref = textReference, let lease = textModelLease,
            try !bookmarks.entries().contains(where: { $0.identity == "text:" + (ref.revision ?? ref.directory.lastPathComponent) }) {
             try bookmarks.remember(identity: "text:" + (ref.revision ?? ref.directory.lastPathComponent),
@@ -845,6 +856,13 @@ public final class ProjectSession {
     }
     private func resolveWorkflowModel(_ kind: WorkflowModelKind, identity: String, session: WorkbenchSession) async throws -> WorkflowModelBinding {
         guard !identity.isEmpty else { throw WorkflowIssue("请为此节点选择已安装模型。") }
+        if kind == .pitch {
+            guard let ref = session.pitchModel, let backend = session.pitchBackendID,
+                  identity == "pitch:" + (ref.revision ?? ref.directory.lastPathComponent) else {
+                throw WorkflowIssue("指定音高识别资源未准备，不能改用其他模型。")
+            }
+            return .init(identity: identity, reference: ref, backendID: backend)
+        }
         if kind == .image, let library = modelLibrary {
             let records = await library.snapshot().records.filter { "image:" + $0.revision == identity }
             // Installation IDs stay private. Do not silently select among ambiguous copies.
@@ -867,6 +885,12 @@ public final class ProjectSession {
             if kind == .text {
                 guard let validator = session.validateTextModel, let id = session.textBackendID else { throw WorkflowIssue("文字实现未安装。") }
                 reference = try await validator(lease.url); backend = id
+            } else if kind == .music {
+                guard let validate = session.validateMusicModel, let id = session.musicBackendID else { throw WorkflowIssue("MRT2 实现未安装。") }
+                reference = try await validate(lease.url); backend = id
+            } else if kind == .video {
+                guard let validate = session.validateVideoModel, let id = session.videoBackendID else { throw WorkflowIssue("T2V 实现未安装。") }
+                reference = try await validate(lease.url); backend = id
             } else {
                 try await session.validateModel(lease.url)
                 reference = .init(directory: lease.url); backend = session.backendID
@@ -897,6 +921,14 @@ public final class ProjectSession {
                     if target.kind == .text {
                         guard let validate = session.validateTextModel else { throw WorkflowIssue("文字实现未安装。") }
                         revision = try await validate(lease.url).revision
+                    } else if target.kind == .music {
+                        guard let validate = session.validateMusicModel else { throw WorkflowIssue("MRT2 实现未安装。") }
+                        revision = try await validate(lease.url).revision
+                    } else if target.kind == .video {
+                        guard let validate = session.validateVideoModel else { throw WorkflowIssue("T2V 实现未安装。") }
+                        revision = try await validate(lease.url).revision
+                    } else if target.kind == .pitch {
+                        throw WorkflowIssue("音高资源由开发资源准备步骤提供；不会替换内嵌资源。")
                     } else {
                         try await session.validateModel(lease.url)
                         revision = nil
@@ -926,6 +958,10 @@ public final class ProjectSession {
             try rememberCurrentWorkflowModels()
             workflow?.modelChoices = try WorkflowModelBookmarks(settings: settings).entries().map {
                 .init(id: $0.identity, kind: $0.kind, displayName: $0.name)
+            }
+            if let ref = session?.pitchModel {
+                workflow?.modelChoices.append(.init(id: "pitch:" + (ref.revision ?? ref.directory.lastPathComponent), kind: .pitch,
+                    displayName: "SwiftF0 0.1.2 · 固定开发资源"))
             }
         } catch { workflow?.errorMessage = error.localizedDescription }
     }

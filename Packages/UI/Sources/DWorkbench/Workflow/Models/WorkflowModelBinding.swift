@@ -2,7 +2,7 @@ import DInference
 import Foundation
 
 /// Application model selection, not a graph node identity or a model installation.
-public enum WorkflowModelKind: String, Sendable, Codable { case text, image }
+public enum WorkflowModelKind: String, Sendable, Codable, CaseIterable { case text, image, music, video, pitch }
 public struct WorkflowModelChoice: Identifiable, Sendable, Equatable {
     public let id: String
     public let kind: WorkflowModelKind

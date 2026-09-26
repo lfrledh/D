@@ -21,11 +21,20 @@ private actor WorkflowFixtureEngine: InferenceEngine {
     var requests: [InferenceRequest] = []
     var failSecondImage = false
     var gate: WorkflowSubmitGate?
+    var submitAction: (@MainActor @Sendable () async throws -> Void)?
+    var terminalFailure: InferenceFailure?
+    func configure(action: (@MainActor @Sendable () async throws -> Void)? = nil, failure: InferenceFailure? = nil) {
+        submitAction = action; terminalFailure = failure
+    }
     init(directory: URL) { self.directory = directory }
     func failSecond() { failSecondImage = true }
     func suspend(using gate: WorkflowSubmitGate) { self.gate = gate }
     func submit(_ request: InferenceRequest, backendID: String) async throws -> InferenceRun {
         requests.append(request)
+        try await submitAction?()
+        if let terminalFailure {
+            return InferenceRun(id: request.id, events: AsyncThrowingStream { $0.finish() }, cancel: {}, outcome: { .failed(terminalFailure) })
+        }
         if let gate { await gate.wait() }
         let result: InferenceResult
         let outputs: [InferenceOutput]
@@ -907,5 +916,133 @@ extension WorkflowLifecycleTests {
         #expect(actual.resolvingSymlinksInPath().path == b.resolvingSymlinksInPath().path)
         #expect(actual.resolvingSymlinksInPath().path != a.resolvingSymlinksInPath().path)
         await owner.closeProject()
+    }
+}
+
+@Suite("Language model Call uses the existing runtime and Store", .serialized) @MainActor
+struct WorkflowLanguageServicesTests {
+    private let operation = WorkflowOperation(definition: .init(id: "test.language.call", title: "Language", detail: "CPU fixture",
+        inputs: [], outputs: [.init("output", "Text", kinds: [.text])], fields: [
+            .init("modelID", "Model", .text(multiline: false), .text(""))], modelKind: .text), execute: { c, s in
+            let ref = try await s.generateLanguage(task: "Write a short garden idea.", content: nil, context: c)
+            return .outputs(["output": .asset(ref)])
+        })
+    private func root() -> URL {
+        URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory())
+            .appendingPathComponent("language-" + UUID().uuidString + ".dproject")
+    }
+    @Test func freezesWithoutLeasingThenGeneratesWithoutRewriteDraftAndReleases() async throws {
+        let store = try await ProjectStore.create(at: root(), name: "language")
+        let before = await store.snapshot().draft
+        let engine = WorkflowFixtureEngine(directory: store.artifactDirectory)
+        let session = WorkbenchSession(engine: engine, backendID: "fixture", status: { .init(activeRunID: nil, phase: nil, queuedRunIDs: []) },
+            shutdown: {}, cleanup: {}, validateModel: { _ in }, textBackendID: "text")
+        var acquired = 0, released = 0
+        let registry = try WorkflowRegistry(operations: [operation])
+        let service = WorkflowServices(store: store, session: session, registry: registry, defaultIdentity: { _ in "text:chosen" }) { kind, identity in
+            #expect(kind == .text); #expect(identity == "text:chosen"); acquired += 1
+            return .init(identity: identity, reference: .init(directory: store.rootURL), backendID: "text", release: { released += 1 })
+        }
+        let graph = service.freezeModels(in: .init(nodes: [operation.definition.makeNode()]))
+        #expect(acquired == 0)
+        try service.beginPlan()
+        let result = try await service.executeCall(.init(node: graph.nodes[0], stepID: UUID(), inputs: [:]))
+        guard case .outputs(let outputs) = result, let ref = outputs["output"]?.asset else { Issue.record("Missing text"); return }
+        #expect(try await service.readText(ref).contains("花园"))
+        #expect(acquired == 1 && released == 1)
+        #expect(await store.snapshot().draft == before)
+        let request = try #require(await engine.requests.first)
+        guard case .text(let text) = request.input else { Issue.record("wrong modality"); return }
+        #expect(text.prompt == "Write a short garden idea.")
+        #expect(try await store.workflowState().archive?.assets.first?.request == request)
+        try await store.close()
+    }
+    @Test func publicationRetryDoesNotResolveUnavailableModelOrRegenerate() async throws {
+        let store = try await ProjectStore.create(at: root(), name: "save retry")
+        let engine = WorkflowFixtureEngine(directory: store.artifactDirectory)
+        let session = WorkbenchSession(engine: engine, backendID: "fixture", status: { .init(activeRunID: nil, phase: nil, queuedRunIDs: []) },
+            shutdown: {}, cleanup: {}, validateModel: { _ in })
+        var acquired = 0
+        let service = WorkflowServices(store: store, session: session, registry: try .init(operations: [operation])) { _, identity in
+            acquired += 1
+            guard acquired == 1 else { throw WorkflowIssue("Model volume is unavailable on retry") }
+            return .init(identity: identity, reference: .init(directory: store.rootURL), backendID: "text")
+        }
+        let moved = store.rootURL.appendingPathExtension("temporarily-unavailable")
+        await engine.configure(action: { try FileManager.default.moveItem(at: store.rootURL, to: moved) })
+        var node = operation.definition.makeNode(); node.parameters["modelID"] = .text("text:frozen")
+        let context = WorkflowExecutionContext(node: node, stepID: UUID(), inputs: [:])
+        try service.beginPlan()
+        do { _ = try await service.executeCall(context); Issue.record("Expected save failure") }
+        catch { #expect(error is WorkflowSaveFailure) }
+        #expect(service.hasPendingSaves)
+        try FileManager.default.moveItem(at: moved, to: store.rootURL)
+        try service.beginPlan()
+        _ = try await service.executeCall(context)
+        #expect(!service.hasPendingSaves)
+        #expect(acquired == 1)
+        #expect(await engine.requests.count == 1)
+        #expect(await store.snapshot().assets.count == 1)
+        try await store.close()
+    }
+    @Test func verifiedIntegrityFailureIsNotHiddenByConcurrentCancellation() async throws {
+        let store = try await ProjectStore.create(at: root(), name: "integrity")
+        let engine = WorkflowFixtureEngine(directory: store.artifactDirectory)
+        let session = WorkbenchSession(engine: engine, backendID: "fixture", status: { .init(activeRunID: nil, phase: nil, queuedRunIDs: []) },
+            shutdown: {}, cleanup: {}, validateModel: { _ in })
+        var released = 0
+        let service = WorkflowServices(store: store, session: session, registry: try .init(operations: [operation])) { _, identity in
+            .init(identity: identity, reference: .init(directory: store.rootURL), backendID: "text", release: { released += 1 })
+        }
+        await engine.configure(action: { await service.cancel() }, failure: .inputIntegrityChanged("controlled protected input change"))
+        var node = operation.definition.makeNode(); node.parameters["modelID"] = .text("text:frozen")
+        try service.beginPlan()
+        do { _ = try await service.executeCall(.init(node: node, stepID: UUID(), inputs: [:])); Issue.record("Integrity lost") }
+        catch { #expect(error as? InferenceFailure == .inputIntegrityChanged("controlled protected input change")) }
+        #expect(released == 1)
+        #expect(await store.snapshot().assets.isEmpty)
+        try await store.close()
+    }
+    @Test func corruptAudioPublicationIsTerminalNotSaveRetry() async throws {
+        let store = try await ProjectStore.create(at: root(), name: "corrupt audio")
+        let engine = WorkflowFixtureEngine(directory: store.artifactDirectory)
+        let session = WorkbenchSession(engine: engine, backendID: "fixture", status: { .init(activeRunID: nil, phase: nil, queuedRunIDs: []) },
+            shutdown: {}, cleanup: {}, validateModel: { _ in })
+        let service = WorkflowServices(store: store, session: session) { _, _ in throw WorkflowIssue("No model needed") }
+        let node = WorkflowNode(operationID: "d.music.render", title: "corrupt")
+        do {
+            _ = try await service.publishMedia(Data("bad wave".utf8), mediaType: "audio/wav", parents: [],
+                context: .init(node: node, stepID: UUID(), inputs: [:]))
+            Issue.record("Corrupt media published")
+        } catch { #expect(!(error is WorkflowSaveFailure)) }
+        #expect(!service.hasPendingSaves)
+        #expect(await store.snapshot().assets.isEmpty)
+        try await store.close()
+    }
+    @Test func wrongModelIdentityAndCancellationAfterResolveReleaseWithoutSubmitting() async throws {
+        for mismatch in [false, true] {
+            let store = try await ProjectStore.create(at: root(), name: "model guard")
+            let engine = WorkflowFixtureEngine(directory: store.artifactDirectory), gate = WorkflowSubmitGate()
+            let session = WorkbenchSession(engine: engine, backendID: "fixture", status: { .init(activeRunID: nil, phase: nil, queuedRunIDs: []) },
+                shutdown: {}, cleanup: {}, validateModel: { _ in })
+            var released = 0
+            let service = WorkflowServices(store: store, session: session, registry: try .init(operations: [operation])) { _, identity in
+                if !mismatch { await gate.wait() }
+                return .init(identity: mismatch ? "other" : identity, reference: .init(directory: store.rootURL), backendID: "text", release: { released += 1 })
+            }
+            var node = operation.definition.makeNode(); node.parameters["modelID"] = .text("text:frozen")
+            try service.beginPlan()
+            let work = Task { try await service.executeCall(.init(node: node, stepID: UUID(), inputs: [:])) }
+            if !mismatch {
+                for _ in 0..<1000 { if await gate.entered { break }; try await Task.sleep(for: .milliseconds(1)) }
+                #expect(await gate.entered)
+                await service.cancel(); await gate.open()
+            }
+            do { _ = try await work.value; Issue.record("Invalid admission succeeded") } catch {}
+            #expect(released == 1)
+            #expect(await engine.requests.isEmpty)
+            #expect(await store.snapshot().assets.isEmpty)
+            try await store.close()
+        }
     }
 }

@@ -170,7 +170,7 @@ import Foundation
 
             switch planned.kind {
             case .call:
-                return try await executeCallStep(planned, node: runtimeNode, inputs: inputs, address: address)
+                return try await executeCallStep(planned, node: runtimeNode, inputs: inputs, address: address, graphID: plan.graphID)
             case .branch(let predicate, let thenPlan, let otherwisePlan):
                 let input = try requiredDatum(inputs["input"], node: runtimeNode, port: "input")
                 let selected = try predicate.matches(input)
@@ -231,6 +231,15 @@ import Foundation
             try updateRecord(at: address) { record in record.step.status = .cancelled }
             try await persist()
             throw CancellationError()
+        } catch let error as WorkflowSaveFailure {
+            if checkpoint?.state == .saving { throw error }
+            // The service retains computed bytes; retry this same call only to publish them.
+            try updateRecord(at: address) { record in
+                record.step.status = .saving; record.step.error = error.localizedDescription
+            }
+            if var value = checkpoint { value.state = .saving; value.error = error.localizedDescription; checkpoint = value }
+            try await persist()
+            throw error
         } catch {
             if checkpoint?.state == .saving { throw error }
             if checkpoint?.records.contains(where: { $0.step.status == .waiting }) == true { throw error }
@@ -247,7 +256,8 @@ import Foundation
         _ planned: WorkflowPlannedStep,
         node: WorkflowNode,
         inputs: [String: WorkflowValue],
-        address: WorkflowExecutionAddress
+        address: WorkflowExecutionAddress,
+        graphID: UUID
     ) async throws -> [String: WorkflowValue] {
         guard let current = record(at: address) else { throw WorkflowIssue("调用记录不存在。", nodeID: node.id) }
         let context = WorkflowExecutionContext(
@@ -255,7 +265,7 @@ import Foundation
             stepID: current.step.id,
             inputs: inputs,
             retryCandidates: current.step.outputs["output"]?.candidates,
-            address: address
+            address: address, graphID: graphID
         )
         let result = try await executeCall(context)
         switch result {

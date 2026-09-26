@@ -4,6 +4,31 @@ import Testing
 
 @Suite("Structured workflow plan r1") @MainActor
 struct WorkflowPlanTests {
+    @Test func typedPublicationSaveFailureRetriesOnlyPublicationAndTypedCheckpointFailureNeverRecomputes() async throws {
+        for failInsideCall in [false, true] {
+            let registry = try makeRegistry(), node = try makeNode("fixture.source", registry: makeRegistry())
+            let plan = try WorkflowPlanCompiler(registry: registry).compile(.init(nodes: [node]))
+            var computations = 0, calls = 0, published = false, failed = false
+            let executor = WorkflowPlanExecutor(registry: registry, executeCall: { _ in
+                calls += 1
+                if !published { computations += 1; published = true }
+                if failInsideCall && !failed { failed = true; throw WorkflowSaveFailure(reason: "controlled publication failure") }
+                return .outputs(["output": .data(.number(7, unit: nil))])
+            }, save: { cp in
+                if !failInsideCall && !failed && cp.records.contains(where: { $0.step.status == .completed }) {
+                    failed = true; throw WorkflowSaveFailure(reason: "controlled checkpoint failure")
+                }
+            })
+            do { _ = try await executor.execute(.init(plan: plan)); Issue.record("Expected controlled failure") } catch {}
+            let stopped = try #require(executor.checkpoint)
+            #expect(stopped.state == .saving)
+            let final = try await executor.execute(stopped)
+            #expect(final.state == .completed)
+            #expect(computations == 1)
+            #expect(calls == (failInsideCall ? 2 : 1))
+        }
+    }
+
     @Test func compilerSelectsTargetsAndRejectsOnlyWithoutTarget() throws {
         let registry = try makeRegistry()
         let source = try makeNode("fixture.source", registry: registry)

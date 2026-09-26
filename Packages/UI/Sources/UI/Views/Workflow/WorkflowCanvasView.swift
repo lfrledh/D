@@ -21,6 +21,7 @@ public struct WorkflowCanvasView: View {
     private let controller: WorkflowController
     private let onTextModel: () -> Void
     private let onImageModel: () -> Void
+    private let onAdditionalModel: (WorkflowModelKind) -> Void
     private let onImport: (UUID) -> Void
     private let onDestination: () -> Void
     private let onPublishText: () -> Void
@@ -40,11 +41,13 @@ public struct WorkflowCanvasView: View {
         onImport: @escaping (UUID) -> Void,
         onDestination: @escaping () -> Void,
         onPublishText: @escaping () -> Void,
-        onReturnText: @escaping (WorkflowAssetReference) -> Void
+        onReturnText: @escaping (WorkflowAssetReference) -> Void,
+        onAdditionalModel: @escaping (WorkflowModelKind) -> Void = { _ in }
     ) {
         self.controller = controller
         self.onTextModel = onTextModel
         self.onImageModel = onImageModel
+        self.onAdditionalModel = onAdditionalModel
         self.onImport = onImport
         self.onDestination = onDestination
         self.onPublishText = onPublishText
@@ -119,6 +122,7 @@ public struct WorkflowCanvasView: View {
                 readOnly: isReadOnly,
                 onTextModel: guarded(onTextModel),
                 onImageModel: guarded(onImageModel),
+                onAdditionalModel: { kind in guarded { onAdditionalModel(kind) }() },
                 onImport: { nodeID in guard !isReadOnly else { return }; onImport(nodeID) },
                 onReturnText: { reference in guard !isReadOnly else { return }; onReturnText(reference) },
                 onPlan: presentPlan
@@ -643,6 +647,7 @@ private struct WorkflowNodeInspector: View {
     let readOnly: Bool
     let onTextModel: () -> Void
     let onImageModel: () -> Void
+    let onAdditionalModel: (WorkflowModelKind) -> Void
     let onImport: (UUID) -> Void
     let onReturnText: (WorkflowAssetReference) -> Void
     let onPlan: (UUID, Bool) -> Void
@@ -887,6 +892,9 @@ private struct WorkflowNodeInspector: View {
     private func modelPicker(for kind: WorkflowModelKind?) -> () -> Void {
         switch kind {
         case .image: onImageModel
+        case .music: { onAdditionalModel(.music) }
+        case .video: { onAdditionalModel(.video) }
+        case .pitch: { onAdditionalModel(.pitch) }
         case .text: onTextModel
         case nil: {}
         }
