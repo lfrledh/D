@@ -21,6 +21,7 @@ enum WorkflowControlFormError: Error, LocalizedError, Equatable {
     case missingOutputPort
     case missingOutputSchema
     case incompatibleOutputSchema
+    case bindingRejected
 
     var localizationKey: String {
         switch self {
@@ -42,6 +43,7 @@ enum WorkflowControlFormError: Error, LocalizedError, Equatable {
         case .missingOutputPort: "workflow.language.control.error.missingOutputPort"
         case .missingOutputSchema: "workflow.language.control.error.missingOutputSchema"
         case .incompatibleOutputSchema: "workflow.language.control.error.incompatibleOutputSchema"
+        case .bindingRejected: "workflow.language.control.error.bindingRejected"
         }
     }
 
@@ -65,6 +67,7 @@ enum WorkflowControlFormError: Error, LocalizedError, Equatable {
         case .missingOutputPort: "An output refers to a missing node or port; the draft was preserved."
         case .missingOutputSchema: "Every output needs an explicitly chosen schema."
         case .incompatibleOutputSchema: "The output schema is incompatible with the selected port kinds."
+        case .bindingRejected: "The controller rejected this change. The draft was preserved; correct the graph and apply again."
         }
     }
 }
@@ -160,6 +163,28 @@ struct WorkflowOutputPortChoice: Identifiable, Equatable {
 enum WorkflowControlFormSupport {
     static let mapVariableNames = ["item", "value", "index"]
     static let loopVariableNames = ["state", "iteration"]
+
+    static func controlCommitWasAccepted(
+        _ proposed: WorkflowControlDraft,
+        storedNode: WorkflowNode
+    ) -> Bool {
+        WorkflowControlDraft(node: storedNode) == proposed
+    }
+
+    static func interfaceCommitWasAccepted(
+        _ proposed: WorkflowGraphInterface,
+        storedGraph: WorkflowGraph
+    ) -> Bool {
+        storedGraph.interface == proposed
+    }
+
+    static func canOpenNestedContent(
+        draft: WorkflowControlDraft,
+        baseline: WorkflowControlDraft,
+        conflict: Bool
+    ) -> Bool {
+        !conflict && draft == baseline
+    }
 
     static func sample(for schema: WorkflowDataSchema) -> WorkflowDatum? {
         switch schema {
@@ -459,6 +484,14 @@ struct WorkflowControlEditor: View {
             if let error {
                 Text(error).font(.caption).foregroundStyle(.red)
             }
+            if !canOpenNestedContent, draft.control != nil {
+                Text(text(
+                    "workflow.language.control.applyBeforeOpen",
+                    "Apply this draft before opening nested content. Reload first if the controlled value changed."
+                ))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
             controlFields
             HStack {
                 Button(text("workflow.language.control.apply", "Apply"), action: apply)
@@ -493,7 +526,9 @@ struct WorkflowControlEditor: View {
             ))
             HStack {
                 Button(text("workflow.language.control.openThen", "Open then body")) { onOpenBody("then") }
+                    .disabled(!canOpenNestedContent)
                 Button(text("workflow.language.control.openOtherwise", "Open otherwise body")) { onOpenBody("otherwise") }
+                    .disabled(!canOpenNestedContent)
             }
         case .map(_, let continueOnFailure):
             Toggle(text("workflow.language.control.continueOnFailure", "Continue after item failure"), isOn: Binding(
@@ -501,6 +536,7 @@ struct WorkflowControlEditor: View {
                 set: { replaceMapContinue($0) }
             ))
             Button(text("workflow.language.control.openBody", "Open body")) { onOpenBody("body") }
+                .disabled(!canOpenNestedContent)
         case .loop(_, let stateSchema, let maximumIterations, let until):
             WorkflowControlSchemaSampleEditor(schema: Binding(
                 get: { stateSchema },
@@ -515,6 +551,7 @@ struct WorkflowControlEditor: View {
             Text(text("workflow.language.control.until", "Stop rule")).font(.caption.weight(.semibold))
             WorkflowControlRuleEditor(rule: Binding(get: { until }, set: replaceLoopRule))
             Button(text("workflow.language.control.openBody", "Open body")) { onOpenBody("body") }
+                .disabled(!canOpenNestedContent)
         case .invoke(let reference):
             invocationEditor(reference)
         case nil:
@@ -564,6 +601,7 @@ struct WorkflowControlEditor: View {
             }
             toolMenu
             Button(text("workflow.language.control.openTool", "Open fixed tool")) { onOpenBody("tool") }
+                .disabled(!canOpenNestedContent)
         }
     }
 
@@ -596,7 +634,14 @@ struct WorkflowControlEditor: View {
             next.control = draft.control
             next.dataConfiguration = draft.dataConfiguration
             node = next
-            baseline = draft
+            guard WorkflowControlFormSupport.controlCommitWasAccepted(draft, storedNode: node) else {
+                self.error = workflowControlErrorText(
+                    WorkflowControlFormError.bindingRejected,
+                    store: languageStore
+                )
+                return
+            }
+            baseline = WorkflowControlDraft(node: node)
             error = nil
         } catch {
             self.error = workflowControlErrorText(error, store: languageStore)
@@ -611,6 +656,14 @@ struct WorkflowControlEditor: View {
         reloadToken = UUID()
         conflict = false
         error = nil
+    }
+
+    private var canOpenNestedContent: Bool {
+        WorkflowControlFormSupport.canOpenNestedContent(
+            draft: draft,
+            baseline: baseline,
+            conflict: conflict
+        )
     }
 
     private func replaceBranchPredicate(_ predicate: WorkflowDataRule) {
@@ -916,7 +969,14 @@ struct WorkflowGraphInterfaceEditor: View {
             var next = graph
             next.interface = interface
             graph = next
-            baselineInterface = interface
+            guard WorkflowControlFormSupport.interfaceCommitWasAccepted(interface, storedGraph: graph) else {
+                self.error = workflowControlErrorText(
+                    WorkflowControlFormError.bindingRejected,
+                    store: languageStore
+                )
+                return
+            }
+            baselineInterface = graph.interface
             error = nil
         } catch {
             self.error = workflowControlErrorText(error, store: languageStore)
