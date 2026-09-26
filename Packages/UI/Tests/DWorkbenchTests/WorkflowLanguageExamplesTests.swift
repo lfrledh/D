@@ -72,16 +72,7 @@ struct WorkflowLanguageExamplesTests {
         let target = try #require(bundle.graph.nodes.first { $0.title == "返回数据结果" })
         let plan = try WorkflowPlanCompiler().compile(bundle.graph, tools: bundle.tools, target: target.id)
         #expect(!plan.steps.contains { $0.node.operationID == "d.value.export" })
-
-        let services = RejectingExampleServices()
-        let registry = WorkflowRegistry.standard
-        let executor = WorkflowPlanExecutor(registry: registry, executeCall: { context in
-            guard let operation = registry.operation(context.node.operationID) else {
-                throw WorkflowIssue("测试遇到未注册操作。")
-            }
-            return try await operation.execute(context, services)
-        }, save: { _ in })
-        let completed = try await executor.execute(.init(plan: plan))
+        let (completed, services) = try await executeDataExample(bundle)
         #expect(completed.state == .completed)
         #expect(services.callCount == 0)
 
@@ -93,6 +84,48 @@ struct WorkflowLanguageExamplesTests {
         #expect(fields["loopState"] == .number(3, unit: nil))
         #expect(fields["mapped"]?.items?.count == 2)
         #expect(fields["pairs"]?.items?.count == 2)
+        guard case .list(_, let mapped)? = fields["mapped"] else {
+            Issue.record("E01 should retain mapped item identities")
+            return
+        }
+        #expect(mapped.map(\.id) == ["featured", "item-1"])
+        #expect(mapped.compactMap(successfulText) == ["重点版本", "基础版本"])
+    }
+
+    @Test func e01EditableBadItemFailsOnlyItsMapPosition() async throws {
+        var bundle = try WorkflowLanguageExamples.make(.data)
+        let listIndex = try #require(bundle.graph.nodes.firstIndex { $0.operationID == "d.value.list" })
+        var configuration = try #require(bundle.graph.nodes[listIndex].dataConfiguration)
+        let badIndex = try #require(configuration.items.firstIndex { $0.id == "item-3" })
+        guard case .record(let schema, var fields) = configuration.items[badIndex].value else {
+            Issue.record("E01 bad fixture should remain a valid same-schema record")
+            return
+        }
+        fields["keep"] = .boolean(true)
+        configuration.items[badIndex].value = .record(schema: schema, fields: fields)
+        bundle.graph.nodes[listIndex].dataConfiguration = configuration
+
+        let (completed, services) = try await executeDataExample(bundle)
+        #expect(completed.state == .completed)
+        #expect(services.callCount == 0)
+        guard case .data(.record(_, let summary))? = completed.outputs["output"],
+              case .list(_, let mapped)? = summary["mapped"] else {
+            Issue.record("E01 should return Map results after one controlled item failure")
+            return
+        }
+        #expect(mapped.map(\.id) == ["item-3", "featured", "item-1"])
+        let statuses = mapped.compactMap { item -> WorkflowDataOutcome? in
+            guard case .result(let result) = item.value else { return nil }
+            return result.status
+        }
+        #expect(statuses == [.failed, .success, .success])
+        guard case .result(let failed) = mapped[0].value else {
+            Issue.record("First mapped item should be the controlled failure")
+            return
+        }
+        #expect(failed.value == nil)
+        #expect(failed.issues.count == 1)
+        #expect(mapped.compactMap(successfulText) == ["重点版本", "基础版本"])
     }
 
     @Test func e02PlansOnceGeneratesThreeAndPreservesEveryCandidateBeforeProcessingSuccesses() throws {
@@ -151,6 +184,17 @@ struct WorkflowLanguageExamplesTests {
             return
         }
         #expect(body.graphInputNames == Set(["item", "notes", "chords"]))
+
+        let target = try #require(bundle.graph.nodes.first { $0.title == "返回音乐候选" })
+        let targetPlan = try WorkflowPlanCompiler().compile(bundle.graph, tools: bundle.tools, target: target.id)
+        let plannedIDs = Set(targetPlan.steps.map { $0.node.operationID })
+        #expect(plannedIDs.contains("d.music.keys"))
+        #expect(plannedIDs.contains("d.music.chords"))
+        #expect(plannedIDs.contains("d.music.render"))
+        let delivery = try #require(bundle.graph.nodes.first { $0.title == "组合候选、调性与试听版本" })
+        #expect(Set(bundle.graph.connections.filter { $0.targetNode == delivery.id }.map(\.targetPort)) == Set([
+            "candidates", "keySuggestions", "referenceAudio", "melody", "chords",
+        ]))
     }
 
     @Test func e04ReturnsFullTypedCandidatesAndKeepsVideoTextOnly() throws {
@@ -206,6 +250,29 @@ struct WorkflowLanguageExamplesTests {
         var node = operation.definition.makeNode()
         node.title = title
         return node
+    }
+
+    private func executeDataExample(
+        _ bundle: WorkflowLanguageExampleBundle
+    ) async throws -> (WorkflowPlanCheckpoint, RejectingExampleServices) {
+        let target = try #require(bundle.graph.nodes.first { $0.title == "返回数据结果" })
+        let plan = try WorkflowPlanCompiler().compile(bundle.graph, tools: bundle.tools, target: target.id)
+        let services = RejectingExampleServices()
+        let registry = WorkflowRegistry.standard
+        let executor = WorkflowPlanExecutor(registry: registry, executeCall: { context in
+            guard let operation = registry.operation(context.node.operationID) else {
+                throw WorkflowIssue("测试遇到未注册操作。")
+            }
+            return try await operation.execute(context, services)
+        }, save: { _ in })
+        return (try await executor.execute(.init(plan: plan)), services)
+    }
+
+    private func successfulText(_ item: WorkflowDataItem) -> String? {
+        guard case .result(let result) = item.value,
+              result.status == .success,
+              case .text(let value)? = result.value else { return nil }
+        return value
     }
 }
 

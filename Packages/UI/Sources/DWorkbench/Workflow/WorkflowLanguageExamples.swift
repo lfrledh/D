@@ -41,16 +41,18 @@ public enum WorkflowLanguageExamples {
         var itemTitle = try valueInput("标题", value: .text("可编辑主项"))
         var itemScore = try valueInput("分数", value: .number(0.92, unit: nil))
         var itemKeep = try valueInput("保留", value: .boolean(true))
+        var itemOptions = try valueInput("候选文字", value: textList(["重点版本"]))
         itemIndex.title = "输入编号"
         itemTitle.title = "输入标题"
         itemScore.title = "输入分数"
         itemKeep.title = "输入保留标记"
+        itemOptions.title = "输入候选文字列表"
 
         var record = try node("d.value.record", title: "组合字段")
         record.dataConfiguration = .init(fields: itemFields)
 
-        let first = dataItem(id: 1, title: "第一项", score: 0.80, keep: true)
-        let third = dataItem(id: 3, title: "可编辑失败反例", score: 0.99, keep: false)
+        let first = dataItem(id: 1, title: "第一项", score: 0.80, keep: true, options: ["基础版本"])
+        let third = dataItem(id: 3, title: "可编辑失败反例", score: 0.99, keep: false, options: [])
         var list = try node("d.value.list", title: "组成列表")
         list.dataConfiguration = .init(
             schema: itemSchema,
@@ -100,7 +102,7 @@ public enum WorkflowLanguageExamples {
         )
 
         var map = try node("d.control.map", title: "逐项保留身份")
-        map.control = .map(body: try mapPassthroughBody(schema: itemSchema, fallback: first), continueOnFailure: true)
+        map.control = .map(body: try fallibleItemMapBody(schema: itemSchema, fallback: first), continueOnFailure: true)
 
         var initialState = try valueInput("循环初始状态", value: .number(0, unit: nil))
         initialState.title = "输入循环状态"
@@ -120,7 +122,7 @@ public enum WorkflowLanguageExamples {
             .init("approved", .boolean),
             .init("validation", validationSchema),
             .init("pairs", .list(pairSchema)),
-            .init("mapped", .list(.result(itemSchema))),
+            .init("mapped", .list(.result(.text))),
             .init("loopState", .number(unit: nil)),
         ]
         var summary = try node("d.value.record", title: "组合运行摘要")
@@ -133,7 +135,7 @@ public enum WorkflowLanguageExamples {
         export.parameters["format"] = .text("json")
 
         let nodes = [
-            itemIndex, itemTitle, itemScore, itemKeep, record, list, filter, select, titleField,
+            itemIndex, itemTitle, itemScore, itemKeep, itemOptions, record, list, filter, select, titleField,
             tagInput, pair, validate, validField, branch, map, initialState, loop, summary, result, export,
         ]
         let connections: [WorkflowConnection] = [
@@ -141,6 +143,7 @@ public enum WorkflowLanguageExamples {
             connect(itemTitle, record, targetPort: "title"),
             connect(itemScore, record, targetPort: "score"),
             connect(itemKeep, record, targetPort: "keep"),
+            connect(itemOptions, record, targetPort: "options"),
             connect(record, list, targetPort: "featured"),
             connect(list, filter),
             connect(filter, select),
@@ -357,12 +360,27 @@ public enum WorkflowLanguageExamples {
 
         var map = try node("d.control.map", title: "生成三条音乐候选")
         map.control = .map(body: try musicCandidateMapBody(tool: musicTool), continueOnFailure: true)
+        let keyFields: [WorkflowRecordField] = [
+            .init("root", .number(unit: nil)),
+            .init("mode", .text),
+            .init("score", .number(unit: nil)),
+            .init("algorithm", .text),
+        ]
+        let deliveryFields: [WorkflowRecordField] = [
+            .init("candidates", .list(.result(.asset(.audio)))),
+            .init("keySuggestions", .list(.record(keyFields))),
+            .init("referenceAudio", .asset(.audio)),
+            .init("melody", WorkflowNoteSequence.schema(clock: .quarterNotes)),
+            .init("chords", WorkflowChordTrack.schema),
+        ]
+        var delivery = try node("d.value.record", title: "组合候选、调性与试听版本")
+        delivery.dataConfiguration = .init(fields: deliveryFields)
         var result = try node("d.value.return", title: "返回音乐候选")
         result.parameters["name"] = .text("musicCandidates")
 
         let nodes = [
             source, convert, trim, pitch, editMelody, align, keys, chordInput, editChords,
-            chordNotes, preview, styleInput, shared, map, result,
+            chordNotes, preview, styleInput, shared, map, delivery, result,
         ]
         let graph = WorkflowGraph(
             name: "E03 哼唱和声与三候选",
@@ -381,7 +399,12 @@ public enum WorkflowLanguageExamples {
                 connect(editChords, shared, targetPort: "chords"),
                 connect(styleInput, map),
                 connect(shared, map, targetPort: "shared"),
-                connect(map, result),
+                connect(map, delivery, targetPort: "candidates"),
+                connect(keys, delivery, targetPort: "keySuggestions"),
+                connect(preview, delivery, targetPort: "referenceAudio"),
+                connect(align, delivery, targetPort: "melody"),
+                connect(editChords, delivery, targetPort: "chords"),
+                connect(delivery, result),
             ],
             layout: gridLayout(nodes)
         )
@@ -546,11 +569,30 @@ public enum WorkflowLanguageExamples {
         return graph
     }
 
-    private static func mapPassthroughBody(
+    private static func fallibleItemMapBody(
         schema: WorkflowDataSchema,
         fallback: WorkflowDatum
     ) throws -> WorkflowGraph {
-        try passthroughGraph(name: "逐项返回", inputName: "item", schema: schema, fallback: fallback)
+        let input = try publicInput("item", schema: schema, fallback: fallback, title: "当前同构条目")
+        var options = try node("d.value.field", title: "读取条目候选文字")
+        options.dataConfiguration = .init(schema: .list(.text), path: ["options"])
+        var first = try node("d.value.select", title: "明确取第一条候选文字")
+        first.parameters["method"] = .text("index")
+        first.parameters["index"] = .integer(1)
+        var output = try node("d.value.return", title: "返回逐项文字")
+        output.parameters["name"] = .text("output")
+        let nodes = [input, options, first, output]
+        var graph = WorkflowGraph(
+            name: "逐项读取可编辑候选",
+            nodes: nodes,
+            connections: [connect(input, options), connect(options, first), connect(first, output)],
+            layout: gridLayout(nodes)
+        )
+        graph.interface = .init(
+            inputs: [.init("item", schema)],
+            outputs: [.init(name: "output", nodeID: output.id, schema: .text)]
+        )
+        return graph
     }
 
     private static func incrementingLoopBody() throws -> WorkflowGraph {
@@ -586,6 +628,7 @@ public enum WorkflowLanguageExamples {
         .init("title", .text),
         .init("score", .number(unit: nil)),
         .init("keep", .boolean),
+        .init("options", .list(.text)),
     ]
 
     private static let dataTagFields: [WorkflowRecordField] = [
@@ -624,13 +667,26 @@ public enum WorkflowLanguageExamples {
         ])
     }
 
-    private static func dataItem(id: Int, title: String, score: Double, keep: Bool) -> WorkflowDatum {
+    private static func dataItem(
+        id: Int,
+        title: String,
+        score: Double,
+        keep: Bool,
+        options: [String]
+    ) -> WorkflowDatum {
         .record(schema: dataItemFields, fields: [
             "index": .number(Double(id), unit: nil),
             "title": .text(title),
             "score": .number(score, unit: nil),
             "keep": .boolean(keep),
+            "options": textList(options),
         ])
+    }
+
+    private static func textList(_ values: [String]) -> WorkflowDatum {
+        .list(element: .text, items: values.enumerated().map {
+            .init(id: "text-\($0.offset + 1)", value: .text($0.element))
+        })
     }
 
     private static func dataTag(id: Int, category: String) -> WorkflowDatum {
