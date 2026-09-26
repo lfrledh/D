@@ -219,6 +219,7 @@ enum WorkflowFormSupport {
                    let field = graph.interface?.inputs.first(where: { $0.name == name }) { return field.type }
                 return source.dataConfiguration?.value?.schema
             case "d.value.record": return .record(source.dataConfiguration?.fields ?? [])
+            case "d.value.validate": return source.dataConfiguration?.schema.map { WorkflowDataConfiguration.validationReportSchema(for: $0) }
             case "d.value.field", "d.control.human": return source.dataConfiguration?.schema
             case "d.model.language": return source.parameters["outputMode"]?.string == "json" ? source.dataConfiguration?.schema : .text
             case "d.value.return", "d.value.filter": return inputSchema(id, visited: next)
@@ -1184,7 +1185,20 @@ struct WorkflowNodeDataEditor: View {
                 WorkflowPathEditor(path: configurationPath, availableRecordSchema: availableRecordSchema, pathRequired: true)
             case "d.music.chords":
                 WorkflowDatumEditor(value: configurationValue)
-            case "d.value.validate", "d.model.language", "d.control.human":
+            case "d.value.validate":
+                Picker(workflowFormText(languageStore, "workflow.language.form.validationInput", fallback: "Input interpretation"), selection: Binding(
+                    get: { node.dataConfiguration?.validationInputFormat ?? .typed },
+                    set: { format in
+                        var next = node.dataConfiguration ?? .init()
+                        next.validationInputFormat = format == .typed ? nil : format
+                        var updated = node; updated.dataConfiguration = next; node = updated
+                    }
+                )) {
+                    Text(workflowFormText(languageStore, "workflow.language.form.validationTyped", fallback: "Typed value")).tag(WorkflowValidationInputFormat.typed)
+                    Text(workflowFormText(languageStore, "workflow.language.form.validationJSON", fallback: "Parse complete JSON text")).tag(WorkflowValidationInputFormat.jsonText)
+                }
+                WorkflowSchemaEditor(schema: configurationSchema, depth: 0)
+            case "d.model.language", "d.control.human":
                 WorkflowSchemaEditor(schema: configurationSchema, depth: 0)
             default:
                 Text(workflowFormText(

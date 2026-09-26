@@ -47,6 +47,9 @@ public struct WorkflowRegistry: Sendable {
         if node.operationID == "d.value.field", let type = node.dataConfiguration?.schema {
             result.outputs = [.init("output", "字段", kinds: type.portKinds)]
         }
+        if node.operationID == "d.value.validate", node.dataConfiguration?.validationInputFormat == .jsonText {
+            result.inputs = [.init("input", "JSON text", kinds: [.text])]
+        }
         if case .invoke(let reference) = node.control,
            let tool = tools.first(where: { $0.id == reference.id && $0.version == reference.version }),
            let interface = tool.graph.interface {

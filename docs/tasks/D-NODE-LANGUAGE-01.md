@@ -251,3 +251,19 @@ lead/scopes-initial九项之前为七项通过；lead/scopes-wiring初轮55项1�
 - 每个测试创建全新App容器内自有项目，不修改现有项目；显式资源目录，缺失即失败而非成功skip（未opt-in才disabled）。请参照已有 NodeLanguageRealTests / M0RealWorkflowTests 的生产接线，不碰共享实现；原有模型租约和资源检查不能绕过。模型绑定必须准确，来源必须是实际请求值。
 - 测试结束无论成败 shutdown、关闭自有Store；不停止别人进程。保存根路径、模型revision、请求/运行/输出、耗时和状态到自有项目旁；失败也保留产物。正常结论须保存重开并回读。不得声称普通GUI、人工试听、Xcode Run、系统断网或发布通过。
 - Swift Testing宏对复杂 optional/coalescing表达式有已观察问题，先求局部值再断言；不是放宽条件。只读源码后发现接口/契约不明须报Lead，不能修改生产代码来过测试。完整参数和写根以对应外部job.json/preflight为准；执行基线为本准备提交。
+
+## A06-REPAIR-GRAPH r1：可展开的有限 JSON 修复工具（2026-09-27）
+这是原 A06 尚缺的结构功能，不重置 DATA/EXAMPLES 的修复预算。N03 原 json 模式保持严格失败+raw；Lead新增 N11 可选 validationInputFormat=jsonText，用同一解析器输出 valid/data/issues，缺省编码与旧 typed 行为保留。规则/输入类型错误在解析 catch 之外；不剥围栏、不自动下载/执行文字。新增纯值/界面契约 validation-json-contract-r1 的过滤 CPU/hosting通过（1e70ab1＋本次已知7文件），首次夹具漏传services编译失败已纠正。
+
+新 Worker 包仅新增 Packages/UI/Sources/DWorkbench/Workflow/WorkflowJSONRepairTool.swift 与 Packages/UI/Tests/DWorkbenchTests/WorkflowJSONRepairToolTests.swift。gpt-5.6-sol/high 受限独立CLI，初交1800秒+最多两轮普通修复。禁止递归、网络/GPU/GUI/构建、共享状态或旧样例修改、Git写；只 parse 允许文件，Lead串行CPU。固定纯值API public enum WorkflowJSONRepairTool { public static func make(schema:WorkflowDataSchema, task:String, exampleJSON:String, maximumRepairs:Int=2) throws -> WorkflowToolDefinition }。需先验证schema及exampleJSON，并验证1...2上限。工具公开 content:Text，输出 output:schema，全部由真实N01/N03/N04/N05/N06/N09/N11/N14/N17及existing graph/control组合，不能新增执行器/控制服务/隐藏闭包。所有内含语言节点modelID空待提交冻结，temperature0，maximumOutputTokens768；初次任务及修复任务明确完整目标schema对应exampleJSON，仅作为结构示例不可强制复制内容。
+
+初次N03 Text→N11 jsonText report，Record state={text:Text,check:Report<T>}，Loop直到check.valid==true，最大两次修复。body声明state/iteration，用字段+列表取项提取上一文本和第一问题，再模板成完整修复任务，N03 Text→N11→nextState。可用额外公开共享值传original content/任务；必须显式普通端口，不能隐式读取图名/当前页面。最终取text→strict N11 jsonText→取data并return T，非法最终值不得流到图像。工具保存所有失败文本与轮次，不静默洗JSON；有限循环结束原因与验证成功分开。用户能展开编辑另存该图。Lead负责将该工具接入E02并调整对应新结构期望，不由Worker越界写旧文件。
+
+测试实际Compiler/PlanExecutor，不另造调度器：首次valid只1次模型；围栏invalid后valid恰好2次；持续invalid最大3次失败，无下游成功输出；duplicate/unknown/type错误失败；resume不重复已完成调用；取消与保存故障保留原状态不成为parse修复；输入不同能影响实际context，不把example当固定答案。使用已有fake OperationServices/response资产读取接口。不能运行真实模型或声称GUI通过。先PRECHECK核验目录、Git、模型可观察上下文、写根，再IMPLEMENT；文档Lead维护。
+
+## 真实验收恢复点（2026-09-27）
+真实文字node-real-text-r2于f593b051ff483461444317f9d7ad986ca0a2fae9通过，5次请求含同计划headless，原raw/来源/重开保留；不是GUI。全UI包language-ui-combined受测9d51f75dbc6dd215055ac6569d8c219a7a8de778通过（160UI、23独立入口、577Workbench，分组记录不冒充模型）。EXAMPLES两轮结束；Lead a58c2ac对和弦JSON任务及差异fixture有界收尾，11CPU通过，非实现者复核关闭。MEDIA-CHECKS初交+repair1已提交548b7522b3052abdf8952a0198f7b68381a1dae4并合入，余1轮；运行时graph模型首次输出围栏JSON被拒绝，尚无6图通过；独立图像取消观察到运行时活动后drain，不能夸为某GPU内核中断。
+
+音乐node-real-music（13cfd51）及node-real-music-access-diagnostic（1e70ab1）均在Pitch access失败，尚未进入MRT2。第二次确认新创建临时书签被CF判stale；具体grant/环境根因未知，未放宽权限。f8189f4仅白名单原因，非实现者核验无权限变化；11Python测试使用准备环境通过，系统Python无numpy的失败保留。Lead端口归属1e70ab1按冻结owner graph过滤复制工具同UUID，并保持各Map调用；非实现者复核关闭，相关过滤CPU已通过。旧预览pause/close不得控制后来播放器。
+
+源仍130603d23a4da81ba2a9852766f3589695ec9468，仅scheme个人修改摘要/索引/未暂存状态未变；候选未源接纳。H27锁屏GUI阻塞，无新原生录音/试听/断网结论。当前Worker均已交还写入（新A06待预检）；外部证据R=AgentTrials/D-NODE-LANGUAGE-01/run-20260926T150929Z，resources-v2是自有新引擎，未替换普通D。下一步定位临时书签、实现A06工具并完成组合真实验收。

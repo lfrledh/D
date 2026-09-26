@@ -342,7 +342,15 @@ enum WorkflowDataOperations {
             inputs: [.init("input", "Value", kinds: WorkflowDataKind.allCases)], outputs: [.init("output", "Report", kinds: [.record])],
             fields: [.init("strict", "Strict", .flag, .flag(false))]
         ),
-        validate: { node in _ = try WorkflowDataOperationSupport.flag("strict", in: node) },
+        validate: { node in
+            _ = try WorkflowDataOperationSupport.flag("strict", in: node)
+            if node.dataConfiguration?.validationInputFormat == .jsonText {
+                guard let schema = node.dataConfiguration?.schema else {
+                    throw WorkflowIssue("Validation schema is required.", nodeID: node.id)
+                }
+                try WorkflowStructuredText.validateSchema(schema)
+            }
+        },
         execute: { context, _ in
             try WorkflowDataOperationSupport.requireOnlyInputs(["input"], context: context)
             let input = try WorkflowDataOperationSupport.inputDatum("input", context: context)
@@ -350,25 +358,34 @@ enum WorkflowDataOperations {
                 throw WorkflowIssue("Validation schema is required.", nodeID: context.node.id)
             }
             let strict = try WorkflowDataOperationSupport.flag("strict", in: context.node)
+            let jsonText: String?
+            if context.node.dataConfiguration?.validationInputFormat == .jsonText {
+                // Configuration and input-shape errors are not model-output repair data.
+                try WorkflowStructuredText.validateSchema(expected)
+                guard case .text(let text) = input else {
+                    throw WorkflowIssue("JSON validation requires a Text value.", nodeID: context.node.id)
+                }
+                jsonText = text
+            } else { jsonText = nil }
             let valid: Bool
             let data: WorkflowDatum
             let issueMessages: [String]
             do {
-                try input.validate(as: expected)
-                valid = true; data = input; issueMessages = []
-            } catch let issue as WorkflowIssue {
-                if strict { throw issue }
+                if let jsonText { data = try WorkflowStructuredText.parse(jsonText, as: expected) }
+                else { try input.validate(as: expected); data = input }
+                valid = true; issueMessages = []
+            } catch {
+                // Only pure parsing/typed validation runs inside this catch.
+                if strict { throw error }
                 valid = false; data = .none(expected)
-                issueMessages = [issue.errorDescription ?? issue.reason]
+                issueMessages = [error.localizedDescription]
             }
             let issueItems = issueMessages.enumerated().map {
                 WorkflowDataItem(id: "issue-\($0.offset + 1)", value: .text($0.element))
             }
-            let reportSchema: [WorkflowRecordField] = [
-                .init("valid", .boolean),
-                .init("data", .optional(expected)),
-                .init("issues", .list(.text)),
-            ]
+            guard case .record(let reportSchema) = WorkflowDataConfiguration.validationReportSchema(for: expected) else {
+                throw WorkflowIssue("Invalid validation report schema.", nodeID: context.node.id)
+            }
             let report = WorkflowDatum.record(schema: reportSchema, fields: [
                 "valid": .boolean(valid),
                 "data": data,

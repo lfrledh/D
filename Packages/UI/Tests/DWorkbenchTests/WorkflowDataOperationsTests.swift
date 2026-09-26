@@ -479,6 +479,45 @@ struct WorkflowDataOperationsTests {
         #expect(services.callCount == 0)
     }
 
+    @Test func jsonValidationReportsStrictErrorsWithoutRepairingText() async throws {
+        let services = RejectingDataServices()
+        let schema = WorkflowDataSchema.record([.init("title", .text)])
+        let config = WorkflowDataConfiguration(schema: schema, validationInputFormat: .jsonText)
+        for text in ["```json\n{\"title\":\"ok\"}\n```", "{\"title\":true}", "{\"title\":\"a\",\"title\":\"b\"}", "{\"title\":\"a\",\"extra\":0}"] {
+            let result = try await execute("d.value.validate", configuration: config, inputs: ["input": .data(.text(text))], services: services)
+            let report = try datum("output", in: result)
+            #expect(report.fields?["valid"] == .boolean(false))
+            #expect(report.fields?["data"] == .none(schema))
+            #expect(report.fields?["issues"]?.items?.isEmpty == false)
+            await #expect(throws: (any Error).self) {
+                _ = try await execute("d.value.validate", configuration: config, parameters: ["strict": .flag(true)], inputs: ["input": .data(.text(text))], services: services)
+            }
+        }
+        let success = try await execute("d.value.validate", configuration: config, inputs: ["input": .data(.text("{\"title\":\"中文 👩🏽‍🎨\"}"))], services: services)
+        let report = try datum("output", in: success)
+        #expect(report.fields?["valid"] == .boolean(true))
+        #expect(report.fields?["data"]?.fields?["title"] == .text("中文 👩🏽‍🎨"))
+        await #expect(throws: WorkflowIssue.self) {
+            _ = try await execute("d.value.validate", configuration: config, inputs: ["input": .data(.boolean(true))], services: services)
+        }
+    }
+
+    @Test func jsonValidationPreflightAndLegacyEncodingRemainExplicit() throws {
+        let old = WorkflowDataConfiguration(schema: .text)
+        let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
+        let encoded = try encoder.encode(old)
+        #expect(!String(decoding: encoded, as: UTF8.self).contains("validationInputFormat"))
+        #expect(try JSONDecoder().decode(WorkflowDataConfiguration.self, from: encoded) == old)
+        var node = try operation("d.value.validate").definition.makeNode()
+        node.dataConfiguration = .init(schema: .record([.init("title", .text)]), validationInputFormat: .jsonText)
+        try WorkflowRegistry.standard.validate(node)
+        #expect(WorkflowRegistry.standard.definition(for: node)?.inputs.first?.kinds == [.text])
+        for unsupported in [WorkflowDataSchema.asset(.image), .result(.text)] {
+            node.dataConfiguration?.schema = unsupported
+            #expect(throws: (any Error).self) { try WorkflowRegistry.standard.validate(node) }
+        }
+    }
+
     private func operation(_ id: String) throws -> WorkflowOperation {
         try #require(WorkflowDataOperations.operations.first { $0.definition.id == id })
     }

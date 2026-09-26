@@ -205,6 +205,10 @@ public struct WorkflowDataRule: Codable, Sendable, Equatable {
 }
 
 /// Form-backed settings for the standard data nodes; no source strings or executable scripts.
+public enum WorkflowValidationInputFormat: String, Codable, Sendable, CaseIterable {
+    case typed, jsonText
+}
+
 public struct WorkflowDataConfiguration: Codable, Sendable, Equatable {
     public var value: WorkflowDatum?
     public var schema: WorkflowDataSchema?
@@ -212,8 +216,16 @@ public struct WorkflowDataConfiguration: Codable, Sendable, Equatable {
     public var path: [String]
     public var rules: [WorkflowDataRule]
     public var items: [WorkflowDataItem]
+    /// Nil preserves the encoding and behavior of existing typed validation nodes.
+    public var validationInputFormat: WorkflowValidationInputFormat?
     public init(value: WorkflowDatum? = nil, schema: WorkflowDataSchema? = nil, fields: [WorkflowRecordField] = [],
-                path: [String] = [], rules: [WorkflowDataRule] = [], items: [WorkflowDataItem] = []) {
+                path: [String] = [], rules: [WorkflowDataRule] = [], items: [WorkflowDataItem] = [],
+                validationInputFormat: WorkflowValidationInputFormat? = nil) {
         self.value = value; self.schema = schema; self.fields = fields; self.path = path; self.rules = rules; self.items = items
+        self.validationInputFormat = validationInputFormat
+    }
+
+    public static func validationReportSchema(for expected: WorkflowDataSchema) -> WorkflowDataSchema {
+        .record([.init("valid", .boolean), .init("data", .optional(expected)), .init("issues", .list(.text))])
     }
 }

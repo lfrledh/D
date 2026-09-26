@@ -3,6 +3,9 @@
   "locale": "en",
   "displayName": "English",
   "strings": {
+    "workflow.language.form.validationInput": "Input interpretation",
+    "workflow.language.form.validationTyped": "Typed value",
+    "workflow.language.form.validationJSON": "Parse complete JSON text",
     "language.system": "Follow System",
     "language.selection": "Display Language",
     "language.effective": "Current Display",
