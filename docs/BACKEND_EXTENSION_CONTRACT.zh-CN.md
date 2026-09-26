@@ -1,8 +1,8 @@
 # 后端扩展约束与新UI服务接线
 
-## 节点边界整理增量（D-NODE-BOUNDARY-01，候选）
+## 节点边界整理增量（D-NODE-BOUNDARY-01，已本地集成）
 
-以下是基于M0候选的实现边界，不将旧源或未整合AP1/CORE/I2V升级为已实现。当前版本、测试、锁屏及接纳条件只见[当前行动](CURRENT_ACTIONS.zh-CN.md)。本节替代下文在2026-09-24所作的“尚无节点执行”时态；其未覆盖模态/发行责任继续有效。
+以下是已本地集成M0与节点边界的实现范围，不将未整合AP1/CORE/I2V升级为已实现。当前版本、测试、接纳及同步状态只见[当前行动](CURRENT_ACTIONS.zh-CN.md)。本节替代下文在2026-09-24所作的“尚无节点执行”时态；其未覆盖模态/发行责任继续有效。
 
 - `Workflow/Operations`：文字、图像、资产三个具体操作模块，`WorkflowBuiltins`仅静态装配。共用`WorkflowOperationSupport`校验；`WorkflowRegistry`拥有类型/端口/版本/连接校验。新增同类操作需实现并登记，不修改调度器。操作ID、定义版本、节点实例UUID、模型内容身份、安装ID继续分开。
 - `Workflow/Models`：`WorkflowModelBinding`每运行节点独立绑定identity/reference/backendID/图像recipe及release；`WorkflowModelBookmarks`仅私有授权偏好，不是第二模型安装器。`WorkflowServices`按nodeUUID保存绑定；指定身份缺失时拒绝，不使用当前页面模型。空ID首次明确运行冻结默认，运行中不重读默认。

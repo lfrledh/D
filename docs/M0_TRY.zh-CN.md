@@ -1,12 +1,14 @@
 # M0 节点工作台试用
 
-2026-09-25。供试用 App 的代码版本：`c8ae6f0a94958f494c4648a2beed547e7a98f0a4`，普通开发签名/沙盒构建，非 XCTest 宿主。真实图文主链与文件/模板组合已由Lead通过原生界面操作补验，取消提示修补也已复验；实际断网T15尚未执行。这是隔离候选的使用说明，不是M0全部验收或发行声明。分层证据与停点见 [当前行动](CURRENT_ACTIONS.zh-CN.md) 和 [M0 任务](tasks/D-M0-01.md)。
+2026-09-26更新。M0与节点边界已本地集成；本次原生语言/逐节点模型选择和真实断网补验通过。受测代码`76bd5963c779c74268c69fa6a4851533768ea4c3`，接入版本`15ee8495deb4ff0da10a62ae03c05cbf890278f7`仅追加文档。最终同步版本与分层证据只见[当前行动](CURRENT_ACTIONS.zh-CN.md)。不是发行声明。
 
 ## 从哪里启动
 
-源码：`/Volumes/CodexProjects/Codex/D-Worktrees/D-M0-01/D.xcworkspace`，可用 Xcode 打开查看。首次试用优先用下面的独立启动入口。若自行从 Xcode 运行，须在 Run 的环境变量中设置一个专属 UUID 值的 `D_UI_TEST_SESSION`，并使用独立 DerivedData；不带此变量会使用普通 App 的偏好/项目恢复，不适合隔离试用。请使用本批独立构建产物，不覆盖普通 D。
+当前源码：`/Volumes/CodexProjects/Codex/D/D.xcworkspace`，Xcode选择scheme D。首次试用用下列已验独立普通App，不替换旧安装。
 
-本批 App：`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-M0-01/run-20260925T091107Z/cache/DerivedData-Regular/Build/Products/Debug/D.app`。本批 `lead/启动M0试用.command` 设置独立偏好会话后打开它；若检测到任何 D 已运行，会提示你先自行保存退出，并拒绝重复启动，不会关闭现有应用；实际 GUI 验收前需解锁 Mac。模型文件和项目目录须通过 App 自己的原生选择器授权，Codex 可以读取某目录不等于沙盒 App 已获授权。
+已做原生补验的App：`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-NODE-BOUNDARY-01/run-20260926T045011Z/cache/DerivedData-Regular/Build/Products/Debug/D.app`。启动入口为[启动已验工作台.command](/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-NODE-BOUNDARY-01/run-20260926T073533Z-acceptance/启动已验工作台.command)，使用稳定隔离偏好便于重开，发现D运行时拒绝重复启动；不关闭普通D。若Xcode直接运行且不设置独立`D_UI_TEST_SESSION`，会使用普通应用偏好，不能当隔离验收。
+
+原生试用项目为[Boundary验收.dproject](/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-NODE-BOUNDARY-01/run-20260926T073533Z-acceptance/gui/Boundary验收.dproject)，包含两个使用不同文字模型的可编辑节点和运行记录。新的作品请另建项目。模型和输出通过App自己的系统选择器授权，Codex能读目录不等于沙盒App获准。右上角地球图标可换中英/导入纯JSON语言包；画布通用词条已接入，旧模态页与部分服务消息仍中文。
 
 先新建专属测试项目，不用唯一一份真实作品试验。M0 使用项目格式 16；源格式 1—12 可读，升级保留原清单备份；AP1/CORE 候选格式 13—15 明确拒绝，未在本批接纳。格式备份不是整个作品的替代备份；旧 App 不能据此自动识别格式 16。
 

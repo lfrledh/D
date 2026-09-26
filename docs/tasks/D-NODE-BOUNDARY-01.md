@@ -106,3 +106,28 @@ waiting人工确认编辑器还经历中英切换及820↔1320宽度，保持同
 独立普通App：本run `cache/DerivedData-Regular/Build/Products/Debug/D.app`，受测代码76bd5963；构建55.02秒，codesign deep/strict验证通过，沙盒true，既有开发签名get-task-allow与原权限保留，无临时测试例外。四个关键文件的SHA256/大小/修改时间及entitlements在`lead/regular-app-manifest.json`。`lead/Launch-Boundary.command`已生成但未执行，使用每次独立D_UI_TEST_SESSION；不会覆盖普通App。其隔离偏好用于试用，不把项目书签混入普通偏好，重开项目仍可显式选择。
 
 本批GPU/构建/测试自有进程均已完成；没有后台等待解锁或断网脚本。下一步是本人返回时集中补H25/H26，满足依赖后接纳组合；目前保留候选，不推进源、不推送、不删除分支或证据。新上下文恢复必须读CURRENT_ACTIONS并核对真实状态；旧试用说明不替代本批普通App证据。
+
+
+## 2026-09-26 本人返回：集中补验与本地接纳
+
+本次授权仅补集中验收、整合已有进度和同步GitHub，然后等待用户审计；没有新产品实现或预算重置。R=`D-Development/AgentTrials/D-NODE-BOUNDARY-01/run-20260926T073533Z-acceptance`。既有生产代码仍`76bd5963c779c74268c69fa6a4851533768ea4c3`，固定候选`15ee8495deb4ff0da10a62ae03c05cbf890278f7`与其仅5份文档差异。
+
+### 原生/离线结果
+
+H26普通开发签名App四个关键文件与旧manifest完全一致。原生系统选择器创建专属项目并导入外部French JSON包；中英切换/缺词回退保持Unicode文本与选区；模型节点A选择Qwen0.5B、B选择1.5B，实际连线A→B并完成一次串行运行。资产记录的实际模型身份分别a5339a…和8b4031…；正常退出后用相同测试suite重开，语言/图/原文/模型身份/已完成记录恢复。再次切中文，正常退出。原生截图/AX和项目摘要在`evidence/gui-*`；迟到选择器反例复用自动测试，不将模态文件选择器中的串行动作称并发回调实验。
+
+一次过快选择器键序列误选不合规目录，被明确拒绝且未绑定；核对AX后准确选择成功。一次ScreenCaptureKit -3812在面板关闭后出现，App仍运行，单次重连接恢复观察；未改变Mac权限。输入法自动输入不稳定时改用原生AX填入合成文本，未据此宣称真人IME通过；H22仍延期。
+
+H25第一次新包装在实际断开后未启动模型：scutil输出`No IPv4/IPv6 states found`，route不存在仍exit0、stderr `not in table`，旧词/退出码条件有误。保留`offline/`全部记录，未计验收成功。外部包装r2用Wi-Fi关闭＋所有非回环链路无active＋无活动可路由地址＋无scutil接口的联合判据，保留原始状态和route monitor；不改变产品契约或网络设置。只读审核指出进程自然退出竞态和AWDL链路覆盖，均在执行前补齐。由本人再次断开/恢复。
+
+`offline-confirmed/`：固定`M0RealWorkflowTests.productionTextAndThreeImagesThroughDurableWorkflow()`实际1项通过，101.070秒；启动前3次离线，执行/结束100次离线采样，最大间隔1.094秒；route GET200/MISS52/DELMADDR2，无恢复网络事件。生产图文/三图/人工决定驱动/JPEG/重开/实际取消与独立文字会话对照均通过；不是原生点击、全模态、下载或零网络调用审计。产物65文件、PNG/JPEG/来源与取消记录复制到本run并保存摘要，不只留应用容器。测试与monitor已回收，提示音不取代实际通过证据。
+
+### 审阅、集成与恢复
+
+`acceptance_offline_review`非实现者只读核对包装/最终1项真实测试/网络/路由记录；`acceptance_integration_review`复用原非实现者审阅，确认源→M0→Boundary祖先链及全部54路径范围，无新的生产P1/P2、签名/权限/依赖锁变更，AP1/CORE不在祖先中。未重做全库审计、未派写Worker、未改产品实现；Lead仅做验收外壳与文档。
+
+源从`58603870719a52ff07b6bb6e4d6d09e02c23901a`以ff-only/no-autostash/no-overwrite-ignore接入15ee849。更新前后个人scheme内容/完整diff/index/未暂存状态相同；源索引没有夹带。H25/H26闭合后才接纳。普通App/验收项目原件和候选树保留不动，历史失败和I18N旧预算不变。
+
+源入口`source-ui`以15ee849重编测试，127 UI（含hosting）、23 ModelLibrary、459 DWorkbench通过，93.85秒；这是本轮新的源目录验证，不是把原路径结果复制。现有测试夹具Sendable/捕获变量及依赖编译警告保留，未在验收阶段扩大修复。`source-app-build`通过（73.32秒），新源构建产物codesign完整性/沙盒核对通过；该产物没有再做一次GUI，原生结论绑定此前固定App。最终文档提交/远端SHA见R`evidence/final-receipt.json`和CURRENT_ACTIONS；最终提交仅文档，不冒称测试在尚未创建的SHA执行。
+
+归因：M0与Boundary原Worker/修复/Lead介入记录原样；本次Lead验收，另有非实现者只读复核，不宣称新实现模型。本次可观测测试/构建墙钟独立列出；完整Lead用量与订阅费用unknown，未重算历史成本。本次验收与本地接纳完成；按授权同步后停止等待用户审计，不启动新功能。
