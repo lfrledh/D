@@ -102,15 +102,20 @@ private struct WorkflowBoundarySchemaPicker: View {
     @State private var sample: WorkflowDatum?
     @Environment(\.dLanguageStore) private var language
     init(schema: Binding<WorkflowDataSchema>) { _schema = schema; _sample = State(initialValue: WorkflowControlFormSupport.sample(for: schema.wrappedValue)) }
+    private func assetTitle(_ kind: WorkflowDataKind) -> String {
+        let asset = language?.text("workflow.language.form.type.asset", fallback: "资产") ?? "资产"
+        let name = language?.text("workflow.language.form.assetKind." + kind.rawValue, fallback: kind.rawValue) ?? kind.rawValue
+        return asset + " (" + name + ")"
+    }
     var body: some View {
         VStack(alignment: .leading) {
             Menu(language?.text("workflow.language.tools.type", fallback: "类型 / 媒体引用") ?? "类型 / 媒体引用") {
-                Button("Text") { schema = .text; sample = .text("") }
+                Button(language?.text("workflow.language.form.type.text", fallback: "文字") ?? "文字") { schema = .text; sample = .text("") }
                 ForEach([WorkflowDataKind.text, .image, .audio, .video, .notes, .chords, .tempo, .pitch], id: \.self) { kind in
-                    Button("Asset<\(kind.rawValue)>") { schema = .asset(kind); sample = nil }
+                    Button(assetTitle(kind)) { schema = .asset(kind); sample = nil }
                 }
             }
-            if case .asset(let kind) = schema { Text("Asset<\(kind.rawValue)>").font(.caption) }
+            if case .asset(let kind) = schema { Text(assetTitle(kind)).font(.caption) }
             else {
                 WorkflowDatumEditor(value: Binding(get: { sample }, set: { value in
                     sample = value; if let value { schema = value.schema }

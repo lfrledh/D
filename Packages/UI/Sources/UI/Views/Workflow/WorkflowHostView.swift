@@ -34,7 +34,7 @@ struct WorkflowHostView: View {
                             WorkflowMediaPreviewPanel(session: model.projectSession, controller: controller, reference: reference)
                         }
                     }
-            } else { ProgressView("正在读取项目流程…") }
+            } else { ProgressView((languageStore?.text("workflow.host.loading", fallback: "正在读取项目流程…") ?? "正在读取项目流程…")) }
         }
         .task(id: model.manifest?.id) { await model.projectSession.openWorkflow() }
     }
@@ -44,7 +44,7 @@ struct WorkflowHostView: View {
         Task {
             guard model.projectSession.workflow === controller, controller.isCurrent(target) else { return }
             if kind == .pitch { model.projectSession.bindSelectedWorkflowModel(); return }
-            let panel = NSOpenPanel(); panel.title = "选择此节点使用的已安装模型"
+            let panel = NSOpenPanel(); panel.title = (languageStore?.text("workflow.host.model", fallback: "选择此节点使用的已安装模型") ?? "选择此节点使用的已安装模型")
             panel.canChooseDirectories = true; panel.canChooseFiles = false; panel.allowsMultipleSelection = false
             guard await panel.begin() == .OK, let url = panel.url,
                   model.projectSession.workflow === controller, controller.isCurrent(target) else { return }
@@ -53,7 +53,7 @@ struct WorkflowHostView: View {
     }
     private func importFile(nodeID: UUID, controller: WorkflowController) async {
         guard !model.isChangingProject else { return }
-        let panel = NSOpenPanel(); panel.title = "导入为不可变资产快照"
+        let panel = NSOpenPanel(); panel.title = (languageStore?.text("workflow.host.import", fallback: "导入为不可变资产快照") ?? "导入为不可变资产快照")
         panel.canChooseDirectories = false; panel.allowsMultipleSelection = false
         panel.allowedContentTypes = [.plainText, .png, .jpeg, .audio, .mpeg4Movie, .json, .init(filenameExtension: "md") ?? .plainText]
         guard await panel.begin() == .OK, let url = panel.url, model.projectSession.workflow === controller else { return }
@@ -62,7 +62,7 @@ struct WorkflowHostView: View {
     }
     private func destination(_ controller: WorkflowController) async {
         guard !model.isBusy, !model.isChangingProject else { return }
-        let panel = NSOpenPanel(); panel.title = "选择导出目录（新建包含媒体、配方和回执的导出包）"
+        let panel = NSOpenPanel(); panel.title = (languageStore?.text("workflow.host.destination", fallback: "选择导出目录（新建包含媒体、配方和回执的导出包）") ?? "选择导出目录（新建包含媒体、配方和回执的导出包）")
         panel.canChooseDirectories = true; panel.canChooseFiles = false; panel.allowsMultipleSelection = false
         guard await panel.begin() == .OK, let url = panel.url, model.projectSession.workflow === controller else { return }
         await model.projectSession.selectWorkflowDestination(at: url)
@@ -85,7 +85,7 @@ private struct WorkflowMediaPreviewPanel: View {
                 } else {
                     HStack {
                         Button(languageStore?.text("workflow.preview.play", fallback: "播放") ?? "播放") { session.playWorkflowAudio(reference, requestID: requestID) }
-                        Button(languageStore?.text("workflow.preview.pause", fallback: "暂停") ?? "暂停") { session.audioCreationTransport.pause() }
+                        Button(languageStore?.text("workflow.preview.pause", fallback: "暂停") ?? "暂停") { session.pauseWorkflowAudio(reference, requestID: requestID) }
                     }
                     Text(reference.assetID.uuidString).font(.caption.monospaced()).textSelection(.enabled)
                 }

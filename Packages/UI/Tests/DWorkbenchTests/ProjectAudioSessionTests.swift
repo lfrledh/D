@@ -30,12 +30,13 @@ private actor AudioSessionGate {
 private final class SessionPlaybackDevice: AudioPlaybackDevice {
     var currentFrame: Int64 = 0
     private(set) var stopCount = 0
+    private(set) var pauseCount = 0
     func playSegment(startFrame: Int64, frameCount: Int64,
                      completion: @escaping @MainActor @Sendable (String?) -> Void) throws -> Bool {
         currentFrame = startFrame
         return true
     }
-    func pause() -> Int64 { currentFrame }
+    func pause() -> Int64 { pauseCount += 1; return currentFrame }
     func stop() { stopCount += 1 }
 }
 
@@ -125,6 +126,37 @@ private final class SessionAudioFactory: AudioTransportDeviceFactory {
 @Suite("Project audio session", .serialized)
 @MainActor
 struct ProjectAudioSessionTests {
+    @Test func workflowPreviewPauseAndCloseCannotControlANewerOwner() async throws {
+        let f = try fixture("PreviewOwner"); defer { cleanup(f) }
+        let factory = SessionAudioFactory(), subject = session(f, factory: factory)
+        await subject.createProject(at: f.project); await subject.openWorkflow()
+        let controller = try #require(subject.workflow)
+        controller.addExample("file")
+        let node = try #require(controller.graph?.nodes.first { $0.operationID == "d.asset.reference" })
+        await controller.importFile(try source(in: f), nodeID: node.id)
+        let reference = try #require(controller.graph?.nodes.first { $0.id == node.id }?.assetReference)
+        let first = UUID(), second = UUID()
+        #expect(await subject.prepareWorkflowPreview(reference, controller: controller, requestID: first) != nil)
+        subject.playWorkflowAudio(reference, requestID: first)
+        #expect(await subject.prepareWorkflowPreview(reference, controller: controller, requestID: second) != nil)
+        subject.playWorkflowAudio(reference, requestID: second)
+        let current = try #require(factory.playbacks.last)
+        subject.pauseWorkflowAudio(reference, requestID: first)
+        subject.endWorkflowPreview(reference, requestID: first)
+        #expect(current.pauseCount == 0 && current.stopCount == 0)
+        subject.pauseWorkflowAudio(reference, requestID: second)
+        #expect(current.pauseCount == 1)
+        await subject.createAudioCreation(sourceAssetID: reference.assetID)
+        let document = try #require(subject.activeDocumentID)
+        await subject.playAudioCreationAsset(id: reference.assetID, contextID: subject.audioCreationContextID, documentID: document)
+        let ordinary = try #require(factory.playbacks.last)
+        #expect(ordinary !== current)
+        subject.pauseWorkflowAudio(reference, requestID: second)
+        subject.endWorkflowPreview(reference, requestID: second)
+        #expect(ordinary.pauseCount == 0 && ordinary.stopCount == 0)
+        #expect(await subject.requestClose())
+    }
+
     @Test(arguments: [false, true]) func endingDuringReservationNeverStartsOrAdoptsADevice(afterLocation: Bool) async throws {
         let f = try fixture("CaptureAdmission"); defer { cleanup(f) }
         let factory = SessionAudioFactory(), subject = session(f, factory: factory, recording: true)
@@ -265,7 +297,8 @@ struct ProjectAudioSessionTests {
             }, shutdown: {}, cleanup: {}, validateModel: { _ in },
             textBackendID: "test.text")
         }, settings: fixture.settings, audioEnabled: true,
-        audioRecordingEnabled: recording, audioTransport: transport)
+        audioRecordingEnabled: recording, audioTransport: transport,
+        audioCreationTransport: AudioTransport(recordingEnabled: false, deviceFactory: factory))
     }
 
     private func source(in fixture: Fixture, name: String = "source.wav") throws -> URL {

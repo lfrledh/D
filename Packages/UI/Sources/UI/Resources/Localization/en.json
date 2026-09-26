@@ -563,6 +563,15 @@
     "workflow.scope.invalid": "This scope is empty or cannot compile. Check the graph and anchor.",
     "workflow.scope.close": "Close",
     "workflow.scope.rerunCall": "Rerun this concrete call",
-    "workflow.scope.callExplanation": "Create a new run using this call’s frozen parameters and inputs. The original loop is not changed or resumed. Model calls may take time."
+    "workflow.scope.callExplanation": "Create a new run using this call’s frozen parameters and inputs. The original loop is not changed or resumed. Model calls may take time.",
+    "workflow.host.loading": "Loading project workflow…",
+    "workflow.host.model": "Choose an installed model for this node",
+    "workflow.host.import": "Import an immutable asset snapshot",
+    "workflow.host.destination": "Choose destination for a new media, recipe and receipt package",
+    "workflow.connection.inspect": "Inspect input data",
+    "workflow.connection.configured": "Current source settings (not a run result)",
+    "workflow.connection.history": "Historical input snapshots; not the current connection",
+    "workflow.connection.noData": "No recorded data; inspection does not run upstream",
+    "workflow.connection.revision": "Run graph revision"
   }
 }

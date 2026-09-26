@@ -563,6 +563,15 @@
     "workflow.scope.invalid": "该范围不存在或不能编译；请先检查图和锚点。",
     "workflow.scope.close": "关闭",
     "workflow.scope.rerunCall": "重新运行具体调用",
-    "workflow.scope.callExplanation": "使用这次调用冻结的参数与输入，创建新的运行。不会改写或继续原有循环；模型调用可能耗时。"
+    "workflow.scope.callExplanation": "使用这次调用冻结的参数与输入，创建新的运行。不会改写或继续原有循环；模型调用可能耗时。",
+    "workflow.host.loading": "正在读取项目流程…",
+    "workflow.host.model": "选择此节点使用的已安装模型",
+    "workflow.host.import": "导入为不可变资产快照",
+    "workflow.host.destination": "选择导出目录（新建包含媒体、配方和回执的导出包）",
+    "workflow.connection.inspect": "检查输入数据",
+    "workflow.connection.configured": "当前源设置（尚非运行结果）",
+    "workflow.connection.history": "此输入端口的历史快照；不代表当前连线",
+    "workflow.connection.noData": "尚无已记录数据；查看不会执行上游",
+    "workflow.connection.revision": "运行图版本"
   }
 }

@@ -254,7 +254,7 @@ public final class ProjectSession {
     }
     private var stableAudioModelStatus = "选择已安装的本地声音模型"
     public private(set) var isRegisteringAudioModel = false
-    public let audioCreationTransport = AudioTransport(recordingEnabled: false)
+    public let audioCreationTransport: AudioTransport
     public private(set) var workflowRecordingNodeID: UUID?
     @ObservationIgnored private var workflowCapture: (id: UUID, controller: WorkflowController, target: WorkflowAssetBindingTarget, audio: ProjectAudioController, admitted: Bool, identity: AudioCaptureHandle?)?
     public private(set) var workflowPreviewReference: WorkflowAssetReference?
@@ -399,6 +399,7 @@ public final class ProjectSession {
                 audioEnabled: Bool = false,
                 audioRecordingEnabled: Bool = false,
                 audioTransport: AudioTransport? = nil,
+                audioCreationTransport: AudioTransport? = nil,
                 textSourcesEnabled: Bool = false,
                 closeDecision: @escaping @MainActor @Sendable () async -> ProjectCloseDecision = { .keepOpen }) {
         self.closeDecision = closeDecision
@@ -408,6 +409,7 @@ public final class ProjectSession {
         self.audioEnabled = audioEnabled
         self.audioRecordingEnabled = audioRecordingEnabled
         self.injectedAudioTransport = audioTransport
+        self.audioCreationTransport = audioCreationTransport ?? AudioTransport(recordingEnabled: false)
         self.textSourcesEnabled = textSourcesEnabled
         if modelLibrary != nil { modelStatus = "请在模型库中安装或选择可用模型。" }
     }
@@ -1539,6 +1541,11 @@ public final class ProjectSession {
         guard workflowPreviewRequestID == requestID, workflowPreviewReference == reference, reference.kind == .audio, !isBusy else { return }
         do { try audioCreationTransport.play() } catch { workflow?.errorMessage = error.localizedDescription }
     }
+    public func pauseWorkflowAudio(_ reference: WorkflowAssetReference, requestID: UUID) {
+        guard workflowPreviewRequestID == requestID, workflowPreviewReference == reference,
+              reference.kind == .audio else { return }
+        audioCreationTransport.pause()
+    }
     public func endWorkflowPreview(_ reference: WorkflowAssetReference, requestID: UUID) {
         guard workflowPreviewRequestID == requestID, workflowPreviewReference == reference else { return }
         workflowPreviewRequestID = nil; workflowPreviewReference = nil; audioCreationTransport.stopPlayback(); stopVideoPreview()
@@ -2385,6 +2392,7 @@ public final class ProjectSession {
             guard contextID == audioCreationContextID, documentID == activeDocumentID,
                   self.store === store, !isChangingProject, !closePending else { return }
             audio?.transport.stopPlayback()
+            workflowPreviewRequestID = nil; workflowPreviewReference = nil
             try audioCreationTransport.preparePlayback(url: url, format: inspection.format,
                 policy: asset.metadata.audio?.origin == .modelGenerated ? .generated : .original)
             try audioCreationTransport.play()

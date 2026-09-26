@@ -848,6 +848,7 @@ private struct WorkflowNodeInspector: View {
                                 .labelStyle(.iconOnly)
                                 .disabled(readOnly)
                             }
+                            WorkflowConnectionInspection(controller: controller, connection: connection)
                         }
                     }
                     .padding(8)
@@ -1069,6 +1070,73 @@ private struct WorkflowFieldEditor: View {
     }
     private var flagBinding: Binding<Bool> {
         Binding(get: { value.flag ?? false }, set: { onChange(.flag($0)) })
+    }
+}
+
+/// Inspection only: historical input ports are explicitly distinct from current wiring.
+/// Every nested call remains separate; never guess one Map item from a node UUID.
+struct WorkflowConnectionSnapshot: Identifiable {
+    var id: String { runID.uuidString + ":" + stepID.uuidString }
+    let runID: UUID
+    let revision: UUID
+    let stepID: UUID
+    let address: [WorkflowAddressComponent]
+    let operationID: String
+    let value: WorkflowValue
+}
+enum WorkflowConnectionPresentation {
+    static func snapshots(_ connection: WorkflowConnection, runs: [WorkflowRun]) -> [WorkflowConnectionSnapshot] {
+        runs.flatMap { run in
+            let records = run.planCheckpoint?.records ?? run.steps.map {
+                WorkflowPlanCallRecord(address: .init(runID: run.id, path: [.node($0.node.id)]), step: $0)
+            }
+            return records.compactMap { call in
+                guard call.step.node.id == connection.targetNode,
+                      let value = call.step.inputs[connection.targetPort] else { return nil }
+                return WorkflowConnectionSnapshot(runID: run.id, revision: run.graph.revision,
+                    stepID: call.step.id, address: call.address.path,
+                    operationID: call.step.node.operationID, value: value)
+            }
+        }
+    }
+    static func configuredValue(source: WorkflowNode?) -> WorkflowValue? {
+        guard let source else { return nil }
+        if source.operationID == "d.value.input", let value = source.dataConfiguration?.value { return .data(value) }
+        if source.operationID == "d.asset.reference", let reference = source.assetReference { return .asset(reference) }
+        return nil
+    }
+}
+private struct WorkflowConnectionInspection: View {
+    let controller: WorkflowController
+    let connection: WorkflowConnection
+    @Environment(\.dLanguageStore) private var language
+    var body: some View {
+        DisclosureGroup(workflowText(language, "workflow.connection.inspect", fallback: "检查输入数据")) {
+            if let value = WorkflowConnectionPresentation.configuredValue(source: controller.graph?.nodes.first {
+                $0.id == connection.sourceNode
+            }) {
+                WorkflowStepValues(title: workflowText(language, "workflow.connection.configured", fallback: "当前源设置（尚非运行结果）"),
+                    values: [connection.targetPort: value], operationID: "", portsAreInputs: true,
+                    controller: controller, onReturnText: { _ in }, allowsReturn: false)
+            }
+            let snapshots = WorkflowConnectionPresentation.snapshots(connection, runs: controller.history(for: connection.targetNode))
+            Text(workflowText(language, "workflow.connection.history", fallback: "此输入端口的历史快照；不代表当前连线"))
+                .font(.caption).foregroundStyle(.secondary)
+            if snapshots.isEmpty {
+                Text(workflowText(language, "workflow.connection.noData", fallback: "尚无已记录数据；查看不会执行上游"))
+                    .font(.caption)
+            }
+            ForEach(snapshots.reversed()) { snapshot in
+                DisclosureGroup(snapshot.runID.uuidString.prefix(8) + " / " + snapshot.stepID.uuidString.prefix(8)) {
+                    Text(workflowText(language, "workflow.connection.revision", fallback: "运行图版本") + ": " + snapshot.revision.uuidString)
+                        .font(.caption2.monospaced()).textSelection(.enabled)
+                    Text(String(describing: snapshot.address)).font(.caption2.monospaced()).textSelection(.enabled)
+                    WorkflowStepValues(title: snapshot.stepID.uuidString, values: [connection.targetPort: snapshot.value],
+                        operationID: snapshot.operationID, portsAreInputs: true, controller: controller,
+                        onReturnText: { _ in }, allowsReturn: false)
+                }
+            }
+        }.accessibilityIdentifier("workflow-connection-inspect-" + connection.id.uuidString)
     }
 }
 

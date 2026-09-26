@@ -122,6 +122,34 @@ struct WorkflowCanvasPresentationTests {
         #expect(!WorkflowCanvasPresentation.canResume(status))
     }
 
+    @Test func connectionInspectionKeepsConcreteCallsAndNeverInventsCurrentOutput() {
+        let source = WorkflowNode(operationID: "d.model.language", title: "model")
+        let target = WorkflowNode(operationID: "d.value.return", title: "target")
+        let edge = WorkflowConnection(sourceNode: source.id, sourcePort: "output", targetNode: target.id, targetPort: "input")
+        let graph = WorkflowGraph(nodes: [source, target], connections: [edge])
+        let plan = WorkflowPlan(graphID: graph.id, graphRevision: graph.revision, steps: [])
+        var run = WorkflowRun(graph: graph)
+        var first = WorkflowStepRun(node: target, signature: "a"), second = WorkflowStepRun(node: target, signature: "b")
+        first.inputs = ["input": .data(.text("first item"))]; second.inputs = ["input": .data(.text("second item"))]
+        let records: [WorkflowPlanCallRecord] = [
+            .init(address: .init(runID: run.id, path: [.item("a"), .node(target.id)]), step: first),
+            .init(address: .init(runID: run.id, path: [.item("b"), .node(target.id)]), step: second),
+        ]
+        run.planCheckpoint = .init(runID: run.id, plan: plan, records: records)
+        let values = WorkflowConnectionPresentation.snapshots(edge, runs: [run])
+        #expect(values.count == 2)
+        #expect(values.map(\.value) == [first.inputs["input"]!, second.inputs["input"]!])
+        #expect(values.map(\.address) == records.map { $0.address.path })
+        #expect(Set(values.map(\.id)).count == 2)
+        #expect(WorkflowConnectionPresentation.configuredValue(source: source) == nil)
+        var differentPort = edge; differentPort.targetPort = "missing"
+        #expect(WorkflowConnectionPresentation.snapshots(differentPort, runs: [run]).isEmpty)
+        var literal = WorkflowNode(operationID: "d.value.input", title: "value")
+        literal.dataConfiguration = .init(value: .text("new setting"))
+        #expect(WorkflowConnectionPresentation.configuredValue(source: literal) == .data(.text("new setting")))
+        #expect(values[0].value == .data(.text("first item")))
+    }
+
     @Test
     func connectionIdentityDisplaysOnlyStableSourceInformation() throws {
         let source = try #require(UUID(uuidString: "12345678-1234-1234-1234-1234567890ab"))
