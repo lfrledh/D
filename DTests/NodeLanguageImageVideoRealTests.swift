@@ -124,6 +124,24 @@ struct NodeLanguageImageVideoRealTests {
             try #require(Set(itemIDs) == Set(plannedThemes.map(\.itemID)))
 
             let afterE02 = try #require(try await store.workflowState().archive)
+            // A successful planning tool may need 0...2 visible repair calls.
+            // Preserve this count instead of claiming every model response was valid first time.
+            let planningCalls = checkpoint.records.filter {
+                $0.step.node.operationID == "d.model.language" && $0.step.status == .completed
+            }
+            try #require((1...3).contains(planningCalls.count))
+            for call in planningCalls {
+                let raw = try #require(call.step.outputs["raw"]?.asset)
+                let record = try #require(afterE02.assets.first { $0.reference == raw })
+                let request = try #require(record.request)
+                try #require(record.stepID == call.id && request.id == call.id)
+                try #require(request.model.revision == textRevision)
+                let rawBytes = try await store.workflowData(raw)
+                try #require(!rawBytes.isEmpty)
+            }
+            let planningLoop = try #require(checkpoint.records.first {
+                $0.step.node.operationID == "d.control.loop"
+            })
             var candidateIDs = Set<UUID>()
             var attemptIDs = Set<UUID>()
             var outputReferences: [WorkflowAssetReference] = []
@@ -286,6 +304,11 @@ struct NodeLanguageImageVideoRealTests {
                 "cancelledObservedPhase": cancellationObservation.phase ?? "unknown",
                 "e02RunID": e02Run.id.uuidString,
                 "e02Status": e02Run.status.rawValue,
+                "planningModelCalls": planningCalls.count,
+                "planningRepairCalls": planningCalls.count - 1,
+                "planningCallIDs": planningCalls.map { $0.id.uuidString },
+                "planningLoopExit": planningLoop.loopExit?.rawValue ?? "unknown",
+
                 "referenceRunID": referenceRun.id.uuidString,
                 "referenceStatus": referenceRun.status.rawValue,
                 "sourceAssetID": sourceReference.assetID.uuidString,
