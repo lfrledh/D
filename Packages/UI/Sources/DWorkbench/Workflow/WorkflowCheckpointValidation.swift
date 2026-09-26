@@ -562,12 +562,12 @@ private struct CheckpointValidator {
             return
 
         case .branch(let predicate, let yes, let no):
-            let input = try requiredDatum(
-                record.step.inputs["input"], nodeID: resolved.step.node.id, port: "input"
-            )
-            let selected = try predicate.matches(input)
-            let body = selected ? yes : no
             if completed {
+                let input = try requiredDatum(
+                    record.step.inputs["input"], nodeID: resolved.step.node.id, port: "input"
+                )
+                let selected = try predicate.matches(input)
+                let body = selected ? yes : no
                 let base = record.address.path + [.branch(selected)]
                 guard let outputs = try planOutputsIfComplete(body, basePath: base) else {
                     throw WorkflowIssue("A completed Branch has no complete selected-body trace.", nodeID: resolved.step.node.id)
@@ -648,7 +648,7 @@ private struct CheckpointValidator {
         }
 
         let output = try bodyOutput(body.interface, purpose: "Map")
-        for resultItem in resultItems {
+        for (offset, resultItem) in resultItems.enumerated() {
             guard case .result(let result) = resultItem.value else {
                 throw WorkflowIssue("A Map result item is not a typed Result.", nodeID: nodeID)
             }
@@ -677,8 +677,21 @@ private struct CheckpointValidator {
                 let matchingFailure = failures.contains(where: { failure in
                           failure.step.error.map { result.issues.contains($0) } ?? true
                       })
+                let arguments = shared.merging([
+                    "item": sourceItems[offset].value,
+                    "value": sourceItems[offset].value,
+                    "index": .number(Double(offset + 1), unit: nil),
+                ]) { current, _ in current }
+                let argumentFailures = mapArgumentFailureIssues(
+                    arguments,
+                    for: body,
+                    basePath: base
+                )
+                let deterministicArgumentFailure = recordsUnder(base).isEmpty &&
+                    result.issues.count == 1 &&
+                    argumentFailures.contains(result.issues[0])
                 guard result.value == nil, !result.issues.isEmpty,
-                      matchingFailure || invalidCompletedProjection,
+                      matchingFailure || invalidCompletedProjection || deterministicArgumentFailure,
                       !completed || continueOnFailure else {
                     throw WorkflowIssue("A failed Map item has no matching failed child trace.", nodeID: nodeID)
                 }
@@ -781,14 +794,9 @@ private struct CheckpointValidator {
         }
         if let progress = record.step.outputs["output"]?.datum {
             try progress.validate(as: stateSchema)
-            let candidates: [WorkflowDatum]
-            if incompleteIteration != nil {
-                candidates = states.last.map { [$0] } ?? []
-            } else {
-                candidates = Array(states.suffix(2))
-            }
+            let candidates = [initial] + states
             guard candidates.contains(progress) else {
-                throw WorkflowIssue("A Loop progress output is not its latest durable traced state.", nodeID: nodeID)
+                throw WorkflowIssue("A Loop progress output is not an exact durable traced prefix state.", nodeID: nodeID)
             }
         } else if record.step.outputs["output"] != nil {
             throw WorkflowIssue("A Loop progress output is not structured state data.", nodeID: nodeID)
@@ -1267,6 +1275,52 @@ private struct CheckpointValidator {
             throw WorkflowIssue("A Map item identity is not in its bound List.")
         }
         return offset
+    }
+
+    private func mapArgumentFailureIssues(
+        _ arguments: [String: WorkflowDatum],
+        for plan: WorkflowPlan,
+        basePath: [WorkflowAddressComponent]
+    ) -> Set<String> {
+        var issues: Set<String> = []
+        for field in plan.interface.inputs {
+            guard let value = arguments[field.name] else {
+                guard field.required else { continue }
+                let nodeID = plan.steps.first {
+                    $0.node.operationID == "d.value.input" &&
+                        $0.node.parameters["publicName"]?.string == field.name
+                }?.node.id
+                let path = nodeID.map { basePath + [.node($0)] } ?? basePath
+                let address = describeAddress(path)
+                issues.insert(WorkflowIssue(
+                    "缺少必填流程参数；地址 \(address)。",
+                    nodeID: nodeID,
+                    port: field.name
+                ).localizedDescription)
+                continue
+            }
+            do {
+                try value.validate(as: field.type)
+            } catch {
+                issues.insert(error.localizedDescription)
+            }
+        }
+        return issues
+    }
+
+    private func describeAddress(_ path: [WorkflowAddressComponent]) -> String {
+        let description = path.map { component -> String in
+            switch component {
+            case .node(let id): return "node:\(id.uuidString)"
+            case .branch(let selected): return "branch:\(selected ? "then" : "otherwise")"
+            case .item(let id): return "item:\(id)"
+            case .iteration(let value): return "iteration:\(value)"
+            case .tool(let reference): return "tool:\(reference.id.uuidString)@\(reference.version)"
+            }
+        }.joined(separator: "/")
+        return description.isEmpty
+            ? checkpoint.runID.uuidString
+            : checkpoint.runID.uuidString + "/" + description
     }
 
     private func validateAsset(_ reference: WorkflowAssetReference) throws {

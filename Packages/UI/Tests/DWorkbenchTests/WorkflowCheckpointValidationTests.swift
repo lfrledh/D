@@ -111,6 +111,253 @@ struct WorkflowCheckpointValidationTests {
         try fixture.validateEverySnapshot(humanRun, expected: humanPlan)
     }
 
+    @Test func validatesExecutorFailuresBeforeAControlChildStarts() async throws {
+        let fixture = try Fixture()
+
+        let yes = try fixture.outputGraph(title: "yes", outputName: "output")
+        let no = try fixture.outputGraph(title: "no", outputName: "output")
+        var branchNode = try fixture.node("d.control.branch")
+        branchNode.control = .branch(
+            predicate: .init(comparison: .equals, value: .text("text-only")),
+            then: yes,
+            otherwise: no
+        )
+        let branchPlan = try fixture.compiler.compile(.init(nodes: [branchNode]))
+        var branchSaved: [WorkflowPlanCheckpoint] = []
+        var branchCallCount = 0
+        let branchExecutor = WorkflowPlanExecutor(registry: fixture.registry, executeCall: { _ in
+            branchCallCount += 1
+            return .outputs(["output": .data(.number(0, unit: nil))])
+        }, save: { branchSaved.append($0) })
+        var branchInitial = WorkflowPlanCheckpoint(plan: branchPlan)
+        branchInitial.externalInputs[branchNode.id] = ["input": .data(.number(1, unit: nil))]
+        do {
+            _ = try await branchExecutor.execute(branchInitial)
+            Issue.record("Expected the incompatible Branch predicate to fail")
+        } catch is WorkflowIssue {}
+        let branchFailed = try #require(branchExecutor.checkpoint)
+        #expect(branchFailed.state == .failed)
+        #expect(branchCallCount == 0)
+        for checkpoint in branchSaved + [branchFailed] {
+            try WorkflowCheckpointValidation.validate(
+                checkpoint,
+                expected: branchPlan,
+                registry: fixture.registry
+            )
+        }
+
+        var requiredInput = try fixture.node("d.value.input")
+        requiredInput.parameters["publicName"] = .text("requiredExtra")
+        requiredInput.dataConfiguration = .init(value: .number(0, unit: nil))
+        var body = WorkflowGraph(nodes: [requiredInput])
+        body.interface = .init(
+            inputs: [.init("requiredExtra", .number(unit: nil))],
+            outputs: [
+                .init(name: "output", nodeID: requiredInput.id, schema: .number(unit: nil)),
+            ]
+        )
+        var mapNode = try fixture.node("d.control.map")
+        mapNode.control = .map(body: body, continueOnFailure: true)
+        let mapPlan = try fixture.compiler.compile(.init(nodes: [mapNode]))
+        let mapInput = WorkflowDatum.list(
+            element: .text,
+            items: [.init(id: "missing-extra", value: .text("item"))]
+        )
+        let mapRun = try await fixture.executeCapturing(
+            mapPlan,
+            externalInputs: [mapNode.id: ["input": .data(mapInput)]]
+        )
+        try fixture.validateEverySnapshot(mapRun, expected: mapPlan)
+        #expect(mapRun.final.state == .completed)
+        #expect(mapRun.final.records.allSatisfy { record in
+            !record.address.path.contains { component in
+                if case .item = component { return true }
+                return false
+            }
+        })
+        var forgedMapFailure = mapRun.final
+        let mapRecordIndex = try #require(forgedMapFailure.records.firstIndex {
+            $0.address.path == [.node(mapNode.id)]
+        })
+        let storedMapOutput = try #require(
+            forgedMapFailure.records[mapRecordIndex].step.outputs["output"]
+        )
+        guard case .data(.list(let element, var items)) = storedMapOutput else {
+            throw FixtureFailure.missingInput
+        }
+        let storedResult = try #require(items.first?.value)
+        guard case .result(var failedResult) = storedResult else {
+            throw FixtureFailure.missingInput
+        }
+        failedResult.issues = ["forged argument failure"]
+        items[0].value = .result(failedResult)
+        let forgedMapOutput = WorkflowValue.data(.list(element: element, items: items))
+        forgedMapFailure.records[mapRecordIndex].step.outputs = ["output": forgedMapOutput]
+        forgedMapFailure.outputs = ["output": forgedMapOutput]
+        #expect(throws: WorkflowIssue.self) {
+            try WorkflowCheckpointValidation.validate(
+                forgedMapFailure,
+                expected: mapPlan,
+                registry: fixture.registry
+            )
+        }
+    }
+
+    @Test func validatesLoopPauseAndSaveFailureRecoverySnapshots() async throws {
+        let fixture = try Fixture()
+        let loopBody = try fixture.outputGraph(title: "recovering-loop", outputName: "state")
+        var loopNode = try fixture.node("d.control.loop")
+        loopNode.control = .loop(
+            body: loopBody,
+            stateSchema: .number(unit: nil),
+            maximumIterations: 5,
+            until: .init(comparison: .equals, value: .number(99, unit: nil))
+        )
+        let loopPlan = try fixture.compiler.compile(.init(nodes: [loopNode]))
+        var initial = WorkflowPlanCheckpoint(plan: loopPlan)
+        initial.externalInputs[loopNode.id] = ["input": .data(.number(0, unit: nil))]
+
+        var pauseSaved: [WorkflowPlanCheckpoint] = []
+        var pauseCalls = 0
+        var shouldPause = true
+        var pauseExecutor: WorkflowPlanExecutor!
+        pauseExecutor = WorkflowPlanExecutor(registry: fixture.registry, executeCall: { context in
+            let iteration = try #require(context.address?.path.compactMap { component -> Int? in
+                if case .iteration(let value) = component { return value }
+                return nil
+            }.last)
+            pauseCalls += 1
+            if shouldPause, iteration == 3 { pauseExecutor.requestPause() }
+            return .outputs(["output": .data(.number(Double(iteration), unit: nil))])
+        }, save: { pauseSaved.append($0) })
+        let paused = try await pauseExecutor.execute(initial)
+        #expect(paused.state == .paused)
+        #expect(pauseCalls == 3)
+        for checkpoint in pauseSaved + [paused] {
+            try WorkflowCheckpointValidation.validate(
+                checkpoint,
+                expected: loopPlan,
+                registry: fixture.registry
+            )
+        }
+        var initialProgress = paused
+        let initialLoopIndex = try #require(initialProgress.records.firstIndex {
+            $0.address.path == [.node(loopNode.id)]
+        })
+        initialProgress.records[initialLoopIndex].step.outputs = [
+            "output": .data(.number(0, unit: nil)),
+        ]
+        try WorkflowCheckpointValidation.validate(
+            initialProgress,
+            expected: loopPlan,
+            registry: fixture.registry
+        )
+        var forgedProgress = paused
+        let pausedLoopIndex = try #require(forgedProgress.records.firstIndex {
+            $0.address.path == [.node(loopNode.id)]
+        })
+        forgedProgress.records[pausedLoopIndex].step.outputs = [
+            "output": .data(.number(77, unit: nil)),
+        ]
+        #expect(throws: WorkflowIssue.self) {
+            try WorkflowCheckpointValidation.validate(
+                forgedProgress,
+                expected: loopPlan,
+                registry: fixture.registry
+            )
+        }
+
+        shouldPause = false
+        let pauseSaveBoundary = pauseSaved.count
+        let resumed = try await pauseExecutor.execute(paused)
+        #expect(resumed.state == .completed)
+        #expect(pauseCalls == 5)
+        let pauseResumeCallbacks = Array(pauseSaved.dropFirst(pauseSaveBoundary))
+        #expect(pauseResumeCallbacks.contains { checkpoint in
+            let hasLaterRecord = checkpoint.records.contains { record in
+                record.address.path.contains(.iteration(3))
+            }
+            let root = checkpoint.records.first { $0.address.path == [.node(loopNode.id)] }
+            return hasLaterRecord &&
+                root?.step.outputs["output"] == WorkflowValue.data(.number(1, unit: nil))
+        })
+        for checkpoint in pauseResumeCallbacks + [resumed] {
+            try WorkflowCheckpointValidation.validate(
+                checkpoint,
+                expected: loopPlan,
+                registry: fixture.registry
+            )
+        }
+
+        var savingNode = loopNode
+        savingNode.control = .loop(
+            body: loopBody,
+            stateSchema: .number(unit: nil),
+            maximumIterations: 3,
+            until: .init(comparison: .equals, value: .number(99, unit: nil))
+        )
+        let savingPlan = try fixture.compiler.compile(.init(nodes: [savingNode]))
+        var savingInitial = WorkflowPlanCheckpoint(plan: savingPlan)
+        savingInitial.externalInputs[savingNode.id] = ["input": .data(.number(0, unit: nil))]
+        var savingCallbacks: [WorkflowPlanCheckpoint] = []
+        var savingCalls = 0
+        var failNextThirdStateSave = true
+        let savingExecutor = WorkflowPlanExecutor(registry: fixture.registry, executeCall: { context in
+            let iteration = try #require(context.address?.path.compactMap { component -> Int? in
+                if case .iteration(let value) = component { return value }
+                return nil
+            }.last)
+            savingCalls += 1
+            return .outputs(["output": .data(.number(Double(iteration), unit: nil))])
+        }, save: { checkpoint in
+            savingCallbacks.append(checkpoint)
+            let root = checkpoint.records.first {
+                $0.address.path == [.node(savingNode.id)]
+            }
+            if failNextThirdStateSave,
+               root?.step.status == .running,
+               root?.step.outputs["output"] == WorkflowValue.data(.number(3, unit: nil)) {
+                failNextThirdStateSave = false
+                throw WorkflowSaveFailure(reason: "fixture Loop progress save failure")
+            }
+        })
+        do {
+            _ = try await savingExecutor.execute(savingInitial)
+            Issue.record("Expected the Loop progress save to fail")
+        } catch is WorkflowSaveFailure {}
+        let saving = try #require(savingExecutor.checkpoint)
+        #expect(saving.state == .saving)
+        #expect(savingCalls == 3)
+        for checkpoint in savingCallbacks + [saving] {
+            try WorkflowCheckpointValidation.validate(
+                checkpoint,
+                expected: savingPlan,
+                registry: fixture.registry
+            )
+        }
+
+        let savingBoundary = savingCallbacks.count
+        let savedResume = try await savingExecutor.execute(saving)
+        #expect(savedResume.state == .completed)
+        #expect(savingCalls == 3)
+        let savingResumeCallbacks = Array(savingCallbacks.dropFirst(savingBoundary))
+        #expect(savingResumeCallbacks.contains { checkpoint in
+            let hasLaterRecord = checkpoint.records.contains { record in
+                record.address.path.contains(.iteration(3))
+            }
+            let root = checkpoint.records.first { $0.address.path == [.node(savingNode.id)] }
+            return hasLaterRecord &&
+                root?.step.outputs["output"] == WorkflowValue.data(.number(1, unit: nil))
+        })
+        for checkpoint in savingResumeCallbacks + [savedResume] {
+            try WorkflowCheckpointValidation.validate(
+                checkpoint,
+                expected: savingPlan,
+                registry: fixture.registry
+            )
+        }
+    }
+
     @Test func rejectsIdentityRecordAndBoundaryMutations() async throws {
         let fixture = try Fixture()
         let source = try fixture.node("fixture.source")
@@ -370,10 +617,11 @@ struct WorkflowCheckpointValidationTests {
         let fixture = try Fixture()
         var input = try fixture.node("d.value.input")
         input.parameters["publicName"] = .text("value")
-        input.dataConfiguration = .init(value: .text("template fallback"))
+        input.dataConfiguration = .init(value: .number(1, unit: nil))
         var graph = WorkflowGraph(nodes: [input])
         graph.interface = .init(
-            inputs: [.init("value", .number(unit: nil))]
+            inputs: [.init("value", .number(unit: nil))],
+            outputs: [.init(name: "output", nodeID: input.id, schema: .number(unit: nil))]
         )
         let plan = try fixture.compiler.compile(graph)
         let checkpoint = try await fixture.execute(plan, arguments: ["value": .number(9, unit: nil)])
@@ -733,7 +981,7 @@ struct WorkflowCheckpointValidationTests {
                     if case .item(let value) = component { return value }
                     return nil
                 }.last
-                if itemID == failingItemID { throw FixtureFailure.mapItem }
+                if let failingItemID, itemID == failingItemID { throw FixtureFailure.mapItem }
                 let iteration = context.address?.path.compactMap { component -> Int? in
                     if case .iteration(let value) = component { return value }
                     return nil
