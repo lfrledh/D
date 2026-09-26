@@ -649,6 +649,14 @@ public final class ProjectSession {
     }
 
     private func relocateOpenProject(_ previousStore: ProjectStore, lease: LocationAccess.Lease) async {
+        // Workflow services retain the Store/runtime that owns their saved and pending
+        // results. Replacing only the audio controller would leave a usable-looking
+        // workflow attached to closed file descriptors and an obsolete runtime.
+        guard workflow == nil, workflowCapture == nil else {
+            await access.release(lease)
+            errorMessage = "流程工作台仍持有当前项目。请先将项目移回原位置，完成录音绑定并保存、关闭项目，再移动后重新打开；现有图稿与原声均保留。"
+            return
+        }
         guard !isRegisteringTextModel, !isRegisteringAudioModel, !isRegisteringVideoModel, text?.hasPendingCandidate != true,
               await audio?.prepareForNavigation() != false, await drainForClose() else {
             audio?.resumeAdmissions()

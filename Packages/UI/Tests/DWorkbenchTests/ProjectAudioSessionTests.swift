@@ -172,6 +172,40 @@ struct ProjectAudioSessionTests {
         #expect(await subject.requestClose())
     }
 
+    @Test func relocationPreservesWorkflowOwnerUntilExplicitClose() async throws {
+        let f = try fixture("WorkflowRelocation"); defer { cleanup(f) }
+        let factory = SessionAudioFactory(), subject = session(f, factory: factory, recording: true)
+        await subject.createProject(at: f.project); await subject.openWorkflow()
+        let controller = try #require(subject.workflow), oldAudio = try #require(subject.audio)
+        controller.addExample("file")
+        let node = try #require(controller.graph?.nodes.first { $0.operationID == "d.asset.reference" })
+        await subject.startWorkflowRecording(nodeID: node.id, controller: controller)
+        let device = try #require(factory.recordings.last)
+        device.finishFromDevice()
+        try await waitUntil { !oldAudio.isBusy }
+        let graph = controller.graph, manifest = try #require(subject.manifest)
+        let moved = f.root.appendingPathComponent("Moved workflow.dproject")
+        try FileManager.default.moveItem(at: f.project, to: moved)
+        await subject.openProject(at: moved)
+        #expect(subject.workflow === controller && subject.audio === oldAudio)
+        #expect(subject.workflowRecordingNodeID == node.id)
+        #expect(controller.graph == graph && subject.manifest == manifest)
+        #expect(subject.errorMessage?.contains("移回原位置") == true)
+        // Follow the documented recovery in this private fixture; no asset is discarded.
+        try FileManager.default.moveItem(at: moved, to: f.project)
+        await subject.finishWorkflowRecording()
+        #expect(subject.workflowRecordingNodeID == nil)
+        #expect(controller.graph?.nodes.first { $0.id == node.id }?.assetReference != nil)
+        await controller.save()
+        #expect(await subject.requestClose())
+        try FileManager.default.moveItem(at: f.project, to: moved)
+        await subject.openProject(at: moved); await subject.openWorkflow()
+        #expect(subject.workflow !== controller && subject.audio !== oldAudio)
+        #expect(subject.manifest?.assets == manifest.assets)
+        #expect(subject.workflow?.graph?.nodes.first { $0.id == node.id }?.assetReference != nil)
+        #expect(await subject.requestClose())
+    }
+
     @Test func workflowCaptureRefusesOtherRecorderAndCancelsOwnPermissionWait() async throws {
         let f = try fixture("WorkflowCaptureCancel"); defer { cleanup(f) }
         let factory = SessionAudioFactory(), subject = session(f, factory: factory, recording: true)
