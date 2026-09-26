@@ -2,7 +2,7 @@ import Foundation
 
 /// HUM1: original media and frame-based editing data, independent of inference and views.
 public enum AudioContainer: String, Codable, Sendable { case wav, caf }
-public enum AudioOrigin: String, Codable, Sendable { case importedFile, microphone, modelGenerated }
+public enum AudioOrigin: String, Codable, Sendable { case importedFile, microphone, modelGenerated, programGenerated }
 public enum AudioInspectionPolicy: Sendable { case original, generated }
 public enum AudioLimits {
     public static let maximumBytes = 64 * 1024 * 1024

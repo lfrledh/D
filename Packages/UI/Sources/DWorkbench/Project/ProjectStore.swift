@@ -2534,7 +2534,13 @@ private enum ProjectFiles {
     static func inspectionPolicy(for asset: ProjectAsset,
                                  jobs: [ProjectJob]) throws -> AudioInspectionPolicy {
         guard let audio = asset.metadata.audio else { throw ProjectStoreError.missingAsset }
+        if asset.relativePath.hasPrefix("WorkflowAssets/") {
+            guard asset.jobID == nil, let format = WorkflowMediaFormat.descriptor(asset.mediaType), format.kind == .audio,
+                  asset.relativePath == "WorkflowAssets/\(asset.id.uuidString)/content.\(format.suffix)" else { throw ProjectStoreError.missingAsset }
+            return asset.role == .original ? .original : .generated
+        }
         switch audio.origin {
+        case .programGenerated: throw ProjectStoreError.invalidProject("程序音频必须属于有来源记录的流程资产。")
         case .importedFile, .microphone:
             guard asset.role == .original, asset.jobID == nil else {
                 throw ProjectStoreError.invalidProject("原声音频登记关系无效。")
@@ -2752,10 +2758,34 @@ private enum ProjectFiles {
             if asset.relativePath.hasPrefix("WorkflowAssets/") {
                 guard [16, 17].contains(value.schemaVersion), value.workflowSnapshot != nil,
                       asset.jobID == nil, asset.role == .original || asset.role == .result,
-                      let suffix = ["text/plain": "txt", "image/png": "png", "image/jpeg": "jpg"][asset.mediaType],
-                      asset.relativePath == "WorkflowAssets/\(asset.id.uuidString)/content.\(suffix)",
-                      asset.metadata.audio == nil, asset.metadata.video == nil, asset.metadata.pitch == nil else {
+                      let format = WorkflowMediaFormat.descriptor(asset.mediaType),
+                      asset.relativePath == "WorkflowAssets/\(asset.id.uuidString)/content.\(format.suffix)",
+                      value.schemaVersion >= (format.kind == .text || format.kind == .image ? 16 : 17) else {
                     throw ProjectStoreError.invalidProject("流程资产的路径或类型无效。")
+                }
+                if format.kind == .audio {
+                    guard let audio = asset.metadata.audio, asset.metadata.video == nil, asset.metadata.pitch == nil,
+                          asset.metadata.width == nil, asset.metadata.height == nil,
+                          asset.metadata.bitDepth == nil, asset.metadata.colorSpace == nil,
+                          audioMediaType(audio.format.container) == asset.mediaType,
+                          PitchSourceIdentity.isDigest(audio.contentSHA256),
+                          (asset.role == .original ? audio.origin == .importedFile : [.modelGenerated, .programGenerated].contains(audio.origin)) else {
+                        throw ProjectStoreError.invalidProject("流程音频的来源或格式不一致。")
+                    }
+                    try validateAudioFormat(audio.format, policy: asset.role == .original ? .original : .generated)
+                } else if format.kind == .video {
+                    guard let video = asset.metadata.video, video.width == asset.metadata.width,
+                          video.height == asset.metadata.height, video.width > 0, video.height > 0,
+                          video.frameCount > 0, video.frameRate.numerator > 0, video.frameRate.denominator > 0,
+                          video.codec == "h264", !video.hasAudio, video.byteCount > 0,
+                          video.byteCount <= format.maximumBytes, PitchSourceIdentity.isDigest(video.contentSHA256),
+                          asset.metadata.audio == nil, asset.metadata.pitch == nil else {
+                        throw ProjectStoreError.invalidProject("流程视频的格式不一致。")
+                    }
+                } else {
+                    guard asset.metadata.audio == nil, asset.metadata.video == nil, asset.metadata.pitch == nil else {
+                        throw ProjectStoreError.invalidProject("流程媒体不得携带另一类型的元数据。")
+                    }
                 }
             } else if asset.mediaType == PitchAnalysisResult.mediaType || asset.metadata.pitch != nil {
                 guard value.schemaVersion >= 12, asset.mediaType == PitchAnalysisResult.mediaType,
@@ -2793,6 +2823,7 @@ private enum ProjectFiles {
                     throw ProjectStoreError.invalidProject("音频作品 SHA-256 元数据无效。")
                 }
                 switch audio.origin {
+                case .programGenerated: throw ProjectStoreError.invalidProject("程序音频不得伪装为旧任务或录音。")
                 case .importedFile, .microphone:
                     let expectedExtension = audio.format.container == .wav ? "wav" : "caf"
                     guard asset.jobID == nil, asset.role == .original,
@@ -3042,10 +3073,9 @@ extension ProjectStore {
         let known = Dictionary(uniqueKeysWithValues: assets.map { ($0.id, $0) })
         for record in archive.assets {
             let ref = record.reference
-            guard ref.projectID == manifest.id, ref.kind == .text || ref.kind == .image,
+            guard ref.projectID == manifest.id, let format = WorkflowMediaFormat.descriptor(known[ref.assetID]?.mediaType ?? ""), ref.kind == format.kind,
                   PitchSourceIdentity.isDigest(ref.sha256), let asset = known[ref.assetID],
-                  (ref.kind == .text && asset.mediaType == "text/plain") ||
-                  (ref.kind == .image && ["image/png", "image/jpeg"].contains(asset.mediaType)) else {
+                  asset.mediaType == known[ref.assetID]?.mediaType else {
                 throw WorkflowIssue("流程资产身份或媒体类型不合法。")
             }
         }
@@ -3115,7 +3145,10 @@ extension ProjectStore {
     func publishWorkflowAsset(data: Data, mediaType: String, metadata: MediaMetadata, name: String,
                               parents: [WorkflowAssetReference], operationID: String, stepID: UUID?,
                               request: InferenceRequest?, details: [String: String], assetID: UUID,
-                              checkpoint: (@Sendable (WorkflowStoreCheckpoint) throws -> Void)?) throws -> WorkflowPublishedAsset {
+                              checkpoint: (@Sendable (WorkflowStoreCheckpoint) throws -> Void)?,
+                              verifiedVideo: VideoAssetMetadata? = nil) throws -> WorkflowPublishedAsset {
+        try checkLocation()
+        var metadata = metadata
         var archive = try editableWorkflow()
         let hash = Self.workflowHash(data)
         if let record = archive.assets.first(where: { $0.reference.assetID == assetID }),
@@ -3126,11 +3159,11 @@ extension ProjectStore {
             return .init(record: record, asset: asset)
         }
         guard !manifest.assets.contains(where: { $0.id == assetID }), !name.isEmpty,
-              let suffix = ["text/plain": "txt", "image/png": "png", "image/jpeg": "jpg"][mediaType],
-              data.count <= 64 * 1_024 * 1_024 else { throw WorkflowIssue("发布内容类型、大小或身份不合法。") }
+              let format = WorkflowMediaFormat.descriptor(mediaType),
+              data.count <= format.maximumBytes else { throw WorkflowIssue("发布内容类型、大小或身份不合法。") }
         if mediaType == "text/plain" {
             guard data.count <= 1_048_576, String(data: data, encoding: .utf8) != nil else { throw WorkflowIssue("文字必须为不超过 1 MiB 的 UTF-8。") }
-        } else {
+        } else if format.kind == .image {
             guard let source = CGImageSourceCreateWithData(data as CFData, nil), CGImageSourceGetCount(source) == 1,
                   CGImageSourceGetStatus(source) == .statusComplete,
                   (CGImageSourceGetType(source) as String?) == (mediaType == "image/png" ? "public.png" : "public.jpeg"),
@@ -3141,9 +3174,41 @@ extension ProjectStore {
                   metadata.width == width, metadata.height == height,
                   CGImageSourceCreateImageAtIndex(source, 0, nil) != nil else { throw WorkflowIssue("图片内容与声明不符或无法完整解码。") }
         }
+        if format.kind == .audio {
+            let url = try stageWorkflowMedia(data, assetID: assetID, suffix: format.suffix, limit: format.maximumBytes)
+            let original = operationID == "d.asset.import"
+            let inspection = try AudioMediaInspector.inspect(at: url, policy: original ? .original : .generated)
+            guard inspection.contentSHA256 == hash,
+                  ProjectFiles.audioMediaType(inspection.format.container) == mediaType else {
+                throw WorkflowIssue("音频内容或容器与冻结输入不一致。")
+            }
+            let origin: AudioOrigin
+            if original { origin = .importedFile }
+            else if let request, case .audio(let audio) = request.input {
+                try ProjectFiles.validateCurrentAudioProfile(audio)
+                guard inspection.format.container == .wav,
+                      inspection.format.sampleRate == Double(audio.outputSampleRate),
+                      inspection.format.channelCount == 2, inspection.format.floatingPoint,
+                      inspection.format.bitDepth == 32,
+                      inspection.format.frameCount == (try ProjectFiles.expectedAudioFrames(audio)) else {
+                    throw WorkflowIssue("音频产物不符合实际请求的采样率、声道或时长。")
+                }
+                origin = .modelGenerated
+            } else { origin = .programGenerated }
+            metadata = .init(audio: .init(format: inspection.format, contentSHA256: hash, origin: origin))
+        } else if format.kind == .video {
+            guard let verifiedVideo, verifiedVideo.contentSHA256 == hash,
+                  verifiedVideo.byteCount == data.count else { throw WorkflowIssue("视频必须先经过完整媒体检查。") }
+            metadata = .init(width: verifiedVideo.width, height: verifiedVideo.height, video: verifiedVideo)
+        } else if [.notes, .chords, .tempo, .pitch].contains(format.kind) {
+            let embeddedParents = try WorkflowMediaFormat.validateStructure(data, mediaType: mediaType)
+            guard Set(embeddedParents).isSubset(of: Set(parents)) else { throw WorkflowIssue("结构数据来源必须保留在资产来源关系中。") }
+            metadata = .init()
+        }
         for parent in parents { _ = try workflowData(parent) }
+        let suffix = format.suffix
         let ref = WorkflowAssetReference(projectID: manifest.id, assetID: assetID,
-                                         kind: mediaType == "text/plain" ? .text : .image, sha256: hash)
+                                         kind: format.kind, sha256: hash)
         var media = metadata
         if mediaType == "image/png" { media.imageContentSHA256 = hash }
         else { media.imageContentSHA256 = nil }
@@ -3151,15 +3216,26 @@ extension ProjectStore {
                                  mediaType: mediaType, role: operationID == "d.asset.import" ? .original : .result, metadata: media, name: name)
         let record = WorkflowAssetRecord(reference: ref, parents: parents, operationID: operationID,
                                           stepID: stepID, request: request, metadata: details)
+        _ = try stageWorkflowMedia(data, assetID: assetID, suffix: suffix, limit: format.maximumBytes)
+        try checkpoint?(.assetDurable)
+        archive.assets.append(record); archive.revision = UUID()
+        try commitWorkflow(archive, assets: manifest.assets + [asset], checkpoint: checkpoint)
+        return .init(record: record, asset: asset)
+    }
+
+    /// Stage only a task-owned immutable asset. Failed validation leaves an unregistered file,
+    /// never a successful asset record; a retry must match the exact bytes.
+    private func stageWorkflowMedia(_ data: Data, assetID: UUID, suffix: String, limit: Int) throws -> URL {
+        try checkLocation()
+        guard data.count <= limit else { throw WorkflowIssue("媒体超过此格式的读取预算。") }
         let folder = try ProjectFiles.openOrCreateDirectory("WorkflowAssets", in: rootFD)
         defer { Darwin.close(folder) }
         let directory = try ProjectFiles.openOrCreateDirectory(assetID.uuidString, in: folder)
         defer { Darwin.close(directory) }
         let filename = "content.\(suffix)"
-        var statInfo = stat()
-        if fstatat(directory, filename, &statInfo, AT_SYMLINK_NOFOLLOW) == 0 {
-            // Retry publication after manifest failure, never overwrite an unrelated orphan.
-            guard try ProjectFiles.read(relative: filename, in: directory, limit: 64 * 1_024 * 1_024) == data else {
+        var info = stat()
+        if fstatat(directory, filename, &info, AT_SYMLINK_NOFOLLOW) == 0 {
+            guard try ProjectFiles.read(relative: filename, in: directory, limit: limit) == data else {
                 throw WorkflowIssue("已有未登记资产内容不同，保留原件并停止。")
             }
         } else {
@@ -3168,17 +3244,34 @@ extension ProjectStore {
                 try data.withUnsafeBytes { try ProjectFiles.writeAll($0, to: fd) }
             }
         }
-        try checkpoint?(.assetDurable)
-        archive.assets.append(record); archive.revision = UUID()
-        try commitWorkflow(archive, assets: manifest.assets + [asset], checkpoint: checkpoint)
-        return .init(record: record, asset: asset)
+        return rootURL.appendingPathComponent("WorkflowAssets/\(assetID.uuidString)/" + filename)
+    }
+
+    /// The same full decoder verifies the generated media before the Store publishes it.
+    /// `expected` is a validation expectation, never a claim that an imported file was generated here.
+    public func publishWorkflowVideo(data: Data, expected: VideoRequest, name: String,
+                                     parents: [WorkflowAssetReference] = [], operationID: String,
+                                     stepID: UUID? = nil, request: InferenceRequest? = nil,
+                                     details: [String: String] = [:], assetID: UUID = UUID()) async throws -> WorkflowPublishedAsset {
+        let format = WorkflowMediaFormat.descriptor("video/mp4")!
+        let url = try stageWorkflowMedia(data, assetID: assetID, suffix: format.suffix, limit: format.maximumBytes)
+        let inspected = try await VideoMediaInspector.inspect(at: url, expected: expected)
+        try checkLocation()
+        guard inspected.contentSHA256 == Self.workflowHash(data) else { throw ProjectStoreError.externalModification }
+        if let request {
+            guard case .video(let actual) = request.input, actual == expected else { throw WorkflowIssue("视频请求与检查期望不一致。") }
+        }
+        return try publishWorkflowAsset(data: data, mediaType: "video/mp4", metadata: .init(), name: name,
+            parents: parents, operationID: operationID, stepID: stepID, request: request, details: details,
+            assetID: assetID, checkpoint: nil, verifiedVideo: inspected)
     }
 
     public func workflowData(_ ref: WorkflowAssetReference) throws -> Data {
         let archive = try editableWorkflow()
         guard ref.projectID == manifest.id, archive.assets.contains(where: { $0.reference == ref }),
               let asset = manifest.assets.first(where: { $0.id == ref.assetID }) else { throw WorkflowIssue("资产版本不属于当前项目。") }
-        let data = try ProjectFiles.read(relative: asset.relativePath, in: rootFD, limit: 64 * 1_024 * 1_024)
+        guard let format = WorkflowMediaFormat.descriptor(asset.mediaType), format.kind == ref.kind else { throw WorkflowIssue("媒体类型不匹配。") }
+        let data = try ProjectFiles.read(relative: asset.relativePath, in: rootFD, limit: format.maximumBytes)
         guard Self.workflowHash(data) == ref.sha256 else { throw WorkflowIssue("原始资产已改变；停止执行，未重新绑定新内容。") }
         return data
     }
@@ -3191,23 +3284,25 @@ extension ProjectStore {
             guard active.count < 128, !active.contains(assetID) else { throw WorkflowIssue("既有素材的来源循环或过深。") }
             if let record = archive.assets.first(where: { $0.reference.assetID == assetID }) {
                 if let asset = manifest.assets.first(where: { $0.id == assetID }) {
-                    let bytes = try ProjectFiles.read(relative: asset.relativePath, in: rootFD, limit: 64 * 1_024 * 1_024)
+                    guard let format = WorkflowMediaFormat.descriptor(asset.mediaType) else { throw WorkflowIssue("素材格式不支持。") }
+                    let bytes = try ProjectFiles.read(relative: asset.relativePath, in: rootFD, limit: format.maximumBytes)
                     guard Self.workflowHash(bytes) == record.reference.sha256 else { throw WorkflowIssue("已发布素材改变，拒绝重新绑定。") }
                 } else { throw WorkflowIssue("素材不存在。") }
                 return record.reference
             }
             guard let asset = manifest.assets.first(where: { $0.id == assetID }),
-                  ["text/plain", "image/png", "image/jpeg"].contains(asset.mediaType) else { throw WorkflowIssue("此资产不属于 M0 支持的文字或图像类型。") }
-            let data = try ProjectFiles.read(relative: asset.relativePath, in: rootFD, limit: 64 * 1_024 * 1_024)
+                  let format = WorkflowMediaFormat.descriptor(asset.mediaType) else { throw WorkflowIssue("此素材不属于当前已适配的格式。") }
+            let data = try ProjectFiles.read(relative: asset.relativePath, in: rootFD, limit: format.maximumBytes)
             let digest = Self.workflowHash(data)
-            if let expected = asset.metadata.imageContentSHA256, expected != digest {
+            if let expected = asset.metadata.imageContentSHA256 ?? asset.metadata.audio?.contentSHA256 ?? asset.metadata.video?.contentSHA256 ?? asset.metadata.pitch?.contentSHA256, expected != digest {
                 throw WorkflowIssue("已登记原件的摘要改变；未将新内容冒充原件。")
             }
             let ref = WorkflowAssetReference(projectID: manifest.id, assetID: assetID,
-                kind: asset.mediaType == "text/plain" ? .text : .image, sha256: digest)
+                kind: format.kind, sha256: digest)
             let job = manifest.jobs.first { $0.id == asset.jobID }
             active.insert(assetID)
-            let parents = try job?.imageReferenceAssetID.map { [try pin($0)] } ?? []
+            var parents = try job?.imageReferenceAssetID.map { [try pin($0)] } ?? []
+            if let sourceID = asset.metadata.pitch?.source.assetID { parents.append(try pin(sourceID)) }
             active.remove(assetID)
             archive.assets.append(.init(reference: ref, parents: parents, operationID: "d.asset.existing", request: job?.request,
                 metadata: ["source": "existing-project-asset", "priorDigest": asset.metadata.imageContentSHA256 == nil ? "unknown" : "verified"]))
@@ -3224,13 +3319,23 @@ extension ProjectStore {
         let parent = try ProjectFiles.openDirectory(source.deletingLastPathComponent())
         defer { Darwin.close(parent) }
         let data = try ProjectFiles.read(relative: source.lastPathComponent, in: parent, limit: 64 * 1_024 * 1_024)
+        if ["wav", "caf"].contains(source.pathExtension.lowercased()) {
+            return try publishWorkflowAsset(data: data, mediaType: source.pathExtension.lowercased() == "wav" ? "audio/wav" : "audio/x-caf",
+                name: source.lastPathComponent, operationID: "d.asset.import", details: ["origin": "explicit-file-snapshot"])
+        }
+        if source.lastPathComponent.hasSuffix(".notes.json") || source.lastPathComponent.hasSuffix(".chords.json") || source.lastPathComponent.hasSuffix(".tempo.json") {
+            let type = source.lastPathComponent.hasSuffix(".notes.json") ? WorkflowMediaFormat.noteType :
+                (source.lastPathComponent.hasSuffix(".chords.json") ? WorkflowMediaFormat.chordType : WorkflowMediaFormat.tempoType)
+            return try publishWorkflowAsset(data: data, mediaType: type, name: source.lastPathComponent,
+                operationID: "d.asset.import", details: ["origin": "explicit-file-snapshot"])
+        }
         if ["txt", "md"].contains(source.pathExtension.lowercased()) {
             return try publishWorkflowAsset(data: data, mediaType: "text/plain", name: source.lastPathComponent,
                                              operationID: "d.asset.import", details: ["origin": "explicit-file-snapshot"])
         }
         guard let image = CGImageSourceCreateWithData(data as CFData, nil),
               let type = CGImageSourceGetType(image) as String?, ["public.png", "public.jpeg"].contains(type),
-              let props = CGImageSourceCopyPropertiesAtIndex(image, 0, nil) as? [String: Any] else { throw WorkflowIssue("请选择 TXT、MD、PNG 或 JPEG。") }
+              let props = CGImageSourceCopyPropertiesAtIndex(image, 0, nil) as? [String: Any] else { throw WorkflowIssue("请选择当前支持的 TXT、MD、PNG、JPEG、PCM WAV/CAF 或音乐结构文件。") }
         let media = MediaMetadata(width: props[kCGImagePropertyPixelWidth as String] as? Int,
                                   height: props[kCGImagePropertyPixelHeight as String] as? Int,
                                   bitDepth: props[kCGImagePropertyDepth as String] as? Int,
@@ -3307,7 +3412,7 @@ extension ProjectStore {
         for (i, ref) in refs.enumerated() {
             let data = try workflowData(ref)
             let record = try item(ref, filename: nil)
-            guard let ext = ["text/plain":"txt", "image/png":"png", "image/jpeg":"jpg"][record.mediaType] else { throw WorkflowIssue("导出资产类型无效。") }
+            guard let ext = WorkflowMediaFormat.descriptor(record.mediaType)?.suffix else { throw WorkflowIssue("导出资产类型无效。") }
             let file = "\(i + 1).\(ext)"; files.append((file, data)); recipeItems.append(try item(ref, filename: file))
             try collect(ref, depth: 0)
         }
@@ -3326,7 +3431,7 @@ extension ProjectStore {
                 throw ProjectStoreError.alreadyExists(packageName)
             }
             for (filename, data) in files {
-                guard try ProjectFiles.read(relative: filename, in: existing, limit: 64 * 1_024 * 1_024) == data else {
+                guard try ProjectFiles.read(relative: filename, in: existing, limit: data.count) == data else {
                     throw WorkflowIssue("同名导出包内容改变，未覆盖。")
                 }
             }
@@ -3344,7 +3449,7 @@ extension ProjectStore {
             try ProjectFiles.publish(in: content, name: filename, replacing: false) { fd in
                 try data.withUnsafeBytes { try ProjectFiles.writeAll($0, to: fd) }
             }
-            guard try ProjectFiles.read(relative: filename, in: content, limit: 64 * 1_024 * 1_024) == data else { throw WorkflowIssue("导出回读不一致，未发布。") }
+            guard try ProjectFiles.read(relative: filename, in: content, limit: data.count) == data else { throw WorkflowIssue("导出回读不一致，未发布。") }
         }
         guard fsync(content) == 0 else { throw ProjectFiles.error() }
         guard renameatx_np(staging, "content", parent, packageName, UInt32(RENAME_EXCL)) == 0 else {
