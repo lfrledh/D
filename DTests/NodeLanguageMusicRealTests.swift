@@ -11,6 +11,73 @@ import Testing
 /// Automated decisions are test actions, not a new user consent or listening verdict.
 @Suite(.serialized) @MainActor
 struct NodeLanguageMusicRealTests {
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["D_NODE_LANGUAGE_REAL_CASE"] == "access"), .timeLimit(.minutes(1)))
+    func freshPitchAccessParentAndChild() throws {
+        let fm = FileManager.default
+        let support = try fm.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
+        let root = support.appendingPathComponent("D/NodeLanguageAccess/" + UUID().uuidString)
+        try fm.createDirectory(at: root, withIntermediateDirectories: true)
+        let engine = try #require(try BundledAudioEngine.resolve(resourceDirectory: #require(Bundle.main.resourceURL), family: .pitch))
+        let directories = [engine.vendorDirectory, root.appendingPathComponent("Input"), root.appendingPathComponent("Run")]
+        for directory in directories.dropFirst() { try fm.createDirectory(at: directory, withIntermediateDirectories: false) }
+        var grants: [[String: String]] = []
+        var parent: [[String: Any]] = []
+        for (index, directory) in directories.enumerated() {
+            let bookmark = try directory.bookmarkData(options: [], includingResourceValuesForKeys: nil, relativeTo: nil)
+            var stale = false
+            let resolved = try URL(resolvingBookmarkData: bookmark, options: .init(rawValue: (1 << 8) | (1 << 9) | (1 << 15)), relativeTo: nil, bookmarkDataIsStale: &stale)
+            parent.append(["grantIndex": index, "stale": stale, "samePath": resolved.path == directory.path])
+            grants.append(["path": directory.path, "bookmark": bookmark.base64EncodedString()])
+        }
+        let manifest = root.appendingPathComponent("private-grants.json")
+        try fm.createDirectory(at: root.appendingPathComponent("tmp"), withIntermediateDirectories: false)
+        try #require(fm.createFile(atPath: manifest.path, contents: JSONSerialization.data(withJSONObject: grants), attributes: [.posixPermissions: 0o600]))
+        defer { try? fm.removeItem(at: manifest) } // Only this test's ephemeral capabilities; reports contain no bookmark.
+        let probe = #"""
+        import sys,json,base64
+        from pathlib import Path
+        sys.path.insert(0,sys.argv[1])
+        import d_audio_access as a
+        result=[]
+        adapter=a._make_cf_adapter()
+        for index,g in enumerate(json.loads(Path(sys.argv[2]).read_text())):
+            url=None;started=False
+            try:
+                url,path=adapter.resolve(base64.b64decode(g['bookmark']))
+                started=adapter.start(url)
+                a._check_directory_readable(path)
+                result.append(dict(grantIndex=index,resolved=True,samePath=path==g['path'],started=started,readable=True))
+            except a.AudioAccessError as e:
+                reason='stale' if str(e)=='bookmark is stale' else 'access_error'
+                result.append(dict(grantIndex=index,resolved=False,reason=reason))
+            finally:
+                if url is not None:
+                    if started:adapter.stop(url)
+                    adapter.release_url(url)
+        print(json.dumps(result))
+        """#
+        let process = Process(), stdout = Pipe(), stderr = Pipe()
+        process.executableURL = engine.pythonExecutable
+        process.arguments = ["-B", "-c", probe, engine.providerScript.deletingLastPathComponent().path, manifest.path]
+        process.currentDirectoryURL = root
+        process.environment = ["PATH": "/usr/bin:/bin", "PYTHONDONTWRITEBYTECODE": "1", "PYTHONNOUSERSITE": "1", "TMPDIR": root.appendingPathComponent("tmp").path]
+        process.standardOutput = stdout; process.standardError = stderr
+        try process.run()
+        let timeout = DispatchWorkItem { if process.isRunning { process.terminate() } }
+        DispatchQueue.global().asyncAfter(deadline: .now() + 20, execute: timeout)
+        process.waitUntilExit(); timeout.cancel()
+        let bytes = stdout.fileHandleForReading.readDataToEndOfFile()
+        let child = try JSONSerialization.jsonObject(with: bytes)
+        let report = try JSONSerialization.data(withJSONObject: ["parent": parent, "child": child, "exit": process.terminationStatus], options: [.prettyPrinted, .sortedKeys])
+        try report.write(to: root.appendingPathComponent("result.json"), options: [.withoutOverwriting])
+        print("D_NODE_LANGUAGE_ACCESS_REPORT=\(root.appendingPathComponent("result.json").path)")
+        print(String(decoding: report, as: UTF8.self))
+        try #require(process.terminationStatus == 0)
+        try #require(parent.allSatisfy { ($0["stale"] as? Bool) == false && ($0["samePath"] as? Bool) == true })
+        let rows = try #require(child as? [[String: Any]])
+        try #require(rows.count == 3 && rows.allSatisfy { ($0["resolved"] as? Bool) == true && ($0["samePath"] as? Bool) == true && ($0["readable"] as? Bool) == true })
+    }
+
     @Test(.enabled(if: ProcessInfo.processInfo.environment["D_NODE_LANGUAGE_REAL_CASE"] == "music"), .timeLimit(.minutes(20)))
     func recordedMelodyAndTwoHarmonyVersionsReachRealConditionedMusic() async throws {
         let env = ProcessInfo.processInfo.environment
