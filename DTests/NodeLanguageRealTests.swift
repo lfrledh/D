@@ -108,7 +108,8 @@ struct NodeLanguageRealTests {
             try #require(finished.plan == previous.plan)
             try #require(Set(finished.records.map(\.id)).isDisjoint(with: Set(previous.records.map(\.id))))
             for call in finished.records {
-                try #require(!(call.step.outputs["output"]?.datum?.text ?? "").isEmpty)
+                let generated = (call.step.outputs["output"]?.datum?.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                try #require(!generated.isEmpty)
             }
             try #require(await runtime.status().activeRunID == nil)
             try #require(await runtime.status().queuedRunIDs.isEmpty)
