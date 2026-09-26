@@ -200,6 +200,17 @@ struct WorkflowLocalizationTests {
         mountedEditor.setSelectedRange(selectedRange)
         #expect(mountedEditor.selectedRange() == selectedRange)
 
+        // Public offscreen accessibility exposes menu labels reliably; SwiftUI-drawn
+        // button/text layers need foreground GUI verification (H26).
+        var chineseChrome: Set<String> = []
+        for _ in 0..<40 {
+            host.layoutSubtreeIfNeeded()
+            chineseChrome = renderedStrings(host)
+            if chineseChrome.contains("添加样例") && chineseChrome.contains("模型") { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(chineseChrome.contains("添加样例") && chineseChrome.contains("模型"))
+
         let graphsBefore = controller.graphs
         let graphIDBefore = controller.selectedGraphID
         let nodeIDBefore = controller.selectedNodeID
@@ -210,7 +221,7 @@ struct WorkflowLocalizationTests {
         for _ in 0..<40 {
             host.layoutSubtreeIfNeeded()
             chrome = renderedStrings(host)
-            if chrome.contains(where: { $0.contains("Save") || $0.contains("Operations") }) { break }
+            if chrome.contains("Add Example") && chrome.contains("Models") { break }
             try await Task.sleep(for: .milliseconds(10))
         }
         let currentEditor = try #require(
@@ -225,7 +236,7 @@ struct WorkflowLocalizationTests {
         #expect(controller.graph?.nodes.first { $0.id == input.id }?.parameters["text"] == .text(draft))
         #expect(controller.runs.count == runCountBefore)
         print("BOUNDARY_RENDERED_CHROME=\(chrome.sorted())")
-        #expect(chrome.contains(where: { $0.contains("Save") || $0.contains("Operations") }))
+        #expect(chrome.contains("Add Example") && chrome.contains("Models"))
         #expect(commands == 0)
         #expect(await engine.calls == 0)
 
