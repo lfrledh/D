@@ -73,7 +73,9 @@ struct NodeLanguageMusicRealTests {
         process.waitUntilExit(); timeout.cancel()
         let bytes = stdout.fileHandleForReading.readDataToEndOfFile()
         let child = try JSONSerialization.jsonObject(with: bytes)
-        let report = try JSONSerialization.data(withJSONObject: ["parent": parent, "child": child, "exit": process.terminationStatus, "homeMode": homeMode], options: [.prettyPrinted, .sortedKeys])
+        let fixedHome = ProcessInfo.processInfo.environment["CFFIXED_USER_HOME"]
+        let report = try JSONSerialization.data(withJSONObject: ["parent": parent, "child": child, "exit": process.terminationStatus, "homeMode": homeMode,
+            "parentHasFixedHome": fixedHome != nil, "parentFixedHomeMatches": fixedHome == NSHomeDirectory()], options: [.prettyPrinted, .sortedKeys])
         try report.write(to: root.appendingPathComponent("result.json"), options: [.withoutOverwriting])
         print("D_NODE_LANGUAGE_ACCESS_REPORT=\(root.appendingPathComponent("result.json").path)")
         print(String(decoding: report, as: UTF8.self))
