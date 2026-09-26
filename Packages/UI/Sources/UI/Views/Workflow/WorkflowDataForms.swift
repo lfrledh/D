@@ -195,6 +195,42 @@ struct WorkflowStableNamedRows: Equatable {
 }
 
 enum WorkflowFormSupport {
+    /// Suggestions from the connected, declared data only. This does not execute
+    /// upstream nodes or turn labels/history into a validation schema.
+    static func connectedRecordFields(nodeID: UUID, graph: WorkflowGraph?, tools: [WorkflowToolDefinition]) -> [WorkflowRecordField] {
+        guard let graph else { return [] }
+        func inputSchema(_ id: UUID, visited: Set<UUID>) -> WorkflowDataSchema? {
+            let edges = graph.connections.filter { $0.targetNode == id && $0.targetPort == "input" }
+            guard edges.count == 1, let edge = edges.first else { return nil }
+            return outputSchema(edge.sourceNode, port: edge.sourcePort, visited: visited)
+        }
+        func outputSchema(_ id: UUID, port: String, visited: Set<UUID>) -> WorkflowDataSchema? {
+            guard visited.count < 64, !visited.contains(id), let source = graph.nodes.first(where: { $0.id == id }) else { return nil }
+            let next = visited.union([id])
+            if case .invoke(let reference) = source.control {
+                guard let tool = tools.first(where: { $0.id == reference.id && $0.version == reference.version }),
+                      (try? WorkflowPlanCompiler.digest(tool)) == reference.digest else { return nil }
+                return tool.graph.interface?.outputs.first(where: { $0.name == port })?.schema
+            }
+            guard port == "output" else { return nil }
+            switch source.operationID {
+            case "d.value.input":
+                if let name = source.parameters["publicName"]?.string, !name.isEmpty,
+                   let field = graph.interface?.inputs.first(where: { $0.name == name }) { return field.type }
+                return source.dataConfiguration?.value?.schema
+            case "d.value.record": return .record(source.dataConfiguration?.fields ?? [])
+            case "d.value.field", "d.control.human": return source.dataConfiguration?.schema
+            case "d.model.language": return source.parameters["outputMode"]?.string == "json" ? source.dataConfiguration?.schema : .text
+            case "d.value.return", "d.value.filter": return inputSchema(id, visited: next)
+            default: return nil
+            }
+        }
+        guard let schema = inputSchema(nodeID, visited: [nodeID]), (try? schema.validateDefinition()) != nil else { return [] }
+        if case .record(let fields) = schema { return fields }
+        if case .list(.record(let fields)) = schema { return fields }
+        return []
+    }
+
     static func isReadOnlyDepth(_ depth: Int) -> Bool { depth >= 8 }
 
     static func seed(for schema: WorkflowDataSchema) -> WorkflowDatum? {

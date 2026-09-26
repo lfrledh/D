@@ -5,6 +5,35 @@ import Testing
 
 @Suite @MainActor
 struct WorkflowDataFormsTests {
+    @Test func connectedFieldsFollowActualWiringAndPreserveLiteralNames() throws {
+        let registry = WorkflowRegistry.standard
+        var record = try #require(registry.operation("d.value.record")).definition.makeNode()
+        let fields = [WorkflowRecordField("音高.Hz", .number(unit: "Hz")), WorkflowRecordField("文本", .text)]
+        record.dataConfiguration = .init(fields: fields)
+        let field = try #require(registry.operation("d.value.field")).definition.makeNode()
+        var graph = WorkflowGraph(name: "menu source", nodes: [record, field], connections: [.init(sourceNode: record.id, targetNode: field.id)])
+        #expect(WorkflowFormSupport.connectedRecordFields(nodeID: field.id, graph: graph, tools: []) == fields)
+        graph.nodes[0].dataConfiguration?.fields = [.init("改名", .boolean)]
+        #expect(WorkflowFormSupport.connectedRecordFields(nodeID: field.id, graph: graph, tools: []).map(\.name) == ["改名"])
+        graph.connections = []
+        #expect(WorkflowFormSupport.connectedRecordFields(nodeID: field.id, graph: graph, tools: []).isEmpty)
+    }
+
+    @Test func connectedFieldsUseDeclaredModelSchemaWithoutRunningOrParsingLabels() throws {
+        let registry = WorkflowRegistry.standard
+        var language = try #require(registry.operation("d.model.language")).definition.makeNode()
+        language.parameters["outputMode"] = .text("json")
+        let fields = [WorkflowRecordField("title", .text)]
+        language.dataConfiguration = .init(schema: .record(fields))
+        let field = try #require(registry.operation("d.value.field")).definition.makeNode()
+        var graph = WorkflowGraph(name: "not installed", nodes: [language, field], connections: [.init(sourceNode: language.id, targetNode: field.id)])
+        #expect(WorkflowFormSupport.connectedRecordFields(nodeID: field.id, graph: graph, tools: []) == fields)
+        graph.nodes[0].parameters["outputMode"] = .text("text")
+        #expect(WorkflowFormSupport.connectedRecordFields(nodeID: field.id, graph: graph, tools: []).isEmpty)
+        graph.connections[0].sourcePort = "raw"
+        #expect(WorkflowFormSupport.connectedRecordFields(nodeID: field.id, graph: graph, tools: []).isEmpty)
+    }
+
     @Test
     func incompleteNumberPreservesTheLastValidDatum() {
         let original = WorkflowDatum.number(12.5, unit: "Hz")
