@@ -18,47 +18,15 @@ public enum VideoMediaInspector {
     /// Bounded import of the current silent, constant-rate, non-reordered H264 format.
     /// Probe values are expectations only; the existing full sample/decode pass proves them.
     public static func inspectImported(at url: URL, timeoutSeconds: Double = 60) async throws -> VideoAssetMetadata {
-        guard timeoutSeconds.isFinite, timeoutSeconds > 0 else { throw VideoInspectionError.invalid("检查期限无效") }
-        let opened = try VideoSafeFile.open(url, maximumBytes: 512 * 1_024 * 1_024)
-        defer { Darwin.close(opened.descriptor) }
-        try VideoSafeFile.validateMP4(descriptor: opened.descriptor, byteCount: opened.identity.size)
-        let asset = AVURLAsset(url: url, options: [AVURLAssetPreferPreciseDurationAndTimingKey: true])
-        let deadline = Task<Void, Never> {
-            do { try await Task.sleep(for: .seconds(timeoutSeconds)) } catch { return }
-            asset.cancelLoading()
-        }
-        defer { deadline.cancel(); asset.cancelLoading() }
-        let shape = try await withTaskCancellationHandler {
-            let tracks = try await asset.loadTracks(withMediaType: .video)
-            guard tracks.count == 1 else { throw VideoInspectionError.invalid("仅支持单视频轨") }
-            let track = tracks[0]
-            let descriptions = try await track.load(.formatDescriptions)
-            guard let description = descriptions.first else { throw VideoInspectionError.invalid("视频缺少格式声明") }
-            let dimensions = CMVideoFormatDescriptionGetDimensions(description)
-            let frame = try await track.load(.minFrameDuration)
-            let duration = try await asset.load(.duration)
-            guard frame.isNumeric, frame > .zero, frame.value <= Int32.max,
-                  duration.isNumeric, duration > .zero else { throw VideoInspectionError.invalid("需要明确恒定帧时钟") }
-            let count = duration.seconds / frame.seconds
-            guard count.isFinite, count > 0, count <= 7200, abs(count - count.rounded()) < 0.000001 else {
-                throw VideoInspectionError.limit("导入视频帧数必须有界且与时长一致")
-            }
-            let result = VideoMediaShape(width: Int(dimensions.width), height: Int(dimensions.height),
-                frameCount: Int(count.rounded()), frameRate: .init(numerator: frame.timescale, denominator: Int32(frame.value)))
-            try result.validateImportBudget()
-            return result
-        } onCancel: { asset.cancelLoading() }
-        try Task.checkCancellation()
-        try VideoSafeFile.verifyUnchanged(url, descriptor: opened.descriptor, initialIdentity: opened.identity, maximumBytes: 512 * 1_024 * 1_024)
-        return try await inspectShape(at: url, expected: shape, timeoutSeconds: timeoutSeconds)
+        try await inspectShape(at: url, expected: nil, timeoutSeconds: timeoutSeconds)
     }
 
-    private static func inspectShape(at url: URL, expected: VideoMediaShape,
+    private static func inspectShape(at url: URL, expected: VideoMediaShape?,
                                      timeoutSeconds: Double) async throws -> VideoAssetMetadata {
         guard timeoutSeconds.isFinite, timeoutSeconds > 0 else {
             throw VideoInspectionError.invalid("检查期限必须是正有限秒数")
         }
-        let maximumBytes = try readBudget(for: expected)
+        let maximumBytes = try expected.map { try readBudget(for: $0) } ?? (512 * 1_024 * 1_024)
         let controller = VideoInspectionCancellation(
             deadline: ContinuousClock.now.advanced(by: .seconds(timeoutSeconds))
         )
@@ -104,7 +72,7 @@ public enum VideoMediaInspector {
         return digest
     }
 
-    private static func inspectFile(at url: URL, expected: VideoMediaShape, maximumBytes: UInt64,
+    private static func inspectFile(at url: URL, expected requestedShape: VideoMediaShape?, maximumBytes: UInt64,
                                     controller: VideoInspectionCancellation) async throws -> VideoAssetMetadata {
         let opened = try VideoSafeFile.open(url, maximumBytes: maximumBytes)
         defer { Darwin.close(opened.descriptor) }
@@ -151,6 +119,28 @@ public enum VideoMediaInspector {
         guard !descriptions.isEmpty,
               descriptions.allSatisfy({ CMFormatDescriptionGetMediaSubType($0) == kCMVideoCodecType_H264 }) else {
             throw VideoInspectionError.invalid("视频轨必须只使用 H264 编码")
+        }
+        let expected: VideoMediaShape
+        if let requestedShape { expected = requestedShape }
+        else {
+            // Discover only from the same descriptor-backed asset and deadline used
+            // by the full decoder. No second URL open or unbounded probe is allowed.
+            try controller.check()
+            let frame = try await track.load(.minFrameDuration)
+            try controller.check()
+            let duration = try await asset.load(.duration)
+            try controller.check()
+            guard let description = descriptions.first,
+                  frame.isNumeric, frame > .zero, frame.value <= Int32.max,
+                  duration.isNumeric, duration > .zero else { throw VideoInspectionError.invalid("需要明确恒定帧时钟") }
+            let dimensions = CMVideoFormatDescriptionGetDimensions(description)
+            let count = duration.seconds / frame.seconds
+            guard count.isFinite, count > 0, count <= 7200, abs(count - count.rounded()) < 0.000001 else {
+                throw VideoInspectionError.limit("导入视频帧数必须有界且与时长一致")
+            }
+            expected = VideoMediaShape(width: Int(dimensions.width), height: Int(dimensions.height),
+                frameCount: Int(count.rounded()), frameRate: .init(numerator: frame.timescale, denominator: Int32(frame.value)))
+            try expected.validateImportBudget()
         }
         guard descriptions.allSatisfy({ description in
             let dimensions = CMVideoFormatDescriptionGetDimensions(description)

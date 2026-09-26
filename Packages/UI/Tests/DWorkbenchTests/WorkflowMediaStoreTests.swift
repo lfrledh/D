@@ -48,6 +48,30 @@ struct WorkflowMediaStoreTests {
         try await store.close()
     }
 
+    @Test func workflowPitchPreparationPinsImmutableAudioWithoutCreatingADraft() async throws {
+        let store = try await ProjectStore.create(at: location("pitch-input"), name: "pitch input")
+        let bytes = try tone(), graphID = UUID(), runID = UUID()
+        let original = try await store.publishWorkflowAsset(data: bytes, mediaType: "audio/wav", name: "原声",
+            operationID: "d.asset.import")
+        let before = await store.snapshot()
+        let request = try await store.prepareWorkflowPitchInput(original.record.reference, graphID: graphID,
+            runID: runID, range: .init(startFrame: 0, endFrame: 1_600))
+        #expect(request.source.documentID == graphID)
+        #expect(request.source.assetID == original.asset.id)
+        #expect(request.source.contentSHA256 == original.record.reference.sha256)
+        #expect(request.sampleCount == 1_600)
+        #expect(try Data(contentsOf: request.inputURL).count == 6_400)
+        #expect(try await store.workflowData(original.record.reference) == bytes)
+        #expect(await store.snapshot() == before)
+        do {
+            _ = try await store.prepareWorkflowPitchInput(original.record.reference, graphID: graphID, runID: UUID(),
+                range: .init(startFrame: 0, endFrame: 2_000))
+            Issue.record("Out-of-range pitch input accepted")
+        } catch {}
+        #expect(await store.snapshot() == before)
+        try await store.close()
+    }
+
     @Test func structuredNotesPreserveAndValidateSources() async throws {
         let store = try await ProjectStore.create(at: location("notes"), name: "notes")
         let original = try await store.publishWorkflowAsset(data: tone(), mediaType: "audio/wav", name: "原声", operationID: "d.asset.import")

@@ -396,6 +396,43 @@ public actor ProjectStore {
         return request
     }
 
+    /// Workflow analysis binds an immutable asset version, not a visible audio draft.
+    /// documentID carries the graph identity; revision zero denotes the frozen published source.
+    /// The complete UUID asset version remains in workflow input and parent records.
+    public func prepareWorkflowPitchInput(_ reference: WorkflowAssetReference, graphID: UUID,
+                                          runID: UUID, range: AudioFrameRange? = nil) throws -> PitchAnalysisRequest {
+        let (url, asset) = try workflowMedia(reference)
+        guard reference.kind == .audio, let audio = asset.metadata.audio else { throw WorkflowIssue("需要已发布的原声音频。") }
+        let inspection = try AudioMediaInspector.inspect(at: url)
+        try ProjectFiles.requireRegisteredAudio(inspection, matches: audio)
+        let selected = range ?? .init(startFrame: 0, endFrame: audio.format.frameCount)
+        let source = PitchSourceIdentity(assetID: reference.assetID, documentID: graphID, documentRevision: 0,
+            contentSHA256: reference.sha256, sampleRate: audio.format.sampleRate, frameCount: audio.format.frameCount,
+            startFrame: selected.startFrame, endFrame: selected.endFrame)
+        try source.validate()
+        let parent = try ProjectFiles.openOrCreateDirectory("PitchInputs", in: rootFD)
+        defer { Darwin.close(parent) }
+        let name = runID.uuidString
+        guard mkdirat(parent, name, 0o700) == 0 else { throw ProjectStoreError.alreadyExists("PitchInputs/" + name) }
+        let directory = try ProjectFiles.openRelativeDirectory(name, in: parent)
+        defer { Darwin.close(directory) }
+        let leaf = "source." + audio.format.container.rawValue
+        let original = try workflowData(reference)
+        try ProjectFiles.publish(in: directory, name: leaf, replacing: false) { fd in
+            try original.withUnsafeBytes { try ProjectFiles.writeAll($0, to: fd) }
+        }
+        let location = rootURL.appendingPathComponent("PitchInputs/" + name)
+        let data = try PitchInputPreparer.prepare(at: location.appendingPathComponent(leaf), source: source)
+        try ProjectFiles.publish(in: directory, name: "input.f32", replacing: false) { output in
+            try data.withUnsafeBytes { try ProjectFiles.writeAll($0, to: output) }
+        }
+        _ = try workflowData(reference)
+        let request = PitchAnalysisRequest(source: source, inputURL: location.appendingPathComponent("input.f32"),
+            inputSHA256: Self.workflowHash(data), sampleCount: data.count / 4)
+        try request.validate()
+        return request
+    }
+
     public func readPitchAnalysis(assetID: UUID) throws -> PitchAnalysisResult {
         guard let asset = manifest.assets.first(where: { $0.id == assetID }), let metadata = asset.metadata.pitch,
               let jobID = asset.jobID, let job = manifest.jobs.first(where: { $0.id == jobID }),
@@ -3290,6 +3327,12 @@ extension ProjectStore {
         return data
     }
 
+    public func workflowMedia(_ reference: WorkflowAssetReference) throws -> (URL, ProjectAsset) {
+        _ = try workflowData(reference)
+        guard let asset = manifest.assets.first(where: { $0.id == reference.assetID }) else { throw ProjectStoreError.missingAsset }
+        return (try assetURL(for: asset), asset)
+    }
+
     /// Pin an existing project asset, without copying it into a second asset system.
     public func pinWorkflowAsset(_ id: UUID) throws -> WorkflowAssetReference {
         var archive = try editableWorkflow()
@@ -3385,6 +3428,32 @@ extension ProjectStore {
         guard artifact.mediaType == "image/png" else { throw WorkflowIssue("后端媒体类型无效。") }
         let relative = try ProjectFiles.relativeArtifact(artifact.url, root: rootURL, jobID: runID)
         return try ProjectFiles.read(relative: relative, in: rootFD, limit: 64 * 1_024 * 1_024)
+    }
+
+    public func readWorkflowBackendMedia(_ artifact: ArtifactReference, request: InferenceRequest) throws -> Data {
+        try checkLocation()
+        let relative: String, limit: Int
+        switch request.input {
+        case .audio:
+            guard artifact.mediaType == "audio/wav" else { throw WorkflowIssue("音频后端输出格式不符。") }
+            relative = try ProjectFiles.relativeAudioArtifact(artifact.url, root: rootURL, jobID: request.id)
+            limit = AudioLimits.maximumGeneratedBytes
+        case .video:
+            guard artifact.mediaType == "video/mp4" else { throw WorkflowIssue("视频后端输出格式不符。") }
+            relative = try ProjectFiles.relativeVideoArtifact(artifact.url, root: rootURL, jobID: request.id)
+            limit = WorkflowMediaFormat.descriptor("video/mp4")!.maximumBytes
+        case .pitch(let pitch):
+            guard artifact.mediaType == PitchAnalysisResult.mediaType,
+                  artifact.url.standardizedFileURL == rootURL.appendingPathComponent("Tasks/\(request.id.uuidString)/pitch.json").standardizedFileURL else {
+                throw WorkflowIssue("音高后端输出位置不符。")
+            }
+            relative = "Tasks/\(request.id.uuidString)/pitch.json"; limit = PitchAnalysisResult.maximumJSONBytes
+            let data = try ProjectFiles.read(relative: relative, in: rootFD, limit: limit)
+            try Self.validatePitchResult(PitchResultFile.decode(data), request: pitch, runID: request.id)
+            return data
+        default: throw WorkflowIssue("此入口只读取音频、视频或音高的任务输出。")
+        }
+        return try ProjectFiles.read(relative: relative, in: rootFD, limit: limit)
     }
 
     /// A directory package atomically publishes media, a portable recipe and a receipt as one unit.
