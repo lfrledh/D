@@ -39,6 +39,70 @@
 
 证据在D-Development/AgentTrials/D-NODE-BOUNDARY-01/run-20260926T045011Z。不缓存到源树，重构建/真实图文/GUI串行独立输出。按影响执行UI包、模型绑定/codec/lang专属反例、现有M0实际图文回归、普通签名App语言与模型选择GUI；锁屏/本人动作进H清单，不伪称通过。重要Lead实现经非实现者审核；被测代码/最终文档SHA分开。未验新路径不默认覆盖源。只显式暂存，保护源scheme和原作品，不reset/clean/stash/rewrite/main，不关闭未知App。
 
-## 当前恢复点
+## 准备时检查点（历史）
 
-准备中；源/M0候选不变。执行基线在外部job/route记录；Worker未获实施前不写。下一动作核验两路预检，再并行模块实现，Lead接模型绑定。结案更新CURRENT_ACTIONS、实际导航、扩展约束及本任务记录；不复制旧阶段为当前。
+准备记录0580c6114a102045ea983ffcc0ef750e6ddcba05；源/M0候选不变。后续实施已发生，以下结果替代“待预检”状态。原r1规格/权限和已消耗预算不倒改。
+
+## 2026-09-26 实施、审核与验证结果
+
+状态：**代码/CPU/装配及真实模型回归通过；普通App原生补验和M0离线依赖待完成，未接纳源。** 受测组合`76bd5963c779c74268c69fa6a4851533768ea4c3`。最终文档提交自身SHA只写外部`lead/final-handoff.json`，不反复amend。当前基线和下一动作唯一入口为CURRENT_ACTIONS。
+
+### 实际改动
+
+1. `Workflow/Operations`按文字、图像、资产归拢定义与执行；共享验证保留在WorkflowOperationSupport，Builtins仅静态装配；移除空行操作仅移动文件，类型/ID不变。
+2. `Workflow/Models`新增运行绑定与Klein配方、私有授权记录；ProjectSession复用ModelLibrary/LocationAccess解析准确模型，WorkflowServices按节点UUID持有模型。图中同类节点可选择不同已登记模型；关闭等待/取消/准备失败均保留资源责任。模型选择回调捕获图/节点/操作/旧绑定，不能串到后选节点。
+3. PNG/JPEG差异移入Media/ImageCodec与静态登记；共用几何/像素预算、单帧保护与回读，校验真实MIME/尺寸/方向/位深/色彩。新策略仍限当前ImageIO能力；没有凭此宣称RAW或任意解码器已支持。
+4. UI/Localization及Resources/Localization建立中英和数据语言包；App统一注入，设置和工具栏均可进入，画布按稳定ID投影显示。原工作流参数、ID、正文、用户命名、来源JSON不翻译、不迁移。
+5. 文档导航区分源基线、M0和本批候选；历史2026-09-24接线表明确加日期范围，不再冒充全部当前状态。没有清理旧公共包/候选、批量改名核心或升级图schema。
+
+### 派工与来源
+
+| 部分 | 请求与可观察设置 | 实施/修复/Lead介入 |
+| --- | --- | --- |
+| CODEC | gpt-5.6-sol/high；线程01a0dc10-82f3-7462-9b28-38079442b502 | 初交7dfd5a3，非实现者发现MIME/方向/质量边界后修复1为3b2d1bd；初交479.5秒、修复250.3秒，未用修复2 |
+| I18N | gpt-5.6-sol/high；线程01a0dc10-830a-70d2-a769-b4f6edbdbe3c | 初交＋修复1归入ceb9be1（有界读取/hosting）；修复2为6237999（AppKit编译）；854.1/387.0/168.1秒。Lead有界接管完成失效语言精确回退及hosting观测修补，不记为Sol独立通过 |
+| 共享绑定/装配/测试 | Lead；不以自述推断服务端身份 | Lead实现；m0_execution_review非实现者审阅并给出关闭等待、重定位与实际request断言建议；boundary_i18n_review审阅语言/codec及Lead关键修补 |
+
+两Worker初交实际重叠约479秒，各独立工作树/分支/受限CLI写根，network=false，未授予公共.git写权限，由Lead逐项提交。创建/运行元数据在`i18n`/`codec`的request、route-accepted、audit文件；隐藏服务端解析unknown。普通预算保持初交+最多2修复，I18N已耗尽普通修复后一次Lead接管，不再另编号刷新。
+
+I18N初交可选shell进程替换比较被`/dev/fd`权限拒绝，未成功越界、未扩大权限，停止该比较并在交付报告；Lead逐条读事件并保留`lead-permission-event-review.json`。修复2的两次搜索退出1是SDK路径检索无匹配，非权限拒绝；无运行构建/网络。线程结束与进程退出分开记录，所有写Worker进程均退出0。
+
+用量只列可观测各轮墙钟；CLI事件含线程累计快照，未相加当增量。完整Lead成本/任务订阅扣费/准确token归因unknown，不用API价格补造，也不据单批认定成本最优。
+
+### 验证矩阵
+
+同一受测代码76bd5963；每项原始命令/环境/HEAD/退出在本run对应result.json。
+
+| 检查 | 本次实际结果 | 证据/边界 |
+| --- | --- | --- |
+| 完整UI包 | 127 UI、23 ModelLibrary、459 DWorkbench通过 | lead/combined-ui-final；含隔离suite、坏包/占位/超限/符号链接/FIFO、格式反证、节点生命周期、hosting |
+| App测试构建 | 通过 | lead/app-build-final；不等同普通签名GUI |
+| 真实双文字模型 | 通过，测试4.50秒 | lead/real-model-bindings：Qwen0.5B a5339a4131f135d0fdc6a5c8b5bbed2753bbe0f3 与1.5B 8b403126fc14f14cfc99bb4cfa72ecbc129ea677；改变普通默认后，同进程项目重开，检查实际request目录/revision与资产modelIdentity，不只检查快照标签 |
+| 原有真实图文主链 | 通过，测试86.16秒 | lead/real-m0-regression：Qwen0.5B＋Klein4B q8 ef52ee019fd1d0e75ae4deb40476ba65989716d7，512²/4步/guidance1/seed42、43、44；文字改写、3候选、明确采用、JPEG导出、保存重开、文字/图像取消释放、独立文稿请求/来源对照 |
+| 普通独立App | 构建及codesign完整性通过；沙盒开启，无temporary-exception | lead/regular-app-build、regular-app-manifest.json；独立DerivedData-Regular，未启动GUI |
+| 原生GUI/外部包文件选择器 | **未执行** | CUA确认锁屏，lead/gui-blocked.json；H26 |
+| 真实断网 | **未执行** | H25/M0 T15；本轮offline flags防依赖联网，不证明网络确实断开 |
+| 新模态/音视频/RAW/任意插件/干净Mac发行 | **未执行且本批未改变相应后端** | 不做全模态GPU重复基准，不将组件测试外推发布 |
+
+完整失败留档：combined-ui-1因新增hosting用裸NSObject访问AX而编译失败；修复2后combined-ui-2有两个测试观察问题。文件URL尾部目录斜杠不同但实际执行路径确为new-copy，focused-boundary-3打印实值，按标准化路径核对并明确排除old-copy。离屏公共AX能看到“添加样例/模型”，不暴露所有SwiftUI绘制按钮；Lead改用同一host切换前后精确中文双项→英文双项，保留编辑器/草稿/选区/图/无执行断言，非实现者确认符合原观测要求。focused-language-4原失败保留，最终组合全过；没有删断言/降低模型精度/拿mock代替真实推理。
+
+waiting人工确认编辑器还经历中英切换及820↔1320宽度，保持同一编辑器/Unicode草稿/选区/无自动决定和推理。它是离屏hosting，不证明原生输入法/所有控件布局。
+
+### 使用及扩展方法
+
+- 本批源码：`/Volumes/CodexProjects/Codex/D-Worktrees/D-NODE-BOUNDARY-01/D.xcworkspace`；scheme D。打开源码不是启动已验发行版。
+- 试用使用本run独立普通App及`lead/Launch-Boundary.command`（产物验签后生成）。入口为项目内“流程画布”；选具体改写/图像节点，在modelID处选择已登记模型或显式导入文件夹。显示语言从工具栏地球图标或D设置进入。M0基本可编辑样例用法见M0_TRY，但该文的旧App路径仍指旧M0版本。
+- 语言包从`Packages/UI/Sources/UI/Resources/Localization/en.json`复制结构，换locale/displayName并翻译strings值。导入后显式选择；缺词回退，已有同locale拒绝覆盖，坏包不删除。示例：`{"schemaVersion":1,"locale":"fr","displayName":"Français","strings":{"workflow.action.save":"Enregistrer"}}`。包只含文字数据，不安装/执行代码。
+- 同类操作通常新增Operations下实现和Builtins登记；新增ImageIO格式实现新增codec并登记/测试；新的模型家族仍需真实适配/资源/契约/数值测试，不能只加卡片。新UI文案新增稳定键及双语/占位检查。具体规则见BACKEND_EXTENSION_CONTRACT，不另建泛用平台。
+
+### 恢复检查点
+
+源58603870719a52ff07b6bb6e4d6d09e02c23901a和M0候选bbf508024a80250b9e4b468e1f5713b7b13dcc13均保留。本批候选包含M0；T15和H26补验前不推进源。个人scheme哈希ca3635d88aa5a15397b90e528667c66c0e6db7e596176e885c79d194b544206c/index9c76916bdc97c2d4298cefe64e0b0fae3380573e继续未暂存；原件/模型/旧App未操作。最终核对在lead/final-handoff.json，恢复先查实际Git/进程/权限再续。
+
+写Worker已结束，非实现者源码审阅与新上下文接手均执行；后者只从AGENTS/CURRENT_ACTIONS起读，准确找到源/候选差别、语言覆盖和H25/H26，指出准备检查点未替代，已在本节修正。最终构建/自有进程/保护核对完成后记录外部回执。下一动作仅补集中验收，再接纳本批；不自动新增节点或发布。
+
+### 普通产物与最终停点
+
+独立普通App：本run `cache/DerivedData-Regular/Build/Products/Debug/D.app`，受测代码76bd5963；构建55.02秒，codesign deep/strict验证通过，沙盒true，既有开发签名get-task-allow与原权限保留，无临时测试例外。四个关键文件的SHA256/大小/修改时间及entitlements在`lead/regular-app-manifest.json`。`lead/Launch-Boundary.command`已生成但未执行，使用每次独立D_UI_TEST_SESSION；不会覆盖普通App。其隔离偏好用于试用，不把项目书签混入普通偏好，重开项目仍可显式选择。
+
+本批GPU/构建/测试自有进程均已完成；没有后台等待解锁或断网脚本。下一步是本人返回时集中补H25/H26，满足依赖后接纳组合；目前保留候选，不推进源、不推送、不删除分支或证据。新上下文恢复必须读CURRENT_ACTIONS并核对真实状态；旧试用说明不替代本批普通App证据。

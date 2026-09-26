@@ -1,57 +1,51 @@
 # 当前行动与接手点
 
-## 当前授权：节点扩展边界与语言包
+最后核实：2026-09-26。**本页是当前任务、版本、停点与下一动作的唯一入口**。历史任务、旧“接下来”及其他候选不自动授权续跑。
 
-2026-09-26用户已批准[D-NODE-BOUNDARY-01](tasks/D-NODE-BOUNDARY-01.md)实际整理与语言包架构。隔离分支codex/d-node-boundary-01从M0候选bbf508024a80250b9e4b468e1f5713b7b13dcc13开始，源58603870719a52ff07b6bb6e4d6d09e02c23901a及个人scheme保持。模型按节点解析、格式模块化、显示语言与执行数据分离；不接新模态/插件市场/旧候选。M0 T15仍是接纳依赖，旧等待已结束，未通过前不推进源。具体范围、预算、证据和接手点见本任务。
+## 当前任务：节点边界与语言包（候选验收）
 
-以下为依赖M0的已核实停点，旧“只补T15”不再阻止本轮独立开发：
+用户批准 [D-NODE-BOUNDARY-01](tasks/D-NODE-BOUNDARY-01.md)：整理节点/模型/格式与显示语言边界，保留原运行时、存储、模型精度和用户数据。不是新增模态、插件市场或全后端重写。
 
-核实：2026-09-25。当前任务、源/候选、停点和下一动作以本页为唯一入口；历史任务不是开工许可。
+| 对象 | 已核实版本/位置 | 状态 |
+| --- | --- | --- |
+| 源 | `/Volumes/CodexProjects/Codex/D`，`codex/inference-foundation`，`58603870719a52ff07b6bb6e4d6d09e02c23901a` | 未推进，个人scheme仍未暂存 |
+| M0候选 | `D-Worktrees/D-M0-01`，`codex/d-m0-01`，`bbf508024a80250b9e4b468e1f5713b7b13dcc13` | 保留不动；实际受测代码c8ae6f0a94958f494c4648a2beed547e7a98f0a4，T15仍未执行 |
+| 本批候选 | `D-Worktrees/D-NODE-BOUNDARY-01`，`codex/d-node-boundary-01` | 从M0候选开始，受测组合`76bd5963c779c74268c69fa6a4851533768ea4c3`；最终文档SHA见外部final-handoff.json |
+| 本批证据 | `D-Development/AgentTrials/D-NODE-BOUNDARY-01/run-20260926T045011Z/` | 大日志与产物留外盘，任务记录只留索引 |
 
-## 当前任务：M0 节点工作台
+绝对根均为`/Volumes/CodexProjects/Codex/`。内盘Documents/ChatGPT/D空仓库不是本工程。
 
-用户已批准 [D-M0-01](tasks/D-M0-01.md) 的 S0→S1→S2 和 S3 小型扩展；不进入 S4、不公开发布。用户附件中的“待评审”不再阻止本批实施。最小范围是可编辑文字/图像/普通图片处理节点、明确人工决定、保存恢复与来源；复用原 ProjectSession、ProjectStore 和 DRuntime，不引入新模态、插件平台或平行资产系统。
+## 实现边界
 
-- 源：`/Volumes/CodexProjects/Codex/D`，`codex/inference-foundation`，`58603870719a52ff07b6bb6e4d6d09e02c23901a`；本批尚未推进源分支。
-- 候选：`/Volumes/CodexProjects/Codex/D-Worktrees/D-M0-01`，`codex/d-m0-01`。当前受测代码 `c8ae6f0a94958f494c4648a2beed547e7a98f0a4`；原全链版本 `18cb9ec9cdf81a7e849204a40226cc91223c275e`。最终文档提交见本次外部 `evidence/final-handoff.json`，不根据短 SHA 猜造。
-- 原 source1—12 项目格式、本批16、AP1/CORE13—15分别处理。仅在独立测试项目上验证迁移，不批量升级真实作品。
-- 新入口为项目内显式选择“流程画布”；旧“创作与资料”继续直接调用服务。发布文稿是快照；后续打字不改变已发布文字，不自动生成下游。
+- 每个文字/图像执行节点冻结自己的模型身份，按节点取运行租约和实现/配方；缺失或不兼容明确拒绝，不偷用当前页面的模型。模型选择捕获项目、图、节点、操作与旧绑定，迟到选择不得写错节点。
+- 具体操作归入`DWorkbench/Workflow/Operations`；`Workflow/Models`负责绑定/私有书签与配方，`Media/ImageCodec{,Registry}`承接PNG/JPEG格式差异。静态装配复用同一Store和DRuntime，未做动态代码插件或任意新格式支持。
+- 语言架构位于`UI/Localization`，内置中英及外部纯JSON包；覆盖流程画布通用控件、操作说明投影与语言入口。界面文字与执行ID/参数/用户正文分开，换语言不重建编辑器。旧模态页面、服务错误/运行计划的完整翻译尚待逐步迁移。
+- 命名/责任与新增模块路线见[实际导航](REPOSITORY_MAP.zh-CN.md)、[后端扩展约束](BACKEND_EXTENSION_CONTRACT.zh-CN.md)。这些文件区分源基线与候选，不把旧源升级成新能力。
 
-## 证据与当前限制
+## 本轮证据与未测范围
 
-候选已实现 N01—N10，S3另有独立“移除空行”程序。静态注册/端口/校验、同一存储、明确继续和候选采用、局部重跑/旧输入、元数据及原子不覆盖导出已接线。不是发布声明。
+`76bd596…`：完整UI包通过 **127 UI（含离屏hosting）、23 ModelLibrary、459 DWorkbench**；App测试构建通过。完整SHA/命令/退出状态见`lead/combined-ui-final`和`lead/app-build-final`。模型路径/语言hosting的早期失败与修正保留，不相加虚构通过率。
 
-本批证据根：`D-Development/AgentTrials/D-M0-01/run-20260925T091107Z/`。完整版本与命令在每项 result.json；失败日志保留。
+同一版本的真实双文字模型及M0图文回归均通过（分别4.50/86.16秒测试时间）：核对实际request模型，三图候选/明确采用/处理/JPEG导出/保存重开/真实取消/独立文稿对照。详见任务验证矩阵和lead/real-evidence。普通App独立构建、签名完整性与沙盒核对通过，位于本run `cache/DerivedData-Regular/Build/Products/Debug/D.app`，隔离启动入口`lead/Launch-Boundary.command`已备妥但未执行。
 
-- `18cb9ec9cdf81a7e849204a40226cc91223c275e`：完整UI package 109项UI/23项ModelLibrary/438项Workbench通过；根运行时70项复用a616126、相关代码/测试零差异已核对；构建、CPU、hosting与真实模型分列，不把总数冒充GUI次数。
-- `real-delivery` 在18cb9ec上实际图文三候选/JPEG导出/恢复及真实取消通过；另经真实ProjectSession文稿入口核对相同请求、来源重开及无隐藏图。隔离 XCTest 宿主不是普通 App GUI。
-- `hosting`/`hosting-fixed` 暴露窄窗口拟合1100问题；实际 viewport约束和稳定编辑器树修补后 `cpu-provenance3` 通过，包括待确认 Unicode 草稿缩放保留。离屏渲染不是桌面截图。
-- 锁屏和普通 App 目录授权现已补验：18cb9ec普通沙盒App通过原生选择器、真实图文三候选与人工决定、文件/模板组合、保存重开、文稿快照、局部重跑及来源查看。首个宿主测试的外盘临时项目拒绝保留历史；普通App后来通过自己的目录选择器访问专属外盘项目，没有扩大权限。
-- c8ae6f0修复取消后横幅仍显示“正在取消”的问题。完整CPU为109 UI / 23 ModelLibrary / 439 Workbench通过，测试构建和普通沙盒App构建通过；原生图像取消显示已停止/释放，随后真实文字重跑完成。代码改动限控制器取消收尾及直接回归，无后端/精度/依赖改变，非实现者只读审核完成。
-- 实际断网T15仍未执行。[H25](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md)只保留这项M0补验；两次有界等待均未触发测试，目前没有等待脚本运行。不能将已联网执行的真实模型结果冒充断网通过。
-- 最终 App/试用步骤见 [M0试用说明](M0_TRY.zh-CN.md)。不替换普通 D，未验收路径不默认覆盖旧行为。
+CPU/hosting、XCTest宿主真实模型、普通App构建分别报告；未做本批原生窗口/实际离线/发行验收。GUI受锁屏阻塞登记H26；M0 T15依赖登记H25，未满足前不推进源。写Worker、构建与模型测试进程均已结束，无后台等待脚本。
 
 ## 保护与未整合候选
 
-源唯一个人 scheme orderHint1→6，SHA256 `ca3635d88aa5a15397b90e528667c66c0e6db7e596176e885c79d194b544206c`，未暂存；index blob `9c76916bdc97c2d4298cefe64e0b0fae3380573e`。完整 diff/index/副本在本 run protection，源每次更新前后核对。索引干净不等于源工作区全干净。
+- 源唯一差异：`D.xcodeproj/xcuserdata/lfrledh.xcuserdatad/xcschemes/xcschememanagement.plist`的orderHint 1→6；SHA256 `ca3635d88aa5a15397b90e528667c66c0e6db7e596176e885c79d194b544206c`，index blob `9c76916bdc97c2d4298cefe64e0b0fae3380573e`，未暂存。保护副本/前后检查见本run。
+- AP1 `e5d24f4e1064423238e3c8e1112bc4b3a9a81e2e`、CORE `9d3a503d327a820cb67e399922a07c27f953e903`、I2V历史候选与预算不变，不随本批合入。
+- 原模型、作品、普通D、M0应用与旧证据保留。没有变更Team/bundle ID/权限/钥匙串/依赖锁/图schema，没有推送或推进main。
 
-| 保留对象 | 固定身份/边界 |
-| --- | --- |
-| AP1 | `codex/d-audio-project-01` / `e5d24f4e1064423238e3c8e1112bc4b3a9a81e2e`；独立候选，不随M0合入 |
-| CORE | `codex/d-core-close-01` / `9d3a503d327a820cb67e399922a07c27f953e903`；包括AP1与部署记录，未做组合全验，不随M0合入 |
-| I2V | 历史全50步只证明latent/首步对照，不代表解码/MP4或App通过；[原任务](tasks/D-VIDEO-I2V-01.md)预算和停点不变 |
-| 上批源验收 | [UI readiness](tasks/D-UI-READINESS-01.md)；`34ee0c5e2172a0bc5479960f7d7660567e657a30`组合、`e24552a6de13b38c4f84baec83462f6681795bb7`源入口复验，后续仅文档；历史普通签名/GUI证据不能替代M0 |
+## 集中待办与停止位置
 
-本批 REGISTRY/IMAGE/CANVAS 写Worker已结束；REGISTRY/CANVAS各消耗一次定向修复，IMAGE无修复。Lead负责存储、运行、应用接线和组合修正；非实现者只读审核记录见任务。测试/构建阶段的自有进程状态在任务恢复点更新，不声称建立系统写锁。
+见[集中待办](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md)：
 
-## 本人返回补验与当前停点
+- **H25**：M0真实断网T15尚未执行。上次本人断路由器WAN，本机Wi-Fi仍连接，旧检测未触发；这是检测条件漏识别，不是模型失败。两次旧等待均已结束。下次重新协调单次明确断网窗口，不照旧提示断网；联网时的offline flags不算证据。
+- **H26**：本批普通App语言包导入/中英切换/草稿和选区/按节点选择不同模型的原生补验。解锁后补验，不再问机器是否空闲，不重新申请已关闭权限。
+- H22输入法候选框跟随按用户决定延期；旧麦克风/歌声/Xcode事项不重开。
 
-本次证据为 `D-Development/AgentTrials/D-M0-01/run-20260925T112546Z-gui/`。主要索引：`evidence/native-invariants.json`、`native-exports.json`、`c8-native-final-check.json`、`c8-ordinary-app-after.json`、`source-protection-final.json`。原生截图/AX见本会话CUA记录，离屏图不替代它。最新测试项目已保存，任务持有的普通App正常退出、完整进程退出0；只读审阅任务已完成。
+本批可执行验证已完成，保留可运行候选和精确证据；依赖及原生补验通过后再按现行规则接纳已验组合。到本批检查点停止，不自动启动新节点、新模态、旧S6/AP1/CORE/I2V或发布。下一有限建议是补H25/H26，然后按用户优先级逐模块扩展，不能先宣称全部应用解耦。
 
-T15第一次本人断路由器外网而本机仍连Wi-Fi；这是一种有效的断外网方式，但监测条件只认本机接口断开，未启动测试。第二次等待本机断网也到期，未观察到符合条件的窗口；不猜测用户是否再次操作，不把未执行写成模型失败。下次需重新安排一段明确的断网窗口并启动新的单次验收；旧等待已经结束，勿现在照旧提示断网。网络设置始终由用户处理。
+## 依赖M0的历史证据索引
 
-## 下一动作与停止规则
-
-代码c8ae6f0的普通签名App已在独立DerivedData-Regular重建，签名完整性通过、四个关键文件在原生补验前后相同，沙盒开启、无测试宿主临时例外。下次只补T15及必要版本/保护核对，不重做已通过的原生全链。T15通过前保留可运行候选，不将M0标为完成、不推进源；全部M0验收满足后按原规则接纳已验组合。
-
-到本批检查点停止；不自动启动S4、恢复旧S6/AP1/CORE/I2V、做音乐/视频扩展或发布。产品目标见[原则](PRODUCT_PRINCIPLES.zh-CN.md)、[目标](PRODUCT_GOALS.zh-CN.md)，旧服务接线债见[后端扩展约束](BACKEND_EXTENSION_CONTRACT.zh-CN.md)（本批实际新增接线以M0任务为准）。
+[M0任务](tasks/D-M0-01.md)、[旧候选试用说明](M0_TRY.zh-CN.md)。M0主链18cb9ec9cdf81a7e849204a40226cc91223c275e已做普通沙盒App真实图文三候选、人工决定、保存重开/局部重跑/来源和文件/模板组合；c8ae6f0取消提示修补后又做原生取消及后续文字。证据`D-M0-01/run-20260925T112546Z-gui/evidence`。这些是复用历史证据，不等于本批GUI重测。
