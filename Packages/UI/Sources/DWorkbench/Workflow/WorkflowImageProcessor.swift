@@ -1,6 +1,7 @@
 import CoreGraphics
 import Foundation
 import ImageIO
+import UniformTypeIdentifiers
 
 public struct WorkflowImageProduct: Sendable, Equatable {
     public let data: Data
@@ -94,7 +95,7 @@ private extension WorkflowImageProcessor {
         let mediaType: String
         let width: Int
         let height: Int
-        let bitDepth: Int?
+        let bitDepth: Int
     }
 
     static func decode(_ data: Data, codecs: ImageCodecRegistry) throws -> DecodedImage {
@@ -325,22 +326,51 @@ private extension WorkflowImageProcessor {
               CGImageSourceGetCount(source) == 1,
               CGImageSourceGetStatus(source) == .statusComplete,
               let actualType = CGImageSourceGetType(source),
+              let actualMediaType = UTType(actualType as String)?.preferredMIMEType,
               actualType as String == expectedCodec.typeIdentifier,
+              actualMediaType.caseInsensitiveCompare(expectedCodec.mediaType) == .orderedSame,
               let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [String: Any],
               let width = integerProperty(properties[kCGImagePropertyPixelWidth as String]),
               let height = integerProperty(properties[kCGImagePropertyPixelHeight as String]),
               width == expectedWidth, height == expectedHeight,
+              (integerProperty(properties[kCGImagePropertyOrientation as String]) ?? 1) == 1,
               let image = CGImageSourceCreateImageAtIndex(
                 source, 0, [kCGImageSourceShouldCacheImmediately: true] as CFDictionary),
               CGImageSourceGetStatusAtIndex(source, 0) == .statusComplete,
-              image.width == expectedWidth, image.height == expectedHeight else {
+              image.width == expectedWidth, image.height == expectedHeight,
+              image.bitsPerComponent == 8,
+              isSRGB(properties: properties, image: image) else {
             throw WorkflowImageProcessorError.outputVerificationFailed
         }
         return EncodedInspection(
-            mediaType: expectedCodec.mediaType,
+            mediaType: actualMediaType,
             width: width,
             height: height,
-            bitDepth: integerProperty(properties[kCGImagePropertyDepth as String]))
+            bitDepth: image.bitsPerComponent)
+    }
+
+    static func isSRGB(properties: [String: Any], image: CGImage) -> Bool {
+        if let actual = image.colorSpace,
+           let standard = CGColorSpace(name: CGColorSpace.sRGB),
+           CFEqual(actual, standard) {
+            return true
+        }
+        var identifiers: [String] = []
+        if let name = image.colorSpace?.name {
+            identifiers.append(name as String)
+        }
+        if let profile = properties[kCGImagePropertyProfileName as String] as? String {
+            identifiers.append(profile)
+        }
+        identifiers = identifiers.map {
+            $0.lowercased().filter { $0.isLetter || $0.isNumber }
+        }
+        let standardNames: Set<String> = [
+            "srgb",
+            "srgbiec6196621",
+            "kcgcolorspacesrgb",
+        ]
+        return identifiers.contains { standardNames.contains($0) }
     }
 
     static func commonDetails(input: DecodedImage,
@@ -363,7 +393,7 @@ private extension WorkflowImageProcessor {
             data: data,
             mediaType: inspection.mediaType,
             metadata: MediaMetadata(width: inspection.width, height: inspection.height,
-                                    bitDepth: inspection.bitDepth ?? 8, colorSpace: "sRGB"),
+                                    bitDepth: inspection.bitDepth, colorSpace: "sRGB"),
             details: details)
     }
 }
