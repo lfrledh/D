@@ -287,3 +287,14 @@ opt-in D_NODE_LANGUAGE_REAL_CASE=music-cancel，复用 D_NODE_LANGUAGE_MUSIC_MOD
 
 ### MEDIA-CHECKS 有界Lead收尾（不记为Worker独立通过）
 真实video在App1bc已完成取消/后续生成，但原测试错误要求无任何inputReferences/parents；官方E04明确发布共享文字资产，T2V不收图片不等于无文字来源。Lead一次有界接管，精确改为仅prompt端口、恰好一个.text源、读取其真实UTF8、parents必须等于该源，再与VideoRequest.prompt核对；不改生产、模型、精度或真实MP4断言。旧失败保存node-real-video；非实现者复核及重跑待办。E02报告另记录1...3实际N03调用、raw归属及修复数，0次不冒称发生修复。MEDIA余下Worker修复不与接管串成无限链。
+
+## PROCESS-RECOVERY-CHECKS r1：A15 跨进程检查点恢复
+新测试包只新增 DTests/NodeLanguageProcessRecoveryTests.swift，Worker gpt-5.6-sol/high，初交1800秒＋两轮修复。原任务预算不重置。不改生产、工程、现有测试、文档；禁网络/模型/GPU/GUI/Git写/递归，仅读/只parse自己的文件，output/tmp独占。Lead运行分阶段宿主测试与仅自有进程的故障注入。
+
+沿现有App宿主DTests的显式opt-in入口：D_NODE_LANGUAGE_REAL_CASE=process-recovery，D_NODE_RECOVERY_CASE=map|loop|human，D_NODE_RECOVERY_PHASE=produce|reopen，D_NODE_RECOVERY_NONCE=UUID。以nonce构造本App容器内固定项目路径，拒绝其他目录及已存在produce数据；独立确定性InferenceEngine只替代模型计算，复用真实ProjectStore、WorkbenchSession、WorkflowServices、Controller、standard registry。不要造第二调度器。计数engine将submit requestID/phase/input写自有ledger，reopen读同ledger；不是模型验收。
+
+Map两稳定itemID：第一项N03完成已保存、第二项submit进入时挂起。Loop初始state Text0、N03 body确定性返回1/2，until==2；第二轮挂起。produce必须从Store回读验证第一项/轮output/ref/地址已完成，第二项/轮call已持久，再写ready.json包括nonce、case、pid、projectID、runID、受测身份及检查点摘要。之后有限等待，不优雅关闭；真正SIGKILL由Lead对本次xcodebuild创建且nonce/PID/产物身份均核对的专属host发出，并观察进程终止。Worker不能自行kill任何进程。不要靠退出码或手写checkpoint冒充崩溃。
+
+reopen使用同nonce、新PID打开项目，确认旧running恢复为interrupted，已完成输出/媒体摘要/记录不变，ledger无自动新增，再显式resume。先前完成项不得重复submit，被中断项可重试一次；Map最终两个ID和位置、Loop最终state2/conditionMet。保留前后账本、两个PID与源快照；不可删除项目锁文件或回滚原项目。
+
+human：N03 fixture→N15 editText→下游N03。produce等待waiting，编辑草稿后显式await save，回读decision=nil、draft/stepID/address/materials正确，再ready等待故障。reopen保持waiting/draft/无自动submit，按精确expectedTask显式决定；重复旧决定不能改结果/新增submit；decide本身不跑下游，必须resume后下游恰好一次。结束正常close所有自有任务/store/runtime，异常cleanup不能mask原错；ready前错误不得写PASS。各phase有受控时限。仅证明落盘检查点跨进程，不声称未保存内存无损或GUI通过。接口可参考 WorkflowLifecycleTests、WorkflowPlanTests、ProjectStore.open、WorkflowController.load/resume/decideHuman；有未知接口先问Lead，不能改生产过测。
