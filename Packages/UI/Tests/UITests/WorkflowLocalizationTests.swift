@@ -17,6 +17,28 @@ private actor LocalizationNoInferenceEngine: InferenceEngine {
 
 @Suite(.serialized) @MainActor
 struct WorkflowLocalizationTests {
+    @Test func registeredOperationDisplayKeysHaveBothBuiltInTranslations() throws {
+        var inventory: [String: String] = [:]
+        for definition in WorkflowRegistry.standard.definitions {
+            let prefix = "workflow.operation." + definition.id
+            inventory[prefix + ".title"] = definition.title
+            inventory[prefix + ".detail"] = definition.detail
+            for field in definition.fields { inventory[prefix + ".field." + field.id] = field.title }
+            for port in definition.inputs { inventory[prefix + ".input." + port.id] = port.title }
+            for port in definition.outputs { inventory[prefix + ".output." + port.id] = port.title }
+        }
+        if let directory = ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] {
+            let data = try JSONSerialization.data(withJSONObject: inventory, options: [.prettyPrinted, .sortedKeys])
+            try data.write(to: URL(fileURLWithPath: directory).appendingPathComponent("operation-display-keys.json"), options: .withoutOverwriting)
+        }
+        for locale in ["en", "zh-Hans"] {
+            let store = UILanguageStore(preferredLanguages: [locale]); try store.select(locale)
+            let missing = inventory.keys.filter { store.text($0, fallback: "__missing__") == "__missing__" }.sorted()
+            #expect(missing.isEmpty, Comment(rawValue: "\(locale) missing operation display keys: \(missing.joined(separator: ", "))"))
+        }
+    }
+
+
     @Test
     func missingEnvironmentUsesOriginalChineseFallbacks() {
         let definition = WorkflowOperationDefinition(
