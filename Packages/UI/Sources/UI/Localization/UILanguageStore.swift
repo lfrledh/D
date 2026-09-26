@@ -76,9 +76,13 @@ public final class UILanguageStore {
         self.selection = settings?.string(forKey: Self.selectionDefaultsKey) ?? Self.systemIdentifier
         loadBuiltIns()
         loadExternalPacks()
-        if selection != Self.systemIdentifier, resolvedIdentifier(for: selection) == nil {
-            diagnostics.append("The saved language is unavailable; following the system language instead.")
-            selection = Self.systemIdentifier
+        if selection != Self.systemIdentifier {
+            if let exact = exactIdentifier(for: selection) {
+                selection = exact
+            } else {
+                diagnostics.append("The saved language is unavailable; following the system language instead.")
+                selection = Self.systemIdentifier
+            }
         }
     }
 
@@ -86,8 +90,7 @@ public final class UILanguageStore {
         let selected: String
         if identifier == Self.systemIdentifier {
             selected = Self.systemIdentifier
-        } else if let resolved = resolvedIdentifier(for: identifier),
-                  builtIns[resolved] != nil || externalPacks[resolved] != nil {
+        } else if let resolved = exactIdentifier(for: identifier) {
             selected = resolved
         } else {
             throw UILanguageError.unavailableLanguage(identifier)
@@ -214,6 +217,13 @@ public final class UILanguageStore {
         let unknown = Set(pack.strings.keys).subtracting(english.strings.keys).sorted()
         guard !unknown.isEmpty else { return }
         diagnostics.append("Language \(pack.locale) contains unused keys: \(unknown.joined(separator: ", ")).")
+    }
+
+    // Explicit selections are exact; only Follow System may use language-family fallback.
+    private func exactIdentifier(for requested: String) -> String? {
+        guard let normalized = try? LanguagePackCodec.normalizedLocale(requested),
+              builtIns[normalized] != nil || externalPacks[normalized] != nil else { return nil }
+        return normalized
     }
 
     private func resolvedIdentifier(for requested: String) -> String? {

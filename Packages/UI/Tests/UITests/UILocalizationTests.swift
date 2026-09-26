@@ -147,6 +147,33 @@ struct UILocalizationTests {
     }
 
     @Test
+    func damagedExplicitRegionDoesNotSilentlySelectAnotherRegion() throws {
+        let fixture = try fixture("Region")
+        defer { fixture.cleanup() }
+        let first = UILanguageStore(settings: fixture.settings, directory: fixture.directory,
+                                    preferredLanguages: ["en"])
+        _ = try first.importPack(data: pack(locale: "fr-FR", displayName: "France", strings: [:]))
+        _ = try first.importPack(data: pack(locale: "fr-CA", displayName: "Canada", strings: [:]))
+        try first.select("fr-fr")
+        #expect(first.selection == "fr-FR")
+        let broken = fixture.directory.appendingPathComponent("fr-FR.json")
+        let original = Data("{broken".utf8)
+        try original.write(to: broken)
+        let reopened = UILanguageStore(settings: fixture.settings, directory: fixture.directory,
+                                       preferredLanguages: ["en"])
+        #expect(reopened.selection == UILanguageStore.systemIdentifier)
+        #expect(reopened.effectiveLanguageIdentifier == "en")
+        #expect(reopened.availableLanguages.contains { $0.id == reopened.selection })
+        #expect(reopened.diagnostics.contains { $0.contains("saved language is unavailable") })
+        #expect(fixture.settings.string(forKey: UILanguageStore.selectionDefaultsKey) == "fr-FR")
+        #expect(try Data(contentsOf: broken) == original)
+        expectFailure { try reopened.select("fr-FR") }
+        #expect(reopened.selection == UILanguageStore.systemIdentifier)
+        try reopened.select("fr-CA")
+        #expect(reopened.effectiveLanguageIdentifier == "fr-CA")
+    }
+
+    @Test
     func boundedNativeReaderRejectsOversizeAndSymlinkThenAcceptsRegularFile() throws {
         let fixture = try fixture("BoundedNative")
         defer { fixture.cleanup() }
