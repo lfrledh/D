@@ -274,3 +274,13 @@ lead/scopes-initial九项之前为七项通过；lead/scopes-wiring初轮55项1�
 独立opt-in D_NODE_LANGUAGE_REAL_CASE=text-control；复用 D_NODE_LANGUAGE_TEXT_MODEL、已批准Qwen1.5B参数。AppSessionFactory+WorkflowServices+真实Controller，隔离App容器新项目/suite，无模型替身。测试一：真实d.control.branch，输入Bool选择有Qwen的body，未选body指定不存在的modelID（结构合法），实际选择的语言生成完成；resolver/调用记录检查未选ID零解析/准备/提交，不因未安装拦住另一分支。保持正文、固定request/model及parent来源，保存重开。
 测试二：同一runtime创建单独文字生成，等待可观察真实运行/首片段（有限超时），cancel，等待任务和drain/release结束，然后成功执行另一文字请求。报告实际观察的阶段，不能把generating笼统称GPU kernel中断；取消后下一任务正常不串旧输出。若生成太快先完成，明确不满足cancel证据，不能伪称取消成功。可用当前已支持较长输出512 tokens及单次可解释fixture，不用无限重试。原文和旧资产不变，结果记录实际状态和调用ID。
 两测试均有限等待、finally shutdown/关闭自有项目、不结束普通App。失败也保留证据、成功才PASS；记录elapsed、model revision、run/request、真实取消边界。输出在专属项目旁json；不导出书签/模型权重/个人数据，不声称GUI/离线通过。必须复用既有生产执行器。任何接口或权限未知停报。Lead统一注册/编译（当前DTests自动发现若不支持报缺口），不为写测试私加生产API。
+
+## MUSIC-CANCEL-CHECKS r1：A17 真实器乐取消与恢复
+新增原验收尚缺的一项测试，不重置原MUSIC/EXAMPLES预算。Worker Sol/high只新增 DTests/NodeLanguageMusicCancellationTests.swift；初交1800秒＋两轮定向修复；受限外盘树/独立output/tmp，网络关闭，不Git写、不构建/GPU/GUI/依赖、不递归，只parse自己的文件。必读本节、既有 NodeLanguageMusicRealTests.swift（引擎/授权/模型接线）、NodeLanguageImageVideoRealTests.swift（有限取消）；不读全部历史。
+
+opt-in D_NODE_LANGUAGE_REAL_CASE=music-cancel，复用 D_NODE_LANGUAGE_MUSIC_MODEL 与 D_NODE_LANGUAGE_MUSIC_AUTHORIZATION（以现有真实音乐测试实际键为准，若不同沿用实际键并报告）。真实 AppSessionFactory+WorkflowServices+Controller、独立App容器自有项目。使用官方E04的d.music.generate及其普通有类型notes/chords输入，target仅音乐，不运行其他模态/LLM；4秒既有MRT2 small实际音符条件，保留既有模型许可声明注入边界，不能代用户点击。两个阶段：观察runtime.generating或实际进度后cancel，等待自有controller Task退出及runtime active/queue清空；再运行同一图音乐成功，WAV真实解码、时长/有限值/非零/来源条件/资产归属与保存重开核对。调用ID和run不串，取消未发表未完成作品，预先自有文字/值记录与已有资产保持。报告观察的取消phase，不称GPU kernel瞬间中断。模型没进入执行或太快完成则证据不足而非PASS。
+
+所有异常必须cancel并await拥有的Controller Task，再shutdown并关闭自有Store；普通D不动。不可修改生产/现有测试/任务文档/断言。不跳过access stale或默认信任许可；环境不符报Lead。产出项目旁JSON含模型revision、实际取消ID/phase、成功run、elapsed、output摘要；没有GUI/试听/新录音结论。Lead执行构建与串行模型，并由非实现者检查测试。
+
+## 2026-09-27 续接事实
+1bc907d8ff7ba2dbcec0499fdc8bdf2c3c79d1c6 仅向隔离子进程保留父App本就具有且等于NSHomeDirectory的 CFFIXED_USER_HOME；不新增HOME、不改书签/权限、无全量环境继承。baseline和HOME-only探针失败，HOME+fixed及生产函数inherited探针通过；父字段存在匹配，非实现者复核通过。node-real-music-access-fixed构建代码1bc，启动记录b9a6c92仅任务文档差异，真实SwiftF0+两和声版本各3次MRT2通过；普通GUI/真人试听仍未执行。d3c8b826的E02用可展开有限JSON检查修复工具；json-repair-initial三个相关CPU suite通过。A06 repair1只补三类实际坏模型响应反例；TEXT-CONTROL repair1修取消阶段、保护夹具及异常清理，非第三轮旧任务。H27仍阻塞GUI，源与scheme未变。
