@@ -180,12 +180,13 @@ public enum WorkflowLanguageExamples {
         var subject = try valueInput("创作主题", value: .text("城市公共花园与夜间阅读空间"))
         subject.title = "输入总体主题"
 
-        var planner = try node("d.model.language", title: "一次规划全部主题")
-        planner.parameters["task"] = .text("输出恰好两个不同主题。每项必须含 themeID、title、prompt；只输出符合结构的 JSON。")
-        planner.parameters["outputMode"] = .text("json")
-        planner.parameters["maximumOutputTokens"] = .integer(512)
-        planner.parameters["modelID"] = .text("")
-        planner.dataConfiguration = .init(schema: .list(.record(themeFields)))
+        let planningTool = try WorkflowJSONRepairTool.make(
+            schema: .list(.record(themeFields)),
+            task: "Create exactly two different visual themes from the supplied content. Each theme has a unique nonempty themeID, a nonempty title, and a detailed image prompt. Use only these three string fields. Return only the JSON array, with no Markdown or explanation.",
+            exampleJSON: #"[{"themeID":"theme-1","title":"Example title A","prompt":"Describe the first distinct image"},{"themeID":"theme-2","title":"Example title B","prompt":"Describe the second distinct image"}]"#)
+        var planner = try node("d.control.invoke", title: "一次规划全部主题")
+        planner.control = .invoke(.init(id: planningTool.id, version: planningTool.version, digest: try WorkflowPlanCompiler.digest(planningTool)))
+        planner.dataConfiguration = .init(fields: planningTool.graph.interface?.inputs ?? [])
 
         var map = try node("d.control.map", title: "按运行时主题逐项生成")
         map.control = .map(body: try themeImageMapBody(tool: imageTool), continueOnFailure: true)
@@ -204,7 +205,7 @@ public enum WorkflowLanguageExamples {
             ],
             layout: gridLayout(nodes)
         )
-        return .init(graph: graph, tools: [imageTool])
+        return .init(graph: graph, tools: [imageTool, planningTool])
     }
 
     private static func makeImageSetTool() throws -> WorkflowToolDefinition {

@@ -94,22 +94,16 @@ struct NodeLanguageImageVideoRealTests {
             try await Self.requireRuntimeDrained(session)
 
             // Load the official editable E02. The real Qwen planner remains in the plan;
-            // only its instruction is tightened for the existing strict JSON parser.
+            // schema checking and repair are editable ordinary nodes inside its tool.
             subject.addLanguageExample(.images)
             try #require(subject.errorMessage == nil,
                          Comment(rawValue: subject.errorMessage ?? "E02 could not be added"))
             let e02Graph = try #require(subject.graph)
             try #require(e02Graph.name == "E02 两主题三图")
-            let planner = try #require(e02Graph.nodes.first { $0.operationID == "d.model.language" })
+            let planner = try #require(e02Graph.nodes.first { $0.title == "一次规划全部主题" && $0.operationID == "d.control.invoke" })
+            // The official visible tool now owns schema checks and a bounded repair loop.
+            // Model identities are frozen from the same explicit default resolver.
             let resultNode = try #require(e02Graph.nodes.first { $0.operationID == "d.value.return" })
-            subject.setParameter(nodeID: planner.id, key: "modelID", value: .text(textIdentity))
-            subject.setParameter(nodeID: planner.id, key: "temperature", value: .decimal(0))
-            subject.setParameter(nodeID: planner.id, key: "task", value: .text(
-                "Return exactly one raw JSON array containing exactly two objects. " +
-                "Each object must contain exactly three non-empty string fields: themeID, title, and prompt. " +
-                "The two themeID values must be different. Start with [ and end with ]. " +
-                "Do not use markdown, backticks, code fences, comments, or text outside the JSON array."
-            ))
             await subject.run(target: resultNode.id, only: false)
             try #require(subject.errorMessage == nil,
                          Comment(rawValue: subject.errorMessage ?? "E02 execution failed"))

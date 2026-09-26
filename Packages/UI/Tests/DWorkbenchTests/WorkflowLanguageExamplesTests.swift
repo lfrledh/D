@@ -131,7 +131,7 @@ struct WorkflowLanguageExamplesTests {
     @Test func e02PlansOnceGeneratesThreeAndPreservesEveryCandidateBeforeProcessingSuccesses() throws {
         let bundle = try WorkflowLanguageExamples.make(.images)
         let all = allNodes(in: bundle)
-        #expect(all.filter { $0.operationID == "d.model.language" }.count == 1)
+        #expect(all.filter { $0.operationID == "d.model.language" }.count == 2)
         #expect(all.filter { $0.operationID == "d.image.generate" }.count == 1)
         #expect(all.first { $0.operationID == "d.image.generate" }?.parameters["count"] == .integer(3))
         #expect(bundle.graph.nodes.contains { $0.operationID == "d.control.map" })
