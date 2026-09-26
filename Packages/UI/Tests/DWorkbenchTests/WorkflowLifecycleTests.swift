@@ -833,3 +833,76 @@ extension WorkflowLifecycleTests {
         try await store.close()
     }
 }
+
+private actor WorkflowValidationControl {
+    var armed = false
+    let gate = WorkflowSubmitGate()
+    func arm() { armed = true }
+    func validate(_ url: URL) async -> ModelReference {
+        if armed { await gate.wait() }
+        return .init(directory: url, revision: url.lastPathComponent)
+    }
+}
+
+extension WorkflowLifecycleTests {
+    @Test func closeWithWaitDoesNotRejectSecondModelDuringPreparation() async throws {
+        let base = URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory())
+            .appendingPathComponent("model-wait-" + UUID().uuidString)
+        let a = base.appendingPathComponent("A"), b = base.appendingPathComponent("B")
+        try FileManager.default.createDirectory(at: a, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: b, withIntermediateDirectories: true)
+        let suite = "D.ModelWait." + UUID().uuidString, settings = try #require(UserDefaults(suiteName: suite))
+        defer { settings.removePersistentDomain(forName: suite) }
+        let engine = WorkflowFixtureEngine(directory: base), validation = WorkflowValidationControl()
+        let owner = ProjectSession(sessionFactory: { _ in
+            WorkbenchSession(engine: engine, backendID: "image", status: { .init(activeRunID: nil, phase: nil, queuedRunIDs: []) },
+                shutdown: {}, cleanup: {}, validateModel: { _ in }, textBackendID: "text",
+                validateTextModel: { url in await validation.validate(url) })
+        }, settings: settings)
+        await owner.createProject(at: base.appendingPathComponent("test.dproject"))
+        await owner.registerTextModel(at: a); await owner.registerTextModel(at: b); await owner.openWorkflow()
+        let c = try #require(owner.workflow); c.addExample("text")
+        let first = try #require(c.graph?.nodes[1].id)
+        c.setParameter(nodeID: first, key: "modelID", value: .text("text:A"))
+        c.addNode(operationID: "d.text.rewrite"); let second = try #require(c.selectedNodeID)
+        c.setParameter(nodeID: second, key: "modelID", value: .text("text:B"))
+        c.connect(source: first, sourcePort: "output", target: second, targetPort: "input")
+        await validation.arm()
+        let run = Task { await c.run(target: second, only: false) }
+        for _ in 0..<1000 { if await validation.gate.entered { break }; try await Task.sleep(for: .milliseconds(1)) }
+        #expect(await validation.gate.entered)
+        let close = Task { await owner.requestClose(decision: .wait) }
+        for _ in 0..<1000 { if owner.isChangingProject { break }; try await Task.sleep(for: .milliseconds(1)) }
+        #expect(owner.isChangingProject)
+        await validation.gate.open(); await run.value
+        #expect(await close.value)
+        #expect(await engine.requests.map { $0.model.revision } == ["A", "B"])
+        #expect(c.errorMessage == nil)
+    }
+
+    @Test func explicitReplacementCopySurvivesRefreshOfOldDefault() async throws {
+        let base = URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory())
+            .appendingPathComponent("model-copy-" + UUID().uuidString)
+        let a = base.appendingPathComponent("old-copy"), b = base.appendingPathComponent("new-copy")
+        try FileManager.default.createDirectory(at: a, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: b, withIntermediateDirectories: true)
+        let suite = "D.ModelCopy." + UUID().uuidString, settings = try #require(UserDefaults(suiteName: suite))
+        defer { settings.removePersistentDomain(forName: suite) }
+        let engine = WorkflowFixtureEngine(directory: base)
+        let owner = ProjectSession(sessionFactory: { _ in
+            WorkbenchSession(engine: engine, backendID: "image", status: { .init(activeRunID: nil, phase: nil, queuedRunIDs: []) },
+                shutdown: {}, cleanup: {}, validateModel: { _ in }, textBackendID: "text",
+                validateTextModel: { url in .init(directory: url, revision: "same") })
+        }, settings: settings)
+        await owner.createProject(at: base.appendingPathComponent("test.dproject"))
+        await owner.registerTextModel(at: a); await owner.openWorkflow()
+        let c = try #require(owner.workflow); c.addExample("text"); c.selectedNodeID = c.graph?.nodes[1].id
+        let target = try #require(c.modelSelectionTarget())
+        await owner.registerWorkflowModel(at: b, target: target, controller: c)
+        owner.refreshWorkflowModels()
+        await c.run(target: target.nodeID, only: false)
+        #expect(c.errorMessage == nil)
+        #expect(await engine.requests.last?.model.directory == b.resolvingSymlinksInPath())
+        await owner.closeProject()
+    }
+}

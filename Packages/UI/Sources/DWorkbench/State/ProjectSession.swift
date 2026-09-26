@@ -797,7 +797,7 @@ public final class ProjectSession {
         let services = WorkflowServices(store: store, session: session,
             defaultIdentity: { [weak self] kind in self?.defaultWorkflowModel(kind) ?? "" },
             resolveModel: { [weak self] kind, identity in
-                guard let self, self.store === store, !self.closePending else { throw WorkflowIssue("项目已切换或正在关闭。") }
+                guard let self, self.store === store else { throw WorkflowIssue("项目已切换。") }
                 return try await self.resolveWorkflowModel(kind, identity: identity, session: session)
             })
         let controller = WorkflowController(services: services)
@@ -828,7 +828,8 @@ public final class ProjectSession {
     }
     private func rememberCurrentWorkflowModels() throws {
         let bookmarks = WorkflowModelBookmarks(settings: settings)
-        if let ref = textReference, let lease = textModelLease {
+        if let ref = textReference, let lease = textModelLease,
+           try !bookmarks.entries().contains(where: { $0.identity == "text:" + (ref.revision ?? ref.directory.lastPathComponent) }) {
             try bookmarks.remember(identity: "text:" + (ref.revision ?? ref.directory.lastPathComponent),
                 kind: .text, name: ref.directory.lastPathComponent, bookmark: lease.bookmark)
         }
@@ -836,7 +837,8 @@ public final class ProjectSession {
            try bookmarks.installation(for: "image:" + revision) == nil {
             try bookmarks.rememberInstallation(identity: "image:" + revision, id: id)
         }
-        if modelLibrary == nil, let lease = modelLease {
+        if modelLibrary == nil, let lease = modelLease,
+           try !bookmarks.entries().contains(where: { $0.identity == defaultWorkflowModel(.image) }) {
             try bookmarks.remember(identity: defaultWorkflowModel(.image), kind: .image,
                 name: lease.url.lastPathComponent, bookmark: lease.bookmark)
         }
