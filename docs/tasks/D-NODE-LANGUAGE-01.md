@@ -116,3 +116,11 @@ WorkflowMusicPrograms提供：
 `WorkflowHumanTaskForm: View` init(task:WorkflowHumanTask,onSaveDraft:@escaping(WorkflowDatum?)->Void,onSubmit:@escaping(WorkflowDatum)->Void,onReject:@escaping()->Void)。提交前resultSchema验证；只明确按钮调用onSubmit/onReject，选择/编辑只保存draft；editText可用原生文字编辑、singleChoice/multipleChoice列出materials List的稳定itemID选择、approve Bool、editMusic先用真实Record/数值表单(音乐专用增强由Lead接)。不默认第一项；未知任务schema明确错误，失败不丢草稿，task.id改变才重置，不能跨等待ID回调。按钮可accessibilityIdentifier定位。
 
 三层展示主要由Canvas接线；此包只可编辑动作/数据与等待面板。所有新文案走Environment dLanguageStore.text(key,fallback)，键前缀workflow.language.form；不能另外建翻译引擎。Tests检查实际使用的formstate/helper的无效输入保护、stable itemID、显式人选/拒绝/类型验证、中文/组合字符。Hosting只编译由Lead跑；Worker不得启动App/系统权限/写真实偏好/下载或递归派工。
+
+## 中途组合核验（2026-09-27）
+
+- DATA初交+repair1+repair2由Sol/high实现；第二修复补“前置false不能隐藏后置缺字段”，Lead复验14项DATA、4项值、5项存储通过。MUSIC初交13项XCTest通过，独立审阅另发现整数上界、ID长度与时间原点反例，repair1处理中；不是全音乐验收。
+- 值预算调整为最多65536个值（类型定义仍16384、深度24、每List4096），使已冻结4096音符的6字段结构可往返；旧16k值预算与音乐上限冲突。需新预算边界测试，不放宽媒体/精度。
+- 当前资源从已有离线依赖重新准备并按既有开发身份签入，四个清单验证成功。第一次SA3准备选错不存在vendor目录，创建前拒绝，r1按实际固定Vendor路径成功；证据R/delivery/engine-preparation*.json。
+- Xcode27脚本沙箱只给普通output literal路径，子目录复制两次拒绝；未禁用沙箱。根据SwiftBuild一手源码改为只读校验＋原生Resources复制，保留沙箱和原有身份，不改Team/entitlements/系统权限。目录复制只作用新构建产物；Release排除此开发资源。旧embed工具仍供显式隔离目标使用，不用于扩大脚本权限。
+- PLAN初交前端parse通过但Lead类型检查发现局部effect名称遮蔽；非实现者发现保存失败/Map/等待恢复缺口，集中repair1，未接纳。FORMS实现中。所有已结束Worker事件摘要无已观察越界；过程详情在对应R子目录。

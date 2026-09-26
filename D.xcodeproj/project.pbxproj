@@ -12,6 +12,7 @@
 		D02000000000000000000002 /* DRuntime in Frameworks */ = {isa = PBXBuildFile; productRef = D01000000000000000000002 /* DRuntime */; };
 		D02000000000000000000003 /* DMLXBackend in Frameworks */ = {isa = PBXBuildFile; productRef = D01000000000000000000003 /* DMLXBackend */; };
 		D02000000000000000000004 /* DWorkbench in Frameworks */ = {isa = PBXBuildFile; productRef = D01000000000000000000004 /* DWorkbench */; };
+		D20260927000000000000004 /* Engines in Resources */ = {isa = PBXBuildFile; fileRef = D20260927000000000000003 /* Engines */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -36,6 +37,7 @@
 		ED43659D2F52D7D400430841 /* DTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		ED4365A72F52D7D400430841 /* DUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		D20260927000000000000001 /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Development/Debug.xcconfig; sourceTree = SOURCE_ROOT; };
+		D20260927000000000000003 /* Engines */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Engines; sourceTree = D_DEVELOPMENT_RESOURCES; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -103,6 +105,7 @@
 			isa = PBXGroup;
 			children = (
 				D20260927000000000000001 /* Debug.xcconfig */,
+				D20260927000000000000003 /* Engines */,
 				ED4365902F52D7D300430841 /* D */,
 				ED4365A02F52D7D400430841 /* DTests */,
 				ED4365AA2F52D7D400430841 /* DUITests */,
@@ -137,8 +140,8 @@
 			buildPhases = (
 				ED43658A2F52D7D300430841 /* Sources */,
 				ED43658B2F52D7D300430841 /* Frameworks */,
+				D20260927000000000000002 /* Verify development engines */,
 				ED43658C2F52D7D300430841 /* Resources */,
-				D20260927000000000000002 /* Embed development engines */,
 			);
 			buildRules = (
 			);
@@ -259,6 +262,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D20260927000000000000004 /* Engines in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -279,17 +283,17 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
-		D20260927000000000000002 /* Embed development engines */ = {
+		D20260927000000000000002 /* Verify development engines */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
 			files = ();
-			inputPaths = ("$(SRCROOT)/scripts/embed-development-resources.py", "$(SRCROOT)/scripts/prepare-development-resources.py", "$(D_DEVELOPMENT_RESOURCES)");
-			name = "Embed development engines";
-			outputPaths = ("$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/Engines");
+			inputPaths = ("$(SRCROOT)/scripts/verify-development-resources.py", "$(SRCROOT)/scripts/prepare-development-resources.py", "$(D_DEVELOPMENT_RESOURCES)/");
+			name = "Verify development engines";
+			outputPaths = ();
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "set -eu\nif [ \"$CONFIGURATION\" != Debug ]; then exit 0; fi\nif [ ! -f \"$D_DEVELOPMENT_RESOURCES/development-resources.json\" ]; then\n  echo \"error: D development engines are not prepared. Follow Development/README.md and set Development.local.xcconfig.\" >&2\n  exit 2\nfi\nexport PYTHONDONTWRITEBYTECODE=1\n/usr/bin/python3 \"$SRCROOT/scripts/embed-development-resources.py\" --prepared \"$D_DEVELOPMENT_RESOURCES\" --destination \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/Engines\"\n";
+			shellScript = "set -eu\nif [ \"$CONFIGURATION\" != Debug ]; then exit 0; fi\nexport PYTHONDONTWRITEBYTECODE=1\n/usr/bin/python3 \"$SRCROOT/scripts/verify-development-resources.py\" --prepared \"$D_DEVELOPMENT_RESOURCES\"\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -371,6 +375,7 @@
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				USE_RECURSIVE_SCRIPT_INPUTS_IN_SCRIPT_PHASES = YES;
 				D_DEVELOPMENT_RESOURCES = "$(SRCROOT)/Development";
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GCC_DYNAMIC_NO_PIC = NO;
@@ -438,6 +443,7 @@
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				USE_RECURSIVE_SCRIPT_INPUTS_IN_SCRIPT_PHASES = YES;
 				D_DEVELOPMENT_RESOURCES = "$(SRCROOT)/Development";
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GCC_NO_COMMON_BLOCKS = YES;
@@ -508,6 +514,7 @@
 		ED4365B32F52D7D400430841 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				EXCLUDED_SOURCE_FILE_NAMES = "Engines";
 				CODE_SIGN_ENTITLEMENTS = D/D.entitlements;
 				INFOPLIST_FILE = D/Info.plist;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;

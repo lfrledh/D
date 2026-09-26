@@ -132,7 +132,7 @@ public indirect enum WorkflowDatum: Codable, Sendable, Equatable {
     }
     private func check(_ expected: WorkflowDataSchema, path: String, depth: Int, count: inout Int) throws {
         count += 1
-        guard depth <= 24, count <= 16_384 else { throw WorkflowIssue("数据层级或数量超过安全限制。") }
+        guard depth <= 24, count <= 65_536 else { throw WorkflowIssue("数据层级或数量超过安全限制。") }
         if case .optional(let inner) = expected {
             if case .none(let declared) = self {
                 if declared == inner { return }
