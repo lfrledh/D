@@ -488,10 +488,15 @@ public enum WorkflowScopePlanner {
         guard kinds.contains(value.kind) else {
             throw WorkflowIssue("历史输入类型与目标端口不兼容。", nodeID: nodeID, port: port)
         }
+        if let schema {
+            guard let datum = value.datum else {
+                throw WorkflowIssue("历史输入不能表示为目标端口要求的数据结构。", nodeID: nodeID, port: port)
+            }
+            try datum.validate(as: schema)
+        }
         switch value {
         case .data(let datum):
             try datum.validate()
-            if let schema { try datum.validate(as: schema) }
         case .asset(let reference):
             guard reference.sha256.count == 64, reference.sha256.allSatisfy({ $0.isHexDigit }) else {
                 throw WorkflowIssue("历史资产摘要无效。", nodeID: nodeID, port: port)
