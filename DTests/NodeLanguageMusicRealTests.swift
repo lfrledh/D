@@ -66,7 +66,7 @@ struct NodeLanguageMusicRealTests {
             let target = try #require(c.graph?.nodes.last { $0.operationID == "d.value.return" }).id
             let chordInput = try #require(c.graph?.nodes.first { $0.title == "输入明确和弦" })
             let originalChords = try #require(chordInput.dataConfiguration?.value)
-            let firstRun = try await runAndDecide(c, target: target, transposeFirstNote: true)
+            let firstRun = try await runAndDecide(c, target: target, retainedMelody: nil)
             try #require(firstRun.status == .completed)
             let firstArchive = try #require(try await store.workflowState().archive)
             let firstRequests = firstArchive.assets.compactMap(\.request)
@@ -80,13 +80,16 @@ struct NodeLanguageMusicRealTests {
             let firstNotes = firstRun.planCheckpoint?.records.first { $0.step.node.operationID == "d.music.pitch" }?.step.outputs["output"]?.datum
             let recognized = try WorkflowNoteSequence(datum: #require(firstNotes))
             try #require(!recognized.notes.isEmpty)
+            let acceptedMelody = try #require(firstRun.planCheckpoint?.records.first {
+                $0.step.humanTask?.resultSchema == WorkflowNoteSequence.schema(clock: .seconds)
+            }?.step.outputs["output"]?.datum)
             // New editable harmony version, without changing the recording or recognized notes.
             var changedChords = try WorkflowChordTrack(datum: originalChords)
             for i in changedChords.chords.indices { changedChords.chords[i].root = (changedChords.chords[i].root + 2) % 12 }
             let harmonyB = try changedChords.datum()
             var config = try #require(chordInput.dataConfiguration); config.value = harmonyB
             c.setDataConfiguration(nodeID: chordInput.id, value: config)
-            let secondRun = try await runAndDecide(c, target: target, transposeFirstNote: false)
+            let secondRun = try await runAndDecide(c, target: target, retainedMelody: acceptedMelody)
             try #require(secondRun.status == .completed)
             let archive = try #require(try await store.workflowState().archive)
             try #require(archive.runs.first { $0.id == firstRun.id } == firstRun)
@@ -100,8 +103,19 @@ struct NodeLanguageMusicRealTests {
             guard case .audio(let bAudio) = bInput else { throw WorkflowIssue("Expected actual audio request.") }
             let bNotes = try #require(bAudio.noteSequence?.notes)
             try #require(aNotes != bNotes)
+            let aMelody = try #require(firstRun.planCheckpoint?.records.first { $0.step.node.operationID == "d.music.align" }?.step.outputs["output"]?.datum)
+            let bMelody = try #require(secondRun.planCheckpoint?.records.first { $0.step.node.operationID == "d.music.align" }?.step.outputs["output"]?.datum)
+            try #require(aMelody == bMelody)
+            let allCalls = [firstRun, secondRun].flatMap { $0.planCheckpoint?.records ?? [] }
             for record in musicRecords {
                 try #require(record.request?.model == musicReference)
+                let call = try #require(allCalls.first { $0.step.id == record.stepID })
+                let actualNotes = try WorkflowNoteSequence(datum: #require(call.step.inputs["notes"]?.datum))
+                let actualChords = try WorkflowChordTrack(datum: #require(call.step.inputs["chords"]?.datum))
+                let request = try #require(record.request)
+                guard case .audio(let input) = request.input else { throw WorkflowIssue("Expected conditioned music.") }
+                try verifyCondition(try #require(input.noteSequence), notes: actualNotes, chords: actualChords)
+                try #require(record.metadata["conditionSHA256"]?.count == 64)
                 let (url, asset) = try await store.workflowMedia(record.reference)
                 let inspection = try AudioMediaInspector.inspect(at: url, policy: .generated)
                 try #require(inspection.format.frameCount > 0)
@@ -112,7 +126,8 @@ struct NodeLanguageMusicRealTests {
                 try #require(buffer.frameLength > 0)
                 let channel = try #require(buffer.floatChannelData?.pointee)
                 let samples = UnsafeBufferPointer(start: channel, count: Int(buffer.frameLength))
-                try #require(samples.allSatisfy(\.isFinite))
+                let finite = samples.allSatisfy { $0.isFinite }
+                try #require(finite)
                 try #require(samples.contains { abs($0) > 0.00001 })
                 _ = try await store.exportWorkflowDatum(.asset(record.reference), format: "auto", name: "music", exportID: UUID(), directory: exports)
             }
@@ -144,7 +159,7 @@ struct NodeLanguageMusicRealTests {
         }
     }
 
-    private func runAndDecide(_ c: WorkflowController, target: UUID, transposeFirstNote: Bool) async throws -> WorkflowRun {
+    private func runAndDecide(_ c: WorkflowController, target: UUID, retainedMelody: WorkflowDatum?) async throws -> WorkflowRun {
         await c.run(target: target, only: false)
         try #require(c.errorMessage == nil, Comment(rawValue: c.errorMessage ?? ""))
         let id = try #require(c.runs.last?.id)
@@ -154,11 +169,14 @@ struct NodeLanguageMusicRealTests {
             let record = try #require(c.callRecords(runID: id).first { $0.step.status == .waiting })
             let human = try #require(record.step.humanTask)
             var value = human.materials
-            if human.resultSchema == WorkflowNoteSequence.schema(clock: .seconds), transposeFirstNote {
-                var notes = try WorkflowNoteSequence(datum: value)
-                try #require(!notes.notes.isEmpty)
-                notes.notes[0].pitch = min(127, notes.notes[0].pitch + 1)
-                value = try notes.datum()
+            if human.resultSchema == WorkflowNoteSequence.schema(clock: .seconds) {
+                if let retainedMelody { value = retainedMelody }
+                else {
+                    var notes = try WorkflowNoteSequence(datum: value)
+                    try #require(!notes.notes.isEmpty)
+                    notes.notes[0].pitch = min(127, notes.notes[0].pitch + 1)
+                    value = try notes.datum()
+                }
             }
             await c.decideHuman(stepID: record.step.id, value: value, expectedTask: human)
             try #require(c.errorMessage == nil, Comment(rawValue: c.errorMessage ?? ""))
@@ -166,6 +184,39 @@ struct NodeLanguageMusicRealTests {
             try #require(c.errorMessage == nil, Comment(rawValue: c.errorMessage ?? ""))
         }
         return try #require(c.runs.first { $0.id == id })
+    }
+    /// Independent frame occupancy/onset oracle, not the production condition builder.
+    private func verifyCondition(_ actual: AudioNoteSequence, notes: WorkflowNoteSequence, chords: WorkflowChordTrack) throws {
+        var expectedHeld = Set<String>(), expectedOnsets = Set<String>()
+        func add(_ pitch: Int, _ start: Double, _ end: Double) {
+            let a = Int((start * 25).rounded(.toNearestOrAwayFromZero)), b = Int((end * 25).rounded(.toNearestOrAwayFromZero))
+            if b > a { expectedOnsets.insert("\(pitch):\(a)"); for frame in a..<b { expectedHeld.insert("\(pitch):\(frame)") } }
+        }
+        let tempo = try #require(notes.tempo)
+        for note in notes.notes where note.velocity > 0 {
+            let a = tempo.firstBeatSeconds + note.start * 60 / tempo.beatsPerMinute
+            let b = tempo.firstBeatSeconds + note.end * 60 / tempo.beatsPerMinute
+            add(note.pitch, a, b)
+        }
+        let harmonyTempo = try #require(chords.tempo)
+        for chord in chords.chords {
+            let intervals: [Int] = switch chord.quality {
+            case .major: [0, 4, 7]; case .minor: [0, 3, 7]; case .dominant7: [0, 4, 7, 10]
+            case .major7: [0, 4, 7, 11]; case .minor7: [0, 3, 7, 10]; case .diminished: [0, 3, 6]
+            }
+            for (index, interval) in intervals.enumerated() {
+                add((chord.octave + 1) * 12 + chord.root + interval + (index < chord.inversion ? 12 : 0),
+                    harmonyTempo.firstBeatSeconds + chord.start * 60 / harmonyTempo.beatsPerMinute,
+                    harmonyTempo.firstBeatSeconds + chord.end * 60 / harmonyTempo.beatsPerMinute)
+            }
+        }
+        var observedHeld = Set<String>(), observedOnsets = Set<String>()
+        for note in try #require(actual.notes) {
+            observedOnsets.insert("\(note.pitch):\(note.startFrame)")
+            for frame in note.startFrame..<note.endFrame { observedHeld.insert("\(note.pitch):\(frame)") }
+        }
+        try #require(observedHeld == expectedHeld)
+        try #require(observedOnsets == expectedOnsets)
     }
     private func digest(_ url: URL) throws -> String { SHA256.hash(data: try Data(contentsOf: url)).map { String(format: "%02x", $0) }.joined() }
 }
