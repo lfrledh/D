@@ -164,13 +164,8 @@ public enum WorkflowMusicPrograms {
         if sequence.clock == .quarterNotes, sequence.tempo == nil {
             throw WorkflowIssue("Beat-clock rendering requires a tempo map.")
         }
-        let secondsPerBeat = sequence.tempo.map { 60 / $0.beatsPerMinute }
-        let origin = sequence.tempo?.firstBeatSeconds ?? 0
         func seconds(_ value: Double) -> Double {
-            switch sequence.clock {
-            case .seconds: value
-            case .quarterNotes: origin + value * secondsPerBeat!
-            }
+            return timelineSeconds(value, clock: sequence.clock, tempo: sequence.tempo)
         }
 
         let durationSeconds = seconds(sequence.duration)
@@ -254,24 +249,18 @@ public enum WorkflowMusicPrograms {
         let micros = Int((60_000_000 / tempoBPM).rounded(.toNearestOrAwayFromZero))
         guard (1...0xFF_FFFF).contains(micros) else { throw WorkflowIssue("MIDI tempo is outside the three-byte range.") }
 
-        func timelineQuarterNotes(_ value: Double) -> Double {
-            switch sequence.clock {
-            case .seconds:
-                value * 2 // Seconds-clock MIDI always uses 120 BPM for time encoding.
-            case .quarterNotes:
-                let mappedSeconds = sequence.tempo!.firstBeatSeconds + value * 60 / tempoBPM
-                return mappedSeconds * tempoBPM / 60
-            }
+        func seconds(_ value: Double) -> Double {
+            return timelineSeconds(value, clock: sequence.clock, tempo: sequence.tempo)
         }
         func tick(_ value: Double) throws -> Int {
-            let scaled = timelineQuarterNotes(value) * 960
+            let scaled = seconds(value) * tempoBPM / 60 * 960
             guard scaled.isFinite, scaled >= 0, scaled <= Double(Int.max) else {
                 throw WorkflowIssue("MIDI tick is outside its safe range.")
             }
             return Int(scaled.rounded(.toNearestOrAwayFromZero))
         }
         guard sequence.notes.allSatisfy({
-            timelineQuarterNotes($0.start) >= 0 && timelineQuarterNotes($0.end) >= 0
+            seconds($0.start) >= 0 && seconds($0.end) >= 0
         }) else {
             throw WorkflowIssue("MIDI export rejects events mapped before the timeline origin; crop the pickup first.")
         }
@@ -279,8 +268,8 @@ public enum WorkflowMusicPrograms {
         var byPitch: [Int: [(start: Double, end: Double, startTick: Int, endTick: Int)]] = [:]
         var events: [MIDIEvent] = []
         for note in sequence.notes where note.velocity > 0 {
-            let mappedStart = timelineQuarterNotes(note.start)
-            let mappedEnd = timelineQuarterNotes(note.end)
+            let mappedStart = seconds(note.start)
+            let mappedEnd = seconds(note.end)
             let startTick = try tick(note.start)
             let endTick = try tick(note.end)
             guard endTick > startTick else { throw WorkflowIssue("MIDI quantization collapsed a note to zero length.") }
@@ -335,6 +324,19 @@ private struct RenderNote {
     let start: Double
     let end: Double
     let velocity: Double
+}
+
+/// The single clock-to-timeline conversion used by every in-memory music
+/// encoder. Keeping the operation order here prevents WAV and MIDI from
+/// disagreeing at the exact zero boundary because of floating-point rounding.
+private func timelineSeconds(_ value: Double, clock: WorkflowMusicClock,
+                             tempo: WorkflowTempoMap?) -> Double {
+    switch clock {
+    case .seconds:
+        return value
+    case .quarterNotes:
+        return tempo!.firstBeatSeconds + value * (60 / tempo!.beatsPerMinute)
+    }
 }
 
 private func derivedNoteID(sourceID: String, pattern: WorkflowChordPattern,
