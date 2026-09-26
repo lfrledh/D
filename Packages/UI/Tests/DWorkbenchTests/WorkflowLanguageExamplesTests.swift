@@ -203,7 +203,13 @@ struct WorkflowLanguageExamplesTests {
         let bundle = try WorkflowLanguageExamples.make(.music)
         let branch = try #require(bundle.graph.nodes.first { $0.title == "按开关选择和弦来源" })
         let request = try #require(bundle.graph.nodes.first { $0.title == "组合和弦提案条件" })
-        let supplied = try #require(bundle.graph.nodes.first { $0.title == "输入明确和弦" }?.dataConfiguration?.value)
+        var suppliedTrack = try WorkflowChordTrack(datum: #require(bundle.graph.nodes.first {
+            $0.title == "输入明确和弦"
+        }?.dataConfiguration?.value))
+        suppliedTrack.chords[0].root = 9
+        suppliedTrack.chords[0].id = "user-chord"
+        suppliedTrack.sources = [fixtureSource()]
+        let supplied = try suppliedTrack.datum()
         let defaultFlag = try #require(bundle.graph.nodes.first {
             $0.title == "可选语言模型和弦提案"
         }?.dataConfiguration?.value)
@@ -248,8 +254,16 @@ struct WorkflowLanguageExamplesTests {
         }
         let plan = try WorkflowPlanCompiler().compile(body, tools: bundle.tools)
         let originalStyle = WorkflowDatum.text("Unchanged editable style")
-        let notes = try publicValue("notes", in: body)
-        let chords = try publicValue("chords", in: body)
+        var suppliedNotes = try WorkflowNoteSequence(datum: publicValue("notes", in: body))
+        suppliedNotes.notes[0].pitch = 81
+        suppliedNotes.notes[0].id = "user-note"
+        suppliedNotes.sources = [fixtureSource()]
+        var suppliedChords = try WorkflowChordTrack(datum: publicValue("chords", in: body))
+        suppliedChords.chords[0].root = 9
+        suppliedChords.chords[0].id = "user-chord"
+        suppliedChords.sources = suppliedNotes.sources
+        let notes = try suppliedNotes.datum()
+        let chords = try suppliedChords.datum()
         let defaultOptimization = try publicValue("optimizeStyle", in: body)
         #expect(defaultOptimization == .boolean(false))
 
@@ -279,6 +293,25 @@ struct WorkflowLanguageExamplesTests {
         #expect(available.musicInputs.map(\.notes) == [notes])
         #expect(available.musicInputs.map(\.chords) == [chords])
         #expect(available.musicRequests.allSatisfy { $0.noteSequence != nil })
+    }
+
+    @Test func harmonyProposalTransmitsAParseableCompleteContract() throws {
+        let bundle = try WorkflowLanguageExamples.make(.music)
+        let proposal = try #require(allNodes(in: bundle).first { $0.title == "可选和弦结构提案" })
+        let task = try #require(proposal.parameters["task"]?.string)
+        let exampleLine = try #require(task.split(separator: "\n").first { $0.hasPrefix("{\"format\":") })
+        let decoded = try WorkflowStructuredText.parse(String(exampleLine), as: WorkflowChordTrack.schema)
+        let track = try WorkflowChordTrack(datum: decoded)
+        #expect(track.duration == 8)
+        #expect(track.tempo?.beatsPerMinute == 120)
+        #expect(track.chords.count == 2)
+        #expect(track.sources.isEmpty)
+        for quality in WorkflowChordQuality.allCases { #expect(task.contains(quality.rawValue)) }
+    }
+
+    private func fixtureSource() -> WorkflowAssetReference {
+        .init(projectID: UUID(), assetID: UUID(), version: UUID(), kind: .audio,
+              sha256: String(repeating: "a", count: 64))
     }
 
     @Test func e04ReturnsFullTypedCandidatesAndKeepsVideoTextOnly() throws {

@@ -529,7 +529,14 @@ public enum WorkflowLanguageExamples {
     private static func harmonyProposalBody() throws -> WorkflowGraph {
         var language = try node("d.model.language", title: "可选和弦结构提案")
         language.parameters["task"] = .text(
-            "提出一个8拍的和弦轨。只输出符合结构的 JSON；tempo 必须明确为120 BPM、首拍0秒、4/4，chords 数组内 id 必须按1起始索引字符串填写。"
+            """
+            提出一个8拍的和弦轨。只返回一个原始 JSON 对象，不要 Markdown、解释或额外字段。
+            以下是完整格式示例，可以修改 chords 中的和弦，必须保留全部字段与类型：
+            {"format":"d.music.chords","version":1,"duration":8,"chords":[{"id":"1","root":0,"quality":"major","octave":4,"inversion":0,"start":0,"end":4},{"id":"2","root":7,"quality":"dominant7","octave":3,"inversion":0,"start":4,"end":8}],"tempo":{"format":"d.music.tempo","version":1,"beatsPerMinute":120,"firstBeatSeconds":0,"numerator":4,"denominator":4},"sources":[]}
+            duration/start/end 单位为四分音符拍。0 <= start < end <= 8。id 按数组顺序从字符串 "1" 开始。
+            root 是0到11的整数音级（C=0），不能写音名；quality 只能是 major、minor、dominant7、major7、minor7、diminished。
+            octave 取3或4，inversion 取0。tempo 固定120 BPM、首拍0秒、4/4，sources 必须为空数组。
+            """
         )
         language.parameters["outputMode"] = .text("json")
         language.parameters["maximumOutputTokens"] = .integer(768)
