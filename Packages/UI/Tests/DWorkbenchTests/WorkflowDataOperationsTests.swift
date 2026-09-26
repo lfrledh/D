@@ -279,6 +279,53 @@ struct WorkflowDataOperationsTests {
         #expect(services.callCount == 0)
     }
 
+    @Test func filterEvaluatesMissingFieldPredicatesAfterAnEarlierFalse() async throws {
+        let services = RejectingDataServices()
+        let fields: [WorkflowRecordField] = [
+            .init("gate", .boolean), .init("x", .text, required: false),
+        ]
+        let element: WorkflowDataSchema = .record(fields)
+        let missingX = WorkflowDatum.record(schema: fields, fields: ["gate": .boolean(false)])
+        let missingInput = WorkflowDatum.list(
+            element: element, items: [.init(id: "missing-x", value: missingX)]
+        )
+        let gateThenX: [WorkflowDataRule] = [
+            .init(path: ["gate"], comparison: .equals, value: .boolean(true)),
+            .init(path: ["x"], comparison: .equals, value: .text("a")),
+        ]
+        await #expect(throws: WorkflowIssue.self) {
+            _ = try await execute(
+                "d.value.filter", configuration: .init(rules: gateThenX),
+                inputs: ["input": .data(missingInput)], services: services
+            )
+        }
+
+        let existsAfterFalse = try await execute(
+            "d.value.filter",
+            configuration: .init(rules: [
+                .init(path: ["gate"], comparison: .equals, value: .boolean(true)),
+                .init(path: ["x"], comparison: .exists),
+            ]),
+            inputs: ["input": .data(missingInput)], services: services
+        )
+        #expect(try datum("output", in: existsAfterFalse).items?.isEmpty == true)
+
+        func row(gate: Bool, x: String) -> WorkflowDatum {
+            .record(schema: fields, fields: ["gate": .boolean(gate), "x": .text(x)])
+        }
+        let legitimateInput = WorkflowDatum.list(element: element, items: [
+            .init(id: "keep-1", value: row(gate: true, x: "a")),
+            .init(id: "skip", value: row(gate: false, x: "a")),
+            .init(id: "keep-2", value: row(gate: true, x: "a")),
+        ])
+        let legitimate = try await execute(
+            "d.value.filter", configuration: .init(rules: gateThenX),
+            inputs: ["input": .data(legitimateInput)], services: services
+        )
+        #expect(try datum("output", in: legitimate).items?.map(\.id) == ["keep-1", "keep-2"])
+        #expect(services.callCount == 0)
+    }
+
     @Test func selectRequiresAnExplicitIDOrValidOneBasedIndex() async throws {
         let services = RejectingDataServices()
         let input = WorkflowDatum.list(element: .text, items: [
