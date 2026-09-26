@@ -128,7 +128,7 @@ struct WorkflowCanvasPresentationTests {
         let edge = WorkflowConnection(sourceNode: source.id, sourcePort: "output", targetNode: target.id, targetPort: "input")
         let graph = WorkflowGraph(nodes: [source, target], connections: [edge])
         let plan = WorkflowPlan(graphID: graph.id, graphRevision: graph.revision, steps: [])
-        var run = WorkflowRun(graph: graph)
+        var run = WorkflowRun(graph: graph, targetNodeID: target.id)
         var first = WorkflowStepRun(node: target, signature: "a"), second = WorkflowStepRun(node: target, signature: "b")
         first.inputs = ["input": .data(.text("first item"))]; second.inputs = ["input": .data(.text("second item"))]
         let records: [WorkflowPlanCallRecord] = [
