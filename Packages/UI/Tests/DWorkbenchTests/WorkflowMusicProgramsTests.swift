@@ -400,6 +400,34 @@ final class WorkflowMusicProgramsTests: XCTestCase {
             uint32LE(wav, $0) != 0
         })
 
+        let boundaryTempo = WorkflowTempoMap(beatsPerMinute: 100, firstBeatSeconds: -1.8,
+                                             numerator: 4, denominator: 4)
+        let roundedBelowZero = WorkflowNoteSequence(
+            clock: .quarterNotes,
+            notes: [.init(id: "boundary", pitch: 60, start: 3, end: 4, velocity: 1)],
+            duration: 4,
+            tempo: boundaryTempo
+        )
+        XCTAssertThrowsError(try WorkflowMusicPrograms.render(sequence: roundedBelowZero, sampleRate: 16_000))
+        XCTAssertThrowsError(try WorkflowMusicPrograms.midi(sequence: roundedBelowZero))
+
+        let accepted = WorkflowNoteSequence(
+            clock: .quarterNotes,
+            notes: [.init(id: "accepted", pitch: 60, start: 3.1, end: 4, velocity: 1)],
+            duration: 4,
+            tempo: boundaryTempo
+        )
+        let acceptedEvents = try midiChannelEvents(WorkflowMusicPrograms.midi(sequence: accepted))
+        XCTAssertEqual(acceptedEvents.map(\.tick), [96, 960])
+        let acceptedWAV = try WorkflowMusicPrograms.render(sequence: accepted, sampleRate: 16_000)
+        XCTAssertEqual(Int(uint32LE(acceptedWAV, 40)), 9_600 * 4)
+        XCTAssertTrue(stride(from: 44, to: 44 + 960 * 4, by: 4).allSatisfy {
+            uint32LE(acceptedWAV, $0) == 0
+        })
+        XCTAssertTrue(stride(from: 44 + 960 * 4, to: acceptedWAV.count, by: 4).contains {
+            uint32LE(acceptedWAV, $0) != 0
+        })
+
         let negativeTempo = WorkflowTempoMap(beatsPerMinute: 120, firstBeatSeconds: -0.25,
                                              numerator: 4, denominator: 4)
         let negativeMapped = WorkflowNoteSequence(
