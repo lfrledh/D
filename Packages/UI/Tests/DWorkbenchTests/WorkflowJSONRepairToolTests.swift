@@ -20,6 +20,11 @@ struct WorkflowJSONRepairToolTests {
         #expect(languageNodes.allSatisfy { $0.parameters["modelID"] == .text("") })
         #expect(languageNodes.allSatisfy { $0.parameters["temperature"] == .decimal(0) })
         #expect(languageNodes.allSatisfy { $0.parameters["maximumOutputTokens"] == .integer(768) })
+        #expect(languageNodes.allSatisfy { $0.parameters["maximumPromptTokens"] == .integer(4_096) })
+        for var language in languageNodes {
+            language.parameters["maximumPromptTokens"] = .integer(32_768)
+            try WorkflowRegistry.standard.validate(language)
+        }
         #expect(nodes.contains { $0.operationID == "d.control.loop" })
         #expect(nodes.contains { $0.operationID == "d.value.template" })
         #expect(nodes.filter { $0.operationID == "d.value.validate" }.allSatisfy {

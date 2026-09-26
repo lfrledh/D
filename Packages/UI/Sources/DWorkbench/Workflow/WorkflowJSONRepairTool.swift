@@ -249,7 +249,8 @@ public enum WorkflowJSONRepairTool {
         var result = try node("d.model.language", title: title)
         result.parameters["modelID"] = .text("")
         result.parameters["outputMode"] = .text("text")
-        result.parameters["maximumPromptTokens"] = .integer(32_768)
+        // A short editable recipe should not reserve the entire supported context by default.
+        result.parameters["maximumPromptTokens"] = .integer(4_096)
         result.parameters["maximumOutputTokens"] = .integer(768)
         result.parameters["temperature"] = .decimal(0)
         return result

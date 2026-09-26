@@ -307,3 +307,8 @@ node-real-image-repair-tool在eb691745构建上生成了合法的一主题三图
 - 非实现者复核发现543e6a4给N11新增可选expectedItemCount后，Registry的统一必填检查会拒绝旧v1节点；不是已交付用户图损坏，候选未入源。仅对此operation/field允许缺省，含义为原有不限制数量；不改旧参数、图签名或严格校验字段要求。
 - 新真实Store回归先经历测试代码枚举拼写编译错误（list-count-legacy-red），修正后list-count-legacy-red-r1以“缺少字段：expectedItemCount”真实失败；最小修补后list-count-legacy-green五组相关测试通过，覆盖原参数、签名、编译、保存冷重开及strict缺失/错误count类型拒绝。
 - MUSIC-CANCEL repair1复核只剩原资产完整记录保护断言，发出最后repair2，仍同任务预算。PROCESS-RECOVERY初交只读检查无权限拒绝/成功越界证据；失败命令为猜测rg位置和不存在源码目录，未用于绕过保护，候选待审阅/构建/实际进程实验。
+
+## E02 真实规划质量与资源边界
+
+53dd7f8实际构建的node-real-image-count：1.5B初次返回1主题，显式数量校验进入两次修复；两次均返回Markdown围栏，被原严格JSON规则拒绝，未启动图片批次。旧3图记录不改称6图。保留三份真实原文/请求及失败项目。
+同一代码与图显式选用SSD已有Qwen2.5-7B 4bit（c26a38f6a37d0a51b4e9a1eb3026530fa35d9fed），node-real-image-7b被现有预算准确拒绝：估计12930768670 > 12884901888字节。不是7B成功运行证据，不降低DRuntime预算。定位为JSON工具预设最大输入32768导致KV按该值预留（LocalModelInventory的2×权重+KV+开销）；Lead仅将新短JSON工具可编辑默认值设为4096，仍允许用户显式32768且不裁输入/不改输出768/不改模型精度。添加默认值与可上调契约回归；实际下一运行单列。
