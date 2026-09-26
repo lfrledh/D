@@ -1,0 +1,33 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<Scheme LastUpgradeVersion="2660" version="1.3">
+   <BuildAction parallelizeBuildables="YES" buildImplicitDependencies="YES">
+      <BuildActionEntries>
+         <BuildActionEntry buildForTesting="YES" buildForRunning="YES" buildForProfiling="YES" buildForArchiving="YES" buildForAnalyzing="YES">
+            <BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="ED43658D2F52D7D300430841" BuildableName="D.app" BlueprintName="D" ReferencedContainer="container:D.xcodeproj" />
+         </BuildActionEntry>
+         <BuildActionEntry buildForTesting="YES" buildForRunning="NO" buildForProfiling="NO" buildForArchiving="NO" buildForAnalyzing="YES">
+            <BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="ED43659C2F52D7D400430841" BuildableName="DTests.xctest" BlueprintName="DTests" ReferencedContainer="container:D.xcodeproj" />
+         </BuildActionEntry>
+         <BuildActionEntry buildForTesting="YES" buildForRunning="NO" buildForProfiling="NO" buildForArchiving="NO" buildForAnalyzing="YES">
+            <BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="ED4365A62F52D7D400430841" BuildableName="DUITests.xctest" BlueprintName="DUITests" ReferencedContainer="container:D.xcodeproj" />
+         </BuildActionEntry>
+      </BuildActionEntries>
+   </BuildAction>
+   <LaunchAction buildConfiguration="Debug" selectedDebuggerIdentifier="Xcode.DebuggerFoundation.Debugger.LLDB" selectedLauncherIdentifier="Xcode.IDEFoundation.Launcher.LLDB" launchStyle="0" useCustomWorkingDirectory="NO" ignoresPersistentStateOnLaunch="NO" debugDocumentVersioning="YES" allowLocationSimulation="NO">
+      <BuildableProductRunnable runnableDebuggingMode="0">
+         <BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="ED43658D2F52D7D300430841" BuildableName="D.app" BlueprintName="D" ReferencedContainer="container:D.xcodeproj" />
+      </BuildableProductRunnable>
+   </LaunchAction>
+   <AnalyzeAction buildConfiguration="Debug" />
+   <TestAction buildConfiguration="Debug" selectedDebuggerIdentifier="Xcode.DebuggerFoundation.Debugger.LLDB" selectedLauncherIdentifier="Xcode.IDEFoundation.Launcher.LLDB" shouldUseLaunchSchemeArgsEnv="YES">
+      <Testables>
+         <TestableReference skipped="NO" parallelizable="NO">
+            <BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="ED43659C2F52D7D400430841" BuildableName="DTests.xctest" BlueprintName="DTests" ReferencedContainer="container:D.xcodeproj" />
+         </TestableReference>
+         <TestableReference skipped="NO" parallelizable="NO">
+            <BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="ED4365A62F52D7D400430841" BuildableName="DUITests.xctest" BlueprintName="DUITests" ReferencedContainer="container:D.xcodeproj" />
+         </TestableReference>
+      </Testables>
+   </TestAction>
+   <ArchiveAction buildConfiguration="Release" revealArchiveInOrganizer="YES" />
+</Scheme>
