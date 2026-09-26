@@ -251,7 +251,10 @@ struct WorkflowRegistryTests {
         ])
         #expect(template.connections.contains { $0.targetPort == "input" })
         #expect(template.connections.contains { $0.targetPort == "other" })
-        #expect(registry.definitions.count == 11) // N01–N10 plus the independent S3 program.
+        let legacyIDs: Set<String> = ["d.text.input", "d.asset.reference", "d.text.template", "d.text.rewrite",
+            "d.image.generate", "d.text.confirm", "d.asset.choose", "d.image.resize", "d.image.convert", "d.asset.export", "d.text.remove-blank-lines"]
+        #expect(legacyIDs.isSubset(of: Set(registry.definitions.map(\.id))))
+        for id in legacyIDs { #expect(registry.operation(id)?.definition.version == 1) }
         #expect(registry.definitions.contains { $0.id == "d.text.remove-blank-lines" })
         #expect(!registry.definitions.contains { $0.id == "d.empty-lines" })
     }

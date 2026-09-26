@@ -38,6 +38,19 @@ struct WorkflowArchiveInspectionTests {
         for version in 13...15 { #expect(!ProjectManifest.readableSchemaVersions.contains(version)) }
     }
 
+    @Test func humanWaitAndDataResultsCannotMasqueradeAsV1() throws {
+        let node = WorkflowNode(operationID: "d.text.input", title: "old compatible operation")
+        let graph = WorkflowGraph(nodes: [node])
+        var step = WorkflowStepRun(node: node, signature: "fixture")
+        step.outputs = ["output": .data(.text("new typed result"))]
+        var archive = WorkflowArchive(runs: [.init(graph: graph, targetNodeID: node.id, steps: [step])])
+        #expect(archive.requiresLanguageVersion)
+        step.outputs = [:]
+        step.humanTask = .init(id: step.id, kind: .approve, title: "explicit wait", materials: .text("check"), resultSchema: .boolean)
+        archive.runs[0].steps = [step]
+        #expect(archive.requiresLanguageVersion)
+    }
+
     @Test func schema16MigrationBacksUpManifestWithoutChangingSnapshot() async throws {
         let root = URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory())
             .appendingPathComponent("workflow-v16-" + UUID().uuidString + ".dproject")

@@ -104,3 +104,15 @@ WorkflowMusicPrograms提供：
 - midi(sequence:)throws->Data：SMF0，960 ticks/quarter，tempo元事件（秒序列用120只编码时间），原velocity，off在同tick on前，同pitch重叠明确拒绝（不合并），安全VLQ/长度，负时间拒绝，末尾保留duration；不是MusicXML全量实现。
 
 验证：秒拍往返原映射、弱起/吸附/塌缩、C大调与相对小调是候选非真值、短空不足、和弦构成/转位/分解时序、polyphonic合成有限且WAV真实解码/无文件原件、超预算预检、同时间noteoff优先/MIDI结构、所有纯值Datum roundtrip及非法版本/单位/ID拒绝。函数签名中snap/pattern可定义对应publicenum，额外局部helper自由；涉及共享接口歧义先回Lead。本包不注册操作；Lead之后把真实操作接服务和存储。
+
+## FORMS r1：真实可调用的节点数据和人工任务表单
+
+只新增 `Packages/UI/Sources/UI/Views/Workflow/WorkflowDataForms.swift`、同目录`WorkflowHumanTaskForm.swift`、`Packages/UI/Tests/UITests/WorkflowDataFormsTests.swift`。gpt-5.6-sol/high，初交1800秒，受限CLI预检。只语法parse；Lead编译/hosting/GUI。不得改Canvas/Controller/Store/语言包主文件、共享类型或本任务；语言新键及en/zh建议输出到任务output JSON由Lead合入既有包。
+
+冻结接线：`@MainActor struct WorkflowDatumEditor: View` init(value:Binding<WorkflowDatum?>,allowsTypeSelection:Bool=true)，有类型Text/Number(unit)/Bool/Enum(选项及值)/Record表单，List/Optional也可递归编辑，Asset/Result只读预览，不用JSON作为唯一入口。允许选择类型是明确用户动作，未提交无效文本留本地草稿/错误，不把数字打半截变0。深度最多8层UI，超出保留只读数据。实例切换按身份重置由调用者.id(nodeID)；中文输入不要每次重建整个树。用户输入不当翻译键。
+
+`WorkflowNodeDataEditor: View` init(node:Binding<WorkflowNode>,availableRecordSchema:[WorkflowRecordField]=[])。N01接value；N04模板字段后备；N05可增删命名输入字段/type/required/固定后备；N06字段菜单从availableRecordSchema展开有界路径，空schema时允许显式填写但不能猜字段；N07元素类型、固定items稳定ID增删/上下序、输入ports，明确一层concat由既有parameter控制；N08/N11规则与schema，N10配对键。普通scalar参数已有Canvas控件，不复制所有模型表单。输出写回实际node.dataConfiguration，空配置不自动启动，不保存文件。必要纯值form状态/helper写同文件且被真实View使用；invalid编辑保持原node不静默清空。
+
+`WorkflowHumanTaskForm: View` init(task:WorkflowHumanTask,onSaveDraft:@escaping(WorkflowDatum?)->Void,onSubmit:@escaping(WorkflowDatum)->Void,onReject:@escaping()->Void)。提交前resultSchema验证；只明确按钮调用onSubmit/onReject，选择/编辑只保存draft；editText可用原生文字编辑、singleChoice/multipleChoice列出materials List的稳定itemID选择、approve Bool、editMusic先用真实Record/数值表单(音乐专用增强由Lead接)。不默认第一项；未知任务schema明确错误，失败不丢草稿，task.id改变才重置，不能跨等待ID回调。按钮可accessibilityIdentifier定位。
+
+三层展示主要由Canvas接线；此包只可编辑动作/数据与等待面板。所有新文案走Environment dLanguageStore.text(key,fallback)，键前缀workflow.language.form；不能另外建翻译引擎。Tests检查实际使用的formstate/helper的无效输入保护、stable itemID、显式人选/拒绝/类型验证、中文/组合字符。Hosting只编译由Lead跑；Worker不得启动App/系统权限/写真实偏好/下载或递归派工。

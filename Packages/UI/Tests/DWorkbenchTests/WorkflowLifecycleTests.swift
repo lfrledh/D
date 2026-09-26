@@ -492,7 +492,7 @@ struct WorkflowLifecycleTests {
         old.schemaVersion = 12; let original = try JSONEncoder().encode(old)
         try original.write(to: store.rootURL.appendingPathComponent("project.json"))
         let migrated = try await ProjectStore.open(at: store.rootURL)
-        #expect(await migrated.snapshot().schemaVersion == 16)
+        #expect(await migrated.snapshot().schemaVersion == 17)
         #expect(try Data(contentsOf: store.rootURL.appendingPathComponent("project.v12.backup.json")) == original)
         try await migrated.close()
         #expect(!ProjectManifest.readableSchemaVersions.contains(13)); #expect(!ProjectManifest.readableSchemaVersions.contains(14)); #expect(!ProjectManifest.readableSchemaVersions.contains(15))
