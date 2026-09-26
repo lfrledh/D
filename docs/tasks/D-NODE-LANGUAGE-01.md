@@ -1,5 +1,24 @@
 # D-NODE-LANGUAGE-01：通用节点语言与四模态试用
 
+## SCOPES r1：A16 局部运行与历史输入（language-v1-scopes1）
+
+有限新增实现包，非旧PLAN/CHECKPOINT修复预算重置。只新增 Packages/UI/Sources/DWorkbench/Workflow/WorkflowRunScope.swift 与 Packages/UI/Tests/DWorkbenchTests/WorkflowRunScopeTests.swift。Lead持有Run/Controller/Store/UI接线。请求gpt-5.6-sol/high，初交1800秒+最多2普通修复；独立受限CLI，禁网/构建/GPU/GUI/Git写/递归，前端parse可用且缓存仅自己output/tmp。禁止heredoc/here-string/process-substitution；Python使用-c或自己output脚本+PYTHONDONTWRITEBYTECODE=1。未知权限拒绝立即停报。按已审阅契约实现，不另造执行器。
+
+公开 Codable/Sendable/Equatable 值及显式public init：WorkflowGraphSelection = through(UUID), only(UUID), downstream(UUID, includingAnchor:Bool)；WorkflowCallReference(address:WorkflowExecutionAddress,stepID:UUID)；WorkflowHistoricalInput(destinationNodeID:UUID,destinationPort:String,sourceCall:WorkflowCallReference,sourcePort:String)；WorkflowRunScope(version:Int=1,selection:WorkflowGraphSelection,originCall:WorkflowCallReference?=nil,historicalInputs:[WorkflowHistoricalInput]=[],recomputeSelected:Bool=false)。Lead后加WorkflowRun.scope可选字段；Worker不编辑它。
+
+非持久载体均Sendable+public init：WorkflowScopeBoundary(destinationNodeID,destinationPort,sourceNodeID,sourcePort)，WorkflowScopeSlice(plan:WorkflowPlan,boundaries:[WorkflowScopeBoundary])；WorkflowScopeSource(graph:WorkflowGraph,selection:WorkflowGraphSelection,checkpoint:WorkflowPlanCheckpoint)；WorkflowResolvedCall(graph:WorkflowGraph,plan:WorkflowPlan,arguments:[String:WorkflowDatum],externalInputs:[UUID:[String:WorkflowValue]],modelDefaults:[String:String],originCall:WorkflowCallReference)。
+
+WorkflowScopePlanner公开static方法：select(graph:selection:tools:registry=.standard) throws -> WorkflowScopeSlice；rebuild(graph:selection:modelDefaults:tools:registry=.standard) throws -> WorkflowPlan；resolveCall(_ reference:WorkflowCallReference,source:WorkflowScopeSource,tools:registry=.standard) throws -> WorkflowResolvedCall；resolveHistoricalInputs(_ pins:[WorkflowHistoricalInput],destination:WorkflowScopeSource,sources:[WorkflowScopeSource],tools:registry=.standard) throws -> [UUID:[String:WorkflowValue]]。
+
+through/only复用现有Compiler；downstream从完整编译有序plan求后继闭包，includingAnchor明确含/不含锚点，空范围拒绝。保留原step.inputs/signature/嵌套plan；interface只保留所选N01公开名与所选命名输出。所有源不在选区、目标在选区的连接均列boundary，含菱形旁路；选择函数无服务调用。rebuild从独立graph+selection编译后freeze modelDefaults，不裁剪待验checkpoint.plan。
+
+历史pin必须一对一覆盖全部boundary，拒绝漏/重/额外/覆盖内部边；source按完整runID/address/stepID/port精确取.completed或.partial的真实outputs，不使用preview/waiting/draft/latest。source nodeID与port须匹配该boundary原连线来源；改接其他来源须用户先编辑连线。每个source用自身graph/selection/defaults独立rebuild并公共CheckpointValidation验证。冻结完整值且类型/单位校验；目标可用新ready checkpoint（records空），其plan仍要独立对照。来源runID不可重复。历史源自身来源链真实性由Lead在Store按已保存运行顺序检验；本helper不声称密码学身份。
+
+resolveCall只处理已存在、输入已绑定的具体Call记录，不执行控制模板。先独立validate source，再按完整地址沿冻结graph/control/tool查真实所属graph；tool的id/version/digest全核对，最终kind必须call。允许completed/partial/failed/cancelled但失败前未绑定必需输入须拒绝；waiting/rejected不派生为暗中接受。返回该局部graph编译only的冻结plan，externalInputs只含此step的绑定inputs，arguments只投影only接口，N01公开输入用已验证record.runtime node value，不用模板旧默认。以新run/step执行，origin保留旧完整地址。无旧outputs/decision/candidate复用，无父图更新；同模板Map item、Loop iteration身份不串。graph保留原局部身份及签名供Store独立重建；模型用source checkpoint defaults+显式node modelID，不读当前UI。
+
+验收真实Compiler/Executor CPU夹具：菱形downstream全边界/含不含锚点；缺/重复/内部pin拒绝；新run不能改变指定旧run输出；Map同nodeID不同item、Loop轮次及N01实际参数；工具摘要坏值拒绝；派生调用只运行该Call且无父操作；独立rebuild拒绝伪造plan/inputs；编码回读scope；空/未知范围拒绝。用现有纯操作与假服务计数，不写第二调度器。前端parse只证明语法；Lead串行跑CPU。Worker交差异、测试方法、异常、进程及缺口，无文档写权。
+
+
 状态：实施中，规格 r1 / language-v1，2026-09-27 JST。用户明确批准 S0—S4 连续实施；不公开发布、不推进 main、不自动接纳 AP1/CORE/I2V。
 
 ## 基线与证据
