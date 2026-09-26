@@ -16,6 +16,81 @@ private actor WorkflowSubmitGate {
 }
 @MainActor private final class WorkflowSaveSwitch { var fails = true }
 
+extension WorkflowLifecycleTests {
+    @Test func explicitHistoricalScopeUsesChosenOldOutputAndSurvivesReopen() async throws {
+        let (_, store, engine, c) = try await fixture()
+        var input = try #require(WorkflowRegistry.standard.operation("d.value.input")).definition.makeNode()
+        input.dataConfiguration = .init(value: .text("原始 👩🏽‍🎨 e\u{301}"))
+        let middle = try #require(WorkflowRegistry.standard.operation("d.value.return")).definition.makeNode()
+        let end = try #require(WorkflowRegistry.standard.operation("d.value.return")).definition.makeNode()
+        let graph = WorkflowGraph(nodes: [input, middle, end], connections: [
+            .init(sourceNode: input.id, targetNode: middle.id), .init(sourceNode: middle.id, targetNode: end.id)])
+        let initial = try #require(try await store.workflowState().archive)
+        _ = try await store.saveWorkflow(graphs: [graph], runs: [], expectedRevision: initial.revision)
+        await c.load()
+        await c.runScoped(.through(end.id), pins: [], expectedGraphID: graph.id, expectedRevision: graph.revision)
+        try #require(c.errorMessage == nil)
+        let old = try #require(c.runs.last)
+        let call = try #require(old.planCheckpoint?.records.first { $0.step.node.id == middle.id })
+        c.setDataConfiguration(nodeID: input.id, value: .init(value: .text("新内容")))
+        let edited = try #require(c.graph)
+        let pin = WorkflowHistoricalInput(destinationNodeID: end.id, destinationPort: "input",
+            sourceCall: .init(address: call.address, stepID: call.step.id), sourcePort: "output")
+        await c.runScoped(.only(end.id), pins: [pin], expectedGraphID: edited.id, expectedRevision: edited.revision)
+        try #require(c.errorMessage == nil)
+        let result = try #require(c.runs.last)
+        #expect(result.steps.count == 1)
+        #expect(result.steps[0].outputs["output"] == .data(.text("原始 👩🏽‍🎨 e\u{301}")))
+        #expect(c.runs.first == old)
+        #expect(c.graph == edited)
+        #expect(await engine.requests.isEmpty)
+        await c.runScoped(.only(end.id), pins: [pin], expectedGraphID: graph.id, expectedRevision: graph.revision)
+        #expect(c.errorMessage != nil && c.runs.count == 2)
+        let archive = try #require(try await store.workflowState().archive)
+        var forged = result
+        forged.steps = []; forged.status = .queued
+        forged.planCheckpoint?.records = []; forged.planCheckpoint?.state = .ready
+        forged.planCheckpoint?.outputs = [:]
+        forged.planCheckpoint?.externalInputs[end.id] = ["input": .data(.text("forged"))]
+        await #expect(throws: (any Error).self) {
+            _ = try await store.saveWorkflow(graphs: archive.graphs, runs: [old, forged], expectedRevision: archive.revision)
+        }
+        #expect(try await store.workflowState().archive == archive)
+        await #expect(throws: (any Error).self) {
+            _ = try await store.saveWorkflow(graphs: archive.graphs, runs: [result], expectedRevision: archive.revision)
+        }
+        try await c.close(); let url = store.rootURL; try await store.close()
+        let reopened = try await ProjectStore.open(at: url)
+        #expect(try await reopened.workflowState().archive?.runs == archive.runs)
+        try await reopened.close()
+    }
+
+    @Test func concreteMapCallCreatesIndependentHistoryWithoutChangingParent() async throws {
+        let (_, store, engine, c) = try await fixture()
+        c.addLanguageExample(.data)
+        let target = try #require(c.graph?.nodes.first { $0.title == "返回数据结果" })
+        await c.run(target: target.id, only: false)
+        try #require(c.errorMessage == nil)
+        let original = try #require(c.runs.last)
+        let call = try #require(original.planCheckpoint?.records.first {
+            $0.address.path.count > 1 && $0.step.node.operationID == "d.value.template" && c.canRerunCall($0)
+        })
+        await c.rerunCall(.init(address: call.address, stepID: call.step.id))
+        try #require(c.errorMessage == nil)
+        let derived = try #require(c.runs.last)
+        #expect(c.runs.count == 2 && c.runs[0] == original)
+        #expect(derived.id != original.id && derived.steps.count == 1)
+        #expect(derived.steps[0].id != call.step.id)
+        #expect(derived.steps[0].outputs == call.step.outputs)
+        #expect(derived.scope?.originCall == .init(address: call.address, stepID: call.step.id))
+        #expect(await engine.requests.isEmpty)
+        try await c.close(); let url = store.rootURL; try await store.close()
+        let reopened = try await ProjectStore.open(at: url)
+        #expect(try await reopened.workflowState().archive?.runs == [original, derived])
+        try await reopened.close()
+    }
+}
+
 private actor WorkflowFixtureEngine: InferenceEngine {
     let directory: URL
     var requests: [InferenceRequest] = []

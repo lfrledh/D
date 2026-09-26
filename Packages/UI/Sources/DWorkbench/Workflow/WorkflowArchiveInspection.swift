@@ -34,6 +34,25 @@ enum WorkflowArchiveInspection {
               checkpoint.records.filter({ $0.address.path.count == 1 }).map(\.step) == run.steps else {
             throw WorkflowIssue("运行身份或顶层步骤投影与恢复点不符。")
         }
+        _ = try scopeSource(run, tools: tools, registry: registry)
+    }
+
+    static func scopeSource(_ run: WorkflowRun, tools: [WorkflowToolDefinition], registry: WorkflowRegistry = .standard) throws -> WorkflowScopeSource {
+        guard let checkpoint = run.planCheckpoint, checkpoint.runID == run.id else { throw WorkflowIssue("历史运行没有可验证的结构化恢复点。") }
+        let selection: WorkflowGraphSelection
+        if let scope = run.scope {
+            guard scope.version == 1 else { throw WorkflowIssue("未知的局部运行版本；保持原记录。") }
+            selection = scope.selection
+            let target: UUID
+            switch selection {
+            case .through(let id), .only(let id), .downstream(let id, _): target = id
+            }
+            guard target == run.targetNodeID else { throw WorkflowIssue("局部运行锚点与记录不符。") }
+            let plan = try WorkflowScopePlanner.rebuild(graph: run.graph, selection: selection,
+                modelDefaults: checkpoint.modelDefaults ?? [:], tools: tools, registry: registry)
+            try WorkflowCheckpointValidation.validate(checkpoint, expected: plan, registry: registry)
+            return .init(graph: run.graph, selection: selection, checkpoint: checkpoint)
+        }
         let compiler = WorkflowPlanCompiler(registry: registry)
         // These are the two persisted run scopes currently offered by the controller.
         // Exact comparison includes topology, interfaces, signatures and nested tools.
@@ -45,6 +64,51 @@ enum WorkflowArchiveInspection {
         }
         guard let expected else { throw WorkflowIssue("恢复计划与已保存的流程、工具版本或运行范围不符。") }
         try WorkflowCheckpointValidation.validate(checkpoint, expected: expected, registry: registry)
+        let through = try compiler.compile(run.graph, tools: tools, target: run.targetNodeID)
+        let full = try WorkflowPlanBinding.freeze(through, defaults: checkpoint.modelDefaults ?? [:], registry: registry)
+        selection = full == checkpoint.plan ? .through(run.targetNodeID) : .only(run.targetNodeID)
+        return .init(graph: run.graph, selection: selection, checkpoint: checkpoint)
+    }
+
+    /// References are an acyclic history, not permission to trust edited checkpoint inputs.
+    static func validateScopeHistory(_ runs: [WorkflowRun], tools: [WorkflowToolDefinition], registry: WorkflowRegistry = .standard) throws {
+        guard Set(runs.map(\.id)).count == runs.count else { throw WorkflowIssue("重复运行身份。") }
+        let byID = Dictionary(uniqueKeysWithValues: runs.map { ($0.id, $0) })
+        var visiting = Set<UUID>(), done = Set<UUID>()
+        func visit(_ run: WorkflowRun) throws {
+            if done.contains(run.id) { return }
+            guard visiting.insert(run.id).inserted else { throw WorkflowIssue("运行来源形成循环。") }
+            defer { visiting.remove(run.id) }
+            guard visiting.count <= 256 else { throw WorkflowIssue("历史派生链超过 256 层；请从新流程开始。") }
+            guard let scope = run.scope else { done.insert(run.id); return }
+            let destination = try scopeSource(run, tools: tools, registry: registry)
+            let dependencyIDs = Set(scope.historicalInputs.map { $0.sourceCall.address.runID } + [scope.originCall?.address.runID].compactMap { $0 })
+            var sources: [WorkflowScopeSource] = []
+            for id in dependencyIDs {
+                guard let source = byID[id] else { throw WorkflowIssue("局部运行引用的原历史已缺失。") }
+                try visit(source)
+                sources.append(try scopeSource(source, tools: tools, registry: registry))
+            }
+            if let origin = scope.originCall {
+                guard scope.historicalInputs.isEmpty, scope.recomputeSelected,
+                      case .only = scope.selection,
+                      let source = sources.first(where: { $0.checkpoint.runID == origin.address.runID }) else {
+                    throw WorkflowIssue("具体调用的派生范围或来源不符。")
+                }
+                let resolved = try WorkflowScopePlanner.resolveCall(origin, source: source, tools: tools, registry: registry)
+                guard resolved.graph == run.graph, resolved.plan == destination.checkpoint.plan,
+                      resolved.arguments == destination.checkpoint.arguments,
+                      resolved.externalInputs == destination.checkpoint.externalInputs else {
+                    throw WorkflowIssue("派生调用的输入与原调用快照不符。")
+                }
+            } else {
+                let inputs = try WorkflowScopePlanner.resolveHistoricalInputs(scope.historicalInputs, destination: destination,
+                    sources: sources, tools: tools, registry: registry)
+                guard inputs == destination.checkpoint.externalInputs else { throw WorkflowIssue("边界输入与固定的历史产物不符。") }
+            }
+            done.insert(run.id)
+        }
+        for run in runs { try visit(run) }
     }
 
     static func containsUnknownFields(original: Data, decoded: WorkflowArchive) throws -> Bool {

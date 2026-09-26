@@ -67,7 +67,7 @@ struct NodeLanguageRealTests {
             controller.setParameter(nodeID: structuredID, key: "temperature", value: .decimal(0))
             controller.setParameter(nodeID: structuredID, key: "maximumOutputTokens", value: .integer(64))
             controller.setParameter(nodeID: structuredID, key: "task",
-                value: .text("Return exactly one JSON object with a string field title. Use title Quiet Lake. No markdown or other text."))
+                value: .text("Output a JSON object with exactly one string field named title describing a quiet lake. Your response must start with { and end with }. Do not use backticks, markdown fences, or any text outside the object."))
             await controller.run(target: structuredID, only: false)
             try #require(controller.errorMessage == nil, Comment(rawValue: controller.errorMessage ?? ""))
             let structured = try #require(controller.runs.last)
@@ -129,6 +129,7 @@ struct NodeLanguageRealTests {
                 let asset = try #require(archive.assets.first { $0.stepID == step.id && $0.request != nil })
                 try #require(asset.reference == step.outputs["raw"]?.asset)
                 let request = try #require(asset.request)
+                try #require(request.id == step.id)
                 guard case .text(let text) = request.input else { throw WorkflowIssue("Expected persisted text request.") }
                 let task = try #require(step.node.parameters["task"]?.string)
                 let content = step.inputs["content"]?.datum?.text

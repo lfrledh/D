@@ -3139,6 +3139,7 @@ extension ProjectStore {
             try WorkflowRegistry.standard.validate(graph, tools: archive.tools ?? [])
             for ref in try WorkflowCheckpointValidation.assetReferences(in: graph) { try validateRef(ref) }
         }
+        try WorkflowArchiveInspection.validateScopeHistory(archive.runs, tools: archive.tools ?? [])
         for run in archive.runs {
             guard run.graph.nodes.contains(where: { $0.id == run.targetNodeID }),
                   Set(run.steps.map(\.id)).count == run.steps.count else { throw WorkflowIssue("流程运行快照无效。") }

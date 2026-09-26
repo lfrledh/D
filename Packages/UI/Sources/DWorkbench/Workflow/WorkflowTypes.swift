@@ -145,6 +145,8 @@ public struct WorkflowRun: Codable, Sendable, Equatable, Identifiable {
     public var id: UUID
     public var graph: WorkflowGraph
     public var planCheckpoint: WorkflowPlanCheckpoint?
+    /// Explicit execution boundary and provenance. Nil preserves historical M0 scope inference.
+    public var scope: WorkflowRunScope?
     public var targetNodeID: UUID
     public var steps: [WorkflowStepRun]
     public var status: WorkflowStepStatus

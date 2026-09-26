@@ -681,6 +681,8 @@ private struct WorkflowNodeInspector: View {
     let onReturnText: (WorkflowAssetReference) -> Void
     let onPlan: (UUID, Bool) -> Void
     @Environment(\.dLanguageStore) private var languageStore
+    @State private var scopePresented = false
+    @State private var pendingCall: WorkflowCallReference?
 
     var body: some View {
         ScrollView {
@@ -701,6 +703,10 @@ private struct WorkflowNodeInspector: View {
                     }
                     ports(node)
                     execution(node)
+                    if controller.bodyPath.isEmpty {
+                        Button(workflowText(languageStore, "workflow.scope.title", fallback: "选择运行范围与历史输入")) { scopePresented = true }
+                            .disabled(readOnly)
+                    }
                     history(node)
                 }
                 .padding(14)
@@ -719,6 +725,21 @@ private struct WorkflowNodeInspector: View {
         }
         .background(.ultraThinMaterial)
         .accessibilityIdentifier("workflow-inspector")
+        .sheet(isPresented: $scopePresented) {
+            if let graph = controller.rootGraph, let node {
+                WorkflowScopePanel(controller: controller, graphID: graph.id, revision: graph.revision, nodeID: node.id)
+            }
+        }
+        .alert(workflowText(languageStore, "workflow.scope.rerunCall", fallback: "重新运行具体调用"),
+               isPresented: Binding(get: { pendingCall != nil }, set: { if !$0 { pendingCall = nil } })) {
+            Button(workflowText(languageStore, "workflow.scope.run", fallback: "运行所选范围")) {
+                if let reference = pendingCall { Task { await controller.rerunCall(reference) } }
+                pendingCall = nil
+            }
+            Button(workflowText(languageStore, "workflow.scope.cancel", fallback: "取消"), role: .cancel) { pendingCall = nil }
+        } message: {
+            Text(workflowText(languageStore, "workflow.scope.callExplanation", fallback: "使用这次调用冻结的参数与输入，创建新的运行。不会改写或继续原有循环；模型调用可能耗时。"))
+        }
     }
 
     @ViewBuilder
@@ -910,7 +931,7 @@ private struct WorkflowNodeInspector: View {
     @ViewBuilder
     private func history(_ node: WorkflowNode) -> some View {
         WorkflowInspectorSection(workflowText(languageStore, "workflow.section.history", fallback: "运行历史")) {
-            let related = controller.runs.filter { run in run.graph.nodes.contains { $0.id == node.id } }
+            let related = controller.history(for: node.id)
             if related.isEmpty {
                 Text(workflowText(languageStore, "workflow.history.none", fallback: "没有历史运行。"))
                     .foregroundStyle(.secondary)
@@ -927,6 +948,11 @@ private struct WorkflowNodeInspector: View {
                     ForEach(controller.callRecords(runID: run.id)) { call in
                         DisclosureGroup(call.step.node.title + " · " + WorkflowCanvasPresentation.statusTitle(call.step.status, language: languageStore)) {
                             Text(String(describing: call.address.path)).font(.caption2.monospaced()).textSelection(.enabled)
+                            if controller.canRerunCall(call) {
+                                Button(workflowText(languageStore, "workflow.scope.rerunCall", fallback: "重新运行具体调用")) {
+                                    pendingCall = .init(address: call.address, stepID: call.step.id)
+                                }.disabled(readOnly)
+                            }
                             WorkflowStepValues(title: workflowText(languageStore, "workflow.port.outputs", fallback: "输出"), values: call.step.outputs, operationID: call.step.node.operationID, portsAreInputs: false, controller: controller, onReturnText: onReturnText, allowsReturn: !readOnly)
                             if call.address.path.count > 1, call.step.status == .waiting, let task = call.step.humanTask {
                                 WorkflowHumanTaskForm(task: task, onSaveDraft: { controller.editHumanDraft(stepID: call.id, value: $0) },

@@ -439,6 +439,115 @@ public struct WorkflowAssetBindingTarget: Sendable, Equatable {
         await finishExecution(failure)
     }
 
+    public func scopeBoundaries(_ selection: WorkflowGraphSelection) throws -> [WorkflowScopeBoundary] {
+        guard bodyPath.isEmpty, let graph = rootGraph else { throw WorkflowIssue("请返回外层选择运行范围；模板不能冒充实际调用。") }
+        return try WorkflowScopePlanner.select(graph: graph, selection: selection, tools: tools, registry: registry).boundaries
+    }
+
+    public func history(for nodeID: UUID) -> [WorkflowRun] {
+        func belongs(_ run: WorkflowRun, seen: Set<UUID>) -> Bool {
+            if run.graph.id == rootGraph?.id { return true }
+            guard !seen.contains(run.id), let id = run.scope?.originCall?.address.runID,
+                  let parent = runs.first(where: { $0.id == id }) else { return false }
+            return belongs(parent, seen: seen.union([run.id]))
+        }
+        return runs.filter { run in
+            belongs(run, seen: []) && (run.graph.nodes.contains { $0.id == nodeID } ||
+                run.planCheckpoint?.records.contains { $0.step.node.id == nodeID } == true)
+        }
+    }
+
+    public func canRerunCall(_ call: WorkflowPlanCallRecord) -> Bool {
+        // Presentation hint only. The action independently validates full provenance.
+        call.step.node.control == nil && call.step.inputsBound == true &&
+            [.completed, .partial, .failed, .cancelled].contains(call.step.status)
+    }
+
+    /// Choices are explicit old output versions; never an implicit 'latest' binding.
+    public func historicalCalls(for boundary: WorkflowScopeBoundary) -> [WorkflowPlanCallRecord] {
+        runs.reversed().filter { $0.graph.id == rootGraph?.id }.flatMap { run in
+            (run.planCheckpoint?.records ?? []).filter {
+                $0.address.path.count == 1 && $0.step.node.id == boundary.sourceNodeID &&
+                [.completed, .partial].contains($0.step.status) && $0.step.outputs[boundary.sourcePort] != nil
+            }
+        }
+    }
+
+    public func runScoped(_ selection: WorkflowGraphSelection, pins: [WorkflowHistoricalInput],
+                          expectedGraphID: UUID, expectedRevision: UUID) async {
+        guard !externalOperationBusy(), !closed, !closing, !isRunning, readOnlyReason == nil,
+              !hasPendingSaves, bodyPath.isEmpty, let original = rootGraph,
+              original.id == expectedGraphID, original.revision == expectedRevision else {
+            errorMessage = "运行范围或原图已改变，或当前有未完成操作；请重新确认。"; return
+        }
+        isRunning = true; cancelled = false; errorMessage = nil
+        defer { isRunning = false; activeRunID = nil; activeExecutor = nil }
+        var failure: (any Error)?
+        do {
+            let frozen = services.freezeModels(in: original), defaults = services.capturedModelDefaults()
+            let plan = try WorkflowScopePlanner.rebuild(graph: frozen, selection: selection, modelDefaults: defaults,
+                tools: tools, registry: registry)
+            var checkpoint = WorkflowPlanCheckpoint(plan: plan, arguments: try publicArguments(plan, graph: frozen))
+            checkpoint.modelDefaults = defaults
+            let sourceIDs = Set(pins.map { $0.sourceCall.address.runID })
+            let sources = try runs.filter { sourceIDs.contains($0.id) }.map {
+                try WorkflowArchiveInspection.scopeSource($0, tools: tools, registry: registry)
+            }
+            checkpoint.externalInputs = try WorkflowScopePlanner.resolveHistoricalInputs(pins,
+                destination: .init(graph: frozen, selection: selection, checkpoint: checkpoint),
+                sources: sources, tools: tools, registry: registry)
+            let target: UUID, recompute: Bool
+            switch selection {
+            case .through(let id): target = id; recompute = false
+            case .only(let id), .downstream(let id, _): target = id; recompute = true
+            }
+            var run = WorkflowRun(id: checkpoint.runID, graph: frozen, targetNodeID: target, status: .running)
+            run.scope = .init(selection: selection, historicalInputs: pins, recomputeSelected: recompute)
+            run.planCheckpoint = checkpoint
+            try WorkflowArchiveInspection.validateScopeHistory(runs + [run], tools: tools, registry: registry)
+            if let i = graphs.firstIndex(where: { $0.id == frozen.id }), graphs[i].revision == original.revision { graphs[i] = frozen }
+            runs.append(run); activeRunID = run.id
+            try await persist(); try await executePlan(runID: run.id)
+        } catch { failure = error }
+        await finishExecution(failure)
+    }
+
+    /// A selected concrete call becomes a new run on its frozen local graph.
+    /// It does not mutate or resume the original Map item, Loop iteration or waiting task.
+    public func rerunCall(_ reference: WorkflowCallReference) async {
+        guard !externalOperationBusy(), !closed, !closing, !isRunning, readOnlyReason == nil, !hasPendingSaves else { return }
+        isRunning = true; cancelled = false; errorMessage = nil
+        defer { isRunning = false; activeRunID = nil; activeExecutor = nil }
+        var failure: (any Error)?
+        do {
+            guard let old = runs.first(where: { $0.id == reference.address.runID }) else { throw WorkflowIssue("原调用记录不存在。") }
+            try WorkflowArchiveInspection.validateScopeHistory(runs, tools: tools, registry: registry)
+            let source = try WorkflowArchiveInspection.scopeSource(old, tools: tools, registry: registry)
+            let resolved = try WorkflowScopePlanner.resolveCall(reference, source: source, tools: tools, registry: registry)
+            guard let node = resolved.plan.steps.first?.node else { throw WorkflowIssue("具体调用为空。") }
+            var checkpoint = WorkflowPlanCheckpoint(plan: resolved.plan, arguments: resolved.arguments)
+            checkpoint.modelDefaults = resolved.modelDefaults; checkpoint.externalInputs = resolved.externalInputs
+            var run = WorkflowRun(id: checkpoint.runID, graph: resolved.graph, targetNodeID: node.id, status: .running)
+            run.scope = .init(selection: .only(node.id), originCall: reference, recomputeSelected: true)
+            run.planCheckpoint = checkpoint
+            try WorkflowArchiveInspection.validateScopeHistory(runs + [run], tools: tools, registry: registry)
+            runs.append(run); activeRunID = run.id
+            try await persist(); try await executePlan(runID: run.id)
+        } catch { failure = error }
+        await finishExecution(failure)
+    }
+
+    private func publicArguments(_ plan: WorkflowPlan, graph: WorkflowGraph) throws -> [String: WorkflowDatum] {
+        var result: [String: WorkflowDatum] = [:]
+        for field in plan.interface.inputs {
+            if let input = graph.nodes.first(where: { $0.operationID == "d.value.input" && $0.parameters["publicName"]?.string == field.name }),
+               let value = input.dataConfiguration?.value {
+                try value.validate(as: field.type); result[field.name] = value
+            } else if field.required { throw WorkflowIssue("公开输入尚未填写：\(field.name)。") }
+        }
+        return result
+    }
+
     private func inputs(for node: WorkflowNode, run: WorkflowRun) throws -> [String: WorkflowValue] {
         var result: [String: WorkflowValue] = [:]
         for edge in run.graph.connections where edge.targetNode == node.id {
@@ -479,7 +588,7 @@ public struct WorkflowAssetBindingTarget: Sendable, Equatable {
             self.progressMessage = context.node.title
             let top = context.address?.path.count == 1
             let record = self.activeExecutor?.checkpoint?.records.first { $0.step.id == context.stepID }
-            if top, force != context.node.id, record?.step.repeatRequested != true, record?.step.outputs.isEmpty == true, !services.hasPendingSaves,
+            if top, self.runs[ri].scope?.recomputeSelected != true, force != context.node.id, record?.step.repeatRequested != true, record?.step.outputs.isEmpty == true, !services.hasPendingSaves,
                let cached = self.reusable(nodeID: context.node.id, graph: self.runs[ri].graph, inputs: context.inputs), cached.id != context.stepID {
                 return .outputs(cached.outputs)
             }
