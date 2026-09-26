@@ -171,11 +171,21 @@ struct WorkflowLocalizationTests {
             var visited: Set<ObjectIdentifier> = []
             while let object = pending.popLast(), visited.count < 2_000 {
                 guard visited.insert(ObjectIdentifier(object)).inserted else { continue }
-                if let label = object.accessibilityLabel(), !label.isEmpty { values.insert(label) }
-                if let value = object.accessibilityValue() as? String, !value.isEmpty { values.insert(value) }
+                let accessibility: (label: String?, value: Any?, children: [Any])?
+                if let view = object as? NSView {
+                    accessibility = (view.accessibilityLabel(), view.accessibilityValue(),
+                                     view.accessibilityChildren() ?? [])
+                } else if let element = object as? NSAccessibilityElement {
+                    accessibility = (element.accessibilityLabel(), element.accessibilityValue(),
+                                     element.accessibilityChildren() ?? [])
+                } else {
+                    accessibility = nil
+                }
+                if let label = accessibility?.label, !label.isEmpty { values.insert(label) }
+                if let value = accessibility?.value as? String, !value.isEmpty { values.insert(value) }
                 if let button = object as? NSButton, !button.title.isEmpty { values.insert(button.title) }
                 if let field = object as? NSTextField, !field.stringValue.isEmpty { values.insert(field.stringValue) }
-                pending.append(contentsOf: (object.accessibilityChildren() ?? []).compactMap { $0 as? NSObject })
+                pending.append(contentsOf: (accessibility?.children ?? []).compactMap { $0 as? NSObject })
                 if let view = object as? NSView { pending.append(contentsOf: view.subviews) }
             }
             return values
