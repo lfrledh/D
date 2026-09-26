@@ -267,3 +267,10 @@ lead/scopes-initial九项之前为七项通过；lead/scopes-wiring初轮55项1�
 音乐node-real-music（13cfd51）及node-real-music-access-diagnostic（1e70ab1）均在Pitch access失败，尚未进入MRT2。第二次确认新创建临时书签被CF判stale；具体grant/环境根因未知，未放宽权限。f8189f4仅白名单原因，非实现者核验无权限变化；11Python测试使用准备环境通过，系统Python无numpy的失败保留。Lead端口归属1e70ab1按冻结owner graph过滤复制工具同UUID，并保持各Map调用；非实现者复核关闭，相关过滤CPU已通过。旧预览pause/close不得控制后来播放器。
 
 源仍130603d23a4da81ba2a9852766f3589695ec9468，仅scheme个人修改摘要/索引/未暂存状态未变；候选未源接纳。H27锁屏GUI阻塞，无新原生录音/试听/断网结论。当前Worker均已交还写入（新A06待预检）；外部证据R=AgentTrials/D-NODE-LANGUAGE-01/run-20260926T150929Z，resources-v2是自有新引擎，未替换普通D。下一步定位临时书签、实现A06工具并完成组合真实验收。
+
+## TEXT-CONTROL-CHECKS r1：A08/A17 真实文字边界验收
+只新增 DTests/NodeLanguageTextControlRealTests.swift，gpt-5.6-sol/high，独立受限CLI。初交1800秒+两轮修复，不改其他任务预算。仅读既有NodeLanguageRealTests/Controller/Runtime必要接口及本节；不改生产/共享工程/断言政策/其他测试/文档，不Git写、不网络/依赖/模型/GPU/GUI/全构建，只parse自己的Swift。Lead执行真实模型与构建。
+
+独立opt-in D_NODE_LANGUAGE_REAL_CASE=text-control；复用 D_NODE_LANGUAGE_TEXT_MODEL、已批准Qwen1.5B参数。AppSessionFactory+WorkflowServices+真实Controller，隔离App容器新项目/suite，无模型替身。测试一：真实d.control.branch，输入Bool选择有Qwen的body，未选body指定不存在的modelID（结构合法），实际选择的语言生成完成；resolver/调用记录检查未选ID零解析/准备/提交，不因未安装拦住另一分支。保持正文、固定request/model及parent来源，保存重开。
+测试二：同一runtime创建单独文字生成，等待可观察真实运行/首片段（有限超时），cancel，等待任务和drain/release结束，然后成功执行另一文字请求。报告实际观察的阶段，不能把generating笼统称GPU kernel中断；取消后下一任务正常不串旧输出。若生成太快先完成，明确不满足cancel证据，不能伪称取消成功。可用当前已支持较长输出512 tokens及单次可解释fixture，不用无限重试。原文和旧资产不变，结果记录实际状态和调用ID。
+两测试均有限等待、finally shutdown/关闭自有项目、不结束普通App。失败也保留证据、成功才PASS；记录elapsed、model revision、run/request、真实取消边界。输出在专属项目旁json；不导出书签/模型权重/个人数据，不声称GUI/离线通过。必须复用既有生产执行器。任何接口或权限未知停报。Lead统一注册/编译（当前DTests自动发现若不支持报缺口），不为写测试私加生产API。
