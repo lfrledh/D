@@ -177,3 +177,16 @@ Lead将Controller接到同一PlanExecutor，保持M0目标/单步、候选、确
 `lead/lead-routing-export-editing-r1`通过本次过滤集合（完整输出保留；Swift Testing 60项、XCTest单列），此前新导出fixture漏填图片尺寸导致一次失败，补齐真实声明后通过。受测为候选e443dcde工作区已知增量，后续提交记录字节映射；不称在未来SHA上测试。CHECKPOINT初交已有3项签名兼容失败，非实现者另找到拒绝preview/控制输出链接/决定输出一致性/公开输入校验缺口，尚待普通repair1；当前不能将其作为已接纳保护。
 
 CONTROL-FORMS初交结束、两文件候选。存在一次`/dev/fd/11`进程替换只读拒绝后未停报、改jq继续的协议事件；没有观察到成功越界或扩大权限，不追改成合规。Lead检查完整事件、任务文件及受限上下文后继续范围内审核。该事件独立于代码质量。Loop轮次参数由Lead按既定state/iteration契约补接，原Worker临时optional写法后续同步；不把未实装变量显示成已运行。
+
+## EXAMPLES r1：四套真实语言样例（新增独立工作包）
+
+允许文件仅新增 `Packages/UI/Sources/DWorkbench/Workflow/WorkflowLanguageExamples.swift` 与 `Packages/UI/Tests/DWorkbenchTests/WorkflowLanguageExamplesTests.swift`。Sol/high，受限独立CLI、1800秒、初交+两轮修复。只parse不构建，Lead串行CPU。禁止改Controller/Store/Executor/Registry/UI、模型/网络/GUI/Git写/递归派工。输出仅本任务目录。
+
+API `public enum WorkflowLanguageExample: String, CaseIterable, Sendable { case data, images, music, multimodal }`；`public struct WorkflowLanguageExampleBundle: Sendable { public var graph:WorkflowGraph; public var tools:[WorkflowToolDefinition] }`；`public enum WorkflowLanguageExamples { public static func make(_ example:WorkflowLanguageExample) throws -> WorkflowLanguageExampleBundle }`。只用当前注册的真实操作、control、类型与公开接口；所有图可编辑且唯一id；模型ID留空由现有Controller提交冻结，无路径/书签/预存模型输出。例子不是特殊执行器，不允许生产分支按样例名字调度。
+
+E01无模型覆盖N01、N05—N14、N17—N18：普通字段/列表数据、提取、排序筛选、index配对、校验报告、真实Branch/Map/有状态有限Loop（nextState变化）、返回；导出需用户选目录。正常默认可完成到返回；坏字段/空列表/单项失败以明确可编辑值构造，不默认失败。可用多个根输出但UI目标建议为末个return。
+E02默认2主题×3图：语言规划共享一次，主题列表运行时数量；Map每主题图生成count3（不要再乘外层3），可选共享图ref，N03结构输出/检查，尺寸格式处理应在明确选出图后或列表映射；默认无人工关卡，使用受控已成功集合取项需检查现有操作是否支持，不发明不可执行桥。G01输出collection与Datum list差异遇必要缺口立即报Lead，不私加新操作。至少一个真实Invoke工具承载可展开部分，节点接口不写死两个主题。参考可由N02显式接线，可缺省；所有模型生成仍未验证。
+E03导入/录音asset输入→可编辑截取/格式→SwiftF0识别→typed human editMusic显式人工采用（这里用户任务有意选择）、tempo对齐、调性候选、用户明确和弦编辑→M07→M08试听参考→M09真实notes/chords条件、Map3候选。默认4s、恒定BPM/拍号；和弦已给分支无语言前置。保留可接N03建议分支但别伪造小模型质量。至少一段普通Invoke封装复用。未知录音不靠预存识别代替。MRT2目前没有seed别造参数；notes/chords明确传。M01原生录音由LeadUI接线，本包只资产输入。
+E04同一发布文字输入分叉文字/图像/受控音乐/T2V，以Record返回资产并含themeID；至少一模型操作每模态，无I2V假边。视频真实参数短小在现有profile，不为本机限制产品上限。编辑模型/配置不自动执行。
+
+依据当前 operations/plan/types和附件02/03必要段落制作；API缺口报告，不造dummy操作。Tests每样例真实Compiler编译、unique/node counts、tools digest/interfaces、公开工具可在不同图多次Invoke、无默认人工（E03明确人工例外）、文字共享不在图像抽卡重复、E03真实notes连接、V01无image条件。尽量实际Executor+fake服务无模型运行E01验证动态列表/Loop，绝不冒充模型验证。样例语言标签可提供 en/zh建议文件，代码标题暂中文可由Lead本地化。回传例子连接/局限与运行目标，而非“GUI已完成”。
