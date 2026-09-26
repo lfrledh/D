@@ -518,6 +518,17 @@ struct WorkflowDataOperationsTests {
         }
     }
 
+    @Test func oversizedJSONFieldProducesBoundedFailureReport() async throws {
+        let text = "{\"" + String(repeating: "a", count: 1_048_569) + "\":0}"
+        #expect(text.utf8.count == 1_048_575)
+        let output = try await execute("d.value.validate", configuration: .init(schema: .record([.init("title", .text)]), validationInputFormat: .jsonText), inputs: ["input": .data(.text(text))], services: RejectingDataServices())
+        let report = try datum("output", in: output)
+        #expect(report.fields?["valid"] == .boolean(false))
+        guard case .text(let diagnostic)? = report.fields?["issues"]?.items?.first?.value else { Issue.record("Missing failure reason"); return }
+        #expect(diagnostic.utf8.count < 4_200)
+        #expect(diagnostic.contains("diagnostic truncated"))
+    }
+
     private func operation(_ id: String) throws -> WorkflowOperation {
         try #require(WorkflowDataOperations.operations.first { $0.definition.id == id })
     }

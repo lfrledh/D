@@ -349,6 +349,7 @@ enum WorkflowDataOperations {
                     throw WorkflowIssue("Validation schema is required.", nodeID: node.id)
                 }
                 try WorkflowStructuredText.validateSchema(schema)
+                try WorkflowDataConfiguration.validationReportSchema(for: schema).validateDefinition()
             }
         },
         execute: { context, _ in
@@ -362,6 +363,7 @@ enum WorkflowDataOperations {
             if context.node.dataConfiguration?.validationInputFormat == .jsonText {
                 // Configuration and input-shape errors are not model-output repair data.
                 try WorkflowStructuredText.validateSchema(expected)
+                try WorkflowDataConfiguration.validationReportSchema(for: expected).validateDefinition()
                 guard case .text(let text) = input else {
                     throw WorkflowIssue("JSON validation requires a Text value.", nodeID: context.node.id)
                 }
@@ -378,7 +380,7 @@ enum WorkflowDataOperations {
                 // Only pure parsing/typed validation runs inside this catch.
                 if strict { throw error }
                 valid = false; data = .none(expected)
-                issueMessages = [error.localizedDescription]
+                issueMessages = [jsonText == nil ? error.localizedDescription : WorkflowDataOperationSupport.boundedDiagnostic(error.localizedDescription)]
             }
             let issueItems = issueMessages.enumerated().map {
                 WorkflowDataItem(id: "issue-\($0.offset + 1)", value: .text($0.element))
@@ -415,6 +417,17 @@ enum WorkflowDataOperations {
 
 private enum WorkflowDataOperationSupport {
     private static let maximumTextBytes = 1_048_576
+
+    static func boundedDiagnostic(_ message: String) -> String {
+        guard message.utf8.count > 4_096 else { return message }
+        var prefix = "", bytes = 0
+        for scalar in message.unicodeScalars {
+            let size = scalar.utf8.count
+            guard bytes + size <= 4_096 else { break }
+            prefix.unicodeScalars.append(scalar); bytes += size
+        }
+        return prefix + "… [diagnostic truncated; original text retained]"
+    }
 
     enum SortKey {
         case text(String)
