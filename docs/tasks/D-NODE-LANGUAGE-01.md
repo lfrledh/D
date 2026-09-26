@@ -78,3 +78,29 @@ S0已核实外盘/源/索引/无已知执行进程，既有源构建App以全新
 Call复用executeCall回调；outputs校验并标完成，旧collection有失败则partial；旧reviewText/choose保持waiting，不自动决策；humanTask保存typed task等待。恢复遇到已完成记录直接使用；waiting无decision停止，typed human已明确decision且schema合法才输出，rejected停止不空成功。旧决定解释由Lead接线，Worker不得变旧语义。top-level interface命名outputs从明确node/port收集，无interface时返回最后step outputs。所有缺输入错误定位node/port/address；无字符串eval。对record/schema定义检查用实际类型。source map为每planned node原UUID+graphID/revision，实际调用地址保存在records，不能假称复制图为tool。
 
 CPU测试：未选分支执行计数0；Map不同长度/稳定ID/一失败保位置；同工具双调用和至少一层nested tool不串；坏工具digest/recursive拒绝；Loop零次/满足/耗尽/失败/停止区分；每轮保存重开不重算；暂停不多调、保存失败不重算成功Call；边界外输入缺失拒绝；typed human等待恢复/拒绝不空成功。用受控executeCall，不绕过生产解释器。任何契约缺口回Lead，不改共享文件或降低标准。
+
+## PLAN r1 歧义澄清（实现前）
+
+冻结工具接口由编译器验证命名端口，编译器局部拓扑检查可取代不识别工具输出的旧registry.plan；不是另造调度器。effect只是描述，资源仍归executeCall/runtime；普通输出核端口/kind及Datum完整性，接口输出再核完整schema。only无target拒绝，externalInputs不得与已规划来源冲突。保存失败重试必须传executor.checkpoint；旧值不得导致重跑。人工拒绝映射cancelled并保留明确原因。深度统计全部块/工具嵌套，展开步数按每个调用实例计，不按唯一模板。具体发出记录在R/plan/implement-prompt.txt。
+
+## 准备增量与中途结果
+
+- 68d6e0e为记录准备，8b0d2d5为值型准备，3031ebc为计划/控制元信息；均未接入源。新存储清单分配17，继续拒绝候选13—15；旧16迁移先备份，不改原流程快照/资产。流程archive2承载新结构；未知字段只读保留。不是全项目迁移授权，只测试隔离fixture。
+- R/lead/data-initial-tests：DATA原10测试通过，额外只读审查发现模板扩展预算与短路筛选单位校验缺口，进入repair1。显式none嵌套是Lead共享类型修补，不归Worker独立成功。
+- R/lead/store-format-tests：首次新测试遗漏.dproject扩展而被Store拒绝，修正测试输入；r1四项通过。不是修改保护规则过测。
+- PACK初14自测通过，非实现者指出stdout退出和NUL路径错误，进入repair1。PLAN已通过预检，实现中。路由均为受限CLI gpt-5.6-sol/high；隐藏服务端解析unknown。
+
+## MUSIC r1：确定性音乐值与程序（不调用模型）
+
+允许新增且仅三文件：`Packages/UI/Sources/DWorkbench/Workflow/Music/WorkflowMusicData.swift`、同目录`WorkflowMusicPrograms.swift`、`Packages/UI/Tests/DWorkbenchTests/WorkflowMusicProgramsTests.swift`。请求gpt-5.6-sol/high，初交1800秒；不改Registry/Store/UI/共享WorkflowData，不注册新引擎、不下载、不联网、不GUI，不文件渲染/播放。Worker只前端parse；Lead串行CPU测试。
+
+公开纯值API由此冻结：WorkflowMusicClock(seconds,quarterNotes)；WorkflowNoteEvent(id:String,pitch:Int,start:Double,end:Double,velocity:Double)；WorkflowTempoMap(beatsPerMinute:Double,firstBeatSeconds:Double,numerator:Int,denominator:Int)；WorkflowNoteSequence(version=1,clock,notes,duration,tempo:WorkflowTempoMap?,sources:[WorkflowAssetReference])。WorkflowChordEvent(id,root:Int=0…11,quality:WorkflowChordQuality,octave:Int,inversion:Int,start:Double,end:Double)，quality major/minor/dominant7/major7/minor7/diminished；WorkflowChordTrack(version1,chords,duration,tempo,sources)，时间为quarterNotes。全部Codable/Sendable/Equatable，公共init；validate、datum()、init(datum:)。Datum为严格的版本化Record（format与version、clock/单位字段、typed列表），不改全局Datum枚举；schema可静态访问。空序列允许，非法/重复ID、越界音高、非有限值、混时间、非法单位必须拒绝。上限4096音符、256和弦、120秒或512拍；velocity0…1、pitch0…127；BPM20…300，拍号分母2/4/8/16、分子1…16；firstBeatSeconds允许负弱起但有界±120。保留源，不原地覆盖。
+
+WorkflowMusicPrograms提供：
+- align(sequence:tempo:snap:)throws->WorkflowNoteSequence：秒→拍，snap为none/quarter/eighth/sixteenth，步长1/0.5/0.25四分拍；不吸附保留时间，吸附首尾nearestAwayFromZero，塌缩音符延长一格且报实际边界；可保留负起拍。返回tempo，原值不改。M05。
+- keys(sequence:)throws->[WorkflowKeyCandidate]：root:Int,mode:String,score:Double,algorithm:String。使用明确的时长加权音高类与大/自然小音阶契合率（在音阶权重1、非音阶0，主三和弦另0.25奖励，除总duration*1.25），稳定排序，最多6候选；少于3个音符或3音高类返回空表示不足；非概率、不冒称心理学标定/自动决定。M06。
+- chordNotes(track:pattern:)throws->WorkflowNoteSequence，pattern sustained/arpeggio：12平均律octave以MIDI C4=60，转位把低音依次上移12，arpeggio每0.5拍顺序轮播末尾截断；duration半开，返回beats+tempo，不自动增写旋律。M07。
+- render(sequence:sampleRate:)throws->Data：48000默认，可16000/44100/48000，单声道Float32 WAV；秒或带tempo的拍，负时间显式拒绝要求先截取；sine+5msattack/20msrelease，最多32同时发声，超限拒绝；峰值超0.95全段等比例缩放，保留关系，不逐样本硬削波；最大120秒/4096notes/累计100M音符样本计算，预估后再分配，Task取消定期检查。合成参考音，不称钢琴。M08。
+- midi(sequence:)throws->Data：SMF0，960 ticks/quarter，tempo元事件（秒序列用120只编码时间），原velocity，off在同tick on前，同pitch重叠明确拒绝（不合并），安全VLQ/长度，负时间拒绝，末尾保留duration；不是MusicXML全量实现。
+
+验证：秒拍往返原映射、弱起/吸附/塌缩、C大调与相对小调是候选非真值、短空不足、和弦构成/转位/分解时序、polyphonic合成有限且WAV真实解码/无文件原件、超预算预检、同时间noteoff优先/MIDI结构、所有纯值Datum roundtrip及非法版本/单位/ID拒绝。函数签名中snap/pattern可定义对应publicenum，额外局部helper自由；涉及共享接口歧义先回Lead。本包不注册操作；Lead之后把真实操作接服务和存储。

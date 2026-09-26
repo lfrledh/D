@@ -145,6 +145,8 @@ public actor ProjectStore {
             loaded = try ProjectFiles.migrateVersionEleven(loaded, original: data, in: descriptor, checkpoint: migrationCheckpoint)
         } else if loaded.schemaVersion == 12 {
             loaded = try ProjectFiles.migrateVersionTwelve(loaded, original: data, in: descriptor, checkpoint: migrationCheckpoint)
+        } else if loaded.schemaVersion == 16 {
+            loaded = try ProjectFiles.migrateVersionSixteen(loaded, original: data, in: descriptor, checkpoint: migrationCheckpoint)
         } else { try ProjectFiles.validate(loaded) }
         let store = ProjectStore(rootURL: root, rootFD: descriptor, lockFD: lock, manifest: loaded)
         // Ownership of both descriptors has moved to the actor before recovery can throw.
@@ -2298,6 +2300,11 @@ private enum ProjectFiles {
         try migrate(legacy, original: original, in: root, backup: "project.v12.backup.json", checkpoint: checkpoint)
     }
 
+    static func migrateVersionSixteen(_ legacy: ProjectManifest, original: Data, in root: Int32,
+                                       checkpoint: (@Sendable (ProjectMigrationCheckpoint) throws -> Void)?) throws -> ProjectManifest {
+        try migrate(legacy, original: original, in: root, backup: "project.v16.backup.json", checkpoint: checkpoint)
+    }
+
     private static func migrate(_ legacy: ProjectManifest, original: Data, in root: Int32, backup: String,
                                 checkpoint: (@Sendable (ProjectMigrationCheckpoint) throws -> Void)?) throws -> ProjectManifest {
         try validate(legacy, allowingLegacySchema: true)
@@ -2689,7 +2696,7 @@ private enum ProjectFiles {
                     throw ProjectStoreError.invalidProject("图像任务不属于图像文档。")
                 }
                 if let reference = image.referenceImage {
-                    guard [9, 11, 12, 16].contains(value.schemaVersion), let id = job.imageReferenceAssetID,
+                    guard [9, 11, 12, 16, 17].contains(value.schemaVersion), let id = job.imageReferenceAssetID,
                           let asset = assets[id], asset.mediaType == "image/png",
                           asset.metadata.imageContentSHA256 != nil,
                           reference.url.path.hasSuffix("/ImageInputs/\(job.id.uuidString)/reference.rgb") else {
@@ -2743,7 +2750,7 @@ private enum ProjectFiles {
             let isDeclaredAudio = asset.metadata.audio != nil || asset.mediaType == "audio/wav" ||
                 asset.mediaType == "audio/x-caf" || asset.relativePath.hasPrefix("Audio/")
             if asset.relativePath.hasPrefix("WorkflowAssets/") {
-                guard value.schemaVersion == 16, value.workflowSnapshot != nil,
+                guard [16, 17].contains(value.schemaVersion), value.workflowSnapshot != nil,
                       asset.jobID == nil, asset.role == .original || asset.role == .result,
                       let suffix = ["text/plain": "txt", "image/png": "png", "image/jpeg": "jpg"][asset.mediaType],
                       asset.relativePath == "WorkflowAssets/\(asset.id.uuidString)/content.\(suffix)",
@@ -2815,7 +2822,7 @@ private enum ProjectFiles {
             } else if asset.role == .original && asset.metadata.imageContentSHA256 != nil {
                 // Explicitly selecting a legacy original pins its digest without relocating it.
                 // Safe relative paths are validated above; only new import publication owns the UUID layout.
-                guard [9, 11, 12, 16].contains(value.schemaVersion), asset.jobID == nil, asset.mediaType == "image/png" else {
+                guard [9, 11, 12, 16, 17].contains(value.schemaVersion), asset.jobID == nil, asset.mediaType == "image/png" else {
                     throw ProjectStoreError.invalidProject("原参考图的路径或身份无效。")
                 }
             } else if asset.role == .result {
@@ -2831,7 +2838,7 @@ private enum ProjectFiles {
                 guard dimension > 0 else { throw ProjectStoreError.invalidProject("媒体元数据包含无效尺寸或位深。") }
             }
             if let digest = asset.metadata.imageContentSHA256 {
-                guard [9, 11, 12, 16].contains(value.schemaVersion), asset.mediaType == "image/png", digest.utf8.count == 64,
+                guard [9, 11, 12, 16, 17].contains(value.schemaVersion), asset.mediaType == "image/png", digest.utf8.count == 64,
                       digest.utf8.allSatisfy({ (48...57).contains($0) || (97...102).contains($0) }) else {
                     throw ProjectStoreError.invalidProject("参考图摘要无效。")
                 }
@@ -2861,7 +2868,7 @@ private enum ProjectFiles {
             }
 
             if let reference = document.draft.referenceImageAssetID {
-                guard [9, 11, 12, 16].contains(value.schemaVersion), document.kind == .image,
+                guard [9, 11, 12, 16, 17].contains(value.schemaVersion), document.kind == .image,
                       let asset = assets[reference], asset.mediaType == "image/png",
                       asset.metadata.imageContentSHA256 != nil else {
                     throw ProjectStoreError.invalidProject("图像草稿的参考来源无效。")
@@ -2902,7 +2909,7 @@ private enum ProjectFiles {
                     throw ProjectStoreError.invalidProject("文字文档包含无效内容或图像引用。")
                 }
                 try TextDraftDocument.validate(textDraft.text)
-                if [10, 11, 12, 16].contains(value.schemaVersion) {
+                if [10, 11, 12, 16, 17].contains(value.schemaVersion) {
                     guard let sources = document.textSources else {
                         throw ProjectStoreError.invalidProject("文字资料记录缺失。")
                     }
@@ -2990,30 +2997,19 @@ extension ProjectStore {
         struct Header: Decodable { let version: Int }
         let decoder = JSONDecoder()
         guard let header = try? decoder.decode(Header.self, from: data) else { throw WorkflowIssue("流程快照已损坏，原件已保留。") }
-        guard header.version == 1 else {
+        guard [1, 2].contains(header.version) else {
             return .init(archive: nil, readOnlyReason: "流程格式 v\(header.version) 尚不支持；原始数据与连接已保留，只读。", originalBytes: data)
         }
-        // Inspect just identities before full decoding: an unknown node may contain new scalar shapes.
-        struct Identities: Decodable {
-            struct Graph: Decodable {
-                struct Node: Decodable { let operationID: String; let definitionVersion: Int }
-                let nodes: [Node]
-            }
-            struct Run: Decodable {
-                struct Step: Decodable { let node: Graph.Node }
-                let graph: Graph; let steps: [Step]
-            }
-            let graphs: [Graph]; let runs: [Run]
-        }
-        guard let identities = try? decoder.decode(Identities.self, from: data) else { throw WorkflowIssue("流程身份记录损坏，未改写原件。") }
-        for node in (identities.graphs + identities.runs.map(\.graph)).flatMap(\.nodes) + identities.runs.flatMap({ $0.steps.map(\.node) }) {
-            guard let op = WorkflowRegistry.standard.operation(node.operationID), op.definition.version == node.definitionVersion else {
-                return .init(archive: nil, readOnlyReason: "未知操作或版本：\(node.operationID) v\(node.definitionVersion)。保留整份原始流程，只读。", originalBytes: data)
-            }
+        if let identity = try WorkflowArchiveInspection.unknownOperation(in: data) {
+            return .init(archive: nil, readOnlyReason: "未知操作或版本：\(identity)。保留整份原始流程，只读。", originalBytes: data)
         }
         let archive: WorkflowArchive
         do { archive = try decoder.decode(WorkflowArchive.self, from: data) }
         catch { throw WorkflowIssue("流程数据无法解码；原始数据已保留。") }
+        // Unknown properties must never disappear through Codable's default key ignoring.
+        if try WorkflowArchiveInspection.containsUnknownFields(original: data, decoded: archive) {
+            return .init(archive: nil, readOnlyReason: "流程包含未识别字段，原件完整保留，只读。", originalBytes: data)
+        }
         try validateWorkflowArchive(archive, assets: manifest.assets)
         return .init(archive: archive)
     }
@@ -3025,21 +3021,24 @@ extension ProjectStore {
     }
 
     /// Draft configuration and execution history are saved together; Store retains all published asset records.
-    public func saveWorkflow(graphs: [WorkflowGraph], runs: [WorkflowRun], expectedRevision: UUID) throws -> WorkflowArchive {
+    public func saveWorkflow(graphs: [WorkflowGraph], runs: [WorkflowRun], expectedRevision: UUID, tools: [WorkflowToolDefinition]? = nil) throws -> WorkflowArchive {
         var archive = try editableWorkflow()
         guard archive.revision == expectedRevision else { throw WorkflowIssue("流程已被另一操作修改，请重新读取后保存。") }
         archive.graphs = graphs; archive.runs = runs; archive.revision = UUID()
+        if let tools { archive.tools = tools }
+        if archive.requiresLanguageVersion { archive.version = 2 }
         try commitWorkflow(archive, assets: manifest.assets)
         return archive
     }
 
     private func validateWorkflowArchive(_ archive: WorkflowArchive, assets: [ProjectAsset]) throws {
-        guard archive.version == 1, archive.graphs.count <= 256, archive.runs.count <= 4_096,
+        guard [1, 2].contains(archive.version), archive.graphs.count <= 256, archive.runs.count <= 4_096,
               archive.assets.count <= 32_768, Set(archive.graphs.map(\.id)).count == archive.graphs.count,
               Set(archive.runs.map(\.id)).count == archive.runs.count,
               Set(archive.assets.map { $0.reference.assetID }).count == archive.assets.count else {
             throw WorkflowIssue("流程数量、版本或身份不合法；请另存项目或检查数据。")
         }
+        try WorkflowArchiveInspection.validateStructure(archive)
         let known = Dictionary(uniqueKeysWithValues: assets.map { ($0.id, $0) })
         for record in archive.assets {
             let ref = record.reference
@@ -3070,7 +3069,7 @@ extension ProjectStore {
         for record in archive.assets { for parent in record.parents { try validateRef(parent) } }
         for graph in archive.graphs + archive.runs.map(\.graph) {
             // Missing values in editable drafts are allowed; topology and identity must remain valid.
-            try WorkflowRegistry.standard.validate(graph)
+            try WorkflowRegistry.standard.validate(graph, tools: archive.tools ?? [])
             for node in graph.nodes { if let ref = node.assetReference { try validateRef(ref) } }
         }
         for run in archive.runs {

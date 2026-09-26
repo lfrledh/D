@@ -34,7 +34,7 @@ public struct WorkflowRegistry: Sendable {
     public func operation(_ id: String) -> WorkflowOperation? { operationsByID[id] }
 
     /// Project the instance's typed interface; display strings never define validation.
-    public func definition(for node: WorkflowNode) -> WorkflowOperationDefinition? {
+    public func definition(for node: WorkflowNode, tools: [WorkflowToolDefinition] = []) -> WorkflowOperationDefinition? {
         guard var result = operation(node.operationID)?.definition else { return nil }
         if ["d.value.record", "d.value.list", "d.control.invoke"].contains(node.operationID) {
             result.inputs = (node.dataConfiguration?.fields ?? []).map {
@@ -46,6 +46,12 @@ public struct WorkflowRegistry: Sendable {
         }
         if node.operationID == "d.value.field", let type = node.dataConfiguration?.schema {
             result.outputs = [.init("output", "字段", kinds: type.portKinds)]
+        }
+        if case .invoke(let reference) = node.control,
+           let tool = tools.first(where: { $0.id == reference.id && $0.version == reference.version }),
+           let interface = tool.graph.interface {
+            result.inputs = interface.inputs.map { .init($0.name, $0.name, kinds: $0.type.portKinds, required: $0.required) }
+            result.outputs = interface.outputs.map { .init($0.name, $0.name, kinds: $0.schema.portKinds) }
         }
         return result
     }
@@ -75,7 +81,7 @@ public struct WorkflowRegistry: Sendable {
         try operation.validate(node)
     }
 
-    public func validate(_ graph: WorkflowGraph) throws {
+    public func validate(_ graph: WorkflowGraph, tools: [WorkflowToolDefinition] = []) throws {
         guard graph.nodes.count <= Self.maximumNodes else {
             throw WorkflowIssue("节点数量超过上限 \(Self.maximumNodes)。")
         }
@@ -104,11 +110,11 @@ public struct WorkflowRegistry: Sendable {
             guard let target = nodes[connection.targetNode] else {
                 throw WorkflowIssue("连接目标节点不存在。")
             }
-            guard let sourceDefinition = definition(for: source),
+            guard let sourceDefinition = definition(for: source, tools: tools),
                   let output = sourceDefinition.outputs.first(where: { $0.id == connection.sourcePort }) else {
                 throw WorkflowIssue("来源端口不存在。", nodeID: source.id, port: connection.sourcePort)
             }
-            guard let targetDefinition = definition(for: target),
+            guard let targetDefinition = definition(for: target, tools: tools),
                   let input = targetDefinition.inputs.first(where: { $0.id == connection.targetPort }) else {
                 throw WorkflowIssue("目标端口不存在。", nodeID: target.id, port: connection.targetPort)
             }

@@ -16,6 +16,31 @@ public indirect enum WorkflowDataSchema: Codable, Sendable, Equatable {
         if case .optional(let wrapped) = self { return [.optional] + wrapped.portKinds }
         return [kind]
     }
+    public func validateDefinition() throws {
+        var count = 0
+        func visit(_ type: WorkflowDataSchema, depth: Int) throws {
+            count += 1
+            guard depth <= 24, count <= 16_384 else { throw WorkflowIssue("数据类型定义层级或数量超限。") }
+            switch type {
+            case .record(let fields):
+                guard fields.count <= 256, Set(fields.map(\.name)).count == fields.count,
+                      fields.allSatisfy({ !$0.name.isEmpty && $0.name.utf8.count <= 256 }) else {
+                    throw WorkflowIssue("记录字段重复或无效。")
+                }
+                for field in fields { try visit(field.type, depth: depth + 1) }
+            case .list(let element), .optional(let element), .result(let element): try visit(element, depth: depth + 1)
+            case .enumeration(let choices):
+                guard !choices.isEmpty, choices.count <= 256, Set(choices).count == choices.count,
+                      choices.allSatisfy({ !$0.isEmpty && $0.utf8.count <= 1024 }) else { throw WorkflowIssue("枚举选项无效。") }
+            case .number(let unit):
+                guard unit == nil || (!(unit?.isEmpty ?? true) && (unit?.utf8.count ?? 0) <= 64) else { throw WorkflowIssue("数字单位无效。") }
+            case .asset(let kind):
+                guard [.text, .image, .audio, .video, .notes, .chords, .tempo, .pitch].contains(kind) else { throw WorkflowIssue("此类型不能作为媒体资产。") }
+            default: break
+            }
+        }
+        try visit(self, depth: 0)
+    }
 }
 
 public struct WorkflowRecordField: Codable, Sendable, Equatable, Identifiable {
@@ -100,6 +125,8 @@ public indirect enum WorkflowDatum: Codable, Sendable, Equatable {
     }
     /// A bounded validation pass also rejects malformed runtime/decoded values.
     public func validate(as expected: WorkflowDataSchema? = nil) throws {
+        try schema.validateDefinition()
+        try expected?.validateDefinition()
         var count = 0
         try check(expected ?? schema, path: "$", depth: 0, count: &count)
     }
@@ -108,7 +135,9 @@ public indirect enum WorkflowDatum: Codable, Sendable, Equatable {
         guard depth <= 24, count <= 16_384 else { throw WorkflowIssue("数据层级或数量超过安全限制。") }
         if case .optional(let inner) = expected {
             if case .none(let declared) = self {
-                guard declared == inner else { throw WorkflowIssue("\(path)：可选值类型不符。") }; return
+                if declared == inner { return }
+                // A present Optional<T> can itself be none when the outer field is Optional<Optional<T>>.
+                // Its declared type still has to match the inner optional, never an unrelated empty value.
             }
             try check(inner, path: path, depth: depth + 1, count: &count); return
         }

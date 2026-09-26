@@ -177,8 +177,8 @@ public struct ProjectDraft: Codable, Sendable, Equatable {
 }
 
 public struct ProjectManifest: Codable, Sendable, Equatable, Identifiable {
-    public static let currentSchemaVersion = 16
-    public static let readableSchemaVersions = Set(1...12).union([16])
+    public static let currentSchemaVersion = 17
+    public static let readableSchemaVersions = Set(1...12).union([16, 17])
     public var schemaVersion: Int
     /// Monotonic committed state version lets the UI discard a late, stale actor response.
     public var revision: UInt64
@@ -242,7 +242,7 @@ public struct ProjectManifest: Codable, Sendable, Equatable, Identifiable {
             // Current-format omissions are corruption, not a request for legacy defaults.
             _ = try CurrentGenerationFields(from: decoder)
         }
-        if [10, 11, 12, 16].contains(schemaVersion) { _ = try CurrentTextSourcesFields(from: decoder) }
+        if [10, 11, 12, 16, 17].contains(schemaVersion) { _ = try CurrentTextSourcesFields(from: decoder) }
         revision = try values.decodeIfPresent(UInt64.self, forKey: .revision) ?? 0
         id = try values.decode(UUID.self, forKey: .id)
         name = try values.decode(String.self, forKey: .name)
