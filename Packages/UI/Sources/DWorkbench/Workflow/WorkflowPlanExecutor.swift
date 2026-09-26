@@ -246,6 +246,7 @@ import Foundation
             try updateRecord(at: address) { record in
                 record.step.status = .failed
                 record.step.error = error.localizedDescription
+                if let failure = error as? WorkflowOutputValidationFailure { record.step.outputs["raw"] = .asset(failure.raw) }
             }
             try await persist()
             throw error

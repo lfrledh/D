@@ -49,7 +49,7 @@ public enum WorkflowValue: Codable, Sendable, Equatable {
         switch self { case .asset(let a): a.kind; case .collection: .images; case .receipt: .receipt; case .data(let value): value.kind }
     }
     public var datum: WorkflowDatum? { if case .data(let value) = self { value } else if case .asset(let ref) = self { .asset(ref) } else { nil } }
-    public var asset: WorkflowAssetReference? { if case .asset(let a) = self { a } else { nil } }
+    public var asset: WorkflowAssetReference? { switch self { case .asset(let a), .data(.asset(let a)): a; default: nil } }
     public var candidates: [WorkflowCandidate] { if case .collection(let a) = self { a } else { [] } }
 }
 

@@ -22,6 +22,7 @@ public struct WorkflowExecutionContext: Sendable {
 
 /// Explicit application services supplied by the project owner; no View or global current page.
 @MainActor public protocol WorkflowOperationServices: AnyObject {
+    func transformAudio(_ reference: WorkflowAssetReference, context: WorkflowExecutionContext) async throws -> WorkflowAssetReference
     func readData(_ reference: WorkflowAssetReference) async throws -> Data
     func generateLanguage(task: String, content: String?, context: WorkflowExecutionContext) async throws -> WorkflowAssetReference
     func generateMusic(_ request: AudioRequest, parents: [WorkflowAssetReference], context: WorkflowExecutionContext) async throws -> WorkflowAssetReference
@@ -50,6 +51,7 @@ public struct WorkflowOperation: Sendable {
 
 /// Older test/host implementations remain explicit about unsupported new services.
 extension WorkflowOperationServices {
+    public func transformAudio(_ reference: WorkflowAssetReference, context: WorkflowExecutionContext) async throws -> WorkflowAssetReference { throw WorkflowIssue("此入口尚未提供音频转换。") }
     public func readData(_ reference: WorkflowAssetReference) async throws -> Data { throw WorkflowIssue("此入口尚未提供媒体读取。") }
     public func generateLanguage(task: String, content: String?, context: WorkflowExecutionContext) async throws -> WorkflowAssetReference { throw WorkflowIssue("此入口尚未提供语言生成。") }
     public func generateMusic(_ request: AudioRequest, parents: [WorkflowAssetReference], context: WorkflowExecutionContext) async throws -> WorkflowAssetReference { throw WorkflowIssue("此入口尚未提供受控音乐生成。") }

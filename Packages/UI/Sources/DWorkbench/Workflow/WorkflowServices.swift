@@ -119,6 +119,7 @@ struct WorkflowSaveFailure: LocalizedError {
         try checkCancellation()
         guard !languageCallActive, bindings.isEmpty, let operation = registry.operation(context.node.operationID) else { throw WorkflowIssue("操作未注册或上一模型租约未释放。") }
         try registry.validate(context.node)
+        try registry.validateInputs(context.inputs, node: context.node, connectedPorts: Set(context.inputs.keys))
         languageCallActive = true
         defer { languageCallActive = false }
         do {
@@ -135,6 +136,20 @@ struct WorkflowSaveFailure: LocalizedError {
             try checkCancellation()
             return result
         } catch { await finish(); throw error }
+    }
+    public func transformAudio(_ reference: WorkflowAssetReference, context: WorkflowExecutionContext) async throws -> WorkflowAssetReference {
+        if pending[context.stepID] != nil { return try await publish(context) }
+        let (url, asset) = try await store.workflowMedia(reference)
+        guard let audio = asset.metadata.audio else { throw WorkflowIssue("缺少原声音频规格。") }
+        let p = context.node.parameters
+        let range = p["whole"]?.flag == false ? AudioFrameRange(startFrame: Int64(p["startFrame"]?.integer ?? -1), endFrame: Int64(p["endFrame"]?.integer ?? -1)) : nil
+        let rate = p["sampleRate"]?.integer ?? 0, channels = p["channels"]?.integer ?? 0
+        let data = try await WorkflowCPU.run {
+            try WorkflowAudioPrograms.transform(at: url, registered: audio, range: range,
+                sampleRate: rate == 0 ? nil : rate, channels: channels == 0 ? nil : channels)
+        }
+        try checkCancellation()
+        return try await publishMedia(data, mediaType: "audio/wav", parents: [reference], context: context)
     }
     public func readData(_ reference: WorkflowAssetReference) async throws -> Data { try await store.workflowData(reference) }
     public func publishMedia(_ data: Data, mediaType: String, parents: [WorkflowAssetReference], context: WorkflowExecutionContext) async throws -> WorkflowAssetReference {
@@ -235,7 +250,10 @@ struct WorkflowSaveFailure: LocalizedError {
     }
     private func generateMedia(_ input: InferenceInput, mediaType: String, parents: [WorkflowAssetReference],
                                binding: WorkflowModelBinding, context: WorkflowExecutionContext) async throws -> WorkflowAssetReference {
-        let request = InferenceRequest(id: context.stepID, model: binding.reference, input: input)
+        let budget = context.node.parameters["memoryBudgetGiB"]?.integer ?? 0
+        guard budget >= 0, let gib = UInt64(exactly: budget), gib <= UInt64(Int64.max) / 1_073_741_824 else { throw WorkflowIssue("内存预算无效。") }
+        let request = InferenceRequest(id: context.stepID, model: binding.reference, input: input,
+            memoryBudgetBytes: gib == 0 ? nil : gib * 1_073_741_824)
         let (result, _) = try await infer(request, binding: binding)
         guard result.artifacts.count == 1, let artifact = result.artifacts.first, artifact.mediaType == mediaType else { throw WorkflowIssue("模型未交付预期的单个完整媒体。") }
         let data = try await store.readWorkflowBackendMedia(artifact, request: request)

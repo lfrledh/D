@@ -7,12 +7,7 @@ public enum WorkflowStructuredText {
             throw StructuredTextError(path: "$", reason: "JSON input exceeds 1 MiB.")
         }
 
-        do {
-            try schema.validateDefinition()
-        } catch {
-            throw StructuredTextError(path: "$", reason: "Invalid schema: \(error)")
-        }
-        try requireSupported(schema, path: "$")
+        try validateSchema(schema)
 
         var parser = JSONParser(text)
         let json = try parser.parse()
@@ -23,6 +18,17 @@ public enum WorkflowStructuredText {
             throw StructuredTextError(path: "$", reason: "Parsed value failed validation: \(error)")
         }
         return datum
+    }
+
+    /// Preflight before model admission; parsing uses the identical schema rules.
+    public static func validateSchema(_ schema: WorkflowDataSchema) throws {
+        do {
+            try schema.validateDefinition()
+        } catch {
+            throw StructuredTextError(path: "$", reason: "Invalid schema: \(error)")
+        }
+        try requireSupported(schema, path: "$")
+
     }
 
     private static func requireSupported(_ schema: WorkflowDataSchema, path: String) throws {

@@ -139,3 +139,23 @@ Tests use actual WAV fixture + AudioMediaInspector readback output: half-open re
 API `public enum WorkflowStructuredText { public static func parse(_ text:String, as schema:WorkflowDataSchema) throws -> WorkflowDatum }`。仅完整标准JSON，允许两端空白，拒绝markdown围栏、前后说明、多JSON值、重复对象键（包括转义后相同键）、非法Unicode/数字/尾随逗号。Text schema也读取JSON string；原始普通文字模式由调用方直接text。支持Text/finite Double Number/Bool/Enum/Record/List/Optional；Result和Asset schema本轮明确拒绝（模型不能制造已发布资产或执行结果）。数字与Bool严格区分，单位取冻结schema，不猜字符串数字。Record拒绝未知字段，required缺失错误，非required可缺但null只有Optional合法。List保序，生成稳定itemID为1起始索引字符串，<=4096。Optional null=>none(inner)，非null按inner解析。JSON输入<=1MiB、嵌套<=24、总值<=65536、Record<=256；源码编码/字符串Unicode准确。解析前/中有界，不先无界解析再检查；可以局部受控parser，也可安全系统解析加重复key/结构预算扫描，但不能eval/执行或读取URI。输出完整Datum.validate(as:)。错误含字段/索引路径且不泄露本机信息，不吞异常成空。
 
 测试：真实JSON成功Record/List/Unicode/escaped-string/Optional，错类型(bool对number和反向)、非有限/超大数、单位schema、缺/多字段、null、Enum、重名键直接及Unicode转义、尾随文本/围栏、深度/输入/数量、Result/Asset拒绝，相同输入稳定ID。至少一个反例中旧合法值不受影响（纯函数），错误可定位。解析算法由Worker选择，不逐函数指定。
+
+
+## CHECKPOINT r1：结构化运行记录的纯校验
+
+只新增 Workflow/WorkflowCheckpointValidation.swift 与 Tests/DWorkbenchTests/WorkflowCheckpointValidationTests.swift（根分别 Packages/UI/Sources/DWorkbench、Packages/UI/Tests）。Sol/high，受限CLI预检；初交1800秒+两轮修复。禁止改Controller/Store/Executor/共享类型/文档/工程/模型。只parse；Lead串行测试。无网络/模型/GUI/Git写，不递归。
+
+API public enum WorkflowCheckpointValidation, static func validate(_ checkpoint: WorkflowPlanCheckpoint, expected: WorkflowPlan, registry: WorkflowRegistry = .standard) throws。纯校验：checkpoint.plan 必须精确等于 expected；expected由Lead调用方从冻结graph/tools编译并冻结明确modelID，不能把原checkpoint.plan自身作为受信expected传入。本文件不编译graph/读Store。原规则不改变：plan版本1、深度16/静态4096steps，接口schema/端口名唯一有界，运行records最多65536、路径深度有界、records地址/stepID唯一，全部runID正确；enum分支对应真实计划节点和所选子块，Map itemID属于父绑定List且长度合法，iteration范围与loop类型对应，invoke reference含digest完全相等。父调用记录必须存在。
+
+每record必须能从地址追溯planned node；静态node字段一致，只允许N01具有publicName且接口声明时的dataConfiguration.value按实际公开输入覆盖；schema验证不可跳过。顶层arguments按interface，嵌套实际arguments沿父inputs构成：Branch record.fields或[input]；Map shared+item/value/index且冲突拒绝；Loop shared+state/iteration（读取原Executor语义）；Invoke父inputs转datum。Loop后续state可由前轮体接口nextState输出恢复。先核真实Executor，不凭此摘要猜键名。有歧义暂停告知Lead，不造猜测语义。
+
+校验所有arguments/externalInputs/outputs、record输入输出、dataConfiguration、human材料/草稿/决定的Datum完整性；拒绝不存在的端口或错误类型；在running/queued可缺输出，completed/partial必须完整输出（review的preview仅等待允许）；外部输入只能顶层计划边界外端口，不能覆盖计划内连接。humanTask.id及decision.waitingStepID对应stepID，结果schema有效，用户draft允许不满足最终schema但仍合法Datum；已提交decision须满足schema。人工rejected不能同时含decision。控件draft只是文字仍有1MiB限制。返回副作用零；不运行/存储/改变状态，不让Dictionary重复key trap。
+
+资产引用存在性仍由ProjectStore按已发布资产逐项核，Worker可提供 static func assetReferences(in checkpoint: WorkflowPlanCheckpoint) throws -> [WorkflowAssetReference]，完整收集所有层次（含plan node/data/control/interface规则值、记录inputs/outputs/decision/human）。不得验证文件或访问URL。
+
+测试真实Compiler+Executor产出的简单/Branch/Map/Loop/Invoke/人工等待快照可validate；mutation反例：错runID/plan身份或参数/重复接口/重复address/stepID/不可能分支或item/iteration/toolDigest/静态node被替换/外部输入覆盖/非法Datum/人工task身份和decision类型/深层资产收集。只纯CPU替身，不另写调度器。Caller不把“通过此结构校验”冒称反篡改签名或模型实测。
+
+## 接线中途（非验收）
+
+FORMS两轮修复后CPU通过，AUDIO-PROGRAMS一轮修复后11项通过（补AVAudioFile完整读测试；CAF非整数采样率不显式转换时拒绝，因WAV不能无损表达）。STRUCTURED初交12项通过；非实现者只读审核通过。所有Worker已交还写入权。各实现/失败日志在对应R子目录，不修改历史预算。
+Lead添加实际N03/M04—M09/V01操作与纯条件桥接，尚待产品接线。MRT2条件映射保留0休止/1延续/2起音；同pitch重叠按所有唯一起音分段覆盖；过滤零力度，不编码声部/非零力度。原乐谱不变；条件时间25Hz四舍五入，塌缩/越界拒绝。M09要求显式音符（可空），不以无条件生成冒充受控。此策略和共享时间映射有独立只读审核及新增反例。

@@ -128,7 +128,7 @@ enum WorkflowExecution {
     }
 
     static func asset(_ value: WorkflowValue, kind: WorkflowDataKind, port: String, node: WorkflowNode) throws -> WorkflowAssetReference {
-        guard case .asset(let reference) = value, reference.kind == kind else {
+        guard let reference = value.asset, reference.kind == kind else {
             throw WorkflowIssue("输入实际类型不符。", nodeID: node.id, port: port)
         }
         return reference

@@ -165,7 +165,7 @@ public enum WorkflowMusicPrograms {
             throw WorkflowIssue("Beat-clock rendering requires a tempo map.")
         }
         func seconds(_ value: Double) -> Double {
-            return timelineSeconds(value, clock: sequence.clock, tempo: sequence.tempo)
+            return workflowMusicTimelineSeconds(value, clock: sequence.clock, tempo: sequence.tempo)
         }
 
         let durationSeconds = seconds(sequence.duration)
@@ -250,7 +250,7 @@ public enum WorkflowMusicPrograms {
         guard (1...0xFF_FFFF).contains(micros) else { throw WorkflowIssue("MIDI tempo is outside the three-byte range.") }
 
         func seconds(_ value: Double) -> Double {
-            return timelineSeconds(value, clock: sequence.clock, tempo: sequence.tempo)
+            return workflowMusicTimelineSeconds(value, clock: sequence.clock, tempo: sequence.tempo)
         }
         func tick(_ value: Double) throws -> Int {
             let scaled = seconds(value) * tempoBPM / 60 * 960
@@ -329,7 +329,7 @@ private struct RenderNote {
 /// The single clock-to-timeline conversion used by every in-memory music
 /// encoder. Keeping the operation order here prevents WAV and MIDI from
 /// disagreeing at the exact zero boundary because of floating-point rounding.
-private func timelineSeconds(_ value: Double, clock: WorkflowMusicClock,
+func workflowMusicTimelineSeconds(_ value: Double, clock: WorkflowMusicClock,
                              tempo: WorkflowTempoMap?) -> Double {
     switch clock {
     case .seconds:

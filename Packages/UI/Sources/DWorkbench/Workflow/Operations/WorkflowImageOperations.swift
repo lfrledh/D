@@ -37,8 +37,7 @@ enum WorkflowImageOperations {
             try WorkflowExecution.requireModel(in: context.node)
             let prompt: String
             if let input = context.inputs["prompt"] {
-                let reference = try WorkflowExecution.asset(input, kind: .text, port: "prompt", node: context.node)
-                prompt = try await services.readText(reference)
+                prompt = try await WorkflowLanguageOperations.text(input, services: services)
             } else {
                 prompt = try WorkflowScalarReader.text("promptText", in: context.node)
             }
