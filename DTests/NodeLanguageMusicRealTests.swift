@@ -17,7 +17,9 @@ struct NodeLanguageMusicRealTests {
         let support = try fm.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
         let root = support.appendingPathComponent("D/NodeLanguageAccess/" + UUID().uuidString)
         try fm.createDirectory(at: root, withIntermediateDirectories: true)
-        let engine = try #require(try BundledAudioEngine.resolve(resourceDirectory: #require(Bundle.main.resourceURL), family: .pitch))
+        let resources = try #require(Bundle.main.resourceURL)
+        let resolvedEngine = try BundledAudioEngine.resolve(resourceDirectory: resources, family: .pitch)
+        let engine = try #require(resolvedEngine)
         let directories = [engine.vendorDirectory, root.appendingPathComponent("Input"), root.appendingPathComponent("Run")]
         for directory in directories.dropFirst() { try fm.createDirectory(at: directory, withIntermediateDirectories: false) }
         var grants: [[String: String]] = []
