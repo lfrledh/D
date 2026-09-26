@@ -511,6 +511,70 @@ struct WorkflowRunScopeTests {
         }
     }
 
+    @Test func historicalAssetPinsRespectExplicitSchemaWithoutBreakingLegacyPorts() async throws {
+        let fixture = try ScopeFixture()
+        let sourceNode = try fixture.node("fixture.asset-source", title: "legacy-asset")
+        let legacySink = try fixture.node("fixture.asset-sink", title: "legacy-no-schema")
+        var assetSink = try fixture.node("fixture.asset-sink", title: "explicit-asset")
+        assetSink.dataConfiguration = .init(fields: [.init("input", .asset(.text))])
+        var textSink = try fixture.node("fixture.asset-sink", title: "explicit-text")
+        textSink.dataConfiguration = .init(fields: [.init("input", .text)])
+        let graph = WorkflowGraph(nodes: [sourceNode, legacySink, assetSink, textSink], connections: [
+            .init(sourceNode: sourceNode.id, targetNode: legacySink.id),
+            .init(sourceNode: sourceNode.id, targetNode: assetSink.id),
+            .init(sourceNode: sourceNode.id, targetNode: textSink.id),
+        ])
+        let sourceCheckpoint = try await fixture.execute(graph: graph, selection: .only(sourceNode.id))
+        let record = try #require(sourceCheckpoint.records.first)
+        let source = WorkflowScopeSource(
+            graph: graph,
+            selection: .only(sourceNode.id),
+            checkpoint: sourceCheckpoint
+        )
+
+        func destination(_ node: WorkflowNode) throws -> WorkflowScopeSource {
+            let plan = try WorkflowScopePlanner.rebuild(
+                graph: graph, selection: .only(node.id), modelDefaults: [:], registry: fixture.registry
+            )
+            var checkpoint = WorkflowPlanCheckpoint(plan: plan)
+            checkpoint.modelDefaults = [:]
+            return .init(graph: graph, selection: .only(node.id), checkpoint: checkpoint)
+        }
+        func pin(_ node: WorkflowNode) -> WorkflowHistoricalInput {
+            .init(
+                destinationNodeID: node.id,
+                destinationPort: "input",
+                sourceCall: .init(address: record.address, stepID: record.step.id),
+                sourcePort: "output"
+            )
+        }
+
+        let legacy = try WorkflowScopePlanner.resolveHistoricalInputs(
+            [pin(legacySink)],
+            destination: destination(legacySink),
+            sources: [source],
+            registry: fixture.registry
+        )
+        #expect(legacy[legacySink.id]?["input"] == record.step.outputs["output"])
+
+        let explicitAsset = try WorkflowScopePlanner.resolveHistoricalInputs(
+            [pin(assetSink)],
+            destination: destination(assetSink),
+            sources: [source],
+            registry: fixture.registry
+        )
+        #expect(explicitAsset[assetSink.id]?["input"] == record.step.outputs["output"])
+
+        #expect(throws: WorkflowIssue.self) {
+            try WorkflowScopePlanner.resolveHistoricalInputs(
+                [pin(textSink)],
+                destination: destination(textSink),
+                sources: [source],
+                registry: fixture.registry
+            )
+        }
+    }
+
     @Test func nestedLoopIterationsResolveByFullAddressWithoutNestedInjectionKeys() async throws {
         let fixture = try ScopeFixture()
         var state = try fixture.node("d.value.input", title: "loop-state")
@@ -607,6 +671,14 @@ struct WorkflowRunScopeTests {
                 inputs: [.init("input", "Input", kinds: [.number])],
                 outputs: [.init("output", "Output", kinds: [.number])]
             ),
+            operation(
+                "fixture.asset-source",
+                outputs: [.init("output", "Output", kinds: [.text])]
+            ),
+            operation(
+                "fixture.asset-sink",
+                inputs: [.init("input", "Input", kinds: [.text])]
+            ),
             operation("fixture.echo", inputs: [.init("input", "Input", kinds: [.text])]),
             operation(
                 "fixture.join",
@@ -689,6 +761,13 @@ struct WorkflowRunScopeTests {
             case "fixture.number-sink":
                 guard let input = context.inputs["input"] else { throw ScopeFixtureError.missingInput }
                 return .outputs(["output": input])
+            case "fixture.asset-source":
+                return .outputs(["output": .asset(.init(
+                    projectID: UUID(),
+                    assetID: UUID(),
+                    kind: .text,
+                    sha256: String(repeating: "a", count: 64)
+                ))])
             case "fixture.echo":
                 guard let input = context.inputs["input"] else { throw ScopeFixtureError.missingInput }
                 return .outputs(["output": input])
