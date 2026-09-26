@@ -1090,7 +1090,7 @@ enum WorkflowConnectionPresentation {
             let records = run.planCheckpoint?.records ?? run.steps.map {
                 WorkflowPlanCallRecord(address: .init(runID: run.id, path: [.node($0.node.id)]), step: $0)
             }
-            return records.compactMap { call in
+            return records.compactMap { call -> WorkflowConnectionSnapshot? in
                 guard call.step.node.id == connection.targetNode,
                       let value = call.step.inputs[connection.targetPort] else { return nil }
                 return WorkflowConnectionSnapshot(runID: run.id, revision: run.graph.revision,
