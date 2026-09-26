@@ -313,13 +313,9 @@ private struct CheckpointValidator {
         }
         let steps = Dictionary(uniqueKeysWithValues: checkpoint.plan.steps.map { ($0.node.id, $0) })
         let selected = Set(steps.keys)
-        let nestedNodeIDs = nodeIDsInNestedPlans(of: checkpoint.plan)
         for (nodeID, values) in checkpoint.externalInputs {
             guard let step = steps[nodeID] else {
                 throw WorkflowIssue("externalInputs refers to a non-top-level plan node.", nodeID: nodeID)
-            }
-            guard !nestedNodeIDs.contains(nodeID) else {
-                throw WorkflowIssue("externalInputs is ambiguous with a nested plan node.", nodeID: nodeID)
             }
             guard values.count <= 256 else {
                 throw WorkflowIssue("externalInputs contains too many ports.", nodeID: nodeID)
@@ -335,28 +331,6 @@ private struct CheckpointValidator {
                 try validateValue(value, port: port, nodeID: nodeID, name: name)
             }
         }
-    }
-
-    private func nodeIDsInNestedPlans(of plan: WorkflowPlan) -> Set<UUID> {
-        var result = Set<UUID>()
-        func visit(_ child: WorkflowPlan) {
-            for step in child.steps {
-                result.insert(step.node.id)
-                switch step.kind {
-                case .call: break
-                case .branch(_, let yes, let no): visit(yes); visit(no)
-                case .map(let body, _), .loop(let body, _, _, _), .invoke(_, let body): visit(body)
-                }
-            }
-        }
-        for step in plan.steps {
-            switch step.kind {
-            case .call: break
-            case .branch(_, let yes, let no): visit(yes); visit(no)
-            case .map(let body, _), .loop(let body, _, _, _), .invoke(_, let body): visit(body)
-            }
-        }
-        return result
     }
 
     private func resolve(_ address: WorkflowExecutionAddress) throws -> ResolvedRecord {

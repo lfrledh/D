@@ -607,7 +607,9 @@ import Foundation
     ) throws -> [String: WorkflowValue] {
         let ports = try inputPorts(for: step)
         let plannedNodeIDs = Set(plan.steps.map { $0.node.id })
-        let external = checkpoint?.externalInputs[runtimeNode.id] ?? [:]
+        // External inputs belong to this run's root boundary. Graph-local UUIDs
+        // may repeat inside tools; their inputs come from that concrete body call.
+        let external = base.path.isEmpty ? (checkpoint?.externalInputs[runtimeNode.id] ?? [:]) : [:]
         var result: [String: WorkflowValue] = [:]
 
         for input in step.inputs {

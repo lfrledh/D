@@ -243,6 +243,40 @@ struct WorkflowLanguageExamplesTests {
         }
     }
 
+    @Test(arguments: [false, true]) func rootExternalInputsNeverLeakIntoSameIDInsideTool(wired: Bool) async throws {
+        let registry = WorkflowRegistry.standard, sharedID = UUID()
+        let fields: [WorkflowRecordField] = [.init("v", .text)]
+        let localFields: [WorkflowRecordField] = [.init("v", .text, required: false)]
+        var argument = try registeredNode("d.value.input", title: "Public argument")
+        argument.parameters["publicName"] = .text("v"); argument.dataConfiguration = .init(value: .text("template"))
+        var inner = try registeredNode("d.value.input", title: "Inner")
+        inner.dataConfiguration = .init(value: .text("inner"))
+        var record = try registeredNode("d.value.record", title: "Local record")
+        record.id = sharedID
+        record.dataConfiguration = .init(value: .record(schema: localFields, fields: ["v": .text("inner")]), fields: localFields)
+        var body = WorkflowGraph(nodes: [argument, inner, record], connections: wired ? [.init(sourceNode: inner.id, targetNode: record.id, targetPort: "v")] : [])
+        body.interface = .init(inputs: fields, outputs: [.init(name: "output", nodeID: record.id, schema: .record(localFields))])
+        let tool = WorkflowToolDefinition(name: "Overlapping local ID", graph: body)
+        var invocation = try registeredNode("d.control.invoke", title: "Root invocation")
+        invocation.id = sharedID; invocation.dataConfiguration = .init(fields: fields)
+        invocation.control = .invoke(.init(id: tool.id, version: 1, digest: try WorkflowPlanCompiler.digest(tool)))
+        let plan = try WorkflowPlanCompiler().compile(.init(nodes: [invocation]), tools: [tool], target: invocation.id, only: true)
+        var checkpoint = WorkflowPlanCheckpoint(plan: plan)
+        checkpoint.externalInputs[sharedID] = ["v": .data(.text("outer"))]
+        let services = RejectingExampleServices()
+        let executor = WorkflowPlanExecutor(executeCall: { context in
+            try await #require(registry.operation(context.node.operationID)).execute(context, services)
+        }, save: { snapshot in try WorkflowCheckpointValidation.validate(snapshot, expected: plan) })
+        let result = try await executor.execute(checkpoint)
+        #expect(result.state == .completed && services.callCount == 0)
+        let root = try #require(result.records.first { $0.address.path.count == 1 })
+        let nested = try #require(result.records.first { $0.address.path.count > 1 && $0.step.node.id == sharedID })
+        #expect(root.step.inputs["v"] == .data(.text("outer")))
+        #expect(nested.step.inputs == (wired ? ["v": .data(.text("inner"))] : [:]))
+        #expect(nested.step.outputs["output"]?.datum == .record(schema: localFields, fields: ["v": .text("inner")]))
+    }
+
+
     private func registeredNode(_ operationID: String, title: String) throws -> WorkflowNode {
         guard let operation = WorkflowRegistry.standard.operation(operationID) else {
             throw WorkflowIssue("Missing registered operation \(operationID)")
