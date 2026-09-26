@@ -631,6 +631,7 @@ public struct WorkflowAssetBindingTarget: Sendable, Equatable {
         } catch { errorMessage = error.localizedDescription }
     }
     public func resume(runID: UUID) async {
+        guard !externalOperationBusy() else { errorMessage = "请先结束录音或恢复保存，再恢复流程。"; return }
         guard !closed, !closing, !isRunning, readOnlyReason == nil, let i = runs.firstIndex(where: { $0.id == runID }) else { return }
         guard runs[i].graph.id == selectedGraphID, let current = graph,
               (runs[i].planCheckpoint?.plan.steps.map(\.node) ?? runs[i].steps.map(\.node)).allSatisfy({ (try? registry.signature($0.id, in: current, tools: tools)) == (try? registry.signature($0.id, in: runs[i].graph, tools: tools)) }) else {
@@ -650,6 +651,7 @@ public struct WorkflowAssetBindingTarget: Sendable, Equatable {
         await finishExecution(failure)
     }
     public func retryFailedCandidates(stepID: UUID) async {
+        guard !externalOperationBusy() else { errorMessage = "请先结束录音或恢复保存，再重试候选。"; return }
         guard !closed, !closing, !isRunning, readOnlyReason == nil,
               let ri = runs.firstIndex(where: { $0.steps.contains { $0.id == stepID } }),
               let si = runs[ri].steps.firstIndex(where: { $0.id == stepID }),

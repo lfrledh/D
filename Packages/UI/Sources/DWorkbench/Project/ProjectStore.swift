@@ -3134,10 +3134,10 @@ extension ProjectStore {
             }
         }
         for record in archive.assets { for parent in record.parents { try validateRef(parent) } }
-        for graph in archive.graphs + archive.runs.map(\.graph) {
+        for graph in archive.graphs + archive.runs.map(\.graph) + (archive.tools ?? []).map(\.graph) {
             // Missing values in editable drafts are allowed; topology and identity must remain valid.
             try WorkflowRegistry.standard.validate(graph, tools: archive.tools ?? [])
-            for node in graph.nodes { if let ref = node.assetReference { try validateRef(ref) } }
+            for ref in try WorkflowCheckpointValidation.assetReferences(in: graph) { try validateRef(ref) }
         }
         for run in archive.runs {
             guard run.graph.nodes.contains(where: { $0.id == run.targetNodeID }),

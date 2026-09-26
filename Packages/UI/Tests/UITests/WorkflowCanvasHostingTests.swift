@@ -42,6 +42,7 @@ struct WorkflowCanvasHostingTests {
         let runtime = WorkbenchSession(engine: engine, backendID: "never", status: { .init(activeRunID: nil, phase: nil, queuedRunIDs: []) },
             shutdown: {}, cleanup: {}, validateModel: { _ in }, textBackendID: "fixture.text")
         let services = WorkflowServices(store: store, session: runtime,
+            defaultIdentity: { _ in "fixture" },
             resolveText: { .init(identity: "fixture", reference: .init(directory: root), backendID: "fixture.text") },
             resolveImage: { throw WorkflowIssue("No image model") })
         let c = WorkflowController(services: services); await c.load(); c.addExample("template")
@@ -95,7 +96,7 @@ struct WorkflowCanvasHostingTests {
             if await compute.started { break }
             try await Task.sleep(for: .milliseconds(10))
         }
-        #expect(await compute.started)
+        #expect(await compute.started, "\(c.errorMessage ?? c.progressMessage)")
         c.selectedGraphID = graph.id
         host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(30))
         #expect(c.isRunning && editor.isEditable && editor.hasMarkedText())

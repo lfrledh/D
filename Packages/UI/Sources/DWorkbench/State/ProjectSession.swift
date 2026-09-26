@@ -256,8 +256,9 @@ public final class ProjectSession {
     public private(set) var isRegisteringAudioModel = false
     public let audioCreationTransport = AudioTransport(recordingEnabled: false)
     public private(set) var workflowRecordingNodeID: UUID?
-    @ObservationIgnored private var workflowCapture: (id: UUID, controller: WorkflowController, target: WorkflowAssetBindingTarget, audio: ProjectAudioController, identity: AudioCaptureHandle?)?
+    @ObservationIgnored private var workflowCapture: (id: UUID, controller: WorkflowController, target: WorkflowAssetBindingTarget, audio: ProjectAudioController, admitted: Bool, identity: AudioCaptureHandle?)?
     public private(set) var workflowPreviewReference: WorkflowAssetReference?
+    @ObservationIgnored private var workflowPreviewRequestID: UUID?
     @ObservationIgnored private var audioCreationDocumentID: UUID?
     @ObservationIgnored private var audioCreationPersistedRevision: UUID?
     @ObservationIgnored private var audioCreationWriteTail: Task<Void, Never>?
@@ -1445,6 +1446,7 @@ public final class ProjectSession {
     }
 
     public func startAudioRecording(name: String) async -> Bool {
+        guard workflowCapture == nil else { return false }
         guard audioRecordingEnabled else {
             errorMessage = "无法开始录音。\n当前项目会话未启用录音能力。"
             return false
@@ -1460,15 +1462,17 @@ public final class ProjectSession {
     public func startWorkflowRecording(nodeID: UUID, controller: WorkflowController) async {
         guard workflow === controller, workflowCapture == nil, !controller.isRunning,
               audioRecordingEnabled, navigationReady(), let store, let audio,
-              let target = controller.assetBindingTarget(nodeID: nodeID), !isChangingProject, !closePending else { return }
+              let target = controller.assetBindingTarget(nodeID: nodeID), !audio.isBusy, !isChangingProject, !closePending else { return }
         let id = UUID()
-        workflowCapture = (id, controller, target, audio, nil); workflowRecordingNodeID = nodeID
+        workflowCapture = (id, controller, target, audio, false, nil); workflowRecordingNodeID = nodeID
         do {
             try await flushDraft(to: store)
             await drainVideoPreview(); audioCreationTransport.stopPlayback()
-            guard workflow === controller, self.store === store, controller.isCurrent(target), workflowCapture?.id == id else {
+            guard workflow === controller, self.store === store, controller.isCurrent(target), workflowCapture?.id == id,
+                  !audio.isBusy, !isChangingProject, !closePending else {
                 throw AudioMediaError.unavailable("录音开始前项目或输入已改变")
             }
+            workflowCapture?.admitted = true
             let identity = await audio.startRecordingWithIdentity(name: "流程原声")
             guard workflowCapture?.id == id else { return }
             guard let identity else { throw AudioMediaError.unavailable(audio.errorMessage ?? "未开始录音") }
@@ -1490,19 +1494,25 @@ public final class ProjectSession {
                 await capture.controller.bindRecordedAsset(assetID, target: capture.target)
             } else {
                 // Explicitly cancel a permission wait, without adopting an old recording.
-                _ = await capture.audio.finishRecording()
+                if capture.admitted { _ = await capture.audio.finishRecording() }
                 if workflowCapture?.id == capture.id { workflowCapture = nil; workflowRecordingNodeID = nil }
             }
         } catch { capture.controller.errorMessage = error.localizedDescription }
     }
 
-    public func prepareWorkflowPreview(_ reference: WorkflowAssetReference, controller: WorkflowController) async -> URL? {
+    public func prepareWorkflowPreview(_ reference: WorkflowAssetReference, controller: WorkflowController, requestID: UUID) async -> URL? {
         guard workflow === controller, !isBusy, !isChangingProject, !closePending, let store else { return nil }
         workflowPreviewReference = reference
+        workflowPreviewRequestID = requestID
         do {
             let (url, asset) = try await store.workflowMedia(reference)
+            try Task.checkCancellation()
+            guard workflow === controller, self.store === store, workflowPreviewRequestID == requestID,
+                  workflowPreviewReference == reference, !isBusy, !isChangingProject, !closePending else { return nil }
             await drainVideoPreview()
+            try Task.checkCancellation()
             guard workflow === controller, self.store === store, workflowPreviewReference == reference,
+                  workflowPreviewRequestID == requestID,
                   !isBusy, !isChangingProject, !closePending else { return nil }
             audio?.transport.stopPlayback(); audioCreationTransport.stopPlayback()
             if reference.kind == .audio {
@@ -1514,16 +1524,16 @@ public final class ProjectSession {
                 videoPreviewURL = url
             } else { throw AudioMediaError.unavailable("此资产不是音视频") }
             return url
-        } catch { if workflowPreviewReference == reference { controller.errorMessage = error.localizedDescription }; return nil }
+        } catch { if workflowPreviewRequestID == requestID, !(error is CancellationError) { controller.errorMessage = error.localizedDescription }; return nil }
     }
 
-    public func playWorkflowAudio(_ reference: WorkflowAssetReference) {
-        guard workflowPreviewReference == reference, reference.kind == .audio, !isBusy else { return }
+    public func playWorkflowAudio(_ reference: WorkflowAssetReference, requestID: UUID) {
+        guard workflowPreviewRequestID == requestID, workflowPreviewReference == reference, reference.kind == .audio, !isBusy else { return }
         do { try audioCreationTransport.play() } catch { workflow?.errorMessage = error.localizedDescription }
     }
-    public func endWorkflowPreview(_ reference: WorkflowAssetReference) {
-        guard workflowPreviewReference == reference else { return }
-        workflowPreviewReference = nil; audioCreationTransport.stopPlayback(); stopVideoPreview()
+    public func endWorkflowPreview(_ reference: WorkflowAssetReference, requestID: UUID) {
+        guard workflowPreviewRequestID == requestID, workflowPreviewReference == reference else { return }
+        workflowPreviewRequestID = nil; workflowPreviewReference = nil; audioCreationTransport.stopPlayback(); stopVideoPreview()
     }
 
     public func finishAudioRecording() async -> Bool {
@@ -1913,6 +1923,7 @@ public final class ProjectSession {
             // if a preceding disk/cleanup operation fails and the user needs to retry.
             if let session { await session.shutdown() }
             audio?.deactivateAfterClose()
+            workflowCapture = nil; workflowRecordingNodeID = nil; workflowPreviewReference = nil; workflowPreviewRequestID = nil
             stopVideoPreview()
             await access.release(videoModelLease)
             videoModelLease = nil; videoReference = nil

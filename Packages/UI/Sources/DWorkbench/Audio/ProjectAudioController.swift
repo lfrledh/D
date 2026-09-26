@@ -84,6 +84,8 @@ public final class ProjectAudioController {
     @ObservationIgnored private var finalizingCaptureID: UUID?
     @ObservationIgnored private var activeCaptureID: UUID?
     @ObservationIgnored private var latestCaptureAttemptID: UUID?
+    // Test-only suspension at the actual durable admission boundary.
+    @ObservationIgnored var afterCaptureReservation: (() async -> Void)?
     @ObservationIgnored private var activeCaptureURL: URL?
     @ObservationIgnored private var activeCaptureFile: AudioCaptureFile?
     @ObservationIgnored private var captureGeneration: UInt64 = 0
@@ -318,6 +320,7 @@ public final class ProjectAudioController {
             // The reservation is durable before a permission request can suspend.
             let reservation = try await store.reserveAudioCapture(name: name)
             latestCaptureAttemptID = reservation.id
+            if let afterCaptureReservation { await afterCaptureReservation() }
             let reservedManifest = await store.snapshot()
             pendingCaptures = reservedManifest.pendingAudioCaptures
             publish(reservedManifest)
@@ -368,6 +371,13 @@ public final class ProjectAudioController {
 
     public func finishRecording() async -> Bool {
         guard isActive else { return false }
+        if isStartingRecording, activeCaptureID == nil, finalizeTask == nil {
+            // Admission may be suspended while the durable reservation is being
+            // created. Fence that admission before it can request a device.
+            permissionRequestDetached = true
+            captureGeneration &+= 1
+            return true
+        }
         let wasRequestingPermission = transport.state == .requestingPermission
         do {
             _ = try transport.finishRecording()

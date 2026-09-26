@@ -4,6 +4,39 @@ import Testing
 
 @Suite("Workflow language format protection")
 struct WorkflowArchiveInspectionTests {
+    @Test @MainActor func storeRebuildsCheckpointAndRejectsUnpublishedNestedReferences() async throws {
+        let root = URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory())
+            .appendingPathComponent("checked-workflow-" + UUID().uuidString + ".dproject")
+        let store = try await ProjectStore.create(at: root, name: "checked")
+        var node = try #require(WorkflowRegistry.standard.operation("d.value.input")).definition.makeNode()
+        node.dataConfiguration = .init(value: .number(2, unit: nil))
+        let graph = WorkflowGraph(nodes: [node])
+        let plan = try WorkflowPlanCompiler().compile(graph, target: node.id)
+        let executor = WorkflowPlanExecutor(executeCall: { context in
+            .outputs(["output": .data(try #require(context.node.dataConfiguration?.value))])
+        }, save: { _ in })
+        let checkpoint = try await executor.execute(.init(plan: plan))
+        var run = WorkflowRun(id: checkpoint.runID, graph: graph, targetNodeID: node.id,
+            steps: checkpoint.records.map(\.step), status: .completed)
+        run.planCheckpoint = checkpoint
+        var archive = try #require(try await store.workflowState().archive)
+        archive = try await store.saveWorkflow(graphs: [graph], runs: [run], expectedRevision: archive.revision)
+        var forged = run
+        forged.planCheckpoint?.plan.steps[0].node.dataConfiguration?.value = .number(99, unit: nil)
+        await #expect(throws: (any Error).self) { _ = try await store.saveWorkflow(graphs: [graph], runs: [forged], expectedRevision: archive.revision) }
+        #expect(try await store.workflowState().archive == archive)
+        let unknown = WorkflowAssetReference(projectID: await store.snapshot().id, assetID: UUID(), version: UUID(), kind: .image, sha256: String(repeating: "a", count: 64))
+        node.dataConfiguration = .init(value: .asset(unknown))
+        var parent = try #require(WorkflowRegistry.standard.operation("d.control.map")).definition.makeNode()
+        parent.control = .map(body: .init(nodes: [node]), continueOnFailure: false)
+        await #expect(throws: (any Error).self) { _ = try await store.saveWorkflow(graphs: [.init(nodes: [parent])], runs: [run], expectedRevision: archive.revision) }
+        #expect(try await store.workflowState().archive == archive)
+        try await store.close()
+        let reopened = try await ProjectStore.open(at: root)
+        #expect(try await reopened.workflowState().archive == archive)
+        try await reopened.close()
+    }
+
     @Test func unknownKeysSurviveAsReadOnlyDetection() throws {
         var archive = WorkflowArchive(graphs: [.init(name: "中文")])
         let encoded = try JSONEncoder().encode(archive)

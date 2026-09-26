@@ -204,3 +204,9 @@ Lead将checkpoint的独立图/工具编译对照接入真实ProjectStore，核�
 CHECKPOINT repair1在Lead CPU有6/7失败（fixture可选nil==nil误触发故障、公开输入输出schema不一致），独立审阅另发现Loop恢复前缀、控制求值失败保存边界。已发最终ordinaryrepair2，仍原任务0次Lead接管；共享retry缺陷由Lead负责。CONTROL-FORMS repair1本机CPU已通过，EXAMPLES续接初交573.37秒完成、无新权限事件、两文件已提交候选bc94274（完整SHA外部Git记录），初交累计扣除此前124.42秒，不重置预算。
 
 源仍130603d23a4da81ba2a9852766f3589695ec9468，个人scheme内容/未暂存状态核对不变。H27 GUI锁屏仍保留；没有新原生或模型验收。所有实现归因按各任务记录保留，不把Lead接线/修复归为Worker独立完成。
+
+## 媒体交互接线复验与 LOCALIZATION r1
+
+Lead新增AudioCaptureHandle（不同于文件描述符的AudioCaptureIdentity），按context/captureID结束并查本次已发布原声。非实现者发现预约等待取消/关闭残留/预览过期副作用/恢复绕过互斥四项，Lead修补并加实际预约边界、项目关闭重开、拒绝停止别的录音回归。`capture-hosting-integration`68项CPU/5套及2项hosting通过；补`admission-durable-regressions`22项/2套通过，含真实Store独立编译校验与深层未发布资产拒绝。hosting第一次失败因旧fixture未显式设置冻结模型身份（错误“请为节点选择模型”），补fixture的明确身份后通过，未放松生产选择。CHECKPOINT repair2的真实Executor快照测试通过（包含在前述组合），2/2普通修复已用；没有接管重写该Worker算法。
+
+新增LOCALIZATION r1有限包：仅可修改 Packages/UI/Sources/UI/Resources/Localization/en.json 与 zh-Hans.json。复用当前语言架构，不改格式/已有语义/用户数据/模型ID。将FORMS和CONTROL-FORMS建议中实际使用的新键补齐中英，并查本轮Workflow UI新键（Canvas/Host/ToolPanel/DataForms/HumanTaskForm/ControlForms），补匹配键。占位符集合严格一致；语言/工作流ID或用户内容不翻译。可以修准确翻译，不擅自删除旧键、改变schemaVersion/locale/displayName；重复键不允许。现有JSON保留原顺序/格式。无法通过资源解决的硬编码文案与错误另列任务output，不改Swift。验收：JSON解析、两包新键一致、占位符一致、无空翻译/重复键/旧键丢失、关键英文表达保持false/unknown/失败/跳过等差异；Lead跑现有语言与hosting测试。请求gpt-5.6-terra/medium，独立受限CLI新会话，初交1800秒+最多2普通修复，不重置其他任务预算。无网络/build/GPU/GUI/递归/Git写；Python只内存解析无默认py_compile，输出/缓存仅任务根。先只读预检，经Lead核验再IMPLEMENT。两JSON以外只输出局部报告，由Lead维护本记录。

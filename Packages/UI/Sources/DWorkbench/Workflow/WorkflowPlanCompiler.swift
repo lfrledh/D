@@ -48,11 +48,11 @@ private struct CompilerState {
     init(registry: WorkflowRegistry, tools supplied: [WorkflowToolDefinition]) throws {
         self.registry = registry
         var table: [WorkflowToolKey: WorkflowToolDefinition] = [:]
-        var names = Set<String>()
         for tool in supplied {
             guard tool.version > 0 else { throw WorkflowIssue("工具版本必须为正数：\(tool.name)。") }
             guard !tool.name.isEmpty else { throw WorkflowIssue("工具名称不能为空。") }
-            guard names.insert(tool.name).inserted else { throw WorkflowIssue("工具名称重复：\(tool.name)。") }
+            // Display names are not identities; copies and successive versions
+            // may retain the same title. Invocation always uses id/version/digest.
             let key = WorkflowToolKey(id: tool.id, version: tool.version)
             guard table[key] == nil else { throw WorkflowIssue("工具身份和版本重复：\(tool.id) v\(tool.version)。") }
             try Self.validateInterface(tool.graph.interface ?? .init(), graph: tool.graph)

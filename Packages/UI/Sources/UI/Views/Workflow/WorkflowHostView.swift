@@ -74,6 +74,7 @@ private struct WorkflowMediaPreviewPanel: View {
     let controller: WorkflowController
     let reference: WorkflowAssetReference
     @State private var ready = false
+    @State private var requestID = UUID()
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dLanguageStore) private var languageStore
     var body: some View {
@@ -83,7 +84,7 @@ private struct WorkflowMediaPreviewPanel: View {
                     VideoPreview(url: session.videoPreviewURL, identity: session.videoPreviewIdentity).frame(minWidth: 520, minHeight: 300)
                 } else {
                     HStack {
-                        Button(languageStore?.text("workflow.preview.play", fallback: "播放") ?? "播放") { session.playWorkflowAudio(reference) }
+                        Button(languageStore?.text("workflow.preview.play", fallback: "播放") ?? "播放") { session.playWorkflowAudio(reference, requestID: requestID) }
                         Button(languageStore?.text("workflow.preview.pause", fallback: "暂停") ?? "暂停") { session.audioCreationTransport.pause() }
                     }
                     Text(reference.assetID.uuidString).font(.caption.monospaced()).textSelection(.enabled)
@@ -92,7 +93,7 @@ private struct WorkflowMediaPreviewPanel: View {
             Button(languageStore?.text("workflow.preview.close", fallback: "关闭") ?? "关闭") { dismiss() }
         }
         .padding(20).frame(minWidth: 420, minHeight: 140)
-        .task(id: reference) { ready = await session.prepareWorkflowPreview(reference, controller: controller) != nil }
-        .onDisappear { session.endWorkflowPreview(reference) }
+        .task(id: reference) { ready = await session.prepareWorkflowPreview(reference, controller: controller, requestID: requestID) != nil }
+        .onDisappear { session.endWorkflowPreview(reference, requestID: requestID) }
     }
 }

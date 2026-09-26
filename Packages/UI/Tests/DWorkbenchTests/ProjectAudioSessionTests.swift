@@ -125,6 +125,76 @@ private final class SessionAudioFactory: AudioTransportDeviceFactory {
 @Suite("Project audio session", .serialized)
 @MainActor
 struct ProjectAudioSessionTests {
+    @Test func endingDuringReservationNeverStartsOrAdoptsADevice() async throws {
+        let f = try fixture("CaptureAdmission"); defer { cleanup(f) }
+        let factory = SessionAudioFactory(), subject = session(f, factory: factory, recording: true)
+        await subject.createProject(at: f.project); await subject.openWorkflow()
+        let controller = try #require(subject.workflow), audio = try #require(subject.audio)
+        controller.addExample("file")
+        let node = try #require(controller.graph?.nodes.first { $0.operationID == "d.asset.reference" })
+        let gate = AudioSessionGate()
+        audio.afterCaptureReservation = { await gate.wait() }
+        let start = Task { await subject.startWorkflowRecording(nodeID: node.id, controller: controller) }
+        try await waitUntil { await gate.reached }
+        await subject.finishWorkflowRecording(); await gate.open(); await start.value
+        #expect(factory.permissionRequests == 0 && factory.recordings.isEmpty)
+        #expect(subject.workflowRecordingNodeID == nil)
+        #expect(subject.manifest?.pendingAudioCaptures.count == 1)
+        #expect(controller.graph?.nodes.first { $0.id == node.id }?.assetReference == nil)
+        #expect(await subject.requestClose())
+    }
+
+    @Test func workflowCaptureBindsExactAssetAndCloseClearsHandle() async throws {
+        let f = try fixture("WorkflowCapture"); defer { cleanup(f) }
+        let factory = SessionAudioFactory(), subject = session(f, factory: factory, recording: true)
+        await subject.createProject(at: f.project); await subject.openWorkflow()
+        let controller = try #require(subject.workflow)
+        controller.addExample("file")
+        let node = try #require(controller.graph?.nodes.first { $0.operationID == "d.asset.reference" })
+        await subject.startWorkflowRecording(nodeID: node.id, controller: controller)
+        #expect(subject.workflowRecordingNodeID == node.id)
+        await subject.finishWorkflowRecording()
+        let ref = try #require(controller.graph?.nodes.first { $0.id == node.id }?.assetReference)
+        #expect(subject.manifest?.assets.first { $0.id == ref.assetID }?.metadata.audio?.origin == .microphone)
+        #expect(subject.workflowRecordingNodeID == nil)
+        await subject.startWorkflowRecording(nodeID: node.id, controller: controller)
+        #expect(subject.workflowRecordingNodeID == node.id)
+        #expect(await subject.requestClose())
+        #expect(subject.workflowRecordingNodeID == nil)
+        await subject.openProject(at: f.project); await subject.openWorkflow()
+        let reopened = try #require(subject.workflow)
+        await subject.startWorkflowRecording(nodeID: node.id, controller: reopened)
+        #expect(subject.workflowRecordingNodeID == node.id)
+        await subject.finishWorkflowRecording()
+        #expect(subject.workflowRecordingNodeID == nil)
+        #expect(factory.recordings.count == 3)
+        #expect(await subject.requestClose())
+    }
+
+    @Test func workflowCaptureRefusesOtherRecorderAndCancelsOwnPermissionWait() async throws {
+        let f = try fixture("WorkflowCaptureCancel"); defer { cleanup(f) }
+        let factory = SessionAudioFactory(), subject = session(f, factory: factory, recording: true)
+        await subject.createProject(at: f.project); await subject.openWorkflow()
+        let controller = try #require(subject.workflow)
+        controller.addExample("file")
+        let node = try #require(controller.graph?.nodes.first { $0.operationID == "d.asset.reference" })
+        #expect(await subject.startAudioRecording(name: "unrelated"))
+        let other = try #require(factory.recordings.first)
+        await subject.startWorkflowRecording(nodeID: node.id, controller: controller)
+        await subject.finishWorkflowRecording()
+        #expect(other.stopCount == 0 && subject.workflowRecordingNodeID == nil)
+        #expect(await subject.finishAudioRecording())
+        factory.suspendPermission = true
+        let start = Task { await subject.startWorkflowRecording(nodeID: node.id, controller: controller) }
+        try await waitUntil { factory.permissionContinuation != nil }
+        await subject.finishWorkflowRecording()
+        factory.resolvePermission(true); await start.value
+        #expect(subject.workflowRecordingNodeID == nil)
+        #expect(factory.recordings.count == 1)
+        #expect(controller.graph?.nodes.first { $0.id == node.id }?.assetReference == nil)
+        #expect(await subject.requestClose())
+    }
+
     private struct Fixture {
         let root: URL
         let project: URL

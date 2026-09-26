@@ -26,6 +26,12 @@ public enum WorkflowCheckpointValidation {
         try collector.collect(checkpoint)
         return collector.references
     }
+    /// Drafts may be incomplete, so collect references without compiling them.
+    public static func assetReferences(in graph: WorkflowGraph) throws -> [WorkflowAssetReference] {
+        var collector = CheckpointAssetCollector()
+        try collector.collect(graph: graph, depth: 0)
+        return collector.references
+    }
 }
 
 private struct CheckpointValidator {
@@ -1436,7 +1442,7 @@ private struct CheckpointAssetCollector {
         }
     }
 
-    private mutating func collect(graph: WorkflowGraph, depth: Int) throws {
+    mutating func collect(graph: WorkflowGraph, depth: Int) throws {
         try count(depth)
         for node in graph.nodes { try collect(node: node, depth: depth + 1) }
     }
