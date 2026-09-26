@@ -11,7 +11,8 @@ let package = Package(
     targets: [
         .target(name: "DWorkbench", dependencies: [.product(name: "DInference", package: "DPlatform")],
                 resources: [.process("Models/Resources")]),
-        .target(name: "UI", dependencies: ["DWorkbench", .product(name: "DInference", package: "DPlatform")]),
+        .target(name: "UI", dependencies: ["DWorkbench", .product(name: "DInference", package: "DPlatform")],
+                resources: [.process("Resources/Localization")]),
         .testTarget(name: "DWorkbenchTests", dependencies: ["DWorkbench", .product(name: "DRuntime", package: "DPlatform")]),
         .testTarget(name: "UITests", dependencies: ["UI", "DWorkbench"]),
         .testTarget(name: "ModelLibraryTests", dependencies: ["DWorkbench", .product(name: "DInference", package: "DPlatform")]),
