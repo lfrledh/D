@@ -532,6 +532,7 @@
     "workflow.operation.d.value.template.title": "数据模板",
     "workflow.operation.d.value.validate.detail": "报告类型校验问题；严格模式下抛出错误。",
     "workflow.operation.d.value.validate.field.strict": "严格检查",
+    "workflow.operation.d.value.validate.field.expectedItemCount": "列表项数（-1：不限制）",
     "workflow.operation.d.value.validate.input.input": "值",
     "workflow.operation.d.value.validate.output.output": "检查报告",
     "workflow.operation.d.value.validate.title": "校验",

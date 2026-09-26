@@ -502,6 +502,35 @@ struct WorkflowDataOperationsTests {
         }
     }
 
+    @Test func listCountIsAnExplicitValidationConstraintAndNeverTruncates() async throws {
+        let schema = WorkflowDataSchema.list(.text)
+        let config = WorkflowDataConfiguration(schema: schema, validationInputFormat: .jsonText)
+        let input = WorkflowValue.data(.text(#"["one"]"#))
+        let result = try await execute("d.value.validate", configuration: config,
+            parameters: ["expectedItemCount": .integer(2)], inputs: ["input": input], services: RejectingDataServices())
+        let report = try datum("output", in: result)
+        #expect(report.fields?["valid"] == .boolean(false))
+        #expect(report.fields?["data"] == .none(schema))
+        #expect(report.fields?["issues"]?.items?.isEmpty == false)
+        await #expect(throws: (any Error).self) {
+            _ = try await execute("d.value.validate", configuration: config,
+                parameters: ["expectedItemCount": .integer(2), "strict": .flag(true)],
+                inputs: ["input": input], services: RejectingDataServices())
+        }
+        let valid = try await execute("d.value.validate", configuration: config,
+            parameters: ["expectedItemCount": .integer(2)],
+            inputs: ["input": .data(.text(#"["one","two"]"#))], services: RejectingDataServices())
+        let validReport = try datum("output", in: valid)
+        #expect(validReport.fields?["data"]?.items?.count == 2)
+        let invalidParameters: [WorkflowScalar] = [.integer(-2), .integer(4097), .text("2"), .flag(true)]
+        for parameter in invalidParameters {
+            await #expect(throws: (any Error).self) {
+                _ = try await execute("d.value.validate", configuration: config,
+                    parameters: ["expectedItemCount": parameter], inputs: ["input": input], services: RejectingDataServices())
+            }
+        }
+    }
+
     @Test func jsonValidationPreflightAndLegacyEncodingRemainExplicit() throws {
         let old = WorkflowDataConfiguration(schema: .text)
         let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]

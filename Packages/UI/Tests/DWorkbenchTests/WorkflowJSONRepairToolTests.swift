@@ -27,6 +27,24 @@ struct WorkflowJSONRepairToolTests {
         })
     }
 
+    @Test func wrongListCountUsesVisibleRepairRatherThanPaddingOrTruncating() async throws {
+        let tool = try WorkflowJSONRepairTool.make(schema: .list(.text), task: "Return two themes",
+            exampleJSON: #"["example1","example2"]"#, expectedItemCount: 2)
+        let services = JSONRepairTestServices(responses: [#"["first"]"#, #"["first","second"]"#])
+        let executor = try makeExecutor(tool: tool, services: services)
+        let complete = try await executor.execute(try checkpoint(for: tool, content: "two independent themes"))
+        #expect(services.languageCalls.count == 2)
+        #expect(services.languageCalls[1].task.contains("Expected exactly 2 list items; received 1"))
+        #expect(complete.outputs["output"]?.datum?.items?.count == 2)
+        #expect(languageTexts(in: complete) == [#"["first"]"#, #"["first","second"]"#])
+        let validations = nestedNodes(in: tool.graph).filter { $0.operationID == "d.value.validate" }
+        #expect(validations.count == 3)
+        #expect(validations.allSatisfy { $0.parameters["expectedItemCount"] == .integer(2) })
+        #expect(throws: (any Error).self) {
+            _ = try WorkflowJSONRepairTool.make(schema: .list(.text), task: "two", exampleJSON: #"["one"]"#, expectedItemCount: 2)
+        }
+    }
+
     @Test func makeRejectsUnsupportedSchemaBadExamplesAndRepairCounts() throws {
         do {
             _ = try WorkflowJSONRepairTool.make(

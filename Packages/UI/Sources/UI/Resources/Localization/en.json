@@ -532,6 +532,7 @@
     "workflow.operation.d.value.template.title": "Data Template",
     "workflow.operation.d.value.validate.detail": "Reports typed validation issues or throws in strict mode.",
     "workflow.operation.d.value.validate.field.strict": "Strict",
+    "workflow.operation.d.value.validate.field.expectedItemCount": "List item count (-1: unrestricted)",
     "workflow.operation.d.value.validate.input.input": "Value",
     "workflow.operation.d.value.validate.output.output": "Report",
     "workflow.operation.d.value.validate.title": "Validate",

@@ -298,3 +298,6 @@ Map两稳定itemID：第一项N03完成已保存、第二项submit进入时挂�
 reopen使用同nonce、新PID打开项目，确认旧running恢复为interrupted，已完成输出/媒体摘要/记录不变，ledger无自动新增，再显式resume。先前完成项不得重复submit，被中断项可重试一次；Map最终两个ID和位置、Loop最终state2/conditionMet。保留前后账本、两个PID与源快照；不可删除项目锁文件或回滚原项目。
 
 human：N03 fixture→N15 editText→下游N03。produce等待waiting，编辑草稿后显式await save，回读decision=nil、draft/stepID/address/materials正确，再ready等待故障。reopen保持waiting/draft/无自动submit，按精确expectedTask显式决定；重复旧决定不能改结果/新增submit；decide本身不跑下游，必须resume后下游恰好一次。结束正常close所有自有任务/store/runtime，异常cleanup不能mask原错；ready前错误不得写PASS。各phase有受控时限。仅证明落盘检查点跨进程，不声称未保存内存无损或GUI通过。接口可参考 WorkflowLifecycleTests、WorkflowPlanTests、ProjectStore.open、WorkflowController.load/resume/decideHuman；有未知接口先问Lead，不能改生产过测。
+
+### A09 实测发现的列表数量约束缺口
+node-real-image-repair-tool在eb691745构建上生成了合法的一主题三图，模型没有遵循两主题提示；验收严格拒绝，没有记6图成功。现有List类型约束元素形状而非特定数量，N11没有显式数量规则。Lead增加原N11/A09范围内的根List expectedItemCount纯值参数（缺失/-1保持原无数量约束；0...4096，类型/配置错误先拒绝），UI沿现有参数表单可编辑；不截断/补造数据、不硬编码执行器主题数、不提高模型。官方E02在普通检查/修复/最终strict三节点显式设2，其他工具默认不限制，List/Map仍可任意受支持数量。先新增实际反例list-count-red于90d091b+测试文件失败8断言，再实现；待非实现者复核、CPU及真实图像重验。此项是实际契约缺口，与先前Worker预算/模型质量分别记录。

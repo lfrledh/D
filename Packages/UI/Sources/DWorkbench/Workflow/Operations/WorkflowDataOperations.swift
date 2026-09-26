@@ -340,10 +340,12 @@ enum WorkflowDataOperations {
         definition: .init(
             id: "d.value.validate", title: "Validate", detail: "Reports typed validation issues or throws in strict mode.",
             inputs: [.init("input", "Value", kinds: WorkflowDataKind.allCases)], outputs: [.init("output", "Report", kinds: [.record])],
-            fields: [.init("strict", "Strict", .flag, .flag(false))]
+            fields: [.init("strict", "Strict", .flag, .flag(false)),
+                     .init("expectedItemCount", "List item count (-1: unrestricted)", .integer, .integer(-1))]
         ),
         validate: { node in
             _ = try WorkflowDataOperationSupport.flag("strict", in: node)
+            _ = try WorkflowDataOperationSupport.expectedItemCount(in: node)
             if node.dataConfiguration?.validationInputFormat == .jsonText {
                 guard let schema = node.dataConfiguration?.schema else {
                     throw WorkflowIssue("Validation schema is required.", nodeID: node.id)
@@ -359,6 +361,7 @@ enum WorkflowDataOperations {
                 throw WorkflowIssue("Validation schema is required.", nodeID: context.node.id)
             }
             let strict = try WorkflowDataOperationSupport.flag("strict", in: context.node)
+            let expectedItemCount = try WorkflowDataOperationSupport.expectedItemCount(in: context.node)
             let jsonText: String?
             if context.node.dataConfiguration?.validationInputFormat == .jsonText {
                 // Configuration and input-shape errors are not model-output repair data.
@@ -373,9 +376,13 @@ enum WorkflowDataOperations {
             let data: WorkflowDatum
             let issueMessages: [String]
             do {
-                if let jsonText { data = try WorkflowStructuredText.parse(jsonText, as: expected) }
-                else { try input.validate(as: expected); data = input }
-                valid = true; issueMessages = []
+                let parsed: WorkflowDatum
+                if let jsonText { parsed = try WorkflowStructuredText.parse(jsonText, as: expected) }
+                else { try input.validate(as: expected); parsed = input }
+                if let expectedItemCount, parsed.items?.count != expectedItemCount {
+                    throw WorkflowIssue("Expected exactly \(expectedItemCount) list items; received \(parsed.items?.count ?? 0).")
+                }
+                data = parsed; valid = true; issueMessages = []
             } catch {
                 // Only pure parsing/typed validation runs inside this catch.
                 if strict { throw error }
@@ -565,6 +572,19 @@ private enum WorkflowDataOperationSupport {
         guard (0 ... 4_096).contains(limit) else {
             throw WorkflowIssue("Filter limit must be between 0 and 4096.", nodeID: node.id)
         }
+    }
+
+    // Missing preserves old nodes; a configured constraint is never inferred from prose.
+    static func expectedItemCount(in node: WorkflowNode) throws -> Int? {
+        guard let parameter = node.parameters["expectedItemCount"] else { return nil }
+        guard case .integer(let count) = parameter, (-1...4096).contains(count) else {
+            throw WorkflowIssue("List item count must be -1 (unrestricted) or 0...4096.", nodeID: node.id)
+        }
+        guard count != -1 else { return nil }
+        guard case .list = node.dataConfiguration?.schema else {
+            throw WorkflowIssue("An item-count constraint requires a List schema.", nodeID: node.id)
+        }
+        return count
     }
 
     static func validateRules(

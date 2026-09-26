@@ -6,10 +6,17 @@ public enum WorkflowJSONRepairTool {
         schema: WorkflowDataSchema,
         task: String,
         exampleJSON: String,
-        maximumRepairs: Int = 2
+        maximumRepairs: Int = 2,
+        expectedItemCount: Int? = nil
     ) throws -> WorkflowToolDefinition {
         try WorkflowStructuredText.validateSchema(schema)
-        _ = try WorkflowStructuredText.parse(exampleJSON, as: schema)
+        let example = try WorkflowStructuredText.parse(exampleJSON, as: schema)
+        if let expectedItemCount {
+            guard (0...4096).contains(expectedItemCount), case .list = schema,
+                  example.items?.count == expectedItemCount else {
+                throw WorkflowIssue("The structural example must match the explicit list item count.")
+            }
+        }
         guard (1...2).contains(maximumRepairs) else {
             throw WorkflowIssue("JSON repair count must be in 1...2.")
         }
@@ -40,7 +47,7 @@ public enum WorkflowJSONRepairTool {
 
         let initialLanguage = try languageNode(title: "Generate candidate JSON")
         let initialCheck = try validationNode(
-            title: "Check candidate JSON", schema: schema, strict: false
+            title: "Check candidate JSON", schema: schema, strict: false, expectedItemCount: expectedItemCount
         )
 
         var initialState = try node("d.value.record", title: "Keep candidate and validation report")
@@ -57,7 +64,7 @@ public enum WorkflowJSONRepairTool {
 
         var loop = try node("d.control.loop", title: "Repair invalid JSON a bounded number of times")
         loop.control = .loop(
-            body: try repairBody(stateSchema: stateSchema, reportSchema: reportSchema, targetSchema: schema),
+            body: try repairBody(stateSchema: stateSchema, reportSchema: reportSchema, targetSchema: schema, expectedItemCount: expectedItemCount),
             stateSchema: stateSchema,
             maximumIterations: maximumRepairs,
             until: .init(path: ["check", "valid"], comparison: .equals, value: .boolean(true))
@@ -66,7 +73,7 @@ public enum WorkflowJSONRepairTool {
         var finalText = try node("d.value.field", title: "Read final candidate text")
         finalText.dataConfiguration = .init(schema: .text, path: ["text"])
         let strictCheck = try validationNode(
-            title: "Strictly validate final JSON", schema: schema, strict: true
+            title: "Strictly validate final JSON", schema: schema, strict: true, expectedItemCount: expectedItemCount
         )
         var finalData = try node("d.value.field", title: "Read validated JSON data")
         finalData.dataConfiguration = .init(schema: .optional(schema), path: ["data"])
@@ -113,7 +120,8 @@ public enum WorkflowJSONRepairTool {
     private static func repairBody(
         stateSchema: WorkflowDataSchema,
         reportSchema: WorkflowDataSchema,
-        targetSchema: WorkflowDataSchema
+        targetSchema: WorkflowDataSchema,
+        expectedItemCount: Int?
     ) throws -> WorkflowGraph {
         let state = try requiredPublicInput("state", schema: stateSchema, title: "Current repair state")
         let iteration = try requiredPublicInput(
@@ -150,7 +158,7 @@ public enum WorkflowJSONRepairTool {
 
         let repairLanguage = try languageNode(title: "Repair candidate JSON")
         let repairedCheck = try validationNode(
-            title: "Check repaired JSON", schema: targetSchema, strict: false
+            title: "Check repaired JSON", schema: targetSchema, strict: false, expectedItemCount: expectedItemCount
         )
         let nextStateFields: [WorkflowRecordField] = [
             .init("text", .text),
@@ -250,10 +258,12 @@ public enum WorkflowJSONRepairTool {
     private static func validationNode(
         title: String,
         schema: WorkflowDataSchema,
-        strict: Bool
+        strict: Bool,
+        expectedItemCount: Int?
     ) throws -> WorkflowNode {
         var result = try node("d.value.validate", title: title)
         result.parameters["strict"] = .flag(strict)
+        if let expectedItemCount { result.parameters["expectedItemCount"] = .integer(expectedItemCount) }
         result.dataConfiguration = .init(schema: schema, validationInputFormat: .jsonText)
         return result
     }

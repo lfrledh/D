@@ -183,7 +183,7 @@ public enum WorkflowLanguageExamples {
         let planningTool = try WorkflowJSONRepairTool.make(
             schema: .list(.record(themeFields)),
             task: "Create exactly two different visual themes from the supplied content. Each theme has a unique nonempty themeID, a nonempty title, and a detailed image prompt. Use only these three string fields. Return only the JSON array, with no Markdown or explanation.",
-            exampleJSON: #"[{"themeID":"theme-1","title":"Example title A","prompt":"Describe the first distinct image"},{"themeID":"theme-2","title":"Example title B","prompt":"Describe the second distinct image"}]"#)
+            exampleJSON: #"[{"themeID":"theme-1","title":"Example title A","prompt":"Describe the first distinct image"},{"themeID":"theme-2","title":"Example title B","prompt":"Describe the second distinct image"}]"#, expectedItemCount: 2)
         var planner = try node("d.control.invoke", title: "一次规划全部主题")
         planner.control = .invoke(.init(id: planningTool.id, version: planningTool.version, digest: try WorkflowPlanCompiler.digest(planningTool)))
         planner.dataConfiguration = .init(fields: planningTool.graph.interface?.inputs ?? [])
