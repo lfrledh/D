@@ -52,6 +52,7 @@ struct DApp: App {
                         .background(.regularMaterial)
                 }
             }
+            .environment(\.dLanguageStore, bootstrap.languageStore)
             .disabled(bootstrap.isTerminating)
             .task { if !deploymentProbeEnabled { await bootstrap.start() } }
             .onOpenURL { url in
@@ -62,6 +63,7 @@ struct DApp: App {
         .defaultSize(width: 1280, height: 820)
         .windowResizability(.contentMinSize)
         .commands { WorkbenchCommands(bootstrap: bootstrap) }
+        Settings { LanguageSettingsView(store: bootstrap.languageStore) }
     }
 }
 

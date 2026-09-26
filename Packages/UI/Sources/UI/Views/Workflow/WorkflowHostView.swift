@@ -10,8 +10,8 @@ struct WorkflowHostView: View {
         Group {
             if let controller = model.projectSession.workflow {
                 WorkflowCanvasView(controller: controller,
-                    onTextModel: { Task { await model.chooseTextModel(); model.projectSession.bindSelectedWorkflowModel() } },
-                    onImageModel: { Task { await model.registerModel(); model.projectSession.bindSelectedWorkflowModel() } },
+                    onTextModel: { chooseModel(controller: controller, kind: .text) },
+                    onImageModel: { chooseModel(controller: controller, kind: .image) },
                     onImport: { id in Task { await importFile(nodeID: id, controller: controller) } },
                     onDestination: { Task { await destination(controller) } },
                     onPublishText: { Task { await model.projectSession.publishTextToWorkflow() } },
@@ -19,6 +19,18 @@ struct WorkflowHostView: View {
             } else { ProgressView("正在读取项目流程…") }
         }
         .task(id: model.manifest?.id) { await model.projectSession.openWorkflow() }
+    }
+    private func chooseModel(controller: WorkflowController, kind: WorkflowModelKind) {
+        // Capture synchronously, before either the task or the native panel suspends.
+        guard let target = controller.modelSelectionTarget(), target.kind == kind else { return }
+        Task {
+            guard model.projectSession.workflow === controller, controller.isCurrent(target) else { return }
+            let panel = NSOpenPanel(); panel.title = "选择此节点使用的已安装模型"
+            panel.canChooseDirectories = true; panel.canChooseFiles = false; panel.allowsMultipleSelection = false
+            guard await panel.begin() == .OK, let url = panel.url,
+                  model.projectSession.workflow === controller, controller.isCurrent(target) else { return }
+            await model.projectSession.registerWorkflowModel(at: url, target: target, controller: controller)
+        }
     }
     private func importFile(nodeID: UUID, controller: WorkflowController) async {
         guard !model.isChangingProject else { return }

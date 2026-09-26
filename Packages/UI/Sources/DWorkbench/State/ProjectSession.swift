@@ -792,21 +792,14 @@ public final class ProjectSession {
     /// M0 composition uses the same project/store/runtime; it does not construct a second model engine.
     public func openWorkflow() async {
         guard workflow == nil, let store, let session, !closePending else { return }
-        let services = WorkflowServices(store: store, session: session, resolveText: { [weak self] in
-            guard let self, self.store === store, let reference = self.textReference,
-                  let backend = session.textBackendID else { throw WorkflowIssue("请先选择已安装的文字模型。") }
-            return WorkflowModelBinding(identity: "text:" + (reference.revision ?? reference.directory.lastPathComponent), reference: reference, backendID: backend)
-        }, resolveImage: { [weak self] in
-            guard let self, self.store === store else { throw WorkflowIssue("项目已切换。") }
-            if let id = self.selectedModelID, let library = self.modelLibrary {
-                let lease = try await library.acquire(id)
-                return WorkflowModelBinding(identity: "image:" + (lease.reference.revision ?? id.description), reference: lease.reference,
-                    backendID: session.backendID, release: { await library.release(lease) })
-            }
-            guard let location = self.modelLease else { throw WorkflowIssue("请先选择已安装的图像模型。") }
-            return WorkflowModelBinding(identity: "image:" + (self.selectedModelRevision ?? location.url.lastPathComponent),
-                reference: .init(directory: location.url, revision: self.selectedModelRevision), backendID: session.backendID)
-        })
+        do { try rememberCurrentWorkflowModels() }
+        catch { report(error, context: "流程模型记录不可用") }
+        let services = WorkflowServices(store: store, session: session,
+            defaultIdentity: { [weak self] kind in self?.defaultWorkflowModel(kind) ?? "" },
+            resolveModel: { [weak self] kind, identity in
+                guard let self, self.store === store, !self.closePending else { throw WorkflowIssue("项目已切换或正在关闭。") }
+                return try await self.resolveWorkflowModel(kind, identity: identity, session: session)
+            })
         let controller = WorkflowController(services: services)
         controller.onChange = { [weak self] in
             guard let self, self.store === store else { return }
@@ -827,23 +820,112 @@ public final class ProjectSession {
         } catch { report(error, context: "导出目录未能授权") }
     }
 
-    public func bindSelectedWorkflowModel() {
-        refreshWorkflowModels()
-        guard let controller = workflow, let node = controller.selectedNode, !isBusy else { return }
-        if node.operationID == "d.text.rewrite", let reference = textReference {
-            controller.setParameter(nodeID: node.id, key: "modelID", value: .text("text:" + (reference.revision ?? reference.directory.lastPathComponent)))
-        } else if node.operationID == "d.image.generate" {
-            if let revision = selectedModelRevision {
-                controller.setParameter(nodeID: node.id, key: "modelID", value: .text("image:" + revision))
-            } else if let location = modelLease {
-                controller.setParameter(nodeID: node.id, key: "modelID", value: .text("image:" + location.url.lastPathComponent))
-            }
+    private func defaultWorkflowModel(_ kind: WorkflowModelKind) -> String {
+        switch kind {
+        case .text: textReference.map { "text:" + ($0.revision ?? $0.directory.lastPathComponent) } ?? ""
+        case .image: selectedModelRevision.map { "image:" + $0 } ?? modelLease.map { "image:" + $0.url.lastPathComponent } ?? ""
         }
     }
-
+    private func rememberCurrentWorkflowModels() throws {
+        let bookmarks = WorkflowModelBookmarks(settings: settings)
+        if let ref = textReference, let lease = textModelLease {
+            try bookmarks.remember(identity: "text:" + (ref.revision ?? ref.directory.lastPathComponent),
+                kind: .text, name: ref.directory.lastPathComponent, bookmark: lease.bookmark)
+        }
+        if let id = selectedModelID, let revision = selectedModelRevision,
+           try bookmarks.installation(for: "image:" + revision) == nil {
+            try bookmarks.rememberInstallation(identity: "image:" + revision, id: id)
+        }
+        if modelLibrary == nil, let lease = modelLease {
+            try bookmarks.remember(identity: defaultWorkflowModel(.image), kind: .image,
+                name: lease.url.lastPathComponent, bookmark: lease.bookmark)
+        }
+    }
+    private func resolveWorkflowModel(_ kind: WorkflowModelKind, identity: String, session: WorkbenchSession) async throws -> WorkflowModelBinding {
+        guard !identity.isEmpty else { throw WorkflowIssue("请为此节点选择已安装模型。") }
+        if kind == .image, let library = modelLibrary {
+            let records = await library.snapshot().records.filter { "image:" + $0.revision == identity }
+            // Installation IDs stay private. Do not silently select among ambiguous copies.
+            let installation = try WorkflowModelBookmarks(settings: settings).installation(for: identity)
+            let selected = records.first { $0.id == installation }
+            guard let record = selected ?? (installation == nil && records.count == 1 ? records.first : nil) else { throw WorkflowIssue("指定图像模型缺失或有多个副本，请明确选择。") }
+            let lease = try await library.acquire(record.id)
+            return .init(identity: "image:" + (lease.reference.revision ?? record.id.description),
+                reference: lease.reference, backendID: session.backendID,
+                imageRecipe: .klein(capability: session.imageCapability), release: { await library.release(lease) })
+        }
+        let entries = try WorkflowModelBookmarks(settings: settings).entries()
+        guard let entry = entries.first(where: { $0.identity == identity && $0.kind == kind }) else {
+            throw WorkflowIssue("指定模型未登记或授权不可用；不会改用当前模型。")
+        }
+        let lease = try await access.restore(entry.bookmark)
+        do {
+            let reference: ModelReference
+            let backend: String
+            if kind == .text {
+                guard let validator = session.validateTextModel, let id = session.textBackendID else { throw WorkflowIssue("文字实现未安装。") }
+                reference = try await validator(lease.url); backend = id
+            } else {
+                try await session.validateModel(lease.url)
+                reference = .init(directory: lease.url); backend = session.backendID
+            }
+            guard kind.rawValue + ":" + (reference.revision ?? lease.url.lastPathComponent) == identity else { throw WorkflowIssue("模型文件与冻结身份不符。") }
+            let access = self.access
+            return .init(identity: identity, reference: reference, backendID: backend,
+                imageRecipe: kind == .image ? .klein(capability: session.imageCapability) : nil,
+                release: { await access.release(lease) })
+        } catch { await access.release(lease); throw error }
+    }
+    public func registerWorkflowModel(at url: URL, target: WorkflowModelSelectionTarget, controller: WorkflowController) async {
+        guard workflow === controller, controller.isCurrent(target), !isBusy, !isChangingProject, !closePending,
+              let session else { return }
+        do {
+            let identity: String
+            if target.kind == .image, let library = modelLibrary {
+                let id = try await library.registerExisting(at: url)
+                let lease = try await library.acquire(id)
+                identity = "image:" + (lease.reference.revision ?? id.description)
+                await library.release(lease)
+                guard workflow === controller, controller.isCurrent(target), !closePending else { return }
+                try WorkflowModelBookmarks(settings: settings).rememberInstallation(identity: identity, id: id)
+            } else {
+                let lease = try await access.acquire(selected: url)
+                do {
+                    let revision: String?
+                    if target.kind == .text {
+                        guard let validate = session.validateTextModel else { throw WorkflowIssue("文字实现未安装。") }
+                        revision = try await validate(lease.url).revision
+                    } else {
+                        try await session.validateModel(lease.url)
+                        revision = nil
+                    }
+                    guard workflow === controller, controller.isCurrent(target), !closePending else { await access.release(lease); return }
+                    identity = target.kind.rawValue + ":" + (revision ?? lease.url.lastPathComponent)
+                    try WorkflowModelBookmarks(settings: settings).remember(identity: identity, kind: target.kind,
+                        name: lease.url.lastPathComponent, bookmark: lease.bookmark)
+                    await access.release(lease)
+                } catch { await access.release(lease); throw error }
+            }
+            guard workflow === controller, controller.isCurrent(target), !closePending else { return }
+            controller.bindModel(identity, to: target)
+            refreshWorkflowModels()
+        } catch { guard workflow === controller else { return }; report(error, context: "节点模型未绑定") }
+    }
+    public func bindSelectedWorkflowModel() {
+        refreshWorkflowModels()
+        guard let controller = workflow, let target = controller.modelSelectionTarget() else { return }
+        let id = defaultWorkflowModel(target.kind)
+        if !id.isEmpty { controller.bindModel(id, to: target) }
+    }
     public func refreshWorkflowModels() {
         workflow?.textModelDescription = textModelStatus
         workflow?.imageModelDescription = modelStatus
+        do {
+            try rememberCurrentWorkflowModels()
+            workflow?.modelChoices = try WorkflowModelBookmarks(settings: settings).entries().map {
+                .init(id: $0.identity, kind: $0.kind, displayName: $0.name)
+            }
+        } catch { workflow?.errorMessage = error.localizedDescription }
     }
 
     public func publishTextToWorkflow() async {
@@ -1842,13 +1924,21 @@ public final class ProjectSession {
     }
     public func registerTextModel(at url: URL) async {
         guard !isBusy, !isChangingProject, !closePending, !isRegisteringTextModel,
-              let validator = session?.validateTextModel else { return }
+              let registeredSession = session, let validator = registeredSession.validateTextModel else { return }
+        let registeredStore = store
         isRegisteringTextModel = true
         defer { isRegisteringTextModel = false }
         do {
             let lease = try await access.acquire(selected: url)
             do {
                 let reference = try await validator(lease.url)
+                guard store === registeredStore, !closePending else {
+                    await access.release(lease); return
+                }
+                try rememberCurrentWorkflowModels()
+                try WorkflowModelBookmarks(settings: settings).remember(
+                    identity: "text:" + (reference.revision ?? reference.directory.lastPathComponent),
+                    kind: .text, name: reference.directory.lastPathComponent, bookmark: lease.bookmark)
                 await access.release(textModelLease)
                 textModelLease = lease
                 textReference = reference

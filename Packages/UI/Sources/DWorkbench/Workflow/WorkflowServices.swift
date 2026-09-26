@@ -2,17 +2,6 @@ import DInference
 import Foundation
 import ImageIO
 
-@MainActor public struct WorkflowModelBinding {
-    public let identity: String
-    public let reference: ModelReference
-    public let backendID: String
-    public let release: @MainActor () async -> Void
-    public init(identity: String, reference: ModelReference, backendID: String,
-                release: @escaping @MainActor () async -> Void = {}) {
-        self.identity = identity; self.reference = reference; self.backendID = backendID; self.release = release
-    }
-}
-
 struct WorkflowSaveFailure: LocalizedError {
     let reason: String
     var errorDescription: String? { "计算结果仍保留，保存未完成：\(reason)。恢复磁盘后重试保存，不必重新推理。" }
@@ -22,9 +11,10 @@ struct WorkflowSaveFailure: LocalizedError {
 @MainActor public final class WorkflowServices: WorkflowOperationServices {
     public let store: ProjectStore
     private let session: WorkbenchSession
-    private let resolveText: @MainActor () async throws -> WorkflowModelBinding
-    private let resolveImage: @MainActor () async throws -> WorkflowModelBinding
-    private var bindings: [String: WorkflowModelBinding] = [:]
+    private let resolveModel: @MainActor (WorkflowModelKind, String) async throws -> WorkflowModelBinding
+    private let defaultIdentity: @MainActor (WorkflowModelKind) -> String
+    private let registry: WorkflowRegistry
+    private var bindings: [UUID: WorkflowModelBinding] = [:]
     private var activeRun: InferenceRun?
     private var textSession: TextDraftSession?
     public var streamedTextCharacterCount: Int { textSession?.partialText.count ?? 0 }
@@ -40,23 +30,48 @@ struct WorkflowSaveFailure: LocalizedError {
     private var candidateProgress: [UUID: [WorkflowCandidate]] = [:]
     public var hasPendingSaves: Bool { !pending.isEmpty }
 
-    public init(store: ProjectStore, session: WorkbenchSession,
+    public init(store: ProjectStore, session: WorkbenchSession, registry: WorkflowRegistry = .standard,
+                defaultIdentity: @escaping @MainActor (WorkflowModelKind) -> String = { _ in "" },
+                resolveModel: @escaping @MainActor (WorkflowModelKind, String) async throws -> WorkflowModelBinding) {
+        self.store = store; self.session = session; self.registry = registry; self.resolveModel = resolveModel; self.defaultIdentity = defaultIdentity
+    }
+
+    /// Compatibility for existing callers with one model per kind. Exact identity is
+    /// still checked in prepare; this never silently substitutes a different model.
+    public convenience init(store: ProjectStore, session: WorkbenchSession,
                 resolveText: @escaping @MainActor () async throws -> WorkflowModelBinding,
                 resolveImage: @escaping @MainActor () async throws -> WorkflowModelBinding) {
-        self.store = store; self.session = session; self.resolveText = resolveText; self.resolveImage = resolveImage
+        self.init(store: store, session: session) { kind, _ in
+            let binding = try await (kind == .text ? resolveText() : resolveImage())
+            return WorkflowModelBinding(identity: binding.identity, reference: binding.reference,
+                backendID: binding.backendID, imageRecipe: binding.imageRecipe ?? (kind == .image ? .klein(capability: session.imageCapability) : nil),
+                release: binding.release)
+        }
     }
 
     public func prepare(_ graph: WorkflowGraph, nodes: [UUID]) async throws -> WorkflowGraph {
+        guard bindings.isEmpty else { throw WorkflowIssue("上一运行的模型使用权尚未释放。") }
         cancelled = false
         var result = graph
+        // Capture defaults before the first suspension; each nonempty node ID remains authoritative.
+        let defaults: [WorkflowModelKind: String] = [.text: defaultIdentity(.text), .image: defaultIdentity(.image)]
         do {
             for i in result.nodes.indices where nodes.contains(result.nodes[i].id) {
-                let kind = result.nodes[i].operationID
-                guard kind == "d.text.rewrite" || kind == "d.image.generate" else { continue }
-                if bindings[kind] == nil { bindings[kind] = try await (kind == "d.text.rewrite" ? resolveText() : resolveImage()) }
-                guard let binding = bindings[kind] else { throw WorkflowIssue("模型尚未登记。") }
-                let required = result.nodes[i].parameters["modelID"]?.string ?? ""
-                guard required.isEmpty || required == binding.identity else { throw WorkflowIssue("当前模型与节点冻结的模型身份不同，请明确重新绑定。", nodeID: result.nodes[i].id) }
+                try checkCancellation()
+                let node = result.nodes[i]
+                guard let definition = registry.operation(node.operationID)?.definition else {
+                    throw WorkflowIssue("未知操作，不能准备模型。", nodeID: node.id)
+                }
+                guard let kind = definition.modelKind else { continue }
+                let required = node.parameters["modelID"]?.string ?? ""
+                let selected = required.isEmpty ? (defaults[kind] ?? "") : required
+                let binding = try await resolveModel(kind, selected)
+                // Retain immediately: validation/cancellation after await must release it too.
+                bindings[node.id] = binding
+                guard !binding.identity.isEmpty, selected.isEmpty || selected == binding.identity else {
+                    throw WorkflowIssue("节点模型缺失或身份不符，不会改用当前模型。", nodeID: node.id)
+                }
+                if kind == .image && binding.imageRecipe == nil { throw WorkflowIssue("图像实现未提供执行配方。", nodeID: node.id) }
                 result.nodes[i].parameters["modelID"] = .text(binding.identity)
                 try checkCancellation()
             }
@@ -102,7 +117,7 @@ struct WorkflowSaveFailure: LocalizedError {
     }
     public func rewriteText(_ text: String, parents: [WorkflowAssetReference], context: WorkflowExecutionContext) async throws -> WorkflowAssetReference {
         if pending[context.stepID] != nil { return try await publish(context) }
-        guard let binding = bindings["d.text.rewrite"], binding.identity == context.node.parameters["modelID"]?.string else {
+        guard let binding = bindings[context.node.id], binding.identity == context.node.parameters["modelID"]?.string else {
             throw WorkflowIssue("文字模型未绑定到本次运行。")
         }
         let p = context.node.parameters
@@ -127,7 +142,7 @@ struct WorkflowSaveFailure: LocalizedError {
     }
 
     public func generateImages(prompt: String, reference: WorkflowAssetReference?, context: WorkflowExecutionContext) async throws -> [WorkflowCandidate] {
-        guard let binding = bindings["d.image.generate"], binding.identity == context.node.parameters["modelID"]?.string else { throw WorkflowIssue("图像模型未绑定到本次运行。") }
+        guard let binding = bindings[context.node.id], binding.identity == context.node.parameters["modelID"]?.string else { throw WorkflowIssue("图像模型未绑定到本次运行。") }
         let p = context.node.parameters
         guard let seed = UInt64(p["seed"]?.string ?? ""), let count = p["count"]?.integer, (1...8).contains(count) else { throw WorkflowIssue("候选数量或 seed 无效。") }
         var items = candidateProgress[context.stepID] ?? context.retryCandidates ?? (0..<count).map { offset in
@@ -151,11 +166,8 @@ struct WorkflowSaveFailure: LocalizedError {
                         // Existing Klein reference preparation accepts PNG; JPEG must pass the explicit conversion node.
                         inputRef = try await store.prepareImageReference(assetID: reference.assetID, runID: attempt)
                     } else { inputRef = nil }
-                    let input = ImageRequest(prompt: prompt, width: p["width"]?.integer ?? 512, height: p["height"]?.integer ?? 512,
-                        steps: p["steps"]?.integer ?? 4, guidanceScale: Float(p["guidance"]?.decimal ?? 1), seed: UInt64(old.seed)!,
-                        executionProfile: inputRef == nil ? session.imageCapability.profile : ImageExecutionCapability.referenceKlein4B.profile,
-                        referenceImage: inputRef)
-                    try session.imageCapability.validate(input)
+                    guard let recipe = binding.imageRecipe else { throw WorkflowIssue("此图像实现缺少执行配方。") }
+                    let input = try recipe.request(node: context.node, prompt: prompt, seed: UInt64(old.seed)!, reference: inputRef)
                     let request = InferenceRequest(id: attempt, model: binding.reference, input: .image(input))
                     try checkCancellation()
                     let run = try await session.engine.submit(request, backendID: binding.backendID)

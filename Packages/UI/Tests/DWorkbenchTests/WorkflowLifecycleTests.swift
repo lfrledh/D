@@ -684,3 +684,111 @@ struct WorkflowLifecycleTests {
         try await c.close(); try await store.close()
     }
 }
+
+
+extension WorkflowLifecycleTests {
+    @Test func perNodeModelsDoNotFollowCurrentDefaultAndReleaseAfterPreparationFailure() async throws {
+        let (root, store, engine, old) = try await fixture()
+        defer { _ = old }
+        let session = WorkbenchSession(engine: engine, backendID: "image", status: { .init(activeRunID: nil, phase: nil, queuedRunIDs: []) },
+            shutdown: {}, cleanup: {}, validateModel: { _ in }, textBackendID: "text")
+        var released: [String] = [], resolved: [String] = []
+        var defaultID = "text:B"
+        let services = WorkflowServices(store: store, session: session, defaultIdentity: { _ in defaultID }) { kind, id in
+            #expect(kind == .text); resolved.append(id)
+            guard ["text:A", "text:B"].contains(id) else { throw WorkflowIssue("missing") }
+            return .init(identity: id, reference: .init(directory: root, revision: id), backendID: "fixture." + id,
+                         release: { released.append(id) })
+        }
+        let operation = try #require(WorkflowRegistry.standard.operation("d.text.rewrite"))
+        var nodes = (0..<3).map { _ in operation.definition.makeNode() }
+        for i in nodes.indices { nodes[i].parameters["modelID"] = .text(i == 1 ? "text:B" : "text:A") }
+        var graph = WorkflowGraph(name: "independent", nodes: nodes)
+        let prepared = try await services.prepare(graph, nodes: nodes.map(\.id))
+        defaultID = "text:OTHER"
+        for node in prepared.nodes {
+            _ = try await services.rewriteText("source", parents: [], context: .init(node: node, stepID: UUID(), inputs: [:]))
+        }
+        #expect(await engine.requests.map { $0.model.revision } == ["text:A", "text:B", "text:A"])
+        #expect(resolved == ["text:A", "text:B", "text:A"])
+        #expect(released.isEmpty)
+        await services.finish(); #expect(released.count == 3)
+        graph.nodes[1].parameters["modelID"] = .text("text:missing")
+        do { _ = try await services.prepare(graph, nodes: nodes.map(\.id)); Issue.record("missing model accepted") } catch {}
+        #expect(released.count == 4); #expect(await engine.requests.count == 3)
+        await services.finish(); #expect(released.count == 4)
+        try await store.close()
+    }
+
+    @Test func modelChooserTargetNeverFollowsLaterSelectionOrChangedBinding() async throws {
+        let (_, store, _, c) = try await fixture()
+        c.addExample("text"); let a = try #require(c.graph?.nodes[1])
+        c.selectedNodeID = a.id; let target = try #require(c.modelSelectionTarget())
+        c.addNode(operationID: "d.text.rewrite"); let b = try #require(c.selectedNode)
+        c.bindModel("text:A", to: target)
+        #expect(c.graph?.nodes.first { $0.id == a.id }?.parameters["modelID"] == .text("text:A"))
+        #expect(c.graph?.nodes.first { $0.id == b.id }?.parameters["modelID"] == .text(""))
+        c.bindModel("text:LATE", to: target)
+        #expect(c.graph?.nodes.first { $0.id == a.id }?.parameters["modelID"] == .text("text:A"))
+        c.selectedNodeID = b.id; let other = try #require(c.modelSelectionTarget())
+        c.deleteSelected(); c.bindModel("text:B", to: other)
+        #expect(c.graph?.nodes.contains { $0.id == b.id } == false)
+        c.addExample("template"); c.bindModel("text:wrong-graph", to: target)
+        #expect(c.graph?.nodes.allSatisfy { $0.parameters["modelID"] == nil } == true)
+        try await c.close(); try await store.close()
+    }
+
+    @Test func modelBookmarksKeepBothAndCorruptionDoesNotOverwriteOriginal() throws {
+        let name = "D.boundary." + UUID().uuidString, defaults = try #require(UserDefaults(suiteName: name))
+        defer { defaults.removePersistentDomain(forName: name) }
+        let book = WorkflowModelBookmarks(settings: defaults)
+        try book.remember(identity: "text:A", kind: .text, name: "甲", bookmark: Data([1]))
+        try book.remember(identity: "text:B", kind: .text, name: "乙", bookmark: Data([2]))
+        let reopened = WorkflowModelBookmarks(settings: defaults)
+        #expect(try reopened.entries().map(\.identity) == ["text:A", "text:B"])
+        defaults.set("corrupt", forKey: WorkflowModelBookmarks.key)
+        #expect(throws: (any Error).self) { try reopened.remember(identity: "text:C", kind: .text, name: "丙", bookmark: Data([3])) }
+        #expect(defaults.string(forKey: WorkflowModelBookmarks.key) == "corrupt")
+    }
+}
+
+extension WorkflowLifecycleTests {
+    @Test func projectReopenResolvesEarlierTextModelAfterAnotherDefaultWasRegistered() async throws {
+        let base = URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory())
+            .appendingPathComponent("model-reopen-" + UUID().uuidString)
+        let a = base.appendingPathComponent("A"), b = base.appendingPathComponent("B")
+        try FileManager.default.createDirectory(at: a, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: b, withIntermediateDirectories: true)
+        let suite = "D.ModelBindings." + UUID().uuidString
+        let settings = try #require(UserDefaults(suiteName: suite))
+        defer { settings.removePersistentDomain(forName: suite) }
+        let engine = WorkflowFixtureEngine(directory: base)
+        let factory: @Sendable (URL) async throws -> WorkbenchSession = { _ in
+            WorkbenchSession(engine: engine, backendID: "fixture.image", status: { .init(activeRunID: nil, phase: nil, queuedRunIDs: []) },
+                shutdown: {}, cleanup: {}, validateModel: { _ in }, textBackendID: "fixture.text",
+                validateTextModel: { url in .init(directory: url, revision: url.lastPathComponent) })
+        }
+        let project = base.appendingPathComponent("多模型.dproject")
+        let owner = ProjectSession(sessionFactory: factory, settings: settings)
+        await owner.createProject(at: project)
+        #expect(owner.errorMessage == nil)
+        await owner.registerTextModel(at: a)
+        await owner.registerTextModel(at: b)
+        await owner.openWorkflow()
+        let first = try #require(owner.workflow)
+        first.addExample("text")
+        let id = try #require(first.graph?.nodes[1].id)
+        first.setParameter(nodeID: id, key: "modelID", value: .text("text:A"))
+        await owner.closeProject(); #expect(owner.manifest == nil)
+        let reopened = ProjectSession(sessionFactory: factory, settings: settings)
+        await reopened.openProject(at: project); await reopened.openWorkflow()
+        let c = try #require(reopened.workflow)
+        c.selectedGraphID = c.graphs.first?.id
+        await c.run(target: id, only: false)
+        #expect(c.errorMessage == nil)
+        #expect(await engine.requests.last?.model.revision == "A")
+        #expect(c.modelChoices.contains { $0.id == "text:A" })
+        #expect(c.modelChoices.contains { $0.id == "text:B" })
+        await reopened.closeProject(); #expect(reopened.manifest == nil)
+    }
+}

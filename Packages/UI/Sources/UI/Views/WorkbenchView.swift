@@ -18,6 +18,9 @@ public struct WorkbenchView: View {
         get { nodePresentation.selectedNodeID }
         nonmutating set { nodePresentation.selectNode(newValue) }
     }
+    @Environment(\.dLanguageStore) private var language
+    @State private var languageSettingsVisible = false
+    private func label(_ key: String, _ fallback: String) -> String { language?.text(key, fallback: fallback) ?? fallback }
     @State private var workflowVisible = false
     @State private var showTasks = false
     @State private var showingPitchAnalysis = false
@@ -52,11 +55,11 @@ public struct WorkbenchView: View {
                     HStack {
                         Text(model.manifest?.name ?? "D").font(.headline)
                         Spacer()
-                        Picker("工作视图", selection: $workflowVisible) {
-                            Text("流程画布").tag(true)
-                            Text("创作与资料").tag(false)
+                        Picker(label("workbench.view", "工作视图"), selection: $workflowVisible) {
+                            Text(label("workbench.canvas", "流程画布")).tag(true)
+                            Text(label("workbench.creation", "创作与资料")).tag(false)
                         }.pickerStyle(.segmented).frame(width: 230)
-                        Button("返回项目") { Task { await model.closeProject() } }
+                        Button(label("workbench.projects", "返回项目")) { Task { await model.closeProject() } }
                     }.padding(10).background(.bar)
                     Divider()
                     if workflowVisible {
@@ -70,6 +73,16 @@ public struct WorkbenchView: View {
                     onRecent: { id in Task { await model.openRecentProject(id: id) } },
                     onModels: { library?.isPresented = true })
             }
+        }
+        .toolbar {
+            if language != nil {
+                Button { languageSettingsVisible = true } label: {
+                    Label(label("language.settings", "显示语言"), systemImage: "globe")
+                }.accessibilityIdentifier("display-language-settings")
+            }
+        }
+        .sheet(isPresented: $languageSettingsVisible) {
+            if let language { LanguageSettingsView(store: language) }
         }
         .frame(minWidth: 860, minHeight: 580)
         .onChange(of: model.projectURL) { _, _ in

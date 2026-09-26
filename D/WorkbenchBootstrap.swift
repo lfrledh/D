@@ -10,6 +10,7 @@ final class WorkbenchBootstrap {
     private(set) var model: WorkbenchModel?
     private(set) var libraryModel: ModelLibraryModel?
     private(set) var nodeTags: ModelNodeTagStore?
+    private(set) var languageStore = UILanguageStore()
     private(set) var startupError: String?
     private(set) var audioEngineIssue: String?
     private(set) var videoEngineIssue: String?
@@ -41,6 +42,8 @@ final class WorkbenchBootstrap {
                     isDirectory: true)
             }
             #endif
+            languageStore = UILanguageStore(settings: settings, directory: libraryDirectory.deletingLastPathComponent()
+                .appendingPathComponent("LanguagePacks", isDirectory: true))
             nodeTags = ModelNodeTagStore(settings: settings)
             let consent = AudioModelUsePermission(settings: settings)
             let accessRoot = libraryDirectory.deletingLastPathComponent()

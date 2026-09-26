@@ -233,6 +233,12 @@ public struct WorkflowRegistry: Sendable {
     }
 
     private static func validateSchema(_ definition: WorkflowOperationDefinition) throws {
+        if definition.modelKind != nil {
+            guard let field = definition.fields.first(where: { $0.id == "modelID" }),
+                  case .text = field.kind, case .text = field.defaultValue else {
+                throw WorkflowIssue("模型操作必须声明稳定的 modelID 文字字段。")
+            }
+        }
         guard definition.version > 0 else { throw WorkflowIssue("操作版本必须为正数：\(definition.id)。") }
         guard Set(definition.inputs.map(\.id)).count == definition.inputs.count,
               Set(definition.outputs.map(\.id)).count == definition.outputs.count,

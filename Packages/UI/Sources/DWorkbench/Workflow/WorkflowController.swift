@@ -16,6 +16,7 @@ import Observation
     public private(set) var progressMessage = "选择一个可编辑样例，或添加节点开始。"
     public var textModelDescription = "尚未选择文字模型"
     public var imageModelDescription = "尚未选择图像模型"
+    public var modelChoices: [WorkflowModelChoice] = []
     public private(set) var destinationDescription = "尚未选择导出目录"
     public var graph: WorkflowGraph? { graphs.first { $0.id == selectedGraphID } }
     public var selectedNode: WorkflowNode? { graph?.nodes.first { $0.id == selectedNodeID } }
@@ -151,6 +152,24 @@ import Observation
             else { g.layout.append(.init(nodeID: id, x: max(0, x), y: max(0, y))) }
         }, changesConfiguration: false)
     }
+    public func modelSelectionTarget() -> WorkflowModelSelectionTarget? {
+        guard !isRunning, !closed, !closing, let graph, let node = selectedNode,
+              let kind = registry.operation(node.operationID)?.definition.modelKind else { return nil }
+        return .init(graphID: graph.id, nodeID: node.id, kind: kind,
+                     previousIdentity: node.parameters["modelID"]?.string ?? "")
+    }
+    public func isCurrent(_ target: WorkflowModelSelectionTarget) -> Bool {
+        guard !closed, !closing, !isRunning, graph?.id == target.graphID,
+              let node = graph?.nodes.first(where: { $0.id == target.nodeID }),
+              registry.operation(node.operationID)?.definition.modelKind == target.kind,
+              node.parameters["modelID"]?.string == target.previousIdentity else { return false }
+        return true
+    }
+    public func bindModel(_ identity: String, to target: WorkflowModelSelectionTarget) {
+        guard isCurrent(target) else { errorMessage = "目标节点已改变，模型未绑定到其他节点。"; return }
+        setParameter(nodeID: target.nodeID, key: "modelID", value: .text(identity))
+    }
+
     public func setParameter(nodeID: UUID, key: String, value: WorkflowScalar) {
         edit { g in guard let i = g.nodes.firstIndex(where: { $0.id == nodeID }) else { return }; g.nodes[i].parameters[key] = value }
     }
