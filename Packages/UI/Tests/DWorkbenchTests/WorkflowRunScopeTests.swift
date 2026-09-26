@@ -294,6 +294,144 @@ struct WorkflowRunScopeTests {
         }
     }
 
+    @Test func historicalPinsResolveContainingGraphAndInvokeCallsRemainDerivable() async throws {
+        let fixture = try ScopeFixture()
+        let collisionID = UUID()
+        var rootSource = try fixture.node("fixture.source", title: "root-collision")
+        rootSource.id = collisionID
+        var toolSource = try fixture.node("fixture.source", title: "tool-collision")
+        toolSource.id = collisionID
+        var toolGraph = WorkflowGraph(name: "collision-tool", nodes: [toolSource])
+        toolGraph.interface = .init(outputs: [
+            .init(name: "output", nodeID: toolSource.id, schema: .text),
+        ])
+        let tool = WorkflowToolDefinition(name: "collision-tool", graph: toolGraph)
+        let reference = WorkflowToolReference(
+            id: tool.id,
+            version: tool.version,
+            digest: try WorkflowPlanCompiler.digest(tool)
+        )
+        var invoke = try fixture.node("d.control.invoke", title: "invoke")
+        invoke.control = .invoke(reference)
+        invoke.dataConfiguration = .init(fields: [])
+        let rootSink = try fixture.node("fixture.echo", title: "root-sink")
+        let invokeSink = try fixture.node("fixture.echo", title: "invoke-sink")
+        let join = try fixture.node("fixture.join", title: "join")
+        let graph = WorkflowGraph(nodes: [rootSource, invoke, rootSink, invokeSink, join], connections: [
+            .init(sourceNode: rootSource.id, targetNode: rootSink.id),
+            .init(sourceNode: invoke.id, targetNode: invokeSink.id),
+            .init(sourceNode: rootSink.id, targetNode: join.id, targetPort: "left"),
+            .init(sourceNode: invokeSink.id, targetNode: join.id, targetPort: "right"),
+        ])
+        let history = try await fixture.execute(
+            graph: graph,
+            selection: .through(join.id),
+            tools: [tool]
+        )
+        let source = WorkflowScopeSource(
+            graph: graph,
+            selection: .through(join.id),
+            checkpoint: history
+        )
+        let rootRecord = try #require(history.records.first {
+            $0.address.path == [.node(rootSource.id)]
+        })
+        let toolRecord = try #require(history.records.first { record in
+            record.step.node.id == collisionID && record.address.path.contains { component in
+                if case .tool(let selected) = component { return selected == reference }
+                return false
+            }
+        })
+        let invokeRecord = try #require(history.records.first {
+            $0.address.path == [.node(invoke.id)]
+        })
+
+        var destinationGraph = graph
+        destinationGraph.revision = UUID()
+        let rootDestinationPlan = try WorkflowScopePlanner.rebuild(
+            graph: destinationGraph,
+            selection: .only(rootSink.id),
+            modelDefaults: [:],
+            tools: [tool],
+            registry: fixture.registry
+        )
+        var rootDestinationCheckpoint = WorkflowPlanCheckpoint(plan: rootDestinationPlan)
+        rootDestinationCheckpoint.modelDefaults = [:]
+        let rootDestination = WorkflowScopeSource(
+            graph: destinationGraph,
+            selection: .only(rootSink.id),
+            checkpoint: rootDestinationCheckpoint
+        )
+        let rootPin = WorkflowHistoricalInput(
+            destinationNodeID: rootSink.id,
+            destinationPort: "input",
+            sourceCall: .init(address: rootRecord.address, stepID: rootRecord.step.id),
+            sourcePort: "output"
+        )
+        let rootResolved = try WorkflowScopePlanner.resolveHistoricalInputs(
+            [rootPin],
+            destination: rootDestination,
+            sources: [source],
+            tools: [tool],
+            registry: fixture.registry
+        )
+        #expect(rootResolved[rootSink.id]?["input"] == .data(.text("root-collision")))
+
+        let collidingToolPin = WorkflowHistoricalInput(
+            destinationNodeID: rootSink.id,
+            destinationPort: "input",
+            sourceCall: .init(address: toolRecord.address, stepID: toolRecord.step.id),
+            sourcePort: "output"
+        )
+        #expect(throws: WorkflowIssue.self) {
+            try WorkflowScopePlanner.resolveHistoricalInputs(
+                [collidingToolPin],
+                destination: rootDestination,
+                sources: [source],
+                tools: [tool],
+                registry: fixture.registry
+            )
+        }
+
+        let invokeDestinationPlan = try WorkflowScopePlanner.rebuild(
+            graph: destinationGraph,
+            selection: .only(invokeSink.id),
+            modelDefaults: [:],
+            tools: [tool],
+            registry: fixture.registry
+        )
+        var invokeDestinationCheckpoint = WorkflowPlanCheckpoint(plan: invokeDestinationPlan)
+        invokeDestinationCheckpoint.modelDefaults = [:]
+        let controlPin = WorkflowHistoricalInput(
+            destinationNodeID: invokeSink.id,
+            destinationPort: "input",
+            sourceCall: .init(address: invokeRecord.address, stepID: invokeRecord.step.id),
+            sourcePort: "output"
+        )
+        let controlResolved = try WorkflowScopePlanner.resolveHistoricalInputs(
+            [controlPin],
+            destination: .init(
+                graph: destinationGraph,
+                selection: .only(invokeSink.id),
+                checkpoint: invokeDestinationCheckpoint
+            ),
+            sources: [source],
+            tools: [tool],
+            registry: fixture.registry
+        )
+        #expect(controlResolved[invokeSink.id]?["input"] == .data(.text("tool-collision")))
+
+        let derived = try WorkflowScopePlanner.resolveCall(
+            .init(address: toolRecord.address, stepID: toolRecord.step.id),
+            source: source,
+            tools: [tool],
+            registry: fixture.registry
+        )
+        #expect(derived.graph.id == toolGraph.id)
+        #expect(derived.plan.steps.map(\.node.id) == [toolSource.id])
+        #expect(derived.externalInputs == [toolSource.id: [:]])
+    }
+
     @Test func historicalPinsValidateStructuredUnitsAtDestination() async throws {
         let fixture = try ScopeFixture()
         let sourceNode = try fixture.node("fixture.number-source", title: "seconds")
@@ -319,6 +457,52 @@ struct WorkflowRunScopeTests {
             try WorkflowScopePlanner.resolveHistoricalInputs(
                 [pin],
                 destination: .init(graph: graph, selection: .only(sink.id), checkpoint: destinationCheckpoint),
+                sources: [
+                    .init(graph: graph, selection: .only(sourceNode.id), checkpoint: sourceCheckpoint),
+                ],
+                registry: fixture.registry
+            )
+        }
+    }
+
+    @Test func historicalPinsValidateLoopStateSchemaBeforeExecution() async throws {
+        let fixture = try ScopeFixture()
+        let sourceNode = try fixture.node("fixture.number-source", title: "seconds")
+        var state = try fixture.node("d.value.input", title: "beat-state")
+        state.parameters["publicName"] = .text("state")
+        state.dataConfiguration = .init(value: .number(0, unit: "beat"))
+        var body = WorkflowGraph(name: "beat-loop-body", nodes: [state])
+        body.interface = .init(
+            inputs: [.init("state", .number(unit: "beat"))],
+            outputs: [.init(name: "state", nodeID: state.id, schema: .number(unit: "beat"))]
+        )
+        var loop = try fixture.node("d.control.loop", title: "beat-loop")
+        loop.control = .loop(
+            body: body,
+            stateSchema: .number(unit: "beat"),
+            maximumIterations: 2,
+            until: .init(comparison: .equals, value: .number(99, unit: "beat"))
+        )
+        let graph = WorkflowGraph(nodes: [sourceNode, loop], connections: [
+            .init(sourceNode: sourceNode.id, targetNode: loop.id),
+        ])
+        let sourceCheckpoint = try await fixture.execute(graph: graph, selection: .only(sourceNode.id))
+        let destinationPlan = try WorkflowScopePlanner.rebuild(
+            graph: graph, selection: .only(loop.id), modelDefaults: [:], registry: fixture.registry
+        )
+        var destinationCheckpoint = WorkflowPlanCheckpoint(plan: destinationPlan)
+        destinationCheckpoint.modelDefaults = [:]
+        let record = try #require(sourceCheckpoint.records.first)
+        let pin = WorkflowHistoricalInput(
+            destinationNodeID: loop.id,
+            destinationPort: "input",
+            sourceCall: .init(address: record.address, stepID: record.step.id),
+            sourcePort: "output"
+        )
+        #expect(throws: WorkflowIssue.self) {
+            try WorkflowScopePlanner.resolveHistoricalInputs(
+                [pin],
+                destination: .init(graph: graph, selection: .only(loop.id), checkpoint: destinationCheckpoint),
                 sources: [
                     .init(graph: graph, selection: .only(sourceNode.id), checkpoint: sourceCheckpoint),
                 ],
@@ -480,9 +664,13 @@ struct WorkflowRunScopeTests {
         return .init(graph: graph, source: source, left: left, right: right, sink: sink)
     }
 
-    func execute(graph: WorkflowGraph, selection: WorkflowGraphSelection) async throws -> WorkflowPlanCheckpoint {
+    func execute(
+        graph: WorkflowGraph,
+        selection: WorkflowGraphSelection,
+        tools: [WorkflowToolDefinition] = []
+    ) async throws -> WorkflowPlanCheckpoint {
         let plan = try WorkflowScopePlanner.rebuild(
-            graph: graph, selection: selection, modelDefaults: [:], registry: registry
+            graph: graph, selection: selection, modelDefaults: [:], tools: tools, registry: registry
         )
         var checkpoint = WorkflowPlanCheckpoint(plan: plan)
         checkpoint.modelDefaults = [:]

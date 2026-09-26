@@ -317,15 +317,23 @@ public enum WorkflowScopePlanner {
                 throw WorkflowIssue("历史输入端口不是原连接的来源端口。", nodeID: boundary.sourceNodeID, port: pin.sourcePort)
             }
             let runID = pin.sourceCall.address.runID
-            guard let source = sourcesByRunID[runID], trustedSourcePlans[runID] != nil else {
+            guard let source = sourcesByRunID[runID], let sourcePlan = trustedSourcePlans[runID] else {
                 throw WorkflowIssue("历史输入引用了未提供的精确运行。")
             }
             guard let record = source.checkpoint.records.first(where: { $0.address == pin.sourceCall.address }),
                   record.step.id == pin.sourceCall.stepID else {
                 throw WorkflowIssue("历史输入找不到完整地址和 stepID 同时匹配的调用。")
             }
-            guard case .node(let addressedNodeID)? = pin.sourceCall.address.path.last,
-                  addressedNodeID == boundary.sourceNodeID,
+            let located = try locateCall(
+                address: pin.sourceCall.address,
+                rootGraph: source.graph,
+                rootPlan: sourcePlan,
+                tools: tools
+            )
+            guard located.graph.id == destination.graph.id else {
+                throw WorkflowIssue("历史输入来源不属于目标工作流图。", nodeID: boundary.sourceNodeID, port: boundary.sourcePort)
+            }
+            guard located.node.id == boundary.sourceNodeID,
                   record.step.node.id == boundary.sourceNodeID else {
                 throw WorkflowIssue("历史输入不是原连接的来源节点。", nodeID: boundary.sourceNodeID, port: boundary.sourcePort)
             }
@@ -458,7 +466,11 @@ public enum WorkflowScopePlanner {
                 throw WorkflowIssue("历史输入目标端口不存在。", nodeID: nodeID, port: port)
             }
             kinds = input.kinds
-            schema = step.node.dataConfiguration?.fields.first(where: { $0.name == port })?.type
+            if case .loop(_, let stateSchema, _, _) = step.kind, port == "input" {
+                schema = stateSchema
+            } else {
+                schema = step.node.dataConfiguration?.fields.first(where: { $0.name == port })?.type
+            }
         }
         guard kinds.contains(value.kind) else {
             throw WorkflowIssue("历史输入类型与目标端口不兼容。", nodeID: nodeID, port: port)
