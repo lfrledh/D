@@ -108,6 +108,59 @@ struct WorkflowJSONRepairToolTests {
         })
     }
 
+    @Test func structuredCounterexamplesExhaustRepairsAndPreserveEveryRawResponse() async throws {
+        let counterexamples = [
+            #"{"title":"one","title":"two"}"#,
+            #"{"title":"one","extra":true}"#,
+            #"{"title":42}"#,
+        ]
+
+        for invalid in counterexamples {
+            let services = JSONRepairTestServices(responses: [invalid, invalid, invalid])
+            let tool = try makeTool()
+            let executor = try makeExecutor(tool: tool, services: services)
+            var executionFailed = false
+
+            do {
+                _ = try await executor.execute(try checkpoint(for: tool, content: "counterexample source"))
+            } catch {
+                executionFailed = true
+            }
+
+            let failed = try #require(executor.checkpoint)
+            let modelRecords = failed.records.filter {
+                $0.step.node.operationID == "d.model.language" && $0.step.status == .completed
+            }
+            let rawReferences = modelRecords.compactMap { $0.step.outputs["raw"]?.asset }
+            var preservedRaw: [String] = []
+            for reference in rawReferences {
+                preservedRaw.append(try await services.readText(reference))
+            }
+
+            #expect(executionFailed)
+            #expect(failed.state == .failed)
+            #expect(services.languageCalls.count == 3)
+            #expect(modelRecords.count == 3)
+            #expect(languageTexts(in: failed) == [invalid, invalid, invalid])
+            #expect(rawReferences.count == 3)
+            #expect(Set(rawReferences.map(\.assetID)).count == 3)
+            #expect(preservedRaw == [invalid, invalid, invalid])
+            #expect(loopRecord(in: failed)?.loopExit == .iterationLimit)
+            #expect(loopRecord(in: failed)?.step.status == .completed)
+            #expect(failed.records.contains {
+                $0.step.node.operationID == "d.value.validate" &&
+                    $0.step.node.title == "Strictly validate final JSON" &&
+                    $0.step.status == .failed
+            })
+            #expect(failed.outputs.isEmpty)
+            #expect(!failed.records.contains {
+                $0.step.node.operationID == "d.value.return" &&
+                    $0.step.node.title == "Return validated structured data" &&
+                    $0.step.status == .completed
+            })
+        }
+    }
+
     @Test func saveFailureRetainsInvalidTextAndResumeDoesNotRepeatCompletedCall() async throws {
         let invalid = "```json\n{\"title\":\"fenced\"}\n```"
         let services = JSONRepairTestServices(responses: [invalid, #"{"title":"fixed"}"#])
