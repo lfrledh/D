@@ -177,6 +177,34 @@ struct WorkflowImageProcessorTests {
         }
     }
 
+    @Test func directJPEGCodecRejectsInvalidOptionsAndAcceptsValidatedOptions() throws {
+        let jpegCodec = try #require(ImageCodecRegistry.standard.codec(formatID: "jpeg"))
+        let image = try ImageFixture.image(width: 4, height: 3) { _, _ in (30, 60, 90, 255) }
+        let invalidQualityOptions = [
+            ImageCodecEncodingOptions(quality: nil, background: .white),
+            ImageCodecEncodingOptions(quality: .nan, background: .white),
+            ImageCodecEncodingOptions(quality: -0.01, background: .white),
+            ImageCodecEncodingOptions(quality: 1.01, background: .white),
+        ]
+        for options in invalidQualityOptions {
+            #expect(throws: WorkflowImageProcessorError.invalidParameters(
+                "JPEG quality 必须为 0...1 的有限小数。")) {
+                try jpegCodec.encode(image, options: options)
+            }
+        }
+        #expect(throws: WorkflowImageProcessorError.invalidParameters("JPEG 必须指定背景。")) {
+            try jpegCodec.encode(
+                image,
+                options: ImageCodecEncodingOptions(quality: 0.8, background: nil))
+        }
+
+        let encoded = try jpegCodec.encode(
+            image,
+            options: ImageCodecEncodingOptions(quality: 0.8, background: .black))
+        #expect(jpegCodec.matchesSignature(encoded))
+        #expect(try ImageFixture.dimensions(encoded) == ImageFixture.Size(width: 4, height: 3))
+    }
+
     @Test func injectedFixtureCodecRunsThroughTheProcessorWithoutAddingAProductionFormat() throws {
         let pngCodec = try #require(ImageCodecRegistry.standard.codec(formatID: "png"))
         let fixtureCodec = PNGFixtureCodec(base: pngCodec)
@@ -194,6 +222,48 @@ struct WorkflowImageProcessorTests {
         #expect(result.details["outputEncoding"] == "fixture-png")
         #expect(result.metadata.width == 6)
         #expect(result.metadata.height == 4)
+    }
+
+    @Test func forgedCodecMIMEIsRejectedBeforePublication() throws {
+        let pngCodec = try #require(ImageCodecRegistry.standard.codec(formatID: "png"))
+        let forged = ForgedMIMEPNGFixtureCodec(base: pngCodec)
+        let registry = try ImageCodecRegistry(codecs: [forged])
+        let source = try ImageFixture.png(width: 5, height: 3) { _, _ in (10, 30, 50, 255) }
+
+        #expect(throws: WorkflowImageProcessorError.outputVerificationFailed) {
+            try WorkflowImageProcessor.process(
+                source,
+                operationID: "d.image.convert",
+                parameters: ["format": .text("fixture-forged-mime")],
+                codecs: registry)
+        }
+    }
+
+    @Test func sameSizeOutputWithAlteredOrientationMetadataIsRejectedBeforePublication() throws {
+        let pngCodec = try #require(ImageCodecRegistry.standard.codec(formatID: "png"))
+        let jpegCodec = try #require(ImageCodecRegistry.standard.codec(formatID: "jpeg"))
+        let alteredCodec = AlteredMetadataJPEGFixtureCodec(base: jpegCodec)
+        let codecs: [any ImageCodec] = [
+            pngCodec,
+            alteredCodec,
+        ]
+        let registry = try ImageCodecRegistry(codecs: codecs)
+        let source = try ImageFixture.png(width: 7, height: 5) { _, _ in (80, 100, 120, 255) }
+        let altered = try alteredCodec.encode(
+            try ImageFixture.image(width: 7, height: 5) { _, _ in (80, 100, 120, 255) },
+            options: ImageCodecEncodingOptions(quality: 0.8, background: .white))
+
+        #expect(try ImageFixture.dimensions(altered) == ImageFixture.Size(width: 7, height: 5))
+        #expect(try ImageFixture.orientation(altered) == 6)
+
+        #expect(throws: WorkflowImageProcessorError.outputVerificationFailed) {
+            try WorkflowImageProcessor.process(
+                source,
+                operationID: "d.image.convert",
+                parameters: ["format": .text("fixture-jpeg-metadata"),
+                             "quality": .decimal(0.8), "background": .text("white")],
+                codecs: registry)
+        }
     }
 
     @Test func ambiguousInjectedSignaturesAreRejectedBeforeDecode() throws {
@@ -370,6 +440,17 @@ private enum ImageFixture {
         return Size(width: width, height: height)
     }
 
+    static func orientation(_ data: Data) throws -> Int {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil)
+                as? [String: Any],
+              let orientation = (properties[kCGImagePropertyOrientation as String]
+                as? NSNumber)?.intValue else {
+            throw FixtureError.decoding
+        }
+        return orientation
+    }
+
     static func pixel(_ data: Data, x: Int, y: Int) throws -> Pixel {
         guard let source = CGImageSourceCreateWithData(data as CFData, nil),
               let image = CGImageSourceCreateImageAtIndex(source, 0, nil),
@@ -447,6 +528,54 @@ private struct PNGFixtureCodec: ImageCodec {
 
     func encode(_ image: CGImage, options: ImageCodecEncodingOptions) throws -> Data {
         try base.encode(image, options: options)
+    }
+}
+
+private struct ForgedMIMEPNGFixtureCodec: ImageCodec {
+    let formatID = "fixture-forged-mime"
+    let mediaType = "image/jpeg"
+    let base: any ImageCodec
+
+    var typeIdentifier: String { base.typeIdentifier }
+    var alphaPolicy: ImageCodecAlphaPolicy { base.alphaPolicy }
+
+    func matchesSignature(_ data: Data) -> Bool {
+        base.matchesSignature(data)
+    }
+
+    func encodingOptions(
+        quality: WorkflowScalar?,
+        background: WorkflowScalar?
+    ) throws -> ImageCodecEncodingOptions {
+        try base.encodingOptions(quality: quality, background: background)
+    }
+
+    func encode(_ image: CGImage, options: ImageCodecEncodingOptions) throws -> Data {
+        try base.encode(image, options: options)
+    }
+}
+
+private struct AlteredMetadataJPEGFixtureCodec: ImageCodec {
+    let formatID = "fixture-jpeg-metadata"
+    let base: any ImageCodec
+
+    var mediaType: String { base.mediaType }
+    var typeIdentifier: String { base.typeIdentifier }
+    var alphaPolicy: ImageCodecAlphaPolicy { base.alphaPolicy }
+
+    func matchesSignature(_ data: Data) -> Bool {
+        base.matchesSignature(data)
+    }
+
+    func encodingOptions(
+        quality: WorkflowScalar?,
+        background: WorkflowScalar?
+    ) throws -> ImageCodecEncodingOptions {
+        try base.encodingOptions(quality: quality, background: background)
+    }
+
+    func encode(_ image: CGImage, options: ImageCodecEncodingOptions) throws -> Data {
+        try ImageFixture.encode(image, type: .jpeg, orientation: 6)
     }
 }
 

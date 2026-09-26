@@ -103,6 +103,11 @@ struct JPEGImageCodec: ImageCodec {
     }
 
     func encode(_ image: CGImage, options: ImageCodecEncodingOptions) throws -> Data {
+        guard let quality = options.quality,
+              quality.isFinite, (0...1).contains(quality) else {
+            throw WorkflowImageProcessorError.invalidParameters(
+                "JPEG quality 必须为 0...1 的有限小数。")
+        }
         guard let background = options.background else {
             throw WorkflowImageProcessorError.invalidParameters("JPEG 必须指定背景。")
         }
@@ -139,7 +144,7 @@ struct JPEGImageCodec: ImageCodec {
         return try encodeImage(
             flattened,
             typeIdentifier: typeIdentifier,
-            quality: options.quality)
+            quality: quality)
     }
 }
 
