@@ -60,6 +60,7 @@ public struct WorkflowPlannedStep: Codable, Sendable, Equatable, Identifiable {
     public var inputs: [WorkflowPlanInput]
     public var kind: WorkflowPlanStepKind
     public var effect: WorkflowEffect
+    public var sourceSignature: String?
     public init(node: WorkflowNode, inputs: [WorkflowPlanInput], kind: WorkflowPlanStepKind = .call, effect: WorkflowEffect = .pure) {
         self.node = node; self.inputs = inputs; self.kind = kind; self.effect = effect
     }
@@ -99,6 +100,7 @@ public struct WorkflowPlanCheckpoint: Codable, Sendable, Equatable {
     public var runID: UUID
     public var plan: WorkflowPlan
     public var arguments: [String: WorkflowDatum]
+    public var modelDefaults: [String: String]?
     public var records: [WorkflowPlanCallRecord]
     public var state: WorkflowPlanState
     public var outputs: [String: WorkflowValue]

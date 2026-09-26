@@ -1,13 +1,17 @@
 import Foundation
 import Observation
 
-/// Coordinates a serial DAG; all expensive model work is still admitted by the shared InferenceRuntime.
+/// Coordinates compiled structured workflows; all expensive model work is still admitted by the shared InferenceRuntime.
 @MainActor @Observable public final class WorkflowController {
     public let registry: WorkflowRegistry
     public private(set) var graphs: [WorkflowGraph] = []
     public private(set) var runs: [WorkflowRun] = []
+    public private(set) var tools: [WorkflowToolDefinition] = []
+    @ObservationIgnored private var activeExecutor: WorkflowPlanExecutor?
     public private(set) var availableAssets: [ProjectAsset] = []
-    public var selectedGraphID: UUID?
+    public var selectedGraphID: UUID? { didSet { if oldValue != selectedGraphID { bodyPath = []; selectedNodeIDs = [] } } }
+    public private(set) var bodyPath: [WorkflowBodyLocation] = []
+    public var selectedNodeIDs: Set<UUID> = []
     public var selectedNodeID: UUID?
     public private(set) var isRunning = false
     public private(set) var isSaving = false
@@ -18,7 +22,8 @@ import Observation
     public var imageModelDescription = "尚未选择图像模型"
     public var modelChoices: [WorkflowModelChoice] = []
     public private(set) var destinationDescription = "尚未选择导出目录"
-    public var graph: WorkflowGraph? { graphs.first { $0.id == selectedGraphID } }
+    public var rootGraph: WorkflowGraph? { graphs.first { $0.id == selectedGraphID } }
+    public var graph: WorkflowGraph? { rootGraph.flatMap { try? WorkflowGraphEditing.body(in: $0, path: bodyPath) } }
     public var selectedNode: WorkflowNode? { graph?.nodes.first { $0.id == selectedNodeID } }
     public var canUndo: Bool { !closed && !closing && !undoStack.isEmpty && readOnlyReason == nil }
     public var canRedo: Bool { !closed && !closing && !redoStack.isEmpty && readOnlyReason == nil }
@@ -40,11 +45,8 @@ import Observation
         self.services = services; self.registry = registry
         services.progress = { [weak self] in self?.progressMessage = $0 }
         services.candidatesChanged = { [weak self] stepID, items in
-            guard let self,
-                  let ri = self.runs.firstIndex(where: { $0.steps.contains { $0.id == stepID } }),
-                  let si = self.runs[ri].steps.firstIndex(where: { $0.id == stepID }) else { return }
-            self.runs[ri].steps[si].outputs = ["output": .collection(items)]
-            do { try await self.persist() }
+            guard let self, let executor = self.activeExecutor else { throw WorkflowIssue("图像进度没有当前执行所有者。") }
+            do { try await executor.updateCandidates(stepID: stepID, candidates: items) }
             catch { throw WorkflowSaveFailure(reason: error.localizedDescription) }
         }
     }
@@ -53,11 +55,19 @@ import Observation
             let state = try await services.store.workflowState()
             readOnlyReason = state.readOnlyReason
             guard let archive = state.archive else { return }
-            graphs = archive.graphs; runs = archive.runs
+            graphs = archive.graphs; runs = archive.runs; tools = archive.tools ?? []
             await refreshAssets()
             // Interrupted processes are never silently restarted. Waiting decisions remain valid.
             for i in runs.indices where [.running, .queued, .cancelling].contains(runs[i].status) {
                 runs[i].status = .interrupted
+                if var checkpoint = runs[i].planCheckpoint {
+                    checkpoint.state = .interrupted
+                    for j in checkpoint.records.indices where [.running, .queued, .cancelling].contains(checkpoint.records[j].step.status) {
+                        checkpoint.records[j].step.status = .interrupted
+                        checkpoint.records[j].step.error = "上次进程已停止；未自动重新计算。"
+                    }
+                    runs[i].planCheckpoint = checkpoint
+                }
                 for j in runs[i].steps.indices where [.running, .queued, .cancelling].contains(runs[i].steps[j].status) {
                     runs[i].steps[j].status = .interrupted
                     runs[i].steps[j].error = "上次进程已停止；未自动重新计算。"
@@ -84,7 +94,7 @@ import Observation
         return String(decoding: try encoder.encode(record), as: UTF8.self)
     }
     private func refreshAssets() async {
-        availableAssets = await services.store.snapshot().assets.filter { ["text/plain", "image/png", "image/jpeg"].contains($0.mediaType) }
+        availableAssets = await services.store.snapshot().assets.filter { WorkflowMediaFormat.descriptor($0.mediaType) != nil }
     }
     public func bindExistingAsset(_ id: UUID, nodeID: UUID) async {
         guard !closed, !closing, !isRunning, readOnlyReason == nil else { return }
@@ -112,24 +122,53 @@ import Observation
         do {
             try TextDraftDocument.validate(text)
             runs[ri].steps[si].reviewTextDraft = text
+            if let ci = runs[ri].planCheckpoint?.records.firstIndex(where: { $0.step.id == stepID }) { runs[ri].planCheckpoint?.records[ci].step.reviewTextDraft = text }
         } catch { errorMessage = "确认草稿未改变：\(error.localizedDescription)" }
     }
 
     private func edit(_ action: (inout WorkflowGraph) throws -> Void, changesConfiguration: Bool = true) {
         guard !closed, !closing, readOnlyReason == nil, let index = graphs.firstIndex(where: { $0.id == selectedGraphID }) else { return }
         do {
-            let before = graphs; var value = graphs[index]
+            let before = graphs
+            var value = try WorkflowGraphEditing.body(in: graphs[index], path: bodyPath)
             try action(&value)
             if changesConfiguration { value.revision = UUID() }
-            try registry.validate(value)
-            guard value != graphs[index] else { return }
+            try registry.validate(value, tools: tools)
+            let replacement = try WorkflowGraphEditing.replacingBody(in: graphs[index], path: bodyPath, with: value)
+            guard replacement != graphs[index] else { return }
             undoStack.append(before); if undoStack.count > 100 { undoStack.removeFirst() }; redoStack = []
-            graphs[index] = value; errorMessage = nil
+            graphs[index] = replacement; errorMessage = nil
         } catch { errorMessage = error.localizedDescription }
+    }
+    public func openBody(nodeID: UUID, slot: String) {
+        guard !isRunning, let rootGraph else { return }
+        do {
+            let path = bodyPath + [.init(nodeID: nodeID, slot: slot)]
+            let body = try WorkflowGraphEditing.body(in: rootGraph, path: path)
+            bodyPath = path; selectedNodeID = body.nodes.first?.id; selectedNodeIDs = []
+        } catch { errorMessage = error.localizedDescription }
+    }
+    public func closeBody() {
+        guard !isRunning, let location = bodyPath.last else { return }
+        bodyPath.removeLast(); selectedNodeID = location.nodeID; selectedNodeIDs = []
+    }
+    public func updateNode(_ node: WorkflowNode, in graphID: UUID) {
+        guard graph?.id == graphID else { errorMessage = "编辑目标已切换。"; return }
+        edit { graph in
+            guard let index = graph.nodes.firstIndex(where: { $0.id == node.id }), graph.nodes[index].operationID == node.operationID else {
+                throw WorkflowIssue("编辑节点已改变。")
+            }
+            graph.nodes[index] = node
+        }
+    }
+    public func updateInterface(_ interface: WorkflowGraphInterface?, in graphID: UUID) {
+        guard graph?.id == graphID else { return }
+        edit { $0.interface = interface }
     }
     public func addNode(operationID: String) {
         guard let op = registry.operation(operationID) else { errorMessage = "未知操作。"; return }
-        let node = op.definition.makeNode()
+        var node = op.definition.makeNode()
+        if operationID == "d.model.language" { node.dataConfiguration = .init(schema: .text) }
         edit { graph in
             graph.nodes.append(node)
             graph.layout.append(.init(nodeID: node.id, x: 80 + Double(graph.nodes.count % 5) * 250, y: 100 + Double(graph.nodes.count / 5) * 210))
@@ -174,6 +213,13 @@ import Observation
     public func setParameter(nodeID: UUID, key: String, value: WorkflowScalar) {
         edit { g in guard let i = g.nodes.firstIndex(where: { $0.id == nodeID }) else { return }; g.nodes[i].parameters[key] = value }
     }
+    public func setDataConfiguration(nodeID: UUID, value: WorkflowDataConfiguration?) {
+        edit { graph in
+            guard let index = graph.nodes.firstIndex(where: { $0.id == nodeID }) else { return }
+            try value?.schema?.validateDefinition(); try value?.value?.validate()
+            graph.nodes[index].dataConfiguration = value
+        }
+    }
     public func connect(source: UUID, sourcePort: String, target: UUID, targetPort: String) {
         edit { $0.connections.append(.init(sourceNode: source, sourcePort: sourcePort, targetNode: target, targetPort: targetPort)) }
     }
@@ -194,7 +240,7 @@ import Observation
         guard !closed, !closing, readOnlyReason == nil else { return }
         let graphID = selectedGraphID
         do {
-            let asset = try await services.store.importWorkflowFile(at: url)
+            let asset = try await services.store.importWorkflowMediaFile(at: url)
             guard graphID == selectedGraphID else { throw WorkflowIssue("导入期间已切换流程；资产已保存，未绑定到另一流程。") }
             attach(asset.record.reference, nodeID: nodeID); try await persist(); await onChange()
         } catch { errorMessage = error.localizedDescription }
@@ -217,7 +263,7 @@ import Observation
     }
     public func isStale(_ step: WorkflowStepRun) -> Bool {
         guard let graph else { return true }
-        if (try? registry.signature(step.node.id, in: graph)) != step.signature { return true }
+        if (try? registry.signature(step.node.id, in: graph, tools: tools)) != step.signature { return true }
         func upstreamChanged(_ value: WorkflowStepRun, visited: Set<UUID>) -> Bool {
             if visited.contains(value.node.id) { return true }
             let seen = visited.union([value.node.id])
@@ -231,14 +277,15 @@ import Observation
         return upstreamChanged(step, visited: [])
     }
     private func reusable(nodeID: UUID, graph: WorkflowGraph, inputs: [String: WorkflowValue]?) -> WorkflowStepRun? {
-        guard let signature = try? registry.signature(nodeID, in: graph) else { return nil }
+        guard let signature = try? registry.signature(nodeID, in: graph, tools: tools) else { return nil }
         return runs.reversed().filter { $0.graph.id == graph.id }.flatMap { $0.steps.reversed() }.first {
             $0.node.id == nodeID && $0.signature == signature && [.completed, .partial].contains($0.status) && (inputs == nil || $0.inputs == inputs)
         }
     }
     public func plan(target: UUID, only: Bool) throws -> [String] {
+        guard bodyPath.isEmpty else { throw WorkflowIssue("局部流程是编辑模板；请返回外层运行，或在运行详情选择具体调用。") }
         guard let graph else { throw WorkflowIssue("请先创建流程。") }
-        let ids = try registry.plan(graph, target: target, only: only)
+        let ids = try WorkflowPlanCompiler(registry: registry).compile(graph, tools: tools, target: target, only: only).steps.map(\.id)
         return try ids.map { id in
             guard let node = graph.nodes.first(where: { $0.id == id }) else { throw WorkflowIssue("节点已不存在。") }
             if only {
@@ -256,13 +303,13 @@ import Observation
     private func persist() async throws {
         guard !closed, readOnlyReason == nil else { throw WorkflowIssue(readOnlyReason ?? "项目已关闭。") }
         // Chain the complete transaction, including its read, so actor reentrancy cannot lose another save.
-        let preceding = writeTail, store = services.store, capturedGraphs = graphs, capturedRuns = runs
+        let preceding = writeTail, store = services.store, capturedGraphs = graphs, capturedRuns = runs, capturedTools = tools
         let task = Task { @MainActor in
             if let preceding { _ = try? await preceding.value }
             let state = try await store.workflowState()
             guard let archive = state.archive else { throw WorkflowIssue(state.readOnlyReason ?? "流程只读。") }
             try self.beforeHistorySave()
-            _ = try await store.saveWorkflow(graphs: capturedGraphs, runs: capturedRuns, expectedRevision: archive.revision)
+            _ = try await store.saveWorkflow(graphs: capturedGraphs, runs: capturedRuns, expectedRevision: archive.revision, tools: capturedTools.isEmpty ? nil : capturedTools)
         }
         writeTail = task; isSaving = true
         do { try await task.value; persistenceFailed = false; isSaving = false; await refreshAssets() }
@@ -273,26 +320,32 @@ import Observation
         catch { errorMessage = error.localizedDescription }
     }
     public func run(target: UUID, only: Bool) async {
-        guard !closed, !closing, !isRunning, readOnlyReason == nil, var frozen = graph else { return }
+        guard bodyPath.isEmpty else { errorMessage = "请返回外层运行；不能把局部模板当作独立调用。"; return }
+        guard !closed, !closing, !isRunning, readOnlyReason == nil, let original = graph else { return }
         guard !hasPendingSaves else { errorMessage = "请先恢复保存，避免重复计算。"; return }
         isRunning = true; cancelled = false; errorMessage = nil
-        defer { isRunning = false; activeRunID = nil }
+        defer { isRunning = false; activeRunID = nil; activeExecutor = nil }
         var failure: (any Error)?
         do {
-            let ids = try registry.plan(frozen, target: target, only: only)
-            let originalRevision = frozen.revision
-            frozen = try await services.prepare(frozen, nodes: ids)
-            if let i = graphs.firstIndex(where: { $0.id == frozen.id }), graphs[i].revision == originalRevision { graphs[i] = frozen }
-            var run = WorkflowRun(graph: frozen, targetNodeID: target, status: .running)
-            for id in ids {
-                let node = frozen.nodes.first { $0.id == id }!
-                var step = WorkflowStepRun(node: node, signature: try registry.signature(id, in: frozen))
-                step.repeatRequested = only && id == target
-                run.steps.append(step)
+            let frozen = services.freezeModels(in: original)
+            let defaults = services.capturedModelDefaults()
+            let compiled = try WorkflowPlanCompiler(registry: registry).compile(frozen, tools: tools, target: target, only: only)
+            let plan = try WorkflowPlanBinding.freeze(compiled, defaults: defaults, registry: registry)
+            if let i = graphs.firstIndex(where: { $0.id == frozen.id }), graphs[i].revision == original.revision { graphs[i] = frozen }
+            var checkpoint = WorkflowPlanCheckpoint(plan: plan)
+            checkpoint.modelDefaults = defaults
+            if only {
+                guard let node = frozen.nodes.first(where: { $0.id == target }) else { throw WorkflowIssue("节点不存在。") }
+                checkpoint.externalInputs[target] = try inputs(for: node, run: .init(graph: frozen, targetNodeID: target))
+                var requested = WorkflowStepRun(node: plan.steps[0].node, signature: plan.steps[0].sourceSignature ?? "")
+                requested.repeatRequested = true
+                checkpoint.records = [.init(address: .init(runID: checkpoint.runID, path: [.node(target)]), step: requested)]
             }
+            var run = WorkflowRun(id: checkpoint.runID, graph: frozen, targetNodeID: target, status: .running)
+            run.planCheckpoint = checkpoint
             runs.append(run); activeRunID = run.id
             try await persist()
-            try await execute(runID: run.id, force: only ? target : nil)
+            try await executePlan(runID: run.id, force: only ? target : nil)
         } catch { failure = error }
         await finishExecution(failure)
     }
@@ -310,72 +363,65 @@ import Observation
         try registry.validateInputs(result, node: node, connectedPorts: Set(run.graph.connections.filter { $0.targetNode == node.id }.map(\.targetPort)))
         return result
     }
-    private func execute(runID: UUID, force: UUID? = nil, retryCandidates: [WorkflowCandidate]? = nil) async throws {
-        guard let ri = runs.firstIndex(where: { $0.id == runID }) else { throw WorkflowIssue("运行记录不存在。") }
-        runs[ri].status = .running
-        for si in runs[ri].steps.indices {
-            if [.completed, .partial].contains(runs[ri].steps[si].status) { continue }
-            if cancelled { runs[ri].status = .cancelled; try await persist(); return }
-            if runs[ri].steps[si].status == .waiting { runs[ri].status = .waiting; try await persist(); return }
-            let node = runs[ri].steps[si].node
-            do {
-                let values: [String: WorkflowValue]
-                if runs[ri].steps[si].inputsBound == true { values = runs[ri].steps[si].inputs }
-                else { values = try inputs(for: node, run: runs[ri]) }
-                runs[ri].steps[si].inputs = values
-                runs[ri].steps[si].inputsBound = true
-                if force != node.id, runs[ri].steps[si].repeatRequested != true, runs[ri].steps[si].status == .queued,
-                   let cached = reusable(nodeID: node.id, graph: runs[ri].graph, inputs: values), cached.id != runs[ri].steps[si].id {
-                    runs[ri].steps[si].outputs = cached.outputs; runs[ri].steps[si].status = cached.status
-                    try await persist(); continue
-                }
-                try registry.validate(node)
-                guard let operation = registry.operation(node.operationID) else { throw WorkflowIssue("操作未注册。") }
-                runs[ri].steps[si].status = .running; progressMessage = node.title
-                try await persist()
-                let retained = retryCandidates ?? runs[ri].steps[si].outputs["output"]?.candidates
-                let context = WorkflowExecutionContext(node: node, stepID: runs[ri].steps[si].id, inputs: values, retryCandidates: retained)
-                let result = try await operation.execute(context, services)
-                if cancelled { throw CancellationError() }
-                switch result {
-                case .outputs(let values):
-                    runs[ri].steps[si].outputs = values
-                    let failed = values.values.contains { value in if case .collection(let items) = value { items.contains { $0.asset == nil } } else { false } }
-                    runs[ri].steps[si].status = failed ? .partial : .completed
-                case .reviewText(let ref):
-                    runs[ri].steps[si].outputs = ["preview": .asset(ref)]; runs[ri].steps[si].status = .waiting
-                case .humanTask(let task):
-                    runs[ri].steps[si].humanTask = task; runs[ri].steps[si].status = .waiting
-                case .choose(let candidates):
-                    runs[ri].steps[si].outputs = ["preview": .collection(candidates)]; runs[ri].steps[si].status = .waiting
-                }
-                if runs[ri].steps[si].status == .waiting {
-                    runs[ri].status = .waiting; progressMessage = "等待明确确认，后续尚未执行。"
-                    try await persist(); return
-                }
-                try await persist()
-            } catch {
-                if [.completed, .partial, .waiting].contains(runs[ri].steps[si].status) {
-                    // The operation already delivered its result. Only its history commit failed.
-                    // Keep the terminal step so resuming cannot execute it a second time.
-                    runs[ri].status = .saving; persistenceFailed = true
-                    throw WorkflowSaveFailure(reason: error.localizedDescription)
-                }
-                let status: WorkflowStepStatus = error is CancellationError ? .cancelled : error is WorkflowSaveFailure ? .saving : .failed
-                runs[ri].steps[si].status = status
-                runs[ri].steps[si].error = status == .cancelled ? nil : error.localizedDescription
-                runs[ri].status = status
-                if let retained = services.retainedCandidates(stepID: runs[ri].steps[si].id) { runs[ri].steps[si].outputs = ["output": .collection(retained)] }
-                do { try await persist() }
-                catch {
-                    persistenceFailed = true; runs[ri].status = .saving
-                    throw WorkflowSaveFailure(reason: error.localizedDescription)
-                }
-                throw error
-            }
+    private func capture(_ checkpoint: WorkflowPlanCheckpoint, runIndex: Int) {
+        runs[runIndex].planCheckpoint = checkpoint
+        // Top-level compatibility projection; nested records remain in the checkpoint.
+        runs[runIndex].steps = checkpoint.records.filter { $0.address.path.count == 1 }.map(\.step)
+        switch checkpoint.state {
+        case .ready: runs[runIndex].status = .queued
+        case .running: runs[runIndex].status = cancelled ? .cancelling : .running
+        case .paused, .waiting: runs[runIndex].status = .waiting
+        case .completed: runs[runIndex].status = .completed
+        case .failed: runs[runIndex].status = .failed
+        case .cancelled: runs[runIndex].status = checkpoint.records.contains { $0.step.status == .rejected } ? .rejected : .cancelled
+        case .saving: runs[runIndex].status = .saving
+        case .interrupted: runs[runIndex].status = .interrupted
         }
-        runs[ri].status = .completed; progressMessage = "此次运行已完成；旧版本与输入快照均保留。"; try await persist()
     }
+    private func executePlan(runID: UUID, force: UUID? = nil) async throws {
+        guard let ri = runs.firstIndex(where: { $0.id == runID }), let checkpoint = runs[ri].planCheckpoint else { throw WorkflowIssue("结构化恢复点不存在。") }
+        if cancelled {
+            var stopped = checkpoint; stopped.state = .cancelled
+            for i in stopped.records.indices where [.queued, .running].contains(stopped.records[i].step.status) { stopped.records[i].step.status = .cancelled }
+            capture(stopped, runIndex: ri); try await persist(); return
+        }
+        try services.beginPlan()
+        let executor = WorkflowPlanExecutor(registry: registry, executeCall: { [unowned self] context in
+            self.progressMessage = context.node.title
+            let top = context.address?.path.count == 1
+            let record = self.activeExecutor?.checkpoint?.records.first { $0.step.id == context.stepID }
+            if top, force != context.node.id, record?.step.repeatRequested != true, record?.step.outputs.isEmpty == true, !services.hasPendingSaves,
+               let cached = self.reusable(nodeID: context.node.id, graph: self.runs[ri].graph, inputs: context.inputs), cached.id != context.stepID {
+                return .outputs(cached.outputs)
+            }
+            return try await self.services.executeCall(context)
+        }, save: { [unowned self] value in
+            self.capture(value, runIndex: ri)
+            try await self.persist()
+        })
+        activeExecutor = executor
+        do {
+            let result = try await executor.execute(checkpoint)
+            capture(result, runIndex: ri)
+            progressMessage = result.state == .waiting ? "等待明确决定，后续尚未执行。" : result.state == .paused ? "已在安全边界暂停，资源已释放。" : "此次运行已保存。"
+        } catch {
+            if let latest = executor.checkpoint { capture(latest, runIndex: ri) }
+            throw error
+        }
+    }
+    /// Convert an old run only on explicit resume. No new Call is added or executed here.
+    private func checkpointForResume(_ index: Int) throws -> WorkflowPlanCheckpoint {
+        if let checkpoint = runs[index].planCheckpoint { return try WorkflowPlanExecutor.preparingRetry(checkpoint) }
+        let run = runs[index]
+        let full = try WorkflowPlanCompiler(registry: registry).compile(run.graph, tools: tools, target: run.targetNodeID,
+            only: run.steps.count == 1 && run.steps.first?.node.id == run.targetNodeID)
+        var checkpoint = WorkflowPlanCheckpoint(runID: run.id, plan: full)
+        checkpoint.records = run.steps.map { .init(address: .init(runID: run.id, path: [.node($0.node.id)]), step: $0) }
+        if full.steps.count == 1, let step = run.steps.first { checkpoint.externalInputs[step.node.id] = step.inputs }
+        checkpoint.state = run.status == .saving ? .saving : .ready
+        return try WorkflowPlanExecutor.preparingRetry(checkpoint)
+    }
+    public func pause() { activeExecutor?.requestPause(); progressMessage = "等待当前步骤结束并释放资源后暂停。" }
 
     /// A cancellation is terminal only after the operation drained and its model leases were released.
     private func finishExecution(_ failure: (any Error)?) async {
@@ -402,6 +448,7 @@ import Observation
         }
         cancelled = true
         progressMessage = "正在取消，等待计算停止并释放资源。"
+        activeExecutor?.requestStop()
         await services.cancel()
     }
     public func decide(stepID: UUID, accept: Bool, text: String?, candidateID: UUID?, acceptPartial: Bool) async {
@@ -431,29 +478,42 @@ import Observation
                 throw WorkflowIssue("确认期间原输入已改变；派生资产保留，但未采用到新的流程。")
             }
             // Do not resume downstream here. Confirmation and expensive continuation are separate user actions.
-            runs[ri].steps[si].decision = WorkflowDecision(waitingStepID: stepID, accepted: accept, selectedCandidateID: candidateID, output: output)
-            runs[ri].steps[si].outputs = output.map { ["output": .asset($0)] } ?? [:]
-            runs[ri].steps[si].status = accept ? .completed : .rejected
-            runs[ri].status = accept ? .waiting : .rejected
-            try await persist(); progressMessage = accept ? "决定已保存。明确点击继续运行才会执行下游。" : "已拒绝；没有发布空输出。"
+            let decision = WorkflowDecision(waitingStepID: stepID, accepted: accept, selectedCandidateID: candidateID, output: output)
+            if var cp = runs[ri].planCheckpoint, let ci = cp.records.firstIndex(where: { $0.step.id == stepID }) {
+                cp.records[ci].step.decision = decision
+                let executor = WorkflowPlanExecutor(registry: registry, executeCall: { _ in throw WorkflowIssue("提交决定不能运行节点。") }, save: { [unowned self] value in
+                    self.capture(value, runIndex: ri); try await self.persist()
+                })
+                do { let settled = try await executor.settleWaiting(cp, stepID: stepID); capture(settled, runIndex: ri) }
+                catch { if let latest = executor.checkpoint { capture(latest, runIndex: ri) }; throw error }
+            } else {
+                // Historical checkpoint-free wait: retain its established decision format.
+                runs[ri].steps[si].decision = decision
+                runs[ri].steps[si].outputs = output.map { ["output": .asset($0)] } ?? [:]
+                runs[ri].steps[si].status = accept ? .completed : .rejected
+                runs[ri].status = accept ? .waiting : .rejected
+                try await persist()
+            }
+            progressMessage = accept ? "决定已保存。明确点击继续运行才会执行下游。" : "已拒绝；没有发布空输出。"
             await onChange()
         } catch { errorMessage = error.localizedDescription }
     }
     public func resume(runID: UUID) async {
         guard !closed, !closing, !isRunning, readOnlyReason == nil, let i = runs.firstIndex(where: { $0.id == runID }) else { return }
         guard runs[i].graph.id == selectedGraphID, let current = graph,
-              runs[i].steps.allSatisfy({ (try? registry.signature($0.node.id, in: current)) == $0.signature }) else {
+              (runs[i].planCheckpoint?.plan.steps.map(\.node) ?? runs[i].steps.map(\.node)).allSatisfy({ (try? registry.signature($0.id, in: current, tools: tools)) == (try? registry.signature($0.id, in: runs[i].graph, tools: tools)) }) else {
             errorMessage = "当前流程已变化；旧运行保留，请运行新的快照。"; return
         }
         guard runs[i].status != .rejected && runs[i].status != .completed else { return }
         isRunning = true; cancelled = false; errorMessage = nil
-        defer { isRunning = false; activeRunID = nil }
+        defer { isRunning = false; activeRunID = nil; activeExecutor = nil }
         var failure: (any Error)?
         do {
             if persistenceFailed { try await persist() }
-            _ = try await services.prepare(runs[i].graph, nodes: runs[i].steps.filter { ![.completed, .partial].contains($0.status) }.map { $0.node.id })
+            let resumedCheckpoint = try checkpointForResume(i)
+            runs[i].planCheckpoint = resumedCheckpoint
             activeRunID = runID
-            try await execute(runID: runID)
+            try await executePlan(runID: runID)
         } catch { failure = error }
         await finishExecution(failure)
     }
@@ -466,19 +526,24 @@ import Observation
         guard !hasPendingSaves else { errorMessage = "先恢复保存并继续原运行，避免重复生成。"; return }
         guard !isStale(old), old.outputs["output"]?.candidates.contains(where: { $0.asset == nil }) == true else { return }
         isRunning = true; cancelled = false; errorMessage = nil
-        defer { isRunning = false; activeRunID = nil }
+        defer { isRunning = false; activeRunID = nil; activeExecutor = nil }
         var failure: (any Error)?
         do {
             let frozen = runs[ri].graph
-            _ = try await services.prepare(frozen, nodes: [old.node.id])
+
             var replacement = WorkflowStepRun(node: old.node, signature: old.signature, inputs: old.inputs)
             replacement.repeatRequested = true
             replacement.inputsBound = true
             replacement.outputs = old.outputs // Retry set survives save failure, cancellation and cold reopen.
-            let retry = WorkflowRun(graph: frozen, targetNodeID: old.node.id, steps: [replacement], status: .running)
+            var retry = WorkflowRun(graph: frozen, targetNodeID: old.node.id, steps: [replacement], status: .running)
+            let compiled = try WorkflowPlanCompiler(registry: registry).compile(frozen, tools: tools, target: old.node.id, only: true)
+            var checkpoint = WorkflowPlanCheckpoint(runID: retry.id, plan: compiled)
+            checkpoint.externalInputs[old.node.id] = old.inputs
+            checkpoint.records = [.init(address: .init(runID: retry.id, path: [.node(old.node.id)]), step: replacement)]
+            retry.planCheckpoint = checkpoint
             runs.append(retry); activeRunID = retry.id
             try await persist()
-            try await execute(runID: retry.id, force: old.node.id, retryCandidates: old.outputs["output"]?.candidates)
+            try await executePlan(runID: retry.id, force: old.node.id)
             progressMessage = "失败项已重试；成功项保留。重新运行选择节点以查看新集合。"
         } catch { failure = error }
         await finishExecution(failure)

@@ -165,7 +165,9 @@ private struct CompilerState {
                 kind = .call
                 stepEffect = try effect(for: node)
             }
-            steps.append(.init(node: node, inputs: inputs, kind: kind, effect: stepEffect))
+            var planned = WorkflowPlannedStep(node: node, inputs: inputs, kind: kind, effect: stepEffect)
+            planned.sourceSignature = try registry.signature(node.id, in: graph, tools: Array(tools.values))
+            steps.append(planned)
         }
 
         let completeInterface = graph.interface ?? .init()

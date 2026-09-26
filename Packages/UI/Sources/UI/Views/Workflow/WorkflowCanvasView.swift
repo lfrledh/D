@@ -659,6 +659,11 @@ private struct WorkflowNodeInspector: View {
                 VStack(alignment: .leading, spacing: 16) {
                     identity(node)
                     parameters(node)
+                    if node.operationID.hasPrefix("d.value.") || ["d.model.language", "d.control.human", "d.music.chords"].contains(node.operationID) {
+                        WorkflowNodeDataEditor(node: Binding(get: { node }, set: { edited in
+                            controller.setDataConfiguration(nodeID: node.id, value: edited.dataConfiguration)
+                        })).id(node.id).disabled(readOnly)
+                    }
                     ports(node)
                     execution(node)
                     history(node)
@@ -718,7 +723,7 @@ private struct WorkflowNodeInspector: View {
     @ViewBuilder
     private func parameters(_ node: WorkflowNode) -> some View {
         WorkflowInspectorSection(workflowText(languageStore, "workflow.section.parameters", fallback: "参数")) {
-            if let definition = controller.registry.operation(node.operationID)?.definition {
+            if let definition = controller.registry.definition(for: node, tools: controller.tools) {
                 if definition.fields.isEmpty {
                     Text(workflowText(languageStore, "workflow.parameters.none", fallback: "此操作没有参数。"))
                         .foregroundStyle(.secondary)
@@ -748,7 +753,7 @@ private struct WorkflowNodeInspector: View {
     @ViewBuilder
     private func ports(_ node: WorkflowNode) -> some View {
         WorkflowInspectorSection(workflowText(languageStore, "workflow.section.ports", fallback: "输入与输出")) {
-            if let definition = controller.registry.operation(node.operationID)?.definition {
+            if let definition = controller.registry.definition(for: node, tools: controller.tools) {
                 Text(workflowText(languageStore, "workflow.port.inputs", fallback: "输入"))
                     .font(.subheadline.weight(.semibold))
                 if definition.inputs.isEmpty {
@@ -862,7 +867,7 @@ private struct WorkflowNodeInspector: View {
     @ViewBuilder
     private func history(_ node: WorkflowNode) -> some View {
         WorkflowInspectorSection(workflowText(languageStore, "workflow.section.history", fallback: "运行历史")) {
-            let related = controller.runs.filter { run in run.steps.contains { $0.node.id == node.id } }
+            let related = controller.runs.filter { run in run.graph.nodes.contains { $0.id == node.id } }
             if related.isEmpty {
                 Text(workflowText(languageStore, "workflow.history.none", fallback: "没有历史运行。"))
                     .foregroundStyle(.secondary)

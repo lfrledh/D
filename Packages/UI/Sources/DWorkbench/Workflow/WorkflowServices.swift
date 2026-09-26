@@ -17,6 +17,7 @@ struct WorkflowSaveFailure: LocalizedError {
     private var bindings: [UUID: WorkflowModelBinding] = [:]
     private var activeRun: InferenceRun?
     private var languageCallActive = false
+    private var activeOperation: Task<WorkflowOperationResult, Error>?
     private var textSession: TextDraftSession?
     private var languagePreview = ""
     public var streamedTextCharacterCount: Int { textSession?.partialText.count ?? languagePreview.count }
@@ -41,9 +42,10 @@ struct WorkflowSaveFailure: LocalizedError {
     /// Compatibility for existing callers with one model per kind. Exact identity is
     /// still checked in prepare; this never silently substitutes a different model.
     public convenience init(store: ProjectStore, session: WorkbenchSession,
+                defaultIdentity: @escaping @MainActor (WorkflowModelKind) -> String = { _ in "" },
                 resolveText: @escaping @MainActor () async throws -> WorkflowModelBinding,
                 resolveImage: @escaping @MainActor () async throws -> WorkflowModelBinding) {
-        self.init(store: store, session: session) { kind, _ in
+        self.init(store: store, session: session, defaultIdentity: defaultIdentity) { kind, _ in
             guard kind == .text || kind == .image else { throw WorkflowIssue("旧模型解析入口不支持此模态。") }
             let binding = try await (kind == .text ? resolveText() : resolveImage())
             return WorkflowModelBinding(identity: binding.identity, reference: binding.reference,
@@ -87,6 +89,7 @@ struct WorkflowSaveFailure: LocalizedError {
     }
     public func cancel() async {
         cancelled = true
+        activeOperation?.cancel()
         if let textSession { await textSession.cancel() }
         if let activeRun { await activeRun.cancel(); _ = await activeRun.outcome() }
     }
@@ -110,6 +113,7 @@ struct WorkflowSaveFailure: LocalizedError {
         }
         return value
     }
+    public func capturedModelDefaults() -> [String: String] { Dictionary(uniqueKeysWithValues: WorkflowModelKind.allCases.map { ($0.rawValue, defaultIdentity($0)) }) }
     public func beginPlan() throws {
         guard bindings.isEmpty, activeRun == nil, !languageCallActive else { throw WorkflowIssue("上一操作尚未释放。") }
         cancelled = false; languagePreview = ""
@@ -121,7 +125,7 @@ struct WorkflowSaveFailure: LocalizedError {
         try registry.validate(context.node)
         try registry.validateInputs(context.inputs, node: context.node, connectedPorts: Set(context.inputs.keys))
         languageCallActive = true
-        defer { languageCallActive = false }
+        defer { languageCallActive = false; activeOperation = nil }
         do {
             if pending[context.stepID] == nil, let kind = operation.definition.modelKind {
                 let identity = context.node.parameters["modelID"]?.string ?? ""
@@ -131,9 +135,12 @@ struct WorkflowSaveFailure: LocalizedError {
                 guard binding.identity == identity else { throw WorkflowIssue("指定模型身份不一致；不会替换。") }
                 try checkCancellation()
             }
-            let result = try await operation.execute(context, self)
+            let child = Task { @MainActor in try await operation.execute(context, self) }
+            activeOperation = child
+            let result = try await withTaskCancellationHandler { try await child.value } onCancel: { child.cancel() }
             await finish()
-            try checkCancellation()
+            // A published result survives cancellation during lease release. The interpreter
+            // persists it before honoring stop, so a later resume cannot generate it twice.
             return result
         } catch { await finish(); throw error }
     }
@@ -423,13 +430,32 @@ struct WorkflowSaveFailure: LocalizedError {
     }
     public func export(_ value: WorkflowValue, context: WorkflowExecutionContext) async throws -> WorkflowExportReceipt {
         guard let destination else { throw WorkflowIssue("请先显式选择导出目录；重开项目后需重新授权目的地。") }
+        let format = context.node.parameters["format"]?.string ?? "auto"
+        guard ["auto", "json", "midi"].contains(format) else { throw WorkflowIssue("导出格式不支持。") }
+        if format != "auto" {
+            let datum: WorkflowDatum
+            switch value {
+            case .data(let data): datum = data
+            case .asset(let ref): datum = .asset(ref)
+            case .collection:
+                throw WorkflowIssue("候选集合请先转换为有类型的列表或选择一个结果；未忽略格式选择。")
+            case .receipt: throw WorkflowIssue("回执不是可导出内容。")
+            }
+            return try await store.exportWorkflowDatum(datum, format: format,
+                name: context.node.parameters["fileName"]?.string ?? "D作品", exportID: context.stepID, directory: destination)
+        }
         let refs: [WorkflowAssetReference]
         switch value {
         case .asset(let ref): refs = [ref]
         case .collection(let candidates):
             guard candidates.allSatisfy({ $0.asset != nil }), !candidates.isEmpty else { throw WorkflowIssue("含失败候选的集合不能直接导出；先明确选择成功结果。") }
             refs = candidates.compactMap(\.asset)
-        case .data: throw WorkflowIssue("结构数据需要明确编码后导出。")
+        case .data(let datum):
+            if case .asset(let reference) = datum, context.node.parameters["format"]?.string != "json" && context.node.parameters["format"]?.string != "midi" { refs = [reference] }
+            else {
+                return try await store.exportWorkflowDatum(datum, format: context.node.parameters["format"]?.string ?? "json",
+                    name: context.node.parameters["fileName"]?.string ?? "D作品", exportID: context.stepID, directory: destination)
+            }
         case .receipt: throw WorkflowIssue("回执不是可导出媒体。")
         }
         return try await store.exportWorkflowAssets(refs, name: context.node.parameters["fileName"]?.string ?? "D作品",

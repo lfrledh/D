@@ -3465,9 +3465,6 @@ extension ProjectStore {
               !name.contains("/"), !name.contains("\\"), !name.contains(".."), !name.contains("\0") else {
             throw WorkflowIssue("导出名称必须是单个安全文件名。")
         }
-        let parent = try ProjectFiles.openDirectory(directory); defer { Darwin.close(parent) }
-        let packageName = name + "-" + exportID.uuidString + ".dexport"
-        let destination = directory.appendingPathComponent(packageName, isDirectory: true)
         struct Recipe: Codable {
             struct Item: Codable {
                 let reference: WorkflowAssetReference; let filename: String?; let parents: [WorkflowAssetReference]
@@ -3521,6 +3518,35 @@ extension ProjectStore {
         let recipe = try encoder.encode(Recipe(version: 1, exportID: exportID, items: recipeItems,
             provenance: provenance, promptDisclosure: "withheld; full requests remain in the private project"))
         files.append(("recipe.json", recipe))
+        return try publishWorkflowExport(files: files, name: name, exportID: exportID, directory: directory)
+    }
+
+    /// Explicit value export uses the same non-overwriting atomic package publication as media.
+    public func exportWorkflowDatum(_ value: WorkflowDatum, format: String, name: String, exportID: UUID, directory: URL) throws -> WorkflowExportReceipt {
+        try checkLocation(); try value.validate()
+        guard ["auto", "json", "midi"].contains(format) else { throw WorkflowIssue("导出格式不支持。") }
+        for reference in value.assetReferences { _ = try workflowData(reference) }
+        let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+        let bytes: Data, suffix: String
+        if format == "midi" {
+            bytes = try WorkflowMusicPrograms.midi(sequence: WorkflowNoteSequence(datum: value)); suffix = "mid"
+        } else if format == "auto", case .text(let text) = value { bytes = Data(text.utf8); suffix = "txt" }
+        else { try WorkflowValueExportBudget.validate(value); bytes = try encoder.encode(value); suffix = "json" }
+        guard bytes.count <= 16 * 1_024 * 1_024 else { throw WorkflowIssue("结构化导出超过16 MiB预算。") }
+        struct ValueRecipe: Codable { let format: String; let version: Int; let exportID: UUID; let parents: [WorkflowAssetReference]; let encoding: String }
+        let recipe = try encoder.encode(ValueRecipe(format: "d.workflow.value-export", version: 1, exportID: exportID,
+            parents: value.assetReferences, encoding: suffix == "json" ? "D typed datum v1; preserves units and schema" : suffix))
+        return try publishWorkflowExport(files: [("1." + suffix, bytes), ("recipe.json", recipe)], name: name, exportID: exportID, directory: directory)
+    }
+
+    private func publishWorkflowExport(files: [(String, Data)], name: String, exportID: UUID, directory: URL) throws -> WorkflowExportReceipt {
+        guard !name.isEmpty, name.utf8.count <= 128, !name.contains("/"), !name.contains("\\"), !name.contains(".."), !name.contains("\0"),
+              !files.isEmpty, files.count <= 10, Set(files.map(\.0)).count == files.count,
+              files.allSatisfy({ !$0.0.isEmpty && !$0.0.contains("/") && !$0.0.contains("\\") && !$0.0.contains("..") && !$0.0.contains("\0") && $0.0 != "receipt.json" }) else { throw WorkflowIssue("导出名称或内容清单无效。") }
+        let parent = try ProjectFiles.openDirectory(directory); defer { Darwin.close(parent) }
+        let packageName = name + "-" + exportID.uuidString + ".dexport"
+        let destination = directory.appendingPathComponent(packageName, isDirectory: true)
+        let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
         let receipt = WorkflowExportReceipt(id: exportID, names: files.map(\.0), hashes: files.map { Self.workflowHash($0.1) })
         let receiptData = try encoder.encode(receipt)
         var info = stat()

@@ -75,11 +75,44 @@ struct WorkflowLifecycleTests {
         let engine = WorkflowFixtureEngine(directory: store.artifactDirectory)
         let session = WorkbenchSession(engine: engine, backendID: "fixture.image", status: { .init(activeRunID: nil, phase: nil, queuedRunIDs: []) },
             shutdown: {}, cleanup: {}, validateModel: { _ in }, textBackendID: "fixture.text", imageCapability: .scalableKlein4B)
-        let services = WorkflowServices(store: store, session: session,
+        let services = WorkflowServices(store: store, session: session, defaultIdentity: { $0 == .text ? "text:fixture" : "image:fixture" },
             resolveText: { await prepare(); return .init(identity: "text:fixture", reference: .init(directory: root, revision: "fixture"), backendID: "fixture.text", release: release) },
             resolveImage: { .init(identity: "image:fixture", reference: .init(directory: root, revision: "fixture"), backendID: "fixture.image") })
         let controller = WorkflowController(services: services); await controller.load()
         return (root, store, engine, controller)
+    }
+
+    @Test func cancelledAfterPublicationRetainsOutputAndResumeDoesNotRegenerate() async throws {
+        let release = WorkflowSubmitGate()
+        let (_, store, engine, c) = try await fixture(release: { await release.wait() })
+        c.addExample("text"); let target = try #require(c.graph?.nodes[1].id)
+        let work = Task { await c.run(target: target, only: false) }
+        for _ in 0..<2000 { if await release.entered { break }; try await Task.sleep(for: .milliseconds(1)) }
+        #expect(await release.entered)
+        await c.cancel(); await release.open(); await work.value
+        #expect(c.runs.last?.status == .cancelled)
+        #expect(c.runs.last?.steps.last?.outputs["output"]?.asset != nil)
+        #expect(c.runs.last?.steps.last?.status == .completed)
+        #expect(await engine.requests.count == 1)
+        await c.resume(runID: try #require(c.runs.last?.id))
+        #expect(c.runs.last?.status == .completed)
+        #expect(await engine.requests.count == 1)
+        try await c.close(); try await store.close()
+    }
+
+    @Test func onlyRetryIntentSurvivesInitialSaveFailure() async throws {
+        let (_, store, engine, c) = try await fixture()
+        c.addExample("text"); let target = try #require(c.graph?.nodes[1].id)
+        await c.run(target: target, only: false)
+        #expect(await engine.requests.count == 1)
+        var fail = true
+        c.beforeHistorySave = { if fail { throw WorkflowIssue("initial history unavailable") } }
+        await c.run(target: target, only: true)
+        #expect(c.runs.last?.planCheckpoint?.records.last?.step.repeatRequested == true)
+        fail = false; await c.save()
+        await c.resume(runID: try #require(c.runs.last?.id))
+        #expect(c.errorMessage == nil); #expect(await engine.requests.count == 2)
+        try await c.close(); try await store.close()
     }
 
     @Test func textWaitReopensIdempotentDecisionAndNoSilentRun() async throws {
@@ -512,7 +545,7 @@ struct WorkflowLifecycleTests {
         c.addExample("text"); let rewrite = try #require(c.graph?.nodes[1].id)
         var fail = true
         c.beforeHistorySave = {
-            if fail && c.runs.last?.steps.last?.status == .completed { throw WorkflowIssue("history volume unavailable") }
+            if fail && c.runs.last?.steps.last(where: { $0.node.operationID == "d.text.rewrite" })?.status == .completed { throw WorkflowIssue("history volume unavailable") }
         }
         await c.run(target: rewrite, only: false)
         #expect(c.runs.last?.status == .saving); #expect(c.runs.last?.steps.last?.status == .completed)
@@ -1001,6 +1034,27 @@ struct WorkflowLanguageServicesTests {
         catch { #expect(error as? InferenceFailure == .inputIntegrityChanged("controlled protected input change")) }
         #expect(released == 1)
         #expect(await store.snapshot().assets.isEmpty)
+        try await store.close()
+    }
+    @Test func explicitValueExportFormatsUseActualServiceRoute() async throws {
+        let store = try await ProjectStore.create(at: root(), name: "export formats")
+        let engine = WorkflowFixtureEngine(directory: store.artifactDirectory)
+        let session = WorkbenchSession(engine: engine, backendID: "fixture", status: { .init(activeRunID: nil, phase: nil, queuedRunIDs: []) }, shutdown: {}, cleanup: {}, validateModel: { _ in })
+        let service = WorkflowServices(store: store, session: session) { _, _ in throw WorkflowIssue("No model needed") }
+        service.destination = store.rootURL.deletingLastPathComponent()
+        let ref = try await store.publishWorkflowAsset(data: workflowFixturePNG(), mediaType: "image/png", metadata: .init(width: 16, height: 12), name: "image", operationID: "fixture").record.reference
+        var node = try #require(WorkflowRegistry.standard.operation("d.value.export")).definition.makeNode()
+        node.parameters["format"] = .text("midi")
+        for value in [WorkflowValue.asset(ref), .data(.asset(ref))] {
+            do { _ = try await service.executeCall(.init(node: node, stepID: UUID(), inputs: ["input": value])); Issue.record("PNG became MIDI") } catch {}
+        }
+        node.parameters["format"] = .text("json")
+        for value in [WorkflowValue.asset(ref), .data(.asset(ref))] {
+            let result = try await service.executeCall(.init(node: node, stepID: UUID(), inputs: ["input": value]))
+            guard case .outputs(let outputs) = result, case .receipt(let receipt)? = outputs["output"] else { Issue.record("No receipt"); continue }
+            #expect(receipt.names.contains("1.json")); #expect(!receipt.names.contains("1.png"))
+        }
+        #expect(await engine.requests.isEmpty)
         try await store.close()
     }
     @Test func corruptAudioPublicationIsTerminalNotSaveRetry() async throws {

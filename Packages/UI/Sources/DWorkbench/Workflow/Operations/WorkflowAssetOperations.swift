@@ -5,19 +5,27 @@ enum WorkflowAssetOperations {
     static let assetReference = WorkflowOperation(
         definition: .init(
             id: "d.asset.reference", title: "项目素材", detail: "引用已发布且不可变的项目素材。", inputs: [],
-            outputs: [.init("output", "素材", kinds: [.text, .image])], interaction: .assetInput
+            outputs: [.init("output", "素材", kinds: [.text, .image, .audio, .video, .notes, .chords, .tempo, .pitch])], interaction: .assetInput
         ),
         execute: { context, services in
             guard let reference = context.node.assetReference else {
                 throw WorkflowIssue("尚未选择项目素材。", nodeID: context.node.id)
             }
-            guard reference.kind == .text || reference.kind == .image else {
+            guard [.text, .image, .audio, .video, .notes, .chords, .tempo, .pitch].contains(reference.kind) else {
                 throw WorkflowIssue("该素材类型不能作为普通素材引用。", nodeID: context.node.id)
             }
             try await services.verifyAsset(reference)
             return .outputs(["output": .asset(reference)])
         }
     )
+
+    static let dataExport = WorkflowOperation(definition: .init(id: "d.value.export", title: "导出文件", detail: "导出明确输入的数据或媒体，不覆盖原件；JSON保留D的类型和单位，MIDI仅音符。",
+        inputs: [.init("input", "内容", kinds: WorkflowDataKind.allCases.filter { $0 != .receipt })], outputs: [.init("output", "回执", kinds: [.receipt])],
+        fields: [.init("fileName", "文件名", .text(multiline: false), .text("export")), .init("format", "格式", .choice(["auto", "json", "midi"]), .text("auto"))]),
+        validate: { node in try assetExport.validate(node) }, execute: { c, s in
+            guard let input = c.inputs["input"] else { throw WorkflowIssue("导出需要明确输入。") }
+            return .outputs(["output": .receipt(try await s.export(input, context: c))])
+        })
 
     static let assetChoose = WorkflowOperation(
         definition: .init(

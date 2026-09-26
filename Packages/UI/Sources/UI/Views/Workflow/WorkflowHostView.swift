@@ -38,7 +38,7 @@ struct WorkflowHostView: View {
         guard !model.isChangingProject else { return }
         let panel = NSOpenPanel(); panel.title = "导入为不可变资产快照"
         panel.canChooseDirectories = false; panel.allowsMultipleSelection = false
-        panel.allowedContentTypes = [.plainText, .png, .jpeg, .init(filenameExtension: "md") ?? .plainText]
+        panel.allowedContentTypes = [.plainText, .png, .jpeg, .audio, .mpeg4Movie, .json, .init(filenameExtension: "md") ?? .plainText]
         guard await panel.begin() == .OK, let url = panel.url, model.projectSession.workflow === controller else { return }
         let scoped = url.startAccessingSecurityScopedResource(); defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         await controller.importFile(url, nodeID: nodeID)

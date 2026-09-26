@@ -144,8 +144,8 @@ public struct WorkflowRegistry: Sendable {
         guard visited == graph.nodes.count else { throw WorkflowIssue("工作流不能包含环。") }
     }
 
-    public func plan(_ graph: WorkflowGraph, target: UUID, only: Bool) throws -> [UUID] {
-        try validate(graph)
+    public func plan(_ graph: WorkflowGraph, target: UUID, only: Bool, tools: [WorkflowToolDefinition] = []) throws -> [UUID] {
+        try validate(graph, tools: tools)
         guard graph.nodes.contains(where: { $0.id == target }) else {
             throw WorkflowIssue("目标节点不存在。", nodeID: target)
         }
@@ -182,8 +182,8 @@ public struct WorkflowRegistry: Sendable {
         return result
     }
 
-    public func signature(_ nodeID: UUID, in graph: WorkflowGraph) throws -> String {
-        let nodeOrder = try plan(graph, target: nodeID, only: false)
+    public func signature(_ nodeID: UUID, in graph: WorkflowGraph, tools: [WorkflowToolDefinition] = []) throws -> String {
+        let nodeOrder = try plan(graph, target: nodeID, only: false, tools: tools)
         let included = Set(nodeOrder)
         let nodes = Dictionary(uniqueKeysWithValues: graph.nodes.map { ($0.id, $0) })
         var canonical = SignatureBytes()

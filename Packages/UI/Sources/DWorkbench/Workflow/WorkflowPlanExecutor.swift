@@ -98,6 +98,55 @@ import Foundation
         }
     }
 
+    /// Settle exactly one explicit human decision, never continue another step.
+    public func settleWaiting(_ supplied: WorkflowPlanCheckpoint, stepID: UUID) async throws -> WorkflowPlanCheckpoint {
+        guard !executing else { throw WorkflowIssue("运行中不能提交另一等待决定。") }
+        checkpoint = supplied
+        try validateCheckpoint(); try validateSubmittedWaitingDecisions()
+        guard let record = supplied.records.first(where: { $0.step.id == stepID }), record.step.status == .waiting else { throw WorkflowIssue("等待点不存在。") }
+        func find(_ plan: WorkflowPlan, path: ArraySlice<WorkflowAddressComponent>) -> WorkflowPlannedStep? {
+            guard case .node(let id) = path.first, let step = plan.steps.first(where: { $0.id == id }) else { return nil }
+            if path.count == 1 { return step }
+            let rest = path.dropFirst()
+            switch (step.kind, rest.first) {
+            case (.branch(_, let yes, let no), .branch(let value)): return find(value ? yes : no, path: rest.dropFirst())
+            case (.map(let body, _), .item): return find(body, path: rest.dropFirst())
+            case (.loop(let body, _, _, _), .iteration): return find(body, path: rest.dropFirst())
+            case (.invoke(let reference, let body), .tool(let selected)) where reference == selected: return find(body, path: rest.dropFirst())
+            default: return nil
+            }
+        }
+        guard let planned = find(supplied.plan, path: record.address.path[...]) else { throw WorkflowIssue("等待地址不属于计划。") }
+        do { _ = try await resumeWaiting(at: record.address, planned: planned) }
+        catch PlanSuspension.stopped { }
+        catch PlanSuspension.waiting { }
+        return try currentCheckpoint()
+    }
+
+    /// Called only by the current Call's owner; keeps partial candidate evidence durable.
+    public func updateCandidates(stepID: UUID, candidates: [WorkflowCandidate]) async throws {
+        guard executing, let index = checkpoint?.records.firstIndex(where: { $0.step.id == stepID }),
+              checkpoint?.records[index].step.node.operationID == "d.image.generate" else { throw WorkflowIssue("候选进度不属于当前图像调用。") }
+        checkpoint?.records[index].step.outputs["output"] = .collection(candidates)
+        try await persist()
+    }
+
+    /// An explicit retry reuses bound inputs and successful candidates; rejection is never revived.
+    public static func preparingRetry(_ supplied: WorkflowPlanCheckpoint) throws -> WorkflowPlanCheckpoint {
+        guard !supplied.records.contains(where: { $0.step.status == .rejected || $0.step.humanTask?.rejected == true || $0.step.decision?.accepted == false }) else {
+            throw WorkflowIssue("人工拒绝的运行不能恢复。")
+        }
+        var result = supplied
+        if result.state == .saving { return result }
+        for i in result.records.indices where [.failed, .cancelled, .interrupted, .cancelling, .running].contains(result.records[i].step.status) {
+            result.records[i].step.status = .queued
+            result.records[i].step.error = nil
+            result.records[i].loopExit = nil
+        }
+        if result.state != .completed { result.state = .ready; result.error = nil }
+        return result
+    }
+
     private func executePlan(
         _ plan: WorkflowPlan,
         arguments: [String: WorkflowDatum],
@@ -135,7 +184,7 @@ import Foundation
 
         let runtimeNode = try nodeForArguments(planned.node, arguments: arguments, interface: plan.interface)
         if record(at: address) == nil {
-            let signature = "\(plan.graphID.uuidString.lowercased()):\(plan.graphRevision.uuidString.lowercased())"
+            let signature = planned.sourceSignature ?? "\(plan.graphID.uuidString.lowercased()):\(plan.graphRevision.uuidString.lowercased())"
             let run = WorkflowStepRun(node: runtimeNode, signature: signature)
             appendRecord(.init(address: address, step: run))
             try await persist()
@@ -433,8 +482,8 @@ import Foundation
         var state = try requiredDatum(inputs["input"], node: planned.node, port: "input")
         try state.validate(as: stateSchema)
         let shared = try sharedFields(inputs["shared"], node: planned.node)
-        guard shared["state"] == nil else {
-            throw WorkflowIssue("Loop shared 不能覆盖 state。", nodeID: planned.node.id)
+        guard shared["state"] == nil, shared["iteration"] == nil else {
+            throw WorkflowIssue("Loop shared 不能覆盖 state/iteration。", nodeID: planned.node.id)
         }
         let outputDefinition = try loopBodyOutput(body.interface)
         let exitChoices = ["conditionMet", "iterationLimit", "failed", "cancelled"]
@@ -449,7 +498,7 @@ import Foundation
                         "exitReason": .data(.enumeration("conditionMet", choices: exitChoices)),
                     ]
                 }
-                let arguments = shared.merging(["state": state]) { current, _ in current }
+                let arguments = shared.merging(["state": state, "iteration": .number(Double(iteration), unit: nil)]) { current, _ in current }
                 let outputs = try await executePlan(
                     body,
                     arguments: arguments,

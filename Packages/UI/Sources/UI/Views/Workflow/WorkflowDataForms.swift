@@ -1146,7 +1146,9 @@ struct WorkflowNodeDataEditor: View {
                 WorkflowRulesNodeEditor(configuration: configuration, availableRecordSchema: availableRecordSchema)
             case "d.value.pair":
                 WorkflowPathEditor(path: configurationPath, availableRecordSchema: availableRecordSchema, pathRequired: true)
-            case "d.value.validate":
+            case "d.music.chords":
+                WorkflowDatumEditor(value: configurationValue)
+            case "d.value.validate", "d.model.language", "d.control.human":
                 WorkflowSchemaEditor(schema: configurationSchema, depth: 0)
             default:
                 Text(workflowFormText(

@@ -169,3 +169,11 @@ Worker仅新增 Packages/UI/Sources/UI/Views/Workflow/WorkflowControlForms.swift
 另提供 @MainActor struct WorkflowGraphInterfaceEditor:View init(graph:Binding<WorkflowGraph>,registry:WorkflowRegistry,tools:[WorkflowToolDefinition])。真实公开输入name/schema/required，可增删改；输出name/nodeID/port/schema来自显式选择（候选为此graph节点有效端口），可编辑，不猜同名；重复名/无效schema保留草稿并显示错误。输入声明后同步到该公开输入N01的参数由Lead图操作负责，此表单只定义interface。不要重置用户图节点或连接。字段行身份独立UUID，改名不重建输入；编辑完整验证才发布；Graph revision由Lead的Binding setter维护。支持空输入/输出草稿，但执行缺output错误由Compiler报告，不静默选首项。
 
 新文案用既有语言Environment，键workflow.language.control.*；新增en/zh文本建议只输出任务output JSON。所有edit仅值Binding，文件/执行/模型均无调用。Tests实际helper检查创建body可Compiler编译、Branch两侧/Map/Loop结构和变量键、工具digest固定、切换工具接口显式更新、重复字段/错误类型不毁旧值、Unicode稳定行ID。不造第二执行器。Lead负责树状导航、包装/展开工具和运行按钮接线；Worker不修改这些共享所有权。
+
+## 统一运行接线中途检查（2026-09-27，仍未产品验收）
+
+Lead将Controller接到同一PlanExecutor，保持M0目标/单步、候选、确认与保存恢复；默认模型在提交时纯值冻结，实际Call按需租约。补取消发生在产物已保存/模型释放时的回归，恢复不重生成。N02扩大媒体引用，N18类型化导出沿原排他原子发布。独立只读审核指出编码预算需前置、媒体format不可忽略，Lead补前置保守编码预算及真实服务反例。预算不是模型容量限制。局部图编辑路径已提取，真实控制表单尚待接线。
+
+`lead/lead-routing-export-editing-r1`通过本次过滤集合（完整输出保留；Swift Testing 60项、XCTest单列），此前新导出fixture漏填图片尺寸导致一次失败，补齐真实声明后通过。受测为候选e443dcde工作区已知增量，后续提交记录字节映射；不称在未来SHA上测试。CHECKPOINT初交已有3项签名兼容失败，非实现者另找到拒绝preview/控制输出链接/决定输出一致性/公开输入校验缺口，尚待普通repair1；当前不能将其作为已接纳保护。
+
+CONTROL-FORMS初交结束、两文件候选。存在一次`/dev/fd/11`进程替换只读拒绝后未停报、改jq继续的协议事件；没有观察到成功越界或扩大权限，不追改成合规。Lead检查完整事件、任务文件及受限上下文后继续范围内审核。该事件独立于代码质量。Loop轮次参数由Lead按既定state/iteration契约补接，原Worker临时optional写法后续同步；不把未实装变量显示成已运行。
