@@ -1,6 +1,13 @@
 import Foundation
 import Observation
 
+public struct WorkflowAssetBindingTarget: Sendable, Equatable {
+    public let graphID: UUID
+    public let revision: UUID
+    public let path: [WorkflowBodyLocation]
+    public let node: WorkflowNode
+}
+
 /// Coordinates compiled structured workflows; all expensive model work is still admitted by the shared InferenceRuntime.
 @MainActor @Observable public final class WorkflowController {
     public let registry: WorkflowRegistry
@@ -17,6 +24,9 @@ import Observation
     public private(set) var isSaving = false
     public private(set) var readOnlyReason: String?
     public var errorMessage: String?
+    public var mediaPreviewReference: WorkflowAssetReference?
+    /// The existing project recording owner may temporarily reserve interactive work.
+    @ObservationIgnored public var externalOperationBusy: () -> Bool = { false }
     public private(set) var progressMessage = "选择一个可编辑样例，或添加节点开始。"
     public var textModelDescription = "尚未选择文字模型"
     public var imageModelDescription = "尚未选择图像模型"
@@ -98,11 +108,29 @@ import Observation
     }
     public func bindExistingAsset(_ id: UUID, nodeID: UUID) async {
         guard !closed, !closing, !isRunning, readOnlyReason == nil else { return }
-        let graphID = selectedGraphID
+        guard let target = assetBindingTarget(nodeID: nodeID) else { return }
         do {
             let ref = try await services.store.pinWorkflowAsset(id)
-            guard graphID == selectedGraphID, !closed, !closing else { throw WorkflowIssue("流程已切换；素材未绑定到另一流程。") }
+            guard isCurrent(target) else { throw WorkflowIssue("流程或输入节点已改变；素材未绑定到另一位置。") }
             attach(ref, nodeID: nodeID); try await persist()
+        } catch { errorMessage = error.localizedDescription }
+    }
+    public func assetBindingTarget(nodeID: UUID) -> WorkflowAssetBindingTarget? {
+        guard !closed, !closing, readOnlyReason == nil, let root = rootGraph,
+              let node = graph?.nodes.first(where: { $0.id == nodeID }),
+              registry.operation(node.operationID)?.definition.interaction == .assetInput else { return nil }
+        return .init(graphID: root.id, revision: root.revision, path: bodyPath, node: node)
+    }
+    public func isCurrent(_ target: WorkflowAssetBindingTarget) -> Bool {
+        !closed && !closing && readOnlyReason == nil && rootGraph?.id == target.graphID &&
+        rootGraph?.revision == target.revision && bodyPath == target.path &&
+        graph?.nodes.first(where: { $0.id == target.node.id }) == target.node
+    }
+    public func bindRecordedAsset(_ id: UUID, target: WorkflowAssetBindingTarget) async {
+        do {
+            let ref = try await services.store.pinWorkflowAsset(id)
+            guard isCurrent(target), ref.kind == .audio else { throw WorkflowIssue("录音已保存，但原输入位置已改变；请从项目素材中重新选择。") }
+            attach(ref, nodeID: target.node.id); try await persist(); await onChange()
         } catch { errorMessage = error.localizedDescription }
     }
     public func toggleCollapsed(_ id: UUID) {
@@ -278,10 +306,10 @@ import Observation
     }
     public func importFile(_ url: URL, nodeID: UUID) async {
         guard !closed, !closing, readOnlyReason == nil else { return }
-        let graphID = selectedGraphID
+        guard let target = assetBindingTarget(nodeID: nodeID) else { return }
         do {
             let asset = try await services.store.importWorkflowMediaFile(at: url)
-            guard graphID == selectedGraphID else { throw WorkflowIssue("导入期间已切换流程；资产已保存，未绑定到另一流程。") }
+            guard isCurrent(target) else { throw WorkflowIssue("导入期间流程或输入已改变；资产已保存，未绑定到另一位置。") }
             attach(asset.record.reference, nodeID: nodeID); try await persist(); await onChange()
         } catch { errorMessage = error.localizedDescription }
     }
@@ -360,6 +388,7 @@ import Observation
         catch { errorMessage = error.localizedDescription }
     }
     public func run(target: UUID, only: Bool) async {
+        guard !externalOperationBusy() else { errorMessage = "请先结束录音或恢复保存，再运行流程。"; return }
         guard bodyPath.isEmpty else { errorMessage = "请返回外层运行；不能把局部模板当作独立调用。"; return }
         guard !closed, !closing, !isRunning, readOnlyReason == nil, let original = graph else { return }
         guard !hasPendingSaves else { errorMessage = "请先恢复保存，避免重复计算。"; return }
@@ -389,6 +418,7 @@ import Observation
             }
             var run = WorkflowRun(id: checkpoint.runID, graph: frozen, targetNodeID: target, status: .running)
             run.planCheckpoint = checkpoint
+            run.steps = checkpoint.records.filter { $0.address.path.count == 1 }.map(\.step)
             runs.append(run); activeRunID = run.id
             try await persist()
             try await executePlan(runID: run.id, force: only ? target : nil)

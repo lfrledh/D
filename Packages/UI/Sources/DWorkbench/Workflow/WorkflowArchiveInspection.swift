@@ -26,6 +26,27 @@ private extension WorkflowNode {
 
 /// Pure validation shared by the durable Store. Unknown source keys are retained read-only.
 enum WorkflowArchiveInspection {
+    /// Rebuild trusted plan structure from the frozen graph and versioned tools,
+    /// never from the checkpoint being checked. Older M0 runs have no plan.
+    static func validateRun(_ run: WorkflowRun, tools: [WorkflowToolDefinition], registry: WorkflowRegistry = .standard) throws {
+        guard let checkpoint = run.planCheckpoint else { return }
+        guard checkpoint.runID == run.id,
+              checkpoint.records.filter({ $0.address.path.count == 1 }).map(\.step) == run.steps else {
+            throw WorkflowIssue("运行身份或顶层步骤投影与恢复点不符。")
+        }
+        let compiler = WorkflowPlanCompiler(registry: registry)
+        // These are the two persisted run scopes currently offered by the controller.
+        // Exact comparison includes topology, interfaces, signatures and nested tools.
+        var expected: WorkflowPlan?
+        for only in [false, true] {
+            let compiled = try compiler.compile(run.graph, tools: tools, target: run.targetNodeID, only: only)
+            let bound = try WorkflowPlanBinding.freeze(compiled, defaults: checkpoint.modelDefaults ?? [:], registry: registry)
+            if bound == checkpoint.plan { expected = bound; break }
+        }
+        guard let expected else { throw WorkflowIssue("恢复计划与已保存的流程、工具版本或运行范围不符。") }
+        try WorkflowCheckpointValidation.validate(checkpoint, expected: expected, registry: registry)
+    }
+
     static func containsUnknownFields(original: Data, decoded: WorkflowArchive) throws -> Bool {
         let source = try JSONSerialization.jsonObject(with: original)
         let encoded = try JSONSerialization.jsonObject(with: JSONEncoder().encode(decoded))

@@ -4,6 +4,40 @@ import Testing
 
 @Suite("Structured workflow plan r1") @MainActor
 struct WorkflowPlanTests {
+    @Test func retryPreservesFailuresAlreadyCollectedByCompletedMap() async throws {
+        let registry = try makeRegistry()
+        let child = try makeNode("fixture.source", registry: registry)
+        let body = namedPlan(node: child, schema: .number(unit: nil))
+        let map = try makeNode("d.control.map", registry: registry)
+        let downstream = try makeNode("fixture.echo", registry: registry)
+        let plan = WorkflowPlan(graphID: UUID(), graphRevision: UUID(), steps: [
+            .init(node: map, inputs: [], kind: .map(body: body, continueOnFailure: true), effect: .pure),
+            .init(node: downstream, inputs: [.init(port: "input", sourceNode: map.id)], effect: .pure),
+        ])
+        var childCalls = 0, downstreamCalls = 0
+        let call: @MainActor (WorkflowExecutionContext) async throws -> WorkflowOperationResult = { context in
+            if context.node.id == child.id { childCalls += 1; throw FixtureError.failed }
+            downstreamCalls += 1
+            if downstreamCalls == 1 { throw FixtureError.failed }
+            return .outputs(["output": try #require(context.inputs["input"])])
+        }
+        let executor = WorkflowPlanExecutor(registry: registry, executeCall: call, save: { _ in })
+        var initial = WorkflowPlanCheckpoint(plan: plan)
+        initial.externalInputs[map.id] = ["input": .data(.list(element: .text, items: [.init(id: "failed", value: .text("x"))]))]
+        do { _ = try await executor.execute(initial); Issue.record("Expected downstream failure") } catch {}
+        let failed = try #require(executor.checkpoint)
+        let oldChild = try #require(failed.records.first { $0.step.node.id == child.id })
+        #expect(oldChild.step.status == .failed)
+        #expect(failed.records.first { $0.step.node.id == map.id }?.step.status == .completed)
+        let retry = try WorkflowPlanExecutor.preparingRetry(failed)
+        #expect(retry.records.first { $0.step.id == oldChild.id } == oldChild)
+        let resumed = WorkflowPlanExecutor(registry: registry, executeCall: call, save: { _ in })
+        let final = try await resumed.execute(retry)
+        #expect(final.state == .completed)
+        #expect(childCalls == 1)
+        #expect(downstreamCalls == 2)
+    }
+
     @Test func typedPublicationSaveFailureRetriesOnlyPublicationAndTypedCheckpointFailureNeverRecomputes() async throws {
         for failInsideCall in [false, true] {
             let registry = try makeRegistry(), node = try makeNode("fixture.source", registry: makeRegistry())

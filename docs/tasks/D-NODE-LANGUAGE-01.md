@@ -196,3 +196,11 @@ E04同一发布文字输入分叉文字/图像/受控音乐/T2V，以Record返�
 Lead接入局部body导航、真实ControlEditor/公开接口、选区边界检查后Invoke封装、固定工具展开为独立编辑副本/另存、typed人工决定与安全暂停；所有运行仍同一个Executor。人工决定用完整期望task比对，且同一顶层等待点不再在主/历史创建两个可编辑表单。Control表单更新被Controller拒绝却误标Apply成功、dirty进入丢草稿两个问题交CONTROL-FORMS repair1，预算仍初交+两轮。Loop现在明确提供1起始iteration，UI必填，原临时optional断言随契约修正，不是放宽标准。
 
 EXAMPLES初次实现因旧G01集合到通用List缺口按要求停报，无写入；这是共享接口缺口，不计普通逻辑返工。Lead新增明确 `d.value.candidates` 适配操作：output为全部record列表（id/attemptID/十进制seed/status/optional资产与错误），successful为显式过滤后的图片List；不丢失败、不调用模型、不改变旧G01/选择语义。`tool-candidate-bridge`相应CPU/界面类型检查通过，实际GUI/模型仍未验收。续接初交总1800秒预算扣除已用124.42秒，普通修复仍0/2。预检shell误用了zsh path导致一次127，绝对路径只读补读成功；Lead明确分类后核验实际Sol/high/隔离/禁网，未当成权限通过探针。
+
+## 持久化接线与第二轮校验（2026-09-27，仍实施中）
+
+Lead将checkpoint的独立图/工具编译对照接入真实ProjectStore，核对runID与顶层投影；不信任checkpoint.plan自身为expected。真实单步首次保存同步投影。preparingRetry保留已完成/partial父调用下的失败证据，不让下游重试篡改Map已结算项。新增实际Executor反例；旧冷恢复fixture同时更新v2 checkpoint/投影，未放宽验收。`lead/durable-plan-integration-r1`62项/4套CPU通过，起点fbedbe654+本提交已知六文件增量；不是全任务或GUI通过。
+
+CHECKPOINT repair1在Lead CPU有6/7失败（fixture可选nil==nil误触发故障、公开输入输出schema不一致），独立审阅另发现Loop恢复前缀、控制求值失败保存边界。已发最终ordinaryrepair2，仍原任务0次Lead接管；共享retry缺陷由Lead负责。CONTROL-FORMS repair1本机CPU已通过，EXAMPLES续接初交573.37秒完成、无新权限事件、两文件已提交候选bc94274（完整SHA外部Git记录），初交累计扣除此前124.42秒，不重置预算。
+
+源仍130603d23a4da81ba2a9852766f3589695ec9468，个人scheme内容/未暂存状态核对不变。H27 GUI锁屏仍保留；没有新原生或模型验收。所有实现归因按各任务记录保留，不把Lead接线/修复归为Worker独立完成。

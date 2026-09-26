@@ -3142,8 +3142,14 @@ extension ProjectStore {
         for run in archive.runs {
             guard run.graph.nodes.contains(where: { $0.id == run.targetNodeID }),
                   Set(run.steps.map(\.id)).count == run.steps.count else { throw WorkflowIssue("流程运行快照无效。") }
+            try WorkflowArchiveInspection.validateRun(run, tools: archive.tools ?? [])
+            if let checkpoint = run.planCheckpoint {
+                for ref in try WorkflowCheckpointValidation.assetReferences(in: checkpoint) { try validateRef(ref) }
+            }
             for step in run.steps {
-                guard run.graph.nodes.contains(step.node) else { throw WorkflowIssue("步骤不属于运行快照。") }
+                if run.planCheckpoint == nil {
+                    guard run.graph.nodes.contains(step.node) else { throw WorkflowIssue("步骤不属于运行快照。") }
+                }
                 for v in Array(step.inputs.values) + Array(step.outputs.values) { try validateValue(v) }
                 if let decision = step.decision {
                     guard decision.waitingStepID == step.id else { throw WorkflowIssue("人工决定不属于此等待点。") }

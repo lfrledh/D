@@ -583,6 +583,10 @@ struct WorkflowLifecycleTests {
             outputs: ["output": .asset(newer.record.reference)], status: .completed)
         archive.runs[archive.runs.count - 1].status = .interrupted
         archive.runs[archive.runs.count - 1].steps[0].status = .interrupted
+        // The checkpoint is authoritative in v2; cold-process interruption must
+        // update its matching projection as the production loader does.
+        archive.runs[archive.runs.count - 1].planCheckpoint?.state = .interrupted
+        archive.runs[archive.runs.count - 1].planCheckpoint?.records[0].step.status = .interrupted
         archive.runs.append(.init(graph: try #require(c.graph), targetNodeID: confirmNode.id, steps: [newerStep], status: .completed))
         _ = try await store.saveWorkflow(graphs: archive.graphs, runs: archive.runs, expectedRevision: archive.revision)
         c.deactivateAfterClose()

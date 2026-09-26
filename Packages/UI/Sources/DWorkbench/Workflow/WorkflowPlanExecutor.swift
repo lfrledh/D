@@ -138,7 +138,12 @@ import Foundation
         }
         var result = supplied
         if result.state == .saving { return result }
+        // A settled control owns its complete trace, including failures it explicitly
+        // collected. Retrying a later step must not rewrite that historical evidence.
+        let settled = result.records.filter { [.completed, .partial].contains($0.step.status) }.map(\.address.path)
         for i in result.records.indices where [.failed, .cancelled, .interrupted, .cancelling, .running].contains(result.records[i].step.status) {
+            let path = result.records[i].address.path
+            if settled.contains(where: { $0.count < path.count && path.starts(with: $0) }) { continue }
             result.records[i].step.status = .queued
             result.records[i].step.error = nil
             result.records[i].loopExit = nil
