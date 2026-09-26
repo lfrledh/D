@@ -19,6 +19,7 @@ struct WorkflowModelBindingRealTests {
         let project = root.appendingPathComponent("two-models.dproject")
         let suite = "D.BoundaryReal." + UUID().uuidString
         let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
         let owner = ProjectSession(sessionFactory: { artifacts in try await AppSessionFactory.makeSession(artifactDirectory: artifacts) }, settings: defaults)
         do {
         await owner.createProject(at: project)
@@ -48,10 +49,16 @@ struct WorkflowModelBindingRealTests {
         try #require(reopened.errorMessage == nil, Comment(rawValue: reopened.errorMessage ?? ""))
         let run = try #require(reopened.runs.last)
         #expect(run.status == .completed)
-        for (id, identity) in [(first, identityA), (second, identityB)] {
+        let archive = try #require(try await reopened.services.store.workflowState().archive)
+        for (id, identity, directory) in [(first, identityA, a), (second, identityB, b)] {
             let step = try #require(run.steps.first { $0.node.id == id })
             #expect(step.node.parameters["modelID"] == .text(identity))
             let asset = try #require(step.outputs["output"]?.asset)
+            let record = try #require(archive.assets.first { $0.reference == asset })
+            let request = try #require(record.request)
+            #expect(request.model.directory.standardizedFileURL == directory.standardizedFileURL)
+            #expect("text:" + (request.model.revision ?? directory.lastPathComponent) == identity)
+            #expect(record.metadata["modelIdentity"] == identity)
             let text = try #require(String(data: try await reopened.preview(asset), encoding: .utf8))
             #expect(!text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }

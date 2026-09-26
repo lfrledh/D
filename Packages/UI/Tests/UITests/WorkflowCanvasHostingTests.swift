@@ -133,10 +133,11 @@ struct WorkflowCanvasHostingTests {
             resolveImage: { throw WorkflowIssue("Hosting must not resolve a model") })
         let controller = WorkflowController(services: services); await controller.load(); controller.addExample("image")
         let before = controller.graphs
+        let language = UILanguageStore(preferredLanguages: ["zh-Hans"])
         var commands = 0
         let view = WorkflowCanvasView(controller: controller, onTextModel: { commands += 1 }, onImageModel: { commands += 1 },
             onImport: { _ in commands += 1 }, onDestination: { commands += 1 }, onPublishText: { commands += 1 },
-            onReturnText: { _ in commands += 1 })
+            onReturnText: { _ in commands += 1 }).environment(\.dLanguageStore, language)
         let host = NSHostingView(rootView: view)
         for width: CGFloat in [1320, 820, 1320] {
             host.frame = CGRect(x: 0, y: 0, width: width, height: 850)
@@ -162,11 +163,15 @@ struct WorkflowCanvasHostingTests {
         let editor = try #require(descendants(host).compactMap { $0 as? NSTextView }.first { $0.isEditable })
         let draft = "尚未接受的修改 👩🏽‍🎨 e\u{301}"
         editor.string = draft; editor.didChangeText()
-        for width: CGFloat in [820, 1320] {
+        editor.setSelectedRange(NSRange(location: 0, length: 2))
+        for (width, locale): (CGFloat, String) in [(820, "en"), (1320, "zh-Hans"), (820, "en")] {
+            try language.select(locale)
             host.frame.size.width = width; host.layoutSubtreeIfNeeded()
             try await Task.sleep(for: .milliseconds(100))
             let current = try #require(descendants(host).compactMap { $0 as? NSTextView }.first { $0.isEditable })
             #expect(current === editor); #expect(current.string == draft)
+            #expect(current.selectedRange() == NSRange(location: 0, length: 2))
+            #expect(host.fittingSize.width <= width)
             #expect(controller.runs.last?.status == .waiting)
             #expect(controller.runs.last?.steps.last?.decision == nil)
             #expect(controller.runs.last?.steps.last?.reviewTextDraft == draft)
