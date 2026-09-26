@@ -902,7 +902,10 @@ extension WorkflowLifecycleTests {
         owner.refreshWorkflowModels()
         await c.run(target: target.nodeID, only: false)
         #expect(c.errorMessage == nil)
-        #expect(await engine.requests.last?.model.directory == b.resolvingSymlinksInPath())
+        let actual = try #require(await engine.requests.last?.model.directory)
+        print("BOUNDARY_RELOCATED_MODEL=\(actual.absoluteString), expected=\(b.absoluteString)")
+        #expect(actual.resolvingSymlinksInPath().path == b.resolvingSymlinksInPath().path)
+        #expect(actual.resolvingSymlinksInPath().path != a.resolvingSymlinksInPath().path)
         await owner.closeProject()
     }
 }

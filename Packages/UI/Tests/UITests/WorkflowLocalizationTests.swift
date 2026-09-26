@@ -172,10 +172,7 @@ struct WorkflowLocalizationTests {
             while let object = pending.popLast(), visited.count < 2_000 {
                 guard visited.insert(ObjectIdentifier(object)).inserted else { continue }
                 let accessibility: (label: String?, value: Any?, children: [Any])?
-                if let view = object as? NSView {
-                    accessibility = (view.accessibilityLabel(), view.accessibilityValue(),
-                                     view.accessibilityChildren() ?? [])
-                } else if let element = object as? NSAccessibilityElement {
+                if let element = object as? any NSAccessibilityProtocol {
                     accessibility = (element.accessibilityLabel(), element.accessibilityValue(),
                                      element.accessibilityChildren() ?? [])
                 } else {
@@ -227,6 +224,7 @@ struct WorkflowLocalizationTests {
         #expect(controller.selectedNodeID == nodeIDBefore)
         #expect(controller.graph?.nodes.first { $0.id == input.id }?.parameters["text"] == .text(draft))
         #expect(controller.runs.count == runCountBefore)
+        print("BOUNDARY_RENDERED_CHROME=\(chrome.sorted())")
         #expect(chrome.contains(where: { $0.contains("Save") || $0.contains("Operations") }))
         #expect(commands == 0)
         #expect(await engine.calls == 0)
