@@ -499,11 +499,10 @@ private func musicNumber(_ fields: [String: WorkflowDatum], _ name: String,
 private func musicInteger(_ fields: [String: WorkflowDatum], _ name: String,
                           unit: String?) throws -> Int {
     let value = try musicNumber(fields, name, unit: unit)
-    guard value.rounded(.towardZero) == value,
-          value >= Double(Int.min), value <= Double(Int.max) else {
+    guard let integer = Int(exactly: value) else {
         throw WorkflowIssue("Music field \(name) must be an integer.")
     }
-    return Int(value)
+    return integer
 }
 
 private func musicRequireVersion(_ fields: [String: WorkflowDatum]) throws {

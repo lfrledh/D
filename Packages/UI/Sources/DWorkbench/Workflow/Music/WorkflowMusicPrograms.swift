@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 public enum WorkflowMusicSnap: String, Codable, Sendable, Equatable, CaseIterable {
@@ -127,7 +128,7 @@ public enum WorkflowMusicPrograms {
             switch pattern {
             case .sustained:
                 for (index, pitch) in pitches.enumerated() {
-                    notes.append(.init(id: "\(chord.id):\(index)", pitch: pitch,
+                    notes.append(.init(id: derivedNoteID(sourceID: chord.id, pattern: pattern, index: index), pitch: pitch,
                                        start: chord.start, end: chord.end, velocity: 1))
                 }
             case .arpeggio:
@@ -135,7 +136,7 @@ public enum WorkflowMusicPrograms {
                 var index = 0
                 while cursor < chord.end {
                     let end = min(cursor + 0.5, chord.end)
-                    notes.append(.init(id: "\(chord.id):\(index)",
+                    notes.append(.init(id: derivedNoteID(sourceID: chord.id, pattern: pattern, index: index),
                                        pitch: pitches[index % pitches.count],
                                        start: cursor, end: end, velocity: 1))
                     cursor = end
@@ -163,10 +164,6 @@ public enum WorkflowMusicPrograms {
         if sequence.clock == .quarterNotes, sequence.tempo == nil {
             throw WorkflowIssue("Beat-clock rendering requires a tempo map.")
         }
-        guard sequence.notes.allSatisfy({ $0.start >= 0 && $0.end >= 0 }) else {
-            throw WorkflowIssue("Reference rendering rejects negative events; crop the pickup first.")
-        }
-
         let secondsPerBeat = sequence.tempo.map { 60 / $0.beatsPerMinute }
         let origin = sequence.tempo?.firstBeatSeconds ?? 0
         func seconds(_ value: Double) -> Double {
@@ -179,6 +176,9 @@ public enum WorkflowMusicPrograms {
         let durationSeconds = seconds(sequence.duration)
         guard durationSeconds.isFinite, durationSeconds > 0, durationSeconds <= 120 else {
             throw WorkflowIssue("Reference rendering requires audible-length duration in 0...120 seconds.")
+        }
+        guard sequence.notes.allSatisfy({ seconds($0.start) >= 0 && seconds($0.end) >= 0 }) else {
+            throw WorkflowIssue("Reference rendering rejects events mapped before the timeline origin; crop the pickup first.")
         }
 
         let audible = try sequence.notes.compactMap { note -> RenderNote? in
@@ -227,13 +227,22 @@ public enum WorkflowMusicPrograms {
             }
         }
 
-        let peak = samples.reduce(0.0) { max($0, abs(Double($1))) }
+        var peak = 0.0
+        for index in samples.indices {
+            if index & 4_095 == 0 { try Task.checkCancellation() }
+            peak = max(peak, abs(Double(samples[index])))
+        }
         if peak > 0.95 {
             let scale = Float(0.95 / peak)
-            for index in samples.indices { samples[index] *= scale }
+            for index in samples.indices {
+                if index & 4_095 == 0 { try Task.checkCancellation() }
+                samples[index] *= scale
+            }
         }
         try Task.checkCancellation()
-        return try encodeFloat32WAV(samples: samples, sampleRate: sampleRate)
+        let wave = try encodeFloat32WAV(samples: samples, sampleRate: sampleRate)
+        try Task.checkCancellation()
+        return wave
     }
 
     public static func midi(sequence: WorkflowNoteSequence) throws -> Data {
@@ -241,36 +250,48 @@ public enum WorkflowMusicPrograms {
         if sequence.clock == .quarterNotes, sequence.tempo == nil {
             throw WorkflowIssue("Beat-clock MIDI requires a tempo map.")
         }
-        guard sequence.notes.allSatisfy({ $0.start >= 0 && $0.end >= 0 }) else {
-            throw WorkflowIssue("MIDI export rejects negative events; crop the pickup first.")
-        }
-
         let tempoBPM = sequence.clock == .seconds ? 120 : sequence.tempo!.beatsPerMinute
         let micros = Int((60_000_000 / tempoBPM).rounded(.toNearestOrAwayFromZero))
         guard (1...0xFF_FFFF).contains(micros) else { throw WorkflowIssue("MIDI tempo is outside the three-byte range.") }
 
+        func timelineQuarterNotes(_ value: Double) -> Double {
+            switch sequence.clock {
+            case .seconds:
+                value * 2 // Seconds-clock MIDI always uses 120 BPM for time encoding.
+            case .quarterNotes:
+                let mappedSeconds = sequence.tempo!.firstBeatSeconds + value * 60 / tempoBPM
+                return mappedSeconds * tempoBPM / 60
+            }
+        }
         func tick(_ value: Double) throws -> Int {
-            let scaled = value * (sequence.clock == .seconds ? 1_920 : 960)
+            let scaled = timelineQuarterNotes(value) * 960
             guard scaled.isFinite, scaled >= 0, scaled <= Double(Int.max) else {
                 throw WorkflowIssue("MIDI tick is outside its safe range.")
             }
             return Int(scaled.rounded(.toNearestOrAwayFromZero))
         }
+        guard sequence.notes.allSatisfy({
+            timelineQuarterNotes($0.start) >= 0 && timelineQuarterNotes($0.end) >= 0
+        }) else {
+            throw WorkflowIssue("MIDI export rejects events mapped before the timeline origin; crop the pickup first.")
+        }
 
         var byPitch: [Int: [(start: Double, end: Double, startTick: Int, endTick: Int)]] = [:]
         var events: [MIDIEvent] = []
         for note in sequence.notes where note.velocity > 0 {
+            let mappedStart = timelineQuarterNotes(note.start)
+            let mappedEnd = timelineQuarterNotes(note.end)
             let startTick = try tick(note.start)
             let endTick = try tick(note.end)
             guard endTick > startTick else { throw WorkflowIssue("MIDI quantization collapsed a note to zero length.") }
             let prior = byPitch[note.pitch] ?? []
-            guard prior.allSatisfy({ note.start >= $0.end || note.end <= $0.start }) else {
+            guard prior.allSatisfy({ mappedStart >= $0.end || mappedEnd <= $0.start }) else {
                 throw WorkflowIssue("MIDI export rejects overlapping notes of the same pitch.")
             }
             guard prior.allSatisfy({ startTick >= $0.endTick || endTick <= $0.startTick }) else {
                 throw WorkflowIssue("MIDI tick quantization created a same-pitch overlap.")
             }
-            byPitch[note.pitch, default: []].append((note.start, note.end, startTick, endTick))
+            byPitch[note.pitch, default: []].append((mappedStart, mappedEnd, startTick, endTick))
             let velocity = max(1, min(127, Int((note.velocity * 127).rounded(.toNearestOrAwayFromZero))))
             events.append(.init(tick: startTick, pitch: note.pitch, velocity: velocity, isOn: true))
             events.append(.init(tick: endTick, pitch: note.pitch, velocity: 0, isOn: false))
@@ -316,6 +337,13 @@ private struct RenderNote {
     let velocity: Double
 }
 
+private func derivedNoteID(sourceID: String, pattern: WorkflowChordPattern,
+                           index: Int) -> String {
+    let payload = "\(sourceID.utf8.count):\(sourceID)|\(pattern.rawValue.utf8.count):\(pattern.rawValue)|\(index)"
+    let digest = SHA256.hash(data: Data(payload.utf8)).map { String(format: "%02x", $0) }.joined()
+    return "d.music.note.\(digest)"
+}
+
 private func validatePolyphony(_ notes: [RenderNote]) throws {
     var boundaries: [(time: Double, delta: Int)] = []
     boundaries.reserveCapacity(notes.count * 2)
@@ -335,10 +363,11 @@ private func validatePolyphony(_ notes: [RenderNote]) throws {
 }
 
 private func encodeFloat32WAV(samples: [Float], sampleRate: Int) throws -> Data {
+    try Task.checkCancellation()
     let dataByteCount = samples.count * MemoryLayout<Float>.size
     guard dataByteCount <= Int(UInt32.max) - 36 else { throw WorkflowIssue("WAV output is too large.") }
     var wave = Data(count: 44 + dataByteCount)
-    wave.withUnsafeMutableBytes { (bytes: UnsafeMutableRawBufferPointer) in
+    try wave.withUnsafeMutableBytes { (bytes: UnsafeMutableRawBufferPointer) throws in
         writeASCII("RIFF", at: 0, to: bytes)
         writeLittleEndian(UInt32(36 + dataByteCount), at: 4, to: bytes)
         writeASCII("WAVE", at: 8, to: bytes)
@@ -353,9 +382,11 @@ private func encodeFloat32WAV(samples: [Float], sampleRate: Int) throws -> Data 
         writeASCII("data", at: 36, to: bytes)
         writeLittleEndian(UInt32(dataByteCount), at: 40, to: bytes)
         for (index, sample) in samples.enumerated() {
+            if index & 4_095 == 0 { try Task.checkCancellation() }
             writeLittleEndian(sample.bitPattern, at: 44 + index * 4, to: bytes)
         }
     }
+    try Task.checkCancellation()
     return wave
 }
 
