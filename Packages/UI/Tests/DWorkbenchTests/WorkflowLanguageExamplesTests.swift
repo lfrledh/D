@@ -183,7 +183,9 @@ struct WorkflowLanguageExamplesTests {
             Issue.record("E03 needs a real Map for three editable candidate intentions")
             return
         }
-        #expect(body.graphInputNames == Set(["item", "notes", "chords"]))
+        #expect(body.graphInputNames == Set(["item", "notes", "chords", "optimizeStyle"]))
+        #expect(all.filter { $0.operationID == "d.control.human" }.count == 2)
+        #expect(all.filter { $0.operationID == "d.model.language" }.count == 2)
 
         let target = try #require(bundle.graph.nodes.first { $0.title == "返回音乐候选" })
         let targetPlan = try WorkflowPlanCompiler().compile(bundle.graph, tools: bundle.tools, target: target.id)
@@ -195,6 +197,88 @@ struct WorkflowLanguageExamplesTests {
         #expect(Set(bundle.graph.connections.filter { $0.targetNode == delivery.id }.map(\.targetPort)) == Set([
             "candidates", "keySuggestions", "referenceAudio", "melody", "chords",
         ]))
+    }
+
+    @Test func e03HarmonyProposalBranchIsLazyAndFallbackPreservesProvidedTrack() async throws {
+        let bundle = try WorkflowLanguageExamples.make(.music)
+        let branch = try #require(bundle.graph.nodes.first { $0.title == "按开关选择和弦来源" })
+        let request = try #require(bundle.graph.nodes.first { $0.title == "组合和弦提案条件" })
+        let supplied = try #require(bundle.graph.nodes.first { $0.title == "输入明确和弦" }?.dataConfiguration?.value)
+        let defaultFlag = try #require(bundle.graph.nodes.first {
+            $0.title == "可选语言模型和弦提案"
+        }?.dataConfiguration?.value)
+        #expect(defaultFlag == .boolean(false))
+        let requestFields = try #require(request.dataConfiguration?.fields)
+        let plan = try WorkflowPlanCompiler().compile(
+            bundle.graph, tools: bundle.tools, target: branch.id, only: true
+        )
+
+        let unavailable = MusicExampleServices(languageAvailable: false)
+        let fallback = WorkflowDatum.record(schema: requestFields, fields: [
+            "flag": defaultFlag, "chords": supplied,
+        ])
+        let fallbackResult = try await executeExamplePlan(
+            plan, services: unavailable, externalInputs: [branch.id: ["input": .data(fallback)]]
+        )
+        #expect(fallbackResult.state == .completed)
+        #expect(fallbackResult.outputs["output"]?.datum == supplied)
+        #expect(unavailable.languageCallCount == 0)
+
+        let available = MusicExampleServices(languageAvailable: true)
+        let proposal = WorkflowDatum.record(schema: requestFields, fields: [
+            "flag": .boolean(true), "chords": supplied,
+        ])
+        let proposalResult = try await executeExamplePlan(
+            plan, services: available, externalInputs: [branch.id: ["input": .data(proposal)]]
+        )
+        let proposed = try #require(proposalResult.outputs["output"]?.datum)
+        try proposed.validate(as: WorkflowChordTrack.schema)
+        let proposedTrack = try WorkflowChordTrack(datum: proposed)
+        #expect(proposedTrack.tempo?.beatsPerMinute == 120)
+        #expect(proposed != supplied)
+        #expect(available.languageCallCount == 1)
+    }
+
+    @Test func e03StyleBranchCallsLanguageOnlyWhenSelectedAndNeverChangesConditions() async throws {
+        let bundle = try WorkflowLanguageExamples.make(.music)
+        let topMap = try #require(bundle.graph.nodes.first { $0.operationID == "d.control.map" })
+        guard case .map(let body, _) = topMap.control else {
+            Issue.record("E03 should expose its real candidate Map body")
+            return
+        }
+        let plan = try WorkflowPlanCompiler().compile(body, tools: bundle.tools)
+        let originalStyle = WorkflowDatum.text("Unchanged editable style")
+        let notes = try publicValue("notes", in: body)
+        let chords = try publicValue("chords", in: body)
+        let defaultOptimization = try publicValue("optimizeStyle", in: body)
+        #expect(defaultOptimization == .boolean(false))
+
+        let unavailable = MusicExampleServices(languageAvailable: false)
+        let plain = try await executeExamplePlan(plan, services: unavailable, arguments: [
+            "item": originalStyle,
+            "notes": notes,
+            "chords": chords,
+            "optimizeStyle": defaultOptimization,
+        ])
+        #expect(plain.state == .completed)
+        #expect(unavailable.languageCallCount == 0)
+        #expect(unavailable.musicRequests.map(\.prompt) == ["Unchanged editable style"])
+        #expect(unavailable.musicInputs.map(\.notes) == [notes])
+        #expect(unavailable.musicInputs.map(\.chords) == [chords])
+
+        let available = MusicExampleServices(languageAvailable: true)
+        let optimized = try await executeExamplePlan(plan, services: available, arguments: [
+            "item": originalStyle,
+            "notes": notes,
+            "chords": chords,
+            "optimizeStyle": .boolean(true),
+        ])
+        #expect(optimized.state == .completed)
+        #expect(available.languageCallCount == 1)
+        #expect(available.musicRequests.map(\.prompt) == ["Optimized style: Unchanged editable style"])
+        #expect(available.musicInputs.map(\.notes) == [notes])
+        #expect(available.musicInputs.map(\.chords) == [chords])
+        #expect(available.musicRequests.allSatisfy { $0.noteSequence != nil })
     }
 
     @Test func e04ReturnsFullTypedCandidatesAndKeepsVideoTextOnly() throws {
@@ -302,6 +386,30 @@ struct WorkflowLanguageExamplesTests {
         return (try await executor.execute(.init(plan: plan)), services)
     }
 
+    private func executeExamplePlan(
+        _ plan: WorkflowPlan,
+        services: any WorkflowOperationServices,
+        arguments: [String: WorkflowDatum] = [:],
+        externalInputs: [UUID: [String: WorkflowValue]] = [:]
+    ) async throws -> WorkflowPlanCheckpoint {
+        let registry = WorkflowRegistry.standard
+        let executor = WorkflowPlanExecutor(registry: registry, executeCall: { context in
+            guard let operation = registry.operation(context.node.operationID) else {
+                throw WorkflowIssue("测试遇到未注册操作。")
+            }
+            return try await operation.execute(context, services)
+        }, save: { _ in })
+        var checkpoint = WorkflowPlanCheckpoint(plan: plan, arguments: arguments)
+        checkpoint.externalInputs = externalInputs
+        return try await executor.execute(checkpoint)
+    }
+
+    private func publicValue(_ name: String, in graph: WorkflowGraph) throws -> WorkflowDatum {
+        try #require(graph.nodes.first {
+            $0.operationID == "d.value.input" && $0.parameters["publicName"]?.string == name
+        }?.dataConfiguration?.value)
+    }
+
     private func successfulText(_ item: WorkflowDataItem) -> String? {
         guard case .result(let result) = item.value,
               result.status == .success,
@@ -339,4 +447,124 @@ private extension WorkflowGraph {
     func export(
         _ value: WorkflowValue, context: WorkflowExecutionContext
     ) async throws -> WorkflowExportReceipt { try unexpected("export") }
+}
+
+@MainActor private final class MusicExampleServices: WorkflowOperationServices {
+    struct MusicInputs {
+        var notes: WorkflowDatum?
+        var chords: WorkflowDatum?
+    }
+
+    let languageAvailable: Bool
+    private(set) var languageCallCount = 0
+    private(set) var musicRequests: [AudioRequest] = []
+    private(set) var musicInputs: [MusicInputs] = []
+    private var textByAsset: [UUID: String] = [:]
+
+    init(languageAvailable: Bool) {
+        self.languageAvailable = languageAvailable
+    }
+
+    func generateLanguage(
+        task: String,
+        content: String?,
+        context: WorkflowExecutionContext
+    ) async throws -> WorkflowAssetReference {
+        languageCallCount += 1
+        guard languageAvailable else { throw WorkflowIssue("Text backend must not be consulted on the false branch.") }
+        let text: String
+        if context.node.parameters["outputMode"] == .text("json") {
+            text = """
+            {
+              "format": "d.music.chords",
+              "version": 1,
+              "duration": 8,
+              "chords": [
+                {"id":"1","root":2,"quality":"minor","octave":4,"inversion":0,"start":0,"end":8}
+              ],
+              "tempo": {
+                "format": "d.music.tempo",
+                "version": 1,
+                "beatsPerMinute": 120,
+                "firstBeatSeconds": 0,
+                "numerator": 4,
+                "denominator": 4
+              },
+              "sources": []
+            }
+            """
+        } else {
+            text = "Optimized style: \(content ?? "")"
+        }
+        let reference = makeReference(kind: .text)
+        textByAsset[reference.assetID] = text
+        return reference
+    }
+
+    func readText(_ reference: WorkflowAssetReference) async throws -> String {
+        guard let text = textByAsset[reference.assetID] else { throw WorkflowIssue("Unknown fake text asset.") }
+        return text
+    }
+
+    func generateMusic(
+        _ request: AudioRequest,
+        parents: [WorkflowAssetReference],
+        context: WorkflowExecutionContext
+    ) async throws -> WorkflowAssetReference {
+        musicRequests.append(request)
+        musicInputs.append(.init(
+            notes: context.inputs["notes"]?.datum,
+            chords: context.inputs["chords"]?.datum
+        ))
+        return makeReference(kind: .audio)
+    }
+
+    func verifyAsset(_ reference: WorkflowAssetReference) async throws {
+        throw WorkflowIssue("Unexpected verifyAsset in music example fixture.")
+    }
+
+    func publishText(
+        _ text: String,
+        parents: [WorkflowAssetReference],
+        context: WorkflowExecutionContext
+    ) async throws -> WorkflowAssetReference {
+        throw WorkflowIssue("Unexpected publishText in music example fixture.")
+    }
+
+    func rewriteText(
+        _ text: String,
+        parents: [WorkflowAssetReference],
+        context: WorkflowExecutionContext
+    ) async throws -> WorkflowAssetReference {
+        throw WorkflowIssue("Unexpected rewriteText in music example fixture.")
+    }
+
+    func generateImages(
+        prompt: String,
+        reference: WorkflowAssetReference?,
+        context: WorkflowExecutionContext
+    ) async throws -> [WorkflowCandidate] {
+        throw WorkflowIssue("Unexpected generateImages in music example fixture.")
+    }
+
+    func transformImage(
+        _ reference: WorkflowAssetReference,
+        context: WorkflowExecutionContext
+    ) async throws -> WorkflowAssetReference {
+        throw WorkflowIssue("Unexpected transformImage in music example fixture.")
+    }
+
+    func export(
+        _ value: WorkflowValue,
+        context: WorkflowExecutionContext
+    ) async throws -> WorkflowExportReceipt {
+        throw WorkflowIssue("Unexpected export in music example fixture.")
+    }
+
+    private func makeReference(kind: WorkflowDataKind) -> WorkflowAssetReference {
+        .init(
+            projectID: UUID(), assetID: UUID(), kind: kind,
+            sha256: String(repeating: "a", count: 64)
+        )
+    }
 }
