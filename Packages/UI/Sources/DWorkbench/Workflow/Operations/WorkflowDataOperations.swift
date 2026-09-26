@@ -197,8 +197,9 @@ enum WorkflowDataOperations {
             var filtered: [WorkflowDataItem] = []
             for item in sourceItems {
                 var matches = true
-                for rule in configuration.rules where matches {
-                    matches = try rule.matches(item.value)
+                for rule in configuration.rules {
+                    let ruleMatches = try rule.matches(item.value)
+                    matches = matches && ruleMatches
                 }
                 if matches { filtered.append(item) }
             }
