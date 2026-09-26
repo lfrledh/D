@@ -106,13 +106,24 @@ struct NodeLanguageMusicRealTests {
             let aMelody = try #require(firstRun.planCheckpoint?.records.first { $0.step.node.operationID == "d.music.align" }?.step.outputs["output"]?.datum)
             let bMelody = try #require(secondRun.planCheckpoint?.records.first { $0.step.node.operationID == "d.music.align" }?.step.outputs["output"]?.datum)
             try #require(aMelody == bMelody)
+            let firstRefs = try candidateReferences(firstRun)
+            let secondRefs = try candidateReferences(secondRun)
+            try #require(Set(firstRefs).isDisjoint(with: Set(secondRefs)))
+            try #require(Set(firstRefs + secondRefs) == Set(musicRecords.map(\.reference)))
+            let corrected = try WorkflowNoteSequence(datum: acceptedMelody)
+            try #require(corrected.sources == recognized.sources)
+            try #require(corrected.notes.first?.pitch == min(127, try #require(recognized.notes.first?.pitch) + 1))
             let allCalls = [firstRun, secondRun].flatMap { $0.planCheckpoint?.records ?? [] }
             for record in musicRecords {
                 try #require(record.request?.model == musicReference)
                 let call = try #require(allCalls.first { $0.step.id == record.stepID })
                 let actualNotes = try WorkflowNoteSequence(datum: #require(call.step.inputs["notes"]?.datum))
                 let actualChords = try WorkflowChordTrack(datum: #require(call.step.inputs["chords"]?.datum))
+                try #require(try actualNotes.datum() == aMelody)
+                let expectedHarmony = firstRefs.contains(record.reference) ? originalChords : harmonyB
+                try #require(try actualChords.datum() == expectedHarmony)
                 let request = try #require(record.request)
+                try #require(request.id == call.step.id && call.step.outputs["output"]?.asset == record.reference)
                 guard case .audio(let input) = request.input else { throw WorkflowIssue("Expected conditioned music.") }
                 try verifyCondition(try #require(input.noteSequence), notes: actualNotes, chords: actualChords)
                 try #require(record.metadata["conditionSHA256"]?.count == 64)
@@ -129,12 +140,28 @@ struct NodeLanguageMusicRealTests {
                 let finite = samples.allSatisfy { $0.isFinite }
                 try #require(finite)
                 try #require(samples.contains { abs($0) > 0.00001 })
-                _ = try await store.exportWorkflowDatum(.asset(record.reference), format: "auto", name: "music", exportID: UUID(), directory: exports)
+                let exportID = UUID()
+                let receipt = try await store.exportWorkflowAssets([record.reference], name: "music", exportID: exportID, directory: exports)
+                let folder = exports.appendingPathComponent("music-\(exportID.uuidString).dexport")
+                try verifyReceipt(receipt, at: folder)
+                let wav = folder.appendingPathComponent("1.wav")
+                try #require(try digest(wav) == record.reference.sha256)
+                let exported = try AudioMediaInspector.inspect(at: wav, policy: .generated)
+                try #require(exported.format == inspection.format)
             }
             // Exact typed handoff and MIDI are program outputs, separate from model waveform.
             let melody = try #require(secondRun.planCheckpoint?.records.first { $0.step.node.operationID == "d.music.align" }?.step.outputs["output"]?.datum)
-            _ = try await store.exportWorkflowDatum(melody, format: "midi", name: "melody", exportID: UUID(), directory: exports)
-            _ = try await store.exportWorkflowDatum(harmonyB, format: "json", name: "harmony", exportID: UUID(), directory: exports)
+            let midiID = UUID(), harmonyID = UUID()
+            let midiReceipt = try await store.exportWorkflowDatum(melody, format: "midi", name: "melody", exportID: midiID, directory: exports)
+            let harmonyReceipt = try await store.exportWorkflowDatum(harmonyB, format: "json", name: "harmony", exportID: harmonyID, directory: exports)
+            let midiFolder = exports.appendingPathComponent("melody-\(midiID.uuidString).dexport")
+            let harmonyFolder = exports.appendingPathComponent("harmony-\(harmonyID.uuidString).dexport")
+            try verifyReceipt(midiReceipt, at: midiFolder); try verifyReceipt(harmonyReceipt, at: harmonyFolder)
+            let midi = try Data(contentsOf: midiFolder.appendingPathComponent("1.mid"))
+            try #require(midi.starts(with: Data([0x4d, 0x54, 0x68, 0x64, 0, 0, 0, 6, 0, 0, 0, 1])))
+            try #require(midi.suffix(3) == Data([0xff, 0x2f, 0]))
+            let exportedHarmony = try JSONDecoder().decode(WorkflowDatum.self, from: Data(contentsOf: harmonyFolder.appendingPathComponent("1.json")))
+            try #require(exportedHarmony == harmonyB)
             try #require(requests.allSatisfy { if case .text = $0.input { return false }; return true })
             try #require(try digest(recording) == originalDigest)
             await c.save(); try #require(!c.hasPendingSaves)
@@ -157,6 +184,21 @@ struct NodeLanguageMusicRealTests {
         } catch {
             await runtime.shutdown(); try? await store.close(preserveExternalChanges: true); throw error
         }
+    }
+    private func candidateReferences(_ run: WorkflowRun) throws -> [WorkflowAssetReference] {
+        let output = try #require(run.planCheckpoint?.records.first { $0.address.path.count == 1 && $0.step.node.operationID == "d.value.return" }?.step.outputs["output"]?.datum)
+        guard case .record(_, let fields) = output, case .list(_, let candidates)? = fields["candidates"] else { throw WorkflowIssue("E03 final delivery is not a candidate record.") }
+        try #require(candidates.map(\.id) == ["candidate-1", "candidate-2", "candidate-3"])
+        return try candidates.map { item in
+            guard case .result(let result) = item.value, result.status == .success, case .asset(let ref)? = result.value else { throw WorkflowIssue("E03 retained a failed or skipped candidate.") }
+            return ref
+        }
+    }
+    private func verifyReceipt(_ receipt: WorkflowExportReceipt, at folder: URL) throws {
+        try #require(receipt.names.count == receipt.hashes.count)
+        for (name, hash) in zip(receipt.names, receipt.hashes) { try #require(try digest(folder.appendingPathComponent(name)) == hash) }
+        let decoded = try JSONDecoder().decode(WorkflowExportReceipt.self, from: Data(contentsOf: folder.appendingPathComponent("receipt.json")))
+        try #require(decoded == receipt)
     }
 
     private func runAndDecide(_ c: WorkflowController, target: UUID, retainedMelody: WorkflowDatum?) async throws -> WorkflowRun {
