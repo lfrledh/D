@@ -284,3 +284,6 @@ opt-in D_NODE_LANGUAGE_REAL_CASE=music-cancel，复用 D_NODE_LANGUAGE_MUSIC_MOD
 
 ## 2026-09-27 续接事实
 1bc907d8ff7ba2dbcec0499fdc8bdf2c3c79d1c6 仅向隔离子进程保留父App本就具有且等于NSHomeDirectory的 CFFIXED_USER_HOME；不新增HOME、不改书签/权限、无全量环境继承。baseline和HOME-only探针失败，HOME+fixed及生产函数inherited探针通过；父字段存在匹配，非实现者复核通过。node-real-music-access-fixed构建代码1bc，启动记录b9a6c92仅任务文档差异，真实SwiftF0+两和声版本各3次MRT2通过；普通GUI/真人试听仍未执行。d3c8b826的E02用可展开有限JSON检查修复工具；json-repair-initial三个相关CPU suite通过。A06 repair1只补三类实际坏模型响应反例；TEXT-CONTROL repair1修取消阶段、保护夹具及异常清理，非第三轮旧任务。H27仍阻塞GUI，源与scheme未变。
+
+### MEDIA-CHECKS 有界Lead收尾（不记为Worker独立通过）
+真实video在App1bc已完成取消/后续生成，但原测试错误要求无任何inputReferences/parents；官方E04明确发布共享文字资产，T2V不收图片不等于无文字来源。Lead一次有界接管，精确改为仅prompt端口、恰好一个.text源、读取其真实UTF8、parents必须等于该源，再与VideoRequest.prompt核对；不改生产、模型、精度或真实MP4断言。旧失败保存node-real-video；非实现者复核及重跑待办。E02报告另记录1...3实际N03调用、raw归属及修复数，0次不冒称发生修复。MEDIA余下Worker修复不与接管串成无限链。

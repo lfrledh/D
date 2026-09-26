@@ -458,8 +458,14 @@ struct NodeLanguageImageVideoRealTests {
             })
             let videoOutput = try #require(videoCall.step.outputs["output"]?.asset)
             let inputReferences = videoCall.step.inputs.values.flatMap { $0.datum?.assetReferences ?? [] }
-            try #require(inputReferences.isEmpty)
-            let prompt = try #require(videoCall.step.inputs["prompt"]?.datum?.text)
+            // E04 deliberately publishes its shared text as an asset. T2V excludes
+            // image conditions, not the provenance of its text prompt.
+            try #require(inputReferences.count == 1)
+            let promptReference = try #require(inputReferences.first)
+            try #require(promptReference.kind == .text)
+            try #require(Set(videoCall.step.inputs.keys) == ["prompt"])
+            let promptData = try await store.workflowData(promptReference)
+            let prompt = try #require(String(data: promptData, encoding: .utf8))
             try #require(!prompt.isEmpty)
 
             await subject.save()
@@ -470,7 +476,7 @@ struct NodeLanguageImageVideoRealTests {
             let record = try #require(savedArchive.assets.first { $0.reference == videoOutput })
             try #require(record.operationID == "d.video.generate")
             try #require(record.stepID == videoCall.step.id)
-            try #require(record.parents.isEmpty)
+            try #require(record.parents == [promptReference])
             let request = try #require(record.request)
             try #require(request.id == videoCall.step.id)
             try #require(request.model == videoReference)
