@@ -23,6 +23,7 @@ public struct WorkflowCanvasView: View {
     private let onImageModel: () -> Void
     private let onAdditionalModel: (WorkflowModelKind) -> Void
     private let onImport: (UUID) -> Void
+    private let onRecord: (UUID) -> Void
     private let onDestination: () -> Void
     private let onPublishText: () -> Void
     private let onReturnText: (WorkflowAssetReference) -> Void
@@ -44,13 +45,15 @@ public struct WorkflowCanvasView: View {
         onDestination: @escaping () -> Void,
         onPublishText: @escaping () -> Void,
         onReturnText: @escaping (WorkflowAssetReference) -> Void,
-        onAdditionalModel: @escaping (WorkflowModelKind) -> Void = { _ in }
+        onAdditionalModel: @escaping (WorkflowModelKind) -> Void = { _ in },
+        onRecord: @escaping (UUID) -> Void = { _ in }
     ) {
         self.controller = controller
         self.onTextModel = onTextModel
         self.onImageModel = onImageModel
         self.onAdditionalModel = onAdditionalModel
         self.onImport = onImport
+        self.onRecord = onRecord
         self.onDestination = onDestination
         self.onPublishText = onPublishText
         self.onReturnText = onReturnText
@@ -133,6 +136,7 @@ public struct WorkflowCanvasView: View {
                 onImageModel: guarded(onImageModel),
                 onAdditionalModel: { kind in guarded { onAdditionalModel(kind) }() },
                 onImport: { nodeID in guard !isReadOnly else { return }; onImport(nodeID) },
+                onRecord: { nodeID in guard !isReadOnly else { return }; onRecord(nodeID) },
                 onReturnText: { reference in guard !isReadOnly else { return }; onReturnText(reference) },
                 onPlan: presentPlan
             )
@@ -157,6 +161,13 @@ public struct WorkflowCanvasView: View {
 
             Menu(workflowText(languageStore, "workflow.toolbar.addExample", fallback: "添加样例"),
                  systemImage: "square.grid.2x2") {
+                ForEach(WorkflowLanguageExample.allCases, id: \.rawValue) { example in
+                    Button(workflowText(languageStore, "workflow.language.example.\(example.rawValue)", fallback:
+                        ["data": "数据与控制", "images": "主题与图像批次", "music": "哼唱与和声", "multimodal": "同源四模态"][example.rawValue] ?? example.rawValue)) {
+                        controller.addLanguageExample(example)
+                    }
+                }
+                Divider()
                 ForEach(WorkflowExampleChoice.allCases) { example in
                     Button(example.title(languageStore)) { controller.addExample(example.rawValue) }
                 }
@@ -666,6 +677,7 @@ private struct WorkflowNodeInspector: View {
     let onImageModel: () -> Void
     let onAdditionalModel: (WorkflowModelKind) -> Void
     let onImport: (UUID) -> Void
+    let onRecord: (UUID) -> Void
     let onReturnText: (WorkflowAssetReference) -> Void
     let onPlan: (UUID, Bool) -> Void
     @Environment(\.dLanguageStore) private var languageStore
@@ -736,6 +748,9 @@ private struct WorkflowNodeInspector: View {
                        systemImage: "square.and.arrow.down") { onImport(node.id) }
                     .disabled(readOnly)
                     .accessibilityIdentifier("workflow-import-\(node.id.uuidString)")
+                Button(workflowText(languageStore, "workflow.asset.record", fallback: "录制原声"), systemImage: "mic") { onRecord(node.id) }
+                    .disabled(readOnly || controller.isRunning)
+                    .accessibilityIdentifier("workflow-record-\(node.id.uuidString)")
             }
             if let asset = node.assetReference {
                 WorkflowAssetIdentity(reference: asset)
@@ -1121,6 +1136,10 @@ private struct WorkflowAssetPreview: View {
                         ))
                     }
                 } else if let failure { previewError(failure) } else { ProgressView() }
+            case .audio, .video:
+                Button(workflowText(languageStore, "workflow.preview.playMedia", fallback: "打开播放预览"), systemImage: "play.circle") {
+                    controller.mediaPreviewReference = reference
+                }
             default:
                 Text(workflowText(
                     languageStore,
@@ -1145,7 +1164,7 @@ private struct WorkflowAssetPreview: View {
             data = nil
             failure = nil
             do {
-                let bytes = try await controller.preview(reference)
+                let bytes = [.audio, .video].contains(reference.kind) ? nil : try await controller.preview(reference)
                 let metadata = try await controller.metadata(reference)
                 try Task.checkCancellation()
                 data = bytes; sourceMetadata = metadata

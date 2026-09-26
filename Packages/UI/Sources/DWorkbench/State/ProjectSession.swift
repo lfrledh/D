@@ -255,6 +255,9 @@ public final class ProjectSession {
     private var stableAudioModelStatus = "选择已安装的本地声音模型"
     public private(set) var isRegisteringAudioModel = false
     public let audioCreationTransport = AudioTransport(recordingEnabled: false)
+    public private(set) var workflowRecordingNodeID: UUID?
+    @ObservationIgnored private var workflowCapture: (id: UUID, controller: WorkflowController, target: WorkflowAssetBindingTarget, audio: ProjectAudioController, identity: AudioCaptureHandle?)?
+    public private(set) var workflowPreviewReference: WorkflowAssetReference?
     @ObservationIgnored private var audioCreationDocumentID: UUID?
     @ObservationIgnored private var audioCreationPersistedRevision: UUID?
     @ObservationIgnored private var audioCreationWriteTail: Task<Void, Never>?
@@ -801,6 +804,7 @@ public final class ProjectSession {
                 return try await self.resolveWorkflowModel(kind, identity: identity, session: session)
             })
         let controller = WorkflowController(services: services)
+        controller.externalOperationBusy = { [weak self] in self?.audio?.isBusy == true || self?.workflowRecordingNodeID != nil }
         controller.onChange = { [weak self] in
             guard let self, self.store === store else { return }
             self.applyManifest(await store.snapshot()); await self.refreshAssets()
@@ -1451,6 +1455,75 @@ public final class ProjectSession {
         let result = await audio.startRecording(name: name)
         if !result, let message = audio.errorMessage { errorMessage = message }
         return result
+    }
+
+    public func startWorkflowRecording(nodeID: UUID, controller: WorkflowController) async {
+        guard workflow === controller, workflowCapture == nil, !controller.isRunning,
+              audioRecordingEnabled, navigationReady(), let store, let audio,
+              let target = controller.assetBindingTarget(nodeID: nodeID), !isChangingProject, !closePending else { return }
+        let id = UUID()
+        workflowCapture = (id, controller, target, audio, nil); workflowRecordingNodeID = nodeID
+        do {
+            try await flushDraft(to: store)
+            await drainVideoPreview(); audioCreationTransport.stopPlayback()
+            guard workflow === controller, self.store === store, controller.isCurrent(target), workflowCapture?.id == id else {
+                throw AudioMediaError.unavailable("录音开始前项目或输入已改变")
+            }
+            let identity = await audio.startRecordingWithIdentity(name: "流程原声")
+            guard workflowCapture?.id == id else { return }
+            guard let identity else { throw AudioMediaError.unavailable(audio.errorMessage ?? "未开始录音") }
+            workflowCapture?.identity = identity
+        } catch {
+            if workflowCapture?.id == id { workflowCapture = nil; workflowRecordingNodeID = nil }
+            controller.errorMessage = error.localizedDescription
+        }
+    }
+
+    public func finishWorkflowRecording() async {
+        guard let capture = workflowCapture else { return }
+        do {
+            if let identity = capture.identity {
+                let assetID = try await capture.audio.finishRecordingAsset(identity)
+                guard workflowCapture?.id == capture.id else { return }
+                workflowCapture = nil; workflowRecordingNodeID = nil
+                guard workflow === capture.controller else { return }
+                await capture.controller.bindRecordedAsset(assetID, target: capture.target)
+            } else {
+                // Explicitly cancel a permission wait, without adopting an old recording.
+                _ = await capture.audio.finishRecording()
+                if workflowCapture?.id == capture.id { workflowCapture = nil; workflowRecordingNodeID = nil }
+            }
+        } catch { capture.controller.errorMessage = error.localizedDescription }
+    }
+
+    public func prepareWorkflowPreview(_ reference: WorkflowAssetReference, controller: WorkflowController) async -> URL? {
+        guard workflow === controller, !isBusy, !isChangingProject, !closePending, let store else { return nil }
+        workflowPreviewReference = reference
+        do {
+            let (url, asset) = try await store.workflowMedia(reference)
+            await drainVideoPreview()
+            guard workflow === controller, self.store === store, workflowPreviewReference == reference,
+                  !isBusy, !isChangingProject, !closePending else { return nil }
+            audio?.transport.stopPlayback(); audioCreationTransport.stopPlayback()
+            if reference.kind == .audio {
+                guard let metadata = asset.metadata.audio else { throw AudioMediaError.invalidMedia("缺少已登记音频格式") }
+                try audioCreationTransport.preparePlayback(url: url, format: metadata.format,
+                    policy: [.modelGenerated, .programGenerated].contains(metadata.origin) ? .generated : .original)
+            } else if reference.kind == .video {
+                guard asset.metadata.video != nil else { throw AudioMediaError.invalidMedia("缺少已登记视频格式") }
+                videoPreviewURL = url
+            } else { throw AudioMediaError.unavailable("此资产不是音视频") }
+            return url
+        } catch { if workflowPreviewReference == reference { controller.errorMessage = error.localizedDescription }; return nil }
+    }
+
+    public func playWorkflowAudio(_ reference: WorkflowAssetReference) {
+        guard workflowPreviewReference == reference, reference.kind == .audio, !isBusy else { return }
+        do { try audioCreationTransport.play() } catch { workflow?.errorMessage = error.localizedDescription }
+    }
+    public func endWorkflowPreview(_ reference: WorkflowAssetReference) {
+        guard workflowPreviewReference == reference else { return }
+        workflowPreviewReference = nil; audioCreationTransport.stopPlayback(); stopVideoPreview()
     }
 
     public func finishAudioRecording() async -> Bool {

@@ -1,6 +1,11 @@
 import Foundation
 import Observation
 
+public struct AudioCaptureHandle: Sendable, Equatable {
+    public let contextID: UUID
+    public let captureID: UUID
+}
+
 /// A verified, read-only view of one registered original and its persisted draft.
 public struct ProjectAudioInspection: Sendable {
     public let document: AudioDraftDocument
@@ -78,6 +83,7 @@ public final class ProjectAudioController {
     @ObservationIgnored private var finalizeToken: UUID?
     @ObservationIgnored private var finalizingCaptureID: UUID?
     @ObservationIgnored private var activeCaptureID: UUID?
+    @ObservationIgnored private var latestCaptureAttemptID: UUID?
     @ObservationIgnored private var activeCaptureURL: URL?
     @ObservationIgnored private var activeCaptureFile: AudioCaptureFile?
     @ObservationIgnored private var captureGeneration: UInt64 = 0
@@ -311,6 +317,7 @@ public final class ProjectAudioController {
         do {
             // The reservation is durable before a permission request can suspend.
             let reservation = try await store.reserveAudioCapture(name: name)
+            latestCaptureAttemptID = reservation.id
             let reservedManifest = await store.snapshot()
             pendingCaptures = reservedManifest.pendingAudioCaptures
             publish(reservedManifest)
@@ -391,6 +398,31 @@ public final class ProjectAudioController {
             return activeCaptureID == nil && !captureFailureBlocksNavigation
         }
         return await awaitFinalize(task)
+    }
+
+    /// A handle for this exact capture; neither a previous recordedURL nor the
+    /// document selected by finalization can identify the result safely.
+    public func startRecordingWithIdentity(name: String) async -> AudioCaptureHandle? {
+        let previous = latestCaptureAttemptID
+        guard await startRecording(name: name), let id = latestCaptureAttemptID, id != previous else { return nil }
+        return .init(contextID: contextID, captureID: id)
+    }
+
+    public func finishRecordingAsset(_ identity: AudioCaptureHandle) async throws -> UUID {
+        guard isActive, identity.contextID == contextID,
+              activeCaptureID == nil || activeCaptureID == identity.captureID,
+              finalizingCaptureID == nil || finalizingCaptureID == identity.captureID else {
+            throw AudioMediaError.unavailable("此录音凭据已过期，未停止其他录音")
+        }
+        if activeCaptureID != nil || finalizeTask != nil {
+            guard await finishRecording() else { throw AudioMediaError.unavailable(errorMessage ?? "录音尚未完成保存") }
+        }
+        let snapshot = await store.snapshot()
+        guard isActive, let asset = snapshot.assets.first(where: { $0.id == identity.captureID }),
+              asset.role == .original, asset.metadata.audio?.origin == .microphone else {
+            throw AudioMediaError.unavailable("本次录音尚无已保存产物；原预约保留，不能使用以前的录音代替")
+        }
+        return asset.id
     }
 
     public func retryPendingCapture(id: UUID) async -> Bool {

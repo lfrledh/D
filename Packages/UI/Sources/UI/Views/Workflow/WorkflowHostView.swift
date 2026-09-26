@@ -6,6 +6,7 @@ import UniformTypeIdentifiers
 /// Native location choices; model and project ownership remain with ProjectSession.
 struct WorkflowHostView: View {
     let model: WorkbenchModel
+    @Environment(\.dLanguageStore) private var languageStore
     var body: some View {
         Group {
             if let controller = model.projectSession.workflow {
@@ -16,7 +17,23 @@ struct WorkflowHostView: View {
                     onDestination: { Task { await destination(controller) } },
                     onPublishText: { Task { await model.projectSession.publishTextToWorkflow() } },
                     onReturnText: { ref in Task { await model.projectSession.returnWorkflowText(ref) } },
-                    onAdditionalModel: { chooseModel(controller: controller, kind: $0) })
+                    onAdditionalModel: { chooseModel(controller: controller, kind: $0) },
+                    onRecord: { nodeID in Task { await model.projectSession.startWorkflowRecording(nodeID: nodeID, controller: controller) } })
+                    .safeAreaInset(edge: .bottom) {
+                        if model.projectSession.workflowRecordingNodeID != nil {
+                            HStack {
+                                Text(languageStore?.text("workflow.recording.active", fallback: "本次原声录音：结束后保存为独立资产。") ?? "本次原声录音")
+                                Button(languageStore?.text("workflow.recording.finish", fallback: "结束录音／取消许可等待") ?? "结束录音") {
+                                    Task { await model.projectSession.finishWorkflowRecording() }
+                                }.accessibilityIdentifier("workflow-record-finish")
+                            }.padding().background(.regularMaterial)
+                        }
+                    }
+                    .sheet(isPresented: Binding(get: { controller.mediaPreviewReference != nil }, set: { if !$0 { controller.mediaPreviewReference = nil } })) {
+                        if let reference = controller.mediaPreviewReference {
+                            WorkflowMediaPreviewPanel(session: model.projectSession, controller: controller, reference: reference)
+                        }
+                    }
             } else { ProgressView("正在读取项目流程…") }
         }
         .task(id: model.manifest?.id) { await model.projectSession.openWorkflow() }
@@ -49,5 +66,33 @@ struct WorkflowHostView: View {
         panel.canChooseDirectories = true; panel.canChooseFiles = false; panel.allowsMultipleSelection = false
         guard await panel.begin() == .OK, let url = panel.url, model.projectSession.workflow === controller else { return }
         await model.projectSession.selectWorkflowDestination(at: url)
+    }
+}
+
+private struct WorkflowMediaPreviewPanel: View {
+    let session: ProjectSession
+    let controller: WorkflowController
+    let reference: WorkflowAssetReference
+    @State private var ready = false
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.dLanguageStore) private var languageStore
+    var body: some View {
+        VStack(spacing: 14) {
+            if ready {
+                if reference.kind == .video {
+                    VideoPreview(url: session.videoPreviewURL, identity: session.videoPreviewIdentity).frame(minWidth: 520, minHeight: 300)
+                } else {
+                    HStack {
+                        Button(languageStore?.text("workflow.preview.play", fallback: "播放") ?? "播放") { session.playWorkflowAudio(reference) }
+                        Button(languageStore?.text("workflow.preview.pause", fallback: "暂停") ?? "暂停") { session.audioCreationTransport.pause() }
+                    }
+                    Text(reference.assetID.uuidString).font(.caption.monospaced()).textSelection(.enabled)
+                }
+            } else { Text(controller.errorMessage ?? (languageStore?.text("workflow.preview.preparing", fallback: "正在核对已保存媒体…") ?? "正在核对已保存媒体…")) }
+            Button(languageStore?.text("workflow.preview.close", fallback: "关闭") ?? "关闭") { dismiss() }
+        }
+        .padding(20).frame(minWidth: 420, minHeight: 140)
+        .task(id: reference) { ready = await session.prepareWorkflowPreview(reference, controller: controller) != nil }
+        .onDisappear { session.endWorkflowPreview(reference) }
     }
 }

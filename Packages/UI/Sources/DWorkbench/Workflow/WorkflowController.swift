@@ -301,6 +301,19 @@ public struct WorkflowAssetBindingTarget: Sendable, Equatable {
         case "template": next = WorkflowExamples.template(); default: next = WorkflowExamples.text() }
         undoStack.append(graphs); redoStack = []; graphs.append(next); selectedGraphID = next.id; selectedNodeID = next.nodes.first?.id
     }
+    public func addLanguageExample(_ choice: WorkflowLanguageExample) {
+        guard !closed, !closing, readOnlyReason == nil else { return }
+        do {
+            let bundle = try WorkflowLanguageExamples.make(choice)
+            // Every addition is an independent editable copy. Tool identity and
+            // digest remain fixed for existing instances; never overwrite them.
+            let combined = tools + bundle.tools
+            _ = try WorkflowPlanCompiler(registry: registry).compile(bundle.graph, tools: combined)
+            undoStack.append(graphs); redoStack = []
+            tools = combined; graphs.append(bundle.graph); selectedGraphID = bundle.graph.id
+            selectedNodeID = bundle.graph.nodes.first?.id; errorMessage = nil
+        } catch { errorMessage = error.localizedDescription }
+    }
     public func attach(_ reference: WorkflowAssetReference, nodeID: UUID) {
         edit { g in guard let i = g.nodes.firstIndex(where: { $0.id == nodeID }), registry.operation(g.nodes[i].operationID)?.definition.interaction == .assetInput else { throw WorkflowIssue("请选择文件／资产输入节点。") }; g.nodes[i].assetReference = reference }
     }
