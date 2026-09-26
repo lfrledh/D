@@ -125,7 +125,7 @@ private final class SessionAudioFactory: AudioTransportDeviceFactory {
 @Suite("Project audio session", .serialized)
 @MainActor
 struct ProjectAudioSessionTests {
-    @Test func endingDuringReservationNeverStartsOrAdoptsADevice() async throws {
+    @Test(arguments: [false, true]) func endingDuringReservationNeverStartsOrAdoptsADevice(afterLocation: Bool) async throws {
         let f = try fixture("CaptureAdmission"); defer { cleanup(f) }
         let factory = SessionAudioFactory(), subject = session(f, factory: factory, recording: true)
         await subject.createProject(at: f.project); await subject.openWorkflow()
@@ -133,7 +133,8 @@ struct ProjectAudioSessionTests {
         controller.addExample("file")
         let node = try #require(controller.graph?.nodes.first { $0.operationID == "d.asset.reference" })
         let gate = AudioSessionGate()
-        audio.afterCaptureReservation = { await gate.wait() }
+        if afterLocation { audio.afterCaptureLocation = { await gate.wait() } }
+        else { audio.afterCaptureReservation = { await gate.wait() } }
         let start = Task { await subject.startWorkflowRecording(nodeID: node.id, controller: controller) }
         try await waitUntil { await gate.reached }
         await subject.finishWorkflowRecording(); await gate.open(); await start.value

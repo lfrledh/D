@@ -86,6 +86,7 @@ public final class ProjectAudioController {
     @ObservationIgnored private var latestCaptureAttemptID: UUID?
     // Test-only suspension at the actual durable admission boundary.
     @ObservationIgnored var afterCaptureReservation: (() async -> Void)?
+    @ObservationIgnored var afterCaptureLocation: (() async -> Void)?
     @ObservationIgnored private var activeCaptureURL: URL?
     @ObservationIgnored private var activeCaptureFile: AudioCaptureFile?
     @ObservationIgnored private var captureGeneration: UInt64 = 0
@@ -326,7 +327,9 @@ public final class ProjectAudioController {
             publish(reservedManifest)
             guard isActive, admissionGeneration == captureGeneration else { return false }
             let url = try await store.audioCaptureURL(id: reservation.id)
-            let generation = captureGeneration
+            if let afterCaptureLocation { await afterCaptureLocation() }
+            guard isActive, admissionsOpen, admissionGeneration == captureGeneration else { return false }
+            let generation = admissionGeneration
             activeCaptureID = reservation.id
             activeCaptureURL = url
             captureFailureBlocksNavigation = false
