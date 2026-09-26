@@ -334,6 +334,25 @@ public enum WorkflowLanguageExamples {
         let chordValue = try defaultChordTrack().datum()
         var chordInput = try valueInput("和弦草稿", value: chordValue)
         chordInput.title = "输入明确和弦"
+        var proposeChords = try valueInput("和弦提案开关", value: .boolean(false))
+        proposeChords.title = "可选语言模型和弦提案"
+        let proposalFields: [WorkflowRecordField] = [
+            .init("flag", .boolean),
+            .init("chords", WorkflowChordTrack.schema),
+        ]
+        var proposalInput = try node("d.value.record", title: "组合和弦提案条件")
+        proposalInput.dataConfiguration = .init(fields: proposalFields)
+        var proposal = try node("d.control.branch", title: "按开关选择和弦来源")
+        proposal.control = .branch(
+            predicate: .init(path: ["flag"], comparison: .equals, value: .boolean(true)),
+            then: try harmonyProposalBody(),
+            otherwise: try passthroughGraph(
+                name: "保留提供的和弦",
+                inputName: "chords",
+                schema: WorkflowChordTrack.schema,
+                fallback: chordValue
+            )
+        )
         var editChords = try node("d.control.human", title: "人工编辑并采用和弦")
         editChords.parameters["kind"] = .text("editMusic")
         editChords.parameters["instruction"] = .text("明确检查和弦根音、性质、转位与时间。")
@@ -350,10 +369,13 @@ public enum WorkflowLanguageExamples {
         ])
         var styleInput = try valueInput("三条候选意图", value: styles)
         styleInput.title = "输入三种可编辑风格"
+        var optimizeStyle = try valueInput("风格优化开关", value: .boolean(false))
+        optimizeStyle.title = "可选逐项风格文字优化"
 
         let sharedFields: [WorkflowRecordField] = [
             .init("notes", WorkflowNoteSequence.schema(clock: .quarterNotes)),
             .init("chords", WorkflowChordTrack.schema),
+            .init("optimizeStyle", .boolean),
         ]
         var shared = try node("d.value.record", title: "共享真实音符与和弦")
         shared.dataConfiguration = .init(fields: sharedFields)
@@ -379,8 +401,9 @@ public enum WorkflowLanguageExamples {
         result.parameters["name"] = .text("musicCandidates")
 
         let nodes = [
-            source, convert, trim, pitch, editMelody, align, keys, chordInput, editChords,
-            chordNotes, preview, styleInput, shared, map, delivery, result,
+            source, convert, trim, pitch, editMelody, align, keys, chordInput, proposeChords,
+            proposalInput, proposal, editChords, chordNotes, preview, styleInput, optimizeStyle,
+            shared, map, delivery, result,
         ]
         let graph = WorkflowGraph(
             name: "E03 哼唱和声与三候选",
@@ -392,11 +415,15 @@ public enum WorkflowLanguageExamples {
                 connect(pitch, editMelody),
                 connect(editMelody, align),
                 connect(align, keys),
-                connect(chordInput, editChords),
+                connect(proposeChords, proposalInput, targetPort: "flag"),
+                connect(chordInput, proposalInput, targetPort: "chords"),
+                connect(proposalInput, proposal),
+                connect(proposal, editChords),
                 connect(editChords, chordNotes),
                 connect(chordNotes, preview, sourcePort: "notes"),
                 connect(align, shared, targetPort: "notes"),
                 connect(editChords, shared, targetPort: "chords"),
+                connect(optimizeStyle, shared, targetPort: "optimizeStyle"),
                 connect(styleInput, map),
                 connect(shared, map, targetPort: "shared"),
                 connect(map, delivery, targetPort: "candidates"),
@@ -455,13 +482,33 @@ public enum WorkflowLanguageExamples {
             "notes", schema: WorkflowNoteSequence.schema(clock: .quarterNotes), fallback: noteValue, title: "共享旋律"
         )
         let chords = try publicInput("chords", schema: WorkflowChordTrack.schema, fallback: chordValue, title: "共享和弦")
+        let optimizeStyle = try publicInput(
+            "optimizeStyle", schema: .boolean, fallback: .boolean(false), title: "风格优化开关"
+        )
+        let styleFields: [WorkflowRecordField] = [
+            .init("flag", .boolean),
+            .init("style", .text),
+        ]
+        var styleInput = try node("d.value.record", title: "组合逐项风格优化条件")
+        styleInput.dataConfiguration = .init(fields: styleFields)
+        var style = try node("d.control.branch", title: "按开关优化当前风格文字")
+        style.control = .branch(
+            predicate: .init(path: ["flag"], comparison: .equals, value: .boolean(true)),
+            then: try styleOptimizationBody(),
+            otherwise: try passthroughGraph(
+                name: "保留当前风格文字", inputName: "style", schema: .text, fallback: .text("Solo piano.")
+            )
+        )
         var invoke = try invocation(of: tool, title: "调用音乐候选工具")
-        let nodes = [prompt, notes, chords, invoke]
+        let nodes = [prompt, notes, chords, optimizeStyle, styleInput, style, invoke]
         var graph = WorkflowGraph(
             name: "逐风格生成音乐候选",
             nodes: nodes,
             connections: [
-                connect(prompt, invoke, targetPort: "prompt"),
+                connect(optimizeStyle, styleInput, targetPort: "flag"),
+                connect(prompt, styleInput, targetPort: "style"),
+                connect(styleInput, style),
+                connect(style, invoke, targetPort: "prompt"),
                 connect(notes, invoke, targetPort: "notes"),
                 connect(chords, invoke, targetPort: "chords"),
             ],
@@ -472,8 +519,54 @@ public enum WorkflowLanguageExamples {
                 .init("item", .text),
                 .init("notes", WorkflowNoteSequence.schema(clock: .quarterNotes)),
                 .init("chords", WorkflowChordTrack.schema),
+                .init("optimizeStyle", .boolean),
             ],
             outputs: [.init(name: "output", nodeID: invoke.id, schema: .asset(.audio))]
+        )
+        return graph
+    }
+
+    private static func harmonyProposalBody() throws -> WorkflowGraph {
+        var language = try node("d.model.language", title: "可选和弦结构提案")
+        language.parameters["task"] = .text(
+            "提出一个8拍的和弦轨。只输出符合结构的 JSON；tempo 必须明确为120 BPM、首拍0秒、4/4，chords 数组内 id 必须按1起始索引字符串填写。"
+        )
+        language.parameters["outputMode"] = .text("json")
+        language.parameters["maximumOutputTokens"] = .integer(768)
+        language.parameters["modelID"] = .text("")
+        language.dataConfiguration = .init(schema: WorkflowChordTrack.schema)
+        var graph = WorkflowGraph(
+            name: "语言模型和弦提案",
+            nodes: [language],
+            layout: gridLayout([language])
+        )
+        graph.interface = .init(outputs: [
+            .init(name: "output", nodeID: language.id, schema: WorkflowChordTrack.schema),
+        ])
+        return graph
+    }
+
+    private static func styleOptimizationBody() throws -> WorkflowGraph {
+        let input = try publicInput(
+            "style", schema: .text, fallback: .text("Solo piano."), title: "待优化风格文字"
+        )
+        var language = try node("d.model.language", title: "可选风格文字优化")
+        language.parameters["task"] = .text(
+            "只优化提供的音乐风格文字，返回纯文字；不要描述、修改或推断旋律、音符、和弦、时长。"
+        )
+        language.parameters["outputMode"] = .text("text")
+        language.parameters["maximumOutputTokens"] = .integer(128)
+        language.parameters["modelID"] = .text("")
+        let nodes = [input, language]
+        var graph = WorkflowGraph(
+            name: "逐项风格文字优化",
+            nodes: nodes,
+            connections: [connect(input, language, targetPort: "content")],
+            layout: gridLayout(nodes)
+        )
+        graph.interface = .init(
+            inputs: [.init("style", .text)],
+            outputs: [.init(name: "output", nodeID: language.id, schema: .text)]
         )
         return graph
     }
