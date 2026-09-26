@@ -233,10 +233,6 @@ private struct CheckpointValidator {
                   declared.contains(name) else {
                 throw WorkflowIssue("A public input name is duplicate or absent from the plan interface.", nodeID: step.node.id)
             }
-            if let field = interface.inputs.first(where: { $0.name == name }),
-               let value = step.node.dataConfiguration?.value {
-                try value.validate(as: field.type)
-            }
         }
         guard publicNames == declared else {
             throw WorkflowIssue("Every plan interface input must have one public data-input node.")
@@ -424,8 +420,8 @@ private struct CheckpointValidator {
                     throw WorkflowIssue("A Loop address has an out-of-range iteration.", nodeID: nodeID)
                 }
                 let shared = try sharedFields(parent.step.inputs["shared"], nodeID: nodeID)
-                guard shared["state"] == nil else {
-                    throw WorkflowIssue("Loop shared fields override state.", nodeID: nodeID)
+                guard shared["state"] == nil, shared["iteration"] == nil else {
+                    throw WorkflowIssue("Loop shared fields override state/iteration.", nodeID: nodeID)
                 }
                 let state: WorkflowDatum
                 if iteration == 1 {
@@ -448,7 +444,10 @@ private struct CheckpointValidator {
                     throw WorkflowIssue("A Loop iteration exists after its exit condition was met.", nodeID: nodeID)
                 }
                 child = body
-                childArguments = shared.merging(["state": state]) { current, _ in current }
+                childArguments = shared.merging([
+                    "state": state,
+                    "iteration": .number(Double(iteration), unit: nil),
+                ]) { current, _ in current }
 
             case let (.invoke(reference, body), .tool(addressReference)):
                 guard reference == addressReference else {
@@ -502,7 +501,8 @@ private struct CheckpointValidator {
             throw WorkflowIssue("A call record changed static node fields or an invalid public input value.", nodeID: step.node.id)
         }
         try validateNode(record.step.node)
-        let signature = "\(resolved.plan.graphID.uuidString.lowercased()):\(resolved.plan.graphRevision.uuidString.lowercased())"
+        let signature = step.sourceSignature ??
+            "\(resolved.plan.graphID.uuidString.lowercased()):\(resolved.plan.graphRevision.uuidString.lowercased())"
         guard record.step.signature == signature else {
             throw WorkflowIssue("A call record has the wrong plan signature.", nodeID: step.node.id)
         }
@@ -530,6 +530,7 @@ private struct CheckpointValidator {
 
         try validateRecordOutputs(record, step: step, runtimeNode: runtimeNode)
         try validateHumanState(record.step)
+        try validateControlEvidence(record, resolved: resolved)
 
         switch step.kind {
         case .loop:
@@ -542,6 +543,303 @@ private struct CheckpointValidator {
             guard record.loopExit == nil else {
                 throw WorkflowIssue("A non-Loop record carries a Loop exit reason.", nodeID: step.node.id)
             }
+        }
+    }
+
+    private func validateControlEvidence(
+        _ record: WorkflowPlanCallRecord,
+        resolved: ResolvedRecord
+    ) throws {
+        guard record.step.inputsBound == true else {
+            guard record.step.outputs.isEmpty else {
+                throw WorkflowIssue("An unbound control record cannot contain outputs.", nodeID: resolved.step.node.id)
+            }
+            return
+        }
+        let completed = [.completed, .partial].contains(record.step.status)
+        switch resolved.step.kind {
+        case .call:
+            return
+
+        case .branch(let predicate, let yes, let no):
+            let input = try requiredDatum(
+                record.step.inputs["input"], nodeID: resolved.step.node.id, port: "input"
+            )
+            let selected = try predicate.matches(input)
+            let body = selected ? yes : no
+            if completed {
+                let base = record.address.path + [.branch(selected)]
+                guard let outputs = try planOutputsIfComplete(body, basePath: base) else {
+                    throw WorkflowIssue("A completed Branch has no complete selected-body trace.", nodeID: resolved.step.node.id)
+                }
+                let output = try bodyOutput(body.interface, purpose: "Branch")
+                guard let value = outputs[output.name],
+                      record.step.outputs == ["output": value] else {
+                    throw WorkflowIssue("A completed Branch output does not equal its selected-body output.", nodeID: resolved.step.node.id)
+                }
+            } else if !record.step.outputs.isEmpty {
+                throw WorkflowIssue("An unfinished Branch cannot contain a forged parent output.", nodeID: resolved.step.node.id)
+            }
+
+        case .invoke(let reference, let body):
+            if completed {
+                let base = record.address.path + [.tool(reference)]
+                guard let outputs = try planOutputsIfComplete(body, basePath: base),
+                      record.step.outputs == outputs else {
+                    throw WorkflowIssue("A completed Invoke output has no matching complete tool trace.", nodeID: resolved.step.node.id)
+                }
+            } else if !record.step.outputs.isEmpty {
+                throw WorkflowIssue("An unfinished Invoke cannot contain a forged parent output.", nodeID: resolved.step.node.id)
+            }
+
+        case .map(let body, let continueOnFailure):
+            try validateMapEvidence(
+                record,
+                body: body,
+                continueOnFailure: continueOnFailure,
+                completed: completed
+            )
+
+        case .loop(let body, let stateSchema, let maximumIterations, let until):
+            try validateLoopEvidence(
+                record,
+                body: body,
+                stateSchema: stateSchema,
+                maximumIterations: maximumIterations,
+                until: until,
+                completed: completed
+            )
+        }
+    }
+
+    private func validateMapEvidence(
+        _ record: WorkflowPlanCallRecord,
+        body: WorkflowPlan,
+        continueOnFailure: Bool,
+        completed: Bool
+    ) throws {
+        let nodeID = record.step.node.id
+        let input = try requiredDatum(record.step.inputs["input"], nodeID: nodeID, port: "input")
+        guard case .list(_, let sourceItems) = input else {
+            throw WorkflowIssue("A Map trace is not bound to a List.", nodeID: nodeID)
+        }
+        let shared = try sharedFields(record.step.inputs["shared"], nodeID: nodeID)
+        guard Set(shared.keys).isDisjoint(with: Set(["item", "value", "index"])) else {
+            throw WorkflowIssue("Map shared fields conflict with item/value/index.", nodeID: nodeID)
+        }
+        guard Set(record.step.outputs.keys).isSubset(of: Set(["output"])) else {
+            throw WorkflowIssue("A Map record contains a non-executor output.", nodeID: nodeID)
+        }
+        guard let outputValue = record.step.outputs["output"] else {
+            if completed {
+                throw WorkflowIssue("A completed Map is missing its result List.", nodeID: nodeID)
+            }
+            return
+        }
+        guard case .data(.list(_, let resultItems)) = outputValue,
+              resultItems.count <= sourceItems.count,
+              resultItems.map(\.id) == Array(sourceItems.prefix(resultItems.count)).map(\.id) else {
+            throw WorkflowIssue("A Map result does not preserve the bound List prefix and identities.", nodeID: nodeID)
+        }
+        if completed {
+            guard resultItems.count == sourceItems.count else {
+                throw WorkflowIssue("A completed Map result does not cover every bound List item.", nodeID: nodeID)
+            }
+        }
+
+        let output = try bodyOutput(body.interface, purpose: "Map")
+        for resultItem in resultItems {
+            guard case .result(let result) = resultItem.value else {
+                throw WorkflowIssue("A Map result item is not a typed Result.", nodeID: nodeID)
+            }
+            let base = record.address.path + [.item(resultItem.id)]
+            switch result.status {
+            case .success:
+                guard let childOutputs = try planOutputsIfComplete(body, basePath: base),
+                      let actual = childOutputs[output.name]?.datum,
+                      result.value == actual,
+                      result.issues.isEmpty else {
+                    throw WorkflowIssue("A successful Map item has no equal complete child output.", nodeID: nodeID)
+                }
+            case .failed:
+                let failures = recordsUnder(base).filter { $0.step.status == .failed }
+                let projected = try planOutputsIfComplete(body, basePath: base)?[output.name]
+                let invalidCompletedProjection: Bool
+                if let projected {
+                    if let datum = projected.datum {
+                        invalidCompletedProjection = (try? datum.validate(as: output.schema)) == nil
+                    } else {
+                        invalidCompletedProjection = true
+                    }
+                } else {
+                    invalidCompletedProjection = planRecordsAreComplete(body, basePath: base)
+                }
+                let matchingFailure = failures.contains(where: { failure in
+                          failure.step.error.map { result.issues.contains($0) } ?? true
+                      })
+                guard result.value == nil, !result.issues.isEmpty,
+                      matchingFailure || invalidCompletedProjection,
+                      !completed || continueOnFailure else {
+                    throw WorkflowIssue("A failed Map item has no matching failed child trace.", nodeID: nodeID)
+                }
+            case .skipped, .cancelled:
+                throw WorkflowIssue("The Executor does not emit skipped/cancelled Map result items.", nodeID: nodeID)
+            }
+        }
+        if completed {
+            guard record.step.outputs == ["output": outputValue] else {
+                throw WorkflowIssue("A completed Map contains outputs not produced by the Executor.", nodeID: nodeID)
+            }
+        }
+    }
+
+    private func validateLoopEvidence(
+        _ record: WorkflowPlanCallRecord,
+        body: WorkflowPlan,
+        stateSchema: WorkflowDataSchema,
+        maximumIterations: Int,
+        until: WorkflowDataRule,
+        completed: Bool
+    ) throws {
+        let nodeID = record.step.node.id
+        let initial = try requiredDatum(record.step.inputs["input"], nodeID: nodeID, port: "input")
+        try initial.validate(as: stateSchema)
+        let shared = try sharedFields(record.step.inputs["shared"], nodeID: nodeID)
+        guard shared["state"] == nil, shared["iteration"] == nil else {
+            throw WorkflowIssue("Loop shared fields override state/iteration.", nodeID: nodeID)
+        }
+        guard Set(record.step.outputs.keys).isSubset(of: Set(["output", "exitReason"])) else {
+            throw WorkflowIssue("A Loop record contains a non-executor output.", nodeID: nodeID)
+        }
+
+        let prefix = record.address.path
+        let observed = Set(recordsUnder(prefix).compactMap { child -> Int? in
+            guard child.address.path.count > prefix.count,
+                  case .iteration(let value) = child.address.path[prefix.count] else { return nil }
+            return value
+        })
+        let maximumObserved = observed.max() ?? 0
+        let expectedIterations = maximumObserved == 0 ? Set<Int>() : Set(1...maximumObserved)
+        guard maximumObserved <= maximumIterations,
+              observed == expectedIterations else {
+            throw WorkflowIssue("Loop iteration traces are not a contiguous in-range prefix.", nodeID: nodeID)
+        }
+
+        let output = try loopBodyOutput(body.interface)
+        var states: [WorkflowDatum] = []
+        var incompleteIteration: Int?
+        if maximumObserved > 0 {
+            for iteration in 1...maximumObserved {
+                let base = prefix + [.iteration(iteration)]
+                if let outputs = try planOutputsIfComplete(body, basePath: base),
+                   let state = outputs[output.name]?.datum {
+                    try state.validate(as: stateSchema)
+                    states.append(state)
+                } else {
+                    guard iteration == maximumObserved, incompleteIteration == nil else {
+                        throw WorkflowIssue("A Loop trace skips an incomplete earlier iteration.", nodeID: nodeID)
+                    }
+                    incompleteIteration = iteration
+                }
+            }
+        }
+
+        if completed {
+            guard incompleteIteration == nil else {
+                throw WorkflowIssue("A completed Loop contains an incomplete iteration trace.", nodeID: nodeID)
+            }
+            let finalState = states.last ?? initial
+            let exit: WorkflowLoopExit
+            switch record.loopExit {
+            case .conditionMet:
+                guard try until.matches(finalState) else {
+                    throw WorkflowIssue("A conditionMet Loop exit does not satisfy its condition.", nodeID: nodeID)
+                }
+                exit = .conditionMet
+            case .iterationLimit:
+                guard states.count == maximumIterations,
+                      try until.matches(finalState) == false else {
+                    throw WorkflowIssue("An iterationLimit Loop exit has the wrong trace length or state.", nodeID: nodeID)
+                }
+                exit = .iterationLimit
+            default:
+                throw WorkflowIssue("A completed Loop has an invalid exit reason.", nodeID: nodeID)
+            }
+            let choices = ["conditionMet", "iterationLimit", "failed", "cancelled"]
+            let expected: [String: WorkflowValue] = [
+                "output": .data(finalState),
+                "exitReason": .data(.enumeration(exit.rawValue, choices: choices)),
+            ]
+            guard record.step.outputs == expected else {
+                throw WorkflowIssue("A completed Loop output does not equal its traced final state and exit.", nodeID: nodeID)
+            }
+            return
+        }
+
+        guard record.step.outputs["exitReason"] == nil else {
+            throw WorkflowIssue("An unfinished Loop cannot contain a final exitReason output.", nodeID: nodeID)
+        }
+        if let progress = record.step.outputs["output"]?.datum {
+            try progress.validate(as: stateSchema)
+            let candidates: [WorkflowDatum]
+            if incompleteIteration != nil {
+                candidates = states.last.map { [$0] } ?? []
+            } else {
+                candidates = Array(states.suffix(2))
+            }
+            guard candidates.contains(progress) else {
+                throw WorkflowIssue("A Loop progress output is not its latest durable traced state.", nodeID: nodeID)
+            }
+        } else if record.step.outputs["output"] != nil {
+            throw WorkflowIssue("A Loop progress output is not structured state data.", nodeID: nodeID)
+        }
+    }
+
+    private func planOutputsIfComplete(
+        _ plan: WorkflowPlan,
+        basePath: [WorkflowAddressComponent]
+    ) throws -> [String: WorkflowValue]? {
+        guard planRecordsAreComplete(plan, basePath: basePath) else { return nil }
+        if plan.interface.outputs.isEmpty {
+            guard let last = plan.steps.last else { return [:] }
+            let address = WorkflowExecutionAddress(
+                runID: checkpoint.runID,
+                path: basePath + [.node(last.node.id)]
+            )
+            return recordsByAddress[address]?.step.outputs
+        }
+        var result: [String: WorkflowValue] = [:]
+        for output in plan.interface.outputs {
+            let address = WorkflowExecutionAddress(
+                runID: checkpoint.runID,
+                path: basePath + [.node(output.nodeID)]
+            )
+            guard let value = recordsByAddress[address]?.step.outputs[output.port] else { return nil }
+            result[output.name] = value
+        }
+        return result
+    }
+
+    private func planRecordsAreComplete(
+        _ plan: WorkflowPlan,
+        basePath: [WorkflowAddressComponent]
+    ) -> Bool {
+        plan.steps.allSatisfy { step in
+            let address = WorkflowExecutionAddress(
+                runID: checkpoint.runID,
+                path: basePath + [.node(step.node.id)]
+            )
+            guard let record = recordsByAddress[address] else { return false }
+            return [.completed, .partial].contains(record.step.status)
+        }
+    }
+
+    private func recordsUnder(
+        _ prefix: [WorkflowAddressComponent]
+    ) -> [WorkflowPlanCallRecord] {
+        checkpoint.records.filter { record in
+            record.address.path.count > prefix.count &&
+                Array(record.address.path.prefix(prefix.count)) == prefix
         }
     }
 
@@ -588,9 +886,22 @@ private struct CheckpointValidator {
     ) throws {
         let ports = try outputPorts(for: step, node: runtimeNode)
         for (name, value) in record.step.outputs {
-            if name == "preview" && record.step.status == .waiting && ports[name] == nil {
-                try validateValue(value, port: .init(kinds: [.image, .images, .audio, .video, .text], required: false),
-                                  nodeID: step.node.id, name: name)
+            if name == "preview", ports[name] == nil {
+                guard [.waiting, .rejected].contains(record.step.status),
+                      record.step.outputs.count == 1,
+                      let interaction = registry.definition(for: runtimeNode)?.interaction else {
+                    throw WorkflowIssue("A preview is not in a legitimate review state.", nodeID: step.node.id, port: name)
+                }
+                switch (interaction, value) {
+                case (.textReview, .asset(let reference)) where reference.kind == .text:
+                    try validateAsset(reference)
+                case (.candidateReview, .collection(let candidates))
+                    where candidates.allSatisfy({ $0.asset == nil || $0.asset?.kind == .image }):
+                    try validateValue(value, port: .init(kinds: [.images], required: false),
+                                      nodeID: step.node.id, name: name)
+                default:
+                    throw WorkflowIssue("A preview does not match its review operation.", nodeID: step.node.id, port: name)
+                }
                 continue
             }
             guard let port = ports[name] else {
@@ -601,6 +912,19 @@ private struct CheckpointValidator {
                case .data(let datum) = value {
                 try datum.validate(as: schema)
             }
+            if name == "output", runtimeNode.operationID == "d.value.input",
+               let projected = runtimeNode.dataConfiguration?.value {
+                guard value == .data(projected) else {
+                    throw WorkflowIssue("A public data-input output does not project its actual bound value.",
+                                        nodeID: step.node.id, port: name)
+                }
+            }
+        }
+        if let interaction = registry.definition(for: runtimeNode)?.interaction,
+           [.textReview, .candidateReview].contains(interaction),
+           [.waiting, .rejected].contains(record.step.status),
+           record.step.outputs["preview"] == nil {
+            throw WorkflowIssue("A waiting or rejected review record is missing its preview.", nodeID: step.node.id)
         }
         if [.completed, .partial].contains(record.step.status) {
             for (name, port) in ports where port.required && record.step.outputs[name] == nil {
@@ -622,6 +946,11 @@ private struct CheckpointValidator {
             guard !(task.rejected && task.decision != nil) else {
                 throw WorkflowIssue("A rejected human task cannot also contain a decision.", nodeID: step.node.id)
             }
+            if let decision = task.decision, [.completed, .partial].contains(step.status) {
+                guard step.outputs == ["output": .data(decision)] else {
+                    throw WorkflowIssue("A completed human-task output does not equal its submitted decision.", nodeID: step.node.id)
+                }
+            }
         }
         if let decision = step.decision {
             guard decision.waitingStepID == step.id else {
@@ -641,6 +970,12 @@ private struct CheckpointValidator {
                     throw WorkflowIssue("A review decision selected an unknown candidate.", nodeID: step.node.id)
                 }
             }
+            if decision.accepted, let output = decision.output,
+               [.completed, .partial].contains(step.status) {
+                guard step.outputs == ["output": .asset(output)] else {
+                    throw WorkflowIssue("A completed review output does not equal its recorded decision.", nodeID: step.node.id)
+                }
+            }
         }
     }
 
@@ -648,7 +983,9 @@ private struct CheckpointValidator {
         let ports: [String: CheckpointPort]
         if checkpoint.plan.interface.outputs.isEmpty {
             if let last = checkpoint.plan.steps.last {
-                ports = try outputPorts(for: last, node: last.node)
+                let address = WorkflowExecutionAddress(runID: checkpoint.runID, path: [.node(last.node.id)])
+                let runtimeNode = recordsByAddress[address]?.step.node ?? last.node
+                ports = try outputPorts(for: last, node: runtimeNode)
             } else {
                 ports = [:]
             }
@@ -670,6 +1007,13 @@ private struct CheckpointValidator {
             try validateValue(value, port: port, nodeID: nil, name: name)
         }
         if checkpoint.state == .completed {
+            for step in checkpoint.plan.steps {
+                let address = WorkflowExecutionAddress(runID: checkpoint.runID, path: [.node(step.node.id)])
+                guard let record = recordsByAddress[address],
+                      [.completed, .partial].contains(record.step.status) else {
+                    throw WorkflowIssue("A completed checkpoint has an unfinished root planned step.", nodeID: step.node.id)
+                }
+            }
             for (name, port) in ports where port.required && checkpoint.outputs[name] == nil {
                 throw WorkflowIssue("A completed checkpoint omits a required output.", port: name)
             }
