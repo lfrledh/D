@@ -27,8 +27,11 @@ final class CloseRequestGate {
 final class WorkbenchInputGeometry {
     private weak var window: NSWindow?
     private var scheduled = false
+    private let invalidate: @MainActor (NSView) -> Void
 
-    init(window: NSWindow) { self.window = window }
+    init(window: NSWindow, invalidate: @escaping @MainActor (NSView) -> Void = {
+        $0.inputContext?.invalidateCharacterCoordinates()
+    }) { self.window = window; self.invalidate = invalidate }
 
     func invalidateAfterLayout() {
         guard !scheduled else { return }
@@ -39,7 +42,7 @@ final class WorkbenchInputGeometry {
             guard let window = self.window else { return }
             window.contentView?.layoutSubtreeIfNeeded()
             guard let responder = window.firstResponder as? NSView, responder.window === window else { return }
-            responder.inputContext?.invalidateCharacterCoordinates()
+            self.invalidate(responder)
         }
     }
 }
@@ -60,10 +63,13 @@ final class WorkbenchApplicationDelegate: NSObject, NSApplicationDelegate, NSWin
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
 
     func connect(window: NSWindow, model: WorkbenchModel,
-                 prepareLibraryForTermination: @escaping @MainActor () async -> Bool) {
+                 prepareLibraryForTermination: @escaping @MainActor () async -> Bool,
+                 invalidateInputContext: @escaping @MainActor (NSView) -> Void = {
+                     $0.inputContext?.invalidateCharacterCoordinates()
+                 }) {
         guard workbenchWindow !== window else { return }
         workbenchWindow = window
-        inputGeometry = WorkbenchInputGeometry(window: window)
+        inputGeometry = WorkbenchInputGeometry(window: window, invalidate: invalidateInputContext)
         previousWindowDelegate = window.delegate
         closeGate = CloseRequestGate { await model.requestClose() }
         self.prepareLibraryForTermination = prepareLibraryForTermination

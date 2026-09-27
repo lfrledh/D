@@ -60,16 +60,18 @@ struct WorkbenchInputGeometryTests {
         defer { window.contentView = nil; otherWindow.contentView = nil; window.close(); otherWindow.close() }
         let next = GeometryTextView(frame: old.frame)
         window.contentView?.addSubview(next)
-        let tracker = WorkbenchInputGeometry(window: window)
+        // Count this helper's deliveries, not independent AppKit layout notifications.
+        var delivered: [NSView] = []
+        let tracker = WorkbenchInputGeometry(window: window) { responder in
+            delivered.append(responder)
+            responder.inputContext?.invalidateCharacterCoordinates()
+        }
         for _ in 0..<20 { tracker.invalidateAfterLayout() }
         window.makeFirstResponder(next)
-        old.geometryContext.invalidations = 0
-        next.geometryContext.invalidations = 0
-        other.geometryContext.invalidations = 0
         try await Task.sleep(for: .milliseconds(30))
-        #expect(old.geometryContext.invalidations == 0)
-        #expect(next.geometryContext.invalidations == 1)
-        #expect(other.geometryContext.invalidations == 0)
+        #expect(delivered.count == 1)
+        #expect(delivered.first === next)
+        #expect(!delivered.contains { $0 === old || $0 === other })
     }
 
     @Test func realDelegateForwardsEventsAndOnlyInvalidatesItsAttachedWindow() async throws {
@@ -82,7 +84,12 @@ struct WorkbenchInputGeometryTests {
         let previous = GeometryWindowDelegate()
         window.delegate = previous
         let delegate = WorkbenchApplicationDelegate()
-        delegate.connect(window: window, model: model, prepareLibraryForTermination: { true })
+        var delivered: [NSView] = []
+        delegate.connect(window: window, model: model, prepareLibraryForTermination: { true },
+                         invalidateInputContext: { view in
+            delivered.append(view)
+            view.inputContext?.invalidateCharacterCoordinates()
+        })
         let callbacks: [(Notification.Name, (Notification) -> Void)] = [
             (NSWindow.didMoveNotification, delegate.windowDidMove),
             (NSWindow.didResizeNotification, delegate.windowDidResize),
@@ -91,21 +98,21 @@ struct WorkbenchInputGeometryTests {
             (NSWindow.didEndLiveResizeNotification, delegate.windowDidEndLiveResize)
         ]
         for (name, callback) in callbacks {
-            editor.geometryContext.invalidations = 0
+            delivered = []
             let prior = previous.events[name, default: 0]
             callback(Notification(name: name, object: window))
             await drainMainQueue()
             #expect(previous.events[name, default: 0] == prior + 1)
-            #expect(editor.geometryContext.invalidations == 1)
+            #expect(delivered.count == 1 && delivered.first === editor)
         }
-        editor.geometryContext.invalidations = 0; other.geometryContext.invalidations = 0
+        delivered = []
         delegate.windowDidMove(Notification(name: NSWindow.didMoveNotification, object: otherWindow))
         await drainMainQueue()
-        #expect(editor.geometryContext.invalidations == 0 && other.geometryContext.invalidations == 0)
+        #expect(delivered.isEmpty)
         delegate.windowDidResize(Notification(name: NSWindow.didResizeNotification, object: window))
         delegate.windowWillClose(Notification(name: NSWindow.willCloseNotification, object: window))
         await drainMainQueue()
-        #expect(editor.geometryContext.invalidations == 0, "Closing must cancel the queued update even if the window remains retained.")
+        #expect(delivered.isEmpty, "Closing must cancel the queued update even if the window remains retained.")
     }
 
     private func drainMainQueue() async {
