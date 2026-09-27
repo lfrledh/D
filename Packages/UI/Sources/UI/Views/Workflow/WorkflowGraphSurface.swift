@@ -16,8 +16,9 @@ struct WorkflowGraphSurface: View {
     var onInspect: (UUID) -> Void = { _ in }
     @Environment(\.dLanguageStore) private var languageStore
     @GestureState private var gestureScale: CGFloat = 1
-    @State private var nodeDrag: WorkflowCanvasNodeDragState?
+    @State private var nodeDrag = WorkflowCanvasNodeDragCoordinator()
     @State private var stableOrigin: WorkflowCanvasStableOrigin?
+    @State private var pendingConnectionScope: WorkflowCanvasScope?
 
     var body: some View {
         Group {
@@ -31,10 +32,16 @@ struct WorkflowGraphSurface: View {
                 let naturalGeometry = WorkflowGraphGeometry(
                     graph: graph, tools: controller.tools, registry: controller.registry
                 )
-                let origin = stableOrigin?.identity == scope.identity
-                    ? stableOrigin!.translation : naturalGeometry.translation
-                let previews = nodeDrag?.scope == scope
-                    ? [nodeDrag!.nodeID: nodeDrag!.previewPosition] : [:]
+                let retainedOrigin = stableOrigin?.identity == scope.identity
+                    ? stableOrigin?.translation : nil
+                let activeOrigin = nodeDrag.active?.scope == scope ? nodeDrag.active?.origin : nil
+                let origin = WorkflowCanvasOriginPolicy.resolved(
+                    natural: naturalGeometry.translation,
+                    retained: retainedOrigin,
+                    active: activeOrigin
+                )
+                let previews = nodeDrag.active?.scope == scope
+                    ? [nodeDrag.active!.nodeID: nodeDrag.active!.previewPosition] : [:]
                 let geometry = WorkflowGraphGeometry(
                     graph: graph,
                     tools: controller.tools,
@@ -60,13 +67,23 @@ struct WorkflowGraphSurface: View {
                                 node: node,
                                 definition: controller.registry.definition(for: node, tools: controller.tools),
                                 pendingConnection: $pendingConnection,
+                                pendingConnectionScope: pendingConnectionScope,
                                 readOnly: readOnly,
                                 selected: controller.selectedNodeID == node.id,
                                 onPlan: onPlan,
                                 onBindAsset: onBindAsset,
                                 onInspect: onInspect,
-                                onDragChanged: { translation in
-                                    updateDrag(
+                                onSelectOutput: { connection in
+                                    pendingConnection = connection
+                                    pendingConnectionScope = scope
+                                },
+                                onClearOutput: {
+                                    pendingConnection = nil
+                                    pendingConnectionScope = nil
+                                },
+                                onDragBegan: { sessionID, translation in
+                                    beginDrag(
+                                        sessionID: sessionID,
                                         nodeID: node.id,
                                         originalPosition: naturalGeometry.rawPosition(node.id),
                                         translation: translation,
@@ -74,21 +91,23 @@ struct WorkflowGraphSurface: View {
                                         origin: origin
                                     )
                                 },
-                                onDragEnded: { translation in
+                                onDragChanged: { sessionID, translation in
                                     updateDrag(
-                                        nodeID: node.id,
-                                        originalPosition: naturalGeometry.rawPosition(node.id),
-                                        translation: translation,
-                                        scope: scope,
-                                        origin: origin
-                                    )
-                                    finishDrag(
+                                        sessionID: sessionID,
                                         nodeID: node.id,
                                         translation: translation,
                                         scope: scope
                                     )
                                 },
-                                onDragCancelled: { nodeDrag = nil }
+                                onDragEnded: { sessionID, translation in
+                                    finishDrag(
+                                        sessionID: sessionID,
+                                        nodeID: node.id,
+                                        translation: translation,
+                                        scope: scope
+                                    )
+                                },
+                                onDragCancelled: { sessionID in nodeDrag.cancel(sessionID: sessionID) }
                             )
                             .onGeometryChange(for: CGSize.self) { $0.size } action: { size in
                                 nodeSizeObserver?(node.id, size)
@@ -124,13 +143,33 @@ struct WorkflowGraphSurface: View {
                         }
                 )
                 .onChange(of: scope) { _, next in
-                    if nodeDrag?.scope != next { nodeDrag = nil }
+                    if nodeDrag.active?.scope != next { nodeDrag.invalidate() }
                     if stableOrigin?.identity != next.identity { stableOrigin = nil }
+                    if pendingConnectionScope != next {
+                        pendingConnection = nil
+                        pendingConnectionScope = nil
+                    }
+                }
+                .onChange(of: naturalGeometry.translation) { _, natural in
+                    guard nodeDrag.active == nil,
+                          let retained = stableOrigin,
+                          retained.identity == scope.identity else { return }
+                    let reachable = WorkflowCanvasOriginPolicy.resolved(
+                        natural: natural,
+                        retained: retained.translation,
+                        active: nil
+                    )
+                    if reachable != retained.translation {
+                        stableOrigin = WorkflowCanvasStableOrigin(
+                            identity: retained.identity,
+                            translation: reachable
+                        )
+                    }
                 }
                 .onChange(of: readOnly || controller.isRunning) { _, blocked in
-                    if blocked { nodeDrag = nil }
+                    if blocked { nodeDrag.invalidate() }
                 }
-                .onDisappear { nodeDrag = nil }
+                .onDisappear { nodeDrag.invalidate() }
                 .overlay(alignment: .topLeading) {
                     if let pendingConnection {
                         HStack(spacing: 8) {
@@ -142,6 +181,7 @@ struct WorkflowGraphSurface: View {
                             ), systemImage: "link")
                             Button(workflowText(languageStore, "workflow.connection.cancel", fallback: "取消连接")) {
                                 self.pendingConnection = nil
+                                pendingConnectionScope = nil
                             }
                                 .buttonStyle(.borderless)
                         }
@@ -170,7 +210,8 @@ struct WorkflowGraphSurface: View {
         WorkflowCanvasLayoutPolicy.clampedZoom(zoom * gestureScale)
     }
 
-    private func updateDrag(
+    private func beginDrag(
+        sessionID: UUID,
         nodeID: UUID,
         originalPosition: CGPoint,
         translation: CGSize,
@@ -178,29 +219,57 @@ struct WorkflowGraphSurface: View {
         origin: CGSize
     ) {
         guard !readOnly, !controller.isRunning, controller.readOnlyReason == nil else {
-            nodeDrag = nil
+            nodeDrag.invalidate()
             return
         }
-        if nodeDrag?.scope != scope || nodeDrag?.nodeID != nodeID {
-            nodeDrag = WorkflowCanvasNodeDragState(
+        let began = nodeDrag.begin(
+            WorkflowCanvasNodeDragState(
+                sessionID: sessionID,
                 scope: scope,
                 nodeID: nodeID,
                 originalPosition: originalPosition,
                 origin: origin
-            )
+            ),
+            screenTranslation: translation,
+            zoom: effectiveZoom
+        )
+        if began {
             stableOrigin = WorkflowCanvasStableOrigin(identity: scope.identity, translation: origin)
         }
-        nodeDrag?.update(screenTranslation: translation, zoom: effectiveZoom)
     }
 
-    private func finishDrag(
+    private func updateDrag(
+        sessionID: UUID,
         nodeID: UUID,
         translation: CGSize,
         scope: WorkflowCanvasScope
     ) {
-        guard var drag = nodeDrag, drag.nodeID == nodeID else { return }
-        drag.update(screenTranslation: translation, zoom: effectiveZoom)
-        nodeDrag = nil
+        guard !readOnly, !controller.isRunning, controller.readOnlyReason == nil else {
+            nodeDrag.invalidate()
+            return
+        }
+        _ = nodeDrag.update(
+            sessionID: sessionID,
+            nodeID: nodeID,
+            scope: scope,
+            screenTranslation: translation,
+            zoom: effectiveZoom
+        )
+    }
+
+    private func finishDrag(
+        sessionID: UUID,
+        nodeID: UUID,
+        translation: CGSize,
+        scope: WorkflowCanvasScope
+    ) {
+        guard let drag = nodeDrag.finish(
+            sessionID: sessionID,
+            nodeID: nodeID,
+            scope: scope,
+            screenTranslation: translation,
+            zoom: effectiveZoom
+        ) else { return }
         let currentGraph = controller.graph
         let currentScope = currentGraph.map {
             WorkflowCanvasScope(
@@ -233,9 +302,7 @@ struct WorkflowGraphSurface: View {
     ) -> Bool {
         guard items.count == 1, !readOnly, !controller.isRunning,
               controller.readOnlyReason == nil,
-              controller.graph?.id == scope.graphID,
-              controller.rootGraph?.id == scope.rootGraphID,
-              controller.rootGraph?.revision == scope.rootRevision,
+              scope.isCurrent(in: controller),
               let item = try? items[0].validated() else { return false }
         switch item {
         case .operation, .asset:
@@ -279,16 +346,21 @@ private struct WorkflowNodeCard: View {
     let node: WorkflowNode
     let definition: WorkflowOperationDefinition?
     @Binding var pendingConnection: WorkflowPendingConnection?
+    let pendingConnectionScope: WorkflowCanvasScope?
     let readOnly: Bool
     let selected: Bool
     let onPlan: (UUID, Bool) -> Void
     let onBindAsset: (UUID, UUID, UUID) -> Bool
     let onInspect: (UUID) -> Void
-    let onDragChanged: (CGSize) -> Void
-    let onDragEnded: (CGSize) -> Void
-    let onDragCancelled: () -> Void
+    let onSelectOutput: (WorkflowPendingConnection) -> Void
+    let onClearOutput: () -> Void
+    let onDragBegan: (UUID, CGSize) -> Void
+    let onDragChanged: (UUID, CGSize) -> Void
+    let onDragEnded: (UUID, CGSize) -> Void
+    let onDragCancelled: (UUID) -> Void
     @Environment(\.dLanguageStore) private var languageStore
     @GestureState private var headerDragActive = false
+    @State private var dragGestureSession = WorkflowCanvasGestureSessionState()
     private var collapsed: Bool { controller.graph?.layout.first(where: { $0.nodeID == node.id })?.collapsed == true }
 
     var body: some View {
@@ -330,15 +402,22 @@ private struct WorkflowNodeCard: View {
                     .updating($headerDragActive) { _, active, _ in active = true }
                     .onChanged { value in
                         guard !readOnly else { return }
-                        onDragChanged(value.translation)
+                        switch dragGestureSession.change() {
+                        case .began(let sessionID):
+                            onDragBegan(sessionID, value.translation)
+                        case .changed(let sessionID):
+                            onDragChanged(sessionID, value.translation)
+                        }
                     }
                     .onEnded { value in
-                        guard !readOnly else { return }
-                        onDragEnded(value.translation)
+                        guard !readOnly, let sessionID = dragGestureSession.end() else { return }
+                        onDragEnded(sessionID, value.translation)
                     }
             )
             .onChange(of: headerDragActive) { wasActive, isActive in
-                if wasActive, !isActive { onDragCancelled() }
+                if wasActive, !isActive, let sessionID = dragGestureSession.cancel() {
+                    onDragCancelled(sessionID)
+                }
             }
 
             if collapsed {
@@ -414,7 +493,7 @@ private struct WorkflowNodeCard: View {
             if input {
                 connect(to: port)
             } else {
-                pendingConnection = WorkflowPendingConnection(nodeID: node.id, port: port.id)
+                onSelectOutput(WorkflowPendingConnection(nodeID: node.id, port: port.id))
             }
         } label: {
             HStack(spacing: 6) {
@@ -467,6 +546,8 @@ private struct WorkflowNodeCard: View {
             }
         } else if !readOnly {
             row.draggable(WorkflowCanvasTransfer.output(
+                rootGraphID: scope.rootGraphID,
+                bodyPath: scope.bodyPath.map(WorkflowCanvasBodyLocation.init),
                 graphID: graph.id,
                 revision: scope.rootRevision,
                 nodeID: node.id,
@@ -487,7 +568,10 @@ private struct WorkflowNodeCard: View {
     }
 
     private func connect(to port: WorkflowPortDefinition) {
-        guard !readOnly, let source = pendingConnection else { return }
+        guard !readOnly, !controller.isRunning, controller.readOnlyReason == nil,
+              scope.isCurrent(in: controller),
+              pendingConnectionScope == scope,
+              let source = pendingConnection else { return }
         guard WorkflowCanvasConnectionPolicy.canConnect(
             graph: graph,
             registry: controller.registry,
@@ -499,7 +583,7 @@ private struct WorkflowNodeCard: View {
         ) else { return }
         controller.connect(source: source.nodeID, sourcePort: source.port,
                            target: node.id, targetPort: port.id)
-        pendingConnection = nil
+        onClearOutput()
     }
 
     private func acceptOutput(
@@ -509,11 +593,9 @@ private struct WorkflowNodeCard: View {
         guard items.count == 1, !readOnly, !controller.isRunning,
               controller.readOnlyReason == nil,
               let item = try? items[0].validated(),
-              case .output(let graphID, let revision, let sourceNodeID, let sourcePort) = item,
-              graphID == graph.id,
-              revision == scope.rootRevision,
-              controller.graph?.id == graph.id,
-              controller.rootGraph?.revision == revision,
+              case .output(_, _, _, _, let sourceNodeID, let sourcePort) = item,
+              item.matchesOutputScope(scope),
+              scope.isCurrent(in: controller),
               WorkflowCanvasConnectionPolicy.canConnect(
                 graph: graph,
                 registry: controller.registry,
@@ -536,8 +618,7 @@ private struct WorkflowNodeCard: View {
         guard items.count == 1, !readOnly, !controller.isRunning,
               controller.readOnlyReason == nil,
               definition?.interaction == .assetInput,
-              controller.graph?.id == graph.id,
-              controller.rootGraph?.revision == scope.rootRevision,
+              scope.isCurrent(in: controller),
               let item = try? items[0].validated(),
               case .asset(let projectID, let assetID) = item else { return false }
         return onBindAsset(projectID, assetID, node.id)
@@ -610,6 +691,30 @@ struct WorkflowCanvasScope: Equatable {
     var identity: WorkflowCanvasScopeIdentity {
         WorkflowCanvasScopeIdentity(rootGraphID: rootGraphID, graphID: graphID, bodyPath: bodyPath)
     }
+
+    @MainActor
+    func isCurrent(in controller: WorkflowController) -> Bool {
+        guard let currentRoot = controller.rootGraph,
+              let currentGraph = controller.graph else { return false }
+        return matches(
+            rootGraphID: currentRoot.id,
+            rootRevision: currentRoot.revision,
+            graphID: currentGraph.id,
+            bodyPath: controller.bodyPath
+        )
+    }
+
+    func matches(
+        rootGraphID: UUID,
+        rootRevision: UUID,
+        graphID: UUID,
+        bodyPath: [WorkflowBodyLocation]
+    ) -> Bool {
+        self.rootGraphID == rootGraphID
+            && self.rootRevision == rootRevision
+            && self.graphID == graphID
+            && self.bodyPath == bodyPath
+    }
 }
 
 struct WorkflowCanvasScopeIdentity: Equatable {
@@ -623,7 +728,23 @@ struct WorkflowCanvasStableOrigin: Equatable {
     let translation: CGSize
 }
 
+enum WorkflowCanvasOriginPolicy {
+    static func resolved(
+        natural: CGSize,
+        retained: CGSize?,
+        active: CGSize?
+    ) -> CGSize {
+        if let active { return active }
+        guard let retained else { return natural }
+        return CGSize(
+            width: max(natural.width, retained.width),
+            height: max(natural.height, retained.height)
+        )
+    }
+}
+
 struct WorkflowCanvasNodeDragState: Equatable {
+    let sessionID: UUID
     let scope: WorkflowCanvasScope
     let nodeID: UUID
     let originalPosition: CGPoint
@@ -631,11 +752,13 @@ struct WorkflowCanvasNodeDragState: Equatable {
     private(set) var previewPosition: CGPoint
 
     init(
+        sessionID: UUID,
         scope: WorkflowCanvasScope,
         nodeID: UUID,
         originalPosition: CGPoint,
         origin: CGSize
     ) {
+        self.sessionID = sessionID
         self.scope = scope
         self.nodeID = nodeID
         self.originalPosition = originalPosition
@@ -668,6 +791,92 @@ struct WorkflowCanvasNodeDragState: Equatable {
     }
 }
 
+enum WorkflowCanvasGestureSessionEvent: Equatable {
+    case began(UUID)
+    case changed(UUID)
+}
+
+struct WorkflowCanvasGestureSessionState: Equatable {
+    private(set) var sessionID: UUID?
+
+    mutating func change() -> WorkflowCanvasGestureSessionEvent {
+        if let sessionID { return .changed(sessionID) }
+        let sessionID = UUID()
+        self.sessionID = sessionID
+        return .began(sessionID)
+    }
+
+    mutating func end() -> UUID? {
+        defer { sessionID = nil }
+        return sessionID
+    }
+
+    mutating func cancel() -> UUID? {
+        defer { sessionID = nil }
+        return sessionID
+    }
+}
+
+struct WorkflowCanvasNodeDragCoordinator: Equatable {
+    private(set) var active: WorkflowCanvasNodeDragState?
+
+    @discardableResult
+    mutating func begin(
+        _ state: WorkflowCanvasNodeDragState,
+        screenTranslation: CGSize,
+        zoom: CGFloat
+    ) -> Bool {
+        guard active == nil else { return false }
+        var state = state
+        state.update(screenTranslation: screenTranslation, zoom: zoom)
+        active = state
+        return true
+    }
+
+    @discardableResult
+    mutating func update(
+        sessionID: UUID,
+        nodeID: UUID,
+        scope: WorkflowCanvasScope,
+        screenTranslation: CGSize,
+        zoom: CGFloat
+    ) -> Bool {
+        guard var state = active,
+              state.sessionID == sessionID,
+              state.nodeID == nodeID,
+              state.scope == scope else { return false }
+        state.update(screenTranslation: screenTranslation, zoom: zoom)
+        active = state
+        return true
+    }
+
+    mutating func finish(
+        sessionID: UUID,
+        nodeID: UUID,
+        scope: WorkflowCanvasScope,
+        screenTranslation: CGSize,
+        zoom: CGFloat
+    ) -> WorkflowCanvasNodeDragState? {
+        guard update(
+            sessionID: sessionID,
+            nodeID: nodeID,
+            scope: scope,
+            screenTranslation: screenTranslation,
+            zoom: zoom
+        ) else { return nil }
+        defer { active = nil }
+        return active
+    }
+
+    mutating func cancel(sessionID: UUID) {
+        if active?.sessionID == sessionID { active = nil }
+    }
+
+    mutating func invalidate() {
+        active = nil
+    }
+}
+
 enum WorkflowCanvasDragGeometry {
     static func rawPosition(original: CGPoint, screenTranslation: CGSize, zoom: CGFloat) -> CGPoint {
         let scale = max(zoom, 0.01)
@@ -685,7 +894,7 @@ struct WorkflowPortIdentity: Hashable {
 }
 
 struct WorkflowPortAnchorPreferenceKey: PreferenceKey {
-    static var defaultValue: [WorkflowPortIdentity: Anchor<CGPoint>] = [:]
+    static let defaultValue: [WorkflowPortIdentity: Anchor<CGPoint>] = [:]
 
     static func reduce(
         value: inout [WorkflowPortIdentity: Anchor<CGPoint>],
