@@ -6,7 +6,9 @@
 
 用户已批准工具链确认后改善输入法候选位置、历史保存响应、视频质量与音乐能力表达。有限范围、冻结 SAVE 契约、工具链结果及证据见[本轮任务](tasks/D-NODE-QUALITY-01.md)。源与远端基线 01758b81527dc27eb4563bf1b66fd1ceab6647ee；实施在独立 codex/node-quality-01，不写源个人差异。优先官方/AppKit/模型既有能力，不新增专用音乐流程。
 
-恢复点：组合代码ca0ff7a5869bad417ed9ddc6e3a724ba0296c77e；后续8125d9488e3683591be5680730b691fc3ea160f5只调整hosting证据分层和任务记录，生产代码相同。Workbench611、UI171、模型库CPU及App测试构建通过；H22普通包3dd32ae已由用户启动，隔离IME-Quality项目已建好，正在等待中文/日文移动缩放反馈。Lead暂停窗口和重模型，未接纳/推送。四项媒体显示要求仍须真实GUI；视频4/50对照、无音符音乐真实运行及最终普通包待执行。运行身份与检查点见本轮R/lead/recovery-checkpoint.json。写Worker已结束，修复预算SAVE用1轮、MEDIA用2轮及1次Lead hosting接管；不可用新编号重置。
+恢复点：组合代码ca0ff7a5869bad417ed9ddc6e3a724ba0296c77e；后续8125d9488e3683591be5680730b691fc3ea160f5只调整hosting证据分层和任务记录，生产代码相同。Workbench611、UI171、模型库CPU及App测试构建通过；H22普通包3dd32ae已由用户启动，隔离IME-Quality项目已建好，正在等待中文/日文移动缩放反馈。四项媒体显示要求仍须真实GUI；视频4/50对照、无音符音乐真实运行待执行。写Worker已结束，修复预算SAVE用1轮、MEDIA用2轮及1次Lead hosting接管；不可用新编号重置。
+
+用户随后明确要求先同步当前进度再自行试用：本次只推送`codex/node-quality-01`候选，源仍为01758b81527dc27eb4563bf1b66fd1ceab6647ee，不提前接纳。948a08ceac42897a9143223512485e13630fc313已重新正常构建D Nodes，独立交付`D Quality Preview.app`及新身份启动器；入口见[最新候选试用](NODE_LANGUAGE_TRY.zh-CN.md#最新进度试用版d-node-quality-01尚未阶段接纳)。本次未启动新App或模型，未操作用户IME窗口。最终远端核对、产物、保护状态及恢复点见本轮R/lead/progress-sync-receipt.json；此前recovery-checkpoint.json保留为历史。同步只保存进度，未改变以上验收门槛。
 
 ## D-NODE-LANGUAGE-01：已完成的上一阶段
 
