@@ -704,6 +704,13 @@ private struct WorkflowNodeInspector: View {
             if let node {
                 VStack(alignment: .leading, spacing: 16) {
                     identity(node)
+                    if node.operationID == "d.video.generate", let graph = controller.graph,
+                       let target = WorkflowVideoPresetAction(node: node, graph: graph) {
+                        videoPresets(target)
+                    }
+                    if node.operationID == "d.music.generate" {
+                        musicCapabilities
+                    }
                     parameters(node)
                     if node.operationID.hasPrefix("d.value.") || ["d.model.language", "d.control.human", "d.music.chords"].contains(node.operationID) {
                         WorkflowNodeDataEditor(node: Binding(get: { controller.graph?.nodes.first(where: { $0.id == node.id }) ?? node }, set: { edited in
@@ -755,6 +762,106 @@ private struct WorkflowNodeInspector: View {
         } message: {
             Text(workflowText(languageStore, "workflow.scope.callExplanation", fallback: "使用这次调用冻结的参数与输入，创建新的运行。不会改写或继续原有循环；模型调用可能耗时。"))
         }
+    }
+
+    @ViewBuilder
+    private func videoPresets(_ target: WorkflowVideoPresetAction) -> some View {
+        WorkflowInspectorSection(workflowText(
+            languageStore, "workflow.videoPresets.title", fallback: "视频参数预设"
+        )) {
+            ForEach(WorkflowVideoPresets.all) { preset in
+                Button {
+                    applyVideoPreset(preset, target: target)
+                } label: {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(workflowText(
+                            languageStore,
+                            "workflow.videoPresets.\(preset.id).title",
+                            fallback: preset.id
+                        ))
+                            .font(.callout.weight(.medium))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        Text(workflowText(
+                            languageStore,
+                            "workflow.videoPresets.\(preset.id).detail",
+                            fallback: "\(preset.width)×\(preset.height) · \(preset.frameCount)帧 · \(preset.frameRate)fps · \(preset.steps)步 · CFG \(preset.guidance.formatted()) · shift \(preset.scheduleShift.formatted())"
+                        ))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+                .buttonStyle(.bordered)
+                .disabled(readOnly || controller.isRunning)
+                .accessibilityLabel(workflowText(
+                    languageStore,
+                    "workflow.videoPresets.\(preset.id).title",
+                    fallback: preset.id
+                ))
+                .accessibilityValue(workflowText(
+                    languageStore,
+                    "workflow.videoPresets.\(preset.id).detail",
+                    fallback: "\(preset.width)×\(preset.height) · \(preset.frameCount)帧 · \(preset.frameRate)fps · \(preset.steps)步 · CFG \(preset.guidance.formatted()) · shift \(preset.scheduleShift.formatted())"
+                ))
+                .accessibilityIdentifier("workflow-video-preset-\(preset.id)")
+            }
+            Text(workflowText(
+                languageStore,
+                "workflow.videoPresets.applyNotice",
+                fallback: "只在明确选择时更新七项参数；不会运行，也不改变模型、提示、种子或内存预算。"
+            ))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text(workflowText(
+                languageStore,
+                "workflow.videoPresets.qualityNotice",
+                fallback: "4步仅检查链路；完整短预览不保证成片质量；官方480p起点未在本机本轮验证。"
+            ))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var musicCapabilities: some View {
+        WorkflowInspectorSection(workflowText(
+            languageStore, "workflow.musicCapabilities.title", fallback: "MRT2 固定能力与边界"
+        )) {
+            Text(workflowText(
+                languageStore,
+                "workflow.musicCapabilities.conditioning",
+                fallback: "25Hz（40ms）条件编码音高、起音和延续；同音声部合并，非零力度不编码，鼓当前不受约束。条件服从为近似，不保证精确复现。"
+            ))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text(workflowText(
+                languageStore,
+                "workflow.musicCapabilities.optionalNotes",
+                fallback: "音符和和声均未提供时不约束音符；无和声时显式空音符列表发送所有音高OFF条件，而不是省略条件，但不保证静音；连接和声时仍与音符条件合并。"
+            ))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text(workflowText(
+                languageStore,
+                "workflow.musicCapabilities.output",
+                fallback: "输出限WAV、48kHz、双声道、最长16秒。"
+            ))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text(workflowText(
+                languageStore,
+                "workflow.musicCapabilities.sampling",
+                fallback: "固定采样：温度1.3、Top-k 40、MusicCoCa CFG 3、音符/鼓 CFG 1。"
+            ))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func applyVideoPreset(_ preset: WorkflowVideoPreset, target: WorkflowVideoPresetAction) {
+        guard !readOnly, !controller.isRunning, controller.readOnlyReason == nil,
+              let graph = controller.graph,
+              let replacement = target.replacement(in: graph, preset: preset) else { return }
+        controller.updateNode(replacement, in: target.graphID)
     }
 
     @ViewBuilder
@@ -1003,6 +1110,28 @@ private struct WorkflowNodeInspector: View {
         case .text: onTextModel
         case nil: {}
         }
+    }
+}
+
+/// A rendered inspector action owns the exact graph revision and node value that produced it.
+/// Re-evaluating the snapshot at invocation prevents an old SwiftUI action from replacing newer edits.
+struct WorkflowVideoPresetAction: Equatable {
+    let graphID: UUID
+    let revision: UUID
+    let node: WorkflowNode
+
+    init?(node: WorkflowNode, graph: WorkflowGraph) {
+        guard node.operationID == "d.video.generate",
+              graph.nodes.first(where: { $0.id == node.id }) == node else { return nil }
+        graphID = graph.id
+        revision = graph.revision
+        self.node = node
+    }
+
+    func replacement(in graph: WorkflowGraph, preset: WorkflowVideoPreset) -> WorkflowNode? {
+        guard graph.id == graphID, graph.revision == revision,
+              graph.nodes.first(where: { $0.id == node.id }) == node else { return nil }
+        return preset.applying(to: node)
     }
 }
 
