@@ -42,3 +42,23 @@ Xcode 27.0 (27A266a)：Agent 的 Codex 已下载但界面仍要求登录；ChatG
 ## 接纳与恢复
 
 各组件 CPU/构建、真人 IME、真实视频/音乐以及源组合验证分别记录；性能保留前后同数据实测，艺术效果单独判断。手动/锁屏阻塞进入集中清单。最终仅快进接纳已验组合到既有工作分支，显式暂存，保留来源及证据；不发布/main，不清候选。待补实现、测试、审阅、版本及停点。
+
+## MEDIA 工作包（r1，冻结于官方对照后）
+
+官方 Wan 原始1.3B非蒸馏建议50步，CFG6/shift8起点；当前节点4步是链路预设，不代表普通画质。MRT2现有1.3/40/3/1与锁定官方CLI一致，不在本轮改其推理协议。来源：Wan-Video/Wan2.1 的 generate.py/text2video.py 与 Magenta MRT2官方控制说明、锁定694a545e的mlx_commands.py。只读定位结果保留；本轮不修改采样器、精度、provider或旧请求回退。
+
+MEDIA只允许下列文件：
+- 新 `Packages/UI/Sources/DWorkbench/Workflow/WorkflowVideoPresets.swift`（当前UI实际调用的纯值参数预设，不是注册平台）。
+- `Packages/UI/Sources/DWorkbench/Workflow/Operations/WorkflowLanguageOperations.swift`、`WorkflowMusicOperations.swift`。
+- `Packages/UI/Sources/DWorkbench/Workflow/WorkflowLanguageExamples.swift`。
+- `Packages/UI/Sources/UI/Views/Workflow/WorkflowCanvasView.swift`。
+- `Packages/UI/Sources/UI/Resources/Localization/zh-Hans.json`、`en.json`。
+- 新 `Packages/UI/Tests/DWorkbenchTests/WorkflowMediaPresentationTests.swift`、新 `Packages/UI/Tests/UITests/WorkflowMediaPresetTests.swift`。
+
+行为：新视频节点和新E04采用320×192/17帧/16fps/50步/CFG6/shift8；UI可显式应用三个普通参数预设：连通性256²/17/16/4/5/5、完整短预览320×192/17/16/50/6/8、官方480p起点832×480/81/16/50/6/8。均不自动运行，不按16GiB限制用户；预算由用户明确填写。已有节点/历史及缺字段的执行回退不变。预设只原子更新列明七项参数，保留modelID、seed、提示、负面提示、内存预算及其他数据，支持原有撤销；只读/运行中不可应用，旧回调不能修改别的图。说明4步仅查链路、短预览不是成片保证、大配置未在本机本轮验证。
+
+MRT2音符端口改为可选，直接复用现有 WorkflowMRT2Condition.make：无音符且无和声产生notes=nil不约束；显式空音符产生notes=[]关闭音高但不保证静音；和弦输入独立可用。不新增特殊调度或输入mode键，不改变既有连线。UI清楚展示25Hz/40ms、音高/起音/延续、同音声部合并、非零力度未编码、鼓当前不受约束、有限WAV/48kHz/双声道≤16秒及固定采样值。能力说明不是执行schema。
+
+验收：三个预设参数正确、只显式应用/不启动/不改模型提示等、保存重开与撤销保留；旧节点含4步不被读/展示改写。无音符/空音符/真实音符/单独和弦的实际操作请求不同且保留父资产；现有例子编译、语言包对等、真实hosting挂载。后端请求/解析/保护不改。Lead串行实际比较同模型/提示/seed/几何/引导/shift的4与50步短视频，检查完整解码/耗时/峰值并看图；新无音符模式做真实短生成。未测的更大预设不称已验证。
+
+请求gpt-5.6-sol/high，初交20分钟，禁止重构建/GPU/GUI/网络/安装，Lead统一测试；独立MEDIA树及本run/MEDIA/output、tmp可写，共享Git不可写。初交与两轮修复预算，不改契约。Lead保持共享文档与最终接纳所有权。
