@@ -20,6 +20,29 @@ final class CloseRequestGate {
     }
 }
 
+/// Window geometry changes can happen outside the input method's event handling.
+/// Ask AppKit to query its native screen coordinates again after SwiftUI layout.
+/// This never commits marked text or caches a responder across a focus change.
+@MainActor
+final class WorkbenchInputGeometry {
+    private weak var window: NSWindow?
+    private var scheduled = false
+
+    init(window: NSWindow) { self.window = window }
+
+    func invalidateAfterLayout() {
+        guard !scheduled else { return }
+        scheduled = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.scheduled = false
+            guard let window = self.window else { return }
+            window.contentView?.layoutSubtreeIfNeeded()
+            window.firstResponder?.inputContext?.invalidateCharacterCoordinates()
+        }
+    }
+}
+
 @MainActor
 final class WorkbenchApplicationDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private weak var workbenchWindow: NSWindow?
@@ -29,6 +52,7 @@ final class WorkbenchApplicationDelegate: NSObject, NSApplicationDelegate, NSWin
     private var windowCloseApproved = false
     private var terminationPending = false
     private var prepareLibraryForTermination: (@MainActor () async -> Bool)?
+    private var inputGeometry: WorkbenchInputGeometry?
 
     // Installation belongs to the app. A single SwiftUI Window otherwise quits
     // when closed; only an explicit app Quit should shut the library down.
@@ -38,6 +62,7 @@ final class WorkbenchApplicationDelegate: NSObject, NSApplicationDelegate, NSWin
                  prepareLibraryForTermination: @escaping @MainActor () async -> Bool) {
         guard workbenchWindow !== window else { return }
         workbenchWindow = window
+        inputGeometry = WorkbenchInputGeometry(window: window)
         previousWindowDelegate = window.delegate
         closeGate = CloseRequestGate { await model.requestClose() }
         self.prepareLibraryForTermination = prepareLibraryForTermination
@@ -94,10 +119,20 @@ final class WorkbenchApplicationDelegate: NSObject, NSApplicationDelegate, NSWin
     func window(_ window: NSWindow, didDecodeRestorableState state: NSCoder) {
         previousWindowDelegate?.window?(window, didDecodeRestorableState: state)
     }
-    func windowDidResize(_ notification: Notification) { previousWindowDelegate?.windowDidResize?(notification) }
+    private func inputGeometryChanged(_ notification: Notification) {
+        guard let window = notification.object as? NSWindow, window === workbenchWindow else { return }
+        inputGeometry?.invalidateAfterLayout()
+    }
+    func windowDidResize(_ notification: Notification) {
+        previousWindowDelegate?.windowDidResize?(notification)
+        inputGeometryChanged(notification)
+    }
     func windowDidExpose(_ notification: Notification) { previousWindowDelegate?.windowDidExpose?(notification) }
     func windowWillMove(_ notification: Notification) { previousWindowDelegate?.windowWillMove?(notification) }
-    func windowDidMove(_ notification: Notification) { previousWindowDelegate?.windowDidMove?(notification) }
+    func windowDidMove(_ notification: Notification) {
+        previousWindowDelegate?.windowDidMove?(notification)
+        inputGeometryChanged(notification)
+    }
     func windowDidBecomeKey(_ notification: Notification) { previousWindowDelegate?.windowDidBecomeKey?(notification) }
     func windowDidResignKey(_ notification: Notification) { previousWindowDelegate?.windowDidResignKey?(notification) }
     func windowDidBecomeMain(_ notification: Notification) { previousWindowDelegate?.windowDidBecomeMain?(notification) }
@@ -107,13 +142,22 @@ final class WorkbenchApplicationDelegate: NSObject, NSApplicationDelegate, NSWin
     func windowDidMiniaturize(_ notification: Notification) { previousWindowDelegate?.windowDidMiniaturize?(notification) }
     func windowDidDeminiaturize(_ notification: Notification) { previousWindowDelegate?.windowDidDeminiaturize?(notification) }
     func windowDidUpdate(_ notification: Notification) { previousWindowDelegate?.windowDidUpdate?(notification) }
-    func windowDidChangeScreen(_ notification: Notification) { previousWindowDelegate?.windowDidChangeScreen?(notification) }
+    func windowDidChangeScreen(_ notification: Notification) {
+        previousWindowDelegate?.windowDidChangeScreen?(notification)
+        inputGeometryChanged(notification)
+    }
     func windowDidChangeScreenProfile(_ notification: Notification) { previousWindowDelegate?.windowDidChangeScreenProfile?(notification) }
-    func windowDidChangeBackingProperties(_ notification: Notification) { previousWindowDelegate?.windowDidChangeBackingProperties?(notification) }
+    func windowDidChangeBackingProperties(_ notification: Notification) {
+        previousWindowDelegate?.windowDidChangeBackingProperties?(notification)
+        inputGeometryChanged(notification)
+    }
     func windowWillBeginSheet(_ notification: Notification) { previousWindowDelegate?.windowWillBeginSheet?(notification) }
     func windowDidEndSheet(_ notification: Notification) { previousWindowDelegate?.windowDidEndSheet?(notification) }
     func windowWillStartLiveResize(_ notification: Notification) { previousWindowDelegate?.windowWillStartLiveResize?(notification) }
-    func windowDidEndLiveResize(_ notification: Notification) { previousWindowDelegate?.windowDidEndLiveResize?(notification) }
+    func windowDidEndLiveResize(_ notification: Notification) {
+        previousWindowDelegate?.windowDidEndLiveResize?(notification)
+        inputGeometryChanged(notification)
+    }
     func windowWillEnterFullScreen(_ notification: Notification) { previousWindowDelegate?.windowWillEnterFullScreen?(notification) }
     func windowDidEnterFullScreen(_ notification: Notification) { previousWindowDelegate?.windowDidEnterFullScreen?(notification) }
     func windowWillExitFullScreen(_ notification: Notification) { previousWindowDelegate?.windowWillExitFullScreen?(notification) }

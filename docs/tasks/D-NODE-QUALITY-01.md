@@ -62,3 +62,9 @@ MRT2音符端口改为可选，直接复用现有 WorkflowMRT2Condition.make：�
 验收：三个预设参数正确、只显式应用/不启动/不改模型提示等、保存重开与撤销保留；旧节点含4步不被读/展示改写。无音符/空音符/真实音符/单独和弦的实际操作请求不同且保留父资产；现有例子编译、语言包对等、真实hosting挂载。后端请求/解析/保护不改。Lead串行实际比较同模型/提示/seed/几何/引导/shift的4与50步短视频，检查完整解码/耗时/峰值并看图；新无音符模式做真实短生成。未测的更大预设不称已验证。
 
 请求gpt-5.6-sol/high，初交20分钟，禁止重构建/GPU/GUI/网络/安装，Lead统一测试；独立MEDIA树及本run/MEDIA/output、tmp可写，共享Git不可写。初交与两轮修复预算，不改契约。Lead保持共享文档与最终接纳所有权。
+
+## H22 候选与证据范围
+
+Lead 在 `D/WorkbenchApplicationDelegate.swift` 复用实际窗口连接，move/resize/screen/backing/live-resize-end转发后合并一次布局后坐标失效通知；新 `DTests/WorkbenchInputGeometryTests.swift` 验证当前焦点、窗口隔离、屏幕矩形、marked text/selection/undo。本轮无手算候选窗、重建编辑器或强制提交。
+
+R/ime/geometry-r3.json 的原生矩形随窗口移动正确；该独立探针没有保留非空marked range，故只证明普通字符坐标，不能当作组合输入或候选跟随验收。H22具体根因仍需新普通App真人确认；实现使用Apple公开invalidateCharacterCoordinates补足窗口布局之外的通知，尚不宣称已修复。第一次外部探针CGFloat类型歧义仅编译失败，无App/项目副作用。准备复用已有独立引擎目录的忽略本机xcconfig，未改签名身份。
