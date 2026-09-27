@@ -87,6 +87,12 @@ public struct WorkflowLayout: Codable, Sendable, Equatable {
     public init(nodeID: UUID, x: Double, y: Double, collapsed: Bool = false) {
         self.nodeID = nodeID; self.x = x; self.y = y; self.collapsed = collapsed
     }
+
+    /// Conservative presentation budget for the current expanded card (bounded
+    /// title/detail rows). Not an execution constraint or a saved-layout migration.
+    public static func cardHeightBudget(inputs: Int, outputs: Int) -> Double {
+        180 + 48 * Double(max(1, inputs) + max(1, outputs))
+    }
 }
 public struct WorkflowGraph: Codable, Sendable, Equatable, Identifiable {
     public var id: UUID

@@ -32,6 +32,110 @@ private actor CanvasNoInferenceEngine: InferenceEngine {
 /// This exercises the actual view tree, not screen capture or native human interaction.
 @Suite(.serialized) @MainActor
 struct WorkflowCanvasHostingTests {
+    @Test func officialExamplesAndToolCopiesHaveNonoverlappingRenderedCards() async throws {
+        let root = URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory())
+            .appendingPathComponent("example-card-layout-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let store = try await ProjectStore.create(at: root.appendingPathComponent("Layout.dproject"), name: "Layout")
+        let engine = CanvasNoInferenceEngine()
+        let runtime = WorkbenchSession(engine: engine, backendID: "never",
+            status: { .init(activeRunID: nil, phase: nil, queuedRunIDs: []) },
+            shutdown: {}, cleanup: {}, validateModel: { _ in })
+        let services = WorkflowServices(store: store, session: runtime,
+            resolveText: { throw WorkflowIssue("Layout must not load models") },
+            resolveImage: { throw WorkflowIssue("Layout must not load models") })
+        let controller = WorkflowController(services: services); await controller.load()
+        func measure() async throws {
+            let graph = try #require(controller.graph)
+            let before = controller.graphs
+            let toolsBefore = controller.tools
+            for locale in ["zh-Hans", "en"] {
+                var sizes: [UUID: CGSize] = [:]
+                let view = WorkflowCanvasView(controller: controller, onTextModel: {}, onImageModel: {},
+                    onImport: { _ in }, onDestination: {}, onPublishText: {}, onReturnText: { _ in })
+                    .observingNodeSizes { sizes[$0] = $1 }
+                    .environment(\.dLanguageStore, UILanguageStore(preferredLanguages: [locale]))
+                let host = NSHostingView(rootView: view)
+                host.frame = CGRect(x: 0, y: 0, width: 1500, height: 900)
+                for _ in 0..<40 {
+                    host.layoutSubtreeIfNeeded()
+                    try await Task.sleep(for: .milliseconds(10))
+                    if sizes.count == graph.nodes.count { break }
+                }
+                #expect(sizes.count == graph.nodes.count)
+                let geometry = WorkflowGraphGeometry(graph: graph, tools: controller.tools, registry: controller.registry)
+                let rectangles = try graph.nodes.map { node -> CGRect in
+                    let size = try #require(sizes[node.id])
+                    #expect(size.width > 0 && size.height > 0)
+                    let point = geometry.displayPosition(node.id)
+                    let rectangle = CGRect(x: point.x - size.width / 2, y: point.y - size.height / 2,
+                        width: size.width, height: size.height)
+                    #expect(rectangle.minY >= 0 && rectangle.maxY <= geometry.size.height,
+                        "Card must remain reachable: \(graph.name) / \(node.title) / \(locale)")
+                    return rectangle
+                }
+                for i in rectangles.indices {
+                    for j in rectangles.indices where j > i {
+                        #expect(!rectangles[i].intersects(rectangles[j]),
+                            "Overlapping cards: \(graph.name) / \(graph.nodes[i].title) / \(graph.nodes[j].title) / \(locale)")
+                    }
+                }
+                #expect(controller.graphs == before && controller.tools == toolsBefore)
+                let calls = await engine.calls
+                #expect(controller.runs.isEmpty && calls == 0)
+            }
+        }
+        var measuredBodies = 0
+        func measureTree() async throws {
+            try await measure()
+            let parent = try #require(controller.graph)
+            let path = controller.bodyPath
+            for node in parent.nodes {
+                let children: [(String, WorkflowGraph)]
+                switch node.control {
+                case .branch(_, let thenBody, let otherwiseBody):
+                    children = [("then", thenBody), ("otherwise", otherwiseBody)]
+                case .map(let body, _), .loop(let body, _, _, _): children = [("body", body)]
+                default: children = []
+                }
+                for (slot, body) in children {
+                    controller.openBody(nodeID: node.id, slot: slot)
+                    try #require(controller.errorMessage == nil)
+                    try #require(controller.graph?.id == body.id)
+                    try #require(controller.bodyPath == path + [.init(nodeID: node.id, slot: slot)])
+                    measuredBodies += 1
+                    try await measureTree()
+                    controller.closeBody()
+                    try #require(controller.graph?.id == parent.id && controller.bodyPath == path)
+                }
+            }
+        }
+        for choice in WorkflowLanguageExample.allCases {
+            let count = controller.graphs.count
+            let previous = controller.selectedGraphID
+            controller.addLanguageExample(choice)
+            try #require(controller.errorMessage == nil)
+            try #require(controller.graphs.count == count + 1 && controller.selectedGraphID != previous)
+            try #require(controller.graph?.id == controller.selectedGraphID && controller.bodyPath.isEmpty)
+            try await measureTree()
+        }
+        for tool in controller.tools {
+            let reference = WorkflowToolReference(id: tool.id, version: tool.version,
+                digest: try WorkflowPlanCompiler.digest(tool))
+            let count = controller.graphs.count
+            let previous = controller.selectedGraphID
+            controller.openToolCopy(reference)
+            try #require(controller.errorMessage == nil)
+            try #require(controller.graphs.count == count + 1 && controller.selectedGraphID != previous)
+            try #require(controller.graph?.id == controller.selectedGraphID && controller.bodyPath.isEmpty)
+            try #require(controller.graph?.id != tool.graph.id)
+            try #require(controller.graph?.nodes.count == tool.graph.nodes.count)
+            try await measureTree()
+        }
+        #expect(measuredBodies > 0)
+        try await controller.close(); try await store.close()
+    }
+
     @Test func waitingEditorWaitsForLoadAndPreservesCompositionDuringOtherExecution() async throws {
         let root = URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory())
             .appendingPathComponent("canvas-delay-" + UUID().uuidString)

@@ -438,3 +438,10 @@ H27 hosting诊断更正：实际全部23个SwiftUI按钮的进程内AX名称为�
 
 
 H27恢复修补收尾：`lead/h27-recovery-actions`实际exit0，UI9项及Audio19项分组通过（Audio含启动/结束失败两参数case）；r2离屏按钮失败保留，不改报通过。`lead/h27-normal-recovery-build`普通签名Debug构建通过，受测95b7ee66加本段对应7文件，生产摘要见新run的`evidence/recovery-build-inputs.json`。非实现者只读复核最终diff无阻断。普通App H27包点击“保留待恢复”后，用户完成新录音；新资产C31991AE-7B00-439C-A0E4-4F30E7A3D5FE，48k单声道7.594667秒，节点绑定与播放预览通过，用户确认“听到了，录音正常”。旧预约及4096字节SHA491b7d1f…5e2cee不变。详见`run-20260927T020614Z-h27/evidence/recording-recovery-native.json`。本修补由Astra Lead实现/验证、非实现者资源审核；非Worker独立成果。原生冷重开、完整音乐候选、输入法/Xcode Run/离线仍需继续，不标阶段完成。
+
+
+### H27 样例初始布局与本次输入反馈
+
+用户确认中文空格选字正常、候选不消失，但报告严重卡顿且候选不跟随窗口；完整缩放/中日输入不能记通过，日文未知，H22未关闭。事后内存/CPU和自有进程8秒采样未见持续模型负载，不能推出卡顿原因或16 GiB不足；原证据 `evidence/ime-and-responsiveness.json`。保存测试项目后正常退出自有App57812。
+
+Lead局部修补仅改变新官方样例与新工具的初始布局：按真实端口数量给行高留空间，限制卡片说明行数但保留完整help/AX；画布边界共用Controller注册表，平移显示不回写已保存坐标。未建立自动排版器、不改执行/图版本/模型数值。新增真实卡片hosting测量中英四样例及工具，并递归条件/Map/Loop内部；非实现者指出初版漏测控制体、未断言切换成功及错误registry，均补齐。`lead/h27-initial-layout-r1` exit0，UI16项/2suite、Workbench21项/2suite分别通过；原生遮挡是先前观察，未伪称回归测试先红。自定义20输入registry边界亦通过。最终源码摘要 `evidence/layout-tested-inputs.json`；非实现者二次只读复核无阻断，GUI另验，不把hosting当原生。

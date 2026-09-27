@@ -108,7 +108,7 @@ public enum WorkflowJSONRepairTool {
                 connect(strictCheck, finalData),
                 connect(finalData, output),
             ],
-            layout: gridLayout(nodes)
+            layout: WorkflowLanguageExamples.gridLayout(nodes)
         )
         graph.interface = .init(
             inputs: [.init("content", .text)],
@@ -195,7 +195,7 @@ public enum WorkflowJSONRepairTool {
                 connect(repairedCheck, nextState, targetPort: "check"),
                 connect(nextState, result),
             ],
-            layout: gridLayout(nodes)
+            layout: WorkflowLanguageExamples.gridLayout(nodes)
         )
         graph.interface = .init(
             inputs: [
@@ -322,13 +322,4 @@ public enum WorkflowJSONRepairTool {
         )
     }
 
-    private static func gridLayout(_ nodes: [WorkflowNode]) -> [WorkflowLayout] {
-        nodes.enumerated().map { offset, node in
-            WorkflowLayout(
-                nodeID: node.id,
-                x: Double(offset % 5) * 280,
-                y: Double(offset / 5) * 180
-            )
-        }
-    }
 }

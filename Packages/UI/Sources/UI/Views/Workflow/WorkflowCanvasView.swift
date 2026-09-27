@@ -27,6 +27,12 @@ public struct WorkflowCanvasView: View {
     private let onDestination: () -> Void
     private let onPublishText: () -> Void
     private let onReturnText: (WorkflowAssetReference) -> Void
+    private var nodeSizeObserver: ((UUID, CGSize) -> Void)?
+
+    // Read-only layout observation; never rewrites stored node positions.
+    func observingNodeSizes(_ observer: @escaping (UUID, CGSize) -> Void) -> Self {
+        var copy = self; copy.nodeSizeObserver = observer; return copy
+    }
 
     @Environment(\.dLanguageStore) private var languageStore
 
@@ -121,7 +127,8 @@ public struct WorkflowCanvasView: View {
                 zoom: $zoom,
                 pendingConnection: $pendingConnection,
                 readOnly: isReadOnly,
-                onPlan: presentPlan
+                onPlan: presentPlan,
+                nodeSizeObserver: nodeSizeObserver
             )
             .frame(minWidth: WorkflowCanvasLayoutPolicy.canvasMinimumWidth,
                    maxWidth: .infinity, maxHeight: .infinity)
@@ -399,13 +406,14 @@ private struct WorkflowGraphSurface: View {
     @Binding var pendingConnection: WorkflowPendingConnection?
     let readOnly: Bool
     let onPlan: (UUID, Bool) -> Void
+    var nodeSizeObserver: ((UUID, CGSize) -> Void)?
     @Environment(\.dLanguageStore) private var languageStore
     @GestureState private var gestureScale: CGFloat = 1
 
     var body: some View {
         Group {
             if let graph {
-                let geometry = WorkflowGraphGeometry(graph: graph)
+                let geometry = WorkflowGraphGeometry(graph: graph, tools: controller.tools, registry: controller.registry)
                 ScrollView([.horizontal, .vertical]) {
                     ZStack(alignment: .topLeading) {
                         Color(nsColor: .textBackgroundColor)
@@ -424,6 +432,9 @@ private struct WorkflowGraphSurface: View {
                                 selected: controller.selectedNodeID == node.id,
                                 onPlan: onPlan
                             )
+                            .onGeometryChange(for: CGSize.self) { $0.size } action: { size in
+                                nodeSizeObserver?(node.id, size)
+                            }
                             .position(geometry.displayPosition(node.id))
                         }
                     }
@@ -526,6 +537,7 @@ private struct WorkflowNodeCard: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(node.title).font(.headline).lineLimit(2)
                     Text(node.operationID).font(.caption2.monospaced()).foregroundStyle(.secondary)
+                        .lineLimit(1).help(node.operationID)
                 }
                 Spacer(minLength: 6)
                 Button { controller.toggleCollapsed(node.id) } label: {
@@ -629,15 +641,18 @@ private struct WorkflowNodeCard: View {
                         VStack(alignment: input ? .leading : .trailing, spacing: 1) {
                             Text(WorkflowCanvasPresentation.portTitle(
                                 operationID: node.operationID, port: port, input: input, language: languageStore
-                            )).font(.caption.weight(.medium))
+                            )).font(.caption.weight(.medium)).lineLimit(1)
                             Text(WorkflowCanvasPresentation.portDetail(port, language: languageStore))
-                                .font(.caption2).foregroundStyle(.secondary)
+                                .font(.caption2).foregroundStyle(.secondary).lineLimit(2)
                         }
                         .frame(maxWidth: .infinity, alignment: input ? .leading : .trailing)
                         if !input { portDot(input: false) }
                     }
                 }
                 .buttonStyle(.plain)
+                .help(WorkflowCanvasPresentation.portTitle(operationID: node.operationID,
+                    port: port, input: input, language: languageStore) + " — "
+                    + WorkflowCanvasPresentation.portDetail(port, language: languageStore))
                 .disabled(readOnly || (input && pendingConnection == nil))
                 .accessibilityLabel(workflowText(
                     languageStore,
@@ -1623,18 +1638,24 @@ struct WorkflowGraphGeometry {
     let translation: CGSize
     let size: CGSize
 
-    init(graph: WorkflowGraph) {
+    init(graph: WorkflowGraph, tools: [WorkflowToolDefinition] = [], registry: WorkflowRegistry = .standard) {
         self.graph = graph
         let raw = graph.nodes.enumerated().map { index, node in
             Self.rawPosition(node.id, index: index, graph: graph)
         }
         let minimumX = raw.map(\.x).min() ?? 0
-        let minimumY = raw.map(\.y).min() ?? 0
-        translation = CGSize(width: max(0, 150 - minimumX), height: max(0, 110 - minimumY))
+        let halfHeights = graph.nodes.map { node -> CGFloat in
+            if graph.layout.first(where: { $0.nodeID == node.id })?.collapsed == true { return 90 }
+            let definition = registry.definition(for: node, tools: tools)
+            return CGFloat(WorkflowLayout.cardHeightBudget(inputs: definition?.inputs.count ?? 1,
+                outputs: definition?.outputs.count ?? 1)) / 2
+        }
+        let minimumY = zip(raw, halfHeights).map { $0.0.y - $0.1 }.min() ?? 0
+        translation = CGSize(width: max(0, 150 - minimumX), height: max(0, 24 - minimumY))
         let maximumX = raw.map(\.x).max() ?? 0
-        let maximumY = raw.map(\.y).max() ?? 0
+        let maximumY = zip(raw, halfHeights).map { $0.0.y + $0.1 }.max() ?? 0
         size = CGSize(width: max(1_400, maximumX + translation.width + 320),
-                      height: max(900, maximumY + translation.height + 260))
+                      height: max(900, maximumY + translation.height + 24))
     }
 
     func rawPosition(_ nodeID: UUID) -> CGPoint {

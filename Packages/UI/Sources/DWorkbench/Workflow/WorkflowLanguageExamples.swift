@@ -203,7 +203,7 @@ public enum WorkflowLanguageExamples {
                 connect(planner, map),
                 connect(map, result),
             ],
-            layout: gridLayout(nodes)
+            layout: gridLayout(nodes, tools: [imageTool, planningTool])
         )
         return .init(graph: graph, tools: [imageTool, planningTool])
     }
@@ -293,7 +293,7 @@ public enum WorkflowLanguageExamples {
             name: "逐主题调用图像工具",
             nodes: nodes,
             connections: [connect(input, invoke, targetPort: "theme")],
-            layout: gridLayout(nodes)
+            layout: gridLayout(nodes, tools: [tool])
         )
         graph.interface = .init(
             inputs: [.init("item", .record(themeFields))],
@@ -513,7 +513,7 @@ public enum WorkflowLanguageExamples {
                 connect(notes, invoke, targetPort: "notes"),
                 connect(chords, invoke, targetPort: "chords"),
             ],
-            layout: gridLayout(nodes)
+            layout: gridLayout(nodes, tools: [tool])
         )
         graph.interface = .init(
             inputs: [
@@ -892,9 +892,22 @@ public enum WorkflowLanguageExamples {
         .init(sourceNode: source.id, sourcePort: sourcePort, targetNode: target.id, targetPort: targetPort)
     }
 
-    private static func gridLayout(_ nodes: [WorkflowNode]) -> [WorkflowLayout] {
-        nodes.enumerated().map { offset, node in
-            WorkflowLayout(nodeID: node.id, x: Double(offset % 5) * 280, y: Double(offset / 5) * 180)
+    static func gridLayout(_ nodes: [WorkflowNode], tools: [WorkflowToolDefinition] = []) -> [WorkflowLayout] {
+        let registry = WorkflowRegistry.standard
+        var result: [WorkflowLayout] = []
+        var top = 24.0
+        for start in stride(from: 0, to: nodes.count, by: 5) {
+            let row = Array(nodes[start..<min(start + 5, nodes.count)])
+            let height = row.map { node in
+                let definition = registry.definition(for: node, tools: tools)
+                return WorkflowLayout.cardHeightBudget(inputs: definition?.inputs.count ?? 1,
+                    outputs: definition?.outputs.count ?? 1)
+            }.max() ?? 0
+            result += row.enumerated().map { column, node in
+                WorkflowLayout(nodeID: node.id, x: Double(column) * 280, y: top + height / 2)
+            }
+            top += height + 36
         }
+        return result
     }
 }

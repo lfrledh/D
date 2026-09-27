@@ -57,6 +57,22 @@ struct WorkflowCanvasPresentationTests {
     }
 
     @Test
+    func graphGeometryUsesTheSameRegistryAsTheCards() throws {
+        let definition = WorkflowOperationDefinition(id: "fixture.manyPorts", title: "Ports", detail: "",
+            inputs: (0..<20).map { .init("i\($0)", "Input \($0)", kinds: [.text]) },
+            outputs: [.init("output", "Output", kinds: [.text])])
+        let registry = try WorkflowRegistry(operations: [.init(definition: definition,
+            execute: { _, _ in throw WorkflowIssue("Geometry must not execute") })])
+        let node = definition.makeNode()
+        let graph = WorkflowGraph(nodes: [node], layout: [.init(nodeID: node.id, x: 0, y: -20)])
+        let geometry = WorkflowGraphGeometry(graph: graph, registry: registry)
+        let halfHeight = WorkflowLayout.cardHeightBudget(inputs: 20, outputs: 1) / 2
+        #expect(geometry.displayPosition(node.id).y - halfHeight >= 24)
+        #expect(geometry.displayPosition(node.id).y + halfHeight <= geometry.size.height - 24)
+        #expect(geometry.rawPosition(node.id) == CGPoint(x: 0, y: -20))
+    }
+
+    @Test
     func graphGeometryFallsBackOnlyForNodesWithoutStoredLayout() {
         let laidOut = WorkflowNode(id: UUID(), operationID: "d.text.input", title: "固定")
         let fallback = WorkflowNode(id: UUID(), operationID: "d.text.confirm", title: "回退")
