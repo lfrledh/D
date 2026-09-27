@@ -6,6 +6,8 @@
 
 用户已批准工具链确认后改善输入法候选位置、历史保存响应、视频质量与音乐能力表达。有限范围、冻结 SAVE 契约、工具链结果及证据见[本轮任务](tasks/D-NODE-QUALITY-01.md)。源与远端基线 01758b81527dc27eb4563bf1b66fd1ceab6647ee；实施在独立 codex/node-quality-01，不写源个人差异。优先官方/AppKit/模型既有能力，不新增专用音乐流程。
 
+恢复点：组合代码ca0ff7a5869bad417ed9ddc6e3a724ba0296c77e；后续8125d9488e3683591be5680730b691fc3ea160f5只调整hosting证据分层和任务记录，生产代码相同。Workbench611、UI171、模型库CPU及App测试构建通过；H22普通包3dd32ae已由用户启动，隔离IME-Quality项目已建好，正在等待中文/日文移动缩放反馈。Lead暂停窗口和重模型，未接纳/推送。四项媒体显示要求仍须真实GUI；视频4/50对照、无音符音乐真实运行及最终普通包待执行。运行身份与检查点见本轮R/lead/recovery-checkpoint.json。写Worker已结束，修复预算SAVE用1轮、MEDIA用2轮及1次Lead hosting接管；不可用新编号重置。
+
 ## D-NODE-LANGUAGE-01：已完成的上一阶段
 
 18个通用节点、记录/列表/条件/Map/有状态Loop/可选人工任务/真实版本化工具与四套可编辑样例已实现。Qwen、FLUX.2 Klein、MRT2、Wan T2V与SwiftF0接通既有Store/运行时；没有按样例名字另造调度器。范围、逐项A01—A36与版本证据见[任务记录](tasks/D-NODE-LANGUAGE-01.md#当前验收检查点2026-09-27h27已实际办理)。A01—A36已按冻结范围验证；源已快进接纳并完成源入口回归与普通构建，不代表发布。
