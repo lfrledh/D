@@ -16,6 +16,7 @@ struct NodeQualityRealTests {
 
     private func run(kind: WorkflowModelKind) async throws {
         let env = ProcessInfo.processInfo.environment
+        let sessionID = try #require(env["D_UI_TEST_SESSION"].flatMap(UUID.init(uuidString:)))
         let modelURL = URL(fileURLWithPath: try #require(env["D_NODE_QUALITY_MODEL"]))
         let support = try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask,
                                                  appropriateFor: nil, create: true)
@@ -101,12 +102,17 @@ struct NodeQualityRealTests {
                 let archive = try #require(try await store.workflowState().archive)
                 let record = try #require(archive.assets.first { $0.reference == ref })
                 let request = try #require(record.request)
-                try #require(request.model == reference && record.parents.isEmpty)
+                try #require(request.model == reference && record.parents.isEmpty && request.id == call.step.id)
                 let media = try await store.workflowMedia(ref)
                 if kind == .video {
                     guard case .video(let input) = request.input else { throw WorkflowIssue("Wrong video request") }
-                    try #require(input.steps == steps && input.width == 320 && input.height == 192 && input.frameCount == 17)
-                    try #require(input.guidanceScale == 6 && input.scheduleShift == 8 && input.seed == 42)
+                    let expected = VideoRequest(
+                        prompt: "A small red toy car slowly rolling across a wooden desk, fixed camera, natural daylight, simple background.",
+                        negativePrompt: "blurry, overexposed, distorted, low quality, watermark",
+                        width: 320, height: 192, frameCount: 17, frameRate: .init(numerator: 16), steps: steps,
+                        guidanceScale: 6, scheduleShift: 8, seed: 42,
+                        executionProfile: try #require(session.videoCapability).profile)
+                    try #require(input == expected && request.memoryBudgetBytes == 14 * 1_024 * 1_024 * 1_024)
                     let inspected = try await VideoMediaInspector.inspect(at: media.0, expected: input)
                     try #require(inspected.frameCount == 17 && inspected.byteCount > 0)
                 } else {
@@ -114,7 +120,7 @@ struct NodeQualityRealTests {
                     let sequence = try #require(input.noteSequence)
                     try #require(sequence.notes == nil && sequence.durationFrames == 100 && input.seed == 42)
                     let inspected = try AudioMediaInspector.inspect(at: media.0, policy: .generated)
-                    try #require(inspected.format.sampleRate == 48_000 && inspected.format.channelCount == 2)
+                    try #require(inspected.format.sampleRate == 48_000 && inspected.format.channelCount == 2 && inspected.format.frameCount == 192_000)
                 }
                 let status = await session.status()
                 try #require(status.activeRunID == nil && status.queuedRunIDs.isEmpty)
@@ -124,6 +130,9 @@ struct NodeQualityRealTests {
             }
             try await subject.close()
             let saved = try #require(try await store.workflowState().archive)
+            let expectedCount = kind == .video ? 2 : 1
+            try #require(saved.runs.count == expectedCount && saved.assets.count == expectedCount)
+            try #require(Set(saved.assets.map { $0.reference.assetID }).count == expectedCount)
             try await store.close()
             let reopened = try await ProjectStore.open(at: project)
             try #require(try await reopened.workflowState().archive == saved)
@@ -131,7 +140,9 @@ struct NodeQualityRealTests {
             try await reopened.close()
             await session.shutdown(); runtime = nil
             let report: [String: Any] = ["kind": kind.rawValue, "project": project.path, "reports": reports,
-                "backend": backend, "revision": reference.revision ?? "unknown", "gui": false, "listening": false]
+                "backend": backend, "revision": reference.revision ?? "unknown", "gui": false, "listening": false,
+                "hostSession": sessionID.uuidString,
+                "authorizationSource": env["D_NODE_LANGUAGE_MUSIC_AUTHORIZATION_SOURCE"] ?? "not_applicable"]
             try JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys])
                 .write(to: root.appendingPathComponent("quality-result.json"), options: .withoutOverwriting)
             print("D_NODE_QUALITY_PASS=\(root.path)")
