@@ -606,10 +606,10 @@ public enum WorkflowLanguageExamples {
 
         var video = try node("d.video.generate", title: "纯文字视频分支")
         video.parameters["modelID"] = .text("")
-        video.parameters["width"] = .integer(256)
-        video.parameters["height"] = .integer(256)
-        video.parameters["frameCount"] = .integer(17)
-        video.parameters["steps"] = .integer(4)
+        guard let previewVideo = WorkflowVideoPresets.fullPreview.applying(to: video) else {
+            throw WorkflowIssue("E04 视频节点无法应用完整短预览参数。")
+        }
+        video = previewVideo
 
         let resultFields: [WorkflowRecordField] = [
             .init("themeID", .text),

@@ -42,11 +42,15 @@ enum WorkflowLanguageOperations {
         inputs: [.init("prompt", "提示", kinds: [.text], required: false)], outputs: [.init("output", "视频", kinds: [.video])],
         fields: [.init("promptText", "提示", .text(multiline: true), .text("A small boat on a calm lake.")),
             .init("negativePrompt", "负向提示", .text(multiline: true), .text("")),
-            .init("width", "宽", .integer, .integer(256)), .init("height", "高", .integer, .integer(256)),
-            .init("frameCount", "帧数 4n+1", .integer, .integer(17)), .init("frameRate", "帧率", .integer, .integer(16)),
+            .init("width", "宽", .integer, .integer(WorkflowVideoPresets.fullPreview.width)),
+            .init("height", "高", .integer, .integer(WorkflowVideoPresets.fullPreview.height)),
+            .init("frameCount", "帧数 4n+1", .integer, .integer(WorkflowVideoPresets.fullPreview.frameCount)),
+            .init("frameRate", "帧率", .integer, .integer(WorkflowVideoPresets.fullPreview.frameRate)),
             .init("memoryBudgetGiB", "显式内存预算 GiB（0使用运行时策略）", .integer, .integer(0)),
-            .init("steps", "步数", .integer, .integer(4)), .init("guidance", "引导", .decimal, .decimal(5)),
-            .init("scheduleShift", "采样偏移", .decimal, .decimal(5)), .init("seed", "种子", .text(multiline: false), .text("42")), modelField], modelKind: .video),
+            .init("steps", "步数", .integer, .integer(WorkflowVideoPresets.fullPreview.steps)),
+            .init("guidance", "引导", .decimal, .decimal(WorkflowVideoPresets.fullPreview.guidance)),
+            .init("scheduleShift", "采样偏移", .decimal, .decimal(WorkflowVideoPresets.fullPreview.scheduleShift)),
+            .init("seed", "种子", .text(multiline: false), .text("42")), modelField], modelKind: .video),
         execute: { context, services in .outputs(["output": .asset(try await services.generateVideo(context: context))]) })
 
     @MainActor static func text(_ value: WorkflowValue?, fallback: String = "", services: any WorkflowOperationServices) async throws -> String {

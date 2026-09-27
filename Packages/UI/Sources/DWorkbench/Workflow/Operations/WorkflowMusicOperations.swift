@@ -60,8 +60,9 @@ enum WorkflowMusicOperations {
             let parents = Array(Set(notes.sources + c.inputs.values.flatMap { $0.datum?.assetReferences ?? [] })).sorted { $0.assetID.uuidString < $1.assetID.uuidString }
             return .outputs(["output": .asset(try await s.publishMedia(bytes, mediaType: "audio/wav", parents: parents, context: c))])
         })
-    static let music = WorkflowOperation(definition: .init(id: "d.music.generate", title: "受控音乐小样", detail: "MRT2 实读25Hz音高/起音条件；同音重叠保留起音并延续覆盖，不编码声部和非零力度，近似生成演奏。",
-        inputs: [.init("prompt", "创作意图", kinds: [.text], required: false), .init("notes", "音符条件（可显式为空）", kinds: [.record, .notes]),
+    static let music = WorkflowOperation(definition: .init(id: "d.music.generate", title: "受控音乐小样", detail: "MRT2 以25Hz（40ms）编码音高、起音与延续；同音声部合并，非零力度不编码，鼓当前不受约束。输出限48kHz双声道WAV、最长16秒；采样固定温度1.3、Top-k 40、MusicCoCa CFG 3及音符/鼓 CFG 1。",
+        inputs: [.init("prompt", "创作意图", kinds: [.text], required: false),
+            .init("notes", "音符条件（未提供为不约束；可显式为空）", kinds: [.record, .notes], required: false),
             .init("chords", "和声", kinds: [.record, .chords], required: false)], outputs: [.init("output", "音乐", kinds: [.audio])],
         fields: [.init("promptText", "意图", .text(multiline: true), .text("Solo piano, clear melody.")),
             .init("durationFrames", "时长（25Hz帧）", .integer, .integer(100)),
