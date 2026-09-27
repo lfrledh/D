@@ -67,7 +67,12 @@ final class WorkbenchApplicationDelegate: NSObject, NSApplicationDelegate, NSWin
                  invalidateInputContext: @escaping @MainActor (NSView) -> Void = {
                      $0.inputContext?.invalidateCharacterCoordinates()
                  }) {
-        guard workbenchWindow !== window else { return }
+        if workbenchWindow === window {
+            if inputGeometry == nil {
+                inputGeometry = WorkbenchInputGeometry(window: window, invalidate: invalidateInputContext)
+            }
+            return
+        }
         workbenchWindow = window
         inputGeometry = WorkbenchInputGeometry(window: window, invalidate: invalidateInputContext)
         previousWindowDelegate = window.delegate

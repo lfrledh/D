@@ -52,10 +52,12 @@ struct NodeQualityRealTests {
             let reference: ModelReference
             let backend: String
             if kind == .video {
-                reference = try await #require(session.validateVideoModel)(modelURL)
+                let validate = try #require(session.validateVideoModel)
+                reference = try await validate(modelURL)
                 backend = try #require(session.videoBackendID)
             } else {
-                reference = try await #require(session.validateMusicModel)(modelURL)
+                let validate = try #require(session.validateMusicModel)
+                reference = try await validate(modelURL)
                 backend = try #require(session.musicBackendID)
             }
             let identity = kind.rawValue + ":" + (reference.revision ?? "unknown")

@@ -113,6 +113,13 @@ struct WorkbenchInputGeometryTests {
         delegate.windowWillClose(Notification(name: NSWindow.willCloseNotification, object: window))
         await drainMainQueue()
         #expect(delivered.isEmpty, "Closing must cancel the queued update even if the window remains retained.")
+        delegate.connect(window: window, model: model, prepareLibraryForTermination: { true },
+                         invalidateInputContext: { view in delivered.append(view); view.inputContext?.invalidateCharacterCoordinates() })
+        let forwardedBeforeReopen = previous.events[NSWindow.didMoveNotification, default: 0]
+        delegate.windowDidMove(Notification(name: NSWindow.didMoveNotification, object: window))
+        await drainMainQueue()
+        #expect(delivered.count == 1 && delivered.first === editor)
+        #expect(previous.events[NSWindow.didMoveNotification, default: 0] == forwardedBeforeReopen + 1)
     }
 
     private func drainMainQueue() async {
