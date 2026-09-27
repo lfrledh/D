@@ -132,6 +132,54 @@ struct WorkflowLibraryMetadataTests {
         }
     }
 
+    @Test func canonicallyEquivalentTagByteChangesCommitInBothDirections() async throws {
+        try await withFixture { fixture in
+            let store = try await ProjectStore.create(at: fixture.project, name: "标签原字节")
+            let (baseline, originalAsset, media, mediaBytes) = try await completedAsset(in: fixture, store: store)
+            let nfc = "é"
+            let nfd = "e\u{301}"
+
+            let initialNFC = try await store.updateAsset(id: originalAsset.id, tags: [nfc])
+            #expect(initialNFC.revision == baseline.revision + 1)
+            try await store.close()
+
+            let nfcReopen = try await ProjectStore.open(at: fixture.project)
+            let nfcSnapshot = await nfcReopen.snapshot()
+            #expect(nfcSnapshot.revision == initialNFC.revision)
+            let persistedNFC = try #require(nfcSnapshot.assets.first?.tags.first)
+            #expect(Array(persistedNFC.utf8) == Array(nfc.utf8))
+            let nfdUpdate = try await nfcReopen.updateAsset(id: originalAsset.id, tags: [nfd])
+            #expect(nfdUpdate.revision == initialNFC.revision + 1)
+            #expect(Array(try #require(nfdUpdate.assets.first?.tags.first).utf8) == Array(nfd.utf8))
+            try await nfcReopen.close()
+
+            let nfdReopen = try await ProjectStore.open(at: fixture.project)
+            let nfdSnapshot = await nfdReopen.snapshot()
+            #expect(nfdSnapshot.revision == nfdUpdate.revision)
+            let persistedNFD = try #require(nfdSnapshot.assets.first?.tags.first)
+            #expect(Array(persistedNFD.utf8) == Array(nfd.utf8))
+            let reverseNFC = try await nfdReopen.updateAsset(id: originalAsset.id, tags: [nfc])
+            #expect(reverseNFC.revision == nfdUpdate.revision + 1)
+            #expect(Array(try #require(reverseNFC.assets.first?.tags.first).utf8) == Array(nfc.utf8))
+            try await nfdReopen.close()
+
+            let finalReopen = try await ProjectStore.open(at: fixture.project)
+            let final = await finalReopen.snapshot()
+            #expect(final.revision == reverseNFC.revision)
+            let finalAsset = try #require(final.assets.first)
+            #expect(Array(try #require(finalAsset.tags.first).utf8) == Array(nfc.utf8))
+            var originalWithoutTags = originalAsset
+            originalWithoutTags.tags = []
+            var finalWithoutTags = finalAsset
+            finalWithoutTags.tags = []
+            #expect(finalWithoutTags == originalWithoutTags)
+            #expect(final.jobs == baseline.jobs)
+            #expect(final.documents == baseline.documents)
+            #expect(try Data(contentsOf: media) == mediaBytes)
+            try await finalReopen.close()
+        }
+    }
+
     @Test func presentNullWrongTypeAndInvalidPersistedTagsAreRejectedWithoutRewrite() async throws {
         try await withFixture { fixture in
             let store = try await ProjectStore.create(at: fixture.project, name: "损坏标签")

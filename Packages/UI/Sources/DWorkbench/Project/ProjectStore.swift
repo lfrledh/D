@@ -890,11 +890,18 @@ public actor ProjectStore {
         try checkLocation()
         guard let index = manifest.assets.firstIndex(where: { $0.id == id }) else { throw ProjectStoreError.missingAsset }
         var candidate = manifest
+        var tagBytesChanged = false
         if let name { candidate.assets[index].name = name }
         if let note { candidate.assets[index].note = note }
         if let isFavorite { candidate.assets[index].isFavorite = isFavorite }
-        if let tags { candidate.assets[index].tags = try LibraryTags.validate(tags) }
-        if candidate != manifest { try commit(candidate) }
+        if let tags {
+            let validated = try LibraryTags.validate(tags)
+            let persisted = manifest.assets[index].tags
+            tagBytesChanged = persisted.count != validated.count ||
+                !zip(persisted, validated).allSatisfy { $0.0.utf8.elementsEqual($0.1.utf8) }
+            candidate.assets[index].tags = validated
+        }
+        if candidate != manifest || tagBytesChanged { try commit(candidate) }
         return manifest
     }
 
