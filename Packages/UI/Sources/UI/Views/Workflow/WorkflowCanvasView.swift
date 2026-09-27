@@ -829,14 +829,14 @@ private struct WorkflowNodeInspector: View {
             Text(workflowText(
                 languageStore,
                 "workflow.musicCapabilities.conditioning",
-                fallback: "25Hz（40ms）条件编码音高、起音和延续；同音声部合并，非零力度不编码，鼓当前不受约束。"
+                fallback: "25Hz（40ms）条件编码音高、起音和延续；同音声部合并，非零力度不编码，鼓当前不受约束。条件服从为近似，不保证精确复现。"
             ))
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Text(workflowText(
                 languageStore,
                 "workflow.musicCapabilities.optionalNotes",
-                fallback: "音符未连接且无和声表示不施加音符条件；显式空音符关闭音高条件但不保证静音；和弦可单独连接。"
+                fallback: "音符和和声均未提供时不约束音符；无和声时显式空音符列表发送所有音高OFF条件，而不是省略条件，但不保证静音；连接和声时仍与音符条件合并。"
             ))
                 .font(.caption)
                 .foregroundStyle(.secondary)

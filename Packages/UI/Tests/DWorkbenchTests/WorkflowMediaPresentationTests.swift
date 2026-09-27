@@ -59,6 +59,9 @@ struct WorkflowMediaPresentationTests {
     @Test func musicPortIsOptionalAndActualOperationPreservesAllFourConditionModes() async throws {
         let notesPort = try #require(WorkflowMusicOperations.music.definition.inputs.first { $0.id == "notes" })
         #expect(!notesPort.required)
+        #expect(notesPort.title == "音符条件（可选；可显式为空）")
+        #expect(WorkflowMusicOperations.music.definition.detail.contains("近似"))
+        #expect(WorkflowMusicOperations.music.definition.detail.contains("不保证精确复现"))
 
         let noteSource = reference(kind: .notes, marker: "a")
         let chordSource = reference(kind: .chords, marker: "b")
