@@ -13,14 +13,12 @@ struct WorkflowCanvasPresentationTests {
     }
 
     @Test
-    func panelPolicyKeepsThreeColumnsAtContractWidthAndScrollsBelowIt() {
-        #expect(!WorkflowCanvasLayoutPolicy.usesHorizontalPanelScroll(width: 1_100))
-        #expect(!WorkflowCanvasLayoutPolicy.usesHorizontalPanelScroll(width: 1_420))
-        #expect(WorkflowCanvasLayoutPolicy.usesHorizontalPanelScroll(width: 1_099))
-        #expect(WorkflowCanvasLayoutPolicy.minimumWorkspaceWidth == 1_100)
-        #expect(WorkflowCanvasLayoutPolicy.libraryWidth
-                + WorkflowCanvasLayoutPolicy.canvasMinimumWidth
-                + WorkflowCanvasLayoutPolicy.inspectorWidth == 1_100)
+    func panelPolicyFitsBothLibrariesAtMinimumWindowWithoutOuterScroll() {
+        for width: CGFloat in [760, 860, 1_100, 1_420] {
+            #expect(!WorkflowCanvasLayoutPolicy.usesHorizontalPanelScroll(width: width))
+        }
+        #expect(WorkflowCanvasLayoutPolicy.libraryWidth * 2
+                + WorkflowCanvasLayoutPolicy.canvasMinimumWidth + 2 <= WorkflowCanvasLayoutPolicy.minimumVisibleWidth)
     }
 
     @Test

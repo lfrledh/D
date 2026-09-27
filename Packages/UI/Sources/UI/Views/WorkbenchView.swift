@@ -63,7 +63,7 @@ public struct WorkbenchView: View {
                     }.padding(10).background(.bar)
                     Divider()
                     if workflowVisible {
-                        WorkflowHostView(model: model)
+                        WorkflowHostView(model: model, nodeTags: nodeTags)
                     } else { projectWorkbench }
                 }
             } else {

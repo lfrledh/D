@@ -8,6 +8,14 @@ public struct WorkflowAssetBindingTarget: Sendable, Equatable {
     public let node: WorkflowNode
 }
 
+public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
+    public let projectID: UUID
+    public let rootID: UUID
+    public let revision: UUID
+    public let bodyID: UUID
+    public let path: [WorkflowBodyLocation]
+}
+
 /// Coordinates compiled structured workflows; all expensive model work is still admitted by the shared InferenceRuntime.
 @MainActor @Observable public final class WorkflowController {
     public let registry: WorkflowRegistry
@@ -16,6 +24,9 @@ public struct WorkflowAssetBindingTarget: Sendable, Equatable {
     public private(set) var tools: [WorkflowToolDefinition] = []
     @ObservationIgnored private var activeExecutor: WorkflowPlanExecutor?
     public private(set) var availableAssets: [ProjectAsset] = []
+    public private(set) var projectID: UUID?
+    public private(set) var assetReferences: [UUID: WorkflowAssetReference] = [:]
+    public var canEditCanvas: Bool { !closed && !closing && !isRunning && !externalOperationBusy() && readOnlyReason == nil }
     public var selectedGraphID: UUID? { didSet { if oldValue != selectedGraphID { bodyPath = []; selectedNodeIDs = [] } } }
     public private(set) var bodyPath: [WorkflowBodyLocation] = []
     public var selectedNodeIDs: Set<UUID> = []
@@ -103,8 +114,19 @@ public struct WorkflowAssetBindingTarget: Sendable, Equatable {
         let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
         return String(decoding: try encoder.encode(record), as: UTF8.self)
     }
+    public func libraryKind(of asset: ProjectAsset) -> WorkflowDataKind? { WorkflowMediaFormat.descriptor(asset.mediaType)?.kind }
     private func refreshAssets() async {
-        availableAssets = await services.store.snapshot().assets.filter { WorkflowMediaFormat.descriptor($0.mediaType) != nil }
+        let snapshot = await services.store.snapshot()
+        projectID = snapshot.id
+        availableAssets = snapshot.assets.filter { WorkflowMediaFormat.descriptor($0.mediaType) != nil }
+        assetReferences = [:]
+        do {
+            let state = try await services.store.workflowState()
+            if let reason = state.readOnlyReason { errorMessage = reason; return }
+            if let archive = state.archive {
+                assetReferences = Dictionary(archive.assets.map { ($0.reference.assetID, $0.reference) }, uniquingKeysWith: { _, last in last })
+            }
+        } catch { errorMessage = error.localizedDescription }
     }
     public func bindExistingAsset(_ id: UUID, nodeID: UUID) async {
         guard !closed, !closing, !isRunning, readOnlyReason == nil else { return }
@@ -232,15 +254,82 @@ public struct WorkflowAssetBindingTarget: Sendable, Equatable {
             tools.append(tool); progressMessage = "工具已加入项目工具箱；保存项目后可重开。"
         } catch { errorMessage = error.localizedDescription }
     }
-    public func addNode(operationID: String) {
+    public func addBlankGraph(name: String = "新流程") {
+        guard canEditCanvas else { return }
+        let next = WorkflowGraph(name: name)
+        undoStack.append(graphs); redoStack = []; graphs.append(next)
+        selectedGraphID = next.id; selectedNodeID = nil
+    }
+    public func addNode(operationID: String, modelID: String? = nil, x: Double? = nil, y: Double? = nil) {
+        guard canEditCanvas else { return }
         guard let op = registry.operation(operationID) else { errorMessage = "未知操作。"; return }
+        if let modelID, !modelChoices.contains(where: { $0.id == modelID && $0.kind == op.definition.modelKind }) {
+            errorMessage = "此模型没有登记到当前项目；请选择可用模型。"; return
+        }
+        guard x?.isFinite != false, y?.isFinite != false else { return }
+        if graph == nil { addBlankGraph() }
         var node = op.definition.makeNode()
         if operationID == "d.model.language" { node.dataConfiguration = .init(schema: .text) }
+        if let modelID { node.parameters["modelID"] = .text(modelID) }
         edit { graph in
             graph.nodes.append(node)
-            graph.layout.append(.init(nodeID: node.id, x: 80 + Double(graph.nodes.count % 5) * 250, y: 100 + Double(graph.nodes.count / 5) * 210))
+            graph.layout.append(.init(nodeID: node.id,
+                x: max(0, x ?? (80 + Double(graph.nodes.count % 5) * 250)),
+                y: max(0, y ?? (100 + Double(graph.nodes.count / 5) * 210))))
         }
-        selectedNodeID = node.id
+        if graph?.nodes.contains(where: { $0.id == node.id }) == true { selectedNodeID = node.id }
+    }
+
+    public func canvasInsertionTarget() -> WorkflowCanvasInsertionTarget? {
+        guard canEditCanvas, let projectID, let rootGraph, let graph else { return nil }
+        return .init(projectID: projectID, rootID: rootGraph.id, revision: rootGraph.revision, bodyID: graph.id, path: bodyPath)
+    }
+    private func isCurrent(_ target: WorkflowCanvasInsertionTarget) -> Bool {
+        canEditCanvas && projectID == target.projectID && rootGraph?.id == target.rootID &&
+        rootGraph?.revision == target.revision && graph?.id == target.bodyID && bodyPath == target.path
+    }
+    /// The UI captures the insertion scope synchronously before starting its Task.
+    public func addAssetNode(projectID expectedProject: UUID, assetID: UUID, x: Double, y: Double,
+                             target: WorkflowCanvasInsertionTarget) async {
+        guard expectedProject == target.projectID, isCurrent(target),
+              availableAssets.contains(where: { $0.id == assetID }), x.isFinite, y.isFinite,
+              let definition = registry.operation("d.asset.reference")?.definition else { return }
+        do {
+            let ref = try await services.store.pinWorkflowAsset(assetID)
+            guard isCurrent(target) else { throw WorkflowIssue("拖入期间流程已改变；资产保留，未添加到其他流程。") }
+            var node = definition.makeNode(); node.assetReference = ref
+            node.title = availableAssets.first(where: { $0.id == assetID })?.name ?? node.title
+            edit { $0.nodes.append(node); $0.layout.append(.init(nodeID: node.id, x: x, y: y)) }
+            guard graph?.nodes.contains(where: { $0.id == node.id }) == true else { return }
+            selectedNodeID = node.id
+            try await persist(); await onChange()
+        } catch { errorMessage = error.localizedDescription }
+    }
+    public func bindLibraryAsset(projectID expectedProject: UUID, assetID: UUID, target: WorkflowAssetBindingTarget) async {
+        guard canEditCanvas, projectID == expectedProject, isCurrent(target),
+              availableAssets.contains(where: { $0.id == assetID }) else { return }
+        do {
+            let ref = try await services.store.pinWorkflowAsset(assetID)
+            guard canEditCanvas, projectID == expectedProject, isCurrent(target) else {
+                throw WorkflowIssue("资产输入已改变；素材未绑定到其他节点。")
+            }
+            attach(ref, nodeID: target.node.id); try await persist(); await onChange()
+        } catch { errorMessage = error.localizedDescription }
+    }
+    /// An explicit import publishes a copy in this project's existing Store, without executing a node.
+    public func importLibraryFile(_ url: URL) async {
+        guard canEditCanvas else { return }
+        do {
+            _ = try await services.store.importWorkflowMediaFile(at: url)
+            await refreshAssets(); await onChange()
+        } catch { errorMessage = error.localizedDescription }
+    }
+    public func setAssetTags(id: UUID, tags: [String]) async throws {
+        guard canEditCanvas, availableAssets.contains(where: { $0.id == id }) else {
+            throw WorkflowIssue("当前不能编辑此资产标签。")
+        }
+        _ = try await services.store.updateAsset(id: id, tags: tags)
+        await refreshAssets(); await onChange()
     }
     public func deleteSelected() {
         guard let id = selectedNodeID else { return }
@@ -252,10 +341,10 @@ public struct WorkflowAssetBindingTarget: Sendable, Equatable {
         edit { g in g.nodes.append(node); g.layout.append(.init(nodeID: node.id, x: 100, y: 100)) }; selectedNodeID = node.id
     }
     public func moveNode(id: UUID, x: Double, y: Double) {
-        guard x.isFinite, y.isFinite else { return }
+        guard canEditCanvas, x.isFinite, y.isFinite else { return }
         edit({ g in
-            if let i = g.layout.firstIndex(where: { $0.nodeID == id }) { g.layout[i].x = max(0, x); g.layout[i].y = max(0, y) }
-            else { g.layout.append(.init(nodeID: id, x: max(0, x), y: max(0, y))) }
+            if let i = g.layout.firstIndex(where: { $0.nodeID == id }) { g.layout[i].x = x; g.layout[i].y = y }
+            else { g.layout.append(.init(nodeID: id, x: x, y: y)) }
         }, changesConfiguration: false)
     }
     public func modelSelectionTarget() -> WorkflowModelSelectionTarget? {

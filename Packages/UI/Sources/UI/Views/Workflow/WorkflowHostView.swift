@@ -6,6 +6,7 @@ import UniformTypeIdentifiers
 /// Native location choices; model and project ownership remain with ProjectSession.
 struct WorkflowHostView: View {
     let model: WorkbenchModel
+    let nodeTags: ModelNodeTagStore
     @Environment(\.dLanguageStore) private var languageStore
     var body: some View {
         Group {
@@ -18,7 +19,13 @@ struct WorkflowHostView: View {
                     onPublishText: { Task { await model.projectSession.publishTextToWorkflow() } },
                     onReturnText: { ref in Task { await model.projectSession.returnWorkflowText(ref) } },
                     onAdditionalModel: { chooseModel(controller: controller, kind: $0) },
-                    onRecord: { nodeID in Task { await model.projectSession.startWorkflowRecording(nodeID: nodeID, controller: controller) } })
+                    onRecord: { nodeID in Task { await model.projectSession.startWorkflowRecording(nodeID: nodeID, controller: controller) } },
+                    nodeTags: nodeTags,
+                    onImportAsset: { Task { await importAsset(controller) } },
+                    onDropFile: { url in
+                        guard model.projectSession.workflow === controller, controller.canEditCanvas else { return false }
+                        Task { await importAssetURL(url, controller: controller) }; return true
+                    })
                     .safeAreaInset(edge: .bottom) {
                         WorkflowCaptureRecoveryView(model: model)
                         if model.projectSession.workflowRecordingNodeID != nil {
@@ -60,6 +67,20 @@ struct WorkflowHostView: View {
         guard await panel.begin() == .OK, let url = panel.url, model.projectSession.workflow === controller else { return }
         let scoped = url.startAccessingSecurityScopedResource(); defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         await controller.importFile(url, nodeID: nodeID)
+    }
+    private func importAsset(_ controller: WorkflowController) async {
+        guard controller.canEditCanvas, !model.isChangingProject else { return }
+        let panel = NSOpenPanel(); panel.canChooseDirectories = false; panel.allowsMultipleSelection = false
+        panel.title = languageStore?.text("canvas.assets.import", fallback: "导入素材") ?? "导入素材"
+        panel.allowedContentTypes = [.plainText, .png, .jpeg, .audio, .mpeg4Movie, .json, .init(filenameExtension: "md") ?? .plainText]
+        guard await panel.begin() == .OK, let url = panel.url else { return }
+        await importAssetURL(url, controller: controller)
+    }
+    private func importAssetURL(_ url: URL, controller: WorkflowController) async {
+        guard model.projectSession.workflow === controller, controller.canEditCanvas, !model.isChangingProject else { return }
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        await controller.importLibraryFile(url)
     }
     private func destination(_ controller: WorkflowController) async {
         guard !model.isBusy, !model.isChangingProject else { return }

@@ -757,7 +757,7 @@ struct WorkflowLifecycleTests {
         old.schemaVersion = 12; let original = try JSONEncoder().encode(old)
         try original.write(to: store.rootURL.appendingPathComponent("project.json"))
         let migrated = try await ProjectStore.open(at: store.rootURL)
-        #expect(await migrated.snapshot().schemaVersion == 17)
+        #expect(await migrated.snapshot().schemaVersion == ProjectManifest.currentSchemaVersion)
         #expect(try Data(contentsOf: store.rootURL.appendingPathComponent("project.v12.backup.json")) == original)
         try await migrated.close()
         #expect(!ProjectManifest.readableSchemaVersions.contains(13)); #expect(!ProjectManifest.readableSchemaVersions.contains(14)); #expect(!ProjectManifest.readableSchemaVersions.contains(15))
@@ -1325,5 +1325,56 @@ struct WorkflowLanguageServicesTests {
             #expect(await store.snapshot().assets.isEmpty)
             try await store.close()
         }
+    }
+}
+
+extension WorkflowLifecycleTests {
+    @Test func canvasInsertionSelectionVersionTagsAndUndoAreSafe() async throws {
+        let (_, store, engine, c) = try await fixture()
+        let published = try await store.publishWorkflowAsset(data: Data("原始素材 👩🏽‍🎨".utf8), mediaType: "text/plain", name: "参考", operationID: "test.input")
+        await c.load(); c.addBlankGraph(name: "A")
+        let project = try #require(c.projectID)
+        let old = try #require(c.canvasInsertionTarget())
+        c.addBlankGraph(name: "B")
+        await c.addAssetNode(projectID: project, assetID: published.asset.id, x: 30, y: 40, target: old)
+        #expect(c.graph?.nodes.isEmpty == true)
+        let target = try #require(c.canvasInsertionTarget())
+        await c.addAssetNode(projectID: UUID(), assetID: published.asset.id, x: 30, y: 40, target: target)
+        #expect(c.graph?.nodes.isEmpty == true)
+        await c.addAssetNode(projectID: project, assetID: published.asset.id, x: 30, y: 40, target: target)
+        let node = try #require(c.selectedNode)
+        #expect(node.assetReference == published.record.reference)
+        let revision = try #require(c.rootGraph?.revision)
+        c.moveNode(id: node.id, x: -150, y: -120)
+        #expect(c.graph?.layout.first?.x == -150)
+        #expect(c.graph?.layout.first?.y == -120)
+        #expect(c.rootGraph?.revision == revision)
+        c.undo(); #expect(c.graph?.layout.first?.x == 30)
+        c.redo(); #expect(c.graph?.layout.first?.x == -150)
+        try await c.setAssetTags(id: published.asset.id, tags: [" 灵感 ", "👩🏽‍🎨"])
+        #expect(c.availableAssets.first?.tags == ["灵感", "👩🏽‍🎨"])
+        #expect(try await c.preview(published.record.reference) == Data("原始素材 👩🏽‍🎨".utf8))
+        await c.save(); try await c.close(); try await store.close()
+        let reopened = try await ProjectStore.open(at: store.rootURL)
+        #expect(await reopened.snapshot().assets.first?.tags == ["灵感", "👩🏽‍🎨"])
+        #expect(try await reopened.workflowState().archive?.graphs.last?.layout.first?.x == -150)
+        #expect(await engine.requests.isEmpty)
+        try await reopened.close()
+    }
+
+    @Test func canvasModelShortcutRejectsWrongKindAndDoesNotRun() async throws {
+        let (_, store, engine, c) = try await fixture()
+        c.modelChoices = [.init(id: "text:test", kind: .text, displayName: "test")]
+        c.addNode(operationID: "d.image.generate", modelID: "text:test")
+        #expect(c.graphs.isEmpty)
+        c.addNode(operationID: "d.model.language", modelID: "text:test", x: 101, y: 120)
+        let node = try #require(c.selectedNode)
+        #expect(node.parameters["modelID"]?.string == "text:test")
+        #expect(c.graph?.layout.first?.x == 101)
+        c.externalOperationBusy = { true }
+        let before = c.graphs; c.addNode(operationID: "d.text.input"); c.moveNode(id: node.id, x: 1, y: 2)
+        #expect(c.graphs == before)
+        #expect(await engine.requests.isEmpty)
+        c.externalOperationBusy = { false }; try await c.close(); try await store.close()
     }
 }

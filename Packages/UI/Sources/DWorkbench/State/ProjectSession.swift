@@ -974,6 +974,10 @@ public final class ProjectSession {
             workflow?.modelChoices = try WorkflowModelBookmarks(settings: settings).entries().map {
                 .init(id: $0.identity, kind: $0.kind, displayName: $0.name)
             }
+            if let revision = selectedModelRevision, !revision.isEmpty,
+               workflow?.modelChoices.contains(where: { $0.id == "image:" + revision }) == false {
+                workflow?.modelChoices.append(.init(id: "image:" + revision, kind: .image, displayName: "FLUX.2 Klein · 已登记版本"))
+            }
             if let ref = session?.pitchModel {
                 workflow?.modelChoices.append(.init(id: "pitch:" + (ref.revision ?? ref.directory.lastPathComponent), kind: .pitch,
                     displayName: "SwiftF0 0.1.2 · 固定开发资源"))

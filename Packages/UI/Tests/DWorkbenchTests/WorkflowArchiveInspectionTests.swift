@@ -199,7 +199,7 @@ struct WorkflowArchiveInspectionTests {
         try prior.write(to: manifestURL)
         let snapshot = try Data(contentsOf: root.appendingPathComponent(pointer.relativePath))
         let reopened = try await ProjectStore.open(at: root)
-        #expect(await reopened.snapshot().schemaVersion == 17)
+        #expect(await reopened.snapshot().schemaVersion == ProjectManifest.currentSchemaVersion)
         #expect(try Data(contentsOf: root.appendingPathComponent("project.v16.backup.json")) == prior)
         #expect(try Data(contentsOf: root.appendingPathComponent(pointer.relativePath)) == snapshot)
         #expect(try await reopened.workflowState().archive == archive)
