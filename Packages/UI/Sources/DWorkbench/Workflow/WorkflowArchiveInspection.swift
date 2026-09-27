@@ -56,17 +56,18 @@ enum WorkflowArchiveInspection {
         let compiler = WorkflowPlanCompiler(registry: registry)
         // These are the two persisted run scopes currently offered by the controller.
         // Exact comparison includes topology, interfaces, signatures and nested tools.
-        var expected: WorkflowPlan?
+        var matched: (plan: WorkflowPlan, selection: WorkflowGraphSelection)?
         for only in [false, true] {
             let compiled = try compiler.compile(run.graph, tools: tools, target: run.targetNodeID, only: only)
             let bound = try WorkflowPlanBinding.freeze(compiled, defaults: checkpoint.modelDefaults ?? [:], registry: registry)
-            if bound == checkpoint.plan { expected = bound; break }
+            if bound == checkpoint.plan {
+                matched = (bound, only ? .only(run.targetNodeID) : .through(run.targetNodeID))
+                break
+            }
         }
-        guard let expected else { throw WorkflowIssue("恢复计划与已保存的流程、工具版本或运行范围不符。") }
-        try WorkflowCheckpointValidation.validate(checkpoint, expected: expected, registry: registry)
-        let through = try compiler.compile(run.graph, tools: tools, target: run.targetNodeID)
-        let full = try WorkflowPlanBinding.freeze(through, defaults: checkpoint.modelDefaults ?? [:], registry: registry)
-        selection = full == checkpoint.plan ? .through(run.targetNodeID) : .only(run.targetNodeID)
+        guard let matched else { throw WorkflowIssue("恢复计划与已保存的流程、工具版本或运行范围不符。") }
+        try WorkflowCheckpointValidation.validate(checkpoint, expected: matched.plan, registry: registry)
+        selection = matched.selection
         return .init(graph: run.graph, selection: selection, checkpoint: checkpoint)
     }
 

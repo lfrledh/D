@@ -10,6 +10,14 @@
 
 修补验证：`lead/h27-read-cache-before` 原生产代码+保护/测时测试4项通过（不是先红后绿）；`h27-read-cache-after` 97项/7suite通过。相同真人项目的独立副本重复读从0.566/0.574/0.555秒变为0.667/0.00157/0.00164秒，save0.882→0.459秒，仅本机单次对照，不当作全GUI帧率或普遍速度保证。`h27-read-cache-full-ui` exit0，UI164、独立入口23、Workbench602及XCTest30按各套件报告；日志显式4项opt-in跳过（CLI/context/权重与已单跑benchmark），不写成真实模型重验。源码摘要在新run `evidence/read-cache-tested-inputs.json`。非实现者h27_layout_readonly静态审阅无阻断；未独立执行测试。缓存失效由全量键比较和行为反例证明，未增加生产计数器。
 
+### H27 范围重建冗余收尾（2026-09-27）
+
+实际 Xcode D Nodes Run 已启动并通过 E01 默认20顶层步骤：title可编辑主项、approved=true、Map保留featured/item-1、loopState=3，run `9E471CAD-A417-4FC2-8EA1-0E9545C11D11`，`evidence/xcode-e01-complete.json`。不是模型运行；六条保留历史的约2MB快照仍使保存累计达分钟级，最终保存完成、正常退出，不能称流畅性问题已完全解决。第二份5秒采样后台497样本中326旧快照首次读取、171提交，scopeSource重复through编译占103；主线程大部分等待，不支持把迟缓归于16GiB硬件。
+
+在此有限修补内保留首次计划匹配的selection，去掉随后仅用于选择范围的重复compile/freeze；through优先、only、完整checkpoint验证及显式scope路径不变。不改保存频率/模型/数据格式。两项新反例覆盖两范围、相同计划through优先、伪造plan/outputs、工具与modelDefaults变更；`lead/h27-scope-match-cpu` 33项/4suite通过（benchmark opt-in跳过），`h27-scope-normal-build`普通构建通过。被测为a083+本差异，hash见`evidence/scope-match-tested-inputs.json`。h27_layout_readonly非实现者静态复核无阻断，未独立跑测试。余下整档校验成本保留为性能债，原生可保存/重开与操作仍需后续检查。
+
+Xcode首次实际Run自动重写3份元数据（2scheme、MLX lock）；关闭本Lead自有App与Xcode后，对照先前备份/hash仅撤回已观测的生成差异，未改模型依赖、质量配置或用户文件。原diff/原件/生成件及守卫撤回证据在`evidence/xcode-generated-metadata`。编译/CPU/真实GUI证据等级不混同。
+
 ## 当前交付检查点（2026-09-27）
 
 **H27进行中更新：** 当前普通App构建49d1ccef95c6cbcaf19e9ab414be69bac7d0d0b7，录音恢复与初始布局修补有独立复核/局部检查。本人新录音试听正常，SwiftF0片段识别8音符，冷重开原声/等待记录与全部已存文件摘要不变；新样例原生布局无遮挡。中文空格确认及日文转换选词正常，不关闭H22。普通GUI三条MRT2已完成且本人试听第三条正常；保存卡顿已有具体采样，有限修补见上段。剩余GUI、Xcode实际Run与A35继续；未接纳/推送。具体现场在本文件末尾H27与新run证据。**下列交付表是5b49f6e锁屏时快照，不能覆盖上述新增事实，也不能整体升级为当前通过。**

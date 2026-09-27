@@ -4,6 +4,61 @@ import Testing
 
 @Suite("Workflow language format protection")
 struct WorkflowArchiveInspectionTests {
+    @Test func inferredScopeRetainsFirstMatchingSelectionAndFullValidation() throws {
+        let registry = WorkflowRegistry.standard
+        var input = try #require(registry.operation("d.value.input")).definition.makeNode()
+        input.dataConfiguration = .init(value: .text("固定输入"))
+        let lone = WorkflowGraph(nodes: [input])
+        func run(_ graph: WorkflowGraph, target: UUID, only: Bool) throws -> WorkflowRun {
+            let plan = try WorkflowPlanCompiler().compile(graph, target: target, only: only)
+            let checkpoint = WorkflowPlanCheckpoint(plan: plan)
+            var result = WorkflowRun(id: checkpoint.runID, graph: graph, targetNodeID: target)
+            result.planCheckpoint = checkpoint
+            return result
+        }
+        // Both scopes compile identically without ancestors: keep the original through preference.
+        #expect(try WorkflowArchiveInspection.scopeSource(run(lone, target: input.id, only: true), tools: []).selection == .through(input.id))
+        let output = try #require(registry.operation("d.value.return")).definition.makeNode()
+        let graph = WorkflowGraph(nodes: [input, output], connections: [.init(sourceNode: input.id, targetNode: output.id, targetPort: "input")])
+        let only = try run(graph, target: output.id, only: true)
+        #expect(try WorkflowArchiveInspection.scopeSource(only, tools: []).selection == .only(output.id))
+        #expect(try WorkflowArchiveInspection.scopeSource(run(graph, target: output.id, only: false), tools: []).selection == .through(output.id))
+        var forged = only
+        forged.planCheckpoint?.plan.graphRevision = UUID()
+        #expect(throws: WorkflowIssue.self) { try WorkflowArchiveInspection.scopeSource(forged, tools: []) }
+        forged = only
+        forged.planCheckpoint?.outputs = ["invented": .data(.text("not a published result"))]
+        #expect(throws: WorkflowIssue.self) { try WorkflowArchiveInspection.scopeSource(forged, tools: []) }
+    }
+
+    @Test func inferredScopeRejectsChangedToolOrFrozenModelDefault() throws {
+        let registry = WorkflowRegistry.standard
+        var input = try #require(registry.operation("d.value.input")).definition.makeNode()
+        input.dataConfiguration = .init(value: .text("固定提示"))
+        let model = try #require(registry.operation("d.model.language")).definition.makeNode()
+        let graph = WorkflowGraph(nodes: [input, model], connections: [.init(sourceNode: input.id, targetNode: model.id, targetPort: "content")])
+        var checkpoint = WorkflowPlanCheckpoint(plan: try WorkflowPlanBinding.freeze(WorkflowPlanCompiler().compile(graph, target: model.id), defaults: ["text": "fixture-model-A"]))
+        checkpoint.modelDefaults = ["text": "fixture-model-A"]
+        var run = WorkflowRun(id: checkpoint.runID, graph: graph, targetNodeID: model.id)
+        run.planCheckpoint = checkpoint
+        _ = try WorkflowArchiveInspection.scopeSource(run, tools: [])
+        run.planCheckpoint?.modelDefaults = ["text": "fixture-model-B"]
+        #expect(throws: WorkflowIssue.self) { try WorkflowArchiveInspection.scopeSource(run, tools: []) }
+
+        var body = WorkflowGraph(nodes: [input])
+        body.interface = .init(outputs: [.init(name: "output", nodeID: input.id, schema: .text)])
+        var tool = WorkflowToolDefinition(name: "固定工具", graph: body)
+        var invoke = try #require(registry.operation("d.control.invoke")).definition.makeNode()
+        invoke.control = .invoke(.init(id: tool.id, version: tool.version, digest: try WorkflowPlanCompiler.digest(tool)))
+        let toolGraph = WorkflowGraph(nodes: [invoke])
+        let toolCheckpoint = WorkflowPlanCheckpoint(plan: try WorkflowPlanCompiler().compile(toolGraph, tools: [tool], target: invoke.id))
+        var toolRun = WorkflowRun(id: toolCheckpoint.runID, graph: toolGraph, targetNodeID: invoke.id)
+        toolRun.planCheckpoint = toolCheckpoint
+        _ = try WorkflowArchiveInspection.scopeSource(toolRun, tools: [tool])
+        tool.graph.nodes[0].dataConfiguration?.value = .text("改动了固定版本")
+        #expect(throws: WorkflowIssue.self) { try WorkflowArchiveInspection.scopeSource(toolRun, tools: [tool]) }
+    }
+
     @Test @MainActor func storeRebuildsCheckpointAndRejectsUnpublishedNestedReferences() async throws {
         let root = URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory())
             .appendingPathComponent("checked-workflow-" + UUID().uuidString + ".dproject")
