@@ -2,9 +2,11 @@
 
 最后核实：2026-09-27。唯一当前任务、版本与停点入口。
 
-## D-CANVAS-USABILITY-01：当前实施
+## D-CANVAS-USABILITY-01：工程就绪，原生试用待验
 
-用户试用后明确批准先解决节点画布可用性：左侧节点库/标签检索、右侧资产库/标签元数据、原生拖放与实时连线、清楚的编辑入口。四模态简易页不改。范围、保护和验收见[本轮任务](tasks/D-CANVAS-USABILITY-01.md)。从e7787e06f5ff409a0293201ee8caf5eb601eb668沿用候选codex/node-quality-01；源01758b8不动。旧QUALITY尚未完成的真实媒体/IME验收保留，用户此次反馈不等于通过。
+用户批准的左节点库/标签检索、右资产库/标签元数据、原生拖放和实时共享位置已实现；四模态简易界面不改。受测组合`ec0027cda72ee7120df6eb7b034cb53d1e2433e8`：完整UI包824项（含hosting）及普通D Nodes构建/签名通过。原生鼠标拖放与窄窗交互等待本人启动隔离新版，不能拿组件测试替代；集中H28。当前候选继续`codex/node-quality-01`，源`01758b81527dc27eb4563bf1b66fd1ceab6647ee`及个人scheme未改。最后文档提交与远端对应见本轮run的`lead/final-receipt.json`。
+
+试用入口见[新版画布](NODE_LANGUAGE_TRY.zh-CN.md#新版节点画布d-canvas-usability-01)，实现/审阅/失败与验收层级见[任务](tasks/D-CANVAS-USABILITY-01.md#工程交付检查点2026-09-27)。下一动作仅完成H28并让用户第二轮试用；旧QUALITY真实视频/音乐/IME待验保持，不自动启新阶段或源接纳。
 
 ## D-NODE-QUALITY-01：前一候选与保留验收
 

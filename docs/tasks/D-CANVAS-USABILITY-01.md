@@ -45,3 +45,21 @@ Lead接线由三位只读非实现者检查（非独立测试模型验收）。�
 manifest17→18是资产标签的最小兼容演进，旧文件原字节备份为project.v17.backup.json；旧版App不应打开新格式。用户现有工程本轮不作为迁移夹具。右库标签是项目元数据，未声称媒体文件已内嵌。新增Finder拖文件/导入按钮只走原Store复制与校验，不自动运行节点。
 
 首次组合编译分别发现Lead错误port.kind（契约实际为kinds）和Worker PreferenceKey共享可变状态；失败日志保留在combination-compile/combination-r2，不删改断言。旧migration测试的“当前格式17”按批准schema18改为currentSchemaVersion，旧16/12原字节备份和候选13—15拒绝断言保留。最终受测SHA/GUI/构建/推送待下面补充，当前不宣称阶段完成。
+
+## 工程交付检查点（2026-09-27）
+
+当前受测组合：`ec0027cda72ee7120df6eb7b034cb53d1e2433e8`。`lead/ui-regression-r2`全UI包通过：DWorkbench 621、UI/hosting 180、ModelLibrary 23，合计824项；不叠加先前32项局部检查。第一次全包只有旧本地化菜单断言仍找“模型”，按本轮真实迁移到“更多”更新，中英草稿/选区/参数/控制器身份与零推理断言不改，第二次全包通过。`lead/app-build`相同SHA普通D Nodes正常开发签名构建通过，`lead/app-signature.txt`验证产物完整性通过。
+
+CANVAS两轮修复后，Lead完成一次有界SDK/测试接管：`DataRepresentation(contentType:)`改为本机双向传输签名；Testing宏中的mutating调用先求值再断言，未改变期望；空画布拖入接到真实Controller；节点负落点与首次插入撤销接线统一。TAGS两轮内修复标签查询遗漏和规范等价字节替换；原始失败/修复记录保留。Lead共享接线及这些修正有非实现者只读复核，详见`lead/review-summary.json`；不声称另一个模型执行了全部测试。
+
+普通试用包：R/delivery/`D Canvas Preview.app`；双击同目录`启动新版节点画布.command`，唯一独立D_UI_TEST_SESSION记录在`trial.json`，不要直接双击App本体。使用说明在同目录`使用说明.md`。Xcode入口仍是本候选树`D.xcworkspace`/`D Nodes`，正常Run使用既有资源打包流程，没有手工修改包内实现。
+
+**原生交互尚待**：已请求本人双击隔离启动器，随后Lead验证左库查询/拖入、连接与移动、撤销、右库标签及重开、Finder拖入和窄窗编辑。当前桌面入口不能传隔离启动环境；未改系统权限、未关闭旧Preview，也未通过不隔离启动绕过。CPU/hosting不是实际鼠标拖放；本轮尚未直接观察按住鼠标期间的连线跟随，不将此项写成已原生验收。集中记录H28。
+
+左库搜索词在名称/说明/系统与用户标签中逐词AND；标签筛选AND，用户标签24个/每个32Swift字符，坏偏好保持只读。已登记模型用固定版本映射保留旧模型标签键；未知参数量不猜。右库使用同一Store资产，原媒体/摘要/来源不改，标签随manifest18保存。旧资产无流程引用时须显式加入画布后预览，不在浏览时偷偷改项目；音符等结构数据仍由节点数据检查入口展示。
+
+本轮源始终`01758b81527dc27eb4563bf1b66fd1ceab6647ee`；scheme内容、SHA256 ca3635d88aa5a15397b90e528667c66c0e6db7e596176e885c79d194b544206c、索引blob及未暂存差异均与开始一致，见`lead/protection-after.json`。普通D与旧Quality Preview未替换/关闭，真实用户项目不作夹具。两个写Worker及自身构建/测试命令均结束；只读审阅结束。隐藏服务端解析、订阅费用和完整Lead成本unknown，累计CLI快照未相加。
+
+状态：**工程实现、CPU/hosting及普通构建通过，候选供第二轮试用；原生交互待完成**。先同步候选`codex/node-quality-01`，不推进main，不因本轮UI变更跳过旧QUALITY未验模型/IME路径接纳到源。最终仅文档提交SHA及远端校验写外部`lead/final-receipt.json`，不反复自引用提交。
+
+恢复：从AGENTS/CURRENT_ACTIONS→本记录，核对真实HEAD、源scheme、`trial.json`启动身份/进程与H28回复，再做原生交互。无新增模型或GPU运行，不恢复其他产品阶段。用户第二轮试用后只按具体反馈继续。

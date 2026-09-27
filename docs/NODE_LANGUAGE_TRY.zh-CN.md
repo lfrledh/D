@@ -1,6 +1,18 @@
 # D 通用节点工作台：本机开发试用
 
-## 最新进度试用版：D-NODE-QUALITY-01（尚未阶段接纳）
+## 新版节点画布：D-CANVAS-USABILITY-01
+
+这一版把节点库放左、资产库放右、可收起的参数与结果放在画布下方。支持按名称/标签搜索，编辑用户标签、库条目拖入、资产绑定、端口拖连和实时共享节点/连线位置。模态简易页仍在“创作与资料”。
+
+- 双击：`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-CANVAS-USABILITY-01/run-20260927T140634Z/delivery/启动新版节点画布.command`。
+- 使用说明：同目录`使用说明.md`。使用新测试项目或项目副本；新资产标签使用manifest18，旧17原文件备份保留，旧App不能继续写新格式。
+- Xcode：`/Volumes/CodexProjects/Codex/D-Worktrees/D-NODE-QUALITY-01/D.xcworkspace`，scheme `D Nodes`。
+- 先试“搜节点→拖入→连线→移动/撤销→导入素材→加标签/搜索→保存重开”，再显式选择模型生成。不会因拖入自动开始推理。
+- 工程受测`ec0027cda72ee7120df6eb7b034cb53d1e2433e8`，824项测试/普通构建通过，原生交互等待独立启动后补验。当前候选分支`codex/node-quality-01`，旧QUALITY未验项保留，不是公开发行包。
+
+以下Quality版入口留作上一候选参考，新画布请用上述启动器。
+
+## 上一进度试用版：D-NODE-QUALITY-01（尚未阶段接纳）
 
 2026-09-27 用户要求先同步当前进度后亲自试用。最新候选分支为 `codex/node-quality-01`，与已验收源分支 `codex/inference-foundation` 分开；下面原 H27 入口仍保留，但不包含本轮媒体改动。
 
