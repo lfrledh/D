@@ -4,7 +4,7 @@ import Foundation
 import SwiftUI
 
 @MainActor
-private func workflowText(
+func workflowText(
     _ store: UILanguageStore?,
     _ key: String,
     fallback: String,
