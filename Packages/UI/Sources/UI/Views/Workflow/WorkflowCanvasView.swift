@@ -1222,7 +1222,7 @@ private struct WorkflowStepValues: View {
                                                          selected: false, onSelect: nil)
                             }
                         case .data(let value):
-                            WorkflowDatumEditor(value: .constant(value)).disabled(true)
+                            WorkflowDatumSnapshotView(value: value)
                         case .receipt(let receipt):
                             Text(receipt.names.joined(separator: "、"))
                             Text(receipt.hashes.joined(separator: "\n"))

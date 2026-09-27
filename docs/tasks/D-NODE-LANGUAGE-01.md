@@ -465,3 +465,10 @@ H27恢复修补收尾：`lead/h27-recovery-actions`实际exit0，UI9项及Audio1
 用户确认中文空格选字正常、候选不消失，但报告严重卡顿且候选不跟随窗口；完整缩放/中日输入不能记通过，日文未知，H22未关闭。事后内存/CPU和自有进程8秒采样未见持续模型负载，不能推出卡顿原因或16 GiB不足；原证据 `evidence/ime-and-responsiveness.json`。保存测试项目后正常退出自有App57812。
 
 Lead局部修补仅改变新官方样例与新工具的初始布局：按真实端口数量给行高留空间，限制卡片说明行数但保留完整help/AX；画布边界共用Controller注册表，平移显示不回写已保存坐标。未建立自动排版器、不改执行/图版本/模型数值。新增真实卡片hosting测量中英四样例及工具，并递归条件/Map/Loop内部；非实现者指出初版漏测控制体、未断言切换成功及错误registry，均补齐。`lead/h27-initial-layout-r1` exit0，UI16项/2suite、Workbench21项/2suite分别通过；原生遮挡是先前观察，未伪称回归测试先红。自定义20输入registry边界亦通过。最终源码摘要 `evidence/layout-tested-inputs.json`；非实现者二次只读复核无阻断，GUI另验，不把hosting当原生。
+
+
+### H27 只读结果陈旧修补（2026-09-27）
+
+普通6ebca7c App完成E01多语言输入保留、列表新增、Loop上限4→2及指定第二轮调用重跑。run B43A6935-3B79-4F2D-859C-609A3DDDDC61终值2已正确落盘，但检查面板仍显示中间1；派生19E4826A-916B-41B4-BA2B-125F2BC56CCB记录精确iteration2/return节点，旧run未改。纯数据结果复用带@State草稿的编辑器导致陈旧；仅结果子树按值变化重建，同值与旁边可编辑表单身份保留，不改计算/保存/当前草稿。普通GUI亦完成两输入两输出工具“H27 判断与循环”选区封装并保存，原生嵌套/双实例继续待验。自有普通App已正常退出。
+
+新增真实NSHostingView同身份回归先失败后通过：修补前h27-result-snapshot-red-r2三测试四条陈旧值断言失败，同值选择保留通过；修补后h27-result-snapshot-green共36项/4suite通过。首次探针另有夹具错误（现有无效数字契约保留73而非nil）、offscreen枚举按钮不可见，已单独保留日志并修正观测；未改原验收。最终Hosting覆盖数字、嵌套record/list、字段schema替换，旁边“-”草稿/中文选择/焦点及同值换语言/宽度保留；枚举A→B具体选中图标未在offscreen直接观察，不能补造。源码hash见evidence/snapshot-green-inputs.json，修补前源/测试保存在snapshot-red-inputs。Lead实现与复验，非实现者只读复核；普通GUI修补复核尚待进行，不提前关闭。

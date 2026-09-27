@@ -356,6 +356,21 @@ enum WorkflowFormSupport {
 }
 
 @MainActor
+struct WorkflowDatumSnapshotView: View {
+    let value: WorkflowDatum
+    @State private var generation = UUID()
+
+    var body: some View {
+        WorkflowDatumEditor(value: .constant(value)).disabled(true)
+            .id(generation)
+            // Editors deliberately keep incomplete drafts. A published result
+            // has no draft: replace only this read-only subtree on a new value.
+            // Unchanged results, neighboring editors and the inspector retain identity.
+            .onChange(of: value) { _, _ in generation = UUID() }
+    }
+}
+
+@MainActor
 struct WorkflowDatumEditor: View {
     @Binding private var value: WorkflowDatum?
     private let allowsTypeSelection: Bool
