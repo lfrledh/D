@@ -14,7 +14,7 @@
 
 恢复点：组合代码ca0ff7a5869bad417ed9ddc6e3a724ba0296c77e；后续8125d9488e3683591be5680730b691fc3ea160f5只调整hosting证据分层和任务记录，生产代码相同。Workbench611、UI171、模型库CPU及App测试构建通过；H22普通包3dd32ae已由用户启动，隔离IME-Quality项目已建好，正在等待中文/日文移动缩放反馈。四项媒体显示要求仍须真实GUI；视频4/50对照、无音符音乐真实运行待执行。写Worker已结束，修复预算SAVE用1轮、MEDIA用2轮及1次Lead hosting接管；不可用新编号重置。
 
-用户随后明确要求先同步当前进度再自行试用：本次只推送`codex/node-quality-01`候选，源仍为01758b81527dc27eb4563bf1b66fd1ceab6647ee，不提前接纳。948a08ceac42897a9143223512485e13630fc313已重新正常构建D Nodes，独立交付`D Quality Preview.app`及新身份启动器；入口见[最新候选试用](NODE_LANGUAGE_TRY.zh-CN.md#最新进度试用版d-node-quality-01尚未阶段接纳)。本次未启动新App或模型，未操作用户IME窗口。最终远端核对、产物、保护状态及恢复点见本轮R/lead/progress-sync-receipt.json；此前recovery-checkpoint.json保留为历史。同步只保存进度，未改变以上验收门槛。
+用户随后明确要求先同步当前进度再自行试用：本次只推送`codex/node-quality-01`候选，源仍为01758b81527dc27eb4563bf1b66fd1ceab6647ee，不提前接纳。948a08ceac42897a9143223512485e13630fc313已重新正常构建D Nodes，独立交付`D Quality Preview.app`及新身份启动器；入口见[上一候选试用](NODE_LANGUAGE_TRY.zh-CN.md#上一进度试用版d-node-quality-01尚未阶段接纳)。本次未启动新App或模型，未操作用户IME窗口。最终远端核对、产物、保护状态及恢复点见本轮R/lead/progress-sync-receipt.json；此前recovery-checkpoint.json保留为历史。同步只保存进度，未改变以上验收门槛。
 
 ## D-NODE-LANGUAGE-01：已完成的上一阶段
 
