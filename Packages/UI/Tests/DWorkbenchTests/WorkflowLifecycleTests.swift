@@ -17,6 +17,76 @@ private actor WorkflowSubmitGate {
 @MainActor private final class WorkflowSaveSwitch { var fails = true }
 
 extension WorkflowLifecycleTests {
+    @Test(arguments: [false, true], [false, true])
+    func pinnedLegacyWaitingDecidesAfterReopenWithoutUsingCurrentInput(image: Bool, changeAfterWaiting: Bool) async throws {
+        let (_, store, engine, c) = try await fixture()
+        var input = try #require(WorkflowRegistry.standard.operation("d.text.input")).definition.makeNode()
+        input.parameters["text"] = .text("A 原始 👩🏽‍🎨 e\u{301}")
+        var generate = try #require(WorkflowRegistry.standard.operation("d.image.generate")).definition.makeNode()
+        generate.parameters["count"] = .integer(1)
+        let human = try #require(WorkflowRegistry.standard.operation(image ? "d.asset.choose" : "d.text.confirm")).definition.makeNode()
+        let graph = WorkflowGraph(nodes: image ? [input, generate, human] : [input, human], connections: image ? [
+            .init(sourceNode: input.id, targetNode: generate.id, targetPort: "prompt"),
+            .init(sourceNode: generate.id, targetNode: human.id)
+        ] : [.init(sourceNode: input.id, targetNode: human.id)])
+        let initial = try #require(try await store.workflowState().archive)
+        _ = try await store.saveWorkflow(graphs: [graph], runs: [], expectedRevision: initial.revision)
+        await c.load(); await c.run(target: image ? generate.id : input.id, only: false)
+        try #require(c.errorMessage == nil)
+        let source = try #require(c.runs.last)
+        let call = try #require(source.planCheckpoint?.records.last)
+        c.setParameter(nodeID: input.id, key: "text", value: .text("B current prompt"))
+        let edited = try #require(c.graph)
+        let pin = WorkflowHistoricalInput(destinationNodeID: human.id, destinationPort: "input",
+            sourceCall: .init(address: call.address, stepID: call.id), sourcePort: "output")
+        await c.runScoped(.only(human.id), pins: [pin], expectedGraphID: edited.id, expectedRevision: edited.revision)
+        try #require(c.errorMessage == nil)
+        let waiting = try #require(c.runs.last?.steps.first)
+        try #require(waiting.status == .waiting)
+        #expect(waiting.inputs["input"] == call.step.outputs["output"])
+        let draft = "人工草稿 👩🏽‍🎨 e\u{301}"
+        if !image { c.editReviewText(stepID: waiting.id, text: draft) }
+        await c.save(); try await c.close(); try await store.close()
+
+        let reopened = try await ProjectStore.open(at: store.rootURL)
+        let session = WorkbenchSession(engine: engine, backendID: "fixture.image",
+            status: { .init(activeRunID: nil, phase: nil, queuedRunIDs: []) }, shutdown: {}, cleanup: {}, validateModel: { _ in })
+        let services = WorkflowServices(store: reopened, session: session, resolveModel: { _, _ in
+            throw WorkflowIssue("Deciding a historical wait must not resolve a model")
+        })
+        let recovered = WorkflowController(services: services); await recovered.load()
+        #expect(recovered.runs.first == source)
+        #expect(recovered.runs.last?.steps.first?.decision == nil)
+        if !image { #expect(recovered.runs.last?.steps.first?.reviewTextDraft == draft) }
+        let before = try #require(try await reopened.workflowState().archive)
+        if changeAfterWaiting {
+            // Both kinds of changes must invalidate the wait, even though its historical pin is valid.
+            if image { recovered.disconnect(try #require(recovered.graph?.connections.last?.id)) }
+            else { recovered.setParameter(nodeID: input.id, key: "text", value: .text("C changed after waiting")) }
+        }
+        let candidate = waiting.outputs["preview"]?.candidates.first
+        await recovered.decide(stepID: waiting.id, accept: true, text: image ? nil : draft,
+            candidateID: candidate?.id, acceptPartial: false)
+        #expect(recovered.runs.first == source)
+        #expect(await engine.requests.count == (image ? 1 : 0))
+        #expect(recovered.runs.count == 2)
+        if changeAfterWaiting {
+            #expect(recovered.errorMessage?.contains("过期") == true)
+            #expect(recovered.runs.last?.steps.first?.decision == nil)
+            #expect(try await reopened.workflowState().archive?.assets == before.assets)
+        } else {
+            try #require(recovered.errorMessage == nil)
+            let decided = try #require(recovered.runs.last?.steps.first)
+            #expect(decided.status == .completed && decided.decision?.accepted == true)
+            #expect(recovered.graph?.nodes.first?.parameters["text"] == .text("B current prompt"))
+            if image { #expect(decided.outputs["output"]?.asset == candidate?.asset) }
+            else { #expect(try await services.readText(try #require(decided.outputs["output"]?.asset)) == draft) }
+            await recovered.decide(stepID: waiting.id, accept: true, text: "duplicate", candidateID: candidate?.id, acceptPartial: false)
+            #expect(recovered.runs.last?.steps.first == decided)
+        }
+        try await recovered.close(); try await reopened.close()
+    }
+
     @Test func retainedDerivativeDoesNotBlockOriginalFailedCallRetry() async throws {
         let (_, store, engine, c) = try await fixture()
         c.addExample("text")

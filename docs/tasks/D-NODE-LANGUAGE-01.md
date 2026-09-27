@@ -472,3 +472,14 @@ Lead局部修补仅改变新官方样例与新工具的初始布局：按真实�
 普通6ebca7c App完成E01多语言输入保留、列表新增、Loop上限4→2及指定第二轮调用重跑。run B43A6935-3B79-4F2D-859C-609A3DDDDC61终值2已正确落盘，但检查面板仍显示中间1；派生19E4826A-916B-41B4-BA2B-125F2BC56CCB记录精确iteration2/return节点，旧run未改。纯数据结果复用带@State草稿的编辑器导致陈旧；仅结果子树按值变化重建，同值与旁边可编辑表单身份保留，不改计算/保存/当前草稿。普通GUI亦完成两输入两输出工具“H27 判断与循环”选区封装并保存，原生嵌套/双实例继续待验。自有普通App已正常退出。
 
 新增真实NSHostingView同身份回归先失败后通过：修补前h27-result-snapshot-red-r2三测试四条陈旧值断言失败，同值选择保留通过；修补后h27-result-snapshot-green共36项/4suite通过。首次探针另有夹具错误（现有无效数字契约保留73而非nil）、offscreen枚举按钮不可见，已单独保留日志并修正观测；未改原验收。最终Hosting覆盖数字、嵌套record/list、字段schema替换，旁边“-”草稿/中文选择/焦点及同值换语言/宽度保留；枚举A→B具体选中图标未在offscreen直接观察，不能补造。源码hash见evidence/snapshot-green-inputs.json，修补前源/测试保存在snapshot-red-inputs。Lead实现与复验，非实现者只读复核；普通GUI修补复核尚待进行，不提前关闭。
+
+
+## H27 显式历史输入与旧人工等待衔接（2026-09-27）
+
+普通GUI代码851ea1b发现：图像生成和文字改写的原A已完成、当前提示改B后，显式pin A的旧确认/选择节点可进入waiting，但决定入口仍按latest计算stale而拒绝。图像等待创建后图未改，构成真实反例；后续新增节点使旧文字等待的图已变，不能放宽后者。原项目/旧等待保留，外部 `run-20260927T020614Z-h27/evidence/pinned-legacy-wait-before-repair.json` 保存快照摘要与失败。
+
+Lead最小修补：顶层且有历史pins时要求当前完整图等于冻结图，复用validateRun及validateScopeHistory核对身份、计划、原连线、实际来源和绑定值；在发布前及await后各检查。普通非scoped stale、嵌套与具体调用决定路径不变。未新建调度/存储/模型实现。
+
+回归先失败后通过：新增真实Store关闭/打开、Controller决定路径的一个参数化测试共4场景。初次测试有多余optional chaining编译错误，修正测试后red-r2两条合法文字/图像pin均以过期失败；图改变的两例拒绝正确。green的43 tests/2 suites为Lifecycle与Language Call（filter未匹配Scope，不宣称包含）；另用精确WorkflowRunScopeTests运行10 tests/1 suite通过。包含原有普通stale、伪造来源/外部输入拒绝保护；没有新增发布期间改图时序注入，双重guard属代码审阅证据。日志 `run-20260926T150929Z/lead/h27-pinned-wait-{red,red-r2,green,scope}`；已测字节 `h27/evidence/pinned-wait-green-inputs.json`。非实现者h27_layout_readonly只读审核无阻断，指出过滤器漏项后已补。
+
+来源：Astra Lead实现与执行，非实现者仅审阅源码/日志。仍待新普通App对当前图重新创建pin A等待、保存重开/采用；旧等待不改写、不改回原A、不重跑GPU。整阶段仍候选，源130603d与个人scheme保护不变。

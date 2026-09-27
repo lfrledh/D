@@ -703,6 +703,17 @@ public struct WorkflowAssetBindingTarget: Sendable, Equatable {
     }
     private func canDecide(_ step: WorkflowStepRun, in run: WorkflowRun) -> Bool {
         if run.scope?.originCall != nil || !run.steps.contains(where: { $0.id == step.id }) { return waitingSnapshotIsCurrent(run) }
+        if let scope = run.scope, !scope.historicalInputs.isEmpty {
+            // An explicit historical boundary is not the latest upstream value.
+            // Keep the selected graph frozen and validate the actual source chain,
+            // both before publishing and again after the publication suspension.
+            guard rootGraph == run.graph else { return false }
+            do {
+                try WorkflowArchiveInspection.validateRun(run, tools: tools, registry: registry)
+                try WorkflowArchiveInspection.validateScopeHistory(runs, tools: tools, registry: registry)
+                return true
+            } catch { return false }
+        }
         return belongsToSelectedWorkflow(run) && !isStale(step)
     }
     public func decide(stepID: UUID, accept: Bool, text: String?, candidateID: UUID?, acceptPartial: Bool) async {
