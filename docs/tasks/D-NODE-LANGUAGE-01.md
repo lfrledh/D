@@ -2,9 +2,9 @@
 
 ## 当前验收检查点（2026-09-27，H27已实际办理）
 
-代码 `08b2e39614113e4de386e4146ef33cbc00c75d59` 的原生收尾与当前物理离线验证完成；本段优先于下面所有历史“锁屏/待验”快照。源仍为 `130603d23a4da81ba2a9852766f3589695ec9468`，正在做交付复核和本地接纳，尚未推送。仅文档最终SHA记外部回执，不自引用。
+代码 `08b2e39614113e4de386e4146ef33cbc00c75d59` 的原生收尾与当前物理离线验证完成；本段优先于下面所有历史“锁屏/待验”快照。源已从 `130603d23a4da81ba2a9852766f3589695ec9468` 快进到 `ccdbdf917c1ec569cccb6c2820056e898f93d871`，源入口回归与普通构建通过。后续仅三份结案文档变化，最终SHA与推送结果记H/`integration/final-receipt.json`，不自引用。
 
-H为`D-Development/AgentTrials/D-NODE-LANGUAGE-01/run-20260927T020614Z-h27`，R为同任务`run-20260926T150929Z`（根均`/Volumes/CodexProjects/Codex/`）。实际普通包：H/`delivery/D Nodes H27 Pinned.app`，双击H/`delivery/启动H27确认版.command`；正常Xcode入口为候选`D.xcworkspace / D Nodes / My Mac`。08b2e39实际点Run并逐个打开E01—E04，普通重新构建内含四个准备引擎，无手工补包。试用步骤见[NODE_LANGUAGE_TRY](../NODE_LANGUAGE_TRY.zh-CN.md)。
+H为`D-Development/AgentTrials/D-NODE-LANGUAGE-01/run-20260927T020614Z-h27`，R为同任务`run-20260926T150929Z`（根均`/Volumes/CodexProjects/Codex/`）。实际普通包：H/`delivery/D Nodes H27 Pinned.app`，双击H/`delivery/启动H27确认版.command`；正常Xcode入口已回到源`/Volumes/CodexProjects/Codex/D/D.xcworkspace / D Nodes / My Mac`；候选入口保留。08b2e39实际点Run并逐个打开E01—E04，普通重新构建内含四个准备引擎，无手工补包。试用步骤见[NODE_LANGUAGE_TRY](../NODE_LANGUAGE_TRY.zh-CN.md)。
 
 ### 本次修补、原生事实与限制
 
@@ -62,7 +62,19 @@ CPU、hosting、真实模型、普通GUI、本人试听和发行分别记账。5
 
 N01—N18及G01—G03/V01/M01—M09均已有有界实现和对应原生/组件证据；下方旧逐项表保留为锁屏时历史。可调用工具、录音、普通程序与真实模型共用既有Store/运行时，不引入独立调度器。M04是SwiftF0与分段，不是Basic Pitch；MRT2真实读取音符条件；Wan只T2V。
 
-归因仍是受限Sol Worker实现＋Lead契约、装配、有限修补与实测；重要Lead改动均有非实现者静态复核。新增复核不等于独立模型跑测试。隐藏模型解析、完整Lead归因与订阅费用unknown。AP1/CORE/I2V不合入，不构成发布批准。下一步仅完成本任务交付/接纳与同步，结束后等待用户审计；不自动启动新批次。
+归因仍是受限Sol Worker实现＋Lead契约、装配、有限修补与实测；重要Lead改动均有非实现者静态复核。新增复核不等于独立模型跑测试。隐藏模型解析、完整Lead归因与订阅费用unknown。AP1/CORE/I2V不合入，不构成发布批准。当前交付、接纳及源复查均完成；最后同步既有工作分支，结果记录外部回执，然后等待用户审计，不自动启动新批次。
+
+### 源接纳、最终回归与恢复点（2026-09-27）
+
+- 非实现者最终复核关闭A36三项记录问题：最新交付清单、GUI/宿主证据层级、历史CPU版本范围。未再次跑模型或改验收契约。H/`evidence/final-delivery-review.json`及`integration/delivery-recheck.json`。
+- 固定候选`ccdbdf917c1ec569cccb6c2820056e898f93d871`只在08b之后追加四份验收文档。已核验源身份、祖先、索引、忽略/新增路径碰撞、hooks/过滤器、保护差异，执行`--ff-only --no-autostash --no-overwrite-ignore`接入源；源/候选历史均保留。H/`integration/{before,ff-preflight,ff-result}.json`。
+- **源目录实际受测ccdbdf9**：R/`lead/source-integrated-ui-cpu`，167 UI / 23独立入口 / 605 Workbench Swift Testing及30 XCTest分别通过，108.25秒；权重/context/CLI与单跑benchmark的4个opt-in明确跳过。没有把套件计数或历史重复次数相加。
+- R/`lead/source-integrated-normal-build`：源workspace的D Nodes普通Debug构建通过，67.51秒，独立H/`integration/DerivedData`、现有离线依赖及原签名身份；不下载、不后补App。H/`integration/source-app-verification.json`核对声音/MRT2/Pitch/视频四引擎全部文件/目录/链接与准备资源一致，签名完整性exit0。此源产物只编译/静态检查，GUI仍引用已实际运行的08b普通包。
+- 本机忽略的`Development.local.xcconfig`从候选逐字复制到源，摘要相同并保持ignored；没有换Team、身份或权限。使源workspace正常Run可定位已准备引擎；不随Git分发本机配置。H/`integration/local-config-copy.json`。
+- 保护：scheme仍未暂存orderHint1→6，SHA256`ca3635d88aa5a15397b90e528667c66c0e6db7e596176e885c79d194b544206c`，index blob`9c76916bdc97c2d4298cefe64e0b0fae3380573e`；内容/diff/index逐项不变。没有修改普通App、模型、真实作品或旧候选。H27已验App与启动器摘要再次核对不变。
+- 最终提交仅当前行动/试用说明/本任务记录；完整最终SHA、仅文档差异、源剩余状态与GitHub核对写H/`integration/final-receipt.json`。源未提交个人修改必须保留，不能称全干净。自有GUI/构建/推理已结束，无活跃写Worker。
+- 来源不变：受限Sol实现、Lead共享契约/装配/有限修补，重要变更有非实现者审阅；本轮源复查由Lead执行，非独立模型重新测试。完整Lead用量及订阅费用unknown，不重算旧用量。
+- 下一动作：用户审计开发试用成果；下一阶段仅提出运行历史保存/响应成本与节点操作可达性改进，尚未开工。H22、低步数视频质量、MRT2近似控制及正式分发门槛继续保留。
 
 ### H27 保存卡顿有限修补（2026-09-27，实施前冻结）
 

@@ -4,19 +4,19 @@
 
 ## 从这里打开
 
-- 候选工作树：`/Volumes/CodexProjects/Codex/D-Worktrees/D-NODE-LANGUAGE-01`。
-- Xcode：该目录的 `D.xcworkspace`，共享 scheme **D Nodes**，运行目标 **My Mac**。使用同一 D Debug target，不是假的样例应用。
+- 正常开发工程：`/Volumes/CodexProjects/Codex/D`。候选工作树`/Volumes/CodexProjects/Codex/D-Worktrees/D-NODE-LANGUAGE-01`保留用于追溯。
+- Xcode：`/Volumes/CodexProjects/Codex/D/D.xcworkspace`，共享 scheme **D Nodes**，运行目标 **My Mac**。使用同一 D Debug target，不是假的样例应用。
 - 构建一次后再次点 Run，会由 Xcode 的原生资源阶段复制已经准备的引擎，再正常签名；不需要运行后手工补包，也不在编译时下载安装依赖。
 - `D Nodes` 使用固定试用身份 `4DFA8D40-45FA-4BA0-934C-F034F36E2D60`。模型索引/偏好与普通 D 分开；重复打开沿用试用记录。项目是你明确选定的新试用文件，不替换已有作品。
 - 最新普通包：`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-NODE-LANGUAGE-01/run-20260927T020614Z-h27/delivery/D Nodes H27 Pinned.app`；双击同目录`启动H27确认版.command`，已实际启动验证。旧run的`D Nodes.app`是历史5b49f6e，不是最新交付。
-- 实际构建代码`08b2e39614113e4de386e4146ef33cbc00c75d59`；Xcode **27.0 (27A266a)**、macOS **26.6.2 (25G83)**、Apple Silicon。当前候选在Xcode实际点Run并逐个打开E01—E04，四引擎经正常构建复制/签名；最终只改文档时不会宣称重跑模型。
+- 实际构建代码`08b2e39614113e4de386e4146ef33cbc00c75d59`；Xcode **27.0 (27A266a)**、macOS **26.6.2 (25G83)**、Apple Silicon。该代码在候选workspace中实际点Run并逐个打开E01—E04；源接纳ccdbdf917c1ec569cccb6c2820056e898f93d871后又从源目录完整构建，四引擎经正常构建复制/签名并逐文件核对。源构建未重复GUI/模型，最终只改文档时也不会宣称重跑模型。
 - 启动器用固定试用身份；直接双击App本体没有该环境变量，推荐启动器或D Nodes scheme，以免沿用普通D偏好。
 
 **已验：本人新录音/原声试听、中日选词、新哼唱三条音乐候选与第三条试听；普通GUI图文视频、工具/循环、保存重开、局部重跑、TXT/PNG/JPEG/WAV/MP4导出。本轮物理断网5方法通过。** 仍保留H22候选栏跟随、运行历史增长后的保存迟缓、低步数视频画质和近似音乐控制限制；没有声称全面UI精修或发布就绪。
 
 ## 一次准备与模型
 
-本机已在外盘准备 `delivery/resources-v2`；候选中的忽略文件 `Development/Development.local.xcconfig` 指向它及现有获准签名身份。不要把本机身份配置复制到别人的 Mac；新机器须使用其合法开发配置。
+本机已在外盘准备 `/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-NODE-LANGUAGE-01/run-20260926T150929Z/delivery/resources-v2`；源工程和候选中各自的忽略文件 `Development/Development.local.xcconfig` 内容相同，指向它及现有获准签名身份。不要把本机身份配置复制到别人的 Mac；新机器须使用其合法开发配置。
 
 资源集合经 `scripts/prepare-development-resources.py` 生成清单、`scripts/verify-development-resources.py` 校验，包含声音、MRT2、视频和音高运行引擎。日常 Run 复用此目录；目录缺失或被改动时构建应解释失败，不悄悄生成缺引擎的 App。具体本机准备命令及来源留在外部 run 的 `scripts/prepare-current-engines-r2.py` 和 `lead/stage-diagnostic-resources`；该步骤已经完成，不要每次重复打包。
 
