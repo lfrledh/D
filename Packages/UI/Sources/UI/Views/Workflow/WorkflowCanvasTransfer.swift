@@ -34,7 +34,7 @@ enum WorkflowCanvasTransfer: Codable, Transferable, Equatable, Sendable {
     private static let maximumModelIdentifierCharacters = 2_048
 
     static var transferRepresentation: some TransferRepresentation {
-        DataRepresentation(exportedContentType: .workflowCanvasItem) { value in
+        DataRepresentation(contentType: .workflowCanvasItem) { value in
             try value.encoded()
         } importing: { data in
             try decode(data)
