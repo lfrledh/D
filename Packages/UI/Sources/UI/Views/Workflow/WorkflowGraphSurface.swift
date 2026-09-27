@@ -685,7 +685,7 @@ struct WorkflowPortIdentity: Hashable {
 }
 
 struct WorkflowPortAnchorPreferenceKey: PreferenceKey {
-    static var defaultValue: [WorkflowPortIdentity: Anchor<CGPoint>] = [:]
+    static let defaultValue: [WorkflowPortIdentity: Anchor<CGPoint>] = [:]
 
     static func reduce(
         value: inout [WorkflowPortIdentity: Anchor<CGPoint>],
