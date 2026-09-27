@@ -74,6 +74,7 @@ private final class SessionRecordingDevice: AudioRecordingDevice {
 
 @MainActor
 private final class SessionAudioFactory: AudioTransportDeviceFactory {
+    var recordingError: AudioMediaError?
     var permissionResult = true
     var suspendPermission = false
     var permissionContinuation: CheckedContinuation<Bool, Never>?
@@ -99,6 +100,7 @@ private final class SessionAudioFactory: AudioTransportDeviceFactory {
         return device
     }
     func makeRecording(capture: AudioCaptureFile) throws -> any AudioRecordingDevice {
+        if let recordingError { throw recordingError }
         var format = AudioStreamBasicDescription(
             mSampleRate: 48_000, mFormatID: kAudioFormatLinearPCM,
             mFormatFlags: kAudioFormatFlagsNativeFloatPacked,
@@ -126,6 +128,44 @@ private final class SessionAudioFactory: AudioTransportDeviceFactory {
 @Suite("Project audio session", .serialized)
 @MainActor
 struct ProjectAudioSessionTests {
+    @Test(arguments: [false, true]) func failedWorkflowCaptureCanBePreservedWithoutChangingCreatorMode(failsAtStop: Bool) async throws {
+        let f = try fixture("WorkflowCaptureRecovery"); defer { cleanup(f) }
+        let factory = SessionAudioFactory(), subject = session(f, factory: factory, recording: true)
+        await subject.createProject(at: f.project); await subject.openWorkflow()
+        let controller = try #require(subject.workflow)
+        controller.addExample("file")
+        let node = try #require(controller.graph?.nodes.first { $0.operationID == "d.asset.reference" })
+        let graph = controller.graph, mode = subject.creatorMode
+        if failsAtStop { factory.configureRecording = { $0.corruptOnStop = true } }
+        else { factory.recordingError = .unavailable("Controlled absent recording device") }
+        await subject.startWorkflowRecording(nodeID: node.id, controller: controller)
+        if failsAtStop { await subject.finishWorkflowRecording() }
+        let pending = try #require(subject.audio?.pendingCaptures.first)
+        let rawURL = f.project.appendingPathComponent(pending.relativePath)
+        let original = try Data(contentsOf: rawURL)
+        #expect(subject.workflowRecordingNodeID == (failsAtStop ? node.id : nil))
+        controller.errorMessage = nil
+        await subject.startWorkflowRecording(nodeID: node.id, controller: controller)
+        #expect(controller.errorMessage?.contains("待恢复") == true)
+        #expect(!(await subject.retryPendingAudioCapture(id: pending.id)))
+        #expect(subject.keepPendingAudioCaptureForRecovery(id: pending.id))
+        #expect(subject.workflowRecordingNodeID == nil)
+        #expect(subject.creatorMode == mode && controller.graph == graph)
+        #expect(subject.audio?.pendingCaptures == [pending])
+        #expect(try Data(contentsOf: rawURL) == original)
+        factory.recordingError = nil
+        factory.configureRecording = nil
+        await subject.startWorkflowRecording(nodeID: node.id, controller: controller)
+        #expect(subject.workflowRecordingNodeID == node.id)
+        await subject.finishWorkflowRecording()
+        let ref = try #require(controller.graph?.nodes.first { $0.id == node.id }?.assetReference)
+        #expect(ref.assetID != pending.id)
+        #expect(subject.manifest?.pendingAudioCaptures == [pending])
+        #expect(try Data(contentsOf: rawURL) == original)
+        #expect(subject.manifest?.assets.first { $0.id == ref.assetID }?.metadata.audio?.origin == .microphone)
+        #expect(await subject.requestClose())
+    }
+
     @Test func workflowPreviewPauseAndCloseCannotControlANewerOwner() async throws {
         let f = try fixture("PreviewOwner"); defer { cleanup(f) }
         let factory = SessionAudioFactory(), subject = session(f, factory: factory)

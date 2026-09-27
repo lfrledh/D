@@ -20,6 +20,7 @@ struct WorkflowHostView: View {
                     onAdditionalModel: { chooseModel(controller: controller, kind: $0) },
                     onRecord: { nodeID in Task { await model.projectSession.startWorkflowRecording(nodeID: nodeID, controller: controller) } })
                     .safeAreaInset(edge: .bottom) {
+                        WorkflowCaptureRecoveryView(model: model)
                         if model.projectSession.workflowRecordingNodeID != nil {
                             HStack {
                                 Text(languageStore?.text("workflow.recording.active", fallback: "本次原声录音：结束后保存为独立资产。") ?? "本次原声录音")
@@ -66,6 +67,37 @@ struct WorkflowHostView: View {
         panel.canChooseDirectories = true; panel.canChooseFiles = false; panel.allowsMultipleSelection = false
         guard await panel.begin() == .OK, let url = panel.url, model.projectSession.workflow === controller else { return }
         await model.projectSession.selectWorkflowDestination(at: url)
+    }
+}
+
+/// Recovery must be reachable without navigating to the audio page: a failed
+/// capture deliberately blocks that navigation until the user preserves it.
+struct WorkflowCaptureRecoveryView: View {
+    let model: WorkbenchModel
+    @Environment(\.dLanguageStore) private var languageStore
+    var body: some View {
+        if let audio = model.projectSession.audio, !audio.pendingCaptures.isEmpty {
+            let contextID = audio.contextID
+            let documentID = model.activeDocumentID
+            VStack(alignment: .leading, spacing: 8) {
+                Text(languageStore?.text("workflow.recording.recovery", fallback: "待恢复录音：重试保存，或保留原文件后继续。") ?? "待恢复录音")
+                ForEach(audio.pendingCaptures) { capture in
+                    HStack {
+                        Text(capture.name).lineLimit(1)
+                        Button(languageStore?.text("workflow.recording.retry", fallback: "重试保存") ?? "重试保存") {
+                            Task { await model.retryPendingAudioCapture(id: capture.id,
+                                contextID: contextID, renderDocumentID: documentID) }
+                        }.accessibilityIdentifier("workflow-record-retry-\(capture.id.uuidString)")
+                        Button(languageStore?.text("workflow.recording.keep", fallback: "保留待恢复，继续操作") ?? "保留待恢复，继续操作") {
+                            model.keepPendingAudioCaptureForRecovery(id: capture.id,
+                                contextID: contextID, renderDocumentID: documentID)
+                        }.accessibilityIdentifier("workflow-record-keep-\(capture.id.uuidString)")
+                    }
+                }
+            }
+            .disabled(audio.isBusy || model.isChangingProject)
+            .padding().frame(maxWidth: .infinity, alignment: .leading).background(.regularMaterial)
+        }
     }
 }
 

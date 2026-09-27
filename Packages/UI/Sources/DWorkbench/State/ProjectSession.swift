@@ -1470,8 +1470,13 @@ public final class ProjectSession {
     }
 
     public func startWorkflowRecording(nodeID: UUID, controller: WorkflowController) async {
+        guard workflow === controller else { return }
+        guard navigationReady() else {
+            controller.errorMessage = errorMessage
+            return
+        }
         guard workflow === controller, workflowCapture == nil, !controller.isRunning,
-              audioRecordingEnabled, navigationReady(), let store, let audio,
+              audioRecordingEnabled, let store, let audio,
               let target = controller.assetBindingTarget(nodeID: nodeID), !audio.isBusy, !isChangingProject, !closePending else { return }
         let id = UUID()
         workflowCapture = (id, controller, target, audio, false, nil); workflowRecordingNodeID = nodeID
@@ -1583,8 +1588,13 @@ public final class ProjectSession {
 
     @discardableResult
     public func keepPendingAudioCaptureForRecovery(id: UUID) -> Bool {
-        guard !isChangingProject, !closePending else { return false }
-        return audio?.keepPendingCaptureForRecovery(id: id) ?? false
+        guard !isChangingProject, !closePending, let audio,
+              audio.keepPendingCaptureForRecovery(id: id) else { return false }
+        if let capture = workflowCapture, capture.audio === audio,
+           capture.identity?.contextID == audio.contextID, capture.identity?.captureID == id {
+            workflowCapture = nil; workflowRecordingNodeID = nil
+        }
+        return true
     }
 
     @discardableResult
