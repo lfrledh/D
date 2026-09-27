@@ -2,15 +2,15 @@
 
 最后核实：2026-09-27。唯一当前任务与停点入口。
 
-## 当前任务：D-NODE-LANGUAGE-01（候选已构建，H27原生验收待办）
+## 当前任务：D-NODE-LANGUAGE-01（H27集中原生验收进行中）
 
 用户批准 S0—S4：18通用节点、结构化控制与工具、四模态真实节点及哼唱和声样例、Xcode Run/普通开发App。任务范围、隔离、预算与证据见[任务记录](tasks/D-NODE-LANGUAGE-01.md)。不自动发布或恢复 AP1/CORE/I2V。
 
-源 `codex/inference-foundation` = `130603d23a4da81ba2a9852766f3589695ec9468`。Lead隔离树 `D-Worktrees/D-NODE-LANGUAGE-01`，分支 `codex/d-node-language-01`；组合代码/完整CPU/普通开发构建 = `5b49f6ebea2db24effe2b317aed399ae74cbc068`，后续仅文档提交在外部 `lead/final-receipt.json` 记录。候选未集成、未推送；整阶段不能记通过。证据 `D-Development/AgentTrials/D-NODE-LANGUAGE-01/run-20260926T150929Z`，路径根 `/Volumes/CodexProjects/Codex/`。
+源 `codex/inference-foundation` = `130603d23a4da81ba2a9852766f3589695ec9468`。Lead隔离树 `D-Worktrees/D-NODE-LANGUAGE-01`，分支 `codex/d-node-language-01`；历史组合代码/完整CPU/普通开发构建 = `5b49f6ebea2db24effe2b317aed399ae74cbc068`；当前候选普通构建 = `49d1ccef95c6cbcaf19e9ab414be69bac7d0d0b7`，含606c1b6录音恢复与49d1cce新样例初始布局修补。两者均有局部CPU/hosting及非实现者复核，不能把历史全CPU/宿主结果升级为在新SHA重跑。候选未集成、未推送；整阶段不能记通过。证据 `D-Development/AgentTrials/D-NODE-LANGUAGE-01/run-20260926T150929Z`，路径根 `/Volumes/CodexProjects/Codex/`。
 
 本轮18通用节点、类型化记录/列表/条件/Map/状态Loop/人工任务/版本化工具与四套可编辑样例已实现。完整组件/hosting、真实图文音视频宿主、三类跨进程检查点恢复通过；具体模型构建各有版本，不等于同一普通GUI已验。见[逐项记录](tasks/D-NODE-LANGUAGE-01.md#当前交付检查点2026-09-27)及外部 `delivery/acceptance-results.json`。
 
-试用从[通用节点说明](NODE_LANGUAGE_TRY.zh-CN.md)开始：候选 `D.xcworkspace / D Nodes / My Mac`；`R/delivery/D Nodes.app` 与两个启动器已准备，普通Debug重新构建自动校验/复制音视频引擎，无手工补包。Xcode实际点Run、普通App交互、本轮新录音/试听、中日输入法、物理断网尚未验；本轮最后桌面检查仍锁定。源旧工作台试用说明保留如下。
+试用从[通用节点说明](NODE_LANGUAGE_TRY.zh-CN.md)开始：候选 `D.xcworkspace / D Nodes / My Mac`；`R/delivery/D Nodes.app` 与两个启动器已准备，普通Debug重新构建自动校验/复制音视频引擎，无手工补包。当前已解锁：普通App新录音7.594667秒、本人原声试听、SwiftF0实际片段识别、正常退出后恢复素材/等待记录及原文件摘要通过。新样例卡片布局原生查看不再遮挡；中文空格确认与日文转换选词正常，H22候选定位仍延期。新录音三条MRT2已在普通界面完成，第三条本人试听正常；保存卡顿已定位为重复解析/校验旧快照，Lead正做单槽已验证读取缓存及保护回归。Xcode实际点Run、剩余普通GUI及物理断网仍待验。最新正常包 `run-20260927T020614Z-h27/delivery/D Nodes H27 Layout.app`，启动器 `启动H27布局版.command`，固定隔离UUID不变。源旧工作台试用说明保留如下。
 
 上一批已集中验收并同步，历史最终回执 `D-Development/AgentTrials/D-NODE-BOUNDARY-01/run-20260926T073533Z-acceptance/evidence/final-receipt.json`；H25/H26历史关闭，不冒充本轮新 A35。旧基线组件与原生证据保留，详情[边界任务](tasks/D-NODE-BOUNDARY-01.md)。
 
@@ -29,4 +29,4 @@ M0可编辑图文、文字、文件、模板组合共用原项目Store、文字�
 - H25/H26和旧设备/协议权限无需重复办理；H22输入法候选窗位置仍按用户决定延期，未改记修复。人不在、锁屏、设备或本人点击引起的新阻塞持续入[集中清单](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md)，返回时集中处理。
 - 所有本轮Worker已交还写入，真实模型及恢复测试结束，最终普通包已构建。Qwen7B短JSON规划实际两主题六图通过，1.5B结构失败证据保留；不提高/降低既有精度或删校验。资源/运行时CPU通过，导出MIDI经Apple解析器核对音符。H27仅阻塞对应原生验收，不标为代码通过或阶段完成；准确版本和进程见任务记录与外部run证据。
 
-**下一动作：本人解锁后集中完成H27及同包普通GUI/录音试听/离线验收，再做必要预算内修复与验收后接纳；不启动下一产品批次。** 不再重复非前台模型测试凑通过数；对未知候选不自动接纳，正式发布仍需另行批准。
+**下一动作：继续H27同包普通GUI、Xcode Run及A35物理离线验收；MRT2资格声明本人已点击，新录音/第三候选试听和日文选词不重复。先完成保存卡顿局部修补及复核，再集中完成剩余原生项目；完整缩放/跨语言保留仍另验。预算内修补验收后才接纳，不启动下一产品批次。** 不再重复非前台模型测试凑通过数；对未知候选不自动接纳，正式发布仍需另行批准。

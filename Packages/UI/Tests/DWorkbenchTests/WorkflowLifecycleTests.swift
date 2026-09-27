@@ -648,7 +648,7 @@ struct WorkflowLifecycleTests {
     }
 
     @Test func futureWorkflowAndUnknownNodePreserveRawBytes() async throws {
-        for variant in 0..<3 {
+        for variant in 0..<4 {
             let (_, store, _, c) = try await fixture()
             c.addExample("text")
             if variant == 2 { await c.run(target: try #require(c.graph?.nodes[0].id), only: false) }
@@ -667,6 +667,8 @@ struct WorkflowLifecycleTests {
                 var node = try #require(steps[0]["node"] as? [String: Any])
                 node["definitionVersion"] = 999; node["opaque"] = ["must":"survive"]
                 steps[0]["node"] = node; runs[0]["steps"] = steps; raw["runs"] = runs
+            } else if variant == 3 {
+                raw["futureMetadata"] = ["must":"survive"]
             } else { raw["version"] = 999; raw["extra"] = ["must":"survive"] }
             let bytes = try JSONSerialization.data(withJSONObject: raw, options: .sortedKeys); try bytes.write(to: url)
             var manifest = saved; manifest.workflowSnapshot = .init(generation: pointer.generation, byteCount: bytes.count,
@@ -674,6 +676,7 @@ struct WorkflowLifecycleTests {
             try JSONEncoder().encode(manifest).write(to: store.rootURL.appendingPathComponent("project.json"))
             let reopened = try await ProjectStore.open(at: store.rootURL)
             let state = try await reopened.workflowState(); #expect(state.archive == nil); #expect(state.originalBytes == bytes)
+            let second = try await reopened.workflowState(); #expect(second.archive == nil); #expect(second.originalBytes == bytes)
             await #expect(throws: (any Error).self) { _ = try await reopened.saveWorkflow(graphs: [], runs: [], expectedRevision: UUID()) }
             #expect(try Data(contentsOf: url) == bytes); try await reopened.close()
         }

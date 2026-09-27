@@ -21,6 +21,8 @@ struct WorkflowArchiveInspectionTests {
         run.planCheckpoint = checkpoint
         var archive = try #require(try await store.workflowState().archive)
         archive = try await store.saveWorkflow(graphs: [graph], runs: [run], expectedRevision: archive.revision)
+        #expect(try await store.workflowState().archive == archive)
+        #expect(try await store.workflowState().archive == archive)
         var forged = run
         forged.planCheckpoint?.plan.steps[0].node.dataConfiguration?.value = .number(99, unit: nil)
         await #expect(throws: (any Error).self) { _ = try await store.saveWorkflow(graphs: [graph], runs: [forged], expectedRevision: archive.revision) }

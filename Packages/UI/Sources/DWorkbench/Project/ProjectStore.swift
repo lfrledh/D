@@ -32,6 +32,15 @@ public actor ProjectStore {
     private let emptyWorkflowRevision = UUID()
     private var captureDirectories: [UUID: Int32] = [:]
     private var preparedImageReferences: [UUID: (assetID: UUID, reference: ImageReference)] = [:]
+    // One already validated read, never an uncommitted candidate. Disk/manifest integrity
+    // is still checked on every read; this only avoids repeating pure archive validation.
+    private struct ValidatedWorkflowRead {
+        let pointer: WorkflowSnapshotPointer
+        let bytes: Data
+        let assets: [ProjectAsset]
+        let archive: WorkflowArchive
+    }
+    private var validatedWorkflowRead: ValidatedWorkflowRead?
 
     private init(rootURL: URL, rootFD: Int32, lockFD: Int32, manifest: ProjectManifest, invalidatedPitchRuns: Set<UUID> = []) {
         self.rootURL = rootURL
@@ -920,6 +929,7 @@ public actor ProjectStore {
         Darwin.close(lockFD)
         Darwin.close(rootFD)
         isClosed = true
+        validatedWorkflowRead = nil
         return replacement
     }
 
@@ -1953,6 +1963,7 @@ public actor ProjectStore {
         Darwin.close(lockFD)
         Darwin.close(rootFD)
         isClosed = true
+        validatedWorkflowRead = nil
     }
 
     private func recoverOnOpen() async throws -> ProjectStore {
@@ -3062,6 +3073,12 @@ extension ProjectStore {
         guard data.count == pointer.byteCount, Self.workflowHash(data) == pointer.sha256 else {
             throw WorkflowIssue("流程快照与已保存摘要不符；已停止写入，不覆盖原记录。")
         }
+        if let cached = validatedWorkflowRead, cached.pointer == pointer,
+           cached.bytes == data, cached.assets == manifest.assets {
+            return .init(archive: cached.archive)
+        }
+        // A changed or read-only snapshot must not retain a previous validation result.
+        validatedWorkflowRead = nil
         struct Header: Decodable { let version: Int }
         let decoder = JSONDecoder()
         guard let header = try? decoder.decode(Header.self, from: data) else { throw WorkflowIssue("流程快照已损坏，原件已保留。") }
@@ -3079,6 +3096,7 @@ extension ProjectStore {
             return .init(archive: nil, readOnlyReason: "流程包含未识别字段，原件完整保留，只读。", originalBytes: data)
         }
         try validateWorkflowArchive(archive, assets: manifest.assets)
+        validatedWorkflowRead = .init(pointer: pointer, bytes: data, assets: manifest.assets, archive: archive)
         return .init(archive: archive)
     }
 
