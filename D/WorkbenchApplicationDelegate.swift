@@ -38,7 +38,8 @@ final class WorkbenchInputGeometry {
             self.scheduled = false
             guard let window = self.window else { return }
             window.contentView?.layoutSubtreeIfNeeded()
-            window.firstResponder?.inputContext?.invalidateCharacterCoordinates()
+            guard let responder = window.firstResponder as? NSView, responder.window === window else { return }
+            responder.inputContext?.invalidateCharacterCoordinates()
         }
     }
 }
