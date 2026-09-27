@@ -1,0 +1,243 @@
+import DWorkbench
+import Foundation
+import SwiftUI
+import Testing
+@testable import UI
+
+@Suite @MainActor
+struct WorkflowCanvasDragTests {
+    @Test
+    func dragMathUsesScreenScaleAndPreservesNegativeStoredCoordinates() {
+        let original = CGPoint(x: -240, y: -80)
+        for zoom: CGFloat in [0.5, 1, 1.8] {
+            let point = WorkflowCanvasDragGeometry.rawPosition(
+                original: original,
+                screenTranslation: CGSize(width: 90 * zoom, height: -40 * zoom),
+                zoom: zoom
+            )
+            #expect(point == CGPoint(x: -150, y: -120))
+        }
+    }
+
+    @Test
+    func transientPreviewMovesCardAndConnectedEndpointWithoutChangingGraph() {
+        let source = WorkflowNode(operationID: "d.text.input", title: "source")
+        let target = WorkflowNode(operationID: "d.text.confirm", title: "target")
+        let edge = WorkflowConnection(sourceNode: source.id, targetNode: target.id)
+        let graph = WorkflowGraph(
+            nodes: [source, target],
+            connections: [edge],
+            layout: [
+                .init(nodeID: source.id, x: -240, y: -80),
+                .init(nodeID: target.id, x: 420, y: 260),
+            ]
+        )
+        let unchanged = graph
+        let base = WorkflowGraphGeometry(graph: graph)
+        let previewPosition = CGPoint(x: -100, y: 40)
+        let preview = WorkflowGraphGeometry(
+            graph: graph,
+            previewPositions: [source.id: previewPosition],
+            translation: base.translation
+        )
+        let before = WorkflowConnectionGeometry.endpoints(
+            for: edge, geometry: base, portCenters: [:]
+        )
+        let during = WorkflowConnectionGeometry.endpoints(
+            for: edge, geometry: preview, portCenters: [:]
+        )
+
+        #expect(graph == unchanged)
+        #expect(preview.rawPosition(source.id) == previewPosition)
+        #expect(during.start.x - before.start.x == 140)
+        #expect(during.start.y - before.start.y == 120)
+        #expect(during.end == before.end)
+        #expect(preview.translation == base.translation)
+    }
+
+    @Test
+    func measuredPortCentersAttachDifferentPortsToTheirActualDots() {
+        let source = WorkflowNode(operationID: "d.model.language", title: "source")
+        let target = WorkflowNode(operationID: "d.image.generate", title: "target")
+        let edge = WorkflowConnection(
+            sourceNode: source.id,
+            sourcePort: "raw",
+            targetNode: target.id,
+            targetPort: "prompt"
+        )
+        let graph = WorkflowGraph(nodes: [source, target], connections: [edge])
+        let geometry = WorkflowGraphGeometry(graph: graph)
+        let expectedStart = CGPoint(x: 311, y: 207)
+        let expectedEnd = CGPoint(x: 519, y: 333)
+        let centers = [
+            WorkflowPortIdentity(nodeID: source.id, port: "output", input: false): CGPoint(x: 310, y: 150),
+            WorkflowPortIdentity(nodeID: source.id, port: "raw", input: false): expectedStart,
+            WorkflowPortIdentity(nodeID: target.id, port: "ref", input: true): CGPoint(x: 520, y: 280),
+            WorkflowPortIdentity(nodeID: target.id, port: "prompt", input: true): expectedEnd,
+        ]
+
+        let endpoints = WorkflowConnectionGeometry.endpoints(
+            for: edge, geometry: geometry, portCenters: centers
+        )
+        #expect(endpoints.start == expectedStart)
+        #expect(endpoints.end == expectedEnd)
+    }
+
+    @Test
+    func dragScopeRejectsRevisionGraphNodeReadOnlyAndRunTransitions() {
+        let node = WorkflowNode(operationID: "d.text.input", title: "node")
+        let graph = WorkflowGraph(
+            nodes: [node],
+            layout: [.init(nodeID: node.id, x: 10, y: 20)]
+        )
+        let scope = WorkflowCanvasScope(
+            rootGraphID: graph.id,
+            rootRevision: graph.revision,
+            graphID: graph.id,
+            bodyPath: []
+        )
+        var drag = WorkflowCanvasNodeDragState(
+            scope: scope,
+            nodeID: node.id,
+            originalPosition: CGPoint(x: 10, y: 20),
+            origin: .zero
+        )
+        drag.update(screenTranslation: CGSize(width: 30, height: 40), zoom: 1)
+
+        #expect(drag.canCommit(
+            currentScope: scope,
+            graph: graph,
+            currentPosition: CGPoint(x: 10, y: 20),
+            readOnly: false,
+            isRunning: false
+        ))
+        var stale = scope
+        stale = WorkflowCanvasScope(
+            rootGraphID: stale.rootGraphID,
+            rootRevision: UUID(),
+            graphID: stale.graphID,
+            bodyPath: stale.bodyPath
+        )
+        #expect(!drag.canCommit(currentScope: stale, graph: graph,
+            currentPosition: CGPoint(x: 10, y: 20), readOnly: false, isRunning: false))
+        #expect(!drag.canCommit(currentScope: scope, graph: WorkflowGraph(),
+            currentPosition: CGPoint(x: 10, y: 20), readOnly: false, isRunning: false))
+        #expect(!drag.canCommit(currentScope: scope, graph: graph,
+            currentPosition: CGPoint(x: 10, y: 20), readOnly: true, isRunning: false))
+        #expect(!drag.canCommit(currentScope: scope, graph: graph,
+            currentPosition: CGPoint(x: 10, y: 20), readOnly: false, isRunning: true))
+        #expect(!drag.canCommit(currentScope: scope, graph: graph,
+            currentPosition: CGPoint(x: 11, y: 20), readOnly: false, isRunning: false))
+
+        var active: WorkflowCanvasNodeDragState? = drag
+        active = nil
+        #expect(active == nil)
+        #expect(graph.layout.first?.x == 10)
+    }
+
+    @Test
+    func canvasTransferRoundTripsAndRejectsMalformedOrUnboundedStrings() throws {
+        let graphID = UUID(), revision = UUID(), nodeID = UUID()
+        let values: [WorkflowCanvasTransfer] = [
+            .operation(id: "d.image.generate", modelID: nil),
+            .operation(id: "d.model.language", modelID: "org/model"),
+            .asset(projectID: UUID(), assetID: UUID()),
+            .output(graphID: graphID, revision: revision, nodeID: nodeID, port: "output"),
+        ]
+        for value in values {
+            #expect(try WorkflowCanvasTransfer.decode(value.encoded()) == value)
+        }
+        #expect(throws: (any Error).self) {
+            try WorkflowCanvasTransfer.output(
+                graphID: graphID, revision: revision, nodeID: nodeID, port: ""
+            ).encoded()
+        }
+        #expect(throws: (any Error).self) {
+            try WorkflowCanvasTransfer.operation(
+                id: String(repeating: "x", count: 257), modelID: nil
+            ).encoded()
+        }
+        #expect(throws: (any Error).self) {
+            try WorkflowCanvasTransfer.decode(Data(repeating: 0, count: 8 * 1_024 + 1))
+        }
+        #expect(throws: (any Error).self) {
+            try WorkflowCanvasTransfer.decode(Data("not-json".utf8))
+        }
+    }
+
+    @Test
+    func connectionPolicyUsesRegistryPortsTypesAndCardinality() throws {
+        let sourceDefinition = WorkflowOperationDefinition(
+            id: "fixture.source",
+            title: "source",
+            detail: "",
+            inputs: [.init("textIn", "text", kinds: [.text])],
+            outputs: [
+                .init("text", "text", kinds: [.text]),
+                .init("image", "image", kinds: [.image]),
+            ]
+        )
+        let targetDefinition = WorkflowOperationDefinition(
+            id: "fixture.target",
+            title: "target",
+            detail: "",
+            inputs: [
+                .init("text", "text", kinds: [.text]),
+                .init("image", "image", kinds: [.image]),
+            ],
+            outputs: [.init("textOut", "text", kinds: [.text])]
+        )
+        let registry = try WorkflowRegistry(operations: [
+            .init(definition: sourceDefinition, execute: { _, _ in
+                throw WorkflowIssue("must not execute")
+            }),
+            .init(definition: targetDefinition, execute: { _, _ in
+                throw WorkflowIssue("must not execute")
+            }),
+        ])
+        let source = sourceDefinition.makeNode()
+        let target = targetDefinition.makeNode()
+        var graph = WorkflowGraph(nodes: [source, target])
+
+        #expect(WorkflowCanvasConnectionPolicy.canConnect(
+            graph: graph, registry: registry, tools: [],
+            sourceNodeID: source.id, sourcePort: "text",
+            targetNodeID: target.id, targetPort: "text"
+        ))
+        #expect(!WorkflowCanvasConnectionPolicy.canConnect(
+            graph: graph, registry: registry, tools: [],
+            sourceNodeID: source.id, sourcePort: "image",
+            targetNodeID: target.id, targetPort: "text"
+        ))
+        #expect(!WorkflowCanvasConnectionPolicy.canConnect(
+            graph: graph, registry: registry, tools: [],
+            sourceNodeID: source.id, sourcePort: "missing",
+            targetNodeID: target.id, targetPort: "text"
+        ))
+        #expect(!WorkflowCanvasConnectionPolicy.canConnect(
+            graph: graph, registry: registry, tools: [],
+            sourceNodeID: source.id, sourcePort: "text",
+            targetNodeID: source.id, targetPort: "text"
+        ))
+
+        graph.connections = [.init(
+            sourceNode: source.id, sourcePort: "text",
+            targetNode: target.id, targetPort: "text"
+        )]
+        #expect(!WorkflowCanvasConnectionPolicy.canConnect(
+            graph: graph, registry: registry, tools: [],
+            sourceNodeID: source.id, sourcePort: "text",
+            targetNodeID: target.id, targetPort: "text"
+        ))
+
+        graph.connections = [.init(
+            sourceNode: target.id, sourcePort: "textOut",
+            targetNode: source.id, targetPort: "textIn"
+        )]
+        #expect(!WorkflowCanvasConnectionPolicy.canConnect(
+            graph: graph, registry: registry, tools: [],
+            sourceNodeID: source.id, sourcePort: "text",
+            targetNodeID: target.id, targetPort: "text"
+        ))
+    }
+}
