@@ -35,7 +35,7 @@ final class WorkbenchInputGeometry {
         scheduled = true
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
-            self.scheduled = false
+            defer { self.scheduled = false }
             guard let window = self.window else { return }
             window.contentView?.layoutSubtreeIfNeeded()
             guard let responder = window.firstResponder as? NSView, responder.window === window else { return }
@@ -138,7 +138,10 @@ final class WorkbenchApplicationDelegate: NSObject, NSApplicationDelegate, NSWin
     func windowDidResignKey(_ notification: Notification) { previousWindowDelegate?.windowDidResignKey?(notification) }
     func windowDidBecomeMain(_ notification: Notification) { previousWindowDelegate?.windowDidBecomeMain?(notification) }
     func windowDidResignMain(_ notification: Notification) { previousWindowDelegate?.windowDidResignMain?(notification) }
-    func windowWillClose(_ notification: Notification) { previousWindowDelegate?.windowWillClose?(notification) }
+    func windowWillClose(_ notification: Notification) {
+        previousWindowDelegate?.windowWillClose?(notification)
+        if let window = notification.object as? NSWindow, window === workbenchWindow { inputGeometry = nil }
+    }
     func windowWillMiniaturize(_ notification: Notification) { previousWindowDelegate?.windowWillMiniaturize?(notification) }
     func windowDidMiniaturize(_ notification: Notification) { previousWindowDelegate?.windowDidMiniaturize?(notification) }
     func windowDidDeminiaturize(_ notification: Notification) { previousWindowDelegate?.windowDidDeminiaturize?(notification) }
