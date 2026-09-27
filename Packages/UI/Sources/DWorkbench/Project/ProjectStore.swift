@@ -3196,6 +3196,10 @@ extension ProjectStore {
         var candidate = manifest; candidate.workflowSnapshot = pointer; candidate.assets = assets
         try checkpoint?(.beforeManifest)
         try commit(candidate)
+        // The committed pointer still has to pass every filesystem and digest check in
+        // workflowState(). Cache only the pure archive validation that just succeeded,
+        // and only after the manifest has durably published this exact encoding.
+        validatedWorkflowRead = .init(pointer: pointer, bytes: data, assets: manifest.assets, archive: archive)
     }
 
     public func publishWorkflowAsset(data: Data, mediaType: String, metadata: MediaMetadata = .init(),
