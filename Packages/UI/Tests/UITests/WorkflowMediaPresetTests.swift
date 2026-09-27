@@ -96,11 +96,12 @@ struct WorkflowMediaPresetTests {
         let video = try #require(controller.graph?.nodes.first { $0.operationID == "d.video.generate" })
         controller.selectedNodeID = video.id
         let originalGraphs = controller.graphs
+        let graph = try #require(controller.graph)
         let action = try #require(WorkflowVideoPresetAction(
-            node: video, graph: try #require(controller.graph)
+            node: video, graph: graph
         ))
         let connectivity = try #require(action.replacement(
-            in: try #require(controller.graph), preset: WorkflowVideoPresets.connectivity
+            in: graph, preset: WorkflowVideoPresets.connectivity
         ))
         controller.updateNode(connectivity, in: action.graphID)
         #expect(controller.graph?.nodes.first { $0.id == video.id }?.parameters["steps"] == .integer(4))
