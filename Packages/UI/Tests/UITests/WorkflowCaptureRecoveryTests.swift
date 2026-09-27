@@ -49,7 +49,7 @@ struct WorkflowCaptureRecoveryTests {
         let before = try Data(contentsOf: project.appendingPathComponent(pending.relativePath))
         #expect(session.creatorMode == .image)
         let language = UILanguageStore(preferredLanguages: ["zh-Hans"])
-        let host = NSHostingView(rootView: WorkflowHostView(model: model).environment(\.dLanguageStore, language))
+        let host = NSHostingView(rootView: WorkflowHostView(model: model, nodeTags: ModelNodeTagStore()).environment(\.dLanguageStore, language))
         host.frame = CGRect(x: 0, y: 0, width: 1100, height: 850)
         let window = NSWindow(contentRect: host.frame, styleMask: [.titled], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false; window.contentView = host

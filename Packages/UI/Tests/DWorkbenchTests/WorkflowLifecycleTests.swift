@@ -1371,6 +1371,7 @@ extension WorkflowLifecycleTests {
         let node = try #require(c.selectedNode)
         #expect(node.parameters["modelID"]?.string == "text:test")
         #expect(c.graph?.layout.first?.x == 101)
+        c.undo(); #expect(c.graphs.isEmpty); c.redo()
         c.externalOperationBusy = { true }
         let before = c.graphs; c.addNode(operationID: "d.text.input"); c.moveNode(id: node.id, x: 1, y: 2)
         #expect(c.graphs == before)

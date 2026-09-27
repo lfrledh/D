@@ -267,17 +267,22 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
             errorMessage = "此模型没有登记到当前项目；请选择可用模型。"; return
         }
         guard x?.isFinite != false, y?.isFinite != false else { return }
-        if graph == nil { addBlankGraph() }
+        let createdGraph = graph == nil
+        if createdGraph { addBlankGraph() }
         var node = op.definition.makeNode()
         if operationID == "d.model.language" { node.dataConfiguration = .init(schema: .text) }
         if let modelID { node.parameters["modelID"] = .text(modelID) }
         edit { graph in
             graph.nodes.append(node)
             graph.layout.append(.init(nodeID: node.id,
-                x: max(0, x ?? (80 + Double(graph.nodes.count % 5) * 250)),
-                y: max(0, y ?? (100 + Double(graph.nodes.count / 5) * 210))))
+                x: x ?? (80 + Double(graph.nodes.count % 5) * 250),
+                y: y ?? (100 + Double(graph.nodes.count / 5) * 210)))
         }
-        if graph?.nodes.contains(where: { $0.id == node.id }) == true { selectedNodeID = node.id }
+        if graph?.nodes.contains(where: { $0.id == node.id }) == true {
+            // New graph plus its first node is one user insertion, not two undo steps.
+            if createdGraph { _ = undoStack.popLast() }
+            selectedNodeID = node.id
+        }
     }
 
     public func canvasInsertionTarget() -> WorkflowCanvasInsertionTarget? {
