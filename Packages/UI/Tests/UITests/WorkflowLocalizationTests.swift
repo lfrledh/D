@@ -237,10 +237,10 @@ struct WorkflowLocalizationTests {
         for _ in 0..<40 {
             host.layoutSubtreeIfNeeded()
             chineseChrome = renderedStrings(host)
-            if chineseChrome.contains("添加样例") && chineseChrome.contains("模型") { break }
+            if chineseChrome.contains("添加样例") && chineseChrome.contains("更多") { break }
             try await Task.sleep(for: .milliseconds(10))
         }
-        #expect(chineseChrome.contains("添加样例") && chineseChrome.contains("模型"))
+        #expect(chineseChrome.contains("添加样例") && chineseChrome.contains("更多"))
 
         let graphsBefore = controller.graphs
         let graphIDBefore = controller.selectedGraphID
@@ -252,7 +252,7 @@ struct WorkflowLocalizationTests {
         for _ in 0..<40 {
             host.layoutSubtreeIfNeeded()
             chrome = renderedStrings(host)
-            if chrome.contains("Add Example") && chrome.contains("Models") { break }
+            if chrome.contains("Add Example") && chrome.contains("More") { break }
             try await Task.sleep(for: .milliseconds(10))
         }
         let currentEditor = try #require(
@@ -267,7 +267,7 @@ struct WorkflowLocalizationTests {
         #expect(controller.graph?.nodes.first { $0.id == input.id }?.parameters["text"] == .text(draft))
         #expect(controller.runs.count == runCountBefore)
         print("BOUNDARY_RENDERED_CHROME=\(chrome.sorted())")
-        #expect(chrome.contains("Add Example") && chrome.contains("Models"))
+        #expect(chrome.contains("Add Example") && chrome.contains("More"))
         #expect(commands == 0)
         #expect(await engine.calls == 0)
 
