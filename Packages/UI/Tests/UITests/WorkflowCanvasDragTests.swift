@@ -56,6 +56,45 @@ struct WorkflowCanvasDragTests {
     }
 
     @Test
+    func idleOriginRaisesForSameGraphExpansionAndNeverShrinksAfterDrag() {
+        let node = WorkflowNode(operationID: "d.model.language", title: "model")
+        let graphID = UUID(), revision = UUID()
+        let collapsed = WorkflowGraph(
+            id: graphID,
+            revision: revision,
+            nodes: [node],
+            layout: [.init(nodeID: node.id, x: 0, y: 0, collapsed: true)]
+        )
+        var expanded = collapsed
+        expanded.layout[0].collapsed = false
+        let retainedAfterDrag = WorkflowGraphGeometry(graph: collapsed).translation
+        let expandedNatural = WorkflowGraphGeometry(graph: expanded).translation
+
+        let active = WorkflowCanvasOriginPolicy.resolved(
+            natural: expandedNatural,
+            retained: retainedAfterDrag,
+            active: retainedAfterDrag
+        )
+        #expect(active == retainedAfterDrag)
+
+        let reachableIdle = WorkflowCanvasOriginPolicy.resolved(
+            natural: expandedNatural,
+            retained: retainedAfterDrag,
+            active: nil
+        )
+        #expect(reachableIdle.height >= expandedNatural.height)
+        #expect(reachableIdle.height > retainedAfterDrag.height)
+
+        let collapsedAgain = WorkflowCanvasOriginPolicy.resolved(
+            natural: WorkflowGraphGeometry(graph: collapsed).translation,
+            retained: reachableIdle,
+            active: nil
+        )
+        #expect(collapsedAgain == reachableIdle)
+        #expect(collapsed.id == expanded.id && collapsed.revision == expanded.revision)
+    }
+
+    @Test
     func measuredPortCentersAttachDifferentPortsToTheirActualDots() {
         let source = WorkflowNode(operationID: "d.model.language", title: "source")
         let target = WorkflowNode(operationID: "d.image.generate", title: "target")
@@ -96,7 +135,9 @@ struct WorkflowCanvasDragTests {
             graphID: graph.id,
             bodyPath: []
         )
+        let sessionID = UUID()
         var drag = WorkflowCanvasNodeDragState(
+            sessionID: sessionID,
             scope: scope,
             nodeID: node.id,
             originalPosition: CGPoint(x: 10, y: 20),
@@ -136,20 +177,120 @@ struct WorkflowCanvasDragTests {
     }
 
     @Test
+    func invalidatedGestureSessionCannotReanimateAndNextGestureCompletesOnce() throws {
+        let node = WorkflowNode(operationID: "d.text.input", title: "node")
+        let graph = WorkflowGraph(
+            nodes: [node],
+            layout: [.init(nodeID: node.id, x: 10, y: 20)]
+        )
+        let firstScope = WorkflowCanvasScope(
+            rootGraphID: graph.id,
+            rootRevision: graph.revision,
+            graphID: graph.id,
+            bodyPath: []
+        )
+        let changedScope = WorkflowCanvasScope(
+            rootGraphID: UUID(),
+            rootRevision: UUID(),
+            graphID: UUID(),
+            bodyPath: []
+        )
+        var gesture = WorkflowCanvasGestureSessionState()
+        var coordinator = WorkflowCanvasNodeDragCoordinator()
+
+        guard case .began(let staleSessionID) = gesture.change() else {
+            Issue.record("First callback must begin a gesture session")
+            return
+        }
+        #expect(coordinator.begin(
+            WorkflowCanvasNodeDragState(
+                sessionID: staleSessionID,
+                scope: firstScope,
+                nodeID: node.id,
+                originalPosition: CGPoint(x: 10, y: 20),
+                origin: .zero
+            ),
+            screenTranslation: CGSize(width: 5, height: 6),
+            zoom: 1
+        ))
+
+        coordinator.invalidate()
+        guard case .changed(let remainingSessionID) = gesture.change() else {
+            Issue.record("Remaining callbacks must retain the invalidated session identity")
+            return
+        }
+        #expect(remainingSessionID == staleSessionID)
+        #expect(!coordinator.update(
+            sessionID: remainingSessionID,
+            nodeID: node.id,
+            scope: changedScope,
+            screenTranslation: CGSize(width: 30, height: 40),
+            zoom: 1
+        ))
+        let staleEndID = try #require(gesture.end())
+        #expect(staleEndID == staleSessionID)
+        #expect(coordinator.finish(
+            sessionID: staleEndID,
+            nodeID: node.id,
+            scope: changedScope,
+            screenTranslation: CGSize(width: 30, height: 40),
+            zoom: 1
+        ) == nil)
+        #expect(coordinator.active == nil)
+
+        guard case .began(let nextSessionID) = gesture.change() else {
+            Issue.record("A true next gesture must begin a new session")
+            return
+        }
+        #expect(nextSessionID != staleSessionID)
+        #expect(coordinator.begin(
+            WorkflowCanvasNodeDragState(
+                sessionID: nextSessionID,
+                scope: changedScope,
+                nodeID: node.id,
+                originalPosition: CGPoint(x: 10, y: 20),
+                origin: .zero
+            ),
+            screenTranslation: CGSize(width: 1, height: 2),
+            zoom: 1
+        ))
+        let nextEndID = try #require(gesture.end())
+        let completed = coordinator.finish(
+            sessionID: nextEndID,
+            nodeID: node.id,
+            scope: changedScope,
+            screenTranslation: CGSize(width: 50, height: 60),
+            zoom: 1
+        )
+        #expect(completed?.sessionID == nextSessionID)
+        #expect(completed?.previewPosition == CGPoint(x: 60, y: 80))
+        #expect(coordinator.active == nil)
+        #expect(coordinator.finish(
+            sessionID: nextEndID,
+            nodeID: node.id,
+            scope: changedScope,
+            screenTranslation: CGSize(width: 50, height: 60),
+            zoom: 1
+        ) == nil)
+    }
+
+    @Test
     func canvasTransferRoundTripsAndRejectsMalformedOrUnboundedStrings() throws {
-        let graphID = UUID(), revision = UUID(), nodeID = UUID()
+        let rootGraphID = UUID(), graphID = UUID(), revision = UUID(), nodeID = UUID()
         let values: [WorkflowCanvasTransfer] = [
             .operation(id: "d.image.generate", modelID: nil),
             .operation(id: "d.model.language", modelID: "org/model"),
             .asset(projectID: UUID(), assetID: UUID()),
-            .output(graphID: graphID, revision: revision, nodeID: nodeID, port: "output"),
+            .output(rootGraphID: rootGraphID, bodyPath: [], graphID: graphID,
+                    revision: revision, nodeID: nodeID, port: "output"),
         ]
         for value in values {
             #expect(try WorkflowCanvasTransfer.decode(value.encoded()) == value)
         }
         #expect(throws: (any Error).self) {
             try WorkflowCanvasTransfer.output(
-                graphID: graphID, revision: revision, nodeID: nodeID, port: ""
+                rootGraphID: rootGraphID, bodyPath: [], graphID: graphID,
+                revision: revision, nodeID: nodeID, port: ""
             ).encoded()
         }
         #expect(throws: (any Error).self) {
@@ -158,11 +299,75 @@ struct WorkflowCanvasDragTests {
             ).encoded()
         }
         #expect(throws: (any Error).self) {
+            try WorkflowCanvasTransfer.output(
+                rootGraphID: rootGraphID,
+                bodyPath: Array(
+                    repeating: WorkflowCanvasBodyLocation(nodeID: UUID(), slot: "body"),
+                    count: 17
+                ),
+                graphID: graphID,
+                revision: revision,
+                nodeID: nodeID,
+                port: "output"
+            ).encoded()
+        }
+        #expect(throws: (any Error).self) {
             try WorkflowCanvasTransfer.decode(Data(repeating: 0, count: 8 * 1_024 + 1))
         }
         #expect(throws: (any Error).self) {
             try WorkflowCanvasTransfer.decode(Data("not-json".utf8))
         }
+    }
+
+    @Test
+    func outputTransferRequiresFullBodyScopeAndAcceptsOrdinaryGraphScope() {
+        let rootGraphID = UUID(), graphID = UUID(), revision = UUID(), nodeID = UUID()
+        let ownerNodeID = UUID()
+        let firstPath = [WorkflowBodyLocation(nodeID: ownerNodeID, slot: "then")]
+        let clonedPath = [WorkflowBodyLocation(nodeID: ownerNodeID, slot: "otherwise")]
+        let firstScope = WorkflowCanvasScope(
+            rootGraphID: rootGraphID,
+            rootRevision: revision,
+            graphID: graphID,
+            bodyPath: firstPath
+        )
+        let clonedScope = WorkflowCanvasScope(
+            rootGraphID: rootGraphID,
+            rootRevision: revision,
+            graphID: graphID,
+            bodyPath: clonedPath
+        )
+        let nested = WorkflowCanvasTransfer.output(
+            rootGraphID: rootGraphID,
+            bodyPath: firstPath.map(WorkflowCanvasBodyLocation.init),
+            graphID: graphID,
+            revision: revision,
+            nodeID: nodeID,
+            port: "output"
+        )
+
+        #expect(nested.matchesOutputScope(firstScope))
+        #expect(!nested.matchesOutputScope(clonedScope))
+        #expect(firstScope.matches(rootGraphID: rootGraphID, rootRevision: revision,
+            graphID: graphID, bodyPath: firstPath))
+        #expect(!firstScope.matches(rootGraphID: rootGraphID, rootRevision: revision,
+            graphID: graphID, bodyPath: clonedPath))
+
+        let ordinaryScope = WorkflowCanvasScope(
+            rootGraphID: rootGraphID,
+            rootRevision: revision,
+            graphID: rootGraphID,
+            bodyPath: []
+        )
+        let ordinary = WorkflowCanvasTransfer.output(
+            rootGraphID: rootGraphID,
+            bodyPath: [],
+            graphID: rootGraphID,
+            revision: revision,
+            nodeID: nodeID,
+            port: "output"
+        )
+        #expect(ordinary.matchesOutputScope(ordinaryScope))
     }
 
     @Test
