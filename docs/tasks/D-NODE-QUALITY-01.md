@@ -68,3 +68,24 @@ MRT2音符端口改为可选，直接复用现有 WorkflowMRT2Condition.make：�
 Lead 在 `D/WorkbenchApplicationDelegate.swift` 复用实际窗口连接，move/resize/screen/backing/live-resize-end转发后合并一次布局后坐标失效通知；新 `DTests/WorkbenchInputGeometryTests.swift` 验证当前焦点、窗口隔离、屏幕矩形、marked text/selection/undo。本轮无手算候选窗、重建编辑器或强制提交。
 
 R/ime/geometry-r3.json 的原生矩形随窗口移动正确；该独立探针没有保留非空marked range，故只证明普通字符坐标，不能当作组合输入或候选跟随验收。H22具体根因仍需新普通App真人确认；实现使用Apple公开invalidateCharacterCoordinates补足窗口布局之外的通知，尚不宣称已修复。第一次外部探针CGFloat类型歧义仅编译失败，无App/项目副作用。准备复用已有独立引擎目录的忽略本机xcconfig，未改签名身份。
+
+## 实施与复核检查点（2026-09-27）
+
+SAVE：受限Sol/high初交＋一轮修复；候选e614d1bc2cff41ddb493ec0ebf5286aa4be5e955。非实现者检查提交后缓存、真实UUID工具检查点与UTF-8字节保留。初交末尾尝试ps被拒后立即停报；未观察到提权或成功越界，后续明确不再使用ps。详见R/SAVE/permission-review.json。没有把拒绝写成实现质量失败或默认放行。
+
+MEDIA：受限Sol/high初交＋两轮修复；最终b6c6450fb151cd9a66ea98070f8562a1acdcaf0b。第一轮澄清已有冻结语义的错误文案并补真实Store重开；第二轮将嵌套Swift Testing宏拆成局部前置值，保留断言，原因是实际类型编译失败。普通修复额度已用完；非实现者已检查第一轮实际语义和持久化，第二轮为Lead检查的等价编译修正。无权限拒绝。工作树/模型/网络关闭和写根见各route/context记录，隐藏服务端解析未知。
+
+Lead负责H22 AppKit通知、真实模型验收入口和组合；H22非实现者指出并修复同一NSWindow关闭后重连时helper未恢复，保留原delegate。3dd32ae81bf5f899e6289f297ed213053fdd6f6f的3项原生组件测试通过，包含marked text/selection/undo、当前焦点、五类通知及重连；不等于真人候选窗已跟随。测试统计先区分AppKit自己的通知与本helper发起通知，再由最终副作用注入记录，真实调度只有一份。
+
+组合版本ca0ff7a5869bad417ed9ddc6e3a724ba0296c77e已通过UI包测试编译、App测试构建及Workbench 611项CPU检查；UI hosting、真实视频/音乐、普通组合GUI继续执行。不存在以静态解析代替编译或模型运行的结论。
+
+历史保存同一H27-Nodes独立副本（17次运行、约2.44MB、5次真实编辑保存）对照：未合缓存代码ced8036的保存中位0.7983秒、保存后读1.0961秒；合入4438f92后0.7911秒和0.001401秒。优化的是重复纯验证/解码；冷读和完整写校验仍有成本，不保证所有项目或GUI变成常数时间。原项目不写，证据R/lead/save-comparison.json；8项保护测试前后均通过，未放宽篡改、失败和外部变更规则。
+
+真实模型验收入口新增DTests/NodeQualityRealTests.swift，仅opt-in：普通装配/Controller/Store中的独立节点，固定video除步数外完整请求/14GiB预算/step身份，music无输入时notes=nil；严格媒体解码、运行时释放、保存重开和资产摘要。宿主启动前D_UI_TEST_SESSION隔离；使用既有模型与原用途授权，不调用云端。非实现者检查测试语义后由Lead执行，不能称独立模型已执行测试。
+
+输入法普通包为R/delivery/D Quality IME.app，代码3dd32ae，正常D Nodes构建并校验签名，独立85dc7354-a17f-4d33-b66e-09c1e6f1ebb3设置。终端UI受工具策略阻止，未换入口绕过；用户双击启动器。一次保存面板焦点冲突由用户说明是同时使用Mac，随后本人创建专属IME-Quality项目，不列为产品保存缺陷。真人中文/日文移动与缩放结果待回。
+
+构建环境事件：第一次XCTest宿主与测试bundle团队不匹配，后续使用已有DevelopmentSigning.xcconfig统一测试签名；普通包重新构建，未修改签名配置。外部xctestrun脚本一次假设错误schema抛KeyError，未启动测试，改按实际DTests键读取；无扩大权限。R/lead/中保留失败和成功，不覆盖旧日志。
+
+
+MEDIA一次有界Lead接管：组合UI hosting的4条纯SwiftUI文字AX断言失败；R/lead/media-hosting-diagnosis实际仅读到原生字段与菜单，和既有WorkflowLocalizationTests:234所记录的离屏限制一致。非实现者建议按证据层分开。保留失败日志，将hosting限定为实际检查器挂载/视频音乐切换/无运行无改图，并继续预设纯值/动作/双语言文本/保存重开检查。四条原显示要求未取消，改为本轮普通GUI必验：三个workflow-video-preset-{connectivity,fullPreview,official480p}按钮的实际标签及MRT2能力标题；完成前展示验收不得称通过。Lead没有重写生产媒体逻辑，修复来源不能记为Sol独立通过。
