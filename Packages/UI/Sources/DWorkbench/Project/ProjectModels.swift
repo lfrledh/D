@@ -83,11 +83,13 @@ public struct ProjectAsset: Codable, Sendable, Equatable, Identifiable {
     public var name: String
     public var isFavorite: Bool
     public var note: String
+    public var tags: [String]
 
     public init(id: UUID = UUID(), jobID: UUID? = nil, relativePath: String,
                 mediaType: String = "image/png", role: AssetRole = .result,
                 createdAt: Date = Date(), metadata: MediaMetadata = .init(),
-                name: String = "未命名作品", isFavorite: Bool = false, note: String = "") {
+                name: String = "未命名作品", isFavorite: Bool = false, note: String = "",
+                tags: [String] = []) {
         self.id = id
         self.jobID = jobID
         self.relativePath = relativePath
@@ -98,10 +100,11 @@ public struct ProjectAsset: Codable, Sendable, Equatable, Identifiable {
         self.name = name
         self.isFavorite = isFavorite
         self.note = note
+        self.tags = tags
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, jobID, relativePath, mediaType, role, createdAt, metadata, name, isFavorite, note
+        case id, jobID, relativePath, mediaType, role, createdAt, metadata, name, isFavorite, note, tags
     }
 
     public init(from decoder: Decoder) throws {
@@ -116,6 +119,20 @@ public struct ProjectAsset: Codable, Sendable, Equatable, Identifiable {
         name = try values.decodeIfPresent(String.self, forKey: .name) ?? "未命名作品"
         isFavorite = try values.decodeIfPresent(Bool.self, forKey: .isFavorite) ?? false
         note = try values.decodeIfPresent(String.self, forKey: .note) ?? ""
+        if values.contains(.tags) {
+            let decoded = try values.decode([String].self, forKey: .tags)
+            let validated = try LibraryTags.validate(decoded)
+            guard decoded.count == validated.count,
+                  zip(decoded, validated).allSatisfy({ $0.0.utf8.elementsEqual($0.1.utf8) }) else {
+                throw DecodingError.dataCorruptedError(
+                    forKey: .tags, in: values,
+                    debugDescription: "Persisted asset tags are not in their validated form."
+                )
+            }
+            tags = decoded
+        } else {
+            tags = []
+        }
     }
 }
 
@@ -177,8 +194,8 @@ public struct ProjectDraft: Codable, Sendable, Equatable {
 }
 
 public struct ProjectManifest: Codable, Sendable, Equatable, Identifiable {
-    public static let currentSchemaVersion = 17
-    public static let readableSchemaVersions = Set(1...12).union([16, 17])
+    public static let currentSchemaVersion = 18
+    public static let readableSchemaVersions = Set(1...12).union([16, 17, 18])
     public var schemaVersion: Int
     /// Monotonic committed state version lets the UI discard a late, stale actor response.
     public var revision: UInt64
@@ -242,7 +259,7 @@ public struct ProjectManifest: Codable, Sendable, Equatable, Identifiable {
             // Current-format omissions are corruption, not a request for legacy defaults.
             _ = try CurrentGenerationFields(from: decoder)
         }
-        if [10, 11, 12, 16, 17].contains(schemaVersion) { _ = try CurrentTextSourcesFields(from: decoder) }
+        if [10, 11, 12, 16, 17, 18].contains(schemaVersion) { _ = try CurrentTextSourcesFields(from: decoder) }
         revision = try values.decodeIfPresent(UInt64.self, forKey: .revision) ?? 0
         id = try values.decode(UUID.self, forKey: .id)
         name = try values.decode(String.self, forKey: .name)
