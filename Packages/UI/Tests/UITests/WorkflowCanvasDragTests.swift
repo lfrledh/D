@@ -202,7 +202,7 @@ struct WorkflowCanvasDragTests {
             Issue.record("First callback must begin a gesture session")
             return
         }
-        #expect(coordinator.begin(
+        let began1 = coordinator.begin(
             WorkflowCanvasNodeDragState(
                 sessionID: staleSessionID,
                 scope: firstScope,
@@ -212,7 +212,8 @@ struct WorkflowCanvasDragTests {
             ),
             screenTranslation: CGSize(width: 5, height: 6),
             zoom: 1
-        ))
+        )
+        #expect(began1)
 
         coordinator.invalidate()
         guard case .changed(let remainingSessionID) = gesture.change() else {
@@ -220,14 +221,16 @@ struct WorkflowCanvasDragTests {
             return
         }
         #expect(remainingSessionID == staleSessionID)
-        #expect(!coordinator.update(
+        let staleUpdated = coordinator.update(
             sessionID: remainingSessionID,
             nodeID: node.id,
             scope: changedScope,
             screenTranslation: CGSize(width: 30, height: 40),
             zoom: 1
-        ))
-        let staleEndID = try #require(gesture.end())
+        )
+        #expect(!staleUpdated)
+        let staleEnd = gesture.end()
+        let staleEndID = try #require(staleEnd)
         #expect(staleEndID == staleSessionID)
         #expect(coordinator.finish(
             sessionID: staleEndID,
@@ -243,7 +246,7 @@ struct WorkflowCanvasDragTests {
             return
         }
         #expect(nextSessionID != staleSessionID)
-        #expect(coordinator.begin(
+        let began2 = coordinator.begin(
             WorkflowCanvasNodeDragState(
                 sessionID: nextSessionID,
                 scope: changedScope,
@@ -253,8 +256,10 @@ struct WorkflowCanvasDragTests {
             ),
             screenTranslation: CGSize(width: 1, height: 2),
             zoom: 1
-        ))
-        let nextEndID = try #require(gesture.end())
+        )
+        #expect(began2)
+        let nextEnd = gesture.end()
+        let nextEndID = try #require(nextEnd)
         let completed = coordinator.finish(
             sessionID: nextEndID,
             nodeID: node.id,

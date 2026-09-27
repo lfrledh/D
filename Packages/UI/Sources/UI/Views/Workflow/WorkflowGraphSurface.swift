@@ -201,6 +201,16 @@ struct WorkflowGraphSurface: View {
                         fallback: "流程只会在明确保存或运行时提交。"
                     ))
                 )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .contentShape(Rectangle())
+                .dropDestination(for: WorkflowCanvasTransfer.self) { items, location in
+                    guard items.count == 1, controller.graph == nil, controller.canEditCanvas,
+                          let item = items.first, (try? item.validated()) != nil else { return false }
+                    switch item {
+                    case .operation, .asset: return onDropItem(item, location)
+                    case .output: return false
+                    }
+                }
             }
         }
         .accessibilityIdentifier("workflow-graph-surface")
