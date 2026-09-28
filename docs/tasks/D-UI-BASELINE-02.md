@@ -108,3 +108,35 @@ H29已不再被锁屏整体阻塞，但未全验：原两hosting失败、资料�
 最终仅文档HEAD/远端、scheme内容/索引/未暂存前后核对、旧/新App摘要及进程状态写R1/lead/final-receipt.json。源个人scheme仍由保护快照逐项核对，不纳入任何提交。候选/旧证据/试用数据保留。本次真人拖放区分已收齐；没有新的本人操作/权限请求。限定修补完整复验未通过，停止该项进一步修改，停在用户审计试用边界；任何尚需修补按真实失败和已有预算处理，不以新编号重置。
 
 收尾实例：原生保存显示成功后正常退出。随后一次绑定窗口AX读取又显示空白Quick窗口（未编辑/生成），不能当作重开成功证据；再次正常退出，CUA库存显示D不运行，最终再用任务级进程查询核对。此工具/生命周期异常原样记入R1/lead/native-continuation.json，不修改或清理真实偏好来消除现象。
+
+
+## 2026-09-29 r3：用户明确批准已知缺陷收口
+
+新授权：将上轮列出的已知缺陷修补收口，自主测试；本人输入法/解锁/操作只进入集中待办，离机不催问。它明确允许继续上轮已停的缺陷，但不追改CANVAS/LIBRARY旧修复预算与失败，不新增产品范围。基线 `ebb88c76baac5adff4d9aeaeda2028d75166f652`；源01758b8及scheme保护保持。R2=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-UI-BASELINE-02/run-20260928T160457Z-defect-close`。
+
+本次范围：①资料库有拖动预览但不插入，覆盖50/100/180缩放与内容/视口坐标、取消/撤销；②H22坐标更新的真实接线，保持marked text/选区与回调归属，最终真人中日IME留集中清单；③原两个hosting失败，定位框架/测试/产品因素，不删断言或把实际触发改为直接调用业务方法；④与本轮直接相关的窄栏菜单省略/最低可操作布局。上轮退出后bound AX再显空窗是已知工具调用副作用风险，本轮正常退出后仅用库存/自有进程核对，不改产品来掩盖。
+
+Lead负责实现和串行测试；两个非实现者并行只读检查拖放/hosting与IME/Apple契约，结束后审固定差异。复用现有隔离候选，不新建主会话、不派全访问写Worker。对每个已确认根因作一次局部修补及最多两轮有明确失败原因的本轮定向返工；若需要改存储/推理/系统权限或大范围重写，停止相关项。历史计数原样保留，绝不用r3证明旧预算通过。
+
+允许文件：Workflow/WorkflowCanvasTransfer.swift、WorkflowGraphSurface.swift、SharedLibraryBrowser.swift、WorkflowCanvasView.swift；必要的既有TextSelectionEditor.swift、TextSourcesQuestionEditor.swift与D/WorkbenchApplicationDelegate.swift；对应UITests的WorkflowBaseline02Tests、WorkflowLocalizationTests、WorkflowMediaPresetTests、SharedLibraryBrowserTests、TextSelectionEditorTests、TextSourcesQuestionEditorTests及DTests/WorkbenchInputGeometryTests。确有当前调用者时允许一个局部输入几何辅助/拖放回归文件；不得触及ProjectStore/schema/运行时/模型/工程签名。四份现行记录和R2证据由Lead维护。发现范围需要扩充先说明依据，不静默扩大。
+
+原失败先保留/复现；测试只写R2/tmp、lead、cache及既有独立scratch/DerivedData，离线依赖，无真实用户项目。生产推理未改则不机械重跑全模态GPU。最终普通包另存R2，旧包/试用记录保留；组件、hosting、原生、真人分别报告，真人未验不能宣布H22完全关闭。候选推送遵从既有授权，源仅接纳已验组合，本轮不公开发布/main。
+
+### r3 修补与锁屏恢复检查点（2026-09-29）
+
+状态：**局部修补已保存，缺陷收口未全部完成**。受测代码`e546762dd9cafd46d0b99d8f360331393a7e95e6`；本节之后最终文档提交见R2/lead/final-receipt.json。源仍01758b81527dc27eb4563bf1b66fd1ceab6647ee，候选继续codex/ui-baseline-02；不源接纳、不宣布H22/H29通过。
+
+| 项目 | 已确认原因/改动 | 证据与剩余 |
+| --- | --- | --- |
+| 输入几何 | 主队列更新在tracking模式迟到，且只访问root responder，漏掉attached sheet。改为default/tracking/modal RunLoop并在交付时重新取当前sheet与responder；无文本提交、无缓存旧焦点 | 新2方法在旧实现失败；最终5方法通过，含sheet关闭后一次回到root、两个嵌套模式、关闭取消、Unicode/选区/undo保护。`geometry-before`、`geometry-after`、`geometry-final`；**不等于真人候选窗已跟随** |
+| 拖放拒绝 | 本机新SDK将节点/端口闭包选择成Void新重载，丢弃Bool返回。明确4处节点/端口/标签/分类的CGPoint/Bool，表面增加自身矩形命中区域 | 编译成功、不再出现对应unused-result警告。真实provider原始data、Transferable、String均通过；提取由实际行调用，传输行为未变。**尚未证实资料库拖入100%失败的根因或修复，50%图外空白仍待定位** |
+| 两项hosting | 原地复现；显示/key窗口、NSApplication初始化、公开AX子树诊断与单独运行均未解决查找，实际本地树只见AppKit承载控件，没暴露目标SwiftUI虚拟按钮 | 诊断修改撤除，原测试/断言逐字保留；`canvas-regressions`49项中47通过、2方法4断言失败。不能将旧原生文字详情/连线通过扩大成音视频或此包GUI通过 |
+| 原生/启动 | 旧R1包再次拖入无新增。诊断启动器带输出重定向返回LaunchServices -10810，未进入指定session；工具getApp随后另启了无session诊断实例，仅看到默认Quick，未编辑/生成，正常退出 | `native-stop.json`、`diagnostic-start.log`。不将其当正确隔离验收；之后CUA明确报告Mac锁屏，停止GUI。只读进程确认无D。**-10810原因未确认，不能直接归因锁屏或缺权限** |
+
+最终普通D Nodes构建`normal-final-app`成功。新包R2/delivery/D UI v0.2 Repair.app从普通构建完整复制，未手补内容，签名检查通过；四关键文件摘要见app-identity.json。唯一下一次集中验收入口R2/delivery/启动v0.2修补验收.command（语法通过，尚未原生启动）；不带诊断重定向，沿用df754b88-0763-480b-864c-74c40057c7e8试用身份。旧R1包四关键文件与其历史摘要一致。
+
+49项执行在提交前固定工作内容，UI生产及UI测试与e546762dd9cafd46d0b99d8f360331393a7e95e6完全相同；之后仅加强输入几何测试，再于上述完整SHA编译、执行5项并普通构建。未重跑GPU/模型，因为执行/数值/存储路径未改。没有把49和5相加成全项目通过率；原34条验收状态复用R1并在R2补增量，不自动全绿。
+
+Lead实施；baseline02_canvas_review、baseline02_services_readonly只读复核，未另造独立测试结论。后者指出sheet空交付/RunLoop等待证据缺口，Lead已加强测试并复验；没有生产返工轮次或新Worker预算重置。此前两个hosting工程接管的失败保持。本轮语法编译曾因beginSheet async重载失败，改明确completionHandler:nil后通过；不是生产根因或权限事件。模型/订阅精确成本未归因，不重算历史。
+
+恢复顺序：核对源/候选HEAD、个人scheme和任务进程；解锁后先确认启动器实际启动成功、进程路径与D_UI_TEST_SESSION正确，再绑定工具，避免getApp隐式另启无session。补实际drop命中/provider/scope证据，完成拖入/缩放/Undo与控件UI对照后继续工程修补；需要本人仅解锁、必要时手动启动和一次中文/日文候选跟随。**两项hosting属于Lead工程/测试问题，不能交用户点击当作修好**。窄栏批量菜单省略与完整原生矩阵仍保留。无新权限申请，不启动下一阶段。全部候选、源个人修改和证据保留。

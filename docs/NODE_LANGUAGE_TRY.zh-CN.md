@@ -2,13 +2,13 @@
 
 ## 当前 v0.2 候选：D-UI-BASELINE-02（尚未阶段接纳）
 
-唯一推荐启动器：`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-UI-BASELINE-02/run-20260928T144932Z-native/delivery/启动v0.2工作台.command`。同目录[使用说明](/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-UI-BASELINE-02/run-20260928T144932Z-native/delivery/使用说明.md)给出模型登记、快速/工作流/资料库试用顺序与已知限制。旧R0启动器和App保留作历史，不再推荐。
+下一次集中验收只用：`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-UI-BASELINE-02/run-20260928T160457Z-defect-close/delivery/启动v0.2修补验收.command`。同目录“D UI v0.2 Repair.app”与[使用说明](/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-UI-BASELINE-02/run-20260928T160457Z-defect-close/delivery/使用说明.md)保留。**这是待原生复验的修补候选：正常构建和签名已过，新启动器仅语法已过，当前锁屏，未证明它已实际启动或拖放/候选跟随已修好。**旧R1/R0包仅留历史，不同时启动。
 
-同一候选工作树 `/Volumes/CodexProjects/Codex/D-Worktrees/D-NODE-QUALITY-01/D.xcworkspace`，分支 `codex/ui-baseline-02`，**D Nodes / My Mac / Debug**。普通包受测代码 `e4fe2f3e405d59a977d715464ab1c583341f8ae0`，资源由正常构建阶段准备/核验，没有手工修改App。此次正常xcodebuild和启动器已验；本次尚未再次在Xcode界面点Run，不混作R01全项通过。启动器与D Nodes各自使用稳定隔离身份，记录不会自动同步。
+同一工作树`/Volumes/CodexProjects/Codex/D-Worktrees/D-NODE-QUALITY-01/D.xcworkspace`，`codex/ui-baseline-02`，**D Nodes / My Mac / Debug**。本轮受测代码`e546762dd9cafd46d0b99d8f360331393a7e95e6`，由正常构建准备资源，没有手补App。本轮未再次Xcode界面点Run；scheme与启动器是两个稳定试用身份，不自动共享记录。不要直接双击App本体。
 
-本次89fa原生Qwen快速生成、切页结果归属、连线查看/断开/撤销，以及89fa→e4fe正常重开已取得证据；三尺寸的左侧裁切已修。本人中文/日文选字正常，候选窗仍不跟随。本人已确认资料库拖入出现预览但不新增节点，失败保留，＋添加可用不代表拖入可用；两个hosting失败、完整验收/性能与用户路径试用仍保留。四模态Quick真实短调用是89fa控制器/运行时证据，不能等同新版四模态鼠标完整验收。具体逐项状态见[本轮记录](tasks/D-UI-BASELINE-02.md#2026-09-29-解锁后原生验收与一次有限宽度修补)。
+已补输入几何/拖放接受返回，5项输入组件通过，画布相关49项中两旧hosting失败。资料库实际拖入、缩放/滚动/Undo与真人IME仍待同包检查。先核对启动进程与隔离身份，失败不要自行改权限或反复打开App。本轮没有改变推理/存储或重跑模型；旧四模态证据不冒充新GUI验收。
 
-这是可运行的审计候选，未集成到源分支；重要作品保留原件，用隔离记录试用。以下旧版本仅为历史来源与未验责任；旧工作树已推进新候选，复现旧UI请用固定旧App，不回退现有树。
+候选未源接纳，原件和旧记录保持。具体恢复步骤和逐项缺口见[任务r3](tasks/D-UI-BASELINE-02.md#r3-修补与锁屏恢复检查点2026-09-29)与[当前行动](CURRENT_ACTIONS.zh-CN.md)。
 
 ## 新版节点画布：D-CANVAS-USABILITY-01
 

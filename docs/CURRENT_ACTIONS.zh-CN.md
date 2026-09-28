@@ -2,7 +2,17 @@
 
 最后核实：2026-09-29。唯一当前任务、版本与停点入口。
 
-## D-UI-BASELINE-02：已恢复原生检查，隔离候选待审计
+## D-UI-BASELINE-02：r3局部修补完成，锁屏与工程缺口保留
+
+候选`codex/ui-baseline-02`，工作树`/Volumes/CodexProjects/Codex/D-Worktrees/D-NODE-QUALITY-01`；本轮实际编译/输入几何受测代码`e546762dd9cafd46d0b99d8f360331393a7e95e6`。最终仅文档SHA/远端见R2/lead/final-receipt.json。源仍`01758b81527dc27eb4563bf1b66fd1ceab6647ee`，个人scheme未暂存且未改变。**未完成全部缺陷收口，未源接纳。**
+
+已修：输入几何在拖动事件循环中迟到、附属窗口更新目标错误；5项组件测试通过，新增反例经历先失败后通过。拖放4处明确接受/拒绝返回并补表面命中区域；真实provider桥接通过，尚不证明实际拖入修复。相关49项中47通过、两项旧hosting/4断言失败，原标准不改。普通D Nodes构建和新包签名通过。
+
+当前Mac已锁屏。诊断启动器曾返回-10810且未进入试用身份，随后工具隐式启动已正常退出；原因未确认，不申请扩权。新普通修补包尚未原生启动验收。下一恢复先核对进程/试用身份，再补drop命中、50/100/180%/滚动/Undo和控件对照；真人IME跟随待本人返回。两hosting和窄栏菜单是工程责任，不是待授权。
+
+R2=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-UI-BASELINE-02/run-20260928T160457Z-defect-close`。具体改动、审阅、原失败和恢复步骤见[本轮r3记录](tasks/D-UI-BASELINE-02.md#r3-修补与锁屏恢复检查点2026-09-29)，本人动作仅见[集中清单](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md#当前集中待办2026-09-29)。新包/唯一下一次验收入口见[试用说明](NODE_LANGUAGE_TRY.zh-CN.md#当前-v02-候选d-ui-baseline-02尚未阶段接纳)。用户已授权继续本轮范围；不恢复旧停止预算、不扩新产品阶段。
+
+### 上一轮原生快照（历史，非当前停点）
 
 当前源 `codex/inference-foundation` 仍为 `01758b81527dc27eb4563bf1b66fd1ceab6647ee`，唯一个人scheme未暂存差异保持。候选 `codex/ui-baseline-02` 位于 `/Volumes/CodexProjects/Codex/D-Worktrees/D-NODE-QUALITY-01`；本次受测代码 `e4fe2f3e405d59a977d715464ab1c583341f8ae0`。最终仅文档提交与远端状态见本次证据R1/lead/final-receipt.json。**未源接纳、未整体验收通过。**
 
@@ -11,8 +21,6 @@
 用户额外批准一次Lead有限修补：统一资料库220/240点宽度冲突，仅改一行布局常量，没有再派写Worker、改模型或存储。相关21项/2 suites及普通D Nodes构建通过；新包在实际860×612、1024×768、1440×900点下左侧裁切消失，菜单可打开；860×580受现有最小高度限制，不能记成精确尺寸通过。批量菜单标题仍有省略。本人拖放已确认“有预览，但未新增节点”；资料库拖入失败，全部缩放/滚动矩阵尚未通过；＋添加、画布内移动不能替代拖入。原两个hosting失败/四断言保留。
 
 R1=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-UI-BASELINE-02/run-20260928T144932Z-native`。本次事实与34项状态见R1/lead/native-continuation.json、acceptance-results.json；构建/真人/模型/GUI分开。旧R=`run-20260928T123204Z`的失败和模型控制器证据原样保留。最新入口见[试用说明](NODE_LANGUAGE_TRY.zh-CN.md#当前-v02-候选d-ui-baseline-02尚未阶段接纳)，完整归因见[任务](tasks/D-UI-BASELINE-02.md#2026-09-29-解锁后原生验收与一次有限宽度修补)。
-
-下一动作：本次本人事项已收齐，按事实同步审计候选；等待用户审计试用。限定修补的完整复验未通过，停止继续修改该项。没有新密码、设备或系统授权请求；不要重新要求断网/录音/模型许可。剩余工程缺陷与未验范围不能通过用户点击权限消除；不自动扩大修复预算、不把候选作为已验版本替换源。用户随后审计与试用；新增产品讨论仍入[UI_NEXT](UI_NEXT.md)。
 
 ## 历史前端候选：D-CANVAS-USABILITY-01（责任保留）
 
