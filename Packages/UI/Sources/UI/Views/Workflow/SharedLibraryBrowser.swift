@@ -4,6 +4,11 @@ import Foundation
 import Observation
 import SwiftUI
 
+enum SharedLibraryBrowserIssue: Error, Equatable {
+    case folderCannotBeSaved
+    case conflictingKindScope
+}
+
 public enum SharedLibraryBrowserSelection: Equatable {
     case operation(id: String, modelID: String?)
     case asset(projectID: UUID, assetID: UUID)
@@ -47,9 +52,89 @@ public final class SharedLibraryBrowserState {
         self.selectedKeys = selectedKeys
         self.focusedKey = focusedKey
     }
+
+    /// A metadata deletion must not leave the browser pointing at a removed scope.
+    /// Query text and selected entry keys remain the caller's presentation state.
+    public func repairScope(using store: SharedLibraryStore) {
+        switch scope {
+        case .tag(let id) where store.metadata.tags[id] == nil,
+             .folder(let id) where store.metadata.folders[id] == nil,
+             .saved(let id) where store.metadata.savedQueries[id] == nil:
+            scope = .all
+        default:
+            break
+        }
+    }
+}
+
+enum SharedLibraryBrowserAction {
+    case use, add, preview, prepare
+}
+
+enum SharedLibraryBrowserOrganizerItem: Hashable {
+    case tag(UUID), folder(UUID), saved(UUID)
+}
+
+struct SharedLibraryBrowserRenameDrafts {
+    private var values: [SharedLibraryBrowserOrganizerItem: String] = [:]
+
+    func text(for item: SharedLibraryBrowserOrganizerItem?, canonical: String) -> String {
+        guard let item else { return "" }
+        return values[item] ?? canonical
+    }
+
+    mutating func set(_ text: String, for item: SharedLibraryBrowserOrganizerItem?) {
+        guard let item else { return }
+        values[item] = text
+    }
+
+    mutating func clear(_ item: SharedLibraryBrowserOrganizerItem) {
+        values.removeValue(forKey: item)
+    }
 }
 
 @MainActor enum SharedLibraryBrowserLogic {
+    static func deleteTag(_ id: UUID, store: SharedLibraryStore, state: SharedLibraryBrowserState) throws {
+        try store.deleteTags([id])
+        state.query.allTagIDs.remove(id)
+        state.query.anyTagIDs.remove(id)
+        state.repairScope(using: store)
+    }
+
+    static func deleteFolder(_ id: UUID, store: SharedLibraryStore, state: SharedLibraryBrowserState) throws {
+        try store.deleteFolder(id)
+        state.repairScope(using: store)
+    }
+
+    static func deleteSavedQuery(_ id: UUID, store: SharedLibraryStore, state: SharedLibraryBrowserState) throws {
+        try store.deleteSavedQuery(id)
+        state.repairScope(using: store)
+    }
+
+    static func queryForSaving(
+        _ query: SharedLibraryQuery, scope: SharedLibraryBrowserScope,
+        store: SharedLibraryStore
+    ) throws -> SharedLibraryQuery {
+        var saved = query
+        switch scope {
+        case .all:
+            break
+        case .saved(let id):
+            guard store.metadata.savedQueries[id] != nil else { throw SharedLibraryError.missingQuery }
+        case .kind(let kind):
+            if !saved.kinds.isEmpty && !saved.kinds.contains(kind) {
+                throw SharedLibraryBrowserIssue.conflictingKindScope
+            }
+            saved.kinds = [kind]
+        case .tag(let id):
+            guard store.metadata.tags[id] != nil else { throw SharedLibraryError.missingTag }
+            saved.allTagIDs.insert(id)
+        case .folder:
+            throw SharedLibraryBrowserIssue.folderCannotBeSaved
+        }
+        return saved
+    }
+
     static func visibleEntries(
         _ entries: [SharedLibraryBrowserEntry], store: SharedLibraryStore,
         query: SharedLibraryQuery, scope: SharedLibraryBrowserScope
@@ -84,8 +169,49 @@ public final class SharedLibraryBrowserState {
         return keys
     }
 
+    static func allows(_ action: SharedLibraryBrowserAction, entry: SharedLibraryBrowserEntry) -> Bool {
+        if action == .prepare {
+            if entry.item.readiness != .available || entry.item.compatible == false { return true }
+            if case .unavailable = entry.selection { return true }
+            return false
+        }
+        guard entry.item.compatible != false, entry.item.readiness != .unsupported else { return false }
+        switch entry.selection {
+        case .operation(let operationID, let modelID):
+            guard !operationID.isEmpty else { return false }
+            let selectable = entry.item.readiness == .available
+                || (modelID?.isEmpty == false
+                    && (entry.item.readiness == .unprepared || entry.item.readiness == .unknown))
+            return selectable && action != .preview
+        case .asset:
+            let selectable = entry.item.readiness == .available || entry.item.readiness == .unknown
+            return selectable && action != .use
+        case .tool:
+            return entry.item.readiness == .available && action == .add
+        case .unavailable:
+            return false
+        }
+    }
+
+    static func currentEntry(
+        key: String, entries: [SharedLibraryBrowserEntry],
+        action: SharedLibraryBrowserAction
+    ) -> SharedLibraryBrowserEntry? {
+        guard let entry = entries.first(where: { $0.id == key }), allows(action, entry: entry) else {
+            return nil
+        }
+        return entry
+    }
+
+    static func detailEntry(
+        key: String?, entries: [SharedLibraryBrowserEntry]
+    ) -> SharedLibraryBrowserEntry? {
+        guard let key else { return nil }
+        return entries.first { $0.id == key }
+    }
+
     static func canvasTransfer(for entry: SharedLibraryBrowserEntry) -> WorkflowCanvasTransfer? {
-        guard entry.item.readiness == .available, entry.item.compatible != false else { return nil }
+        guard allows(.add, entry: entry) else { return nil }
         switch entry.selection {
         case .operation(let id, let modelID): return .operation(id: id, modelID: modelID)
         case .asset(let projectID, let assetID): return .asset(projectID: projectID, assetID: assetID)
@@ -94,10 +220,7 @@ public final class SharedLibraryBrowserState {
     }
 
     static func quickUseAllowed(_ entry: SharedLibraryBrowserEntry) -> Bool {
-        guard entry.item.compatible != false else { return false }
-        guard case .operation(_, let modelID) = entry.selection else { return false }
-        if entry.item.readiness == .available { return true }
-        return entry.item.readiness == .unknown && modelID?.isEmpty == false
+        allows(.use, entry: entry)
     }
 }
 
@@ -117,11 +240,11 @@ public struct SharedLibraryBrowser: View {
     @State private var state: SharedLibraryBrowserState
     @State private var showFilters = false
     @State private var showOrganizer = false
-    @State private var compactDetail: SharedLibraryBrowserEntry?
+    @State private var compactDetailKey: String?
     @State private var errorMessage: String?
     @State private var tab: OrganizerTab = .tags
     @State private var newName = ""
-    @State private var renameName = ""
+    @State private var renameDrafts = SharedLibraryBrowserRenameDrafts()
     @State private var selectedTagID: UUID?
     @State private var selectedFolderID: UUID?
     @State private var selectedQueryID: UUID?
@@ -218,15 +341,26 @@ public struct SharedLibraryBrowser: View {
         }
         .background(.regularMaterial)
         .sheet(isPresented: $showOrganizer) { organizer }
-        .sheet(item: $compactDetail) { entry in
-            VStack(alignment: .leading) {
-                HStack {
-                    Text(word("detail", "详情")).font(.headline)
-                    Spacer()
-                    Button(word("close", "关闭")) { compactDetail = nil }
-                }
-                ScrollView { details(entry) }
-            }.padding(16).frame(minWidth: 300, minHeight: 320)
+        .sheet(isPresented: Binding(
+            get: { SharedLibraryBrowserLogic.detailEntry(key: compactDetailKey, entries: entries) != nil },
+            set: { if !$0 { compactDetailKey = nil } }
+        )) {
+            if let entry = SharedLibraryBrowserLogic.detailEntry(key: compactDetailKey, entries: entries) {
+                VStack(alignment: .leading) {
+                    HStack {
+                        Text(word("detail", "详情")).font(.headline)
+                        Spacer()
+                        Button(word("close", "关闭")) { compactDetailKey = nil }
+                    }
+                    ScrollView { details(entry) }
+                }.padding(16).frame(minWidth: 300, minHeight: 320)
+            }
+        }
+        .onChange(of: entries) { _, current in
+            if compactDetailKey != nil,
+               SharedLibraryBrowserLogic.detailEntry(key: compactDetailKey, entries: current) == nil {
+                self.compactDetailKey = nil
+            }
         }
         .onChange(of: selectedKeys) { _, value in
             if let focusedKey, value.contains(focusedKey) { return }
@@ -288,7 +422,7 @@ public struct SharedLibraryBrowser: View {
                 ForEach(tags) { tag in
                     scopeButton(tag.name, icon: "tag", value: .tag(tag.id))
                         .dropDestination(for: String.self) { keys, _ in
-                            acceptDrop(keys) { try store.addTags([tag.id], to: $0) }
+                            return acceptDrop(keys) { try store.addTags([tag.id], to: $0) }
                         }
                 }
                 Text(word("folders", "分类")).font(.caption.weight(.semibold)).foregroundStyle(.secondary).padding(.top, 8)
@@ -296,7 +430,7 @@ public struct SharedLibraryBrowser: View {
                     scopeButton(folder.name, icon: "folder", value: .folder(folder.id))
                         .padding(.leading, CGFloat(folderDepth(folder.id)) * 10)
                         .dropDestination(for: String.self) { keys, _ in
-                            acceptDrop(keys) { try store.addMembers($0, to: folder.id) }
+                            return acceptDrop(keys) { try store.addMembers($0, to: folder.id) }
                         }
                 }
                 Text(word("savedQueries", "智能筛选")).font(.caption.weight(.semibold)).foregroundStyle(.secondary).padding(.top, 8)
@@ -396,7 +530,8 @@ public struct SharedLibraryBrowser: View {
                 .accessibilityLabel(selectedKeys.contains(entry.id)
                     ? word("deselect", "取消选择") : word("select", "选择"))
                 Button {
-                    if canAdd(entry) { onAdd(entry) } else { compactDetail = entry }
+                    if canAdd(entry) { dispatch(.add, key: entry.id) }
+                    else { compactDetailKey = entry.id }
                 } label: { Image(systemName: canAdd(entry) ? "plus.circle" : "info.circle") }
                     .buttonStyle(.borderless)
                     .accessibilityLabel(canAdd(entry) ? word("addCanvas", "添加画布") : word("detail", "详情"))
@@ -405,10 +540,10 @@ public struct SharedLibraryBrowser: View {
         .padding(6).contentShape(Rectangle())
         .onTapGesture {
             focusedKey = entry.id
-            if compact { selectedKeys = [entry.id]; compactDetail = entry }
+            if compact { selectedKeys = [entry.id]; compactDetailKey = entry.id }
         }
         .accessibilityIdentifier("shared-library-entry-" + entry.id)
-        row.onDrag { dragProvider(for: entry) }
+        row.onDrag { dragProvider(for: entry.id) }
     }
 
     private var detailPane: some View {
@@ -438,23 +573,23 @@ public struct SharedLibraryBrowser: View {
             Text(word("legend", "能力 / 我的标签")).font(.caption2).foregroundStyle(.secondary)
             Divider()
             if canUse(entry) {
-                Button(word("quickUse", "快速用")) { onUse(entry) }
+                Button(word("quickUse", "快速用")) { dispatch(.use, key: entry.id) }
                     .accessibilityIdentifier("shared-library-use")
-                if entry.item.readiness == .unknown {
-                    Text(word("unknownDraft", "就绪状态未知；快速用仅选择草稿，不会执行。"))
+                if entry.item.readiness != .available {
+                    Text(word("draftOnly", "快速用仅选择草稿，不会执行；就绪状态仍如上所示。"))
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }
             if canAdd(entry) {
-                Button(word("addCanvas", "添加画布")) { onAdd(entry) }
+                Button(word("addCanvas", "添加画布")) { dispatch(.add, key: entry.id) }
                     .accessibilityIdentifier("shared-library-add")
             }
             if canPreview(entry) {
-                Button(word("preview", "预览")) { onPreview(entry) }
+                Button(word("preview", "预览")) { dispatch(.preview, key: entry.id) }
                     .accessibilityIdentifier("shared-library-preview")
             }
-            if entry.item.readiness != .available || (!canUse(entry) && !canAdd(entry) && !canPreview(entry)) {
-                Button(word("prepare", "准备")) { onPrepare(entry) }
+            if SharedLibraryBrowserLogic.allows(.prepare, entry: entry) {
+                Button(prepareLabel(for: entry)) { dispatch(.prepare, key: entry.id) }
                     .accessibilityIdentifier("shared-library-prepare")
             }
             if case .unavailable(let reason) = entry.selection {
@@ -551,17 +686,26 @@ public struct SharedLibraryBrowser: View {
     }
 
     private var filterSummary: String {
-        let parts = [
-            query.kinds.map(kindName).sorted().joined(separator: ", "),
-            query.roles.sorted().joined(separator: ", "),
-            query.inputs.map(dataName).sorted().joined(separator: ", "),
-            query.outputs.map(dataName).sorted().joined(separator: ", "),
-            query.contentKinds.map(dataName).sorted().joined(separator: ", "),
-            query.readiness.map(readinessName).sorted().joined(separator: ", "),
-            query.compatibility.map(compatibilityName).sorted().joined(separator: ", "),
-            tags.filter { query.anyTagIDs.contains($0.id) }.map(\.name).joined(separator: ", "),
-            tags.filter { query.allTagIDs.contains($0.id) }.map(\.name).joined(separator: ", ")
-        ].filter { !$0.isEmpty }
+        let current = query
+        var parts: [String] = []
+        func include(_ names: [String]) {
+            if !names.isEmpty { parts.append(names.joined(separator: ", ")) }
+        }
+        let kindNames: [String] = current.kinds.map { kindName($0) }
+        let inputNames: [String] = current.inputs.map { dataName($0) }
+        let outputNames: [String] = current.outputs.map { dataName($0) }
+        let contentNames: [String] = current.contentKinds.map { dataName($0) }
+        let readinessNames: [String] = current.readiness.map { readinessName($0) }
+        let compatibilityNames: [String] = current.compatibility.map { compatibilityName($0) }
+        include(kindNames.sorted())
+        include(current.roles.sorted())
+        include(inputNames.sorted())
+        include(outputNames.sorted())
+        include(contentNames.sorted())
+        include(readinessNames.sorted())
+        include(compatibilityNames.sorted())
+        include(tags.filter { current.anyTagIDs.contains($0.id) }.map(\.name))
+        include(tags.filter { current.allTagIDs.contains($0.id) }.map(\.name))
         return parts.isEmpty ? word("noFilters", "未选择筛选") : parts.joined(separator: " · ")
     }
 
@@ -600,16 +744,23 @@ public struct SharedLibraryBrowser: View {
             List(selection: $selectedTagID) {
                 ForEach(tags) { tag in Text(tag.name).tag(tag.id) }
             }
-            .onChange(of: selectedTagID) { _, id in renameName = id.flatMap { store.metadata.tags[$0]?.name } ?? "" }
             HStack {
-                TextField(word("rename", "重命名"), text: $renameName)
+                TextField(word("rename", "重命名"), text: renameBinding(
+                    selectedTagID.map { .tag($0) },
+                    canonical: selectedTagID.flatMap { store.metadata.tags[$0]?.name } ?? ""
+                ))
                 Button(word("rename", "重命名")) {
                     guard let id = selectedTagID else { return }
-                    perform { try store.renameTags([id: renameName]) }
+                    let item = SharedLibraryBrowserOrganizerItem.tag(id)
+                    let name = renameDrafts.text(for: item, canonical: store.metadata.tags[id]?.name ?? "")
+                    if perform({ try store.renameTags([id: name]) }) { renameDrafts.clear(item) }
                 }.disabled(selectedTagID == nil)
                 Button(word("delete", "删除"), role: .destructive) {
                     guard let id = selectedTagID else { return }
-                    perform { try store.deleteTags([id]); selectedTagID = nil }
+                    if perform({ try SharedLibraryBrowserLogic.deleteTag(id, store: store, state: state) }) {
+                        selectedTagID = nil
+                        renameDrafts.clear(.tag(id))
+                    }
                 }.disabled(selectedTagID == nil)
             }
             if let id = selectedTagID {
@@ -639,18 +790,25 @@ public struct SharedLibraryBrowser: View {
                 }
             }
             .onChange(of: selectedFolderID) { _, id in
-                renameName = id.flatMap { store.metadata.folders[$0]?.name } ?? ""
                 parentID = id.flatMap { store.metadata.folders[$0]?.parentID }
             }
             HStack {
-                TextField(word("rename", "重命名"), text: $renameName)
+                TextField(word("rename", "重命名"), text: renameBinding(
+                    selectedFolderID.map { .folder($0) },
+                    canonical: selectedFolderID.flatMap { store.metadata.folders[$0]?.name } ?? ""
+                ))
                 Button(word("rename", "重命名")) {
                     guard let id = selectedFolderID else { return }
-                    perform { try store.renameFolder(id, to: renameName) }
+                    let item = SharedLibraryBrowserOrganizerItem.folder(id)
+                    let name = renameDrafts.text(for: item, canonical: store.metadata.folders[id]?.name ?? "")
+                    if perform({ try store.renameFolder(id, to: name) }) { renameDrafts.clear(item) }
                 }.disabled(selectedFolderID == nil)
                 Button(word("delete", "删除"), role: .destructive) {
                     guard let id = selectedFolderID else { return }
-                    perform { try store.deleteFolder(id); selectedFolderID = nil }
+                    if perform({ try SharedLibraryBrowserLogic.deleteFolder(id, store: store, state: state) }) {
+                        selectedFolderID = nil
+                        renameDrafts.clear(.folder(id))
+                    }
                 }.disabled(selectedFolderID == nil)
             }
             HStack {
@@ -683,28 +841,44 @@ public struct SharedLibraryBrowser: View {
             HStack {
                 TextField(word("newQuery", "新智能筛选"), text: $newName)
                 Button(word("saveQuery", "保存当前智能筛选")) {
-                    perform { _ = try store.createSavedQuery(name: newName, query: query); newName = "" }
+                    perform {
+                        let savedQuery = try SharedLibraryBrowserLogic.queryForSaving(query, scope: scope, store: store)
+                        _ = try store.createSavedQuery(name: newName, query: savedQuery)
+                        newName = ""
+                    }
                 }
             }
             List(selection: $selectedQueryID) {
                 ForEach(saved) { item in Text(item.name).tag(item.id) }
             }
-            .onChange(of: selectedQueryID) { _, id in
-                renameName = id.flatMap { store.metadata.savedQueries[$0]?.name } ?? ""
-            }
             HStack {
-                TextField(word("rename", "重命名"), text: $renameName)
+                TextField(word("rename", "重命名"), text: renameBinding(
+                    selectedQueryID.map { .saved($0) },
+                    canonical: selectedQueryID.flatMap { store.metadata.savedQueries[$0]?.name } ?? ""
+                ))
                 Button(word("rename", "重命名")) {
-                    guard let id = selectedQueryID, let item = store.metadata.savedQueries[id] else { return }
-                    perform { try store.updateSavedQuery(id, name: renameName, query: item.query) }
+                    guard let id = selectedQueryID, let saved = store.metadata.savedQueries[id] else { return }
+                    let item = SharedLibraryBrowserOrganizerItem.saved(id)
+                    let name = renameDrafts.text(for: item, canonical: saved.name)
+                    if perform({ try store.updateSavedQuery(id, name: name, query: saved.query) }) {
+                        renameDrafts.clear(item)
+                    }
                 }.disabled(selectedQueryID == nil)
                 Button(word("updateRules", "更新当前规则")) {
-                    guard let id = selectedQueryID else { return }
-                    perform { try store.updateSavedQuery(id, name: renameName, query: query) }
+                    guard let id = selectedQueryID, let saved = store.metadata.savedQueries[id] else { return }
+                    let item = SharedLibraryBrowserOrganizerItem.saved(id)
+                    let name = renameDrafts.text(for: item, canonical: saved.name)
+                    if perform({
+                        let savedQuery = try SharedLibraryBrowserLogic.queryForSaving(query, scope: scope, store: store)
+                        try store.updateSavedQuery(id, name: name, query: savedQuery)
+                    }) { renameDrafts.clear(item) }
                 }.disabled(selectedQueryID == nil)
                 Button(word("delete", "删除"), role: .destructive) {
                     guard let id = selectedQueryID else { return }
-                    perform { try store.deleteSavedQuery(id); selectedQueryID = nil }
+                    if perform({ try SharedLibraryBrowserLogic.deleteSavedQuery(id, store: store, state: state) }) {
+                        selectedQueryID = nil
+                        renameDrafts.clear(.saved(id))
+                    }
                 }.disabled(selectedQueryID == nil)
             }
             Text(word("smartNote", "智能筛选按规则显示条目，不能手工添加成员。"))
@@ -712,9 +886,29 @@ public struct SharedLibraryBrowser: View {
         }
     }
 
-    private func perform(_ body: () throws -> Void) {
-        do { try body(); errorMessage = nil }
-        catch { errorMessage = error.localizedDescription }
+    private func renameBinding(
+        _ item: SharedLibraryBrowserOrganizerItem?, canonical: String
+    ) -> Binding<String> {
+        Binding(
+            get: { renameDrafts.text(for: item, canonical: canonical) },
+            set: { renameDrafts.set($0, for: item) }
+        )
+    }
+    @discardableResult private func perform(_ body: () throws -> Void) -> Bool {
+        do { try body(); errorMessage = nil; return true }
+        catch {
+            if let issue = error as? SharedLibraryBrowserIssue {
+                switch issue {
+                case .folderCannotBeSaved:
+                    errorMessage = word("folderNotSaved", "当前分类的成员无法存为智能筛选；请先切换浏览范围。")
+                case .conflictingKindScope:
+                    errorMessage = word("conflictingScope", "当前类别与筛选条件冲突，无法保存。")
+                }
+            } else {
+                errorMessage = error.localizedDescription
+            }
+            return false
+        }
     }
     private func selectScope(_ value: SharedLibraryBrowserScope) {
         scope = value
@@ -728,9 +922,24 @@ public struct SharedLibraryBrowser: View {
         do { try action(keys); errorMessage = nil; return true }
         catch { errorMessage = error.localizedDescription; return false }
     }
-    private func dragProvider(for entry: SharedLibraryBrowserEntry) -> NSItemProvider {
-        let provider = NSItemProvider(object: entry.id as NSString)
-        if let transfer = SharedLibraryBrowserLogic.canvasTransfer(for: entry),
+    private func dispatch(_ action: SharedLibraryBrowserAction, key: String) {
+        guard let current = SharedLibraryBrowserLogic.currentEntry(
+            key: key, entries: entries, action: action
+        ) else {
+            errorMessage = word("staleEntry", "条目已变化，请重新选择。")
+            return
+        }
+        switch action {
+        case .use: onUse(current)
+        case .add: onAdd(current)
+        case .preview: onPreview(current)
+        case .prepare: onPrepare(current)
+        }
+    }
+    private func dragProvider(for key: String) -> NSItemProvider {
+        guard let current = entries.first(where: { $0.id == key }) else { return NSItemProvider() }
+        let provider = NSItemProvider(object: current.id as NSString)
+        if let transfer = SharedLibraryBrowserLogic.canvasTransfer(for: current),
            let payload = try? transfer.encoded() {
             provider.registerDataRepresentation(
                 forTypeIdentifier: "org.d-workbench.canvas-item", visibility: .all
@@ -751,19 +960,20 @@ public struct SharedLibraryBrowser: View {
         return depth
     }
     private func canUse(_ entry: SharedLibraryBrowserEntry) -> Bool {
-        SharedLibraryBrowserLogic.quickUseAllowed(entry)
+        SharedLibraryBrowserLogic.allows(.use, entry: entry)
     }
     private func canAdd(_ entry: SharedLibraryBrowserEntry) -> Bool {
-        guard entry.item.readiness == .available, entry.item.compatible != false else { return false }
-        switch entry.selection {
-        case .operation, .asset, .tool: return true
-        case .unavailable: return false
-        }
+        SharedLibraryBrowserLogic.allows(.add, entry: entry)
     }
     private func canPreview(_ entry: SharedLibraryBrowserEntry) -> Bool {
-        guard entry.item.readiness == .available, entry.item.compatible != false else { return false }
-        if case .asset = entry.selection { return true }
-        return false
+        SharedLibraryBrowserLogic.allows(.preview, entry: entry)
+    }
+    private func prepareLabel(for entry: SharedLibraryBrowserEntry) -> String {
+        switch entry.item.readiness {
+        case .unprepared: word("prepare", "准备")
+        case .unknown: word("checkPreparation", "检查准备状态")
+        case .unavailable, .unsupported, .available: word("prepareInfo", "查看准备信息")
+        }
     }
     private func kindList(_ kinds: Set<WorkflowDataKind>) -> String {
         kinds.isEmpty ? word("none", "无") : kinds.map(dataName).sorted().joined(separator: " · ")

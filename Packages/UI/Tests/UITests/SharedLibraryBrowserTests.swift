@@ -11,12 +11,13 @@ struct SharedLibraryBrowserTests {
         _ key: String, title: String, kind: SharedLibraryItemKind = .program,
         inputs: Set<WorkflowDataKind> = [], outputs: Set<WorkflowDataKind> = [],
         readiness: SharedLibraryReadiness = .available,
+        compatible: Bool? = true,
         selection: SharedLibraryBrowserSelection? = nil
     ) -> SharedLibraryBrowserEntry {
         SharedLibraryBrowserEntry(
             item: SharedLibraryItem(
                 key: key, title: title, kind: kind, inputs: inputs, outputs: outputs,
-                readiness: readiness, compatible: true
+                readiness: readiness, compatible: compatible
             ),
             selection: selection ?? .operation(id: key, modelID: nil)
         )
@@ -62,6 +63,94 @@ struct SharedLibraryBrowserTests {
     }
 
     @Test
+    func savingScopePreservesIntersectionAndRejectsUnrepresentableCases() throws {
+        let store = try SharedLibraryStore()
+        let firstTag = try #require(store.createTags(["第一"]).first)
+        let secondTag = try #require(store.createTags(["第二"]).first)
+        let both = entry("model:both", title: "两种标签", kind: .model)
+        let firstOnly = entry("model:first", title: "第一标签", kind: .model)
+        let secondOnly = entry("model:second", title: "第二标签", kind: .model)
+        let asset = entry("asset:other", title: "素材", kind: .asset)
+        let entries = [both, firstOnly, secondOnly, asset]
+        try store.addTags([firstTag, secondTag], to: [both.id])
+        try store.addTags([firstTag], to: [firstOnly.id])
+        try store.addTags([secondTag], to: [secondOnly.id])
+
+        let models = try SharedLibraryBrowserLogic.queryForSaving(
+            .init(), scope: .kind(.model), store: store
+        )
+        #expect(models.kinds == [.model])
+        let modelQueryID = try store.createSavedQuery(name: "仅模型", query: models)
+        let reopenedModels = try #require(store.metadata.savedQueries[modelQueryID]?.query)
+        #expect(store.filter(entries.map(\.item), query: reopenedModels).map(\.key)
+            == [both.id, firstOnly.id, secondOnly.id])
+
+        let tagQuery = try SharedLibraryBrowserLogic.queryForSaving(
+            .init(anyTagIDs: [secondTag]), scope: .tag(firstTag), store: store
+        )
+        #expect(tagQuery.allTagIDs == [firstTag])
+        #expect(tagQuery.anyTagIDs == [secondTag])
+        #expect(store.filter(entries.map(\.item), query: tagQuery).map(\.key) == [both.id])
+        #expect(throws: SharedLibraryBrowserIssue.conflictingKindScope) {
+            try SharedLibraryBrowserLogic.queryForSaving(
+                .init(kinds: [.asset]), scope: .kind(.model), store: store
+            )
+        }
+        let folderID = try store.createFolder(name: "手工分类")
+        #expect(throws: SharedLibraryBrowserIssue.folderCannotBeSaved) {
+            try SharedLibraryBrowserLogic.queryForSaving(
+                .init(), scope: .folder(folderID), store: store
+            )
+        }
+    }
+
+    @Test
+    func renameDraftsSurviveSelectionReturnAndDeletedScopesRepairWithoutReset() throws {
+        let tagID = UUID(), folderID = UUID(), queryID = UUID()
+        var drafts = SharedLibraryBrowserRenameDrafts()
+        drafts.set("标签草稿", for: .tag(tagID))
+        drafts.set("分类草稿", for: .folder(folderID))
+        drafts.set("筛选草稿", for: .saved(queryID))
+        #expect(drafts.text(for: .tag(tagID), canonical: "旧标签") == "标签草稿")
+        #expect(drafts.text(for: .folder(folderID), canonical: "旧分类") == "分类草稿")
+        #expect(drafts.text(for: .saved(queryID), canonical: "旧筛选") == "筛选草稿")
+        #expect(drafts.text(for: .tag(tagID), canonical: "旧标签") == "标签草稿")
+        drafts.clear(.folder(folderID))
+        #expect(drafts.text(for: .folder(folderID), canonical: "已改名") == "已改名")
+
+        let store = try SharedLibraryStore()
+        let realTagID = try #require(store.createTags(["可删"]).first)
+        let parentID = try store.createFolder(name: "父")
+        let childID = try store.createFolder(name: "子", parentID: parentID)
+        let savedID = try store.createSavedQuery(name: "可删筛选", query: .init())
+        let state = SharedLibraryBrowserState(
+            query: .init(text: "保留搜索", anyTagIDs: [realTagID]), scope: .tag(realTagID),
+            selectedKeys: ["entry:one"], focusedKey: "entry:one"
+        )
+        try SharedLibraryBrowserLogic.deleteTag(realTagID, store: store, state: state)
+        #expect(state.scope == .all)
+        #expect(state.query.anyTagIDs.isEmpty)
+        state.scope = .folder(childID)
+        try SharedLibraryBrowserLogic.deleteFolder(parentID, store: store, state: state)
+        #expect(state.scope == .all)
+        state.scope = .saved(savedID)
+        try SharedLibraryBrowserLogic.deleteSavedQuery(savedID, store: store, state: state)
+        #expect(state.scope == .all)
+        let protectedTagID = try #require(store.createTags(["受保护"]).first)
+        _ = try store.createSavedQuery(
+            name: "引用标签", query: .init(allTagIDs: [protectedTagID])
+        )
+        state.scope = .tag(protectedTagID)
+        #expect(throws: SharedLibraryError.tagInSavedQuery) {
+            try SharedLibraryBrowserLogic.deleteTag(protectedTagID, store: store, state: state)
+        }
+        #expect(state.scope == .tag(protectedTagID))
+        #expect(state.query.text == "保留搜索")
+        #expect(state.selectedKeys == ["entry:one"])
+        #expect(state.focusedKey == "entry:one")
+    }
+
+    @Test
     func dropRequiresCurrentEntryKeysAndCanvasPayloadKeepsProjectScope() throws {
         let projectID = UUID(), assetID = UUID()
         let asset = entry(
@@ -91,23 +180,83 @@ struct SharedLibraryBrowserTests {
     }
 
     @Test
-    func unknownExactModelCanOnlySelectDraft() {
-        let exact = entry(
-            "model:exact", title: "待确认模型", kind: .model, readiness: .unknown,
-            selection: .operation(id: "d.image.generate", modelID: "model:exact")
+    func actionPolicyHandlesEveryReadinessWithoutExecuting() {
+        let modelSelection: SharedLibraryBrowserSelection = .operation(
+            id: "d.image.generate", modelID: "model:exact"
         )
-        let generic = entry(
+        for readiness in [SharedLibraryReadiness.available, .unprepared, .unknown] {
+            let model = entry(
+                "model:exact", title: "模型", kind: .model,
+                readiness: readiness, selection: modelSelection
+            )
+            #expect(SharedLibraryBrowserLogic.allows(.use, entry: model))
+            #expect(SharedLibraryBrowserLogic.allows(.add, entry: model))
+            #expect(SharedLibraryBrowserLogic.allows(.prepare, entry: model)
+                == (readiness != .available))
+            #expect(SharedLibraryBrowserLogic.canvasTransfer(for: model)
+                == .operation(id: "d.image.generate", modelID: "model:exact"))
+        }
+        for readiness in [SharedLibraryReadiness.unavailable, .unsupported] {
+            let model = entry(
+                "model:exact", title: "模型", kind: .model,
+                readiness: readiness, selection: modelSelection
+            )
+            #expect(!SharedLibraryBrowserLogic.allows(.use, entry: model))
+            #expect(!SharedLibraryBrowserLogic.allows(.add, entry: model))
+            #expect(SharedLibraryBrowserLogic.allows(.prepare, entry: model))
+            #expect(SharedLibraryBrowserLogic.canvasTransfer(for: model) == nil)
+        }
+        let genericUnknown = entry(
             "model:generic", title: "泛用入口", kind: .model, readiness: .unknown,
             selection: .operation(id: "d.image.generate", modelID: nil)
         )
-        let unsupported = entry(
-            "model:unsupported", title: "不支持", kind: .model, readiness: .unsupported,
-            selection: .operation(id: "d.image.generate", modelID: "model:unsupported")
+        #expect(!SharedLibraryBrowserLogic.quickUseAllowed(genericUnknown))
+        let incompatible = entry(
+            "model:incompatible", title: "不兼容", kind: .model, readiness: .available,
+            compatible: false, selection: modelSelection
         )
-        #expect(SharedLibraryBrowserLogic.quickUseAllowed(exact))
-        #expect(!SharedLibraryBrowserLogic.quickUseAllowed(generic))
-        #expect(!SharedLibraryBrowserLogic.quickUseAllowed(unsupported))
-        #expect(SharedLibraryBrowserLogic.canvasTransfer(for: exact) == nil)
+        #expect(!SharedLibraryBrowserLogic.allows(.use, entry: incompatible))
+        #expect(!SharedLibraryBrowserLogic.allows(.add, entry: incompatible))
+        #expect(SharedLibraryBrowserLogic.allows(.prepare, entry: incompatible))
+        #expect(SharedLibraryBrowserLogic.canvasTransfer(for: incompatible) == nil)
+
+        let projectID = UUID(), assetID = UUID()
+        for readiness in SharedLibraryReadiness.allCases {
+            let asset = entry(
+                "asset:test", title: "素材", kind: .asset, readiness: readiness,
+                selection: .asset(projectID: projectID, assetID: assetID)
+            )
+            let expected = readiness == .available || readiness == .unknown
+            #expect(SharedLibraryBrowserLogic.allows(.preview, entry: asset) == expected)
+            #expect(SharedLibraryBrowserLogic.allows(.add, entry: asset) == expected)
+            #expect(SharedLibraryBrowserLogic.allows(.prepare, entry: asset)
+                == (readiness != .available))
+            #expect((SharedLibraryBrowserLogic.canvasTransfer(for: asset) != nil) == expected)
+        }
+    }
+
+    @Test
+    func compactDetailAndCallbacksResolveCurrentEntryByKey() {
+        let old = entry("model:same", title: "旧名称", kind: .model)
+        let current = entry(
+            "model:same", title: "现名称", kind: .model, readiness: .unknown,
+            selection: .operation(id: "d.image.generate", modelID: "model:same")
+        )
+        #expect(SharedLibraryBrowserLogic.detailEntry(key: old.id, entries: [current]) == current)
+        #expect(SharedLibraryBrowserLogic.currentEntry(
+            key: old.id, entries: [current], action: .use
+        ) == current)
+        let unsupported = entry(
+            "model:same", title: "不支持", kind: .model, readiness: .unsupported,
+            selection: current.selection
+        )
+        #expect(SharedLibraryBrowserLogic.currentEntry(
+            key: old.id, entries: [unsupported], action: .use
+        ) == nil)
+        #expect(SharedLibraryBrowserLogic.detailEntry(key: old.id, entries: []) == nil)
+        #expect(SharedLibraryBrowserLogic.currentEntry(
+            key: old.id, entries: [], action: .add
+        ) == nil)
     }
 
     @Test
