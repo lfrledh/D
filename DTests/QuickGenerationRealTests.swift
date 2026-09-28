@@ -66,7 +66,8 @@ struct QuickGenerationRealTests {
             func services() -> WorkflowServices {
                 WorkflowServices(store: store, session: session, resolveModel: { requested, selected in
                     guard requested == kind, selected == identity else { throw WorkflowIssue("Unexpected model binding") }
-                    return .init(identity: identity, reference: reference, backendID: backend)
+                    return .init(identity: identity, reference: reference, backendID: backend,
+                                 imageRecipe: kind == .image ? .klein(capability: session.imageCapability) : nil)
                 })
             }
             let quick = QuickGenerationController(store: store, makeServices: services)
