@@ -265,6 +265,38 @@ struct SharedLibraryBrowserTests {
         ) == nil)
     }
 
+    @Test func externalTagDeletionAndUndoPruneOnlyRemovedFilterIDs() throws {
+        let store = try SharedLibraryStore()
+        let keep = try #require(store.createTags(["保留"]).first)
+        let removed = try #require(store.createTags(["撤销创建"]).first)
+        let state = SharedLibraryBrowserState(query: .init(text: "未保存草稿", inputs: [.image],
+            allTagIDs: [removed], anyTagIDs: [keep, removed]), selectedKeys: ["unchanged"])
+        try store.undo(); state.reconcile(using: store)
+        #expect(state.query.anyTagIDs == [keep] && state.query.allTagIDs.isEmpty)
+        #expect(state.query.text == "未保存草稿" && state.query.inputs == [.image])
+        #expect(state.selectedKeys == ["unchanged"])
+        try store.deleteTags([keep]); state.reconcile(using: store)
+        #expect(state.query.anyTagIDs.isEmpty)
+        #expect(state.query.text == "未保存草稿")
+    }
+
+    @Test func exactToolTransferAndLegacyModelFactsRemainDistinctFromReadiness() throws {
+        let reference = WorkflowToolReference(id: UUID(), version: 2, digest: String(repeating: "a", count: 64))
+        let tool = entry("tool:test", title: "我的工具", kind: .tool, selection: .tool(reference))
+        let payload = try #require(SharedLibraryBrowserLogic.canvasTransfer(for: tool))
+        #expect(try WorkflowCanvasTransfer.decode(payload.encoded()) == .tool(reference))
+        #expect(throws: (any Error).self) { try WorkflowCanvasTransfer.tool(.init(id: reference.id, version: 2, digest: "wrong")).encoded() }
+        let projected = SharedLibraryProjection.entries(models: [], readiness: [:], tools: [], projects: [], language: nil)
+        let audio = try #require(projected.first { $0.id == "sm-music" })
+        #expect(audio.item.outputs == [.audio])
+        #expect(audio.item.inputs.contains(.audio))
+        #expect(audio.item.readiness == .unsupported)
+        #expect(!SharedLibraryBrowserLogic.allows(.use, entry: audio))
+        let language = try #require(WorkflowRegistry.standard.operation("d.model.language")?.definition)
+        #expect(!SharedLibraryProjection.outputs(language).contains(.video))
+        #expect(SharedLibraryProjection.outputs(language).contains(.record))
+    }
+
     @Test
     func actionPolicyHandlesEveryReadinessWithoutExecuting() {
         let modelSelection: SharedLibraryBrowserSelection = .operation(

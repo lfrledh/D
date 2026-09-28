@@ -293,7 +293,7 @@ struct WorkflowMediaPresetTests {
             guard visited.insert(ObjectIdentifier(object)).inserted else { continue }
             if let element = object as? any NSAccessibilityProtocol,
                element.accessibilityIdentifier() == identifier,
-               element.accessibilityPerformPress?() == true {
+               element.accessibilityPerformPress() == true {
                 return true
             }
             if let element = object as? any NSAccessibilityProtocol {

@@ -23,7 +23,7 @@ import Foundation
     static func modelKey(_ choice: WorkflowModelChoice) -> String { descriptor(for: choice)?.id ?? "model:" + choice.id }
     static func outputs(_ definition: WorkflowOperationDefinition) -> Set<WorkflowDataKind> {
         // Generic value ports express a future binding, not every concrete media capability.
-        if definition.id == "d.model.language" { return [.text] }
+        if definition.id == "d.model.language" { return [.text, .number, .boolean, .enumeration, .record, .list, .optional] }
         return Set(definition.outputs.flatMap { $0.kinds.count == WorkflowDataKind.allCases.count ? [] : $0.kinds })
     }
     static func entries(models: [WorkflowModelChoice], readiness: [String: SharedLibraryReadiness],
@@ -49,8 +49,12 @@ import Foundation
                     inputs: Set(definition.inputs.flatMap(\.kinds)), outputs: outputs(definition), readiness: .unprepared),
                     selection: .operation(id: definition.id, modelID: identity), facts: [descriptor.modelIdentity, descriptor.revision, descriptor.precision, descriptor.deploymentNote]))
             } else {
+                // Reviewed legacy adapters remain discoverable without claiming a new executable node route.
+                let legacyAudio = ["sm-music", "sm-sfx", "medium"].contains(descriptor.id)
+                let singing = descriptor.id == "audio.singing.qixuan"
                 result.append(.init(item: .init(key: descriptor.id, title: descriptor.title, detail: descriptor.deploymentNote,
-                    kind: .model, role: "separate-entry", readiness: .unsupported),
+                    kind: .model, role: "separate-entry", inputs: legacyAudio ? [.text, .audio] : (singing ? [.record] : []),
+                    outputs: legacyAudio || singing ? [.audio] : [], readiness: .unsupported),
                     selection: .unavailable("此适配尚未提供快速/通用节点操作；原有编辑器与CLI责任保留。"),
                     facts: [descriptor.modelIdentity, descriptor.revision, descriptor.engine]))
             }

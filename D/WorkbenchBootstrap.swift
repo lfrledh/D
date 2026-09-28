@@ -172,13 +172,14 @@ final class WorkbenchBootstrap {
     }
 
     func openProject(at url: URL) async {
+        guard !isTerminating else { return }
         if let model { await model.openProject(at: url) }
         else { pendingProjectURL = url; await start() }
     }
 
     /// Invoked for app Quit after the project close gate has drained inference and saved files.
     /// Closing a project/window or the model sheet alone must not cancel downloads.
-    func prepareLibraryForTermination() async -> Bool {
+    func prepareQuickForTermination() async -> Bool {
         isTerminating = true
         do {
             if let quick, quick.isRunning {
@@ -193,8 +194,23 @@ final class WorkbenchBootstrap {
                 if response == .alertThirdButtonReturn { await quick.cancel() }
                 else { await quick.waitForCompletion() }
             }
-            try await quick?.flush()
+            try await quick?.prepareForTermination()
             guard quick?.pendingSaveRunID == nil else { throw WorkflowIssue("快速生成仍有待保存结果，请恢复保存后退出。") }
+            return true
+        } catch {
+            isTerminating = false
+            startupError = error.localizedDescription
+            let alert = NSAlert(); alert.messageText = "快速创作尚未保存"
+            alert.informativeText = error.localizedDescription; alert.addButton(withTitle: "继续使用 D")
+            alert.runModal()
+            return false
+        }
+    }
+    func cancelTermination() { isTerminating = false }
+
+    func prepareLibraryForTermination() async -> Bool {
+        isTerminating = true
+        do {
             guard await quickModel?.projectSession.prepareInternalForTermination() != false else { isTerminating = false; return false }
             try await library?.shutdown()
             await sharedSession?.shutdown()

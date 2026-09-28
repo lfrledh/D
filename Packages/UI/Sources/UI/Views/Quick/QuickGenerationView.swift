@@ -36,6 +36,10 @@ struct QuickGenerationView: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(title).font(.title3.bold())
                     Text(definition.map { WorkflowCanvasPresentation.operationTitle($0, language: language) } ?? "从资料库选择已适配模型").font(.caption).foregroundStyle(.secondary)
+                    if let id = quick.draft?.node.parameters["modelID"]?.string, !id.isEmpty {
+                        Text((ModelNodeCatalog.entries.first { descriptor in WorkflowModelKind.allCases.contains { id == $0.rawValue + ":" + descriptor.revision } }?.precision ?? "") + " · " + readinessTitle(id))
+                            .font(.caption).foregroundStyle(.secondary).help(id)
+                    }
                 }
                 Spacer()
                 Button(baselineText(language, "label.48ff0f9d0b4d", fallback: "更换模型"), action: onChooseModel)
@@ -92,6 +96,7 @@ struct QuickGenerationView: View {
                                 .font(.caption).foregroundStyle(.secondary)
                             if let issue = inputIssue ?? quick.inputIssue ?? quick.saveIssue ?? quick.error { Text(issue).foregroundStyle(.red).textSelection(.enabled) }
                         } else {
+                            if let error = quick.error { Text(error).foregroundStyle(.red).textSelection(.enabled) }
                             ContentUnavailableView(baselineText(language, "label.48ccfc0d2104", fallback: "从一个模型开始"), systemImage: "square.stack.3d.up",
                                 description: Text(baselineText(language, "label.6f33836bdd1a", fallback: "选择模型后，这里只显示它支持的输入和设置。")))
                             Button(baselineText(language, "label.72f5f0e15b59", fallback: "浏览模型"), action: onChooseModel)
@@ -151,7 +156,7 @@ struct QuickGenerationView: View {
                                 ForEach(Array(run.outputs.keys.sorted()), id: \.self) { key in
                                     if let text = run.outputs[key]?.datum?.text {
                                         Text(text).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
-                                    } else if let value = run.outputs[key]?.datum, value.assetReferences.isEmpty {
+                                    } else if let value = run.outputs[key]?.datum, run.outputs[key]?.asset == nil {
                                         WorkflowDatumSnapshotView(value: value)
                                         Button(baselineText(language, "result.toCanvas", fallback: "带结果到工作流")) { onValueToCanvas(value) }
                                     }
@@ -184,6 +189,15 @@ struct QuickGenerationView: View {
         case .cancelled: "已取消"; case .failed: "失败"; case .interrupted: "已中断"
         }
         return workflowText(language, "baseline02.quick.status." + status.rawValue, fallback: fallback)
+    }
+    private func readinessTitle(_ id: String) -> String {
+        switch model.projectSession.explicitModelReadiness[id] ?? .unknown {
+        case .available: baselineText(language, "readiness.ready", fallback: "文件已核验 · 运行时检查参数")
+        case .unprepared: baselineText(language, "readiness.unprepared", fallback: "需要准备模型文件")
+        case .unavailable: baselineText(language, "readiness.unavailable", fallback: "文件或授权暂不可用")
+        case .unsupported: baselineText(language, "readiness.unsupported", fallback: "当前入口未适配")
+        case .unknown: baselineText(language, "readiness.unknown", fallback: "准备状态待核验")
+        }
     }
     private func references(_ run: QuickRunRecord) -> [WorkflowAssetReference] {
         var refs: [WorkflowAssetReference] = []

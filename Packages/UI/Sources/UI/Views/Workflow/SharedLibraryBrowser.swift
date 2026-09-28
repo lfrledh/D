@@ -86,6 +86,9 @@ public final class SharedLibraryBrowserState {
 
     /// Called after local or external metadata changes. Drafts and selected keys are retained.
     public func reconcile(using store: SharedLibraryStore) {
+        let availableTags = Set(store.metadata.tags.keys)
+        query.anyTagIDs.formIntersection(availableTags)
+        query.allTagIDs.formIntersection(availableTags)
         switch scope {
         case .tag(let id) where store.metadata.tags[id] == nil,
              .folder(let id) where store.metadata.folders[id] == nil,
@@ -251,7 +254,8 @@ struct SharedLibraryBrowserRenameDrafts {
         switch entry.selection {
         case .operation(let id, let modelID): return .operation(id: id, modelID: modelID)
         case .asset(let projectID, let assetID): return .asset(projectID: projectID, assetID: assetID)
-        case .tool, .unavailable: return nil
+        case .tool(let reference): return .tool(reference)
+        case .unavailable: return nil
         }
     }
 

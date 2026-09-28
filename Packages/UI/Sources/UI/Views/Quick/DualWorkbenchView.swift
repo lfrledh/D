@@ -16,6 +16,9 @@ public struct DualWorkbenchView: View {
     @State private var fullLibraryState = SharedLibraryBrowserState()
     @State private var compactLibraryState = SharedLibraryBrowserState()
     @State private var previewAsset: LibraryAssetPreview?
+    private enum LibraryDestination { case asset(LibraryAssetPreview), info(SharedLibraryBrowserEntry), models }
+    @State private var pendingLibraryDestination: LibraryDestination?
+    @State private var returnToLibrary = false
     @State private var libraryInfo: SharedLibraryBrowserEntry?
     private struct LibraryAssetPreview: Identifiable { let store: ProjectStore; let reference: WorkflowAssetReference; var id: WorkflowAssetReference { reference } }
     private var entries: [SharedLibraryBrowserEntry] {
@@ -71,7 +74,7 @@ public struct DualWorkbenchView: View {
 
         }
         .frame(minWidth: 860, minHeight: 580)
-        .sheet(isPresented: $libraryVisible) {
+        .sheet(isPresented: $libraryVisible, onDismiss: finishLibraryDismissal) {
             libraryBrowser(compact: false, at: CGPoint(x: 160, y: 140))
                 .frame(minWidth: 820, minHeight: 540)
                 .task { await refreshLibrary(checkModels: true) }
@@ -80,8 +83,8 @@ public struct DualWorkbenchView: View {
             VStack(spacing: 0) {
                 HStack { Text(baselineText(language, "label.79f326be4409", fallback: "项目")).font(.headline); Spacer(); Button(baselineText(language, "label.3fd47edce45b", fallback: "关闭")) { projectsVisible = false }.keyboardShortcut(.cancelAction) }.padding()
                 ProjectChooserView(recentProjects: model.recentProjects, isBusy: model.isChangingProject,
-                    onNew: { Task { await model.newProject(); if model.manifest != nil { projectsVisible = false; entry = .workflow } } },
-                    onOpen: { Task { await model.openProject(); if model.manifest != nil { projectsVisible = false; entry = .workflow } } },
+                    onNew: { Task { if await model.newProject() { projectsVisible = false; entry = .workflow } } },
+                    onOpen: { Task { if await model.openProject() { projectsVisible = false; entry = .workflow } } },
                     onRecent: { id in Task { await model.openRecentProject(id: id); if model.manifest != nil { projectsVisible = false; entry = .workflow } } },
                     onModels: { library.isPresented = true })
             }.frame(minWidth: 640, minHeight: 420)
@@ -92,14 +95,18 @@ public struct DualWorkbenchView: View {
                 WorkbenchView(model: model, library: library, nodeTags: nodeTags)
             }.frame(minWidth: 960, minHeight: 650)
         }
-        .sheet(isPresented: Binding(get: { library.isPresented }, set: { library.isPresented = $0 })) {
+        .sheet(isPresented: Binding(get: { library.isPresented }, set: { library.isPresented = $0 }), onDismiss: restoreLibraryIfNeeded) {
             ModelLibraryView(model: library, selectedModelID: quickModel.selectedModelID, canSelect: true) { id in
+                quickModel.clearError()
                 await quickModel.selectModel(id: id)
+                guard quickModel.selectedModelID == id, quickModel.projectSession.errorMessage == nil else {
+                    issue = quickModel.projectSession.errorMessage ?? "模型选择未完成，原选择保留。"; return
+                }
                 quickModel.projectSession.refreshWorkflowModels()
                 if let identity = quickModel.projectSession.selectedWorkflowImageIdentity {
                     quick.select(operationID: "d.image.generate", modelID: identity)
                 }
-                library.isPresented = false
+                returnToLibrary = false; library.isPresented = false; entry = .quick
             }
         }
         .sheet(isPresented: $languageVisible) {
@@ -115,18 +122,38 @@ public struct DualWorkbenchView: View {
         }
         .onChange(of: quick.state.revision) { _, _ in Task { await refreshLibrary(checkModels: false) } }
         .onChange(of: model.manifest?.revision) { _, _ in Task { await refreshLibrary(checkModels: false) } }
-        .sheet(item: $previewAsset) { value in
+        .sheet(item: $previewAsset, onDismiss: restoreLibraryIfNeeded) { value in
             VStack { QuickAssetPreview(store: value.store, reference: value.reference, compact: false)
                 Button(baselineText(language, "label.3fd47edce45b", fallback: "关闭")) { previewAsset = nil }.keyboardShortcut(.cancelAction) }.padding(20).frame(minWidth: 560, minHeight: 360)
         }
-        .sheet(item: $libraryInfo) { value in
+        .sheet(item: $libraryInfo, onDismiss: restoreLibraryIfNeeded) { value in
             VStack(alignment: .leading, spacing: 14) { HStack { Text(value.item.title).font(.title2); Spacer(); Button(baselineText(language, "label.3fd47edce45b", fallback: "关闭")) { libraryInfo = nil } }
                 Text(value.item.detail); ForEach(value.facts, id: \.self) { Text($0).textSelection(.enabled) }
-                if case .unavailable = value.selection { Button(baselineText(language, "label.32d818ead29f", fallback: "打开已有编辑器")) { libraryInfo = nil; libraryVisible = false; compatibilityVisible = true } }
+                if case .unavailable = value.selection { Button(baselineText(language, "label.32d818ead29f", fallback: "打开已有编辑器")) { returnToLibrary = false; libraryInfo = nil; libraryVisible = false; compatibilityVisible = true } }
             }.padding(24).frame(minWidth: 550, minHeight: 280)
         }
         .focusedSceneValue(\.workbenchGeneration, WorkbenchGenerationCommand(title: "快速生成", isEnabled: quickCommandEnabled,
             action: { if quickCommandEnabled { quick.start() } }))
+    }
+    private func presentLibraryDestination(_ value: LibraryDestination) {
+        if libraryVisible {
+            returnToLibrary = true; pendingLibraryDestination = value; libraryVisible = false
+        } else { openLibraryDestination(value) }
+    }
+    private func finishLibraryDismissal() {
+        guard let pending = pendingLibraryDestination else { return }
+        pendingLibraryDestination = nil; openLibraryDestination(pending)
+    }
+    private func openLibraryDestination(_ value: LibraryDestination) {
+        switch value {
+        case .asset(let preview): previewAsset = preview
+        case .info(let item): libraryInfo = item
+        case .models: library.isPresented = true
+        }
+    }
+    private func restoreLibraryIfNeeded() {
+        guard returnToLibrary else { return }
+        returnToLibrary = false; libraryVisible = true
     }
     private var quickCommandEnabled: Bool {
         entry == .quick && quick.canStart && !libraryVisible && !projectsVisible && !compatibilityVisible &&
@@ -165,7 +192,7 @@ public struct DualWorkbenchView: View {
     }
     private func useLibraryEntry(_ value: SharedLibraryBrowserEntry) {
         guard case .operation(let operation, let id) = value.selection,
-              let id, WorkflowRegistry.standard.operation(operation)?.definition.modelKind != nil else { libraryInfo = value; return }
+              let id, WorkflowRegistry.standard.operation(operation)?.definition.modelKind != nil else { presentLibraryDestination(.info(value)); return }
         quick.select(operationID: operation, modelID: id)
         libraryVisible = false; entry = .quick
     }
@@ -183,16 +210,16 @@ public struct DualWorkbenchView: View {
         throw WorkflowIssue("所属项目已关闭，请重新打开；没有扩大素材访问范围。")
     }
     private func previewLibraryEntry(_ value: SharedLibraryBrowserEntry) async {
-        guard case .asset(let projectID, let assetID) = value.selection else { libraryVisible = false; libraryInfo = value; return }
+        guard case .asset(let projectID, let assetID) = value.selection else { presentLibraryDestination(.info(value)); return }
         do { let source = try await store(for: projectID)
             let ref = try await source.pinWorkflowAsset(assetID)
-            libraryVisible = false; previewAsset = .init(store: source, reference: ref)
+            presentLibraryDestination(.asset(.init(store: source, reference: ref)))
         } catch { issue = error.localizedDescription }
     }
     private func prepareModel(_ value: SharedLibraryBrowserEntry) async {
-        guard case .operation(let id, _) = value.selection, let kind = WorkflowRegistry.standard.operation(id)?.definition.modelKind else { libraryInfo = value; return }
-        if kind == .image { libraryVisible = false; library.isPresented = true; return }
-        if kind == .pitch { await refreshLibrary(checkModels: true); libraryVisible = false; libraryInfo = value; return }
+        guard case .operation(let id, _) = value.selection, let kind = WorkflowRegistry.standard.operation(id)?.definition.modelKind else { presentLibraryDestination(.info(value)); return }
+        if kind == .image { presentLibraryDestination(.models); return }
+        if kind == .pitch { await refreshLibrary(checkModels: true); presentLibraryDestination(.info(value)); return }
         let panel = NSOpenPanel(); panel.canChooseDirectories = true; panel.canChooseFiles = false
         panel.message = "登记已有模型的原位置；不会复制、移动或删除权重。"
         guard await panel.begin() == .OK, let url = panel.url else { return }

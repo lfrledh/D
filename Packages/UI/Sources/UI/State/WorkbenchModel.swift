@@ -734,9 +734,9 @@ public final class WorkbenchModel {
         return await projectSession.cancelAndCloseProject()
     }
 
-    public func newProject() async {
-        guard !refuseEditorClose() else { return }
-        guard !isChangingProject else { return }
+    @discardableResult public func newProject() async -> Bool {
+        guard !refuseEditorClose() else { return false }
+        guard !isChangingProject else { return false }
         isChoosingLocation = true
         defer { isChoosingLocation = false }
         let panel = NSSavePanel()
@@ -745,13 +745,15 @@ public final class WorkbenchModel {
         panel.canCreateDirectories = true
         panel.allowedContentTypes = [UTType(filenameExtension: "dproject") ?? .package]
         panel.isExtensionHidden = false
-        guard await panel.begin() == .OK, let url = panel.url else { return }
+        guard await panel.begin() == .OK, let url = panel.url else { return false }
+        projectSession.clearError()
         await projectSession.createProject(at: url)
+        return projectSession.errorMessage == nil && projectSession.currentStore?.rootURL.standardizedFileURL == url.standardizedFileURL
     }
 
-    public func openProject() async {
-        guard !refuseEditorClose() else { return }
-        guard !isChangingProject else { return }
+    @discardableResult public func openProject() async -> Bool {
+        guard !refuseEditorClose() else { return false }
+        guard !isChangingProject else { return false }
         isChoosingLocation = true
         defer { isChoosingLocation = false }
         let panel = NSOpenPanel()
@@ -760,8 +762,10 @@ public final class WorkbenchModel {
         panel.canChooseDirectories = false
         panel.allowedContentTypes = [UTType(filenameExtension: "dproject") ?? .package]
         panel.allowsMultipleSelection = false
-        guard await panel.begin() == .OK, let url = panel.url else { return }
+        guard await panel.begin() == .OK, let url = panel.url else { return false }
+        projectSession.clearError()
         await projectSession.openProject(at: url)
+        return projectSession.errorMessage == nil && projectSession.currentStore?.rootURL.standardizedFileURL == url.standardizedFileURL
     }
 
     public func registerModel() async {

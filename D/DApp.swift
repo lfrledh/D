@@ -32,13 +32,15 @@ struct DApp: App {
                           let quickModel = bootstrap.quickModel, let quick = bootstrap.quick, let nodeTags = bootstrap.nodeTags {
                     DualWorkbenchView(model: model, quickModel: quickModel, quick: quick, library: library, nodeTags: nodeTags, metadata: bootstrap.sharedLibrary, metadataIssue: bootstrap.sharedLibraryIssue)
                         .background(WorkbenchWindowConnection(delegate: applicationDelegate, model: model,
-                            prepareLibraryForTermination: bootstrap.prepareLibraryForTermination))
+                            prepareLibraryForTermination: bootstrap.prepareLibraryForTermination,
+                            prepareQuickForTermination: bootstrap.prepareQuickForTermination, cancelTermination: bootstrap.cancelTermination))
                 } else if let model = bootstrap.model, let library = bootstrap.libraryModel, let tags = bootstrap.nodeTags {
                     VStack(spacing: 0) {
                         if let issue = bootstrap.startupError { Text(issue).textSelection(.enabled).padding().background(.regularMaterial) }
                         WorkbenchView(model: model, library: library, nodeTags: tags)
                     }.background(WorkbenchWindowConnection(delegate: applicationDelegate, model: model,
-                        prepareLibraryForTermination: bootstrap.prepareLibraryForTermination))
+                        prepareLibraryForTermination: bootstrap.prepareLibraryForTermination,
+                            prepareQuickForTermination: bootstrap.prepareQuickForTermination, cancelTermination: bootstrap.cancelTermination))
                 } else if let error = bootstrap.startupError {
                     VStack(spacing: 18) {
                         Label("无法准备工作台", systemImage: "externaldrive.badge.exclamationmark")

@@ -272,6 +272,10 @@ public struct WorkflowCanvasView: View {
             guard let target = controller.canvasInsertionTarget() else { return false }
             Task { await controller.addAssetNode(projectID: project, assetID: asset, x: point.x, y: point.y, target: target) }
             return true
+        case .tool(let reference):
+            guard let tool = controller.tools.first(where: { $0.id == reference.id && $0.version == reference.version && (try? WorkflowPlanCompiler.digest($0)) == reference.digest }) else { return false }
+            controller.addTool(tool, x: point.x, y: point.y)
+            showInspector = true; return controller.errorMessage == nil
         case .output: return false
         }
     }

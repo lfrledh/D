@@ -297,4 +297,10 @@ public struct QuickCreationState: Codable, Sendable, Equatable {
         }
     }
     public func waitForCompletion() async { await runTask?.value }
+    public func prepareForTermination() async throws {
+        // A rejected sidecar is read-only: no edits were admitted and its bytes must remain intact.
+        guard isLoaded else { return }
+        guard !isRunning, pendingSaveRunID == nil else { throw WorkflowIssue("快速生成仍有运行或待保存结果。") }
+        try await flush()
+    }
 }

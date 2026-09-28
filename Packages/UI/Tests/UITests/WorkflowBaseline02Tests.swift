@@ -155,7 +155,7 @@ struct WorkflowBaseline02Tests {
         #expect(blankGraph.id != originalGraph.id)
         let blankContext = WorkflowCanvasViewContext(projectID: controller.projectID,
             rootGraphID: blankGraph.id, bodyPath: [])
-        var blankOffset = CGPoint(x: .infinity, y: .infinity)
+        var blankOffset = CGPoint(x: CGFloat.infinity, y: CGFloat.infinity)
         for _ in 0..<40 {
             host.layoutSubtreeIfNeeded()
             blankOffset = graphScrollView()?.contentView.bounds.origin ?? blankOffset

@@ -56,6 +56,8 @@ final class WorkbenchApplicationDelegate: NSObject, NSApplicationDelegate, NSWin
     private var windowCloseApproved = false
     private var terminationPending = false
     private var prepareLibraryForTermination: (@MainActor () async -> Bool)?
+    private var prepareQuickForTermination: (@MainActor () async -> Bool)?
+    private var cancelTermination: (@MainActor () -> Void)?
     private var inputGeometry: WorkbenchInputGeometry?
 
     // Installation belongs to the app. A single SwiftUI Window otherwise quits
@@ -64,6 +66,8 @@ final class WorkbenchApplicationDelegate: NSObject, NSApplicationDelegate, NSWin
 
     func connect(window: NSWindow, model: WorkbenchModel,
                  prepareLibraryForTermination: @escaping @MainActor () async -> Bool,
+                 prepareQuickForTermination: @escaping @MainActor () async -> Bool = { true },
+                 cancelTermination: @escaping @MainActor () -> Void = {},
                  invalidateInputContext: @escaping @MainActor (NSView) -> Void = {
                      $0.inputContext?.invalidateCharacterCoordinates()
                  }) {
@@ -78,6 +82,8 @@ final class WorkbenchApplicationDelegate: NSObject, NSApplicationDelegate, NSWin
         previousWindowDelegate = window.delegate
         closeGate = CloseRequestGate { await model.requestClose() }
         self.prepareLibraryForTermination = prepareLibraryForTermination
+        self.prepareQuickForTermination = prepareQuickForTermination
+        self.cancelTermination = cancelTermination
         window.delegate = self
     }
 
@@ -103,8 +109,10 @@ final class WorkbenchApplicationDelegate: NSObject, NSApplicationDelegate, NSWin
         guard !terminationPending else { return .terminateLater }
         terminationPending = true
         Task { @MainActor [weak self] in
-            var approved = await closeGate.prepareToClose()
+            var approved = await self?.prepareQuickForTermination?() ?? true
+            if approved { approved = await closeGate.prepareToClose() }
             if approved { approved = await self?.prepareLibraryForTermination?() ?? true }
+            if !approved { self?.cancelTermination?() }
             self?.terminationPending = false
             sender.reply(toApplicationShouldTerminate: approved)
         }
@@ -185,11 +193,14 @@ struct WorkbenchWindowConnection: NSViewRepresentable {
     let delegate: WorkbenchApplicationDelegate
     let model: WorkbenchModel
     let prepareLibraryForTermination: @MainActor () async -> Bool
+    var prepareQuickForTermination: @MainActor () async -> Bool = { true }
+    var cancelTermination: @MainActor () -> Void = {}
 
     func makeNSView(context: Context) -> WindowConnectionView {
         WindowConnectionView { window in
             delegate.connect(window: window, model: model,
-                             prepareLibraryForTermination: prepareLibraryForTermination)
+                             prepareLibraryForTermination: prepareLibraryForTermination,
+                             prepareQuickForTermination: prepareQuickForTermination, cancelTermination: cancelTermination)
         }
     }
 

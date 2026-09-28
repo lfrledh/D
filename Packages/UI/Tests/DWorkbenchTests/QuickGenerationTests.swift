@@ -84,6 +84,27 @@ struct QuickGenerationTests {
         try await quick.flush(); try await canvas.close(); try await store.close()
     }
 
+    @Test func retryKeepsFailedAttemptInputsAndStructuredResultDoesNotRun() async throws {
+        let (store, engine, quick, canvas) = try await fixture()
+        let captured = try #require(quick.draft)
+        quick.start(); await quick.cancel()
+        let failed = try #require(quick.state.runs.last)
+        quick.setParameter("task", value: .text("下一次不同输入"), draftID: captured.id)
+        quick.retryAttempt(failed.id); await quick.waitForCompletion()
+        let retried = try #require(quick.state.runs.last)
+        #expect(retried.retryOf == failed.id && retried.id != failed.id)
+        #expect(retried.draft.node == captured.node)
+        #expect(quick.state.runs.first == failed)
+        let calls = await engine.requests.count
+        #expect(calls == 1)
+        canvas.addBlankGraph()
+        let value = WorkflowDatum.record(schema: [.init("标题", .text)], fields: ["标题": .text("雨后 👩🏽‍🎨")])
+        try await canvas.insertQuickValue(value, target: try #require(canvas.canvasInsertionTarget()))
+        #expect(canvas.graph?.nodes.last?.dataConfiguration?.value == value)
+        #expect(await engine.requests.count == calls)
+        try await quick.flush(); try await canvas.close(); try await store.close()
+    }
+
     @Test func copiedSettingsAndResultDoNotRunAndStaleTargetRejected() async throws {
         let (store, engine, quick, canvas) = try await fixture()
         quick.setInput("content", value: .data(.text("原文 e\u{301}")), draftID: try #require(quick.draft?.id))
@@ -115,6 +136,11 @@ struct QuickGenerationTests {
         object["futureMeaning"] = "must survive"
         let unknown = try JSONSerialization.data(withJSONObject: object)
         try unknown.write(to: file)
+        let readOnly = QuickGenerationController(store: store, makeServices: { throw WorkflowIssue("must not run") })
+        await readOnly.load()
+        #expect(!readOnly.isLoaded)
+        try await readOnly.prepareForTermination()
+        #expect(try Data(contentsOf: file) == unknown)
         await #expect(throws: (any Error).self) { try await quick.flush() }
         #expect(try Data(contentsOf: file) == unknown)
         #expect(quick.saveIssue != nil && !quick.canStart)

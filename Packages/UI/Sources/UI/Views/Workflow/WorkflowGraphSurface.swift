@@ -267,7 +267,7 @@ struct WorkflowGraphSurface: View {
                     guard items.count == 1, controller.graph == nil, controller.canEditCanvas,
                           let item = items.first, (try? item.validated()) != nil else { return false }
                     switch item {
-                    case .operation, .asset: return onDropItem(item, location)
+                    case .operation, .asset, .tool: return onDropItem(item, location)
                     case .output: return false
                     }
                 }
@@ -375,7 +375,7 @@ struct WorkflowGraphSurface: View {
               scope.isCurrent(in: controller),
               let item = try? items[0].validated() else { return false }
         switch item {
-        case .operation, .asset:
+        case .operation, .asset, .tool:
             return onDropItem(item, rawPoint)
         case .output:
             return false
