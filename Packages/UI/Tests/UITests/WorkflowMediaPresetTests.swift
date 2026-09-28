@@ -293,8 +293,8 @@ struct WorkflowMediaPresetTests {
             guard visited.insert(ObjectIdentifier(object)).inserted else { continue }
             if let element = object as? any NSAccessibilityProtocol,
                element.accessibilityIdentifier() == identifier,
-               let button = object as? any NSAccessibilityButton {
-                return button.accessibilityPerformPress()
+               element.accessibilityPerformPress?() == true {
+                return true
             }
             if let element = object as? any NSAccessibilityProtocol {
                 pending.append(contentsOf: (element.accessibilityChildren() ?? []).compactMap { $0 as? NSObject })

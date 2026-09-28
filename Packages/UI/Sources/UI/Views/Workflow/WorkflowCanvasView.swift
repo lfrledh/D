@@ -687,15 +687,21 @@ private struct WorkflowNodeInspector: View {
                 }
                 .accessibilityIdentifier("canvas-view-fixed-tool-" + node.id.uuidString)
             }
-            DisclosureGroup(isExpanded: $showTechnical) {
+            Button { showTechnical.toggle() } label: {
+                HStack {
+                    Text(workflowText(languageStore, "canvas.identity.technical", fallback: "技术信息"))
+                    Spacer()
+                    Image(systemName: showTechnical ? "chevron.down" : "chevron.right")
+                }
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("canvas-technical-toggle")
+            if showTechnical {
                 WorkflowMetadataRow(workflowText(languageStore, "workflow.metadata.operation", fallback: "操作"),
                                     node.operationID)
                 WorkflowMetadataRow(workflowText(languageStore, "workflow.metadata.definitionVersion", fallback: "定义版本"),
                                     String(node.definitionVersion))
-            } label: {
-                Text(workflowText(languageStore, "canvas.identity.technical", fallback: "技术信息"))
             }
-            .accessibilityIdentifier("canvas-technical-toggle")
             HStack {
                 Button(workflowText(languageStore, "workflow.action.copy", fallback: "复制"),
                        systemImage: "doc.on.doc") { controller.copySelected() }
