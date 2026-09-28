@@ -53,17 +53,53 @@ public final class SharedLibraryBrowserState {
         self.focusedKey = focusedKey
     }
 
-    /// A metadata deletion must not leave the browser pointing at a removed scope.
-    /// Query text and selected entry keys remain the caller's presentation state.
-    public func repairScope(using store: SharedLibraryStore) {
+    /// Editing a named query creates a free filter draft, so its name never labels new rules.
+    public func setDraftQuery(_ draft: SharedLibraryQuery) {
+        if case .saved = scope, draft != query { scope = .all }
+        query = draft
+    }
+
+    public func selectScope(_ requested: SharedLibraryBrowserScope, using store: SharedLibraryStore) throws {
+        switch requested {
+        case .all, .kind:
+            scope = requested
+        case .tag(let id):
+            guard store.metadata.tags[id] != nil else { throw SharedLibraryError.missingTag }
+            scope = requested
+        case .folder(let id):
+            guard store.metadata.folders[id] != nil else { throw SharedLibraryError.missingFolder }
+            scope = requested
+        case .saved(let id):
+            guard let saved = store.metadata.savedQueries[id] else { throw SharedLibraryError.missingQuery }
+            query = saved.query
+            scope = requested
+        }
+    }
+
+    /// Named queries always evaluate the current Store version, including before onChange runs.
+    public func effectiveQuery(using store: SharedLibraryStore) -> SharedLibraryQuery {
+        if case .saved(let id) = scope, let saved = store.metadata.savedQueries[id] {
+            return saved.query
+        }
+        return query
+    }
+
+    /// Called after local or external metadata changes. Drafts and selected keys are retained.
+    public func reconcile(using store: SharedLibraryStore) {
         switch scope {
         case .tag(let id) where store.metadata.tags[id] == nil,
              .folder(let id) where store.metadata.folders[id] == nil,
              .saved(let id) where store.metadata.savedQueries[id] == nil:
             scope = .all
+        case .saved(let id):
+            if let saved = store.metadata.savedQueries[id] { query = saved.query }
         default:
             break
         }
+    }
+
+    public func repairScope(using store: SharedLibraryStore) {
+        reconcile(using: store)
     }
 }
 
@@ -266,13 +302,10 @@ public struct SharedLibraryBrowser: View {
     }
 
     private var query: SharedLibraryQuery {
-        get { state.query }
-        nonmutating set { state.query = newValue }
+        get { state.effectiveQuery(using: store) }
+        nonmutating set { state.setDraftQuery(newValue) }
     }
-    private var scope: SharedLibraryBrowserScope {
-        get { state.scope }
-        nonmutating set { state.scope = newValue }
-    }
+    private var scope: SharedLibraryBrowserScope { state.scope }
     private var selectedKeys: Set<String> {
         get { state.selectedKeys }
         nonmutating set { state.selectedKeys = newValue }
@@ -356,6 +389,8 @@ public struct SharedLibraryBrowser: View {
                 }.padding(16).frame(minWidth: 300, minHeight: 320)
             }
         }
+        .onAppear { state.reconcile(using: store) }
+        .onChange(of: store.metadata) { _, _ in state.reconcile(using: store) }
         .onChange(of: entries) { _, current in
             if compactDetailKey != nil,
                SharedLibraryBrowserLogic.detailEntry(key: compactDetailKey, entries: current) == nil {
@@ -871,7 +906,10 @@ public struct SharedLibraryBrowser: View {
                     if perform({
                         let savedQuery = try SharedLibraryBrowserLogic.queryForSaving(query, scope: scope, store: store)
                         try store.updateSavedQuery(id, name: name, query: savedQuery)
-                    }) { renameDrafts.clear(item) }
+                    }) {
+                        renameDrafts.clear(item)
+                        selectScope(.saved(id))
+                    }
                 }.disabled(selectedQueryID == nil)
                 Button(word("delete", "删除"), role: .destructive) {
                     guard let id = selectedQueryID else { return }
@@ -895,7 +933,12 @@ public struct SharedLibraryBrowser: View {
         )
     }
     @discardableResult private func perform(_ body: () throws -> Void) -> Bool {
-        do { try body(); errorMessage = nil; return true }
+        do {
+            try body()
+            state.reconcile(using: store)
+            errorMessage = nil
+            return true
+        }
         catch {
             if let issue = error as? SharedLibraryBrowserIssue {
                 switch issue {
@@ -911,15 +954,19 @@ public struct SharedLibraryBrowser: View {
         }
     }
     private func selectScope(_ value: SharedLibraryBrowserScope) {
-        scope = value
-        if case .saved(let id) = value, let item = store.metadata.savedQueries[id] { query = item.query }
+        perform { try state.selectScope(value, using: store) }
     }
     private func acceptDrop(_ values: [String], action: (Set<String>) throws -> Void) -> Bool {
         guard let keys = SharedLibraryBrowserLogic.validatedDropKeys(values, entries: entries) else {
             errorMessage = word("invalidDrop", "拖放条目不属于当前资料库")
             return false
         }
-        do { try action(keys); errorMessage = nil; return true }
+        do {
+            try action(keys)
+            state.reconcile(using: store)
+            errorMessage = nil
+            return true
+        }
         catch { errorMessage = error.localizedDescription; return false }
     }
     private func dispatch(_ action: SharedLibraryBrowserAction, key: String) {

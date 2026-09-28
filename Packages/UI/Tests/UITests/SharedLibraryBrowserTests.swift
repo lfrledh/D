@@ -151,6 +151,92 @@ struct SharedLibraryBrowserTests {
     }
 
     @Test
+    func savedScopeFollowsStoreAfterUpdateUndoAndOtherSurfaceChange() throws {
+        let store = try SharedLibraryStore()
+        let models = SharedLibraryQuery(kinds: [.model])
+        let assets = SharedLibraryQuery(kinds: [.asset])
+        let savedID = try store.createSavedQuery(name: "类型", query: models)
+        let active = SharedLibraryBrowserState(
+            query: .init(text: "原自由查询"), selectedKeys: ["keep"], focusedKey: "keep"
+        )
+        let other = SharedLibraryBrowserState()
+        try active.selectScope(.saved(savedID), using: store)
+        try other.selectScope(.saved(savedID), using: store)
+        #expect(active.query == models)
+        #expect(other.effectiveQuery(using: store) == models)
+
+        active.setDraftQuery(assets)
+        #expect(active.scope == .all)
+        #expect(active.query == assets)
+        try store.updateSavedQuery(savedID, name: "类型", query: assets)
+        active.reconcile(using: store)
+        other.reconcile(using: store)
+        #expect(active.query == assets)
+        #expect(active.scope == .all)
+        #expect(other.scope == .saved(savedID))
+        #expect(other.query == assets)
+
+        try active.selectScope(.saved(savedID), using: store)
+        try store.undo()
+        #expect(active.effectiveQuery(using: store) == models)
+        active.reconcile(using: store)
+        other.reconcile(using: store)
+        #expect(active.scope == .saved(savedID))
+        #expect(active.query == models)
+        #expect(other.query == models)
+
+        active.setDraftQuery(.init(text: "未保存草稿", kinds: [.asset]))
+        let draft = active.query
+        try store.updateSavedQuery(savedID, name: "类型", query: assets)
+        active.reconcile(using: store)
+        other.reconcile(using: store)
+        #expect(active.scope == .all)
+        #expect(active.query == draft)
+        #expect(other.query == assets)
+        _ = try store.createTags(["无关标签"])
+        active.reconcile(using: store)
+        other.reconcile(using: store)
+        #expect(active.query == draft)
+        #expect(active.selectedKeys == ["keep"])
+        #expect(active.focusedKey == "keep")
+        #expect(other.query == assets)
+    }
+
+    @Test
+    func undoAndExternalDeletionRepairOnlyInvalidScope() throws {
+        let store = try SharedLibraryStore()
+        let state = SharedLibraryBrowserState(
+            query: .init(text: "自由搜索"), selectedKeys: ["keep"], focusedKey: "keep"
+        )
+        let folderID = try store.createFolder(name: "稍后撤销")
+        try state.selectScope(.folder(folderID), using: store)
+        try store.undo()
+        state.reconcile(using: store)
+        #expect(state.scope == .all)
+        #expect(state.query.text == "自由搜索")
+        #expect(state.selectedKeys == ["keep"])
+        try store.redo()
+        state.reconcile(using: store)
+        #expect(state.scope == .all)
+
+        let tagID = try #require(store.createTags(["跨视图标签"]).first)
+        try state.selectScope(.tag(tagID), using: store)
+        try store.deleteTags([tagID])
+        state.reconcile(using: store)
+        #expect(state.scope == .all)
+        #expect(state.query.text == "自由搜索")
+
+        let savedID = try store.createSavedQuery(name: "跨视图筛选", query: .init(kinds: [.model]))
+        try state.selectScope(.saved(savedID), using: store)
+        try store.deleteSavedQuery(savedID)
+        state.reconcile(using: store)
+        #expect(state.scope == .all)
+        #expect(state.query.text == "")
+        #expect(state.selectedKeys == ["keep"])
+        #expect(state.focusedKey == "keep")
+    }
+
+    @Test
     func dropRequiresCurrentEntryKeysAndCanvasPayloadKeepsProjectScope() throws {
         let projectID = UUID(), assetID = UUID()
         let asset = entry(
