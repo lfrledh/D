@@ -85,8 +85,11 @@ public struct DualWorkbenchView: View {
                 ProjectChooserView(recentProjects: model.recentProjects, isBusy: model.isChangingProject,
                     onNew: { Task { if await model.newProject() { projectsVisible = false; entry = .workflow } } },
                     onOpen: { Task { if await model.openProject() { projectsVisible = false; entry = .workflow } } },
-                    onRecent: { id in Task { await model.openRecentProject(id: id); if model.manifest != nil { projectsVisible = false; entry = .workflow } } },
+                    onRecent: { id in Task { if await model.openRecentProject(id: id) { projectsVisible = false; entry = .workflow } } },
                     onModels: { library.isPresented = true })
+                if let error = model.errorMessage {
+                    Text(error).foregroundStyle(.red).textSelection(.enabled).padding()
+                }
             }.frame(minWidth: 640, minHeight: 420)
         }
         .sheet(isPresented: $compatibilityVisible) {

@@ -12,7 +12,8 @@ struct QuickGenerationRealTests {
     @Test(.enabled(if: ProcessInfo.processInfo.environment["D_BASELINE02_REAL_KIND"] != nil), .timeLimit(.minutes(20)))
     func productionQuickCallPreservesDraftAndReopens() async throws {
         let env = ProcessInfo.processInfo.environment
-        let kind = try #require(WorkflowModelKind(rawValue: try #require(env["D_BASELINE02_REAL_KIND"])))
+        let rawKind = try #require(env["D_BASELINE02_REAL_KIND"])
+        let kind = try #require(WorkflowModelKind(rawValue: rawKind))
         try #require([WorkflowModelKind.text, .image, .music, .video].contains(kind))
         let modelURL = URL(fileURLWithPath: try #require(env["D_BASELINE02_REAL_MODEL"]))
         let sessionID = try #require(env["D_UI_TEST_SESSION"].flatMap(UUID.init(uuidString:)))
@@ -26,11 +27,12 @@ struct QuickGenerationRealTests {
         let settings = try #require(UserDefaults(suiteName: suite))
         defer { settings.removePersistentDomain(forName: suite) }
         let resources = try #require(Bundle.main.resourceURL)
-        let musicEngine = kind == .music ? try #require(BundledAudioEngine.resolve(resourceDirectory: resources, family: .mrt2Music)) : nil
-        let videoEngine = kind == .video ? try #require(BundledAudioEngine.resolve(resourceDirectory: resources, family: .video)) : nil
+        let musicEngine = kind == .music ? try BundledAudioEngine.resolve(resourceDirectory: resources, family: .mrt2Music) : nil
+        let videoEngine = kind == .video ? try BundledAudioEngine.resolve(resourceDirectory: resources, family: .video) : nil
         if kind == .music {
             try #require(env["D_NODE_LANGUAGE_MUSIC_ACKNOWLEDGED"] == "1")
-            try #require(FileManager.default.isReadableFile(atPath: try #require(env["D_NODE_LANGUAGE_MUSIC_AUTHORIZATION_SOURCE"])))
+            let authorization = try #require(env["D_NODE_LANGUAGE_MUSIC_AUTHORIZATION_SOURCE"])
+            try #require(FileManager.default.isReadableFile(atPath: authorization))
             settings.set(true, forKey: "audio.model-use.mrt2-small." + MRT2BackendConfiguration.registeredModelRevision)
         }
         let session = try await AppSessionFactory.makeSession(artifactDirectory: store.artifactDirectory,

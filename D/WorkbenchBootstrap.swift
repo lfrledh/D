@@ -177,7 +177,7 @@ final class WorkbenchBootstrap {
         else { pendingProjectURL = url; await start() }
     }
 
-    /// Invoked for app Quit after the project close gate has drained inference and saved files.
+    /// Reversible automatic-workspace save gates run before closing a named project.
     /// Closing a project/window or the model sheet alone must not cancel downloads.
     func prepareQuickForTermination() async -> Bool {
         isTerminating = true
@@ -196,6 +196,7 @@ final class WorkbenchBootstrap {
             }
             try await quick?.prepareForTermination()
             guard quick?.pendingSaveRunID == nil else { throw WorkflowIssue("快速生成仍有待保存结果，请恢复保存后退出。") }
+            guard await quickModel?.projectSession.prepareInternalForTermination() != false else { isTerminating = false; return false }
             return true
         } catch {
             isTerminating = false
@@ -211,7 +212,6 @@ final class WorkbenchBootstrap {
     func prepareLibraryForTermination() async -> Bool {
         isTerminating = true
         do {
-            guard await quickModel?.projectSession.prepareInternalForTermination() != false else { isTerminating = false; return false }
             try await library?.shutdown()
             await sharedSession?.shutdown()
             // All fallible save gates have accepted Quit; process termination releases the

@@ -226,13 +226,20 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
         } catch { errorMessage = error.localizedDescription }
     }
     public func addTool(_ tool: WorkflowToolDefinition, x: Double = 160, y: Double = 160) {
-        guard let definition = registry.operation("d.control.invoke")?.definition else { return }
+        guard canEditCanvas, x.isFinite, y.isFinite,
+              let definition = registry.operation("d.control.invoke")?.definition else { return }
         do {
             guard tools.contains(tool), let interface = tool.graph.interface else { throw WorkflowIssue("工具版本不在项目中。") }
             var node = definition.makeNode(); node.title = tool.name
             node.control = .invoke(.init(id: tool.id, version: tool.version, digest: try WorkflowPlanCompiler.digest(tool)))
             node.dataConfiguration = .init(fields: interface.inputs)
-            edit { $0.nodes.append(node); $0.layout.append(.init(nodeID: node.id, x: x, y: y)) }; selectedNodeID = node.id
+            let createdGraph = graph == nil
+            if createdGraph { addBlankGraph() }
+            edit { $0.nodes.append(node); $0.layout.append(.init(nodeID: node.id, x: x, y: y)) }
+            if graph?.nodes.contains(where: { $0.id == node.id }) == true {
+                if createdGraph { _ = undoStack.popLast() }
+                selectedNodeID = node.id
+            }
         } catch { errorMessage = error.localizedDescription }
     }
     public func openToolCopy(_ reference: WorkflowToolReference) {

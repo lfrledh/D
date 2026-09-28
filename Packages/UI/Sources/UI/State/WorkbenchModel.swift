@@ -35,10 +35,16 @@ public final class WorkbenchModel {
         }
         return entries
     }
-    public func openRecentProject(id: String) async {
-        guard !isChangingProject, !refuseEditorClose() else { return }
-        if id == "last-project" { await projectSession.restoreLastProject() }
-        else if let id = UUID(uuidString: id) { await projectSession.openRecentProject(id: id) }
+    @discardableResult public func openRecentProject(id: String) async -> Bool {
+        guard !isChangingProject, !refuseEditorClose() else { return false }
+        projectSession.clearError()
+        if id == "last-project" {
+            guard projectSession.manifest == nil else { return false }
+            await projectSession.restoreLastProject()
+            return projectSession.manifest != nil && projectSession.errorMessage == nil
+        }
+        guard let id = UUID(uuidString: id) else { return false }
+        return await projectSession.openRecentProject(id: id)
     }
     public func switchCreatorMode(_ mode: CreatorMode) async {
         guard !isChangingProject, !refuseEditorClose() else { return }

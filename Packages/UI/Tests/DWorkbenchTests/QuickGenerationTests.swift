@@ -33,6 +33,31 @@ struct QuickGenerationTests {
         return (store, engine, quick, canvas)
     }
 
+    @Test func fixedToolDropCreatesOneUndoableGraphAndRejectsUnknownVersion() async throws {
+        let (store, engine, quick, canvas) = try await fixture()
+        var input = try #require(WorkflowRegistry.standard.operation("d.value.input")).definition.makeNode()
+        input.dataConfiguration = .init(value: .text("tool value"))
+        var body = WorkflowGraph(nodes: [input])
+        body.interface = .init(outputs: [.init(name: "output", nodeID: input.id, schema: .text)])
+        let tool = WorkflowToolDefinition(name: "fixed", graph: body)
+        let archive = try #require(try await store.workflowState().archive)
+        _ = try await store.saveWorkflow(graphs: [], runs: [], expectedRevision: archive.revision, tools: [tool])
+        await canvas.load()
+        #expect(canvas.graph == nil)
+        canvas.addTool(.init(name: "unknown", graph: body))
+        #expect(canvas.graph == nil && canvas.selectedNodeID == nil)
+        canvas.addTool(tool, x: -120, y: 340)
+        #expect(canvas.graph?.nodes.count == 1)
+        let node = try #require(canvas.graph?.nodes.first)
+        #expect(canvas.selectedNodeID == node.id)
+        #expect(canvas.graph?.layout.first?.x == -120)
+        #expect(canvas.graph?.layout.first?.y == 340)
+        #expect(await engine.requests.isEmpty)
+        canvas.undo()
+        #expect(canvas.graphs.isEmpty)
+        try await quick.prepareForTermination(); try await canvas.close(); try await store.close()
+    }
+
     @Test func perModelDraftsRawNumericInputAndReopen() async throws {
         let (store, engine, quick, canvas) = try await fixture()
         let a = try #require(quick.draft?.id)

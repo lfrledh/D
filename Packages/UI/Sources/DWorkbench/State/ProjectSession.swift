@@ -302,9 +302,9 @@ public final class ProjectSession {
             settings.set(data, forKey: "workbench.recentProjects.v1")
         }
     }
-    public func openRecentProject(id: UUID) async {
+    @discardableResult public func openRecentProject(id: UUID) async -> Bool {
         guard let entry = recentProjects.first(where: { $0.id == id }), !isChangingProject,
-              await requestClose() else { return }
+              await requestClose() else { return false }
         isChangingProject = true
         defer { isChangingProject = false }
         do {
@@ -312,8 +312,9 @@ public final class ProjectSession {
             do {
                 let candidate = try await ProjectStore.open(at: lease.url)
                 try await activate(candidate, lease: lease)
+                return true
             } catch { await access.release(lease); throw error }
-        } catch { report(error, context: "最近项目暂不可用；请连接原磁盘或使用打开项目重新定位") }
+        } catch { report(error, context: "最近项目暂不可用；请连接原磁盘或使用打开项目重新定位"); return false }
     }
 
     @discardableResult public func selectCreatorMode(_ mode: CreatorMode) async -> Bool {
