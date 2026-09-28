@@ -259,6 +259,20 @@ struct SharedLibraryBrowserRenameDrafts {
         }
     }
 
+    static func dragProvider(for current: SharedLibraryBrowserEntry) -> NSItemProvider {
+        let provider = NSItemProvider(object: current.id as NSString)
+        if let transfer = canvasTransfer(for: current),
+           let payload = try? transfer.encoded() {
+            provider.registerDataRepresentation(
+                forTypeIdentifier: "org.d-workbench.canvas-item", visibility: .all
+            ) { completion in
+                completion(payload, nil)
+                return nil
+            }
+        }
+        return provider
+    }
+
     static func quickUseAllowed(_ entry: SharedLibraryBrowserEntry) -> Bool {
         allows(.use, entry: entry)
     }
@@ -460,7 +474,7 @@ public struct SharedLibraryBrowser: View {
                 Text(word("myTags", "我的标签")).font(.caption.weight(.semibold)).foregroundStyle(.secondary).padding(.top, 8)
                 ForEach(tags) { tag in
                     scopeButton(tag.name, icon: "tag", value: .tag(tag.id))
-                        .dropDestination(for: String.self) { keys, _ in
+                        .dropDestination(for: String.self) { (keys: [String], _: CGPoint) -> Bool in
                             return acceptDrop(keys) { try store.addTags([tag.id], to: $0) }
                         }
                 }
@@ -468,7 +482,7 @@ public struct SharedLibraryBrowser: View {
                 ForEach(folderTree) { folder in
                     scopeButton(folder.name, icon: "folder", value: .folder(folder.id))
                         .padding(.leading, CGFloat(folderDepth(folder.id)) * 10)
-                        .dropDestination(for: String.self) { keys, _ in
+                        .dropDestination(for: String.self) { (keys: [String], _: CGPoint) -> Bool in
                             return acceptDrop(keys) { try store.addMembers($0, to: folder.id) }
                         }
                 }
@@ -989,17 +1003,7 @@ public struct SharedLibraryBrowser: View {
     }
     private func dragProvider(for key: String) -> NSItemProvider {
         guard let current = entries.first(where: { $0.id == key }) else { return NSItemProvider() }
-        let provider = NSItemProvider(object: current.id as NSString)
-        if let transfer = SharedLibraryBrowserLogic.canvasTransfer(for: current),
-           let payload = try? transfer.encoded() {
-            provider.registerDataRepresentation(
-                forTypeIdentifier: "org.d-workbench.canvas-item", visibility: .all
-            ) { completion in
-                completion(payload, nil)
-                return nil
-            }
-        }
-        return provider
+        return SharedLibraryBrowserLogic.dragProvider(for: current)
     }
     private func folderDepth(_ id: UUID) -> Int {
         var depth = 0

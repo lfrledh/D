@@ -101,29 +101,84 @@ struct WorkbenchInputGeometryTests {
             delivered = []
             let prior = previous.events[name, default: 0]
             callback(Notification(name: name, object: window))
-            await drainMainQueue()
+            drainGeometryUpdates()
             #expect(previous.events[name, default: 0] == prior + 1)
             #expect(delivered.count == 1 && delivered.first === editor)
         }
         delivered = []
         delegate.windowDidMove(Notification(name: NSWindow.didMoveNotification, object: otherWindow))
-        await drainMainQueue()
+        drainGeometryUpdates()
         #expect(delivered.isEmpty)
         delegate.windowDidResize(Notification(name: NSWindow.didResizeNotification, object: window))
         delegate.windowWillClose(Notification(name: NSWindow.willCloseNotification, object: window))
-        await drainMainQueue()
+        drainGeometryUpdates()
         #expect(delivered.isEmpty, "Closing must cancel the queued update even if the window remains retained.")
         delegate.connect(window: window, model: model, prepareLibraryForTermination: { true },
                          invalidateInputContext: { view in delivered.append(view); view.inputContext?.invalidateCharacterCoordinates() })
         let forwardedBeforeReopen = previous.events[NSWindow.didMoveNotification, default: 0]
         delegate.windowDidMove(Notification(name: NSWindow.didMoveNotification, object: window))
-        await drainMainQueue()
+        drainGeometryUpdates()
         #expect(delivered.count == 1 && delivered.first === editor)
         #expect(previous.events[NSWindow.didMoveNotification, default: 0] == forwardedBeforeReopen + 1)
     }
 
-    private func drainMainQueue() async {
-        await withCheckedContinuation { continuation in DispatchQueue.main.async { continuation.resume() } }
+    @Test func attachedSheetReceivesGeometryUpdateWithoutChangingMarkedText() async throws {
+        let (window, rootEditor) = fixture()
+        let (sheet, sheetEditor) = fixture()
+        let (unrelated, unrelatedEditor) = fixture()
+        defer {
+            window.endSheet(sheet)
+            sheet.orderOut(nil)
+            window.close(); sheet.close(); unrelated.close()
+        }
+        window.beginSheet(sheet, completionHandler: nil)
+        sheet.makeFirstResponder(sheetEditor)
+        sheetEditor.string = "中文 e\u{301} 👩🏽‍🎨 "
+        sheetEditor.setMarkedText("pinyin", selectedRange: NSRange(location: 6, length: 0),
+                                  replacementRange: NSRange(location: sheetEditor.string.utf16.count, length: 0))
+        let text = sheetEditor.string, marked = sheetEditor.markedRange(), selection = sheetEditor.selectedRange()
+        var delivered: [NSView] = []
+        let tracker = WorkbenchInputGeometry(window: window) { view in delivered.append(view) }
+        tracker.invalidateAfterLayout()
+        drainGeometryUpdates()
+        #expect(delivered.count == 1 && delivered.first === sheetEditor,
+                "A parent move must invalidate the presented sheet's input client, not its old root responder.")
+        #expect(!delivered.contains { $0 === rootEditor || $0 === unrelatedEditor })
+        #expect(sheetEditor.string.utf8.elementsEqual(text.utf8))
+        #expect(sheetEditor.markedRange() == marked && sheetEditor.selectedRange() == selection)
+        delivered = []
+        tracker.invalidateAfterLayout()
+        window.endSheet(sheet)
+        sheet.orderOut(nil)
+        window.makeFirstResponder(rootEditor)
+        drainGeometryUpdates()
+        #expect(delivered.count == 1 && delivered.first === rootEditor)
+        #expect(!delivered.contains { $0 === sheetEditor || $0 === unrelatedEditor },
+                "Queued delivery must return to the root client, not retain the dismissed sheet.")
+    }
+
+    @Test func geometryDeliveryDoesNotWaitForEndOfEventTracking() {
+        let (window, editor) = fixture()
+        defer { window.close() }
+        var delivered: [NSView] = []
+        let tracker = WorkbenchInputGeometry(window: window) { delivered.append($0) }
+        for mode in [RunLoop.Mode.eventTracking, .modalPanel] {
+            delivered = []
+            tracker.invalidateAfterLayout()
+            let deadline = Date(timeIntervalSinceNow: 0.05)
+            while delivered.isEmpty && Date() < deadline {
+                _ = RunLoop.main.run(mode: mode, before: deadline)
+            }
+            #expect(delivered.count == 1 && delivered.first === editor,
+                    "Input coordinates must update before the tracking or modal loop ends.")
+        }
+    }
+
+    private func drainGeometryUpdates() {
+        // Exercise the helper's run-loop scheduling, including negative cases.
+        // A DispatchQueue marker alone does not establish this delivery boundary.
+        let deadline = Date(timeIntervalSinceNow: 0.02)
+        repeat { _ = RunLoop.main.run(mode: .default, before: deadline) } while Date() < deadline
     }
 }
 

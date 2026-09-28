@@ -161,6 +161,7 @@ struct WorkflowGraphSurface: View {
                     }
                     .frame(width: geometry.size.width, height: geometry.size.height)
                     .coordinateSpace(name: WorkflowCanvasCoordinateSpace.name)
+                    .contentShape(Rectangle())
                     .dropDestination(for: WorkflowCanvasTransfer.self) { items, location in
                         acceptSurfaceDrop(items, at: geometry.rawPoint(forDisplayPoint: location), scope: scope)
                     }
@@ -582,7 +583,7 @@ private struct WorkflowNodeCard: View {
         .shadow(color: .black.opacity(0.12), radius: 8, y: 3)
         .contentShape(RoundedRectangle(cornerRadius: 13))
         .onTapGesture { onInspect(node.id) }
-        .dropDestination(for: WorkflowCanvasTransfer.self) { items, _ in
+        .dropDestination(for: WorkflowCanvasTransfer.self) { (items: [WorkflowCanvasTransfer], _: CGPoint) -> Bool in
             acceptAsset(items)
         }
         .onChange(of: outputDragActive) { wasActive, isActive in
@@ -659,7 +660,7 @@ private struct WorkflowNodeCard: View {
         ))
 
         if input {
-            row.dropDestination(for: WorkflowCanvasTransfer.self) { items, _ in
+            row.dropDestination(for: WorkflowCanvasTransfer.self) { (items: [WorkflowCanvasTransfer], _: CGPoint) -> Bool in
                 acceptOutput(items, targetPort: port)
             }
         } else if !readOnly {

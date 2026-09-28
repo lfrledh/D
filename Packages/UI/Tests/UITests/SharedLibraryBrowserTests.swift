@@ -1,4 +1,5 @@
 import AppKit
+import CoreTransferable
 import DWorkbench
 import Foundation
 import SwiftUI
@@ -21,6 +22,30 @@ struct SharedLibraryBrowserTests {
             ),
             selection: selection ?? .operation(id: key, modelID: nil)
         )
+    }
+
+    @Test func nativeDragProviderPreservesCanvasPayloadAndLibraryKey() async throws {
+        let current = entry("operation:d.text.input", title: "文字输入",
+                            selection: .operation(id: "d.text.input", modelID: nil))
+        let provider = SharedLibraryBrowserLogic.dragProvider(for: current)
+        print("NATIVE_PROVIDER_TYPES=\(provider.registeredTypeIdentifiers)")
+        let data: Data = try await withCheckedThrowingContinuation { continuation in
+            provider.loadDataRepresentation(forTypeIdentifier: "org.d-workbench.canvas-item") { data, error in
+                if let error { continuation.resume(throwing: error) }
+                else if let data { continuation.resume(returning: data) }
+                else { continuation.resume(throwing: CocoaError(.fileReadCorruptFile)) }
+            }
+        }
+        let expected = WorkflowCanvasTransfer.operation(id: "d.text.input", modelID: nil)
+        #expect(try WorkflowCanvasTransfer.decode(data) == expected)
+        let actual: WorkflowCanvasTransfer = try await withCheckedThrowingContinuation { continuation in
+            _ = provider.loadTransferable(type: WorkflowCanvasTransfer.self) { continuation.resume(with: $0) }
+        }
+        #expect(actual == expected)
+        let key: String = try await withCheckedThrowingContinuation { continuation in
+            _ = provider.loadTransferable(type: String.self) { continuation.resume(with: $0) }
+        }
+        #expect(key == current.id)
     }
 
     @Test

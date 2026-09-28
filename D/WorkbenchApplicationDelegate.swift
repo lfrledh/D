@@ -36,13 +36,21 @@ final class WorkbenchInputGeometry {
     func invalidateAfterLayout() {
         guard !scheduled else { return }
         scheduled = true
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            defer { self.scheduled = false }
-            guard let window = self.window else { return }
-            window.contentView?.layoutSubtreeIfNeeded()
-            guard let responder = window.firstResponder as? NSView, responder.window === window else { return }
-            self.invalidate(responder)
+        // Window dragging/resizing runs a nested tracking loop. A main-queue
+        // block alone can wait until mouse-up; schedule in those modes too.
+        RunLoop.main.perform(inModes: [.default, .eventTracking, .modalPanel]) { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                defer { self.scheduled = false }
+                guard var target = self.window else { return }
+                // Sheets own their input client. Resolve it at delivery time so
+                // a dismissed sheet or an old responder is never retained.
+                while let sheet = target.attachedSheet { target = sheet }
+                target.contentView?.layoutSubtreeIfNeeded()
+                guard let responder = target.firstResponder as? NSView,
+                      responder.window === target else { return }
+                self.invalidate(responder)
+            }
         }
     }
 }
