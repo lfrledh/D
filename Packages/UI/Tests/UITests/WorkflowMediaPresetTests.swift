@@ -132,6 +132,17 @@ struct WorkflowMediaPresetTests {
         window.contentView = host
         defer { window.close() }
 
+        var technicalOpened = false
+        for _ in 0..<40 {
+            host.layoutSubtreeIfNeeded()
+            if pressControl(host, identifier: "canvas-technical-toggle") {
+                technicalOpened = true
+                break
+            }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(technicalOpened, "The real inspector must expose its technical disclosure")
+
         var strings: Set<String> = []
         for _ in 0..<40 {
             host.layoutSubtreeIfNeeded()
@@ -139,9 +150,8 @@ struct WorkflowMediaPresetTests {
             if strings.contains("d.video.generate") && strings.contains("50") { break }
             try await Task.sleep(for: .milliseconds(10))
         }
-        // As in WorkflowLocalizationTests, offscreen AppKit exposes native controls but
-        // not all SwiftUI-drawn labels. The three preset labels and music heading remain
-        // mandatory foreground checks in D-NODE-QUALITY-01, not passes inferred here.
+        // Operation ID is intentionally behind the real technical disclosure.
+        // Preset labels still require foreground GUI checks.
         #expect(strings.contains("d.video.generate") && strings.contains("50"))
         #expect(controller.graphs == before)
         #expect(controller.runs.isEmpty && callbacks == 0)
@@ -274,5 +284,23 @@ struct WorkflowMediaPresetTests {
             if let view = object as? NSView { pending.append(contentsOf: view.subviews) }
         }
         return values
+    }
+
+    private func pressControl(_ root: NSView, identifier: String) -> Bool {
+        var pending: [NSObject] = [root]
+        var visited: Set<ObjectIdentifier> = []
+        while let object = pending.popLast(), visited.count < 2_000 {
+            guard visited.insert(ObjectIdentifier(object)).inserted else { continue }
+            if let element = object as? any NSAccessibilityProtocol,
+               element.accessibilityIdentifier() == identifier,
+               let button = object as? any NSAccessibilityButton {
+                return button.accessibilityPerformPress()
+            }
+            if let element = object as? any NSAccessibilityProtocol {
+                pending.append(contentsOf: (element.accessibilityChildren() ?? []).compactMap { $0 as? NSObject })
+            }
+            if let view = object as? NSView { pending.append(contentsOf: view.subviews) }
+        }
+        return false
     }
 }

@@ -218,6 +218,23 @@ struct WorkflowLocalizationTests {
             }
             return values
         }
+        func pressControl(_ root: NSView, identifier: String) -> Bool {
+            var pending: [NSObject] = [root]
+            var visited: Set<ObjectIdentifier> = []
+            while let object = pending.popLast(), visited.count < 2_000 {
+                guard visited.insert(ObjectIdentifier(object)).inserted else { continue }
+                if let element = object as? any NSAccessibilityProtocol,
+                   element.accessibilityIdentifier() == identifier,
+                   let button = object as? any NSAccessibilityButton {
+                    return button.accessibilityPerformPress()
+                }
+                if let element = object as? any NSAccessibilityProtocol {
+                    pending.append(contentsOf: (element.accessibilityChildren() ?? []).compactMap { $0 as? NSObject })
+                }
+                if let view = object as? NSView { pending.append(contentsOf: view.subviews) }
+            }
+            return false
+        }
 
         var editor: NSTextView?
         for _ in 0..<40 {
@@ -231,8 +248,18 @@ struct WorkflowLocalizationTests {
         mountedEditor.setSelectedRange(selectedRange)
         #expect(mountedEditor.selectedRange() == selectedRange)
 
-        // Public offscreen accessibility exposes menu labels reliably; SwiftUI-drawn
-        // button/text layers need foreground GUI verification (H26).
+        let connection = try #require(controller.graph?.connections.first)
+        #expect(pressControl(host, identifier: "workflow-connection-" + connection.id.uuidString))
+        host.layoutSubtreeIfNeeded()
+        let editorAfterEdge = try #require(
+            descendants(host).compactMap { $0 as? NSTextView }.first { $0.string == draft }
+        )
+        #expect(editorAfterEdge === mountedEditor)
+        #expect(editorAfterEdge.selectedRange() == selectedRange)
+        #expect(controller.selectedNodeID == input.id)
+
+        // Samples now live inside More. Open the real control before checking its items.
+        #expect(pressControl(host, identifier: "canvas-more"))
         var chineseChrome: Set<String> = []
         for _ in 0..<40 {
             host.layoutSubtreeIfNeeded()
@@ -247,6 +274,8 @@ struct WorkflowLocalizationTests {
         let nodeIDBefore = controller.selectedNodeID
         let runCountBefore = controller.runs.count
         try language.select("en")
+        host.layoutSubtreeIfNeeded()
+        #expect(pressControl(host, identifier: "canvas-more"))
 
         var chrome: Set<String> = []
         for _ in 0..<40 {

@@ -32,10 +32,15 @@ public struct WorkflowCanvasView: View {
     private let onPublishText: () -> Void
     private let onReturnText: (WorkflowAssetReference) -> Void
     private var nodeSizeObserver: ((UUID, CGSize) -> Void)?
+    private var scrollObserver: ((WorkflowCanvasViewContext, WorkflowCanvasScrollObservation) -> Void)?
 
     // Read-only layout observation; never rewrites stored node positions.
     func observingNodeSizes(_ observer: @escaping (UUID, CGSize) -> Void) -> Self {
         var copy = self; copy.nodeSizeObserver = observer; return copy
+    }
+
+    func observingScroll(_ observer: @escaping (WorkflowCanvasViewContext, WorkflowCanvasScrollObservation) -> Void) -> Self {
+        var copy = self; copy.scrollObserver = observer; return copy
     }
 
     @Environment(\.dLanguageStore) private var languageStore
@@ -46,6 +51,8 @@ public struct WorkflowCanvasView: View {
     @State private var zoom: CGFloat = 1
     @State private var scrollPosition = ScrollPosition()
     @State private var viewStates = WorkflowCanvasViewStateStore()
+    @State private var activeViewContext: WorkflowCanvasViewContext?
+    @State private var actualContentOffset = CGPoint.zero
     @State private var canvasInsertionPoint = CGPoint(x: 170, y: 130)
     @State private var pendingConnection: WorkflowPendingConnection?
     @State private var selectedConnectionID: UUID?
@@ -81,6 +88,9 @@ public struct WorkflowCanvasView: View {
         self.onDestination = onDestination
         self.onPublishText = onPublishText
         self.onReturnText = onReturnText
+        _activeViewContext = State(initialValue: WorkflowCanvasViewContext(projectID: controller.projectID,
+            rootGraphID: controller.rootGraph?.id,
+            bodyPath: controller.bodyPath.map(WorkflowCanvasBodyLocation.init)))
     }
 
     public var body: some View {
@@ -139,8 +149,8 @@ public struct WorkflowCanvasView: View {
             }
         }
         .onChange(of: viewContext) { _, next in restoreViewContext(next) }
+        .onAppear { activeViewContext = viewContext }
         .onChange(of: zoom) { _, _ in rememberViewContext() }
-        .onChange(of: scrollPosition.point) { _, _ in rememberViewContext() }
         .onChange(of: controller.selectedNodeID) { _, _ in rememberViewContext() }
     }
 
@@ -180,10 +190,17 @@ public struct WorkflowCanvasView: View {
             VStack(spacing: 0) {
                 WorkflowGraphSurface(controller: controller, graph: controller.graph, zoom: $zoom,
                     scrollPosition: $scrollPosition,
+                    viewContext: viewContext,
                     pendingConnection: $pendingConnection, selectedConnectionID: $selectedConnectionID,
                     readOnly: !controller.canEditCanvas,
                     onPlan: presentPlan, nodeSizeObserver: nodeSizeObserver,
-                    onVisibleCenter: { canvasInsertionPoint = $0 },
+                    onScrollObservation: { context, observation in
+                        guard context == viewContext, activeViewContext == context else { return }
+                        actualContentOffset = observation.contentOffset
+                        canvasInsertionPoint = observation.visibleRawCenter
+                        rememberViewContext()
+                        scrollObserver?(context, observation)
+                    },
                     onDropItem: dropItem,
                     onBindAsset: { project, asset, node in
                         guard controller.canEditCanvas, controller.projectID == project,
@@ -218,6 +235,7 @@ public struct WorkflowCanvasView: View {
                 })
                     .opacity(selectedConnectionID == nil ? 1 : 0)
                     .allowsHitTesting(selectedConnectionID == nil)
+                    .accessibilityHidden(selectedConnectionID != nil)
                 if let connection = controller.graph?.connections.first(where: { $0.id == selectedConnectionID }) {
                     WorkflowCanvasConnectionInspector(controller: controller, connection: connection,
                         onClose: { selectedConnectionID = nil })
@@ -387,21 +405,23 @@ public struct WorkflowCanvasView: View {
     }
 
     private func rememberViewContext() {
-        viewStates.save(WorkflowCanvasViewMemory(zoom: zoom,
-            scrollPoint: scrollPosition.point ?? .zero, selectedNodeID: controller.selectedNodeID),
-            for: viewContext)
+        viewStates.capture(zoom: zoom, contentOffset: actualContentOffset,
+            selectedNodeID: controller.selectedNodeID, for: viewContext)
     }
 
     private func restoreViewContext(_ context: WorkflowCanvasViewContext) {
         if let saved = viewStates.state(for: context) {
             zoom = WorkflowCanvasLayoutPolicy.clampedZoom(saved.zoom)
+            actualContentOffset = saved.scrollPoint
             scrollPosition.scrollTo(point: saved.scrollPoint)
             controller.selectedNodeID = controller.graph?.nodes.contains(where: { $0.id == saved.selectedNodeID }) == true
                 ? saved.selectedNodeID : nil
         } else {
             zoom = 1
+            actualContentOffset = .zero
             scrollPosition.scrollTo(point: .zero)
         }
+        activeViewContext = context
     }
 
     private var isReadOnly: Bool {
@@ -423,6 +443,11 @@ public struct WorkflowCanvasView: View {
     }
 }
 
+private struct WorkflowFixedToolPresentation: Identifiable {
+    let reference: WorkflowToolReference
+    var id: String { reference.id.uuidString + ":\(reference.version):" + reference.digest }
+}
+
 private struct WorkflowNodeInspector: View {
     let controller: WorkflowController
     let node: WorkflowNode?
@@ -439,6 +464,7 @@ private struct WorkflowNodeInspector: View {
     let onOpenTool: (WorkflowToolReference) -> Void
     @Environment(\.dLanguageStore) private var languageStore
     @State private var scopePresentation: WorkflowScopePresentation?
+    @State private var fixedToolPresentation: WorkflowFixedToolPresentation?
     @State private var pendingCall: WorkflowCallReference?
     @State private var showHistory = false
     @State private var showTechnical = false
@@ -463,7 +489,9 @@ private struct WorkflowNodeInspector: View {
                     }
                     if node.operationID.hasPrefix("d.control."), node.operationID != "d.control.human", let graphID = controller.graph?.id {
                         WorkflowControlEditor(node: Binding(get: { controller.graph?.nodes.first(where: { $0.id == node.id }) ?? node }, set: { controller.updateNode($0, in: graphID) }), tools: controller.tools, onOpenBody: { slot in
-                            if slot == "tool", case .invoke(let reference) = node.control { onOpenTool(reference) }
+                            if slot == "tool", case .invoke(let reference) = node.control {
+                                fixedToolPresentation = .init(reference: reference)
+                            }
                             else { onOpenBody(node.id, slot) }
                         }).id(node.id).disabled(readOnly)
                     }
@@ -499,6 +527,14 @@ private struct WorkflowNodeInspector: View {
         .accessibilityIdentifier("workflow-inspector")
         .sheet(item: $scopePresentation) { request in
             WorkflowScopePanel(controller: controller, graphID: request.graphID, revision: request.revision, nodeID: request.nodeID)
+        }
+        .sheet(item: $fixedToolPresentation) { request in
+            WorkflowFixedToolSheet(controller: controller, reference: request.reference,
+                onClose: { fixedToolPresentation = nil },
+                onCopy: {
+                    fixedToolPresentation = nil
+                    onOpenTool(request.reference)
+                })
         }
         .alert(workflowText(languageStore, "workflow.scope.rerunCall", fallback: "重新运行具体调用"),
                isPresented: Binding(get: { pendingCall != nil }, set: { if !$0 { pendingCall = nil } })) {
@@ -632,6 +668,12 @@ private struct WorkflowNodeInspector: View {
                 }
                 .accessibilityIdentifier("canvas-quick-use-" + node.id.uuidString)
             }
+            if case .invoke(let reference) = node.control {
+                Button(workflowText(languageStore, "canvas.tool.fixedTitle", fallback: "查看固定工具")) {
+                    fixedToolPresentation = .init(reference: reference)
+                }
+                .accessibilityIdentifier("canvas-view-fixed-tool-" + node.id.uuidString)
+            }
             DisclosureGroup(isExpanded: $showTechnical) {
                 WorkflowMetadataRow(workflowText(languageStore, "workflow.metadata.operation", fallback: "操作"),
                                     node.operationID)
@@ -640,6 +682,7 @@ private struct WorkflowNodeInspector: View {
             } label: {
                 Text(workflowText(languageStore, "canvas.identity.technical", fallback: "技术信息"))
             }
+            .accessibilityIdentifier("canvas-technical-toggle")
             HStack {
                 Button(workflowText(languageStore, "workflow.action.copy", fallback: "复制"),
                        systemImage: "doc.on.doc") { controller.copySelected() }
@@ -878,6 +921,98 @@ private struct WorkflowNodeInspector: View {
         case .text: onTextModel
         case nil: {}
         }
+    }
+}
+
+/// Inspecting a fixed tool is read-only. A separate explicit action may open an editable copy.
+private struct WorkflowFixedToolSheet: View {
+    let controller: WorkflowController
+    let reference: WorkflowToolReference
+    let onClose: () -> Void
+    let onCopy: () -> Void
+    @Environment(\.dLanguageStore) private var language
+
+    private var tool: WorkflowToolDefinition? {
+        WorkflowNodeIdentity.fixedTool(reference: reference, tools: controller.tools)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text(workflowText(language, "canvas.tool.fixedTitle", fallback: "查看固定工具"))
+                    .font(.title2.weight(.semibold))
+                Spacer()
+                Button(workflowText(language, "workflow.action.close", fallback: "关闭")) { onClose() }
+            }
+            Text("v\(reference.version) · \(reference.id.uuidString)")
+                .font(.caption.monospaced()).foregroundStyle(.secondary).textSelection(.enabled)
+            if let tool {
+                Text(tool.name).font(.headline)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 15) {
+                        WorkflowInspectorSection(workflowText(language, "canvas.tool.interface", fallback: "公开端口")) {
+                            if let interface = tool.graph.interface {
+                                Text(workflowText(language, "workflow.port.inputs", fallback: "输入"))
+                                    .font(.subheadline.weight(.semibold))
+                                ForEach(interface.inputs) { input in
+                                    Text(input.name + " · " + String(describing: input.type)
+                                        + (input.required ? " · 必选" : " · 可选"))
+                                        .font(.callout)
+                                }
+                                Text(workflowText(language, "workflow.port.outputs", fallback: "输出"))
+                                    .font(.subheadline.weight(.semibold))
+                                ForEach(interface.outputs) { output in
+                                    Text(output.name + " · " + output.port + " · "
+                                        + String(describing: output.schema)).font(.callout)
+                                }
+                            } else {
+                                Text(workflowText(language, "canvas.tool.noInterface", fallback: "未声明公开端口"))
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        WorkflowInspectorSection(workflowText(language, "canvas.tool.nodes", fallback: "内部节点")) {
+                            ForEach(tool.graph.nodes) { node in
+                                let definition = controller.registry.definition(for: node, tools: controller.tools)
+                                let identity = WorkflowNodeIdentity.resolve(node: node, definition: definition,
+                                    modelChoices: controller.modelChoices, assets: controller.availableAssets,
+                                    tools: controller.tools, language: language)
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(identity.title).font(.callout.weight(.medium))
+                                    Text(node.operationID).font(.caption.monospaced()).foregroundStyle(.secondary)
+                                    if let definition {
+                                        Text(definition.inputs.map(\.id).joined(separator: ", ") + " → "
+                                            + definition.outputs.map(\.id).joined(separator: ", "))
+                                            .font(.caption).foregroundStyle(.secondary)
+                                    }
+                                }
+                            }
+                        }
+                        WorkflowInspectorSection(workflowText(language, "canvas.tool.connections", fallback: "内部连接")) {
+                            if tool.graph.connections.isEmpty {
+                                Text(workflowText(language, "canvas.tool.noConnections", fallback: "没有内部连接"))
+                                    .foregroundStyle(.secondary)
+                            }
+                            ForEach(tool.graph.connections) { connection in
+                                Text(connection.sourceNode.uuidString.prefix(8) + "." + connection.sourcePort
+                                     + " → " + connection.targetNode.uuidString.prefix(8) + "." + connection.targetPort)
+                                    .font(.caption.monospaced()).textSelection(.enabled)
+                            }
+                        }
+                    }
+                }
+                HStack {
+                    Spacer()
+                    Button(workflowText(language, "canvas.tool.copy", fallback: "复制为可编辑流程"), action: onCopy)
+                        .disabled(!controller.canEditCanvas)
+                }
+            } else {
+                Label(workflowText(language, "canvas.tool.unavailable", fallback: "固定工具的版本或摘要不匹配，无法查看或复制。"),
+                      systemImage: "exclamationmark.triangle")
+                    .foregroundStyle(.orange)
+            }
+        }
+        .padding(20).frame(minWidth: 620, minHeight: 500)
+        .accessibilityIdentifier("canvas-fixed-tool-sheet")
     }
 }
 
