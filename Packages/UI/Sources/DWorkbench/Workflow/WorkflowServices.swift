@@ -263,7 +263,7 @@ struct WorkflowSaveFailure: LocalizedError {
             memoryBudgetBytes: gib == 0 ? nil : gib * 1_073_741_824)
         let (result, _) = try await infer(request, binding: binding)
         guard result.artifacts.count == 1, let artifact = result.artifacts.first, artifact.mediaType == mediaType else { throw WorkflowIssue("模型未交付预期的单个完整媒体。") }
-        let data = try await store.readWorkflowBackendMedia(artifact, request: request)
+        let data = try await (session.artifactStore ?? store).readWorkflowBackendMedia(artifact, request: request)
         pending[context.stepID] = Publication(id: UUID(), data: data, mediaType: mediaType, metadata: .init(), parents: parents, request: request,
             details: result.metadata.merging(["backend": binding.backendID, "modelIdentity": binding.identity]) { _, new in new })
         return try await publish(context)
@@ -347,6 +347,8 @@ struct WorkflowSaveFailure: LocalizedError {
             WorkflowCandidate(seed: String(seed &+ UInt64(offset)))
         }
         guard items.count == count else { throw WorkflowIssue("候选重试数量与原快照不符。") }
+        candidateProgress[context.stepID] = items
+        try await candidatesChanged(context.stepID, items)
         let parents = context.inputs.values.compactMap(\.asset)
         for i in items.indices {
             if items[i].asset != nil { continue }
@@ -390,7 +392,7 @@ struct WorkflowSaveFailure: LocalizedError {
                     guard result.artifacts.count == 1, let artifact = result.artifacts.first, artifact.mediaType == "image/png" else {
                         throw WorkflowIssue("后端未交付单张完整 PNG。")
                     }
-                    let data = try await store.readWorkflowBackendImage(artifact, runID: attempt)
+                    let data = try await (session.artifactStore ?? store).readWorkflowBackendImage(artifact, runID: attempt)
                     let metadata = MediaMetadata(width: input.width, height: input.height, bitDepth: 8, colorSpace: "sRGB")
                     pending[attempt] = Publication(id: UUID(), data: data, mediaType: "image/png", metadata: metadata,
                         parents: parents, request: request,
@@ -416,6 +418,43 @@ struct WorkflowSaveFailure: LocalizedError {
         candidateProgress.removeValue(forKey: context.stepID)
         return items
     }
+    /// Save-only recovery for the Quick caller. This path never resolves a model or submits inference.
+    public func retryQuickPublications(_ context: WorkflowExecutionContext) async throws -> [String: WorkflowValue] {
+        if context.node.operationID == "d.image.generate" {
+            guard var items = candidateProgress[context.stepID] else { throw WorkflowIssue("没有待保存的候选记录。") }
+            for index in items.indices {
+                let old = items[index]
+                if pending[old.attemptID] != nil {
+                    let ref = try await publish(.init(node: context.node, stepID: old.attemptID, inputs: context.inputs))
+                    items[index] = .init(id: old.id, attemptID: old.attemptID, asset: ref, seed: old.seed)
+                    candidateProgress[context.stepID] = items
+                } else if old.asset == nil, old.error == nil {
+                    items[index].error = "尚未执行；保存恢复不会自动开始新的推理。"
+                }
+            }
+            return ["output": .collection(items)]
+        }
+        guard ["d.model.language", "d.music.generate", "d.video.generate", "d.music.pitch"].contains(context.node.operationID) else {
+            throw WorkflowIssue("此操作不支持快速保存恢复。")
+        }
+        let ref = try await publish(context)
+        if context.node.operationID == "d.music.pitch" {
+            let input = try WorkflowExecution.inputAsset("input", kind: .audio, context: context)
+            let result = try JSONDecoder().decode(PitchAnalysisResult.self, from: await readData(ref))
+            return try WorkflowMusicOperations.pitchOutputs(input: input, reference: ref, result: result)
+        }
+        if context.node.operationID == "d.model.language" {
+            let text = try await readText(ref)
+            let value: WorkflowDatum
+            if context.node.parameters["outputMode"]?.string == "json" {
+                guard let schema = context.node.dataConfiguration?.schema else { throw WorkflowIssue("缺少输出结构。") }
+                value = try WorkflowStructuredText.parse(text, as: schema)
+            } else { value = .text(text) }
+            return ["raw": .asset(ref), "output": .data(value)]
+        }
+        return ["output": .asset(ref)]
+    }
+
     public func retainedCandidates(stepID: UUID) -> [WorkflowCandidate]? { candidateProgress[stepID] }
 
     public func transformImage(_ reference: WorkflowAssetReference, context: WorkflowExecutionContext) async throws -> WorkflowAssetReference {

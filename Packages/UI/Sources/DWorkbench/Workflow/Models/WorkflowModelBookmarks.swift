@@ -32,6 +32,7 @@ import Foundation
         }
         return table
     }
+    func imageIdentities() throws -> [String] { try installations().keys.sorted() }
     func installation(for identity: String) throws -> ModelID? {
         try installations()[identity].flatMap { UUID(uuidString: $0) }.map { ModelID(rawValue: $0) }
     }

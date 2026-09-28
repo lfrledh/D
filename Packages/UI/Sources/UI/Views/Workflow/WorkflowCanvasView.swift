@@ -28,6 +28,8 @@ public struct WorkflowCanvasView: View {
     private let onImportAsset: () -> Void
     private let onDropFile: (URL) -> Bool
     private let onQuickUse: ((WorkflowNode) -> Void)?
+    private let libraryContent: ((CGPoint) -> AnyView)?
+    private let onSharedAssetDrop: ((UUID, UUID, CGPoint, WorkflowCanvasInsertionTarget) -> Bool)?
     private let onDestination: () -> Void
     private let onPublishText: () -> Void
     private let onReturnText: (WorkflowAssetReference) -> Void
@@ -73,7 +75,9 @@ public struct WorkflowCanvasView: View {
         nodeTags: ModelNodeTagStore? = nil,
         onImportAsset: @escaping () -> Void = {},
         onDropFile: @escaping (URL) -> Bool = { _ in false },
-        onQuickUse: ((WorkflowNode) -> Void)? = nil
+        onQuickUse: ((WorkflowNode) -> Void)? = nil,
+        libraryContent: ((CGPoint) -> AnyView)? = nil,
+        onSharedAssetDrop: ((UUID, UUID, CGPoint, WorkflowCanvasInsertionTarget) -> Bool)? = nil
     ) {
         self.controller = controller
         self.nodeTags = nodeTags ?? ModelNodeTagStore()
@@ -84,7 +88,8 @@ public struct WorkflowCanvasView: View {
         self.onRecord = onRecord
         self.onImportAsset = onImportAsset
         self.onDropFile = onDropFile
-        self.onQuickUse = onQuickUse
+        self.onSharedAssetDrop = onSharedAssetDrop
+        self.onQuickUse = onQuickUse; self.libraryContent = libraryContent
         self.onDestination = onDestination
         self.onPublishText = onPublishText
         self.onReturnText = onReturnText
@@ -156,6 +161,9 @@ public struct WorkflowCanvasView: View {
 
     private func panels(height: CGFloat) -> some View {
         HStack(spacing: 0) {
+            Group {
+                if let libraryContent { libraryContent(canvasInsertionPoint) }
+                else {
             VStack(spacing: 0) {
                     Picker(workflowText(languageStore, "canvas.library.mode", fallback: "资料类型"), selection: $libraryMode) {
                         Text(workflowText(languageStore, "canvas.library.nodes", fallback: "节点"))
@@ -184,6 +192,8 @@ public struct WorkflowCanvasView: View {
                         .accessibilityHidden(libraryMode != .assets)
                     }
                 }
+                }
+            }
                 .frame(width: showLibrary ? WorkflowCanvasLayoutPolicy.libraryWidth : 0)
                 .clipped().allowsHitTesting(showLibrary).accessibilityHidden(!showLibrary)
             Divider().opacity(showLibrary ? 1 : 0)
@@ -254,6 +264,9 @@ public struct WorkflowCanvasView: View {
             controller.addNode(operationID: id, modelID: model, x: point.x, y: point.y)
             showInspector = true; return controller.errorMessage == nil
         case .asset(let project, let asset):
+            if controller.projectID != project, let onSharedAssetDrop, let target = controller.canvasInsertionTarget() {
+                return onSharedAssetDrop(project, asset, point, target)
+            }
             guard controller.projectID == project, controller.availableAssets.contains(where: { $0.id == asset }) else { return false }
             if controller.graph == nil { controller.addBlankGraph() }
             guard let target = controller.canvasInsertionTarget() else { return false }

@@ -225,14 +225,14 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
             selectedNodeID = result.invocationID; selectedNodeIDs = []
         } catch { errorMessage = error.localizedDescription }
     }
-    public func addTool(_ tool: WorkflowToolDefinition) {
+    public func addTool(_ tool: WorkflowToolDefinition, x: Double = 160, y: Double = 160) {
         guard let definition = registry.operation("d.control.invoke")?.definition else { return }
         do {
             guard tools.contains(tool), let interface = tool.graph.interface else { throw WorkflowIssue("工具版本不在项目中。") }
             var node = definition.makeNode(); node.title = tool.name
             node.control = .invoke(.init(id: tool.id, version: tool.version, digest: try WorkflowPlanCompiler.digest(tool)))
             node.dataConfiguration = .init(fields: interface.inputs)
-            edit { $0.nodes.append(node); $0.layout.append(.init(nodeID: node.id, x: 160, y: 160)) }; selectedNodeID = node.id
+            edit { $0.nodes.append(node); $0.layout.append(.init(nodeID: node.id, x: x, y: y)) }; selectedNodeID = node.id
         } catch { errorMessage = error.localizedDescription }
     }
     public func openToolCopy(_ reference: WorkflowToolReference) {
@@ -285,11 +285,62 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
         }
     }
 
+    /// Copy explicit settings and input snapshots; no runner is invoked by this command.
+    public func insertQuickSettings(_ draft: QuickDraft, target: WorkflowCanvasInsertionTarget) async throws {
+        guard isCurrent(target) else { throw WorkflowIssue("目标流程已改变，未添加到其他流程。") }
+        try registry.validate(draft.node)
+        var model = draft.node; model.id = UUID()
+        var inputs: [(WorkflowNode, String)] = []
+        for (port, value) in draft.inputs.sorted(by: { $0.key < $1.key }) {
+            guard let datum = value.datum, let definition = registry.operation("d.value.input")?.definition else {
+                throw WorkflowIssue("此输入必须先选择单项结果，不能隐式转换。")
+            }
+            var node = definition.makeNode(); node.title = port
+            node.dataConfiguration = .init(value: datum)
+            inputs.append((node, port))
+        }
+        edit { graph in
+            graph.nodes.append(model)
+            graph.layout.append(.init(nodeID: model.id, x: 400, y: 100))
+            for (index, input) in inputs.enumerated() {
+                graph.nodes.append(input.0)
+                graph.layout.append(.init(nodeID: input.0.id, x: 60, y: 100 + Double(index) * 180))
+                graph.connections.append(.init(sourceNode: input.0.id, targetNode: model.id, targetPort: input.1))
+            }
+        }
+        selectedNodeID = model.id
+        try await persist(); await onChange()
+    }
+
+    public func insertQuickResult(_ reference: WorkflowAssetReference, target: WorkflowCanvasInsertionTarget, x: Double = 80, y: Double = 100) async throws {
+        guard isCurrent(target), let definition = registry.operation("d.asset.reference")?.definition else { throw WorkflowIssue("目标流程已改变。") }
+        _ = try await services.store.workflowData(reference)
+        guard isCurrent(target) else { throw WorkflowIssue("读取期间流程已改变。") }
+        var node = definition.makeNode(); node.assetReference = reference
+        edit { $0.nodes.append(node); $0.layout.append(.init(nodeID: node.id, x: x, y: y)) }
+        guard graph?.nodes.contains(where: { $0.id == node.id }) == true else { throw WorkflowIssue("没有插入结果节点。") }
+        selectedNodeID = node.id
+        try await persist(); await onChange()
+    }
+
+    /// A structured published result is a frozen value input, not a generator or hidden execution.
+    public func insertQuickValue(_ value: WorkflowDatum, target: WorkflowCanvasInsertionTarget) async throws {
+        guard isCurrent(target), let definition = registry.operation("d.value.input")?.definition else { throw WorkflowIssue("目标流程已改变。") }
+        try value.validate()
+        for reference in value.assetReferences { _ = try await services.store.workflowData(reference) }
+        guard isCurrent(target) else { throw WorkflowIssue("读取期间流程已改变。") }
+        var node = definition.makeNode(); node.dataConfiguration = .init(value: value)
+        edit { $0.nodes.append(node); $0.layout.append(.init(nodeID: node.id, x: 80, y: 100)) }
+        guard graph?.nodes.contains(where: { $0.id == node.id }) == true else { throw WorkflowIssue("没有插入结果节点。") }
+        selectedNodeID = node.id
+        try await persist(); await onChange()
+    }
+
     public func canvasInsertionTarget() -> WorkflowCanvasInsertionTarget? {
         guard canEditCanvas, let projectID, let rootGraph, let graph else { return nil }
         return .init(projectID: projectID, rootID: rootGraph.id, revision: rootGraph.revision, bodyID: graph.id, path: bodyPath)
     }
-    private func isCurrent(_ target: WorkflowCanvasInsertionTarget) -> Bool {
+    public func isCurrent(_ target: WorkflowCanvasInsertionTarget) -> Bool {
         canEditCanvas && projectID == target.projectID && rootGraph?.id == target.rootID &&
         rootGraph?.revision == target.revision && graph?.id == target.bodyID && bodyPath == target.path
     }
@@ -493,6 +544,7 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
         do { try await persist(); progressMessage = "流程、人工决定与运行历史已保存。"; await onChange() }
         catch { errorMessage = error.localizedDescription }
     }
+    public func saveExplicitEdits() async throws { try await persist(); await onChange() }
     public func run(target: UUID, only: Bool) async {
         guard !externalOperationBusy() else { errorMessage = "请先结束录音或恢复保存，再运行流程。"; return }
         guard bodyPath.isEmpty else { errorMessage = "请返回外层运行；不能把局部模板当作独立调用。"; return }

@@ -7,9 +7,14 @@ import UI
 /// One application owns the library and presentation observers, including with no project open.
 @MainActor @Observable
 final class WorkbenchBootstrap {
+    private(set) var quickModel: WorkbenchModel?
+    private(set) var quick: QuickGenerationController?
+    private var sharedSession: WorkbenchSession?
     private(set) var model: WorkbenchModel?
     private(set) var libraryModel: ModelLibraryModel?
     private(set) var nodeTags: ModelNodeTagStore?
+    private(set) var sharedLibrary: SharedLibraryStore?
+    private(set) var sharedLibraryIssue: String?
     private(set) var languageStore = UILanguageStore()
     private(set) var startupError: String?
     private(set) var audioEngineIssue: String?
@@ -45,6 +50,8 @@ final class WorkbenchBootstrap {
             languageStore = UILanguageStore(settings: settings, directory: libraryDirectory.deletingLastPathComponent()
                 .appendingPathComponent("LanguagePacks", isDirectory: true))
             nodeTags = ModelNodeTagStore(settings: settings)
+            do { sharedLibrary = try SharedLibraryStore(fileURL: libraryDirectory.deletingLastPathComponent().appendingPathComponent("shared-library.json")) }
+            catch { sharedLibraryIssue = "资料整理记录无法读取，已保留原件：" + error.localizedDescription }
             let consent = AudioModelUsePermission(settings: settings)
             let accessRoot = libraryDirectory.deletingLastPathComponent()
                 .appendingPathComponent("AudioProcessAccess", isDirectory: true)
@@ -95,16 +102,46 @@ final class WorkbenchBootstrap {
                 audioEngineIssue = [audioEngineIssue, "音高识别暂不可用：" + issue].compactMap { $0 }.joined(separator: "\n")
             }
             let library = try await ModelLibrary(stateDirectory: libraryDirectory)
-            let model = WorkbenchModel(sessionFactory: { artifacts in
-                try await AppSessionFactory.makeSession(artifactDirectory: artifacts,
-                    bundledAudioEngine: engine, audioConsent: consent,
-                    bundledMusicEngine: musicEngine, musicConsent: musicConsent, audioAccessRoot: accessRoot,
-                    bundledVideoEngine: videoEngine, videoAccessRoot: videoAccessRoot,
-                    bundledPitchEngine: pitchAvailability.engine)
-            }, settings: settings, modelLibrary: library,
-                // Original capture/import/playback are independent of optional model deployment.
-                // H09 hardware recording, playback, export and cold reopen are accepted.
-                audioEnabled: true, audioRecordingEnabled: true)
+            let quickURL = libraryDirectory.deletingLastPathComponent().appendingPathComponent("Quick Creations.dproject", isDirectory: true)
+            let quickStore: ProjectStore
+            do {
+                if FileManager.default.fileExists(atPath: quickURL.path) { quickStore = try await ProjectStore.open(at: quickURL) }
+                else { quickStore = try await ProjectStore.create(at: quickURL, name: "快速创作") }
+            } catch {
+                // A damaged automatic record never becomes an empty replacement or blocks existing named projects.
+                startupError = "快速创作记录暂不可用，原件保留；仍可打开已有项目。\n" + error.localizedDescription
+                self.library = library
+                let observer = ModelLibraryModel(library: library); self.libraryModel = observer
+                self.model = WorkbenchModel(sessionFactory: { artifactDirectory in
+                    try await AppSessionFactory.makeSession(artifactDirectory: artifactDirectory,
+                        bundledAudioEngine: engine, audioConsent: consent, bundledMusicEngine: musicEngine,
+                        musicConsent: musicConsent, audioAccessRoot: accessRoot, bundledVideoEngine: videoEngine,
+                        videoAccessRoot: videoAccessRoot, bundledPitchEngine: pitchAvailability.engine)
+                }, settings: settings, modelLibrary: library, audioEnabled: true, audioRecordingEnabled: true)
+                observer.start()
+                if let pendingProjectURL { self.pendingProjectURL = nil; await self.model?.openProject(at: pendingProjectURL) }
+                return
+            }
+            let shared = try await AppSessionFactory.makeSession(artifactDirectory: quickStore.artifactDirectory,
+                bundledAudioEngine: engine, audioConsent: consent,
+                bundledMusicEngine: musicEngine, musicConsent: musicConsent, audioAccessRoot: accessRoot,
+                bundledVideoEngine: videoEngine, videoAccessRoot: videoAccessRoot,
+                bundledPitchEngine: pitchAvailability.engine)
+            let borrowed = shared.borrowed(artifactStore: quickStore)
+            let quickModel = WorkbenchModel(sessionFactory: { _ in borrowed }, settings: settings,
+                modelLibrary: library, audioEnabled: true, audioRecordingEnabled: true)
+            try await quickModel.projectSession.activateInternalWorkspace(quickStore)
+            quickModel.projectSession.refreshWorkflowModels()
+            let quick = QuickGenerationController(store: quickStore) { [weak quickModel] in
+                guard let quickModel else { throw WorkflowIssue("快速工作区已关闭。") }
+                return try quickModel.projectSession.makeExplicitOperationServices()
+            }
+            await quick.load()
+            let model = WorkbenchModel(sessionFactory: { _ in borrowed }, settings: settings,
+                modelLibrary: library, audioEnabled: true, audioRecordingEnabled: true)
+            self.sharedSession = shared
+            self.quickModel = quickModel
+            self.quick = quick
             let observer = ModelLibraryModel(library: library)
             self.library = library
             self.model = model
@@ -144,7 +181,29 @@ final class WorkbenchBootstrap {
     func prepareLibraryForTermination() async -> Bool {
         isTerminating = true
         do {
+            if let quick, quick.isRunning {
+                let alert = NSAlert()
+                alert.messageText = "快速生成仍在运行"
+                alert.informativeText = "可以等待完成后退出，或取消本次生成。已保存的创作会保留。"
+                alert.addButton(withTitle: "等待完成并退出")
+                alert.addButton(withTitle: "继续使用 D")
+                alert.addButton(withTitle: "取消生成并退出")
+                let response = alert.runModal()
+                if response == .alertSecondButtonReturn { isTerminating = false; return false }
+                if response == .alertThirdButtonReturn { await quick.cancel() }
+                else { await quick.waitForCompletion() }
+            }
+            try await quick?.flush()
+            guard quick?.pendingSaveRunID == nil else { throw WorkflowIssue("快速生成仍有待保存结果，请恢复保存后退出。") }
+            guard await quickModel?.projectSession.prepareInternalForTermination() != false else { isTerminating = false; return false }
             try await library?.shutdown()
+            await sharedSession?.shutdown()
+            // All fallible save gates have accepted Quit; process termination releases the
+            // automatic Store's descriptor/lock. Do not close it before another owner can refuse.
+            // Compute has drained. Cleanup only owns unpublished
+            // temporaries; failure must not return the user to a dead runtime/closed Store.
+            do { try await sharedSession?.cleanup() }
+            catch { NSLog("D: shutdown completed; temporary cleanup pending: %@", error.localizedDescription) }
             libraryModel?.stop()
             return true
         } catch {

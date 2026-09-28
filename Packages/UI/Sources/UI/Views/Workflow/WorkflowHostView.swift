@@ -7,6 +7,9 @@ import UniformTypeIdentifiers
 struct WorkflowHostView: View {
     let model: WorkbenchModel
     let nodeTags: ModelNodeTagStore
+    var onQuickUse: ((WorkflowNode) -> Void)? = nil
+    var libraryContent: ((CGPoint) -> AnyView)? = nil
+    var onSharedAssetDrop: ((UUID, UUID, CGPoint, WorkflowCanvasInsertionTarget) -> Bool)? = nil
     @Environment(\.dLanguageStore) private var languageStore
     var body: some View {
         Group {
@@ -25,7 +28,7 @@ struct WorkflowHostView: View {
                     onDropFile: { url in
                         guard model.projectSession.workflow === controller, controller.canEditCanvas else { return false }
                         Task { await importAssetURL(url, controller: controller) }; return true
-                    })
+                    }, onQuickUse: onQuickUse, libraryContent: libraryContent, onSharedAssetDrop: onSharedAssetDrop)
                     .safeAreaInset(edge: .bottom) {
                         WorkflowCaptureRecoveryView(model: model)
                         if model.projectSession.workflowRecordingNodeID != nil {

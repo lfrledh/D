@@ -292,7 +292,9 @@ public final class ProjectSession {
         return Array(entries.prefix(10))
     }
     public var hasLegacyRecentProject: Bool { settings.data(forKey: Self.projectBookmarkKey) != nil }
+    private var isInternalWorkspace = false
     private func rememberProject() {
+        guard !isInternalWorkspace else { return }
         guard let manifest, let bookmark = projectLease?.bookmark else { return }
         var entries = recentProjects.filter { $0.id != manifest.id }
         entries.insert(RecentProject(id: manifest.id, name: manifest.name, bookmark: bookmark), at: 0)
@@ -738,8 +740,12 @@ public final class ProjectSession {
         session = createdSession
         projectLease = lease
         projectURL = lease.url
-        settings.set(lease.bookmark, forKey: Self.projectBookmarkKey)
+        if !isInternalWorkspace { settings.set(lease.bookmark, forKey: Self.projectBookmarkKey) }
         manifest = await candidate.snapshot()
+        if let owner = createdSession.artifactStore, owner !== candidate {
+            do { manifest = try await candidate.recoverSharedRuntimeArtifacts(from: owner) }
+            catch { errorMessage = "共享计算产物尚未恢复，原文件保留：" + error.localizedDescription }
+        }
         lastDocuments = [:]
         rememberProject()
         installAudioController(for: candidate)
@@ -801,6 +807,27 @@ public final class ProjectSession {
         } else if createdSession.videoBackendID == nil {
             videoModelStatus = "本地视频引擎尚未配置；已有视频仍可预览和导出"
         }
+    }
+
+    /// Automatic creation history uses the existing Store and remains open while named projects change.
+    public func activateInternalWorkspace(_ candidate: ProjectStore) async throws {
+        guard store == nil else { throw ProjectStoreError.invalidTransition }
+        isInternalWorkspace = true
+        let lease = try await access.acquire(selected: candidate.rootURL)
+        do { try await activate(candidate, lease: lease) }
+        catch { await access.release(lease); throw error }
+    }
+
+    public var currentStore: ProjectStore? { store }
+    public func makeExplicitOperationServices() throws -> WorkflowServices {
+        guard let store, let session, !closePending else { throw WorkflowIssue("工作区尚未准备。") }
+        try rememberCurrentWorkflowModels()
+        return WorkflowServices(store: store, session: session,
+            defaultIdentity: { [weak self] in self?.defaultWorkflowModel($0) ?? "" },
+            resolveModel: { [weak self] kind, identity in
+                guard let self, self.store === store else { throw WorkflowIssue("工作区已关闭。") }
+                return try await self.resolveWorkflowModel(kind, identity: identity, session: session)
+            })
     }
 
     /// M0 composition uses the same project/store/runtime; it does not construct a second model engine.
@@ -917,47 +944,54 @@ public final class ProjectSession {
                 release: { await access.release(lease) })
         } catch { await access.release(lease); throw error }
     }
+    /// Registration has explicit identity and does not depend on a selected graph node.
+    public func registerExplicitModel(at url: URL, kind: WorkflowModelKind) async throws -> WorkflowModelChoice {
+        guard let session, let owner = store, !isChangingProject, !closePending else { throw WorkflowIssue("工作区未就绪。") }
+        let identity: String
+        if kind == .image, let library = modelLibrary {
+            let id = try await library.registerExisting(at: url)
+            let lease = try await library.acquire(id)
+            identity = "image:" + (lease.reference.revision ?? id.description)
+            await library.release(lease)
+            guard store === owner, !closePending else { throw WorkflowIssue("工作区已切换。") }
+            try WorkflowModelBookmarks(settings: settings).rememberInstallation(identity: identity, id: id)
+        } else {
+            let lease = try await access.acquire(selected: url)
+            do {
+                let revision: String?
+                switch kind {
+                case .text:
+                    guard let validate = session.validateTextModel else { throw WorkflowIssue("文字实现未安装。") }
+                    revision = try await validate(lease.url).revision
+                case .music:
+                    guard let validate = session.validateMusicModel else { throw WorkflowIssue("MRT2 实现未安装。") }
+                    revision = try await validate(lease.url).revision
+                case .video:
+                    guard let validate = session.validateVideoModel else { throw WorkflowIssue("T2V 实现未安装。") }
+                    revision = try await validate(lease.url).revision
+                case .pitch: throw WorkflowIssue("SwiftF0 使用已准备的固定资源，不能替换为其他模型。")
+                case .image: try await session.validateModel(lease.url); revision = nil
+                }
+                guard store === owner, !closePending else { throw WorkflowIssue("工作区已切换。") }
+                identity = kind.rawValue + ":" + (revision ?? lease.url.lastPathComponent)
+                try WorkflowModelBookmarks(settings: settings).remember(identity: identity, kind: kind,
+                    name: lease.url.lastPathComponent, bookmark: lease.bookmark)
+                await access.release(lease)
+            } catch { await access.release(lease); throw error }
+        }
+        let choice = WorkflowModelChoice(id: identity, kind: kind, displayName: url.lastPathComponent)
+        if !explicitModelChoices.contains(where: { $0.id == identity }) { explicitModelChoices.append(choice) }
+        refreshWorkflowModels()
+        return choice
+    }
+    public private(set) var explicitModelChoices: [WorkflowModelChoice] = []
+    public var selectedWorkflowImageIdentity: String? { selectedModelRevision.map { "image:" + $0 } }
     public func registerWorkflowModel(at url: URL, target: WorkflowModelSelectionTarget, controller: WorkflowController) async {
-        guard workflow === controller, controller.isCurrent(target), !isBusy, !isChangingProject, !closePending,
-              let session else { return }
+        guard workflow === controller, controller.isCurrent(target), !isBusy, !isChangingProject, !closePending else { return }
         do {
-            let identity: String
-            if target.kind == .image, let library = modelLibrary {
-                let id = try await library.registerExisting(at: url)
-                let lease = try await library.acquire(id)
-                identity = "image:" + (lease.reference.revision ?? id.description)
-                await library.release(lease)
-                guard workflow === controller, controller.isCurrent(target), !closePending else { return }
-                try WorkflowModelBookmarks(settings: settings).rememberInstallation(identity: identity, id: id)
-            } else {
-                let lease = try await access.acquire(selected: url)
-                do {
-                    let revision: String?
-                    if target.kind == .text {
-                        guard let validate = session.validateTextModel else { throw WorkflowIssue("文字实现未安装。") }
-                        revision = try await validate(lease.url).revision
-                    } else if target.kind == .music {
-                        guard let validate = session.validateMusicModel else { throw WorkflowIssue("MRT2 实现未安装。") }
-                        revision = try await validate(lease.url).revision
-                    } else if target.kind == .video {
-                        guard let validate = session.validateVideoModel else { throw WorkflowIssue("T2V 实现未安装。") }
-                        revision = try await validate(lease.url).revision
-                    } else if target.kind == .pitch {
-                        throw WorkflowIssue("音高资源由开发资源准备步骤提供；不会替换内嵌资源。")
-                    } else {
-                        try await session.validateModel(lease.url)
-                        revision = nil
-                    }
-                    guard workflow === controller, controller.isCurrent(target), !closePending else { await access.release(lease); return }
-                    identity = target.kind.rawValue + ":" + (revision ?? lease.url.lastPathComponent)
-                    try WorkflowModelBookmarks(settings: settings).remember(identity: identity, kind: target.kind,
-                        name: lease.url.lastPathComponent, bookmark: lease.bookmark)
-                    await access.release(lease)
-                } catch { await access.release(lease); throw error }
-            }
+            let choice = try await registerExplicitModel(at: url, kind: target.kind)
             guard workflow === controller, controller.isCurrent(target), !closePending else { return }
-            controller.bindModel(identity, to: target)
-            refreshWorkflowModels()
+            controller.bindModel(choice.id, to: target)
         } catch { guard workflow === controller else { return }; report(error, context: "节点模型未绑定") }
     }
     public func bindSelectedWorkflowModel() {
@@ -966,22 +1000,49 @@ public final class ProjectSession {
         let id = defaultWorkflowModel(target.kind)
         if !id.isEmpty { controller.bindModel(id, to: target) }
     }
+    public private(set) var explicitModelReadiness: [String: SharedLibraryReadiness] = [:]
+    public private(set) var explicitModelIssues: [String: String] = [:]
+    public func checkExplicitModelReadiness() async {
+        guard let session, let capturedStore = store else { return }
+        let choices = explicitModelChoices
+        for choice in choices {
+            do {
+                let binding = try await resolveWorkflowModel(choice.kind, identity: choice.id, session: session)
+                await binding.release()
+                guard store === capturedStore else { return }
+                explicitModelReadiness[choice.id] = .available; explicitModelIssues[choice.id] = nil
+            } catch {
+                guard store === capturedStore else { return }
+                explicitModelReadiness[choice.id] = .unavailable; explicitModelIssues[choice.id] = error.localizedDescription
+            }
+        }
+    }
     public func refreshWorkflowModels() {
         workflow?.textModelDescription = textModelStatus
         workflow?.imageModelDescription = modelStatus
         do {
             try rememberCurrentWorkflowModels()
-            workflow?.modelChoices = try WorkflowModelBookmarks(settings: settings).entries().map {
+            var choices: [WorkflowModelChoice] = try WorkflowModelBookmarks(settings: settings).entries().map {
                 .init(id: $0.identity, kind: $0.kind, displayName: $0.name)
             }
+            for identity in try WorkflowModelBookmarks(settings: settings).imageIdentities() where !choices.contains(where: { $0.id == identity }) {
+                choices.append(.init(id: identity, kind: .image, displayName: "FLUX.2 Klein 4B · q8"))
+            }
+            for choice in explicitModelChoices where !choices.contains(where: { $0.id == choice.id }) { choices.append(choice) }
             if let revision = selectedModelRevision, !revision.isEmpty,
-               workflow?.modelChoices.contains(where: { $0.id == "image:" + revision }) == false {
-                workflow?.modelChoices.append(.init(id: "image:" + revision, kind: .image, displayName: "FLUX.2 Klein · 已登记版本"))
+               !choices.contains(where: { $0.id == "image:" + revision }) {
+                choices.append(.init(id: "image:" + revision, kind: .image, displayName: "FLUX.2 Klein · 已登记版本"))
             }
             if let ref = session?.pitchModel {
-                workflow?.modelChoices.append(.init(id: "pitch:" + (ref.revision ?? ref.directory.lastPathComponent), kind: .pitch,
+                choices.append(.init(id: "pitch:" + (ref.revision ?? ref.directory.lastPathComponent), kind: .pitch,
                     displayName: "SwiftF0 0.1.2 · 固定开发资源"))
             }
+            choices = choices.map { choice in
+                let name = ModelNodeCatalog.entries.first { choice.id == choice.kind.rawValue + ":" + $0.revision }?.title
+                return .init(id: choice.id, kind: choice.kind, displayName: name ?? choice.displayName)
+            }
+            explicitModelChoices = choices
+            workflow?.modelChoices = choices
         } catch { workflow?.errorMessage = error.localizedDescription }
     }
 
@@ -1301,7 +1362,12 @@ public final class ProjectSession {
         case .completed(let result):
             let origin = manifest?.jobs.first(where: { $0.id == id })?.documentID
             let selection = selectionVersion
-            applyManifest(try await store.complete(id: id, result: result))
+            let localResult: InferenceResult
+            if let owner = session?.artifactStore, owner !== store,
+               let request = manifest?.jobs.first(where: { $0.id == id })?.request {
+                localResult = try await store.copyRuntimeResult(result, request: request, from: owner)
+            } else { localResult = result }
+            applyManifest(try await store.complete(id: id, result: localResult))
             if automaticResultSelectionEnabled, activeDocument?.kind == .image, !showingAllArtworks, origin == activeDocumentID, selection == selectionVersion,
                let assetID = manifest?.jobs.first(where: { $0.id == id })?.artifactIDs.first {
                 await selectAsset(assetID)
@@ -1360,7 +1426,9 @@ public final class ProjectSession {
                 phases.removeValue(forKey: id)
                 liveStates.removeValue(forKey: id)
             }
-            applyManifest(try await store.recoverPublishedArtifacts())
+            if let owner = session?.artifactStore, owner !== store {
+                applyManifest(try await store.recoverSharedRuntimeArtifacts(from: owner))
+            } else { applyManifest(try await store.recoverPublishedArtifacts()) }
             await refreshAssets()
         } catch { report(error, context: "恢复尚未完成，请确认项目磁盘可用且允许写入") }
     }
@@ -1869,6 +1937,28 @@ public final class ProjectSession {
     }
 
     public func closeProject() async { _ = await requestClose() }
+
+    /// App termination's reversible preflight for the automatic workspace. Keep its Store
+    /// and borrowed runtime usable until every other application owner has accepted Quit.
+    public func prepareInternalForTermination() async -> Bool {
+        guard isInternalWorkspace, !isRegisteringTextModel, !isRegisteringAudioModel,
+              !isRegisteringVideoModel, !isChangingProject, !closePending,
+              workflow?.hasPendingSaves != true, text?.hasPendingCandidate != true else { return false }
+        closePending = true; isChangingProject = true
+        defer { closePending = false; isChangingProject = false; workflow?.cancelClosing(); audio?.resumeAdmissions() }
+        guard await audio?.prepareForNavigation() != false, await drainForClose() else { return false }
+        do {
+            try await workflow?.prepareForClose()
+            if let store {
+                try await flushDraft(to: store)
+                for (id, outcome) in pendingSaves {
+                    try await persist(id: id, outcome: outcome, store: store)
+                    pendingSaves.removeValue(forKey: id)
+                }
+            }
+            return true
+        } catch { report(error, context: "退出前保存未完成"); return false }
+    }
 
     /// Used by project switching and native window/application close delegates.
     public func requestClose(decision: ProjectCloseDecision? = nil) async -> Bool {

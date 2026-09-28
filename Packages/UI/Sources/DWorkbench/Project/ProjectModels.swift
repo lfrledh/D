@@ -73,6 +73,8 @@ public struct MediaMetadata: Codable, Sendable, Equatable {
 }
 
 public struct ProjectAsset: Codable, Sendable, Equatable, Identifiable {
+    /// Typed display projection of the Store's admitted format; never parses UI text.
+    public var workflowContentKind: WorkflowDataKind? { WorkflowMediaFormat.descriptor(mediaType)?.kind }
     public var id: UUID
     public var jobID: UUID?
     public var relativePath: String

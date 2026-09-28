@@ -42,6 +42,9 @@ public actor ProjectStore {
         let archive: WorkflowArchive
     }
     private var validatedWorkflowRead: ValidatedWorkflowRead?
+    private var quickValidatedBytes: Data?
+    private var quickPendingBytes: Data?
+    private var quickPendingBaseRevision: UInt64?
 
     private init(rootURL: URL, rootFD: Int32, lockFD: Int32, manifest: ProjectManifest, invalidatedPitchRuns: Set<UUID> = []) {
         self.rootURL = rootURL
@@ -3245,7 +3248,7 @@ extension ProjectStore {
                               parents: [WorkflowAssetReference], operationID: String, stepID: UUID?,
                               request: InferenceRequest?, details: [String: String], assetID: UUID,
                               checkpoint: (@Sendable (WorkflowStoreCheckpoint) throws -> Void)?,
-                              verifiedVideo: VideoAssetMetadata? = nil) throws -> WorkflowPublishedAsset {
+                              verifiedVideo: VideoAssetMetadata? = nil, copiedAudioOrigin: AudioOrigin? = nil) throws -> WorkflowPublishedAsset {
         try checkLocation()
         var metadata = metadata
         var archive = try editableWorkflow()
@@ -3294,7 +3297,7 @@ extension ProjectStore {
                 }
                 origin = .modelGenerated
             } else { origin = .programGenerated }
-            metadata = .init(audio: .init(format: inspection.format, contentSHA256: hash, origin: origin))
+            metadata = .init(audio: .init(format: inspection.format, contentSHA256: hash, origin: copiedAudioOrigin ?? origin))
         } else if format.kind == .video {
             guard let verifiedVideo, verifiedVideo.contentSHA256 == hash,
                   verifiedVideo.byteCount == data.count else { throw WorkflowIssue("视频必须先经过完整媒体检查。") }
@@ -3649,5 +3652,232 @@ extension ProjectStore {
             _ = unlinkat(owner, temporary.lastPathComponent, AT_REMOVEDIR); Darwin.close(owner)
         }
         return receipt
+    }
+}
+
+extension ProjectStore {
+    /// App-supplied owner plus existing request/path validators grant access, never an arbitrary URL.
+    public func copyRuntimeResult(_ result: InferenceResult, request: InferenceRequest,
+                                  from owner: ProjectStore) async throws -> InferenceResult {
+        guard owner !== self else { return result }
+        let payloads = try await owner.runtimePayloads(result, request: request)
+        try checkLocation()
+        guard let job = manifest.jobs.first(where: { $0.id == request.id }), job.request == request,
+              (!job.state.isTerminal || (job.state == .interrupted && job.artifactIDs.isEmpty)) else { throw ProjectStoreError.invalidTransition }
+        for payload in payloads {
+            let parts = try ProjectFiles.components(payload.path)
+            var directory = dup(rootFD)
+            guard directory >= 0 else { throw ProjectFiles.error() }
+            defer { Darwin.close(directory) }
+            for component in parts.dropLast() {
+                let next = try ProjectFiles.openOrCreateDirectory(component, in: directory)
+                Darwin.close(directory); directory = next
+            }
+            let name = parts.last!
+            var info = stat()
+            if fstatat(directory, name, &info, AT_SYMLINK_NOFOLLOW) == 0 {
+                guard try ProjectFiles.read(relative: name, in: directory, limit: payload.data.count) == payload.data else {
+                    throw ProjectStoreError.externalModification
+                }
+                guard fsync(directory) == 0 else { throw ProjectFiles.error() }
+            } else {
+                guard errno == ENOENT else { throw ProjectFiles.error() }
+                try ProjectFiles.publish(in: directory, name: name, replacing: false) { fd in
+                    try payload.data.withUnsafeBytes { try ProjectFiles.writeAll($0, to: fd) }
+                }
+            }
+        }
+        var metadata = result.metadata
+        for payload in payloads { if let key = payload.metadataKey { metadata[key] = rootURL.appendingPathComponent(payload.path).path } }
+        return .init(artifacts: payloads.compactMap { payload in
+            payload.mediaType.map { ArtifactReference(url: rootURL.appendingPathComponent(payload.path), mediaType: $0) }
+        }, metadata: metadata)
+    }
+    /// Reuse the destination's durable frozen requests; never claim a recovered file proves a completed run.
+    public func recoverSharedRuntimeArtifacts(from owner: ProjectStore) async throws -> ProjectManifest {
+        guard owner !== self else { return try await recoverPublishedArtifacts() }
+        let requests = manifest.jobs.filter { $0.state == .interrupted && $0.artifactIDs.isEmpty }.map(\.request)
+        for request in requests {
+            for result in try await owner.unregisteredRuntimeResults(for: request) {
+                _ = try await copyRuntimeResult(result, request: request, from: owner)
+            }
+        }
+        return try await recoverPublishedArtifacts()
+    }
+    private func unregisteredRuntimeResults(for request: InferenceRequest) throws -> [InferenceResult] {
+        try checkLocation()
+        let suffix: String, type: String
+        switch request.input {
+        case .image: suffix = "image.png"; type = "image/png"
+        case .audio: suffix = "job/output.wav"; type = "audio/wav"
+        case .video: suffix = "output.mp4"; type = "video/mp4"
+        default: return []
+        }
+        let tasks = try ProjectFiles.openRelativeDirectory("Tasks", in: rootFD); defer { Darwin.close(tasks) }
+        var results: [InferenceResult] = []
+        for name in try ProjectFiles.directoryNames(tasks) where ProjectFiles.taskOwner(name) == request.id {
+            let artifact = ArtifactReference(url: rootURL.appendingPathComponent("Tasks/" + name + "/" + suffix), mediaType: type)
+            // Only an owned final leaf counts; interrupted partial files remain untouched.
+            guard FileManager.default.fileExists(atPath: artifact.url.path) else { continue }
+            let result = InferenceResult(artifacts: [artifact])
+            _ = try runtimePayloads(result, request: request)
+            results.append(result)
+        }
+        return results
+    }
+    private struct RuntimePayload: Sendable {
+        let path: String; let data: Data; let mediaType: String?; let metadataKey: String?
+    }
+    private func runtimePayloads(_ result: InferenceResult, request: InferenceRequest) throws -> [RuntimePayload] {
+        try checkLocation()
+        var payloads: [RuntimePayload] = []
+        for artifact in result.artifacts {
+            let data: Data
+            if case .image = request.input { data = try readWorkflowBackendImage(artifact, runID: request.id) }
+            else { data = try readWorkflowBackendMedia(artifact, request: request) }
+            // The read above checked exact type-specific layout, run owner and no-follow access.
+            let relative = String(artifact.url.path.dropFirst(rootURL.path.count + 1))
+            payloads.append(.init(path: relative, data: data, mediaType: artifact.mediaType, metadataKey: nil))
+        }
+        for key in ["recordPath", "mediaRecordPath"] {
+            if let value = result.metadata[key] {
+                let url = URL(fileURLWithPath: value)
+                guard url.standardizedFileURL == url, url.path.hasPrefix(rootURL.path + "/") else { throw ProjectStoreError.unsafePath(value) }
+                let relative = String(value.dropFirst(rootURL.path.count + 1)), parts = try ProjectFiles.components(relative)
+                guard (3...4).contains(parts.count), parts[0] == "Tasks", ProjectFiles.taskOwner(parts[1]) == request.id,
+                      parts.last?.hasSuffix(".json") == true,
+                      parts.count == 3 || parts[2] == "job" else { throw ProjectStoreError.unsafePath(value) }
+                let data = try ProjectFiles.read(relative: relative, in: rootFD, limit: 8 * 1_024 * 1_024)
+                payloads.append(.init(path: relative, data: data, mediaType: nil, metadataKey: key))
+            }
+        }
+        return payloads
+    }
+}
+
+extension ProjectStore {
+    public func quickCreationState() throws -> QuickCreationState {
+        try checkLocation()
+        var info = stat()
+        if fstatat(rootFD, "quick-creation.json", &info, AT_SYMLINK_NOFOLLOW) != 0 {
+            guard errno == ENOENT else { throw ProjectFiles.error() }
+            quickValidatedBytes = nil
+            return QuickCreationState()
+        }
+        let data = try ProjectFiles.read(relative: "quick-creation.json", in: rootFD, limit: 16 * 1_024 * 1_024)
+        let state = try JSONDecoder().decode(QuickCreationState.self, from: data)
+        // Unknown schema-one fields must not disappear during a later normal save.
+        let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
+        let reencoded = try encoder.encode(state)
+        func normalized(_ value: Data) throws -> Data {
+            try JSONSerialization.data(withJSONObject: JSONSerialization.jsonObject(with: value), options: [.sortedKeys, .fragmentsAllowed])
+        }
+        guard try normalized(data) == normalized(reencoded) else { throw WorkflowIssue("快速记录含有不能安全保存的扩展或数值，原件未改。") }
+        try state.validate(); quickValidatedBytes = data; return state
+    }
+    @discardableResult public func saveQuickCreationState(_ state: QuickCreationState, expectedRevision: UInt64) throws -> UInt64 {
+        try saveQuickCreationState(state, expectedRevision: expectedRevision, afterPublication: nil)
+    }
+    func saveQuickCreationState(_ state: QuickCreationState, expectedRevision: UInt64,
+                               afterPublication: (@Sendable () throws -> Void)?) throws -> UInt64 {
+        try checkLocation(); try state.validate()
+        let expectedBytes = quickValidatedBytes
+        let previous = try quickCreationState()
+        let ownPublishedFailure = quickPendingBaseRevision == expectedRevision && quickPendingBytes != nil && quickValidatedBytes == quickPendingBytes
+        guard quickValidatedBytes == expectedBytes || ownPublishedFailure else {
+            quickValidatedBytes = expectedBytes
+            throw ProjectStoreError.externalModification
+        }
+        guard (previous.revision == expectedRevision || ownPublishedFailure), previous.revision < UInt64.max else {
+            quickValidatedBytes = expectedBytes; throw ProjectStoreError.externalModification
+        }
+        var value = state; value.revision = previous.revision + 1
+        let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
+        let data = try encoder.encode(value)
+        guard data.count <= 16 * 1_024 * 1_024 else { throw WorkflowIssue("快速记录超过安全上限；原记录未被替换。") }
+        var info = stat()
+        let exists = fstatat(rootFD, "quick-creation.json", &info, AT_SYMLINK_NOFOLLOW) == 0
+        do {
+            try ProjectFiles.publish(in: rootFD, name: "quick-creation.json", replacing: exists) { fd in
+                try data.withUnsafeBytes { try ProjectFiles.writeAll($0, to: fd) }
+            }
+            try afterPublication?()
+        } catch {
+            // rename may succeed before the directory sync fails. Remember only our exact bytes,
+            // even if the volume is currently unreadable. A retry must observe an exact match;
+            // merely attempting these bytes does not authorize replacing another writer's content.
+            quickPendingBytes = data; quickPendingBaseRevision = expectedRevision
+            quickValidatedBytes = expectedBytes
+            throw error
+        }
+        quickValidatedBytes = data; quickPendingBytes = nil; quickPendingBaseRevision = nil
+        return value.revision
+    }
+    public func workflowAssets(forStepID stepID: UUID) throws -> [WorkflowAssetReference] {
+        try editableWorkflow().assets.filter { $0.stepID == stepID }.map(\.reference)
+    }
+
+    /// Explicit project-to-project publication. Source bytes stay immutable; source IDs are
+    /// retained to preserve pitch's frozen audio identity. A collision is rejected, never replaced.
+    public func copyWorkflowAsset(_ reference: WorkflowAssetReference, from source: ProjectStore) async throws -> WorkflowAssetReference {
+        if source === self { _ = try workflowData(reference); return reference }
+        var visited: [WorkflowAssetReference: WorkflowAssetReference] = [:]
+        var active = Set<WorkflowAssetReference>()
+        func copy(_ ref: WorkflowAssetReference) async throws -> WorkflowAssetReference {
+            if let existing = visited[ref] { return existing }
+            guard visited.count + active.count < 128, active.insert(ref).inserted else { throw WorkflowIssue("素材来源循环或超过一次复制的安全范围。") }
+            defer { active.remove(ref) }
+            let snapshot = try await source.workflowCopySnapshot(ref)
+            if let existing = try editableWorkflow().assets.first(where: { $0.reference.assetID == ref.assetID }) {
+                guard existing.metadata["copiedFromProject"] == ref.projectID.uuidString,
+                      existing.metadata["copiedFromVersion"] == ref.version.uuidString,
+                      existing.metadata["copiedFromSHA256"] == ref.sha256 else { throw WorkflowIssue("目标已有不同来源的同身份素材；未覆盖。") }
+                _ = try workflowData(existing.reference); visited[ref] = existing.reference; return existing.reference
+            }
+            var parents: [WorkflowAssetReference] = []
+            for parent in snapshot.record.parents { parents.append(try await copy(parent)) }
+            var data = snapshot.data
+            let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
+            if ref.kind == .notes {
+                var value = try WorkflowNoteSequence(datum: JSONDecoder().decode(WorkflowDatum.self, from: data))
+                value.sources = try value.sources.map { original in guard let mapped = visited[original] else { throw WorkflowIssue("音符来源缺少已复制父项。") }; return mapped }
+                data = try encoder.encode(value.datum())
+            } else if ref.kind == .chords {
+                var value = try WorkflowChordTrack(datum: JSONDecoder().decode(WorkflowDatum.self, from: data))
+                value.sources = try value.sources.map { original in guard let mapped = visited[original] else { throw WorkflowIssue("和弦来源缺少已复制父项。") }; return mapped }
+                data = try encoder.encode(value.datum())
+            }
+            var details = snapshot.record.metadata
+            details["copiedFromProject"] = ref.projectID.uuidString
+            details["copiedFromVersion"] = ref.version.uuidString
+            details["copiedFromSHA256"] = ref.sha256
+            details["sourceOperation"] = snapshot.record.operationID
+            var verifiedVideo: VideoAssetMetadata?
+            if ref.kind == .video {
+                let staged = try stageWorkflowMedia(data, assetID: ref.assetID, suffix: "mp4", limit: 512 * 1_024 * 1_024)
+                verifiedVideo = try await VideoMediaInspector.inspectImported(at: staged)
+            }
+            // Actor awaits above allow another publication. Recheck provenance immediately
+            // before synchronous commit; same media bytes do not imply the same source/version.
+            if let existing = try editableWorkflow().assets.first(where: { $0.reference.assetID == ref.assetID }) {
+                guard existing.metadata["copiedFromProject"] == ref.projectID.uuidString,
+                      existing.metadata["copiedFromVersion"] == ref.version.uuidString,
+                      existing.metadata["copiedFromSHA256"] == ref.sha256 else { throw WorkflowIssue("复制期间目标身份已有不同来源，未替换。") }
+                _ = try workflowData(existing.reference); visited[ref] = existing.reference; return existing.reference
+            }
+            let result = try publishWorkflowAsset(data: data, mediaType: snapshot.asset.mediaType,
+                metadata: snapshot.asset.metadata, name: snapshot.asset.name, parents: parents,
+                operationID: "d.asset.explicit-copy", stepID: nil, request: snapshot.record.request,
+                details: details, assetID: ref.assetID, checkpoint: nil, verifiedVideo: verifiedVideo,
+                copiedAudioOrigin: snapshot.asset.metadata.audio?.origin)
+            visited[ref] = result.record.reference; return result.record.reference
+        }
+        return try await copy(reference)
+    }
+    private func workflowCopySnapshot(_ ref: WorkflowAssetReference) throws -> (data: Data, asset: ProjectAsset, record: WorkflowAssetRecord) {
+        let data = try workflowData(ref)
+        guard let asset = manifest.assets.first(where: { $0.id == ref.assetID }),
+              let record = try editableWorkflow().assets.first(where: { $0.reference == ref }) else { throw ProjectStoreError.missingAsset }
+        return (data, asset, record)
     }
 }

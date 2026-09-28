@@ -19,12 +19,30 @@ public struct WorkbenchSession: Sendable {
     public let validateTextModel: (@Sendable (URL) async throws -> ModelReference)?
     public let pitchBackendID: String?
     public let pitchModel: ModelReference?
+    /// Explicit owner of backend output files when several workspaces share one runtime.
+    public var artifactStore: ProjectStore? = nil
     public let engine: any InferenceEngine
     public let backendID: String
     public let status: @Sendable () async -> WorkbenchRuntimeStatus
     public let shutdown: @Sendable () async -> Void
     public let cleanup: @Sendable () async throws -> Void
     public let validateModel: @Sendable (URL) async throws -> Void
+
+    /// A workspace may drain its own requests, but must not shut down the App runtime.
+    public func borrowed(artifactStore: ProjectStore) -> Self {
+        var value = Self(engine: engine, backendID: backendID, status: status,
+            shutdown: {}, cleanup: {}, validateModel: validateModel,
+            textBackendID: textBackendID, validateTextModel: validateTextModel,
+            audioBackendID: audioBackendID, validateAudioModel: validateAudioModel,
+            musicBackendID: musicBackendID, validateMusicModel: validateMusicModel,
+            imageCapability: imageCapability, textCapability: textCapability,
+            audioCapability: audioCapability, musicCapability: musicCapability,
+            videoBackendID: videoBackendID, validateVideoModel: validateVideoModel,
+            videoCapability: videoCapability, defaultMemoryBudgetBytes: defaultMemoryBudgetBytes,
+            pitchBackendID: pitchBackendID, pitchModel: pitchModel)
+        value.artifactStore = artifactStore
+        return value
+    }
 
     public init(engine: any InferenceEngine, backendID: String,
                 status: @escaping @Sendable () async -> WorkbenchRuntimeStatus,

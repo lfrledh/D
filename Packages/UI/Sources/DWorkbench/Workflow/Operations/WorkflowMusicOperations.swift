@@ -12,13 +12,17 @@ enum WorkflowMusicOperations {
             let input = try WorkflowExecution.inputAsset("input", kind: .audio, context: c)
             let ref = try await s.analyzePitch(input, context: c)
             let result = try JSONDecoder().decode(PitchAnalysisResult.self, from: await s.readData(ref))
-            let interpretation = try PitchInterpretation(result: result)
-            let sequence = WorkflowNoteSequence(clock: .seconds, notes: interpretation.notes.enumerated().map { i, note in
-                .init(id: "note-\(i + 1)", pitch: note.midiNote, start: Double(note.startSample) / 16_000,
-                    end: Double(note.endSample) / 16_000, velocity: 0.65)
-            }, duration: Double(result.sampleCount) / 16_000, sources: [input, ref])
-            return .outputs(["output": .data(try sequence.datum()), "pitch": .asset(ref)])
+            return .outputs(try pitchOutputs(input: input, reference: ref, result: result))
         })
+    static func pitchOutputs(input: WorkflowAssetReference, reference: WorkflowAssetReference,
+                             result: PitchAnalysisResult) throws -> [String: WorkflowValue] {
+        let interpretation = try PitchInterpretation(result: result)
+        let sequence = WorkflowNoteSequence(clock: .seconds, notes: interpretation.notes.enumerated().map { i, note in
+            .init(id: "note-\(i + 1)", pitch: note.midiNote, start: Double(note.startSample) / 16_000,
+                end: Double(note.endSample) / 16_000, velocity: 0.65)
+        }, duration: Double(result.sampleCount) / 16_000, sources: [input, reference])
+        return ["output": .data(try sequence.datum()), "pitch": .asset(reference)]
+    }
     static let align = WorkflowOperation(definition: .init(id: "d.music.align", title: "解释节拍", detail: "保留原声；显式速度、拍号与量化产生新的音符解释。",
         inputs: [noteInput, .init("tempo", "速度映射", kinds: [.record, .tempo], required: false)], outputs: [recordOutput],
         fields: [.init("bpm", "BPM", .decimal, .decimal(120)), .init("firstBeatSeconds", "第一拍秒位置", .decimal, .decimal(0)),
