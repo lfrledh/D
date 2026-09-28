@@ -27,6 +27,7 @@ public struct WorkflowCanvasView: View {
     private let onRecord: (UUID) -> Void
     private let onImportAsset: () -> Void
     private let onDropFile: (URL) -> Bool
+    private let onQuickUse: ((WorkflowNode) -> Void)?
     private let onDestination: () -> Void
     private let onPublishText: () -> Void
     private let onReturnText: (WorkflowAssetReference) -> Void
@@ -39,11 +40,15 @@ public struct WorkflowCanvasView: View {
 
     @Environment(\.dLanguageStore) private var languageStore
 
-    @State private var showNodes = true
-    @State private var showAssets = true
+    @State private var showLibrary = true
+    @State private var libraryMode: WorkflowCanvasLibraryMode = .nodes
     @State private var showInspector = true
     @State private var zoom: CGFloat = 1
+    @State private var scrollPosition = ScrollPosition()
+    @State private var viewStates = WorkflowCanvasViewStateStore()
+    @State private var canvasInsertionPoint = CGPoint(x: 170, y: 130)
     @State private var pendingConnection: WorkflowPendingConnection?
+    @State private var selectedConnectionID: UUID?
     @State private var runPreview: WorkflowRunPreview?
     @State private var toolsPresented = false
     @State private var interfacePresented = false
@@ -60,7 +65,8 @@ public struct WorkflowCanvasView: View {
         onRecord: @escaping (UUID) -> Void = { _ in },
         nodeTags: ModelNodeTagStore? = nil,
         onImportAsset: @escaping () -> Void = {},
-        onDropFile: @escaping (URL) -> Bool = { _ in false }
+        onDropFile: @escaping (URL) -> Bool = { _ in false },
+        onQuickUse: ((WorkflowNode) -> Void)? = nil
     ) {
         self.controller = controller
         self.nodeTags = nodeTags ?? ModelNodeTagStore()
@@ -71,6 +77,7 @@ public struct WorkflowCanvasView: View {
         self.onRecord = onRecord
         self.onImportAsset = onImportAsset
         self.onDropFile = onDropFile
+        self.onQuickUse = onQuickUse
         self.onDestination = onDestination
         self.onPublishText = onPublishText
         self.onReturnText = onReturnText
@@ -80,8 +87,6 @@ public struct WorkflowCanvasView: View {
         GeometryReader { viewport in
         VStack(spacing: 0) {
             toolbar.frame(width: viewport.size.width)
-            Divider()
-            statusStrip
             Divider()
             GeometryReader { proxy in
                 panels(height: proxy.size.height)
@@ -104,32 +109,81 @@ public struct WorkflowCanvasView: View {
                 }
             )
         }
-        .sheet(isPresented: $toolsPresented) { WorkflowToolPanel(controller: controller) }
+        .sheet(isPresented: $toolsPresented) {
+            VStack(alignment: .trailing) {
+                Button(workflowText(languageStore, "workflow.action.close", fallback: "关闭")) { toolsPresented = false }
+                WorkflowToolPanel(controller: controller)
+            }
+        }
         .sheet(isPresented: $interfacePresented) {
             if let graph = controller.graph {
-                ScrollView { WorkflowGraphInterfaceEditor(graph: Binding(get: { controller.graph?.id == graph.id ? controller.graph! : graph }, set: { controller.updateInterface($0.interface, in: graph.id) }), registry: controller.registry, tools: controller.tools).padding() }
+                VStack(alignment: .trailing) {
+                    Button(workflowText(languageStore, "workflow.action.close", fallback: "关闭")) { interfacePresented = false }
+                    ScrollView { WorkflowGraphInterfaceEditor(graph: Binding(get: { controller.graph?.id == graph.id ? controller.graph! : graph }, set: { controller.updateInterface($0.interface, in: graph.id) }), registry: controller.registry, tools: controller.tools).padding() }
+                }
                     .frame(minWidth: 640, minHeight: 500)
             }
         }
         .onChange(of: controller.graph?.id) { _, _ in
             pendingConnection = nil
+            selectedConnectionID = nil
             runPreview = nil
         }
+        .onChange(of: selectedConnectionID) { _, value in
+            if value != nil { showInspector = true }
+        }
+        .onChange(of: controller.graph?.connections) { _, connections in
+            if let selectedConnectionID,
+               connections?.contains(where: { $0.id == selectedConnectionID }) != true {
+                self.selectedConnectionID = nil
+            }
+        }
+        .onChange(of: viewContext) { _, next in restoreViewContext(next) }
+        .onChange(of: zoom) { _, _ in rememberViewContext() }
+        .onChange(of: scrollPosition.point) { _, _ in rememberViewContext() }
+        .onChange(of: controller.selectedNodeID) { _, _ in rememberViewContext() }
     }
 
     private func panels(height: CGFloat) -> some View {
         HStack(spacing: 0) {
-            if showNodes {
-                WorkflowNodeLibrary(controller: controller, tagStore: nodeTags) { entry in
-                    controller.addNode(operationID: entry.operation.id, modelID: entry.model?.id)
-                    showInspector = true
-                }.frame(width: WorkflowCanvasLayoutPolicy.libraryWidth)
-                Divider()
-            }
+            VStack(spacing: 0) {
+                    Picker(workflowText(languageStore, "canvas.library.mode", fallback: "资料类型"), selection: $libraryMode) {
+                        Text(workflowText(languageStore, "canvas.library.nodes", fallback: "节点"))
+                            .tag(WorkflowCanvasLibraryMode.nodes)
+                        Text(workflowText(languageStore, "canvas.library.assets", fallback: "素材"))
+                            .tag(WorkflowCanvasLibraryMode.assets)
+                    }
+                    .pickerStyle(.segmented).labelsHidden().padding(8)
+                    ZStack {
+                        WorkflowNodeLibrary(controller: controller, tagStore: nodeTags) { entry in
+                            controller.addNode(operationID: entry.operation.id, modelID: entry.model?.id,
+                                               x: canvasInsertionPoint.x, y: canvasInsertionPoint.y)
+                            showInspector = true
+                        }
+                        .opacity(libraryMode == .nodes ? 1 : 0)
+                        .allowsHitTesting(libraryMode == .nodes)
+                        .accessibilityHidden(libraryMode != .nodes)
+                        WorkflowAssetLibrary(controller: controller, onAdd: { project, asset in
+                            if controller.graph == nil { controller.addBlankGraph() }
+                            guard let target = controller.canvasInsertionTarget() else { return }
+                            Task { await controller.addAssetNode(projectID: project, assetID: asset,
+                                x: canvasInsertionPoint.x, y: canvasInsertionPoint.y, target: target) }
+                        }, onImport: onImportAsset, onDropFile: onDropFile)
+                        .opacity(libraryMode == .assets ? 1 : 0)
+                        .allowsHitTesting(libraryMode == .assets)
+                        .accessibilityHidden(libraryMode != .assets)
+                    }
+                }
+                .frame(width: showLibrary ? WorkflowCanvasLayoutPolicy.libraryWidth : 0)
+                .clipped().allowsHitTesting(showLibrary).accessibilityHidden(!showLibrary)
+            Divider().opacity(showLibrary ? 1 : 0)
             VStack(spacing: 0) {
                 WorkflowGraphSurface(controller: controller, graph: controller.graph, zoom: $zoom,
-                    pendingConnection: $pendingConnection, readOnly: !controller.canEditCanvas,
+                    scrollPosition: $scrollPosition,
+                    pendingConnection: $pendingConnection, selectedConnectionID: $selectedConnectionID,
+                    readOnly: !controller.canEditCanvas,
                     onPlan: presentPlan, nodeSizeObserver: nodeSizeObserver,
+                    onVisibleCenter: { canvasInsertionPoint = $0 },
                     onDropItem: dropItem,
                     onBindAsset: { project, asset, node in
                         guard controller.canEditCanvas, controller.projectID == project,
@@ -138,37 +192,39 @@ public struct WorkflowCanvasView: View {
                         return true
                     }, onInspect: { id in
                         guard controller.graph?.nodes.contains(where: { $0.id == id }) == true else { return }
-                        controller.selectedNodeID = id; showInspector = true
+                        controller.selectedNodeID = id; selectedConnectionID = nil; showInspector = true
                     })
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 Divider()
-                HStack {
-                    Button { showInspector.toggle() } label: {
-                        Label(workflowText(languageStore, "canvas.inspector.title", fallback: "节点参数与结果"),
-                              systemImage: showInspector ? "chevron.down" : "chevron.right")
-                    }.buttonStyle(.plain).accessibilityIdentifier("canvas-inspector-toggle")
-                    Text(controller.selectedNode?.title ?? workflowText(languageStore, "canvas.inspector.hint", fallback: "选中节点后在此编辑"))
-                        .font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                    Spacer()
-                }.padding(9).background(.bar)
-                // Mounted while folded: local form drafts and marked text are not recreated.
+                statusStrip
+            }.frame(minWidth: WorkflowCanvasLayoutPolicy.canvasMinimumWidth, maxWidth: .infinity)
+            Divider().opacity(showInspector ? 1 : 0)
+            // Keep the inspector mounted while folded so marked text and drafts survive.
+            ZStack {
                 WorkflowNodeInspector(controller: controller, node: controller.selectedNode,
                     readOnly: isReadOnly, onTextModel: guarded(onTextModel), onImageModel: guarded(onImageModel),
                     onAdditionalModel: { kind in guarded { onAdditionalModel(kind) }() },
                     onImport: { id in guard !isReadOnly else { return }; onImport(id) },
                     onRecord: { id in guard !isReadOnly else { return }; onRecord(id) },
-                    onReturnText: { ref in guard !isReadOnly else { return }; onReturnText(ref) }, onPlan: presentPlan)
-                    .frame(height: showInspector ? min(260, max(150, height * 0.42)) : 0)
-                    .clipped().allowsHitTesting(showInspector).accessibilityHidden(!showInspector)
-            }.frame(minWidth: WorkflowCanvasLayoutPolicy.canvasMinimumWidth, maxWidth: .infinity)
-            if showAssets {
-                Divider()
-                WorkflowAssetLibrary(controller: controller, onAdd: { project, asset in
-                    if controller.graph == nil { controller.addBlankGraph() }
-                    guard let target = controller.canvasInsertionTarget() else { return }
-                    Task { await controller.addAssetNode(projectID: project, assetID: asset, x: 180, y: 160, target: target) }
-                }, onImport: onImportAsset, onDropFile: onDropFile).frame(width: WorkflowCanvasLayoutPolicy.libraryWidth)
+                    onReturnText: { ref in guard !isReadOnly else { return }; onReturnText(ref) },
+                onPlan: presentPlan, onQuickUse: onQuickUse,
+                onOpenBody: { nodeID, slot in
+                    rememberViewContext()
+                    controller.openBody(nodeID: nodeID, slot: slot)
+                },
+                onOpenTool: { reference in
+                    rememberViewContext()
+                    controller.openToolCopy(reference)
+                })
+                    .opacity(selectedConnectionID == nil ? 1 : 0)
+                    .allowsHitTesting(selectedConnectionID == nil)
+                if let connection = controller.graph?.connections.first(where: { $0.id == selectedConnectionID }) {
+                    WorkflowCanvasConnectionInspector(controller: controller, connection: connection,
+                        onClose: { selectedConnectionID = nil })
+                }
             }
+                .frame(width: showInspector ? WorkflowCanvasLayoutPolicy.inspectorWidth : 0)
+                .clipped().allowsHitTesting(showInspector).accessibilityHidden(!showInspector)
         }
     }
 
@@ -190,99 +246,101 @@ public struct WorkflowCanvasView: View {
     }
 
     private var toolbar: some View {
-        ScrollView(.horizontal) {
-            HStack(spacing: 10) {
-            Picker(workflowText(languageStore, "workflow.toolbar.graph", fallback: "流程"), selection: graphSelection) {
-                Text(workflowText(languageStore, "workflow.toolbar.noGraph", fallback: "未选择流程"))
-                    .tag(Optional<UUID>.none)
-                ForEach(controller.graphs) { graph in
-                    Text(graph.name).tag(Optional(graph.id))
+        HStack(spacing: 8) {
+            if !controller.bodyPath.isEmpty {
+                Button(workflowText(languageStore, "workflow.language.control.back", fallback: "返回外层"),
+                       systemImage: "arrow.up.backward") {
+                    rememberViewContext()
+                    controller.closeBody()
                 }
+                    .labelStyle(.iconOnly)
             }
-            .labelsHidden()
-            .frame(width: 180)
-            .accessibilityLabel(workflowText(languageStore, "workflow.toolbar.graph", fallback: "流程"))
+            Menu {
+                ForEach(controller.graphs) { graph in
+                    Button(graph.name) {
+                        rememberViewContext()
+                        controller.selectedGraphID = graph.id
+                    }
+                }
+            } label: {
+                Label(controller.graph?.name ?? workflowText(languageStore, "workflow.toolbar.noGraph", fallback: "选择流程"),
+                      systemImage: "chevron.down")
+                    .lineLimit(1).frame(maxWidth: 130)
+            }
             .accessibilityIdentifier("workflow-graph-picker")
-
-            Menu(workflowText(languageStore, "workflow.toolbar.addExample", fallback: "添加样例"),
-                 systemImage: "square.grid.2x2") {
-                ForEach(WorkflowLanguageExample.allCases, id: \.rawValue) { example in
-                    Button(workflowText(languageStore, "workflow.language.example.\(example.rawValue)", fallback:
-                        ["data": "数据与控制", "images": "主题与图像批次", "music": "哼唱与和声", "multimodal": "同源四模态"][example.rawValue] ?? example.rawValue)) {
-                        controller.addLanguageExample(example)
+            Button(workflowText(languageStore, "canvas.new", fallback: "新流程"), systemImage: "plus") {
+                controller.addBlankGraph()
+            }.labelStyle(.iconOnly).disabled(!controller.canEditCanvas)
+                .accessibilityIdentifier("canvas-new-flow")
+            Button(workflowText(languageStore, "workflow.action.save", fallback: "保存"),
+                   systemImage: "square.and.arrow.down") { Task { await controller.save() } }
+                .disabled(isReadOnly || controller.isSaving)
+                .accessibilityIdentifier("workflow-save")
+            if controller.isRunning {
+                Button(workflowText(languageStore, "workflow.language.control.pause", fallback: "安全暂停"),
+                       systemImage: "pause") { controller.pause() }
+                    .labelStyle(.iconOnly)
+                Button(workflowText(languageStore, "workflow.action.cancel", fallback: "停止"),
+                       systemImage: "stop.fill", role: .destructive) { Task { await controller.cancel() } }
+                    .accessibilityIdentifier("workflow-cancel")
+            } else {
+                Button(workflowText(languageStore, "workflow.action.runToHere", fallback: "运行"),
+                       systemImage: "play.fill") {
+                    if let target = controller.selectedNode?.id ?? controller.graph?.nodes.last?.id {
+                        presentPlan(nodeID: target, only: false)
+                    }
+                }
+                .disabled(isReadOnly || controller.graph?.nodes.isEmpty != false)
+                .accessibilityIdentifier("workflow-run")
+            }
+            Spacer(minLength: 0)
+            Button { showLibrary.toggle() } label: {
+                Image(systemName: "sidebar.left")
+            }.help(workflowText(languageStore, "canvas.library.toggle", fallback: "显示或隐藏资料库"))
+                .accessibilityIdentifier("canvas-library-toggle")
+            Button { showInspector.toggle() } label: {
+                Image(systemName: "sidebar.right")
+            }.help(workflowText(languageStore, "canvas.inspector.toggle", fallback: "显示或隐藏检查器"))
+                .accessibilityIdentifier("canvas-inspector-toggle")
+            Text("\(Int((zoom * 100).rounded()))%")
+                .font(.caption.monospacedDigit()).frame(minWidth: 36)
+            Slider(value: $zoom, in: WorkflowCanvasLayoutPolicy.zoomRange)
+                .frame(width: 76)
+                .accessibilityLabel(workflowText(languageStore, "workflow.toolbar.zoom", fallback: "画布缩放"))
+            Menu(workflowText(languageStore, "canvas.more", fallback: "更多"), systemImage: "ellipsis.circle") {
+                Menu(workflowText(languageStore, "workflow.toolbar.addExample", fallback: "添加样例")) {
+                    ForEach(WorkflowLanguageExample.allCases, id: \.rawValue) { example in
+                        Button(workflowText(languageStore, "workflow.language.example.\(example.rawValue)", fallback:
+                            ["data": "数据与控制", "images": "主题与图像批次", "music": "哼唱与和声", "multimodal": "同源四模态"][example.rawValue] ?? example.rawValue)) {
+                            controller.addLanguageExample(example)
+                        }
+                    }
+                    ForEach(WorkflowExampleChoice.allCases) { example in
+                        Button(example.title(languageStore)) { controller.addExample(example.rawValue) }
+                    }
+                }
+                Button(workflowText(languageStore, "workflow.action.undo", fallback: "撤销")) { controller.undo() }
+                    .disabled(isReadOnly || !controller.canUndo)
+                Button(workflowText(languageStore, "workflow.action.redo", fallback: "重做")) { controller.redo() }
+                    .disabled(isReadOnly || !controller.canRedo)
+                Menu(workflowText(languageStore, "workflow.toolbar.zoom", fallback: "画布缩放")) {
+                    ForEach([0.5, 1.0, 1.8], id: \.self) { value in
+                        Button("\(Int(value * 100))%") { zoom = CGFloat(value) }
                     }
                 }
                 Divider()
-                ForEach(WorkflowExampleChoice.allCases) { example in
-                    Button(example.title(languageStore)) { controller.addExample(example.rawValue) }
-                }
-            }
-            .disabled(isReadOnly)
-
-            Button(workflowText(languageStore, "canvas.new", fallback: "新流程"), systemImage: "plus") { controller.addBlankGraph() }
-                .disabled(!controller.canEditCanvas).accessibilityIdentifier("canvas-new-flow")
-            Button(workflowText(languageStore, "workflow.action.save", fallback: "保存"),
-                   systemImage: "square.and.arrow.down") {
-                Task { await controller.save() }
-            }
-            .disabled(isReadOnly || controller.isSaving)
-            .accessibilityIdentifier("workflow-save")
-
-            Button(workflowText(languageStore, "workflow.action.undo", fallback: "撤销"),
-                   systemImage: "arrow.uturn.backward") { controller.undo() }
-                .labelStyle(.iconOnly)
-                .disabled(isReadOnly || !controller.canUndo)
-                .accessibilityIdentifier("workflow-undo")
-            Button(workflowText(languageStore, "workflow.action.redo", fallback: "重做"),
-                   systemImage: "arrow.uturn.forward") { controller.redo() }
-                .labelStyle(.iconOnly)
-                .disabled(isReadOnly || !controller.canRedo)
-                .accessibilityIdentifier("workflow-redo")
-
-            if !controller.bodyPath.isEmpty {
-                Button(workflowText(languageStore, "workflow.language.control.back", fallback: "返回外层"), systemImage: "arrow.up.backward") { controller.closeBody() }
-                Text(controller.graph?.name ?? "").font(.caption)
-            }
-            Menu(workflowText(languageStore, "canvas.more", fallback: "更多"), systemImage: "ellipsis.circle") {
                 Button(workflowText(languageStore, "workflow.language.tools", fallback: "工具与封装")) { toolsPresented = true }
                 Button(workflowText(languageStore, "workflow.language.interface", fallback: "公开接口")) { interfacePresented = true }
                     .disabled(controller.graph == nil)
-                Divider()
                 Button(workflowText(languageStore, "workflow.action.publishText", fallback: "发布文稿")) { guarded(onPublishText)() }
                 Button(workflowText(languageStore, "workflow.action.exportDirectory", fallback: "导出目录")) { guarded(onDestination)() }
                 Text(controller.destinationDescription)
-            }.disabled(isReadOnly)
-            Toggle(isOn: $showNodes) { Image(systemName: "sidebar.left") }.toggleStyle(.button)
-                .help(workflowText(languageStore, "canvas.library.nodes", fallback: "节点库"))
-            Toggle(isOn: $showAssets) { Image(systemName: "sidebar.right") }.toggleStyle(.button)
-                .help(workflowText(languageStore, "canvas.assets.title", fallback: "资产库"))
-
-            Spacer(minLength: 8)
-
-            if controller.isRunning {
-                Button(workflowText(languageStore, "workflow.language.control.pause", fallback: "安全暂停"), systemImage: "pause") { controller.pause() }
-                Button(workflowText(languageStore, "workflow.action.cancel", fallback: "取消"),
-                       systemImage: "stop.fill", role: .destructive) {
-                    Task { await controller.cancel() }
-                }
-                .disabled(isReadOnly)
-                .accessibilityIdentifier("workflow-cancel")
             }
-
-            Text("\(Int((zoom * 100).rounded()))%")
-                .font(.caption.monospacedDigit())
-                .foregroundStyle(.secondary)
-                Slider(value: $zoom, in: WorkflowCanvasLayoutPolicy.zoomRange)
-                    .frame(width: 90)
-                    .accessibilityLabel(workflowText(languageStore, "workflow.toolbar.zoom", fallback: "画布缩放"))
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 9)
-            .frame(minWidth: 0)
+            .disabled(isReadOnly)
+            .accessibilityIdentifier("canvas-more")
         }
-        // Only the compact toolbar may scroll; sidebars stay inside the window.
-        .frame(minWidth: 0, maxWidth: .infinity)
-        .scrollIndicators(.hidden)
+        .buttonStyle(.borderless)
+        .padding(.horizontal, 10).padding(.vertical, 8)
         .background(.bar)
     }
 
@@ -323,8 +381,27 @@ public struct WorkflowCanvasView: View {
         .background(.thinMaterial)
     }
 
-    private var graphSelection: Binding<UUID?> {
-        Binding(get: { controller.selectedGraphID }, set: { controller.selectedGraphID = $0 })
+    private var viewContext: WorkflowCanvasViewContext {
+        WorkflowCanvasViewContext(projectID: controller.projectID, rootGraphID: controller.rootGraph?.id,
+            bodyPath: controller.bodyPath.map(WorkflowCanvasBodyLocation.init))
+    }
+
+    private func rememberViewContext() {
+        viewStates.save(WorkflowCanvasViewMemory(zoom: zoom,
+            scrollPoint: scrollPosition.point ?? .zero, selectedNodeID: controller.selectedNodeID),
+            for: viewContext)
+    }
+
+    private func restoreViewContext(_ context: WorkflowCanvasViewContext) {
+        if let saved = viewStates.state(for: context) {
+            zoom = WorkflowCanvasLayoutPolicy.clampedZoom(saved.zoom)
+            scrollPosition.scrollTo(point: saved.scrollPoint)
+            controller.selectedNodeID = controller.graph?.nodes.contains(where: { $0.id == saved.selectedNodeID }) == true
+                ? saved.selectedNodeID : nil
+        } else {
+            zoom = 1
+            scrollPosition.scrollTo(point: .zero)
+        }
     }
 
     private var isReadOnly: Bool {
@@ -357,9 +434,14 @@ private struct WorkflowNodeInspector: View {
     let onRecord: (UUID) -> Void
     let onReturnText: (WorkflowAssetReference) -> Void
     let onPlan: (UUID, Bool) -> Void
+    let onQuickUse: ((WorkflowNode) -> Void)?
+    let onOpenBody: (UUID, String) -> Void
+    let onOpenTool: (WorkflowToolReference) -> Void
     @Environment(\.dLanguageStore) private var languageStore
     @State private var scopePresentation: WorkflowScopePresentation?
     @State private var pendingCall: WorkflowCallReference?
+    @State private var showHistory = false
+    @State private var showTechnical = false
 
     var body: some View {
         ScrollView {
@@ -381,8 +463,8 @@ private struct WorkflowNodeInspector: View {
                     }
                     if node.operationID.hasPrefix("d.control."), node.operationID != "d.control.human", let graphID = controller.graph?.id {
                         WorkflowControlEditor(node: Binding(get: { controller.graph?.nodes.first(where: { $0.id == node.id }) ?? node }, set: { controller.updateNode($0, in: graphID) }), tools: controller.tools, onOpenBody: { slot in
-                            if slot == "tool", case .invoke(let reference) = node.control { controller.openToolCopy(reference) }
-                            else { controller.openBody(nodeID: node.id, slot: slot) }
+                            if slot == "tool", case .invoke(let reference) = node.control { onOpenTool(reference) }
+                            else { onOpenBody(node.id, slot) }
                         }).id(node.id).disabled(readOnly)
                     }
                     ports(node)
@@ -393,7 +475,11 @@ private struct WorkflowNodeInspector: View {
                         }
                             .disabled(readOnly)
                     }
-                    history(node)
+                    DisclosureGroup(isExpanded: $showHistory) {
+                        history(node)
+                    } label: {
+                        Text(workflowText(languageStore, "workflow.section.history", fallback: "运行历史"))
+                    }
                 }
                 .padding(14)
             } else {
@@ -529,11 +615,31 @@ private struct WorkflowNodeInspector: View {
     @ViewBuilder
     private func identity(_ node: WorkflowNode) -> some View {
         WorkflowInspectorSection(workflowText(languageStore, "workflow.section.node", fallback: "节点")) {
-            Text(node.title).font(.title3.weight(.semibold))
-            WorkflowMetadataRow(workflowText(languageStore, "workflow.metadata.operation", fallback: "操作"),
-                                node.operationID)
-            WorkflowMetadataRow(workflowText(languageStore, "workflow.metadata.definitionVersion", fallback: "定义版本"),
-                                String(node.definitionVersion))
+            let resolved = WorkflowNodeIdentity.resolve(node: node,
+                definition: controller.registry.definition(for: node, tools: controller.tools),
+                modelChoices: controller.modelChoices, assets: controller.availableAssets,
+                tools: controller.tools, language: languageStore)
+            Text(resolved.title).font(.title3.weight(.semibold))
+            if let detail = resolved.detail {
+                Text(detail).font(.caption.monospaced()).foregroundStyle(.secondary).textSelection(.enabled)
+            }
+            if let annotation = resolved.annotation, annotation != resolved.title {
+                Text(annotation).font(.callout).foregroundStyle(.secondary)
+            }
+            if let onQuickUse, controller.registry.definition(for: node, tools: controller.tools)?.modelKind != nil {
+                Button(workflowText(languageStore, "canvas.identity.quickUse", fallback: "在快速生成中使用设置")) {
+                    onQuickUse(node)
+                }
+                .accessibilityIdentifier("canvas-quick-use-" + node.id.uuidString)
+            }
+            DisclosureGroup(isExpanded: $showTechnical) {
+                WorkflowMetadataRow(workflowText(languageStore, "workflow.metadata.operation", fallback: "操作"),
+                                    node.operationID)
+                WorkflowMetadataRow(workflowText(languageStore, "workflow.metadata.definitionVersion", fallback: "定义版本"),
+                                    String(node.definitionVersion))
+            } label: {
+                Text(workflowText(languageStore, "canvas.identity.technical", fallback: "技术信息"))
+            }
             HStack {
                 Button(workflowText(languageStore, "workflow.action.copy", fallback: "复制"),
                        systemImage: "doc.on.doc") { controller.copySelected() }
@@ -967,6 +1073,69 @@ private struct WorkflowConnectionInspection: View {
                 }
             }
         }.accessibilityIdentifier("workflow-connection-inspect-" + connection.id.uuidString)
+    }
+}
+
+private struct WorkflowCanvasConnectionInspector: View {
+    let controller: WorkflowController
+    let connection: WorkflowConnection
+    let onClose: () -> Void
+    @Environment(\.dLanguageStore) private var language
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Text(workflowText(language, "canvas.connection.title", fallback: "连接"))
+                        .font(.title3.weight(.semibold))
+                    Spacer()
+                    Button(workflowText(language, "workflow.action.close", fallback: "关闭"),
+                           systemImage: "xmark") { onClose() }.labelStyle(.iconOnly)
+                }
+                if let source = controller.graph?.nodes.first(where: { $0.id == connection.sourceNode }),
+                   let target = controller.graph?.nodes.first(where: { $0.id == connection.targetNode }) {
+                    let sourceDefinition = controller.registry.definition(for: source, tools: controller.tools)
+                    let targetDefinition = controller.registry.definition(for: target, tools: controller.tools)
+                    let sourceName = WorkflowNodeIdentity.resolve(node: source, definition: sourceDefinition,
+                        modelChoices: controller.modelChoices, assets: controller.availableAssets,
+                        tools: controller.tools, language: language).title
+                    let targetName = WorkflowNodeIdentity.resolve(node: target, definition: targetDefinition,
+                        modelChoices: controller.modelChoices, assets: controller.availableAssets,
+                        tools: controller.tools, language: language).title
+                    Text(sourceName + " · " + connection.sourcePort)
+                    Image(systemName: "arrow.down").foregroundStyle(.secondary)
+                    Text(targetName + " · " + connection.targetPort)
+                    if let port = sourceDefinition?.outputs.first(where: { $0.id == connection.sourcePort }) {
+                        Text(WorkflowCanvasPresentation.portDetail(port, language: language))
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    if let step = controller.latestStep(for: source.id),
+                       let value = step.outputs[connection.sourcePort] {
+                        Text(controller.isStale(step)
+                             ? workflowText(language, "canvas.connection.stale", fallback: "运行记录输出（来源版本已变化）")
+                             : workflowText(language, "canvas.connection.saved", fallback: "运行记录输出"))
+                            .font(.caption).foregroundStyle(.secondary)
+                        WorkflowStepValues(title: connection.sourcePort,
+                            values: [connection.sourcePort: value], operationID: source.operationID,
+                            portsAreInputs: false, controller: controller,
+                            onReturnText: { _ in }, allowsReturn: false)
+                    } else {
+                        Text(workflowText(language, "canvas.connection.notRun", fallback: "未运行：没有已保存的来源输出"))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                Button(workflowText(language, "workflow.action.disconnect", fallback: "断开"),
+                       systemImage: "link.badge.minus", role: .destructive) {
+                    controller.disconnect(connection.id)
+                    onClose()
+                }
+                .disabled(!controller.canEditCanvas)
+                .accessibilityIdentifier("canvas-disconnect-" + connection.id.uuidString)
+                WorkflowConnectionInspection(controller: controller, connection: connection)
+            }.padding(14).frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .background(.ultraThinMaterial)
+        .accessibilityIdentifier("canvas-connection-inspector")
     }
 }
 
@@ -1424,12 +1593,14 @@ private struct WorkflowRunPreview: Identifiable {
     let lines: [String]
 }
 
+enum WorkflowCanvasLibraryMode: Hashable { case nodes, assets }
+
 enum WorkflowCanvasLayoutPolicy {
     static let minimumVisibleWidth: CGFloat = 760
-    static let minimumVisibleHeight: CGFloat = 560
+    static let minimumVisibleHeight: CGFloat = 500
     static let minimumWorkspaceWidth: CGFloat = 760
     static let libraryWidth: CGFloat = 220
-    static let inspectorWidth: CGFloat = 340
+    static let inspectorWidth: CGFloat = 300
     static let canvasMinimumWidth: CGFloat = 260
     static let nodeWidth: CGFloat = 240
     static let zoomRange: ClosedRange<CGFloat> = 0.5...1.8

@@ -7,10 +7,13 @@ struct WorkflowGraphSurface: View {
     let controller: WorkflowController
     let graph: WorkflowGraph?
     @Binding var zoom: CGFloat
+    @Binding var scrollPosition: ScrollPosition
     @Binding var pendingConnection: WorkflowPendingConnection?
+    @Binding var selectedConnectionID: UUID?
     let readOnly: Bool
     let onPlan: (UUID, Bool) -> Void
     var nodeSizeObserver: ((UUID, CGSize) -> Void)?
+    var onVisibleCenter: (CGPoint) -> Void = { _ in }
     var onDropItem: (WorkflowCanvasTransfer, CGPoint) -> Bool = { _, _ in false }
     var onBindAsset: (UUID, UUID, UUID) -> Bool = { _, _, _ in false }
     var onInspect: (UUID) -> Void = { _ in }
@@ -19,6 +22,8 @@ struct WorkflowGraphSurface: View {
     @State private var nodeDrag = WorkflowCanvasNodeDragCoordinator()
     @State private var stableOrigin: WorkflowCanvasStableOrigin?
     @State private var pendingConnectionScope: WorkflowCanvasScope?
+    @State private var pendingDragPoint: CGPoint?
+    @State private var connectionIssue: WorkflowCanvasConnectionIssue?
 
     var body: some View {
         Group {
@@ -53,7 +58,10 @@ struct WorkflowGraphSurface: View {
                     ZStack(alignment: .topLeading) {
                         Color(nsColor: .textBackgroundColor)
                             .contentShape(Rectangle())
-                            .onTapGesture { controller.selectedNodeID = nil }
+                            .onTapGesture {
+                                controller.selectedNodeID = nil
+                                selectedConnectionID = nil
+                            }
                             .help(workflowText(
                                 languageStore,
                                 "workflow.canvas.dropHint",
@@ -76,11 +84,21 @@ struct WorkflowGraphSurface: View {
                                 onSelectOutput: { connection in
                                     pendingConnection = connection
                                     pendingConnectionScope = scope
+                                    connectionIssue = nil
                                 },
                                 onClearOutput: {
                                     pendingConnection = nil
                                     pendingConnectionScope = nil
+                                    pendingDragPoint = nil
                                 },
+                                onOutputDrag: { source, point in
+                                    pendingConnection = source
+                                    pendingConnectionScope = scope
+                                    pendingDragPoint = point
+                                    connectionIssue = nil
+                                },
+                                onOutputDragEnd: { pendingDragPoint = nil },
+                                onConnectionIssue: { connectionIssue = $0 },
                                 onDragBegan: { sessionID, translation in
                                     beginDrag(
                                         sessionID: sessionID,
@@ -122,7 +140,14 @@ struct WorkflowGraphSurface: View {
                             WorkflowConnectionLayer(
                                 graph: graph,
                                 geometry: geometry,
-                                portCenters: anchors.mapValues { proxy[$0] }
+                                portCenters: anchors.mapValues { proxy[$0] },
+                                selectedConnectionID: selectedConnectionID,
+                                pendingConnection: pendingConnection,
+                                pendingDragPoint: pendingDragPoint,
+                                onSelect: { connectionID in
+                                    controller.selectedNodeID = nil
+                                    selectedConnectionID = connectionID
+                                }
                             )
                         }
                     }
@@ -133,6 +158,14 @@ struct WorkflowGraphSurface: View {
                     .frame(width: geometry.size.width * effectiveZoom,
                            height: geometry.size.height * effectiveZoom,
                            alignment: .topLeading)
+                }
+                .scrollPosition($scrollPosition)
+                .onScrollGeometryChange(for: CGPoint.self) { scroll in
+                    WorkflowCanvasViewport.visibleRawCenter(contentOffset: scroll.contentOffset,
+                        containerSize: scroll.containerSize, zoom: effectiveZoom,
+                        translation: geometry.translation)
+                } action: { _, center in
+                    onVisibleCenter(center)
                 }
                 .background(Color(nsColor: .underPageBackgroundColor))
                 .simultaneousGesture(
@@ -148,8 +181,11 @@ struct WorkflowGraphSurface: View {
                     if pendingConnectionScope != next {
                         pendingConnection = nil
                         pendingConnectionScope = nil
+                        pendingDragPoint = nil
+                        connectionIssue = nil
                     }
                 }
+                .onChange(of: graph.connections) { _, _ in connectionIssue = nil }
                 .onChange(of: naturalGeometry.translation) { _, natural in
                     guard nodeDrag.active == nil,
                           let retained = stableOrigin,
@@ -169,7 +205,10 @@ struct WorkflowGraphSurface: View {
                 .onChange(of: readOnly || controller.isRunning) { _, blocked in
                     if blocked { nodeDrag.invalidate() }
                 }
-                .onDisappear { nodeDrag.invalidate() }
+                .onDisappear {
+                    nodeDrag.invalidate()
+                    pendingDragPoint = nil
+                }
                 .overlay(alignment: .topLeading) {
                     if let pendingConnection {
                         HStack(spacing: 8) {
@@ -189,6 +228,12 @@ struct WorkflowGraphSurface: View {
                         .padding(8)
                         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
                         .padding(10)
+                    }
+                    if let connectionIssue {
+                        Text(connectionIssue.message(language: languageStore))
+                            .font(.caption).foregroundStyle(.orange)
+                            .padding(8).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+                            .padding(.top, pendingConnection == nil ? 10 : 48).padding(.leading, 10)
                     }
                 }
             } else {
@@ -331,6 +376,10 @@ private struct WorkflowConnectionLayer: View {
     let graph: WorkflowGraph
     let geometry: WorkflowGraphGeometry
     let portCenters: [WorkflowPortIdentity: CGPoint]
+    let selectedConnectionID: UUID?
+    let pendingConnection: WorkflowPendingConnection?
+    let pendingDragPoint: CGPoint?
+    let onSelect: (UUID) -> Void
 
     var body: some View {
         Canvas { context, _ in
@@ -339,13 +388,39 @@ private struct WorkflowConnectionLayer: View {
                     WorkflowConnectionGeometry.path(
                         for: connection, geometry: geometry, portCenters: portCenters
                     ),
-                    with: .color(.accentColor.opacity(0.75)),
-                    lineWidth: 2
+                    with: .color(connection.id == selectedConnectionID ? .orange : .accentColor.opacity(0.75)),
+                    lineWidth: connection.id == selectedConnectionID ? 3 : 2
                 )
             }
         }
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
+        .overlay {
+            ForEach(graph.connections) { connection in
+                let hitPath = WorkflowConnectionGeometry.path(
+                    for: connection, geometry: geometry, portCenters: portCenters
+                ).strokedPath(StrokeStyle(lineWidth: 16))
+                hitPath.fill(Color.clear)
+                    .contentShape(hitPath)
+                    .onTapGesture { onSelect(connection.id) }
+                    .accessibilityLabel("连接 \(connection.sourcePort) 到 \(connection.targetPort)")
+                    .accessibilityAddTraits(.isButton)
+                    .accessibilityIdentifier("workflow-connection-" + connection.id.uuidString)
+            }
+        }
+        .overlay {
+            if let pendingConnection, let pendingDragPoint {
+                let source = WorkflowPortIdentity(nodeID: pendingConnection.nodeID,
+                    port: pendingConnection.port, input: false)
+                if let start = portCenters[source] {
+                    Path { path in
+                        path.move(to: start)
+                        path.addLine(to: pendingDragPoint)
+                    }
+                    .stroke(Color.accentColor, style: StrokeStyle(lineWidth: 2, dash: [5, 4]))
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+                }
+            }
+        }
     }
 }
 
@@ -364,6 +439,9 @@ private struct WorkflowNodeCard: View {
     let onInspect: (UUID) -> Void
     let onSelectOutput: (WorkflowPendingConnection) -> Void
     let onClearOutput: () -> Void
+    let onOutputDrag: (WorkflowPendingConnection, CGPoint) -> Void
+    let onOutputDragEnd: () -> Void
+    let onConnectionIssue: (WorkflowCanvasConnectionIssue) -> Void
     let onDragBegan: (UUID, CGSize) -> Void
     let onDragChanged: (UUID, CGSize) -> Void
     let onDragEnded: (UUID, CGSize) -> Void
@@ -377,7 +455,16 @@ private struct WorkflowNodeCard: View {
         VStack(alignment: .leading, spacing: 9) {
             HStack(alignment: .center) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(node.title).font(.headline).lineLimit(2)
+                    let identity = WorkflowNodeIdentity.resolve(node: node, definition: definition,
+                        modelChoices: controller.modelChoices, assets: controller.availableAssets,
+                        tools: controller.tools, language: languageStore)
+                    Text(identity.title).font(.headline).lineLimit(2)
+                    if let detail = identity.detail {
+                        Text(detail).font(.caption2.monospaced()).foregroundStyle(.secondary).lineLimit(1)
+                    }
+                    if let annotation = identity.annotation, annotation != identity.title {
+                        Text(annotation).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                    }
                     Text(workflowText(
                         languageStore,
                         "workflow.node.dragHint",
@@ -476,7 +563,7 @@ private struct WorkflowNodeCard: View {
         }
         .shadow(color: .black.opacity(0.12), radius: 8, y: 3)
         .contentShape(RoundedRectangle(cornerRadius: 13))
-        .onTapGesture { controller.selectedNodeID = node.id }
+        .onTapGesture { onInspect(node.id) }
         .dropDestination(for: WorkflowCanvasTransfer.self) { items, _ in
             acceptAsset(items)
         }
@@ -563,6 +650,13 @@ private struct WorkflowNodeCard: View {
                 nodeID: node.id,
                 port: port.id
             ))
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 2, coordinateSpace: .named(WorkflowCanvasCoordinateSpace.name))
+                    .onChanged { value in
+                        onOutputDrag(WorkflowPendingConnection(nodeID: node.id, port: port.id), value.location)
+                    }
+                    .onEnded { _ in onOutputDragEnd() }
+            )
         } else {
             row
         }
@@ -582,7 +676,7 @@ private struct WorkflowNodeCard: View {
               scope.isCurrent(in: controller),
               pendingConnectionScope == scope,
               let source = pendingConnection else { return }
-        guard WorkflowCanvasConnectionPolicy.canConnect(
+        if let issue = WorkflowCanvasConnectionPolicy.issue(
             graph: graph,
             registry: controller.registry,
             tools: controller.tools,
@@ -590,7 +684,10 @@ private struct WorkflowNodeCard: View {
             sourcePort: source.port,
             targetNodeID: node.id,
             targetPort: port.id
-        ) else { return }
+        ) {
+            onConnectionIssue(issue)
+            return
+        }
         controller.connect(source: source.nodeID, sourcePort: source.port,
                            target: node.id, targetPort: port.id)
         onClearOutput()
@@ -605,16 +702,18 @@ private struct WorkflowNodeCard: View {
               let item = try? items[0].validated(),
               case .output(_, _, _, _, let sourceNodeID, let sourcePort) = item,
               item.matchesOutputScope(scope),
-              scope.isCurrent(in: controller),
-              WorkflowCanvasConnectionPolicy.canConnect(
-                graph: graph,
-                registry: controller.registry,
-                tools: controller.tools,
-                sourceNodeID: sourceNodeID,
-                sourcePort: sourcePort,
-                targetNodeID: node.id,
-                targetPort: targetPort.id
-              ) else { return false }
+              scope.isCurrent(in: controller) else {
+            onConnectionIssue(.staleScope)
+            return false
+        }
+        if let issue = WorkflowCanvasConnectionPolicy.issue(
+            graph: graph, registry: controller.registry, tools: controller.tools,
+            sourceNodeID: sourceNodeID, sourcePort: sourcePort,
+            targetNodeID: node.id, targetPort: targetPort.id
+        ) {
+            onConnectionIssue(issue)
+            return false
+        }
         controller.connect(
             source: sourceNodeID,
             sourcePort: sourcePort,
@@ -689,6 +788,17 @@ struct WorkflowGraphGeometry {
             return CGPoint(x: CGFloat(layout.x), y: CGFloat(layout.y))
         }
         return WorkflowCanvasLayoutPolicy.fallbackPosition(index: index)
+    }
+}
+
+enum WorkflowCanvasViewport {
+    static func visibleRawCenter(contentOffset: CGPoint, containerSize: CGSize,
+                                 zoom: CGFloat, translation: CGSize) -> CGPoint {
+        let scale = max(zoom, 0.01)
+        return CGPoint(
+            x: (contentOffset.x + containerSize.width / 2) / scale - translation.width,
+            y: (contentOffset.y + containerSize.height / 2) / scale - translation.height
+        )
     }
 }
 
@@ -958,6 +1068,23 @@ enum WorkflowConnectionGeometry {
     }
 }
 
+enum WorkflowCanvasConnectionIssue: Equatable {
+    case staleScope, sameNode, unknownPort, incompatibleKind, occupiedInput, duplicate, cycle
+
+    @MainActor
+    func message(language: UILanguageStore?) -> String {
+        switch self {
+        case .staleScope: workflowText(language, "canvas.connection.staleScope", fallback: "画布已变化，请重新拖动连接。")
+        case .sameNode: workflowText(language, "canvas.connection.sameNode", fallback: "不能将节点连到自身。")
+        case .unknownPort: workflowText(language, "canvas.connection.unknownPort", fallback: "端口或节点已变化。")
+        case .incompatibleKind: workflowText(language, "canvas.connection.incompatible", fallback: "端口数据类型不兼容。")
+        case .occupiedInput: workflowText(language, "canvas.connection.occupied", fallback: "输入端口已有连接，请先断开。")
+        case .duplicate: workflowText(language, "canvas.connection.duplicate", fallback: "这条连接已存在。")
+        case .cycle: workflowText(language, "canvas.connection.cycle", fallback: "该连接会形成无效循环。")
+        }
+    }
+}
+
 enum WorkflowCanvasConnectionPolicy {
     static func canConnect(
         graph: WorkflowGraph,
@@ -968,25 +1095,39 @@ enum WorkflowCanvasConnectionPolicy {
         targetNodeID: UUID,
         targetPort: String
     ) -> Bool {
-        guard sourceNodeID != targetNodeID,
-              let sourceNode = graph.nodes.first(where: { $0.id == sourceNodeID }),
+        issue(graph: graph, registry: registry, tools: tools,
+              sourceNodeID: sourceNodeID, sourcePort: sourcePort,
+              targetNodeID: targetNodeID, targetPort: targetPort) == nil
+    }
+
+    static func issue(
+        graph: WorkflowGraph,
+        registry: WorkflowRegistry,
+        tools: [WorkflowToolDefinition],
+        sourceNodeID: UUID,
+        sourcePort: String,
+        targetNodeID: UUID,
+        targetPort: String
+    ) -> WorkflowCanvasConnectionIssue? {
+        if sourceNodeID == targetNodeID { return .sameNode }
+        guard let sourceNode = graph.nodes.first(where: { $0.id == sourceNodeID }),
               let targetNode = graph.nodes.first(where: { $0.id == targetNodeID }),
               let source = registry.definition(for: sourceNode, tools: tools)?.outputs.first(where: {
-                $0.id == sourcePort
+                  $0.id == sourcePort
               }),
               let target = registry.definition(for: targetNode, tools: tools)?.inputs.first(where: {
-                $0.id == targetPort
-              }),
-              !Set(source.kinds).isDisjoint(with: target.kinds),
-              !graph.connections.contains(where: {
-                $0.targetNode == targetNodeID && $0.targetPort == targetPort
-              }),
-              !graph.connections.contains(where: {
-                $0.sourceNode == sourceNodeID && $0.sourcePort == sourcePort
-                    && $0.targetNode == targetNodeID && $0.targetPort == targetPort
-              }),
-              !wouldCreateCycle(graph: graph, source: sourceNodeID, target: targetNodeID) else { return false }
-        return true
+                  $0.id == targetPort
+              }) else { return .unknownPort }
+        if Set(source.kinds).isDisjoint(with: target.kinds) { return .incompatibleKind }
+        if graph.connections.contains(where: {
+            $0.sourceNode == sourceNodeID && $0.sourcePort == sourcePort
+                && $0.targetNode == targetNodeID && $0.targetPort == targetPort
+        }) { return .duplicate }
+        if graph.connections.contains(where: {
+            $0.targetNode == targetNodeID && $0.targetPort == targetPort
+        }) { return .occupiedInput }
+        if wouldCreateCycle(graph: graph, source: sourceNodeID, target: targetNodeID) { return .cycle }
+        return nil
     }
 
     private static func wouldCreateCycle(

@@ -3,7 +3,7 @@ import DWorkbench
 import Foundation
 import UniformTypeIdentifiers
 
-struct WorkflowCanvasBodyLocation: Codable, Equatable, Sendable {
+struct WorkflowCanvasBodyLocation: Codable, Hashable, Sendable {
     let nodeID: UUID
     let slot: String
 
