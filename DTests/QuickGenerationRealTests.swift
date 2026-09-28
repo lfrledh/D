@@ -45,17 +45,20 @@ struct QuickGenerationRealTests {
             let operation: String
             switch kind {
             case .text:
-                reference = try await #require(session.validateTextModel)(modelURL)
+                let validate = try #require(session.validateTextModel)
+                reference = try await validate(modelURL)
                 backend = try #require(session.textBackendID); operation = "d.model.language"
             case .image:
                 try await session.validateModel(modelURL)
                 reference = ModelReference(directory: modelURL, revision: "ef52ee019fd1d0e75ae4deb40476ba65989716d7")
                 backend = session.backendID; operation = "d.image.generate"
             case .music:
-                reference = try await #require(session.validateMusicModel)(modelURL)
+                let validate = try #require(session.validateMusicModel)
+                reference = try await validate(modelURL)
                 backend = try #require(session.musicBackendID); operation = "d.music.generate"
             case .video:
-                reference = try await #require(session.validateVideoModel)(modelURL)
+                let validate = try #require(session.validateVideoModel)
+                reference = try await validate(modelURL)
                 backend = try #require(session.videoBackendID); operation = "d.video.generate"
             default: throw WorkflowIssue("Unsupported test kind")
             }
