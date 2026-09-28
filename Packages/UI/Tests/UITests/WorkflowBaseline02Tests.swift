@@ -139,6 +139,7 @@ struct WorkflowBaseline02Tests {
         canvas.contentView.scroll(to: CGPoint(x: 237, y: 119))
         canvas.reflectScrolledClipView(canvas.contentView)
         let actual = canvas.contentView.bounds.origin
+        #expect(actual.x > 20 && actual.y > 20, "The source graph must be manually scrolled before restoration")
         for _ in 0..<40 {
             host.layoutSubtreeIfNeeded()
             if observations[originalContext]?.contains(where: {
@@ -150,7 +151,23 @@ struct WorkflowBaseline02Tests {
             abs($0.x - actual.x) < 2 && abs($0.y - actual.y) < 2
         }) == true)
         controller.addBlankGraph()
-        host.layoutSubtreeIfNeeded()
+        let blankGraph = try #require(controller.graph)
+        #expect(blankGraph.id != originalGraph.id)
+        let blankContext = WorkflowCanvasViewContext(projectID: controller.projectID,
+            rootGraphID: blankGraph.id, bodyPath: [])
+        var blankOffset = CGPoint(x: .infinity, y: .infinity)
+        for _ in 0..<40 {
+            host.layoutSubtreeIfNeeded()
+            blankOffset = graphScrollView()?.contentView.bounds.origin ?? blankOffset
+            if observations[blankContext]?.contains(where: {
+                abs($0.x) < 2 && abs($0.y) < 2
+            }) == true && abs(blankOffset.x) < 2 && abs(blankOffset.y) < 2 { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(observations[blankContext]?.contains(where: {
+            abs($0.x) < 2 && abs($0.y) < 2
+        }) == true, "The blank graph must mount and report its reset offset before switching back")
+        #expect(abs(blankOffset.x) < 2 && abs(blankOffset.y) < 2)
         controller.selectedGraphID = originalGraph.id
         var restored = CGPoint.zero
         for _ in 0..<40 {

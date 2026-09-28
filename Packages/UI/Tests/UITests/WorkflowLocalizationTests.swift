@@ -225,8 +225,8 @@ struct WorkflowLocalizationTests {
                 guard visited.insert(ObjectIdentifier(object)).inserted else { continue }
                 if let element = object as? any NSAccessibilityProtocol,
                    element.accessibilityIdentifier() == identifier,
-                   let button = object as? any NSAccessibilityButton {
-                    return button.accessibilityPerformPress()
+                   element.accessibilityPerformPress?() == true {
+                    return true
                 }
                 if let element = object as? any NSAccessibilityProtocol {
                     pending.append(contentsOf: (element.accessibilityChildren() ?? []).compactMap { $0 as? NSObject })
@@ -258,16 +258,17 @@ struct WorkflowLocalizationTests {
         #expect(editorAfterEdge.selectedRange() == selectedRange)
         #expect(controller.selectedNodeID == input.id)
 
-        // Samples now live inside More. Open the real control before checking its items.
-        #expect(pressControl(host, identifier: "canvas-more"))
+        // Native Menu content lives outside this offscreen NSHostingView's accessibility tree.
+        // Check the mounted trigger and the exact localized title supplied to that menu.
         var chineseChrome: Set<String> = []
         for _ in 0..<40 {
             host.layoutSubtreeIfNeeded()
             chineseChrome = renderedStrings(host)
-            if chineseChrome.contains("添加样例") && chineseChrome.contains("更多") { break }
+            if chineseChrome.contains("更多") { break }
             try await Task.sleep(for: .milliseconds(10))
         }
-        #expect(chineseChrome.contains("添加样例") && chineseChrome.contains("更多"))
+        #expect(chineseChrome.contains("更多"))
+        #expect(workflowText(language, "workflow.toolbar.addExample", fallback: "添加样例") == "添加样例")
 
         let graphsBefore = controller.graphs
         let graphIDBefore = controller.selectedGraphID
@@ -275,13 +276,12 @@ struct WorkflowLocalizationTests {
         let runCountBefore = controller.runs.count
         try language.select("en")
         host.layoutSubtreeIfNeeded()
-        #expect(pressControl(host, identifier: "canvas-more"))
 
         var chrome: Set<String> = []
         for _ in 0..<40 {
             host.layoutSubtreeIfNeeded()
             chrome = renderedStrings(host)
-            if chrome.contains("Add Example") && chrome.contains("More") { break }
+            if chrome.contains("More") { break }
             try await Task.sleep(for: .milliseconds(10))
         }
         let currentEditor = try #require(
@@ -296,7 +296,8 @@ struct WorkflowLocalizationTests {
         #expect(controller.graph?.nodes.first { $0.id == input.id }?.parameters["text"] == .text(draft))
         #expect(controller.runs.count == runCountBefore)
         print("BOUNDARY_RENDERED_CHROME=\(chrome.sorted())")
-        #expect(chrome.contains("Add Example") && chrome.contains("More"))
+        #expect(chrome.contains("More"))
+        #expect(workflowText(language, "workflow.toolbar.addExample", fallback: "添加样例") == "Add Example")
         #expect(commands == 0)
         #expect(await engine.calls == 0)
 

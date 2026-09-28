@@ -416,6 +416,7 @@ private struct WorkflowConnectionLayer: View {
                 hitPath.fill(Color.clear)
                     .contentShape(hitPath)
                     .onTapGesture { onSelect(connection.id) }
+                    .accessibilityElement(children: .ignore)
                     .accessibilityLabel("连接 \(connection.sourcePort) 到 \(connection.targetPort)")
                     .accessibilityAddTraits(.isButton)
                     .accessibilityAction { onSelect(connection.id) }
