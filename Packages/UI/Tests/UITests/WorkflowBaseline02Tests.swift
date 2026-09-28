@@ -1,8 +1,18 @@
 import AppKit
+import DInference
 import DWorkbench
 import Foundation
+import SwiftUI
 import Testing
 @testable import UI
+
+private actor Baseline02NoInferenceEngine: InferenceEngine {
+    private(set) var calls = 0
+    func submit(_ request: InferenceRequest, backendID: String) async throws -> InferenceRun {
+        calls += 1
+        throw WorkflowIssue("Hosting scroll must not execute inference")
+    }
+}
 
 @Suite @MainActor
 struct WorkflowBaseline02Tests {
@@ -72,6 +82,90 @@ struct WorkflowBaseline02Tests {
         #expect(memory.state(for: .init(projectID: UUID(), rootGraphID: root, bodyPath: [])) == nil)
     }
 
+    @Test func capturedOffsetUsesObservedScrollInsteadOfScrollPositionPoint() {
+        let context = WorkflowCanvasViewContext(projectID: UUID(), rootGraphID: UUID(), bodyPath: [])
+        var memory = WorkflowCanvasViewStateStore()
+        let manuallyObserved = CGPoint(x: 237, y: 119)
+        memory.capture(zoom: 1.8, contentOffset: manuallyObserved,
+            selectedNodeID: UUID(), for: context)
+        #expect(memory.state(for: context)?.scrollPoint == manuallyObserved)
+    }
+
+    @Test func manualHostingScrollRestoresActualOffsetAfterGraphSwitch() async throws {
+        let root = URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory())
+            .appendingPathComponent("baseline02-scroll-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = try await ProjectStore.create(at: root.appendingPathComponent("Scroll.dproject"), name: "Scroll")
+        let engine = Baseline02NoInferenceEngine()
+        let runtime = WorkbenchSession(engine: engine, backendID: "never",
+            status: { .init(activeRunID: nil, phase: nil, queuedRunIDs: []) },
+            shutdown: {}, cleanup: {}, validateModel: { _ in })
+        let services = WorkflowServices(store: store, session: runtime,
+            resolveText: { throw WorkflowIssue("No model in scroll test") },
+            resolveImage: { throw WorkflowIssue("No model in scroll test") })
+        let controller = WorkflowController(services: services)
+        await controller.load()
+        controller.addExample("text")
+        let originalGraph = try #require(controller.graph)
+        let originalContext = WorkflowCanvasViewContext(projectID: controller.projectID,
+            rootGraphID: originalGraph.id, bodyPath: [])
+        var observations: [WorkflowCanvasViewContext: [CGPoint]] = [:]
+        let view = WorkflowCanvasView(controller: controller, onTextModel: {}, onImageModel: {},
+            onImport: { _ in }, onDestination: {}, onPublishText: {}, onReturnText: { _ in })
+            .observingScroll { context, observation in
+                observations[context, default: []].append(observation.contentOffset)
+            }
+        let host = NSHostingView(rootView: view)
+        host.frame = CGRect(x: 0, y: 0, width: 860, height: 580)
+        let window = NSWindow(contentRect: host.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = host
+        defer { window.close() }
+        func descendants(_ view: NSView) -> [NSView] { view.subviews.flatMap { [$0] + descendants($0) } }
+        func graphScrollView() -> NSScrollView? {
+            descendants(host).compactMap { $0 as? NSScrollView }.first {
+                ($0.documentView?.frame.width ?? 0) >= 1_400 && ($0.documentView?.frame.height ?? 0) >= 900
+            }
+        }
+        var scroll: NSScrollView?
+        for _ in 0..<40 {
+            host.layoutSubtreeIfNeeded()
+            scroll = graphScrollView()
+            if scroll != nil { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        let canvas = try #require(scroll)
+        canvas.contentView.scroll(to: CGPoint(x: 237, y: 119))
+        canvas.reflectScrolledClipView(canvas.contentView)
+        let actual = canvas.contentView.bounds.origin
+        for _ in 0..<40 {
+            host.layoutSubtreeIfNeeded()
+            if observations[originalContext]?.contains(where: {
+                abs($0.x - actual.x) < 2 && abs($0.y - actual.y) < 2
+            }) == true { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(observations[originalContext]?.contains(where: {
+            abs($0.x - actual.x) < 2 && abs($0.y - actual.y) < 2
+        }) == true)
+        controller.addBlankGraph()
+        host.layoutSubtreeIfNeeded()
+        controller.selectedGraphID = originalGraph.id
+        var restored = CGPoint.zero
+        for _ in 0..<40 {
+            host.layoutSubtreeIfNeeded()
+            restored = graphScrollView()?.contentView.bounds.origin ?? .zero
+            if abs(restored.x - actual.x) < 2 && abs(restored.y - actual.y) < 2 { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(abs(restored.x - actual.x) < 2 && abs(restored.y - actual.y) < 2)
+        #expect(controller.runs.isEmpty)
+        #expect(await engine.calls == 0)
+        try await controller.close()
+        try await store.close()
+    }
+
     @Test func visibleInsertionPointUsesCurrentZoomAndScroll() {
         let offset = CGPoint(x: 120, y: 80)
         let container = CGSize(width: 500, height: 400)
@@ -95,6 +189,24 @@ struct WorkflowBaseline02Tests {
         let current = WorkflowCanvasScope(rootGraphID: root, rootRevision: UUID(),
             graphID: graph, bodyPath: [])
         #expect(!old.matchesOutputScope(current))
+    }
+
+    @Test func connectionHitAreaExcludesBothPortCenters() {
+        let source = WorkflowNode(operationID: "d.text.input", title: "source")
+        let target = WorkflowNode(operationID: "d.text.output", title: "target")
+        let connection = WorkflowConnection(sourceNode: source.id, targetNode: target.id)
+        let graph = WorkflowGraph(nodes: [source, target], connections: [connection], layout: [
+            .init(nodeID: source.id, x: 170, y: 200),
+            .init(nodeID: target.id, x: 660, y: 240),
+        ])
+        let geometry = WorkflowGraphGeometry(graph: graph)
+        let start = CGPoint(x: geometry.displayPosition(source.id).x + WorkflowCanvasLayoutPolicy.nodeWidth / 2,
+                            y: geometry.displayPosition(source.id).y)
+        let end = CGPoint(x: geometry.displayPosition(target.id).x - WorkflowCanvasLayoutPolicy.nodeWidth / 2,
+                          y: geometry.displayPosition(target.id).y)
+        let hit = WorkflowConnectionGeometry.hitPath(for: connection, geometry: geometry, portCenters: [:])
+        #expect(!hit.contains(start) && !hit.contains(end))
+        #expect(hit.boundingRect.width > 0)
     }
 
     @Test func connectionFailureNamesIncompatibleAndOccupiedInputs() throws {

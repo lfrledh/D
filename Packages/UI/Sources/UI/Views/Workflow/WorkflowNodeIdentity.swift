@@ -37,10 +37,7 @@ struct WorkflowNodeIdentity: Equatable {
             return Self(title: name, detail: reference.assetID.uuidString, annotation: annotation)
         }
         if case .invoke(let reference) = node.control {
-            let matching = tools.first {
-                $0.id == reference.id && $0.version == reference.version
-                    && (try? WorkflowPlanCompiler.digest($0)) == reference.digest
-            }
+            let matching = fixedTool(reference: reference, tools: tools)
             let name = matching?.name
                 ?? workflowText(language, "canvas.identity.unknownTool", fallback: "未识别的工具")
             return Self(title: name, detail: "v\(reference.version) · \(reference.id.uuidString)",
@@ -49,6 +46,14 @@ struct WorkflowNodeIdentity: Equatable {
         let title = definition.map { WorkflowCanvasPresentation.operationTitle($0, language: language) }
             ?? workflowText(language, "canvas.identity.unknownOperation", fallback: "未知操作")
         return Self(title: title, detail: node.operationID, annotation: annotation)
+    }
+
+    static func fixedTool(reference: WorkflowToolReference,
+                          tools: [WorkflowToolDefinition]) -> WorkflowToolDefinition? {
+        tools.first {
+            $0.id == reference.id && $0.version == reference.version
+                && (try? WorkflowPlanCompiler.digest($0)) == reference.digest
+        }
     }
 }
 
@@ -70,6 +75,12 @@ struct WorkflowCanvasViewStateStore {
 
     mutating func save(_ state: WorkflowCanvasViewMemory, for context: WorkflowCanvasViewContext) {
         values[context] = state
+    }
+
+    mutating func capture(zoom: CGFloat, contentOffset: CGPoint,
+                          selectedNodeID: UUID?, for context: WorkflowCanvasViewContext) {
+        save(WorkflowCanvasViewMemory(zoom: zoom, scrollPoint: contentOffset,
+            selectedNodeID: selectedNodeID), for: context)
     }
 
     func state(for context: WorkflowCanvasViewContext) -> WorkflowCanvasViewMemory? {
