@@ -1,6 +1,6 @@
 # D-UI-BASELINE-02：原生双入口与共享资料库
 
-2026-09-28 · r1 · U0开始。用户批准U0—U4连续实施，不公开发布/main。基线源01758b81527dc27eb4563bf1b66fd1ceab6647ee；已推前端395378116d39899d138df797b4e39bd1aea917a4。复用原候选物理树，新分支codex/ui-baseline-02；旧分支/证据保留。
+2026-09-28 · r2 · 隔离实现与分层验收中。用户批准U0—U4连续实施，不公开发布/main。基线源01758b81527dc27eb4563bf1b66fd1ceab6647ee；已推前端395378116d39899d138df797b4e39bd1aea917a4。复用原候选物理树，新分支codex/ui-baseline-02；旧分支/证据保留。
 
 ## 本轮事实与保护
 附件所有摘要已核对；持久只读副本R/reference-package。浏览器file导航被策略拒绝，未绕过。用户明确回复“允许先按截图和规格实施”，替代本轮HTML浏览器走查前提；不能记成实际原型交互已验。已查看两张1440×1004参照并读完整任务/验收和书面规格。
@@ -22,4 +22,54 @@ CANVAS受限Worker：仅WorkflowCanvasView.swift、WorkflowGraphSurface.swift、
 每任务只写自己树与R/task/output,tmp，网络关闭、不写共享Git、不构建App/GPU/GUI。允许xcrun swiftc -frontend -parse具体文件（无目标输出），测试由Lead串行。语法与行为分开。未预授权拒绝停报；不提权/另造缓存绕路。正常输出/临时目录预先固定。Lead串行CPU/hosting、正常签名构建、真实GUI和四模态短冒烟；不改签名/权限/全局设置，不把组件当原生。UX01—R02完整表见R/reference-package/02_ACCEPTANCE.md，逐项状态见R/lead/acceptance-results.json；不得静默缩范围。
 
 ## U0—U4与交付
-U0基线/映射；U1尽早真实双入口原生闭环；U2资料整理；U3既有模态/下载导入；U4真实鼠标/键盘与三尺寸、资源/保存、最终普通构建。旧入口映射和实测版本后续追加。最终一个D UI v0.2 Preview及持久隔离启动器、同树D.xcworkspace/D Nodes Run、同尺寸对照、事件证据、逐项结果。UI_NEXT只收后续提案，未明确批准不扩展。当前并未完成任何新UI或新验收。
+U0基线/映射；U1尽早真实双入口原生闭环；U2资料整理；U3既有模态/下载导入；U4真实鼠标/键盘与三尺寸、资源/保存、最终普通构建。旧入口映射和实测版本后续追加。最终一个D UI v0.2 Preview及持久隔离启动器、同树D.xcworkspace/D Nodes Run、同尺寸对照、事件证据、逐项结果。UI_NEXT只收后续提案，未明确批准不扩展。U0准备时尚未完成新UI；以下为后续实际进展，不覆盖最初停点。
+
+
+## r2 实际实现与审阅（2026-09-28）
+
+本轮已在上述候选树实现原生双入口、Quick按模型草稿与独立尝试、共享资料库、固定工具/素材带入、紧凑画布与检查器。采用现有SwiftUI/AppKit、真实WorkflowServices、单个共享运行时与ProjectStore；未嵌入HTML或加入模拟模型。新Quick/共享资料整理是现有Store旁有版本的记录，不是第二套生成/资产系统。命名项目和自动创作拥有各自Store；跨项目引用显式复制并记录来源，模型和媒体不会因为分类而搬动。
+
+### 实际允许路径与所有权补充
+
+- Lead：D/DApp.swift、WorkbenchBootstrap/WorkbenchApplicationDelegate；UI/State/WorkbenchModel；UI/Views/Quick/两文件、SharedLibraryProjection、WorkflowHostView；DWorkbench/Quick/QuickGeneration、ProjectModels/ProjectStore、ProjectSession、WorkbenchSession、WorkflowServices/Controller、WorkflowModelBookmarks、WorkflowMusicOperations；对应QuickGenerationTests/ProjectSessionTests、DTests/QuickGenerationRealTests、en/zh-Hans语言包与本任务/当前入口/试用/集中清单。
+- 三个写任务均经现行受限独立CLI预检，`gpt-6-sol / high`；自己的树与输出/tmp，网络关闭、共享Git不写。配置与可观察上下文吻合；隐藏服务端模型解析unknown。具体文件与完整执行基线由R/{META,CANVAS,LIBRARY}/job.json、spec.txt、route-accepted.json追溯。
+- META初交+1修复，在SAVE物理树完成并由Lead提交1a6c81e；结束写入后复用该树给LIBRARY，未同时写。CANVAS从984bd9f与META并行；LIBRARY从1a6c81e与CANVAS后续并行。各自分支保留。
+- CANVAS初交+2修复结束，最终ebdb7fa；Lead有界修补两个SDK编译差异（CGFloat.infinity、非optional AX方法）。两项hosting仍失败，不能再给第三轮Worker或把未验控件写成可用。
+- LIBRARY初交期间heredoc缓存写入被拒绝，Worker曾自行继续；Lead发现后终止自有CLI，记录R/LIBRARY/lead-incident.json、incident-resolution.json。未把旧行为追改合规；检查无观察到成功越界/权限扩大后，按显式限定恢复原初交，随后两轮修复至c560606。Lead接管修复撤销/外部删除标签后的陈旧筛选ID并增加反例，相关测试通过。详情保留在事件证据，未重置预算。
+- Lead负责共享接线和重要保存保护，不能归为Worker独立成功。两个非实现者只读审阅逐项指出并复核模型能力投影、保存/引用保护、退出/最近项目、工具拖放问题；不是另有独立测试执行。摘要R/lead/review-summary.json；实际测试由Lead串行。
+
+### 行为与已知边界
+
+Quick提交冻结模型/输入/参数，切入口/模型不会取消或改派结果；失败尝试可从冻结输入重试并生成新ID；保存失败只重试保存。设置带画布与结果带画布是分开命令，不运行模型。不可解析旧记录进入只读保护，不自动当空记录重建；未加载坏记录也不阻止关闭应用。退出先完成自动创作的可撤销预检，再关闭命名项目。最近项目取消/失败不再仅凭旧manifest误判成功；恢复提示保留。
+
+固定工具拖入无graph的工作区可新建一个流程并一次撤销；未知版本拒绝，不留下幽灵选中。资产跨项目复制复核内容与来源，并复核异步目标没有变化；结构化结果中的引用一起验证。共享运行时产物发布与项目发布各有所有权，不删除已交付图片。
+
+资料库能力来自真实类型/固定目录投影，用户标签不改变能力。标签/分类/智能查询为有界元数据，重命名使用稳定ID、删除/撤销清理过期筛选；支持动态查询、多重分类和独立预览。未接新快速路径的SA3/歌声仍如实显示独立入口/不支持新路径，非虚构可用。未附新权重或更改现有精度。
+
+**仍未关闭**：CANVAS离屏AX两控件无法触发（未分离查找失败/performPress拒绝），不能归因锁屏；整个原生鼠标、三尺寸、同尺寸对照及用户试用等待H29。新快速参考当前偏重导入和结构值入口，专业音符/区域编辑的完整可达性、历史实名展示、跨项目素材空画布拖放须在原生走查时逐条核对，不能仅以有控件宣布满足。旧H28/QUALITY、H22输入法跟随和历史性能/音视频质量责任保留，不以新UI覆盖。
+
+### 已执行检查与失败保留
+
+- `42aeeec84a3606d0dda89f508760b329278ebff8`：UI包完整检查，DWorkbench 647/81 suites与模型库23/1 suite通过；UI 201/31 suites中两方法、四断言失败，日志R/lead/full-ui.log。失败方法为WorkflowLocalizationTests.hostedCanvasSwitchPreservesDraftSelectionParametersAndControllerIdentity与WorkflowMediaPresetTests.actualCanvasHostsMediaInspectorsWithoutRunning。技术详情未打开后的字段缺失是级联，50/100的短路表达式未求值，不能算另两个实际参数错误。
+- `1b080a7b7ef37e48f724dcfb8d0f9ec7acbb3bc3`：QuickGenerationTests、ProjectSessionTests、SharedLibraryBrowserTests 31方法/3 suites通过（R/lead/focused-final），含新增工具空图插入/撤销、非法最近ID保持原项目。CPU不替代GUI。
+- Swift 6.4真实测试编译在嵌套require及“require后直接调用异步闭包”处崩溃；将条件与调用分别赋值，保留同断言。app-test-build2/3失败，4/5通过。首次真实测试宿主/测试签名不一致；复用已有DevelopmentSigning.xcconfig的build6通过，没有修改签名设置。一次方法筛选实际选到0 tests，由外部PASS标记检查拒收，改为唯一suite选择。原失败与空执行日志保留。
+- 真实图像测试的初次resolver漏传既有Klein配方，被执行层明确拒绝，未加载推理；测试按生产ProjectSession补同一配方，未改生产规则。build7受测`89fa56b`的完整值及后续真实结果由R/lead相应result.json记录；本段不提前宣布通过。
+
+### 恢复/验收入口
+
+R/scripts/run-check.py固定输出/tmp/超时、只回收自身进程。UI包使用已有离线scratch；App使用同一候选D.xcworkspace与既有资源配置，D scheme build-for-testing；普通交付使用D Nodes正常构建。R/scripts/run-quick-real.py选择DTests/QuickGenerationRealTests，实际生产Quick控制器+AppSessionFactory，逐模态独立测试记录、GPU串行；不是鼠标GUI、试听或艺术质量验收。
+
+R/lead/acceptance-results.json按原UX01—R02列全；原生未验不能据CPU升级passed。完整最终源码/产物/签名、模型实测及源保护、进程状态在final-receipt.json；本文不为写自身SHA反复提交。源仍01758b8，个人scheme摘要/索引和差异由保护记录逐项核对；候选未快进接纳，AP1/CORE/I2V不动。
+
+预算记录使用逐进程墙钟与每phase原始用量证据；不累加累计token快照、不换算订阅费用。完整Lead与订阅成本unknown。本轮不宣称低成本最佳或所有普通交互通过。接下来只完成本批准范围剩余验收/缺陷，不启动新的产品阶段。
+
+
+### 当前实际停点：2026-09-28 受测代码89fa56be3237f7be2955b3d6834e8110c3e87e07
+
+- `focused-final2`最终相关31方法/3 suites通过；与完整测试42aeeec的范围不相加成全量最终通过。
+- `quick-real-{text,image,music,video}-final`分别1项真实测试通过。模型固定版本见R/lead/real-summary.json：Qwen1.5B4bit约1.47秒、Klein512²/4步约26.04秒、MRT2无音符4秒约3.34秒、Wan320×192/17帧/4步约107.28秒。此耗时从会话创建后到生成/导出/关闭前后，不是模型纯计算基准或首音延迟。没有降精度、更换模型或扩大内存硬门槛。每项验证冻结输入、生成中切草稿、资产可读、空闲状态、结果入图不运行、导出和重开；非真实鼠标/听感。PNG另由Lead看图确认红茶壶输出。
+- `normal-app-final`在相同代码正常构建D Nodes通过；完整复制到`R/delivery/D UI v0.2 Preview.app`，不是手补运行时。diagnose-app只读检查签名完整性、既有sandbox与identifier通过，未证明Gatekeeper/公证/TCC/GUI。`final-delivery-identity.json`记录二进制/资源封印摘要及稳定试用身份。
+- 非实现者在89fa56b对最后窄差异复核无新增P1/P2；服务错误展示已闭合。原CANVAS两个hosting失败与原生锁屏仍独立保留。R/lead/review-summary.json补最终结论。
+- CUA收尾真实返回Mac锁屏、无法自动解锁（R/gui/blocked.json）。因此U1—U4的原生可用性、同尺寸截图和用户试用没有完成；不因真实模型通过宣布v0.2已验收，不快进源。阶段状态：**部分完成，隔离开发候选可供恢复验收；不是交付验收通过**。
+- 唯一推荐入口/完整步骤见[当前试用](../NODE_LANGUAGE_TRY.zh-CN.md)及R/delivery/使用说明.md；旧Early/Canvas/Quality包保留但不作当前推荐。当前新增UI控制不得当作已验版本替换源。
+- 恢复：先核源01758b81527dc27eb4563bf1b66fd1ceab6647ee、候选最终文档SHA、scheme真实摘要/未暂存、已结束Worker与自有进程；解锁后续同一批准范围H29。普通代码/构建工作无需用户逐条转发；若控制缺陷需要超出既定修复预算，具体说明剩余问题，不能暗开第三轮或以新编号刷新。

@@ -1,5 +1,13 @@
 # D 通用节点工作台：本机开发试用
 
+## 当前 v0.2 候选：D-UI-BASELINE-02（尚未阶段接纳）
+
+唯一推荐启动器：`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-UI-BASELINE-02/run-20260928T123204Z/delivery/启动v0.2工作台.command`。同目录[使用说明](/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-UI-BASELINE-02/run-20260928T123204Z/delivery/使用说明.md)给出模型登记、快速/工作流/资料库试用顺序与限制。
+
+同一候选工作树 `/Volumes/CodexProjects/Codex/D-Worktrees/D-NODE-QUALITY-01/D.xcworkspace`，分支 `codex/ui-baseline-02`，**D Nodes / My Mac** 正常Run。普通包代码 `89fa56be3237f7be2955b3d6834e8110c3e87e07`，现有资源由构建阶段准备/核验，不需要手工修补App。启动器与D Nodes使用各自稳定隔离身份，记录不会自动同步。
+
+Quick真实Qwen/Klein/MRT2/Wan短调用、保存与重开通过；原生界面还因锁屏待H29，两个离屏控件测试失败保留，不能称完成易用性验收。具体版本/范围见[本轮记录](tasks/D-UI-BASELINE-02.md)。以下旧版本仅为历史来源与未验责任，不是本轮推荐入口；旧工作树路径现在已推进到新候选，复现旧UI应使用对应固定旧App，不要回退现有树。
+
 ## 新版节点画布：D-CANVAS-USABILITY-01
 
 这一版把节点库放左、资产库放右、可收起的参数与结果放在画布下方。支持按名称/标签搜索，编辑用户标签、库条目拖入、资产绑定、端口拖连和实时共享节点/连线位置。模态简易页仍在“创作与资料”。
