@@ -1,10 +1,18 @@
 # 当前行动与接手点
 
-最后核实：2026-09-28。唯一当前任务、版本与停点入口。
+最后核实：2026-09-29。唯一当前任务、版本与停点入口。
 
-## D-UI-BASELINE-02：隔离候选已实现，验收未完成
+## D-UI-BASELINE-02：已恢复原生检查，隔离候选待审计
 
-用户批准原生快速生成/工作流平等入口、共享资料库与v0.2布局；允许先按截图和规格实施（本地HTML浏览器策略阻塞，未绕过）。复用前端395378116d39899d138df797b4e39bd1aea917a4，在同物理候选树codex/ui-baseline-02实施U0—U4。源/个人修改保护不变，旧H28/QUALITY待验仍保留。当前唯一任务和实际路径/来源/失败见[任务记录](tasks/D-UI-BASELINE-02.md)。已完成Quick与共享资料库/画布接线，CPU与构建已有证据；两项CANVAS hosting失败保留，原生H29因锁屏待验。尚未源接纳或宣布交付通过。本批源码/普通包受测`89fa56be3237f7be2955b3d6834e8110c3e87e07`，最终仅文档SHA及远端审查分支状态在R/lead/final-receipt.json；[唯一候选入口](NODE_LANGUAGE_TRY.zh-CN.md#当前-v02-候选d-ui-baseline-02尚未阶段接纳)。后续讨论只进入[UI_NEXT](UI_NEXT.md)。
+当前源 `codex/inference-foundation` 仍为 `01758b81527dc27eb4563bf1b66fd1ceab6647ee`，唯一个人scheme未暂存差异保持。候选 `codex/ui-baseline-02` 位于 `/Volumes/CodexProjects/Codex/D-Worktrees/D-NODE-QUALITY-01`；本次受测代码 `e4fe2f3e405d59a977d715464ab1c583341f8ae0`。最终仅文档提交与远端状态见本次证据R1/lead/final-receipt.json。**未源接纳、未整体验收通过。**
+
+用户已解锁；原生双入口、共享资料库已观察；89fa原生连线检查/断开/撤销及真实Qwen快速生成、89fa→e4fe正常重开已取得局部证据。本人确认中文/日文选字正常、未见丢字或重复，但候选窗仍不跟随；H22继续是工程缺陷，不是缺权限。此前“所有原生检查因锁屏未执行”只属于历史快照。
+
+用户额外批准一次Lead有限修补：统一资料库220/240点宽度冲突，仅改一行布局常量，没有再派写Worker、改模型或存储。相关21项/2 suites及普通D Nodes构建通过；新包在实际860×612、1024×768、1440×900点下左侧裁切消失，菜单可打开；860×580受现有最小高度限制，不能记成精确尺寸通过。批量菜单标题仍有省略。本人拖放已确认“有预览，但未新增节点”；资料库拖入失败，全部缩放/滚动矩阵尚未通过；＋添加、画布内移动不能替代拖入。原两个hosting失败/四断言保留。
+
+R1=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-UI-BASELINE-02/run-20260928T144932Z-native`。本次事实与34项状态见R1/lead/native-continuation.json、acceptance-results.json；构建/真人/模型/GUI分开。旧R=`run-20260928T123204Z`的失败和模型控制器证据原样保留。最新入口见[试用说明](NODE_LANGUAGE_TRY.zh-CN.md#当前-v02-候选d-ui-baseline-02尚未阶段接纳)，完整归因见[任务](tasks/D-UI-BASELINE-02.md#2026-09-29-解锁后原生验收与一次有限宽度修补)。
+
+下一动作：本次本人事项已收齐，按事实同步审计候选；等待用户审计试用。限定修补的完整复验未通过，停止继续修改该项。没有新密码、设备或系统授权请求；不要重新要求断网/录音/模型许可。剩余工程缺陷与未验范围不能通过用户点击权限消除；不自动扩大修复预算、不把候选作为已验版本替换源。用户随后审计与试用；新增产品讨论仍入[UI_NEXT](UI_NEXT.md)。
 
 ## 历史前端候选：D-CANVAS-USABILITY-01（责任保留）
 
