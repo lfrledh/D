@@ -1757,7 +1757,7 @@ enum WorkflowCanvasLayoutPolicy {
     static let minimumVisibleWidth: CGFloat = 760
     static let minimumVisibleHeight: CGFloat = 500
     static let minimumWorkspaceWidth: CGFloat = 760
-    static let libraryWidth: CGFloat = 220
+    static let libraryWidth: CGFloat = 240
     static let inspectorWidth: CGFloat = 300
     static let canvasMinimumWidth: CGFloat = 260
     static let nodeWidth: CGFloat = 240
