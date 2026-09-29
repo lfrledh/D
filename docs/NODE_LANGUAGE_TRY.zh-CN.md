@@ -2,13 +2,15 @@
 
 ## 当前 v0.2 候选：D-UI-BASELINE-02（尚未阶段接纳）
 
-下一次集中验收只用：`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-UI-BASELINE-02/run-20260928T160457Z-defect-close/delivery/启动v0.2修补验收.command`。同目录“D UI v0.2 Repair.app”与[使用说明](/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-UI-BASELINE-02/run-20260928T160457Z-defect-close/delivery/使用说明.md)保留。**2026-09-29已实际验证此启动器与隔离身份，部分原生控件通过；100%资料库拖入仍失败，不是完成版。真人输入法跟随未复验。**旧R1/R0包仅留历史，不同时启动。
+当前只用：`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-UI-BASELINE-02/run-20260929T151114Z-card-drag/delivery/启动卡片拖动验收.command`。同目录“D Card Drag.app”与“使用说明.md”。**2026-09-30已实际启动、核对隔离身份并保存重开；卡片非交互区域拖动已验。旧资料库拖入、端口拖线和真人输入法跟随仍有保留项，不是阶段完成版。**旧Repair/R1/R0包留历史，不同时启动。
 
-同一工作树`/Volumes/CodexProjects/Codex/D-Worktrees/D-NODE-QUALITY-01/D.xcworkspace`，`codex/ui-baseline-02`，**D Nodes / My Mac / Debug**。本轮受测代码`e546762dd9cafd46d0b99d8f360331393a7e95e6`，由正常构建准备资源，没有手补App。本轮未再次Xcode界面点Run；scheme与启动器是两个稳定试用身份，不自动共享记录。不要直接双击App本体。
+同一工作树`/Volumes/CodexProjects/Codex/D-Worktrees/D-NODE-QUALITY-01/D.xcworkspace`，`codex/ui-baseline-02`，**D Nodes / My Mac / Debug**。本轮受测代码`42b2243e0e8ff0bfa7300b81d8e46cc13c23f50e`，由正常构建准备资源，没有手补App。本轮未再次Xcode界面点Run；scheme与启动器是两个稳定试用身份，不自动共享记录。不要直接双击App本体。
+
+卡片可从标题、说明、空白、内部边缘移动；按钮/折叠/端口单独操作。可先在50/100/180%试移动，再用“更多→撤销”，保存后重开。当前输入框与缩放滑块在检查器/工具栏。缩放轨道点击已验，自动鼠标连续拖滑块未改值，单独保留该观察；不等于移动手势抢走控件。相关45项CPU及同SHA普通构建通过，原生证据在R4/gui，布局不改模型请求与资产来源。
 
 已补输入几何/拖放接受返回，5项输入组件通过，画布相关49项中两旧hosting失败。同包连线详情/断开/撤销、草稿与音乐/视频技术信息已有原生证据；资料库拖入本次失败，完整缩放/滚动/Undo矩阵和真人IME仍待完成。先核对启动进程与隔离身份，失败不要自行改权限或反复打开App。本轮没有改变推理/存储或重跑模型；旧四模态证据不冒充新GUI验收。
 
-候选未源接纳，原件和旧记录保持。具体恢复步骤和逐项缺口见[任务r3](tasks/D-UI-BASELINE-02.md#r3-修补与锁屏恢复检查点2026-09-29)与[当前行动](CURRENT_ACTIONS.zh-CN.md)。
+候选未源接纳，原件和旧记录保持。旧完整拖放矩阵不与本次卡片移动混同。具体增量见[任务r4](tasks/D-UI-BASELINE-02.md#2026-09-30-r4卡片非交互区域默认可拖)，其余缺口见[当前行动](CURRENT_ACTIONS.zh-CN.md)。
 
 ## 新版节点画布：D-CANVAS-USABILITY-01
 

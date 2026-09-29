@@ -1,8 +1,16 @@
 # 当前行动与接手点
 
-最后核实：2026-09-29。唯一当前任务、版本与停点入口。
+最后核实：2026-09-30。唯一当前任务、版本与停点入口。
 
-## D-UI-BASELINE-02：已恢复原生检查，拖放等工程缺口保留
+## 最新增量：卡片非交互区域默认可拖（r4）
+
+用户本轮要求已在候选完成，停在试用点。候选仍`codex/ui-baseline-02`，工作树`/Volumes/CodexProjects/Codex/D-Worktrees/D-NODE-QUALITY-01`；受测代码`42b2243e0e8ff0bfa7300b81d8e46cc13c23f50e`，后续仅文档提交/同步状态见R4/lead/final-receipt.json。R4=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-UI-BASELINE-02/run-20260929T151114Z-card-drag`。源仍`01758b81527dc27eb4563bf1b66fd1ceab6647ee`，个人scheme未暂存保护保持；未源接纳。
+
+同一移动手势移到卡片背景，说明、空白、内部边缘可拖；端口/按钮保持前景手势。固定代码45项相关CPU测试、普通D Nodes构建通过。隔离App实际鼠标验证50/100/180%卡片移动、端口/按钮不误移、正文选择、撤销和保存重开；保存归档除布局和归档版本号外，节点/参数/连接/资产/运行记录不变。缩放滑块点击可改值，两次自动鼠标拖滑块未改值，不能宣称连续滑动已验通过。当前卡片内没有输入框/滑块，验证的是现有右侧编辑器和工具栏；未伪造内嵌控件。
+
+最新唯一试用入口见[试用说明](NODE_LANGUAGE_TRY.zh-CN.md#当前-v02-候选d-ui-baseline-02尚未阶段接纳)。本次没有新增真人待办、没有GPU任务；两个测试实例正常退出。旧资料库拖入、端口拖线、两项hosting、H22等责任继续保留，**本增量通过不表示整轮缺陷全部关闭**。具体证据与自动操作偏差见[任务r4](tasks/D-UI-BASELINE-02.md#2026-09-30-r4卡片非交互区域默认可拖)。
+
+## r3历史停点：已恢复原生检查，拖放等工程缺口保留
 
 候选`codex/ui-baseline-02`，工作树`/Volumes/CodexProjects/Codex/D-Worktrees/D-NODE-QUALITY-01`；本轮实际编译/输入几何受测代码`e546762dd9cafd46d0b99d8f360331393a7e95e6`。最终仅文档SHA/远端见R2/lead/final-receipt.json。源仍`01758b81527dc27eb4563bf1b66fd1ceab6647ee`，个人scheme未暂存且未改变。**未完成全部缺陷收口，未源接纳。**
 
