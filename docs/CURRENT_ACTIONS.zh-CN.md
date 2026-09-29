@@ -2,13 +2,13 @@
 
 最后核实：2026-09-29。唯一当前任务、版本与停点入口。
 
-## D-UI-BASELINE-02：r3局部修补完成，锁屏与工程缺口保留
+## D-UI-BASELINE-02：已恢复原生检查，拖放等工程缺口保留
 
 候选`codex/ui-baseline-02`，工作树`/Volumes/CodexProjects/Codex/D-Worktrees/D-NODE-QUALITY-01`；本轮实际编译/输入几何受测代码`e546762dd9cafd46d0b99d8f360331393a7e95e6`。最终仅文档SHA/远端见R2/lead/final-receipt.json。源仍`01758b81527dc27eb4563bf1b66fd1ceab6647ee`，个人scheme未暂存且未改变。**未完成全部缺陷收口，未源接纳。**
 
 已修：输入几何在拖动事件循环中迟到、附属窗口更新目标错误；5项组件测试通过，新增反例经历先失败后通过。拖放4处明确接受/拒绝返回并补表面命中区域；真实provider桥接通过，尚不证明实际拖入修复。相关49项中47通过、两项旧hosting/4断言失败，原标准不改。普通D Nodes构建和新包签名通过。
 
-当前Mac已锁屏。诊断启动器曾返回-10810且未进入试用身份，随后工具隐式启动已正常退出；原因未确认，不申请扩权。新普通修补包尚未原生启动验收。下一恢复先核对进程/试用身份，再补drop命中、50/100/180%/滚动/Undo和控件对照；真人IME跟随待本人返回。两hosting和窄栏菜单是工程责任，不是待授权。
+2026-09-29本人解锁后，只补无需本人操作的原生检查。R3=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-UI-BASELINE-02/run-20260929T003334Z-unlock-native`：固定Repair包与df754试用身份实际启动两次；连线详情/断开/撤销、文字草稿保留、视频100%/音乐50%技术信息与参数切换已观察。资料库100%拖入仍无新增节点，端口拖线本次未成功；接收回调状态未知。不能关闭完整拖放矩阵、旧两hosting或H22。测试项目已正常保存，测试App已正常退出，无模型运行。真人集中待办按用户本轮要求暂不办理。下一步是已授权r3内的拖放接收诊断与工程修补，不是继续等解锁，也不升级为新产品阶段。
 
 R2=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-UI-BASELINE-02/run-20260928T160457Z-defect-close`。具体改动、审阅、原失败和恢复步骤见[本轮r3记录](tasks/D-UI-BASELINE-02.md#r3-修补与锁屏恢复检查点2026-09-29)，本人动作仅见[集中清单](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md#当前集中待办2026-09-29)。新包/唯一下一次验收入口见[试用说明](NODE_LANGUAGE_TRY.zh-CN.md#当前-v02-候选d-ui-baseline-02尚未阶段接纳)。用户已授权继续本轮范围；不恢复旧停止预算、不扩新产品阶段。
 

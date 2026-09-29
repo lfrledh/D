@@ -2,11 +2,11 @@
 
 ## 当前 v0.2 候选：D-UI-BASELINE-02（尚未阶段接纳）
 
-下一次集中验收只用：`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-UI-BASELINE-02/run-20260928T160457Z-defect-close/delivery/启动v0.2修补验收.command`。同目录“D UI v0.2 Repair.app”与[使用说明](/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-UI-BASELINE-02/run-20260928T160457Z-defect-close/delivery/使用说明.md)保留。**这是待原生复验的修补候选：正常构建和签名已过，新启动器仅语法已过，当前锁屏，未证明它已实际启动或拖放/候选跟随已修好。**旧R1/R0包仅留历史，不同时启动。
+下一次集中验收只用：`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-UI-BASELINE-02/run-20260928T160457Z-defect-close/delivery/启动v0.2修补验收.command`。同目录“D UI v0.2 Repair.app”与[使用说明](/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-UI-BASELINE-02/run-20260928T160457Z-defect-close/delivery/使用说明.md)保留。**2026-09-29已实际验证此启动器与隔离身份，部分原生控件通过；100%资料库拖入仍失败，不是完成版。真人输入法跟随未复验。**旧R1/R0包仅留历史，不同时启动。
 
 同一工作树`/Volumes/CodexProjects/Codex/D-Worktrees/D-NODE-QUALITY-01/D.xcworkspace`，`codex/ui-baseline-02`，**D Nodes / My Mac / Debug**。本轮受测代码`e546762dd9cafd46d0b99d8f360331393a7e95e6`，由正常构建准备资源，没有手补App。本轮未再次Xcode界面点Run；scheme与启动器是两个稳定试用身份，不自动共享记录。不要直接双击App本体。
 
-已补输入几何/拖放接受返回，5项输入组件通过，画布相关49项中两旧hosting失败。资料库实际拖入、缩放/滚动/Undo与真人IME仍待同包检查。先核对启动进程与隔离身份，失败不要自行改权限或反复打开App。本轮没有改变推理/存储或重跑模型；旧四模态证据不冒充新GUI验收。
+已补输入几何/拖放接受返回，5项输入组件通过，画布相关49项中两旧hosting失败。同包连线详情/断开/撤销、草稿与音乐/视频技术信息已有原生证据；资料库拖入本次失败，完整缩放/滚动/Undo矩阵和真人IME仍待完成。先核对启动进程与隔离身份，失败不要自行改权限或反复打开App。本轮没有改变推理/存储或重跑模型；旧四模态证据不冒充新GUI验收。
 
 候选未源接纳，原件和旧记录保持。具体恢复步骤和逐项缺口见[任务r3](tasks/D-UI-BASELINE-02.md#r3-修补与锁屏恢复检查点2026-09-29)与[当前行动](CURRENT_ACTIONS.zh-CN.md)。
 
