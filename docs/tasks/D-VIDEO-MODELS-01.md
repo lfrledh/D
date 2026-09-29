@@ -37,3 +37,19 @@ Lead协调资源预检、Swift契约/选择与Store/App接线、文件保护、�
 Lead澄清LTX完整2.5配方必须显式 diffusion decoder，2.3为conv；不默认使用更轻解码器。LTX Worker初交后的修复1同时关闭NUL参数缺陷，并落实这项新澄清；不倒记为原规格违约。H3初交、LTX修复1由Lead复读并在隔离组合分支保留历史合并。Lead将LTX测试临时根改为调用方TMPDIR，去除本机run硬编码。非实现者审阅见R/lead/review，纯配方仍不等于后端。
 
 新增两个互不重叠的有限切片：值型视频执行选项（DInference与根包测试）；本地视频引擎子进程监督（Python适配目录与对应CPU测试）。各独立受限树/基线/输出，gpt-6-sol/high，初交加最多2次修复，不能修改公共规格。前者仅给现有VideoRequest增加可选、有类型的H3/LTX选项，旧Wan缺省解码不变；后者服务本次上游进程及其FFmpeg回收，不新建运行时或模型调度器。确切允许路径、接口与反例在各任务输出规格中冻结。Lead负责最终实际调用、资源与产物发布。
+
+## 真实模型入口与 Lead 有界收尾（2026-09-30）
+
+两项资格/门控问题 H30/H31 尚未得到本人回复；不下载 H3/LTX2.5 权重。LTX2.3 Q8 + Gemma3 Q4 测试资源共 36,826,797,038 字节，固定清单逐文件摘要已核；非蒸馏 dev，但不是全精度。BF16 模型与文字塔单独清单约72.58GB，未以小机实测冒充。实际独立环境/下载证据在R/lead与tests，不提交权重。
+
+Swift 值型组合在 `c863e2b67fca18d1048e29bd0ea725961f250a14` 根包79项/14 suites通过；受限Worker无法启动SwiftPM嵌套沙箱后按规则停报，Lead在原有权限检查。PROCESS经历初交+两轮修复，15 CPU项曾通过；初交权限拒绝后未立刻停报、Lead较晚发现的事实保留（R/lead/process-worker-event.json）。不得把后续修补归为Sol独立通过。
+
+固定 `9dcf4978034a09402411b8709dbdd9b5be8bb603` 的第一次真实Q8流式调用：上游GPU完成256×256、9帧、24fps、2步、seed42音视频，日志106.1秒；VAE阶段报告Metal峰值3.47GB，不等于全流程RSS。随后ffprobe退出竞争导致包装器失败，初始两个probe日志不完整，不能验收通过。原MP4保留。`__metadata__: null` 曾被自写资源检查器误拒绝，已对照safetensors参考读取器纠正，原件没有被修改。
+
+PROCESS剩余普通修复为0；Lead执行一次有界接管：本机自有子进程证明Darwin在僵尸尚未回收时signal0可报EPERM，wait后为ESRCH。新增真实进程竞态回归先失败（tests/process-lead-before-02.log）再通过；仅对已拥有Popen有界wait0.1秒后复查同PGID，持续拒绝仍失败，绝不把EPERM直接当不存在。18项CPU检查通过。非实现者video_extension_map复核代码/日志，未另跑测试；没有改权限、换用户或忽略拒绝。依据Apple XNU killpg1对SZOMB过滤：https://github.com/apple-oss-distributions/xnu/blob/main/bsd/kern/kern_sig.c 。
+
+Lead另修私有产物检查：明确`-xerror`全量音视频解码、哈希后再检查取消、请求读取1MiB上限；资源每4MiB分块可取消。新入口固定tempfile.tempdir为任务tmp，避免磁盘错误回落系统临时路径；调用同一上游CLI函数与参数，没有改变模型数值。新5项CPU媒体检查包含真实FFmpeg合成/损坏副本、取消、拒绝和临时目录失败；不算真实模型样本。h3_primary_research只读审查取消和媒体验证；video_extension_map复核进程/临时目录。
+
+`real-ltx23-q8/strict-recheck-01/result.json`：只读复验原始MP4的完整JSON与解码均通过，视频9帧/24fps/0.375秒，AAC48kHz立体声约0.33秒，在明确AV容差内。原件SHA256 `56ee9103049794d536a53e3e43f5c19bfba35189bdb3b6b69c82ed050d70004c` 不变。这是修补后复验原样本，不倒改第一次完整调用失败历史。2步极短样本不是画质、音画语义、官方数值对照或BF16验收。
+
+仍待：修补后的整个真实入口与取消复验、完整App运行时/安装使用权/音视频Store接线、新节点和流式开关、普通Xcode可复建依赖打包。旧Wan仅值型拒绝外来选项的针对性回归；没有声称新后端已注册或前端节点可生成。当前代码不改项目schema、原App或已有模型请求。精确最终提交与后续结果写外部回执，不能用本文把尚未执行事项记为通过。

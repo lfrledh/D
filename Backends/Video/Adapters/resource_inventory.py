@@ -114,7 +114,7 @@ def inspect_safetensors(file, *, allow_quantized=False):
     return {"tensors": count, "dtypes": dtypes}
 
 
-def verify_inventory(root, inventory):
+def verify_inventory(root, inventory, *, cancelled=lambda: False):
     """Hash every required file through no-follow descriptors; preserve originals."""
     root = Path(root)
     if not root.is_absolute():
@@ -142,12 +142,14 @@ def verify_inventory(root, inventory):
     verified = []
     try:
         for entry in entries:
+            if cancelled():raise InterruptedError("Cancelled during resource verification")
             with _open_regular(root_fd, entry["name"]) as file:
                 before = os.fstat(file.fileno())
                 if before.st_size != entry["size"]:
                     raise ResourceError(f"Size mismatch: {entry['name']}")
                 digest = hashlib.sha256()
                 for chunk in iter(lambda: file.read(4 * 1024 * 1024), b""):
+                    if cancelled():raise InterruptedError("Cancelled during resource verification")
                     digest.update(chunk)
                 if digest.hexdigest() != entry["sha256"]:
                     raise ResourceError(f"Hash mismatch: {entry['name']}")

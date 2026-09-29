@@ -19,6 +19,54 @@ from owned_video_process import run_owned  # noqa: E402
 
 
 class OwnedVideoProcessTests(unittest.TestCase):
+    def test_persistent_group_denial_is_not_absence(self):
+        child = mock.Mock(pid=12345)
+        child.wait.return_value = 0
+        with mock.patch.object(process_module, "_group_alive", side_effect=PermissionError("denied")) as probe:
+            with self.assertRaises(PermissionError):
+                process_module._owned_group_alive(child)
+        child.wait.assert_called_once_with(timeout=0.1)
+        self.assertEqual(probe.call_count, 2)
+
+    def test_denied_signal_only_ignored_after_group_really_absent(self):
+        child = mock.Mock(pid=12345)
+        with mock.patch.object(process_module, "_signal_group", side_effect=PermissionError("denied")):
+            with mock.patch.object(process_module, "_owned_group_alive", return_value=True):
+                with self.assertRaises(PermissionError):
+                    process_module._signal_owned_group(child, signal.SIGTERM)
+            with mock.patch.object(process_module, "_owned_group_alive", return_value=False):
+                process_module._signal_owned_group(child, signal.SIGTERM)
+
+    @unittest.skipUnless(sys.platform == "darwin", "Darwin zombie-group semantics")
+    def test_parent_exits_between_poll_and_group_probe(self):
+        real_popen = process_module.subprocess.Popen
+        real_probe = process_module._group_alive
+        children = []
+        injected = []
+
+        def capture(*args, **kwargs):
+            child = real_popen(*args, **kwargs)
+            children.append(child)
+            return child
+
+        def exit_before_probe(pgid):
+            if not injected:
+                injected.append(pgid)
+                # Empty pipes reach EOF only after this real child exits. Leave
+                # it unreaped to reproduce Darwin's EPERM, not a permissions mock.
+                for pipe in (children[0].stdout, children[0].stderr):
+                    os.set_blocking(pipe.fileno(), True)
+                    pipe.read()
+                    os.set_blocking(pipe.fileno(), False)
+            return real_probe(pgid)
+
+        with mock.patch.object(process_module.subprocess, "Popen", side_effect=capture):
+            with mock.patch.object(process_module, "_group_alive", side_effect=exit_before_probe):
+                result = self._run("import time; time.sleep(0.05)")
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(result["exit_code"], 0)
+        self.assertEqual(len(injected), 1)
+
     def setUp(self):
         task_tmp = os.environ["VIDEO_PROCESS_TEST_TMPDIR"]
         self.assertTrue(os.path.isabs(task_tmp) and os.path.isdir(task_tmp))

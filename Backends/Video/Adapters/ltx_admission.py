@@ -23,7 +23,7 @@ def _inventory(name):
     return json.loads(path.read_bytes())
 
 
-def _closed_pack(root, inventory):
+def _closed_pack(root, inventory, *, cancelled=lambda: False):
     root = Path(root)
     if not root.is_absolute() or not stat.S_ISDIR(root.lstat().st_mode):
         raise ResourceError('Pack must be an explicit physical directory, not a symlink')
@@ -37,10 +37,10 @@ def _closed_pack(root, inventory):
     if not expected <= seen:
         raise ResourceError('Required pack files are missing: ' + ', '.join(sorted(expected - seen)))
     # Prevents extra text_encoder.safetensors/config from redirecting 2.3 to Gemma4.
-    return verify_inventory(root, inventory)
+    return verify_inventory(root, inventory, cancelled=cancelled)
 
 
-def admit_ltx23(profile, *, model, text_encoder):
+def admit_ltx23(profile, *, model, text_encoder, cancelled=lambda: False):
     if profile not in _PROFILES:
         raise ResourceError('No approved local resource inventory for this LTX profile')
     model_name, text_name, precision = _PROFILES[profile]
@@ -51,8 +51,8 @@ def admit_ltx23(profile, *, model, text_encoder):
     # No output or temporary data belongs in either read-only installed pack.
     if model_root.resolve() == text_root.resolve():
         raise ResourceError('Separate model and encoder packs are required for LTX 2.3')
-    model_verified = _closed_pack(model_root, model_inventory)
-    text_verified = _closed_pack(text_root, text_inventory)
+    model_verified = _closed_pack(model_root, model_inventory, cancelled=cancelled)
+    text_verified = _closed_pack(text_root, text_inventory, cancelled=cancelled)
     return {
         'profile': profile, 'component_precision': dict(precision),
         'model': {'repository': model_inventory['repository'], 'revision': model_inventory['revision'], 'verification': model_verified},

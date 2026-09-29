@@ -64,6 +64,28 @@ def _signal_group(pgid, sig):
         pass
 
 
+def _owned_group_alive(process):
+    try:
+        return _group_alive(process.pid)
+    except PermissionError:
+        # Darwin can return EPERM for an existing group containing only zombies.
+        # Reap only our child, then require a fresh signal-0 result. EPERM is
+        # never evidence of absence; a persistent denial still propagates.
+        try:
+            process.wait(timeout=0.1)
+        except subprocess.TimeoutExpired:
+            pass
+        return _group_alive(process.pid)
+
+
+def _signal_owned_group(process, sig):
+    try:
+        _signal_group(process.pid, sig)
+    except PermissionError:
+        if _owned_group_alive(process):
+            raise
+
+
 class ProcessCleanupError(RuntimeError):
     """The owned group or its output pipes could not be confirmed drained."""
 
@@ -77,13 +99,14 @@ def _drain_after_error(process, grace_seconds):
                 reader.register(pipe, selectors.EVENT_READ)
 
         process.poll()  # Reap an exited parent before probing its group.
-        if _group_alive(process.pid):
-            _signal_group(process.pid, signal.SIGTERM)
+        if _owned_group_alive(process):
+            _signal_owned_group(process, signal.SIGTERM)
         term_at = time.monotonic()
         killed_at = None
         while True:
             exit_code = process.poll()
-            group_alive = _group_alive(process.pid)
+            group_alive = _owned_group_alive(process)
+            exit_code = process.poll()
             if exit_code is not None and not group_alive and not reader.get_map():
                 process.wait()
                 return
@@ -91,7 +114,7 @@ def _drain_after_error(process, grace_seconds):
             now = time.monotonic()
             if killed_at is None and now - term_at >= grace_seconds:
                 if group_alive:
-                    _signal_group(process.pid, signal.SIGKILL)
+                    _signal_owned_group(process, signal.SIGKILL)
                 killed_at = now
             elif killed_at is not None and now - killed_at >= 5:
                 raise ProcessCleanupError(
@@ -196,7 +219,8 @@ def run_owned(argv, *, cwd, environment, log_directory, timeout_seconds,
             while True:
                 now = time.monotonic()
                 exit_code = process.poll()
-                group_alive = _group_alive(process.pid)
+                group_alive = _owned_group_alive(process)
+                exit_code = process.poll()
                 if cancel_event.is_set():
                     reason = "cancelled"
                 elif reason is None:
@@ -207,10 +231,10 @@ def run_owned(argv, *, cwd, environment, log_directory, timeout_seconds,
 
                 if reason is not None:
                     if term_at is None:
-                        _signal_group(process.pid, signal.SIGTERM)
+                        _signal_owned_group(process, signal.SIGTERM)
                         term_at = now
                     elif killed_at is None and now - term_at >= grace_seconds:
-                        _signal_group(process.pid, signal.SIGKILL)
+                        _signal_owned_group(process, signal.SIGKILL)
                         killed_at = now
                     elif killed_at is not None and now - killed_at >= 5:
                         if group_alive or selector.get_map() or exit_code is None:

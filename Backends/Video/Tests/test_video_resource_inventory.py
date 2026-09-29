@@ -14,6 +14,16 @@ spec.loader.exec_module(m)
 
 
 class ResourceInventoryTests(unittest.TestCase):
+    def test_cancel_before_and_during_hash_preserves_resource(self):
+        data=self.tensor();inventory=self.inventory(data)
+        for stop_at in [1,2]:
+            calls=[]
+            def cancelled():
+                calls.append(True);return len(calls)>=stop_at
+            with self.assertRaises(InterruptedError):
+                m.verify_inventory(self.root,inventory,cancelled=cancelled)
+            self.assertEqual((self.root/'weights.safetensors').read_bytes(),data)
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name)
