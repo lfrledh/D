@@ -2,7 +2,13 @@
 
 最后核实：2026-09-30。唯一当前任务、版本与停点入口。
 
-## 当前增量：现用资料库拖入、节点删除和返回（r5）
+## 当前实施：H3 / LTX 视频模型扩展
+
+用户新增授权：MiniMax H3 与 LTX 的真实推理及节点、全尺寸非量化配置、显式权重流式开关。任务见 [D-VIDEO-MODELS-01](tasks/D-VIDEO-MODELS-01.md)。实施树 `D-Worktrees/D-VIDEO-MODELS-01`，分支 `codex/video-models-01`，从前端候选 `4b90327db126e46a9277a0a401d2b6ea3e283399` 开始；源仍01758b8，源个人scheme与旧前端候选不变。
+
+目前仅参数配方/资源身份检查和上游引擎准备；尚未真实生成，也没有新增可运行节点。H3公开Base为CFG蒸馏，不能承诺不存在的非蒸馏公开权重。LTX完整配置区分2.3/2.5 dev和文字塔精度；小机q8测试不证明BF16全链可用。H3资格确认、LTX2.5本人门控等待集中办理，2.3可继续。取消子进程、完整音视频产物与真实请求接线仍须验证。旧前端缺陷、H22/H28责任全部保留，未由本批关闭。
+
+## 前端候选保留停点：现用资料库拖入、节点删除和返回（r5）
 
 候选`codex/ui-baseline-02`仍在`/Volumes/CodexProjects/Codex/D-Worktrees/D-NODE-QUALITY-01`。受测代码`40a2c2fdbd74bef88a9171ce11322d809f440307`，最终仅文档提交/同步见R5/lead/final-receipt.json；源仍`01758b81527dc27eb4563bf1b66fd1ceab6647ee`，未源接纳。R5=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-UI-BASELINE-02/run-20260929T154311Z-current-input-drop`。
 

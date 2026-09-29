@@ -12,10 +12,7 @@ import unittest
 
 
 _PLAN_FILE = Path(__file__).resolve().parents[1] / "Adapters" / "ltx_plan.py"
-_TMP_ROOT = Path(
-    "/Volumes/CodexProjects/Codex/D-Development/AgentTrials/"
-    "D-VIDEO-MODELS-01/run-20260929T173017Z/LTX/tmp"
-)
+_TMP_ROOT = Path(os.environ["TMPDIR"])
 _spec = importlib.util.spec_from_file_location("d_video_ltx_plan", _PLAN_FILE)
 assert _spec is not None and _spec.loader is not None
 _module = importlib.util.module_from_spec(_spec)
