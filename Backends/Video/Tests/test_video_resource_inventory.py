@@ -43,6 +43,18 @@ class ResourceInventoryTests(unittest.TestCase):
         self.assertEqual((before.st_mtime_ns, before.st_size), (after.st_mtime_ns, after.st_size))
         self.assertEqual(path.read_bytes(), data)
 
+    def test_optional_metadata_null_matches_reference_reader(self):
+        base = {"weight": {"dtype": "BF16", "shape": [1], "data_offsets": [0, 2]}}
+        for metadata in (None, {}, {"format": "mlx"}):
+            header = json.dumps({"__metadata__": metadata, **base}).encode()
+            data = struct.pack("<Q", len(header)) + header + b"\0\0"
+            self.assertEqual(len(m.verify_inventory(self.root, self.inventory(data))["verified_files"]), 1)
+        for metadata in ([], True, {"nonstring": 1}):
+            header = json.dumps({"__metadata__": metadata, **base}).encode()
+            data = struct.pack("<Q", len(header)) + header + b"\0\0"
+            with self.assertRaises(m.ResourceError):
+                m.verify_inventory(self.root, self.inventory(data))
+
     def test_changed_content_or_size_is_rejected(self):
         inventory = self.inventory(self.tensor())
         path = self.root / "weights.safetensors"

@@ -74,7 +74,10 @@ def inspect_safetensors(file, *, allow_quantized=False):
     dtypes, regions, count = {}, [], 0
     for name, tensor in header.items():
         if name == "__metadata__":
-            if not isinstance(tensor, dict) or not all(isinstance(k, str) and isinstance(v, str) for k, v in tensor.items()):
+            # The reference safetensors reader accepts explicit null for its
+            # optional metadata map (MLX saves this form when no metadata exists).
+            if tensor is not None and (not isinstance(tensor, dict) or not all(
+                isinstance(k, str) and isinstance(v, str) for k, v in tensor.items())):
                 raise ResourceError("Invalid safetensors metadata")
             continue
         if not isinstance(tensor, dict) or set(tensor) != {"dtype", "shape", "data_offsets"}:
