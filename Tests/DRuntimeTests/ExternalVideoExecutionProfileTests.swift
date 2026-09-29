@@ -65,6 +65,19 @@ struct ExternalVideoExecutionProfileTests {
         try VideoExecutionCapability.wan21.validate(restored)
     }
 
+    @Test("Wan rejects foreign adapter options instead of silently ignoring them")
+    func wanRejectsForeignOptions() throws {
+        for option in [VideoAdapterOptions.h3(streamWeights: true),
+                       .ltx(streamWeights: false, spatiotemporalGuidance: 1)] {
+            let value = VideoRequest(prompt: "valid", negativePrompt: "", width: 256, height: 256,
+                frameCount: 17, frameRate: .init(numerator: 16), steps: 4,
+                guidanceScale: 5, scheduleShift: 5, seed: 42,
+                executionProfile: VideoExecutionCapability.wan21.profile, adapterOptions: option)
+            try value.validate()
+            #expect(throws: InferenceFailure.self) { try VideoExecutionCapability.wan21.validate(value) }
+        }
+    }
+
     @Test("Typed options round-trip, and streaming changes only its own value")
     func optionsRoundTrip() throws {
         for profile in ExternalVideoExecutionProfile.allCases {

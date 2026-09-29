@@ -16,6 +16,9 @@ public struct VideoExecutionCapability: Sendable, Equatable {
 
     public func validate(_ value: VideoRequest) throws {
         try value.validate()
+        guard value.adapterOptions == nil else {
+            throw InferenceFailure.invalidRequest("Wan does not accept H3 or LTX adapter options.")
+        }
         guard value.executionProfile == profile,
               value.width % dimensionMultiple == 0, value.height % dimensionMultiple == 0,
               (value.frameCount - 1) % frameStride == 0, value.seed <= maximumSeed,
