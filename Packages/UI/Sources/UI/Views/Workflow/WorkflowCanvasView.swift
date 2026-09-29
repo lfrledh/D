@@ -28,7 +28,7 @@ public struct WorkflowCanvasView: View {
     private let onImportAsset: () -> Void
     private let onDropFile: (URL) -> Bool
     private let onQuickUse: ((WorkflowNode) -> Void)?
-    private let libraryContent: ((CGPoint) -> AnyView)?
+    private let libraryContent: ((CGPoint, @escaping () -> Void) -> AnyView)?
     private let onSharedAssetDrop: ((UUID, UUID, CGPoint, WorkflowCanvasInsertionTarget) -> Bool)?
     private let onDestination: () -> Void
     private let onPublishText: () -> Void
@@ -76,7 +76,7 @@ public struct WorkflowCanvasView: View {
         onImportAsset: @escaping () -> Void = {},
         onDropFile: @escaping (URL) -> Bool = { _ in false },
         onQuickUse: ((WorkflowNode) -> Void)? = nil,
-        libraryContent: ((CGPoint) -> AnyView)? = nil,
+        libraryContent: ((CGPoint, @escaping () -> Void) -> AnyView)? = nil,
         onSharedAssetDrop: ((UUID, UUID, CGPoint, WorkflowCanvasInsertionTarget) -> Bool)? = nil
     ) {
         self.controller = controller
@@ -125,15 +125,15 @@ public struct WorkflowCanvasView: View {
             )
         }
         .sheet(isPresented: $toolsPresented) {
-            VStack(alignment: .trailing) {
-                Button(workflowText(languageStore, "workflow.action.close", fallback: "关闭")) { toolsPresented = false }
+            VStack(alignment: .leading) {
+                Button(workflowText(languageStore, "baseline02.ui.label.572cf45ba436", fallback: "返回"), systemImage: "chevron.left") { toolsPresented = false }.padding([.top, .leading])
                 WorkflowToolPanel(controller: controller)
             }
         }
         .sheet(isPresented: $interfacePresented) {
             if let graph = controller.graph {
-                VStack(alignment: .trailing) {
-                    Button(workflowText(languageStore, "workflow.action.close", fallback: "关闭")) { interfacePresented = false }
+                VStack(alignment: .leading) {
+                    Button(workflowText(languageStore, "baseline02.ui.label.572cf45ba436", fallback: "返回"), systemImage: "chevron.left") { interfacePresented = false }.padding([.top, .leading])
                     ScrollView { WorkflowGraphInterfaceEditor(graph: Binding(get: { controller.graph?.id == graph.id ? controller.graph! : graph }, set: { controller.updateInterface($0.interface, in: graph.id) }), registry: controller.registry, tools: controller.tools).padding() }
                 }
                     .frame(minWidth: 640, minHeight: 500)
@@ -162,7 +162,7 @@ public struct WorkflowCanvasView: View {
     private func panels(height: CGFloat) -> some View {
         HStack(spacing: 0) {
             Group {
-                if let libraryContent { libraryContent(canvasInsertionPoint) }
+                if let libraryContent { libraryContent(canvasInsertionPoint, { showLibrary = false }) }
                 else {
             VStack(spacing: 0) {
                     Picker(workflowText(languageStore, "canvas.library.mode", fallback: "资料类型"), selection: $libraryMode) {
@@ -962,10 +962,10 @@ private struct WorkflowFixedToolSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
+                Button(workflowText(language, "baseline02.ui.label.572cf45ba436", fallback: "返回"), systemImage: "chevron.left") { onClose() }
                 Text(workflowText(language, "canvas.tool.fixedTitle", fallback: "查看固定工具"))
                     .font(.title2.weight(.semibold))
                 Spacer()
-                Button(workflowText(language, "workflow.action.close", fallback: "关闭")) { onClose() }
             }
             Text("v\(reference.version) · \(reference.id.uuidString)")
                 .font(.caption.monospaced()).foregroundStyle(.secondary).textSelection(.enabled)
@@ -1244,11 +1244,10 @@ private struct WorkflowCanvasConnectionInspector: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
+                    Button(workflowText(language, "baseline02.ui.label.572cf45ba436", fallback: "返回"), systemImage: "chevron.left") { onClose() }
                     Text(workflowText(language, "canvas.connection.title", fallback: "连接"))
                         .font(.title3.weight(.semibold))
                     Spacer()
-                    Button(workflowText(language, "workflow.action.close", fallback: "关闭"),
-                           systemImage: "xmark") { onClose() }.labelStyle(.iconOnly)
                 }
                 if let source = controller.graph?.nodes.first(where: { $0.id == connection.sourceNode }),
                    let target = controller.graph?.nodes.first(where: { $0.id == connection.targetNode }) {
@@ -1615,6 +1614,7 @@ private struct WorkflowRunPlanSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
+            Button(workflowText(languageStore, "baseline02.ui.label.572cf45ba436", fallback: "返回"), systemImage: "chevron.left", action: onCancel)
             Text(preview.only
                  ? workflowText(languageStore, "workflow.plan.rerunTitle", fallback: "确认仅重跑本步")
                  : workflowText(languageStore, "workflow.plan.runTitle", fallback: "确认运行到这里"))

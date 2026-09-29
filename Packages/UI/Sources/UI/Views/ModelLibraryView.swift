@@ -9,6 +9,7 @@ public struct ModelLibraryView: View {
     private let onSelect: @MainActor (ModelID) async -> Void
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dLanguageStore) private var language
 
     public init(model: ModelLibraryModel, selectedModelID: ModelID? = nil,
                 canSelect: Bool = false,
@@ -69,6 +70,7 @@ public struct ModelLibraryView: View {
 
     private var header: some View {
         HStack(alignment: .center, spacing: 20) {
+            doneButton
             VStack(alignment: .leading, spacing: 5) {
                 Text("模型库").font(.title2.weight(.semibold))
                 Text("安装一次，在你的项目中重复使用。")
@@ -83,7 +85,6 @@ public struct ModelLibraryView: View {
             .disabled(model.isChoosingLocation || model.globalOperation != nil || model.hasActiveWork)
             .accessibilityIdentifier("model-register-existing")
             .help(model.hasActiveWork ? "请先暂停当前下载或校验，再登记其他模型" : "校验并登记完整的本地模型文件夹")
-            doneButton
         }
         .padding(24)
     }
@@ -97,7 +98,9 @@ public struct ModelLibraryView: View {
     }
 
     private var closeAction: some View {
-        Button("完成") { dismiss() }
+        Button { dismiss() } label: {
+            Label(baselineText(language, "label.572cf45ba436", fallback: "返回"), systemImage: "chevron.left")
+        }
             .keyboardShortcut(.cancelAction)
             .disabled(model.isChoosingLocation)
             .accessibilityIdentifier("model-library-done")

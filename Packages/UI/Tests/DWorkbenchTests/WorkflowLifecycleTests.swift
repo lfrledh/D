@@ -17,6 +17,45 @@ private actor WorkflowSubmitGate {
 @MainActor private final class WorkflowSaveSwitch { var fails = true }
 
 extension WorkflowLifecycleTests {
+    @Test func cardDeletionUsesIdentityAndScopeAndIsOneUndo() async throws {
+        let (_, store, _, c) = try await fixture()
+        c.addExample("text")
+        let inputID = try #require(c.graph?.nodes.first?.id)
+        await c.run(target: inputID, only: false)
+        try #require(c.errorMessage == nil && !c.runs.isEmpty && !c.availableAssets.isEmpty)
+        let graph = try #require(c.graph)
+        let first = try #require(graph.nodes.first)
+        let other = try #require(graph.nodes.last)
+        c.selectedNodeID = other.id
+        c.selectedNodeIDs = [first.id, other.id]
+        let target = try #require(c.canvasInsertionTarget())
+        let assets = c.availableAssets, runs = c.runs
+        #expect(c.deleteNode(id: first.id, target: target))
+        #expect(c.selectedNodeID == other.id && c.selectedNodeIDs == [other.id])
+        #expect(c.graph?.nodes.contains { $0.id == first.id } == false)
+        #expect(c.graph?.connections.contains { $0.sourceNode == first.id || $0.targetNode == first.id } == false)
+        #expect(c.graph?.layout.contains { $0.nodeID == first.id } == false)
+        #expect(c.availableAssets == assets && c.runs == runs)
+        c.undo()
+        #expect(c.graph == graph)
+        c.externalOperationBusy = { true }
+        #expect(!c.deleteNode(id: first.id, target: target))
+        #expect(c.graph == graph && c.selectedNodeID == other.id)
+        c.externalOperationBusy = { false }
+        c.setParameter(nodeID: first.id, key: "text", value: .text("changed"))
+        let changed = c.graph
+        #expect(!c.deleteNode(id: first.id, target: target))
+        #expect(c.graph == changed)
+        let fresh = try #require(c.canvasInsertionTarget())
+        #expect(!c.deleteNode(id: UUID(), target: fresh))
+        #expect(c.graph == changed)
+        #expect(c.deleteNode(id: first.id, target: fresh))
+        try await c.saveExplicitEdits()
+        let archive = try #require(try await store.workflowState().archive)
+        #expect(archive.graphs == c.graphs)
+        #expect(archive.runs == runs)
+    }
+
     @Test(arguments: [false, true], [false, true])
     func pinnedLegacyWaitingDecidesAfterReopenWithoutUsingCurrentInput(image: Bool, changeAfterWaiting: Bool) async throws {
         let (_, store, engine, c) = try await fixture()

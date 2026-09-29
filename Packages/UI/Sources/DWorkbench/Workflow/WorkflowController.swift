@@ -395,9 +395,18 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
         await refreshAssets(); await onChange()
     }
     public func deleteSelected() {
-        guard let id = selectedNodeID else { return }
+        guard let id = selectedNodeID, let target = canvasInsertionTarget() else { return }
+        _ = deleteNode(id: id, target: target)
+    }
+    /// The card owns an explicit identity; selection may belong to another card.
+    @discardableResult
+    public func deleteNode(id: UUID, target: WorkflowCanvasInsertionTarget) -> Bool {
+        guard isCurrent(target), graph?.nodes.contains(where: { $0.id == id }) == true else { return false }
         edit { g in g.nodes.removeAll { $0.id == id }; g.connections.removeAll { $0.sourceNode == id || $0.targetNode == id }; g.layout.removeAll { $0.nodeID == id } }
-        selectedNodeID = nil
+        guard graph?.nodes.contains(where: { $0.id == id }) == false else { return false }
+        if selectedNodeID == id { selectedNodeID = nil }
+        selectedNodeIDs.remove(id)
+        return true
     }
     public func copySelected() {
         guard var node = selectedNode else { return }; node.id = UUID(); node.title += " 副本"

@@ -16,6 +16,11 @@
     <key>UTExportedTypeDeclarations</key>
     <array>
         <dict>
+            <key>UTTypeIdentifier</key><string>org.d-workbench.canvas-item</string>
+            <key>UTTypeDescription</key><string>D Canvas Item</string>
+            <key>UTTypeConformsTo</key><array><string>public.data</string></array>
+        </dict>
+        <dict>
             <key>UTTypeIdentifier</key><string>com.lfrledh.d.project</string>
             <key>UTTypeDescription</key><string>D 创作项目</string>
             <key>UTTypeConformsTo</key><array><string>com.apple.package</string></array>

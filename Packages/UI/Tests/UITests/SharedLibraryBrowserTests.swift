@@ -4,10 +4,22 @@ import DWorkbench
 import Foundation
 import SwiftUI
 import Testing
+import UniformTypeIdentifiers
 @testable import UI
 
 @Suite @MainActor
 struct SharedLibraryBrowserTests {
+    @Test func applicationDeclaresTheActualCanvasTransferType() throws {
+        var root = URL(fileURLWithPath: #filePath)
+        for _ in 0..<5 { root.deleteLastPathComponent() }
+        let data = try Data(contentsOf: root.appendingPathComponent("D/Info.plist"))
+        let info = try #require(PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any])
+        let exported = try #require(info["UTExportedTypeDeclarations"] as? [[String: Any]])
+        let declaration = try #require(exported.first { $0["UTTypeIdentifier"] as? String == UTType.workflowCanvasItem.identifier })
+        let parents = try #require(declaration["UTTypeConformsTo"] as? [String])
+        #expect(parents.contains(UTType.data.identifier))
+        #expect(UTType.workflowCanvasItem.conforms(to: .data))
+    }
     private func entry(
         _ key: String, title: String, kind: SharedLibraryItemKind = .program,
         inputs: Set<WorkflowDataKind> = [], outputs: Set<WorkflowDataKind> = [],

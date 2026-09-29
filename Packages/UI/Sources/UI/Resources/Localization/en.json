@@ -3,6 +3,7 @@
   "locale": "en",
   "displayName": "English",
   "strings": {
+    "workflow.node.delete": "Delete node",
     "workflow.language.form.validationInput": "Input interpretation",
     "workflow.language.form.validationTyped": "Typed value",
     "workflow.language.form.validationJSON": "Parse complete JSON text",

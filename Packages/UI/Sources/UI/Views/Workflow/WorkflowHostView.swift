@@ -8,7 +8,7 @@ struct WorkflowHostView: View {
     let model: WorkbenchModel
     let nodeTags: ModelNodeTagStore
     var onQuickUse: ((WorkflowNode) -> Void)? = nil
-    var libraryContent: ((CGPoint) -> AnyView)? = nil
+    var libraryContent: ((CGPoint, @escaping () -> Void) -> AnyView)? = nil
     var onSharedAssetDrop: ((UUID, UUID, CGPoint, WorkflowCanvasInsertionTarget) -> Bool)? = nil
     @Environment(\.dLanguageStore) private var languageStore
     var body: some View {
@@ -135,6 +135,10 @@ private struct WorkflowMediaPreviewPanel: View {
     @Environment(\.dLanguageStore) private var languageStore
     var body: some View {
         VStack(spacing: 14) {
+            HStack {
+                Button(languageStore?.text("baseline02.ui.label.572cf45ba436", fallback: "返回") ?? "返回", systemImage: "chevron.left") { dismiss() }
+                Spacer()
+            }
             if ready {
                 if reference.kind == .video {
                     VideoPreview(url: session.videoPreviewURL, identity: session.videoPreviewIdentity).frame(minWidth: 520, minHeight: 300)
@@ -146,7 +150,6 @@ private struct WorkflowMediaPreviewPanel: View {
                     Text(reference.assetID.uuidString).font(.caption.monospaced()).textSelection(.enabled)
                 }
             } else { Text(controller.errorMessage ?? (languageStore?.text("workflow.preview.preparing", fallback: "正在核对已保存媒体…") ?? "正在核对已保存媒体…")) }
-            Button(languageStore?.text("workflow.preview.close", fallback: "关闭") ?? "关闭") { dismiss() }
         }
         .padding(20).frame(minWidth: 420, minHeight: 140)
         .task(id: reference) { ready = await session.prepareWorkflowPreview(reference, controller: controller, requestID: requestID) != nil }

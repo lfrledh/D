@@ -55,6 +55,13 @@ struct WorkflowGraphSurface: View {
                     previewPositions: previews,
                     translation: origin
                 )
+                GeometryReader { viewport in
+                // Keep the same canvas coordinate system, including visible blank space
+                // when zoomed out. Otherwise that space has no drop destination.
+                let contentSize = CGSize(
+                    width: max(geometry.size.width, viewport.size.width / effectiveZoom),
+                    height: max(geometry.size.height, viewport.size.height / effectiveZoom)
+                )
                 ScrollView([.horizontal, .vertical]) {
                     ZStack(alignment: .topLeading) {
                         Color(nsColor: .textBackgroundColor)
@@ -159,15 +166,15 @@ struct WorkflowGraphSurface: View {
                         }
                     }
                     }
-                    .frame(width: geometry.size.width, height: geometry.size.height)
+                    .frame(width: contentSize.width, height: contentSize.height)
                     .coordinateSpace(name: WorkflowCanvasCoordinateSpace.name)
                     .contentShape(Rectangle())
-                    .dropDestination(for: WorkflowCanvasTransfer.self) { items, location in
-                        acceptSurfaceDrop(items, at: geometry.rawPoint(forDisplayPoint: location), scope: scope)
-                    }
+                    .dropDestination(for: WorkflowCanvasTransfer.self, action: { items, location in
+                        return acceptSurfaceDrop(items, at: geometry.rawPoint(forDisplayPoint: location), scope: scope)
+                    })
                     .scaleEffect(effectiveZoom, anchor: .topLeading)
-                    .frame(width: geometry.size.width * effectiveZoom,
-                           height: geometry.size.height * effectiveZoom,
+                    .frame(width: contentSize.width * effectiveZoom,
+                           height: contentSize.height * effectiveZoom,
                            alignment: .topLeading)
                 }
                 .scrollPosition($scrollPosition)
@@ -251,6 +258,7 @@ struct WorkflowGraphSurface: View {
                             .padding(8).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
                             .padding(.top, pendingConnection == nil ? 10 : 48).padding(.leading, 10)
                     }
+                }
                 }
             } else {
                 ContentUnavailableView(
@@ -507,6 +515,15 @@ private struct WorkflowNodeCard: View {
                       ? workflowText(languageStore, "workflow.node.expand", fallback: "展开节点")
                       : workflowText(languageStore, "workflow.node.collapse", fallback: "折叠节点"))
                 .disabled(readOnly)
+                Button {
+                    guard scope.isCurrent(in: controller), let target = controller.canvasInsertionTarget() else { return }
+                    controller.deleteNode(id: node.id, target: target)
+                } label: { Image(systemName: "trash") }
+                .buttonStyle(.borderless)
+                .help(workflowText(languageStore, "workflow.node.delete", fallback: "删除节点"))
+                .accessibilityLabel(workflowText(languageStore, "workflow.node.delete", fallback: "删除节点"))
+                .accessibilityIdentifier("workflow-node-delete-\(node.id.uuidString)")
+                .disabled(readOnly || !controller.canEditCanvas)
                 if let step = controller.latestStep(for: node.id) {
                     WorkflowStatusBadge(status: step.status, stale: controller.isStale(step))
                         .allowsHitTesting(false)

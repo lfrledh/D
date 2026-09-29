@@ -27,6 +27,7 @@ public struct DualWorkbenchView: View {
             tools: canvasModel.projectSession.workflow?.tools ?? [], projects: projects, language: language)
     }
     @State private var entry: Entry = .quick
+    @State private var entryHistory: [Entry] = []
     @State private var libraryVisible = false
     @State private var projectsVisible = false
     @State private var compatibilityVisible = false
@@ -38,11 +39,24 @@ public struct DualWorkbenchView: View {
                 library: ModelLibraryModel, nodeTags: ModelNodeTagStore, metadata: SharedLibraryStore?, metadataIssue: String? = nil) {
         self.model = model; self.quickModel = quickModel; self.quick = quick; self.library = library; self.nodeTags = nodeTags; self.metadata = metadata; self.metadataIssue = metadataIssue
     }
+    private func navigate(to destination: Entry) {
+        guard destination != entry else { return }
+        entryHistory.append(entry); entry = destination
+    }
+    private func goBack() {
+        guard let previous = entryHistory.popLast() else { return }
+        entry = previous
+    }
     public var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 18) {
+                Button(action: goBack) {
+                    Label(baselineText(language, "label.572cf45ba436", fallback: "返回"), systemImage: "chevron.left")
+                }
+                .disabled(entryHistory.isEmpty)
+                .accessibilityIdentifier("workbench-back")
                 Text("D").font(.title2.bold())
-                Picker(baselineText(language, "label.78d18c6b29c7", fallback: "工作方式"), selection: $entry) {
+                Picker(baselineText(language, "label.78d18c6b29c7", fallback: "工作方式"), selection: Binding(get: { entry }, set: navigate)) {
                     Text(baselineText(language, "label.893819bb34b0", fallback: "快速生成")).tag(Entry.quick)
                     Text(baselineText(language, "label.c71d0bca46eb", fallback: "工作流")).tag(Entry.workflow)
                 }.pickerStyle(.segmented).frame(width: 230).accessibilityIdentifier("workbench-entry")
@@ -67,7 +81,7 @@ public struct DualWorkbenchView: View {
                     onValueToCanvas: { value in Task { await valueToCanvas(value) } })
                     .opacity(entry == .quick ? 1 : 0).allowsHitTesting(entry == .quick).accessibilityHidden(entry != .quick)
                 WorkflowHostView(model: canvasModel, nodeTags: nodeTags, onQuickUse: useNode,
-                    libraryContent: { point in AnyView(libraryBrowser(compact: true, at: point)) },
+                    libraryContent: { point, close in AnyView(libraryBrowser(compact: true, at: point, onBack: close)) },
                     onSharedAssetDrop: acceptSharedAssetDrop)
                     .opacity(entry == .workflow ? 1 : 0).allowsHitTesting(entry == .workflow).accessibilityHidden(entry != .workflow)
             }
@@ -81,11 +95,11 @@ public struct DualWorkbenchView: View {
         }
         .sheet(isPresented: $projectsVisible) {
             VStack(spacing: 0) {
-                HStack { Text(baselineText(language, "label.79f326be4409", fallback: "项目")).font(.headline); Spacer(); Button(baselineText(language, "label.3fd47edce45b", fallback: "关闭")) { projectsVisible = false }.keyboardShortcut(.cancelAction) }.padding()
+                HStack { Button(baselineText(language, "label.572cf45ba436", fallback: "返回")) { projectsVisible = false }.keyboardShortcut(.cancelAction); Text(baselineText(language, "label.79f326be4409", fallback: "项目")).font(.headline); Spacer() }.padding()
                 ProjectChooserView(recentProjects: model.recentProjects, isBusy: model.isChangingProject,
-                    onNew: { Task { if await model.newProject() { projectsVisible = false; entry = .workflow } } },
-                    onOpen: { Task { if await model.openProject() { projectsVisible = false; entry = .workflow } } },
-                    onRecent: { id in Task { if await model.openRecentProject(id: id) { projectsVisible = false; entry = .workflow } } },
+                    onNew: { Task { if await model.newProject() { projectsVisible = false; navigate(to: .workflow) } } },
+                    onOpen: { Task { if await model.openProject() { projectsVisible = false; navigate(to: .workflow) } } },
+                    onRecent: { id in Task { if await model.openRecentProject(id: id) { projectsVisible = false; navigate(to: .workflow) } } },
                     onModels: { library.isPresented = true })
                 if let error = model.errorMessage {
                     Text(error).foregroundStyle(.red).textSelection(.enabled).padding()
@@ -94,7 +108,7 @@ public struct DualWorkbenchView: View {
         }
         .sheet(isPresented: $compatibilityVisible) {
             VStack(spacing: 0) {
-                HStack { Text(baselineText(language, "label.6f5cabc6a134", fallback: "创作文稿与模态编辑器")); Spacer(); Button(baselineText(language, "label.572cf45ba436", fallback: "返回")) { compatibilityVisible = false }.keyboardShortcut(.cancelAction) }.padding()
+                HStack { Button(baselineText(language, "label.572cf45ba436", fallback: "返回")) { compatibilityVisible = false }.keyboardShortcut(.cancelAction); Text(baselineText(language, "label.6f5cabc6a134", fallback: "创作文稿与模态编辑器")); Spacer() }.padding()
                 WorkbenchView(model: model, library: library, nodeTags: nodeTags)
             }.frame(minWidth: 960, minHeight: 650)
         }
@@ -109,12 +123,14 @@ public struct DualWorkbenchView: View {
                 if let identity = quickModel.projectSession.selectedWorkflowImageIdentity {
                     quick.select(operationID: "d.image.generate", modelID: identity)
                 }
-                returnToLibrary = false; library.isPresented = false; entry = .quick
+                returnToLibrary = false; library.isPresented = false; navigate(to: .quick)
             }
         }
         .sheet(isPresented: $languageVisible) {
-            VStack { if let language { LanguageSettingsView(store: language) }
-                Button(baselineText(language, "label.3fd47edce45b", fallback: "关闭")) { languageVisible = false }.keyboardShortcut(.cancelAction) }.padding().frame(width: 560, height: 440)
+            VStack {
+                HStack { Button(baselineText(language, "label.572cf45ba436", fallback: "返回")) { languageVisible = false }.keyboardShortcut(.cancelAction); Spacer() }
+                if let language { LanguageSettingsView(store: language) }
+            }.padding().frame(width: 560, height: 440)
         }
         .alert("操作未完成", isPresented: Binding(get: { issue != nil }, set: { if !$0 { issue = nil } })) {
             Button(baselineText(language, "label.f867f3417859", fallback: "好")) { issue = nil }
@@ -126,11 +142,13 @@ public struct DualWorkbenchView: View {
         .onChange(of: quick.state.revision) { _, _ in Task { await refreshLibrary(checkModels: false) } }
         .onChange(of: model.manifest?.revision) { _, _ in Task { await refreshLibrary(checkModels: false) } }
         .sheet(item: $previewAsset, onDismiss: restoreLibraryIfNeeded) { value in
-            VStack { QuickAssetPreview(store: value.store, reference: value.reference, compact: false)
-                Button(baselineText(language, "label.3fd47edce45b", fallback: "关闭")) { previewAsset = nil }.keyboardShortcut(.cancelAction) }.padding(20).frame(minWidth: 560, minHeight: 360)
+            VStack {
+                HStack { Button(baselineText(language, "label.572cf45ba436", fallback: "返回")) { previewAsset = nil }.keyboardShortcut(.cancelAction); Spacer() }
+                QuickAssetPreview(store: value.store, reference: value.reference, compact: false)
+            }.padding(20).frame(minWidth: 560, minHeight: 360)
         }
         .sheet(item: $libraryInfo, onDismiss: restoreLibraryIfNeeded) { value in
-            VStack(alignment: .leading, spacing: 14) { HStack { Text(value.item.title).font(.title2); Spacer(); Button(baselineText(language, "label.3fd47edce45b", fallback: "关闭")) { libraryInfo = nil } }
+            VStack(alignment: .leading, spacing: 14) { HStack { Button(baselineText(language, "label.572cf45ba436", fallback: "返回")) { libraryInfo = nil }; Text(value.item.title).font(.title2); Spacer() }
                 Text(value.item.detail); ForEach(value.facts, id: \.self) { Text($0).textSelection(.enabled) }
                 if case .unavailable = value.selection { Button(baselineText(language, "label.32d818ead29f", fallback: "打开已有编辑器")) { returnToLibrary = false; libraryInfo = nil; libraryVisible = false; compatibilityVisible = true } }
             }.padding(24).frame(minWidth: 550, minHeight: 280)
@@ -162,17 +180,21 @@ public struct DualWorkbenchView: View {
         entry == .quick && quick.canStart && !libraryVisible && !projectsVisible && !compatibilityVisible &&
         !languageVisible && !library.isPresented && previewAsset == nil && libraryInfo == nil
     }
-    @ViewBuilder private func libraryBrowser(compact: Bool, at point: CGPoint) -> some View {
+    @ViewBuilder private func libraryBrowser(compact: Bool, at point: CGPoint, onBack: (() -> Void)? = nil) -> some View {
         if let metadata {
             SharedLibraryBrowser(entries: entries, store: metadata, compact: compact, state: compact ? compactLibraryState : fullLibraryState,
                 onUse: useLibraryEntry, onAdd: { value in Task { await addLibraryEntry(value, at: point) } },
                 onPreview: { value in Task { await previewLibraryEntry(value) } },
                 onPrepare: { value in Task { await prepareModel(value) } },
-                onImport: { Task { await importLibraryAsset() } }, onClose: { libraryVisible = false })
+                onImport: { Task { await importLibraryAsset() } }, onClose: { if let onBack { onBack() } else { libraryVisible = false } })
         } else {
-            VStack { Text(metadataIssue ?? "资料整理暂不可用，原件未改。").textSelection(.enabled)
+            VStack(alignment: .leading) {
+                Button(baselineText(language, "label.572cf45ba436", fallback: "返回"), systemImage: "chevron.left") {
+                    if let onBack { onBack() } else { libraryVisible = false }
+                }
+                Text(metadataIssue ?? "资料整理暂不可用，原件未改。").textSelection(.enabled)
                 Button(baselineText(language, "label.17bb056515cd", fallback: "模型下载与安装…")) { libraryVisible = false; library.isPresented = true }
-                Button(baselineText(language, "label.3fd47edce45b", fallback: "关闭")) { libraryVisible = false } }.padding()
+            }.padding()
         }
     }
     private func refreshLibrary(checkModels: Bool) async {
@@ -197,7 +219,7 @@ public struct DualWorkbenchView: View {
         guard case .operation(let operation, let id) = value.selection,
               let id, WorkflowRegistry.standard.operation(operation)?.definition.modelKind != nil else { presentLibraryDestination(.info(value)); return }
         quick.select(operationID: operation, modelID: id)
-        libraryVisible = false; entry = .quick
+        libraryVisible = false; navigate(to: .quick)
     }
     private func useNode(_ node: WorkflowNode) {
         guard let controller = canvasModel.projectSession.workflow else { return }
@@ -205,7 +227,7 @@ public struct DualWorkbenchView: View {
         guard controller.graph?.connections.contains(where: { $0.targetNode == node.id }) != true else {
             issue = "此节点包含连线输入。请先把所需结果存为素材，再在快速界面显式选择；未忽略连线或修改原节点。"; return
         }
-        quick.useSettings(node); entry = .quick
+        quick.useSettings(node); navigate(to: .quick)
     }
     private func store(for projectID: UUID) async throws -> ProjectStore {
         if await quick.store.snapshot().id == projectID { return quick.store }
@@ -259,7 +281,7 @@ public struct DualWorkbenchView: View {
             case .unavailable(let reason): throw WorkflowIssue(reason)
             }
             try await controller.saveExplicitEdits()
-            libraryVisible = false; entry = .workflow
+            libraryVisible = false; navigate(to: .workflow)
         } catch { issue = error.localizedDescription }
     }
     private func copiedReference(_ reference: WorkflowAssetReference, from original: ProjectStore? = nil, to destination: ProjectStore) async throws -> WorkflowAssetReference {
@@ -315,7 +337,7 @@ public struct DualWorkbenchView: View {
             }
             guard target.projectSession.workflow === controller else { throw WorkflowIssue("目标项目已改变，未放入其他流程。") }
             try await controller.insertQuickSettings(copy, target: scope)
-            entry = .workflow
+            navigate(to: .workflow)
         } catch { issue = error.localizedDescription }
     }
     private func resultToCanvas(_ ref: WorkflowAssetReference) async {
@@ -328,7 +350,7 @@ public struct DualWorkbenchView: View {
             let copy = try await copiedReference(ref, to: controller.services.store)
             guard target.projectSession.workflow === controller else { throw WorkflowIssue("目标项目已改变。") }
             try await controller.insertQuickResult(copy, target: scope)
-            entry = .workflow
+            navigate(to: .workflow)
         } catch { issue = error.localizedDescription }
     }
     private func valueToCanvas(_ value: WorkflowDatum) async {
@@ -341,7 +363,7 @@ public struct DualWorkbenchView: View {
             let copy = try await copiedDatum(value, to: controller.services.store)
             guard target.projectSession.workflow === controller else { throw WorkflowIssue("目标项目已改变。") }
             try await controller.insertQuickValue(copy, target: scope)
-            entry = .workflow
+            navigate(to: .workflow)
         } catch { issue = error.localizedDescription }
     }
 }

@@ -38,7 +38,7 @@ enum WorkflowCanvasTransfer: Codable, Transferable, Equatable, Sendable {
         DataRepresentation(contentType: .workflowCanvasItem) { value in
             try value.encoded()
         } importing: { data in
-            try decode(data)
+            return try decode(data)
         }
     }
 
@@ -97,7 +97,7 @@ enum WorkflowCanvasTransfer: Codable, Transferable, Equatable, Sendable {
     }
 }
 
-private extension UTType {
+extension UTType {
     static let workflowCanvasItem = UTType(
         exportedAs: "org.d-workbench.canvas-item",
         conformingTo: .data

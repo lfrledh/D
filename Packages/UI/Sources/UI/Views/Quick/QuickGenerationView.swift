@@ -137,8 +137,10 @@ struct QuickGenerationView: View {
             }.padding(16)
         }
         .sheet(isPresented: Binding(get: { preview != nil }, set: { if !$0 { preview = nil } })) {
-            if let reference = preview { VStack { QuickAssetPreview(store: quick.store, reference: reference, compact: false)
-                Button(baselineText(language, "label.3fd47edce45b", fallback: "关闭")) { preview = nil }.keyboardShortcut(.cancelAction) }.padding(20).frame(minWidth: 560, minHeight: 360) }
+            if let reference = preview { VStack {
+                HStack { Button(baselineText(language, "label.572cf45ba436", fallback: "返回")) { preview = nil }.keyboardShortcut(.cancelAction); Spacer() }
+                QuickAssetPreview(store: quick.store, reference: reference, compact: false)
+            }.padding(20).frame(minWidth: 560, minHeight: 360) }
         }
         .onChange(of: quick.state.selectedDraftID) { _, _ in inputIssue = nil; history = false }
     }

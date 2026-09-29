@@ -3,6 +3,7 @@ import DWorkbench
 import Foundation
 import Observation
 import SwiftUI
+import UniformTypeIdentifiers
 
 enum SharedLibraryBrowserIssue: Error, Equatable {
     case folderCannotBeSaved
@@ -264,7 +265,7 @@ struct SharedLibraryBrowserRenameDrafts {
         if let transfer = canvasTransfer(for: current),
            let payload = try? transfer.encoded() {
             provider.registerDataRepresentation(
-                forTypeIdentifier: "org.d-workbench.canvas-item", visibility: .all
+                forTypeIdentifier: UTType.workflowCanvasItem.identifier, visibility: .all
             ) { completion in
                 completion(payload, nil)
                 return nil
@@ -399,9 +400,9 @@ public struct SharedLibraryBrowser: View {
             if let entry = SharedLibraryBrowserLogic.detailEntry(key: compactDetailKey, entries: entries) {
                 VStack(alignment: .leading) {
                     HStack {
+                        Button(word("back", "返回")) { compactDetailKey = nil }
                         Text(word("detail", "详情")).font(.headline)
                         Spacer()
-                        Button(word("close", "关闭")) { compactDetailKey = nil }
                     }
                     ScrollView { details(entry) }
                 }.padding(16).frame(minWidth: 300, minHeight: 320)
@@ -767,9 +768,9 @@ public struct SharedLibraryBrowser: View {
     private var organizer: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
+                Button(word("back", "返回")) { showOrganizer = false }
                 Text(word("organize", "整理资料库")).font(.headline)
                 Spacer()
-                Button(word("close", "关闭")) { showOrganizer = false }
             }
             Picker(word("organize", "整理资料库"), selection: $tab) {
                 Text(word("myTags", "我的标签")).tag(OrganizerTab.tags)
