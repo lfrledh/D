@@ -1,0 +1,22 @@
+--- a/packages/ltx-core-mlx/src/ltx_core_mlx/text_encoders/gemma/encoders/base_encoder.py
++++ b/packages/ltx-core-mlx/src/ltx_core_mlx/text_encoders/gemma/encoders/base_encoder.py
+@@ -65,7 +65,7 @@
+ 
+         tokens = self._tokenizer.encode(text.strip())
+         if len(tokens) > max_length:
+-            tokens = tokens[-max_length:]  # Keep last tokens (left-pad = truncate from left)
++            raise ValueError(f"Prompt has {len(tokens)} tokens; maximum is {max_length}. D does not truncate prompts.")
+ 
+         # Left-pad to max_length using the native pad token
+         pad_length = max_length - len(tokens)
+--- a/packages/ltx-core-mlx/src/ltx_core_mlx/text_encoders/gemma/encoders/gemma4_encoder.py
++++ b/packages/ltx-core-mlx/src/ltx_core_mlx/text_encoders/gemma/encoders/gemma4_encoder.py
+@@ -143,7 +143,7 @@
+ 
+         tokens = self._tokenizer.encode(text.strip())
+         if len(tokens) > max_length:
+-            tokens = tokens[-max_length:]
++            raise ValueError(f"Prompt has {len(tokens)} tokens; maximum is {max_length}. D does not truncate prompts.")
+ 
+         pad_length = max_length - len(tokens)
+         pad_token = self._tokenizer.pad_token_id if self._tokenizer.pad_token_id is not None else 0

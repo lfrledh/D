@@ -12,7 +12,7 @@ import os
 from pathlib import Path
 
 
-_PROFILES = frozenset({"ltx-2.3-dev-bf16-full-v1", "ltx-2.5-dev-bf16-full-v1"})
+_PROFILES = frozenset({"ltx-2.3-dev-bf16-full-v1", "ltx-2.5-dev-bf16-full-v1", "ltx-2.3-dev-q8-gemma3-q4-test-v1"})
 _REQUEST_FIELDS = frozenset(
     {
         "schema_version",
@@ -208,6 +208,7 @@ def build_plan(request, *, engine, model, output, text_encoder=None):
         "video_decoder": video_decoder,
         "stream_weights": checked["stream_weights"],
         "weight_loading": "transformer-block-streaming" if checked["stream_weights"] else "eager",
+        "quantized_test_profile": checked["profile"].endswith("-test-v1"),
         "request": checked,
         "plan_only": True,
         "resources_and_precision_verified": False,

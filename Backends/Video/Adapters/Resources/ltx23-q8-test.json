@@ -1,0 +1,81 @@
+{
+  "schema_version": 1,
+  "profile": "ltx23-q8-test",
+  "repository": "dgrauet/ltx-2.3-mlx-q8",
+  "revision": "6671a7572a530862d1d60ce393b5d93491e3f76b",
+  "files": [
+    {
+      "name": "LICENSE",
+      "size": 21399,
+      "sha256": "e28ef68d90e17b06308e4c5cba5c9a967b70c3d67f87ddc3dfc46a312cb6a134",
+      "tensor_policy": "not_tensor"
+    },
+    {
+      "name": "README.md",
+      "size": 2977,
+      "sha256": "1f0bbc7bf285b87d3e4e2e11054849c11c3d0f6d9c28be531f3dcccc9fb3cbaa",
+      "tensor_policy": "not_tensor"
+    },
+    {
+      "name": "audio_vae.safetensors",
+      "size": 106509048,
+      "sha256": "442119db8eaf976f83a105cc8c5f2c930e0f625062f9776b10adcdb7bc96c416",
+      "tensor_policy": "floating_only"
+    },
+    {
+      "name": "config.json",
+      "size": 951,
+      "sha256": "2dd64d4f8b7a385b0471a23a6e2069e4bc0f9d9903fc289347b2e4cac3c776ec",
+      "tensor_policy": "not_tensor"
+    },
+    {
+      "name": "connector.safetensors",
+      "size": 6344495512,
+      "sha256": "5885c2bd7af4e761b3257cf5b17bc1fdb2d187cea3ca520ea723b6a129b7029f",
+      "tensor_policy": "floating_only"
+    },
+    {
+      "name": "embedded_config.json",
+      "size": 7234,
+      "sha256": "c09755357e21d2b2eb15ea2b5c3c11f1e6b44c514ebb6d8babeee30e86f7bd14",
+      "tensor_policy": "not_tensor"
+    },
+    {
+      "name": "quantize_config.json",
+      "size": 100,
+      "sha256": "aebe5755de31b1619d5d50b5f6fdc1e53123097505c328cfddb45b4ebc4e447b",
+      "tensor_policy": "not_tensor"
+    },
+    {
+      "name": "split_model.json",
+      "size": 1835,
+      "sha256": "45dcbdc86120ad9c9af193670be2276a897cbd8c574114fdbfb366e2c8962f02",
+      "tensor_policy": "not_tensor"
+    },
+    {
+      "name": "transformer-dev.safetensors",
+      "size": 20597189549,
+      "sha256": "bd28c73e333581a81c4b3e2213051bfcce989fdb40682d22f062cf8b691455e2",
+      "tensor_policy": "quantized_explicit"
+    },
+    {
+      "name": "vae_decoder.safetensors",
+      "size": 814349531,
+      "sha256": "f404026fe0b59418eaec4a3fcdc474125c798f0b787dc390f6eb4e79934d4160",
+      "tensor_policy": "floating_only"
+    },
+    {
+      "name": "vae_encoder.safetensors",
+      "size": 637885319,
+      "sha256": "1512f5ef8387901db0baecb328690676e2667ddf2b63e28f8e6645188c1a8c06",
+      "tensor_policy": "floating_only"
+    },
+    {
+      "name": "vocoder.safetensors",
+      "size": 258313851,
+      "sha256": "410cee86c14f76956bf487d153211ef15050fe8bf51f86d47a1d27ca6e3ba287",
+      "tensor_policy": "floating_only"
+    }
+  ],
+  "claim": "Explicit quantized development test fixture, not full-precision acceptance."
+}

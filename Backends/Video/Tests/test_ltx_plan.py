@@ -64,6 +64,12 @@ class LTXPlanTests(unittest.TestCase):
         arguments.update(overrides)
         return build_plan(request, **arguments)
 
+    def test_explicit_quantized_test_profile_is_not_full_precision(self):
+        request = _request("ltx-2.3-dev-q8-gemma3-q4-test-v1")
+        result = self.plan(request)
+        self.assertTrue(result["provenance"]["quantized_test_profile"])
+        self.assertEqual(result["provenance"]["profile"], request["profile"])
+
     def test_full_23_plan_is_literal_local_and_does_not_write_output(self):
         request = _request()
         original = dict(request)

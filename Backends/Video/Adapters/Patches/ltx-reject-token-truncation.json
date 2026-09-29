@@ -1,0 +1,18 @@
+{
+  "upstream": "https://github.com/dgrauet/ltx-2-mlx",
+  "commit": "1724ca673d59f023a8a95efee06e5d36d61c2765",
+  "license": "MIT",
+  "scope": "Reject overflow at both actual tokenizer boundaries; preserve upstream padding and normalization.",
+  "files": [
+    {
+      "path": "packages/ltx-core-mlx/src/ltx_core_mlx/text_encoders/gemma/encoders/base_encoder.py",
+      "before_sha256": "d43a4a64a2ba8c3784398f86686e9dabdd14acf5b40ba3547b551c3cb198c3a2",
+      "after_sha256": "b9edff27c0663f1aae0c337bf87c44213a1dfab109cdd6791310bdfaaa92f71c"
+    },
+    {
+      "path": "packages/ltx-core-mlx/src/ltx_core_mlx/text_encoders/gemma/encoders/gemma4_encoder.py",
+      "before_sha256": "4d3551cd5a2b09708706ed6151f9264f8596365bed08b4d10274c9b6330c8bc3",
+      "after_sha256": "6ccc63977bb0dcfe6f49cad61c6d10dfb0c203e7c49895cebd1f0e173b92ca11"
+    }
+  ]
+}
