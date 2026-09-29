@@ -465,7 +465,7 @@ private struct WorkflowNodeCard: View {
     let onDragEnded: (UUID, CGSize) -> Void
     let onDragCancelled: (UUID) -> Void
     @Environment(\.dLanguageStore) private var languageStore
-    @GestureState private var headerDragActive = false
+    @GestureState private var cardDragActive = false
     @GestureState private var outputDragActive = false
     @State private var dragGestureSession = WorkflowCanvasGestureSessionState()
     private var collapsed: Bool { controller.graph?.layout.first(where: { $0.nodeID == node.id })?.collapsed == true }
@@ -487,12 +487,12 @@ private struct WorkflowNodeCard: View {
                     Text(workflowText(
                         languageStore,
                         "workflow.node.dragHint",
-                        fallback: "拖动标题移动；双击编辑"
+                        fallback: "拖动卡片空白或说明移动；控件独立操作"
                     ))
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                 }
-                .help(node.operationID)
+                .allowsHitTesting(false)
                 Spacer(minLength: 6)
                 Button { onInspect(node.id) } label: {
                     Image(systemName: "slider.horizontal.3")
@@ -509,42 +509,19 @@ private struct WorkflowNodeCard: View {
                 .disabled(readOnly)
                 if let step = controller.latestStep(for: node.id) {
                     WorkflowStatusBadge(status: step.status, stale: controller.isStale(step))
+                        .allowsHitTesting(false)
                 }
             }
-            .contentShape(Rectangle())
-            .onTapGesture(count: 2) { onInspect(node.id) }
-            .gesture(
-                DragGesture(minimumDistance: 5, coordinateSpace: .global)
-                    .updating($headerDragActive) { _, active, _ in active = true }
-                    .onChanged { value in
-                        guard !readOnly else { return }
-                        switch dragGestureSession.change() {
-                        case .began(let sessionID):
-                            onDragBegan(sessionID, value.translation)
-                        case .changed(let sessionID):
-                            onDragChanged(sessionID, value.translation)
-                        }
-                    }
-                    .onEnded { value in
-                        guard !readOnly, let sessionID = dragGestureSession.end() else { return }
-                        onDragEnded(sessionID, value.translation)
-                    }
-            )
-            .onChange(of: headerDragActive) { wasActive, isActive in
-                if wasActive, !isActive, let sessionID = dragGestureSession.cancel() {
-                    onDragCancelled(sessionID)
-                }
-            }
-
             if collapsed {
                 Text(workflowText(
                     languageStore,
                     "workflow.node.collapsedDescription",
                     fallback: "端口与参数保留；展开后连接"
                 )).font(.caption).foregroundStyle(.secondary)
+                    .allowsHitTesting(false)
             } else if let definition {
                 portRows(definition.inputs, input: true)
-                Divider()
+                Divider().allowsHitTesting(false)
                 portRows(definition.outputs, input: false)
             } else {
                 Label(workflowText(
@@ -553,6 +530,7 @@ private struct WorkflowNodeCard: View {
                     fallback: "未知操作或版本；流程保持只读"
                 ), systemImage: "questionmark.diamond")
                     .font(.caption).foregroundStyle(.orange)
+                    .allowsHitTesting(false)
             }
 
             Toggle(workflowText(languageStore, "workflow.language.selection", fallback: "加入封装选区"), isOn: Binding(get: { controller.selectedNodeIDs.contains(node.id) }, set: { checked in
@@ -574,11 +552,20 @@ private struct WorkflowNodeCard: View {
         }
         .padding(12)
         .frame(width: WorkflowCanvasLayoutPolicy.nodeWidth, alignment: .leading)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 13))
+        .background {
+            // Only the backdrop owns movement. Foreground controls keep their gestures;
+            // passive labels opt out of hit testing so descriptions and gaps reach it.
+            RoundedRectangle(cornerRadius: 13)
+                .fill(.regularMaterial)
+                .contentShape(RoundedRectangle(cornerRadius: 13))
+                .help(node.operationID)
+                .gesture(cardMovement)
+        }
         .overlay {
             RoundedRectangle(cornerRadius: 13)
                 .stroke(selected ? Color.accentColor : Color.secondary.opacity(0.25),
                         lineWidth: selected ? 3 : 1)
+                .allowsHitTesting(false)
         }
         .shadow(color: .black.opacity(0.12), radius: 8, y: 3)
         .contentShape(RoundedRectangle(cornerRadius: 13))
@@ -589,7 +576,30 @@ private struct WorkflowNodeCard: View {
         .onChange(of: outputDragActive) { wasActive, isActive in
             if wasActive && !isActive { onOutputDragEnd() }
         }
+        .onChange(of: cardDragActive) { wasActive, isActive in
+            if wasActive, !isActive, let sessionID = dragGestureSession.cancel() {
+                onDragCancelled(sessionID)
+            }
+        }
         .accessibilityIdentifier("workflow-node-\(node.id.uuidString)")
+    }
+
+    private var cardMovement: some Gesture {
+        DragGesture(minimumDistance: 5, coordinateSpace: .global)
+            .updating($cardDragActive) { _, active, _ in active = true }
+            .onChanged { value in
+                guard !readOnly else { return }
+                switch dragGestureSession.change() {
+                case .began(let sessionID):
+                    onDragBegan(sessionID, value.translation)
+                case .changed(let sessionID):
+                    onDragChanged(sessionID, value.translation)
+                }
+            }
+            .onEnded { value in
+                guard !readOnly, let sessionID = dragGestureSession.end() else { return }
+                onDragEnded(sessionID, value.translation)
+            }
     }
 
     @ViewBuilder
@@ -599,6 +609,7 @@ private struct WorkflowNodeCard: View {
                  ? workflowText(languageStore, "workflow.port.noInputs", fallback: "无输入")
                  : workflowText(languageStore, "workflow.port.noOutputs", fallback: "无输出"))
                 .font(.caption).foregroundStyle(.tertiary)
+                .allowsHitTesting(false)
         } else {
             ForEach(ports) { port in
                 portRow(port, input: input)

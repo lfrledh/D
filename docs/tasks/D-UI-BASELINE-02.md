@@ -152,3 +152,11 @@ Lead实施；baseline02_canvas_review、baseline02_services_readonly只读复核
 - 非实现者baseline02_canvas_review只读核对上述截图/AX和摘要，确认分层，指出gui/03证据不足，Lead采纳注记；无新写Worker、无修补轮次、无独立模型测试。真人H22、试听/权限完全未办理。测试项目正常保存，自有App正常退出，pgrep无D；源/修补包关键摘要见最终回执。
 
 结论：启动锁屏停点解除；原生检查有通过也有失败，**缺陷收口仍未完成、候选不源接纳**。下一动作在现有r3范围取实际drop接收/命中证据，再决定最小修补；不以静态provider通过代替真实拖入。不处理集中待办，不启动新阶段。仅文档最终SHA留R3/lead/final-receipt.json。
+
+## 2026-09-30 r4：卡片非交互区域默认可拖
+
+用户新增有限交互要求；基线d114cada742350cc072b252ebd3306311213b30d，源01758b8与scheme保护不变。R4=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-UI-BASELINE-02/run-20260929T151114Z-card-drag`。不重置旧库拖入、hosting或H22失败；本增量不修其他问题。
+
+Lead实现同一WorkflowNodeCard的手势归属与两种内置语言提示；允许GraphSurface、直接相关测试与本任务/当前/试用记录。不改推理、资产、模型参数或保存schema。非实现者canvas reviewer只读审查。初次实现后最多两次有明确原因的局部修正；越界或仍失败保留停点。
+
+行为与验收：卡片空白、说明及内部边缘启动既有移动手势；按钮/折叠/端口保留自身操作；当前输入框/滑块/内容编辑器在检查器或工具栏，不在卡片内，实测这些控件不移动节点。背景位移继续调用同一drag coordinator、实时几何和moveNode，一次结束仅一次撤销，取消/运行/只读保护不变。50/100/180%实际鼠标矩阵验证，CPU复用drag/生命周期/语言测试；普通独立App构建。比较移动前后节点参数、连接、模型身份与素材引用不变；布局不触发生成。真正用户素材不参与。本run输出/tmp/cache，编译复用已有离线依赖和隔离构建缓存，无GPU作业。需要真人/锁屏事项继续集中记录。

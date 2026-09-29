@@ -628,7 +628,7 @@
     "canvas.new": "New Workflow",
     "canvas.more": "More",
     "workflow.canvas.dropHint": "Drop nodes or project assets here; drag an output port to connect.",
-    "workflow.node.dragHint": "Drag the title to move; double-click to edit",
+    "workflow.node.dragHint": "Drag empty space or descriptions to move; controls act independently",
     "workflow.node.edit": "Edit Node",
     "workflow.port.dropOutputHint": "Drop a compatible output here",
     "workflow.port.dragOutputHint": "Drag to a compatible input port to connect",

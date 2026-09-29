@@ -628,7 +628,7 @@
     "canvas.new": "新流程",
     "canvas.more": "更多",
     "workflow.canvas.dropHint": "将节点或项目素材拖到这里；拖动输出端口可建立连接。",
-    "workflow.node.dragHint": "拖动标题移动；双击编辑",
+    "workflow.node.dragHint": "拖动卡片空白或说明移动；控件独立操作",
     "workflow.node.edit": "编辑节点",
     "workflow.port.dropOutputHint": "可将兼容输出拖到这里",
     "workflow.port.dragOutputHint": "拖到兼容输入端口以连接",
