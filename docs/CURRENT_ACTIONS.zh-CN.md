@@ -2,7 +2,17 @@
 
 最后核实：2026-09-30。唯一当前任务、版本与停点入口。
 
-## 最新增量：卡片非交互区域默认可拖（r4）
+## 当前增量：现用资料库拖入、节点删除和返回（r5）
+
+候选`codex/ui-baseline-02`仍在`/Volumes/CodexProjects/Codex/D-Worktrees/D-NODE-QUALITY-01`。受测代码`40a2c2fdbd74bef88a9171ce11322d809f440307`，最终仅文档提交/同步见R5/lead/final-receipt.json；源仍`01758b81527dc27eb4563bf1b66fd1ceab6647ee`，未源接纳。R5=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-UI-BASELINE-02/run-20260929T154311Z-current-input-drop`。
+
+已修现用库的UTI缺失：真实鼠标对照由空items变为导入数据和新增节点；缩小后可见空白归入同一接收面。每张节点卡片有删除按钮，显式删自身并复用Undo，非空资产/历史留存有测试；当前双入口及库/预览/模型/工具/接口等子页加左上返回，关闭只改变原展示状态，根入口无历史禁用。固定SHA相关46项CPU及普通D Nodes构建/签名通过；两名非实现者审阅，并修正返回错误分支/语言键和测试证据不足。
+
+**原生仍为局部通过**：最终包已核隔离身份，实际删除未选中卡片、保留另一选择、撤销恢复卡片/连线通过。随后100%鼠标拖入发出，但等待异步完成时桌面工具明确报告Mac锁定；不得写成该次通过。50/180%、滚动落点、端口拖线、返回/保存重开需解锁后继续。测试实例PID37434仍在锁屏桌面，未强杀或宣称退出；无模型/GPU任务。唯一推荐包/入口见[试用说明](NODE_LANGUAGE_TRY.zh-CN.md#当前-v02-候选d-ui-baseline-02尚未阶段接纳)。
+
+退役的是旧默认左右资料库布局专项，兼容编辑器仍可达，不删实现/历史。H22在当前Quick/画布仍适用：实测位置失效通知送达实际PlatformTextView，不证明视觉跟随；最后真人失败保留、下次集中办理。当前跨项目资产拖入完全空图仍会拒绝、旧两hosting失败仍保留，不冒充已修或仅需本人操作。锁屏项和真人项见[集中清单](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md#当前集中待办2026-09-29)，精确证据和预算见[任务r5](tasks/D-UI-BASELINE-02.md#2026-09-30-r5当前拖入与输入法收尾)。
+
+## 已完成增量：卡片非交互区域默认可拖（r4）
 
 用户本轮要求已在候选完成，停在试用点。候选仍`codex/ui-baseline-02`，工作树`/Volumes/CodexProjects/Codex/D-Worktrees/D-NODE-QUALITY-01`；受测代码`42b2243e0e8ff0bfa7300b81d8e46cc13c23f50e`，后续仅文档提交/同步状态见R4/lead/final-receipt.json。R4=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-UI-BASELINE-02/run-20260929T151114Z-card-drag`。源仍`01758b81527dc27eb4563bf1b66fd1ceab6647ee`，个人scheme未暂存保护保持；未源接纳。
 

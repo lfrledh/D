@@ -1,5 +1,29 @@
 # D-UI-BASELINE-02：原生双入口与共享资料库
 
+## 2026-09-30 r5：当前拖入与输入法收尾
+
+用户明确批准继续当前缺陷，退役路径不再修；历史失败/预算不改写。起点2c9c755064f492c1336f3af32afc615a2c321cce，源01758b81527dc27eb4563bf1b66fd1ceab6647ee及scheme保护一致。R5=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-UI-BASELINE-02/run-20260929T154311Z-current-input-drop`。Lead实施，两名非实现者只读调查/审核。延续r3局部修补及最多两轮定向返工；不恢复已耗尽的旧hosting接管预算。
+
+允许：现用SharedLibraryBrowser/WorkflowCanvasTransfer/WorkflowGraphSurface/WorkflowCanvasView、必要的D/Info.plist类型声明、WorkbenchApplicationDelegate及直接测试；当前行动/任务/试用/集中清单。临时诊断不记录文字/资产内容，结束移除。输出/tmp/cache仅R5和既有离线构建目录；不改模型、保存、签名策略或权限。
+
+范围已核对：新版SharedLibraryBrowser仍复现100%文字输入拖入不新增；旧WorkflowLibraries退出默认左栏但兼容sheet仍可达。旧布局专项退出新版默认验收，兼容义务保留。H22仍涉及Quick/画布TextEditor；历史歌词框不再是本轮修补目标。两项hosting的连线/技术信息行为仍在，不能直接删除义务。先取得实际回调/命中证据，不重复r3已修补的排队模式反例。本人专属检查进入集中清单，不催问。
+
+用户过程中追加：每个需有删除按钮、每页左上返回。未指定删除对象的破坏范围，已询问并按每张画布节点实施；不引入删除项目/原件/生成历史。允许范围据此增加WorkflowController原有删除入口、DualWorkbench/Quick/ModelLibrary与直接生命周期测试；不建第二套撤销。卡片删自身ID，旧选择可属另一节点；过期/只读/运行时拒绝；节点、连线和布局一起撤销；资产及历史留存。返回只改变展示/导航历史，确认页返回不提交运行，媒体返回只停止该预览；顶层无历史时禁用。
+
+根因对照：未声明自定义UTI时，系统记录`org.d-workbench.canvas-item`未导出，provider创建但导入回调不执行、画布action收到0项。仅补D/Info.plist的`public.data`导出声明后，同一隔离身份/鼠标路径出现payload→decode→count 1，并实际新增2281F4A9-B412-4C6C-9893-89D5BBF3C49B。R5/lead/diagnostic-count.log与declared-type-events.log、gui/declared-type-drop.txt/png分别保留。最终移除所有临时日志；provider和Transferable共用类型标识，并补真实Info交叉检查。Apple依据：[自定义类型声明](https://developer.apple.com/documentation/UniformTypeIdentifiers/defining-file-and-data-types-for-your-app)。缩小后可见空白扩大现有画布接收区域，不改变原点、模型请求或资产来源。
+
+H22定位：临时观测实际Quick输入时，窗口resize/endLiveResize及move确实把几何失效通知送到PlatformTextView且inputContext存在（R5/lead/diagnostic-events-2.log、diagnostic-count.log）。这只证明当前原生接线，不证明候选窗视觉跟随；没有叠加无依据的生产修补，也不把问题归为系统正常。最后真人失败保留，下次只在当前包/字段做针对性对照。Apple接口只是[使候选字符坐标失效](https://developer.apple.com/documentation/appkit/nstextinputcontext/invalidatecharactercoordinates/)，不应推导即时跟随已通过。
+
+非实现者审核：baseline02_canvas_review审类型/坐标/删除；baseline02_services_readonly审返回和输入接线。发现并修正metadata==nil紧凑库返回回调遗漏、返回键命名空间及删除测试最初空资产/历史证据不足；最终测试先真实执行无模型文字节点并断言非空。两名均未独立运行测试，服务端模型解析unknown。Lead实现、复核与所有CPU/原生执行，不冒称Worker实现或独立模型测试。原已耗尽hosting预算保持；跨项目资产拖入完全空图仍为实际窄缺口，不能以旧路径退役注销。
+
+### r5受测与停点
+
+- 固定代码`40a2c2fdbd74bef88a9171ce11322d809f440307`。`pinned-cpu/result.json`：SharedLibraryBrowserTests、WorkflowCanvasDragTests、WorkflowBaseline02Tests、WorkflowLifecycleTests共46项/2 suites通过，14.55秒；新增Info契约、精确卡片删除/非空历史/资产/过期/忙碌/撤销/保存反例。原两hosting不在本过滤器，没有删除断言或冒称通过。`pinned-build/result.json`普通D Nodes构建17.54秒通过；必要离线依赖/既有签名/准备目录不改。此前无提交CPU/final-build只是开发中检查，固定版以pinned记录为准。
+- 最终普通包`delivery/D Canvas Controls.app`，唯一启动器同名`.command`。deep/strict签名和四关键文件摘要前后不变；核验固定隔离身份df754b88-0763-480b-864c-74c40057c7e8、实际PID37434，见`lead/final-launch.json`及`final-app-after.json`。未手改构建包。
+- 最终包实际GUI：选中改写节点→点原文卡片垃圾桶，删除原文及其连线但改写仍选中→更多撤销，原文/连线/文字恢复。见`gui/card-delete.txt`、`card-undo.txt`及`final-open-workflow.txt`。随后搜索“文字输入”拖入100%画布，立即观察尚未变化；下一次等待异步完成时CUA明确报告Mac锁定。**该次新增未确认**，不可拿前述诊断包成功替代。50/180%、滚动、端口、返回/重开矩阵和本包真人IME未执行完。无新模型测试、无全套Xcode/UI测试；不声称完整阶段通过。
+- 锁屏后停止桌面操作，不绕自动解锁、不催本人。保留自有测试PID37434及隔离测试现场；CPU/build均结束，两个只读代理结束；未将进程仍在写成已退出。最后已保存归档单独备份，不推测内存未保存操作已落盘。下次恢复先核candidate/源/scheme及这个进程身份，再继续当前固定包；别自动启动普通D。
+- 本轮不源接纳。最终仅四份文档差异、候选/远端、源scheme完整diff/摘要/index及状态写R5/lead/final-receipt.json，避免提交自引用。历史失败/预算保留。工程候选局部通过，集中剩余检查待解锁；协作仅Lead实现＋非实现者只读审阅，实际订阅费用与完整Lead token归因unknown。
+
 2026-09-28 · r2 · 隔离实现与分层验收中。用户批准U0—U4连续实施，不公开发布/main。基线源01758b81527dc27eb4563bf1b66fd1ceab6647ee；已推前端395378116d39899d138df797b4e39bd1aea917a4。复用原候选物理树，新分支codex/ui-baseline-02；旧分支/证据保留。
 
 ## 本轮事实与保护
