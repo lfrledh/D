@@ -17,6 +17,13 @@ public struct VideoFrameRate: Sendable, Codable, Equatable {
     }
 }
 
+/// Adapter-specific request values. The selected execution profile determines which
+/// case is valid; nil preserves video requests recorded before these adapters existed.
+public enum VideoAdapterOptions: Sendable, Codable, Equatable {
+    case h3(streamWeights: Bool)
+    case ltx(streamWeights: Bool, spatiotemporalGuidance: Float)
+}
+
 /// A text-to-video execution snapshot. Image conditioning and audio are deliberately
 /// absent until an adapter implements them; no untyped condition dictionary is used.
 /// The profile determines the sampler/precision, while these values are never silently
@@ -33,11 +40,13 @@ public struct VideoRequest: Sendable, Codable, Equatable {
     public let scheduleShift: Float
     public let seed: UInt64
     public let executionProfile: ExecutionProfileReference
+    public let adapterOptions: VideoAdapterOptions?
 
     public init(prompt: String, negativePrompt: String, width: Int, height: Int,
                 frameCount: Int, frameRate: VideoFrameRate, steps: Int,
                 guidanceScale: Float, scheduleShift: Float, seed: UInt64,
-                executionProfile: ExecutionProfileReference) {
+                executionProfile: ExecutionProfileReference,
+                adapterOptions: VideoAdapterOptions? = nil) {
         self.prompt = prompt
         self.negativePrompt = negativePrompt
         self.width = width
@@ -49,6 +58,7 @@ public struct VideoRequest: Sendable, Codable, Equatable {
         self.scheduleShift = scheduleShift
         self.seed = seed
         self.executionProfile = executionProfile
+        self.adapterOptions = adapterOptions
     }
 
     /// Common representational rules only. Dimensions, frame stride, token counts,
@@ -68,6 +78,10 @@ public struct VideoRequest: Sendable, Codable, Equatable {
         let (_, timeOverflow) = Int64(frameCount).multipliedReportingOverflow(by: Int64(frameRate.denominator))
         guard !areaOverflow, !frameOverflow, !spoolOverflow, !timeOverflow else {
             throw InferenceFailure.invalidRequest("Video geometry or duration exceeds the integer representation.")
+        }
+        if case .some(.ltx(_, let spatiotemporalGuidance)) = adapterOptions,
+           !spatiotemporalGuidance.isFinite {
+            throw InferenceFailure.invalidRequest("Video spatiotemporal guidance must be finite.")
         }
     }
 }
