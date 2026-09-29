@@ -53,3 +53,33 @@ Lead另修私有产物检查：明确`-xerror`全量音视频解码、哈希后�
 `real-ltx23-q8/strict-recheck-01/result.json`：只读复验原始MP4的完整JSON与解码均通过，视频9帧/24fps/0.375秒，AAC48kHz立体声约0.33秒，在明确AV容差内。原件SHA256 `56ee9103049794d536a53e3e43f5c19bfba35189bdb3b6b69c82ed050d70004c` 不变。这是修补后复验原样本，不倒改第一次完整调用失败历史。2步极短样本不是画质、音画语义、官方数值对照或BF16验收。
 
 仍待：修补后的整个真实入口与取消复验、完整App运行时/安装使用权/音视频Store接线、新节点和流式开关、普通Xcode可复建依赖打包。旧Wan仅值型拒绝外来选项的针对性回归；没有声称新后端已注册或前端节点可生成。当前代码不改项目schema、原App或已有模型请求。精确最终提交与后续结果写外部回执，不能用本文把尚未执行事项记为通过。
+
+
+## 当前验证检查点（未结案）
+
+受测完整适配代码 `b207c0f34d86be408ba1e586db8842b36c6fcd58`。之后仅更新本任务与CURRENT_ACTIONS；最终文档SHA写R/lead/final-handoff.json，不自引用提交。
+
+- **通过**：R/real-ltx23-q8/attempt-02 完整入口，GPU引擎93.968秒（不含资源预检），生成256²/9帧/24fps/2步/seed42 H.264＋AAC。probe完整JSON、逐帧计数、严格完整解码、AV时间线、摘要通过；没有发布到用户项目。
+- **通过**：attempt-03-cancel 在真实Gemma编码阶段发SIGTERM给自有包装器；约0.247秒后包装器结束，退出2、engine_process=cancelled、原引擎进程组46158已不存在；未把取消当成功或发布输出。GPU正在计算时能结束，不宣称任意硬件瞬间停止。
+- **通过**：attempt-04-after-cancel 重新加载并生成，GPU引擎90.043秒，完整媒体检查通过。两次成功样本摘要相同仅是这个固定输入/环境的观察，不承诺普遍逐像素确定性。VAE阶段Metal峰值3.58GB，仅是阶段指标；全流程RSS和跨机精度仍未知。未运行关闭流式的20GB Q8 DiT驻留测试，未运行全BF16模型，不能由开发机实测推断产品容量上限。
+- **CPU/结构**：H3配方6、LTX配方10、资源9、准入5、进程18、媒体5、实际tokenizer方法3，共56项，R/lead-cpu-final及tests/ltx-job-final-five.log。媒体中含合成的真实FFmpeg文件/损坏副本；模型样本另列。根包79项/14 suites受测c863e2b至本次b207的Sources/Tests差异为空（R/lead/tested-code.json）；未宣称重新跑过App。
+- **审核**：两个非实现者只读复核，范围、限制在R/lead/review-final.json。重要进程修补归Lead，PROCESS的两轮用尽及历史未停报保持。共享重计算许可、模型安装租约、GUI、Xcode普通可复建运行时、带音轨Store迁移/重开、正式节点streamWeights开关都仍未验收。
+
+### 版本/精度与剩余边界
+
+|资源/实现|已核对的身份|当前实际程度|
+|---|---|---|
+|MiniMax H3官方Base|官方42ed227ee7df40d41602854ae760620d6eb651fe；BF16、CFG蒸馏；所选首条FL2VA配方，不把Ref2VA/未发布能力写成已实现|h3.c固定8974cc055ea9c02fcd14cc27dfda3e1027c05153，MIT源码编译及1768无权重检查；全50层/禁隐式int8/真SSD streaming配方已核。等待H30，不含真实H3生成或App节点|
+|LTX2.3 dev BF16|非蒸馏dev，DiT和Gemma3文字塔均固定无量化资源，禁止隐含蒸馏LoRA|有独立完整资源清单及同一one-stage入口，但72.58GB资源未实测；不能称“满血版已通过”|
+|LTX2.3 Q8测试|dgrauet/ltx-2.3-mlx-q8@6671a7572a530862d1d60ce393b5d93491e3f76b；Gemma3 Q4@86cc6a8dedbc456dd0e4af01a9d09f396f77e558|36.83GB已下载摘要核验；本机流式GPU、取消和恢复局部通过；不是BF16或画质验收|
+|LTX2.5 dev|官方5e6e71018ee1756ed329b697a7b4aedc934dfce9；dev与distilled必须分开；自定义Gemma4-LTX，不能以Gemma3代替|纯值/CLI参数映射，显式diffusion decoder；H31门控未完成，未下载、未真实执行；2.3成功不证明2.5成功|
+
+流式开关是每任务冻结值，不改变模型版本/量化/蒸馏。H3是DiT块预取；LTX是48个transformer block的逐块权重加载，文字塔/解码阶段不由此开关流式。前端尚无该开关，不能把Python参数等同已交付节点。
+
+当前AV接线债已有定位：`VideoMediaInspector.inspect`、`VideoAssetMetadata.validate`和ProjectStore视频恢复分支仍保留Wan无声/固定时间线约束；新输出实际有AAC轨及B帧。下一步应增加明确的AV验证/来源/保存分支，保留旧Wan严格规则；不能丢音轨、放松全局检查或另造Store。`WorkflowModelBinding`目前只有imageRecipe，通用generateVideo和ProjectSession模型选择仍绑定Wan；需要按选定模型的冻结视频配方接入，不能把显示字符串当执行规则。H3/LTX只读说明卡片也未作为本轮节点交付。
+
+### 恢复
+
+源仍01758b81527dc27eb4563bf1b66fd1ceab6647ee、旧前端候选仍4b90327db126e46a9277a0a401d2b6ea3e283399。源scheme完整diff、SHA256、index及未暂存状态逐项与起点相同（R/lead/protection-after-model-tests.json）。专属候选留在codex/video-models-01；不源接纳、不推送、不改普通D，不删除任何候选/证据。已知旧GUI测试实例仍保持，不把本轮无GPU进程解释为全系统所有进程已退出。
+
+下次先核候选/源/进程与集中H30/H31，再续本任务的真实运行时和节点接线；不是重置修复预算、重新规划产品或自动接纳其他候选。当前只能交付后端候选进展，整项用户需求尚未完成。
