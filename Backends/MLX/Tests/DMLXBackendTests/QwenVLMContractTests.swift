@@ -41,6 +41,7 @@ struct QwenVLMContractTests {
             let config: [String: Any] = [
             "architectures": ["Qwen3_5ForConditionalGeneration"], "model_type": "qwen3_5",
             "text_config": ["model_type": "qwen3_5_text", "hidden_size": hidden,
+                            "output_gate_type": expected == "9B" ? "sigmoid" : "swish",
                             "num_hidden_layers": layers, "max_position_embeddings": 262144,
                             "vocab_size": 248320, "head_dim": 256, "num_key_value_heads": 4,
                             "num_attention_heads": expected == "9B" ? 16 : 24,
@@ -61,6 +62,21 @@ struct QwenVLMContractTests {
             try Data("{}".utf8).write(to: root.appendingPathComponent("tokenizer_config.json"))
             try Data(repeating: 1, count: 16).write(to: root.appendingPathComponent("a.safetensors"))
             #expect(try QwenVLMModelInventory.validateModel(at: root).size == expected)
+        }
+    }
+
+    @Test func outputGateTypeMustMatchKnownModelSize() throws {
+        try QwenVLMModelInventory.validateOutputGateType([:], size: "9B")
+        try QwenVLMModelInventory.validateOutputGateType(["output_gate_type": "sigmoid"], size: "9B")
+        try QwenVLMModelInventory.validateOutputGateType(["output_gate_type": "swish"], size: "27B")
+        for (size, gate) in [("9B", "unknown"), ("9B", "swish"),
+                             ("27B", "sigmoid"), ("27B", "unknown")] {
+            #expect(throws: (any Error).self) {
+                try QwenVLMModelInventory.validateOutputGateType(["output_gate_type": gate], size: size)
+            }
+        }
+        #expect(throws: (any Error).self) {
+            try QwenVLMModelInventory.validateOutputGateType([:], size: "27B")
         }
     }
 

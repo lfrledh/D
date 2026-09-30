@@ -58,6 +58,7 @@ public struct QwenVLMModelInventory: Sendable {
         case (5120, 64): size = "27B"
         default: throw InferenceFailure.invalidRequest("Unsupported Qwen3.5 dimensions.")
         }
+        try validateOutputGateType(text, size: size)
         let context = try integer(text, "max_position_embeddings")
         guard context > 0, context <= 262_144,
               try integer(text, "vocab_size") == 248_320,
@@ -142,6 +143,15 @@ public struct QwenVLMModelInventory: Sendable {
             throw InferenceFailure.invalidRequest("Missing or invalid \(name).")
         }
         return number.intValue
+    }
+
+    static func validateOutputGateType(_ text: [String: Any], size: String) throws {
+        if text["output_gate_type"] == nil, size == "9B" { return }
+        guard let gate = text["output_gate_type"] as? String,
+              (size == "9B" && gate == "sigmoid") ||
+              (size == "27B" && gate == "swish") else {
+            throw InferenceFailure.invalidRequest("Unsupported Qwen3.5 output gate type for model size.")
+        }
     }
 
     private static func validateQuantization(_ value: [String: Any]) throws {
