@@ -8,6 +8,8 @@ struct WorkflowGraphSurface: View {
     let graph: WorkflowGraph?
     @Binding var zoom: CGFloat
     @Binding var scrollPosition: ScrollPosition
+    @Binding var navigationRequest: WorkflowCanvasNavigationRequest?
+    @Binding var viewportInteractionLocked: Bool
     let viewContext: WorkflowCanvasViewContext
     @Binding var pendingConnection: WorkflowPendingConnection?
     @Binding var selectedConnectionID: UUID?
@@ -25,6 +27,10 @@ struct WorkflowGraphSurface: View {
     @State private var pendingConnectionScope: WorkflowCanvasScope?
     @State private var pendingDragPoint: CGPoint?
     @State private var connectionIssue: WorkflowCanvasConnectionIssue?
+    @State private var scrollOffset = CGPoint.zero
+    @State private var pendingZoomOffset: CGPoint?
+    @State private var panStartOffset: CGPoint?
+    @State private var suppressBlankTap = false
 
     var body: some View {
         Group {
@@ -56,25 +62,28 @@ struct WorkflowGraphSurface: View {
                     translation: origin
                 )
                 GeometryReader { viewport in
-                // Keep the same canvas coordinate system, including visible blank space
-                // when zoomed out. Otherwise that space has no drop destination.
-                let contentSize = CGSize(
-                    width: max(geometry.size.width, viewport.size.width / effectiveZoom),
-                    height: max(geometry.size.height, viewport.size.height / effectiveZoom)
+                let layout = WorkflowCanvasViewportGeometry(
+                    graphSize: geometry.size, viewportSize: viewport.size,
+                    zoom: effectiveZoom, translation: geometry.translation
                 )
+                let contentSize = layout.unscaledGraphSize
+                let edge = layout.unscaledPadding
                 ScrollView([.horizontal, .vertical]) {
                     ZStack(alignment: .topLeading) {
                         Color(nsColor: .textBackgroundColor)
                             .contentShape(Rectangle())
                             .onTapGesture {
+                                guard !suppressBlankTap else { return }
                                 controller.selectedNodeID = nil
                                 selectedConnectionID = nil
                             }
+                            .gesture(blankPan(layout: layout))
                             .help(workflowText(
                                 languageStore,
                                 "workflow.canvas.dropHint",
                                 fallback: "将节点或项目素材拖到这里；拖动输出端口可建立连接。"
                             ))
+                            .background(viewportInput(geometry: geometry, layout: layout))
                         ZStack(alignment: .topLeading) {
                         ForEach(graph.nodes) { node in
                             WorkflowNodeCard(
@@ -99,15 +108,19 @@ struct WorkflowGraphSurface: View {
                                     pendingConnection = nil
                                     pendingConnectionScope = nil
                                     pendingDragPoint = nil
+                                    viewportInteractionLocked = false
                                 },
                                 onOutputDrag: { source, point in
                                     pendingConnection = source
                                     pendingConnectionScope = scope
-                                    pendingDragPoint = point
+                                    pendingDragPoint = CGPoint(x: point.x - edge.width,
+                                                               y: point.y - edge.height)
+                                    viewportInteractionLocked = true
                                     connectionIssue = nil
                                 },
                                 onOutputDragEnd: {
                                     pendingDragPoint = nil
+                                    viewportInteractionLocked = false
                                     if pendingConnectionScope == scope {
                                         pendingConnection = nil
                                         pendingConnectionScope = nil
@@ -140,7 +153,10 @@ struct WorkflowGraphSurface: View {
                                         scope: scope
                                     )
                                 },
-                                onDragCancelled: { sessionID in nodeDrag.cancel(sessionID: sessionID) }
+                                onDragCancelled: { sessionID in
+                                    nodeDrag.cancel(sessionID: sessionID)
+                                    viewportInteractionLocked = false
+                                }
                             )
                             .onGeometryChange(for: CGSize.self) { $0.size } action: { size in
                                 nodeSizeObserver?(node.id, size)
@@ -165,37 +181,81 @@ struct WorkflowGraphSurface: View {
                             )
                         }
                     }
+                    .offset(x: edge.width, y: edge.height)
                     }
-                    .frame(width: contentSize.width, height: contentSize.height)
+                    .frame(width: contentSize.width + edge.width * 2,
+                           height: contentSize.height + edge.height * 2)
                     .coordinateSpace(name: WorkflowCanvasCoordinateSpace.name)
                     .contentShape(Rectangle())
                     .dropDestination(for: WorkflowCanvasTransfer.self, action: { items, location in
-                        return acceptSurfaceDrop(items, at: geometry.rawPoint(forDisplayPoint: location), scope: scope)
+                        return acceptSurfaceDrop(items, at: geometry.rawPoint(forDisplayPoint: CGPoint(
+                            x: location.x - edge.width, y: location.y - edge.height)), scope: scope)
                     })
                     .scaleEffect(effectiveZoom, anchor: .topLeading)
-                    .frame(width: contentSize.width * effectiveZoom,
-                           height: contentSize.height * effectiveZoom,
+                    .frame(width: layout.contentSize.width,
+                           height: layout.contentSize.height,
                            alignment: .topLeading)
                 }
                 .scrollPosition($scrollPosition)
                 .onScrollGeometryChange(for: WorkflowCanvasScrollObservation.self) { scroll in
                     WorkflowCanvasScrollObservation(contentOffset: scroll.contentOffset,
-                        visibleRawCenter: WorkflowCanvasViewport.visibleRawCenter(
-                            contentOffset: scroll.contentOffset, containerSize: scroll.containerSize,
-                            zoom: effectiveZoom, translation: geometry.translation))
+                        visibleRawCenter: WorkflowCanvasViewportGeometry(graphSize: geometry.size,
+                            viewportSize: scroll.containerSize, zoom: effectiveZoom,
+                            translation: geometry.translation).visibleRawCenter(offset: scroll.contentOffset))
                 } action: { _, observation in
+                    scrollOffset = observation.contentOffset
                     onScrollObservation(viewContext, observation)
                 }
                 .background(Color(nsColor: .underPageBackgroundColor))
+                .onAppear {
+                    if let navigationRequest {
+                        scrollPosition.scrollTo(point: layout.centeredOffset(
+                            on: navigationRequest.rawCenter ?? layout.centerRawPoint))
+                    } else {
+                        scrollPosition.scrollTo(point: layout.centeredOffset(on: layout.centerRawPoint))
+                    }
+                }
+                .onChange(of: navigationRequest) { _, request in
+                    guard let request else { return }
+                    Task { @MainActor in
+                        guard navigationRequest == request else { return }
+                        let current = WorkflowCanvasViewportGeometry(graphSize: geometry.size,
+                            viewportSize: viewport.size, zoom: zoom, translation: geometry.translation)
+                        scrollPosition.scrollTo(point: current.centeredOffset(
+                            on: request.rawCenter ?? current.centerRawPoint))
+                    }
+                }
+                .onChange(of: viewport.size) { old, new in
+                    guard old.width > 0, old.height > 0, new.width > 0, new.height > 0 else { return }
+                    let previous = WorkflowCanvasViewportGeometry(graphSize: geometry.size,
+                        viewportSize: old, zoom: effectiveZoom, translation: geometry.translation)
+                    let next = WorkflowCanvasViewportGeometry(graphSize: geometry.size,
+                        viewportSize: new, zoom: effectiveZoom, translation: geometry.translation)
+                    scrollPosition.scrollTo(point: next.centeredOffset(
+                        on: previous.visibleRawCenter(offset: scrollOffset)))
+                }
+                .onChange(of: zoom) { old, new in
+                    guard old != new, !viewportInteractionLocked else { return }
+                    let previous = WorkflowCanvasViewportGeometry(graphSize: geometry.size,
+                        viewportSize: viewport.size, zoom: old, translation: geometry.translation)
+                    let next = WorkflowCanvasViewportGeometry(graphSize: geometry.size,
+                        viewportSize: viewport.size, zoom: new, translation: geometry.translation)
+                    let offset = pendingZoomOffset ?? next.centeredOffset(
+                        on: previous.visibleRawCenter(offset: scrollOffset))
+                    pendingZoomOffset = nil
+                    scrollPosition.scrollTo(point: offset)
+                }
                 .simultaneousGesture(
                     MagnificationGesture()
                         .updating($gestureScale) { value, state, _ in state = value }
                         .onEnded { value in
-                            zoom = WorkflowCanvasLayoutPolicy.clampedZoom(zoom * value)
+                            if !viewportInteractionLocked {
+                                zoom = WorkflowCanvasLayoutPolicy.clampedZoom(zoom * value)
+                            }
                         }
                 )
                 .onChange(of: scope) { _, next in
-                    if nodeDrag.active?.scope != next { nodeDrag.invalidate() }
+                    if nodeDrag.active?.scope != next { nodeDrag.invalidate(); viewportInteractionLocked = false }
                     if stableOrigin?.identity != next.identity { stableOrigin = nil }
                     if pendingConnectionScope != next {
                         pendingConnection = nil
@@ -225,11 +285,15 @@ struct WorkflowGraphSurface: View {
                     if blocked {
                         nodeDrag.invalidate()
                         pendingDragPoint = nil
+                        viewportInteractionLocked = false
                     }
                 }
                 .onDisappear {
                     nodeDrag.invalidate()
                     pendingDragPoint = nil
+                    panStartOffset = nil
+                    suppressBlankTap = false
+                    viewportInteractionLocked = false
                 }
                 .overlay(alignment: .topLeading) {
                     if let pendingConnection {
@@ -286,7 +350,45 @@ struct WorkflowGraphSurface: View {
     }
 
     private var effectiveZoom: CGFloat {
-        WorkflowCanvasLayoutPolicy.clampedZoom(zoom * gestureScale)
+        viewportInteractionLocked ? zoom : WorkflowCanvasLayoutPolicy.clampedZoom(zoom * gestureScale)
+    }
+
+    private func blankPan(layout: WorkflowCanvasViewportGeometry) -> some Gesture {
+        DragGesture(minimumDistance: 5, coordinateSpace: .global)
+            .onChanged { value in
+                guard nodeDrag.active == nil, pendingDragPoint == nil else { return }
+                suppressBlankTap = true
+                if panStartOffset == nil { panStartOffset = scrollOffset }
+                guard let start = panStartOffset else { return }
+                scrollPosition.scrollTo(point: layout.pannedOffset(
+                    from: start, translation: value.translation))
+            }
+            .onEnded { _ in
+                panStartOffset = nil
+                Task { @MainActor in suppressBlankTap = false }
+            }
+    }
+
+    private func viewportInput(
+        geometry: WorkflowGraphGeometry,
+        layout: WorkflowCanvasViewportGeometry
+    ) -> WorkflowCanvasViewportInput {
+        WorkflowCanvasViewportInput(
+            allowsEvent: { nodeDrag.active == nil && pendingDragPoint == nil },
+            onWheel: { delta, point, offset, size in
+                guard nodeDrag.active == nil, pendingDragPoint == nil else { return }
+                let old = WorkflowCanvasViewportGeometry(graphSize: geometry.size,
+                    viewportSize: size, zoom: zoom, translation: geometry.translation)
+                let requested = zoom * CGFloat(exp(Double(delta) * 0.015))
+                let next = old.anchoredZoom(toward: requested, mouse: point, offset: offset)
+                guard next.zoom != zoom else { return }
+                pendingZoomOffset = next.offset
+                zoom = next.zoom
+            },
+            onMiddleClick: {
+                guard nodeDrag.active == nil, pendingDragPoint == nil else { return }
+                scrollPosition.scrollTo(point: layout.centeredOffset(on: layout.centerRawPoint))
+            })
     }
 
     private func beginDrag(
@@ -314,6 +416,7 @@ struct WorkflowGraphSurface: View {
         )
         if began {
             stableOrigin = WorkflowCanvasStableOrigin(identity: scope.identity, translation: origin)
+            viewportInteractionLocked = true
         }
     }
 
@@ -342,6 +445,7 @@ struct WorkflowGraphSurface: View {
         translation: CGSize,
         scope: WorkflowCanvasScope
     ) {
+        viewportInteractionLocked = false
         guard let drag = nodeDrag.finish(
             sessionID: sessionID,
             nodeID: nodeID,
@@ -839,17 +943,6 @@ struct WorkflowGraphGeometry {
             return CGPoint(x: CGFloat(layout.x), y: CGFloat(layout.y))
         }
         return WorkflowCanvasLayoutPolicy.fallbackPosition(index: index)
-    }
-}
-
-enum WorkflowCanvasViewport {
-    static func visibleRawCenter(contentOffset: CGPoint, containerSize: CGSize,
-                                 zoom: CGFloat, translation: CGSize) -> CGPoint {
-        let scale = max(zoom, 0.01)
-        return CGPoint(
-            x: (contentOffset.x + containerSize.width / 2) / scale - translation.width,
-            y: (contentOffset.y + containerSize.height / 2) / scale - translation.height
-        )
     }
 }
 

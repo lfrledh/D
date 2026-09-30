@@ -72,9 +72,9 @@ struct WorkflowBaseline02Tests {
             bodyPath: [.init(nodeID: node, slot: "body")])
         var memory = WorkflowCanvasViewStateStore()
         let outerState = WorkflowCanvasViewMemory(zoom: 1.8,
-            scrollPoint: CGPoint(x: 440, y: 210), selectedNodeID: node)
+            rawVisibleCenter: CGPoint(x: 440, y: 210), selectedNodeID: node)
         let innerState = WorkflowCanvasViewMemory(zoom: 0.5,
-            scrollPoint: CGPoint(x: 20, y: 90), selectedNodeID: nil)
+            rawVisibleCenter: CGPoint(x: 20, y: 90), selectedNodeID: nil)
         memory.save(outerState, for: outer)
         memory.save(innerState, for: inner)
         #expect(memory.state(for: outer) == outerState)
@@ -82,13 +82,16 @@ struct WorkflowBaseline02Tests {
         #expect(memory.state(for: .init(projectID: UUID(), rootGraphID: root, bodyPath: [])) == nil)
     }
 
-    @Test func capturedOffsetUsesObservedScrollInsteadOfScrollPositionPoint() {
+    @Test func capturedLogicalCenterSurvivesPaddingAndZoomChanges() {
         let context = WorkflowCanvasViewContext(projectID: UUID(), rootGraphID: UUID(), bodyPath: [])
         var memory = WorkflowCanvasViewStateStore()
-        let manuallyObserved = CGPoint(x: 237, y: 119)
-        memory.capture(zoom: 1.8, contentOffset: manuallyObserved,
+        let geometry = WorkflowCanvasViewportGeometry(graphSize: CGSize(width: 1400, height: 900),
+            viewportSize: CGSize(width: 500, height: 400), zoom: 1.8,
+            translation: CGSize(width: 150, height: 24))
+        let manuallyObserved = geometry.visibleRawCenter(offset: CGPoint(x: 737, y: 519))
+        memory.capture(zoom: 1.8, rawVisibleCenter: manuallyObserved,
             selectedNodeID: UUID(), for: context)
-        #expect(memory.state(for: context)?.scrollPoint == manuallyObserved)
+        #expect(memory.state(for: context)?.rawVisibleCenter == manuallyObserved)
     }
 
     @Test func manualHostingScrollRestoresActualOffsetAfterGraphSwitch() async throws {
@@ -156,18 +159,30 @@ struct WorkflowBaseline02Tests {
         let blankContext = WorkflowCanvasViewContext(projectID: controller.projectID,
             rootGraphID: blankGraph.id, bodyPath: [])
         var blankOffset = CGPoint(x: CGFloat.infinity, y: CGFloat.infinity)
+        let blankGeometry = WorkflowGraphGeometry(graph: blankGraph, tools: controller.tools,
+            registry: controller.registry)
+        func expectedBlankOffset(_ scroll: NSScrollView) -> CGPoint {
+            let layout = WorkflowCanvasViewportGeometry(graphSize: blankGeometry.size,
+                viewportSize: scroll.contentView.bounds.size, zoom: 1,
+                translation: blankGeometry.translation)
+            return layout.centeredOffset(on: layout.centerRawPoint)
+        }
         for _ in 0..<40 {
             host.layoutSubtreeIfNeeded()
-            blankOffset = graphScrollView()?.contentView.bounds.origin ?? blankOffset
+            let blankScroll = graphScrollView()
+            blankOffset = blankScroll?.contentView.bounds.origin ?? blankOffset
+            let expected = blankScroll.map(expectedBlankOffset) ?? .zero
             if observations[blankContext]?.contains(where: {
-                abs($0.x) < 2 && abs($0.y) < 2
-            }) == true && abs(blankOffset.x) < 2 && abs(blankOffset.y) < 2 { break }
+                abs($0.x - expected.x) < 2 && abs($0.y - expected.y) < 2
+            }) == true && abs(blankOffset.x - expected.x) < 2 && abs(blankOffset.y - expected.y) < 2 { break }
             try await Task.sleep(for: .milliseconds(10))
         }
+        let blankScroll = try #require(graphScrollView())
+        let expected = expectedBlankOffset(blankScroll)
         #expect(observations[blankContext]?.contains(where: {
-            abs($0.x) < 2 && abs($0.y) < 2
+            abs($0.x - expected.x) < 2 && abs($0.y - expected.y) < 2
         }) == true, "The blank graph must mount and report its reset offset before switching back")
-        #expect(abs(blankOffset.x) < 2 && abs(blankOffset.y) < 2)
+        #expect(abs(blankOffset.x - expected.x) < 2 && abs(blankOffset.y - expected.y) < 2)
         controller.selectedGraphID = originalGraph.id
         var restored = CGPoint.zero
         for _ in 0..<40 {
@@ -187,16 +202,15 @@ struct WorkflowBaseline02Tests {
         let offset = CGPoint(x: 120, y: 80)
         let container = CGSize(width: 500, height: 400)
         let translation = CGSize(width: 180, height: 260)
-        let half = WorkflowCanvasViewport.visibleRawCenter(contentOffset: offset,
-            containerSize: container, zoom: 0.5, translation: translation)
-        let normal = WorkflowCanvasViewport.visibleRawCenter(contentOffset: offset,
-            containerSize: container, zoom: 1, translation: translation)
-        let enlarged = WorkflowCanvasViewport.visibleRawCenter(contentOffset: offset,
-            containerSize: container, zoom: 1.8, translation: translation)
-        #expect(half == CGPoint(x: 560, y: 300))
-        #expect(normal == CGPoint(x: 190, y: 20))
-        #expect(abs(enlarged.x - 25.5555) < 0.01)
-        #expect(abs(enlarged.y + 104.4444) < 0.01)
+        func center(_ zoom: CGFloat) -> CGPoint {
+            WorkflowCanvasViewportGeometry(graphSize: CGSize(width: 1400, height: 900),
+                viewportSize: container, zoom: zoom, translation: translation)
+                .visibleRawCenter(offset: offset)
+        }
+        #expect(center(0.5) == CGPoint(x: -440, y: -500))
+        #expect(center(1) == CGPoint(x: -810, y: -780))
+        #expect(abs(center(1.8).x + 974.4444) < 0.01)
+        #expect(abs(center(1.8).y + 904.4444) < 0.01)
     }
 
     @Test func outputTransferRejectsOldScope() {

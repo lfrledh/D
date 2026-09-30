@@ -52,9 +52,11 @@ public struct WorkflowCanvasView: View {
     @State private var showInspector = true
     @State private var zoom: CGFloat = 1
     @State private var scrollPosition = ScrollPosition()
+    @State private var navigationRequest: WorkflowCanvasNavigationRequest?
+    @State private var viewportInteractionLocked = false
     @State private var viewStates = WorkflowCanvasViewStateStore()
     @State private var activeViewContext: WorkflowCanvasViewContext?
-    @State private var actualContentOffset = CGPoint.zero
+    @State private var actualVisibleRawCenter = CGPoint(x: 550, y: 426)
     @State private var canvasInsertionPoint = CGPoint(x: 170, y: 130)
     @State private var pendingConnection: WorkflowPendingConnection?
     @State private var selectedConnectionID: UUID?
@@ -199,14 +201,15 @@ public struct WorkflowCanvasView: View {
             Divider().opacity(showLibrary ? 1 : 0)
             VStack(spacing: 0) {
                 WorkflowGraphSurface(controller: controller, graph: controller.graph, zoom: $zoom,
-                    scrollPosition: $scrollPosition,
+                    scrollPosition: $scrollPosition, navigationRequest: $navigationRequest,
+                    viewportInteractionLocked: $viewportInteractionLocked,
                     viewContext: viewContext,
                     pendingConnection: $pendingConnection, selectedConnectionID: $selectedConnectionID,
                     readOnly: !controller.canEditCanvas,
                     onPlan: presentPlan, nodeSizeObserver: nodeSizeObserver,
                     onScrollObservation: { context, observation in
                         guard context == viewContext, activeViewContext == context else { return }
-                        actualContentOffset = observation.contentOffset
+                        actualVisibleRawCenter = observation.visibleRawCenter
                         canvasInsertionPoint = observation.visibleRawCenter
                         rememberViewContext()
                         scrollObserver?(context, observation)
@@ -222,6 +225,18 @@ public struct WorkflowCanvasView: View {
                         controller.selectedNodeID = id; selectedConnectionID = nil; showInspector = true
                     })
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .overlay(alignment: .bottomTrailing) {
+                        Button(workflowText(languageStore, "workflow.canvas.resetView",
+                                            fallback: "恢复默认视图"), systemImage: "scope") {
+                            guard !viewportInteractionLocked else { return }
+                            zoom = 1
+                            navigationRequest = WorkflowCanvasNavigationRequest(rawCenter: nil)
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(viewportInteractionLocked)
+                        .accessibilityIdentifier("workflow-canvas-reset-view")
+                        .padding(12)
+                    }
                 Divider()
                 statusStrip
             }.frame(minWidth: WorkflowCanvasLayoutPolicy.canvasMinimumWidth, maxWidth: .infinity)
@@ -341,6 +356,7 @@ public struct WorkflowCanvasView: View {
                 .font(.caption.monospacedDigit()).frame(minWidth: 36)
             Slider(value: $zoom, in: WorkflowCanvasLayoutPolicy.zoomRange)
                 .frame(width: 76)
+                .disabled(viewportInteractionLocked)
                 .accessibilityLabel(workflowText(languageStore, "workflow.toolbar.zoom", fallback: "画布缩放"))
             Menu(workflowText(languageStore, "canvas.more", fallback: "更多"), systemImage: "ellipsis.circle") {
                 Menu(workflowText(languageStore, "workflow.toolbar.addExample", fallback: "添加样例")) {
@@ -361,6 +377,7 @@ public struct WorkflowCanvasView: View {
                 Menu(workflowText(languageStore, "workflow.toolbar.zoom", fallback: "画布缩放")) {
                     ForEach([0.5, 1.0, 1.8], id: \.self) { value in
                         Button("\(Int(value * 100))%") { zoom = CGFloat(value) }
+                            .disabled(viewportInteractionLocked)
                     }
                 }
                 Divider()
@@ -422,21 +439,27 @@ public struct WorkflowCanvasView: View {
     }
 
     private func rememberViewContext() {
-        viewStates.capture(zoom: zoom, contentOffset: actualContentOffset,
+        viewStates.capture(zoom: zoom, rawVisibleCenter: actualVisibleRawCenter,
             selectedNodeID: controller.selectedNodeID, for: viewContext)
     }
 
     private func restoreViewContext(_ context: WorkflowCanvasViewContext) {
         if let saved = viewStates.state(for: context) {
             zoom = WorkflowCanvasLayoutPolicy.clampedZoom(saved.zoom)
-            actualContentOffset = saved.scrollPoint
-            scrollPosition.scrollTo(point: saved.scrollPoint)
+            actualVisibleRawCenter = saved.rawVisibleCenter
+            navigationRequest = WorkflowCanvasNavigationRequest(rawCenter: saved.rawVisibleCenter)
             controller.selectedNodeID = controller.graph?.nodes.contains(where: { $0.id == saved.selectedNodeID }) == true
                 ? saved.selectedNodeID : nil
         } else {
             zoom = 1
-            actualContentOffset = .zero
-            scrollPosition.scrollTo(point: .zero)
+            if let graph = controller.graph {
+                let geometry = WorkflowGraphGeometry(graph: graph, tools: controller.tools,
+                    registry: controller.registry)
+                actualVisibleRawCenter = CGPoint(
+                    x: geometry.size.width / 2 - geometry.translation.width,
+                    y: geometry.size.height / 2 - geometry.translation.height)
+            }
+            navigationRequest = WorkflowCanvasNavigationRequest(rawCenter: nil)
         }
         activeViewContext = context
     }
