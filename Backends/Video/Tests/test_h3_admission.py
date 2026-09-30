@@ -11,6 +11,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).parents[1] / "Adapters"))
 import h3_admission as m
+import resource_inventory as inventory_module
 from resource_inventory import ResourceError, verify_inventory
 
 
@@ -88,12 +89,39 @@ class H3AdmissionTests(unittest.TestCase):
     def test_cancel_during_inventory_hash_and_reject_nonfloat_header(self):
         active = False
         calls = 0
+        reads = []
+        opened = []
+        original = self.resource.read_bytes()
+        real_open = inventory_module._open_regular
+
+        class TracedFile:
+            def __init__(self, file):
+                self.file = file
+
+            def __enter__(self):
+                self.file.__enter__()
+                return self
+
+            def __exit__(self, *args):
+                return self.file.__exit__(*args)
+
+            def __getattr__(self, name):
+                return getattr(self.file, name)
+
+            def read(self, size=-1):
+                chunk = self.file.read(size)
+                reads.append((size, len(chunk)))
+                return chunk
+
+        def traced_open(root_fd, name):
+            opened.append(name)
+            return TracedFile(real_open(root_fd, name))
 
         def cancelled():
             nonlocal calls
             if active:
                 calls += 1
-                return calls >= 3
+                return calls >= 2
             return False
 
         def verifying(root, inventory, *, cancelled):
@@ -101,9 +129,13 @@ class H3AdmissionTests(unittest.TestCase):
             active = True
             return verify_inventory(root, inventory, cancelled=cancelled)
 
-        with patch.object(m, "verify_inventory", side_effect=verifying):
+        with patch.object(m, "verify_inventory", side_effect=verifying), \
+                patch.object(inventory_module, "_open_regular", side_effect=traced_open):
             with self.assertRaises(InterruptedError): m.admit_h3_fl2va(self.root, cancelled=cancelled)
-        self.assertGreaterEqual(calls, 3)
+        self.assertEqual(calls, 2)
+        self.assertEqual(opened, ["FL2VA/transformer/model.safetensors"])
+        self.assertEqual(reads, [(4 * 1024 * 1024, len(original))])
+        self.assertEqual(self.resource.read_bytes(), original)
         self.resource.write_bytes(tiny_tensor("U16"))
         self.inventory["files"][0] = self.row("FL2VA/transformer/model.safetensors", "floating_only")
         with self.assertRaises(ResourceError): m.admit_h3_fl2va(self.root)
