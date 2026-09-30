@@ -63,6 +63,30 @@ struct LocalImageModelInventoryTests {
         }
     }
 
+    @Test("Valid Klein files with no revision cannot enter the Dev profile through the old backend")
+    func devProfileRejectedByKleinPaths() throws {
+        let fixture = try ImageInventoryFixture()
+        defer { fixture.remove() }
+        let valid = try LocalImageModelInventory.inspect(
+            fixture.request(revision: nil), manifest: fixture.manifest)
+        try valid.verifyContents()
+
+        let devRequest = fixture.request(
+            revision: nil, steps: 1, guidanceScale: 3.5,
+            executionProfile: ImageExecutionCapability.flux2Dev.profile)
+        expectInvalidImageRequest(containing: "incompatible") {
+            _ = try LocalImageModelInventory.inspect(
+                devRequest, manifest: fixture.manifest, profile: .flux2Dev)
+        }
+        expectInvalidImageRequest(containing: "incompatible") {
+            _ = try LocalImageModelInventory.inspect(devRequest, profile: .flux2Dev)
+        }
+        expectInvalidImageRequest(containing: "incompatible") {
+            _ = try MLXImageBackend(configuration: .init(
+                artifactDirectory: fixture.base, profile: .flux2Dev))
+        }
+    }
+
     @Test("Unsupported image settings and empty/oversized UTF-8 prompts fail admission", arguments: [
         "width", "height", "steps", "guidance", "nonfinite", "empty", "whitespace", "utf8Limit",
     ])
@@ -277,10 +301,12 @@ private struct ImageInventoryFixture {
 
     func request(directory: URL? = nil, revision: String? = LocalImageModelInventory.revision,
                  seed: UInt64 = 42, width: Int = 512, height: Int = 512,
-                 steps: Int = 4, guidanceScale: Float = 1) -> InferenceRequest {
+                 steps: Int = 4, guidanceScale: Float = 1,
+                 executionProfile: ExecutionProfileReference? = nil) -> InferenceRequest {
         .init(model: .init(directory: directory ?? self.directory, revision: revision),
               input: .image(.init(prompt: "A red teapot.", width: width, height: height,
-                                  steps: steps, guidanceScale: guidanceScale, seed: seed)))
+                                  steps: steps, guidanceScale: guidanceScale, seed: seed,
+                                  executionProfile: executionProfile)))
     }
 
     func remove() { try? FileManager.default.removeItem(at: base) }
