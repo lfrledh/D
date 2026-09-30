@@ -120,6 +120,13 @@ public enum VideoMediaInspector {
                 throw VideoInspectionError.invalid("音视频 MP4 包含额外轨道")
             }
         }
+        let movieDuration: CMTime?
+        if hasAudio {
+            movieDuration = try VideoSafeFile.movieDuration(
+                descriptor: opened.descriptor, byteCount: opened.identity.size, controller: controller)
+        } else {
+            movieDuration = nil
+        }
         if let policy {
             guard hasAudio == (policy.requiredAudioSampleRate != nil) else {
                 throw VideoInspectionError.invalid("音轨数量与执行配方不符")
@@ -187,9 +194,10 @@ public enum VideoMediaInspector {
                                    allowsReordering: hasAudio, controller: controller)
 
         let audioTrack: InspectedAudioHeader?
-        if let source = audioTracks.first {
+        if let source = audioTracks.first, let movieDuration {
             audioTrack = try await inspectAudioHeader(
-                source, assetDuration: assetDuration, videoDuration: expectedDuration,
+                source, assetDuration: assetDuration, movieDuration: movieDuration,
+                videoDuration: expectedDuration,
                 frameDuration: frameDuration, expectedSampleRate: policy?.requiredAudioSampleRate,
                 controller: controller
             )
@@ -338,7 +346,8 @@ public enum VideoMediaInspector {
                 try controller.check()
                 let sampleCount = CMSampleBufferGetNumSamples(sample)
                 if sampleCount == 0 {
-                    if allowsReordering { throw VideoInspectionError.invalid("H264 包含空采样") }
+                    // AVAssetReader may emit drain/empty-edit/end-duration markers.
+                    // They carry no frame and cannot contribute to the PTS grid.
                     continue
                 }
                 guard sampleCount == 1, frameIndex < expected.frameCount else {
@@ -402,6 +411,7 @@ public enum VideoMediaInspector {
     }
 
     private static func inspectAudioHeader(_ track: AVAssetTrack, assetDuration: CMTime,
+                                           movieDuration: CMTime,
                                            videoDuration: CMTime, frameDuration: CMTime,
                                            expectedSampleRate: Int?,
                                            controller: VideoInspectionCancellation) async throws -> InspectedAudioHeader {
@@ -428,10 +438,18 @@ public enum VideoMediaInspector {
         }
         let tolerance = audioVisualTolerance(frameDuration: frameDuration, sampleRate: sampleRate)
         let audioEnd = CMTimeAdd(range.start, range.duration)
+        guard audioEnd.isNumeric else { throw VideoInspectionError.invalid("AAC 音轨终点无效") }
         let trackEnd = max(videoDuration.seconds, audioEnd.seconds)
-        guard audioEnd.isNumeric, abs(range.start.seconds) <= tolerance,
+        guard assetDuration.timescale > 0, movieDuration.isNumeric,
+              movieDuration.timescale > 0 else {
+            throw VideoInspectionError.invalid("容器时钟无效")
+        }
+        let assetTick = 1 / Double(assetDuration.timescale)
+        let movieTick = 1 / Double(movieDuration.timescale)
+        guard abs(range.start.seconds) <= tolerance,
               abs(audioEnd.seconds - videoDuration.seconds) <= tolerance,
-              abs(assetDuration.seconds - trackEnd) <= tolerance else {
+              abs(assetDuration.seconds - trackEnd) <= assetTick,
+              abs(movieDuration.seconds - trackEnd) <= movieTick else {
             throw VideoInspectionError.invalid("AAC 音轨或容器时间线与视频不符")
         }
         return InspectedAudioHeader(track: track, sampleRate: sampleRate)
@@ -694,6 +712,83 @@ private enum VideoSafeFile {
         }
     }
 
+    /// Read the movie header from the same verified descriptor. AVAsset.duration
+    /// alone can be synthesized from track edits and miss a damaged mvhd duration.
+    static func movieDuration(descriptor: Int32, byteCount: UInt64,
+                              controller: VideoInspectionCancellation) throws -> CMTime {
+        var offset: UInt64 = 0
+        var visited = 0
+        var result: CMTime?
+        while offset < byteCount {
+            try controller.check()
+            let box = try readBox(descriptor: descriptor, offset: offset, limit: byteCount)
+            visited += 1
+            guard visited <= 10_000 else { throw VideoInspectionError.limit("MP4 数据块数量过多") }
+            if box.type == "moov" {
+                var childOffset = box.contentStart
+                while childOffset < box.end {
+                    try controller.check()
+                    let child = try readBox(descriptor: descriptor, offset: childOffset, limit: box.end)
+                    visited += 1
+                    guard visited <= 10_000 else { throw VideoInspectionError.limit("MP4 数据块数量过多") }
+                    if child.type == "mvhd" {
+                        guard result == nil else { throw VideoInspectionError.invalid("MP4 包含重复电影头") }
+                        guard child.end - child.contentStart >= 1 else {
+                            throw VideoInspectionError.invalid("MP4 电影头被截断")
+                        }
+                        let version = try readExact(descriptor: descriptor, offset: child.contentStart, count: 1)[0]
+                        let needed: UInt64 = version == 0 ? 20 : 32
+                        guard (version == 0 || version == 1), child.end - child.contentStart >= needed else {
+                            throw VideoInspectionError.invalid("MP4 电影头版本或长度无效")
+                        }
+                        let fields = try readExact(descriptor: descriptor, offset: child.contentStart, count: Int(needed))
+                        let scale = version == 0 ? big32(fields, 12) : big32(fields, 20)
+                        let duration = version == 0 ? UInt64(big32(fields, 16)) : big64(fields, 24)
+                        guard scale > 0, scale <= UInt32(Int32.max), duration > 0,
+                              duration <= UInt64(Int64.max) else {
+                            throw VideoInspectionError.invalid("MP4 电影头时长无效")
+                        }
+                        result = CMTime(value: Int64(duration), timescale: Int32(scale))
+                    }
+                    childOffset = child.end
+                }
+            }
+            offset = box.end
+        }
+        guard let result else { throw VideoInspectionError.invalid("MP4 缺少电影时长") }
+        return result
+    }
+
+    private struct MP4Box {
+        let type: String
+        let contentStart: UInt64
+        let end: UInt64
+    }
+
+    private static func readBox(descriptor: Int32, offset: UInt64, limit: UInt64) throws -> MP4Box {
+        guard offset <= limit, limit - offset >= 8 else {
+            throw VideoInspectionError.invalid("MP4 数据块头被截断")
+        }
+        let header = try readExact(descriptor: descriptor, offset: offset, count: 8)
+        let type = String(bytes: header[4..<8], encoding: .ascii) ?? ""
+        let shortSize = big32(header, 0)
+        let headerSize: UInt64 = shortSize == 1 ? 16 : 8
+        guard limit - offset >= headerSize else { throw VideoInspectionError.invalid("MP4 扩展数据块头被截断") }
+        let size: UInt64
+        if shortSize == 1 {
+            let extended = try readExact(descriptor: descriptor, offset: offset + 8, count: 8)
+            size = big64(extended, 0)
+        } else if shortSize == 0 {
+            size = limit - offset
+        } else {
+            size = UInt64(shortSize)
+        }
+        guard size >= headerSize, size <= limit - offset else {
+            throw VideoInspectionError.invalid("MP4 数据块长度无效")
+        }
+        return MP4Box(type: type, contentStart: offset + headerSize, end: offset + size)
+    }
+
     static func sha256(descriptor: Int32, byteCount: UInt64,
                        controller: VideoInspectionCancellation? = nil,
                        checkpoint: VideoInspectionTestCheckpoint,
@@ -743,6 +838,10 @@ private enum VideoSafeFile {
     private static func big32(_ bytes: [UInt8], _ offset: Int) -> UInt32 {
         UInt32(bytes[offset]) << 24 | UInt32(bytes[offset + 1]) << 16 |
             UInt32(bytes[offset + 2]) << 8 | UInt32(bytes[offset + 3])
+    }
+
+    private static func big64(_ bytes: [UInt8], _ offset: Int) -> UInt64 {
+        (0..<8).reduce(UInt64(0)) { ($0 << 8) | UInt64(bytes[offset + $1]) }
     }
 
     private static func ioError(_ code: Int32 = errno) -> VideoInspectionError {
