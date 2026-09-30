@@ -2204,6 +2204,9 @@ public actor ProjectStore {
         // flock protects cooperating sessions; also detect an editor that ignores the lock.
         // This is an optimistic check, not a promise of exclusion against hostile concurrent writes.
         try verifyUnchangedManifest()
+        guard value.revision == manifest.revision else {
+            throw ProjectStoreError.io("上次保存已恢复，当前修改基于旧版本；请重试此操作。")
+        }
         guard manifest.revision < UInt64.max else {
             throw ProjectStoreError.invalidProject("项目修订编号已经达到上限，无法安全保存更多更改。")
         }

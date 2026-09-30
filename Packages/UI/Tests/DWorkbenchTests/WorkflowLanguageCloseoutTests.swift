@@ -145,6 +145,12 @@ private actor CloseoutResponseEngine: InferenceEngine {
                 catch { #expect(error as? ProjectStoreError == .externalModification) }
                 // No restore: the controlled external bytes remain for this fixture's lifetime.
             } else {
+                // This method constructs its candidate before commit reconciles the pending rename.
+                // It must not overwrite the newly published response with an older manifest.
+                do { _ = try await store.createTextDocument(name: "interleaved", text: "保留"); Issue.record("Stale candidate committed") }
+                catch let error as ProjectStoreError { if case .io = error {} else { Issue.record("Wrong stale write failure") } }
+                #expect(await store.snapshot().assets.filter { $0.id == id }.count == 1)
+                _ = try await store.createTextDocument(name: "interleaved", text: "保留")
                 let published = try await store.publishWorkflowAsset(data: data, mediaType: WorkflowTextResponseFile.mediaType, name: "result", operationID: "fixture", assetID: id)
                 #expect(try await store.workflowData(published.record.reference) == data)
                 #expect(await store.snapshot().assets.filter { $0.id == id }.count == 1)
