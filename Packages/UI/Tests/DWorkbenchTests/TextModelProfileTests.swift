@@ -105,6 +105,24 @@ struct TextModelProfileTests {
             "Qwen2.5 7B Instruct · 4-bit · 文件已校验 · 推理待本机验证")
     }
 
+    @Test func vlmRegistrationsRemainSeparateFromLegacyTextAndBindAllPinnedFiles() async throws {
+        let profiles = try TextModelProfiles.registeredVLM()
+        #expect(profiles.map(\.id) == ["Qwen/Qwen3.5-9B", "Qwen/Qwen3.8-27B",
+            "mlx-community/Qwen3.5-9B-4bit", "mlx-community/Qwen3.8-27B-4bit"])
+        #expect(profiles.map(\.quantizationBits) == [0, 0, 4, 4])
+        #expect(Set(profiles.map(\.revision)).isDisjoint(with: try TextModelProfiles.registered().map(\.revision)))
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let bytes = Data("fixture VLM weights".utf8)
+        let fixture = try TextModelProfiles.registrationForTesting(profileID: profiles[2].id,
+            files: [file("model.safetensors", bytes: bytes)])
+        try bytes.write(to: root.appendingPathComponent("model.safetensors"))
+        let result = try await TextModelProfiles.verify(at: root, registrations: [fixture])
+        #expect(result.revision == profiles[2].revision)
+        try Data("fixture VLM weightx".utf8).write(to: root.appendingPathComponent("model.safetensors"))
+        await #expect(throws: (any Error).self) { try await TextModelProfiles.verify(at: root, registrations: [fixture]) }
+    }
+
     @Test func tinyMetadataFixturesResolveDistinctProfilesOnlyAfterEveryHashMatches() async throws {
         let root = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }

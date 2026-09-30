@@ -247,7 +247,9 @@ struct WorkflowSaveFailure: LocalizedError {
             guard context.node.operationID == recipe.operationID else {
                 throw WorkflowIssue("所选视频模型与此节点的执行配方不同；不会静默替换。")
             }
-            input = try recipe.request(node: context.node, prompt: prompt, seed: seed)
+            let first = try await videoFrame(context.inputs["firstFrame"], port: "firstFrame", node: context.node)
+            let last = try await videoFrame(context.inputs["lastFrame"], port: "lastFrame", node: context.node)
+            input = try recipe.request(node: context.node, prompt: prompt, seed: seed, firstFrame: first, lastFrame: last)
         } else {
             guard context.node.operationID == "d.video.generate", let capability = session.videoCapability else {
                 throw WorkflowIssue("指定视频实现尚未准备。")
@@ -261,6 +263,19 @@ struct WorkflowSaveFailure: LocalizedError {
         }
         return try await generateMedia(.video(input), mediaType: "video/mp4", parents: context.inputs.values.flatMap { $0.datum?.assetReferences ?? [] },
             binding: binding, context: context)
+    }
+    private func videoFrame(_ value: WorkflowValue?, port: String, node: WorkflowNode) async throws -> VideoFrameReference? {
+        guard let value else { return nil }
+        let ref = try WorkflowExecution.asset(value, kind: .image, port: port, node: node)
+        let (url, asset) = try await store.workflowMedia(ref)
+        guard asset.mediaType == "image/png", let width = asset.metadata.width, let height = asset.metadata.height else {
+            throw WorkflowIssue("视频参考帧需要尺寸已核验的 PNG；请先通过格式转换节点。", nodeID: node.id, port: port)
+        }
+        let bytes = try await store.workflowData(ref)
+        let result = VideoFrameReference(url: url, width: width, height: height,
+            byteCount: UInt64(bytes.count), contentSHA256: ref.sha256)
+        try result.validate()
+        return result
     }
     public func analyzePitch(_ reference: WorkflowAssetReference, context: WorkflowExecutionContext) async throws -> WorkflowAssetReference {
         if pending[context.stepID] != nil { return try await publish(context) }

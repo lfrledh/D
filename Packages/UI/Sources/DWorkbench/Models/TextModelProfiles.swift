@@ -91,7 +91,7 @@ public enum TextModelProfiles {
         let directoryName: String
     }
 
-    private static let expectedSpecifications: [ExpectedSpecification] = [
+    private static let legacySpecifications: [ExpectedSpecification] = [
         ExpectedSpecification(
             profile: TextModelProfile(
                 id: originalProfileID,
@@ -133,6 +133,36 @@ public enum TextModelProfiles {
             resourceName: "text-model-32b",
             directoryName: "Qwen2.5-32B-Instruct-4bit")
     ]
+
+    // Separate selection keeps old Qwen2 admission from accidentally accepting a VLM.
+    private static let vlmSpecifications: [ExpectedSpecification] = [
+        ExpectedSpecification(profile: TextModelProfile(id: "Qwen/Qwen3.5-9B", displayTitle: "Qwen3.5-9B · BF16",
+            repository: "Qwen/Qwen3.5-9B", revision: "c202236235762e1c871ad0ccb60c8ee5ba337b9a", quantizationBits: 0,
+            validationStatus: .registeredAwaitingRealModelValidation), resourceName: "qwen35-9b-bf16", directoryName: "Qwen3.5-9B"),
+        ExpectedSpecification(profile: TextModelProfile(id: "Qwen/Qwen3.8-27B", displayTitle: "Qwen3.8-27B · BF16",
+            repository: "Qwen/Qwen3.8-27B", revision: "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0", quantizationBits: 0,
+            validationStatus: .registeredAwaitingRealModelValidation), resourceName: "qwen38-27b-bf16", directoryName: "Qwen3.8-27B"),
+        ExpectedSpecification(profile: TextModelProfile(id: "mlx-community/Qwen3.5-9B-4bit", displayTitle: "Qwen3.5-9B · 4-bit",
+            repository: "mlx-community/Qwen3.5-9B-4bit", revision: "8b2b98c00a6b4d291155e4890773ca8f769aee53", quantizationBits: 4,
+            validationStatus: .registeredAwaitingRealModelValidation), resourceName: "qwen35-9b-q4", directoryName: "Qwen3.5-9B-4bit"),
+        ExpectedSpecification(profile: TextModelProfile(id: "mlx-community/Qwen3.8-27B-4bit", displayTitle: "Qwen3.8-27B · 4-bit",
+            repository: "mlx-community/Qwen3.8-27B-4bit", revision: "10c35caafbb80f7dc6a7a432cdd11af10a6d4818", quantizationBits: 4,
+            validationStatus: .registeredAwaitingRealModelValidation), resourceName: "qwen38-27b-q4", directoryName: "Qwen3.8-27B-4bit")
+    ]
+    private static var expectedSpecifications: [ExpectedSpecification] { legacySpecifications + vlmSpecifications }
+    public static func registeredVLM() throws -> [TextModelProfile] {
+        try vlmRegistrations().map(\.profile)
+    }
+    public static func verifyVLM(at directory: URL, profileID: String? = nil) async throws -> ModelReference {
+        let registrations = try vlmRegistrations().filter { profileID == nil || $0.profile.id == profileID }
+        guard !registrations.isEmpty else { throw packagingError("未知的视觉语言模型身份。") }
+        return try await verify(at: directory, registrations: registrations)
+    }
+    private static func vlmRegistrations() throws -> [TextModelRegistration] {
+        let registrations = try vlmSpecifications.map(loadBundledRegistration)
+        try validate(registrations: registrations, requireCompleteSet: false)
+        return registrations
+    }
 
     public static func registered() throws -> [TextModelProfile] {
         try bundledRegistrations().map(\.profile)
@@ -216,7 +246,7 @@ public enum TextModelProfiles {
     }
 
     private static func bundledRegistrations() throws -> [TextModelRegistration] {
-        let registrations = try expectedSpecifications.map(loadBundledRegistration)
+        let registrations = try legacySpecifications.map(loadBundledRegistration)
         try validate(registrations: registrations, requireCompleteSet: true)
         return registrations
     }
@@ -244,10 +274,10 @@ public enum TextModelProfiles {
                                  requireCompleteSet: Bool) throws {
         guard !registrations.isEmpty else { throw packagingError("固定注册表为空。") }
         if requireCompleteSet {
-            guard registrations.count == expectedSpecifications.count else {
+            guard registrations.count == legacySpecifications.count else {
                 throw packagingError("固定注册表数量不符。")
             }
-            guard registrations.map(\.profile.id) == expectedSpecifications.map(\.profile.id) else {
+            guard registrations.map(\.profile.id) == legacySpecifications.map(\.profile.id) else {
                 throw packagingError("固定注册表顺序或身份不符。")
             }
         }

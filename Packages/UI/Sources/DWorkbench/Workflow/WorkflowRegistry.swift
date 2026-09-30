@@ -279,10 +279,14 @@ public struct WorkflowRegistry: Sendable {
             }
         }
         guard definition.version > 0 else { throw WorkflowIssue("操作版本必须为正数：\(definition.id)。") }
-        for port in definition.inputs + definition.outputs where port.assetListKind != nil {
+        guard definition.outputs.allSatisfy({ $0.assetListKind == nil }) else {
+            throw WorkflowIssue("有序资产约束目前只用于输入；输出请使用已有值类型声明。")
+        }
+        for port in definition.inputs where port.assetListKind != nil {
             guard port.kinds.contains(.list),
                   let kind = port.assetListKind,
-                  [.image, .audio, .video, .text, .notes, .chords, .tempo, .pitch].contains(kind) else {
+                  [.image, .audio, .video, .text, .notes, .chords, .tempo, .pitch].contains(kind),
+                  port.kinds.allSatisfy({ $0 == .list || $0 == kind }) else {
                 throw WorkflowIssue("有序资产端口的类型声明无效：\(port.id)。")
             }
         }

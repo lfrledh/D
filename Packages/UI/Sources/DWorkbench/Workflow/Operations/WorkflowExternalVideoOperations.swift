@@ -9,14 +9,14 @@ enum WorkflowExternalVideoOperations {
         let h3 = profile == .h3BF16Full
         let title: String
         switch profile {
-        case .h3BF16Full: title = "MiniMax H3 · BF16"
+        case .h3BF16Full: title = "MiniMax H3 Base FL2VA · BF16"
         case .ltx23BF16Full: title = "LTX 2.3 dev · BF16"
         case .ltx23Q8GemmaQ4: title = "LTX 2.3 dev · Q8 / Gemma Q4"
-        case .ltx25BF16Full: title = "LTX 2.5 dev · BF16"
+        case .ltx25BF16Full: title = "LTX-2.5 dev · BF16"
         }
         let detail = h3
-            ? "FL2VA 文字入口，输出含声音的视频；公开 Base 已作 CFG 蒸馏。流式加载控制扩散权重，不改变精度。参考帧条件尚未接入此节点。"
-            : "非蒸馏 dev，输出含声音的视频；流式加载扩散块，文字编码器和解码器仍需各自的内存。此节点未提供图像条件。"
+            ? "FL2VA：文字及可选首帧、尾帧，输出含声音的视频；公开 Base 已作 CFG 蒸馏。首帧按目标尺寸拉伸、尾帧填满裁切；流式加载不改变精度。未接入 Ref2VA。"
+            : "非蒸馏 dev：文字及可选首帧，输出含声音的视频；流式加载扩散块，文字编码器和解码器仍需各自的内存。不接受尾帧或任意参考列表。"
         var fields: [WorkflowFieldDefinition] = [
             .init("promptText", "提示", .text(multiline: true), .text("A small boat on a calm lake.")),
             .init("width", "宽（32 的倍数）", .integer, .integer(256)),
@@ -35,8 +35,11 @@ enum WorkflowExternalVideoOperations {
                        .init("stg", "STG 引导", .decimal, .decimal(0))]
         }
         let recipe = WorkflowVideoRecipe(profile: profile)
+        var inputs: [WorkflowPortDefinition] = [.init("prompt", "提示", kinds: [.text], required: false),
+            .init("firstFrame", "首帧 PNG", kinds: [.image], required: false)]
+        if h3 { inputs.append(.init("lastFrame", "尾帧 PNG", kinds: [.image], required: false)) }
         return WorkflowOperation(definition: .init(id: recipe.operationID, title: title, detail: detail,
-            inputs: [.init("prompt", "提示", kinds: [.text], required: false)],
+            inputs: inputs,
             outputs: [.init("output", "含声音的视频", kinds: [.video])], fields: fields, modelKind: .video),
             validate: { node in
                 guard let seed = UInt64(node.parameters["seed"]?.string ?? "") else { throw WorkflowIssue("视频种子无效。") }

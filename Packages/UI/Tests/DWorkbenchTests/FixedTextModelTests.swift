@@ -20,6 +20,24 @@ struct FixedTextModelTests {
 
 @Suite("Explicit existing text weights: CPU checksums, no inference")
 struct ExistingTextModelChecksumTests {
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["D_TEST_VLM_MODEL"] != nil))
+    func vlmInstalledWeightsUsePinnedContentIdentity() async throws {
+        let path = try #require(ProcessInfo.processInfo.environment["D_TEST_VLM_MODEL"])
+        let directory = URL(fileURLWithPath: path)
+        let names = try FileManager.default.contentsOfDirectory(atPath: path).sorted()
+        func snapshot() throws -> [String] {
+            try names.map { name in
+                let info = try FileManager.default.attributesOfItem(atPath: directory.appendingPathComponent(name).path)
+                return "\(name):\(info[.size]!):\(info[.modificationDate]!)"
+            }
+        }
+        let before = try snapshot()
+        let ref = try await TextModelProfiles.verifyVLM(at: directory)
+        #expect(try TextModelProfiles.registeredVLM().contains { $0.revision == ref.revision })
+        #expect(ref.directory == directory)
+        #expect(try snapshot() == before)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: path).sorted() == names)
+    }
     @Test(.enabled(if: ProcessInfo.processInfo.environment["D_TEST_TEXT_MODEL"] != nil))
     func approvedInstalledWeightsRemainUnchanged() async throws {
         let path = try #require(ProcessInfo.processInfo.environment["D_TEST_TEXT_MODEL"])

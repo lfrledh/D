@@ -7,7 +7,8 @@ public struct WorkflowVideoRecipe: Sendable {
     public var operationID: String { "d.video." + profile.rawValue }
     public init(profile: ExternalVideoExecutionProfile) { self.profile = profile }
 
-    public func request(node: WorkflowNode, prompt: String, seed: UInt64) throws -> VideoRequest {
+    public func request(node: WorkflowNode, prompt: String, seed: UInt64,
+                        firstFrame: VideoFrameReference? = nil, lastFrame: VideoFrameReference? = nil) throws -> VideoRequest {
         let p = node.parameters
         guard let width = p["width"]?.integer, let height = p["height"]?.integer,
               let frames = p["frameCount"]?.integer, let steps = p["steps"]?.integer,
@@ -26,7 +27,8 @@ public struct WorkflowVideoRecipe: Sendable {
         let request = VideoRequest(prompt: prompt, negativePrompt: p["negativePrompt"]?.string ?? "",
             width: width, height: height, frameCount: frames, frameRate: .init(numerator: numerator),
             steps: steps, guidanceScale: Float(guidance), scheduleShift: 1, seed: seed,
-            executionProfile: profile.reference, adapterOptions: options)
+            executionProfile: profile.reference, adapterOptions: options,
+            firstFrame: firstFrame, lastFrame: lastFrame)
         try profile.validate(request)
         return request
     }
