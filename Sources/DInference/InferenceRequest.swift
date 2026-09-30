@@ -27,47 +27,6 @@ public struct ModelReference: Sendable, Codable, Equatable {
     }
 }
 
-public struct TextRequest: Sendable, Codable, Equatable {
-    public let prompt: String
-    public let maxTokens: Int
-    public let temperature: Float
-    public let topP: Float
-    public let execution: TextExecutionSelection?
-
-    public init(prompt: String, maxTokens: Int = 256, temperature: Float = 0.7, topP: Float = 0.95,
-                execution: TextExecutionSelection? = nil) {
-        self.prompt = prompt
-        self.maxTokens = maxTokens
-        self.temperature = temperature
-        self.topP = topP
-        self.execution = execution
-    }
-}
-
-public struct ImageRequest: Sendable, Codable, Equatable {
-    public let prompt: String
-    public let width: Int
-    public let height: Int
-    public let steps: Int
-    public let guidanceScale: Float
-    public let seed: UInt64
-    public let executionProfile: ExecutionProfileReference?
-    public let referenceImage: ImageReference?
-
-    public init(prompt: String, width: Int, height: Int, steps: Int,
-                guidanceScale: Float, seed: UInt64, executionProfile: ExecutionProfileReference? = nil,
-                referenceImage: ImageReference? = nil) {
-        self.prompt = prompt
-        self.width = width
-        self.height = height
-        self.steps = steps
-        self.guidanceScale = guidanceScale
-        self.seed = seed
-        self.executionProfile = executionProfile
-        self.referenceImage = referenceImage
-    }
-}
-
 /// This deliberately describes implemented contract shapes, not every future modality.
 /// Tokenization, latents, tensor layouts, and model-specific conditioning stay in backends.
 public enum InferenceInput: Sendable, Codable, Equatable {
