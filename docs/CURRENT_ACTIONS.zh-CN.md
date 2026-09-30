@@ -2,7 +2,11 @@
 
 最后核实：2026-09-30。唯一当前任务、版本与停点入口。
 
-## 当前实施：H3 / LTX 视频模型扩展
+## 当前实施：首发模型有限收口 D-RELEASE-FREEZE-01
+
+用户已批准A→B→C，固定9个模型目标及Quick/Canvas共用契约。范围、起点、保护和最小QA见[本轮记录](tasks/D-RELEASE-FREEZE-01.md)。实施树D-Worktrees/D-RELEASE-FREEZE-01、codex/release-freeze-01，从d7dba252视频候选开始；源仍01758b8，个人scheme不动。H3 Store修复已在本轮明确获批；下列视频停点作为历史，不再是该项授权障碍。新能力尚未实测，不宣称功能冻结。
+
+## 上轮候选：H3 / LTX 视频模型扩展（历史责任保留）
 
 用户新增授权：MiniMax H3 与 LTX 的真实推理及节点、全尺寸非量化配置、显式权重流式开关。任务见 [D-VIDEO-MODELS-01](tasks/D-VIDEO-MODELS-01.md)。实施树 `D-Worktrees/D-VIDEO-MODELS-01`，分支 `codex/video-models-01`，从前端候选 `4b90327db126e46a9277a0a401d2b6ea3e283399` 开始；源仍01758b8，源个人scheme与旧前端候选不变。
 
