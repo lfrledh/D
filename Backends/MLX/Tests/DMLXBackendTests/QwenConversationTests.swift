@@ -112,7 +112,7 @@ struct QwenConversationTests {
             "<tool_call><function=sum><parameter=value>2</parameter></function>"
         ]
         for text in cases {
-            let response = QwenTextResponse.assemble(raw: text, final: text, stopped: "stop", tools: [tool])
+            let response = QwenTextResponse.assemble(raw: text, reasoning: nil, final: text, stopped: "stop", tools: [tool])
             #expect(response.finishReason == .incomplete)
             #expect(response.finalText == nil)
             #expect(response.rawText == text)
@@ -122,14 +122,14 @@ struct QwenConversationTests {
         #expect(thought.finishReason == .stop && thought.toolCalls.isEmpty && thought.finalText == "safe")
         #expect(QwenTextResponse.assemble(raw: "unfinished", reasoning: "unfinished", final: nil,
             stopped: "length", tools: [tool]).finishReason == .incomplete)
-        #expect(QwenTextResponse.assemble(raw: "partial", final: "partial", stopped: "length",
+        #expect(QwenTextResponse.assemble(raw: "partial", reasoning: nil, final: "partial", stopped: "length",
             tools: [tool]).finishReason == .length)
         let objectTool = TextToolDefinition(name: "nested", description: "Nested", parameters: [
             "type": .string("object"), "properties": .object([
                 "payload": .object(["type": .string("object"), "properties": .object([
                     "n": .object(["type": .string("integer")])])])])])
         let duplicate = "<tool_call><function=nested><parameter=payload>{\"n\":1,\"n\":2}</parameter></function></tool_call>"
-        #expect(QwenTextResponse.assemble(raw: duplicate, final: duplicate, stopped: "stop",
+        #expect(QwenTextResponse.assemble(raw: duplicate, reasoning: nil, final: duplicate, stopped: "stop",
             tools: [objectTool]).finishReason == .incomplete)
     }
 }
