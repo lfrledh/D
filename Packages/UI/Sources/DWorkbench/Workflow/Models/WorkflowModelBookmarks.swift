@@ -50,7 +50,9 @@ import Foundation
         guard values.count <= 128 else { throw WorkflowIssue("已登记模型过多，请保留现有记录。") }
         let encoded = try JSONEncoder().encode(Archive(entries: values))
         guard encoded.count <= 4 * 1024 * 1024 else { throw WorkflowIssue("模型授权记录超过限制。") }
+        var bound = try installations(); bound.removeValue(forKey: identity)
         settings.set(encoded, forKey: Self.key)
+        settings.set(bound, forKey: Self.installationKey)
     }
 }
 

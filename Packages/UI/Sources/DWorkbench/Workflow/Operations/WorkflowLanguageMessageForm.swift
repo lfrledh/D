@@ -23,6 +23,15 @@ enum WorkflowLanguageMessageForm {
     private struct Part: Decodable { let type: String; let text: String?; let index: Int? }
     static func messages(_ json: String, images: [TextImageReference], videos: [TextVideoReference]) throws -> [TextMessage]? {
         guard !json.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        for object in try objects(json) {
+            try keys(object, allowed: ["role", "parts", "reasoningContent", "toolCalls", "toolCallID"])
+            if let parts = object["parts"] as? [[String: Any]] {
+                for part in parts { try keys(part, allowed: ["type", "text", "index"]) }
+            }
+            if let calls = object["toolCalls"] as? [[String: Any]] {
+                for call in calls { try keys(call, allowed: ["id", "name", "arguments", "validationError"]) }
+            }
+        }
         let forms = try decode([Message].self, json)
         var usedImages = Set<Int>(), usedVideos = Set<Int>()
         let messages = try forms.map { message in
@@ -50,6 +59,7 @@ enum WorkflowLanguageMessageForm {
     }
     static func tools(_ json: String) throws -> [TextToolDefinition]? {
         guard !json.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        for object in try objects(json) { try keys(object, allowed: ["name", "description", "parameters"]) }
         return try decode([TextToolDefinition].self, json)
     }
     static func thinking(_ p: [String: WorkflowScalar]) throws -> TextThinkingOptions? {
@@ -73,5 +83,16 @@ enum WorkflowLanguageMessageForm {
     private static func decode<T: Decodable>(_ type: T.Type, _ text: String) throws -> T {
         guard text.utf8.count <= 1_048_576 else { throw WorkflowIssue("消息或工具声明超过1MiB解析预算。") }
         return try JSONDecoder().decode(type, from: Data(text.utf8))
+    }
+    private static func objects(_ text: String) throws -> [[String: Any]] {
+        guard text.utf8.count <= 1_048_576,
+              let objects = try JSONSerialization.jsonObject(with: Data(text.utf8)) as? [[String: Any]] else {
+            throw WorkflowIssue("消息和工具必须是对象数组，且不超过1MiB。")
+        }
+        return objects
+    }
+    private static func keys(_ object: [String: Any], allowed: Set<String>) throws {
+        let unknown = Set(object.keys).subtracting(allowed)
+        guard unknown.isEmpty else { throw WorkflowIssue("未支持的消息/工具字段：\(unknown.sorted().joined(separator: ", "))；未忽略输入。") }
     }
 }

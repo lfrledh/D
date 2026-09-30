@@ -889,7 +889,8 @@ public final class ProjectSession {
                 kind: .text, name: ref.directory.lastPathComponent, bookmark: lease.bookmark)
         }
         if let id = selectedModelID, let revision = selectedModelRevision,
-           try bookmarks.installation(for: "image:" + revision) == nil {
+           try bookmarks.installation(for: "image:" + revision) == nil,
+           try !bookmarks.entries().contains(where: { $0.identity == "image:" + revision }) {
             try bookmarks.rememberInstallation(identity: "image:" + revision, id: id)
         }
         if modelLibrary == nil, let lease = modelLease,
@@ -1009,10 +1010,17 @@ public final class ProjectSession {
     }
     /// Shared model-manager selection for Quick and Canvas. Does not overwrite
     /// the legacy image editor's active settings with a non-image installation.
+    @ObservationIgnored private var workflowInstallationSelection = UUID()
+    public func workflowInstallationID(for identity: String?) -> ModelID? {
+        guard let identity else { return nil }
+        return try? WorkflowModelBookmarks(settings: settings).installation(for: identity)
+    }
     public func selectWorkflowInstallation(id: ModelID) async throws -> WorkflowModelChoice {
         guard let library = modelLibrary, let session, let owner = store, !isChangingProject, !closePending else {
             throw WorkflowIssue("请先打开项目，再选择模型。")
         }
+        let selection = UUID(); workflowInstallationSelection = selection
+        try Task.checkCancellation()
         let entry = try await library.catalogEntry(for: id)
         guard let operation = entry.workflowProfileID,
               let kind = WorkflowRegistry.standard.operation(operation)?.definition.modelKind else {
@@ -1021,6 +1029,8 @@ public final class ProjectSession {
         let identity = kind.rawValue + ":" + entry.revision
         let binding = try await resolveInstalledWorkflowModel(id, kind: kind, identity: identity, session: session, library: library)
         await binding.release()
+        try Task.checkCancellation()
+        guard workflowInstallationSelection == selection else { throw CancellationError() }
         guard store === owner, !isChangingProject, !closePending else { throw WorkflowIssue("校验期间项目已切换，未改变模型选择。") }
         try WorkflowModelBookmarks(settings: settings).rememberInstallation(identity: identity, id: id)
         let choice = WorkflowModelChoice(id: identity, kind: kind, displayName: entry.title)

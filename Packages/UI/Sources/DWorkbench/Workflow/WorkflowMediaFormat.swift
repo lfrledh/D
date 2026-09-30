@@ -9,6 +9,7 @@ enum WorkflowMediaFormat {
     static func descriptor(_ mediaType: String) -> (kind: WorkflowDataKind, suffix: String, maximumBytes: Int)? {
         switch mediaType {
         case "text/plain": (.text, "txt", 1_048_576)
+        case WorkflowTextResponseFile.mediaType: (.text, "response.json", WorkflowTextResponseFile.maximumBytes)
         case "image/png": (.image, "png", 64 * 1_024 * 1_024)
         case "image/jpeg": (.image, "jpg", 64 * 1_024 * 1_024)
         case "audio/wav": (.audio, "wav", AudioLimits.maximumGeneratedBytes)

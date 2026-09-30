@@ -44,6 +44,12 @@ struct ACEModelInventory: Sendable {
         let sourceRevision: String
         let files: [File]
         let sourceFiles: [SourceFile]
+        let sourcePatches: [SourcePatch]?
+    }
+    struct SourcePatch: Codable, Sendable, Equatable {
+        let path: String
+        let baseSHA256: String
+        let patchedSHA256: String
     }
     struct SourceFile: Codable, Sendable, Equatable {
         let path: String
@@ -126,8 +132,12 @@ struct ACEModelInventory: Sendable {
             manifestURL, label: "ACE manifest", maximumBytes: 2 * 1024 * 1024).0
         var parser = AudioJSONParser(data: manifestData, maximumDepth: 16)
         let parsed = try parser.parse()
-        let object = try parsed.object(exactKeys: ["schemaVersion", "profile", "modelRepository",
-            "modelRevision", "sharedRepository", "sharedRevision", "sourceRevision", "files", "sourceFiles"],
+        guard case .object(let fields) = parsed else {
+            throw InferenceFailure.invalidRequest("ACE manifest must be an object.")
+        }
+        let patchKeys: Set<String> = fields["sourcePatches"] == nil ? [] : ["sourcePatches"]
+        let object = try parsed.object(exactKeys: Set(["schemaVersion", "profile", "modelRepository",
+            "modelRevision", "sharedRepository", "sharedRevision", "sourceRevision", "files", "sourceFiles"]).union(patchKeys),
             context: "ACE manifest")
         guard try object["schemaVersion"]!.requiredInteger(context: "ACE schema") == 1,
               try object["profile"]!.requiredString(context: "ACE profile") == profile,
@@ -216,10 +226,11 @@ struct ACEModelInventory: Sendable {
                                          "acestep/models/xl_sft/apg_guidance.py"]) else {
             throw InferenceFailure.invalidRequest("ACE pinned source inventory is incomplete.")
         }
+        let sourcePatches = try validateSourcePatches(object["sourcePatches"], sources: sourceFiles)
         let decoded = Manifest(schemaVersion: 1, profile: profile,
             modelRepository: modelRepository, modelRevision: modelRevision,
             sharedRepository: sharedRepository, sharedRevision: sharedRevision,
-            sourceRevision: sourceRevision, files: files, sourceFiles: sourceFiles)
+            sourceRevision: sourceRevision, files: files, sourceFiles: sourceFiles, sourcePatches: sourcePatches)
         var admitted: [AdmittedFile] = []
         var total: UInt64 = 0
         for file in files {
@@ -256,6 +267,31 @@ struct ACEModelInventory: Sendable {
                     providerIdentity: providerIdentity, providerDigest: providerDigest,
                     manifestIdentity: manifestIdentity, manifestDigest: manifestDigest,
                     vendorIdentity: vendorIdentity, rootIdentity: rootIdentity)
+    }
+
+    /// Legacy inventories remain readable; the current Python provider requires the
+    /// patched inventory. This records local changes without claiming upstream bytes.
+    static func validateSourcePatches(_ value: AudioJSONValue?, sources: [SourceFile]) throws -> [SourcePatch]? {
+        guard let value else { return nil }
+        let expected = [
+            ("acestep/core/generation/handler/init_service_loader.py", "22b41692bcb73fead4c831d16eaef3dda56cc995577f2353d763445dae7362e1"),
+            ("acestep/core/generation/handler/init_service_loader_components.py", "621fc7d24ee847835de2eb66f35451120cb92310cf5e112e4edbdf955535d6de")
+        ]
+        guard case .array(let entries) = value, entries.count == expected.count else {
+            throw InferenceFailure.invalidRequest("ACE source patch inventory differs.")
+        }
+        return try zip(entries, expected).map { value, identity in
+            let fields = try value.object(exactKeys: ["path", "baseSHA256", "patchedSHA256"], context: "ACE source patch")
+            let path = try fields["path"]!.requiredString(context: "ACE patch path")
+            let base = try fields["baseSHA256"]!.requiredString(context: "ACE original source digest")
+            let patched = try fields["patchedSHA256"]!.requiredString(context: "ACE patched source digest")
+            guard path == identity.0, base == identity.1, patched.count == 64,
+                  patched.utf8.allSatisfy({ (48...57).contains($0) || (97...102).contains($0) }),
+                  sources.contains(where: { $0.path == path && $0.sha256 == patched }) else {
+                throw InferenceFailure.invalidRequest("ACE source patch does not match admitted source.")
+            }
+            return SourcePatch(path: path, baseSHA256: base, patchedSHA256: patched)
+        }
     }
 
     func confirmUnchanged() throws {

@@ -110,7 +110,10 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
     public func deactivateAfterClose() { closed = true; closing = false }
     public func close() async throws { try await prepareForClose(); deactivateAfterClose() }
     public func setDestination(_ url: URL) { services.destination = url; destinationDescription = url.lastPathComponent }
-    public func preview(_ ref: WorkflowAssetReference) async throws -> Data { try await services.store.workflowData(ref) }
+    public func preview(_ ref: WorkflowAssetReference) async throws -> Data {
+        if ref.kind == .text { return Data(try await services.store.workflowText(ref).utf8) }
+        return try await services.store.workflowData(ref)
+    }
     public func metadata(_ ref: WorkflowAssetReference) async throws -> String {
         let state = try await services.store.workflowState()
         guard let record = state.archive?.assets.first(where: { $0.reference == ref }) else { throw WorkflowIssue("来源记录不存在。") }

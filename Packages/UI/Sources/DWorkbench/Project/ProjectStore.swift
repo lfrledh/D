@@ -3351,6 +3351,8 @@ extension ProjectStore {
               data.count <= format.maximumBytes else { throw WorkflowIssue("发布内容类型、大小或身份不合法。") }
         if mediaType == "text/plain" {
             guard data.count <= 1_048_576, String(data: data, encoding: .utf8) != nil else { throw WorkflowIssue("文字必须为不超过 1 MiB 的 UTF-8。") }
+        } else if mediaType == WorkflowTextResponseFile.mediaType {
+            _ = try WorkflowTextResponseFile.decode(data)
         } else if format.kind == .image {
             guard let source = CGImageSourceCreateWithData(data as CFData, nil), CGImageSourceGetCount(source) == 1,
                   CGImageSourceGetStatus(source) == .statusComplete,
@@ -3475,6 +3477,22 @@ extension ProjectStore {
         let data = try ProjectFiles.read(relative: asset.relativePath, in: rootFD, limit: format.maximumBytes)
         guard Self.workflowHash(data) == ref.sha256 else { throw WorkflowIssue("原始资产已改变；停止执行，未重新绑定新内容。") }
         return data
+    }
+
+    public func workflowText(_ reference: WorkflowAssetReference) throws -> String {
+        guard reference.kind == .text else { throw WorkflowIssue("需要文字资产。") }
+        let bytes = try workflowData(reference)
+        if manifest.assets.first(where: { $0.id == reference.assetID })?.mediaType == WorkflowTextResponseFile.mediaType {
+            return try WorkflowTextResponseFile.decode(bytes).rawText
+        }
+        guard let text = String(data: bytes, encoding: .utf8) else { throw WorkflowIssue("文字不是完整 UTF-8。") }
+        return text
+    }
+
+    func workflowTextResponse(_ reference: WorkflowAssetReference) throws -> TextResponse? {
+        let bytes = try workflowData(reference)
+        guard manifest.assets.first(where: { $0.id == reference.assetID })?.mediaType == WorkflowTextResponseFile.mediaType else { return nil }
+        return try WorkflowTextResponseFile.decode(bytes)
     }
 
     public func workflowMedia(_ reference: WorkflowAssetReference) throws -> (URL, ProjectAsset) {

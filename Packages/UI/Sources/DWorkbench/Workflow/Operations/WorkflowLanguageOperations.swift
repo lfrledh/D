@@ -58,10 +58,13 @@ enum WorkflowLanguageOperations {
             let output: WorkflowDatum
             if node.parameters["outputMode"]?.string == "response" {
                 guard let response else { throw WorkflowIssue("此运行未保留结构化模型响应。") }
-                output = try responseValue(response)
+                output = try responseValue(response, raw: raw)
             } else {
                 let value: String
                 if let response {
+                    guard response.toolCalls.isEmpty, response.finishReason != .toolCalls, response.finishReason != .incomplete else {
+                        throw WorkflowIssue("本次响应包含工具请求或未完成内容；请选择 response 检查完整结果，不把前导文字交给下游。")
+                    }
                     guard let final = response.finalText, !final.isEmpty else {
                         throw WorkflowIssue("本次没有最终正文；原始响应已保存。工具请求请选择 response 输出，不会自动执行。")
                     }
@@ -75,10 +78,11 @@ enum WorkflowLanguageOperations {
                     output = try WorkflowStructuredText.parse(value, as: schema)
                 } else { output = .text(value) }
             }
+            try output.validate()
             return ["output": .data(output), "raw": .asset(raw)]
         } catch { throw WorkflowOutputValidationFailure(raw: raw, reason: error.localizedDescription) }
     }
-    private static func responseValue(_ response: TextResponse) throws -> WorkflowDatum {
+    private static func responseValue(_ response: TextResponse, raw: WorkflowAssetReference) throws -> WorkflowDatum {
         let callFields: [WorkflowRecordField] = [.init("id", .text), .init("name", .text),
             .init("argumentsJSON", .text), .init("validationError", .optional(.text))]
         let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
@@ -88,9 +92,9 @@ enum WorkflowLanguageOperations {
                 "argumentsJSON": .text(String(decoding: try encoder.encode(call.arguments), as: UTF8.self)),
                 "validationError": call.validationError.map(WorkflowDatum.text) ?? .none(.text)]))
         }
-        let fields: [WorkflowRecordField] = [.init("rawText", .text), .init("reasoningText", .optional(.text)),
+        let fields: [WorkflowRecordField] = [.init("rawResponse", .asset(.text)), .init("reasoningText", .optional(.text)),
             .init("finalText", .optional(.text)), .init("toolCalls", .list(.record(callFields))), .init("finishReason", .text)]
-        return .record(schema: fields, fields: ["rawText": .text(response.rawText),
+        return .record(schema: fields, fields: ["rawResponse": .asset(raw),
             "reasoningText": response.reasoningText.map(WorkflowDatum.text) ?? .none(.text),
             "finalText": response.finalText.map(WorkflowDatum.text) ?? .none(.text),
             "toolCalls": .list(element: .record(callFields), items: calls), "finishReason": .text(response.finishReason.rawValue)])

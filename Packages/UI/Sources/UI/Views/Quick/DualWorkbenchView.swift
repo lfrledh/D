@@ -113,13 +113,14 @@ public struct DualWorkbenchView: View {
             }.frame(minWidth: 960, minHeight: 650)
         }
         .sheet(isPresented: Binding(get: { library.isPresented }, set: { library.isPresented = $0 }), onDismiss: restoreLibraryIfNeeded) {
-            ModelLibraryView(model: library, selectedModelID: quickModel.selectedModelID, canSelect: true) { id in
+            ModelLibraryView(model: library, selectedModelID: quickModel.projectSession.workflowInstallationID(for: quick.draft?.node.parameters["modelID"]?.string), canSelect: true) { id in
                 do {
                     let choice = try await quickModel.projectSession.selectWorkflowInstallation(id: id)
                     guard let operation = WorkflowModelRoutes.operation(for: choice) else { throw WorkflowIssue("此模型没有可用的共享操作。") }
                     quick.select(operationID: operation, modelID: choice.id)
                     returnToLibrary = false; library.isPresented = false; navigate(to: .quick)
-                } catch { issue = error.localizedDescription }
+                } catch is CancellationError { }
+                catch { issue = error.localizedDescription }
             }
         }
         .sheet(isPresented: $languageVisible) {
@@ -241,7 +242,7 @@ public struct DualWorkbenchView: View {
         guard case .operation(let id, _) = value.selection, let kind = WorkflowRegistry.standard.operation(id)?.definition.modelKind else { presentLibraryDestination(.info(value)); return }
         if kind == .pitch { await refreshLibrary(checkModels: true); presentLibraryDestination(.info(value)); return }
         if [WorkflowModelRoutes.qwen35, WorkflowModelRoutes.qwen38, WorkflowModelRoutes.fluxDev,
-            WorkflowModelRoutes.ace, "d.image.generate", "d.music.mrt2", "d.video.generate"].contains(id) || kind == .video {
+            WorkflowModelRoutes.ace, "d.image.generate", "d.music.mrt2"].contains(id) {
             presentLibraryDestination(.models); return
         }
         let panel = NSOpenPanel(); panel.canChooseDirectories = true; panel.canChooseFiles = false

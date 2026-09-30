@@ -186,7 +186,12 @@ struct WorkflowLocalizationTests {
             onPublishText: { commands += 1 },
             onReturnText: { _ in commands += 1 }
         ).environment(\.dLanguageStore, language)
-        let host = NSHostingView(rootView: view)
+        var positivePresses = 0
+        let host = NSHostingView(rootView: VStack {
+            Button("Hosting action probe") { positivePresses += 1 }
+                .accessibilityIdentifier("hosting-action-probe")
+            view
+        })
         host.frame = CGRect(x: 0, y: 0, width: 1_420, height: 900)
         let window = NSWindow(contentRect: host.frame, styleMask: [.titled], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
@@ -224,9 +229,10 @@ struct WorkflowLocalizationTests {
             while let object = pending.popLast(), visited.count < 2_000 {
                 guard visited.insert(ObjectIdentifier(object)).inserted else { continue }
                 if let element = object as? any NSAccessibilityProtocol,
-                   element.accessibilityIdentifier() == identifier,
-                   element.accessibilityPerformPress() == true {
-                    return true
+                   element.accessibilityIdentifier() == identifier {
+                    let performed = element.accessibilityPerformPress()
+                    print("HOSTING_PRESS id=\(identifier) type=\(type(of: object)) performed=\(performed)")
+                    if performed { return true }
                 }
                 if let element = object as? any NSAccessibilityProtocol {
                     pending.append(contentsOf: (element.accessibilityChildren() ?? []).compactMap { $0 as? NSObject })
@@ -249,6 +255,9 @@ struct WorkflowLocalizationTests {
         #expect(mountedEditor.selectedRange() == selectedRange)
 
         let connection = try #require(controller.graph?.connections.first)
+        let positiveResult = pressControl(host, identifier: "hosting-action-probe")
+        print("HOSTING_POSITIVE result=\(positiveResult) count=\(positivePresses)")
+        #expect(positiveResult && positivePresses == 1, "The same host must execute a plain SwiftUI Button")
         #expect(pressControl(host, identifier: "workflow-connection-" + connection.id.uuidString))
         host.layoutSubtreeIfNeeded()
         let editorAfterEdge = try #require(

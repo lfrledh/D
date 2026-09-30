@@ -6,6 +6,22 @@ import Testing
 
 @Suite("ACE pinned inventory and stopped-process audit", .serialized)
 struct ACEBackendTests {
+    @Test("Local source patches preserve upstream provenance and match shipped source")
+    func offlineSourcePatches() throws {
+        let paths = ["acestep/core/generation/handler/init_service_loader.py",
+                     "acestep/core/generation/handler/init_service_loader_components.py"]
+        let originals = ["22b41692bcb73fead4c831d16eaef3dda56cc995577f2353d763445dae7362e1",
+                         "621fc7d24ee847835de2eb66f35451120cb92310cf5e112e4edbdf955535d6de"]
+        let sources = paths.map { ACEModelInventory.SourceFile(path: $0, size: 10, sha256: String(repeating: "a", count: 64)) }
+        let patches = AudioJSONValue.array(zip(paths, originals).map { path, base in
+            .object(["path": .string(path), "baseSHA256": .string(base),
+                     "patchedSHA256": .string(String(repeating: "a", count: 64))])
+        })
+        #expect(try ACEModelInventory.validateSourcePatches(patches, sources: sources)?.count == 2)
+        #expect(try ACEModelInventory.validateSourcePatches(nil, sources: sources) == nil)
+        #expect(throws: (any Error).self) { try ACEModelInventory.validateSourcePatches(patches, sources: Array(sources.dropLast())) }
+        #expect(throws: (any Error).self) { try ACEModelInventory.validateSourcePatches(.array([]), sources: sources) }
+    }
     @Test("Source inventory is required and changes are caught after admission")
     func sourceInventory() throws {
         let fixture = try Fixture()

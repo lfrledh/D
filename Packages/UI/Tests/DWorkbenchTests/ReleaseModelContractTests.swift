@@ -11,7 +11,10 @@ struct ReleaseModelContractTests {
             let definition = try #require(registry.operation(id)?.definition)
             #expect(definition.title == name)
             #expect(definition.inputs.first { $0.id == "images" }?.assetListKind == .image)
-            #expect(definition.inputs.first { $0.id == "video" }?.kinds == [.video])
+            let videoPort = try #require(definition.inputs.first { $0.id == "video" })
+            #expect(videoPort.kinds == [.video, .list] && videoPort.assetListKind == .video)
+            let single = WorkflowAssetReference(projectID: UUID(), assetID: UUID(), kind: .video, sha256: String(repeating: "a", count: 64))
+            #expect(try videoPort.resolveAssets(.asset(single)) == [single])
             try registry.validate(definition.makeNode())
         }
         for id in ["d.image.generate", WorkflowModelRoutes.fluxDev] {

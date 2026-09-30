@@ -189,7 +189,8 @@ struct WorkflowSaveFailure: LocalizedError {
                 if cancelled || Task.isCancelled { await run.cancel() }
                 switch event {
                 case .textDelta(let delta):
-                    guard text.utf8.count + delta.utf8.count <= 1_048_576 else { throw WorkflowIssue("文字输出超过上限。") }
+                    let limit = binding.textCapability?.profile == TextExecutionCapability.qwen35VLMProfile ? WorkflowTextResponseFile.maximumBytes : 1_048_576
+                    guard text.utf8.count + delta.utf8.count <= limit else { throw WorkflowIssue("文字输出超过应用接收预算。") }
                     text += delta; languagePreview = text
                 case .progress(let completed, let total): progress("\(completed)/\(total)")
                 default: break
@@ -266,19 +267,17 @@ struct WorkflowSaveFailure: LocalizedError {
         let (result, text) = try await infer(request, binding: binding)
         let raw = result.textResponse?.rawText ?? text
         guard !raw.isEmpty else { throw WorkflowIssue("语言模型未交付文字。") }
-        var details = result.metadata.merging(["backend": binding.backendID, "modelIdentity": binding.identity,
+        let details = result.metadata.merging(["backend": binding.backendID, "modelIdentity": binding.identity,
             "outputValidation": "raw model response retained; final-only parsing is separate"]) { _, new in new }
-        if let response = result.textResponse {
-            let encoded = try JSONEncoder().encode(response)
-            guard encoded.count <= 4 * 1_048_576 else { throw WorkflowIssue("模型响应记录超过保存预算。") }
-            details["textResponse.v1"] = String(decoding: encoded, as: UTF8.self)
-        }
-        pending[context.stepID] = Publication(id: UUID(), data: Data(raw.utf8), mediaType: "text/plain", metadata: .init(),
+        let bytes = try result.textResponse.map(WorkflowTextResponseFile.encode) ?? Data(raw.utf8)
+        let mediaType = result.textResponse == nil ? "text/plain" : WorkflowTextResponseFile.mediaType
+        pending[context.stepID] = Publication(id: UUID(), data: bytes, mediaType: mediaType, metadata: .init(),
             parents: context.inputs.values.flatMap { $0.datum?.assetReferences ?? [] }, request: request,
             details: details)
         return try await publish(context)
     }
     public func readLanguageResponse(_ reference: WorkflowAssetReference) async throws -> TextResponse? {
+        if let response = try await store.workflowTextResponse(reference) { return response }
         _ = try await store.workflowData(reference)
         guard let record = try await store.workflowState().archive?.assets.first(where: { $0.reference == reference }),
               let encoded = record.metadata["textResponse.v1"] else { return nil }
@@ -380,10 +379,7 @@ struct WorkflowSaveFailure: LocalizedError {
     }
 
     public func readText(_ reference: WorkflowAssetReference) async throws -> String {
-        guard reference.kind == .text, let text = String(data: try await store.workflowData(reference), encoding: .utf8) else {
-            throw WorkflowIssue("此端口需要完整 UTF-8 文字资产。")
-        }
-        return text
+        try await store.workflowText(reference)
     }
     public func verifyAsset(_ reference: WorkflowAssetReference) async throws { _ = try await store.workflowData(reference) }
 
@@ -404,7 +400,7 @@ struct WorkflowSaveFailure: LocalizedError {
             pending.removeValue(forKey: context.stepID)
             return result.record.reference
         } catch {
-            if ["audio/wav", "video/mp4", PitchAnalysisResult.mediaType].contains(content.mediaType) {
+            if ["audio/wav", "video/mp4", PitchAnalysisResult.mediaType, WorkflowTextResponseFile.mediaType].contains(content.mediaType) {
                 // A corrupt artifact or cancelled decode will not become valid by retrying the disk.
                 let retryable: Bool
                 switch error {
