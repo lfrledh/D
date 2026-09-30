@@ -22,7 +22,7 @@ struct QwenConversationTests {
             .init(role: .assistant, parts: [], toolCalls: [second]),
             .init(role: .tool, parts: [.text("3")], toolCallID: second.id)
         ], tools: [tool])
-        try request.validate()
+        try request.validateConversation()
     }
     @Test func longReasoningDoesNotInvalidateCompletedShortAnswer() {
         let reasoning = String(repeating: "x", count: 2 * 1_048_576)
