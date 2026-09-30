@@ -52,10 +52,15 @@ class ACEBackendTests(unittest.TestCase):
             "sourceRevision": contract.SOURCE_REVISION,
             "files": [], "sourceFiles": [],
         }
-        for role, name in (("xl", "acestep-v15-xl-sft"),
-                           ("vae", "vae"), ("embedding", "Qwen3-Embedding-0.6B")):
-            relative = f"checkpoints/{name}/weights.safetensors"
-            self.add_file(self.model, "files", relative, b"weight " + role.encode(), role)
+        index = {"metadata": {"total_size": 4},
+                 "weight_map": {f"layer{number}.weight": f"model-{number:05d}-of-00004.safetensors"
+                                for number in range(1, 5)}}
+        for relative in sorted(contract.REQUIRED_MODEL_FILES):
+            role = ("xl" if relative.startswith(contract.XL_ROOT) else
+                    "vae" if relative.startswith("checkpoints/vae/") else "embedding")
+            raw = (json.dumps(index).encode() if relative.endswith("model.safetensors.index.json")
+                   else ("fixture " + relative).encode())
+            self.add_file(self.model, "files", relative, raw, role)
         for relative in ("acestep/handler.py", "acestep/model_downloader.py",
                          "acestep/models/xl_sft/modeling_acestep_v15_xl_base.py",
                          "acestep/models/xl_sft/configuration_acestep_v15.py",
@@ -103,9 +108,10 @@ class ACEBackendTests(unittest.TestCase):
         self.add_file(self.vendor, "sourceFiles", "acestep/models/xl_sft/__init__.py", b"")
         contract.validate_manifest(self.manifest)
         view = runtime.prepare_runtime_view(self.run, self.model, self.vendor, self.manifest)
-        weight = view / self.manifest["files"][0]["path"]
+        weight_path = contract.XL_ROOT + "model-00001-of-00004.safetensors"
+        weight = view / weight_path
         self.assertTrue(weight.is_symlink())
-        self.assertEqual(weight.readlink(), self.model / self.manifest["files"][0]["path"])
+        self.assertEqual(weight.readlink(), self.model / weight_path)
         self.assertFalse((view / "checkpoints/acestep-v15-xl-sft/modeling_acestep_v15_xl_base.py").is_symlink())
         self.assertFalse((view / "checkpoints/acestep-v15-xl-sft/__init__.py").exists())
         runtime.verify_runtime_view(view, self.model, self.vendor, self.manifest)
@@ -124,6 +130,44 @@ class ACEBackendTests(unittest.TestCase):
         (self.vendor / "acestep/extra.py").write_text("# unpinned")
         with self.assertRaises(contract.ACEContractError):
             contract.verify_source_files(self.manifest, self.vendor)
+
+    def test_required_resources_and_index_shards(self):
+        for missing in ("checkpoints/vae/config.json",
+                        "checkpoints/Qwen3-Embedding-0.6B/tokenizer.json",
+                        contract.XL_ROOT + "model.safetensors.index.json"):
+            bad = dict(self.manifest, files=[item for item in self.manifest["files"]
+                                             if item["path"] != missing])
+            with self.subTest(missing=missing), self.assertRaises(contract.ACEContractError):
+                contract.validate_manifest(bad)
+        index = self.model / contract.XL_ROOT / "model.safetensors.index.json"
+        original = index.read_bytes()
+        for name in ("missing.safetensors", "../vae/diffusion_pytorch_model.safetensors"):
+            changed = {"metadata": {}, "weight_map": {"layer.weight": name}}
+            raw = json.dumps(changed).encode()
+            index.write_bytes(raw)
+            for item in self.manifest["files"]:
+                if item["path"] == contract.XL_ROOT + "model.safetensors.index.json":
+                    item.update(size=len(raw), sha256=sha(raw))
+            with self.subTest(shard=name), self.assertRaises(contract.ACEContractError):
+                contract.verify_manifest_files(self.manifest, self.model)
+        index.write_bytes(original)
+
+    def test_float_input_rejects_clipping_and_nonfinite(self):
+        ref = self.source(frames=1)
+        for sample in (1.25, float("nan"), float("inf")):
+            raw = (b"RIFF" + struct.pack("<I", 36 + 8) + b"WAVEfmt "
+                   + struct.pack("<IHHIIHH", 16, 3, 2, 48000, 384000, 8, 32)
+                   + b"data" + struct.pack("<Iff", 8, sample, -1.0))
+            (self.run / "source.wav").write_bytes(raw)
+            ref["sha256"] = sha(raw)
+            with self.subTest(sample=sample), self.assertRaises(contract.ACEContractError):
+                contract.verify_wav(ref)
+        raw = (b"RIFF" + struct.pack("<I", 36 + 8) + b"WAVEfmt "
+               + struct.pack("<IHHIIHH", 16, 3, 2, 48000, 384000, 8, 32)
+               + b"data" + struct.pack("<Iff", 8, 1.0, -1.0))
+        (self.run / "source.wav").write_bytes(raw)
+        ref["sha256"] = sha(raw)
+        contract.verify_wav(ref)
 
     def test_checkpoint_environment_override_is_rejected(self):
         class Writer:
@@ -163,7 +207,8 @@ class ACEBackendTests(unittest.TestCase):
         with self.assertRaises(contract.ACEContractError): contract.validate_request(self.request)
 
     def test_duration_and_number_types(self):
-        for value in (float("nan"), float("inf"), 0.099, 1.00001, True):
+        for value in (float("nan"), float("inf"), 0.099, 1.00001,
+                      2**63 / 48000, True):
             self.request["durationSeconds"] = value
             with self.subTest(value=value), self.assertRaises(contract.ACEContractError):
                 contract.validate_request(self.request)

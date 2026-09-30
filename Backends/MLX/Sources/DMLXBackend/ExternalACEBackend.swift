@@ -20,6 +20,7 @@ public actor ExternalACEBackend: InferenceBackend {
     private var lease: UUID?
     private var executing = false
     private var releasing = false
+    private var cleanupUnconfirmed = false
 
     public init(configuration: ACEBackendConfiguration) throws {
         guard configuration.timeoutSeconds.isFinite, configuration.timeoutSeconds > 0,
@@ -73,11 +74,13 @@ public actor ExternalACEBackend: InferenceBackend {
         let jobIdentity = try MRT2ReportCommit.captureJobIdentity(job)
         let source = audio.source
         let reference = ace.referenceAudio
-        var originals: [AudioSourceReference] = []
+        let originals = [source, reference].compactMap { $0 }
+        // Admission failures retain invalidRequest; a later changed original is audited
+        // after the owned provider stops, even when the caller has cancelled.
+        try Self.verify(originals)
+        var providerStarted = false
         do {
-            if let source { originals.append(source) }
             let frozenSource = try Self.freeze(source, role: "source", into: run)
-            if let reference { originals.append(reference) }
             let frozenReference = try Self.freeze(reference, role: "reference", into: run)
             let frozenACE = ACERequest(executionProfile: ace.executionProfile, vocal: ace.vocal,
                 bpm: ace.bpm, keyScale: ace.keyScale, timeSignature: ace.timeSignature,
@@ -131,9 +134,13 @@ public actor ExternalACEBackend: InferenceBackend {
                     currentDirectory: access?.directory ?? run,
                     timeoutSeconds: configuration.timeoutSeconds,
                     cancellationGraceSeconds: configuration.cancellationGraceSeconds)
+                providerStarted = true
                 terminal = try await process.run(runID: request.id, emit: emit)
             } catch {
                 let stoppedError = error
+                if case InferenceFailure.resourceCleanupUnconfirmed = stoppedError {
+                    throw stoppedError
+                }
                 try Self.finishStopped(access: access, confirmation: configuration.confirmDeployment)
                 throw stoppedError
             }
@@ -179,15 +186,31 @@ public actor ExternalACEBackend: InferenceBackend {
             ])
         } catch {
             let stoppedError = error
+            if case InferenceFailure.resourceCleanupUnconfirmed = stoppedError {
+                cleanupUnconfirmed = true
+                throw stoppedError
+            }
             do { try await Self.verifyStopped(originals, inventory: inventory) }
-            catch { throw InferenceFailure.backendFailed("ACE input or deployment mutation detected after provider stop: \(error.localizedDescription)") }
+            catch let verification as InferenceFailure {
+                if case .invalidRequest = verification {
+                    throw InferenceFailure.inputIntegrityChanged(
+                        "ACE input or deployment mutation detected after provider stop: \(verification.localizedDescription)")
+                }
+                throw verification
+            } catch {
+                throw InferenceFailure.backendFailed(
+                    "ACE stopped input audit failed: \(error.localizedDescription)")
+            }
+            if !providerStarted, case InferenceFailure.invalidRequest = stoppedError {
+                throw stoppedError
+            }
             if stoppedError is CancellationError { throw CancellationError() }
             throw InferenceFailure.backendFailed("ACE execution failed; diagnostics retained at \(run.path): \(stoppedError.localizedDescription)")
         }
     }
 
     public func release() async {
-        guard !executing, !releasing, let token = lease else { return }
+        guard !executing, !releasing, !cleanupUnconfirmed, let token = lease else { return }
         releasing = true
         defer { releasing = false }
         lease = nil

@@ -32,6 +32,18 @@ struct ACERequestTests {
         }
     }
 
+    @Test("Rounded ACE frames must fit Int64 before conversion")
+    func extremeDurationThrows() {
+        let extreme = 9_223_372_036_854_775_808.0 / 48_000
+        let hugeSource = AudioSourceReference(url: reference.url, sha256: reference.sha256,
+            frameCount: Int64.max, sampleRate: 48_000, channels: 2)
+        #expect(throws: (any Error).self) {
+            try AudioRequest(operation: .variation, prompt: "x", durationSeconds: extreme,
+                seed: 0, ace: ACERequest(editOptions: .cover(audioCoverStrength: 0.5,
+                    noiseStrength: 0.5)), source: hugeSource).validate()
+        }
+    }
+
     @Test("Malformed hashes, nonfinite controls and incompatible operations fail")
     func rejectInvalidFields() {
         let invalid = AudioSourceReference(url: reference.url, sha256: "ABC",

@@ -21,6 +21,20 @@ SOURCE_REVISION = "ca1e85fe9430179831e6bc6be790c332190a3866"
 MAX_REQUEST_BYTES = 3 * 1024 * 1024
 MAX_MANIFEST_BYTES = 2 * 1024 * 1024
 SHA = re.compile(r"[0-9a-f]{64}\Z")
+INT64_LIMIT = 2**63
+XL_ROOT = "checkpoints/acestep-v15-xl-sft/"
+XL_SHARDS = {f"model-{number:05d}-of-00004.safetensors" for number in range(1, 5)}
+REQUIRED_MODEL_FILES = {
+    XL_ROOT + name for name in (
+        "config.json", "configuration_acestep_v15.py", "modeling_acestep_v15_xl_base.py",
+        "apg_guidance.py", "silence_latent.pt", "model.safetensors.index.json")
+} | {XL_ROOT + name for name in XL_SHARDS} | {
+    "checkpoints/vae/config.json", "checkpoints/vae/diffusion_pytorch_model.safetensors"} | {
+    "checkpoints/Qwen3-Embedding-0.6B/" + name for name in (
+        "config.json", "model.safetensors", "tokenizer.json", "tokenizer_config.json",
+        "special_tokens_map.json", "added_tokens.json", "chat_template.jinja",
+        "merges.txt", "vocab.json")
+}
 
 
 class ACEContractError(Exception):
@@ -113,7 +127,7 @@ def validate_request(value: dict[str, Any]) -> dict[str, Any]:
     _string(request["prompt"], 1_048_576, "prompt")
     duration = _float(request["durationSeconds"], 0.1, 600, "duration")
     frames = duration * 48000
-    if abs(frames - round(frames)) > 1e-6:
+    if not math.isfinite(frames) or not 1 <= round(frames) < INT64_LIMIT or abs(frames - round(frames)) > 1e-6:
         raise ACEContractError("ACE duration is outside the 48 kHz frame grid")
     _integer(request["seed"], 0, 2**32 - 1, "seed")
     params = exact(request["parameters"], {"kind", "ace"}, label="ACE parameters")
@@ -206,8 +220,8 @@ def validate_manifest(value: dict[str, Any]) -> dict[str, Any]:
             raise ACEContractError("invalid ACE manifest file", "configuration")
         paths.add(path)
         roles.add(role)
-    if roles != {"xl", "vae", "embedding"}:
-        raise ACEContractError("ACE manifest omits XL, VAE or embedding resources", "configuration")
+    if roles != {"xl", "vae", "embedding"} or not REQUIRED_MODEL_FILES <= paths:
+        raise ACEContractError("ACE manifest omits required XL, VAE or embedding resources", "configuration")
     sources = manifest["sourceFiles"]
     if not isinstance(sources, list) or not 5 <= len(sources) <= 4096:
         raise ACEContractError("ACE pinned source inventory is absent", "configuration")
@@ -231,6 +245,31 @@ def validate_manifest(value: dict[str, Any]) -> dict[str, Any]:
 
 
 def verify_manifest_files(manifest: dict[str, Any], root: Path) -> None:
+    index_path = root / XL_ROOT / "model.safetensors.index.json"
+    index_entry = next(item for item in manifest["files"] if item["path"] == XL_ROOT + "model.safetensors.index.json")
+    if (index_path.is_symlink() or not index_path.is_file()
+            or index_entry["size"] > MAX_MANIFEST_BYTES
+            or index_path.stat().st_size != index_entry["size"]):
+        raise ACEContractError("ACE XL shard index is missing or changed", "configuration")
+    if hashlib.sha256(index_path.read_bytes()).hexdigest() != index_entry["sha256"]:
+        raise ACEContractError("ACE XL shard index digest changed", "configuration")
+    try:
+        index = json.loads(index_path.read_text(), object_pairs_hook=_unique_pairs)
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise ACEContractError("ACE XL shard index is invalid", "configuration") from exc
+    weight_map = exact(index, {"metadata", "weight_map"}, label="ACE XL shard index")["weight_map"]
+    if not isinstance(weight_map, dict) or not weight_map:
+        raise ACEContractError("ACE XL shard map is empty", "configuration")
+    names = tuple(weight_map.values())
+    if (any(not isinstance(name, str) or Path(name).name != name or "\\" in name
+            or not name.endswith(".safetensors") or name in (".", "..") for name in names)
+            or not names
+            or set(names) != XL_SHARDS
+            or {XL_ROOT + name for name in names} != {
+                item["path"] for item in manifest["files"]
+                if item["role"] == "xl" and item["path"].endswith(".safetensors")
+            }):
+        raise ACEContractError("ACE XL shard references differ from admitted files", "configuration")
     for item in manifest["files"]:
         path = root / item["path"]
         parent = root
@@ -279,7 +318,7 @@ def verify_wav(ref: dict[str, Any]) -> None:
         raise ACEContractError("ACE frozen WAV digest changed")
     if len(raw) < 44 or raw[:4] != b"RIFF" or raw[8:12] != b"WAVE" or struct.unpack_from("<I", raw, 4)[0] + 8 != len(raw):
         raise ACEContractError("ACE frozen WAV container is invalid")
-    offset, fmt, frame_bytes = 12, None, None
+    offset, fmt, frame_bytes, sample_start = 12, None, None, None
     while offset < len(raw):
         if offset + 8 > len(raw):
             raise ACEContractError("ACE WAV chunk is truncated")
@@ -296,6 +335,7 @@ def verify_wav(ref: dict[str, Any]) -> None:
             if frame_bytes is not None:
                 raise ACEContractError("ACE WAV audio data is duplicated")
             frame_bytes = size
+            sample_start = body
         offset = body + size + (size & 1)
     if offset != len(raw) or fmt is None or frame_bytes is None:
         raise ACEContractError("ACE WAV is incomplete")
@@ -305,3 +345,8 @@ def verify_wav(ref: dict[str, Any]) -> None:
             or byte_rate != rate * align or frame_bytes % align
             or frame_bytes // align != ref["frameCount"]):
         raise ACEContractError("ACE WAV format or frame count changed")
+    if code == 3:
+        for position in range(sample_start, sample_start + frame_bytes, 4):
+            sample = struct.unpack_from("<f", raw, position)[0]
+            if not math.isfinite(sample) or not -1 <= sample <= 1:
+                raise ACEContractError("ACE WAV contains a nonfinite or out-of-range sample")
