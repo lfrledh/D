@@ -1,0 +1,78 @@
+--- a/Libraries/MLXVLM/MediaProcessing.swift
++++ b/Libraries/MLXVLM/MediaProcessing.swift
+@@ -364,6 +364,7 @@
+         _ video: UserInput.Video,
+         targetFPS: (CMTime) -> Double,
+         maxFrames: Int = Int.max,
++        preserveSuppliedFrames: Bool = false,
+         frameProcessing: (VideoFrame) throws -> VideoFrame = { $0 }
+     ) async throws -> ProcessedFrames {
+ 
+@@ -381,6 +382,28 @@
+                 asset, maxFrames: maxFrames, targetFPS: targetFPS, frameProcessing: frameProcessing)
+ 
+         case .frames(let videoFrames):
++            // D: callers with a verified pre-sampled sequence must not be sampled again.
++            // URL/AVAsset and historical callers retain upstream behavior.
++            if preserveSuppliedFrames {
++                guard !videoFrames.isEmpty, videoFrames.count <= maxFrames else {
++                    throw VLMError.imageProcessingFailure("Invalid pre-sampled frame count")
++                }
++                var frames: [MLXArray] = []
++                var timestamps: [CMTime] = []
++                for supplied in videoFrames {
++                    try Task.checkCancellation()
++                    guard supplied.timeStamp.isNumeric,
++                          timestamps.last.map({ supplied.timeStamp >= $0 }) ?? true else {
++                        throw VLMError.imageProcessingFailure("Invalid pre-sampled timestamps")
++                    }
++                    let processed = try frameProcessing(supplied)
++                    frames.append(processed.frame.asMLXArray())
++                    timestamps.append(processed.timeStamp)
++                }
++                try Task.checkCancellation()
++                return ProcessedFrames(frames: frames, timestamps: timestamps,
++                    totalDuration: CMTimeSubtract(timestamps.last!, timestamps.first!))
++            }
+             return try await _asProcessedSequence(
+                 videoFrames, targetFPS: targetFPS, frameProcessing: frameProcessing)
+         }
+--- a/Libraries/MLXVLM/Models/Qwen3VL.swift
++++ b/Libraries/MLXVLM/Models/Qwen3VL.swift
+@@ -20,10 +20,13 @@
+ 
+     private let config: Qwen3VLProcessorConfiguration
+     private let tokenizer: any Tokenizer
+-
+-    public init(_ config: Qwen3VLProcessorConfiguration, tokenizer: any Tokenizer) {
++    private let preserveSuppliedVideoFrames: Bool
++
++    public init(_ config: Qwen3VLProcessorConfiguration, tokenizer: any Tokenizer,
++                preserveSuppliedVideoFrames: Bool = false) {
+         self.config = config
+         self.tokenizer = tokenizer
++        self.preserveSuppliedVideoFrames = preserveSuppliedVideoFrames
+     }
+ 
+     private func preprocess(image: CIImage, resizedSize: CGSize) -> CIImage {
+@@ -110,7 +113,8 @@
+             for video in input.videos {
+                 var resizedSize: CGSize = .zero
+                 let sequence = try await MediaProcessing.asProcessedSequence(
+-                    video, targetFPS: { _ in Double(2) }
++                    video, targetFPS: { _ in Double(2) },
++                    preserveSuppliedFrames: preserveSuppliedVideoFrames
+                 ) { frame in
+                     let processed = MediaProcessing.apply(frame.frame, processing: input.processing)
+                     if resizedSize == .zero {
+--- a/Package.swift
++++ b/Package.swift
+@@ -36,7 +36,7 @@
+             targets: ["IntegrationTestHelpers"]),
+     ],
+     dependencies: [
+-        .package(url: "https://github.com/ml-explore/mlx-swift", .upToNextMinor(from: "0.31.4")),
++        .package(path: "../mlx-swift"),
+         // 602.0.0 floor: swift.org publishes signed prebuilt swift-syntax artifacts only for
+         // >= 602 tags on current toolchains; a 600.x/601.x resolution falls back to the full
+         // source compile of swift-syntax.

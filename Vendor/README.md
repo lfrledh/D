@@ -56,3 +56,7 @@ python3 scripts/verify-mlx-vendor.py
 ## FLUX.2 图像依赖
 
 `flux2-swift/` 是固定的 Apache-2.0 源码快照，包含上游全部 206 个文件。D 仅增加统一本地 MLX、显式缓存清理和严格分词三项补丁。完整来源、许可证、前后摘要和维护条件见 [FLUX.2 依赖记录](../docs/FLUX2_DEPENDENCY_PATCH.zh-CN.md)；运行 `python3 scripts/verify-flux2-vendor.py` 离线核对。实际模型权重保存在项目外，未提交到 Git。
+
+## MLX LM 3.31.4：预采样视频保真补丁
+
+`mlx-swift-lm/` 保留官方 `bd4b7434e6bdb588c7ef55706ff8904cb7fd4c57` 全部跟踪文件和 MIT 许可。`mlx-swift-lm.files.json`保存原始/当前SHA256；补丁为`patches/mlx-lm-presampled-frames.patch`。仅将依赖指向同仓MLX，并增加显式opt-in预采样帧通路；默认URL和旧frames行为不变。D已严格解码的帧按原顺序/时间戳全部进入Qwen预处理，逐帧检查取消，不能静默重采样成N-1。未修改注意力/权重数值算法。回归在DMLXBackendTests中；真实模型状态见当前任务，不能用此源码补丁冒充全模型数值验收。

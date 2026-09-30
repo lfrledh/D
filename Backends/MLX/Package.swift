@@ -14,7 +14,7 @@ let package = Package(
         .package(name: "DPlatform", path: "../.."),
         .package(path: "../../Vendor/mlx-swift"),
         .package(path: "../../Vendor/flux2-swift"),
-        .package(url: "https://github.com/ml-explore/mlx-swift-lm", exact: "3.31.4"),
+        .package(path: "../../Vendor/mlx-swift-lm"),
         .package(url: "https://github.com/huggingface/swift-transformers", exact: "1.1.8"),
     ],
     targets: [
