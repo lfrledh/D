@@ -45,10 +45,13 @@ public enum InferenceOutput: Sendable, Equatable {
 public struct InferenceResult: Sendable, Codable, Equatable {
     public let artifacts: [ArtifactReference]
     public let metadata: [String: String]
+    public let textResponse: TextResponse?
 
-    public init(artifacts: [ArtifactReference] = [], metadata: [String: String] = [:]) {
+    public init(artifacts: [ArtifactReference] = [], metadata: [String: String] = [:],
+                textResponse: TextResponse? = nil) {
         self.artifacts = artifacts
         self.metadata = metadata
+        self.textResponse = textResponse
     }
 }
 

@@ -72,12 +72,12 @@ public actor MLXQwenVLMBackend: InferenceBackend {
         guard minimumPixels <= maximumPixels else {
             throw InferenceFailure.invalidRequest("Conflicting pixel overrides.")
         }
-        let imagePixels = (input.images ?? []).reduce(UInt64(0)) { total, image in
+        let imagePixels = input.allImages.reduce(UInt64(0)) { total, image in
             let sourcePixels = Self.saturatingMultiply(UInt64(image.width), UInt64(image.height))
             return Self.saturatingAdd(total, min(max(sourcePixels, minimumPixels), maximumPixels))
         }
         var videoPixels: UInt64 = 0
-        if let video = input.video {
+        for video in input.allVideos {
             let samples = video.durationSeconds * 2
             let maximumFrames = input.visualProcessing?.maximumVideoFrames ?? 64
             guard samples.isFinite, samples <= Double(maximumFrames) else {
@@ -85,7 +85,8 @@ public actor MLXQwenVLMBackend: InferenceBackend {
             }
             let frames = UInt64(samples.rounded(.up))
             // The vision processor pads an odd temporal pair with one extra frame.
-            videoPixels = Self.saturatingMultiply(frames + frames % 2, maximumPixels)
+            videoPixels = Self.saturatingAdd(videoPixels,
+                Self.saturatingMultiply(frames + frames % 2, maximumPixels))
         }
         let visualPixels = Self.saturatingAdd(imagePixels, videoPixels)
         // Estimated peak: transient weights, f32 KV cache, active visual pixels,
@@ -123,11 +124,15 @@ public actor MLXQwenVLMBackend: InferenceBackend {
             let frozen = try QwenVLMInputSnapshot.freeze(input, in: configuration.artifactDirectory,
                                                          modelDirectory: inventory.directory)
             snapshot = frozen
-            let video = try await decodeVideo(input.video, snapshot: frozen,
-                                              maximumFrames: input.visualProcessing?.maximumVideoFrames ?? 64)
+            var decodedClips = [DecodedVideo]()
+            for (index, reference) in input.allVideos.enumerated() {
+                decodedClips.append(try await decodeVideo(reference, source: frozen.videos[index],
+                    maximumFrames: input.visualProcessing?.maximumVideoFrames ?? 64))
+            }
+            let videos = decodedClips
             try Task.checkCancellation()
             await observer(MLXLifecycleEvent(runID: request.id, phase: .loading))
-            let randomSeed = UInt64.random(in: .min ... .max)
+            let randomSeed = input.seed ?? UInt64.random(in: .min ... .max)
             let randomState = MLXRandom.RandomState(seed: randomSeed)
             let processing = input.visualProcessing
             let registry = ProcessorTypeRegistry(creators: [
@@ -148,19 +153,24 @@ public actor MLXQwenVLMBackend: InferenceBackend {
             // Resolve actor-owned capability before sending the generation body to MLX.
             let promptLimit = try executionCapability.resolvedPromptTokens(for: input)
             let executionProfile = executionCapability.profile
+            let templateContext = try QwenMessageMapping.context(for: input.thinking, modelSize: inventory.size)
             let generated = try await withRandomState(randomState) {
                 try await loaded.perform { (context: ModelContext) in
-                    let decodedFrames = try video.frames.map { encoded -> UserInput.VideoFrame in
-                        guard let image = CIImage(data: encoded.png) else {
-                            throw InferenceFailure.backendFailed("Cannot reconstruct decoded MP4 frame.")
+                    let decodedVideos = try videos.map { video -> UserInput.Video in
+                        let frames = try video.frames.map { encoded -> UserInput.VideoFrame in
+                            guard let image = CIImage(data: encoded.png) else {
+                                throw InferenceFailure.backendFailed("Cannot reconstruct decoded MP4 frame.")
+                            }
+                            return UserInput.VideoFrame(frame: image,
+                                timeStamp: CMTime(value: encoded.timeValue, timescale: encoded.timescale))
                         }
-                        return UserInput.VideoFrame(frame: image,
-                                                    timeStamp: CMTime(value: encoded.timeValue,
-                                                                      timescale: encoded.timescale))
+                        return .frames(frames)
                     }
-                    var userInput = UserInput(prompt: input.prompt,
+                    var userInput = UserInput(messages: QwenMessageMapping.messages(input),
                                               images: frozen.images.map { .url($0.privateURL) },
-                                              videos: decodedFrames.isEmpty ? [] : [.frames(decodedFrames)])
+                                              videos: decodedVideos,
+                                              tools: QwenMessageMapping.tools(input.tools),
+                                              additionalContext: templateContext)
                     userInput.processing = .init(minPixels: processing?.minimumPixels,
                                                  maxPixels: processing?.maximumPixels)
                     let prepared = try await context.processor.prepare(input: userInput)
@@ -184,20 +194,11 @@ public actor MLXQwenVLMBackend: InferenceBackend {
                         do {
                             var completion: GenerateCompletionInfo?
                             var tokens = [Int]()
-                            var decoder = IncrementalTextDecoder()
-                            let toolCalls = ToolCallProcessor(format: context.configuration.toolCallFormat ?? .json)
                             for await item in stream {
                                 try Task.checkCancellation()
                                 switch item {
                                 case .token(let token):
                                     tokens.append(token)
-                                    if let delta = try decoder.consume(context.tokenizer.decode(tokenIds: tokens)),
-                                       let text = toolCalls.processChunk(delta), !text.isEmpty {
-                                        try await emit(.textDelta(text))
-                                    }
-                                    if !toolCalls.toolCalls.isEmpty {
-                                        throw InferenceFailure.backendFailed("Tool calls are unsupported by Qwen3.5 VLM.")
-                                    }
                                 case .info(let info): completion = info
                                 }
                             }
@@ -206,19 +207,35 @@ public actor MLXQwenVLMBackend: InferenceBackend {
                             guard let completion else {
                                 throw InferenceFailure.backendFailed("VLM generation omitted completion information.")
                             }
-                            if let delta = try decoder.consume(context.tokenizer.decode(tokenIds: tokens), final: true),
-                               let text = toolCalls.processChunk(delta), !text.isEmpty {
-                                try await emit(.textDelta(text))
-                            }
-                            if let trailing = toolCalls.processEOS(returnBufferedText: true), !trailing.isEmpty {
-                                try await emit(.textDelta(trailing))
-                            }
-                            if !toolCalls.toolCalls.isEmpty {
-                                throw InferenceFailure.backendFailed("Tool calls are unsupported by Qwen3.5 VLM.")
-                            }
                             let stop = try GenerationTermination.resolve(
                                 completion, requestedTokens: input.maxTokens,
                                 taskWasCancelled: Task.isCancelled || generationTask.isCancelled)
+                            let openID = context.tokenizer.convertTokenToId("<think>")
+                            let closeID = context.tokenizer.convertTokenToId("</think>")
+                            var inReasoning = input.thinking?.enableThinking ?? true
+                            var endedReasoning = !inReasoning
+                            var malformedChannel = false
+                            var thoughtTokens = [Int]()
+                            var finalTokens = [Int]()
+                            for token in tokens {
+                                if token == openID {
+                                    if !inReasoning && !finalTokens.isEmpty { malformedChannel = true }
+                                    inReasoning = true; endedReasoning = false
+                                } else if token == closeID {
+                                    if !inReasoning { malformedChannel = true }
+                                    inReasoning = false; endedReasoning = true
+                                } else if inReasoning { thoughtTokens.append(token) }
+                                else { finalTokens.append(token) }
+                            }
+                            let raw = context.tokenizer.decode(tokenIds: tokens)
+                            let thought = thoughtTokens.isEmpty ? nil : context.tokenizer.decode(tokenIds: thoughtTokens)
+                            let final = inReasoning || malformedChannel || !endedReasoning ? nil :
+                                context.tokenizer.decode(tokenIds: finalTokens)
+                            let response = QwenTextResponse.assemble(raw: raw, reasoning: thought,
+                                final: final, stopped: stop, tools: input.tools)
+                            if let finalText = response.finalText, !finalText.isEmpty {
+                                try await emit(.textDelta(finalText))
+                            }
                             let imageFrames = prepared.image?.frames ?? []
                             let videoFrames = prepared.video?.frames ?? []
                             let visualTokens = imageFrames.reduce(0) { $0 + $1.product / 4 } +
@@ -236,20 +253,20 @@ public actor MLXQwenVLMBackend: InferenceBackend {
                                 "executionProfileRevision": String(executionProfile.revision),
                                 "imageCount": String(frozen.images.count),
                                 "imageSourceSHA256": frozen.images.map(\.digest).joined(separator: ","),
-                                "videoSourceSHA256": frozen.video?.digest ?? "none",
+                                "videoSourceSHA256": frozen.videos.isEmpty ? "none" : frozen.videos.map(\.digest).joined(separator: ","),
                                 "visualTHW": thw, "visualTokens": String(visualTokens),
                                 "sourceMinimumPixels": String(inventory.minimumPixels),
                                 "sourceMaximumPixels": String(inventory.maximumPixels),
                                 "effectiveMinimumPixels": String(processing?.minimumPixels ?? inventory.minimumPixels),
                                 "effectiveMaximumPixels": String(processing?.maximumPixels ?? inventory.maximumPixels),
-                                "videoRequestedFrames": String(video.requestedTimestamps.count),
-                                "videoDecodedFrames": String(video.frames.count),
-                                "videoRequestedTimestamps": video.requestedTimestamps.map { String($0) }.joined(separator: ","),
-                                "videoActualTimestamps": video.actualTimestamps.map { String($0) }.joined(separator: ","),
-                                "videoSamplingFPS": "2", "videoAudio": input.video == nil ? "none" : "ignored",
-                                "videoSemantics": input.video == nil ? "none" : "sampled-clip-understanding",
-                                "videoTemporalPadding": input.video == nil ? "none" : "upstream-odd-frame-padding",
-                            ])
+                                "videoRequestedFrames": String(videos.reduce(0) { $0 + $1.requestedTimestamps.count }),
+                                "videoDecodedFrames": String(videos.reduce(0) { $0 + $1.frames.count }),
+                                "videoRequestedTimestamps": videos.flatMap(\.requestedTimestamps).map { String($0) }.joined(separator: ","),
+                                "videoActualTimestamps": videos.flatMap(\.actualTimestamps).map { String($0) }.joined(separator: ","),
+                                "videoSamplingFPS": "2", "videoAudio": videos.isEmpty ? "none" : "ignored",
+                                "videoSemantics": videos.isEmpty ? "none" : "sampled-clip-understanding",
+                                "videoTemporalPadding": videos.isEmpty ? "none" : "upstream-odd-frame-padding",
+                            ], textResponse: response)
                         } catch {
                             generationTask.cancel()
                             await generationTask.value
@@ -328,10 +345,9 @@ public actor MLXQwenVLMBackend: InferenceBackend {
 
     /// Decode every requested timestamp from the frozen MP4. Upstream `.url` silently
     /// skips failed frames and includes the endpoint, so it is never used here.
-    private func decodeVideo(_ reference: TextVideoReference?, snapshot: QwenVLMInputSnapshot,
+    private func decodeVideo(_ reference: TextVideoReference, source: QwenVLMInputSnapshot.Source,
                              maximumFrames: Int) async throws -> DecodedVideo {
-        guard let reference, let privateVideo = snapshot.video else { return .empty }
-        let asset = AVURLAsset(url: privateVideo.privateURL)
+        let asset = AVURLAsset(url: source.privateURL)
         let duration = try await asset.load(.duration)
         let actualDuration = duration.seconds
         guard actualDuration.isFinite, actualDuration > 0,

@@ -18,12 +18,18 @@ public struct QwenVLMModelInventory: Sendable {
             throw InferenceFailure.unsupportedCapability(request.input.capability)
         }
         try capability.validate(text)
-        guard text.prompt.utf8.count <= 1_048_576,
-              !text.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
-                text.images != nil || text.video != nil else {
+        guard text.resolvedMessages.contains(where: { message in
+            message.parts.contains { part in
+                switch part {
+                case .text(let value): !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                case .image, .video: true
+                }
+            } || message.toolCalls != nil
+        }) else {
             throw InferenceFailure.invalidRequest("VLM request needs text or visual input, and text is limited to 1 MiB.")
         }
         let inventory = try validateModel(at: request.model.directory)
+        _ = try QwenMessageMapping.context(for: text.thinking, modelSize: inventory.size)
         let prompt = try capability.resolvedPromptTokens(for: text)
         guard prompt <= inventory.contextLimit,
               text.maxTokens <= inventory.contextLimit - prompt else {

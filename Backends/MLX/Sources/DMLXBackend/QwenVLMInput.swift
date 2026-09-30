@@ -36,7 +36,8 @@ struct QwenVLMInputSnapshot: Sendable {
     let directoryOwnership: Ownership
     let ownedFiles: [String: Ownership]
     let images: [Source]
-    let video: Source?
+    let videos: [Source]
+    var video: Source? { videos.first }
 
     static func freeze(_ request: TextRequest, in artifactDirectory: URL, modelDirectory: URL) throws -> Self {
         let root = try AudioFileSystem.absoluteLocal(artifactDirectory, label: "VLM snapshot root")
@@ -44,9 +45,11 @@ struct QwenVLMInputSnapshot: Sendable {
         guard !AudioFileSystem.overlaps(root, modelDirectory) else {
             throw InferenceFailure.invalidRequest("Snapshot root must be separate from model files.")
         }
-        let references = (request.images ?? []).map { ($0.url, $0.byteCount, $0.contentSHA256) }
-        let videoReference = request.video.map { ($0.url, $0.byteCount, $0.contentSHA256) }
-        for (url, _, _) in references + (videoReference.map { [$0] } ?? []) {
+        let imageReferences = request.allImages
+        let videoReferences = request.allVideos
+        let references = imageReferences.map { ($0.url, $0.byteCount, $0.contentSHA256) }
+        let videoItems = videoReferences.map { ($0.url, $0.byteCount, $0.contentSHA256) }
+        for (url, _, _) in references + videoItems {
             guard !AudioFileSystem.overlaps(root, url) else {
                 throw InferenceFailure.invalidRequest("Snapshot root overlaps visual source.")
             }
@@ -71,24 +74,24 @@ struct QwenVLMInputSnapshot: Sendable {
                                     to: directory.appendingPathComponent("image-\(index).\(ext)"),
                                     registered: { proof in touched.append(proof) },
                                     created: { name, owner in ownedFiles[name] = owner })
-                try validateImage(item.privateURL, declared: request.images![index])
+                try validateImage(item.privateURL, declared: imageReferences[index])
                 return item
             }
-            let video = try videoReference.map { value in
+            let videos = try videoItems.enumerated().map { index, value in
                 try copy(value.0, bytes: value.1, digest: value.2,
-                         to: directory.appendingPathComponent("video.mp4"),
+                         to: directory.appendingPathComponent("video-\(index).mp4"),
                          registered: { proof in touched.append(proof) },
                          created: { name, owner in ownedFiles[name] = owner })
             }
             return Self(directory: directory, directoryOwnership: directoryOwnership,
-                        ownedFiles: ownedFiles, images: images, video: video)
+                        ownedFiles: ownedFiles, images: images, videos: videos)
         } catch {
             let originalError = error
             // A failed second copy or cancellation still audits every source already opened.
             var terminalError: Error = originalError
             do { try verify(touched) } catch { terminalError = error }
             let partial = Self(directory: directory, directoryOwnership: directoryOwnership,
-                               ownedFiles: ownedFiles, images: [], video: nil)
+                               ownedFiles: ownedFiles, images: [], videos: [])
             do { try partial.removePrivateFiles() }
             catch { throw InferenceFailure.resourceCleanupUnconfirmed("Incomplete VLM snapshot retained at \(directory.path): \(error.localizedDescription)") }
             throw terminalError
@@ -96,7 +99,7 @@ struct QwenVLMInputSnapshot: Sendable {
     }
 
     func verifyOriginals() throws {
-        try Self.verify((images + (video.map { [$0] } ?? [])).map {
+        try Self.verify((images + videos).map {
             Proof(original: $0.original, byteCount: $0.byteCount,
                   digest: $0.digest, identity: $0.identity)
         })

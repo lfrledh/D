@@ -34,6 +34,7 @@ public struct TextExecutionCapability: Codable, Equatable, Sendable {
     }
 
     private func resolve(_ request: TextRequest) throws -> Int {
+        try request.validateConversation()
         guard profile == Self.qwen2Profile || profile == Self.qwen35VLMProfile else {
             throw InferenceFailure.invalidRequest("Unsupported text execution capability profile.")
         }
@@ -43,18 +44,20 @@ public struct TextExecutionCapability: Codable, Equatable, Sendable {
               (1...outputCeiling).contains(maximumOutputTokens) else {
             throw InferenceFailure.invalidRequest("Invalid text execution capability limits.")
         }
-        if profile == Self.qwen2Profile && request.hasVisualInput {
-            throw InferenceFailure.invalidRequest("The selected text profile does not accept visual input.")
+        if profile == Self.qwen2Profile &&
+            (request.hasVisualInput || request.messages != nil || request.tools != nil ||
+             request.thinking != nil || request.seed != nil) {
+            throw InferenceFailure.invalidRequest("The selected text profile does not accept conversation, visual or Qwen controls.")
         }
         if profile == Self.qwen35VLMProfile {
-            if request.visualProcessing != nil, request.images == nil, request.video == nil {
+            if request.visualProcessing != nil, request.allImages.isEmpty, request.allVideos.isEmpty {
                 throw InferenceFailure.invalidRequest("Visual processing requires an image or video source.")
             }
-            if let images = request.images {
-                guard !images.isEmpty else { throw InferenceFailure.invalidRequest("Supplied images cannot be empty.") }
-                for image in images { try image.validate() }
+            if request.images != nil && request.images!.isEmpty {
+                throw InferenceFailure.invalidRequest("Supplied images cannot be empty.")
             }
-            try request.video?.validate()
+            for image in request.allImages { try image.validate() }
+            for video in request.allVideos { try video.validate() }
             try request.visualProcessing?.validate()
         }
         guard request.maxTokens > 0, request.maxTokens <= maximumOutputTokens,
