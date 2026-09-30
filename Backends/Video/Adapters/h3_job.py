@@ -18,12 +18,29 @@ import tempfile
 import threading
 
 from h3_admission import admit_h3_fl2va
-from h3_plan import build_plan, UPSTREAM_REVISION
+from h3_plan import build_plan, UPSTREAM_REVISION, _FIELDS
 from ltx_job import verify_candidate
 from owned_video_process import run_owned
 
 
 SHADER_SHA256 = "95d665ecad0a19b6864708272b4e0a30d41ea445ecc8a74b8f75dd6de323ddd3"
+
+
+def _freeze_request(request):
+    # H3 v1 is a flat value contract. Copy once before admission can spend
+    # minutes hashing weights; no caller-owned mutable value may survive.
+    if type(request) is not dict:
+        raise ValueError("request must have exactly the H3 v1 fields")
+    frozen = request.copy()
+    if set(frozen) != _FIELDS:
+        raise ValueError("request must have exactly the H3 v1 fields")
+    strings = {"profile", "prompt", "negative_prompt"}
+    integers = _FIELDS - strings - {"stream_weights"}
+    if (any(type(frozen[key]) is not str for key in strings) or
+            any(type(frozen[key]) is not int for key in integers) or
+            type(frozen["stream_weights"]) is not bool):
+        raise ValueError("H3 v1 request requires immutable exact-type scalar fields")
+    return frozen
 
 
 def _physical_file(path: Path, label: str, executable=False):
@@ -103,6 +120,7 @@ def _separate_run(run: Path, protected: list[Path]):
 
 def execute(request, *, engine, shader, model, run_directory, ffmpeg, ffprobe,
             timeout_seconds, cancel_event):
+    frozen_request = _freeze_request(request)
     engine, shader, model, run_directory, ffmpeg, ffprobe = map(
         Path, (engine, shader, model, run_directory, ffmpeg, ffprobe))
     if not isinstance(cancel_event, threading.Event):
@@ -143,7 +161,7 @@ def execute(request, *, engine, shader, model, run_directory, ffmpeg, ffprobe,
             (run_directory / name).mkdir(mode=0o700)
         _copy_shader(shader, run_directory / "h3_shaders.metal", cancelled=cancel_event.is_set)
         output = run_directory / "candidate.mp4"
-        plan = build_plan(request, engine=str(engine), model=str(model), output=str(output))
+        plan = build_plan(frozen_request, engine=str(engine), model=str(model), output=str(output))
         record["request"] = plan["provenance"]["request"]
         record["plan"] = plan
         environment = {

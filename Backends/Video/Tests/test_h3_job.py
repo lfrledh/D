@@ -144,6 +144,48 @@ sys.exit(9 if (pathlib.Path(__file__).parent / "fail-decode").exists() else 0)
         self.assertEqual(second.returncode, 2)
         self.assertEqual((self.run_directory / "candidate.mp4").read_bytes(), b"simulated candidate")
 
+    def test_admission_mutation_cannot_change_frozen_plan_or_result(self):
+        original = self.request.copy()
+        digest = hashlib.sha256(self.shader.read_bytes()).hexdigest()
+        real_admission = h3_admission.admit_h3_fl2va
+
+        def mutating_admission(model, *, cancelled):
+            self.request["seed"] = 999
+            self.request["prompt"] = "later prompt"
+            self.request["stream_weights"] = False
+            return real_admission(model, cancelled=cancelled)
+
+        with patch.object(m, "SHADER_SHA256", digest), \
+                patch.object(h3_admission, "_inventory", side_effect=lambda: json.loads(self.manifest.read_bytes())), \
+                patch.object(m, "admit_h3_fl2va", side_effect=mutating_admission):
+            result = m.execute(self.request, engine=self.engine, shader=self.shader,
+                               model=self.model, run_directory=self.run_directory,
+                               ffmpeg=self.ffmpeg, ffprobe=self.ffprobe,
+                               timeout_seconds=8, cancel_event=threading.Event())
+        argv = json.loads((self.run_directory / "engine-observation.json").read_text())["argv"]
+        saved = json.loads((self.run_directory / "result.json").read_text())
+        self.assertEqual(result["request"], original)
+        self.assertEqual(saved["request"], original)
+        self.assertEqual(saved["plan"]["provenance"]["request"], original)
+        self.assertIn("--seed=42", argv)
+        self.assertIn("--prompt=" + original["prompt"], argv)
+        self.assertIn("--ssd-streaming", argv)
+        self.assertNotIn("--seed=999", argv)
+
+    def test_mutable_or_wrong_type_request_is_rejected_before_admission(self):
+        for field, value in (("prompt", ["mutable"]), ("seed", True),
+                             ("stream_weights", 1)):
+            with self.subTest(field=field):
+                invalid = self.request.copy()
+                invalid[field] = value
+                with patch.object(m, "admit_h3_fl2va") as admission:
+                    with self.assertRaises(ValueError):
+                        m.execute(invalid, engine=self.engine, shader=self.shader,
+                                  model=self.model, run_directory=self.run_directory,
+                                  ffmpeg=self.ffmpeg, ffprobe=self.ffprobe,
+                                  timeout_seconds=8, cancel_event=threading.Event())
+                    admission.assert_not_called()
+
     def test_wrong_shader_and_run_overlap_rejected_before_launch(self):
         wrong = self.cli()
         self.assertEqual(wrong.returncode, 2)
