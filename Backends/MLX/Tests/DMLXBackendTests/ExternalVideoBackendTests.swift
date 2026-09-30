@@ -86,6 +86,59 @@ struct ExternalVideoBackendTests {
         let backend = try fixture.backend(mode: "success")
         await #expect(throws: InferenceFailure.self) { _ = try await backend.validateModel(at: fixture.model) }
     }
+
+    @Test func firstFrameIsFrozenIndependentlyAndKeepsSourceProvenance() async throws {
+        let fixture = try Fixture()
+        let frame = try fixture.frame()
+        let backend = try fixture.backend(mode: "success")
+        let result = try await backend.execute(fixture.request(firstFrame: frame)) { _ in }
+        await backend.release()
+        #expect(result.metadata["firstFrameSHA256"] == frame.contentSHA256)
+        #expect(result.metadata["firstFrameSourceURL"] == frame.url.absoluteString)
+        let record = try #require(result.metadata["recordPath"])
+        let run = URL(fileURLWithPath: record).deletingLastPathComponent()
+        let frozen = run.appendingPathComponent("first-frame.png")
+        var originalStat = stat(), frozenStat = stat()
+        #expect(lstat(frame.url.path, &originalStat) == 0 && lstat(frozen.path, &frozenStat) == 0)
+        #expect(originalStat.st_ino != frozenStat.st_ino)
+        #expect(try Data(contentsOf: frame.url) == Data(contentsOf: frozen))
+    }
+
+    @Test func sourceOrPrivateFrameMutationWinsAfterProcessDrain() async throws {
+        for mode in ["mutate-source", "mutate-source-fail", "replace-frame"] {
+            let fixture = try Fixture()
+            let frame = try fixture.frame()
+            let backend = try fixture.backend(mode: mode)
+            do {
+                _ = try await backend.execute(fixture.request(firstFrame: frame)) { _ in
+                    Issue.record("Changed frame must not publish")
+                }
+                Issue.record("Expected frame integrity failure")
+            } catch InferenceFailure.inputIntegrityChanged { }
+            catch { Issue.record("Wrong error: \(error)") }
+            await backend.release()
+        }
+    }
+
+    @Test func mismatchedOrSymlinkedSourceCannotLaunch() async throws {
+        let fixture = try Fixture()
+        let frame = try fixture.frame()
+        let backend = try fixture.backend(mode: "success")
+        let wrong = VideoFrameReference(url: frame.url, width: frame.width, height: frame.height,
+            byteCount: frame.byteCount, contentSHA256: String(repeating: "0", count: 64))
+        await #expect(throws: InferenceFailure.self) {
+            _ = try await backend.execute(fixture.request(firstFrame: wrong)) { _ in }
+        }
+        await backend.release()
+        let held = fixture.root.appendingPathComponent("held-source.png")
+        try FileManager.default.moveItem(at: frame.url, to: held)
+        try FileManager.default.createSymbolicLink(at: frame.url, withDestinationURL: held)
+        let next = try fixture.backend(mode: "success")
+        await #expect(throws: InferenceFailure.self) {
+            _ = try await next.execute(fixture.request(firstFrame: frame)) { _ in }
+        }
+        await next.release()
+    }
 }
 
 private struct Fixture {
@@ -111,12 +164,20 @@ private struct Fixture {
         run=request.parent; pack=arg('--pack'); manifest=(pack/'D-VIDEO-PACK.json').read_bytes()
         if mode=='mutate-input':
             request.write_bytes(b'changed'); sys.exit(7)
+        if mode in ('mutate-source','mutate-source-fail'):
+            (run.parent.parent/'source.png').write_bytes(b'changed source')
+        if mode=='mutate-source-fail': sys.exit(7)
+        if mode=='replace-frame':
+            frame=run/wire['request']['first_frame']['file']
+            held=run/'held-frame.png'; frame.rename(held); frame.symlink_to(held)
         if mode=='bootstrap-remainder': pathlib.Path('unknown-marker').write_text('retain me')
         candidate=run/'candidate.mp4'; candidate.write_bytes(b'controlled candidate')
         result={'schema':'d.external-video.app-result.v1','run_id':wire['run_id'],
           'request_sha256':hashlib.sha256(raw).hexdigest(),'manifest_sha256':hashlib.sha256(manifest).hexdigest(),
           'profile':wire['request']['profile'],'media_verified':True,'published':False,
           'candidate_file':'candidate.mp4','sha256':hashlib.sha256(candidate.read_bytes()).hexdigest()}
+        if 'first_frame' in wire['request']:
+            result['frame_conditions']={'first_frame_sha256':wire['request']['first_frame']['content_sha256']}
         (run/'result.json').write_text(json.dumps(result))
         """#
         try Data(code.utf8).write(to: script)
@@ -126,11 +187,19 @@ private struct Fixture {
             artifactDirectory: outputs, accessBootstrapRoot: useAccess ? access : nil,
             timeoutSeconds: 10, cancellationGraceSeconds: 0.2))
     }
-    func request() -> InferenceRequest {
+    func frame() throws -> VideoFrameReference {
+        let data = try ImagePNG.encode(rgb: Array(repeating: 0, count: 12), width: 2, height: 2)
+        let source = root.appendingPathComponent("source.png")
+        try data.write(to: source)
+        return .init(url: source, width: 2, height: 2, byteCount: UInt64(data.count),
+                     contentSHA256: SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined())
+    }
+    func request(firstFrame: VideoFrameReference? = nil) -> InferenceRequest {
         .init(model: .init(directory: model, revision: profile.modelIdentity),
             input: .video(.init(prompt: "CPU fixture", negativePrompt: "", width: 64, height: 64,
                 frameCount: 9, frameRate: .init(numerator: 24), steps: 2,
                 guidanceScale: 1, scheduleShift: 1, seed: 42, executionProfile: profile.reference,
-                adapterOptions: .ltx(streamWeights: true, spatiotemporalGuidance: 0))))
+                adapterOptions: .ltx(streamWeights: true, spatiotemporalGuidance: 0),
+                firstFrame: firstFrame)))
     }
 }

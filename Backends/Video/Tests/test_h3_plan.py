@@ -90,6 +90,23 @@ class H3PlanChecks(unittest.TestCase):
         self.assertEqual(resident["provenance"]["weight_loading"], "resident")
         self.assertFalse(os.path.lexists(self.output))
 
+    def test_first_and_last_frame_roles_survive_streaming_and_unicode_paths(self):
+        first = self.model / "首帧 a b.png"
+        last = self.model / "末帧 🎞️.png"
+        first.write_bytes(b"first fixture")
+        last.write_bytes(b"last fixture")
+        resident = self.plan(first_frame=str(first), last_frame=str(last))
+        changed = request()
+        changed["stream_weights"] = True
+        streamed = self.plan(changed, first_frame=str(first), last_frame=str(last))
+        self.assertIn(f"--first-frame={first}", resident["argv"])
+        self.assertIn(f"--last-frame={last}", resident["argv"])
+        self.assertEqual(streamed["argv"], resident["argv"] + ["--ssd-streaming"])
+        self.assertEqual(resident["provenance"]["frame_conditions"]["first_transform"], "STRETCH")
+        self.assertEqual(resident["provenance"]["frame_conditions"]["last_transform"], "COVER")
+        with self.assertRaises(ValueError):
+            self.plan(first_frame=str(self.output))
+
     def test_exact_schema_and_types(self):
         for key, bad in [
             ("schema_version", True), ("schema_version", 2), ("profile", "wan"),

@@ -24,8 +24,7 @@ public enum VideoAdapterOptions: Sendable, Codable, Equatable {
     case ltx(streamWeights: Bool, spatiotemporalGuidance: Float)
 }
 
-/// A text-to-video execution snapshot. Image conditioning and audio are deliberately
-/// absent until an adapter implements them; no untyped condition dictionary is used.
+/// A video execution snapshot with typed optional frame conditions.
 /// The profile determines the sampler/precision, while these values are never silently
 /// rounded, truncated, or replaced by a host's latest preferences.
 public struct VideoRequest: Sendable, Codable, Equatable {
@@ -41,12 +40,16 @@ public struct VideoRequest: Sendable, Codable, Equatable {
     public let seed: UInt64
     public let executionProfile: ExecutionProfileReference
     public let adapterOptions: VideoAdapterOptions?
+    public let firstFrame: VideoFrameReference?
+    public let lastFrame: VideoFrameReference?
 
     public init(prompt: String, negativePrompt: String, width: Int, height: Int,
                 frameCount: Int, frameRate: VideoFrameRate, steps: Int,
                 guidanceScale: Float, scheduleShift: Float, seed: UInt64,
                 executionProfile: ExecutionProfileReference,
-                adapterOptions: VideoAdapterOptions? = nil) {
+                adapterOptions: VideoAdapterOptions? = nil,
+                firstFrame: VideoFrameReference? = nil,
+                lastFrame: VideoFrameReference? = nil) {
         self.prompt = prompt
         self.negativePrompt = negativePrompt
         self.width = width
@@ -59,11 +62,15 @@ public struct VideoRequest: Sendable, Codable, Equatable {
         self.seed = seed
         self.executionProfile = executionProfile
         self.adapterOptions = adapterOptions
+        self.firstFrame = firstFrame
+        self.lastFrame = lastFrame
     }
 
     /// Common representational rules only. Dimensions, frame stride, token counts,
     /// sampler, and seed support must additionally be checked by the selected adapter.
     public func validate() throws {
+        try firstFrame?.validate()
+        try lastFrame?.validate()
         try frameRate.validate()
         guard width > 0, height > 0, frameCount > 0, steps > 0,
               guidanceScale.isFinite, guidanceScale >= 0,

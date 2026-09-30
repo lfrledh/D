@@ -28,7 +28,9 @@ struct ExternalVideoExecutionProfileTests {
         guidance: Float = 1,
         shift: Float = 1,
         seed: UInt64 = .max,
-        revision: Int = 1
+        revision: Int = 1,
+        firstFrame: VideoFrameReference? = nil,
+        lastFrame: VideoFrameReference? = nil
     ) -> VideoRequest {
         VideoRequest(
             prompt: prompt, negativePrompt: negativePrompt,
@@ -36,7 +38,7 @@ struct ExternalVideoExecutionProfileTests {
             frameRate: rate, steps: steps, guidanceScale: guidance,
             scheduleShift: shift, seed: seed,
             executionProfile: .init(identifier: profile.rawValue, revision: revision),
-            adapterOptions: options)
+            adapterOptions: options, firstFrame: firstFrame, lastFrame: lastFrame)
     }
 
     /// Every LTX rejection starts from this valid request; overrides change one input.
@@ -68,10 +70,46 @@ struct ExternalVideoExecutionProfileTests {
         let encoded = try JSONEncoder().encode(old)
         let object = try #require(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
         #expect(object["adapterOptions"] == nil)
+        #expect(object["firstFrame"] == nil && object["lastFrame"] == nil)
         let restored = try JSONDecoder().decode(VideoRequest.self, from: encoded)
         #expect(restored == old)
         #expect(restored.adapterOptions == nil)
         try VideoExecutionCapability.wan21.validate(restored)
+    }
+
+    private func frame(_ name: String) -> VideoFrameReference {
+        .init(url: URL(fileURLWithPath: "/private/tmp/\(name).png"), width: 64, height: 64,
+              byteCount: 4096, contentSHA256: String(repeating: "a", count: 64))
+    }
+
+    @Test("Frame conditions keep role and Codable identity without changing legacy profiles")
+    func frameConditions() throws {
+        let first = frame("首帧 with spaces")
+        let last = frame("末帧")
+        let roles: [(VideoFrameReference?, VideoFrameReference?)] = [(first, nil), (nil, last), (first, last)]
+        for (a, b) in roles {
+            let h3 = request(firstFrame: a, lastFrame: b)
+            try ExternalVideoExecutionProfile.h3BF16Full.validate(h3)
+            #expect(try JSONDecoder().decode(VideoRequest.self, from: JSONEncoder().encode(h3)) == h3)
+        }
+        let ltx = request(profile: .ltx23BF16Full,
+                          options: .ltx(streamWeights: true, spatiotemporalGuidance: 0),
+                          width: 64, height: 64, frames: 9, seed: 42, firstFrame: first)
+        try ExternalVideoExecutionProfile.ltx23BF16Full.validate(ltx)
+        #expect(try JSONDecoder().decode(VideoRequest.self, from: JSONEncoder().encode(ltx)) == ltx)
+        let invalidLTX = request(profile: .ltx23BF16Full,
+                                  options: .ltx(streamWeights: true, spatiotemporalGuidance: 0),
+                                  width: 64, height: 64, frames: 9, seed: 42, lastFrame: last)
+        #expect(throws: InferenceFailure.self) { try ExternalVideoExecutionProfile.ltx23BF16Full.validate(invalidLTX) }
+        let wan = VideoRequest(prompt: "valid", negativePrompt: "", width: 256, height: 256,
+            frameCount: 17, frameRate: .init(numerator: 16), steps: 4,
+            guidanceScale: 5, scheduleShift: 5, seed: 42,
+            executionProfile: VideoExecutionCapability.wan21.profile, firstFrame: first)
+        #expect(throws: InferenceFailure.self) { try VideoExecutionCapability.wan21.validate(wan) }
+        #expect(throws: InferenceFailure.self) {
+            try VideoFrameReference(url: first.url, width: 64, height: 64, byteCount: 4096,
+                contentSHA256: String(repeating: "A", count: 64)).validate()
+        }
     }
 
     @Test("Wan rejects foreign adapter options instead of silently ignoring them")

@@ -49,7 +49,8 @@ def _output_path(value):
     return value
 
 
-def build_plan(request, *, engine, model, output, text_encoder=None):
+def build_plan(request, *, engine, model, output, text_encoder=None,
+               first_frame=None, last_frame=None):
     """Return argv, environment overrides, and provenance without side effects.
 
     `environment` contains the required override, not a copy of the host's
@@ -87,6 +88,10 @@ def build_plan(request, *, engine, model, output, text_encoder=None):
         raise ValueError("engine must be executable")
     model = _local_path(model, "model", "directory")
     output = _output_path(output)
+    if first_frame is not None:
+        first_frame = _local_path(first_frame, "first frame", "file")
+    if last_frame is not None:
+        last_frame = _local_path(last_frame, "last frame", "file")
 
     # Use --name=value so even a prompt beginning with '-' is an option value.
     argv = [
@@ -97,6 +102,10 @@ def build_plan(request, *, engine, model, output, text_encoder=None):
         "--use-reference-rope", "--use-slower-bf16-mlp",
         "--use-slower-bf16-qkv", "--use-slower-bf16-attention-output",
     ]
+    if first_frame is not None:
+        argv.append(f"--first-frame={first_frame}")
+    if last_frame is not None:
+        argv.append(f"--last-frame={last_frame}")
     if stream:
         argv.append("--ssd-streaming")
     environment = {"H3_DIT_F32_FINAL": "1"}
@@ -108,6 +117,9 @@ def build_plan(request, *, engine, model, output, text_encoder=None):
         "model": model,
         "output": output,
         "request": request.copy(),
+        "frame_conditions": {"first_frame": first_frame, "last_frame": last_frame,
+                             "first_transform": "STRETCH" if first_frame else None,
+                             "last_transform": "COVER" if last_frame else None},
         "weight_loading": "ssd-streaming" if stream else "resident",
         "resource_and_precision_verified": False,
         "execution_performed": False,
