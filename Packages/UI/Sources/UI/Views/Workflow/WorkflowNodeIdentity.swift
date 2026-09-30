@@ -66,7 +66,7 @@ struct WorkflowCanvasViewContext: Hashable {
 
 struct WorkflowCanvasViewMemory: Equatable {
     let zoom: CGFloat
-    let scrollPoint: CGPoint
+    let rawVisibleCenter: CGPoint
     let selectedNodeID: UUID?
 }
 
@@ -77,9 +77,9 @@ struct WorkflowCanvasViewStateStore {
         values[context] = state
     }
 
-    mutating func capture(zoom: CGFloat, contentOffset: CGPoint,
+    mutating func capture(zoom: CGFloat, rawVisibleCenter: CGPoint,
                           selectedNodeID: UUID?, for context: WorkflowCanvasViewContext) {
-        save(WorkflowCanvasViewMemory(zoom: zoom, scrollPoint: contentOffset,
+        save(WorkflowCanvasViewMemory(zoom: zoom, rawVisibleCenter: rawVisibleCenter,
             selectedNodeID: selectedNodeID), for: context)
     }
 

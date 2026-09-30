@@ -61,6 +61,7 @@
     "workflow.library.noMatches": "没有匹配的操作",
     "workflow.canvas.empty": "选择或添加流程",
     "workflow.canvas.emptyDescription": "流程只会在明确保存或运行时提交。",
+    "workflow.canvas.resetView": "恢复默认视图",
     "workflow.connection.chooseInput": "已选择输出 {port}，请选择目标输入",
     "workflow.connection.cancel": "取消连接",
     "workflow.node.expand": "展开节点",

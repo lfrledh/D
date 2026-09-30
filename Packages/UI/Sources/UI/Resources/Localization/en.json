@@ -61,6 +61,7 @@
     "workflow.library.noMatches": "No Matching Operations",
     "workflow.canvas.empty": "Select or Add a Workflow",
     "workflow.canvas.emptyDescription": "A workflow is committed only when you explicitly save or run it.",
+    "workflow.canvas.resetView": "Reset View",
     "workflow.connection.chooseInput": "Output {port} selected; choose a target input",
     "workflow.connection.cancel": "Cancel Connection",
     "workflow.node.expand": "Expand Node",
