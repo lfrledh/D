@@ -15,6 +15,8 @@
 | H25 M0原生画布与离线验收 | **已关闭（2026-09-26）**。旧原生证据保留；最终组合在本人关闭本机Wi-Fi后完成真实图文、3候选、导出、重开、取消释放。Swift Testing实际1项通过，101.070秒；执行与结束100次采样全离线，路由无恢复事件 | 无需再断网。新证据 `D-NODE-BOUNDARY-01/run-20260926T073533Z-acceptance/offline-confirmed/`。首次新包装仍未启动，原因是scutil措辞不同、route无路由时exit0；保留 `offline/` 失败记录。修正为物理链路/地址/无线电联合判据后通过，不修改系统网络设置、不改变产品契约 |
 | H26 节点边界与语言包原生验收 | **已关闭（2026-09-26）**。普通开发签名沙盒App完成中英切换、外部JSON包导入/缺词回退、Unicode草稿及选区保留；原生选择0.5B/1.5B模型，在同图两个节点真实执行，正常退出后恢复语言/草稿/绑定/运行记录 | 无需新增本人授权。证据同run `evidence/gui-summary.json`、`gui-*.txt/png`；App四关键文件前后不变。迟到选择器等异常保护复用CPU反例；旧页面全面翻译、H22不由此关闭 |
 
+**工程收尾决定（不是系统权限/下载授权）**：D-VIDEO-MODELS-01 的 AVMEDIA 已用初交＋两次修复＋一次 Lead 有界接管。真实 H3 文件暴露 `AVAsset.duration` 不等于最长音轨末端的检查兼容问题；不损坏原文件、不以错误发布作品。根因、最小修补及未放宽的原标准见任务 r4 与 R4/lead/review-media/。本轮停止该实现，后续需明确一次有限收尾范围；不要求用户修改 Mac 权限，不重启模型资格审批。H32解锁可先验无依赖画布/LTX，不能据此关闭H3保存缺口。
+
 R3解锁原生证据：`D-UI-BASELINE-02/run-20260929T003334Z-unlock-native/lead/native-results.json`。启动与部分GUI已补；两次自有Repair进程均正常退出。未办理任何真人集中项，未把GUI通过覆盖hosting失败。
 
 R2为 `/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-UI-BASELINE-02/run-20260928T160457Z-defect-close`；当时源及旧App保护、启动异常和锁屏记录见lead/native-stop.json，版本e546762dd9cafd46d0b99d8f360331393a7e95e6。

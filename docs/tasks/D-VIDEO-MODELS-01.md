@@ -156,3 +156,10 @@ AVMEDIA已用初交+两轮修复+一次有界Lead接管，现保留剩余缺陷�
 **来源/消耗**：受限Worker实现与修复历史按前文及各job记录；Lead承担共享装配、保护/部署修补和以上验收。CANVAS/APPDRIVER普通修复已用2轮；AVMEDIA普通2轮+Lead接管用尽；TRANSPORT普通1轮；H3RUN普通1轮；未刷新旧PROCESS预算。非实现者只读审核与实际检查分开。可核实时长写各周期/工具日志；完整Lead归因、订阅扣费未知，不拿API价格换算。
 
 **恢复**：先查W HEAD/差异、源个人文件、已拥有进程；R4/lead/final-receipt.json指向最新候选与未完成项。H3 Store阻塞与H32锁屏独立；LTX2.5 H31只阻塞该资源及实测。LTX2.3 full BF16尚未实测；H3公开Base是CFG蒸馏，不承诺不存在的非蒸馏权重。不要把本次候选同步或后端成功写成已在源App完整接纳。
+
+
+r4补充的正常参数对照：生产仍为7beb，测试/检查点提交`cb33b028cba5bd440400bf92b0d2992f4ff2f989`未改生产。Lead首次独立实验`ltx-normal-01`在完成去噪后因实验环境PATH漏掉native目录而封装失败，driver exit2，683.890秒；普通ExternalVideoBackend.swift:133原本已提供正确PATH，不是生产缺陷、不安装FFmpeg。保留失败及环境更正记录。仅更正新实验环境并在计算前核对ffmpeg/ffprobe解析路径，02一次重跑成功，driver exit0/owned group drained、653.796秒；没有改模型/推理/测试标准，也不改写Worker预算。
+
+02使用上游一阶段常用30步/CFG3（STG0），其余256²/9帧/24fps/seed42/流式true/Q8-GemmaQ4不变。MP4为H264 + AAC 48kHz双声道，完整文件解码通过；Lead实际查看首/中/末帧红杯可辨，相邻帧有轻微变化。样本仅0.375秒，不能称长视频或艺术质量验收。此处独立provider没有经过正式Runtime或Store，不冒充新原生闭环；上述Runtime和Store证据仍各自绑定自己的2步输入。证据`lead/ltx-normal-02-{command,process,summary}.json`、`tmp/ltx-normal-02/`及`delivery/samples/LTX-2.3-Q8-30step.mp4`，失败见01同名记录和`ltx-normal-environment-correction.json`。
+
+本轮所有自有模型/CPU/构建命令已经结束；只读协助均完成。旧GUI PID37434没有被强杀，当前是否仍存活未知，不声称全系统已空闲。新包只复制和核签、未启动；H32仍保留。本段及集中工程停点补充后仅文档提交，不重跑/倒记模型结果；最终SHA与候选远端同步在外部回执。
