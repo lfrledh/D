@@ -485,10 +485,12 @@ class AppVideoDriverTests(unittest.TestCase):
         with mock.patch.object(driver.sys, "executable", str(venv / "bin" / "python")), \
              mock.patch.object(driver.sys, "prefix", str(venv)), \
              mock.patch.dict(os.environ, {"TMPDIR": str(nested / "tmp")}), \
-             mock.patch.object(driver, "_file_access", side_effect=AssertionError("unsafe runtime overlap reached access")):
+             mock.patch.object(driver, "_file_access", side_effect=AssertionError("unsafe runtime overlap reached access")) as access:
             self.assertEqual(driver.run(args), 2)
+            access.assert_not_called()
         self.assertEqual((nested / "request.json").read_bytes(), source)
         self.assertEqual((self.pack / driver.MANIFEST_NAME).read_bytes(), manifest)
+        self.assertFalse((nested / "candidate.mp4").exists())
         self.assertFalse((nested / "result.json").exists())
 
 
