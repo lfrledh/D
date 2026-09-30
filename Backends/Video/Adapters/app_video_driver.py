@@ -41,13 +41,18 @@ WIRE_FIELDS = frozenset(("schema_version", "profile", "prompt", "negative_prompt
 MAX_LOG = 4 * 1024 * 1024
 
 
-def _physical(path: str | Path, label: str, *, kind: str, executable: bool = False) -> Path:
-    """Reject aliases and special leaves, including symlinked ancestors."""
+def _lexical(path: str | Path, label: str) -> Path:
+    """Validate a path without touching protected file system metadata."""
     value = str(path)
     if (not value or "\0" in value or not os.path.isabs(value) or
             os.path.normpath(value) != value or str(Path(value)) != value or value == "/"):
         raise ValueError(f"{label} must be a normalized absolute path")
-    result = Path(value)
+    return Path(value)
+
+
+def _physical(path: str | Path, label: str, *, kind: str, executable: bool = False) -> Path:
+    """Reject aliases and special leaves, including symlinked ancestors."""
+    result = _lexical(path, label)
     current = Path("/")
     for component in result.parts[1:]:
         current /= component
@@ -65,7 +70,7 @@ def _physical(path: str | Path, label: str, *, kind: str, executable: bool = Fal
 def _separate(run: Path, protected: list[Path]) -> None:
     for path in protected:
         if run == path or run in path.parents or path in run.parents:
-            raise ValueError("Task directory overlaps a model, engine, or runtime")
+            raise ValueError("Task directory overlaps a model, tool, provider, or runtime")
 
 
 def _identity(info: os.stat_result) -> tuple[int, ...]:
@@ -186,7 +191,7 @@ def _file_access(args, run: Path, pack: Path):
     if args.access_manifest is None:
         yield
         return
-    access = _physical(args.access_manifest, "access manifest", kind="file")
+    access = _lexical(args.access_manifest, "access manifest")
     if type(args.access_run_id) is not str or str(uuid.UUID(args.access_run_id)) != args.access_run_id:
         raise ValueError("Access run ID must be a canonical UUID")
     # Deployment puts the helper beside this provider; repository tests use the
@@ -362,77 +367,112 @@ def _execute(request: dict, *, pack: Path, run: Path, ffmpeg: Path, ffprobe: Pat
 
 def run(args) -> int:
     """One already-owned App task. All acquired access stays live through children."""
-    request_path = _physical(args.request, "request", kind="file")
-    if request_path.name != "request.json":
-        raise ValueError("request must be the private task request.json")
-    run_dir = _physical(request_path.parent, "task directory", kind="directory")
-    record = {"schema": RESULT_SCHEMA, "media_verified": False, "published": False}
-    safe_to_write = False
     try:
-        pack = _physical(args.pack, "pack", kind="directory")
-        ffmpeg = _physical(args.ffmpeg, "ffmpeg", kind="file", executable=True)
-        ffprobe = _physical(args.ffprobe, "ffprobe", kind="file", executable=True)
-        h3_engine = _physical(args.h3_engine, "H3 engine", kind="file", executable=True) if args.h3_engine else None
-        h3_shader = _physical(args.h3_shader, "H3 shader", kind="file") if args.h3_shader else None
+        request_path = _lexical(args.request, "request")
+        if request_path.name != "request.json":
+            raise ValueError("request must be the private task request.json")
+        run_dir = _lexical(request_path.parent, "task directory")
+        pack = _lexical(args.pack, "pack")
+        ffmpeg = _lexical(args.ffmpeg, "ffmpeg")
+        ffprobe = _lexical(args.ffprobe, "ffprobe")
+        h3_engine = _lexical(args.h3_engine, "H3 engine") if args.h3_engine else None
+        h3_shader = _lexical(args.h3_shader, "H3 shader") if args.h3_shader else None
         if bool(h3_engine) != bool(h3_shader):
             raise ValueError("H3 engine and shader must be paired")
         if ffmpeg.parent != ffprobe.parent:
             raise ValueError("FFmpeg tools must share a fixed directory")
-        # sys.executable may itself be an OS-installed symlink; it is the running
-        # interpreter, not a caller-supplied path. Protect its resolved install root.
-        runtime = _physical(Path(sys.executable).resolve(strict=True), "Python runtime", kind="file", executable=True)
-        protected = [pack, runtime.parent.parent, ffmpeg.parent]
+        executable = _lexical(sys.executable, "Python executable")
+        provider = _lexical(Path(__file__).absolute().parent, "video provider")
+        prefix = _lexical(sys.prefix, "Python prefix")
+        base_prefix = _lexical(sys.base_prefix, "Python base prefix")
+        protected = [pack, ffmpeg.parent, ffprobe.parent, provider,
+                     executable.parent.parent, prefix, base_prefix]
         if h3_engine:
             protected += [h3_engine.parent, h3_shader.parent]
+        # No target metadata is inspected before the two bookmarks are acquired.
         _separate(run_dir, protected)
-        safe_to_write = True
-        scratch = _physical(run_dir / "tmp", "TMPDIR", kind="directory")
-        _physical(run_dir / "cache", "cache", kind="directory")
-        if os.environ.get("TMPDIR") != str(scratch):
-            raise ValueError("TMPDIR must equal the private task tmp directory")
-        if (os.environ.get("HF_HUB_OFFLINE") != "1" or
-                os.environ.get("TRANSFORMERS_OFFLINE") != "1" or
-                os.environ.get("LTX2_GEMMA_MAX_LENGTH") != "1024"):
-            raise ValueError("Swift-supplied offline environment and tokenizer limit are required")
-        tempfile.tempdir = str(scratch)
+    except Exception as error:
+        print(f"Video App driver rejected input: {type(error).__name__}: {str(error)[:2048]}",
+              file=sys.stderr, flush=True)
+        return 2
+    record = {"schema": RESULT_SCHEMA, "media_verified": False, "published": False}
+    try:
         with _file_access(args, run_dir, pack):
-            # Acquisition is before opening the request or any pack file.
-            request_snapshot = _read_snapshot(request_path, 1024 * 1024)
-            wire = _wire(request_snapshot[0])
-            if args.access_run_id and args.access_run_id != wire["run_id"]:
-                raise ValueError("Access run ID differs from request run_id")
-            manifest_path = _physical(pack / MANIFEST_NAME, "pack manifest", kind="file")
-            manifest_snapshot = _read_snapshot(manifest_path, 16 * 1024)
-            request = wire["request"]
-            _manifest(manifest_snapshot[0], request["profile"])
-            if wire["manifest_sha256"] != manifest_snapshot[2]:
-                raise ValueError("Pack manifest hash differs from frozen wire")
-            record.update(run_id=wire["run_id"], request_sha256=request_snapshot[2],
-                          manifest_sha256=manifest_snapshot[2], profile=request["profile"],
-                          source_request=request.copy())
-            _assert_free(run_dir)
-            previous_cwd = Path.cwd()
-            os.chdir(run_dir)
+            safe_to_write = False
             try:
-                admission, source = _execute(request, pack=pack, run=run_dir, ffmpeg=ffmpeg,
-                                             ffprobe=ffprobe, h3_engine=h3_engine, h3_shader=h3_shader)
-                record.update(admission=admission, source=source)
-                verified = _verify_media(run_dir / "candidate.mp4", request, ffmpeg=ffmpeg,
-                                         ffprobe=ffprobe, run=run_dir, profile=request["profile"])
-                _unchanged(request_path, request_snapshot, 1024 * 1024)
-                _unchanged(manifest_path, manifest_snapshot, 16 * 1024)
-                record.update(candidate_file="candidate.mp4", sha256=verified["sha256"],
-                              media=verified["media"], media_verified=True)
-                _write_result(run_dir / "result.json", record)
-                return 0
-            finally:
-                os.chdir(previous_cwd)
-    except (OSError, ValueError, RuntimeError, ImportError, InterruptedError) as error:
-        record["media_verified"] = False
-        record["error"] = {"type": type(error).__name__, "message": str(error)[:2048]}
-        if safe_to_write and not os.path.lexists(run_dir / "result.json"):
-            _write_result(run_dir / "result.json", record)
-        print(f"Video App driver failed: {type(error).__name__}: {error}", file=sys.stderr, flush=True)
+                request_path = _physical(request_path, "request", kind="file")
+                run_dir = _physical(run_dir, "task directory", kind="directory")
+                pack = _physical(pack, "pack", kind="directory")
+                ffmpeg = _physical(ffmpeg, "ffmpeg", kind="file", executable=True)
+                ffprobe = _physical(ffprobe, "ffprobe", kind="file", executable=True)
+                if h3_engine:
+                    h3_engine = _physical(h3_engine, "H3 engine", kind="file", executable=True)
+                    h3_shader = _physical(h3_shader, "H3 shader", kind="file")
+                # The running interpreter may be a symlink into a base install.
+                # Protect both the venv spelling and resolved base, without
+                # adding either runtime path to the model-access grant.
+                runtime = _physical(executable.resolve(strict=True), "Python runtime", kind="file", executable=True)
+                physical_protected = protected + [runtime.parent.parent,
+                    prefix.resolve(strict=True), base_prefix.resolve(strict=True),
+                    provider.resolve(strict=True)]
+                _separate(run_dir, physical_protected)
+                safe_to_write = True
+                scratch = _physical(run_dir / "tmp", "TMPDIR", kind="directory")
+                _physical(run_dir / "cache", "cache", kind="directory")
+                if os.environ.get("TMPDIR") != str(scratch):
+                    raise ValueError("TMPDIR must equal the private task tmp directory")
+                if (os.environ.get("HF_HUB_OFFLINE") != "1" or
+                        os.environ.get("TRANSFORMERS_OFFLINE") != "1" or
+                        os.environ.get("LTX2_GEMMA_MAX_LENGTH") != "1024"):
+                    raise ValueError("Swift-supplied offline environment and tokenizer limit are required")
+                tempfile.tempdir = str(scratch)
+                request_snapshot = _read_snapshot(request_path, 1024 * 1024)
+                wire = _wire(request_snapshot[0])
+                if args.access_run_id and args.access_run_id != wire["run_id"]:
+                    raise ValueError("Access run ID differs from request run_id")
+                manifest_path = _physical(pack / MANIFEST_NAME, "pack manifest", kind="file")
+                manifest_snapshot = _read_snapshot(manifest_path, 16 * 1024)
+                request = wire["request"]
+                _manifest(manifest_snapshot[0], request["profile"])
+                if wire["manifest_sha256"] != manifest_snapshot[2]:
+                    raise ValueError("Pack manifest hash differs from frozen wire")
+                record.update(run_id=wire["run_id"], request_sha256=request_snapshot[2],
+                              manifest_sha256=manifest_snapshot[2], profile=request["profile"],
+                              source_request=request.copy())
+                _assert_free(run_dir)
+                previous_cwd = Path.cwd()
+                os.chdir(run_dir)
+                try:
+                    admission, source = _execute(request, pack=pack, run=run_dir, ffmpeg=ffmpeg,
+                                                 ffprobe=ffprobe, h3_engine=h3_engine, h3_shader=h3_shader)
+                    record.update(admission=admission, source=source)
+                    verified = _verify_media(run_dir / "candidate.mp4", request, ffmpeg=ffmpeg,
+                                             ffprobe=ffprobe, run=run_dir, profile=request["profile"])
+                    _unchanged(request_path, request_snapshot, 1024 * 1024)
+                    _unchanged(manifest_path, manifest_snapshot, 16 * 1024)
+                    record.update(candidate_file="candidate.mp4", sha256=verified["sha256"],
+                                  media=verified["media"], media_verified=True)
+                    _write_result(run_dir / "result.json", record)
+                    return 0
+                finally:
+                    os.chdir(previous_cwd)
+            except Exception as error:
+                # The report is part of the same capability lifetime as the
+                # engine and probes. Unsafe or unknown output roots get no write.
+                failure = {key: record[key] for key in ("schema", "run_id", "request_sha256",
+                    "manifest_sha256", "profile", "source_request") if key in record}
+                failure.update(media_verified=False, published=False,
+                    error={"type": type(error).__name__, "message": str(error)[:2048]})
+                if safe_to_write and not os.path.lexists(run_dir / "result.json"):
+                    _write_result(run_dir / "result.json", failure)
+                print(f"Video App driver failed: {type(error).__name__}: {str(error)[:2048]}",
+                      file=sys.stderr, flush=True)
+                return 2
+    except Exception as error:
+        # Includes access acquisition/cleanup failures. The scope is unavailable;
+        # never attempt a result write after leaving it.
+        print(f"Video App driver rejected access: {type(error).__name__}: {str(error)[:2048]}",
+              file=sys.stderr, flush=True)
         return 2
 
 
@@ -445,8 +485,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         return run(args)
-    except (OSError, ValueError, RuntimeError) as error:
-        print(f"Video App driver rejected input: {type(error).__name__}: {error}", file=sys.stderr, flush=True)
+    except Exception as error:
+        print(f"Video App driver rejected input: {type(error).__name__}: {str(error)[:2048]}", file=sys.stderr, flush=True)
         return 2
 
 
