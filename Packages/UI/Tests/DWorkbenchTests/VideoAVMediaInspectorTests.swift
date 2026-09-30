@@ -32,6 +32,29 @@ struct VideoAVMediaInspectorTests {
         }
     }
 
+    @Test func audioTailMayExtendPastAVAssetPresentationDuration() async throws {
+        try await withAVFixtureDirectory { directory in
+            let file = directory.appendingPathComponent("valid-audio-tail.mp4")
+            try writeAVFixture(to: file, frames: 22, sampleRate: 32_000, audioTail: 1.0 / 120)
+            let asset = AVURLAsset(url: file, options: [AVURLAssetPreferPreciseDurationAndTimingKey: true])
+            let videos = try await asset.loadTracks(withMediaType: .video)
+            let audios = try await asset.loadTracks(withMediaType: .audio)
+            let videoRange = try await #require(videos.first).load(.timeRange)
+            let audioRange = try await #require(audios.first).load(.timeRange)
+            let duration = try await asset.load(.duration)
+            let videoEnd = CMTimeRangeGetEnd(videoRange)
+            let audioEnd = CMTimeRangeGetEnd(audioRange)
+            #expect(audioEnd > videoEnd)
+            // Assert the actual platform behavior behind the original H3 rejection.
+            #expect(CMTimeCompare(duration, videoEnd) == 0)
+            let original = try Data(contentsOf: file)
+            let inspected = try await VideoMediaInspector.inspect(at: file,
+                expected: avRequest(.h3BF16Full, frames: 22))
+            #expect(inspected.hasAudio && inspected.frameCount == 22)
+            #expect(try Data(contentsOf: file) == original)
+        }
+    }
+
     @Test func rejectsAbsentExtraAndWrongAudio() async throws {
         try await withAVFixtureDirectory { directory in
             let request = avRequest(.ltx23BF16Full, frames: 9)
@@ -387,10 +410,25 @@ private func withAVFixtureDirectory<T>(_ body: (URL) async throws -> T) async th
 
 private func writeAVFixture(to url: URL, frames: Int, sampleRate: Int, channels: Int = 2,
                             audioTracks: Int = 1, audioOffset: Double = 0,
-                            videoOffset: Double = 0, dropVideoFrame: Int? = nil) throws {
+                            videoOffset: Double = 0, dropVideoFrame: Int? = nil, audioTail: Double = 0) throws {
     let executable = "/opt/homebrew/bin/ffmpeg"
     guard FileManager.default.isExecutableFile(atPath: executable) else {
         throw AVFixtureError("固定 FFmpeg 不可用：\(executable)")
+    }
+    if audioTail != 0 {
+        let raw = url.deletingPathExtension().appendingPathExtension("video-source.mp4")
+        try writeAVFixture(to: raw, frames: frames, sampleRate: sampleRate, audioTracks: 0)
+        let mux = Process()
+        mux.executableURL = URL(fileURLWithPath: executable)
+        mux.arguments = ["-hide_banner", "-loglevel", "error", "-nostdin", "-n",
+            "-i", raw.path, "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=\(sampleRate)",
+            "-map", "0:v", "-map", "1:a", "-c:v", "copy", "-c:a", "aac",
+            "-ar", String(sampleRate), "-ac", String(channels),
+            "-t", String(Double(frames) / 24 + audioTail), "-movflags", "+faststart", url.path]
+        mux.standardOutput = FileHandle.nullDevice; mux.standardError = FileHandle.nullDevice
+        try mux.run(); mux.waitUntilExit()
+        guard mux.terminationStatus == 0 else { throw AVFixtureError("Audio-tail mux failed") }
+        return
     }
     if audioOffset != 0 || videoOffset != 0 {
         let raw = url.deletingPathExtension().appendingPathExtension("unaltered.mp4")
@@ -427,7 +465,7 @@ private func writeAVFixture(to url: URL, frames: Int, sampleRate: Int, channels:
     arguments += ["-c:v", "libx264", "-preset", "medium", "-bf", "2",
         "-g", String(frames), "-sc_threshold", "0", "-pix_fmt", "yuv420p",
         "-threads", "1", "-frames:v", String(frames - (dropVideoFrame == nil ? 0 : 1)),
-        "-t", String(Double(frames) / 24), "-movflags", "+faststart"]
+        "-t", String(Double(frames) / 24 + audioTail), "-movflags", "+faststart"]
     if audioTracks > 0 {
         arguments += ["-c:a", "aac", "-ar", String(sampleRate), "-ac", String(channels),
                       "-b:a", "96k"]
