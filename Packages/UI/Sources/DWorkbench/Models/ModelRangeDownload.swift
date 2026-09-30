@@ -103,6 +103,10 @@ private final class ModelRangeReceiver: NSObject, URLSessionDataDelegate, Sendab
     func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive response: URLResponse,
                     completionHandler: @escaping @Sendable (URLSession.ResponseDisposition) -> Void) {
         let expectedRange = "bytes \(range.start)-\(range.end)/\(range.total)"
+        if let http = response as? HTTPURLResponse, allowed(http.url), [401, 403].contains(http.statusCode) {
+            state.withLock { $0.failure = ModelLibraryError.accessDenied("模型来源拒绝访问（HTTP \(http.statusCode)）；请在来源平台完成所需访问手续。") }
+            completionHandler(.cancel); return
+        }
         guard let http = response as? HTTPURLResponse, allowed(http.url), http.statusCode == 206,
               http.value(forHTTPHeaderField: "Content-Range") == expectedRange,
               http.value(forHTTPHeaderField: "Content-Length").flatMap(UInt64.init) == range.count,

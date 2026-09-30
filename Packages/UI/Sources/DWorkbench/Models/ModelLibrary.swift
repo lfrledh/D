@@ -11,6 +11,7 @@ public actor ModelLibrary {
     private struct StoredRecord: Codable, Sendable {
         var record: ModelRecord
         var bookmark: Data?
+        var recipeIdentity: String?
         var files: [String: FileProgress] = [:]
         var verifiedFiles: [String: ModelFileIdentity] = [:]
         var verifiedRoot: ModelFileIdentity?
@@ -50,6 +51,15 @@ public actor ModelLibrary {
     init(stateDirectory: URL, catalog: [ModelCatalogEntry],
          transport: any ModelRangeTransport = URLSessionModelRangeTransport(), sourceBaseURL: URL? = nil, availableBytesOverride: UInt64? = nil) async throws {
         try Self.validateCatalog(catalog)
+        if let sourceBaseURL {
+            guard let components = URLComponents(url: sourceBaseURL, resolvingAgainstBaseURL: false),
+                  components.user == nil, components.password == nil, components.query == nil, components.fragment == nil,
+                  components.path.isEmpty || components.path == "/",
+                  components.scheme == "https" ||
+                    (components.scheme == "http" && ["127.0.0.1", "localhost", "::1"].contains(components.host ?? "")) else {
+                throw ModelLibraryError.invalidCatalog("下载来源 URL 不安全。")
+            }
+        }
         try FileManager.default.createDirectory(at: stateDirectory, withIntermediateDirectories: true)
         let directory = try ModelDirectory(ModelDirectory.canonicalURL(stateDirectory))
         self.stateDirectory = directory
@@ -67,6 +77,20 @@ public actor ModelLibrary {
             guard let entry = catalog.first(where: { $0.id == value.record.catalogID }), entry.revision == value.record.revision,
                   value.files.allSatisfy({ path, progress in entry.files.contains { $0.path == path && progress.completed <= $0.size } }) else {
                 throw ModelLibraryError.integrity("模型索引与固定目录不一致。")
+            }
+            let identity = try Self.recipeIdentity(entry)
+            if let recorded = value.recipeIdentity {
+                guard recorded == identity else { throw ModelLibraryError.integrity("固定下载配方已改变；保留已有文件，拒绝混合断点。") }
+            } else {
+                // v1 persisted only Klein's fixed single-repository SHA-256 recipe.
+                guard let legacy = try? ModelCatalog.flux2(), entry.id == ModelCatalog.flux2ID,
+                      entry.repository == "mzbac/FLUX.2-klein-4B-q8",
+                      entry.revision == "ef52ee019fd1d0e75ae4deb40476ba65989716d7",
+                      entry.files == legacy.files,
+                      entry.files.allSatisfy({ $0.digestAlgorithm == .sha256 && $0.sourceRepository == nil && $0.sourceRevision == nil && $0.remotePath == nil }) else {
+                    throw ModelLibraryError.integrity("旧索引缺少下载配方身份，拒绝恢复。")
+                }
+                disk.records[index].recipeIdentity = identity
             }
             disk.records[index].record.activeLeaseCount = 0
             if [.queued, .downloading, .pausing, .verifying, .publishing].contains(value.record.state) {
@@ -94,7 +118,7 @@ public actor ModelLibrary {
             let stored = disk.records[index]
             var availability = stored.record.availability
             var location = stored.record.directory
-            if stored.record.state == .installed {
+            if stored.record.state == .installed || stored.record.state == .preparationRequired {
                 do { location = try resolved(stored).url; availability = .available }
                 catch { availability = stored.record.storage == .external && externalScopes[stored.record.id] == nil ? .needsAuthorization : .unavailable }
             } else if stored.record.storage == .managed {
@@ -141,7 +165,7 @@ public actor ModelLibrary {
         try requireAdmission()
         let entry = try catalogEntry(catalogID)
         if let existing = disk.records.first(where: { $0.record.catalogID == catalogID && $0.record.storage == .managed }) {
-            if existing.record.state != .installed { try resume(existing.record.id) }
+            if existing.record.state != .installed && existing.record.state != .preparationRequired { try resume(existing.record.id) }
             return existing.record.id
         }
         try requireIdleWorker()
@@ -151,7 +175,7 @@ public actor ModelLibrary {
         let id = ModelID()
         disk.records.append(StoredRecord(record: .init(id: id, catalogID: entry.id, revision: entry.revision,
             storage: .managed, state: .queued, availability: .available, downloadedBytes: 0,
-            totalBytes: entry.totalBytes, error: nil, directory: nil, activeLeaseCount: 0)))
+            totalBytes: entry.totalBytes, error: nil, directory: nil, activeLeaseCount: 0), recipeIdentity: try Self.recipeIdentity(entry)))
         do { try persist() } catch { disk.records.removeAll { $0.record.id == id }; throw error }
         launchInstallation(id)
         return id
@@ -170,7 +194,7 @@ public actor ModelLibrary {
     public func resume(_ id: ModelID) throws {
         try requireAdmission(); try requireIdleWorker()
         let value = try stored(id)
-        guard value.record.state != .installed else { return }
+        guard value.record.state != .installed && value.record.state != .preparationRequired else { return }
         if value.record.storage == .external {
             guard let scope = externalScopes[id] else { throw ModelLibraryError.unavailable("请重新授权模型文件夹。") }
             launchVerification(id, scope: scope)
@@ -187,7 +211,8 @@ public actor ModelLibrary {
         if workers[id] != nil { try await pause(id) }
         try requireIdleWorker()
         let value = try stored(id)
-        guard value.record.storage == .managed, value.record.state != .installed else {
+        guard value.record.storage == .managed,
+              value.record.state != .installed && value.record.state != .preparationRequired else {
             throw ModelLibraryError.busy("仅未完成的受管理安装可以重新开始。")
         }
         guard let root = libraryRoot else { throw ModelLibraryError.unavailable("模型库不可用。") }
@@ -212,20 +237,21 @@ public actor ModelLibrary {
         let scope = try ModelScopedLocation(selected)
         let directory = try ModelDirectory(scope.url)
         if let existing = disk.records.first(where: { $0.record.catalogID == catalogID && $0.verifiedRoot?.sameNode(directory.identity) == true }) {
-            _ = try resolve(existing.record.id)
+            _ = try resolved(existing)
             return existing.record.id
         }
         let id = ModelID()
         disk.records.append(StoredRecord(record: .init(id: id, catalogID: catalogID, revision: entry.revision,
             storage: .external, state: .registered, availability: .available, downloadedBytes: 0,
-            totalBytes: entry.totalBytes, error: nil, directory: scope.url, activeLeaseCount: 0), bookmark: scope.bookmark))
+            totalBytes: entry.totalBytes, error: nil, directory: scope.url, activeLeaseCount: 0), bookmark: scope.bookmark,
+            recipeIdentity: try Self.recipeIdentity(entry)))
         externalScopes[id] = scope
         do { try persist() } catch { disk.records.removeAll { $0.record.id == id }; externalScopes[id] = nil; throw error }
         launchVerification(id, scope: scope)
         await workers[id]?.value
         let completed = try stored(id)
         if cancelledOperations.contains(id) { throw ModelLibraryError.operationPaused }
-        guard completed.record.state == .installed else {
+        guard completed.record.state == .installed || completed.record.state == .preparationRequired else {
             throw ModelLibraryError.integrity(completed.record.error ?? "模型校验未完成。")
         }
         return id
@@ -278,11 +304,22 @@ public actor ModelLibrary {
         workers.removeValue(forKey: id)
     }
 
-    public func profile(for id: ModelID) throws -> ImageModelProfile { try entry(for: id).imageProfile }
+    public func profile(for id: ModelID) throws -> ImageModelProfile {
+        guard let profile = try entry(for: id).imageProfile else {
+            throw ModelLibraryError.unavailable("所选模型没有已接线的旧图像推理配置。")
+        }
+        return profile
+    }
+    public func catalogEntry(for id: ModelID) throws -> ModelCatalogEntry { try entry(for: id) }
     public func resolve(_ id: ModelID) throws -> ModelReference {
         try requireAdmission()
         let value = try stored(id)
-        guard value.record.state == .installed else { throw ModelLibraryError.unavailable("模型尚未完成安装和完整校验。") }
+        guard value.record.state == .installed else {
+            if value.record.state == .preparationRequired {
+                throw ModelLibraryError.unavailable("模型原始文件已校验，但仍需准备执行引擎；当前不能用于任务。")
+            }
+            throw ModelLibraryError.unavailable("模型尚未完成安装和完整校验。")
+        }
         let directory = try resolved(value)
         return .init(directory: directory.url, revision: value.record.revision)
     }
@@ -407,10 +444,12 @@ public actor ModelLibrary {
         }
     }
     private func verified(_ id: ModelID, directory: ModelDirectory, files: [String: ModelFileIdentity]) {
+        let needsPreparation = (try? entry(for: id).preparation) == .required
         mutate(id) {
             $0.verifiedRoot = directory.identity; $0.verifiedFiles = files
             $0.record.directory = directory.url; $0.record.downloadedBytes = $0.record.totalBytes
-            $0.record.state = .installed; $0.record.error = nil; $0.record.availability = .available
+            $0.record.state = needsPreparation ? .preparationRequired : .installed
+            $0.record.error = nil; $0.record.availability = .available
         }
     }
     private func workerEnded(_ id: ModelID, error: (any Error)?) {
@@ -597,8 +636,8 @@ public actor ModelLibrary {
     }
     private func sourceURL(entry: ModelCatalogEntry, file: ModelFile, start: UInt64) -> URL {
         let base = sourceBaseURL ?? URL(string: "https://huggingface.co")!
-        var url = base.appendingPathComponent(entry.repository).appendingPathComponent("resolve")
-            .appendingPathComponent(entry.revision).appendingPathComponent(file.path)
+        var url = base.appendingPathComponent(file.sourceRepository ?? entry.repository).appendingPathComponent("resolve")
+            .appendingPathComponent(file.sourceRevision ?? entry.revision).appendingPathComponent(file.remotePath ?? file.path)
         if sourceBaseURL == nil { url.append(queryItems: [.init(name: "download", value: "true"), .init(name: "d_range", value: String(start))]) }
         return url
     }
@@ -607,7 +646,8 @@ public actor ModelLibrary {
         var status = statvfs()
         guard fstatvfs(root.descriptor, &status) == 0 else { throw ModelDirectory.failure("检查磁盘空间") }
         let available = availableBytesOverride ?? UInt64(status.f_bavail) * UInt64(status.f_frsize)
-        let required = remaining + 64 * 1024 * 1024
+        let (required, overflow) = remaining.addingReportingOverflow(64 * 1024 * 1024)
+        guard !overflow else { throw ModelLibraryError.invalidCatalog("模型总大小溢出。") }
         guard available >= required else { throw ModelLibraryError.insufficientSpace(required: required, available: available) }
     }
     private func persist() throws {
@@ -628,6 +668,22 @@ public actor ModelLibrary {
         guard let value = catalog.first(where: { $0.id == id }) else { throw ModelLibraryError.invalidCatalog("不支持的模型目录条目。") }; return value
     }
     private func entry(for id: ModelID) throws -> ModelCatalogEntry { try catalogEntry(stored(id).record.catalogID) }
+    private static func recipeIdentity(_ entry: ModelCatalogEntry) throws -> String {
+        struct Recipe: Encodable {
+            let id: String
+            let repository: String
+            let revision: String
+            let files: [ModelFile]
+            let preparation: ModelPreparation
+            let workflowProfileID: String?
+            let workflowIdentity: String?
+        }
+        let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
+        let recipe = Recipe(id: entry.id, repository: entry.repository, revision: entry.revision,
+                            files: entry.files, preparation: entry.preparation,
+                            workflowProfileID: entry.workflowProfileID, workflowIdentity: entry.workflowIdentity)
+        return SHA256.hash(data: try encoder.encode(recipe)).map { String(format: "%02x", $0) }.joined()
+    }
     private static func exists(_ path: String, in directory: ModelDirectory) throws -> Bool {
         let (parent, name) = try directory.parent(path); defer { Darwin.close(parent) }
         var value = stat()
@@ -645,19 +701,43 @@ public actor ModelLibrary {
     private static func validateCatalog(_ entries: [ModelCatalogEntry]) throws {
         guard !entries.isEmpty, Set(entries.map(\.id)).count == entries.count else { throw ModelLibraryError.invalidCatalog("模型目录为空或重复。") }
         for entry in entries {
-            guard entry.revision.count == 40, entry.revision.allSatisfy({ $0.isHexDigit }),
-                  !entry.files.isEmpty, entry.files.count <= 1024,
+            guard validRepository(entry.repository), validRevision(entry.revision),
+                  !entry.id.isEmpty, !entry.title.isEmpty,
+                  !entry.files.isEmpty, entry.files.count <= 16_384,
                   Set(entry.files.map(\.path)).count == entry.files.count else { throw ModelLibraryError.invalidCatalog("模型版本或文件清单无效。") }
             let paths = Set(entry.files.map(\.path))
+            var total: UInt64 = 0
             for file in entry.files {
                 let parts = try ModelDirectory.parts(file.path)
-                guard file.size > 0, file.size <= 16 * 1024 * 1024 * 1024,
-                      file.sha256.count == 64, file.sha256.allSatisfy({ $0.isHexDigit }),
+                let (next, overflow) = total.addingReportingOverflow(file.size)
+                total = next
+                let digestLength = file.digestAlgorithm == .sha256 ? 64 : 40
+                guard file.size > 0, file.size <= UInt64(Int64.max), !overflow, total <= UInt64(Int64.max),
+                      file.sha256.count == digestLength, file.sha256.allSatisfy({ $0.isHexDigit }),
+                      (file.sourceRepository == nil || validRepository(file.sourceRepository!)),
+                      (file.sourceRevision == nil || validRevision(file.sourceRevision!)),
+                      validRemotePath(file.remotePath ?? file.path),
                       !(1..<parts.count).contains(where: { paths.contains(parts.prefix($0).joined(separator: "/")) }) else {
                     throw ModelLibraryError.invalidCatalog("模型文件大小、摘要或路径冲突。")
                 }
             }
         }
+    }
+    private static func validRepository(_ repository: String) -> Bool {
+        let parts = repository.split(separator: "/", omittingEmptySubsequences: false)
+        return parts.count == 2 && parts.allSatisfy { part in
+            !part.isEmpty && part != "." && part != ".." &&
+            part.utf8.allSatisfy { ($0 >= 48 && $0 <= 57) || ($0 >= 65 && $0 <= 90) ||
+                ($0 >= 97 && $0 <= 122) || $0 == 45 || $0 == 46 || $0 == 95 }
+        }
+    }
+    private static func validRevision(_ revision: String) -> Bool {
+        revision.count == 40 && revision.utf8.allSatisfy { ($0 >= 48 && $0 <= 57) || ($0 >= 97 && $0 <= 102) }
+    }
+    private static func validRemotePath(_ path: String) -> Bool {
+        guard (try? ModelDirectory.parts(path)) != nil else { return false }
+        return path.utf8.allSatisfy { ($0 >= 48 && $0 <= 57) || ($0 >= 65 && $0 <= 90) ||
+            ($0 >= 97 && $0 <= 122) || $0 == 45 || $0 == 46 || $0 == 47 || $0 == 95 }
     }
 }
 

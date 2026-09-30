@@ -47,7 +47,7 @@ public struct ModelLibraryView: View {
             Divider()
             HStack(spacing: 8) {
                 Image(systemName: model.hasActiveWork ? "arrow.down.circle" : "checkmark.shield")
-                Text(model.hasActiveWork ? "关闭此窗口后，下载和校验仍会继续。" : "只有校验完成且位置可访问的模型才能用于生成。")
+                Text(model.hasActiveWork ? "关闭此窗口后，下载和校验仍会继续。" : "文件校验、引擎准备与实际推理验证分别进行。")
                     .font(.caption)
                 Spacer()
             }
@@ -77,8 +77,10 @@ public struct ModelLibraryView: View {
                     .font(.callout).foregroundStyle(.secondary)
             }
             Spacer()
-            Button {
-                Task { await model.registerExisting() }
+            Menu {
+                ForEach(model.catalog) { entry in
+                    Button(entry.title) { Task { await model.registerExisting(catalogID: entry.id) } }
+                }
             } label: {
                 Label("登记已有模型…", systemImage: "folder.badge.plus")
             }
@@ -160,7 +162,7 @@ public struct ModelLibraryView: View {
                     Image(systemName: "cube.transparent").font(.title2).foregroundStyle(.tertiary)
                     VStack(alignment: .leading, spacing: 5) {
                         Text("还没有登记或安装的模型").font(.callout)
-                        Text("从下面的已验证模型开始，或登记你已下载的文件。")
+                        Text("从下面选择固定版本下载，或登记已有文件。")
                             .font(.caption).foregroundStyle(.secondary)
                     }
                     Spacer()
@@ -180,7 +182,7 @@ public struct ModelLibraryView: View {
 
     private var catalog: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("已验证的模型").font(.headline)
+            Text("固定版本模型目录").font(.headline)
             ForEach(model.catalog) { entry in
                 ModelCatalogCard(model: model, entry: entry)
             }
@@ -348,7 +350,7 @@ private struct ModelInstallationRow: View {
                     .disabled(selected || !model.canUse(record))
                     .accessibilityIdentifier("model-use-\(record.id)")
                 }
-            case .registered, .pausing, .publishing:
+            case .registered, .pausing, .publishing, .preparationRequired:
                 EmptyView()
             }
         }
@@ -380,12 +382,20 @@ private struct ModelCatalogCard: View {
             }
             HStack(spacing: 22) {
                 specification("下载", value: ModelLibraryModel.formatBytes(entry.totalBytes))
-                specification("尺寸", value: "\(entry.imageProfile.width) × \(entry.imageProfile.height)")
-                specification("步数", value: "\(entry.imageProfile.steps)")
-                specification("Guidance", value: entry.imageProfile.guidanceScale.formatted())
+                if let image = entry.imageProfile {
+                    specification("尺寸", value: "\(image.width) × \(image.height)")
+                    specification("步数", value: "\(image.steps)")
+                    specification("Guidance", value: image.guidanceScale.formatted())
+                } else {
+                    specification("文件", value: "\(entry.files.count) 项")
+                }
                 Spacer()
             }
             Text(entry.memoryGuidance).font(.caption).foregroundStyle(.secondary)
+            if entry.preparation == .required {
+                Label("文件下载后仍需准备执行引擎；当前不可直接用于任务。", systemImage: "wrench.and.screwdriver")
+                    .font(.caption).foregroundStyle(.orange)
+            }
             if model.rootURL == nil {
                 Text("选择模型库位置后即可安装，也可以直接登记已有模型。")
                     .font(.caption).foregroundStyle(.secondary)
@@ -397,8 +407,11 @@ private struct ModelCatalogCard: View {
                     }
                     Text("固定版本：\(entry.revision)")
                         .font(.caption.monospaced()).textSelection(.enabled)
-                    Text("\(entry.files.count) 个文件；下载完成后逐个校验，再登记为可用模型。")
+                    Text("\(entry.files.count) 个固定文件；校验完成仅确认文件完整，执行能力另行验证。")
                         .font(.caption).foregroundStyle(.secondary)
+                    if let provenance = entry.provenance {
+                        Text("清单来源：\(provenance)").font(.caption2).foregroundStyle(.secondary).textSelection(.enabled)
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading).padding(.top, 10)
             }
