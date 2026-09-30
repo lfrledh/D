@@ -926,6 +926,7 @@ public final class ProjectSession {
         do {
             let reference: ModelReference
             let backend: String
+            var videoRecipe: WorkflowVideoRecipe?
             if kind == .text {
                 guard let validator = session.validateTextModel, let id = session.textBackendID else { throw WorkflowIssue("文字实现未安装。") }
                 reference = try await validator(lease.url); backend = id
@@ -933,8 +934,13 @@ public final class ProjectSession {
                 guard let validate = session.validateMusicModel, let id = session.musicBackendID else { throw WorkflowIssue("MRT2 实现未安装。") }
                 reference = try await validate(lease.url); backend = id
             } else if kind == .video {
-                guard let validate = session.validateVideoModel, let id = session.videoBackendID else { throw WorkflowIssue("T2V 实现未安装。") }
-                reference = try await validate(lease.url); backend = id
+                if let adapter = session.videoAdapters.first(where: { "video:" + $0.modelIdentity == identity }) {
+                    reference = try await adapter.validateModel(lease.url); backend = adapter.backendID
+                    videoRecipe = WorkflowVideoRecipe(profile: adapter.profile)
+                } else {
+                    guard let validate = session.validateVideoModel, let id = session.videoBackendID else { throw WorkflowIssue("指定视频实现未安装。") }
+                    reference = try await validate(lease.url); backend = id
+                }
             } else {
                 try await session.validateModel(lease.url)
                 reference = .init(directory: lease.url); backend = session.backendID
@@ -943,6 +949,7 @@ public final class ProjectSession {
             let access = self.access
             return .init(identity: identity, reference: reference, backendID: backend,
                 imageRecipe: kind == .image ? .klein(capability: session.imageCapability) : nil,
+                videoRecipe: videoRecipe,
                 release: { await access.release(lease) })
         } catch { await access.release(lease); throw error }
     }
@@ -969,8 +976,21 @@ public final class ProjectSession {
                     guard let validate = session.validateMusicModel else { throw WorkflowIssue("MRT2 实现未安装。") }
                     revision = try await validate(lease.url).revision
                 case .video:
-                    guard let validate = session.validateVideoModel else { throw WorkflowIssue("T2V 实现未安装。") }
-                    revision = try await validate(lease.url).revision
+                    if FileManager.default.fileExists(atPath: lease.url.appendingPathComponent("D-VIDEO-PACK.json").path) {
+                        let candidates = session.videoAdapters
+                        var matches: [ModelReference] = []
+                        // Registration validators are read-only and do not load weights.
+                        for adapter in candidates {
+                            if let value = try? await adapter.validateModel(lease.url) { matches.append(value) }
+                        }
+                        guard matches.count == 1, let value = matches.first else {
+                            throw WorkflowIssue("视频资源包未匹配唯一的已安装实现；请检查模型版本与配方。")
+                        }
+                        revision = value.revision
+                    } else {
+                        guard let validate = session.validateVideoModel else { throw WorkflowIssue("T2V 实现未安装。") }
+                        revision = try await validate(lease.url).revision
+                    }
                 case .pitch: throw WorkflowIssue("SwiftF0 使用已准备的固定资源，不能替换为其他模型。")
                 case .image: try await session.validateModel(lease.url); revision = nil
                 }

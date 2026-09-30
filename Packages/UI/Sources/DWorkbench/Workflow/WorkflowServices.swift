@@ -230,8 +230,7 @@ struct WorkflowSaveFailure: LocalizedError {
     public func generateVideo(context: WorkflowExecutionContext) async throws -> WorkflowAssetReference {
         if pending[context.stepID] != nil { return try await publish(context) }
         let binding = try model(for: context), p = context.node.parameters
-        guard let capability = session.videoCapability,
-              let seed = UInt64(p["seed"]?.string ?? ""),
+        guard let seed = UInt64(p["seed"]?.string ?? ""),
               let numerator = Int32(exactly: p["frameRate"]?.integer ?? 16) else { throw WorkflowIssue("T2V 配方或 seed 无效。") }
         let prompt: String
         if let value = context.inputs["prompt"] {
@@ -239,12 +238,23 @@ struct WorkflowSaveFailure: LocalizedError {
             else if let ref = value.datum?.assetReferences.first, ref.kind == .text { prompt = try await readText(ref) }
             else { throw WorkflowIssue("视频提示输入需要文字。") }
         } else { prompt = p["promptText"]?.string ?? "" }
-        let input = VideoRequest(prompt: prompt, negativePrompt: p["negativePrompt"]?.string ?? "",
+        let input: VideoRequest
+        if let recipe = binding.videoRecipe {
+            guard context.node.operationID == recipe.operationID else {
+                throw WorkflowIssue("所选视频模型与此节点的执行配方不同；不会静默替换。")
+            }
+            input = try recipe.request(node: context.node, prompt: prompt, seed: seed)
+        } else {
+            guard context.node.operationID == "d.video.generate", let capability = session.videoCapability else {
+                throw WorkflowIssue("指定视频实现尚未准备。")
+            }
+            input = VideoRequest(prompt: prompt, negativePrompt: p["negativePrompt"]?.string ?? "",
             width: p["width"]?.integer ?? 256, height: p["height"]?.integer ?? 256, frameCount: p["frameCount"]?.integer ?? 17,
             frameRate: .init(numerator: numerator), steps: p["steps"]?.integer ?? 4,
             guidanceScale: Float(p["guidance"]?.decimal ?? 5), scheduleShift: Float(p["scheduleShift"]?.decimal ?? 5),
             seed: seed, executionProfile: capability.profile)
-        try capability.validate(input)
+            try capability.validate(input)
+        }
         return try await generateMedia(.video(input), mediaType: "video/mp4", parents: context.inputs.values.flatMap { $0.datum?.assetReferences ?? [] },
             binding: binding, context: context)
     }
@@ -434,7 +444,8 @@ struct WorkflowSaveFailure: LocalizedError {
             }
             return ["output": .collection(items)]
         }
-        guard ["d.model.language", "d.music.generate", "d.video.generate", "d.music.pitch"].contains(context.node.operationID) else {
+        guard (["d.model.language", "d.music.generate", "d.video.generate", "d.music.pitch"]
+            + ExternalVideoExecutionProfile.allCases.map { WorkflowVideoRecipe(profile: $0).operationID }).contains(context.node.operationID) else {
             throw WorkflowIssue("此操作不支持快速保存恢复。")
         }
         let ref = try await publish(context)

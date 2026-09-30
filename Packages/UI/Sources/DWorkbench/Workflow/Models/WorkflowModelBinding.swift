@@ -39,11 +39,13 @@ public struct WorkflowImageRecipe: Sendable {
     public let reference: ModelReference
     public let backendID: String
     public let imageRecipe: WorkflowImageRecipe?
+    public let videoRecipe: WorkflowVideoRecipe?
     public let release: @MainActor () async -> Void
     public init(identity: String, reference: ModelReference, backendID: String,
                 imageRecipe: WorkflowImageRecipe? = nil,
+                videoRecipe: WorkflowVideoRecipe? = nil,
                 release: @escaping @MainActor () async -> Void = {}) {
         self.identity = identity; self.reference = reference; self.backendID = backendID
-        self.imageRecipe = imageRecipe; self.release = release
+        self.imageRecipe = imageRecipe; self.videoRecipe = videoRecipe; self.release = release
     }
 }

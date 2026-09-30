@@ -121,6 +121,7 @@ struct ExternalVideoExecutionProfileTests {
         #expect(ExternalVideoExecutionProfile.allCases.map(\.rawValue) == [
             "minimax-h3-fl2va-bf16-full-v1",
             "ltx-2.3-dev-bf16-full-v1",
+            "ltx-2.3-dev-q8-gemma3-q4-test-v1",
             "ltx-2.5-dev-bf16-full-v1",
         ])
         for profile in ExternalVideoExecutionProfile.allCases {

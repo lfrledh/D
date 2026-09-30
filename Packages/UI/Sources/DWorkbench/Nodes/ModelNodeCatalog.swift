@@ -46,7 +46,7 @@ public enum ModelNodeCatalog {
         swiftF0,
         singing,
         wan21
-    ]
+    ] + externalVideoEntries
 
     private static func qwen(id: String, title: String, revision: String,
                              availability: ModelNodeAvailability, validation: String) -> ModelNodeDescriptor {

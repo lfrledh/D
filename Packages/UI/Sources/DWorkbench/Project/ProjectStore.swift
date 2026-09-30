@@ -26,6 +26,7 @@ public actor ProjectStore {
     public static let versionNineBackupFilename = "project.v9.backup.json"
     public static let versionTenBackupFilename = "project.v10.backup.json"
     public static let versionSeventeenBackupFilename = "project.v17.backup.json"
+    public static let versionEighteenBackupFilename = "project.v18.backup.json"
     private let rootFD: Int32
     private let lockFD: Int32
     private var manifest: ProjectManifest
@@ -162,6 +163,8 @@ public actor ProjectStore {
             loaded = try ProjectFiles.migrateVersionSixteen(loaded, original: data, in: descriptor, checkpoint: migrationCheckpoint)
         } else if loaded.schemaVersion == 17 {
             loaded = try ProjectFiles.migrateVersionSeventeen(loaded, original: data, in: descriptor, checkpoint: migrationCheckpoint)
+        } else if loaded.schemaVersion == 18 {
+            loaded = try ProjectFiles.migrateVersionEighteen(loaded, original: data, in: descriptor, checkpoint: migrationCheckpoint)
         } else { try ProjectFiles.validate(loaded) }
         let store = ProjectStore(rootURL: root, rootFD: descriptor, lockFD: lock, manifest: loaded)
         // Ownership of both descriptors has moved to the actor before recovery can throw.
@@ -2380,6 +2383,12 @@ private enum ProjectFiles {
                     checkpoint: checkpoint)
     }
 
+    static func migrateVersionEighteen(_ legacy: ProjectManifest, original: Data, in root: Int32,
+                                       checkpoint: (@Sendable (ProjectMigrationCheckpoint) throws -> Void)?) throws -> ProjectManifest {
+        try migrate(legacy, original: original, in: root, backup: ProjectStore.versionEighteenBackupFilename,
+                    checkpoint: checkpoint)
+    }
+
     private static func migrate(_ legacy: ProjectManifest, original: Data, in root: Int32, backup: String,
                                 checkpoint: (@Sendable (ProjectMigrationCheckpoint) throws -> Void)?) throws -> ProjectManifest {
         try validate(legacy, allowingLegacySchema: true)
@@ -2777,7 +2786,7 @@ private enum ProjectFiles {
                     throw ProjectStoreError.invalidProject("图像任务不属于图像文档。")
                 }
                 if let reference = image.referenceImage {
-                    guard [9, 11, 12, 16, 17, 18].contains(value.schemaVersion), let id = job.imageReferenceAssetID,
+                    guard [9, 11, 12, 16, 17, 18, 19].contains(value.schemaVersion), let id = job.imageReferenceAssetID,
                           let asset = assets[id], asset.mediaType == "image/png",
                           asset.metadata.imageContentSHA256 != nil,
                           reference.url.path.hasSuffix("/ImageInputs/\(job.id.uuidString)/reference.rgb") else {
@@ -2838,7 +2847,7 @@ private enum ProjectFiles {
             let isDeclaredAudio = asset.metadata.audio != nil || asset.mediaType == "audio/wav" ||
                 asset.mediaType == "audio/x-caf" || asset.relativePath.hasPrefix("Audio/")
             if asset.relativePath.hasPrefix("WorkflowAssets/") {
-                guard [16, 17, 18].contains(value.schemaVersion), value.workflowSnapshot != nil,
+                guard [16, 17, 18, 19].contains(value.schemaVersion), value.workflowSnapshot != nil,
                       asset.jobID == nil, asset.role == .original || asset.role == .result,
                       let format = WorkflowMediaFormat.descriptor(asset.mediaType),
                       asset.relativePath == "WorkflowAssets/\(asset.id.uuidString)/content.\(format.suffix)",
@@ -2859,11 +2868,12 @@ private enum ProjectFiles {
                     guard let video = asset.metadata.video, video.width == asset.metadata.width,
                           video.height == asset.metadata.height, video.width > 0, video.height > 0,
                           video.frameCount > 0, video.frameRate.numerator > 0, video.frameRate.denominator > 0,
-                          video.codec == "h264", !video.hasAudio, video.byteCount > 0,
+                          video.codec == "h264", (!video.hasAudio || value.schemaVersion >= 19), video.byteCount > 0,
                           video.byteCount <= format.maximumBytes, PitchSourceIdentity.isDigest(video.contentSHA256),
                           asset.metadata.audio == nil, asset.metadata.pitch == nil else {
                         throw ProjectStoreError.invalidProject("流程视频的格式不一致。")
                     }
+                    try video.validateStoredMedia()
                 } else {
                     guard asset.metadata.audio == nil, asset.metadata.video == nil, asset.metadata.pitch == nil else {
                         throw ProjectStoreError.invalidProject("流程媒体不得携带另一类型的元数据。")
@@ -2935,7 +2945,7 @@ private enum ProjectFiles {
             } else if asset.role == .original && asset.metadata.imageContentSHA256 != nil {
                 // Explicitly selecting a legacy original pins its digest without relocating it.
                 // Safe relative paths are validated above; only new import publication owns the UUID layout.
-                guard [9, 11, 12, 16, 17, 18].contains(value.schemaVersion), asset.jobID == nil, asset.mediaType == "image/png" else {
+                guard [9, 11, 12, 16, 17, 18, 19].contains(value.schemaVersion), asset.jobID == nil, asset.mediaType == "image/png" else {
                     throw ProjectStoreError.invalidProject("原参考图的路径或身份无效。")
                 }
             } else if asset.role == .result {
@@ -2951,7 +2961,7 @@ private enum ProjectFiles {
                 guard dimension > 0 else { throw ProjectStoreError.invalidProject("媒体元数据包含无效尺寸或位深。") }
             }
             if let digest = asset.metadata.imageContentSHA256 {
-                guard [9, 11, 12, 16, 17, 18].contains(value.schemaVersion), asset.mediaType == "image/png", digest.utf8.count == 64,
+                guard [9, 11, 12, 16, 17, 18, 19].contains(value.schemaVersion), asset.mediaType == "image/png", digest.utf8.count == 64,
                       digest.utf8.allSatisfy({ (48...57).contains($0) || (97...102).contains($0) }) else {
                     throw ProjectStoreError.invalidProject("参考图摘要无效。")
                 }
@@ -2981,7 +2991,7 @@ private enum ProjectFiles {
             }
 
             if let reference = document.draft.referenceImageAssetID {
-                guard [9, 11, 12, 16, 17, 18].contains(value.schemaVersion), document.kind == .image,
+                guard [9, 11, 12, 16, 17, 18, 19].contains(value.schemaVersion), document.kind == .image,
                       let asset = assets[reference], asset.mediaType == "image/png",
                       asset.metadata.imageContentSHA256 != nil else {
                     throw ProjectStoreError.invalidProject("图像草稿的参考来源无效。")
@@ -3022,7 +3032,7 @@ private enum ProjectFiles {
                     throw ProjectStoreError.invalidProject("文字文档包含无效内容或图像引用。")
                 }
                 try TextDraftDocument.validate(textDraft.text)
-                if [10, 11, 12, 16, 17, 18].contains(value.schemaVersion) {
+                if [10, 11, 12, 16, 17, 18, 19].contains(value.schemaVersion) {
                     guard let sources = document.textSources else {
                         throw ProjectStoreError.invalidProject("文字资料记录缺失。")
                     }

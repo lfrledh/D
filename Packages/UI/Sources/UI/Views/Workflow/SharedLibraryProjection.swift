@@ -1,4 +1,5 @@
 import DWorkbench
+import DInference
 import Foundation
 
 /// Read-only facts come from registered operations and exact model identities. User tags do not enter this projection.
@@ -7,6 +8,7 @@ import Foundation
         switch kind { case .text: "d.model.language"; case .image: "d.image.generate"; case .music: "d.music.generate"; case .video: "d.video.generate"; case .pitch: "d.music.pitch" }
     }
     static func modelKind(_ descriptor: ModelNodeDescriptor) -> WorkflowModelKind? {
+        if externalProfile(descriptor) != nil { return .video }
         if TextModelProfilesIdentity.contains(descriptor.modelIdentity) { return .text }
         switch descriptor.id {
         case "flux2-klein-4b-q8": return .image
@@ -17,8 +19,20 @@ import Foundation
         }
     }
     private static var TextModelProfilesIdentity: Set<String> { Set(((try? TextModelProfiles.registered()) ?? []).map(\.id)) }
+    private static func externalProfile(_ descriptor: ModelNodeDescriptor) -> ExternalVideoExecutionProfile? {
+        ExternalVideoExecutionProfile.allCases.first { descriptor.id == "video.model." + $0.rawValue }
+    }
+    private static func identity(_ descriptor: ModelNodeDescriptor, kind: WorkflowModelKind) -> String {
+        kind.rawValue + ":" + (externalProfile(descriptor)?.modelIdentity ?? descriptor.revision)
+    }
+    private static func operation(_ choice: WorkflowModelChoice) -> String {
+        if choice.kind == .video, let profile = ExternalVideoExecutionProfile.allCases.first(where: { choice.id == "video:" + $0.modelIdentity }) {
+            return WorkflowVideoRecipe(profile: profile).operationID
+        }
+        return operation(choice.kind)
+    }
     static func descriptor(for choice: WorkflowModelChoice) -> ModelNodeDescriptor? {
-        ModelNodeCatalog.entries.first { modelKind($0) == choice.kind && choice.id == choice.kind.rawValue + ":" + $0.revision }
+        ModelNodeCatalog.entries.first { modelKind($0) == choice.kind && choice.id == identity($0, kind: choice.kind) }
     }
     static func modelKey(_ choice: WorkflowModelChoice) -> String { descriptor(for: choice)?.id ?? "model:" + choice.id }
     static func outputs(_ definition: WorkflowOperationDefinition) -> Set<WorkflowDataKind> {
@@ -32,7 +46,7 @@ import Foundation
         var result: [SharedLibraryBrowserEntry] = []
         var identities = Set<String>()
         for choice in models where identities.insert(choice.id).inserted {
-            guard let definition = registry.operation(operation(choice.kind))?.definition else { continue }
+            guard let definition = registry.operation(operation(choice))?.definition else { continue }
             let descriptor = descriptor(for: choice)
             result.append(.init(item: .init(key: modelKey(choice), title: descriptor?.title ?? choice.displayName,
                 detail: WorkflowCanvasPresentation.operationTitle(definition, language: language), kind: .model, role: "primary-model",
@@ -42,8 +56,8 @@ import Foundation
         }
         for descriptor in ModelNodeCatalog.entries {
             guard !result.contains(where: { $0.item.key == descriptor.id }) else { continue }
-            if let kind = modelKind(descriptor), let definition = registry.operation(operation(kind))?.definition {
-                let identity = kind.rawValue + ":" + descriptor.revision
+            if let kind = modelKind(descriptor), let definition = registry.operation(externalProfile(descriptor).map { WorkflowVideoRecipe(profile: $0).operationID } ?? operation(kind))?.definition {
+                let identity = identity(descriptor, kind: kind)
                 result.append(.init(item: .init(key: descriptor.id, title: descriptor.title,
                     detail: WorkflowCanvasPresentation.operationTitle(definition, language: language), kind: .model, role: "primary-model",
                     inputs: Set(definition.inputs.flatMap(\.kinds)), outputs: outputs(definition), readiness: .unprepared),
