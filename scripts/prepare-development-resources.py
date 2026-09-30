@@ -636,7 +636,7 @@ def main(argv: list[str] | None = None) -> int:
             "schemaVersion": 1,
             "status": status,
             "output": str(output),
-            "engines": list(ENGINE_NAMES),
+            "engines": list(engine_names(validate_prepared(output)["engines"])),
             "runtimeVerification": "not-run",
         })
         if not reported:

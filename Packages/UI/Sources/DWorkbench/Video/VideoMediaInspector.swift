@@ -162,8 +162,13 @@ public enum VideoMediaInspector {
             guard count.isFinite, count > 0, count <= 7200, abs(count - count.rounded()) < 0.000001 else {
                 throw VideoInspectionError.limit("导入视频帧数必须有界且与时长一致")
             }
+            // The container may encode 24 fps as 12288/512. Canonicalize the
+            // rational clock so imported and generated records describe the same media.
+            var a = Int64(frame.timescale), b = frame.value
+            while b != 0 { let remainder = a % b; a = b; b = remainder }
             expected = VideoMediaShape(width: Int(dimensions.width), height: Int(dimensions.height),
-                frameCount: Int(count.rounded()), frameRate: .init(numerator: frame.timescale, denominator: Int32(frame.value)))
+                frameCount: Int(count.rounded()), frameRate: .init(numerator: frame.timescale / Int32(a),
+                                                                 denominator: Int32(frame.value / a)))
             try expected.validateImportBudget()
         }
         guard descriptions.allSatisfy({ description in

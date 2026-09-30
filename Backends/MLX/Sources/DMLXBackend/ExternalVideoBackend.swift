@@ -76,6 +76,34 @@ public actor ExternalVideoBackend: InferenceBackend {
         guard !executing, lease == nil, drained else { throw InferenceFailure.backendFailed("Previous video execution has not been released.") }
         executing = true
         defer { executing = false }
+        do {
+            let result = try await executeOwned(request, emit: emit)
+            try finishAccessAfterDrain()
+            return result
+        } catch {
+            let primary = error
+            do { try finishAccessAfterDrain() }
+            catch {
+                let context = "\(primary.localizedDescription); access cleanup: \(error.localizedDescription)"
+                if case InferenceFailure.inputIntegrityChanged = primary {
+                    throw InferenceFailure.inputIntegrityChanged(context)
+                }
+                throw InferenceFailure.backendFailed(context)
+            }
+            throw primary
+        }
+    }
+
+    private func finishAccessAfterDrain() throws {
+        guard drained, let access = retainedAccess else { return }
+        // Clear the handle before the one-shot cleanup. A partially removed
+        // bootstrap is retained as evidence; it is not a running GPU process.
+        retainedAccess = nil
+        try access.finish()
+    }
+
+    private func executeOwned(_ request: InferenceRequest,
+                              emit: @escaping @Sendable (InferenceOutput) async throws -> Void) async throws -> InferenceResult {
         try Task.checkCancellation()
         let (video, manifest) = try inspect(request)
         let manifestURL = request.model.directory.appendingPathComponent(ExternalVideoModelManifest.filename)
@@ -114,7 +142,6 @@ public actor ExternalVideoBackend: InferenceBackend {
                 timeoutSeconds: configuration.timeoutSeconds, cancellationGraceSeconds: configuration.cancellationGraceSeconds).run()
         } catch {
             // Transport throws only before a live process exists.
-            try retainedAccess?.finish(); retainedAccess = nil
             throw error
         }
         drained = terminal.fullyDrained
@@ -136,14 +163,16 @@ public actor ExternalVideoBackend: InferenceBackend {
                 throw InferenceFailure.inputIntegrityChanged("Video frozen input verification failed: \(error.localizedDescription)")
             }
         }.value
-        try retainedAccess?.finish(); retainedAccess = nil
+        try finishAccessAfterDrain()
         switch terminal.reason {
         case .cancelled: throw CancellationError()
         case .timedOut: throw InferenceFailure.backendFailed("Video generation exceeded the explicit deadline. \(terminal.stderrTail)")
         case .cleanupUnconfirmed: throw InferenceFailure.backendFailed("Video process exited before all owned work completed. " + terminal.stderrTail)
         case .exited: break
         }
-        guard terminal.exitCode == 0 else { throw InferenceFailure.backendFailed("Video engine failed. \(terminal.stderrTail)") }
+        guard terminal.exitCode == 0 else {
+            throw InferenceFailure.backendFailed("Video engine failed (exit \(terminal.exitCode.map(String.init) ?? "unknown")). \(terminal.stderrTail)")
+        }
         try Task.checkCancellation()
         let (resultData, _) = try AudioFileSystem.readRegularFile(run.appendingPathComponent("result.json"), label: "video terminal result", maximumBytes: 2_097_152)
         var parser = AudioJSONParser(data: resultData, maximumDepth: 24)
@@ -158,13 +187,11 @@ public actor ExternalVideoBackend: InferenceBackend {
             throw InferenceFailure.backendFailed("Video terminal result does not match the frozen request.")
         }
         let candidate = run.appendingPathComponent("candidate.mp4")
-        _ = try AudioFileSystem.regularFile(candidate, label: "private video candidate", maximumBytes: nil)
-        let output = run.appendingPathComponent("output.mp4")
-        // Same-volume no-overwrite publication retains the private evidence and
-        // uses the existing Store task filename; release never deletes it.
-        guard Darwin.link(candidate.path, output.path) == 0 else {
-            throw InferenceFailure.backendFailed("Cannot publish video output without overwriting an existing file.")
+        guard case .string(let expectedDigest)? = result["sha256"] else {
+            throw InferenceFailure.backendFailed("Video terminal result has no candidate digest.")
         }
+        let output = run.appendingPathComponent("output.mp4")
+        try Self.copyVerifiedCandidate(candidate, to: output, expectedDigest: expectedDigest)
         let artifact = ArtifactReference(url: output, mediaType: "video/mp4")
         try await emit(.artifact(artifact))
         return .init(artifacts: [artifact], metadata: ["profile": configuration.profile.rawValue,
@@ -175,12 +202,67 @@ public actor ExternalVideoBackend: InferenceBackend {
 
     public func release() async {
         guard !executing, drained, let token = lease else { return }
-        if let access = retainedAccess {
-            do { try access.finish(); retainedAccess = nil }
-            catch { return } // Do not release ownership while access cleanup is uncertain.
-        }
         retainedModelScope?.stopAccessingSecurityScopedResource(); retainedModelScope = nil
         lease = nil; await MLXExecutionLease.shared.relinquish(token)
+    }
+    /// A new inode satisfies Store's no-hardlink rule. Read and hash the same
+    /// source fd, with bounded memory, and publish only after its frozen digest
+    /// matches the driver's result. Failed unpublished copies stay in this run.
+    static func copyVerifiedCandidate(_ source: URL, to destination: URL, expectedDigest: String,
+                                      afterCopy: (() throws -> Void)? = nil) throws {
+        guard expectedDigest.utf8.count == 64,
+              expectedDigest.utf8.allSatisfy({ (48...57).contains($0) || (97...102).contains($0) }) else {
+            throw InferenceFailure.backendFailed("Invalid video digest.")
+        }
+        let parent = try AudioFileSystem.openDirectory(source.deletingLastPathComponent(), label: "video candidate parent")
+        defer { Darwin.close(parent) }
+        guard source.deletingLastPathComponent() == destination.deletingLastPathComponent() else {
+            throw InferenceFailure.invalidRequest("Video publication must stay in its owned run.")
+        }
+        let input = Darwin.openat(parent, source.lastPathComponent, O_RDONLY | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK)
+        guard input >= 0 else { throw InferenceFailure.backendFailed("Cannot open video candidate.") }
+        defer { Darwin.close(input) }
+        var before = stat()
+        guard Darwin.fstat(input, &before) == 0, before.st_mode & S_IFMT == S_IFREG,
+              before.st_nlink == 1, before.st_size > 0 else {
+            throw InferenceFailure.backendFailed("Video candidate is not an independent regular file.")
+        }
+        let output = Darwin.openat(parent, destination.lastPathComponent, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0o600)
+        guard output >= 0 else { throw InferenceFailure.backendFailed("Cannot create video output without overwriting.") }
+        defer { Darwin.close(output) }
+        var hash = SHA256(), remaining = before.st_size
+        var buffer = [UInt8](repeating: 0, count: 1_048_576)
+        while remaining > 0 {
+            try Task.checkCancellation()
+            let count = buffer.withUnsafeMutableBytes { Darwin.read(input, $0.baseAddress, min($0.count, Int(remaining))) }
+            if count < 0, errno == EINTR { continue }
+            guard count > 0 else { throw InferenceFailure.backendFailed("Video candidate ended during publication.") }
+            hash.update(data: Data(buffer.prefix(count)))
+            try buffer.withUnsafeBytes { bytes in
+                var offset = 0
+                while offset < count {
+                    let written = Darwin.write(output, bytes.baseAddress!.advanced(by: offset), count - offset)
+                    if written < 0, errno == EINTR { continue }
+                    guard written > 0 else { throw InferenceFailure.backendFailed("Cannot write complete video output.") }
+                    offset += written
+                }
+            }
+            remaining -= off_t(count)
+        }
+        try afterCopy?()
+        var after = stat(), named = stat(), published = stat(), publishedName = stat()
+        let observedDigest = hash.finalize().map { String(format: "%02x", $0) }.joined()
+        guard observedDigest == expectedDigest,
+              Darwin.fstat(input, &after) == 0, AudioFileSystem.Identity(after) == AudioFileSystem.Identity(before),
+              Darwin.fstatat(parent, source.lastPathComponent, &named, AT_SYMLINK_NOFOLLOW) == 0,
+              AudioFileSystem.Identity(named) == AudioFileSystem.Identity(before),
+              Darwin.fstat(output, &published) == 0, published.st_size == before.st_size,
+              Darwin.fstatat(parent, destination.lastPathComponent, &publishedName, AT_SYMLINK_NOFOLLOW) == 0,
+              AudioFileSystem.Identity(publishedName) == AudioFileSystem.Identity(published),
+              published.st_nlink == 1, published.st_ino != before.st_ino else {
+            throw InferenceFailure.inputIntegrityChanged("Video candidate differs from the engine's verified result.")
+        }
+        guard Darwin.fsync(output) == 0 else { throw InferenceFailure.backendFailed("Cannot flush video output.") }
     }
     private static func digest(_ data: Data) -> String { SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined() }
     private func makeRunDirectory(_ id: UUID) throws -> URL {

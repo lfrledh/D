@@ -50,6 +50,14 @@ CONTRACTS = {
     ),
 }
 
+CONTRACTS["ExternalVideoEngine.dengine"] = (
+    "d-external-video-engine", "provider/app_video_driver.py", "native",
+    ("python/bin/python3", "provider/app_video_driver.py", "provider/d_audio_access.py",
+     "model-manifests/h3-fl2va-bf16.json", "native/h3", "native/h3_shaders.metal",
+     "native/ffmpeg", "native/ffprobe", "provider/Resources/h3-fl2va-bf16.json",
+     "provider/Resources/ltx23-bf16.json", "provider/Resources/ltx23-q8-test.json"),
+)
+
 
 def digest(path: Path) -> str:
     value = hashlib.sha256()
@@ -221,6 +229,29 @@ class DevelopmentResourceTests(unittest.TestCase):
         self.assertEqual(second.returncode, 0, second.stderr)
         self.assertEqual(json.loads(second.stdout)["status"], "reused")
         self.assertEqual(tree_snapshot(output), before)
+
+    def test_optional_external_video_is_explicit_verified_and_reusable(self) -> None:
+        name = "ExternalVideoEngine.dengine"
+        external = write_engine(self.inputs, name)
+        values = {key: str(value) for key, value in self.engines.items()}
+        values[name] = str(external)
+        self.write_config(values)
+        before = tree_snapshot(self.inputs)
+        prepared, result = self.prepare()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(set(json.loads(result.stdout)["engines"]), set(values))
+        destination = self.root / "native resources"
+        first = self.run_cli(EMBED, "--prepared", prepared, "--destination", destination)
+        self.assertEqual(first.returncode, 0, first.stderr)
+        snapshot = tree_snapshot(destination)
+        second = self.run_cli(EMBED, "--prepared", prepared, "--destination", destination)
+        self.assertEqual(second.returncode, 0, second.stderr)
+        self.assertEqual(tree_snapshot(destination), snapshot)
+        self.assertEqual(tree_snapshot(self.inputs), before)
+        (prepared / "Engines" / name / "native/h3").write_bytes(b"tampered")
+        rejected = self.run_cli(EMBED, "--prepared", prepared, "--destination", self.root / "must not exist")
+        self.assert_failure(rejected)
+        self.assertFalse((self.root / "must not exist").exists())
 
     def test_reuse_rejects_changed_input_even_when_config_is_unchanged(self) -> None:
         output, first = self.prepare()

@@ -100,6 +100,10 @@ struct VideoAVMediaInspectorTests {
             let shiftedAudio = directory.appendingPathComponent("shifted-audio.mp4")
             try writeAVFixture(to: shiftedAudio, frames: 9, sampleRate: 48_000,
                                audioOffset: 0.20)
+            let shiftedAudioTracks = try await AVURLAsset(url: shiftedAudio).loadTracks(withMediaType: .audio)
+            let shiftedAudioSegments = try await #require(shiftedAudioTracks.first).load(.segments)
+            let shiftedContent = try #require(shiftedAudioSegments.first(where: { !$0.isEmpty }))
+            #expect(shiftedContent.timeMapping.target.start.seconds > 0.15)
             await #expect(throws: (any Error).self) {
                 try await VideoMediaInspector.inspect(at: shiftedAudio, expected: request)
             }
@@ -135,7 +139,7 @@ struct VideoAVMediaInspectorTests {
             let altered = directory.appendingPathComponent("movie-duration-only.mp4")
             try writeAVFixture(to: valid, frames: 9, sampleRate: 48_000)
             let original = try Data(contentsOf: valid)
-            let changed = try changeOnlyMovieDuration(original, additionalSeconds: 0.25)
+            let changed = try changeOnlyMovieDuration(original, additionalSeconds: 0.05)
             #expect(changed.count == original.count)
             let changedBytes = zip(original, changed).filter { pair in pair.0 != pair.1 }.count
             #expect((1...8).contains(changedBytes))
@@ -275,6 +279,54 @@ struct VideoAVMediaInspectorTests {
             adapterOptions: .h3(streamWeights: false))
         #expect(throws: (any Error).self) { try VideoOutputInspectionPolicy.resolve(for: wrongOptions) }
     }
+    @Test func generatedAVPublishesReopensAndExportsActualBytes() async throws {
+        try await withAVFixtureDirectory { directory in
+            let project = directory.appendingPathComponent("影片.dproject")
+            let store = try await ProjectStore.create(at: project, name: "AV")
+            let video = avRequest(.ltx23Q8GemmaQ4, frames: 9)
+            let request = InferenceRequest(model: .init(directory: directory.appendingPathComponent("model"),
+                revision: ExternalVideoExecutionProfile.ltx23Q8GemmaQ4.modelIdentity), input: .video(video))
+            let output = try VideoProjectFixture.output(project: project, runID: request.id)
+            try writeAVFixture(to: output, frames: 9, sampleRate: 48_000)
+            let bytes = try await store.readWorkflowBackendMedia(.init(url: output, mediaType: "video/mp4"), request: request)
+            let published = try await store.publishWorkflowVideo(data: bytes, expected: video, name: "候选",
+                operationID: "d.video.ltx23", request: request)
+            #expect(published.asset.metadata.video?.hasAudio == true)
+            #expect(published.asset.metadata.video?.audioTrack?.sampleRate == 48_000)
+            try await store.close()
+            let reopened = try await ProjectStore.open(at: project)
+            #expect(try await reopened.workflowData(published.record.reference) == bytes)
+            let item = try await reopened.workflowMedia(published.record.reference)
+            #expect(item.1.metadata.video == published.asset.metadata.video)
+            let export = try await reopened.exportWorkflowAssets([published.record.reference], name: "AV-export",
+                exportID: UUID(), directory: directory)
+            #expect(export.names == ["1.mp4", "recipe.json"])
+            try await reopened.close()
+            #expect(try Data(contentsOf: output) == bytes)
+        }
+    }
+
+    @Test func version18MigrationBacksUpWithoutChangingExistingMedia() async throws {
+        try await withAVFixtureDirectory { directory in
+            let project = directory.appendingPathComponent("old.dproject")
+            let store = try await ProjectStore.create(at: project, name: "legacy")
+            let published = try await store.publishWorkflowAsset(data: Data("kept text".utf8), mediaType: "text/plain",
+                name: "original", operationID: "d.asset.import")
+            try await store.close()
+            let file = project.appendingPathComponent(ProjectStore.manifestFilename)
+            var json = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any])
+            json["schemaVersion"] = 18
+            let original = try JSONSerialization.data(withJSONObject: json, options: [.sortedKeys])
+            try original.write(to: file)
+            let reopened = try await ProjectStore.open(at: project)
+            #expect(await reopened.snapshot().schemaVersion == 19)
+            #expect(try Data(contentsOf: project.appendingPathComponent(ProjectStore.versionEighteenBackupFilename)) == original)
+            #expect(try await reopened.workflowData(published.record.reference) == Data("kept text".utf8))
+            try await reopened.close()
+            #expect(try Data(contentsOf: project.appendingPathComponent(published.asset.relativePath)) == Data("kept text".utf8))
+        }
+    }
+
 }
 
 private func avRequest(_ profile: ExternalVideoExecutionProfile, frames: Int) -> VideoRequest {
@@ -303,6 +355,24 @@ private func writeAVFixture(to url: URL, frames: Int, sampleRate: Int, channels:
     let executable = "/opt/homebrew/bin/ffmpeg"
     guard FileManager.default.isExecutableFile(atPath: executable) else {
         throw AVFixtureError("固定 FFmpeg 不可用：\(executable)")
+    }
+    if audioOffset != 0 || videoOffset != 0 {
+        let raw = url.deletingPathExtension().appendingPathExtension("unaltered.mp4")
+        try writeAVFixture(to: raw, frames: frames, sampleRate: sampleRate, channels: channels,
+                           audioTracks: audioTracks, dropVideoFrame: dropVideoFrame)
+        let offset = audioOffset != 0 ? audioOffset : videoOffset
+        let shift = Process()
+        shift.executableURL = URL(fileURLWithPath: executable)
+        // A pure remux preserves real shifted timestamps. The former lavfi
+        // offset was filled with silence by FFmpeg and did not create this case.
+        shift.arguments = ["-hide_banner", "-loglevel", "error", "-nostdin", "-n", "-copyts",
+                           "-itsoffset", String(offset), "-i", raw.path, "-i", raw.path,
+                           "-map", audioOffset != 0 ? "1:v" : "0:v",
+                           "-map", audioOffset != 0 ? "0:a" : "1:a", "-c", "copy", url.path]
+        shift.standardOutput = FileHandle.nullDevice; shift.standardError = FileHandle.nullDevice
+        try shift.run(); shift.waitUntilExit()
+        guard shift.terminationStatus == 0 else { throw AVFixtureError("Shifted remux failed") }
+        return
     }
     let process = Process()
     process.executableURL = URL(fileURLWithPath: executable)

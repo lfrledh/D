@@ -32,6 +32,9 @@ extension ExternalVideoBackendConfiguration {
     /// and precision are checked by the fixed provider before importing a model.
     func inspectPack(at directory: URL) throws -> Data {
         try confirmDeployment?()
+        guard profile != .ltx25BF16Full else {
+            throw InferenceFailure.invalidRequest("LTX 2.5 is a declared recipe, pending its gated component inventory and real validation; it is not ready to run.")
+        }
         try AudioFileSystem.validateDirectory(directory, label: "video model pack")
         let (data, _) = try AudioFileSystem.readRegularFile(directory.appendingPathComponent(ExternalVideoModelManifest.filename),
             label: "video pack manifest", maximumBytes: 16 * 1024)

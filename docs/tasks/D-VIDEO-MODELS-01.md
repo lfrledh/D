@@ -108,3 +108,21 @@ Lead另修私有产物检查：明确`-xerror`全量音视频解码、哈希后�
 Lead 正在接入 schema19 的可选音轨事实、冻结视频配方、模型选择和静态节点投影。此准备提交不是可交付App：媒体检查实现由AVMEDIA交回后整合；外部进程组transport/普通包部署仍在制作。新增TRANSPORT仅负责App的Swift进程组所有权，与已用尽预算的私有Python PROCESS实现不同，不修改或重置后者。新传输必须原子建立进程组，取消/超时后确认父进程回收、进程组消失与双管道排空；未知收尾不能释放重推理许可。临时/输出和受限路由在R4/TRANSPORT。H3RUN本次私有候选执行与资源准入已初交，尚待Lead复验及非实现者审核。
 
 根包首次新配方测试发现预期列表漏加Q8，修正枚举期望并保留旧身份；新清单交叉检查第一次将本地清单键误当执行profile，已明确两种身份的映射，revision及精度边界检查未降低。测试失败原日志均保留R4/lead/root-tests。
+
+### r4 2026-09-30 包部署与验证中间点
+
+当前组合HEAD `2299e75a2a1d1857267d71f6022383e4e4111a0d`，另有Lead未提交的后端保护、媒体检查、打包脚本/测试及文档。不是干净受测SHA，也未源接纳。CANVAS初交+两轮修复、APPDRIVER初交+两轮修复完成；AVMEDIA初交+两轮后由Lead有界修正有理帧率/音轨偏移夹具与时间容差。来源和旧失败保留R4，不再给这些Worker追加普通轮次。
+
+- `lead/external-video-cpu-03.log`：实际12项/2 suites通过，覆盖独立inode/hash/目的路径替换、bootstrap残留、输入变更优先、原子进程组取消/超时/子孙排空。并非真实模型。
+- `lead/ui-tests/test-09-store-canvas-math.log`：AV/Store12项与画布数学5项通过；schema18备份与音轨保存/重开/导出使用隔离夹具。`test-08`虽进程0，hosting未出完成记录，标未完成。
+- `lead/prepare-engine-08.log`：固定LTX源码124项及两项tokenizer补丁比对，H3源码/档案/Metal摘要比对；复制闭包中的Mach-O依赖均在包内或系统内。内部开发包不代表依赖分发审查完成。
+- `lead/app-build-01.log` 与 `lead/app-signature-01.json`：普通D Nodes构建、深层签名核查通过。产物`R4/lead/app-build/Build/Products/Debug/D.app`，仅隔离产物，没有启动/覆盖普通D。
+- `lead/real-ltx-01.log`：正式Runtime真实权重验证已启动，尚待结果；生成/准入取消/恢复三个周期不能提前写通过。
+- `lead/gui-locked.json`：工具明确返回Mac锁定，H32暂存真实鼠标/新模型节点界面验收。无新系统权限请求，不自动关闭旧测试实例。
+
+准备资源在`R4/delivery/resources-final`，本树忽略的`Development/Development.local.xcconfig`指向该目录并沿用已有开发身份；源码的准备脚本可重建资源，权重不在App。源个人scheme摘要/未暂存状态继续保护，普通用户App与旧候选未动。
+
+
+本中间点后的实际部署失败与修正：`real-ltx-01`在导入PIL依赖时SIGKILL，未进模型计算。`python-import-01`和`python-import-verbose-01`定位，`dylib-signature-failures-01.json`确认重定位的原生库签名失效；外层App `codesign --deep`成功不证明Resources内这些库可加载。Lead在新准备目录复用现有`_sign_engine`、既有开发身份/Team签署新副本（没有改签名方案/普通App/来源目录）。`prepare-engine-09`后`python-import-02`真实PIL/MLX/LTX CLI导入通过；`app-build-02`为普通工程重新构建。模型验证尚待重新运行，旧失败不删除。
+
+非实现者审阅另发现复制后来源绑定及`@executable_path`入口歧义，已在准备器目标副本做固定源码摘要/文件集合精确核对，依Python/native实际入口解析，共享库歧义拒绝；`packaging-tests-01`三个反例通过。`ui-tests/test-10-recipes.log`27项/3 suites通过（节点配方3、既有注册12、AV/Store12）；不是完整hosting。`mlx-build-04`编译通过，最新代码另补真实非零退出码到错误信息。
