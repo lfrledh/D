@@ -16,6 +16,7 @@ from pathlib import Path
 import re
 import selectors
 import stat
+import struct
 import subprocess
 import sys
 import tempfile
@@ -38,6 +39,8 @@ REVISIONS = {
 WIRE_FIELDS = frozenset(("schema_version", "profile", "prompt", "negative_prompt", "width",
                          "height", "frames", "steps", "fps", "seed", "stream_weights",
                          "cfg_scale", "stg_scale"))
+FRAME_FIELDS = frozenset(("file", "width", "height", "byte_count", "content_sha256"))
+FRAME_LIMIT = 64 * 1024 * 1024
 MAX_LOG = 4 * 1024 * 1024
 
 
@@ -147,7 +150,9 @@ def _wire(raw: bytes) -> dict:
     digest = root["manifest_sha256"]
     if type(digest) is not str or re.fullmatch(r"[0-9a-f]{64}", digest) is None:
         raise ValueError("manifest_sha256 must be lowercase SHA-256")
-    request = _exact(root["request"], WIRE_FIELDS, "request")
+    request = root["request"]
+    if type(request) is not dict or not WIRE_FIELDS <= set(request) or not set(request) <= WIRE_FIELDS | {"first_frame", "last_frame"}:
+        raise ValueError("request fields differ from the fixed schema")
     _integer(request["schema_version"], "request schema_version", 1, 1)
     profile = request["profile"]
     if type(profile) is not str or profile not in REVISIONS:
@@ -164,9 +169,55 @@ def _wire(raw: bytes) -> dict:
         _number(request[field], field)
     if request["fps"] <= 0 or type(request["stream_weights"]) is not bool:
         raise ValueError("fps must be positive and stream_weights boolean")
+    for role in ("first", "last"):
+        field = role + "_frame"
+        if field in request:
+            frame = _exact(request[field], FRAME_FIELDS, field)
+            if frame["file"] != role + "-frame.png":
+                raise ValueError(f"{field} must name its private role file")
+            _integer(frame["width"], field + " width", 1, 2**31 - 1)
+            _integer(frame["height"], field + " height", 1, 2**31 - 1)
+            _integer(frame["byte_count"], field + " byte_count", 1, FRAME_LIMIT)
+            if type(frame["content_sha256"]) is not str or re.fullmatch(r"[0-9a-f]{64}", frame["content_sha256"]) is None:
+                raise ValueError(f"{field} must have a lowercase SHA-256")
+    if profile != H3 and "last_frame" in request:
+        raise ValueError("LTX does not support last-frame conditioning")
     # Rebuild immediately. No caller-owned mutable JSON values survive validation.
     return {"schema_version": 1, "run_id": run_id, "manifest_sha256": digest,
-            "request": {key: request[key] for key in WIRE_FIELDS}}
+            "request": {key: request[key] for key in request}}
+
+
+def _frame_snapshots(request: dict, run: Path) -> dict[str, tuple[Path, tuple[bytes, tuple[int, ...], str]]]:
+    frames = {}
+    file_ids = set()
+    for role in ("first", "last"):
+        field = role + "_frame"
+        if field not in request:
+            continue
+        expected = request[field]
+        path = _physical(run / expected["file"], field, kind="file")
+        named = path.lstat()
+        file_id = (named.st_dev, named.st_ino)
+        if named.st_nlink != 1 or file_id in file_ids:
+            raise ValueError(f"{field} must be an independent private file")
+        file_ids.add(file_id)
+        raw, identity, digest = _read_snapshot(path, FRAME_LIMIT)
+        # PNG signature and IHDR are enough here to reject a mismatched wire;
+        # Swift has already fully decoded the frozen source before launch.
+        if (len(raw) < 33 or raw[:8] != b"\x89PNG\r\n\x1a\n" or
+                raw[8:16] != b"\x00\x00\x00\rIHDR" or
+                struct.unpack(">II", raw[16:24]) != (expected["width"], expected["height"]) or
+                len(raw) != expected["byte_count"] or digest != expected["content_sha256"]):
+            raise ValueError(f"{field} bytes or PNG geometry differ from frozen wire")
+        frames[role] = (path, (raw, identity, digest))
+    return frames
+
+
+def _unchanged_frames(frames: dict) -> None:
+    for path, snapshot in frames.values():
+        if path.lstat().st_nlink != 1:
+            raise ValueError(f"{path.name} lost independent-file status")
+        _unchanged(path, snapshot, FRAME_LIMIT)
 
 
 def _manifest(raw: bytes, profile: str) -> dict:
@@ -307,7 +358,7 @@ def _verify_media(output: Path, request: dict, *, ffmpeg: Path, ffprobe: Path, r
 
 
 def _execute(request: dict, *, pack: Path, run: Path, ffmpeg: Path, ffprobe: Path,
-             h3_engine: Path | None, h3_shader: Path | None) -> tuple[dict, dict]:
+             h3_engine: Path | None, h3_shader: Path | None, frames: dict) -> tuple[dict, dict]:
     profile = request["profile"]
     output = run / "candidate.mp4"
     if profile == LTX_25:
@@ -322,7 +373,9 @@ def _execute(request: dict, *, pack: Path, run: Path, ffmpeg: Path, ffprobe: Pat
         from h3_job import _digest, _copy_shader, SHADER_SHA256
         import threading
         mapped = _h3_request(request)
-        plan = build_plan(mapped, engine=str(h3_engine), model=str(model), output=str(output))
+        plan = build_plan(mapped, engine=str(h3_engine), model=str(model), output=str(output),
+                          first_frame=str(frames["first"][0]) if "first" in frames else None,
+                          last_frame=str(frames["last"][0]) if "last" in frames else None)
         admission = admit_h3_fl2va(model)
         engine_digest = _digest(h3_engine, cancelled=lambda: False)
         if _digest(h3_shader, cancelled=lambda: False) != SHADER_SHA256:
@@ -334,6 +387,7 @@ def _execute(request: dict, *, pack: Path, run: Path, ffmpeg: Path, ffprobe: Pat
                 del environment[key]
         environment.update(H3_DIT_F32_FINAL="1", H3_FFMPEG=str(ffmpeg), H3_FFPROBE=str(ffprobe),
                            H3_PROFILE="1", H3_NAX="0", H3_CPU_SAMPLER="1")
+        _unchanged_frames(frames)
         process = _run_child(plan["argv"], "engine", 7200, run, environment)
         source = {"expected_engine_source": f"antirez/h3.c@{UPSTREAM_REVISION}",
                   "engine_sha256": engine_digest, "shader_sha256": SHADER_SHA256,
@@ -347,11 +401,14 @@ def _execute(request: dict, *, pack: Path, run: Path, ffmpeg: Path, ffprobe: Pat
     from ltx_plan import build_plan
     from ltx_job import _confirm_tokenizer_patch
     text_encoder = _physical(pack / "text_encoder", "text encoder", kind="directory")
-    plan = build_plan(request, engine=sys.executable, model=model, text_encoder=text_encoder, output=output)
+    plan_request = {key: value for key, value in request.items() if key in WIRE_FIELDS}
+    plan = build_plan(plan_request, engine=sys.executable, model=model, text_encoder=text_encoder, output=output,
+                      first_frame=str(frames["first"][0]) if "first" in frames else None)
     admission = admit_ltx23(profile, model=model, text_encoder=text_encoder)
     upstream = _confirm_tokenizer_patch(Path(sys.executable))
     previous = sys.argv
     try:
+        _unchanged_frames(frames)
         sys.argv = plan["argv"]
         from ltx_pipelines_mlx.cli import main as ltx_main
         try:
@@ -439,17 +496,26 @@ def run(args) -> int:
                 record.update(run_id=wire["run_id"], request_sha256=request_snapshot[2],
                               manifest_sha256=manifest_snapshot[2], profile=request["profile"],
                               source_request=request.copy())
+                frames = _frame_snapshots(request, run_dir)
+                if frames:
+                    record["frame_conditions"] = {
+                        role + "_frame_sha256": snapshot[1][2] for role, snapshot in frames.items()
+                    }
                 _assert_free(run_dir)
                 previous_cwd = Path.cwd()
                 os.chdir(run_dir)
                 try:
-                    admission, source = _execute(request, pack=pack, run=run_dir, ffmpeg=ffmpeg,
-                                                 ffprobe=ffprobe, h3_engine=h3_engine, h3_shader=h3_shader)
-                    record.update(admission=admission, source=source)
-                    verified = _verify_media(run_dir / "candidate.mp4", request, ffmpeg=ffmpeg,
-                                             ffprobe=ffprobe, run=run_dir, profile=request["profile"])
-                    _unchanged(request_path, request_snapshot, 1024 * 1024)
-                    _unchanged(manifest_path, manifest_snapshot, 16 * 1024)
+                    try:
+                        admission, source = _execute(request, pack=pack, run=run_dir, ffmpeg=ffmpeg,
+                                                     ffprobe=ffprobe, h3_engine=h3_engine, h3_shader=h3_shader,
+                                                     frames=frames)
+                        record.update(admission=admission, source=source)
+                        verified = _verify_media(run_dir / "candidate.mp4", request, ffmpeg=ffmpeg,
+                                                 ffprobe=ffprobe, run=run_dir, profile=request["profile"])
+                    finally:
+                        _unchanged_frames(frames)
+                        _unchanged(request_path, request_snapshot, 1024 * 1024)
+                        _unchanged(manifest_path, manifest_snapshot, 16 * 1024)
                     record.update(candidate_file="candidate.mp4", sha256=verified["sha256"],
                                   media=verified["media"], media_verified=True)
                     _write_result(run_dir / "result.json", record)

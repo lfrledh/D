@@ -34,6 +34,9 @@ public enum ExternalVideoExecutionProfile: String, Sendable, Codable, CaseIterab
             }
 
         case .ltx23BF16Full, .ltx23Q8GemmaQ4, .ltx25BF16Full:
+            guard request.lastFrame == nil else {
+                throw InferenceFailure.invalidRequest("LTX does not support a last-frame condition.")
+            }
             guard case .some(.ltx(_, let spatiotemporalGuidance)) = request.adapterOptions else {
                 throw InferenceFailure.invalidRequest("LTX requires LTX adapter options.")
             }

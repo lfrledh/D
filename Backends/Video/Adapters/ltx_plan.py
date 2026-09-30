@@ -135,16 +135,20 @@ def _checked_request(request: object) -> dict:
     return dict(request)
 
 
-def build_plan(request, *, engine, model, output, text_encoder=None):
+def build_plan(request, *, engine, model, output, text_encoder=None,
+               first_frame=None, last_frame=None):
     """Return argv, environment and provenance for an offline LTX dev run.
 
     All checks are read-only. Path existence is time-sensitive; this plan is
     neither an execution authorization nor complete resource/precision proof.
     """
     checked = _checked_request(request)
+    if last_frame is not None:
+        raise ValueError("LTX does not support a last-frame condition")
     engine_path = _local_file(engine, "engine", executable=True)
     model_path = _local_directory(model, "model")
     output_path = _unused_output(output)
+    image_path = _local_file(first_frame, "first_frame") if first_frame is not None else None
 
     if checked["profile"].startswith("ltx-2.3-"):
         video_decoder = "conv"
@@ -185,6 +189,8 @@ def build_plan(request, *, engine, model, output, text_encoder=None):
         f"--cfg-scale={checked['cfg_scale']}",
         f"--stg-scale={checked['stg_scale']}",
     ]
+    if image_path is not None:
+        argv.extend(["--image", str(image_path), "0", "1.0", "33"])
     if checked["stream_weights"]:
         argv.append("--low-ram")
 
@@ -210,6 +216,8 @@ def build_plan(request, *, engine, model, output, text_encoder=None):
         "weight_loading": "transformer-block-streaming" if checked["stream_weights"] else "eager",
         "quantized_test_profile": checked["profile"].endswith("-test-v1"),
         "request": checked,
+        "frame_conditions": {"first_frame": str(image_path) if image_path else None,
+                             "first_transform": "one-stage-first-frame:0:1.0:33" if image_path else None},
         "plan_only": True,
         "resources_and_precision_verified": False,
     }

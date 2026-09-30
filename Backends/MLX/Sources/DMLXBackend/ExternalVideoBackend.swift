@@ -111,11 +111,17 @@ public actor ExternalVideoBackend: InferenceBackend {
         guard frozenManifest == manifest else { throw InferenceFailure.inputIntegrityChanged("Video pack changed during admission.") }
         let token = UUID(); try await MLXExecutionLease.shared.acquire(token); lease = token
         if request.model.directory.startAccessingSecurityScopedResource() { retainedModelScope = request.model.directory }
+        let scopedFrames = [video.firstFrame, video.lastFrame].compactMap { $0?.url }
+            .filter { $0.startAccessingSecurityScopedResource() }
+        defer { for url in scopedFrames { url.stopAccessingSecurityScopedResource() } }
         let run = try makeRunDirectory(request.id)
+        let firstFrame = try video.firstFrame.map { try Self.freezeFrame($0, role: "first", in: run) }
+        let lastFrame = try video.lastFrame.map { try Self.freezeFrame($0, role: "last", in: run) }
         let input = run.appendingPathComponent("request.json")
         let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
         let wire = try ExternalVideoWireRequest(id: request.id, profile: configuration.profile, video: video,
-                                              manifestSHA256: Self.digest(manifest))
+                                              manifestSHA256: Self.digest(manifest),
+                                              firstFrame: firstFrame?.wire, lastFrame: lastFrame?.wire)
         let bytes = try encoder.encode(wire)
         guard bytes.count <= 1_048_576 else { throw InferenceFailure.invalidRequest("Video request exceeds 1 MiB.") }
         try AudioFileSystem.writeExclusive(bytes, to: input)
@@ -159,6 +165,8 @@ public actor ExternalVideoBackend: InferenceBackend {
                       nowInput == bytes, nowInputIdentity == inputIdentity else {
                     throw InferenceFailure.inputIntegrityChanged("Video request or model manifest changed during execution.")
                 }
+                try firstFrame?.recheck()
+                try lastFrame?.recheck()
             } catch {
                 throw InferenceFailure.inputIntegrityChanged("Video frozen input verification failed: \(error.localizedDescription)")
             }
@@ -186,6 +194,15 @@ public actor ExternalVideoBackend: InferenceBackend {
               result["candidate_file"] == .string("candidate.mp4") else {
             throw InferenceFailure.backendFailed("Video terminal result does not match the frozen request.")
         }
+        if firstFrame != nil || lastFrame != nil {
+            let expectedFirst: AudioJSONValue? = firstFrame.map { .string($0.reference.contentSHA256) }
+            let expectedLast: AudioJSONValue? = lastFrame.map { .string($0.reference.contentSHA256) }
+            guard case .object(let conditions)? = result["frame_conditions"],
+                  conditions["first_frame_sha256"] == expectedFirst,
+                  conditions["last_frame_sha256"] == expectedLast else {
+                throw InferenceFailure.backendFailed("Video result omitted frozen frame provenance.")
+            }
+        }
         let candidate = run.appendingPathComponent("candidate.mp4")
         guard case .string(let expectedDigest)? = result["sha256"] else {
             throw InferenceFailure.backendFailed("Video terminal result has no candidate digest.")
@@ -194,10 +211,19 @@ public actor ExternalVideoBackend: InferenceBackend {
         try Self.copyVerifiedCandidate(candidate, to: output, expectedDigest: expectedDigest)
         let artifact = ArtifactReference(url: output, mediaType: "video/mp4")
         try await emit(.artifact(artifact))
-        return .init(artifacts: [artifact], metadata: ["profile": configuration.profile.rawValue,
+        var metadata = ["profile": configuration.profile.rawValue,
             "modelRevision": configuration.profile.modelRevision, "modelIdentity": configuration.profile.modelIdentity,
             "streamWeights": String(wire.request.stream_weights), "recordPath": run.appendingPathComponent("result.json").path,
-            "audio": configuration.profile == .h3BF16Full ? "AAC 32000 stereo" : "AAC 48000 stereo"])
+            "audio": configuration.profile == .h3BF16Full ? "AAC 32000 stereo" : "AAC 48000 stereo"]
+        if let firstFrame {
+            metadata["firstFrameSHA256"] = firstFrame.reference.contentSHA256
+            metadata["firstFrameSourceURL"] = firstFrame.reference.url.absoluteString
+        }
+        if let lastFrame {
+            metadata["lastFrameSHA256"] = lastFrame.reference.contentSHA256
+            metadata["lastFrameSourceURL"] = lastFrame.reference.url.absoluteString
+        }
+        return .init(artifacts: [artifact], metadata: metadata)
     }
 
     public func release() async {
@@ -265,6 +291,59 @@ public actor ExternalVideoBackend: InferenceBackend {
         guard Darwin.fsync(output) == 0 else { throw InferenceFailure.backendFailed("Cannot flush video output.") }
     }
     private static func digest(_ data: Data) -> String { SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined() }
+    private struct FrozenFrame: Sendable {
+        let reference: VideoFrameReference
+        let sourceIdentity: AudioFileSystem.Identity
+        let frozenURL: URL
+        let frozenIdentity: AudioFileSystem.Identity
+        var wire: ExternalVideoWireRequest.FrameCondition {
+            .init(file: frozenURL.lastPathComponent, width: reference.width, height: reference.height,
+                  byte_count: reference.byteCount, content_sha256: reference.contentSHA256)
+        }
+        func recheck() throws {
+            do {
+                let (source, sourceNow) = try AudioFileSystem.readRegularFile(reference.url,
+                    label: "video source frame", maximumBytes: 64 * 1_048_576)
+                let (frozen, frozenNow) = try AudioFileSystem.readRegularFile(frozenURL,
+                    label: "video frozen frame", maximumBytes: 64 * 1_048_576)
+                let namedSource = try AudioFileSystem.regularFile(reference.url,
+                    label: "video source frame", maximumBytes: nil)
+                let namedFrozen = try AudioFileSystem.regularFile(frozenURL,
+                    label: "video frozen frame", maximumBytes: nil)
+                guard sourceNow == sourceIdentity, frozenNow == frozenIdentity,
+                      namedSource == sourceIdentity, namedFrozen == frozenIdentity,
+                      source == frozen, UInt64(source.count) == reference.byteCount,
+                      ExternalVideoBackend.digest(source) == reference.contentSHA256 else {
+                    throw InferenceFailure.inputIntegrityChanged("Video frame condition changed during execution.")
+                }
+            } catch {
+                throw InferenceFailure.inputIntegrityChanged("Video frame condition verification failed: \(error.localizedDescription)")
+            }
+        }
+    }
+    private static func freezeFrame(_ reference: VideoFrameReference, role: String, in run: URL) throws -> FrozenFrame {
+        try reference.validate()
+        guard !AudioFileSystem.overlaps(run, reference.url) else {
+            throw InferenceFailure.invalidRequest("Video frame source overlaps its private output.")
+        }
+        let (data, identity) = try AudioFileSystem.readRegularFile(reference.url,
+            label: "video \(role) frame", maximumBytes: 64 * 1_048_576)
+        let namedSource = try AudioFileSystem.regularFile(reference.url,
+            label: "video \(role) frame", maximumBytes: nil)
+        guard namedSource == identity,
+              UInt64(data.count) == reference.byteCount, digest(data) == reference.contentSHA256 else {
+            throw InferenceFailure.inputIntegrityChanged("Video \(role) frame differs from its frozen reference.")
+        }
+        try ImagePNG.validate(data, width: reference.width, height: reference.height)
+        let frozenURL = run.appendingPathComponent("\(role)-frame.png")
+        try AudioFileSystem.writeExclusive(data, to: frozenURL)
+        let (saved, savedIdentity) = try AudioFileSystem.readRegularFile(frozenURL,
+            label: "frozen video \(role) frame", maximumBytes: 64 * 1_048_576)
+        guard saved == data, savedIdentity != identity else {
+            throw InferenceFailure.inputIntegrityChanged("Frozen video frame copy is not independent.")
+        }
+        return .init(reference: reference, sourceIdentity: identity, frozenURL: frozenURL, frozenIdentity: savedIdentity)
+    }
     private func makeRunDirectory(_ id: UUID) throws -> URL {
         let root = try AudioFileSystem.openDirectory(configuration.artifactDirectory, label: "video artifact root")
         defer { Darwin.close(root) }
@@ -283,6 +362,13 @@ struct ExternalVideoWireRequest: Encodable {
     let run_id: String
     let manifest_sha256: String
     let request: Parameters
+    struct FrameCondition: Encodable {
+        let file: String
+        let width: Int
+        let height: Int
+        let byte_count: UInt64
+        let content_sha256: String
+    }
     struct Parameters: Encodable {
         let schema_version = 1
         let profile: String, prompt: String, negative_prompt: String
@@ -291,8 +377,11 @@ struct ExternalVideoWireRequest: Encodable {
         let seed: UInt64
         let stream_weights: Bool
         let cfg_scale: Float, stg_scale: Float
+        let first_frame: FrameCondition?
+        let last_frame: FrameCondition?
     }
-    init(id: UUID, profile: ExternalVideoExecutionProfile, video: VideoRequest, manifestSHA256: String) throws {
+    init(id: UUID, profile: ExternalVideoExecutionProfile, video: VideoRequest, manifestSHA256: String,
+         firstFrame: FrameCondition? = nil, lastFrame: FrameCondition? = nil) throws {
         try profile.validate(video)
         run_id = id.uuidString.lowercased(); manifest_sha256 = manifestSHA256
         let stream: Bool, stg: Float
@@ -304,6 +393,7 @@ struct ExternalVideoWireRequest: Encodable {
         request = .init(profile: profile.rawValue, prompt: video.prompt, negative_prompt: video.negativePrompt,
             width: video.width, height: video.height, frames: video.frameCount, steps: video.steps,
             fps: Double(video.frameRate.numerator) / Double(video.frameRate.denominator), seed: video.seed,
-            stream_weights: stream, cfg_scale: video.guidanceScale, stg_scale: stg)
+            stream_weights: stream, cfg_scale: video.guidanceScale, stg_scale: stg,
+            first_frame: firstFrame, last_frame: lastFrame)
     }
 }

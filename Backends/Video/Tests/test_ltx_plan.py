@@ -113,6 +113,19 @@ class LTXPlanTests(unittest.TestCase):
         self.assertEqual(streamed_25["argv"], eager_25["argv"] + ["--low-ram"])
         self.assertEqual(streamed_25["provenance"]["video_decoder"], "diffusion")
 
+    def test_first_frame_exact_tuple_and_last_frame_rejection(self):
+        first = self.root / "首帧 🎞️ with spaces.png"
+        first.write_bytes(b"fixture")
+        eager = self.plan(_request(stream=False), first_frame=first)
+        streamed = self.plan(_request(stream=True), first_frame=first)
+        position = eager["argv"].index("--image")
+        self.assertEqual(eager["argv"][position:position + 5],
+                         ["--image", str(first), "0", "1.0", "33"])
+        self.assertEqual(streamed["argv"], eager["argv"] + ["--low-ram"])
+        self.assertEqual(eager["provenance"]["frame_conditions"]["first_frame"], str(first))
+        with self.assertRaisesRegex(ValueError, "last-frame"):
+            self.plan(last_frame=first)
+
     def test_empty_negative_prompt_and_finite_scales_are_not_rewritten(self):
         request = _request()
         request["negative_prompt"] = ""

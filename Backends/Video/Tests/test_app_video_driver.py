@@ -9,6 +9,7 @@ import json
 import os
 from pathlib import Path
 import stat
+import struct
 import sys
 import tempfile
 import textwrap
@@ -16,6 +17,7 @@ import types
 import unittest
 from unittest import mock
 import uuid
+import zlib
 
 
 ADAPTERS = Path(__file__).resolve().parents[1] / "Adapters"
@@ -74,7 +76,7 @@ class AppVideoDriverTests(unittest.TestCase):
             pathlib.Path(args['output']).write_bytes(b'SIM-H3 candidate')
             pathlib.Path('engine-observation.json').write_text(json.dumps({
                 'pgid':os.getpgid(0),'parent_pgid':os.getpgid(os.getppid()),
-                'seed':args['seed'],'tmpdir':os.environ['TMPDIR'],
+                'seed':args['seed'],'tmpdir':os.environ['TMPDIR'], 'argv':sys.argv[1:],
                 'h3':{key:value for key,value in os.environ.items() if key.startswith('H3_')}}))
             print('plain H3 diagnostic, not NDJSON')
         ''')
@@ -136,6 +138,86 @@ class AppVideoDriverTests(unittest.TestCase):
 
     def _result(self):
         return json.loads((self.task / "result.json").read_text())
+
+    def _frame(self, role, *, name=None):
+        def chunk(kind, value):
+            return struct.pack(">I", len(value)) + kind + value + struct.pack(">I", zlib.crc32(kind + value))
+        png = (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", 1, 1, 8, 6, 0, 0, 0))
+               + chunk(b"IDAT", zlib.compress(b"\0\xff\0\0\xff")) + chunk(b"IEND", b""))
+        path = self.task / (name or role + "-frame.png")
+        path.write_bytes(png)
+        value = {"file": role + "-frame.png", "width": 1, "height": 1,
+                 "byte_count": len(png), "content_sha256": hashlib.sha256(png).hexdigest()}
+        self.request[role + "_frame"] = value
+        self._write_wire()
+        return path, value
+
+    def test_h3_both_private_frames_reach_actual_child_and_record(self):
+        first, first_value = self._frame("first")
+        last, last_value = self._frame("last")
+        admission, shader = self._h3_patches()
+        with admission, shader:
+            self.assertEqual(driver.run(self._args()), 0)
+        observed = json.loads((self.task / "engine-observation.json").read_text())
+        self.assertIn(f"--first-frame={first}", observed["argv"])
+        self.assertIn(f"--last-frame={last}", observed["argv"])
+        self.assertIn("--ssd-streaming", observed["argv"])
+        self.assertEqual(self._result()["frame_conditions"], {
+            "first_frame_sha256": first_value["content_sha256"],
+            "last_frame_sha256": last_value["content_sha256"]})
+
+    def test_ltx_first_private_frame_reaches_actual_cli_and_last_is_rejected(self):
+        import ltx_admission, ltx_job
+        self.profile = driver.LTX_FULL
+        self.request = self._request(self.profile)
+        first, value = self._frame("first")
+        called = []
+        module = types.ModuleType("ltx_pipelines_mlx")
+        cli = types.ModuleType("ltx_pipelines_mlx.cli")
+        def main():
+            called.extend(sys.argv)
+            (self.task / "candidate.mp4").write_bytes(b"SIM-LTX candidate")
+            return 0
+        cli.main = main
+        with mock.patch.dict(sys.modules, {"ltx_pipelines_mlx": module, "ltx_pipelines_mlx.cli": cli}), \
+             mock.patch.object(ltx_admission, "admit_ltx23", return_value={"simulated": True}), \
+             mock.patch.object(ltx_job, "_confirm_tokenizer_patch", return_value="simulated patch"):
+            self.assertEqual(driver.run(self._args(h3=False)), 0)
+        index = called.index("--image")
+        self.assertEqual(called[index:index + 5], ["--image", str(first), "0", "1.0", "33"])
+        self.assertEqual(self._result()["frame_conditions"], {"first_frame_sha256": value["content_sha256"]})
+
+    def test_bad_or_symlinked_private_frame_is_rejected_before_engine(self):
+        first, value = self._frame("first")
+        correct_digest = value["content_sha256"]
+        self.request["first_frame"]["content_sha256"] = "0" * 64
+        self._write_wire()
+        with mock.patch.object(driver, "_execute") as execute:
+            self.assertEqual(driver.run(self._args()), 2)
+            execute.assert_not_called()
+        (self.task / "result.json").unlink()
+        self.request["first_frame"]["content_sha256"] = correct_digest
+        self._write_wire()
+        original = self.task / "held.png"
+        first.rename(original)
+        first.symlink_to(original)
+        with mock.patch.object(driver, "_execute") as execute:
+            self.assertEqual(driver.run(self._args()), 2)
+            execute.assert_not_called()
+
+    def test_private_frame_replacement_after_child_fails_terminal(self):
+        first, _ = self._frame("first")
+        admission, shader = self._h3_patches()
+        real_child = driver._run_child
+        def replaced(*args, **kwargs):
+            result = real_child(*args, **kwargs)
+            first.unlink()
+            first.write_bytes(b"replacement")
+            return result
+        with admission, shader, mock.patch.object(driver, "_run_child", side_effect=replaced):
+            self.assertEqual(driver.run(self._args()), 2)
+        self.assertFalse(self._result()["media_verified"])
+        self.assertIn("changed", self._result()["error"]["message"])
 
     def test_h3_success_frozen_seed_inherited_group_and_plain_diagnostic(self):
         admission, shader = self._h3_patches()
