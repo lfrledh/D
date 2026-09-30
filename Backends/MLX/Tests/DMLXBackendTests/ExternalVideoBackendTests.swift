@@ -130,6 +130,13 @@ struct ExternalVideoBackendTests {
             _ = try await backend.execute(fixture.request(firstFrame: wrong)) { _ in }
         }
         await backend.release()
+        let dimensions = VideoFrameReference(url: frame.url, width: 3, height: frame.height,
+            byteCount: frame.byteCount, contentSHA256: frame.contentSHA256)
+        let dimensionBackend = try fixture.backend(mode: "success")
+        await #expect(throws: InferenceFailure.self) {
+            _ = try await dimensionBackend.execute(fixture.request(firstFrame: dimensions)) { _ in }
+        }
+        await dimensionBackend.release()
         let held = fixture.root.appendingPathComponent("held-source.png")
         try FileManager.default.moveItem(at: frame.url, to: held)
         try FileManager.default.createSymbolicLink(at: frame.url, withDestinationURL: held)
@@ -138,6 +145,28 @@ struct ExternalVideoBackendTests {
             _ = try await next.execute(fixture.request(firstFrame: frame)) { _ in }
         }
         await next.release()
+    }
+
+    @Test func sourceMutationWinsOverCancellationAfterOwnedChildDrains() async throws {
+        let fixture = try Fixture()
+        let frame = try fixture.frame()
+        let backend = try fixture.backend(mode: "mutate-source-wait")
+        let execution = Task { try await backend.execute(fixture.request(firstFrame: frame)) { _ in } }
+        let marker = fixture.root.appendingPathComponent("mutation-ready")
+        let deadline = ContinuousClock.now + .seconds(8)
+        while !FileManager.default.fileExists(atPath: marker.path), ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        let observed = FileManager.default.fileExists(atPath: marker.path)
+        execution.cancel()
+        do { _ = try await execution.value; Issue.record("Changed source must fail even on cancellation") }
+        catch InferenceFailure.inputIntegrityChanged { }
+        catch { Issue.record("Wrong terminal failure: \(error)") }
+        await backend.release()
+        #expect(observed)
+        let token = UUID()
+        try await MLXExecutionLease.shared.acquire(token)
+        await MLXExecutionLease.shared.relinquish(token)
     }
 }
 
@@ -164,8 +193,12 @@ private struct Fixture {
         run=request.parent; pack=arg('--pack'); manifest=(pack/'D-VIDEO-PACK.json').read_bytes()
         if mode=='mutate-input':
             request.write_bytes(b'changed'); sys.exit(7)
-        if mode in ('mutate-source','mutate-source-fail'):
+        if mode in ('mutate-source','mutate-source-fail','mutate-source-wait'):
             (run.parent.parent/'source.png').write_bytes(b'changed source')
+        if mode=='mutate-source-wait':
+            import time
+            (run.parent.parent/'mutation-ready').write_text('ready')
+            time.sleep(30)
         if mode=='mutate-source-fail': sys.exit(7)
         if mode=='replace-frame':
             frame=run/wire['request']['first_frame']['file']
