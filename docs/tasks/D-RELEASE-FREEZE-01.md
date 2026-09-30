@@ -1,6 +1,6 @@
 # D-RELEASE-FREEZE-01：首发模型有限收口
 
-2026-09-30 · r2 收尾执行中；以下 r1 结果保留为历史，未升级为冻结通过。
+2026-10-01 · r2 已交付部分可试用候选；实现与功能冻结仍未闭合。最新回执见文末；r1及r2过程快照保留原义。
 
 ## r2 有界续作规格与恢复点
 
@@ -108,3 +108,75 @@ A先形成实际调用的共用契约，再接UI展示；B按固定家族实施�
 最终候选/远端、App四文件摘要、自有过程退出、源scheme保护在R/lead/final-receipt.json。恢复先核Git及活动状态；不要按本段短SHA猜版本。开发包正常构建、未实际启动；当前候选仅待后续验证，不合入源/主分支、不公开发布，不删除旧候选与证据。
 
 下一步仅补冻结名单验收：H31资源取得后真实Dev/LTX2.5；可用大内存环境的原始profile；H32解锁后同包Quick/Canvas强输入及导航；独立解决Klein数值基准差异。完整图/发行/音乐专业编辑和新增模型家族故意推迟，不把这些后置功能变成本轮扩大范围的理由。
+
+
+## r2 交付检查点（2026-10-01；部分可试用，冻结未通过）
+
+### 固定版本和保护
+
+续作起点 `49ad3dc7c1bc63aab3e6afd9491cf3bc6e5eea3d`；最终构建/CPU代码 `b315ffa0c2d8d191204b0b93f1afdaaaae46e865`。本节之后的提交仅上述现行文档，最终文档SHA和远端回执写 R2/lead/final-receipt.json，不为自引用amend。保护源 `codex/inference-foundation@01758b81527dc27eb4563bf1b66fd1ceab6647ee` 未合入；main未推进。代码位于原候选工作树/分支，未重写历史。
+
+源scheme SHA256仍须逐项核对 `ca3635d88aa5a15397b90e528667c66c0e6db7e596176e885c79d194b544206c`，索引blob `9c76916bdc97c2d4298cefe64e0b0fae3380573e`，orderHint1→6仍未暂存；结束核对在 R2/lead/protection-after.json。原App四项文件和模型/作品原件保护分别见原生保护、各模型验证记录；不能把未读取的整个磁盘宣称已全面比对。内盘空仓库未操作。
+
+### 审查问题与实际增量
+
+| 问题 | 本轮处理与证据 | 状态／保留责任 |
+|---|---|---|
+| F01 原生能力承接 | `TextRequest`原生角色、按序媒体、工具声明/调用/结果、型号特有思考设置；后端返回raw/reasoning/final/toolCalls；旧delta仅最终正文。Quick/Canvas共用消息表单、同一操作校验、模型安装身份、显式资源预算。响应作为独立类型化资产保存，不挤入4MiB metadata；每轮工具ID不再重复。 | 已补所列请求缺口；9B实测、27B未验。工具调用数据不自动执行命令；JSON要求＋最终解析不是约束解码。64MiB响应/工具JSON/工作流datum保护上限明确拒绝，不静默截断。不能称全部上游模式已验。 |
+| F02 真实证据不足 | 9B Q4正式runtime新增四请求：有意义最终JSON、双图明暗次序、视频描述、合法工具结果往返42；普通App双入口均得到title/answer结构且冷恢复。 | 部分关闭；BF16、27B及其他路线合理采样/强条件仍未验，不以9B、小样或旧模型替代。 |
+| F03 模型准备 | 原ModelLibrary扩为九家族12配置228固定文件；多仓库/独立revision/混合摘要、真实状态、续传、访问失败、租约不另造系统。H3/LTX2.5固定无数值转换配方独立打包，APFS独立clone或独占复制、取消drain、原子发布/全量校验和跨项目保护；H3普通沙盒App144GB原件校验→准备→登记真实通过。 | 部分关闭。Wan原始下载到数值转换包的正常App接线未完成（纯工程缺口）；Dev/LTX资源受H31阻塞。原件完整与执行准备分开，raw仍preparationRequired。 |
+| F04 Klein差异 | 上述最小源级A/B证明Float32 Steel attention缩放次序造成差异；保留上游实现，独立审阅后绑定唯一新严格黄金值，生产3周期通过、active/cache归零。 | 固定环境关闭；未放宽容差、未接受双hash、未合并实验回退；不外推其他精度/设备，不宣称数学更准确。 |
+| F05 ACE重复hash | 同一初始化记录复用，初始/退出完整检查；中间使用身份保护，输入改变、取消和finally各项独立执行；跨进程重新校验。 | 重复边界已收敛；31CPU反例与实际初始化通过。不得跨文件变化/重新定位复用旧信任，不宣称消除全部I/O。 |
+| F06 ACE生产mock | 四处固定上游加载点显式本地路径/local_files_only补丁，包装记录摘要与漂移拒绝；不再全局unittest.mock加载器。 | 主要维护风险缓解；少量既有私有适配仍准确登记，不伪称全公开API或重写loader。 |
+| F07 投影一致性 | Dev有序参考使用实际值型契约；Quick/Canvas一致性反例；目录/模型标题修正，重新登记与冷重开投影实名，用户node.title注释和旧书签不改写。 | 已知投影缺陷关闭；最终视频标题回归先失败后通过，原生最终包复验被锁屏阻塞。 |
+| F08 ACE资源 | MLX转换完成后释放不用的Torch decoder，必要条件编码组件保留；6秒50步实际进入采样2步后换页约17GiB/231秒，估算约94分钟，由Lead受控TERM后KILL；不是OOM。6秒1步原始F32真实生成261.12秒完成。 | 部分关闭；单步只是链路冒烟，无合理采样/主观质量/完整强条件结论。转换峰值仍含双份，不冒称全流式或已测最低内存；不量化/换模型降低要求。 |
+| F09 文档真相 | CURRENT_ACTIONS只保留当前候选/停点/保护/下一动作；模型矩阵、试用、集中清单与本记录各司其职，历史失败不倒改。 | 活动文档已整理；不是产品架构全面解耦/功能冻结证明。 |
+
+附带应用缺陷：`WorkflowArchiveInspection`按一次调用缓存不可变来源检查，避免历史增长导致重复读同一元数据；ProjectStore发布后fsync失败只对自身精确pending清单恢复，新增旧实例不能覆盖新版本反例；跨项目资产进入空图先复制、一次可撤销图操作、项目/epoch校验防迟到结果污染。已有CPU反例通过，不声称已经用大规模真实历史量化提速。两个hosting失败继续留证；原生的部分通过不能抵销测试失败。H22没有新增生产IME补丁，仍等待实际组字对照，不能以通知到达等同位置正确。
+
+### 测试与真实产物（按层，不累计历史数字）
+
+M4/16GiB、macOS26.6.2、Xcode27/27A266a、Swift6.4；重构建/GPU/GUI串行。完整参数、独立tmp、超时/子进程回收、退出状态见各 `*-command.json`/`*-result.json`，原日志/xcresult保留。下列为实际执行，未列能力不能据此写通过。
+
+| 层／代码 | 实际结果 | R2/lead证据 |
+|---|---|---|
+| 最终相关UI/模型库CPU，b315ffa | 1项双语言键测试、28项模型库/准备测试、67项Workbench测试，各组通过；包含Quick/Canvas、消息/响应资产、安装身份、准备取消/源保护和视频真实标题。不是整个UI套件全绿 | ui-final-names.log/result.json，测试过滤器在command.json |
+| 视频实名先失败后通过 | 未修前1方法2断言失败；修补后26项相关检查通过；最终b315ffa再纳入上行 | video-title-red、video-title-green；video-title-review.json |
+| 后端CPU，9cdf8e51222852ba67bb410929ff0c613511a4a1 | 27项/3suite通过；此后改动为UI/安装准备/显示名，后端未变 | backend-final-cpu-02.log/result.json |
+| ACE CPU，最终b315ffa | 31项通过；补测是为旧结果缺代码SHA字段建立精确版本关联，不再重复真实采样 | ace-final-cpu.log/result.json |
+| 应用运行/Store等局部CPU | 原保存恢复/来源保护/空图与epoch反例45项通过；原生conversation验证4项通过。旧记录未全部携带SHA，不冒充最终版本全测试 | ui-local-reviewed、root-conversation；命令路径固定本候选 |
+| 保留失败 | 两个hosting方法：语言切换按钮动作未被plain hosting找到、媒体技术控件toggle未能由hosting触发；可见window诊断未消除，断言未删/标准未放宽 | ui-closeout*、hosting相关日志；当前原生部分操作独立记载 |
+| Qwen9B Q4正式runtime，2f2855b86c2ecd636ba749a657fe7d6e6bdee58a | 1个真实测试，4个不同请求通过，24.17秒；含视频环境实际启用 | qwen-closeout-real.log/xcresult/result.json |
+| Klein Q8生产，84f66cdc18f9884792be2f1429f0f9ddd407b37c | 3周期严格新基准通过，90.33秒，资源回零；相同提示/seed42/512²/4步，未增加生成次数冒充不同模式 | klein-production-03；klein-ab*保存旧实现对照 |
+| ACE原始F32/no-LM，406b853e07d2b6957cf684dad87ed782c87a8542 | 6秒1步WAV实际产出：288000帧48kHz双声道，有限F32，261.12秒；SHA256 a8f0fea3e7e24187f789d55d44ae7abf84cb213343ff0c5aff14ac8614aa99fd | ace-one-step/job/output.wav、result.json；50步受控停止另见ace-real-02，不计通过 |
+| 正常签名构建，b315ffa | 正常工程装配六引擎通过，33.27秒；ditto复制正常成品，未构建后手补provider；codesign严格检查通过。启动器exit0且进程存在 | app-final-names、final-app-identity.json、launcher-native-start.json |
+
+早期测试失败包含：fixture输出目录复用导致不覆盖保护触发、CPU测试适配签名变更、ACE一次lead直接provider cwd留下官方缓存。分别修测试调用/独立目录，缓存只移存本任务证据；生产provider已有job cwd。不是权限扩大、不是删断言。完整过程日志保留，不累计每轮重跑为新通过用例。
+
+### 原生路径、试用与未验边界
+
+普通签名App原生受测代码 **41ad63026da948eef6e3b5f5837f63744f1a2c98**，隔离会话 `4555a0d5-e285-48f5-b34f-dff8238a893c`。Qwen9B Q4：默认12GiB预算先正确拒绝估算13,108,401,696字节，随后由UI显式选15GiB；未先填JSON结构会拒绝。填写title(text)/answer(number)后Quick生成真实记录，带设置进入Canvas并显式运行得到同一结构；正常退出/重开保留两入口草稿、预算、运行及raw响应资产。没有覆盖普通项目或自动运行下游。证据 `native-final/qwen-gui-summary.json`及同目录AX/PNG。
+
+H3原生：固定38文件144,023,606,861字节原件的独立APFS clone，通过真实目录授权和全部hash；点击模型库准备，发布独立包并登记，raw仍未转换状态、lease归零、当前Qwen草稿不被切换。准备后发现目录名污染视频标题，Lead修补 **b315ffa** 并独立审阅；旧自定义node.title不改。证据 `native-final/h3-preparation-summary.json`。这是准备链路，不是此App内H3生成。
+
+最终b315ffa仅上述视频实名及对应测试变化。推荐启动器已成功启动最终包；随后CUA明确返回Mac锁屏，未继续界面操作。**不能说最终b315ffa已完成与父版相同的原生复验**；下一次解锁只补受影响标题/登记恢复及未验GUI，不无理由重跑全部模型。H32追加 `native-final/lock-after-final-build.json`；未修改锁屏策略，不轮询/催促。
+
+唯一推荐启动器与同树Xcode Run说明：[精简试用](../RELEASE_FREEZE_TRY.zh-CN.md)。`delivery/samples/首发文字试用.dproject`是本次测试项目快照，依赖的权重不在App/项目内。真实首尾帧H3、旧Wan/MRT2、H3 Store修复沿r1证据复用，不冒称最终同包全验。画布滚轮100→50%、中键视口移动、恢复100%已观察；空白平移/端口/拖放全矩阵和真人IME尚未关闭。
+
+### 实施来源、审核与剩余预算
+
+LIBRARY、VLM-CLOSEOUT、ACE-CLOSEOUT使用本项目已核验受限独立CLI `gpt-6-sol/high`，各自初交＋一轮有明确反例的修复；实际写根、请求/可观察设置、时间、输出在各job/spec/运行记录。隐藏服务端解析unknown。Lead负责共享接线、样例、固定金标决定、保存保护修补、预算/视频准备与实名修补，并亲自复验；不能把最终结果归为Worker独立完成。
+
+Worker过程存在未按旧停止规则立即回报的缓存权限拒绝记录，Lead后续已核查并保留；不能把命令被拒绝写成已成功越界，也不能倒改为全程协议合规。没有观察到成功扩权或网络传输，未测边界不作系统证明。独立审阅为定点源码/证据检查，不是第二次模型执行：baseline02_services_readonly复核保存/迟到状态/预算/视频准备/标题；video_extension_map复核目录映射、F04与准备；h3_primary_research复核ACE四项生命周期修补。见 `targeted-review-summary.json`、`budget-review.json`、`video-preparation-review.json`、`video-title-review.json`。重要Lead差异经过非实现者检查，未新建常驻审核平台。
+
+旧任务和r1预算不刷新。本轮不再无依据重复同一失败；Wan转换接线需上述明确子进程授权/固定依赖/取消发布实现与独立检查，不能拿H3打包冒充。ACE合理采样、27B和原始BF16缺验证不是“所有代码已无可改进”，后续仍属同一冻结名单欠账，不自动扩大模型范围。可观察单项墙钟见表；完整Lead token/订阅费用不可准确归因，unknown，不重算历史或用API价估计。
+
+### 退出状态和恢复顺序
+
+- **实现收口：部分完成。** VLM、固定目录、H3/LTX准备、已知投影、ACE局部生命周期和存储反例进入候选；Wan准备、完整模型条件/精度和部分交互仍欠账。
+- **真实模型验证：部分通过。** 精确型号/参数以上表为准；ACE1步不达到合理采样门槛。
+- **原生应用验证：部分通过。** 41ad630的Qwen双入口/冷恢复/H3准备已验；b315ffa最终显示修补的GUI复验被锁屏阻塞。
+- **用户试用：有可用候选和隔离文字样例。** 同树正常构建带齐引擎，启动器已启动；未验路线上有明确缺口，不能作为九模型稳定版。
+- **功能冻结出口：未通过。** H31平台访问、各未验精度/强条件、Wan工程接线及本包GUI仍须收口，不能仅改profile命名关闭。
+
+写Worker、构建/CPU/推理自有进程均结束；最终试用App空闲保留，不自动生成，旧D保持。进程精确状态/保护/远端/最终SHA在 `R2/lead/final-receipt.json`；它是最终版本索引，不修改此提交自引用。恢复先核该回执对应HEAD、索引、个人修改、App四摘要与已知进程；再处理H31/解锁集中项和上述工程欠账。此刻停在用户试用检查点，不合入保护源/main，不发布，也不启动下一模型或新产品任务。

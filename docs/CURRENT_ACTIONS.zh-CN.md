@@ -1,118 +1,38 @@
 # 当前行动与接手点
 
-最后核实：2026-09-30。唯一当前任务、版本与停点入口。
+最后核实：2026-10-01。当前任务、候选、停点与下一动作只从本页进入；历史回执不再充当开工指令。
 
-## 当前停点：D-RELEASE-FREEZE-01 候选收口，冻结门槛未达
+## 当前任务：D-RELEASE-FREEZE-01 收口 r2
 
-本轮代码受测版本 **37bd091044a2dd438a2e37f4453c32af9c91fe18**；最终仅文档版本、App摘要、远端及保护回执在 `D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T070201Z/lead/final-receipt.json`。实施树 `D-Worktrees/D-RELEASE-FREEZE-01` / `codex/release-freeze-01`。源仍 `01758b81527dc27eb4563bf1b66fd1ceab6647ee`，个人scheme未暂存差异保持，未源接纳、未发布。
+- 源：`codex/inference-foundation@01758b81527dc27eb4563bf1b66fd1ceab6647ee`，未接纳本候选。
+- 实施：外盘 `D-Worktrees/D-RELEASE-FREEZE-01`，`codex/release-freeze-01`。从 `49ad3dc7c1bc63aab3e6afd9491cf3bc6e5eea3d` 保留历史续作，最终受测代码 `b315ffa0c2d8d191204b0b93f1afdaaaae46e865`；结案最终 SHA 见[任务](tasks/D-RELEASE-FREEZE-01.md)及 R2/lead/final-receipt.json。
+- R2：`D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout`。日志、样本与测试产物留此，不能只凭目录存在推断通过。
+- 本轮明确不合并受保护源或 main，不公开发布。只收口既定九模型及直接影响的应用缺陷，不开启训练、远程、移动端或新增家族。
 
-Quick/Canvas已共用类型化模型操作；实名/profile、VLM多图/时间戳视频、FLUX有序参考图、H3首尾帧、LTX2.5独立配方、ACE XL F32/no-LM与正常资源打包已入候选。H3真实媒体Store时长问题在本轮有限授权内修复。Qwen9B Q4真实三种输入及H3原始BF16首尾帧链路已验；CPU/编译/真实推理/GUI分开见[任务结果](tasks/D-RELEASE-FREEZE-01.md)。
+## 已取得的增量与尚未闭合
 
-**不能冻结的具体原因**：LTX2.5与FLUX Dev资源401（H31）；27B、Klein BF16及ACE原始F32真实运行未验；新Quick/Canvas普通App因锁屏未走查（H32）；升级SDK后Klein Q8严格旧PNG基准失败，虽差异仅少量通道1/255且重复结果一致，标准未改。不得用旧模型成功、编译或替身代替这些出口。
+类型化 VLM 消息/媒体顺序/思考控制/工具往返和 raw/final 响应资产已进入候选；九模型固定下载清单复用模型库，完整性、访问错误与执行前准备状态分开。ACE 固定上游离线加载补丁、重复校验精简和 decoder 副本释放已装配。保存增长的局部重复工作、跨项目空图与保存同步失败重试已补反例；不宣称所有性能或 UI 问题已经解决。
 
-[九模型矩阵](RELEASE_MODEL_MATRIX.zh-CN.md)是能力/实测边界；[精简试用](RELEASE_FREEZE_TRY.zh-CN.md)是本轮唯一推荐入口（新App原生启动尚未验）；[集中待办](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md)收录本人解锁/平台访问，H22等旧责任不被消除。下一动作仅补这些冻结门槛，不再扩张模型名单；不自动接纳旧AP1/CORE/I2V或进入公开发布。
+Qwen9B Q4 的真实 JSON、双图顺序、视频和工具结果往返已通过；Klein Q8 数值 A/B 已解释并由非实现者复核，固定新引擎仍用唯一严格基准。具体受测版本、CPU/真实模型/GUI分层见任务；其他型号不能据此算通过。
 
-## 上轮候选：H3 / LTX 视频模型扩展（历史责任保留）
+普通App已完成Qwen9B Q4的Quick/Canvas真实JSON与保存冷重开；H3原始144GB经原生模型库校验、独立准备、登记完成，随后修正目录名污染模型标题。ACE6秒/1步F32真实生成通过，但50步在2步后因换页及预计耗时受控停止，非OOM/非成功。
 
-用户新增授权：MiniMax H3 与 LTX 的真实推理及节点、全尺寸非量化配置、显式权重流式开关。任务见 [D-VIDEO-MODELS-01](tasks/D-VIDEO-MODELS-01.md)。实施树 `D-Worktrees/D-VIDEO-MODELS-01`，分支 `codex/video-models-01`，从前端候选 `4b90327db126e46a9277a0a401d2b6ea3e283399` 开始；源仍01758b8，源个人scheme与旧前端候选不变。
+上述原生操作绑定 `41ad63026da948eef6e3b5f5837f63744f1a2c98`；最后 `b315ffa0c2d8d191204b0b93f1afdaaaae46e865` 仅视频实名展示及回归，CPU与正常构建通过。推荐启动器已启动最终包；之后CUA明确报告Mac锁屏，修补后的界面复验未执行，已记H32，不重复催解锁。
 
-当前为**候选已实现、部分验收通过；H3保存检查阻塞、原生GUI待解锁，未结案/未源接纳**。新增 H3 / LTX 配方节点已接入现有工作流服务、安装目录使用权、DRuntime 和资产 Store；带声音视频采用可选音轨事实，schema19 迁移先备份，旧 Wan 无声约束保留。全 BF16 与 Q8/Gemma Q4 测试配方独立，节点“流式加载扩散权重”冻结到请求，不改变精度或层数。LTX2.5 固定资源尚未取得，登记明确拒绝 ready；不能把已声明配方写成已完成推理适配。
+**冻结尚未通过**：Dev/LTX2.5固定资源访问仍受H31阻塞；27B、原始BF16等配置及ACE合理采样/强条件、每模型同包原生入口未验。H3/LTX无转换打包已接，Wan原始权重数值转换的沙盒子进程/封装/发布接线仍缺，不能把“原文件完整”写成“可执行”。H22输入法位置、两个hosting失败与完整拖放责任仍保留。模型原生能力清单、未实现项与 profile 边界见[矩阵](RELEASE_MODEL_MATRIX.zh-CN.md)，改名不关闭缺口。
 
-受测生产代码`7beb5b6494396311934b5a11a6a696d21b38c543`，普通D Nodes构建将签名后的新引擎正常嵌入，无构建后手补。正式DRuntime分别完成H3全50层原始BF16、LTX2.3 Q8/Gemma Q4：生成→资源准入期间取消→再次生成。各为1个测试/3周期；真实神经网络使用GPU，取消的活跃计算边界另外由CPU进程组测试覆盖。本次H3约144GB固定资源已下载校验；公开Base本身CFG蒸馏，不冒称未公开非蒸馏版。LTX2.3全BF16尚未实测；2.5仍受真实平台资源访问条件H31限制，不重复下载授权。
+## 试用、保护与恢复
 
-LTX真实产物通过AVFoundation完整解码、Store发布/重开/导出。**H3真实产物未通过Store检查**：轨道与容器记录正常，独立完整解码通过，但AVAsset.duration取视频终点，现检查器错误要求它等于最长音轨终点（相差8.333ms）。AVMEDIA已有初交+2修复+一次Lead接管，按现行预算保留失败，不改mux迁就、不再自增修复轮次。最小后续修正及反例见任务r4最终检查点；不是显存不足、用户授权不足或媒体已损坏。
+唯一推荐入口以[精简试用](RELEASE_FREEZE_TRY.zh-CN.md)的已交付版本为准；构建中的新包不是推荐成品。Xcode 使用候选同树 `D.xcworkspace` / **D Nodes / My Mac / Debug**，不是内盘空仓库，也不是旧源树。
 
-新增登记/保存重开与配方绑定CPU检查通过，确认关闭成功和新控制器身份，目录bookmark按完整物理路径/device/inode检查。最新相关CPU结果：运行时12项；UI画布/库28项与工作台6项；AV夹具12项通过，真实LTX另1项通过、真实H3另1项失败。每组版本和入口独立记录，不累加为完整App通过。2步短样本只证明链路。另用同一普通包内provider完成LTX Q8/Gemma Q4的30步/CFG3对照，653.796秒，9帧全部解码；首/中/末帧红杯可辨。此为独立provider验证，不倒记成正式Runtime、GUI或全BF16验收；长视频画质及较大配置仍未验。
+保护源个人 scheme 未暂存改动（历史 orderHint 1→6；实际以 R2/lead/protection-before.json 为准）、普通 App、项目/模型原件与旧候选。源与候选 index/HEAD、已知进程先核实再恢复；不能仅依赖本摘要。写 Worker 已交还文件，重要 Lead 改动经定点非实现者复核；真实执行与审阅分别记载。
 
-画布实现：滚轮以鼠标位置缩放；空白拖动平移；中键居中保留缩放；右下恢复100%并居中，沿用位置/连线/Undo，导航不改节点或生成条件。实际鼠标及新节点普通App验收因工具确认锁屏挂H32；hosting启动未获完成记录，不能记通过。旧H22/H28责任保留。
+本人操作只见[集中清单](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md)：H31平台访问、必要真人IME/试听与新锁屏事件。已关闭的录音/断网不重复办理。工程问题不推成用户授权。
 
-隔离候选包`R4/delivery/D Video Preview.app`及`启动视频与画布候选.command`已准备，尚未启动/原生验收，不替换普通D。当前树`D.xcworkspace`选D Nodes/My Mac正常Run使用忽略的本地资源配置。试用步骤在同目录`使用说明.md`；不要用真实项目做未接纳候选试验。
+## 保留的历史与发布责任
 
-继续动作仅本任务：先核源/候选/保护与任务进程，再按剩余门槛收口。H3媒体检查预算停点须明确追加有限授权；H32下次解锁后集中验收，不重新询问开发下载。源仍`01758b81527dc27eb4563bf1b66fd1ceab6647ee`，旧UI候选`4b90327db126e46a9277a0a401d2b6ea3e283399`与个人scheme不变。R4=`D-Development/AgentTrials/D-VIDEO-MODELS-01/run-20260930T000439Z-app-canvas`；最终候选SHA与测试文件摘要以R4/lead/final-receipt.json为准。历史R与旧CLI结果不代表当前App验收。
+- 前端拖放/返回/输入法历史：[D-UI-BASELINE-02](tasks/D-UI-BASELINE-02.md)；视频与旧媒体失败：[D-VIDEO-MODELS-01](tasks/D-VIDEO-MODELS-01.md)。本轮已修问题以本轮证据覆盖状态，原失败不倒改。
+- 已入源基础：[D-NODE-LANGUAGE-01](tasks/D-NODE-LANGUAGE-01.md)、[D-NODE-QUALITY-01](tasks/D-NODE-QUALITY-01.md)。旧入口/旧日期“下一步”不再是当前许可。
+- AP1/CORE/I2V候选保留、不自动合入。内部 Pitch 评估权重、依赖分发、首次使用/升级恢复、渠道与签名仍按[发布责任](MODEL_SUPPORT_AND_RELEASE.zh-CN.md)核验。
 
-## 前端候选保留停点：现用资料库拖入、节点删除和返回（r5）
-
-候选`codex/ui-baseline-02`仍在`/Volumes/CodexProjects/Codex/D-Worktrees/D-NODE-QUALITY-01`。受测代码`40a2c2fdbd74bef88a9171ce11322d809f440307`，最终仅文档提交/同步见R5/lead/final-receipt.json；源仍`01758b81527dc27eb4563bf1b66fd1ceab6647ee`，未源接纳。R5=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-UI-BASELINE-02/run-20260929T154311Z-current-input-drop`。
-
-已修现用库的UTI缺失：真实鼠标对照由空items变为导入数据和新增节点；缩小后可见空白归入同一接收面。每张节点卡片有删除按钮，显式删自身并复用Undo，非空资产/历史留存有测试；当前双入口及库/预览/模型/工具/接口等子页加左上返回，关闭只改变原展示状态，根入口无历史禁用。固定SHA相关46项CPU及普通D Nodes构建/签名通过；两名非实现者审阅，并修正返回错误分支/语言键和测试证据不足。
-
-**原生仍为局部通过**：最终包已核隔离身份，实际删除未选中卡片、保留另一选择、撤销恢复卡片/连线通过。随后100%鼠标拖入发出，但等待异步完成时桌面工具明确报告Mac锁定；不得写成该次通过。50/180%、滚动落点、端口拖线、返回/保存重开需解锁后继续。测试实例PID37434仍在锁屏桌面，未强杀或宣称退出；无模型/GPU任务。唯一推荐包/入口见[试用说明](NODE_LANGUAGE_TRY.zh-CN.md#当前-v02-候选d-ui-baseline-02尚未阶段接纳)。
-
-退役的是旧默认左右资料库布局专项，兼容编辑器仍可达，不删实现/历史。H22在当前Quick/画布仍适用：实测位置失效通知送达实际PlatformTextView，不证明视觉跟随；最后真人失败保留、下次集中办理。当前跨项目资产拖入完全空图仍会拒绝、旧两hosting失败仍保留，不冒充已修或仅需本人操作。锁屏项和真人项见[集中清单](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md#当前集中待办2026-09-29)，精确证据和预算见[任务r5](tasks/D-UI-BASELINE-02.md#2026-09-30-r5当前拖入与输入法收尾)。
-
-## 已完成增量：卡片非交互区域默认可拖（r4）
-
-用户本轮要求已在候选完成，停在试用点。候选仍`codex/ui-baseline-02`，工作树`/Volumes/CodexProjects/Codex/D-Worktrees/D-NODE-QUALITY-01`；受测代码`42b2243e0e8ff0bfa7300b81d8e46cc13c23f50e`，后续仅文档提交/同步状态见R4/lead/final-receipt.json。R4=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-UI-BASELINE-02/run-20260929T151114Z-card-drag`。源仍`01758b81527dc27eb4563bf1b66fd1ceab6647ee`，个人scheme未暂存保护保持；未源接纳。
-
-同一移动手势移到卡片背景，说明、空白、内部边缘可拖；端口/按钮保持前景手势。固定代码45项相关CPU测试、普通D Nodes构建通过。隔离App实际鼠标验证50/100/180%卡片移动、端口/按钮不误移、正文选择、撤销和保存重开；保存归档除布局和归档版本号外，节点/参数/连接/资产/运行记录不变。缩放滑块点击可改值，两次自动鼠标拖滑块未改值，不能宣称连续滑动已验通过。当前卡片内没有输入框/滑块，验证的是现有右侧编辑器和工具栏；未伪造内嵌控件。
-
-最新唯一试用入口见[试用说明](NODE_LANGUAGE_TRY.zh-CN.md#当前-v02-候选d-ui-baseline-02尚未阶段接纳)。本次没有新增真人待办、没有GPU任务；两个测试实例正常退出。旧资料库拖入、端口拖线、两项hosting、H22等责任继续保留，**本增量通过不表示整轮缺陷全部关闭**。具体证据与自动操作偏差见[任务r4](tasks/D-UI-BASELINE-02.md#2026-09-30-r4卡片非交互区域默认可拖)。
-
-## r3历史停点：已恢复原生检查，拖放等工程缺口保留
-
-候选`codex/ui-baseline-02`，工作树`/Volumes/CodexProjects/Codex/D-Worktrees/D-NODE-QUALITY-01`；本轮实际编译/输入几何受测代码`e546762dd9cafd46d0b99d8f360331393a7e95e6`。最终仅文档SHA/远端见R2/lead/final-receipt.json。源仍`01758b81527dc27eb4563bf1b66fd1ceab6647ee`，个人scheme未暂存且未改变。**未完成全部缺陷收口，未源接纳。**
-
-已修：输入几何在拖动事件循环中迟到、附属窗口更新目标错误；5项组件测试通过，新增反例经历先失败后通过。拖放4处明确接受/拒绝返回并补表面命中区域；真实provider桥接通过，尚不证明实际拖入修复。相关49项中47通过、两项旧hosting/4断言失败，原标准不改。普通D Nodes构建和新包签名通过。
-
-2026-09-29本人解锁后，只补无需本人操作的原生检查。R3=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-UI-BASELINE-02/run-20260929T003334Z-unlock-native`：固定Repair包与df754试用身份实际启动两次；连线详情/断开/撤销、文字草稿保留、视频100%/音乐50%技术信息与参数切换已观察。资料库100%拖入仍无新增节点，端口拖线本次未成功；接收回调状态未知。不能关闭完整拖放矩阵、旧两hosting或H22。测试项目已正常保存，测试App已正常退出，无模型运行。真人集中待办按用户本轮要求暂不办理。下一步是已授权r3内的拖放接收诊断与工程修补，不是继续等解锁，也不升级为新产品阶段。
-
-R2=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-UI-BASELINE-02/run-20260928T160457Z-defect-close`。具体改动、审阅、原失败和恢复步骤见[本轮r3记录](tasks/D-UI-BASELINE-02.md#r3-修补与锁屏恢复检查点2026-09-29)，本人动作仅见[集中清单](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md#当前集中待办2026-09-29)。新包/唯一下一次验收入口见[试用说明](NODE_LANGUAGE_TRY.zh-CN.md#当前-v02-候选d-ui-baseline-02尚未阶段接纳)。用户已授权继续本轮范围；不恢复旧停止预算、不扩新产品阶段。
-
-### 上一轮原生快照（历史，非当前停点）
-
-当前源 `codex/inference-foundation` 仍为 `01758b81527dc27eb4563bf1b66fd1ceab6647ee`，唯一个人scheme未暂存差异保持。候选 `codex/ui-baseline-02` 位于 `/Volumes/CodexProjects/Codex/D-Worktrees/D-NODE-QUALITY-01`；本次受测代码 `e4fe2f3e405d59a977d715464ab1c583341f8ae0`。最终仅文档提交与远端状态见本次证据R1/lead/final-receipt.json。**未源接纳、未整体验收通过。**
-
-用户已解锁；原生双入口、共享资料库已观察；89fa原生连线检查/断开/撤销及真实Qwen快速生成、89fa→e4fe正常重开已取得局部证据。本人确认中文/日文选字正常、未见丢字或重复，但候选窗仍不跟随；H22继续是工程缺陷，不是缺权限。此前“所有原生检查因锁屏未执行”只属于历史快照。
-
-用户额外批准一次Lead有限修补：统一资料库220/240点宽度冲突，仅改一行布局常量，没有再派写Worker、改模型或存储。相关21项/2 suites及普通D Nodes构建通过；新包在实际860×612、1024×768、1440×900点下左侧裁切消失，菜单可打开；860×580受现有最小高度限制，不能记成精确尺寸通过。批量菜单标题仍有省略。本人拖放已确认“有预览，但未新增节点”；资料库拖入失败，全部缩放/滚动矩阵尚未通过；＋添加、画布内移动不能替代拖入。原两个hosting失败/四断言保留。
-
-R1=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-UI-BASELINE-02/run-20260928T144932Z-native`。本次事实与34项状态见R1/lead/native-continuation.json、acceptance-results.json；构建/真人/模型/GUI分开。旧R=`run-20260928T123204Z`的失败和模型控制器证据原样保留。最新入口见[试用说明](NODE_LANGUAGE_TRY.zh-CN.md#当前-v02-候选d-ui-baseline-02尚未阶段接纳)，完整归因见[任务](tasks/D-UI-BASELINE-02.md#2026-09-29-解锁后原生验收与一次有限宽度修补)。
-
-## 历史前端候选：D-CANVAS-USABILITY-01（责任保留）
-
-以下旧回执仅作来源/未验责任索引，不是当前排程或推荐启动入口；本轮以顶部D-UI-BASELINE-02为准。
-
-用户批准的左节点库/标签检索、右资产库/标签元数据、原生拖放和实时共享位置已实现；四模态简易界面不改。受测组合`ec0027cda72ee7120df6eb7b034cb53d1e2433e8`：完整UI包824项（含hosting）及普通D Nodes构建/签名通过。原生鼠标拖放与窄窗交互等待本人启动隔离新版，不能拿组件测试替代；集中H28。当前候选继续`codex/node-quality-01`，源`01758b81527dc27eb4563bf1b66fd1ceab6647ee`及个人scheme未改。最后文档提交与远端对应见本轮run的`lead/final-receipt.json`。
-
-试用入口见[新版画布](NODE_LANGUAGE_TRY.zh-CN.md#新版节点画布d-canvas-usability-01)，实现/审阅/失败与验收层级见[任务](tasks/D-CANVAS-USABILITY-01.md#工程交付检查点2026-09-27)。下一动作仅完成H28并让用户第二轮试用；旧QUALITY真实视频/音乐/IME待验保持，不自动启新阶段或源接纳。
-
-## D-NODE-QUALITY-01：前一候选与保留验收
-
-用户已批准工具链确认后改善输入法候选位置、历史保存响应、视频质量与音乐能力表达。有限范围、冻结 SAVE 契约、工具链结果及证据见[本轮任务](tasks/D-NODE-QUALITY-01.md)。源与远端基线 01758b81527dc27eb4563bf1b66fd1ceab6647ee；实施在独立 codex/node-quality-01，不写源个人差异。优先官方/AppKit/模型既有能力，不新增专用音乐流程。
-
-恢复点：组合代码ca0ff7a5869bad417ed9ddc6e3a724ba0296c77e；后续8125d9488e3683591be5680730b691fc3ea160f5只调整hosting证据分层和任务记录，生产代码相同。Workbench611、UI171、模型库CPU及App测试构建通过；H22普通包3dd32ae已由用户启动，隔离IME-Quality项目已建好，正在等待中文/日文移动缩放反馈。四项媒体显示要求仍须真实GUI；视频4/50对照、无音符音乐真实运行待执行。写Worker已结束，修复预算SAVE用1轮、MEDIA用2轮及1次Lead hosting接管；不可用新编号重置。
-
-用户随后明确要求先同步当前进度再自行试用：本次只推送`codex/node-quality-01`候选，源仍为01758b81527dc27eb4563bf1b66fd1ceab6647ee，不提前接纳。948a08ceac42897a9143223512485e13630fc313已重新正常构建D Nodes，独立交付`D Quality Preview.app`及新身份启动器；入口见[上一候选试用](NODE_LANGUAGE_TRY.zh-CN.md#上一进度试用版d-node-quality-01尚未阶段接纳)。本次未启动新App或模型，未操作用户IME窗口。最终远端核对、产物、保护状态及恢复点见本轮R/lead/progress-sync-receipt.json；此前recovery-checkpoint.json保留为历史。同步只保存进度，未改变以上验收门槛。
-
-## D-NODE-LANGUAGE-01：已完成的上一阶段
-
-18个通用节点、记录/列表/条件/Map/有状态Loop/可选人工任务/真实版本化工具与四套可编辑样例已实现。Qwen、FLUX.2 Klein、MRT2、Wan T2V与SwiftF0接通既有Store/运行时；没有按样例名字另造调度器。范围、逐项A01—A36与版本证据见[任务记录](tasks/D-NODE-LANGUAGE-01.md#当前验收检查点2026-09-27h27已实际办理)。A01—A36已按冻结范围验证；源已快进接纳并完成源入口回归与普通构建，不代表发布。
-
-源`codex/inference-foundation`已从`130603d23a4da81ba2a9852766f3589695ec9468`快进到`ccdbdf917c1ec569cccb6c2820056e898f93d871`。候选`codex/d-node-language-01`与外盘`D-Worktrees/D-NODE-LANGUAGE-01`保留在ccdbdf9。原生/离线受测代码`08b2e39614113e4de386e4146ef33cbc00c75d59`到ccdbdf9仅四份文档变化；源入口UI包和普通D Nodes构建实测为ccdbdf9。后续结案仅改当前行动、任务记录与试用说明，最终完整SHA和远端同步结果写H/`integration/final-receipt.json`，不自引用。
-
-源入口UI167、独立入口23、Workbench605及XCTest30各组通过；4项显式opt-in跳过，不当作真实模型新验收。四引擎与准备目录逐文件一致、开发签名完整性通过。历史5b49的UI/Runtime/资源检查、a083的UI包全量、各真实模型及修补证据仍分别保存，不改称同一版本全量模型重验。
-
-证据根R：`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-NODE-LANGUAGE-01/run-20260926T150929Z`；H：同任务`run-20260927T020614Z-h27`。最新索引为R/`delivery/acceptance-results.json`、H/`evidence/`，旧R/`lead/final-receipt.json`是锁屏时历史，不是当前回执；当前源接纳/保护/源检查均在H/`integration/`。
-
-## 可以怎样试用
-
-从[试用说明](NODE_LANGUAGE_TRY.zh-CN.md)打开源`/Volumes/CodexProjects/Codex/D/D.xcworkspace`，选 **D Nodes / My Mac** 点Run，或双击H/`delivery/启动H27确认版.command`。实际普通包为H/`delivery/D Nodes H27 Pinned.app`，代码08b2e39。试用身份与普通D隔离，普通App未替换。准备的四引擎由正常Xcode构建阶段复制并签名，无构建后手补；权重独立导入。旧M0试用入口仍保留但不是本批主入口。
-
-已在普通界面验证：本人新录音/原声试听、SwiftF0片段、人工音符/和弦与MRT2三候选、本人音乐试听；Qwen文字、Klein单参考出图、Wan短视频播放；原生工具封装/嵌套/双实例、模板与单位反例、旧确认恢复、历史结果局部运行、尺寸格式处理和多媒体导出。当前参数与历史冻结值分别可查。08b2e39重新在Xcode点Run并打开E01—E04，保存项目可重开。
-
-本轮A35真实物理离线5方法通过，409采样及路由全程离线；结束后用户恢复网络。无需重复断网/录音/日文/试听。集中待办H27已实际办理；[本人事项清单](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md)持续记录新锁屏、离机、设备或本人点击阻塞。
-
-## 边界、保护与未完成责任
-
-- 个人scheme未暂存`orderHint 1→6`，SHA256`ca3635d88aa5a15397b90e528667c66c0e6db7e596176e885c79d194b544206c`，index blob`9c76916bdc97c2d4298cefe64e0b0fae3380573e`。逐次源接纳前后核对，不暂存、不恢复。
-- H22输入法候选窗不跟随按用户决定延期；中文/日文确认正常不代表H22修复。历史增多时保存仍慢；缓存与重复编译修补有限改善，不能称普遍流畅。Xcode负几何警告/缩放AX命中体验问题保留，不归因内存上限。
-- 图像/音乐/视频本机profile是验证样本，不是产品上限；Wan 4步短片画面抽象，MRT2音频控制近似；本轮不保证艺术质量或转谱准确率。
-- AP1`e5d24f4e1064423238e3c8e1112bc4b3a9a81e2e`、CORE`9d3a503d327a820cb67e399922a07c27f953e903`及I2V研究未合入、未删除。格式16不代表旧候选迁移已解决。
-- 内部Pitch引擎含已追踪评估权重；正式无附带权重、分发许可、部署/首次使用与发布渠道仍有责任。没改签名策略/权限，没发布或推进main。
-- 自有GUI/重模型/构建已结束；写Worker均交还，只读验收协助不写仓库。源接纳和源入口回归完成，候选与旧证据保留，不自动开启下一产品批次。
-
-## 上一阶段提案的历史记录（已被顶部本轮范围替代）
-
-上一阶段已结案并推送01758b8，结果见H/`integration/final-receipt.json`。当时按D-NODE-QUALITY-01继续；锁屏/离机/本人操作的新阻塞进入集中清单。
-
-下一有限提案：以用户试用反馈为入口，优先解决积累运行历史时的保存/响应成本与节点操作可达性，在既有数据保护下实测；不再增加新模态或专用样例调度。该有限方向现已由用户批准，按本轮任务执行；不再把旧提案当停工边界。导航和扩展约束见[仓库地图](REPOSITORY_MAP.zh-CN.md)、[边界与语言](BACKEND_EXTENSION_CONTRACT.zh-CN.md)。
+停在本收口候选的用户试用点；不自动开启下一产品阶段。后续仍须关闭上述同一冻结名单的工程与实测缺口，当前不是已进入全绿发布QA。功能冻结必须逐项达到现有出口，文档变短或分类完成不代表架构/产品/发布已完成。
