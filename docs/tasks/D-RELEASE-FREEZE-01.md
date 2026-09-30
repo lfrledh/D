@@ -1,6 +1,18 @@
 # D-RELEASE-FREEZE-01：首发模型有限收口
 
-2026-09-30 · r1授权下有限收口 · 候选已实现并完成可执行QA；冻结门槛未达、未源接纳。
+2026-09-30 · r2 收尾执行中；以下 r1 结果保留为历史，未升级为冻结通过。
+
+## r2 有界续作规格与恢复点
+
+用户《Closeout v0.1》明确继续 F01—F09。起点候选/远端均为 `49ad3dc7c1bc63aab3e6afd9491cf3bc6e5eea3d`；源仍 `01758b81527dc27eb4563bf1b66fd1ceab6647ee`。源仅既有 scheme 未暂存差异，摘要与索引见新证据 R2=`D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/lead/protection-before.json`。旧 UI、视频候选不变，无新增未知差异。未获准合入受保护源或 main。
+
+本增量先补已确认的消息/工具/思考承接、九模型准备和共享接线，再处理 ACE 同 job 重复验证/离线加载及转换后副本，最后进行 Klein 有界数值对照、普通 App 和有限 QA。冻结名单、精度、原件保护、取消释放及旧失败保留；单纯缩小 profile 不算能力完成。仅涉及既定公开 checkpoint，不扩展训练、远程或新模型。缺资源/锁屏只阻塞对应实测。
+
+Lead 单一维护共享请求、App/ProjectSession 接线与本记录。新增两个明确切片由受限 CLI `gpt-6-sol/high` 实现：LIBRARY（复用 FORMS 已空闲工作树）：现有模型库、运输/校验、目录清单和模型库 UI；ACE-CLOSEOUT（复用 ACE 工作树）：Python provider/offline runtime、包装及直接测试。各自精确允许路径、执行基线、输出/缓存和验收在 R2 对应 `job.json`/`spec.md`；预检核验后方可实施。不改其他任务文件，不访问网络/模型/GPU/真实偏好，不提交 Git 元数据。初交预算分别 45/30 分钟；新明确切片初交+最多两次定向修复，不重置 r1 已消耗预算。模型隐藏服务端解析仍 unknown。
+
+代表验收：混合摘要/多仓库/续传身份/访问错误/未就绪/租约；VLM 角色与媒体次序、型号特有思考参数、类型化工具往返及最终 JSON；ACE 同进程验证次数与原件突变/取消优先级、真实离线 loader 和 decoder 释放边界；Dev 参考输入投影；同包编译、真实模型与 GUI 独立。不机械重复全部旧 GPU。重要 Lead 实现须非实现者只读审阅。权重和大证据不入 Git，只有通过对应实测才更新矩阵。
+
+当前写入仅本规格准备；写 Worker 尚未启动。最终代码/受测/文档 SHA 记录外部回执，不自引用 amend。下一动作：准备提交→工作树快进并核验 CLI→执行上述切片；源、普通 App、历史证据保持。
 
 ## 基线与边界
 源 codex/inference-foundation@01758b81527dc27eb4563bf1b66fd1ceab6647ee；实现从视频候选 d7dba252eea52d0f4a9a26915f4df3c3f7d244d0 创建外盘 D-RELEASE-FREEZE-01 / codex/release-freeze-01。原视频/前端候选保持。保护源个人 scheme 未暂存状态、作品、模型和普通 App。证据 R=`D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T070201Z`。
