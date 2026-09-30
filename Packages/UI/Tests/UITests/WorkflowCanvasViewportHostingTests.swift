@@ -26,8 +26,6 @@ private actor ViewportNoInferenceEngine: InferenceEngine {
 
     var body: some View {
         ZStack {
-            canvas.opacity(visibility.quickVisible ? 0 : 1)
-                .allowsHitTesting(!visibility.quickVisible)
             VStack {
                 TextField("Quick editor", text: $quickDraft)
                 Slider(value: $quickValue)
@@ -38,6 +36,8 @@ private actor ViewportNoInferenceEngine: InferenceEngine {
             .background(Color.gray)
             .opacity(visibility.quickVisible ? 1 : 0)
             .allowsHitTesting(visibility.quickVisible)
+            canvas.opacity(visibility.quickVisible ? 0 : 1)
+                .allowsHitTesting(!visibility.quickVisible)
         }
     }
 }
@@ -262,7 +262,7 @@ struct WorkflowCanvasViewportHostingTests {
 
         let sheet = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 320, height: 180),
             styleMask: [.titled], backing: .buffered, defer: false)
-        window.beginSheet(sheet)
+        window.beginSheet(sheet, completionHandler: nil)
         #expect(window.attachedSheet === sheet)
         let sheetSize = try #require(scroll.documentView).frame.size
         try await dispatch(wheel(at: mouseInWindow, in: window, delta: 24))

@@ -220,7 +220,7 @@ struct WorkflowGraphSurface: View {
                 .scrollPosition($scrollPosition)
                 .onScrollGeometryChange(for: WorkflowCanvasScrollObservation.self) { scroll in
                     let size = clipViewportSize ?? scroll.containerSize
-                    WorkflowCanvasScrollObservation(contentOffset: scroll.contentOffset,
+                    return WorkflowCanvasScrollObservation(contentOffset: scroll.contentOffset,
                         containerSize: size,
                         visibleRawCenter: WorkflowCanvasViewportGeometry(graphSize: geometry.size,
                             viewportSize: size, zoom: effectiveZoom,
