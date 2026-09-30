@@ -64,8 +64,14 @@ class ACEBackendTests(unittest.TestCase):
         for relative in ("acestep/handler.py", "acestep/model_downloader.py",
                          "acestep/models/xl_sft/modeling_acestep_v15_xl_base.py",
                          "acestep/models/xl_sft/configuration_acestep_v15.py",
-                         "acestep/models/xl_sft/apg_guidance.py"):
+                         "acestep/models/xl_sft/apg_guidance.py",
+                         *(path for path, _ in contract.SOURCE_PATCHES)):
             self.add_file(self.vendor, "sourceFiles", relative, b"# pinned " + relative.encode())
+        source_by_path = {item["path"]: item for item in self.manifest["sourceFiles"]}
+        self.manifest["sourcePatches"] = [
+            {"path": path, "baseSHA256": base,
+             "patchedSHA256": source_by_path[path]["sha256"]}
+            for path, base in contract.SOURCE_PATCHES]
         self.manifest_path = self.root / "manifest.json"
         self.save_manifest()
         self.request = {
@@ -322,10 +328,9 @@ class ACEBackendTests(unittest.TestCase):
                     stream.write(b"\1")
                 return "forced failure", False
         writer = Writer()
-        with mock.patch.object(backend, "local_only_loading", lambda view: contextlib.nullcontext()):
-            code = backend.run_provider(self.request_path, self.job, self.model,
-                                        self.manifest_path, self.vendor, writer,
-                                        lambda: False, lambda *args: Handler())
+        code = backend.run_provider(self.request_path, self.job, self.model,
+                                    self.manifest_path, self.vendor, writer,
+                                    lambda: False, lambda *args: Handler())
         self.assertEqual(code, 2)
         self.assertEqual(writer.events[-1]["kind"], "inputMutation")
         self.assertFalse((self.job / "output.wav").exists())
@@ -337,8 +342,6 @@ import sys
 from pathlib import Path
 sys.path.insert(0, sys.argv[1])
 import d_audio_ace_backend as b
-import contextlib
-b.local_only_loading=lambda view: contextlib.nullcontext()
 class Handler:
     def initialize_service(self, **kwargs):
         sys.stderr.write('E' * 131072)
@@ -360,32 +363,217 @@ sys.exit(code)
         self.assertEqual(lines[-1]["type"], "error")
         self.assertEqual(lines[-1]["kind"], "configuration")
 
-    def test_pretrained_loaders_are_local_only(self):
-        calls = []
-        class Model:
-            @staticmethod
-            def from_pretrained(path, **kwargs):
-                calls.append((Path(path), kwargs))
-                return object()
-        class Tokenizer(Model): pass
-        class VAE(Model): pass
-        transformer = types.ModuleType("transformers")
-        transformer.AutoModel = Model
-        transformer.AutoTokenizer = Tokenizer
-        diffusers = types.ModuleType("diffusers")
-        diffusers_models = types.ModuleType("diffusers.models")
-        diffusers_models.AutoencoderOobleck = VAE
-        with mock.patch.dict(sys.modules, {"transformers": transformer, "diffusers": diffusers,
-                                           "diffusers.models": diffusers_models}):
-            view = self.root / "view"
-            with runtime.local_only_loading(view):
-                Model.from_pretrained(view / "checkpoints/acestep-v15-xl-sft")
-                Tokenizer.from_pretrained(view / "checkpoints/Qwen3-Embedding-0.6B")
-                VAE.from_pretrained(view / "checkpoints/vae")
-                with self.assertRaises(contract.ACEContractError):
-                    Model.from_pretrained("https://example.invalid/model")
-            self.assertEqual(len(calls), 3)
-            self.assertTrue(all(kwargs["local_files_only"] for _, kwargs in calls))
+    def test_production_has_no_global_pretrained_loader_patch(self):
+        import inspect
+        self.assertNotIn("unittest.mock", inspect.getsource(runtime))
+        self.assertNotIn("local_only_loading", inspect.getsource(backend))
+
+    def test_weight_hashes_once_before_and_once_after_fake_handler(self):
+        counts = {}
+        original = Path.open
+        def measured(path, *args, **kwargs):
+            if path.suffix == ".safetensors" and self.model in path.parents:
+                counts[path] = counts.get(path, 0) + 1
+            return original(path, *args, **kwargs)
+        class Writer:
+            def __init__(self): self.events = []
+            def progress(self, *args): pass
+            def emit(self, value, **kwargs): self.events.append(value)
+        class Handler:
+            dtype = "torch.float32"
+            def initialize_service(self, **kwargs): return "ready", True
+            def generate_instruction(self, task): return task
+            def generate_music(self, **kwargs): return {"fake": True}
+        writer = Writer()
+        with (mock.patch.object(Path, "open", measured),
+              mock.patch.object(backend, "forbid_torch_fallback"),
+              mock.patch.object(backend, "precheck_tokens", return_value={"caption": 2, "lyrics": 2}),
+              mock.patch.object(backend, "float32_samples", return_value=([0.0, 0.0] * 48000, 48000))):
+            code = backend.run_provider(self.request_path, self.job, self.model,
+                                        self.manifest_path, self.vendor, writer,
+                                        lambda: False, lambda *args: Handler())
+        self.assertEqual(code, 0)
+        self.assertEqual(writer.events[-1]["type"], "result")
+        expected = {self.model / item["path"] for item in self.manifest["files"]
+                    if item["path"].endswith(".safetensors")}
+        self.assertEqual(set(counts), expected)
+        self.assertEqual(set(counts.values()), {2})
+
+    def admitted_record(self):
+        record = contract.capture_verified_record(self.manifest, self.manifest_path,
+                                                  self.model, self.vendor)
+        contract.verify_manifest_files(self.manifest, self.model)
+        contract.verify_source_files(self.manifest, self.vendor)
+        record.check(self.manifest, manifest_path=self.manifest_path,
+                     model=self.model, vendor=self.vendor)
+        return record
+
+    def test_same_size_change_after_full_hash_is_rejected_before_handler(self):
+        weight = self.model / contract.XL_ROOT / "model-00001-of-00004.safetensors"
+        original_verify = backend.verify_source_files
+        reached = []
+        def mutate_after_complete_hash(manifest, vendor):
+            original_verify(manifest, vendor)
+            raw = weight.read_bytes()
+            weight.write_bytes(b"X" + raw[1:])
+        class Writer:
+            def __init__(self): self.events = []
+            def progress(self, *args): pass
+            def emit(self, value, **kwargs): self.events.append(value)
+        writer = Writer()
+        with mock.patch.object(backend, "verify_source_files", side_effect=mutate_after_complete_hash):
+            code = backend.run_provider(self.request_path, self.job, self.model,
+                                        self.manifest_path, self.vendor, writer,
+                                        lambda: False, lambda *args: reached.append("handler"))
+        self.assertEqual(code, 2)
+        self.assertEqual(writer.events[-1]["kind"], "inputMutation")
+        self.assertIn(str(weight), writer.events[-1]["message"])
+        self.assertEqual(reached, [])
+
+    def test_record_rejects_new_location_and_manifest_value(self):
+        record = self.admitted_record()
+        view = runtime.prepare_runtime_view(self.run, self.model, self.vendor, self.manifest, record)
+        record = record.with_view(view)
+        record.check(self.manifest, manifest_path=self.manifest_path,
+                     model=self.model, vendor=self.vendor, view=view)
+        with self.assertRaises(contract.ACEContractError):
+            record.check(self.manifest, model=self.root / "other-model")
+        with self.assertRaises(contract.ACEContractError):
+            record.check(self.manifest, view=self.root / "other-view")
+        changed = dict(self.manifest, sourceRevision="other")
+        with self.assertRaises(contract.ACEContractError): record.check(changed)
+
+    def test_record_rejects_same_size_file_change(self):
+        record = self.admitted_record()
+        weight = self.model / contract.XL_ROOT / "model-00001-of-00004.safetensors"
+        raw = weight.read_bytes()
+        weight.write_bytes(b"X" + raw[1:])
+        with self.assertRaisesRegex(contract.ACEContractError, str(weight)):
+            record.check(self.manifest)
+
+    def test_record_rejects_inode_replacement(self):
+        record = self.admitted_record()
+        weight = self.model / contract.XL_ROOT / "model-00001-of-00004.safetensors"
+        replacement = weight.with_suffix(".replacement")
+        replacement.write_bytes(weight.read_bytes())
+        replacement.replace(weight)
+        with self.assertRaisesRegex(contract.ACEContractError, str(weight)):
+            record.check(self.manifest)
+
+    def test_record_allows_unrelated_siblings(self):
+        record = self.admitted_record()
+        (self.root / "unrelated-output").write_bytes(b"result")
+        (self.model / "unrelated-model").write_bytes(b"another model")
+        record.check(self.manifest)
+
+    def test_record_rejects_parent_identity_replacement(self):
+        record = self.admitted_record()
+        source_parent = self.vendor / "acestep/models/xl_sft"
+        source_parent.rename(source_parent.with_name("xl_old"))
+        source_parent.mkdir()
+        with self.assertRaisesRegex(contract.ACEContractError, str(source_parent)):
+            record.check(self.manifest)
+
+    def test_record_rejects_parent_symlink(self):
+        record = self.admitted_record()
+        source_parent = self.vendor / "acestep/models/xl_sft"
+        moved = source_parent.with_name("xl_old")
+        source_parent.rename(moved)
+        source_parent.symlink_to(moved, target_is_directory=True)
+        with self.assertRaises(contract.ACEContractError):
+            record.check(self.manifest)
+
+    def test_record_rejects_unlisted_source_file(self):
+        record = self.admitted_record()
+        (self.vendor / "acestep/unlisted.py").write_bytes(b"pass\n")
+        with self.assertRaisesRegex(contract.ACEContractError, "source tree differs"):
+            record.check(self.manifest)
+
+    def test_cancelled_job_still_reports_input_mutation(self):
+        ref = self.source(frames=4800)
+        self.request.update(operation="variation", durationSeconds=.1, source=ref)
+        self.request["parameters"]["ace"]["editOptions"] = {
+            "kind": "cover", "audioCoverStrength": .5, "noiseStrength": .5}
+        self.save_request()
+        state = {"cancelled": False}
+        class Writer:
+            def __init__(self): self.events = []
+            def progress(self, *args): pass
+            def emit(self, value, **kwargs): self.events.append(value)
+        class Handler:
+            def initialize_service(self, **kwargs):
+                path = contract.reference_path(ref)
+                raw = path.read_bytes()
+                path.write_bytes(raw[:-1] + bytes([raw[-1] ^ 1]))
+                state["cancelled"] = True
+                return "cancelled", False
+        writer = Writer()
+        code = backend.run_provider(self.request_path, self.job, self.model,
+                                    self.manifest_path, self.vendor, writer,
+                                    lambda: state["cancelled"], lambda *args: Handler())
+        self.assertEqual(code, 2)
+        self.assertEqual(writer.events[-1]["kind"], "inputMutation")
+
+    def test_view_copy_mutation_rejected(self):
+        initial = self.admitted_record()
+        view = runtime.prepare_runtime_view(self.run, self.model, self.vendor, self.manifest, initial)
+        record = initial.with_view(view)
+        config = view / "checkpoints/vae/config.json"
+        raw = config.read_bytes()
+        config.write_bytes(b"X" + raw[1:])
+        with self.assertRaisesRegex(contract.ACEContractError, str(config)):
+            runtime.verify_runtime_view(view, self.model, self.vendor, self.manifest, record)
+
+    def test_view_rejects_unlisted_file(self):
+        initial = self.admitted_record()
+        view = runtime.prepare_runtime_view(self.run, self.model, self.vendor, self.manifest, initial)
+        record = initial.with_view(view)
+        (view / "unlisted").write_bytes(b"extra")
+        with self.assertRaises(contract.ACEContractError):
+            runtime.verify_runtime_view(view, self.model, self.vendor, self.manifest, record)
+
+    def test_manifest_file_mutation_rejected(self):
+        record = self.admitted_record()
+        manifest_raw = self.manifest_path.read_bytes()
+        self.manifest_path.write_bytes(b" " + manifest_raw[1:])
+        with self.assertRaisesRegex(contract.ACEContractError, str(self.manifest_path)):
+            record.check(self.manifest)
+
+    def test_decoder_release_requires_materialized_f32_and_keeps_conditions(self):
+        mlx = types.ModuleType("mlx")
+        mlx.__path__ = []
+        core = types.ModuleType("mlx.core")
+        utils = types.ModuleType("mlx.utils")
+        utils.tree_flatten = lambda parameters: [("p", parameters["p"])]
+        class DType:
+            def __init__(self, name): self.name = name
+            def __str__(self): return "mlx.core." + self.name
+            def __eq__(self, other): return isinstance(other, DType) and self.name == other.name
+        core.float32 = DType("float32")
+        core.float16 = DType("float16")
+        array = types.SimpleNamespace(dtype=core.float32)
+        decoder = types.SimpleNamespace(parameters=lambda: {"p": array})
+        torch_decoder = object()
+        tokenizer = object()
+        detokenizer = object()
+        condition = object()
+        model = types.SimpleNamespace(decoder=torch_decoder, tokenizer=tokenizer,
+                                      detokenizer=detokenizer, null_condition=condition)
+        handler = types.SimpleNamespace(model=model, mlx_decoder=decoder, use_mlx_dit=True)
+        core.eval = lambda *args: (_ for _ in ()).throw(RuntimeError("eval failed"))
+        with mock.patch.dict(sys.modules, {"mlx": mlx, "mlx.core": core, "mlx.utils": utils}):
+            with self.assertRaises(RuntimeError): runtime.release_torch_decoder(handler)
+            self.assertIs(model.decoder, torch_decoder)
+            core.eval = lambda *args: None
+            array.dtype = core.float16
+            with self.assertRaises(contract.ACEContractError): runtime.release_torch_decoder(handler)
+            self.assertIs(model.decoder, torch_decoder)
+            array.dtype = core.float32
+            runtime.release_torch_decoder(handler)
+        self.assertIsNone(model.decoder)
+        self.assertIs(model.tokenizer, tokenizer)
+        self.assertIs(model.detokenizer, detokenizer)
+        self.assertIs(model.null_condition, condition)
 
 
 if __name__ == "__main__":

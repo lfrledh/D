@@ -5,6 +5,9 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
+import stat
+from dataclasses import dataclass
 from pathlib import Path
 import re
 import struct
@@ -18,6 +21,12 @@ MODEL_REVISION = "d06de46b4622f781cf07f4a013a67d591ca52819"
 SHARED_REPOSITORY = "ACE-Step/Ace-Step1.5"
 SHARED_REVISION = "19671f406d603126926c1b7e2adc169acbcade22"
 SOURCE_REVISION = "ca1e85fe9430179831e6bc6be790c332190a3866"
+SOURCE_PATCHES = (
+    ("acestep/core/generation/handler/init_service_loader.py",
+     "22b41692bcb73fead4c831d16eaef3dda56cc995577f2353d763445dae7362e1"),
+    ("acestep/core/generation/handler/init_service_loader_components.py",
+     "621fc7d24ee847835de2eb66f35451120cb92310cf5e112e4edbdf955535d6de"),
+)
 MAX_REQUEST_BYTES = 3 * 1024 * 1024
 MAX_MANIFEST_BYTES = 2 * 1024 * 1024
 SHA = re.compile(r"[0-9a-f]{64}\Z")
@@ -197,12 +206,22 @@ def validate_request(value: dict[str, Any]) -> dict[str, Any]:
 def validate_manifest(value: dict[str, Any]) -> dict[str, Any]:
     manifest = exact(value, {"schemaVersion", "profile", "modelRepository", "modelRevision",
                              "sharedRepository", "sharedRevision", "sourceRevision", "files", "sourceFiles"},
+                     {"sourcePatches"},
                      label="ACE manifest")
     expected = {"schemaVersion": 1, "profile": PROFILE, "modelRepository": MODEL_REPOSITORY,
                 "modelRevision": MODEL_REVISION, "sharedRepository": SHARED_REPOSITORY,
                 "sharedRevision": SHARED_REVISION, "sourceRevision": SOURCE_REVISION}
     if any(manifest[key] != item for key, item in expected.items()):
         raise ACEContractError("ACE manifest identifies a different model or source", "configuration")
+    patches = manifest.get("sourcePatches")
+    if not isinstance(patches, list) or len(patches) != len(SOURCE_PATCHES):
+        raise ACEContractError("ACE source patch inventory differs", "configuration")
+    for patch, (path, original) in zip(patches, SOURCE_PATCHES):
+        exact(patch, {"path", "baseSHA256", "patchedSHA256"}, label="ACE source patch")
+        if (patch["path"] != path or patch["baseSHA256"] != original
+                or not isinstance(patch["patchedSHA256"], str)
+                or not SHA.fullmatch(patch["patchedSHA256"])):
+            raise ACEContractError("ACE source patch identity differs", "configuration")
     files = manifest["files"]
     if not isinstance(files, list) or not 1 <= len(files) <= 4096:
         raise ACEContractError("ACE manifest files are absent", "configuration")
@@ -241,7 +260,144 @@ def validate_manifest(value: dict[str, Any]) -> dict[str, Any]:
             "acestep/models/xl_sft/configuration_acestep_v15.py",
             "acestep/models/xl_sft/apg_guidance.py"} <= source_paths:
         raise ACEContractError("ACE source inventory omits required official code", "configuration")
+    by_path = {item["path"]: item for item in sources}
+    if any(patch["path"] not in by_path or by_path[patch["path"]]["sha256"] != patch["patchedSHA256"]
+           for patch in patches):
+        raise ACEContractError("ACE patched source inventory differs", "configuration")
     return manifest
+
+
+def _open_exact(path: Path, *, directory: bool = False) -> int:
+    """Walk from the filesystem root with no symlink following at any component."""
+    if not path.is_absolute():
+        raise ACEContractError("ACE admitted path is not absolute", "configuration")
+    fd = os.open("/", os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        for index, part in enumerate(path.parts[1:]):
+            last = index == len(path.parts) - 2
+            flags = os.O_RDONLY | os.O_NOFOLLOW
+            if not last or directory:
+                flags |= os.O_DIRECTORY
+            next_fd = os.open(part, flags, dir_fd=fd)
+            os.close(fd)
+            fd = next_fd
+        return fd
+    except BaseException:
+        os.close(fd)
+        raise
+
+
+def _identity(path: Path) -> tuple[int, int, int, int, int, int]:
+    """Open and fstat the exact file or directory without following links."""
+    fd = _open_exact(path)
+    try:
+        value = os.fstat(fd)
+        if not (stat.S_ISREG(value.st_mode) or stat.S_ISDIR(value.st_mode)):
+            raise ACEContractError("ACE admitted path changed type", "configuration")
+        return (value.st_dev, value.st_ino, value.st_mode, value.st_size,
+                value.st_mtime_ns, value.st_ctime_ns)
+    finally:
+        os.close(fd)
+
+
+def _link_identity(path: Path) -> tuple[int, int, int, int, int, int]:
+    fd = _open_exact(path.parent, directory=True)
+    try:
+        value = os.stat(path.name, dir_fd=fd, follow_symlinks=False)
+        if not stat.S_ISLNK(value.st_mode):
+            raise ACEContractError("ACE private weight view is no longer a link", "configuration")
+        return (value.st_dev, value.st_ino, value.st_mode, value.st_size,
+                value.st_mtime_ns, value.st_ctime_ns)
+    finally:
+        os.close(fd)
+
+
+@dataclass(frozen=True)
+class VerificationRecord:
+    manifest_bytes: bytes
+    paths: tuple[tuple[Path, tuple[int, int, int, int, int, int]], ...]
+    manifest_path: Path
+    model_root: Path
+    vendor_root: Path
+    view_root: Path | None = None
+
+    def check(self, manifest: dict[str, Any], *, manifest_path: Path | None = None,
+              model: Path | None = None, vendor: Path | None = None,
+              view: Path | None = None) -> None:
+        if ((manifest_path is not None and manifest_path != self.manifest_path)
+                or (model is not None and model != self.model_root)
+                or (vendor is not None and vendor != self.vendor_root)
+                or (view is not None and self.view_root is not None and view != self.view_root)):
+            raise ACEContractError("ACE verification record belongs to another job location", "configuration")
+        try:
+            current_manifest = json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode()
+        except (TypeError, ValueError) as exc:
+            raise ACEContractError("ACE manifest changed after admission", "configuration") from exc
+        if current_manifest != self.manifest_bytes:
+            raise ACEContractError("ACE manifest changed after admission", "configuration")
+        for path, identity in self.paths:
+            try:
+                observed = (_link_identity(path) if stat.S_ISLNK(identity[2])
+                            else _identity(path))
+                # Directory contents change when an unrelated sibling is created.
+                # Keep the ancestor itself pinned, while files and view links retain
+                # their complete metadata snapshot.
+                same = ((observed[:2] == identity[:2]
+                         and stat.S_IFMT(observed[2]) == stat.S_IFMT(identity[2]))
+                        if stat.S_ISDIR(identity[2]) else observed == identity)
+                if not same:
+                    raise ACEContractError(f"ACE admitted identity changed: {path}", "configuration")
+            except OSError as exc:
+                raise ACEContractError(f"ACE admitted path changed: {path}", "configuration") from exc
+        declared_source = {item["path"] for item in manifest["sourceFiles"]}
+        observed_source = set()
+        for path in self.vendor_root.rglob("*"):
+            if path.is_symlink():
+                raise ACEContractError("ACE source tree contains a symbolic link", "configuration")
+            if path.is_file():
+                observed_source.add(path.relative_to(self.vendor_root).as_posix())
+        if observed_source != declared_source:
+            raise ACEContractError("ACE source tree differs from pinned inventory", "configuration")
+
+    def with_view(self, view: Path) -> "VerificationRecord":
+        original = dict(self.paths)
+        paths = set(original)
+        for item in (view, *view.rglob("*")):
+            path = item
+            while path != path.parent:
+                paths.add(path)
+                path = path.parent
+        snapshot = []
+        for path in sorted(paths):
+            if path in original:
+                identity = original[path]
+            elif path.is_symlink():
+                identity = _link_identity(path)
+            else:
+                identity = _identity(path)
+            snapshot.append((path, identity))
+        return VerificationRecord(self.manifest_bytes, tuple(snapshot),
+                                  self.manifest_path, self.model_root, self.vendor_root, view)
+
+
+def capture_verified_record(manifest: dict[str, Any], manifest_path: Path,
+                            model: Path, vendor: Path) -> VerificationRecord:
+    """Pin identities before complete model and source hashing begins."""
+    paths = [manifest_path, model, vendor]
+    paths += [model / item["path"] for item in manifest["files"]]
+    paths += [vendor / item["path"] for item in manifest["sourceFiles"]]
+    expanded: set[Path] = set()
+    for path in paths:
+        while path != path.parent:
+            expanded.add(path)
+            path = path.parent
+    try:
+        snapshot = tuple((path, _identity(path)) for path in sorted(expanded))
+    except OSError as exc:
+        raise ACEContractError("ACE admitted path cannot be opened safely", "configuration") from exc
+    return VerificationRecord(json.dumps(manifest, sort_keys=True,
+                              separators=(",", ":")).encode(), snapshot,
+                              manifest_path, model, vendor)
 
 
 def verify_manifest_files(manifest: dict[str, Any], root: Path) -> None:
