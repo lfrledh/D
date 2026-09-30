@@ -168,7 +168,20 @@ public actor InferenceRuntime: InferenceEngine {
         if entries[id]?.cancellationRequested == true {
             // Cancellation may supersede ordinary errors, but never conceal a
             // independently verified mutation of protected input.
-            if case .failed(.inputIntegrityChanged) = outcome {} else { outcome = .cancelled }
+            switch outcome {
+            case .failed(.inputIntegrityChanged), .failed(.resourceCleanupUnconfirmed): break
+            default: outcome = .cancelled
+            }
+        }
+        // An unknown process-group lifetime is not a successful cancellation.
+        // Close this runtime before any await; the affected backend separately
+        // retains the process-wide compute lease. No queued operation may start.
+        var refused: [Entry] = []
+        if case .failed(.resourceCleanupUnconfirmed) = outcome {
+            isClosed = true
+            refused = queue.compactMap { entries.removeValue(forKey: $0) }
+            queue.removeAll()
+            for waiting in refused { waiting.continuation.finish(throwing: InferenceFailure.runtimeClosed) }
         }
         switch outcome {
         case .completed: entry.continuation.finish()
@@ -186,6 +199,7 @@ public actor InferenceRuntime: InferenceEngine {
         // release has finished. A reentrant submission may start the FIFO head during
         // this await; after resuming, never clear or replace that newer run's state.
         await entry.completion.resolve(outcome)
+        for waiting in refused { await waiting.completion.resolve(.failed(.runtimeClosed)) }
         startNextIfIdle()
     }
 

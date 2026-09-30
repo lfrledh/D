@@ -14,6 +14,9 @@ public enum InferenceFailure: Error, Sendable, Codable, Equatable, LocalizedErro
     /// Verified input modification is a protection failure even when the caller
     /// also cancelled. Backends must retain the original stop/error context.
     case inputIntegrityChanged(String)
+    /// An external process group could not be proven stopped. The backend keeps
+    /// its resource lease and the runtime must close admission, including queued work.
+    case resourceCleanupUnconfirmed(String)
 
     public var errorDescription: String? {
         switch self {
@@ -28,6 +31,7 @@ public enum InferenceFailure: Error, Sendable, Codable, Equatable, LocalizedErro
         case .consumerTooSlow: "Output buffer is full; inference stopped to avoid silently losing output."
         case .backendFailed(let reason): reason
         case .inputIntegrityChanged(let reason): reason
+        case .resourceCleanupUnconfirmed(let reason): reason
         }
     }
 }

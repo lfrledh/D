@@ -5,6 +5,25 @@ import Testing
 
 @Suite("Input protection and cancellation", .serialized)
 struct InputIntegrityCancellationTests {
+    @Test("Unknown process cleanup closes admission without starting queued work")
+    func uncertainCleanupQuarantinesRuntime() async throws {
+        let first = request(), second = request(), execute = TestGate()
+        let failure = InferenceFailure.resourceCleanupUnconfirmed("owned group still uncertain")
+        let backend = ControlledBackend(plans: [first.id: TestPlan(executeGate: execute, failure: failure)])
+        let engine = try runtime([backend])
+        let run = try await engine.submit(first, backendID: "controlled")
+        await execute.waitForArrival()
+        let queued = try await engine.submit(second, backendID: "controlled")
+        await run.cancel(); await execute.open()
+        #expect(await run.outcome() == .failed(failure))
+        #expect(await queued.outcome() == .failed(.runtimeClosed))
+        #expect(!(await backend.observations().calls).contains(.executeStarted(second.id)))
+        do {
+            _ = try await engine.submit(request(), backendID: "controlled")
+            Issue.record("Quarantined runtime accepted another request")
+        } catch let value as InferenceFailure { #expect(value == .runtimeClosed) }
+        await engine.shutdown()
+    }
     @Test("Verified mutation survives cancellation during execution and release")
     func integrityWins() async throws {
         for cancelDuringRelease in [false, true] {

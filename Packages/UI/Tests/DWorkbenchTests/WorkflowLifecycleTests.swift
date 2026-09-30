@@ -1302,6 +1302,24 @@ struct WorkflowLanguageServicesTests {
         #expect(await store.snapshot().assets.isEmpty)
         try await store.close()
     }
+    @Test func unconfirmedCleanupIsNotHiddenByConcurrentCancellation() async throws {
+        let store = try await ProjectStore.create(at: root(), name: "integrity")
+        let engine = WorkflowFixtureEngine(directory: store.artifactDirectory)
+        let session = WorkbenchSession(engine: engine, backendID: "fixture", status: { .init(activeRunID: nil, phase: nil, queuedRunIDs: []) },
+            shutdown: {}, cleanup: {}, validateModel: { _ in })
+        var released = 0
+        let service = WorkflowServices(store: store, session: session, registry: try .init(operations: [operation])) { _, identity in
+            .init(identity: identity, reference: .init(directory: store.rootURL), backendID: "text", release: { released += 1 })
+        }
+        await engine.configure(action: { await service.cancel() }, failure: .resourceCleanupUnconfirmed("controlled process group uncertainty"))
+        var node = operation.definition.makeNode(); node.parameters["modelID"] = .text("text:frozen")
+        try service.beginPlan()
+        do { _ = try await service.executeCall(.init(node: node, stepID: UUID(), inputs: [:])); Issue.record("Cleanup uncertainty hidden") }
+        catch { #expect(error as? InferenceFailure == .resourceCleanupUnconfirmed("controlled process group uncertainty")) }
+        #expect(released == 1)
+        #expect(await store.snapshot().assets.isEmpty)
+        try await store.close()
+    }
     @Test func explicitValueExportFormatsUseActualServiceRoute() async throws {
         let store = try await ProjectStore.create(at: root(), name: "export formats")
         let engine = WorkflowFixtureEngine(directory: store.artifactDirectory)

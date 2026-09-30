@@ -191,8 +191,12 @@ struct WorkflowSaveFailure: LocalizedError {
             }
         } catch { failure = error; await run.cancel() }
         let outcome = await run.outcome(); activeRun = nil
-        if case .failed(let integrity) = outcome,
-           case .inputIntegrityChanged = integrity { throw integrity }
+        if case .failed(let authoritativeFailure) = outcome {
+            switch authoritativeFailure {
+            case .inputIntegrityChanged, .resourceCleanupUnconfirmed: throw authoritativeFailure
+            default: break
+            }
+        }
         try checkCancellation()
         if let failure { throw failure }
         switch outcome {
