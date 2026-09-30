@@ -20,9 +20,7 @@ struct QuickGenerationView: View {
     @State private var inputIssue: String?
     @State private var preview: WorkflowAssetReference?
     @Environment(\.dLanguageStore) private var language
-    private var definition: WorkflowOperationDefinition? {
-        quick.draft.flatMap { WorkflowRegistry.standard.operation($0.node.operationID)?.definition }
-    }
+    private var definition: WorkflowOperationDefinition? { quick.definition }
     private var title: String {
         let id = quick.draft?.node.parameters["modelID"]?.string ?? ""
         return model.projectSession.explicitModelChoices.first { $0.id == id }?.displayName
@@ -57,24 +55,44 @@ struct QuickGenerationView: View {
                                 QuickParameterField(operationID: draft.node.operationID, field: field, value: draft.node.parameters[field.id] ?? field.defaultValue,
                                     onChange: { quick.setParameter(field.id, value: $0, draftID: draft.id) }, raw: draft.fieldText[field.id], onRaw: { quick.setFieldText(field.id, text: $0, draftID: draft.id) })
                             }
-                            if definition.inputs.contains(where: { $0.id == "content" }) {
+                            if definition.inputs.contains(where: { $0.id == "content" && $0.assetListKind == nil && $0.kinds.contains(.text) }) {
                                 Text(baselineText(language, "label.bf8881ad5d3a", fallback: "参考正文（可选）")).font(.subheadline)
                                 TextEditor(text: Binding(get: { draft.inputs["content"]?.datum?.text ?? "" },
                                     set: { quick.setInput("content", value: $0.isEmpty ? nil : .data(.text($0)), draftID: draft.id) }))
                                     .frame(minHeight: 100).padding(6).background(.quaternary, in: RoundedRectangle(cornerRadius: 9))
                             }
-                            ForEach(definition.inputs.filter { !["task", "prompt", "content"].contains($0.id) }) { port in
+                            ForEach(definition.inputs.filter { $0.assetListKind != nil || !["task", "prompt", "content"].contains($0.id) }) { port in
                                 VStack(alignment: .leading) {
                                     Text(WorkflowCanvasPresentation.portTitle(operationID: draft.node.operationID, port: port, input: true, language: language) +
                                          (port.required ? baselineText(language, "required", fallback: " · 必选") : baselineText(language, "optional", fallback: " · 可选"))).font(.subheadline)
-                                    HStack {
-                                        Text(draft.inputs[port.id] == nil ? "未绑定输入" : "已保存输入快照").foregroundStyle(.secondary)
-                                        Spacer()
-                                        Button(baselineText(language, "label.1b9818e1adfe", fallback: "导入…")) { Task { await importInput(port: port, draft: draft) } }
-                                        if draft.inputs[port.id] != nil {
-                                            Button(baselineText(language, "label.6135d4159e89", fallback: "移除")) { quick.setInput(port.id, value: nil, draftID: draft.id) }
+                                    if port.assetListKind != nil {
+                                        let items = quick.inputAssetItems(port: port, draftID: draft.id)
+                                        ForEach(items) { item in
+                                            if let ordinal = items.firstIndex(where: { $0.id == item.id }),
+                                               case .asset(let reference) = item.value {
+                                                HStack {
+                                                    Text("\(ordinal + 1).")
+                                                    QuickInputAssetName(store: quick.store, reference: reference)
+                                                    Spacer()
+                                                    Button("上移") { editInput { try quick.moveInputAsset(item.id, by: -1, port: port, draftID: draft.id) } }
+                                                        .disabled(ordinal == 0)
+                                                    Button("下移") { editInput { try quick.moveInputAsset(item.id, by: 1, port: port, draftID: draft.id) } }
+                                                        .disabled(ordinal == items.count - 1)
+                                                    Button("移除") { editInput { try quick.removeInputAsset(item.id, port: port, draftID: draft.id) } }
+                                                }
+                                            }
+                                        }
+                                        if items.isEmpty { Text("未绑定输入").foregroundStyle(.secondary) }
+                                    } else {
+                                        HStack {
+                                            Text(draft.inputs[port.id] == nil ? "未绑定输入" : "已保存输入快照").foregroundStyle(.secondary)
+                                            Spacer()
+                                            if draft.inputs[port.id] != nil {
+                                                Button(baselineText(language, "label.6135d4159e89", fallback: "移除")) { quick.setInput(port.id, value: nil, draftID: draft.id) }
+                                            }
                                         }
                                     }
+                                    Button(baselineText(language, "label.1b9818e1adfe", fallback: "导入…")) { Task { await importInput(port: port, draft: draft) } }
                                 }
                             }
                             DisclosureGroup(baselineText(language, "label.44455611b910", fallback: "高级设置"), isExpanded: $advanced) {
@@ -83,7 +101,9 @@ struct QuickGenerationView: View {
                                         QuickParameterField(operationID: draft.node.operationID, field: field, value: draft.node.parameters[field.id] ?? field.defaultValue,
                                             onChange: { quick.setParameter(field.id, value: $0, draftID: draft.id) }, raw: draft.fieldText[field.id], onRaw: { quick.setFieldText(field.id, text: $0, draftID: draft.id) })
                                     }
-                                    if draft.node.operationID == "d.model.language", draft.node.parameters["outputMode"]?.string == "json" {
+                                    if definition.modelKind == .text,
+                                       definition.fields.contains(where: { $0.id == "outputMode" }),
+                                       draft.node.parameters["outputMode"]?.string == "json" {
                                         WorkflowNodeDataEditor(node: Binding(get: { draft.node }, set: {
                                             quick.setDataConfiguration($0.dataConfiguration, draftID: draft.id)
                                         }))
@@ -211,14 +231,34 @@ struct QuickGenerationView: View {
         return refs
     }
     private func importInput(port: WorkflowPortDefinition, draft: QuickDraft) async {
-        let panel = NSOpenPanel(); panel.canChooseDirectories = false; panel.allowsMultipleSelection = false
-        guard await panel.begin() == .OK, let url = panel.url else { return }
-        let scoped = url.startAccessingSecurityScopedResource(); defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        let panel = NSOpenPanel(); panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = port.assetListKind != nil
+        guard await panel.begin() == .OK else { return }
+        let urls = panel.urls
+        guard !urls.isEmpty else { return }
         do {
-            let published = try await quick.store.importWorkflowMediaFile(at: url)
-            guard port.kinds.contains(published.record.reference.kind) else { throw WorkflowIssue("文件已保留为素材，但不符合此输入端口。") }
-            quick.setInput(port.id, value: .asset(published.record.reference), draftID: draft.id)
-        } catch { inputIssue = error.localizedDescription }
+            var imported: [WorkflowAssetReference] = []
+            for url in urls {
+                let scoped = url.startAccessingSecurityScopedResource()
+                do {
+                    let published = try await quick.store.importWorkflowMediaFile(at: url)
+                    imported.append(published.record.reference)
+                    if scoped { url.stopAccessingSecurityScopedResource() }
+                } catch {
+                    if scoped { url.stopAccessingSecurityScopedResource() }
+                    throw error
+                }
+            }
+            try quick.commitImportedAssets(imported, port: port, draftID: draft.id,
+                                           expectedNode: draft.node, expectedInputs: draft.inputs)
+            inputIssue = nil
+        } catch {
+            if quick.draft?.id == draft.id { inputIssue = error.localizedDescription }
+        }
+    }
+    private func editInput(_ action: () throws -> Void) {
+        do { try action(); inputIssue = nil }
+        catch { inputIssue = error.localizedDescription }
     }
     private func export(_ reference: WorkflowAssetReference) async {
         let panel = NSOpenPanel(); panel.canChooseDirectories = true; panel.canChooseFiles = false
@@ -226,6 +266,23 @@ struct QuickGenerationView: View {
         let scoped = url.startAccessingSecurityScopedResource(); defer { if scoped { url.stopAccessingSecurityScopedResource() } }
         do { _ = try await quick.store.exportWorkflowAssets([reference], name: "D-" + UUID().uuidString.prefix(8), exportID: UUID(), directory: url) }
         catch { inputIssue = error.localizedDescription }
+    }
+}
+
+private struct QuickInputAssetName: View {
+    let store: ProjectStore
+    let reference: WorkflowAssetReference
+    @State private var name: String?
+    var body: some View {
+        Text(name ?? reference.assetID.uuidString)
+            .lineLimit(1)
+            .help(reference.assetID.uuidString + " · " + reference.version.uuidString)
+            .task(id: reference) {
+                let manifest = await store.snapshot()
+                name = manifest.id == reference.projectID
+                    ? manifest.assets.first(where: { $0.id == reference.assetID })?.name
+                    : nil
+            }
     }
 }
 

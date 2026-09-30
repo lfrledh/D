@@ -1,6 +1,9 @@
 import DInference
 import Foundation
+import CoreGraphics
+import ImageIO
 import Testing
+import UniformTypeIdentifiers
 @testable import DWorkbench
 
 private actor QuickFixtureEngine: InferenceEngine {
@@ -31,6 +34,93 @@ struct QuickGenerationTests {
         let id = try #require(quick.draft?.id)
         quick.setParameter("task", value: .text("重写这段话"), draftID: id)
         return (store, engine, quick, canvas)
+    }
+
+    private func imageData() throws -> Data {
+        let context = try #require(CGContext(data: nil, width: 2, height: 2, bitsPerComponent: 8, bytesPerRow: 8,
+            space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        context.setFillColor(CGColor(red: 1, green: 0, blue: 0, alpha: 1))
+        context.fill(.init(x: 0, y: 0, width: 2, height: 2))
+        let image = try #require(context.makeImage()), data = NSMutableData()
+        let destination = try #require(CGImageDestinationCreateWithData(data, UTType.png.identifier as CFString, 1, nil))
+        CGImageDestinationAddImage(destination, image, nil)
+        #expect(CGImageDestinationFinalize(destination))
+        return data as Data
+    }
+
+    @Test func sharedModelDefinitionAndOrderedQuickInputsSurviveReopen() async throws {
+        let (store, engine, quick, canvas) = try await fixture()
+        let operation = try #require(WorkflowRegistry.standard.definitions.first {
+            $0.modelKind != nil && $0.inputs.contains(where: { $0.assetListKind == .image })
+        })
+        quick.select(operationID: operation.id, modelID: "fixture:ordered")
+        let draft = try #require(quick.draft)
+        #expect(quick.definition == WorkflowRegistry.standard.definition(for: draft.node))
+        let port = try #require(quick.definition?.inputs.first(where: { $0.assetListKind == .image }))
+        let png = try imageData()
+        let a = try await store.publishWorkflowAsset(data: png, mediaType: "image/png", metadata: .init(width: 2, height: 2), name: "first",
+            operationID: "d.asset.import").record.reference
+        let b = try await store.publishWorkflowAsset(data: png, mediaType: "image/png", metadata: .init(width: 2, height: 2), name: "second",
+            operationID: "d.asset.import").record.reference
+        try quick.commitImportedAssets([a, b], port: port, draftID: draft.id,
+                                       expectedNode: draft.node, expectedInputs: draft.inputs)
+        let firstItems = quick.inputAssetItems(port: port, draftID: draft.id)
+        #expect(try port.resolveAssets(#require(quick.draft?.inputs[port.id])) == [a, b])
+        try quick.moveInputAsset(firstItems[1].id, by: -1, port: port, draftID: draft.id)
+        let reordered = quick.inputAssetItems(port: port, draftID: draft.id)
+        #expect(reordered == [firstItems[1], firstItems[0]])
+        try quick.removeInputAsset(firstItems[0].id, port: port, draftID: draft.id)
+        #expect(try port.resolveAssets(#require(quick.draft?.inputs[port.id])) == [b])
+        #expect(quick.inputAssetItems(port: port, draftID: draft.id) == [firstItems[1]])
+        try await quick.flush()
+        let saved = quick.state
+        #expect(await engine.requests.isEmpty)
+        try await canvas.close(); try await store.close()
+        let reopened = try await ProjectStore.open(at: store.rootURL)
+        let restored = QuickGenerationController(store: reopened) { throw WorkflowIssue("must not execute") }
+        await restored.load()
+        #expect(restored.state == saved)
+        #expect(restored.inputAssetItems(port: port, draftID: draft.id) == [firstItems[1]])
+        try restored.removeInputAsset(firstItems[1].id, port: port, draftID: draft.id)
+        #expect(restored.draft?.inputs[port.id] == nil)
+        #expect(await engine.requests.isEmpty)
+        try await restored.flush(); try await reopened.close()
+    }
+
+    @Test func importedAssetBatchRejectsWrongKindAndStaleCallbacksWithoutChangingDraft() async throws {
+        let (store, engine, quick, canvas) = try await fixture()
+        let operation = try #require(WorkflowRegistry.standard.definitions.first {
+            $0.modelKind != nil && $0.inputs.contains(where: { $0.assetListKind == .image })
+        })
+        quick.select(operationID: operation.id, modelID: "fixture:ordered")
+        let captured = try #require(quick.draft)
+        let port = try #require(quick.definition?.inputs.first(where: { $0.assetListKind == .image }))
+        let image = try await store.publishWorkflowAsset(data: imageData(), mediaType: "image/png", metadata: .init(width: 2, height: 2), name: "retained image",
+            operationID: "d.asset.import").record.reference
+        let text = try await store.publishWorkflowAsset(data: Data("wrong kind".utf8), mediaType: "text/plain", name: "retained text",
+            operationID: "d.asset.import").record.reference
+        #expect(throws: WorkflowIssue.self) {
+            try quick.commitImportedAssets([image, text], port: port, draftID: captured.id,
+                                           expectedNode: captured.node, expectedInputs: captured.inputs)
+        }
+        #expect(quick.draft?.inputs[port.id] == nil)
+        quick.setInput(port.id, value: .asset(image), draftID: captured.id)
+        #expect(throws: WorkflowIssue.self) {
+            try quick.commitImportedAssets([image], port: port, draftID: captured.id,
+                                           expectedNode: captured.node, expectedInputs: captured.inputs)
+        }
+        #expect(quick.draft?.inputs[port.id] == .asset(image))
+        quick.select(operationID: "d.model.language", modelID: "text:other")
+        let other = quick.draft
+        #expect(throws: WorkflowIssue.self) {
+            try quick.commitImportedAssets([image], port: port, draftID: captured.id,
+                                           expectedNode: captured.node, expectedInputs: [port.id: .asset(image)])
+        }
+        #expect(quick.draft == other)
+        #expect(await store.snapshot().assets.contains(where: { $0.id == image.assetID }))
+        #expect(await store.snapshot().assets.contains(where: { $0.id == text.assetID }))
+        #expect(await engine.requests.isEmpty)
+        try await quick.flush(); try await canvas.close(); try await store.close()
     }
 
     @Test func fixedToolDropCreatesOneUndoableGraphAndRejectsUnknownVersion() async throws {
