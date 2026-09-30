@@ -66,23 +66,33 @@ struct QuickGenerationView: View {
                                     Text(WorkflowCanvasPresentation.portTitle(operationID: draft.node.operationID, port: port, input: true, language: language) +
                                          (port.required ? baselineText(language, "required", fallback: " · 必选") : baselineText(language, "optional", fallback: " · 可选"))).font(.subheadline)
                                     if port.assetListKind != nil {
-                                        let items = quick.inputAssetItems(port: port, draftID: draft.id)
-                                        ForEach(items) { item in
-                                            if let ordinal = items.firstIndex(where: { $0.id == item.id }),
-                                               case .asset(let reference) = item.value {
-                                                HStack {
-                                                    Text("\(ordinal + 1).")
-                                                    QuickInputAssetName(store: quick.store, reference: reference)
-                                                    Spacer()
-                                                    Button("上移") { editInput { try quick.moveInputAsset(item.id, by: -1, port: port, draftID: draft.id) } }
-                                                        .disabled(ordinal == 0)
-                                                    Button("下移") { editInput { try quick.moveInputAsset(item.id, by: 1, port: port, draftID: draft.id) } }
-                                                        .disabled(ordinal == items.count - 1)
-                                                    Button("移除") { editInput { try quick.removeInputAsset(item.id, port: port, draftID: draft.id) } }
+                                        switch assetListPresentation(port: port, draftID: draft.id) {
+                                        case .valid(let items):
+                                            ForEach(items) { item in
+                                                if let ordinal = items.firstIndex(where: { $0.id == item.id }),
+                                                   case .asset(let reference) = item.value {
+                                                    HStack {
+                                                        Text("\(ordinal + 1).")
+                                                        QuickInputAssetName(store: quick.store, reference: reference)
+                                                        Spacer()
+                                                        Button("上移") { editInput { try quick.moveInputAsset(item.id, by: -1, port: port, draftID: draft.id) } }
+                                                            .disabled(ordinal == 0)
+                                                        Button("下移") { editInput { try quick.moveInputAsset(item.id, by: 1, port: port, draftID: draft.id) } }
+                                                            .disabled(ordinal == items.count - 1)
+                                                        Button("移除") { editInput { try quick.removeInputAsset(item.id, port: port, draftID: draft.id) } }
+                                                    }
+                                                }
+                                            }
+                                            if items.isEmpty { Text("未绑定输入").foregroundStyle(.secondary) }
+                                        case .invalid(let issue):
+                                            Text("已保存的输入无效：" + issue).foregroundStyle(.red).textSelection(.enabled)
+                                            Button("清空整个输入") {
+                                                editInput {
+                                                    try quick.clearInputAssetList(port: port, draftID: draft.id,
+                                                                                  expectedNode: draft.node, expectedInputs: draft.inputs)
                                                 }
                                             }
                                         }
-                                        if items.isEmpty { Text("未绑定输入").foregroundStyle(.secondary) }
                                     } else {
                                         HStack {
                                             Text(draft.inputs[port.id] == nil ? "未绑定输入" : "已保存输入快照").foregroundStyle(.secondary)
@@ -101,7 +111,7 @@ struct QuickGenerationView: View {
                                         QuickParameterField(operationID: draft.node.operationID, field: field, value: draft.node.parameters[field.id] ?? field.defaultValue,
                                             onChange: { quick.setParameter(field.id, value: $0, draftID: draft.id) }, raw: draft.fieldText[field.id], onRaw: { quick.setFieldText(field.id, text: $0, draftID: draft.id) })
                                     }
-                                    if definition.modelKind == .text,
+                                    if WorkflowModelRoutes.isLanguage(draft.node.operationID),
                                        definition.fields.contains(where: { $0.id == "outputMode" }),
                                        draft.node.parameters["outputMode"]?.string == "json" {
                                         WorkflowNodeDataEditor(node: Binding(get: { draft.node }, set: {
@@ -170,6 +180,14 @@ struct QuickGenerationView: View {
     }
     private var pastRuns: [QuickRunRecord] {
         let current = Set(currentRuns.map(\.id)); return quick.visibleRuns.filter { !current.contains($0.id) }
+    }
+    private enum AssetListPresentation {
+        case valid([WorkflowDataItem])
+        case invalid(String)
+    }
+    private func assetListPresentation(port: WorkflowPortDefinition, draftID: String) -> AssetListPresentation {
+        do { return .valid(try quick.inputAssetItems(port: port, draftID: draftID)) }
+        catch { return .invalid(error.localizedDescription) }
     }
     private func runCard(_ run: QuickRunRecord) -> some View {
                             VStack(alignment: .leading, spacing: 10) {

@@ -87,6 +87,11 @@ public struct QuickCreationState: Codable, Sendable, Equatable {
             default: break
             }
         }
+        for port in definition.inputs where port.assetListKind != nil {
+            guard let value = draft.inputs[port.id] else { continue }
+            do { _ = try Self.assetItems(from: value, port: port) }
+            catch { return port.title + "：" + error.localizedDescription }
+        }
         return nil
     }
     public var canStart: Bool {
@@ -133,8 +138,8 @@ public struct QuickCreationState: Codable, Sendable, Equatable {
             var node = operation.definition.makeNode()
             node.parameters["modelID"] = .text(modelID)
             // The text field remains editable; no output from a previous model is reused.
-            if operationID == "d.model.language" { node.parameters["outputMode"] = .text("text") }
-            if operationID == "d.image.generate" { node.parameters["count"] = .integer(1) }
+            if WorkflowModelRoutes.isLanguage(operationID) { node.parameters["outputMode"] = .text("text") }
+            if WorkflowModelRoutes.isImage(operationID) { node.parameters["count"] = .integer(1) }
             state.drafts.append(.init(id: key, node: node))
         }
         state.selectedDraftID = key; scheduleSave()
@@ -185,11 +190,27 @@ public struct QuickCreationState: Codable, Sendable, Equatable {
         }
         scheduleSave()
     }
-    public func inputAssetItems(port: WorkflowPortDefinition, draftID: String) -> [WorkflowDataItem] {
+    public func inputAssetItems(port: WorkflowPortDefinition, draftID: String) throws -> [WorkflowDataItem] {
         guard let draft = state.drafts.first(where: { $0.id == draftID }),
               let actual = WorkflowRegistry.standard.definition(for: draft.node)?.inputs.first(where: { $0.id == port.id }),
-              actual == port else { return [] }
-        return (try? Self.assetItems(from: draft.inputs[port.id], port: port)) ?? []
+              actual == port, port.assetListKind != nil else {
+            throw WorkflowIssue("当前草稿或输入端口已改变。")
+        }
+        return try Self.assetItems(from: draft.inputs[port.id], port: port)
+    }
+    /// Clear only the exact input snapshot shown to the user; never repair invalid data on load.
+    public func clearInputAssetList(port: WorkflowPortDefinition, draftID: String,
+                                    expectedNode: WorkflowNode, expectedInputs: [String: WorkflowValue]) throws {
+        guard isLoaded, state.selectedDraftID == draftID, port.assetListKind != nil,
+              let index = state.drafts.firstIndex(where: { $0.id == draftID }),
+              state.drafts[index].node == expectedNode,
+              state.drafts[index].inputs == expectedInputs,
+              expectedInputs[port.id] != nil,
+              WorkflowRegistry.standard.definition(for: expectedNode)?.inputs.contains(port) == true else {
+            throw WorkflowIssue("输入已改变；原有输入未清空。", port: port.id)
+        }
+        state.drafts[index].inputs[port.id] = nil
+        scheduleSave()
     }
     public func moveInputAsset(_ itemID: String, by offset: Int, port: WorkflowPortDefinition, draftID: String) throws {
         let index = try editableAssetListIndex(port: port, draftID: draftID)
@@ -221,7 +242,21 @@ public struct QuickCreationState: Codable, Sendable, Equatable {
     }
     private static func assetItems(from value: WorkflowValue?, port: WorkflowPortDefinition) throws -> [WorkflowDataItem] {
         guard let value else { return [] }
-        _ = try port.resolveAssets(value)
+        do { _ = try port.resolveAssets(value) }
+        catch {
+            if case .data(.list(let element, let items)) = value {
+                if items.isEmpty { throw WorkflowIssue("有序资产列表为空；请显式清空整个输入。", port: port.id) }
+                if Set(items.map(\.id)).count != items.count {
+                    throw WorkflowIssue("有序资产列表包含重复项目身份；请显式清空整个输入。", port: port.id)
+                }
+                if let kind = port.assetListKind, element != .asset(kind) {
+                    throw WorkflowIssue("有序资产列表的成员类型与端口不符；请显式清空整个输入。", port: port.id)
+                }
+            } else if case .data = value {
+                throw WorkflowIssue("已保存的输入不是有序资产列表或单个资产；请显式清空整个输入。", port: port.id)
+            }
+            throw error
+        }
         if case .data(.list(_, let items)) = value { return items }
         guard let asset = value.asset else { throw WorkflowIssue("输入不是资产列表。", port: port.id) }
         return [WorkflowDataItem(id: asset.version.uuidString, value: .asset(asset))]
@@ -229,13 +264,13 @@ public struct QuickCreationState: Codable, Sendable, Equatable {
     public func useSettings(_ node: WorkflowNode, inputs: [String: WorkflowValue] = [:]) {
         guard isLoaded, WorkflowRegistry.standard.operation(node.operationID)?.definition.modelKind != nil,
               let model = node.parameters["modelID"]?.string else { return }
-        if node.operationID == "d.image.generate", !(1...8).contains(node.parameters["count"]?.integer ?? 1) {
+        if WorkflowModelRoutes.isImage(node.operationID), !(1...8).contains(node.parameters["count"]?.integer ?? 1) {
             error = "此图像节点的候选次数不在 1–8 范围，原快速草稿未改变。"; return
         }
         select(operationID: node.operationID, modelID: model)
         guard let index = state.drafts.firstIndex(where: { $0.id == state.selectedDraftID }) else { return }
         state.drafts[index].node = node; state.drafts[index].inputs = inputs
-        if node.operationID == "d.image.generate" {
+        if WorkflowModelRoutes.isImage(node.operationID) {
             state.drafts[index].attempts = node.parameters["count"]?.integer ?? 1
             state.drafts[index].node.parameters["count"] = .integer(1)
         }
@@ -268,7 +303,7 @@ public struct QuickCreationState: Codable, Sendable, Equatable {
         // Separate requests, never multiply the image operation's internal batch count.
         for offset in 0..<source.attempts {
             var captured = source
-            if captured.node.operationID == "d.image.generate" { captured.node.parameters["count"] = .integer(1) }
+            if WorkflowModelRoutes.isImage(captured.node.operationID) { captured.node.parameters["count"] = .integer(1) }
             if offset > 0, let raw = captured.node.parameters["seed"]?.string, let seed = UInt64(raw) {
                 let (next, overflow) = seed.addingReportingOverflow(UInt64(offset))
                 guard !overflow else { error = "独立尝试的种子超出范围，请减少次数或调整种子。"; return }

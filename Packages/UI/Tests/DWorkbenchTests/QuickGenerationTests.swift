@@ -64,14 +64,14 @@ struct QuickGenerationTests {
             operationID: "d.asset.import").record.reference
         try quick.commitImportedAssets([a, b], port: port, draftID: draft.id,
                                        expectedNode: draft.node, expectedInputs: draft.inputs)
-        let firstItems = quick.inputAssetItems(port: port, draftID: draft.id)
+        let firstItems = try quick.inputAssetItems(port: port, draftID: draft.id)
         #expect(try port.resolveAssets(#require(quick.draft?.inputs[port.id])) == [a, b])
         try quick.moveInputAsset(firstItems[1].id, by: -1, port: port, draftID: draft.id)
-        let reordered = quick.inputAssetItems(port: port, draftID: draft.id)
+        let reordered = try quick.inputAssetItems(port: port, draftID: draft.id)
         #expect(reordered == [firstItems[1], firstItems[0]])
         try quick.removeInputAsset(firstItems[0].id, port: port, draftID: draft.id)
         #expect(try port.resolveAssets(#require(quick.draft?.inputs[port.id])) == [b])
-        #expect(quick.inputAssetItems(port: port, draftID: draft.id) == [firstItems[1]])
+        #expect(try quick.inputAssetItems(port: port, draftID: draft.id) == [firstItems[1]])
         try await quick.flush()
         let saved = quick.state
         #expect(await engine.requests.isEmpty)
@@ -80,7 +80,7 @@ struct QuickGenerationTests {
         let restored = QuickGenerationController(store: reopened) { throw WorkflowIssue("must not execute") }
         await restored.load()
         #expect(restored.state == saved)
-        #expect(restored.inputAssetItems(port: port, draftID: draft.id) == [firstItems[1]])
+        #expect(try restored.inputAssetItems(port: port, draftID: draft.id) == [firstItems[1]])
         try restored.removeInputAsset(firstItems[1].id, port: port, draftID: draft.id)
         #expect(restored.draft?.inputs[port.id] == nil)
         #expect(await engine.requests.isEmpty)
@@ -119,6 +119,99 @@ struct QuickGenerationTests {
         #expect(quick.draft == other)
         #expect(await store.snapshot().assets.contains(where: { $0.id == image.assetID }))
         #expect(await store.snapshot().assets.contains(where: { $0.id == text.assetID }))
+        #expect(await engine.requests.isEmpty)
+        try await quick.flush(); try await canvas.close(); try await store.close()
+    }
+
+    @Test func invalidOrderedInputIsVisibleAndOnlyExplicitSnapshotClearAllowsImport() async throws {
+        let (store, engine, quick, canvas) = try await fixture()
+        quick.select(operationID: WorkflowModelRoutes.fluxDev, modelID: "image:dev")
+        let draftID = try #require(quick.draft?.id)
+        let port = try #require(quick.definition?.inputs.first(where: { $0.assetListKind == .image }))
+        let image = try await store.publishWorkflowAsset(data: imageData(), mediaType: "image/png",
+            metadata: .init(width: 2, height: 2), name: "retained image", operationID: "d.asset.import").record.reference
+        let invalid: [(WorkflowValue, String)] = [
+            (.data(.list(element: .asset(.image), items: [])), "列表为空"),
+            (.data(.text("wrong type")), "不是有序资产列表"),
+            (.data(.list(element: .asset(.image), items: [
+                .init(id: "duplicate", value: .asset(image)), .init(id: "duplicate", value: .asset(image))])), "重复项目身份")
+        ]
+        for (value, reason) in invalid {
+            quick.setInput(port.id, value: value, draftID: draftID)
+            let captured = try #require(quick.draft)
+            #expect(quick.inputIssue?.contains(reason) == true && !quick.canStart)
+            #expect(throws: WorkflowIssue.self) { try quick.inputAssetItems(port: port, draftID: draftID) }
+            #expect(throws: WorkflowIssue.self) {
+                try quick.commitImportedAssets([image], port: port, draftID: draftID,
+                                               expectedNode: captured.node, expectedInputs: captured.inputs)
+            }
+            #expect(quick.draft?.inputs[port.id] == value)
+            quick.start()
+            #expect(await engine.requests.isEmpty)
+            try quick.clearInputAssetList(port: port, draftID: draftID,
+                                          expectedNode: captured.node, expectedInputs: captured.inputs)
+            #expect(quick.draft?.inputs[port.id] == nil)
+            #expect(quick.inputIssue == nil)
+            #expect(quick.canStart)
+            try quick.commitImportedAssets([image], port: port, draftID: draftID,
+                                           expectedNode: captured.node, expectedInputs: [:])
+            #expect(try port.resolveAssets(#require(quick.draft?.inputs[port.id])) == [image])
+        }
+        #expect(await engine.requests.isEmpty)
+        try await quick.flush(); try await canvas.close(); try await store.close()
+    }
+
+    @Test func clearOrderedInputRejectsChangedDraftNodeAndInputSnapshot() async throws {
+        let (store, engine, quick, canvas) = try await fixture()
+        quick.select(operationID: WorkflowModelRoutes.qwen35, modelID: "text:vlm")
+        let captured = try #require(quick.draft)
+        let port = try #require(quick.definition?.inputs.first(where: { $0.assetListKind == .image }))
+        quick.setInput(port.id, value: .data(.list(element: .asset(.image), items: [])), draftID: captured.id)
+        let invalid = try #require(quick.draft)
+        quick.setParameter("task", value: .text("changed"), draftID: captured.id)
+        #expect(throws: WorkflowIssue.self) {
+            try quick.clearInputAssetList(port: port, draftID: captured.id,
+                                          expectedNode: invalid.node, expectedInputs: invalid.inputs)
+        }
+        #expect(quick.draft?.inputs[port.id] == invalid.inputs[port.id])
+        let changedNode = try #require(quick.draft)
+        quick.setInput("content", value: .data(.text("changed content")), draftID: captured.id)
+        #expect(throws: WorkflowIssue.self) {
+            try quick.clearInputAssetList(port: port, draftID: captured.id,
+                                          expectedNode: changedNode.node, expectedInputs: changedNode.inputs)
+        }
+        quick.select(operationID: "d.model.language", modelID: "text:other")
+        #expect(throws: WorkflowIssue.self) {
+            try quick.clearInputAssetList(port: port, draftID: captured.id,
+                                          expectedNode: invalid.node, expectedInputs: invalid.inputs)
+        }
+        #expect(await engine.requests.isEmpty)
+        try await quick.flush(); try await canvas.close(); try await store.close()
+    }
+
+    @Test func newImageAndLanguageRoutesKeepQuickCandidateAndJSONControls() async throws {
+        let (store, engine, quick, canvas) = try await fixture()
+        for route in [WorkflowModelRoutes.qwen35, WorkflowModelRoutes.qwen38] {
+            quick.select(operationID: route, modelID: "text:" + route)
+            #expect(quick.draft?.node.parameters["outputMode"] == .text("text"))
+            #expect(quick.definition?.fields.contains(where: { $0.id == "outputMode" }) == true)
+        }
+        quick.select(operationID: WorkflowModelRoutes.fluxDev, modelID: "image:dev")
+        #expect(quick.draft?.node.parameters["count"] == .integer(1))
+        var node = try #require(quick.draft?.node)
+        node.parameters["count"] = .integer(3)
+        let image = try await store.publishWorkflowAsset(data: imageData(), mediaType: "image/png",
+            metadata: .init(width: 2, height: 2), name: "settings source", operationID: "d.asset.import").record.reference
+        let sources: [String: WorkflowValue] = ["ref": .data(.list(element: .asset(.image),
+            items: [.init(id: "source", value: .asset(image))]))]
+        quick.useSettings(node, inputs: sources)
+        #expect(quick.draft?.attempts == 3)
+        #expect(quick.draft?.node.parameters["count"] == .integer(1))
+        #expect(quick.draft?.inputs == sources)
+        node.parameters["count"] = .integer(9)
+        quick.useSettings(node)
+        #expect(quick.draft?.attempts == 3)
+        #expect(quick.draft?.inputs == sources)
         #expect(await engine.requests.isEmpty)
         try await quick.flush(); try await canvas.close(); try await store.close()
     }
