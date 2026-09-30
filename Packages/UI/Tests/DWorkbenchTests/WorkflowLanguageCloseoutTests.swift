@@ -9,7 +9,8 @@ struct WorkflowLanguageCloseoutTests {
         let image = TextImageReference(url: URL(fileURLWithPath: "/fixture/a.png"), width: 1, height: 1,
                                       byteCount: 3, contentSHA256: String(repeating: "a", count: 64))
         let json = #"[{"role":"system","parts":[{"type":"text","text":"Keep roles"}]},{"role":"user","parts":[{"type":"text","text":"before"},{"type":"image","index":0},{"type":"text","text":"after"}]}]"#
-        let messages = try #require(WorkflowLanguageMessageForm.messages(json, images: [image], videos: []))
+        let parsed = try WorkflowLanguageMessageForm.messages(json, images: [image], videos: [])
+        let messages = try #require(parsed)
         #expect(messages.map(\.role) == [.system, .user])
         #expect(messages[1].parts == [.text("before"), .image(image), .text("after")])
         #expect(throws: (any Error).self) { try WorkflowLanguageMessageForm.messages(json, images: [], videos: []) }
@@ -71,7 +72,7 @@ private actor CloseoutResponseEngine: InferenceEngine {
         let session = WorkbenchSession(engine: engine, backendID: "fixture", status: { .init(activeRunID: nil, phase: nil, queuedRunIDs: []) }, shutdown: {}, cleanup: {}, validateModel: { _ in })
         let service = WorkflowServices(store: store, session: session) { _, identity in
             .init(identity: identity, reference: .init(directory: root), backendID: "fixture", operationID: WorkflowModelRoutes.qwen35,
-                  textCapability: .init(maximumPromptTokens: 2048, maximumOutputTokens: 256, profile: .qwen35VLMProfile))
+                  textCapability: .init(maximumPromptTokens: 2048, maximumOutputTokens: 256, profile: TextExecutionCapability.qwen35VLMProfile))
         }
         var node = try #require(WorkflowRegistry.standard.operation(WorkflowModelRoutes.qwen35)?.definition.makeNode())
         node.parameters["modelID"] = .text("text:fixture"); node.parameters["outputMode"] = .text("response")
@@ -174,7 +175,7 @@ private actor CloseoutResponseEngine: InferenceEngine {
         var leases = 0
         let service = WorkflowServices(store: store, session: session) { _, identity in
             leases += 1
-            return .init(identity: identity, reference: .init(directory: root), backendID: "fixture", operationID: WorkflowModelRoutes.qwen35, textCapability: .init(maximumPromptTokens: 2048, maximumOutputTokens: 256, profile: .qwen35VLMProfile))
+            return .init(identity: identity, reference: .init(directory: root), backendID: "fixture", operationID: WorkflowModelRoutes.qwen35, textCapability: .init(maximumPromptTokens: 2048, maximumOutputTokens: 256, profile: TextExecutionCapability.qwen35VLMProfile))
         }
         var node = try #require(WorkflowRegistry.standard.operation(WorkflowModelRoutes.qwen35)?.definition.makeNode()); node.parameters["modelID"] = .text("text:fixture")
         let context = WorkflowExecutionContext(node: node, stepID: UUID(), inputs: [:])

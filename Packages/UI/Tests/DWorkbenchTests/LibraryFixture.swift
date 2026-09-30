@@ -74,6 +74,8 @@ final class ReleaseDeniedHTTPFixture {
         process.standardOutput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice
         try process.run()
+        var initialized = false
+        defer { if !initialized { Self.stop(process) } }
         var port: Int?
         for _ in 0..<300 {
             if let value = try? String(contentsOf: portFile, encoding: .utf8),
@@ -82,12 +84,19 @@ final class ReleaseDeniedHTTPFixture {
             try await Task.sleep(for: .milliseconds(10))
         }
         guard let port, let resolved = URL(string: "http://127.0.0.1:\(port)/model.bin") else {
-            if process.isRunning { process.terminate() }
             throw ModelLibraryError.download("Denied fixture server failed to start")
         }
         url = resolved
+        initialized = true
     }
-    deinit { if process.isRunning { process.terminate() } }
+    deinit { Self.stop(process) }
+    private static func stop(_ process: Process) {
+        if process.isRunning { process.terminate() }
+        let deadline = Date().addingTimeInterval(1)
+        while process.isRunning && Date() < deadline { Thread.sleep(forTimeInterval: 0.01) }
+        if process.isRunning { Darwin.kill(process.processIdentifier, SIGKILL) }
+        process.waitUntilExit()
+    }
     private static let script = #"""
 import sys, os
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler

@@ -1185,7 +1185,7 @@
       "repository": "MiniMaxAI/MiniMax-H3",
       "revision": "42ed227ee7df40d41602854ae760620d6eb651fe",
       "title": "MiniMax H3 Base · FL2VA BF16",
-      "workflowIdentity": "minimax-h3-fl2va-bf16-full-v1@42ed227ee7df40d41602854ae760620d6eb651fe",
+      "workflowIdentity": "video:minimax-h3-fl2va-bf16-full-v1@42ed227ee7df40d41602854ae760620d6eb651fe",
       "workflowProfileID": "d.video.minimax-h3-fl2va-bf16-full-v1"
     },
     {
@@ -1313,7 +1313,7 @@
       "repository": "dgrauet/ltx-2.5-mlx",
       "revision": "e378b7e1b50fcb1795fce74219b40bb0b1ede1e2",
       "title": "LTX-2.5 · BF16",
-      "workflowIdentity": "ltx-2.5-dev-bf16-full-v1@e378b7e1b50fcb1795fce74219b40bb0b1ede1e2",
+      "workflowIdentity": "video:ltx-2.5-dev-bf16-full-v1@e378b7e1b50fcb1795fce74219b40bb0b1ede1e2",
       "workflowProfileID": "d.video.ltx-2.5-dev-bf16-full-v1"
     },
     {

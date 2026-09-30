@@ -20,13 +20,14 @@ struct ModelNodeCatalogCrossContractTests {
 
     @Test func imageProjectionUsesFixedCatalogAndThreeTypedCapabilities() throws {
         let source = try ModelCatalog.flux2()
+        let profile = try #require(source.imageProfile)
         let node = try catalogNode(ModelCatalog.flux2ID)
         let capabilities: [ImageExecutionCapability] = [.verified512, .scalableKlein4B, .referenceKlein4B]
 
-        #expect(source.imageProfile.width == ImageExecutionCapability.verified512.minimumWidth)
-        #expect(source.imageProfile.height == ImageExecutionCapability.verified512.minimumHeight)
-        #expect(source.imageProfile.steps == ImageExecutionCapability.verified512.steps)
-        #expect(source.imageProfile.maximumPromptTokens == ImageExecutionCapability.verified512.maximumTextTokens)
+        #expect(profile.width == ImageExecutionCapability.verified512.minimumWidth)
+        #expect(profile.height == ImageExecutionCapability.verified512.minimumHeight)
+        #expect(profile.steps == ImageExecutionCapability.verified512.steps)
+        #expect(profile.maximumPromptTokens == ImageExecutionCapability.verified512.maximumTextTokens)
         #expect(imageMismatches(node, source: source, capabilities: capabilities).isEmpty)
     }
 
@@ -198,11 +199,11 @@ private func imageMismatches(_ node: ModelNodeDescriptor, source: ModelCatalogEn
             mismatches.append("\(operationID) conditioning default")
         }
         if projected.parameters.first(where: { $0.id == "width" })?.defaultValue
-            != String(source.imageProfile.width) {
+            != source.imageProfile.map({ String($0.width) }) {
             mismatches.append("\(operationID) width default")
         }
         if projected.parameters.first(where: { $0.id == "height" })?.defaultValue
-            != String(source.imageProfile.height) {
+            != source.imageProfile.map({ String($0.height) }) {
             mismatches.append("\(operationID) height default")
         }
     }
