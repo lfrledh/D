@@ -2,9 +2,15 @@
 
 最后核实：2026-09-30。唯一当前任务、版本与停点入口。
 
-## 当前实施：首发模型有限收口 D-RELEASE-FREEZE-01
+## 当前停点：D-RELEASE-FREEZE-01 候选收口，冻结门槛未达
 
-用户已批准A→B→C，固定9个模型目标及Quick/Canvas共用契约。范围、起点、保护和最小QA见[本轮记录](tasks/D-RELEASE-FREEZE-01.md)。实施树D-Worktrees/D-RELEASE-FREEZE-01、codex/release-freeze-01，从d7dba252视频候选开始；源仍01758b8，个人scheme不动。H3 Store修复已在本轮明确获批；下列视频停点作为历史，不再是该项授权障碍。新能力尚未实测，不宣称功能冻结。
+本轮代码受测版本 **37bd091044a2dd438a2e37f4453c32af9c91fe18**；最终仅文档版本、App摘要、远端及保护回执在 `D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T070201Z/lead/final-receipt.json`。实施树 `D-Worktrees/D-RELEASE-FREEZE-01` / `codex/release-freeze-01`。源仍 `01758b81527dc27eb4563bf1b66fd1ceab6647ee`，个人scheme未暂存差异保持，未源接纳、未发布。
+
+Quick/Canvas已共用类型化模型操作；实名/profile、VLM多图/时间戳视频、FLUX有序参考图、H3首尾帧、LTX2.5独立配方、ACE XL F32/no-LM与正常资源打包已入候选。H3真实媒体Store时长问题在本轮有限授权内修复。Qwen9B Q4真实三种输入及H3原始BF16首尾帧链路已验；CPU/编译/真实推理/GUI分开见[任务结果](tasks/D-RELEASE-FREEZE-01.md)。
+
+**不能冻结的具体原因**：LTX2.5与FLUX Dev资源401（H31）；27B、Klein BF16及ACE原始F32真实运行未验；新Quick/Canvas普通App因锁屏未走查（H32）；升级SDK后Klein Q8严格旧PNG基准失败，虽差异仅少量通道1/255且重复结果一致，标准未改。不得用旧模型成功、编译或替身代替这些出口。
+
+[九模型矩阵](RELEASE_MODEL_MATRIX.zh-CN.md)是能力/实测边界；[精简试用](RELEASE_FREEZE_TRY.zh-CN.md)是本轮唯一推荐入口（新App原生启动尚未验）；[集中待办](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md)收录本人解锁/平台访问，H22等旧责任不被消除。下一动作仅补这些冻结门槛，不再扩张模型名单；不自动接纳旧AP1/CORE/I2V或进入公开发布。
 
 ## 上轮候选：H3 / LTX 视频模型扩展（历史责任保留）
 
