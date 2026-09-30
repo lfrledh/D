@@ -89,6 +89,27 @@ struct IncrementalTextDecoderTests {
         }
     }
 
+    @Test("Local tokenizer fails closed for missing or damaged selected templates", arguments: ["missing", "jinja", "json"])
+    func localTemplateIntegrity(kind: String) async throws {
+        let source = try realModelDirectory()
+        let root = try #require(ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"])
+        let copy = URL(fileURLWithPath: root).appendingPathComponent("tokenizer-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: copy, withIntermediateDirectories: false)
+        for name in ["config.json", "tokenizer.json", "tokenizer_config.json"] {
+            try FileManager.default.copyItem(at: source.appendingPathComponent(name), to: copy.appendingPathComponent(name))
+        }
+        if kind == "missing" {
+            let url = copy.appendingPathComponent("tokenizer_config.json")
+            var config = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
+            config.removeValue(forKey: "chat_template")
+            try JSONSerialization.data(withJSONObject: config).write(to: url)
+        } else {
+            try Data([0xff, 0xfe]).write(to: copy.appendingPathComponent("chat_template." + kind))
+        }
+        await #expect(throws: (any Error).self) { _ = try await LocalTokenizerLoader().load(from: copy) }
+        // Preserve this task's inputs for failure diagnosis; never edit the installed tokenizer.
+    }
+
     @Test("Decoder retains ordinary text through the same SDK tool processor")
     func ordinaryToolPipeline() throws {
         let parts = ["甲 ", "<", " 乙 e", "\u{0301}", " 👩", "\u{200d}", "💻", "。"]
@@ -119,8 +140,8 @@ struct IncrementalTextDecoderTests {
         #expect(output.isEmpty)
     }
 
-    @Test("Unclosed tool prefix remains an upstream buffering limitation")
-    func incompleteToolTailLimitation() throws {
+    @Test("EOS returns incomplete tool markup as ordinary text without dropping the tail")
+    func incompleteToolTailFlush() throws {
         var decoder = IncrementalTextDecoder()
         let processor = ToolCallProcessor(format: .json)
         let pending = try decoder.consume("<tool")
@@ -128,8 +149,9 @@ struct IncrementalTextDecoderTests {
         #expect(processor.processChunk(delta) == nil)
         #expect(try decoder.consume("<tool", final: true) == nil)
         #expect(processor.toolCalls.isEmpty)
-        // The SDK exposes no tail flush. This preserves its prior behavior, not a
-        // promise that literal incomplete tool markup is faithfully delivered.
+        #expect(processor.processEOS(returnBufferedText: true) == "<tool")
+        #expect(processor.toolCalls.isEmpty)
+        #expect(processor.processEOS(returnBufferedText: true) == nil)
     }
 
 }

@@ -20,7 +20,7 @@ import Foundation
     let state = MLXRandom.RandomState(seed: 0)
     try await withRandomState(state) {
         let container = try await LLMModelFactory.shared.loadContainer(
-            configuration: ModelConfiguration(directory: directory))
+            from: directory, using: LocalTokenizerLoader())
         withExtendedLifetime(container) {}
     }
 }

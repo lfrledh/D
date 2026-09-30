@@ -170,6 +170,23 @@ class TestBase(mlx_tests.MLXTestCase):
         # Empty weights is ok if strict is false
         m.load_weights([], strict=False)
 
+        # Extra weights for non-existent layers are filtered when strict
+        # is false. Flat keys like "extra.weight" are silently dropped by
+        # Module.update, but nested indexed keys like "layers.1.weight"
+        # cause an IndexError in tree_unflatten/update without filtering.
+        m = nn.Sequential(nn.Linear(2, 2))
+        m.load_weights(
+            [
+                ("layers.0.weight", mx.ones((2, 2))),
+                ("layers.0.bias", mx.ones((2,))),
+                ("layers.1.weight", mx.ones((2, 2))),
+                ("layers.1.bias", mx.ones((2,))),
+            ],
+            strict=False,
+        )
+        self.assertTrue(mx.array_equal(m.layers[0].weight, mx.ones((2, 2))))
+        self.assertEqual(len(m.layers), 1)
+
     def test_module_state(self):
         m = nn.Linear(10, 1)
         m.state["hello"] = "world"
@@ -203,6 +220,27 @@ class TestBase(mlx_tests.MLXTestCase):
         self.assertTrue(isinstance(m.layers[1], nn.ReLU))
         self.assertTrue(isinstance(m.layers[2], nn.QuantizedLinear))
         self.assertTrue(isinstance(m.layers[2].scales, mx.array))
+
+        m = nn.Sequential(
+            nn.Embedding(5, 256), nn.ReLU(), nn.Linear(256, 256, bias=False)
+        )
+        nn.quantize(
+            m,
+            group_size=32,
+            mode="mxfp8",
+            quantize_input=True,
+            class_predicate=lambda path, module: isinstance(module, nn.Linear),
+        )
+        self.assertTrue(isinstance(m.layers[0], nn.Embedding))
+        self.assertTrue(isinstance(m.layers[1], nn.ReLU))
+        self.assertTrue(isinstance(m.layers[2], nn.QQLinear))
+
+        # Check that Embedding does not support quantize_input
+        m = nn.Sequential(
+            nn.Embedding(5, 256), nn.ReLU(), nn.Linear(256, 256, bias=False)
+        )
+        with self.assertRaises(ValueError) as context:
+            nn.quantize(m, group_size=32, mode="mxfp8", quantize_input=True)
 
     def test_quantize_freeze(self):
         lin = nn.Linear(512, 512)

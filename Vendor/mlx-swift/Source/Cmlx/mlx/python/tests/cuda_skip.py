@@ -6,11 +6,6 @@ cuda_skip = {
     "TestBlas.test_gather_matmul",
     "TestBlas.test_gather_matmul_grad",
     "TestBlas.test_gather_mm_sorted_vjp",
-    # Segmented matmul NYI
-    "TestBlas.test_segmented_mm",
-    # Hadamard NYI
-    "TestOps.test_hadamard",
-    "TestOps.test_hadamard_grad_vmap",
     # FFTs NYI
     "TestFFT.test_fft",
     "TestFFT.test_fft_big_powers_of_two",
@@ -46,7 +41,6 @@ cuda_skip = {
     "TestQuantized.test_qmm_jvp",
     "TestQuantized.test_qmm_shapes",
     "TestQuantized.test_qmm_vjp",
-    "TestQuantized.test_qmv",
     "TestQuantized.test_fp_qvm",
     "TestQuantized.test_qvm",
     "TestQuantized.test_qvm_splitk",
