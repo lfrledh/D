@@ -7,13 +7,30 @@ struct WorkflowCanvasNavigationRequest: Equatable {
     let rawCenter: CGPoint?
 }
 
+struct WorkflowCanvasPanSession: Equatable {
+    private(set) var startOffset: CGPoint?
+    private(set) var suppressBlankTap = false
+
+    mutating func startIfNeeded(at offset: CGPoint) -> CGPoint {
+        if startOffset == nil { startOffset = offset }
+        suppressBlankTap = true
+        return startOffset!
+    }
+
+    mutating func reset() {
+        startOffset = nil
+        suppressBlankTap = false
+    }
+}
+
 /// The probe lives inside the graph's scroll content. The local monitor is active only while
 /// that native view is mounted, and accepts events whose native hit path reaches its scroll view.
 struct WorkflowCanvasViewportInput: NSViewRepresentable {
     typealias Coordinator = Void
-    var allowsEvent: () -> Bool
+    var allowsEvent: (_ point: CGPoint, _ offset: CGPoint, _ viewport: CGSize) -> Bool
+    var onViewportSize: (CGSize) -> Void
     var onWheel: (_ deltaY: CGFloat, _ point: CGPoint, _ offset: CGPoint, _ viewport: CGSize) -> Void
-    var onMiddleClick: () -> Void
+    var onMiddleClick: (_ viewport: CGSize) -> Void
 
     func makeNSView(context: Context) -> ProbeView {
         let view = ProbeView()
@@ -23,15 +40,19 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
 
     func updateNSView(_ view: ProbeView, context: Context) {
         view.allowsEvent = allowsEvent
+        view.onViewportSize = onViewportSize
         view.onWheel = onWheel
         view.onMiddleClick = onMiddleClick
+        view.reportViewportSize()
     }
 
     final class ProbeView: NSView {
-        var allowsEvent: () -> Bool = { false }
+        var allowsEvent: (CGPoint, CGPoint, CGSize) -> Bool = { _, _, _ in false }
+        var onViewportSize: (CGSize) -> Void = { _ in }
         var onWheel: (CGFloat, CGPoint, CGPoint, CGSize) -> Void = { _, _, _, _ in }
-        var onMiddleClick: () -> Void = {}
+        var onMiddleClick: (CGSize) -> Void = { _ in }
         private var monitor: Any?
+        private var reportedSize: CGSize?
 
         override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
@@ -39,24 +60,43 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
             super.viewDidMoveToWindow()
             stopMonitoring()
             guard window != nil else { return }
+            reportViewportSize()
             monitor = NSEvent.addLocalMonitorForEvents(matching: [.scrollWheel, .otherMouseDown]) { [weak self] event in
-                guard let self, self.accepts(event), self.allowsEvent() else { return event }
+                guard let self, self.accepts(event),
+                      let scroll = self.enclosingScrollView else { return event }
+                let clip = scroll.contentView
+                let location = clip.convert(event.locationInWindow, from: nil)
+                let point = CGPoint(
+                    x: location.x - clip.bounds.minX,
+                    y: clip.isFlipped ? location.y - clip.bounds.minY : clip.bounds.maxY - location.y
+                )
+                guard self.allowsEvent(point, clip.bounds.origin, clip.bounds.size) else { return event }
                 if event.type == .scrollWheel {
-                    guard event.scrollingDeltaY != 0,
-                          let scroll = self.enclosingScrollView else { return event }
-                    let clip = scroll.contentView
-                    let location = clip.convert(event.locationInWindow, from: nil)
-                    let point = CGPoint(
-                        x: location.x - clip.bounds.minX,
-                        y: clip.isFlipped ? location.y - clip.bounds.minY : clip.bounds.maxY - location.y
-                    )
+                    guard event.scrollingDeltaY != 0 else { return event }
                     self.onWheel(event.scrollingDeltaY, point, clip.bounds.origin, clip.bounds.size)
                     return nil // A zoom wheel event must not also scroll the native view.
                 }
                 guard event.buttonNumber == 2 else { return event }
-                self.onMiddleClick()
+                self.onMiddleClick(scroll.contentView.bounds.size)
                 return nil
             }
+        }
+
+        override func viewDidMoveToSuperview() {
+            super.viewDidMoveToSuperview()
+            reportViewportSize()
+        }
+
+        override func layout() {
+            super.layout()
+            reportViewportSize()
+        }
+
+        func reportViewportSize() {
+            guard let size = enclosingScrollView?.contentView.bounds.size,
+                  size.width > 0, size.height > 0, reportedSize != size else { return }
+            reportedSize = size
+            onViewportSize(size)
         }
 
         private func accepts(_ event: NSEvent) -> Bool {
@@ -66,6 +106,11 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
                   !isHiddenOrHasHiddenAncestor,
                   let scroll = enclosingScrollView, !scroll.isHiddenOrHasHiddenAncestor,
                   let content = window.contentView else { return false }
+            var ancestor: NSView? = self
+            while let current = ancestor {
+                if current.alphaValue <= 0.01 || (current.layer?.opacity ?? 1) <= 0.01 { return false }
+                ancestor = current.superview
+            }
             let point = content.superview?.convert(event.locationInWindow, from: nil)
                 ?? event.locationInWindow
             guard let hit = content.hitTest(point) else { return false }

@@ -4,6 +4,7 @@ import Foundation
 import SwiftUI
 
 struct WorkflowGraphSurface: View {
+    private static let emptyGraph = WorkflowGraph()
     let controller: WorkflowController
     let graph: WorkflowGraph?
     @Binding var zoom: CGFloat
@@ -16,25 +17,29 @@ struct WorkflowGraphSurface: View {
     let readOnly: Bool
     let onPlan: (UUID, Bool) -> Void
     var nodeSizeObserver: ((UUID, CGSize) -> Void)?
+    var portCenterObserver: (([WorkflowPortIdentity: CGPoint]) -> Void)?
     var onScrollObservation: (WorkflowCanvasViewContext, WorkflowCanvasScrollObservation) -> Void = { _, _ in }
     var onDropItem: (WorkflowCanvasTransfer, CGPoint) -> Bool = { _, _ in false }
     var onBindAsset: (UUID, UUID, UUID) -> Bool = { _, _, _ in false }
     var onInspect: (UUID) -> Void = { _ in }
     @Environment(\.dLanguageStore) private var languageStore
     @GestureState private var gestureScale: CGFloat = 1
+    @GestureState private var panGestureActive = false
     @State private var nodeDrag = WorkflowCanvasNodeDragCoordinator()
     @State private var stableOrigin: WorkflowCanvasStableOrigin?
     @State private var pendingConnectionScope: WorkflowCanvasScope?
     @State private var pendingDragPoint: CGPoint?
     @State private var connectionIssue: WorkflowCanvasConnectionIssue?
     @State private var scrollOffset = CGPoint.zero
+    @State private var clipViewportSize: CGSize?
+    @State private var resizeAnchorRaw: CGPoint?
     @State private var pendingZoomOffset: CGPoint?
-    @State private var panStartOffset: CGPoint?
-    @State private var suppressBlankTap = false
+    @State private var panSession = WorkflowCanvasPanSession()
+    @State private var cardSizes: [UUID: CGSize] = [:]
 
     var body: some View {
+        let graph = self.graph ?? Self.emptyGraph
         Group {
-            if let graph {
                 let scope = WorkflowCanvasScope(
                     rootGraphID: controller.rootGraph?.id ?? graph.id,
                     rootRevision: controller.rootGraph?.revision ?? graph.revision,
@@ -62,8 +67,9 @@ struct WorkflowGraphSurface: View {
                     translation: origin
                 )
                 GeometryReader { viewport in
+                let viewportSize = clipViewportSize ?? viewport.size
                 let layout = WorkflowCanvasViewportGeometry(
-                    graphSize: geometry.size, viewportSize: viewport.size,
+                    graphSize: geometry.size, viewportSize: viewportSize,
                     zoom: effectiveZoom, translation: geometry.translation
                 )
                 let contentSize = layout.unscaledGraphSize
@@ -73,7 +79,7 @@ struct WorkflowGraphSurface: View {
                         Color(nsColor: .textBackgroundColor)
                             .contentShape(Rectangle())
                             .onTapGesture {
-                                guard !suppressBlankTap else { return }
+                                guard !panSession.suppressBlankTap else { return }
                                 controller.selectedNodeID = nil
                                 selectedConnectionID = nil
                             }
@@ -83,7 +89,7 @@ struct WorkflowGraphSurface: View {
                                 "workflow.canvas.dropHint",
                                 fallback: "将节点或项目素材拖到这里；拖动输出端口可建立连接。"
                             ))
-                            .background(viewportInput(geometry: geometry, layout: layout))
+                            .background(viewportInput(geometry: geometry))
                         ZStack(alignment: .topLeading) {
                         ForEach(graph.nodes) { node in
                             WorkflowNodeCard(
@@ -159,19 +165,32 @@ struct WorkflowGraphSurface: View {
                                 }
                             )
                             .onGeometryChange(for: CGSize.self) { $0.size } action: { size in
+                                cardSizes[node.id] = size
                                 nodeSizeObserver?(node.id, size)
                             }
                             .position(geometry.displayPosition(node.id))
+                        }
+                        if self.graph == nil {
+                            ContentUnavailableView(
+                                workflowText(languageStore, "workflow.canvas.empty", fallback: "选择或添加流程"),
+                                systemImage: "point.3.connected.trianglepath.dotted",
+                                description: Text(workflowText(languageStore,
+                                    "workflow.canvas.emptyDescription",
+                                    fallback: "流程只会在明确保存或运行时提交。"))
+                            )
+                            .frame(width: geometry.size.width, height: geometry.size.height)
+                            .allowsHitTesting(false)
                         }
                         }
                         .frame(width: geometry.size.width, height: geometry.size.height)
                         // Lines remain behind cards and port buttons, including at intersections.
                         .backgroundPreferenceValue(WorkflowPortAnchorPreferenceKey.self) { anchors in
                         GeometryReader { proxy in
+                            let centers = anchors.mapValues { proxy[$0] }
                             WorkflowConnectionLayer(
                                 graph: graph,
                                 geometry: geometry,
-                                portCenters: anchors.mapValues { proxy[$0] },
+                                portCenters: centers,
                                 selectedConnectionID: selectedConnectionID,
                                 pendingConnection: pendingConnection,
                                 pendingDragPoint: pendingDragPoint,
@@ -179,6 +198,8 @@ struct WorkflowGraphSurface: View {
                                     selectedConnectionID = connectionID
                                 }
                             )
+                            .onAppear { portCenterObserver?(centers) }
+                            .onChange(of: centers) { _, updated in portCenterObserver?(updated) }
                         }
                     }
                     .offset(x: edge.width, y: edge.height)
@@ -198,9 +219,11 @@ struct WorkflowGraphSurface: View {
                 }
                 .scrollPosition($scrollPosition)
                 .onScrollGeometryChange(for: WorkflowCanvasScrollObservation.self) { scroll in
+                    let size = clipViewportSize ?? scroll.containerSize
                     WorkflowCanvasScrollObservation(contentOffset: scroll.contentOffset,
+                        containerSize: size,
                         visibleRawCenter: WorkflowCanvasViewportGeometry(graphSize: geometry.size,
-                            viewportSize: scroll.containerSize, zoom: effectiveZoom,
+                            viewportSize: size, zoom: effectiveZoom,
                             translation: geometry.translation).visibleRawCenter(offset: scroll.contentOffset))
                 } action: { _, observation in
                     scrollOffset = observation.contentOffset
@@ -220,26 +243,31 @@ struct WorkflowGraphSurface: View {
                     Task { @MainActor in
                         guard navigationRequest == request else { return }
                         let current = WorkflowCanvasViewportGeometry(graphSize: geometry.size,
-                            viewportSize: viewport.size, zoom: zoom, translation: geometry.translation)
+                            viewportSize: clipViewportSize ?? viewport.size,
+                            zoom: zoom, translation: geometry.translation)
                         scrollPosition.scrollTo(point: current.centeredOffset(
                             on: request.rawCenter ?? current.centerRawPoint))
                     }
                 }
-                .onChange(of: viewport.size) { old, new in
-                    guard old.width > 0, old.height > 0, new.width > 0, new.height > 0 else { return }
+                .onChange(of: clipViewportSize) { old, new in
+                    guard let new, new.width > 0, new.height > 0 else { return }
                     let previous = WorkflowCanvasViewportGeometry(graphSize: geometry.size,
-                        viewportSize: old, zoom: effectiveZoom, translation: geometry.translation)
+                        viewportSize: old ?? viewport.size,
+                        zoom: effectiveZoom, translation: geometry.translation)
                     let next = WorkflowCanvasViewportGeometry(graphSize: geometry.size,
                         viewportSize: new, zoom: effectiveZoom, translation: geometry.translation)
-                    scrollPosition.scrollTo(point: next.centeredOffset(
-                        on: previous.visibleRawCenter(offset: scrollOffset)))
+                    let raw = resizeAnchorRaw ?? (old == nil
+                        ? navigationRequest?.rawCenter ?? next.centerRawPoint
+                        : previous.visibleRawCenter(offset: scrollOffset))
+                    resizeAnchorRaw = nil
+                    scrollPosition.scrollTo(point: next.centeredOffset(on: raw))
                 }
                 .onChange(of: zoom) { old, new in
                     guard old != new, !viewportInteractionLocked else { return }
                     let previous = WorkflowCanvasViewportGeometry(graphSize: geometry.size,
-                        viewportSize: viewport.size, zoom: old, translation: geometry.translation)
+                        viewportSize: viewportSize, zoom: old, translation: geometry.translation)
                     let next = WorkflowCanvasViewportGeometry(graphSize: geometry.size,
-                        viewportSize: viewport.size, zoom: new, translation: geometry.translation)
+                        viewportSize: viewportSize, zoom: new, translation: geometry.translation)
                     let offset = pendingZoomOffset ?? next.centeredOffset(
                         on: previous.visibleRawCenter(offset: scrollOffset))
                     pendingZoomOffset = nil
@@ -254,7 +282,11 @@ struct WorkflowGraphSurface: View {
                             }
                         }
                 )
+                .onChange(of: panGestureActive) { wasActive, isActive in
+                    if wasActive && !isActive { panSession.reset() }
+                }
                 .onChange(of: scope) { _, next in
+                    panSession.reset()
                     if nodeDrag.active?.scope != next { nodeDrag.invalidate(); viewportInteractionLocked = false }
                     if stableOrigin?.identity != next.identity { stableOrigin = nil }
                     if pendingConnectionScope != next {
@@ -291,8 +323,7 @@ struct WorkflowGraphSurface: View {
                 .onDisappear {
                     nodeDrag.invalidate()
                     pendingDragPoint = nil
-                    panStartOffset = nil
-                    suppressBlankTap = false
+                    panSession.reset()
                     viewportInteractionLocked = false
                 }
                 .overlay(alignment: .topLeading) {
@@ -324,27 +355,6 @@ struct WorkflowGraphSurface: View {
                     }
                 }
                 }
-            } else {
-                ContentUnavailableView(
-                    workflowText(languageStore, "workflow.canvas.empty", fallback: "选择或添加流程"),
-                    systemImage: "point.3.connected.trianglepath.dotted",
-                    description: Text(workflowText(
-                        languageStore,
-                        "workflow.canvas.emptyDescription",
-                        fallback: "流程只会在明确保存或运行时提交。"
-                    ))
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .contentShape(Rectangle())
-                .dropDestination(for: WorkflowCanvasTransfer.self) { items, location in
-                    guard items.count == 1, controller.graph == nil, controller.canEditCanvas,
-                          let item = items.first, (try? item.validated()) != nil else { return false }
-                    switch item {
-                    case .operation, .asset, .tool: return onDropItem(item, location)
-                    case .output: return false
-                    }
-                }
-            }
         }
         .accessibilityIdentifier("workflow-graph-surface")
     }
@@ -355,26 +365,45 @@ struct WorkflowGraphSurface: View {
 
     private func blankPan(layout: WorkflowCanvasViewportGeometry) -> some Gesture {
         DragGesture(minimumDistance: 5, coordinateSpace: .global)
+            .updating($panGestureActive) { _, active, _ in active = true }
             .onChanged { value in
                 guard nodeDrag.active == nil, pendingDragPoint == nil else { return }
-                suppressBlankTap = true
-                if panStartOffset == nil { panStartOffset = scrollOffset }
-                guard let start = panStartOffset else { return }
+                let start = panSession.startIfNeeded(at: scrollOffset)
                 scrollPosition.scrollTo(point: layout.pannedOffset(
                     from: start, translation: value.translation))
             }
-            .onEnded { _ in
-                panStartOffset = nil
-                Task { @MainActor in suppressBlankTap = false }
-            }
+            .onEnded { _ in panSession.reset() }
     }
 
-    private func viewportInput(
-        geometry: WorkflowGraphGeometry,
-        layout: WorkflowCanvasViewportGeometry
-    ) -> WorkflowCanvasViewportInput {
+    private func viewportInput(geometry: WorkflowGraphGeometry)
+        -> WorkflowCanvasViewportInput {
         WorkflowCanvasViewportInput(
-            allowsEvent: { nodeDrag.active == nil && pendingDragPoint == nil },
+            allowsEvent: { point, offset, size in
+                guard nodeDrag.active == nil, pendingDragPoint == nil else { return false }
+                let current = WorkflowCanvasViewportGeometry(graphSize: geometry.size,
+                    viewportSize: size, zoom: zoom, translation: geometry.translation)
+                let raw = current.rawPoint(screenPoint: point, offset: offset)
+                for node in geometry.graph.nodes {
+                    let center = geometry.rawPosition(node.id)
+                    let halfHeight = (cardSizes[node.id]?.height ?? 600) / 2
+                    if abs(raw.x - center.x) <= WorkflowCanvasLayoutPolicy.nodeWidth / 2,
+                       abs(raw.y - center.y) <= halfHeight { return false }
+                }
+                return true
+            },
+            onViewportSize: { size in
+                guard clipViewportSize != size else { return }
+                let raw = clipViewportSize.map { oldSize in
+                    WorkflowCanvasViewportGeometry(graphSize: geometry.size,
+                        viewportSize: oldSize, zoom: zoom,
+                        translation: geometry.translation).visibleRawCenter(offset: scrollOffset)
+                }
+                Task { @MainActor in
+                    guard clipViewportSize != size else { return }
+                    resizeAnchorRaw = raw
+                    clipViewportSize = size
+                }
+            },
             onWheel: { delta, point, offset, size in
                 guard nodeDrag.active == nil, pendingDragPoint == nil else { return }
                 let old = WorkflowCanvasViewportGeometry(graphSize: geometry.size,
@@ -385,9 +414,11 @@ struct WorkflowGraphSurface: View {
                 pendingZoomOffset = next.offset
                 zoom = next.zoom
             },
-            onMiddleClick: {
+            onMiddleClick: { size in
                 guard nodeDrag.active == nil, pendingDragPoint == nil else { return }
-                scrollPosition.scrollTo(point: layout.centeredOffset(on: layout.centerRawPoint))
+                let current = WorkflowCanvasViewportGeometry(graphSize: geometry.size,
+                    viewportSize: size, zoom: zoom, translation: geometry.translation)
+                scrollPosition.scrollTo(point: current.centeredOffset(on: current.centerRawPoint))
             })
     }
 
@@ -485,8 +516,14 @@ struct WorkflowGraphSurface: View {
     ) -> Bool {
         guard items.count == 1, !readOnly, !controller.isRunning,
               controller.readOnlyReason == nil,
-              scope.isCurrent(in: controller),
               let item = try? items[0].validated() else { return false }
+        if controller.graph == nil {
+            switch item {
+            case .operation, .asset, .tool: return onDropItem(item, rawPoint)
+            case .output: return false
+            }
+        }
+        guard scope.isCurrent(in: controller) else { return false }
         switch item {
         case .operation, .asset, .tool:
             return onDropItem(item, rawPoint)
@@ -948,6 +985,7 @@ struct WorkflowGraphGeometry {
 
 struct WorkflowCanvasScrollObservation: Equatable {
     let contentOffset: CGPoint
+    let containerSize: CGSize
     let visibleRawCenter: CGPoint
 }
 

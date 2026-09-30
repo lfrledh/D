@@ -5,6 +5,18 @@ import Testing
 
 @Suite @MainActor
 struct WorkflowCanvasViewportTests {
+    @Test func cancelledPanAllowsBlankClickAndStartsAtNewObservedOffset() {
+        var session = WorkflowCanvasPanSession()
+        let first = CGPoint(x: 430, y: 280)
+        #expect(session.startIfNeeded(at: first) == first)
+        #expect(session.suppressBlankTap)
+        #expect(session.startIfNeeded(at: CGPoint(x: 200, y: 100)) == first)
+        session.reset() // @GestureState deactivation or a graph scope change
+        #expect(session.startOffset == nil && !session.suppressBlankTap)
+        let actualAfterCancellation = CGPoint(x: 612, y: 335)
+        #expect(session.startIfNeeded(at: actualAfterCancellation) == actualAfterCancellation)
+    }
+
     @Test func mouseAnchorAndVisibleCenterRoundTripAcrossZoomAndNegativeNodes() {
         let node = WorkflowNode(operationID: "d.text.input", title: "negative")
         let graph = WorkflowGraph(nodes: [node], layout: [

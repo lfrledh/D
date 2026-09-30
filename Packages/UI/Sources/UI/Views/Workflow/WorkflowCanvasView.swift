@@ -34,11 +34,21 @@ public struct WorkflowCanvasView: View {
     private let onPublishText: () -> Void
     private let onReturnText: (WorkflowAssetReference) -> Void
     private var nodeSizeObserver: ((UUID, CGSize) -> Void)?
+    private var portCenterObserver: (([WorkflowPortIdentity: CGPoint]) -> Void)?
+    private var viewportLockObserver: ((Bool) -> Void)?
     private var scrollObserver: ((WorkflowCanvasViewContext, WorkflowCanvasScrollObservation) -> Void)?
 
     // Read-only layout observation; never rewrites stored node positions.
     func observingNodeSizes(_ observer: @escaping (UUID, CGSize) -> Void) -> Self {
         var copy = self; copy.nodeSizeObserver = observer; return copy
+    }
+
+    func observingPortCenters(_ observer: @escaping ([WorkflowPortIdentity: CGPoint]) -> Void) -> Self {
+        var copy = self; copy.portCenterObserver = observer; return copy
+    }
+
+    func observingViewportLock(_ observer: @escaping (Bool) -> Void) -> Self {
+        var copy = self; copy.viewportLockObserver = observer; return copy
     }
 
     func observingScroll(_ observer: @escaping (WorkflowCanvasViewContext, WorkflowCanvasScrollObservation) -> Void) -> Self {
@@ -158,6 +168,7 @@ public struct WorkflowCanvasView: View {
         .onChange(of: viewContext) { _, next in restoreViewContext(next) }
         .onAppear { activeViewContext = viewContext }
         .onChange(of: zoom) { _, _ in rememberViewContext() }
+        .onChange(of: viewportInteractionLocked) { _, locked in viewportLockObserver?(locked) }
         .onChange(of: controller.selectedNodeID) { _, _ in rememberViewContext() }
     }
 
@@ -207,6 +218,7 @@ public struct WorkflowCanvasView: View {
                     pendingConnection: $pendingConnection, selectedConnectionID: $selectedConnectionID,
                     readOnly: !controller.canEditCanvas,
                     onPlan: presentPlan, nodeSizeObserver: nodeSizeObserver,
+                    portCenterObserver: portCenterObserver,
                     onScrollObservation: { context, observation in
                         guard context == viewContext, activeViewContext == context else { return }
                         actualVisibleRawCenter = observation.visibleRawCenter
