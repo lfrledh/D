@@ -55,7 +55,8 @@ def _open_regular(root_fd, name):
         os.close(parent)
 
 
-def inspect_safetensors(file, *, allow_quantized=False, ltx25_transformer=False):
+def inspect_safetensors(file, *, allow_quantized=False, ltx25_transformer=False,
+                        ltx25_audio_ff_bias=None):
     """Bounded header inspection; never maps tensor data or creates MLX arrays."""
     file.seek(0)
     raw = file.read(8)
@@ -75,6 +76,7 @@ def inspect_safetensors(file, *, allow_quantized=False, ltx25_transformer=False)
     core_blocks = set()
     keyframes_embedding = False
     ff_probe = False
+    audio_ff_biases = set()
     for name, tensor in header.items():
         if name == "__metadata__":
             # The reference safetensors reader accepts explicit null for its
@@ -112,8 +114,16 @@ def inspect_safetensors(file, *, allow_quantized=False, ltx25_transformer=False)
             if (name.startswith("transformer.transformer_blocks.") or
                     name == "transformer.keyframes_abs_pos_embedding") and dtype != "BF16":
                 raise ResourceError("LTX 2.5 core transformer must be BF16")
-            if re.fullmatch(r"transformer\.transformer_blocks\.\d+\.(ff|audio_ff)\..*\.bias", name):
-                raise ResourceError("LTX 2.5 feed-forward bias disagrees with its configuration")
+            if re.fullmatch(r"transformer\.transformer_blocks\.\d+\.ff\..*\.bias", name):
+                raise ResourceError("LTX 2.5 video feed-forward bias disagrees with its configuration")
+            audio_bias = re.fullmatch(
+                r"transformer\.transformer_blocks\.(\d+)\.audio_ff\.(proj_in|proj_out)\.bias", name)
+            if re.fullmatch(r"transformer\.transformer_blocks\.\d+\.audio_ff\..*\.bias", name):
+                if ltx25_audio_ff_bias is False:
+                    raise ResourceError("LTX 2.5 audio feed-forward bias disagrees with its configuration")
+                if audio_bias is None:
+                    raise ResourceError("LTX 2.5 audio feed-forward bias tensor is unsupported")
+                audio_ff_biases.add((int(audio_bias.group(1)), audio_bias.group(2)))
         if end > start:
             regions.append((start, end))
         dtypes[dtype] = dtypes.get(dtype, 0) + 1
@@ -129,10 +139,13 @@ def inspect_safetensors(file, *, allow_quantized=False, ltx25_transformer=False)
         raise ResourceError("Unaccounted tensor payload")
     if ltx25_transformer and (core_blocks != set(range(48)) or not keyframes_embedding or not ff_probe):
         raise ResourceError("LTX 2.5 transformer lacks 48 blocks, keyframes embedding, or FF probe")
+    if ltx25_transformer and ltx25_audio_ff_bias is True and audio_ff_biases != {
+            (block, projection) for block in range(48) for projection in ('proj_in', 'proj_out')}:
+        raise ResourceError("LTX 2.5 audio feed-forward bias tensors are missing")
     return {"tensors": count, "dtypes": dtypes}
 
 
-def verify_inventory(root, inventory, *, cancelled=lambda: False):
+def verify_inventory(root, inventory, *, cancelled=lambda: False, ltx25_audio_ff_bias=None):
     """Hash every required file through no-follow descriptors; preserve originals."""
     root = Path(root)
     if not root.is_absolute():
@@ -189,8 +202,11 @@ def verify_inventory(root, inventory, *, cancelled=lambda: False):
                     raise ResourceError(f"Hash mismatch: {entry['name']}")
                 tensors = None
                 if entry["tensor_policy"] != "not_tensor":
+                    if entry["tensor_policy"] == "ltx25_transformer" and type(ltx25_audio_ff_bias) is not bool:
+                        raise ResourceError("LTX 2.5 audio feed-forward bias configuration is required")
                     tensors = inspect_safetensors(file, allow_quantized=entry["tensor_policy"] == "quantized_explicit",
-                                                  ltx25_transformer=entry["tensor_policy"] == "ltx25_transformer")
+                                                  ltx25_transformer=entry["tensor_policy"] == "ltx25_transformer",
+                                                  ltx25_audio_ff_bias=ltx25_audio_ff_bias)
                 after = os.fstat(file.fileno())
                 if (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns, before.st_ctime_ns) != (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns):
                     raise ResourceError("Resource changed during verification")

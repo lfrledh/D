@@ -26,7 +26,7 @@ def _inventory(name):
     return json.loads(path.read_bytes())
 
 
-def _closed_pack(root, inventory, *, cancelled=lambda: False):
+def _check_pack_entries(root, inventory):
     root = Path(root)
     if not root.is_absolute() or not stat.S_ISDIR(root.lstat().st_mode):
         raise ResourceError('Pack must be an explicit physical directory, not a symlink')
@@ -39,8 +39,13 @@ def _closed_pack(root, inventory, *, cancelled=lambda: False):
         seen.add(entry.name)
     if not expected <= seen:
         raise ResourceError('Required pack files are missing: ' + ', '.join(sorted(expected - seen)))
+
+
+def _closed_pack(root, inventory, *, cancelled=lambda: False, ltx25_audio_ff_bias=None):
+    _check_pack_entries(root, inventory)
     # Prevents extra text_encoder.safetensors/config from redirecting 2.3 to Gemma4.
-    return verify_inventory(root, inventory, cancelled=cancelled)
+    return verify_inventory(root, inventory, cancelled=cancelled,
+                            ltx25_audio_ff_bias=ltx25_audio_ff_bias)
 
 
 def admit_ltx23(profile, *, model, text_encoder, cancelled=lambda: False):
@@ -108,10 +113,10 @@ def _ltx25_config(root, inventory):
     transformer = embedded.get('transformer')
     if type(transformer) is not dict or (type(transformer.get('num_layers')) is not int or
             transformer['num_layers'] != 48 or transformer.get('ff_bias') is not False or
-            transformer.get('audio_ff_bias') is not False or
+            type(transformer.get('audio_ff_bias', True)) is not bool or
             transformer.get('use_keyframes_abs_pos_embedding') is not True or
             transformer.get('share_ff', False) is not False):
-        raise ResourceError('LTX 2.5 transformer config must declare 48 blocks, keyframes embedding and no FF bias')
+        raise ResourceError('LTX 2.5 transformer config must declare 48 blocks, keyframes embedding and no video FF bias')
     text = _verified_json(root, inventory, 'text_encoder_config.json')
     tower = text.get('text_config')
     if (text.get('model_type') != 'gemma4_unified' or type(tower) is not dict or
@@ -147,7 +152,8 @@ def _ltx25_config(root, inventory):
             not positive_finite(rope['full_attention'].get('partial_rotary_factor')) or
             not 0 < rope['full_attention']['partial_rotary_factor'] <= 1):
         raise ResourceError('Unsupported Gemma4 rotary configuration')
-    return {'transformer_blocks': 48, 'text_encoder': 'pack-local-gemma4',
+    return {'transformer_blocks': 48, 'audio_ff_bias': transformer.get('audio_ff_bias', True),
+            'text_encoder': 'pack-local-gemma4',
             'text_layers': layer_count, 'video_decoder': 'experimental-diffusion'}
 
 
@@ -155,8 +161,10 @@ def admit_ltx25(profile, *, model, text_encoder=None, cancelled=lambda: False):
     if profile != LTX25_PROFILE or text_encoder is not None:
         raise ResourceError('LTX 2.5 requires its fixed pack-local Gemma4, without an external encoder')
     inventory = _inventory('ltx25-bf16')
-    verified = _closed_pack(model, inventory, cancelled=cancelled)
+    _check_pack_entries(model, inventory)
     configuration = _ltx25_config(model, inventory)
+    verified = _closed_pack(model, inventory, cancelled=cancelled,
+                            ltx25_audio_ff_bias=configuration['audio_ff_bias'])
     return {
         'profile': profile, 'component_precision': {
             'diffusion_core': 'BF16', 'other_tensors': 'floating only; per-file header dtypes recorded',

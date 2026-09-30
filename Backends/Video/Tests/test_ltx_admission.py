@@ -106,6 +106,26 @@ class LTX25SyntheticAdmissionTests(unittest.TestCase):
     def admit(self):
         return m.admit_ltx25(m.LTX25_PROFILE, model=self.root)
 
+    def replace_file(self, name, data):
+        entry = next(e for e in self.inventory['files'] if e['name'] == name)
+        (self.root/name).write_bytes(data)
+        entry['size'] = len(data)
+        entry['hash']['digest'] = hashlib.sha256(data).hexdigest()
+
+    def audio_bias_fixture(self, *, missing_field=False):
+        config = json.loads((self.root/'embedded_config.json').read_bytes())
+        if missing_field:
+            del config['transformer']['audio_ff_bias']
+        else:
+            config['transformer']['audio_ff_bias'] = True
+        self.replace_file('embedded_config.json', json.dumps(config).encode())
+        tensors = [(f'transformer.transformer_blocks.{i}.ff.proj_in.weight', 'BF16', 1)
+                   for i in range(48)]
+        tensors += [(f'transformer.transformer_blocks.{i}.audio_ff.{projection}.bias', 'BF16', 1)
+                    for i in range(48) for projection in ('proj_in', 'proj_out')]
+        tensors.append(('transformer.keyframes_abs_pos_embedding', 'BF16', 1))
+        self.replace_file('transformer-dev.safetensors', tensor_file(tensors))
+
     def test_synthetic_complete_and_no_external_encoder(self):
         result = self.admit()
         self.assertFalse(result['inference_verified'])
@@ -119,12 +139,36 @@ class LTX25SyntheticAdmissionTests(unittest.TestCase):
                      'vae_decoder_conv.safetensors'):
             with self.subTest(name=name):
                 file = self.root/name
-                held = self.root/(name + '.held')
-                file.rename(held)
-                try:
-                    with self.assertRaises(m.ResourceError): self.admit()
-                finally:
-                    held.rename(file)
+                with tempfile.TemporaryDirectory(dir=os.environ['TMPDIR']) as held_dir:
+                    held = Path(held_dir)/name
+                    file.rename(held)
+                    try:
+                        with self.assertRaisesRegex(m.ResourceError, 'Required pack files are missing: ' + name):
+                            self.admit()
+                    finally:
+                        held.rename(file)
+
+    def test_audio_ff_bias_upstream_default_and_explicit_true(self):
+        for missing_field in (True, False):
+            with self.subTest(missing_field=missing_field):
+                self.audio_bias_fixture(missing_field=missing_field)
+                self.assertTrue(self.admit()['configuration']['audio_ff_bias'])
+
+    def test_audio_ff_bias_tensors_must_match_selected_variant(self):
+        self.audio_bias_fixture(missing_field=True)
+        path = self.root/'transformer-dev.safetensors'
+        data = tensor_file(
+            [(f'transformer.transformer_blocks.{i}.ff.proj_in.weight', 'BF16', 1)
+             for i in range(48)] + [('transformer.keyframes_abs_pos_embedding', 'BF16', 1)])
+        self.replace_file(path.name, data)
+        with self.assertRaisesRegex(m.ResourceError, 'audio feed-forward bias tensors are missing'):
+            self.admit()
+        self.audio_bias_fixture()
+        config = json.loads((self.root/'embedded_config.json').read_bytes())
+        config['transformer']['audio_ff_bias'] = False
+        self.replace_file('embedded_config.json', json.dumps(config).encode())
+        with self.assertRaisesRegex(m.ResourceError, 'audio feed-forward bias disagrees'):
+            self.admit()
 
     def test_unexpected_quantization_and_malformed_config(self):
         extra = self.root/'quantize_config.json'

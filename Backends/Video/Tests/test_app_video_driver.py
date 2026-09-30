@@ -296,6 +296,7 @@ class AppVideoDriverTests(unittest.TestCase):
         self.request = self._request(driver.LTX_25)
         self.request['negative_prompt'] = 'avoid blur'
         self._write_wire()
+        first, first_value = self._frame('first')
         for name in ('text_encoder.safetensors', 'text_encoder_config.json'):
             (self.pack / 'model' / name).write_bytes(b'synthetic plan fixture')
         calls = []
@@ -316,6 +317,11 @@ class AppVideoDriverTests(unittest.TestCase):
         self.assertIn('--video-decoder=diffusion', calls[0])
         self.assertIn('--gemma=' + str(self.pack / 'model'), calls[0])
         self.assertIn('--negative-prompt=avoid blur', calls[0])
+        image = calls[0].index('--image')
+        self.assertEqual(calls[0][image:image + 5], ('--image', str(first), '0', '1.0', '33'))
+        self.assertIn('--low-ram', calls[0])
+        self.assertEqual(self._result()['frame_conditions'],
+                         {'first_frame_sha256': first_value['content_sha256']})
         self.assertTrue(self._result()['media_verified'])
 
     def test_mismatch_unknown_profile_and_duplicate_keys(self):
