@@ -295,7 +295,6 @@ public struct WorkflowCanvasView: View {
                 return onSharedAssetDrop(project, asset, point, target)
             }
             guard controller.projectID == project, controller.availableAssets.contains(where: { $0.id == asset }) else { return false }
-            if controller.graph == nil { controller.addBlankGraph() }
             guard let target = controller.canvasInsertionTarget() else { return false }
             Task { await controller.addAssetNode(projectID: project, assetID: asset, x: point.x, y: point.y, target: target) }
             return true

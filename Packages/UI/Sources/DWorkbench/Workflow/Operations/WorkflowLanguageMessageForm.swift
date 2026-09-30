@@ -1,0 +1,77 @@
+import DInference
+import Foundation
+
+/// Shared Quick/Canvas form transport. Media are indexes into admitted asset
+/// ports, never arbitrary paths or URLs supplied by a text field.
+enum WorkflowLanguageMessageForm {
+    static let optionalFields: Set<String> = ["messagesJSON", "toolsJSON", "thinking", "reasoningEffort", "preserveThinking", "seed"]
+    static let fields: [WorkflowFieldDefinition] = [
+        .init("messagesJSON", "有序消息 JSON（留空使用任务；媒体 index 从0开始）", .text(multiline: true), .text("")),
+        .init("toolsJSON", "工具声明 JSON（仅声明，不自动执行）", .text(multiline: true), .text("")),
+        .init("thinking", "思考", .choice(["model", "on", "off"]), .text("model")),
+        .init("reasoningEffort", "思考强度（27B）", .choice(["model", "low", "medium", "xhigh"]), .text("model")),
+        .init("preserveThinking", "保留历史思考（27B）", .choice(["model", "on", "off"]), .text("model")),
+        .init("seed", "文字随机种子（留空随机）", .text(multiline: false), .text("")),
+    ]
+    private struct Message: Decodable {
+        let role: TextMessageRole
+        let parts: [Part]
+        let reasoningContent: String?
+        let toolCalls: [TextToolCall]?
+        let toolCallID: String?
+    }
+    private struct Part: Decodable { let type: String; let text: String?; let index: Int? }
+    static func messages(_ json: String, images: [TextImageReference], videos: [TextVideoReference]) throws -> [TextMessage]? {
+        guard !json.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        let forms = try decode([Message].self, json)
+        var usedImages = Set<Int>(), usedVideos = Set<Int>()
+        let messages = try forms.map { message in
+            let parts = try message.parts.map { part -> TextMessagePart in
+                switch part.type {
+                case "text":
+                    guard let text = part.text, part.index == nil else { throw WorkflowIssue("文字消息片段需要 text，不接受媒体 index。") }
+                    return .text(text)
+                case "image":
+                    guard part.text == nil, let i = part.index, images.indices.contains(i) else { throw WorkflowIssue("图像消息 index 未对应已接入图像。") }
+                    usedImages.insert(i); return .image(images[i])
+                case "video":
+                    guard part.text == nil, let i = part.index, videos.indices.contains(i) else { throw WorkflowIssue("视频消息 index 未对应已接入视频。") }
+                    usedVideos.insert(i); return .video(videos[i])
+                default: throw WorkflowIssue("消息片段 type 仅支持 text、image、video。")
+                }
+            }
+            return TextMessage(role: message.role, parts: parts, reasoningContent: message.reasoningContent,
+                toolCalls: message.toolCalls, toolCallID: message.toolCallID)
+        }
+        guard usedImages == Set(images.indices), usedVideos == Set(videos.indices) else {
+            throw WorkflowIssue("消息未引用全部已接入媒体；不会静默忽略输入。")
+        }
+        return messages
+    }
+    static func tools(_ json: String) throws -> [TextToolDefinition]? {
+        guard !json.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        return try decode([TextToolDefinition].self, json)
+    }
+    static func thinking(_ p: [String: WorkflowScalar]) throws -> TextThinkingOptions? {
+        func flag(_ key: String) throws -> Bool? {
+            switch p[key]?.string ?? "model" { case "model": nil; case "on": true; case "off": false
+            default: throw WorkflowIssue("未知的思考设置。") }
+        }
+        let enabled = try flag("thinking"), preserve = try flag("preserveThinking")
+        let value = p["reasoningEffort"]?.string ?? "model"
+        let effort: TextReasoningEffort?
+        if value == "model" { effort = nil }
+        else { guard let parsed = TextReasoningEffort(rawValue: value) else { throw WorkflowIssue("未知的思考强度。") }; effort = parsed }
+        return enabled == nil && preserve == nil && effort == nil ? nil : .init(enableThinking: enabled, reasoningEffort: effort, preserveThinking: preserve)
+    }
+    static func seed(_ p: [String: WorkflowScalar]) throws -> UInt64? {
+        let text = p["seed"]?.string ?? ""
+        if text.isEmpty { return nil }
+        guard let value = UInt64(text), String(value) == text else { throw WorkflowIssue("seed 需要完整 UInt64 十进制整数。") }
+        return value
+    }
+    private static func decode<T: Decodable>(_ type: T.Type, _ text: String) throws -> T {
+        guard text.utf8.count <= 1_048_576 else { throw WorkflowIssue("消息或工具声明超过1MiB解析预算。") }
+        return try JSONDecoder().decode(type, from: Data(text.utf8))
+    }
+}

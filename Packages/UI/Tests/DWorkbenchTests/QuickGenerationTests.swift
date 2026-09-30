@@ -313,6 +313,45 @@ struct QuickGenerationTests {
         try await quick.flush(); try await canvas.close(); try await store.close()
     }
 
+    @Test func crossProjectAssetCanCreateEmptyCanvasInOneUndoWithoutInference() async throws {
+        let (destination, engine, quick, canvas) = try await fixture()
+        let source = try await ProjectStore.create(at: destination.rootURL.deletingLastPathComponent()
+            .appendingPathComponent("source.dproject"), name: "source")
+        let original = try await source.publishWorkflowAsset(data: Data("原件 👩🏽‍🎨".utf8),
+            mediaType: "text/plain", name: "original", operationID: "d.asset.import")
+        let before = await source.snapshot()
+        #expect(canvas.graphs.isEmpty)
+        let target = try #require(canvas.canvasInsertionTarget())
+        #expect(target.rootID == nil)
+        // This is the same copy + captured insertion path used by the shared-library drop.
+        let copied = try await destination.copyWorkflowAsset(original.record.reference, from: source)
+        try await canvas.insertQuickResult(copied, target: target, x: 200, y: 180)
+        #expect(canvas.graphs.count == 1 && canvas.graph?.nodes.count == 1)
+        #expect(canvas.graph?.nodes.first?.assetReference == copied)
+        #expect(await source.snapshot() == before)
+        #expect(try await source.workflowData(original.record.reference) == Data("原件 👩🏽‍🎨".utf8))
+        canvas.undo()
+        #expect(canvas.graphs.isEmpty && !canvas.canUndo)
+        // Empty -> edited -> empty does not make an old asynchronous destination valid again.
+        #expect(!canvas.isCurrent(target))
+        await #expect(throws: (any Error).self) { try await canvas.insertQuickResult(copied, target: target) }
+        let empty = try #require(canvas.canvasInsertionTarget())
+        let invalid = WorkflowAssetReference(projectID: copied.projectID, assetID: UUID(), kind: .text, sha256: copied.sha256)
+        await #expect(throws: (any Error).self) { try await canvas.insertQuickResult(invalid, target: empty) }
+        #expect(canvas.graphs.isEmpty && !canvas.canUndo)
+        try await canvas.saveExplicitEdits()
+        await canvas.load()
+        let localTarget = try #require(canvas.canvasInsertionTarget())
+        await canvas.addAssetNode(projectID: copied.projectID, assetID: copied.assetID,
+            x: 80, y: 90, target: localTarget)
+        #expect(canvas.graphs.count == 1 && canvas.graph?.nodes.count == 1)
+        #expect(canvas.graph?.nodes.first?.assetReference == copied)
+        canvas.undo()
+        #expect(canvas.graphs.isEmpty && !canvas.canUndo)
+        #expect(await engine.requests.isEmpty)
+        try await quick.flush(); try await canvas.close(); try await source.close(); try await destination.close()
+    }
+
     @Test func copiedSettingsAndResultDoNotRunAndStaleTargetRejected() async throws {
         let (store, engine, quick, canvas) = try await fixture()
         quick.setInput("content", value: .data(.text("原文 e\u{301}")), draftID: try #require(quick.draft?.id))

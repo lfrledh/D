@@ -80,6 +80,8 @@ public struct WorkflowRegistry: Sendable {
                 // Earlier N11 v1 nodes predate the optional cardinality constraint.
                 // Preserve their stored parameters/signatures; missing means unrestricted.
                 if node.operationID == "d.value.validate", field.id == "expectedItemCount" { continue }
+                if [WorkflowModelRoutes.qwen35, WorkflowModelRoutes.qwen38].contains(node.operationID),
+                   WorkflowLanguageMessageForm.optionalFields.contains(field.id) { continue }
                 throw WorkflowIssue("缺少字段：\(field.id)。", nodeID: node.id)
             }
             try Self.validate(value, for: field, nodeID: node.id)

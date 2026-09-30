@@ -214,7 +214,8 @@ struct WorkflowSaveFailure: LocalizedError {
     public func generateLanguage(task: String, content: String?, context: WorkflowExecutionContext) async throws -> WorkflowAssetReference {
         if pending[context.stepID] != nil { return try await publish(context) }
         let binding = try model(for: context), p = context.node.parameters
-        guard !task.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw WorkflowIssue("任务不能为空。") }
+        let messagesJSON = p["messagesJSON"]?.string ?? ""
+        guard !task.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !messagesJSON.isEmpty else { throw WorkflowIssue("任务或有序消息不能为空。") }
         let prompt = task + (content.map { "\n\nContent:\n" + $0 } ?? "")
         let capability = binding.textCapability ?? session.textCapability
         let visual = capability?.profile == TextExecutionCapability.qwen35VLMProfile
@@ -231,33 +232,58 @@ struct WorkflowSaveFailure: LocalizedError {
                 images.append(.init(url: url, width: width, height: height, byteCount: UInt64(bytes.count), contentSHA256: reference.sha256))
             }
         }
-        var video: TextVideoReference?
+        var videos: [TextVideoReference] = []
         if let value = context.inputs["video"] {
             guard visual else { throw WorkflowIssue("此文字实现不支持视频。") }
-            let reference = try WorkflowExecution.asset(value, kind: .video, port: "video", node: context.node)
-            let (url, asset) = try await store.workflowMedia(reference)
-            guard asset.mediaType == "video/mp4", let metadata = asset.metadata.video else { throw WorkflowIssue("视频理解需要完整的 MP4 和真实时长。") }
-            let bytes = try await store.workflowData(reference)
-            video = .init(url: url, byteCount: UInt64(bytes.count), contentSHA256: reference.sha256, durationSeconds: Double(metadata.durationNumerator) / Double(metadata.durationDenominator))
+            let references = try WorkflowPortDefinition("video", "", kinds: [.video, .list], required: false, assetListKind: .video).resolveAssets(value)
+            for reference in references {
+                let (url, asset) = try await store.workflowMedia(reference)
+                guard asset.mediaType == "video/mp4", let metadata = asset.metadata.video else { throw WorkflowIssue("视频理解需要完整的 MP4 和真实时长。") }
+                let bytes = try await store.workflowData(reference)
+                videos.append(.init(url: url, byteCount: UInt64(bytes.count), contentSHA256: reference.sha256,
+                    durationSeconds: Double(metadata.durationNumerator) / Double(metadata.durationDenominator)))
+            }
         }
-        let processing: TextVisualProcessing? = visual && (!images.isEmpty || video != nil) ? .init(
+        var messages = try WorkflowLanguageMessageForm.messages(messagesJSON, images: images, videos: videos)
+        if messages != nil {
+            guard task.isEmpty, content == nil || content == "" else { throw WorkflowIssue("有序消息模式请清空任务和内容；不会猜测消息插入位置。") }
+        } else if videos.count > 1 {
+            messages = [.init(role: .user, parts: images.map(TextMessagePart.image) + videos.map(TextMessagePart.video) + [.text(prompt)])]
+        }
+        let processing: TextVisualProcessing? = visual && (!images.isEmpty || !videos.isEmpty) ? .init(
             minimumPixels: (p["minimumPixels"]?.integer ?? 0) == 0 ? nil : p["minimumPixels"]?.integer,
             maximumPixels: (p["maximumPixels"]?.integer ?? 0) == 0 ? nil : p["maximumPixels"]?.integer,
             maximumVideoFrames: p["maximumVideoFrames"]?.integer ?? 64) : nil
-        let input = TextRequest(prompt: prompt, maxTokens: p["maximumOutputTokens"]?.integer ?? 256,
+        let input = TextRequest(prompt: messages == nil ? prompt : "", maxTokens: p["maximumOutputTokens"]?.integer ?? 256,
             temperature: Float(p["temperature"]?.decimal ?? 0.7), topP: Float(p["topP"]?.decimal ?? 0.95),
             execution: .init(profile: capability?.profile ?? TextExecutionCapability.qwen2Profile, maximumPromptTokens: p["maximumPromptTokens"]?.integer ?? 2048),
-            images: images.isEmpty ? nil : images, video: video, visualProcessing: processing)
+            images: messages == nil && !images.isEmpty ? images : nil, video: messages == nil ? videos.first : nil, visualProcessing: processing,
+            messages: messages, tools: try WorkflowLanguageMessageForm.tools(p["toolsJSON"]?.string ?? ""),
+            thinking: try WorkflowLanguageMessageForm.thinking(p), seed: try WorkflowLanguageMessageForm.seed(p))
         try capability?.validate(input)
         let request = InferenceRequest(id: context.stepID, model: binding.reference, input: .text(input))
         languagePreview = ""
         let (result, text) = try await infer(request, binding: binding)
-        guard !text.isEmpty else { throw WorkflowIssue("语言模型未交付文字。") }
-        pending[context.stepID] = Publication(id: UUID(), data: Data(text.utf8), mediaType: "text/plain", metadata: .init(),
+        let raw = result.textResponse?.rawText ?? text
+        guard !raw.isEmpty else { throw WorkflowIssue("语言模型未交付文字。") }
+        var details = result.metadata.merging(["backend": binding.backendID, "modelIdentity": binding.identity,
+            "outputValidation": "raw model response retained; final-only parsing is separate"]) { _, new in new }
+        if let response = result.textResponse {
+            let encoded = try JSONEncoder().encode(response)
+            guard encoded.count <= 4 * 1_048_576 else { throw WorkflowIssue("模型响应记录超过保存预算。") }
+            details["textResponse.v1"] = String(decoding: encoded, as: UTF8.self)
+        }
+        pending[context.stepID] = Publication(id: UUID(), data: Data(raw.utf8), mediaType: "text/plain", metadata: .init(),
             parents: context.inputs.values.flatMap { $0.datum?.assetReferences ?? [] }, request: request,
-            details: result.metadata.merging(["backend": binding.backendID, "modelIdentity": binding.identity,
-                "outputValidation": "raw model text; structured parsing is separate"]) { _, new in new })
+            details: details)
         return try await publish(context)
+    }
+    public func readLanguageResponse(_ reference: WorkflowAssetReference) async throws -> TextResponse? {
+        _ = try await store.workflowData(reference)
+        guard let record = try await store.workflowState().archive?.assets.first(where: { $0.reference == reference }),
+              let encoded = record.metadata["textResponse.v1"] else { return nil }
+        guard encoded.utf8.count <= 4 * 1_048_576 else { throw WorkflowIssue("模型响应记录超过解析预算。") }
+        return try JSONDecoder().decode(TextResponse.self, from: Data(encoded.utf8))
     }
     public func generateMusic(_ input: AudioRequest, parents: [WorkflowAssetReference], context: WorkflowExecutionContext) async throws -> WorkflowAssetReference {
         if pending[context.stepID] != nil { return try await publish(context) }
@@ -526,13 +552,7 @@ struct WorkflowSaveFailure: LocalizedError {
             return try WorkflowMusicOperations.pitchOutputs(input: input, reference: ref, result: result)
         }
         if WorkflowModelRoutes.isLanguage(context.node.operationID) {
-            let text = try await readText(ref)
-            let value: WorkflowDatum
-            if context.node.parameters["outputMode"]?.string == "json" {
-                guard let schema = context.node.dataConfiguration?.schema else { throw WorkflowIssue("缺少输出结构。") }
-                value = try WorkflowStructuredText.parse(text, as: schema)
-            } else { value = .text(text) }
-            return ["raw": .asset(ref), "output": .data(value)]
+            return try await WorkflowLanguageOperations.outputs(raw: ref, node: context.node, services: self)
         }
         return ["output": .asset(ref)]
     }

@@ -67,7 +67,8 @@ public struct ImageExecutionCapability: Sendable, Equatable {
         contract = ExecutionContractDescription(
             operationID: profile.identifier == "referenceKlein4B" ? "image.referenceEdit" :
                 (profile.identifier == "flux2-dev-bf16-v1" ? "image.flux2Dev" : "image.generate"),
-            inputRoles: profile.identifier == "referenceKlein4B" ? [.prompt, .image] : [.prompt], outputRole: .image,
+            inputRoles: ["referenceKlein4B", "flux2-dev-bf16-v1"].contains(profile.identifier)
+                ? [.prompt, .image] : [.prompt], outputRole: .image,
             controlFidelity: .approximate)
     }
 

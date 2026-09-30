@@ -1,7 +1,7 @@
 import Foundation
 
 /// Private application preferences, never graph data or exported provenance.
-/// ModelLibrary remains the image installation owner; this retains existing
+/// ModelLibrary remains the installation owner; this retains existing
 /// user-granted text/legacy image bookmarks without making another installer.
 @MainActor struct WorkflowModelBookmarks {
     struct Entry: Codable, Equatable {
@@ -32,7 +32,8 @@ import Foundation
         }
         return table
     }
-    func imageIdentities() throws -> [String] { try installations().keys.sorted() }
+    func installationIdentities() throws -> [String] { try installations().keys.sorted() }
+    func imageIdentities() throws -> [String] { try installationIdentities().filter { $0.hasPrefix("image:") } }
     func installation(for identity: String) throws -> ModelID? {
         try installations()[identity].flatMap { UUID(uuidString: $0) }.map { ModelID(rawValue: $0) }
     }

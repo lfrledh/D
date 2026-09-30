@@ -13,9 +13,13 @@ extension MLXHardwareTests {
 struct MLXImageRealModelTests {
     private static let revision = "ef52ee019fd1d0e75ae4deb40476ba65989716d7"
     private static let prompt = "A red ceramic teapot on a wooden table beside a window, soft morning light, detailed studio photograph."
-    private static let referencePNG = "05f0b80ac7d9d6e4ffa105af12a8805cdea4425a9448f9d35a1bd9d8f8dda553"
+    // F04 closeout-r2: MLX 0.31.4 / core ce45, current FP32 Steel score-scaling path.
+    // Fixed M4/macOS 26.6.2/Xcode 27 baseline, reviewed with the source-only A/B in
+    // docs/tasks/D-RELEASE-FREEZE-01.md. Other environments require their own review;
+    // never accept either historical hash indiscriminately or relax pixel tolerance.
+    private static let referencePNG = "f7cebb5068312c1128dbd671a20d172be4a36d34d1c70aa55d62d0d3c89eb548"
 
-    @Test("Three runtime rounds reproduce the B1 image and release every allocation", .timeLimit(.minutes(3)))
+    @Test("Three runtime rounds reproduce the reviewed MLX 0.31.4 image and release every allocation", .timeLimit(.minutes(3)))
     func repeatedGeneration() async throws {
         let directory = try Self.modelDirectory()
         let artifacts = try Self.artifactDirectory(model: directory)
@@ -42,7 +46,7 @@ struct MLXImageRealModelTests {
                     try Data(contentsOf: resultURL).write(to: target, options: .withoutOverwriting)
                 }
                 urls.insert(resultURL)
-                #expect(hash == Self.referencePNG, "The fixed prompt/seed must reproduce the reviewed B1 PNG")
+                #expect(hash == Self.referencePNG, "The fixed prompt/seed must reproduce the reviewed MLX 0.31.4 PNG")
                 try await Self.expectReleased(trace, run: request.id, label: "normal-round-\(round)")
             }
             #expect(Set(hashes).count == 1)

@@ -907,6 +907,10 @@ public final class ProjectSession {
             }
             return .init(identity: identity, reference: ref, backendID: backend)
         }
+        if let installation = try WorkflowModelBookmarks(settings: settings).installation(for: identity) {
+            guard let library = modelLibrary else { throw WorkflowIssue("模型库当前不可用；未改用其他目录。") }
+            return try await resolveInstalledWorkflowModel(installation, kind: kind, identity: identity, session: session, library: library)
+        }
         if let adapter = session.modelAdapters.first(where: { $0.kind == kind && $0.identity == identity }) {
             guard let entry = try WorkflowModelBookmarks(settings: settings).entries().first(where: { $0.identity == identity && $0.kind == kind }) else {
                 throw WorkflowIssue("此模型的本地目录尚未登记。")
@@ -966,6 +970,63 @@ public final class ProjectSession {
                 videoRecipe: videoRecipe,
                 release: { await access.release(lease) })
         } catch { await access.release(lease); throw error }
+    }
+    /// A selected installation owns the lease for every modality. Failure is not
+    /// permission to fall back to a remembered directory or another copy.
+    private func resolveInstalledWorkflowModel(_ id: ModelID, kind: WorkflowModelKind, identity: String,
+                                               session: WorkbenchSession, library: ModelLibrary) async throws -> WorkflowModelBinding {
+        let entry = try await library.catalogEntry(for: id)
+        guard identity == kind.rawValue + ":" + entry.revision else { throw WorkflowIssue("安装记录与节点的固定模型身份不符。") }
+        let lease = try await library.acquire(id)
+        do {
+            let reference: ModelReference
+            let backendID: String
+            var operationID: String?, textCapability: TextExecutionCapability?, imageRecipe: WorkflowImageRecipe?, videoRecipe: WorkflowVideoRecipe?
+            if let adapter = session.modelAdapters.first(where: { $0.identity == identity && $0.kind == kind }) {
+                reference = try await adapter.validateModel(lease.reference.directory)
+                backendID = adapter.backendID; operationID = adapter.operationID
+                textCapability = adapter.textCapability; imageRecipe = adapter.imageRecipe
+            } else if kind == .image, entry.id == ModelCatalog.flux2ID {
+                try await session.validateModel(lease.reference.directory)
+                reference = lease.reference; backendID = session.backendID
+                operationID = "d.image.generate"; imageRecipe = .klein(capability: session.imageCapability)
+            } else if kind == .music, let validate = session.validateMusicModel, let backend = session.musicBackendID,
+                      entry.workflowProfileID == "d.music.mrt2" {
+                reference = try await validate(lease.reference.directory); backendID = backend; operationID = "d.music.mrt2"
+            } else if kind == .video, let adapter = session.videoAdapters.first(where: { "video:" + $0.modelIdentity == identity }) {
+                reference = try await adapter.validateModel(lease.reference.directory); backendID = adapter.backendID
+                let recipe = WorkflowVideoRecipe(profile: adapter.profile)
+                videoRecipe = recipe; operationID = recipe.operationID
+            } else if kind == .video, entry.workflowProfileID == "d.video.generate",
+                      let validate = session.validateVideoModel, let backend = session.videoBackendID {
+                reference = try await validate(lease.reference.directory); backendID = backend; operationID = "d.video.generate"
+            } else { throw WorkflowIssue("已取得模型文件，但此应用尚未准备对应的执行引擎。") }
+            guard reference.revision == entry.revision else { throw WorkflowIssue("执行引擎验证的版本与安装目录不符。") }
+            return .init(identity: identity, reference: reference, backendID: backendID, operationID: operationID,
+                textCapability: textCapability, imageRecipe: imageRecipe, videoRecipe: videoRecipe,
+                release: { await library.release(lease) })
+        } catch { await library.release(lease); throw error }
+    }
+    /// Shared model-manager selection for Quick and Canvas. Does not overwrite
+    /// the legacy image editor's active settings with a non-image installation.
+    public func selectWorkflowInstallation(id: ModelID) async throws -> WorkflowModelChoice {
+        guard let library = modelLibrary, let session, let owner = store, !isChangingProject, !closePending else {
+            throw WorkflowIssue("请先打开项目，再选择模型。")
+        }
+        let entry = try await library.catalogEntry(for: id)
+        guard let operation = entry.workflowProfileID,
+              let kind = WorkflowRegistry.standard.operation(operation)?.definition.modelKind else {
+            throw WorkflowIssue("模型文件仍需准备，尚不能绑定执行操作。")
+        }
+        let identity = kind.rawValue + ":" + entry.revision
+        let binding = try await resolveInstalledWorkflowModel(id, kind: kind, identity: identity, session: session, library: library)
+        await binding.release()
+        guard store === owner, !isChangingProject, !closePending else { throw WorkflowIssue("校验期间项目已切换，未改变模型选择。") }
+        try WorkflowModelBookmarks(settings: settings).rememberInstallation(identity: identity, id: id)
+        let choice = WorkflowModelChoice(id: identity, kind: kind, displayName: entry.title)
+        explicitModelChoices.removeAll { $0.id == identity }; explicitModelChoices.append(choice)
+        refreshWorkflowModels()
+        return choice
     }
     /// Registration has explicit identity and does not depend on a selected graph node.
     public func registerExplicitModel(at url: URL, kind: WorkflowModelKind) async throws -> WorkflowModelChoice {
@@ -1089,8 +1150,11 @@ public final class ProjectSession {
             var choices: [WorkflowModelChoice] = try WorkflowModelBookmarks(settings: settings).entries().map {
                 .init(id: $0.identity, kind: $0.kind, displayName: $0.name)
             }
-            for identity in try WorkflowModelBookmarks(settings: settings).imageIdentities() where !choices.contains(where: { $0.id == identity }) {
-                choices.append(.init(id: identity, kind: .image, displayName: "FLUX.2 Klein 4B · q8"))
+            let catalog = try ModelCatalog.entries()
+            for identity in try WorkflowModelBookmarks(settings: settings).installationIdentities() where !choices.contains(where: { $0.id == identity }) {
+                guard let kind = WorkflowModelKind(rawValue: String(identity.prefix { $0 != ":" })),
+                      let entry = catalog.first(where: { identity == kind.rawValue + ":" + $0.revision }) else { continue }
+                choices.append(.init(id: identity, kind: kind, displayName: entry.title))
             }
             for choice in explicitModelChoices where !choices.contains(where: { $0.id == choice.id }) { choices.append(choice) }
             if let revision = selectedModelRevision, !revision.isEmpty,

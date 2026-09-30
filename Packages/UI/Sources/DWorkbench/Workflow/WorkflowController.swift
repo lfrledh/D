@@ -10,16 +10,19 @@ public struct WorkflowAssetBindingTarget: Sendable, Equatable {
 
 public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
     public let projectID: UUID
-    public let rootID: UUID
+    public let rootID: UUID?
     public let revision: UUID
-    public let bodyID: UUID
+    public let bodyID: UUID?
     public let path: [WorkflowBodyLocation]
 }
 
 /// Coordinates compiled structured workflows; all expensive model work is still admitted by the shared InferenceRuntime.
 @MainActor @Observable public final class WorkflowController {
     public let registry: WorkflowRegistry
-    public private(set) var graphs: [WorkflowGraph] = []
+    public private(set) var graphs: [WorkflowGraph] = [] {
+        didSet { emptyInsertionRevision = UUID() }
+    }
+    @ObservationIgnored private var emptyInsertionRevision = UUID()
     public private(set) var runs: [WorkflowRun] = []
     public private(set) var tools: [WorkflowToolDefinition] = []
     @ObservationIgnored private var activeExecutor: WorkflowPlanExecutor?
@@ -294,7 +297,7 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
 
     /// Copy explicit settings and input snapshots; no runner is invoked by this command.
     public func insertQuickSettings(_ draft: QuickDraft, target: WorkflowCanvasInsertionTarget) async throws {
-        guard isCurrent(target) else { throw WorkflowIssue("目标流程已改变，未添加到其他流程。") }
+        guard isCurrent(target), target.rootID != nil else { throw WorkflowIssue("目标流程已改变，未添加到其他流程。") }
         try registry.validate(draft.node)
         var model = draft.node; model.id = UUID()
         var inputs: [(WorkflowNode, String)] = []
@@ -319,12 +322,23 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
         try await persist(); await onChange()
     }
 
-    public func insertQuickResult(_ reference: WorkflowAssetReference, target: WorkflowCanvasInsertionTarget, x: Double = 80, y: Double = 100) async throws {
-        guard isCurrent(target), let definition = registry.operation("d.asset.reference")?.definition else { throw WorkflowIssue("目标流程已改变。") }
+    public func insertQuickResult(_ reference: WorkflowAssetReference, target: WorkflowCanvasInsertionTarget, x: Double = 80, y: Double = 100, title: String? = nil) async throws {
+        guard x.isFinite, y.isFinite, isCurrent(target), let definition = registry.operation("d.asset.reference")?.definition else { throw WorkflowIssue("目标流程已改变。") }
         _ = try await services.store.workflowData(reference)
         guard isCurrent(target) else { throw WorkflowIssue("读取期间流程已改变。") }
         var node = definition.makeNode(); node.assetReference = reference
-        edit { $0.nodes.append(node); $0.layout.append(.init(nodeID: node.id, x: x, y: y)) }
+        if let title { node.title = title }
+        if target.rootID == nil {
+            // Do not create an empty graph before the asynchronous copy/read succeeds.
+            // First graph and first asset are a single user insertion and undo step.
+            let next = WorkflowGraph(name: "新流程", nodes: [node],
+                layout: [.init(nodeID: node.id, x: x, y: y)])
+            try registry.validate(next, tools: tools)
+            undoStack.append(graphs); redoStack = []; graphs.append(next)
+            selectedGraphID = next.id
+        } else {
+            edit { $0.nodes.append(node); $0.layout.append(.init(nodeID: node.id, x: x, y: y)) }
+        }
         guard graph?.nodes.contains(where: { $0.id == node.id }) == true else { throw WorkflowIssue("没有插入结果节点。") }
         selectedNodeID = node.id
         try await persist(); await onChange()
@@ -332,7 +346,7 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
 
     /// A structured published result is a frozen value input, not a generator or hidden execution.
     public func insertQuickValue(_ value: WorkflowDatum, target: WorkflowCanvasInsertionTarget) async throws {
-        guard isCurrent(target), let definition = registry.operation("d.value.input")?.definition else { throw WorkflowIssue("目标流程已改变。") }
+        guard isCurrent(target), target.rootID != nil, let definition = registry.operation("d.value.input")?.definition else { throw WorkflowIssue("目标流程已改变。") }
         try value.validate()
         for reference in value.assetReferences { _ = try await services.store.workflowData(reference) }
         guard isCurrent(target) else { throw WorkflowIssue("读取期间流程已改变。") }
@@ -344,28 +358,31 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
     }
 
     public func canvasInsertionTarget() -> WorkflowCanvasInsertionTarget? {
-        guard canEditCanvas, let projectID, let rootGraph, let graph else { return nil }
+        guard canEditCanvas, let projectID else { return nil }
+        if graphs.isEmpty {
+            return .init(projectID: projectID, rootID: nil, revision: emptyInsertionRevision, bodyID: nil, path: [])
+        }
+        guard let rootGraph, let graph else { return nil }
         return .init(projectID: projectID, rootID: rootGraph.id, revision: rootGraph.revision, bodyID: graph.id, path: bodyPath)
     }
     public func isCurrent(_ target: WorkflowCanvasInsertionTarget) -> Bool {
-        canEditCanvas && projectID == target.projectID && rootGraph?.id == target.rootID &&
-        rootGraph?.revision == target.revision && graph?.id == target.bodyID && bodyPath == target.path
+        guard canEditCanvas, projectID == target.projectID else { return false }
+        if target.rootID == nil {
+            return graphs.isEmpty && target.bodyID == nil && target.path.isEmpty && emptyInsertionRevision == target.revision
+        }
+        return rootGraph?.id == target.rootID && rootGraph?.revision == target.revision &&
+            graph?.id == target.bodyID && bodyPath == target.path
     }
     /// The UI captures the insertion scope synchronously before starting its Task.
     public func addAssetNode(projectID expectedProject: UUID, assetID: UUID, x: Double, y: Double,
                              target: WorkflowCanvasInsertionTarget) async {
         guard expectedProject == target.projectID, isCurrent(target),
-              availableAssets.contains(where: { $0.id == assetID }), x.isFinite, y.isFinite,
-              let definition = registry.operation("d.asset.reference")?.definition else { return }
+              availableAssets.contains(where: { $0.id == assetID }), x.isFinite, y.isFinite else { return }
         do {
             let ref = try await services.store.pinWorkflowAsset(assetID)
             guard isCurrent(target) else { throw WorkflowIssue("拖入期间流程已改变；资产保留，未添加到其他流程。") }
-            var node = definition.makeNode(); node.assetReference = ref
-            node.title = availableAssets.first(where: { $0.id == assetID })?.name ?? node.title
-            edit { $0.nodes.append(node); $0.layout.append(.init(nodeID: node.id, x: x, y: y)) }
-            guard graph?.nodes.contains(where: { $0.id == node.id }) == true else { return }
-            selectedNodeID = node.id
-            try await persist(); await onChange()
+            try await insertQuickResult(ref, target: target, x: x, y: y,
+                title: availableAssets.first(where: { $0.id == assetID })?.name)
         } catch { errorMessage = error.localizedDescription }
     }
     public func bindLibraryAsset(projectID expectedProject: UUID, assetID: UUID, target: WorkflowAssetBindingTarget) async {

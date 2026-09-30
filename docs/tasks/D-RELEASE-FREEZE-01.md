@@ -16,6 +16,12 @@ Lead 单一维护共享请求、App/ProjectSession 接线与本记录。新增�
 
 最终代码/受测/文档 SHA 记录外部回执，不自引用 amend。写 Worker 仅在各自预检通过后进入实施；源、普通 App、历史证据保持。
 
+### r2 F04 数值基线决定（实现中，尚待生产版本复验）
+
+R2/lead/klein-ab* 保留一次源代码级 A/B：独立 IMAGE 工作树只恢复 d20ead4 引入前 Steel attention 的缩放顺序，并记录实际 kernel 路径；相同模型/输入/seed/精度/SDK下原严格三周期测试通过，81.845秒。实际381次均为 **Float32 Steel/headDim128**，并非推测的 BF16 舍入，也未走 NAX。A/B三张PNG恢复旧哈希 `05f0b80ac7d9d6e4ffa105af12a8805cdea4425a9448f9d35a1bd9d8f8dda553`；原新引擎三张均为 `f7cebb5068312c1128dbd671a20d172be4a36d34d1c70aa55d62d0d3c89eb548`。差异为1845/262144像素、最大通道1/255，旧失败不删除。
+
+Lead 决定保留上游新缩放实现，不把实验性全局回退合入生产。非实现者 video_extension_map 独立审阅同意为当前固定引擎建立唯一新精确基准；生产测试改为新哈希，仍严格逐字节，不能两个哈希任选或放宽误差。绑定 MLX Swift 0.31.4/core ce45、Flux2 959a4af、Q8 revision ef52ee0、原测试提示/seed/512²/4步、M4、macOS26.6.2/Xcode27.0。本决定没有高精度oracle，不能据此宣布新数学更准确或其他硬件逐像素相同；未知配置的差异仍须独立核实。生产测试尚未在此段撰写时重新执行，结果在后续回执追加。
+
 ## 基线与边界
 源 codex/inference-foundation@01758b81527dc27eb4563bf1b66fd1ceab6647ee；实现从视频候选 d7dba252eea52d0f4a9a26915f4df3c3f7d244d0 创建外盘 D-RELEASE-FREEZE-01 / codex/release-freeze-01。原视频/前端候选保持。保护源个人 scheme 未暂存状态、作品、模型和普通 App。证据 R=`D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T070201Z`。
 

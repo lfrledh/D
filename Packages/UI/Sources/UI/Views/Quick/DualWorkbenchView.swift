@@ -114,16 +114,12 @@ public struct DualWorkbenchView: View {
         }
         .sheet(isPresented: Binding(get: { library.isPresented }, set: { library.isPresented = $0 }), onDismiss: restoreLibraryIfNeeded) {
             ModelLibraryView(model: library, selectedModelID: quickModel.selectedModelID, canSelect: true) { id in
-                quickModel.clearError()
-                await quickModel.selectModel(id: id)
-                guard quickModel.selectedModelID == id, quickModel.projectSession.errorMessage == nil else {
-                    issue = quickModel.projectSession.errorMessage ?? "模型选择未完成，原选择保留。"; return
-                }
-                quickModel.projectSession.refreshWorkflowModels()
-                if let identity = quickModel.projectSession.selectedWorkflowImageIdentity {
-                    quick.select(operationID: "d.image.generate", modelID: identity)
-                }
-                returnToLibrary = false; library.isPresented = false; navigate(to: .quick)
+                do {
+                    let choice = try await quickModel.projectSession.selectWorkflowInstallation(id: id)
+                    guard let operation = WorkflowModelRoutes.operation(for: choice) else { throw WorkflowIssue("此模型没有可用的共享操作。") }
+                    quick.select(operationID: operation, modelID: choice.id)
+                    returnToLibrary = false; library.isPresented = false; navigate(to: .quick)
+                } catch { issue = error.localizedDescription }
             }
         }
         .sheet(isPresented: $languageVisible) {
@@ -243,8 +239,11 @@ public struct DualWorkbenchView: View {
     }
     private func prepareModel(_ value: SharedLibraryBrowserEntry) async {
         guard case .operation(let id, _) = value.selection, let kind = WorkflowRegistry.standard.operation(id)?.definition.modelKind else { presentLibraryDestination(.info(value)); return }
-        if kind == .image { presentLibraryDestination(.models); return }
         if kind == .pitch { await refreshLibrary(checkModels: true); presentLibraryDestination(.info(value)); return }
+        if [WorkflowModelRoutes.qwen35, WorkflowModelRoutes.qwen38, WorkflowModelRoutes.fluxDev,
+            WorkflowModelRoutes.ace, "d.image.generate", "d.music.mrt2", "d.video.generate"].contains(id) || kind == .video {
+            presentLibraryDestination(.models); return
+        }
         let panel = NSOpenPanel(); panel.canChooseDirectories = true; panel.canChooseFiles = false
         panel.message = "登记已有模型的原位置；不会复制、移动或删除权重。"
         guard await panel.begin() == .OK, let url = panel.url else { return }

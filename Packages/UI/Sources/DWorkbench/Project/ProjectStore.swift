@@ -3280,7 +3280,8 @@ extension ProjectStore {
         for run in archive.runs {
             guard run.graph.nodes.contains(where: { $0.id == run.targetNodeID }),
                   Set(run.steps.map(\.id)).count == run.steps.count else { throw WorkflowIssue("流程运行快照无效。") }
-            try WorkflowArchiveInspection.validateRun(run, tools: archive.tools ?? [])
+            // validateScopeHistory above validates each run and its source once
+            // against this exact archive; assets and publication checks stay below.
             if let checkpoint = run.planCheckpoint {
                 for ref in try WorkflowCheckpointValidation.assetReferences(in: checkpoint) { try validateRef(ref) }
             }

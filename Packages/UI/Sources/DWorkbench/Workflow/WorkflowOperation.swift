@@ -25,6 +25,7 @@ public struct WorkflowExecutionContext: Sendable {
     func transformAudio(_ reference: WorkflowAssetReference, context: WorkflowExecutionContext) async throws -> WorkflowAssetReference
     func readData(_ reference: WorkflowAssetReference) async throws -> Data
     func generateLanguage(task: String, content: String?, context: WorkflowExecutionContext) async throws -> WorkflowAssetReference
+    func readLanguageResponse(_ reference: WorkflowAssetReference) async throws -> TextResponse?
     func generateMusic(_ request: AudioRequest, parents: [WorkflowAssetReference], context: WorkflowExecutionContext) async throws -> WorkflowAssetReference
     func generateACE(context: WorkflowExecutionContext) async throws -> WorkflowAssetReference
     func generateVideo(context: WorkflowExecutionContext) async throws -> WorkflowAssetReference
@@ -52,6 +53,7 @@ public struct WorkflowOperation: Sendable {
 
 /// Older test/host implementations remain explicit about unsupported new services.
 extension WorkflowOperationServices {
+    public func readLanguageResponse(_ reference: WorkflowAssetReference) async throws -> TextResponse? { nil }
     public func transformAudio(_ reference: WorkflowAssetReference, context: WorkflowExecutionContext) async throws -> WorkflowAssetReference { throw WorkflowIssue("此入口尚未提供音频转换。") }
     public func readData(_ reference: WorkflowAssetReference) async throws -> Data { throw WorkflowIssue("此入口尚未提供媒体读取。") }
     public func generateLanguage(task: String, content: String?, context: WorkflowExecutionContext) async throws -> WorkflowAssetReference { throw WorkflowIssue("此入口尚未提供语言生成。") }

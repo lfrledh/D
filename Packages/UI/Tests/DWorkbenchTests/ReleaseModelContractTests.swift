@@ -40,7 +40,14 @@ struct ReleaseModelContractTests {
             let node = try #require(registry.operation(id)?.definition.makeNode())
             let request = try recipe.request(node: node, prompt: "ordered", seed: 42, references: refs)
             #expect(try request.resolvedReferences() == refs)
-            if id == WorkflowModelRoutes.fluxDev { #expect(request.guidanceScale == 4 && request.steps == 50) }
+            if id == WorkflowModelRoutes.fluxDev {
+                #expect(request.guidanceScale == 4 && request.steps == 50)
+                let capability = ImageExecutionCapability.flux2Dev
+                try capability.validate(request)
+                #expect(capability.supportsReferenceImage)
+                #expect(capability.contract.inputRoles.contains(.image))
+                #expect(registry.operation(id)?.definition.inputs.contains { $0.assetListKind == .image } == true)
+            }
         }
         let duplicate = WorkflowDataItem(value: .asset(.init(projectID: UUID(), assetID: UUID(), kind: .image, sha256: String(repeating: "a", count: 64))))
         let port = WorkflowPortDefinition("ref", "", kinds: [.image, .list], assetListKind: .image)

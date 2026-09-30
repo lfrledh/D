@@ -11,7 +11,7 @@ enum WorkflowLanguageOperations {
     static func makeLanguage(id: String, title: String, visual: Bool) -> WorkflowOperation {
         let visualInputs: [WorkflowPortDefinition] = visual ? [
             .init("images", "有序参考图像", kinds: [.image, .list], required: false, assetListKind: .image),
-            .init("video", "视频（2 FPS抽帧，无音频理解）", kinds: [.video], required: false)] : []
+            .init("video", "视频（2 FPS抽帧，无音频理解）", kinds: [.video, .list], required: false, assetListKind: .video)] : []
         let visualFields: [WorkflowFieldDefinition] = visual ? [
             .init("minimumPixels", "每图最小像素（0使用模型配置）", .integer, .integer(0)),
             .init("maximumPixels", "每图最大像素（0使用模型配置）", .integer, .integer(0)),
@@ -20,15 +20,15 @@ enum WorkflowLanguageOperations {
         inputs: [.init("task", "任务", kinds: [.text], required: false), .init("content", "内容", kinds: [.text], required: false)] + visualInputs,
         outputs: [.init("output", "结果", kinds: WorkflowDataKind.allCases), .init("raw", "原始模型文字", kinds: [.text])],
         fields: [.init("task", "任务", .text(multiline: true), .text("请写一个简短的创作提案。")),
-            .init("outputMode", "输出", .choice(["text", "json"]), .text("text")),
+            .init("outputMode", "输出", .choice(visual ? ["text", "json", "response"] : ["text", "json"]), .text("text")),
             .init("maximumPromptTokens", "输入 token 上限", .integer, .integer(2048)),
             .init("maximumOutputTokens", "输出 token 上限", .integer, .integer(256)),
-            .init("temperature", "温度", .decimal, .decimal(0.7)), .init("topP", "Top P", .decimal, .decimal(0.95)), modelField] + visualFields, modelKind: .text),
+            .init("temperature", "温度", .decimal, .decimal(0.7)), .init("topP", "Top P", .decimal, .decimal(0.95)), modelField] + visualFields + (visual ? WorkflowLanguageMessageForm.fields : []), modelKind: .text),
         validate: { node in
             guard (1...(visual ? 262144 : 32768)).contains(try WorkflowScalarReader.integer("maximumPromptTokens", in: node)),
                   (1...(visual ? 262144 : 8192)).contains(try WorkflowScalarReader.integer("maximumOutputTokens", in: node)) else { throw WorkflowIssue("文字 token 范围无效。") }
             try WorkflowLimits.nonnegative(WorkflowScalarReader.decimal("temperature", in: node), field: "temperature", node: node)
-            guard let mode = node.parameters["outputMode"]?.string, ["text", "json"].contains(mode) else { throw WorkflowIssue("输出模式无效。") }
+            guard let mode = node.parameters["outputMode"]?.string, (visual ? ["text", "json", "response"] : ["text", "json"]).contains(mode) else { throw WorkflowIssue("输出模式无效。") }
             if mode == "json" {
                 guard let schema = node.dataConfiguration?.schema else { throw WorkflowIssue("请明确 JSON 输出结构。") }
                 try WorkflowStructuredText.validateSchema(schema)
@@ -36,6 +36,9 @@ enum WorkflowLanguageOperations {
             let p = try WorkflowScalarReader.decimal("topP", in: node)
             guard p > 0 && p <= 1 else { throw WorkflowIssue("Top P 必须大于0且不超过1。") }
             if visual {
+                _ = try WorkflowLanguageMessageForm.thinking(node.parameters)
+                _ = try WorkflowLanguageMessageForm.seed(node.parameters)
+                _ = try WorkflowLanguageMessageForm.tools(node.parameters["toolsJSON"]?.string ?? "")
                 let min = try WorkflowScalarReader.integer("minimumPixels", in: node)
                 let max = try WorkflowScalarReader.integer("maximumPixels", in: node)
                 guard min >= 0, max >= 0, min == 0 || max == 0 || min <= max,
@@ -45,16 +48,52 @@ enum WorkflowLanguageOperations {
             let task = try await text(context.inputs["task"], fallback: context.node.parameters["task"]?.string ?? "", services: services)
             let content = try await context.inputs["content"].asyncText(services)
             let raw = try await services.generateLanguage(task: task, content: content, context: context)
-            let value = try await services.readText(raw)
-            let output: WorkflowDatum
-            if context.node.parameters["outputMode"]?.string == "json" {
-                do {
-                    guard let schema = context.node.dataConfiguration?.schema else { throw WorkflowIssue("请明确 JSON 输出结构。") }
-                    output = try WorkflowStructuredText.parse(value, as: schema)
-                } catch { throw WorkflowOutputValidationFailure(raw: raw, reason: error.localizedDescription) }
-            } else { output = .text(value) }
-            return .outputs(["output": .data(output), "raw": .asset(raw)])
+            return .outputs(try await outputs(raw: raw, node: context.node, services: services))
         })
+    }
+    @MainActor static func outputs(raw: WorkflowAssetReference, node: WorkflowNode,
+                                   services: any WorkflowOperationServices) async throws -> [String: WorkflowValue] {
+        do {
+            let response = try await services.readLanguageResponse(raw)
+            let output: WorkflowDatum
+            if node.parameters["outputMode"]?.string == "response" {
+                guard let response else { throw WorkflowIssue("此运行未保留结构化模型响应。") }
+                output = try responseValue(response)
+            } else {
+                let value: String
+                if let response {
+                    guard let final = response.finalText, !final.isEmpty else {
+                        throw WorkflowIssue("本次没有最终正文；原始响应已保存。工具请求请选择 response 输出，不会自动执行。")
+                    }
+                    if node.parameters["outputMode"]?.string == "json", response.finishReason != .stop {
+                        throw WorkflowIssue("响应未正常结束，不把截断或工具请求解析为最终 JSON。")
+                    }
+                    value = final
+                } else { value = try await services.readText(raw) }
+                if node.parameters["outputMode"]?.string == "json" {
+                    guard let schema = node.dataConfiguration?.schema else { throw WorkflowIssue("请明确 JSON 输出结构。") }
+                    output = try WorkflowStructuredText.parse(value, as: schema)
+                } else { output = .text(value) }
+            }
+            return ["output": .data(output), "raw": .asset(raw)]
+        } catch { throw WorkflowOutputValidationFailure(raw: raw, reason: error.localizedDescription) }
+    }
+    private static func responseValue(_ response: TextResponse) throws -> WorkflowDatum {
+        let callFields: [WorkflowRecordField] = [.init("id", .text), .init("name", .text),
+            .init("argumentsJSON", .text), .init("validationError", .optional(.text))]
+        let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
+        let calls = try response.toolCalls.enumerated().map { index, call in
+            WorkflowDataItem(id: String(index), value: .record(schema: callFields, fields: [
+                "id": .text(call.id), "name": .text(call.name),
+                "argumentsJSON": .text(String(decoding: try encoder.encode(call.arguments), as: UTF8.self)),
+                "validationError": call.validationError.map(WorkflowDatum.text) ?? .none(.text)]))
+        }
+        let fields: [WorkflowRecordField] = [.init("rawText", .text), .init("reasoningText", .optional(.text)),
+            .init("finalText", .optional(.text)), .init("toolCalls", .list(.record(callFields))), .init("finishReason", .text)]
+        return .record(schema: fields, fields: ["rawText": .text(response.rawText),
+            "reasoningText": response.reasoningText.map(WorkflowDatum.text) ?? .none(.text),
+            "finalText": response.finalText.map(WorkflowDatum.text) ?? .none(.text),
+            "toolCalls": .list(element: .record(callFields), items: calls), "finishReason": .text(response.finishReason.rawValue)])
     }
     static let video = WorkflowOperation(definition: .init(id: "d.video.generate", title: "Wan2.1-T2V-1.3B", detail: "Wan2.1 T2V；不支持首尾帧或图像条件。",
         inputs: [.init("prompt", "提示", kinds: [.text], required: false)], outputs: [.init("output", "视频", kinds: [.video])],

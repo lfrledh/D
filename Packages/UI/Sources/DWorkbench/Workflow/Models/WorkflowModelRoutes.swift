@@ -9,6 +9,8 @@ public enum WorkflowModelRoutes {
     public static func isLanguage(_ id: String) -> Bool { ["d.model.language", qwen35, qwen38].contains(id) }
     public static func isImage(_ id: String) -> Bool { ["d.image.generate", fluxDev].contains(id) }
     public static func operation(for choice: WorkflowModelChoice) -> String? {
+        if let entry = try? ModelCatalog.entries().first(where: { choice.id == choice.kind.rawValue + ":" + $0.revision }),
+           let operation = entry.workflowProfileID { return operation }
         if choice.kind == .text, let profile = try? TextModelProfiles.registeredVLM().first(where: { "text:" + $0.revision == choice.id }) {
             return profile.repository.contains("Qwen3.8-27B") ? qwen38 : qwen35
         }

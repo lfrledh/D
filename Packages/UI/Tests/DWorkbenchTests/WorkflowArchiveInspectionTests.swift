@@ -4,6 +4,40 @@ import Testing
 
 @Suite("Workflow language format protection")
 struct WorkflowArchiveInspectionTests {
+    @Test @MainActor func historyValidationRebuildsEachSharedSourceOnceAndNeverTrustsNextSave() async throws {
+        var input = try #require(WorkflowRegistry.standard.operation("d.value.input")).definition.makeNode()
+        input.dataConfiguration = .init(value: .text("不可变来源"))
+        let output = try #require(WorkflowRegistry.standard.operation("d.value.return")).definition.makeNode()
+        let graph = WorkflowGraph(nodes: [input, output], connections: [.init(sourceNode: input.id, targetNode: output.id, targetPort: "input")])
+        let execute = WorkflowPlanExecutor(executeCall: { context in
+            .outputs(["output": context.inputs["input"] ?? .data(.text("不可变来源"))])
+        }, save: { _ in })
+        let old = try await execute.execute(.init(plan: WorkflowPlanCompiler().compile(graph, target: output.id)))
+        var original = WorkflowRun(id: old.runID, graph: graph, targetNodeID: output.id,
+            steps: old.records.map(\.step), status: .completed)
+        original.planCheckpoint = old
+        let record = try #require(old.records.first { $0.step.node.id == input.id })
+        let pin = WorkflowHistoricalInput(destinationNodeID: output.id, destinationPort: "input",
+            sourceCall: .init(address: record.address, stepID: record.step.id), sourcePort: "output")
+        var runs = [original]
+        for _ in 0..<12 {
+            let plan = try WorkflowScopePlanner.rebuild(graph: graph, selection: .only(output.id), modelDefaults: [:], tools: [])
+            var checkpoint = WorkflowPlanCheckpoint(plan: plan)
+            checkpoint.modelDefaults = [:]
+            checkpoint.externalInputs = [output.id: ["input": .data(.text("不可变来源"))]]
+            checkpoint = try await execute.execute(checkpoint)
+            var run = WorkflowRun(id: checkpoint.runID, graph: graph, targetNodeID: output.id,
+                steps: checkpoint.records.map(\.step), status: .completed)
+            run.planCheckpoint = checkpoint
+            run.scope = .init(selection: .only(output.id), historicalInputs: [pin], recomputeSelected: true)
+            runs.append(run)
+        }
+        #expect(try WorkflowArchiveInspection.validateScopeHistory(runs, tools: []) == runs.count)
+        var changed = runs
+        changed[0].planCheckpoint?.records[0].step.outputs = ["output": .data(.text("篡改"))]
+        #expect(throws: WorkflowIssue.self) { try WorkflowArchiveInspection.validateScopeHistory(changed, tools: []) }
+        #expect(try WorkflowArchiveInspection.validateScopeHistory(runs, tools: []) == runs.count)
+    }
     @Test func inferredScopeRetainsFirstMatchingSelectionAndFullValidation() throws {
         let registry = WorkflowRegistry.standard
         var input = try #require(registry.operation("d.value.input")).definition.makeNode()

@@ -29,12 +29,17 @@ enum WorkflowArchiveInspection {
     /// Rebuild trusted plan structure from the frozen graph and versioned tools,
     /// never from the checkpoint being checked. Older M0 runs have no plan.
     static func validateRun(_ run: WorkflowRun, tools: [WorkflowToolDefinition], registry: WorkflowRegistry = .standard) throws {
+        try validateProjection(run)
+        guard run.planCheckpoint != nil else { return }
+        _ = try scopeSource(run, tools: tools, registry: registry)
+    }
+
+    private static func validateProjection(_ run: WorkflowRun) throws {
         guard let checkpoint = run.planCheckpoint else { return }
         guard checkpoint.runID == run.id,
               checkpoint.records.filter({ $0.address.path.count == 1 }).map(\.step) == run.steps else {
             throw WorkflowIssue("运行身份或顶层步骤投影与恢复点不符。")
         }
-        _ = try scopeSource(run, tools: tools, registry: registry)
     }
 
     static func scopeSource(_ run: WorkflowRun, tools: [WorkflowToolDefinition], registry: WorkflowRegistry = .standard) throws -> WorkflowScopeSource {
@@ -72,23 +77,35 @@ enum WorkflowArchiveInspection {
     }
 
     /// References are an acyclic history, not permission to trust edited checkpoint inputs.
-    static func validateScopeHistory(_ runs: [WorkflowRun], tools: [WorkflowToolDefinition], registry: WorkflowRegistry = .standard) throws {
+    /// Returns the number of distinct frozen sources rebuilt. The cache exists only
+    /// inside this validation of immutable runs/tools; no trust survives a save.
+    @discardableResult
+    static func validateScopeHistory(_ runs: [WorkflowRun], tools: [WorkflowToolDefinition], registry: WorkflowRegistry = .standard) throws -> Int {
         guard Set(runs.map(\.id)).count == runs.count else { throw WorkflowIssue("重复运行身份。") }
         let byID = Dictionary(uniqueKeysWithValues: runs.map { ($0.id, $0) })
+        var validated: [UUID: WorkflowScopeSource] = [:]
+        func source(_ run: WorkflowRun) throws -> WorkflowScopeSource {
+            if let result = validated[run.id] { return result }
+            try validateProjection(run)
+            let result = try scopeSource(run, tools: tools, registry: registry)
+            validated[run.id] = result
+            return result
+        }
         var visiting = Set<UUID>(), done = Set<UUID>()
         func visit(_ run: WorkflowRun) throws {
             if done.contains(run.id) { return }
             guard visiting.insert(run.id).inserted else { throw WorkflowIssue("运行来源形成循环。") }
             defer { visiting.remove(run.id) }
             guard visiting.count <= 256 else { throw WorkflowIssue("历史派生链超过 256 层；请从新流程开始。") }
+            if run.planCheckpoint != nil { _ = try source(run) }
             guard let scope = run.scope else { done.insert(run.id); return }
-            let destination = try scopeSource(run, tools: tools, registry: registry)
+            let destination = try source(run)
             let dependencyIDs = Set(scope.historicalInputs.map { $0.sourceCall.address.runID } + [scope.originCall?.address.runID].compactMap { $0 })
             var sources: [WorkflowScopeSource] = []
             for id in dependencyIDs {
-                guard let source = byID[id] else { throw WorkflowIssue("局部运行引用的原历史已缺失。") }
-                try visit(source)
-                sources.append(try scopeSource(source, tools: tools, registry: registry))
+                guard let original = byID[id] else { throw WorkflowIssue("局部运行引用的原历史已缺失。") }
+                try visit(original)
+                sources.append(try source(original))
             }
             if let origin = scope.originCall {
                 guard scope.historicalInputs.isEmpty, scope.recomputeSelected,
@@ -110,6 +127,7 @@ enum WorkflowArchiveInspection {
             done.insert(run.id)
         }
         for run in runs { try visit(run) }
+        return validated.count
     }
 
     static func containsUnknownFields(original: Data, decoded: WorkflowArchive) throws -> Bool {
