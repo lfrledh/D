@@ -1,4 +1,5 @@
 import DInference
+import Foundation
 import Testing
 
 @Suite("Image execution capability")
@@ -107,6 +108,103 @@ struct ImageExecutionCapabilityTests {
             width: 768, height: 512) == 8 * gibibyte + gibibyte / 2)
         #expect(try ImageExecutionCapability.scalableKlein4B.estimatedPeakBytes(
             width: 2048, height: 2048) == 23 * gibibyte)
+    }
+
+    @Test("Ordered reference forms resolve without ambiguity or truncation")
+    func orderedReferences() throws {
+        let first = reference("a")
+        let second = reference("b")
+        let profile = ImageExecutionCapability.referenceKlein4B.profile
+        let nilInput = image(references: nil)
+        #expect(try nilInput.resolvedReferences().isEmpty)
+        let legacy = ImageRequest(prompt: "test", width: 512, height: 512, steps: 4,
+                                  guidanceScale: 1, seed: 0, executionProfile: profile,
+                                  referenceImage: first)
+        #expect(try legacy.resolvedReferences() == [first])
+        let ordered = image(references: [second, first], profile: profile)
+        #expect(try ordered.resolvedReferences() == [second, first])
+        #expect(try JSONDecoder().decode(ImageRequest.self, from: JSONEncoder().encode(ordered)) == ordered)
+        #expect(try ImageExecutionCapability.referenceKlein4B.resolvedCapability(for: ordered) == .referenceKlein4B)
+        #expect(try ImageExecutionCapability.referenceKlein4B.estimatedPeakBytes(for: ordered)
+                == 10 * 1024 * 1024 * 1024)
+        let nine = image(references: Array(repeating: first, count: 9), profile: profile)
+        #expect(try nine.resolvedReferences().count == 9)
+        #expect(try ImageExecutionCapability.referenceKlein4B.estimatedPeakBytes(for: nine)
+                == 17 * 1024 * 1024 * 1024)
+        #expect(throws: InferenceFailure.self) { try image(references: []).resolvedReferences() }
+        let ambiguous = ImageRequest(prompt: "test", width: 512, height: 512, steps: 4,
+                                     guidanceScale: 1, seed: 0, executionProfile: profile,
+                                     referenceImage: first, referenceImages: [second])
+        #expect(throws: InferenceFailure.self) { try ambiguous.resolvedReferences() }
+        let bad = ImageReference(url: URL(fileURLWithPath: "/tmp/bad"), sha256: "bad",
+                                 byteCount: 1, width: 256, height: 256)
+        #expect(throws: InferenceFailure.self) { try image(references: [first, bad]).resolvedReferences() }
+        #expect(throws: InferenceFailure.self) {
+            try ImageExecutionCapability.verified512.validate(image(references: [first], profile: profile))
+        }
+        let legacyJSON = try JSONEncoder().encode(legacy)
+        let decoded = try JSONDecoder().decode(ImageRequest.self, from: legacyJSON)
+        #expect(decoded.referenceImages == nil)
+        #expect(try decoded.resolvedReferences() == [first])
+    }
+
+    @Test("Invalid ordered reference requests are rejected", arguments: [
+        "empty", "ambiguous", "invalid", "missing", "verified",
+    ])
+    func rejectedReferenceForms(kind: String) {
+        let first = reference("a")
+        let profile = ImageExecutionCapability.referenceKlein4B.profile
+        let candidate: ImageRequest
+        switch kind {
+        case "empty": candidate = image(references: [], profile: profile)
+        case "ambiguous":
+            candidate = ImageRequest(prompt: "test", width: 512, height: 512, steps: 4,
+                                     guidanceScale: 1, seed: 0, executionProfile: profile,
+                                     referenceImage: first, referenceImages: [first])
+        case "invalid":
+            let bad = ImageReference(url: URL(fileURLWithPath: "/tmp/bad"), sha256: "bad",
+                                     byteCount: 1, width: 256, height: 256)
+            candidate = image(references: [first, bad], profile: profile)
+        case "missing": candidate = image(references: nil, profile: profile)
+        default: candidate = image(references: [first], profile: ImageExecutionCapability.verified512.profile)
+        }
+        #expect(throws: InferenceFailure.self) {
+            try ImageExecutionCapability.scalableKlein4B.validate(candidate)
+        }
+    }
+
+    @Test("Dev BF16 values require explicit profile and a large host envelope")
+    func devValues() throws {
+        let capability = ImageExecutionCapability.flux2Dev
+        #expect(capability.profile.identifier == "flux2-dev-bf16-v1")
+        #expect(capability.contract.operationID == "image.flux2Dev")
+        #expect(capability.dimensionMultiple == 16)
+        #expect(try capability.estimatedPeakBytes(width: 512, height: 512)
+                >= 128 * 1024 * 1024 * 1024)
+        let valid = ImageRequest(prompt: "test", width: 512, height: 512, steps: 28,
+                                 guidanceScale: 4, seed: 0, executionProfile: capability.profile)
+        #expect(try capability.resolvedCapability(for: valid) == capability)
+        #expect(throws: InferenceFailure.self) {
+            try ImageExecutionCapability.scalableKlein4B.validate(valid)
+        }
+        #expect(throws: InferenceFailure.self) {
+            try capability.validate(ImageRequest(prompt: "test", width: 511, height: 512,
+                                                 steps: 28, guidanceScale: 4, seed: 0,
+                                                 executionProfile: capability.profile))
+        }
+    }
+
+    private func reference(_ character: String) -> ImageReference {
+        ImageReference(url: URL(fileURLWithPath: "/tmp/\(character).rgb"),
+                       sha256: String(repeating: character, count: 64),
+                       byteCount: 256 * 256 * 3, width: 256, height: 256)
+    }
+
+    private func image(references: [ImageReference]?,
+                       profile: ExecutionProfileReference? = nil) -> ImageRequest {
+        ImageRequest(prompt: "test", width: 512, height: 512, steps: 4,
+                     guidanceScale: 1, seed: 0, executionProfile: profile,
+                     referenceImages: references)
     }
 
     private func request(width: Int, height: Int, steps: Int = 4,

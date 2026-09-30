@@ -12,6 +12,7 @@ internal enum Flux2ImageMath {
     struct ReferenceConditioning {
         let latents: MLXArray
         let ids: MLXArray
+        let referenceCount: Int
     }
 
     static func configure(scheduler: FlowMatchEulerDiscreteScheduler, latents: MLXArray, steps: Int) throws {
@@ -53,11 +54,12 @@ internal enum Flux2ImageMath {
     @inline(never)
     static func step(_ denoiser: Flux2Denoiser, current: MLXArray, timestep: Float,
                      promptEmbeds: MLXArray, textIDs: MLXArray, imageIDs: MLXArray,
-                     referenceLatents: MLXArray? = nil) throws -> MLXArray {
+                     referenceLatents: MLXArray? = nil, guidanceScale: Float? = nil) throws -> MLXArray {
         let time = MLX.full([current.dim(0)], values: timestep).asType(current.dtype)
+        let guidance = guidanceScale.map { MLX.full([current.dim(0)], values: $0) }
         let output = try denoiser.step(
             latents: current, encoderHiddenStates: promptEmbeds, timestep: time,
-            imgIds: imageIDs, txtIds: textIDs, imageLatents: referenceLatents, guidance: nil,
+            imgIds: imageIDs, txtIds: textIDs, imageLatents: referenceLatents, guidance: guidance,
             attentionMask: .none, modelTimestepScale: 0.001)
         MLX.eval(output.prevLatents)
         try requireFinite(output.prevLatents, name: "Denoised latents")
@@ -81,22 +83,66 @@ internal enum Flux2ImageMath {
     }
 
     @inline(never)
+    static func prepareReference(vae: Flux2AutoencoderKL, images: [MLXArray],
+                                 dtype: DType, targetBatch: Int = 1,
+                                 checkpoint: () throws -> Void = { try Task.checkCancellation() }) throws -> ReferenceConditioning {
+        guard targetBatch > 0, !images.isEmpty,
+              images.allSatisfy({ $0.ndim == 4 && $0.dim(0) == 1 && $0.dim(1) == 3 }),
+              images.count <= Int(Int32.max / 10) else {
+            throw InferenceFailure.invalidRequest("References must be ordered NCHW RGB images with representable latent IDs.")
+        }
+        var sections: [MLXArray] = []
+        var idSections: [MLXArray] = []
+        sections.reserveCapacity(images.count)
+        idSections.reserveCapacity(images.count)
+        for (index, image) in images.enumerated() {
+            try checkpoint()
+            // The upstream helper encodes one image at a time. Evaluate each image before
+            // beginning the next so cancellation can stop further VAE work.
+            let part = try Flux2LatentPreparation.prepareImageLatents(
+                images: [image], batchSize: targetBatch, vae: vae, dtype: dtype, imageIdScale: 10)
+            MLX.eval(part.latents, part.ids)
+            try checkpoint()
+            let offset = MLXArray([Int32(index * 10), 0, 0, 0], [1, 1, 4])
+            let ids = part.ids.asType(.int32) + offset
+            MLX.eval(ids)
+            sections.append(part.latents)
+            idSections.append(ids)
+            try checkpoint()
+        }
+        try checkpoint()
+        let latents = sections.count == 1 ? sections[0] : MLX.concatenated(sections, axis: 1)
+        let ids = idSections.count == 1 ? idSections[0] : MLX.concatenated(idSections, axis: 1)
+        MLX.eval(latents, ids)
+        try checkpoint()
+        guard latents.ndim == 3, ids.ndim == 3,
+              latents.dim(0) == targetBatch, ids.dim(0) == targetBatch,
+              latents.dim(1) == ids.dim(1), ids.dim(2) == 4 else {
+            throw InferenceFailure.backendFailed("FLUX.2 produced invalid reference conditioning geometry.")
+        }
+        let timeIDs = ids[.ellipsis, 0].asType(.int32).asArray(Int32.self)
+        let tokensPerBatch = ids.dim(1)
+        let expectedTimes = (1...images.count).map { Int32($0 * 10) }
+        let ordered = (0..<targetBatch).allSatisfy { batch in
+            let times = timeIDs[(batch * tokensPerBatch)..<((batch + 1) * tokensPerBatch)]
+            var previous = Int32(0)
+            var seen: [Int32] = []
+            for value in times {
+                if value != previous { seen.append(value); previous = value }
+            }
+            return seen == expectedTimes
+        }
+        guard ordered else {
+            throw InferenceFailure.backendFailed("FLUX.2 produced invalid ordered reference conditioning IDs.")
+        }
+        try requireFinite(latents, name: "Reference latents")
+        return ReferenceConditioning(latents: latents, ids: ids,
+                                     referenceCount: images.count)
+    }
+
     static func prepareReference(vae: Flux2AutoencoderKL, image: MLXArray,
                                  dtype: DType, targetBatch: Int = 1) throws -> ReferenceConditioning {
-        guard targetBatch > 0, image.ndim == 4, image.dim(0) == 1, image.dim(1) == 3 else {
-            throw InferenceFailure.invalidRequest("Reference pixels must be one NCHW RGB image.")
-        }
-        let prepared = try Flux2LatentPreparation.prepareImageLatents(
-            images: [image], batchSize: targetBatch, vae: vae, dtype: dtype, imageIdScale: 10)
-        MLX.eval(prepared.latents, prepared.ids)
-        guard prepared.latents.ndim == 3, prepared.ids.ndim == 3,
-              prepared.latents.dim(0) == targetBatch, prepared.ids.dim(0) == targetBatch,
-              prepared.latents.dim(1) == prepared.ids.dim(1), prepared.ids.dim(2) == 4,
-              (prepared.ids[.ellipsis, 0] .== MLXArray(Int32(10))).all().item(Bool.self) else {
-            throw InferenceFailure.backendFailed("FLUX.2 produced invalid t10 reference conditioning IDs.")
-        }
-        try requireFinite(prepared.latents, name: "Reference latents")
-        return ReferenceConditioning(latents: prepared.latents, ids: prepared.ids)
+        try prepareReference(vae: vae, images: [image], dtype: dtype, targetBatch: targetBatch)
     }
 
     static func appendReferenceIDs(outputIDs: MLXArray,

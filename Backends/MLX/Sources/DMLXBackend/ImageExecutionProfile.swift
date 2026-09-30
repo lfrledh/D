@@ -19,6 +19,7 @@ public struct ImageExecutionProfile: Sendable, Hashable {
 
     public static let verified512 = ImageExecutionProfile(executionCapability: .verified512)
     public static let scalableKlein4B = ImageExecutionProfile(executionCapability: .scalableKlein4B)
+    public static let flux2Dev = ImageExecutionProfile(executionCapability: .flux2Dev)
 
     private init(executionCapability: ImageExecutionCapability) {
         self.executionCapability = executionCapability

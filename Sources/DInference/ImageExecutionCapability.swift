@@ -1,6 +1,5 @@
-/// Typed execution envelope for the pinned FLUX.2 Klein 4B q8 image implementation.
-/// A capability describes implemented shape adaptation; it does not select another
-/// model, quantization, scheduler, step count, guidance value, or text configuration.
+/// Typed image execution envelopes. A capability records requested constraints;
+/// admission still requires a matching backend and a verified local installation.
 public struct ImageExecutionCapability: Sendable, Equatable {
     public let profile: ExecutionProfileReference
     public let minimumWidth: Int
@@ -36,7 +35,19 @@ public struct ImageExecutionCapability: Sendable, Equatable {
         dimensionMultiple: 32, maximumPixelCount: 2048 * 2048,
         steps: 4, guidanceScale: 1, maximumTextTokens: 512)
 
-    public var supportsReferenceImage: Bool { self == .referenceKlein4B || self == .scalableKlein4B }
+    /// BF16 FLUX.2-dev envelope for a host with sufficient memory. The 512 token
+    /// field is Vendor's processor fallback; a pinned tokenizer config must be
+    /// checked before activation. This value alone does not enable a backend.
+    public static let flux2Dev = ImageExecutionCapability(
+        profile: ExecutionProfileReference(identifier: "flux2-dev-bf16-v1", revision: 1),
+        minimumWidth: 256, maximumWidth: 2048,
+        minimumHeight: 256, maximumHeight: 2048,
+        dimensionMultiple: 16, maximumPixelCount: 2048 * 2048,
+        steps: 1, guidanceScale: 0, maximumTextTokens: 512)
+
+    public var supportsReferenceImage: Bool {
+        self == .referenceKlein4B || self == .scalableKlein4B || self == .flux2Dev
+    }
 
     private init(profile: ExecutionProfileReference,
                  minimumWidth: Int, maximumWidth: Int,
@@ -54,7 +65,8 @@ public struct ImageExecutionCapability: Sendable, Equatable {
         self.guidanceScale = guidanceScale
         self.maximumTextTokens = maximumTextTokens
         contract = ExecutionContractDescription(
-            operationID: profile.identifier == "referenceKlein4B" ? "image.referenceEdit" : "image.generate",
+            operationID: profile.identifier == "referenceKlein4B" ? "image.referenceEdit" :
+                (profile.identifier == "flux2-dev-bf16-v1" ? "image.flux2Dev" : "image.generate"),
             inputRoles: profile.identifier == "referenceKlein4B" ? [.prompt, .image] : [.prompt], outputRole: .image,
             controlFidelity: .approximate)
     }
@@ -76,6 +88,8 @@ public struct ImageExecutionCapability: Sendable, Equatable {
                 resolved = .scalableKlein4B
             } else if requestedProfile == Self.referenceKlein4B.profile {
                 resolved = .referenceKlein4B
+            } else if requestedProfile == Self.flux2Dev.profile {
+                resolved = .flux2Dev
             } else {
                 throw InferenceFailure.invalidRequest("Unsupported image execution profile or revision.")
             }
@@ -83,7 +97,8 @@ public struct ImageExecutionCapability: Sendable, Equatable {
             resolved = self
         }
 
-        guard self == .scalableKlein4B || self == resolved || resolved == .verified512 else {
+        guard (self == .scalableKlein4B && resolved != .flux2Dev) || self == resolved ||
+              (self != .flux2Dev && resolved == .verified512) else {
             throw InferenceFailure.invalidRequest(
                 "The verified 512 image host cannot execute the scalable Klein 4B profile.")
         }
@@ -92,15 +107,23 @@ public struct ImageExecutionCapability: Sendable, Equatable {
     }
 
     private func validateResolved(_ request: ImageRequest) throws {
+        let references = try request.resolvedReferences()
         if self == .referenceKlein4B {
-            guard request.executionProfile == Self.referenceKlein4B.profile, let reference = request.referenceImage else {
-                throw InferenceFailure.invalidRequest("The reference profile requires one explicit reference image.")
+            guard request.executionProfile == Self.referenceKlein4B.profile, !references.isEmpty else {
+                throw InferenceFailure.invalidRequest("The reference profile requires at least one explicit reference image.")
             }
-            try reference.validate()
-        } else if request.referenceImage != nil {
+        } else if self != .flux2Dev && !references.isEmpty {
             throw InferenceFailure.invalidRequest("A reference image requires the referenceKlein4B profile.")
         }
         _ = try validatedPixelCount(width: request.width, height: request.height)
+        if self == .flux2Dev {
+            guard request.executionProfile == Self.flux2Dev.profile,
+                  request.steps >= 1, request.guidanceScale.isFinite,
+                  request.guidanceScale >= 0 else {
+                throw InferenceFailure.invalidRequest("FLUX.2-dev requires at least one step and finite nonnegative guidance.")
+            }
+            return
+        }
         guard request.steps == steps, request.guidanceScale.isFinite,
               request.guidanceScale == guidanceScale else {
             if self == .verified512 {
@@ -137,7 +160,9 @@ public struct ImageExecutionCapability: Sendable, Equatable {
     public func estimatedPeakBytes(width: Int, height: Int) throws -> UInt64 {
         let pixelCount = try validatedPixelCount(width: width, height: height)
         let baselinePixels = UInt64(512 * 512)
-        let baselineBytes = UInt64(8 * 1024 * 1024 * 1024)
+        // The official BF16 Dev weights alone occupy about 105.058 GiB. This
+        // 128 GiB planning floor is deliberately above that weight footprint.
+        let baselineBytes = (self == .flux2Dev ? UInt64(128) : UInt64(8)) * 1024 * 1024 * 1024
         let workspacePerBaselineArea = UInt64(1024 * 1024 * 1024)
         guard pixelCount > baselinePixels else { return baselineBytes }
 
@@ -162,12 +187,22 @@ public struct ImageExecutionCapability: Sendable, Equatable {
         return estimate
     }
 
-    /// Conservative incremental reference encoding/attention estimate, not a hardware cap.
+    /// Conservative incremental reference encoding/attention estimate, not a
+    /// reference-count cap. Every ordered input contributes its own area.
     public func estimatedPeakBytes(for request: ImageRequest) throws -> UInt64 {
         try validateResolved(request)
         let baseline = try estimatedPeakBytes(width: request.width, height: request.height)
-        guard let reference = request.referenceImage else { return baseline }
-        let areas = (UInt64(reference.width * reference.height) + 512 * 512 - 1) / (512 * 512)
-        return baseline + areas * 1024 * 1024 * 1024
+        var estimate = baseline
+        for reference in try request.resolvedReferences() {
+            let pixels = UInt64(reference.width) * UInt64(reference.height)
+            let areas = (pixels + 512 * 512 - 1) / (512 * 512)
+            let (increment, multiplyOverflow) = areas.multipliedReportingOverflow(by: 1024 * 1024 * 1024)
+            let (total, addOverflow) = estimate.addingReportingOverflow(increment)
+            guard !multiplyOverflow, !addOverflow else {
+                throw InferenceFailure.invalidRequest("The image reference resource estimate exceeds UInt64 capacity.")
+            }
+            estimate = total
+        }
+        return estimate
     }
 }

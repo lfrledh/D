@@ -142,10 +142,12 @@ public actor MLXImageBackend: InferenceBackend {
     @inline(never)
     private func generate(request: InferenceRequest, input: ImageRequest, inventory: LocalImageModelInventory,
                           emit: @escaping @Sendable (InferenceOutput) async throws -> Void) async throws -> InferenceResult {
+        let references = try input.resolvedReferences()
         let state = MLXRandom.RandomState(seed: input.seed)
         // Use synchronous RNG scopes around each compute call. The upstream async helper
         // does not inherit actor isolation, so tensors must never cross that boundary.
-        let denoised = try await generateLatents(input: input, directory: inventory.directory, state: state, emit: emit)
+        let denoised = try await generateLatents(input: input, references: references,
+                                                directory: inventory.directory, state: state, emit: emit)
         Self.synchronize()
         Memory.clearCache()
         let rgb = try await decodeRGB(directory: inventory.directory, denoised: denoised,
@@ -170,7 +172,7 @@ public actor MLXImageBackend: InferenceBackend {
             "weightBytes": String(inventory.weightBytes), "estimatedPeakBytes": String(inventory.estimatedPeakBytes),
             "pngBytes": String(data.count), "pngDecodedAndValidated": "true",
         ], uniquingKeysWith: { _, new in new })
-        if let reference = input.referenceImage {
+        if let reference = references.first, references.count == 1 {
             metadata.merge([
                 "referenceImageSHA256": reference.sha256,
                 "referenceImageByteCount": String(reference.byteCount),
@@ -183,6 +185,13 @@ public actor MLXImageBackend: InferenceBackend {
                 "generatedImageIDScale": "0",
                 "referenceLatentTokenCount": String(denoised.referenceLatentTokenCount ?? 0),
             ], uniquingKeysWith: { _, new in new })
+        }
+        if !references.isEmpty {
+            metadata["referenceImageCount"] = String(references.count)
+            metadata["referenceImageSHA256Ordered"] = references.map(\.sha256).joined(separator: ",")
+            metadata["referenceConditioningApplied"] = "true"
+            metadata["referenceImageIDScale"] = "10"
+            metadata["referenceLatentTokenCount"] = String(denoised.referenceLatentTokenCount ?? 0)
         }
         return InferenceResult(artifacts: [artifact], metadata: metadata)
     }
@@ -249,9 +258,10 @@ public actor MLXImageBackend: InferenceBackend {
     }
 
     @inline(never)
-    private func generateLatents(input: ImageRequest, directory: URL, state: MLXRandom.RandomState,
+    private func generateLatents(input: ImageRequest, references: [ImageReference],
+                                 directory: URL, state: MLXRandom.RandomState,
                                  emit: @escaping @Sendable (InferenceOutput) async throws -> Void) async throws -> Denoised {
-        let reference = try await encodeReference(input.referenceImage, directory: directory, state: state)
+        let reference = try await encodeReferences(references, directory: directory, state: state)
         if reference != nil {
             Self.synchronize()
             Memory.clearCache()
@@ -266,12 +276,17 @@ public actor MLXImageBackend: InferenceBackend {
     /// Reference bytes and the encoder VAE remain local to this stage. Only evaluated
     /// packed latents/IDs cross into transformer loading and denoising.
     @inline(never)
-    private func encodeReference(_ submitted: ImageReference?, directory: URL,
+    private func encodeReferences(_ submitted: [ImageReference], directory: URL,
                                  state: MLXRandom.RandomState) async throws -> Flux2ImageMath.ReferenceConditioning? {
-        guard let submitted else { return nil }
+        guard !submitted.isEmpty else { return nil }
         // Descriptor validation, one immutable read and digest verification all finish
         // before any model object is allocated. A failure cannot fall back to T2I.
-        let frozen = try ImageReferenceInput.load(submitted)
+        var frozen: [ImageReferenceInput] = []
+        frozen.reserveCapacity(submitted.count)
+        for reference in submitted {
+            try Task.checkCancellation()
+            frozen.append(try ImageReferenceInput.load(reference))
+        }
         try await checkpoint(.loadingVAE)
         let vae = try withRandomState(state) { try Flux2AutoencoderKL.load(from: directory, dtype: .bfloat16) }
         try Flux2ImageMath.validateVAEEncoderWeightCoverage(
@@ -279,8 +294,14 @@ public actor MLXImageBackend: InferenceBackend {
         try await checkpoint(.vaeLoaded)
         try await checkpoint(.encoding)
         let prepared = try withRandomState(state) {
-            let image = try Flux2ImageMath.referenceTensor(frozen, dtype: .bfloat16)
-            return try Flux2ImageMath.prepareReference(vae: vae, image: image, dtype: .bfloat16)
+            var images: [MLXArray] = []
+            images.reserveCapacity(frozen.count)
+            for input in frozen {
+                try Task.checkCancellation()
+                images.append(try Flux2ImageMath.referenceTensor(input, dtype: .bfloat16))
+                try Task.checkCancellation()
+            }
+            return try Flux2ImageMath.prepareReference(vae: vae, images: images, dtype: .bfloat16)
         }
         MLX.eval(prepared.latents, prepared.ids)
         try await checkpoint(.encoded)
