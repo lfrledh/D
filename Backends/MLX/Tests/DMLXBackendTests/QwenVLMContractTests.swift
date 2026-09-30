@@ -1,6 +1,10 @@
+import CoreImage
+import CoreMedia
 import CryptoKit
 import DInference
 import Foundation
+import MLXLMCommon
+import MLXVLM
 import Testing
 @testable import DMLXBackend
 
@@ -47,7 +51,8 @@ struct QwenVLMContractTests {
                             "num_attention_heads": expected == "9B" ? 16 : 24,
                             "intermediate_size": expected == "9B" ? 12288 : 17408,
                             "linear_num_value_heads": expected == "9B" ? 32 : 48,
-                            "layer_types": Array(repeating: "full_attention", count: layers),
+                            "full_attention_interval": 4,
+                            "layer_types": (0..<layers).map { ($0 + 1) % 4 == 0 ? "full_attention" : "linear_attention" },
                             "dtype": "bfloat16"],
             "vision_config": ["model_type": "qwen3_5", "out_hidden_size": hidden,
                               "patch_size": 16, "spatial_merge_size": 2,
@@ -95,7 +100,7 @@ struct QwenVLMContractTests {
         let request = TextRequest(prompt: "clip", video: TextVideoReference(
             url: source, byteCount: UInt64(bytes.count), contentSHA256: digest, durationSeconds: 1))
         let snapshot = try QwenVLMInputSnapshot.freeze(request, in: artifacts, modelDirectory: model)
-        defer { snapshot.removePrivateFiles() }
+        defer { try? snapshot.removePrivateFiles() }
         #expect(try Data(contentsOf: snapshot.video!.privateURL) == bytes)
         try snapshot.verifyOriginals()
         try Data("mutated-source".utf8).write(to: source)
@@ -103,8 +108,129 @@ struct QwenVLMContractTests {
         #expect(try Data(contentsOf: snapshot.video!.privateURL) == bytes)
     }
 
-    @Test func upstreamFrameResamplingIsDetectedBeforeLoad() {
-        #expect(MLXQwenVLMBackend.upstreamFrameCount([0]) == 1)
-        #expect(MLXQwenVLMBackend.upstreamFrameCount([0, 0.5, 1.0]) == 2)
+    @Test func failedFreezeKeepsOriginalAndCleansOwnedPartialCopy() throws {
+        let root = FileManager.default.temporaryDirectory.resolvingSymlinksInPath()
+            .appendingPathComponent(UUID().uuidString)
+        let model = root.appendingPathComponent("model")
+        let artifacts = root.appendingPathComponent("artifacts")
+        try FileManager.default.createDirectory(at: model, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: artifacts, withIntermediateDirectories: false)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = root.appendingPathComponent("clip.mp4")
+        let bytes = Data("original-video".utf8)
+        try bytes.write(to: source)
+        let wrongDigest = String(repeating: "0", count: 64)
+        let request = TextRequest(prompt: "clip", video: TextVideoReference(
+            url: source, byteCount: UInt64(bytes.count), contentSHA256: wrongDigest, durationSeconds: 1))
+        #expect(throws: (any Error).self) {
+            try QwenVLMInputSnapshot.freeze(request, in: artifacts, modelDirectory: model)
+        }
+        #expect(try Data(contentsOf: source) == bytes)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: artifacts.path).isEmpty)
+    }
+
+    @Test func attentionLayoutRejectsCrashAndWrongArchitecture() throws {
+        let expected = (0..<32).map { ($0 + 1) % 4 == 0 ? "full_attention" : "linear_attention" }
+        #expect(try QwenVLMModelInventory.validAttentionLayout(["layer_types": expected], layers: 32))
+        #expect(try QwenVLMModelInventory.validAttentionLayout(
+            ["layer_types": expected, "full_attention_interval": 4], layers: 32))
+        for interval in [0, 3, 5] {
+            #expect(try !QwenVLMModelInventory.validAttentionLayout(
+                ["layer_types": expected, "full_attention_interval": interval], layers: 32))
+        }
+        var wrong = expected
+        wrong[0] = "full_attention"
+        #expect(try !QwenVLMModelInventory.validAttentionLayout(["layer_types": wrong], layers: 32))
+        #expect(try !QwenVLMModelInventory.validAttentionLayout(
+            ["layer_types": Array(repeating: "full_attention", count: 32)], layers: 32))
+    }
+
+    @Test func invalidImageNormalizationFailsBeforeProcessorLoad() throws {
+        for (key, value) in [
+            ("image_mean", [0.5, 0.5]),
+            ("image_std", [0.5, 0.5]),
+            ("image_std", [0.5, 0.0, 0.5]),
+        ] {
+            var object = try QwenVLMModelInventory.object(officialProcessor)
+            object[key] = value
+            #expect(throws: (any Error).self) {
+                try QwenVLMProcessorConfiguration.normalized(
+                    JSONSerialization.data(withJSONObject: object), overrides: nil)
+            }
+        }
+    }
+
+    @Test func privateCleanupPreservesUnknownAndReplacementEntries() throws {
+        let root = FileManager.default.temporaryDirectory.resolvingSymlinksInPath()
+            .appendingPathComponent(UUID().uuidString)
+        let model = root.appendingPathComponent("model")
+        let artifacts = root.appendingPathComponent("artifacts")
+        try FileManager.default.createDirectory(at: model, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: artifacts, withIntermediateDirectories: false)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = root.appendingPathComponent("clip.mp4")
+        let bytes = Data("original-video".utf8)
+        try bytes.write(to: source)
+        let digest = SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
+        let request = TextRequest(prompt: "clip", video: TextVideoReference(
+            url: source, byteCount: UInt64(bytes.count), contentSHA256: digest, durationSeconds: 1))
+        let snapshot = try QwenVLMInputSnapshot.freeze(request, in: artifacts, modelDirectory: model)
+        let unknown = snapshot.directory.appendingPathComponent("unowned")
+        try Data("keep".utf8).write(to: unknown)
+        #expect(throws: (any Error).self) { try snapshot.removePrivateFiles() }
+        #expect(try Data(contentsOf: unknown) == Data("keep".utf8))
+        #expect(try Data(contentsOf: snapshot.video!.privateURL) == bytes)
+        try FileManager.default.removeItem(at: unknown)
+        let held = artifacts.appendingPathComponent("held")
+        try FileManager.default.moveItem(at: snapshot.directory, to: held)
+        try FileManager.default.createDirectory(at: snapshot.directory, withIntermediateDirectories: false)
+        let replacement = snapshot.directory.appendingPathComponent("replacement")
+        try Data("keep replacement".utf8).write(to: replacement)
+        #expect(throws: (any Error).self) { try snapshot.removePrivateFiles() }
+        #expect(try Data(contentsOf: replacement) == Data("keep replacement".utf8))
+        #expect(try Data(contentsOf: source) == bytes)
+    }
+
+    @Test func suppliedVideoFramesKeepCountOrderAndTimestamps() async throws {
+        let timestamps = [0, 0.5, 1, 1.5].map { CMTime(seconds: $0, preferredTimescale: 600) }
+        let frames = timestamps.enumerated().map { index, time in
+            UserInput.VideoFrame(
+                frame: CIImage(color: CIColor(red: CGFloat(index) / 4, green: 0, blue: 0))
+                    .cropped(to: CGRect(x: CGFloat(index), y: 0, width: 2, height: 2)),
+                timeStamp: time)
+        }
+        var observedOrigins = [Int]()
+        let processed = try await MediaProcessing.asProcessedSequence(
+            .frames(frames), targetFPS: { _ in 2 }, maxFrames: 4,
+            preserveSuppliedFrames: true) { frame in
+                observedOrigins.append(Int(frame.frame.extent.origin.x))
+                return frame
+            }
+        #expect(processed.frames.count == 4)
+        #expect(processed.timestamps == timestamps)
+        #expect(observedOrigins == [0, 1, 2, 3])
+        await #expect(throws: (any Error).self) {
+            try await MediaProcessing.asProcessedSequence(
+                .frames(frames), targetFPS: { _ in 2 }, maxFrames: 3,
+                preserveSuppliedFrames: true)
+        }
+        let reversed = [frames[1], frames[0]]
+        await #expect(throws: (any Error).self) {
+            try await MediaProcessing.asProcessedSequence(
+                .frames(reversed), targetFPS: { _ in 2 }, maxFrames: 4,
+                preserveSuppliedFrames: true)
+        }
+        let cancelled = Task<Void, Error> {
+            let cancelledFrames = (0..<4).map { index in
+                UserInput.VideoFrame(
+                    frame: CIImage(color: .red).cropped(to: CGRect(x: 0, y: 0, width: 2, height: 2)),
+                    timeStamp: CMTime(value: Int64(index), timescale: 2))
+            }
+            withUnsafeCurrentTask { $0?.cancel() }
+            _ = try await MediaProcessing.asProcessedSequence(
+                .frames(cancelledFrames), targetFPS: { _ in 2 }, maxFrames: 4,
+                preserveSuppliedFrames: true)
+        }
+        await #expect(throws: CancellationError.self) { try await cancelled.value }
     }
 }

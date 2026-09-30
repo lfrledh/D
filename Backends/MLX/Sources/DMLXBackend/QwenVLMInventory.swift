@@ -67,7 +67,7 @@ public struct QwenVLMModelInventory: Sendable {
               try integer(text, "num_attention_heads") == (size == "9B" ? 16 : 24),
               try integer(text, "intermediate_size") == (size == "9B" ? 12_288 : 17_408),
               try integer(text, "linear_num_value_heads") == (size == "9B" ? 32 : 48),
-              (text["layer_types"] as? [String])?.count == layers,
+              try validAttentionLayout(text, layers: layers),
               try integer(vision, "out_hidden_size") == hidden,
               try integer(vision, "hidden_size") == 1152,
               try integer(vision, "intermediate_size") == 4304,
@@ -145,6 +145,16 @@ public struct QwenVLMModelInventory: Sendable {
         return number.intValue
     }
 
+    static func validAttentionLayout(_ text: [String: Any], layers: Int) throws -> Bool {
+        let interval = text["full_attention_interval"] == nil
+            ? 4 : try integer(text, "full_attention_interval")
+        guard interval == 4, let types = text["layer_types"] as? [String],
+              types.count == layers else { return false }
+        return types.enumerated().allSatisfy { index, type in
+            type == ((index + 1) % 4 == 0 ? "full_attention" : "linear_attention")
+        }
+    }
+
     static func validateOutputGateType(_ text: [String: Any], size: String) throws {
         if text["output_gate_type"] == nil, size == "9B" { return }
         guard let gate = text["output_gate_type"] as? String,
@@ -195,6 +205,14 @@ enum QwenVLMProcessorConfiguration {
         }
         if let top = object["max_pixels"], (top as? Int) != maxPixels {
             throw InferenceFailure.invalidRequest("Conflicting maximum pixel budgets.")
+        }
+        for key in ["image_mean", "image_std"] {
+            guard let values = object[key] as? [NSNumber], values.count == 3,
+                  values.allSatisfy({ CFGetTypeID($0) != CFBooleanGetTypeID() &&
+                                      $0.doubleValue.isFinite &&
+                                      (key != "image_std" || $0.doubleValue > 0) }) else {
+                throw InferenceFailure.invalidRequest("Invalid Qwen3VL \(key) channels.")
+            }
         }
         try overrides?.validate()
         let minimum = overrides?.minimumPixels ?? minPixels

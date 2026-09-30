@@ -15,7 +15,26 @@ struct QwenVLMInputSnapshot: Sendable {
         let identity: AudioFileSystem.Identity
     }
 
+    struct Ownership: Sendable, Equatable {
+        let device: Int64
+        let inode: UInt64
+
+        init(_ value: stat) {
+            device = Int64(value.st_dev)
+            inode = UInt64(value.st_ino)
+        }
+    }
+
+    struct Proof: Sendable {
+        let original: URL
+        let byteCount: UInt64
+        let digest: String
+        let identity: AudioFileSystem.Identity
+    }
+
     let directory: URL
+    let directoryOwnership: Ownership
+    let ownedFiles: [String: Ownership]
     let images: [Source]
     let video: Source?
 
@@ -35,45 +54,147 @@ struct QwenVLMInputSnapshot: Sendable {
         let directory = root.appendingPathComponent("vlm-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false,
                                                 attributes: [.posixPermissions: 0o700])
+        let directoryFD = try AudioFileSystem.openDirectory(directory, label: "VLM snapshot")
+        var directoryStat = stat()
+        guard Darwin.fstat(directoryFD, &directoryStat) == 0 else {
+            Darwin.close(directoryFD)
+            throw InferenceFailure.backendFailed("Cannot identify private visual snapshot directory.")
+        }
+        Darwin.close(directoryFD)
+        let directoryOwnership = Ownership(directoryStat)
+        var ownedFiles = [String: Ownership]()
+        var touched = [Proof]()
         do {
             let images = try references.enumerated().map { index, value in
                 let ext = value.0.pathExtension.lowercased()
                 let item = try copy(value.0, bytes: value.1, digest: value.2,
-                                    to: directory.appendingPathComponent("image-\(index).\(ext)"))
+                                    to: directory.appendingPathComponent("image-\(index).\(ext)"),
+                                    registered: { proof in touched.append(proof) },
+                                    created: { name, owner in ownedFiles[name] = owner })
                 try validateImage(item.privateURL, declared: request.images![index])
                 return item
             }
             let video = try videoReference.map { value in
                 try copy(value.0, bytes: value.1, digest: value.2,
-                         to: directory.appendingPathComponent("video.mp4"))
+                         to: directory.appendingPathComponent("video.mp4"),
+                         registered: { proof in touched.append(proof) },
+                         created: { name, owner in ownedFiles[name] = owner })
             }
-            return Self(directory: directory, images: images, video: video)
+            return Self(directory: directory, directoryOwnership: directoryOwnership,
+                        ownedFiles: ownedFiles, images: images, video: video)
         } catch {
-            try? FileManager.default.removeItem(at: directory)
-            throw error
+            let originalError = error
+            // A failed second copy or cancellation still audits every source already opened.
+            var terminalError: Error = originalError
+            do { try verify(touched) } catch { terminalError = error }
+            let partial = Self(directory: directory, directoryOwnership: directoryOwnership,
+                               ownedFiles: ownedFiles, images: [], video: nil)
+            try partial.removePrivateFiles()
+            throw terminalError
         }
     }
 
     func verifyOriginals() throws {
-        for source in images + (video.map { [$0] } ?? []) {
-            let (digest, identity) = try Self.hashFile(source.original, expectedBytes: source.byteCount)
-            guard identity == source.identity, digest == source.digest else {
+        try Self.verify((images + (video.map { [$0] } ?? [])).map {
+            Proof(original: $0.original, byteCount: $0.byteCount,
+                  digest: $0.digest, identity: $0.identity)
+        })
+    }
+
+    private static func verify(_ proofs: [Proof]) throws {
+        for proof in proofs {
+            let (digest, identity) = try hashFile(proof.original, expectedBytes: proof.byteCount)
+            guard identity == proof.identity, digest == proof.digest else {
                 throw InferenceFailure.invalidRequest("A visual source changed during inference.")
             }
         }
     }
 
-    func removePrivateFiles() {
-        // Only this instance's unpublished snapshot directory is ever removed.
-        try? FileManager.default.removeItem(at: directory)
+    func removePrivateFiles() throws {
+        let parent = try AudioFileSystem.openDirectory(directory.deletingLastPathComponent(),
+                                                       label: "VLM snapshot parent")
+        defer { Darwin.close(parent) }
+        let fd = Darwin.openat(parent, directory.lastPathComponent,
+                               O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK)
+        guard fd >= 0 else {
+            throw InferenceFailure.backendFailed("Private visual snapshot directory is missing or replaced.")
+        }
+        defer { Darwin.close(fd) }
+        var directoryStat = stat()
+        guard Darwin.fstat(fd, &directoryStat) == 0,
+              Ownership(directoryStat) == directoryOwnership else {
+            throw InferenceFailure.backendFailed("Private visual snapshot directory ownership changed.")
+        }
+        let streamFD = Darwin.dup(fd)
+        guard streamFD >= 0, let stream = Darwin.fdopendir(streamFD) else {
+            if streamFD >= 0 { Darwin.close(streamFD) }
+            throw InferenceFailure.backendFailed("Cannot inspect private visual snapshot entries.")
+        }
+        var names = Set<String>()
+        errno = 0
+        while let entry = Darwin.readdir(stream) {
+            let name = withUnsafePointer(to: entry.pointee.d_name) {
+                $0.withMemoryRebound(to: CChar.self, capacity: MemoryLayout.size(ofValue: entry.pointee.d_name)) {
+                    String(cString: $0)
+                }
+            }
+            if name != "." && name != ".." { names.insert(name) }
+        }
+        let enumerationError = errno
+        Darwin.closedir(stream)
+        guard enumerationError == 0 else {
+            throw InferenceFailure.backendFailed("Cannot finish inspecting private visual snapshot.")
+        }
+        guard names == Set(ownedFiles.keys) else {
+            throw InferenceFailure.backendFailed("Private visual snapshot has unknown or missing entries.")
+        }
+        // Check all entries before removing any. No recursive deletion is permitted.
+        for (name, owner) in ownedFiles {
+            var item = stat()
+            guard Darwin.fstatat(fd, name, &item, AT_SYMLINK_NOFOLLOW) == 0,
+                  item.st_mode & S_IFMT == S_IFREG,
+                  Ownership(item) == owner else {
+                throw InferenceFailure.backendFailed("Private visual snapshot file ownership changed.")
+            }
+        }
+        for (name, owner) in ownedFiles {
+            var item = stat()
+            guard Darwin.fstatat(fd, name, &item, AT_SYMLINK_NOFOLLOW) == 0,
+                  item.st_mode & S_IFMT == S_IFREG, Ownership(item) == owner else {
+                throw InferenceFailure.backendFailed("Private visual snapshot file changed during cleanup.")
+            }
+            guard Darwin.unlinkat(fd, name, 0) == 0 else {
+                throw InferenceFailure.backendFailed("Cannot remove owned private visual snapshot file.")
+            }
+        }
+        var finalDirectory = stat()
+        guard Darwin.fstatat(parent, directory.lastPathComponent, &finalDirectory,
+                            AT_SYMLINK_NOFOLLOW) == 0,
+              Ownership(finalDirectory) == directoryOwnership else {
+            throw InferenceFailure.backendFailed("Private visual snapshot directory changed during cleanup.")
+        }
+        guard Darwin.unlinkat(parent, directory.lastPathComponent, AT_REMOVEDIR) == 0 else {
+            throw InferenceFailure.backendFailed("Cannot remove owned private visual snapshot directory.")
+        }
     }
 
-    private static func copy(_ source: URL, bytes: UInt64, digest: String, to destination: URL) throws -> Source {
+    private static func copy(_ source: URL, bytes: UInt64, digest: String, to destination: URL,
+                             registered: (Proof) -> Void,
+                             created: (String, Ownership) -> Void) throws -> Source {
+        guard (1...2 * 1024 * 1024 * 1024).contains(bytes) else {
+            throw InferenceFailure.invalidRequest("Visual source exceeds bounded verification size.")
+        }
         let (input, before) = try openSource(source, expectedBytes: bytes)
         defer { Darwin.close(input) }
+        registered(Proof(original: source, byteCount: bytes, digest: digest, identity: before))
         let output = Darwin.open(destination.path, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0o600)
         guard output >= 0 else { throw InferenceFailure.backendFailed("Cannot create private visual snapshot.") }
         defer { Darwin.close(output) }
+        var outputStat = stat()
+        guard Darwin.fstat(output, &outputStat) == 0 else {
+            throw InferenceFailure.backendFailed("Cannot identify private visual snapshot file.")
+        }
+        created(destination.lastPathComponent, Ownership(outputStat))
         var hasher = SHA256()
         var copied: UInt64 = 0
         var buffer = [UInt8](repeating: 0, count: 1_048_576)
