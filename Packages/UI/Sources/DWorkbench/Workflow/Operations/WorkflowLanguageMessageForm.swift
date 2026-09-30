@@ -4,8 +4,9 @@ import Foundation
 /// Shared Quick/Canvas form transport. Media are indexes into admitted asset
 /// ports, never arbitrary paths or URLs supplied by a text field.
 enum WorkflowLanguageMessageForm {
-    static let optionalFields: Set<String> = ["messagesJSON", "toolsJSON", "thinking", "reasoningEffort", "preserveThinking", "seed"]
+    static let optionalFields: Set<String> = ["messagesJSON", "toolsJSON", "thinking", "reasoningEffort", "preserveThinking", "seed", "memoryBudgetGiB"]
     static let fields: [WorkflowFieldDefinition] = [
+        .init("memoryBudgetGiB", "显式内存预算 GiB（0使用运行时策略）", .integer, .integer(0)),
         .init("messagesJSON", "有序消息 JSON（留空使用任务；媒体 index 从0开始）", .text(multiline: true), .text("")),
         .init("toolsJSON", "工具声明 JSON（仅声明，不自动执行）", .text(multiline: true), .text("")),
         .init("thinking", "思考", .choice(["model", "on", "off"]), .text("model")),
@@ -13,6 +14,14 @@ enum WorkflowLanguageMessageForm {
         .init("preserveThinking", "保留历史思考（27B）", .choice(["model", "on", "off"]), .text("model")),
         .init("seed", "文字随机种子（留空随机）", .text(multiline: false), .text("")),
     ]
+    static func memoryBudgetBytes(_ parameters: [String: WorkflowScalar]) throws -> UInt64? {
+        guard let value = parameters["memoryBudgetGiB"] else { return nil }
+        guard case .integer(let budget) = value, budget >= 0,
+              let gib = UInt64(exactly: budget), gib <= UInt64(Int64.max) / 1_073_741_824 else {
+            throw WorkflowIssue("内存预算必须是非负的整数 GiB；0 使用运行时策略。")
+        }
+        return gib == 0 ? nil : gib * 1_073_741_824
+    }
     private struct Message: Decodable {
         let role: TextMessageRole
         let parts: [Part]

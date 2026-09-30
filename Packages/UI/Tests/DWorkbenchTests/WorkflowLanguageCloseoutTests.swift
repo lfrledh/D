@@ -47,11 +47,12 @@ struct WorkflowLanguageCloseoutTests {
 private actor CloseoutResponseEngine: InferenceEngine {
     let response: TextResponse
     var calls = 0
+    var requests: [InferenceRequest] = []
     var action: (@Sendable () async throws -> Void)?
     init(_ response: TextResponse) { self.response = response }
     func beforeReturn(_ value: @escaping @Sendable () async throws -> Void) { action = value }
     func submit(_ request: InferenceRequest, backendID: String) async throws -> InferenceRun {
-        calls += 1; try await action?()
+        calls += 1; requests.append(request); try await action?()
         let response = response
         return .init(id: request.id, events: AsyncThrowingStream { stream in
             if let text = response.finalText { stream.yield(.textDelta(text)) }; stream.finish()
@@ -187,6 +188,43 @@ private actor CloseoutResponseEngine: InferenceEngine {
         try service.beginPlan(); _ = try await service.executeCall(context)
         #expect(!service.hasPendingSaves && leases == 1)
         #expect(await engine.calls == 1)
+        try await store.close()
+    }
+}
+
+@MainActor extension WorkflowLanguageCloseoutTests {
+    @Test func explicitMemoryBudgetReachesRuntimeWithoutChangingModelOrOldNodes() async throws {
+        let root = URL(fileURLWithPath: try #require(ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"]))
+            .appendingPathComponent("language-budget-" + UUID().uuidString + ".dproject")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = try await ProjectStore.create(at: root, name: "budget")
+        let engine = CloseoutResponseEngine(.init(rawText: "ok", finalText: "ok", finishReason: .stop))
+        let session = WorkbenchSession(engine: engine, backendID: "fixture", status: { .init(activeRunID: nil, phase: nil, queuedRunIDs: []) }, shutdown: {}, cleanup: {}, validateModel: { _ in })
+        let service = WorkflowServices(store: store, session: session) { _, identity in
+            .init(identity: identity, reference: .init(directory: root), backendID: "fixture", operationID: WorkflowModelRoutes.qwen35,
+                  textCapability: .init(maximumPromptTokens: 2048, maximumOutputTokens: 256, profile: TextExecutionCapability.qwen35VLMProfile))
+        }
+        let registry = WorkflowRegistry.standard
+        var node = try #require(registry.operation(WorkflowModelRoutes.qwen35)?.definition.makeNode())
+        node.parameters["modelID"] = .text("text:fixture")
+        for budget: Int? in [nil, 0, 15] {
+            node.parameters["memoryBudgetGiB"] = budget.map(WorkflowScalar.integer)
+            let before = node
+            try registry.validate(node)
+            #expect(node == before)
+            try service.beginPlan()
+            _ = try await service.executeCall(.init(node: node, stepID: UUID(), inputs: [:]))
+            let request = try #require(await engine.requests.last)
+            let expectedBytes: UInt64? = budget == 15 ? 15 * 1_073_741_824 : nil
+            #expect(request.memoryBudgetBytes == expectedBytes)
+            #expect(request.model.directory == root)
+        }
+        for invalid: WorkflowScalar in [.integer(-1), .integer(Int.max), .text("15"), .decimal(15)] {
+            node.parameters["memoryBudgetGiB"] = invalid
+            #expect(throws: (any Error).self) { try registry.validate(node) }
+            #expect(throws: (any Error).self) { try WorkflowLanguageMessageForm.memoryBudgetBytes(node.parameters) }
+        }
+        #expect(await engine.calls == 3)
         try await store.close()
     }
 }

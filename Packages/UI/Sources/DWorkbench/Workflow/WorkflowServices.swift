@@ -262,7 +262,8 @@ struct WorkflowSaveFailure: LocalizedError {
             messages: messages, tools: try WorkflowLanguageMessageForm.tools(p["toolsJSON"]?.string ?? ""),
             thinking: try WorkflowLanguageMessageForm.thinking(p), seed: try WorkflowLanguageMessageForm.seed(p))
         try capability?.validate(input)
-        let request = InferenceRequest(id: context.stepID, model: binding.reference, input: .text(input))
+        let request = InferenceRequest(id: context.stepID, model: binding.reference, input: .text(input),
+            memoryBudgetBytes: try WorkflowLanguageMessageForm.memoryBudgetBytes(p))
         languagePreview = ""
         let (result, text) = try await infer(request, binding: binding)
         let raw = result.textResponse?.rawText ?? text
