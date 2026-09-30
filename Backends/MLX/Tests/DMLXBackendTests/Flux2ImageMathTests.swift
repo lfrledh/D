@@ -83,6 +83,41 @@ struct Flux2ImageMathTests {
         #expect(released.cacheBytes == 0)
     }
 
+    @Test("Ordered reference latents retain every image and t10/t20 IDs")
+    func orderedReferenceIDs() async throws {
+        let root = Self.tinyImageFixtureDirectory()
+        let evidence = try await Self.withExecutionLease {
+            try autoreleasepool {
+                try Self.withFixtureRandomState {
+                    let vae = try Flux2AutoencoderKL.load(from: root, dtype: .float32)
+                    let first = MLX.zeros([1, 3, 8, 8], dtype: .float32)
+                    let second = MLX.ones([1, 3, 8, 8], dtype: .float32)
+                    let prepared = try Flux2ImageMath.prepareReference(
+                        vae: vae, images: [first, second], dtype: .float32)
+                    let outputIDs = MLX.zeros([1, 4, 4], dtype: .int32)
+                    let joined = try Flux2ImageMath.appendReferenceIDs(
+                        outputIDs: outputIDs, reference: prepared)
+                    MLX.eval(prepared.latents, prepared.ids, joined)
+                    return (prepared.referenceCount, prepared.latents.dim(1),
+                            prepared.ids[.ellipsis, 0].asType(.int32).asArray(Int32.self),
+                            joined.dim(1))
+                }
+            }
+        }
+        #expect(evidence.0 == 2)
+        #expect(evidence.1 > 1)
+        #expect(evidence.2.first == 10)
+        #expect(evidence.2.last == 20)
+        #expect(evidence.2.filter { $0 == 10 }.count + evidence.2.filter { $0 == 20 }.count == evidence.1)
+        #expect(evidence.3 == 4 + evidence.1)
+    }
+
+    private static func tinyImageFixtureDirectory() -> URL {
+        var repository = URL(fileURLWithPath: #filePath)
+        for _ in 0..<5 { repository.deleteLastPathComponent() }
+        return repository.appendingPathComponent("Vendor/flux2-swift/fixtures/flux2_tiny_pipeline")
+    }
+
     private struct Comparison: Sendable {
         let reference: Reference
         let actualShape: [Int]
