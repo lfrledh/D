@@ -90,26 +90,63 @@ struct Flux2ImageMathTests {
             try autoreleasepool {
                 try Self.withFixtureRandomState {
                     let vae = try Flux2AutoencoderKL.load(from: root, dtype: .float32)
-                    let first = MLX.zeros([1, 3, 8, 8], dtype: .float32)
-                    let second = MLX.ones([1, 3, 8, 8], dtype: .float32)
+                    let first = MLX.zeros([1, 3, 32, 32], dtype: .float32)
+                    let second = MLX.ones([1, 3, 32, 32], dtype: .float32)
+                    let firstOnly = try Flux2ImageMath.prepareReference(
+                        vae: vae, image: first, dtype: .float32)
+                    let secondOnly = try Flux2ImageMath.prepareReference(
+                        vae: vae, image: second, dtype: .float32)
                     let prepared = try Flux2ImageMath.prepareReference(
                         vae: vae, images: [first, second], dtype: .float32)
                     let outputIDs = MLX.zeros([1, 4, 4], dtype: .int32)
                     let joined = try Flux2ImageMath.appendReferenceIDs(
                         outputIDs: outputIDs, reference: prepared)
                     MLX.eval(prepared.latents, prepared.ids, joined)
+                    let sectionsMatch = prepared.latents.asArray(Float.self)
+                        == firstOnly.latents.asArray(Float.self) + secondOnly.latents.asArray(Float.self)
                     return (prepared.referenceCount, prepared.latents.dim(1),
                             prepared.ids[.ellipsis, 0].asType(.int32).asArray(Int32.self),
-                            joined.dim(1))
+                            joined.dim(1), firstOnly.latents.dim(1), secondOnly.latents.dim(1), sectionsMatch)
                 }
             }
         }
         #expect(evidence.0 == 2)
-        #expect(evidence.1 > 1)
+        #expect(evidence.1 == 8)
+        #expect(evidence.4 == 4)
+        #expect(evidence.5 == 4)
+        #expect(evidence.6)
         #expect(evidence.2.first == 10)
         #expect(evidence.2.last == 20)
+        #expect(evidence.2 == [10, 10, 10, 10, 20, 20, 20, 20])
         #expect(evidence.2.filter { $0 == 10 }.count + evidence.2.filter { $0 == 20 }.count == evidence.1)
         #expect(evidence.3 == 4 + evidence.1)
+    }
+
+    @Test("Reference cancellation stops before the next VAE encoding")
+    func referenceCancellation() async throws {
+        enum Stop: Error { case requested }
+        let root = Self.tinyImageFixtureDirectory()
+        let checkpoints = try await Self.withExecutionLease {
+            try autoreleasepool {
+                try Self.withFixtureRandomState {
+                    let vae = try Flux2AutoencoderKL.load(from: root, dtype: .float32)
+                    let images = [MLX.zeros([1, 3, 32, 32], dtype: .float32),
+                                  MLX.ones([1, 3, 32, 32], dtype: .float32)]
+                    var count = 0
+                    do {
+                        _ = try Flux2ImageMath.prepareReference(
+                            vae: vae, images: images, dtype: .float32,
+                            checkpoint: {
+                                count += 1
+                                if count == 2 { throw Stop.requested }
+                            })
+                        Issue.record("Cancellation after the first evaluated encoding must stop")
+                    } catch Stop.requested { }
+                    return count
+                }
+            }
+        }
+        #expect(checkpoints == 2)
     }
 
     private static func tinyImageFixtureDirectory() -> URL {

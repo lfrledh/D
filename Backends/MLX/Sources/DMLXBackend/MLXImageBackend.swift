@@ -294,7 +294,13 @@ public actor MLXImageBackend: InferenceBackend {
         try await checkpoint(.vaeLoaded)
         try await checkpoint(.encoding)
         let prepared = try withRandomState(state) {
-            let images = try frozen.map { try Flux2ImageMath.referenceTensor($0, dtype: .bfloat16) }
+            var images: [MLXArray] = []
+            images.reserveCapacity(frozen.count)
+            for input in frozen {
+                try Task.checkCancellation()
+                images.append(try Flux2ImageMath.referenceTensor(input, dtype: .bfloat16))
+                try Task.checkCancellation()
+            }
             return try Flux2ImageMath.prepareReference(vae: vae, images: images, dtype: .bfloat16)
         }
         MLX.eval(prepared.latents, prepared.ids)
