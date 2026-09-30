@@ -78,6 +78,9 @@ public actor ExternalVideoBackend: InferenceBackend {
         defer { executing = false }
         try Task.checkCancellation()
         let (video, manifest) = try inspect(request)
+        let manifestURL = request.model.directory.appendingPathComponent(ExternalVideoModelManifest.filename)
+        let (frozenManifest, manifestIdentity) = try AudioFileSystem.readRegularFile(manifestURL, label: "video manifest snapshot", maximumBytes: 16_384)
+        guard frozenManifest == manifest else { throw InferenceFailure.inputIntegrityChanged("Video pack changed during admission.") }
         let token = UUID(); try await MLXExecutionLease.shared.acquire(token); lease = token
         if request.model.directory.startAccessingSecurityScopedResource() { retainedModelScope = request.model.directory }
         let run = try makeRunDirectory(request.id)
@@ -88,6 +91,7 @@ public actor ExternalVideoBackend: InferenceBackend {
         let bytes = try encoder.encode(wire)
         guard bytes.count <= 1_048_576 else { throw InferenceFailure.invalidRequest("Video request exceeds 1 MiB.") }
         try AudioFileSystem.writeExclusive(bytes, to: input)
+        let (_, inputIdentity) = try AudioFileSystem.readRegularFile(input, label: "frozen video input", maximumBytes: 1_048_576)
         var arguments = ["-B", configuration.providerScript.path, "--request", input.path,
                          "--pack", request.model.directory.path, "--ffmpeg", configuration.ffmpeg.path,
                          "--ffprobe", configuration.ffprobe.path]
@@ -118,11 +122,25 @@ public actor ExternalVideoBackend: InferenceBackend {
             quarantinedProcess = terminal
             throw InferenceFailure.resourceCleanupUnconfirmed("Video process cleanup is unconfirmed; runtime disabled and resource lease retained. PID \(terminal.processID.map(String.init) ?? "unknown"). \(terminal.stderrTail)")
         }
+        // A bounded detached read deliberately does not inherit user cancellation:
+        // protection failures must remain observable on every drained terminal path.
+        try await Task.detached {
+            do {
+                let (nowManifest, nowManifestIdentity) = try AudioFileSystem.readRegularFile(manifestURL, label: "video manifest recheck", maximumBytes: 16_384)
+                let (nowInput, nowInputIdentity) = try AudioFileSystem.readRegularFile(input, label: "video input recheck", maximumBytes: 1_048_576)
+                guard nowManifest == manifest, nowManifestIdentity == manifestIdentity,
+                      nowInput == bytes, nowInputIdentity == inputIdentity else {
+                    throw InferenceFailure.inputIntegrityChanged("Video request or model manifest changed during execution.")
+                }
+            } catch {
+                throw InferenceFailure.inputIntegrityChanged("Video frozen input verification failed: \(error.localizedDescription)")
+            }
+        }.value
         try retainedAccess?.finish(); retainedAccess = nil
         switch terminal.reason {
         case .cancelled: throw CancellationError()
         case .timedOut: throw InferenceFailure.backendFailed("Video generation exceeded the explicit deadline. \(terminal.stderrTail)")
-        case .cleanupUnconfirmed: throw InferenceFailure.resourceCleanupUnconfirmed("Inconsistent process cleanup result.")
+        case .cleanupUnconfirmed: throw InferenceFailure.backendFailed("Video process exited before all owned work completed. " + terminal.stderrTail)
         case .exited: break
         }
         guard terminal.exitCode == 0 else { throw InferenceFailure.backendFailed("Video engine failed. \(terminal.stderrTail)") }
@@ -139,12 +157,15 @@ public actor ExternalVideoBackend: InferenceBackend {
               result["candidate_file"] == .string("candidate.mp4") else {
             throw InferenceFailure.backendFailed("Video terminal result does not match the frozen request.")
         }
-        let (_, currentManifest) = try inspect(request)
-        let (currentRequest, _) = try AudioFileSystem.readRegularFile(input, label: "video input recheck", maximumBytes: 1_048_576)
-        guard manifest == currentManifest, bytes == currentRequest else {
-            throw InferenceFailure.inputIntegrityChanged("Video request or model manifest changed during execution.")
+        let candidate = run.appendingPathComponent("candidate.mp4")
+        _ = try AudioFileSystem.regularFile(candidate, label: "private video candidate", maximumBytes: nil)
+        let output = run.appendingPathComponent("output.mp4")
+        // Same-volume no-overwrite publication retains the private evidence and
+        // uses the existing Store task filename; release never deletes it.
+        guard Darwin.link(candidate.path, output.path) == 0 else {
+            throw InferenceFailure.backendFailed("Cannot publish video output without overwriting an existing file.")
         }
-        let artifact = ArtifactReference(url: run.appendingPathComponent("candidate.mp4"), mediaType: "video/mp4")
+        let artifact = ArtifactReference(url: output, mediaType: "video/mp4")
         try await emit(.artifact(artifact))
         return .init(artifacts: [artifact], metadata: ["profile": configuration.profile.rawValue,
             "modelRevision": configuration.profile.modelRevision, "modelIdentity": configuration.profile.modelIdentity,
@@ -154,6 +175,10 @@ public actor ExternalVideoBackend: InferenceBackend {
 
     public func release() async {
         guard !executing, drained, let token = lease else { return }
+        if let access = retainedAccess {
+            do { try access.finish(); retainedAccess = nil }
+            catch { return } // Do not release ownership while access cleanup is uncertain.
+        }
         retainedModelScope?.stopAccessingSecurityScopedResource(); retainedModelScope = nil
         lease = nil; await MLXExecutionLease.shared.relinquish(token)
     }

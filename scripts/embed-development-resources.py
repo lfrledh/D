@@ -77,11 +77,11 @@ def _verify_existing(
     core: ModuleType,
 ) -> list[str]:
     entries = _destination_entries(destination)
-    unknown = sorted(entries - set(core.ENGINE_NAMES))
+    unknown = sorted(entries - set(recorded))
     if unknown:
         raise EmbedError(f"destination contains unknown entries and was not modified: {unknown}")
     completed: list[str] = []
-    for name in core.ENGINE_NAMES:
+    for name in core.engine_names(recorded):
         if name not in entries:
             continue
         try:
@@ -107,7 +107,7 @@ def embed(prepared: Path, destination: Path, destination_exists: bool, core: Mod
         completed = _verify_existing(destination, recorded, core)
     else:
         completed = []
-    if len(completed) == len(core.ENGINE_NAMES):
+    if len(completed) == len(recorded):
         return "reused", completed
 
     if not destination_exists:
@@ -118,7 +118,7 @@ def embed(prepared: Path, destination: Path, destination_exists: bool, core: Mod
 
     source_root = prepared / core.ENGINE_DIRECTORY
     try:
-        for name in core.ENGINE_NAMES:
+        for name in core.engine_names(recorded):
             if name in completed:
                 continue
             staging = Path(tempfile.mkdtemp(prefix=f".d-embed-{name}-", dir=destination))
@@ -150,7 +150,7 @@ def embed(prepared: Path, destination: Path, destination_exists: bool, core: Mod
     except EmbedError as error:
         error.completed = completed
         raise
-    if final != list(core.ENGINE_NAMES):
+    if final != list(core.engine_names(recorded)):
         raise EmbedError(f"embed ended incomplete: completed={final}", final)
     return "embedded", final
 

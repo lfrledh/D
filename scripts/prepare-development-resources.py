@@ -76,6 +76,30 @@ ENGINE_CONTRACTS: dict[str, dict[str, Any]] = {
     },
 }
 
+OPTIONAL_ENGINE_NAMES = ("ExternalVideoEngine.dengine",)
+ENGINE_CONTRACTS["ExternalVideoEngine.dengine"] = {
+    "kind": "d-external-video-engine",
+    "providerScript": "provider/app_video_driver.py",
+    "vendorDirectory": "native",
+    "required": (
+        "python/bin/python3", "provider/app_video_driver.py", "provider/d_audio_access.py",
+        "model-manifests/h3-fl2va-bf16.json", "native/h3", "native/h3_shaders.metal",
+        "native/ffmpeg", "native/ffprobe", "provider/Resources/h3-fl2va-bf16.json",
+        "provider/Resources/ltx23-bf16.json", "provider/Resources/ltx23-q8-test.json",
+    ),
+}
+
+
+def engine_names(value: dict[str, Any]) -> tuple[str, ...]:
+    """Four existing engines remain mandatory; the new deployment is explicit."""
+    names = set(value)
+    missing = set(ENGINE_NAMES) - names
+    unknown = names - set(ENGINE_NAMES + OPTIONAL_ENGINE_NAMES)
+    if missing or unknown:
+        raise ResourceError(f"engine fields differ; missing={sorted(missing)}, unknown={sorted(unknown)}")
+    return ENGINE_NAMES + tuple(name for name in OPTIONAL_ENGINE_NAMES if name in names)
+
+
 MAXIMUM_ENGINE_MANIFEST_BYTES = 4 * 1024 * 1024
 MAXIMUM_RESOURCE_MANIFEST_BYTES = 32 * 1024 * 1024
 MAXIMUM_FILES_PER_ENGINE = 10_000
@@ -411,15 +435,15 @@ def _load_config(path: Path) -> tuple[dict[str, Path], str]:
     engines = value.get("engines")
     if not isinstance(engines, dict):
         raise ResourceError("config engines must be an object")
-    _strict_keys(engines, set(ENGINE_NAMES), "config engines")
+    names = engine_names(engines)
     result: dict[str, Path] = {}
-    for name in ENGINE_NAMES:
+    for name in names:
         supplied = engines[name]
         if not isinstance(supplied, str) or not supplied:
             raise ResourceError(f"config engine path must be a non-empty string: {name}")
         result[name] = _absolute_directory(supplied, f"config engine {name}")
     canonical = json.dumps(
-        {"schemaVersion": SCHEMA_VERSION, "engines": {name: str(result[name]) for name in ENGINE_NAMES}},
+        {"schemaVersion": SCHEMA_VERSION, "engines": {name: str(result[name]) for name in names}},
         ensure_ascii=False,
         sort_keys=True,
         separators=(",", ":"),
@@ -433,7 +457,7 @@ def _resource_manifest(config_digest: str, inventories: dict[str, dict[str, Any]
         "schemaVersion": SCHEMA_VERSION,
         "kind": "d-development-resources",
         "configurationSHA256": config_digest,
-        "engines": {name: inventories[name] for name in ENGINE_NAMES},
+        "engines": {name: inventories[name] for name in engine_names(inventories)},
     }
 
 
@@ -509,18 +533,18 @@ def validate_prepared(root: Path, expected_config_digest: str | None = None) -> 
     engines = manifest.get("engines")
     if not isinstance(engines, dict):
         raise ResourceError("development resource manifest engines must be an object")
-    _strict_keys(engines, set(ENGINE_NAMES), "development resource manifest engines")
+    names = engine_names(engines)
     engine_root = _absolute_directory(str(root / ENGINE_DIRECTORY), "prepared Engines")
     try:
         actual_names = {entry.name for entry in engine_root.iterdir()}
     except OSError as error:
         raise ResourceError(f"cannot enumerate prepared Engines: {error}") from error
-    if actual_names != set(ENGINE_NAMES):
+    if actual_names != set(names):
         raise ResourceError(
             f"prepared Engines contains unknown or missing entries; "
-            f"missing={sorted(set(ENGINE_NAMES) - actual_names)}, unknown={sorted(actual_names - set(ENGINE_NAMES))}"
+            f"missing={sorted(set(names) - actual_names)}, unknown={sorted(actual_names - set(names))}"
         )
-    for name in ENGINE_NAMES:
+    for name in names:
         recorded = engines[name]
         if not isinstance(recorded, dict):
             raise ResourceError(f"prepared inventory is not an object: {name}")
@@ -533,10 +557,11 @@ def validate_prepared(root: Path, expected_config_digest: str | None = None) -> 
 
 def prepare(config_path: Path, output: Path) -> str:
     engines, config_digest = _load_config(config_path)
+    names = engine_names(engines)
     for name, engine in engines.items():
         if _overlaps(output, engine):
             raise ResourceError(f"output overlaps input engine {name}: {output} and {engine}")
-    source_inventories = {name: inspect_engine(engines[name], name) for name in ENGINE_NAMES}
+    source_inventories = {name: inspect_engine(engines[name], name) for name in names}
     if _lexists(output):
         existing = validate_prepared(output, config_digest)
         if existing["engines"] != source_inventories:
@@ -548,10 +573,10 @@ def prepare(config_path: Path, output: Path) -> str:
     try:
         engine_destination = staging / ENGINE_DIRECTORY
         engine_destination.mkdir(mode=0o700)
-        for name in ENGINE_NAMES:
+        for name in names:
             shutil.copytree(engines[name], engine_destination / name, symlinks=True, copy_function=shutil.copy2)
         copied_inventories = {
-            name: inspect_engine(engine_destination / name, name) for name in ENGINE_NAMES
+            name: inspect_engine(engine_destination / name, name) for name in names
         }
         if copied_inventories != source_inventories:
             raise ResourceError("copied engine inventory differs from its input")

@@ -14,7 +14,8 @@ enum AppSessionFactory {
         musicConsent: AudioModelUsePermission? = nil,
         audioAccessRoot: URL? = nil,
         bundledVideoEngine: BundledAudioEngine? = nil, videoAccessRoot: URL? = nil,
-        bundledPitchEngine: BundledAudioEngine? = nil) async throws -> WorkbenchSession {
+        bundledPitchEngine: BundledAudioEngine? = nil,
+        bundledExternalVideoEngine: BundledAudioEngine? = nil) async throws -> WorkbenchSession {
         let stages = BackendStageMonitor()
         let backend = try MLXImageBackend(configuration: .init(artifactDirectory: artifactDirectory, profile: .scalableKlein4B),
                                          observer: { await stages.record($0) })
@@ -49,6 +50,20 @@ enum AppSessionFactory {
                 memoryLimitBytes: memoryBudgetBytes, accessBootstrapRoot: accessRoot,
                 confirmDeployment: { try engine.confirmUnchanged() }))
         } else { videoBackend = nil }
+        var externalVideoBackends: [ExternalVideoBackend] = []
+        var videoAdapters: [WorkflowVideoAdapter] = []
+        if let engine = bundledExternalVideoEngine, let accessRoot = videoAccessRoot,
+           let ffmpeg = engine.externalVideoTool("ffmpeg"), let ffprobe = engine.externalVideoTool("ffprobe") {
+            for profile in ExternalVideoExecutionProfile.allCases {
+                let implementation = try ExternalVideoBackend(configuration: .init(profile: profile,
+                    pythonExecutable: engine.pythonExecutable, providerScript: engine.providerScript,
+                    ffmpeg: ffmpeg, ffprobe: ffprobe, h3Executable: engine.externalVideoTool("h3"),
+                    h3Shader: engine.externalVideoTool("h3_shaders.metal"), artifactDirectory: artifactDirectory,
+                    accessBootstrapRoot: accessRoot, confirmDeployment: { try engine.confirmUnchanged() }))
+                externalVideoBackends.append(implementation)
+                videoAdapters.append(.init(profile: profile, validateModel: { try await implementation.validateModel(at: $0) }))
+            }
+        }
         let pitchBackend: PitchAnalysisBackend?
         let pitchReference: ModelReference?
         if let engine = bundledPitchEngine {
@@ -61,6 +76,7 @@ enum AppSessionFactory {
         var backends: [any InferenceBackend] = [backend, textBackend]
         if let pitchBackend { backends.append(pitchBackend) }
         if let videoBackend { backends.append(videoBackend) }
+        backends.append(contentsOf: externalVideoBackends)
         if let musicBackend { backends.append(musicBackend) }
         if let audioBackend { backends.append(audioBackend) }
         let runtime = try InferenceRuntime(
@@ -134,7 +150,7 @@ enum AppSessionFactory {
             imageCapability: backend.executionCapability, textCapability: textBackend.executionCapability,
             audioCapability: audioBackend?.executionCapability, musicCapability: musicBackend?.executionCapability,
             videoBackendID: videoBackend?.descriptor.id, validateVideoModel: validateVideoModel,
-            videoCapability: videoBackend?.executionCapability, defaultMemoryBudgetBytes: memoryBudgetBytes,
+            videoCapability: videoBackend?.executionCapability, videoAdapters: videoAdapters, defaultMemoryBudgetBytes: memoryBudgetBytes,
             pitchBackendID: pitchBackend?.descriptor.id, pitchModel: pitchReference)
     }
 

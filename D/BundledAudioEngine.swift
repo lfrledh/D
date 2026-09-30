@@ -5,13 +5,14 @@ import Foundation
 /// Read-only description of a fixed inference engine bundled with an application.
 struct BundledAudioEngine: Sendable {
     enum Family: Sendable {
-        case stableAudio, mrt2Music, video, pitch
+        case stableAudio, mrt2Music, video, pitch, externalVideo
         var directory: String {
             switch self {
             case .stableAudio: "AudioEngine.dengine"
             case .mrt2Music: "MRT2MusicEngine.dengine"
             case .pitch: "PitchEngine.dengine"
             case .video: "VideoEngine.dengine"
+            case .externalVideo: "ExternalVideoEngine.dengine"
             }
         }
         var kind: String {
@@ -20,6 +21,7 @@ struct BundledAudioEngine: Sendable {
             case .mrt2Music: "d-mrt2-music-engine"
             case .pitch: "d-pitch-engine"
             case .video: "d-video-engine"
+            case .externalVideo: "d-external-video-engine"
             }
         }
         var script: String {
@@ -28,6 +30,7 @@ struct BundledAudioEngine: Sendable {
             case .mrt2Music: "provider/d_audio_mrt2_backend.py"
             case .pitch: "provider/d_pitch_analysis_backend.py"
             case .video: "provider/d_video_run.py"
+            case .externalVideo: "provider/app_video_driver.py"
             }
         }
         var model: String {
@@ -36,6 +39,7 @@ struct BundledAudioEngine: Sendable {
             case .mrt2Music: "model-manifests/mrt2-small.json"
             case .pitch: "model-manifests/swift-f0.json"
             case .video: "model-manifests/wan21.json"
+            case .externalVideo: "model-manifests/h3-fl2va-bf16.json"
             }
         }
         var vendor: String {
@@ -43,10 +47,16 @@ struct BundledAudioEngine: Sendable {
             case .stableAudio, .mrt2Music: "vendor"
             case .pitch: "python/lib/python3.12/site-packages/swift_f0"
             case .video: "Vendor"
+            case .externalVideo: "native"
             }
         }
         var required: [String] {
             switch self {
+            case .externalVideo:
+                ["python/bin/python3", script, "provider/d_audio_access.py", model,
+                 "native/h3", "native/h3_shaders.metal", "native/ffmpeg", "native/ffprobe",
+                 "provider/Resources/h3-fl2va-bf16.json",
+                 "provider/Resources/ltx23-bf16.json", "provider/Resources/ltx23-q8-test.json"]
             case .pitch:
                 ["python/bin/python3", script, "provider/d_audio_access.py", model,
                  "python/lib/python3.12/site-packages/swift_f0/core.py",
@@ -81,9 +91,15 @@ struct BundledAudioEngine: Sendable {
 
     var videoTokenizerDirectory: URL? {
         switch family {
-        case .stableAudio, .mrt2Music, .pitch: nil
+        case .stableAudio, .mrt2Music, .pitch, .externalVideo: nil
         case .video: root.appendingPathComponent("tokenizer", isDirectory: true)
         }
+    }
+
+    func externalVideoTool(_ name: String) -> URL? {
+        guard case .externalVideo = family,
+              ["h3", "h3_shaders.metal", "ffmpeg", "ffprobe"].contains(name) else { return nil }
+        return root.appendingPathComponent("native/" + name)
     }
 
     private static let maximumManifestBytes = 4 * 1024 * 1024

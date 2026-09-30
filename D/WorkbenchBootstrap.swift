@@ -90,6 +90,16 @@ final class WorkbenchBootstrap {
                 resolvedVideo = nil
                 videoEngineIssue = "视频引擎暂不可用；已有项目与媒体仍可打开。\n" + error.localizedDescription
             }
+            let externalVideoAvailability = Self.prepareAudioEngine(resolve: {
+                guard let resources = Bundle.main.resourceURL else { return nil }
+                return try BundledAudioEngine.resolve(resourceDirectory: resources, family: .externalVideo)
+            }, prepareAccess: {
+                try FileManager.default.createDirectory(at: videoAccessRoot, withIntermediateDirectories: true,
+                    attributes: [.posixPermissions: 0o700])
+            })
+            if let issue = externalVideoAvailability.issue {
+                videoEngineIssue = [videoEngineIssue, "H3/LTX 引擎暂不可用：" + issue].compactMap { $0 }.joined(separator: "\n")
+            }
             let videoEngine = resolvedVideo
             let pitchAvailability = Self.prepareAudioEngine(resolve: {
                 guard let resources = Bundle.main.resourceURL else { return nil }
@@ -116,7 +126,7 @@ final class WorkbenchBootstrap {
                     try await AppSessionFactory.makeSession(artifactDirectory: artifactDirectory,
                         bundledAudioEngine: engine, audioConsent: consent, bundledMusicEngine: musicEngine,
                         musicConsent: musicConsent, audioAccessRoot: accessRoot, bundledVideoEngine: videoEngine,
-                        videoAccessRoot: videoAccessRoot, bundledPitchEngine: pitchAvailability.engine)
+                        videoAccessRoot: videoAccessRoot, bundledPitchEngine: pitchAvailability.engine, bundledExternalVideoEngine: externalVideoAvailability.engine)
                 }, settings: settings, modelLibrary: library, audioEnabled: true, audioRecordingEnabled: true)
                 observer.start()
                 if let pendingProjectURL { self.pendingProjectURL = nil; await self.model?.openProject(at: pendingProjectURL) }
@@ -126,7 +136,7 @@ final class WorkbenchBootstrap {
                 bundledAudioEngine: engine, audioConsent: consent,
                 bundledMusicEngine: musicEngine, musicConsent: musicConsent, audioAccessRoot: accessRoot,
                 bundledVideoEngine: videoEngine, videoAccessRoot: videoAccessRoot,
-                bundledPitchEngine: pitchAvailability.engine)
+                bundledPitchEngine: pitchAvailability.engine, bundledExternalVideoEngine: externalVideoAvailability.engine)
             let borrowed = shared.borrowed(artifactStore: quickStore)
             let quickModel = WorkbenchModel(sessionFactory: { _ in borrowed }, settings: settings,
                 modelLibrary: library, audioEnabled: true, audioRecordingEnabled: true)

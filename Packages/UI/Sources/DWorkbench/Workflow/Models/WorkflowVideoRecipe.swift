@@ -36,12 +36,12 @@ public struct WorkflowVideoRecipe: Sendable {
 /// does not load weights; a retained model-location lease covers the complete pack.
 public struct WorkflowVideoAdapter: Sendable {
     public let profile: ExternalVideoExecutionProfile
-    public let backendID: String
-    public let modelIdentity: String
+    public var backendID: String { profile.backendID }
+    public var modelIdentity: String { profile.modelIdentity }
     public let validateModel: @Sendable (URL) async throws -> ModelReference
-    public init(profile: ExternalVideoExecutionProfile, backendID: String, modelIdentity: String,
+    public init(profile: ExternalVideoExecutionProfile,
                 validateModel: @escaping @Sendable (URL) async throws -> ModelReference) {
-        self.profile = profile; self.backendID = backendID; self.modelIdentity = modelIdentity
+        self.profile = profile
         self.validateModel = validateModel
     }
 }
