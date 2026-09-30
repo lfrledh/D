@@ -12,7 +12,9 @@ Lead 单一维护共享请求、App/ProjectSession 接线与本记录。新增�
 
 代表验收：混合摘要/多仓库/续传身份/访问错误/未就绪/租约；VLM 角色与媒体次序、型号特有思考参数、类型化工具往返及最终 JSON；ACE 同进程验证次数与原件突变/取消优先级、真实离线 loader 和 decoder 释放边界；Dev 参考输入投影；同包编译、真实模型与 GUI 独立。不机械重复全部旧 GPU。重要 Lead 实现须非实现者只读审阅。权重和大证据不入 Git，只有通过对应实测才更新矩阵。
 
-当前写入仅本规格准备；写 Worker 尚未启动。最终代码/受测/文档 SHA 记录外部回执，不自引用 amend。下一动作：准备提交→工作树快进并核验 CLI→执行上述切片；源、普通 App、历史证据保持。
+接口调查后，Lead 明确第三个独立 VLM-CLOSEOUT 切片：按 R2/spec 的冻结型接口扩展 TextRequest/InferenceResult、Qwen 消息/输出映射与直接测试；既有工作流/Quick/App/Store 接线仍由 Lead 维护。请求消息与旧 prompt 不可歧义并存；媒体直接值引用且保持次序；可选 textResponse 保存 raw/reasoning/final/toolCalls，旧 `.textDelta` 只含最终正文，不建立自动工具执行器。gpt-6-sol/high 初交45分钟，受限链路与新切片修复预算同上，重要契约由Lead审核并交非实现者复核。
+
+最终代码/受测/文档 SHA 记录外部回执，不自引用 amend。写 Worker 仅在各自预检通过后进入实施；源、普通 App、历史证据保持。
 
 ## 基线与边界
 源 codex/inference-foundation@01758b81527dc27eb4563bf1b66fd1ceab6647ee；实现从视频候选 d7dba252eea52d0f4a9a26915f4df3c3f7d244d0 创建外盘 D-RELEASE-FREEZE-01 / codex/release-freeze-01。原视频/前端候选保持。保护源个人 scheme 未暂存状态、作品、模型和普通 App。证据 R=`D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T070201Z`。
