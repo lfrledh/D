@@ -11,11 +11,67 @@ struct ACEBackendTests {
         let fixture = try Fixture()
         defer { fixture.remove() }
         let admitted = try ACEModelInventory.inspect(fixture.request(), configuration: fixture.configuration())
-        #expect(admitted.files.count == 3)
+        #expect(admitted.files.count == 21)
         #expect(admitted.sourceFiles.count == 6)
         try admitted.confirmUnchanged()
         try Data("changed official code".utf8).write(to: fixture.vendor.appendingPathComponent("acestep/handler.py"))
         #expect(throws: (any Error).self) { try admitted.confirmUnchanged() }
+    }
+
+    @Test("Manifest requires pinned configs, tokenizer, index, and indexed shards")
+    func requiredResources() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let original = try JSONSerialization.jsonObject(with: Data(contentsOf: fixture.manifest)) as! [String: Any]
+        let entries = original["files"] as! [[String: Any]]
+        for suffix in ["checkpoints/vae/config.json",
+                       "checkpoints/Qwen3-Embedding-0.6B/tokenizer.json",
+                       "checkpoints/acestep-v15-xl-sft/model.safetensors.index.json",
+                       "checkpoints/acestep-v15-xl-sft/model-00001-of-00004.safetensors"] {
+            var changed = original
+            changed["files"] = entries.filter { $0["path"] as? String != suffix }
+            try JSONSerialization.data(withJSONObject: changed).write(to: fixture.manifest)
+            #expect(throws: (any Error).self) {
+                try ACEModelInventory.inspect(fixture.request(), configuration: fixture.configuration())
+            }
+        }
+        let indexPath = "checkpoints/acestep-v15-xl-sft/model.safetensors.index.json"
+        let index = fixture.model.appendingPathComponent(indexPath)
+        let badIndex = Data(#"{"metadata":{},"weight_map":{"layer":"../vae/diffusion_pytorch_model.safetensors"}}"#.utf8)
+        try badIndex.write(to: index)
+        var changed = original
+        changed["files"] = entries.map { entry -> [String: Any] in
+            guard entry["path"] as? String == indexPath else { return entry }
+            var updated = entry
+            updated["size"] = badIndex.count
+            updated["sha256"] = digest(badIndex)
+            return updated
+        }
+        try JSONSerialization.data(withJSONObject: changed).write(to: fixture.manifest)
+        #expect(throws: (any Error).self) {
+            try ACEModelInventory.inspect(fixture.request(), configuration: fixture.configuration())
+        }
+    }
+
+    @Test("Float source endpoints pass and clipped or nonfinite samples fail")
+    func floatInputRange() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        for (sample, accepted) in [(Float(1), true), (Float(-1), true),
+                                   (Float(1.25), false), (Float.nan, false)] {
+            var wav = Data("RIFF".utf8)
+            wav.appendLE(UInt32(44)); wav.append(Data("WAVEfmt ".utf8))
+            wav.appendLE(UInt32(16)); wav.appendLE(UInt16(3)); wav.appendLE(UInt16(2))
+            wav.appendLE(UInt32(48_000)); wav.appendLE(UInt32(384_000))
+            wav.appendLE(UInt16(8)); wav.appendLE(UInt16(32))
+            wav.append(Data("data".utf8)); wav.appendLE(UInt32(8))
+            wav.appendLE(sample.bitPattern); wav.appendLE(Float(-1).bitPattern)
+            try wav.write(to: fixture.original)
+            let ref = AudioSourceReference(url: fixture.original, sha256: digest(wav),
+                frameCount: 1, sampleRate: 48_000, channels: 2)
+            if accepted { _ = try ACEInputValidation.check(ref) }
+            else { #expect(throws: (any Error).self) { _ = try ACEInputValidation.check(ref) } }
+        }
     }
 
     @Test("A drained fake provider that changes a source is reported as mutation")
@@ -27,11 +83,47 @@ struct ACEBackendTests {
         do {
             _ = try await backend.execute(request, emit: { _ in })
             Issue.record("The fake provider must fail")
+        } catch let failure as InferenceFailure {
+            if case .inputIntegrityChanged = failure {} else {
+                Issue.record("Mutation became \(failure)")
+            }
         } catch {
-            #expect(error.localizedDescription.contains("mutation"))
+            Issue.record("Mutation became \(error.localizedDescription)")
         }
         await backend.release()
         #expect(try Data(contentsOf: fixture.original).last == 1)
+    }
+
+    @Test("Unchanged ordinary child failure remains a backend failure")
+    func stoppedChildOrdinaryFailure() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let backend = try ExternalACEBackend(configuration: fixture.configuration())
+        do {
+            _ = try await backend.execute(fixture.request(), emit: { _ in })
+            Issue.record("The fake provider must fail")
+        } catch let failure as InferenceFailure {
+            if case .backendFailed = failure {} else { Issue.record("Unexpected \(failure)") }
+        } catch { Issue.record("Unexpected \(error.localizedDescription)") }
+        await backend.release()
+    }
+
+    @Test("Bad original before admission remains an invalid request")
+    func initialBadInput() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let backend = try ExternalACEBackend(configuration: fixture.configuration())
+        let request = fixture.request(source: true)
+        var changed = try Data(contentsOf: fixture.original)
+        changed[changed.count - 1] = 1
+        try changed.write(to: fixture.original)
+        do {
+            _ = try await backend.execute(request, emit: { _ in })
+            Issue.record("The changed original must fail admission")
+        } catch let failure as InferenceFailure {
+            if case .invalidRequest = failure {} else { Issue.record("Unexpected \(failure)") }
+        } catch { Issue.record("Unexpected \(error.localizedDescription)") }
+        await backend.release()
     }
 
     @Test("A drained unchanged fake child reports real caller cancellation")
@@ -64,6 +156,30 @@ struct ACEBackendTests {
         #expect(try Data(contentsOf: fixture.original).last == 0)
     }
 
+    @Test("Cancellation after source mutation reports integrity failure")
+    func cancelledMutation() async throws {
+        let fixture = try Fixture(sleepUntilCancelled: true)
+        defer { fixture.remove() }
+        let backend = try ExternalACEBackend(configuration: fixture.configuration())
+        let task = Task { try await backend.execute(fixture.request(source: true), emit: { _ in }) }
+        for _ in 0..<150 {
+            if FileManager.default.fileExists(atPath: fixture.marker.path) { break }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        #expect(FileManager.default.fileExists(atPath: fixture.marker.path))
+        var changed = try Data(contentsOf: fixture.original)
+        changed[changed.count - 1] = 1
+        try changed.write(to: fixture.original)
+        task.cancel()
+        do {
+            _ = try await task.value
+            Issue.record("Changed source unexpectedly succeeded")
+        } catch let failure as InferenceFailure {
+            if case .inputIntegrityChanged = failure {} else { Issue.record("Unexpected \(failure)") }
+        } catch { Issue.record("Unexpected \(error.localizedDescription)") }
+        await backend.release()
+    }
+
     private struct Fixture {
         let root: URL
         let model: URL
@@ -87,10 +203,23 @@ struct ACEBackendTests {
                 try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             }
             var files: [[String: Any]] = []
-            for (role, name) in [("xl", "acestep-v15-xl-sft"), ("vae", "vae"),
-                                 ("embedding", "Qwen3-Embedding-0.6B")] {
-                let path = "checkpoints/\(name)/weights.safetensors"
-                files.append(try write(Data(role.utf8), at: model, path: path, role: role))
+            let xl = "checkpoints/acestep-v15-xl-sft/"
+            let paths = ["config.json", "configuration_acestep_v15.py",
+                         "modeling_acestep_v15_xl_base.py", "apg_guidance.py",
+                         "silence_latent.pt", "model.safetensors.index.json",
+                         "model-00001-of-00004.safetensors", "model-00002-of-00004.safetensors",
+                         "model-00003-of-00004.safetensors", "model-00004-of-00004.safetensors"].map { xl + $0 }
+                + ["checkpoints/vae/config.json", "checkpoints/vae/diffusion_pytorch_model.safetensors"]
+                + ["config.json", "model.safetensors", "tokenizer.json", "tokenizer_config.json",
+                   "special_tokens_map.json", "added_tokens.json", "chat_template.jinja",
+                   "merges.txt", "vocab.json"].map { "checkpoints/Qwen3-Embedding-0.6B/" + $0 }
+            for path in paths {
+                let role = path.hasPrefix(xl) ? "xl" : path.hasPrefix("checkpoints/vae/") ? "vae" : "embedding"
+                let raw: Data
+                if path.hasSuffix("model.safetensors.index.json") {
+                    raw = Data(#"{"metadata":{"total_size":4},"weight_map":{"a":"model-00001-of-00004.safetensors","b":"model-00002-of-00004.safetensors","c":"model-00003-of-00004.safetensors","d":"model-00004-of-00004.safetensors"}}"#.utf8)
+                } else { raw = Data(("fixture " + path).utf8) }
+                files.append(try write(raw, at: model, path: path, role: role))
             }
             var sourceFiles: [[String: Any]] = []
             for path in ["acestep/handler.py", "acestep/model_downloader.py",

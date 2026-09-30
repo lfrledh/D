@@ -43,8 +43,9 @@ enum ACEInputValidation {
         if format.0 == 3 {
             var index = pcm.lowerBound
             while index < pcm.upperBound {
-                guard Float(bitPattern: u32(data, index)).isFinite else {
-                    throw InferenceFailure.invalidRequest("ACE WAV contains a nonfinite sample.")
+                let sample = Float(bitPattern: u32(data, index))
+                guard sample.isFinite, sample >= -1, sample <= 1 else {
+                    throw InferenceFailure.invalidRequest("ACE WAV contains a nonfinite or out-of-range sample.")
                 }
                 index += 4
             }

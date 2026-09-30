@@ -13,6 +13,20 @@ struct ACEModelInventory: Sendable {
     static let sharedRepository = "ACE-Step/Ace-Step1.5"
     static let sharedRevision = "19671f406d603126926c1b7e2adc169acbcade22"
     static let sourceRevision = "ca1e85fe9430179831e6bc6be790c332190a3866"
+    private static let xlRoot = "checkpoints/acestep-v15-xl-sft/"
+    private static let xlShards: Set<String> = Set((1...4).map {
+        xlRoot + String(format: "model-%05d-of-00004.safetensors", $0)
+    })
+    private static let requiredFiles: Set<String> = Set([
+        "config.json", "configuration_acestep_v15.py", "modeling_acestep_v15_xl_base.py",
+        "apg_guidance.py", "silence_latent.pt", "model.safetensors.index.json",
+    ].map { xlRoot + $0 } + Array(xlShards) + [
+        "checkpoints/vae/config.json", "checkpoints/vae/diffusion_pytorch_model.safetensors",
+    ] + [
+        "config.json", "model.safetensors", "tokenizer.json", "tokenizer_config.json",
+        "special_tokens_map.json", "added_tokens.json", "chat_template.jinja",
+        "merges.txt", "vocab.json",
+    ].map { "checkpoints/Qwen3-Embedding-0.6B/" + $0 })
 
     struct File: Codable, Sendable, Equatable {
         let path: String
@@ -152,8 +166,32 @@ struct ACEModelInventory: Sendable {
             roles.insert(role)
             files.append(File(path: path, size: size, sha256: digest, role: role))
         }
-        guard roles == Set(["xl", "vae", "embedding"]) else {
-            throw InferenceFailure.invalidRequest("ACE requires XL, VAE and embedding resources.")
+        guard roles == Set(["xl", "vae", "embedding"]), paths.isSuperset(of: requiredFiles) else {
+            throw InferenceFailure.invalidRequest("ACE requires pinned XL, VAE and embedding resources.")
+        }
+        let indexURL = root.appendingPathComponent(xlRoot + "model.safetensors.index.json")
+        let indexData = try AudioFileSystem.readRegularFile(indexURL,
+            label: "ACE XL shard index", maximumBytes: 2 * 1024 * 1024).0
+        var indexParser = AudioJSONParser(data: indexData, maximumDepth: 8)
+        let index = try indexParser.parse().object(exactKeys: ["metadata", "weight_map"],
+            context: "ACE XL shard index")
+        guard case .object(let weightMap) = index["weight_map"]!, !weightMap.isEmpty else {
+            throw InferenceFailure.invalidRequest("ACE XL shard map is empty.")
+        }
+        var shards = Set<String>()
+        for value in weightMap.values {
+            let name = try value.requiredString(context: "ACE XL shard")
+            guard !name.isEmpty, name != ".", name != "..",
+                  !name.contains("/"), !name.contains("\\"),
+                  name.hasSuffix(".safetensors") else {
+                throw InferenceFailure.invalidRequest("ACE XL shard reference escapes its checkpoint.")
+            }
+            shards.insert(xlRoot + name)
+        }
+        let admittedShards = Set(files.filter { $0.role == "xl" && $0.path.hasSuffix(".safetensors") }
+            .map(\.path))
+        guard shards == xlShards, shards == admittedShards else {
+            throw InferenceFailure.invalidRequest("ACE XL shard references differ from admitted files.")
         }
         var sourceFiles: [SourceFile] = []
         var sourcePaths = Set<String>()

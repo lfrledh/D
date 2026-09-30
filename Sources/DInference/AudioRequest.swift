@@ -130,8 +130,10 @@ public struct AudioRequest: Codable, Sendable, Equatable {
             }
             if let source { try ACERequest.validateReference(source) }
             let frames = durationSeconds * 48_000
-            guard frames.isFinite, frames <= Double(Int64.max),
-                  abs(frames.rounded() - frames) < 0.000_001 else {
+            let roundedFrames = frames.rounded()
+            guard frames.isFinite, roundedFrames >= 1,
+                  roundedFrames < 9_223_372_036_854_775_808.0,
+                  abs(roundedFrames - frames) < 0.000_001 else {
                 throw InferenceFailure.invalidRequest("ACE duration must identify exact 48 kHz frames.")
             }
             if source == nil {
@@ -158,7 +160,7 @@ public struct AudioRequest: Codable, Sendable, Equatable {
                 }
             }
             if let source {
-                guard Int64(frames.rounded()) == source.frameCount else {
+                guard Int64(roundedFrames) == source.frameCount else {
                     throw InferenceFailure.invalidRequest("ACE edit duration must equal exact source frames.")
                 }
             }
