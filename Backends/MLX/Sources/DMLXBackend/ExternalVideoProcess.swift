@@ -136,9 +136,12 @@ struct ExternalVideoProcess: Sendable {
 
     private static func makePipe() throws -> ExternalVideoPipe {
         var original: [Int32] = [-1, -1]
-        guard Darwin.pipe2(&original, O_CLOEXEC) == 0 else { throw error(errno, "create output pipe") }
-        // Moving both ends above stdio makes addopen/adddup2/addclose unambiguous even
-        // when the host launched with a closed standard descriptor.
+        // pipe2 is unavailable at the macOS 14 deployment target. pipe leaves a
+        // brief inheritance window before F_DUPFD_CLOEXEC creates the final ends;
+        // this invocation's spawn uses CLOEXEC_DEFAULT and closes originals first.
+        guard Darwin.pipe(&original) == 0 else { throw error(errno, "create output pipe") }
+        // Moving both ends above stdio makes addopen/adddup2/addclose unambiguous
+        // even when the host launched with a closed standard descriptor.
         let readFD = fcntl(original[0], F_DUPFD_CLOEXEC, 3)
         let readError = errno
         let writeFD = fcntl(original[1], F_DUPFD_CLOEXEC, 3)
