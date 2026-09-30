@@ -77,3 +77,29 @@ D-VIDEO-V0-01 的命令行后端已通过 D-VIDEO-WORKBENCH-01 接入基础视�
 现有tokenizers 0.22.2 wheel缺少许可证文件。仅此固定版本可使用本仓`Packaging/Licenses/tokenizers-0.22.2-LICENSE.txt`回退：来自[官方v0.22.2标签](https://raw.githubusercontent.com/huggingface/tokenizers/v0.22.2/LICENSE)，SHA-256 `c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4`。有许可证的安装不依赖回退；复制后再次校验。无下载、安装或对原环境写入；其他缺许可证仍拒绝。
 
 便携Python只承诺固定视频provider所需能力。其闲置标准库`_tkinter`无配套Tcl/Tk，不提供Tkinter GUI；视频导入/生成通过不代表通用Python环境或全部扩展闭包通过。
+
+
+## H3 / LTX 外部视频节点开发接线
+
+实现目录为`Adapters/`，Swift所有者为`DMLXBackend.ExternalVideoBackend`；App装配使用同一个DRuntime与重推理许可，不在节点中另启调度器。模型身份与量化/文字编码配方由`ExternalVideoExecutionProfile`和固定`Resources/`清单给出。实际验收状态只看`docs/CURRENT_ACTIONS.zh-CN.md`及D-VIDEO-MODELS-01，不因存在节点就推断已验证。
+
+- H3公开FL2VA Base为CFG蒸馏，原始BF16/50层；节点当前只接文字条件，未接参考帧。没有虚构公开非蒸馏版。
+- LTX2.3 dev BF16与Q8/Gemma Q4测试配方身份分离；LTX2.5配方已声明，但固定资源清单/真实验证未完成前明确拒绝登记为就绪。
+- `streamWeights`冻结到请求，对应H3 DiT预取、LTX diffusion block低内存加载；它不量化、不减少层数，不保证文字塔/解码器也被流式化。关闭后按常驻估算准入，用户可显式调预算，16GiB不是产品上限。
+- 输出为H264/AAC MP4；H3为32kHz双声道，LTX为48kHz双声道。读取、完整解码、保存重开/导出检查与生成分别验收。旧Wan仍保持无声契约。
+
+### 一次准备，普通Xcode构建复用
+
+`Packaging/prepare_external_video_engine.py --help`给出全部显式输入：已有独立Python、固定LTX依赖、固定H3源码/二进制/档案、LTX源码档案、FFmpeg/ffprobe、全新输出目录及既有开发identity/team。不下载、不读取私钥、不改全局环境或普通App。先核对固定源码及补丁，将依赖重定位到新副本，再逐个签名/校验复制的原生文件，最后形成清单。源目录和此前引擎不动；不能只用外层App的`codesign --deep`推断Resources里所有动态库可加载。
+
+在`prepare-development-resources.py`配置的`engines`中增加可选`ExternalVideoEngine.dengine`，指向上述输出；仍须保留原有四个引擎。将生成资源目录写入忽略的`Development/Development.local.xcconfig`，现有D Nodes scheme正常构建会核验、复制资源并照原方案签名。模型权重不进入这个视频引擎或App。
+
+模型登记选择独立物理资源包：根部`D-VIDEO-PACK.json`使用`ExternalVideoModelManifest`字段，`model/`为固定资源目录；LTX2.3另有`text_encoder/`。版本/量化不匹配拒绝，不根据文件名猜测或静默换模型；APFS克隆可减少同卷测试副本的实际占用。正式下载/安装UI的通用演进不由这一开发准备步骤冒充完成。
+
+### 验证入口及边界
+
+- `Backends/Video/Tests/test_app_video_driver.py`、`test_external_video_packaging.py`：受控CPU夹具。
+- `DMLXTests/ExternalVideoBackendTests`与`ExternalVideoProcessTests`：真实进程生命周期/文件边界，计算为夹具。
+- `ExternalVideoRealModelTests`：显式环境选已有profile/pack/engine，正式Runtime生成→准入取消→恢复；不下载、不声称GUI通过。
+- UI包`WorkflowExternalVideoRecipeTests`/`WorkflowExternalVideoServicesTests`：参数和应用服务边界；AV/Store测试另验保存。
+- 真实开发App的登记、节点选择、流式两态、取消/切项目、预览与鼠标操作仍须单独验。较大模型/配置未实测时如实标明，不由小配置结果外推。

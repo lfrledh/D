@@ -126,3 +126,33 @@ Lead 正在接入 schema19 的可选音轨事实、冻结视频配方、模型�
 本中间点后的实际部署失败与修正：`real-ltx-01`在导入PIL依赖时SIGKILL，未进模型计算。`python-import-01`和`python-import-verbose-01`定位，`dylib-signature-failures-01.json`确认重定位的原生库签名失效；外层App `codesign --deep`成功不证明Resources内这些库可加载。Lead在新准备目录复用现有`_sign_engine`、既有开发身份/Team签署新副本（没有改签名方案/普通App/来源目录）。`prepare-engine-09`后`python-import-02`真实PIL/MLX/LTX CLI导入通过；`app-build-02`为普通工程重新构建。模型验证尚待重新运行，旧失败不删除。
 
 非实现者审阅另发现复制后来源绑定及`@executable_path`入口歧义，已在准备器目标副本做固定源码摘要/文件集合精确核对，依Python/native实际入口解析，共享库歧义拒绝；`packaging-tests-01`三个反例通过。`ui-tests/test-10-recipes.log`27项/3 suites通过（节点配方3、既有注册12、AV/Store12）；不是完整hosting。`mlx-build-04`编译通过，最新代码另补真实非零退出码到错误信息。
+
+### r4 固定候选检查点：真实生成已运行，媒体接纳与原生验收分开
+
+生产代码/普通构建受测`7beb5b6494396311934b5a11a6a696d21b38c543`；随后仅新增三份测试与文档，没有修改生产推理、Store或画布实现。最终候选SHA、各测试文件摘要、源/旧候选保护和进程状态写R4/lead/final-receipt.json；不把新增测试倒记成在7beb提交内运行。源尚未接纳，不推main。
+
+| 检查 | 实际结果与范围 | R4证据 |
+| --- | --- | --- |
+| 固定H3权重 | 38个固定源文件、144023606861字节，逐文件校验；独立APFS克隆包，权重不进App/Git | lead/h3-download-result.json、h3-pack-path.json |
+| H3普通包内引擎→正式Runtime | 1测试3周期：原始BF16全部50层、256²/22帧/24fps/2步/seed42/流式true；生成114.532秒，准入取消8.114秒，再生成112.429秒；结束activeRunID nil/reservedBytes0 | lead/real-h3-01.log、.xcresult、-context.json、-summary.json |
+| LTX普通包内引擎→正式Runtime | 1测试3周期：2.3 dev Q8/Gemma Q4、256²/9帧/24fps/2步/CFG1/STG0/seed42/流式true；生成130.448秒，准入取消8.061秒，再生成124.476秒 | lead/real-ltx-02.log、.xcresult、-summary.json |
+| 当前运行时CPU | 12项/2 suites通过：后端5、真实自有子进程7；固定模型计算以夹具替代 | lead/external-video-cpu-04-command.json、.log、.xcresult |
+| 节点/库/应用CPU | test15：28 UI（画布几何/拖动/展示/四配方库映射）与6 Workbench（3配方、3服务）通过；登记重开使用真实ProjectSession/隔离suite，Engine只记录请求并受控失败 | lead/ui-tests/test-15-services-canvas-command.json、.log |
+| AV/Store夹具与真实LTX | 12个合成AV/Store方法通过；另1个opt-in真实LTX文件解码/发布/重开/导出通过，原文件不变 | lead/ui-tests/test-11-real-ltx-store.log |
+| 真实H3→Store | **失败**：真实输出被音轨/容器时间线检查拒绝；不以Runtime成功覆盖 | lead/ui-tests/test-12-real-h3-store.log、lead/review-media/ |
+| 普通App与引擎 | app-build-02成功，外层包签名及真实Python/PIL/MLX/LTX导入通过；引擎随普通工程构建嵌入，无手工改App；复制交付包签名复核通过 | lead/app-build-02.log、python-import-03.json、delivery/preview-build.json |
+| 实际GUI/hosting | 锁屏未跑新包；旧test08原生hosting未记录结束，不能用exit0当通过。新增画布手势及模型登记/运行/保存界面待H32 | lead/gui-locked.json、集中清单 |
+
+两个2步样本独立保存于R4/delivery/samples；H3首帧可辨红杯、存在变形，LTX首帧抽象纹理。它们是链路/文件检查，不能代表成片质量、较大参数或全LTX BF16验收。LTX正常30步/CFG3独立候选对照见后续同run记录，不重算上述Runtime3周期。
+
+**H3保存失败的根因与停止点**：AVFoundation直接读到视频终点`88000/96000`、音轨/mvhd终点`88800/96000`，但`AVAsset.duration`仍为前者；启用precise、providesPrecise=true也相同。VideoMediaInspector.swift的assetDuration==最长轨终点假设导致拒绝（8.333ms），不是Double舍入或显存不足。mvhd/tkhd/elst一致、软件完整解码22帧与29600个PCM样本成功，原MP4 SHA256 `de441ddda7bc8de4192ff88ddab04798269104a5eb28aac4ca435c82b5ff4e33`未变。来源：lead/review-media/audio-times[-precise].json、movie-atoms.json、full-decode-precise-02.json；首次探针把无效sample duration序列化为NaN失败，02仅改诊断值为null，不改媒体。
+
+AVMEDIA已用初交+两轮修复+一次有界Lead接管，现保留剩余缺陷并停止相关实现；不借APPDRIVER、改任务编号或更改mux绕开额度。最小后续有限修补：移除错误的API时长等式假设，保持实际mvhd、完整轨道解码、既定同步容差和文件身份校验，补“合法AAC尾稍长、asset duration仍取视频”CPU反例，再重验真实H3及LTX。须明确追加有限授权后实施；本轮未放宽标准、未覆盖输出。
+
+**新增测试修正**：test12同时发现登记重开比较的URL带/不带目录斜杠；test13输出确证仅表示差异。改为完整physical path、目录类型及device/inode，非文件名前缀匹配。非实现者又要求关闭结果和控制器身份反例，test15已断言requestClose成功、workflow/store/manifest清空、重开对象不同。失败日志保留；没有修改生产绑定掩盖问题。非实现者baseline02_services_readonly核代码/日志，未自行重跑。video_extension_map独立诊断媒体语义；两者都不称另一个模型完成整轮验收。
+
+**部署与保护**：R4/delivery/engines-r4为经签名固定源副本，resources-signed含原四引擎及可选第五视频引擎；本工作树忽略的Development.local.xcconfig引用它，源配置未动。候选普通包为R4/delivery/D Video Preview.app，启动器仅使用独立D_UI_TEST_SESSION，已有D运行则拒绝启动，不关闭用户进程。尚未原生启动，见delivery/使用说明.md。源仍01758b81527dc27eb4563bf1b66fd1ceab6647ee，旧UI候选4b90327db126e46a9277a0a401d2b6ea3e283399，个人scheme内容/摘要及未暂存状态保持。测试项目、临时文件、所有原日志与候选保留。
+
+**来源/消耗**：受限Worker实现与修复历史按前文及各job记录；Lead承担共享装配、保护/部署修补和以上验收。CANVAS/APPDRIVER普通修复已用2轮；AVMEDIA普通2轮+Lead接管用尽；TRANSPORT普通1轮；H3RUN普通1轮；未刷新旧PROCESS预算。非实现者只读审核与实际检查分开。可核实时长写各周期/工具日志；完整Lead归因、订阅扣费未知，不拿API价格换算。
+
+**恢复**：先查W HEAD/差异、源个人文件、已拥有进程；R4/lead/final-receipt.json指向最新候选与未完成项。H3 Store阻塞与H32锁屏独立；LTX2.5 H31只阻塞该资源及实测。LTX2.3 full BF16尚未实测；H3公开Base是CFG蒸馏，不承诺不存在的非蒸馏权重。不要把本次候选同步或后端成功写成已在源App完整接纳。

@@ -1,6 +1,7 @@
 import AppKit
 import CoreTransferable
 import DWorkbench
+import DInference
 import Foundation
 import SwiftUI
 import Testing
@@ -9,6 +10,21 @@ import UniformTypeIdentifiers
 
 @Suite @MainActor
 struct SharedLibraryBrowserTests {
+    @Test func externalVideoModelsKeepExactQuickAndCanvasOperationBindings() throws {
+        let profiles = ExternalVideoExecutionProfile.allCases
+        let choices = profiles.map { WorkflowModelChoice(id: "video:" + $0.modelIdentity, kind: .video, displayName: "registered copy") }
+        for choices in [[], choices] {
+            let entries = SharedLibraryProjection.entries(models: choices, readiness: [:], tools: [], projects: [], language: nil)
+            for profile in profiles {
+                let entry = try #require(entries.first { $0.id == "video.model." + profile.rawValue })
+                guard case .operation(let operation, let modelID) = entry.selection else { Issue.record("Missing model operation"); continue }
+                #expect(operation == WorkflowVideoRecipe(profile: profile).operationID)
+                #expect(operation != "d.video.generate")
+                #expect(modelID == "video:" + profile.modelIdentity)
+                #expect(entry.item.readiness != .available)
+            }
+        }
+    }
     @Test func applicationDeclaresTheActualCanvasTransferType() throws {
         var root = URL(fileURLWithPath: #filePath)
         for _ in 0..<5 { root.deleteLastPathComponent() }

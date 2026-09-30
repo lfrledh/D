@@ -327,6 +327,42 @@ struct VideoAVMediaInspectorTests {
         }
     }
 
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["D_TEST_REAL_AV_FILE"] != nil))
+    func realSmokeOutputPublishesReopensAndExports() async throws {
+        let env = ProcessInfo.processInfo.environment
+        let source = URL(fileURLWithPath: try #require(env["D_TEST_REAL_AV_FILE"]))
+        let name = try #require(env["D_TEST_REAL_AV_PROFILE"])
+        let profile = try #require(ExternalVideoExecutionProfile(rawValue: name))
+        let original = try Data(contentsOf: source)
+        try await withAVFixtureDirectory { directory in
+            let project = directory.appendingPathComponent("real-output.dproject")
+            let store = try await ProjectStore.create(at: project, name: "Real generated media validation")
+            let h3 = profile == .h3BF16Full
+            let video = VideoRequest(prompt: "A red ceramic cup on a wooden table, steady camera, natural light.",
+                negativePrompt: "", width: 256, height: 256, frameCount: h3 ? 22 : 9,
+                frameRate: .init(numerator: 24), steps: 2, guidanceScale: 1, scheduleShift: 1,
+                seed: 42, executionProfile: profile.reference,
+                adapterOptions: h3 ? .h3(streamWeights: true) : .ltx(streamWeights: true, spatiotemporalGuidance: 0))
+            let request = InferenceRequest(model: .init(directory: directory.appendingPathComponent("model-not-read"),
+                revision: profile.modelIdentity), input: .video(video))
+            let output = try VideoProjectFixture.output(project: project, runID: request.id)
+            try original.write(to: output, options: .withoutOverwriting)
+            let bytes = try await store.readWorkflowBackendMedia(.init(url: output, mediaType: "video/mp4"), request: request)
+            let published = try await store.publishWorkflowVideo(data: bytes, expected: video, name: "Real smoke output",
+                operationID: WorkflowVideoRecipe(profile: profile).operationID, request: request)
+            #expect(published.asset.metadata.video?.hasAudio == true)
+            try await store.close()
+            let reopened = try await ProjectStore.open(at: project)
+            #expect(try await reopened.workflowData(published.record.reference) == original)
+            let export = try await reopened.exportWorkflowAssets([published.record.reference], name: "real-export",
+                exportID: UUID(), directory: directory)
+            #expect(export.names == ["1.mp4", "recipe.json"])
+            try await reopened.close()
+        }
+        #expect(try Data(contentsOf: source) == original)
+        print("D_REAL_AV_STORE profile=\(profile.rawValue) source=\(source.path) bytes=\(original.count)")
+    }
+
 }
 
 private func avRequest(_ profile: ExternalVideoExecutionProfile, frames: Int) -> VideoRequest {
