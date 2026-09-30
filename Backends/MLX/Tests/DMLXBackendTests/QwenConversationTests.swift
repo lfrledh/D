@@ -5,6 +5,25 @@ import Testing
 
 @Suite("Qwen3.5 conversation mapping and output")
 struct QwenConversationTests {
+    @Test func successiveToolOutputsHaveDistinctStableConversationIDs() throws {
+        let xml = "<tool_call><function=sum><parameter=value>2</parameter><parameter=ok>true</parameter></function></tool_call>"
+        let firstID = UUID(), secondID = UUID()
+        func response(_ id: UUID) -> TextResponse {
+            QwenTextResponse.assemble(raw: xml, reasoning: nil, final: xml, stopped: "stop", tools: [tool], runID: id)
+        }
+        let first = try #require(response(firstID).toolCalls.first)
+        let second = try #require(response(secondID).toolCalls.first)
+        #expect(first.id != second.id && response(firstID).toolCalls.first?.id == first.id)
+        let request = TextRequest(prompt: "", messages: [
+            .init(role: .user, parts: [.text("Add")]),
+            .init(role: .assistant, parts: [], toolCalls: [first]),
+            .init(role: .tool, parts: [.text("3")], toolCallID: first.id),
+            .init(role: .user, parts: [.text("Again")]),
+            .init(role: .assistant, parts: [], toolCalls: [second]),
+            .init(role: .tool, parts: [.text("3")], toolCallID: second.id)
+        ], tools: [tool])
+        try request.validate()
+    }
     @Test func longReasoningDoesNotInvalidateCompletedShortAnswer() {
         let reasoning = String(repeating: "x", count: 2 * 1_048_576)
         let response = QwenTextResponse.assemble(raw: reasoning + "ok", reasoning: reasoning,

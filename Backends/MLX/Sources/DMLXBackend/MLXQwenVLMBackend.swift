@@ -232,7 +232,7 @@ public actor MLXQwenVLMBackend: InferenceBackend {
                             let final = inReasoning || malformedChannel || !endedReasoning ? nil :
                                 context.tokenizer.decode(tokenIds: finalTokens)
                             let response = QwenTextResponse.assemble(raw: raw, reasoning: thought,
-                                final: final, stopped: stop, tools: input.tools)
+                                final: final, stopped: stop, tools: input.tools, runID: request.id)
                             if let finalText = response.finalText, !finalText.isEmpty {
                                 try await emit(.textDelta(finalText))
                             }

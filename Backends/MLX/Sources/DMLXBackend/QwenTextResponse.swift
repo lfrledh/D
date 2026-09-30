@@ -5,7 +5,7 @@ import Foundation
 /// This never calls the upstream XML parser, whose number conversion can trap.
 enum QwenTextResponse {
     static func assemble(raw: String, reasoning: String?, final: String?, stopped: String,
-                         tools: [TextToolDefinition]?) -> TextResponse {
+                         tools: [TextToolDefinition]?, runID: UUID? = nil) -> TextResponse {
         guard let final else {
             return TextResponse(rawText: raw, reasoningText: reasoning, finishReason: .incomplete)
         }
@@ -17,7 +17,11 @@ enum QwenTextResponse {
             stopped == "length" ? .length : parsed.calls.isEmpty ? .stop : .toolCalls
         return TextResponse(rawText: raw, reasoningText: reasoning,
                             finalText: parsed.error == nil ? parsed.text : nil,
-                            toolCalls: parsed.calls, finishReason: reason)
+                            toolCalls: parsed.calls.enumerated().map { index, call in
+                                guard let runID else { return call }
+                                return TextToolCall(id: "call_" + runID.uuidString.replacingOccurrences(of: "-", with: "_") + "_\(index)",
+                                    name: call.name, arguments: call.arguments, validationError: call.validationError)
+                            }, finishReason: reason)
     }
 
     static func parseFinal(_ input: String, tools: [TextToolDefinition])
