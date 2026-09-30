@@ -170,8 +170,8 @@
       "upstreamGitBlob": "b9bd6d74ba4dce581d8bec0ed7d4f22bef85f015",
       "upstreamSize": 18218,
       "upstreamSHA256": "87c8def2e682df7f379c0ac4ae1c5bfbbaf3b465c081653e59cdbd04128a6088",
-      "size": 18218,
-      "sha256": "87c8def2e682df7f379c0ac4ae1c5bfbbaf3b465c081653e59cdbd04128a6088"
+      "size": 18468,
+      "sha256": "6be6177c6139e83c2f188610d61d8d359853c988afcfe1696c6cc36c41524e15"
     },
     {
       "path": "Sources/Flux2/Models/TextEncoder/Flux2PixtralVisionConfiguration.swift",
@@ -377,8 +377,8 @@
       "upstreamGitBlob": "d330388a129875abf90c768e28231a9dd7637466",
       "upstreamSize": 3792,
       "upstreamSHA256": "0e516192d5c01b259b3173618c28635e5e2e397c1459a2c984a5c7c97e3c21e2",
-      "size": 3792,
-      "sha256": "0e516192d5c01b259b3173618c28635e5e2e397c1459a2c984a5c7c97e3c21e2"
+      "size": 3851,
+      "sha256": "6acf73b93971582f6b7de89fa0b2511073b9ea5a4c823c658307f403e7bf40e6"
     },
     {
       "path": "Sources/Flux2/Pipeline/Flux2DevPromptUpsampler.swift",

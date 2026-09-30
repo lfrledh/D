@@ -46,6 +46,7 @@ public final class Flux2DevPromptEncoder {
     _ prompts: [String],
     maxLength: Int? = nil,
     addGenerationPrompt: Bool = false,
+    truncation: Bool = true,
     numImagesPerPrompt: Int = 1,
     tCoord: MLXArray? = nil
   ) throws -> Flux2PromptEncoding {
@@ -56,7 +57,8 @@ public final class Flux2DevPromptEncoder {
       prompts: prompts,
       systemMessage: systemMessage,
       maxLength: maxLength,
-      addGenerationPrompt: addGenerationPrompt
+      addGenerationPrompt: addGenerationPrompt,
+      truncation: truncation
     )
     return try encodeTokens(
       inputIds: tokens.inputIds,

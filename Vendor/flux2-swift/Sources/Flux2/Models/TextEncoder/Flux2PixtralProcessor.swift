@@ -189,7 +189,8 @@ public final class Flux2PixtralProcessor {
     prompts: [String],
     systemMessage: String,
     maxLength: Int? = nil,
-    addGenerationPrompt: Bool = false
+    addGenerationPrompt: Bool = false,
+    truncation: Bool = true
   ) throws -> Flux2TokenBatch {
     guard !prompts.isEmpty else {
       throw Flux2PixtralProcessorError.emptyPromptList
@@ -225,11 +226,17 @@ public final class Flux2PixtralProcessor {
         messages: messages,
         chatTemplate: chatTemplate,
         addGenerationPrompt: addGenerationPrompt,
-        truncation: true,
-        maxLength: targetLength,
+        truncation: truncation,
+        maxLength: truncation ? targetLength : nil,
         tools: nil,
         additionalContext: nil
       )
+
+      if !truncation && tokens.count > targetLength {
+        throw Flux2PixtralProcessorError.tokenExpansionOverflow(
+          expanded: tokens.count, maxLength: targetLength
+        )
+      }
 
       let (padded, attention) = padTokens(tokens: tokens, padTokenId: padTokenId, maxLength: targetLength)
       inputSequences.append(padded)
