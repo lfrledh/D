@@ -70,6 +70,9 @@ public struct QuickCreationState: Codable, Sendable, Equatable {
         self.store = store; self.makeServices = makeServices
     }
     public var draft: QuickDraft? { state.drafts.first { $0.id == state.selectedDraftID } }
+    public var definition: WorkflowOperationDefinition? {
+        draft.flatMap { WorkflowRegistry.standard.definition(for: $0.node) }
+    }
     public var visibleRuns: [QuickRunRecord] {
         state.runs.filter { $0.draft.id == state.selectedDraftID }.reversed()
     }
@@ -151,6 +154,77 @@ public struct QuickCreationState: Codable, Sendable, Equatable {
     public func setInput(_ port: String, value: WorkflowValue?, draftID: String) {
         guard isLoaded, let index = state.drafts.firstIndex(where: { $0.id == draftID }) else { return }
         state.drafts[index].inputs[port] = value; scheduleSave()
+    }
+    /// The panel and Store can suspend while a different draft or input is selected.
+    /// Commit the whole imported batch only against the state captured before opening it.
+    public func commitImportedAssets(_ assets: [WorkflowAssetReference], port: WorkflowPortDefinition,
+                                     draftID: String, expectedNode: WorkflowNode,
+                                     expectedInputs: [String: WorkflowValue]) throws {
+        guard isLoaded, state.selectedDraftID == draftID,
+              let index = state.drafts.firstIndex(where: { $0.id == draftID }),
+              state.drafts[index].node == expectedNode,
+              state.drafts[index].inputs == expectedInputs,
+              WorkflowRegistry.standard.definition(for: expectedNode)?.inputs.contains(port) == true else {
+            throw WorkflowIssue("输入已改变；导入的素材已保留在资料库，当前草稿未覆盖。")
+        }
+        guard !assets.isEmpty else { return }
+        if let kind = port.assetListKind {
+            guard assets.allSatisfy({ $0.kind == kind }) else {
+                throw WorkflowIssue("文件已保留为素材，但不符合此输入端口。", port: port.id)
+            }
+            var items = try Self.assetItems(from: expectedInputs[port.id], port: port)
+            items += assets.map { WorkflowDataItem(value: .asset($0)) }
+            let value: WorkflowValue = .data(.list(element: .asset(kind), items: items))
+            _ = try port.resolveAssets(value)
+            state.drafts[index].inputs[port.id] = value
+        } else {
+            guard assets.count == 1, let asset = assets.first, port.kinds.contains(asset.kind) else {
+                throw WorkflowIssue("文件已保留为素材，但不符合此输入端口。", port: port.id)
+            }
+            state.drafts[index].inputs[port.id] = .asset(asset)
+        }
+        scheduleSave()
+    }
+    public func inputAssetItems(port: WorkflowPortDefinition, draftID: String) -> [WorkflowDataItem] {
+        guard let draft = state.drafts.first(where: { $0.id == draftID }),
+              let actual = WorkflowRegistry.standard.definition(for: draft.node)?.inputs.first(where: { $0.id == port.id }),
+              actual == port else { return [] }
+        return (try? Self.assetItems(from: draft.inputs[port.id], port: port)) ?? []
+    }
+    public func moveInputAsset(_ itemID: String, by offset: Int, port: WorkflowPortDefinition, draftID: String) throws {
+        let index = try editableAssetListIndex(port: port, draftID: draftID)
+        guard let kind = port.assetListKind, [-1, 1].contains(offset) else { return }
+        var items = try Self.assetItems(from: state.drafts[index].inputs[port.id], port: port)
+        guard let source = items.firstIndex(where: { $0.id == itemID }),
+              items.indices.contains(source + offset) else { return }
+        items.swapAt(source, source + offset)
+        state.drafts[index].inputs[port.id] = .data(.list(element: .asset(kind), items: items))
+        scheduleSave()
+    }
+    public func removeInputAsset(_ itemID: String, port: WorkflowPortDefinition, draftID: String) throws {
+        let index = try editableAssetListIndex(port: port, draftID: draftID)
+        guard let kind = port.assetListKind else { return }
+        var items = try Self.assetItems(from: state.drafts[index].inputs[port.id], port: port)
+        guard let source = items.firstIndex(where: { $0.id == itemID }) else { return }
+        items.remove(at: source)
+        state.drafts[index].inputs[port.id] = items.isEmpty ? nil :
+            .data(.list(element: .asset(kind), items: items))
+        scheduleSave()
+    }
+    private func editableAssetListIndex(port: WorkflowPortDefinition, draftID: String) throws -> Int {
+        guard isLoaded, state.selectedDraftID == draftID, port.assetListKind != nil,
+              let index = state.drafts.firstIndex(where: { $0.id == draftID }),
+              WorkflowRegistry.standard.definition(for: state.drafts[index].node)?.inputs.contains(port) == true else {
+            throw WorkflowIssue("当前草稿或输入端口已改变。")
+        }
+        return index
+    }
+    private static func assetItems(from value: WorkflowValue?, port: WorkflowPortDefinition) throws -> [WorkflowDataItem] {
+        guard let value else { return [] }
+        _ = try port.resolveAssets(value)
+        if case .data(.list(_, let items)) = value { return items }
+        guard let asset = value.asset else { throw WorkflowIssue("输入不是资产列表。", port: port.id) }
+        return [WorkflowDataItem(id: asset.version.uuidString, value: .asset(asset))]
     }
     public func useSettings(_ node: WorkflowNode, inputs: [String: WorkflowValue] = [:]) {
         guard isLoaded, WorkflowRegistry.standard.operation(node.operationID)?.definition.modelKind != nil,
