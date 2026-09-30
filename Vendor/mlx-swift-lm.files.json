@@ -1176,8 +1176,8 @@
     {
       "path": "Libraries/MLXVLM/Models/Qwen3VL.swift",
       "upstreamSHA256": "8c9d221709d28819ac4a4d5760790ad10f8ec312206f8748cd5a1b8233c86c9f",
-      "sha256": "f67f320209ff3055dace0b383fb42e7d7b580d551b86d90abfb8fffbada0582c",
-      "size": 68245
+      "sha256": "50ae8773f8c8a5e5ae74020b27889cbf7b7770f36390b63bebcfddd16a63cc8e",
+      "size": 68413
     },
     {
       "path": "Libraries/MLXVLM/Models/QwenVL.swift",

@@ -22,8 +22,12 @@ public struct Qwen3VLProcessor: UserInputProcessor {
     private let tokenizer: any Tokenizer
     private let preserveSuppliedVideoFrames: Bool
 
+    public init(_ config: Qwen3VLProcessorConfiguration, tokenizer: any Tokenizer) {
+        self.init(config, tokenizer: tokenizer, preserveSuppliedVideoFrames: false)
+    }
+
     public init(_ config: Qwen3VLProcessorConfiguration, tokenizer: any Tokenizer,
-                preserveSuppliedVideoFrames: Bool = false) {
+                preserveSuppliedVideoFrames: Bool) {
         self.config = config
         self.tokenizer = tokenizer
         self.preserveSuppliedVideoFrames = preserveSuppliedVideoFrames

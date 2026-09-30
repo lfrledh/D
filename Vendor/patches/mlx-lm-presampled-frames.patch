@@ -39,23 +39,25 @@
          }
 --- a/Libraries/MLXVLM/Models/Qwen3VL.swift
 +++ b/Libraries/MLXVLM/Models/Qwen3VL.swift
-@@ -20,10 +20,13 @@
+@@ -20,10 +20,17 @@
  
      private let config: Qwen3VLProcessorConfiguration
      private let tokenizer: any Tokenizer
--
--    public init(_ config: Qwen3VLProcessorConfiguration, tokenizer: any Tokenizer) {
 +    private let preserveSuppliedVideoFrames: Bool
+ 
+     public init(_ config: Qwen3VLProcessorConfiguration, tokenizer: any Tokenizer) {
++        self.init(config, tokenizer: tokenizer, preserveSuppliedVideoFrames: false)
++    }
 +
 +    public init(_ config: Qwen3VLProcessorConfiguration, tokenizer: any Tokenizer,
-+                preserveSuppliedVideoFrames: Bool = false) {
++                preserveSuppliedVideoFrames: Bool) {
          self.config = config
          self.tokenizer = tokenizer
 +        self.preserveSuppliedVideoFrames = preserveSuppliedVideoFrames
      }
  
      private func preprocess(image: CIImage, resizedSize: CGSize) -> CIImage {
-@@ -110,7 +113,8 @@
+@@ -110,7 +117,8 @@
              for video in input.videos {
                  var resizedSize: CGSize = .zero
                  let sequence = try await MediaProcessing.asProcessedSequence(
