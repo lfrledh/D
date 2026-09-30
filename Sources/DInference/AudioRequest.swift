@@ -50,13 +50,24 @@ public struct AudioRequest: Codable, Sendable, Equatable {
         parameters = .mrt2FixedV1(noteSequence); source = nil; editRegion = nil
     }
 
+    public init(operation: AudioOperation, prompt: String, durationSeconds: Double,
+                seed: UInt64, ace: ACERequest,
+                source: AudioSourceReference? = nil, editRegion: AudioEditRegion? = nil) {
+        self.operation = operation; self.prompt = prompt; self.durationSeconds = durationSeconds
+        self.seed = seed; self.parameters = .aceStep15(ace)
+        self.source = source; self.editRegion = editRegion
+    }
+
     public var diffusion: AudioDiffusionParameters? {
         if case .diffusion(let value) = parameters { return value }; return nil
     }
     public var noteSequence: AudioNoteSequence? {
         if case .mrt2FixedV1(let value) = parameters { return value }; return nil
     }
-    public var outputSampleRate: Int { noteSequence == nil ? 44_100 : 48_000 }
+    public var ace: ACERequest? {
+        if case .aceStep15(let value) = parameters { return value }; return nil
+    }
+    public var outputSampleRate: Int { diffusion == nil ? 48_000 : 44_100 }
 
     private enum CodingKeys: String, CodingKey {
         case operation, prompt, durationSeconds, seed, steps, guidanceScale, strength, source, editRegion, parameters
@@ -90,7 +101,7 @@ public struct AudioRequest: Codable, Sendable, Equatable {
         case .diffusion(let value):
             try c.encode(value.steps, forKey: .steps); try c.encode(value.guidanceScale, forKey: .guidanceScale)
             try c.encode(value.strength, forKey: .strength)
-        case .mrt2FixedV1:
+        case .mrt2FixedV1, .aceStep15:
             try c.encode(parameters, forKey: .parameters)
         }
     }
@@ -109,6 +120,41 @@ public struct AudioRequest: Codable, Sendable, Equatable {
                   !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                   prompt.utf8.count <= 4096 else {
                 throw InferenceFailure.invalidRequest("Invalid MRT2 generation parameters.")
+            }
+            return
+        }
+        if let ace {
+            try ace.validate()
+            guard seed <= UInt32.max else {
+                throw InferenceFailure.invalidRequest("ACE seed exceeds UInt32.")
+            }
+            if let source { try ACERequest.validateReference(source) }
+            let grid = durationSeconds * 10
+            guard grid.isFinite, grid <= Double(Int64.max / 4_800),
+                  abs(grid.rounded() - grid) < 0.000_001 else {
+                throw InferenceFailure.invalidRequest("ACE duration requires the official 0.1-second grid.")
+            }
+            switch operation {
+            case .generate:
+                guard source == nil, editRegion == nil, ace.editOptions == nil else {
+                    throw InferenceFailure.invalidRequest("ACE generation does not accept edit inputs.")
+                }
+            case .variation:
+                guard source != nil, editRegion == nil,
+                      ace.editOptions.map({ if case .cover = $0 { return true }; return false }) == true else {
+                    throw InferenceFailure.invalidRequest("ACE variation requires source and cover options.")
+                }
+            case .inpaint:
+                guard let source, let region = editRegion, region.startFrame >= 0,
+                      region.endFrame > region.startFrame, region.endFrame <= source.frameCount,
+                      ace.editOptions.map({ if case .repaint = $0 { return true }; return false }) == true else {
+                    throw InferenceFailure.invalidRequest("ACE inpaint requires source, region, and repaint options.")
+                }
+            }
+            if let source {
+                guard Int64(grid.rounded()) * 4_800 == source.frameCount else {
+                    throw InferenceFailure.invalidRequest("ACE edit duration must equal exact source frames.")
+                }
             }
             return
         }

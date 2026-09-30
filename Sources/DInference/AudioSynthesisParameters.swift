@@ -87,8 +87,9 @@ public struct AudioNoteSequence: Codable, Sendable, Equatable {
 public enum AudioSynthesisParameters: Codable, Sendable, Equatable {
     case diffusion(AudioDiffusionParameters)
     case mrt2FixedV1(AudioNoteSequence)
+    case aceStep15(ACERequest)
 
-    private enum CodingKeys: String, CodingKey { case kind, diffusion, sequence }
+    private enum CodingKeys: String, CodingKey { case kind, diffusion, sequence, ace }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         switch try c.decode(String.self, forKey: .kind) {
@@ -98,6 +99,9 @@ public enum AudioSynthesisParameters: Codable, Sendable, Equatable {
         case "mrt2FixedV1":
             try requireAudioKeys(decoder, allowed: ["kind", "sequence"])
             self = .mrt2FixedV1(try c.decode(AudioNoteSequence.self, forKey: .sequence))
+        case "aceStep15":
+            try requireAudioKeys(decoder, allowed: ["kind", "ace"])
+            self = .aceStep15(try c.decode(ACERequest.self, forKey: .ace))
         default: throw InferenceFailure.invalidRequest("Unsupported audio parameter family.")
         }
     }
@@ -108,6 +112,8 @@ public enum AudioSynthesisParameters: Codable, Sendable, Equatable {
             try c.encode("diffusion", forKey: .kind); try c.encode(value, forKey: .diffusion)
         case .mrt2FixedV1(let value):
             try c.encode("mrt2FixedV1", forKey: .kind); try c.encode(value, forKey: .sequence)
+        case .aceStep15(let value):
+            try c.encode("aceStep15", forKey: .kind); try c.encode(value, forKey: .ace)
         }
     }
 }
