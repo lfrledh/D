@@ -17,4 +17,4 @@ public struct WorkflowPublishedAsset: Sendable {
 }
 
 /// Test injection follows the existing Store durable-boundary pattern, without changing filesystem permissions.
-enum WorkflowStoreCheckpoint: Sendable { case assetDurable, snapshotDurable, beforeManifest }
+enum WorkflowStoreCheckpoint: Sendable { case assetDurable, snapshotDurable, beforeManifest, manifestPublished }

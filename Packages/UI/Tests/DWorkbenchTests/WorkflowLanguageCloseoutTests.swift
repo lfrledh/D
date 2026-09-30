@@ -122,3 +122,64 @@ private actor CloseoutResponseEngine: InferenceEngine {
         try await store.close()
     }
 }
+
+@MainActor extension WorkflowLanguageCloseoutTests {
+    @Test func responseManifestSyncFailureReconcilesOnlyOwnExactBytes() async throws {
+        let root = URL(fileURLWithPath: try #require(ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"]))
+            .appendingPathComponent("response-sync-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        for tamper in [false, true] {
+            let store = try await ProjectStore.create(at: root.appendingPathComponent("\(tamper).dproject"), name: "sync failure")
+            let data = try WorkflowTextResponseFile.encode(.init(rawText: "完整原文", finalText: "完整原文", finishReason: .stop))
+            let id = UUID()
+            do {
+                _ = try await store.publishWorkflowAsset(data: data, mediaType: WorkflowTextResponseFile.mediaType, metadata: .init(), name: "result", parents: [], operationID: "fixture", stepID: nil, request: nil, details: [:], assetID: id, checkpoint: { stage in
+                    if case .manifestPublished = stage { throw ProjectStoreError.io("controlled post-rename directory sync failure") }
+                }); Issue.record("Expected injected sync failure")
+            } catch let error as ProjectStoreError { if case .io = error {} else { Issue.record("Wrong failure") } }
+            if tamper {
+                let path = store.rootURL.appendingPathComponent(ProjectStore.manifestFilename)
+                var bytes = try Data(contentsOf: path); bytes.append(Data("\n".utf8)); try bytes.write(to: path)
+                do { _ = try await store.workflowState(); Issue.record("Unowned manifest bytes accepted") }
+                catch { #expect(error as? ProjectStoreError == .externalModification) }
+                // No restore: the controlled external bytes remain for this fixture's lifetime.
+            } else {
+                let published = try await store.publishWorkflowAsset(data: data, mediaType: WorkflowTextResponseFile.mediaType, name: "result", operationID: "fixture", assetID: id)
+                #expect(try await store.workflowData(published.record.reference) == data)
+                #expect(await store.snapshot().assets.filter { $0.id == id }.count == 1)
+                try await store.flush(); try await store.close()
+                let reopened = try await ProjectStore.open(at: store.rootURL)
+                #expect(try await reopened.workflowData(published.record.reference) == data)
+                try await reopened.close()
+            }
+        }
+    }
+    @Test func responseDiskRetryDoesNotGenerateAgain() async throws {
+        let root = URL(fileURLWithPath: try #require(ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"]))
+            .appendingPathComponent("response-retry-" + UUID().uuidString + ".dproject")
+        let moved = root.appendingPathExtension("offline")
+        defer { try? FileManager.default.removeItem(at: root); try? FileManager.default.removeItem(at: moved) }
+        let store = try await ProjectStore.create(at: root, name: "retry")
+        let response = TextResponse(rawText: "ok", finalText: "ok", finishReason: .stop)
+        let engine = CloseoutResponseEngine(response)
+        await engine.beforeReturn { try FileManager.default.moveItem(at: root, to: moved) }
+        let session = WorkbenchSession(engine: engine, backendID: "fixture", status: { .init(activeRunID: nil, phase: nil, queuedRunIDs: []) }, shutdown: {}, cleanup: {}, validateModel: { _ in })
+        var leases = 0
+        let service = WorkflowServices(store: store, session: session) { _, identity in
+            leases += 1
+            return .init(identity: identity, reference: .init(directory: root), backendID: "fixture", operationID: WorkflowModelRoutes.qwen35, textCapability: .init(maximumPromptTokens: 2048, maximumOutputTokens: 256, profile: .qwen35VLMProfile))
+        }
+        var node = try #require(WorkflowRegistry.standard.operation(WorkflowModelRoutes.qwen35)?.definition.makeNode()); node.parameters["modelID"] = .text("text:fixture")
+        let context = WorkflowExecutionContext(node: node, stepID: UUID(), inputs: [:])
+        try service.beginPlan()
+        do { _ = try await service.executeCall(context); Issue.record("Missing volume must fail") }
+        catch { #expect(error is WorkflowSaveFailure) }
+        #expect(service.hasPendingSaves)
+        try FileManager.default.moveItem(at: moved, to: root)
+        try service.beginPlan(); _ = try await service.executeCall(context)
+        #expect(!service.hasPendingSaves && leases == 1)
+        #expect(await engine.calls == 1)
+        try await store.close()
+    }
+}

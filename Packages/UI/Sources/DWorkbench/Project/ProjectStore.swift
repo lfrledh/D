@@ -46,6 +46,7 @@ public actor ProjectStore {
     private var quickValidatedBytes: Data?
     private var quickPendingBytes: Data?
     private var quickPendingBaseRevision: UInt64?
+    private var pendingManifest: (bytes: Data, value: ProjectManifest)?
 
     private init(rootURL: URL, rootFD: Int32, lockFD: Int32, manifest: ProjectManifest, invalidatedPitchRuns: Set<UUID> = []) {
         self.rootURL = rootURL
@@ -1918,6 +1919,12 @@ public actor ProjectStore {
 
     private func verifyUnchangedManifest() throws {
         let data = try ProjectFiles.read(relative: Self.manifestFilename, in: rootFD, limit: 32 * 1_024 * 1_024)
+        // A rename can succeed before directory sync reports failure. Only our
+        // exact attempted bytes may be reconciled; another writer remains an error.
+        if let pending = pendingManifest, data == pending.bytes {
+            guard fsync(rootFD) == 0 else { throw ProjectFiles.error() }
+            manifest = pending.value; pendingManifest = nil; validatedWorkflowRead = nil
+        }
         let current: ProjectManifest
         do { current = try JSONDecoder().decode(ProjectManifest.self, from: data) }
         catch { throw ProjectStoreError.externalModification }
@@ -2192,7 +2199,7 @@ public actor ProjectStore {
         return expected.st_dev == actual.st_dev && expected.st_ino == actual.st_ino
     }
 
-    private func commit(_ value: ProjectManifest) throws {
+    private func commit(_ value: ProjectManifest, afterRename: (() throws -> Void)? = nil) throws {
         try checkLocation()
         // flock protects cooperating sessions; also detect an editor that ignores the lock.
         // This is an optimistic check, not a promise of exclusion against hostile concurrent writes.
@@ -2204,8 +2211,16 @@ public actor ProjectStore {
         candidate.revision = manifest.revision + 1
         candidate.updatedAt = Date()
         try ProjectFiles.validate(candidate)
-        try ProjectFiles.writeManifest(candidate, in: rootFD, replacing: true)
-        manifest = candidate
+        let bytes = try ProjectFiles.manifestData(candidate)
+        do {
+            try ProjectFiles.publish(in: rootFD, name: Self.manifestFilename, replacing: true, afterRename: afterRename) { descriptor in
+                try bytes.withUnsafeBytes { try ProjectFiles.writeAll($0, to: descriptor) }
+            }
+        } catch {
+            pendingManifest = (bytes, candidate)
+            throw error
+        }
+        manifest = candidate; pendingManifest = nil
     }
 }
 
@@ -2328,13 +2343,18 @@ private enum ProjectFiles {
         return descriptor
     }
 
-    static func writeManifest(_ manifest: ProjectManifest, in root: Int32, replacing: Bool) throws {
+    static func manifestData(_ manifest: ProjectManifest) throws -> Data {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
         let data = try encoder.encode(manifest)
         guard data.count <= 32 * 1_024 * 1_024 else {
             throw ProjectStoreError.invalidProject("项目清单超过当前工作台的 32 MiB 上限，请新建项目；本次更改尚未写入。")
         }
+        return data
+    }
+
+    static func writeManifest(_ manifest: ProjectManifest, in root: Int32, replacing: Bool) throws {
+        let data = try manifestData(manifest)
         try publish(in: root, name: ProjectStore.manifestFilename, replacing: replacing) { descriptor in
             try data.withUnsafeBytes { try writeAll($0, to: descriptor) }
         }
@@ -2479,7 +2499,8 @@ private enum ProjectFiles {
         }
     }
 
-    static func publish(in parent: Int32, name: String, replacing: Bool, write: (Int32) throws -> Void) throws {
+    static func publish(in parent: Int32, name: String, replacing: Bool,
+                        afterRename: (() throws -> Void)? = nil, write: (Int32) throws -> Void) throws {
         let temporary = ".d-\(UUID().uuidString).partial"
         let descriptor = openat(parent, temporary, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0o600)
         guard descriptor >= 0 else { throw error() }
@@ -2497,6 +2518,7 @@ private enum ProjectFiles {
                 throw error()
             }
         }
+        try afterRename?()
         guard fsync(parent) == 0 else { throw error() }
     }
 
@@ -3315,7 +3337,7 @@ extension ProjectStore {
         try checkpoint?(.snapshotDurable)
         var candidate = manifest; candidate.workflowSnapshot = pointer; candidate.assets = assets
         try checkpoint?(.beforeManifest)
-        try commit(candidate)
+        try commit(candidate, afterRename: { try checkpoint?(.manifestPublished) })
         // The committed pointer still has to pass every filesystem and digest check in
         // workflowState(). Cache only the pure archive validation that just succeeded,
         // and only after the manifest has durably published this exact encoding.
