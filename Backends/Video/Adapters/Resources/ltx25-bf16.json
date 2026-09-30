@@ -1,0 +1,181 @@
+{
+  "schema_version": 1,
+  "profile": "ltx-2.5-dev-bf16-full-v1",
+  "repository": "dgrauet/ltx-2.5-mlx",
+  "revision": "e378b7e1b50fcb1795fce74219b40bb0b1ede1e2",
+  "source": "pinned Hugging Face model API siblings, size/lfs.sha256/blobId; no file bodies acquired",
+  "files": [
+    {
+      "name": "LICENSE",
+      "size": 34441,
+      "hash": {
+        "algorithm": "git-blob-sha1",
+        "digest": "aa1e32a736bb14f4da11fadca8ad4507a2764edb"
+      },
+      "tensor_policy": "not_tensor"
+    },
+    {
+      "name": "README.md",
+      "size": 2144,
+      "hash": {
+        "algorithm": "git-blob-sha1",
+        "digest": "9eb48357dfd2dcd3b04b3fc200389ba24fe22e6e"
+      },
+      "tensor_policy": "not_tensor"
+    },
+    {
+      "name": "audio_vae.safetensors",
+      "size": 106510732,
+      "hash": {
+        "algorithm": "sha256",
+        "digest": "847a62b7b20691a55fe9c097f5d745eb4bbcc1f68bdeeb570140dfeec5175624"
+      },
+      "tensor_policy": "floating_only"
+    },
+    {
+      "name": "chat_template.jinja",
+      "size": 17466,
+      "hash": {
+        "algorithm": "git-blob-sha1",
+        "digest": "e61bbfe9a31db79ea1e4e557b046f895ad7899d0"
+      },
+      "tensor_policy": "not_tensor"
+    },
+    {
+      "name": "connector.safetensors",
+      "size": 4032375032,
+      "hash": {
+        "algorithm": "sha256",
+        "digest": "dd1273769b8b7ada9edd3887999c8384d2357f91cce21ad4ac09f5816b2d70d5"
+      },
+      "tensor_policy": "floating_only"
+    },
+    {
+      "name": "duration_head.safetensors",
+      "size": 3808466,
+      "hash": {
+        "algorithm": "sha256",
+        "digest": "9b2d78ade8aced87586523c795b8b76c6241516b8ea7bf969b6fa5818f0e1604"
+      },
+      "tensor_policy": "floating_only"
+    },
+    {
+      "name": "embedded_config.json",
+      "size": 2557,
+      "hash": {
+        "algorithm": "git-blob-sha1",
+        "digest": "62f78f1aba7b1d3bdf47c8bc1557cd6bafdedae8"
+      },
+      "tensor_policy": "not_tensor"
+    },
+    {
+      "name": "generation_config.json",
+      "size": 255,
+      "hash": {
+        "algorithm": "git-blob-sha1",
+        "digest": "2528bb46703f6abf6489b1bd15e6a724ab4525d7"
+      },
+      "tensor_policy": "not_tensor"
+    },
+    {
+      "name": "processor_config.json",
+      "size": 1382,
+      "hash": {
+        "algorithm": "git-blob-sha1",
+        "digest": "b889adcd78015bf5a0139438c5fb0b7067529a61"
+      },
+      "tensor_policy": "not_tensor"
+    },
+    {
+      "name": "split_model.json",
+      "size": 1000,
+      "hash": {
+        "algorithm": "git-blob-sha1",
+        "digest": "9576954b4d4594d715183aabe494d4bc98664a7e"
+      },
+      "tensor_policy": "not_tensor"
+    },
+    {
+      "name": "text_encoder.safetensors",
+      "size": 26231670945,
+      "hash": {
+        "algorithm": "sha256",
+        "digest": "fdb1c082d033a75f13d1f9bcd9600447ee3a06f393bbc7ad01e5a9907f659ee7"
+      },
+      "tensor_policy": "floating_only"
+    },
+    {
+      "name": "text_encoder_config.json",
+      "size": 4377,
+      "hash": {
+        "algorithm": "git-blob-sha1",
+        "digest": "c6148a703195fd3dec6646b6c7db738d8d18295a"
+      },
+      "tensor_policy": "not_tensor"
+    },
+    {
+      "name": "tokenizer.json",
+      "size": 32169626,
+      "hash": {
+        "algorithm": "sha256",
+        "digest": "cc8d3a0ce36466ccc1278bf987df5f71db1719b9ca6b4118264f45cb627bfe0f"
+      },
+      "tensor_policy": "not_tensor"
+    },
+    {
+      "name": "tokenizer_config.json",
+      "size": 2749,
+      "hash": {
+        "algorithm": "git-blob-sha1",
+        "digest": "df4afd629c3e51c2a7ef4e72b967a3f17acbffe1"
+      },
+      "tensor_policy": "not_tensor"
+    },
+    {
+      "name": "transformer-dev.safetensors",
+      "size": 37985738816,
+      "hash": {
+        "algorithm": "sha256",
+        "digest": "aa94922199890d72f57f7f214d1b5ce4ca1e6203cd3eb1fdac6208f88026a5cd"
+      },
+      "tensor_policy": "ltx25_transformer"
+    },
+    {
+      "name": "vae_decoder_av.safetensors",
+      "size": 834306032,
+      "hash": {
+        "algorithm": "sha256",
+        "digest": "9a2c5fc6b8cd6349188d0d8295223f9ed70ea1362ed3f94e9dab10d991db9268"
+      },
+      "tensor_policy": "floating_only"
+    },
+    {
+      "name": "vae_decoder_conv.safetensors",
+      "size": 814351176,
+      "hash": {
+        "algorithm": "sha256",
+        "digest": "c81bc87c8739fbcafb8c33c66b8351ef5232f3a66ea347914f85619d67b206b5"
+      },
+      "tensor_policy": "floating_only"
+    },
+    {
+      "name": "vae_encoder_conv.safetensors",
+      "size": 637887026,
+      "hash": {
+        "algorithm": "sha256",
+        "digest": "5e1be85f6d31ec059853077101ff673fd6c37f3057194432a8b6f1117e2795fd"
+      },
+      "tensor_policy": "floating_only"
+    },
+    {
+      "name": "vocoder.safetensors",
+      "size": 258315824,
+      "hash": {
+        "algorithm": "sha256",
+        "digest": "da8635f84dc97d35aad860810ca86a2fad8e5f4df8073fff23a4d5d5043ea506"
+      },
+      "tensor_policy": "floating_only"
+    }
+  ],
+  "claim": "Pinned identity and admission only; no real inference verified."
+}

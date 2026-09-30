@@ -361,8 +361,6 @@ def _execute(request: dict, *, pack: Path, run: Path, ffmpeg: Path, ffprobe: Pat
              h3_engine: Path | None, h3_shader: Path | None, frames: dict) -> tuple[dict, dict]:
     profile = request["profile"]
     output = run / "candidate.mp4"
-    if profile == LTX_25:
-        raise ValueError("LTX 2.5 has no accessible verified resource inventory; execution rejected")
     _assert_free(run)
     model = _physical(pack / "model", "model", kind="directory")
     if profile == H3:
@@ -397,14 +395,16 @@ def _execute(request: dict, *, pack: Path, run: Path, ffmpeg: Path, ffprobe: Pat
         return admission, source
     if h3_engine is not None or h3_shader is not None:
         raise ValueError("H3 engine arguments are invalid for LTX")
-    from ltx_admission import admit_ltx23
+    from ltx_admission import admit_ltx23, admit_ltx25
     from ltx_plan import build_plan
     from ltx_job import _confirm_tokenizer_patch
-    text_encoder = _physical(pack / "text_encoder", "text encoder", kind="directory")
+    text_encoder = (_physical(pack / "text_encoder", "text encoder", kind="directory")
+                    if profile != LTX_25 else None)
+    admission = (admit_ltx25(profile, model=model) if profile == LTX_25 else
+                 admit_ltx23(profile, model=model, text_encoder=text_encoder))
     plan_request = {key: value for key, value in request.items() if key in WIRE_FIELDS}
     plan = build_plan(plan_request, engine=sys.executable, model=model, text_encoder=text_encoder, output=output,
                       first_frame=str(frames["first"][0]) if "first" in frames else None)
-    admission = admit_ltx23(profile, model=model, text_encoder=text_encoder)
     upstream = _confirm_tokenizer_patch(Path(sys.executable))
     previous = sys.argv
     try:

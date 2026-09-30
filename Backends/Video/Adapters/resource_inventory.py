@@ -55,7 +55,7 @@ def _open_regular(root_fd, name):
         os.close(parent)
 
 
-def inspect_safetensors(file, *, allow_quantized=False):
+def inspect_safetensors(file, *, allow_quantized=False, ltx25_transformer=False):
     """Bounded header inspection; never maps tensor data or creates MLX arrays."""
     file.seek(0)
     raw = file.read(8)
@@ -72,6 +72,9 @@ def inspect_safetensors(file, *, allow_quantized=False):
              "I8": 1, "U8": 1, "I16": 2, "U16": 2, "I32": 4,
              "U32": 4, "I64": 8, "U64": 8, "BOOL": 1}
     dtypes, regions, count = {}, [], 0
+    core_blocks = set()
+    keyframes_embedding = False
+    ff_probe = False
     for name, tensor in header.items():
         if name == "__metadata__":
             # The reference safetensors reader accepts explicit null for its
@@ -98,6 +101,19 @@ def inspect_safetensors(file, *, allow_quantized=False):
         if not allow_quantized and (dtype not in {"BF16", "F16", "F32", "F64"}
                                     or name.endswith((".scales", ".qweight", ".qzeros"))):
             raise ResourceError("Full precision profile contains packed/non-floating or quantized tensors")
+        if ltx25_transformer:
+            match = re.fullmatch(r"transformer\.transformer_blocks\.(\d+)\..+", name)
+            if match:
+                core_blocks.add(int(match.group(1)))
+            if name == "transformer.keyframes_abs_pos_embedding":
+                keyframes_embedding = True
+            if name == "transformer.transformer_blocks.0.ff.proj_in.weight":
+                ff_probe = True
+            if (name.startswith("transformer.transformer_blocks.") or
+                    name == "transformer.keyframes_abs_pos_embedding") and dtype != "BF16":
+                raise ResourceError("LTX 2.5 core transformer must be BF16")
+            if re.fullmatch(r"transformer\.transformer_blocks\.\d+\.(ff|audio_ff)\..*\.bias", name):
+                raise ResourceError("LTX 2.5 feed-forward bias disagrees with its configuration")
         if end > start:
             regions.append((start, end))
         dtypes[dtype] = dtypes.get(dtype, 0) + 1
@@ -111,6 +127,8 @@ def inspect_safetensors(file, *, allow_quantized=False):
         previous = end
     if previous != total - length - 8:
         raise ResourceError("Unaccounted tensor payload")
+    if ltx25_transformer and (core_blocks != set(range(48)) or not keyframes_embedding or not ff_probe):
+        raise ResourceError("LTX 2.5 transformer lacks 48 blocks, keyframes embedding, or FF probe")
     return {"tensors": count, "dtypes": dtypes}
 
 
@@ -128,15 +146,24 @@ def verify_inventory(root, inventory, *, cancelled=lambda: False):
         raise ResourceError("Invalid inventory files")
     names = set()
     for entry in entries:
-        if not isinstance(entry, dict) or set(entry) != {"name", "size", "sha256", "tensor_policy"}:
+        if not isinstance(entry, dict) or set(entry) not in ({"name", "size", "sha256", "tensor_policy"},
+                                                              {"name", "size", "hash", "tensor_policy"}):
             raise ResourceError("Invalid file inventory entry")
         _name(entry["name"])
         if entry["name"] in names or type(entry["size"]) is not int or entry["size"] <= 0:
             raise ResourceError("Duplicate resource or invalid size")
         names.add(entry["name"])
-        if not isinstance(entry["sha256"], str) or not re.fullmatch(r"[0-9a-f]{64}", entry["sha256"]):
-            raise ResourceError("Invalid SHA256")
-        if entry["tensor_policy"] not in {"not_tensor", "floating_only", "quantized_explicit"}:
+        if "sha256" in entry:
+            algorithm, expected = "sha256", entry["sha256"]
+        else:
+            identity = entry["hash"]
+            if type(identity) is not dict or set(identity) != {"algorithm", "digest"}:
+                raise ResourceError("Invalid resource hash identity")
+            algorithm, expected = identity["algorithm"], identity["digest"]
+        if algorithm not in {"sha256", "git-blob-sha1"} or not isinstance(expected, str) or not re.fullmatch(
+                r"[0-9a-f]{64}" if algorithm == "sha256" else r"[0-9a-f]{40}", expected):
+            raise ResourceError("Invalid resource hash identity")
+        if entry["tensor_policy"] not in {"not_tensor", "floating_only", "quantized_explicit", "ltx25_transformer"}:
             raise ResourceError("Unknown tensor policy")
     root_fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
     verified = []
@@ -147,19 +174,29 @@ def verify_inventory(root, inventory, *, cancelled=lambda: False):
                 before = os.fstat(file.fileno())
                 if before.st_size != entry["size"]:
                     raise ResourceError(f"Size mismatch: {entry['name']}")
+                identity = entry.get("hash", {"algorithm": "sha256", "digest": entry.get("sha256")})
                 digest = hashlib.sha256()
+                blob = hashlib.sha1() if identity["algorithm"] == "git-blob-sha1" else None
+                if blob is not None:
+                    blob.update(f"blob {before.st_size}\0".encode("ascii"))
                 for chunk in iter(lambda: file.read(4 * 1024 * 1024), b""):
                     if cancelled():raise InterruptedError("Cancelled during resource verification")
                     digest.update(chunk)
-                if digest.hexdigest() != entry["sha256"]:
+                    if blob is not None:
+                        blob.update(chunk)
+                observed = digest.hexdigest() if blob is None else blob.hexdigest()
+                if observed != identity["digest"]:
                     raise ResourceError(f"Hash mismatch: {entry['name']}")
                 tensors = None
                 if entry["tensor_policy"] != "not_tensor":
-                    tensors = inspect_safetensors(file, allow_quantized=entry["tensor_policy"] == "quantized_explicit")
+                    tensors = inspect_safetensors(file, allow_quantized=entry["tensor_policy"] == "quantized_explicit",
+                                                  ltx25_transformer=entry["tensor_policy"] == "ltx25_transformer")
                 after = os.fstat(file.fileno())
                 if (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns, before.st_ctime_ns) != (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns):
                     raise ResourceError("Resource changed during verification")
-                verified.append({"name": entry["name"], "sha256": digest.hexdigest(), "tensor_header": tensors})
+                verified.append({"name": entry["name"], "sha256": digest.hexdigest(),
+                                 "source_hash": {"algorithm": identity["algorithm"], "digest": observed},
+                                 "tensor_header": tensors})
     finally:
         os.close(root_fd)
     return {"schema_version": 1, "profile": inventory["profile"], "verified_files": verified,
