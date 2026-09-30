@@ -1,4 +1,5 @@
 @preconcurrency import AVFoundation
+import AudioToolbox
 import CryptoKit
 import DInference
 import Darwin
@@ -8,20 +9,21 @@ import VideoToolbox
 public enum VideoMediaInspector {
     public static func inspect(at url: URL, expected: VideoRequest,
                                timeoutSeconds: Double = 60) async throws -> VideoAssetMetadata {
-        try VideoExecutionCapability.wan21.validate(expected)
+        let policy = try VideoOutputInspectionPolicy.resolve(for: expected)
         let result = try await inspectShape(at: url, expected: VideoMediaShape(width: expected.width, height: expected.height,
-            frameCount: expected.frameCount, frameRate: expected.frameRate), timeoutSeconds: timeoutSeconds)
+            frameCount: expected.frameCount, frameRate: expected.frameRate), policy: policy,
+            timeoutSeconds: timeoutSeconds)
         try result.validate(matching: expected)
         return result
     }
 
-    /// Bounded import of the current silent, constant-rate, non-reordered H264 format.
-    /// Probe values are expectations only; the existing full sample/decode pass proves them.
+    /// Bounded import of either silent H264 or H264 with one AAC track. An import
+    /// never acquires a model identity from the media that happens to be present.
     public static func inspectImported(at url: URL, timeoutSeconds: Double = 60) async throws -> VideoAssetMetadata {
-        try await inspectShape(at: url, expected: nil, timeoutSeconds: timeoutSeconds)
+        try await inspectShape(at: url, expected: nil, policy: nil, timeoutSeconds: timeoutSeconds)
     }
 
-    private static func inspectShape(at url: URL, expected: VideoMediaShape?,
+    private static func inspectShape(at url: URL, expected: VideoMediaShape?, policy: VideoOutputInspectionPolicy?,
                                      timeoutSeconds: Double) async throws -> VideoAssetMetadata {
         guard timeoutSeconds.isFinite, timeoutSeconds > 0 else {
             throw VideoInspectionError.invalid("检查期限必须是正有限秒数")
@@ -38,7 +40,7 @@ public enum VideoMediaInspector {
                 controller.stop(.timedOut)
             }
             do {
-                let metadata = try await inspectFile(at: url, expected: expected,
+                let metadata = try await inspectFile(at: url, expected: expected, policy: policy,
                                                      maximumBytes: maximumBytes,
                                                      controller: controller)
                 try controller.finishSuccessfully()
@@ -72,7 +74,8 @@ public enum VideoMediaInspector {
         return digest
     }
 
-    private static func inspectFile(at url: URL, expected requestedShape: VideoMediaShape?, maximumBytes: UInt64,
+    private static func inspectFile(at url: URL, expected requestedShape: VideoMediaShape?,
+                                    policy: VideoOutputInspectionPolicy?, maximumBytes: UInt64,
                                     controller: VideoInspectionCancellation) async throws -> VideoAssetMetadata {
         let opened = try VideoSafeFile.open(url, maximumBytes: maximumBytes)
         defer { Darwin.close(opened.descriptor) }
@@ -107,8 +110,20 @@ public enum VideoMediaInspector {
         guard videoTracks.count == 1 else {
             throw VideoInspectionError.invalid("MP4 必须且只能包含一条视频轨")
         }
-        guard audioTracks.isEmpty else {
-            throw VideoInspectionError.invalid("MP4 不得包含音轨")
+        let hasAudio = !audioTracks.isEmpty
+        guard audioTracks.count <= 1 else {
+            throw VideoInspectionError.invalid("MP4 包含额外的音轨、视频轨或其他轨道")
+        }
+        if hasAudio {
+            let allTracks = try await asset.load(.tracks)
+            guard allTracks.count == 2 else {
+                throw VideoInspectionError.invalid("音视频 MP4 包含额外轨道")
+            }
+        }
+        if let policy {
+            guard hasAudio == (policy.requiredAudioSampleRate != nil) else {
+                throw VideoInspectionError.invalid("音轨数量与执行配方不符")
+            }
         }
         let track = videoTracks[0]
         let transform = try await track.load(.preferredTransform)
@@ -128,13 +143,15 @@ public enum VideoMediaInspector {
             try controller.check()
             let frame = try await track.load(.minFrameDuration)
             try controller.check()
-            let duration = try await asset.load(.duration)
+            let range = try await track.load(.timeRange)
             try controller.check()
             guard let description = descriptions.first,
                   frame.isNumeric, frame > .zero, frame.value <= Int32.max,
-                  duration.isNumeric, duration > .zero else { throw VideoInspectionError.invalid("需要明确恒定帧时钟") }
+                  range.duration.isNumeric, range.duration > .zero else {
+                throw VideoInspectionError.invalid("需要明确恒定帧时钟")
+            }
             let dimensions = CMVideoFormatDescriptionGetDimensions(description)
-            let count = duration.seconds / frame.seconds
+            let count = range.duration.seconds / frame.seconds
             guard count.isFinite, count > 0, count <= 7200, abs(count - count.rounded()) < 0.000001 else {
                 throw VideoInspectionError.limit("导入视频帧数必须有界且与时长一致")
             }
@@ -151,17 +168,34 @@ public enum VideoMediaInspector {
 
         let expectedDuration = CMTime(value: Int64(expected.frameCount) * Int64(expected.frameRate.denominator),
                                       timescale: expected.frameRate.numerator)
+        let frameDuration = CMTime(value: Int64(expected.frameRate.denominator),
+                                   timescale: expected.frameRate.numerator)
         let assetDuration = try await asset.load(.duration)
         let timeRange = try await track.load(.timeRange)
         guard timeRange.start == .zero,
-              exactTime(assetDuration, equals: expectedDuration),
               exactTime(timeRange.duration, equals: expectedDuration) else {
             throw VideoInspectionError.invalid("视频起点或有理数时长与固定生成请求不一致")
+        }
+        if !hasAudio {
+            guard exactTime(assetDuration, equals: expectedDuration) else {
+                throw VideoInspectionError.invalid("无声视频容器时长与请求不一致")
+            }
         }
         try controller.check()
 
         try verifyCompressedTiming(asset: asset, track: track, expected: expected,
-                                   controller: controller)
+                                   allowsReordering: hasAudio, controller: controller)
+
+        let audioTrack: InspectedAudioHeader?
+        if let source = audioTracks.first {
+            audioTrack = try await inspectAudioHeader(
+                source, assetDuration: assetDuration, videoDuration: expectedDuration,
+                frameDuration: frameDuration, expectedSampleRate: policy?.requiredAudioSampleRate,
+                controller: controller
+            )
+        } else {
+            audioTrack = nil
+        }
 
         let reader = try AVAssetReader(asset: asset)
         let outputSettings: [String: Any] = [
@@ -193,6 +227,16 @@ public enum VideoMediaInspector {
             throw VideoInspectionError.invalid("视频未完整解码：\(reader.error?.localizedDescription ?? "读取被中断")")
         }
         try controller.check()
+        let audioMetadata: VideoAudioTrackMetadata?
+        if let audioTrack {
+            audioMetadata = try decodeEveryAudioSample(asset: asset, track: audioTrack.track,
+                                                       sampleRate: audioTrack.sampleRate,
+                                                       videoDuration: expectedDuration, frameDuration: frameDuration,
+                                                       controller: controller)
+            try controller.check()
+        } else {
+            audioMetadata = nil
+        }
         VideoInspectionTestHooks.reach(.afterFullDecode)
         try controller.check()
 
@@ -212,9 +256,10 @@ public enum VideoMediaInspector {
             width: expected.width, height: expected.height, frameCount: expected.frameCount,
             frameRate: expected.frameRate,
             durationNumerator: Int64(expected.frameCount) * Int64(expected.frameRate.denominator),
-            durationDenominator: expected.frameRate.numerator, codec: "h264", hasAudio: false,
-            byteCount: opened.identity.size, contentSHA256: initialHash
+            durationDenominator: expected.frameRate.numerator, codec: "h264", hasAudio: hasAudio,
+            byteCount: opened.identity.size, contentSHA256: initialHash, audioTrack: audioMetadata
         )
+        try metadata.validateStoredMedia()
         VideoInspectionTestHooks.reach(.beforeSuccessfulFinish)
         try controller.check()
         return metadata
@@ -264,7 +309,7 @@ public enum VideoMediaInspector {
     }
 
     private static func verifyCompressedTiming(asset: AVAsset, track: AVAssetTrack,
-                                               expected: VideoMediaShape,
+                                               expected: VideoMediaShape, allowsReordering: Bool,
                                                controller: VideoInspectionCancellation) throws {
         let reader = try AVAssetReader(asset: asset)
         let output = AVAssetReaderTrackOutput(track: track, outputSettings: nil)
@@ -282,6 +327,8 @@ public enum VideoMediaInspector {
                                  timescale: expected.frameRate.numerator)
         var frameIndex = 0
         var actualEnd = CMTime.invalid
+        var seenPresentationFrames = Set<Int>()
+        var previousDTS: CMTime?
         do {
             while true {
                 try controller.check()
@@ -290,23 +337,51 @@ public enum VideoMediaInspector {
                 guard let sample = output.copyNextSampleBuffer() else { break }
                 try controller.check()
                 let sampleCount = CMSampleBufferGetNumSamples(sample)
-                if sampleCount == 0 { continue }
+                if sampleCount == 0 {
+                    if allowsReordering { throw VideoInspectionError.invalid("H264 包含空采样") }
+                    continue
+                }
                 guard sampleCount == 1, frameIndex < expected.frameCount else {
                     throw VideoInspectionError.invalid("H264 采样表不是每帧一个样本")
                 }
-                let expectedPTS = CMTime(value: Int64(frameIndex) * Int64(expected.frameRate.denominator),
-                                         timescale: expected.frameRate.numerator)
                 let pts = CMSampleBufferGetPresentationTimeStamp(sample)
                 let duration = CMSampleBufferGetDuration(sample)
-                guard exactTime(pts, equals: expectedPTS), duration > .zero,
-                      exactTime(duration, equals: frameDuration) else {
-                    throw VideoInspectionError.invalid("第 \(frameIndex) 个 H264 样本的 PTS 或时长不连续")
-                }
                 let decodeTime = CMSampleBufferGetDecodeTimeStamp(sample)
-                if decodeTime.isNumeric, !exactTime(decodeTime, equals: pts) {
-                    throw VideoInspectionError.invalid("H264 视频包含重排帧")
+                guard duration > .zero, exactTime(duration, equals: frameDuration) else {
+                    throw VideoInspectionError.invalid("H264 样本时长不连续")
                 }
-                actualEnd = CMTimeAdd(pts, duration)
+                if allowsReordering {
+                    guard pts.isNumeric, pts >= .zero else {
+                        throw VideoInspectionError.invalid("H264 展示时间无效")
+                    }
+                    let position = pts.seconds / frameDuration.seconds
+                    guard position.isFinite, position >= 0, position < Double(expected.frameCount),
+                          let index = Int(exactly: position.rounded()), index < expected.frameCount,
+                          !seenPresentationFrames.contains(index),
+                          exactTime(pts, equals: CMTime(value: Int64(index) * Int64(expected.frameRate.denominator),
+                                                       timescale: expected.frameRate.numerator)) else {
+                        throw VideoInspectionError.invalid("H264 展示时间未唯一覆盖完整帧网格")
+                    }
+                    guard decodeTime.isNumeric, !decodeTime.isIndefinite,
+                          decodeTime <= pts,
+                          previousDTS.map({ decodeTime > $0 }) ?? true else {
+                        throw VideoInspectionError.invalid("H264 解码时间无效或不递增")
+                    }
+                    _ = seenPresentationFrames.insert(index)
+                    previousDTS = decodeTime
+                    let end = CMTimeAdd(pts, duration)
+                    if !actualEnd.isNumeric || end > actualEnd { actualEnd = end }
+                } else {
+                    let expectedPTS = CMTime(value: Int64(frameIndex) * Int64(expected.frameRate.denominator),
+                                             timescale: expected.frameRate.numerator)
+                    guard exactTime(pts, equals: expectedPTS) else {
+                        throw VideoInspectionError.invalid("第 \(frameIndex) 个 H264 样本的 PTS 不连续")
+                    }
+                    if decodeTime.isNumeric, !exactTime(decodeTime, equals: pts) {
+                        throw VideoInspectionError.invalid("H264 视频包含重排帧")
+                    }
+                    actualEnd = CMTimeAdd(pts, duration)
+                }
                 frameIndex += 1
             }
             try controller.check()
@@ -315,9 +390,138 @@ public enum VideoMediaInspector {
             throw error
         }
         guard reader.status == .completed, frameIndex == expected.frameCount,
+              (!allowsReordering || seenPresentationFrames.count == expected.frameCount),
               exactTime(actualEnd, equals: expectedEnd) else {
             throw VideoInspectionError.invalid("H264 采样表未证明完整帧数与有理数终点")
         }
+    }
+
+    private struct InspectedAudioHeader {
+        let track: AVAssetTrack
+        let sampleRate: Int
+    }
+
+    private static func inspectAudioHeader(_ track: AVAssetTrack, assetDuration: CMTime,
+                                           videoDuration: CMTime, frameDuration: CMTime,
+                                           expectedSampleRate: Int?,
+                                           controller: VideoInspectionCancellation) async throws -> InspectedAudioHeader {
+        try controller.check()
+        let descriptions = try await track.load(.formatDescriptions)
+        let range = try await track.load(.timeRange)
+        try controller.check()
+        guard !descriptions.isEmpty else { throw VideoInspectionError.invalid("AAC 音轨没有格式说明") }
+        var sampleRate: Int?
+        for description in descriptions {
+            guard let basic = CMAudioFormatDescriptionGetStreamBasicDescription(description)?.pointee,
+                  basic.mFormatID == kAudioFormatMPEG4AAC,
+                  let rate = Int(exactly: basic.mSampleRate), [32_000, 48_000].contains(rate),
+                  basic.mChannelsPerFrame == 2,
+                  expectedSampleRate.map({ $0 == rate }) ?? true,
+                  sampleRate.map({ $0 == rate }) ?? true else {
+                throw VideoInspectionError.invalid("音轨必须是指定采样率的双声道 AAC")
+            }
+            sampleRate = rate
+        }
+        guard let sampleRate, range.start.isNumeric, range.duration.isNumeric,
+              range.duration > .zero, assetDuration.isNumeric else {
+            throw VideoInspectionError.invalid("AAC 音轨时间范围无效")
+        }
+        let tolerance = audioVisualTolerance(frameDuration: frameDuration, sampleRate: sampleRate)
+        let audioEnd = CMTimeAdd(range.start, range.duration)
+        let trackEnd = max(videoDuration.seconds, audioEnd.seconds)
+        guard audioEnd.isNumeric, abs(range.start.seconds) <= tolerance,
+              abs(audioEnd.seconds - videoDuration.seconds) <= tolerance,
+              abs(assetDuration.seconds - trackEnd) <= tolerance else {
+            throw VideoInspectionError.invalid("AAC 音轨或容器时间线与视频不符")
+        }
+        return InspectedAudioHeader(track: track, sampleRate: sampleRate)
+    }
+
+    private static func decodeEveryAudioSample(asset: AVAsset, track: AVAssetTrack,
+                                               sampleRate: Int, videoDuration: CMTime,
+                                               frameDuration: CMTime,
+                                               controller: VideoInspectionCancellation) throws -> VideoAudioTrackMetadata {
+        let reader = try AVAssetReader(asset: asset)
+        let settings: [String: Any] = [
+            AVFormatIDKey: kAudioFormatLinearPCM,
+            AVLinearPCMBitDepthKey: 32,
+            AVLinearPCMIsFloatKey: true,
+            AVLinearPCMIsBigEndianKey: false,
+            AVLinearPCMIsNonInterleaved: false
+        ]
+        let output = AVAssetReaderTrackOutput(track: track, outputSettings: settings)
+        output.alwaysCopiesSampleData = false
+        guard reader.canAdd(output) else { throw VideoInspectionError.invalid("无法建立 AAC PCM 解码输出") }
+        reader.add(output)
+        guard reader.startReading() else {
+            throw VideoInspectionError.invalid("无法开始 AAC 完整解码：\(reader.error?.localizedDescription ?? "未知原因")")
+        }
+        var firstPTS: CMTime?
+        var nextPTS: CMTime?
+        var decodedCount: Int64 = 0
+        do {
+            while true {
+                try controller.check()
+                VideoInspectionTestHooks.reach(.audioDecodedSampleRead)
+                try controller.check()
+                guard let sample = output.copyNextSampleBuffer() else { break }
+                try controller.check()
+                guard CMSampleBufferDataIsReady(sample),
+                      let format = CMSampleBufferGetFormatDescription(sample),
+                      let basic = CMAudioFormatDescriptionGetStreamBasicDescription(format)?.pointee,
+                      basic.mFormatID == kAudioFormatLinearPCM,
+                      basic.mSampleRate == Double(sampleRate), basic.mChannelsPerFrame == 2,
+                      basic.mBitsPerChannel == 32,
+                      (basic.mFormatFlags & kAudioFormatFlagIsFloat) != 0,
+                      (basic.mFormatFlags & kAudioFormatFlagIsBigEndian) == 0,
+                      (basic.mFormatFlags & kAudioFormatFlagIsNonInterleaved) == 0,
+                      basic.mFramesPerPacket == 1, basic.mBytesPerFrame == 8,
+                      let bytes = CMSampleBufferGetDataBuffer(sample) else {
+                    throw VideoInspectionError.invalid("AAC 未完整解码为双声道 PCM")
+                }
+                let count = CMSampleBufferGetNumSamples(sample)
+                let (minimumBytes, byteOverflow) = count.multipliedReportingOverflow(by: 8)
+                let (sum, countOverflow) = decodedCount.addingReportingOverflow(Int64(count))
+                guard count > 0, !byteOverflow, !countOverflow,
+                      CMBlockBufferGetDataLength(bytes) >= minimumBytes else {
+                    throw VideoInspectionError.invalid("PCM 样本数量或数据长度无效")
+                }
+                let pts = CMSampleBufferGetPresentationTimeStamp(sample)
+                let duration = CMTime(value: Int64(count), timescale: Int32(sampleRate))
+                guard pts.isNumeric, !pts.isIndefinite,
+                      nextPTS.map({ exactTime(pts, equals: $0) }) ?? true else {
+                    throw VideoInspectionError.invalid("AAC PCM 时间线不连续")
+                }
+                let declaredDuration = CMSampleBufferGetDuration(sample)
+                if declaredDuration.isNumeric && !exactTime(declaredDuration, equals: duration) {
+                    throw VideoInspectionError.invalid("AAC PCM 时长与样本数矛盾")
+                }
+                if firstPTS == nil { firstPTS = pts }
+                nextPTS = CMTimeAdd(pts, duration)
+                decodedCount = sum
+            }
+            try controller.check()
+        } catch {
+            cancelAndDrain(reader, output: output)
+            throw error
+        }
+        guard reader.status == .completed, let firstPTS, let nextPTS, decodedCount > 0,
+              firstPTS.timescale > 0, nextPTS.isNumeric else {
+            throw VideoInspectionError.invalid("AAC PCM 未完整解码：\(reader.error?.localizedDescription ?? "读取未完成")")
+        }
+        let tolerance = audioVisualTolerance(frameDuration: frameDuration, sampleRate: sampleRate)
+        guard abs(firstPTS.seconds) <= tolerance,
+              abs(nextPTS.seconds - videoDuration.seconds) <= tolerance else {
+            throw VideoInspectionError.invalid("AAC PCM 与视频时间线未对齐")
+        }
+        return VideoAudioTrackMetadata(codec: "aac", sampleRate: sampleRate, channels: 2,
+            decodedSampleCount: decodedCount, startNumerator: firstPTS.value,
+            startDenominator: firstPTS.timescale, durationNumerator: decodedCount,
+            durationDenominator: Int32(sampleRate))
+    }
+
+    private static func audioVisualTolerance(frameDuration: CMTime, sampleRate: Int) -> Double {
+        frameDuration.seconds + 2 * 1024 / Double(sampleRate)
     }
 
     private static func cancelAndDrain(_ reader: AVAssetReader, output: AVAssetReaderTrackOutput) {
@@ -553,6 +757,7 @@ enum VideoInspectionTestCheckpoint: Sendable, Equatable {
     case initialHashChunk
     case compressedSampleRead
     case decodedSampleRead
+    case audioDecodedSampleRead
     case afterFullDecode
     case finalHashChunk
     case beforeSuccessfulFinish
