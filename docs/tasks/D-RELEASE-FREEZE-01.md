@@ -161,7 +161,7 @@ H3原生：固定38文件144,023,606,861字节原件的独立APFS clone，通过
 
 最终b315ffa仅上述视频实名及对应测试变化。推荐启动器已成功启动最终包；随后CUA明确返回Mac锁屏，未继续界面操作。**不能说最终b315ffa已完成与父版相同的原生复验**；下一次解锁只补受影响标题/登记恢复及未验GUI，不无理由重跑全部模型。H32追加 `native-final/lock-after-final-build.json`；未修改锁屏策略，不轮询/催促。
 
-唯一推荐启动器与同树Xcode Run说明：[精简试用](../RELEASE_FREEZE_TRY.zh-CN.md)。`delivery/samples/首发文字试用.dproject`是本次测试项目快照，依赖的权重不在App/项目内。真实首尾帧H3、旧Wan/MRT2、H3 Store修复沿r1证据复用，不冒称最终同包全验。画布滚轮100→50%、中键视口移动、恢复100%已观察；空白平移/端口/拖放全矩阵和真人IME尚未关闭。
+唯一推荐启动器与同树Xcode Run说明：[精简试用](../RELEASE_FREEZE_TRY.zh-CN.md)。`delivery/samples/首发文字试用.dproject`是本次测试项目快照，其Qwen/H3生成权重不在App/项目内；既有Pitch评估引擎的包内ONNX例外仍按MODEL_SUPPORT_AND_RELEASE保留发行责任，不能称本包已经实现最终无权重分发。真实首尾帧H3、旧Wan/MRT2、H3 Store修复沿r1证据复用，不冒称最终同包全验。画布滚轮100→50%、中键视口移动、恢复100%已观察；空白平移/端口/拖放全矩阵和真人IME尚未关闭。
 
 ### 实施来源、审核与剩余预算
 
