@@ -7,13 +7,8 @@ enum WorkflowExternalVideoOperations {
     static let operations = ExternalVideoExecutionProfile.allCases.map(operation)
     private static func operation(_ profile: ExternalVideoExecutionProfile) -> WorkflowOperation {
         let h3 = profile == .h3BF16Full
-        let title: String
-        switch profile {
-        case .h3BF16Full: title = "MiniMax H3 Base FL2VA · BF16"
-        case .ltx23BF16Full: title = "LTX 2.3 dev · BF16"
-        case .ltx23Q8GemmaQ4: title = "LTX 2.3 dev · Q8 / Gemma Q4"
-        case .ltx25BF16Full: title = "LTX-2.5 dev · BF16"
-        }
+        let recipe = WorkflowVideoRecipe(profile: profile)
+        let title = recipe.displayName
         let detail = h3
             ? "FL2VA：文字及可选首帧、尾帧，输出含声音的视频；公开 Base 已作 CFG 蒸馏。首帧按目标尺寸拉伸、尾帧填满裁切；流式加载不改变精度。未接入 Ref2VA。"
             : "非蒸馏 dev：文字及可选首帧，输出含声音的视频；流式加载扩散块，文字编码器和解码器仍需各自的内存。不接受尾帧或任意参考列表。"
@@ -34,7 +29,6 @@ enum WorkflowExternalVideoOperations {
             fields += [.init("negativePrompt", "负向提示", .text(multiline: true), .text("")),
                        .init("stg", "STG 引导", .decimal, .decimal(0))]
         }
-        let recipe = WorkflowVideoRecipe(profile: profile)
         var inputs: [WorkflowPortDefinition] = [.init("prompt", "提示", kinds: [.text], required: false),
             .init("firstFrame", "首帧 PNG", kinds: [.image], required: false)]
         if h3 { inputs.append(.init("lastFrame", "尾帧 PNG", kinds: [.image], required: false)) }

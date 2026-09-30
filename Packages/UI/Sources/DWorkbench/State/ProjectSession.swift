@@ -1081,6 +1081,7 @@ public final class ProjectSession {
             } catch { await access.release(lease); throw error }
         }
         let identity: String
+        var displayName = url.lastPathComponent
         if kind == .image, let library = modelLibrary {
             let id = try await library.registerExisting(at: url)
             let lease = try await library.acquire(id)
@@ -1102,18 +1103,19 @@ public final class ProjectSession {
                 case .video:
                     if FileManager.default.fileExists(atPath: lease.url.appendingPathComponent("D-VIDEO-PACK.json").path) {
                         let candidates = session.videoAdapters
-                        var matches: [ModelReference] = []
+                        var matches: [(WorkflowVideoAdapter, ModelReference)] = []
                         // Registration validators are read-only and do not load weights.
                         for adapter in candidates {
                             try Task.checkCancellation()
-                            do { matches.append(try await adapter.validateModel(lease.url)) }
+                            do { matches.append((adapter, try await adapter.validateModel(lease.url))) }
                             catch is CancellationError { throw CancellationError() }
                             catch { /* Nonmatching fixed recipe only; no execution fallback. */ }
                         }
-                        guard matches.count == 1, let value = matches.first else {
+                        guard matches.count == 1, let (adapter, value) = matches.first else {
                             throw WorkflowIssue("视频资源包未匹配唯一的已安装实现；请检查模型版本与配方。")
                         }
                         revision = value.revision
+                        displayName = WorkflowVideoRecipe(profile: adapter.profile).displayName
                     } else {
                         guard let validate = session.validateVideoModel else { throw WorkflowIssue("T2V 实现未安装。") }
                         revision = try await validate(lease.url).revision
@@ -1125,11 +1127,11 @@ public final class ProjectSession {
                 guard store === owner, !isChangingProject, !closePending else { throw WorkflowIssue("工作区已切换。") }
                 identity = kind.rawValue + ":" + (revision ?? lease.url.lastPathComponent)
                 try WorkflowModelBookmarks(settings: settings).remember(identity: identity, kind: kind,
-                    name: lease.url.lastPathComponent, bookmark: lease.bookmark)
+                    name: displayName, bookmark: lease.bookmark)
                 await access.release(lease)
             } catch { await access.release(lease); throw error }
         }
-        let choice = WorkflowModelChoice(id: identity, kind: kind, displayName: url.lastPathComponent)
+        let choice = WorkflowModelChoice(id: identity, kind: kind, displayName: displayName)
         if !explicitModelChoices.contains(where: { $0.id == identity }) { explicitModelChoices.append(choice) }
         refreshWorkflowModels()
         return choice
@@ -1191,7 +1193,9 @@ public final class ProjectSession {
                     displayName: "SwiftF0 0.1.2 · 固定开发资源"))
             }
             choices = choices.map { choice in
-                let name = ModelNodeCatalog.entries.first { choice.id == choice.kind.rawValue + ":" + $0.revision }?.title
+                let videoName = session?.videoAdapters.first { choice.id == "video:" + $0.modelIdentity }
+                    .map { WorkflowVideoRecipe(profile: $0.profile).displayName }
+                let name = videoName ?? ModelNodeCatalog.entries.first { choice.id == choice.kind.rawValue + ":" + $0.revision }?.title
                 return .init(id: choice.id, kind: choice.kind, displayName: name ?? choice.displayName)
             }
             explicitModelChoices = choices

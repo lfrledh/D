@@ -5,6 +5,14 @@ import Foundation
 public struct WorkflowVideoRecipe: Sendable {
     public let profile: ExternalVideoExecutionProfile
     public var operationID: String { "d.video." + profile.rawValue }
+    public var displayName: String {
+        switch profile {
+        case .h3BF16Full: "MiniMax H3 Base FL2VA · BF16"
+        case .ltx23BF16Full: "LTX 2.3 dev · BF16"
+        case .ltx23Q8GemmaQ4: "LTX 2.3 dev · Q8 / Gemma Q4"
+        case .ltx25BF16Full: "LTX-2.5 dev · BF16"
+        }
+    }
     public init(profile: ExternalVideoExecutionProfile) { self.profile = profile }
 
     public func request(node: WorkflowNode, prompt: String, seed: UInt64,
