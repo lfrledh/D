@@ -3,6 +3,8 @@
 public enum ExternalVideoExecutionProfile: String, Sendable, Codable, CaseIterable {
     case h3BF16Full = "minimax-h3-fl2va-bf16-full-v1"
     case ltx23BF16Full = "ltx-2.3-dev-bf16-full-v1"
+    /// Explicit development configuration; never presented as the BF16 full recipe.
+    case ltx23Q8GemmaQ4 = "ltx-2.3-dev-q8-gemma3-q4-test-v1"
     case ltx25BF16Full = "ltx-2.5-dev-bf16-full-v1"
 
     public var reference: ExecutionProfileReference {
@@ -31,7 +33,7 @@ public enum ExternalVideoExecutionProfile: String, Sendable, Codable, CaseIterab
                 throw InferenceFailure.invalidRequest("Request does not match the full H3 FL2VA recipe.")
             }
 
-        case .ltx23BF16Full, .ltx25BF16Full:
+        case .ltx23BF16Full, .ltx23Q8GemmaQ4, .ltx25BF16Full:
             guard case .some(.ltx(_, let spatiotemporalGuidance)) = request.adapterOptions else {
                 throw InferenceFailure.invalidRequest("LTX requires LTX adapter options.")
             }

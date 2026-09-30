@@ -4,6 +4,15 @@ import Testing
 
 @Suite("External video execution profile values")
 struct ExternalVideoExecutionProfileTests {
+    @Test("Quantized LTX test identity cannot be substituted for the full recipe")
+    func quantizedIdentity() throws {
+        let value = ltxRequest(profile: .ltx23Q8GemmaQ4)
+        try ExternalVideoExecutionProfile.ltx23Q8GemmaQ4.validate(value)
+        #expect(throws: InferenceFailure.self) {
+            try ExternalVideoExecutionProfile.ltx23BF16Full.validate(value)
+        }
+        #expect(try JSONDecoder().decode(VideoRequest.self, from: JSONEncoder().encode(value)) == value)
+    }
     private let unicodePrompt = "镜头 🌅 e\u{301}"
 
     private func request(
