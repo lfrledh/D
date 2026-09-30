@@ -146,7 +146,7 @@ public struct ACERequest: Codable, Sendable, Equatable {
         }
     }
 
-    static func validateReference(_ source: AudioSourceReference) throws {
+    public static func validateReference(_ source: AudioSourceReference) throws {
         guard source.url.isFileURL, source.url.path.hasPrefix("/"),
               source.url.host == nil || source.url.host == "" || source.url.host == "localhost",
               source.frameCount > 0, source.sampleRate == 48_000, source.channels == 2,

@@ -75,10 +75,10 @@ public actor ExternalACEBackend: InferenceBackend {
         let reference = ace.referenceAudio
         var originals: [AudioSourceReference] = []
         do {
-            let frozenSource = try Self.freeze(source, role: "source", into: run)
             if let source { originals.append(source) }
-            let frozenReference = try Self.freeze(reference, role: "reference", into: run)
+            let frozenSource = try Self.freeze(source, role: "source", into: run)
             if let reference { originals.append(reference) }
+            let frozenReference = try Self.freeze(reference, role: "reference", into: run)
             let frozenACE = ACERequest(executionProfile: ace.executionProfile, vocal: ace.vocal,
                 bpm: ace.bpm, keyScale: ace.keyScale, timeSignature: ace.timeSignature,
                 steps: ace.steps, guidanceScale: ace.guidanceScale,
@@ -138,8 +138,7 @@ public actor ExternalACEBackend: InferenceBackend {
                 throw stoppedError
             }
             try Self.finishStopped(access: access, confirmation: configuration.confirmDeployment)
-            try Self.verify(originals)
-            try inventory.confirmUnchanged()
+            try await Self.verifyStopped(originals, inventory: inventory)
             let recordURL = MRT2ReportCommit.observedURL(job: job, accessConfigured: access != nil)
             let (recordData, recordIdentity) = try AudioFileSystem.readRegularFile(
                 recordURL, label: "ACE pending result", maximumBytes: 2 * 1024 * 1024)
@@ -171,6 +170,8 @@ public actor ExternalACEBackend: InferenceBackend {
                 "requestedFrames": String(requestedFrames),
                 "effectiveFrames": String(try Self.effectiveFrames(terminal)),
                 "deliveredFrames": String(terminal.artifact.frameCount),
+                "tailPaddingFrames": String(max(0, terminal.artifact.frameCount - requestedFrames)),
+                "shortfallFrames": String(max(0, requestedFrames - terminal.artifact.frameCount)),
                 "requestedSource": source?.url.path ?? "",
                 "sourceSHA256": source?.sha256 ?? "",
                 "referenceSHA256": reference?.sha256 ?? "",
@@ -178,8 +179,8 @@ public actor ExternalACEBackend: InferenceBackend {
             ])
         } catch {
             let stoppedError = error
-            do { try Self.verify(originals) }
-            catch { throw InferenceFailure.backendFailed("ACE input mutation detected after provider stop: \(error.localizedDescription)") }
+            do { try await Self.verifyStopped(originals, inventory: inventory) }
+            catch { throw InferenceFailure.backendFailed("ACE input or deployment mutation detected after provider stop: \(error.localizedDescription)") }
             if stoppedError is CancellationError { throw CancellationError() }
             throw InferenceFailure.backendFailed("ACE execution failed; diagnostics retained at \(run.path): \(stoppedError.localizedDescription)")
         }
@@ -195,6 +196,16 @@ public actor ExternalACEBackend: InferenceBackend {
 
     private static func verify(_ references: [AudioSourceReference]) throws {
         for reference in references { _ = try ACEInputValidation.check(reference) }
+    }
+
+    /// A detached read-only audit has its own cancellation state. It must complete after
+    /// the process bridge drains, including when the caller task was cancelled.
+    private static func verifyStopped(_ references: [AudioSourceReference],
+                                      inventory: ACEModelInventory) async throws {
+        try await Task.detached(priority: .utility) {
+            try Self.verify(references)
+            try inventory.confirmUnchanged()
+        }.value
     }
 
     private static func freeze(_ reference: AudioSourceReference?, role: String,

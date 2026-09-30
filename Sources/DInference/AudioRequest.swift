@@ -129,10 +129,16 @@ public struct AudioRequest: Codable, Sendable, Equatable {
                 throw InferenceFailure.invalidRequest("ACE seed exceeds UInt32.")
             }
             if let source { try ACERequest.validateReference(source) }
-            let grid = durationSeconds * 10
-            guard grid.isFinite, grid <= Double(Int64.max / 4_800),
-                  abs(grid.rounded() - grid) < 0.000_001 else {
-                throw InferenceFailure.invalidRequest("ACE duration requires the official 0.1-second grid.")
+            let frames = durationSeconds * 48_000
+            guard frames.isFinite, frames <= Double(Int64.max),
+                  abs(frames.rounded() - frames) < 0.000_001 else {
+                throw InferenceFailure.invalidRequest("ACE duration must identify exact 48 kHz frames.")
+            }
+            if source == nil {
+                let grid = durationSeconds * 10
+                guard abs(grid.rounded() - grid) < 0.000_001 else {
+                    throw InferenceFailure.invalidRequest("ACE generation requires the official 0.1-second grid.")
+                }
             }
             switch operation {
             case .generate:
@@ -152,7 +158,7 @@ public struct AudioRequest: Codable, Sendable, Equatable {
                 }
             }
             if let source {
-                guard Int64(grid.rounded()) * 4_800 == source.frameCount else {
+                guard Int64(frames.rounded()) == source.frameCount else {
                     throw InferenceFailure.invalidRequest("ACE edit duration must equal exact source frames.")
                 }
             }

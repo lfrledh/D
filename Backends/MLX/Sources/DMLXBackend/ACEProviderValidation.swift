@@ -95,7 +95,11 @@ enum ACEProviderValidation {
               try metadata["requestedFrames"]?.requiredInteger(context: "ACE requested frames") == expected.requestedFrames,
               try metadata["deliveredFrames"]?.requiredInteger(context: "ACE delivered frames") == result.artifact.frameCount,
               let effective = try metadata["effectiveFrames"]?.requiredInteger(context: "ACE effective frames"),
-              effective > 0, result.artifact.frameCount > 0,
+              effective == expected.requestedFrames, result.artifact.frameCount > 0,
+              try metadata["tailPaddingFrames"]?.requiredInteger(context: "ACE tail padding")
+                == max(0, result.artifact.frameCount - expected.requestedFrames),
+              try metadata["shortfallFrames"]?.requiredInteger(context: "ACE shortfall")
+                == max(0, expected.requestedFrames - result.artifact.frameCount),
               metadata["sourceSHA256"] == expected.source.map({ .string($0.sha256) }) ?? .null,
               metadata["referenceSHA256"] == expected.reference.map({ .string($0.sha256) }) ?? .null else {
             throw InferenceFailure.backendFailed("ACE result does not match frozen request, sources, precision or length facts.")
@@ -115,6 +119,22 @@ enum ACEProviderValidation {
                   inventory.files.contains(where: { $0.file.path == path && $0.file.size == size
                     && $0.file.sha256 == digest && $0.file.role == role }) else {
                 throw InferenceFailure.backendFailed("ACE result weight provenance changed.")
+            }
+        }
+        guard case .array(let sources)? = metadata["sourceManifest"],
+              sources.count == inventory.sourceFiles.count else {
+            throw InferenceFailure.backendFailed("ACE result source inventory is incomplete.")
+        }
+        var seenSources = Set<String>()
+        for entry in sources {
+            let item = try entry.object(exactKeys: ["path", "size", "sha256"], context: "ACE source")
+            let path = try item["path"]!.requiredString(context: "ACE source path")
+            let size = try item["size"]!.requiredUInt64(context: "ACE source size")
+            let digest = try item["sha256"]!.requiredString(context: "ACE source digest")
+            guard seenSources.insert(path).inserted,
+                  inventory.sourceFiles.contains(where: { $0.file.path == path && $0.file.size == size
+                    && $0.file.sha256 == digest }) else {
+                throw InferenceFailure.backendFailed("ACE result source provenance changed.")
             }
         }
     }

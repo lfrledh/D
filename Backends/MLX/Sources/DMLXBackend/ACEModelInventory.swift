@@ -5,7 +5,7 @@ import Foundation
 
 /// Manifest v1 is an exact file inventory prepared by the host. Every path is relative
 /// to the original model root, including its checkpoints/ prefix. Roles are xl, vae,
-/// embedding. The runtime view in vendorDirectory is separately pinned by the host.
+/// embedding. vendorDirectory contains only the pinned official Python source.
 struct ACEModelInventory: Sendable {
     static let profile = ACERequest.fixedProfile
     static let modelRepository = "ACE-Step/acestep-v15-xl-sft"
@@ -29,19 +29,32 @@ struct ACEModelInventory: Sendable {
         let sharedRevision: String
         let sourceRevision: String
         let files: [File]
+        let sourceFiles: [SourceFile]
+    }
+    struct SourceFile: Codable, Sendable, Equatable {
+        let path: String
+        let size: UInt64
+        let sha256: String
     }
     struct AdmittedFile: Sendable {
         let file: File
+        let identity: AudioFileSystem.Identity
+    }
+    struct AdmittedSource: Sendable {
+        let file: SourceFile
         let identity: AudioFileSystem.Identity
     }
 
     let root: URL
     let manifest: Manifest
     let files: [AdmittedFile]
+    let sourceFiles: [AdmittedSource]
     let estimatedPeakBytes: UInt64
     let configuration: ACEBackendConfiguration
     let providerIdentity: AudioFileSystem.Identity
+    let providerDigest: String
     let manifestIdentity: AudioFileSystem.Identity
+    let manifestDigest: String
     let vendorIdentity: AudioFileSystem.Identity
     let rootIdentity: AudioFileSystem.Identity
 
@@ -64,7 +77,7 @@ struct ACEModelInventory: Sendable {
         let root = try AudioFileSystem.absoluteLocal(request.model.directory, label: "ACE model root")
         let provider = try AudioFileSystem.absoluteLocal(configuration.providerScript, label: "ACE provider")
         let manifestURL = try AudioFileSystem.absoluteLocal(configuration.modelManifest, label: "ACE manifest")
-        let vendor = try AudioFileSystem.absoluteLocal(configuration.vendorDirectory, label: "ACE runtime view")
+        let vendor = try AudioFileSystem.absoluteLocal(configuration.vendorDirectory, label: "ACE official source")
         let artifact = try AudioFileSystem.absoluteLocal(configuration.artifactDirectory, label: "ACE artifact root")
         let python = try AudioFileSystem.absoluteLocal(configuration.pythonExecutable, label: "ACE Python")
         _ = try AudioFileSystem.regularFile(python.resolvingSymlinksInPath(), label: "ACE Python", maximumBytes: nil)
@@ -72,11 +85,13 @@ struct ACEModelInventory: Sendable {
             throw InferenceFailure.invalidRequest("ACE Python is not executable.")
         }
         try AudioFileSystem.validateDirectory(root, label: "ACE model root")
-        try AudioFileSystem.validateDirectory(vendor, label: "ACE runtime view")
+        try AudioFileSystem.validateDirectory(vendor, label: "ACE official source")
         try AudioFileSystem.validateDirectory(artifact, label: "ACE artifact root")
         let providerIdentity = try AudioFileSystem.regularFile(provider, label: "ACE provider", maximumBytes: 16 * 1024 * 1024)
+        let providerDigest = try sha256(provider)
         let manifestIdentity = try AudioFileSystem.regularFile(manifestURL, label: "ACE manifest", maximumBytes: 2 * 1024 * 1024)
-        let vendorIdentity = try AudioFileSystem.directoryIdentity(vendor, label: "ACE runtime view")
+        let manifestDigest = try sha256(manifestURL)
+        let vendorIdentity = try AudioFileSystem.directoryIdentity(vendor, label: "ACE official source")
         let rootIdentity = try AudioFileSystem.directoryIdentity(root, label: "ACE model root")
         let protected = [root, vendor, artifact, provider, manifestURL]
         for i in protected.indices {
@@ -98,7 +113,7 @@ struct ACEModelInventory: Sendable {
         var parser = AudioJSONParser(data: manifestData, maximumDepth: 16)
         let parsed = try parser.parse()
         let object = try parsed.object(exactKeys: ["schemaVersion", "profile", "modelRepository",
-            "modelRevision", "sharedRepository", "sharedRevision", "sourceRevision", "files"],
+            "modelRevision", "sharedRepository", "sharedRevision", "sourceRevision", "files", "sourceFiles"],
             context: "ACE manifest")
         guard try object["schemaVersion"]!.requiredInteger(context: "ACE schema") == 1,
               try object["profile"]!.requiredString(context: "ACE profile") == profile,
@@ -108,7 +123,9 @@ struct ACEModelInventory: Sendable {
               try object["sharedRevision"]!.requiredString(context: "ACE shared revision") == sharedRevision,
               try object["sourceRevision"]!.requiredString(context: "ACE source revision") == sourceRevision,
               case .array(let entries) = object["files"]!, !entries.isEmpty,
-              entries.count <= 4096 else {
+              entries.count <= 4096,
+              case .array(let sourceEntries) = object["sourceFiles"]!,
+              !sourceEntries.isEmpty, sourceEntries.count <= 4096 else {
             throw InferenceFailure.invalidRequest("ACE manifest is absent or identifies the wrong profile.")
         }
         var files: [File] = []
@@ -138,10 +155,33 @@ struct ACEModelInventory: Sendable {
         guard roles == Set(["xl", "vae", "embedding"]) else {
             throw InferenceFailure.invalidRequest("ACE requires XL, VAE and embedding resources.")
         }
+        var sourceFiles: [SourceFile] = []
+        var sourcePaths = Set<String>()
+        for entry in sourceEntries {
+            let item = try entry.object(exactKeys: ["path", "size", "sha256"], context: "ACE source file")
+            let path = try item["path"]!.requiredString(context: "ACE source path")
+            let size = try item["size"]!.requiredUInt64(context: "ACE source size")
+            let digest = try item["sha256"]!.requiredString(context: "ACE source digest")
+            let components = path.split(separator: "/", omittingEmptySubsequences: false)
+            guard !path.hasPrefix("/"), !path.contains("\0"),
+                  components.allSatisfy({ !$0.isEmpty && $0 != "." && $0 != ".." }),
+                  sourcePaths.insert(path).inserted,
+                  digest.count == 64,
+                  digest.utf8.allSatisfy({ (48...57).contains($0) || (97...102).contains($0) }) else {
+                throw InferenceFailure.invalidRequest("Invalid ACE source inventory entry.")
+            }
+            sourceFiles.append(SourceFile(path: path, size: size, sha256: digest))
+        }
+        guard sourcePaths.isSuperset(of: ["acestep/handler.py", "acestep/model_downloader.py",
+                                         "acestep/models/xl_sft/modeling_acestep_v15_xl_base.py",
+                                         "acestep/models/xl_sft/configuration_acestep_v15.py",
+                                         "acestep/models/xl_sft/apg_guidance.py"]) else {
+            throw InferenceFailure.invalidRequest("ACE pinned source inventory is incomplete.")
+        }
         let decoded = Manifest(schemaVersion: 1, profile: profile,
             modelRepository: modelRepository, modelRevision: modelRevision,
             sharedRepository: sharedRepository, sharedRevision: sharedRevision,
-            sourceRevision: sourceRevision, files: files)
+            sourceRevision: sourceRevision, files: files, sourceFiles: sourceFiles)
         var admitted: [AdmittedFile] = []
         var total: UInt64 = 0
         for file in files {
@@ -157,21 +197,35 @@ struct ACEModelInventory: Sendable {
             guard !overflow else { throw InferenceFailure.invalidRequest("ACE inventory size overflow.") }
             total = sum
         }
+        var admittedSources: [AdmittedSource] = []
+        for file in sourceFiles {
+            try Task.checkCancellation()
+            let url = vendor.appendingPathComponent(file.path)
+            let identity = try AudioFileSystem.regularFile(url, label: "ACE official source \(file.path)", maximumBytes: nil)
+            guard identity.size >= 0, UInt64(identity.size) == file.size,
+                  try sha256(url) == file.sha256 else {
+                throw InferenceFailure.invalidRequest("ACE official source changed: \(file.path)")
+            }
+            admittedSources.append(AdmittedSource(file: file, identity: identity))
+        }
         // Official MPS initialization holds the PyTorch model and MLX converted copy.
         // This estimate includes both full-precision copies and a bounded runtime reserve.
         let (twice, overflow) = total.multipliedReportingOverflow(by: 2)
         let (estimate, overflow2) = twice.addingReportingOverflow(8 * 1024 * 1024 * 1024)
         guard !overflow, !overflow2 else { throw InferenceFailure.invalidRequest("ACE peak estimate overflow.") }
-        return Self(root: root, manifest: decoded, files: admitted,
+        return Self(root: root, manifest: decoded, files: admitted, sourceFiles: admittedSources,
                     estimatedPeakBytes: estimate, configuration: configuration,
-                    providerIdentity: providerIdentity, manifestIdentity: manifestIdentity,
+                    providerIdentity: providerIdentity, providerDigest: providerDigest,
+                    manifestIdentity: manifestIdentity, manifestDigest: manifestDigest,
                     vendorIdentity: vendorIdentity, rootIdentity: rootIdentity)
     }
 
     func confirmUnchanged() throws {
         guard try AudioFileSystem.regularFile(configuration.providerScript, label: "ACE provider", maximumBytes: 16 * 1024 * 1024) == providerIdentity,
+              try Self.sha256(configuration.providerScript) == providerDigest,
               try AudioFileSystem.regularFile(configuration.modelManifest, label: "ACE manifest", maximumBytes: 2 * 1024 * 1024) == manifestIdentity,
-              try AudioFileSystem.directoryIdentity(configuration.vendorDirectory, label: "ACE runtime view") == vendorIdentity,
+              try Self.sha256(configuration.modelManifest) == manifestDigest,
+              try AudioFileSystem.directoryIdentity(configuration.vendorDirectory, label: "ACE official source") == vendorIdentity,
               try AudioFileSystem.directoryIdentity(root, label: "ACE model root") == rootIdentity else {
             throw InferenceFailure.invalidRequest("ACE deployment changed after admission.")
         }
@@ -180,6 +234,15 @@ struct ACEModelInventory: Sendable {
             guard try AudioFileSystem.regularFile(url, label: "ACE resource", maximumBytes: nil) == admitted.identity,
                   try Self.sha256(url) == admitted.file.sha256 else {
                 throw InferenceFailure.invalidRequest("ACE resource changed after admission: \(admitted.file.path)")
+            }
+        }
+        for admitted in sourceFiles {
+            let file = admitted.file
+            let url = configuration.vendorDirectory.appendingPathComponent(file.path)
+            let identity = try AudioFileSystem.regularFile(url, label: "ACE official source", maximumBytes: nil)
+            guard identity == admitted.identity,
+                  try Self.sha256(url) == file.sha256 else {
+                throw InferenceFailure.invalidRequest("ACE official source changed after admission: \(file.path)")
             }
         }
     }

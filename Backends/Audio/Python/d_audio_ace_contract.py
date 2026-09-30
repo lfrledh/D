@@ -112,8 +112,9 @@ def validate_request(value: dict[str, Any]) -> dict[str, Any]:
         raise ACEContractError("unknown ACE operation")
     _string(request["prompt"], 1_048_576, "prompt")
     duration = _float(request["durationSeconds"], 0.1, 600, "duration")
-    if abs(duration * 10 - round(duration * 10)) > 1e-6:
-        raise ACEContractError("ACE duration is outside the 0.1-second grid")
+    frames = duration * 48000
+    if abs(frames - round(frames)) > 1e-6:
+        raise ACEContractError("ACE duration is outside the 48 kHz frame grid")
     _integer(request["seed"], 0, 2**32 - 1, "seed")
     params = exact(request["parameters"], {"kind", "ace"}, label="ACE parameters")
     if params["kind"] != "aceStep15":
@@ -145,7 +146,7 @@ def validate_request(value: dict[str, Any]) -> dict[str, Any]:
     source = request.get("source")
     if source is not None:
         _reference(source, "ACE edit source")
-        if source["frameCount"] != round(duration * 48000):
+        if source["frameCount"] != round(frames):
             raise ACEContractError("ACE edit duration must equal exact source frames")
     region = request.get("editRegion")
     options = ace.get("editOptions")
@@ -153,6 +154,8 @@ def validate_request(value: dict[str, Any]) -> dict[str, Any]:
     if op == "generate":
         if source is not None or region is not None or options is not None:
             raise ACEContractError("ACE generation cannot accept edit input")
+        if abs(duration * 10 - round(duration * 10)) > 1e-6:
+            raise ACEContractError("ACE generation requires the 0.1-second grid")
     elif op == "variation":
         if source is None or region is not None:
             raise ACEContractError("ACE variation requires only a source")
@@ -179,7 +182,7 @@ def validate_request(value: dict[str, Any]) -> dict[str, Any]:
 
 def validate_manifest(value: dict[str, Any]) -> dict[str, Any]:
     manifest = exact(value, {"schemaVersion", "profile", "modelRepository", "modelRevision",
-                             "sharedRepository", "sharedRevision", "sourceRevision", "files"},
+                             "sharedRepository", "sharedRevision", "sourceRevision", "files", "sourceFiles"},
                      label="ACE manifest")
     expected = {"schemaVersion": 1, "profile": PROFILE, "modelRepository": MODEL_REPOSITORY,
                 "modelRevision": MODEL_REVISION, "sharedRepository": SHARED_REPOSITORY,
@@ -205,12 +208,36 @@ def validate_manifest(value: dict[str, Any]) -> dict[str, Any]:
         roles.add(role)
     if roles != {"xl", "vae", "embedding"}:
         raise ACEContractError("ACE manifest omits XL, VAE or embedding resources", "configuration")
+    sources = manifest["sourceFiles"]
+    if not isinstance(sources, list) or not 5 <= len(sources) <= 4096:
+        raise ACEContractError("ACE pinned source inventory is absent", "configuration")
+    source_paths: set[str] = set()
+    for raw in sources:
+        item = exact(raw, {"path", "size", "sha256"}, label="ACE source file")
+        path = item["path"]
+        if (not isinstance(path, str) or not path or path.startswith("/")
+                or any(part in ("", ".", "..") for part in path.split("/"))
+                or "\0" in path or path in source_paths
+                or type(item["size"]) is not int or item["size"] < 0
+                or not isinstance(item["sha256"], str) or not SHA.fullmatch(item["sha256"])):
+            raise ACEContractError("invalid ACE source entry", "configuration")
+        source_paths.add(path)
+    if not {"acestep/handler.py", "acestep/model_downloader.py",
+            "acestep/models/xl_sft/modeling_acestep_v15_xl_base.py",
+            "acestep/models/xl_sft/configuration_acestep_v15.py",
+            "acestep/models/xl_sft/apg_guidance.py"} <= source_paths:
+        raise ACEContractError("ACE source inventory omits required official code", "configuration")
     return manifest
 
 
 def verify_manifest_files(manifest: dict[str, Any], root: Path) -> None:
     for item in manifest["files"]:
         path = root / item["path"]
+        parent = root
+        for part in Path(item["path"]).parts[:-1]:
+            parent = parent / part
+            if parent.is_symlink():
+                raise ACEContractError(f"ACE resource path contains a link: {item['path']}", "configuration")
         if path.is_symlink() or not path.is_file() or path.stat().st_size != item["size"]:
             raise ACEContractError(f"ACE resource missing or size changed: {item['path']}", "configuration")
         digest = hashlib.sha256()
@@ -219,6 +246,28 @@ def verify_manifest_files(manifest: dict[str, Any], root: Path) -> None:
                 digest.update(block)
         if digest.hexdigest() != item["sha256"]:
             raise ACEContractError(f"ACE resource digest changed: {item['path']}", "configuration")
+
+
+def verify_source_files(manifest: dict[str, Any], vendor: Path) -> None:
+    declared = {item["path"] for item in manifest["sourceFiles"]}
+    observed = set()
+    for path in vendor.rglob("*"):
+        if path.is_symlink():
+            raise ACEContractError("ACE source tree contains a symbolic link", "configuration")
+        if path.is_file():
+            observed.add(path.relative_to(vendor).as_posix())
+    if observed != declared:
+        raise ACEContractError("ACE source tree differs from pinned inventory", "configuration")
+    for item in manifest["sourceFiles"]:
+        path = vendor / item["path"]
+        if path.is_symlink() or not path.is_file() or path.stat().st_size != item["size"]:
+            raise ACEContractError(f"ACE source missing or size changed: {item['path']}", "configuration")
+        digest = hashlib.sha256()
+        with path.open("rb") as stream:
+            for block in iter(lambda: stream.read(1024 * 1024), b""):
+                digest.update(block)
+        if digest.hexdigest() != item["sha256"]:
+            raise ACEContractError(f"ACE source digest changed: {item['path']}", "configuration")
 
 
 def verify_wav(ref: dict[str, Any]) -> None:

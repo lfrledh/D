@@ -20,9 +20,11 @@ from d_audio_mrt2_contract import encode_float32_wave, validate_float32_wave
 from d_audio_ace_contract import (
     ACEContractError, MAX_MANIFEST_BYTES, MAX_REQUEST_BYTES, MODEL_REVISION,
     PROFILE, SHARED_REVISION, SOURCE_REVISION, load_json, reference_path,
-    validate_manifest, validate_request, verify_manifest_files, verify_wav,
+    validate_manifest, validate_request, verify_manifest_files, verify_source_files, verify_wav,
 )
-from d_ace_offline_runtime import forbid_torch_fallback, make_handler
+from d_ace_offline_runtime import (forbid_torch_fallback, make_handler,
+                                   local_only_loading, prepare_runtime_view,
+                                   verify_runtime_view)
 
 
 class DeliveryError(Exception):
@@ -74,6 +76,15 @@ class DeferredWriter:
 def _error(run_id: str | None, kind: str, message: str) -> dict[str, Any]:
     return {"schemaVersion": 1, "type": "error", "runID": run_id,
             "kind": kind, "message": message or "ACE provider failed"}
+
+
+def _snapshot(paths: list[Path]) -> dict[Path, tuple[int, int, int, int, int]]:
+    result = {}
+    for path in paths:
+        stat = path.lstat()
+        result[path] = (stat.st_dev, stat.st_ino, stat.st_size,
+                        stat.st_mtime_ns, stat.st_ctime_ns)
+    return result
 
 
 def build_generate_kwargs(request: dict[str, Any], handler: Any) -> tuple[dict[str, Any], str]:
@@ -158,10 +169,18 @@ def float32_samples(payload: dict[str, Any]) -> tuple[Any, int]:
 
 def run_provider(request_path: Path, job: Path, model: Path, manifest_path: Path,
                  vendor: Path, writer: Any, cancelled: Callable[[], bool],
-                 handler_factory: Callable[[Path, dict[str, Any]], Any],
+                 handler_factory: Callable[[Path, dict[str, Any], Path, Path], Any],
                  *, access_mode: bool = False) -> int:
     run_id: str | None = None
+    manifest: dict[str, Any] | None = None
+    request: dict[str, Any] | None = None
+    view: Path | None = None
+    admitted: dict[Path, tuple[int, int, int, int, int]] = {}
+    delivery = DeferredWriter(writer)
+    writer = delivery
     try:
+        if "ACESTEP_CHECKPOINTS_DIR" in os.environ:
+            raise ACEContractError("ACESTEP_CHECKPOINTS_DIR overrides the private ACE view", "configuration")
         validate_launch_paths(request_path, job, model, manifest_path, vendor)
         request = validate_request(load_json(request_path, MAX_REQUEST_BYTES))
         run_id = request["runID"]
@@ -170,20 +189,27 @@ def run_provider(request_path: Path, job: Path, model: Path, manifest_path: Path
         if cancelled():
             raise InterruptedError("cancelled before ACE validation")
         verify_manifest_files(manifest, model)
+        verify_source_files(manifest, vendor)
+        admitted = _snapshot([model / item["path"] for item in manifest["files"]]
+                             + [vendor / item["path"] for item in manifest["sourceFiles"]])
         for ref in (request.get("source"), request["parameters"]["ace"].get("referenceAudio")):
             if ref is not None:
                 verify_wav(ref)
         writer.progress(run_id, "validating", 1, 1)
         if cancelled():
             raise InterruptedError("cancelled before ACE initialization")
-        handler = handler_factory(vendor, manifest)
+        view = prepare_runtime_view(request_path.parent, model, vendor, manifest)
+        admitted.update(_snapshot([path for path in view.rglob("*")
+                                   if path.is_file() or path.is_symlink()]))
+        handler = handler_factory(vendor, manifest, view, model)
         try:
-            status, ready = handler.initialize_service(
-                project_root=str(vendor), config_path="acestep-v15-xl-sft", device="mps",
-                use_flash_attention=False, compile_model=False,
-                offload_to_cpu=True, offload_dit_to_cpu=True,
-                quantization=None, prefer_source=None, use_mlx_dit=True,
-                vae_checkpoint="official")
+            with local_only_loading(view):
+                status, ready = handler.initialize_service(
+                    project_root=str(view), config_path="acestep-v15-xl-sft", device="mps",
+                    use_flash_attention=False, compile_model=False,
+                    offload_to_cpu=True, offload_dit_to_cpu=True,
+                    quantization=None, prefer_source=None, use_mlx_dit=True,
+                    vae_checkpoint="official")
             if ready is not True:
                 raise ACEContractError(f"official ACE initialization failed: {status}", "configuration")
             if getattr(handler, "dtype", None) is None or str(handler.dtype) != "torch.float32":
@@ -222,13 +248,16 @@ def run_provider(request_path: Path, job: Path, model: Path, manifest_path: Path
             "request": request, "profile": PROFILE, "modelRevision": MODEL_REVISION,
             "sharedRevision": SHARED_REVISION, "sourceRevision": SOURCE_REVISION,
             "precision": "XL=float32,MLX=float32,output=float32", "device": "mps+mlx",
-            "requestedFrames": requested_frames, "effectiveFrames": frames,
-            "deliveredFrames": frames, "effectiveLyrics": effective_lyrics,
+            "requestedFrames": requested_frames, "effectiveFrames": requested_frames,
+            "deliveredFrames": frames, "tailPaddingFrames": max(0, frames - requested_frames),
+            "shortfallFrames": max(0, requested_frames - frames),
+            "effectiveLyrics": effective_lyrics,
             "captionTokens": counts["caption"], "lyricTokens": counts["lyrics"],
             "taskType": kwargs["task_type"],
             "sourceSHA256": request.get("source", {}).get("sha256") if request.get("source") else None,
             "referenceSHA256": (request["parameters"]["ace"].get("referenceAudio") or {}).get("sha256"),
-            "weightManifest": manifest["files"], "offloadToCPU": True,
+            "weightManifest": manifest["files"], "sourceManifest": manifest["sourceFiles"],
+            "offloadToCPU": True,
             "offloadDiTToCPU": True,
         }
         result = {"schemaVersion": 1, "type": "result", "runID": run_id,
@@ -258,6 +287,31 @@ def run_provider(request_path: Path, job: Path, model: Path, manifest_path: Path
         try: writer.emit(_error(run_id, "engine", str(exc)), terminal=True)
         except DeliveryError: pass
         return 1
+    finally:
+        failures: list[str] = []
+        if manifest is not None:
+            try:
+                verify_manifest_files(manifest, model)
+                verify_source_files(manifest, vendor)
+                if view is not None:
+                    verify_runtime_view(view, model, vendor, manifest)
+                if admitted and _snapshot(list(admitted)) != admitted:
+                    raise ACEContractError("ACE admitted file identity changed", "configuration")
+            except (ACEContractError, OSError) as exc:
+                failures.append(str(exc))
+        if request is not None:
+            for ref in (request.get("source"), request["parameters"]["ace"].get("referenceAudio")):
+                if ref is not None:
+                    try: verify_wav(ref)
+                    except (ACEContractError, OSError) as exc: failures.append(str(exc))
+        if failures:
+            delivery.pending = _error(run_id, "inputMutation", "; ".join(failures))
+        try:
+            delivery.deliver()
+        except DeliveryError:
+            pass
+        if failures:
+            return 2
 
 
 def parser() -> argparse.ArgumentParser:
@@ -270,7 +324,7 @@ def parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Sequence[str] | None = None,
-         *, handler_factory: Callable[[Path, dict[str, Any]], Any] = make_handler) -> int:
+         *, handler_factory: Callable[[Path, dict[str, Any], Path, Path], Any] = make_handler) -> int:
     writer = EventWriter()
     requested = {"cancelled": False}
 
@@ -285,7 +339,7 @@ def main(argv: Sequence[str] | None = None,
         job = checked_absolute_path(args.job_directory, label="ACE job")
         model = checked_absolute_path(args.model_directory, label="ACE model")
         manifest = checked_absolute_path(args.manifest, label="ACE manifest")
-        vendor = checked_absolute_path(args.vendor_directory, label="ACE runtime view")
+        vendor = checked_absolute_path(args.vendor_directory, label="ACE official source")
         access_mode = args.access_manifest is not None or args.access_run_id is not None
         if access_mode:
             if args.access_manifest is None or args.access_run_id is None:
