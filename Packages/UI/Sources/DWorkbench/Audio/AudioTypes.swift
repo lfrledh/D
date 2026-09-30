@@ -3,7 +3,7 @@ import Foundation
 /// HUM1: original media and frame-based editing data, independent of inference and views.
 public enum AudioContainer: String, Codable, Sendable { case wav, caf }
 public enum AudioOrigin: String, Codable, Sendable { case importedFile, microphone, modelGenerated, programGenerated }
-public enum AudioInspectionPolicy: Sendable { case original, generated }
+public enum AudioInspectionPolicy: Sendable { case original, generated, aceGenerated, workflowOriginal }
 public enum AudioLimits {
     public static let maximumBytes = 64 * 1024 * 1024
     public static let maximumSeconds: Double = 120
@@ -19,7 +19,7 @@ extension AudioInspectionPolicy {
     var maximumBytes: Int {
         switch self {
         case .original: AudioLimits.maximumBytes
-        case .generated: AudioLimits.maximumGeneratedBytes
+        case .generated, .aceGenerated, .workflowOriginal: AudioLimits.maximumGeneratedBytes
         }
     }
 
@@ -27,6 +27,8 @@ extension AudioInspectionPolicy {
         switch self {
         case .original: AudioLimits.maximumSeconds
         case .generated: AudioLimits.maximumGeneratedSeconds
+        case .aceGenerated: 602
+        case .workflowOriginal: 600
         }
     }
 }

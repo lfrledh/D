@@ -14,8 +14,9 @@ public enum InferenceFailure: Error, Sendable, Codable, Equatable, LocalizedErro
     /// Verified input modification is a protection failure even when the caller
     /// also cancelled. Backends must retain the original stop/error context.
     case inputIntegrityChanged(String)
-    /// An external process group could not be proven stopped. The backend keeps
-    /// its resource lease and the runtime must close admission, including queued work.
+    /// Required cleanup could not be confirmed; runtime closes admission, including
+    /// queued work. A still-running process must retain its lease; a drained backend
+    /// releases compute ownership while preserving unconfirmed files for diagnosis.
     case resourceCleanupUnconfirmed(String)
 
     public var errorDescription: String? {

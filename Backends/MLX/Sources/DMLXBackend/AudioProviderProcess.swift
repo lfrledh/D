@@ -93,9 +93,15 @@ struct AudioProviderProcess: Sendable {
             environment: environment, currentDirectory: currentDirectory,
             timeoutSeconds: timeoutSeconds, cancellationGraceSeconds: cancellationGraceSeconds,
             label: "Audio provider")
-        let result = try await transport.run { reader, control in
+        let result = try await transport.run(consume: { reader, control in
             await AudioProviderProtocol.readStdout(reader, runID: runID, control: control, emit: emit)
-        }
+        }, failureFromDrainedOutput: { result in
+            guard result.failure == nil, case .error(let kind, let message)? = result.terminal else { return nil }
+            if kind == "inputMutation" {
+                return .inputIntegrityChanged("Audio provider confirmed input mutation: \(message)")
+            }
+            return .backendFailed("Audio provider reported \(kind): \(message)")
+        })
         if let failure = result.failure { throw InferenceFailure.backendFailed(failure) }
         guard let terminal = result.terminal else {
             throw InferenceFailure.backendFailed("Audio provider exited without one result terminal event.")
@@ -404,7 +410,7 @@ enum AudioProviderProtocol {
             try validateHeader(object, type: "error", runID: runID)
             let kind = try object["kind"]!.requiredString(context: "error kind")
             let message = try object["message"]!.requiredString(context: "error message")
-            guard ["invalidRequest", "configuration", "output", "engine", "cancelled"].contains(kind),
+            guard ["invalidRequest", "configuration", "output", "engine", "cancelled", "inputMutation"].contains(kind),
                   !message.isEmpty else {
                 throw InferenceFailure.backendFailed("Invalid provider error terminal event.")
             }

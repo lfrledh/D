@@ -268,6 +268,12 @@ public actor MLXQwenVLMBackend: InferenceBackend {
         await observer(MLXLifecycleEvent(runID: request.id, phase: .drained))
         // Source corruption is more informative than a simultaneous cancellation or inference error.
         do { try snapshot?.verifyOriginals() } catch { outcome = .failure(error) }
+        // Report filesystem cleanup before returning the outcome. GPU ownership is
+        // still released by release(), even when unknown files must be preserved.
+        do { try snapshot?.removePrivateFiles() }
+        catch { outcome = .failure(InferenceFailure.resourceCleanupUnconfirmed(
+            "VLM snapshot retained at \(snapshot?.directory.path ?? "unknown"): \(error.localizedDescription)")) }
+        snapshot = nil
         switch outcome {
         case .success(let result):
             try Task.checkCancellation()
@@ -285,14 +291,6 @@ public actor MLXQwenVLMBackend: InferenceBackend {
         Memory.clearCache()
         if let previousCacheLimit { Memory.cacheLimit = previousCacheLimit }
         previousCacheLimit = nil
-        do {
-            try snapshot?.removePrivateFiles()
-        } catch {
-            // release() cannot throw. Keep the lease and snapshot so cleanup can be retried,
-            // and make the failure observable instead of admitting another heavy run.
-            FileHandle.standardError.write(Data("VLM private snapshot cleanup failed: \(error)\n".utf8))
-            return
-        }
         snapshot = nil
         if let runID { await observer(MLXLifecycleEvent(runID: runID, phase: .released)) }
         runID = nil

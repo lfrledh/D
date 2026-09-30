@@ -29,7 +29,7 @@ public enum ExecutionControlFidelity: String, Codable, Sendable {
 }
 
 public enum ExecutionDataRole: String, Codable, Sendable {
-    case prompt, referenceAudio, noteSequence, text, image, audio
+    case prompt, referenceAudio, noteSequence, text, image, audio, video
 }
 
 /// Small semantic descriptor shared by native presentations and adapters.

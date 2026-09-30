@@ -46,7 +46,7 @@ public enum ModelNodeCatalog {
         swiftF0,
         singing,
         wan21
-    ] + externalVideoEntries
+    ] + externalVideoEntries + ReleaseModelDescriptors.entries
 
     private static func qwen(id: String, title: String, revision: String,
                              availability: ModelNodeAvailability, validation: String) -> ModelNodeDescriptor {
@@ -57,7 +57,7 @@ public enum ModelNodeCatalog {
             summary: "固定版本的 Qwen2.5 Instruct 文字生成节点；接收一个已经由应用组合好的提示词并流式返回文字增量。",
             modelIdentity: id,
             revision: revision,
-            engine: "mlx.text · MLX / MLXLLM / MLXLMCommon 2.30.6 · qwen2-text/1",
+            engine: "mlx.text · MLX / MLXLLM / MLXLMCommon 3.31.4 · qwen2-text/1",
             device: "默认 GPU；请求不提供设备切换",
             precision: "权重为 affine 4-bit、group size 64；整体计算 dtype 未统一声明",
             availability: availability,

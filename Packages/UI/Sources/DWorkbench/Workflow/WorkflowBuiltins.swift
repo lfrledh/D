@@ -13,6 +13,6 @@ enum WorkflowBuiltins {
         WorkflowImageOperations.imageResize,
         WorkflowImageOperations.imageConvert,
         WorkflowAssetOperations.assetExport, WorkflowAssetOperations.dataExport,
-        WorkflowRemoveBlankLines.operation, WorkflowCandidateList.operation,
+        WorkflowRemoveBlankLines.operation, WorkflowCandidateList.operation, WorkflowACEOperation.operation,
     ] + WorkflowControlOperations.operations + WorkflowDataOperations.operations + WorkflowLanguageOperations.operations + WorkflowMusicOperations.operations + WorkflowExternalVideoOperations.operations
 }

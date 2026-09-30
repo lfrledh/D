@@ -266,6 +266,26 @@ struct WorkflowSaveFailure: LocalizedError {
         try input.validate(); try capability.validateDuration(input.durationSeconds)
         return try await generateMedia(.audio(input), mediaType: "audio/wav", parents: parents, binding: binding, context: context)
     }
+    public func generateACE(context: WorkflowExecutionContext) async throws -> WorkflowAssetReference {
+        if pending[context.stepID] != nil { return try await publish(context) }
+        let binding = try model(for: context)
+        guard binding.operationID == WorkflowModelRoutes.ace else { throw WorkflowIssue("ACE实现未绑定。") }
+        let p = context.node.parameters
+        let prompt = try await WorkflowLanguageOperations.text(context.inputs["prompt"], fallback: p["promptText"]?.string ?? "", services: self)
+        let lyrics = try await WorkflowLanguageOperations.text(context.inputs["lyrics"], fallback: p["lyricsText"]?.string ?? "", services: self)
+        func source(_ port: String) async throws -> AudioSourceReference? {
+            guard let value = context.inputs[port] else { return nil }
+            let reference = try WorkflowExecution.asset(value, kind: .audio, port: port, node: context.node)
+            let (url, asset) = try await store.workflowMedia(reference)
+            guard let format = asset.metadata.audio?.format, let sampleRate = Int(exactly: format.sampleRate) else { throw WorkflowIssue("缺少可核验的音频规格。") }
+            return AudioSourceReference(url: url, sha256: reference.sha256, frameCount: format.frameCount,
+                sampleRate: sampleRate, channels: format.channelCount)
+        }
+        let reference = try await source("reference"), original = try await source("source")
+        let input = try WorkflowACEOperation.request(node: context.node, prompt: prompt, lyrics: lyrics, reference: reference, source: original)
+        return try await generateMedia(.audio(input), mediaType: "audio/wav",
+            parents: context.inputs.values.flatMap { $0.datum?.assetReferences ?? [] }, binding: binding, context: context)
+    }
     public func generateVideo(context: WorkflowExecutionContext) async throws -> WorkflowAssetReference {
         if pending[context.stepID] != nil { return try await publish(context) }
         let binding = try model(for: context), p = context.node.parameters

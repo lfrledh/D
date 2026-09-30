@@ -10,6 +10,10 @@ struct LocalImageModelInventory: Sendable {
     static let repository = "mzbac/FLUX.2-klein-4B-q8"
     static let revision = "ef52ee019fd1d0e75ae4deb40476ba65989716d7"
 
+    static let fullRepository = "black-forest-labs/FLUX.2-klein-4B"
+    static let fullRevision = "e7b7dc27f91deacad38e78976d1f2b499d76a294"
+    var modelRepository: String { manifest.repository }
+    var modelRevision: String { manifest.revision }
     let directory: URL
     let estimatedPeakBytes: UInt64
     let weightBytes: UInt64
@@ -23,6 +27,10 @@ struct LocalImageModelInventory: Sendable {
             let path: String
             let size: UInt64
             let sha256: String
+            let algorithm: String?
+            init(path: String, size: UInt64, sha256: String, algorithm: String? = nil) {
+                self.path = path; self.size = size; self.sha256 = sha256; self.algorithm = algorithm
+            }
         }
 
         let schemaVersion: Int
@@ -30,8 +38,12 @@ struct LocalImageModelInventory: Sendable {
         let revision: String
         let files: [File]
 
-        static func bundled() throws -> Self {
-            guard let url = Bundle.module.url(forResource: "flux2-klein-model", withExtension: "json") else {
+        static func bundled(revision: String? = nil) throws -> Self {
+            guard revision == nil || revision == LocalImageModelInventory.revision || revision == LocalImageModelInventory.fullRevision else {
+                throw InferenceFailure.invalidRequest("Unsupported image model revision.")
+            }
+            let resource = revision == LocalImageModelInventory.fullRevision ? "flux2-klein-bf16-model" : "flux2-klein-model"
+            guard let url = Bundle.module.url(forResource: resource, withExtension: "json") else {
                 throw InferenceFailure.backendFailed("The bundled FLUX.2 model manifest is missing.")
             }
             do {
@@ -42,16 +54,17 @@ struct LocalImageModelInventory: Sendable {
         }
 
         fileprivate func validate() throws {
+            let full = repository == LocalImageModelInventory.fullRepository && revision == LocalImageModelInventory.fullRevision
+            let required = full ? LocalImageModelInventory.fullRequiredPaths : LocalImageModelInventory.requiredPaths
             guard schemaVersion == 1,
-                  repository == LocalImageModelInventory.repository,
-                  revision == LocalImageModelInventory.revision,
-                  files.count == LocalImageModelInventory.requiredPaths.count,
-                  Set(files.map(\.path)) == LocalImageModelInventory.requiredPaths else {
+                  full || (repository == LocalImageModelInventory.repository && revision == LocalImageModelInventory.revision),
+                  files.count == required.count, Set(files.map(\.path)) == required else {
                 throw InferenceFailure.invalidRequest("The image manifest must describe the complete pinned FLUX.2 Klein installation.")
             }
             for file in files {
                 guard file.size > 0, file.size <= 16 * 1024 * 1024 * 1024,
-                      file.sha256.utf8.count == 64,
+                      [nil, "sha256", "git-blob-sha1"].contains(file.algorithm),
+                      file.sha256.utf8.count == (file.algorithm == "git-blob-sha1" ? 40 : 64),
                       file.sha256.utf8.allSatisfy({ (48...57).contains($0) || (97...102).contains($0) }) else {
                     throw InferenceFailure.invalidRequest("Invalid image manifest size or SHA-256: \(file.path)")
                 }
@@ -69,10 +82,14 @@ struct LocalImageModelInventory: Sendable {
         "vae/config.json", "vae/diffusion_pytorch_model.safetensors",
     ]
 
+    private static var fullRequiredPaths: Set<String> {
+        requiredPaths.subtracting(["quantization.json"]).union(["text_encoder/model.safetensors.index.json"])
+    }
+
     static func inspect(_ request: InferenceRequest,
                         profile: ImageExecutionProfile = .verified512) throws -> Self {
         try requireKleinProfile(profile)
-        return try inspect(request, manifest: Manifest.bundled(), profile: profile)
+        return try inspect(request, manifest: Manifest.bundled(revision: request.model.revision), profile: profile)
     }
 
     static func inspect(_ request: InferenceRequest, manifest: Manifest,
@@ -89,7 +106,7 @@ struct LocalImageModelInventory: Sendable {
               !image.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw InferenceFailure.invalidRequest("Image prompt must be nonempty and no larger than 1 MiB of UTF-8.")
         }
-        guard request.model.revision == nil || request.model.revision == revision else {
+        guard request.model.revision == nil || request.model.revision == manifest.revision else {
             throw InferenceFailure.invalidRequest("Unsupported image model revision; use the pinned FLUX.2 Klein snapshot.")
         }
         guard request.model.directory.host == nil || request.model.directory.host == ""
@@ -116,7 +133,8 @@ struct LocalImageModelInventory: Sendable {
             }
         }
         let weightBytes = manifest.files.filter { $0.path.hasSuffix(".safetensors") }.reduce(UInt64(0)) { $0 + $1.size }
-        return Self(directory: directory, estimatedPeakBytes: estimatedPeakBytes,
+        let peak = manifest.revision == fullRevision ? max(estimatedPeakBytes, weightBytes + 8 * 1024 * 1024 * 1024) : estimatedPeakBytes
+        return Self(directory: directory, estimatedPeakBytes: peak,
                     weightBytes: weightBytes, executionProfile: resolvedCapability.profile,
                     manifest: manifest, identities: identities)
     }
@@ -295,6 +313,8 @@ struct LocalImageModelInventory: Sendable {
             throw InferenceFailure.invalidRequest("Image model file changed before SHA-256 verification: \(file.path)")
         }
         var digest = SHA256()
+        var gitDigest = Insecure.SHA1()
+        gitDigest.update(data: Data("blob \(file.size)\0".utf8))
         var buffer = [UInt8](repeating: 0, count: 1024 * 1024)
         var total: UInt64 = 0
         while total < file.size {
@@ -310,7 +330,8 @@ struct LocalImageModelInventory: Sendable {
             guard count > 0 else {
                 throw InferenceFailure.invalidRequest("Image model file was truncated during verification: \(file.path)")
             }
-            digest.update(data: Data(buffer.prefix(count)))
+            let chunk = Data(buffer.prefix(count))
+            if file.algorithm == "git-blob-sha1" { gitDigest.update(data: chunk) } else { digest.update(data: chunk) }
             total += UInt64(count)
         }
         try Task.checkCancellation()
@@ -323,7 +344,9 @@ struct LocalImageModelInventory: Sendable {
         guard trailing == 0, try identity(of: descriptor) == before else {
             throw InferenceFailure.invalidRequest("Image model file changed during SHA-256 verification: \(file.path)")
         }
-        let checksum = digest.finalize().map { String(format: "%02x", $0) }.joined()
+        let checksum = file.algorithm == "git-blob-sha1"
+            ? gitDigest.finalize().map { String(format: "%02x", $0) }.joined()
+            : digest.finalize().map { String(format: "%02x", $0) }.joined()
         guard checksum == file.sha256 else {
             throw InferenceFailure.invalidRequest("Image model SHA-256 mismatch: \(file.path)")
         }

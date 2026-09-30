@@ -13,7 +13,10 @@ struct ModelNodeCatalogTests {
     }
 
     @Test func catalogHasFrozenIdentityCoverageAndUniqueNestedIDs() {
-        let entries = ModelNodeCatalog.entries
+        let all = ModelNodeCatalog.entries
+        #expect(Set(all.map(\.id)).count == all.count)
+        let added = Set(ReleaseModelDescriptors.entries.map(\.id))
+        let entries = all.filter { !$0.id.hasPrefix("video.model.") && !added.contains($0.id) }
         #expect(entries.count == 12)
         #expect(Set(entries.map(\.id)).count == entries.count)
         #expect(entries.map(\.id) == [
@@ -43,7 +46,12 @@ struct ModelNodeCatalogTests {
 
     @Test func textEntriesMatchSourceRegistryAndDoNotInventA512TokenLimit() throws {
         let registered = try TextModelProfiles.registered()
-        let qwen = ModelNodeCatalog.entries.filter { $0.modality == .text }
+        let qwen = ModelNodeCatalog.entries.filter { $0.modality == .text && registered.map(\.id).contains($0.id) }
+        let vlm = try TextModelProfiles.registeredVLM()
+        let added = ModelNodeCatalog.entries.filter { $0.modality == .text && vlm.map(\.id).contains($0.id) }
+        #expect(added.map(\.id) == vlm.map(\.id))
+        #expect(added.map(\.revision) == vlm.map(\.revision))
+        #expect(added.allSatisfy { $0.availability == .evaluation })
         #expect(qwen.map(\.id) == registered.map(\.id))
         #expect(qwen.map(\.revision) == registered.map(\.revision))
         #expect(qwen.allSatisfy { $0.availability == .workbench })

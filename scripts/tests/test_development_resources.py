@@ -58,6 +58,13 @@ CONTRACTS["ExternalVideoEngine.dengine"] = (
      "provider/Resources/ltx23-bf16.json", "provider/Resources/ltx23-q8-test.json"),
 )
 
+CONTRACTS["ACEMusicEngine.dengine"] = (
+    "d-ace-music-engine", "provider/d_audio_ace_backend.py", "vendor",
+    ("python/bin/python3", "provider/d_audio_ace_backend.py", "provider/d_audio_access.py",
+     "provider/d_audio_ace_contract.py", "provider/d_audio_contract.py", "provider/d_audio_mrt2_contract.py",
+     "provider/d_ace_offline_runtime.py", "model-manifests/ace-xl-sft.json", "vendor/acestep/handler.py", "vendor/LICENSE"),
+)
+
 
 def digest(path: Path) -> str:
     value = hashlib.sha256()
@@ -229,6 +236,25 @@ class DevelopmentResourceTests(unittest.TestCase):
         self.assertEqual(second.returncode, 0, second.stderr)
         self.assertEqual(json.loads(second.stdout)["status"], "reused")
         self.assertEqual(tree_snapshot(output), before)
+
+    def test_optional_ace_requires_its_real_import_closure(self) -> None:
+        name = "ACEMusicEngine.dengine"
+        engine = write_engine(self.inputs, name)
+        values = {key: str(value) for key, value in self.engines.items()}
+        values[name] = str(engine)
+        self.write_config(values)
+        _prepared, result = self.prepare()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        for missing in ("d_audio_contract.py", "d_audio_mrt2_contract.py"):
+            path = engine / "provider" / missing
+            original = path.read_bytes()
+            path.unlink()
+            rewrite_engine_manifest(engine, name)
+            _prepared, rejected = self.prepare(self.root / (missing + "-missing"))
+            self.assertNotEqual(rejected.returncode, 0)
+            self.assertIn(missing, rejected.stderr)
+            path.write_bytes(original)
+            rewrite_engine_manifest(engine, name)
 
     def test_optional_external_video_is_explicit_verified_and_reusable(self) -> None:
         name = "ExternalVideoEngine.dengine"

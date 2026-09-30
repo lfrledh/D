@@ -38,7 +38,7 @@ struct QwenVLMContractTests {
 
     @Test func modelIdentityUsesBothNestedDimensions() throws {
         for (hidden, layers, expected) in [(4096, 32, "9B"), (5120, 64, "27B")] {
-            let root = FileManager.default.temporaryDirectory.resolvingSymlinksInPath()
+            let root = URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory()).resolvingSymlinksInPath()
                 .appendingPathComponent(UUID().uuidString)
             try FileManager.default.createDirectory(at: root, withIntermediateDirectories: false)
             defer { try? FileManager.default.removeItem(at: root) }
@@ -86,7 +86,7 @@ struct QwenVLMContractTests {
     }
 
     @Test func privateCopyProtectsOriginalAndDetectsMutation() throws {
-        let root = FileManager.default.temporaryDirectory.resolvingSymlinksInPath()
+        let root = URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory()).resolvingSymlinksInPath()
             .appendingPathComponent(UUID().uuidString)
         let model = root.appendingPathComponent("model")
         let artifacts = root.appendingPathComponent("artifacts")
@@ -104,12 +104,14 @@ struct QwenVLMContractTests {
         #expect(try Data(contentsOf: snapshot.video!.privateURL) == bytes)
         try snapshot.verifyOriginals()
         try Data("mutated-source".utf8).write(to: source)
-        #expect(throws: (any Error).self) { try snapshot.verifyOriginals() }
+        do { try snapshot.verifyOriginals(); Issue.record("Changed input was accepted") }
+        catch InferenceFailure.inputIntegrityChanged { }
+        catch { Issue.record("Mutation must not be hidden by cancellation: \(error)") }
         #expect(try Data(contentsOf: snapshot.video!.privateURL) == bytes)
     }
 
     @Test func failedFreezeKeepsOriginalAndCleansOwnedPartialCopy() throws {
-        let root = FileManager.default.temporaryDirectory.resolvingSymlinksInPath()
+        let root = URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory()).resolvingSymlinksInPath()
             .appendingPathComponent(UUID().uuidString)
         let model = root.appendingPathComponent("model")
         let artifacts = root.appendingPathComponent("artifacts")
@@ -161,7 +163,7 @@ struct QwenVLMContractTests {
     }
 
     @Test func privateCleanupPreservesUnknownAndReplacementEntries() throws {
-        let root = FileManager.default.temporaryDirectory.resolvingSymlinksInPath()
+        let root = URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory()).resolvingSymlinksInPath()
             .appendingPathComponent(UUID().uuidString)
         let model = root.appendingPathComponent("model")
         let artifacts = root.appendingPathComponent("artifacts")
@@ -210,13 +212,13 @@ struct QwenVLMContractTests {
         #expect(processed.timestamps == timestamps)
         #expect(observedOrigins == [0, 1, 2, 3])
         await #expect(throws: (any Error).self) {
-            try await MediaProcessing.asProcessedSequence(
+            _ = try await MediaProcessing.asProcessedSequence(
                 .frames(frames), targetFPS: { _ in 2 }, maxFrames: 3,
                 preserveSuppliedFrames: true)
         }
         let reversed = [frames[1], frames[0]]
         await #expect(throws: (any Error).self) {
-            try await MediaProcessing.asProcessedSequence(
+            _ = try await MediaProcessing.asProcessedSequence(
                 .frames(reversed), targetFPS: { _ in 2 }, maxFrames: 4,
                 preserveSuppliedFrames: true)
         }

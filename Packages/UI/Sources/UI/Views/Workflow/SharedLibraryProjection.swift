@@ -11,14 +11,14 @@ import Foundation
         if externalProfile(descriptor) != nil { return .video }
         if TextModelProfilesIdentity.contains(descriptor.modelIdentity) { return .text }
         switch descriptor.id {
-        case "flux2-klein-4b-q8": return .image
-        case "mrt2-small-export-v1": return .music
+        case "flux2-klein-4b-q8", "flux2-klein-4b-bf16", "flux2-dev-bf16": return .image
+        case "mrt2-small-export-v1", "ace-step-1.5-xl-sft-f32-no-lm": return .music
         case "wan21-t2v-1.3b-bf16-v1": return .video
         case "swift-f0-0.1.2-cpu-v1": return .pitch
         default: return nil
         }
     }
-    private static var TextModelProfilesIdentity: Set<String> { Set(((try? TextModelProfiles.registered()) ?? []).map(\.id)) }
+    private static var TextModelProfilesIdentity: Set<String> { Set((((try? TextModelProfiles.registered()) ?? []) + ((try? TextModelProfiles.registeredVLM()) ?? [])).map(\.id)) }
     private static func externalProfile(_ descriptor: ModelNodeDescriptor) -> ExternalVideoExecutionProfile? {
         ExternalVideoExecutionProfile.allCases.first { descriptor.id == "video.model." + $0.rawValue }
     }
@@ -26,6 +26,7 @@ import Foundation
         kind.rawValue + ":" + (externalProfile(descriptor)?.modelIdentity ?? descriptor.revision)
     }
     private static func operation(_ choice: WorkflowModelChoice) -> String {
+        if let exact = WorkflowModelRoutes.operation(for: choice) { return exact }
         if choice.kind == .video, let profile = ExternalVideoExecutionProfile.allCases.first(where: { choice.id == "video:" + $0.modelIdentity }) {
             return WorkflowVideoRecipe(profile: profile).operationID
         }
@@ -37,7 +38,7 @@ import Foundation
     static func modelKey(_ choice: WorkflowModelChoice) -> String { descriptor(for: choice)?.id ?? "model:" + choice.id }
     static func outputs(_ definition: WorkflowOperationDefinition) -> Set<WorkflowDataKind> {
         // Generic value ports express a future binding, not every concrete media capability.
-        if definition.id == "d.model.language" { return [.text, .number, .boolean, .enumeration, .record, .list, .optional] }
+        if WorkflowModelRoutes.isLanguage(definition.id) { return [.text, .number, .boolean, .enumeration, .record, .list, .optional] }
         return Set(definition.outputs.flatMap { $0.kinds.count == WorkflowDataKind.allCases.count ? [] : $0.kinds })
     }
     static func entries(models: [WorkflowModelChoice], readiness: [String: SharedLibraryReadiness],
@@ -56,7 +57,7 @@ import Foundation
         }
         for descriptor in ModelNodeCatalog.entries {
             guard !result.contains(where: { $0.item.key == descriptor.id }) else { continue }
-            if let kind = modelKind(descriptor), let definition = registry.operation(externalProfile(descriptor).map { WorkflowVideoRecipe(profile: $0).operationID } ?? operation(kind))?.definition {
+            if let kind = modelKind(descriptor), let definition = registry.operation(externalProfile(descriptor).map { WorkflowVideoRecipe(profile: $0).operationID } ?? WorkflowModelRoutes.operation(for: WorkflowModelChoice(id: identity(descriptor, kind: kind), kind: kind, displayName: descriptor.title)) ?? operation(kind))?.definition {
                 let identity = identity(descriptor, kind: kind)
                 result.append(.init(item: .init(key: descriptor.id, title: descriptor.title,
                     detail: WorkflowCanvasPresentation.operationTitle(definition, language: language), kind: .model, role: "primary-model",

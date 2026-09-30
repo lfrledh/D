@@ -1668,8 +1668,11 @@ public final class ProjectSession {
             audio?.transport.stopPlayback(); audioCreationTransport.stopPlayback()
             if reference.kind == .audio {
                 guard let metadata = asset.metadata.audio else { throw AudioMediaError.invalidMedia("缺少已登记音频格式") }
-                try audioCreationTransport.preparePlayback(url: url, format: metadata.format,
-                    policy: [.modelGenerated, .programGenerated].contains(metadata.origin) ? .generated : .original)
+                let policy = try await store.workflowAudioPlaybackPolicy(reference)
+                try Task.checkCancellation()
+                guard workflow === controller, self.store === store, workflowPreviewRequestID == requestID,
+                      workflowPreviewReference == reference, !isBusy, !isChangingProject, !closePending else { return nil }
+                try audioCreationTransport.preparePlayback(url: url, format: metadata.format, policy: policy)
             } else if reference.kind == .video {
                 guard asset.metadata.video != nil else { throw AudioMediaError.invalidMedia("缺少已登记视频格式") }
                 videoPreviewURL = url

@@ -28,7 +28,8 @@ struct LocalProviderProcess: Sendable {
     }
 
     func run<Output: Sendable>(
-        consume: @escaping @Sendable (LocalDedicatedPipeReader, LocalOwnedProcessControl) async -> Output
+        consume: @escaping @Sendable (LocalDedicatedPipeReader, LocalOwnedProcessControl) async -> Output,
+        failureFromDrainedOutput: (@Sendable (Output) -> InferenceFailure?)? = nil
     ) async throws -> Output {
         try Task.checkCancellation()
         let process = Process()
@@ -88,6 +89,12 @@ struct LocalProviderProcess: Sendable {
         stdout.fileHandleForReading.closeFile()
         stderr.fileHandleForReading.closeFile()
 
+        // Protocol-owned protection evidence is interpreted only after the child
+        // exited and both pipes drained. Other users retain the original ordering.
+        let reportedFailure = failureFromDrainedOutput?(stdoutResult)
+        if case .inputIntegrityChanged? = reportedFailure {
+            throw reportedFailure!
+        }
         if let reason = control.stopReason {
             switch reason {
             case .cancelled:
@@ -103,6 +110,7 @@ struct LocalProviderProcess: Sendable {
             throw InferenceFailure.backendFailed(
                 "Cannot drain \(label) stderr: \(failure)." + Self.stderrSuffix(stderrResult.retained))
         }
+        if let reportedFailure { throw reportedFailure }
         guard status == 0 else {
             throw InferenceFailure.backendFailed(
                 "\(label) exited with status \(status)." + Self.stderrSuffix(stderrResult.retained))

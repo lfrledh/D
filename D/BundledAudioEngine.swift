@@ -5,7 +5,9 @@ import Foundation
 /// Read-only description of a fixed inference engine bundled with an application.
 struct BundledAudioEngine: Sendable {
     enum Family: Sendable {
-        case stableAudio, mrt2Music, video, pitch, externalVideo
+        case stableAudio, mrt2Music, video, pitch, externalVideo, aceMusic
+        var maximumManifestBytes: Int { self == .aceMusic ? 16 * 1024 * 1024 : 4 * 1024 * 1024 }
+        var maximumFiles: Int { self == .aceMusic ? 40_000 : 10_000 }
         var directory: String {
             switch self {
             case .stableAudio: "AudioEngine.dengine"
@@ -13,6 +15,7 @@ struct BundledAudioEngine: Sendable {
             case .pitch: "PitchEngine.dengine"
             case .video: "VideoEngine.dengine"
             case .externalVideo: "ExternalVideoEngine.dengine"
+            case .aceMusic: "ACEMusicEngine.dengine"
             }
         }
         var kind: String {
@@ -22,6 +25,7 @@ struct BundledAudioEngine: Sendable {
             case .pitch: "d-pitch-engine"
             case .video: "d-video-engine"
             case .externalVideo: "d-external-video-engine"
+            case .aceMusic: "d-ace-music-engine"
             }
         }
         var script: String {
@@ -31,6 +35,7 @@ struct BundledAudioEngine: Sendable {
             case .pitch: "provider/d_pitch_analysis_backend.py"
             case .video: "provider/d_video_run.py"
             case .externalVideo: "provider/app_video_driver.py"
+            case .aceMusic: "provider/d_audio_ace_backend.py"
             }
         }
         var model: String {
@@ -40,11 +45,12 @@ struct BundledAudioEngine: Sendable {
             case .pitch: "model-manifests/swift-f0.json"
             case .video: "model-manifests/wan21.json"
             case .externalVideo: "model-manifests/h3-fl2va-bf16.json"
+            case .aceMusic: "model-manifests/ace-xl-sft.json"
             }
         }
         var vendor: String {
             switch self {
-            case .stableAudio, .mrt2Music: "vendor"
+            case .stableAudio, .mrt2Music, .aceMusic: "vendor"
             case .pitch: "python/lib/python3.12/site-packages/swift_f0"
             case .video: "Vendor"
             case .externalVideo: "native"
@@ -52,6 +58,10 @@ struct BundledAudioEngine: Sendable {
         }
         var required: [String] {
             switch self {
+            case .aceMusic:
+                ["python/bin/python3", script, "provider/d_audio_access.py", model,
+                 "provider/d_audio_ace_contract.py", "provider/d_audio_contract.py", "provider/d_audio_mrt2_contract.py", "provider/d_ace_offline_runtime.py",
+                 "vendor/acestep/handler.py", "vendor/LICENSE"]
             case .externalVideo:
                 ["python/bin/python3", script, "provider/d_audio_access.py", model,
                  "native/h3", "native/h3_shaders.metal", "native/ffmpeg", "native/ffprobe",
@@ -91,7 +101,7 @@ struct BundledAudioEngine: Sendable {
 
     var videoTokenizerDirectory: URL? {
         switch family {
-        case .stableAudio, .mrt2Music, .pitch, .externalVideo: nil
+        case .stableAudio, .mrt2Music, .pitch, .externalVideo, .aceMusic: nil
         case .video: root.appendingPathComponent("tokenizer", isDirectory: true)
         }
     }
@@ -102,8 +112,6 @@ struct BundledAudioEngine: Sendable {
         return root.appendingPathComponent("native/" + name)
     }
 
-    private static let maximumManifestBytes = 4 * 1024 * 1024
-    private static let maximumFiles = 10_000
     private static let maximumFileBytes: Int64 = 512 * 1024 * 1024
     private static let maximumAggregateBytes: Int64 = 1024 * 1024 * 1024
 
@@ -163,10 +171,10 @@ struct BundledAudioEngine: Sendable {
         let manifest = root.appendingPathComponent("engine.json", isDirectory: false)
         let initialManifestEntry = try entry(at: manifest)
         guard !initialManifestEntry.isDirectory else { throw DeploymentError.invalid("engine.json is not a regular file") }
-        guard initialManifestEntry.metadata.size <= Int64(maximumManifestBytes) else {
-            throw DeploymentError.invalid("engine.json exceeds the 4 MiB limit")
+        guard initialManifestEntry.metadata.size <= Int64(family.maximumManifestBytes) else {
+            throw DeploymentError.invalid("engine.json exceeds this engine family limit")
         }
-        let manifestData = try boundedData(manifest, expected: initialManifestEntry.metadata, limit: maximumManifestBytes)
+        let manifestData = try boundedData(manifest, expected: initialManifestEntry.metadata, limit: family.maximumManifestBytes)
         let object: [String: Any]
         do {
             guard let value = try JSONSerialization.jsonObject(with: manifestData) as? [String: Any] else {
@@ -185,7 +193,7 @@ struct BundledAudioEngine: Sendable {
         try requireExact(object, key: "providerScript", string: family.script)
         try requireExact(object, key: "vendorDirectory", string: family.vendor)
         try requireExact(object, key: "modelManifestsDirectory", string: "model-manifests")
-        guard let values = object["files"] as? [Any], values.count <= maximumFiles else {
+        guard let values = object["files"] as? [Any], values.count <= family.maximumFiles else {
             throw DeploymentError.invalid("files list is missing or exceeds the limit")
         }
 
@@ -216,7 +224,7 @@ struct BundledAudioEngine: Sendable {
         let vendor = root.appendingPathComponent(family.vendor, isDirectory: true)
         guard try entry(at: vendor).isDirectory else { throw DeploymentError.invalid("vendor is not a directory") }
 
-        let actual = try treeEntries(root: root)
+        let actual = try treeEntries(root: root, maximumFiles: family.maximumFiles)
         guard Set(actual.keys) == Set(declared.keys) else {
             throw DeploymentError.invalid("engine contains missing or undeclared regular files")
         }
@@ -231,7 +239,7 @@ struct BundledAudioEngine: Sendable {
                 throw DeploymentError.invalid("SHA-256 differs for \(path)")
             }
         }
-        let finalEntries = try treeEntries(root: root)
+        let finalEntries = try treeEntries(root: root, maximumFiles: family.maximumFiles)
         guard finalEntries == actual else { throw DeploymentError.invalid("engine changed while being resolved") }
         let finalRoot = try entry(at: root)
         let finalManifest = try entry(at: manifest)
@@ -251,7 +259,7 @@ struct BundledAudioEngine: Sendable {
         guard try Self.entry(at: root).metadata == rootEntry else {
             throw DeploymentError.invalid("engine root changed after resolution")
         }
-        let current = try Self.treeEntries(root: root)
+        let current = try Self.treeEntries(root: root, maximumFiles: family.maximumFiles)
         guard current == entries else { throw DeploymentError.invalid("engine file tree changed after resolution") }
         let currentManifest = try Self.entry(at: manifest)
         guard currentManifest.metadata == manifestEntry,
@@ -300,7 +308,7 @@ struct BundledAudioEngine: Sendable {
                       changedNanoseconds: Int64(value.st_ctimespec.tv_nsec)), kind == S_IFDIR)
     }
 
-    private static func treeEntries(root: URL) throws -> [String: Entry] {
+    private static func treeEntries(root: URL, maximumFiles: Int) throws -> [String: Entry] {
         var enumerationError: Error?
         guard let enumerator = FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil, options: [], errorHandler: { _, error in
             enumerationError = error
@@ -316,7 +324,7 @@ struct BundledAudioEngine: Sendable {
             let item = try entry(at: url)
             if !item.isDirectory {
                 guard relative != "engine.json" else { continue }
-                guard result.count < maximumFiles else { throw DeploymentError.invalid("engine has more than 10000 regular files") }
+                guard result.count < maximumFiles else { throw DeploymentError.invalid("engine exceeds its family file count") }
                 result[relative] = item.metadata
             }
         }

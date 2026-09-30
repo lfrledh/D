@@ -18,7 +18,7 @@ public struct TextExecutionCapability: Codable, Equatable, Sendable {
         self.maximumOutputTokens = maximumOutputTokens
         contract = ExecutionContractDescription(
             operationID: "text.generate",
-            inputRoles: profile == Self.qwen35VLMProfile ? [.prompt, .image] : [.prompt],
+            inputRoles: profile == Self.qwen35VLMProfile ? [.prompt, .image, .video] : [.prompt],
             outputRole: .text,
             controlFidelity: .approximate)
     }

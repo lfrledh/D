@@ -21,6 +21,16 @@ struct ReleaseModelContractTests {
             try registry.validate(definition.makeNode())
         }
     }
+    @Test func descriptiveReleasePortsComeFromExecutableDefinitions() throws {
+        for descriptor in ReleaseModelDescriptors.entries {
+            let projection = try #require(descriptor.operations.first)
+            let definition = try #require(WorkflowRegistry.standard.operation(projection.id)?.definition)
+            #expect(projection.inputs.map(\.id) == definition.inputs.map(\.id))
+            #expect(projection.outputs.map(\.id) == definition.outputs.map(\.id))
+            #expect(projection.parameters.map(\.id) == definition.fields.map(\.id))
+            #expect(descriptor.availability == .evaluation)
+        }
+    }
     @Test func recipesPreserveAllReferencesAndRejectCrossFamilyProfile() throws {
         let refs = ["a", "b"].map { value in ImageReference(url: URL(fileURLWithPath: "/fixture/" + value + ".rgb"),
             sha256: String(repeating: value, count: 64), byteCount: 512 * 512 * 3, width: 512, height: 512) }

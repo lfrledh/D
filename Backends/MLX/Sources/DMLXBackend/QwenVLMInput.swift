@@ -89,7 +89,8 @@ struct QwenVLMInputSnapshot: Sendable {
             do { try verify(touched) } catch { terminalError = error }
             let partial = Self(directory: directory, directoryOwnership: directoryOwnership,
                                ownedFiles: ownedFiles, images: [], video: nil)
-            try partial.removePrivateFiles()
+            do { try partial.removePrivateFiles() }
+            catch { throw InferenceFailure.resourceCleanupUnconfirmed("Incomplete VLM snapshot retained at \(directory.path): \(error.localizedDescription)") }
             throw terminalError
         }
     }
@@ -102,11 +103,15 @@ struct QwenVLMInputSnapshot: Sendable {
     }
 
     private static func verify(_ proofs: [Proof]) throws {
-        for proof in proofs {
-            let (digest, identity) = try hashFile(proof.original, expectedBytes: proof.byteCount)
-            guard identity == proof.identity, digest == proof.digest else {
-                throw InferenceFailure.invalidRequest("A visual source changed during inference.")
+        do {
+            for proof in proofs {
+                let (digest, identity) = try hashFile(proof.original, expectedBytes: proof.byteCount)
+                guard identity == proof.identity, digest == proof.digest else {
+                    throw InferenceFailure.inputIntegrityChanged("A visual source changed during inference.")
+                }
             }
+        } catch {
+            throw InferenceFailure.inputIntegrityChanged("Visual source verification failed: \(error.localizedDescription)")
         }
     }
 

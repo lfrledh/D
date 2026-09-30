@@ -27,7 +27,7 @@ public struct MLXImageBackendConfiguration: Sendable {
     }
 }
 
-/// Fixed local FLUX.2 Klein 4B q8 pipeline. One instance belongs to one runtime.
+/// Fixed local FLUX.2 Klein 4B q8 or original BF16 pipeline. One instance belongs to one runtime.
 /// Encoder, transformer and decoder have separate lifetimes; only evaluated arrays bridge stages.
 public actor MLXImageBackend: InferenceBackend {
     public nonisolated let descriptor = BackendDescriptor(
@@ -56,6 +56,15 @@ public actor MLXImageBackend: InferenceBackend {
         self.configuration = configuration
         executionCapability = configuration.profile.executionCapability
         self.observer = observer
+    }
+
+    public func validateModel(at directory: URL, revision: String) throws -> ModelReference {
+        let model = ModelReference(directory: directory, revision: revision)
+        let input = ImageRequest(prompt: "Installation verification", width: 512, height: 512,
+            steps: 4, guidanceScale: 1, seed: 0, executionProfile: executionCapability.profile)
+        let inventory = try LocalImageModelInventory.inspect(.init(model: model, input: .image(input)), profile: configuration.profile)
+        try inventory.verifyContents()
+        return model
     }
 
     public func estimate(_ request: InferenceRequest) async throws -> ResourceEstimate {
@@ -166,8 +175,8 @@ public actor MLXImageBackend: InferenceBackend {
         try Task.checkCancellation()
         var metadata = Self.executionProfileMetadata(inventory.executionProfile)
         metadata.merge([
-            "modelRepository": LocalImageModelInventory.repository,
-            "modelRevision": LocalImageModelInventory.revision,
+            "modelRepository": inventory.modelRepository,
+            "modelRevision": inventory.modelRevision,
             "flux2SourceRevision": "959a4af7c0721c800851c84431ffd3fa1f353f1f",
             "width": String(input.width), "height": String(input.height), "steps": String(input.steps),
             "guidanceScale": String(input.guidanceScale), "seed": String(input.seed),

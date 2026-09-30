@@ -26,6 +26,7 @@ public struct WorkflowExecutionContext: Sendable {
     func readData(_ reference: WorkflowAssetReference) async throws -> Data
     func generateLanguage(task: String, content: String?, context: WorkflowExecutionContext) async throws -> WorkflowAssetReference
     func generateMusic(_ request: AudioRequest, parents: [WorkflowAssetReference], context: WorkflowExecutionContext) async throws -> WorkflowAssetReference
+    func generateACE(context: WorkflowExecutionContext) async throws -> WorkflowAssetReference
     func generateVideo(context: WorkflowExecutionContext) async throws -> WorkflowAssetReference
     func analyzePitch(_ reference: WorkflowAssetReference, context: WorkflowExecutionContext) async throws -> WorkflowAssetReference
     func publishMedia(_ data: Data, mediaType: String, parents: [WorkflowAssetReference], context: WorkflowExecutionContext) async throws -> WorkflowAssetReference
@@ -55,6 +56,7 @@ extension WorkflowOperationServices {
     public func readData(_ reference: WorkflowAssetReference) async throws -> Data { throw WorkflowIssue("此入口尚未提供媒体读取。") }
     public func generateLanguage(task: String, content: String?, context: WorkflowExecutionContext) async throws -> WorkflowAssetReference { throw WorkflowIssue("此入口尚未提供语言生成。") }
     public func generateMusic(_ request: AudioRequest, parents: [WorkflowAssetReference], context: WorkflowExecutionContext) async throws -> WorkflowAssetReference { throw WorkflowIssue("此入口尚未提供受控音乐生成。") }
+    public func generateACE(context: WorkflowExecutionContext) async throws -> WorkflowAssetReference { throw WorkflowIssue("此入口尚未提供ACE实现。") }
     public func generateVideo(context: WorkflowExecutionContext) async throws -> WorkflowAssetReference { throw WorkflowIssue("此入口尚未提供 T2V。") }
     public func analyzePitch(_ reference: WorkflowAssetReference, context: WorkflowExecutionContext) async throws -> WorkflowAssetReference { throw WorkflowIssue("此入口尚未提供音高识别。") }
     public func publishMedia(_ data: Data, mediaType: String, parents: [WorkflowAssetReference], context: WorkflowExecutionContext) async throws -> WorkflowAssetReference { throw WorkflowIssue("此入口尚未提供媒体发布。") }

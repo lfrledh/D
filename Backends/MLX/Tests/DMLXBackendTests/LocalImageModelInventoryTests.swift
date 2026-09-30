@@ -23,6 +23,45 @@ struct LocalImageModelInventoryTests {
         #expect(manifest.files.reduce(UInt64(0)) { $0 + $1.size } == 9_426_536_934)
     }
 
+    @Test("Original BF16 uses an independent fixed manifest without quantization")
+    func fullPrecisionManifestAndVerification() throws {
+        let template = try LocalImageModelInventory.Manifest.bundled(revision: LocalImageModelInventory.fullRevision)
+        #expect(template.repository == "black-forest-labs/FLUX.2-klein-4B")
+        #expect(!template.files.contains { $0.path == "quantization.json" })
+        #expect(template.files.contains { $0.path == "text_encoder/model.safetensors.index.json" })
+        let fixture = try ImageInventoryFixture(template: template)
+        defer { fixture.remove() }
+        let inventory = try LocalImageModelInventory.inspect(fixture.request(revision: template.revision), manifest: fixture.manifest)
+        try inventory.verifyContents()
+        #expect(inventory.modelRevision == template.revision)
+        #expect(inventory.modelRepository == template.repository)
+        #expect(inventory.estimatedPeakBytes > 8 * 1024 * 1024 * 1024)
+        #expect(throws: (any Error).self) {
+            try LocalImageModelInventory.inspect(fixture.request(), manifest: fixture.manifest)
+        }
+    }
+
+    @Test("Git blob digests require the object header; bare SHA1 is rejected")
+    func fullPrecisionGitBlobHeader() throws {
+        let template = try LocalImageModelInventory.Manifest.bundled(revision: LocalImageModelInventory.fullRevision)
+        let fixture = try ImageInventoryFixture(template: template)
+        defer { fixture.remove() }
+        let file = try #require(fixture.manifest.files.first { $0.algorithm == "git-blob-sha1" })
+        let bytes = try #require(fixture.contents[file.path])
+        let bare = Insecure.SHA1.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
+        #expect(bare != file.sha256)
+        let files = fixture.manifest.files.map { item in
+            LocalImageModelInventory.Manifest.File(path: item.path, size: item.size,
+                sha256: item.path == file.path ? bare : item.sha256, algorithm: item.algorithm)
+        }
+        let wrong = LocalImageModelInventory.Manifest(schemaVersion: template.schemaVersion,
+            repository: template.repository, revision: template.revision, files: files)
+        #expect(throws: (any Error).self) {
+            let inventory = try LocalImageModelInventory.inspect(fixture.request(revision: template.revision), manifest: wrong)
+            try inventory.verifyContents()
+        }
+    }
+
     @Test("Complete local fixtures verify repeatedly with any UInt64 seed", arguments: [UInt64(0), 42, UInt64.max])
     func validInstallation(seed: UInt64) throws {
         let fixture = try ImageInventoryFixture()
@@ -263,7 +302,7 @@ private struct ImageInventoryFixture {
     let manifest: LocalImageModelInventory.Manifest
     let contents: [String: Data]
 
-    init() throws {
+    init(template supplied: LocalImageModelInventory.Manifest? = nil) throws {
         // Follow the test harness's external-SSD root; a default /var temporary
         // location can regain the symlink spelling during Foundation normalization.
         let parent = ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"]
@@ -271,16 +310,20 @@ private struct ImageInventoryFixture {
         let base = parent.resolvingSymlinksInPath()
             .appendingPathComponent("D-image-inventory-\(UUID().uuidString)")
         let directory = base.appendingPathComponent("model")
-        let template = try LocalImageModelInventory.Manifest.bundled()
+        let template = try supplied ?? LocalImageModelInventory.Manifest.bundled()
         let contents = Dictionary(uniqueKeysWithValues: template.files.map { file in
             (file.path, Data("Small offline fixture for \(file.path)\n".utf8))
         })
         let files = template.files.map { file in
             let data = contents[file.path]!
-            return LocalImageModelInventory.Manifest.File(
-                path: file.path, size: UInt64(data.count),
-                sha256: SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
-            )
+            let digest: String
+            if file.algorithm == "git-blob-sha1" {
+                var hasher = Insecure.SHA1()
+                hasher.update(data: Data("blob \(data.count)\0".utf8)); hasher.update(data: data)
+                digest = hasher.finalize().map { String(format: "%02x", $0) }.joined()
+            } else { digest = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined() }
+            return LocalImageModelInventory.Manifest.File(path: file.path, size: UInt64(data.count),
+                sha256: digest, algorithm: file.algorithm)
         }
         do {
             for file in files {

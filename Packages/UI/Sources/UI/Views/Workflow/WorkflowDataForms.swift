@@ -221,7 +221,7 @@ enum WorkflowFormSupport {
             case "d.value.record": return .record(source.dataConfiguration?.fields ?? [])
             case "d.value.validate": return source.dataConfiguration?.schema.map { WorkflowDataConfiguration.validationReportSchema(for: $0) }
             case "d.value.field", "d.control.human": return source.dataConfiguration?.schema
-            case "d.model.language": return source.parameters["outputMode"]?.string == "json" ? source.dataConfiguration?.schema : .text
+            case "d.model.language", WorkflowModelRoutes.qwen35, WorkflowModelRoutes.qwen38: return source.parameters["outputMode"]?.string == "json" ? source.dataConfiguration?.schema : .text
             case "d.value.return", "d.value.filter": return inputSchema(id, visited: next)
             default: return nil
             }
@@ -1213,7 +1213,7 @@ struct WorkflowNodeDataEditor: View {
                     Text(workflowFormText(languageStore, "workflow.language.form.validationJSON", fallback: "Parse complete JSON text")).tag(WorkflowValidationInputFormat.jsonText)
                 }
                 WorkflowSchemaEditor(schema: configurationSchema, depth: 0)
-            case "d.model.language", "d.control.human":
+            case "d.model.language", WorkflowModelRoutes.qwen35, WorkflowModelRoutes.qwen38, "d.control.human":
                 WorkflowSchemaEditor(schema: configurationSchema, depth: 0)
             default:
                 Text(workflowFormText(

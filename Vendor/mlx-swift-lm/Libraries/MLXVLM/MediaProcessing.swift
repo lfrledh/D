@@ -398,7 +398,7 @@ public enum MediaProcessing {
                     }
                     let processed = try frameProcessing(supplied)
                     frames.append(processed.frame.asMLXArray())
-                    timestamps.append(processed.timeStamp)
+                    timestamps.append(supplied.timeStamp)
                 }
                 try Task.checkCancellation()
                 return ProcessedFrames(frames: frames, timestamps: timestamps,

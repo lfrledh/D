@@ -76,7 +76,7 @@ ENGINE_CONTRACTS: dict[str, dict[str, Any]] = {
     },
 }
 
-OPTIONAL_ENGINE_NAMES = ("ExternalVideoEngine.dengine",)
+OPTIONAL_ENGINE_NAMES = ("ExternalVideoEngine.dengine", "ACEMusicEngine.dengine")
 ENGINE_CONTRACTS["ExternalVideoEngine.dengine"] = {
     "kind": "d-external-video-engine",
     "providerScript": "provider/app_video_driver.py",
@@ -89,6 +89,15 @@ ENGINE_CONTRACTS["ExternalVideoEngine.dengine"] = {
     ),
 }
 
+
+ENGINE_CONTRACTS["ACEMusicEngine.dengine"] = {
+    "kind": "d-ace-music-engine", "providerScript": "provider/d_audio_ace_backend.py",
+    "vendorDirectory": "vendor", "required": (
+        "python/bin/python3", "provider/d_audio_ace_backend.py", "provider/d_audio_access.py",
+        "provider/d_audio_ace_contract.py", "provider/d_audio_contract.py", "provider/d_audio_mrt2_contract.py", "provider/d_ace_offline_runtime.py",
+        "model-manifests/ace-xl-sft.json", "vendor/acestep/handler.py", "vendor/LICENSE",
+    ),
+}
 
 def engine_names(value: dict[str, Any]) -> tuple[str, ...]:
     """Four existing engines remain mandatory; the new deployment is explicit."""
@@ -277,7 +286,7 @@ def _validate_symlink(root: Path, path: Path, relative: str) -> str:
     return target
 
 
-def _walk_engine(root: Path) -> dict[str, Any]:
+def _walk_engine(root: Path, maximum_files: int = MAXIMUM_FILES_PER_ENGINE, manifest_limit: int = MAXIMUM_ENGINE_MANIFEST_BYTES) -> dict[str, Any]:
     directories: list[str] = []
     files: list[dict[str, Any]] = []
     symlinks: list[dict[str, str]] = []
@@ -314,7 +323,7 @@ def _walk_engine(root: Path) -> dict[str, Any]:
                 raise ResourceError(f"engine contains a special file: {relative}")
             digest, checked = _hash_regular(path, f"engine file {relative}")
             total_bytes += checked.st_size
-            if total_bytes > MAXIMUM_BYTES_PER_ENGINE + MAXIMUM_ENGINE_MANIFEST_BYTES:
+            if total_bytes > MAXIMUM_BYTES_PER_ENGINE + manifest_limit:
                 raise ResourceError("engine regular files exceed the aggregate size limit")
             files.append({
                 "path": relative,
@@ -324,7 +333,7 @@ def _walk_engine(root: Path) -> dict[str, Any]:
             })
     if enumeration_error:
         raise ResourceError(f"engine could not be completely enumerated: {enumeration_error[0]}")
-    if len(files) + len(symlinks) > MAXIMUM_FILES_PER_ENGINE + 1:
+    if len(files) + len(symlinks) > maximum_files + 1:
         raise ResourceError("engine exceeds the entry-count limit")
     for relative in directories + [item["path"] for item in files] + [item["path"] for item in symlinks]:
         folded = relative.casefold()
@@ -350,8 +359,10 @@ def inspect_engine(root: Path, name: str) -> dict[str, Any]:
     if name not in ENGINE_CONTRACTS:
         raise ResourceError(f"unknown engine name: {name}")
     root = _absolute_directory(str(root), f"engine {name}")
+    maximum_files = 40_000 if name == "ACEMusicEngine.dengine" else MAXIMUM_FILES_PER_ENGINE
+    manifest_limit = 16 * 1024 * 1024 if name == "ACEMusicEngine.dengine" else MAXIMUM_ENGINE_MANIFEST_BYTES
     manifest_path = root / "engine.json"
-    manifest = _read_json(manifest_path, f"{name} engine manifest", MAXIMUM_ENGINE_MANIFEST_BYTES)
+    manifest = _read_json(manifest_path, f"{name} engine manifest", manifest_limit)
     if not isinstance(manifest, dict):
         raise ResourceError(f"{name} engine manifest root must be an object")
     exact = {
@@ -371,7 +382,7 @@ def inspect_engine(root: Path, name: str) -> dict[str, Any]:
         if actual != expected:
             raise ResourceError(f"{name} engine manifest {key} differs from the fixed contract")
     declarations = manifest.get("files")
-    if not isinstance(declarations, list) or len(declarations) > MAXIMUM_FILES_PER_ENGINE:
+    if not isinstance(declarations, list) or len(declarations) > maximum_files:
         raise ResourceError(f"{name} engine files list is missing or exceeds the limit")
     declared: dict[str, dict[str, Any]] = {}
     aggregate = 0
@@ -403,7 +414,7 @@ def inspect_engine(root: Path, name: str) -> dict[str, Any]:
         if required not in declared:
             raise ResourceError(f"{name} engine manifest lacks required file: {required}")
 
-    inventory = _walk_engine(root)
+    inventory = _walk_engine(root, maximum_files, manifest_limit)
     vendor_directory = ENGINE_CONTRACTS[name]["vendorDirectory"]
     if vendor_directory not in inventory["directories"]:
         raise ResourceError(f"{name} engine vendorDirectory is not a real directory: {vendor_directory}")

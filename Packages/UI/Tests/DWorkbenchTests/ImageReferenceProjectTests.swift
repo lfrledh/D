@@ -157,6 +157,37 @@ struct ImageReferenceProjectTests {
         }
     }
 
+    @Test func legacyWorkflowReferenceUsesFrozenBytesAndRejectsReplacedOriginal() async throws {
+        try await withFixture { fixture in
+            let store = try await ProjectStore.create(at: fixture.project, name: "旧原件保护")
+            var manifest = await store.snapshot()
+            let source = try fixture.publishPNG(jobID: UUID(), size: 512)
+            let bytes = try Data(contentsOf: source)
+            let original = ProjectAsset(relativePath: "Images/Legacy.png", role: .original,
+                metadata: .init(width: 512, height: 512))
+            try FileManager.default.createDirectory(at: fixture.project.appendingPathComponent("Images"), withIntermediateDirectories: false)
+            let file = fixture.project.appendingPathComponent(original.relativePath)
+            try bytes.write(to: file, options: .withoutOverwriting)
+            manifest.assets = [original]
+            try await store.close()
+            try JSONEncoder().encode(manifest).write(to: fixture.project.appendingPathComponent(ProjectStore.manifestFilename))
+            let reopened = try await ProjectStore.open(at: fixture.project)
+            let pinned = try await reopened.pinWorkflowAsset(original.id)
+            #expect(await reopened.snapshot().assets[0].metadata.imageContentSHA256 == nil)
+            let inputs = try await reopened.prepareWorkflowImageReferences([pinned, pinned], runID: UUID())
+            let expected = try ImageReferencePixels.decodePNG(bytes)
+            #expect(inputs.count == 2)
+            #expect(try Data(contentsOf: inputs[0].url) == expected.rgb)
+            #expect(inputs[0].url != inputs[1].url)
+            try Data("replaced outside".utf8).write(to: file)
+            await #expect(throws: (any Error).self) {
+                try await reopened.prepareWorkflowImageReferences([pinned], runID: UUID())
+            }
+            #expect(try Data(contentsOf: inputs[0].url) == expected.rgb)
+            try await reopened.close()
+        }
+    }
+
     @Test func failedManifestSaveDoesNotOverwriteOriginalOrAttachReference() async throws {
         try await withFixture { fixture in
             let store = try await ProjectStore.create(at: fixture.project, name: "保存失败")

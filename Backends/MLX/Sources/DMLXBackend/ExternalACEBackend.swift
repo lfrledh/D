@@ -141,7 +141,14 @@ public actor ExternalACEBackend: InferenceBackend {
                 if case InferenceFailure.resourceCleanupUnconfirmed = stoppedError {
                     throw stoppedError
                 }
-                try Self.finishStopped(access: access, confirmation: configuration.confirmDeployment)
+                do { try Self.finishStopped(access: access, confirmation: configuration.confirmDeployment) }
+                catch {
+                    if case InferenceFailure.inputIntegrityChanged(let reason) = stoppedError {
+                        throw InferenceFailure.inputIntegrityChanged(
+                            reason + "; stopped provider check also failed: " + error.localizedDescription)
+                    }
+                    throw error
+                }
                 throw stoppedError
             }
             try Self.finishStopped(access: access, confirmation: configuration.confirmDeployment)
@@ -201,6 +208,7 @@ public actor ExternalACEBackend: InferenceBackend {
                 throw InferenceFailure.backendFailed(
                     "ACE stopped input audit failed: \(error.localizedDescription)")
             }
+            if case InferenceFailure.inputIntegrityChanged = stoppedError { throw stoppedError }
             if !providerStarted, case InferenceFailure.invalidRequest = stoppedError {
                 throw stoppedError
             }

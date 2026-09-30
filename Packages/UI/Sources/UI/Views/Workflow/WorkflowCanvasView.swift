@@ -1845,7 +1845,8 @@ enum WorkflowCanvasPresentation {
         _ definition: WorkflowOperationDefinition,
         language: UILanguageStore?
     ) -> String {
-        workflowText(language, "workflow.operation.\(definition.id).title", fallback: definition.title)
+        if definition.modelKind != nil, definition.id != "d.model.language" { return definition.title }
+        return workflowText(language, "workflow.operation.\(definition.id).title", fallback: definition.title)
     }
 
     @MainActor static func operationDetail(

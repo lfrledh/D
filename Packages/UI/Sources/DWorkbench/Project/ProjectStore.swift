@@ -272,8 +272,8 @@ public actor ProjectStore {
         // Validate every original before publishing any derivative. workflowData checks project/version/digest.
         let pixels = try references.map { reference in
             guard reference.kind == .image else { throw ProjectStoreError.invalidProject("参考列表需要图像资产。") }
-            _ = try workflowData(reference)
-            return try imageReferencePixels(reference.assetID).1
+            let bytes = try workflowData(reference)
+            return try ImageReferencePixels.decodePNG(bytes)
         }
         let inputs = try ProjectFiles.openOrCreateDirectory("ImageInputs", in: rootFD)
         defer { Darwin.close(inputs) }
@@ -716,11 +716,23 @@ public actor ProjectStore {
         }
     }
 
+    private func audioInspectionPolicy(for asset: ProjectAsset) throws -> AudioInspectionPolicy {
+        if asset.relativePath.hasPrefix("WorkflowAssets/"), asset.role == .result {
+            let archive = try editableWorkflow()
+            if let record = archive.assets.first(where: { $0.reference.assetID == asset.id }),
+               let request = record.request, case .audio(let audio) = request.input, audio.ace != nil {
+                _ = try ProjectFiles.expectedWorkflowAudioFrames(audio, details: record.metadata)
+                return .aceGenerated
+            }
+        }
+        return try ProjectFiles.inspectionPolicy(for: asset, jobs: manifest.jobs)
+    }
+
     public func prepareAudioCreationSource(assetID: UUID, runID: UUID) throws -> AudioSourceReference {
         guard let asset = manifest.assets.first(where: { $0.id == assetID }),
               let registered = asset.metadata.audio else { throw ProjectStoreError.missingAsset }
         try checkLocation()
-        let policy = try ProjectFiles.inspectionPolicy(for: asset, jobs: manifest.jobs)
+        let policy = try audioInspectionPolicy(for: asset)
         let sourceURL = try assetURL(for: asset)
         let sourceInspection = try AudioMediaInspector.inspect(at: sourceURL, policy: policy)
         try ProjectFiles.requireRegisteredAudio(sourceInspection, matches: registered)
@@ -1051,7 +1063,7 @@ public actor ProjectStore {
                       source.url.standardizedFileURL == expectedURL.standardizedFileURL else {
                     throw ProjectStoreError.unsafePath(source.url.path)
                 }
-                let policy = try ProjectFiles.inspectionPolicy(for: asset, jobs: manifest.jobs)
+                let policy = try audioInspectionPolicy(for: asset)
                 let inspection = try AudioMediaInspector.inspect(at: expectedURL, policy: policy)
                 try ProjectFiles.requireRegisteredAudio(inspection, matches: metadata)
                 try ProjectFiles.validateCreationSource(inspection.format)
@@ -1265,7 +1277,7 @@ public actor ProjectStore {
     public func inspectAudioAsset(id: UUID) throws -> AudioInspection {
         guard let asset = manifest.assets.first(where: { $0.id == id }),
               let metadata = asset.metadata.audio else { throw ProjectStoreError.missingAsset }
-        let policy = try ProjectFiles.inspectionPolicy(for: asset, jobs: manifest.jobs)
+        let policy = try audioInspectionPolicy(for: asset)
         let inspection = try AudioMediaInspector.inspect(at: try assetURL(for: asset), policy: policy)
         try ProjectFiles.requireRegisteredAudio(inspection, matches: metadata)
         return inspection
@@ -1335,7 +1347,7 @@ public actor ProjectStore {
               !destination.lastPathComponent.isEmpty else {
             throw ProjectStoreError.unsafePath(destination.path)
         }
-        let policy = try ProjectFiles.inspectionPolicy(for: asset, jobs: manifest.jobs)
+        let policy = try audioInspectionPolicy(for: asset)
         let sourceURL = rootURL.appendingPathComponent(asset.relativePath)
         let sourceInspection = try AudioMediaInspector.inspect(at: sourceURL, policy: policy)
         try ProjectFiles.requireRegisteredAudio(sourceInspection, matches: registered)
@@ -1704,7 +1716,7 @@ public actor ProjectStore {
         guard destination.isFileURL, destination.path.hasPrefix("/"),
               !destination.lastPathComponent.isEmpty else { throw ProjectStoreError.unsafePath(destination.path) }
         if let audio = asset.metadata.audio {
-            let policy = try ProjectFiles.inspectionPolicy(for: asset, jobs: manifest.jobs)
+            let policy = try audioInspectionPolicy(for: asset)
             let inspection = try AudioMediaInspector.inspect(
                 at: rootURL.appendingPathComponent(asset.relativePath), policy: policy)
             try ProjectFiles.requireRegisteredAudio(inspection, matches: audio)
@@ -2650,7 +2662,7 @@ private enum ProjectFiles {
         if asset.relativePath.hasPrefix("WorkflowAssets/") {
             guard asset.jobID == nil, let format = WorkflowMediaFormat.descriptor(asset.mediaType), format.kind == .audio,
                   asset.relativePath == "WorkflowAssets/\(asset.id.uuidString)/content.\(format.suffix)" else { throw ProjectStoreError.missingAsset }
-            return asset.role == .original ? .original : .generated
+            return asset.role == .original ? .workflowOriginal : .generated
         }
         switch audio.origin {
         case .programGenerated: throw ProjectStoreError.invalidProject("程序音频必须属于有来源记录的流程资产。")
@@ -2679,7 +2691,7 @@ private enum ProjectFiles {
 
     static func validateCurrentAudioProfile(_ request: AudioRequest) throws {
         try request.validate()
-        if request.noteSequence != nil { return }
+        if request.noteSequence != nil || request.ace != nil { return }
         guard let diffusion = request.diffusion, request.seed <= UInt64(UInt32.max) - 1,
               (1...100).contains(diffusion.steps), diffusion.guidanceScale.isFinite,
               (1...15).contains(diffusion.guidanceScale) else {
@@ -2697,6 +2709,25 @@ private enum ProjectFiles {
             throw ProjectStoreError.invalidProject("音频请求帧数不可表示。")
         }
         return Int64(rounded)
+    }
+
+    /// ACE reports requested and delivered clocks separately; never crop to fake equality.
+    static func expectedWorkflowAudioFrames(_ request: AudioRequest, details: [String: String]) throws -> Int64 {
+        guard request.ace != nil else { return try expectedAudioFrames(request) }
+        let frameValue = (request.durationSeconds * 48_000).rounded()
+        guard request.durationSeconds <= 600,
+              let requested = Int64(exactly: frameValue), requested > 0,
+              requested <= Int64.max - 96_000,
+              details["profile"] == ACERequest.fixedProfile,
+              details["requestedFrames"].flatMap(Int64.init) == requested,
+              details["effectiveFrames"].flatMap(Int64.init) == requested,
+              let delivered = details["deliveredFrames"].flatMap(Int64.init),
+              delivered > 0, delivered <= max(requested, 245_760) + 96_000,
+              details["tailPaddingFrames"].flatMap(Int64.init) == max(0, delivered - requested),
+              details["shortfallFrames"].flatMap(Int64.init) == max(0, requested - delivered) else {
+            throw ProjectStoreError.invalidProject("ACE产物缺少与实际请求一致的时长记录。")
+        }
+        return delivered
     }
 
     static func validateAudioName(_ name: String) throws {
@@ -2892,7 +2923,8 @@ private enum ProjectFiles {
                           (asset.role == .original ? audio.origin == .importedFile : [.modelGenerated, .programGenerated].contains(audio.origin)) else {
                         throw ProjectStoreError.invalidProject("流程音频的来源或格式不一致。")
                     }
-                    try validateAudioFormat(audio.format, policy: asset.role == .original ? .original : .generated)
+                    // Workflow request/receipt validation below applies the model-specific bound.
+                    try validateAudioFormat(audio.format, policy: asset.role == .original ? .workflowOriginal : .aceGenerated)
                 } else if format.kind == .video {
                     guard let video = asset.metadata.video, video.width == asset.metadata.width,
                           video.height == asset.metadata.height, video.width > 0, video.height > 0,
@@ -3206,6 +3238,20 @@ extension ProjectStore {
                   asset.mediaType == known[ref.assetID]?.mediaType else {
                 throw WorkflowIssue("流程资产身份或媒体类型不合法。")
             }
+            if let metadata = asset.metadata.audio, asset.relativePath.hasPrefix("WorkflowAssets/") {
+                var policy: AudioInspectionPolicy = asset.role == .original ? .workflowOriginal : .generated
+                if let request = record.request, case .audio(let audio) = request.input, audio.ace != nil {
+                    try ProjectFiles.validateCurrentAudioProfile(audio)
+                    guard metadata.origin == .modelGenerated, metadata.format.container == .wav,
+                          metadata.format.sampleRate == 48_000, metadata.format.channelCount == 2,
+                          metadata.format.bitDepth == 32, metadata.format.floatingPoint,
+                          metadata.format.frameCount == (try ProjectFiles.expectedWorkflowAudioFrames(audio, details: record.metadata)) else {
+                        throw WorkflowIssue("ACE保存记录与媒体规格不一致。")
+                    }
+                    policy = .aceGenerated
+                }
+                try ProjectFiles.validateAudioFormat(metadata.format, policy: policy)
+            }
         }
         let refs = Set(archive.assets.map(\.reference))
         func validateRef(_ ref: WorkflowAssetReference) throws {
@@ -3318,7 +3364,8 @@ extension ProjectStore {
         if format.kind == .audio {
             let url = try stageWorkflowMedia(data, assetID: assetID, suffix: format.suffix, limit: format.maximumBytes)
             let original = operationID == "d.asset.import"
-            let inspection = try AudioMediaInspector.inspect(at: url, policy: original ? .original : .generated)
+            let isACE = request.map { if case .audio(let audio) = $0.input { return audio.ace != nil }; return false } ?? false
+            let inspection = try AudioMediaInspector.inspect(at: url, policy: original ? .workflowOriginal : (isACE ? .aceGenerated : .generated))
             guard inspection.contentSHA256 == hash,
                   ProjectFiles.audioMediaType(inspection.format.container) == mediaType else {
                 throw WorkflowIssue("音频内容或容器与冻结输入不一致。")
@@ -3331,7 +3378,7 @@ extension ProjectStore {
                       inspection.format.sampleRate == Double(audio.outputSampleRate),
                       inspection.format.channelCount == 2, inspection.format.floatingPoint,
                       inspection.format.bitDepth == 32,
-                      inspection.format.frameCount == (try ProjectFiles.expectedAudioFrames(audio)) else {
+                      inspection.format.frameCount == (try ProjectFiles.expectedWorkflowAudioFrames(audio, details: details)) else {
                     throw WorkflowIssue("音频产物不符合实际请求的采样率、声道或时长。")
                 }
                 origin = .modelGenerated
@@ -3435,6 +3482,16 @@ extension ProjectStore {
         return (try assetURL(for: asset), asset)
     }
 
+    /// Playback uses the admitted asset and recipe, never a caller's free-form profile label.
+    public func workflowAudioPlaybackPolicy(_ reference: WorkflowAssetReference) throws -> AudioInspectionPolicy {
+        _ = try workflowData(reference)
+        guard reference.kind == .audio,
+              let asset = manifest.assets.first(where: { $0.id == reference.assetID }) else {
+            throw ProjectStoreError.missingAsset
+        }
+        return try audioInspectionPolicy(for: asset)
+    }
+
     /// Pin an existing project asset, without copying it into a second asset system.
     public func pinWorkflowAsset(_ id: UUID) throws -> WorkflowAssetReference {
         var archive = try editableWorkflow()
@@ -3495,8 +3552,10 @@ extension ProjectStore {
         try checkLocation()
         let parent = try ProjectFiles.openDirectory(source.deletingLastPathComponent())
         defer { Darwin.close(parent) }
-        let data = try ProjectFiles.read(relative: source.lastPathComponent, in: parent, limit: 64 * 1_024 * 1_024)
-        if ["wav", "caf"].contains(source.pathExtension.lowercased()) {
+        let audioImport = ["wav", "caf"].contains(source.pathExtension.lowercased())
+        let readLimit = audioImport ? AudioInspectionPolicy.workflowOriginal.maximumBytes : 64 * 1_024 * 1_024
+        let data = try ProjectFiles.read(relative: source.lastPathComponent, in: parent, limit: readLimit)
+        if audioImport {
             return try publishWorkflowAsset(data: data, mediaType: source.pathExtension.lowercased() == "wav" ? "audio/wav" : "audio/x-caf",
                 name: source.lastPathComponent, operationID: "d.asset.import", details: ["origin": "explicit-file-snapshot"])
         }

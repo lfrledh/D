@@ -15,11 +15,46 @@ enum AppSessionFactory {
         audioAccessRoot: URL? = nil,
         bundledVideoEngine: BundledAudioEngine? = nil, videoAccessRoot: URL? = nil,
         bundledPitchEngine: BundledAudioEngine? = nil,
-        bundledExternalVideoEngine: BundledAudioEngine? = nil) async throws -> WorkbenchSession {
+        bundledExternalVideoEngine: BundledAudioEngine? = nil, bundledACEEngine: BundledAudioEngine? = nil) async throws -> WorkbenchSession {
         let stages = BackendStageMonitor()
         let backend = try MLXImageBackend(configuration: .init(artifactDirectory: artifactDirectory, profile: .scalableKlein4B),
                                          observer: { await stages.record($0) })
         let textBackend = try MLXTextBackend(configuration: .init(maximumPromptTokens: 32768, maximumOutputTokens: 8192))
+        let vlmBackend = try MLXQwenVLMBackend(configuration: .init(artifactDirectory: artifactDirectory,
+            maximumPromptTokens: 262144, maximumOutputTokens: 262144))
+        let devBackend = try MLXFluxDevBackend(configuration: .init(artifactDirectory: artifactDirectory, profile: .flux2Dev))
+        var modelAdapters: [WorkflowModelAdapter] = []
+        for profile in try TextModelProfiles.registeredVLM() {
+            let operation = profile.repository.contains("Qwen3.8-27B") ? WorkflowModelRoutes.qwen38 : WorkflowModelRoutes.qwen35
+            modelAdapters.append(.init(kind: .text, modelRevision: profile.revision, operationID: operation,
+                title: profile.displayTitle, backendID: vlmBackend.descriptor.id, textCapability: vlmBackend.executionCapability,
+                validateModel: { directory in
+                    let reference = try await TextModelProfiles.verifyVLM(at: directory, profileID: profile.id)
+                    _ = try MLXQwenVLMBackend.validateModel(at: directory)
+                    return reference
+                }))
+        }
+        modelAdapters.append(.init(kind: .image, modelRevision: "e7b7dc27f91deacad38e78976d1f2b499d76a294",
+            operationID: "d.image.generate", title: "FLUX.2-klein-4B · BF16", backendID: backend.descriptor.id,
+            imageRecipe: .klein(capability: backend.executionCapability),
+            validateModel: { try await backend.validateModel(at: $0, revision: "e7b7dc27f91deacad38e78976d1f2b499d76a294") }))
+        modelAdapters.append(.init(kind: .image, modelRevision: "26afe3a78bb242c0a8bb181dcc8937bb16e5c66c",
+            operationID: WorkflowModelRoutes.fluxDev, title: "FLUX.2-dev · BF16", backendID: devBackend.descriptor.id,
+            imageRecipe: .fluxDev(capability: devBackend.executionCapability),
+            validateModel: { try await devBackend.validateModel(at: $0) }))
+
+        let aceBackend: ExternalACEBackend?
+        if let engine = bundledACEEngine, let accessRoot = audioAccessRoot {
+            let implementation = try ExternalACEBackend(configuration: .init(
+                pythonExecutable: engine.pythonExecutable, providerScript: engine.providerScript,
+                vendorDirectory: engine.vendorDirectory, modelManifest: engine.modelManifest,
+                artifactDirectory: artifactDirectory, accessBootstrapRoot: accessRoot,
+                confirmDeployment: { try engine.confirmUnchanged() }))
+            aceBackend = implementation
+            modelAdapters.append(.init(kind: .music, modelRevision: "d06de46b4622f781cf07f4a013a67d591ca52819",
+                operationID: WorkflowModelRoutes.ace, title: "ACE-Step 1.5 XL SFT · MLX F32 / no-LM",
+                backendID: implementation.descriptor.id, validateModel: { try await implementation.validateModel(at: $0) }))
+        } else { aceBackend = nil }
         let audioBackend: MLXAudioBackend?
         if let engine = bundledAudioEngine, let consent = audioConsent, let accessRoot = audioAccessRoot {
             audioBackend = try MLXAudioBackend(configuration: .init(
@@ -74,11 +109,12 @@ enum AppSessionFactory {
                 accessBootstrapRoot: audioAccessRoot))
             pitchReference = ModelReference(directory: engine.vendorDirectory, revision: PitchAnalysisRequest.modelSHA256)
         } else { pitchBackend = nil; pitchReference = nil }
-        var backends: [any InferenceBackend] = [backend, textBackend]
+        var backends: [any InferenceBackend] = [backend, textBackend, vlmBackend, devBackend]
         if let pitchBackend { backends.append(pitchBackend) }
         if let videoBackend { backends.append(videoBackend) }
         backends.append(contentsOf: externalVideoBackends)
         if let musicBackend { backends.append(musicBackend) }
+        if let aceBackend { backends.append(aceBackend) }
         if let audioBackend { backends.append(audioBackend) }
         let runtime = try InferenceRuntime(
             backends: backends,
@@ -133,7 +169,10 @@ enum AppSessionFactory {
                                               state: state)
             },
             shutdown: { await runtime.shutdown() },
-            cleanup: { try await backend.cleanupUnpublishedArtifacts() },
+            cleanup: {
+                try await backend.cleanupUnpublishedArtifacts()
+                try await devBackend.cleanupUnpublishedArtifacts()
+            },
             validateModel: { directory in
                 // Registration checks layout and configuration without loading weights.
                 // Actual execution still verifies the complete fixed model SHA-256 manifest.
@@ -151,7 +190,7 @@ enum AppSessionFactory {
             imageCapability: backend.executionCapability, textCapability: textBackend.executionCapability,
             audioCapability: audioBackend?.executionCapability, musicCapability: musicBackend?.executionCapability,
             videoBackendID: videoBackend?.descriptor.id, validateVideoModel: validateVideoModel,
-            videoCapability: videoBackend?.executionCapability, videoAdapters: videoAdapters, defaultMemoryBudgetBytes: memoryBudgetBytes,
+            videoCapability: videoBackend?.executionCapability, videoAdapters: videoAdapters, modelAdapters: modelAdapters, defaultMemoryBudgetBytes: memoryBudgetBytes,
             pitchBackendID: pitchBackend?.descriptor.id, pitchModel: pitchReference)
     }
 

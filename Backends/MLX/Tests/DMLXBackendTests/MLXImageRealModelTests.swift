@@ -34,7 +34,14 @@ struct MLXImageRealModelTests {
                 let result = try Self.completed(collected)
                 let hash = try Self.validateImage(result, outputs: collected.outputs, root: artifacts.url)
                 hashes.append(hash)
-                urls.insert(try #require(result.artifacts.first).url)
+                let resultURL = try #require(result.artifacts.first).url
+                if let path = ProcessInfo.processInfo.environment["D_TEST_IMAGE_EVIDENCE_DIR"] {
+                    // Explicit test-owned persistent evidence, without changing the golden assertion.
+                    let target = URL(fileURLWithPath: path, isDirectory: true)
+                        .appendingPathComponent(request.id.uuidString + ".png")
+                    try Data(contentsOf: resultURL).write(to: target, options: .withoutOverwriting)
+                }
+                urls.insert(resultURL)
                 #expect(hash == Self.referencePNG, "The fixed prompt/seed must reproduce the reviewed B1 PNG")
                 try await Self.expectReleased(trace, run: request.id, label: "normal-round-\(round)")
             }

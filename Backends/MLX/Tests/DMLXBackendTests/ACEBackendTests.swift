@@ -180,6 +180,66 @@ struct ACEBackendTests {
         await backend.release()
     }
 
+    @Test("Drained private-copy mutation and ordinary terminal causes cross the real bridge",
+          arguments: ["mutation", "cancelledMutation", "configuration", "cancelledMutationCleanup"])
+    func privateCopyTerminal(mode: String) async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let marker = Data(fixture.marker.path.utf8).base64EncodedString()
+        let script = """
+            import base64,json,sys,time,signal,urllib.parse
+            a=sys.argv;r=json.load(open(a[a.index('--request')+1]))
+            def terminal(*_):
+                if '\(mode)' != 'configuration':
+                    p=urllib.parse.unquote(urllib.parse.urlsplit(r['source']['url']).path)
+                    with open(p,'r+b') as f:
+                        f.seek(-1,2);f.write(b'\\x01');f.flush()
+                kind='configuration' if '\(mode)' == 'configuration' else 'inputMutation'
+                print(json.dumps({'schemaVersion':1,'type':'error','runID':r['runID'],
+                      'kind':kind,'message':'controlled private-view verification cause'}),flush=True)
+                sys.exit(2)
+            signal.signal(signal.SIGTERM, terminal)
+            open(base64.b64decode('\(marker)').decode(),'wb').write(b'1')
+            if '\(mode)'.startswith('cancelledMutation'):
+                while True: time.sleep(0.02)
+            terminal()
+            """
+        try Data(script.utf8).write(to: fixture.provider)
+        let markerURL = fixture.marker
+        let check: @Sendable () throws -> Void = {
+            if mode.hasSuffix("Cleanup"), FileManager.default.fileExists(atPath: markerURL.path) {
+                throw InferenceFailure.backendFailed("controlled stopped deployment check")
+            }
+        }
+        let backend = try ExternalACEBackend(configuration: fixture.configuration(confirmation: check))
+        let task = Task { try await backend.execute(fixture.request(source: true), emit: { _ in }) }
+        if mode.hasPrefix("cancelledMutation") {
+            for _ in 0..<150 {
+                if FileManager.default.fileExists(atPath: fixture.marker.path) { break }
+                try await Task.sleep(for: .milliseconds(20))
+            }
+            #expect(FileManager.default.fileExists(atPath: fixture.marker.path))
+            task.cancel()
+        }
+        do {
+            _ = try await task.value
+            Issue.record("Invalid private input must not publish")
+        } catch let failure as InferenceFailure {
+            if mode == "configuration" {
+                if case .backendFailed = failure {} else { Issue.record("Unexpected \(failure)") }
+            } else {
+                if case .inputIntegrityChanged = failure {} else { Issue.record("Unexpected \(failure)") }
+            }
+            #expect(failure.localizedDescription.contains("controlled private-view verification cause"))
+            if mode.hasSuffix("Cleanup") {
+                #expect(failure.localizedDescription.contains("controlled stopped deployment check"))
+            }
+        } catch { Issue.record("Lost child protection/cause: \(error)") }
+        await backend.release()
+        let bytes = try Data(contentsOf: fixture.original)
+        #expect(bytes.last == 0, "The original was never changed by this fixture")
+    }
+
     private struct Fixture {
         let root: URL
         let model: URL
@@ -191,7 +251,8 @@ struct ACEBackendTests {
         let marker: URL
 
         init(mutateSource: Bool = false, sleepUntilCancelled: Bool = false) throws {
-            root = FileManager.default.temporaryDirectory.appendingPathComponent("ace-test-\(UUID())", isDirectory: true)
+            let temporary = ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"].map { URL(fileURLWithPath: $0, isDirectory: true) } ?? FileManager.default.temporaryDirectory
+            root = temporary.resolvingSymlinksInPath().appendingPathComponent("ace-test-\(UUID())", isDirectory: true)
             model = root.appendingPathComponent("model", isDirectory: true)
             vendor = root.appendingPathComponent("vendor", isDirectory: true)
             artifacts = root.appendingPathComponent("artifacts", isDirectory: true)
@@ -275,10 +336,11 @@ struct ACEBackendTests {
 
         func remove() { try? FileManager.default.removeItem(at: root) }
 
-        func configuration() -> ACEBackendConfiguration {
+        func configuration(confirmation: (@Sendable () throws -> Void)? = nil) -> ACEBackendConfiguration {
             ACEBackendConfiguration(pythonExecutable: URL(fileURLWithPath: "/usr/bin/python3"),
                 providerScript: provider, vendorDirectory: vendor, modelManifest: manifest,
-                artifactDirectory: artifacts, timeoutSeconds: 10, cancellationGraceSeconds: 1)
+                artifactDirectory: artifacts, timeoutSeconds: 10, cancellationGraceSeconds: 1,
+                confirmDeployment: confirmation)
         }
 
         func request(source: Bool = false) -> InferenceRequest {

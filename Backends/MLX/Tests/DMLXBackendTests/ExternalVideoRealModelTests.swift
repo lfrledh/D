@@ -1,3 +1,4 @@
+import CryptoKit
 import DInference
 import DRuntime
 import Foundation
@@ -9,6 +10,62 @@ import Testing
 @Suite("Prepared external video engine with real local weights", .serialized,
        .enabled(if: ProcessInfo.processInfo.environment["D_TEST_REAL_VIDEO_PROFILE"] != nil))
 struct ExternalVideoRealModelTests {
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["D_TEST_REAL_VIDEO_PROFILE"] == "minimax-h3-fl2va-bf16-full-v1"))
+    func firstLastFrameConditionsReachRealH3() async throws {
+        let env = ProcessInfo.processInfo.environment
+        let engine = URL(fileURLWithPath: try #require(env["D_TEST_REAL_VIDEO_ENGINE"]))
+        let pack = URL(fileURLWithPath: try #require(env["D_TEST_REAL_VIDEO_PACK"]))
+        let root = URL(fileURLWithPath: try #require(env["D_TEST_EXTERNAL_VIDEO_ROOT"]))
+            .appendingPathComponent("h3-frames-" + UUID().uuidString)
+        let output = root.appendingPathComponent("outputs")
+        try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
+        func frame(_ name: String, blue: Bool) throws -> VideoFrameReference {
+            var pixels = [UInt8](repeating: 0, count: 256 * 256 * 3)
+            for y in 0..<256 { for x in 0..<256 {
+                let index = (y * 256 + x) * 3
+                pixels[index + (blue ? 2 : 0)] = UInt8(64 + x / 2)
+                pixels[index + 1] = UInt8(y / 2)
+            } }
+            let data = try ImagePNG.encode(rgb: pixels, width: 256, height: 256)
+            let file = root.appendingPathComponent(name + ".png")
+            try data.write(to: file, options: .withoutOverwriting)
+            return .init(url: file, width: 256, height: 256, byteCount: UInt64(data.count),
+                contentSHA256: SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined())
+        }
+        let first = try frame("first", blue: false), last = try frame("last", blue: true)
+        let backend = try ExternalVideoBackend(configuration: .init(profile: .h3BF16Full,
+            pythonExecutable: engine.appendingPathComponent("python/bin/python3"),
+            providerScript: engine.appendingPathComponent("provider/app_video_driver.py"),
+            ffmpeg: engine.appendingPathComponent("native/ffmpeg"), ffprobe: engine.appendingPathComponent("native/ffprobe"),
+            h3Executable: engine.appendingPathComponent("native/h3"), h3Shader: engine.appendingPathComponent("native/h3_shaders.metal"),
+            artifactDirectory: output, timeoutSeconds: 900, cancellationGraceSeconds: 5))
+        let model = try await backend.validateModel(at: pack)
+        let runtime = try InferenceRuntime(backends: [backend], configuration: .init(memoryBudgetBytes: 12 * 1_073_741_824))
+        let request = InferenceRequest(model: model, input: .video(.init(prompt: "A slow color transition, stable camera.",
+            negativePrompt: "", width: 256, height: 256, frameCount: 22, frameRate: .init(numerator: 24),
+            steps: 2, guidanceScale: 1, scheduleShift: 1, seed: 42,
+            executionProfile: ExternalVideoExecutionProfile.h3BF16Full.reference,
+            adapterOptions: .h3(streamWeights: true), firstFrame: first, lastFrame: last)))
+        do {
+            let run = try await runtime.submit(request, backendID: backend.descriptor.id)
+            for try await _ in run.events {}
+            let outcome = await run.outcome()
+            guard case .completed(let result) = outcome else { throw InferenceFailure.backendFailed("H3 condition run failed: \(outcome)") }
+            #expect(result.metadata["firstFrameSHA256"] == first.contentSHA256)
+            #expect(result.metadata["lastFrameSHA256"] == last.contentSHA256)
+            for frame in [first, last] {
+                #expect(SHA256.hash(data: try Data(contentsOf: frame.url)).map { String(format: "%02x", $0) }.joined() == frame.contentSHA256)
+            }
+            let state = await runtime.snapshot()
+            #expect(state.activeRunID == nil && state.reservedBytes == 0)
+            let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            try encoder.encode(request).write(to: root.appendingPathComponent("request.json"), options: .withoutOverwriting)
+            try encoder.encode(result).write(to: root.appendingPathComponent("result.json"), options: .withoutOverwriting)
+            print("D_H3_FRAME_RESULT " + root.path)
+            await runtime.shutdown()
+        } catch { await runtime.shutdown(); throw error }
+    }
+
     @Test func generateCancelAdmissionAndRecover() async throws {
         let env = ProcessInfo.processInfo.environment
         let profileName = try #require(env["D_TEST_REAL_VIDEO_PROFILE"])

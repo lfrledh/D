@@ -277,7 +277,7 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
         let createdGraph = graph == nil
         if createdGraph { addBlankGraph() }
         var node = op.definition.makeNode()
-        if operationID == "d.model.language" { node.dataConfiguration = .init(schema: .text) }
+        if WorkflowModelRoutes.isLanguage(operationID) { node.dataConfiguration = .init(schema: .text) }
         if let modelID { node.parameters["modelID"] = .text(modelID) }
         edit { graph in
             graph.nodes.append(node)

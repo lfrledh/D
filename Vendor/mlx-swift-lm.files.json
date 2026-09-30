@@ -1086,8 +1086,8 @@
     {
       "path": "Libraries/MLXVLM/MediaProcessing.swift",
       "upstreamSHA256": "bd202dc47e11f60234fad8a94317bcb768cbf0a74efe714580aafb890d8ff4ea",
-      "sha256": "f7575ee91aae1e9704f4eb77ff58c1caefbedc3f76a43af673268a04a6b6ea67",
-      "size": 23421
+      "sha256": "c8d0cb32e853fc30c17eee71b930f2e6608068c11f310250a71c2705a6c83f9c",
+      "size": 23420
     },
     {
       "path": "Libraries/MLXVLM/Models/FastVLM.swift",
