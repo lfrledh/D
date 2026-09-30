@@ -141,6 +141,43 @@ struct WorkflowExternalVideoServicesTests {
         }
         #expect(await owner.requestClose())
     }
+    @Test func cancelledRegistrationAfterFirstMatchDoesNotPersistBookmarkOrChoice() async throws {
+        let base = URL(fileURLWithPath: try #require(ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"]))
+            .appendingPathComponent("cancel-video-registration-" + UUID().uuidString)
+        let pack = base.appendingPathComponent("pack")
+        try FileManager.default.createDirectory(at: pack, withIntermediateDirectories: true)
+        try JSONEncoder().encode(ExternalVideoModelManifest(profile: .h3BF16Full))
+            .write(to: pack.appendingPathComponent(ExternalVideoModelManifest.filename), options: .withoutOverwriting)
+        let suite = "D.CancelVideoRegistration." + UUID().uuidString
+        let settings = try #require(UserDefaults(suiteName: suite))
+        defer { settings.removePersistentDomain(forName: suite) }
+        let engine = VideoAdmissionProbe()
+        let (entered, signal) = AsyncStream<Void>.makeStream()
+        let owner = ProjectSession(sessionFactory: { _ in
+            WorkbenchSession(engine: engine, backendID: "unused.image",
+                status: { .init(activeRunID: nil, phase: nil, queuedRunIDs: []) }, shutdown: {}, cleanup: {}, validateModel: { _ in },
+                videoAdapters: [
+                    .init(profile: .h3BF16Full, validateModel: { url in .init(directory: url, revision: ExternalVideoExecutionProfile.h3BF16Full.modelIdentity) }),
+                    .init(profile: .ltx25BF16Full, validateModel: { _ in
+                        signal.yield(())
+                        try await Task.sleep(for: .seconds(5))
+                        throw VideoAdmissionProbeFailure.stoppedBeforeModel
+                    })])
+        }, settings: settings)
+        await owner.createProject(at: base.appendingPathComponent("test.dproject"))
+        let registration = Task { @MainActor in
+            defer { signal.finish() }
+            return try await owner.registerExplicitModel(at: pack, kind: .video)
+        }
+        var iterator = entered.makeAsyncIterator()
+        #expect(await iterator.next() != nil)
+        registration.cancel()
+        await #expect(throws: CancellationError.self) { try await registration.value }
+        #expect(try WorkflowModelBookmarks(settings: settings).entries().isEmpty)
+        #expect(owner.explicitModelChoices.isEmpty)
+        #expect(await engine.calls.isEmpty)
+        #expect(await owner.requestClose())
+    }
     @Test func mismatchedRecipeSubmitsNothingAndReleasesInstallation() async throws {
         try await checkBinding(mismatch: true)
     }

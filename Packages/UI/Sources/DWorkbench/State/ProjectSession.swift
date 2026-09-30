@@ -1038,6 +1038,17 @@ public final class ProjectSession {
         refreshWorkflowModels()
         return choice
     }
+    public func prepareWorkflowVideo(id: ModelID, in parent: URL) async throws -> WorkflowModelChoice {
+        guard let library = modelLibrary, let owner = store, session != nil, !isChangingProject, !closePending else {
+            throw WorkflowIssue("请先打开项目，再准备模型。")
+        }
+        let prepared = try await library.prepareVideo(id, in: parent)
+        try Task.checkCancellation()
+        guard store === owner, !isChangingProject, !closePending else {
+            throw WorkflowIssue("项目已切换；执行包已保留在 \(prepared.path)，未改变新项目。")
+        }
+        return try await registerExplicitModel(at: prepared, kind: .video)
+    }
     /// Registration has explicit identity and does not depend on a selected graph node.
     public func registerExplicitModel(at url: URL, kind: WorkflowModelKind) async throws -> WorkflowModelChoice {
         guard let session, let owner = store, !isChangingProject, !closePending else { throw WorkflowIssue("工作区未就绪。") }
@@ -1094,7 +1105,10 @@ public final class ProjectSession {
                         var matches: [ModelReference] = []
                         // Registration validators are read-only and do not load weights.
                         for adapter in candidates {
-                            if let value = try? await adapter.validateModel(lease.url) { matches.append(value) }
+                            try Task.checkCancellation()
+                            do { matches.append(try await adapter.validateModel(lease.url)) }
+                            catch is CancellationError { throw CancellationError() }
+                            catch { /* Nonmatching fixed recipe only; no execution fallback. */ }
                         }
                         guard matches.count == 1, let value = matches.first else {
                             throw WorkflowIssue("视频资源包未匹配唯一的已安装实现；请检查模型版本与配方。")
@@ -1107,7 +1121,8 @@ public final class ProjectSession {
                 case .pitch: throw WorkflowIssue("SwiftF0 使用已准备的固定资源，不能替换为其他模型。")
                 case .image: try await session.validateModel(lease.url); revision = nil
                 }
-                guard store === owner, !closePending else { throw WorkflowIssue("工作区已切换。") }
+                try Task.checkCancellation()
+                guard store === owner, !isChangingProject, !closePending else { throw WorkflowIssue("工作区已切换。") }
                 identity = kind.rawValue + ":" + (revision ?? lease.url.lastPathComponent)
                 try WorkflowModelBookmarks(settings: settings).remember(identity: identity, kind: kind,
                     name: lease.url.lastPathComponent, bookmark: lease.bookmark)

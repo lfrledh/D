@@ -39,6 +39,7 @@ public actor ModelLibrary {
     private var externalScopes: [ModelID: ModelScopedLocation] = [:]
     private var workers: [ModelID: Task<Void, Never>] = [:]
     private var leases: [UUID: ModelUsageLease] = [:]
+    private var preparationJobs: [ModelID: (job: Task<URL, any Error>, lease: ModelUsageLease)] = [:]
     private var accepting = true
     private var cancelledOperations: Set<ModelID> = []
     private static let chunkBytes: UInt64 = 16 * 1024 * 1024
@@ -146,7 +147,7 @@ public actor ModelLibrary {
 
     public func configureRoot(at selected: URL) throws {
         try requireAdmission()
-        guard workers.isEmpty, leases.isEmpty else { throw ModelLibraryError.busy("模型正在下载、校验或用于任务；请等待结束后更换模型库位置。") }
+        guard workers.isEmpty, preparationJobs.isEmpty, leases.isEmpty else { throw ModelLibraryError.busy("模型正在下载、校验或用于任务；请等待结束后更换模型库位置。") }
         let scope = try ModelScopedLocation(selected)
         let hasManaged = disk.records.contains { $0.record.storage == .managed }
         let candidate = try ModelDirectory(scope.url)
@@ -323,6 +324,33 @@ public actor ModelLibrary {
         let directory = try resolved(value)
         return .init(directory: directory.url, revision: value.record.revision)
     }
+    public func canPrepareVideo(_ id: ModelID) throws -> Bool {
+        try stored(id).record.state == .preparationRequired && ModelVideoPreparation.profile(for: entry(for: id)) != nil
+    }
+    /// A separate prepared copy is returned for the existing explicit-model
+    /// registration path. Raw download records deliberately remain raw resources.
+    public func prepareVideo(_ id: ModelID, in selectedParent: URL) async throws -> URL {
+        try await prepareVideo(id, in: selectedParent, checkpoint: { _ in })
+    }
+    func prepareVideo(_ id: ModelID, in selectedParent: URL, checkpoint: @escaping @Sendable (Int) throws -> Void) async throws -> URL {
+        try requireAdmission(); try requireIdleWorker()
+        guard try canPrepareVideo(id) else { throw ModelLibraryError.unavailable("此模型暂未提供原生准备操作。") }
+        let original = try stored(id), entry = try entry(for: id)
+        let source = try resolved(original)
+        let scope = try ModelScopedLocation(selectedParent)
+        let parent = try ModelDirectory(scope.url)
+        let lease = ModelUsageLease(id: UUID(), modelID: id, reference: .init(directory: source.url, revision: entry.revision))
+        leases[lease.id] = lease; disk.revision &+= 1
+        defer { finishPreparation(id, lease: lease); withExtendedLifetime(scope) {} }
+        let name = entry.id + "-" + UUID().uuidString
+        let job = Task.detached { try ModelVideoPreparation.prepare(source: source, entry: entry, parent: parent, name: name, checkpoint: checkpoint) }
+        preparationJobs[id] = (job, lease)
+        return try await withTaskCancellationHandler { try await job.value } onCancel: { job.cancel() }
+    }
+    private func finishPreparation(_ id: ModelID, lease: ModelUsageLease) {
+        if preparationJobs[id]?.lease.id == lease.id { preparationJobs.removeValue(forKey: id) }
+        release(lease)
+    }
     public func acquire(_ id: ModelID) throws -> ModelUsageLease {
         let reference = try resolve(id)
         let lease = ModelUsageLease(id: UUID(), modelID: id, reference: reference)
@@ -407,6 +435,12 @@ public actor ModelLibrary {
     public func shutdown() async throws {
         accepting = false
         do {
+            let preparing = preparationJobs
+            for task in preparing.values { task.job.cancel() }
+            for (id, task) in preparing {
+                _ = try? await task.job.value
+                finishPreparation(id, lease: task.lease)
+            }
             let pending = Array(workers.values)
             for worker in pending { worker.cancel() }
             for worker in pending { await worker.value }
@@ -656,7 +690,7 @@ public actor ModelLibrary {
         try stateDirectory.atomicWrite(encoder.encode(disk), to: "index.json")
     }
     private func requireAdmission() throws { if !accepting { throw ModelLibraryError.busy("模型库正在关闭，请等待应用退出。") } }
-    private func requireIdleWorker() throws { if !workers.isEmpty { throw ModelLibraryError.busy("请先等待或暂停当前模型操作。") } }
+    private func requireIdleWorker() throws { if !workers.isEmpty || !preparationJobs.isEmpty { throw ModelLibraryError.busy("请先等待或暂停当前模型操作。") } }
     private func stored(_ id: ModelID) throws -> StoredRecord {
         guard let result = disk.records.first(where: { $0.record.id == id }) else { throw ModelLibraryError.unavailable("模型记录不存在。") }; return result
     }

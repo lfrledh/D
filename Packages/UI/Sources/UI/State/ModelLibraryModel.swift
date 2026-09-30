@@ -9,6 +9,7 @@ import Observation
 public final class ModelLibraryModel {
     public var isPresented = false
     public var errorMessage: String?
+    public private(set) var preparationNotice: String?
     public private(set) var snapshot: ModelLibrarySnapshot?
     public private(set) var isChoosingLocation = false
     public private(set) var globalOperation: GlobalOperation?
@@ -16,16 +17,18 @@ public final class ModelLibraryModel {
     public private(set) var pendingCatalogIDs: Set<String> = []
 
     @ObservationIgnored public let library: ModelLibrary
+    @ObservationIgnored private var preparation: Task<Void, Never>?
     @ObservationIgnored private var poller: Task<Void, Never>?
     @ObservationIgnored private var refreshGeneration: UInt64 = 0
 
     public enum GlobalOperation: Sendable {
-        case choosingRoot, registering
+        case choosingRoot, registering, preparing
 
         public var title: String {
             switch self {
             case .choosingRoot: "正在连接模型库…"
             case .registering: "正在校验本地模型…"
+            case .preparing: "正在准备并校验独立执行包…"
             }
         }
     }
@@ -153,6 +156,35 @@ public final class ModelLibraryModel {
         await refresh()
     }
 
+    public func prepareVideo(_ id: ModelID, action: @escaping @MainActor (ModelID, URL) async throws -> Void) async {
+        guard canChooseRoot else { return }
+        isChoosingLocation = true
+        guard (try? await library.canPrepareVideo(id)) == true else { isChoosingLocation = false; return }
+        let panel = NSOpenPanel()
+        panel.title = "选择执行包存放位置"
+        panel.message = "D 将创建独立执行包并校验文件，保留原始模型。优先使用同一 APFS 外盘；不会加载模型。"
+        panel.canChooseFiles = false; panel.canChooseDirectories = true
+        panel.canCreateDirectories = true; panel.allowsMultipleSelection = false
+        let response = await panel.begin(); isChoosingLocation = false
+        guard response == .OK, let parent = panel.url else { return }
+        globalOperation = .preparing; preparationNotice = nil
+        let task = Task { @MainActor in
+            let scoped = parent.startAccessingSecurityScopedResource()
+            defer { if scoped { parent.stopAccessingSecurityScopedResource() } }
+            do {
+                try await action(id, parent)
+                try Task.checkCancellation()
+                preparationNotice = "独立执行包已校验并登记。返回资料库选择该模型即可使用；原始下载记录保留，不自动运行或切换草稿。"
+            }
+            catch is CancellationError { }
+            catch { self.report(error, context: "执行包准备或登记未完成") }
+        }
+        preparation = task
+        await task.value
+        preparation = nil; globalOperation = nil
+        await refresh()
+    }
+    public func cancelPreparation() { preparation?.cancel() }
     public func install(catalogID: String) async {
         guard !isChoosingLocation, rootURL != nil, globalOperation == nil, !pendingCatalogIDs.contains(catalogID) else { return }
         pendingCatalogIDs.insert(catalogID)

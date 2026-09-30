@@ -113,7 +113,10 @@ public struct DualWorkbenchView: View {
             }.frame(minWidth: 960, minHeight: 650)
         }
         .sheet(isPresented: Binding(get: { library.isPresented }, set: { library.isPresented = $0 }), onDismiss: restoreLibraryIfNeeded) {
-            ModelLibraryView(model: library, selectedModelID: quickModel.projectSession.workflowInstallationID(for: quick.draft?.node.parameters["modelID"]?.string), canSelect: true) { id in
+            ModelLibraryView(model: library, selectedModelID: quickModel.projectSession.workflowInstallationID(for: quick.draft?.node.parameters["modelID"]?.string), canSelect: true, onPrepare: { id, parent in
+                // Preparing resources does not navigate or replace a newer draft.
+                _ = try await quickModel.projectSession.prepareWorkflowVideo(id: id, in: parent)
+            }) { id in
                 do {
                     let choice = try await quickModel.projectSession.selectWorkflowInstallation(id: id)
                     guard let operation = WorkflowModelRoutes.operation(for: choice) else { throw WorkflowIssue("此模型没有可用的共享操作。") }

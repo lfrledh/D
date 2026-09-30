@@ -6,6 +6,7 @@ public struct ModelLibraryView: View {
     @Bindable private var model: ModelLibraryModel
     private let selectedModelID: ModelID?
     private let canSelect: Bool
+    private let onPrepare: (@MainActor (ModelID, URL) async throws -> Void)?
     private let onSelect: @MainActor (ModelID) async -> Void
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.dismiss) private var dismiss
@@ -13,10 +14,12 @@ public struct ModelLibraryView: View {
 
     public init(model: ModelLibraryModel, selectedModelID: ModelID? = nil,
                 canSelect: Bool = false,
+                onPrepare: (@MainActor (ModelID, URL) async throws -> Void)? = nil,
                 onSelect: @escaping @MainActor (ModelID) async -> Void = { _ in }) {
         self.model = model
         self.selectedModelID = selectedModelID
         self.canSelect = canSelect
+        self.onPrepare = onPrepare
         self.onSelect = onSelect
     }
 
@@ -27,10 +30,12 @@ public struct ModelLibraryView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 28) {
                     storageLocation
+                    if let notice = model.preparationNotice { Text(notice).font(.callout).textSelection(.enabled) }
                     if let operation = model.globalOperation {
                         HStack(spacing: 10) {
                             ProgressView().controlSize(.small)
                             Text(operation.title).font(.callout)
+                            if case .preparing = operation { Button("取消准备") { model.cancelPreparation() } }
                         }
                         .accessibilityElement(children: .combine)
                     }
@@ -174,7 +179,7 @@ public struct ModelLibraryView: View {
                 ForEach(model.records) { record in
                     ModelInstallationRow(model: model, record: record,
                         selected: record.id == selectedModelID, canSelect: canSelect,
-                        onSelect: onSelect)
+                        onPrepare: onPrepare, onSelect: onSelect)
                 }
             }
         }
@@ -195,6 +200,7 @@ private struct ModelInstallationRow: View {
     let record: ModelRecord
     let selected: Bool
     let canSelect: Bool
+    let onPrepare: (@MainActor (ModelID, URL) async throws -> Void)?
     let onSelect: @MainActor (ModelID) async -> Void
 
     private var isWorking: Bool {
@@ -350,7 +356,14 @@ private struct ModelInstallationRow: View {
                     .disabled(selected || !model.canUse(record))
                     .accessibilityIdentifier("model-use-\(record.id)")
                 }
-            case .registered, .pausing, .publishing, .preparationRequired:
+            case .preparationRequired:
+                if let onPrepare, let entry = model.entry(for: record),
+                   ["minimax-h3-fl2va-bf16", "ltx-2.5-bf16"].contains(entry.id) {
+                    Button("准备独立执行包…") { Task { await model.prepareVideo(record.id, action: onPrepare) } }
+                        .disabled(!model.canChooseRoot)
+                        .accessibilityIdentifier("model-prepare-\(record.id)")
+                }
+            case .registered, .pausing, .publishing:
                 EmptyView()
             }
         }

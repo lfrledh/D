@@ -124,7 +124,7 @@ public struct WorkbenchView: View {
         )) {
             if let library {
                 ModelLibraryView(model: library, selectedModelID: model.selectedModelID,
-                    canSelect: model.manifest != nil && model.creatorMode == .image && !model.isChangingProject) { id in
+                    canSelect: model.manifest != nil && model.creatorMode == .image && !model.isChangingProject, onPrepare: nil) { id in
                     await model.selectModel(id: id)
                     if model.selectedModelID == id {
                         library.isPresented = false
