@@ -267,6 +267,7 @@ public struct WorkflowRegistry: Sendable {
             guard let port = ports[key], port.kinds.contains(value.kind) else {
                 throw WorkflowIssue("输入实际类型不兼容。", nodeID: node.id, port: key)
             }
+            if port.assetListKind != nil { _ = try port.resolveAssets(value) }
         }
     }
 
@@ -278,6 +279,13 @@ public struct WorkflowRegistry: Sendable {
             }
         }
         guard definition.version > 0 else { throw WorkflowIssue("操作版本必须为正数：\(definition.id)。") }
+        for port in definition.inputs + definition.outputs where port.assetListKind != nil {
+            guard port.kinds.contains(.list),
+                  let kind = port.assetListKind,
+                  [.image, .audio, .video, .text, .notes, .chords, .tempo, .pitch].contains(kind) else {
+                throw WorkflowIssue("有序资产端口的类型声明无效：\(port.id)。")
+            }
+        }
         guard Set(definition.inputs.map(\.id)).count == definition.inputs.count,
               Set(definition.outputs.map(\.id)).count == definition.outputs.count,
               Set(definition.fields.map(\.id)).count == definition.fields.count else {

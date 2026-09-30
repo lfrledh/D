@@ -205,8 +205,28 @@ public struct WorkflowPortDefinition: Sendable, Equatable, Identifiable {
     public let title: String
     public let kinds: [WorkflowDataKind]
     public let required: Bool
-    public init(_ id: String, _ title: String, kinds: [WorkflowDataKind], required: Bool = true) {
+    /// Ordered asset-list semantics shared by form rendering and runtime validation.
+    /// nil leaves historical generic list ports unchanged.
+    public let assetListKind: WorkflowDataKind?
+    public init(_ id: String, _ title: String, kinds: [WorkflowDataKind], required: Bool = true,
+                assetListKind: WorkflowDataKind? = nil) {
         self.id = id; self.title = title; self.kinds = kinds; self.required = required
+        self.assetListKind = assetListKind
+    }
+    public func resolveAssets(_ value: WorkflowValue) throws -> [WorkflowAssetReference] {
+        if let asset = value.asset, kinds.contains(asset.kind),
+           assetListKind == nil || assetListKind == asset.kind { return [asset] }
+        guard let kind = assetListKind, kinds.contains(.list),
+              case .list(let element, let items)? = value.datum,
+              element == .asset(kind), !items.isEmpty else {
+            throw WorkflowIssue("此输入需要规定类型的资产或非空有序资产列表。", port: id)
+        }
+        return try items.map { item in
+            guard case .asset(let asset) = item.value, asset.kind == kind else {
+                throw WorkflowIssue("资产列表含不兼容的项目。", port: id)
+            }
+            return asset
+        }
     }
 }
 public enum WorkflowFieldKind: Sendable, Equatable { case text(multiline: Bool), integer, decimal, flag, choice([String]) }
