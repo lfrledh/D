@@ -4,15 +4,17 @@
 
 ## 原样快照
 
-从三个固定 Git 提交直接读取全部跟踪 blob，保留文件内容和 Git 可执行模式，将两项 gitlink 展开为普通目录。基线共 **1811 个文件、23,200,811 字节**，没有复制 `.git`、SwiftPM checkout 状态或构建缓存，也没有裁剪上游文档和测试。
+从三个固定 Git 提交直接读取全部跟踪 blob，保留文件内容和 Git 可执行模式，将两项 gitlink 展开为普通目录。基线共 **1748 个文件、23,089,400 字节**，没有复制 `.git`、SwiftPM checkout 状态或构建缓存，也没有裁剪上游文档和测试。
 
 | 来源 | 提交 | 在快照中的路径 | 原始许可文件 |
 | --- | --- | --- | --- |
-| [mlx-swift 0.30.6](https://github.com/ml-explore/mlx-swift/tree/6ba4827fb82c97d012eec9ab4b2de21f85c3b33d) | `6ba4827fb82c97d012eec9ab4b2de21f85c3b33d` | `.` | `mlx-swift/LICENSE` |
-| [mlx](https://github.com/ml-explore/mlx/tree/185b06d9efc1c869540eccfb5baff853fff3659d) | `185b06d9efc1c869540eccfb5baff853fff3659d` | `Source/Cmlx/mlx` | `mlx-swift/Source/Cmlx/mlx/LICENSE` |
-| [mlx-c](https://github.com/ml-explore/mlx-c/tree/a1290d221f92bd020af805b7d14207eee4ec973b) | `a1290d221f92bd020af805b7d14207eee4ec973b` | `Source/Cmlx/mlx-c` | `mlx-swift/Source/Cmlx/mlx-c/LICENSE` |
+| [mlx-swift 0.31.4](https://github.com/ml-explore/mlx-swift/tree/dc43e62d7055353c7f99fa071a4e71d29dfddc44) | `dc43e62d7055353c7f99fa071a4e71d29dfddc44` | `.` | `mlx-swift/LICENSE` |
+| [mlx](https://github.com/ml-explore/mlx/tree/ce45c52505c8158ea48d2a54e8caae05efd86bfe) | `ce45c52505c8158ea48d2a54e8caae05efd86bfe` | `Source/Cmlx/mlx` | `mlx-swift/Source/Cmlx/mlx/LICENSE` |
+| [mlx-c](https://github.com/ml-explore/mlx-c/tree/0726ca922fc902c4c61ef9c27d94132be418e945) | `0726ca922fc902c4c61ef9c27d94132be418e945` | `Source/Cmlx/mlx-c` | `mlx-swift/Source/Cmlx/mlx-c/LICENSE` |
 
 三项顶层许可均为 MIT；其完整文本保留。嵌入第三方代码的许可、`ACKNOWLEDGMENTS.md` 与 `Source/Cmlx/vendor-README.md` 也随原样快照保留，不能只用本表代替这些 notices。原 `.gitmodules` 作为上游文件保留，但其中 gitlink 已展开；普通 clone D 不需要为这个 vendor 执行子模块初始化。
+
+2026-09-30更新：为Qwen3.5/3.8 VLM采用官方MLX Swift0.31.4候选；固定Git blob逐文件核对，原所有权补丁原样适用，尚待本轮编译/真实模型回归。旧版本的验证不会倒记为新版本通过。
 
 ## 三文件补丁
 
@@ -43,7 +45,7 @@ git apply /absolute/path/to/D/Vendor/patches/mlx-array-ownership.patch
 python3 scripts/verify-mlx-vendor.py
 ```
 
-验证器不访问网络、不编辑或自动修复文件。它核对 provenance 引用的清单与补丁摘要、全部 1811 个源码的类型/模式/大小/摘要、缺失文件与意外新增文件或目录。包根的 `.build`、`.swiftpm` 和各目录的普通 `.DS_Store` 被视为本机产物忽略；这不是整个机器环境的完整性证明。`--vendor PATH` 可以用同一清单验证一个隔离副本。成功状态写 stderr，stdout 保持空，便于构建脚本返回二进制路径。
+验证器不访问网络、不编辑或自动修复文件。它核对 provenance 引用的清单与补丁摘要、全部 1748 个源码的类型/模式/大小/摘要、缺失文件与意外新增文件或目录。包根的 `.build`、`.swiftpm` 和各目录的普通 `.DS_Store` 被视为本机产物忽略；这不是整个机器环境的完整性证明。`--vendor PATH` 可以用同一清单验证一个隔离副本。成功状态写 stderr，stdout 保持空，便于构建脚本返回二进制路径。
 
 维护范围限定在已复现的所有权问题；不在这里发展另一套推理 API。升级时重新取得三个固定上游提交的跟踪文件，保留许可和 notices，重新判断该补丁是否仍需要，生成新的完整前后清单，再运行独立分配探针、真实 CLI、MLX 测试及旧应用构建。升级不能只修改版本字符串或在缓存中临时补丁。
 

@@ -14,9 +14,9 @@
   "snapshot": {
     "fileCount": 206,
     "upstreamBytes": 41852259,
-    "patchedBytes": 41856374,
+    "patchedBytes": 41856683,
     "manifest": "flux2-swift.files.json",
-    "manifestSHA256": "80f0cb099a3f4958f554a1e06547cb6ae375cc01a330e33b7f1248f99e651830",
+    "manifestSHA256": "145bcbdba8e1993d1af4f71194f7e82245bee7b85a48bccce375c1bbe6118065",
     "selection": "All 206 tracked upstream blobs; no trimming or expanded gitlinks."
   },
   "patches": [
@@ -73,6 +73,27 @@
           "sha256": "bc155536366d393775385bb3e816ae524cdb7a1df34f7b08e95b13357321b5f1",
           "upstreamSize": 1264,
           "size": 4123
+        }
+      ]
+    },
+    {
+      "file": "patches/flux2-dev-prompt-budget.patch",
+      "sha256": "737cb4e59b426fdf75e6fed0f9fcf353db413938d69003fedd2933b705f4399b",
+      "description": "Opt-in rejection of complete Dev Pixtral chat-template tokens; upstream truncating default unchanged",
+      "modifiedFiles": [
+        {
+          "path": "Sources/Flux2/Models/TextEncoder/Flux2PixtralProcessor.swift",
+          "upstreamSHA256": "87c8def2e682df7f379c0ac4ae1c5bfbbaf3b465c081653e59cdbd04128a6088",
+          "sha256": "6be6177c6139e83c2f188610d61d8d359853c988afcfe1696c6cc36c41524e15",
+          "upstreamSize": 18218,
+          "size": 18468
+        },
+        {
+          "path": "Sources/Flux2/Pipeline/Flux2DevPromptEncoder.swift",
+          "upstreamSHA256": "0e516192d5c01b259b3173618c28635e5e2e397c1459a2c984a5c7c97e3c21e2",
+          "sha256": "6acf73b93971582f6b7de89fa0b2511073b9ea5a4c823c658307f403e7bf40e6",
+          "upstreamSize": 3792,
+          "size": 3851
         }
       ]
     }

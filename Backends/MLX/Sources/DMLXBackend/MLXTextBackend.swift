@@ -8,7 +8,7 @@ import MLXLMCommon
 /// The runtime owns cancellation and calls release after execute has completely drained.
 public actor MLXTextBackend: InferenceBackend {
     public nonisolated let descriptor = BackendDescriptor(
-        id: "mlx.text", version: "0.1.2+mlx-0.30.6.d1.lm-2.30.6", capabilities: [.textGeneration])
+        id: "mlx.text", version: "0.1.3+mlx-0.31.4.d1.lm-3.31.4", capabilities: [.textGeneration])
     public nonisolated let executionCapability: TextExecutionCapability
 
     private let configuration: MLXBackendConfiguration
@@ -76,7 +76,7 @@ public actor MLXTextBackend: InferenceBackend {
             let randomState = MLXRandom.RandomState(seed: randomSeed)
             let loaded = try await withRandomState(randomState) {
                 try await LLMModelFactory.shared.loadContainer(
-                    configuration: ModelConfiguration(directory: inventory.directory))
+                    from: inventory.directory, using: LocalTokenizerLoader())
             }
             container = loaded
             await observer(MLXLifecycleEvent(runID: request.id, phase: .loaded))
@@ -91,7 +91,8 @@ public actor MLXTextBackend: InferenceBackend {
                         throw InferenceFailure.invalidRequest("Tokenized prompt exceeds the model/backend context limit.")
                     }
                     let parameters = GenerateParameters(maxTokens: input.maxTokens,
-                                                        temperature: input.temperature, topP: input.topP)
+                                                        temperature: input.temperature, topP: input.topP,
+                                                        seed: randomSeed)
                     await observer(MLXLifecycleEvent(runID: request.id, phase: .generating))
                     try Task.checkCancellation()
                     // This initializer can synchronously prefill. Cancellation is cooperative;
@@ -113,7 +114,7 @@ public actor MLXTextBackend: InferenceBackend {
                                 switch item {
                                 case .token(let token):
                                     tokens.append(token)
-                                    if let delta = try decoder.consume(context.tokenizer.decode(tokens: tokens)),
+                                    if let delta = try decoder.consume(context.tokenizer.decode(tokenIds: tokens)),
                                        let text = toolCalls.processChunk(delta), !text.isEmpty {
                                         try await emit(.textDelta(text))
                                     }
@@ -128,9 +129,12 @@ public actor MLXTextBackend: InferenceBackend {
                             guard let completion else {
                                 throw InferenceFailure.backendFailed("Generation ended without completion information.")
                             }
-                            if let delta = try decoder.consume(context.tokenizer.decode(tokens: tokens), final: true),
+                            if let delta = try decoder.consume(context.tokenizer.decode(tokenIds: tokens), final: true),
                                let text = toolCalls.processChunk(delta), !text.isEmpty {
                                 try await emit(.textDelta(text))
+                            }
+                            if let trailing = toolCalls.processEOS(returnBufferedText: true), !trailing.isEmpty {
+                                try await emit(.textDelta(trailing))
                             }
                             if !toolCalls.toolCalls.isEmpty {
                                 throw InferenceFailure.backendFailed("Tool calls are not supported by this text-only backend.")

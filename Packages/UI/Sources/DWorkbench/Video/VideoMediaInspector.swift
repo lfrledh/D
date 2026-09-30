@@ -464,7 +464,11 @@ public enum VideoMediaInspector {
         let movieTick = 1 / Double(movieDuration.timescale)
         guard abs(range.start.seconds) <= tolerance,
               abs(audioEnd.seconds - videoDuration.seconds) <= tolerance,
-              abs(assetDuration.seconds - trackEnd) <= assetTick,
+              // AVFoundation may report the video presentation end even when a
+              // valid AAC tail makes mvhd longer. The raw movie clock below is
+              // authoritative; the API summary must stay within the track ends.
+              assetDuration.seconds >= min(videoDuration.seconds, audioEnd.seconds) - assetTick,
+              assetDuration.seconds <= trackEnd + assetTick,
               abs(movieDuration.seconds - trackEnd) <= movieTick else {
             throw VideoInspectionError.invalid("AAC 音轨或容器时间线与视频不符")
         }

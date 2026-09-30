@@ -1,0 +1,54 @@
+diff --git a/Sources/Flux2/Models/TextEncoder/Flux2PixtralProcessor.swift b/Sources/Flux2/Models/TextEncoder/Flux2PixtralProcessor.swift
+--- a/Sources/Flux2/Models/TextEncoder/Flux2PixtralProcessor.swift
++++ b/Sources/Flux2/Models/TextEncoder/Flux2PixtralProcessor.swift
+@@ -189,7 +189,8 @@
+     prompts: [String],
+     systemMessage: String,
+     maxLength: Int? = nil,
+-    addGenerationPrompt: Bool = false
++    addGenerationPrompt: Bool = false,
++    truncation: Bool = true
+   ) throws -> Flux2TokenBatch {
+     guard !prompts.isEmpty else {
+       throw Flux2PixtralProcessorError.emptyPromptList
+@@ -225,11 +226,17 @@
+         messages: messages,
+         chatTemplate: chatTemplate,
+         addGenerationPrompt: addGenerationPrompt,
+-        truncation: true,
+-        maxLength: targetLength,
++        truncation: truncation,
++        maxLength: truncation ? targetLength : nil,
+         tools: nil,
+         additionalContext: nil
+       )
++
++      if !truncation && tokens.count > targetLength {
++        throw Flux2PixtralProcessorError.tokenExpansionOverflow(
++          expanded: tokens.count, maxLength: targetLength
++        )
++      }
+ 
+       let (padded, attention) = padTokens(tokens: tokens, padTokenId: padTokenId, maxLength: targetLength)
+       inputSequences.append(padded)
+diff --git a/Sources/Flux2/Pipeline/Flux2DevPromptEncoder.swift b/Sources/Flux2/Pipeline/Flux2DevPromptEncoder.swift
+--- a/Sources/Flux2/Pipeline/Flux2DevPromptEncoder.swift
++++ b/Sources/Flux2/Pipeline/Flux2DevPromptEncoder.swift
+@@ -46,6 +46,7 @@
+     _ prompts: [String],
+     maxLength: Int? = nil,
+     addGenerationPrompt: Bool = false,
++    truncation: Bool = true,
+     numImagesPerPrompt: Int = 1,
+     tCoord: MLXArray? = nil
+   ) throws -> Flux2PromptEncoding {
+@@ -56,7 +57,8 @@
+       prompts: prompts,
+       systemMessage: systemMessage,
+       maxLength: maxLength,
+-      addGenerationPrompt: addGenerationPrompt
++      addGenerationPrompt: addGenerationPrompt,
++      truncation: truncation
+     )
+     return try encodeTokens(
+       inputIds: tokens.inputIds,

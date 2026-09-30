@@ -4,13 +4,14 @@ import Testing
 
 @Suite("Pinned SDK generation termination compatibility")
 struct GenerationTerminationTests {
-    @Test("Uncancelled generation at its token limit normalizes the pinned SDK mislabel")
-    func mislabeledLimit() throws {
-        let reason = try GenerationTermination.resolve(
-            .init(promptTokenCount: 5, generationTokenCount: 8,
-                  promptTime: 0.1, generationTime: 0.2, stopReason: .cancelled),
-            requestedTokens: 8, taskWasCancelled: false)
-        #expect(reason == "length")
+    @Test("Pinned SDK cancellation at the limit is never rewritten as success")
+    func cancellationReportedAtLimit() {
+        #expect(throws: CancellationError.self) {
+            try GenerationTermination.resolve(
+                .init(promptTokenCount: 5, generationTokenCount: 8,
+                      promptTime: 0.1, generationTime: 0.2, stopReason: .cancelled),
+                requestedTokens: 8, taskWasCancelled: false)
+        }
     }
 
     @Test("Explicit cancellation wins at the exact token limit, regardless of completion label")
