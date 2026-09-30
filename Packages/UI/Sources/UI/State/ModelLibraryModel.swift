@@ -125,26 +125,29 @@ public final class ModelLibraryModel {
         await refresh()
     }
 
-    public func registerExisting() async {
+    public func registerExisting(catalogID: String = ModelCatalog.flux2ID) async {
         guard !isChoosingLocation, globalOperation == nil, !hasActiveWork else { return }
+        guard let entry = catalog.first(where: { $0.id == catalogID }) else {
+            errorMessage = "所选模型不在固定目录中。"; return
+        }
         isChoosingLocation = true
         let panel = NSOpenPanel()
-        panel.title = "登记已有模型"
-        panel.message = "选择完整的 FLUX.2 Klein 4B q8 文件夹。D 会校验文件并保留原来的存放位置。"
+        panel.title = "登记已有模型：\(entry.title)"
+        panel.message = "选择完整的 \(entry.title) 文件夹。D 会按固定版本逐个校验文件并保留原来的存放位置。"
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = false
         let response = await panel.begin()
         isChoosingLocation = false
         guard response == .OK, let url = panel.url else { return }
-        await registerExisting(at: url)
+        await registerExisting(at: url, catalogID: catalogID)
     }
 
-    public func registerExisting(at url: URL) async {
+    public func registerExisting(at url: URL, catalogID: String = ModelCatalog.flux2ID) async {
         guard !isChoosingLocation, globalOperation == nil, !hasActiveWork else { return }
         globalOperation = .registering
         defer { globalOperation = nil }
-        do { _ = try await library.registerExisting(at: url) }
+        do { _ = try await library.registerExisting(at: url, catalogID: catalogID) }
         catch ModelLibraryError.operationPaused { }
         catch { report(error, context: "未能登记此模型，请确认文件完整且属于受支持的版本") }
         await refresh()
@@ -223,7 +226,8 @@ public final class ModelLibraryModel {
     }
 
     public func canUse(_ record: ModelRecord) -> Bool {
-        record.state == .installed && record.availability == .available && pendingActions[record.id] == nil
+        ModelLibrarySelection.canUse(record, entry: entry(for: record),
+                                     hasPendingAction: pendingActions[record.id] != nil)
     }
 
     public func status(for record: ModelRecord) -> String {
@@ -238,7 +242,8 @@ public final class ModelLibraryModel {
         case .paused: return "已暂停"
         case .verifying: return "正在校验完整性"
         case .publishing: return "正在完成安装"
-        case .installed: return "已安装"
+        case .installed: return "文件已校验；执行引擎需单独验证"
+        case .preparationRequired: return "原始文件已校验；仍需准备"
         case .failed: return "操作未完成"
         }
     }

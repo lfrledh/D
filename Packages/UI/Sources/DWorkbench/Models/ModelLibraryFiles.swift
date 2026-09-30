@@ -214,17 +214,27 @@ final class ModelDirectory: Sendable {
             guard initial.size >= 0, UInt64(initial.size) == file.size, initial == before[file.path] else {
                 throw ModelLibraryError.integrity("模型文件大小或身份不符：\(file.path)")
             }
-            var hash = SHA256(), remaining = file.size, buffer = [UInt8](repeating: 0, count: 1024 * 1024)
+            var sha256 = SHA256(), gitBlob = Insecure.SHA1()
+            if file.digestAlgorithm == .gitBlobSHA1 {
+                gitBlob.update(data: Data("blob \(file.size)\0".utf8))
+            }
+            var remaining = file.size, buffer = [UInt8](repeating: 0, count: 1024 * 1024)
             while remaining > 0 {
                 try Task.checkCancellation()
                 let n = buffer.withUnsafeMutableBytes { Darwin.read(fd, $0.baseAddress, min($0.count, Int(min(remaining, 1024 * 1024)))) }
                 if n < 0 && errno == EINTR { continue }
                 guard n > 0 else { throw Self.failure("读取模型进行校验") }
-                hash.update(data: Data(buffer.prefix(n))); remaining -= UInt64(n)
+                let block = Data(buffer.prefix(n))
+                if file.digestAlgorithm == .sha256 { sha256.update(data: block) }
+                else { gitBlob.update(data: block) }
+                remaining -= UInt64(n)
             }
-            guard hash.finalize().map({ String(format: "%02x", $0) }).joined() == file.sha256,
+            let digest: String = file.digestAlgorithm == .sha256
+                ? sha256.finalize().map { String(format: "%02x", $0) }.joined()
+                : gitBlob.finalize().map { String(format: "%02x", $0) }.joined()
+            guard digest == file.sha256.lowercased(),
                   try Self.identity(fd, regular: true) == initial else {
-                throw ModelLibraryError.integrity("SHA-256 校验失败或文件发生变化：\(file.path)")
+                throw ModelLibraryError.integrity("\(file.digestAlgorithm == .sha256 ? "SHA-256" : "Git blob SHA-1") 校验失败或文件发生变化：\(file.path)")
             }
         }
         guard try entries(expectedPaths: expected) == before else { throw ModelLibraryError.integrity("模型目录在校验期间发生变化。") }
