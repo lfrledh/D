@@ -15,6 +15,8 @@ struct VideoAVMediaInspectorTests {
             let file = directory.appendingPathComponent("av-\(profile.rawValue).mp4")
             try writeAVFixture(to: file, frames: frames, sampleRate: rate)
             #expect(try await hasReorderedH264Samples(file))
+            let sampleSummary = try await compressedVideoSampleSummary(file)
+            #expect(sampleSummary.frames == frames && sampleSummary.emptyMarkers > 0)
             let request = avRequest(profile, frames: frames)
             let bytes = try Data(contentsOf: file)
             let value = try await VideoMediaInspector.inspect(at: file, expected: request)
@@ -106,6 +108,41 @@ struct VideoAVMediaInspectorTests {
                                videoOffset: 0.25)
             await #expect(throws: (any Error).self) {
                 try await VideoMediaInspector.inspect(at: shiftedVideo, expected: request)
+            }
+        }
+    }
+
+    @Test func emptyMarkersCannotReplaceAMissingPresentationFrame() async throws {
+        try await withAVFixtureDirectory { directory in
+            let file = directory.appendingPathComponent("missing-frame.mp4")
+            try writeAVFixture(to: file, frames: 9, sampleRate: 48_000, dropVideoFrame: 4)
+            let summary = try await compressedVideoSampleSummary(file)
+            #expect(summary.frames == 8 && summary.emptyMarkers > 0)
+            let videoTracks = try await AVURLAsset(url: file).loadTracks(withMediaType: .video)
+            let videoTrack = try #require(videoTracks.first)
+            let range = try await videoTrack.load(.timeRange)
+            #expect(CMTimeCompare(range.duration, CMTime(value: 9, timescale: 24)) == 0)
+            await #expect(throws: (any Error).self) {
+                try await VideoMediaInspector.inspect(at: file,
+                    expected: avRequest(.ltx23BF16Full, frames: 9))
+            }
+        }
+    }
+
+    @Test func movieDurationCannotBorrowAVAlignmentTolerance() async throws {
+        try await withAVFixtureDirectory { directory in
+            let valid = directory.appendingPathComponent("valid-duration.mp4")
+            let altered = directory.appendingPathComponent("movie-duration-only.mp4")
+            try writeAVFixture(to: valid, frames: 9, sampleRate: 48_000)
+            let original = try Data(contentsOf: valid)
+            let changed = try changeOnlyMovieDuration(original, additionalSeconds: 0.25)
+            #expect(changed.count == original.count)
+            let changedBytes = zip(original, changed).filter { pair in pair.0 != pair.1 }.count
+            #expect((1...8).contains(changedBytes))
+            try changed.write(to: altered)
+            await #expect(throws: (any Error).self) {
+                try await VideoMediaInspector.inspect(at: altered,
+                    expected: avRequest(.ltx23BF16Full, frames: 9))
             }
         }
     }
@@ -262,7 +299,7 @@ private func withAVFixtureDirectory<T>(_ body: (URL) async throws -> T) async th
 
 private func writeAVFixture(to url: URL, frames: Int, sampleRate: Int, channels: Int = 2,
                             audioTracks: Int = 1, audioOffset: Double = 0,
-                            videoOffset: Double = 0) throws {
+                            videoOffset: Double = 0, dropVideoFrame: Int? = nil) throws {
     let executable = "/opt/homebrew/bin/ffmpeg"
     guard FileManager.default.isExecutableFile(atPath: executable) else {
         throw AVFixtureError("固定 FFmpeg 不可用：\(executable)")
@@ -276,10 +313,14 @@ private func writeAVFixture(to url: URL, frames: Int, sampleRate: Int, channels:
     arguments += ["-i", "sine=frequency=440:sample_rate=\(sampleRate)",
         "-map", "0:v"]
     for _ in 0..<audioTracks { arguments += ["-map", "1:a"] }
-    if videoOffset != 0 { arguments += ["-vf", "setpts=PTS+\(videoOffset)/TB"] }
+    var filters = [String]()
+    if videoOffset != 0 { filters.append("setpts=PTS+\(videoOffset)/TB") }
+    if let dropVideoFrame { filters.append("select=not(eq(n\\,\(dropVideoFrame)))") }
+    if !filters.isEmpty { arguments += ["-vf", filters.joined(separator: ",")] }
+    if dropVideoFrame != nil { arguments += ["-fps_mode", "passthrough"] }
     arguments += ["-c:v", "libx264", "-preset", "medium", "-bf", "2",
         "-g", String(frames), "-sc_threshold", "0", "-pix_fmt", "yuv420p",
-        "-threads", "1", "-frames:v", String(frames),
+        "-threads", "1", "-frames:v", String(frames - (dropVideoFrame == nil ? 0 : 1)),
         "-t", String(Double(frames) / 24), "-movflags", "+faststart"]
     if audioTracks > 0 {
         arguments += ["-c:a", "aac", "-ar", String(sampleRate), "-ac", String(channels),
@@ -311,6 +352,73 @@ private func hasReorderedH264Samples(_ url: URL) async throws -> Bool {
         if dts.isNumeric && CMTimeCompare(pts, dts) != 0 { reordered = true }
     }
     return reader.status == .completed && reordered
+}
+
+private func compressedVideoSampleSummary(_ url: URL) async throws -> (frames: Int, emptyMarkers: Int) {
+    let asset = AVURLAsset(url: url)
+    let tracks = try await asset.loadTracks(withMediaType: .video)
+    guard let track = tracks.first else { throw AVFixtureError("夹具没有视频轨") }
+    let reader = try AVAssetReader(asset: asset)
+    let output = AVAssetReaderTrackOutput(track: track, outputSettings: nil)
+    reader.add(output)
+    guard reader.startReading() else { throw AVFixtureError("无法读取夹具压缩样本") }
+    var frames = 0, emptyMarkers = 0
+    while let sample = output.copyNextSampleBuffer() {
+        let count = CMSampleBufferGetNumSamples(sample)
+        if count == 0 { emptyMarkers += 1 }
+        else { frames += count }
+    }
+    guard reader.status == .completed else { throw AVFixtureError("夹具压缩样本读取未完成") }
+    return (frames, emptyMarkers)
+}
+
+/// Change only mvhd.duration; all track headers, sample tables and media stay byte identical.
+private func changeOnlyMovieDuration(_ original: Data, additionalSeconds: Double) throws -> Data {
+    var bytes = original
+    let moov = try avFixtureBox(named: "moov", in: bytes, range: 0..<bytes.count)
+    let mvhd = try avFixtureBox(named: "mvhd", in: bytes,
+                               range: (moov.lowerBound + 8)..<moov.upperBound)
+    guard mvhd.count >= 40 else { throw AVFixtureError("mvhd 过短") }
+    let version = bytes[mvhd.lowerBound + 8]
+    guard version == 0 || version == 1 else { throw AVFixtureError("mvhd 版本不支持") }
+    let timescaleOffset = mvhd.lowerBound + (version == 0 ? 20 : 28)
+    let durationOffset = mvhd.lowerBound + (version == 0 ? 24 : 32)
+    let durationWidth = version == 0 ? 4 : 8
+    guard durationOffset + durationWidth <= mvhd.upperBound else {
+        throw AVFixtureError("mvhd 时长字段被截断")
+    }
+    let timescale = avFixtureBigEndian(bytes, offset: timescaleOffset, count: 4)
+    let oldDuration = avFixtureBigEndian(bytes, offset: durationOffset, count: durationWidth)
+    let delta = UInt64((Double(timescale) * additionalSeconds).rounded())
+    guard timescale > 0, delta > 0, oldDuration <= UInt64.max - delta,
+          durationWidth == 8 || oldDuration + delta <= UInt64(UInt32.max) else {
+        throw AVFixtureError("mvhd 时长修改无效")
+    }
+    let newDuration = oldDuration + delta
+    for offset in 0..<durationWidth {
+        bytes[durationOffset + offset] = UInt8(truncatingIfNeeded:
+            newDuration >> (8 * (durationWidth - offset - 1)))
+    }
+    return bytes
+}
+
+private func avFixtureBox(named name: String, in bytes: Data, range: Range<Int>) throws -> Range<Int> {
+    var offset = range.lowerBound
+    while offset + 8 <= range.upperBound {
+        let size = avFixtureBigEndian(bytes, offset: offset, count: 4)
+        guard size >= 8, size <= UInt64(range.upperBound - offset) else {
+            throw AVFixtureError("MP4 夹具数据块长度无效")
+        }
+        let end = offset + Int(size)
+        let type = String(data: bytes[(offset + 4)..<(offset + 8)], encoding: .ascii)
+        if type == name { return offset..<end }
+        offset = end
+    }
+    throw AVFixtureError("MP4 夹具缺少 \(name)")
+}
+
+private func avFixtureBigEndian(_ bytes: Data, offset: Int, count: Int) -> UInt64 {
+    (0..<count).reduce(UInt64(0)) { ($0 << 8) | UInt64(bytes[offset + $1]) }
 }
 
 private struct AVFixtureError: Error { let message: String; init(_ message: String) { self.message = message } }
