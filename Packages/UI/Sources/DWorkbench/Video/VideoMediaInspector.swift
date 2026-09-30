@@ -337,6 +337,7 @@ public enum VideoMediaInspector {
         var actualEnd = CMTime.invalid
         var seenPresentationFrames = Set<Int>()
         var previousDTS: CMTime?
+        var previousRawDTS: CMTime?
         do {
             while true {
                 try controller.check()
@@ -353,13 +354,22 @@ public enum VideoMediaInspector {
                 guard sampleCount == 1, frameIndex < expected.frameCount else {
                     throw VideoInspectionError.invalid("H264 采样表不是每帧一个样本")
                 }
-                let pts = CMSampleBufferGetPresentationTimeStamp(sample)
-                let duration = CMSampleBufferGetDuration(sample)
-                let decodeTime = CMSampleBufferGetDecodeTimeStamp(sample)
+                let rawPTS = CMSampleBufferGetPresentationTimeStamp(sample)
+                let rawDuration = CMSampleBufferGetDuration(sample)
+                let rawDTS = CMSampleBufferGetDecodeTimeStamp(sample)
+                let pts = allowsReordering ? CMSampleBufferGetOutputPresentationTimeStamp(sample) : rawPTS
+                let duration = allowsReordering ? CMSampleBufferGetOutputDuration(sample) : rawDuration
+                let decodeTime = allowsReordering ? CMSampleBufferGetOutputDecodeTimeStamp(sample) : rawDTS
                 guard duration > .zero, exactTime(duration, equals: frameDuration) else {
                     throw VideoInspectionError.invalid("H264 样本时长不连续")
                 }
                 if allowsReordering {
+                    guard rawPTS.isNumeric, rawDuration > .zero,
+                          exactTime(rawDuration, equals: frameDuration),
+                          rawDTS.isNumeric, !rawDTS.isIndefinite,
+                          previousRawDTS.map({ rawDTS > $0 }) ?? true else {
+                        throw VideoInspectionError.invalid("H264 原始解码时间或时长无效")
+                    }
                     guard pts.isNumeric, pts >= .zero else {
                         throw VideoInspectionError.invalid("H264 展示时间无效")
                     }
@@ -378,6 +388,7 @@ public enum VideoMediaInspector {
                     }
                     _ = seenPresentationFrames.insert(index)
                     previousDTS = decodeTime
+                    previousRawDTS = rawDTS
                     let end = CMTimeAdd(pts, duration)
                     if !actualEnd.isNumeric || end > actualEnd { actualEnd = end }
                 } else {
