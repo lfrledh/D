@@ -6,9 +6,6 @@ import Foundation
 enum QwenTextResponse {
     static func assemble(raw: String, reasoning: String?, final: String?, stopped: String,
                          tools: [TextToolDefinition]?) -> TextResponse {
-        guard raw.utf8.count <= 1_048_576 else {
-            return TextResponse(rawText: raw, reasoningText: reasoning, finishReason: .incomplete)
-        }
         guard let final else {
             return TextResponse(rawText: raw, reasoningText: reasoning, finishReason: .incomplete)
         }
@@ -25,6 +22,11 @@ enum QwenTextResponse {
 
     static func parseFinal(_ input: String, tools: [TextToolDefinition])
         -> (text: String, calls: [TextToolCall], error: String?) {
+        // Bound tool parsing, not completed reasoning or ordinary final text.
+        // The raw response is always retained when a tool payload exceeds this budget.
+        if input.contains("<tool_call>"), input.utf8.count > 1_048_576 {
+            return ("", [], "Tool payload exceeds 1 MiB parsing budget")
+        }
         var remaining = input[...]
         var text = ""
         var calls = [TextToolCall]()

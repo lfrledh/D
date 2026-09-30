@@ -242,7 +242,7 @@ public struct DualWorkbenchView: View {
         guard case .operation(let id, _) = value.selection, let kind = WorkflowRegistry.standard.operation(id)?.definition.modelKind else { presentLibraryDestination(.info(value)); return }
         if kind == .pitch { await refreshLibrary(checkModels: true); presentLibraryDestination(.info(value)); return }
         if [WorkflowModelRoutes.qwen35, WorkflowModelRoutes.qwen38, WorkflowModelRoutes.fluxDev,
-            WorkflowModelRoutes.ace, "d.image.generate", "d.music.mrt2"].contains(id) {
+            WorkflowModelRoutes.ace, "d.image.generate", "d.music.generate"].contains(id) {
             presentLibraryDestination(.models); return
         }
         let panel = NSOpenPanel(); panel.canChooseDirectories = true; panel.canChooseFiles = false

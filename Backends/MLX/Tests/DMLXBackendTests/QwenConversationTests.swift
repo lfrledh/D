@@ -5,6 +5,13 @@ import Testing
 
 @Suite("Qwen3.5 conversation mapping and output")
 struct QwenConversationTests {
+    @Test func longReasoningDoesNotInvalidateCompletedShortAnswer() {
+        let reasoning = String(repeating: "x", count: 2 * 1_048_576)
+        let response = QwenTextResponse.assemble(raw: reasoning + "ok", reasoning: reasoning,
+            final: "ok", stopped: "stop", tools: nil)
+        #expect(response.rawText == reasoning + "ok" && response.reasoningText == reasoning)
+        #expect(response.finalText == "ok" && response.finishReason == .stop)
+    }
     private let tool = TextToolDefinition(name: "sum", description: "Add values", parameters: [
         "type": .string("object"),
         "properties": .object([

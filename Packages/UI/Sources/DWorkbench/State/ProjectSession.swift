@@ -992,8 +992,8 @@ public final class ProjectSession {
                 reference = lease.reference; backendID = session.backendID
                 operationID = "d.image.generate"; imageRecipe = .klein(capability: session.imageCapability)
             } else if kind == .music, let validate = session.validateMusicModel, let backend = session.musicBackendID,
-                      entry.workflowProfileID == "d.music.mrt2" {
-                reference = try await validate(lease.reference.directory); backendID = backend; operationID = "d.music.mrt2"
+                      entry.workflowProfileID == "d.music.generate" {
+                reference = try await validate(lease.reference.directory); backendID = backend; operationID = "d.music.generate"
             } else if kind == .video, let adapter = session.videoAdapters.first(where: { "video:" + $0.modelIdentity == identity }) {
                 reference = try await adapter.validateModel(lease.reference.directory); backendID = adapter.backendID
                 let recipe = WorkflowVideoRecipe(profile: adapter.profile)
