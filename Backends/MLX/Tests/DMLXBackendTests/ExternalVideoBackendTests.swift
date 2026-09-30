@@ -81,10 +81,15 @@ struct ExternalVideoBackendTests {
         await next.release()
     }
 
-    @Test func declaredButUnavailable25CannotBecomeReady() async throws {
+    @Test func incomplete25PackCannotBecomeReady() async throws {
         let fixture = try Fixture(profile: .ltx25BF16Full)
         let backend = try fixture.backend(mode: "success")
-        await #expect(throws: InferenceFailure.self) { _ = try await backend.validateModel(at: fixture.model) }
+        do {
+            _ = try await backend.validateModel(at: fixture.model)
+            Issue.record("A manifest without the fixed LTX 2.5 resources must fail registration")
+        } catch {
+            #expect(String(describing: error).contains("LTX 2.5 component"))
+        }
     }
 
     @Test func firstFrameIsFrozenIndependentlyAndKeepsSourceProvenance() async throws {

@@ -290,6 +290,40 @@ class AppVideoDriverTests(unittest.TestCase):
                 (self.task / "decode-log.stdout").unlink()
                 (self.task / "decode-log.stderr").unlink()
 
+    def test_ltx25_routes_pack_local_gemma4_after_admission(self):
+        import ltx_admission, ltx_job
+        self.profile = driver.LTX_25
+        self.request = self._request(driver.LTX_25)
+        self.request['negative_prompt'] = 'avoid blur'
+        self._write_wire()
+        first, first_value = self._frame('first')
+        for name in ('text_encoder.safetensors', 'text_encoder_config.json'):
+            (self.pack / 'model' / name).write_bytes(b'synthetic plan fixture')
+        calls = []
+        module = types.ModuleType('ltx_pipelines_mlx')
+        cli = types.ModuleType('ltx_pipelines_mlx.cli')
+        def main():
+            calls.append(tuple(sys.argv))
+            (self.task / 'candidate.mp4').write_bytes(b'SIM-LTX candidate')
+            return 0
+        cli.main = main
+        with mock.patch.dict(sys.modules, {'ltx_pipelines_mlx': module, 'ltx_pipelines_mlx.cli': cli}), \
+             mock.patch.object(ltx_admission, 'admit_ltx25', return_value={'synthetic': True}) as admit, \
+             mock.patch.object(ltx_job, '_confirm_tokenizer_patch', return_value='simulated patch'):
+            self.assertEqual(driver.run(self._args(h3=False)), 0)
+        admit.assert_called_once()
+        self.assertEqual(admit.call_args.kwargs['model'], self.pack / 'model')
+        self.assertEqual(len(calls), 1)
+        self.assertIn('--video-decoder=diffusion', calls[0])
+        self.assertIn('--gemma=' + str(self.pack / 'model'), calls[0])
+        self.assertIn('--negative-prompt=avoid blur', calls[0])
+        image = calls[0].index('--image')
+        self.assertEqual(calls[0][image:image + 5], ('--image', str(first), '0', '1.0', '33'))
+        self.assertIn('--low-ram', calls[0])
+        self.assertEqual(self._result()['frame_conditions'],
+                         {'first_frame_sha256': first_value['content_sha256']})
+        self.assertTrue(self._result()['media_verified'])
+
     def test_mismatch_unknown_profile_and_duplicate_keys(self):
         self.profile = driver.LTX_TEST
         self.request = self._request(driver.LTX_TEST)
@@ -302,7 +336,7 @@ class AppVideoDriverTests(unittest.TestCase):
         self.request = self._request(driver.LTX_25)
         self._write_wire()
         self.assertEqual(driver.run(self._args(h3=False)), 2)
-        self.assertIn("no accessible verified resource inventory", self._result()["error"]["message"])
+        self.assertIn("Required pack files are missing", self._result()["error"]["message"])
         (self.task / "result.json").unlink()
         raw = (self.task / "request.json").read_bytes()
         (self.task / "request.json").write_bytes(raw.replace(b'"schema_version": 1,', b'"schema_version": 1, "schema_version": 1,', 1))
