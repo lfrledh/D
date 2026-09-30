@@ -907,6 +907,20 @@ public final class ProjectSession {
             }
             return .init(identity: identity, reference: ref, backendID: backend)
         }
+        if let adapter = session.modelAdapters.first(where: { $0.kind == kind && $0.identity == identity }) {
+            guard let entry = try WorkflowModelBookmarks(settings: settings).entries().first(where: { $0.identity == identity && $0.kind == kind }) else {
+                throw WorkflowIssue("此模型的本地目录尚未登记。")
+            }
+            let lease = try await access.restore(entry.bookmark)
+            do {
+                let reference = try await adapter.validateModel(lease.url)
+                guard reference.revision == adapter.modelRevision else { throw WorkflowIssue("模型固定版本与所选身份不符。") }
+                let access = self.access
+                return .init(identity: identity, reference: reference, backendID: adapter.backendID,
+                    operationID: adapter.operationID, textCapability: adapter.textCapability, imageRecipe: adapter.imageRecipe,
+                    release: { await access.release(lease) })
+            } catch { await access.release(lease); throw error }
+        }
         if kind == .image, let library = modelLibrary {
             let records = await library.snapshot().records.filter { "image:" + $0.revision == identity }
             // Installation IDs stay private. Do not silently select among ambiguous copies.
@@ -956,6 +970,34 @@ public final class ProjectSession {
     /// Registration has explicit identity and does not depend on a selected graph node.
     public func registerExplicitModel(at url: URL, kind: WorkflowModelKind) async throws -> WorkflowModelChoice {
         guard let session, let owner = store, !isChangingProject, !closePending else { throw WorkflowIssue("工作区未就绪。") }
+        let candidates = session.modelAdapters.filter { $0.kind == kind }
+        if !candidates.isEmpty {
+            let lease = try await access.acquire(selected: url)
+            do {
+                var matches: [(WorkflowModelAdapter, ModelReference)] = []
+                for adapter in candidates {
+                    try Task.checkCancellation()
+                    do {
+                        let reference = try await adapter.validateModel(lease.url)
+                        guard reference.revision == adapter.modelRevision else { throw WorkflowIssue("模型校验返回了错误身份。") }
+                        matches.append((adapter, reference))
+                    } catch is CancellationError { throw CancellationError() }
+                    catch { /* A non-matching fixed manifest is not an execution fallback. */ }
+                }
+                guard matches.count <= 1 else { throw WorkflowIssue("模型目录匹配多个身份，不能猜测。") }
+                if let (adapter, _) = matches.first {
+                    guard store === owner, !closePending else { throw WorkflowIssue("工作区已切换。") }
+                    try WorkflowModelBookmarks(settings: settings).remember(identity: adapter.identity, kind: kind,
+                        name: adapter.title, bookmark: lease.bookmark)
+                    await access.release(lease)
+                    let choice = WorkflowModelChoice(id: adapter.identity, kind: kind, displayName: adapter.title)
+                    if !explicitModelChoices.contains(where: { $0.id == choice.id }) { explicitModelChoices.append(choice) }
+                    refreshWorkflowModels()
+                    return choice
+                }
+                await access.release(lease)
+            } catch { await access.release(lease); throw error }
+        }
         let identity: String
         if kind == .image, let library = modelLibrary {
             let id = try await library.registerExisting(at: url)

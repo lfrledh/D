@@ -214,6 +214,7 @@ public struct WorkflowPortDefinition: Sendable, Equatable, Identifiable {
         self.assetListKind = assetListKind
     }
     public func resolveAssets(_ value: WorkflowValue) throws -> [WorkflowAssetReference] {
+        if let datum = value.datum { try datum.validate() }
         if let asset = value.asset, kinds.contains(asset.kind),
            assetListKind == nil || assetListKind == asset.kind { return [asset] }
         guard let kind = assetListKind, kinds.contains(.list),

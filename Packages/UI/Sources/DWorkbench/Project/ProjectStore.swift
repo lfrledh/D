@@ -265,6 +265,35 @@ public actor ProjectStore {
         return reference
     }
 
+    /// Workflow lists retain their order and source identities; the single-image editor path is unchanged.
+    public func prepareWorkflowImageReferences(_ references: [WorkflowAssetReference], runID: UUID) throws -> [ImageReference] {
+        try checkLocation()
+        guard !references.isEmpty else { return [] }
+        // Validate every original before publishing any derivative. workflowData checks project/version/digest.
+        let pixels = try references.map { reference in
+            guard reference.kind == .image else { throw ProjectStoreError.invalidProject("参考列表需要图像资产。") }
+            _ = try workflowData(reference)
+            return try imageReferencePixels(reference.assetID).1
+        }
+        let inputs = try ProjectFiles.openOrCreateDirectory("ImageInputs", in: rootFD)
+        defer { Darwin.close(inputs) }
+        guard mkdirat(inputs, runID.uuidString, 0o700) == 0 else { throw ProjectFiles.error() }
+        let directory = try ProjectFiles.openRelativeDirectory(runID.uuidString, in: inputs)
+        defer { Darwin.close(directory) }
+        var result: [ImageReference] = []
+        for (index, value) in pixels.enumerated() {
+            let name = "reference-\(index).rgb"
+            try ProjectFiles.publish(in: directory, name: name, replacing: false) { fd in
+                try value.rgb.withUnsafeBytes { try ProjectFiles.writeAll($0, to: fd) }
+            }
+            result.append(ImageReference(url: rootURL.appendingPathComponent("ImageInputs/\(runID.uuidString)/\(name)"),
+                sha256: SHA256.hash(data: value.rgb).map { String(format: "%02x", $0) }.joined(),
+                byteCount: UInt64(value.rgb.count), width: value.width, height: value.height))
+        }
+        guard fsync(inputs) == 0 else { throw ProjectFiles.error() }
+        return result
+    }
+
     public func saveDraft(_ draft: ProjectDraft, documentID: UUID? = nil) throws -> ProjectManifest {
         let index = try documentIndex(documentID ?? manifest.activeDocumentID)
         guard manifest.documents[index].kind == .image else {

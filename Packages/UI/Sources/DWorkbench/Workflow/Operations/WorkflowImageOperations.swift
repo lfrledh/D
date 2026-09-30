@@ -2,20 +2,22 @@ import Foundation
 
 /// Concrete operations; shared scheduling, assets and persistence remain outside this module.
 enum WorkflowImageOperations {
-    static let imageGenerate = WorkflowOperation(
+    static let imageGenerate = makeGenerate(id: "d.image.generate", title: "FLUX.2-klein-4B", dev: false)
+    static let devGenerate = makeGenerate(id: WorkflowModelRoutes.fluxDev, title: "FLUX.2-dev · BF16", dev: true)
+    static func makeGenerate(id: String, title: String, dev: Bool) -> WorkflowOperation { WorkflowOperation(
         definition: .init(
-            id: "d.image.generate", title: "图像生成", detail: "生成相互独立且保留身份的候选。",
+            id: id, title: title, detail: "生成相互独立且保留身份的候选。",
             inputs: [
                 .init("prompt", "提示文字", kinds: [.text], required: false),
-                .init("ref", "参考图像", kinds: [.image], required: false),
+                .init("ref", "有序参考图像", kinds: [.image, .list], required: false, assetListKind: .image),
             ],
             outputs: [.init("output", "候选图像", kinds: [.images])],
             fields: [
                 .init("promptText", "后备提示", .text(multiline: true), .text("")),
                 .init("width", "宽度", .integer, .integer(512)),
                 .init("height", "高度", .integer, .integer(512)),
-                .init("steps", "步数", .integer, .integer(4)),
-                .init("guidance", "引导", .decimal, .decimal(1)),
+                .init("steps", "步数", .integer, .integer(dev ? 50 : 4)),
+                .init("guidance", "引导", .decimal, .decimal(dev ? 4 : 1)),
                 .init("seed", "种子", .text(multiline: false), .text("42")),
                 .init("count", "候选数", .integer, .integer(3)),
                 .init("modelID", "模型内容身份", .text(multiline: false), .text("")),
@@ -43,9 +45,11 @@ enum WorkflowImageOperations {
             }
             guard !prompt.isEmpty else { throw WorkflowIssue("生成提示不能为空。", nodeID: context.node.id, port: "prompt") }
             try WorkflowExecution.ensureTextLimit(prompt, node: context.node, port: "prompt")
-            let reference = try context.inputs["ref"].map {
-                try WorkflowExecution.asset($0, kind: .image, port: "ref", node: context.node)
-            }
+            let references = try context.inputs["ref"].map {
+                try WorkflowPortDefinition("ref", "", kinds: [.image, .list], required: false, assetListKind: .image).resolveAssets($0)
+            } ?? []
+            // Context owns the complete ordered list; this argument retains old service ABI.
+            let reference = references.count == 1 ? references.first : nil
             let candidates = try await services.generateImages(prompt: prompt, reference: reference, context: context)
             let expectedCount = try WorkflowScalarReader.integer("count", in: context.node)
             guard candidates.count == expectedCount,
@@ -55,7 +59,7 @@ enum WorkflowImageOperations {
             }
             return .outputs(["output": .collection(candidates)])
         }
-    )
+    ) }
 
     static let imageResize = WorkflowOperation(
         definition: .init(

@@ -7,7 +7,7 @@ enum WorkflowBuiltins {
         WorkflowAssetOperations.assetReference,
         WorkflowTextOperations.textTemplate,
         WorkflowTextOperations.textRewrite,
-        WorkflowImageOperations.imageGenerate,
+        WorkflowImageOperations.imageGenerate, WorkflowImageOperations.devGenerate,
         WorkflowTextOperations.textConfirm,
         WorkflowAssetOperations.assetChoose,
         WorkflowImageOperations.imageResize,

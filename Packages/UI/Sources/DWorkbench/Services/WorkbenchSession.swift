@@ -3,6 +3,7 @@ import Foundation
 
 /// Application-facing runtime bridge. The composition root owns backend-specific types.
 public struct WorkbenchSession: Sendable {
+    public let modelAdapters: [WorkflowModelAdapter]
     public let videoAdapters: [WorkflowVideoAdapter]
     public let videoCapability: VideoExecutionCapability?
     public let videoBackendID: String?
@@ -39,7 +40,7 @@ public struct WorkbenchSession: Sendable {
             imageCapability: imageCapability, textCapability: textCapability,
             audioCapability: audioCapability, musicCapability: musicCapability,
             videoBackendID: videoBackendID, validateVideoModel: validateVideoModel,
-            videoCapability: videoCapability, videoAdapters: videoAdapters, defaultMemoryBudgetBytes: defaultMemoryBudgetBytes,
+            videoCapability: videoCapability, videoAdapters: videoAdapters, modelAdapters: modelAdapters, defaultMemoryBudgetBytes: defaultMemoryBudgetBytes,
             pitchBackendID: pitchBackendID, pitchModel: pitchModel)
         value.artifactStore = artifactStore
         return value
@@ -64,6 +65,7 @@ public struct WorkbenchSession: Sendable {
                 validateVideoModel: (@Sendable (URL) async throws -> ModelReference)? = nil,
                 videoCapability: VideoExecutionCapability? = nil,
                 videoAdapters: [WorkflowVideoAdapter] = [],
+                modelAdapters: [WorkflowModelAdapter] = [],
                 defaultMemoryBudgetBytes: UInt64 = 12 * 1024 * 1024 * 1024,
                 pitchBackendID: String? = nil, pitchModel: ModelReference? = nil) {
         self.pitchBackendID = pitchBackendID
@@ -72,6 +74,7 @@ public struct WorkbenchSession: Sendable {
         self.validateVideoModel = validateVideoModel
         self.videoCapability = videoCapability
         self.videoAdapters = videoAdapters
+        self.modelAdapters = modelAdapters
         self.defaultMemoryBudgetBytes = defaultMemoryBudgetBytes
         self.imageCapability = imageCapability
         self.textCapability = textCapability

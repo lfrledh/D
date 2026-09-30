@@ -3,19 +3,30 @@ import Foundation
 
 /// New language nodes use typed values; historical M0 operation IDs retain their meaning.
 enum WorkflowLanguageOperations {
-    static let operations: [WorkflowOperation] = [language, video]
+    static let operations: [WorkflowOperation] = [language,
+        makeLanguage(id: WorkflowModelRoutes.qwen35, title: "Qwen3.5-9B", visual: true),
+        makeLanguage(id: WorkflowModelRoutes.qwen38, title: "Qwen3.8-27B", visual: true), video]
     static let modelField = WorkflowFieldDefinition("modelID", "模型内容身份", .text(multiline: false), .text(""))
-    static let language = WorkflowOperation(definition: .init(id: "d.model.language", title: "语言模型", detail: "任务生成文字；可配置 JSON 解析与结构校验，不是原生约束解码。",
-        inputs: [.init("task", "任务", kinds: [.text], required: false), .init("content", "内容", kinds: [.text], required: false)],
+    static let language = makeLanguage(id: "d.model.language", title: "Qwen2.5 Instruct · 兼容", visual: false)
+    static func makeLanguage(id: String, title: String, visual: Bool) -> WorkflowOperation {
+        let visualInputs: [WorkflowPortDefinition] = visual ? [
+            .init("images", "有序参考图像", kinds: [.image, .list], required: false, assetListKind: .image),
+            .init("video", "视频（2 FPS抽帧，无音频理解）", kinds: [.video], required: false)] : []
+        let visualFields: [WorkflowFieldDefinition] = visual ? [
+            .init("minimumPixels", "每图最小像素（0使用模型配置）", .integer, .integer(0)),
+            .init("maximumPixels", "每图最大像素（0使用模型配置）", .integer, .integer(0)),
+            .init("maximumVideoFrames", "抽帧安全预算", .integer, .integer(64))] : []
+        return WorkflowOperation(definition: .init(id: id, title: title, detail: "任务生成文字；可配置 JSON 解析与结构校验，不是原生约束解码。",
+        inputs: [.init("task", "任务", kinds: [.text], required: false), .init("content", "内容", kinds: [.text], required: false)] + visualInputs,
         outputs: [.init("output", "结果", kinds: WorkflowDataKind.allCases), .init("raw", "原始模型文字", kinds: [.text])],
         fields: [.init("task", "任务", .text(multiline: true), .text("请写一个简短的创作提案。")),
             .init("outputMode", "输出", .choice(["text", "json"]), .text("text")),
             .init("maximumPromptTokens", "输入 token 上限", .integer, .integer(2048)),
             .init("maximumOutputTokens", "输出 token 上限", .integer, .integer(256)),
-            .init("temperature", "温度", .decimal, .decimal(0.7)), .init("topP", "Top P", .decimal, .decimal(0.95)), modelField], modelKind: .text),
+            .init("temperature", "温度", .decimal, .decimal(0.7)), .init("topP", "Top P", .decimal, .decimal(0.95)), modelField] + visualFields, modelKind: .text),
         validate: { node in
-            guard (1...32768).contains(try WorkflowScalarReader.integer("maximumPromptTokens", in: node)),
-                  (1...8192).contains(try WorkflowScalarReader.integer("maximumOutputTokens", in: node)) else { throw WorkflowIssue("文字 token 范围无效。") }
+            guard (1...(visual ? 262144 : 32768)).contains(try WorkflowScalarReader.integer("maximumPromptTokens", in: node)),
+                  (1...(visual ? 262144 : 8192)).contains(try WorkflowScalarReader.integer("maximumOutputTokens", in: node)) else { throw WorkflowIssue("文字 token 范围无效。") }
             try WorkflowLimits.nonnegative(WorkflowScalarReader.decimal("temperature", in: node), field: "temperature", node: node)
             guard let mode = node.parameters["outputMode"]?.string, ["text", "json"].contains(mode) else { throw WorkflowIssue("输出模式无效。") }
             if mode == "json" {
@@ -24,6 +35,12 @@ enum WorkflowLanguageOperations {
             }
             let p = try WorkflowScalarReader.decimal("topP", in: node)
             guard p > 0 && p <= 1 else { throw WorkflowIssue("Top P 必须大于0且不超过1。") }
+            if visual {
+                let min = try WorkflowScalarReader.integer("minimumPixels", in: node)
+                let max = try WorkflowScalarReader.integer("maximumPixels", in: node)
+                guard min >= 0, max >= 0, min == 0 || max == 0 || min <= max,
+                      try WorkflowScalarReader.integer("maximumVideoFrames", in: node) > 0 else { throw WorkflowIssue("视觉处理预算无效。") }
+            }
         }, execute: { context, services in
             let task = try await text(context.inputs["task"], fallback: context.node.parameters["task"]?.string ?? "", services: services)
             let content = try await context.inputs["content"].asyncText(services)
@@ -38,7 +55,8 @@ enum WorkflowLanguageOperations {
             } else { output = .text(value) }
             return .outputs(["output": .data(output), "raw": .asset(raw)])
         })
-    static let video = WorkflowOperation(definition: .init(id: "d.video.generate", title: "文字生成视频", detail: "Wan2.1 T2V；不支持首尾帧或图像条件。",
+    }
+    static let video = WorkflowOperation(definition: .init(id: "d.video.generate", title: "Wan2.1-T2V-1.3B", detail: "Wan2.1 T2V；不支持首尾帧或图像条件。",
         inputs: [.init("prompt", "提示", kinds: [.text], required: false)], outputs: [.init("output", "视频", kinds: [.video])],
         fields: [.init("promptText", "提示", .text(multiline: true), .text("A small boat on a calm lake.")),
             .init("negativePrompt", "负向提示", .text(multiline: true), .text("")),

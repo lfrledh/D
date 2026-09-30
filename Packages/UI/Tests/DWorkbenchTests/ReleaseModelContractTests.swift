@@ -5,6 +5,37 @@ import Testing
 
 @Suite("Release model shared contracts")
 struct ReleaseModelContractTests {
+    @Test func releaseContractsUseRealNamesAndOrderedVisualPorts() throws {
+        let registry = WorkflowRegistry.standard
+        for (id, name) in [(WorkflowModelRoutes.qwen35, "Qwen3.5-9B"), (WorkflowModelRoutes.qwen38, "Qwen3.8-27B")] {
+            let definition = try #require(registry.operation(id)?.definition)
+            #expect(definition.title == name)
+            #expect(definition.inputs.first { $0.id == "images" }?.assetListKind == .image)
+            #expect(definition.inputs.first { $0.id == "video" }?.kinds == [.video])
+            try registry.validate(definition.makeNode())
+        }
+        for id in ["d.image.generate", WorkflowModelRoutes.fluxDev] {
+            let definition = try #require(registry.operation(id)?.definition)
+            #expect(definition.title.hasPrefix("FLUX.2-"))
+            #expect(definition.inputs.first { $0.id == "ref" }?.assetListKind == .image)
+            try registry.validate(definition.makeNode())
+        }
+    }
+    @Test func recipesPreserveAllReferencesAndRejectCrossFamilyProfile() throws {
+        let refs = ["a", "b"].map { value in ImageReference(url: URL(fileURLWithPath: "/fixture/" + value + ".rgb"),
+            sha256: String(repeating: value, count: 64), byteCount: 512 * 512 * 3, width: 512, height: 512) }
+        let registry = WorkflowRegistry.standard
+        for (id, recipe) in [("d.image.generate", WorkflowImageRecipe.klein(capability: .scalableKlein4B)),
+                              (WorkflowModelRoutes.fluxDev, WorkflowImageRecipe.fluxDev(capability: .flux2Dev))] {
+            let node = try #require(registry.operation(id)?.definition.makeNode())
+            let request = try recipe.request(node: node, prompt: "ordered", seed: 42, references: refs)
+            #expect(try request.resolvedReferences() == refs)
+            if id == WorkflowModelRoutes.fluxDev { #expect(request.guidanceScale == 4 && request.steps == 50) }
+        }
+        let duplicate = WorkflowDataItem(value: .asset(.init(projectID: UUID(), assetID: UUID(), kind: .image, sha256: String(repeating: "a", count: 64))))
+        let port = WorkflowPortDefinition("ref", "", kinds: [.image, .list], assetListKind: .image)
+        #expect(throws: WorkflowIssue.self) { try port.resolveAssets(.data(.list(element: .asset(.image), items: [duplicate, duplicate]))) }
+    }
     @Test func assetListSchemaRejectsContradictorySingleKindAndUnsupportedOutputAnnotation() throws {
         let contradictory = WorkflowPortDefinition("input", "Input", kinds: [.audio, .list], assetListKind: .image)
         let typed = WorkflowPortDefinition("output", "Output", kinds: [.list], assetListKind: .image)

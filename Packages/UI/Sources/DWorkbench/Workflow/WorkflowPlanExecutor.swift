@@ -126,7 +126,7 @@ import Foundation
     /// Called only by the current Call's owner; keeps partial candidate evidence durable.
     public func updateCandidates(stepID: UUID, candidates: [WorkflowCandidate]) async throws {
         guard executing, let index = checkpoint?.records.firstIndex(where: { $0.step.id == stepID }),
-              checkpoint?.records[index].step.node.operationID == "d.image.generate" else { throw WorkflowIssue("候选进度不属于当前图像调用。") }
+              checkpoint.map({ WorkflowModelRoutes.isImage($0.records[index].step.node.operationID) }) == true else { throw WorkflowIssue("候选进度不属于当前图像调用。") }
         checkpoint?.records[index].step.outputs["output"] = .collection(candidates)
         try await persist()
     }

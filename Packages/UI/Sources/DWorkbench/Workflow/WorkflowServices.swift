@@ -170,6 +170,12 @@ struct WorkflowSaveFailure: LocalizedError {
         guard let binding = bindings[context.node.id], binding.identity == context.node.parameters["modelID"]?.string else {
             throw WorkflowIssue("模型未绑定到本次操作。")
         }
+        if [WorkflowModelRoutes.qwen35, WorkflowModelRoutes.qwen38, WorkflowModelRoutes.fluxDev, WorkflowModelRoutes.ace].contains(context.node.operationID), binding.operationID == nil {
+            throw WorkflowIssue("所选模型未提供此能力契约。")
+        }
+        if let operationID = binding.operationID, operationID != context.node.operationID {
+            throw WorkflowIssue("模型身份与此节点的能力契约不匹配；不会静默改用其他实现。")
+        }
         return binding
     }
     private func infer(_ request: InferenceRequest, binding: WorkflowModelBinding) async throws -> (InferenceResult, String) {
@@ -210,10 +216,39 @@ struct WorkflowSaveFailure: LocalizedError {
         let binding = try model(for: context), p = context.node.parameters
         guard !task.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw WorkflowIssue("任务不能为空。") }
         let prompt = task + (content.map { "\n\nContent:\n" + $0 } ?? "")
+        let capability = binding.textCapability ?? session.textCapability
+        let visual = capability?.profile == TextExecutionCapability.qwen35VLMProfile
+        var images: [TextImageReference] = []
+        if let value = context.inputs["images"] {
+            guard visual else { throw WorkflowIssue("此文字实现不支持图像。") }
+            let references = try WorkflowPortDefinition("images", "", kinds: [.image, .list], required: false, assetListKind: .image).resolveAssets(value)
+            for reference in references {
+                let (url, asset) = try await store.workflowMedia(reference)
+                guard ["image/png", "image/jpeg"].contains(asset.mediaType), let width = asset.metadata.width, let height = asset.metadata.height else {
+                    throw WorkflowIssue("视觉输入需要已验证尺寸的 PNG/JPEG。")
+                }
+                let bytes = try await store.workflowData(reference)
+                images.append(.init(url: url, width: width, height: height, byteCount: UInt64(bytes.count), contentSHA256: reference.sha256))
+            }
+        }
+        var video: TextVideoReference?
+        if let value = context.inputs["video"] {
+            guard visual else { throw WorkflowIssue("此文字实现不支持视频。") }
+            let reference = try WorkflowExecution.asset(value, kind: .video, port: "video", node: context.node)
+            let (url, asset) = try await store.workflowMedia(reference)
+            guard asset.mediaType == "video/mp4", let metadata = asset.metadata.video else { throw WorkflowIssue("视频理解需要完整的 MP4 和真实时长。") }
+            let bytes = try await store.workflowData(reference)
+            video = .init(url: url, byteCount: UInt64(bytes.count), contentSHA256: reference.sha256, durationSeconds: Double(metadata.durationNumerator) / Double(metadata.durationDenominator))
+        }
+        let processing: TextVisualProcessing? = visual && (!images.isEmpty || video != nil) ? .init(
+            minimumPixels: (p["minimumPixels"]?.integer ?? 0) == 0 ? nil : p["minimumPixels"]?.integer,
+            maximumPixels: (p["maximumPixels"]?.integer ?? 0) == 0 ? nil : p["maximumPixels"]?.integer,
+            maximumVideoFrames: p["maximumVideoFrames"]?.integer ?? 64) : nil
         let input = TextRequest(prompt: prompt, maxTokens: p["maximumOutputTokens"]?.integer ?? 256,
             temperature: Float(p["temperature"]?.decimal ?? 0.7), topP: Float(p["topP"]?.decimal ?? 0.95),
-            execution: .init(profile: TextExecutionCapability.qwen2Profile, maximumPromptTokens: p["maximumPromptTokens"]?.integer ?? 2048))
-        try session.textCapability?.validate(input)
+            execution: .init(profile: capability?.profile ?? TextExecutionCapability.qwen2Profile, maximumPromptTokens: p["maximumPromptTokens"]?.integer ?? 2048),
+            images: images.isEmpty ? nil : images, video: video, visualProcessing: processing)
+        try capability?.validate(input)
         let request = InferenceRequest(id: context.stepID, model: binding.reference, input: .text(input))
         languagePreview = ""
         let (result, text) = try await infer(request, binding: binding)
@@ -369,7 +404,7 @@ struct WorkflowSaveFailure: LocalizedError {
     }
 
     public func generateImages(prompt: String, reference: WorkflowAssetReference?, context: WorkflowExecutionContext) async throws -> [WorkflowCandidate] {
-        guard let binding = bindings[context.node.id], binding.identity == context.node.parameters["modelID"]?.string else { throw WorkflowIssue("图像模型未绑定到本次运行。") }
+        let binding = try model(for: context)
         let p = context.node.parameters
         guard let seed = UInt64(p["seed"]?.string ?? ""), let count = p["count"]?.integer, (1...8).contains(count) else { throw WorkflowIssue("候选数量或 seed 无效。") }
         var items = candidateProgress[context.stepID] ?? context.retryCandidates ?? (0..<count).map { offset in
@@ -378,7 +413,10 @@ struct WorkflowSaveFailure: LocalizedError {
         guard items.count == count else { throw WorkflowIssue("候选重试数量与原快照不符。") }
         candidateProgress[context.stepID] = items
         try await candidatesChanged(context.stepID, items)
-        let parents = context.inputs.values.compactMap(\.asset)
+        let references = try context.inputs["ref"].map {
+            try WorkflowPortDefinition("ref", "", kinds: [.image, .list], required: false, assetListKind: .image).resolveAssets($0)
+        } ?? reference.map { [$0] } ?? []
+        let parents = context.inputs.values.flatMap { $0.datum?.assetReferences ?? [] }
         for i in items.indices {
             if items[i].asset != nil { continue }
             try checkCancellation()
@@ -388,15 +426,9 @@ struct WorkflowSaveFailure: LocalizedError {
             let itemContext = WorkflowExecutionContext(node: context.node, stepID: attempt, inputs: context.inputs)
             do {
                 if pending[attempt] == nil {
-                    let inputRef: ImageReference?
-                    if let reference {
-                        guard reference.kind == .image else { throw WorkflowIssue("参考端口不是图片。") }
-                        _ = try await store.workflowData(reference)
-                        // Existing Klein reference preparation accepts PNG; JPEG must pass the explicit conversion node.
-                        inputRef = try await store.prepareImageReference(assetID: reference.assetID, runID: attempt)
-                    } else { inputRef = nil }
+                    let inputRefs = try await store.prepareWorkflowImageReferences(references, runID: attempt)
                     guard let recipe = binding.imageRecipe else { throw WorkflowIssue("此图像实现缺少执行配方。") }
-                    let input = try recipe.request(node: context.node, prompt: prompt, seed: UInt64(old.seed)!, reference: inputRef)
+                    let input = try recipe.request(node: context.node, prompt: prompt, seed: UInt64(old.seed)!, references: inputRefs)
                     let request = InferenceRequest(id: attempt, model: binding.reference, input: .image(input))
                     try checkCancellation()
                     let run = try await session.engine.submit(request, backendID: binding.backendID)
@@ -449,7 +481,7 @@ struct WorkflowSaveFailure: LocalizedError {
     }
     /// Save-only recovery for the Quick caller. This path never resolves a model or submits inference.
     public func retryQuickPublications(_ context: WorkflowExecutionContext) async throws -> [String: WorkflowValue] {
-        if context.node.operationID == "d.image.generate" {
+        if WorkflowModelRoutes.isImage(context.node.operationID) {
             guard var items = candidateProgress[context.stepID] else { throw WorkflowIssue("没有待保存的候选记录。") }
             for index in items.indices {
                 let old = items[index]
@@ -463,7 +495,7 @@ struct WorkflowSaveFailure: LocalizedError {
             }
             return ["output": .collection(items)]
         }
-        guard (["d.model.language", "d.music.generate", "d.video.generate", "d.music.pitch"]
+        guard (["d.model.language", WorkflowModelRoutes.qwen35, WorkflowModelRoutes.qwen38, WorkflowModelRoutes.ace, "d.music.generate", "d.video.generate", "d.music.pitch"]
             + ExternalVideoExecutionProfile.allCases.map { WorkflowVideoRecipe(profile: $0).operationID }).contains(context.node.operationID) else {
             throw WorkflowIssue("此操作不支持快速保存恢复。")
         }
@@ -473,7 +505,7 @@ struct WorkflowSaveFailure: LocalizedError {
             let result = try JSONDecoder().decode(PitchAnalysisResult.self, from: await readData(ref))
             return try WorkflowMusicOperations.pitchOutputs(input: input, reference: ref, result: result)
         }
-        if context.node.operationID == "d.model.language" {
+        if WorkflowModelRoutes.isLanguage(context.node.operationID) {
             let text = try await readText(ref)
             let value: WorkflowDatum
             if context.node.parameters["outputMode"]?.string == "json" {
