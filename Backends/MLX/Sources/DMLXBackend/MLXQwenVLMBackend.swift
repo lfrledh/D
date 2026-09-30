@@ -134,7 +134,7 @@ public actor MLXQwenVLMBackend: InferenceBackend {
                 "Qwen3VLProcessor": { data, tokenizer in
                     let normalized = try QwenVLMProcessorConfiguration.normalized(data, overrides: processing)
                     let config = try JSONDecoder().decode(Qwen3VLProcessorConfiguration.self, from: normalized.data)
-                    return Qwen3VLProcessor(config, tokenizer: tokenizer)
+                    return Qwen3VLProcessor(config, tokenizer: tokenizer, preserveSuppliedVideoFrames: true)
                 }
             ])
             let factory = VLMModelFactory(typeRegistry: VLMTypeRegistry.shared,
@@ -285,7 +285,14 @@ public actor MLXQwenVLMBackend: InferenceBackend {
         Memory.clearCache()
         if let previousCacheLimit { Memory.cacheLimit = previousCacheLimit }
         previousCacheLimit = nil
-        snapshot?.removePrivateFiles()
+        do {
+            try snapshot?.removePrivateFiles()
+        } catch {
+            // release() cannot throw. Keep the lease and snapshot so cleanup can be retried,
+            // and make the failure observable instead of admitting another heavy run.
+            FileHandle.standardError.write(Data("VLM private snapshot cleanup failed: \(error)\n".utf8))
+            return
+        }
         snapshot = nil
         if let runID { await observer(MLXLifecycleEvent(runID: runID, phase: .released)) }
         runID = nil
@@ -383,21 +390,9 @@ public actor MLXQwenVLMBackend: InferenceBackend {
         guard !failed, frames.count == times.count, actual.count == times.count else {
             throw InferenceFailure.invalidRequest("MP4 frame decoding did not return every requested 2 FPS frame.")
         }
-        // MLX LM 3.31.4 re-samples `.frames` using the first/last timestamps.
-        // Reject cases where that public path would silently remove a decoded frame.
-        // The dependency needs a frame-preserving path before normal multi-frame clips can run.
-        let upstreamCount = Self.upstreamFrameCount(times.indices.map { actual[$0]! })
-        guard upstreamCount == times.count else {
-            throw InferenceFailure.invalidRequest(
-                "MLX LM 3.31.4 would drop a decoded 2 FPS video frame during preprocessing.")
-        }
         return DecodedVideo(frames: times.indices.map { frames[$0]! },
                             requestedTimestamps: times.map(\.seconds),
                             actualTimestamps: times.indices.map { actual[$0]! })
     }
 
-    static func upstreamFrameCount(_ timestamps: [Double]) -> Int {
-        guard let first = timestamps.first, let last = timestamps.last else { return 0 }
-        return max(1, min(timestamps.count, Int((2 * (last - first)).rounded())))
-    }
 }
