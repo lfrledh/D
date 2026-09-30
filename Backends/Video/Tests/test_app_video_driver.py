@@ -243,8 +243,8 @@ class AppVideoDriverTests(unittest.TestCase):
         actual.write_bytes((self.task / "request.json").read_bytes())
         (self.task / "request.json").unlink()
         (self.task / "request.json").symlink_to(actual)
-        with self.assertRaises(ValueError):
-            driver.run(self._args())
+        self.assertEqual(driver.run(self._args()), 2)
+        self.assertFalse(report.exists())
 
     def test_decode_failure_and_input_mutation_do_not_verify(self):
         admission, shader = self._h3_patches()
@@ -321,10 +321,29 @@ class AppVideoDriverTests(unittest.TestCase):
         def child(*child_args, **kwargs):
             self.assertTrue(state["active"])
             return original_child(*child_args, **kwargs)
+        def guarded(path, original, *call_args, **kwargs):
+            if isinstance(path, (str, os.PathLike)):
+                value = str(path)
+                if any(value == str(root) or value.startswith(str(root) + os.sep)
+                       for root in (self.pack, self.task)):
+                    self.assertTrue(state["active"], "protected stat/read occurred before bookmark acquisition")
+            return original(path, *call_args, **kwargs)
+        original_lstat, original_stat = Path.lstat, Path.stat
+        original_open, original_os_open = Path.open, os.open
+        original_os_stat, original_os_lstat = os.stat, os.lstat
+        def path_lstat(path, *a, **k): return guarded(path, original_lstat, *a, **k)
+        def path_stat(path, *a, **k): return guarded(path, original_stat, *a, **k)
+        def path_open(path, *a, **k): return guarded(path, original_open, *a, **k)
+        def os_open(path, *a, **k): return guarded(path, original_os_open, *a, **k)
+        def os_stat(path, *a, **k): return guarded(path, original_os_stat, *a, **k)
+        def os_lstat(path, *a, **k): return guarded(path, original_os_lstat, *a, **k)
         admission, shader = self._h3_patches()
         with mock.patch.dict(sys.modules, {"d_audio_access": module}), \
              mock.patch.object(driver, "_read_snapshot", side_effect=read), \
-             mock.patch.object(driver, "_run_child", side_effect=child), admission, shader:
+             mock.patch.object(driver, "_run_child", side_effect=child), \
+             mock.patch.object(Path, "lstat", path_lstat), mock.patch.object(Path, "stat", path_stat), \
+             mock.patch.object(Path, "open", path_open), mock.patch("os.open", os_open), \
+             mock.patch("os.stat", os_stat), mock.patch("os.lstat", os_lstat), admission, shader:
             self.assertEqual(driver.run(args), 0)
         self.assertTrue(state["read"])
         self.assertFalse(state["active"])
@@ -373,6 +392,103 @@ class AppVideoDriverTests(unittest.TestCase):
         args = self._args()
         args.request = str(nested / "request.json")
         self.assertEqual(driver.run(args), 2)
+        self.assertFalse((nested / "result.json").exists())
+
+    def _assert_malformed_probe_reports_inside_scope(self, video_change, audio_change, root_change=lambda value: value):
+        video = {"codec_type": "video", "codec_name": "h264", "width": 32, "height": 32,
+                 "nb_read_frames": "22", "avg_frame_rate": "24/1", "duration": "11/12", "start_time": "0"}
+        audio = {"codec_type": "audio", "codec_name": "aac", "sample_rate": "32000",
+                 "channels": 2, "duration": "11/12", "start_time": "0"}
+        video_change(video)
+        audio_change(audio)
+        probe = json.dumps(root_change({"streams": [video, audio]}))
+        self.ffprobe = self._program("tools/ffprobe", "#!/usr/bin/env python3\nprint(" + repr(probe) + ")\n")
+        access = self.root / "access.json"
+        access.write_bytes(b"simulated bootstrap")
+        args = self._args()
+        args.access_manifest, args.access_run_id = str(access), self.run_id
+        state = {"active": False, "report_at_release": False}
+        @contextmanager
+        def acquire(path, *, run_id, allowed_paths):
+            self.assertEqual(allowed_paths, [self.pack, self.task])
+            state["active"] = True
+            try:
+                yield
+            finally:
+                report = self.task / "result.json"
+                state["report_at_release"] = report.exists() and not json.loads(report.read_text())["media_verified"]
+                state["active"] = False
+        module = types.ModuleType("d_audio_access")
+        module.acquire_file_access = acquire
+        module.AudioAccessError = RuntimeError
+        original_write = driver._write_result
+        def write(path, value):
+            self.assertTrue(state["active"], "failure result write must hold file access")
+            return original_write(path, value)
+        admission, shader = self._h3_patches()
+        with mock.patch.dict(sys.modules, {"d_audio_access": module}), \
+             mock.patch.object(driver, "_write_result", side_effect=write), admission, shader:
+            self.assertEqual(driver.run(args), 2)
+        self.assertTrue(state["report_at_release"], "failure report must be written before access release")
+        self.assertEqual(self._result()["schema"], driver.RESULT_SCHEMA)
+        self.assertLess((self.task / "result.json").stat().st_size, 2 * 1024 * 1024)
+
+    def test_missing_probe_frame_count_is_bounded_failure_in_scope(self):
+        self._assert_malformed_probe_reports_inside_scope(lambda v: v.pop("nb_read_frames"), lambda a: None)
+
+    def test_missing_probe_duration_is_bounded_failure_in_scope(self):
+        self._assert_malformed_probe_reports_inside_scope(lambda v: v.pop("duration"), lambda a: None)
+
+    def test_zero_denominator_fps_is_bounded_failure_in_scope(self):
+        self._assert_malformed_probe_reports_inside_scope(lambda v: v.update(avg_frame_rate="0/0"), lambda a: None)
+
+    def test_probe_type_error_is_bounded_failure_in_scope(self):
+        self._assert_malformed_probe_reports_inside_scope(lambda v: v.update(duration=None), lambda a: None)
+
+    def test_probe_attribute_error_is_bounded_failure_in_scope(self):
+        self._assert_malformed_probe_reports_inside_scope(lambda v: None, lambda a: None,
+                                                          root_change=lambda value: [value])
+
+    def test_access_acquisition_failure_writes_no_report(self):
+        access = self.root / "access.json"
+        access.write_bytes(b"simulated bootstrap")
+        args = self._args()
+        args.access_manifest, args.access_run_id = str(access), self.run_id
+        module = types.ModuleType("d_audio_access")
+        module.AudioAccessError = RuntimeError
+        @contextmanager
+        def acquire(path, *, run_id, allowed_paths):
+            raise RuntimeError("simulated access refusal")
+            yield
+        module.acquire_file_access = acquire
+        request = (self.task / "request.json").read_bytes()
+        manifest = (self.pack / driver.MANIFEST_NAME).read_bytes()
+        with mock.patch.dict(sys.modules, {"d_audio_access": module}):
+            self.assertEqual(driver.run(args), 2)
+        self.assertFalse((self.task / "result.json").exists())
+        self.assertEqual((self.task / "request.json").read_bytes(), request)
+        self.assertEqual((self.pack / driver.MANIFEST_NAME).read_bytes(), manifest)
+
+    def test_venv_symlink_runtime_overlap_rejected_before_input_inspection(self):
+        venv = self.root / "venv"
+        (venv / "bin").mkdir(parents=True)
+        (venv / "lib" / "task").mkdir(parents=True)
+        (venv / "bin" / "python").symlink_to(Path(sys.executable).resolve())
+        nested = venv / "lib" / "task"
+        (nested / "tmp").mkdir()
+        (nested / "cache").mkdir()
+        source = (self.task / "request.json").read_bytes()
+        (nested / "request.json").write_bytes(source)
+        args = self._args()
+        args.request = str(nested / "request.json")
+        manifest = (self.pack / driver.MANIFEST_NAME).read_bytes()
+        with mock.patch.object(driver.sys, "executable", str(venv / "bin" / "python")), \
+             mock.patch.object(driver.sys, "prefix", str(venv)), \
+             mock.patch.dict(os.environ, {"TMPDIR": str(nested / "tmp")}), \
+             mock.patch.object(driver, "_file_access", side_effect=AssertionError("unsafe runtime overlap reached access")):
+            self.assertEqual(driver.run(args), 2)
+        self.assertEqual((nested / "request.json").read_bytes(), source)
+        self.assertEqual((self.pack / driver.MANIFEST_NAME).read_bytes(), manifest)
         self.assertFalse((nested / "result.json").exists())
 
 
