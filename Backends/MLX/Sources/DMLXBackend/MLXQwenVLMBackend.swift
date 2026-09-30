@@ -67,13 +67,33 @@ public actor MLXQwenVLMBackend: InferenceBackend {
         let prompt = UInt64(try executionCapability.resolvedPromptTokens(for: input))
         let tokens = prompt + UInt64(input.maxTokens)
         let kvPerToken: UInt64 = inventory.size == "27B" ? 64 * 4 * 256 * 8 : 32 * 4 * 256 * 8
-        let visualCount = UInt64(input.images?.count ?? 0) +
-            (input.video == nil ? 0 : UInt64(input.visualProcessing?.maximumVideoFrames ?? 64))
-        let visualPixels = UInt64(input.visualProcessing?.maximumPixels ?? inventory.maximumPixels)
+        let minimumPixels = UInt64(input.visualProcessing?.minimumPixels ?? inventory.minimumPixels)
+        let maximumPixels = UInt64(input.visualProcessing?.maximumPixels ?? inventory.maximumPixels)
+        guard minimumPixels <= maximumPixels else {
+            throw InferenceFailure.invalidRequest("Conflicting pixel overrides.")
+        }
+        let imagePixels = (input.images ?? []).reduce(UInt64(0)) { total, image in
+            let sourcePixels = Self.saturatingMultiply(UInt64(image.width), UInt64(image.height))
+            return Self.saturatingAdd(total, min(max(sourcePixels, minimumPixels), maximumPixels))
+        }
+        var videoPixels: UInt64 = 0
+        if let video = input.video {
+            let samples = video.durationSeconds * 2
+            let maximumFrames = input.visualProcessing?.maximumVideoFrames ?? 64
+            guard samples.isFinite, samples <= Double(maximumFrames) else {
+                throw InferenceFailure.invalidRequest("The full 2 FPS video sample exceeds maximumVideoFrames.")
+            }
+            let frames = UInt64(samples.rounded(.up))
+            // The vision processor pads an odd temporal pair with one extra frame.
+            videoPixels = Self.saturatingMultiply(frames + frames % 2, maximumPixels)
+        }
+        let visualPixels = Self.saturatingAdd(imagePixels, videoPixels)
+        // Estimated peak: transient weights, f32 KV cache, active visual pixels,
+        // allocator cache and workspace. No visual term is added for text-only input.
         let peak = Self.saturatingAdd(
             Self.saturatingAdd(Self.saturatingMultiply(inventory.weightBytes, 2),
                                Self.saturatingMultiply(tokens, kvPerToken)),
-            Self.saturatingAdd(Self.saturatingMultiply(visualCount, Self.saturatingMultiply(visualPixels, 8)),
+            Self.saturatingAdd(Self.saturatingMultiply(visualPixels, 8),
                                UInt64(configuration.cacheLimitBytes) + 512 * 1024 * 1024))
         return ResourceEstimate(peakBytes: peak, confidence: .estimated)
     }
@@ -125,6 +145,9 @@ public actor MLXQwenVLMBackend: InferenceBackend {
             container = loaded
             await observer(MLXLifecycleEvent(runID: request.id, phase: .loaded))
             try Task.checkCancellation()
+            // Resolve actor-owned capability before sending the generation body to MLX.
+            let promptLimit = try executionCapability.resolvedPromptTokens(for: input)
+            let executionProfile = executionCapability.profile
             let generated = try await withRandomState(randomState) {
                 try await loaded.perform { (context: ModelContext) in
                     let decodedFrames = try video.frames.map { encoded -> UserInput.VideoFrame in
@@ -143,7 +166,6 @@ public actor MLXQwenVLMBackend: InferenceBackend {
                     let prepared = try await context.processor.prepare(input: userInput)
                     try Task.checkCancellation()
                     let promptTokens = prepared.text.tokens.size
-                    let promptLimit = try executionCapability.resolvedPromptTokens(for: input)
                     guard promptTokens <= promptLimit,
                           promptTokens <= inventory.contextLimit,
                           input.maxTokens <= inventory.contextLimit - promptTokens else {
@@ -210,8 +232,8 @@ public actor MLXQwenVLMBackend: InferenceBackend {
                                 "modelFamily": inventory.family, "modelSize": inventory.size,
                                 "weightBytes": String(inventory.weightBytes),
                                 "randomSeed": String(randomSeed),
-                                "executionProfileIdentifier": executionCapability.profile.identifier,
-                                "executionProfileRevision": String(executionCapability.profile.revision),
+                                "executionProfileIdentifier": executionProfile.identifier,
+                                "executionProfileRevision": String(executionProfile.revision),
                                 "imageCount": String(frozen.images.count),
                                 "imageSourceSHA256": frozen.images.map(\.digest).joined(separator: ","),
                                 "videoSourceSHA256": frozen.video?.digest ?? "none",
