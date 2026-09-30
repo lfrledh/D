@@ -74,8 +74,9 @@ final class ReleaseDeniedHTTPFixture {
         process.standardOutput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice
         try process.run()
+        let child = process
         var initialized = false
-        defer { if !initialized { Self.stop(process) } }
+        defer { if !initialized { Self.stop(child) } }
         var port: Int?
         for _ in 0..<300 {
             if let value = try? String(contentsOf: portFile, encoding: .utf8),

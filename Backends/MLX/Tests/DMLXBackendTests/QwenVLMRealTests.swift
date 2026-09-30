@@ -52,6 +52,17 @@ struct QwenVLMRealTests {
                     execution: .init(profile: TextExecutionCapability.qwen35VLMProfile, maximumPromptTokens: 4096),
                     video: .init(url: url, byteCount: UInt64(bytes.count), contentSHA256: SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined(), durationSeconds: duration), thinking: .init(enableThinking: false), seed: 42))
             }
+            let tool = TextToolDefinition(name: "read_number", description: "Read a stored integer", parameters: [
+                "type": .string("object"), "properties": .object([:]), "required": .array([])])
+            let conversationIndex = requests.count
+            requests.append(TextRequest(prompt: "", maxTokens: 256, temperature: 0,
+                execution: .init(profile: TextExecutionCapability.qwen35VLMProfile, maximumPromptTokens: 4096),
+                messages: [
+                    .init(role: .system, parts: [.text("Use the tool result as data. Answer with a single integer only.")]),
+                    .init(role: .user, parts: [.text("Read the stored number and add one.")]),
+                    .init(role: .assistant, parts: [], toolCalls: [.init(id: "call_0", name: "read_number", arguments: [:])]),
+                    .init(role: .tool, parts: [.text("41")], toolCallID: "call_0")
+                ], tools: [tool], thinking: .init(enableThinking: false), seed: 42))
             for (index, input) in requests.enumerated() {
                 let request = InferenceRequest(model: .init(directory: model, revision: "8b2b98c00a6b4d291155e4890773ca8f769aee53"), input: .text(input))
                 let run = try await runtime.submit(request, backendID: backend.descriptor.id)
@@ -68,6 +79,8 @@ struct QwenVLMRealTests {
                     #expect(object["answer"] as? Int == 42 && object["ok"] as? Bool == true)
                 } else if index == 1 {
                     #expect(final.trimmingCharacters(in: .whitespacesAndNewlines).lowercased().contains("second"))
+                } else if index == conversationIndex {
+                    #expect(final.trimmingCharacters(in: .whitespacesAndNewlines) == "42")
                 } else { #expect(final.split(whereSeparator: \.isWhitespace).count >= 3) }
                 #expect(result.metadata["imageCount"] == String(input.images?.count ?? 0))
                 #expect(result.metadata["modelRevision"] == request.model.revision)
