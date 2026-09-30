@@ -111,13 +111,14 @@ struct Flux2ImageMathTests {
             }
         }
         #expect(evidence.0 == 2)
-        #expect(evidence.1 == 8)
-        #expect(evidence.4 == 4)
-        #expect(evidence.5 == 4)
+        #expect(evidence.1 == 128)
+        #expect(evidence.4 == 64)
+        #expect(evidence.5 == 64)
         #expect(evidence.6)
         #expect(evidence.2.first == 10)
         #expect(evidence.2.last == 20)
-        #expect(evidence.2 == [10, 10, 10, 10, 20, 20, 20, 20])
+        #expect(evidence.2 == Array(repeating: Int32(10), count: 64)
+            + Array(repeating: Int32(20), count: 64))
         #expect(evidence.2.filter { $0 == 10 }.count + evidence.2.filter { $0 == 20 }.count == evidence.1)
         #expect(evidence.3 == 4 + evidence.1)
     }

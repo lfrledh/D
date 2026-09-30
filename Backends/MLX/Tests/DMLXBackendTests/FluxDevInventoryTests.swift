@@ -35,23 +35,39 @@ struct FluxDevInventoryTests {
 
     @Test("Missing component and algorithm substitution are rejected")
     func strictTree() throws {
-        let fixture = try Fixture()
-        defer { fixture.remove() }
-        let missing = fixture.directory.appendingPathComponent("text_encoder/model-00010-of-00010.safetensors")
+        let missingFixture = try Fixture()
+        defer { missingFixture.remove() }
+        let missing = missingFixture.directory.appendingPathComponent("text_encoder/model-00010-of-00010.safetensors")
         try FileManager.default.removeItem(at: missing)
-        #expect(throws: (any Error).self) {
-            _ = try LocalFluxDevInventory.inspect(fixture.request(), manifest: fixture.manifest)
+        do {
+            _ = try LocalFluxDevInventory.inspect(missingFixture.request(), manifest: missingFixture.manifest)
+            Issue.record("Missing Dev text encoder shard unexpectedly passed admission")
+        } catch InferenceFailure.invalidRequest(let reason) {
+            #expect(reason.contains("missing manifest files"))
+        } catch {
+            Issue.record("Expected missing-file admission failure, received \(error)")
         }
-        let replaced = fixture.manifest.files.map { file in
+
+        let completeFixture = try Fixture()
+        defer { completeFixture.remove() }
+        let complete = try LocalFluxDevInventory.inspect(
+            completeFixture.request(), manifest: completeFixture.manifest)
+        try complete.verifyContents()
+        let replaced = completeFixture.manifest.files.map { file in
             LocalFluxDevInventory.Manifest.File(path: file.path, size: file.size,
                 digestAlgorithm: file.path == "model_index.json" ? "sha256" : file.digestAlgorithm,
                 digest: file.digest)
         }
-        let altered = LocalFluxDevInventory.Manifest(schemaVersion: fixture.manifest.schemaVersion,
-            repository: fixture.manifest.repository, revision: fixture.manifest.revision,
-            profile: fixture.manifest.profile, files: replaced)
-        #expect(throws: (any Error).self) {
-            _ = try LocalFluxDevInventory.inspect(fixture.request(), manifest: altered)
+        let altered = LocalFluxDevInventory.Manifest(schemaVersion: completeFixture.manifest.schemaVersion,
+            repository: completeFixture.manifest.repository, revision: completeFixture.manifest.revision,
+            profile: completeFixture.manifest.profile, files: replaced)
+        do {
+            _ = try LocalFluxDevInventory.inspect(completeFixture.request(), manifest: altered)
+            Issue.record("Dev manifest with substituted digest algorithm unexpectedly passed admission")
+        } catch InferenceFailure.invalidRequest(let reason) {
+            #expect(reason.contains("digest"))
+        } catch {
+            Issue.record("Expected digest algorithm failure, received \(error)")
         }
     }
 

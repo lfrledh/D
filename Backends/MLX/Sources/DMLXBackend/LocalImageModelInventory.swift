@@ -71,11 +71,13 @@ struct LocalImageModelInventory: Sendable {
 
     static func inspect(_ request: InferenceRequest,
                         profile: ImageExecutionProfile = .verified512) throws -> Self {
-        try inspect(request, manifest: Manifest.bundled(), profile: profile)
+        try requireKleinProfile(profile)
+        return try inspect(request, manifest: Manifest.bundled(), profile: profile)
     }
 
     static func inspect(_ request: InferenceRequest, manifest: Manifest,
                         profile: ImageExecutionProfile = .verified512) throws -> Self {
+        try requireKleinProfile(profile)
         try Task.checkCancellation()
         try request.validate()
         guard case .image(let image) = request.input else {
@@ -117,6 +119,12 @@ struct LocalImageModelInventory: Sendable {
         return Self(directory: directory, estimatedPeakBytes: estimatedPeakBytes,
                     weightBytes: weightBytes, executionProfile: resolvedCapability.profile,
                     manifest: manifest, identities: identities)
+    }
+
+    private static func requireKleinProfile(_ profile: ImageExecutionProfile) throws {
+        guard profile != .flux2Dev else {
+            throw InferenceFailure.invalidRequest("The FLUX.2 Dev profile is incompatible with the Klein image inventory.")
+        }
     }
 
     /// Rehash every manifest file, including all four weight files, using bounded memory.

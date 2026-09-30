@@ -45,6 +45,9 @@ public actor MLXImageBackend: InferenceBackend {
 
     public init(configuration: MLXImageBackendConfiguration,
                 observer: @escaping @Sendable (MLXLifecycleEvent) async -> Void = { _ in }) throws {
+        guard configuration.profile != .flux2Dev else {
+            throw InferenceFailure.invalidRequest("The FLUX.2 Dev profile is incompatible with the Klein image backend.")
+        }
         guard (0...1024 * 1024 * 1024).contains(configuration.cacheLimitBytes),
               configuration.memoryLimitBytes.map({ $0 > 0 }) ?? true else {
             throw InferenceFailure.invalidRequest("Invalid image backend cache or memory limit.")
