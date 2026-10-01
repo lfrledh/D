@@ -129,7 +129,25 @@ class AppVideoDriverTests(unittest.TestCase):
             ffmpeg=str(self.ffmpeg), ffprobe=str(self.ffprobe),
             h3_engine=str(self.h3_engine) if h3 else None,
             h3_shader=str(self.shader) if h3 else None,
-            access_manifest=None, access_run_id=None)
+            access_manifest=None, access_run_id=None, engine_timeout_seconds=7200)
+
+    def test_explicit_h3_budget_reaches_child_without_two_hour_clamp(self):
+        args = self._args()
+        args.engine_timeout_seconds = 43_200
+        admission, shader = self._h3_patches()
+        with admission, shader, mock.patch.object(driver, "_run_child", wraps=driver._run_child) as child:
+            self.assertEqual(driver.run(args), 0)
+        engine_calls = [call for call in child.call_args_list if call.args[1] == "engine"]
+        self.assertEqual(len(engine_calls), 1)
+        self.assertEqual(engine_calls[0].args[2], 43_200)
+
+    def test_invalid_budget_is_rejected_before_execution(self):
+        for value in (0, -1, float("nan"), float("inf"), True, "43200"):
+            with self.subTest(value=value), mock.patch.object(driver, "_execute") as execute:
+                args = self._args()
+                args.engine_timeout_seconds = value
+                self.assertEqual(driver.run(args), 2)
+                execute.assert_not_called()
 
     def _h3_patches(self):
         import h3_admission, h3_job

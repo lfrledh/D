@@ -249,6 +249,7 @@ struct WorkflowLocalizationTests {
                 }
                 if let view = object as? NSView { pending.append(contentsOf: view.subviews) }
             }
+            print("D_HOSTING_CONTROL", identifier, "lookup-miss")
             return false
         }
 
@@ -270,7 +271,8 @@ struct WorkflowLocalizationTests {
         #expect(positiveResult && positivePresses == 1, "The same host must execute a plain SwiftUI Button")
         let disconnectID = "canvas-disconnect-" + connection.id.uuidString
         #expect(!HostingControlClick.contains(disconnectID, in: host))
-        #expect(pressControl(host, identifier: "workflow-connection-" + connection.id.uuidString))
+        let edgePressed = pressControl(host, identifier: "workflow-connection-" + connection.id.uuidString)
+        #expect(edgePressed)
         for _ in 0..<40 {
             host.layoutSubtreeIfNeeded()
             if HostingControlClick.contains(disconnectID, in: host) { break }

@@ -300,6 +300,7 @@ struct WorkflowMediaPresetTests {
             }
             if let view = object as? NSView { pending.append(contentsOf: view.subviews) }
         }
+        print("D_HOSTING_CONTROL", identifier, "lookup-miss")
         return false
     }
 }

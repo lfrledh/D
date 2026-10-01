@@ -128,7 +128,8 @@ public actor ExternalVideoBackend: InferenceBackend {
         let (_, inputIdentity) = try AudioFileSystem.readRegularFile(input, label: "frozen video input", maximumBytes: 1_048_576)
         var arguments = ["-B", configuration.providerScript.path, "--request", input.path,
                          "--pack", request.model.directory.path, "--ffmpeg", configuration.ffmpeg.path,
-                         "--ffprobe", configuration.ffprobe.path]
+                         "--ffprobe", configuration.ffprobe.path,
+                         "--engine-timeout-seconds", String(configuration.timeoutSeconds)]
         if let h3 = configuration.h3Executable, let shader = configuration.h3Shader {
             arguments += ["--h3-engine", h3.path, "--h3-shader", shader.path]
         }

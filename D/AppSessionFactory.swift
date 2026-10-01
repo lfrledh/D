@@ -95,7 +95,8 @@ enum AppSessionFactory {
                     ffmpeg: ffmpeg, ffprobe: ffprobe,
                     h3Executable: profile == .h3BF16Full ? engine.externalVideoTool("h3") : nil,
                     h3Shader: profile == .h3BF16Full ? engine.externalVideoTool("h3_shaders.metal") : nil, artifactDirectory: artifactDirectory,
-                    accessBootstrapRoot: accessRoot, confirmDeployment: { try engine.confirmUnchanged() }))
+                    accessBootstrapRoot: accessRoot, timeoutSeconds: 43_200,
+                    confirmDeployment: { try engine.confirmUnchanged() }))
                 externalVideoBackends.append(implementation)
                 videoAdapters.append(.init(profile: profile, validateModel: { try await implementation.validateModel(at: $0) }))
             }

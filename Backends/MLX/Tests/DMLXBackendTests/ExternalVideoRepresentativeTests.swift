@@ -67,9 +67,17 @@ struct ExternalVideoRepresentativeTests {
                 try encoder.encode(request).write(to: root.appendingPathComponent(name + "-request.json"), options: .withoutOverwriting)
                 print("D_VIDEO_REPRESENTATIVE_START", name, root.path)
                 let start = Date(), run = try await runtime.submit(request, backendID: backend.descriptor.id)
-                for try await _ in run.events {}
+                var streamFailure: String?
+                do { for try await _ in run.events {} }
+                catch { streamFailure = error.localizedDescription }
                 let outcome = await run.outcome(), state = await runtime.snapshot()
+                try JSONSerialization.data(withJSONObject: ["seconds": Date().timeIntervalSince(start),
+                    "outcome": String(describing: outcome), "streamFailure": streamFailure ?? "none",
+                    "activeRun": state.activeRunID?.uuidString ?? "none", "reservedBytes": state.reservedBytes,
+                    "guiVerified": false, "userStorePublished": false], options: [.sortedKeys])
+                    .write(to: root.appendingPathComponent(name + "-terminal.json"), options: .withoutOverwriting)
                 #expect(state.activeRunID == nil && state.reservedBytes == 0)
+                #expect(streamFailure == nil)
                 guard case .completed(let result) = outcome else {
                     try Data(String(describing: outcome).utf8).write(to: root.appendingPathComponent(name + "-failure.txt"))
                     throw InferenceFailure.backendFailed("Representative \(name) failed: \(outcome)")

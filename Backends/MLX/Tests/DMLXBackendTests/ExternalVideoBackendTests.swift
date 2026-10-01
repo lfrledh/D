@@ -194,6 +194,7 @@ private struct Fixture {
         let code = "mode = " + String(reflecting: mode) + "\n" + #"""
         import sys,json,hashlib,pathlib
         def arg(name): return pathlib.Path(sys.argv[sys.argv.index(name)+1])
+        assert float(sys.argv[sys.argv.index('--engine-timeout-seconds')+1]) == 10
         request=arg('--request'); raw=request.read_bytes(); wire=json.loads(raw)
         run=request.parent; pack=arg('--pack'); manifest=(pack/'D-VIDEO-PACK.json').read_bytes()
         if mode=='mutate-input':

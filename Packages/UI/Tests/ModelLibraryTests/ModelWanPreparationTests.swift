@@ -15,13 +15,14 @@ struct ModelWanPreparationTests {
         let entry = try #require(ModelCatalog.entries().first { $0.id == "wan21-t2v-1.3b-bf16" })
         let directory = try ModelDirectory(source)
         let before = try directory.requiredTree(paths: Set(entry.files.map(\.path)))
-        let library = try await ModelLibrary(stateDirectory: state, catalog: [entry])
+        var library: ModelLibrary? = try await ModelLibrary(stateDirectory: state, catalog: [entry])
         do {
-            let id = try await library.registerExisting(at: source, catalogID: entry.id)
-            let record = try #require(await library.snapshot().records.first)
+            let id = try await library!.registerExisting(at: source, catalogID: entry.id)
+            let record = try #require(await library!.snapshot().records.first)
             #expect(record.state == .preparationRequired && record.availability == .available)
             #expect(record.activeLeaseCount == 0)
-            try await library.shutdown()
+            try await library!.shutdown()
+            library = nil // Release the state-file lock before constructing the replacement instance.
             let reopened = try await ModelLibrary(stateDirectory: state, catalog: [entry])
             let restored = try #require(await reopened.snapshot().records.first)
             #expect(restored.id == id && restored.state == .preparationRequired)
@@ -33,7 +34,7 @@ struct ModelWanPreparationTests {
                 "guiVerified": false, "converterRepeated": false], options: [.prettyPrinted, .sortedKeys])
                 .write(to: state.appendingPathComponent("acceptance.json"), options: .withoutOverwriting)
             print("D_WAN_FULL_IMPORT", state.path)
-        } catch { try? await library.shutdown(); throw error }
+        } catch { try? await library?.shutdown(); throw error }
     }
 
     @Test(.enabled(if: ProcessInfo.processInfo.environment["D_TEST_WAN_PREPARED_OUTPUT"] != nil))

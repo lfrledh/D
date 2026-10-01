@@ -358,7 +358,8 @@ def _verify_media(output: Path, request: dict, *, ffmpeg: Path, ffprobe: Path, r
 
 
 def _execute(request: dict, *, pack: Path, run: Path, ffmpeg: Path, ffprobe: Path,
-             h3_engine: Path | None, h3_shader: Path | None, frames: dict) -> tuple[dict, dict]:
+             h3_engine: Path | None, h3_shader: Path | None, frames: dict,
+             engine_timeout_seconds: float) -> tuple[dict, dict]:
     profile = request["profile"]
     output = run / "candidate.mp4"
     _assert_free(run)
@@ -386,7 +387,7 @@ def _execute(request: dict, *, pack: Path, run: Path, ffmpeg: Path, ffprobe: Pat
         environment.update(H3_DIT_F32_FINAL="1", H3_FFMPEG=str(ffmpeg), H3_FFPROBE=str(ffprobe),
                            H3_PROFILE="1", H3_NAX="0", H3_CPU_SAMPLER="1")
         _unchanged_frames(frames)
-        process = _run_child(plan["argv"], "engine", 7200, run, environment)
+        process = _run_child(plan["argv"], "engine", engine_timeout_seconds, run, environment)
         source = {"expected_engine_source": f"antirez/h3.c@{UPSTREAM_REVISION}",
                   "engine_sha256": engine_digest, "shader_sha256": SHADER_SHA256,
                   "engine_source_cryptographically_verified": False}
@@ -428,6 +429,9 @@ def _execute(request: dict, *, pack: Path, run: Path, ffmpeg: Path, ffprobe: Pat
 def run(args) -> int:
     """One already-owned App task. All acquired access stays live through children."""
     try:
+        engine_timeout = args.engine_timeout_seconds
+        if type(engine_timeout) not in (int, float) or not math.isfinite(engine_timeout) or engine_timeout <= 0:
+            raise ValueError("engine timeout must be finite and positive")
         request_path = _lexical(args.request, "request")
         if request_path.name != "request.json":
             raise ValueError("request must be the private task request.json")
@@ -511,7 +515,7 @@ def run(args) -> int:
                     try:
                         admission, source = _execute(request, pack=pack, run=run_dir, ffmpeg=ffmpeg,
                                                      ffprobe=ffprobe, h3_engine=h3_engine, h3_shader=h3_shader,
-                                                     frames=frames)
+                                                     frames=frames, engine_timeout_seconds=engine_timeout)
                         record.update(admission=admission, source=source)
                         verified = _verify_media(run_dir / "candidate.mp4", request, ffmpeg=ffmpeg,
                                                  ffprobe=ffprobe, run=run_dir, profile=request["profile"])
@@ -551,6 +555,9 @@ def main(argv: list[str] | None = None) -> int:
         parser.add_argument("--" + name, required=True)
     for name in ("h3-engine", "h3-shader", "access-manifest", "access-run-id"):
         parser.add_argument("--" + name)
+    # The Swift parent remains the owner of the end-to-end deadline and process
+    # group. Avoid imposing a second, shorter fixed deadline on the H3 child.
+    parser.add_argument("--engine-timeout-seconds", type=float, default=7200)
     args = parser.parse_args(argv)
     try:
         return run(args)
