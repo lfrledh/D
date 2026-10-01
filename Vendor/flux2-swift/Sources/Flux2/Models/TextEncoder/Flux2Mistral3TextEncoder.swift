@@ -10,6 +10,10 @@ public enum Flux2Mistral3TextEncoderError: Error {
   case multimodalUnavailable
   case invalidMultimodalInput
   case imageTokenMismatch(expected: Int, actual: Int)
+  case incompleteLayer(Int)
+  case unsupportedLayeredQuantization
+  case layeredGenerationUnavailable
+  case duplicateNormalizedWeight(String)
 }
 
 public final class Flux2Mistral3TextEncoder: Module {
@@ -19,6 +23,7 @@ public final class Flux2Mistral3TextEncoder: Module {
   @ModuleInfo(key: "language_model") private var languageModel: Flux2Mistral3CausalLM
   @ModuleInfo(key: "vision_tower") private var visionTower: Flux2PixtralVisionTower?
   @ModuleInfo(key: "multi_modal_projector") private var multiModalProjector: Flux2Mistral3MultiModalProjector?
+  private var layeredWeights: Flux2PinnedWeightSelection?
 
   public init(configuration: Flux2Mistral3Configuration, vlmConfiguration: Flux2Mistral3VLMConfiguration? = nil) {
     self.configuration = configuration
@@ -73,6 +78,50 @@ public final class Flux2Mistral3TextEncoder: Module {
     return encoder
   }
 
+  /// Prompt-only original precision execution. Retain embedding and final norm;
+  /// each complete decoder block is read, evaluated and released in model order.
+  public static func loadLayered(from snapshot: URL, dtype: DType = .bfloat16,
+                                 admissionValidator: (() throws -> Void)? = nil) throws -> Flux2Mistral3TextEncoder {
+    try admissionValidator?()
+    if let _ = try Flux2Quantizer.loadManifest(from: snapshot) {
+      throw Flux2Mistral3TextEncoderError.unsupportedLayeredQuantization
+    }
+    try admissionValidator?()
+    let configURL = snapshot.appendingPathComponent("text_encoder/config.json")
+    try admissionValidator?()
+    guard FileManager.default.fileExists(atPath: configURL.path) else {
+      throw Flux2Mistral3TextEncoderError.configNotFound(configURL)
+    }
+    let data = try Data(contentsOf: configURL)
+    try admissionValidator?()
+    let vlm = try? JSONDecoder().decode(Flux2Mistral3VLMConfiguration.self, from: data)
+    let configuration: Flux2Mistral3Configuration
+    if let vlm { configuration = vlm.textConfig }
+    else { configuration = try JSONDecoder().decode(Flux2Mistral3Configuration.self, from: data) }
+    try admissionValidator?()
+    let encoder = Flux2Mistral3TextEncoder(configuration: configuration, vlmConfiguration: vlm)
+    try admissionValidator?()
+    let source = try Flux2PinnedWeightSelection(snapshot: snapshot, component: .textEncoder,
+                                                 admissionValidator: admissionValidator) {
+      _, actual in actual == dtype
+    }
+    let shared = try source.load { name in
+      let key = normalizedTextEncoderName(name)
+      return key == "language_model.model.embed_tokens.weight" ||
+        key == "language_model.model.norm.weight"
+    }
+    let normalized = normalizeTextEncoderWeights(shared)
+    guard normalized.count == shared.count,
+          Set(normalized.keys) == ["language_model.model.embed_tokens.weight", "language_model.model.norm.weight"] else {
+      throw Flux2Mistral3TextEncoderError.incompleteLayer(-1)
+    }
+    try encoder.update(parameters: ModuleParameters.unflattened(normalized), verify: .none)
+    MLX.eval(Array(normalized.values))
+    try source.verifyFileIdentities()
+    encoder.layeredWeights = source
+    return encoder
+  }
+
   public func generateTokenIds(
     inputIds: MLXArray,
     maxNewTokens: Int = 512,
@@ -86,6 +135,9 @@ public final class Flux2Mistral3TextEncoder: Module {
     prefillChunkSize: Int = 256,
     evaluationPolicy: Flux2EvaluationPolicy = .deferred
   ) throws -> [Int] {
+    guard layeredWeights == nil else {
+      throw Flux2Mistral3TextEncoderError.layeredGenerationUnavailable
+    }
     guard languageModel.isGenerationReady else {
       throw Flux2Mistral3TextEncoderError.invalidGenerationInput
     }
@@ -253,11 +305,12 @@ public final class Flux2Mistral3TextEncoder: Module {
       throw Flux2Mistral3TextEncoderError.invalidInputShape
     }
 
-    let hiddenStates = languageModel.hiddenStates(
+    let hiddenStates = try languageModel.hiddenStates(
       inputIds: inputIds,
       attentionMask: attentionMask,
       outputLayerIndices: hiddenStateLayers,
-      evaluationPolicy: evaluationPolicy
+      evaluationPolicy: evaluationPolicy,
+      layeredWeights: layeredWeights
     )
 
     var selected: [MLXArray] = []
@@ -278,34 +331,33 @@ public final class Flux2Mistral3TextEncoder: Module {
   }
 }
 
+private func normalizedTextEncoderName(_ name: String) -> String {
+  if name.hasPrefix("model.language_model.model.") {
+    return "language_model.model." + String(name.dropFirst("model.language_model.model.".count))
+  }
+  if name.hasPrefix("model.language_model.lm_head.") {
+    return "language_model.lm_head." + String(name.dropFirst("model.language_model.lm_head.".count))
+  }
+  if name.hasPrefix("model.language_model.") {
+    return "language_model.model." + String(name.dropFirst("model.language_model.".count))
+  }
+  if name.hasPrefix("model.vision_tower.") {
+    return "vision_tower." + String(name.dropFirst("model.vision_tower.".count))
+  }
+  if name.hasPrefix("model.multi_modal_projector.") {
+    return "multi_modal_projector." + String(name.dropFirst("model.multi_modal_projector.".count))
+  }
+  if name.hasPrefix("model.") { return String(name.dropFirst("model.".count)) }
+  return name
+}
+
 private func normalizeTextEncoderWeights(_ weights: [String: MLXArray]) -> [String: MLXArray] {
   var normalized: [String: MLXArray] = [:]
   normalized.reserveCapacity(weights.count)
 
   for (name, value) in weights {
     var tensor = value
-    let key: String
-    if name.hasPrefix("model.language_model.model.") {
-      let suffix = name.dropFirst("model.language_model.model.".count)
-      key = "language_model.model.\(suffix)"
-    } else if name.hasPrefix("model.language_model.lm_head.") {
-      let suffix = name.dropFirst("model.language_model.lm_head.".count)
-      key = "language_model.lm_head.\(suffix)"
-    } else if name.hasPrefix("model.language_model.") {
-      let suffix = name.dropFirst("model.language_model.".count)
-      key = "language_model.model.\(suffix)"
-    } else if name.hasPrefix("model.vision_tower.") {
-      let suffix = name.dropFirst("model.vision_tower.".count)
-      key = "vision_tower.\(suffix)"
-    } else if name.hasPrefix("model.multi_modal_projector.") {
-      let suffix = name.dropFirst("model.multi_modal_projector.".count)
-      key = "multi_modal_projector.\(suffix)"
-    } else if name.hasPrefix("model.") {
-      let suffix = name.dropFirst("model.".count)
-      key = String(suffix)
-    } else {
-      key = name
-    }
+    let key = normalizedTextEncoderName(name)
 
     if key == "vision_tower.patch_conv.weight", tensor.ndim == 4 {
       tensor = tensor.transposed(0, 2, 3, 1)
@@ -396,13 +448,15 @@ private final class Flux2Mistral3CausalLM: Module {
     inputIds: MLXArray,
     attentionMask: MLXArray,
     outputLayerIndices: [Int],
-    evaluationPolicy: Flux2EvaluationPolicy
-  ) -> [Int: MLXArray] {
-    model.hiddenStates(
+    evaluationPolicy: Flux2EvaluationPolicy,
+    layeredWeights: Flux2PinnedWeightSelection? = nil
+  ) throws -> [Int: MLXArray] {
+    try model.hiddenStates(
       inputIds: inputIds,
       attentionMask: attentionMask,
       outputLayerIndices: outputLayerIndices,
-      evaluationPolicy: evaluationPolicy
+      evaluationPolicy: evaluationPolicy,
+      layeredWeights: layeredWeights
     )
   }
 
@@ -456,8 +510,9 @@ private final class Flux2Mistral3LanguageModel: Module {
     inputIds: MLXArray,
     attentionMask: MLXArray,
     outputLayerIndices: [Int],
-    evaluationPolicy: Flux2EvaluationPolicy
-  ) -> [Int: MLXArray] {
+    evaluationPolicy: Flux2EvaluationPolicy,
+    layeredWeights: Flux2PinnedWeightSelection? = nil
+  ) throws -> [Int: MLXArray] {
     let wanted = Set(outputLayerIndices)
     var results: [Int: MLXArray] = [:]
 
@@ -489,10 +544,37 @@ private final class Flux2Mistral3LanguageModel: Module {
       dtype: hidden.dtype
     )
 
-    for (index, layer) in layers.enumerated() {
+    for (index, residentLayer) in layers.enumerated() {
+      if layeredWeights != nil { try Task.checkCancellation(); Memory.clearCache() }
+      let layer: Flux2Mistral3TransformerBlock
+      if let layeredWeights {
+        let prefix = "language_model.model.layers.\(index)."
+        let loaded = try layeredWeights.load { normalizedTextEncoderName($0).hasPrefix(prefix) }
+        let normalized = normalizeTextEncoderWeights(loaded)
+        guard normalized.count == loaded.count else {
+          throw Flux2Mistral3TextEncoderError.duplicateNormalizedWeight(prefix)
+        }
+        let stripped = Dictionary(uniqueKeysWithValues: normalized.map {
+          (String($0.key.dropFirst(prefix.count)), $0.value)
+        })
+        try layeredWeights.verifyFileIdentities()
+        layer = Flux2Mistral3TransformerBlock(configuration, useSliding: residentLayer.useSliding)
+        let expected = Set(layer.parameters().flattened().map { $0.0 })
+        guard !expected.isEmpty, Set(stripped.keys) == expected else {
+          throw Flux2Mistral3TextEncoderError.incompleteLayer(index)
+        }
+        try layer.update(parameters: ModuleParameters.unflattened(stripped), verify: .none)
+      } else {
+        layer = residentLayer
+      }
       let mask = layer.useSliding ? slidingMask : fullMask
       hidden = layer(hidden, attentionMask: mask, attnScale: attnScale)
-      evaluationPolicy.evalIfNeeded(hidden)
+      if let layeredWeights {
+        MLX.eval(hidden)
+        try layeredWeights.verifyFileIdentities()
+      } else {
+        evaluationPolicy.evalIfNeeded(hidden)
+      }
       let hiddenIndex = index + 1
       if wanted.contains(hiddenIndex) {
         results[hiddenIndex] = hidden

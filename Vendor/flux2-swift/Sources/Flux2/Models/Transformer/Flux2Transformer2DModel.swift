@@ -29,7 +29,7 @@ public final class Flux2Transformer2DModel: Module {
 
   @ModuleInfo(key: "norm_out") private var normOut: Flux2AdaLayerNormContinuous
   @ModuleInfo(key: "proj_out") private var projOut: Linear
-  private var layeredSource: (snapshot: URL, dtype: DType)? = nil
+  private var layeredSource: Flux2PinnedWeightSelection? = nil
 
   public var isLayered: Bool { layeredSource != nil }
 
@@ -125,24 +125,29 @@ public final class Flux2Transformer2DModel: Module {
     return model
   }
 
-  public static func loadLayered(from snapshot: URL, dtype: DType = .bfloat16) throws -> Flux2Transformer2DModel {
+  public static func loadLayered(from snapshot: URL, dtype: DType = .bfloat16,
+                                 admissionValidator: (() throws -> Void)? = nil) throws -> Flux2Transformer2DModel {
+    try admissionValidator?()
     if let _ = try Flux2Quantizer.loadManifest(from: snapshot) {
       throw Flux2Transformer2DModelError.unsupportedLayeredQuantization
     }
+    try admissionValidator?()
     let configURL = snapshot.appendingPathComponent("transformer/config.json")
+    try admissionValidator?()
     guard FileManager.default.fileExists(atPath: configURL.path) else {
       throw Flux2Transformer2DModelError.configNotFound(configURL)
     }
-    let configuration = try JSONDecoder().decode(Flux2TransformerConfiguration.self, from: Data(contentsOf: configURL))
+    let configData = try Data(contentsOf: configURL)
+    try admissionValidator?()
+    let configuration = try JSONDecoder().decode(Flux2TransformerConfiguration.self, from: configData)
+    try admissionValidator?()
     let model = Flux2Transformer2DModel(configuration: configuration)
-    let loader = Flux2WeightsLoader(snapshot: snapshot)
-    for file in try loader.listSafetensors(component: .transformer) {
-      try Task.checkCancellation()
-      guard try SafeTensorsReader(fileURL: file).allMetadata().allSatisfy({ $0.dtype == dtype }) else {
-        throw Flux2Transformer2DModelError.unsupportedLayeredPrecision
-      }
+    try admissionValidator?()
+    let source = try Flux2PinnedWeightSelection(snapshot: snapshot, component: .transformer,
+                                                 admissionValidator: admissionValidator) {
+      _, actual in actual == dtype
     }
-    let weights = try loader.load(component: .transformer, dtype: dtype) {
+    let weights = try source.load {
       !$0.hasPrefix("transformer_blocks.") && !$0.hasPrefix("single_transformer_blocks.")
     }
     let expected = Set(model.parameters().flattened().map { $0.0 }.filter {
@@ -153,16 +158,18 @@ public final class Flux2Transformer2DModel: Module {
     }
     try model.update(parameters: ModuleParameters.unflattened(weights), verify: .none)
     MLX.eval(Array(weights.values))
-    model.layeredSource = (snapshot, dtype)
+    try source.verifyFileIdentities()
+    model.layeredSource = source
     return model
   }
 
-  private func loadDoubleBlock(_ index: Int, source: (snapshot: URL, dtype: DType)) throws -> Flux2TransformerBlock {
+  private func loadDoubleBlock(_ index: Int, source: Flux2PinnedWeightSelection) throws -> Flux2TransformerBlock {
     let prefix = "transformer_blocks.\(index)."
-    let loaded = try Flux2WeightsLoader(snapshot: source.snapshot).load(component: .transformer, dtype: source.dtype) {
+    let loaded = try source.load {
       $0.hasPrefix(prefix)
     }
     let stripped = Dictionary(uniqueKeysWithValues: loaded.map { (String($0.key.dropFirst(prefix.count)), $0.value) })
+    try source.verifyFileIdentities()
     let block = Flux2TransformerBlock(dim: innerDim, numAttentionHeads: configuration.numAttentionHeads,
       attentionHeadDim: configuration.attentionHeadDim, mlpRatio: configuration.mlpRatio,
       eps: configuration.eps, bias: false)
@@ -174,12 +181,13 @@ public final class Flux2Transformer2DModel: Module {
     return block
   }
 
-  private func loadSingleBlock(_ index: Int, source: (snapshot: URL, dtype: DType)) throws -> Flux2SingleTransformerBlock {
+  private func loadSingleBlock(_ index: Int, source: Flux2PinnedWeightSelection) throws -> Flux2SingleTransformerBlock {
     let prefix = "single_transformer_blocks.\(index)."
-    let loaded = try Flux2WeightsLoader(snapshot: source.snapshot).load(component: .transformer, dtype: source.dtype) {
+    let loaded = try source.load {
       $0.hasPrefix(prefix)
     }
     let stripped = Dictionary(uniqueKeysWithValues: loaded.map { (String($0.key.dropFirst(prefix.count)), $0.value) })
+    try source.verifyFileIdentities()
     let block = Flux2SingleTransformerBlock(dim: innerDim, numAttentionHeads: configuration.numAttentionHeads,
       attentionHeadDim: configuration.attentionHeadDim, mlpRatio: configuration.mlpRatio,
       eps: configuration.eps, bias: false)
@@ -224,7 +232,7 @@ public final class Flux2Transformer2DModel: Module {
     imgIds: MLXArray, txtIds: MLXArray, guidance: MLXArray?,
     attentionMask: MLXFast.ScaledDotProductAttentionMaskMode,
     evaluationPolicy: Flux2EvaluationPolicy,
-    source: (snapshot: URL, dtype: DType)?
+    source: Flux2PinnedWeightSelection?
   ) throws -> MLXArray {
     let numTxtTokens = encoderHiddenStates.dim(1)
     let targetDtype = hiddenStates.dtype
@@ -279,6 +287,7 @@ public final class Flux2Transformer2DModel: Module {
       encoder = outputs.encoderHiddenStates
       hidden = outputs.hiddenStates
       if evaluationPolicy == .aggressive { MLX.eval(encoder, hidden) }
+      if let source { try source.verifyFileIdentities() }
     }
 
     hidden = MLX.concatenated([encoder, hidden], axis: 1)
@@ -294,12 +303,18 @@ public final class Flux2Transformer2DModel: Module {
       )
       hidden = outputs.hiddenStates
       evaluationPolicy.evalIfNeeded(hidden)
+      if let source { try source.verifyFileIdentities() }
     }
 
     let splitStates = split(hidden, indices: [numTxtTokens], axis: 1)
     hidden = splitStates[1]
 
     hidden = normOut(hidden, conditioningEmbedding: temb)
-    return projOut(hidden)
+    let output = projOut(hidden)
+    if let source {
+      MLX.eval(output)
+      try source.verifyFileIdentities()
+    }
+    return output
   }
 }

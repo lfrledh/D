@@ -71,6 +71,37 @@ struct FluxDevInventoryTests {
         }
     }
 
+    @Test("Layered budget includes every ordered reference and stays below resident floor")
+    func layeredBudget() throws {
+        let gib = UInt64(1024 * 1024 * 1024)
+        let stage = LocalFluxDevInventory.LayeredStages(
+            text: 3 * gib, transformer: 3 * gib, vae: gib,
+            transformerWidth: 3072, textWidth: 5120)
+        func reference(_ suffix: String) -> ImageReference {
+            ImageReference(url: URL(fileURLWithPath: "/tmp/\(suffix)"),
+                           sha256: String(repeating: "a", count: 64),
+                           byteCount: 256 * 256 * 3, width: 256, height: 256)
+        }
+        let base = ImageRequest(prompt: "A red cup", width: 512, height: 512,
+            steps: 50, guidanceScale: 4, seed: 42,
+            executionProfile: ImageExecutionCapability.flux2Dev.profile,
+            loadingStrategy: .ssdLayered)
+        let one = ImageRequest(prompt: base.prompt, width: base.width, height: base.height,
+            steps: base.steps, guidanceScale: base.guidanceScale, seed: base.seed,
+            executionProfile: base.executionProfile, referenceImages: [reference("first")],
+            loadingStrategy: .ssdLayered)
+        let two = ImageRequest(prompt: base.prompt, width: base.width, height: base.height,
+            steps: base.steps, guidanceScale: base.guidanceScale, seed: base.seed,
+            executionProfile: base.executionProfile, referenceImages: [reference("first"), reference("second")],
+            loadingStrategy: .ssdLayered)
+        let noReference = try LocalFluxDevInventory.layeredPeak(stage: stage, image: base)
+        let oneReference = try LocalFluxDevInventory.layeredPeak(stage: stage, image: one)
+        let twoReferences = try LocalFluxDevInventory.layeredPeak(stage: stage, image: two)
+        #expect(noReference < oneReference)
+        #expect(oneReference < twoReferences)
+        #expect(twoReferences < 128 * gib)
+    }
+
     private struct Fixture {
         let directory: URL
         let manifest: LocalFluxDevInventory.Manifest

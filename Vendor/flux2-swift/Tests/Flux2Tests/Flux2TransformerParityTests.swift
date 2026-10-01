@@ -1,9 +1,49 @@
 import Foundation
+import Darwin
 import MLX
 import XCTest
 @testable import Flux2
 
 final class Flux2TransformerParityTests: XCTestCase {
+  func testLayeredTransformerRejectsReplacementFromOriginalAdmission() throws {
+    enum AdmissionError: Error { case changed }
+    let fixture = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+      .deletingLastPathComponent().deletingLastPathComponent()
+      .appendingPathComponent("fixtures/flux2_tiny/transformer")
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    let component = root.appendingPathComponent("transformer")
+    try FileManager.default.createDirectory(at: component, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    try FileManager.default.copyItem(at: fixture.appendingPathComponent("config.json"),
+      to: component.appendingPathComponent("config.json"))
+    let file = component.appendingPathComponent("model.safetensors")
+    try FileManager.default.copyItem(at: fixture.appendingPathComponent("model.safetensors"), to: file)
+    var original = stat()
+    XCTAssertEqual(Darwin.lstat(file.path, &original), 0)
+    var bytes = try Data(contentsOf: file)
+    bytes[bytes.count - 1] ^= 1 // Payload changes; the header, dtype, and file length do not.
+    let replacement = component.appendingPathComponent("replacement.tmp")
+    try bytes.write(to: replacement)
+    try FileManager.default.removeItem(at: file)
+    try FileManager.default.moveItem(at: replacement, to: file)
+    var validations = 0
+    let validate: () throws -> Void = {
+      validations += 1
+      var current = stat()
+      guard Darwin.lstat(file.path, &current) == 0,
+            current.st_dev == original.st_dev, current.st_ino == original.st_ino else {
+        throw AdmissionError.changed
+      }
+    }
+    XCTAssertThrowsError(try Flux2Transformer2DModel.loadLayered(from: root, dtype: .float32,
+      admissionValidator: validate)) { error in
+      guard case AdmissionError.changed = error else {
+        return XCTFail("Expected original admission failure, got \(error)")
+      }
+    }
+    XCTAssertGreaterThan(validations, 0)
+  }
+
   func testTinyTransformerMatchesFixtures() throws {
     let fixtureRoot = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()
@@ -35,6 +75,12 @@ final class Flux2TransformerParityTests: XCTestCase {
     let expectedReader = try SafeTensorsReader(fileURL: expectedURL)
     let expected = try expectedReader.tensor(named: "output").asType(.float32)
     TestHelpers.assertAllClose(actual, expected, atol: 1e-4, rtol: 1e-3)
+    // The fixture is an independent original-operation reference, including
+    // its one double block and one single block. Exercise selected reads too.
+    let layered = try Flux2Transformer2DModel.loadLayered(from: fixtureRoot, dtype: .float32)
+    let selected = try layered.callLayered(hiddenStates, encoderHiddenStates: encoderHiddenStates,
+      timestep: timestep, imgIds: imgIds, txtIds: txtIds)
+    TestHelpers.assertAllClose(selected, expected, atol: 1e-4, rtol: 1e-3)
   }
 
   func testLayeredTinyTransformerMatchesResidentAndRequiresEveryBlock() throws {

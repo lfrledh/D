@@ -2,6 +2,8 @@ import CryptoKit
 import Darwin
 import DInference
 import Foundation
+import Flux2
+import MLX
 
 /// Admission reads metadata and file identities, never MLX weights or network data.
 /// Full verification is a separate, cancellable step before any model initialization.
@@ -14,6 +16,7 @@ struct LocalFluxDevInventory: Sendable {
     let estimatedPeakBytes: UInt64
     let weightBytes: UInt64
     let executionProfile: ExecutionProfileReference
+    let loadingStrategy: ImageLoadingStrategy
     private let manifest: Manifest
     private let identities: [String: FileIdentity]
 
@@ -116,11 +119,8 @@ struct LocalFluxDevInventory: Sendable {
         guard profile == .flux2Dev else {
             throw InferenceFailure.invalidRequest("Only the fixed BF16 Dev profile is supported.")
         }
-        guard image.loadingStrategy == nil || image.loadingStrategy == .staged else {
-            throw InferenceFailure.invalidRequest("FLUX.2-dev SSD layering is not implemented; the requested mode is not ignored.")
-        }
         let resolvedCapability = try profile.resolvedCapability(for: image)
-        let estimatedPeakBytes = try resolvedCapability.estimatedPeakBytes(for: image)
+        let loadingStrategy = image.loadingStrategy ?? .staged
         guard image.prompt.utf8.count <= 1_048_576,
               !image.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw InferenceFailure.invalidRequest("Image prompt must be nonempty and no larger than 1 MiB of UTF-8.")
@@ -151,10 +151,175 @@ struct LocalFluxDevInventory: Sendable {
                 throw InferenceFailure.invalidRequest("Image model location changed during inspection.")
             }
         }
+        let estimatedPeakBytes: UInt64
+        if loadingStrategy == .ssdLayered {
+            let stage = try Self.layeredStages(directory: directory, manifest: manifest, identities: identities)
+            estimatedPeakBytes = try Self.layeredPeak(stage: stage, image: image)
+        } else {
+            estimatedPeakBytes = try resolvedCapability.estimatedPeakBytes(for: image)
+        }
         let weightBytes = manifest.files.filter { $0.path.hasSuffix(".safetensors") }.reduce(UInt64(0)) { $0 + $1.size }
         return Self(directory: directory, estimatedPeakBytes: estimatedPeakBytes,
                     weightBytes: weightBytes, executionProfile: resolvedCapability.profile,
+                    loadingStrategy: loadingStrategy,
                     manifest: manifest, identities: identities)
+    }
+
+    /// Recheck the identity captured at admission. A later stage must never adopt
+    /// a replacement as its new file baseline after digest verification.
+    func assertUnchanged() throws {
+        try Self.withRoot(directory) { root in
+            guard try Self.snapshot(root: root, manifest: manifest) == identities else {
+                throw InferenceFailure.invalidRequest("Dev installation changed during execution.")
+            }
+        }
+    }
+
+    struct LayeredStages {
+        let text: UInt64
+        let transformer: UInt64
+        let vae: UInt64
+        let transformerWidth: UInt64
+        let textWidth: UInt64
+    }
+
+    private static func checkedSum(_ values: UInt64...) throws -> UInt64 {
+        var result: UInt64 = 0
+        for value in values {
+            let (next, overflow) = result.addingReportingOverflow(value)
+            guard !overflow else { throw InferenceFailure.invalidRequest("Dev layered estimate overflow.") }
+            result = next
+        }
+        return result
+    }
+
+    private static func checkedProduct(_ values: UInt64...) throws -> UInt64 {
+        var result: UInt64 = 1
+        for value in values {
+            let (next, overflow) = result.multipliedReportingOverflow(by: value)
+            guard !overflow else { throw InferenceFailure.invalidRequest("Dev layered estimate overflow.") }
+            result = next
+        }
+        return result
+    }
+
+    /// Read bounded headers only. The pinned manifest digest is checked before
+    /// execution; identity checks prevent admission from accepting a moving tree.
+    private static func layeredStages(directory: URL, manifest: Manifest,
+                                      identities: [String: FileIdentity]) throws -> LayeredStages {
+        var textShared: UInt64 = 0
+        var ditShared: UInt64 = 0
+        var vae: UInt64 = 0
+        var textBlocks: [Int: (Int, UInt64)] = [:]
+        var doubleBlocks: [Int: (Int, UInt64)] = [:]
+        var singleBlocks: [Int: (Int, UInt64)] = [:]
+        var textCount = 0, ditCount = 0, vaeFloatCount = 0, vaeCounterCount = 0
+        var seen = Set<String>()
+        func index(_ name: String, prefix: String) -> Int? {
+            guard name.hasPrefix(prefix) else { return nil }
+            return Int(name.dropFirst(prefix.count).split(separator: ".", maxSplits: 1).first ?? "")
+        }
+        for file in manifest.files where file.path.hasSuffix(".safetensors") {
+            try Task.checkCancellation()
+            let component = file.path.split(separator: "/")[0]
+            let reader = try SafeTensorsReader(fileURL: directory.appendingPathComponent(file.path))
+            for tensor in reader.allMetadata() {
+                let name = tensor.name
+                guard seen.insert("\(component)/\(name)").inserted else {
+                    throw InferenceFailure.invalidRequest("Dev safetensors repeat a tensor key: \(name)")
+                }
+                let bytes = UInt64(tensor.byteCount)
+                switch component {
+                case "text_encoder":
+                    textCount += 1
+                    guard tensor.dtype == .bfloat16, bytes > 0 else {
+                        throw InferenceFailure.invalidRequest("Dev text encoder requires BF16: \(name)")
+                    }
+                    if let layer = index(name, prefix: "language_model.model.layers.") {
+                        let old = textBlocks[layer, default: (0, 0)]
+                        textBlocks[layer] = (old.0 + 1, try checkedSum(old.1, bytes))
+                    } else if name == "language_model.model.embed_tokens.weight" ||
+                                name == "language_model.model.norm.weight" {
+                        textShared = try checkedSum(textShared, bytes)
+                    }
+                case "transformer":
+                    ditCount += 1
+                    guard tensor.dtype == .bfloat16, bytes > 0 else {
+                        throw InferenceFailure.invalidRequest("Dev transformer requires BF16: \(name)")
+                    }
+                    if let layer = index(name, prefix: "transformer_blocks.") {
+                        let old = doubleBlocks[layer, default: (0, 0)]
+                        doubleBlocks[layer] = (old.0 + 1, try checkedSum(old.1, bytes))
+                    } else if let layer = index(name, prefix: "single_transformer_blocks.") {
+                        let old = singleBlocks[layer, default: (0, 0)]
+                        singleBlocks[layer] = (old.0 + 1, try checkedSum(old.1, bytes))
+                    } else {
+                        ditShared = try checkedSum(ditShared, bytes)
+                    }
+                case "vae":
+                    if name == "bn.num_batches_tracked" {
+                        guard tensor.dtype == .int64, tensor.shape.isEmpty, bytes == 8 else {
+                            throw InferenceFailure.invalidRequest("Dev VAE BatchNorm counter must be I64.")
+                        }
+                        vaeCounterCount += 1
+                    } else {
+                        guard tensor.dtype == .float32, bytes > 0 else {
+                            throw InferenceFailure.invalidRequest("Dev VAE requires F32: \(name)")
+                        }
+                        vaeFloatCount += 1
+                    }
+                    vae = try checkedSum(vae, bytes)
+                default:
+                    throw InferenceFailure.invalidRequest("Unexpected Dev weight component.")
+                }
+            }
+        }
+        let textConfig = try JSONDecoder().decode(Flux2Mistral3Configuration.self,
+            from: Data(contentsOf: directory.appendingPathComponent("text_encoder/config.json")))
+        let ditConfig = try JSONDecoder().decode(Flux2TransformerConfiguration.self,
+            from: Data(contentsOf: directory.appendingPathComponent("transformer/config.json")))
+        try withRoot(directory) { root in
+            guard try snapshot(root: root, manifest: manifest) == identities else {
+                throw InferenceFailure.invalidRequest("Dev model changed during layered header inspection.")
+            }
+        }
+        guard textCount == 585, ditCount == 331, vaeFloatCount == 250, vaeCounterCount == 1,
+              textConfig.hiddenLayers == 40, ditConfig.numLayers == 8,
+              ditConfig.numSingleLayers == 48,
+              Set(textBlocks.keys) == Set(0..<40), textBlocks.values.allSatisfy({ $0.0 == 9 }),
+              Set(doubleBlocks.keys) == Set(0..<8), doubleBlocks.values.allSatisfy({ $0.0 == 16 }),
+              Set(singleBlocks.keys) == Set(0..<48), singleBlocks.values.allSatisfy({ $0.0 == 4 }),
+              textShared > 0, ditShared > 0, vae > 0,
+              textConfig.hiddenSize == 5120, ditConfig.innerDim > 0 else {
+            throw InferenceFailure.invalidRequest("Dev layered inventory lacks the fixed complete layers.")
+        }
+        let text = try checkedSum(textShared, textBlocks.values.map { $0.1 }.max()!)
+        let transformer = try checkedSum(ditShared,
+            max(doubleBlocks.values.map { $0.1 }.max()!, singleBlocks.values.map { $0.1 }.max()!))
+        return LayeredStages(text: text, transformer: transformer, vae: vae,
+                             transformerWidth: UInt64(ditConfig.innerDim), textWidth: UInt64(textConfig.hiddenSize))
+    }
+
+    static func layeredPeak(stage: LayeredStages, image: ImageRequest) throws -> UInt64 {
+        let references = try image.resolvedReferences()
+        var referenceTokens: UInt64 = 0, referencePixels: UInt64 = 0
+        for reference in references {
+            referenceTokens = try checkedSum(referenceTokens,
+                checkedProduct(UInt64(reference.width / 16), UInt64(reference.height / 16)))
+            referencePixels = try checkedSum(referencePixels,
+                checkedProduct(UInt64(reference.width), UInt64(reference.height)))
+        }
+        let outputTokens = try checkedProduct(UInt64(image.width / 16), UInt64(image.height / 16))
+        let allTokens = try checkedSum(outputTokens, referenceTokens, 512)
+        let allPixels = try checkedSum(checkedProduct(UInt64(image.width), UInt64(image.height)), referencePixels)
+        // One evaluated stage, source/copy space, full 512-token states, all
+        // reference tokens and pixels, and a materialized attention workspace.
+        let weights = try checkedProduct(max(stage.text, stage.transformer, stage.vae), 3)
+        let transformerStates = try checkedProduct(allTokens, stage.transformerWidth, 64)
+        let attention = try checkedProduct(allTokens, allTokens, 16)
+        let textStates = try checkedProduct(512, stage.textWidth, 64)
+        let imageWorkspace = try checkedProduct(allPixels, 64)
+        return try checkedSum(weights, transformerStates, attention, textStates, imageWorkspace)
     }
 
     /// Rehash every manifest file, including all 18 weight shards, using bounded memory.
