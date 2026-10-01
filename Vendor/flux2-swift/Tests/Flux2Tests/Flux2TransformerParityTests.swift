@@ -75,7 +75,7 @@ final class Flux2TransformerParityTests: XCTestCase {
       to: transformerDirectory.appendingPathComponent("config.json"))
     var weights = try Flux2WeightsLoader(snapshot: root).load(component: .transformer, dtype: .float32)
     weights.removeValue(forKey: "single_transformer_blocks.0.attn.norm_q.weight")
-    try MLX.save(arrays: weights, metadata: [:], url: transformerDirectory.appendingPathComponent("model.safetensors"))
+    try MLX.save(arrays: weights, metadata: ["format": "pt"], url: transformerDirectory.appendingPathComponent("model.safetensors"))
     let incomplete = try Flux2Transformer2DModel.loadLayered(from: temporary, dtype: .float32)
     XCTAssertThrowsError(try incomplete.callLayered(hidden, encoderHiddenStates: encoder,
       timestep: time, imgIds: imageIDs, txtIds: textIDs))
@@ -121,7 +121,7 @@ final class Flux2TransformerParityTests: XCTestCase {
     let sourceWeights = try Flux2WeightsLoader(snapshot: root).load(component: .transformer, dtype: .float32)
     let bf16 = sourceWeights.mapValues { $0.asType(.bfloat16) }
     MLX.eval(Array(bf16.values))
-    try MLX.save(arrays: bf16, metadata: [:], url: component.appendingPathComponent("model.safetensors"))
+    try MLX.save(arrays: bf16, metadata: ["format": "pt"], url: component.appendingPathComponent("model.safetensors"))
 
     let reader = try SafeTensorsReader(fileURL: root.appendingPathComponent("transformer_inputs.safetensors"))
     let hidden = try reader.tensor(named: "hidden_states").asType(.bfloat16)

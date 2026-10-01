@@ -55,7 +55,7 @@ final class Flux2Qwen3TextEncoderParityTests: XCTestCase {
       to: encoderDirectory.appendingPathComponent("config.json"))
     var weights = try Flux2WeightsLoader(snapshot: root).load(component: .textEncoder, dtype: .float32)
     weights.removeValue(forKey: "model.layers.1.self_attn.q_proj.weight")
-    try MLX.save(arrays: weights, metadata: [:], url: encoderDirectory.appendingPathComponent("model.safetensors"))
+    try MLX.save(arrays: weights, metadata: ["format": "pt"], url: encoderDirectory.appendingPathComponent("model.safetensors"))
     let incomplete = try Flux2Qwen3TextEncoder.loadLayered(from: temporary, dtype: .float32)
     XCTAssertThrowsError(try incomplete.promptEmbeds(inputIds: ids, attentionMask: mask, hiddenStateLayers: [0, 1, 2]))
   }
@@ -73,7 +73,7 @@ final class Flux2Qwen3TextEncoderParityTests: XCTestCase {
     let sourceWeights = try Flux2WeightsLoader(snapshot: root).load(component: .textEncoder, dtype: .float32)
     let bf16 = sourceWeights.mapValues { $0.asType(.bfloat16) }
     MLX.eval(Array(bf16.values))
-    try MLX.save(arrays: bf16, metadata: [:], url: component.appendingPathComponent("model.safetensors"))
+    try MLX.save(arrays: bf16, metadata: ["format": "pt"], url: component.appendingPathComponent("model.safetensors"))
 
     let reader = try SafeTensorsReader(fileURL: root.appendingPathComponent("prompt_embeds.safetensors"))
     let ids = try reader.tensor(named: "input_ids").asType(.int32)
