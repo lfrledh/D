@@ -27,6 +27,7 @@ public actor ModelLibrary {
         var downloadCredentialBookmark: Data?
         var records: [StoredRecord] = []
     }
+    private let wanPreparation: ModelWanPreparation.Converter?
     private let stateDirectory: ModelDirectory
     private let stateLock: ModelFileHandle
     private let catalog: [ModelCatalogEntry]
@@ -40,18 +41,18 @@ public actor ModelLibrary {
     private var externalScopes: [ModelID: ModelScopedLocation] = [:]
     private var workers: [ModelID: Task<Void, Never>] = [:]
     private var leases: [UUID: ModelUsageLease] = [:]
-    private var preparationJobs: [ModelID: (job: Task<URL, any Error>, lease: ModelUsageLease)] = [:]
+    private var preparationJobs: [ModelID: (job: Task<URL, any Error>, lease: ModelUsageLease, scope: ModelScopedLocation)] = [:]
     private var accepting = true
     private var cancelledOperations: Set<ModelID> = []
     private static let chunkBytes: UInt64 = 16 * 1024 * 1024
 
-    public init(stateDirectory: URL) async throws {
-        try await self.init(stateDirectory: stateDirectory, catalog: ModelCatalog.entries())
+    public init(stateDirectory: URL, wanPreparation: (@Sendable (URL, URL) async throws -> Void)? = nil) async throws {
+        try await self.init(stateDirectory: stateDirectory, catalog: ModelCatalog.entries(), wanPreparation: wanPreparation)
     }
 
     /// Internal seams use tiny deterministic catalogs and loopback HTTP; production is fixed and HTTPS-only.
     init(stateDirectory: URL, catalog: [ModelCatalogEntry],
-         transport: any ModelRangeTransport = URLSessionModelRangeTransport(), sourceBaseURL: URL? = nil, availableBytesOverride: UInt64? = nil) async throws {
+         transport: any ModelRangeTransport = URLSessionModelRangeTransport(), sourceBaseURL: URL? = nil, availableBytesOverride: UInt64? = nil, wanPreparation: ModelWanPreparation.Converter? = nil) async throws {
         try Self.validateCatalog(catalog)
         if let sourceBaseURL {
             guard let components = URLComponents(url: sourceBaseURL, resolvingAgainstBaseURL: false),
@@ -68,6 +69,7 @@ public actor ModelLibrary {
         stateLock = try Self.lock(in: directory, path: "model-library.lock")
         self.catalog = catalog; self.transport = transport; self.sourceBaseURL = sourceBaseURL
         self.availableBytesOverride = availableBytesOverride
+        self.wanPreparation = wanPreparation
         if try Self.exists("index.json", in: directory) {
             disk = try JSONDecoder().decode(DiskState.self, from: directory.read("index.json", maximum: 32 * 1024 * 1024))
             guard disk.schemaVersion == 1, Set(disk.records.map(\.record.id)).count == disk.records.count else {
@@ -346,7 +348,7 @@ public actor ModelLibrary {
         return .init(directory: directory.url, revision: value.record.revision)
     }
     public func canPrepareVideo(_ id: ModelID) throws -> Bool {
-        try stored(id).record.state == .preparationRequired && ModelVideoPreparation.profile(for: entry(for: id)) != nil
+        try stored(id).record.state == .preparationRequired && (ModelVideoPreparation.profile(for: entry(for: id)) != nil || (wanPreparation != nil && ModelWanPreparation.supports(entry(for: id))))
     }
     /// A separate prepared copy is returned for the existing explicit-model
     /// registration path. Raw download records deliberately remain raw resources.
@@ -362,13 +364,27 @@ public actor ModelLibrary {
         let parent = try ModelDirectory(scope.url)
         let lease = ModelUsageLease(id: UUID(), modelID: id, reference: .init(directory: source.url, revision: entry.revision))
         leases[lease.id] = lease; disk.revision &+= 1
-        defer { finishPreparation(id, lease: lease); withExtendedLifetime(scope) {} }
         let name = entry.id + "-" + UUID().uuidString
-        let job = Task.detached { try ModelVideoPreparation.prepare(source: source, entry: entry, parent: parent, name: name, checkpoint: checkpoint) }
-        preparationJobs[id] = (job, lease)
-        return try await withTaskCancellationHandler { try await job.value } onCancel: { job.cancel() }
+        let converter = wanPreparation
+        let job = Task.detached {
+            if ModelWanPreparation.supports(entry), let converter {
+                return try await ModelWanPreparation.prepare(source: source, entry: entry, parent: parent, name: name, converter: converter)
+            }
+            return try ModelVideoPreparation.prepare(source: source, entry: entry, parent: parent, name: name, checkpoint: checkpoint)
+        }
+        preparationJobs[id] = (job, lease, scope)
+        let result = await withTaskCancellationHandler { await job.result } onCancel: { job.cancel() }
+        finishPreparation(id, lease: lease, result: result)
+        return try result.get()
     }
-    private func finishPreparation(_ id: ModelID, lease: ModelUsageLease) {
+    private func finishPreparation(_ id: ModelID, lease: ModelUsageLease, result: Result<URL, any Error>) {
+        if case .failure(let error) = result,
+           case .resourceCleanupUnconfirmed = error as? InferenceFailure {
+            // Retain the task, source lease and destination scope. A returned
+            // error is not proof that the child process stopped using files.
+            mutate(id) { $0.record.error = error.localizedDescription }
+            return
+        }
         if preparationJobs[id]?.lease.id == lease.id { preparationJobs.removeValue(forKey: id) }
         release(lease)
     }
@@ -459,8 +475,8 @@ public actor ModelLibrary {
             let preparing = preparationJobs
             for task in preparing.values { task.job.cancel() }
             for (id, task) in preparing {
-                _ = try? await task.job.value
-                finishPreparation(id, lease: task.lease)
+                let result = await task.job.result
+                finishPreparation(id, lease: task.lease, result: result)
             }
             let pending = Array(workers.values)
             for worker in pending { worker.cancel() }

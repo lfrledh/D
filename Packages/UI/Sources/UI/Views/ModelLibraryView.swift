@@ -157,20 +157,20 @@ public struct ModelLibraryView: View {
             Image(systemName: "key.horizontal")
                 .font(.title2).foregroundStyle(.secondary).padding(.top, 3)
             VStack(alignment: .leading, spacing: 7) {
-                Text("Hugging Face 下载令牌").font(.callout.weight(.semibold))
-                Text(model.downloadCredentialConnected ? "已连接令牌文件" : "未连接；公开文件仍可直接下载")
+                Text(baselineText(language, "model.downloadCredential.title", fallback: "Hugging Face 下载令牌")).font(.callout.weight(.semibold))
+                Text(model.downloadCredentialConnected ? baselineText(language, "model.downloadCredential.connected", fallback: "已连接令牌文件") : baselineText(language, "model.downloadCredential.unconnected", fallback: "未连接；公开文件仍可直接下载"))
                     .font(.callout).foregroundStyle(.secondary)
-                Text("仅用于固定仓库的下载请求；跨站重定向不会携带令牌。")
+                Text(baselineText(language, "model.downloadCredential.detail", fallback: "仅用于固定仓库的下载请求；跨站重定向不会携带令牌。"))
                     .font(.caption).foregroundStyle(.secondary)
             }
             Spacer(minLength: 12)
-            Button(model.downloadCredentialConnected ? "更换文件…" : "选择文件…") {
+            Button(model.downloadCredentialConnected ? baselineText(language, "model.downloadCredential.replace", fallback: "更换文件…") : baselineText(language, "model.downloadCredential.choose", fallback: "选择文件…")) {
                 Task { await model.chooseDownloadCredential() }
             }
             .disabled(!model.canChangeDownloadCredential)
             .accessibilityIdentifier("model-download-credential-choose")
             if model.downloadCredentialConnected {
-                Button("移除连接") { Task { await model.removeDownloadCredential() } }
+                Button(baselineText(language, "model.downloadCredential.remove", fallback: "移除连接")) { Task { await model.removeDownloadCredential() } }
                     .disabled(!model.canChangeDownloadCredential)
                     .accessibilityIdentifier("model-download-credential-remove")
             }
@@ -386,7 +386,7 @@ private struct ModelInstallationRow: View {
                 }
             case .preparationRequired:
                 if let onPrepare, let entry = model.entry(for: record),
-                   ["minimax-h3-fl2va-bf16", "ltx-2.5-bf16"].contains(entry.id) {
+                   ["minimax-h3-fl2va-bf16", "ltx-2.5-bf16", "wan21-t2v-1.3b-bf16"].contains(entry.id) {
                     Button("准备独立执行包…") { Task { await model.prepareVideo(record.id, action: onPrepare) } }
                         .disabled(!model.canChooseRoot)
                         .accessibilityIdentifier("model-prepare-\(record.id)")

@@ -262,7 +262,8 @@ struct WorkflowSaveFailure: LocalizedError {
             execution: .init(profile: capability?.profile ?? TextExecutionCapability.qwen2Profile, maximumPromptTokens: p["maximumPromptTokens"]?.integer ?? 2048),
             images: messages == nil && !images.isEmpty ? images : nil, video: messages == nil ? videos.first : nil, visualProcessing: processing,
             messages: messages, tools: try WorkflowLanguageMessageForm.tools(p["toolsJSON"]?.string ?? ""),
-            thinking: try WorkflowLanguageMessageForm.thinking(p), seed: try WorkflowLanguageMessageForm.seed(p))
+            thinking: try WorkflowLanguageMessageForm.thinking(p), seed: try WorkflowLanguageMessageForm.seed(p),
+            loadingStrategy: try WorkflowLanguageMessageForm.loadingStrategy(p))
         try capability?.validate(input)
         let request = InferenceRequest(id: context.stepID, model: binding.reference, input: .text(input),
             memoryBudgetBytes: try WorkflowLanguageMessageForm.memoryBudgetBytes(p))

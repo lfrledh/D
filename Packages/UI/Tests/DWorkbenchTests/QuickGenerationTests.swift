@@ -50,10 +50,9 @@ struct QuickGenerationTests {
 
     @Test func sharedModelDefinitionAndOrderedQuickInputsSurviveReopen() async throws {
         let (store, engine, quick, canvas) = try await fixture()
-        let operation = try #require(WorkflowRegistry.standard.definitions.first {
-            $0.modelKind != nil && $0.inputs.contains(where: { $0.assetListKind == .image })
-        })
+        let operation = try #require(WorkflowRegistry.standard.operation(WorkflowModelRoutes.qwen35)?.definition)
         quick.select(operationID: operation.id, modelID: "fixture:ordered")
+        quick.setParameter("loadingStrategy", value: .text("ssdLayered"), draftID: try #require(quick.draft?.id))
         let draft = try #require(quick.draft)
         #expect(quick.definition == WorkflowRegistry.standard.definition(for: draft.node))
         let port = try #require(quick.definition?.inputs.first(where: { $0.assetListKind == .image }))
@@ -80,6 +79,7 @@ struct QuickGenerationTests {
         let restored = QuickGenerationController(store: reopened) { throw WorkflowIssue("must not execute") }
         await restored.load()
         #expect(restored.state == saved)
+        #expect(restored.draft?.node.parameters["loadingStrategy"] == .text("ssdLayered"))
         #expect(try restored.inputAssetItems(port: port, draftID: draft.id) == [firstItems[1]])
         try restored.removeInputAsset(firstItems[1].id, port: port, draftID: draft.id)
         #expect(restored.draft?.inputs[port.id] == nil)

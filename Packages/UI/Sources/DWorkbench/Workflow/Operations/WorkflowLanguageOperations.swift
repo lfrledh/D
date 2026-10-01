@@ -36,6 +36,7 @@ enum WorkflowLanguageOperations {
             let p = try WorkflowScalarReader.decimal("topP", in: node)
             guard p > 0 && p <= 1 else { throw WorkflowIssue("Top P 必须大于0且不超过1。") }
             if visual {
+                _ = try WorkflowLanguageMessageForm.loadingStrategy(node.parameters)
                 _ = try WorkflowLanguageMessageForm.memoryBudgetBytes(node.parameters)
                 _ = try WorkflowLanguageMessageForm.thinking(node.parameters)
                 _ = try WorkflowLanguageMessageForm.seed(node.parameters)

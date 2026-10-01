@@ -929,6 +929,15 @@
     "workflow.operation.d.image.flux2-dev.field.loadingStrategy": "加载方式（精度不变）",
     "workflow.operation.d.image.flux2-dev.field.memoryBudgetGiB": "显式内存预算 GiB（0使用运行时策略）",
     "workflow.operation.d.music.ace-step-1.5-xl-sft.field.loadingStrategy": "加载方式（精度不变）",
-    "workflow.operation.d.music.ace-step-1.5-xl-sft.field.memoryBudgetGiB": "显式内存预算 GiB（0使用运行时策略）"
+    "workflow.operation.d.music.ace-step-1.5-xl-sft.field.memoryBudgetGiB": "显式内存预算 GiB（0使用运行时策略）",
+    "model.downloadCredential.title": "Hugging Face 下载令牌",
+    "model.downloadCredential.connected": "已连接令牌文件",
+    "model.downloadCredential.unconnected": "未连接；公开文件仍可直接下载",
+    "model.downloadCredential.detail": "仅用于固定仓库的下载请求；跨站重定向不会携带令牌。",
+    "model.downloadCredential.replace": "更换文件…",
+    "model.downloadCredential.choose": "选择文件…",
+    "model.downloadCredential.remove": "移除连接",
+    "workflow.operation.d.model.qwen35-9b.field.loadingStrategy": "加载方式（精度不变）",
+    "workflow.operation.d.model.qwen38-27b.field.loadingStrategy": "加载方式（精度不变）"
   }
 }

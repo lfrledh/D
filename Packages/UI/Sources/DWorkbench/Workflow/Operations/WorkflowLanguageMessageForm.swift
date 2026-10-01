@@ -4,9 +4,10 @@ import Foundation
 /// Shared Quick/Canvas form transport. Media are indexes into admitted asset
 /// ports, never arbitrary paths or URLs supplied by a text field.
 enum WorkflowLanguageMessageForm {
-    static let optionalFields: Set<String> = ["messagesJSON", "toolsJSON", "thinking", "reasoningEffort", "preserveThinking", "seed", "memoryBudgetGiB"]
+    static let optionalFields: Set<String> = ["messagesJSON", "toolsJSON", "thinking", "reasoningEffort", "preserveThinking", "seed", "memoryBudgetGiB", "loadingStrategy"]
     static let fields: [WorkflowFieldDefinition] = [
         .init("memoryBudgetGiB", "显式内存预算 GiB（0使用运行时策略）", .integer, .integer(0)),
+        .init("loadingStrategy", "加载方式（精度不变）", .choice(["resident", "ssdLayered"]), .text("resident")),
         .init("messagesJSON", "有序消息 JSON（留空使用任务；媒体 index 从0开始）", .text(multiline: true), .text("")),
         .init("toolsJSON", "工具声明 JSON（仅声明，不自动执行）", .text(multiline: true), .text("")),
         .init("thinking", "思考", .choice(["model", "on", "off"]), .text("model")),
@@ -14,6 +15,13 @@ enum WorkflowLanguageMessageForm {
         .init("preserveThinking", "保留历史思考（27B）", .choice(["model", "on", "off"]), .text("model")),
         .init("seed", "文字随机种子（留空随机）", .text(multiline: false), .text("")),
     ]
+    static func loadingStrategy(_ parameters: [String: WorkflowScalar]) throws -> TextLoadingStrategy? {
+        guard let value = parameters["loadingStrategy"] else { return nil }
+        guard case .text(let raw) = value, let strategy = TextLoadingStrategy(rawValue: raw) else {
+            throw WorkflowIssue("文字加载方式无效；不会静默切换模型或精度。")
+        }
+        return strategy
+    }
     static func memoryBudgetBytes(_ parameters: [String: WorkflowScalar]) throws -> UInt64? {
         guard let value = parameters["memoryBudgetGiB"] else { return nil }
         guard case .integer(let budget) = value, budget >= 0,

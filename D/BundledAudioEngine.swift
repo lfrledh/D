@@ -7,7 +7,7 @@ struct BundledAudioEngine: Sendable {
     enum Family: Sendable {
         case stableAudio, mrt2Music, video, pitch, externalVideo, aceMusic
         var maximumManifestBytes: Int { self == .aceMusic ? 16 * 1024 * 1024 : 4 * 1024 * 1024 }
-        var maximumFiles: Int { self == .aceMusic ? 40_000 : 10_000 }
+        var maximumFiles: Int { self == .aceMusic ? 40_000 : (self == .video ? 20_000 : 10_000) }
         var directory: String {
             switch self {
             case .stableAudio: "AudioEngine.dengine"
@@ -98,6 +98,12 @@ struct BundledAudioEngine: Sendable {
     private let manifestEntry: Entry
     private let manifestDigest: String
     private let entries: [String: Entry]
+
+    var videoPreparationScript: URL? {
+        guard family == .video, entries["python/lib/python3.12/site-packages/torch/__init__.py"] != nil,
+              entries["python/lib/python3.12/site-packages/safetensors/__init__.py"] != nil else { return nil }
+        return root.appendingPathComponent("provider/d_video_prepare.py")
+    }
 
     var videoTokenizerDirectory: URL? {
         switch family {

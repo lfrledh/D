@@ -48,6 +48,12 @@ def digest(path: Path) -> str:
 
 class VideoFixture(unittest.TestCase):
     def setUp(self) -> None:
+        import prepare_external_video_engine
+        relocation = mock.patch.object(prepare_external_video_engine, "relocate_tools", return_value=[])
+        closure = mock.patch.object(prepare_external_video_engine, "verify_relocated_dependencies")
+        self.real_relocate = prepare_external_video_engine.relocate_tools
+        relocation.start(); closure.start()
+        self.addCleanup(relocation.stop); self.addCleanup(closure.stop)
         if not TASK_TMP.is_dir():
             self.fail("D_TEST_TEMP_DIR must name the existing task-owned temporary directory")
         self.temporary = tempfile.TemporaryDirectory(dir=TASK_TMP)
@@ -79,8 +85,8 @@ class VideoFixture(unittest.TestCase):
             (metadata / "RECORD").write_text("private/build/path", encoding="utf-8")
             (metadata / "INSTALLER").write_text("pip", encoding="utf-8")
             (metadata / "REQUESTED").write_text("", encoding="utf-8")
-        (self.site / "torch").mkdir()
-        (self.site / "torch/__init__.py").write_text("must not be copied", encoding="utf-8")
+        for module in prepare_video_engine.REQUIRED_MODULES:
+            (self.site / module).write_text("# required single-file module", encoding="utf-8")
         (self.site / "transformers").mkdir()
 
         self.tokenizer = self.base / "tokenizer 输入"
@@ -132,6 +138,24 @@ class PrepareVideoEngineTests(VideoFixture):
             with tokenize.open(target) as handle:
                 compile(handle.read(), str(target), "exec", dont_inherit=True)
 
+    def test_real_relocator_receives_private_native_parent(self) -> None:
+        import prepare_external_video_engine as external
+        with mock.patch.object(external, "relocate_tools", self.real_relocate), \
+             mock.patch.object(external.signing, "_is_mach_o", return_value=False):
+            self.prepare()
+        self.assertTrue((self.output / "native/libs").is_dir())
+
+    def test_preparation_dependency_missing_or_wrong_version_fails(self) -> None:
+        (self.site / "typing_extensions.py").unlink()
+        with self.assertRaises(prepare_video_engine.PackagingError):
+            self.prepare()
+        (self.site / "typing_extensions.py").write_text("# restored fixture")
+        metadata = self.site / "torch-2.7.1.dist-info/METADATA"
+        metadata.write_text("Name: torch\nVersion: 0.0.0\n")
+        with self.assertRaises(prepare_video_engine.PackagingError):
+            self.prepare()
+        self.assertFalse(self.output.exists())
+
     def test_fixed_layout_manifest_whitelist_unicode_and_input_preservation(self) -> None:
         runner_before = digest(self.video_root / "Python/d_video_run.py")
         self.prepare()
@@ -148,7 +172,8 @@ class PrepareVideoEngineTests(VideoFixture):
         self.assertNotIn("Python", {path.name for path in self.output.iterdir()})
         for relative in package_video_app.REQUIRED_VIDEO_FILES:
             self.assertIn(relative, paths)
-        self.assertFalse((self.output / "python/lib/python3.12/site-packages/torch").exists())
+        self.assertTrue((self.output / "python/lib/python3.12/site-packages/torch").is_dir())
+        self.assertTrue((self.output / "python/lib/python3.12/site-packages/typing_extensions.py").is_file())
         self.assertFalse((self.output / "python/lib/python3.12/site-packages/transformers").exists())
         self.assertEqual(digest(self.output / "provider/d_video_run.py"), runner_before)
         self.assertEqual(digest(self.video_root / "Python/d_video_run.py"), runner_before)

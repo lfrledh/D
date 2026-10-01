@@ -359,7 +359,7 @@ def inspect_engine(root: Path, name: str) -> dict[str, Any]:
     if name not in ENGINE_CONTRACTS:
         raise ResourceError(f"unknown engine name: {name}")
     root = _absolute_directory(str(root), f"engine {name}")
-    maximum_files = 40_000 if name == "ACEMusicEngine.dengine" else MAXIMUM_FILES_PER_ENGINE
+    maximum_files = 40_000 if name == "ACEMusicEngine.dengine" else (20_000 if name == "VideoEngine.dengine" else MAXIMUM_FILES_PER_ENGINE)
     manifest_limit = 16 * 1024 * 1024 if name == "ACEMusicEngine.dengine" else MAXIMUM_ENGINE_MANIFEST_BYTES
     manifest_path = root / "engine.json"
     manifest = _read_json(manifest_path, f"{name} engine manifest", manifest_limit)

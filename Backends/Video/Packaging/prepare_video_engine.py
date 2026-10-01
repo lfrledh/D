@@ -37,8 +37,15 @@ REQUIRED_DISTRIBUTIONS = {
     "tokenizers": "0.22.2",
     "ftfy": "6.3.1",
     "wcwidth": "0.8.3",
+    "torch": "2.7.1", "safetensors": "0.7.0", "filelock": "3.32.6",
+    "typing-extensions": "4.16.0", "setuptools": "84.0.0", "sympy": "1.14.0",
+    "mpmath": "1.3.0", "networkx": "3.6.1", "jinja2": "3.1.6",
+    "markupsafe": "3.0.3", "fsspec": "2026.7.0", "packaging": "26.3",
 }
-REQUIRED_PACKAGES = ("mlx", "numpy", "tokenizers", "ftfy", "wcwidth")
+REQUIRED_PACKAGES = ("mlx", "numpy", "tokenizers", "ftfy", "wcwidth",
+    "torch", "functorch", "torchgen", "safetensors", "filelock", "setuptools",
+    "_distutils_hack", "sympy", "mpmath", "networkx", "jinja2", "markupsafe", "fsspec", "packaging")
+REQUIRED_MODULES = ("typing_extensions.py",)
 MODEL_DECLARATION = "wan21.json"
 INSTALLATION_RECORDS = {"direct_url.json", "RECORD", "INSTALLER", "REQUESTED"}
 # The official 0.22.2 wheel omits its Apache text. Preserve the matching tagged
@@ -126,6 +133,10 @@ def _selected_site_entries(site: Path) -> list[Path]:
                 raise PackagingError(f"native package resources must be a directory: {native}")
             prepare_engine._validate_tree(native, f"native package resources {native.name}")
             selected.append(native)
+    for module in REQUIRED_MODULES:
+        path = site / module
+        _regular(path, f"site module {module}")
+        selected.append(path)
     optional_metal = site / "mlx_metal"
     if os.path.lexists(optional_metal):
         if optional_metal.is_symlink() or not optional_metal.is_dir():
@@ -142,7 +153,10 @@ def _copy_selected_site(site: Path, destination: Path) -> None:
         target = destination / entry.name
         if target.exists():
             raise PackagingError(f"duplicate selected site-packages entry: {entry.name}")
-        prepare_engine._copy_tree(entry, target)
+        if entry.is_file():
+            _copy_verified_source(entry, target, "site module " + entry.name)
+        else:
+            prepare_engine._copy_tree(entry, target)
         if entry.name.endswith(".dist-info"):
             has_license = any(p.is_file() and p.name.lower().startswith(("license", "copying", "notice"))
                               for p in target.rglob("*"))
@@ -396,6 +410,10 @@ def prepare(args: argparse.Namespace) -> None:
     try:
         staging = Path(tempfile.mkdtemp(prefix=".d-video-engine-", dir=output.parent))
         _copy_inputs(staging, python_root, site_packages, video_root, audio_provider, tokenizer)
+        from prepare_external_video_engine import relocate_tools, verify_relocated_dependencies
+        (staging / "native").mkdir()
+        relocate_tools(staging)
+        verify_relocated_dependencies(staging)
         prepare_engine._validate_tree(staging, "prepared video engine")
         _reject_casefold_collisions(staging)
         _reject_source_paths(staging, sources)

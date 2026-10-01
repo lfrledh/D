@@ -77,6 +77,7 @@ private actor CloseoutResponseEngine: InferenceEngine {
         }
         var node = try #require(WorkflowRegistry.standard.operation(WorkflowModelRoutes.qwen35)?.definition.makeNode())
         node.parameters["modelID"] = .text("text:fixture"); node.parameters["outputMode"] = .text("response")
+        node.parameters["loadingStrategy"] = .text("ssdLayered")
         try service.beginPlan()
         var retained: WorkflowAssetReference?
         do { _ = try await service.executeCall(.init(node: node, stepID: UUID(), inputs: [:])); Issue.record("Long reasoning must fail datum budget after durable publication") }
@@ -90,6 +91,8 @@ private actor CloseoutResponseEngine: InferenceEngine {
         #expect(bytes.count > 1_048_576)
         let snapshot = try #require(try await store.workflowState().archive)
         #expect(snapshot.assets.first?.metadata["textResponse.v1"] == nil)
+        guard case .text(let savedRequest) = snapshot.assets.first?.request?.input else { Issue.record("Missing text request"); return }
+        #expect(savedRequest.loadingStrategy == .ssdLayered)
         #expect(try JSONEncoder().encode(snapshot).count < 64 * 1024)
         node.parameters["outputMode"] = .text("text")
         #expect(try await WorkflowLanguageOperations.outputs(raw: ref, node: node, services: service)["output"] == .data(.text("ok")))
@@ -101,6 +104,14 @@ private actor CloseoutResponseEngine: InferenceEngine {
         let copied = try await destination.copyWorkflowAsset(ref, from: reopened)
         #expect(try await destination.workflowData(copied) == bytes)
         #expect(try await destination.workflowTextResponse(copied) == response)
+        let copiedRecord = try #require(try await destination.workflowState().archive?.assets.first { $0.reference == copied })
+        guard case .text(let copiedRequest) = copiedRecord.request?.input else { Issue.record("Missing copied request"); return }
+        #expect(copiedRequest.loadingStrategy == .ssdLayered)
+        let exportID = UUID()
+        _ = try await destination.exportWorkflowAssets([copied], name: "text-recipe", exportID: exportID, directory: root)
+        let recipe = try String(contentsOf: root.appendingPathComponent("text-recipe-" + exportID.uuidString + ".dexport/recipe.json"), encoding: .utf8)
+        #expect(recipe.contains("ssdLayered"))
+        #expect(!recipe.contains(root.path))
         try await destination.close(); try await reopened.close()
     }
     @Test func legacyMetadataResponseStillReadsAndDoesNotExecuteTools() async throws {
@@ -207,8 +218,9 @@ private actor CloseoutResponseEngine: InferenceEngine {
         let registry = WorkflowRegistry.standard
         var node = try #require(registry.operation(WorkflowModelRoutes.qwen35)?.definition.makeNode())
         node.parameters["modelID"] = .text("text:fixture")
-        for budget: Int? in [nil, 0, 15] {
+        for (budget, strategy): (Int?, String?) in [(nil, nil), (0, "resident"), (15, "ssdLayered")] {
             node.parameters["memoryBudgetGiB"] = budget.map(WorkflowScalar.integer)
+            node.parameters["loadingStrategy"] = strategy.map(WorkflowScalar.text)
             let before = node
             try registry.validate(node)
             #expect(node == before)
@@ -217,12 +229,23 @@ private actor CloseoutResponseEngine: InferenceEngine {
             let request = try #require(await engine.requests.last)
             let expectedBytes: UInt64? = budget == 15 ? 15 * 1_073_741_824 : nil
             #expect(request.memoryBudgetBytes == expectedBytes)
+            guard case .text(let text) = request.input else { Issue.record("Expected text"); return }
+            #expect(text.loadingStrategy == strategy.flatMap(TextLoadingStrategy.init(rawValue:)))
             #expect(request.model.directory == root)
         }
         for invalid: WorkflowScalar in [.integer(-1), .integer(Int.max), .text("15"), .decimal(15)] {
             node.parameters["memoryBudgetGiB"] = invalid
             #expect(throws: (any Error).self) { try registry.validate(node) }
             #expect(throws: (any Error).self) { try WorkflowLanguageMessageForm.memoryBudgetBytes(node.parameters) }
+        }
+        node.parameters["memoryBudgetGiB"] = nil
+        for route in [WorkflowModelRoutes.qwen35, WorkflowModelRoutes.qwen38] {
+            var invalidNode = try #require(registry.operation(route)?.definition.makeNode())
+            for invalid: WorkflowScalar in [.text("automatic"), .integer(1), .decimal(0)] {
+                invalidNode.parameters["loadingStrategy"] = invalid
+                #expect(throws: (any Error).self) { try registry.validate(invalidNode) }
+                #expect(throws: (any Error).self) { try WorkflowLanguageMessageForm.loadingStrategy(invalidNode.parameters) }
+            }
         }
         #expect(await engine.calls == 3)
         try await store.close()

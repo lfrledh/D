@@ -203,7 +203,15 @@ public final class ModelLibraryModel {
     public func prepareVideo(_ id: ModelID, action: @escaping @MainActor (ModelID, URL) async throws -> Void) async {
         guard canChooseRoot else { return }
         isChoosingLocation = true
-        guard (try? await library.canPrepareVideo(id)) == true else { isChoosingLocation = false; return }
+        do {
+            guard try await library.canPrepareVideo(id) else {
+                throw ModelLibraryError.unavailable("当前应用没有该模型的完整准备引擎，或原始文件尚未校验；请使用本阶段的完整开发资源重新构建。原文件未修改。")
+            }
+        } catch {
+            isChoosingLocation = false
+            report(error, context: "执行包准备尚不可用")
+            return
+        }
         let panel = NSOpenPanel()
         panel.title = "选择执行包存放位置"
         panel.message = "D 将创建独立执行包并校验文件，保留原始模型。优先使用同一 APFS 外盘；不会加载模型。"

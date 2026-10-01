@@ -1,5 +1,6 @@
 import AppKit
 import DWorkbench
+import DMLXBackend
 import Foundation
 import Observation
 import UI
@@ -118,7 +119,16 @@ final class WorkbenchBootstrap {
             if let issue = pitchAvailability.issue {
                 audioEngineIssue = [audioEngineIssue, "音高识别暂不可用：" + issue].compactMap { $0 }.joined(separator: "\n")
             }
-            let library = try await ModelLibrary(stateDirectory: libraryDirectory)
+            let wanPreparation: (@Sendable (URL, URL) async throws -> Void)?
+            if let videoEngine, let script = videoEngine.videoPreparationScript {
+                let preparer = try WanModelPreparation(configuration: .init(pythonExecutable: videoEngine.pythonExecutable,
+                    providerScript: script, accessBootstrapRoot: videoAccessRoot))
+                wanPreparation = { source, destination in
+                    try videoEngine.confirmUnchanged()
+                    try await preparer.prepare(source: source, destination: destination)
+                }
+            } else { wanPreparation = nil }
+            let library = try await ModelLibrary(stateDirectory: libraryDirectory, wanPreparation: wanPreparation)
             let quickURL = libraryDirectory.deletingLastPathComponent().appendingPathComponent("Quick Creations.dproject", isDirectory: true)
             let quickStore: ProjectStore
             do {

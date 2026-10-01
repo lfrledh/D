@@ -3691,7 +3691,8 @@ extension ProjectStore {
                 seed = String(image.seed)
             } else if let request = record.request, case .text(let text) = request.input {
                 input = .text(TextRequest(prompt: "[withheld]", maxTokens: text.maxTokens,
-                    temperature: text.temperature, topP: text.topP, execution: text.execution))
+                    temperature: text.temperature, topP: text.topP, execution: text.execution,
+                    loadingStrategy: text.loadingStrategy))
             }
             else { input = nil }
             let permitted: Set<String> = ["scalePolicy", "scale", "backgroundPolicy", "quality", "alpha",

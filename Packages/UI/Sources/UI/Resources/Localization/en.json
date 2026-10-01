@@ -929,6 +929,15 @@
     "workflow.operation.d.image.flux2-dev.field.loadingStrategy": "Loading strategy (precision unchanged)",
     "workflow.operation.d.image.flux2-dev.field.memoryBudgetGiB": "Memory budget in GiB (0 uses runtime policy)",
     "workflow.operation.d.music.ace-step-1.5-xl-sft.field.loadingStrategy": "Loading strategy (precision unchanged)",
-    "workflow.operation.d.music.ace-step-1.5-xl-sft.field.memoryBudgetGiB": "Memory budget in GiB (0 uses runtime policy)"
+    "workflow.operation.d.music.ace-step-1.5-xl-sft.field.memoryBudgetGiB": "Memory budget in GiB (0 uses runtime policy)",
+    "model.downloadCredential.title": "Hugging Face download token",
+    "model.downloadCredential.connected": "Token file connected",
+    "model.downloadCredential.unconnected": "Not connected; public files can still download",
+    "model.downloadCredential.detail": "Used only to download from fixed repositories. Cross-site redirects never carry the token.",
+    "model.downloadCredential.replace": "Replace file…",
+    "model.downloadCredential.choose": "Choose file…",
+    "model.downloadCredential.remove": "Disconnect",
+    "workflow.operation.d.model.qwen35-9b.field.loadingStrategy": "Loading strategy (precision unchanged)",
+    "workflow.operation.d.model.qwen38-27b.field.loadingStrategy": "Loading strategy (precision unchanged)"
   }
 }
