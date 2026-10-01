@@ -12,7 +12,8 @@ struct ExternalVideoRepresentativeTests {
     @Test(.timeLimit(.minutes(1440)))
     func textAndNativeFrameConditions() async throws {
         let env = ProcessInfo.processInfo.environment
-        let profile = try #require(ExternalVideoExecutionProfile(rawValue: try #require(env["D_TEST_REAL_VIDEO_PROFILE"])))
+        let profileName = try #require(env["D_TEST_REAL_VIDEO_PROFILE"])
+        let profile = try #require(ExternalVideoExecutionProfile(rawValue: profileName))
         try #require(profile == .h3BF16Full || profile == .ltx25BF16Full)
         let engine = URL(fileURLWithPath: try #require(env["D_TEST_REAL_VIDEO_ENGINE"]))
         let pack = URL(fileURLWithPath: try #require(env["D_TEST_REAL_VIDEO_PACK"]))
