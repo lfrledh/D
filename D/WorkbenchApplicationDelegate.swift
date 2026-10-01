@@ -112,7 +112,8 @@ private enum WorkbenchInputDiagnostic {
         }
         let point = window.convertPoint(fromScreen: NSEvent.mouseLocation)
         if let content = window.contentView {
-            row["hitView"] = identity(content.hitTest(content.convert(point, from: nil)))
+            let parentPoint = content.superview?.convert(point, from: nil) ?? point
+            row["hitView"] = identity(content.hitTest(parentPoint))
         }
         if let client = context?.client {
             let marked = client.markedRange(), selected = client.selectedRange()
