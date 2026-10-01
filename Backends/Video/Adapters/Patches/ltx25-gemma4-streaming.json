@@ -1,0 +1,23 @@
+{
+  "upstream": "https://github.com/dgrauet/ltx-2-mlx",
+  "commit": "1724ca673d59f023a8a95efee06e5d36d61c2765",
+  "license": "MIT",
+  "scope": "Opt-in original Gemma-4 SSD tower streaming; preserve full hidden-state projection and resident path.",
+  "files": [
+    {
+      "path": "packages/ltx-core-mlx/src/ltx_core_mlx/text_encoders/gemma/gemma4.py",
+      "before_sha256": "fab22bd842e94d03a74d11ca3b9fea794489b3d909a06fbc3118064d0ba29ddd",
+      "after_sha256": "18bec2b88616ca07a0b9faf318a5b5074e8da7e7b0101253ff107cad6bab1eda"
+    },
+    {
+      "path": "packages/ltx-pipelines-mlx/src/ltx_pipelines_mlx/_base.py",
+      "before_sha256": "954c457b33aa8e6ead6f42c29cbff48967193d804359bef89c733517e02c2489",
+      "after_sha256": "c8643162c27e2679a767b88689cfee1dc8b0b06339817613ed07135225844553"
+    },
+    {
+      "path": "packages/ltx-pipelines-mlx/src/ltx_pipelines_mlx/utils/blocks.py",
+      "before_sha256": "12fc43ed7a08d947ad7a4f8c666da8e6693d3d1cfc05ba107eab7bae31f8dc61",
+      "after_sha256": "54cb0bdbda2a4fc99b3c4f2d27d1d1763feb2b7ae60ca49b60577cb1fa7b0042"
+    }
+  ]
+}
