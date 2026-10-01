@@ -30,15 +30,15 @@ struct KleinLayeredRealModelTests {
         var originals: [URL: Data] = [:]
         for index in 0..<2 {
             var bytes = Data()
-            for y in 0..<128 { for x in 0..<128 {
-                bytes.append(contentsOf: index == 0 ? [UInt8(2*x), UInt8(y), 32] : [32, UInt8(x), UInt8(2*y)])
+            for y in 0..<256 { for x in 0..<256 {
+                bytes.append(contentsOf: index == 0 ? [UInt8(x), UInt8(y/2), 32] : [32, UInt8(x/2), UInt8(y)])
             } }
             let url = root.appendingPathComponent("reference-\(index).rgb")
             try bytes.write(to: url, options: .withoutOverwriting)
             originals[url] = bytes
             references.append(.init(url: url,
                 sha256: SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined(),
-                byteCount: UInt64(bytes.count), width: 128, height: 128))
+                byteCount: UInt64(bytes.count), width: 256, height: 256))
         }
         do {
             for mode in ["cancel", "generate", "references"] {
