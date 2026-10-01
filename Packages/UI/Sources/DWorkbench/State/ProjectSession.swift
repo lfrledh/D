@@ -1029,15 +1029,20 @@ public final class ProjectSession {
         let identity = kind.rawValue + ":" + entry.revision
         let binding = try await resolveInstalledWorkflowModel(id, kind: kind, identity: identity, session: session, library: library)
         await binding.release()
+        let installationSnapshot = await library.snapshot()
         try Task.checkCancellation()
         guard workflowInstallationSelection == selection else { throw CancellationError() }
         guard store === owner, !isChangingProject, !closePending else { throw WorkflowIssue("校验期间项目已切换，未改变模型选择。") }
+        guard installationSnapshot.records.contains(where: { $0.id == id && $0.state == .installed && $0.availability == .available }) else {
+            throw WorkflowIssue("校验期间模型安装已改变，请重新选择。")
+        }
         try WorkflowModelBookmarks(settings: settings).rememberInstallation(identity: identity, id: id)
         let choice = WorkflowModelChoice(id: identity, kind: kind, displayName: entry.title)
         explicitModelChoices.removeAll { $0.id == identity }; explicitModelChoices.append(choice)
         // This exact installation has just passed the real resolver and its lease
         // was released. Presentation becomes current without a second full scan.
         modelReadinessGeneration = UUID()
+        modelAvailabilityRevision = max(modelAvailabilityRevision, installationSnapshot.revision)
         explicitModelReadiness[identity] = .available; explicitModelIssues[identity] = nil
         refreshWorkflowModels()
         return choice
@@ -1163,9 +1168,12 @@ public final class ProjectSession {
     public private(set) var explicitModelReadiness: [String: SharedLibraryReadiness] = [:]
     public private(set) var explicitModelIssues: [String: String] = [:]
     @ObservationIgnored private var modelReadinessGeneration = UUID()
+    @ObservationIgnored private var modelAvailabilityRevision: UInt64 = 0
     /// Installation state can revoke an earlier readiness observation. It cannot
     /// grant execution: only the real resolver above can validate an installation.
     public func observeModelAvailability(_ snapshot: ModelLibrarySnapshot) {
+        guard snapshot.revision >= modelAvailabilityRevision else { return }
+        modelAvailabilityRevision = snapshot.revision
         do {
             let bookmarks = WorkflowModelBookmarks(settings: settings)
             for identity in try bookmarks.installationIdentities() {

@@ -18,6 +18,66 @@ struct QwenVLMRealTests {
         func append(_ value: MLXLifecycleEvent) { events.append(value) }
         func forRun(_ id: UUID) -> [MLXLifecycleEvent] { events.filter { $0.runID == id } }
     }
+    /// A separate entry avoids regenerating the already-validated text, image and
+    /// tool samples when only timestamped, multi-frame video coverage is missing.
+    @Test(.timeLimit(.minutes(120)),
+          .enabled(if: ProcessInfo.processInfo.environment["D_TEST_QWEN_MULTIFRAME_FILE"] != nil))
+    func timestampedMultiFrameVideoThroughRuntime() async throws {
+        let env = ProcessInfo.processInfo.environment
+        let model = URL(fileURLWithPath: try #require(env["D_TEST_QWEN_VLM_DIR"]))
+        let revision = try #require(env["D_TEST_QWEN_REVISION"])
+        let video = URL(fileURLWithPath: try #require(env["D_TEST_QWEN_MULTIFRAME_FILE"]))
+        let bytes = try Data(contentsOf: video)
+        let digest = SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
+        let duration = try await AVURLAsset(url: video).load(.duration).seconds
+        try #require(duration >= 2 && duration <= 4, "Use the short multi-frame fixture, not a one-frame smoke clip")
+        let root = URL(fileURLWithPath: try #require(env["D_TEST_TEMP_DIR"]))
+            .appendingPathComponent("qwen-video-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: false)
+        let artifacts = root.appendingPathComponent("artifacts")
+        try FileManager.default.createDirectory(at: artifacts, withIntermediateDirectories: false)
+        let trace = Trace(), encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        let backend = try MLXQwenVLMBackend(configuration: .init(artifactDirectory: artifacts,
+            maximumPromptTokens: 4096, maximumOutputTokens: 128), observer: { await trace.append($0) })
+        let runtime = try InferenceRuntime(backends: [backend], configuration: try .init(memoryBudgetBytes: 15 * 1024 * 1024 * 1024))
+        let input = TextRequest(prompt: "Describe the changes you see over time in this short video. Be concise.",
+            maxTokens: 128, temperature: 0,
+            execution: .init(profile: TextExecutionCapability.qwen35VLMProfile, maximumPromptTokens: 4096),
+            video: .init(url: video, byteCount: UInt64(bytes.count), contentSHA256: digest, durationSeconds: duration),
+            thinking: .init(enableThinking: false), seed: 42, loadingStrategy: .ssdLayered)
+        let request = InferenceRequest(model: .init(directory: model, revision: revision), input: .text(input))
+        try encoder.encode(request).write(to: root.appendingPathComponent("request.json"), options: .withoutOverwriting)
+        let start = Date()
+        do {
+            let run = try await runtime.submit(request, backendID: backend.descriptor.id)
+            var streamed = ""
+            for try await event in run.events { if case .textDelta(let value) = event { streamed += value } }
+            guard case .completed(let result) = await run.outcome() else { throw InferenceFailure.backendFailed("Multi-frame run did not complete") }
+            let text = try #require(result.textResponse?.finalText)
+            #expect(!text.isEmpty && text == streamed && result.textResponse?.finishReason == .stop)
+            let requested = try #require(result.metadata["videoRequestedTimestamps"]?.split(separator: ",").compactMap { Double($0) })
+            let actual = try #require(result.metadata["videoActualTimestamps"]?.split(separator: ",").compactMap { Double($0) })
+            let expected = (0..<Int(ceil(duration * 2))).map { Double($0) / 2 }.filter { $0 < duration }
+            #expect(requested == expected && actual.count == expected.count && expected.count >= 4)
+            #expect(zip(actual, expected).allSatisfy { abs($0 - $1) <= 0.001 })
+            #expect(Set(actual).count == actual.count)
+            #expect(result.metadata["videoDecodedFrames"] == String(expected.count))
+            #expect(result.metadata["videoSourceSHA256"] == digest && result.metadata["modelRevision"] == revision)
+            #expect((Int(result.metadata["visualTokens"] ?? "") ?? 0) > 0)
+            let lifecycle = await trace.forRun(request.id), state = await runtime.snapshot()
+            #expect(state.activeRunID == nil && state.reservedBytes == 0)
+            #expect(lifecycle.last?.phase == .released)
+            #expect(lifecycle.last?.memory.activeBytes == 0 && lifecycle.last?.memory.cacheBytes == 0)
+            #expect(SHA256.hash(data: try Data(contentsOf: video)).map { String(format: "%02x", $0) }.joined() == digest)
+            try encoder.encode(lifecycle).write(to: root.appendingPathComponent("lifecycle.json"), options: .withoutOverwriting)
+            try JSONSerialization.data(withJSONObject: ["seconds": Date().timeIntervalSince(start), "metadata": result.metadata,
+                "text": text, "semanticReview": "Response retained for inspection; frame consumption asserted independently"], options: [.prettyPrinted, .sortedKeys])
+                .write(to: root.appendingPathComponent("result.json"), options: .withoutOverwriting)
+            print("D_QWEN_MULTIFRAME", root.path, "seconds", Date().timeIntervalSince(start))
+            await runtime.shutdown()
+        } catch { await runtime.shutdown(); throw error }
+    }
     @Test(.timeLimit(.minutes(720))) func textAndOrderedImagesThroughRuntime() async throws {
         let env = ProcessInfo.processInfo.environment
         let strategy: TextLoadingStrategy?

@@ -15,6 +15,7 @@ struct QuickGenerationView: View {
     let onSettingsToCanvas: (QuickDraft) -> Void
     let onResultToCanvas: (WorkflowAssetReference) -> Void
     let onValueToCanvas: (WorkflowDatum) -> Void
+    var onAssetsChanged: () -> Void = {}
     @State private var advanced = false
     @State private var history = false
     @State private var inputIssue: String?
@@ -260,12 +261,15 @@ struct QuickGenerationView: View {
         guard await panel.begin() == .OK else { return }
         let urls = panel.urls
         guard !urls.isEmpty else { return }
+        var publishedAssets = false
+        defer { if publishedAssets { onAssetsChanged() } }
         do {
             var imported: [WorkflowAssetReference] = []
             for url in urls {
                 let scoped = url.startAccessingSecurityScopedResource()
                 do {
                     let published = try await quick.store.importWorkflowMediaFile(at: url)
+                    publishedAssets = true
                     imported.append(published.record.reference)
                     if scoped { url.stopAccessingSecurityScopedResource() }
                 } catch {

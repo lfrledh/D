@@ -52,6 +52,7 @@ struct WorkflowModelReadinessTests {
                           sha256: SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined())],
             imageProfile: .flux2Klein, workflowProfileID: "d.image.generate")
         let library = try await ModelLibrary(stateDirectory: root.appendingPathComponent("library"), catalog: [entry])
+        let beforeRegistration = await library.snapshot()
         let id = try await library.registerExisting(at: model, catalogID: entry.id)
         let suite = "D.Readiness." + UUID().uuidString
         let settings = try #require(UserDefaults(suiteName: suite))
@@ -81,6 +82,9 @@ struct WorkflowModelReadinessTests {
         let expectedDraft = quick.draft
         let choice = try await quickOwner.selectWorkflowInstallation(id: id)
         #expect(quickOwner.explicitModelReadiness[choice.id] == .available)
+        quickOwner.observeModelAvailability(beforeRegistration)
+        #expect(quickOwner.explicitModelReadiness[choice.id] == .available,
+                "A delayed snapshot from before registration cannot revoke the new validated selection")
         #expect(await validator.calls == 1, "A successful registration must not require a second content verification")
         if staleInspection {
             await validator.arm()

@@ -86,8 +86,8 @@ private enum WorkbenchInputDiagnostic {
                         record(window: window, reason: "event-\(event.type.rawValue)")
                     }
                 }
-                return event
             }
+            return event
         }
     }
 

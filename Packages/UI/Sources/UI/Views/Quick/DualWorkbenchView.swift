@@ -81,7 +81,8 @@ public struct DualWorkbenchView: View {
                 QuickGenerationView(quick: quick, model: quickModel, onChooseModel: { libraryVisible = true },
                     onSettingsToCanvas: { draft in Task { await settingsToCanvas(draft) } },
                     onResultToCanvas: { ref in Task { await resultToCanvas(ref) } },
-                    onValueToCanvas: { value in Task { await valueToCanvas(value) } })
+                    onValueToCanvas: { value in Task { await valueToCanvas(value) } },
+                    onAssetsChanged: { Task { await refreshLibrary(checkModels: false) } })
                     .opacity(entry == .quick ? 1 : 0).allowsHitTesting(entry == .quick).accessibilityHidden(entry != .quick)
                 WorkflowHostView(model: canvasModel, nodeTags: nodeTags, onQuickUse: useNode,
                     libraryContent: { point, close in AnyView(libraryBrowser(compact: true, at: point, onBack: close)) },
@@ -125,8 +126,8 @@ public struct DualWorkbenchView: View {
                     let choice = try await quickModel.projectSession.selectWorkflowInstallation(id: id)
                     guard let operation = WorkflowModelRoutes.operation(for: choice) else { throw WorkflowIssue("此模型没有可用的共享操作。") }
                     quick.select(operationID: operation, modelID: choice.id)
-                    await refreshLibrary(checkModels: false)
                     returnToLibrary = false; library.isPresented = false; navigate(to: .quick)
+                    await refreshLibrary(checkModels: false)
                 } catch is CancellationError { }
                 catch { issue = error.localizedDescription }
             }
