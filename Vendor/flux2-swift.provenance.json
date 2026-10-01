@@ -14,9 +14,9 @@
   "snapshot": {
     "fileCount": 206,
     "upstreamBytes": 41852259,
-    "patchedBytes": 41856683,
+    "patchedBytes": 41889671,
     "manifest": "flux2-swift.files.json",
-    "manifestSHA256": "145bcbdba8e1993d1af4f71194f7e82245bee7b85a48bccce375c1bbe6118065",
+    "manifestSHA256": "57e9b126ae74e1054782a61425676c8b9984adf87a3b0386b03505ed9efef730",
     "selection": "All 206 tracked upstream blobs; no trimming or expanded gitlinks."
   },
   "patches": [
@@ -94,6 +94,62 @@
           "sha256": "6acf73b93971582f6b7de89fa0b2511073b9ea5a4c823c658307f403e7bf40e6",
           "upstreamSize": 3792,
           "size": 3851
+        }
+      ]
+    },
+    {
+      "file": "patches/flux2-klein-ssd-layered.patch",
+      "sha256": "47020aba81c9a0a25dbc6a5ce913670645cdc7bd0ad322747c89dbe097726528",
+      "description": "Original BF16 demand-loaded complete Qwen/transformer blocks, strict bounded safetensors reads and parity fixtures; resident path retained",
+      "modifiedFiles": [
+        {
+          "path": "Sources/Flux2/IO/SafeTensorsReader.swift",
+          "upstreamSHA256": "3025da02f505a34962861cb2a84854e53e87c3ce0b778679269897066321ddde",
+          "sha256": "a897785391bc51cedfd908cf2085d7c2a99f497d6651e67f90c4c5d159c05ba5",
+          "upstreamSize": 8481,
+          "size": 15262
+        },
+        {
+          "path": "Sources/Flux2/Models/TextEncoder/Flux2Qwen3TextEncoder.swift",
+          "upstreamSHA256": "56942a7d37c32a44565fee71b697a1f5e6b15f58fc0263258fb41cdb7374c3be",
+          "sha256": "a05b84fff694e60fa6fd09f6cd2a5aae9cde099d14549f326f1a0bd05e85536f",
+          "upstreamSize": 10148,
+          "size": 13117
+        },
+        {
+          "path": "Sources/Flux2/Models/Transformer/Flux2Transformer2DModel.swift",
+          "upstreamSHA256": "72533cafb7de8d269bde25178388598a7083499fadf7a31ee87d620b28bf9641",
+          "sha256": "b5ee5d7ebc9fb66b1b9aeb44f606f8660ed9addee3da17ef3875705ee9918e27",
+          "upstreamSize": 7455,
+          "size": 13322
+        },
+        {
+          "path": "Sources/Flux2/Pipeline/Flux2Denoiser.swift",
+          "upstreamSHA256": "2cbf6f02b1d1d200d70101377db6fd3ed12cb8ca9b0df5b19ee75465be489761",
+          "sha256": "00e64d222473c5222c14dc6e5a1e19f0a0154b0744f6cd685b26d4d82c0a7a16",
+          "upstreamSize": 1747,
+          "size": 2026
+        },
+        {
+          "path": "Tests/Flux2Tests/Flux2Qwen3TextEncoderParityTests.swift",
+          "upstreamSHA256": "ea92e326ac1fe3bd261b5e975b015533b66744e2fd8de09e7deff2c71eebe355",
+          "sha256": "5378863cf0463f5a2223b40614cbdaa1fd65f2b4975918a1366ad0f75e4e88e9",
+          "upstreamSize": 1463,
+          "size": 5677
+        },
+        {
+          "path": "Tests/Flux2Tests/Flux2TransformerParityTests.swift",
+          "upstreamSHA256": "48e56189d9ebe1b9026a62f9b74ac1288b224e03707358879ab0f432c2300e4e",
+          "sha256": "09c58af2fc2dbeedbb0e685b25636f6a4a75ed13e581ee1598b26fd931b12a32",
+          "upstreamSize": 1714,
+          "size": 9035
+        },
+        {
+          "path": "Tests/Flux2Tests/SafeTensorsReaderTests.swift",
+          "upstreamSHA256": "231e4d631a6165c3308834d9bbd3d03e0671ff3b5374163e33171cfacef59a11",
+          "sha256": "ed8475cd1b75e8a3c4a5175814ce133405ba95cd19ba42011cdefd358b32d7be",
+          "upstreamSize": 3937,
+          "size": 9494
         }
       ]
     }
