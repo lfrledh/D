@@ -194,6 +194,10 @@ class AppVideoDriverTests(unittest.TestCase):
         cli = types.ModuleType("ltx_pipelines_mlx.cli")
         def main():
             called.extend(sys.argv)
+            print("D_LTX_GEMMA4_", end="")
+            print("FIRST_BLOCK_EVALUATED", flush=True)
+            self.assertIn("D_LTX_GEMMA4_FIRST_BLOCK_EVALUATED\n",
+                          (self.task / "engine.stdout").read_text())
             (self.task / "candidate.mp4").write_bytes(b"SIM-LTX candidate")
             return 0
         cli.main = main
@@ -204,6 +208,16 @@ class AppVideoDriverTests(unittest.TestCase):
         index = called.index("--image")
         self.assertEqual(called[index:index + 5], ["--image", str(first), "0", "1.0", "33"])
         self.assertEqual(self._result()["frame_conditions"], {"first_frame_sha256": value["content_sha256"]})
+
+    def test_ltx_log_is_bounded_but_does_not_truncate_forwarded_output(self):
+        output, log = io.StringIO(), io.BytesIO()
+        with mock.patch.object(driver, "MAX_LOG", 17):
+            tee = driver._LTXLog(output, log)
+            self.assertEqual(tee.write("音符" * 20), 40)
+            self.assertEqual(tee.write("end\n"), 4)
+            tee.flush()
+        self.assertEqual(output.getvalue(), "音符" * 20 + "end\n")
+        self.assertEqual(len(log.getvalue()), 17)
 
     def test_bad_or_symlinked_private_frame_is_rejected_before_engine(self):
         first, value = self._frame("first")
@@ -303,6 +317,7 @@ class AppVideoDriverTests(unittest.TestCase):
                 self.assertNotIn("mlx", sys.modules)
                 (self.task / "candidate.mp4").unlink()
                 (self.task / "result.json").unlink()
+                (self.task / "engine.stdout").unlink()
                 (self.task / "probe-log.stdout").unlink()
                 (self.task / "probe-log.stderr").unlink()
                 (self.task / "decode-log.stdout").unlink()

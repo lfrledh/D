@@ -7,7 +7,7 @@ Only the parent-issued task directory may receive outputs and diagnostics.
 from __future__ import annotations
 
 import argparse
-from contextlib import contextmanager
+from contextlib import contextmanager, redirect_stdout
 import hashlib
 import json
 import math
@@ -271,6 +271,27 @@ def _write_result(path: Path, value: dict) -> None:
         os.fsync(file.fileno())
 
 
+class _LTXLog:
+    """Keep bounded, live diagnostics for the in-process LTX pipeline."""
+    def __init__(self, output, log):
+        self.output, self.log, self.size = output, log, 0
+
+    def write(self, text):
+        encoded = text.encode("utf-8", errors="replace")
+        retained = encoded[:max(0, MAX_LOG - self.size)]
+        self.log.write(retained)
+        self.size += len(retained)
+        self.output.write(text)
+        return len(text)
+
+    def flush(self):
+        self.log.flush()
+        self.output.flush()
+
+    def isatty(self):
+        return False
+
+
 def _run_child(argv: list[str], label: str, timeout: float, run_dir: Path, environment: dict | None = None) -> dict:
     """Drain bounded logs while inheriting the Swift-owned process group."""
     stdout_path, stderr_path = (run_dir / f"{label}.stdout", run_dir / f"{label}.stderr")
@@ -413,10 +434,15 @@ def _execute(request: dict, *, pack: Path, run: Path, ffmpeg: Path, ffprobe: Pat
         _unchanged_frames(frames)
         sys.argv = plan["argv"]
         from ltx_pipelines_mlx.cli import main as ltx_main
-        try:
-            code = ltx_main()
-        except SystemExit as error:
-            code = error.code
+        # No extra child or sandbox boundary: LTX stays in this owned provider.
+        # Exclusive creation preserves any earlier diagnostic; marker flushes
+        # are visible before completion without unbounded output files.
+        with (run / "engine.stdout").open("xb") as log:
+            with redirect_stdout(_LTXLog(sys.stdout, log)):
+                try:
+                    code = ltx_main()
+                except SystemExit as error:
+                    code = error.code
         if code not in (None, 0):
             raise ValueError(f"LTX engine failed: {code}")
     finally:

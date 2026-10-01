@@ -51,19 +51,64 @@ struct ExternalVideoRepresentativeTests {
         let model = try await backend.validateModel(at: pack)
         let runtime = try InferenceRuntime(backends: [backend], configuration: .init(memoryBudgetBytes: 15 * 1_073_741_824))
         let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        func video(conditioned: Bool) -> VideoRequest {
+            VideoRequest(
+                prompt: conditioned ? "A red cube slowly rotates on a dark tabletop, steady camera, subtle room ambience."
+                    : "A red ceramic cup on a wooden table, steady camera, natural light, quiet room ambience.",
+                negativePrompt: "", width: width, height: height,
+                frameCount: isH3 ? 22 : 97, frameRate: .init(numerator: 24),
+                steps: isH3 ? 50 : 30, guidanceScale: isH3 ? 1 : 3,
+                scheduleShift: 1, seed: 42, executionProfile: profile.reference,
+                adapterOptions: isH3 ? .h3(streamWeights: true) : .ltx(streamWeights: true, spatiotemporalGuidance: 1),
+                firstFrame: conditioned ? first : nil, lastFrame: conditioned ? last : nil)
+        }
         do {
+            if !isH3 {
+                let request = InferenceRequest(model: model, input: .video(video(conditioned: false)))
+                try encoder.encode(request).write(to: root.appendingPathComponent("cancel-request.json"), options: .withoutOverwriting)
+                let started = Date(), run = try await runtime.submit(request, backendID: backend.descriptor.id)
+                let marker = "D_LTX_GEMMA4_FIRST_BLOCK_EVALUATED"
+                var observed = false, evidencePath: String?
+                while Date().timeIntervalSince(started) < 1_800 {
+                    let directories = try FileManager.default.contentsOfDirectory(at: outputs, includingPropertiesForKeys: nil)
+                        .filter { $0.lastPathComponent.hasPrefix(request.id.uuidString.lowercased() + "-") }
+                    try #require(directories.count <= 1)
+                    if let directory = directories.first {
+                        let log = directory.appendingPathComponent("engine.stdout")
+                        if FileManager.default.fileExists(atPath: log.path) {
+                            let data = try Data(contentsOf: log)
+                            try #require(data.count <= 4 * 1_024 * 1_024)
+                            if String(decoding: data, as: UTF8.self).components(separatedBy: "\n").contains(marker) {
+                                observed = true; evidencePath = log.path; break
+                            }
+                        }
+                    }
+                    let state = await runtime.snapshot()
+                    if state.activeRunID != request.id && !state.queuedRunIDs.contains(request.id) { break }
+                    try await Task.sleep(for: .seconds(1))
+                }
+                // Only this request is cancelled; no timer is accepted as proof
+                // that actual model compute has started. A missing marker fails.
+                await run.cancel()
+                var artifacts = 0, streamFailure: String?
+                do { for try await event in run.events { if case .artifact = event { artifacts += 1 } } }
+                catch { streamFailure = error.localizedDescription }
+                let outcome = await run.outcome(), state = await runtime.snapshot()
+                try JSONSerialization.data(withJSONObject: ["seconds": Date().timeIntervalSince(started),
+                    "observedFirstEvaluatedBlock": observed, "stageLog": evidencePath ?? "none",
+                    "outcome": String(describing: outcome), "streamFailure": streamFailure ?? "none", "artifacts": artifacts,
+                    "activeRun": state.activeRunID?.uuidString ?? "none", "reservedBytes": state.reservedBytes,
+                    "guiVerified": false], options: [.prettyPrinted, .sortedKeys])
+                    .write(to: root.appendingPathComponent("cancel-terminal.json"), options: .withoutOverwriting)
+                try #require(observed)
+                try #require(outcome == .cancelled)
+                try #require(artifacts == 0 && state.activeRunID == nil && state.reservedBytes == 0)
+                #expect(try Data(contentsOf: manifestURL) == originalManifest)
+                print("D_VIDEO_REPRESENTATIVE_DONE cancel-after-evaluated-block", root.path)
+            }
             for conditioned in [false, true] {
                 let name = conditioned ? "conditioned" : "text"
-                let video = VideoRequest(
-                    prompt: conditioned ? "A red cube slowly rotates on a dark tabletop, steady camera, subtle room ambience."
-                        : "A red ceramic cup on a wooden table, steady camera, natural light, quiet room ambience.",
-                    negativePrompt: "", width: width, height: height,
-                    frameCount: isH3 ? 22 : 97, frameRate: .init(numerator: 24),
-                    steps: isH3 ? 50 : 30, guidanceScale: isH3 ? 1 : 3,
-                    scheduleShift: 1, seed: 42, executionProfile: profile.reference,
-                    adapterOptions: isH3 ? .h3(streamWeights: true) : .ltx(streamWeights: true, spatiotemporalGuidance: 1),
-                    firstFrame: conditioned ? first : nil, lastFrame: conditioned ? last : nil)
-                let request = InferenceRequest(model: model, input: .video(video))
+                let request = InferenceRequest(model: model, input: .video(video(conditioned: conditioned)))
                 try encoder.encode(request).write(to: root.appendingPathComponent(name + "-request.json"), options: .withoutOverwriting)
                 print("D_VIDEO_REPRESENTATIVE_START", name, root.path)
                 let start = Date(), run = try await runtime.submit(request, backendID: backend.descriptor.id)

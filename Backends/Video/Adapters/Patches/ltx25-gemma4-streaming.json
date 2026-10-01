@@ -7,7 +7,7 @@
     {
       "path": "packages/ltx-core-mlx/src/ltx_core_mlx/text_encoders/gemma/gemma4.py",
       "before_sha256": "fab22bd842e94d03a74d11ca3b9fea794489b3d909a06fbc3118064d0ba29ddd",
-      "after_sha256": "18bec2b88616ca07a0b9faf318a5b5074e8da7e7b0101253ff107cad6bab1eda"
+      "after_sha256": "54256e9972020eadcbca37a6a90b7db7cae1487201bf1921f4d562e6ec183050"
     },
     {
       "path": "packages/ltx-pipelines-mlx/src/ltx_pipelines_mlx/_base.py",
