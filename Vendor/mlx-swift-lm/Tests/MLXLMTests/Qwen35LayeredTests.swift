@@ -10,7 +10,7 @@ private struct TinyQwenFixture {
     let layered: Qwen35
     let directory: URL
 
-    static func make(originalLayout: Bool = false) throws -> Self {
+    static func configuration() throws -> Qwen35Configuration {
         let json = """
         {"model_type":"qwen3_5","image_token_id":60,"video_token_id":61,
          "image_token_index":60,"video_token_index":61,"vision_start_token_id":59,
@@ -27,7 +27,11 @@ private struct TinyQwenFixture {
            "patch_size":2,"spatial_merge_size":1,"temporal_patch_size":1,
            "num_position_embeddings":16,"in_channels":3}}
         """
-        let config = try JSONDecoder().decode(Qwen35Configuration.self, from: Data(json.utf8))
+        return try Qwen35LayeredFileValidation.configuration(Data(json.utf8))
+    }
+
+    static func make(originalLayout: Bool = false) throws -> Self {
+        let config = try configuration()
         let resident = withRandomState(MLXRandom.RandomState(seed: 17)) { Qwen35(config) }
         let weights = Dictionary(uniqueKeysWithValues: resident.parameters().flattened().map {
             ($0.0, $0.1.asType(.bfloat16))
@@ -132,6 +136,7 @@ private func expectSameSteps(_ original: [PrefillStep], _ streamed: [PrefillStep
     }
 }
 
+@Suite(.serialized) struct QwenLayeredTests {
 @Test("Three linear and one attention block match BF16 resident prefill and decode")
 func qwenLayeredMatchesResident() throws {
     let fixture = try TinyQwenFixture.make()
@@ -187,11 +192,11 @@ func qwenLayeredReportsLayerIO() throws {
 func qwenLayeredKeepsMergedVisualState() throws {
     let fixture = try TinyQwenFixture.make()
     defer { try? FileManager.default.removeItem(at: fixture.directory) }
-    let frame = THW(1, 1, 1)
+    let imageFrame = THW(1, 2, 2), videoFrame = THW(2, 2, 2)
     let input = LMInput(
-        text: .init(tokens: MLXArray([[2, 59, 60, 3, 59, 61, 4]])),
-        image: .init(pixels: MLXArray.zeros([1, 12]), frames: [frame]),
-        video: .init(pixels: MLXArray.ones([1, 12]), frames: [frame]))
+        text: .init(tokens: MLXArray([[2, 59] + Array(repeating: Int32(60), count: 4) + [3, 59] + Array(repeating: Int32(61), count: 8) + [4]])),
+        image: .init(pixels: MLXArray.zeros([4, 12]), frames: [imageFrame]),
+        video: .init(pixels: MLXArray.ones([8, 12]), frames: [videoFrame]))
     let residentCache = fixture.resident.newCache(parameters: nil)
     let layeredCache = fixture.layered.newCache(parameters: nil)
     var residentSteps: [PrefillStep] = []
@@ -201,7 +206,7 @@ func qwenLayeredKeepsMergedVisualState() throws {
     let resident = try output(fixture.resident.prepare(input, cache: residentCache, windowSize: 2))
     let layered = try output(fixture.layered.prepareThrowing(input,
         cache: layeredCache, windowSize: 2))
-    #expect(residentSteps.count == 4)
+    #expect(residentSteps.count == 9)
     expectSameSteps(residentSteps, layeredSteps)
     #expect(allClose(resident.logits[0..., -1, 0...],
                      layered.logits[0..., -1, 0...],
@@ -313,4 +318,36 @@ func qwenLayeredRejectsMalformedHeaders() throws {
         payload: Data(repeating: 0, count: 4))
     defer { try? FileManager.default.removeItem(at: overlapDirectory) }
     #expect(throws: (any Error).self) { _ = try Qwen35LayeredWeights(directory: overlapDirectory) }
+}
+
+@Test("Malformed dimensions reject before construction rather than trap")
+func configurationRejectsTrappingControls() throws {
+    let data = try JSONEncoder().encode(TinyQwenFixture.configuration())
+    let base = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+    var oversized = base, oversizedText = try #require(base["text_config"] as? [String: Any])
+    oversizedText["linear_key_head_dim"] = 1_000_000_000
+    oversizedText["linear_value_head_dim"] = 1_000_000_000
+    oversized["text_config"] = oversizedText
+    #expect(throws: (any Error).self) { _ = try Qwen35LayeredFileValidation.configuration(JSONSerialization.data(withJSONObject: oversized)) }
+    for (hidden, heads) in [(64, 0), (Int.min, -1), (64, 3)] {
+        var object = base, text = try #require(base["text_config"] as? [String: Any])
+        text.removeValue(forKey: "head_dim")
+        text["hidden_size"] = hidden; text["num_attention_heads"] = heads
+        object["text_config"] = text
+        #expect(throws: (any Error).self) { _ = try Qwen35LayeredFileValidation.configuration(JSONSerialization.data(withJSONObject: object)) }
+    }
+    for (key, value) in [("linear_num_key_heads", 3 as Any),
+                         ("vocab_size", 0 as Any), ("full_attention_interval", 0 as Any)] {
+        var object = base, text = try #require(base["text_config"] as? [String: Any])
+        text[key] = value; object["text_config"] = text
+        #expect(throws: (any Error).self) { _ = try Qwen35LayeredFileValidation.configuration(JSONSerialization.data(withJSONObject: object)) }
+    }
+    for (key, value) in [("partial_rotary_factor", 1e30 as Any),
+                         ("mrope_section", [Int.max, 11, 10] as Any)] {
+        var object = base, text = try #require(base["text_config"] as? [String: Any])
+        var rope = try #require(text["rope_parameters"] as? [String: Any])
+        rope[key] = value; text["rope_parameters"] = rope; object["text_config"] = text
+        #expect(throws: (any Error).self) { _ = try Qwen35LayeredFileValidation.configuration(JSONSerialization.data(withJSONObject: object)) }
+    }
+}
 }

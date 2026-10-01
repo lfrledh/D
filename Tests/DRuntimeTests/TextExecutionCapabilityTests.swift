@@ -22,6 +22,16 @@ struct TextExecutionCapabilityTests {
         try capability.validate(legacy)
     }
 
+    @Test func legacyBackendDoesNotSilentlyIgnoreSSDSelection() throws {
+        try capability.validate(TextRequest(prompt: "old", loadingStrategy: .resident))
+        #expect(throws: InferenceFailure.self) {
+            try capability.validate(TextRequest(prompt: "invalid", loadingStrategy: .ssdLayered))
+        }
+        let vlm = TextExecutionCapability(maximumPromptTokens: 2048, maximumOutputTokens: 256,
+            profile: TextExecutionCapability.qwen35VLMProfile)
+        try vlm.validate(TextRequest(prompt: "new", loadingStrategy: .ssdLayered))
+    }
+
     @Test func selectedPromptBudgetResolvesWithoutChangingOutputBudget() throws {
         let request = TextRequest(
             prompt: "selected",

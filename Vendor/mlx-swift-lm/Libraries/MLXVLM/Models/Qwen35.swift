@@ -171,6 +171,11 @@ public struct Qwen35Configuration: Codable, Sendable {
             }
 
             if self.headDim == nil {
+                guard self.hiddenSize > 0, self.attentionHeads > 0,
+                      self.hiddenSize % self.attentionHeads == 0 else {
+                    throw DecodingError.dataCorruptedError(forKey: .attentionHeads,
+                        in: container, debugDescription: "Invalid implicit attention head dimension")
+                }
                 self.headDim = self.hiddenSize / self.attentionHeads
             }
         }
@@ -992,7 +997,10 @@ public class Qwen35: Module, VLMModel {
     var layeredVisionIsResident: Bool { visionModel != nil }
     var evaluateResidentLayersForComparison: Bool {
         get { languageModel.model.evaluateEachLayerForComparison }
-        set { languageModel.model.evaluateEachLayerForComparison = newValue }
+        set {
+            languageModel.model.evaluateEachLayerForComparison = newValue
+            visionModel?.evaluateEachLayerForComparison = newValue
+        }
     }
     var onComparisonPrefillStep: ((LMOutput, [any KVCache]) -> Void)?
 

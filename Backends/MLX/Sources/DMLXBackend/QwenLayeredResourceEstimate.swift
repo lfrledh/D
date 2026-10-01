@@ -10,6 +10,7 @@ enum QwenLayeredResourceEstimate {
             inventory.directory.appendingPathComponent("config.json"),
             label: "Qwen3.5 config", maximumBytes: 4 * 1024 * 1024)
         let config = try QwenVLMModelInventory.object(configData)
+        _ = try Qwen35LayeredFileValidation.configuration(configData)
         guard let text = config["text_config"] as? [String: Any] else {
             throw InferenceFailure.invalidRequest("Missing Qwen3.5 text configuration.")
         }
@@ -103,7 +104,10 @@ enum QwenLayeredResourceEstimate {
         // The prepared input remains captured by the generation closure until
         // completion, including its visual pixel arrays. Account for that
         // ownership during decode, not only during the vision stage.
-        let retainedVisual = multiplying(visualPixels, 16)
+        // A static RGB float32 image is repeated across two temporal frames.
+        // Video pixel accounting already includes temporal padding; 24 is a
+        // conservative common bound, never a claim that pixels are released.
+        let retainedVisual = multiplying(visualPixels, 24)
         let decode = adding(textResident, adding(active, adding(cache, retainedVisual)))
         guard visualPixels > 0 else { return decode }
         guard visionBlocks.count == 27, let visionBlock = visionBlocks.values.max() else {

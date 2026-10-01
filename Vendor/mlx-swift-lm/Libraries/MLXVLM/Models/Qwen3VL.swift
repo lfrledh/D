@@ -628,6 +628,7 @@ enum Qwen3VLVision {
         @ModuleInfo(key: "merger") var merger: PatchMerger
         @ModuleInfo(key: "deepstack_merger_list") var deepstackMergers: [PatchMerger]
         let deepstackVisualIndexes: [Int]
+        var evaluateEachLayerForComparison = false
 
         init(_ config: Qwen3VLConfiguration.VisionConfiguration, layered: Bool = false) {
             self.config = config
@@ -870,6 +871,7 @@ enum Qwen3VLVision {
 
             let posEmbeds = positionalEmbeddings(gridTHW)
             hiddenStates = hiddenStates + posEmbeds
+            if evaluateEachLayerForComparison { eval(hiddenStates) }
 
             let rotaryEmbeds = rotaryPositionEmbedding(gridTHW)
             let cuSeqlens = cumulativeSequenceLengths(gridTHW)
@@ -878,6 +880,7 @@ enum Qwen3VLVision {
 
             for (index, block) in blocks.enumerated() {
                 hiddenStates = block(hiddenStates, cuSeqlens: cuSeqlens, rotaryPosEmb: rotaryEmbeds)
+                if evaluateEachLayerForComparison { eval(hiddenStates) }
                 if let dsIndex = deepstackVisualIndexes.firstIndex(of: index) {
                     let feature = deepstackMergers[dsIndex](hiddenStates)
                     deepstackOutputs.append(feature)
@@ -885,6 +888,7 @@ enum Qwen3VLVision {
             }
 
             hiddenStates = merger(hiddenStates)
+            if evaluateEachLayerForComparison { eval(hiddenStates) }
             return (hiddenStates, deepstackOutputs)
         }
 

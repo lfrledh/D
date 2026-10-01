@@ -463,6 +463,73 @@ final class Qwen35LayeredWeights {
 
 /// Shared narrow header rules used by the loader and the resource estimator.
 public enum Qwen35LayeredFileValidation {
+    /// Validate dimensions before constructors reach integer conversions,
+    /// divisions or preconditions. This is a dense Qwen loader, not an MoE route.
+    public static func configuration(_ data: Data) throws -> Qwen35Configuration {
+        try uniqueJSON(data)
+        let c = try JSONDecoder().decode(Qwen35Configuration.self, from: data)
+        let t = c.textConfiguration, v = c.visionConfiguration
+        func positive(_ values: Int...) -> Bool {
+            values.allSatisfy { $0 > 0 && $0 <= Int(Int32.max) }
+        }
+        guard c.modelType == "qwen3_5",
+              positive(t.hiddenSize, t.hiddenLayers, t.intermediateSize, t.attentionHeads,
+                t.kvHeads, t.linearNumValueHeads, t.linearNumKeyHeads, t.linearKeyHeadDim,
+                t.linearValueHeadDim, t.linearConvKernelDim, t.vocabularySize,
+                t.maxPositionEmbeddings, t.fullAttentionInterval),
+              t.linearNumValueHeads % t.linearNumKeyHeads == 0,
+              t.attentionHeads % t.kvHeads == 0,
+              t.fullAttentionInterval <= t.hiddenLayers,
+              t.numExperts == 0, t.numExpertsPerTok == 0,
+              t.sharedExpertIntermediateSize == 0, t.moeIntermediateSize == 0,
+              t.rmsNormEps.isFinite, t.rmsNormEps > 0,
+              t.ropeTheta.isFinite, t.ropeTheta > 0,
+              t.partialRotaryFactor.isFinite, t.partialRotaryFactor > 0,
+              t.partialRotaryFactor <= 1,
+              positive(v.depth, v.hiddenSize, v.intermediateSize, v.outHiddenSize,
+                v.numHeads, v.patchSize, v.spatialMergeSize, v.temporalPatchSize,
+                v.numPositionEmbeddings, v.inChannels),
+              v.hiddenSize % v.numHeads == 0, (v.hiddenSize / v.numHeads) % 4 == 0,
+              v.outHiddenSize == t.hiddenSize, v.deepstackVisualIndexes.isEmpty else {
+            throw Qwen35LayeredWeights.Failure.invalid("invalid dense model dimensions or controls")
+        }
+        let head = t.headDim ?? (t.hiddenSize / t.attentionHeads)
+        guard positive(head), t.headDim != nil || t.hiddenSize % t.attentionHeads == 0 else {
+            throw Qwen35LayeredWeights.Failure.invalid("invalid attention head dimensions")
+        }
+        let rotary = Double(head) * Double(t.partialRotaryFactor)
+        guard rotary >= 2, rotary <= Double(head), rotary.rounded(.down) == rotary,
+              Int(rotary) % 2 == 0 else {
+            throw Qwen35LayeredWeights.Failure.invalid("invalid rotary dimensions")
+        }
+        let sections = t.ropeParameters?["mrope_section"]?.asInts() ?? [11, 11, 10]
+        guard sections.count == 3, sections.allSatisfy({ $0 > 0 && $0 <= head }),
+              sections.reduce(0, +) == Int(rotary) / 2 else {
+            throw Qwen35LayeredWeights.Failure.invalid("invalid multimodal rotary sections")
+        }
+        // Bound products used as individual MLX dimensions, not total model RAM.
+        let products = [[t.attentionHeads, head, 2], [t.kvHeads, head],
+            [t.linearNumKeyHeads, t.linearKeyHeadDim, 2],
+            [t.linearNumValueHeads, t.linearValueHeadDim],
+            [v.hiddenSize, v.spatialMergeSize, v.spatialMergeSize],
+            [v.inChannels, v.temporalPatchSize, v.patchSize, v.patchSize]]
+        for values in products {
+            var result = 1
+            for value in values {
+                let (next, overflow) = result.multipliedReportingOverflow(by: value)
+                guard !overflow, next <= Int(Int32.max) else {
+                    throw Qwen35LayeredWeights.Failure.invalid("model dimension product overflow")
+                }
+                result = next
+            }
+        }
+        let convolutionDimension = t.linearNumKeyHeads * t.linearKeyHeadDim * 2
+            + t.linearNumValueHeads * t.linearValueHeadDim
+        guard convolutionDimension <= Int(Int32.max) else {
+            throw Qwen35LayeredWeights.Failure.invalid("linear convolution dimension overflow")
+        }
+        return c
+    }
     public static func header(_ url: URL) throws -> (Data, UInt64) {
         try Qwen35LayeredWeights.readHeader(url)
     }

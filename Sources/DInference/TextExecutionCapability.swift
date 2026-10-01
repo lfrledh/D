@@ -46,7 +46,7 @@ public struct TextExecutionCapability: Codable, Equatable, Sendable {
         }
         if profile == Self.qwen2Profile &&
             (request.hasVisualInput || request.messages != nil || request.tools != nil ||
-             request.thinking != nil || request.seed != nil) {
+             request.thinking != nil || request.seed != nil || request.loadingStrategy == .ssdLayered) {
             throw InferenceFailure.invalidRequest("The selected text profile does not accept conversation, visual or Qwen controls.")
         }
         if profile == Self.qwen35VLMProfile {

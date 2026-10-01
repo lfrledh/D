@@ -371,7 +371,7 @@ public final class VLMModelFactory: GenericModelFactory {
                 guard baseConfig.modelType == "qwen3_5", baseConfig.perLayerQuantization == nil else {
                     throw Qwen35LayeredWeights.Failure.invalid("only unquantized Qwen3.5 supports layered loading")
                 }
-                let config = try JSONDecoder.json5().decode(Qwen35Configuration.self, from: configData)
+                let config = try Qwen35LayeredFileValidation.configuration(configData)
                 model = Qwen35(config, layered: true)
             } else {
                 model = try await typeRegistry.createModel(

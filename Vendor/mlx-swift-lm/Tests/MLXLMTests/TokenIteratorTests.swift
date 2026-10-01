@@ -1,3 +1,4 @@
+import Foundation
 import MLX
 import MLXLMCommon
 import MLXNN
@@ -23,6 +24,7 @@ private final class PreparedStateModel: Module, LanguageModel {
     }
 }
 
+@Suite(.serialized) struct IteratorBoundaryTests {
 @Test("TokenIterator carries prepare logits state into first decode")
 func preparedLogitsStateSurvivesFirstDecode() throws {
     let model = PreparedStateModel()
@@ -35,6 +37,7 @@ func preparedLogitsStateSurvivesFirstDecode() throws {
 private final class ThrowingFixedModel: Module, ThrowingLanguageModel {
     var failDecodeOnCall: Int?
     var decodeCalls = 0
+    var slowDecode = false
     func newCache(parameters: GenerateParameters?) -> [KVCache] { [] }
 
     func prepare(_ input: LMInput, cache: [KVCache], windowSize: Int?) throws -> PrepareResult {
@@ -52,6 +55,7 @@ private final class ThrowingFixedModel: Module, ThrowingLanguageModel {
     func callThrowing(_ input: LMInput.Text, cache: [KVCache]?,
                       state: LMOutput.State?) throws -> LMOutput {
         decodeCalls += 1
+        if slowDecode { Thread.sleep(forTimeInterval: 0.01) }
         if let failDecodeOnCall, decodeCalls == failDecodeOnCall {
             throw DecodeFixtureError.failed
         }
@@ -102,4 +106,24 @@ func throwingTokenStreamReportsDecodeFailure() async throws {
     task.cancel()
     await task.value
     #expect(model.decodeCalls == 2)
+}
+
+@Test("Cancellation during generation drains the producer")
+func throwingTokenStreamCancelsDuringDecode() async throws {
+    let model = ThrowingFixedModel()
+    model.slowDecode = true
+    let iterator = try TokenIterator(throwingInput: LMInput(tokens: MLXArray([[1, 2]])),
+        model: model, parameters: GenerateParameters(maxTokens: 10_000, temperature: 0))
+    let (stream, task) = generateThrowingTokenTask(promptTokenCount: 2,
+        modelConfiguration: ModelConfiguration(id: "synthetic"), tokenizer: TestTokenizer(), iterator: iterator)
+    var cancelled = false
+    do {
+        for try await event in stream {
+            if case .token = event, !cancelled { cancelled = true; task.cancel() }
+        }
+    } catch is CancellationError {} // Either a cancelled completion or propagated cancellation is valid.
+    await task.value
+    #expect(cancelled && task.isCancelled)
+    #expect(model.decodeCalls > 0 && model.decodeCalls < 10_000)
+}
 }
