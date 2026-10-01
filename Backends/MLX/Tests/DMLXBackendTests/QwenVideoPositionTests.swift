@@ -68,9 +68,15 @@ struct QwenVideoPositionTests {
         #expect(video.pixels.shape == [64, patchWidth])
         for (group, red) in [true, false, false, true].enumerated() {
             let start = group * 16 * patchWidth
-            #expect(pixels[start] == (red ? 1 : 0))
-            #expect(pixels[start + 2 * 2 * 16 * 16] == (red ? 0 : 1))
+            let r = pixels[start], b = pixels[start + 2 * 2 * 16 * 16]
+            #expect(red ? r > b : b > r)
         }
+        // CoreImage's sRGB resampling returns 0.99999994 for unit primaries.
+        // Verify all tensor elements of repeated/odd-padded groups exactly, not
+        // equality to an unprocessed RGB literal or a relaxed model tolerance.
+        let groupSize = 16 * patchWidth
+        #expect(Array(pixels[0..<groupSize]) == Array(pixels[3*groupSize..<4*groupSize]))
+        #expect(Array(pixels[groupSize..<2*groupSize]) == Array(pixels[2*groupSize..<3*groupSize]))
     }
 
     @Test func temporalRopeMatchesOfficialSplitGridReference() {
