@@ -14,6 +14,7 @@ public actor ModelLibrary {
         var recipeIdentity: String?
         var files: [String: FileProgress] = [:]
         var verifiedFiles: [String: ModelFileIdentity] = [:]
+        var verifiedDirectories: [String: ModelFileIdentity]?
         var verifiedRoot: ModelFileIdentity?
         var publicationRoot: ModelFileIdentity?
     }
@@ -296,12 +297,12 @@ public actor ModelLibrary {
         workers[id] = Task { [weak self] in
             guard let self else { return }
             do {
-                let files = try await self.entry(for: id).files
+                let entry = try await self.entry(for: id)
                 let directory = try ModelDirectory(candidate.url)
-                let job = Task.detached { try directory.verify(files) }
+                let job = Task.detached { try Self.verifyExternal(directory, entry: entry) }
                 let verified = try await withTaskCancellationHandler { try await job.value } onCancel: { job.cancel() }
                 try Task.checkCancellation()
-                await self.commitRebinding(id, scope: candidate, directory: directory, files: verified, previous: previous, previousScope: previousScope)
+                await self.commitRebinding(id, scope: candidate, directory: directory, tree: verified, previous: previous, previousScope: previousScope)
             } catch { await self.rollbackRebinding(id, previous: previous, scope: previousScope, error: error) }
         }
         await workers[id]?.value
@@ -312,10 +313,10 @@ public actor ModelLibrary {
     }
 
     private func commitRebinding(_ id: ModelID, scope: ModelScopedLocation, directory: ModelDirectory,
-                                 files: [String: ModelFileIdentity], previous: StoredRecord, previousScope: ModelScopedLocation?) {
+                                 tree: ModelRequiredTree, previous: StoredRecord, previousScope: ModelScopedLocation?) {
         externalScopes[id] = scope
         mutate(id) { $0.bookmark = scope.bookmark }
-        verified(id, directory: directory, files: files)
+        verified(id, directory: directory, files: tree.files, directories: tree.directories)
         do { try persist(); workers.removeValue(forKey: id) }
         catch { rollbackRebinding(id, previous: previous, scope: previousScope, error: error) }
     }
@@ -368,7 +369,8 @@ public actor ModelLibrary {
         let converter = wanPreparation
         let job = Task.detached {
             if ModelWanPreparation.supports(entry), let converter {
-                return try await ModelWanPreparation.prepare(source: source, entry: entry, parent: parent, name: name, converter: converter)
+                return try await ModelWanPreparation.prepare(source: source, entry: entry, parent: parent, name: name,
+                    externalRawProjection: original.record.storage == .external && ModelWanPreparation.allowsExternalRawProjection(entry), converter: converter)
             }
             return try ModelVideoPreparation.prepare(source: source, entry: entry, parent: parent, name: name, checkpoint: checkpoint)
         }
@@ -504,20 +506,26 @@ public actor ModelLibrary {
         workers[id] = Task { [weak self] in
             guard let self else { return }
             do {
-                let files = try await self.entry(for: id).files
+                let entry = try await self.entry(for: id)
                 let directory = try ModelDirectory(scope.url)
-                let job = Task.detached { try directory.verify(files) }
+                let job = Task.detached { try Self.verifyExternal(directory, entry: entry) }
                 let verified = try await withTaskCancellationHandler { try await job.value } onCancel: { job.cancel() }
                 try Task.checkCancellation()
-                await self.verified(id, directory: directory, files: verified)
+                await self.verified(id, directory: directory, files: verified.files, directories: verified.directories)
                 await self.workerEnded(id, error: nil)
             } catch { await self.workerEnded(id, error: error) }
         }
     }
-    private func verified(_ id: ModelID, directory: ModelDirectory, files: [String: ModelFileIdentity]) {
+    private static func verifyExternal(_ directory: ModelDirectory, entry: ModelCatalogEntry) throws -> ModelRequiredTree {
+        if ModelWanPreparation.allowsExternalRawProjection(entry) { return try directory.verifyRequired(entry.files) }
+        return ModelRequiredTree(files: try directory.verify(entry.files), directories: [:])
+    }
+
+    private func verified(_ id: ModelID, directory: ModelDirectory, files: [String: ModelFileIdentity],
+                          directories: [String: ModelFileIdentity]? = nil) {
         let needsPreparation = (try? entry(for: id).preparation) == .required
         mutate(id) {
-            $0.verifiedRoot = directory.identity; $0.verifiedFiles = files
+            $0.verifiedRoot = directory.identity; $0.verifiedFiles = files; $0.verifiedDirectories = directories
             $0.record.directory = directory.url; $0.record.downloadedBytes = $0.record.totalBytes
             $0.record.state = needsPreparation ? .preparationRequired : .installed
             $0.record.error = nil; $0.record.availability = .available
@@ -704,9 +712,23 @@ public actor ModelLibrary {
             guard let scope = externalScopes[stored.record.id] else { throw ModelLibraryError.unavailable("模型目录需要重新授权。") }
             directory = try ModelDirectory(scope.url)
         }
-        guard let identity = stored.verifiedRoot, identity.sameNode(directory.identity),
-              try directory.entries(expectedPaths: Set(stored.verifiedFiles.keys)) == stored.verifiedFiles else {
+        guard let identity = stored.verifiedRoot, identity.sameNode(directory.identity) else {
             throw ModelLibraryError.integrity("模型文件已改变或位置不符，请重新校验。")
+        }
+        let entry = try entry(for: stored.record.id)
+        if stored.record.storage == .external && ModelWanPreparation.allowsExternalRawProjection(entry) {
+            let current = try directory.requiredTree(paths: Set(entry.files.map(\.path)))
+            // Earlier strict registrations of the official three root files had
+            // no intermediate directory identities to persist.
+            let directories = stored.verifiedDirectories ?? (current.directories.isEmpty ? [:] : nil)
+            guard let directories,
+                  current == ModelRequiredTree(files: stored.verifiedFiles, directories: directories) else {
+                throw ModelLibraryError.integrity("Wan 原始仓必要文件或目录已改变，请重新校验。")
+            }
+        } else {
+            guard try directory.entries(expectedPaths: Set(stored.verifiedFiles.keys)) == stored.verifiedFiles else {
+                throw ModelLibraryError.integrity("模型文件已改变或位置不符，请重新校验。")
+            }
         }
         return directory
     }

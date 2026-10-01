@@ -18,6 +18,20 @@ struct ModelFileIdentity: Codable, Equatable, Sendable {
     func sameNode(_ other: Self) -> Bool { device == other.device && inode == other.inode }
 }
 
+/// Only explicitly named paths are inspected. Directory metadata may change when
+/// unrelated files are added; the directory node itself must remain the same.
+struct ModelRequiredTree: Sendable, Equatable {
+    let files: [String: ModelFileIdentity]
+    let directories: [String: ModelFileIdentity]
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.files == rhs.files && Set(lhs.directories.keys) == Set(rhs.directories.keys) &&
+            lhs.directories.allSatisfy { path, identity in
+                rhs.directories[path].map { identity.sameNode($0) } == true
+            }
+    }
+}
+
 /// Immutable descriptor ownership; all operations remain anchored even during directory replacement.
 final class ModelDirectory: Sendable {
     let url: URL
@@ -203,10 +217,47 @@ final class ModelDirectory: Sendable {
         return result
     }
 
+    func requiredTree(paths: Set<String>) throws -> ModelRequiredTree {
+        try validateLocation()
+        var directories = Set<String>()
+        for path in paths {
+            let parts = try Self.parts(path)
+            for count in 1..<parts.count { directories.insert(parts.prefix(count).joined(separator: "/")) }
+        }
+        var directoryIdentities: [String: ModelFileIdentity] = [:]
+        for path in directories.sorted() {
+            let fd = try openDirectory(path)
+            do { directoryIdentities[path] = try Self.identity(fd, regular: false) }
+            catch { Darwin.close(fd); throw error }
+            Darwin.close(fd)
+        }
+        var fileIdentities: [String: ModelFileIdentity] = [:]
+        for path in paths.sorted() { fileIdentities[path] = try fileIdentity(path) }
+        try validateLocation()
+        return ModelRequiredTree(files: fileIdentities, directories: directoryIdentities)
+    }
+
+    func verifyRequired(_ files: [ModelFile]) throws -> ModelRequiredTree {
+        let paths = Set(files.map(\.path))
+        guard paths.count == files.count else { throw ModelLibraryError.integrity("模型必要路径重复。") }
+        let before = try requiredTree(paths: paths)
+        try verifyDigests(files, before: before.files)
+        guard try requiredTree(paths: paths) == before else {
+            throw ModelLibraryError.integrity("模型必要目录或文件在校验期间发生变化。")
+        }
+        return before
+    }
+
     func verify(_ files: [ModelFile]) throws -> [String: ModelFileIdentity] {
         let expected = Set(files.map(\.path))
         let before = try entries(expectedPaths: expected)
         guard Set(before.keys) == expected else { throw ModelLibraryError.integrity("模型目录包含清单外文件，或缺少必要文件。") }
+        try verifyDigests(files, before: before)
+        guard try entries(expectedPaths: expected) == before else { throw ModelLibraryError.integrity("模型目录在校验期间发生变化。") }
+        return before
+    }
+
+    private func verifyDigests(_ files: [ModelFile], before: [String: ModelFileIdentity]) throws {
         for file in files {
             try Task.checkCancellation()
             let fd = try openFile(file.path); defer { Darwin.close(fd) }
@@ -237,8 +288,6 @@ final class ModelDirectory: Sendable {
                 throw ModelLibraryError.integrity("\(file.digestAlgorithm == .sha256 ? "SHA-256" : "Git blob SHA-1") 校验失败或文件发生变化：\(file.path)")
             }
         }
-        guard try entries(expectedPaths: expected) == before else { throw ModelLibraryError.integrity("模型目录在校验期间发生变化。") }
-        return before
     }
 
     func removeKnownFiles(_ known: [String: ModelFileIdentity]) throws {
