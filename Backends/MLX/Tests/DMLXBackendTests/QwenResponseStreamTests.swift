@@ -95,7 +95,10 @@ struct QwenResponseStreamTests {
         try late.token(open)
         try late.text("secret")
         try late.token(close)
-        #expect(try late.finish().finishReason == .incomplete)
+        let lateResponse = try late.finish()
+        #expect(lateResponse.finishReason == .incomplete)
+        #expect(lateResponse.reasoningText == "secret")
+        #expect(lateResponse.rawText == "preview<think>secret</think>")
         #expect(late.output == "preview")
 
         var duplicate = Feed(thinking: true)

@@ -27,9 +27,6 @@ struct QwenResponseStream {
     }
 
     mutating func accept(_ token: Int, decode: ([Int]) -> String) throws -> String? {
-        // Once the channel order is invalid, no later token can make its body safe
-        // to publish. The caller still retains every token for the raw response.
-        guard !malformedChannel else { return nil }
         if token == openID {
             if !inReasoning && !finalTokens.isEmpty { malformedChannel = true }
             inReasoning = true
@@ -47,6 +44,9 @@ struct QwenResponseStream {
             return nil
         }
         finalTokens.append(token)
+        // Retain channel data for the final structured response, but never
+        // publish additional body previews after a malformed channel sequence.
+        guard !malformedChannel else { return nil }
         guard let delta = try decoder.consume(decode(finalTokens)) else { return nil }
         return scan(delta)
     }
