@@ -28,7 +28,7 @@ private final class PreparedStateModel: Module, LanguageModel {
 @Test("TokenIterator carries prepare logits state into first decode")
 func preparedLogitsStateSurvivesFirstDecode() throws {
     let model = PreparedStateModel()
-    var iterator = try TokenIterator(input: LMInput(tokens: MLXArray([[1]])),
+    var iterator = try TokenIterator(input: LMInput(tokens: MLXArray([1]).reshaped(1, -1)),
         model: model, parameters: GenerateParameters(maxTokens: 2, temperature: 0))
     _ = iterator.next()
     #expect(model.observed == 37)
@@ -67,7 +67,7 @@ private enum DecodeFixtureError: Error { case failed }
 
 @Test("Throwing raw token stream yields tokens and a length completion")
 func throwingTokenStreamUsesRawHandler() async throws {
-    let iterator = try TokenIterator(throwingInput: LMInput(tokens: MLXArray([[1]])),
+    let iterator = try TokenIterator(throwingInput: LMInput(tokens: MLXArray([1]).reshaped(1, -1)),
         model: ThrowingFixedModel(), parameters: GenerateParameters(maxTokens: 2, temperature: 0))
     let (stream, task) = generateThrowingTokenTask(promptTokenCount: 1,
         modelConfiguration: ModelConfiguration(id: "synthetic"), tokenizer: TestTokenizer(),
@@ -89,7 +89,7 @@ func throwingTokenStreamUsesRawHandler() async throws {
 func throwingTokenStreamReportsDecodeFailure() async throws {
     let model = ThrowingFixedModel()
     model.failDecodeOnCall = 2
-    let iterator = try TokenIterator(throwingInput: LMInput(tokens: MLXArray([[1, 2]])),
+    let iterator = try TokenIterator(throwingInput: LMInput(tokens: MLXArray([1, 2]).reshaped(1, -1)),
         model: model, parameters: GenerateParameters(maxTokens: 3, temperature: 0))
     let (stream, task) = generateThrowingTokenTask(promptTokenCount: 2,
         modelConfiguration: ModelConfiguration(id: "synthetic"), tokenizer: TestTokenizer(),
@@ -112,7 +112,7 @@ func throwingTokenStreamReportsDecodeFailure() async throws {
 func throwingTokenStreamCancelsDuringDecode() async throws {
     let model = ThrowingFixedModel()
     model.slowDecode = true
-    let iterator = try TokenIterator(throwingInput: LMInput(tokens: MLXArray([[1, 2]])),
+    let iterator = try TokenIterator(throwingInput: LMInput(tokens: MLXArray([1, 2]).reshaped(1, -1)),
         model: model, parameters: GenerateParameters(maxTokens: 10_000, temperature: 0))
     let (stream, task) = generateThrowingTokenTask(promptTokenCount: 2,
         modelConfiguration: ModelConfiguration(id: "synthetic"), tokenizer: TestTokenizer(), iterator: iterator)

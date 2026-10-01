@@ -13,8 +13,21 @@ extension MLXHardwareTests {
 @Suite("Fixed Qwen VLM real GPU responses", .serialized,
        .enabled(if: ProcessInfo.processInfo.environment["D_TEST_QWEN_VLM_DIR"] != nil))
 struct QwenVLMRealTests {
-    @Test(.timeLimit(.minutes(5))) func textAndOrderedImagesThroughRuntime() async throws {
+    private actor Trace {
+        var events: [MLXLifecycleEvent] = []
+        func append(_ value: MLXLifecycleEvent) { events.append(value) }
+        func forRun(_ id: UUID) -> [MLXLifecycleEvent] { events.filter { $0.runID == id } }
+    }
+    @Test(.timeLimit(.minutes(720))) func textAndOrderedImagesThroughRuntime() async throws {
         let env = ProcessInfo.processInfo.environment
+        let strategy: TextLoadingStrategy?
+        if let value = env["D_TEST_QWEN_LOADING"] { strategy = try #require(TextLoadingStrategy(rawValue: value)) }
+        else { strategy = nil }
+        let revision = strategy == .ssdLayered
+            ? try #require(env["D_TEST_QWEN_REVISION"])
+            : env["D_TEST_QWEN_REVISION"] ?? "8b2b98c00a6b4d291155e4890773ca8f769aee53"
+        let trace = Trace()
+        let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         let model = URL(fileURLWithPath: try #require(env["D_TEST_QWEN_VLM_DIR"]))
         let root = URL(fileURLWithPath: try #require(env["D_TEST_TEMP_DIR"]))
             .appendingPathComponent("qwen-real-" + UUID().uuidString, isDirectory: true)
@@ -22,7 +35,7 @@ struct QwenVLMRealTests {
         let artifacts = root.appendingPathComponent("snapshots", isDirectory: true)
         try FileManager.default.createDirectory(at: artifacts, withIntermediateDirectories: false)
         let backend = try MLXQwenVLMBackend(configuration: .init(artifactDirectory: artifacts,
-            maximumPromptTokens: 4096, maximumOutputTokens: 256))
+            maximumPromptTokens: 4096, maximumOutputTokens: 256), observer: { await trace.append($0) })
         let runtime = try InferenceRuntime(backends: [backend], configuration: try RuntimeConfiguration(memoryBudgetBytes: 15 * 1024 * 1024 * 1024))
         var images: [TextImageReference] = []
         for (index, component) in [UInt8(0), UInt8(255)].enumerated() {
@@ -41,16 +54,38 @@ struct QwenVLMRealTests {
                 contentSHA256: SHA256.hash(data: data as Data).map { String(format: "%02x", $0) }.joined()))
         }
         do {
+            if strategy == .ssdLayered {
+                let request = InferenceRequest(model: .init(directory: model, revision: revision), input: .text(.init(
+                    prompt: "Write a detailed poem in twelve long stanzas about the changing seasons.", maxTokens: 256,
+                    temperature: 0, execution: .init(profile: TextExecutionCapability.qwen35VLMProfile, maximumPromptTokens: 1024),
+                    thinking: .init(enableThinking: false), seed: 42, loadingStrategy: strategy)))
+                let start = Date(), run = try await runtime.submit(request, backendID: backend.descriptor.id)
+                var cancelled = false
+                do {
+                    for try await output in run.events {
+                        if case .textDelta = output, !cancelled { cancelled = true; await run.cancel() }
+                    }
+                } catch { if !cancelled { throw error } }
+                let outcome = await run.outcome(), state = await runtime.snapshot()
+                #expect(cancelled && outcome == .cancelled)
+                #expect(state.activeRunID == nil && state.reservedBytes == 0)
+                let lifecycle = await trace.forRun(request.id)
+                #expect(lifecycle.last?.phase == .released)
+                #expect(lifecycle.last?.memory.activeBytes == 0 && lifecycle.last?.memory.cacheBytes == 0)
+                try encoder.encode(lifecycle).write(to: root.appendingPathComponent("cancel-lifecycle.json"), options: .withoutOverwriting)
+                try JSONSerialization.data(withJSONObject: ["outcome": String(describing: outcome), "seconds": Date().timeIntervalSince(start), "cancelRequested": cancelled], options: [.prettyPrinted, .sortedKeys]).write(to: root.appendingPathComponent("cancel-run.json"), options: .withoutOverwriting)
+                print("D_QWEN_REAL cancelled and released", root.path)
+            }
             var requests = [[], images].map { inputs in TextRequest(prompt: inputs.isEmpty ? "Return only this JSON object, no explanation: {\"answer\":42,\"ok\":true}" : "Compare the two images in their order. Answer only first or second: which is brighter?",
                     maxTokens: 256, temperature: 0,
                     execution: .init(profile: TextExecutionCapability.qwen35VLMProfile, maximumPromptTokens: 1024),
-                    images: inputs.isEmpty ? nil : inputs, thinking: .init(enableThinking: false), seed: 42) }
+                    images: inputs.isEmpty ? nil : inputs, thinking: .init(enableThinking: false), seed: 42, loadingStrategy: strategy) }
             if let videoPath = env["D_TEST_QWEN_VIDEO_FILE"] {
                 let url = URL(fileURLWithPath: videoPath), bytes = try Data(contentsOf: url)
                 let duration = try await AVURLAsset(url: url).load(.duration).seconds
                 requests.append(TextRequest(prompt: "Describe this short video briefly.", maxTokens: 256, temperature: 0,
                     execution: .init(profile: TextExecutionCapability.qwen35VLMProfile, maximumPromptTokens: 4096),
-                    video: .init(url: url, byteCount: UInt64(bytes.count), contentSHA256: SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined(), durationSeconds: duration), thinking: .init(enableThinking: false), seed: 42))
+                    video: .init(url: url, byteCount: UInt64(bytes.count), contentSHA256: SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined(), durationSeconds: duration), thinking: .init(enableThinking: false), seed: 42, loadingStrategy: strategy))
             }
             let tool = TextToolDefinition(name: "read_number", description: "Read a stored integer", parameters: [
                 "type": .string("object"), "properties": .object([:]), "required": .array([])])
@@ -62,12 +97,19 @@ struct QwenVLMRealTests {
                     .init(role: .user, parts: [.text("Read the stored number and add one.")]),
                     .init(role: .assistant, parts: [], toolCalls: [.init(id: "call_0", name: "read_number", arguments: [:])]),
                     .init(role: .tool, parts: [.text("41")], toolCallID: "call_0")
-                ], tools: [tool], thinking: .init(enableThinking: false), seed: 42))
+                ], tools: [tool], thinking: .init(enableThinking: false), seed: 42, loadingStrategy: strategy))
             for (index, input) in requests.enumerated() {
-                let request = InferenceRequest(model: .init(directory: model, revision: "8b2b98c00a6b4d291155e4890773ca8f769aee53"), input: .text(input))
-                let run = try await runtime.submit(request, backendID: backend.descriptor.id)
-                var text = ""
-                for try await output in run.events { if case .textDelta(let part) = output { text += part } }
+                let request = InferenceRequest(model: .init(directory: model, revision: revision), input: .text(input))
+                let estimate = try await backend.estimate(request)
+                try encoder.encode(request).write(to: root.appendingPathComponent("request-\(index).json"), options: .withoutOverwriting)
+                try encoder.encode(estimate).write(to: root.appendingPathComponent("estimate-\(index).json"), options: .withoutOverwriting)
+                let start = Date(), run = try await runtime.submit(request, backendID: backend.descriptor.id)
+                print("D_QWEN_REAL started", index, root.path)
+                var text = "", deltas = 0
+                for try await output in run.events { if case .textDelta(let part) = output {
+                    text += part; deltas += 1
+                    if deltas == 1 || deltas % 16 == 0 { print("D_QWEN_REAL progress", index, deltas) }
+                } }
                 guard case .completed(let result) = await run.outcome() else { Issue.record("Qwen real run did not complete"); throw InferenceFailure.backendFailed("Qwen real run failed") }
                 let response = try #require(result.textResponse)
                 let final = try #require(response.finalText)
@@ -84,8 +126,15 @@ struct QwenVLMRealTests {
                 } else { #expect(final.split(whereSeparator: \.isWhitespace).count >= 3) }
                 #expect(result.metadata["imageCount"] == String(input.images?.count ?? 0))
                 #expect(result.metadata["modelRevision"] == request.model.revision)
-                let evidence = try JSONSerialization.data(withJSONObject: ["metadata": result.metadata, "text": text, "response": try JSONSerialization.jsonObject(with: JSONEncoder().encode(response))], options: [.prettyPrinted, .sortedKeys])
+                let lifecycle = await trace.forRun(request.id)
+                try encoder.encode(lifecycle).write(to: root.appendingPathComponent("lifecycle-\(index).json"), options: .withoutOverwriting)
+                let state = await runtime.snapshot()
+                #expect(state.activeRunID == nil && state.reservedBytes == 0)
+                #expect(lifecycle.last?.phase == .released)
+                #expect(lifecycle.last?.memory.activeBytes == 0 && lifecycle.last?.memory.cacheBytes == 0)
+                let evidence = try JSONSerialization.data(withJSONObject: ["seconds": Date().timeIntervalSince(start), "loadingStrategy": strategy?.rawValue ?? "resident", "metadata": result.metadata, "text": text, "response": try JSONSerialization.jsonObject(with: JSONEncoder().encode(response))], options: [.prettyPrinted, .sortedKeys])
                 try evidence.write(to: root.appendingPathComponent("result-\(index).json"), options: .withoutOverwriting)
+                print("D_QWEN_REAL complete", index, Date().timeIntervalSince(start))
                 for image in images {
                     #expect(SHA256.hash(data: try Data(contentsOf: image.url)).map { String(format: "%02x", $0) }.joined() == image.contentSHA256)
                 }

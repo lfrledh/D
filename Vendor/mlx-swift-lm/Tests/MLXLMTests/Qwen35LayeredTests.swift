@@ -144,7 +144,7 @@ func qwenLayeredMatchesResident() throws {
     #expect(fixture.layered.loraLayers.isEmpty)
     #expect(!fixture.layered.layeredVisionIsResident)
     // Same two-token chunks and per-layer materialization on both paths.
-    let input = LMInput(tokens: MLXArray([[3, 4, 5, 6, 7]]))
+    let input = LMInput(tokens: MLXArray([3, 4, 5, 6, 7]).reshaped(1, -1))
     let residentCache = fixture.resident.newCache(parameters: nil)
     let layeredCache = fixture.layered.newCache(parameters: nil)
     var residentSteps: [PrefillStep] = []
@@ -184,7 +184,7 @@ func qwenLayeredReportsLayerIO() throws {
     let cache = fixture.layered.newCache(parameters: nil)
     #expect(throws: (any Error).self) {
         _ = try fixture.layered.prepareThrowing(
-            LMInput(tokens: MLXArray([[3, 4, 5]])), cache: cache, windowSize: 2)
+            LMInput(tokens: MLXArray([3, 4, 5]).reshaped(1, -1)), cache: cache, windowSize: 2)
     }
 }
 
@@ -193,8 +193,10 @@ func qwenLayeredKeepsMergedVisualState() throws {
     let fixture = try TinyQwenFixture.make()
     defer { try? FileManager.default.removeItem(at: fixture.directory) }
     let imageFrame = THW(1, 2, 2), videoFrame = THW(2, 2, 2)
+    let imageTokens: [Int32] = [2, 59] + Array(repeating: 60, count: 4)
+    let videoTokens: [Int32] = [3, 59] + Array(repeating: 61, count: 8) + [4]
     let input = LMInput(
-        text: .init(tokens: MLXArray([[2, 59] + Array(repeating: Int32(60), count: 4) + [3, 59] + Array(repeating: Int32(61), count: 8) + [4]])),
+        text: .init(tokens: MLXArray(imageTokens + videoTokens).reshaped(1, -1)),
         image: .init(pixels: MLXArray.zeros([4, 12]), frames: [imageFrame]),
         video: .init(pixels: MLXArray.ones([8, 12]), frames: [videoFrame]))
     let residentCache = fixture.resident.newCache(parameters: nil)
@@ -225,7 +227,7 @@ func qwenLayeredKeepsMergedVisualState() throws {
 func qwenLayeredSanitizesOriginalLayout() throws {
     let fixture = try TinyQwenFixture.make(originalLayout: true)
     defer { try? FileManager.default.removeItem(at: fixture.directory) }
-    let input = LMInput(tokens: MLXArray([[3]]))
+    let input = LMInput(tokens: MLXArray([3]).reshaped(1, -1))
     let resident = try output(fixture.resident.prepare(input,
         cache: fixture.resident.newCache(parameters: nil), windowSize: 1))
     let layered = try output(fixture.layered.prepareThrowing(input,
