@@ -94,12 +94,15 @@ enum QwenLayeredResourceEstimate {
         guard byLayer.count == layers, let active = byLayer.values.max() else {
             throw InferenceFailure.invalidRequest("Incomplete Qwen3.5 decoder weights.")
         }
-        let kvPerToken = product(fullLayers, 2, kvHeads, headDim, 2)
+        // Original FP32 linear controls can promote subsequent activations,
+        // including full-attention KV and convolution state. Never estimate
+        // these as BF16 merely because most stored weights are BF16.
+        let kvPerToken = product(fullLayers, 2, kvHeads, headDim, 4)
         let recurrent = product(linearLayers, valueHeads, valueDim, keyDim, 4)
-        let conv = multiplying(product(linearLayers, convKernel - 1, 2),
+        let conv = multiplying(product(linearLayers, convKernel - 1, 4),
             adding(product(2, keyHeads, keyDim), product(valueHeads, valueDim)))
         let hidden = UInt64(inventory.size == "27B" ? 5120 : 4096)
-        let promptWorkspace = adding(multiplying(tokens, hidden * 2), multiplying(512 * 16, hidden))
+        let promptWorkspace = adding(multiplying(tokens, hidden * 4), multiplying(512 * 32, hidden))
         // Chunked prefill preserves the resident output projection geometry.
         // Original mixed-precision controls can promote its result to FP32.
         let projection = product(512, modelConfiguration.textConfiguration.vocabularySize, 4)
