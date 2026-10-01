@@ -2,6 +2,8 @@ import CryptoKit
 import Darwin
 import DInference
 import Foundation
+import Flux2
+import MLX
 
 /// Admission reads metadata and file identities, never MLX weights or network data.
 /// Full verification is a separate, cancellable step before any model initialization.
@@ -102,6 +104,9 @@ struct LocalImageModelInventory: Sendable {
         }
         let resolvedCapability = try profile.resolvedCapability(for: image)
         let estimatedPeakBytes = try resolvedCapability.estimatedPeakBytes(for: image)
+        guard image.loadingStrategy != .ssdLayered || manifest.revision == fullRevision else {
+            throw InferenceFailure.invalidRequest("SSD layered image loading requires the original pinned Klein BF16 installation.")
+        }
         guard image.prompt.utf8.count <= 1_048_576,
               !image.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw InferenceFailure.invalidRequest("Image prompt must be nonempty and no larger than 1 MiB of UTF-8.")
@@ -132,11 +137,198 @@ struct LocalImageModelInventory: Sendable {
                 throw InferenceFailure.invalidRequest("Image model location changed during inspection.")
             }
         }
-        let weightBytes = manifest.files.filter { $0.path.hasSuffix(".safetensors") }.reduce(UInt64(0)) { $0 + $1.size }
-        let peak = manifest.revision == fullRevision ? max(estimatedPeakBytes, weightBytes + 8 * 1024 * 1024 * 1024) : estimatedPeakBytes
+        let weightBytes = try manifest.files.filter { $0.path.hasSuffix(".safetensors") }.reduce(UInt64(0)) { total, file in
+            let (next, overflow) = total.addingReportingOverflow(file.size)
+            guard !overflow else { throw InferenceFailure.invalidRequest("Image weight size exceeds UInt64 capacity.") }
+            return next
+        }
+        let peak: UInt64
+        if image.loadingStrategy == .ssdLayered {
+            let stage = try layeredStageWeightBytes(directory: directory, manifest: manifest,
+                                                    identities: identities)
+            peak = try layeredPeak(stageBytes: stage.bytes, transformerWidth: stage.transformerWidth,
+                                   textWidth: stage.textWidth, image: image,
+                                   textTokens: resolvedCapability.maximumTextTokens)
+        } else if manifest.revision == fullRevision {
+            let (resident, overflow) = weightBytes.addingReportingOverflow(8 * 1024 * 1024 * 1024)
+            guard !overflow else { throw InferenceFailure.invalidRequest("Image estimate exceeds UInt64 capacity.") }
+            peak = max(estimatedPeakBytes, resident)
+        } else {
+            peak = estimatedPeakBytes
+        }
         return Self(directory: directory, estimatedPeakBytes: peak,
                     weightBytes: weightBytes, executionProfile: resolvedCapability.profile,
                     manifest: manifest, identities: identities)
+    }
+
+    /// Safetensors headers provide exact stored BF16 tensor bytes without loading arrays.
+    /// A stage retains its shared weights and at most one decoder/transformer block.
+    private static func layeredStageWeightBytes(directory: URL, manifest: Manifest,
+                                                identities: [String: FileIdentity]) throws ->
+        (bytes: UInt64, transformerWidth: UInt64, textWidth: UInt64) {
+        guard manifest.revision == fullRevision else {
+            throw InferenceFailure.invalidRequest("Layered Klein loading requires original BF16 weights.")
+        }
+        var textBase: UInt64 = 0
+        var transformerBase: UInt64 = 0
+        var vae: UInt64 = 0
+        var vaeBF16Count = 0
+        var vaeScalarCount = 0
+        var textBlocks: [Int: UInt64] = [:]
+        var doubleBlocks: [Int: UInt64] = [:]
+        var singleBlocks: [Int: UInt64] = [:]
+        func add(_ value: UInt64, to total: inout UInt64) throws {
+            let (sum, overflow) = total.addingReportingOverflow(value)
+            guard !overflow else { throw InferenceFailure.invalidRequest("Image tensor sizes exceed UInt64 capacity.") }
+            total = sum
+        }
+        func blockIndex(_ name: String, prefix: String) -> Int? {
+            guard name.hasPrefix(prefix) else { return nil }
+            return Int(name.dropFirst(prefix.count).split(separator: ".", maxSplits: 1).first ?? "")
+        }
+        for file in manifest.files where file.path.hasSuffix(".safetensors") {
+            try Task.checkCancellation()
+            // The header is read before the full digest. Match the admitted file
+            // identity around each bounded parse, including path replacement.
+            try withRoot(directory) { root in
+                guard try snapshot(root: root, manifest: manifest) == identities else {
+                    throw InferenceFailure.invalidRequest("Image model changed before layered header inspection.")
+                }
+            }
+            let reader: SafeTensorsReader
+            do { reader = try SafeTensorsReader(fileURL: directory.appendingPathComponent(file.path)) }
+            catch is CancellationError { throw CancellationError() }
+            catch { throw InferenceFailure.invalidRequest("Invalid layered safetensors header: \(file.path): \(error)") }
+            let metadata = reader.allMetadata()
+            let firstDataOffset = metadata.map(\.dataOffset).min() ?? 0
+            for tensor in metadata {
+                guard validLayeredTensor(tensor, component: file.path,
+                                         firstDataOffset: firstDataOffset) else {
+                    throw InferenceFailure.invalidRequest("Layered Klein requires original BF16 tensors: \(file.path)/\(tensor.name)")
+                }
+                let bytes = UInt64(tensor.byteCount)
+                if file.path.hasPrefix("text_encoder/") {
+                    if let index = blockIndex(tensor.name, prefix: "model.layers.") {
+                        var current = textBlocks[index, default: 0]
+                        try add(bytes, to: &current)
+                        textBlocks[index] = current
+                    } else { try add(bytes, to: &textBase) }
+                } else if file.path.hasPrefix("transformer/") {
+                    if let index = blockIndex(tensor.name, prefix: "transformer_blocks.") {
+                        var current = doubleBlocks[index, default: 0]
+                        try add(bytes, to: &current)
+                        doubleBlocks[index] = current
+                    } else if let index = blockIndex(tensor.name, prefix: "single_transformer_blocks.") {
+                        var current = singleBlocks[index, default: 0]
+                        try add(bytes, to: &current)
+                        singleBlocks[index] = current
+                    } else { try add(bytes, to: &transformerBase) }
+                } else if file.path.hasPrefix("vae/") {
+                    if tensor.dtype == .bfloat16 { vaeBF16Count += 1 }
+                    else { vaeScalarCount += 1 }
+                    try add(bytes, to: &vae)
+                }
+            }
+            try withRoot(directory) { root in
+                guard try snapshot(root: root, manifest: manifest) == identities else {
+                    throw InferenceFailure.invalidRequest("Image model changed during layered header inspection.")
+                }
+            }
+        }
+        let textConfig = try JSONDecoder().decode(Flux2Qwen3Configuration.self,
+            from: Data(contentsOf: directory.appendingPathComponent("text_encoder/config.json")))
+        let transformerConfig = try JSONDecoder().decode(Flux2TransformerConfiguration.self,
+            from: Data(contentsOf: directory.appendingPathComponent("transformer/config.json")))
+        try withRoot(directory) { root in
+            guard try snapshot(root: root, manifest: manifest) == identities else {
+                throw InferenceFailure.invalidRequest("Image model changed during layered config inspection.")
+            }
+        }
+        let (transformerWidth, widthOverflow) = transformerConfig.numAttentionHeads
+            .multipliedReportingOverflow(by: transformerConfig.attentionHeadDim)
+        guard textConfig.hiddenLayers > 0, transformerConfig.numLayers > 0,
+              transformerConfig.numSingleLayers > 0,
+              textConfig.hiddenSize > 0, transformerConfig.numAttentionHeads > 0,
+              transformerConfig.attentionHeadDim > 0, !widthOverflow, transformerWidth > 0,
+              Set(textBlocks.keys) == Set(0..<textConfig.hiddenLayers),
+              Set(doubleBlocks.keys) == Set(0..<transformerConfig.numLayers),
+              Set(singleBlocks.keys) == Set(0..<transformerConfig.numSingleLayers),
+              textBase > 0, transformerBase > 0, vae > 0,
+              vaeBF16Count == 250, vaeScalarCount == 1 else {
+            throw InferenceFailure.invalidRequest("Layered Klein weights do not cover every original block.")
+        }
+        guard let textMaximum = textBlocks.values.max(), let doubleMaximum = doubleBlocks.values.max(),
+              let singleMaximum = singleBlocks.values.max() else {
+            throw InferenceFailure.invalidRequest("Layered Klein block inventory is empty.")
+        }
+        let (textStage, textOverflow) = textBase.addingReportingOverflow(textMaximum)
+        let (doubleStage, doubleOverflow) = transformerBase.addingReportingOverflow(doubleMaximum)
+        let (singleStage, singleOverflow) = transformerBase.addingReportingOverflow(singleMaximum)
+        guard !textOverflow, !doubleOverflow, !singleOverflow else {
+            throw InferenceFailure.invalidRequest("Layered image stage size exceeds UInt64 capacity.")
+        }
+        return (max(textStage, doubleStage, singleStage, vae),
+                UInt64(transformerWidth), UInt64(textConfig.hiddenSize))
+    }
+
+    static func validLayeredTensor(_ tensor: SafeTensorMetadata, component: String,
+                                   firstDataOffset: Int) -> Bool {
+        if tensor.dtype == .bfloat16 { return tensor.byteCount > 0 }
+        // The pinned original VAE has one non-floating BatchNorm counter. It is
+        // an 8-byte scalar and must remain I64; no general dtype conversion.
+        return component == "vae/diffusion_pytorch_model.safetensors" &&
+            tensor.name == "bn.num_batches_tracked" && tensor.dtype == .int64 &&
+            tensor.shape.isEmpty && tensor.byteCount == 8 &&
+            tensor.dataOffset == firstDataOffset
+    }
+
+    private static func layeredPeak(stageBytes: UInt64, transformerWidth: UInt64,
+                                    textWidth: UInt64, image: ImageRequest,
+                                    textTokens: Int) throws -> UInt64 {
+        func product(_ values: UInt64...) throws -> UInt64 {
+            var result: UInt64 = 1
+            for value in values {
+                let (next, overflow) = result.multipliedReportingOverflow(by: value)
+                guard !overflow else { throw InferenceFailure.invalidRequest("Layered workspace exceeds UInt64 capacity.") }
+                result = next
+            }
+            return result
+        }
+        func sum(_ values: UInt64...) throws -> UInt64 {
+            var result: UInt64 = 0
+            for value in values {
+                let (next, overflow) = result.addingReportingOverflow(value)
+                guard !overflow else { throw InferenceFailure.invalidRequest("Layered workspace exceeds UInt64 capacity.") }
+                result = next
+            }
+            return result
+        }
+        func tokens(width: Int, height: Int) throws -> UInt64 {
+            // VAE downsamples by 8; 2x2 packing yields one token per 16x16 pixels.
+            try product(UInt64(width / 16), UInt64(height / 16))
+        }
+        var referenceTokens: UInt64 = 0
+        var referencePixels: UInt64 = 0
+        for reference in try image.resolvedReferences() {
+            try Task.checkCancellation()
+            referenceTokens = try sum(referenceTokens, tokens(width: reference.width, height: reference.height))
+            referencePixels = try sum(referencePixels, try product(UInt64(reference.width), UInt64(reference.height)))
+        }
+        let outputTokens = try tokens(width: image.width, height: image.height)
+        let spatialTokens = try sum(outputTokens, referenceTokens)
+        let allTokens = try sum(spatialTokens, UInt64(textTokens))
+        let outputPixels = try product(UInt64(image.width), UInt64(image.height))
+        // One loaded BF16 block may coexist with its source/read buffer and MLX
+        // evaluated buffers. Workspace covers Q/K/V, MLP and residual intermediates
+        // at 64 bytes per token/channel, a materialized attention matrix at 16
+        // bytes per token pair, text states/cache, and VAE/ref image intermediates
+        // at 64 bytes per pixel. These are conservative admission assumptions.
+        let weightCopies = try product(stageBytes, 2)
+        let activations = try product(allTokens, transformerWidth, 64)
+        let attention = try product(allTokens, allTokens, 16)
+        let textCache = try product(UInt64(textTokens), textWidth, 64)
+        let imageCache = try product(try sum(outputPixels, referencePixels), 64)
+        return try sum(weightCopies, activations, attention, textCache, imageCache)
     }
 
     private static func requireKleinProfile(_ profile: ImageExecutionProfile) throws {

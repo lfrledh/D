@@ -182,6 +182,7 @@ public actor MLXImageBackend: InferenceBackend {
             "guidanceScale": String(input.guidanceScale), "seed": String(input.seed),
             "textSequenceLength": "512", "promptTruncated": "false", "modelTimestepScale": "0.001",
             "weightBytes": String(inventory.weightBytes), "estimatedPeakBytes": String(inventory.estimatedPeakBytes),
+            "loadingStrategy": (input.loadingStrategy ?? .staged).rawValue,
             "pngBytes": String(data.count), "pngDecodedAndValidated": "true",
         ], uniquingKeysWith: { _, new in new })
         if let reference = references.first, references.count == 1 {
@@ -230,8 +231,12 @@ public actor MLXImageBackend: InferenceBackend {
             throw InferenceFailure.invalidRequest("Prompt uses \(count) tokens including the model template; maximum is \(maximum). Shorten the prompt.")
         }
         try await checkpoint(.loadingTextEncoder)
-        let model = try withRandomState(state) { try Flux2Qwen3TextEncoder.load(from: directory, dtype: .bfloat16) }
-        MLX.eval(model)
+        let layered = input.loadingStrategy == .ssdLayered
+        let model = try withRandomState(state) {
+            try layered ? Flux2Qwen3TextEncoder.loadLayered(from: directory, dtype: .bfloat16)
+                        : Flux2Qwen3TextEncoder.load(from: directory, dtype: .bfloat16)
+        }
+        if !layered { MLX.eval(model) }
         try await checkpoint(.textEncoderLoaded)
         let encoder = Flux2KleinPromptEncoder(textEncoder: model, hiddenStateLayers: [9, 18, 27])
         try await checkpoint(.encoding)
@@ -326,8 +331,12 @@ public actor MLXImageBackend: InferenceBackend {
                          state: MLXRandom.RandomState,
                          emit: @escaping @Sendable (InferenceOutput) async throws -> Void) async throws -> Denoised {
         try await checkpoint(.loadingTransformer)
-        let transformer = try withRandomState(state) { try Flux2Transformer2DModel.load(from: directory, dtype: .bfloat16) }
-        MLX.eval(transformer)
+        let layered = input.loadingStrategy == .ssdLayered
+        let transformer = try withRandomState(state) {
+            try layered ? Flux2Transformer2DModel.loadLayered(from: directory, dtype: .bfloat16)
+                        : Flux2Transformer2DModel.load(from: directory, dtype: .bfloat16)
+        }
+        if !layered { MLX.eval(transformer) }
         try await checkpoint(.transformerLoaded)
         let scheduler = try FlowMatchEulerDiscreteScheduler.load(from: directory)
         let prepared = try prepare(directory: directory, inChannels: transformer.configuration.inChannels,

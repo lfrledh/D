@@ -1,5 +1,7 @@
 import Foundation
 import MLX
+import Darwin
+import CoreFoundation
 
 public struct SafeTensorMetadata: Sendable {
   public let name: String
@@ -24,35 +26,73 @@ public enum SafeTensorsReaderError: Error {
   case invalidShape(name: String)
   case tensorNotFound(String)
   case unmappedData(URL)
+  case fileChanged(URL)
+  case truncatedData(URL)
 }
 
 public final class SafeTensorsReader {
   public let fileURL: URL
-  private let mappedData: Data
+  private let descriptor: Int32
+  private let identity: FileIdentity
   private let tensors: [String: SafeTensorMetadata]
   public let fileMetadata: [String: String]
 
-  public init(fileURL: URL) throws {
-    self.fileURL = fileURL
-    self.mappedData = try Data(contentsOf: fileURL, options: [.mappedIfSafe])
+  private struct FileIdentity: Equatable {
+    let device: dev_t
+    let inode: ino_t
+    let size: off_t
+    let modified: timespec
+    let changed: timespec
 
-    guard mappedData.count >= MemoryLayout<UInt64>.size else {
+    init(_ value: stat) {
+      device = value.st_dev
+      inode = value.st_ino
+      size = value.st_size
+      modified = value.st_mtimespec
+      changed = value.st_ctimespec
+    }
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+      lhs.device == rhs.device && lhs.inode == rhs.inode && lhs.size == rhs.size &&
+        lhs.modified.tv_sec == rhs.modified.tv_sec && lhs.modified.tv_nsec == rhs.modified.tv_nsec &&
+        lhs.changed.tv_sec == rhs.changed.tv_sec && lhs.changed.tv_nsec == rhs.changed.tv_nsec
+    }
+  }
+
+  deinit { Darwin.close(descriptor) }
+
+  public init(fileURL: URL) throws {
+    try Task.checkCancellation()
+    let fd = Darwin.open(fileURL.path, O_RDONLY | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK)
+    guard fd >= 0 else { throw SafeTensorsReaderError.fileChanged(fileURL) }
+    var keepDescriptor = false
+    defer { if !keepDescriptor { Darwin.close(fd) } }
+    var info = stat()
+    guard Darwin.fstat(fd, &info) == 0, info.st_mode & S_IFMT == S_IFREG,
+          info.st_size >= 0, info.st_size <= off_t(Int.max) else {
+      throw SafeTensorsReaderError.fileChanged(fileURL)
+    }
+    let original = FileIdentity(info)
+    guard info.st_size >= off_t(MemoryLayout<UInt64>.size) else {
       throw SafeTensorsReaderError.fileTooSmall(fileURL)
     }
-
-    let headerLength = mappedData.prefix(8).withUnsafeBytes { rawBuffer -> Int in
-      let value = rawBuffer.load(as: UInt64.self)
-      return Int(UInt64(littleEndian: value))
-    }
-
-    let headerStart = 8
-    let headerEnd = headerStart + headerLength
-    guard headerEnd <= mappedData.count else {
+    let lengthBytes = try Self.read(fd, offset: 0, count: 8, fileURL: fileURL)
+    let length = lengthBytes.enumerated().reduce(UInt64(0)) { $0 | (UInt64($1.element) << ($1.offset * 8)) }
+    // Safetensors caps JSON headers at 100 MB. Check before allocating or converting to Int.
+    guard length <= 100_000_000, length <= UInt64(info.st_size - 8) else {
       throw SafeTensorsReaderError.invalidHeaderLength(fileURL)
     }
-
-    let headerData = mappedData.subdata(in: headerStart..<headerEnd)
-    let headerJSON = try JSONSerialization.jsonObject(with: headerData, options: [])
+    let headerLength = Int(length)
+    let headerStart = 8
+    let headerEnd = headerStart + headerLength
+    let headerData = try Self.read(fd, offset: headerStart, count: headerLength, fileURL: fileURL)
+    guard Self.hasUniqueObjectKeys(headerData) else {
+      throw SafeTensorsReaderError.malformedHeader(fileURL)
+    }
+    try Task.checkCancellation()
+    let headerJSON: Any
+    do { headerJSON = try JSONSerialization.jsonObject(with: headerData, options: []) }
+    catch { throw SafeTensorsReaderError.malformedHeader(fileURL) }
 
     guard let headerDict = headerJSON as? [String: Any] else {
       throw SafeTensorsReaderError.malformedHeader(fileURL)
@@ -60,24 +100,22 @@ public final class SafeTensorsReader {
 
     var tensorMetadata: [String: SafeTensorMetadata] = [:]
     var metadataValues: [String: String] = [:]
+    var ranges: [(Int, Int)] = []
 
     let dataStartOffset = headerEnd
 
     for (key, value) in headerDict {
+      try Task.checkCancellation()
       if key == "__metadata__" {
-        if let dict = value as? [String: Any] {
-          for (metaKey, metaValue) in dict {
-            if let stringValue = metaValue as? String {
-              metadataValues[metaKey] = stringValue
-            } else {
-              metadataValues[metaKey] = "\(metaValue)"
-            }
-          }
+        guard let dict = value as? [String: String] else {
+          throw SafeTensorsReaderError.malformedHeader(fileURL)
         }
+        metadataValues = dict
         continue
       }
 
-      guard let tensorInfo = value as? [String: Any] else {
+      guard let tensorInfo = value as? [String: Any],
+            Set(tensorInfo.keys) == Set(["dtype", "shape", "data_offsets"]) else {
         throw SafeTensorsReaderError.tensorMetadataMissing(key)
       }
 
@@ -91,15 +129,7 @@ public final class SafeTensorsReader {
         throw SafeTensorsReaderError.tensorMetadataMissing(key)
       }
 
-      let shape: [Int] = try shapeAny.map { element in
-        if let number = element as? NSNumber {
-          return number.intValue
-        } else if let string = element as? String, let intValue = Int(string) {
-          return intValue
-        } else {
-          throw SafeTensorsReaderError.invalidShape(name: key)
-        }
-      }
+      let shape: [Int] = try shapeAny.map { try Self.parseInteger($0, error: .invalidShape(name: key)) }
 
       guard let offsetsAny = tensorInfo["data_offsets"] as? [Any], offsetsAny.count == 2 else {
         throw SafeTensorsReaderError.tensorMetadataMissing(key)
@@ -108,18 +138,18 @@ public final class SafeTensorsReader {
       let startOffset = try SafeTensorsReader.parseOffset(offsetsAny[0], tensorName: key)
       let endOffset = try SafeTensorsReader.parseOffset(offsetsAny[1], tensorName: key)
 
-      guard endOffset >= startOffset else {
+      guard startOffset >= 0, endOffset >= startOffset else {
         throw SafeTensorsReaderError.invalidOffsets(name: key)
       }
 
       let byteCount = endOffset - startOffset
-      let expectedBytes = SafeTensorsReader.expectedByteCount(shape: shape, dtype: dtype)
+      let expectedBytes = try SafeTensorsReader.expectedByteCount(shape: shape, dtype: dtype, name: key)
       guard byteCount == expectedBytes else {
         throw SafeTensorsReaderError.invalidShape(name: key)
       }
 
-      let absoluteOffset = dataStartOffset + startOffset
-      guard absoluteOffset + byteCount <= mappedData.count else {
+      let (absoluteOffset, offsetOverflow) = dataStartOffset.addingReportingOverflow(startOffset)
+      guard !offsetOverflow, startOffset >= 0, endOffset <= Int(info.st_size) - dataStartOffset else {
         throw SafeTensorsReaderError.invalidOffsets(name: key)
       }
 
@@ -130,10 +160,25 @@ public final class SafeTensorsReader {
         dataOffset: absoluteOffset,
         byteCount: byteCount
       )
+      ranges.append((startOffset, endOffset))
     }
 
+    var nextOffset = 0
+    for range in ranges.sorted(by: { $0.0 == $1.0 ? $0.1 < $1.1 : $0.0 < $1.0 }) {
+      guard range.0 == nextOffset else { throw SafeTensorsReaderError.malformedHeader(fileURL) }
+      nextOffset = range.1
+    }
+    guard nextOffset == Int(info.st_size) - headerEnd else {
+      throw SafeTensorsReaderError.malformedHeader(fileURL)
+    }
+
+    try Self.checkIdentity(fd, fileURL: fileURL, original: original)
+    self.fileURL = fileURL
+    self.descriptor = fd
+    self.identity = original
     self.tensors = tensorMetadata
     self.fileMetadata = metadataValues
+    keepDescriptor = true
   }
 
   public var tensorNames: [String] {
@@ -169,16 +214,8 @@ public final class SafeTensorsReader {
       throw SafeTensorsReaderError.tensorNotFound(name)
     }
 
-    return try mappedData.withUnsafeBytes { rawBuffer in
-      guard let base = rawBuffer.baseAddress else {
-        throw SafeTensorsReaderError.unmappedData(fileURL)
-      }
-
-      let startPointer = base.advanced(by: metadata.dataOffset)
-      let slicePointer = UnsafeMutableRawPointer(mutating: startPointer)
-      let data = Data(bytesNoCopy: slicePointer, count: metadata.byteCount, deallocator: .none)
-      return MLXArray(data, metadata.shape, dtype: metadata.dtype)
-    }
+    let data = try readTensor(metadata)
+    return MLXArray(data, metadata.shape, dtype: metadata.dtype)
   }
 
   public func intScalar(named name: String) throws -> Int {
@@ -189,12 +226,9 @@ public final class SafeTensorsReader {
       throw SafeTensorsReaderError.invalidShape(name: name)
     }
 
-    return try mappedData.withUnsafeBytes { rawBuffer in
-      guard let base = rawBuffer.baseAddress else {
-        throw SafeTensorsReaderError.unmappedData(fileURL)
-      }
-
-      let valuePtr = base.advanced(by: metadata.dataOffset)
+    let data = try readTensor(metadata)
+    return try data.withUnsafeBytes { rawBuffer in
+      guard let valuePtr = rawBuffer.baseAddress else { throw SafeTensorsReaderError.truncatedData(fileURL) }
       switch metadata.dtype {
       case .int32:
         var value: Int32 = 0
@@ -222,7 +256,10 @@ public final class SafeTensorsReader {
         withUnsafeMutableBytes(of: &value) { dst in
           dst.copyBytes(from: UnsafeRawBufferPointer(start: valuePtr, count: MemoryLayout<UInt64>.size))
         }
-        return Int(value)
+        guard let converted = Int(exactly: value) else {
+          throw SafeTensorsReaderError.invalidShape(name: name)
+        }
+        return converted
 
       default:
         throw SafeTensorsReaderError.unsupportedScalarDType(name: name, dtype: String(describing: metadata.dtype))
@@ -231,18 +268,126 @@ public final class SafeTensorsReader {
   }
 
   private static func parseOffset(_ value: Any, tensorName: String) throws -> Int {
-    if let number = value as? NSNumber {
-      return number.intValue
-    }
-    if let string = value as? String, let intValue = Int(string) {
-      return intValue
-    }
-    throw SafeTensorsReaderError.invalidOffsets(name: tensorName)
+    try parseInteger(value, error: .invalidOffsets(name: tensorName))
   }
 
-  private static func expectedByteCount(shape: [Int], dtype: DType) -> Int {
-    let elements = shape.reduce(1, *)
-    return elements * dtype.size
+  private static func expectedByteCount(shape: [Int], dtype: DType, name: String) throws -> Int {
+    var elements = 1
+    for dimension in shape {
+      guard dimension >= 0 else { throw SafeTensorsReaderError.invalidShape(name: name) }
+      let (next, overflow) = elements.multipliedReportingOverflow(by: dimension)
+      guard !overflow else { throw SafeTensorsReaderError.invalidShape(name: name) }
+      elements = next
+    }
+    let (bytes, overflow) = elements.multipliedReportingOverflow(by: dtype.size)
+    guard !overflow else { throw SafeTensorsReaderError.invalidShape(name: name) }
+    return bytes
+  }
+
+  private static func parseInteger(_ value: Any, error: SafeTensorsReaderError) throws -> Int {
+    // NSNumber.intValue truncates out-of-range values and accepts floating point/bools.
+    guard let number = value as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID(),
+          let result = Int(number.stringValue), String(result) == number.stringValue else {
+      throw error
+    }
+    return result
+  }
+
+  private static func read(_ fd: Int32, offset: Int, count: Int, fileURL: URL) throws -> Data {
+    var data = Data(count: count)
+    var done = 0
+    while done < count {
+      try Task.checkCancellation()
+      let n = data.withUnsafeMutableBytes { bytes in
+        Darwin.pread(fd, bytes.baseAddress?.advanced(by: done), count - done, off_t(offset + done))
+      }
+      if n < 0 && errno == EINTR { continue }
+      guard n > 0 else { throw SafeTensorsReaderError.truncatedData(fileURL) }
+      done += n
+    }
+    return data
+  }
+
+  private static func checkIdentity(_ fd: Int32, fileURL: URL, original: FileIdentity) throws {
+    var opened = stat()
+    var path = stat()
+    guard Darwin.fstat(fd, &opened) == 0,
+          Darwin.lstat(fileURL.path, &path) == 0,
+          opened.st_mode & S_IFMT == S_IFREG, path.st_mode & S_IFMT == S_IFREG,
+          FileIdentity(opened) == original, FileIdentity(path) == original else {
+      throw SafeTensorsReaderError.fileChanged(fileURL)
+    }
+  }
+
+  private func readTensor(_ metadata: SafeTensorMetadata) throws -> Data {
+    try Self.checkIdentity(descriptor, fileURL: fileURL, original: identity)
+    let data = try Self.read(descriptor, offset: metadata.dataOffset,
+                             count: metadata.byteCount, fileURL: fileURL)
+    try Self.checkIdentity(descriptor, fileURL: fileURL, original: identity)
+    return data
+  }
+
+  /// JSONSerialization keeps the last duplicate object member; reject duplicates
+  /// before it can silently change a tensor's dtype, shape or offsets.
+  private static func hasUniqueObjectKeys(_ data: Data) -> Bool {
+    let bytes = Array(data)
+    var cursor = 0
+    func whitespace() {
+      while cursor < bytes.count && [UInt8(32), 9, 10, 13].contains(bytes[cursor]) { cursor += 1 }
+    }
+    func string() -> String? {
+      let start = cursor
+      guard cursor < bytes.count, bytes[cursor] == 34 else { return nil }
+      cursor += 1
+      while cursor < bytes.count {
+        if bytes[cursor] == 92 { cursor += 2; continue }
+        if bytes[cursor] == 34 {
+          cursor += 1
+          return try? JSONSerialization.jsonObject(with: Data(bytes[start..<cursor]),
+                                                    options: .fragmentsAllowed) as? String
+        }
+        cursor += 1
+      }
+      return nil
+    }
+    func value(_ depth: Int) -> Bool {
+      guard depth <= 128 else { return false }
+      whitespace()
+      guard cursor < bytes.count else { return false }
+      if bytes[cursor] == 34 { return string() != nil }
+      if bytes[cursor] == 123 || bytes[cursor] == 91 {
+        let object = bytes[cursor] == 123
+        let closing: UInt8 = object ? 125 : 93
+        cursor += 1
+        whitespace()
+        if cursor < bytes.count, bytes[cursor] == closing { cursor += 1; return true }
+        var keys = Set<String>()
+        while cursor < bytes.count {
+          if object {
+            guard let key = string(), keys.insert(key).inserted else { return false }
+            whitespace()
+            guard cursor < bytes.count, bytes[cursor] == 58 else { return false }
+            cursor += 1
+          }
+          guard value(depth + 1) else { return false }
+          whitespace()
+          guard cursor < bytes.count else { return false }
+          if bytes[cursor] == closing { cursor += 1; return true }
+          guard bytes[cursor] == 44 else { return false }
+          cursor += 1
+          whitespace()
+        }
+        return false
+      }
+      let start = cursor
+      while cursor < bytes.count && ![UInt8(32), 9, 10, 13, 44, 93, 125].contains(bytes[cursor]) {
+        cursor += 1
+      }
+      return cursor > start
+    }
+    guard value(0) else { return false }
+    whitespace()
+    return cursor == bytes.count
   }
 
   private static func mapDType(_ value: String) throws -> DType {
