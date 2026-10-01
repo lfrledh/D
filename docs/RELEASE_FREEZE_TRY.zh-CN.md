@@ -1,38 +1,56 @@
 # 首发收口候选：精简试用
 
-2026-10-01 · D-RELEASE-FREEZE-01 r2。**可试用的开发候选；功能冻结尚未通过。** 正常App构建及CPU受测代码 `b315ffa0c2d8d191204b0b93f1afdaaaae46e865`；实际原生操作在其父版本 `41ad63026da948eef6e3b5f5837f63744f1a2c98`，最后变化仅视频模型展示名与对应回归。最终包已由推荐启动器启动，但锁屏阻塞了修补后的界面复验，不能把父版本操作冒充最终包全验。后续结案仅文档，最终提交在任务/外部回执中；不要用旧启动器判断本版状态。
+2026-10-01 · D-RELEASE-FREEZE-01 r3。**原始精度低内存开发候选，尚未功能冻结。** 代码、真实模型、普通App与真人验证分开记录；最新构建与验收结果见[本轮任务](tasks/D-RELEASE-FREEZE-01.md)及外部最终回执，不能用旧包结果代替本包。
 
 ## 唯一推荐入口
 
-双击：
-`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout/delivery/启动首发收口候选.command`
+本轮交付目录：
+`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261001T040512Z-low-memory/delivery`
 
-同目录 **D Release Freeze Closeout.app** 是正常构建的本版。启动器使用独立试用身份，不关闭其他D、不替换普通App。避免同时在其他D运行模型；再次使用本入口会恢复这份试用记录。旧 `run-20260930T070201Z` 与 `intermediate-9cdf` 仅保留历史，不推荐试用。
+其中双击 **启动首发收口候选.command**，启动同目录 **D Release Freeze Closeout.app**。启动器使用既有独立试用身份，不关闭其他D、不替换普通App或作品。旧r1/r2启动器保留历史，不再作为本轮推荐入口。若当前仍锁屏，请解锁后使用；本轮未把构建、签名或启动器检查写成已完成原生操作。
 
-## 已经可以直接试
+## 先试已有记录，再选择原始权重
 
-1. 打开后快速页已有 **Qwen3.5-9B · 4-bit**，模型已通过真实界面导入与完整校验。已保存任务要求输出 `title: D freeze tryout` 和 `answer: 42`。直接点击生成，结果应是可展开记录与原始JSON。
-2. 高级设置中当前思考为off、seed42、输入2048/输出256、显式内存预算15GiB。原默认12GiB曾被本配置估算正确拒绝；15仅为这次M4/16GiB短请求的显式选择，不是全模型默认/内存保证。不要直接把长视频/大上下文套用此预算。
-3. 点击 **工作流**，已有从同一Quick设置生成的Qwen节点。选节点后“运行到这里”→确认计划可真实执行；输出结构、模型与预算保留。Quick继续编辑不会自动运行画布。
-4. 节点结果与原文可查，保存后退出再用同一启动器打开；41ad630已实测两入口结果、草稿、节点参数和运行记录冷恢复。画布滚轮改变缩放，中键调整中心，右下恢复100%；平移/拖放全矩阵与IME跟随尚未完整关闭。
-5. 模型下载与安装位于右上 **更多 → 模型下载与安装**。九家族12个精度条目已显示，支持固定原件下载/导入、校验与重新定位。未准备不显示假成功。H3/LTX2.5原始资源有独立准备入口；Wan原始权重自动转换仍缺接线，已有准备包可继续显式登记。
+1. 同一试用身份保留r2的Qwen3.5-9B Q4文字项目与Quick/Canvas记录。继续使用常驻模式仍可；它不是本轮原始精度证据。
+2. 右上 **更多 → 模型下载与安装**，选择对应的固定精度条目，导入本机外盘已经校验的目录。等待正常完整性校验，不用重新下载：
 
-试用项目属于隔离会话的 `Quick Creations.dproject`；交付 `samples/` 保留本次项目快照，本轮新增Qwen/H3等生成权重不复制进项目或App。既有Pitch评估引擎的包内ONNX仍是无权重发行前的已知清理/来源责任，因此本开发App不能称为最终无权重发行包。日常作品请保留原件，不用唯一作品替代测试项目。
+   | 模型 | 已有目录（均在 `/Volumes/CodexProjects/Codex/D-Development/Models/` 下） |
+   | --- | --- |
+   | ACE-Step 1.5 XL SFT 原始F32 | `ACE-Step-1.5-XL-SFT` |
+   | FLUX.2-klein-4B 原始BF16 | `release-flux2-klein-4b-bf16` |
+   | Qwen3.5-9B 原始权重 | `release-qwen35-9b-bf16` |
+   | Qwen3.8-27B 原始BF16 | `release-qwen38-27b-bf16` |
+
+3. Quick或Canvas选中实际模型后，在高级参数的加载方式选择 **省内存（SSD 分层加载，精度不变）**。常驻和分阶段模式保留给合适配置；SSD不会自动量化、裁层或删参考。Q4/Q8暂不支持这条SSD路径，错误会明确报告，请不要用量化条目代替原始条目。
+4. 可先用已验证的小请求：ACE六秒、50步、guidance7；Klein512×512、4步、guidance1；Qwen3.5-9B或Qwen3.8-27B要求一个简短JSON、关闭思考、输出上限256。seed可用42（ACE样本用7）。本机短请求验证使用显式15GiB预算；这不是产品上限、默认建议或任意长输入的内存保证。
+5. ACE支持歌词、独立参考音频，以及cover原声/repaint区间；该profile的输入为48kHz双声道PCM WAV，非法格式不会静默转换。Klein支持有序参考图；文字节点保留消息、媒体、工具结果和结构化响应。运行前参数形成快照，继续编辑不会改掉在途输入。
+6. 文字逐段显示与SSD加载是两个不同能力；文字结果仍保留raw/final等结构。已有结果可以在资料库查来源，再安全导出和保存。长任务可取消，界面结束必须等计算与释放完成。
+
+正常界面的原始模型导入、上述新选择器、取消和保存/重开仍需H32在本包集中操作。CLI/正式Runtime通过不代替GUI；未知或未验路线不会因出现在菜单中变成已冻结。
+
+## Wan原件准备
+
+本版普通构建包含固定转换依赖。模型库下载/导入原件后，使用 **准备独立执行包**；准备保持原件，逐张量写独立暂存目录，完整校验后原子发布并登记。中断不会伪造ready；恢复按明确状态处理，不清未知文件。
+
+R3正式内嵌转换桥已将固定Wan原件转为1,261个分片，并由生产模型库校验器检查完整1,262文件集合。此处尚未把普通App沙盒点击、最终发布或本包视频生成记为已验。已有准备包仍可沿原入口使用；Wan2.1仍为T2V，不显示成I2V。
 
 ## 同一代码在Xcode运行
 
-打开 `/Volumes/CodexProjects/Codex/D-Worktrees/D-RELEASE-FREEZE-01/D.xcworkspace`，选择 **D Nodes / My Mac / Debug** 后Run。不是内盘空仓库，也不是受保护源旧版本。正常构建阶段已校验并嵌入六种执行引擎，无构建后手补provider。
+打开 `/Volumes/CodexProjects/Codex/D-Worktrees/D-RELEASE-FREEZE-01/D.xcworkspace`，选择 **D Nodes / My Mac / Debug** 后Run。不是内盘空仓库或受保护源旧版本。
 
-本工作树忽略的 `Development/Development.local.xcconfig` 已指向本轮外盘resources及现有开发签名。资源无需重新安装；如需重建，用 `scripts/prepare-development-resources.py` 读取本轮delivery中的 `prepared-inputs.json`，输出新目录。模型仍由正常UI下载或登记，不打包进App。
+本工作树忽略的 `Development/Development.local.xcconfig` 指向本轮 `delivery/resources` 和既有开发签名。正常构建阶段校验、嵌入六类引擎，不需构建后手补脚本。若只重编译源码，不必重做资源准备；资源重建复用 `scripts/prepare-development-resources.py`，读取同目录 `prepared-inputs.json`，输出新的目录后更新本地配置。
 
-共享D Nodes scheme默认使用另一独立开发身份 `4DFA8D40-45FA-4BA0-934C-F034F36E2D60`，所以首次Run不一定看到本次试用记录。若要复用上述已备好的记录，在**本地**Edit Scheme→Run→Environment Variables把现有 `D_UI_TEST_SESSION` 值设为 `4555a0d5-e285-48f5-b34f-dff8238a893c`；无需改Team/bundle ID/权限。不要把你的个人scheme修改提交到Git。正常构建已通过；这轮没有另做Xcode界面点击Run验收。
+共享scheme默认独立身份 `4DFA8D40-45FA-4BA0-934C-F034F36E2D60`；如需看到推荐启动器的旧试用记录，在**本地**Edit Scheme→Run→Environment Variables，将 `D_UI_TEST_SESSION` 设为 `4555a0d5-e285-48f5-b34f-dff8238a893c`。不改Team/bundle ID/权限，不提交个人scheme。命令行普通构建和Xcode界面点击Run是两种证据，后者本轮未重做。
 
-## 本版尚不能承诺
+## 仅需本人集中处理的入口
 
-- Dev和LTX2.5固定资源访问受平台阻塞；需本人登录取得访问或提供对应本地目录，密码/token不要发到聊天。
-- 27B、9B BF16、Klein BF16未完成真实验收；不能用Q4/Q8结果代替。大内存Mac依既有参数运行，不受16GiB硬编码上限限制。
-- ACE XL原始F32已产出6秒/1步真实WAV；50步在本机换页明显，受控停止。尚未合理采样、歌词/参考/cover/repaint全部实测和同包GUI试听，不能称音乐路线已通过冻结。
-- H3真实首尾帧生成复用本轮前段Runtime证据，不等于最终包新视频Quick/Canvas全验；MRT2/Wan旧结果也不升级为本包全验。
-- 两项hosting检查仍失败，原因和原生结果分开记录；跨项目空图保护已补CPU回归，完整原生拖放尚未验。H22中文/日文候选位置仍需集中本人检查。
+- **H31**：本机双击交付目录中的 `H31-本机下载登录.command`。在实际固定资源仓完成HF账号访问，并在官方CLI本地输入只读凭据；不要发聊天。实际仓库为 `black-forest-labs/FLUX.2-dev` 和 `dgrauet/ltx-2.5-mlx`，拥有其他仓库权限不代表这两份固定文件可读。
+- **H32/H22**：返回解锁后统一完成本包原生操作、中文/日文候选位置及必要音频试听。无需重做已关闭的录音和断网验收。
 
-详细边界见[能力矩阵](RELEASE_MODEL_MATRIX.zh-CN.md)、[本轮结果](tasks/D-RELEASE-FREEZE-01.md)、[集中待办](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md)。本轮不合并受保护源/main、不公开发布。
+唯一清单为[集中待办](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md)，不在此维护第二份状态。没有登录/解锁状态变化不重复请求。
+
+## 尚未完成的冻结责任
+
+Dev与LTX2.5访问及真实模型、其他尚未覆盖的原生能力、同包九模型Quick/Canvas操作、两项hosting动作和完整拖放、输入法/听感仍按[能力矩阵](RELEASE_MODEL_MATRIX.zh-CN.md)保留。模型文件下载和逐块对照不能代替完整生成；本轮已完成的完整生成见任务证据，不把不同版本通过率相加。
+
+新增模型原件不进入App或Git。既有Pitch评估引擎中的ONNX仍是最终无权重发行策略的已知缺口，依赖封装/首次使用/升级恢复/渠道责任未解除。本轮不合入保护源/main，不公开发布。

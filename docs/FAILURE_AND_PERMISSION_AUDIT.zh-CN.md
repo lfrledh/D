@@ -6,9 +6,9 @@ R3=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/r
 
 | ID | 真实状态 | 最小本人动作与关闭条件 |
 | --- | --- | --- |
-| H32 冻结候选原生验收 | **r2部分完成，最终包复验再次被锁屏阻塞**：41ad630普通App Qwen Quick/Canvas真实JSON、保存冷重开、滚轮50%及默认100%已观察；H3原件校验/准备/登记已过。b315ffa修正视频展示名，CPU/正常构建/推荐启动器成功后CUA报告Mac锁屏。新副本路径此前一度Invalid app，保留中间包后使用已登记固定路径恢复，不改权限。其他模型双入口/完整拖放仍未全验 | 返回时解锁即可，不需再次批准测试或下载。先确认最终包视频实名及保存记录，再集中IME和必要试听。证据为D-RELEASE-FREEZE-01的R2/lead/native-final及native-final/lock-after-final-build.json；不是最终包全GUI通过。 |
+| H32 冻结候选原生验收 | **r2部分完成，r3普通App构建/签名已通过，原生操作未验**。最后已知CUA为锁屏，无解锁状态变化不重试。r2 41ad630的Q4双入口/冷恢复、H3准备仅复用历史证据；不能证明新原始精度加载选择器、Wan准备及r3新包操作 | 返回时解锁即可。唯一推荐入口见RELEASE_FREEZE_TRY；集中验证原始模型导入/SSD选择、Wan准备/登记、参数/保存恢复及必要ACE试听，并复验两项hosting动作与拖放。必要时同时处理H22实际组字；不重复旧录音/离线。R3/lead/app-r3-delivery.json只证明构建副本/签名，不是GUI通过。 |
 | H30 H3 开发测试权重 | **2026-09-30取消额外资格审批停点，无需本人回复。** 用户再次确认开发适配/测试下载已长期授权；原先询问保留为历史，不把关闭审批项写成已取得权重或完成实测 | 本轮已完成固定约144GB下载/摘要校验，正式Runtime用全50层BF16生成、准入取消、恢复通过。H3保存检查失败另属工程/返工预算停点，不重开资格审批。下载记录R4/lead/h3-download-result.json，真实记录real-h3-01-summary.json。 |
-| H31 HF账号访问与本地下载登录 | r3只作一轮配置诊断：现有下载环境huggingface_hub0.36.0，用户lfrledh，HOME=/Users/lfrledh，HF_HOME=~/.cache/huggingface、HF_TOKEN_PATH=其token文件；文件不存在且无HF_TOKEN覆盖。沿用旧401/gated事实，不重发权重请求。实际清单是black-forest-labs/FLUX.2-dev@26afe3…和dgrauet/ltx-2.5-mlx@e378…；原Lightricks仓授权不等于转换仓授权。未读取秘密值 | 本人在两实际下载仓库页面完成访问，并双击R3/delivery/H31-本机下载登录.command，以专用最小只读token在官方CLI隐藏输入；不用Git凭据、不发聊天。完成后Lead核有效身份→固定受限文件→仅缺失分片下载/校验→执行准备→实推理，四种状态分别关闭。CLI登录不自动给Swift/URLSession认证，窄接线仍属工程事项。 |
+| H31 HF账号访问与本地下载登录 | r3只作一轮配置诊断：现有下载环境huggingface_hub0.36.0，用户lfrledh，HOME=/Users/lfrledh，HF_HOME=~/.cache/huggingface、HF_TOKEN_PATH=其token文件；文件不存在且无HF_TOKEN覆盖。沿用旧401/gated事实，不重发权重请求。实际清单是black-forest-labs/FLUX.2-dev@26afe3…和dgrauet/ltx-2.5-mlx@e378…；原Lightricks仓授权不等于转换仓授权。未读取秘密值 | 本人在两实际下载仓库页面完成访问，并双击R3/delivery/H31-本机下载登录.command，以专用最小只读token在官方CLI隐藏输入；不用Git凭据、不发聊天。完成后Lead核有效身份→固定受限文件→仅缺失分片下载/校验→执行准备→实推理，四种状态分别关闭。CLI登录不自动给Swift/URLSession认证；r3已接显式凭据文件的下载专用授权读取与跨站重定向保护，CPU检查通过，实际凭据/下载待H31。 |
 | H29 v0.2 原生双入口验收 | r2候选已走通Qwen双入口与冷恢复；旧资料库拖入、端口/50–180%/跨项目空图的全矩阵仍未完成。两个hosting失败保留，不能由正常App部分操作抵销 | 本人不负责补工程缺陷。旧D PID37434不被本轮关闭；后续只在唯一推荐候选接续未验范围，不重复录音、断网或旧布局专项。 |
 | H28 新画布原生交互 | 旧责任已并入H29，不另启动旧包或单独阻塞新包 | 只使用RELEASE_FREEZE_TRY中的唯一候选入口；旧证据保留。 |
 | H27 通用节点工作台原生验收 | **已集中办理关闭（2026-09-27）**。新录音7.594667秒及本人原声试听正常；SwiftF0实际片段与MRT2三候选完成，本人第三条试听正常；中文空格/日文选词正常；08b2e39普通GUI和实际Xcode Run四样例已验。A35 JST13:55:19—14:02:25物理离线5方法/409采样通过 | 无需再断网、录音或试听。用户未听到结束提示，恢复网络时测试已结束；以日志/路由/产物核对结论，不以提示音作通过依据。证据`D-NODE-LANGUAGE-01/run-20260927T020614Z-h27/evidence/{A35-reviewed,xcode-final-run,native-final-assets,native-music-japanese-complete}.json`。H22和历史增长导致的保存迟缓属于保留工程项，不是待用户授权；集成/推送以CURRENT_ACTIONS为准 |
@@ -17,11 +17,11 @@ R3=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/r
 | H25 M0原生画布与离线验收 | **已关闭（2026-09-26）**。旧原生证据保留；最终组合在本人关闭本机Wi-Fi后完成真实图文、3候选、导出、重开、取消释放。Swift Testing实际1项通过，101.070秒；执行与结束100次采样全离线，路由无恢复事件 | 无需再断网。新证据 `D-NODE-BOUNDARY-01/run-20260926T073533Z-acceptance/offline-confirmed/`。首次新包装仍未启动，原因是scutil措辞不同、route无路由时exit0；保留 `offline/` 失败记录。修正为物理链路/地址/无线电联合判据后通过，不修改系统网络设置、不改变产品契约 |
 | H26 节点边界与语言包原生验收 | **已关闭（2026-09-26）**。普通开发签名沙盒App完成中英切换、外部JSON包导入/缺词回退、Unicode草稿及选区保留；原生选择0.5B/1.5B模型，在同图两个节点真实执行，正常退出后恢复语言/草稿/绑定/运行记录 | 无需新增本人授权。证据同run `evidence/gui-summary.json`、`gui-*.txt/png`；App四关键文件前后不变。迟到选择器等异常保护复用CPU反例；旧页面全面翻译、H22不由此关闭 |
 
-本轮剩余工程/资源（不是本人授权事项）：Wan转换产品接线；ACE合理采样及歌词/风格/cover/repaint实测；27B/原始BF16等独立精度实测；两个hosting定位与完整拖放。ACE50步受控停止不归为OOM，也不要求购买机器；更大Mac测试方式须沿固定配方记录实际资源。已得到的6秒/1步WAV可在下一次集中时试听，但试听通过也不能替代合理采样质量验证。原件/已生成作品继续保留。
+本轮剩余工程/资源（不是本人授权事项）：Wan转换接线已实现，真实内嵌桥和生产校验器通过，普通App入口待H32；ACE原始F32/50步完整生成、歌词/风格/cover/repaint及正式取消释放已通过，Klein BF16完整与双参考正式生成已通过；Qwen原始权重与分层缓存对照已通过，9B完整运行时已通过（视频仅单帧夹具，不证明时序质量），27B取消及JSON/双图/工具结果完整代表请求已通过，资源严格归零；未验27B视频及长上下文极限。两项hosting分别停在普通按钮/连接的离屏AX触发和技术信息按钮的离屏触发，不能写成语言切换或生产按钮已证实损坏；不删断言，解锁后复用真实点击检查草稿/图不变及零生成。完整拖放继续保留。新的六秒/50步ACE样本留到H32同包集中试听，不重复旧单步样本。原件/已生成作品继续保留。
 
 **历史工程停点与本轮处理**：D-VIDEO-MODELS-01 的 AVMEDIA 已用初交＋两次修复＋一次 Lead 有界接管。旧真实H3文件暴露 `AVAsset.duration` 不等于最长音轨末端的检查兼容问题，旧失败/预算不追改。本轮D-RELEASE-FREEZE-01明确批准有限收尾后，已保留原标准修复该假设，旧产物及新增首尾帧产物的完整解码/Store分别通过，见本轮任务。不是权限问题，不重开资格审批。H32本轮已部分验证，余下按当前表在唯一候选完成；最新入口见RELEASE_FREEZE_TRY.zh-CN.md，不能用CPU通过关闭GUI。
 
-R3解锁原生证据：`D-UI-BASELINE-02/run-20260929T003334Z-unlock-native/lead/native-results.json`。启动与部分GUI已补；两次自有Repair进程均正常退出。未办理任何真人集中项，未把GUI通过覆盖hosting失败。
+**历史任务D-UI-BASELINE-02的R3**解锁证据（不是本轮低内存R3）：`D-UI-BASELINE-02/run-20260929T003334Z-unlock-native/lead/native-results.json`。启动与部分GUI已补；两次自有Repair进程均正常退出。未办理任何真人集中项，未把GUI通过覆盖hosting失败。
 
 R2为 `/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-UI-BASELINE-02/run-20260928T160457Z-defect-close`；当时源及旧App保护、启动异常和锁屏记录见lead/native-stop.json，版本e546762dd9cafd46d0b99d8f360331393a7e95e6。
 R1为 `D-UI-BASELINE-02/run-20260928T144932Z-native`；旧native-progress.json是早期观察快照，现行结果以native-continuation.json为准。宽度修补由Lead实施/复验，非实现者只读复核；预算不刷新。
