@@ -280,6 +280,7 @@ public actor MLXQwenVLMBackend: InferenceBackend {
                                 "modelRevision": request.model.revision ?? "unrecorded",
                                 "modelFamily": inventory.family, "modelSize": inventory.size,
                                 "weightBytes": String(inventory.weightBytes),
+                                "loadingStrategy": input.loadingStrategy?.rawValue ?? "resident",
                                 "randomSeed": String(randomSeed),
                                 "executionProfileIdentifier": executionProfile.identifier,
                                 "executionProfileRevision": String(executionProfile.revision),

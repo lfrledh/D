@@ -126,6 +126,7 @@ struct QwenVLMRealTests {
                 } else { #expect(final.split(whereSeparator: \.isWhitespace).count >= 3) }
                 #expect(result.metadata["imageCount"] == String(input.images?.count ?? 0))
                 #expect(result.metadata["modelRevision"] == request.model.revision)
+                #expect(result.metadata["loadingStrategy"] == (strategy?.rawValue ?? "resident"))
                 let lifecycle = await trace.forRun(request.id)
                 try encoder.encode(lifecycle).write(to: root.appendingPathComponent("lifecycle-\(index).json"), options: .withoutOverwriting)
                 let state = await runtime.snapshot()

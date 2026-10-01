@@ -260,15 +260,18 @@ func qwenLayeredRejectsPostSelectionMutation() throws {
 }
 
 @Test("Cancelled layer loading propagates cancellation")
-func qwenLayeredCancelledLayer() throws {
-    let fixture = try TinyQwenFixture.make()
-    defer { try? FileManager.default.removeItem(at: fixture.directory) }
-    let weights = try Qwen35LayeredWeights(directory: fixture.directory)
-    let layer = Qwen35Language.DecoderLayer(fixture.layered.config.textConfiguration, layerIdx: 0)
-    #expect(throws: CancellationError.self) {
-        try withUnsafeCurrentTask { $0?.cancel() }
-        try weights.loadLayer(0, into: layer, model: fixture.layered)
-    }
+func qwenLayeredCancelledLayer() async throws {
+    let observed = try await Task {
+        let fixture = try TinyQwenFixture.make()
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        let weights = try Qwen35LayeredWeights(directory: fixture.directory)
+        let layer = Qwen35Language.DecoderLayer(fixture.layered.config.textConfiguration, layerIdx: 0)
+        withUnsafeCurrentTask { $0?.cancel() }
+        do { try weights.loadLayer(0, into: layer, model: fixture.layered); return false }
+        catch is CancellationError { return true }
+    }.value
+    #expect(observed)
+    #expect(!Task.isCancelled)
 }
 
 private func headerFixture(_ json: String, payload: Data = Data()) throws -> (URL, URL) {
