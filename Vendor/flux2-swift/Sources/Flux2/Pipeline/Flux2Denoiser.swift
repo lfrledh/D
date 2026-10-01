@@ -41,15 +41,16 @@ public final class Flux2Denoiser {
       transformerTimestep = transformerTimestep * scale
     }
 
-    let noisePredAll = transformer(
-      modelInput,
-      encoderHiddenStates: encoderHiddenStates,
-      timestep: transformerTimestep,
-      imgIds: imgIds,
-      txtIds: txtIds,
-      guidance: guidance,
-      attentionMask: attentionMask
-    )
+    let noisePredAll: MLXArray
+    if transformer.isLayered {
+      noisePredAll = try transformer.callLayered(modelInput, encoderHiddenStates: encoderHiddenStates,
+        timestep: transformerTimestep, imgIds: imgIds, txtIds: txtIds,
+        guidance: guidance, attentionMask: attentionMask)
+    } else {
+      noisePredAll = transformer(modelInput, encoderHiddenStates: encoderHiddenStates,
+        timestep: transformerTimestep, imgIds: imgIds, txtIds: txtIds,
+        guidance: guidance, attentionMask: attentionMask)
+    }
 
     let tokenCount = latents.dim(1)
     let noisePred = noisePredAll[0..., 0..<tokenCount, 0...]

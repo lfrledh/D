@@ -6,6 +6,9 @@ public enum Flux2Qwen3TextEncoderError: Error {
   case configNotFound(URL)
   case invalidInputShape
   case missingHiddenState(Int)
+  case incompleteLayer(Int)
+  case unsupportedLayeredQuantization
+  case unsupportedLayeredPrecision
 }
 
 public final class Flux2Qwen3TextEncoder: Module {
@@ -13,6 +16,7 @@ public final class Flux2Qwen3TextEncoder: Module {
 
   @ModuleInfo(key: "model") private var model: Flux2Qwen3Model
   @ModuleInfo(key: "lm_head") private var lmHead: Linear?
+  private var layeredSource: (snapshot: URL, dtype: DType)? = nil
 
   public init(configuration: Flux2Qwen3Configuration) {
     self.configuration = configuration
@@ -48,6 +52,38 @@ public final class Flux2Qwen3TextEncoder: Module {
     return encoder
   }
 
+  /// Retain only weights outside the decoder blocks. Each original decoder block
+  /// is read for its turn, evaluated, then released before the next block is loaded.
+  public static func loadLayered(from snapshot: URL, dtype: DType = .bfloat16) throws -> Flux2Qwen3TextEncoder {
+    if let _ = try Flux2Quantizer.loadManifest(from: snapshot) {
+      throw Flux2Qwen3TextEncoderError.unsupportedLayeredQuantization
+    }
+    let configURL = snapshot.appendingPathComponent("text_encoder/config.json")
+    guard FileManager.default.fileExists(atPath: configURL.path) else {
+      throw Flux2Qwen3TextEncoderError.configNotFound(configURL)
+    }
+    let configuration = try JSONDecoder().decode(Flux2Qwen3Configuration.self, from: Data(contentsOf: configURL))
+    let encoder = Flux2Qwen3TextEncoder(configuration: configuration)
+    let loader = Flux2WeightsLoader(snapshot: snapshot)
+    for file in try loader.listSafetensors(component: .textEncoder) {
+      try Task.checkCancellation()
+      guard try SafeTensorsReader(fileURL: file).allMetadata().allSatisfy({ $0.dtype == dtype }) else {
+        throw Flux2Qwen3TextEncoderError.unsupportedLayeredPrecision
+      }
+    }
+    let weights = try loader.load(component: .textEncoder, dtype: dtype) {
+      !$0.hasPrefix("model.layers.")
+    }
+    guard weights["model.embed_tokens.weight"] != nil, weights["model.norm.weight"] != nil,
+          configuration.tieWordEmbeddings || weights["lm_head.weight"] != nil else {
+      throw Flux2Qwen3TextEncoderError.incompleteLayer(-1)
+    }
+    try encoder.update(parameters: ModuleParameters.unflattened(weights), verify: .none)
+    MLX.eval(Array(weights.values))
+    encoder.layeredSource = (snapshot, dtype)
+    return encoder
+  }
+
   public func promptEmbeds(
     inputIds: MLXArray,
     attentionMask: MLXArray,
@@ -61,11 +97,12 @@ public final class Flux2Qwen3TextEncoder: Module {
       throw Flux2Qwen3TextEncoderError.invalidInputShape
     }
 
-    let hiddenStates = model.hiddenStates(
+    let hiddenStates = try model.hiddenStates(
       inputIds: inputIds,
       attentionMask: attentionMask,
       outputLayerIndices: hiddenStateLayers,
-      evaluationPolicy: evaluationPolicy
+      evaluationPolicy: evaluationPolicy,
+      layeredSource: layeredSource
     )
 
     var selected: [MLXArray] = []
@@ -131,8 +168,9 @@ private final class Flux2Qwen3Model: Module {
     inputIds: MLXArray,
     attentionMask: MLXArray,
     outputLayerIndices: [Int],
-    evaluationPolicy: Flux2EvaluationPolicy
-  ) -> [Int: MLXArray] {
+    evaluationPolicy: Flux2EvaluationPolicy,
+    layeredSource: (snapshot: URL, dtype: DType)? = nil
+  ) throws -> [Int: MLXArray] {
     let wanted = Set(outputLayerIndices)
     var results: [Int: MLXArray] = [:]
 
@@ -149,9 +187,26 @@ private final class Flux2Qwen3Model: Module {
 
     let mask = Flux2Qwen3AttentionMask.make(hiddenStates: hidden, attentionMask: attentionMask)
 
-    for (index, layer) in layers.enumerated() {
+    for index in layers.indices {
+      if layeredSource != nil { try Task.checkCancellation(); Memory.clearCache() }
+      let layer: Flux2Qwen3TransformerBlock
+      if let layeredSource {
+        let prefix = "model.layers.\(index)."
+        let loaded = try Flux2WeightsLoader(snapshot: layeredSource.snapshot).load(
+          component: .textEncoder, dtype: layeredSource.dtype) { $0.hasPrefix(prefix) }
+        let stripped = Dictionary(uniqueKeysWithValues: loaded.map { (String($0.key.dropFirst(prefix.count)), $0.value) })
+        layer = Flux2Qwen3TransformerBlock(configuration)
+        let expected = Set(layer.parameters().flattened().map { $0.0 })
+        guard !expected.isEmpty, Set(stripped.keys) == expected else {
+          throw Flux2Qwen3TextEncoderError.incompleteLayer(index)
+        }
+        try layer.update(parameters: ModuleParameters.unflattened(stripped), verify: .none)
+      } else {
+        layer = layers[index]
+      }
       hidden = layer(hidden, attentionMask: mask)
-      evaluationPolicy.evalIfNeeded(hidden)
+      if layeredSource != nil { MLX.eval(hidden) }
+      else { evaluationPolicy.evalIfNeeded(hidden) }
       let hiddenIndex = index + 1
       if wanted.contains(hiddenIndex) {
         results[hiddenIndex] = hidden

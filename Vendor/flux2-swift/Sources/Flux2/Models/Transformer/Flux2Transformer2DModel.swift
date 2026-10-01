@@ -4,6 +4,9 @@ import MLXNN
 
 public enum Flux2Transformer2DModelError: Error {
   case configNotFound(URL)
+  case incompleteLayer(String)
+  case unsupportedLayeredQuantization
+  case unsupportedLayeredPrecision
 }
 
 public final class Flux2Transformer2DModel: Module {
@@ -26,6 +29,9 @@ public final class Flux2Transformer2DModel: Module {
 
   @ModuleInfo(key: "norm_out") private var normOut: Flux2AdaLayerNormContinuous
   @ModuleInfo(key: "proj_out") private var projOut: Linear
+  private var layeredSource: (snapshot: URL, dtype: DType)? = nil
+
+  public var isLayered: Bool { layeredSource != nil }
 
   public init(configuration: Flux2TransformerConfiguration) {
     self.configuration = configuration
@@ -119,6 +125,72 @@ public final class Flux2Transformer2DModel: Module {
     return model
   }
 
+  public static func loadLayered(from snapshot: URL, dtype: DType = .bfloat16) throws -> Flux2Transformer2DModel {
+    if let _ = try Flux2Quantizer.loadManifest(from: snapshot) {
+      throw Flux2Transformer2DModelError.unsupportedLayeredQuantization
+    }
+    let configURL = snapshot.appendingPathComponent("transformer/config.json")
+    guard FileManager.default.fileExists(atPath: configURL.path) else {
+      throw Flux2Transformer2DModelError.configNotFound(configURL)
+    }
+    let configuration = try JSONDecoder().decode(Flux2TransformerConfiguration.self, from: Data(contentsOf: configURL))
+    let model = Flux2Transformer2DModel(configuration: configuration)
+    let loader = Flux2WeightsLoader(snapshot: snapshot)
+    for file in try loader.listSafetensors(component: .transformer) {
+      try Task.checkCancellation()
+      guard try SafeTensorsReader(fileURL: file).allMetadata().allSatisfy({ $0.dtype == dtype }) else {
+        throw Flux2Transformer2DModelError.unsupportedLayeredPrecision
+      }
+    }
+    let weights = try loader.load(component: .transformer, dtype: dtype) {
+      !$0.hasPrefix("transformer_blocks.") && !$0.hasPrefix("single_transformer_blocks.")
+    }
+    let expected = Set(model.parameters().flattened().map { $0.0 }.filter {
+      !$0.hasPrefix("transformer_blocks.") && !$0.hasPrefix("single_transformer_blocks.")
+    })
+    guard !expected.isEmpty, Set(weights.keys) == expected else {
+      throw Flux2Transformer2DModelError.incompleteLayer("shared")
+    }
+    try model.update(parameters: ModuleParameters.unflattened(weights), verify: .none)
+    MLX.eval(Array(weights.values))
+    model.layeredSource = (snapshot, dtype)
+    return model
+  }
+
+  private func loadDoubleBlock(_ index: Int, source: (snapshot: URL, dtype: DType)) throws -> Flux2TransformerBlock {
+    let prefix = "transformer_blocks.\(index)."
+    let loaded = try Flux2WeightsLoader(snapshot: source.snapshot).load(component: .transformer, dtype: source.dtype) {
+      $0.hasPrefix(prefix)
+    }
+    let stripped = Dictionary(uniqueKeysWithValues: loaded.map { (String($0.key.dropFirst(prefix.count)), $0.value) })
+    let block = Flux2TransformerBlock(dim: innerDim, numAttentionHeads: configuration.numAttentionHeads,
+      attentionHeadDim: configuration.attentionHeadDim, mlpRatio: configuration.mlpRatio,
+      eps: configuration.eps, bias: false)
+    let expected = Set(block.parameters().flattened().map { $0.0 })
+    guard !expected.isEmpty, Set(stripped.keys) == expected else {
+      throw Flux2Transformer2DModelError.incompleteLayer(prefix)
+    }
+    try block.update(parameters: ModuleParameters.unflattened(stripped), verify: .none)
+    return block
+  }
+
+  private func loadSingleBlock(_ index: Int, source: (snapshot: URL, dtype: DType)) throws -> Flux2SingleTransformerBlock {
+    let prefix = "single_transformer_blocks.\(index)."
+    let loaded = try Flux2WeightsLoader(snapshot: source.snapshot).load(component: .transformer, dtype: source.dtype) {
+      $0.hasPrefix(prefix)
+    }
+    let stripped = Dictionary(uniqueKeysWithValues: loaded.map { (String($0.key.dropFirst(prefix.count)), $0.value) })
+    let block = Flux2SingleTransformerBlock(dim: innerDim, numAttentionHeads: configuration.numAttentionHeads,
+      attentionHeadDim: configuration.attentionHeadDim, mlpRatio: configuration.mlpRatio,
+      eps: configuration.eps, bias: false)
+    let expected = Set(block.parameters().flattened().map { $0.0 })
+    guard !expected.isEmpty, Set(stripped.keys) == expected else {
+      throw Flux2Transformer2DModelError.incompleteLayer(prefix)
+    }
+    try block.update(parameters: ModuleParameters.unflattened(stripped), verify: .none)
+    return block
+  }
+
   public func callAsFunction(
     _ hiddenStates: MLXArray,
     encoderHiddenStates: MLXArray,
@@ -128,6 +200,28 @@ public final class Flux2Transformer2DModel: Module {
     guidance: MLXArray? = nil,
     attentionMask: MLXFast.ScaledDotProductAttentionMaskMode = .none
   ) -> MLXArray {
+    // This entry point is retained for the resident model, where forward cannot throw.
+    precondition(layeredSource == nil, "Use callLayered for a layered transformer.")
+    return try! forward(hiddenStates, encoderHiddenStates: encoderHiddenStates, timestep: timestep,
+      imgIds: imgIds, txtIds: txtIds, guidance: guidance, attentionMask: attentionMask, source: nil)
+  }
+
+  public func callLayered(
+    _ hiddenStates: MLXArray, encoderHiddenStates: MLXArray, timestep: MLXArray,
+    imgIds: MLXArray, txtIds: MLXArray, guidance: MLXArray? = nil,
+    attentionMask: MLXFast.ScaledDotProductAttentionMaskMode = .none
+  ) throws -> MLXArray {
+    guard let layeredSource else { throw Flux2Transformer2DModelError.incompleteLayer("layered source") }
+    return try forward(hiddenStates, encoderHiddenStates: encoderHiddenStates, timestep: timestep,
+      imgIds: imgIds, txtIds: txtIds, guidance: guidance, attentionMask: attentionMask, source: layeredSource)
+  }
+
+  private func forward(
+    _ hiddenStates: MLXArray, encoderHiddenStates: MLXArray, timestep: MLXArray,
+    imgIds: MLXArray, txtIds: MLXArray, guidance: MLXArray?,
+    attentionMask: MLXFast.ScaledDotProductAttentionMaskMode,
+    source: (snapshot: URL, dtype: DType)?
+  ) throws -> MLXArray {
     let numTxtTokens = encoderHiddenStates.dim(1)
     let targetDtype = hiddenStates.dtype
     let scale = MLXArray(1000.0).asType(targetDtype)
@@ -167,7 +261,9 @@ public final class Flux2Transformer2DModel: Module {
       sin: MLX.concatenated([textRotary.sin, imageRotary.sin], axis: 1)
     )
 
-    for block in transformerBlocks {
+    for index in transformerBlocks.indices {
+      if source != nil { try Task.checkCancellation(); Memory.clearCache() }
+      let block = try source.map { try loadDoubleBlock(index, source: $0) } ?? transformerBlocks[index]
       let outputs = block(
         hiddenStates: hidden,
         encoderHiddenStates: encoder,
@@ -178,11 +274,14 @@ public final class Flux2Transformer2DModel: Module {
       )
       encoder = outputs.encoderHiddenStates
       hidden = outputs.hiddenStates
+      if source != nil { MLX.eval(encoder, hidden) }
     }
 
     hidden = MLX.concatenated([encoder, hidden], axis: 1)
 
-    for block in singleTransformerBlocks {
+    for index in singleTransformerBlocks.indices {
+      if source != nil { try Task.checkCancellation(); Memory.clearCache() }
+      let block = try source.map { try loadSingleBlock(index, source: $0) } ?? singleTransformerBlocks[index]
       let outputs = block(
         hiddenStates: hidden,
         tembModParams: singleStreamMod,
@@ -190,6 +289,7 @@ public final class Flux2Transformer2DModel: Module {
         attentionMask: attentionMask
       )
       hidden = outputs.hiddenStates
+      if source != nil { MLX.eval(hidden) }
     }
 
     let splitStates = split(hidden, indices: [numTxtTokens], axis: 1)
