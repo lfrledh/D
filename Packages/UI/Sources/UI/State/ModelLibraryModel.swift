@@ -22,11 +22,12 @@ public final class ModelLibraryModel {
     @ObservationIgnored private var refreshGeneration: UInt64 = 0
 
     public enum GlobalOperation: Sendable {
-        case choosingRoot, registering, preparing
+        case choosingRoot, choosingCredential, registering, preparing
 
         public var title: String {
             switch self {
             case .choosingRoot: "正在连接模型库…"
+            case .choosingCredential: "正在连接下载令牌…"
             case .registering: "正在校验本地模型…"
             case .preparing: "正在准备并校验独立执行包…"
             }
@@ -53,6 +54,7 @@ public final class ModelLibraryModel {
     public var records: [ModelRecord] { snapshot?.records ?? [] }
     public var catalog: [ModelCatalogEntry] { snapshot?.catalog ?? [] }
     public var rootURL: URL? { snapshot?.rootURL }
+    public var downloadCredentialConnected: Bool { snapshot?.downloadCredentialConnected ?? false }
     public var hasActiveWork: Bool {
         records.contains { record in
             switch record.state {
@@ -73,6 +75,48 @@ public final class ModelLibraryModel {
     public var isInUse: Bool { records.contains { $0.activeLeaseCount > 0 } }
     public var canChooseRoot: Bool {
         !isChoosingLocation && globalOperation == nil && pendingActions.isEmpty && !hasActiveWork && !isInUse
+    }
+    public var canChangeDownloadCredential: Bool {
+        !isChoosingLocation && globalOperation == nil && pendingActions.isEmpty && !hasActiveWork
+    }
+
+    public func chooseDownloadCredential() async {
+        guard canChangeDownloadCredential else { return }
+        isChoosingLocation = true
+        let panel = NSOpenPanel()
+        panel.title = "选择 Hugging Face 下载令牌文件"
+        panel.message = "选择只包含一个令牌的纯文本文件。D 仅保存文件授权，下载时读取令牌；不会保存令牌内容。"
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        let response = await panel.begin()
+        isChoosingLocation = false
+        guard !Task.isCancelled else { return }
+        guard response == .OK, let url = panel.url else { return }
+        globalOperation = .choosingCredential
+        defer { globalOperation = nil }
+        do { try await library.connectDownloadCredential(at: url) }
+        catch is CancellationError { return }
+        catch {
+            guard !Task.isCancelled else { return }
+            report(error, context: "未能连接下载令牌")
+        }
+        guard !Task.isCancelled else { return }
+        await refresh()
+    }
+
+    public func removeDownloadCredential() async {
+        guard canChangeDownloadCredential else { return }
+        globalOperation = .choosingCredential
+        defer { globalOperation = nil }
+        do { try await library.disconnectDownloadCredential() }
+        catch is CancellationError { return }
+        catch {
+            guard !Task.isCancelled else { return }
+            report(error, context: "未能移除下载令牌连接")
+        }
+        guard !Task.isCancelled else { return }
+        await refresh()
     }
 
     /// Called by the app composition root, independently of a manager sheet's lifetime.

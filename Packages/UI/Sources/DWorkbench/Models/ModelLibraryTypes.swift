@@ -180,6 +180,7 @@ public struct ModelLibrarySnapshot: Sendable {
     public let rootURL: URL?
     public let catalog: [ModelCatalogEntry]
     public let records: [ModelRecord]
+    public let downloadCredentialConnected: Bool
 }
 
 public struct ModelUsageLease: Sendable {

@@ -30,6 +30,7 @@ public struct ModelLibraryView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 28) {
                     storageLocation
+                    downloadCredential
                     if let notice = model.preparationNotice { Text(notice).font(.callout).textSelection(.enabled) }
                     if let operation = model.globalOperation {
                         HStack(spacing: 10) {
@@ -146,6 +147,33 @@ public struct ModelLibraryView: View {
             }
             .disabled(!model.canChooseRoot)
             .accessibilityIdentifier("model-library-location")
+        }
+        .padding(18)
+        .background(.background, in: RoundedRectangle(cornerRadius: 14))
+    }
+
+    private var downloadCredential: some View {
+        HStack(alignment: .top, spacing: 14) {
+            Image(systemName: "key.horizontal")
+                .font(.title2).foregroundStyle(.secondary).padding(.top, 3)
+            VStack(alignment: .leading, spacing: 7) {
+                Text("Hugging Face 下载令牌").font(.callout.weight(.semibold))
+                Text(model.downloadCredentialConnected ? "已连接令牌文件" : "未连接；公开文件仍可直接下载")
+                    .font(.callout).foregroundStyle(.secondary)
+                Text("仅用于固定仓库的下载请求；跨站重定向不会携带令牌。")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 12)
+            Button(model.downloadCredentialConnected ? "更换文件…" : "选择文件…") {
+                Task { await model.chooseDownloadCredential() }
+            }
+            .disabled(!model.canChangeDownloadCredential)
+            .accessibilityIdentifier("model-download-credential-choose")
+            if model.downloadCredentialConnected {
+                Button("移除连接") { Task { await model.removeDownloadCredential() } }
+                    .disabled(!model.canChangeDownloadCredential)
+                    .accessibilityIdentifier("model-download-credential-remove")
+            }
         }
         .padding(18)
         .background(.background, in: RoundedRectangle(cornerRadius: 14))
