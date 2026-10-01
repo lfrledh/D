@@ -286,3 +286,17 @@ All restricted worker routes have exact worktree/output/tmp write roots, workspa
 Lead协调共享ProjectSession/双入口状态、H22真实控件诊断与最终包；可独立的Dev完整原始SSD、LTX2.5塔/连接器分阶段、Wan外部目录清单投影使用受限独立CLI，精确允许文件及执行基线随本run冻结job/prompt，先预检后授权。新切片普通初交+两轮修复、最多一次有界Lead接管；旧Klein/Qwen/Wan转换实现预算及失败不刷新，修补新增缺口不重做旧实验。禁止Worker网络、GPU、GUI、重构建、源码外写入、共享Git写入；必要语法/小CPU检查使用任务tmp，Lead串行验收与显式提交。
 
 风险与检查：Dev/LTX驻留/原始混合dtype → 真实小块数值对照、完整代表文生/参考及取消释放 → 沿用未变模型证据，不拿块对照替代整模型；模型投影/导入 → 状态/代次/原件反例及普通App路径 → 不重复转换验证断言；H22 → 实际firstResponder/client/firstRect与指针覆盖取证、最小补丁及真实组字 → 禁止全局替换、计数冒充坐标。新唯一测试正文TESTING_POLICY，AGENTS/协作入口短引用。最终应交同版本普通App、唯一推荐启动器与同树Xcode Run；未验/失败不改记通过。
+
+### R4 执行证据增量（2026-10-02；尚未结案）
+
+- 下载复核：原作业已结束且verified，Dev32文件112.823GB/LTX19文件70.937GB；仅核固定revision、来源与文件身份/大小，未重复下载或全量散列。H31不再设停点。
+- 受限写切片均为可观察 `gpt-6-sol/high`、workspace-write、各自工作树/输出/tmp、网络关闭；隐藏服务端解析unknown。Dev初交＋修复1，LTX初交后一次已明确安全路径恢复，Wan初交＋修复1；完整route/job/异常摘要保留R4 worker目录。Wan修复1 heredoc临时写拒绝在Python执行前立即停报，Lead未提权；被拒临时文件精确位置unknown。不能将其写成成功越界或没有任何副作用的系统级证明。
+- Dev整合271ac840827ffe35ed19e70369c882136367ebde：完整40文本层/中间层10、20、30；8双/48单DiT；原F32 VAE与I64计数保持；固定入场身份用于每阶段/读取前后复核。非实现者检查资源/条件/数值/原件边界。新夹具MLX空metadata导致严格reader拒绝，改为非空format元数据，不放宽reader。原始代表块对照`dev-original-weights`1方法4.351秒；文本/双块/单块常驻与逐层输出相等，非完整模型常驻对照。Vendor206文件/6补丁18改动闭包通过。完整正式Runtime首试误把开发来源JSON一并交给严格清单而被拒，原件未改；改用32固定文件独立APFS克隆作输入，生产完整校验保持。正在执行`dev-runtime-full-02`，受测二进制d3afbfb3fbb6f5227e0f104bdbdab3b680ea6b92。
+- Qwen视频在4bc9b9ffa7810ccaa4b380dec5c6a06a871265b5修正原处理器丢时间戳、两帧网格只占一个语言块的问题；固定上游transformers a005fc82babfe8871d87746decad2dbee100a125 的processing_qwen3_vl/modeling_qwen3_5为依据。原图像/文字行为不改。3个小型Metal/位置检查通过；实际9B/27B同一红→蓝2秒视频、4采样帧、完整原始模型/SSD/输出128/seed42，分别131.489和293.433秒通过，回答正确顺序，MLX active/cache严格0。两个独立方法，不拼成全能力通过率；R4/lead/qwen{9,27}-temporal-fixed*含请求/输出/运行及xcresult。Vendor276文件/10改动独立来源重放通过。
+- LTX小型48层/49状态/两注意力/两prompt数值maxabs0，`ltx-numeric-control-result.json`明确synthetic。实际完整原资源通过生产模型库准备，`ltx-production-prepare/result.json`，56.878秒，独立准备包保留；未生成视频。固定源码124文件及原补丁+流式补丁闭包通过，独立审核无P1/P2。
+- Wan整合cf4a32355e6fe41ba7207fea8d20363baa08f1b9：仅固定原仓外部根投影所需树，NOFOLLOW验证中间目录及叶子，额外内容不读取。18个CPU安全/生命周期用例通过。首次两个URL断言仅因目录尾斜线失败，以标准path＋实际inode修正夹具，不降保护。真实完整目录登记首次重开夹具保留旧actor，正确触发状态锁；按既有实例生命周期释放后，`wan-actual-reopen`1方法6.822秒通过，原件身份不变、记录恢复、active lease0；未经原生文件面板操作。
+- 就绪投影672ee0dc及相关实现：resolve租约/代次/revision floor，拒绝旧positive snapshot覆盖新状态；共享Quick/Canvas刷新不改草稿、参数或模型请求。6个就绪/外部视频服务用例通过（`ui-wan-ltx-preparation`），同一运行另有2个Wan夹具失败，不能把整个命令写通过。
+- 4e088ac：H3内层7200秒与代表测试43200秒不一致，传递父期限并验证有限正数，App显式12小时；24项Python夹具通过，非实现者审阅无P1/P2。旧CLI省略新参数仍7200；Swift新入口必须匹配新provider。Representative新增terminal记录，事件失败也等待outcome；runner最终结论才是通过依据，文件名acceptance/DONE不单独算通过。
+- 两项hosting仍失败：普通按钮positiveResult=false，事件未真正派发；非实现者定位helper早退，但现日志缺坐标/队列证据。新增单次结构诊断，不归因于锁屏、不改生产文本系统。H22当前真实诊断尚被锁屏阻塞，DEBUG工具不代表缺陷修复。原生待办已在唯一清单记录，旧证据与真人失败保留。
+
+本段不是最终冻结回执。所有模型完整生成、普通App、原生操作和发行结论分开；最终受测SHA/App/远端/进程见后续外部回执。费用与完整Lead归因unknown，未重算历史累计用量。
