@@ -121,11 +121,12 @@ final class Qwen35LayeredWeights {
             for (key, value) in header where key != "__metadata__" &&
                 !key.contains("position_ids") && !key.contains("mtp.") {
                 guard let tensor = value as? [String: Any],
-                      let dtype = tensor["dtype"] as? String, dtype == "BF16",
+                      let dtype = tensor["dtype"] as? String,
+                      let width = Qwen35LayeredFileValidation.byteWidth(name: key, dtype: dtype),
                       let shape = Self.strictDimensions(tensor["shape"]),
                       let offsets = Self.strictOffsets(tensor["data_offsets"]),
                       offsets[0] < offsets[1], offsets[1] <= identities[file]!.size - 8 - length,
-                      Self.validByteCount(shape: shape, offsets: offsets),
+                      Self.validByteCount(shape: shape, offsets: offsets, width: width),
                       entries[key] == nil else {
                     throw Failure.invalid("unsupported or duplicate tensor \(key)")
                 }
@@ -340,8 +341,8 @@ final class Qwen35LayeredWeights {
         }
     }
 
-    private static func validByteCount(shape: [Int], offsets: [UInt64]) -> Bool {
-        var bytes: UInt64 = 2 // BF16
+    private static func validByteCount(shape: [Int], offsets: [UInt64], width: UInt64) -> Bool {
+        var bytes = width
         for dimension in shape {
             let (next, overflow) = bytes.multipliedReportingOverflow(by: UInt64(dimension))
             if overflow { return false }
@@ -366,7 +367,7 @@ final class Qwen35LayeredWeights {
             let arrays = try loadArrays(url: file)
             var slice: [String: MLXArray] = [:]
             for key in byShard[file]! {
-                guard let array = arrays[key], array.dtype == .bfloat16,
+                guard let array = arrays[key], array.dtype == (entries[key]!.dtype == "BF16" ? .bfloat16 : .float32),
                       array.shape == entries[key]!.shape else {
                     throw Failure.invalid("tensor changed or missing: \(key)")
                 }
@@ -463,6 +464,20 @@ final class Qwen35LayeredWeights {
 
 /// Shared narrow header rules used by the loader and the resource estimator.
 public enum Qwen35LayeredFileValidation {
+    /// Official 9B BF16 checkpoints retain these linear-attention parameters in
+    /// FP32. Keep their stored precision; this does not permit quantized tensors.
+    public static func byteWidth(name: String, dtype: String) -> UInt64? {
+        if dtype == "BF16" { return 2 }
+        guard dtype == "F32" else { return nil }
+        let parts = name.split(separator: ".")
+        guard let layer = parts.firstIndex(of: "layers"), layer > 0,
+              parts[layer - 1] == "language_model" || (layer >= 2 && parts[layer - 2] == "language_model" && parts[layer - 1] == "model"),
+              layer + 3 < parts.count, let index = Int(parts[layer + 1]), index >= 0,
+              parts[layer + 2] == "linear_attn" else { return nil }
+        let tail = parts[(layer + 3)...].joined(separator: ".")
+        return ["A_log", "norm.weight"].contains(tail) ? 4 : nil
+    }
+
     /// Validate dimensions before constructors reach integer conversions,
     /// divisions or preconditions. This is a dense Qwen loader, not an MoE route.
     public static func configuration(_ data: Data) throws -> Qwen35Configuration {

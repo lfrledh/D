@@ -34,7 +34,7 @@ private struct TinyQwenFixture {
         let config = try configuration()
         let resident = withRandomState(MLXRandom.RandomState(seed: 17)) { Qwen35(config) }
         let weights = Dictionary(uniqueKeysWithValues: resident.parameters().flattened().map {
-            ($0.0, $0.1.asType(.bfloat16))
+            ($0.0, $0.1.asType($0.0.hasSuffix(".linear_attn.A_log") || $0.0.hasSuffix(".linear_attn.norm.weight") ? .float32 : .bfloat16))
         })
         try resident.update(parameters: ModuleParameters.unflattened(weights), verify: [.all])
         try checkedEval(resident)
@@ -287,6 +287,15 @@ private func headerFixture(_ json: String, payload: Data = Data()) throws -> (UR
     data.append(payload)
     try data.write(to: file)
     return (directory, file)
+}
+
+@Test("Original FP32 linear controls retain their dtype without admitting arbitrary FP32 weights")
+func qwenOriginalPrecisionControls() throws {
+    #expect(Qwen35LayeredFileValidation.byteWidth(name: "model.language_model.layers.0.linear_attn.A_log", dtype: "F32") == 4)
+    #expect(Qwen35LayeredFileValidation.byteWidth(name: "language_model.model.layers.2.linear_attn.norm.weight", dtype: "F32") == 4)
+    #expect(Qwen35LayeredFileValidation.byteWidth(name: "language_model.model.layers.0.linear_attn.in_proj_qkv.weight", dtype: "F32") == nil)
+    #expect(Qwen35LayeredFileValidation.byteWidth(name: "language_model.model.layers.0.linear_attn.A_log", dtype: "I32") == nil)
+    #expect(Qwen35LayeredFileValidation.byteWidth(name: "language_model.model.layers.0.linear_attn.A_log", dtype: "BF16") == 2)
 }
 
 @Test("Layered headers reject noninteger and unrepresentable dimensions")

@@ -57,9 +57,10 @@ enum QwenLayeredResourceEstimate {
                 guard let tensor = value as? [String: Any],
                       let offsets = Qwen35LayeredFileValidation.offsets(tensor["data_offsets"]),
                       offsets[0] < offsets[1], offsets[1] <= payloadSize,
-                      tensor["dtype"] as? String == "BF16",
+                      let dtype = tensor["dtype"] as? String,
+                      let width = Qwen35LayeredFileValidation.byteWidth(name: name, dtype: dtype),
                       let shape = Qwen35LayeredFileValidation.dimensions(tensor["shape"]),
-                      validByteCount(shape, offsets) else {
+                      validByteCount(shape, offsets, width: width) else {
                     throw InferenceFailure.invalidRequest("Invalid safetensors tensor offsets.")
                 }
                 let bytes = offsets[1] - offsets[0]
@@ -128,8 +129,8 @@ enum QwenLayeredResourceEstimate {
         return value
     }
 
-    private static func validByteCount(_ shape: [Int], _ offsets: [UInt64]) -> Bool {
-        var bytes: UInt64 = 2
+    private static func validByteCount(_ shape: [Int], _ offsets: [UInt64], width: UInt64) -> Bool {
+        var bytes = width
         for dimension in shape {
             let (next, overflow) = bytes.multipliedReportingOverflow(by: UInt64(dimension))
             if overflow { return false }
