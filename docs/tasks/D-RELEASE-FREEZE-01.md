@@ -258,3 +258,22 @@ All restricted worker routes have exact worktree/output/tmp write roots, workspa
 来源：受限Sol/high Worker完成分片实现；Lead协调共享请求/Store/UI/资源、实施本次有界收尾并执行验收，重要差异由非实现者定点检查。不是Worker独立完成，也不是第二模型重复实跑。旧未按时停报事件与修复预算保持，隐藏模型解析、完整Lead消耗及订阅实际费用unknown；只保留可核对的单次墙钟，不重算历史用量。
 
 恢复：源01758b81527dc27eb4563bf1b66fd1ceab6647ee和个人scheme摘要/索引/未暂存差异由最终保护回执逐项确认；不合入保护源/main，候选正常提交/推送，最终远端以R3/lead/final-receipt.json为准。自有构建/测试/转换/串行推理进程已结束，未关闭旧D/未知进程；不以此宣称系统无其他作业。候选、原件、样例和历史证据保留。下一步仅在H31或H32/H22状态变化后补对应既定验收；本轮停在用户试用点，不新开模型或产品阶段。
+
+### R3 集中办理补验（2026-10-01）
+
+本段更新上方交付时尚未解锁/登录的状态。候选起点`f383871c8a83afb6efaaec99dfe97c7e5e34136f`；受测普通App仍为`dd00baadbc030c186c1db4ceee12e02a4a4e401b`，本次没有生产代码修改或重建，仅追加任务/当前行动/集中待办三份记录。R3定义沿上文，H=`R3/lead/human-20261001T133601Z`。**这是部分原生补验，不是功能冻结完成。**
+
+- H31：本人登录与访问申请后，13:36 UTC FLUX.2-dev固定revision `26afe3a78bb242c0a8bb181dcc8937bb16e5c66c`及LTX2.5实际MLX仓revision `e378b7e1b50fcb1795fce74219b40bb0b1ede1e2`的代表权重metadata与固定清单相符，Range各1byte返回206。旧403不覆盖。完整32/19文件合计183,760,215,682 bytes串行下载/摘要校验已启动；实时记录`R3/lead/h31-download-20261001T133601Z/events.jsonl`，只有最终result才证明完整资源取得。未读出token/钥匙串或在日志打印凭据。CLI登录不等于沙盒App取得凭据文件访问权；该入口仍未实测。
+- 原生隔离：旧r2 App持有推荐试用session的模型库；本轮初次新实例被明确拒绝，正常退出，未关闭旧实例。单独验收启动器`H/启动本次集中验收.command`只替换本次session UUID，不改交付App，普通推荐入口不变。会话`2DCE71F2-652C-4917-AE76-77035D2EB35A`，新建`H/H32-r3-native.dproject`，无真实用户项目改写。
+- 原生交互：点击文字连线能打开检查器，Unicode草稿`待保存草稿 👩🏽‍🎨 é 100%`与选区`待保`保留；中→英→中切换不丢草稿/选区。实际打开视频`d.video.generate`、音乐`d.music.generate`技术信息，此阶段没有提交模型任务。此为普通App真实点击证据；两项旧离屏hosting失败没有重跑，也没有改断言。
+- Wan：完整原始仓目录因额外`google/`被严格导入拒绝，作为兼容缺口保留；Lead在本次证据目录创建仅固定三文件的APFS独立inode副本，不删改原件。App导入→原生“准备独立执行包”→逐张量转换/校验→原子发布/登记通过，1261张量，使用租约结束。`H/wan-native-source.json`和`wan-native-result.json`；不是Wan GUI生成或准备中取消通过。分词器仍由既有VideoEngine独立提供，执行包不是脱离引擎的完整运行环境。
+- Klein：固定18文件BF16副本经App导入校验；Quick与Canvas往返实际保留512×512、4步、guidance1、seed42、预算0、`loadingStrategy=ssdLayered`。分别在Quick与Canvas真实执行红色陶碗提示，结果均成功，PNG各自实际摘要相同`6b2d7216cd828ad951b79a229a68fb2fb643df9274833eb0cf9b3316fd34c9c8`。这只是同一固定样本，不承诺任意运行逐像素确定性。Quick结果见`klein-quick-native.json`（参数由原生观察支撑，资产摘要另核对）；Canvas完整执行快照见`klein-canvas-native-run.json`，只运行新增的一个图像节点，不是整个E04四模态通过。
+- 冷恢复：正常退出并重开同一隔离session，Quick恢复原提示/参数/结果；打开最近项目，原文字草稿和Klein已完成节点/SSD参数恢复。`cold-reopen-result.json`核对两图内容、一个完成run、资产及PNG摘要与退出前完全一致，没有自动新任务。缩小画布到50%查看，不冒充完整50–180%拖放矩阵。
+- 新工程缺口：导入后`ProjectSession.selectWorkflowInstallation`未更新显式准备状态，`DualWorkbenchView.refreshLibrary`只刷新Quick，已打开Canvas的模型列表可能过期。实际双入口resolver可执行，冷重开模型名称正确；旧列表还用于直接添加门禁，不能仅称文案问题。最小后续修补为同步投影并保护草稿/请求，不新建运行时。只读非实现者已定点定位，未修改实现。
+- H22：本人确认选字正常，候选不跟随；新增文本I型/窗口边缘拉伸光标只闪现后恢复箭头，输入和拖动仍可用。未证明根因，未作新修补，不要求本人反复复测。CUA一次SCStream -3812重连恢复，仅为工具事件，不归因于锁屏/光标。ACE固定六秒原始F32/50步样本由`afplay`播放exit0，本人答“听到了，播放正常”；`ace-listen-source.json`。Python标准wave不支持float格式3不代表损坏；本次不称App内播放或新GUI音乐生成。
+
+保护：`protection-before.json`→`protection-after.json`逐项比较源HEAD、scheme完整diff/摘要/索引/未暂存状态和App三关键文件摘要/大小/mtime全部不变。`originals-metadata-after.json`确认两套原件inode/大小/mtime不变，是后验元信息检查，不冒充额外全权重散列。自有GUI PID82523/82948/83688均正常退出并确认不在；旧D 35439/37434未操作。自有固定下载仍在运行，工具会话48725；恢复时按进程和events/result核实，不能把GUI结束写成全部后台进程结束。
+
+来源/复核：Lead执行原生验收与记录，`h3_primary_research`仅只读核对固定资源/入口和本次四份结果，不是另一个模型执行了GUI/真实生成。其指出Quick结构记录较窄及旧progress两处滞后，Lead已修正`realModelRunThisHumanSession`与SSD原始枚举并保留分层结论。无新Worker实现/修复轮次，不重算历史费用；本次完整Lead消耗与订阅扣费unknown。
+
+恢复与下一步：H31本人访问和本次试听无需再办；H22先工程修补再必要真人复验。继续既定下载/Dev与LTX原始能力低内存接线、模型即时投影与原始目录兼容问题及剩余H32，不开新家族、不据资源慢放弃，也不以改profile名结案。最终文档SHA和远端/进程快照写`H/final-receipt.json`；不合入保护源/main、不发布，原件/候选/旧失败证据保留。
