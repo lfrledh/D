@@ -10,6 +10,9 @@ enum ModelWanPreparation {
     static func supports(_ entry: ModelCatalogEntry) -> Bool {
         entry.id == "wan21-t2v-1.3b-bf16" && entry.revision == revision
     }
+    static func allowsExternalRawProjection(_ entry: ModelCatalogEntry) -> Bool {
+        supports(entry) && entry.repository == "Wan-AI/Wan2.1-T2V-1.3B" && entry.preparation == .required
+    }
     typealias Converter = @Sendable (URL, URL) async throws -> Void
     private struct Manifest: Decodable {
         var schemaVersion: Int
@@ -64,15 +67,20 @@ enum ModelWanPreparation {
     }
 
     static func prepare(source: ModelDirectory, entry: ModelCatalogEntry, parent: ModelDirectory,
-                        name: String, converter: Converter) async throws -> URL {
+                        name: String, externalRawProjection: Bool = false, converter: Converter) async throws -> URL {
         guard supports(entry), try ModelDirectory.parts(name).count == 1 else { throw ModelLibraryError.invalidCatalog("此资源不是固定 Wan 转换配方。") }
+        guard !externalRawProjection || allowsExternalRawProjection(entry) else {
+            throw ModelLibraryError.invalidCatalog("原始目录投影仅适用于固定 Wan 外部仓。")
+        }
         let sourcePath = source.url.path + "/", targetPath = parent.url.appendingPathComponent(name).path + "/"
         guard !targetPath.hasPrefix(sourcePath), !sourcePath.hasPrefix(targetPath) else { throw ModelLibraryError.unsafePath("执行包位置不能与原始模型重叠。") }
         try parent.validateLocation()
         var existing = stat()
         guard fstatat(parent.descriptor, name, &existing, AT_SYMLINK_NOFOLLOW) != 0, errno == ENOENT else { throw ModelLibraryError.unsafePath("执行包目标已存在；不会覆盖。") }
-        let before = try source.entries(expectedPaths: Set(entry.files.map(\.path)))
-        guard Set(before.keys) == Set(entry.files.map(\.path)) else { throw ModelLibraryError.integrity("原始模型清单不完整。") }
+        let requiredPaths = Set(entry.files.map(\.path))
+        let before = externalRawProjection ? try source.verifyRequired(entry.files) :
+            ModelRequiredTree(files: try source.entries(expectedPaths: requiredPaths), directories: [:])
+        guard Set(before.files.keys) == requiredPaths else { throw ModelLibraryError.integrity("原始模型清单不完整。") }
         let stageName = ".d-wan-preparing-" + UUID().uuidString
         let stageURL = parent.url.appendingPathComponent(stageName, isDirectory: true)
         do {
@@ -81,7 +89,9 @@ enum ModelWanPreparation {
             try Task.checkCancellation()
             let stage = try parent.child(stageName)
             let verified = try verifiedFiles(in: stage, entry: entry)
-            guard try source.entries(expectedPaths: Set(before.keys)) == before,
+            let after = externalRawProjection ? try source.verifyRequired(entry.files) :
+                ModelRequiredTree(files: try source.entries(expectedPaths: requiredPaths), directories: [:])
+            guard after == before,
                   try stage.entries(expectedPaths: Set(verified.keys)) == verified else { throw ModelLibraryError.integrity("准备期间原件或执行包发生变化；未发布。") }
             try source.validateLocation(); try parent.validateLocation(); try stage.validateLocation()
             try Task.checkCancellation()
