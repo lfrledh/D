@@ -191,3 +191,11 @@ Worker过程存在未按旧停止规则立即回报的缓存权限拒绝记录�
 Lead负责ACE加载/共享请求/准备/装配及集成；只读非实现者定点复核。Qwen增量解析、HF下载认证等独立写切片仅在精确规格/独立受限CLI预检通过后派发，网络关闭、原件只读、允许文件/缓存/tmp明确，普通初交+两修后有界Lead接管不无限迭代；旧切片预算不冒名刷新。GPU、真实转换与重构建串行。
 
 H31一轮诊断：hf0.36.0既有外盘下载环境，默认HF_HOME/token不存在且无环境覆盖；不读取token、不再重试旧401。固定清单的LTX下载仓实际是dgrauet/ltx-2.5-mlx，不是仅Lightricks原仓，已原位纠正集中待办并制作未执行的官方交互登录入口。登录只下载，Swift认证接线未完成不能因CLI登录就写通过。
+
+### R3 bounded implementation ownership
+
+Lead owns ACE SSD preparation/layer lifecycle, shared execution strategy and final app assembly. Two independent restricted CLI slices use `gpt-6-sol/high`, network off, own worktree/output/tmp only, no shared Git writes. New slice initial + at most two focused repairs; previous slice history is unchanged. Each starts preflight only, then requires verified runtime route before IMPLEMENT.
+
+- R3-VLM: Qwen incremental final-body stream. Allowed paths: `Backends/MLX/Sources/DMLXBackend/MLXQwenVLMBackend.swift`, `Backends/MLX/Sources/DMLXBackend/QwenResponseStream.swift`, `Backends/MLX/Tests/DMLXBackendTests/QwenResponseStreamTests.swift`.
+
+- R3-FORMS: Download-only Hugging Face credential connection. Allowed paths: `Packages/UI/Sources/DWorkbench/Models/ModelDownloadCredential.swift`, `Packages/UI/Sources/DWorkbench/Models/ModelRangeDownload.swift`, `Packages/UI/Sources/DWorkbench/Models/ModelLibrary.swift`, `Packages/UI/Sources/DWorkbench/Models/ModelLibraryTypes.swift`, `Packages/UI/Sources/UI/State/ModelLibraryModel.swift`, `Packages/UI/Sources/UI/Views/ModelLibraryView.swift`, `Packages/UI/Tests/DWorkbenchTests/ModelDownloadCredentialTests.swift`.
