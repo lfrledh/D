@@ -1032,6 +1032,9 @@ public final class ProjectSession {
         let installationSnapshot = await library.snapshot()
         try Task.checkCancellation()
         guard workflowInstallationSelection == selection else { throw CancellationError() }
+        // A newer removal/unavailability observation can arrive while snapshot()
+        // returns across the actor boundary. Do not resurrect that installation.
+        guard installationSnapshot.revision >= modelAvailabilityRevision else { throw CancellationError() }
         guard store === owner, !isChangingProject, !closePending else { throw WorkflowIssue("校验期间项目已切换，未改变模型选择。") }
         guard installationSnapshot.records.contains(where: { $0.id == id && $0.state == .installed && $0.availability == .available }) else {
             throw WorkflowIssue("校验期间模型安装已改变，请重新选择。")
