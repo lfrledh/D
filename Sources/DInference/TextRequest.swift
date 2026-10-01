@@ -1,5 +1,10 @@
 import Foundation
 
+public enum TextLoadingStrategy: String, Sendable, Codable, Equatable {
+    case resident
+    case ssdLayered
+}
+
 public struct TextRequest: Sendable, Codable, Equatable {
     public let prompt: String
     public let maxTokens: Int
@@ -13,13 +18,15 @@ public struct TextRequest: Sendable, Codable, Equatable {
     public let tools: [TextToolDefinition]?
     public let thinking: TextThinkingOptions?
     public let seed: UInt64?
+    public let loadingStrategy: TextLoadingStrategy?
 
     public init(prompt: String, maxTokens: Int = 256, temperature: Float = 0.7, topP: Float = 0.95,
                 execution: TextExecutionSelection? = nil,
                 images: [TextImageReference]? = nil, video: TextVideoReference? = nil,
                 visualProcessing: TextVisualProcessing? = nil,
                 messages: [TextMessage]? = nil, tools: [TextToolDefinition]? = nil,
-                thinking: TextThinkingOptions? = nil, seed: UInt64? = nil) {
+                thinking: TextThinkingOptions? = nil, seed: UInt64? = nil,
+                loadingStrategy: TextLoadingStrategy? = nil) {
         self.prompt = prompt
         self.maxTokens = maxTokens
         self.temperature = temperature
@@ -32,6 +39,7 @@ public struct TextRequest: Sendable, Codable, Equatable {
         self.tools = tools
         self.thinking = thinking
         self.seed = seed
+        self.loadingStrategy = loadingStrategy
     }
 
     public var hasVisualInput: Bool {

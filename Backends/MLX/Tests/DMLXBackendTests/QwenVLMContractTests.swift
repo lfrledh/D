@@ -10,6 +10,17 @@ import Testing
 
 @Suite("Qwen3.5 VLM metadata contract")
 struct QwenVLMContractTests {
+    @Test func loadingStrategyIsExplicitAndLegacyJSONRemainsResident() throws {
+        let legacy = TextRequest(prompt: "hello")
+        let data = try JSONEncoder().encode(legacy)
+        let json = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        #expect(json["loadingStrategy"] == nil)
+        #expect(try JSONDecoder().decode(TextRequest.self, from: data).loadingStrategy == nil)
+        let selected = TextRequest(prompt: "hello", loadingStrategy: .ssdLayered)
+        #expect(try JSONDecoder().decode(TextRequest.self,
+            from: JSONEncoder().encode(selected)).loadingStrategy == .ssdLayered)
+    }
+
     private let officialProcessor = Data("""
         {"processor_class":"Qwen3VLProcessor","image_processor_type":"Qwen2VLImageProcessorFast",
          "patch_size":16,"merge_size":2,"temporal_patch_size":2,
@@ -33,6 +44,21 @@ struct QwenVLMContractTests {
         object["min_pixels"] = 3136
         #expect(throws: (any Error).self) {
             try QwenVLMProcessorConfiguration.normalized(JSONSerialization.data(withJSONObject: object), overrides: nil)
+        }
+    }
+
+    @Test func configurationIntegersRejectBooleanFractionAndOversize() throws {
+        for source in ["{\"n\":true}", "{\"n\":1.0}",
+                       "{\"n\":1.5}", "{\"n\":9223372036854775808}"] {
+            let object = try QwenVLMModelInventory.object(Data(source.utf8))
+            #expect(throws: (any Error).self) {
+                _ = try QwenVLMModelInventory.integer(object, "n")
+            }
+        }
+        let zero = try QwenVLMModelInventory.object(Data("{\"n\":0}".utf8))
+        #expect(try QwenVLMModelInventory.integer(zero, "n") == 0)
+        #expect(throws: (any Error).self) {
+            _ = try QwenVLMModelInventory.object(Data("{\"n\":1,\"n\":2}".utf8))
         }
     }
 

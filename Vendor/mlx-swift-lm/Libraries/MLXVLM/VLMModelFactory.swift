@@ -311,11 +311,12 @@ public final class VLMModelFactory: GenericModelFactory {
 
     public init(
         typeRegistry: ModelTypeRegistry<LanguageModel>, processorRegistry: ProcessorTypeRegistry,
-        modelRegistry: AbstractModelRegistry
+        modelRegistry: AbstractModelRegistry, layeredQwen35: Bool = false
     ) {
         self.typeRegistry = typeRegistry
         self.processorRegistry = processorRegistry
         self.modelRegistry = modelRegistry
+        self.layeredQwen35 = layeredQwen35
     }
 
     /// Shared instance with default behavior.
@@ -331,6 +332,7 @@ public final class VLMModelFactory: GenericModelFactory {
 
     /// registry of model id to configuration, e.g. `mlx-community/paligemma-3b-mix-448-8bit`
     public let modelRegistry: AbstractModelRegistry
+    private let layeredQwen35: Bool
 
     public func _load(
         configuration: ResolvedModelConfiguration,
@@ -342,10 +344,18 @@ public final class VLMModelFactory: GenericModelFactory {
         let configurationURL = modelDirectory.appending(component: "config.json")
         let configData: Data
         do {
-            configData = try Data(contentsOf: configurationURL)
+            configData = try layeredQwen35
+                ? Qwen35LayeredWeights.readBounded(configurationURL, maximum: 4 * 1024 * 1024)
+                : Data(contentsOf: configurationURL)
         } catch {
             throw ModelFactoryError.configurationFileError(
                 configurationURL.lastPathComponent, configuration.name, error)
+        }
+        let configurationIdentity: String?
+        if layeredQwen35 {
+            configurationIdentity = try Qwen35LayeredFileValidation.identity(configurationURL)
+        } else {
+            configurationIdentity = nil
         }
         let baseConfig: BaseConfiguration
         do {
@@ -357,8 +367,16 @@ public final class VLMModelFactory: GenericModelFactory {
 
         let model: LanguageModel
         do {
-            model = try await typeRegistry.createModel(
-                configuration: configData, modelType: baseConfig.modelType)
+            if layeredQwen35 {
+                guard baseConfig.modelType == "qwen3_5", baseConfig.perLayerQuantization == nil else {
+                    throw Qwen35LayeredWeights.Failure.invalid("only unquantized Qwen3.5 supports layered loading")
+                }
+                let config = try JSONDecoder.json5().decode(Qwen35Configuration.self, from: configData)
+                model = Qwen35(config, layered: true)
+            } else {
+                model = try await typeRegistry.createModel(
+                    configuration: configData, modelType: baseConfig.modelType)
+            }
         } catch let error as DecodingError {
             throw ModelFactoryError.configurationDecodingError(
                 configurationURL.lastPathComponent, configuration.name, error)
@@ -368,7 +386,9 @@ public final class VLMModelFactory: GenericModelFactory {
         var eosTokenIds = Set(baseConfig.eosTokenIds?.values ?? [])
         let generationConfigURL = modelDirectory.appending(component: "generation_config.json")
         let generationConfig: GenerationConfigFile? =
-            if let generationData = try? Data(contentsOf: generationConfigURL) {
+            if let generationData = try? (layeredQwen35
+                ? Qwen35LayeredWeights.readBounded(generationConfigURL, maximum: 4 * 1024 * 1024)
+                : Data(contentsOf: generationConfigURL)) {
                 try? JSONDecoder.json5().decode(GenerationConfigFile.self, from: generationData)
             } else {
                 nil
@@ -395,9 +415,14 @@ public final class VLMModelFactory: GenericModelFactory {
             from: configuration.tokenizerDirectory)
         async let processorConfigTask = loadProcessorConfig(from: modelDirectory)
 
-        try loadWeights(
-            modelDirectory: modelDirectory, model: model,
-            perLayerQuantization: baseConfig.perLayerQuantization)
+        if let layered = model as? Qwen35, layeredQwen35 {
+            try layered.loadLayeredWeights(from: modelDirectory,
+                                           expectedConfiguration: configData,
+                                           expectedConfigurationIdentity: configurationIdentity)
+        } else {
+            try loadWeights(modelDirectory: modelDirectory, model: model,
+                perLayerQuantization: baseConfig.perLayerQuantization)
+        }
 
         let tokenizer = try await tokenizerTask
         let processorConfigData: Data

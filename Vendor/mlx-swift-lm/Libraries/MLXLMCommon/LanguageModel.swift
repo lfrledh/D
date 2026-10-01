@@ -256,6 +256,13 @@ public protocol LanguageModel: BaseLanguageModel {
     func newCache(parameters: GenerateParameters?) -> [KVCache]
 }
 
+/// Opt-in execution for models whose decode can fail during weight I/O.
+/// Existing LanguageModel implementations keep their nonthrowing path.
+public protocol ThrowingLanguageModel: LanguageModel {
+    func prepareThrowing(_ input: LMInput, cache: [KVCache], windowSize: Int?) throws -> PrepareResult
+    func callThrowing(_ input: LMInput.Text, cache: [KVCache]?, state: LMOutput.State?) throws -> LMOutput
+}
+
 extension LanguageModel {
     public func callAsFunction(_ input: LMInput.Text, cache: [KVCache]?, state: LMOutput.State?)
         -> LMOutput
