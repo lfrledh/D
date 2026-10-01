@@ -60,11 +60,16 @@ struct DevLayeredRealModelTests {
                 let start = Date()
                 let run = try await runtime.submit(request, backendID: backend.descriptor.id)
                 var cancelled = false, artifacts = 0
+                var progress: [Int] = []
                 var streamFailure: String?
                 do {
                     for try await output in run.events {
                         if case .artifact = output { artifacts += 1 }
-                        if case .progress(let done, let total) = output { print("D_DEV_PROGRESS", mode, done, total) }
+                        if case .progress(let done, let total) = output {
+                            #expect(total == 50)
+                            progress.append(done)
+                            print("D_DEV_PROGRESS", mode, done, total)
+                        }
                         if mode == "cancel", !cancelled,
                            case .progress(let done, let total) = output, total == 50, done > 0 {
                             cancelled = true; await run.cancel()
@@ -80,13 +85,14 @@ struct DevLayeredRealModelTests {
                 #expect(lifecycle.last?.phase == .released)
                 #expect(lifecycle.last?.memory.activeBytes == 0 && lifecycle.last?.memory.cacheBytes == 0)
                 var record: [String: Any] = ["runID":request.id.uuidString, "seconds":Date().timeIntervalSince(start),
-                    "outcome":String(describing: outcome), "cancelRequested":cancelled, "streamFailure":streamFailure ?? "none", "GUI":false]
+                    "outcome":String(describing: outcome), "cancelRequested":cancelled, "streamFailure":streamFailure ?? "none", "GUI":false, "progress": progress]
                 if mode == "cancel" { #expect(cancelled && outcome == .cancelled && artifacts == 0) }
                 else {
                     guard case .completed(let result) = outcome else {
                         throw InferenceFailure.backendFailed("Dev original BF16 failed: \(outcome)")
                     }
                     #expect(streamFailure == nil && artifacts == 1)
+                    #expect(progress == Array(0...50), "The complete 50-step trajectory must finish before publication")
                     #expect(result.metadata["loadingStrategy"] == "ssdLayered")
                     #expect(result.metadata["modelRevision"] == LocalFluxDevInventory.revision)
                     if refs != nil {

@@ -14,9 +14,9 @@
   "snapshot": {
     "fileCount": 206,
     "upstreamBytes": 41852259,
-    "patchedBytes": 41889671,
+    "patchedBytes": 41917577,
     "manifest": "flux2-swift.files.json",
-    "manifestSHA256": "57e9b126ae74e1054782a61425676c8b9984adf87a3b0386b03505ed9efef730",
+    "manifestSHA256": "273fab03698421cba32ed0ff4e99c353f556010ca2b1e01d0c7279efce5764d7",
     "selection": "All 206 tracked upstream blobs; no trimming or expanded gitlinks."
   },
   "patches": [
@@ -99,8 +99,8 @@
     },
     {
       "file": "patches/flux2-klein-ssd-layered.patch",
-      "sha256": "47020aba81c9a0a25dbc6a5ce913670645cdc7bd0ad322747c89dbe097726528",
-      "description": "Original BF16 demand-loaded complete Qwen/transformer blocks, strict bounded safetensors reads and parity fixtures; resident path retained",
+      "sha256": "3cbdb6da5d0de7754d8e4f10b155caadf09a14ddeddbdee8bf372a327c7a6849",
+      "description": "Original Klein and Dev block streaming, same numerical kernels; strict identity and parity controls",
       "modifiedFiles": [
         {
           "path": "Sources/Flux2/IO/SafeTensorsReader.swift",
@@ -119,9 +119,9 @@
         {
           "path": "Sources/Flux2/Models/Transformer/Flux2Transformer2DModel.swift",
           "upstreamSHA256": "72533cafb7de8d269bde25178388598a7083499fadf7a31ee87d620b28bf9641",
-          "sha256": "b5ee5d7ebc9fb66b1b9aeb44f606f8660ed9addee3da17ef3875705ee9918e27",
+          "sha256": "975c2cafb4e52dcd25ae3e62033b41b582b68c851fd8761c2e858f73433c123c",
           "upstreamSize": 7455,
-          "size": 13322
+          "size": 13605
         },
         {
           "path": "Sources/Flux2/Pipeline/Flux2Denoiser.swift",
@@ -140,9 +140,9 @@
         {
           "path": "Tests/Flux2Tests/Flux2TransformerParityTests.swift",
           "upstreamSHA256": "48e56189d9ebe1b9026a62f9b74ac1288b224e03707358879ab0f432c2300e4e",
-          "sha256": "09c58af2fc2dbeedbb0e685b25636f6a4a75ed13e581ee1598b26fd931b12a32",
+          "sha256": "627698356d937a2b5c98e38e77f2aabe91ae4a45de5a126c88e0f52d4d4f42b4",
           "upstreamSize": 1714,
-          "size": 9035
+          "size": 18170
         },
         {
           "path": "Tests/Flux2Tests/SafeTensorsReaderTests.swift",
@@ -152,6 +152,41 @@
           "size": 9494
         }
       ]
+    },
+    {
+      "file": "patches/flux2-dev-ssd-layered.patch",
+      "description": "Original Dev prompt encoder and pinned per-layer reads with original-admission identity validation",
+      "modifiedFiles": [
+        {
+          "path": "Sources/Flux2/IO/Weights/Flux2WeightsLoader.swift",
+          "upstreamSHA256": "2558cb165a1da0d04056bca3095d34c84e64284f121f47b9e9bec06f7576c2f9",
+          "sha256": "bc16e4259aa8fdd93e6ba5bae8400e282c5ba4923aaca9f35e0abeaf6c2b23a2",
+          "upstreamSize": 3406,
+          "size": 6896
+        },
+        {
+          "path": "Sources/Flux2/Models/TextEncoder/Flux2Mistral3TextEncoder.swift",
+          "upstreamSHA256": "1d137dab82435d7a468b534a5c482e26451e08e288de52a7db4e8469bf8dd70c",
+          "sha256": "7d354bf77e6f669bc623bcc6b842ff59a3451e743af946d10408efa8df8fa9e2",
+          "upstreamSize": 24548,
+          "size": 28618
+        },
+        {
+          "path": "Tests/Flux2Tests/Flux2Mistral3TextEncoderTests.swift",
+          "upstreamSHA256": "3fa215ab32409863ed06526bbff349e99a62fd11577f2c9587d8376ad3b79a4e",
+          "sha256": "64e4ab0376781eaf3a83135915db051e2a699f4a3ed736427b0590a30b9805b1",
+          "upstreamSize": 4638,
+          "size": 10035
+        },
+        {
+          "path": "Tests/Flux2Tests/Flux2WeightsLoaderTests.swift",
+          "upstreamSHA256": "0fc9a37bc2f0685210c18975cdf69497e6833dfc0c54e9d7489c934c49f8624b",
+          "sha256": "0ede7d44954a2b6d1be0cbc87584552f1856a268abd015aa8db4d0ea4503a9cc",
+          "upstreamSize": 2110,
+          "size": 7641
+        }
+      ],
+      "sha256": "a660a7e4d25da11ab2d6c0dfecce6c15200d17b53207172fb525d1031b6dea7e"
     }
   ]
 }

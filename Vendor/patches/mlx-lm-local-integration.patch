@@ -633,7 +633,12 @@
      }
  
      private func preprocess(image: CIImage, resizedSize: CGSize) -> CIImage {
-@@ -110,7 +117,8 @@
+@@ -106,11 +113,13 @@
+         var processedVideo: LMInput.ProcessedVideo?
+         if !input.videos.isEmpty {
+             var accumulatedFrames: [[MLXArray]] = []
++            var timestamps: [[Double]] = []
+ 
              for video in input.videos {
                  var resizedSize: CGSize = .zero
                  let sequence = try await MediaProcessing.asProcessedSequence(
@@ -643,7 +648,75 @@
                  ) { frame in
                      let processed = MediaProcessing.apply(frame.frame, processing: input.processing)
                      if resizedSize == .zero {
-@@ -376,6 +384,23 @@
+@@ -127,6 +136,7 @@
+                     return VideoFrame(frame: finalImage, timeStamp: frame.timeStamp)
+                 }
+                 accumulatedFrames.append(sequence.frames)
++                timestamps.append(sequence.timestamps.map { $0.seconds })
+             }
+ 
+             let videoFrames = try accumulatedFrames.map {
+@@ -141,10 +151,11 @@
+             processedVideo = .init(pixels: concatenated, frames: videoFrames.map { $0.1 })
+ 
+             if let frames = processedVideo?.frames {
+-                promptTokens = try QwenVL.replacePaddingTokens(
++                promptTokens = try Self.replaceVideoPaddingTokens(
+                     in: promptTokens,
+                     frames: frames,
+-                    paddingToken: "<|video_pad|>",
++                    timestamps: timestamps,
++                    temporalPatchSize: config.temporalPatchSize,
+                     mergeSize: config.mergeSize,
+                     tokenizer: tokenizer)
+             }
+@@ -157,6 +168,45 @@
+             text: .init(tokens: promptArray, mask: mask),
+             image: processedImage,
+             video: processedVideo)
++    }
++
++    // Qwen3-VL/3.5 uses one timestamped language segment per temporal patch.
++    // Keep the vision grid intact; getRopeIndex expands it only for language positions.
++    // Reference: transformers@a005fc82, Qwen3VLProcessor and Qwen3_5Model.get_rope_index.
++    static func replaceVideoPaddingTokens(
++        in tokens: [Int], frames: [THW], timestamps: [[Double]],
++        temporalPatchSize: Int, mergeSize: Int, tokenizer: any Tokenizer
++    ) throws -> [Int] {
++        let placeholder = tokenizer.encode(text: "<|vision_start|><|video_pad|><|vision_end|>")
++        let ranges = tokens.ranges(of: placeholder)
++        guard ranges.count == frames.count, timestamps.count == frames.count,
++              temporalPatchSize > 0, mergeSize > 0 else {
++            throw VLMError.processing("Video placeholders, grids and timestamps do not match")
++        }
++        var result: [Int] = [], cursor = tokens.startIndex
++        for (index, range) in ranges.enumerated() {
++            let grid = frames[index], times = timestamps[index]
++            guard !times.isEmpty, times.allSatisfy({ $0.isFinite && $0 >= 0 }),
++                  zip(times, times.dropFirst()).allSatisfy({ $0 <= $1 }),
++                  grid.t == (times.count + temporalPatchSize - 1) / temporalPatchSize,
++                  grid.h > 0, grid.w > 0, grid.h % mergeSize == 0, grid.w % mergeSize == 0 else {
++                throw VLMError.processing("Invalid video temporal grid or timestamps")
++            }
++            var replacement = ""
++            let padding = String(repeating: "<|video_pad|>", count: grid.h * grid.w / (mergeSize * mergeSize))
++            for temporal in 0..<grid.t {
++                let first = temporal * temporalPatchSize
++                let last = min(first + temporalPatchSize - 1, times.count - 1)
++                let time = (times[first] + times[last]) / 2
++                replacement += String(format: "<%.1f seconds>", locale: Locale(identifier: "en_US_POSIX"), time)
++                replacement += "<|vision_start|>" + padding + "<|vision_end|>"
++            }
++            result.append(contentsOf: tokens[cursor..<range.lowerBound])
++            result.append(contentsOf: tokenizer.encode(text: replacement))
++            cursor = range.upperBound
++        }
++        result.append(contentsOf: tokens[cursor...])
++        return result
+     }
+ }
+ 
+@@ -376,6 +426,23 @@
  // MARK: - Vision
  
  enum Qwen3VLVision {
@@ -667,7 +740,7 @@
  
      static func rotateHalf(_ x: MLXArray) -> MLXArray {
          let half = x.dim(-1) / 2
-@@ -473,7 +498,7 @@
+@@ -473,7 +540,7 @@
          @ModuleInfo(key: "norm") var norm: LayerNorm
          @ModuleInfo(key: "linear_fc1") var linear1: Linear
          @ModuleInfo(key: "linear_fc2") var linear2: Linear
@@ -676,7 +749,7 @@
  
          init(config: Qwen3VLConfiguration.VisionConfiguration, usePostShuffleNorm: Bool) {
              self.hiddenSize =
-@@ -484,7 +509,7 @@
+@@ -484,7 +551,7 @@
              _norm.wrappedValue = LayerNorm(dimensions: normDim, eps: 1e-6)
              _linear1.wrappedValue = Linear(hiddenSize, hiddenSize)
              _linear2.wrappedValue = Linear(hiddenSize, config.outHiddenSize)
@@ -685,7 +758,7 @@
          }
  
          func callAsFunction(_ x: MLXArray) -> MLXArray {
-@@ -568,12 +593,12 @@
+@@ -568,12 +635,12 @@
      final class MLP: Module, UnaryLayer {
          @ModuleInfo(key: "linear_fc1") var linear1: Linear
          @ModuleInfo(key: "linear_fc2") var linear2: Linear
@@ -700,7 +773,7 @@
          }
  
          func callAsFunction(_ x: MLXArray) -> MLXArray {
-@@ -620,8 +645,9 @@
+@@ -620,8 +687,9 @@
          @ModuleInfo(key: "merger") var merger: PatchMerger
          @ModuleInfo(key: "deepstack_merger_list") var deepstackMergers: [PatchMerger]
          let deepstackVisualIndexes: [Int]
@@ -712,7 +785,7 @@
              self.config = config
              self.spatialMergeSize = config.spatialMergeSize
              self.numGridPerSide = Int(sqrt(Double(config.numPositionEmbeddings)))
-@@ -640,7 +666,7 @@
+@@ -640,7 +708,7 @@
                  embeddingCount: config.numPositionEmbeddings,
                  dimensions: config.hiddenSize)
  
@@ -721,7 +794,7 @@
              _merger.wrappedValue = PatchMerger(config: config, usePostShuffleNorm: false)
  
              _deepstackMergers.wrappedValue = config.deepstackVisualIndexes.map { _ in
-@@ -862,6 +888,7 @@
+@@ -862,6 +930,7 @@
  
              let posEmbeds = positionalEmbeddings(gridTHW)
              hiddenStates = hiddenStates + posEmbeds
@@ -729,7 +802,7 @@
  
              let rotaryEmbeds = rotaryPositionEmbedding(gridTHW)
              let cuSeqlens = cumulativeSequenceLengths(gridTHW)
-@@ -870,6 +897,7 @@
+@@ -870,6 +939,7 @@
  
              for (index, block) in blocks.enumerated() {
                  hiddenStates = block(hiddenStates, cuSeqlens: cuSeqlens, rotaryPosEmb: rotaryEmbeds)
@@ -737,7 +810,7 @@
                  if let dsIndex = deepstackVisualIndexes.firstIndex(of: index) {
                      let feature = deepstackMergers[dsIndex](hiddenStates)
                      deepstackOutputs.append(feature)
-@@ -877,16 +905,42 @@
+@@ -877,16 +947,42 @@
              }
  
              hiddenStates = merger(hiddenStates)
@@ -781,6 +854,28 @@
                          sanitized[key] = value
                      } else {
                          sanitized[key] = value.transposed(0, 2, 3, 4, 1)
+@@ -1341,6 +1437,12 @@
+ 
+         let (batchSize, seqLength) = (inputIds.dim(0), inputIds.dim(1))
+ 
++        // Timestamp text separates temporal patches in the language sequence;
++        // the vision encoder still consumes each original full video grid.
++        let languageVideoGrids = videoGridTHW?.flatMap { grid in
++            Array(repeating: THW(1, grid.h, grid.w), count: grid.t)
++        }
++
+         var positionIds = MLXArray(0 ..< seqLength).asType(.int32)
+         positionIds = broadcast(positionIds[.newAxis, 0...], to: [batchSize, seqLength])
+ 
+@@ -1416,7 +1518,7 @@
+                     ed = edImage
+                 } else {
+                     // Process video
+-                    guard let grid = videoGridTHW, videoIndex < grid.count else { break }
++                    guard let grid = languageVideoGrids, videoIndex < grid.count else { break }
+                     (t, h, w) = grid[videoIndex].values
+                     videoIndex += 1
+                     remainVideos -= 1
 --- /dev/null
 +++ b/Libraries/MLXVLM/Qwen35LayeredWeights.swift
 @@ -0,0 +1,563 @@

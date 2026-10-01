@@ -116,8 +116,8 @@
       "upstreamGitBlob": "139d10ae596e51818f2552b5d1ce856025183934",
       "upstreamSize": 3406,
       "upstreamSHA256": "2558cb165a1da0d04056bca3095d34c84e64284f121f47b9e9bec06f7576c2f9",
-      "size": 3406,
-      "sha256": "2558cb165a1da0d04056bca3095d34c84e64284f121f47b9e9bec06f7576c2f9"
+      "size": 6896,
+      "sha256": "bc16e4259aa8fdd93e6ba5bae8400e282c5ba4923aaca9f35e0abeaf6c2b23a2"
     },
     {
       "path": "Sources/Flux2/Models/TextEncoder/Flux2Mistral3Configuration.swift",
@@ -143,8 +143,8 @@
       "upstreamGitBlob": "59a0f5a2670fb43d41dbe96111195a8a301692cf",
       "upstreamSize": 24548,
       "upstreamSHA256": "1d137dab82435d7a468b534a5c482e26451e08e288de52a7db4e8469bf8dd70c",
-      "size": 24548,
-      "sha256": "1d137dab82435d7a468b534a5c482e26451e08e288de52a7db4e8469bf8dd70c"
+      "size": 28618,
+      "sha256": "7d354bf77e6f669bc623bcc6b842ff59a3451e743af946d10408efa8df8fa9e2"
     },
     {
       "path": "Sources/Flux2/Models/TextEncoder/Flux2Mistral3VLMConfiguration.swift",
@@ -296,8 +296,8 @@
       "upstreamGitBlob": "c1fa1e3a4df11b0f0b5f7167cf2c0a3cdb034120",
       "upstreamSize": 7455,
       "upstreamSHA256": "72533cafb7de8d269bde25178388598a7083499fadf7a31ee87d620b28bf9641",
-      "size": 13322,
-      "sha256": "b5ee5d7ebc9fb66b1b9aeb44f606f8660ed9addee3da17ef3875705ee9918e27"
+      "size": 13605,
+      "sha256": "975c2cafb4e52dcd25ae3e62033b41b582b68c851fd8761c2e858f73433c123c"
     },
     {
       "path": "Sources/Flux2/Models/Transformer/Flux2TransformerBlocks.swift",
@@ -665,8 +665,8 @@
       "upstreamGitBlob": "0a633623aa9727a7b35c1ec16014854aeae4d798",
       "upstreamSize": 4638,
       "upstreamSHA256": "3fa215ab32409863ed06526bbff349e99a62fd11577f2c9587d8376ad3b79a4e",
-      "size": 4638,
-      "sha256": "3fa215ab32409863ed06526bbff349e99a62fd11577f2c9587d8376ad3b79a4e"
+      "size": 10035,
+      "sha256": "64e4ab0376781eaf3a83135915db051e2a699f4a3ed736427b0590a30b9805b1"
     },
     {
       "path": "Tests/Flux2Tests/Flux2PipelineGuidanceTests.swift",
@@ -719,8 +719,8 @@
       "upstreamGitBlob": "e680bbfa3cbf9397e479bc2cd9601e6247a3ff74",
       "upstreamSize": 1714,
       "upstreamSHA256": "48e56189d9ebe1b9026a62f9b74ac1288b224e03707358879ab0f432c2300e4e",
-      "size": 9035,
-      "sha256": "09c58af2fc2dbeedbb0e685b25636f6a4a75ed13e581ee1598b26fd931b12a32"
+      "size": 18170,
+      "sha256": "627698356d937a2b5c98e38e77f2aabe91ae4a45de5a126c88e0f52d4d4f42b4"
     },
     {
       "path": "Tests/Flux2Tests/Flux2VAEParityTests.swift",
@@ -737,8 +737,8 @@
       "upstreamGitBlob": "290943b31daf1193357d35585edd49d5f3406671",
       "upstreamSize": 2110,
       "upstreamSHA256": "0fc9a37bc2f0685210c18975cdf69497e6833dfc0c54e9d7489c934c49f8624b",
-      "size": 2110,
-      "sha256": "0fc9a37bc2f0685210c18975cdf69497e6833dfc0c54e9d7489c934c49f8624b"
+      "size": 7641,
+      "sha256": "0ede7d44954a2b6d1be0cbc87584552f1856a268abd015aa8db4d0ea4503a9cc"
     },
     {
       "path": "Tests/Flux2Tests/SafeTensorsReaderTests.swift",

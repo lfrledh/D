@@ -1,0 +1,566 @@
+diff --git a/Sources/Flux2/IO/Weights/Flux2WeightsLoader.swift b/Sources/Flux2/IO/Weights/Flux2WeightsLoader.swift
+--- a/Sources/Flux2/IO/Weights/Flux2WeightsLoader.swift
++++ b/Sources/Flux2/IO/Weights/Flux2WeightsLoader.swift
+@@ -1,5 +1,6 @@
+ import Foundation
+ import MLX
++import Darwin
+ 
+ public enum Flux2WeightComponent: String, CaseIterable, Sendable {
+   case transformer
+@@ -10,6 +11,103 @@
+ public enum Flux2WeightsLoaderError: Error {
+   case componentDirectoryMissing(Flux2WeightComponent, URL)
+   case noSafetensorsFound(Flux2WeightComponent, URL)
++  case duplicateTensor(String)
++  case unexpectedPrecision(String)
++  case changedFile(URL)
++}
++
++/// A fixed set of open safetensors readers for one layered model stage. The
++/// readers validate their original file identity on every selected tensor read.
++/// No unselected tensor data is materialized.
++public final class Flux2PinnedWeightSelection {
++  private struct Identity: Equatable {
++    let device: dev_t
++    let inode: ino_t
++    let size: off_t
++    let modifiedSeconds: Int
++    let modifiedNanoseconds: Int
++    let changedSeconds: Int
++    let changedNanoseconds: Int
++
++    init(_ value: stat) {
++      device = value.st_dev
++      inode = value.st_ino
++      size = value.st_size
++      modifiedSeconds = value.st_mtimespec.tv_sec
++      modifiedNanoseconds = value.st_mtimespec.tv_nsec
++      changedSeconds = value.st_ctimespec.tv_sec
++      changedNanoseconds = value.st_ctimespec.tv_nsec
++    }
++  }
++
++  private let readers: [SafeTensorsReader]
++  private let locations: [String: SafeTensorsReader]
++  private let identities: [URL: Identity]
++  private let admissionValidator: (() throws -> Void)?
++
++  public var tensorNames: Set<String> { Set(locations.keys) }
++
++  public init(snapshot: URL, component: Flux2WeightComponent,
++              admissionValidator: (() throws -> Void)? = nil,
++              allowedDType: (String, DType) -> Bool) throws {
++    try admissionValidator?()
++    let files = try Flux2WeightsLoader(snapshot: snapshot).listSafetensors(component: component)
++    var opened: [SafeTensorsReader] = []
++    var found: [String: SafeTensorsReader] = [:]
++    var saved: [URL: Identity] = [:]
++    for file in files {
++      try Task.checkCancellation()
++      try admissionValidator?()
++      let reader = try SafeTensorsReader(fileURL: file)
++      try admissionValidator?()
++      var value = stat()
++      guard Darwin.lstat(file.path, &value) == 0, value.st_mode & S_IFMT == S_IFREG else {
++        throw Flux2WeightsLoaderError.changedFile(file)
++      }
++      saved[file] = Identity(value)
++      for metadata in reader.allMetadata() {
++        guard allowedDType(metadata.name, metadata.dtype) else {
++          throw Flux2WeightsLoaderError.unexpectedPrecision(metadata.name)
++        }
++        guard found.updateValue(reader, forKey: metadata.name) == nil else {
++          throw Flux2WeightsLoaderError.duplicateTensor(metadata.name)
++        }
++      }
++      opened.append(reader)
++    }
++    readers = opened
++    locations = found
++    identities = saved
++    self.admissionValidator = admissionValidator
++    try verifyFileIdentities()
++  }
++
++  public func load(where include: (String) -> Bool) throws -> [String: MLXArray] {
++    try verifyFileIdentities()
++    var selected: [String: MLXArray] = [:]
++    for name in locations.keys.sorted() where include(name) {
++      try Task.checkCancellation()
++      try admissionValidator?()
++      selected[name] = try locations[name]!.tensor(named: name)
++    }
++    try verifyFileIdentities()
++    return selected
++  }
++
++  /// Call after evaluating the selected block, before loading its successor.
++  public func verifyFileIdentities() throws {
++    try admissionValidator?()
++    for reader in readers {
++      try Task.checkCancellation()
++      var value = stat()
++      guard Darwin.lstat(reader.fileURL.path, &value) == 0,
++            value.st_mode & S_IFMT == S_IFREG,
++            identities[reader.fileURL] == Identity(value) else {
++        throw Flux2WeightsLoaderError.changedFile(reader.fileURL)
++      }
++    }
++    try admissionValidator?()
++  }
+ }
+ 
+ public struct Flux2WeightsLoader: Sendable {
+diff --git a/Sources/Flux2/Models/TextEncoder/Flux2Mistral3TextEncoder.swift b/Sources/Flux2/Models/TextEncoder/Flux2Mistral3TextEncoder.swift
+--- a/Sources/Flux2/Models/TextEncoder/Flux2Mistral3TextEncoder.swift
++++ b/Sources/Flux2/Models/TextEncoder/Flux2Mistral3TextEncoder.swift
+@@ -10,6 +10,10 @@
+   case multimodalUnavailable
+   case invalidMultimodalInput
+   case imageTokenMismatch(expected: Int, actual: Int)
++  case incompleteLayer(Int)
++  case unsupportedLayeredQuantization
++  case layeredGenerationUnavailable
++  case duplicateNormalizedWeight(String)
+ }
+ 
+ public final class Flux2Mistral3TextEncoder: Module {
+@@ -19,6 +23,7 @@
+   @ModuleInfo(key: "language_model") private var languageModel: Flux2Mistral3CausalLM
+   @ModuleInfo(key: "vision_tower") private var visionTower: Flux2PixtralVisionTower?
+   @ModuleInfo(key: "multi_modal_projector") private var multiModalProjector: Flux2Mistral3MultiModalProjector?
++  private var layeredWeights: Flux2PinnedWeightSelection?
+ 
+   public init(configuration: Flux2Mistral3Configuration, vlmConfiguration: Flux2Mistral3VLMConfiguration? = nil) {
+     self.configuration = configuration
+@@ -70,6 +75,50 @@
+     }
+     try encoder.update(parameters: ModuleParameters.unflattened(normalized), verify: .none)
+ 
++    return encoder
++  }
++
++  /// Prompt-only original precision execution. Retain embedding and final norm;
++  /// each complete decoder block is read, evaluated and released in model order.
++  public static func loadLayered(from snapshot: URL, dtype: DType = .bfloat16,
++                                 admissionValidator: (() throws -> Void)? = nil) throws -> Flux2Mistral3TextEncoder {
++    try admissionValidator?()
++    if let _ = try Flux2Quantizer.loadManifest(from: snapshot) {
++      throw Flux2Mistral3TextEncoderError.unsupportedLayeredQuantization
++    }
++    try admissionValidator?()
++    let configURL = snapshot.appendingPathComponent("text_encoder/config.json")
++    try admissionValidator?()
++    guard FileManager.default.fileExists(atPath: configURL.path) else {
++      throw Flux2Mistral3TextEncoderError.configNotFound(configURL)
++    }
++    let data = try Data(contentsOf: configURL)
++    try admissionValidator?()
++    let vlm = try? JSONDecoder().decode(Flux2Mistral3VLMConfiguration.self, from: data)
++    let configuration: Flux2Mistral3Configuration
++    if let vlm { configuration = vlm.textConfig }
++    else { configuration = try JSONDecoder().decode(Flux2Mistral3Configuration.self, from: data) }
++    try admissionValidator?()
++    let encoder = Flux2Mistral3TextEncoder(configuration: configuration, vlmConfiguration: vlm)
++    try admissionValidator?()
++    let source = try Flux2PinnedWeightSelection(snapshot: snapshot, component: .textEncoder,
++                                                 admissionValidator: admissionValidator) {
++      _, actual in actual == dtype
++    }
++    let shared = try source.load { name in
++      let key = normalizedTextEncoderName(name)
++      return key == "language_model.model.embed_tokens.weight" ||
++        key == "language_model.model.norm.weight"
++    }
++    let normalized = normalizeTextEncoderWeights(shared)
++    guard normalized.count == shared.count,
++          Set(normalized.keys) == ["language_model.model.embed_tokens.weight", "language_model.model.norm.weight"] else {
++      throw Flux2Mistral3TextEncoderError.incompleteLayer(-1)
++    }
++    try encoder.update(parameters: ModuleParameters.unflattened(normalized), verify: .none)
++    MLX.eval(Array(normalized.values))
++    try source.verifyFileIdentities()
++    encoder.layeredWeights = source
+     return encoder
+   }
+ 
+@@ -86,6 +135,9 @@
+     prefillChunkSize: Int = 256,
+     evaluationPolicy: Flux2EvaluationPolicy = .deferred
+   ) throws -> [Int] {
++    guard layeredWeights == nil else {
++      throw Flux2Mistral3TextEncoderError.layeredGenerationUnavailable
++    }
+     guard languageModel.isGenerationReady else {
+       throw Flux2Mistral3TextEncoderError.invalidGenerationInput
+     }
+@@ -253,11 +305,12 @@
+       throw Flux2Mistral3TextEncoderError.invalidInputShape
+     }
+ 
+-    let hiddenStates = languageModel.hiddenStates(
++    let hiddenStates = try languageModel.hiddenStates(
+       inputIds: inputIds,
+       attentionMask: attentionMask,
+       outputLayerIndices: hiddenStateLayers,
+-      evaluationPolicy: evaluationPolicy
++      evaluationPolicy: evaluationPolicy,
++      layeredWeights: layeredWeights
+     )
+ 
+     var selected: [MLXArray] = []
+@@ -278,34 +331,33 @@
+   }
+ }
+ 
++private func normalizedTextEncoderName(_ name: String) -> String {
++  if name.hasPrefix("model.language_model.model.") {
++    return "language_model.model." + String(name.dropFirst("model.language_model.model.".count))
++  }
++  if name.hasPrefix("model.language_model.lm_head.") {
++    return "language_model.lm_head." + String(name.dropFirst("model.language_model.lm_head.".count))
++  }
++  if name.hasPrefix("model.language_model.") {
++    return "language_model.model." + String(name.dropFirst("model.language_model.".count))
++  }
++  if name.hasPrefix("model.vision_tower.") {
++    return "vision_tower." + String(name.dropFirst("model.vision_tower.".count))
++  }
++  if name.hasPrefix("model.multi_modal_projector.") {
++    return "multi_modal_projector." + String(name.dropFirst("model.multi_modal_projector.".count))
++  }
++  if name.hasPrefix("model.") { return String(name.dropFirst("model.".count)) }
++  return name
++}
++
+ private func normalizeTextEncoderWeights(_ weights: [String: MLXArray]) -> [String: MLXArray] {
+   var normalized: [String: MLXArray] = [:]
+   normalized.reserveCapacity(weights.count)
+ 
+   for (name, value) in weights {
+     var tensor = value
+-    let key: String
+-    if name.hasPrefix("model.language_model.model.") {
+-      let suffix = name.dropFirst("model.language_model.model.".count)
+-      key = "language_model.model.\(suffix)"
+-    } else if name.hasPrefix("model.language_model.lm_head.") {
+-      let suffix = name.dropFirst("model.language_model.lm_head.".count)
+-      key = "language_model.lm_head.\(suffix)"
+-    } else if name.hasPrefix("model.language_model.") {
+-      let suffix = name.dropFirst("model.language_model.".count)
+-      key = "language_model.model.\(suffix)"
+-    } else if name.hasPrefix("model.vision_tower.") {
+-      let suffix = name.dropFirst("model.vision_tower.".count)
+-      key = "vision_tower.\(suffix)"
+-    } else if name.hasPrefix("model.multi_modal_projector.") {
+-      let suffix = name.dropFirst("model.multi_modal_projector.".count)
+-      key = "multi_modal_projector.\(suffix)"
+-    } else if name.hasPrefix("model.") {
+-      let suffix = name.dropFirst("model.".count)
+-      key = String(suffix)
+-    } else {
+-      key = name
+-    }
++    let key = normalizedTextEncoderName(name)
+ 
+     if key == "vision_tower.patch_conv.weight", tensor.ndim == 4 {
+       tensor = tensor.transposed(0, 2, 3, 1)
+@@ -396,13 +448,15 @@
+     inputIds: MLXArray,
+     attentionMask: MLXArray,
+     outputLayerIndices: [Int],
+-    evaluationPolicy: Flux2EvaluationPolicy
+-  ) -> [Int: MLXArray] {
+-    model.hiddenStates(
++    evaluationPolicy: Flux2EvaluationPolicy,
++    layeredWeights: Flux2PinnedWeightSelection? = nil
++  ) throws -> [Int: MLXArray] {
++    try model.hiddenStates(
+       inputIds: inputIds,
+       attentionMask: attentionMask,
+       outputLayerIndices: outputLayerIndices,
+-      evaluationPolicy: evaluationPolicy
++      evaluationPolicy: evaluationPolicy,
++      layeredWeights: layeredWeights
+     )
+   }
+ 
+@@ -456,8 +510,9 @@
+     inputIds: MLXArray,
+     attentionMask: MLXArray,
+     outputLayerIndices: [Int],
+-    evaluationPolicy: Flux2EvaluationPolicy
+-  ) -> [Int: MLXArray] {
++    evaluationPolicy: Flux2EvaluationPolicy,
++    layeredWeights: Flux2PinnedWeightSelection? = nil
++  ) throws -> [Int: MLXArray] {
+     let wanted = Set(outputLayerIndices)
+     var results: [Int: MLXArray] = [:]
+ 
+@@ -489,10 +544,37 @@
+       dtype: hidden.dtype
+     )
+ 
+-    for (index, layer) in layers.enumerated() {
++    for (index, residentLayer) in layers.enumerated() {
++      if layeredWeights != nil { try Task.checkCancellation(); Memory.clearCache() }
++      let layer: Flux2Mistral3TransformerBlock
++      if let layeredWeights {
++        let prefix = "language_model.model.layers.\(index)."
++        let loaded = try layeredWeights.load { normalizedTextEncoderName($0).hasPrefix(prefix) }
++        let normalized = normalizeTextEncoderWeights(loaded)
++        guard normalized.count == loaded.count else {
++          throw Flux2Mistral3TextEncoderError.duplicateNormalizedWeight(prefix)
++        }
++        let stripped = Dictionary(uniqueKeysWithValues: normalized.map {
++          (String($0.key.dropFirst(prefix.count)), $0.value)
++        })
++        try layeredWeights.verifyFileIdentities()
++        layer = Flux2Mistral3TransformerBlock(configuration, useSliding: residentLayer.useSliding)
++        let expected = Set(layer.parameters().flattened().map { $0.0 })
++        guard !expected.isEmpty, Set(stripped.keys) == expected else {
++          throw Flux2Mistral3TextEncoderError.incompleteLayer(index)
++        }
++        try layer.update(parameters: ModuleParameters.unflattened(stripped), verify: .none)
++      } else {
++        layer = residentLayer
++      }
+       let mask = layer.useSliding ? slidingMask : fullMask
+       hidden = layer(hidden, attentionMask: mask, attnScale: attnScale)
+-      evaluationPolicy.evalIfNeeded(hidden)
++      if let layeredWeights {
++        MLX.eval(hidden)
++        try layeredWeights.verifyFileIdentities()
++      } else {
++        evaluationPolicy.evalIfNeeded(hidden)
++      }
+       let hiddenIndex = index + 1
+       if wanted.contains(hiddenIndex) {
+         results[hiddenIndex] = hidden
+diff --git a/Tests/Flux2Tests/Flux2Mistral3TextEncoderTests.swift b/Tests/Flux2Tests/Flux2Mistral3TextEncoderTests.swift
+--- a/Tests/Flux2Tests/Flux2Mistral3TextEncoderTests.swift
++++ b/Tests/Flux2Tests/Flux2Mistral3TextEncoderTests.swift
+@@ -1,9 +1,49 @@
+ import Foundation
++import Darwin
+ import MLX
+ import XCTest
+ @testable import Flux2
+ 
+ final class Flux2Mistral3TextEncoderTests: XCTestCase {
++  func testLayeredTextRejectsReplacementFromOriginalAdmission() throws {
++    enum AdmissionError: Error { case changed }
++    let fixture = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
++      .deletingLastPathComponent().deletingLastPathComponent()
++      .appendingPathComponent("fixtures/flux2_tiny_mistral3_text_encoder/text_encoder")
++    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
++    let component = root.appendingPathComponent("text_encoder")
++    try FileManager.default.createDirectory(at: component, withIntermediateDirectories: true)
++    defer { try? FileManager.default.removeItem(at: root) }
++    try FileManager.default.copyItem(at: fixture.appendingPathComponent("config.json"),
++      to: component.appendingPathComponent("config.json"))
++    let file = component.appendingPathComponent("model.safetensors")
++    try FileManager.default.copyItem(at: fixture.appendingPathComponent("model.safetensors"), to: file)
++    var original = stat()
++    XCTAssertEqual(Darwin.lstat(file.path, &original), 0)
++    var bytes = try Data(contentsOf: file)
++    bytes[bytes.count - 1] ^= 1 // Preserve the header, dtype, and length.
++    let replacement = component.appendingPathComponent("replacement.tmp")
++    try bytes.write(to: replacement)
++    try FileManager.default.removeItem(at: file)
++    try FileManager.default.moveItem(at: replacement, to: file)
++    var validations = 0
++    let validate: () throws -> Void = {
++      validations += 1
++      var current = stat()
++      guard Darwin.lstat(file.path, &current) == 0,
++            current.st_dev == original.st_dev, current.st_ino == original.st_ino else {
++        throw AdmissionError.changed
++      }
++    }
++    XCTAssertThrowsError(try Flux2Mistral3TextEncoder.loadLayered(from: root, dtype: .float32,
++      admissionValidator: validate)) { error in
++      guard case AdmissionError.changed = error else {
++        return XCTFail("Expected original admission failure, got \(error)")
++      }
++    }
++    XCTAssertGreaterThan(validations, 0)
++  }
++
+   func testPromptEmbedsSmoke() throws {
+     let fixtureRoot = URL(fileURLWithPath: #filePath)
+       .deletingLastPathComponent()
+@@ -104,4 +144,54 @@
+     XCTAssertFalse(values.isEmpty)
+     XCTAssertFalse(values.contains { !$0.isFinite })
+   }
++
++  func testLayeredPromptMatchesIndependentOriginalFixtureAndRejectsGeneration() throws {
++    let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
++      .deletingLastPathComponent().deletingLastPathComponent()
++      .appendingPathComponent("fixtures/flux2_tiny_mistral3_text_encoder")
++    let reader = try SafeTensorsReader(fileURL: root.appendingPathComponent("prompt_embeds.safetensors"))
++    let input = try reader.tensor(named: "input_ids").asType(.int32)
++    let mask = try reader.tensor(named: "attention_mask").asType(.int32)
++    let expected = try reader.tensor(named: "prompt_embeds").asType(.float32)
++    let layered = try Flux2Mistral3TextEncoder.loadLayered(from: root, dtype: .float32)
++    let actual = try layered.promptEmbeds(inputIds: input, attentionMask: mask,
++                                          hiddenStateLayers: [0, 1, 2])
++    TestHelpers.assertAllClose(actual, expected, atol: 1e-4, rtol: 1e-3)
++    XCTAssertThrowsError(try layered.generateTokenIds(inputIds: input, maxNewTokens: 1)) { error in
++      guard case Flux2Mistral3TextEncoderError.layeredGenerationUnavailable = error else {
++        return XCTFail("Expected explicit layered generation rejection, got \(error)")
++      }
++    }
++  }
++
++  func testLayeredPromptRequiresCompleteBlockAndStopsOnCancellation() async throws {
++    let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
++      .deletingLastPathComponent().deletingLastPathComponent()
++      .appendingPathComponent("fixtures/flux2_tiny_mistral3_text_encoder")
++    let target = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
++    let component = target.appendingPathComponent("text_encoder")
++    try FileManager.default.createDirectory(at: component, withIntermediateDirectories: true)
++    defer { try? FileManager.default.removeItem(at: target) }
++    try FileManager.default.copyItem(at: root.appendingPathComponent("text_encoder/config.json"),
++                                     to: component.appendingPathComponent("config.json"))
++    let original = try SafeTensorsReader(fileURL: root.appendingPathComponent("text_encoder/model.safetensors"))
++    var weights = try original.loadAllTensors(as: .float32)
++    weights.removeValue(forKey: "model.language_model.layers.0.self_attn.q_proj.weight")
++    try MLX.save(arrays: weights, metadata: [:], url: component.appendingPathComponent("model.safetensors"))
++    let inputs = try SafeTensorsReader(fileURL: root.appendingPathComponent("prompt_embeds.safetensors"))
++    let input = try inputs.tensor(named: "input_ids").asType(.int32)
++    let mask = try inputs.tensor(named: "attention_mask").asType(.int32)
++    let incomplete = try Flux2Mistral3TextEncoder.loadLayered(from: target, dtype: .float32)
++    XCTAssertThrowsError(try incomplete.promptEmbeds(inputIds: input, attentionMask: mask,
++                                                       hiddenStateLayers: [0, 1, 2]))
++
++    let complete = try Flux2Mistral3TextEncoder.loadLayered(from: root, dtype: .float32)
++    let cancelled = await Task { () -> Bool in
++      withUnsafeCurrentTask { $0?.cancel() }
++      do { _ = try complete.promptEmbeds(inputIds: input, attentionMask: mask); return false }
++      catch is CancellationError { return true }
++      catch { return false }
++    }.value
++    XCTAssertTrue(cancelled)
++  }
+ }
+diff --git a/Tests/Flux2Tests/Flux2WeightsLoaderTests.swift b/Tests/Flux2Tests/Flux2WeightsLoaderTests.swift
+--- a/Tests/Flux2Tests/Flux2WeightsLoaderTests.swift
++++ b/Tests/Flux2Tests/Flux2WeightsLoaderTests.swift
+@@ -1,5 +1,6 @@
+ import Foundation
+ import MLX
++import Darwin
+ import XCTest
+ @testable import Flux2
+ 
+@@ -55,4 +56,107 @@
+     XCTAssertEqual(tensors.keys.sorted(), ["a.weight"])
+     XCTAssertEqual(tensors["a.weight"]?.asArray(Float32.self), [1, 2, 3, 4])
+   }
++
++  func testPinnedSelectionRejectsDuplicateAndWrongDType() throws {
++    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
++    let component = root.appendingPathComponent("transformer")
++    try FileManager.default.createDirectory(at: component, withIntermediateDirectories: true)
++    defer { try? FileManager.default.removeItem(at: root) }
++    try TestHelpers.writeSafeTensor(url: component.appendingPathComponent("a.safetensors"),
++      tensorName: "same.weight", values: [1, 2, 3, 4], shape: [2, 2])
++    XCTAssertThrowsError(try Flux2PinnedWeightSelection(snapshot: root, component: .transformer) {
++      _, dtype in dtype == .bfloat16
++    })
++    try TestHelpers.writeSafeTensor(url: component.appendingPathComponent("b.safetensors"),
++      tensorName: "same.weight", values: [5, 6, 7, 8], shape: [2, 2])
++    XCTAssertThrowsError(try Flux2PinnedWeightSelection(snapshot: root, component: .transformer) {
++      _, dtype in dtype == .float32
++    }) { error in
++      guard case Flux2WeightsLoaderError.duplicateTensor(let name) = error,
++            name == "same.weight" else {
++        return XCTFail("Expected duplicate key, got \(error)")
++      }
++    }
++  }
++
++  func testPinnedSelectionMatchesIndependentReaderAndRejectsReplacement() throws {
++    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
++    let component = root.appendingPathComponent("transformer")
++    try FileManager.default.createDirectory(at: component, withIntermediateDirectories: true)
++    defer { try? FileManager.default.removeItem(at: root) }
++    let file = component.appendingPathComponent("block.safetensors")
++    try TestHelpers.writeSafeTensor(url: file, tensorName: "block.weight",
++      values: [1, 2, 3, 4], shape: [2, 2])
++    let source = try Flux2PinnedWeightSelection(snapshot: root, component: .transformer) {
++      _, dtype in dtype == .float32
++    }
++    let expected = try SafeTensorsReader(fileURL: file).tensor(named: "block.weight")
++    let actual = try XCTUnwrap(source.load { $0 == "block.weight" }["block.weight"])
++    XCTAssertEqual(actual.asArray(Float32.self), expected.asArray(Float32.self))
++    try FileManager.default.removeItem(at: file)
++    try TestHelpers.writeSafeTensor(url: file, tensorName: "block.weight",
++      values: [1, 2, 3, 4], shape: [2, 2])
++    XCTAssertThrowsError(try source.verifyFileIdentities())
++    XCTAssertThrowsError(try source.load { $0 == "block.weight" })
++  }
++
++  func testAdmissionRejectsSameLayoutReplacementBeforeSelectionOpens() throws {
++    enum AdmissionError: Error { case changed }
++    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
++    let component = root.appendingPathComponent("transformer")
++    try FileManager.default.createDirectory(at: component, withIntermediateDirectories: true)
++    defer { try? FileManager.default.removeItem(at: root) }
++    let file = component.appendingPathComponent("block.safetensors")
++    let replacement = component.appendingPathComponent("replacement.tmp")
++    try TestHelpers.writeSafeTensor(url: file, tensorName: "block.weight",
++      values: [1, 2, 3, 4], shape: [2, 2])
++    try TestHelpers.writeSafeTensor(url: replacement, tensorName: "block.weight",
++      values: [5, 6, 7, 8], shape: [2, 2])
++    var admitted = stat()
++    XCTAssertEqual(Darwin.lstat(file.path, &admitted), 0)
++    var substituted = stat()
++    XCTAssertEqual(Darwin.lstat(replacement.path, &substituted), 0)
++    XCTAssertEqual(admitted.st_size, substituted.st_size)
++    XCTAssertNotEqual(admitted.st_ino, substituted.st_ino)
++    try FileManager.default.removeItem(at: file)
++    try FileManager.default.moveItem(at: replacement, to: file)
++
++    var inspectedMetadata = false
++    let validate: () throws -> Void = {
++      var current = stat()
++      guard Darwin.lstat(file.path, &current) == 0,
++            current.st_dev == admitted.st_dev,
++            current.st_ino == admitted.st_ino,
++            current.st_size == admitted.st_size else { throw AdmissionError.changed }
++    }
++    XCTAssertThrowsError(try Flux2PinnedWeightSelection(snapshot: root, component: .transformer,
++      admissionValidator: validate) { _, dtype in
++        inspectedMetadata = true
++        return dtype == .float32
++      }) { error in
++        guard case AdmissionError.changed = error else {
++          return XCTFail("Expected original admission failure, got \(error)")
++        }
++      }
++    XCTAssertFalse(inspectedMetadata, "Replacement must fail before selected tensor metadata or payload is used")
++  }
++
++  func testPinnedSelectionHonorsCancellationBeforeTensorRead() async throws {
++    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
++    let component = root.appendingPathComponent("transformer")
++    try FileManager.default.createDirectory(at: component, withIntermediateDirectories: true)
++    defer { try? FileManager.default.removeItem(at: root) }
++    try TestHelpers.writeSafeTensor(url: component.appendingPathComponent("block.safetensors"),
++      tensorName: "block.weight", values: [1, 2, 3, 4], shape: [2, 2])
++    let source = try Flux2PinnedWeightSelection(snapshot: root, component: .transformer) {
++      _, dtype in dtype == .float32
++    }
++    let cancelled = await Task { () -> Bool in
++      withUnsafeCurrentTask { $0?.cancel() }
++      do { _ = try source.load { _ in true }; return false }
++      catch is CancellationError { return true }
++      catch { return false }
++    }.value
++    XCTAssertTrue(cancelled)
++  }
+ }
