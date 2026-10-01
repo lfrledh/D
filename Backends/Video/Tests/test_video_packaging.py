@@ -67,6 +67,8 @@ class VideoFixture(unittest.TestCase):
         (stdlib / "encodings").mkdir(parents=True)
         (stdlib / "LICENSE.txt").write_text("PSF fixture", encoding="utf-8")
         (stdlib / "encodings/__init__.py").write_text("# fixture", encoding="utf-8")
+        for name in ("libtcl9.0.dylib", "libtcl9tk9.0.dylib"):
+            (self.python / "lib" / name).write_bytes(MACH_O)
 
         self.site = self.base / "site packages 📦"
         self.site.mkdir()
@@ -122,6 +124,15 @@ class VideoFixture(unittest.TestCase):
 
 
 class PrepareVideoEngineTests(VideoFixture):
+    def test_standalone_python_dependency_closure_is_preserved(self) -> None:
+        self.prepare()
+        for name in ("libtcl9.0.dylib", "libtcl9tk9.0.dylib"):
+            self.assertEqual(digest(self.python / "lib" / name),
+                             digest(self.output / "python/lib" / name))
+        (self.python / "lib/libtcl9.0.dylib").unlink()
+        with self.assertRaises(prepare_video_engine.PackagingError):
+            self.prepare(output=str(self.base / "missing-python-dependency"))
+
     def test_official_tokenizers_wheel_without_license_preserves_pinned_source_license(self) -> None:
         (self.site / "tokenizers-0.22.2.dist-info/LICENSE").unlink()
         self.prepare()

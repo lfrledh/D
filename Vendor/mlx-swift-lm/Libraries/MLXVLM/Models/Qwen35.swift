@@ -967,8 +967,10 @@ enum Qwen35Language {
             let hidden = try model.callLayered(inputs, inputsEmbeds: inputsEmbeds,
                 cache: cache, positionIds: positionIds, config: textConfig,
                 weights: weights, owner: owner)
-            let last = hidden[0..., (hidden.dim(1) - 1)..., 0...]
-            let logits = lmHead.map { $0(last) } ?? model.embedTokens.asLinear(last)
+            // Preserve the resident projection's chunk shape. Slicing before
+            // the projection changes the GEMM/GEMV accumulation for original
+            // FP32 linear-attention controls, even when recurrent state agrees.
+            let logits = lmHead.map { $0(hidden) } ?? model.embedTokens.asLinear(hidden)
             return LMOutput(logits: logits, state: state)
         }
 

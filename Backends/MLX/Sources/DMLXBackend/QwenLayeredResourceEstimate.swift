@@ -10,7 +10,7 @@ enum QwenLayeredResourceEstimate {
             inventory.directory.appendingPathComponent("config.json"),
             label: "Qwen3.5 config", maximumBytes: 4 * 1024 * 1024)
         let config = try QwenVLMModelInventory.object(configData)
-        _ = try Qwen35LayeredFileValidation.configuration(configData)
+        let modelConfiguration = try Qwen35LayeredFileValidation.configuration(configData)
         guard let text = config["text_config"] as? [String: Any] else {
             throw InferenceFailure.invalidRequest("Missing Qwen3.5 text configuration.")
         }
@@ -100,7 +100,10 @@ enum QwenLayeredResourceEstimate {
             adding(product(2, keyHeads, keyDim), product(valueHeads, valueDim)))
         let hidden = UInt64(inventory.size == "27B" ? 5120 : 4096)
         let promptWorkspace = adding(multiplying(tokens, hidden * 2), multiplying(512 * 16, hidden))
-        let cache = [multiplying(tokens, kvPerToken), recurrent, conv,
+        // Chunked prefill preserves the resident output projection geometry.
+        // Original mixed-precision controls can promote its result to FP32.
+        let projection = product(512, modelConfiguration.textConfiguration.vocabularySize, 4)
+        let cache = [multiplying(tokens, kvPerToken), recurrent, conv, projection,
                      promptWorkspace, UInt64(cacheLimit), 512 * 1024 * 1024].reduce(0, adding)
         // The prepared input remains captured by the generation closure until
         // completion, including its visual pixel arrays. Account for that

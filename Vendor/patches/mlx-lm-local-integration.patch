@@ -328,7 +328,7 @@
              self.kvHeads = Array(
                  repeating: config.textConfiguration.kvHeads,
                  count: config.textConfiguration.hiddenLayers
-@@ -881,9 +923,58 @@
+@@ -881,9 +923,60 @@
              return LMOutput(logits: out, state: state)
          }
  
@@ -376,8 +376,10 @@
 +            let hidden = try model.callLayered(inputs, inputsEmbeds: inputsEmbeds,
 +                cache: cache, positionIds: positionIds, config: textConfig,
 +                weights: weights, owner: owner)
-+            let last = hidden[0..., (hidden.dim(1) - 1)..., 0...]
-+            let logits = lmHead.map { $0(last) } ?? model.embedTokens.asLinear(last)
++            // Preserve the resident projection's chunk shape. Slicing before
++            // the projection changes the GEMM/GEMV accumulation for original
++            // FP32 linear-attention controls, even when recurrent state agrees.
++            let logits = lmHead.map { $0(hidden) } ?? model.embedTokens.asLinear(hidden)
 +            return LMOutput(logits: logits, state: state)
 +        }
 +
@@ -389,7 +391,7 @@
                      return MambaCache()
                  }
                  if let maxKVSize {
-@@ -898,16 +989,62 @@
+@@ -898,16 +991,62 @@
  // MARK: - Model
  
  public class Qwen35: Module, VLMModel {
@@ -453,7 +455,7 @@
      }
  
      public var vocabularySize: Int { config.vocabSize }
-@@ -982,7 +1119,7 @@
+@@ -982,7 +1121,7 @@
      public func prepare(
          _ input: LMInput,
          cache: [any KVCache],
@@ -462,7 +464,7 @@
      ) throws -> PrepareResult {
          let inputIds = input.text.tokens
  
-@@ -990,7 +1127,7 @@
+@@ -990,7 +1129,7 @@
          var imageFrames: [THW]?
          var videoFrames: [THW]?
  
@@ -471,7 +473,7 @@
          var pixelParts: [MLXArray] = []
  
          if let image = input.image {
-@@ -1012,7 +1149,7 @@
+@@ -1012,7 +1151,7 @@
                  .nilIfEmpty
          {
              let textEmbeds = languageModel.model.embedTokens(inputIds)
@@ -480,7 +482,7 @@
              let visionFeatures = visionHidden.asType(textEmbeds.dtype)
  
              let (mergedEmbeds, _) = try mergeInputIdsWithImageFeatures(
-@@ -1026,6 +1163,36 @@
+@@ -1026,6 +1165,36 @@
          }
  
          let typedCache = castCache(cache)
@@ -517,7 +519,7 @@
          let output = withPreparedCache(cache, lengths: input.text.sequenceLengths) {
              languageModel(
                  inputIds,
-@@ -1041,6 +1208,79 @@
+@@ -1041,6 +1210,79 @@
          }
  
          return .logits(output)
@@ -597,7 +599,7 @@
      }
  
      public func callAsFunction(
-@@ -1118,9 +1358,12 @@
+@@ -1118,9 +1360,12 @@
              sanitized[key] = value
          }
  

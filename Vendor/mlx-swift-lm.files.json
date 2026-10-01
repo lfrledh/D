@@ -1164,8 +1164,8 @@
     {
       "path": "Libraries/MLXVLM/Models/Qwen35.swift",
       "upstreamSHA256": "94ece218b65aa528373dde25347513b6758db6a59f82f175f2dde48c2aebc49e",
-      "sha256": "b0228d0e46f02297d8ddba159f91f07622a534169988b29e563a6a4b0f3df93d",
-      "size": 57168
+      "sha256": "55ec778884d0e03fdcb1ea8285d12d29b9dfb09ce4ef1bbc7c26304c11d9c0d0",
+      "size": 57343
     },
     {
       "path": "Libraries/MLXVLM/Models/Qwen35MoE.swift",
@@ -1666,7 +1666,7 @@
   "patches": [
     {
       "path": "patches/mlx-lm-local-integration.patch",
-      "sha256": "b51362ceff65ee982585a263ba6337ba13ed9c9acca4a3b5db85abe538d14b2c",
+      "sha256": "b7a2b8f7cf77986528e0e6d040548ff46bdec72874d11e19d47c413dec8fb4e8",
       "description": "Complete D delta from the fixed upstream snapshot; supersedes historical presampled-only patch."
     }
   ]

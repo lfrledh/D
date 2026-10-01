@@ -340,6 +340,11 @@ def _copy_inputs(
     (target_python / "bin").mkdir(parents=True)
     shutil.copy2(interpreter, target_python / "bin/python3")
     prepare_engine._copy_tree(stdlib, target_python / "lib/python3.12", exclude_site_packages=True)
+    # Match the already shipped standalone-Python closure in the ACE/external
+    # video packagers; the stdlib's _tkinter extension references these libraries.
+    for name in ("libtcl9.0.dylib", "libtcl9tk9.0.dylib"):
+        _copy_verified_source(python_root / "lib" / name, target_python / "lib" / name,
+                              "standalone Python dependency " + name)
     _copy_selected_site(site_packages, target_python / "lib/python3.12/site-packages")
 
     provider = staging / "provider"
