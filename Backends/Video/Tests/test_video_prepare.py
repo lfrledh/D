@@ -140,6 +140,143 @@ class PreparationTests(unittest.TestCase):
                 prepare.prepare(src, dest)
         self.assertOriginalsUnchanged()
 
+    def testPrecancelDoesNotCreateDestination(self):
+        prepare._cancelled = True
+        try:
+            with self.assertRaises(InterruptedError):
+                prepare.prepare(self.source, self.root / "cancelled")
+        finally:
+            prepare._cancelled = False
+        self.assertFalse((self.root / "cancelled").exists())
+        self.assertOriginalsUnchanged()
+
+    def testEarlierOriginalMutationPreventsCompletion(self):
+        destination = self.root / "changed-original"
+        original_print = print
+
+        def mutate_after_text(*args, **kwargs):
+            if args and '"component": "text"' in args[0]:
+                name = prepare.FILES["text"][0]
+                torch.save({"token_embedding.weight": torch.tensor([[2.0]])}, self.source / name)
+            return original_print(*args, **kwargs)
+
+        with mock.patch.object(prepare, "print", mutate_after_text, create=True):
+            with self.assertRaisesRegex(ValueError, "Original changed"):
+                prepare.prepare(self.source, destination)
+        self.assertFalse((destination / "D-VIDEO-PREPARED.json").exists())
+
+    def testTamperedEarlierShardPreventsCompletion(self):
+        destination = self.root / "tampered-output"
+        original_print = print
+
+        def tamper_after_text(*args, **kwargs):
+            if args and '"component": "text"' in args[0]:
+                shard = destination / "text/0000.safetensors"
+                with shard.open("ab") as output:
+                    output.write(b"tampered")
+            return original_print(*args, **kwargs)
+
+        with mock.patch.object(prepare, "print", tamper_after_text, create=True):
+            with self.assertRaisesRegex(ValueError, "resource changed"):
+                prepare.prepare(self.source, destination)
+        self.assertFalse((destination / "D-VIDEO-PREPARED.json").exists())
+        self.assertOriginalsUnchanged()
+
+    def testEarlierOriginalMutatedDuringLaterOutputValidation(self):
+        destination = self.root / "late-source"
+        later = destination / "vae/0000.safetensors"
+        original_digest = prepare.digest
+        original_validate = prepare.validate_output
+        validating = False
+        changed = False
+
+        def validate(*args, **kwargs):
+            nonlocal validating
+            validating = True
+            return original_validate(*args, **kwargs)
+
+        def mutate_while_validating(path):
+            nonlocal changed
+            if validating and path == later and not changed:
+                changed = True
+                name = prepare.FILES["text"][0]
+                torch.save({"token_embedding.weight": torch.tensor([[3.0]])}, self.source / name)
+            return original_digest(path)
+
+        with mock.patch.object(prepare, "digest", mutate_while_validating), \
+                mock.patch.object(prepare, "validate_output", validate):
+            with self.assertRaisesRegex(ValueError, "Original changed before publication"):
+                prepare.prepare(self.source, destination)
+        self.assertTrue(changed)
+        self.assertFalse((destination / "D-VIDEO-PREPARED.json").exists())
+
+    def testEarlierOutputMutatedDuringLaterOutputValidation(self):
+        destination = self.root / "late-output"
+        earlier = destination / "text/0000.safetensors"
+        later = destination / "vae/0000.safetensors"
+        original_digest = prepare.digest
+        original_validate = prepare.validate_output
+        validating = False
+        changed = False
+
+        def validate(*args, **kwargs):
+            nonlocal validating
+            validating = True
+            return original_validate(*args, **kwargs)
+
+        def mutate_while_validating(path):
+            nonlocal changed
+            if validating and path == later and not changed:
+                changed = True
+                with earlier.open("ab") as output:
+                    output.write(b"late mutation")
+            return original_digest(path)
+
+        with mock.patch.object(prepare, "digest", mutate_while_validating), \
+                mock.patch.object(prepare, "validate_output", validate):
+            with self.assertRaisesRegex(ValueError, "Prepared tensor changed before publication"):
+                prepare.prepare(self.source, destination)
+        self.assertTrue(changed)
+        self.assertFalse((destination / "D-VIDEO-PREPARED.json").exists())
+        self.assertOriginalsUnchanged()
+
+    def testEarlierOriginalMutatedDuringFinalLaterOriginalHash(self):
+        destination = self.root / "late-final-original"
+        earlier = self.source / prepare.FILES["text"][0]
+        later = self.source / prepare.FILES["vae"][0]
+        original_digest = prepare.digest
+        original_validate = prepare.validate_output
+        validated = False
+        changed = False
+
+        def validate(*args, **kwargs):
+            nonlocal validated
+            result = original_validate(*args, **kwargs)
+            validated = True
+            return result
+
+        def mutate_during_final_hash(path):
+            nonlocal changed
+            if validated and path == later and not changed:
+                changed = True
+                with earlier.open("ab") as source:
+                    source.write(b"late mutation")
+            return original_digest(path)
+
+        with mock.patch.object(prepare, "digest", mutate_during_final_hash), \
+                mock.patch.object(prepare, "validate_output", validate):
+            with self.assertRaisesRegex(ValueError, "Original changed before publication"):
+                prepare.prepare(self.source, destination)
+        self.assertTrue(changed)
+        self.assertFalse((destination / "D-VIDEO-PREPARED.json").exists())
+
+    def testProductionCountGateIsSeparateFromSyntheticFixture(self):
+        destination = self.root / "synthetic-counts"
+        record = prepare.prepare(self.source, destination)
+        self.assertEqual(len(record["tensors"]), 7)
+        with self.assertRaisesRegex(ValueError, "Production checkpoint tensor counts differ"):
+            prepare.validate_output(destination, record, production=True)
+
 
 if __name__ == "__main__":
     unittest.main()
