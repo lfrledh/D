@@ -107,4 +107,51 @@ final class Flux2TransformerParityTests: XCTestCase {
     let cancelled = await task.value
     XCTAssertTrue(cancelled)
   }
+
+  func testBF16LayeredTransformerMatchesResidentWithFullBlocksAndGuidance() throws {
+    let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+      .deletingLastPathComponent().deletingLastPathComponent()
+      .appendingPathComponent("fixtures/flux2_tiny")
+    let temporary = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: temporary) }
+    let component = temporary.appendingPathComponent("transformer")
+    try FileManager.default.createDirectory(at: component, withIntermediateDirectories: true)
+    try FileManager.default.copyItem(at: root.appendingPathComponent("transformer/config.json"),
+      to: component.appendingPathComponent("config.json"))
+    let sourceWeights = try Flux2WeightsLoader(snapshot: root).load(component: .transformer, dtype: .float32)
+    let bf16 = sourceWeights.mapValues { $0.asType(.bfloat16) }
+    MLX.eval(Array(bf16.values))
+    try MLX.save(arrays: bf16, metadata: [:], url: component.appendingPathComponent("model.safetensors"))
+
+    let reader = try SafeTensorsReader(fileURL: root.appendingPathComponent("transformer_inputs.safetensors"))
+    let hidden = try reader.tensor(named: "hidden_states").asType(.bfloat16)
+    let encoder = try reader.tensor(named: "encoder_hidden_states").asType(.bfloat16)
+    let time = try reader.tensor(named: "timestep").asType(.bfloat16)
+    let imageIDs = try reader.tensor(named: "img_ids").asType(.int32)
+    let textIDs = try reader.tensor(named: "txt_ids").asType(.int32)
+    let guidance = MLXArray([Float32(1)]).asType(.bfloat16)
+    let resident = try Flux2Transformer2DModel.load(from: temporary, dtype: .bfloat16)
+    let layered = try Flux2Transformer2DModel.loadLayered(from: temporary, dtype: .bfloat16)
+    XCTAssertEqual(layered.configuration.numLayers, 1)
+    XCTAssertEqual(layered.configuration.numSingleLayers, 1)
+    let expected = resident(hidden, encoderHiddenStates: encoder, timestep: time,
+      imgIds: imageIDs, txtIds: textIDs, guidance: guidance, evaluationPolicy: .aggressive)
+    let actual = try layered.callLayered(hidden, encoderHiddenStates: encoder, timestep: time,
+      imgIds: imageIDs, txtIds: textIDs, guidance: guidance)
+    MLX.eval(expected, actual)
+    XCTAssertEqual(actual.dtype, .bfloat16)
+    XCTAssertEqual(actual.shape, expected.shape)
+    XCTAssertEqual(actual.asType(.float32).asArray(Float32.self),
+                   expected.asType(.float32).asArray(Float32.self))
+
+    let control = withRandomState(MLXRandom.RandomState(seed: 73)) {
+      MLXRandom.uniform(0.0..<1.0, [4]).asArray(Float.self)
+    }
+    let afterLayered = try withRandomState(MLXRandom.RandomState(seed: 73)) {
+      _ = try layered.callLayered(hidden, encoderHiddenStates: encoder, timestep: time,
+        imgIds: imageIDs, txtIds: textIDs, guidance: guidance)
+      return MLXRandom.uniform(0.0..<1.0, [4]).asArray(Float.self)
+    }
+    XCTAssertEqual(afterLayered, control)
+  }
 }
