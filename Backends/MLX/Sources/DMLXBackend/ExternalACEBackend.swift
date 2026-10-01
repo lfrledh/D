@@ -24,6 +24,7 @@ public actor ExternalACEBackend: InferenceBackend {
 
     public init(configuration: ACEBackendConfiguration) throws {
         guard configuration.timeoutSeconds.isFinite, configuration.timeoutSeconds > 0,
+              configuration.ssdTimeoutSeconds.isFinite, configuration.ssdTimeoutSeconds > 0,
               configuration.cancellationGraceSeconds.isFinite,
               configuration.cancellationGraceSeconds > 0 else {
             throw InferenceFailure.invalidRequest("ACE timeout and cancellation grace must be positive.")
@@ -85,7 +86,7 @@ public actor ExternalACEBackend: InferenceBackend {
             let frozenACE = ACERequest(executionProfile: ace.executionProfile, vocal: ace.vocal,
                 bpm: ace.bpm, keyScale: ace.keyScale, timeSignature: ace.timeSignature,
                 steps: ace.steps, guidanceScale: ace.guidanceScale,
-                referenceAudio: frozenReference, editOptions: ace.editOptions)
+                referenceAudio: frozenReference, editOptions: ace.editOptions, loadingStrategy: ace.loadingStrategy)
             let frozen = FrozenRequest(runID: request.id.uuidString.lowercased(),
                 operation: audio.operation, prompt: audio.prompt,
                 durationSeconds: audio.durationSeconds, seed: audio.seed,
@@ -119,10 +120,16 @@ public actor ExternalACEBackend: InferenceBackend {
                              "--model-directory", inventory.root.path,
                              "--manifest", configuration.modelManifest.path,
                              "--vendor-directory", configuration.vendorDirectory.path]
+            var accessDirectories = [inventory.root, configuration.vendorDirectory, run]
+            if ace.loadingStrategy == .ssdLayered {
+                let prepared = try Self.makePreparedDirectory(root: configuration.artifactDirectory)
+                arguments += ["--prepared-directory", prepared.path]
+                accessDirectories.append(prepared)
+            }
             let access: AudioProviderAccess?
             if let bootstrap = configuration.accessBootstrapRoot {
                 access = try AudioProviderAccess.prepare(root: bootstrap, runID: request.id,
-                    directories: [inventory.root, configuration.vendorDirectory, run])
+                    directories: accessDirectories)
                 arguments += ["--access-manifest", access!.manifest.path,
                               "--access-run-id", request.id.uuidString.lowercased()]
             } else { access = nil }
@@ -132,7 +139,7 @@ public actor ExternalACEBackend: InferenceBackend {
                 let process = AudioProviderProcess(executable: configuration.pythonExecutable,
                     arguments: arguments, environment: environment,
                     currentDirectory: access?.directory ?? run,
-                    timeoutSeconds: configuration.timeoutSeconds,
+                    timeoutSeconds: ace.loadingStrategy == .ssdLayered ? configuration.ssdTimeoutSeconds : configuration.timeoutSeconds,
                     cancellationGraceSeconds: configuration.cancellationGraceSeconds)
                 providerStarted = true
                 terminal = try await process.run(runID: request.id, emit: emit)
@@ -181,6 +188,7 @@ public actor ExternalACEBackend: InferenceBackend {
                 "profile": ACEModelInventory.profile,
                 "modelRevision": ACEModelInventory.modelRevision,
                 "precision": "XL=float32,MLX=float32,output=float32",
+                "loadingStrategy": ace.loadingStrategy.rawValue,
                 "requestedFrames": String(requestedFrames),
                 "effectiveFrames": String(try Self.effectiveFrames(terminal)),
                 "deliveredFrames": String(terminal.artifact.frameCount),
@@ -250,6 +258,18 @@ public actor ExternalACEBackend: InferenceBackend {
             channels: reference.channels)
         _ = try ACEInputValidation.check(frozen)
         return frozen
+    }
+
+    private static func makePreparedDirectory(root: URL) throws -> URL {
+        let fd = try AudioFileSystem.openDirectory(root, label: "ACE artifact directory")
+        defer { Darwin.close(fd) }
+        let name = "PreparedACE-F32-v1"
+        guard Darwin.mkdirat(fd, name, 0o700) == 0 || errno == EEXIST else {
+            throw InferenceFailure.backendFailed("Cannot create ACE prepared-resource directory.")
+        }
+        let url = root.appendingPathComponent(name, isDirectory: true)
+        try AudioFileSystem.validateDirectory(url, label: "ACE prepared-resource directory")
+        return url
     }
 
     private static func makeRunDirectory(root: URL, requestID: UUID) throws -> URL {

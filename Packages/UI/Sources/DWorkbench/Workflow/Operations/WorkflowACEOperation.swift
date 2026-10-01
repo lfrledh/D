@@ -19,6 +19,8 @@ enum WorkflowACEOperation {
             .init("keyScale", "调性（留空为未指定）", .text(multiline: false), .text("")),
             .init("meter", "拍数", .choice(["auto", "2", "3", "4", "6"]), .text("auto")),
             .init("duration", "生成时长（秒；编辑取原声时长）", .decimal, .decimal(5.2)),
+            .init("memoryBudgetGiB", "显式内存预算 GiB（0使用运行时策略）", .integer, .integer(0)),
+            .init("loadingStrategy", "权重加载（不改变精度）", .choice(["resident", "ssdLayered"]), .text("resident")),
             .init("steps", "步数", .integer, .integer(50)),
             .init("guidance", "引导强度", .decimal, .decimal(7)),
             .init("coverStrength", "Cover 强度", .decimal, .decimal(1)),
@@ -32,6 +34,7 @@ enum WorkflowACEOperation {
             guard let seed = UInt64(p["seed"]?.string ?? ""), seed <= UInt32.max,
                   (p["bpm"]?.integer ?? -1) >= 0,
                   (p["steps"]?.integer ?? 0) > 0,
+                  ACELoadingStrategy(rawValue: p["loadingStrategy"]?.string ?? "resident") != nil,
                   let duration = p["duration"]?.decimal, duration.isFinite, duration > 0,
                   ["generate", "cover", "repaint"].contains(p["mode"]?.string ?? "") else { throw WorkflowIssue("ACE参数无效。") }
         }, execute: { c, s in .outputs(["output": .asset(try await s.generateACE(context: c))]) })
@@ -41,6 +44,7 @@ enum WorkflowACEOperation {
         let p = node.parameters
         guard let seed = UInt64(p["seed"]?.string ?? ""),
               let mode = p["mode"]?.string else { throw WorkflowIssue("ACE操作或seed无效。") }
+        guard let strategy = ACELoadingStrategy(rawValue: p["loadingStrategy"]?.string ?? "resident") else { throw WorkflowIssue("未知ACE加载方式。") }
         let hasLyrics = p["vocal"]?.string == "lyrics"
         guard hasLyrics || lyrics.isEmpty else { throw WorkflowIssue("器乐模式不能静默忽略歌词；请选择歌词模式或显式清空。") }
         let meter = p["meter"]?.string ?? "auto"
@@ -58,7 +62,7 @@ enum WorkflowACEOperation {
         let options = ACERequest(vocal: hasLyrics ? .lyrics(text: lyrics, language: p["language"]?.string ?? "en") : .instrumental,
             bpm: bpm == 0 ? nil : bpm, keyScale: key.isEmpty ? nil : key,
             timeSignature: ACETimeSignature(rawValue: meter), steps: p["steps"]?.integer ?? 50,
-            guidanceScale: Float(p["guidance"]?.decimal ?? 7), referenceAudio: reference, editOptions: edit)
+            guidanceScale: Float(p["guidance"]?.decimal ?? 7), referenceAudio: reference, editOptions: edit, loadingStrategy: strategy)
         let region = operation == .inpaint ? AudioEditRegion(startFrame: Int64(p["startFrame"]?.integer ?? -1), endFrame: Int64(p["endFrame"]?.integer ?? -1)) : nil
         let duration = source.map { Double($0.frameCount) / Double($0.sampleRate) } ?? (p["duration"]?.decimal ?? 5.2)
         let request = AudioRequest(operation: operation, prompt: prompt, durationSeconds: duration, seed: seed,

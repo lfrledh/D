@@ -310,6 +310,23 @@ class ACEBackendTests(unittest.TestCase):
             self.assertEqual(writer.events[-1]["type"], "error")
             self.assertFalse((self.job / "output.wav").exists())
 
+    def test_initialization_cancellation_swallowed_by_official_wrapper_is_still_cancelled(self):
+        cancelled = [False]
+        class Writer:
+            def __init__(self): self.events = []
+            def progress(self, *args): pass
+            def emit(self, value, **kwargs): self.events.append(value)
+        class Handler:
+            def initialize_service(self, **kwargs):
+                cancelled[0] = True
+                return "official wrapper caught InterruptedError", False
+        writer = Writer()
+        code = backend.run_provider(self.request_path, self.job, self.model,
+            self.manifest_path, self.vendor, writer, lambda: cancelled[0], lambda *args: Handler())
+        self.assertEqual(code, 130)
+        self.assertEqual(writer.events[-1]["kind"], "cancelled")
+        self.assertFalse((self.job / "output.wav").exists())
+
     def test_input_mutation_after_fake_handler_failure_wins(self):
         ref = self.source(frames=4800)
         self.request.update(operation="variation", durationSeconds=.1, source=ref)

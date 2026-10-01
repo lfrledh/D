@@ -154,6 +154,28 @@ class OfflineACEMixin:
             raise ACEContractError("ACE MPS device is unavailable; no CPU fallback", "configuration")
         return "mps"
 
+    def _load_main_model_from_checkpoint(self, **kwargs):
+        if getattr(self, "_ace_loading_strategy", "resident") != "ssdLayered":
+            return super()._load_main_model_from_checkpoint(**kwargs)
+        if kwargs["quantization"] is not None or kwargs["compile_model"] or kwargs["use_flash_attention"]:
+            raise ACEContractError("ACE SSD execution preserves F32/uncompiled SDPA", "configuration")
+        from d_ace_ssd import load_condition_model
+        load_condition_model(self, Path(kwargs["model_checkpoint_path"]), self._ace_cancelled)
+        return "sdpa"
+
+    def _init_mlx_dit(self, compile_model=False):
+        if getattr(self, "_ace_loading_strategy", "resident") != "ssdLayered":
+            return super()._init_mlx_dit(compile_model=compile_model)
+        if compile_model:
+            raise ACEContractError("ACE SSD layers cannot retain compiled weights", "configuration")
+        from d_ace_ssd import PreparedDecoder, make_decoder, release_condition_modules
+        prepared = PreparedDecoder(self._ace_prepared_decoder, self._ace_prepared_source, self._ace_cancelled)
+        self.mlx_decoder = make_decoder(self.config, prepared, self._ace_layer_progress,
+                                       lambda: release_condition_modules(self), total_steps=self._ace_steps)
+        self.use_mlx_dit = True
+        self.mlx_dit_compiled = False
+        return True
+
     def _initialize_mlx_backends(self, *, device: str, use_mlx_dit: bool,
                                   mlx_compile_requested: bool):
         if device != "mps" or not use_mlx_dit:
@@ -165,8 +187,29 @@ class OfflineACEMixin:
             raise ACEContractError("ACE MLX DiT or VAE conversion failed; PyTorch fallback forbidden", "configuration")
         if not self.use_mlx_dit or self.mlx_decoder is None or not self.use_mlx_vae or self.mlx_vae is None:
             raise ACEContractError("ACE MLX DiT/VAE flags are not ready", "configuration")
-        release_torch_decoder(self)
+        if getattr(self, "_ace_loading_strategy", "resident") == "ssdLayered":
+            import mlx.core as mx
+            from mlx.utils import tree_flatten
+            if self.model.decoder is not None:
+                raise ACEContractError("ACE SSD decoder retained Torch weights", "configuration")
+            if self._mlx_vae_dtype != mx.float32 or any(a.dtype != mx.float32 for _, a in tree_flatten(self.mlx_vae.parameters())):
+                raise ACEContractError("ACE SSD VAE precision differs from F32", "configuration")
+        else:
+            release_torch_decoder(self)
         return dit, vae
+
+
+    # Mapping from Apache-2.0 pinned official generate_music_execute.py;
+    # execute synchronously so process cancellation owns every GPU operation.
+    def _run_generate_music_service_with_progress(self, progress, actual_batch_size, audio_duration, inference_steps, timesteps, service_inputs, refer_audios, guidance_scale, actual_seed_list, audio_cover_strength, cover_noise_strength, use_adg, cfg_interval_start, cfg_interval_end, shift, infer_method, sampler_mode='euler', velocity_norm_threshold=0.0, velocity_ema_factor=0.0, dcw_enabled=True, dcw_mode='double', dcw_scaler=0.05, dcw_high_scaler=0.02, dcw_wavelet='haar', repaint_crossfade_frames=10, repaint_injection_ratio=0.5, source_repaint_latents=None, task_type='', actual_retake_seed_list=None, retake_variance=0.0, flow_edit_morph=False, flow_edit_source_caption='', flow_edit_source_lyrics='', flow_edit_n_min=0.0, flow_edit_n_max=1.0, flow_edit_n_avg=1):
+        if flow_edit_morph:
+            raise ACEContractError('ACE D profile does not enable morph', 'configuration')
+        if getattr(self, '_ace_cancelled', lambda : False)():
+            raise InterruptedError('ACE cancelled before service generation')
+        infer_steps_for_progress = len(timesteps) if timesteps else inference_steps
+        progress(0.52, desc='Generating music with complete model...')
+        outputs = self.service_generate(captions=service_inputs['captions_batch'], global_captions=service_inputs.get('global_captions_batch'), lyrics=service_inputs['lyrics_batch'], metas=service_inputs['metas_batch'], vocal_languages=service_inputs['vocal_languages_batch'], refer_audios=refer_audios, target_wavs=service_inputs['target_wavs_tensor'], infer_steps=inference_steps, guidance_scale=guidance_scale, seed=actual_seed_list, repainting_start=service_inputs['repainting_start_batch'], repainting_end=service_inputs['repainting_end_batch'], instructions=service_inputs['instructions_batch'], audio_cover_strength=audio_cover_strength, cover_noise_strength=cover_noise_strength, use_adg=use_adg, cfg_interval_start=cfg_interval_start, cfg_interval_end=cfg_interval_end, shift=shift, infer_method=infer_method, sampler_mode=sampler_mode, velocity_norm_threshold=velocity_norm_threshold, velocity_ema_factor=velocity_ema_factor, dcw_enabled=dcw_enabled, dcw_mode=dcw_mode, dcw_scaler=dcw_scaler, dcw_high_scaler=dcw_high_scaler, dcw_wavelet=dcw_wavelet, audio_code_hints=service_inputs['audio_code_hints_batch'], return_intermediate=service_inputs['should_return_intermediate'], timesteps=timesteps, chunk_mask_modes=service_inputs.get('chunk_mask_modes_batch'), repaint_crossfade_frames=repaint_crossfade_frames, repaint_injection_ratio=repaint_injection_ratio, source_repaint_latents=source_repaint_latents, task_type=task_type, retake_seed=actual_retake_seed_list, retake_variance=retake_variance, flow_edit_morph=flow_edit_morph, flow_edit_source_caption=flow_edit_source_caption, flow_edit_source_lyrics=flow_edit_source_lyrics, flow_edit_n_min=flow_edit_n_min, flow_edit_n_max=flow_edit_n_max, flow_edit_n_avg=flow_edit_n_avg)
+        return {'outputs': outputs, 'infer_steps_for_progress': infer_steps_for_progress}
 
 
 def release_torch_decoder(handler: Any) -> None:

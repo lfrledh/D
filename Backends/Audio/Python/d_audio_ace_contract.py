@@ -143,7 +143,9 @@ def validate_request(value: dict[str, Any]) -> dict[str, Any]:
     if params["kind"] != "aceStep15":
         raise ACEContractError("ACE parameter family is wrong")
     ace = exact(params["ace"], {"executionProfile", "vocal", "steps", "guidanceScale"},
-                {"bpm", "keyScale", "timeSignature", "referenceAudio", "editOptions"}, label="ACE condition")
+                {"bpm", "keyScale", "timeSignature", "referenceAudio", "editOptions", "loadingStrategy"}, label="ACE condition")
+    if ace.get("loadingStrategy", "resident") not in ("resident", "ssdLayered"):
+        raise ACEContractError("Unknown ACE loading strategy")
     if ace["executionProfile"] != PROFILE:
         raise ACEContractError("ACE execution profile is wrong")
     _integer(ace["steps"], 1, 2**31 - 1, "steps")

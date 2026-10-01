@@ -262,8 +262,11 @@ struct ACEModelInventory: Sendable {
         let (twice, overflow) = total.multipliedReportingOverflow(by: 2)
         let (estimate, overflow2) = twice.addingReportingOverflow(8 * 1024 * 1024 * 1024)
         guard !overflow, !overflow2 else { throw InferenceFailure.invalidRequest("ACE peak estimate overflow.") }
+        let selectedEstimate = ace.loadingStrategy == .ssdLayered
+            ? try ACEResourceEstimate.layered(root: root, files: files,
+                duration: audio.durationSeconds, guidance: ace.guidanceScale) : estimate
         return Self(root: root, manifest: decoded, files: admitted, sourceFiles: admittedSources,
-                    estimatedPeakBytes: estimate, configuration: configuration,
+                    estimatedPeakBytes: selectedEstimate, configuration: configuration,
                     providerIdentity: providerIdentity, providerDigest: providerDigest,
                     manifestIdentity: manifestIdentity, manifestDigest: manifestDigest,
                     vendorIdentity: vendorIdentity, rootIdentity: rootIdentity)

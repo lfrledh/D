@@ -161,7 +161,7 @@ def float32_samples(payload: dict[str, Any]) -> tuple[Any, int]:
 def run_provider(request_path: Path, job: Path, model: Path, manifest_path: Path,
                  vendor: Path, writer: Any, cancelled: Callable[[], bool],
                  handler_factory: Callable[[Path, dict[str, Any], Path, Path], Any],
-                 *, access_mode: bool = False) -> int:
+                 *, access_mode: bool = False, prepared_directory: Path | None = None) -> int:
     run_id: str | None = None
     manifest: dict[str, Any] | None = None
     request: dict[str, Any] | None = None
@@ -196,12 +196,34 @@ def run_provider(request_path: Path, job: Path, model: Path, manifest_path: Path
                    if handler_factory is make_handler else
                    handler_factory(vendor, manifest, view, model))
         try:
+            strategy = request["parameters"]["ace"].get("loadingStrategy", "resident")
+            handler._ace_loading_strategy = strategy
+            handler._ace_cancelled = cancelled
+            handler._ace_steps = request["parameters"]["ace"]["steps"]
+            if strategy == "ssdLayered":
+                from d_ace_ssd import prepare_decoder, CONVERTER
+                if prepared_directory is None:
+                    raise ACEContractError("ACE SSD execution requires backend-owned preparation directory", "configuration")
+                # A separately authorized derived cache may never be inside original inputs.
+                for original in (model, vendor, job, manifest_path.parent):
+                    if prepared_directory == original or original in prepared_directory.parents:
+                        raise ACEContractError("ACE derived cache overlaps protected inputs/output", "configuration")
+                source_files = [entry for entry in manifest["files"]
+                                if entry["path"].startswith("checkpoints/acestep-v15-xl-sft/")]
+                handler._ace_prepared_source = {"converter": CONVERTER, "files": source_files}
+                handler._ace_prepared_decoder = prepare_decoder(
+                    view / "checkpoints/acestep-v15-xl-sft", prepared_directory, source_files,
+                    cancelled, lambda done, total: writer.progress(run_id, "validating", done, total),
+                    verify_sources=lambda: record.check(manifest, manifest_path=manifest_path, model=model, vendor=vendor, view=view))
+                handler._ace_layer_progress = lambda done, total: writer.progress(run_id, "denoising", done, total)
             status, ready = handler.initialize_service(
                 project_root=str(view), config_path="acestep-v15-xl-sft", device="mps",
                 use_flash_attention=False, compile_model=False,
                 offload_to_cpu=True, offload_dit_to_cpu=True,
                 quantization=None, prefer_source=None, use_mlx_dit=True,
                 vae_checkpoint="official")
+            if cancelled():
+                raise InterruptedError("cancelled during ACE initialization")
             if ready is not True:
                 raise ACEContractError(f"official ACE initialization failed: {status}", "configuration")
             if getattr(handler, "dtype", None) is None or str(handler.dtype) != "torch.float32":
@@ -216,6 +238,8 @@ def run_provider(request_path: Path, job: Path, model: Path, manifest_path: Path
             random.seed(request["seed"])
             writer.progress(run_id, "denoising", 0, 1)
             payload = handler.generate_music(**kwargs)
+            if cancelled():
+                raise InterruptedError("cancelled during ACE generation")
             writer.progress(run_id, "denoising", 1, 1)
             if cancelled():
                 raise InterruptedError("cancelled after ACE generation")
@@ -249,6 +273,7 @@ def run_provider(request_path: Path, job: Path, model: Path, manifest_path: Path
             "sourceSHA256": request.get("source", {}).get("sha256") if request.get("source") else None,
             "referenceSHA256": (request["parameters"]["ace"].get("referenceAudio") or {}).get("sha256"),
             "weightManifest": manifest["files"], "sourceManifest": manifest["sourceFiles"],
+            "loadingStrategy": strategy,
             "offloadToCPU": True,
             "offloadDiTToCPU": True,
         }
@@ -314,6 +339,7 @@ def parser() -> argparse.ArgumentParser:
     item = argparse.ArgumentParser(prog="d_audio_ace_backend.py", exit_on_error=False)
     for option in ("request", "job-directory", "model-directory", "manifest", "vendor-directory"):
         item.add_argument("--" + option, required=True)
+    item.add_argument("--prepared-directory")
     item.add_argument("--access-manifest")
     item.add_argument("--access-run-id")
     return item
@@ -336,6 +362,7 @@ def main(argv: Sequence[str] | None = None,
         model = checked_absolute_path(args.model_directory, label="ACE model")
         manifest = checked_absolute_path(args.manifest, label="ACE manifest")
         vendor = checked_absolute_path(args.vendor_directory, label="ACE official source")
+        prepared = checked_absolute_path(args.prepared_directory, label="ACE prepared cache") if args.prepared_directory else None
         access_mode = args.access_manifest is not None or args.access_run_id is not None
         if access_mode:
             if args.access_manifest is None or args.access_run_id is None:
@@ -345,14 +372,14 @@ def main(argv: Sequence[str] | None = None,
             access_id = str(UUID(args.access_run_id))
             deferred = DeferredWriter(writer)
             with acquire_file_access(access_manifest, run_id=access_id,
-                                     allowed_paths=(model, vendor, request.parent)):
+                                     allowed_paths=(model, vendor, request.parent) + ((prepared,) if prepared else ())):
                 code = run_provider(request, job, model, manifest, vendor, deferred,
                                     lambda: requested["cancelled"], handler_factory,
-                                    access_mode=True)
+                                    access_mode=True, prepared_directory=prepared)
             deferred.deliver()
             return code
         return run_provider(request, job, model, manifest, vendor, writer,
-                            lambda: requested["cancelled"], handler_factory)
+                            lambda: requested["cancelled"], handler_factory, prepared_directory=prepared)
     except (ACEContractError, ContractError, AudioAccessError, ValueError, argparse.ArgumentError) as exc:
         try: writer.emit(_error(None, "configuration", str(exc)), terminal=True)
         except DeliveryError: pass

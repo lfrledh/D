@@ -70,6 +70,7 @@ struct ACEMetadataExpectation: Sendable {
     let requestedFrames: Int64
     let source: AudioSourceReference?
     let reference: AudioSourceReference?
+    let loadingStrategy: ACELoadingStrategy
 
     init(requestData: Data, audio: AudioRequest) throws {
         var parser = AudioJSONParser(data: requestData, maximumDepth: 32)
@@ -77,6 +78,7 @@ struct ACEMetadataExpectation: Sendable {
         requestedFrames = Int64((audio.durationSeconds * 48_000).rounded())
         source = audio.source
         reference = audio.ace?.referenceAudio
+        loadingStrategy = audio.ace?.loadingStrategy ?? .resident
     }
 }
 
@@ -86,7 +88,9 @@ enum ACEProviderValidation {
                          inventory: ACEModelInventory) throws {
         let terminal = try result.snapshot.objectAny(context: "ACE terminal")
         let metadata = try terminal["metadata"]!.objectAny(context: "ACE metadata")
-        guard metadata["request"] == expected.frozen,
+        let observedStrategy = try metadata["loadingStrategy"]?.requiredString(context: "ACE loading strategy") ?? "resident"
+        guard observedStrategy == expected.loadingStrategy.rawValue,
+              metadata["request"] == expected.frozen,
               try metadata["profile"]?.requiredString(context: "ACE profile") == ACEModelInventory.profile,
               try metadata["modelRevision"]?.requiredString(context: "ACE model revision") == ACEModelInventory.modelRevision,
               try metadata["sharedRevision"]?.requiredString(context: "ACE shared revision") == ACEModelInventory.sharedRevision,

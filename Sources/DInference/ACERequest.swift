@@ -70,6 +70,12 @@ public enum ACEEditOptions: Codable, Sendable, Equatable {
     }
 }
 
+/// Residency only: both strategies execute the complete original F32 model.
+public enum ACELoadingStrategy: String, Codable, Sendable, Equatable {
+    case resident
+    case ssdLayered
+}
+
 public struct ACERequest: Codable, Sendable, Equatable {
     public static let fixedProfile = "ace-step-1.5-xl-sft-mlx-f32-v1"
     public let executionProfile: String
@@ -81,27 +87,30 @@ public struct ACERequest: Codable, Sendable, Equatable {
     public let guidanceScale: Float
     public let referenceAudio: AudioSourceReference?
     public let editOptions: ACEEditOptions?
+    public let loadingStrategy: ACELoadingStrategy
 
     public init(executionProfile: String = ACERequest.fixedProfile,
                 vocal: ACEVocalCondition = .instrumental, bpm: Int? = nil,
                 keyScale: String? = nil, timeSignature: ACETimeSignature? = nil,
                 steps: Int = 50, guidanceScale: Float = 7,
                 referenceAudio: AudioSourceReference? = nil,
-                editOptions: ACEEditOptions? = nil) {
+                editOptions: ACEEditOptions? = nil,
+                loadingStrategy: ACELoadingStrategy = .resident) {
         self.executionProfile = executionProfile; self.vocal = vocal
         self.bpm = bpm; self.keyScale = keyScale; self.timeSignature = timeSignature
         self.steps = steps; self.guidanceScale = guidanceScale
         self.referenceAudio = referenceAudio; self.editOptions = editOptions
+        self.loadingStrategy = loadingStrategy
     }
 
     private enum Keys: String, CodingKey {
         case executionProfile, vocal, bpm, keyScale, timeSignature, steps,
-             guidanceScale, referenceAudio, editOptions
+             guidanceScale, referenceAudio, editOptions, loadingStrategy
     }
     public init(from decoder: Decoder) throws {
         try requireAudioKeys(decoder, allowed: ["executionProfile", "vocal", "bpm", "keyScale",
                                                 "timeSignature", "steps", "guidanceScale",
-                                                "referenceAudio", "editOptions"])
+                                                "referenceAudio", "editOptions", "loadingStrategy"])
         let c = try decoder.container(keyedBy: Keys.self)
         executionProfile = try c.decode(String.self, forKey: .executionProfile)
         vocal = try c.decode(ACEVocalCondition.self, forKey: .vocal)
@@ -112,6 +121,7 @@ public struct ACERequest: Codable, Sendable, Equatable {
         guidanceScale = try c.decode(Float.self, forKey: .guidanceScale)
         referenceAudio = try c.decodeIfPresent(AudioSourceReference.self, forKey: .referenceAudio)
         editOptions = try c.decodeIfPresent(ACEEditOptions.self, forKey: .editOptions)
+        loadingStrategy = try c.decodeIfPresent(ACELoadingStrategy.self, forKey: .loadingStrategy) ?? .resident
         try validate()
     }
 

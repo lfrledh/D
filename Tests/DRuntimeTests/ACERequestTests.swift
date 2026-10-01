@@ -76,4 +76,21 @@ struct ACERequestTests {
         let unknown = try JSONSerialization.data(withJSONObject: value)
         #expect(throws: (any Error).self) { try JSONDecoder().decode(AudioRequest.self, from: unknown) }
     }
+    @Test("Residency is explicit and backward compatible without changing precision or conditions")
+    func loadingStrategy() throws {
+        let layered = ACERequest(vocal: .lyrics(text: "保留全部歌词", language: "zh"),
+            steps: 50, guidanceScale: 7, referenceAudio: reference, loadingStrategy: .ssdLayered)
+        let bytes = try JSONEncoder().encode(layered)
+        #expect(try JSONDecoder().decode(ACERequest.self, from: bytes) == layered)
+        var old = try #require(JSONSerialization.jsonObject(with: bytes) as? [String: Any])
+        old.removeValue(forKey: "loadingStrategy")
+        let legacy = try JSONDecoder().decode(ACERequest.self, from: JSONSerialization.data(withJSONObject: old))
+        #expect(legacy.loadingStrategy == .resident)
+        #expect(legacy.vocal == layered.vocal && legacy.referenceAudio == reference && legacy.steps == 50)
+        old["loadingStrategy"] = "silently-quantize"
+        #expect(throws: (any Error).self) {
+            try JSONDecoder().decode(ACERequest.self, from: JSONSerialization.data(withJSONObject: old))
+        }
+    }
+
 }

@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'Python'))
 from d_audio_ace_contract import SOURCE_PATCHES, validate_manifest
 
 SOURCE_REVISION = 'ca1e85fe9430179831e6bc6be790c332190a3866'
-PROVIDERS = ('d_audio_ace_backend.py', 'd_audio_ace_contract.py', 'd_ace_offline_runtime.py',
+PROVIDERS = ('d_audio_ace_backend.py', 'd_audio_ace_contract.py', 'd_ace_offline_runtime.py', 'd_ace_ssd.py',
              'd_audio_access.py', 'd_audio_contract.py', 'd_audio_mrt2_contract.py')
 FIXED_DISTRIBUTIONS = {'torch': '2.10.0', 'torchaudio': '2.10.0', 'transformers': '4.57.6',
     'diffusers': '0.37.1', 'mlx': '0.30.6', 'numpy': '2.3.5', 'soundfile': '0.13.1',

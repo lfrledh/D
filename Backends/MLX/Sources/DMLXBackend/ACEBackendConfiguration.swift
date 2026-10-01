@@ -9,19 +9,21 @@ public struct ACEBackendConfiguration: Sendable {
     public let modelManifest: URL
     public let artifactDirectory: URL
     public let timeoutSeconds: Double
+    public let ssdTimeoutSeconds: Double
     public let cancellationGraceSeconds: Double
     public let accessBootstrapRoot: URL?
     public let confirmDeployment: (@Sendable () throws -> Void)?
 
     public init(pythonExecutable: URL, providerScript: URL, vendorDirectory: URL,
                 modelManifest: URL, artifactDirectory: URL,
-                timeoutSeconds: Double = 3600, cancellationGraceSeconds: Double = 30,
+                timeoutSeconds: Double = 3600, ssdTimeoutSeconds: Double = 12 * 3600, cancellationGraceSeconds: Double = 30,
                 accessBootstrapRoot: URL? = nil,
                 confirmDeployment: (@Sendable () throws -> Void)? = nil) {
         self.pythonExecutable = pythonExecutable; self.providerScript = providerScript
         self.vendorDirectory = vendorDirectory; self.modelManifest = modelManifest
         self.artifactDirectory = artifactDirectory
         self.timeoutSeconds = timeoutSeconds
+        self.ssdTimeoutSeconds = ssdTimeoutSeconds
         self.cancellationGraceSeconds = cancellationGraceSeconds
         self.accessBootstrapRoot = accessBootstrapRoot
         self.confirmDeployment = confirmDeployment
