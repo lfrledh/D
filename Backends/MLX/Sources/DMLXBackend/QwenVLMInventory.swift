@@ -1,6 +1,7 @@
 import CoreFoundation
 import DInference
 import Foundation
+import MLXVLM
 
 /// Local metadata inspection. No MLX allocation or network access occurs here.
 public struct QwenVLMModelInventory: Sendable {
@@ -9,6 +10,7 @@ public struct QwenVLMModelInventory: Sendable {
     public let size: String
     public let contextLimit: Int
     public let weightBytes: UInt64
+    public let quantized: Bool
     public let minimumPixels: Int
     public let maximumPixels: Int
 
@@ -29,6 +31,9 @@ public struct QwenVLMModelInventory: Sendable {
             throw InferenceFailure.invalidRequest("VLM request needs text or visual input, and text is limited to 1 MiB.")
         }
         let inventory = try validateModel(at: request.model.directory)
+        if text.loadingStrategy == .ssdLayered && inventory.quantized {
+            throw InferenceFailure.invalidRequest("SSD layered loading requires original BF16 Qwen3.5 weights.")
+        }
         _ = try QwenMessageMapping.context(for: text.thinking, modelSize: inventory.size)
         let prompt = try capability.resolvedPromptTokens(for: text)
         guard prompt <= inventory.contextLimit,
@@ -133,10 +138,12 @@ public struct QwenVLMModelInventory: Sendable {
         if let enumerationError { throw enumerationError }
         guard bytes > 0 else { throw InferenceFailure.invalidRequest("No VLM weights found.") }
         return Self(directory: directory, family: "qwen3_5", size: size, contextLimit: context,
-                    weightBytes: bytes, minimumPixels: budgets.minimum, maximumPixels: budgets.maximum)
+                    weightBytes: bytes, quantized: config["quantization"] != nil || config["quantization_config"] != nil,
+                    minimumPixels: budgets.minimum, maximumPixels: budgets.maximum)
     }
 
     static func object(_ data: Data) throws -> [String: Any] {
+        try Qwen35LayeredFileValidation.uniqueJSON(data)
         guard let result = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             throw InferenceFailure.invalidRequest("VLM configuration must be a JSON object.")
         }
@@ -145,10 +152,11 @@ public struct QwenVLMModelInventory: Sendable {
 
     static func integer(_ object: [String: Any], _ name: String) throws -> Int {
         guard let number = object[name] as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID(),
-              NSNumber(value: number.intValue) == number else {
+              ["q", "Q", "i", "I", "l", "L", "s", "S"].contains(String(cString: number.objCType)),
+              let value = Int(number.stringValue) else {
             throw InferenceFailure.invalidRequest("Missing or invalid \(name).")
         }
-        return number.intValue
+        return value
     }
 
     static func validAttentionLayout(_ text: [String: Any], layers: Int) throws -> Bool {

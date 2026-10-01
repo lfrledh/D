@@ -91,11 +91,17 @@ public actor MLXQwenVLMBackend: InferenceBackend {
         let visualPixels = Self.saturatingAdd(imagePixels, videoPixels)
         // Estimated peak: transient weights, f32 KV cache, active visual pixels,
         // allocator cache and workspace. No visual term is added for text-only input.
-        let peak = Self.saturatingAdd(
-            Self.saturatingAdd(Self.saturatingMultiply(inventory.weightBytes, 2),
-                               Self.saturatingMultiply(tokens, kvPerToken)),
-            Self.saturatingAdd(Self.saturatingMultiply(visualPixels, 8),
-                               UInt64(configuration.cacheLimitBytes) + 512 * 1024 * 1024))
+        let peak: UInt64
+        if input.loadingStrategy == .ssdLayered {
+            peak = try QwenLayeredResourceEstimate.peak(inventory: inventory, tokens: tokens,
+                visualPixels: visualPixels, cacheLimit: configuration.cacheLimitBytes)
+        } else {
+            peak = Self.saturatingAdd(
+                Self.saturatingAdd(Self.saturatingMultiply(inventory.weightBytes, 2),
+                                   Self.saturatingMultiply(tokens, kvPerToken)),
+                Self.saturatingAdd(Self.saturatingMultiply(visualPixels, 8),
+                                   UInt64(configuration.cacheLimitBytes) + 512 * 1024 * 1024))
+        }
         return ResourceEstimate(peakBytes: peak, confidence: .estimated)
     }
 
@@ -143,7 +149,8 @@ public actor MLXQwenVLMBackend: InferenceBackend {
                 }
             ])
             let factory = VLMModelFactory(typeRegistry: VLMTypeRegistry.shared,
-                                          processorRegistry: registry, modelRegistry: VLMRegistry.shared)
+                                          processorRegistry: registry, modelRegistry: VLMRegistry.shared,
+                                          layeredQwen35: input.loadingStrategy == .ssdLayered)
             let loaded = try await withRandomState(randomState) {
                 try await factory.loadContainer(from: inventory.directory, using: LocalTokenizerLoader())
             }
@@ -186,10 +193,27 @@ public actor MLXQwenVLMBackend: InferenceBackend {
                                                         seed: randomSeed)
                     await observer(MLXLifecycleEvent(runID: request.id, phase: .generating))
                     try Task.checkCancellation()
-                    let iterator = try TokenIterator(input: prepared, model: context.model, parameters: parameters)
-                    let (stream, generationTask) = MLXLMCommon.generateTokenTask(
-                        promptTokenCount: promptTokens, modelConfiguration: context.configuration,
-                        tokenizer: context.tokenizer, iterator: iterator)
+                    let residentStream: AsyncStream<TokenGeneration>?
+                    let layeredStream: AsyncThrowingStream<TokenGeneration, Error>?
+                    let generationTask: Task<Void, Never>
+                    if input.loadingStrategy == .ssdLayered {
+                        guard let throwingModel = context.model as? any ThrowingLanguageModel else {
+                            throw InferenceFailure.backendFailed("Layered model lacks throwing decode support.")
+                        }
+                        let iterator = try TokenIterator(throwingInput: prepared,
+                            model: throwingModel, parameters: parameters)
+                        (layeredStream, generationTask) = MLXLMCommon.generateThrowingTokenTask(
+                            promptTokenCount: promptTokens, modelConfiguration: context.configuration,
+                            tokenizer: context.tokenizer, iterator: iterator)
+                        residentStream = nil
+                    } else {
+                        let iterator = try TokenIterator(input: prepared, model: context.model,
+                            parameters: parameters)
+                        (residentStream, generationTask) = MLXLMCommon.generateTokenTask(
+                            promptTokenCount: promptTokens, modelConfiguration: context.configuration,
+                            tokenizer: context.tokenizer, iterator: iterator)
+                        layeredStream = nil
+                    }
                     return try await withTaskCancellationHandler {
                         do {
                             var completion: GenerateCompletionInfo?
@@ -202,7 +226,8 @@ public actor MLXQwenVLMBackend: InferenceBackend {
                                 openID: openID, closeID: closeID,
                                 thinking: input.thinking?.enableThinking ?? true,
                                 tools: input.tools)
-                            for await item in stream {
+                            if let layeredStream {
+                              for try await item in layeredStream {
                                 try Task.checkCancellation()
                                 switch item {
                                 case .token(let token):
@@ -213,6 +238,20 @@ public actor MLXQwenVLMBackend: InferenceBackend {
                                     }
                                 case .info(let info): completion = info
                                 }
+                              }
+                            } else if let residentStream {
+                              for await item in residentStream {
+                                try Task.checkCancellation()
+                                switch item {
+                                case .token(let token):
+                                    tokens.append(token)
+                                    if let delta = try responseStream.accept(token,
+                                        decode: { context.tokenizer.decode(tokenIds: $0) }) {
+                                        try await emit(.textDelta(delta))
+                                    }
+                                case .info(let info): completion = info
+                                }
+                              }
                             }
                             await generationTask.value
                             try Task.checkCancellation()

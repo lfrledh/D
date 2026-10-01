@@ -629,7 +629,7 @@ enum Qwen3VLVision {
         @ModuleInfo(key: "deepstack_merger_list") var deepstackMergers: [PatchMerger]
         let deepstackVisualIndexes: [Int]
 
-        init(_ config: Qwen3VLConfiguration.VisionConfiguration) {
+        init(_ config: Qwen3VLConfiguration.VisionConfiguration, layered: Bool = false) {
             self.config = config
             self.spatialMergeSize = config.spatialMergeSize
             self.numGridPerSide = Int(sqrt(Double(config.numPositionEmbeddings)))
@@ -648,7 +648,7 @@ enum Qwen3VLVision {
                 embeddingCount: config.numPositionEmbeddings,
                 dimensions: config.hiddenSize)
 
-            _blocks.wrappedValue = (0 ..< config.depth).map { _ in VisionBlock(config) }
+            _blocks.wrappedValue = layered ? [] : (0 ..< config.depth).map { _ in VisionBlock(config) }
             _merger.wrappedValue = PatchMerger(config: config, usePostShuffleNorm: false)
 
             _deepstackMergers.wrappedValue = config.deepstackVisualIndexes.map { _ in
@@ -888,13 +888,38 @@ enum Qwen3VLVision {
             return (hiddenStates, deepstackOutputs)
         }
 
+        func callLayered(_ pixelValues: MLXArray, gridTHW: [THW],
+                         weights: Qwen35LayeredWeights, owner: Qwen35) throws -> MLXArray {
+            try weights.loadVisionPart("patch_embed", into: patchEmbed, model: owner)
+            try weights.loadVisionPart("pos_embed", into: posEmbed, model: owner)
+            var hiddenStates = patchEmbed(pixelValues) + positionalEmbeddings(gridTHW)
+            try checkedEval(hiddenStates)
+            let rotaryEmbeds = rotaryPositionEmbedding(gridTHW)
+            let cuSeqlens = cumulativeSequenceLengths(gridTHW)
+            for index in 0..<config.depth {
+                try Task.checkCancellation()
+                let block = VisionBlock(config)
+                try weights.loadVisionPart("blocks.\(index)", into: block, model: owner)
+                hiddenStates = block(hiddenStates, cuSeqlens: cuSeqlens, rotaryPosEmb: rotaryEmbeds)
+                try checkedEval(hiddenStates)
+            }
+            try weights.loadVisionPart("merger", into: merger, model: owner)
+            let features = merger(hiddenStates)
+            try checkedEval(features)
+            return features
+        }
+
         func sanitize(weights: [String: MLXArray]) -> [String: MLXArray] {
+            Self.sanitize(weights: weights, inChannels: config.inChannels)
+        }
+
+        static func sanitize(weights: [String: MLXArray], inChannels: Int) -> [String: MLXArray] {
             var sanitized: [String: MLXArray] = [:]
             for (key, value) in weights {
                 if key.contains("position_ids") {
                     continue
                 } else if key.contains("patch_embed.proj.weight") {
-                    if value.ndim == 5 && value.dim(-1) == config.inChannels {
+                    if value.ndim == 5 && value.dim(-1) == inChannels {
                         sanitized[key] = value
                     } else {
                         sanitized[key] = value.transposed(0, 2, 3, 4, 1)

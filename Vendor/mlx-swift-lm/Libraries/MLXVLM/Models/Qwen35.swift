@@ -426,6 +426,9 @@ enum Qwen35Language {
             .transposed(0, 2, 1, 3)
             .reshaped(B, L, -1)
 
+            // The fixed Transformers attention implementation uses sigmoid here even
+            // when the 27B config advertises output_gate_type=swish. The mapping is
+            // unresolved; keep resident and layered math identical.
             return oProj(output * sigmoid(gate))
         }
     }
@@ -694,18 +697,24 @@ enum Qwen35Language {
 
         let ssmIdx: Int
         let faIdx: Int
+        let layerCount: Int
+        let layered: Bool
+        // Narrow numerical-oracle policy. Production resident evaluation is unchanged.
+        var evaluateEachLayerForComparison = false
 
-        init(_ args: Qwen35Configuration.TextConfiguration) {
+        init(_ args: Qwen35Configuration.TextConfiguration, layered: Bool = false) {
             precondition(args.vocabularySize > 0)
             _embedTokens.wrappedValue = Embedding(
                 embeddingCount: args.vocabularySize, dimensions: args.hiddenSize)
-            _layers.wrappedValue = (0 ..< args.hiddenLayers).map {
+            _layers.wrappedValue = layered ? [] : (0 ..< args.hiddenLayers).map {
                 DecoderLayer(args, layerIdx: $0)
             }
             _norm.wrappedValue = RMSNorm(dimensions: args.hiddenSize, eps: args.rmsNormEps)
 
             self.ssmIdx = 0
             self.faIdx = args.fullAttentionInterval - 1
+            self.layerCount = args.hiddenLayers
+            self.layered = layered
             super.init()
         }
 
@@ -746,8 +755,36 @@ enum Qwen35Language {
                     cache: cacheArray?[index],
                     positionIds: positionIds
                 )
+                if evaluateEachLayerForComparison {
+                    eval([hiddenStates] + (cacheArray?[index]?.innerState() ?? []))
+                }
             }
 
+            return norm(hiddenStates)
+        }
+
+        func callLayered(
+            _ inputs: MLXArray, inputsEmbeds: MLXArray?, cache: [KVCache?]?,
+            positionIds: MLXArray?, config: Qwen35Configuration.TextConfiguration,
+            weights: Qwen35LayeredWeights, owner: Qwen35
+        ) throws -> MLXArray {
+            var hiddenStates = inputsEmbeds ?? embedTokens(inputs)
+            let faMaskMode = createAttentionMask(h: hiddenStates, cache: cache?[faIdx], returnArray: true)
+            let faMask: MLXArray?
+            if case .array(let arrayMask) = faMaskMode { faMask = arrayMask } else { faMask = nil }
+            let ssmMask = createSSMMask(h: hiddenStates, cache: cache?[ssmIdx] as? MambaCache)
+            for index in 0..<layerCount {
+                try Task.checkCancellation()
+                let layer = withRandomState(MLXRandom.RandomState(seed: 0)) {
+                    DecoderLayer(config, layerIdx: index)
+                }
+                try weights.loadLayer(index, into: layer, model: owner)
+                hiddenStates = layer(hiddenStates, attentionMask: faMask,
+                    ssmMask: layer.isLinear ? ssmMask : nil,
+                    cache: cache?[index], positionIds: positionIds)
+                // Materialize both output and recurrent/KV state before dropping this layer.
+                try checkedEval([hiddenStates] + (cache?[index]?.innerState() ?? []))
+            }
             return norm(hiddenStates)
         }
     }
@@ -761,11 +798,11 @@ enum Qwen35Language {
         let modelType: String
         let kvHeads: [Int]
 
-        init(_ config: Qwen35Configuration) {
+        init(_ config: Qwen35Configuration, layered: Bool = false) {
             self.config = config
             self.textConfig = config.textConfiguration
             self.modelType = config.textConfiguration.modelType
-            self.model = Model(config.textConfiguration)
+            self.model = Model(config.textConfiguration, layered: layered)
             self.kvHeads = Array(
                 repeating: config.textConfiguration.kvHeads,
                 count: config.textConfiguration.hiddenLayers
@@ -881,9 +918,58 @@ enum Qwen35Language {
             return LMOutput(logits: out, state: state)
         }
 
+        func callLayered(
+            _ input: MLXArray, inputsEmbeds: MLXArray? = nil, cache: [KVCache?]?,
+            state suppliedState: LMOutput.State?, mask: MLXArray? = nil,
+            providedPositionIds: MLXArray? = nil, imageGridTHW: [THW]? = nil,
+            videoGridTHW: [THW]? = nil, weights: Qwen35LayeredWeights, owner: Qwen35
+        ) throws -> LMOutput {
+            var state = suppliedState ?? .init()
+            let inputs = input.ndim == 1 ? input.expandedDimensions(axis: 0) : input
+            let precomputed = state[precomputedPositionIdsKey]
+            let deltas = state[ropeDeltasKey]
+            let cacheOffset = cache?[model.faIdx]?.offset ?? 0
+            var positionIds = providedPositionIds
+            if positionIds == nil {
+                if cacheOffset == 0 || deltas == nil || cache == nil {
+                    if let precomputed {
+                        positionIds = precomputed[0..., 0..., cacheOffset..<(cacheOffset + inputs.dim(1))]
+                    } else {
+                        let (computed, delta) = Qwen3VLLanguage.getRopeIndex(
+                            inputIds: inputs, imageGridTHW: imageGridTHW,
+                            videoGridTHW: videoGridTHW,
+                            spatialMergeSize: config.visionConfiguration.spatialMergeSize,
+                            imageTokenId: config.imageTokenId, videoTokenId: config.videoTokenId,
+                            visionStartTokenId: config.visionStartTokenId, attentionMask: mask)
+                        positionIds = computed
+                        state[precomputedPositionIdsKey] = computed
+                        state[ropeDeltasKey] = delta
+                    }
+                } else {
+                    let batch = inputs.dim(0)
+                    let length = inputs.dim(1)
+                    var delta = MLXArray(cacheOffset).asType(.int32)
+                    if let deltas { delta = delta + deltas.asType(.int32) }
+                    var base = MLXArray(0..<length).asType(.int32)
+                    base = broadcast(base[.newAxis, 0...], to: [batch, length])
+                    if delta.ndim == 0 { delta = broadcast(delta, to: [batch]) }
+                    else if delta.dim(0) < batch { delta = repeated(delta, count: batch, axis: 0) }
+                    else if delta.dim(0) > batch { delta = delta[0..<batch] }
+                    base = base + delta[0..., .newAxis]
+                    positionIds = broadcast(base[.newAxis, 0..., 0...], to: [3, batch, length])
+                }
+            }
+            let hidden = try model.callLayered(inputs, inputsEmbeds: inputsEmbeds,
+                cache: cache, positionIds: positionIds, config: textConfig,
+                weights: weights, owner: owner)
+            let last = hidden[0..., (hidden.dim(1) - 1)..., 0...]
+            let logits = lmHead.map { $0(last) } ?? model.embedTokens.asLinear(last)
+            return LMOutput(logits: logits, state: state)
+        }
+
         func makeCache(maxKVSize: Int?) -> [KVCache] {
-            model.layers.map { layer in
-                if layer.isLinear {
+            (0..<model.layerCount).map { index in
+                if (index + 1) % textConfig.fullAttentionInterval != 0 {
                     return MambaCache()
                 }
                 if let maxKVSize {
@@ -898,16 +984,59 @@ enum Qwen35Language {
 // MARK: - Model
 
 public class Qwen35: Module, VLMModel {
-    @ModuleInfo(key: "vision_tower") private var visionModel: Qwen3VLVision.VisionModel
+    @ModuleInfo(key: "vision_tower") private var visionModel: Qwen3VLVision.VisionModel?
     @ModuleInfo(key: "language_model") fileprivate var languageModel: Qwen35Language.LanguageModel
 
     public let config: Qwen35Configuration
+    private var layeredWeights: Qwen35LayeredWeights?
+    var layeredVisionIsResident: Bool { visionModel != nil }
+    var evaluateResidentLayersForComparison: Bool {
+        get { languageModel.model.evaluateEachLayerForComparison }
+        set { languageModel.model.evaluateEachLayerForComparison = newValue }
+    }
+    var onComparisonPrefillStep: ((LMOutput, [any KVCache]) -> Void)?
 
     public init(_ config: Qwen35Configuration) {
         self.config = config
         _visionModel.wrappedValue = Qwen3VLVision.VisionModel(config.visionConfiguration)
         _languageModel.wrappedValue = Qwen35Language.LanguageModel(config)
         super.init()
+    }
+
+    public init(_ config: Qwen35Configuration, layered: Bool) {
+        self.config = config
+        _visionModel.wrappedValue = layered ? nil : Qwen3VLVision.VisionModel(config.visionConfiguration)
+        _languageModel.wrappedValue = Qwen35Language.LanguageModel(config, layered: layered)
+        super.init()
+    }
+
+    public func loadLayeredWeights(from directory: URL,
+                                   expectedConfiguration: Data? = nil,
+                                   expectedConfigurationIdentity: String? = nil) throws {
+        guard languageModel.model.layered else {
+            throw Qwen35LayeredWeights.Failure.invalid("model was constructed for resident loading")
+        }
+        let weights = try Qwen35LayeredWeights(directory: directory)
+        if let expectedConfiguration {
+            let file = directory.appendingPathComponent("config.json")
+            let current = try Qwen35LayeredWeights.readBounded(file, maximum: 4 * 1024 * 1024)
+            guard current == expectedConfiguration else {
+                throw Qwen35LayeredWeights.Failure.invalid("config changed before weight loading")
+            }
+            if let expectedConfigurationIdentity {
+                guard try Qwen35LayeredFileValidation.identity(file) == expectedConfigurationIdentity else {
+                    throw Qwen35LayeredWeights.Failure.invalid("config identity changed before weight loading")
+                }
+            }
+        }
+        try weights.loadResident(into: self)
+        if let expectedConfigurationIdentity {
+            let file = directory.appendingPathComponent("config.json")
+            guard try Qwen35LayeredFileValidation.identity(file) == expectedConfigurationIdentity else {
+                throw Qwen35LayeredWeights.Failure.invalid("config changed during weight loading")
+            }
+        }
+        layeredWeights = weights
     }
 
     public var vocabularySize: Int { config.vocabSize }
@@ -982,7 +1111,7 @@ public class Qwen35: Module, VLMModel {
     public func prepare(
         _ input: LMInput,
         cache: [any KVCache],
-        windowSize _: Int?
+        windowSize: Int?
     ) throws -> PrepareResult {
         let inputIds = input.text.tokens
 
@@ -990,7 +1119,7 @@ public class Qwen35: Module, VLMModel {
         var imageFrames: [THW]?
         var videoFrames: [THW]?
 
-        let visionDType = visionModel.patchEmbed.proj.weight.dtype
+        let visionDType = visionModel!.patchEmbed.proj.weight.dtype
         var pixelParts: [MLXArray] = []
 
         if let image = input.image {
@@ -1012,7 +1141,7 @@ public class Qwen35: Module, VLMModel {
                 .nilIfEmpty
         {
             let textEmbeds = languageModel.model.embedTokens(inputIds)
-            let (visionHidden, _) = visionModel(pixelValues, gridTHW: frames)
+            let (visionHidden, _) = visionModel!(pixelValues, gridTHW: frames)
             let visionFeatures = visionHidden.asType(textEmbeds.dtype)
 
             let (mergedEmbeds, _) = try mergeInputIdsWithImageFeatures(
@@ -1026,6 +1155,36 @@ public class Qwen35: Module, VLMModel {
         }
 
         let typedCache = castCache(cache)
+        if evaluateResidentLayersForComparison {
+            let ids = inputIds.ndim == 1 ? inputIds.expandedDimensions(axis: 0) : inputIds
+            let (positions, deltas) = Qwen3VLLanguage.getRopeIndex(
+                inputIds: ids, imageGridTHW: imageFrames, videoGridTHW: videoFrames,
+                spatialMergeSize: config.visionConfiguration.spatialMergeSize,
+                imageTokenId: config.imageTokenId, videoTokenId: config.videoTokenId,
+                visionStartTokenId: config.visionStartTokenId, attentionMask: input.text.mask)
+            var state = LMOutput.State()
+            state[precomputedPositionIdsKey] = positions
+            state[ropeDeltasKey] = deltas
+            if let inputEmbeddings { eval(inputEmbeddings) }
+            let chunk = max(1, windowSize ?? 512)
+            return try withPreparedCache(cache, lengths: input.text.sequenceLengths) {
+                var last: LMOutput?
+                for start in stride(from: 0, to: ids.dim(1), by: chunk) {
+                    let end = min(start + chunk, ids.dim(1))
+                    last = languageModel(ids[0..., start..<end],
+                        inputsEmbeds: inputEmbeddings?[0..., start..<end, 0...],
+                        cache: typedCache, state: state,
+                        positionIds: positions[0..., 0..., start..<end])
+                    state = last!.state ?? state
+                    eval(last!.logits)
+                    onComparisonPrefillStep?(last!, cache)
+                }
+                guard let last else {
+                    throw Qwen35LayeredWeights.Failure.invalid("empty prompt")
+                }
+                return .logits(last)
+            }
+        }
         let output = withPreparedCache(cache, lengths: input.text.sequenceLengths) {
             languageModel(
                 inputIds,
@@ -1041,6 +1200,79 @@ public class Qwen35: Module, VLMModel {
         }
 
         return .logits(output)
+    }
+
+    public func prepareThrowing(
+        _ input: LMInput, cache: [any KVCache], windowSize: Int?
+    ) throws -> PrepareResult {
+        guard let weights = layeredWeights else {
+            throw Qwen35LayeredWeights.Failure.invalid("layered weights are not loaded")
+        }
+        let ids = input.text.tokens.ndim == 1
+            ? input.text.tokens.expandedDimensions(axis: 0) : input.text.tokens
+        let imageFrames = input.image?.frames
+        let videoFrames = input.video?.frames
+        let frames = combinedFrames(imageFrames: imageFrames, videoFrames: videoFrames)
+        let visionDType: DType = .bfloat16
+        var parts: [MLXArray] = []
+        if let image = input.image { parts.append(image.pixels.asType(visionDType)) }
+        if let video = input.video { parts.append(video.pixels.asType(visionDType)) }
+        var merged: MLXArray?
+        if !parts.isEmpty {
+            let textEmbeds = languageModel.model.embedTokens(ids)
+            let pixels = concatenated(parts)
+            // This local module owns only the current vision block, and dies
+            // before text decode begins.
+            let vision = Qwen3VLVision.VisionModel(config.visionConfiguration, layered: true)
+            let features = try vision.callLayered(pixels, gridTHW: frames,
+                                                  weights: weights, owner: self)
+            merged = try mergeInputIdsWithImageFeatures(
+                imageFeatures: features.asType(textEmbeds.dtype), inputEmbeds: textEmbeds,
+                inputIds: ids, imageTokenIndex: config.imageTokenIndex,
+                videoTokenIndex: config.videoTokenIndex).0
+            // The merged features must no longer depend on vision evaluation later.
+            try checkedEval(merged!)
+        }
+        let (positions, deltas) = Qwen3VLLanguage.getRopeIndex(
+            inputIds: ids, imageGridTHW: imageFrames, videoGridTHW: videoFrames,
+            spatialMergeSize: config.visionConfiguration.spatialMergeSize,
+            imageTokenId: config.imageTokenId, videoTokenId: config.videoTokenId,
+            visionStartTokenId: config.visionStartTokenId, attentionMask: input.text.mask)
+        var state = LMOutput.State()
+        state[precomputedPositionIdsKey] = positions
+        state[ropeDeltasKey] = deltas
+        let typedCache = castCache(cache)
+        let chunk = max(1, windowSize ?? 512)
+        let output = try withPreparedCache(cache, lengths: input.text.sequenceLengths) {
+            var last: LMOutput?
+            for start in stride(from: 0, to: ids.dim(1), by: chunk) {
+                try Task.checkCancellation()
+                let end = min(start + chunk, ids.dim(1))
+                let embeddings = merged?[0..., start..<end, 0...]
+                last = try languageModel.callLayered(ids[0..., start..<end],
+                    inputsEmbeds: embeddings, cache: typedCache, state: state,
+                    providedPositionIds: positions[0..., 0..., start..<end],
+                    weights: weights, owner: self)
+                state = last!.state ?? state
+                try checkedEval(last!.logits)
+                onComparisonPrefillStep?(last!, cache)
+            }
+            guard let last else {
+                throw Qwen35LayeredWeights.Failure.invalid("empty prompt")
+            }
+            return last
+        }
+        return .logits(output)
+    }
+
+    public func callThrowing(
+        _ input: LMInput.Text, cache: [any KVCache]?, state: LMOutput.State?
+    ) throws -> LMOutput {
+        guard let weights = layeredWeights else {
+            throw Qwen35LayeredWeights.Failure.invalid("layered weights are not loaded")
+        }
+        return try languageModel.callLayered(input.tokens, cache: castCacheOptional(cache),
+            state: state, weights: weights, owner: self)
     }
 
     public func callAsFunction(
@@ -1118,9 +1350,12 @@ public class Qwen35: Module, VLMModel {
             sanitized[key] = value
         }
 
-        return visionModel.sanitize(weights: sanitized)
+        return Qwen3VLVision.VisionModel.sanitize(weights: sanitized,
+            inChannels: config.visionConfiguration.inChannels)
     }
 }
+
+extension Qwen35: ThrowingLanguageModel {}
 
 extension Array where Element == THW {
     fileprivate var nilIfEmpty: [THW]? { isEmpty ? nil : self }

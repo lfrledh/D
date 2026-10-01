@@ -638,6 +638,68 @@ public struct TokenIterator: TokenIteratorProtocol {
         }
     }
 
+    /// Initialize the opt-in I/O path without invoking nonthrowing model.prepare.
+    public init(
+        throwingInput input: LMInput, model: any ThrowingLanguageModel,
+        cache: [KVCache]? = nil, parameters: GenerateParameters
+    ) throws {
+        self.model = model
+        self.y = input.text
+        self.cache = cache ?? model.newCache(parameters: parameters)
+        self.processor = parameters.processor()
+        self.sampler = parameters.sampler()
+        self.maxTokens = parameters.maxTokens
+        self.kvBits = parameters.kvBits
+        self.kvGroupSize = parameters.kvGroupSize
+        self.quantizedKVStart = parameters.quantizedKVStart
+        self.kvScheme = parameters.kvScheme
+        self.promptPrefillTime = try measure {
+            try prepareThrowing(input: input, windowSize: parameters.prefillStepSize)
+        }
+    }
+
+    mutating func prepareThrowing(input: LMInput, windowSize: Int?) throws {
+        guard let throwingModel = model as? any ThrowingLanguageModel else {
+            throw ThrowingGenerationError.modelDoesNotSupportThrowingExecution
+        }
+        processor?.prompt(input.text.tokens)
+        switch try throwingModel.prepareThrowing(input, cache: cache, windowSize: windowSize) {
+        case .tokens(let tokens):
+            y = tokens
+            let token = try stepThrowing(previous: y)
+            y = .init(tokens: token)
+            asyncEval(y.tokens)
+        case .logits(let result):
+            state = result.state
+            y = .init(tokens: convertToToken(logits: result.logits))
+            asyncEval(y.tokens)
+        }
+    }
+
+    mutating func stepThrowing(previous: LMInput.Text) throws -> MLXArray {
+        guard let throwingModel = model as? any ThrowingLanguageModel else {
+            throw ThrowingGenerationError.modelDoesNotSupportThrowingExecution
+        }
+        let result = try withPreparedCache(cache, lengths: previous.sequenceLengths) {
+            try throwingModel.callThrowing(previous[text: .newAxis],
+                                           cache: cache.isEmpty ? nil : cache, state: state)
+        }
+        state = result.state
+        maybeQuantizeKVCache(cache: &cache, kvBits: kvBits, kvGroupSize: kvGroupSize,
+                             quantizedKVStart: quantizedKVStart, kvScheme: kvScheme)
+        return convertToToken(logits: result.logits)
+    }
+
+    public mutating func nextThrowing() throws -> Int? {
+        if let maxTokens, tokenCount >= maxTokens { return nil }
+        let previous = y
+        let token = try stepThrowing(previous: previous)
+        y = .init(tokens: token)
+        asyncEval(token)
+        tokenCount += 1
+        return previous.tokens.item(Int.self)
+    }
+
     /// Initialize a `TokenIterator` with the given input and logit handling.
     ///
     /// - Parameters:
@@ -685,6 +747,7 @@ public struct TokenIterator: TokenIteratorProtocol {
             asyncEval(y.tokens)
 
         case .logits(let result):
+            state = result.state
             y = .init(tokens: convertToToken(logits: result.logits))
             asyncEval(y.tokens)
 
@@ -1808,6 +1871,90 @@ public func generateTokenTask(
         includeStopToken: includeStopToken,
         handler: RawTokenLoopHandler()
     )
+}
+
+public enum ThrowingGenerationError: Error {
+    case modelDoesNotSupportThrowingExecution
+}
+
+/// Raw token stream for a model that can throw while loading a decode layer.
+/// The producer task is returned so callers can cancel and drain it on every exit.
+public func generateThrowingTokenTask(
+    promptTokenCount: Int, modelConfiguration: ModelConfiguration, tokenizer: Tokenizer,
+    iterator: consuming TokenIterator, includeStopToken: Bool = false
+) -> (AsyncThrowingStream<TokenGeneration, Error>, Task<Void, Never>) {
+    let (stream, continuation) = AsyncThrowingStream<TokenGeneration, Error>.makeStream()
+    let boxed = SendableBox(iterator)
+    let task = Task {
+        var iterator = boxed.consume()
+        var handler = RawTokenLoopHandler()
+        var start = Date.timeIntervalSinceReferenceDate
+        var promptTime: TimeInterval = 0
+        var tokenCount = 0
+        var stopReason: GenerateStopReason?
+        let stops = buildStopTokenIds(modelConfiguration: modelConfiguration, tokenizer: tokenizer)
+        // The throwing stream has its own YieldResult type. RawTokenLoopHandler
+        // only needs to know whether the consumer has terminated.
+        let emit: (sending TokenGeneration) -> AsyncStream<TokenGeneration>.Continuation.YieldResult = {
+            generation in
+            switch continuation.yield(generation) {
+            case .terminated: return .terminated
+            case .enqueued(let remaining): return .enqueued(remaining: remaining)
+            case .dropped(let dropped): return .dropped(dropped)
+            @unknown default: return .terminated
+            }
+        }
+        do {
+            tokenLoop: while let token = try iterator.nextThrowing() {
+                try Task.checkCancellation()
+                if promptTime == 0 {
+                    let now = Date.timeIntervalSinceReferenceDate
+                    promptTime = now - start
+                    start = now
+                }
+                if token == tokenizer.unknownTokenId || stops.contains(token) {
+                    if includeStopToken {
+                        tokenCount += 1
+                        switch handler.onStopToken(token, emit: emit) {
+                        case .more: break
+                        case .stop: stopReason = .stop; break tokenLoop
+                        case .cancelled: stopReason = .cancelled; break tokenLoop
+                        }
+                    } else {
+                        iterator.discardGeneratedToken()
+                    }
+                    stopReason = .stop
+                    break
+                }
+                tokenCount += 1
+                switch handler.onToken(token, emit: emit) {
+                case .more: break
+                case .stop: stopReason = .stop; break tokenLoop
+                case .cancelled: stopReason = .cancelled; break tokenLoop
+                }
+            }
+            if stopReason == nil {
+                stopReason = iterator.maxTokens.map { iterator.tokenCount >= $0 ? .length : .cancelled }
+                    ?? .cancelled
+            }
+            handler.onGenerationEnd(emit: emit)
+            let info = GenerateCompletionInfo(
+                promptTokenCount: promptTokenCount, generationTokenCount: tokenCount,
+                promptTime: promptTime + iterator.promptPrefillTime,
+                generationTime: Date.timeIntervalSinceReferenceDate - start,
+                stopReason: stopReason ?? .cancelled)
+            _ = continuation.yield(handler.infoEvent(info))
+            Stream().synchronize()
+            continuation.finish()
+        } catch {
+            Stream().synchronize()
+            continuation.finish(throwing: error)
+        }
+    }
+    continuation.onTermination = { termination in
+        if case .cancelled = termination { task.cancel() }
+    }
+    return (stream, task)
 }
 
 private func generateLoopTask<Handler: TokenLoopHandler>(
