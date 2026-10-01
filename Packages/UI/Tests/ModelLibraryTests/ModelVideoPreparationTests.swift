@@ -4,6 +4,39 @@ import Testing
 
 @Suite(.serialized)
 struct ModelVideoPreparationTests {
+    @Test(.timeLimit(.minutes(120)),
+          .enabled(if: ProcessInfo.processInfo.environment["D_TEST_LTX25_RAW"] != nil))
+    func fixedLTX25OriginalResourcesUseProductionPreparation() async throws {
+        let env = ProcessInfo.processInfo.environment
+        let source = URL(fileURLWithPath: try #require(env["D_TEST_LTX25_RAW"]))
+        let root = URL(fileURLWithPath: try #require(env["D_TEST_LTX25_PREPARE_ROOT"]))
+        let state = root.appendingPathComponent("state"), destination = root.appendingPathComponent("prepared")
+        try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
+        let expected = try #require(ModelCatalog.entries().first { $0.id == "ltx-2.5-bf16" })
+        let directory = try ModelDirectory(source), before = try directory.entries()
+        let start = Date(), library = try await ModelLibrary(stateDirectory: state, catalog: [expected])
+        do {
+            let id = try await library.registerExisting(at: source, catalogID: expected.id)
+            #expect(await library.snapshot().records.first?.state == .preparationRequired)
+            let output = try await library.prepareVideo(id, in: destination)
+            let target = try ModelDirectory(output)
+            let manifest = try #require(JSONSerialization.jsonObject(with: target.read("D-VIDEO-PACK.json")) as? [String: Any])
+            #expect(manifest["profile"] as? String == "ltx-2.5-dev-bf16-full-v1")
+            #expect(manifest["modelRevision"] as? String == expected.revision)
+            #expect(Set(manifest.keys) == ["schemaVersion", "profile", "modelRevision"])
+            #expect(try directory.entries() == before)
+            #expect(await library.snapshot().records.first?.activeLeaseCount == 0)
+            for file in expected.files {
+                #expect(try !target.fileIdentity("model/" + file.path).sameNode(directory.fileIdentity(file.path)))
+            }
+            try JSONSerialization.data(withJSONObject: ["prepared": output.path, "modelRevision": expected.revision,
+                "fileCount": expected.files.count, "seconds": Date().timeIntervalSince(start),
+                "sourceUnchanged": true, "activeLeaseCount": 0, "guiVerified": false], options: [.prettyPrinted, .sortedKeys])
+                .write(to: root.appendingPathComponent("result.json"), options: .withoutOverwriting)
+            try await library.shutdown()
+        } catch { try? await library.shutdown(); throw error }
+    }
+
     private func entry(_ fixture: LibraryFixture) -> ModelCatalogEntry {
         .init(id: "minimax-h3-fl2va-bf16", title: "H3 controlled fixture", repository: "fixture/model",
             revision: "42ed227ee7df40d41602854ae760620d6eb651fe", files: fixture.entry.files,

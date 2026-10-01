@@ -59,7 +59,8 @@ struct QwenVideoPositionTests {
         #expect(prompt == "prefix<0.2 seconds>" + block + "<1.2 seconds>" + block
             + "<3.2 seconds>" + block + "<4.0 seconds>" + block + "suffix")
         let video = try #require(input.video)
-        #expect(video.frames.map { [$0.t, $0.h, $0.w] } == [[2,4,4], [2,4,4]])
+        let grids = try #require(video.frames)
+        #expect(grids.map { [$0.t, $0.h, $0.w] } == [[2,4,4], [2,4,4]])
         // Each group of 16 spatial patches still contains consecutive red/red or
         // blue/blue frames. Reversing the second clip reverses these groups.
         let pixels = video.pixels.asArray(Float.self)
