@@ -6,6 +6,10 @@ import Testing
 
 @Suite(.serialized)
 struct ModelWanPreparationTests {
+    private actor ConverterSignal {
+        var entered = false
+        func markEntered() { entered = true }
+    }
     @Test func unconfirmedDrainRetainsLeaseAndScopesAcrossShutdown() async throws {
         let fixture = try LibraryFixture(); defer { fixture.clean() }
         let expected = entry(fixture)
@@ -27,17 +31,19 @@ struct ModelWanPreparationTests {
     }
     @Test func shutdownCancellationCannotReleaseAnUnconfirmedChild() async throws {
         let fixture = try LibraryFixture(); defer { fixture.clean() }
-        let expected = entry(fixture)
+        let expected = entry(fixture), signal = ConverterSignal()
         let library = try await ModelLibrary(stateDirectory: fixture.state, catalog: [expected], wanPreparation: { _, _ in
+            await signal.markEntered()
             do { try await Task.sleep(for: .seconds(10)) } catch is CancellationError {}
             throw InferenceFailure.resourceCleanupUnconfirmed("controlled cancelled fixture")
         })
         let id = try await library.registerExisting(at: fixture.source, catalogID: expected.id)
         let task = Task { try await library.prepareVideo(id, in: fixture.destination) }
         for _ in 0..<100 {
-            if await library.snapshot().records.first?.activeLeaseCount == 1 { break }
+            if await signal.entered { break }
             try await Task.sleep(for: .milliseconds(5))
         }
+        #expect(await signal.entered)
         #expect(await library.snapshot().records.first?.activeLeaseCount == 1)
         await #expect(throws: (any Error).self) { try await library.shutdown() }
         _ = await task.result
