@@ -1162,7 +1162,7 @@ private struct WorkflowFieldEditor: View {
             Toggle(title, isOn: flagBinding).labelsHidden().disabled(readOnly)
         case .choice(let choices):
             Picker(title, selection: textBinding) {
-                ForEach(choices, id: \.self) { Text($0).tag($0) }
+                ForEach(choices, id: \.self) { Text(WorkflowCanvasPresentation.choiceTitle(fieldID: field.id, value: $0, language: languageStore)).tag($0) }
             }
             .labelsHidden()
             .disabled(readOnly)
@@ -1859,6 +1859,18 @@ enum WorkflowCanvasPresentation {
         language: UILanguageStore?
     ) -> String {
         workflowText(language, "workflow.operation.\(definition.id).detail", fallback: definition.detail)
+    }
+
+    @MainActor static func choiceTitle(fieldID: String, value: String, language: UILanguageStore?) -> String {
+        guard fieldID == "loadingStrategy" else { return value }
+        let fallback: String
+        switch value {
+        case "resident": fallback = "常驻内存（精度不变）"
+        case "staged": fallback = "分阶段加载（精度不变）"
+        case "ssdLayered": fallback = "省内存（SSD 分层加载，精度不变）"
+        default: return value
+        }
+        return workflowText(language, "workflow.loading." + value, fallback: fallback)
     }
 
     @MainActor static func fieldTitle(

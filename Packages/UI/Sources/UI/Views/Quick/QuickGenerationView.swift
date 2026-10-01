@@ -327,7 +327,7 @@ private struct QuickParameterField: View {
                 if multiline { TextEditor(text: stringBinding).frame(minHeight: 130).padding(6).background(.quaternary, in: RoundedRectangle(cornerRadius: 9)) }
                 else { TextField(title, text: stringBinding).textFieldStyle(.roundedBorder) }
             case .choice(let options):
-                Picker(title, selection: stringBinding) { ForEach(options, id: \.self) { Text($0).tag($0) } }.labelsHidden()
+                Picker(title, selection: stringBinding) { ForEach(options, id: \.self) { Text(WorkflowCanvasPresentation.choiceTitle(fieldID: field.id, value: $0, language: language)).tag($0) } }.labelsHidden()
             case .flag: Toggle(title, isOn: Binding(get: { if case .flag(let b) = value { b } else { false } }, set: { onChange(.flag($0)) })).labelsHidden()
             case .integer, .decimal:
                 TextField(title, text: Binding(get: { raw ?? numberString }, set: { onRaw($0) })).textFieldStyle(.roundedBorder)

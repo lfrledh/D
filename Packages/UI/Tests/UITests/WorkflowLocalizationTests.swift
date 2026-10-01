@@ -17,6 +17,18 @@ private actor LocalizationNoInferenceEngine: InferenceEngine {
 
 @Suite(.serialized) @MainActor
 struct WorkflowLocalizationTests {
+    @Test func loadingChoicesTranslateWithoutChangingStoredValues() throws {
+        for locale in ["en", "zh-Hans"] {
+            let store = UILanguageStore(preferredLanguages: [locale]); try store.select(locale)
+            for value in ["resident", "staged", "ssdLayered"] {
+                let expected = store.text("workflow.loading." + value, fallback: "__missing__")
+                #expect(expected != "__missing__" && expected != value)
+                #expect(WorkflowCanvasPresentation.choiceTitle(fieldID: "loadingStrategy", value: value, language: store) == expected)
+                #expect(WorkflowCanvasPresentation.choiceTitle(fieldID: "userChoice", value: value, language: store) == value)
+            }
+            #expect(WorkflowCanvasPresentation.choiceTitle(fieldID: "loadingStrategy", value: "future", language: store) == "future")
+        }
+    }
     @Test func scopePresentationFreezesGraphIdentityAtOpen() {
         var graph = WorkflowGraph(name: "scope"), node = WorkflowNode(operationID: "d.value.input", title: "input")
         graph.nodes = [node]
