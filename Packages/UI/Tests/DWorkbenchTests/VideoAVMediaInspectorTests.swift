@@ -361,13 +361,29 @@ struct VideoAVMediaInspectorTests {
             let project = directory.appendingPathComponent("real-output.dproject")
             let store = try await ProjectStore.create(at: project, name: "Real generated media validation")
             let h3 = profile == .h3BF16Full
-            let video = VideoRequest(prompt: "A red ceramic cup on a wooden table, steady camera, natural light.",
+            let legacyVideo = VideoRequest(prompt: "A red ceramic cup on a wooden table, steady camera, natural light.",
                 negativePrompt: "", width: 256, height: 256, frameCount: h3 ? 22 : 9,
                 frameRate: .init(numerator: 24), steps: 2, guidanceScale: 1, scheduleShift: 1,
                 seed: 42, executionProfile: profile.reference,
                 adapterOptions: h3 ? .h3(streamWeights: true) : .ltx(streamWeights: true, spatiotemporalGuidance: 0))
-            let request = InferenceRequest(model: .init(directory: directory.appendingPathComponent("model-not-read"),
-                revision: profile.modelIdentity), input: .video(video))
+            let request: InferenceRequest
+            if let path = env["D_TEST_REAL_AV_REQUEST"] {
+                request = try JSONDecoder().decode(InferenceRequest.self, from: Data(contentsOf: URL(fileURLWithPath: path)))
+                let result = try JSONDecoder().decode(InferenceResult.self, from: Data(contentsOf:
+                    URL(fileURLWithPath: try #require(env["D_TEST_REAL_AV_RESULT"]))))
+                try #require(result.artifacts.count == 1 && result.artifacts.first?.url == source)
+                try #require(UUID(uuidString: String(source.deletingLastPathComponent().lastPathComponent.prefix(36))) == request.id)
+                try #require(result.metadata["profile"] == profile.rawValue)
+                try #require(result.metadata["modelRevision"] == profile.modelRevision)
+                guard case .video(let originalVideo) = request.input else { throw AVFixtureError("Expected video request") }
+                try #require(result.metadata["firstFrameSHA256"] == originalVideo.firstFrame?.contentSHA256)
+                try #require(result.metadata["lastFrameSHA256"] == originalVideo.lastFrame?.contentSHA256)
+            } else {
+                request = InferenceRequest(model: .init(directory: directory.appendingPathComponent("model-not-read"),
+                    revision: profile.modelIdentity), input: .video(legacyVideo))
+            }
+            guard case .video(let video) = request.input else { throw AVFixtureError("Expected the original video request") }
+            try #require(video.executionProfile == profile.reference)
             let output = try VideoProjectFixture.output(project: project, runID: request.id)
             try original.write(to: output, options: .withoutOverwriting)
             let bytes = try await store.readWorkflowBackendMedia(.init(url: output, mediaType: "video/mp4"), request: request)
@@ -377,9 +393,18 @@ struct VideoAVMediaInspectorTests {
             try await store.close()
             let reopened = try await ProjectStore.open(at: project)
             #expect(try await reopened.workflowData(published.record.reference) == original)
+            #expect(try await reopened.workflowState().archive?.assets.first { $0.reference == published.record.reference }?.request == request)
             let export = try await reopened.exportWorkflowAssets([published.record.reference], name: "real-export",
                 exportID: UUID(), directory: directory)
             #expect(export.names == ["1.mp4", "recipe.json"])
+            let package = directory.appendingPathComponent("real-export-\(export.id).dexport")
+            #expect(try Data(contentsOf: package.appendingPathComponent("1.mp4")) == original)
+            let recipe = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: package.appendingPathComponent("recipe.json"))) as? [String: Any])
+            let item = try #require((recipe["items"] as? [[String: Any]])?.first)
+            #expect(item["modelRevision"] as? String == request.model.revision)
+            #expect(item["operationID"] as? String == WorkflowVideoRecipe(profile: profile).operationID)
+            // Current public video recipe omits the request; full conditions remain private.
+            #expect(item["input"] == nil)
             try await reopened.close()
         }
         #expect(try Data(contentsOf: source) == original)

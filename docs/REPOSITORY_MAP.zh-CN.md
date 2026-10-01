@@ -55,6 +55,10 @@
 
 ## 验证入口（现有，非本轮全部执行）
 
+选择工作量以[唯一测试政策](TESTING_POLICY.zh-CN.md)为准。首发候选r4的局部已用入口：`swift test --package-path Packages/UI --filter 'ModelWanPreparationTests|WorkflowModelReadinessTests'`（安装/投影）；`python3 -B -m unittest discover -s Backends/Video/Tests -p test_app_video_driver.py`（受控provider）；workspace的`DMLXTests`用`build-for-testing`后按精确Swift Testing方法`test-without-building`（模型/生命周期）。这些简写不包含环境准备：实际命令及外盘scratch/cache/tmp、有效筛选、opt-in变量均在当前任务R4/lead对应`*-command.json`，不能省略隔离目录直接复制运行全部测试。无匹配/跳过不算通过。
+
+实际新模型产物可复用`WorkflowMediaStoreTests.realImagePublishesReopensAndExports`和`VideoAVMediaInspectorTests.realSmokeOutputPublishesReopensAndExports`做Store发布/重开/来源/导出；后者可显式读取原`InferenceRequest`，不将旧2步夹具参数套给新50/30步结果。这是CPU/媒体文件验证，独立于模型和普通App。新外部视频provider需经`Backends/Video/Packaging/prepare_external_video_engine.py`正常打包，再由`scripts/prepare-development-resources.py`登记；Xcode `D Nodes`从同树本地配置嵌入，不能手补构建后的App。
+
 | 改动 | 入口与边界 |
 | --- | --- |
 | 纯契约/运行时 | `scripts/test-foundation.sh`、Tests/DRuntimeTests；无模型 |
