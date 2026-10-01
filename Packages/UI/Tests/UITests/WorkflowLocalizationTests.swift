@@ -266,6 +266,7 @@ struct WorkflowLocalizationTests {
         #expect(mountedEditor.selectedRange() == selectedRange)
 
         let connection = try #require(controller.graph?.connections.first)
+        HostingControlClick.diagnoseTree(in: host)
         let positiveResult = pressControl(host, identifier: "hosting-action-probe")
         print("HOSTING_POSITIVE result=\(positiveResult) count=\(positivePresses)")
         #expect(positiveResult && positivePresses == 1, "The same host must execute a plain SwiftUI Button")

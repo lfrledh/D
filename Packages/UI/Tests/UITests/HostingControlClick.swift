@@ -4,6 +4,35 @@ import AppKit
 /// AX press is unsupported by some hosted SwiftUI virtual controls. Deliver the
 /// same down/up pair at their real geometry; callers must assert the action result.
 @MainActor enum HostingControlClick {
+    static func diagnoseTree(in root: NSView) {
+        var pending: [NSObject] = [root], visited = Set<ObjectIdentifier>(), rows = 0
+        var completeProtocol = 0, roleProtocol = 0, identifiers = 0
+        func objectValue(_ object: NSObject, _ name: String) -> AnyObject? {
+            let selector = NSSelectorFromString(name)
+            guard object.responds(to: selector) else { return nil }
+            return object.perform(selector)?.takeUnretainedValue()
+        }
+        while let object = pending.popLast(), visited.count < 2_000 {
+            guard visited.insert(ObjectIdentifier(object)).inserted else { continue }
+            let complete = object is any NSAccessibilityProtocol
+            let role = object is any NSAccessibilityElementProtocol
+            if complete { completeProtocol += 1 }
+            if role { roleProtocol += 1 }
+            let identifier = objectValue(object, "accessibilityIdentifier") as? String
+            if identifier != nil { identifiers += 1 }
+            if rows < 64 {
+                print("D_HOSTING_TREE", String(describing: type(of: object)),
+                    "complete", complete, "role", role, "id", identifier ?? "none",
+                    "label", objectValue(object, "accessibilityLabel") as? String ?? "none")
+                rows += 1
+            }
+            pending.append(contentsOf: (objectValue(object, "accessibilityChildren") as? [Any] ?? []).compactMap { $0 as? NSObject })
+            if let view = object as? NSView { pending.append(contentsOf: view.subviews) }
+        }
+        print("D_HOSTING_TREE_SUMMARY", visited.count, "remaining", pending.count,
+            "complete", completeProtocol, "role", roleProtocol, "identifiers", identifiers)
+    }
+
     static func contains(_ identifier: String, in root: NSView) -> Bool {
         var pending: [NSObject] = [root], visited = Set<ObjectIdentifier>()
         while let object = pending.popLast(), visited.count < 2_000 {
