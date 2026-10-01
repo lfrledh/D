@@ -2,11 +2,13 @@
 
 ## 当前集中待办（2026-10-01）
 
+R3=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261001T040512Z-low-memory`；本轮原始精度低内存续作。H31凭据只供下载，不进入推理、来源、Git或日志。无本人状态变化不重复登录/401测试。
+
 | ID | 真实状态 | 最小本人动作与关闭条件 |
 | --- | --- | --- |
 | H32 冻结候选原生验收 | **r2部分完成，最终包复验再次被锁屏阻塞**：41ad630普通App Qwen Quick/Canvas真实JSON、保存冷重开、滚轮50%及默认100%已观察；H3原件校验/准备/登记已过。b315ffa修正视频展示名，CPU/正常构建/推荐启动器成功后CUA报告Mac锁屏。新副本路径此前一度Invalid app，保留中间包后使用已登记固定路径恢复，不改权限。其他模型双入口/完整拖放仍未全验 | 返回时解锁即可，不需再次批准测试或下载。先确认最终包视频实名及保存记录，再集中IME和必要试听。证据为D-RELEASE-FREEZE-01的R2/lead/native-final及native-final/lock-after-final-build.json；不是最终包全GUI通过。 |
 | H30 H3 开发测试权重 | **2026-09-30取消额外资格审批停点，无需本人回复。** 用户再次确认开发适配/测试下载已长期授权；原先询问保留为历史，不把关闭审批项写成已取得权重或完成实测 | 本轮已完成固定约144GB下载/摘要校验，正式Runtime用全50层BF16生成、准入取消、恢复通过。H3保存检查失败另属工程/返工预算停点，不重开资格审批。下载记录R4/lead/h3-download-result.json，真实记录real-h3-01-summary.json。 |
-| H31 LTX-2.5 / FLUX.2-dev 固定资源访问 | 固定文件请求401，公共仓库元数据可读且gated，已有本地授权入口未取得资源；不是开发下载授权缺口。LTX2.5/Dev真实推理未验 | 在Hugging Face本人登录并完成 Lightricks/LTX-2.5 与 black-forest-labs/FLUX.2-dev 对应访问，或提供矩阵中固定revision本地目录。凭据只在本机配置，不发聊天；Lead核来源/摘要继续对应测试，不反复无认证重试。 |
+| H31 HF账号访问与本地下载登录 | r3只作一轮配置诊断：现有下载环境huggingface_hub0.36.0，用户lfrledh，HOME=/Users/lfrledh，HF_HOME=~/.cache/huggingface、HF_TOKEN_PATH=其token文件；文件不存在且无HF_TOKEN覆盖。沿用旧401/gated事实，不重发权重请求。实际清单是black-forest-labs/FLUX.2-dev@26afe3…和dgrauet/ltx-2.5-mlx@e378…；原Lightricks仓授权不等于转换仓授权。未读取秘密值 | 本人在两实际下载仓库页面完成访问，并双击R3/delivery/H31-本机下载登录.command，以专用最小只读token在官方CLI隐藏输入；不用Git凭据、不发聊天。完成后Lead核有效身份→固定受限文件→仅缺失分片下载/校验→执行准备→实推理，四种状态分别关闭。CLI登录不自动给Swift/URLSession认证，窄接线仍属工程事项。 |
 | H29 v0.2 原生双入口验收 | r2候选已走通Qwen双入口与冷恢复；旧资料库拖入、端口/50–180%/跨项目空图的全矩阵仍未完成。两个hosting失败保留，不能由正常App部分操作抵销 | 本人不负责补工程缺陷。旧D PID37434不被本轮关闭；后续只在唯一推荐候选接续未验范围，不重复录音、断网或旧布局专项。 |
 | H28 新画布原生交互 | 旧责任已并入H29，不另启动旧包或单独阻塞新包 | 只使用RELEASE_FREEZE_TRY中的唯一候选入口；旧证据保留。 |
 | H27 通用节点工作台原生验收 | **已集中办理关闭（2026-09-27）**。新录音7.594667秒及本人原声试听正常；SwiftF0实际片段与MRT2三候选完成，本人第三条试听正常；中文空格/日文选词正常；08b2e39普通GUI和实际Xcode Run四样例已验。A35 JST13:55:19—14:02:25物理离线5方法/409采样通过 | 无需再断网、录音或试听。用户未听到结束提示，恢复网络时测试已结束；以日志/路由/产物核对结论，不以提示音作通过依据。证据`D-NODE-LANGUAGE-01/run-20260927T020614Z-h27/evidence/{A35-reviewed,xcode-final-run,native-final-assets,native-music-japanese-complete}.json`。H22和历史增长导致的保存迟缓属于保留工程项，不是待用户授权；集成/推送以CURRENT_ACTIONS为准 |

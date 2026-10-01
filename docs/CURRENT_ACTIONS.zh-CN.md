@@ -2,12 +2,16 @@
 
 最后核实：2026-10-01。当前任务、候选、停点与下一动作只从本页进入；历史回执不再充当开工指令。
 
-## 当前任务：D-RELEASE-FREEZE-01 收口 r2
+## 当前任务：D-RELEASE-FREEZE-01 原始精度低内存续作 r3
 
 - 源：`codex/inference-foundation@01758b81527dc27eb4563bf1b66fd1ceab6647ee`，未接纳本候选。
 - 实施：外盘 `D-Worktrees/D-RELEASE-FREEZE-01`，`codex/release-freeze-01`。从 `49ad3dc7c1bc63aab3e6afd9491cf3bc6e5eea3d` 保留历史续作，最终受测代码 `b315ffa0c2d8d191204b0b93f1afdaaaae46e865`；结案最终 SHA 见[任务](tasks/D-RELEASE-FREEZE-01.md)及 R2/lead/final-receipt.json。
 - R2：`D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20260930T142825Z-closeout`。日志、样本与测试产物留此，不能只凭目录存在推断通过。
 - 本轮明确不合并受保护源或 main，不公开发布。只收口既定九模型及直接影响的应用缺陷，不开启训练、远程、移动端或新增家族。
+
+## r3 执行中（不是验收回执）
+
+从候选/远端c44f6438a6090f305cd3dd5dfd9d9c98f4ec47b6接续，源及scheme未变。R3=`D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261001T040512Z-low-memory`。用户明确优先原始精度/完整层数/完整条件并接受慢：ACE先做逐张量执行准备、分阶段释放与SSD逐层加载，随后Klein BF16；不以swap、估算或初期耗时直接停止。保留常驻模式、加载与精度分开。H31真实仓库/本机登录入口已准备，未启动登录等待。文字增量正文、Wan准备和既有UI工程继续；不并发高内存作业，不重开新模态。下文为r2可复用结果，最终新版本须另记实测。
 
 ## 已取得的增量与尚未闭合
 
