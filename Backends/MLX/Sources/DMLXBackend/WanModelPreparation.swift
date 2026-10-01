@@ -258,7 +258,7 @@ private extension WanModelPreparation {
             directoryIdentities.append((directory, identity))
         }
         guard try regularIdentity(marker, label: "Wan completion marker") == markerIdentity,
-              directoryIdentity(destination) == rootIdentity else { throw invalidMarker() }
+              try directoryIdentity(destination) == rootIdentity else { throw invalidMarker() }
         for (url, identity) in originalIdentities + files {
             guard try regularIdentity(url, label: "Wan prepared contract resource") == identity else {
                 throw invalidMarker()
