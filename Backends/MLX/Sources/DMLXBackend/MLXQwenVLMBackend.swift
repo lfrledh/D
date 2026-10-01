@@ -194,11 +194,20 @@ public actor MLXQwenVLMBackend: InferenceBackend {
                         do {
                             var completion: GenerateCompletionInfo?
                             var tokens = [Int]()
+                            var responseStream = QwenResponseStream(
+                                openID: context.tokenizer.convertTokenToId("<think>"),
+                                closeID: context.tokenizer.convertTokenToId("</think>"),
+                                thinking: input.thinking?.enableThinking ?? true,
+                                tools: input.tools)
                             for await item in stream {
                                 try Task.checkCancellation()
                                 switch item {
                                 case .token(let token):
                                     tokens.append(token)
+                                    if let delta = try responseStream.accept(token,
+                                        decode: { context.tokenizer.decode(tokenIds: $0) }) {
+                                        try await emit(.textDelta(delta))
+                                    }
                                 case .info(let info): completion = info
                                 }
                             }
@@ -210,31 +219,12 @@ public actor MLXQwenVLMBackend: InferenceBackend {
                             let stop = try GenerationTermination.resolve(
                                 completion, requestedTokens: input.maxTokens,
                                 taskWasCancelled: Task.isCancelled || generationTask.isCancelled)
-                            let openID = context.tokenizer.convertTokenToId("<think>")
-                            let closeID = context.tokenizer.convertTokenToId("</think>")
-                            var inReasoning = input.thinking?.enableThinking ?? true
-                            var endedReasoning = !inReasoning
-                            var malformedChannel = false
-                            var thoughtTokens = [Int]()
-                            var finalTokens = [Int]()
-                            for token in tokens {
-                                if token == openID {
-                                    if !inReasoning && !finalTokens.isEmpty { malformedChannel = true }
-                                    inReasoning = true; endedReasoning = false
-                                } else if token == closeID {
-                                    if !inReasoning { malformedChannel = true }
-                                    inReasoning = false; endedReasoning = true
-                                } else if inReasoning { thoughtTokens.append(token) }
-                                else { finalTokens.append(token) }
-                            }
                             let raw = context.tokenizer.decode(tokenIds: tokens)
-                            let thought = thoughtTokens.isEmpty ? nil : context.tokenizer.decode(tokenIds: thoughtTokens)
-                            let final = inReasoning || malformedChannel || !endedReasoning ? nil :
-                                context.tokenizer.decode(tokenIds: finalTokens)
-                            let response = QwenTextResponse.assemble(raw: raw, reasoning: thought,
-                                final: final, stopped: stop, tools: input.tools, runID: request.id)
-                            if let finalText = response.finalText, !finalText.isEmpty {
-                                try await emit(.textDelta(finalText))
+                            let finished = try responseStream.finish(raw: raw, stopped: stop,
+                                tools: input.tools, runID: request.id,
+                                decode: { context.tokenizer.decode(tokenIds: $0) })
+                            if let delta = finished.delta {
+                                try await emit(.textDelta(delta))
                             }
                             let imageFrames = prepared.image?.frames ?? []
                             let videoFrames = prepared.video?.frames ?? []
@@ -266,7 +256,7 @@ public actor MLXQwenVLMBackend: InferenceBackend {
                                 "videoSamplingFPS": "2", "videoAudio": videos.isEmpty ? "none" : "ignored",
                                 "videoSemantics": videos.isEmpty ? "none" : "sampled-clip-understanding",
                                 "videoTemporalPadding": videos.isEmpty ? "none" : "upstream-odd-frame-padding",
-                            ], textResponse: response)
+                            ], textResponse: finished.response)
                         } catch {
                             generationTask.cancel()
                             await generationTask.value
