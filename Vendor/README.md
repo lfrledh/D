@@ -55,8 +55,12 @@ python3 scripts/verify-mlx-vendor.py
 
 ## FLUX.2 图像依赖
 
-`flux2-swift/` 是固定的 Apache-2.0 源码快照，包含上游全部 206 个文件。D 仅增加统一本地 MLX、显式缓存清理和严格分词三项补丁。完整来源、许可证、前后摘要和维护条件见 [FLUX.2 依赖记录](../docs/FLUX2_DEPENDENCY_PATCH.zh-CN.md)；运行 `python3 scripts/verify-flux2-vendor.py` 离线核对。实际模型权重保存在项目外，未提交到 Git。
+`flux2-swift/` 是固定的 Apache-2.0 源码快照，包含上游全部 206 个文件。D 的局部补丁包含统一本地 MLX、显式缓存清理、严格分词、分阶段生命周期和原始 BF16 SSD 逐层加载。完整来源、许可证、前后摘要和维护条件见 [FLUX.2 依赖记录](../docs/FLUX2_DEPENDENCY_PATCH.zh-CN.md)；运行 `python3 scripts/verify-flux2-vendor.py` 离线核对。实际模型权重保存在项目外，未提交到 Git。
 
-## MLX LM 3.31.4：预采样视频保真补丁
+## MLX LM 3.31.4：本地集成与原始 BF16 分层加载
 
-`mlx-swift-lm/` 保留官方 `bd4b7434e6bdb588c7ef55706ff8904cb7fd4c57` 全部跟踪文件和 MIT 许可。`mlx-swift-lm.files.json`保存原始/当前SHA256；补丁为`patches/mlx-lm-presampled-frames.patch`。仅将依赖指向同仓MLX，并增加显式opt-in预采样帧通路；默认URL和旧frames行为不变。D已严格解码的帧按原顺序/时间戳全部进入Qwen预处理，逐帧检查取消，不能静默重采样成N-1。未修改注意力/权重数值算法。回归在DMLXBackendTests中；真实模型状态见当前任务，不能用此源码补丁冒充全模型数值验收。
+`mlx-swift-lm/` 保留官方 `bd4b7434e6bdb588c7ef55706ff8904cb7fd4c57` 全部跟踪文件和 MIT 许可。`mlx-swift-lm.files.json`记录固定上游/当前SHA256，新文件明确标为D局部添加；完整可重放差异为`patches/mlx-lm-local-integration.patch`。旧`mlx-lm-presampled-frames.patch`仅为历史子集，不能与完整补丁叠加。
+
+变更包括同仓MLX依赖、显式预采样视频保真、prepare状态传递、可抛错的token迭代/流以及Qwen原始BF16逐层加载。后者按需求读取全部解码/视觉层，保留原始键转换、混合注意力cache和多轴位置；不支持量化权重时明确拒绝，不静默降精度。文件/索引在延迟读取前后检查，损坏配置在构造前报错，取消等待producer结束。常驻路径保留；用于对照的逐层求值仅在测试显式开启。
+
+本地细小BF16模型的13项对照/边界测试通过，涵盖非平凡图片/视频位置、逐段预填充与decode/cache精确对照、文件变动和取消；这不是完整9B/27B权重或GUI验收。真实模型与App证据以当前任务记录为准。更新依赖时重新判断局部补丁适用性，不在SwiftPM缓存内悄悄打补丁；回退保留Git历史及原始权重。

@@ -756,8 +756,8 @@
     {
       "path": "Libraries/MLXLMCommon/Evaluate.swift",
       "upstreamSHA256": "fb4a7f08d4db732956b7c20a8573278789acc7f7ae9f81910e58c2609f4a39b4",
-      "sha256": "fb4a7f08d4db732956b7c20a8573278789acc7f7ae9f81910e58c2609f4a39b4",
-      "size": 86665
+      "sha256": "70c5a2a7b4f9ea6b3b5630d343d488cc8f8af8b74b48847662f2be0f7dae55e2",
+      "size": 93261
     },
     {
       "path": "Libraries/MLXLMCommon/Extensions/Encodable+toolResult.swift",
@@ -804,8 +804,8 @@
     {
       "path": "Libraries/MLXLMCommon/LanguageModel.swift",
       "upstreamSHA256": "890c91ecd5eda8112b7b6026c91a0355c6e71e1068e5c0493e1e42cca4e74127",
-      "sha256": "890c91ecd5eda8112b7b6026c91a0355c6e71e1068e5c0493e1e42cca4e74127",
-      "size": 9506
+      "sha256": "62218ed27d0da25a78ac0deca2ad90bfa7c36777932a58b3305657fab810319f",
+      "size": 9919
     },
     {
       "path": "Libraries/MLXLMCommon/Load.swift",
@@ -1164,8 +1164,8 @@
     {
       "path": "Libraries/MLXVLM/Models/Qwen35.swift",
       "upstreamSHA256": "94ece218b65aa528373dde25347513b6758db6a59f82f175f2dde48c2aebc49e",
-      "sha256": "94ece218b65aa528373dde25347513b6758db6a59f82f175f2dde48c2aebc49e",
-      "size": 43600
+      "sha256": "b0228d0e46f02297d8ddba159f91f07622a534169988b29e563a6a4b0f3df93d",
+      "size": 57168
     },
     {
       "path": "Libraries/MLXVLM/Models/Qwen35MoE.swift",
@@ -1176,8 +1176,8 @@
     {
       "path": "Libraries/MLXVLM/Models/Qwen3VL.swift",
       "upstreamSHA256": "8c9d221709d28819ac4a4d5760790ad10f8ec312206f8748cd5a1b8233c86c9f",
-      "sha256": "50ae8773f8c8a5e5ae74020b27889cbf7b7770f36390b63bebcfddd16a63cc8e",
-      "size": 68413
+      "sha256": "6f911b40391d7dc1b131439b7465afa9c1f7756880c45103b828971636d0710e",
+      "size": 70062
     },
     {
       "path": "Libraries/MLXVLM/Models/QwenVL.swift",
@@ -1190,6 +1190,13 @@
       "upstreamSHA256": "e06594817260713ca32ead481f2a45b7a76724e9fcd95d0f17c0f46753a26243",
       "sha256": "e06594817260713ca32ead481f2a45b7a76724e9fcd95d0f17c0f46753a26243",
       "size": 15819
+    },
+    {
+      "path": "Libraries/MLXVLM/Qwen35LayeredWeights.swift",
+      "upstreamSHA256": null,
+      "sha256": "ebfc8219f083fa6c0c572339b6a367416d3b73e46e823bf81dd0374f79b9a16a",
+      "size": 25755,
+      "origin": "D local addition"
     },
     {
       "path": "Libraries/MLXVLM/README.md",
@@ -1206,8 +1213,8 @@
     {
       "path": "Libraries/MLXVLM/VLMModelFactory.swift",
       "upstreamSHA256": "f754278a81c182a60dfdbab4871fbbf09ddb4bc77307272f310b9a5a1c24d292",
-      "sha256": "f754278a81c182a60dfdbab4871fbbf09ddb4bc77307272f310b9a5a1c24d292",
-      "size": 20050
+      "sha256": "4d8a819ad0fb96a7406d4fc04b47035529f4c8b21e8ade532914273415d5d22e",
+      "size": 21422
     },
     {
       "path": "Package.swift",
@@ -1396,6 +1403,13 @@
       "size": 11941
     },
     {
+      "path": "Tests/MLXLMTests/Qwen35LayeredTests.swift",
+      "upstreamSHA256": null,
+      "sha256": "9fdbfc6de626fb2cb6b5b390ea93abfc48095b4d58030bfc2c2c090b673b46e7",
+      "size": 19089,
+      "origin": "D local addition"
+    },
+    {
       "path": "Tests/MLXLMTests/Qwen35SanitizeTests.swift",
       "upstreamSHA256": "be947459a1992e5b696987116e17748a309c94329da161385da3fd45d3682a6b",
       "sha256": "be947459a1992e5b696987116e17748a309c94329da161385da3fd45d3682a6b",
@@ -1484,6 +1498,13 @@
       "upstreamSHA256": "fd4d90bf92d534fbc672713d7fae7ae306a9c73af8fe9268a33939839cc9d900",
       "sha256": "fd4d90bf92d534fbc672713d7fae7ae306a9c73af8fe9268a33939839cc9d900",
       "size": 3125
+    },
+    {
+      "path": "Tests/MLXLMTests/TokenIteratorTests.swift",
+      "upstreamSHA256": null,
+      "sha256": "a65fa9e7819548b7ff936917869b0cd60bd5a317068a0a6826df7fadcfc919f2",
+      "size": 5335,
+      "origin": "D local addition"
     },
     {
       "path": "Tests/MLXLMTests/ToolCallIdTests.swift",
@@ -1640,6 +1661,13 @@
       "upstreamSHA256": "301697b47379867c3c9d784b894b0b12478892bcb4c8b7665a82008917a5e100",
       "sha256": "301697b47379867c3c9d784b894b0b12478892bcb4c8b7665a82008917a5e100",
       "size": 4324
+    }
+  ],
+  "patches": [
+    {
+      "path": "patches/mlx-lm-local-integration.patch",
+      "sha256": "6ae54146703a310da1a5a8d813303bbbfb500a34d1d802e613e93a85300dad6a",
+      "description": "Complete D delta from the fixed upstream snapshot; supersedes historical presampled-only patch."
     }
   ]
 }
