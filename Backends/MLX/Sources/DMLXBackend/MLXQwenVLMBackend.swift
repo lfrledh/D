@@ -194,9 +194,12 @@ public actor MLXQwenVLMBackend: InferenceBackend {
                         do {
                             var completion: GenerateCompletionInfo?
                             var tokens = [Int]()
+                            guard let openID = context.tokenizer.convertTokenToId("<think>"),
+                                  let closeID = context.tokenizer.convertTokenToId("</think>") else {
+                                throw InferenceFailure.invalidRequest("Qwen tokenizer is missing required response-channel tokens.")
+                            }
                             var responseStream = QwenResponseStream(
-                                openID: context.tokenizer.convertTokenToId("<think>"),
-                                closeID: context.tokenizer.convertTokenToId("</think>"),
+                                openID: openID, closeID: closeID,
                                 thinking: input.thinking?.enableThinking ?? true,
                                 tools: input.tools)
                             for await item in stream {
