@@ -77,6 +77,7 @@ public actor MLXFluxDevBackend: InferenceBackend {
         do {
             try await checkpoint(.verifying)
             try inventory.verifyContents()
+            try inventory.assertUnchanged()
             result = try await generate(request: request, input: input, inventory: inventory, emit: emit)
         } catch {
             Self.synchronize()
@@ -132,20 +133,20 @@ public actor MLXFluxDevBackend: InferenceBackend {
                           emit: @escaping @Sendable (InferenceOutput) async throws -> Void) async throws -> InferenceResult {
         let references = try input.resolvedReferences()
         let state = MLXRandom.RandomState(seed: input.seed)
-        let reference = try await encodeReferences(references, directory: inventory.directory, state: state)
+        let reference = try await encodeReferences(references, inventory: inventory, state: state)
         Self.synchronize()
         Memory.clearCache()
-        let encoding = try await encode(input: input, directory: inventory.directory, state: state)
+        let encoding = try await encode(input: input, inventory: inventory, state: state)
         Self.synchronize()
         Memory.clearCache()
-        let prepared = try await prepare(input: input, directory: inventory.directory, state: state)
+        let prepared = try await prepare(input: input, inventory: inventory, state: state)
         Self.synchronize()
         Memory.clearCache()
-        let denoised = try await denoise(input: input, directory: inventory.directory, encoding: encoding,
+        let denoised = try await denoise(input: input, inventory: inventory, encoding: encoding,
                                          prepared: prepared, reference: reference, state: state, emit: emit)
         Self.synchronize()
         Memory.clearCache()
-        let rgb = try await decodeRGB(directory: inventory.directory, denoised: denoised,
+        let rgb = try await decodeRGB(inventory: inventory, denoised: denoised,
                                       width: input.width, height: input.height, state: state)
         try await checkpoint(.publishing)
         let data = try ImagePNG.encode(rgb: rgb, width: input.width, height: input.height)
@@ -160,7 +161,14 @@ public actor MLXFluxDevBackend: InferenceBackend {
             "modelRepository": LocalFluxDevInventory.repository,
             "modelRevision": LocalFluxDevInventory.revision,
             "flux2SourceRevision": "959a4af7c0721c800851c84431ffd3fa1f353f1f",
-            "precision": "bf16", "width": String(input.width), "height": String(input.height),
+            "precision": "bf16", "textEncoderPrecision": "bf16",
+            "transformerPrecision": "bf16", "vaePrecision": "f32",
+            "vaeCounterDType": "i64",
+            "loadingStrategy": inventory.loadingStrategy.rawValue,
+            "textEncoderLoading": inventory.loadingStrategy == .ssdLayered ? "layered" : "resident",
+            "transformerLoading": inventory.loadingStrategy == .ssdLayered ? "layered" : "resident",
+            "vaeLoading": "staged-f32",
+            "width": String(input.width), "height": String(input.height),
             "steps": String(input.steps), "guidanceScale": String(input.guidanceScale),
             "seed": String(input.seed), "promptTruncated": "false", "textSequenceLength": "512",
             "modelTimestepScale": "0.001", "weightBytes": String(inventory.weightBytes),
@@ -171,11 +179,12 @@ public actor MLXFluxDevBackend: InferenceBackend {
             "referenceImageIDScale": "10", "pngBytes": String(data.count),
             "pngDecodedAndValidated": "true",
         ], uniquingKeysWith: { _, new in new })
+        if !references.isEmpty { metadata["referenceLatentPrecision"] = "bf16" }
         return InferenceResult(artifacts: [artifact], metadata: metadata)
     }
 
     @inline(never)
-    private func encodeReferences(_ submitted: [ImageReference], directory: URL,
+    private func encodeReferences(_ submitted: [ImageReference], inventory: LocalFluxDevInventory,
                                   state: MLXRandom.RandomState) async throws -> Flux2ImageMath.ReferenceConditioning? {
         guard !submitted.isEmpty else { return nil }
         var frozen: [ImageReferenceInput] = []
@@ -185,9 +194,10 @@ public actor MLXFluxDevBackend: InferenceBackend {
             frozen.append(try ImageReferenceInput.load(reference))
         }
         try await checkpoint(.loadingVAE)
-        let vae = try withRandomState(state) { try Flux2AutoencoderKL.load(from: directory, dtype: .bfloat16) }
+        try inventory.assertUnchanged()
+        let vae = try withRandomState(state) { try Flux2AutoencoderKL.load(from: inventory.directory, dtype: .float32) }
         try Flux2ImageMath.validateVAEEncoderWeightCoverage(
-            vae: vae, snapshot: directory, expectedDType: .bfloat16)
+            vae: vae, snapshot: inventory.directory, expectedDType: .float32)
         try await checkpoint(.vaeLoaded)
         try await checkpoint(.encoding)
         let prepared = try withRandomState(state) {
@@ -195,20 +205,23 @@ public actor MLXFluxDevBackend: InferenceBackend {
             images.reserveCapacity(frozen.count)
             for input in frozen {
                 try Task.checkCancellation()
-                images.append(try Flux2ImageMath.referenceTensor(input, dtype: .bfloat16))
+                images.append(try Flux2ImageMath.referenceTensor(input, dtype: .float32))
                 try Task.checkCancellation()
             }
-            return try Flux2ImageMath.prepareReference(vae: vae, images: images, dtype: .bfloat16)
+            return try Flux2ImageMath.prepareReference(vae: vae, images: images, dtype: .float32)
         }
+        let latents = prepared.latents.asType(.bfloat16)
+        MLX.eval(latents, prepared.ids)
+        try inventory.assertUnchanged()
         try await checkpoint(.encoded)
-        return prepared
+        return .init(latents: latents, ids: prepared.ids, referenceCount: prepared.referenceCount)
     }
 
     @inline(never)
-    private func encode(input: ImageRequest, directory: URL,
+    private func encode(input: ImageRequest, inventory: LocalFluxDevInventory,
                         state: MLXRandom.RandomState) async throws -> Flux2PromptEncoding {
         try await checkpoint(.tokenizing)
-        let processor = try Flux2PixtralProcessor.load(from: directory, maxLengthOverride: 512)
+        let processor = try Flux2PixtralProcessor.load(from: inventory.directory, maxLengthOverride: 512)
         let tokens: Flux2TokenBatch
         do {
             tokens = try processor.encode(prompts: [input.prompt],
@@ -219,8 +232,14 @@ public actor MLXFluxDevBackend: InferenceBackend {
                 "Complete Dev prompt uses \(count) tokens; maximum is \(maximum). Shorten the prompt.")
         }
         try await checkpoint(.loadingTextEncoder)
-        let model = try withRandomState(state) { try Flux2Mistral3TextEncoder.load(from: directory, dtype: .bfloat16) }
-        MLX.eval(model)
+        try inventory.assertUnchanged()
+        let layered = inventory.loadingStrategy == .ssdLayered
+        let model = try withRandomState(state) {
+            try layered ? Flux2Mistral3TextEncoder.loadLayered(from: inventory.directory, dtype: .bfloat16,
+                                                                admissionValidator: inventory.assertUnchanged)
+                        : Flux2Mistral3TextEncoder.load(from: inventory.directory, dtype: .bfloat16)
+        }
+        if !layered { MLX.eval(model) }
         try await checkpoint(.textEncoderLoaded)
         let encoder = Flux2DevPromptEncoder(textEncoder: model)
         try await checkpoint(.encoding)
@@ -228,8 +247,10 @@ public actor MLXFluxDevBackend: InferenceBackend {
             try encoder.encodeTokens(inputIds: tokens.inputIds, attentionMask: tokens.attentionMask)
         }
         MLX.eval(encoding.promptEmbeds, encoding.textIds, encoding.inputIds, encoding.attentionMask)
+        try inventory.assertUnchanged()
         guard encoding.inputIds.shape == [1, 512], encoding.promptEmbeds.ndim == 3,
-              encoding.promptEmbeds.dim(0) == 1, encoding.promptEmbeds.dim(1) == 512 else {
+              encoding.promptEmbeds.dim(0) == 1, encoding.promptEmbeds.dim(1) == 512,
+              encoding.promptEmbeds.dim(2) == 15360 else {
             throw InferenceFailure.backendFailed("Unexpected FLUX.2 Dev prompt encoding dimensions.")
         }
         try Flux2ImageMath.requireFinite(encoding.promptEmbeds, name: "Dev prompt embeddings")
@@ -238,14 +259,15 @@ public actor MLXFluxDevBackend: InferenceBackend {
     }
 
     @inline(never)
-    private func prepare(input: ImageRequest, directory: URL,
+    private func prepare(input: ImageRequest, inventory: LocalFluxDevInventory,
                          state: MLXRandom.RandomState) async throws -> Flux2PreparedLatents {
         try await checkpoint(.loadingVAE)
-        let vae = try withRandomState(state) { try Flux2AutoencoderKL.load(from: directory, dtype: .bfloat16) }
+        try inventory.assertUnchanged()
+        let vae = try withRandomState(state) { try Flux2AutoencoderKL.load(from: inventory.directory, dtype: .float32) }
         try await checkpoint(.vaeLoaded)
         // The already verified fixed transformer config supplies the packed channel
         // count before the large transformer is loaded. The VAE is released first.
-        let configURL = directory.appendingPathComponent("transformer/config.json")
+        let configURL = inventory.directory.appendingPathComponent("transformer/config.json")
         let transformerConfig = try JSONDecoder().decode(
             Flux2TransformerConfiguration.self, from: Data(contentsOf: configURL))
         guard transformerConfig.guidanceEmbeds else {
@@ -263,23 +285,30 @@ public actor MLXFluxDevBackend: InferenceBackend {
                 height: input.height, width: input.width, vae: vae, dtype: .bfloat16)
         }
         MLX.eval(prepared.latents, prepared.ids)
+        try inventory.assertUnchanged()
         try Task.checkCancellation()
         return prepared
     }
 
     @inline(never)
-    private func denoise(input: ImageRequest, directory: URL, encoding: Flux2PromptEncoding,
+    private func denoise(input: ImageRequest, inventory: LocalFluxDevInventory, encoding: Flux2PromptEncoding,
                          prepared: Flux2PreparedLatents, reference: Flux2ImageMath.ReferenceConditioning?,
                          state: MLXRandom.RandomState,
                          emit: @escaping @Sendable (InferenceOutput) async throws -> Void) async throws -> Denoised {
         try await checkpoint(.loadingTransformer)
-        let transformer = try withRandomState(state) { try Flux2Transformer2DModel.load(from: directory, dtype: .bfloat16) }
-        MLX.eval(transformer)
+        try inventory.assertUnchanged()
+        let layered = inventory.loadingStrategy == .ssdLayered
+        let transformer = try withRandomState(state) {
+            try layered ? Flux2Transformer2DModel.loadLayered(from: inventory.directory, dtype: .bfloat16,
+                                                               admissionValidator: inventory.assertUnchanged)
+                        : Flux2Transformer2DModel.load(from: inventory.directory, dtype: .bfloat16)
+        }
+        if !layered { MLX.eval(transformer) }
         guard transformer.configuration.inChannels == prepared.latents.dim(2) else {
             throw InferenceFailure.backendFailed("Dev transformer and prepared latents have incompatible channels.")
         }
         try await checkpoint(.transformerLoaded)
-        let scheduler = try FlowMatchEulerDiscreteScheduler.load(from: directory)
+        let scheduler = try FlowMatchEulerDiscreteScheduler.load(from: inventory.directory)
         try Flux2ImageMath.configure(scheduler: scheduler, latents: prepared.latents, steps: input.steps)
         let denoisingIDs = try Flux2ImageMath.appendReferenceIDs(outputIDs: prepared.ids, reference: reference)
         let denoiser = Flux2Denoiser(transformer: transformer, scheduler: scheduler)
@@ -287,12 +316,14 @@ public actor MLXFluxDevBackend: InferenceBackend {
         try await emit(.progress(completed: 0, total: input.steps))
         for (index, timestep) in scheduler.timestepsValues.enumerated() {
             try await checkpoint(.denoising)
+            try inventory.assertUnchanged()
             current = try withRandomState(state) {
                 try Flux2ImageMath.step(denoiser, current: current, timestep: timestep,
                                         promptEmbeds: encoding.promptEmbeds, textIDs: encoding.textIds,
                                         imageIDs: denoisingIDs, referenceLatents: reference?.latents,
                                         guidanceScale: input.guidanceScale)
             }
+            try inventory.assertUnchanged()
             try await emit(.progress(completed: index + 1, total: input.steps))
             try Task.checkCancellation()
         }
@@ -301,16 +332,18 @@ public actor MLXFluxDevBackend: InferenceBackend {
     }
 
     @inline(never)
-    private func decodeRGB(directory: URL, denoised: Denoised, width: Int, height: Int,
+    private func decodeRGB(inventory: LocalFluxDevInventory, denoised: Denoised, width: Int, height: Int,
                            state: MLXRandom.RandomState) async throws -> [UInt8] {
         try await checkpoint(.loadingVAE)
-        let vae = try withRandomState(state) { try Flux2AutoencoderKL.load(from: directory, dtype: .bfloat16) }
+        try inventory.assertUnchanged()
+        let vae = try withRandomState(state) { try Flux2AutoencoderKL.load(from: inventory.directory, dtype: .float32) }
         MLX.eval(vae)
         try await checkpoint(.vaeLoaded)
         try await checkpoint(.decoding)
         let decoded = try withRandomState(state) {
-            try Flux2ImageMath.decode(vae: vae, latents: denoised.latents, ids: denoised.ids)
+            try Flux2ImageMath.decode(vae: vae, latents: denoised.latents.asType(.float32), ids: denoised.ids)
         }
+        try inventory.assertUnchanged()
         guard decoded.shape == [1, 3, height, width] else {
             throw InferenceFailure.backendFailed("Unexpected Dev decoded image dimensions.")
         }

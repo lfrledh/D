@@ -1,5 +1,6 @@
 import Foundation
 import MLX
+import Darwin
 
 public enum Flux2WeightComponent: String, CaseIterable, Sendable {
   case transformer
@@ -10,6 +11,103 @@ public enum Flux2WeightComponent: String, CaseIterable, Sendable {
 public enum Flux2WeightsLoaderError: Error {
   case componentDirectoryMissing(Flux2WeightComponent, URL)
   case noSafetensorsFound(Flux2WeightComponent, URL)
+  case duplicateTensor(String)
+  case unexpectedPrecision(String)
+  case changedFile(URL)
+}
+
+/// A fixed set of open safetensors readers for one layered model stage. The
+/// readers validate their original file identity on every selected tensor read.
+/// No unselected tensor data is materialized.
+public final class Flux2PinnedWeightSelection {
+  private struct Identity: Equatable {
+    let device: dev_t
+    let inode: ino_t
+    let size: off_t
+    let modifiedSeconds: Int
+    let modifiedNanoseconds: Int
+    let changedSeconds: Int
+    let changedNanoseconds: Int
+
+    init(_ value: stat) {
+      device = value.st_dev
+      inode = value.st_ino
+      size = value.st_size
+      modifiedSeconds = value.st_mtimespec.tv_sec
+      modifiedNanoseconds = value.st_mtimespec.tv_nsec
+      changedSeconds = value.st_ctimespec.tv_sec
+      changedNanoseconds = value.st_ctimespec.tv_nsec
+    }
+  }
+
+  private let readers: [SafeTensorsReader]
+  private let locations: [String: SafeTensorsReader]
+  private let identities: [URL: Identity]
+  private let admissionValidator: (() throws -> Void)?
+
+  public var tensorNames: Set<String> { Set(locations.keys) }
+
+  public init(snapshot: URL, component: Flux2WeightComponent,
+              admissionValidator: (() throws -> Void)? = nil,
+              allowedDType: (String, DType) -> Bool) throws {
+    try admissionValidator?()
+    let files = try Flux2WeightsLoader(snapshot: snapshot).listSafetensors(component: component)
+    var opened: [SafeTensorsReader] = []
+    var found: [String: SafeTensorsReader] = [:]
+    var saved: [URL: Identity] = [:]
+    for file in files {
+      try Task.checkCancellation()
+      try admissionValidator?()
+      let reader = try SafeTensorsReader(fileURL: file)
+      try admissionValidator?()
+      var value = stat()
+      guard Darwin.lstat(file.path, &value) == 0, value.st_mode & S_IFMT == S_IFREG else {
+        throw Flux2WeightsLoaderError.changedFile(file)
+      }
+      saved[file] = Identity(value)
+      for metadata in reader.allMetadata() {
+        guard allowedDType(metadata.name, metadata.dtype) else {
+          throw Flux2WeightsLoaderError.unexpectedPrecision(metadata.name)
+        }
+        guard found.updateValue(reader, forKey: metadata.name) == nil else {
+          throw Flux2WeightsLoaderError.duplicateTensor(metadata.name)
+        }
+      }
+      opened.append(reader)
+    }
+    readers = opened
+    locations = found
+    identities = saved
+    self.admissionValidator = admissionValidator
+    try verifyFileIdentities()
+  }
+
+  public func load(where include: (String) -> Bool) throws -> [String: MLXArray] {
+    try verifyFileIdentities()
+    var selected: [String: MLXArray] = [:]
+    for name in locations.keys.sorted() where include(name) {
+      try Task.checkCancellation()
+      try admissionValidator?()
+      selected[name] = try locations[name]!.tensor(named: name)
+    }
+    try verifyFileIdentities()
+    return selected
+  }
+
+  /// Call after evaluating the selected block, before loading its successor.
+  public func verifyFileIdentities() throws {
+    try admissionValidator?()
+    for reader in readers {
+      try Task.checkCancellation()
+      var value = stat()
+      guard Darwin.lstat(reader.fileURL.path, &value) == 0,
+            value.st_mode & S_IFMT == S_IFREG,
+            identities[reader.fileURL] == Identity(value) else {
+        throw Flux2WeightsLoaderError.changedFile(reader.fileURL)
+      }
+    }
+    try admissionValidator?()
+  }
 }
 
 public struct Flux2WeightsLoader: Sendable {
