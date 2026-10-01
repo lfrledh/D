@@ -167,7 +167,8 @@ def admit_ltx25(profile, *, model, text_encoder=None, cancelled=lambda: False):
                             ltx25_audio_ff_bias=configuration['audio_ff_bias'])
     return {
         'profile': profile, 'component_precision': {
-            'diffusion_core': 'BF16', 'other_tensors': 'floating only; per-file header dtypes recorded',
+            'diffusion_core': 'BF16', 'diffusion_modulation_tables': 'F32',
+            'other_tensors': 'floating only; per-file header dtypes recorded',
             'distilled': False},
         'model': {'repository': inventory['repository'], 'revision': inventory['revision'],
                   'verification': verified},

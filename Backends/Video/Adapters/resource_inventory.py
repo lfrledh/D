@@ -20,6 +20,22 @@ class ResourceError(ValueError):
     pass
 
 
+# Original e378b7e1 LTX 2.5 weights use F32 AdaLN tables around BF16 matrices.
+# These are exact names/shapes, not permission for arbitrary F32 core weights.
+_LTX25_OUTPUT_TABLES = {
+    "transformer.audio_scale_shift_table": [2, 2048],
+    "transformer.scale_shift_table": [2, 4096],
+}
+_LTX25_BLOCK_TABLES = {
+    "audio_prompt_scale_shift_table": [2, 2048],
+    "audio_scale_shift_table": [9, 2048],
+    "prompt_scale_shift_table": [2, 4096],
+    "scale_shift_table": [9, 4096],
+    "scale_shift_table_a2v_ca_audio": [5, 2048],
+    "scale_shift_table_a2v_ca_video": [5, 4096],
+}
+
+
 def _unique(pairs):
     result = {}
     for key, value in pairs:
@@ -111,7 +127,13 @@ def inspect_safetensors(file, *, allow_quantized=False, ltx25_transformer=False,
                 keyframes_embedding = True
             if name == "transformer.transformer_blocks.0.ff.proj_in.weight":
                 ff_probe = True
-            if (name.startswith("transformer.transformer_blocks.") or
+            table_shape = _LTX25_OUTPUT_TABLES.get(name)
+            if match:
+                table_shape = _LTX25_BLOCK_TABLES.get(name.split(".", 3)[3])
+            if table_shape is not None:
+                if dtype != "F32" or shape != table_shape:
+                    raise ResourceError("LTX 2.5 modulation table must retain its original F32 shape")
+            elif (name.startswith("transformer.transformer_blocks.") or
                     name == "transformer.keyframes_abs_pos_embedding") and dtype != "BF16":
                 raise ResourceError("LTX 2.5 core transformer must be BF16")
             if re.fullmatch(r"transformer\.transformer_blocks\.\d+\.ff\..*\.bias", name):

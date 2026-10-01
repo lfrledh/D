@@ -1,6 +1,7 @@
 """CPU-only identity and header checks with synthetic resources."""
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import struct
@@ -16,9 +17,11 @@ def tensor_file(entries):
     offset = 0
     header = {}
     payload = bytearray()
-    for name, dtype, value in entries:
-        width = {'BF16': 2, 'F32': 4, 'I8': 1}[dtype]
-        header[name] = {'dtype': dtype, 'shape': [1], 'data_offsets': [offset, offset + width]}
+    for entry in entries:
+        name, dtype, value = entry[:3]
+        shape = entry[3] if len(entry) == 4 else [1]
+        width = {'BF16': 2, 'F32': 4, 'I8': 1}[dtype] * math.prod(shape)
+        header[name] = {'dtype': dtype, 'shape': shape, 'data_offsets': [offset, offset + width]}
         payload.extend(bytes([value]) * width)
         offset += width
     raw = json.dumps(header).encode()

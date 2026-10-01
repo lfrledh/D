@@ -194,4 +194,34 @@ class LTX25SyntheticAdmissionTests(unittest.TestCase):
         with self.assertRaisesRegex(m.ResourceError, 'core transformer must be BF16'):
             self.admit()
 
+    def test_original_f32_modulation_is_preserved_and_not_a_blanket_float_exception(self):
+        # Shapes and names from the pinned original 2.5 header, not a dtype cast.
+        base = [(f'transformer.transformer_blocks.{i}.ff.proj_in.weight', 'BF16', 1)
+                for i in range(48)] + [('transformer.keyframes_abs_pos_embedding', 'BF16', 1)]
+        tables = [
+            ('transformer.audio_scale_shift_table', 'F32', 0, [2, 2048]),
+            ('transformer.scale_shift_table', 'F32', 0, [2, 4096]),
+            ('transformer.transformer_blocks.0.audio_prompt_scale_shift_table', 'F32', 0, [2, 2048]),
+            ('transformer.transformer_blocks.0.audio_scale_shift_table', 'F32', 0, [9, 2048]),
+            ('transformer.transformer_blocks.0.prompt_scale_shift_table', 'F32', 0, [2, 4096]),
+            ('transformer.transformer_blocks.0.scale_shift_table', 'F32', 0, [9, 4096]),
+            ('transformer.transformer_blocks.0.scale_shift_table_a2v_ca_audio', 'F32', 0, [5, 2048]),
+            ('transformer.transformer_blocks.0.scale_shift_table_a2v_ca_video', 'F32', 0, [5, 4096]),
+        ]
+        original = tensor_file(base + tables)
+        self.replace_file('transformer-dev.safetensors', original)
+        self.admit()
+        self.assertEqual((self.root/'transformer-dev.safetensors').read_bytes(), original)
+        for name, dtype, value, shape in tables:
+            for replacement in [(name, 'BF16', value, shape), (name, dtype, value, [1])]:
+                with self.subTest(name=name, replacement=replacement):
+                    changed = [replacement if entry[0] == name else entry for entry in tables]
+                    self.replace_file('transformer-dev.safetensors', tensor_file(base + changed))
+                    with self.assertRaisesRegex(m.ResourceError, 'modulation table'):
+                        self.admit()
+        self.replace_file('transformer-dev.safetensors', tensor_file(base + tables + [
+            ('transformer.transformer_blocks.0.unrecognized_scale_shift_table', 'F32', 0, [2, 4096])]))
+        with self.assertRaisesRegex(m.ResourceError, 'core transformer must be BF16'):
+            self.admit()
+
 if __name__=='__main__':unittest.main()
