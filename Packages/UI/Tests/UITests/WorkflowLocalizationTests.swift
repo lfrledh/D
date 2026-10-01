@@ -268,7 +268,16 @@ struct WorkflowLocalizationTests {
         let positiveResult = pressControl(host, identifier: "hosting-action-probe")
         print("HOSTING_POSITIVE result=\(positiveResult) count=\(positivePresses)")
         #expect(positiveResult && positivePresses == 1, "The same host must execute a plain SwiftUI Button")
+        let disconnectID = "canvas-disconnect-" + connection.id.uuidString
+        #expect(!HostingControlClick.contains(disconnectID, in: host))
         #expect(pressControl(host, identifier: "workflow-connection-" + connection.id.uuidString))
+        for _ in 0..<40 {
+            host.layoutSubtreeIfNeeded()
+            if HostingControlClick.contains(disconnectID, in: host) { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(HostingControlClick.contains(disconnectID, in: host))
+        #expect(HostingControlClick.contains("canvas-connection-inspector", in: host))
         host.layoutSubtreeIfNeeded()
         let editorAfterEdge = try #require(
             descendants(host).compactMap { $0 as? NSTextView }.first { $0.string == draft }
