@@ -6,6 +6,16 @@ import Testing
 
 @Suite(.serialized)
 struct ModelWanPreparationTests {
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["D_TEST_WAN_PREPARED_OUTPUT"] != nil))
+    func realPreparedPackPassesApplicationVerifier() throws {
+        let path = try #require(ProcessInfo.processInfo.environment["D_TEST_WAN_PREPARED_OUTPUT"])
+        let directory = try ModelDirectory(URL(fileURLWithPath: path))
+        let model = try #require(ModelCatalog.entries().first { $0.id == "wan21-t2v-1.3b-bf16" })
+        let files = try ModelWanPreparation.verifiedFiles(in: directory, entry: model)
+        #expect(files.count == 1_262)
+        #expect(try directory.entries(expectedPaths: Set(files.keys)) == files)
+    }
+
     private actor ConverterSignal {
         var entered = false
         func markEntered() { entered = true }

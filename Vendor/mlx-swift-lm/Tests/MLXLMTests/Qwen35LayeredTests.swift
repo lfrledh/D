@@ -364,4 +364,169 @@ func configurationRejectsTrappingControls() throws {
         #expect(throws: (any Error).self) { _ = try Qwen35LayeredFileValidation.configuration(JSONSerialization.data(withJSONObject: object)) }
     }
 }
+
+@Test("Original Qwen linear and attention blocks match independent resident import",
+      .enabled(if: ProcessInfo.processInfo.environment["D_TEST_QWEN_REAL_BLOCKS"] == "1"))
+func originalQwenBlocksMatch() throws {
+    defer { Stream(.gpu).synchronize(); Stream(.cpu).synchronize(); Memory.clearCache() }
+    let env = ProcessInfo.processInfo.environment
+    let directory = URL(fileURLWithPath: try #require(env["D_TEST_QWEN_VLM_DIR"]))
+    let revision = try #require(env["D_TEST_QWEN_REVISION"])
+    let configURL = directory.appendingPathComponent("config.json")
+    let indexURL = directory.appendingPathComponent("model.safetensors.index.json")
+    let metadataBefore = try [configURL, indexURL].map(Qwen35LayeredFileValidation.identity)
+    let config = try Qwen35LayeredFileValidation.configuration(
+        Qwen35LayeredWeights.readBounded(configURL, maximum: 4 * 1024 * 1024))
+    try #require(config.textConfiguration.fullAttentionInterval == 4)
+    let index = try #require(JSONSerialization.jsonObject(with:
+        Qwen35LayeredWeights.readBounded(indexURL, maximum: 4 * 1024 * 1024)) as? [String: Any])
+    let map = try #require(index["weight_map"] as? [String: String])
+    // Sparse sanitizer carrier: never evaluate its embedding/head placeholders.
+    let owner = withRandomState(MLXRandom.RandomState(seed: 101)) { Qwen35(config, layered: true) }
+    let loader = try Qwen35LayeredWeights(directory: directory)
+    func make(_ i: Int) -> Qwen35Language.DecoderLayer {
+        withRandomState(MLXRandom.RandomState(seed: 102)) {
+            Qwen35Language.DecoderLayer(config.textConfiguration, layerIdx: i)
+        }
+    }
+    func same(_ a: MLXArray, _ b: MLXArray) throws {
+        try #require(a.shape == b.shape && a.dtype == b.dtype)
+        #expect(allClose(a, b, rtol: 0, atol: 0).item(Bool.self))
+    }
+    func resident(_ i: Int) throws -> Qwen35Language.DecoderLayer {
+        let raw = "model.language_model.layers.\(i).", local = "language_model.model.layers.\(i)."
+        let selected = map.filter { $0.key.hasPrefix(raw) }
+        try #require(!selected.isEmpty)
+        var weights: [String: MLXArray] = [:], identities: [URL: String] = [:]
+        for file in Set(selected.values).sorted() {
+            try #require(!file.contains("/") && !file.contains("\\") && file.hasSuffix(".safetensors"))
+            let url = directory.appendingPathComponent(file)
+            identities[url] = try Qwen35LayeredFileValidation.identity(url)
+            let (arrays, metadata) = try loadArraysAndMetadata(url: url)
+            let keys = Set(selected.filter { $0.value == file }.keys)
+            let slice = arrays.filter { keys.contains($0.key) }
+            try #require(Set(slice.keys) == keys)
+            for (key, value) in owner.sanitize(weights: slice, metadata: metadata) {
+                try #require(key.hasPrefix(local))
+                let name = String(key.dropFirst(local.count))
+                try #require(weights[name] == nil)
+                weights[name] = value // Preserve stored dtype, with no asType.
+            }
+        }
+        let block = make(i)
+        try #require(Set(weights.keys) == Set(block.parameters().flattened().map { $0.0 }))
+        try block.update(parameters: ModuleParameters.unflattened(weights), verify: [.all])
+        try checkedEval(block)
+        for (url, identity) in identities { try #require(Qwen35LayeredFileValidation.identity(url) == identity) }
+        return block
+    }
+    func forward(_ block: Qwen35Language.DecoderLayer, _ x: MLXArray,
+                 _ cache: any KVCache, _ position: Int) throws -> MLXArray {
+        let count = x.dim(1)
+        let positions = broadcast(MLXArray((position..<(position + count)).map { Int32($0) })
+            .reshaped(1, 1, count), to: [3, 1, count])
+        var mask: MLXArray?
+        if case .array(let value) = createAttentionMask(h: x, cache: cache, returnArray: true) { mask = value }
+        let result = withPreparedCache([cache], lengths: nil) {
+            block(x, attentionMask: mask,
+                  ssmMask: block.isLinear ? createSSMMask(h: x, cache: cache as? MambaCache) : nil,
+                  cache: cache, positionIds: positions)
+        }
+        try checkedEval([result] + cache.innerState())
+        return result
+    }
+    func run(_ i: Int, _ dtype: DType) throws -> DType {
+        let original = try resident(i)
+        let a: any KVCache = i == 0 ? MambaCache() : KVCacheSimple()
+        let b: any KVCache = i == 0 ? MambaCache() : KVCacheSimple()
+        var position = 0, outputDType = dtype
+        for (step, count) in [2, 3, 1, 1].enumerated() {
+            let width = config.textConfiguration.hiddenSize
+            let values = (0..<(count * width)).map { Float(($0 + position * width) % 97 - 48) / 64 }
+            let input = MLXArray(values).reshaped(1, count, width).asType(dtype)
+            let streamed = make(i)
+            try loader.loadLayer(i, into: streamed, model: owner)
+            if step == 0 {
+                let pa = Dictionary(uniqueKeysWithValues: original.parameters().flattened())
+                let pb = Dictionary(uniqueKeysWithValues: streamed.parameters().flattened())
+                try #require(Set(pa.keys) == Set(pb.keys))
+                for key in pa.keys.sorted() { try same(pa[key]!, pb[key]!) }
+            }
+            let expected = try forward(original, input, a, position)
+            let actual = try forward(streamed, input, b, position)
+            try same(expected, actual)
+            try #require(a.offset == b.offset && a.metaState == b.metaState)
+            let ca = a.innerState(), cb = b.innerState()
+            try #require(ca.count == cb.count)
+            for (left, right) in zip(ca, cb) { try same(left, right) }
+            if i == 3 { #expect(b.offset == position + count) }
+            outputDType = actual.dtype
+            let record: [String: Any] = ["revision": revision, "layer": i, "step": step,
+                "tokens": count, "inputDType": String(describing: input.dtype),
+                "outputDType": String(describing: actual.dtype), "cacheOffset": b.offset,
+                "cache": cb.map { ["dtype": String(describing: $0.dtype), "shape": $0.shape] as [String: Any] }]
+            print("QWEN_REAL_BLOCK " + String(decoding: try JSONSerialization.data(withJSONObject: record, options: .sortedKeys), as: UTF8.self))
+            position += count
+        }
+        return outputDType
+    }
+    let control = withRandomState(MLXRandom.RandomState(seed: 73)) { MLXRandom.uniform(0.0..<1.0, [4]).asArray(Float.self) }
+    let after = try withRandomState(MLXRandom.RandomState(seed: 73)) {
+        let promoted = try run(0, .bfloat16)
+        Stream().synchronize(); Memory.clearCache()
+        _ = try run(3, promoted)
+        Stream().synchronize(); Memory.clearCache()
+        return MLXRandom.uniform(0.0..<1.0, [4]).asArray(Float.self)
+    }
+    #expect(after == control)
+    #expect(try [configURL, indexURL].map(Qwen35LayeredFileValidation.identity) == metadataBefore)
+}
+}
+
+// Run alone in a fresh process: upstream global compilation caches outlive tests.
+@Suite(.serialized) struct QwenActivationOwnershipTests {
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["D_TEST_QWEN_ACTIVATION_PROBE"] == "1"))
+    func activationOwnership() throws {
+        func snapshot(_ name: String) {
+            Stream(.gpu).synchronize(); Stream(.cpu).synchronize(); Memory.clearCache()
+            print("QWEN_ACTIVATION \(name) active=\(Memory.activeMemory) cache=\(Memory.cacheMemory)")
+        }
+        func upstream(_ fast: Bool, _ dtype: DType) throws {
+            let input = MLXArray([-2.0 as Float, -0.5, 0, 0.5, 2]).asType(dtype)
+            let output = fast ? GELU(approximation: .fast)(input) : GELU()(input)
+            try checkedEval(output)
+        }
+        func scoped(_ fast: Bool, _ dtype: DType, compareUpstream: Bool = false) throws {
+            let activation = Qwen3VLVision.ScopedGELU(fast: fast)
+            let input = MLXArray([-10.0 as Float, -2, -0.5, 0, 0.5, 2, 10]).asType(dtype)
+            let actual = activation(input)
+            try checkedEval(actual)
+            if compareUpstream {
+                let expected = fast ? GELU(approximation: .fast)(input) : GELU()(input)
+                try checkedEval(expected)
+                #expect(actual.dtype == expected.dtype)
+                #expect(arrayEqual(actual, expected).item(Bool.self))
+            }
+        }
+        snapshot("before")
+        try #require(Memory.activeMemory == 0)
+        for _ in 0..<3 {
+            for dtype in [DType.bfloat16, .float32] {
+                try scoped(true, dtype); try scoped(false, dtype)
+            }
+            snapshot("scoped-released")
+            #expect(Memory.activeMemory == 0 && Memory.cacheMemory == 0)
+        }
+        try upstream(true, .bfloat16); snapshot("global-fast-bf16")
+        try upstream(false, .bfloat16); snapshot("global-exact-bf16")
+        try upstream(true, .float32); snapshot("global-fast-f32")
+        try upstream(false, .float32); snapshot("global-exact-f32")
+        let globalBaseline = Memory.activeMemory
+        for dtype in [DType.bfloat16, .float32] {
+            try scoped(true, dtype, compareUpstream: true)
+            try scoped(false, dtype, compareUpstream: true)
+        }
+        snapshot("scoped-parity-released")
+        #expect(Memory.activeMemory == globalBaseline && Memory.cacheMemory == 0)
+    }
 }

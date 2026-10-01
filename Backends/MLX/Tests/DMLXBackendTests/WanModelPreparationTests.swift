@@ -5,6 +5,42 @@ import Testing
 
 @Suite("Wan offline preparation bridge (bounded CPU process fixtures)", .serialized)
 struct WanModelPreparationTests {
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["D_TEST_WAN_PREPARE_ENGINE"] != nil),
+          .timeLimit(.minutes(30)))
+    func originalWeightsThroughPackagedPreparationBridge() async throws {
+        let env = ProcessInfo.processInfo.environment
+        let engine = URL(fileURLWithPath: try #require(env["D_TEST_WAN_PREPARE_ENGINE"]))
+        let source = URL(fileURLWithPath: try #require(env["D_TEST_WAN_ORIGINAL_DIR"]))
+        let destination = URL(fileURLWithPath: try #require(env["D_TEST_WAN_PREPARED_OUTPUT"]))
+        let root = URL(fileURLWithPath: try #require(env["D_TEST_TEMP_DIR"]))
+        let names = ["models_t5_umt5-xxl-enc-bf16.pth", "diffusion_pytorch_model.safetensors", "Wan2.1_VAE.pth"]
+        func identity() throws -> [AudioFileSystem.Identity] {
+            try names.map { try AudioFileSystem.regularFile(source.appendingPathComponent($0), label: $0, maximumBytes: nil) }
+        }
+        let before = try identity(), started = Date()
+        let access = root.appendingPathComponent("wan-real-access-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: access, withIntermediateDirectories: false)
+        let bridge = try WanModelPreparation(configuration: .init(
+            pythonExecutable: engine.appendingPathComponent("python/bin/python3"),
+            providerScript: engine.appendingPathComponent("provider/d_video_prepare.py"),
+            accessBootstrapRoot: access, timeoutSeconds: 1_700))
+        try await bridge.prepare(source: source, destination: destination)
+        try #require(identity() == before)
+        try #require(FileManager.default.contentsOfDirectory(atPath: access.path).isEmpty)
+        let token = UUID()
+        try await MLXExecutionLease.shared.acquire(token)
+        await MLXExecutionLease.shared.relinquish(token)
+        let data = try Data(contentsOf: destination.appendingPathComponent("D-VIDEO-PREPARED.json"))
+        let object = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        try #require(object["complete"] as? Bool == true)
+        try #require((object["tensors"] as? [Any])?.count == 1_261)
+        let result: [String: Any] = ["seconds": Date().timeIntervalSince(started), "source": source.path,
+            "destination": destination.path, "engine": engine.path, "originalIdentitiesUnchanged": true,
+            "sharedPermitReacquired": true, "manifestBytes": data.count]
+        try JSONSerialization.data(withJSONObject: result, options: [.prettyPrinted, .sortedKeys])
+            .write(to: root.appendingPathComponent("wan-real-bridge.json"), options: .withoutOverwriting)
+    }
+
     @Test func deadlinesAndExistingDestination() async throws {
         let fixture = try Fixture(mode: "success")
         #expect(throws: InferenceFailure.self) {

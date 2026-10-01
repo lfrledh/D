@@ -384,6 +384,23 @@ public struct Qwen3VLConfiguration: Codable, Sendable {
 // MARK: - Vision
 
 enum Qwen3VLVision {
+    // Keep MLXNN's exact compiled formulas, but own the compiler cache with the
+    // vision module. The upstream global GELU caches retain scalar tensors after
+    // a model release; compiled closure deinit erases only this module's graph.
+    final class ScopedGELU: Module, UnaryLayer {
+        private let apply: @Sendable (MLXArray) -> MLXArray
+
+        init(fast: Bool = false) {
+            if fast {
+                apply = compile(shapeless: true) { x in x * sigmoid(1.702 * x) }
+            } else {
+                apply = compile(shapeless: true) { x in x * (1 + erf(x / sqrt(2))) / 2 }
+            }
+            super.init()
+        }
+
+        func callAsFunction(_ x: MLXArray) -> MLXArray { apply(x) }
+    }
 
     static func rotateHalf(_ x: MLXArray) -> MLXArray {
         let half = x.dim(-1) / 2
@@ -481,7 +498,7 @@ enum Qwen3VLVision {
         @ModuleInfo(key: "norm") var norm: LayerNorm
         @ModuleInfo(key: "linear_fc1") var linear1: Linear
         @ModuleInfo(key: "linear_fc2") var linear2: Linear
-        @ModuleInfo(key: "act") var activation: GELU
+        @ModuleInfo(key: "act") var activation: ScopedGELU
 
         init(config: Qwen3VLConfiguration.VisionConfiguration, usePostShuffleNorm: Bool) {
             self.hiddenSize =
@@ -492,7 +509,7 @@ enum Qwen3VLVision {
             _norm.wrappedValue = LayerNorm(dimensions: normDim, eps: 1e-6)
             _linear1.wrappedValue = Linear(hiddenSize, hiddenSize)
             _linear2.wrappedValue = Linear(hiddenSize, config.outHiddenSize)
-            _activation.wrappedValue = GELU()
+            _activation.wrappedValue = ScopedGELU()
         }
 
         func callAsFunction(_ x: MLXArray) -> MLXArray {
@@ -576,12 +593,12 @@ enum Qwen3VLVision {
     final class MLP: Module, UnaryLayer {
         @ModuleInfo(key: "linear_fc1") var linear1: Linear
         @ModuleInfo(key: "linear_fc2") var linear2: Linear
-        @ModuleInfo(key: "act") var activation: GELU
+        @ModuleInfo(key: "act") var activation: ScopedGELU
 
         init(dim: Int, hiddenDim: Int) {
             _linear1.wrappedValue = Linear(dim, hiddenDim, bias: true)
             _linear2.wrappedValue = Linear(hiddenDim, dim, bias: true)
-            _activation.wrappedValue = GELU(approximation: .fast)
+            _activation.wrappedValue = ScopedGELU(fast: true)
         }
 
         func callAsFunction(_ x: MLXArray) -> MLXArray {
