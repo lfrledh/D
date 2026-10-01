@@ -177,7 +177,7 @@ final class Flux2Mistral3TextEncoderTests: XCTestCase {
     let original = try SafeTensorsReader(fileURL: root.appendingPathComponent("text_encoder/model.safetensors"))
     var weights = try original.loadAllTensors(as: .float32)
     weights.removeValue(forKey: "model.language_model.layers.0.self_attn.q_proj.weight")
-    try MLX.save(arrays: weights, metadata: [:], url: component.appendingPathComponent("model.safetensors"))
+    try MLX.save(arrays: weights, metadata: ["format": "pt"], url: component.appendingPathComponent("model.safetensors"))
     let inputs = try SafeTensorsReader(fileURL: root.appendingPathComponent("prompt_embeds.safetensors"))
     let input = try inputs.tensor(named: "input_ids").asType(.int32)
     let mask = try inputs.tensor(named: "attention_mask").asType(.int32)

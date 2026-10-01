@@ -242,9 +242,7 @@ struct WorkflowLocalizationTests {
                 guard visited.insert(ObjectIdentifier(object)).inserted else { continue }
                 if let element = object as? any NSAccessibilityProtocol,
                    element.accessibilityIdentifier() == identifier {
-                    let performed = element.accessibilityPerformPress()
-                    print("HOSTING_PRESS id=\(identifier) type=\(type(of: object)) performed=\(performed)")
-                    if performed { return true }
+                    return HostingControlClick.send(to: element, in: root)
                 }
                 if let element = object as? any NSAccessibilityProtocol {
                     pending.append(contentsOf: (element.accessibilityChildren() ?? []).compactMap { $0 as? NSObject })

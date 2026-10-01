@@ -14,9 +14,9 @@
   "snapshot": {
     "fileCount": 206,
     "upstreamBytes": 41852259,
-    "patchedBytes": 41917577,
+    "patchedBytes": 41917618,
     "manifest": "flux2-swift.files.json",
-    "manifestSHA256": "273fab03698421cba32ed0ff4e99c353f556010ca2b1e01d0c7279efce5764d7",
+    "manifestSHA256": "a4986f35e44a5197cbd59958659b38e9bfb64e2a526a5fc67d9594b783bc6c23",
     "selection": "All 206 tracked upstream blobs; no trimming or expanded gitlinks."
   },
   "patches": [
@@ -99,7 +99,7 @@
     },
     {
       "file": "patches/flux2-klein-ssd-layered.patch",
-      "sha256": "3cbdb6da5d0de7754d8e4f10b155caadf09a14ddeddbdee8bf372a327c7a6849",
+      "sha256": "433c67ef2927b7f084337e5ed583a522e88989a90c6d7844c0ceea03618eba8b",
       "description": "Original Klein and Dev block streaming, same numerical kernels; strict identity and parity controls",
       "modifiedFiles": [
         {
@@ -140,9 +140,9 @@
         {
           "path": "Tests/Flux2Tests/Flux2TransformerParityTests.swift",
           "upstreamSHA256": "48e56189d9ebe1b9026a62f9b74ac1288b224e03707358879ab0f432c2300e4e",
-          "sha256": "627698356d937a2b5c98e38e77f2aabe91ae4a45de5a126c88e0f52d4d4f42b4",
+          "sha256": "436c497f9ba412a86883c090e5f1aa1d25505e1d7d8c63371accf078c2d7fff3",
           "upstreamSize": 1714,
-          "size": 18170
+          "size": 18198
         },
         {
           "path": "Tests/Flux2Tests/SafeTensorsReaderTests.swift",
@@ -174,9 +174,9 @@
         {
           "path": "Tests/Flux2Tests/Flux2Mistral3TextEncoderTests.swift",
           "upstreamSHA256": "3fa215ab32409863ed06526bbff349e99a62fd11577f2c9587d8376ad3b79a4e",
-          "sha256": "64e4ab0376781eaf3a83135915db051e2a699f4a3ed736427b0590a30b9805b1",
+          "sha256": "57d4d123e198815c373735f5422b5005cbea05ee6545331e071c7ae30e3321ad",
           "upstreamSize": 4638,
-          "size": 10035
+          "size": 10048
         },
         {
           "path": "Tests/Flux2Tests/Flux2WeightsLoaderTests.swift",
@@ -186,7 +186,7 @@
           "size": 7641
         }
       ],
-      "sha256": "a660a7e4d25da11ab2d6c0dfecce6c15200d17b53207172fb525d1031b6dea7e"
+      "sha256": "c4c87f6559f573379412d0f1480a1b72af583ada3475571cef7a07d11d837ba3"
     }
   ]
 }

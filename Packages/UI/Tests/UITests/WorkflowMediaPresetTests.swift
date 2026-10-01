@@ -292,9 +292,8 @@ struct WorkflowMediaPresetTests {
         while let object = pending.popLast(), visited.count < 2_000 {
             guard visited.insert(ObjectIdentifier(object)).inserted else { continue }
             if let element = object as? any NSAccessibilityProtocol,
-               element.accessibilityIdentifier() == identifier,
-               element.accessibilityPerformPress() == true {
-                return true
+               element.accessibilityIdentifier() == identifier {
+                return HostingControlClick.send(to: element, in: root)
             }
             if let element = object as? any NSAccessibilityProtocol {
                 pending.append(contentsOf: (element.accessibilityChildren() ?? []).compactMap { $0 as? NSObject })

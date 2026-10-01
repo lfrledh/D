@@ -244,7 +244,7 @@ final class Flux2DevOriginalBlockTests: XCTestCase {
           $0 == "model.language_model.norm.weight" || $0.contains(".layers.0.")
       }
       XCTAssertTrue(tensors.values.allSatisfy { $0.dtype == .bfloat16 })
-      try MLX.save(arrays: tensors, url: component.appendingPathComponent("model.safetensors"))
+      try MLX.save(arrays: tensors, metadata: ["format": "pt"], url: component.appendingPathComponent("model.safetensors"))
     }
     func textResult(layered: Bool) throws -> [Float32] {
       let model = try layered ? Flux2Mistral3TextEncoder.loadLayered(from: target) : Flux2Mistral3TextEncoder.load(from: target)

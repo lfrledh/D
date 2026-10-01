@@ -6,6 +6,36 @@ import Testing
 
 @Suite(.serialized)
 struct ModelWanPreparationTests {
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["D_TEST_WAN_FULL_ROOT"] != nil))
+    func actualFullWanDirectoryImportsWithoutReadingExtras() async throws {
+        let env = ProcessInfo.processInfo.environment
+        let source = URL(fileURLWithPath: try #require(env["D_TEST_WAN_FULL_ROOT"]))
+        let parent = URL(fileURLWithPath: try #require(env["D_TEST_TEMP_DIR"]))
+        let state = parent.appendingPathComponent("wan-full-import-" + UUID().uuidString)
+        let entry = try #require(ModelCatalog.entries().first { $0.id == "wan21-t2v-1.3b-bf16" })
+        let directory = try ModelDirectory(source)
+        let before = try directory.requiredTree(paths: Set(entry.files.map(\.path)))
+        let library = try await ModelLibrary(stateDirectory: state, catalog: [entry])
+        do {
+            let id = try await library.registerExisting(at: source, catalogID: entry.id)
+            let record = try #require(await library.snapshot().records.first)
+            #expect(record.state == .preparationRequired && record.availability == .available)
+            #expect(record.activeLeaseCount == 0)
+            try await library.shutdown()
+            let reopened = try await ModelLibrary(stateDirectory: state, catalog: [entry])
+            let restored = try #require(await reopened.snapshot().records.first)
+            #expect(restored.id == id && restored.state == .preparationRequired)
+            #expect(try directory.requiredTree(paths: Set(entry.files.map(\.path))) == before)
+            try await reopened.shutdown()
+            try JSONSerialization.data(withJSONObject: ["model": entry.id, "revision": entry.revision,
+                "source": source.path, "requiredFileCount": entry.files.count,
+                "state": "preparationRequired", "sourceUnchanged": true,
+                "guiVerified": false, "converterRepeated": false], options: [.prettyPrinted, .sortedKeys])
+                .write(to: state.appendingPathComponent("acceptance.json"), options: .withoutOverwriting)
+            print("D_WAN_FULL_IMPORT", state.path)
+        } catch { try? await library.shutdown(); throw error }
+    }
+
     @Test(.enabled(if: ProcessInfo.processInfo.environment["D_TEST_WAN_PREPARED_OUTPUT"] != nil))
     func realPreparedPackPassesApplicationVerifier() throws {
         let path = try #require(ProcessInfo.processInfo.environment["D_TEST_WAN_PREPARED_OUTPUT"])

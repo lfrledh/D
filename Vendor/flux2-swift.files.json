@@ -665,8 +665,8 @@
       "upstreamGitBlob": "0a633623aa9727a7b35c1ec16014854aeae4d798",
       "upstreamSize": 4638,
       "upstreamSHA256": "3fa215ab32409863ed06526bbff349e99a62fd11577f2c9587d8376ad3b79a4e",
-      "size": 10035,
-      "sha256": "64e4ab0376781eaf3a83135915db051e2a699f4a3ed736427b0590a30b9805b1"
+      "size": 10048,
+      "sha256": "57d4d123e198815c373735f5422b5005cbea05ee6545331e071c7ae30e3321ad"
     },
     {
       "path": "Tests/Flux2Tests/Flux2PipelineGuidanceTests.swift",
@@ -719,8 +719,8 @@
       "upstreamGitBlob": "e680bbfa3cbf9397e479bc2cd9601e6247a3ff74",
       "upstreamSize": 1714,
       "upstreamSHA256": "48e56189d9ebe1b9026a62f9b74ac1288b224e03707358879ab0f432c2300e4e",
-      "size": 18170,
-      "sha256": "627698356d937a2b5c98e38e77f2aabe91ae4a45de5a126c88e0f52d4d4f42b4"
+      "size": 18198,
+      "sha256": "436c497f9ba412a86883c090e5f1aa1d25505e1d7d8c63371accf078c2d7fff3"
     },
     {
       "path": "Tests/Flux2Tests/Flux2VAEParityTests.swift",
