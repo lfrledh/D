@@ -24,6 +24,7 @@ public actor ModelLibrary {
         var rootBookmark: Data?
         var rootURL: URL?
         var rootIdentity: ModelFileIdentity?
+        var downloadCredentialBookmark: Data?
         var records: [StoredRecord] = []
     }
     private let stateDirectory: ModelDirectory
@@ -142,7 +143,27 @@ public actor ModelLibrary {
             record.activeLeaseCount = leases.values.filter { $0.modelID == record.id }.count
             return record
         }
-        return .init(revision: disk.revision, rootURL: rootScope?.url ?? disk.rootURL, catalog: catalog, records: records)
+        return .init(revision: disk.revision, rootURL: rootScope?.url ?? disk.rootURL, catalog: catalog,
+                     records: records, downloadCredentialConnected: disk.downloadCredentialBookmark != nil)
+    }
+
+    public func connectDownloadCredential(at selected: URL) throws {
+        try Task.checkCancellation()
+        try requireAdmission(); try requireIdleWorker()
+        let credential = try ModelDownloadCredential.choose(selected)
+        try Task.checkCancellation()
+        let previous = disk.downloadCredentialBookmark
+        disk.downloadCredentialBookmark = credential.bookmark
+        do { try persist() } catch { disk.downloadCredentialBookmark = previous; throw error }
+    }
+
+    public func disconnectDownloadCredential() throws {
+        try Task.checkCancellation()
+        try requireAdmission(); try requireIdleWorker()
+        try Task.checkCancellation()
+        let previous = disk.downloadCredentialBookmark
+        disk.downloadCredentialBookmark = nil
+        do { try persist() } catch { disk.downloadCredentialBookmark = previous; throw error }
     }
 
     public func configureRoot(at selected: URL) throws {
@@ -577,7 +598,12 @@ public actor ModelLibrary {
         while offset < file.size {
             try Task.checkCancellation(); try content.validateLocation()
             let end = min(offset + Self.chunkBytes, file.size) - 1
-            let range = ModelByteRange(url: sourceURL(entry: entry, file: file, start: offset), start: offset, end: end, total: file.size)
+            let url = sourceURL(entry: entry, file: file, start: offset)
+            var range = ModelByteRange(url: url, start: offset, end: end, total: file.size)
+            if sourceBaseURL == nil, let bookmark = disk.downloadCredentialBookmark {
+                range.credential = ModelDownloadCredential(bookmark: bookmark)
+                range.authorizedPath = url.path
+            }
             try await transport.download(range, to: fd)
             try content.validateLocation()
             offset = end + 1
