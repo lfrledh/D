@@ -294,6 +294,34 @@ class ACEBackendTests(unittest.TestCase):
         self.assertEqual(calls[1][1]["truncation"], False)
         self.assertIn("all lyrics", calls[1][0])
 
+    def test_layer_progress_volume_is_bounded_without_reducing_steps(self):
+        from d_ace_ssd import report_layer_progress
+        for total in (32, 1600, 320000):
+            values = [i for i in range(1, total + 1) if report_layer_progress(i, total)]
+            self.assertEqual(values[0], 1)
+            self.assertEqual(values[-1], total)
+            self.assertLessEqual(len(values), 1026)
+        self.assertTrue(report_layer_progress(32 * (2**31 - 1), 32 * (2**31 - 1)))
+
+    def test_protocol_writer_survives_upstream_stdout_diagnostics(self):
+        import io
+        stdout, stderr = io.StringIO(), io.StringIO()
+        def noisy_factory(*args):
+            print("upstream diagnostic is not JSON")
+            raise contract.ACEContractError("controlled initialization failure", "engine")
+        args = ["--request", str(self.request_path), "--job-directory", str(self.job),
+                "--model-directory", str(self.model), "--manifest", str(self.manifest_path),
+                "--vendor-directory", str(self.vendor)]
+        with contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+            code = backend.main(args, handler_factory=noisy_factory)
+        self.assertEqual(code, 2)
+        events = [json.loads(line) for line in stdout.getvalue().splitlines()]
+        self.assertEqual(events[-1]["type"], "error")
+        self.assertEqual(sum(e["type"] == "error" for e in events), 1)
+        self.assertIn("upstream diagnostic", stderr.getvalue())
+        self.assertNotIn("upstream diagnostic", stdout.getvalue())
+        self.assertFalse((self.job / "output.wav").exists())
+
     def test_cancel_and_failure_do_not_call_handler(self):
         class Writer:
             def __init__(self): self.events = []

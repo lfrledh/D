@@ -56,6 +56,30 @@ struct ReleaseModelContractTests {
         let port = WorkflowPortDefinition("ref", "", kinds: [.image, .list], assetListKind: .image)
         #expect(throws: WorkflowIssue.self) { try port.resolveAssets(.data(.list(element: .asset(.image), items: [duplicate, duplicate]))) }
     }
+    @Test func imageLoadingChoiceIsSharedExplicitAndBackwardCompatible() throws {
+        let definition = try #require(WorkflowRegistry.standard.operation("d.image.generate")?.definition)
+        var node = definition.makeNode()
+        node.parameters.removeValue(forKey: "loadingStrategy")
+        node.parameters.removeValue(forKey: "memoryBudgetGiB")
+        let before = node
+        try WorkflowRegistry.standard.validate(node)
+        #expect(node == before)
+        var oldACE = try #require(WorkflowRegistry.standard.operation(WorkflowModelRoutes.ace)?.definition.makeNode())
+        oldACE.parameters.removeValue(forKey: "loadingStrategy"); oldACE.parameters.removeValue(forKey: "memoryBudgetGiB")
+        try WorkflowRegistry.standard.validate(oldACE)
+        #expect(try WorkflowACEOperation.request(node: oldACE, prompt: "original", lyrics: "", reference: nil, source: nil).ace?.loadingStrategy == .resident)
+        let recipe = WorkflowImageRecipe.klein(capability: .scalableKlein4B)
+        #expect(try recipe.request(node: node, prompt: "full model", seed: 7, references: []).loadingStrategy == .staged)
+        node.parameters["loadingStrategy"] = .text("ssdLayered")
+        try WorkflowRegistry.standard.validate(node)
+        #expect(try recipe.request(node: node, prompt: "full model", seed: 7, references: []).loadingStrategy == .ssdLayered)
+        node.parameters["loadingStrategy"] = .text("invented")
+        #expect(throws: (any Error).self) { try WorkflowRegistry.standard.validate(node) }
+        var dev = try #require(WorkflowRegistry.standard.operation(WorkflowModelRoutes.fluxDev)?.definition.makeNode())
+        dev.parameters["loadingStrategy"] = .text("ssdLayered")
+        #expect(throws: (any Error).self) { try WorkflowRegistry.standard.validate(dev) }
+        #expect(throws: (any Error).self) { try WorkflowImageRecipe.fluxDev(capability: .flux2Dev).request(node: dev, prompt: "unchanged", seed: 7, references: []) }
+    }
     @Test func assetListSchemaRejectsContradictorySingleKindAndUnsupportedOutputAnnotation() throws {
         let contradictory = WorkflowPortDefinition("input", "Input", kinds: [.audio, .list], assetListKind: .image)
         let typed = WorkflowPortDefinition("output", "Output", kinds: [.list], assetListKind: .image)

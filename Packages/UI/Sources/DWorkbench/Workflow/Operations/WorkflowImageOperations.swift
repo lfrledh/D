@@ -20,6 +20,8 @@ enum WorkflowImageOperations {
                 .init("guidance", "引导", .decimal, .decimal(dev ? 4 : 1)),
                 .init("seed", "种子", .text(multiline: false), .text("42")),
                 .init("count", "候选数", .integer, .integer(3)),
+                .init("memoryBudgetGiB", "显式内存预算 GiB（0使用运行时策略）", .integer, .integer(0)),
+                .init("loadingStrategy", "加载方式", .choice(dev ? ["staged"] : ["staged", "ssdLayered"]), .text("staged")),
                 .init("modelID", "模型内容身份", .text(multiline: false), .text("")),
             ], modelKind: .image
         ),
@@ -28,6 +30,12 @@ enum WorkflowImageOperations {
             try WorkflowLimits.positive(WorkflowScalarReader.integer("height", in: node), field: "height", node: node)
             try WorkflowLimits.positive(WorkflowScalarReader.integer("steps", in: node), field: "steps", node: node)
             try WorkflowLimits.nonnegative(WorkflowScalarReader.decimal("guidance", in: node), field: "guidance", node: node)
+            _ = try WorkflowLanguageMessageForm.memoryBudgetBytes(node.parameters)
+            if let value = node.parameters["loadingStrategy"] {
+                guard let mode = value.string, (dev ? ["staged"] : ["staged", "ssdLayered"]).contains(mode) else {
+                    throw WorkflowIssue("此图像实现不支持所选加载方式。", nodeID: node.id)
+                }
+            }
             let seed = try WorkflowScalarReader.text("seed", in: node)
             guard !seed.isEmpty, seed.utf8.allSatisfy({ (48 ... 57).contains($0) }), UInt64(seed) != nil else {
                 throw WorkflowIssue("seed 必须是 UInt64 十进制字符串。", nodeID: node.id)

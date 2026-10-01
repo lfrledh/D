@@ -116,6 +116,9 @@ struct LocalFluxDevInventory: Sendable {
         guard profile == .flux2Dev else {
             throw InferenceFailure.invalidRequest("Only the fixed BF16 Dev profile is supported.")
         }
+        guard image.loadingStrategy == nil || image.loadingStrategy == .staged else {
+            throw InferenceFailure.invalidRequest("FLUX.2-dev SSD layering is not implemented; the requested mode is not ignored.")
+        }
         let resolvedCapability = try profile.resolvedCapability(for: image)
         let estimatedPeakBytes = try resolvedCapability.estimatedPeakBytes(for: image)
         guard image.prompt.utf8.count <= 1_048_576,

@@ -54,6 +54,7 @@ public struct QuickCreationState: Codable, Sendable, Equatable {
     public private(set) var isLoaded = false
     public private(set) var isRunning = false
     public private(set) var phase = ""
+    public private(set) var streamingText = ""
     public private(set) var saveIssue: String?
     public private(set) var pendingSaveRunID: UUID?
     @ObservationIgnored private var cancelRequested = false
@@ -75,6 +76,10 @@ public struct QuickCreationState: Codable, Sendable, Equatable {
     }
     public var visibleRuns: [QuickRunRecord] {
         state.runs.filter { $0.draft.id == state.selectedDraftID }.reversed()
+    }
+    public var visibleStreamingText: String {
+        guard let id = activeRunID, state.runs.first(where: { $0.id == id })?.draft.id == state.selectedDraftID else { return "" }
+        return streamingText
     }
     public var inputIssue: String? {
         guard let draft, let definition = WorkflowRegistry.standard.definition(for: draft.node) else { return nil }
@@ -322,10 +327,10 @@ public struct QuickCreationState: Codable, Sendable, Equatable {
         launch([captured], retryOf: id)
     }
     private func launch(_ attempts: [QuickDraft], retryOf: UUID? = nil) {
-        isRunning = true; cancelRequested = false; error = nil; phase = "正在保存输入…"
+        isRunning = true; cancelRequested = false; error = nil; streamingText = ""; phase = "正在保存输入…"
         let batch = UUID()
         runTask = Task { [self] in
-            defer { isRunning = false; activeRunID = nil; if pendingSaveRunID == nil { services = nil }; runTask = nil }
+            defer { isRunning = false; activeRunID = nil; streamingText = ""; if pendingSaveRunID == nil { services = nil }; runTask = nil }
             for (offset, captured) in attempts.enumerated() {
                 // Preserve an explicit cancelled first attempt even if cancelled before admission.
                 if offset > 0 && cancelRequested { break }
@@ -337,6 +342,10 @@ public struct QuickCreationState: Codable, Sendable, Equatable {
                 if cancelRequested { throw CancellationError() }
                 let service = try makeServices(); services = service
                 service.progress = { [weak self] in self?.phase = $0 }
+                service.languagePreviewChanged = { [weak self] stepID, text in
+                    guard let self, self.isRunning, self.activeRunID == id, stepID == id else { return }
+                    self.streamingText = text
+                }
                 service.candidatesChanged = { [weak self] _, candidates in
                     guard let self, let index = self.state.runs.firstIndex(where: { $0.id == id }) else { return }
                     self.state.runs[index].candidates = candidates; try await self.flush()

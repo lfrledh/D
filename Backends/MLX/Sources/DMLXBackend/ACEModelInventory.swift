@@ -90,6 +90,7 @@ struct ACEModelInventory: Sendable {
             throw InferenceFailure.invalidRequest("ACE model revision is not the pinned XL SFT revision.")
         }
         guard configuration.timeoutSeconds.isFinite, configuration.timeoutSeconds > 0,
+              configuration.ssdTimeoutSeconds.isFinite, configuration.ssdTimeoutSeconds > 0,
               configuration.cancellationGraceSeconds.isFinite,
               configuration.cancellationGraceSeconds > 0 else {
             throw InferenceFailure.invalidRequest("Invalid ACE timeout or cancellation grace.")
@@ -263,7 +264,7 @@ struct ACEModelInventory: Sendable {
         let (estimate, overflow2) = twice.addingReportingOverflow(8 * 1024 * 1024 * 1024)
         guard !overflow, !overflow2 else { throw InferenceFailure.invalidRequest("ACE peak estimate overflow.") }
         let selectedEstimate = ace.loadingStrategy == .ssdLayered
-            ? try ACEResourceEstimate.layered(root: root, files: files,
+            ? try ACEResourceEstimate.layered(root: root, files: admitted,
                 duration: audio.durationSeconds, guidance: ace.guidanceScale) : estimate
         return Self(root: root, manifest: decoded, files: admitted, sourceFiles: admittedSources,
                     estimatedPeakBytes: selectedEstimate, configuration: configuration,

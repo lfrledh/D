@@ -141,6 +141,12 @@ struct QuickGenerationView: View {
                                 description: Text(baselineText(language, "label.2187866b8a29", fallback: "无需先命名项目。切换模型不会丢失已有创作。")))
                                 .frame(minHeight: 300)
                         }
+                        if quick.isRunning && !quick.visibleStreamingText.isEmpty {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text(baselineText(language, "generation.preview.pending", fallback: "正在生成 · 临时预览")).font(.caption).foregroundStyle(.secondary)
+                                Text(quick.visibleStreamingText).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
+                            }.accessibilityIdentifier("quick-streaming-text")
+                        }
                         ForEach(currentRuns) { run in runCard(run) }
                         if !pastRuns.isEmpty {
                             DisclosureGroup(baselineText(language, "label.dda5a8cd017c", fallback: "以前的创作"), isExpanded: $history) {

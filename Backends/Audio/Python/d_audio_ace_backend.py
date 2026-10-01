@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import argparse
-from contextlib import contextmanager
+from contextlib import contextmanager, redirect_stdout
 import json
 import math
 import os
@@ -34,13 +34,15 @@ class DeliveryError(Exception):
 class EventWriter:
     def __init__(self) -> None:
         self.terminal = False
+        # Keep the protocol stream stable while upstream diagnostics use stderr.
+        self.stream = sys.stdout
 
     def emit(self, value: dict[str, Any], *, terminal: bool = False) -> None:
         if self.terminal:
             raise DeliveryError("ACE terminal event already emitted")
         try:
-            sys.stdout.write(json.dumps(value, ensure_ascii=False, separators=(",", ":"), allow_nan=False) + "\n")
-            sys.stdout.flush()
+            self.stream.write(json.dumps(value, ensure_ascii=False, separators=(",", ":"), allow_nan=False) + "\n")
+            self.stream.flush()
         except (OSError, UnicodeError, TypeError, ValueError) as exc:
             raise DeliveryError(f"ACE control stream failed: {exc}") from exc
         if terminal:
@@ -373,13 +375,15 @@ def main(argv: Sequence[str] | None = None,
             deferred = DeferredWriter(writer)
             with acquire_file_access(access_manifest, run_id=access_id,
                                      allowed_paths=(model, vendor, request.parent) + ((prepared,) if prepared else ())):
-                code = run_provider(request, job, model, manifest, vendor, deferred,
-                                    lambda: requested["cancelled"], handler_factory,
-                                    access_mode=True, prepared_directory=prepared)
+                with redirect_stdout(sys.stderr):
+                    code = run_provider(request, job, model, manifest, vendor, deferred,
+                                        lambda: requested["cancelled"], handler_factory,
+                                        access_mode=True, prepared_directory=prepared)
             deferred.deliver()
             return code
-        return run_provider(request, job, model, manifest, vendor, writer,
-                            lambda: requested["cancelled"], handler_factory, prepared_directory=prepared)
+        with redirect_stdout(sys.stderr):
+            return run_provider(request, job, model, manifest, vendor, writer,
+                                lambda: requested["cancelled"], handler_factory, prepared_directory=prepared)
     except (ACEContractError, ContractError, AudioAccessError, ValueError, argparse.ArgumentError) as exc:
         try: writer.emit(_error(None, "configuration", str(exc)), terminal=True)
         except DeliveryError: pass

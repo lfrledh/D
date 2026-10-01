@@ -35,11 +35,15 @@ public struct WorkflowImageRecipe: Sendable {
     private static func flux(capability: ImageExecutionCapability, dev: Bool) -> Self {
         Self(ordered: { node, prompt, seed, references in
             let p = node.parameters
+            let rawLoading = p["loadingStrategy"]?.string ?? "staged"
+            guard let loading = ImageLoadingStrategy(rawValue: rawLoading), !dev || loading == .staged else {
+                throw WorkflowIssue("所选图像实现不支持此加载方式。")
+            }
             let value = ImageRequest(prompt: prompt, width: p["width"]?.integer ?? 512,
                 height: p["height"]?.integer ?? 512, steps: p["steps"]?.integer ?? (dev ? 50 : 4),
                 guidanceScale: Float(p["guidance"]?.decimal ?? (dev ? 4 : 1)), seed: seed,
                 executionProfile: dev || references.isEmpty ? capability.profile : ImageExecutionCapability.referenceKlein4B.profile,
-                referenceImages: references.isEmpty ? nil : references)
+                referenceImages: references.isEmpty ? nil : references, loadingStrategy: loading)
             try capability.validate(value)
             return value
         })

@@ -3687,7 +3687,7 @@ extension ProjectStore {
             var seed: String?
             if let request = record.request, case .image(let image) = request.input {
                 input = .image(ImageRequest(prompt: "[withheld]", width: image.width, height: image.height,
-                    steps: image.steps, guidanceScale: image.guidanceScale, seed: image.seed, executionProfile: image.executionProfile))
+                    steps: image.steps, guidanceScale: image.guidanceScale, seed: image.seed, executionProfile: image.executionProfile, loadingStrategy: image.loadingStrategy))
                 seed = String(image.seed)
             } else if let request = record.request, case .text(let text) = request.input {
                 input = .text(TextRequest(prompt: "[withheld]", maxTokens: text.maxTokens,

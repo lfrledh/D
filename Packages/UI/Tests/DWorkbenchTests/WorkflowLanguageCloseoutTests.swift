@@ -228,3 +228,64 @@ private actor CloseoutResponseEngine: InferenceEngine {
         try await store.close()
     }
 }
+
+
+private actor PreviewCloseoutEngine: InferenceEngine {
+    private var continuation: AsyncThrowingStream<InferenceOutput, Error>.Continuation?
+    private var completed: RunOutcome = .cancelled
+    var ready: Bool { continuation != nil }
+    func submit(_ request: InferenceRequest, backendID: String) async throws -> InferenceRun {
+        let pair = AsyncThrowingStream<InferenceOutput, Error>.makeStream()
+        continuation = pair.continuation
+        return .init(id: request.id, events: pair.stream,
+            cancel: { await self.end(.cancelled) }, outcome: { await self.outcome() })
+    }
+    func send(_ text: String) { continuation?.yield(.textDelta(text)) }
+    func end(_ value: RunOutcome) { completed = value; continuation?.finish(); continuation = nil }
+    private func outcome() -> RunOutcome { completed }
+}
+
+@MainActor extension WorkflowLanguageCloseoutTests {
+    @Test func transientPreviewArrivesBeforeCompletionAndNeverPublishesFailedPartial() async throws {
+        let root = URL(fileURLWithPath: try #require(ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"]))
+            .appendingPathComponent("preview-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        for end in ["success", "failure", "cancel"] {
+            let store = try await ProjectStore.create(at: root.appendingPathComponent(end + ".dproject"), name: end)
+            let engine = PreviewCloseoutEngine()
+            let session = WorkbenchSession(engine: engine, backendID: "fixture", status: { .init(activeRunID: nil, phase: nil, queuedRunIDs: []) }, shutdown: {}, cleanup: {}, validateModel: { _ in })
+            let service = WorkflowServices(store: store, session: session) { _, identity in
+                .init(identity: identity, reference: .init(directory: root), backendID: "fixture", operationID: WorkflowModelRoutes.qwen35,
+                    textCapability: .init(maximumPromptTokens: 2048, maximumOutputTokens: 256, profile: TextExecutionCapability.qwen35VLMProfile))
+            }
+            var node = try #require(WorkflowRegistry.standard.operation(WorkflowModelRoutes.qwen35)?.definition.makeNode())
+            node.parameters["modelID"] = .text("text:fixture"); node.parameters["outputMode"] = .text("text")
+            let id = UUID(); var received: [(UUID, String)] = []
+            service.languagePreviewChanged = { received.append(($0, $1)) }
+            try service.beginPlan()
+            let task = Task { try await service.executeCall(.init(node: node, stepID: id, inputs: [:])) }
+            for _ in 0..<500 { if await engine.ready { break }; try await Task.sleep(for: .milliseconds(5)) }
+            guard await engine.ready else { task.cancel(); Issue.record("No submitted run"); continue }
+            await engine.send("你好🌍")
+            for _ in 0..<500 { if received.last?.1 == "你好🌍" { break }; try await Task.sleep(for: .milliseconds(5)) }
+            #expect(received.last?.0 == id && received.last?.1 == "你好🌍")
+            #expect((try await store.workflowState().archive?.assets ?? []).isEmpty)
+            switch end {
+            case "success": await engine.end(.completed(.init(textResponse: .init(rawText: "你好🌍", finalText: "你好🌍", finishReason: .stop))))
+            case "failure": await engine.end(.failed(.backendFailed("controlled failure")))
+            default: await service.cancel()
+            }
+            let result = await task.result
+            if end == "success" {
+                if case .failure(let error) = result { Issue.record("Unexpected failure: \(error)") }
+                #expect((try await store.workflowState().archive?.assets ?? []).count == 1)
+            } else {
+                if case .success = result { Issue.record("Partial must not succeed") }
+                #expect((try await store.workflowState().archive?.assets ?? []).isEmpty)
+            }
+            #expect(received.last?.0 == id && received.last?.1 == "")
+            try await store.close()
+        }
+    }
+}

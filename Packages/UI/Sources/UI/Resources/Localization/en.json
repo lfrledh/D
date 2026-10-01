@@ -922,6 +922,13 @@
     "workflow.operation.d.video.minimax-h3-fl2va-bf16-full-v1.output.output": "Video with audio",
     "workflow.operation.d.video.minimax-h3-fl2va-bf16-full-v1.title": "MiniMax H3 Base FL2VA · BF16",
     "workflow.operation.d.model.qwen35-9b.field.memoryBudgetGiB": "Memory budget in GiB (0 uses runtime policy)",
-    "workflow.operation.d.model.qwen38-27b.field.memoryBudgetGiB": "Memory budget in GiB (0 uses runtime policy)"
+    "workflow.operation.d.model.qwen38-27b.field.memoryBudgetGiB": "Memory budget in GiB (0 uses runtime policy)",
+    "generation.preview.pending": "Generating · temporary preview",
+    "workflow.operation.d.image.generate.field.loadingStrategy": "Loading strategy (precision unchanged)",
+    "workflow.operation.d.image.generate.field.memoryBudgetGiB": "Memory budget in GiB (0 uses runtime policy)",
+    "workflow.operation.d.image.flux2-dev.field.loadingStrategy": "Loading strategy (precision unchanged)",
+    "workflow.operation.d.image.flux2-dev.field.memoryBudgetGiB": "Memory budget in GiB (0 uses runtime policy)",
+    "workflow.operation.d.music.ace-step-1.5-xl-sft.field.loadingStrategy": "Loading strategy (precision unchanged)",
+    "workflow.operation.d.music.ace-step-1.5-xl-sft.field.memoryBudgetGiB": "Memory budget in GiB (0 uses runtime policy)"
   }
 }

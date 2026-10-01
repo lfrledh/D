@@ -250,6 +250,12 @@ public struct WorkflowCanvasView: View {
                         .padding(12)
                     }
                 Divider()
+                if controller.isRunning && !controller.visibleStreamingText.isEmpty {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(workflowText(languageStore, "generation.preview.pending", fallback: "正在生成 · 临时预览")).font(.caption).foregroundStyle(.secondary)
+                        ScrollView { Text(controller.visibleStreamingText).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading) }.frame(maxHeight: 140)
+                    }.padding(10).accessibilityIdentifier("canvas-streaming-text")
+                }
                 statusStrip
             }.frame(minWidth: WorkflowCanvasLayoutPolicy.canvasMinimumWidth, maxWidth: .infinity)
             Divider().opacity(showInspector ? 1 : 0)

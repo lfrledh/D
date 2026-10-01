@@ -237,6 +237,12 @@ def preserve_mlx_random():
         mx.random.state[:] = saved
 
 
+def report_layer_progress(completed: int, total: int) -> bool:
+    """Bound protocol volume independently of requested steps; no compute is skipped."""
+    stride = max(1, (total + 1023) // 1024)
+    return completed == 1 or completed == total or completed % stride == 0
+
+
 def make_decoder(config: Any, prepared: PreparedDecoder,
                  progress: Callable[[int, int], None], before_first_layer: Callable[[], None],
                  *, total_steps: int = 1):
@@ -283,7 +289,9 @@ def make_decoder(config: Any, prepared: PreparedDecoder,
                 mx.eval(output, *retained)
                 check_cancel(prepared.cancelled)
                 state["calls"] += 1
-                progress(state["calls"], prepared.count * total_steps)
+                total = prepared.count * total_steps
+                if report_layer_progress(state["calls"], total):
+                    progress(state["calls"], total)
                 return output
             finally:
                 del layer, weights

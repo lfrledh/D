@@ -1410,7 +1410,8 @@ public final class ProjectSession {
                     try Task.checkCancellation()
                     frozenInput = ImageRequest(prompt: input.prompt, width: input.width, height: input.height,
                         steps: input.steps, guidanceScale: input.guidanceScale, seed: input.seed,
-                        executionProfile: ImageExecutionCapability.referenceKlein4B.profile, referenceImage: pixels)
+                        executionProfile: ImageExecutionCapability.referenceKlein4B.profile, referenceImage: pixels,
+                        loadingStrategy: input.loadingStrategy)
                 } else { frozenInput = input }
                 let request = InferenceRequest(id: id, model: reference, input: .image(frozenInput))
                 await admit(request, documentID: documentID, savedDraft: savedDraft, store: store, session: session,

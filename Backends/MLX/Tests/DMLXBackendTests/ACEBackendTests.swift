@@ -6,6 +6,33 @@ import Testing
 
 @Suite("ACE pinned inventory and stopped-process audit", .serialized)
 struct ACEBackendTests {
+    @Test("Header estimate rejects overflow and changed files without a trap")
+    func layeredHeaderSafety() throws {
+        let fixture = try Fixture(); defer { fixture.remove() }
+        let url = fixture.artifacts.appendingPathComponent("header.safetensors")
+        func write(_ header: String) throws -> AudioFileSystem.Identity {
+            let raw = Data(header.utf8)
+            var bytes = Data(); bytes.appendLE(UInt64(raw.count)); bytes.append(raw); bytes.append(Data(repeating: 0, count: 8))
+            try bytes.write(to: url)
+            return try AudioFileSystem.regularFile(url, label: "fixture", maximumBytes: nil)
+        }
+        let valid = #"{"a":{"dtype":"F32","shape":[2],"data_offsets":[0,8]}}"#
+        let identity = try write(valid)
+        #expect(try ACEResourceEstimate.tensorElementCounts(at: url, expected: identity) == ["a": 2])
+        for invalid in [
+            #"{"a":{"dtype":"F32","shape":[18446744073709551615,2],"data_offsets":[0,8]}}"#,
+            #"{"a":{"dtype":"F32","shape":[true],"data_offsets":[0,8]}}"#,
+            #"{"a":{"dtype":"F32","shape":[2],"data_offsets":[0,9]}}"#,
+            #"{"a":{"dtype":"F32","shape":[2],"data_offsets":[0,8]},"a":{"dtype":"F32","shape":[2],"data_offsets":[0,8]}}"#
+        ] {
+            let changed = try write(invalid)
+            #expect(throws: (any Error).self) { try ACEResourceEstimate.tensorElementCounts(at: url, expected: changed) }
+        }
+        try Data(repeating: 255, count: 8).write(to: url)
+        let oversized = try AudioFileSystem.regularFile(url, label: "fixture", maximumBytes: nil)
+        #expect(throws: (any Error).self) { try ACEResourceEstimate.tensorElementCounts(at: url, expected: oversized) }
+        #expect(throws: (any Error).self) { try ACEResourceEstimate.tensorElementCounts(at: url, expected: identity) }
+    }
     @Test("Local source patches preserve upstream provenance and match shipped source")
     func offlineSourcePatches() throws {
         let paths = ["acestep/core/generation/handler/init_service_loader.py",

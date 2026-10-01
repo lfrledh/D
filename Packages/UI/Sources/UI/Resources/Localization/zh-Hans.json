@@ -922,6 +922,13 @@
     "workflow.operation.d.video.minimax-h3-fl2va-bf16-full-v1.output.output": "含声音的视频",
     "workflow.operation.d.video.minimax-h3-fl2va-bf16-full-v1.title": "MiniMax H3 Base FL2VA · BF16",
     "workflow.operation.d.model.qwen35-9b.field.memoryBudgetGiB": "显式内存预算 GiB（0使用运行时策略）",
-    "workflow.operation.d.model.qwen38-27b.field.memoryBudgetGiB": "显式内存预算 GiB（0使用运行时策略）"
+    "workflow.operation.d.model.qwen38-27b.field.memoryBudgetGiB": "显式内存预算 GiB（0使用运行时策略）",
+    "generation.preview.pending": "正在生成 · 临时预览",
+    "workflow.operation.d.image.generate.field.loadingStrategy": "加载方式（精度不变）",
+    "workflow.operation.d.image.generate.field.memoryBudgetGiB": "显式内存预算 GiB（0使用运行时策略）",
+    "workflow.operation.d.image.flux2-dev.field.loadingStrategy": "加载方式（精度不变）",
+    "workflow.operation.d.image.flux2-dev.field.memoryBudgetGiB": "显式内存预算 GiB（0使用运行时策略）",
+    "workflow.operation.d.music.ace-step-1.5-xl-sft.field.loadingStrategy": "加载方式（精度不变）",
+    "workflow.operation.d.music.ace-step-1.5-xl-sft.field.memoryBudgetGiB": "显式内存预算 GiB（0使用运行时策略）"
   }
 }

@@ -41,6 +41,12 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
     public var mediaPreviewReference: WorkflowAssetReference?
     /// The existing project recording owner may temporarily reserve interactive work.
     @ObservationIgnored public var externalOperationBusy: () -> Bool = { false }
+    public private(set) var streamingText = ""
+    public private(set) var streamingStepID: UUID?
+    public var visibleStreamingText: String {
+        guard let id = activeRunID, runs.first(where: { $0.id == id })?.graph.id == selectedGraphID else { return "" }
+        return streamingText
+    }
     public private(set) var progressMessage = "选择一个可编辑样例，或添加节点开始。"
     public var textModelDescription = "尚未选择文字模型"
     public var imageModelDescription = "尚未选择图像模型"
@@ -68,6 +74,11 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
     public init(services: WorkflowServices, registry: WorkflowRegistry = .standard) {
         self.services = services; self.registry = registry
         services.progress = { [weak self] in self?.progressMessage = $0 }
+        services.languagePreviewChanged = { [weak self] stepID, text in
+            guard let self, self.isRunning, self.activeRunID != nil, !self.closed, !self.closing else { return }
+            self.streamingStepID = text.isEmpty ? nil : stepID
+            self.streamingText = text
+        }
         services.candidatesChanged = { [weak self] stepID, items in
             guard let self, let executor = self.activeExecutor else { throw WorkflowIssue("图像进度没有当前执行所有者。") }
             do { try await executor.updateCandidates(stepID: stepID, candidates: items) }
@@ -587,7 +598,7 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
         guard !closed, !closing, !isRunning, readOnlyReason == nil, let original = graph else { return }
         guard !hasPendingSaves else { errorMessage = "请先恢复保存，避免重复计算。"; return }
         isRunning = true; cancelled = false; errorMessage = nil
-        defer { isRunning = false; activeRunID = nil; activeExecutor = nil }
+        defer { isRunning = false; activeRunID = nil; activeExecutor = nil; streamingText = ""; streamingStepID = nil }
         var failure: (any Error)?
         do {
             let frozen = services.freezeModels(in: original)
@@ -667,7 +678,7 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
             errorMessage = "运行范围或原图已改变，或当前有未完成操作；请重新确认。"; return
         }
         isRunning = true; cancelled = false; errorMessage = nil
-        defer { isRunning = false; activeRunID = nil; activeExecutor = nil }
+        defer { isRunning = false; activeRunID = nil; activeExecutor = nil; streamingText = ""; streamingStepID = nil }
         var failure: (any Error)?
         do {
             let frozen = services.freezeModels(in: original), defaults = services.capturedModelDefaults()
@@ -703,7 +714,7 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
     public func rerunCall(_ reference: WorkflowCallReference) async {
         guard !externalOperationBusy(), !closed, !closing, !isRunning, readOnlyReason == nil, !hasPendingSaves else { return }
         isRunning = true; cancelled = false; errorMessage = nil
-        defer { isRunning = false; activeRunID = nil; activeExecutor = nil }
+        defer { isRunning = false; activeRunID = nil; activeExecutor = nil; streamingText = ""; streamingStepID = nil }
         var failure: (any Error)?
         do {
             guard let old = runs.first(where: { $0.id == reference.address.runID }) else { throw WorkflowIssue("原调用记录不存在。") }
@@ -959,7 +970,7 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
         }
         guard runs[i].status != .rejected && runs[i].status != .completed else { return }
         isRunning = true; cancelled = false; errorMessage = nil
-        defer { isRunning = false; activeRunID = nil; activeExecutor = nil }
+        defer { isRunning = false; activeRunID = nil; activeExecutor = nil; streamingText = ""; streamingStepID = nil }
         var failure: (any Error)?
         do {
             try WorkflowArchiveInspection.validateScopeHistory(runs, tools: tools, registry: registry)
@@ -981,7 +992,7 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
         guard !hasPendingSaves else { errorMessage = "先恢复保存并继续原运行，避免重复生成。"; return }
         guard !isStale(old), old.outputs["output"]?.candidates.contains(where: { $0.asset == nil }) == true else { return }
         isRunning = true; cancelled = false; errorMessage = nil
-        defer { isRunning = false; activeRunID = nil; activeExecutor = nil }
+        defer { isRunning = false; activeRunID = nil; activeExecutor = nil; streamingText = ""; streamingStepID = nil }
         var failure: (any Error)?
         do {
             let frozen = runs[ri].graph

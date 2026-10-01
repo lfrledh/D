@@ -23,6 +23,7 @@ struct WorkflowSaveFailure: LocalizedError {
     public var streamedTextCharacterCount: Int { textSession?.partialText.count ?? languagePreview.count }
     public private(set) var cancelled = false
     public var progress: @MainActor (String) -> Void = { _ in }
+    public var languagePreviewChanged: @MainActor (UUID, String) -> Void = { _, _ in }
     public var candidatesChanged: @MainActor (UUID, [WorkflowCandidate]) async throws -> Void = { _, _ in }
     public var destination: URL?
     private struct Publication {
@@ -192,6 +193,7 @@ struct WorkflowSaveFailure: LocalizedError {
                     let limit = binding.textCapability?.profile == TextExecutionCapability.qwen35VLMProfile ? WorkflowTextResponseFile.maximumBytes : 1_048_576
                     guard text.utf8.count + delta.utf8.count <= limit else { throw WorkflowIssue("文字输出超过应用接收预算。") }
                     text += delta; languagePreview = text
+                    languagePreviewChanged(request.id, text)
                 case .progress(let completed, let total): progress("\(completed)/\(total)")
                 default: break
                 }
@@ -265,6 +267,8 @@ struct WorkflowSaveFailure: LocalizedError {
         let request = InferenceRequest(id: context.stepID, model: binding.reference, input: .text(input),
             memoryBudgetBytes: try WorkflowLanguageMessageForm.memoryBudgetBytes(p))
         languagePreview = ""
+        languagePreviewChanged(context.stepID, "")
+        defer { languagePreviewChanged(context.stepID, "") }
         let (result, text) = try await infer(request, binding: binding)
         let raw = result.textResponse?.rawText ?? text
         guard !raw.isEmpty else { throw WorkflowIssue("语言模型未交付文字。") }
@@ -472,7 +476,8 @@ struct WorkflowSaveFailure: LocalizedError {
                     let inputRefs = try await store.prepareWorkflowImageReferences(references, runID: attempt)
                     guard let recipe = binding.imageRecipe else { throw WorkflowIssue("此图像实现缺少执行配方。") }
                     let input = try recipe.request(node: context.node, prompt: prompt, seed: UInt64(old.seed)!, references: inputRefs)
-                    let request = InferenceRequest(id: attempt, model: binding.reference, input: .image(input))
+                    let request = InferenceRequest(id: attempt, model: binding.reference, input: .image(input),
+                        memoryBudgetBytes: try WorkflowLanguageMessageForm.memoryBudgetBytes(p))
                     try checkCancellation()
                     let run = try await session.engine.submit(request, backendID: binding.backendID)
                     activeRun = run
