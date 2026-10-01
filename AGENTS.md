@@ -8,6 +8,7 @@
 2. 读 [当前行动](docs/CURRENT_ACTIONS.zh-CN.md)：源、应用、候选、当前授权、保护与下一步。只信聊天摘要或旧“下一阶段”会走错基线。
 3. 产品决定读 [原则](docs/PRODUCT_PRINCIPLES.zh-CN.md) 和 [目标](docs/PRODUCT_GOALS.zh-CN.md) 相关行；定位代码/测试读 [实际导航](docs/REPOSITORY_MAP.zh-CN.md)。执行任务再读该任务规格及相关接口，不默认全读历史。
 4. 派工、权限事件、预算、集成和恢复按 [协作规程](docs/MULTI_AGENT_WORKFLOW.zh-CN.md)，规格用 [单一模板](docs/TASK_SPEC_TEMPLATE.md)。本人操作读 [集中待办](docs/FAILURE_AND_PERMISSION_AUDIT.zh-CN.md)。
+5. 验证按改动影响选择最小互补证据，复用未受影响的结果；唯一常驻正文为[测试政策](docs/TESTING_POLICY.zh-CN.md)。不以减少重复削弱数值、数据、权限与取消保护。
 
 ## 当前方向与实施边界
 

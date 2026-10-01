@@ -277,3 +277,12 @@ All restricted worker routes have exact worktree/output/tmp write roots, workspa
 来源/复核：Lead执行原生验收与记录，`h3_primary_research`仅只读核对固定资源/入口和本次四份结果，不是另一个模型执行了GUI/真实生成。其指出Quick结构记录较窄及旧progress两处滞后，Lead已修正`realModelRunThisHumanSession`与SSD原始枚举并保留分层结论。无新Worker实现/修复轮次，不重算历史费用；本次完整Lead消耗与订阅扣费unknown。
 
 恢复与下一步：H31本人访问和本次试听无需再办；H22先工程修补再必要真人复验。继续既定下载/Dev与LTX原始能力低内存接线、模型即时投影与原始目录兼容问题及剩余H32，不开新家族、不据资源慢放弃，也不以改profile名结案。最终文档SHA和远端/进程快照写`H/final-receipt.json`；不合入保护源/main、不发布，原件/候选/旧失败证据保留。
+
+
+### R4 接续规格（2026-10-02，执行中）
+
+同一任务，r4仅交接标识；起点3a11abaed601fad73d9050719cf0235dca560395，源01758b81527dc27eb4563bf1b66fd1ceab6647ee与未暂存个人scheme不动。按用户本次附件完成既定缺口，不增加家族/架构阶段，不合入保护源/main、不发布。R4=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261001T162316Z-r4`；保护及下载复核见lead/protection-before.json、download-recovery.json。原Dev/LTX下载结果确实完整，未重启下载。
+
+Lead协调共享ProjectSession/双入口状态、H22真实控件诊断与最终包；可独立的Dev完整原始SSD、LTX2.5塔/连接器分阶段、Wan外部目录清单投影使用受限独立CLI，精确允许文件及执行基线随本run冻结job/prompt，先预检后授权。新切片普通初交+两轮修复、最多一次有界Lead接管；旧Klein/Qwen/Wan转换实现预算及失败不刷新，修补新增缺口不重做旧实验。禁止Worker网络、GPU、GUI、重构建、源码外写入、共享Git写入；必要语法/小CPU检查使用任务tmp，Lead串行验收与显式提交。
+
+风险与检查：Dev/LTX驻留/原始混合dtype → 真实小块数值对照、完整代表文生/参考及取消释放 → 沿用未变模型证据，不拿块对照替代整模型；模型投影/导入 → 状态/代次/原件反例及普通App路径 → 不重复转换验证断言；H22 → 实际firstResponder/client/firstRect与指针覆盖取证、最小补丁及真实组字 → 禁止全局替换、计数冒充坐标。新唯一测试正文TESTING_POLICY，AGENTS/协作入口短引用。最终应交同版本普通App、唯一推荐启动器与同树Xcode Run；未验/失败不改记通过。
