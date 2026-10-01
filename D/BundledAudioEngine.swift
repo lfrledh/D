@@ -66,7 +66,9 @@ struct BundledAudioEngine: Sendable {
                 ["python/bin/python3", script, "provider/d_audio_access.py", model,
                  "native/h3", "native/h3_shaders.metal", "native/ffmpeg", "native/ffprobe",
                  "provider/Resources/h3-fl2va-bf16.json",
-                 "provider/Resources/ltx23-bf16.json", "provider/Resources/ltx23-q8-test.json"]
+                 "provider/Resources/ltx23-bf16.json", "provider/Resources/ltx23-q8-test.json",
+                 "provider/Resources/ltx25-bf16.json", "model-manifests/ltx25-bf16.json",
+                 "provider/Patches/ltx25-gemma4-streaming.json", "provider/Patches/ltx25-gemma4-streaming.patch"]
             case .pitch:
                 ["python/bin/python3", script, "provider/d_audio_access.py", model,
                  "python/lib/python3.12/site-packages/swift_f0/core.py",

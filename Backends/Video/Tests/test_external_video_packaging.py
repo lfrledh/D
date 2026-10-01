@@ -28,6 +28,7 @@ class ExternalPackagingTests(unittest.TestCase):
         patch = video / "Adapters/Patches/ltx-reject-token-truncation.json"
         patch.parent.mkdir(parents=True)
         patch.write_text(json.dumps({"files": []}))
+        (patch.parent / "ltx25-gemma4-streaming.json").write_text(json.dumps({"files": []}))
         archive = self.root / "fixture.tar.gz"
         with tarfile.open(archive, "w:gz") as bundle:
             for number in range(50):
@@ -62,6 +63,24 @@ class ExternalPackagingTests(unittest.TestCase):
         shadow.parent.mkdir()
         shadow.write_text("raise RuntimeError('shadow')")
         with self.assertRaisesRegex(packaging.core.PackagingError, "file set differs"):
+            packaging.verify_ltx_source(archive, site, video)
+
+    def test_patched_source_must_match_both_pinned_before_and_installed_after(self):
+        archive, site, video = self.sources()
+        original = (site / "ltx_core_mlx/part0.py").read_bytes()
+        replacement = b"VALUE = 51\n"
+        entry = {"path": "packages/ltx-core-mlx/src/ltx_core_mlx/part0.py",
+                 "before_sha256": hashlib.sha256(original).hexdigest(),
+                 "after_sha256": hashlib.sha256(replacement).hexdigest()}
+        record = video / "Adapters/Patches/ltx25-gemma4-streaming.json"
+        record.write_text(json.dumps({"files": [entry]}))
+        with self.assertRaisesRegex(packaging.core.PackagingError, "differs from pinned"):
+            packaging.verify_ltx_source(archive, site, video)
+        (site / "ltx_core_mlx/part0.py").write_bytes(replacement)
+        self.assertEqual(packaging.verify_ltx_source(archive, site, video), 50)
+        entry["before_sha256"] = "0" * 64
+        record.write_text(json.dumps({"files": [entry]}))
+        with self.assertRaisesRegex(packaging.core.PackagingError, "baseline differs"):
             packaging.verify_ltx_source(archive, site, video)
 
     def test_native_executable_path_is_not_python_bin(self):

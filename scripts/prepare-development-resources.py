@@ -86,6 +86,8 @@ ENGINE_CONTRACTS["ExternalVideoEngine.dengine"] = {
         "model-manifests/h3-fl2va-bf16.json", "native/h3", "native/h3_shaders.metal",
         "native/ffmpeg", "native/ffprobe", "provider/Resources/h3-fl2va-bf16.json",
         "provider/Resources/ltx23-bf16.json", "provider/Resources/ltx23-q8-test.json",
+        "provider/Resources/ltx25-bf16.json", "model-manifests/ltx25-bf16.json",
+        "provider/Patches/ltx25-gemma4-streaming.json", "provider/Patches/ltx25-gemma4-streaming.patch",
     ),
 }
 

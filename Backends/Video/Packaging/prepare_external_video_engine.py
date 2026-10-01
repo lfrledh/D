@@ -152,8 +152,14 @@ def verify_relocated_dependencies(staging):
 def verify_ltx_source(archive, site, video):
     if core._sha256(archive) != "99a789280172bfc51c4e4b455e29f55c8b467ac2305131bcf9fe5750a3b03d0e":
         raise core.PackagingError("Pinned LTX source archive differs")
-    patches = json.loads((video / "Adapters/Patches/ltx-reject-token-truncation.json").read_text())
-    expected = {entry["path"].split("/src/", 1)[1]: entry["after_sha256"] for entry in patches["files"]}
+    expected, before = {}, {}
+    for name in ("ltx-reject-token-truncation.json", "ltx25-gemma4-streaming.json"):
+        patches = json.loads((video / "Adapters/Patches" / name).read_text())
+        for entry in patches["files"]:
+            relative = entry["path"].split("/src/", 1)[1]
+            if relative in expected:
+                raise core.PackagingError("Overlapping LTX patches require an explicit ordered migration")
+            expected[relative], before[relative] = entry["after_sha256"], entry["before_sha256"]
     checked = set()
     with tarfile.open(archive, "r:gz") as bundle:
         for member in bundle.getmembers():
@@ -166,7 +172,10 @@ def verify_ltx_source(archive, site, video):
             if any(part in ("..", ".") for part in Path(relative).parts):
                 raise core.PackagingError("Unsafe LTX source archive name")
             source = bundle.extractfile(member)
-            digest = expected.get(relative) or hashlib.sha256(source.read()).hexdigest()
+            original_digest = hashlib.sha256(source.read()).hexdigest()
+            if relative in before and before[relative] != original_digest:
+                raise core.PackagingError(f"LTX patch baseline differs from pinned archive: {relative}")
+            digest = expected.get(relative) or original_digest
             if digest != core._sha256(site / relative):
                 raise core.PackagingError(f"Installed LTX differs from pinned source/patch: {relative}")
             checked.add(relative)
@@ -238,7 +247,8 @@ def prepare(args):
         (staging / "runtime-origin.json").write_text(json.dumps({
             "schemaVersion": 1, "h3Commit": "8974cc055ea9c02fcd14cc27dfda3e1027c05153",
             "ltxCommit": "1724ca673d59f023a8a95efee06e5d36d61c2765",
-            "ltxSourceFilesVerified": ltx_checked, "ltxPatch": "ltx-reject-token-truncation.json",
+            "ltxSourceFilesVerified": ltx_checked,
+            "ltxPatches": ["ltx-reject-token-truncation.json", "ltx25-gemma4-streaming.json"],
             "nativeLibraries": libraries, "weightsBundled": False,
             "distributionReview": "development-only; not a release clearance",
         }, indent=2) + "\n")

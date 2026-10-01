@@ -405,7 +405,8 @@ def _execute(request: dict, *, pack: Path, run: Path, ffmpeg: Path, ffprobe: Pat
     plan_request = {key: value for key, value in request.items() if key in WIRE_FIELDS}
     plan = build_plan(plan_request, engine=sys.executable, model=model, text_encoder=text_encoder, output=output,
                       first_frame=str(frames["first"][0]) if "first" in frames else None)
-    upstream = _confirm_tokenizer_patch(Path(sys.executable))
+    upstream = _confirm_tokenizer_patch(Path(sys.executable),
+        streaming_gemma4=profile == LTX_25 and plan_request["stream_weights"])
     previous = sys.argv
     try:
         _unchanged_frames(frames)
@@ -419,7 +420,9 @@ def _execute(request: dict, *, pack: Path, run: Path, ffmpeg: Path, ffprobe: Pat
             raise ValueError(f"LTX engine failed: {code}")
     finally:
         sys.argv = previous
-    return admission, {"upstream_patch_commit": upstream, "upstream_source_expected": plan["provenance"]["upstream_commit_from_task"]}
+    return admission, {"upstream_patch_commit": upstream,
+        "upstream_source_expected": plan["provenance"]["upstream_commit_from_task"],
+        "weight_loading": plan["provenance"]["weight_loading"]}
 
 
 def run(args) -> int:

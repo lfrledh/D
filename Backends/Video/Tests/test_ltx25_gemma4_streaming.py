@@ -13,6 +13,7 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tempfile
 import tokenize
 import unittest
@@ -98,6 +99,30 @@ class LTX25Gemma4StreamingPatchTests(unittest.TestCase):
         keywords = {kw.arg: ast.unparse(kw.value) for kw in prompt_calls[0].keywords}
         self.assertEqual(keywords["low_ram_streaming"], "self.low_ram_streaming")
 
+    def test_runtime_rejects_old_or_missing_streaming_source(self) -> None:
+        sys.path.insert(0, str(REPO / "Backends/Video/Adapters"))
+        from ltx_job import _confirm_tokenizer_patch
+        with tempfile.TemporaryDirectory(dir=os.environ.get("D_LTX_STREAMING_TMP")) as directory:
+            python = Path(directory) / "python"
+            site = python / "lib/python3.12/site-packages"
+            tokenizer = json.loads((MANIFEST.parent / "ltx-reject-token-truncation.json").read_text())
+            for entry in tokenizer["files"] + self.manifest["files"]:
+                relative = entry["path"].split("/src/", 1)[1]
+                target = site / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(Path(BASELINE) / relative, target)
+            engine = python / "bin/python3"
+            self.assertEqual(_confirm_tokenizer_patch(engine), self.manifest["commit"])
+            with self.assertRaises(ValueError):
+                _confirm_tokenizer_patch(engine, streaming_gemma4=True)
+            for entry in self.manifest["files"]:
+                shutil.copyfile(self.root / entry["path"], site / entry["path"].split("/src/", 1)[1])
+            self.assertEqual(_confirm_tokenizer_patch(engine, streaming_gemma4=True), self.manifest["commit"])
+            first = site / self.manifest["files"][0]["path"].split("/src/", 1)[1]
+            first.write_bytes(first.read_bytes() + b"\nCHANGED=True\n")
+            with self.assertRaises(ValueError):
+                _confirm_tokenizer_patch(engine, streaming_gemma4=True)
+
     def test_streams_configured_layers_with_original_decoder(self) -> None:
         cls = _class(self.source("ltx_core_mlx/text_encoders/gemma/gemma4.py"), "StreamingGemma4TextModel")
         init, forward, close = (_method(cls, name) for name in ("__init__", "__call__", "close"))
@@ -116,7 +141,8 @@ class LTX25Gemma4StreamingPatchTests(unittest.TestCase):
         self.assertLess(body_calls.index("mx.eval"), body_calls.index("hidden_states_list.append"))
         self.assertIn("streamer.close", _calls(close))
         self.assertIn("mx.clear_cache", _calls(close))
-        self.assertNotIn("astype", _calls(forward))
+        self.assertFalse(any(isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+                             and node.func.attr == "astype" for node in ast.walk(forward)))
 
     def test_tower_drains_before_projection_and_failure_closes(self) -> None:
         cls = _class(self.source("ltx_pipelines_mlx/utils/blocks.py"), "PromptEncoder")

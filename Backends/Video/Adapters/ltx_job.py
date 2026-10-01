@@ -36,15 +36,20 @@ def _digest(path):
         return h.hexdigest()
 
 
-def _confirm_tokenizer_patch(engine):
+def _confirm_tokenizer_patch(engine, *, streaming_gemma4=False):
     # This entry targets a prepared CPython 3.12 local runtime. No model imports
     # or site discovery from the caller's current environment.
     root=engine.parent.parent/'lib/python3.12/site-packages'
-    record=json.loads((Path(__file__).parent/'Patches/ltx-reject-token-truncation.json').read_bytes())
-    for row in record['files']:
-        path=root/row['path'].split('/src/',1)[1]
-        if path.is_symlink() or _digest(path)!=row['after_sha256']:
-            raise ValueError('LTX tokenizer patch is missing or changed: '+str(path))
+    names=['ltx-reject-token-truncation.json']
+    if streaming_gemma4: names.append('ltx25-gemma4-streaming.json')
+    for name in names:
+        record=json.loads((Path(__file__).parent/'Patches'/name).read_bytes())
+        if record['commit'] != '1724ca673d59f023a8a95efee06e5d36d61c2765':
+            raise ValueError('LTX source patch revision differs')
+        for row in record['files']:
+            path=root/row['path'].split('/src/',1)[1]
+            if path.is_symlink() or _digest(path)!=row['after_sha256']:
+                raise ValueError('LTX source patch is missing or changed: '+str(path))
     return record['commit']
 
 
