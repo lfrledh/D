@@ -38,7 +38,7 @@ struct KleinLayeredRealModelTests {
             originals[url] = bytes
             references.append(.init(url: url,
                 sha256: SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined(),
-                byteCount: bytes.count, width: 128, height: 128))
+                byteCount: UInt64(bytes.count), width: 128, height: 128))
         }
         do {
             for mode in ["cancel", "generate", "references"] {
