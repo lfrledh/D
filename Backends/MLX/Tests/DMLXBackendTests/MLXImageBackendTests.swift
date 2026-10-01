@@ -152,8 +152,13 @@ struct MLXImageBackendTests {
             loadingStrategy: .ssdLayered)
         let request = InferenceRequest(model: .init(directory: URL(fileURLWithPath: "/nonexistent/klein"),
             revision: LocalImageModelInventory.revision), input: .image(image))
-        #expect(throws: (any Error).self) {
+        do {
             _ = try LocalImageModelInventory.inspect(request)
+            Issue.record("Expected the pinned q8 revision to reject SSD layering")
+        } catch InferenceFailure.invalidRequest(let message) {
+            #expect(message == "SSD layered image loading requires the original pinned Klein BF16 installation.")
+        } catch {
+            Issue.record("Expected the precision admission error, got \(error)")
         }
     }
 }

@@ -274,7 +274,11 @@ public final class SafeTensorsReader {
   private static func expectedByteCount(shape: [Int], dtype: DType, name: String) throws -> Int {
     var elements = 1
     for dimension in shape {
-      guard dimension >= 0 else { throw SafeTensorsReaderError.invalidShape(name: name) }
+      // MLX stores dimensions as Int32, including when a zero dimension makes
+      // the total byte count zero. Reject an unrepresentable shape before load.
+      guard (0...Int(Int32.max)).contains(dimension) else {
+        throw SafeTensorsReaderError.invalidShape(name: name)
+      }
       let (next, overflow) = elements.multipliedReportingOverflow(by: dimension)
       guard !overflow else { throw SafeTensorsReaderError.invalidShape(name: name) }
       elements = next
@@ -285,8 +289,10 @@ public final class SafeTensorsReader {
   }
 
   private static func parseInteger(_ value: Any, error: SafeTensorsReaderError) throws -> Int {
-    // NSNumber.intValue truncates out-of-range values and accepts floating point/bools.
+    // Safetensors shape and offset members are JSON integers. A mathematically
+    // integral JSON float such as 1.0 or 1e0 is still the wrong token type.
     guard let number = value as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID(),
+          ["c", "C", "s", "S", "i", "I", "l", "L", "q", "Q"].contains(String(cString: number.objCType)),
           let result = Int(number.stringValue), String(result) == number.stringValue else {
       throw error
     }
@@ -294,6 +300,7 @@ public final class SafeTensorsReader {
   }
 
   private static func read(_ fd: Int32, offset: Int, count: Int, fileURL: URL) throws -> Data {
+    try Task.checkCancellation()
     var data = Data(count: count)
     var done = 0
     while done < count {

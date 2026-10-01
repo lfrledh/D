@@ -35,12 +35,49 @@ final class SafeTensorsReaderTests: XCTestCase {
         #"{"x":{"dtype":"F32","shape":[1],"data_offsets":[-1,3]}}"#,
         #"{"x":{"dtype":"F32","shape":[1],"data_offsets":[9223372036854775808,9223372036854775812]}}"#,
         #"{"x":{"dtype":"F32","shape":[1],"data_offsets":[0,4]}}"#,
+      ] {
+        // The [1]/[0,4] case intentionally has a truncated payload.
+        let payload = header == #"{"x":{"dtype":"F32","shape":[1],"data_offsets":[0,4]}}"#
+          ? Data() : Data(repeating: 0, count: 4)
+        try writeRaw(url, header: header, data: payload)
+        XCTAssertThrowsError(try SafeTensorsReader(fileURL: url), header)
+      }
+      // Both complete files have a valid four-byte payload. Only the repeated
+      // object member makes them invalid.
+      for header in [
         #"{"x":{"dtype":"F32","shape":[1],"data_offsets":[0,4],"dtype":"I32"}}"#,
         #"{"x":{"dtype":"F32","shape":[1],"data_offsets":[0,4]},"x":{"dtype":"I32","shape":[1],"data_offsets":[0,4]}}"#,
       ] {
-        let payload = header.contains(#""data_offsets":[0,4]}}"#) ? Data() : Data(repeating: 0, count: 4)
-        try writeRaw(url, header: header, data: payload)
-        XCTAssertThrowsError(try SafeTensorsReader(fileURL: url), header)
+        try writeRaw(url, header: header, data: Data(repeating: 0, count: 4))
+        XCTAssertThrowsError(try SafeTensorsReader(fileURL: url), header) { error in
+          guard case SafeTensorsReaderError.malformedHeader = error else {
+            return XCTFail("Expected duplicate-key error, got \(error)")
+          }
+        }
+      }
+      // The safetensors integer contract requires integer JSON tokens, even
+      // when a decimal or exponent happens to represent a whole number.
+      for token in ["1.0", "1e0", "true"] {
+        try writeRaw(url, header: "{\"x\":{\"dtype\":\"F32\",\"shape\":[\(token)],\"data_offsets\":[0,4]}}",
+                     data: Data(repeating: 0, count: 4))
+        XCTAssertThrowsError(try SafeTensorsReader(fileURL: url), token) { error in
+          guard case SafeTensorsReaderError.invalidShape(name: "x") = error else {
+            return XCTFail("Expected invalid shape for \(token), got \(error)")
+          }
+        }
+        try writeRaw(url, header: "{\"x\":{\"dtype\":\"F32\",\"shape\":[1],\"data_offsets\":[0,\(token)]}}",
+                     data: Data(repeating: 0, count: 4))
+        XCTAssertThrowsError(try SafeTensorsReader(fileURL: url), token) { error in
+          guard case SafeTensorsReaderError.invalidOffsets(name: "x") = error else {
+            return XCTFail("Expected invalid offsets for \(token), got \(error)")
+          }
+        }
+      }
+      try writeRaw(url, header: #"{"x":{"dtype":"BF16","shape":[0,2147483648],"data_offsets":[0,0]}}"#)
+      XCTAssertThrowsError(try SafeTensorsReader(fileURL: url)) { error in
+        guard case SafeTensorsReaderError.invalidShape(name: "x") = error else {
+          return XCTFail("Expected unrepresentable MLX dimension error, got \(error)")
+        }
       }
     }
   }
@@ -60,18 +97,19 @@ final class SafeTensorsReaderTests: XCTestCase {
   }
 
   func testCancelledReadDoesNotLoadTensor() async throws {
-    try withTempDir { dir in
-      let url = dir.appendingPathComponent("cancelled.safetensors")
-      try writeRaw(url, header: #"{"x":{"dtype":"I64","shape":[],"data_offsets":[0,8]}}"#,
-                   data: Data(repeating: 0, count: 8))
-      let reader = try SafeTensorsReader(fileURL: url)
-      let task = Task {
-        withUnsafeCurrentTask { $0?.cancel() }
-        return try reader.intScalar(named: "x")
-      }
-      do { _ = try await task.value; XCTFail("Cancelled read succeeded") }
-      catch is CancellationError { }
+    let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: dir) }
+    let url = dir.appendingPathComponent("cancelled.safetensors")
+    try writeRaw(url, header: #"{"x":{"dtype":"I64","shape":[],"data_offsets":[0,8]}}"#,
+                 data: Data(repeating: 0, count: 8))
+    let reader = try SafeTensorsReader(fileURL: url)
+    let task = Task {
+      withUnsafeCurrentTask { $0?.cancel() }
+      return try reader.intScalar(named: "x")
     }
+    do { _ = try await task.value; XCTFail("Cancelled read succeeded") }
+    catch is CancellationError { }
   }
   private func withTempDir(_ body: (URL) throws -> Void) throws {
     let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)

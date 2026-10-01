@@ -198,12 +198,14 @@ public final class Flux2Transformer2DModel: Module {
     imgIds: MLXArray,
     txtIds: MLXArray,
     guidance: MLXArray? = nil,
-    attentionMask: MLXFast.ScaledDotProductAttentionMaskMode = .none
+    attentionMask: MLXFast.ScaledDotProductAttentionMaskMode = .none,
+    evaluationPolicy: Flux2EvaluationPolicy = .deferred
   ) -> MLXArray {
     // This entry point is retained for the resident model, where forward cannot throw.
     precondition(layeredSource == nil, "Use callLayered for a layered transformer.")
     return try! forward(hiddenStates, encoderHiddenStates: encoderHiddenStates, timestep: timestep,
-      imgIds: imgIds, txtIds: txtIds, guidance: guidance, attentionMask: attentionMask, source: nil)
+      imgIds: imgIds, txtIds: txtIds, guidance: guidance, attentionMask: attentionMask,
+      evaluationPolicy: evaluationPolicy, source: nil)
   }
 
   public func callLayered(
@@ -213,13 +215,15 @@ public final class Flux2Transformer2DModel: Module {
   ) throws -> MLXArray {
     guard let layeredSource else { throw Flux2Transformer2DModelError.incompleteLayer("layered source") }
     return try forward(hiddenStates, encoderHiddenStates: encoderHiddenStates, timestep: timestep,
-      imgIds: imgIds, txtIds: txtIds, guidance: guidance, attentionMask: attentionMask, source: layeredSource)
+      imgIds: imgIds, txtIds: txtIds, guidance: guidance, attentionMask: attentionMask,
+      evaluationPolicy: .aggressive, source: layeredSource)
   }
 
   private func forward(
     _ hiddenStates: MLXArray, encoderHiddenStates: MLXArray, timestep: MLXArray,
     imgIds: MLXArray, txtIds: MLXArray, guidance: MLXArray?,
     attentionMask: MLXFast.ScaledDotProductAttentionMaskMode,
+    evaluationPolicy: Flux2EvaluationPolicy,
     source: (snapshot: URL, dtype: DType)?
   ) throws -> MLXArray {
     let numTxtTokens = encoderHiddenStates.dim(1)
@@ -274,7 +278,7 @@ public final class Flux2Transformer2DModel: Module {
       )
       encoder = outputs.encoderHiddenStates
       hidden = outputs.hiddenStates
-      if source != nil { MLX.eval(encoder, hidden) }
+      if evaluationPolicy == .aggressive { MLX.eval(encoder, hidden) }
     }
 
     hidden = MLX.concatenated([encoder, hidden], axis: 1)
@@ -289,7 +293,7 @@ public final class Flux2Transformer2DModel: Module {
         attentionMask: attentionMask
       )
       hidden = outputs.hiddenStates
-      if source != nil { MLX.eval(hidden) }
+      evaluationPolicy.evalIfNeeded(hidden)
     }
 
     let splitStates = split(hidden, indices: [numTxtTokens], axis: 1)
