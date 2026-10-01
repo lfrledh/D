@@ -1035,6 +1035,10 @@ public final class ProjectSession {
         try WorkflowModelBookmarks(settings: settings).rememberInstallation(identity: identity, id: id)
         let choice = WorkflowModelChoice(id: identity, kind: kind, displayName: entry.title)
         explicitModelChoices.removeAll { $0.id == identity }; explicitModelChoices.append(choice)
+        // This exact installation has just passed the real resolver and its lease
+        // was released. Presentation becomes current without a second full scan.
+        modelReadinessGeneration = UUID()
+        explicitModelReadiness[identity] = .available; explicitModelIssues[identity] = nil
         refreshWorkflowModels()
         return choice
     }
@@ -1074,6 +1078,8 @@ public final class ProjectSession {
                     await access.release(lease)
                     let choice = WorkflowModelChoice(id: adapter.identity, kind: kind, displayName: adapter.title)
                     if !explicitModelChoices.contains(where: { $0.id == choice.id }) { explicitModelChoices.append(choice) }
+                    modelReadinessGeneration = UUID()
+                    explicitModelReadiness[choice.id] = .available; explicitModelIssues[choice.id] = nil
                     refreshWorkflowModels()
                     return choice
                 }
@@ -1133,6 +1139,8 @@ public final class ProjectSession {
         }
         let choice = WorkflowModelChoice(id: identity, kind: kind, displayName: displayName)
         if !explicitModelChoices.contains(where: { $0.id == identity }) { explicitModelChoices.append(choice) }
+        modelReadinessGeneration = UUID()
+        explicitModelReadiness[identity] = .available; explicitModelIssues[identity] = nil
         refreshWorkflowModels()
         return choice
     }
@@ -1154,17 +1162,36 @@ public final class ProjectSession {
     }
     public private(set) var explicitModelReadiness: [String: SharedLibraryReadiness] = [:]
     public private(set) var explicitModelIssues: [String: String] = [:]
+    @ObservationIgnored private var modelReadinessGeneration = UUID()
+    /// Installation state can revoke an earlier readiness observation. It cannot
+    /// grant execution: only the real resolver above can validate an installation.
+    public func observeModelAvailability(_ snapshot: ModelLibrarySnapshot) {
+        do {
+            let bookmarks = WorkflowModelBookmarks(settings: settings)
+            for identity in try bookmarks.installationIdentities() {
+                guard let id = try bookmarks.installation(for: identity) else { continue }
+                let record = snapshot.records.first { $0.id == id }
+                guard record?.state != .installed || record?.availability != .available else { continue }
+                modelReadinessGeneration = UUID()
+                explicitModelReadiness[identity] = .unavailable
+                explicitModelIssues[identity] = record?.error ?? "模型安装已不可用或仍需准备，请在模型库检查。"
+            }
+        } catch { workflow?.errorMessage = error.localizedDescription }
+    }
     public func checkExplicitModelReadiness() async {
         guard let session, let capturedStore = store else { return }
+        let generation = UUID(); modelReadinessGeneration = generation
         let choices = explicitModelChoices
         for choice in choices {
+            guard !Task.isCancelled, modelReadinessGeneration == generation else { return }
             do {
                 let binding = try await resolveWorkflowModel(choice.kind, identity: choice.id, session: session)
                 await binding.release()
-                guard store === capturedStore else { return }
+                guard !Task.isCancelled, store === capturedStore, modelReadinessGeneration == generation else { return }
                 explicitModelReadiness[choice.id] = .available; explicitModelIssues[choice.id] = nil
+            } catch is CancellationError { return
             } catch {
-                guard store === capturedStore else { return }
+                guard !Task.isCancelled, store === capturedStore, modelReadinessGeneration == generation else { return }
                 explicitModelReadiness[choice.id] = .unavailable; explicitModelIssues[choice.id] = error.localizedDescription
             }
         }
@@ -1198,8 +1225,8 @@ public final class ProjectSession {
                 let name = videoName ?? ModelNodeCatalog.entries.first { choice.id == choice.kind.rawValue + ":" + $0.revision }?.title
                 return .init(id: choice.id, kind: choice.kind, displayName: name ?? choice.displayName)
             }
-            explicitModelChoices = choices
-            workflow?.modelChoices = choices
+            if explicitModelChoices != choices { explicitModelChoices = choices }
+            if workflow?.modelChoices != choices { workflow?.modelChoices = choices }
         } catch { workflow?.errorMessage = error.localizedDescription }
     }
 

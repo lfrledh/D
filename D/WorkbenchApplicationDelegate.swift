@@ -49,11 +49,88 @@ final class WorkbenchInputGeometry {
                 target.contentView?.layoutSubtreeIfNeeded()
                 guard let responder = target.firstResponder as? NSView,
                       responder.window === target else { return }
+                #if DEBUG
+                WorkbenchInputDiagnostic.record(window: target, reason: "before-invalidate")
+                #endif
                 self.invalidate(responder)
+                #if DEBUG
+                WorkbenchInputDiagnostic.record(window: target, reason: "after-invalidate")
+                #endif
             }
         }
     }
 }
+
+#if DEBUG
+/// Opt-in, task-local diagnostic. Never records text, changes focus or consumes an event.
+/// Queries are labelled so they cannot be mistaken for the input method's own queries.
+@MainActor
+private enum WorkbenchInputDiagnostic {
+    static let enabled = ProcessInfo.processInfo.environment["D_INPUT_GEOMETRY_DIAGNOSTICS"] == "1"
+        && UUID(uuidString: ProcessInfo.processInfo.environment["D_UI_TEST_SESSION"] ?? "") != nil
+    static var monitor: Any?
+    static weak var observedWindow: NSWindow?
+    static var lastCursorSignature: String?
+
+    static func install(window: NSWindow) {
+        guard enabled else { return }
+        observedWindow = window
+        guard monitor == nil else { return }
+        monitor = NSEvent.addLocalMonitorForEvents(matching: [.cursorUpdate, .mouseMoved, .mouseEntered, .mouseExited, .keyDown]) { event in
+            MainActor.assumeIsolated {
+                if let window = observedWindow, event.window === window {
+                    let cursor = String(describing: NSCursor.current)
+                    let signature = "\(event.type.rawValue):\(cursor)"
+                    if signature != lastCursorSignature || event.type == .keyDown {
+                        lastCursorSignature = signature
+                        record(window: window, reason: "event-\(event.type.rawValue)")
+                    }
+                }
+                return event
+            }
+        }
+    }
+
+    static func record(window: NSWindow, reason: String) {
+        guard enabled else { return }
+        func identity(_ object: AnyObject?) -> String {
+            guard let object else { return "nil" }
+            return "\(type(of: object)):\(ObjectIdentifier(object))"
+        }
+        let responder = window.firstResponder as? NSView
+        let context = responder?.inputContext
+        let active = NSTextInputContext.current
+        var row: [String: Any] = ["event": "D_INPUT_GEOMETRY", "reason": reason,
+            "time": ProcessInfo.processInfo.systemUptime, "window": identity(window),
+            "delegate": identity(window.delegate), "frame": NSStringFromRect(window.frame),
+            "responder": identity(responder), "context": identity(context),
+            "activeContext": identity(active), "client": identity(context?.client),
+            "activeClient": identity(active?.client), "cursor": String(describing: NSCursor.current),
+            "pointer": NSStringFromPoint(NSEvent.mouseLocation)]
+        if let view = responder {
+            row["visibleScreenRect"] = NSStringFromRect(window.convertToScreen(view.convert(view.visibleRect, to: nil)))
+        }
+        let point = window.convertPoint(fromScreen: NSEvent.mouseLocation)
+        if let content = window.contentView {
+            row["hitView"] = identity(content.hitTest(content.convert(point, from: nil)))
+        }
+        if let client = context?.client {
+            let marked = client.markedRange(), selected = client.selectedRange()
+            row["markedRange"] = NSStringFromRange(marked); row["selectedRange"] = NSStringFromRange(selected)
+            var actual = NSRange(location: NSNotFound, length: 0)
+            let requested = marked.location == NSNotFound ? selected : marked
+            row["queryOrigin"] = "diagnostic-explicit"
+            row["firstRectScreen"] = NSStringFromRect(client.firstRect(forCharacterRange: requested, actualRange: &actual))
+            row["actualRange"] = NSStringFromRange(actual)
+        }
+        if let data = try? JSONSerialization.data(withJSONObject: row, options: [.sortedKeys]),
+           let line = String(data: data, encoding: .utf8) {
+            // stderr belongs to the launcher. No arbitrary file paths, content or credentials.
+            try? FileHandle.standardError.write(contentsOf: Data((line + "\n").utf8))
+        }
+    }
+}
+#endif
 
 @MainActor
 final class WorkbenchApplicationDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
@@ -93,6 +170,9 @@ final class WorkbenchApplicationDelegate: NSObject, NSApplicationDelegate, NSWin
         self.prepareQuickForTermination = prepareQuickForTermination
         self.cancelTermination = cancelTermination
         window.delegate = self
+        #if DEBUG
+        WorkbenchInputDiagnostic.install(window: window)
+        #endif
     }
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {

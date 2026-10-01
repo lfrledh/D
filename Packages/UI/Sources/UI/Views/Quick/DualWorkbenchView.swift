@@ -35,6 +35,9 @@ public struct DualWorkbenchView: View {
     @State private var issue: String?
     @Environment(\.dLanguageStore) private var language
     private var canvasModel: WorkbenchModel { model.manifest == nil ? quickModel : model }
+    private var installationStates: [String] {
+        library.records.map { "\($0.id):\($0.state.rawValue):\($0.availability.rawValue)" }.sorted()
+    }
     public init(model: WorkbenchModel, quickModel: WorkbenchModel, quick: QuickGenerationController,
                 library: ModelLibraryModel, nodeTags: ModelNodeTagStore, metadata: SharedLibraryStore?, metadataIssue: String? = nil) {
         self.model = model; self.quickModel = quickModel; self.quick = quick; self.library = library; self.nodeTags = nodeTags; self.metadata = metadata; self.metadataIssue = metadataIssue
@@ -116,11 +119,13 @@ public struct DualWorkbenchView: View {
             ModelLibraryView(model: library, selectedModelID: quickModel.projectSession.workflowInstallationID(for: quick.draft?.node.parameters["modelID"]?.string), canSelect: true, onPrepare: { id, parent in
                 // Preparing resources does not navigate or replace a newer draft.
                 _ = try await quickModel.projectSession.prepareWorkflowVideo(id: id, in: parent)
+                await refreshLibrary(checkModels: false)
             }) { id in
                 do {
                     let choice = try await quickModel.projectSession.selectWorkflowInstallation(id: id)
                     guard let operation = WorkflowModelRoutes.operation(for: choice) else { throw WorkflowIssue("此模型没有可用的共享操作。") }
                     quick.select(operationID: operation, modelID: choice.id)
+                    await refreshLibrary(checkModels: false)
                     returnToLibrary = false; library.isPresented = false; navigate(to: .quick)
                 } catch is CancellationError { }
                 catch { issue = error.localizedDescription }
@@ -139,7 +144,12 @@ public struct DualWorkbenchView: View {
             if quick.draft == nil { quick.select(operationID: "d.model.language", modelID: "") }
             await refreshLibrary(checkModels: false)
         }
-        .onChange(of: quick.state.revision) { _, _ in Task { await refreshLibrary(checkModels: false) } }
+        // Draft autosaves do not change installed models or assets. Refresh at
+        // result/publication boundaries, not on every typing pause.
+        .onChange(of: quick.isRunning) { _, running in if !running { Task { await refreshLibrary(checkModels: false) } } }
+        .onChange(of: quick.pendingSaveRunID) { _, _ in Task { await refreshLibrary(checkModels: false) } }
+        .onChange(of: library.isPresented) { _, presented in if !presented { Task { await refreshLibrary(checkModels: false) } } }
+        .onChange(of: installationStates) { _, _ in Task { await refreshLibrary(checkModels: false) } }
         .onChange(of: model.manifest?.revision) { _, _ in Task { await refreshLibrary(checkModels: false) } }
         .sheet(item: $previewAsset, onDismiss: restoreLibraryIfNeeded) { value in
             VStack {
@@ -199,6 +209,10 @@ public struct DualWorkbenchView: View {
     }
     private func refreshLibrary(checkModels: Bool) async {
         quickModel.projectSession.refreshWorkflowModels()
+        if model.projectSession !== quickModel.projectSession { model.projectSession.refreshWorkflowModels() }
+        let installationSnapshot = await library.library.snapshot()
+        quickModel.projectSession.observeModelAvailability(installationSnapshot)
+        if model.projectSession !== quickModel.projectSession { model.projectSession.observeModelAvailability(installationSnapshot) }
         if checkModels { await quickModel.projectSession.checkExplicitModelReadiness() }
         var snapshots = [await quick.store.snapshot()]
         if let store = model.projectSession.currentStore, store !== quick.store { snapshots.append(await store.snapshot()) }
