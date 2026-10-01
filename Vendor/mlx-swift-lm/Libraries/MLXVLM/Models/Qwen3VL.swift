@@ -113,6 +113,7 @@ public struct Qwen3VLProcessor: UserInputProcessor {
         var processedVideo: LMInput.ProcessedVideo?
         if !input.videos.isEmpty {
             var accumulatedFrames: [[MLXArray]] = []
+            var timestamps: [[Double]] = []
 
             for video in input.videos {
                 var resizedSize: CGSize = .zero
@@ -135,6 +136,7 @@ public struct Qwen3VLProcessor: UserInputProcessor {
                     return VideoFrame(frame: finalImage, timeStamp: frame.timeStamp)
                 }
                 accumulatedFrames.append(sequence.frames)
+                timestamps.append(sequence.timestamps.map { $0.seconds })
             }
 
             let videoFrames = try accumulatedFrames.map {
@@ -149,10 +151,11 @@ public struct Qwen3VLProcessor: UserInputProcessor {
             processedVideo = .init(pixels: concatenated, frames: videoFrames.map { $0.1 })
 
             if let frames = processedVideo?.frames {
-                promptTokens = try QwenVL.replacePaddingTokens(
+                promptTokens = try Self.replaceVideoPaddingTokens(
                     in: promptTokens,
                     frames: frames,
-                    paddingToken: "<|video_pad|>",
+                    timestamps: timestamps,
+                    temporalPatchSize: config.temporalPatchSize,
                     mergeSize: config.mergeSize,
                     tokenizer: tokenizer)
             }
@@ -165,6 +168,45 @@ public struct Qwen3VLProcessor: UserInputProcessor {
             text: .init(tokens: promptArray, mask: mask),
             image: processedImage,
             video: processedVideo)
+    }
+
+    // Qwen3-VL/3.5 uses one timestamped language segment per temporal patch.
+    // Keep the vision grid intact; getRopeIndex expands it only for language positions.
+    // Reference: transformers@a005fc82, Qwen3VLProcessor and Qwen3_5Model.get_rope_index.
+    static func replaceVideoPaddingTokens(
+        in tokens: [Int], frames: [THW], timestamps: [[Double]],
+        temporalPatchSize: Int, mergeSize: Int, tokenizer: any Tokenizer
+    ) throws -> [Int] {
+        let placeholder = tokenizer.encode(text: "<|vision_start|><|video_pad|><|vision_end|>")
+        let ranges = tokens.ranges(of: placeholder)
+        guard ranges.count == frames.count, timestamps.count == frames.count,
+              temporalPatchSize > 0, mergeSize > 0 else {
+            throw VLMError.processing("Video placeholders, grids and timestamps do not match")
+        }
+        var result: [Int] = [], cursor = tokens.startIndex
+        for (index, range) in ranges.enumerated() {
+            let grid = frames[index], times = timestamps[index]
+            guard !times.isEmpty, times.allSatisfy({ $0.isFinite && $0 >= 0 }),
+                  zip(times, times.dropFirst()).allSatisfy({ $0 <= $1 }),
+                  grid.t == (times.count + temporalPatchSize - 1) / temporalPatchSize,
+                  grid.h > 0, grid.w > 0, grid.h % mergeSize == 0, grid.w % mergeSize == 0 else {
+                throw VLMError.processing("Invalid video temporal grid or timestamps")
+            }
+            var replacement = ""
+            let padding = String(repeating: "<|video_pad|>", count: grid.h * grid.w / (mergeSize * mergeSize))
+            for temporal in 0..<grid.t {
+                let first = temporal * temporalPatchSize
+                let last = min(first + temporalPatchSize - 1, times.count - 1)
+                let time = (times[first] + times[last]) / 2
+                replacement += String(format: "<%.1f seconds>", locale: Locale(identifier: "en_US_POSIX"), time)
+                replacement += "<|vision_start|>" + padding + "<|vision_end|>"
+            }
+            result.append(contentsOf: tokens[cursor..<range.lowerBound])
+            result.append(contentsOf: tokenizer.encode(text: replacement))
+            cursor = range.upperBound
+        }
+        result.append(contentsOf: tokens[cursor...])
+        return result
     }
 }
 
@@ -1395,6 +1437,12 @@ extension Qwen3VLLanguage {
 
         let (batchSize, seqLength) = (inputIds.dim(0), inputIds.dim(1))
 
+        // Timestamp text separates temporal patches in the language sequence;
+        // the vision encoder still consumes each original full video grid.
+        let languageVideoGrids = videoGridTHW?.flatMap { grid in
+            Array(repeating: THW(1, grid.h, grid.w), count: grid.t)
+        }
+
         var positionIds = MLXArray(0 ..< seqLength).asType(.int32)
         positionIds = broadcast(positionIds[.newAxis, 0...], to: [batchSize, seqLength])
 
@@ -1470,7 +1518,7 @@ extension Qwen3VLLanguage {
                     ed = edImage
                 } else {
                     // Process video
-                    guard let grid = videoGridTHW, videoIndex < grid.count else { break }
+                    guard let grid = languageVideoGrids, videoIndex < grid.count else { break }
                     (t, h, w) = grid[videoIndex].values
                     videoIndex += 1
                     remainVideos -= 1
