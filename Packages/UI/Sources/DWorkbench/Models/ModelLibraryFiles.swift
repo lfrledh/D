@@ -298,6 +298,19 @@ final class ModelDirectory: Sendable {
         guard try source.requiredTree(paths: Set(files.map(\.path))) == expected else {
             throw ModelLibraryError.integrity("复制期间原始模型必要文件已改变。")
         }
+        // File fsync does not persist the directory entries naming those files.
+        // Flush known children before their parents while this is still a private
+        // stage, so an error cannot publish an installed index entry.
+        let copied = try requiredTree(paths: Set(files.map(\.path)))
+        for path in copied.directories.keys.sorted(by: {
+            let left = $0.split(separator: "/").count, right = $1.split(separator: "/").count
+            return left == right ? $0 < $1 : left > right
+        }) {
+            let directory = try openDirectory(path)
+            defer { Darwin.close(directory) }
+            guard fsync(directory) == 0 else { throw Self.failure("同步复制模型子目录") }
+        }
+        guard fsync(descriptor) == 0 else { throw Self.failure("同步复制模型内容目录") }
     }
 
     func verify(_ files: [ModelFile]) throws -> [String: ModelFileIdentity] {
