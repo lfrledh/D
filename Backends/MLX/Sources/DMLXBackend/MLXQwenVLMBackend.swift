@@ -54,8 +54,8 @@ public actor MLXQwenVLMBackend: InferenceBackend {
             profile: TextExecutionCapability.qwen35VLMProfile)
     }
 
-    public nonisolated static func validateModel(at directory: URL) throws -> QwenVLMModelInventory {
-        try QwenVLMModelInventory.validateModel(at: directory)
+    public nonisolated static func validateModel(at directory: URL, revision: String? = nil) throws -> QwenVLMModelInventory {
+        try QwenVLMModelInventory.validateModel(at: directory, revision: revision)
     }
 
     public func estimate(_ request: InferenceRequest) async throws -> ResourceEstimate {

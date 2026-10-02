@@ -26,10 +26,9 @@ struct LocalModelFileSet: Sendable {
     }
 
     static func resolve(_ revision: String?) throws -> Self? {
-        guard let revision else { return nil } // Explicit legacy directory behavior.
-        guard let files = catalog[revision] else {
-            throw InferenceFailure.invalidRequest("Unsupported fixed model revision.")
-        }
+        // Only catalog revisions select a frozen file set. Other revision labels
+        // retain the existing metadata and directory validation path.
+        guard let revision, let files = catalog[revision] else { return nil }
         return Self(revision: revision, files: files)
     }
 

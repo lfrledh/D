@@ -45,8 +45,8 @@ public struct QwenVLMModelInventory: Sendable {
         return inventory
     }
 
-    public static func validateModel(at location: URL) throws -> Self {
-        try validateModel(at: location, fileSet: nil)
+    public static func validateModel(at location: URL, revision: String? = nil) throws -> Self {
+        try validateModel(at: location, fileSet: LocalModelFileSet.resolve(revision))
     }
 
     static func validateModel(at location: URL, fileSet: LocalModelFileSet?) throws -> Self {

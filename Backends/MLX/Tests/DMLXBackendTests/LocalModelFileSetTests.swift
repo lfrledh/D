@@ -23,7 +23,7 @@ struct LocalModelFileSetTests {
             #expect(try LocalModelFileSet.resolve(revision)?.files == expected)
         }
         #expect(try LocalModelFileSet.resolve(nil)?.revision == nil)
-        #expect(throws: (any Error).self) { _ = try LocalModelFileSet.resolve("unknown") }
+        #expect(try LocalModelFileSet.resolve("unknown")?.revision == nil)
     }
 
     @Test func independentSelectionsIgnoreExtrasAndRejectMissingOrChangedAdmittedFiles() throws {
@@ -80,5 +80,139 @@ struct LocalModelFileSetTests {
         #expect(throws: (any Error).self) {
             _ = try decodeAdmittedGenerationConfig(Data("{\"eos_token_id\":\"broken\"}".utf8))
         }
+    }
+
+    @Test func fixedTokenizerIgnoresUnselectedBrokenSidecars() async throws {
+        let directory = try tokenizerFixture()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try Data([0xff]).write(to: directory.appendingPathComponent("chat_template.jinja"))
+        try Data("not json".utf8).write(to: directory.appendingPathComponent("chat_template.json"))
+        let tokenizer = try await LocalTokenizerLoader(fileSet: tokenizerFiles(in: directory, template: nil)).load(from: directory)
+        let rendered = try tokenizer.applyChatTemplate(messages: [["role": "user", "content": "Hello"]],
+                                                       tools: nil, additionalContext: ["add_generation_prompt": true])
+        #expect(tokenizer.decode(tokenIds: rendered, skipSpecialTokens: false).contains("Hello"))
+    }
+
+    @Test func declaredTemplateOverridesEmbeddedTemplate() async throws {
+        let directory = try tokenizerFixture(embeddedTemplate: "{{ 'embedded' }}")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let selected = "{{ 'selected' }}"
+        try Data(selected.utf8).write(to: directory.appendingPathComponent("chat_template.jinja"))
+        let tokenizer = try await LocalTokenizerLoader(fileSet: tokenizerFiles(in: directory, template: selected)).load(from: directory)
+        let rendered = try tokenizer.applyChatTemplate(messages: [["role": "user", "content": "Hello"]],
+                                                       tools: nil, additionalContext: nil)
+        let output = tokenizer.decode(tokenIds: rendered, skipSpecialTokens: false)
+        #expect(output.contains("selected"))
+        #expect(!output.contains("embedded"))
+    }
+
+    @Test("Selected template damage fails at load or application", arguments: ["missing", "badUTF8", "syntax", "json"])
+    func selectedTemplateDamage(kind: String) async throws {
+        let directory = try tokenizerFixture()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let name = kind == "json" ? "chat_template.json" : "chat_template.jinja"
+        let content: Data
+        switch kind {
+        case "badUTF8": content = Data([0xff, 0xfe])
+        case "syntax": content = Data("{% if %}".utf8)
+        case "json": content = Data("{\"chat_template\": 12}".utf8)
+        default: content = Data("{{ 'selected' }}".utf8)
+        }
+        if kind != "missing" { try content.write(to: directory.appendingPathComponent(name)) }
+        let files = LocalModelFileSet(revision: "selected-fixture", files: [
+            "tokenizer.json": try fileSize(directory, "tokenizer.json"),
+            "tokenizer_config.json": try fileSize(directory, "tokenizer_config.json"),
+            name: UInt64(content.count),
+        ])
+        do {
+            let tokenizer = try await LocalTokenizerLoader(fileSet: files).load(from: directory)
+            _ = try tokenizer.applyChatTemplate(messages: [["role": "user", "content": "Hello"]],
+                                                tools: nil, additionalContext: nil)
+            Issue.record("Damaged selected \(name) unexpectedly rendered")
+        } catch { /* Loading and template application are both valid rejection points. */ }
+    }
+
+    @Test func alternatingFixedLoadersKeepTheirOwnTemplate() async throws {
+        let first = try tokenizerFixture()
+        let second = try tokenizerFixture()
+        defer {
+            try? FileManager.default.removeItem(at: first)
+            try? FileManager.default.removeItem(at: second)
+        }
+        let a = "{{ 'first' }}", b = "{{ 'second' }}"
+        try Data(a.utf8).write(to: first.appendingPathComponent("chat_template.jinja"))
+        try Data(b.utf8).write(to: second.appendingPathComponent("chat_template.jinja"))
+        let loaderA = LocalTokenizerLoader(fileSet: try tokenizerFiles(in: first, template: a))
+        let loaderB = LocalTokenizerLoader(fileSet: try tokenizerFiles(in: second, template: b))
+        for expected in ["first", "second", "first", "second"] {
+            let tokenizer = try await (expected == "first" ? loaderA : loaderB).load(
+                from: expected == "first" ? first : second)
+            let ids = try tokenizer.applyChatTemplate(messages: [["role": "user", "content": "Hello"]],
+                                                      tools: nil, additionalContext: nil)
+            let output = tokenizer.decode(tokenIds: ids, skipSpecialTokens: false)
+            #expect(output.contains(expected))
+            #expect(!output.contains(expected == "first" ? "second" : "first"))
+        }
+    }
+
+    @Test func cleanFixedAndLegacyTokenizersRenderTheSameToolsAndContext() async throws {
+        let directory = try tokenizerFixture()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let source = try sourceTemplate()
+        try Data(source.utf8).write(to: directory.appendingPathComponent("chat_template.jinja"))
+        let fixed = try await LocalTokenizerLoader(fileSet: tokenizerFiles(in: directory, template: source)).load(from: directory)
+        let legacy = try await LocalTokenizerLoader().load(from: directory)
+        let messages: [[String: any Sendable]] = [["role": "user", "content": "Hello"]]
+        let tools: [[String: any Sendable]] = [["name": "lookup"]]
+        let context: [String: any Sendable] = ["add_generation_prompt": true, "enable_thinking": false]
+        let fixedIDs = try fixed.applyChatTemplate(messages: messages, tools: tools, additionalContext: context)
+        let legacyIDs = try legacy.applyChatTemplate(messages: messages, tools: tools, additionalContext: context)
+        #expect(fixedIDs == legacyIDs)
+        #expect(fixed.decode(tokenIds: fixedIDs, skipSpecialTokens: false)
+                == legacy.decode(tokenIds: legacyIDs, skipSpecialTokens: false))
+        let sample = "Hello, tokenizer!"
+        #expect(fixed.encode(text: sample, addSpecialTokens: false)
+                == legacy.encode(text: sample, addSpecialTokens: false))
+        #expect(fixed.decode(tokenIds: fixed.encode(text: sample, addSpecialTokens: false), skipSpecialTokens: false)
+                == legacy.decode(tokenIds: legacy.encode(text: sample, addSpecialTokens: false), skipSpecialTokens: false))
+    }
+
+    private func tokenizerFixture(embeddedTemplate: String? = nil) throws -> URL {
+        let base = URL(fileURLWithPath: try #require(ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"]),
+                       isDirectory: true).resolvingSymlinksInPath()
+        let directory = base.appendingPathComponent("local-tokenizer-" + UUID().uuidString)
+        let source = sourceTokenizerDirectory()
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
+        for name in ["tokenizer.json", "tokenizer_config.json"] {
+            try FileManager.default.copyItem(at: source.appendingPathComponent(name),
+                                             to: directory.appendingPathComponent(name))
+        }
+        var config = try #require(JSONSerialization.jsonObject(with: Data(contentsOf:
+            directory.appendingPathComponent("tokenizer_config.json"))) as? [String: Any])
+        config["chat_template"] = try embeddedTemplate ?? sourceTemplate()
+        try JSONSerialization.data(withJSONObject: config).write(to: directory.appendingPathComponent("tokenizer_config.json"))
+        return directory
+    }
+
+    private func sourceTokenizerDirectory() -> URL {
+        let source = URL(fileURLWithPath: #filePath)
+        let root = (0..<5).reduce(source) { url, _ in url.deletingLastPathComponent() }
+        return root.appendingPathComponent("Vendor/flux2-swift/fixtures/flux2_klein4b/tokenizer")
+    }
+
+    private func sourceTemplate() throws -> String {
+        let data = try Data(contentsOf: sourceTokenizerDirectory().appendingPathComponent("chat_template.jinja"))
+        return try #require(String(data: data, encoding: .utf8))
+    }
+
+    private func fileSize(_ directory: URL, _ name: String) throws -> UInt64 {
+        UInt64(try Data(contentsOf: directory.appendingPathComponent(name)).count)
+    }
+
+    private func tokenizerFiles(in directory: URL, template: String?) throws -> LocalModelFileSet {
+        var files = ["tokenizer.json": try fileSize(directory, "tokenizer.json"),
+                     "tokenizer_config.json": try fileSize(directory, "tokenizer_config.json")]
+        if let template { files["chat_template.jinja"] = UInt64(template.utf8.count) }
+        return LocalModelFileSet(revision: "fixture", files: files)
     }
 }
