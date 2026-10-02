@@ -7,6 +7,29 @@ import Testing
 @Suite @MainActor
 struct WorkflowCanvasDragTests {
     @Test
+    func cardAndBlankAssetDropsKeepInstanceIdentityAndRejectAmbiguousLegacyPayload() throws {
+        let project = UUID(), instance = UUID(), otherInstance = UUID(), asset = UUID()
+        let explicit = try WorkflowCanvasTransfer.assetInstance(projectID: project,
+            instanceID: instance, assetID: asset).validated()
+        let card = try #require(WorkflowCanvasAssetIdentity.payload(explicit))
+        let blank = try #require(WorkflowCanvasAssetIdentity.payload(
+            WorkflowCanvasTransfer.decode(explicit.encoded())))
+        #expect(card.project == project && card.instance == instance && card.asset == asset)
+        #expect(blank.project == card.project && blank.instance == card.instance && blank.asset == card.asset)
+        #expect(WorkflowCanvasAssetIdentity.acceptsOwnProject(projectID: card.project,
+            instanceID: card.instance, assetID: card.asset, currentProjectID: project,
+            currentInstanceID: instance, acceptsLegacyAsset: nil))
+        #expect(!WorkflowCanvasAssetIdentity.acceptsOwnProject(projectID: card.project,
+            instanceID: card.instance, assetID: card.asset, currentProjectID: project,
+            currentInstanceID: otherInstance, acceptsLegacyAsset: nil))
+        let legacy = try #require(WorkflowCanvasAssetIdentity.payload(
+            .asset(projectID: project, assetID: asset)))
+        #expect(!WorkflowCanvasAssetIdentity.acceptsOwnProject(projectID: legacy.project,
+            instanceID: legacy.instance, assetID: legacy.asset, currentProjectID: project,
+            currentInstanceID: instance, acceptsLegacyAsset: { _, _ in false }))
+    }
+
+    @Test
     func dragMathUsesScreenScaleAndPreservesNegativeStoredCoordinates() {
         let original = CGPoint(x: -240, y: -80)
         for zoom: CGFloat in [0.5, 1, 1.8] {

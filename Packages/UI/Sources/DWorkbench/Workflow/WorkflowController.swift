@@ -135,6 +135,15 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
         return String(decoding: try encoder.encode(record), as: UTF8.self)
     }
     public func libraryKind(of asset: ProjectAsset) -> WorkflowDataKind? { WorkflowMediaFormat.descriptor(asset.mediaType)?.kind }
+    /// File operations may publish assets outside this controller. Keep the live graph and edit state intact.
+    public func refreshAvailableAssets(instanceID: UUID) async {
+        guard !closed, projectInstanceID == instanceID else { return }
+        let snapshot = await services.store.snapshot()
+        guard !closed, projectInstanceID == instanceID,
+              snapshot.effectiveInstanceID == instanceID,
+              snapshot.id == projectID else { return }
+        availableAssets = snapshot.assets.filter { WorkflowMediaFormat.descriptor($0.mediaType) != nil }
+    }
     private func refreshAssets() async {
         let snapshot = await services.store.snapshot()
         projectID = snapshot.id

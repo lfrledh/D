@@ -140,6 +140,19 @@ public struct DualWorkbenchView: View {
                     canvasModel.manifest?.effectiveInstanceID == route.instanceID) ||
                     (quick.store === route.store && projects.contains(where: { $0.effectiveInstanceID == route.instanceID })) },
                 modelLibrary: library.library,
+                onContentsChanged: { changedStore, instanceID in
+                    let primary = model.projectSession
+                    let quickOwner = quickModel.projectSession
+                    if primary.currentStore === changedStore {
+                        await primary.refreshAfterFileOperation(store: changedStore, instanceID: instanceID)
+                    }
+                    if quickOwner !== primary, quickOwner.currentStore === changedStore {
+                        await quickOwner.refreshAfterFileOperation(store: changedStore, instanceID: instanceID)
+                    }
+                    guard (primary.currentStore === changedStore && primary.manifest?.effectiveInstanceID == instanceID) ||
+                          (quickOwner.currentStore === changedStore && quickOwner.manifest?.effectiveInstanceID == instanceID) else { return }
+                    await refreshLibrary(checkModels: false)
+                },
                 onOpenRestored: { url in
                     await model.openProject(at: url)
                     if model.projectSession.currentStore?.rootURL.standardizedFileURL == url.standardizedFileURL {
@@ -265,8 +278,19 @@ public struct DualWorkbenchView: View {
         quickModel.projectSession.observeModelAvailability(installationSnapshot)
         if model.projectSession !== quickModel.projectSession { model.projectSession.observeModelAvailability(installationSnapshot) }
         if checkModels { await quickModel.projectSession.checkExplicitModelReadiness() }
+        let otherStore = model.projectSession.currentStore
         var snapshots = [await quick.store.snapshot()]
-        if let store = model.projectSession.currentStore, store !== quick.store { snapshots.append(await store.snapshot()) }
+        if let otherStore, otherStore !== quick.store {
+            let snapshot = await otherStore.snapshot()
+            guard model.projectSession.currentStore === otherStore,
+                  model.manifest?.effectiveInstanceID == snapshot.effectiveInstanceID else { return }
+            snapshots.append(snapshot)
+        }
+        guard model.projectSession.currentStore === otherStore else { return }
+        guard snapshots.allSatisfy({ incoming in
+            projects.first(where: { $0.effectiveInstanceID == incoming.effectiveInstanceID })
+                .map { incoming.revision >= $0.revision } ?? true
+        }) else { return }
         projects = snapshots
         if let metadata {
             do {

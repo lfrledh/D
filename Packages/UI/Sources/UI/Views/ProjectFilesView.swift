@@ -46,6 +46,7 @@ struct ProjectFilesView: View {
     let instanceID: UUID
     let isActive: () -> Bool
     let modelLibrary: ModelLibrary
+    let onContentsChanged: @MainActor (ProjectStore, UUID) async -> Void
     let onOpenRestored: (URL) async -> String?
     let onClose: () -> Void
     var initialAssetID: UUID? = nil
@@ -122,16 +123,17 @@ struct ProjectFilesView: View {
                 }
             } else { ProgressView(word("loading", "读取项目文件…")) }
             if !models.isEmpty {
-                DisclosureGroup(word("models", "可选：包含已安装模型权重（默认不选）")) {
+                DisclosureGroup(word("models", "可选：包含模型资源（默认不选）")) {
                     ForEach(models, id: \.id) { record in
-                        let eligible = record.state == .installed && record.availability == .available
+                        let eligible = (record.state == .installed || record.state == .preparationRequired)
+                            && record.availability == .available
                         Toggle(isOn: Binding(get: { chosenModels.contains(record.id) }, set: { enabled in
                             if enabled { chosenModels.insert(record.id) } else { chosenModels.remove(record.id) }
                         })) {
                             Text("\(modelTitles[record.catalogID] ?? record.catalogID) · \(bytes(record.totalBytes))")
                         }.disabled(!eligible || busy)
                         if record.state == .preparationRequired {
-                            Text(word("rawUnavailable", "原始文件尚不能由此备份接口取得读取许可；请先在模型库准备。"))
+                            Text(word("rawUnavailable", "原始资源可随备份保留；恢复后仍需准备才能用于推理。"))
                                 .font(.caption).foregroundStyle(.secondary)
                         }
                     }
@@ -250,9 +252,11 @@ struct ProjectFilesView: View {
         job = Task {
             do {
                 let text = try await operation(captured)
-                if isActive() { message = text; await refresh(deep: deepRefresh) }
-            } catch is CancellationError { if isActive() { message = word("cancelled", "操作已取消；请查看刷新后的状态确认已完成项。") ; await refresh(deep: false) } }
-            catch { if isActive() { message = error.localizedDescription; await refresh(deep: false) } }
+                if isActive() { message = text }
+            } catch is CancellationError { if isActive() { message = word("cancelled", "操作已取消；请查看刷新后的状态确认已完成项。") } }
+            catch { if isActive() { message = error.localizedDescription } }
+            await onContentsChanged(captured, instanceID)
+            if isActive() { await refresh(deep: deepRefresh) }
             busy = false; job = nil
         }
     }
