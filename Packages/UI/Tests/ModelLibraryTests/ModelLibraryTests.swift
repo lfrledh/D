@@ -451,6 +451,29 @@ struct ModelLibraryTests {
         try await library.shutdown()
     }
 
+    @Test func projectBackupIncludesSelectedRawModelWithoutMakingItRunnable() async throws {
+        let fixture = try LibraryFixture(); defer { fixture.clean() }
+        let raw = ModelCatalogEntry(id: "raw-backup-fixture", title: "raw fixture", repository: fixture.entry.repository,
+            revision: fixture.entry.revision, files: fixture.entry.files, preparation: .required)
+        let library = try await ModelLibrary(stateDirectory: fixture.state, catalog: [raw])
+        let id = try await library.registerExisting(at: fixture.source, catalogID: raw.id)
+        let store = try await ProjectStore.create(at: fixture.root.appendingPathComponent("Work.dproject"), name: "Raw backup")
+        let destination = fixture.root.appendingPathComponent("Selected.dbackup")
+        let receipt = try await store.createBackup(at: destination, modelLibrary: library, includingModels: [id])
+        #expect(receipt.complete)
+        for (path, bytes) in fixture.contents {
+            #expect(try Data(contentsOf: destination.appendingPathComponent("Models/" + id.description + "/" + path)) == bytes)
+        }
+        #expect(await library.snapshot().records.first?.state == .preparationRequired)
+        #expect(await library.snapshot().records.first?.activeLeaseCount == 0)
+        await #expect(throws: ModelLibraryError.self) { _ = try await library.acquire(id) }
+        await #expect(throws: (any Error).self) {
+            _ = try await store.createBackup(at: destination, modelLibrary: library, includingModels: [id])
+        }
+        #expect(await library.snapshot().records.first?.activeLeaseCount == 0)
+        try await store.close(); try await library.shutdown()
+    }
+
     @Test func failedVerificationCannotAcquireBackupLease() async throws {
         let fixture = try LibraryFixture(); defer { fixture.clean() }
         try Data(repeating: 0, count: fixture.contents["weights/payload.bin"]!.count)

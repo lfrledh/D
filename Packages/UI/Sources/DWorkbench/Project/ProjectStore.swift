@@ -4095,7 +4095,7 @@ extension ProjectStore {
                 guard let modelLibrary else { throw ModelLibraryError.unavailable("模型库不可用；未创建缺少已选择权重的备份。") }
                 for id in Set(modelIDs) {
                     try Task.checkCancellation()
-                    let lease = try await modelLibrary.acquire(id); leases.append(lease)
+                    let lease = try await modelLibrary.acquireForBackup(id); leases.append(lease)
                     let entry = try await modelLibrary.catalogEntry(for: id)
                     dependencies.append(.init(catalogID: entry.id, revision: entry.revision, files: entry.files))
                     let root = try ModelDirectory(lease.reference.directory)
