@@ -27,6 +27,18 @@ struct AssetFileLocationsTests {
         #expect(try await store.workflowState().archive?.assets.first?.reference == ref)
         try await store.close()
     }
+    @Test func copiedAssetDeepInspectionChecksPublishedDigest() async throws {
+        let (_, store, source) = try await fixture()
+        let imported = try await store.importWorkflowMediaFile(at: source, mode: .copy)
+        #expect(imported.asset.fileLocations == nil)
+        let unchanged = try await store.assetLocationOverview(imported.asset.id, deep: true)
+        #expect(unchanged.locations.first?.status == .verified)
+        try Data("changed copy".utf8).write(to: store.rootURL.appendingPathComponent(imported.asset.relativePath))
+        let changed = try await store.assetLocationOverview(imported.asset.id, deep: true)
+        #expect(changed.locations.first?.status == .changed)
+        #expect(changed.contentSHA256 == imported.record.reference.sha256)
+        try await store.close()
+    }
     @Test func collectThenMoveSourceReopenAndExportKeepsOldVersion() async throws {
         let (root, store, source) = try await fixture()
         let imported = try await store.importWorkflowMediaFile(at: source, mode: .reference)

@@ -4253,6 +4253,7 @@ extension ProjectStore {
     }
 
     private func assetLocationOverview(_ id: UUID, deep: Bool, archive: WorkflowArchive) throws -> AssetLocationOverview {
+        try Task.checkCancellation()
         guard let asset = manifest.assets.first(where: { $0.id == id }), let format = WorkflowMediaFormat.descriptor(asset.mediaType) else { throw ProjectStoreError.missingAsset }
         let record = archive.assets.first { $0.reference.assetID == id }
         let uses = archive.graphs.reduce(0) { $0 + $1.nodes.filter { $0.assetReference?.assetID == id }.count }
@@ -4260,14 +4261,36 @@ extension ProjectStore {
             + archive.runs.filter { run in run.steps.contains { step in (Array(step.inputs.values) + Array(step.outputs.values)).contains { (($0.datum?.assetReferences ?? []) + $0.candidates.compactMap(\.asset)).contains { $0.assetID == id } } } }.count
         guard let placements = asset.fileLocations else {
             let location = AssetFileLocation(id: id, libraryID: manifest.id, libraryName: manifest.name, role: .projectCopy, url: rootURL.appendingPathComponent(asset.relativePath), registeredAt: asset.createdAt)
+            let digest = record?.reference.sha256 ?? asset.metadata.imageContentSHA256
+                ?? asset.metadata.audio?.contentSHA256 ?? asset.metadata.video?.contentSHA256
+                ?? asset.metadata.pitch?.contentSHA256
             let status: AssetLocationStatus
-            do { if deep { _ = try readAssetData(asset, limit: format.maximumBytes) }; let fd = try ProjectFiles.openRelativeFile(asset.relativePath, in: rootFD); Darwin.close(fd); status = .verified }
-            catch { status = .missing }
-            return .init(asset: asset, contentSHA256: record?.reference.sha256, byteCount: nil,
-                         locations: [.init(location: location, status: status, reason: nil, resolvedURL: location.url)], selectedLocationID: id, knownUseCount: uses)
+            var reason: String?
+            do {
+                if deep {
+                    let data = try readAssetData(asset, limit: format.maximumBytes)
+                    if let digest {
+                        guard AssetLocationFiles.hash(data) == digest else { throw ProjectStoreError.externalModification }
+                    }
+                }
+                let fd = try ProjectFiles.openRelativeFile(asset.relativePath, in: rootFD); Darwin.close(fd)
+                try Task.checkCancellation()
+                status = deep && digest == nil ? .pendingVerification : .verified
+                if deep && digest == nil { reason = "旧素材没有固定摘要，不能确认内容版本。" }
+            } catch is CancellationError { throw CancellationError() }
+            catch ProjectStoreError.externalModification { status = .changed; reason = "当前字节与登记版本不同；旧版本未改。" }
+            catch ProjectStoreError.unsafePath { status = .corrupt; reason = "位置不是安全的独立普通文件。" }
+            catch {
+                // Older ProjectFiles errors retain prose, not an errno. Do not infer absence
+                // or permission loss from that text; keep the actual failure visible.
+                status = .pendingVerification; reason = error.localizedDescription
+            }
+            return .init(asset: asset, contentSHA256: digest, byteCount: nil,
+                         locations: [.init(location: location, status: status, reason: reason, resolvedURL: location.url)], selectedLocationID: id, knownUseCount: uses)
         }
         var states = [AssetLocationInspection]()
         for location in placements.locations {
+            try Task.checkCancellation()
             if location.role != .projectCopy { states.append(AssetLocationFiles.inspect(location, expected: placements, deep: deep, maximum: format.maximumBytes)); continue }
             do {
                 let fd = try ProjectFiles.openRelativeFile(asset.relativePath, in: rootFD); defer { Darwin.close(fd) }
@@ -4278,6 +4301,7 @@ extension ProjectStore {
                 states.append(.init(location: location, status: .verified, reason: nil, resolvedURL: rootURL.appendingPathComponent(asset.relativePath)))
             } catch { states.append(.init(location: location, status: error as? ProjectStoreError == .externalModification ? .changed : .missing, reason: error.localizedDescription, resolvedURL: nil)) }
         }
+        try Task.checkCancellation()
         return .init(asset: asset, contentSHA256: placements.sha256, byteCount: placements.byteCount,
                      locations: states, selectedLocationID: placements.preferredLocationID, knownUseCount: uses)
     }
