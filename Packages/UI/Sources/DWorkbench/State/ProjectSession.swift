@@ -2144,9 +2144,12 @@ public final class ProjectSession {
         var firstFailure: Error?
         for asset in manifest.assets {
             do { urls[asset.id] = try await store.assetURL(for: asset) }
+            catch is CancellationError { return }
             catch { if firstFailure == nil { firstFailure = error } }
         }
+        guard !Task.isCancelled else { return }
         guard self.store === store, self.manifest?.effectiveInstanceID == manifest.effectiveInstanceID,
+              self.manifest?.revision == manifest.revision,
               self.manifest?.assets == manifest.assets else { return }
         assetURLs = urls
         if let firstFailure { report(firstFailure, context: "部分作品暂时无法读取，请检查项目所在磁盘") }
@@ -2178,6 +2181,21 @@ public final class ProjectSession {
         if let workflow { await workflow.refreshAvailableAssets(instanceID: instanceID) }
         guard store === changedStore, manifest?.effectiveInstanceID == instanceID else { return }
         await refreshAssets()
+    }
+
+    /// A manual backup deliberately includes the live canvas draft from this exact project instance.
+    public func saveWorkflowForBackup(store captured: ProjectStore, instanceID: UUID) async throws {
+        guard store === captured, manifest?.effectiveInstanceID == instanceID,
+              !isChangingProject, !closePending else { throw WorkflowIssue("项目已切换；备份未创建。") }
+        if let workflow {
+            guard workflow.services.store === captured, workflow.projectInstanceID == instanceID else {
+                throw WorkflowIssue("流程所属项目已改变；备份未创建。")
+            }
+            try await workflow.saveExplicitEdits()
+        }
+        try Task.checkCancellation()
+        guard store === captured, manifest?.effectiveInstanceID == instanceID,
+              !isChangingProject, !closePending else { throw WorkflowIssue("项目已切换；备份未创建。") }
     }
 
     public func closeProject() async { _ = await requestClose() }
