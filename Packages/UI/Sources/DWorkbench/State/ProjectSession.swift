@@ -2171,16 +2171,47 @@ public final class ProjectSession {
         audio?.synchronize(updated)
     }
 
+    private static func verificationMetadataOnly(_ old: [ProjectAsset], _ new: [ProjectAsset]) -> Bool {
+        guard old.count == new.count else { return false }
+        for (before, after) in zip(old, new) {
+            var oldAsset = before, newAsset = after
+            oldAsset.fileLocations = nil; newAsset.fileLocations = nil
+            guard oldAsset == newAsset else { return false }
+            switch (before.fileLocations, after.fileLocations) {
+            case (nil, nil): break
+            case (nil, let current?):
+                // Legacy package copies gain their first placement after a matching digest.
+                guard current.locations.count == 1, current.preferredLocationID == before.id,
+                      current.locations[0].id == before.id, current.locations[0].role == .projectCopy,
+                      current.locations[0].url == nil, current.locations[0].bookmark == nil else { return false }
+            case (let prior?, let current?):
+                guard prior.sha256 == current.sha256, prior.byteCount == current.byteCount,
+                      prior.preferredLocationID == current.preferredLocationID,
+                      prior.locations.count == current.locations.count else { return false }
+                for (previousLocation, currentLocation) in zip(prior.locations, current.locations) {
+                    var comparison = currentLocation
+                    comparison.fingerprint = previousLocation.fingerprint
+                    comparison.lastVerifiedAt = previousLocation.lastVerifiedAt
+                    guard comparison == previousLocation else { return false }
+                }
+            case (_?, nil): return false
+            }
+        }
+        return true
+    }
+
     /// Reconcile a file operation on the captured Store without reloading the workflow draft.
-    public func refreshAfterFileOperation(store changedStore: ProjectStore, instanceID: UUID) async {
+    public func refreshAfterFileOperation(store changedStore: ProjectStore, instanceID: UUID,
+                                          refreshMedia: Bool = true) async {
         guard store === changedStore, manifest?.effectiveInstanceID == instanceID else { return }
         let snapshot = await changedStore.snapshot()
         guard store === changedStore, manifest?.effectiveInstanceID == instanceID,
               snapshot.effectiveInstanceID == instanceID else { return }
+        let needsMediaRefresh = refreshMedia || !Self.verificationMetadataOnly(manifest?.assets ?? [], snapshot.assets)
         applyManifest(snapshot)
         if let workflow { await workflow.refreshAvailableAssets(instanceID: instanceID) }
         guard store === changedStore, manifest?.effectiveInstanceID == instanceID else { return }
-        await refreshAssets()
+        if needsMediaRefresh { await refreshAssets() }
     }
 
     /// A manual backup deliberately includes the live canvas draft from this exact project instance.

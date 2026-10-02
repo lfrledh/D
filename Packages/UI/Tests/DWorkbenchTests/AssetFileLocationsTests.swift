@@ -192,6 +192,31 @@ struct AssetFileLocationsTests {
         try await store.close()
     }
 
+    @Test func movedProjectCopyRelocatesAsExternalAndRemainsReadable() async throws {
+        let (root, store, source) = try await fixture()
+        let imported = try await store.importWorkflowMediaFile(at: source, mode: .copy)
+        let original = try Data(contentsOf: source)
+        try await store.verifyAssetLocation(imported.asset.id)
+        let before = try #require((await store.snapshot()).assets.first(where: { $0.id == imported.asset.id })?
+            .fileLocations?.locations.first)
+        let packageFile = store.rootURL.appendingPathComponent(imported.asset.relativePath)
+        let moved = root.appendingPathComponent("moved-project-copy.txt")
+        try FileManager.default.moveItem(at: packageFile, to: moved)
+        try await store.relocateAsset(imported.asset.id, to: moved)
+        let relocated = try #require((await store.snapshot()).assets.first(where: { $0.id == imported.asset.id })?
+            .fileLocations?.locations.first)
+        #expect(relocated.id == before.id)
+        #expect(relocated.role == .externalOriginal)
+        #expect(relocated.registeredAt == before.registeredAt)
+        if let created = before.contentCreatedAt { #expect(relocated.contentCreatedAt == created) }
+        try await store.verifyAssetLocation(imported.asset.id)
+        #expect(try await store.workflowData(imported.record.reference) == original)
+        let output = root.appendingPathComponent("exported-copy.txt")
+        try await store.export(assetID: imported.asset.id, to: output)
+        #expect(try Data(contentsOf: output) == original)
+        try await store.close()
+    }
+
     @Test func knownUsesNameGraphNodeAndDerivedAsset() async throws {
         let (_, store, source) = try await fixture()
         let imported = try await store.importWorkflowMediaFile(at: source, mode: .reference)

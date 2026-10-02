@@ -12,6 +12,56 @@ private actor RoutingNoInferenceEngine: InferenceEngine {
 @Suite("Independent project instance routing", .serialized)
 @MainActor
 struct ProjectInstanceRoutingTests {
+    @Test func verificationRefreshUpdatesRevisionWithoutReadingUnrelatedAsset() async throws {
+        let base = URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory())
+            .appendingPathComponent("verification-refresh-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: base) }
+        let suite = "D.VerificationRefresh." + UUID().uuidString
+        let settings = try #require(UserDefaults(suiteName: suite))
+        defer { settings.removePersistentDomain(forName: suite) }
+        let engine = RoutingNoInferenceEngine()
+        let owner = ProjectSession(sessionFactory: { _ in
+            WorkbenchSession(engine: engine, backendID: "routing.none",
+                status: { .init(activeRunID: nil, phase: nil, queuedRunIDs: []) },
+                shutdown: {}, cleanup: {}, validateModel: { _ in })
+        }, settings: settings)
+        await owner.createProject(at: base.appendingPathComponent("Work.dproject"))
+        let store = try #require(owner.currentStore)
+        let instanceID = try #require(owner.manifest?.effectiveInstanceID)
+        let selected = base.appendingPathComponent("selected.txt")
+        let unrelated = base.appendingPathComponent("unrelated.txt")
+        try Data("selected".utf8).write(to: selected)
+        try Data("unrelated".utf8).write(to: unrelated)
+        let first = try await store.importWorkflowMediaFile(at: selected, mode: .reference)
+        _ = try await store.importWorkflowMediaFile(at: unrelated, mode: .reference)
+        try FileManager.default.removeItem(at: unrelated)
+        try FileManager.default.createDirectory(at: unrelated, withIntermediateDirectories: false)
+        try await store.verifyAssetLocation(first.asset.id)
+        await owner.refreshAfterFileOperation(store: store, instanceID: instanceID, refreshMedia: false)
+        #expect(owner.manifest?.revision == (await store.snapshot()).revision)
+        #expect(owner.manifest?.assets.first(where: { $0.id == first.asset.id })?.fileLocations?.locations.first?.lastVerifiedAt != nil)
+        #expect(owner.assetURLs.isEmpty)
+        #expect(!FileManager.default.fileExists(atPath: store.rootURL.appendingPathComponent("AssetInputs").path))
+        #expect(owner.errorMessage == nil)
+        try Data("changed selected".utf8).write(to: selected)
+        await #expect(throws: (any Error).self) { try await store.verifyAssetLocation(first.asset.id) }
+        await owner.refreshAfterFileOperation(store: store, instanceID: instanceID, refreshMedia: false)
+        #expect(owner.manifest?.revision == (await store.snapshot()).revision)
+        #expect(owner.assetURLs.isEmpty)
+        #expect(owner.errorMessage == nil)
+        let cancelled = Task { @MainActor in
+            withUnsafeCurrentTask { $0?.cancel() }
+            try await store.verifyAssetLocation(first.asset.id)
+        }
+        await #expect(throws: (any Error).self) { try await cancelled.value }
+        await owner.refreshAfterFileOperation(store: store, instanceID: instanceID, refreshMedia: false)
+        #expect(owner.manifest?.revision == (await store.snapshot()).revision)
+        #expect(owner.assetURLs.isEmpty)
+        #expect(owner.errorMessage == nil)
+        await owner.closeProject()
+    }
+
     @Test func restoredProjectKeepsLogicalHistoryButGetsDistinctRecentAndControllerTargets() async throws {
         let base = URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory())
             .appendingPathComponent("instance-routing-" + UUID().uuidString)

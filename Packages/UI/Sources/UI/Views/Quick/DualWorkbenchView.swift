@@ -144,14 +144,16 @@ public struct DualWorkbenchView: View {
                     (quickModel.projectSession.currentStore === route.store &&
                      quickModel.manifest?.effectiveInstanceID == route.instanceID) },
                 modelLibrary: library.library,
-                onContentsChanged: { changedStore, instanceID in
+                onContentsChanged: { changedStore, instanceID, refreshMedia in
                     let primary = model.projectSession
                     let quickOwner = quickModel.projectSession
                     if primary.currentStore === changedStore {
-                        await primary.refreshAfterFileOperation(store: changedStore, instanceID: instanceID)
+                        await primary.refreshAfterFileOperation(store: changedStore, instanceID: instanceID,
+                            refreshMedia: refreshMedia)
                     }
                     if quickOwner !== primary, quickOwner.currentStore === changedStore {
-                        await quickOwner.refreshAfterFileOperation(store: changedStore, instanceID: instanceID)
+                        await quickOwner.refreshAfterFileOperation(store: changedStore, instanceID: instanceID,
+                            refreshMedia: refreshMedia)
                     }
                     guard (primary.currentStore === changedStore && primary.manifest?.effectiveInstanceID == instanceID) ||
                           (quickOwner.currentStore === changedStore && quickOwner.manifest?.effectiveInstanceID == instanceID) else { return }

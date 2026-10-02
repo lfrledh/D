@@ -4320,19 +4320,19 @@ extension ProjectStore {
             try Task.checkCancellation()
             if location.role != .projectCopy {
                 states.append(AssetLocationFiles.inspect(location, expected: placements,
-                    deep: deep && location.id == placements.preferredLocationID, maximum: format.maximumBytes))
+                    deep: deep, maximum: format.maximumBytes))
                 continue
             }
             do {
                 let fd = try ProjectFiles.openRelativeFile(asset.relativePath, in: rootFD); defer { Darwin.close(fd) }
                 var file = stat(); guard fstat(fd, &file) == 0 else { throw ProjectFiles.error() }
-                if deep && location.id == placements.preferredLocationID {
+                if deep {
                     let read = try AssetLocationFiles.read(rootURL.appendingPathComponent(asset.relativePath), maximum: format.maximumBytes)
                     guard UInt64(read.data.count) == placements.byteCount,
                           AssetLocationFiles.hash(read.data) == placements.sha256 else { throw ProjectStoreError.externalModification }
                 }
                 let verified = location.lastVerifiedAt != nil && location.fingerprint == AssetFileFingerprint(file)
-                let contentChecked = deep && location.id == placements.preferredLocationID
+                let contentChecked = deep
                 states.append(.init(location: location, status: contentChecked || verified ? .verified : .pendingVerification,
                     reason: contentChecked || verified ? nil : "文件身份变化或尚未显式核对内容。", resolvedURL: rootURL.appendingPathComponent(asset.relativePath)))
             } catch { states.append(.init(location: location, status: error as? ProjectStoreError == .externalModification ? .changed : .missing, reason: error.localizedDescription, resolvedURL: nil)) }
@@ -4437,7 +4437,12 @@ extension ProjectStore {
         if let i = placements.locations.firstIndex(where: { $0.fingerprint?.device == location.fingerprint?.device && $0.fingerprint?.inode == location.fingerprint?.inode }) {
             let original = placements.locations[i]
             var refreshed = location
-            refreshed.id = original.id; refreshed.role = original.role
+            refreshed.id = original.id
+            // A package copy moved out of its recorded relative path is now an
+            // externally authorized file, even when its inode is unchanged.
+            refreshed.role = original.role == .projectCopy &&
+                source.standardizedFileURL != rootURL.appendingPathComponent(asset.relativePath).standardizedFileURL
+                ? .externalOriginal : original.role
             refreshed.registeredAt = original.registeredAt
             refreshed.contentCreatedAt = original.contentCreatedAt ?? location.contentCreatedAt
             placements.locations[i] = refreshed

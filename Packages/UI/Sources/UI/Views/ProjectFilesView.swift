@@ -14,10 +14,11 @@ enum ProjectFilesPresentation {
 
     /// A cancelled file job still needs to publish its already committed steps.
     @MainActor static func refreshAfterOperation(store: ProjectStore, instanceID: UUID,
-        onContentsChanged: @escaping @MainActor (ProjectStore, UUID) async -> Void,
+        refreshMedia: Bool = true,
+        onContentsChanged: @escaping @MainActor (ProjectStore, UUID, Bool) async -> Void,
         refreshOverview: @escaping @MainActor () async -> Void) async {
         let refresh = Task { @MainActor in
-            await onContentsChanged(store, instanceID)
+            await onContentsChanged(store, instanceID, refreshMedia)
             await refreshOverview()
         }
         await refresh.value
@@ -71,7 +72,7 @@ struct ProjectFilesView: View {
     let instanceID: UUID
     let isActive: @MainActor () -> Bool
     let modelLibrary: ModelLibrary
-    let onContentsChanged: @MainActor (ProjectStore, UUID) async -> Void
+    let onContentsChanged: @MainActor (ProjectStore, UUID, Bool) async -> Void
     let saveDraftsForBackup: @MainActor (ProjectStore, UUID) async throws -> Void
     let onOpenRestored: (URL) async -> String?
     var onOpenGraph: (UUID, UUID) -> Bool = { _, _ in false }
@@ -199,7 +200,7 @@ struct ProjectFilesView: View {
         .task(id: instanceID) { await refresh(); await loadModels() }
         .onChange(of: selectedAssetID) { _, id in
             guard let id, checkedSelections.insert(id).inserted else { return }
-            start { store in
+            start(refreshMedia: false) { store in
                 try await store.verifyAssetLocation(id)
                 return word("verifiedNow", "所选素材内容已核对。")
             }
@@ -267,7 +268,7 @@ struct ProjectFilesView: View {
                 }.padding(8).background(Color.secondary.opacity(0.08)).cornerRadius(8)
             }
             HStack {
-                Button(word("verify", "核对内容")) { start { store in
+                Button(word("verify", "核对内容")) { start(refreshMedia: false) { store in
                     try await store.verifyAssetLocation(item.asset.id)
                     return word("verifiedNow", "内容核对完成；时间与文件身份已记录。")
                 } }.disabled(busy)
@@ -307,7 +308,8 @@ struct ProjectFilesView: View {
         models = snapshot.records
         modelTitles = Dictionary(uniqueKeysWithValues: snapshot.catalog.map { ($0.id, $0.title) })
     }
-    private func start(_ operation: @escaping @MainActor (ProjectStore) async throws -> String) {
+    private func start(refreshMedia: Bool = true,
+                       _ operation: @escaping @MainActor (ProjectStore) async throws -> String) {
         guard !busy, isActive() else { return }
         busy = true; message = nil; results = []
         let captured = store
@@ -318,6 +320,7 @@ struct ProjectFilesView: View {
             } catch is CancellationError { if isActive() { message = word("cancelled", "操作已取消；请查看刷新后的状态确认已完成项。") } }
             catch { if isActive() { message = error.localizedDescription } }
             await ProjectFilesPresentation.refreshAfterOperation(store: captured, instanceID: instanceID,
+                refreshMedia: refreshMedia,
                 onContentsChanged: onContentsChanged, refreshOverview: {
                     if isActive() { await refresh() }
                 })

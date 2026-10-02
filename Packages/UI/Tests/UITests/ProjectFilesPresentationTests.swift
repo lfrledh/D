@@ -70,8 +70,9 @@ struct ProjectFilesPresentationTests {
             let second = try await store.importWorkflowMediaFile(at: secondSource, mode: .reference)
             withUnsafeCurrentTask { $0?.cancel() }
             await ProjectFilesPresentation.refreshAfterOperation(store: store, instanceID: instanceID,
-                onContentsChanged: { changedStore, changedInstance in
-                    await owner.refreshAfterFileOperation(store: changedStore, instanceID: changedInstance)
+                onContentsChanged: { changedStore, changedInstance, refreshMedia in
+                    await owner.refreshAfterFileOperation(store: changedStore, instanceID: changedInstance,
+                        refreshMedia: refreshMedia)
                 }, refreshOverview: {
                     let overview = try? await store.projectFileOverview(deep: false)
                     displayedIDs = Set(overview?.assets.map(\.asset.id) ?? [])
@@ -83,6 +84,17 @@ struct ProjectFilesPresentationTests {
         #expect(owner.assetURLs[first.asset.id] != nil)
         #expect(owner.assetURLs[secondID] != nil)
         #expect(displayedIDs == Set([first.asset.id, secondID]))
+        #expect(owner.errorMessage == nil)
+        try FileManager.default.removeItem(at: secondSource)
+        try FileManager.default.createDirectory(at: secondSource, withIntermediateDirectories: false)
+        try await store.verifyAssetLocation(first.asset.id)
+        await ProjectFilesPresentation.refreshAfterOperation(store: store, instanceID: instanceID,
+            refreshMedia: false,
+            onContentsChanged: { changedStore, changedInstance, refreshMedia in
+                await owner.refreshAfterFileOperation(store: changedStore, instanceID: changedInstance,
+                    refreshMedia: refreshMedia)
+            }, refreshOverview: {})
+        #expect(owner.manifest?.revision == (await store.snapshot()).revision)
         #expect(owner.errorMessage == nil)
         await owner.closeProject()
     }
