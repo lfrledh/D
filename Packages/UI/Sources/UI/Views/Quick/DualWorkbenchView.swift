@@ -41,6 +41,7 @@ public struct DualWorkbenchView: View {
     @State private var compatibilityVisible = false
     @State private var languageVisible = false
     @State private var issue: String?
+    @State private var failedAssetRoute: FilesRoute?
     @Environment(\.dLanguageStore) private var language
     private var canvasModel: WorkbenchModel { model.manifest == nil ? quickModel : model }
     private var installationStates: [String] {
@@ -75,7 +76,8 @@ public struct DualWorkbenchView: View {
                 if entry == .workflow {
                     Button(canvasModel.manifest?.name ?? "流程项目") { projectsVisible = true }
                 }
-                if let manifest = canvasModel.manifest, let store = canvasModel.projectSession.currentStore {
+                if let manifest = (entry == .quick ? quickModel.manifest : canvasModel.manifest),
+                   let store = (entry == .quick ? quickModel.projectSession.currentStore : canvasModel.projectSession.currentStore) {
                     Button(baselineText(language, "files.title", fallback: "项目文件")) {
                         filesRoute = .init(store: store, instanceID: manifest.effectiveInstanceID, assetID: nil)
                     }.accessibilityIdentifier("project-files-open")
@@ -84,7 +86,8 @@ public struct DualWorkbenchView: View {
                     .accessibilityIdentifier("shared-library-open")
                 Menu {
                     Button(baselineText(language, "label.a6b4608f6c77", fallback: "项目…")) { projectsVisible = true }
-                    if let manifest = canvasModel.manifest, let store = canvasModel.projectSession.currentStore {
+                    if let manifest = (entry == .quick ? quickModel.manifest : canvasModel.manifest),
+                       let store = (entry == .quick ? quickModel.projectSession.currentStore : canvasModel.projectSession.currentStore) {
                         Button(baselineText(language, "files.title", fallback: "项目文件…")) {
                             filesRoute = .init(store: store, instanceID: manifest.effectiveInstanceID, assetID: nil)
                         }
@@ -138,7 +141,8 @@ public struct DualWorkbenchView: View {
             ProjectFilesView(store: route.store, instanceID: route.instanceID,
                 isActive: { (canvasModel.projectSession.currentStore === route.store &&
                     canvasModel.manifest?.effectiveInstanceID == route.instanceID) ||
-                    (quick.store === route.store && projects.contains(where: { $0.effectiveInstanceID == route.instanceID })) },
+                    (quickModel.projectSession.currentStore === route.store &&
+                     quickModel.manifest?.effectiveInstanceID == route.instanceID) },
                 modelLibrary: library.library,
                 onContentsChanged: { changedStore, instanceID in
                     let primary = model.projectSession
@@ -185,6 +189,17 @@ public struct DualWorkbenchView: View {
                         return nil
                     }
                     return model.errorMessage ?? "无法打开已恢复项目；请使用项目入口重新选择。"
+                }, onOpenGraph: { graphID, nodeID in
+                    guard ((model.projectSession.currentStore === route.store &&
+                            model.manifest?.effectiveInstanceID == route.instanceID) ||
+                           (quickModel.projectSession.currentStore === route.store &&
+                            quickModel.manifest?.effectiveInstanceID == route.instanceID)),
+                          let controller = canvasModel.projectSession.workflow,
+                          controller.projectInstanceID == route.instanceID,
+                          controller.graphs.contains(where: { $0.id == graphID && $0.nodes.contains(where: { $0.id == nodeID }) }) else { return false }
+                    controller.selectedGraphID = graphID; controller.selectedNodeID = nodeID
+                    returnToLibrary = false; filesRoute = nil; navigate(to: .workflow)
+                    return true
                 }, onClose: { filesRoute = nil }, initialAssetID: route.assetID)
         }
         .sheet(isPresented: $compatibilityVisible) {
@@ -215,8 +230,15 @@ public struct DualWorkbenchView: View {
                 if let language { LanguageSettingsView(store: language) }
             }.padding().frame(width: 560, height: 440)
         }
-        .alert("操作未完成", isPresented: Binding(get: { issue != nil }, set: { if !$0 { issue = nil } })) {
-            Button(baselineText(language, "label.f867f3417859", fallback: "好")) { issue = nil }
+        .alert("操作未完成", isPresented: Binding(get: { issue != nil }, set: { if !$0 { issue = nil; failedAssetRoute = nil } })) {
+            Button(baselineText(language, "label.f867f3417859", fallback: "好")) { issue = nil; failedAssetRoute = nil }
+            if let failedAssetRoute {
+                Button(baselineText(language, "files.inspect", fallback: "查看文件位置")) {
+                    issue = nil; self.failedAssetRoute = nil
+                    if libraryVisible { returnToLibrary = true; pendingFilesRoute = failedAssetRoute; libraryVisible = false }
+                    else { filesRoute = failedAssetRoute }
+                }
+            }
         } message: { Text(issue ?? "") }
         .task {
             if quick.draft == nil { quick.select(operationID: "d.model.language", modelID: "") }
@@ -230,7 +252,9 @@ public struct DualWorkbenchView: View {
         .onChange(of: installationStates) { _, _ in Task { await refreshLibrary(checkModels: false) } }
         .onChange(of: model.manifest?.revision) { _, _ in Task { await refreshLibrary(checkModels: false) } }
         .sheet(item: $previewAsset, onDismiss: {
-            if let pendingFilesRoute { filesRoute = pendingFilesRoute; self.pendingFilesRoute = nil }
+            if let pendingFilesRoute {
+                returnToLibrary = false; filesRoute = pendingFilesRoute; self.pendingFilesRoute = nil
+            }
             else { restoreLibraryIfNeeded() }
         }) { value in
             VStack {
@@ -261,6 +285,10 @@ public struct DualWorkbenchView: View {
         } else { openLibraryDestination(value) }
     }
     private func finishLibraryDismissal() {
+        if let pendingFilesRoute {
+            self.pendingFilesRoute = nil; returnToLibrary = false; filesRoute = pendingFilesRoute
+            return
+        }
         guard let pending = pendingLibraryDestination else { return }
         pendingLibraryDestination = nil; openLibraryDestination(pending)
     }
@@ -277,13 +305,15 @@ public struct DualWorkbenchView: View {
     }
     private var quickCommandEnabled: Bool {
         entry == .quick && quick.canStart && !libraryVisible && !projectsVisible && !compatibilityVisible &&
-        !languageVisible && !library.isPresented && previewAsset == nil && libraryInfo == nil
+        !languageVisible && !library.isPresented && previewAsset == nil && libraryInfo == nil &&
+        filesRoute == nil && pendingFilesRoute == nil
     }
     @ViewBuilder private func libraryBrowser(compact: Bool, at point: CGPoint, onBack: (() -> Void)? = nil) -> some View {
         if let metadata {
             SharedLibraryBrowser(entries: entries, store: metadata, compact: compact, state: compact ? compactLibraryState : fullLibraryState,
                 onUse: useLibraryEntry, onAdd: { value in Task { await addLibraryEntry(value, at: point) } },
                 onPreview: { value in Task { await previewLibraryEntry(value) } },
+                onLocation: { value in Task { await showAssetLocation(value) } },
                 onPrepare: { value in Task { await prepareModel(value) } },
                 onImport: { Task { await importLibraryAsset() } }, onClose: { if let onBack { onBack() } else { libraryVisible = false } })
         } else {
@@ -363,10 +393,50 @@ public struct DualWorkbenchView: View {
         }
     }
     private func previewLibraryEntry(_ value: SharedLibraryBrowserEntry) async {
+        failedAssetRoute = nil
         guard let identity = assetIdentity(value.selection) else { presentLibraryDestination(.info(value)); return }
         do { let source = try await store(for: identity.0, instanceID: identity.1)
             let ref = try await source.pinWorkflowAsset(identity.2)
             presentLibraryDestination(.asset(.init(store: source, reference: ref)))
+        } catch {
+            if let source = try? await store(for: identity.0, instanceID: identity.1) {
+                let snapshot = await source.snapshot()
+                if snapshot.assets.contains(where: { $0.id == identity.2 }) {
+                    failedAssetRoute = .init(store: source, instanceID: snapshot.effectiveInstanceID, assetID: identity.2)
+                }
+            }
+            issue = error.localizedDescription
+        }
+    }
+    private func showAssetLocation(_ value: SharedLibraryBrowserEntry) async {
+        guard let identity = assetIdentity(value.selection) else { return }
+        do {
+            var active = [(ProjectStore, ProjectManifest)]()
+            if let current = quickModel.projectSession.currentStore {
+                active.append((current, await current.snapshot()))
+            }
+            if let current = model.projectSession.currentStore,
+               !active.contains(where: { $0.0 === current }) {
+                active.append((current, await current.snapshot()))
+            }
+            guard let resolved = SharedLibraryProjection.resolvedInstanceID(projectID: identity.0,
+                    instanceID: identity.1, projects: active.map { $0.1 }),
+                  let source = active.first(where: { $0.1.effectiveInstanceID == resolved })?.0 else {
+                throw WorkflowIssue("所属项目尚未打开，请从项目入口打开后再查看文件位置。")
+            }
+            let snapshot = await source.snapshot()
+            guard snapshot.id == identity.0,
+                  snapshot.assets.contains(where: { $0.id == identity.2 }),
+                  (quickModel.projectSession.currentStore === source &&
+                   quickModel.manifest?.effectiveInstanceID == snapshot.effectiveInstanceID) ||
+                  (model.projectSession.currentStore === source &&
+                   model.manifest?.effectiveInstanceID == snapshot.effectiveInstanceID) else {
+                throw WorkflowIssue("所属项目尚未打开，请从项目入口打开后再查看文件位置。")
+            }
+            let route = FilesRoute(store: source, instanceID: snapshot.effectiveInstanceID, assetID: identity.2)
+            if libraryVisible {
+                returnToLibrary = true; pendingFilesRoute = route; libraryVisible = false
+            } else { filesRoute = route }
         } catch { issue = error.localizedDescription }
     }
     private func prepareModel(_ value: SharedLibraryBrowserEntry) async {

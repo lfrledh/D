@@ -430,11 +430,19 @@ struct SharedLibraryBrowserTests {
             )
             let expected = readiness == .available || readiness == .unknown
             #expect(SharedLibraryBrowserLogic.allows(.preview, entry: asset) == expected)
+            #expect(SharedLibraryBrowserLogic.allows(.location, entry: asset))
+            #expect(SharedLibraryBrowserLogic.currentEntry(key: asset.id, entries: [asset], action: .location) == asset)
             #expect(SharedLibraryBrowserLogic.allows(.add, entry: asset) == expected)
             #expect(SharedLibraryBrowserLogic.allows(.prepare, entry: asset)
                 == (readiness != .available))
             #expect((SharedLibraryBrowserLogic.canvasTransfer(for: asset) != nil) == expected)
         }
+        let instanceAsset = entry("asset:instance", title: "恢复实例素材", kind: .asset,
+            readiness: .unavailable,
+            selection: .assetInstance(projectID: projectID, instanceID: UUID(), assetID: assetID))
+        #expect(SharedLibraryBrowserLogic.allows(.location, entry: instanceAsset))
+        #expect(!SharedLibraryBrowserLogic.allows(.preview, entry: instanceAsset))
+        #expect(SharedLibraryBrowserLogic.currentEntry(key: instanceAsset.id, entries: [], action: .location) == nil)
     }
 
     @Test

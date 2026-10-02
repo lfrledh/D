@@ -110,7 +110,7 @@ public final class SharedLibraryBrowserState {
 }
 
 enum SharedLibraryBrowserAction {
-    case use, add, preview, prepare
+    case use, add, preview, prepare, location
 }
 
 enum SharedLibraryBrowserOrganizerItem: Hashable {
@@ -212,6 +212,9 @@ struct SharedLibraryBrowserRenameDrafts {
     }
 
     static func allows(_ action: SharedLibraryBrowserAction, entry: SharedLibraryBrowserEntry) -> Bool {
+        if action == .location {
+            switch entry.selection { case .asset, .assetInstance: return true; default: return false }
+        }
         if action == .prepare {
             if entry.item.readiness != .available || entry.item.compatible == false { return true }
             if case .unavailable = entry.selection { return true }
@@ -291,6 +294,7 @@ public struct SharedLibraryBrowser: View {
     private let onUse: (SharedLibraryBrowserEntry) -> Void
     private let onAdd: (SharedLibraryBrowserEntry) -> Void
     private let onPreview: (SharedLibraryBrowserEntry) -> Void
+    private let onLocation: (SharedLibraryBrowserEntry) -> Void
     private let onPrepare: (SharedLibraryBrowserEntry) -> Void
     private let onImport: () -> Void
     private let onClose: () -> Void
@@ -315,12 +319,13 @@ public struct SharedLibraryBrowser: View {
         onUse: @escaping (SharedLibraryBrowserEntry) -> Void,
         onAdd: @escaping (SharedLibraryBrowserEntry) -> Void,
         onPreview: @escaping (SharedLibraryBrowserEntry) -> Void,
+        onLocation: @escaping (SharedLibraryBrowserEntry) -> Void = { _ in },
         onPrepare: @escaping (SharedLibraryBrowserEntry) -> Void,
         onImport: @escaping () -> Void, onClose: @escaping () -> Void
     ) {
         self._state = State(initialValue: state ?? SharedLibraryBrowserState())
         self.entries = entries; self.store = store; self.compact = compact
-        self.onUse = onUse; self.onAdd = onAdd; self.onPreview = onPreview
+        self.onUse = onUse; self.onAdd = onAdd; self.onPreview = onPreview; self.onLocation = onLocation
         self.onPrepare = onPrepare; self.onImport = onImport; self.onClose = onClose
     }
 
@@ -646,6 +651,10 @@ public struct SharedLibraryBrowser: View {
             if canPreview(entry) {
                 Button(word("preview", "预览")) { dispatch(.preview, key: entry.id) }
                     .accessibilityIdentifier("shared-library-preview")
+            }
+            if SharedLibraryBrowserLogic.allows(.location, entry: entry) {
+                Button(word("location", "查看文件位置…")) { dispatch(.location, key: entry.id) }
+                    .accessibilityIdentifier("shared-library-location")
             }
             if SharedLibraryBrowserLogic.allows(.prepare, entry: entry) {
                 Button(prepareLabel(for: entry)) { dispatch(.prepare, key: entry.id) }
@@ -1004,6 +1013,7 @@ public struct SharedLibraryBrowser: View {
         case .use: onUse(current)
         case .add: onAdd(current)
         case .preview: onPreview(current)
+        case .location: onLocation(current)
         case .prepare: onPrepare(current)
         }
     }

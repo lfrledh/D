@@ -4256,27 +4256,53 @@ extension ProjectStore {
         try Task.checkCancellation()
         guard let asset = manifest.assets.first(where: { $0.id == id }), let format = WorkflowMediaFormat.descriptor(asset.mediaType) else { throw ProjectStoreError.missingAsset }
         let record = archive.assets.first { $0.reference.assetID == id }
-        let uses = archive.graphs.reduce(0) { $0 + $1.nodes.filter { $0.assetReference?.assetID == id }.count }
-            + archive.assets.filter { $0.parents.contains { $0.assetID == id } }.count
-            + archive.runs.filter { run in run.steps.contains { step in (Array(step.inputs.values) + Array(step.outputs.values)).contains { (($0.datum?.assetReferences ?? []) + $0.candidates.compactMap(\.asset)).contains { $0.assetID == id } } } }.count
+        var uses = [AssetKnownUse]()
+        for graph in archive.graphs {
+            for node in graph.nodes where node.assetReference?.assetID == id {
+                uses.append(.init(id: "graph:\(graph.id):\(node.id)", kind: .graph,
+                    title: graph.name, detail: "节点 \(node.id.uuidString)", graphID: graph.id, nodeID: node.id, assetID: nil))
+            }
+        }
+        for derived in archive.assets where derived.parents.contains(where: { $0.assetID == id }) {
+            let child = derived.reference.assetID
+            let childAsset = manifest.assets.first(where: { $0.id == child })
+            uses.append(.init(id: "asset:\(child)", kind: .derivedAsset,
+                title: childAsset?.name ?? child.uuidString,
+                detail: "派生素材 · \(derived.operationID)", graphID: nil, nodeID: nil,
+                assetID: childAsset.flatMap { WorkflowMediaFormat.descriptor($0.mediaType) == nil ? nil : child }))
+        }
+        for run in archive.runs {
+            let referenced = run.graph.nodes.contains { $0.assetReference?.assetID == id } || run.steps.contains { step in
+                (Array(step.inputs.values) + Array(step.outputs.values)).contains {
+                    (($0.datum?.assetReferences ?? []) + $0.candidates.compactMap(\.asset)).contains { $0.assetID == id }
+                }
+            }
+            if referenced {
+                uses.append(.init(id: "run:\(run.id)", kind: .run,
+                    title: "运行 \(run.id.uuidString)", detail: "运行证据 · \(run.createdAt.formatted())",
+                    graphID: nil, nodeID: nil, assetID: nil))
+            }
+        }
         guard let placements = asset.fileLocations else {
-            let location = AssetFileLocation(id: id, libraryID: manifest.id, libraryName: manifest.name, role: .projectCopy, url: rootURL.appendingPathComponent(asset.relativePath), registeredAt: asset.createdAt)
+            let location = AssetFileLocation(id: id, libraryID: manifest.id, libraryName: manifest.name, role: .projectCopy,
+                url: rootURL.appendingPathComponent(asset.relativePath), registeredAt: asset.createdAt)
             let digest = record?.reference.sha256 ?? asset.metadata.imageContentSHA256
                 ?? asset.metadata.audio?.contentSHA256 ?? asset.metadata.video?.contentSHA256
                 ?? asset.metadata.pitch?.contentSHA256
             let status: AssetLocationStatus
             var reason: String?
             do {
-                if deep {
-                    let data = try readAssetData(asset, limit: format.maximumBytes)
-                    if let digest {
-                        guard AssetLocationFiles.hash(data) == digest else { throw ProjectStoreError.externalModification }
-                    }
+                let fd = try ProjectFiles.openRelativeFile(asset.relativePath, in: rootFD)
+                defer { Darwin.close(fd) }
+                var file = stat()
+                guard fstat(fd, &file) == 0 else { throw ProjectFiles.error() }
+                if deep, let digest {
+                    let read = try AssetLocationFiles.read(rootURL.appendingPathComponent(asset.relativePath), maximum: format.maximumBytes)
+                    guard AssetLocationFiles.hash(read.data) == digest else { throw ProjectStoreError.externalModification }
                 }
-                let fd = try ProjectFiles.openRelativeFile(asset.relativePath, in: rootFD); Darwin.close(fd)
                 try Task.checkCancellation()
-                status = deep && digest == nil ? .pendingVerification : .verified
-                if deep && digest == nil { reason = "旧素材没有固定摘要，不能确认内容版本。" }
+                status = deep && digest != nil ? .verified : .pendingVerification
+                reason = digest == nil ? "旧素材没有固定摘要，不能确认内容版本。" : (deep ? nil : "尚未显式核对本位置内容。")
             } catch is CancellationError { throw CancellationError() }
             catch ProjectStoreError.externalModification { status = .changed; reason = "当前字节与登记版本不同；旧版本未改。" }
             catch ProjectStoreError.unsafePath { status = .corrupt; reason = "位置不是安全的独立普通文件。" }
@@ -4286,36 +4312,110 @@ extension ProjectStore {
                 status = .pendingVerification; reason = error.localizedDescription
             }
             return .init(asset: asset, contentSHA256: digest, byteCount: nil,
-                         locations: [.init(location: location, status: status, reason: reason, resolvedURL: location.url)], selectedLocationID: id, knownUseCount: uses)
+                         locations: [.init(location: location, status: status, reason: reason, resolvedURL: location.url)], selectedLocationID: id,
+                         knownUseCount: uses.count, knownUses: uses)
         }
         var states = [AssetLocationInspection]()
         for location in placements.locations {
             try Task.checkCancellation()
-            if location.role != .projectCopy { states.append(AssetLocationFiles.inspect(location, expected: placements, deep: deep, maximum: format.maximumBytes)); continue }
+            if location.role != .projectCopy {
+                states.append(AssetLocationFiles.inspect(location, expected: placements,
+                    deep: deep && location.id == placements.preferredLocationID, maximum: format.maximumBytes))
+                continue
+            }
             do {
                 let fd = try ProjectFiles.openRelativeFile(asset.relativePath, in: rootFD); defer { Darwin.close(fd) }
-                if deep {
-                    let bytes = try ProjectFiles.read(relative: asset.relativePath, in: rootFD, limit: format.maximumBytes)
-                    guard bytes.count == placements.byteCount, AssetLocationFiles.hash(bytes) == placements.sha256 else { throw ProjectStoreError.externalModification }
+                var file = stat(); guard fstat(fd, &file) == 0 else { throw ProjectFiles.error() }
+                if deep && location.id == placements.preferredLocationID {
+                    let read = try AssetLocationFiles.read(rootURL.appendingPathComponent(asset.relativePath), maximum: format.maximumBytes)
+                    guard UInt64(read.data.count) == placements.byteCount,
+                          AssetLocationFiles.hash(read.data) == placements.sha256 else { throw ProjectStoreError.externalModification }
                 }
-                states.append(.init(location: location, status: .verified, reason: nil, resolvedURL: rootURL.appendingPathComponent(asset.relativePath)))
+                let verified = location.lastVerifiedAt != nil && location.fingerprint == AssetFileFingerprint(file)
+                let contentChecked = deep && location.id == placements.preferredLocationID
+                states.append(.init(location: location, status: contentChecked || verified ? .verified : .pendingVerification,
+                    reason: contentChecked || verified ? nil : "文件身份变化或尚未显式核对内容。", resolvedURL: rootURL.appendingPathComponent(asset.relativePath)))
             } catch { states.append(.init(location: location, status: error as? ProjectStoreError == .externalModification ? .changed : .missing, reason: error.localizedDescription, resolvedURL: nil)) }
         }
         try Task.checkCancellation()
         return .init(asset: asset, contentSHA256: placements.sha256, byteCount: placements.byteCount,
-                     locations: states, selectedLocationID: placements.preferredLocationID, knownUseCount: uses)
+                     locations: states, selectedLocationID: placements.preferredLocationID,
+                     knownUseCount: uses.count, knownUses: uses)
     }
 
     public func projectFileOverview(deep: Bool = false) throws -> ProjectFileOverview {
         try checkLocation()
+        // The project-wide projection never hashes media; explicit verification names one asset.
+        _ = deep
         let archive = try workflowState().archive ?? WorkflowArchive()
-        let values = try manifest.assets.filter { WorkflowMediaFormat.descriptor($0.mediaType) != nil }.map { try assetLocationOverview($0.id, deep: deep, archive: archive) }
+        let values = try manifest.assets.filter { WorkflowMediaFormat.descriptor($0.mediaType) != nil }.map { try assetLocationOverview($0.id, deep: false, archive: archive) }
         let external = values.filter { item in item.asset.fileLocations?.locations.first(where: { $0.id == item.selectedLocationID })?.role != .projectCopy && item.asset.fileLocations != nil }
         let bytes = try external.reduce(UInt64(0)) { total, item in
             let sum = total.addingReportingOverflow(item.byteCount ?? 0)
             guard !sum.overflow else { throw ProjectStoreError.invalidProject("收纳大小溢出。") }; return sum.partialValue
         }
-        return .init(projectID: manifest.id, revision: manifest.revision, assets: values, bytesToCollect: bytes, externalCount: external.count)
+        var libraries: [UUID: (String, Int, Int, Int)] = [:]
+        for item in values { for location in item.locations {
+            let key = location.location.libraryID
+            var row = libraries[key] ?? (location.location.libraryName, 0, 0, 0)
+            if location.status == .offline { row.1 += 1 }
+            if location.status == .needsAuthorization { row.2 += 1 }
+            if location.status == .missing { row.3 += 1 }
+            libraries[key] = row
+        } }
+        let availability = libraries.map { AssetLibraryAvailability(libraryID: $0.key, name: $0.value.0,
+            offline: $0.value.1, needsAuthorization: $0.value.2, missing: $0.value.3) }.sorted { $0.name < $1.name }
+        return .init(projectID: manifest.id, revision: manifest.revision, assets: values,
+            bytesToCollect: bytes, externalCount: external.count, libraryAvailability: availability)
+    }
+
+    /// Explicitly checks one registered placement and persists proof only for this unchanged snapshot.
+    public func verifyAssetLocation(_ id: UUID, locationID: UUID? = nil) throws {
+        try checkLocation(); try Task.checkCancellation()
+        let projectID = manifest.id, instanceID = manifest.effectiveInstanceID, revision = manifest.revision
+        guard let index = manifest.assets.firstIndex(where: { $0.id == id }),
+              let format = WorkflowMediaFormat.descriptor(manifest.assets[index].mediaType) else { throw ProjectStoreError.missingAsset }
+        let asset = manifest.assets[index]
+        let archive = try workflowState().archive
+        let knownDigest = asset.fileLocations?.sha256
+            ?? archive?.assets.first(where: { $0.reference.assetID == id })?.reference.sha256
+            ?? asset.metadata.imageContentSHA256 ?? asset.metadata.audio?.contentSHA256
+            ?? asset.metadata.video?.contentSHA256 ?? asset.metadata.pitch?.contentSHA256
+        guard let knownDigest else { throw WorkflowIssue("旧素材没有固定内容摘要，无法确认版本；原记录保留。") }
+        let placements = asset.fileLocations
+        let chosenID = locationID ?? placements?.preferredLocationID ?? id
+        guard let location = placements?.locations.first(where: { $0.id == chosenID })
+            ?? (placements == nil && chosenID == id ? AssetFileLocation(id: id, libraryID: manifest.id,
+                libraryName: manifest.name, role: .projectCopy) : nil) else {
+            throw ProjectStoreError.missingAsset
+        }
+        let url = location.role == .projectCopy ? rootURL.appendingPathComponent(asset.relativePath) : nil
+        let read: AssetLocationFiles.Read
+        if let url { read = try AssetLocationFiles.read(url, maximum: format.maximumBytes) }
+        else { read = try AssetLocationFiles.withResolved(location) { try AssetLocationFiles.read($0, maximum: format.maximumBytes) } }
+        guard UInt64(read.data.count) == (placements?.byteCount ?? UInt64(read.data.count)),
+              AssetLocationFiles.hash(read.data) == knownDigest else { throw ProjectStoreError.externalModification }
+        try Task.checkCancellation()
+        let currentFingerprint: AssetFileFingerprint
+        if let url { currentFingerprint = try AssetLocationFiles.fingerprint(url) }
+        else { currentFingerprint = try AssetLocationFiles.withResolved(location) { try AssetLocationFiles.fingerprint($0) } }
+        guard currentFingerprint == read.fingerprint else { throw ProjectStoreError.externalModification }
+        try checkLocation(); try verifyUnchangedManifest()
+        guard manifest.id == projectID, manifest.effectiveInstanceID == instanceID,
+              manifest.revision == revision, manifest.assets[index] == asset else {
+            throw ProjectStoreError.externalModification
+        }
+        var updated = location
+        updated.fingerprint = read.fingerprint
+        updated.lastVerifiedAt = Date()
+        var replacement = placements ?? AssetFileLocations(sha256: knownDigest, byteCount: UInt64(read.data.count),
+            preferredLocationID: id, locations: [location])
+        guard let placementIndex = replacement.locations.firstIndex(where: { $0.id == chosenID }) else { throw ProjectStoreError.missingAsset }
+        replacement.locations[placementIndex] = updated
+        try replacement.validate()
+        var candidate = manifest; candidate.assets[index].fileLocations = replacement
+        try Task.checkCancellation()
+        try commit(candidate)
     }
 
     /// Register a user-selected same-content location. Identity/version/source record stay unchanged.
@@ -4332,10 +4432,15 @@ extension ProjectStore {
         guard AssetLocationFiles.hash(read.data) == expected else { throw ProjectStoreError.externalModification }
         let location = try AssetLocationFiles.register(source, read: read, role: .externalOriginal)
         var placements = asset.fileLocations ?? .init(sha256: expected, byteCount: UInt64(read.data.count), preferredLocationID: id,
-            locations: [.init(id: id, libraryID: manifest.id, libraryName: manifest.name, role: .projectCopy, registeredAt: asset.createdAt)])
+            locations: [.init(id: id, libraryID: manifest.id, libraryName: manifest.name, role: .projectCopy)])
         // A second alias/bookmark of the same physical file is not another copy.
         if let i = placements.locations.firstIndex(where: { $0.fingerprint?.device == location.fingerprint?.device && $0.fingerprint?.inode == location.fingerprint?.inode }) {
-            var refreshed = location; refreshed.id = placements.locations[i].id; placements.locations[i] = refreshed
+            let original = placements.locations[i]
+            var refreshed = location
+            refreshed.id = original.id; refreshed.role = original.role
+            refreshed.registeredAt = original.registeredAt
+            refreshed.contentCreatedAt = original.contentCreatedAt ?? location.contentCreatedAt
+            placements.locations[i] = refreshed
             placements.preferredLocationID = refreshed.id
         } else { placements.locations.append(location); placements.preferredLocationID = location.id }
         try placements.validate()
@@ -4367,8 +4472,8 @@ extension ProjectStore {
         try checkLocation()
         guard let index = manifest.assets.firstIndex(where: { $0.id == id }), var placements = manifest.assets[index].fileLocations,
               placements.locations.contains(where: { $0.id == locationID }) else { throw ProjectStoreError.missingAsset }
-        let status = try assetLocationOverview(id, deep: true)
-        guard status.locations.contains(where: { $0.id == locationID && $0.status == .verified }) else { throw WorkflowIssue("该位置尚不能提供已登记的相同版本。") }
+        try verifyAssetLocation(id, locationID: locationID)
+        placements = manifest.assets[index].fileLocations ?? placements
         placements.preferredLocationID = locationID
         var candidate = manifest; candidate.assets[index].fileLocations = placements; try commit(candidate)
     }
@@ -4387,7 +4492,7 @@ extension ProjectStore {
         if let expected, digest != expected { throw ProjectStoreError.externalModification }
         if libraryFolder == nil, asset.fileLocations == nil { return } // Already stored in this project.
         var placements = asset.fileLocations ?? .init(sha256: digest, byteCount: UInt64(data.count), preferredLocationID: id,
-            locations: [.init(id: id, libraryID: manifest.id, libraryName: manifest.name, role: .projectCopy, registeredAt: asset.createdAt)])
+            locations: [.init(id: id, libraryID: manifest.id, libraryName: manifest.name, role: .projectCopy)])
         let location: AssetFileLocation
         if let libraryFolder {
             let fd = try ProjectFiles.openDirectory(libraryFolder); defer { Darwin.close(fd) }
@@ -4412,12 +4517,21 @@ extension ProjectStore {
                 // Existing Tasks/Audio originals remain at their declared path; never overwrite them.
                 guard try ProjectFiles.read(relative: asset.relativePath, in: rootFD, limit: format.maximumBytes) == data else { throw ProjectStoreError.externalModification }
             }
-            location = placements.locations.first(where: { $0.role == .projectCopy }) ?? .init(libraryID: manifest.id, libraryName: manifest.name, role: .projectCopy, lastVerifiedAt: Date())
+            let copiedURL = rootURL.appendingPathComponent(asset.relativePath)
+            let created = try? copiedURL.resourceValues(forKeys: [.creationDateKey]).creationDate
+            var projectCopy = placements.locations.first(where: { $0.role == .projectCopy })
+                ?? .init(libraryID: manifest.id, libraryName: manifest.name, role: .projectCopy,
+                    contentCreatedAt: created)
+            projectCopy.fingerprint = try AssetLocationFiles.fingerprint(copiedURL)
+            projectCopy.lastVerifiedAt = Date()
+            location = projectCopy
         }
         try Task.checkCancellation()
         // Recheck a mutable original before updating which location owns future reads.
         guard try readAssetData(asset, limit: format.maximumBytes) == data else { throw ProjectStoreError.externalModification }
-        if !placements.locations.contains(where: { $0.id == location.id }) { placements.locations.append(location) }
+        if let existing = placements.locations.firstIndex(where: { $0.id == location.id }) {
+            placements.locations[existing] = location
+        } else { placements.locations.append(location) }
         placements.preferredLocationID = location.id; try placements.validate()
         var candidate = manifest; candidate.assets[index].fileLocations = placements
         try commit(candidate)

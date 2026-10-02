@@ -39,6 +39,24 @@ struct AssetFileLocationsTests {
         #expect(changed.contentSHA256 == imported.record.reference.sha256)
         try await store.close()
     }
+    @Test func legacyProjectCopyMaterializesOnlyAfterKnownDigestMatches() async throws {
+        let (_, store, source) = try await fixture()
+        let imported = try await store.importWorkflowMediaFile(at: source, mode: .copy)
+        let path = store.rootURL.appendingPathComponent(imported.asset.relativePath)
+        #expect((await store.snapshot()).assets.first(where: { $0.id == imported.asset.id })?.fileLocations == nil)
+        let original = try Data(contentsOf: path)
+        try Data("different".utf8).write(to: path)
+        await #expect(throws: (any Error).self) { try await store.verifyAssetLocation(imported.asset.id) }
+        #expect((await store.snapshot()).assets.first(where: { $0.id == imported.asset.id })?.fileLocations == nil)
+        try original.write(to: path)
+        try await store.verifyAssetLocation(imported.asset.id)
+        let placement = try #require((await store.snapshot()).assets.first(where: { $0.id == imported.asset.id })?.fileLocations)
+        #expect(placement.sha256 == imported.record.reference.sha256)
+        #expect(placement.locations.count == 1 && placement.locations[0].role == .projectCopy)
+        #expect(placement.locations[0].lastVerifiedAt != nil)
+        #expect(placement.locations[0].contentCreatedAt == nil)
+        try await store.close()
+    }
     @Test func collectThenMoveSourceReopenAndExportKeepsOldVersion() async throws {
         let (root, store, source) = try await fixture()
         let imported = try await store.importWorkflowMediaFile(at: source, mode: .reference)
@@ -113,6 +131,81 @@ struct AssetFileLocationsTests {
         let output = root.appendingPathComponent("export.txt")
         await #expect(throws: (any Error).self) { try await store.export(assetID: imported.asset.id, to: output) }
         #expect(!FileManager.default.fileExists(atPath: output.path))
+        try await store.close()
+    }
+
+    @Test func explicitVerificationPersistsOnlyMatchingSelectedPlacement() async throws {
+        let (root, store, source) = try await fixture()
+        let first = try await store.importWorkflowMediaFile(at: source, mode: .reference)
+        let other = root.appendingPathComponent("unrelated.txt")
+        try Data("other".utf8).write(to: other)
+        _ = try await store.importWorkflowMediaFile(at: other, mode: .reference)
+        let before = try #require((await store.snapshot()).assets.first(where: { $0.id == first.asset.id })?.fileLocations?.locations.first)
+        try FileManager.default.removeItem(at: other)
+        try FileManager.default.createDirectory(at: other, withIntermediateDirectories: false)
+        try await store.verifyAssetLocation(first.asset.id)
+        let verified = try await store.assetLocationOverview(first.asset.id)
+        #expect(verified.locations.first?.status == .verified)
+        let persisted = try #require((await store.snapshot()).assets.first(where: { $0.id == first.asset.id })?.fileLocations?.locations.first)
+        let originalCheck = try #require(before.lastVerifiedAt)
+        let newCheck = try #require(persisted.lastVerifiedAt)
+        #expect(persisted.lastVerifiedAt != nil)
+        #expect(newCheck >= originalCheck)
+        #expect(persisted.fingerprint != nil)
+        try await store.close()
+        let reopened = try await ProjectStore.open(at: store.rootURL)
+        let reopenedLocation = try #require((await reopened.snapshot()).assets.first(where: { $0.id == first.asset.id })?.fileLocations?.locations.first)
+        #expect(reopenedLocation.lastVerifiedAt == persisted.lastVerifiedAt)
+        #expect(reopenedLocation.fingerprint == persisted.fingerprint)
+        try Data("changed content".utf8).write(to: source)
+        await #expect(throws: (any Error).self) { try await reopened.verifyAssetLocation(first.asset.id) }
+        #expect((await reopened.snapshot()).assets.first(where: { $0.id == first.asset.id })?.fileLocations?.locations.first?.lastVerifiedAt == persisted.lastVerifiedAt)
+        let cancelled = Task {
+            withUnsafeCurrentTask { $0?.cancel() }
+            return try await reopened.verifyAssetLocation(first.asset.id)
+        }
+        await #expect(throws: (any Error).self) { try await cancelled.value }
+        #expect((await reopened.snapshot()).assets.first(where: { $0.id == first.asset.id })?.fileLocations?.locations.first?.lastVerifiedAt == persisted.lastVerifiedAt)
+        try await reopened.close()
+    }
+
+    @Test func independentCopyKeepsOriginalCreationAndRecordsItsOwn() async throws {
+        let (root, store, source) = try await fixture()
+        let first = try await store.importWorkflowMediaFile(at: source, mode: .reference)
+        let original = try #require((await store.snapshot()).assets.first(where: { $0.id == first.asset.id })?.fileLocations?.locations.first)
+        let folder = root.appendingPathComponent("library")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: false)
+        try await store.collectAsset(first.asset.id, to: folder)
+        let locations = try #require((await store.snapshot()).assets.first(where: { $0.id == first.asset.id })?.fileLocations?.locations)
+        let retained = try #require(locations.first(where: { $0.id == original.id }))
+        let copy = try #require(locations.first(where: { $0.role == .independentCopy }))
+        #expect(retained.contentCreatedAt == original.contentCreatedAt)
+        #expect(retained.registeredAt == original.registeredAt)
+        #expect(copy.id != original.id && copy.contentCreatedAt != nil)
+        #expect(copy.registeredAt >= original.registeredAt)
+        try await store.relocateAsset(first.asset.id, to: try #require(copy.url))
+        let sameCopy = try #require((await store.snapshot()).assets.first(where: { $0.id == first.asset.id })?
+            .fileLocations?.locations.first(where: { $0.id == copy.id }))
+        #expect(sameCopy.role == .independentCopy)
+        #expect(sameCopy.contentCreatedAt == copy.contentCreatedAt)
+        #expect(sameCopy.registeredAt == copy.registeredAt)
+        try await store.close()
+    }
+
+    @Test func knownUsesNameGraphNodeAndDerivedAsset() async throws {
+        let (_, store, source) = try await fixture()
+        let imported = try await store.importWorkflowMediaFile(at: source, mode: .reference)
+        let child = try await store.publishWorkflowAsset(data: Data("derived".utf8), mediaType: "text/plain",
+            name: "派生版本", parents: [imported.record.reference], operationID: "test.derived")
+        var node = try #require(WorkflowRegistry.standard.operation("d.asset.reference")).definition.makeNode()
+        node.assetReference = imported.record.reference
+        let graph = WorkflowGraph(name: "使用素材的流程", nodes: [node])
+        let archive = try #require(try await store.workflowState().archive)
+        _ = try await store.saveWorkflow(graphs: [graph], runs: [], expectedRevision: archive.revision)
+        let overview = try await store.assetLocationOverview(imported.asset.id)
+        #expect(overview.knownUseCount == 2)
+        #expect(overview.knownUses.contains { $0.kind == .graph && $0.graphID == graph.id && $0.nodeID == node.id && $0.title == graph.name })
+        #expect(overview.knownUses.contains { $0.kind == .derivedAsset && $0.assetID == child.asset.id && $0.title == "派生版本" })
         try await store.close()
     }
 }

@@ -74,6 +74,25 @@ public struct AssetLocationOverview: Sendable {
     public let locations: [AssetLocationInspection]
     public let selectedLocationID: UUID?
     public let knownUseCount: Int
+    public let knownUses: [AssetKnownUse]
+}
+public struct AssetKnownUse: Sendable, Identifiable {
+    public enum Kind: Sendable, Equatable { case graph, derivedAsset, run }
+    public let id: String
+    public let kind: Kind
+    public let title: String
+    public let detail: String
+    public let graphID: UUID?
+    public let nodeID: UUID?
+    public let assetID: UUID?
+}
+public struct AssetLibraryAvailability: Sendable, Identifiable {
+    public var id: UUID { libraryID }
+    public let libraryID: UUID
+    public let name: String
+    public let offline: Int
+    public let needsAuthorization: Int
+    public let missing: Int
 }
 public struct ProjectFileOverview: Sendable {
     public let projectID: UUID
@@ -81,6 +100,7 @@ public struct ProjectFileOverview: Sendable {
     public let assets: [AssetLocationOverview]
     public let bytesToCollect: UInt64
     public let externalCount: Int
+    public let libraryAvailability: [AssetLibraryAvailability]
 }
 public struct AssetRelocationResult: Sendable, Identifiable {
     public let id: UUID
@@ -92,6 +112,19 @@ public struct AssetRelocationResult: Sendable, Identifiable {
 /// A read is a fixed bounded snapshot, verified before publication/use.
 enum AssetLocationFiles {
     struct Read: Sendable { let data: Data; let fingerprint: AssetFileFingerprint }
+    static func fingerprint(_ url: URL) throws -> AssetFileFingerprint {
+        let parent = try ProjectFiles.openDirectory(url.deletingLastPathComponent())
+        defer { Darwin.close(parent) }
+        let fd = try ProjectFiles.openRelativeFile(url.lastPathComponent, in: parent)
+        defer { Darwin.close(fd) }
+        var opened = stat(), path = stat()
+        guard fstat(fd, &opened) == 0,
+              fstatat(parent, url.lastPathComponent, &path, AT_SYMLINK_NOFOLLOW) == 0,
+              AssetFileFingerprint(opened) == AssetFileFingerprint(path) else {
+            throw ProjectStoreError.externalModification
+        }
+        return .init(opened)
+    }
     static func read(_ url: URL, maximum: Int) throws -> Read {
         let parent = try ProjectFiles.openDirectory(url.deletingLastPathComponent())
         defer { Darwin.close(parent) }
@@ -159,7 +192,7 @@ enum AssetLocationFiles {
                 }
                 guard s.st_mode & S_IFMT == S_IFREG, s.st_nlink == 1 else { return .init(location: location, status: .corrupt, reason: "位置不是独立普通文件。", resolvedURL: url) }
                 if !deep {
-                    let status: AssetLocationStatus = location.fingerprint == AssetFileFingerprint(s) ? .verified : .pendingVerification
+                    let status: AssetLocationStatus = location.lastVerifiedAt != nil && location.fingerprint == AssetFileFingerprint(s) ? .verified : .pendingVerification
                     return .init(location: location, status: status, reason: status == .verified ? nil : "文件身份变化，使用前需核对内容。", resolvedURL: url)
                 }
                 let current = try read(url, maximum: maximum)

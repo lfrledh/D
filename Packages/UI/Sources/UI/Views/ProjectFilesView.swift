@@ -1,4 +1,5 @@
 import AppKit
+import Darwin
 import DWorkbench
 import SwiftUI
 import UniformTypeIdentifiers
@@ -73,6 +74,7 @@ struct ProjectFilesView: View {
     let onContentsChanged: @MainActor (ProjectStore, UUID) async -> Void
     let saveDraftsForBackup: @MainActor (ProjectStore, UUID) async throws -> Void
     let onOpenRestored: (URL) async -> String?
+    var onOpenGraph: (UUID, UUID) -> Bool = { _, _ in false }
     let onClose: () -> Void
     var initialAssetID: UUID? = nil
 
@@ -90,6 +92,7 @@ struct ProjectFilesView: View {
     @State private var pendingRestore: (URL, URL)?
     @State private var job: Task<Void, Never>?
     @State private var busy = false
+    @State private var checkedSelections: Set<UUID> = []
 
     private func word(_ key: String, _ fallback: String) -> String {
         language?.text("files." + key, fallback: fallback) ?? fallback
@@ -128,6 +131,12 @@ struct ProjectFilesView: View {
             if let overview {
                 Text("\(word("external", "外部引用")) \(overview.externalCount) · \(word("collectBytes", "收纳需复制")) \(bytes(overview.bytesToCollect))")
                     .font(.headline)
+                Text("范围：本项目及已登记位置；不代表磁盘上所有副本。")
+                    .font(.caption).foregroundStyle(.secondary)
+                ForEach(overview.libraryAvailability.filter { $0.offline + $0.needsAuthorization + $0.missing > 0 }) { library in
+                    Text("\(library.name)：离线 \(library.offline) · 需授权 \(library.needsAuthorization) · 缺失 \(library.missing)")
+                        .font(.caption).foregroundStyle(.orange)
+                }
                 HStack(alignment: .top, spacing: 14) {
                     List(overview.assets, id: \.asset.id, selection: $selectedAssetID) { item in
                         VStack(alignment: .leading) {
@@ -135,7 +144,7 @@ struct ProjectFilesView: View {
                             Text(ProjectFilesPresentation.selectedStatus(item).map(status) ?? word("unknown", "未知"))
                                 .font(.caption).foregroundStyle(.secondary)
                         }.tag(item.asset.id)
-                    }.frame(minWidth: 220)
+                    }.frame(minWidth: 220).disabled(busy)
                     ScrollView { if let selected { inspector(selected) } else { Text(word("choose", "选择素材查看位置")) } }
                         .frame(minWidth: 370, maxWidth: .infinity)
                 }
@@ -146,7 +155,8 @@ struct ProjectFilesView: View {
                     Button(word("backup", "创建手动备份…")) { prepareBackup() }.disabled(busy)
                     Button(word("restore", "恢复手动备份…")) { prepareRestore() }.disabled(busy)
                 }
-            } else { ProgressView(word("loading", "读取项目文件…")) }
+            } else if isActive() { ProgressView(word("loading", "读取项目文件…")) }
+            else { Text("所属项目实例已关闭或切换；请从项目入口重新打开。") }
             if !models.isEmpty {
                 DisclosureGroup(word("models", "可选：包含模型资源（默认不选）")) {
                     ForEach(models, id: \.id) { record in
@@ -186,7 +196,14 @@ struct ProjectFilesView: View {
             if let message { Text(message).foregroundStyle(.secondary).textSelection(.enabled) }
         }
         .padding(20).frame(minWidth: 760, minHeight: 520)
-        .task(id: instanceID) { await refresh(deep: false); await loadModels() }
+        .task(id: instanceID) { await refresh(); await loadModels() }
+        .onChange(of: selectedAssetID) { _, id in
+            guard let id, checkedSelections.insert(id).inserted else { return }
+            start { store in
+                try await store.verifyAssetLocation(id)
+                return word("verifiedNow", "所选素材内容已核对。")
+            }
+        }
         .onDisappear { job?.cancel() }
         .alert(word("incomplete", "备份缺少文件"), isPresented: Binding(get: { pendingBackup != nil }, set: { if !$0 { pendingBackup = nil } })) {
             Button(word("cancel", "取消"), role: .cancel) { pendingBackup = nil }
@@ -206,7 +223,26 @@ struct ProjectFilesView: View {
     @ViewBuilder private func inspector(_ item: AssetLocationOverview) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(item.asset.name).font(.headline)
-            Text("\(word("knownUse", "本项目已知图与历史使用")) \(item.knownUseCount)")
+            Text("\(word("knownUse", "本项目已知使用")) \(item.knownUseCount)")
+            ForEach(item.knownUses) { use in
+                HStack {
+                    VStack(alignment: .leading) {
+                        Text(use.title).font(.caption.weight(.semibold))
+                        Text(use.detail).font(.caption2).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    if let graphID = use.graphID, let nodeID = use.nodeID {
+                        Button("打开流程") {
+                            if !onOpenGraph(graphID, nodeID) { message = "该流程当前未打开；请从所属项目打开流程。" }
+                        }.disabled(busy)
+                    } else if let assetID = use.assetID {
+                        Button("查看派生素材") { selectedAssetID = assetID }.disabled(busy)
+                    } else {
+                        Text(use.kind == .run ? "运行证据：暂无直接导航" : "此关联暂无直接导航")
+                            .font(.caption2).foregroundStyle(.secondary)
+                    }
+                }
+            }
             Text("SHA-256: \(item.contentSHA256 ?? word("unknown", "未知"))").font(.caption.monospaced()).textSelection(.enabled)
             Text("\(word("size", "已知字节")): \(item.byteCount.map(bytes) ?? word("unknown", "未知"))")
             ForEach(item.locations) { location in
@@ -221,17 +257,19 @@ struct ProjectFilesView: View {
                     Text(location.resolvedURL?.path ?? location.location.url?.path ?? word("unknown", "未知"))
                         .font(.caption).textSelection(.enabled)
                     if let reason = location.reason { Text(reason).font(.caption).foregroundStyle(.orange) }
-                    Text("\(word("registered", "登记")): \(date(location.location.registeredAt)) · \(word("verified", "上次核对")): \(date(location.location.lastVerifiedAt)) · \(word("created", "文件创建")): \(date(location.location.contentCreatedAt))")
+                    Text("\(word("registered", "登记")): \(item.asset.fileLocations == nil ? word("unknown", "未知") : date(location.location.registeredAt)) · \(word("verified", "上次核对")): \(date(location.location.lastVerifiedAt)) · \(location.location.role == .externalOriginal ? "原件创建" : "此副本创建"): \(date(location.location.contentCreatedAt))")
                         .font(.caption).foregroundStyle(.secondary)
+                    Button("在访达中显示") { reveal(location) }
+                        .disabled(busy || !canReveal(location))
                     if location.id != item.selectedLocationID {
                         Button(word("useLocation", "核对并使用此位置")) { useLocation(item.asset.id, location.id) }.disabled(busy)
                     }
                 }.padding(8).background(Color.secondary.opacity(0.08)).cornerRadius(8)
             }
             HStack {
-                Button(word("verify", "核对内容")) { start(deepRefresh: true) { store in
-                    _ = try await store.assetLocationOverview(item.asset.id, deep: true)
-                    return word("verifiedNow", "内容核对完成；位置状态已刷新。")
+                Button(word("verify", "核对内容")) { start { store in
+                    try await store.verifyAssetLocation(item.asset.id)
+                    return word("verifiedNow", "内容核对完成；时间与文件身份已记录。")
                 } }.disabled(busy)
                 Button(word("findFile", "定位同内容文件…")) { relocateFile(item.asset.id) }.disabled(busy)
                 Button(word("collectOne", "复制入项目…")) { start { store in
@@ -255,9 +293,9 @@ struct ProjectFilesView: View {
             }.disabled(busy)
         }.frame(maxWidth: .infinity, alignment: .leading)
     }
-    private func refresh(deep: Bool) async {
+    private func refresh() async {
         do {
-            let value = try await store.projectFileOverview(deep: deep)
+            let value = try await store.projectFileOverview()
             guard isActive() else { return }
             overview = value
             if selectedAssetID == nil { selectedAssetID = initialAssetID ?? value.assets.first?.asset.id }
@@ -269,8 +307,7 @@ struct ProjectFilesView: View {
         models = snapshot.records
         modelTitles = Dictionary(uniqueKeysWithValues: snapshot.catalog.map { ($0.id, $0.title) })
     }
-    private func start(deepRefresh: Bool = false,
-                       _ operation: @escaping @MainActor (ProjectStore) async throws -> String) {
+    private func start(_ operation: @escaping @MainActor (ProjectStore) async throws -> String) {
         guard !busy, isActive() else { return }
         busy = true; message = nil; results = []
         let captured = store
@@ -282,7 +319,7 @@ struct ProjectFilesView: View {
             catch { if isActive() { message = error.localizedDescription } }
             await ProjectFilesPresentation.refreshAfterOperation(store: captured, instanceID: instanceID,
                 onContentsChanged: onContentsChanged, refreshOverview: {
-                    if isActive() { await refresh(deep: deepRefresh) }
+                    if isActive() { await refresh() }
                 })
             busy = false; job = nil
         }
@@ -291,6 +328,37 @@ struct ProjectFilesView: View {
         let panel = NSOpenPanel(); panel.title = title
         panel.canChooseDirectories = true; panel.canChooseFiles = false
         return await panel.begin() == .OK ? panel.url : nil
+    }
+    private func reveal(_ inspection: AssetLocationInspection) {
+        guard canReveal(inspection) else { return }
+        do {
+            let url: URL
+            if inspection.location.role == .projectCopy {
+                guard let resolved = inspection.resolvedURL else { return }
+                url = resolved
+                try checkRevealFile(url)
+                NSWorkspace.shared.activateFileViewerSelecting([url])
+            } else {
+                guard let bookmark = inspection.location.bookmark else { throw WorkflowIssue("此位置需要重新授权。") }
+                var stale = false
+                url = try URL(resolvingBookmarkData: bookmark, options: [.withSecurityScope, .withoutUI],
+                    relativeTo: nil, bookmarkDataIsStale: &stale)
+                guard !stale else { throw WorkflowIssue("位置授权已过期，请重新定位。") }
+                let access = url.startAccessingSecurityScopedResource()
+                defer { if access { url.stopAccessingSecurityScopedResource() } }
+                try checkRevealFile(url)
+                NSWorkspace.shared.activateFileViewerSelecting([url])
+            }
+        } catch { message = error.localizedDescription }
+    }
+    private func canReveal(_ inspection: AssetLocationInspection) -> Bool {
+        inspection.status == .verified || inspection.status == .pendingVerification || inspection.status == .changed
+    }
+    private func checkRevealFile(_ url: URL) throws {
+        var file = stat()
+        guard lstat(url.path, &file) == 0, file.st_mode & S_IFMT == S_IFREG, file.st_nlink == 1 else {
+            throw WorkflowIssue("该位置当前不是可显示的独立普通文件，请重新定位。")
+        }
     }
     private func relocateFile(_ id: UUID) {
         Task {
