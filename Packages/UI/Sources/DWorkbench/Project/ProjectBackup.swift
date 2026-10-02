@@ -80,8 +80,14 @@ public enum ProjectBackup {
 
     public static func restore(at backup: URL, to destination: URL,
                                allowIncomplete: Bool = false) async throws -> ProjectBackupReceipt {
+        try await restore(at: backup, to: destination, allowIncomplete: allowIncomplete, prepare: { _ in })
+    }
+
+    // ProjectStore may prepare its new instance in the verified, owned staging directory.
+    static func restore(at backup: URL, to destination: URL, allowIncomplete: Bool = false,
+                        prepare: @escaping @Sendable (URL) throws -> Void) async throws -> ProjectBackupReceipt {
         let work = Task.detached(priority: .userInitiated) {
-            try restoreSync(at: backup, to: destination, allowIncomplete: allowIncomplete)
+            try restoreSync(at: backup, to: destination, allowIncomplete: allowIncomplete, prepare: prepare)
         }
         return try await withTaskCancellationHandler { try await work.value } onCancel: { work.cancel() }
     }
@@ -117,6 +123,10 @@ private extension ProjectBackup {
             ctimeSec = value.st_ctimespec.tv_sec; ctimeNsec = value.st_ctimespec.tv_nsec
         }
     }
+    struct DirectoryIdentity: Equatable {
+        let device: dev_t; let inode: ino_t
+        init(_ value: stat) { device = value.st_dev; inode = value.st_ino }
+    }
 
     static func createSync(_ plan: ProjectBackupPlan, at destination: URL, allowIncomplete: Bool,
                            checkpoint: @Sendable (Int) throws -> Void) throws -> ProjectBackupReceipt {
@@ -137,7 +147,17 @@ private extension ProjectBackup {
         guard mkdirat(parent, stageName, 0o700) == 0 else { throw io("create staging directory") }
         let stage = try childDirectory(stageName, in: parent)
         defer { Darwin.close(stage) }
-        // On failure the exact owned .partial folder remains for inspection; it is never ready.
+        let ownedStage = try directoryIdentity(stage)
+        var markerWritten = false
+        var published = false
+        defer {
+            // Keep partial evidence, but never leave our completion marker on a failed publication.
+            if markerWritten && !published {
+                _ = unlinkat(stage, markerName, 0)
+                _ = fsync(stage)
+            }
+        }
+        guard fsync(parent) == 0 else { throw io("sync staging parent") }
         for (index, input) in plan.files.enumerated() {
             try Task.checkCancellation()
             let (folder, name) = try createParent(input.relativePath, in: stage)
@@ -178,30 +198,48 @@ private extension ProjectBackup {
         guard bytes.count <= maxManifestBytes else { throw ProjectBackupError.invalidPackage("manifest too large") }
         try writeSmall(bytes, named: manifestName, in: stage)
         try Task.checkCancellation()
-        try writeSmall(Data(digest(bytes).utf8), named: markerName, in: stage)
         _ = try inspect(manifest: manifest, in: stage, directory: target, verifyFiles: true)
         try absent(target.lastPathComponent, in: parent)
         try Task.checkCancellation()
-        guard fsync(stage) == 0 else { throw io("sync backup package") }
+        // All file and manifest validation precedes the marker. A failed partial is never complete.
+        let marker = try exclusiveFile(markerName, in: stage)
+        markerWritten = true
+        do {
+            try write(Data(digest(bytes).utf8), to: marker)
+            guard fsync(marker) == 0 else { throw io("sync completion marker") }
+        } catch {
+            Darwin.close(marker)
+            throw error
+        }
+        Darwin.close(marker)
+        guard fsync(stage) == 0 else { throw io("sync completion directory") }
+        try Task.checkCancellation()
+        try checkPublicationRoute(parent: parent, parentURL: target.deletingLastPathComponent(),
+                                  stage: stage, stageName: stageName, stageIdentity: ownedStage)
         guard renameatx_np(parent, stageName, parent, target.lastPathComponent, UInt32(RENAME_EXCL)) == 0 else {
             if errno == EEXIST { throw ProjectBackupError.alreadyExists(target.path) }
             throw io("publish backup package")
         }
+        published = true
+        try checkPublishedTarget(target.lastPathComponent, in: parent, expected: ownedStage)
         guard fsync(parent) == 0 else { throw ProjectBackupError.io("backup published but parent sync failed; retained at \(target.path)") }
         return receipt(manifest, at: target)
     }
 
     static func verifySync(at backup: URL) throws -> ProjectBackupReceipt {
         let location = try absolute(backup)
+        try rejectPartial(location)
         let root = try directory(location)
         defer { Darwin.close(root) }
         let manifest = try loadManifest(in: root)
         return try inspect(manifest: manifest, in: root, directory: location, verifyFiles: true)
     }
 
-    static func restoreSync(at backup: URL, to destination: URL, allowIncomplete: Bool) throws -> ProjectBackupReceipt {
+    static func restoreSync(at backup: URL, to destination: URL, allowIncomplete: Bool,
+                            prepare: @Sendable (URL) throws -> Void) throws -> ProjectBackupReceipt {
         try Task.checkCancellation()
         let source = try absolute(backup), target = try absolute(destination)
+        try rejectPartial(source)
         guard source.path != target.path, !source.path.hasPrefix(target.path + "/"),
               !target.path.hasPrefix(source.path + "/") else { throw ProjectBackupError.unsafePath(target.path) }
         let backupFD = try directory(source)
@@ -217,6 +255,8 @@ private extension ProjectBackup {
         guard mkdirat(parent, stageName, 0o700) == 0 else { throw io("create restore staging directory") }
         let stage = try childDirectory(stageName, in: parent)
         defer { Darwin.close(stage) }
+        let ownedStage = try directoryIdentity(stage)
+        guard fsync(parent) == 0 else { throw io("sync restore staging parent") }
         for entry in manifest.files {
             try Task.checkCancellation()
             let input = try relativeFile(entry.path, in: backupFD)
@@ -233,14 +273,21 @@ private extension ProjectBackup {
             Darwin.close(output)
             guard fsync(folder) == 0 else { throw io("sync restore directory") }
         }
-        // Restore contains only the selected project bytes. Lead remaps the project ID.
+        // Check all original bytes before ProjectStore intentionally changes project.json.
         _ = try inspect(manifest: manifest, in: stage, directory: target, verifyFiles: true)
         try Task.checkCancellation()
+        try checkPublicationRoute(parent: parent, parentURL: target.deletingLastPathComponent(),
+                                  stage: stage, stageName: stageName, stageIdentity: ownedStage)
+        try prepare(target.deletingLastPathComponent().appendingPathComponent(stageName, isDirectory: true))
+        try Task.checkCancellation()
         guard fsync(stage) == 0 else { throw io("sync restore package") }
+        try checkPublicationRoute(parent: parent, parentURL: target.deletingLastPathComponent(),
+                                  stage: stage, stageName: stageName, stageIdentity: ownedStage)
         guard renameatx_np(parent, stageName, parent, target.lastPathComponent, UInt32(RENAME_EXCL)) == 0 else {
             if errno == EEXIST { throw ProjectBackupError.alreadyExists(target.path) }
             throw io("publish restore")
         }
+        try checkPublishedTarget(target.lastPathComponent, in: parent, expected: ownedStage)
         guard fsync(parent) == 0 else { throw ProjectBackupError.io("restore published but parent sync failed; retained at \(target.path)") }
         return receipt(manifest, at: target)
     }
@@ -412,13 +459,49 @@ private extension ProjectBackup {
         guard fd >= 0 else { throw io("open child directory") }
         return fd
     }
+    static func directoryIdentity(_ fd: Int32) throws -> DirectoryIdentity {
+        var value = stat()
+        guard fstat(fd, &value) == 0 else { throw io("stat directory") }
+        guard value.st_mode & S_IFMT == S_IFDIR else { throw ProjectBackupError.unsafePath("non-directory") }
+        return DirectoryIdentity(value)
+    }
+    static func namedDirectoryIdentity(_ name: String, in parent: Int32) throws -> DirectoryIdentity {
+        var value = stat()
+        guard fstatat(parent, name, &value, AT_SYMLINK_NOFOLLOW) == 0 else { throw io("stat named directory") }
+        guard value.st_mode & S_IFMT == S_IFDIR else { throw ProjectBackupError.unsafePath(name) }
+        return DirectoryIdentity(value)
+    }
+    static func checkPublicationRoute(parent: Int32, parentURL: URL, stage: Int32,
+                                      stageName: String, stageIdentity: DirectoryIdentity) throws {
+        let route = try directory(parentURL)
+        defer { Darwin.close(route) }
+        guard try directoryIdentity(route) == directoryIdentity(parent),
+              try directoryIdentity(stage) == stageIdentity,
+              try namedDirectoryIdentity(stageName, in: parent) == stageIdentity else {
+            throw ProjectBackupError.integrity("staging directory or destination parent changed")
+        }
+    }
+    static func checkPublishedTarget(_ name: String, in parent: Int32,
+                                     expected: DirectoryIdentity) throws {
+        guard try namedDirectoryIdentity(name, in: parent) == expected else {
+            throw ProjectBackupError.integrity("published directory identity changed; result retained")
+        }
+    }
+    static func rejectPartial(_ url: URL) throws {
+        let name = url.lastPathComponent
+        guard !((name.hasPrefix(".d-backup-") || name.hasPrefix(".d-restore-")) && name.hasSuffix(".partial")) else {
+            throw ProjectBackupError.invalidPackage("staging directory is incomplete")
+        }
+    }
     static func createParent(_ path: String, in root: Int32) throws -> (Int32, String) {
         var parts = path.split(separator: "/").map(String.init)
         let name = parts.removeLast()
         var current = dup(root)
         guard current >= 0 else { throw io("duplicate directory") }
         for component in parts {
-            if mkdirat(current, component, 0o700) != 0 && errno != EEXIST {
+            if mkdirat(current, component, 0o700) == 0 {
+                if fsync(current) != 0 { Darwin.close(current); throw io("sync new directory entry") }
+            } else if errno != EEXIST {
                 Darwin.close(current); throw io("create backup directory")
             }
             let next = openat(current, component, O_SEARCH | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
