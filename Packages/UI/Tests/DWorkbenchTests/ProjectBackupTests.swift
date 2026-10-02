@@ -1,4 +1,5 @@
 import CryptoKit
+import Darwin
 import Dispatch
 import Foundation
 import Testing
@@ -155,13 +156,18 @@ struct ProjectBackupTests {
             let (entered, signalEntered) = AsyncStream<Void>.makeStream()
             let resume = DispatchSemaphore(value: 0)
             let work = Task {
+                defer { signalEntered.finish(); resume.signal() }
                 try await ProjectBackup.create(plan, at: target, checkpoint: { _ in
                     signalEntered.yield(())
-                    resume.wait()
+                    guard resume.wait(timeout: .now() + .seconds(5)) == .success else { throw Interrupted.now }
                 })
             }
             var iterator = entered.makeAsyncIterator()
-            _ = await iterator.next()
+            guard await iterator.next() != nil else {
+                _ = try await work.value
+                Issue.record("copy finished before the cancellation checkpoint")
+                return
+            }
             work.cancel()
             resume.signal()
             await #expect(throws: CancellationError.self) { try await work.value }
@@ -178,14 +184,77 @@ struct ProjectBackupTests {
             let backup = root.appendingPathComponent("backup")
             _ = try await ProjectBackup.create(plan, at: backup)
             let target = root.appendingPathComponent("restored")
-            _ = try await ProjectBackup.restore(at: backup, to: target, prepare: { stage in
-                #expect(try Data(contentsOf: stage.appendingPathComponent("project.json")) == data)
-                try Data("new instance".utf8).write(to: stage.appendingPathComponent("project.json"))
-                try FileManager.default.createDirectory(at: stage.appendingPathComponent("Tasks"), withIntermediateDirectories: false)
+            _ = try await ProjectBackup.restore(at: backup, to: target, prepare: { stageFD in
+                #expect(try readStageFile("project.json", in: stageFD) == data)
+                try writeStageFile(Data("new instance".utf8), named: "project.json", in: stageFD)
+                guard mkdirat(stageFD, "Tasks", 0o700) == 0 else { throw Interrupted.now }
             })
             #expect(try Data(contentsOf: target.appendingPathComponent("project.json")) == Data("new instance".utf8))
             #expect(FileManager.default.fileExists(atPath: target.appendingPathComponent("Tasks").path))
             #expect(try await ProjectBackup.verify(at: backup).complete)
+        }
+    }
+
+    @Test func replacedRestoreStageCannotRedirectPreparation() async throws {
+        try await fixture { root in
+            let original = Data("verified project".utf8)
+            let replacement = Data("other project".utf8)
+            let prepared = Data("prepared instance".utf8)
+            let plan = ProjectBackupPlan(projectID: UUID(), revision: 1, files: [
+                .init(relativePath: "project.json", sourceURL: nil, data: original,
+                      sha256: hash(original), byteCount: UInt64(original.count))
+            ])
+            let backup = root.appendingPathComponent("backup")
+            _ = try await ProjectBackup.create(plan, at: backup)
+            let target = root.appendingPathComponent("restored")
+            let retained = root.appendingPathComponent("retained-stage")
+            await #expect(throws: ProjectBackupError.self) {
+                try await ProjectBackup.restore(at: backup, to: target, prepare: { stageFD in
+                    let stage = try FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)
+                        .first { $0.lastPathComponent.hasPrefix(".d-restore-") && $0.lastPathComponent.hasSuffix(".partial") }
+                    guard let stage else { throw Interrupted.now }
+                    try FileManager.default.moveItem(at: stage, to: retained)
+                    try FileManager.default.createDirectory(at: stage, withIntermediateDirectories: false)
+                    try replacement.write(to: stage.appendingPathComponent("project.json"))
+                    #expect(try readStageFile("project.json", in: stageFD) == original)
+                    try writeStageFile(prepared, named: "project.json", in: stageFD)
+                })
+            }
+            #expect(!FileManager.default.fileExists(atPath: target.path))
+            #expect(try Data(contentsOf: retained.appendingPathComponent("project.json")) == prepared)
+            let replacementStage = try FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)
+                .first { $0.lastPathComponent.hasPrefix(".d-restore-") && $0.lastPathComponent.hasSuffix(".partial") }
+            guard let replacementStage else { Issue.record("replacement stage missing"); return }
+            #expect(try Data(contentsOf: replacementStage.appendingPathComponent("project.json")) == replacement)
+        }
+    }
+
+    @Test func failedPublicationKeepsReplacementCompletionMarker() async throws {
+        try await fixture { root in
+            let data = Data("source".utf8)
+            let replacement = Data("unowned marker".utf8)
+            let plan = ProjectBackupPlan(projectID: UUID(), revision: 1, files: [
+                .init(relativePath: "file", sourceURL: nil, data: data,
+                      sha256: hash(data), byteCount: UInt64(data.count))
+            ])
+            let target = root.appendingPathComponent("backup")
+            await #expect(throws: Interrupted.self) {
+                try await ProjectBackup.create(plan, at: target, checkpoint: { _ in }, markerCheckpoint: {
+                    let stage = try FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)
+                        .first { $0.lastPathComponent.hasPrefix(".d-backup-") && $0.lastPathComponent.hasSuffix(".partial") }
+                    guard let stage else { throw Interrupted.now }
+                    try FileManager.default.moveItem(at: stage.appendingPathComponent("complete.sha256"),
+                                                     to: stage.appendingPathComponent("original-marker"))
+                    try replacement.write(to: stage.appendingPathComponent("complete.sha256"))
+                    throw Interrupted.now
+                })
+            }
+            #expect(!FileManager.default.fileExists(atPath: target.path))
+            let partial = try FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)
+                .first { $0.lastPathComponent.hasPrefix(".d-backup-") && $0.lastPathComponent.hasSuffix(".partial") }
+            guard let partial else { Issue.record("partial backup missing"); return }
+            #expect(try Data(contentsOf: partial.appendingPathComponent("complete.sha256")) == replacement)
+            await #expect(throws: ProjectBackupError.self) { try await ProjectBackup.verify(at: partial) }
         }
     }
 
@@ -198,4 +267,25 @@ struct ProjectBackupTests {
     }
 
     private func hash(_ data: Data) -> String { SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined() }
+
+    private func readStageFile(_ name: String, in directory: Int32) throws -> Data {
+        let fd = openat(directory, name, O_RDONLY | O_NOFOLLOW | O_CLOEXEC)
+        guard fd >= 0 else { throw Interrupted.now }
+        defer { Darwin.close(fd) }
+        var result = Data(), buffer = [UInt8](repeating: 0, count: 128)
+        while true {
+            let count = buffer.withUnsafeMutableBytes { Darwin.read(fd, $0.baseAddress, $0.count) }
+            guard count >= 0 else { throw Interrupted.now }
+            if count == 0 { return result }
+            result.append(contentsOf: buffer.prefix(count))
+        }
+    }
+
+    private func writeStageFile(_ data: Data, named name: String, in directory: Int32) throws {
+        let fd = openat(directory, name, O_WRONLY | O_TRUNC | O_NOFOLLOW | O_CLOEXEC)
+        guard fd >= 0 else { throw Interrupted.now }
+        defer { Darwin.close(fd) }
+        let written = data.withUnsafeBytes { Darwin.write(fd, $0.baseAddress, $0.count) }
+        guard written == data.count, fsync(fd) == 0 else { throw Interrupted.now }
+    }
 }

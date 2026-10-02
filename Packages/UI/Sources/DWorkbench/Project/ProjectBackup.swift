@@ -66,9 +66,11 @@ public enum ProjectBackup {
 
     // Internal seam: deterministic cancellation and source mutation tests without a public hook.
     static func create(_ plan: ProjectBackupPlan, at destination: URL, allowIncomplete: Bool = false,
-                       checkpoint: @escaping @Sendable (Int) throws -> Void) async throws -> ProjectBackupReceipt {
+                       checkpoint: @escaping @Sendable (Int) throws -> Void,
+                       markerCheckpoint: @escaping @Sendable () throws -> Void = {}) async throws -> ProjectBackupReceipt {
         let work = Task.detached(priority: .userInitiated) {
-            try createSync(plan, at: destination, allowIncomplete: allowIncomplete, checkpoint: checkpoint)
+            try createSync(plan, at: destination, allowIncomplete: allowIncomplete,
+                           checkpoint: checkpoint, markerCheckpoint: markerCheckpoint)
         }
         return try await withTaskCancellationHandler { try await work.value } onCancel: { work.cancel() }
     }
@@ -83,9 +85,9 @@ public enum ProjectBackup {
         try await restore(at: backup, to: destination, allowIncomplete: allowIncomplete, prepare: { _ in })
     }
 
-    // ProjectStore may prepare its new instance in the verified, owned staging directory.
+    // The descriptor is borrowed for this synchronous call. The helper owns and closes it.
     static func restore(at backup: URL, to destination: URL, allowIncomplete: Bool = false,
-                        prepare: @escaping @Sendable (URL) throws -> Void) async throws -> ProjectBackupReceipt {
+                        prepare: @escaping @Sendable (Int32) throws -> Void) async throws -> ProjectBackupReceipt {
         let work = Task.detached(priority: .userInitiated) {
             try restoreSync(at: backup, to: destination, allowIncomplete: allowIncomplete, prepare: prepare)
         }
@@ -129,7 +131,8 @@ private extension ProjectBackup {
     }
 
     static func createSync(_ plan: ProjectBackupPlan, at destination: URL, allowIncomplete: Bool,
-                           checkpoint: @Sendable (Int) throws -> Void) throws -> ProjectBackupReceipt {
+                           checkpoint: @Sendable (Int) throws -> Void,
+                           markerCheckpoint: @Sendable () throws -> Void) throws -> ProjectBackupReceipt {
         try Task.checkCancellation()
         let target = try absolute(destination)
         let manifest = try makeManifest(plan, allowIncomplete: allowIncomplete)
@@ -148,13 +151,21 @@ private extension ProjectBackup {
         let stage = try childDirectory(stageName, in: parent)
         defer { Darwin.close(stage) }
         let ownedStage = try directoryIdentity(stage)
-        var markerWritten = false
+        var markerFD: Int32 = -1
         var published = false
         defer {
-            // Keep partial evidence, but never leave our completion marker on a failed publication.
-            if markerWritten && !published {
-                _ = unlinkat(stage, markerName, 0)
-                _ = fsync(stage)
+            // Keep partial evidence. Remove only the marker created by this invocation.
+            if markerFD >= 0 {
+                if !published {
+                    var owned = stat(), named = stat()
+                    if fstat(markerFD, &owned) == 0,
+                       fstatat(stage, markerName, &named, AT_SYMLINK_NOFOLLOW) == 0,
+                       owned.st_dev == named.st_dev, owned.st_ino == named.st_ino,
+                       named.st_mode & S_IFMT == S_IFREG {
+                        if unlinkat(stage, markerName, 0) == 0 { _ = fsync(stage) }
+                    }
+                }
+                Darwin.close(markerFD)
             }
         }
         guard fsync(parent) == 0 else { throw io("sync staging parent") }
@@ -203,16 +214,11 @@ private extension ProjectBackup {
         try Task.checkCancellation()
         // All file and manifest validation precedes the marker. A failed partial is never complete.
         let marker = try exclusiveFile(markerName, in: stage)
-        markerWritten = true
-        do {
-            try write(Data(digest(bytes).utf8), to: marker)
-            guard fsync(marker) == 0 else { throw io("sync completion marker") }
-        } catch {
-            Darwin.close(marker)
-            throw error
-        }
-        Darwin.close(marker)
+        markerFD = marker
+        try write(Data(digest(bytes).utf8), to: marker)
+        guard fsync(marker) == 0 else { throw io("sync completion marker") }
         guard fsync(stage) == 0 else { throw io("sync completion directory") }
+        try markerCheckpoint()
         try Task.checkCancellation()
         try checkPublicationRoute(parent: parent, parentURL: target.deletingLastPathComponent(),
                                   stage: stage, stageName: stageName, stageIdentity: ownedStage)
@@ -236,7 +242,7 @@ private extension ProjectBackup {
     }
 
     static func restoreSync(at backup: URL, to destination: URL, allowIncomplete: Bool,
-                            prepare: @Sendable (URL) throws -> Void) throws -> ProjectBackupReceipt {
+                            prepare: @Sendable (Int32) throws -> Void) throws -> ProjectBackupReceipt {
         try Task.checkCancellation()
         let source = try absolute(backup), target = try absolute(destination)
         try rejectPartial(source)
@@ -278,7 +284,7 @@ private extension ProjectBackup {
         try Task.checkCancellation()
         try checkPublicationRoute(parent: parent, parentURL: target.deletingLastPathComponent(),
                                   stage: stage, stageName: stageName, stageIdentity: ownedStage)
-        try prepare(target.deletingLastPathComponent().appendingPathComponent(stageName, isDirectory: true))
+        try prepare(stage)
         try Task.checkCancellation()
         guard fsync(stage) == 0 else { throw io("sync restore package") }
         try checkPublicationRoute(parent: parent, parentURL: target.deletingLastPathComponent(),
