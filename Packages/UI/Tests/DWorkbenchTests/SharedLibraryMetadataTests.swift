@@ -5,6 +5,33 @@ import Testing
 @Suite("Shared library metadata", .serialized)
 @MainActor
 struct SharedLibraryMetadataTests {
+    @Test func representativeIndexObservations() throws {
+        let directory = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let file = directory.appendingPathComponent("metadata.json")
+        let store = try SharedLibraryStore(fileURL: file)
+        let tags = try store.createTags(["index", "edited"])
+        let entries = (0..<1_000).map { item("asset-\($0)", kind: .asset, contentKind: .image) }
+        try store.addTags([tags[0]], to: Set(entries.map(\.key)))
+        let start = Date()
+        let opened = try SharedLibraryStore(fileURL: file)
+        let openSeconds = Date().timeIntervalSince(start)
+        let before = try Data(contentsOf: file)
+        let queryStart = Date()
+        for _ in 0..<20 {
+            #expect(opened.filter(entries, query: .init(allTagIDs: [tags[0]])).count == entries.count)
+        }
+        let querySeconds = Date().timeIntervalSince(queryStart)
+        #expect(try Data(contentsOf: file) == before)
+        let saveStart = Date()
+        try opened.addTags([tags[1]], to: Set(entries.prefix(100).map(\.key)))
+        let saveSeconds = Date().timeIntervalSince(saveStart)
+        let reopened = try SharedLibraryStore(fileURL: file)
+        #expect(reopened.filter(entries, query: .init(allTagIDs: [tags[1]])).count == 100)
+        print("D_INDEX_OBSERVATION entries", entries.count, "bytes", before.count,
+              "open", openSeconds, "queries20", querySeconds, "tagSave100", saveSeconds)
+    }
+
     private func item(_ key: String, kind: SharedLibraryItemKind = .model,
                       inputs: Set<WorkflowDataKind> = [], outputs: Set<WorkflowDataKind> = [],
                       contentKind: WorkflowDataKind? = nil,

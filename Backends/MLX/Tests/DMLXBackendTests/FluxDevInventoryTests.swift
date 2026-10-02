@@ -6,6 +6,24 @@ import Testing
 
 @Suite("Pinned FLUX.2 Dev BF16 inventory")
 struct FluxDevInventoryTests {
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["D_TEST_DEV_DIRECTORY_ADMISSION"] != nil))
+    func actualExternalDirectoryMetadataAdmission() throws {
+        let path = try #require(ProcessInfo.processInfo.environment["D_TEST_DEV_DIRECTORY_ADMISSION"])
+        let request = InferenceRequest(model: .init(directory: URL(fileURLWithPath: path),
+            revision: LocalFluxDevInventory.revision), input: .image(.init(
+                prompt: "Admission only; no generation", width: 512, height: 512, steps: 50,
+                guidanceScale: 4, seed: 42, executionProfile: ImageExecutionCapability.flux2Dev.profile,
+                loadingStrategy: .ssdLayered)))
+        let start = Date()
+        let inventory = try LocalFluxDevInventory.inspect(request)
+        #expect(inventory.weightBytes > 100_000_000_000)
+        #expect(inventory.loadingStrategy == .ssdLayered)
+        _ = try inventory.fileSet
+        try inventory.assertUnchanged()
+        print("D_DEV_DIRECTORY_ADMISSION", path, "seconds", Date().timeIntervalSince(start),
+              "weightBytes", inventory.weightBytes, "metadata-and-headers-only")
+    }
+
     @Test("Bundled official tree has 32 pinned files and BF16 components")
     func bundledManifest() throws {
         let manifest = try LocalFluxDevInventory.Manifest.bundled()
