@@ -68,7 +68,7 @@ enum NativeAssetImportPanel {
 struct ProjectFilesView: View {
     let store: ProjectStore
     let instanceID: UUID
-    let isActive: () -> Bool
+    let isActive: @MainActor () -> Bool
     let modelLibrary: ModelLibrary
     let onContentsChanged: @MainActor (ProjectStore, UUID) async -> Void
     let saveDraftsForBackup: @MainActor (ProjectStore, UUID) async throws -> Void
