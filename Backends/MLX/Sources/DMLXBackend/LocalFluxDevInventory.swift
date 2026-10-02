@@ -139,7 +139,7 @@ struct LocalFluxDevInventory: Sendable {
             for file in manifest.files where !file.path.hasSuffix(".safetensors") {
                 try verify(file, root: root, identities: initial)
             }
-            guard try snapshot(root: root, manifest: manifest) == initial else {
+            guard sameSnapshot(try snapshot(root: root, manifest: manifest), initial) else {
                 throw InferenceFailure.invalidRequest("Image model installation changed while inspecting metadata.")
             }
             return initial
@@ -147,7 +147,7 @@ struct LocalFluxDevInventory: Sendable {
         // Reopen the absolute location as well, so replacing the root during inspection
         // cannot make an open descriptor silently validate the former installation.
         try withRoot(directory) { root in
-            guard try snapshot(root: root, manifest: manifest) == identities else {
+            guard sameSnapshot(try snapshot(root: root, manifest: manifest), identities) else {
                 throw InferenceFailure.invalidRequest("Image model location changed during inspection.")
             }
         }
@@ -169,7 +169,7 @@ struct LocalFluxDevInventory: Sendable {
     /// a replacement as its new file baseline after digest verification.
     func assertUnchanged() throws {
         try Self.withRoot(directory) { root in
-            guard try Self.snapshot(root: root, manifest: manifest) == identities else {
+            guard Self.sameSnapshot(try Self.snapshot(root: root, manifest: manifest), identities) else {
                 throw InferenceFailure.invalidRequest("Dev installation changed during execution.")
             }
         }
@@ -279,7 +279,7 @@ struct LocalFluxDevInventory: Sendable {
         let ditConfig = try JSONDecoder().decode(Flux2TransformerConfiguration.self,
             from: Data(contentsOf: directory.appendingPathComponent("transformer/config.json")))
         try withRoot(directory) { root in
-            guard try snapshot(root: root, manifest: manifest) == identities else {
+            guard sameSnapshot(try snapshot(root: root, manifest: manifest), identities) else {
                 throw InferenceFailure.invalidRequest("Dev model changed during layered header inspection.")
             }
         }
@@ -328,18 +328,18 @@ struct LocalFluxDevInventory: Sendable {
     func verifyContents() throws {
         try Task.checkCancellation()
         try Self.withRoot(directory) { root in
-            guard try Self.snapshot(root: root, manifest: manifest) == identities else {
+            guard Self.sameSnapshot(try Self.snapshot(root: root, manifest: manifest), identities) else {
                 throw InferenceFailure.invalidRequest("Image model installation changed after admission.")
             }
             for file in manifest.files {
                 try Self.verify(file, root: root, identities: identities)
             }
-            guard try Self.snapshot(root: root, manifest: manifest) == identities else {
+            guard Self.sameSnapshot(try Self.snapshot(root: root, manifest: manifest), identities) else {
                 throw InferenceFailure.invalidRequest("Dev installation changed during digest verification.")
             }
         }
         try Self.withRoot(directory) { root in
-            guard try Self.snapshot(root: root, manifest: manifest) == identities else {
+            guard Self.sameSnapshot(try Self.snapshot(root: root, manifest: manifest), identities) else {
                 throw InferenceFailure.invalidRequest("Dev model location changed during digest verification.")
             }
         }
@@ -399,70 +399,59 @@ struct LocalFluxDevInventory: Sendable {
         return FileIdentity(value)
     }
 
-    /// Strict installation policy: only manifest files and their parent directories.
-    /// Download state, extra config/weights, symlinks, devices, sockets and FIFOs fail.
+    /// Read only fixed manifest paths. Unrelated entries in an original snapshot
+    /// are outside this inventory's authority and must not be inspected.
     private static func snapshot(root: Int32, manifest: Manifest) throws -> [String: FileIdentity] {
-        let files = Dictionary(uniqueKeysWithValues: manifest.files.map { ($0.path, $0) })
         let directories = Set(manifest.files.flatMap { file -> [String] in
             let parts = file.path.split(separator: "/")
             return (1..<parts.count).map { parts.prefix($0).joined(separator: "/") }
         })
         var found: [String: FileIdentity] = ["": try identity(of: root)]
-
-        func walk(_ descriptor: Int32, prefix: String) throws {
-            // A dup shares the directory offset and would make a later snapshot
-            // start at EOF. Opening "." creates an independent enumeration cursor.
-            let duplicate = Darwin.openat(descriptor, ".", directoryFlags)
-            guard duplicate >= 0 else { throw fileError("Cannot open model directory enumeration cursor") }
-            guard let listing = fdopendir(duplicate) else {
-                Darwin.close(duplicate)
-                throw fileError("Cannot enumerate image model directory")
-            }
-            defer { closedir(listing) }
-            while true {
-                try Task.checkCancellation()
-                errno = 0
-                guard let entry = readdir(listing) else {
-                    if errno != 0 { throw fileError("Cannot finish enumerating image model directory") }
-                    break
-                }
-                let name = withUnsafePointer(to: &entry.pointee.d_name) { pointer in
-                    pointer.withMemoryRebound(to: CChar.self, capacity: Int(NAME_MAX) + 1) { String(cString: $0) }
-                }
-                if name == "." || name == ".." { continue }
-                let path = prefix.isEmpty ? name : prefix + "/" + name
-                var value = stat()
-                guard Darwin.fstatat(descriptor, name, &value, AT_SYMLINK_NOFOLLOW) == 0 else {
-                    throw fileError("Cannot inspect image model entry \(path)")
-                }
-                let record = FileIdentity(value)
-                switch value.st_mode & S_IFMT {
-                case S_IFREG:
-                    guard let file = files[path], value.st_size >= 0, UInt64(value.st_size) == file.size else {
-                        throw InferenceFailure.invalidRequest("Unlisted image file or incorrect file size: \(path)")
-                    }
-                case S_IFDIR:
-                    guard directories.contains(path) else {
-                        throw InferenceFailure.invalidRequest("Unlisted image model directory or incomplete download state: \(path)")
-                    }
-                    let child = Darwin.openat(descriptor, name, directoryFlags)
-                    guard child >= 0 else { throw fileError("Cannot open image model subdirectory \(path)") }
-                    defer { Darwin.close(child) }
-                    guard try identity(of: child) == record else {
-                        throw InferenceFailure.invalidRequest("Image model directory changed while opening: \(path)")
-                    }
-                    try walk(child, prefix: path)
-                default:
-                    throw InferenceFailure.invalidRequest("Image model entries must be regular files/directories, without symbolic links: \(path)")
-                }
-                found[path] = record
-            }
+        for path in directories.sorted() {
+            try Task.checkCancellation()
+            let descriptor = try openRequiredDirectory(root: root, path: path)
+            defer { Darwin.close(descriptor) }
+            found[path] = try identity(of: descriptor)
         }
-        try walk(root, prefix: "")
-        guard Set(found.keys) == Set(files.keys).union(directories).union([""]) else {
-            throw InferenceFailure.invalidRequest("The image model installation is missing manifest files or directories.")
+        for file in manifest.files {
+            try Task.checkCancellation()
+            let parts = file.path.split(separator: "/").map(String.init)
+            let parentPath = parts.dropLast().joined(separator: "/")
+            let parent = parentPath.isEmpty ? Darwin.dup(root) : try openRequiredDirectory(root: root, path: parentPath)
+            guard parent >= 0 else { throw fileError("Cannot open image model parent") }
+            defer { Darwin.close(parent) }
+            let descriptor = Darwin.openat(parent, parts.last!, O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC)
+            guard descriptor >= 0 else { throw fileError("Cannot open image model file \(file.path)") }
+            defer { Darwin.close(descriptor) }
+            let value = try identity(of: descriptor)
+            guard value.mode & UInt32(S_IFMT) == UInt32(S_IFREG), value.size >= 0,
+                  UInt64(value.size) == file.size else {
+                throw InferenceFailure.invalidRequest("Image model file size or type is invalid: \(file.path)")
+            }
+            found[file.path] = value
         }
         return found
+    }
+
+    private static func sameSnapshot(_ lhs: [String: FileIdentity], _ rhs: [String: FileIdentity]) -> Bool {
+        lhs.count == rhs.count && lhs.allSatisfy { path, value in
+            guard let previous = rhs[path] else { return false }
+            return path.isEmpty || value.mode & UInt32(S_IFMT) == UInt32(S_IFDIR)
+                ? value.device == previous.device && value.inode == previous.inode
+                : value == previous
+        }
+    }
+
+    private static func openRequiredDirectory(root: Int32, path: String) throws -> Int32 {
+        var descriptor = Darwin.dup(root)
+        guard descriptor >= 0 else { throw fileError("Cannot duplicate image model directory") }
+        for part in path.split(separator: "/") {
+            let next = Darwin.openat(descriptor, String(part), directoryFlags)
+            Darwin.close(descriptor)
+            guard next >= 0 else { throw fileError("Cannot open required image model directory \(path)") }
+            descriptor = next
+        }
+        return descriptor
     }
 
     private static func verify(_ file: Manifest.File, root: Int32, identities: [String: FileIdentity]) throws {
@@ -478,7 +467,8 @@ struct LocalFluxDevInventory: Sendable {
             guard next >= 0 else { throw fileError("Cannot open image model parent \(prefix)") }
             Darwin.close(parent)
             parent = next
-            guard try identity(of: parent) == identities[prefix] else {
+            guard let expected = identities[prefix],
+                  sameSnapshot([prefix: try identity(of: parent)], [prefix: expected]) else {
                 throw InferenceFailure.invalidRequest("Image model parent changed before reading: \(prefix)")
             }
         }

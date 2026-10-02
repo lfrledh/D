@@ -37,6 +37,13 @@ public struct ModelLibraryView: View {
                             ProgressView().controlSize(.small)
                             Text(operation.title).font(.callout)
                             if case .preparing = operation { Button("取消准备") { model.cancelPreparation() } }
+                            if case .copying = operation {
+                                if let progress = model.copyProgress {
+                                    Text("\(ModelLibraryModel.formatBytes(progress.copiedBytes)) / \(ModelLibraryModel.formatBytes(progress.totalBytes))")
+                                        .font(.caption).monospacedDigit()
+                                }
+                                Button("取消复制") { model.cancelImport() }
+                            }
                         }
                         .accessibilityElement(children: .combine)
                     }
@@ -85,7 +92,11 @@ public struct ModelLibraryView: View {
             Spacer()
             Menu {
                 ForEach(model.catalog) { entry in
-                    Button(entry.title) { Task { await model.registerExisting(catalogID: entry.id) } }
+                    Menu(entry.title) {
+                        Button("保留原位置") { Task { await model.registerExisting(catalogID: entry.id, storage: .external) } }
+                        Button("复制到模型库") { Task { await model.registerExisting(catalogID: entry.id, storage: .managed) } }
+                            .disabled(model.rootURL == nil)
+                    }
                 }
             } label: {
                 Label("登记已有模型…", systemImage: "folder.badge.plus")
@@ -127,7 +138,7 @@ public struct ModelLibraryView: View {
                     Text("先选择存放位置。建议使用空间充足的外置 SSD。")
                         .font(.callout).foregroundStyle(.secondary)
                 }
-                Text("已有模型可以保留原位置；模型文件不会复制进项目。")
+                Text("已有模型可保留原位置，或只复制必要文件进模型库；模型文件不会复制进项目。")
                     .font(.caption).foregroundStyle(.secondary)
                 if model.records.contains(where: { $0.storage == .managed }) {
                     Text("可重新定位在同一磁盘卷内移动的原模型库；跨盘搬迁尚未支持。")
@@ -324,6 +335,12 @@ private struct ModelInstallationRow: View {
         HStack(spacing: 10) {
             primaryAction
             Menu {
+                if record.storage == .external,
+                   record.state == .installed || record.state == .preparationRequired {
+                    Button("复制到模型库…") { Task { await model.copyExisting(record.id) } }
+                        .disabled(!canModifyRecord || model.rootURL == nil)
+                        .accessibilityIdentifier("model-copy-\(record.id)")
+                }
                 if record.storage == .managed, record.state == .paused || record.state == .failed {
                     Button("从头重新下载…") { Task { await model.restart(record.id) } }
                         .disabled(!canModifyRecord)

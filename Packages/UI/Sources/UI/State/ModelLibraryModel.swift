@@ -18,17 +18,19 @@ public final class ModelLibraryModel {
 
     @ObservationIgnored public let library: ModelLibrary
     @ObservationIgnored private var preparation: Task<Void, Never>?
+    @ObservationIgnored private var importTask: Task<Void, Never>?
     @ObservationIgnored private var poller: Task<Void, Never>?
     @ObservationIgnored private var refreshGeneration: UInt64 = 0
 
     public enum GlobalOperation: Sendable {
-        case choosingRoot, choosingCredential, registering, preparing
+        case choosingRoot, choosingCredential, registering, copying, preparing
 
         public var title: String {
             switch self {
             case .choosingRoot: "正在连接模型库…"
             case .choosingCredential: "正在连接下载令牌…"
             case .registering: "正在校验本地模型…"
+            case .copying: "正在校验并复制必要模型文件…"
             case .preparing: "正在准备并校验独立执行包…"
             }
         }
@@ -55,8 +57,9 @@ public final class ModelLibraryModel {
     public var catalog: [ModelCatalogEntry] { snapshot?.catalog ?? [] }
     public var rootURL: URL? { snapshot?.rootURL }
     public var downloadCredentialConnected: Bool { snapshot?.downloadCredentialConnected ?? false }
+    public var copyProgress: ModelCopyProgress? { snapshot?.copyProgress }
     public var hasActiveWork: Bool {
-        records.contains { record in
+        copyProgress != nil || records.contains { record in
             switch record.state {
             case .queued, .downloading, .pausing, .verifying, .publishing: true
             default: false
@@ -69,7 +72,7 @@ public final class ModelLibraryModel {
             case .queued, .downloading, .pausing, .verifying, .publishing: true
             default: false
             }
-        }.count
+        }.count + (copyProgress == nil ? 0 : 1)
     }
     public var failedCount: Int { records.filter { $0.state == .failed }.count }
     public var isInUse: Bool { records.contains { $0.activeLeaseCount > 0 } }
@@ -172,7 +175,8 @@ public final class ModelLibraryModel {
         await refresh()
     }
 
-    public func registerExisting(catalogID: String = ModelCatalog.flux2ID) async {
+    public func registerExisting(catalogID: String = ModelCatalog.flux2ID,
+                                 storage: ModelStorageKind = .external) async {
         guard !isChoosingLocation, globalOperation == nil, !hasActiveWork else { return }
         guard let entry = catalog.first(where: { $0.id == catalogID }) else {
             errorMessage = "所选模型不在固定目录中。"; return
@@ -180,25 +184,49 @@ public final class ModelLibraryModel {
         isChoosingLocation = true
         let panel = NSOpenPanel()
         panel.title = "登记已有模型：\(entry.title)"
-        panel.message = "选择完整的 \(entry.title) 文件夹。D 会按固定版本逐个校验文件并保留原来的存放位置。"
+        panel.message = storage == .external
+            ? "选择 \(entry.title) 的准确文件夹。D 只校验固定版本必要文件并保留原位置。"
+            : "选择 \(entry.title) 的准确文件夹。D 校验必要文件后复制进已配置的模型库，原件仍保留。"
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = false
         let response = await panel.begin()
         isChoosingLocation = false
         guard response == .OK, let url = panel.url else { return }
-        await registerExisting(at: url, catalogID: catalogID)
+        await registerExisting(at: url, catalogID: catalogID, storage: storage)
     }
 
-    public func registerExisting(at url: URL, catalogID: String = ModelCatalog.flux2ID) async {
+    public func registerExisting(at url: URL, catalogID: String = ModelCatalog.flux2ID,
+                                 storage: ModelStorageKind = .external) async {
         guard !isChoosingLocation, globalOperation == nil, !hasActiveWork else { return }
-        globalOperation = .registering
-        defer { globalOperation = nil }
-        do { _ = try await library.registerExisting(at: url, catalogID: catalogID) }
-        catch ModelLibraryError.operationPaused { }
-        catch { report(error, context: "未能登记此模型，请确认文件完整且属于受支持的版本") }
+        globalOperation = storage == .external ? .registering : .copying
+        let task = Task { @MainActor in
+            do { _ = try await library.registerExisting(at: url, catalogID: catalogID, storage: storage) }
+            catch is CancellationError { }
+            catch ModelLibraryError.operationPaused { }
+            catch { report(error, context: "未能登记此模型，请确认文件完整且属于受支持的版本") }
+        }
+        importTask = task
+        await task.value
+        importTask = nil; globalOperation = nil
         await refresh()
     }
+
+    public func copyExisting(_ id: ModelID) async {
+        guard !isChoosingLocation, globalOperation == nil, !hasActiveWork, rootURL != nil else { return }
+        globalOperation = .copying
+        let task = Task { @MainActor in
+            do { _ = try await library.copyExistingToLibrary(id) }
+            catch is CancellationError { }
+            catch { report(error, context: "复制未完成；原位置登记仍保留") }
+        }
+        importTask = task
+        await task.value
+        importTask = nil; globalOperation = nil
+        await refresh()
+    }
+
+    public func cancelImport() { importTask?.cancel() }
 
     public func prepareVideo(_ id: ModelID, action: @escaping @MainActor (ModelID, URL) async throws -> Void) async {
         guard canChooseRoot else { return }

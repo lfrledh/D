@@ -248,6 +248,49 @@ final class ModelDirectory: Sendable {
         return before
     }
 
+    /// Copy only catalog paths into a fresh private stage. The callback records
+    /// identities before and after writes so cancellation cleanup never guesses.
+    func copyRequired(_ files: [ModelFile], from source: ModelDirectory, expected: ModelRequiredTree,
+                      progress: @Sendable (String, UInt64, ModelFileIdentity) async throws -> Void) async throws {
+        guard try source.requiredTree(paths: Set(files.map(\.path))) == expected else {
+            throw ModelLibraryError.integrity("复制前原始模型必要文件已改变。")
+        }
+        var buffer = [UInt8](repeating: 0, count: 4 * 1024 * 1024)
+        var total: UInt64 = 0
+        for file in files {
+            try Task.checkCancellation()
+            let input = try source.openFile(file.path)
+            defer { Darwin.close(input) }
+            guard try Self.identity(input, regular: true) == expected.files[file.path] else {
+                throw ModelLibraryError.integrity("复制时原始文件已改变：\(file.path)")
+            }
+            let output = try openFile(file.path, writing: true, create: true)
+            defer { Darwin.close(output) }
+            let created = try Self.identity(output, regular: true)
+            try await progress(file.path, total, created)
+            var remaining = file.size
+            while remaining > 0 {
+                try Task.checkCancellation()
+                let count = buffer.withUnsafeMutableBytes {
+                    Darwin.read(input, $0.baseAddress, min($0.count, Int(remaining)))
+                }
+                if count < 0 && errno == EINTR { continue }
+                guard count > 0 else { throw Self.failure("读取原始模型文件") }
+                try Self.write(Data(buffer.prefix(count)), to: output)
+                remaining -= UInt64(count); total += UInt64(count)
+                let current = try Self.identity(output, regular: true)
+                guard current.sameNode(created) else { throw ModelLibraryError.integrity("复制目标已被替换。") }
+                try await progress(file.path, total, current)
+            }
+            guard fsync(output) == 0, try Self.identity(input, regular: true) == expected.files[file.path] else {
+                throw ModelLibraryError.integrity("复制期间原始文件改变或目标保存失败：\(file.path)")
+            }
+        }
+        guard try source.requiredTree(paths: Set(files.map(\.path))) == expected else {
+            throw ModelLibraryError.integrity("复制期间原始模型必要文件已改变。")
+        }
+    }
+
     func verify(_ files: [ModelFile]) throws -> [String: ModelFileIdentity] {
         let expected = Set(files.map(\.path))
         let before = try entries(expectedPaths: expected)
