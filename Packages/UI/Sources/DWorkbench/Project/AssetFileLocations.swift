@@ -119,9 +119,18 @@ enum AssetLocationFiles {
         return .init(data: data, fingerprint: .init(after))
     }
     static func hash(_ data: Data) -> String { SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined() }
-    static func register(_ url: URL, read: Read, role: AssetLocationRole, libraryID: UUID = UUID()) throws -> AssetFileLocation {
+    static func register(_ url: URL, read: Read, role: AssetLocationRole) throws -> AssetFileLocation {
         let bookmark = try url.bookmarkData(options: [.withSecurityScope, .securityScopeAllowOnlyReadAccess], includingResourceValuesForKeys: nil, relativeTo: nil)
         let created = try? url.resourceValues(forKeys: [.creationDateKey]).creationDate
+        // The explicitly selected parent is this registered location's root. Aliases of the
+        // same directory group together, without scanning or creating a second index.
+        let fd = try ProjectFiles.openDirectory(url.deletingLastPathComponent()); defer { Darwin.close(fd) }
+        var s = stat(); guard fstat(fd, &s) == 0 else { throw ProjectFiles.error() }
+        let key = hash(Data("d.asset-library.v1:\(s.st_dev):\(s.st_ino)".utf8))
+        let hex = String(key.prefix(32)); let pieces = [8, 4, 4, 4, 12]
+        var cursor = hex.startIndex
+        let uuidText = pieces.map { count -> String in let end = hex.index(cursor, offsetBy: count); defer { cursor = end }; return String(hex[cursor..<end]) }.joined(separator: "-")
+        guard let libraryID = UUID(uuidString: uuidText) else { throw ProjectStoreError.invalidProject("位置身份无效。") }
         return .init(libraryID: libraryID, libraryName: url.deletingLastPathComponent().lastPathComponent,
                      role: role, url: url, bookmark: bookmark, fingerprint: read.fingerprint,
                      lastVerifiedAt: Date(), contentCreatedAt: created)
@@ -159,7 +168,18 @@ enum AssetLocationFiles {
                              reason: valid ? nil : "当前字节与登记版本不同；旧版本未改。", resolvedURL: url)
             }
         } catch {
-            return .init(location: location, status: .needsAuthorization, reason: error.localizedDescription, resolvedURL: location.url)
+            var status: AssetLocationStatus = .needsAuthorization
+            if let original = location.url {
+                var s = stat()
+                let result = lstat(original.path, &s)
+                if result != 0, errno == ENOENT {
+                    status = .missing
+                    if original.path.hasPrefix("/Volumes/"), original.pathComponents.count > 2,
+                       !FileManager.default.fileExists(atPath: "/Volumes/" + original.pathComponents[2]) { status = .offline }
+                } else if result == 0, s.st_mode & S_IFMT != S_IFREG { status = .corrupt }
+            }
+            if error as? ProjectStoreError == .externalModification { status = .changed }
+            return .init(location: location, status: status, reason: error.localizedDescription, resolvedURL: location.url)
         }
     }
 }
