@@ -317,7 +317,7 @@ public final class ProjectSession {
             guard let oldURL = try? URL(resolvingBookmarkData: entry.bookmark,
                 options: [.withSecurityScope, .withoutUI], relativeTo: nil,
                 bookmarkDataIsStale: &stale) else { return true }
-            return oldURL.standardizedFileURL.resolvingSymlinksInPath() != openedURL
+            return oldURL.standardizedFileURL.resolvingSymlinksInPath().path != openedURL.path
         }
         entries.insert(RecentProject(id: manifest.effectiveInstanceID, name: manifest.name, bookmark: bookmark,
                                      instanceID: manifest.instanceID), at: 0)
