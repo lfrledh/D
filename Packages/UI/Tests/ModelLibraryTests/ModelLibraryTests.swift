@@ -439,7 +439,12 @@ struct ModelLibraryTests {
         await library.release(lease)
         #expect(await library.snapshot().records.first?.activeLeaseCount == 0)
         try await library.rebind(id, to: candidate)
-        #expect(try await library.resolve(id).directory.path == candidate.path)
+        // Moving a raw resource does not make it inference-ready. Its backup
+        // lease must nevertheless resolve the verified new directory.
+        await #expect(throws: ModelLibraryError.self) { _ = try await library.resolve(id) }
+        let movedLease = try await library.acquireForBackup(id)
+        #expect(movedLease.reference.directory.path == candidate.path)
+        await library.release(movedLease)
         try await library.remove(id)
         await #expect(throws: ModelLibraryError.self) { _ = try await library.acquireForBackup(id) }
         #expect(await library.snapshot().records.isEmpty)
