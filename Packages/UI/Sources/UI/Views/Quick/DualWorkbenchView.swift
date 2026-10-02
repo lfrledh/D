@@ -153,6 +153,31 @@ public struct DualWorkbenchView: View {
                           (quickOwner.currentStore === changedStore && quickOwner.manifest?.effectiveInstanceID == instanceID) else { return }
                     await refreshLibrary(checkModels: false)
                 },
+                saveDraftsForBackup: { captured, instanceID in
+                    guard captured === route.store, instanceID == route.instanceID else {
+                        throw WorkflowIssue("项目已切换；备份未创建。")
+                    }
+                    let primary = model.projectSession
+                    let quickOwner = quickModel.projectSession
+                    let primaryMatches = primary.currentStore === captured && primary.manifest?.effectiveInstanceID == instanceID
+                    let quickMatches = quickOwner.currentStore === captured && quickOwner.manifest?.effectiveInstanceID == instanceID
+                    guard primaryMatches || quickMatches else { throw WorkflowIssue("项目已切换；备份未创建。") }
+                    if primaryMatches { try await primary.saveWorkflowForBackup(store: captured, instanceID: instanceID) }
+                    if quickOwner !== primary && quickMatches {
+                        try await quickOwner.saveWorkflowForBackup(store: captured, instanceID: instanceID)
+                    }
+                    try Task.checkCancellation()
+                    guard (primary.currentStore === captured && primary.manifest?.effectiveInstanceID == instanceID) ||
+                          (quickOwner.currentStore === captured && quickOwner.manifest?.effectiveInstanceID == instanceID) else {
+                        throw WorkflowIssue("项目已切换；备份未创建。")
+                    }
+                    if quick.store === captured && quick.isLoaded { try await quick.flush() }
+                    try Task.checkCancellation()
+                    guard (primary.currentStore === captured && primary.manifest?.effectiveInstanceID == instanceID) ||
+                          (quickOwner.currentStore === captured && quickOwner.manifest?.effectiveInstanceID == instanceID) else {
+                        throw WorkflowIssue("项目已切换；备份未创建。")
+                    }
+                },
                 onOpenRestored: { url in
                     await model.openProject(at: url)
                     if model.projectSession.currentStore?.rootURL.standardizedFileURL == url.standardizedFileURL {

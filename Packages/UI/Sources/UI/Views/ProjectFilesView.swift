@@ -10,6 +10,30 @@ enum ProjectFilesPresentation {
     static func allSucceeded(_ values: [AssetRelocationResult]) -> Bool {
         values.allSatisfy(\.matched)
     }
+
+    /// A cancelled file job still needs to publish its already committed steps.
+    @MainActor static func refreshAfterOperation(store: ProjectStore, instanceID: UUID,
+        onContentsChanged: @escaping @MainActor (ProjectStore, UUID) async -> Void,
+        refreshOverview: @escaping @MainActor () async -> Void) async {
+        let refresh = Task { @MainActor in
+            await onContentsChanged(store, instanceID)
+            await refreshOverview()
+        }
+        await refresh.value
+    }
+
+    @MainActor static func createBackup(at url: URL, store: ProjectStore, instanceID: UUID,
+        modelLibrary: ModelLibrary, models: [ModelID], allowIncomplete: Bool,
+        isActive: @escaping @MainActor () -> Bool,
+        saveDrafts: @escaping @MainActor (ProjectStore, UUID) async throws -> Void) async throws -> ProjectBackupReceipt {
+        try Task.checkCancellation()
+        guard isActive() else { throw WorkflowIssue("项目已切换；备份未创建。") }
+        try await saveDrafts(store, instanceID)
+        try Task.checkCancellation()
+        guard isActive() else { throw WorkflowIssue("项目已切换；备份未创建。") }
+        return try await store.createBackup(at: url, modelLibrary: modelLibrary,
+            includingModels: models, allowIncomplete: allowIncomplete)
+    }
 }
 
 @MainActor
@@ -47,6 +71,7 @@ struct ProjectFilesView: View {
     let isActive: () -> Bool
     let modelLibrary: ModelLibrary
     let onContentsChanged: @MainActor (ProjectStore, UUID) async -> Void
+    let saveDraftsForBackup: @MainActor (ProjectStore, UUID) async throws -> Void
     let onOpenRestored: (URL) async -> String?
     let onClose: () -> Void
     var initialAssetID: UUID? = nil
@@ -255,8 +280,10 @@ struct ProjectFilesView: View {
                 if isActive() { message = text }
             } catch is CancellationError { if isActive() { message = word("cancelled", "操作已取消；请查看刷新后的状态确认已完成项。") } }
             catch { if isActive() { message = error.localizedDescription } }
-            await onContentsChanged(captured, instanceID)
-            if isActive() { await refresh(deep: deepRefresh) }
+            await ProjectFilesPresentation.refreshAfterOperation(store: captured, instanceID: instanceID,
+                onContentsChanged: onContentsChanged, refreshOverview: {
+                    if isActive() { await refresh(deep: deepRefresh) }
+                })
             busy = false; job = nil
         }
     }
@@ -310,16 +337,21 @@ struct ProjectFilesView: View {
     }
     private func prepareBackup() {
         Task {
+            guard !busy, isActive() else { return }
             let panel = NSSavePanel(); panel.title = word("backup", "创建手动备份…")
             panel.nameFieldStringValue = "D-Backup.dbackup"
             panel.canCreateDirectories = true
-            guard await panel.begin() == .OK, let url = panel.url else { return }
+            guard await panel.begin() == .OK, let url = panel.url, !busy, isActive() else { return }
             guard !FileManager.default.fileExists(atPath: url.path) else { message = word("exists", "目标已存在；请选择新名称。"); return }
             let ids = Array(chosenModels)
             busy = true
             job = Task {
                 do {
+                    try await saveDraftsForBackup(store, instanceID)
+                    try Task.checkCancellation()
+                    guard isActive() else { throw WorkflowIssue("项目已切换；备份未创建。") }
                     let plan = try await store.backupPlan()
+                    try Task.checkCancellation()
                     guard isActive() else { busy = false; job = nil; return }
                     busy = false; job = nil
                     if !plan.missing.isEmpty { pendingBackup = (url, ids, plan.missing) }
@@ -337,8 +369,9 @@ struct ProjectFilesView: View {
     private func runBackup(at url: URL, models ids: [ModelID], allowIncomplete: Bool) {
         start { store in
             let access = url.startAccessingSecurityScopedResource(); defer { if access { url.stopAccessingSecurityScopedResource() } }
-            let value = try await store.createBackup(at: url, modelLibrary: modelLibrary,
-                includingModels: ids, allowIncomplete: allowIncomplete)
+            let value = try await ProjectFilesPresentation.createBackup(at: url, store: store,
+                instanceID: instanceID, modelLibrary: modelLibrary, models: ids,
+                allowIncomplete: allowIncomplete, isActive: isActive, saveDrafts: saveDraftsForBackup)
             if isActive() { receipt = value }
             return value.complete ? word("backupComplete", "备份完成") : word("backupPartial", "不完整备份已创建")
         }
