@@ -1,4 +1,5 @@
 import CryptoKit
+import Dispatch
 import Foundation
 import Testing
 @testable import DWorkbench
@@ -101,6 +102,90 @@ struct ProjectBackupTests {
             }
             #expect(try Data(contentsOf: source) == Data("modified".utf8))
             #expect(!FileManager.default.fileExists(atPath: root.appendingPathComponent("changed").path))
+        }
+    }
+
+    @Test func replacedStageAndLateDestinationCollisionNeverPublishReplacement() async throws {
+        try await fixture { root in
+            let data = Data("original".utf8)
+            let source = root.appendingPathComponent("source")
+            try data.write(to: source)
+            let plan = ProjectBackupPlan(projectID: UUID(), revision: 1, files: [
+                .init(relativePath: "file", sourceURL: source, data: nil, sha256: hash(data), byteCount: UInt64(data.count))
+            ])
+            let target = root.appendingPathComponent("backup")
+            await #expect(throws: ProjectBackupError.self) {
+                try await ProjectBackup.create(plan, at: target, checkpoint: { _ in
+                    let stage = try FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)
+                        .first { $0.lastPathComponent.hasPrefix(".d-backup-") && $0.lastPathComponent.hasSuffix(".partial") }
+                    guard let stage else { throw Interrupted.now }
+                    try FileManager.default.moveItem(at: stage, to: root.appendingPathComponent("moved"))
+                    try FileManager.default.createDirectory(at: stage, withIntermediateDirectories: false)
+                })
+            }
+            #expect(!FileManager.default.fileExists(atPath: target.path))
+            #expect(!FileManager.default.fileExists(atPath: root.appendingPathComponent("moved/complete.sha256").path))
+            let partial = try FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)
+                .first { $0.lastPathComponent.hasPrefix(".d-backup-") && $0.lastPathComponent.hasSuffix(".partial") }
+            if let partial {
+                await #expect(throws: ProjectBackupError.self) { try await ProjectBackup.verify(at: partial) }
+                await #expect(throws: ProjectBackupError.self) {
+                    try await ProjectBackup.restore(at: partial, to: root.appendingPathComponent("refused"))
+                }
+            } else { Issue.record("replacement staging directory missing") }
+
+            await #expect(throws: ProjectBackupError.self) {
+                try await ProjectBackup.create(plan, at: target, checkpoint: { _ in
+                    try FileManager.default.createDirectory(at: target, withIntermediateDirectories: false)
+                })
+            }
+            #expect(try FileManager.default.contentsOfDirectory(atPath: target.path).isEmpty)
+        }
+    }
+
+    @Test func cancellationForwardsToDetachedCopy() async throws {
+        try await fixture { root in
+            let data = Data("cancel me".utf8)
+            let source = root.appendingPathComponent("source")
+            try data.write(to: source)
+            let target = root.appendingPathComponent("backup")
+            let plan = ProjectBackupPlan(projectID: UUID(), revision: 1, files: [
+                .init(relativePath: "file", sourceURL: source, data: nil, sha256: hash(data), byteCount: UInt64(data.count))
+            ])
+            let (entered, signalEntered) = AsyncStream<Void>.makeStream()
+            let resume = DispatchSemaphore(value: 0)
+            let work = Task {
+                try await ProjectBackup.create(plan, at: target, checkpoint: { _ in
+                    signalEntered.yield(())
+                    resume.wait()
+                })
+            }
+            var iterator = entered.makeAsyncIterator()
+            _ = await iterator.next()
+            work.cancel()
+            resume.signal()
+            await #expect(throws: CancellationError.self) { try await work.value }
+            #expect(!FileManager.default.fileExists(atPath: target.path))
+        }
+    }
+
+    @Test func restorePreparationGetsVerifiedStageBeforeExclusivePublication() async throws {
+        try await fixture { root in
+            let data = Data("logical project bytes".utf8)
+            let plan = ProjectBackupPlan(projectID: UUID(), revision: 1, files: [
+                .init(relativePath: "project.json", sourceURL: nil, data: data, sha256: hash(data), byteCount: UInt64(data.count))
+            ])
+            let backup = root.appendingPathComponent("backup")
+            _ = try await ProjectBackup.create(plan, at: backup)
+            let target = root.appendingPathComponent("restored")
+            _ = try await ProjectBackup.restore(at: backup, to: target, prepare: { stage in
+                #expect(try Data(contentsOf: stage.appendingPathComponent("project.json")) == data)
+                try Data("new instance".utf8).write(to: stage.appendingPathComponent("project.json"))
+                try FileManager.default.createDirectory(at: stage.appendingPathComponent("Tasks"), withIntermediateDirectories: false)
+            })
+            #expect(try Data(contentsOf: target.appendingPathComponent("project.json")) == Data("new instance".utf8))
+            #expect(FileManager.default.fileExists(atPath: target.appendingPathComponent("Tasks").path))
+            #expect(try await ProjectBackup.verify(at: backup).complete)
         }
     }
 
