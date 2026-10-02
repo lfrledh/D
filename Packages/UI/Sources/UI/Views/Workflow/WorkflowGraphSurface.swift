@@ -20,7 +20,7 @@ struct WorkflowGraphSurface: View {
     var portCenterObserver: (([WorkflowPortIdentity: CGPoint]) -> Void)?
     var onScrollObservation: (WorkflowCanvasViewContext, WorkflowCanvasScrollObservation) -> Void = { _, _ in }
     var onDropItem: (WorkflowCanvasTransfer, CGPoint) -> Bool = { _, _ in false }
-    var onBindAsset: (UUID, UUID, UUID) -> Bool = { _, _, _ in false }
+    var onBindAsset: (UUID, UUID?, UUID, UUID) -> Bool = { _, _, _, _ in false }
     var onInspect: (UUID) -> Void = { _ in }
     @Environment(\.dLanguageStore) private var languageStore
     @GestureState private var gestureScale: CGFloat = 1
@@ -519,13 +519,13 @@ struct WorkflowGraphSurface: View {
               let item = try? items[0].validated() else { return false }
         if controller.graph == nil {
             switch item {
-            case .operation, .asset, .tool: return onDropItem(item, rawPoint)
+            case .operation, .asset, .assetInstance, .tool: return onDropItem(item, rawPoint)
             case .output: return false
             }
         }
         guard scope.isCurrent(in: controller) else { return false }
         switch item {
-        case .operation, .asset, .tool:
+        case .operation, .asset, .assetInstance, .tool:
             return onDropItem(item, rawPoint)
         case .output:
             return false
@@ -602,7 +602,7 @@ private struct WorkflowNodeCard: View {
     let readOnly: Bool
     let selected: Bool
     let onPlan: (UUID, Bool) -> Void
-    let onBindAsset: (UUID, UUID, UUID) -> Bool
+    let onBindAsset: (UUID, UUID?, UUID, UUID) -> Bool
     let onInspect: (UUID) -> Void
     let onSelectOutput: (WorkflowPendingConnection) -> Void
     let onClearOutput: () -> Void
@@ -921,8 +921,8 @@ private struct WorkflowNodeCard: View {
               definition?.interaction == .assetInput,
               scope.isCurrent(in: controller),
               let item = try? items[0].validated(),
-              case .asset(let projectID, let assetID) = item else { return false }
-        return onBindAsset(projectID, assetID, node.id)
+              let identity = WorkflowCanvasAssetIdentity.payload(item) else { return false }
+        return onBindAsset(identity.project, identity.instance, identity.asset, node.id)
     }
 }
 

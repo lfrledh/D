@@ -285,6 +285,19 @@ public final class ProjectSession {
         public let id: UUID
         public let name: String
         fileprivate let bookmark: Data
+        public let instanceID: UUID?
+        public init(from decoder: Decoder) throws {
+            let values = try decoder.container(keyedBy: CodingKeys.self)
+            id = try values.decode(UUID.self, forKey: .id)
+            name = try values.decode(String.self, forKey: .name)
+            bookmark = try values.decode(Data.self, forKey: .bookmark)
+            instanceID = try values.decodeIfPresent(UUID.self, forKey: .instanceID)
+        }
+        private enum CodingKeys: String, CodingKey { case id, name, bookmark, instanceID }
+        fileprivate init(id: UUID, name: String, bookmark: Data, instanceID: UUID?) {
+            self.id = id; self.name = name; self.bookmark = bookmark; self.instanceID = instanceID
+        }
+        public var effectiveInstanceID: UUID { instanceID ?? id }
     }
     public var recentProjects: [RecentProject] {
         guard let data = settings.data(forKey: "workbench.recentProjects.v1"), data.count <= 262_144,
@@ -296,14 +309,24 @@ public final class ProjectSession {
     private func rememberProject() {
         guard !isInternalWorkspace else { return }
         guard let manifest, let bookmark = projectLease?.bookmark else { return }
-        var entries = recentProjects.filter { $0.id != manifest.id }
-        entries.insert(RecentProject(id: manifest.id, name: manifest.name, bookmark: bookmark), at: 0)
+        let openedURL = projectURL?.standardizedFileURL.resolvingSymlinksInPath()
+        var entries = recentProjects.filter { entry in
+            if entry.effectiveInstanceID == manifest.effectiveInstanceID { return false }
+            guard entry.instanceID == nil, entry.id == manifest.id, let openedURL else { return true }
+            var stale = false
+            guard let oldURL = try? URL(resolvingBookmarkData: entry.bookmark,
+                options: [.withSecurityScope, .withoutUI], relativeTo: nil,
+                bookmarkDataIsStale: &stale) else { return true }
+            return oldURL.standardizedFileURL.resolvingSymlinksInPath() != openedURL
+        }
+        entries.insert(RecentProject(id: manifest.effectiveInstanceID, name: manifest.name, bookmark: bookmark,
+                                     instanceID: manifest.instanceID), at: 0)
         if let data = try? JSONEncoder().encode(Array(entries.prefix(10))), data.count <= 262_144 {
             settings.set(data, forKey: "workbench.recentProjects.v1")
         }
     }
     @discardableResult public func openRecentProject(id: UUID) async -> Bool {
-        guard let entry = recentProjects.first(where: { $0.id == id }), !isChangingProject,
+        guard let entry = recentProjects.first(where: { $0.effectiveInstanceID == id }), !isChangingProject,
               await requestClose() else { return false }
         errorMessage = nil
         isChangingProject = true
@@ -847,7 +870,9 @@ public final class ProjectSession {
         controller.externalOperationBusy = { [weak self] in self?.audio?.isBusy == true || self?.workflowRecordingNodeID != nil }
         controller.onChange = { [weak self] in
             guard let self, self.store === store else { return }
-            self.applyManifest(await store.snapshot()); await self.refreshAssets()
+            let snapshot = await store.snapshot()
+            guard self.store === store, self.manifest?.effectiveInstanceID == snapshot.effectiveInstanceID else { return }
+            self.applyManifest(snapshot); await self.refreshAssets()
         }
         workflow = controller
         await controller.load()
@@ -2121,18 +2146,38 @@ public final class ProjectSession {
             do { urls[asset.id] = try await store.assetURL(for: asset) }
             catch { if firstFailure == nil { firstFailure = error } }
         }
-        guard self.store === store, self.manifest?.id == manifest.id,
+        guard self.store === store, self.manifest?.effectiveInstanceID == manifest.effectiveInstanceID,
               self.manifest?.assets == manifest.assets else { return }
         assetURLs = urls
         if let firstFailure { report(firstFailure, context: "部分作品暂时无法读取，请检查项目所在磁盘") }
     }
 
+    /// Accept only the current instance and a nonstale revision after actor suspension.
+    static func acceptsManifest(_ updated: ProjectManifest, current: ProjectManifest?) -> Bool {
+        guard let current else { return false }
+        return current.id == updated.id &&
+            current.effectiveInstanceID == updated.effectiveInstanceID &&
+            updated.revision >= current.revision
+    }
+
     private func applyManifest(_ updated: ProjectManifest) {
         // Actor calls can resume out of order on the main executor. A stale snapshot must not
         // hide a later saved artwork or queued request.
-        guard manifest?.id == updated.id, updated.revision >= (manifest?.revision ?? 0) else { return }
+        guard Self.acceptsManifest(updated, current: manifest) else { return }
         manifest = updated
         audio?.synchronize(updated)
+    }
+
+    /// Reconcile a file operation on the captured Store without reloading the workflow draft.
+    public func refreshAfterFileOperation(store changedStore: ProjectStore, instanceID: UUID) async {
+        guard store === changedStore, manifest?.effectiveInstanceID == instanceID else { return }
+        let snapshot = await changedStore.snapshot()
+        guard store === changedStore, manifest?.effectiveInstanceID == instanceID,
+              snapshot.effectiveInstanceID == instanceID else { return }
+        applyManifest(snapshot)
+        if let workflow { await workflow.refreshAvailableAssets(instanceID: instanceID) }
+        guard store === changedStore, manifest?.effectiveInstanceID == instanceID else { return }
+        await refreshAssets()
     }
 
     public func closeProject() async { _ = await requestClose() }

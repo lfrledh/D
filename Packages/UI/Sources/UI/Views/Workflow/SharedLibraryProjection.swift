@@ -4,6 +4,12 @@ import Foundation
 
 /// Read-only facts come from registered operations and exact model identities. User tags do not enter this projection.
 @MainActor enum SharedLibraryProjection {
+    static func resolvedInstanceID(projectID: UUID, instanceID: UUID?, projects: [ProjectManifest]) -> UUID? {
+        let matches = projects.filter { $0.id == projectID }
+        if let instanceID { return matches.first(where: { $0.effectiveInstanceID == instanceID })?.effectiveInstanceID }
+        let distinct = Set(matches.map(\.effectiveInstanceID))
+        return distinct.count == 1 ? distinct.first : nil
+    }
     static func operation(_ kind: WorkflowModelKind) -> String {
         switch kind { case .text: "d.model.language"; case .image: "d.image.generate"; case .music: "d.music.generate"; case .video: "d.video.generate"; case .pitch: "d.music.pitch" }
     }
@@ -96,8 +102,10 @@ import Foundation
                 let kind = asset.workflowContentKind
                 result.append(.init(item: .init(key: "asset:" + project.id.uuidString + ":" + asset.id.uuidString,
                     title: asset.name, detail: project.name, kind: .asset, role: asset.role.rawValue,
-                    contentKind: kind, readiness: .unknown), selection: .asset(projectID: project.id, assetID: asset.id),
-                    facts: [asset.mediaType, "访问时核验所属项目、文件与摘要；不改变原件"]))
+                    contentKind: kind, readiness: .unknown), selection: .assetInstance(projectID: project.id,
+                        instanceID: project.effectiveInstanceID, assetID: asset.id),
+                    facts: [asset.mediaType, "访问时核验所属项目、文件与摘要；不改变原件"],
+                    activityID: "asset-instance:" + project.effectiveInstanceID.uuidString + ":" + asset.id.uuidString))
             }
         }
         return result

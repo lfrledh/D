@@ -20,6 +20,7 @@ struct WorkflowCanvasBodyLocation: Codable, Hashable, Sendable {
 enum WorkflowCanvasTransfer: Codable, Transferable, Equatable, Sendable {
     case operation(id: String, modelID: String?)
     case asset(projectID: UUID, assetID: UUID)
+    case assetInstance(projectID: UUID, instanceID: UUID, assetID: UUID)
     case tool(WorkflowToolReference)
     case output(
         rootGraphID: UUID,
@@ -47,7 +48,7 @@ enum WorkflowCanvasTransfer: Codable, Transferable, Equatable, Sendable {
         case .operation(let id, let modelID):
             try Self.validate(id, maximum: Self.maximumIdentifierCharacters)
             if let modelID { try Self.validate(modelID, maximum: Self.maximumModelIdentifierCharacters) }
-        case .asset:
+        case .asset, .assetInstance:
             break
         case .tool(let reference):
             guard reference.version > 0, reference.digest.count == 64,

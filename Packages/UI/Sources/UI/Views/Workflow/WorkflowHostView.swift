@@ -9,7 +9,8 @@ struct WorkflowHostView: View {
     let nodeTags: ModelNodeTagStore
     var onQuickUse: ((WorkflowNode) -> Void)? = nil
     var libraryContent: ((CGPoint, @escaping () -> Void) -> AnyView)? = nil
-    var onSharedAssetDrop: ((UUID, UUID, CGPoint, WorkflowCanvasInsertionTarget) -> Bool)? = nil
+    var onSharedAssetDrop: ((UUID, UUID?, UUID, CGPoint, WorkflowCanvasInsertionTarget) -> Bool)? = nil
+    var acceptsLegacyAsset: ((UUID, UUID) -> Bool)? = nil
     @Environment(\.dLanguageStore) private var languageStore
     var body: some View {
         Group {
@@ -28,7 +29,8 @@ struct WorkflowHostView: View {
                     onDropFile: { url in
                         guard model.projectSession.workflow === controller, controller.canEditCanvas else { return false }
                         Task { await importAssetURL(url, controller: controller) }; return true
-                    }, onQuickUse: onQuickUse, libraryContent: libraryContent, onSharedAssetDrop: onSharedAssetDrop)
+                    }, onQuickUse: onQuickUse, libraryContent: libraryContent,
+                    onSharedAssetDrop: onSharedAssetDrop, acceptsLegacyAsset: acceptsLegacyAsset)
                     .safeAreaInset(edge: .bottom) {
                         WorkflowCaptureRecoveryView(model: model)
                         if model.projectSession.workflowRecordingNodeID != nil {
@@ -47,7 +49,7 @@ struct WorkflowHostView: View {
                     }
             } else { ProgressView((languageStore?.text("workflow.host.loading", fallback: "正在读取项目流程…") ?? "正在读取项目流程…")) }
         }
-        .task(id: model.manifest?.id) { await model.projectSession.openWorkflow() }
+        .task(id: model.manifest?.effectiveInstanceID) { await model.projectSession.openWorkflow() }
     }
     private func chooseModel(controller: WorkflowController, kind: WorkflowModelKind) {
         // Capture synchronously, before either the task or the native panel suspends.
@@ -64,26 +66,22 @@ struct WorkflowHostView: View {
     }
     private func importFile(nodeID: UUID, controller: WorkflowController) async {
         guard !model.isChangingProject else { return }
-        let panel = NSOpenPanel(); panel.title = (languageStore?.text("workflow.host.import", fallback: "导入为不可变资产快照") ?? "导入为不可变资产快照")
-        panel.canChooseDirectories = false; panel.allowsMultipleSelection = false
-        panel.allowedContentTypes = [.plainText, .png, .jpeg, .audio, .mpeg4Movie, .json, .init(filenameExtension: "md") ?? .plainText]
-        guard await panel.begin() == .OK, let url = panel.url, model.projectSession.workflow === controller else { return }
+        guard let target = controller.assetBindingTarget(nodeID: nodeID),
+              let (url, mode) = await NativeAssetImportPanel.choose(language: languageStore),
+              model.projectSession.workflow === controller, controller.isCurrent(target) else { return }
         let scoped = url.startAccessingSecurityScopedResource(); defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-        await controller.importFile(url, nodeID: nodeID)
+        await controller.importFile(url, nodeID: nodeID, mode: mode)
     }
     private func importAsset(_ controller: WorkflowController) async {
         guard controller.canEditCanvas, !model.isChangingProject else { return }
-        let panel = NSOpenPanel(); panel.canChooseDirectories = false; panel.allowsMultipleSelection = false
-        panel.title = languageStore?.text("canvas.assets.import", fallback: "导入素材") ?? "导入素材"
-        panel.allowedContentTypes = [.plainText, .png, .jpeg, .audio, .mpeg4Movie, .json, .init(filenameExtension: "md") ?? .plainText]
-        guard await panel.begin() == .OK, let url = panel.url else { return }
-        await importAssetURL(url, controller: controller)
+        guard let (url, mode) = await NativeAssetImportPanel.choose(language: languageStore) else { return }
+        await importAssetURL(url, controller: controller, mode: mode)
     }
-    private func importAssetURL(_ url: URL, controller: WorkflowController) async {
+    private func importAssetURL(_ url: URL, controller: WorkflowController, mode: AssetImportMode = .copy) async {
         guard model.projectSession.workflow === controller, controller.canEditCanvas, !model.isChangingProject else { return }
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-        await controller.importLibraryFile(url)
+        await controller.importLibraryFile(url, mode: mode)
     }
     private func destination(_ controller: WorkflowController) async {
         guard !model.isBusy, !model.isChangingProject else { return }

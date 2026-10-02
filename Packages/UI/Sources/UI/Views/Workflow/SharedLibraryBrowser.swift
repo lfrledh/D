@@ -13,6 +13,7 @@ enum SharedLibraryBrowserIssue: Error, Equatable {
 public enum SharedLibraryBrowserSelection: Equatable {
     case operation(id: String, modelID: String?)
     case asset(projectID: UUID, assetID: UUID)
+    case assetInstance(projectID: UUID, instanceID: UUID, assetID: UUID)
     case tool(WorkflowToolReference)
     case unavailable(String)
 }
@@ -21,12 +22,13 @@ public struct SharedLibraryBrowserEntry: Identifiable, Equatable {
     public let item: SharedLibraryItem
     public let selection: SharedLibraryBrowserSelection
     public let facts: [String]
-    public var id: String { item.key }
+    public let id: String
 
-    public init(item: SharedLibraryItem, selection: SharedLibraryBrowserSelection, facts: [String] = []) {
+    public init(item: SharedLibraryItem, selection: SharedLibraryBrowserSelection, facts: [String] = [], activityID: String? = nil) {
         self.item = item
         self.selection = selection
         self.facts = facts
+        self.id = activityID ?? item.key
     }
 }
 
@@ -188,14 +190,14 @@ struct SharedLibraryBrowserRenameDrafts {
             scopeKeys = Set(entries.map(\.id))
         case .tag(let id):
             guard store.metadata.tags[id] != nil else { throw SharedLibraryError.missingTag }
-            scopeKeys = Set(entries.filter { store.metadata.tagAssignments[$0.id]?.contains(id) == true }.map(\.id))
+            scopeKeys = Set(entries.filter { store.metadata.tagAssignments[$0.item.key]?.contains(id) == true }.map(\.id))
         case .folder(let id):
             guard let folder = store.metadata.folders[id] else { throw SharedLibraryError.missingFolder }
-            scopeKeys = folder.memberKeys
+            scopeKeys = Set(entries.filter { folder.memberKeys.contains($0.item.key) }.map(\.id))
         }
         let filtered = Set(store.filter(entries.map(\.item), query: query).map(\.key))
         return entries.filter { entry in
-            guard scopeKeys.contains(entry.id), filtered.contains(entry.id) else { return false }
+            guard scopeKeys.contains(entry.id), filtered.contains(entry.item.key) else { return false }
             if case .kind(let kind) = scope { return entry.item.kind == kind }
             return true
         }
@@ -223,7 +225,7 @@ struct SharedLibraryBrowserRenameDrafts {
                 || (modelID?.isEmpty == false
                     && (entry.item.readiness == .unprepared || entry.item.readiness == .unknown))
             return selectable && action != .preview
-        case .asset:
+        case .asset, .assetInstance:
             let selectable = entry.item.readiness == .available || entry.item.readiness == .unknown
             return selectable && action != .use
         case .tool:
@@ -255,6 +257,8 @@ struct SharedLibraryBrowserRenameDrafts {
         switch entry.selection {
         case .operation(let id, let modelID): return .operation(id: id, modelID: modelID)
         case .asset(let projectID, let assetID): return .asset(projectID: projectID, assetID: assetID)
+        case .assetInstance(let projectID, let instanceID, let assetID):
+            return .assetInstance(projectID: projectID, instanceID: instanceID, assetID: assetID)
         case .tool(let reference): return .tool(reference)
         case .unavailable: return nil
         }
@@ -352,6 +356,7 @@ public struct SharedLibraryBrowser: View {
     }
     private var saved: [SharedLibrarySavedQuery] { store.metadata.savedQueries.values.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending } }
     private var validSelection: Set<String> { selectedKeys.intersection(Set(entries.map(\.id))) }
+    private var selectedMetadataKeys: Set<String> { Set(entries.filter { validSelection.contains($0.id) }.map { $0.item.key }) }
     private var selectedEntry: SharedLibraryBrowserEntry? {
         entries.first { $0.id == focusedKey } ?? entries.first { validSelection.contains($0.id) }
     }
@@ -539,10 +544,10 @@ public struct SharedLibraryBrowser: View {
             Menu {
                 ForEach(tags) { tag in
                     Button(word("addTag", "添加标签") + " · " + tag.name) {
-                        perform { try store.addTags([tag.id], to: validSelection) }
+                        perform { try store.addTags([tag.id], to: selectedMetadataKeys) }
                     }
                     Button(word("removeTag", "移除标签") + " · " + tag.name) {
-                        perform { try store.removeTags([tag.id], from: validSelection) }
+                        perform { try store.removeTags([tag.id], from: selectedMetadataKeys) }
                     }
                 }
                 if tags.isEmpty { Text(word("noTags", "尚无我的标签")) }
@@ -551,10 +556,10 @@ public struct SharedLibraryBrowser: View {
             Menu {
                 ForEach(folders) { folder in
                     Button(word("addToFolder", "加入分类") + " · " + folder.name) {
-                        perform { try store.addMembers(validSelection, to: folder.id) }
+                        perform { try store.addMembers(selectedMetadataKeys, to: folder.id) }
                     }
                     Button(word("removeFromFolder", "移出分类") + " · " + folder.name) {
-                        perform { try store.removeMembers(validSelection, from: folder.id) }
+                        perform { try store.removeMembers(selectedMetadataKeys, from: folder.id) }
                     }
                 }
                 if folders.isEmpty { Text(word("noFolders", "尚无分类")) }
@@ -623,7 +628,7 @@ public struct SharedLibraryBrowser: View {
                 ForEach(entry.facts, id: \.self) { fact in Text(fact).font(.caption).textSelection(.enabled) }
             }
             Text(word("myTags", "我的标签")).font(.subheadline.weight(.semibold))
-            Text(assignedTagNames(entry.id)).font(.caption).textSelection(.enabled)
+            Text(assignedTagNames(entry.item.key)).font(.caption).textSelection(.enabled)
             Text(word("legend", "能力 / 我的标签")).font(.caption2).foregroundStyle(.secondary)
             Divider()
             if canUse(entry) {
@@ -820,10 +825,10 @@ public struct SharedLibraryBrowser: View {
             if let id = selectedTagID {
                 HStack {
                     Button(word("addSelected", "给已选条目添加")) {
-                        perform { try store.addTags([id], to: validSelection) }
+                        perform { try store.addTags([id], to: selectedMetadataKeys) }
                     }
                     Button(word("removeSelected", "从已选条目移除")) {
-                        perform { try store.removeTags([id], from: validSelection) }
+                        perform { try store.removeTags([id], from: selectedMetadataKeys) }
                     }
                 }.disabled(validSelection.isEmpty)
             }
@@ -878,10 +883,10 @@ public struct SharedLibraryBrowser: View {
             if let id = selectedFolderID {
                 HStack {
                     Button(word("addSelected", "给已选条目添加")) {
-                        perform { try store.addMembers(validSelection, to: id) }
+                        perform { try store.addMembers(selectedMetadataKeys, to: id) }
                     }
                     Button(word("removeSelected", "从已选条目移除")) {
-                        perform { try store.removeMembers(validSelection, from: id) }
+                        perform { try store.removeMembers(selectedMetadataKeys, from: id) }
                     }
                 }.disabled(validSelection.isEmpty)
             }
@@ -981,7 +986,7 @@ public struct SharedLibraryBrowser: View {
             return false
         }
         do {
-            try action(keys)
+            try action(Set(entries.filter { keys.contains($0.id) }.map { $0.item.key }))
             state.reconcile(using: store)
             errorMessage = nil
             return true

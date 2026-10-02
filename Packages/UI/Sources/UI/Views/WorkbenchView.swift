@@ -63,7 +63,13 @@ public struct WorkbenchView: View {
                     }.padding(10).background(.bar)
                     Divider()
                     if workflowVisible {
-                        WorkflowHostView(model: model, nodeTags: nodeTags)
+                        WorkflowHostView(model: model, nodeTags: nodeTags,
+                            acceptsLegacyAsset: { projectID, assetID in
+                                guard let manifest = model.manifest,
+                                      manifest.id == projectID,
+                                      manifest.effectiveInstanceID == projectID else { return false }
+                                return manifest.assets.contains(where: { $0.id == assetID })
+                            })
                     } else { projectWorkbench }
                 }
             } else {
