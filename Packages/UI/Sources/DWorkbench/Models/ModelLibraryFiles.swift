@@ -32,6 +32,11 @@ struct ModelRequiredTree: Sendable, Equatable {
     }
 }
 
+/// The replacement index may already be visible even when its directory sync fails.
+enum ModelAtomicWriteError: Error, Sendable {
+    case publishedButUnsynced(ModelLibraryError)
+}
+
 /// Immutable descriptor ownership; all operations remain anchored even during directory replacement.
 final class ModelDirectory: Sendable {
     let url: URL
@@ -155,7 +160,8 @@ final class ModelDirectory: Sendable {
         return result
     }
 
-    func atomicWrite(_ data: Data, to path: String, replace: Bool = true) throws {
+    func atomicWrite(_ data: Data, to path: String, replace: Bool = true,
+                     afterRename: (@Sendable () throws -> Void)? = nil) throws {
         try validateLocation()
         let (parent, name) = try parent(path, create: true)
         defer { Darwin.close(parent) }
@@ -173,8 +179,11 @@ final class ModelDirectory: Sendable {
         }
         try validateLocation()
         let flags: UInt32 = replace ? 0 : UInt32(RENAME_EXCL)
-        guard renameatx_np(parent, temporary, parent, name, flags) == 0, fsync(parent) == 0 else {
-            throw Self.failure("提交状态文件")
+        guard renameatx_np(parent, temporary, parent, name, flags) == 0 else { throw Self.failure("提交状态文件") }
+        do { try afterRename?() }
+        catch { throw ModelAtomicWriteError.publishedButUnsynced(.storage("状态文件已替换，但目录同步未确认：\(error.localizedDescription)")) }
+        guard fsync(parent) == 0 else {
+            throw ModelAtomicWriteError.publishedButUnsynced(Self.failure("状态文件已替换，但目录同步失败"))
         }
     }
 

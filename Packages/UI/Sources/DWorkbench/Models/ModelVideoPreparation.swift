@@ -28,8 +28,9 @@ enum ModelVideoPreparation {
         guard fstatat(parent.descriptor, name, &existing, AT_SYMLINK_NOFOLLOW) != 0, errno == ENOENT else {
             throw ModelLibraryError.unsafePath("执行包目标已存在；不会覆盖。")
         }
-        let before = try source.entries(expectedPaths: Set(entry.files.map(\.path)))
-        guard Set(before.keys) == Set(entry.files.map(\.path)) else {
+        let requiredPaths = Set(entry.files.map(\.path))
+        let before = try source.verifyRequired(entry.files)
+        guard Set(before.files.keys) == requiredPaths else {
             throw ModelLibraryError.integrity("原始文件清单不完整。")
         }
         let stageName = ".d-video-preparing-" + UUID().uuidString
@@ -38,7 +39,7 @@ enum ModelVideoPreparation {
         do {
             for (index, file) in entry.files.enumerated() {
                 try Task.checkCancellation(); try checkpoint(index)
-                guard let identity = before[file.path], identity.size >= 0, UInt64(identity.size) == file.size else {
+                guard let identity = before.files[file.path], identity.size >= 0, UInt64(identity.size) == file.size else {
                     throw ModelLibraryError.integrity("原始文件大小与固定清单不符。")
                 }
                 try copy(file.path, from: source, to: "model/" + file.path, in: stage)
@@ -47,7 +48,7 @@ enum ModelVideoPreparation {
                 sha256: $0.sha256, digestAlgorithm: $0.digestAlgorithm) }
             let verified = try stage.verify(packaged)
             try Task.checkCancellation(); try checkpoint(entry.files.count)
-            guard try source.entries(expectedPaths: Set(before.keys)) == before else {
+            guard try source.requiredTree(paths: requiredPaths) == before else {
                 throw ModelLibraryError.integrity("准备期间原始模型发生变化；未发布。")
             }
             guard try stage.entries(expectedPaths: Set(verified.keys)) == verified else {
