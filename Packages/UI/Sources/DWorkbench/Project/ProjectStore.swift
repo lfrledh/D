@@ -4206,8 +4206,7 @@ extension ProjectStore {
     public static func restoreBackup(at backup: URL, to destination: URL,
                                      allowIncomplete: Bool = false) async throws -> ProjectBackupReceipt {
         _ = try ProjectFiles.projectURL(destination)
-        return try await ProjectBackup.restore(at: backup, to: destination, allowIncomplete: allowIncomplete) { stage in
-            let fd = try ProjectFiles.openDirectory(stage); defer { Darwin.close(fd) }
+        return try await ProjectBackup.restore(at: backup, to: destination, allowIncomplete: allowIncomplete) { fd in
             let bytes = try ProjectFiles.read(relative: Self.manifestFilename, in: fd, limit: 32 * 1024 * 1024)
             var restored = try JSONDecoder().decode(ProjectManifest.self, from: bytes)
             guard restored.schemaVersion == ProjectManifest.currentSchemaVersion else {
