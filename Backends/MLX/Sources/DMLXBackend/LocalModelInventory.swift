@@ -9,6 +9,7 @@ struct LocalModelInventory: Sendable {
     let contextLimit: Int
     let profile: ExecutionProfileReference
     let maximumPromptTokens: Int
+    let fileSet: LocalModelFileSet?
 
     private struct Configuration: Decodable {
         let model_type: String
@@ -73,6 +74,8 @@ struct LocalModelInventory: Sendable {
         guard manager.fileExists(atPath: directory.path, isDirectory: &isDirectory), isDirectory.boolValue else {
             throw InferenceFailure.invalidRequest("Model directory does not exist: \(directory.path)")
         }
+        let fileSet = try LocalModelFileSet.resolve(request.model.revision)
+        try fileSet?.validateRequired(in: directory)
         for name in ["config.json", "tokenizer.json", "tokenizer_config.json"] {
             let url = directory.appendingPathComponent(name)
             let values = try url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey])
@@ -125,29 +128,39 @@ struct LocalModelInventory: Sendable {
         // Match the upstream loader's recursive weight discovery; reject indirection rather
         // than estimating one file tree and then letting the loader traverse a different one.
         var enumerationError: Error?
-        guard let enumerator = manager.enumerator(at: directory, includingPropertiesForKeys: keys,
-                                                  options: [], errorHandler: { _, error in
-            enumerationError = error
-            return false
-        }) else {
-            throw InferenceFailure.invalidRequest("Cannot enumerate the model directory.")
+        let weightURLs: [URL]
+        if let fileSet {
+            weightURLs = fileSet.weightNames.map { directory.appendingPathComponent($0) }
+        } else {
+            guard let enumerator = manager.enumerator(at: directory, includingPropertiesForKeys: keys,
+                                                      options: [], errorHandler: { _, error in
+                enumerationError = error
+                return false
+            }) else {
+                throw InferenceFailure.invalidRequest("Cannot enumerate the model directory.")
+            }
+            var discovered: [URL] = []
+            for case let url as URL in enumerator {
+                let values = try url.resourceValues(forKeys: Set(keys))
+                guard values.isSymbolicLink != true else {
+                    throw InferenceFailure.invalidRequest("Model directory must not contain symbolic links.")
+                }
+                if url.pathExtension == "safetensors" { discovered.append(url) }
+            }
+            weightURLs = discovered
         }
         var weightBytes: UInt64 = 0
-        for case let url as URL in enumerator {
+        for url in weightURLs {
             let values = try url.resourceValues(forKeys: Set(keys))
-            guard values.isSymbolicLink != true else {
-                throw InferenceFailure.invalidRequest("Model directory must not contain symbolic links.")
+            guard values.isRegularFile == true, values.isSymbolicLink != true,
+                  let size = values.fileSize, size > 8 else {
+                throw InferenceFailure.invalidRequest("Invalid safetensors weight file.")
             }
-            if url.pathExtension == "safetensors" {
-                guard values.isRegularFile == true, let size = values.fileSize, size > 8 else {
-                    throw InferenceFailure.invalidRequest("Invalid safetensors weight file.")
-                }
-                let (sum, overflow) = weightBytes.addingReportingOverflow(UInt64(size))
-                guard !overflow, sum <= 128 * 1024 * 1024 * 1024 else {
-                    throw InferenceFailure.invalidRequest("Model weight files exceed the supported size.")
-                }
-                weightBytes = sum
+            let (sum, overflow) = weightBytes.addingReportingOverflow(UInt64(size))
+            guard !overflow, sum <= 128 * 1024 * 1024 * 1024 else {
+                throw InferenceFailure.invalidRequest("Model weight files exceed the supported size.")
             }
+            weightBytes = sum
         }
         if let enumerationError { throw enumerationError }
         guard weightBytes > 0 else { throw InferenceFailure.invalidRequest("No safetensors weights found.") }
@@ -159,7 +172,8 @@ struct LocalModelInventory: Sendable {
         let estimate = weightBytes * 2 + kvBytes + 512 * 1024 * 1024 + UInt64(cacheLimitBytes)
         return Self(directory: directory, weightBytes: weightBytes,
                     estimatedPeakBytes: estimate, contextLimit: config.max_position_embeddings,
-                    profile: capability.profile, maximumPromptTokens: maximumPromptTokens)
+                    profile: capability.profile, maximumPromptTokens: maximumPromptTokens,
+                    fileSet: fileSet)
     }
 
     /// Retains the original metadata-inspection entry point for callers that own a

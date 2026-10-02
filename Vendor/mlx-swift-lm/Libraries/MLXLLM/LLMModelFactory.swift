@@ -524,10 +524,12 @@ public final class LLMModelFactory: GenericModelFactory {
     public typealias ContainerType = ModelContainer
 
     public init(
-        typeRegistry: ModelTypeRegistry<LanguageModel>, modelRegistry: AbstractModelRegistry
+        typeRegistry: ModelTypeRegistry<LanguageModel>, modelRegistry: AbstractModelRegistry,
+        fileSelection: ModelFileSelection? = nil
     ) {
         self.typeRegistry = typeRegistry
         self.modelRegistry = modelRegistry
+        self.fileSelection = fileSelection
     }
 
     /// Shared instance with default behavior.
@@ -539,6 +541,7 @@ public final class LLMModelFactory: GenericModelFactory {
 
     /// registry of model id to configuration, e.g. `mlx-community/Llama-3.2-3B-Instruct-4bit`
     public let modelRegistry: AbstractModelRegistry
+    private let fileSelection: ModelFileSelection?
 
     public func _load(
         configuration: ResolvedModelConfiguration,
@@ -575,12 +578,16 @@ public final class LLMModelFactory: GenericModelFactory {
         // Load EOS token IDs from config.json, with optional override from generation_config.json
         var eosTokenIds = Set(baseConfig.eosTokenIds?.values ?? [])
         let generationConfigURL = modelDirectory.appending(component: "generation_config.json")
-        let generationConfig: GenerationConfigFile? =
-            if let generationData = try? Data(contentsOf: generationConfigURL) {
-                try? JSONDecoder.json5().decode(GenerationConfigFile.self, from: generationData)
-            } else {
-                nil
-            }
+        let generationConfig: GenerationConfigFile?
+        if let fileSelection {
+            generationConfig = fileSelection.contains("generation_config.json")
+                ? try decodeAdmittedGenerationConfig(Data(contentsOf: generationConfigURL))
+                : nil
+        } else if let generationData = try? Data(contentsOf: generationConfigURL) {
+            generationConfig = try? JSONDecoder.json5().decode(GenerationConfigFile.self, from: generationData)
+        } else {
+            generationConfig = nil
+        }
         if let genEosIds = generationConfig?.eosTokenIds?.values {
             eosTokenIds = Set(genEosIds)  // Override per Python mlx-lm behavior
         }
@@ -600,7 +607,8 @@ public final class LLMModelFactory: GenericModelFactory {
 
         try loadWeights(
             modelDirectory: modelDirectory, model: model,
-            perLayerQuantization: baseConfig.perLayerQuantization)
+            perLayerQuantization: baseConfig.perLayerQuantization,
+            fileSelection: fileSelection)
 
         let tokenizer = try await tokenizerTask
 

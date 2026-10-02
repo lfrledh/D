@@ -30,7 +30,7 @@ enum AppSessionFactory {
                 title: profile.displayTitle, backendID: vlmBackend.descriptor.id, textCapability: vlmBackend.executionCapability,
                 validateModel: { directory in
                     let reference = try await TextModelProfiles.verifyVLM(at: directory, profileID: profile.id)
-                    _ = try MLXQwenVLMBackend.validateModel(at: directory)
+                    _ = try MLXQwenVLMBackend.validateModel(at: directory, revision: reference.revision)
                     return reference
                 }))
         }

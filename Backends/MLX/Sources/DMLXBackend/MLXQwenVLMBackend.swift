@@ -54,8 +54,8 @@ public actor MLXQwenVLMBackend: InferenceBackend {
             profile: TextExecutionCapability.qwen35VLMProfile)
     }
 
-    public nonisolated static func validateModel(at directory: URL) throws -> QwenVLMModelInventory {
-        try QwenVLMModelInventory.validateModel(at: directory)
+    public nonisolated static func validateModel(at directory: URL, revision: String? = nil) throws -> QwenVLMModelInventory {
+        try QwenVLMModelInventory.validateModel(at: directory, revision: revision)
     }
 
     public func estimate(_ request: InferenceRequest) async throws -> ResourceEstimate {
@@ -150,9 +150,11 @@ public actor MLXQwenVLMBackend: InferenceBackend {
             ])
             let factory = VLMModelFactory(typeRegistry: VLMTypeRegistry.shared,
                                           processorRegistry: registry, modelRegistry: VLMRegistry.shared,
-                                          layeredQwen35: input.loadingStrategy == .ssdLayered)
+                                          layeredQwen35: input.loadingStrategy == .ssdLayered,
+                                          fileSelection: inventory.fileSet?.selection)
             let loaded = try await withRandomState(randomState) {
-                try await factory.loadContainer(from: inventory.directory, using: LocalTokenizerLoader())
+                try await factory.loadContainer(from: inventory.directory,
+                                                using: LocalTokenizerLoader(fileSet: inventory.fileSet))
             }
             container = loaded
             await observer(MLXLifecycleEvent(runID: request.id, phase: .loaded))

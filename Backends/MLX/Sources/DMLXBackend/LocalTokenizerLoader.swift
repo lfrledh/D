@@ -1,13 +1,19 @@
 import Foundation
+import Hub
 import MLXLMCommon
 import Tokenizers
 
 /// Loads only an already-installed tokenizer. It cannot fall back to a Hub download.
 struct LocalTokenizerLoader: MLXLMCommon.TokenizerLoader {
+    let fileSet: LocalModelFileSet?
+
+    init(fileSet: LocalModelFileSet? = nil) { self.fileSet = fileSet }
+
     func load(from directory: URL) async throws -> any MLXLMCommon.Tokenizer {
         guard directory.isFileURL, directory.path.hasPrefix("/") else {
             throw LocalTokenizerFailure.invalidTemplate("Tokenizer directory must be local.")
         }
+        if let fileSet { return try loadFixed(from: directory, fileSet: fileSet) }
         // The upstream local loader uses try? for optional template sidecars. Validate
         // the selected sidecar first so damage cannot fall back to an older template.
         for name in ["chat_template.jinja", "chat_template.json"] {
@@ -32,6 +38,51 @@ struct LocalTokenizerLoader: MLXLMCommon.TokenizerLoader {
             throw LocalTokenizerFailure.invalidTemplate("This profile requires a local chat template.")
         }
         return LocalTokenizer(base: tokenizer)
+    }
+
+    private func loadFixed(from directory: URL, fileSet: LocalModelFileSet) throws -> any MLXLMCommon.Tokenizer {
+        // The upstream folder API probes sidecars. Its config/data initializer performs
+        // the same tokenization without observing undeclared neighboring files.
+        let configURL = directory.appendingPathComponent("tokenizer_config.json")
+        let tokenizerURL = directory.appendingPathComponent("tokenizer.json")
+        var config = try parseConfig(configURL)
+        let data = try parseConfig(tokenizerURL)
+        let template: String?
+        if fileSet.admits("chat_template.jinja") {
+            let value = try String(contentsOf: directory.appendingPathComponent("chat_template.jinja"), encoding: .utf8)
+            guard !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                throw LocalTokenizerFailure.invalidTemplate("Empty admitted chat_template.jinja.")
+            }
+            template = value
+        } else if fileSet.admits("chat_template.json") {
+            let value = try parseConfig(directory.appendingPathComponent("chat_template.json")).chatTemplate.string()
+            guard let value, !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                throw LocalTokenizerFailure.invalidTemplate("Invalid admitted chat_template.json.")
+            }
+            template = value
+        } else {
+            template = nil // The embedded tokenizer_config template retains its precedence.
+        }
+        if let template {
+            guard var values = config.dictionary() else {
+                throw LocalTokenizerFailure.invalidTemplate("Invalid tokenizer configuration.")
+            }
+            values["chat_template"] = Config(template)
+            config = Config(values)
+        }
+        let tokenizer = try PreTrainedTokenizer(tokenizerConfig: config, tokenizerData: data, strict: true)
+        guard tokenizer.hasChatTemplate else {
+            throw LocalTokenizerFailure.invalidTemplate("This profile requires a local chat template.")
+        }
+        return LocalTokenizer(base: tokenizer)
+    }
+
+    private func parseConfig(_ url: URL) throws -> Config {
+        let value = try HubApi.shared.configuration(fileURL: url)
+        guard value.dictionary() != nil else {
+            throw LocalTokenizerFailure.invalidTemplate("Invalid tokenizer JSON: \(url.lastPathComponent)")
+        }
+        return value
     }
 }
 
