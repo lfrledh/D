@@ -44,9 +44,19 @@ public final class Flux2QwenTokenizer {
   public static func load(
     from directory: URL,
     maxLengthOverride: Int? = nil,
-    hubApi: HubApi = .shared
+    hubApi: HubApi = .shared,
+    fileSet: Flux2FileSet? = nil
   ) throws -> Flux2QwenTokenizer {
-    let tokenizerDirectory = resolveTokenizerDirectory(directory)
+    let tokenizerDirectory: URL
+    let prefix: String
+    if let fileSet {
+      prefix = fileSet.contains("tokenizer/tokenizer_config.json") ? "tokenizer/" : ""
+      try fileSet.require(prefix + "tokenizer_config.json")
+      tokenizerDirectory = prefix.isEmpty ? directory : directory.appendingPathComponent("tokenizer")
+    } else {
+      tokenizerDirectory = resolveTokenizerDirectory(directory)
+      prefix = tokenizerDirectory == directory ? "" : "tokenizer/"
+    }
     let tokenizerConfigURL = tokenizerDirectory.appending(path: "tokenizer_config.json")
     let tokenizerDataURL = tokenizerDirectory.appending(path: "tokenizer.json")
 
@@ -59,17 +69,19 @@ public final class Flux2QwenTokenizer {
 
     let tokenizerConfig = try hubApi.configuration(fileURL: tokenizerConfigURL)
     let tokenizer: Tokenizer
-    if FileManager.default.fileExists(atPath: tokenizerDataURL.path) {
+    if fileSet?.contains(prefix + "tokenizer.json") ?? FileManager.default.fileExists(atPath: tokenizerDataURL.path) {
       let tokenizerData = try hubApi.configuration(fileURL: tokenizerDataURL)
       tokenizer = try AutoTokenizer.from(tokenizerConfig: tokenizerConfig, tokenizerData: tokenizerData)
     } else {
+      try fileSet?.require(prefix + "vocab.json")
+      try fileSet?.require(prefix + "merges.txt")
       let vocabURL = tokenizerDirectory.appending(path: "vocab.json")
       let mergesURL = tokenizerDirectory.appending(path: "merges.txt")
       guard FileManager.default.fileExists(atPath: vocabURL.path),
             FileManager.default.fileExists(atPath: mergesURL.path) else {
         throw Flux2TokenizerError.fileNotFound(tokenizerDataURL)
       }
-      let tokenizerData = try makeBPETokenizerData(vocabURL: vocabURL, mergesURL: mergesURL)
+      let tokenizerData = try makeBPETokenizerData(vocabURL: vocabURL, mergesURL: mergesURL, includeAddedTokens: fileSet?.contains(prefix + "added_tokens.json") ?? true, requireAddedTokens: fileSet?.contains(prefix + "added_tokens.json") == true)
       tokenizer = try AutoTokenizer.from(tokenizerConfig: tokenizerConfig, tokenizerData: tokenizerData)
     }
 
@@ -90,7 +102,7 @@ public final class Flux2QwenTokenizer {
 
     let chatTemplateURL = tokenizerDirectory.appending(path: "chat_template.jinja")
     let chatTemplate: ChatTemplateArgument?
-    if FileManager.default.fileExists(atPath: chatTemplateURL.path) {
+    if fileSet?.contains(prefix + "chat_template.jinja") ?? FileManager.default.fileExists(atPath: chatTemplateURL.path) {
       let template = try String(contentsOf: chatTemplateURL, encoding: .utf8)
       chatTemplate = .literal(template)
     } else {
@@ -194,7 +206,7 @@ public final class Flux2QwenTokenizer {
     return directory
   }
 
-  static func makeBPETokenizerData(vocabURL: URL, mergesURL: URL) throws -> Config {
+  static func makeBPETokenizerData(vocabURL: URL, mergesURL: URL, includeAddedTokens: Bool = true, requireAddedTokens: Bool = false) throws -> Config {
     let vocabData = try Data(contentsOf: vocabURL)
     guard let vocabObject = try JSONSerialization.jsonObject(with: vocabData, options: []) as? [String: Any] else {
       throw Flux2TokenizerError.fileNotFound(vocabURL)
@@ -208,7 +220,14 @@ public final class Flux2QwenTokenizer {
     let tokenizerDir = vocabURL.deletingLastPathComponent()
     let addedTokensURL = tokenizerDir.appending(path: "added_tokens.json")
     var addedTokensMap: [String: Int] = [:]
-    if FileManager.default.fileExists(atPath: addedTokensURL.path) {
+    if requireAddedTokens {
+      let data = try Data(contentsOf: addedTokensURL)
+      guard let added = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+            added.values.allSatisfy({ ($0 as? NSNumber).map { CFGetTypeID($0) != CFBooleanGetTypeID() && $0.doubleValue == Double($0.intValue) } ?? false }) else {
+        throw Flux2TokenizerError.fileNotFound(addedTokensURL)
+      }
+    }
+    if includeAddedTokens && FileManager.default.fileExists(atPath: addedTokensURL.path) {
       if let addedData = try? Data(contentsOf: addedTokensURL),
          let added = try? JSONSerialization.jsonObject(with: addedData, options: []) as? [String: Any] {
         for (k, v) in added {

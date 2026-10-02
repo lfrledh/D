@@ -113,9 +113,19 @@ public final class Flux2PixtralProcessor {
   public static func load(
     from directory: URL,
     maxLengthOverride: Int? = nil,
-    hubApi: HubApi = .shared
+    hubApi: HubApi = .shared,
+    fileSet: Flux2FileSet? = nil
   ) throws -> Flux2PixtralProcessor {
-    let tokenizerDirectory = resolveTokenizerDirectory(directory)
+    let tokenizerDirectory: URL
+    let prefix: String
+    if let fileSet {
+      prefix = fileSet.contains("tokenizer/tokenizer_config.json") ? "tokenizer/" : ""
+      try fileSet.require(prefix + "tokenizer_config.json")
+      tokenizerDirectory = prefix.isEmpty ? directory : directory.appendingPathComponent("tokenizer")
+    } else {
+      tokenizerDirectory = resolveTokenizerDirectory(directory)
+      prefix = tokenizerDirectory == directory ? "" : "tokenizer/"
+    }
     let tokenizerConfigURL = tokenizerDirectory.appending(path: "tokenizer_config.json")
     let tokenizerDataURL = tokenizerDirectory.appending(path: "tokenizer.json")
 
@@ -128,17 +138,19 @@ public final class Flux2PixtralProcessor {
 
     let tokenizerConfig = try hubApi.configuration(fileURL: tokenizerConfigURL)
     let tokenizer: Tokenizer
-    if FileManager.default.fileExists(atPath: tokenizerDataURL.path) {
+    if fileSet?.contains(prefix + "tokenizer.json") ?? FileManager.default.fileExists(atPath: tokenizerDataURL.path) {
       let tokenizerData = try hubApi.configuration(fileURL: tokenizerDataURL)
       tokenizer = try AutoTokenizer.from(tokenizerConfig: tokenizerConfig, tokenizerData: tokenizerData)
     } else {
+      try fileSet?.require(prefix + "vocab.json")
+      try fileSet?.require(prefix + "merges.txt")
       let vocabURL = tokenizerDirectory.appending(path: "vocab.json")
       let mergesURL = tokenizerDirectory.appending(path: "merges.txt")
       guard FileManager.default.fileExists(atPath: vocabURL.path),
             FileManager.default.fileExists(atPath: mergesURL.path) else {
         throw Flux2TokenizerError.fileNotFound(tokenizerDataURL)
       }
-      let tokenizerData = try Flux2QwenTokenizer.makeBPETokenizerData(vocabURL: vocabURL, mergesURL: mergesURL)
+      let tokenizerData = try Flux2QwenTokenizer.makeBPETokenizerData(vocabURL: vocabURL, mergesURL: mergesURL, includeAddedTokens: fileSet?.contains(prefix + "added_tokens.json") ?? true, requireAddedTokens: fileSet?.contains(prefix + "added_tokens.json") == true)
       tokenizer = try AutoTokenizer.from(tokenizerConfig: tokenizerConfig, tokenizerData: tokenizerData)
     }
 
@@ -160,14 +172,14 @@ public final class Flux2PixtralProcessor {
 
     let chatTemplateURL = tokenizerDirectory.appending(path: "chat_template.jinja")
     let chatTemplate: ChatTemplateArgument?
-    if FileManager.default.fileExists(atPath: chatTemplateURL.path) {
+    if fileSet?.contains(prefix + "chat_template.jinja") ?? FileManager.default.fileExists(atPath: chatTemplateURL.path) {
       let template = try String(contentsOf: chatTemplateURL, encoding: .utf8)
       chatTemplate = .literal(template)
     } else {
       chatTemplate = nil
     }
 
-    let multimodal = try loadMultimodalConfiguration(tokenizer: tokenizer, tokenizerDirectory: tokenizerDirectory)
+    let multimodal = try loadMultimodalConfiguration(tokenizer: tokenizer, tokenizerDirectory: tokenizerDirectory, fileSet: fileSet, prefix: prefix)
 
     return Flux2PixtralProcessor(
       tokenizer: tokenizer,
@@ -438,12 +450,12 @@ public final class Flux2PixtralProcessor {
 
   private static func loadMultimodalConfiguration(
     tokenizer: Tokenizer,
-    tokenizerDirectory: URL
+    tokenizerDirectory: URL, fileSet: Flux2FileSet?, prefix: String
   ) throws -> Flux2PixtralMultimodalConfiguration? {
     let processorURL = tokenizerDirectory.appending(path: "processor_config.json")
     let preprocessorURL = tokenizerDirectory.appending(path: "preprocessor_config.json")
 
-    guard FileManager.default.fileExists(atPath: processorURL.path) else {
+    guard fileSet?.contains(prefix + "processor_config.json") ?? FileManager.default.fileExists(atPath: processorURL.path) else {
       return nil
     }
 
@@ -461,7 +473,7 @@ public final class Flux2PixtralProcessor {
     }
 
     var imageProcessorConfiguration = Flux2PixtralImageProcessorConfiguration()
-    if FileManager.default.fileExists(atPath: preprocessorURL.path) {
+    if fileSet?.contains(prefix + "preprocessor_config.json") ?? FileManager.default.fileExists(atPath: preprocessorURL.path) {
       let preprocessorData = try Data(contentsOf: preprocessorURL)
       let preprocessorConfig = try JSONDecoder().decode(PreprocessorConfig.self, from: preprocessorData)
 

@@ -164,7 +164,7 @@ internal enum Flux2ImageMath {
     /// encoder path against the fixed safetensors headers, then evaluate each loaded
     /// tensor so missing, random or non-finite encoder state cannot reach conditioning.
     static func validateVAEEncoderWeightCoverage(vae: Flux2AutoencoderKL, snapshot: URL,
-                                                 expectedDType: DType) throws {
+                                                 expectedDType: DType, fileSet: Flux2FileSet? = nil) throws {
         func required(_ name: String) -> Bool {
             name.hasPrefix("encoder.") || name.hasPrefix("quant_conv.") ||
                 name == "bn.running_mean" || name == "bn.running_var"
@@ -176,7 +176,7 @@ internal enum Flux2ImageMath {
             throw InferenceFailure.backendFailed("The loaded FLUX.2 VAE does not expose complete encoder state.")
         }
 
-        let files = try Flux2WeightsLoader(snapshot: snapshot).listSafetensors(component: .vae)
+        let files = try Flux2WeightsLoader(snapshot: snapshot, fileSet: fileSet).listSafetensors(component: .vae)
         var expected: [String: [Int]] = [:]
         for file in files {
             let reader = try SafeTensorsReader(fileURL: file)

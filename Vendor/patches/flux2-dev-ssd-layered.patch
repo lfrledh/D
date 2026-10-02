@@ -1,20 +1,30 @@
 diff --git a/Sources/Flux2/IO/Weights/Flux2WeightsLoader.swift b/Sources/Flux2/IO/Weights/Flux2WeightsLoader.swift
 --- a/Sources/Flux2/IO/Weights/Flux2WeightsLoader.swift
 +++ b/Sources/Flux2/IO/Weights/Flux2WeightsLoader.swift
-@@ -1,5 +1,6 @@
- import Foundation
- import MLX
+@@ -2,0 +3 @@
 +import Darwin
- 
- public enum Flux2WeightComponent: String, CaseIterable, Sendable {
-   case transformer
-@@ -10,6 +11,103 @@
- public enum Flux2WeightsLoaderError: Error {
-   case componentDirectoryMissing(Flux2WeightComponent, URL)
-   case noSafetensorsFound(Flux2WeightComponent, URL)
+@@ -12,0 +14,115 @@
 +  case duplicateTensor(String)
 +  case unexpectedPrecision(String)
 +  case changedFile(URL)
++  case fileNotAdmitted(String)
++}
++
++/// Per-load selection supplied by the host's verified manifest. No discovery or
++/// global state: an unrelated file cannot change weights, precision, or templates.
++public struct Flux2FileSet: Sendable {
++  public let paths: Set<String>
++  public init(paths: Set<String>) throws {
++    guard !paths.isEmpty, paths.allSatisfy({ path in
++      !path.hasPrefix("/") && !path.contains("\\") && !path.contains("\0") &&
++      path.split(separator: "/", omittingEmptySubsequences: false).allSatisfy { !$0.isEmpty && $0 != "." && $0 != ".." }
++    }) else { throw Flux2WeightsLoaderError.fileNotAdmitted("invalid file set") }
++    self.paths = paths
++  }
++  public func require(_ path: String) throws {
++    guard paths.contains(path) else { throw Flux2WeightsLoaderError.fileNotAdmitted(path) }
++  }
++  public func contains(_ path: String) -> Bool { paths.contains(path) }
 +}
 +
 +/// A fixed set of open safetensors readers for one layered model stage. The
@@ -48,11 +58,11 @@ diff --git a/Sources/Flux2/IO/Weights/Flux2WeightsLoader.swift b/Sources/Flux2/I
 +
 +  public var tensorNames: Set<String> { Set(locations.keys) }
 +
-+  public init(snapshot: URL, component: Flux2WeightComponent,
++  public init(snapshot: URL, component: Flux2WeightComponent, fileSet: Flux2FileSet? = nil,
 +              admissionValidator: (() throws -> Void)? = nil,
 +              allowedDType: (String, DType) -> Bool) throws {
 +    try admissionValidator?()
-+    let files = try Flux2WeightsLoader(snapshot: snapshot).listSafetensors(component: component)
++    let files = try Flux2WeightsLoader(snapshot: snapshot, fileSet: fileSet).listSafetensors(component: component)
 +    var opened: [SafeTensorsReader] = []
 +    var found: [String: SafeTensorsReader] = [:]
 +    var saved: [URL: Identity] = [:]
@@ -109,47 +119,65 @@ diff --git a/Sources/Flux2/IO/Weights/Flux2WeightsLoader.swift b/Sources/Flux2/I
 +    }
 +    try admissionValidator?()
 +  }
- }
- 
- public struct Flux2WeightsLoader: Sendable {
+@@ -17,2 +133,3 @@
+-
+-  public init(snapshot: URL) {
++  public let fileSet: Flux2FileSet?
++
++  public init(snapshot: URL, fileSet: Flux2FileSet? = nil) {
+@@ -19,0 +137 @@
++    self.fileSet = fileSet
+@@ -28 +146,8 @@
+-    let contents = try FileManager.default.contentsOfDirectory(at: componentDir, includingPropertiesForKeys: nil)
++    let contents: [URL]
++    if let fileSet {
++      contents = fileSet.paths.filter {
++        $0.hasPrefix(component.rawValue + "/") && $0.split(separator: "/").count == 2
++      }.map { snapshot.appendingPathComponent($0) }
++    } else {
++      contents = try FileManager.default.contentsOfDirectory(at: componentDir, includingPropertiesForKeys: nil)
++    }
+@@ -59,0 +185,3 @@
++        if fileSet != nil, tensors[name] != nil {
++          throw Flux2WeightsLoaderError.duplicateTensor(name)
++        }
+@@ -75 +203 @@
+-    guard Flux2Quantizer.hasQuantization(at: snapshot) else {
++    guard Flux2Quantizer.hasQuantization(at: snapshot, fileSet: fileSet) else {
 diff --git a/Sources/Flux2/Models/TextEncoder/Flux2Mistral3TextEncoder.swift b/Sources/Flux2/Models/TextEncoder/Flux2Mistral3TextEncoder.swift
 --- a/Sources/Flux2/Models/TextEncoder/Flux2Mistral3TextEncoder.swift
 +++ b/Sources/Flux2/Models/TextEncoder/Flux2Mistral3TextEncoder.swift
-@@ -10,6 +10,10 @@
-   case multimodalUnavailable
-   case invalidMultimodalInput
-   case imageTokenMismatch(expected: Int, actual: Int)
+@@ -12,0 +13,4 @@
 +  case incompleteLayer(Int)
 +  case unsupportedLayeredQuantization
 +  case layeredGenerationUnavailable
 +  case duplicateNormalizedWeight(String)
- }
- 
- public final class Flux2Mistral3TextEncoder: Module {
-@@ -19,6 +23,7 @@
-   @ModuleInfo(key: "language_model") private var languageModel: Flux2Mistral3CausalLM
-   @ModuleInfo(key: "vision_tower") private var visionTower: Flux2PixtralVisionTower?
-   @ModuleInfo(key: "multi_modal_projector") private var multiModalProjector: Flux2Mistral3MultiModalProjector?
+@@ -21,0 +26 @@
 +  private var layeredWeights: Flux2PinnedWeightSelection?
- 
-   public init(configuration: Flux2Mistral3Configuration, vlmConfiguration: Flux2Mistral3VLMConfiguration? = nil) {
-     self.configuration = configuration
-@@ -70,6 +75,50 @@
-     }
-     try encoder.update(parameters: ModuleParameters.unflattened(normalized), verify: .none)
- 
+@@ -37 +42,2 @@
+-  public static func load(from snapshot: URL, dtype: DType = .bfloat16) throws -> Flux2Mistral3TextEncoder {
++  public static func load(from snapshot: URL, dtype: DType = .bfloat16, fileSet: Flux2FileSet? = nil) throws -> Flux2Mistral3TextEncoder {
++    try fileSet?.require("text_encoder/config.json")
+@@ -56 +62 @@
+-    let loader = Flux2WeightsLoader(snapshot: snapshot)
++    let loader = Flux2WeightsLoader(snapshot: snapshot, fileSet: fileSet)
+@@ -68 +74 @@
+-    if let manifest = try Flux2Quantizer.loadManifest(from: snapshot) {
++    if let manifest = try Flux2Quantizer.loadManifest(from: snapshot, fileSet: fileSet) {
+@@ -72,0 +79,45 @@
 +    return encoder
 +  }
 +
 +  /// Prompt-only original precision execution. Retain embedding and final norm;
 +  /// each complete decoder block is read, evaluated and released in model order.
-+  public static func loadLayered(from snapshot: URL, dtype: DType = .bfloat16,
++  public static func loadLayered(from snapshot: URL, dtype: DType = .bfloat16, fileSet: Flux2FileSet? = nil,
 +                                 admissionValidator: (() throws -> Void)? = nil) throws -> Flux2Mistral3TextEncoder {
 +    try admissionValidator?()
-+    if let _ = try Flux2Quantizer.loadManifest(from: snapshot) {
++    if let _ = try Flux2Quantizer.loadManifest(from: snapshot, fileSet: fileSet) {
 +      throw Flux2Mistral3TextEncoderError.unsupportedLayeredQuantization
 +    }
 +    try admissionValidator?()
++    try fileSet?.require("text_encoder/config.json")
 +    let configURL = snapshot.appendingPathComponent("text_encoder/config.json")
 +    try admissionValidator?()
 +    guard FileManager.default.fileExists(atPath: configURL.path) else {
@@ -164,7 +192,7 @@ diff --git a/Sources/Flux2/Models/TextEncoder/Flux2Mistral3TextEncoder.swift b/S
 +    try admissionValidator?()
 +    let encoder = Flux2Mistral3TextEncoder(configuration: configuration, vlmConfiguration: vlm)
 +    try admissionValidator?()
-+    let source = try Flux2PinnedWeightSelection(snapshot: snapshot, component: .textEncoder,
++    let source = try Flux2PinnedWeightSelection(snapshot: snapshot, component: .textEncoder, fileSet: fileSet,
 +                                                 admissionValidator: admissionValidator) {
 +      _, actual in actual == dtype
 +    }
@@ -182,38 +210,18 @@ diff --git a/Sources/Flux2/Models/TextEncoder/Flux2Mistral3TextEncoder.swift b/S
 +    MLX.eval(Array(normalized.values))
 +    try source.verifyFileIdentities()
 +    encoder.layeredWeights = source
-     return encoder
-   }
- 
-@@ -86,6 +135,9 @@
-     prefillChunkSize: Int = 256,
-     evaluationPolicy: Flux2EvaluationPolicy = .deferred
-   ) throws -> [Int] {
+@@ -88,0 +140,3 @@
 +    guard layeredWeights == nil else {
 +      throw Flux2Mistral3TextEncoderError.layeredGenerationUnavailable
 +    }
-     guard languageModel.isGenerationReady else {
-       throw Flux2Mistral3TextEncoderError.invalidGenerationInput
-     }
-@@ -253,11 +305,12 @@
-       throw Flux2Mistral3TextEncoderError.invalidInputShape
-     }
- 
+@@ -256 +310 @@
 -    let hiddenStates = languageModel.hiddenStates(
 +    let hiddenStates = try languageModel.hiddenStates(
-       inputIds: inputIds,
-       attentionMask: attentionMask,
-       outputLayerIndices: hiddenStateLayers,
+@@ -260 +314,2 @@
 -      evaluationPolicy: evaluationPolicy
 +      evaluationPolicy: evaluationPolicy,
 +      layeredWeights: layeredWeights
-     )
- 
-     var selected: [MLXArray] = []
-@@ -278,34 +331,33 @@
-   }
- }
- 
+@@ -280,0 +336,20 @@
 +private func normalizedTextEncoderName(_ name: String) -> String {
 +  if name.hasPrefix("model.language_model.model.") {
 +    return "language_model.model." + String(name.dropFirst("model.language_model.model.".count))
@@ -234,12 +242,7 @@ diff --git a/Sources/Flux2/Models/TextEncoder/Flux2Mistral3TextEncoder.swift b/S
 +  return name
 +}
 +
- private func normalizeTextEncoderWeights(_ weights: [String: MLXArray]) -> [String: MLXArray] {
-   var normalized: [String: MLXArray] = [:]
-   normalized.reserveCapacity(weights.count)
- 
-   for (name, value) in weights {
-     var tensor = value
+@@ -287,22 +362 @@
 -    let key: String
 -    if name.hasPrefix("model.language_model.model.") {
 -      let suffix = name.dropFirst("model.language_model.model.".count)
@@ -263,13 +266,7 @@ diff --git a/Sources/Flux2/Models/TextEncoder/Flux2Mistral3TextEncoder.swift b/S
 -      key = name
 -    }
 +    let key = normalizedTextEncoderName(name)
- 
-     if key == "vision_tower.patch_conv.weight", tensor.ndim == 4 {
-       tensor = tensor.transposed(0, 2, 3, 1)
-@@ -396,13 +448,15 @@
-     inputIds: MLXArray,
-     attentionMask: MLXArray,
-     outputLayerIndices: [Int],
+@@ -399,3 +453,4 @@
 -    evaluationPolicy: Flux2EvaluationPolicy
 -  ) -> [Int: MLXArray] {
 -    model.hiddenStates(
@@ -277,31 +274,17 @@ diff --git a/Sources/Flux2/Models/TextEncoder/Flux2Mistral3TextEncoder.swift b/S
 +    layeredWeights: Flux2PinnedWeightSelection? = nil
 +  ) throws -> [Int: MLXArray] {
 +    try model.hiddenStates(
-       inputIds: inputIds,
-       attentionMask: attentionMask,
-       outputLayerIndices: outputLayerIndices,
+@@ -405 +460,2 @@
 -      evaluationPolicy: evaluationPolicy
 +      evaluationPolicy: evaluationPolicy,
 +      layeredWeights: layeredWeights
-     )
-   }
- 
-@@ -456,8 +510,9 @@
-     inputIds: MLXArray,
-     attentionMask: MLXArray,
-     outputLayerIndices: [Int],
+@@ -459,2 +515,3 @@
 -    evaluationPolicy: Flux2EvaluationPolicy
 -  ) -> [Int: MLXArray] {
 +    evaluationPolicy: Flux2EvaluationPolicy,
 +    layeredWeights: Flux2PinnedWeightSelection? = nil
 +  ) throws -> [Int: MLXArray] {
-     let wanted = Set(outputLayerIndices)
-     var results: [Int: MLXArray] = [:]
- 
-@@ -489,10 +544,37 @@
-       dtype: hidden.dtype
-     )
- 
+@@ -492 +549,23 @@
 -    for (index, layer) in layers.enumerated() {
 +    for (index, residentLayer) in layers.enumerated() {
 +      if layeredWeights != nil { try Task.checkCancellation(); Memory.clearCache() }
@@ -326,8 +309,7 @@ diff --git a/Sources/Flux2/Models/TextEncoder/Flux2Mistral3TextEncoder.swift b/S
 +      } else {
 +        layer = residentLayer
 +      }
-       let mask = layer.useSliding ? slidingMask : fullMask
-       hidden = layer(hidden, attentionMask: mask, attnScale: attnScale)
+@@ -495 +574,6 @@
 -      evaluationPolicy.evalIfNeeded(hidden)
 +      if let layeredWeights {
 +        MLX.eval(hidden)
@@ -335,20 +317,12 @@ diff --git a/Sources/Flux2/Models/TextEncoder/Flux2Mistral3TextEncoder.swift b/S
 +      } else {
 +        evaluationPolicy.evalIfNeeded(hidden)
 +      }
-       let hiddenIndex = index + 1
-       if wanted.contains(hiddenIndex) {
-         results[hiddenIndex] = hidden
 diff --git a/Tests/Flux2Tests/Flux2Mistral3TextEncoderTests.swift b/Tests/Flux2Tests/Flux2Mistral3TextEncoderTests.swift
 --- a/Tests/Flux2Tests/Flux2Mistral3TextEncoderTests.swift
 +++ b/Tests/Flux2Tests/Flux2Mistral3TextEncoderTests.swift
-@@ -1,9 +1,49 @@
- import Foundation
+@@ -1,0 +2 @@
 +import Darwin
- import MLX
- import XCTest
- @testable import Flux2
- 
- final class Flux2Mistral3TextEncoderTests: XCTestCase {
+@@ -6,0 +8,39 @@
 +  func testLayeredTextRejectsReplacementFromOriginalAdmission() throws {
 +    enum AdmissionError: Error { case changed }
 +    let fixture = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
@@ -388,13 +362,7 @@ diff --git a/Tests/Flux2Tests/Flux2Mistral3TextEncoderTests.swift b/Tests/Flux2T
 +    XCTAssertGreaterThan(validations, 0)
 +  }
 +
-   func testPromptEmbedsSmoke() throws {
-     let fixtureRoot = URL(fileURLWithPath: #filePath)
-       .deletingLastPathComponent()
-@@ -104,4 +144,54 @@
-     XCTAssertFalse(values.isEmpty)
-     XCTAssertFalse(values.contains { !$0.isFinite })
-   }
+@@ -106,0 +147,50 @@
 +
 +  func testLayeredPromptMatchesIndependentOriginalFixtureAndRejectsGeneration() throws {
 +    let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
@@ -445,21 +413,12 @@ diff --git a/Tests/Flux2Tests/Flux2Mistral3TextEncoderTests.swift b/Tests/Flux2T
 +    }.value
 +    XCTAssertTrue(cancelled)
 +  }
- }
 diff --git a/Tests/Flux2Tests/Flux2WeightsLoaderTests.swift b/Tests/Flux2Tests/Flux2WeightsLoaderTests.swift
 --- a/Tests/Flux2Tests/Flux2WeightsLoaderTests.swift
 +++ b/Tests/Flux2Tests/Flux2WeightsLoaderTests.swift
-@@ -1,5 +1,6 @@
- import Foundation
- import MLX
+@@ -2,0 +3 @@
 +import Darwin
- import XCTest
- @testable import Flux2
- 
-@@ -55,4 +56,107 @@
-     XCTAssertEqual(tensors.keys.sorted(), ["a.weight"])
-     XCTAssertEqual(tensors["a.weight"]?.asArray(Float32.self), [1, 2, 3, 4])
-   }
+@@ -57,0 +59,103 @@
 +
 +  func testPinnedSelectionRejectsDuplicateAndWrongDType() throws {
 +    let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -563,4 +522,3 @@ diff --git a/Tests/Flux2Tests/Flux2WeightsLoaderTests.swift b/Tests/Flux2Tests/F
 +    }.value
 +    XCTAssertTrue(cancelled)
 +  }
- }

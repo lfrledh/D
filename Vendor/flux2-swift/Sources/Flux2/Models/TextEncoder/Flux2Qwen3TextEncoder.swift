@@ -16,7 +16,7 @@ public final class Flux2Qwen3TextEncoder: Module {
 
   @ModuleInfo(key: "model") private var model: Flux2Qwen3Model
   @ModuleInfo(key: "lm_head") private var lmHead: Linear?
-  private var layeredSource: (snapshot: URL, dtype: DType)? = nil
+  private var layeredSource: (snapshot: URL, dtype: DType, fileSet: Flux2FileSet?)? = nil
 
   public init(configuration: Flux2Qwen3Configuration) {
     self.configuration = configuration
@@ -29,7 +29,8 @@ public final class Flux2Qwen3TextEncoder: Module {
     super.init()
   }
 
-  public static func load(from snapshot: URL, dtype: DType = .bfloat16) throws -> Flux2Qwen3TextEncoder {
+  public static func load(from snapshot: URL, dtype: DType = .bfloat16, fileSet: Flux2FileSet? = nil) throws -> Flux2Qwen3TextEncoder {
+    try fileSet?.require("text_encoder/config.json")
     let configURL = snapshot
       .appendingPathComponent("text_encoder")
       .appendingPathComponent("config.json")
@@ -42,9 +43,9 @@ public final class Flux2Qwen3TextEncoder: Module {
     let configuration = try JSONDecoder().decode(Flux2Qwen3Configuration.self, from: configData)
     let encoder = Flux2Qwen3TextEncoder(configuration: configuration)
 
-    let loader = Flux2WeightsLoader(snapshot: snapshot)
+    let loader = Flux2WeightsLoader(snapshot: snapshot, fileSet: fileSet)
     let weights = try loader.load(component: .textEncoder, dtype: dtype)
-    if let manifest = try Flux2Quantizer.loadManifest(from: snapshot) {
+    if let manifest = try Flux2Quantizer.loadManifest(from: snapshot, fileSet: fileSet) {
       Flux2Quantizer.applyQuantization(to: encoder, manifest: manifest, weights: weights)
     }
     try encoder.update(parameters: ModuleParameters.unflattened(weights), verify: .none)
@@ -54,17 +55,18 @@ public final class Flux2Qwen3TextEncoder: Module {
 
   /// Retain only weights outside the decoder blocks. Each original decoder block
   /// is read for its turn, evaluated, then released before the next block is loaded.
-  public static func loadLayered(from snapshot: URL, dtype: DType = .bfloat16) throws -> Flux2Qwen3TextEncoder {
-    if let _ = try Flux2Quantizer.loadManifest(from: snapshot) {
+  public static func loadLayered(from snapshot: URL, dtype: DType = .bfloat16, fileSet: Flux2FileSet? = nil) throws -> Flux2Qwen3TextEncoder {
+    if let _ = try Flux2Quantizer.loadManifest(from: snapshot, fileSet: fileSet) {
       throw Flux2Qwen3TextEncoderError.unsupportedLayeredQuantization
     }
+    try fileSet?.require("text_encoder/config.json")
     let configURL = snapshot.appendingPathComponent("text_encoder/config.json")
     guard FileManager.default.fileExists(atPath: configURL.path) else {
       throw Flux2Qwen3TextEncoderError.configNotFound(configURL)
     }
     let configuration = try JSONDecoder().decode(Flux2Qwen3Configuration.self, from: Data(contentsOf: configURL))
     let encoder = Flux2Qwen3TextEncoder(configuration: configuration)
-    let loader = Flux2WeightsLoader(snapshot: snapshot)
+    let loader = Flux2WeightsLoader(snapshot: snapshot, fileSet: fileSet)
     for file in try loader.listSafetensors(component: .textEncoder) {
       try Task.checkCancellation()
       guard try SafeTensorsReader(fileURL: file).allMetadata().allSatisfy({ $0.dtype == dtype }) else {
@@ -80,7 +82,7 @@ public final class Flux2Qwen3TextEncoder: Module {
     }
     try encoder.update(parameters: ModuleParameters.unflattened(weights), verify: .none)
     MLX.eval(Array(weights.values))
-    encoder.layeredSource = (snapshot, dtype)
+    encoder.layeredSource = (snapshot, dtype, fileSet)
     return encoder
   }
 
@@ -169,7 +171,7 @@ private final class Flux2Qwen3Model: Module {
     attentionMask: MLXArray,
     outputLayerIndices: [Int],
     evaluationPolicy: Flux2EvaluationPolicy,
-    layeredSource: (snapshot: URL, dtype: DType)? = nil
+    layeredSource: (snapshot: URL, dtype: DType, fileSet: Flux2FileSet?)? = nil
   ) throws -> [Int: MLXArray] {
     let wanted = Set(outputLayerIndices)
     var results: [Int: MLXArray] = [:]
@@ -192,7 +194,7 @@ private final class Flux2Qwen3Model: Module {
       let layer: Flux2Qwen3TransformerBlock
       if let layeredSource {
         let prefix = "model.layers.\(index)."
-        let loaded = try Flux2WeightsLoader(snapshot: layeredSource.snapshot).load(
+        let loaded = try Flux2WeightsLoader(snapshot: layeredSource.snapshot, fileSet: layeredSource.fileSet).load(
           component: .textEncoder, dtype: layeredSource.dtype) { $0.hasPrefix(prefix) }
         let stripped = Dictionary(uniqueKeysWithValues: loaded.map { (String($0.key.dropFirst(prefix.count)), $0.value) })
         layer = Flux2Qwen3TransformerBlock(configuration)

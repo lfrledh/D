@@ -17,6 +17,7 @@ struct LocalFluxDevInventory: Sendable {
     let weightBytes: UInt64
     let executionProfile: ExecutionProfileReference
     let loadingStrategy: ImageLoadingStrategy
+    var fileSet: Flux2FileSet { get throws { try Flux2FileSet(paths: Set(manifest.files.map(\.path))) } }
     private let manifest: Manifest
     private let identities: [String: FileIdentity]
 

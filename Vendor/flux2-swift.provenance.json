@@ -14,9 +14,9 @@
   "snapshot": {
     "fileCount": 206,
     "upstreamBytes": 41852259,
-    "patchedBytes": 41917618,
+    "patchedBytes": 41922513,
     "manifest": "flux2-swift.files.json",
-    "manifestSHA256": "a4986f35e44a5197cbd59958659b38e9bfb64e2a526a5fc67d9594b783bc6c23",
+    "manifestSHA256": "724cca92736fd5280d3a0cb7a7119164628e82996906236d901a155ea2e606be",
     "selection": "All 206 tracked upstream blobs; no trimming or expanded gitlinks."
   },
   "patches": [
@@ -50,15 +50,15 @@
     },
     {
       "file": "patches/flux2-tokenizer-no-truncation.patch",
-      "sha256": "bc868322068f6d809900847fb2fd42ddc9a37ea79bf82092aae7f3f6421ccfaa",
+      "sha256": "e8c95393436969c2c53f1fbc76f7af5c962a46e981d78ecf066a2654dcc6fbe0",
       "description": "Opt-in rejection of complete overlong chat-template tokens",
       "modifiedFiles": [
         {
           "path": "Sources/Flux2/Models/TextEncoder/Flux2QwenTokenizer.swift",
           "upstreamSHA256": "41d71305910e9792f5f578029a7ba36987bc6d37f4fddd87d6100558d5c0bf68",
-          "sha256": "2c6cc51a10dc8f0af395430f93ef019f1e9275fc1cae41fc4b9918048eb14b90",
+          "sha256": "e551a56905fdec819b23d8bcfb4c70c1cb7a6ea8abc64e10250beb50bcddce12",
           "upstreamSize": 8453,
-          "size": 9095
+          "size": 10393
         },
         {
           "path": "Sources/Flux2/Pipeline/Flux2KleinPromptEncoder.swift",
@@ -78,15 +78,15 @@
     },
     {
       "file": "patches/flux2-dev-prompt-budget.patch",
-      "sha256": "737cb4e59b426fdf75e6fed0f9fcf353db413938d69003fedd2933b705f4399b",
+      "sha256": "3d45c9eac0dd7121bd21d72c276853cd2df505847a4b49065597a2bb8117e37d",
       "description": "Opt-in rejection of complete Dev Pixtral chat-template tokens; upstream truncating default unchanged",
       "modifiedFiles": [
         {
           "path": "Sources/Flux2/Models/TextEncoder/Flux2PixtralProcessor.swift",
           "upstreamSHA256": "87c8def2e682df7f379c0ac4ae1c5bfbbaf3b465c081653e59cdbd04128a6088",
-          "sha256": "6be6177c6139e83c2f188610d61d8d359853c988afcfe1696c6cc36c41524e15",
+          "sha256": "a8c6e6d866fefe7ee69255e47711631a8305c9559821c743c0d569aba2729490",
           "upstreamSize": 18218,
-          "size": 18468
+          "size": 19453
         },
         {
           "path": "Sources/Flux2/Pipeline/Flux2DevPromptEncoder.swift",
@@ -99,7 +99,7 @@
     },
     {
       "file": "patches/flux2-klein-ssd-layered.patch",
-      "sha256": "433c67ef2927b7f084337e5ed583a522e88989a90c6d7844c0ceea03618eba8b",
+      "sha256": "4d6dd6a0b0bc00c6305665e0d6ca5f8e2bfdd414dc1249a73b9bb0335ac4a5fa",
       "description": "Original Klein and Dev block streaming, same numerical kernels; strict identity and parity controls",
       "modifiedFiles": [
         {
@@ -112,16 +112,16 @@
         {
           "path": "Sources/Flux2/Models/TextEncoder/Flux2Qwen3TextEncoder.swift",
           "upstreamSHA256": "56942a7d37c32a44565fee71b697a1f5e6b15f58fc0263258fb41cdb7374c3be",
-          "sha256": "a05b84fff694e60fa6fd09f6cd2a5aae9cde099d14549f326f1a0bd05e85536f",
+          "sha256": "155b522030d610342b8d58a3ef10db40c623cc30db5c9fbce3fcc633c3f1b327",
           "upstreamSize": 10148,
-          "size": 13117
+          "size": 13444
         },
         {
           "path": "Sources/Flux2/Models/Transformer/Flux2Transformer2DModel.swift",
           "upstreamSHA256": "72533cafb7de8d269bde25178388598a7083499fadf7a31ee87d620b28bf9641",
-          "sha256": "975c2cafb4e52dcd25ae3e62033b41b582b68c851fd8761c2e858f73433c123c",
+          "sha256": "44e05b5b278b1cf6e1e787abacf3cff1d01c45a1ff4bd9793b99283aa49b09d3",
           "upstreamSize": 7455,
-          "size": 13605
+          "size": 13841
         },
         {
           "path": "Sources/Flux2/Pipeline/Flux2Denoiser.swift",
@@ -160,16 +160,16 @@
         {
           "path": "Sources/Flux2/IO/Weights/Flux2WeightsLoader.swift",
           "upstreamSHA256": "2558cb165a1da0d04056bca3095d34c84e64284f121f47b9e9bec06f7576c2f9",
-          "sha256": "bc16e4259aa8fdd93e6ba5bae8400e282c5ba4923aaca9f35e0abeaf6c2b23a2",
+          "sha256": "412f906cea96be00961c210af96c6f0aec0a12953ace3a84106d83c6b095a8c3",
           "upstreamSize": 3406,
-          "size": 6896
+          "size": 8306
         },
         {
           "path": "Sources/Flux2/Models/TextEncoder/Flux2Mistral3TextEncoder.swift",
           "upstreamSHA256": "1d137dab82435d7a468b534a5c482e26451e08e288de52a7db4e8469bf8dd70c",
-          "sha256": "7d354bf77e6f669bc623bcc6b842ff59a3451e743af946d10408efa8df8fa9e2",
+          "sha256": "0d583b2775514a14c0883383b1f69e985475955d12a284ec7d00e2b30b507f07",
           "upstreamSize": 24548,
-          "size": 28618
+          "size": 28856
         },
         {
           "path": "Tests/Flux2Tests/Flux2Mistral3TextEncoderTests.swift",
@@ -186,7 +186,35 @@
           "size": 7641
         }
       ],
-      "sha256": "c4c87f6559f573379412d0f1480a1b72af583ada3475571cef7a07d11d837ba3"
+      "sha256": "86e1fbec11ed2eed25af79bcd12cc6e4a07d8aff772e6cc5050c919100be7085"
+    },
+    {
+      "file": "patches/flux2-fixed-file-selection.patch",
+      "sha256": "4f72b7d9ba1d1acd4e55cbc1a994c18eeb442e9e93ac50e64fdaaf21006662a3",
+      "purpose": "Per-load verified file selection, no optional directory discovery; legacy default retained.",
+      "modifiedFiles": [
+        {
+          "path": "Sources/Flux2/IO/Flux2Quantization.swift",
+          "upstreamSHA256": "c90032742fcce459453c295079382618a871d0e5bc32325c04f5a4cf9aa38b7c",
+          "sha256": "d7685de1cea86749b35ed4200e5f941893d51d60e2a59e42db3aa22f35d84d7c",
+          "upstreamSize": 15023,
+          "size": 15200
+        },
+        {
+          "path": "Sources/Flux2/Models/VAE/Flux2AutoencoderKL.swift",
+          "upstreamSHA256": "c80db82e60d3cecbb17688660c22093dfe220850ada4f18f5b4bf12f3fdeafd7",
+          "sha256": "b76b910464a2bfc445e8b977a3541bc6bb6490d89f5d8095c412747acbf431b2",
+          "upstreamSize": 9174,
+          "size": 9266
+        },
+        {
+          "path": "Sources/Flux2/Schedulers/FlowMatchEulerDiscreteScheduler.swift",
+          "upstreamSHA256": "4aba21c4e517158bc3940ecfa32bed834d78b5cbd4441609acfcca91e1b2b76f",
+          "sha256": "d3275bd7c918da557d5730d44f19ead7665e4b1b9edadbfe1fc8a79810e8db1c",
+          "upstreamSize": 14851,
+          "size": 14983
+        }
+      ]
     }
   ]
 }

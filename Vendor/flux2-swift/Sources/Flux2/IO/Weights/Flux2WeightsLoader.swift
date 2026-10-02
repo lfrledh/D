@@ -14,6 +14,24 @@ public enum Flux2WeightsLoaderError: Error {
   case duplicateTensor(String)
   case unexpectedPrecision(String)
   case changedFile(URL)
+  case fileNotAdmitted(String)
+}
+
+/// Per-load selection supplied by the host's verified manifest. No discovery or
+/// global state: an unrelated file cannot change weights, precision, or templates.
+public struct Flux2FileSet: Sendable {
+  public let paths: Set<String>
+  public init(paths: Set<String>) throws {
+    guard !paths.isEmpty, paths.allSatisfy({ path in
+      !path.hasPrefix("/") && !path.contains("\\") && !path.contains("\0") &&
+      path.split(separator: "/", omittingEmptySubsequences: false).allSatisfy { !$0.isEmpty && $0 != "." && $0 != ".." }
+    }) else { throw Flux2WeightsLoaderError.fileNotAdmitted("invalid file set") }
+    self.paths = paths
+  }
+  public func require(_ path: String) throws {
+    guard paths.contains(path) else { throw Flux2WeightsLoaderError.fileNotAdmitted(path) }
+  }
+  public func contains(_ path: String) -> Bool { paths.contains(path) }
 }
 
 /// A fixed set of open safetensors readers for one layered model stage. The
@@ -47,11 +65,11 @@ public final class Flux2PinnedWeightSelection {
 
   public var tensorNames: Set<String> { Set(locations.keys) }
 
-  public init(snapshot: URL, component: Flux2WeightComponent,
+  public init(snapshot: URL, component: Flux2WeightComponent, fileSet: Flux2FileSet? = nil,
               admissionValidator: (() throws -> Void)? = nil,
               allowedDType: (String, DType) -> Bool) throws {
     try admissionValidator?()
-    let files = try Flux2WeightsLoader(snapshot: snapshot).listSafetensors(component: component)
+    let files = try Flux2WeightsLoader(snapshot: snapshot, fileSet: fileSet).listSafetensors(component: component)
     var opened: [SafeTensorsReader] = []
     var found: [String: SafeTensorsReader] = [:]
     var saved: [URL: Identity] = [:]
@@ -112,9 +130,11 @@ public final class Flux2PinnedWeightSelection {
 
 public struct Flux2WeightsLoader: Sendable {
   public let snapshot: URL
+  public let fileSet: Flux2FileSet?
 
-  public init(snapshot: URL) {
+  public init(snapshot: URL, fileSet: Flux2FileSet? = nil) {
     self.snapshot = snapshot
+    self.fileSet = fileSet
   }
 
   public func listSafetensors(component: Flux2WeightComponent) throws -> [URL] {
@@ -123,7 +143,14 @@ public struct Flux2WeightsLoader: Sendable {
       throw Flux2WeightsLoaderError.componentDirectoryMissing(component, componentDir)
     }
 
-    let contents = try FileManager.default.contentsOfDirectory(at: componentDir, includingPropertiesForKeys: nil)
+    let contents: [URL]
+    if let fileSet {
+      contents = fileSet.paths.filter {
+        $0.hasPrefix(component.rawValue + "/") && $0.split(separator: "/").count == 2
+      }.map { snapshot.appendingPathComponent($0) }
+    } else {
+      contents = try FileManager.default.contentsOfDirectory(at: componentDir, includingPropertiesForKeys: nil)
+    }
     let files = contents.filter { $0.pathExtension == "safetensors" }.sorted { $0.lastPathComponent < $1.lastPathComponent }
     guard !files.isEmpty else {
       throw Flux2WeightsLoaderError.noSafetensorsFound(component, componentDir)
@@ -155,6 +182,9 @@ public struct Flux2WeightsLoader: Sendable {
            shouldCastLoadedTensor(name: name, tensorDType: tensor.dtype, targetDType: dtype, availableNames: tensorNames) {
           tensor = tensor.asType(dtype, stream: .cpu)
         }
+        if fileSet != nil, tensors[name] != nil {
+          throw Flux2WeightsLoaderError.duplicateTensor(name)
+        }
         tensors[name] = tensor
       }
     }
@@ -170,7 +200,7 @@ public struct Flux2WeightsLoader: Sendable {
     guard isFloatingDType(tensorDType) else { return false }
     guard targetDType != tensorDType else { return false }
 
-    guard Flux2Quantizer.hasQuantization(at: snapshot) else {
+    guard Flux2Quantizer.hasQuantization(at: snapshot, fileSet: fileSet) else {
       return true
     }
 

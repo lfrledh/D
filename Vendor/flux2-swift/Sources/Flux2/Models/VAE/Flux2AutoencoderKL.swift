@@ -252,7 +252,8 @@ public final class Flux2AutoencoderKL: Module {
     super.init()
   }
 
-  public static func load(from snapshot: URL, dtype: DType = .bfloat16) throws -> Flux2AutoencoderKL {
+  public static func load(from snapshot: URL, dtype: DType = .bfloat16, fileSet: Flux2FileSet? = nil) throws -> Flux2AutoencoderKL {
+    try fileSet?.require("vae/config.json")
     let configURL = snapshot
       .appendingPathComponent("vae")
       .appendingPathComponent("config.json")
@@ -265,7 +266,7 @@ public final class Flux2AutoencoderKL: Module {
     let configuration = try JSONDecoder().decode(Flux2AutoencoderKLConfiguration.self, from: configData)
     let model = Flux2AutoencoderKL(configuration: configuration)
 
-    let loader = Flux2WeightsLoader(snapshot: snapshot)
+    let loader = Flux2WeightsLoader(snapshot: snapshot, fileSet: fileSet)
     let weights = try loader.load(component: .vae, dtype: dtype)
     let mapped = Flux2AutoencoderKL.mapWeights(weights)
     try model.update(parameters: ModuleParameters.unflattened(mapped), verify: .none)

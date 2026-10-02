@@ -195,9 +195,9 @@ public actor MLXFluxDevBackend: InferenceBackend {
         }
         try await checkpoint(.loadingVAE)
         try inventory.assertUnchanged()
-        let vae = try withRandomState(state) { try Flux2AutoencoderKL.load(from: inventory.directory, dtype: .float32) }
+        let vae = try withRandomState(state) { try Flux2AutoencoderKL.load(from: inventory.directory, dtype: .float32, fileSet: inventory.fileSet) }
         try Flux2ImageMath.validateVAEEncoderWeightCoverage(
-            vae: vae, snapshot: inventory.directory, expectedDType: .float32)
+            vae: vae, snapshot: inventory.directory, expectedDType: .float32, fileSet: inventory.fileSet)
         try await checkpoint(.vaeLoaded)
         try await checkpoint(.encoding)
         let prepared = try withRandomState(state) {
@@ -221,7 +221,7 @@ public actor MLXFluxDevBackend: InferenceBackend {
     private func encode(input: ImageRequest, inventory: LocalFluxDevInventory,
                         state: MLXRandom.RandomState) async throws -> Flux2PromptEncoding {
         try await checkpoint(.tokenizing)
-        let processor = try Flux2PixtralProcessor.load(from: inventory.directory, maxLengthOverride: 512)
+        let processor = try Flux2PixtralProcessor.load(from: inventory.directory, maxLengthOverride: 512, fileSet: inventory.fileSet)
         let tokens: Flux2TokenBatch
         do {
             tokens = try processor.encode(prompts: [input.prompt],
@@ -235,9 +235,9 @@ public actor MLXFluxDevBackend: InferenceBackend {
         try inventory.assertUnchanged()
         let layered = inventory.loadingStrategy == .ssdLayered
         let model = try withRandomState(state) {
-            try layered ? Flux2Mistral3TextEncoder.loadLayered(from: inventory.directory, dtype: .bfloat16,
+            try layered ? Flux2Mistral3TextEncoder.loadLayered(from: inventory.directory, dtype: .bfloat16, fileSet: inventory.fileSet,
                                                                 admissionValidator: inventory.assertUnchanged)
-                        : Flux2Mistral3TextEncoder.load(from: inventory.directory, dtype: .bfloat16)
+                        : Flux2Mistral3TextEncoder.load(from: inventory.directory, dtype: .bfloat16, fileSet: inventory.fileSet)
         }
         if !layered { MLX.eval(model) }
         try await checkpoint(.textEncoderLoaded)
@@ -263,7 +263,7 @@ public actor MLXFluxDevBackend: InferenceBackend {
                          state: MLXRandom.RandomState) async throws -> Flux2PreparedLatents {
         try await checkpoint(.loadingVAE)
         try inventory.assertUnchanged()
-        let vae = try withRandomState(state) { try Flux2AutoencoderKL.load(from: inventory.directory, dtype: .float32) }
+        let vae = try withRandomState(state) { try Flux2AutoencoderKL.load(from: inventory.directory, dtype: .float32, fileSet: inventory.fileSet) }
         try await checkpoint(.vaeLoaded)
         // The already verified fixed transformer config supplies the packed channel
         // count before the large transformer is loaded. The VAE is released first.
@@ -299,16 +299,16 @@ public actor MLXFluxDevBackend: InferenceBackend {
         try inventory.assertUnchanged()
         let layered = inventory.loadingStrategy == .ssdLayered
         let transformer = try withRandomState(state) {
-            try layered ? Flux2Transformer2DModel.loadLayered(from: inventory.directory, dtype: .bfloat16,
+            try layered ? Flux2Transformer2DModel.loadLayered(from: inventory.directory, dtype: .bfloat16, fileSet: inventory.fileSet,
                                                                admissionValidator: inventory.assertUnchanged)
-                        : Flux2Transformer2DModel.load(from: inventory.directory, dtype: .bfloat16)
+                        : Flux2Transformer2DModel.load(from: inventory.directory, dtype: .bfloat16, fileSet: inventory.fileSet)
         }
         if !layered { MLX.eval(transformer) }
         guard transformer.configuration.inChannels == prepared.latents.dim(2) else {
             throw InferenceFailure.backendFailed("Dev transformer and prepared latents have incompatible channels.")
         }
         try await checkpoint(.transformerLoaded)
-        let scheduler = try FlowMatchEulerDiscreteScheduler.load(from: inventory.directory)
+        let scheduler = try FlowMatchEulerDiscreteScheduler.load(from: inventory.directory, fileSet: inventory.fileSet)
         try Flux2ImageMath.configure(scheduler: scheduler, latents: prepared.latents, steps: input.steps)
         let denoisingIDs = try Flux2ImageMath.appendReferenceIDs(outputIDs: prepared.ids, reference: reference)
         let denoiser = Flux2Denoiser(transformer: transformer, scheduler: scheduler)
@@ -336,7 +336,7 @@ public actor MLXFluxDevBackend: InferenceBackend {
                            state: MLXRandom.RandomState) async throws -> [UInt8] {
         try await checkpoint(.loadingVAE)
         try inventory.assertUnchanged()
-        let vae = try withRandomState(state) { try Flux2AutoencoderKL.load(from: inventory.directory, dtype: .float32) }
+        let vae = try withRandomState(state) { try Flux2AutoencoderKL.load(from: inventory.directory, dtype: .float32, fileSet: inventory.fileSet) }
         MLX.eval(vae)
         try await checkpoint(.vaeLoaded)
         try await checkpoint(.decoding)

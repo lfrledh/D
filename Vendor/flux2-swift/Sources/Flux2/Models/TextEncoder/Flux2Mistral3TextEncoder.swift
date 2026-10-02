@@ -39,7 +39,8 @@ public final class Flux2Mistral3TextEncoder: Module {
     super.init()
   }
 
-  public static func load(from snapshot: URL, dtype: DType = .bfloat16) throws -> Flux2Mistral3TextEncoder {
+  public static func load(from snapshot: URL, dtype: DType = .bfloat16, fileSet: Flux2FileSet? = nil) throws -> Flux2Mistral3TextEncoder {
+    try fileSet?.require("text_encoder/config.json")
     let configURL = snapshot
       .appendingPathComponent("text_encoder")
       .appendingPathComponent("config.json")
@@ -58,7 +59,7 @@ public final class Flux2Mistral3TextEncoder: Module {
     }
     let encoder = Flux2Mistral3TextEncoder(configuration: configuration, vlmConfiguration: vlmConfiguration)
 
-    let loader = Flux2WeightsLoader(snapshot: snapshot)
+    let loader = Flux2WeightsLoader(snapshot: snapshot, fileSet: fileSet)
     let weights = try loader.load(component: .textEncoder, dtype: dtype) { name in
       name.hasPrefix("language_model.model.") ||
         name.hasPrefix("language_model.lm_head.") ||
@@ -70,7 +71,7 @@ public final class Flux2Mistral3TextEncoder: Module {
     }
 
     let normalized = normalizeTextEncoderWeights(weights)
-    if let manifest = try Flux2Quantizer.loadManifest(from: snapshot) {
+    if let manifest = try Flux2Quantizer.loadManifest(from: snapshot, fileSet: fileSet) {
       Flux2Quantizer.applyQuantization(to: encoder, manifest: manifest, weights: normalized)
     }
     try encoder.update(parameters: ModuleParameters.unflattened(normalized), verify: .none)
@@ -80,13 +81,14 @@ public final class Flux2Mistral3TextEncoder: Module {
 
   /// Prompt-only original precision execution. Retain embedding and final norm;
   /// each complete decoder block is read, evaluated and released in model order.
-  public static func loadLayered(from snapshot: URL, dtype: DType = .bfloat16,
+  public static func loadLayered(from snapshot: URL, dtype: DType = .bfloat16, fileSet: Flux2FileSet? = nil,
                                  admissionValidator: (() throws -> Void)? = nil) throws -> Flux2Mistral3TextEncoder {
     try admissionValidator?()
-    if let _ = try Flux2Quantizer.loadManifest(from: snapshot) {
+    if let _ = try Flux2Quantizer.loadManifest(from: snapshot, fileSet: fileSet) {
       throw Flux2Mistral3TextEncoderError.unsupportedLayeredQuantization
     }
     try admissionValidator?()
+    try fileSet?.require("text_encoder/config.json")
     let configURL = snapshot.appendingPathComponent("text_encoder/config.json")
     try admissionValidator?()
     guard FileManager.default.fileExists(atPath: configURL.path) else {
@@ -101,7 +103,7 @@ public final class Flux2Mistral3TextEncoder: Module {
     try admissionValidator?()
     let encoder = Flux2Mistral3TextEncoder(configuration: configuration, vlmConfiguration: vlm)
     try admissionValidator?()
-    let source = try Flux2PinnedWeightSelection(snapshot: snapshot, component: .textEncoder,
+    let source = try Flux2PinnedWeightSelection(snapshot: snapshot, component: .textEncoder, fileSet: fileSet,
                                                  admissionValidator: admissionValidator) {
       _, actual in actual == dtype
     }

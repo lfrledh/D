@@ -1,92 +1,89 @@
 diff --git a/Sources/Flux2/Models/TextEncoder/Flux2QwenTokenizer.swift b/Sources/Flux2/Models/TextEncoder/Flux2QwenTokenizer.swift
 --- a/Sources/Flux2/Models/TextEncoder/Flux2QwenTokenizer.swift
 +++ b/Sources/Flux2/Models/TextEncoder/Flux2QwenTokenizer.swift
-@@ -10,6 +10,7 @@
-   case padTokenNotInVocabulary(String)
-   case emptyPromptList
-   case invalidMaxLength(Int)
+@@ -12,0 +13 @@
 +  case promptTooLong(index: Int, tokenCount: Int, maxLength: Int)
- }
- 
- public struct Flux2TokenBatch {
-@@ -104,11 +105,17 @@
-     )
-   }
- 
+@@ -46 +47,2 @@
+-    hubApi: HubApi = .shared
++    hubApi: HubApi = .shared,
++    fileSet: Flux2FileSet? = nil
+@@ -48 +50,10 @@
+-    let tokenizerDirectory = resolveTokenizerDirectory(directory)
++    let tokenizerDirectory: URL
++    let prefix: String
++    if let fileSet {
++      prefix = fileSet.contains("tokenizer/tokenizer_config.json") ? "tokenizer/" : ""
++      try fileSet.require(prefix + "tokenizer_config.json")
++      tokenizerDirectory = prefix.isEmpty ? directory : directory.appendingPathComponent("tokenizer")
++    } else {
++      tokenizerDirectory = resolveTokenizerDirectory(directory)
++      prefix = tokenizerDirectory == directory ? "" : "tokenizer/"
++    }
+@@ -61 +72 @@
+-    if FileManager.default.fileExists(atPath: tokenizerDataURL.path) {
++    if fileSet?.contains(prefix + "tokenizer.json") ?? FileManager.default.fileExists(atPath: tokenizerDataURL.path) {
+@@ -64,0 +76,2 @@
++      try fileSet?.require(prefix + "vocab.json")
++      try fileSet?.require(prefix + "merges.txt")
+@@ -71 +84 @@
+-      let tokenizerData = try makeBPETokenizerData(vocabURL: vocabURL, mergesURL: mergesURL)
++      let tokenizerData = try makeBPETokenizerData(vocabURL: vocabURL, mergesURL: mergesURL, includeAddedTokens: fileSet?.contains(prefix + "added_tokens.json") ?? true, requireAddedTokens: fileSet?.contains(prefix + "added_tokens.json") == true)
+@@ -92 +105 @@
+-    if FileManager.default.fileExists(atPath: chatTemplateURL.path) {
++    if fileSet?.contains(prefix + "chat_template.jinja") ?? FileManager.default.fileExists(atPath: chatTemplateURL.path) {
+@@ -106,0 +120,5 @@
 +  /// Encodes and pads prompts to the effective maximum length.
 +  ///
 +  /// With `truncation: false`, counts the complete chat-template output and throws
 +  /// `promptTooLong` before constructing MLX arrays if any prompt exceeds that
 +  /// length. The default preserves the upstream truncating behavior.
-   public func encode(
-     prompts: [String],
-     maxLength: Int? = nil,
-     addGenerationPrompt: Bool = true,
+@@ -111 +129,2 @@
 -    enableThinking: Bool = false
 +    enableThinking: Bool = false,
 +    truncation: Bool = true
-   ) throws -> Flux2TokenBatch {
-     guard !prompts.isEmpty else {
-       throw Flux2TokenizerError.emptyPromptList
-@@ -123,7 +130,7 @@
-     inputSequences.reserveCapacity(prompts.count)
-     attentionSequences.reserveCapacity(prompts.count)
- 
+@@ -126 +145 @@
 -    for prompt in prompts {
 +    for (index, prompt) in prompts.enumerated() {
-       let messages: [Message] = [
-         ["role": "user", "content": prompt]
-       ]
-@@ -131,11 +138,17 @@
-         messages: messages,
-         chatTemplate: chatTemplate,
-         addGenerationPrompt: addGenerationPrompt,
+@@ -134,2 +153,2 @@
 -        truncation: true,
 -        maxLength: targetLength,
 +        truncation: truncation,
 +        maxLength: truncation ? targetLength : nil,
-         tools: nil,
-         additionalContext: ["enable_thinking": enableThinking]
-       )
+@@ -138,0 +158,6 @@
 +
 +      if !truncation && tokens.count > targetLength {
 +        throw Flux2TokenizerError.promptTooLong(
 +          index: index, tokenCount: tokens.count, maxLength: targetLength
 +        )
 +      }
- 
-       let (padded, attention) = Self.padTokens(tokens: tokens, padTokenId: padTokenId, maxLength: targetLength)
-       inputSequences.append(padded)
+@@ -184 +209 @@
+-  static func makeBPETokenizerData(vocabURL: URL, mergesURL: URL) throws -> Config {
++  static func makeBPETokenizerData(vocabURL: URL, mergesURL: URL, includeAddedTokens: Bool = true, requireAddedTokens: Bool = false) throws -> Config {
+@@ -198 +223,8 @@
+-    if FileManager.default.fileExists(atPath: addedTokensURL.path) {
++    if requireAddedTokens {
++      let data = try Data(contentsOf: addedTokensURL)
++      guard let added = try JSONSerialization.jsonObject(with: data) as? [String: Any],
++            added.values.allSatisfy({ ($0 as? NSNumber).map { CFGetTypeID($0) != CFBooleanGetTypeID() && $0.doubleValue == Double($0.intValue) } ?? false }) else {
++        throw Flux2TokenizerError.fileNotFound(addedTokensURL)
++      }
++    }
++    if includeAddedTokens && FileManager.default.fileExists(atPath: addedTokensURL.path) {
 diff --git a/Sources/Flux2/Pipeline/Flux2KleinPromptEncoder.swift b/Sources/Flux2/Pipeline/Flux2KleinPromptEncoder.swift
 --- a/Sources/Flux2/Pipeline/Flux2KleinPromptEncoder.swift
 +++ b/Sources/Flux2/Pipeline/Flux2KleinPromptEncoder.swift
-@@ -51,7 +51,8 @@
-     addGenerationPrompt: Bool = true,
-     enableThinking: Bool = false,
-     numImagesPerPrompt: Int = 1,
+@@ -54 +54,2 @@
 -    tCoord: MLXArray? = nil
 +    tCoord: MLXArray? = nil,
 +    truncation: Bool = true
-   ) throws -> Flux2PromptEncoding {
-     guard let tokenizer else {
-       throw Flux2PromptEncoderError.tokenizerUnavailable
-@@ -60,7 +61,8 @@
-       prompts: prompts,
-       maxLength: maxLength,
-       addGenerationPrompt: addGenerationPrompt,
+@@ -63 +64,2 @@
 -      enableThinking: enableThinking
 +      enableThinking: enableThinking,
 +      truncation: truncation
-     )
-     return try encodeTokens(
-       inputIds: tokens.inputIds,
 diff --git a/Tests/Flux2Tests/Flux2QwenTokenizerTests.swift b/Tests/Flux2Tests/Flux2QwenTokenizerTests.swift
 --- a/Tests/Flux2Tests/Flux2QwenTokenizerTests.swift
 +++ b/Tests/Flux2Tests/Flux2QwenTokenizerTests.swift
-@@ -4,6 +4,64 @@
- @testable import Flux2
- 
- final class Flux2QwenTokenizerTests: XCTestCase {
+@@ -6,0 +7,58 @@
 +  private func fixtureTokenizer(maxLength: Int = 512) throws -> Flux2QwenTokenizer {
 +    let directory = URL(fileURLWithPath: #filePath)
 +      .deletingLastPathComponent()
@@ -145,6 +142,3 @@ diff --git a/Tests/Flux2Tests/Flux2QwenTokenizerTests.swift b/Tests/Flux2Tests/F
 +    }
 +  }
 +
-   func testTokenizerLoadsAndEncodes() throws {
-     let fixtureRoot = URL(fileURLWithPath: #filePath)
-       .deletingLastPathComponent()

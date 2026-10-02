@@ -98,8 +98,8 @@
       "upstreamGitBlob": "95f45f4b70848330d4b191d82581b558efa85d02",
       "upstreamSize": 15023,
       "upstreamSHA256": "c90032742fcce459453c295079382618a871d0e5bc32325c04f5a4cf9aa38b7c",
-      "size": 15023,
-      "sha256": "c90032742fcce459453c295079382618a871d0e5bc32325c04f5a4cf9aa38b7c"
+      "size": 15200,
+      "sha256": "d7685de1cea86749b35ed4200e5f941893d51d60e2a59e42db3aa22f35d84d7c"
     },
     {
       "path": "Sources/Flux2/IO/SafeTensorsReader.swift",
@@ -116,8 +116,8 @@
       "upstreamGitBlob": "139d10ae596e51818f2552b5d1ce856025183934",
       "upstreamSize": 3406,
       "upstreamSHA256": "2558cb165a1da0d04056bca3095d34c84e64284f121f47b9e9bec06f7576c2f9",
-      "size": 6896,
-      "sha256": "bc16e4259aa8fdd93e6ba5bae8400e282c5ba4923aaca9f35e0abeaf6c2b23a2"
+      "size": 8306,
+      "sha256": "412f906cea96be00961c210af96c6f0aec0a12953ace3a84106d83c6b095a8c3"
     },
     {
       "path": "Sources/Flux2/Models/TextEncoder/Flux2Mistral3Configuration.swift",
@@ -143,8 +143,8 @@
       "upstreamGitBlob": "59a0f5a2670fb43d41dbe96111195a8a301692cf",
       "upstreamSize": 24548,
       "upstreamSHA256": "1d137dab82435d7a468b534a5c482e26451e08e288de52a7db4e8469bf8dd70c",
-      "size": 28618,
-      "sha256": "7d354bf77e6f669bc623bcc6b842ff59a3451e743af946d10408efa8df8fa9e2"
+      "size": 28856,
+      "sha256": "0d583b2775514a14c0883383b1f69e985475955d12a284ec7d00e2b30b507f07"
     },
     {
       "path": "Sources/Flux2/Models/TextEncoder/Flux2Mistral3VLMConfiguration.swift",
@@ -170,8 +170,8 @@
       "upstreamGitBlob": "b9bd6d74ba4dce581d8bec0ed7d4f22bef85f015",
       "upstreamSize": 18218,
       "upstreamSHA256": "87c8def2e682df7f379c0ac4ae1c5bfbbaf3b465c081653e59cdbd04128a6088",
-      "size": 18468,
-      "sha256": "6be6177c6139e83c2f188610d61d8d359853c988afcfe1696c6cc36c41524e15"
+      "size": 19453,
+      "sha256": "a8c6e6d866fefe7ee69255e47711631a8305c9559821c743c0d569aba2729490"
     },
     {
       "path": "Sources/Flux2/Models/TextEncoder/Flux2PixtralVisionConfiguration.swift",
@@ -206,8 +206,8 @@
       "upstreamGitBlob": "b956f7e5a29932c8e6c624b9b3692db52cfc345b",
       "upstreamSize": 10148,
       "upstreamSHA256": "56942a7d37c32a44565fee71b697a1f5e6b15f58fc0263258fb41cdb7374c3be",
-      "size": 13117,
-      "sha256": "a05b84fff694e60fa6fd09f6cd2a5aae9cde099d14549f326f1a0bd05e85536f"
+      "size": 13444,
+      "sha256": "155b522030d610342b8d58a3ef10db40c623cc30db5c9fbce3fcc633c3f1b327"
     },
     {
       "path": "Sources/Flux2/Models/TextEncoder/Flux2QwenTokenizer.swift",
@@ -215,8 +215,8 @@
       "upstreamGitBlob": "5cb36a1464940d12a3e5663e6fcaa8effd820b3b",
       "upstreamSize": 8453,
       "upstreamSHA256": "41d71305910e9792f5f578029a7ba36987bc6d37f4fddd87d6100558d5c0bf68",
-      "size": 9095,
-      "sha256": "2c6cc51a10dc8f0af395430f93ef019f1e9275fc1cae41fc4b9918048eb14b90"
+      "size": 10393,
+      "sha256": "e551a56905fdec819b23d8bcfb4c70c1cb7a6ea8abc64e10250beb50bcddce12"
     },
     {
       "path": "Sources/Flux2/Models/Transformer/Flux2AdaLayerNormContinuous.swift",
@@ -296,8 +296,8 @@
       "upstreamGitBlob": "c1fa1e3a4df11b0f0b5f7167cf2c0a3cdb034120",
       "upstreamSize": 7455,
       "upstreamSHA256": "72533cafb7de8d269bde25178388598a7083499fadf7a31ee87d620b28bf9641",
-      "size": 13605,
-      "sha256": "975c2cafb4e52dcd25ae3e62033b41b582b68c851fd8761c2e858f73433c123c"
+      "size": 13841,
+      "sha256": "44e05b5b278b1cf6e1e787abacf3cff1d01c45a1ff4bd9793b99283aa49b09d3"
     },
     {
       "path": "Sources/Flux2/Models/Transformer/Flux2TransformerBlocks.swift",
@@ -323,8 +323,8 @@
       "upstreamGitBlob": "f2f06332abeca5f26ad0ae20030428fd0e98c5bd",
       "upstreamSize": 9174,
       "upstreamSHA256": "c80db82e60d3cecbb17688660c22093dfe220850ada4f18f5b4bf12f3fdeafd7",
-      "size": 9174,
-      "sha256": "c80db82e60d3cecbb17688660c22093dfe220850ada4f18f5b4bf12f3fdeafd7"
+      "size": 9266,
+      "sha256": "b76b910464a2bfc445e8b977a3541bc6bb6490d89f5d8095c412747acbf431b2"
     },
     {
       "path": "Sources/Flux2/Models/VAE/Flux2AutoencoderKLConfiguration.swift",
@@ -440,8 +440,8 @@
       "upstreamGitBlob": "f9c0e7ab95932a92e946a9edea6cb6a480d6a9a7",
       "upstreamSize": 14851,
       "upstreamSHA256": "4aba21c4e517158bc3940ecfa32bed834d78b5cbd4441609acfcca91e1b2b76f",
-      "size": 14851,
-      "sha256": "4aba21c4e517158bc3940ecfa32bed834d78b5cbd4441609acfcca91e1b2b76f"
+      "size": 14983,
+      "sha256": "d3275bd7c918da557d5730d44f19ead7665e4b1b9edadbfe1fc8a79810e8db1c"
     },
     {
       "path": "Sources/Flux2/Schedulers/FlowMatchEulerDiscreteSchedulerConfiguration.swift",

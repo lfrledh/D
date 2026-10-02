@@ -20,6 +20,7 @@ struct LocalImageModelInventory: Sendable {
     let estimatedPeakBytes: UInt64
     let weightBytes: UInt64
     let executionProfile: ExecutionProfileReference
+    var fileSet: Flux2FileSet { get throws { try Flux2FileSet(paths: Set(manifest.files.map(\.path))) } }
     private let manifest: Manifest
     private let identities: [String: FileIdentity]
 

@@ -1,30 +1,17 @@
 diff --git a/Sources/Flux2/IO/SafeTensorsReader.swift b/Sources/Flux2/IO/SafeTensorsReader.swift
 --- a/Sources/Flux2/IO/SafeTensorsReader.swift
 +++ b/Sources/Flux2/IO/SafeTensorsReader.swift
-@@ -1,5 +1,7 @@
- import Foundation
- import MLX
+@@ -2,0 +3,2 @@
 +import Darwin
 +import CoreFoundation
- 
- public struct SafeTensorMetadata: Sendable {
-   public let name: String
-@@ -24,35 +26,73 @@
-   case invalidShape(name: String)
-   case tensorNotFound(String)
-   case unmappedData(URL)
+@@ -26,0 +29,2 @@
 +  case fileChanged(URL)
 +  case truncatedData(URL)
- }
- 
- public final class SafeTensorsReader {
-   public let fileURL: URL
+@@ -31 +35,2 @@
 -  private let mappedData: Data
 +  private let descriptor: Int32
 +  private let identity: FileIdentity
-   private let tensors: [String: SafeTensorMetadata]
-   public let fileMetadata: [String: String]
- 
+@@ -34,0 +40,24 @@
 +  private struct FileIdentity: Equatable {
 +    let device: dev_t
 +    let inode: ino_t
@@ -49,7 +36,7 @@ diff --git a/Sources/Flux2/IO/SafeTensorsReader.swift b/Sources/Flux2/IO/SafeTen
 +
 +  deinit { Darwin.close(descriptor) }
 +
-   public init(fileURL: URL) throws {
+@@ -36,4 +65,12 @@
 -    self.fileURL = fileURL
 -    self.mappedData = try Data(contentsOf: fileURL, options: [.mappedIfSafe])
 -
@@ -66,8 +53,7 @@ diff --git a/Sources/Flux2/IO/SafeTensorsReader.swift b/Sources/Flux2/IO/SafeTen
 +    }
 +    let original = FileIdentity(info)
 +    guard info.st_size >= off_t(MemoryLayout<UInt64>.size) else {
-       throw SafeTensorsReaderError.fileTooSmall(fileURL)
-     }
+@@ -42,6 +79,7 @@
 -
 -    let headerLength = mappedData.prefix(8).withUnsafeBytes { rawBuffer -> Int in
 -      let value = rawBuffer.load(as: UInt64.self)
@@ -81,8 +67,7 @@ diff --git a/Sources/Flux2/IO/SafeTensorsReader.swift b/Sources/Flux2/IO/SafeTen
 +      throw SafeTensorsReaderError.invalidHeaderLength(fileURL)
 +    }
 +    let headerLength = Int(length)
-     let headerStart = 8
-     let headerEnd = headerStart + headerLength
+@@ -50,6 +88,8 @@
 -    guard headerEnd <= mappedData.count else {
 -      throw SafeTensorsReaderError.invalidHeaderLength(fileURL)
 -    }
@@ -97,20 +82,11 @@ diff --git a/Sources/Flux2/IO/SafeTensorsReader.swift b/Sources/Flux2/IO/SafeTen
 +    let headerJSON: Any
 +    do { headerJSON = try JSONSerialization.jsonObject(with: headerData, options: []) }
 +    catch { throw SafeTensorsReaderError.malformedHeader(fileURL) }
- 
-     guard let headerDict = headerJSON as? [String: Any] else {
-       throw SafeTensorsReaderError.malformedHeader(fileURL)
-@@ -60,24 +100,22 @@
- 
-     var tensorMetadata: [String: SafeTensorMetadata] = [:]
-     var metadataValues: [String: String] = [:]
+@@ -62,0 +103 @@
 +    var ranges: [(Int, Int)] = []
- 
-     let dataStartOffset = headerEnd
- 
-     for (key, value) in headerDict {
+@@ -66,0 +108 @@
 +      try Task.checkCancellation()
-       if key == "__metadata__" {
+@@ -68,9 +110,4 @@
 -        if let dict = value as? [String: Any] {
 -          for (metaKey, metaValue) in dict {
 -            if let stringValue = metaValue as? String {
@@ -124,19 +100,11 @@ diff --git a/Sources/Flux2/IO/SafeTensorsReader.swift b/Sources/Flux2/IO/SafeTen
 +          throw SafeTensorsReaderError.malformedHeader(fileURL)
 +        }
 +        metadataValues = dict
-         continue
-       }
- 
+@@ -80 +117,2 @@
 -      guard let tensorInfo = value as? [String: Any] else {
 +      guard let tensorInfo = value as? [String: Any],
 +            Set(tensorInfo.keys) == Set(["dtype", "shape", "data_offsets"]) else {
-         throw SafeTensorsReaderError.tensorMetadataMissing(key)
-       }
- 
-@@ -91,15 +129,7 @@
-         throw SafeTensorsReaderError.tensorMetadataMissing(key)
-       }
- 
+@@ -94,9 +132 @@
 -      let shape: [Int] = try shapeAny.map { element in
 -        if let number = element as? NSNumber {
 -          return number.intValue
@@ -147,36 +115,18 @@ diff --git a/Sources/Flux2/IO/SafeTensorsReader.swift b/Sources/Flux2/IO/SafeTen
 -        }
 -      }
 +      let shape: [Int] = try shapeAny.map { try Self.parseInteger($0, error: .invalidShape(name: key)) }
- 
-       guard let offsetsAny = tensorInfo["data_offsets"] as? [Any], offsetsAny.count == 2 else {
-         throw SafeTensorsReaderError.tensorMetadataMissing(key)
-@@ -108,18 +138,18 @@
-       let startOffset = try SafeTensorsReader.parseOffset(offsetsAny[0], tensorName: key)
-       let endOffset = try SafeTensorsReader.parseOffset(offsetsAny[1], tensorName: key)
- 
+@@ -111 +141 @@
 -      guard endOffset >= startOffset else {
 +      guard startOffset >= 0, endOffset >= startOffset else {
-         throw SafeTensorsReaderError.invalidOffsets(name: key)
-       }
- 
-       let byteCount = endOffset - startOffset
+@@ -116 +146 @@
 -      let expectedBytes = SafeTensorsReader.expectedByteCount(shape: shape, dtype: dtype)
 +      let expectedBytes = try SafeTensorsReader.expectedByteCount(shape: shape, dtype: dtype, name: key)
-       guard byteCount == expectedBytes else {
-         throw SafeTensorsReaderError.invalidShape(name: key)
-       }
- 
+@@ -121,2 +151,2 @@
 -      let absoluteOffset = dataStartOffset + startOffset
 -      guard absoluteOffset + byteCount <= mappedData.count else {
 +      let (absoluteOffset, offsetOverflow) = dataStartOffset.addingReportingOverflow(startOffset)
 +      guard !offsetOverflow, startOffset >= 0, endOffset <= Int(info.st_size) - dataStartOffset else {
-         throw SafeTensorsReaderError.invalidOffsets(name: key)
-       }
- 
-@@ -130,10 +160,25 @@
-         dataOffset: absoluteOffset,
-         byteCount: byteCount
-       )
+@@ -133,2 +163,16 @@
 -    }
 -
 +      ranges.append((startOffset, endOffset))
@@ -195,16 +145,9 @@ diff --git a/Sources/Flux2/IO/SafeTensorsReader.swift b/Sources/Flux2/IO/SafeTen
 +    self.fileURL = fileURL
 +    self.descriptor = fd
 +    self.identity = original
-     self.tensors = tensorMetadata
-     self.fileMetadata = metadataValues
+@@ -136,0 +181 @@
 +    keepDescriptor = true
-   }
- 
-   public var tensorNames: [String] {
-@@ -169,16 +214,8 @@
-       throw SafeTensorsReaderError.tensorNotFound(name)
-     }
- 
+@@ -172,10 +217,2 @@
 -    return try mappedData.withUnsafeBytes { rawBuffer in
 -      guard let base = rawBuffer.baseAddress else {
 -        throw SafeTensorsReaderError.unmappedData(fileURL)
@@ -217,13 +160,7 @@ diff --git a/Sources/Flux2/IO/SafeTensorsReader.swift b/Sources/Flux2/IO/SafeTen
 -    }
 +    let data = try readTensor(metadata)
 +    return MLXArray(data, metadata.shape, dtype: metadata.dtype)
-   }
- 
-   public func intScalar(named name: String) throws -> Int {
-@@ -189,12 +226,9 @@
-       throw SafeTensorsReaderError.invalidShape(name: name)
-     }
- 
+@@ -192,6 +229,3 @@
 -    return try mappedData.withUnsafeBytes { rawBuffer in
 -      guard let base = rawBuffer.baseAddress else {
 -        throw SafeTensorsReaderError.unmappedData(fileURL)
@@ -233,25 +170,13 @@ diff --git a/Sources/Flux2/IO/SafeTensorsReader.swift b/Sources/Flux2/IO/SafeTen
 +    let data = try readTensor(metadata)
 +    return try data.withUnsafeBytes { rawBuffer in
 +      guard let valuePtr = rawBuffer.baseAddress else { throw SafeTensorsReaderError.truncatedData(fileURL) }
-       switch metadata.dtype {
-       case .int32:
-         var value: Int32 = 0
-@@ -222,7 +256,10 @@
-         withUnsafeMutableBytes(of: &value) { dst in
-           dst.copyBytes(from: UnsafeRawBufferPointer(start: valuePtr, count: MemoryLayout<UInt64>.size))
-         }
+@@ -225 +259,4 @@
 -        return Int(value)
 +        guard let converted = Int(exactly: value) else {
 +          throw SafeTensorsReaderError.invalidShape(name: name)
 +        }
 +        return converted
- 
-       default:
-         throw SafeTensorsReaderError.unsupportedScalarDType(name: name, dtype: String(describing: metadata.dtype))
-@@ -231,18 +268,133 @@
-   }
- 
-   private static func parseOffset(_ value: Any, tensorName: String) throws -> Int {
+@@ -234,12 +271,127 @@
 -    if let number = value as? NSNumber {
 -      return number.intValue
 -    }
@@ -391,50 +316,43 @@ diff --git a/Sources/Flux2/IO/SafeTensorsReader.swift b/Sources/Flux2/IO/SafeTen
 +    guard value(0) else { return false }
 +    whitespace()
 +    return cursor == bytes.count
-   }
- 
-   private static func mapDType(_ value: String) throws -> DType {
 diff --git a/Sources/Flux2/Models/TextEncoder/Flux2Qwen3TextEncoder.swift b/Sources/Flux2/Models/TextEncoder/Flux2Qwen3TextEncoder.swift
 --- a/Sources/Flux2/Models/TextEncoder/Flux2Qwen3TextEncoder.swift
 +++ b/Sources/Flux2/Models/TextEncoder/Flux2Qwen3TextEncoder.swift
-@@ -6,6 +6,9 @@
-   case configNotFound(URL)
-   case invalidInputShape
-   case missingHiddenState(Int)
+@@ -8,0 +9,3 @@
 +  case incompleteLayer(Int)
 +  case unsupportedLayeredQuantization
 +  case unsupportedLayeredPrecision
- }
- 
- public final class Flux2Qwen3TextEncoder: Module {
-@@ -13,6 +16,7 @@
- 
-   @ModuleInfo(key: "model") private var model: Flux2Qwen3Model
-   @ModuleInfo(key: "lm_head") private var lmHead: Linear?
-+  private var layeredSource: (snapshot: URL, dtype: DType)? = nil
- 
-   public init(configuration: Flux2Qwen3Configuration) {
-     self.configuration = configuration
-@@ -45,6 +49,38 @@
-     }
-     try encoder.update(parameters: ModuleParameters.unflattened(weights), verify: .none)
- 
+@@ -15,0 +19 @@
++  private var layeredSource: (snapshot: URL, dtype: DType, fileSet: Flux2FileSet?)? = nil
+@@ -28 +32,2 @@
+-  public static func load(from snapshot: URL, dtype: DType = .bfloat16) throws -> Flux2Qwen3TextEncoder {
++  public static func load(from snapshot: URL, dtype: DType = .bfloat16, fileSet: Flux2FileSet? = nil) throws -> Flux2Qwen3TextEncoder {
++    try fileSet?.require("text_encoder/config.json")
+@@ -41 +46 @@
+-    let loader = Flux2WeightsLoader(snapshot: snapshot)
++    let loader = Flux2WeightsLoader(snapshot: snapshot, fileSet: fileSet)
+@@ -43 +48 @@
+-    if let manifest = try Flux2Quantizer.loadManifest(from: snapshot) {
++    if let manifest = try Flux2Quantizer.loadManifest(from: snapshot, fileSet: fileSet) {
+@@ -47,0 +53,33 @@
 +    return encoder
 +  }
 +
 +  /// Retain only weights outside the decoder blocks. Each original decoder block
 +  /// is read for its turn, evaluated, then released before the next block is loaded.
-+  public static func loadLayered(from snapshot: URL, dtype: DType = .bfloat16) throws -> Flux2Qwen3TextEncoder {
-+    if let _ = try Flux2Quantizer.loadManifest(from: snapshot) {
++  public static func loadLayered(from snapshot: URL, dtype: DType = .bfloat16, fileSet: Flux2FileSet? = nil) throws -> Flux2Qwen3TextEncoder {
++    if let _ = try Flux2Quantizer.loadManifest(from: snapshot, fileSet: fileSet) {
 +      throw Flux2Qwen3TextEncoderError.unsupportedLayeredQuantization
 +    }
++    try fileSet?.require("text_encoder/config.json")
 +    let configURL = snapshot.appendingPathComponent("text_encoder/config.json")
 +    guard FileManager.default.fileExists(atPath: configURL.path) else {
 +      throw Flux2Qwen3TextEncoderError.configNotFound(configURL)
 +    }
 +    let configuration = try JSONDecoder().decode(Flux2Qwen3Configuration.self, from: Data(contentsOf: configURL))
 +    let encoder = Flux2Qwen3TextEncoder(configuration: configuration)
-+    let loader = Flux2WeightsLoader(snapshot: snapshot)
++    let loader = Flux2WeightsLoader(snapshot: snapshot, fileSet: fileSet)
 +    for file in try loader.listSafetensors(component: .textEncoder) {
 +      try Task.checkCancellation()
 +      guard try SafeTensorsReader(fileURL: file).allMetadata().allSatisfy({ $0.dtype == dtype }) else {
@@ -450,48 +368,28 @@ diff --git a/Sources/Flux2/Models/TextEncoder/Flux2Qwen3TextEncoder.swift b/Sour
 +    }
 +    try encoder.update(parameters: ModuleParameters.unflattened(weights), verify: .none)
 +    MLX.eval(Array(weights.values))
-+    encoder.layeredSource = (snapshot, dtype)
-     return encoder
-   }
- 
-@@ -61,11 +97,12 @@
-       throw Flux2Qwen3TextEncoderError.invalidInputShape
-     }
- 
++    encoder.layeredSource = (snapshot, dtype, fileSet)
+@@ -64 +102 @@
 -    let hiddenStates = model.hiddenStates(
 +    let hiddenStates = try model.hiddenStates(
-       inputIds: inputIds,
-       attentionMask: attentionMask,
-       outputLayerIndices: hiddenStateLayers,
+@@ -68 +106,2 @@
 -      evaluationPolicy: evaluationPolicy
 +      evaluationPolicy: evaluationPolicy,
 +      layeredSource: layeredSource
-     )
- 
-     var selected: [MLXArray] = []
-@@ -131,8 +168,9 @@
-     inputIds: MLXArray,
-     attentionMask: MLXArray,
-     outputLayerIndices: [Int],
+@@ -134,2 +173,3 @@
 -    evaluationPolicy: Flux2EvaluationPolicy
 -  ) -> [Int: MLXArray] {
 +    evaluationPolicy: Flux2EvaluationPolicy,
-+    layeredSource: (snapshot: URL, dtype: DType)? = nil
++    layeredSource: (snapshot: URL, dtype: DType, fileSet: Flux2FileSet?)? = nil
 +  ) throws -> [Int: MLXArray] {
-     let wanted = Set(outputLayerIndices)
-     var results: [Int: MLXArray] = [:]
- 
-@@ -149,9 +187,26 @@
- 
-     let mask = Flux2Qwen3AttentionMask.make(hiddenStates: hidden, attentionMask: attentionMask)
- 
+@@ -152 +192,17 @@
 -    for (index, layer) in layers.enumerated() {
 +    for index in layers.indices {
 +      if layeredSource != nil { try Task.checkCancellation(); Memory.clearCache() }
 +      let layer: Flux2Qwen3TransformerBlock
 +      if let layeredSource {
 +        let prefix = "model.layers.\(index)."
-+        let loaded = try Flux2WeightsLoader(snapshot: layeredSource.snapshot).load(
++        let loaded = try Flux2WeightsLoader(snapshot: layeredSource.snapshot, fileSet: layeredSource.fileSet).load(
 +          component: .textEncoder, dtype: layeredSource.dtype) { $0.hasPrefix(prefix) }
 +        let stripped = Dictionary(uniqueKeysWithValues: loaded.map { (String($0.key.dropFirst(prefix.count)), $0.value) })
 +        layer = Flux2Qwen3TransformerBlock(configuration)
@@ -503,47 +401,42 @@ diff --git a/Sources/Flux2/Models/TextEncoder/Flux2Qwen3TextEncoder.swift b/Sour
 +      } else {
 +        layer = layers[index]
 +      }
-       hidden = layer(hidden, attentionMask: mask)
+@@ -154 +210,2 @@
 -      evaluationPolicy.evalIfNeeded(hidden)
 +      if layeredSource != nil { MLX.eval(hidden) }
 +      else { evaluationPolicy.evalIfNeeded(hidden) }
-       let hiddenIndex = index + 1
-       if wanted.contains(hiddenIndex) {
-         results[hiddenIndex] = hidden
 diff --git a/Sources/Flux2/Models/Transformer/Flux2Transformer2DModel.swift b/Sources/Flux2/Models/Transformer/Flux2Transformer2DModel.swift
 --- a/Sources/Flux2/Models/Transformer/Flux2Transformer2DModel.swift
 +++ b/Sources/Flux2/Models/Transformer/Flux2Transformer2DModel.swift
-@@ -4,6 +4,9 @@
- 
- public enum Flux2Transformer2DModelError: Error {
-   case configNotFound(URL)
+@@ -6,0 +7,3 @@
 +  case incompleteLayer(String)
 +  case unsupportedLayeredQuantization
 +  case unsupportedLayeredPrecision
- }
- 
- public final class Flux2Transformer2DModel: Module {
-@@ -26,6 +29,9 @@
- 
-   @ModuleInfo(key: "norm_out") private var normOut: Flux2AdaLayerNormContinuous
-   @ModuleInfo(key: "proj_out") private var projOut: Linear
+@@ -28,0 +32,3 @@
 +  private var layeredSource: Flux2PinnedWeightSelection? = nil
 +
 +  public var isLayered: Bool { layeredSource != nil }
- 
-   public init(configuration: Flux2TransformerConfiguration) {
-     self.configuration = configuration
-@@ -119,6 +125,80 @@
-     return model
-   }
- 
-+  public static func loadLayered(from snapshot: URL, dtype: DType = .bfloat16,
+@@ -99 +105,2 @@
+-  public static func load(from snapshot: URL, dtype: DType = .bfloat16) throws -> Flux2Transformer2DModel {
++  public static func load(from snapshot: URL, dtype: DType = .bfloat16, fileSet: Flux2FileSet? = nil) throws -> Flux2Transformer2DModel {
++    try fileSet?.require("transformer/config.json")
+@@ -112 +119 @@
+-    let loader = Flux2WeightsLoader(snapshot: snapshot)
++    let loader = Flux2WeightsLoader(snapshot: snapshot, fileSet: fileSet)
+@@ -114 +121 @@
+-    if let manifest = try Flux2Quantizer.loadManifest(from: snapshot) {
++    if let manifest = try Flux2Quantizer.loadManifest(from: snapshot, fileSet: fileSet) {
+@@ -119,0 +127,75 @@
++  }
++
++  public static func loadLayered(from snapshot: URL, dtype: DType = .bfloat16, fileSet: Flux2FileSet? = nil,
 +                                 admissionValidator: (() throws -> Void)? = nil) throws -> Flux2Transformer2DModel {
 +    try admissionValidator?()
-+    if let _ = try Flux2Quantizer.loadManifest(from: snapshot) {
++    if let _ = try Flux2Quantizer.loadManifest(from: snapshot, fileSet: fileSet) {
 +      throw Flux2Transformer2DModelError.unsupportedLayeredQuantization
 +    }
 +    try admissionValidator?()
++    try fileSet?.require("transformer/config.json")
 +    let configURL = snapshot.appendingPathComponent("transformer/config.json")
 +    try admissionValidator?()
 +    guard FileManager.default.fileExists(atPath: configURL.path) else {
@@ -555,7 +448,7 @@ diff --git a/Sources/Flux2/Models/Transformer/Flux2Transformer2DModel.swift b/So
 +    try admissionValidator?()
 +    let model = Flux2Transformer2DModel(configuration: configuration)
 +    try admissionValidator?()
-+    let source = try Flux2PinnedWeightSelection(snapshot: snapshot, component: .transformer,
++    let source = try Flux2PinnedWeightSelection(snapshot: snapshot, component: .transformer, fileSet: fileSet,
 +                                                 admissionValidator: admissionValidator) {
 +      _, actual in actual == dtype
 +    }
@@ -609,15 +502,7 @@ diff --git a/Sources/Flux2/Models/Transformer/Flux2Transformer2DModel.swift b/So
 +    }
 +    try block.update(parameters: ModuleParameters.unflattened(stripped), verify: .none)
 +    return block
-+  }
-+
-   public func callAsFunction(
-     _ hiddenStates: MLXArray,
-     encoderHiddenStates: MLXArray,
-@@ -126,8 +206,34 @@
-     imgIds: MLXArray,
-     txtIds: MLXArray,
-     guidance: MLXArray? = nil,
+@@ -128,0 +211,13 @@
 +    attentionMask: MLXFast.ScaledDotProductAttentionMaskMode = .none,
 +    evaluationPolicy: Flux2EvaluationPolicy = .deferred
 +  ) -> MLXArray {
@@ -631,7 +516,7 @@ diff --git a/Sources/Flux2/Models/Transformer/Flux2Transformer2DModel.swift b/So
 +  public func callLayered(
 +    _ hiddenStates: MLXArray, encoderHiddenStates: MLXArray, timestep: MLXArray,
 +    imgIds: MLXArray, txtIds: MLXArray, guidance: MLXArray? = nil,
-     attentionMask: MLXFast.ScaledDotProductAttentionMaskMode = .none
+@@ -130 +225,14 @@
 -  ) -> MLXArray {
 +  ) throws -> MLXArray {
 +    guard let layeredSource else { throw Flux2Transformer2DModelError.incompleteLayer("layered source") }
@@ -647,49 +532,23 @@ diff --git a/Sources/Flux2/Models/Transformer/Flux2Transformer2DModel.swift b/So
 +    evaluationPolicy: Flux2EvaluationPolicy,
 +    source: Flux2PinnedWeightSelection?
 +  ) throws -> MLXArray {
-     let numTxtTokens = encoderHiddenStates.dim(1)
-     let targetDtype = hiddenStates.dtype
-     let scale = MLXArray(1000.0).asType(targetDtype)
-@@ -167,7 +273,9 @@
-       sin: MLX.concatenated([textRotary.sin, imageRotary.sin], axis: 1)
-     )
- 
+@@ -170 +278,3 @@
 -    for block in transformerBlocks {
 +    for index in transformerBlocks.indices {
 +      if source != nil { try Task.checkCancellation(); Memory.clearCache() }
 +      let block = try source.map { try loadDoubleBlock(index, source: $0) } ?? transformerBlocks[index]
-       let outputs = block(
-         hiddenStates: hidden,
-         encoderHiddenStates: encoder,
-@@ -178,11 +286,15 @@
-       )
-       encoder = outputs.encoderHiddenStates
-       hidden = outputs.hiddenStates
+@@ -180,0 +291,2 @@
 +      if evaluationPolicy == .aggressive { MLX.eval(encoder, hidden) }
 +      if let source { try source.verifyFileIdentities() }
-     }
- 
-     hidden = MLX.concatenated([encoder, hidden], axis: 1)
- 
+@@ -185 +297,3 @@
 -    for block in singleTransformerBlocks {
 +    for index in singleTransformerBlocks.indices {
 +      if source != nil { try Task.checkCancellation(); Memory.clearCache() }
 +      let block = try source.map { try loadSingleBlock(index, source: $0) } ?? singleTransformerBlocks[index]
-       let outputs = block(
-         hiddenStates: hidden,
-         tembModParams: singleStreamMod,
-@@ -190,12 +302,19 @@
-         attentionMask: attentionMask
-       )
-       hidden = outputs.hiddenStates
+@@ -192,0 +307,2 @@
 +      evaluationPolicy.evalIfNeeded(hidden)
 +      if let source { try source.verifyFileIdentities() }
-     }
- 
-     let splitStates = split(hidden, indices: [numTxtTokens], axis: 1)
-     hidden = splitStates[1]
- 
-     hidden = normOut(hidden, conditioningEmbedding: temb)
+@@ -199 +315,6 @@
 -    return projOut(hidden)
 +    let output = projOut(hidden)
 +    if let source {
@@ -697,15 +556,10 @@ diff --git a/Sources/Flux2/Models/Transformer/Flux2Transformer2DModel.swift b/So
 +      try source.verifyFileIdentities()
 +    }
 +    return output
-   }
- }
 diff --git a/Sources/Flux2/Pipeline/Flux2Denoiser.swift b/Sources/Flux2/Pipeline/Flux2Denoiser.swift
 --- a/Sources/Flux2/Pipeline/Flux2Denoiser.swift
 +++ b/Sources/Flux2/Pipeline/Flux2Denoiser.swift
-@@ -41,15 +41,16 @@
-       transformerTimestep = transformerTimestep * scale
-     }
- 
+@@ -44,9 +44,10 @@
 -    let noisePredAll = transformer(
 -      modelInput,
 -      encoderHiddenStates: encoderHiddenStates,
@@ -725,16 +579,10 @@ diff --git a/Sources/Flux2/Pipeline/Flux2Denoiser.swift b/Sources/Flux2/Pipeline
 +        timestep: transformerTimestep, imgIds: imgIds, txtIds: txtIds,
 +        guidance: guidance, attentionMask: attentionMask)
 +    }
- 
-     let tokenCount = latents.dim(1)
-     let noisePred = noisePredAll[0..., 0..<tokenCount, 0...]
 diff --git a/Tests/Flux2Tests/Flux2Qwen3TextEncoderParityTests.swift b/Tests/Flux2Tests/Flux2Qwen3TextEncoderParityTests.swift
 --- a/Tests/Flux2Tests/Flux2Qwen3TextEncoderParityTests.swift
 +++ b/Tests/Flux2Tests/Flux2Qwen3TextEncoderParityTests.swift
-@@ -32,5 +32,63 @@
-     let actualTextIds = try Flux2PositionIds.prepareTextIds(actualEmbeds)
-     XCTAssertEqual(actualTextIds.asType(.int32).asArray(Int32.self), expectedTextIds.asArray(Int32.self))
-   }
+@@ -34,0 +35,59 @@
 +
 +  func testLayeredKeepsEveryTinyHiddenStateAndRejectsMissingBlock() throws {
 +    let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
@@ -794,19 +642,14 @@ diff --git a/Tests/Flux2Tests/Flux2Qwen3TextEncoderParityTests.swift b/Tests/Flu
 +    XCTAssertEqual(actual.asType(.float32).asArray(Float32.self),
 +                   expected.asType(.float32).asArray(Float32.self))
 +  }
- }
+@@ -36 +94,0 @@
 -
 diff --git a/Tests/Flux2Tests/Flux2TransformerParityTests.swift b/Tests/Flux2Tests/Flux2TransformerParityTests.swift
 --- a/Tests/Flux2Tests/Flux2TransformerParityTests.swift
 +++ b/Tests/Flux2Tests/Flux2TransformerParityTests.swift
-@@ -1,9 +1,49 @@
- import Foundation
+@@ -1,0 +2 @@
 +import Darwin
- import MLX
- import XCTest
- @testable import Flux2
- 
- final class Flux2TransformerParityTests: XCTestCase {
+@@ -6,0 +8,39 @@
 +  func testLayeredTransformerRejectsReplacementFromOriginalAdmission() throws {
 +    enum AdmissionError: Error { case changed }
 +    let fixture = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
@@ -846,13 +689,7 @@ diff --git a/Tests/Flux2Tests/Flux2TransformerParityTests.swift b/Tests/Flux2Tes
 +    XCTAssertGreaterThan(validations, 0)
 +  }
 +
-   func testTinyTransformerMatchesFixtures() throws {
-     let fixtureRoot = URL(fileURLWithPath: #filePath)
-       .deletingLastPathComponent()
-@@ -35,6 +75,230 @@
-     let expectedReader = try SafeTensorsReader(fileURL: expectedURL)
-     let expected = try expectedReader.tensor(named: "output").asType(.float32)
-     TestHelpers.assertAllClose(actual, expected, atol: 1e-4, rtol: 1e-3)
+@@ -37,0 +78,124 @@
 +    // The fixture is an independent original-operation reference, including
 +    // its one double block and one single block. Exercise selected reads too.
 +    let layered = try Flux2Transformer2DModel.loadLayered(from: fixtureRoot, dtype: .float32)
@@ -977,9 +814,7 @@ diff --git a/Tests/Flux2Tests/Flux2TransformerParityTests.swift b/Tests/Flux2Tes
 +      return MLXRandom.uniform(0.0..<1.0, [4]).asArray(Float.self)
 +    }
 +    XCTAssertEqual(afterLayered, control)
-   }
- }
- 
+@@ -40,0 +205,100 @@
 +import Foundation
 +import MLX
 +import MLXNN
@@ -1083,10 +918,7 @@ diff --git a/Tests/Flux2Tests/Flux2TransformerParityTests.swift b/Tests/Flux2Tes
 diff --git a/Tests/Flux2Tests/SafeTensorsReaderTests.swift b/Tests/Flux2Tests/SafeTensorsReaderTests.swift
 --- a/Tests/Flux2Tests/SafeTensorsReaderTests.swift
 +++ b/Tests/Flux2Tests/SafeTensorsReaderTests.swift
-@@ -4,6 +4,113 @@
- @testable import Flux2
- 
- final class SafeTensorsReaderTests: XCTestCase {
+@@ -6,0 +7,107 @@
 +  private func writeRaw(_ url: URL, header: String, data: Data = Data()) throws {
 +    var length = UInt64(header.utf8.count).littleEndian
 +    var file = withUnsafeBytes(of: &length) { Data($0) }
@@ -1194,6 +1026,3 @@ diff --git a/Tests/Flux2Tests/SafeTensorsReaderTests.swift b/Tests/Flux2Tests/Sa
 +    do { _ = try await task.value; XCTFail("Cancelled read succeeded") }
 +    catch is CancellationError { }
 +  }
-   private func withTempDir(_ body: (URL) throws -> Void) throws {
-     let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-     try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)

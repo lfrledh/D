@@ -112,13 +112,14 @@ public struct Flux2Quantizer {
   public static let supportedGroupSizes: Set<Int> = [32, 64, 128]
   public static let supportedBits: Set<Int> = [4, 8]
 
-  public static func hasQuantization(at directory: URL) -> Bool {
-    FileManager.default.fileExists(atPath: directory.appendingPathComponent("quantization.json").path)
+  public static func hasQuantization(at directory: URL, fileSet: Flux2FileSet? = nil) -> Bool {
+    if let fileSet { return fileSet.contains("quantization.json") }
+    return FileManager.default.fileExists(atPath: directory.appendingPathComponent("quantization.json").path)
   }
 
-  public static func loadManifest(from directory: URL) throws -> Flux2QuantizationManifest? {
+  public static func loadManifest(from directory: URL, fileSet: Flux2FileSet? = nil) throws -> Flux2QuantizationManifest? {
     let manifestURL = directory.appendingPathComponent("quantization.json")
-    guard FileManager.default.fileExists(atPath: manifestURL.path) else {
+    guard fileSet?.contains("quantization.json") ?? FileManager.default.fileExists(atPath: manifestURL.path) else {
       return nil
     }
     return try Flux2QuantizationManifest.load(from: manifestURL)

@@ -1,0 +1,40 @@
+diff --git a/Sources/Flux2/IO/Flux2Quantization.swift b/Sources/Flux2/IO/Flux2Quantization.swift
+--- a/Sources/Flux2/IO/Flux2Quantization.swift
++++ b/Sources/Flux2/IO/Flux2Quantization.swift
+@@ -115,5 +115,6 @@
+-  public static func hasQuantization(at directory: URL) -> Bool {
+-    FileManager.default.fileExists(atPath: directory.appendingPathComponent("quantization.json").path)
+-  }
+-
+-  public static func loadManifest(from directory: URL) throws -> Flux2QuantizationManifest? {
++  public static func hasQuantization(at directory: URL, fileSet: Flux2FileSet? = nil) -> Bool {
++    if let fileSet { return fileSet.contains("quantization.json") }
++    return FileManager.default.fileExists(atPath: directory.appendingPathComponent("quantization.json").path)
++  }
++
++  public static func loadManifest(from directory: URL, fileSet: Flux2FileSet? = nil) throws -> Flux2QuantizationManifest? {
+@@ -121 +122 @@
+-    guard FileManager.default.fileExists(atPath: manifestURL.path) else {
++    guard fileSet?.contains("quantization.json") ?? FileManager.default.fileExists(atPath: manifestURL.path) else {
+diff --git a/Sources/Flux2/Models/VAE/Flux2AutoencoderKL.swift b/Sources/Flux2/Models/VAE/Flux2AutoencoderKL.swift
+--- a/Sources/Flux2/Models/VAE/Flux2AutoencoderKL.swift
++++ b/Sources/Flux2/Models/VAE/Flux2AutoencoderKL.swift
+@@ -255 +255,2 @@
+-  public static func load(from snapshot: URL, dtype: DType = .bfloat16) throws -> Flux2AutoencoderKL {
++  public static func load(from snapshot: URL, dtype: DType = .bfloat16, fileSet: Flux2FileSet? = nil) throws -> Flux2AutoencoderKL {
++    try fileSet?.require("vae/config.json")
+@@ -268 +269 @@
+-    let loader = Flux2WeightsLoader(snapshot: snapshot)
++    let loader = Flux2WeightsLoader(snapshot: snapshot, fileSet: fileSet)
+diff --git a/Sources/Flux2/Schedulers/FlowMatchEulerDiscreteScheduler.swift b/Sources/Flux2/Schedulers/FlowMatchEulerDiscreteScheduler.swift
+--- a/Sources/Flux2/Schedulers/FlowMatchEulerDiscreteScheduler.swift
++++ b/Sources/Flux2/Schedulers/FlowMatchEulerDiscreteScheduler.swift
+@@ -77 +77 @@
+-  public static func load(from snapshot: URL) throws -> FlowMatchEulerDiscreteScheduler {
++  public static func load(from snapshot: URL, fileSet: Flux2FileSet? = nil) throws -> FlowMatchEulerDiscreteScheduler {
+@@ -83 +83 @@
+-    if FileManager.default.fileExists(atPath: configURL.path) {
++    if fileSet?.contains("scheduler/config.json") ?? FileManager.default.fileExists(atPath: configURL.path) {
+@@ -85 +85 @@
+-    } else if FileManager.default.fileExists(atPath: schedulerConfigURL.path) {
++    } else if fileSet?.contains("scheduler/scheduler_config.json") ?? FileManager.default.fileExists(atPath: schedulerConfigURL.path) {

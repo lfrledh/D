@@ -74,15 +74,15 @@ public final class FlowMatchEulerDiscreteScheduler {
     sigmaMax = sigmas.first ?? 1.0
   }
 
-  public static func load(from snapshot: URL) throws -> FlowMatchEulerDiscreteScheduler {
+  public static func load(from snapshot: URL, fileSet: Flux2FileSet? = nil) throws -> FlowMatchEulerDiscreteScheduler {
     let schedulerDir = snapshot.appendingPathComponent("scheduler")
     let configURL = schedulerDir.appendingPathComponent("config.json")
     let schedulerConfigURL = schedulerDir.appendingPathComponent("scheduler_config.json")
 
     let resolvedURL: URL
-    if FileManager.default.fileExists(atPath: configURL.path) {
+    if fileSet?.contains("scheduler/config.json") ?? FileManager.default.fileExists(atPath: configURL.path) {
       resolvedURL = configURL
-    } else if FileManager.default.fileExists(atPath: schedulerConfigURL.path) {
+    } else if fileSet?.contains("scheduler/scheduler_config.json") ?? FileManager.default.fileExists(atPath: schedulerConfigURL.path) {
       resolvedURL = schedulerConfigURL
     } else {
       throw FlowMatchEulerDiscreteSchedulerError.configNotFound(schedulerConfigURL)

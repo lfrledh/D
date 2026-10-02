@@ -102,7 +102,8 @@ public final class Flux2Transformer2DModel: Module {
     super.init()
   }
 
-  public static func load(from snapshot: URL, dtype: DType = .bfloat16) throws -> Flux2Transformer2DModel {
+  public static func load(from snapshot: URL, dtype: DType = .bfloat16, fileSet: Flux2FileSet? = nil) throws -> Flux2Transformer2DModel {
+    try fileSet?.require("transformer/config.json")
     let configURL = snapshot
       .appendingPathComponent("transformer")
       .appendingPathComponent("config.json")
@@ -115,9 +116,9 @@ public final class Flux2Transformer2DModel: Module {
     let configuration = try JSONDecoder().decode(Flux2TransformerConfiguration.self, from: configData)
     let model = Flux2Transformer2DModel(configuration: configuration)
 
-    let loader = Flux2WeightsLoader(snapshot: snapshot)
+    let loader = Flux2WeightsLoader(snapshot: snapshot, fileSet: fileSet)
     let weights = try loader.load(component: .transformer, dtype: dtype)
-    if let manifest = try Flux2Quantizer.loadManifest(from: snapshot) {
+    if let manifest = try Flux2Quantizer.loadManifest(from: snapshot, fileSet: fileSet) {
       Flux2Quantizer.applyQuantization(to: model, manifest: manifest, weights: weights)
     }
     try model.update(parameters: ModuleParameters.unflattened(weights), verify: .none)
@@ -125,13 +126,14 @@ public final class Flux2Transformer2DModel: Module {
     return model
   }
 
-  public static func loadLayered(from snapshot: URL, dtype: DType = .bfloat16,
+  public static func loadLayered(from snapshot: URL, dtype: DType = .bfloat16, fileSet: Flux2FileSet? = nil,
                                  admissionValidator: (() throws -> Void)? = nil) throws -> Flux2Transformer2DModel {
     try admissionValidator?()
-    if let _ = try Flux2Quantizer.loadManifest(from: snapshot) {
+    if let _ = try Flux2Quantizer.loadManifest(from: snapshot, fileSet: fileSet) {
       throw Flux2Transformer2DModelError.unsupportedLayeredQuantization
     }
     try admissionValidator?()
+    try fileSet?.require("transformer/config.json")
     let configURL = snapshot.appendingPathComponent("transformer/config.json")
     try admissionValidator?()
     guard FileManager.default.fileExists(atPath: configURL.path) else {
@@ -143,7 +145,7 @@ public final class Flux2Transformer2DModel: Module {
     try admissionValidator?()
     let model = Flux2Transformer2DModel(configuration: configuration)
     try admissionValidator?()
-    let source = try Flux2PinnedWeightSelection(snapshot: snapshot, component: .transformer,
+    let source = try Flux2PinnedWeightSelection(snapshot: snapshot, component: .transformer, fileSet: fileSet,
                                                  admissionValidator: admissionValidator) {
       _, actual in actual == dtype
     }
