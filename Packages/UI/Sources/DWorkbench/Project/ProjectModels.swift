@@ -86,12 +86,13 @@ public struct ProjectAsset: Codable, Sendable, Equatable, Identifiable {
     public var isFavorite: Bool
     public var note: String
     public var tags: [String]
+    public var fileLocations: AssetFileLocations?
 
     public init(id: UUID = UUID(), jobID: UUID? = nil, relativePath: String,
                 mediaType: String = "image/png", role: AssetRole = .result,
                 createdAt: Date = Date(), metadata: MediaMetadata = .init(),
                 name: String = "未命名作品", isFavorite: Bool = false, note: String = "",
-                tags: [String] = []) {
+                tags: [String] = [], fileLocations: AssetFileLocations? = nil) {
         self.id = id
         self.jobID = jobID
         self.relativePath = relativePath
@@ -103,10 +104,11 @@ public struct ProjectAsset: Codable, Sendable, Equatable, Identifiable {
         self.isFavorite = isFavorite
         self.note = note
         self.tags = tags
+        self.fileLocations = fileLocations
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, jobID, relativePath, mediaType, role, createdAt, metadata, name, isFavorite, note, tags
+        case id, jobID, relativePath, mediaType, role, createdAt, metadata, name, isFavorite, note, tags, fileLocations
     }
 
     public init(from decoder: Decoder) throws {
@@ -121,6 +123,8 @@ public struct ProjectAsset: Codable, Sendable, Equatable, Identifiable {
         name = try values.decodeIfPresent(String.self, forKey: .name) ?? "未命名作品"
         isFavorite = try values.decodeIfPresent(Bool.self, forKey: .isFavorite) ?? false
         note = try values.decodeIfPresent(String.self, forKey: .note) ?? ""
+        fileLocations = try values.decodeIfPresent(AssetFileLocations.self, forKey: .fileLocations)
+        try fileLocations?.validate()
         if values.contains(.tags) {
             let decoded = try values.decode([String].self, forKey: .tags)
             let validated = try LibraryTags.validate(decoded)
@@ -196,12 +200,15 @@ public struct ProjectDraft: Codable, Sendable, Equatable {
 }
 
 public struct ProjectManifest: Codable, Sendable, Equatable, Identifiable {
-    public static let currentSchemaVersion = 19
-    public static let readableSchemaVersions = Set(1...12).union([16, 17, 18, 19])
+    public static let currentSchemaVersion = 20
+    public static let readableSchemaVersions = Set(1...12).union([16, 17, 18, 19, 20])
     public var schemaVersion: Int
     /// Monotonic committed state version lets the UI discard a late, stale actor response.
     public var revision: UInt64
     public var id: UUID
+    /// Physical working instance. Restores preserve logical content IDs and historical hashes.
+    public var instanceID: UUID?
+    public var effectiveInstanceID: UUID { instanceID ?? id }
     public var name: String
     public var createdAt: Date
     public var updatedAt: Date
@@ -231,6 +238,7 @@ public struct ProjectManifest: Codable, Sendable, Equatable, Identifiable {
         self.schemaVersion = schemaVersion
         self.revision = revision
         self.id = id
+        self.instanceID = UUID()
         self.name = name
         self.createdAt = createdAt
         self.updatedAt = updatedAt
@@ -250,7 +258,7 @@ public struct ProjectManifest: Codable, Sendable, Equatable, Identifiable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case schemaVersion, revision, id, name, createdAt, updatedAt, draft, jobs, assets, documents, activeDocumentID,
+        case schemaVersion, revision, id, instanceID, name, createdAt, updatedAt, draft, jobs, assets, documents, activeDocumentID,
              pendingAudioCaptures, workflowSnapshot
     }
 
@@ -261,9 +269,10 @@ public struct ProjectManifest: Codable, Sendable, Equatable, Identifiable {
             // Current-format omissions are corruption, not a request for legacy defaults.
             _ = try CurrentGenerationFields(from: decoder)
         }
-        if [10, 11, 12, 16, 17, 18, 19].contains(schemaVersion) { _ = try CurrentTextSourcesFields(from: decoder) }
+        if [10, 11, 12, 16, 17, 18, 19, 20].contains(schemaVersion) { _ = try CurrentTextSourcesFields(from: decoder) }
         revision = try values.decodeIfPresent(UInt64.self, forKey: .revision) ?? 0
         id = try values.decode(UUID.self, forKey: .id)
+        instanceID = try values.decodeIfPresent(UUID.self, forKey: .instanceID)
         name = try values.decode(String.self, forKey: .name)
         createdAt = try values.decode(Date.self, forKey: .createdAt)
         updatedAt = try values.decode(Date.self, forKey: .updatedAt)
@@ -292,6 +301,7 @@ public struct ProjectManifest: Codable, Sendable, Equatable, Identifiable {
         try values.encode(schemaVersion, forKey: .schemaVersion)
         try values.encode(revision, forKey: .revision)
         try values.encode(id, forKey: .id)
+        try values.encodeIfPresent(instanceID, forKey: .instanceID)
         try values.encode(name, forKey: .name)
         try values.encode(createdAt, forKey: .createdAt)
         try values.encode(updatedAt, forKey: .updatedAt)

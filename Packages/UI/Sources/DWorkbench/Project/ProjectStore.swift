@@ -166,6 +166,8 @@ public actor ProjectStore {
             loaded = try ProjectFiles.migrateVersionSeventeen(loaded, original: data, in: descriptor, checkpoint: migrationCheckpoint)
         } else if loaded.schemaVersion == 18 {
             loaded = try ProjectFiles.migrateVersionEighteen(loaded, original: data, in: descriptor, checkpoint: migrationCheckpoint)
+        } else if loaded.schemaVersion == 19 {
+            loaded = try ProjectFiles.migrateVersionNineteen(loaded, original: data, in: descriptor, checkpoint: migrationCheckpoint)
         } else { try ProjectFiles.validate(loaded) }
         let store = ProjectStore(rootURL: root, rootFD: descriptor, lockFD: lock, manifest: loaded)
         // Ownership of both descriptors has moved to the actor before recovery can throw.
@@ -226,7 +228,7 @@ public actor ProjectStore {
         guard let index = manifest.assets.firstIndex(where: { $0.id == assetID }),
               manifest.assets[index].mediaType == "image/png" else { throw ProjectStoreError.missingAsset }
         let asset = manifest.assets[index]
-        let bytes = try ProjectFiles.read(relative: asset.relativePath, in: rootFD, limit: 64 * 1024 * 1024)
+        let bytes = try readAssetData(asset, limit: 64 * 1024 * 1024)
         let pixels = try ImageReferencePixels.decodePNG(bytes)
         if let expected = asset.metadata.imageContentSHA256, pixels.sourceSHA256 != expected {
             throw ProjectStoreError.externalModification
@@ -486,7 +488,7 @@ public actor ProjectStore {
               let jobID = asset.jobID, let job = manifest.jobs.first(where: { $0.id == jobID }),
               case .pitch(let request) = job.request.input else { throw ProjectStoreError.missingAsset }
         try checkLocation()
-        let data = try ProjectFiles.read(relative: asset.relativePath, in: rootFD, limit: PitchAnalysisResult.maximumJSONBytes)
+        let data = try readAssetData(asset, limit: PitchAnalysisResult.maximumJSONBytes)
         guard SHA256.hash(data: data).map({ String(format: "%02x", $0) }).joined() == metadata.contentSHA256 else {
             throw ProjectStoreError.externalModification
         }
@@ -1251,7 +1253,22 @@ public actor ProjectStore {
             throw ProjectStoreError.missingAsset
         }
         try checkLocation()
-        let file = try ProjectFiles.openRelativeFile(asset.relativePath, in: rootFD)
+        if let placements = asset.fileLocations {
+            // Consumers receive a verified, task-owned snapshot, never a mutable external URL.
+            let data = try readAssetData(asset, limit: WorkflowMediaFormat.descriptor(asset.mediaType)?.maximumBytes ?? 0)
+            let folder = try ProjectFiles.openOrCreateDirectory("AssetInputs", in: rootFD)
+            defer { Darwin.close(folder) }
+            let name = asset.id.uuidString + "-" + placements.sha256 + "." + (WorkflowMediaFormat.descriptor(asset.mediaType)?.suffix ?? "data")
+            var info = stat()
+            if fstatat(folder, name, &info, AT_SYMLINK_NOFOLLOW) == 0 {
+                guard try ProjectFiles.read(relative: name, in: folder, limit: data.count) == data else { throw ProjectStoreError.externalModification }
+            } else {
+                guard errno == ENOENT else { throw ProjectFiles.error() }
+                try ProjectFiles.publish(in: folder, name: name, replacing: false) { fd in try data.withUnsafeBytes { try ProjectFiles.writeAll($0, to: fd) } }
+            }
+            return rootURL.appendingPathComponent("AssetInputs/" + name)
+        }
+        let file = try openAssetFile(asset)
         Darwin.close(file)
         return rootURL.appendingPathComponent(asset.relativePath)
     }
@@ -1300,7 +1317,7 @@ public actor ProjectStore {
         let sourceURL = try await inspectVideoAsset(id: id)
         guard manifest.assets.first(where: { $0.id == id }) == asset else { throw ProjectStoreError.externalModification }
         try checkLocation()
-        let source = try ProjectFiles.openRelativeFile(asset.relativePath, in: rootFD)
+        let source = try openAssetFile(asset)
         defer { Darwin.close(source) }
         let parent = try ProjectFiles.openDirectory(destination.deletingLastPathComponent())
         defer { Darwin.close(parent) }
@@ -1349,10 +1366,10 @@ public actor ProjectStore {
             throw ProjectStoreError.unsafePath(destination.path)
         }
         let policy = try audioInspectionPolicy(for: asset)
-        let sourceURL = rootURL.appendingPathComponent(asset.relativePath)
+        let sourceURL = try assetURL(for: asset)
         let sourceInspection = try AudioMediaInspector.inspect(at: sourceURL, policy: policy)
         try ProjectFiles.requireRegisteredAudio(sourceInspection, matches: registered)
-        let source = try ProjectFiles.openRelativeFile(asset.relativePath, in: rootFD)
+        let source = try openAssetFile(asset)
         defer { Darwin.close(source) }
         let parent = try ProjectFiles.openDirectory(destination.deletingLastPathComponent())
         defer { Darwin.close(parent) }
@@ -1719,10 +1736,10 @@ public actor ProjectStore {
         if let audio = asset.metadata.audio {
             let policy = try audioInspectionPolicy(for: asset)
             let inspection = try AudioMediaInspector.inspect(
-                at: rootURL.appendingPathComponent(asset.relativePath), policy: policy)
+                at: try assetURL(for: asset), policy: policy)
             try ProjectFiles.requireRegisteredAudio(inspection, matches: audio)
         }
-        let source = try ProjectFiles.openRelativeFile(asset.relativePath, in: rootFD)
+        let source = try openAssetFile(asset)
         defer { Darwin.close(source) }
         let parent = try ProjectFiles.openDirectory(destination.deletingLastPathComponent())
         defer { Darwin.close(parent) }
@@ -1755,7 +1772,7 @@ public actor ProjectStore {
               let job = manifest.jobs.first(where: { $0.id == asset.jobID }),
               job.state == .completed, job.artifactIDs.contains(asset.id),
               case .image(let input) = job.request.input else { throw ProjectStoreError.missingAsset }
-        let png = try ProjectFiles.read(relative: asset.relativePath, in: rootFD, limit: 32 * 1024 * 1024)
+        let png = try readAssetData(asset, limit: 32 * 1024 * 1024)
         _ = try Self.validateRecipePNG(png)
         func field(_ value: String?) -> RecipeField<String> {
             guard let value, !value.isEmpty, value != "unrecorded" else { return .unknown }
@@ -2227,7 +2244,7 @@ public actor ProjectStore {
     }
 }
 
-private enum ProjectFiles {
+enum ProjectFiles {
     static func error() -> ProjectStoreError { .io(String(cString: strerror(errno))) }
 
     static func projectURL(_ url: URL) throws -> URL {
@@ -2451,6 +2468,11 @@ private enum ProjectFiles {
                                        checkpoint: (@Sendable (ProjectMigrationCheckpoint) throws -> Void)?) throws -> ProjectManifest {
         try migrate(legacy, original: original, in: root, backup: ProjectStore.versionEighteenBackupFilename,
                     checkpoint: checkpoint)
+    }
+
+    static func migrateVersionNineteen(_ legacy: ProjectManifest, original: Data, in root: Int32,
+                                      checkpoint: (@Sendable (ProjectMigrationCheckpoint) throws -> Void)?) throws -> ProjectManifest {
+        try migrate(legacy, original: original, in: root, backup: "project.v19.backup.json", checkpoint: checkpoint)
     }
 
     private static func migrate(_ legacy: ProjectManifest, original: Data, in root: Int32, backup: String,
@@ -2871,7 +2893,7 @@ private enum ProjectFiles {
                     throw ProjectStoreError.invalidProject("图像任务不属于图像文档。")
                 }
                 if let reference = image.referenceImage {
-                    guard [9, 11, 12, 16, 17, 18, 19].contains(value.schemaVersion), let id = job.imageReferenceAssetID,
+                    guard [9, 11, 12, 16, 17, 18, 19, 20].contains(value.schemaVersion), let id = job.imageReferenceAssetID,
                           let asset = assets[id], asset.mediaType == "image/png",
                           asset.metadata.imageContentSHA256 != nil,
                           reference.url.path.hasSuffix("/ImageInputs/\(job.id.uuidString)/reference.rgb") else {
@@ -2923,6 +2945,10 @@ private enum ProjectFiles {
                   zip(asset.tags, validatedTags).allSatisfy({ $0.0.utf8.elementsEqual($0.1.utf8) }) else {
                 throw ProjectStoreError.invalidProject("作品标签未采用有效的持久化形式。")
             }
+            if let placements = asset.fileLocations {
+                guard value.schemaVersion >= 20 else { throw ProjectStoreError.invalidProject("素材位置需要v20项目。") }
+                try placements.validate()
+            }
             _ = try components(asset.relativePath)
             if let jobID = asset.jobID {
                 guard let job = jobs[jobID], job.artifactIDs.contains(asset.id) else {
@@ -2932,7 +2958,7 @@ private enum ProjectFiles {
             let isDeclaredAudio = asset.metadata.audio != nil || asset.mediaType == "audio/wav" ||
                 asset.mediaType == "audio/x-caf" || asset.relativePath.hasPrefix("Audio/")
             if asset.relativePath.hasPrefix("WorkflowAssets/") {
-                guard [16, 17, 18, 19].contains(value.schemaVersion), value.workflowSnapshot != nil,
+                guard [16, 17, 18, 19, 20].contains(value.schemaVersion), value.workflowSnapshot != nil,
                       asset.jobID == nil, asset.role == .original || asset.role == .result,
                       let format = WorkflowMediaFormat.descriptor(asset.mediaType),
                       asset.relativePath == "WorkflowAssets/\(asset.id.uuidString)/content.\(format.suffix)",
@@ -3031,7 +3057,7 @@ private enum ProjectFiles {
             } else if asset.role == .original && asset.metadata.imageContentSHA256 != nil {
                 // Explicitly selecting a legacy original pins its digest without relocating it.
                 // Safe relative paths are validated above; only new import publication owns the UUID layout.
-                guard [9, 11, 12, 16, 17, 18, 19].contains(value.schemaVersion), asset.jobID == nil, asset.mediaType == "image/png" else {
+                guard [9, 11, 12, 16, 17, 18, 19, 20].contains(value.schemaVersion), asset.jobID == nil, asset.mediaType == "image/png" else {
                     throw ProjectStoreError.invalidProject("原参考图的路径或身份无效。")
                 }
             } else if asset.role == .result {
@@ -3047,7 +3073,7 @@ private enum ProjectFiles {
                 guard dimension > 0 else { throw ProjectStoreError.invalidProject("媒体元数据包含无效尺寸或位深。") }
             }
             if let digest = asset.metadata.imageContentSHA256 {
-                guard [9, 11, 12, 16, 17, 18, 19].contains(value.schemaVersion), asset.mediaType == "image/png", digest.utf8.count == 64,
+                guard [9, 11, 12, 16, 17, 18, 19, 20].contains(value.schemaVersion), asset.mediaType == "image/png", digest.utf8.count == 64,
                       digest.utf8.allSatisfy({ (48...57).contains($0) || (97...102).contains($0) }) else {
                     throw ProjectStoreError.invalidProject("参考图摘要无效。")
                 }
@@ -3077,7 +3103,7 @@ private enum ProjectFiles {
             }
 
             if let reference = document.draft.referenceImageAssetID {
-                guard [9, 11, 12, 16, 17, 18, 19].contains(value.schemaVersion), document.kind == .image,
+                guard [9, 11, 12, 16, 17, 18, 19, 20].contains(value.schemaVersion), document.kind == .image,
                       let asset = assets[reference], asset.mediaType == "image/png",
                       asset.metadata.imageContentSHA256 != nil else {
                     throw ProjectStoreError.invalidProject("图像草稿的参考来源无效。")
@@ -3118,7 +3144,7 @@ private enum ProjectFiles {
                     throw ProjectStoreError.invalidProject("文字文档包含无效内容或图像引用。")
                 }
                 try TextDraftDocument.validate(textDraft.text)
-                if [10, 11, 12, 16, 17, 18, 19].contains(value.schemaVersion) {
+                if [10, 11, 12, 16, 17, 18, 19, 20].contains(value.schemaVersion) {
                     guard let sources = document.textSources else {
                         throw ProjectStoreError.invalidProject("文字资料记录缺失。")
                     }
@@ -3359,11 +3385,25 @@ extension ProjectStore {
                               parents: [WorkflowAssetReference], operationID: String, stepID: UUID?,
                               request: InferenceRequest?, details: [String: String], assetID: UUID,
                               checkpoint: (@Sendable (WorkflowStoreCheckpoint) throws -> Void)?,
-                              verifiedVideo: VideoAssetMetadata? = nil, copiedAudioOrigin: AudioOrigin? = nil) throws -> WorkflowPublishedAsset {
+                              verifiedVideo: VideoAssetMetadata? = nil, copiedAudioOrigin: AudioOrigin? = nil,
+                              externalLocation: AssetFileLocation? = nil) throws -> WorkflowPublishedAsset {
         try checkLocation()
         var metadata = metadata
         var archive = try editableWorkflow()
         let hash = Self.workflowHash(data)
+        if let externalLocation {
+            guard operationID == "d.asset.import", let source = externalLocation.url,
+                  try AssetLocationFiles.read(source, maximum: data.count).data == data else { throw ProjectStoreError.externalModification }
+        }
+        defer {
+            if externalLocation != nil, let format = WorkflowMediaFormat.descriptor(mediaType) {
+                // Exact validation file owned by this new import; not the user's original.
+                let path = "WorkflowAssets/\(assetID.uuidString)/content.\(format.suffix)"
+                if let bytes = try? ProjectFiles.read(relative: path, in: rootFD, limit: data.count), bytes == data {
+                    _ = unlinkat(rootFD, path, 0)
+                }
+            }
+        }
         if let record = archive.assets.first(where: { $0.reference.assetID == assetID }),
            let asset = manifest.assets.first(where: { $0.id == assetID }) {
             guard record.reference.sha256 == hash, asset.mediaType == mediaType,
@@ -3441,10 +3481,11 @@ extension ProjectStore {
         if mediaType == "image/png" { media.imageContentSHA256 = hash }
         else { media.imageContentSHA256 = nil }
         let asset = ProjectAsset(id: assetID, relativePath: "WorkflowAssets/\(assetID.uuidString)/content.\(suffix)",
-                                 mediaType: mediaType, role: operationID == "d.asset.import" ? .original : .result, metadata: media, name: name)
+                                 mediaType: mediaType, role: operationID == "d.asset.import" ? .original : .result, metadata: media, name: name,
+                                 fileLocations: externalLocation.map { .init(sha256: hash, byteCount: UInt64(data.count), preferredLocationID: $0.id, locations: [$0]) })
         let record = WorkflowAssetRecord(reference: ref, parents: parents, operationID: operationID,
                                           stepID: stepID, request: request, metadata: details)
-        _ = try stageWorkflowMedia(data, assetID: assetID, suffix: suffix, limit: format.maximumBytes)
+        if externalLocation == nil { _ = try stageWorkflowMedia(data, assetID: assetID, suffix: suffix, limit: format.maximumBytes) }
         try checkpoint?(.assetDurable)
         archive.assets.append(record); archive.revision = UUID()
         try commitWorkflow(archive, assets: manifest.assets + [asset], checkpoint: checkpoint)
@@ -3499,7 +3540,7 @@ extension ProjectStore {
         guard ref.projectID == manifest.id, archive.assets.contains(where: { $0.reference == ref }),
               let asset = manifest.assets.first(where: { $0.id == ref.assetID }) else { throw WorkflowIssue("资产版本不属于当前项目。") }
         guard let format = WorkflowMediaFormat.descriptor(asset.mediaType), format.kind == ref.kind else { throw WorkflowIssue("媒体类型不匹配。") }
-        let data = try ProjectFiles.read(relative: asset.relativePath, in: rootFD, limit: format.maximumBytes)
+        let data = try readAssetData(asset, limit: format.maximumBytes)
         guard Self.workflowHash(data) == ref.sha256 else { throw WorkflowIssue("原始资产已改变；停止执行，未重新绑定新内容。") }
         return data
     }
@@ -3545,14 +3586,14 @@ extension ProjectStore {
             if let record = archive.assets.first(where: { $0.reference.assetID == assetID }) {
                 if let asset = manifest.assets.first(where: { $0.id == assetID }) {
                     guard let format = WorkflowMediaFormat.descriptor(asset.mediaType) else { throw WorkflowIssue("素材格式不支持。") }
-                    let bytes = try ProjectFiles.read(relative: asset.relativePath, in: rootFD, limit: format.maximumBytes)
+                    let bytes = try readAssetData(asset, limit: format.maximumBytes)
                     guard Self.workflowHash(bytes) == record.reference.sha256 else { throw WorkflowIssue("已发布素材改变，拒绝重新绑定。") }
                 } else { throw WorkflowIssue("素材不存在。") }
                 return record.reference
             }
             guard let asset = manifest.assets.first(where: { $0.id == assetID }),
                   let format = WorkflowMediaFormat.descriptor(asset.mediaType) else { throw WorkflowIssue("此素材不属于当前已适配的格式。") }
-            let data = try ProjectFiles.read(relative: asset.relativePath, in: rootFD, limit: format.maximumBytes)
+            let data = try readAssetData(asset, limit: format.maximumBytes)
             let digest = Self.workflowHash(data)
             if let expected = asset.metadata.imageContentSHA256 ?? asset.metadata.audio?.contentSHA256 ?? asset.metadata.video?.contentSHA256 ?? asset.metadata.pitch?.contentSHA256, expected != digest {
                 throw WorkflowIssue("已登记原件的摘要改变；未将新内容冒充原件。")
@@ -3575,44 +3616,47 @@ extension ProjectStore {
 
     /// Explicit MP4 selection uses the same full decoder as generated video; other
     /// formats retain the synchronous import path. No model request is invented.
-    public func importWorkflowMediaFile(at source: URL) async throws -> WorkflowPublishedAsset {
-        guard source.pathExtension.lowercased() == "mp4" else { return try importWorkflowFile(at: source) }
+    public func importWorkflowMediaFile(at source: URL, mode: AssetImportMode = .copy) async throws -> WorkflowPublishedAsset {
+        guard source.pathExtension.lowercased() == "mp4" else { return try importWorkflowFile(at: source, mode: mode) }
         try checkLocation()
         let format = WorkflowMediaFormat.descriptor("video/mp4")!
         let parent = try ProjectFiles.openDirectory(source.deletingLastPathComponent())
         defer { Darwin.close(parent) }
-        let data = try ProjectFiles.read(relative: source.lastPathComponent, in: parent, limit: format.maximumBytes)
+        let frozen = try AssetLocationFiles.read(source, maximum: format.maximumBytes)
+        let data = frozen.data
+        let placement = mode == .reference ? try AssetLocationFiles.register(source, read: frozen, role: .externalOriginal) : nil
         let id = UUID(), url = try stageWorkflowMedia(data, assetID: id, suffix: format.suffix, limit: format.maximumBytes)
         let metadata = try await VideoMediaInspector.inspectImported(at: url)
         try checkLocation()
         guard metadata.contentSHA256 == Self.workflowHash(data) else { throw ProjectStoreError.externalModification }
         return try publishWorkflowAsset(data: data, mediaType: "video/mp4", metadata: .init(), name: source.lastPathComponent,
             parents: [], operationID: "d.asset.import", stepID: nil, request: nil, details: ["origin": "explicit-file-snapshot"],
-            assetID: id, checkpoint: nil, verifiedVideo: metadata)
+            assetID: id, checkpoint: nil, verifiedVideo: metadata, externalLocation: placement)
     }
 
     /// Import snapshots approved files. Subsequent source changes do not change the published version.
-    public func importWorkflowFile(at source: URL) throws -> WorkflowPublishedAsset {
+    public func importWorkflowFile(at source: URL, mode: AssetImportMode = .copy) throws -> WorkflowPublishedAsset {
         try checkLocation()
         let parent = try ProjectFiles.openDirectory(source.deletingLastPathComponent())
         defer { Darwin.close(parent) }
         let audioImport = ["wav", "caf"].contains(source.pathExtension.lowercased())
         let readLimit = audioImport ? AudioInspectionPolicy.workflowOriginal.maximumBytes : 64 * 1_024 * 1_024
-        let data = try ProjectFiles.read(relative: source.lastPathComponent, in: parent, limit: readLimit)
-        if audioImport {
-            return try publishWorkflowAsset(data: data, mediaType: source.pathExtension.lowercased() == "wav" ? "audio/wav" : "audio/x-caf",
-                name: source.lastPathComponent, operationID: "d.asset.import", details: ["origin": "explicit-file-snapshot"])
+        let frozen = try AssetLocationFiles.read(source, maximum: readLimit)
+        let data = frozen.data
+        let placement = mode == .reference ? try AssetLocationFiles.register(source, read: frozen, role: .externalOriginal) : nil
+        func publish(_ mediaType: String, _ metadata: MediaMetadata = .init()) throws -> WorkflowPublishedAsset {
+            try publishWorkflowAsset(data: data, mediaType: mediaType, metadata: metadata, name: source.lastPathComponent,
+                parents: [], operationID: "d.asset.import", stepID: nil, request: nil,
+                details: ["origin": mode == .reference ? "explicit-file-reference" : "explicit-file-snapshot", "sourceName": source.lastPathComponent],
+                assetID: UUID(), checkpoint: nil, externalLocation: placement)
         }
+        if audioImport { return try publish(source.pathExtension.lowercased() == "wav" ? "audio/wav" : "audio/x-caf") }
         if source.lastPathComponent.hasSuffix(".notes.json") || source.lastPathComponent.hasSuffix(".chords.json") || source.lastPathComponent.hasSuffix(".tempo.json") {
             let type = source.lastPathComponent.hasSuffix(".notes.json") ? WorkflowMediaFormat.noteType :
                 (source.lastPathComponent.hasSuffix(".chords.json") ? WorkflowMediaFormat.chordType : WorkflowMediaFormat.tempoType)
-            return try publishWorkflowAsset(data: data, mediaType: type, name: source.lastPathComponent,
-                operationID: "d.asset.import", details: ["origin": "explicit-file-snapshot"])
+            return try publish(type)
         }
-        if ["txt", "md"].contains(source.pathExtension.lowercased()) {
-            return try publishWorkflowAsset(data: data, mediaType: "text/plain", name: source.lastPathComponent,
-                                             operationID: "d.asset.import", details: ["origin": "explicit-file-snapshot"])
-        }
+        if ["txt", "md"].contains(source.pathExtension.lowercased()) { return try publish("text/plain") }
         guard let image = CGImageSourceCreateWithData(data as CFData, nil),
               let type = CGImageSourceGetType(image) as String?, ["public.png", "public.jpeg"].contains(type),
               let props = CGImageSourceCopyPropertiesAtIndex(image, 0, nil) as? [String: Any] else { throw WorkflowIssue("请选择当前支持的 TXT、MD、PNG、JPEG、PCM WAV/CAF 或音乐结构文件。") }
@@ -3620,9 +3664,7 @@ extension ProjectStore {
                                   height: props[kCGImagePropertyPixelHeight as String] as? Int,
                                   bitDepth: props[kCGImagePropertyDepth as String] as? Int,
                                   colorSpace: props[kCGImagePropertyProfileName as String] as? String)
-        return try publishWorkflowAsset(data: data, mediaType: type == "public.png" ? "image/png" : "image/jpeg",
-                                         metadata: media, name: source.lastPathComponent, operationID: "d.asset.import",
-                                         details: ["origin": "explicit-file-snapshot", "sourceName": source.lastPathComponent])
+        return try publish(type == "public.png" ? "image/png" : "image/jpeg", media)
     }
 }
 
@@ -4022,5 +4064,188 @@ extension ProjectStore {
         guard let asset = manifest.assets.first(where: { $0.id == ref.assetID }),
               let record = try editableWorkflow().assets.first(where: { $0.reference == ref }) else { throw ProjectStoreError.missingAsset }
         return (data, asset, record)
+    }
+}
+
+extension ProjectStore {
+    private func openAssetFile(_ asset: ProjectAsset) throws -> Int32 {
+        if asset.fileLocations != nil {
+            let url = try assetURL(for: asset)
+            let parent = try ProjectFiles.openDirectory(url.deletingLastPathComponent())
+            defer { Darwin.close(parent) }
+            return try ProjectFiles.openRelativeFile(url.lastPathComponent, in: parent)
+        }
+        return try ProjectFiles.openRelativeFile(asset.relativePath, in: rootFD)
+    }
+
+    /// All readers keep the published digest; a mutable file can never redefine a version.
+    private func readAssetData(_ asset: ProjectAsset, limit: Int) throws -> Data {
+        guard let placements = asset.fileLocations else { return try ProjectFiles.read(relative: asset.relativePath, in: rootFD, limit: limit) }
+        try placements.validate()
+        guard let location = placements.locations.first(where: { $0.id == placements.preferredLocationID }) else { throw ProjectStoreError.missingAsset }
+        let data: Data
+        if location.role == .projectCopy {
+            data = try ProjectFiles.read(relative: asset.relativePath, in: rootFD, limit: limit)
+        } else {
+            data = try AssetLocationFiles.withResolved(location) { try AssetLocationFiles.read($0, maximum: limit).data }
+        }
+        guard data.count == placements.byteCount, AssetLocationFiles.hash(data) == placements.sha256 else { throw ProjectStoreError.externalModification }
+        return data
+    }
+
+    public func assetLocationOverview(_ id: UUID, deep: Bool = false) throws -> AssetLocationOverview {
+        try checkLocation()
+        guard let asset = manifest.assets.first(where: { $0.id == id }), let format = WorkflowMediaFormat.descriptor(asset.mediaType) else { throw ProjectStoreError.missingAsset }
+        let archive = try workflowState().archive ?? WorkflowArchive()
+        let record = archive.assets.first { $0.reference.assetID == id }
+        let uses = archive.graphs.reduce(0) { $0 + $1.nodes.filter { $0.assetReference?.assetID == id }.count }
+            + archive.assets.filter { $0.parents.contains { $0.assetID == id } }.count
+            + archive.runs.filter { run in run.steps.contains { step in (Array(step.inputs.values) + Array(step.outputs.values)).contains { (($0.datum?.assetReferences ?? []) + $0.candidates.compactMap(\.asset)).contains { $0.assetID == id } } } }.count
+        guard let placements = asset.fileLocations else {
+            let location = AssetFileLocation(id: id, libraryID: manifest.id, libraryName: manifest.name, role: .projectCopy, url: rootURL.appendingPathComponent(asset.relativePath), registeredAt: asset.createdAt)
+            let status: AssetLocationStatus
+            do { if deep { _ = try readAssetData(asset, limit: format.maximumBytes) }; let fd = try ProjectFiles.openRelativeFile(asset.relativePath, in: rootFD); Darwin.close(fd); status = .verified }
+            catch { status = .missing }
+            return .init(asset: asset, contentSHA256: record?.reference.sha256, byteCount: nil,
+                         locations: [.init(location: location, status: status, reason: nil, resolvedURL: location.url)], selectedLocationID: id, knownUseCount: uses)
+        }
+        var states = [AssetLocationInspection]()
+        for location in placements.locations {
+            if location.role != .projectCopy { states.append(AssetLocationFiles.inspect(location, expected: placements, deep: deep, maximum: format.maximumBytes)); continue }
+            do {
+                let fd = try ProjectFiles.openRelativeFile(asset.relativePath, in: rootFD); defer { Darwin.close(fd) }
+                if deep {
+                    let bytes = try ProjectFiles.read(relative: asset.relativePath, in: rootFD, limit: format.maximumBytes)
+                    guard bytes.count == placements.byteCount, AssetLocationFiles.hash(bytes) == placements.sha256 else { throw ProjectStoreError.externalModification }
+                }
+                states.append(.init(location: location, status: .verified, reason: nil, resolvedURL: rootURL.appendingPathComponent(asset.relativePath)))
+            } catch { states.append(.init(location: location, status: error as? ProjectStoreError == .externalModification ? .changed : .missing, reason: error.localizedDescription, resolvedURL: nil)) }
+        }
+        return .init(asset: asset, contentSHA256: placements.sha256, byteCount: placements.byteCount,
+                     locations: states, selectedLocationID: placements.preferredLocationID, knownUseCount: uses)
+    }
+
+    public func projectFileOverview(deep: Bool = false) throws -> ProjectFileOverview {
+        try checkLocation()
+        let values = try manifest.assets.filter { WorkflowMediaFormat.descriptor($0.mediaType) != nil }.map { try assetLocationOverview($0.id, deep: deep) }
+        let external = values.filter { item in item.asset.fileLocations?.locations.first(where: { $0.id == item.selectedLocationID })?.role != .projectCopy && item.asset.fileLocations != nil }
+        let bytes = try external.reduce(UInt64(0)) { total, item in
+            let sum = total.addingReportingOverflow(item.byteCount ?? 0)
+            guard !sum.overflow else { throw ProjectStoreError.invalidProject("收纳大小溢出。") }; return sum.partialValue
+        }
+        return .init(projectID: manifest.id, revision: manifest.revision, assets: values, bytesToCollect: bytes, externalCount: external.count)
+    }
+
+    /// Register a user-selected same-content location. Identity/version/source record stay unchanged.
+    public func relocateAsset(_ id: UUID, to source: URL) throws {
+        try checkLocation()
+        guard let index = manifest.assets.firstIndex(where: { $0.id == id }), let format = WorkflowMediaFormat.descriptor(manifest.assets[index].mediaType) else { throw ProjectStoreError.missingAsset }
+        let asset = manifest.assets[index]
+        let archive = try editableWorkflow()
+        guard let ref = archive.assets.first(where: { $0.reference.assetID == id })?.reference else { throw WorkflowIssue("请先将此素材登记为流程输入。") }
+        let read = try AssetLocationFiles.read(source, maximum: format.maximumBytes)
+        guard AssetLocationFiles.hash(read.data) == ref.sha256 else { throw ProjectStoreError.externalModification }
+        let location = try AssetLocationFiles.register(source, read: read, role: .externalOriginal)
+        var placements = asset.fileLocations ?? .init(sha256: ref.sha256, byteCount: UInt64(read.data.count), preferredLocationID: id,
+            locations: [.init(id: id, libraryID: manifest.id, libraryName: manifest.name, role: .projectCopy, registeredAt: asset.createdAt)])
+        // A second alias/bookmark of the same physical file is not another copy.
+        if let i = placements.locations.firstIndex(where: { $0.fingerprint?.device == location.fingerprint?.device && $0.fingerprint?.inode == location.fingerprint?.inode }) {
+            var refreshed = location; refreshed.id = placements.locations[i].id; placements.locations[i] = refreshed
+            placements.preferredLocationID = refreshed.id
+        } else { placements.locations.append(location); placements.preferredLocationID = location.id }
+        try placements.validate()
+        var candidate = manifest; candidate.assets[index].fileLocations = placements
+        try commit(candidate)
+    }
+
+    /// Matches only known filenames immediately inside the explicitly chosen folder, then hashes.
+    public func relocateAssets(in folder: URL) throws -> [AssetRelocationResult] {
+        try checkLocation()
+        let fd = try ProjectFiles.openDirectory(folder); defer { Darwin.close(fd) }
+        var results = [AssetRelocationResult]()
+        for asset in manifest.assets where asset.fileLocations != nil {
+            guard let placements = asset.fileLocations else { continue }
+            let names = Set(placements.locations.compactMap { $0.url?.lastPathComponent })
+            let matches = names.compactMap { name -> URL? in
+                let url = folder.appendingPathComponent(name)
+                guard let format = WorkflowMediaFormat.descriptor(asset.mediaType), let bytes = try? AssetLocationFiles.read(url, maximum: format.maximumBytes), AssetLocationFiles.hash(bytes.data) == placements.sha256 else { return nil }
+                return url
+            }
+            guard matches.count == 1 else { results.append(.init(id: asset.id, matched: false, message: matches.isEmpty ? "未找到同内容文件，原位置保留。" : "有多个同内容候选，请逐项选择。")); continue }
+            do { try relocateAsset(asset.id, to: matches[0]); results.append(.init(id: asset.id, matched: true, message: "已核对同一内容版本。")) }
+            catch { results.append(.init(id: asset.id, matched: false, message: error.localizedDescription)) }
+        }
+        return results
+    }
+
+    public func useAssetLocation(_ id: UUID, locationID: UUID) throws {
+        try checkLocation()
+        guard let index = manifest.assets.firstIndex(where: { $0.id == id }), var placements = manifest.assets[index].fileLocations,
+              placements.locations.contains(where: { $0.id == locationID }) else { throw ProjectStoreError.missingAsset }
+        let status = try assetLocationOverview(id, deep: true)
+        guard status.locations.contains(where: { $0.id == locationID && $0.status == .verified }) else { throw WorkflowIssue("该位置尚不能提供已登记的相同版本。") }
+        placements.preferredLocationID = locationID
+        var candidate = manifest; candidate.assets[index].fileLocations = placements; try commit(candidate)
+    }
+
+    /// One file transaction, not a move. The old location is retained until the new bytes and manifest publish.
+    public func collectAsset(_ id: UUID, to libraryFolder: URL? = nil) throws {
+        try checkLocation(); try Task.checkCancellation()
+        guard let index = manifest.assets.firstIndex(where: { $0.id == id }), let format = WorkflowMediaFormat.descriptor(manifest.assets[index].mediaType) else { throw ProjectStoreError.missingAsset }
+        let asset = manifest.assets[index]
+        let data = try readAssetData(asset, limit: format.maximumBytes)
+        let digest = AssetLocationFiles.hash(data)
+        // Inspect provenance without publishing a workflow revision as a side effect.
+        let archive = try workflowState().archive
+        let expected = asset.fileLocations?.sha256 ?? archive?.assets.first(where: { $0.reference.assetID == id })?.reference.sha256
+            ?? asset.metadata.imageContentSHA256 ?? asset.metadata.audio?.contentSHA256 ?? asset.metadata.video?.contentSHA256 ?? asset.metadata.pitch?.contentSHA256
+        if let expected, digest != expected { throw ProjectStoreError.externalModification }
+        if libraryFolder == nil, asset.fileLocations == nil { return } // Already stored in this project.
+        var placements = asset.fileLocations ?? .init(sha256: digest, byteCount: UInt64(data.count), preferredLocationID: id,
+            locations: [.init(id: id, libraryID: manifest.id, libraryName: manifest.name, role: .projectCopy, registeredAt: asset.createdAt)])
+        let location: AssetFileLocation
+        if let libraryFolder {
+            let fd = try ProjectFiles.openDirectory(libraryFolder); defer { Darwin.close(fd) }
+            var vfs = statvfs(); guard fstatvfs(fd, &vfs) == 0 else { throw ProjectFiles.error() }
+            let available = UInt64(vfs.f_bavail).multipliedReportingOverflow(by: UInt64(vfs.f_frsize))
+            guard !available.overflow, available.partialValue >= UInt64(data.count) else { throw ProjectStoreError.io("目标库空间不足，原位置未变。") }
+            let name = "D-" + id.uuidString + "-" + UUID().uuidString + "." + format.suffix
+            try ProjectFiles.publish(in: fd, name: name, replacing: false) { out in
+                try data.withUnsafeBytes { bytes in
+                    var offset = 0
+                    while offset < bytes.count { try Task.checkCancellation(); let count = min(1024 * 1024, bytes.count - offset); try ProjectFiles.writeAll(UnsafeRawBufferPointer(rebasing: bytes[offset..<(offset + count)]), to: out); offset += count }
+                }
+            }
+            let copied = libraryFolder.appendingPathComponent(name)
+            let frozen = try AssetLocationFiles.read(copied, maximum: data.count)
+            guard frozen.data == data else { throw ProjectStoreError.externalModification }
+            location = try AssetLocationFiles.register(copied, read: frozen, role: .independentCopy)
+        } else {
+            if asset.relativePath.hasPrefix("WorkflowAssets/") {
+                _ = try stageWorkflowMedia(data, assetID: id, suffix: format.suffix, limit: format.maximumBytes)
+            } else {
+                // Existing Tasks/Audio originals remain at their declared path; never overwrite them.
+                guard try ProjectFiles.read(relative: asset.relativePath, in: rootFD, limit: format.maximumBytes) == data else { throw ProjectStoreError.externalModification }
+            }
+            location = placements.locations.first(where: { $0.role == .projectCopy }) ?? .init(libraryID: manifest.id, libraryName: manifest.name, role: .projectCopy, lastVerifiedAt: Date())
+        }
+        try Task.checkCancellation()
+        // Recheck a mutable original before updating which location owns future reads.
+        guard try readAssetData(asset, limit: format.maximumBytes) == data else { throw ProjectStoreError.externalModification }
+        if !placements.locations.contains(where: { $0.id == location.id }) { placements.locations.append(location) }
+        placements.preferredLocationID = location.id; try placements.validate()
+        var candidate = manifest; candidate.assets[index].fileLocations = placements
+        try commit(candidate)
+    }
+
+    public func collectProjectMedia() throws -> [AssetRelocationResult] {
+        let snapshot = try projectFileOverview()
+        var results = [AssetRelocationResult]()
+        for item in snapshot.assets where item.asset.fileLocations != nil {
+            try Task.checkCancellation()
+            do { try collectAsset(item.asset.id); results.append(.init(id: item.asset.id, matched: true, message: "已收纳到本项目，不再依赖原位置。")) }
+            catch { results.append(.init(id: item.asset.id, matched: false, message: error.localizedDescription)) }
+        }
+        return results
     }
 }
