@@ -2,13 +2,15 @@
 
 最后核实：2026-10-02。当前任务、基线、候选、阻塞与下一动作只从本页进入；历史回执不自动授权续跑。
 
-## 当前任务：D-RELEASE-FREEZE-01 r4（候选交付；原生验收待解锁）
+## 当前任务：D-RELEASE-FREEZE-01 / D-DISCUSSION-FREEZE-20261002
 
-- 保护源 `codex/inference-foundation@01758b81527dc27eb4563bf1b66fd1ceab6647ee`，未接纳本候选。个人 scheme 仍为未暂存 orderHint 1→6，SHA-256 `ca3635d88aa5a15397b90e528667c66c0e6db7e596176e885c79d194b544206c`，索引不夹带。
-- 候选 `/Volumes/CodexProjects/Codex/D-Worktrees/D-RELEASE-FREEZE-01`，分支 `codex/release-freeze-01`。r4 起点/起始远端 `3a11abaed601fad73d9050719cf0235dca560395`。当前实现提交与自有运行身份以外部 R4/lead 检查点及实际 Git 核对；不要把文档历史 SHA 当最新 HEAD。
-- R4=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261001T162316Z-r4`；旧 R3=`…/run-20261001T040512Z-low-memory`。精确历史、预算、来源与失败保留在[原任务](tasks/D-RELEASE-FREEZE-01.md#r4-接续规格2026-10-02执行中)。
-- 本轮只关闭既定首发缺口；不新增家族，不合入保护源/main，不公开发布。原始精度、完整层数/条件优先；使用有限监测、分阶段和逐层 SSD 加载，允许慢，不以小模型/少步替代。
-- 唯一常驻[测试政策](TESTING_POLICY.zh-CN.md)已建立并由 AGENTS 引用；按受影响边界复用旧证据，模型、CPU、hosting、原生和真人分别报告。
+- 用户已批准本轮正常推进main：公开开发基线与试用、功能冻结、正式发行分别报告。main为唯一日常集成线；inference-foundation保留历史，不再作为第二道接纳门。禁止强推、发布安装包、变更许可或收费。
+- 起点候选 `codex/release-freeze-01@0555bacccd5eea2e57fb9d0946f1065deeded9d7`，实际目录 `/Volumes/CodexProjects/Codex/D-Worktrees/D-RELEASE-FREEZE-01`。旧main `708f5fbb7e5e78b5583c487a67329c0eeaf6e5cf` 是其祖先；当前源/远端以本run回执和真实Git核对，不把本页起点当最新HEAD。
+- 干净main集成树 `/Volumes/CodexProjects/Codex/D-Worktrees/D-DISCUSSION-MAIN`。旧main归档 `archive/main-before-refresh-2026-10-02` 及独立bundle已校验；六个历史子模块的已有bundle含准确gitlink。备份不含外部模型、未提交数据或完整机器，见本run `lead/main-backup.json`。
+- 个人旧源仍 `codex/inference-foundation@01758b81527dc27eb4563bf1b66fd1ceab6647ee`，scheme未暂存orderHint 1→6，SHA-256 `ca3635d88aa5a15397b90e528667c66c0e6db7e596176e885c79d194b544206c`；不切分支/暂存/还原。
+- R=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261002T062206Z-discussion`。本轮W0核对完成，W1双语首页/历史备份/公开基线先行；随后W4A外部目录导入、W4B引用/入库/已知位置/项目收纳、W4C手动备份恢复分片实现并检查。W2只针对H22实际客户端/指针和hosting，W3复用已有完整产物解决质量疑点；不新增模型或同步平台。
+- R4=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261001T162316Z-r4`；R3=`…/run-20261001T040512Z-low-memory`。既有证据与失败保留[原任务](tasks/D-RELEASE-FREEZE-01.md)，未受影响不重跑。r4正常签名App及受测代码6328d9cd7dca1edb1b2a5b233089bb73469be7ca；0555仅后续文档。
+- 唯一[测试政策](TESTING_POLICY.zh-CN.md)补文件生命周期与公开主线边界。W4新功能尚未实现/验收，不以README更新冒称可用。
 
 ## 本轮已核实与当前在做
 
@@ -25,7 +27,7 @@
 
 ## 原生与本人事项
 
-当前 CUA 已明确报告锁屏；没有新的解锁状态，停止重复探测。H22实际客户端/firstRect/指针来源取证、H32双入口/拖放等，以及本轮就绪刷新和完整Wan目录原生导入，统一留在[集中待办](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md)。不重开已关闭的录音、断网、Xcode和H31；用户返回后在同一普通签名包集中办。
+r4的最后原生检查明确报告锁屏；本轮桌面库存可读，尚未证明目标D可操作或已经解锁。工具未提供自动解锁能力；不改系统权限。H22实际客户端/firstRect/指针来源取证、H32双入口/拖放等，以及本轮就绪刷新和完整Wan目录原生导入，统一留在[集中待办](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md)。不重开已关闭的录音、断网、Xcode和H31；用户返回后在同一普通签名包集中办。
 
 H22诊断仅 DEBUG、显式测试会话开启，不记录输入文本；当前只完成定位装置与父坐标修正，尚无候选窗/指针实际根因或修复结论，不能靠通知计数关闭。旧本人结论为选字正常、候选窗位置不随动，I型/缩放指针闪后变箭头。
 
@@ -37,4 +39,4 @@ R3 ACE原始F32完整50步四类请求及正式Runtime取消/释放；Klein BF16
 
 恢复先核真实 HEAD/index/个人scheme及R4/lead/final-receipt.json，核活动进程句柄/模型任务与受测二进制，再继续；编译产物的受测SHA可能早于只改其他路径的新提交，必须检查差分。LTX串行作业与两份Store复验均已结束，不要重开等待器或重复生成。所有写Worker已交回，旧拒绝/审核时序及修复额度保留。重构建/GPU/GUI串行，只回收本轮拥有的进程，不关闭未知D。
 
-**功能冻结仍未通过。** 同包原生验收、剩余完整模型/条件与发布责任继续保留。AP1/CORE/I2V候选不自动接纳；无权重分发、首次使用、依赖封装、升级恢复、许可与渠道责任见[发布差距](MODEL_SUPPORT_AND_RELEASE.zh-CN.md)。本轮结束停在用户试用/冻结判断，不自动转入新模型或下个产品阶段。
+**功能冻结仍未通过。** 同包原生验收、剩余完整模型/条件与发布责任继续保留。AP1/CORE/I2V候选不自动接纳；无权重分发、首次使用、依赖封装、升级恢复、许可与渠道责任见[发布差距](MODEL_SUPPORT_AND_RELEASE.zh-CN.md)。本轮结束停在用户试用/冻结判断；公开main更新不关闭这些验收责任，不自动转入新模型或下个产品阶段。

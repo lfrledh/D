@@ -341,3 +341,16 @@ H3 `h3-representative-result.json` exit0，总3274.421秒、单方法3271.875秒
 - **保护与来源**：`protection-after-models.json`逐项确认源HEAD、个人scheme内容/摘要/索引/未暂存状态及交付App四文件不变。自有LTX/Store进程和等待器均已正常结束，未关闭未知D；不是系统无其他任务的证明。实现由受限Sol切片与Lead完成，重要Lead差异有非实现者定点审阅；没有另一模型重复执行真实生成。完整Lead消耗、隐藏模型解析和实际订阅费用unknown，不重算历史用量。
 
 最终文档提交仅更新六份获准活动/任务记录，实际代码/测试/引擎与6328d9c相同；最终SHA与候选推送核对写外部`R4/lead/final-receipt.json`，不为自引用追加提交。本轮不接纳保护源/main、不发布。停止在可用候选及原生待验的检查点；解锁后按唯一集中清单继续已有责任，不自动增加模型或新阶段。
+
+
+### 讨论冻结接续（D-DISCUSSION-FREEZE-20261002，执行中）
+
+用户任务书v1.0将W0—W5作为同一有限里程碑，明确新增文件管理与正常main推进授权。旧r4“不得main”是历史边界，现行规程已窄幅替代；不重置历史修复额度或将候选/质量/原生未验改判通过。需求包与校验在R/handoff；R=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261002T062206Z-discussion`。
+
+起点候选0555bacccd5eea2e57fb9d0946f1065deeded9d7；旧main708f5fbb7e5e78b5583c487a67329c0eeaf6e5cf，fetch后确认共同历史且0/1061。个人源01758b81527dc27eb4563bf1b66fd1ceab6647ee及scheme摘要/差分/索引保存R/lead/baseline.json与小型保护副本。候选起始干净，无本轮活跃写Worker。工具建立工作树因当前聊天绑定内盘空仓库而失败；未操作该仓库，按用户指定实际仓库用Git建立外盘干净main树D-DISCUSSION-MAIN。
+
+W0/W1：仅核相关差分与接口，不全库重审。旧main准确归档标签archive/main-before-refresh-2026-10-02，独立D-main.bundle及六个已有历史子模块bundle均验证，原gitlink在各bundle可达。R/lead/main-backup.json记录范围；同SSD备份不称异地容灾，无未提交数据/外部权重。公开README英文/中文核心对等，准确注明已实现工作台、固定模型profile、引擎准备、开发签名与已知缺口，无项目级许可证新增。复用6328正常App构建/固定源码证据，未变模型不重跑；公开更新不等于原生通过或正式发布。
+
+W4A冻结为固定模型实际所需树严格验证、额外内容不读不删，注册与后端入场保持一致；W4B在既有ModelLibrary/ProjectStore增加显式引用/独立复制、已知副本/内容版本与恢复/收纳；W4C一致快照手动备份与独立目录恢复。Lead拥有共享Store/契约，独立切片精确路径及运行设置另存本run任务包；初交＋最多两轮修复，后至多一次有界接管。任何新增功能先有真实失败/保护反例，再相应CPU/原生；不改数值/新模型/自动同步/数据库。W2原生取证、W3既有媒体完整查看并行准备，人到场事项只写唯一集中清单。
+
+恢复：先核实际HEAD/index与个人修改，再读R/lead；本段写入时W1尚未提交，W4尚未开工，不据此宣称main已更新。后续精确提交/远端与进程状态写外部回执，避免自身SHA反复提交。

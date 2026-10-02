@@ -1,37 +1,78 @@
-# D · 本地 AI 创作工作台
+# D — Local AI Workbench for Mac
 
-D面向Mac上的创作者、艺术家与学生，目标是可组合、可检查的**统一节点工作台**：用户准备和修改条件、检查中间结果，再决定后续生成。场景是能力组合例子；模态可用于类型和筛选，不强制分割工作方式。当前仍是旧模态工作台实现，新节点界面尚未实施。
+[简体中文](README.zh-CN.md) · **Development Preview**
 
-## 从哪里开始
+D is a native multimodal AI workbench for Apple Silicon Macs. Use **Quick** for a single model, or assemble editable operations on the **workflow canvas**. Both surfaces share model capabilities, runtime scheduling and project assets. Inspect inputs, keep candidates separate from accepted work, and decide what runs next.
 
-- 看当前源、最近受测App、未整合候选与下一步：[当前行动](docs/CURRENT_ACTIONS.zh-CN.md)。整理前生产快照为`b334920907de0324bf3e0146bb78433742356a6c`；文档提交不代表新应用构建。
-- 看各模型实际上支持什么、在哪验证：[模型与发行状态](docs/MODEL_SUPPORT_AND_RELEASE.zh-CN.md)。图文、声音、器乐、T2V已有指定App证据；歌声/音符编辑组合和I2V仍有候选验收缺口，不是全部模态全部配置已完成。
-- 看为什么这样设计：[产品原则](docs/PRODUCT_PRINCIPLES.zh-CN.md)、[目标与发布边界](docs/PRODUCT_GOALS.zh-CN.md)。首发剩余承诺未因整理取消。
-- 修改代码从[实际导航](docs/REPOSITORY_MAP.zh-CN.md)选路径；代理先读[AGENTS](AGENTS.md)。旧方案及版本见[历史](docs/history/README.md)，不是当前开工授权。
+The node workbench is implemented. This repository is an active development baseline, **not a production release**. Successful model runs, native interaction checks, feature freeze and distribution readiness are tracked separately. There is no public installer yet.
 
-## 打开与构建
+## What is implemented
 
-在**真实开发仓库**打开`D.xcworkspace`，选`D` scheme、My Mac。不要按项目名猜目录或使用同名空仓库；本机实际根目录从Git工作树清单与当前任务的本机回执定位。当前App部署目标macOS26.2、Apple Silicon；不声称所有历史Mac可运行，16GiB只是开发验证样本。
+| Area | Current scope |
+| --- | --- |
+| Quick and workflows | Model selection, typed operations, editable connections and parameters, optional human decisions, candidates, project save/reopen and export. Some native interactions still need acceptance. |
+| Text / vision | Qwen3.5-9B and Qwen3.8-27B: text, ordered images, sampled video frames and structured tool messages. D does not automatically execute returned tool calls. |
+| Images | FLUX.2-klein-4B and FLUX.2-dev: text generation and ordered reference images. Original precision and separately identified quantized profiles are not interchangeable. |
+| Video | Wan2.1-T2V-1.3B (text to silent video); LTX-2.5 dev single-stage (text / first frame to audiovisual video); MiniMax H3 Base FL2VA (text / first and last frame to audiovisual video). This is not every mode of each model family. |
+| Music | MRT2 small/export-v1 with actual note/chord conditions; ACE-Step 1.5 XL SFT F32/no-LM generation, lyrics/reference, cover and repaint. Music control is approximate, not guaranteed score fidelity. |
+| Resources | Explicit model download/import, preparation and validation, shared installation leases, cancellation and asset provenance. Location management, copy-to-library and manual backup/restore are the current implementation slice; do not assume they are complete. |
 
-已有Xcode、固定依赖与本机合法签名配置时，从仓库根运行：
+The [model capability matrix](docs/RELEASE_MODEL_MATRIX.zh-CN.md) records exact profiles, revisions and tested modes. Full representative original-precision requests have run using SSD layering for Dev, H3 and LTX, with cancellation and real artifact storage checks. This does not establish every parameter combination, large-memory resident mode or current App interaction.
+
+## Requirements and development build
+
+- Apple Silicon Mac; the App deployment target is **macOS 26.2**. Current local validation uses Xcode 27.0 on macOS 26.6.2. Other configurations need their own verification.
+- Sufficient disk space for fixed dependencies, engine resources and user-selected models. A 16 GiB development machine is **not** a product capability ceiling. Original-precision SSD loading can take hours; it changes residency, not model precision or layer count.
+- Xcode and the pinned Swift package dependencies; the first dependency resolution can require network access.
+- Prepared local engine bundles and your own development signing identity. A clean clone alone is **not** a complete runnable App environment.
 
 ```sh
-./scripts/build-local.sh --offline
+git clone https://github.com/lfrledh/D.git
+cd D
 ```
 
-脚本默认将产物/日志与App依赖检出放在仓库同级`D-Development`；隔离工作树必须先显式指定`D_DEVELOPMENT_ROOT`或脚本的`--derived-data-path`、`--source-packages-path`、`--log-path`，避免共用可变输出。`--offline`不能补齐缺失依赖，也不等于系统强制断网。签名配置由本机受控文件提供，不把Team/私钥/个人目录写进仓库。
+Prepare the verified engine resource set with the existing tool. The output parent directory must exist; use a new output directory:
 
-普通Swift构建**不自动封装全部Python音视频引擎**。完整开发包另见`scripts/build-development-app.py`及对应任务；不将当前开发环境依赖说成干净Mac发行已完成。正式App不附模型权重，用户显式下载/导入；现有开发包的内含模型与路径差距见支持表，本页不表示已改好。
+```sh
+python3 scripts/prepare-development-resources.py \
+  --config /absolute/path/prepared-inputs.json \
+  --output /absolute/path/prepared-resources
+```
 
-## 开发验证
+The JSON has `schemaVersion: 1` and an `engines` map from bundle name to an existing absolute path. The four baseline bundles are `AudioEngine.dengine`, `MRT2MusicEngine.dengine`, `VideoEngine.dengine` and `PitchEngine.dengine`; the current H3/LTX and ACE capabilities additionally require `ExternalVideoEngine.dengine` and `ACEMusicEngine.dengine`. This tool verifies and packages **already prepared** engines; it is not a dependency or model installer. See [development resources](Development/README.md) and [backend/source navigation](docs/REPOSITORY_MAP.zh-CN.md) for preparation entry points and fixed-source responsibilities.
 
-| 入口 | 用途 |
-| --- | --- |
-| `scripts/test-foundation.sh` | 纯契约/运行时，无模型 |
-| `scripts/test-workbench.sh` | 工作台、模型管理和项目服务CPU检查 |
-| `scripts/build-mlx.sh` | 固定上游校验及d-infer构建 |
-| `scripts/test-mlx.sh` | 指定模型的图文真实测试，需独立资源与完整证据 |
+Create the ignored `Development/Development.local.xcconfig`:
 
-更细的触发关系见[导航验证表](docs/REPOSITORY_MAP.zh-CN.md)；文本/图像调用见[MLX指南](docs/MLX_REFERENCE_GUIDE.zh-CN.md)、[图像指南](docs/IMAGE_RUNTIME_GUIDE.zh-CN.md)，按其版本范围使用。构建、夹具、CLI、普通签名App、真人、发布分别验收；旧通过、条件跳过和当前文档检查不互相替代。
+```xcconfig
+D_DEVELOPMENT_RESOURCES = /absolute/path/prepared-resources
+D_DEVELOPMENT_SIGNING_IDENTITY = Apple Development: YOUR EXISTING IDENTITY
+D_DEVELOPMENT_TEAM = YOUR TEAM ID
+```
 
-项目采用单仓模块化组织；DInference定义值契约，DRuntime调度，DMLXBackend执行，DWorkbench拥有应用服务，UI展示，App装配。旧公共Packages与研究/参考代码保留并分类，不属于当前App依赖图的部分也不据此删除。来源与许可证保留在Vendor和历史记录。
+Open **D.xcworkspace**, choose **D / My Mac / Debug**, and Run. **D Nodes** uses the same target with an isolated, persistent trial identity. The ordinary build embeds verified engines and signs the App; do not patch providers into an already built App.
+
+For a command-line build with separate outputs:
+
+```sh
+D_DEVELOPMENT_ROOT=/absolute/path/build-output ./scripts/build-local.sh
+```
+
+Add `--offline` only when the required dependencies are already cached. It does not impose system-wide network isolation. Engine/model acquisition is separate from Swift compilation; no claim is made that the older `build-development-app.py` prepares the complete six-engine set automatically.
+
+## Known limitations and next work
+
+- IME candidate positioning and mouse-cursor reversion remain under targeted diagnosis. Input selection has passed previous human checks; that does not close positioning defects.
+- Current App acceptance is incomplete. Two offscreen hosting tests did not reach their intended controls; their failures remain recorded.
+- The LTX synthetic first-frame sample retains a planar red region. Its cause and general control quality are not settled. Short H3 samples do not establish long-video quality.
+- Import, known-location recovery, project collection and manual backup are being completed in bounded slices. No cloud synchronization or concurrent multi-Mac library writing is provided.
+- Clean-machine setup, dependency packaging, upgrades/recovery and distribution checks remain. The intended distributed App does not bundle model weights; the current internal Pitch development engine still includes an evaluation ONNX weight and is **not** a distribution package.
+
+Models are acquired explicitly by the user; their terms and sources are separate from D's code. No new model family, training system, remote service or mobile client is part of the current closeout.
+
+## Development, feedback and licensing
+
+Start with [current status](docs/CURRENT_ACTIONS.zh-CN.md), [repository map](docs/REPOSITORY_MAP.zh-CN.md) and the single [risk-based testing policy](docs/TESTING_POLICY.zh-CN.md). Most engineering records are currently in Chinese. Pure contract/runtime tests use `scripts/test-foundation.sh`; workbench CPU checks use `scripts/test-workbench.sh`. Select the affected tests rather than regenerating every model output. Model tests need the specified local resources and a free compute slot.
+
+Report reproducible problems through [GitHub Issues](https://github.com/lfrledh/D/issues), including the commit, macOS/chip/memory, model profile and concise steps. Remove private prompts, project files and credentials before sharing logs.
+
+**No repository-wide open-source license has been granted in this repository.** Public source visibility is not a grant of MIT/Apache or unrestricted reuse. Third-party source retains its own notices; see [Vendor provenance](Vendor/README.md) and the LICENSE/NOTICE files in the respective backend/dependency directories. This update does not change licensing or announce a commercial release.
