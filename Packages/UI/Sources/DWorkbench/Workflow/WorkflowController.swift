@@ -2,6 +2,7 @@ import Foundation
 import Observation
 
 public struct WorkflowAssetBindingTarget: Sendable, Equatable {
+    public let instanceID: UUID
     public let graphID: UUID
     public let revision: UUID
     public let path: [WorkflowBodyLocation]
@@ -10,6 +11,7 @@ public struct WorkflowAssetBindingTarget: Sendable, Equatable {
 
 public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
     public let projectID: UUID
+    public let instanceID: UUID
     public let rootID: UUID?
     public let revision: UUID
     public let bodyID: UUID?
@@ -28,6 +30,7 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
     @ObservationIgnored private var activeExecutor: WorkflowPlanExecutor?
     public private(set) var availableAssets: [ProjectAsset] = []
     public private(set) var projectID: UUID?
+    public private(set) var projectInstanceID: UUID?
     public private(set) var assetReferences: [UUID: WorkflowAssetReference] = [:]
     public var canEditCanvas: Bool { !closed && !closing && !isRunning && !externalOperationBusy() && readOnlyReason == nil }
     public var selectedGraphID: UUID? { didSet { if oldValue != selectedGraphID { bodyPath = []; selectedNodeIDs = [] } } }
@@ -135,6 +138,7 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
     private func refreshAssets() async {
         let snapshot = await services.store.snapshot()
         projectID = snapshot.id
+        projectInstanceID = snapshot.effectiveInstanceID
         availableAssets = snapshot.assets.filter { WorkflowMediaFormat.descriptor($0.mediaType) != nil }
         assetReferences = [:]
         do {
@@ -158,10 +162,11 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
         guard !closed, !closing, readOnlyReason == nil, let root = rootGraph,
               let node = graph?.nodes.first(where: { $0.id == nodeID }),
               registry.operation(node.operationID)?.definition.interaction == .assetInput else { return nil }
-        return .init(graphID: root.id, revision: root.revision, path: bodyPath, node: node)
+        guard let projectInstanceID else { return nil }
+        return .init(instanceID: projectInstanceID, graphID: root.id, revision: root.revision, path: bodyPath, node: node)
     }
     public func isCurrent(_ target: WorkflowAssetBindingTarget) -> Bool {
-        !closed && !closing && readOnlyReason == nil && rootGraph?.id == target.graphID &&
+        !closed && !closing && readOnlyReason == nil && projectInstanceID == target.instanceID && rootGraph?.id == target.graphID &&
         rootGraph?.revision == target.revision && bodyPath == target.path &&
         graph?.nodes.first(where: { $0.id == target.node.id }) == target.node
     }
@@ -372,15 +377,15 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
     }
 
     public func canvasInsertionTarget() -> WorkflowCanvasInsertionTarget? {
-        guard canEditCanvas, let projectID else { return nil }
+        guard canEditCanvas, let projectID, let projectInstanceID else { return nil }
         if graphs.isEmpty {
-            return .init(projectID: projectID, rootID: nil, revision: emptyInsertionRevision, bodyID: nil, path: [])
+            return .init(projectID: projectID, instanceID: projectInstanceID, rootID: nil, revision: emptyInsertionRevision, bodyID: nil, path: [])
         }
         guard let rootGraph, let graph else { return nil }
-        return .init(projectID: projectID, rootID: rootGraph.id, revision: rootGraph.revision, bodyID: graph.id, path: bodyPath)
+        return .init(projectID: projectID, instanceID: projectInstanceID, rootID: rootGraph.id, revision: rootGraph.revision, bodyID: graph.id, path: bodyPath)
     }
     public func isCurrent(_ target: WorkflowCanvasInsertionTarget) -> Bool {
-        guard canEditCanvas, projectID == target.projectID else { return false }
+        guard canEditCanvas, projectID == target.projectID, projectInstanceID == target.instanceID else { return false }
         if target.rootID == nil {
             return graphs.isEmpty && target.bodyID == nil && target.path.isEmpty && emptyInsertionRevision == target.revision
         }
@@ -410,11 +415,11 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
             attach(ref, nodeID: target.node.id); try await persist(); await onChange()
         } catch { errorMessage = error.localizedDescription }
     }
-    /// An explicit import publishes a copy in this project's existing Store, without executing a node.
-    public func importLibraryFile(_ url: URL) async {
+    /// An explicit import publishes the chosen reference or copy in this project's existing Store.
+    public func importLibraryFile(_ url: URL, mode: AssetImportMode = .copy) async {
         guard canEditCanvas else { return }
         do {
-            _ = try await services.store.importWorkflowMediaFile(at: url)
+            _ = try await services.store.importWorkflowMediaFile(at: url, mode: mode)
             await refreshAssets(); await onChange()
         } catch { errorMessage = error.localizedDescription }
     }
@@ -508,11 +513,11 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
     public func attach(_ reference: WorkflowAssetReference, nodeID: UUID) {
         edit { g in guard let i = g.nodes.firstIndex(where: { $0.id == nodeID }), registry.operation(g.nodes[i].operationID)?.definition.interaction == .assetInput else { throw WorkflowIssue("请选择文件／资产输入节点。") }; g.nodes[i].assetReference = reference }
     }
-    public func importFile(_ url: URL, nodeID: UUID) async {
+    public func importFile(_ url: URL, nodeID: UUID, mode: AssetImportMode = .copy) async {
         guard !closed, !closing, readOnlyReason == nil else { return }
         guard let target = assetBindingTarget(nodeID: nodeID) else { return }
         do {
-            let asset = try await services.store.importWorkflowMediaFile(at: url)
+            let asset = try await services.store.importWorkflowMediaFile(at: url, mode: mode)
             guard isCurrent(target) else { throw WorkflowIssue("导入期间流程或输入已改变；资产已保存，未绑定到另一位置。") }
             attach(asset.record.reference, nodeID: nodeID); try await persist(); await onChange()
         } catch { errorMessage = error.localizedDescription }

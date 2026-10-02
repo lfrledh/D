@@ -285,6 +285,19 @@ public final class ProjectSession {
         public let id: UUID
         public let name: String
         fileprivate let bookmark: Data
+        public let instanceID: UUID?
+        public init(from decoder: Decoder) throws {
+            let values = try decoder.container(keyedBy: CodingKeys.self)
+            id = try values.decode(UUID.self, forKey: .id)
+            name = try values.decode(String.self, forKey: .name)
+            bookmark = try values.decode(Data.self, forKey: .bookmark)
+            instanceID = try values.decodeIfPresent(UUID.self, forKey: .instanceID)
+        }
+        private enum CodingKeys: String, CodingKey { case id, name, bookmark, instanceID }
+        fileprivate init(id: UUID, name: String, bookmark: Data, instanceID: UUID?) {
+            self.id = id; self.name = name; self.bookmark = bookmark; self.instanceID = instanceID
+        }
+        public var effectiveInstanceID: UUID { instanceID ?? id }
     }
     public var recentProjects: [RecentProject] {
         guard let data = settings.data(forKey: "workbench.recentProjects.v1"), data.count <= 262_144,
@@ -296,14 +309,15 @@ public final class ProjectSession {
     private func rememberProject() {
         guard !isInternalWorkspace else { return }
         guard let manifest, let bookmark = projectLease?.bookmark else { return }
-        var entries = recentProjects.filter { $0.id != manifest.id }
-        entries.insert(RecentProject(id: manifest.id, name: manifest.name, bookmark: bookmark), at: 0)
+        var entries = recentProjects.filter { $0.effectiveInstanceID != manifest.effectiveInstanceID }
+        entries.insert(RecentProject(id: manifest.effectiveInstanceID, name: manifest.name, bookmark: bookmark,
+                                     instanceID: manifest.instanceID), at: 0)
         if let data = try? JSONEncoder().encode(Array(entries.prefix(10))), data.count <= 262_144 {
             settings.set(data, forKey: "workbench.recentProjects.v1")
         }
     }
     @discardableResult public func openRecentProject(id: UUID) async -> Bool {
-        guard let entry = recentProjects.first(where: { $0.id == id }), !isChangingProject,
+        guard let entry = recentProjects.first(where: { $0.effectiveInstanceID == id }), !isChangingProject,
               await requestClose() else { return false }
         errorMessage = nil
         isChangingProject = true

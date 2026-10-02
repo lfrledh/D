@@ -16,6 +16,14 @@ public struct DualWorkbenchView: View {
     @State private var fullLibraryState = SharedLibraryBrowserState()
     @State private var compactLibraryState = SharedLibraryBrowserState()
     @State private var previewAsset: LibraryAssetPreview?
+    private struct FilesRoute: Identifiable {
+        let store: ProjectStore
+        let instanceID: UUID
+        let assetID: UUID?
+        var id: String { instanceID.uuidString + (assetID?.uuidString ?? "project") }
+    }
+    @State private var filesRoute: FilesRoute?
+    @State private var pendingFilesRoute: FilesRoute?
     private enum LibraryDestination { case asset(LibraryAssetPreview), info(SharedLibraryBrowserEntry), models }
     @State private var pendingLibraryDestination: LibraryDestination?
     @State private var returnToLibrary = false
@@ -67,10 +75,20 @@ public struct DualWorkbenchView: View {
                 if entry == .workflow {
                     Button(canvasModel.manifest?.name ?? "流程项目") { projectsVisible = true }
                 }
+                if let manifest = canvasModel.manifest, let store = canvasModel.projectSession.currentStore {
+                    Button(baselineText(language, "files.title", fallback: "项目文件")) {
+                        filesRoute = .init(store: store, instanceID: manifest.effectiveInstanceID, assetID: nil)
+                    }.accessibilityIdentifier("project-files-open")
+                }
                 Button { libraryVisible = true } label: { Label(baselineText(language, "label.433bdcb25776", fallback: "资料库"), systemImage: "square.stack.3d.up") }
                     .accessibilityIdentifier("shared-library-open")
                 Menu {
                     Button(baselineText(language, "label.a6b4608f6c77", fallback: "项目…")) { projectsVisible = true }
+                    if let manifest = canvasModel.manifest, let store = canvasModel.projectSession.currentStore {
+                        Button(baselineText(language, "files.title", fallback: "项目文件…")) {
+                            filesRoute = .init(store: store, instanceID: manifest.effectiveInstanceID, assetID: nil)
+                        }
+                    }
                     Button(baselineText(language, "label.7e060553182c", fallback: "创作文稿与原有编辑器…")) { compatibilityVisible = true }
                     Button(baselineText(language, "label.17bb056515cd", fallback: "模型下载与安装…")) { library.isPresented = true }
                     Button(baselineText(language, "label.f1df761fb2f8", fallback: "显示语言…")) { languageVisible = true }
@@ -86,7 +104,13 @@ public struct DualWorkbenchView: View {
                     .opacity(entry == .quick ? 1 : 0).allowsHitTesting(entry == .quick).accessibilityHidden(entry != .quick)
                 WorkflowHostView(model: canvasModel, nodeTags: nodeTags, onQuickUse: useNode,
                     libraryContent: { point, close in AnyView(libraryBrowser(compact: true, at: point, onBack: close)) },
-                    onSharedAssetDrop: acceptSharedAssetDrop)
+                    onSharedAssetDrop: acceptSharedAssetDrop,
+                    acceptsLegacyAsset: { projectID, assetID in
+                        guard let instance = SharedLibraryProjection.resolvedInstanceID(projectID: projectID,
+                            instanceID: nil, projects: projects) else { return false }
+                        return canvasModel.projectSession.workflow?.projectInstanceID == instance &&
+                            projects.contains(where: { $0.effectiveInstanceID == instance && $0.assets.contains(where: { $0.id == assetID }) })
+                    })
                     .opacity(entry == .workflow ? 1 : 0).allowsHitTesting(entry == .workflow).accessibilityHidden(entry != .workflow)
             }
 
@@ -109,6 +133,21 @@ public struct DualWorkbenchView: View {
                     Text(error).foregroundStyle(.red).textSelection(.enabled).padding()
                 }
             }.frame(minWidth: 640, minHeight: 420)
+        }
+        .sheet(item: $filesRoute) { route in
+            ProjectFilesView(store: route.store, instanceID: route.instanceID,
+                isActive: { (canvasModel.projectSession.currentStore === route.store &&
+                    canvasModel.manifest?.effectiveInstanceID == route.instanceID) ||
+                    (quick.store === route.store && projects.contains(where: { $0.effectiveInstanceID == route.instanceID })) },
+                modelLibrary: library.library,
+                onOpenRestored: { url in
+                    await model.openProject(at: url)
+                    if model.projectSession.currentStore?.rootURL.standardizedFileURL == url.standardizedFileURL {
+                        filesRoute = nil; navigate(to: .workflow); await refreshLibrary(checkModels: false)
+                        return nil
+                    }
+                    return model.errorMessage ?? "无法打开已恢复项目；请使用项目入口重新选择。"
+                }, onClose: { filesRoute = nil }, initialAssetID: route.assetID)
         }
         .sheet(isPresented: $compatibilityVisible) {
             VStack(spacing: 0) {
@@ -152,10 +191,21 @@ public struct DualWorkbenchView: View {
         .onChange(of: library.isPresented) { _, presented in if !presented { Task { await refreshLibrary(checkModels: false) } } }
         .onChange(of: installationStates) { _, _ in Task { await refreshLibrary(checkModels: false) } }
         .onChange(of: model.manifest?.revision) { _, _ in Task { await refreshLibrary(checkModels: false) } }
-        .sheet(item: $previewAsset, onDismiss: restoreLibraryIfNeeded) { value in
+        .sheet(item: $previewAsset, onDismiss: {
+            if let pendingFilesRoute { filesRoute = pendingFilesRoute; self.pendingFilesRoute = nil }
+            else { restoreLibraryIfNeeded() }
+        }) { value in
             VStack {
                 HStack { Button(baselineText(language, "label.572cf45ba436", fallback: "返回")) { previewAsset = nil }.keyboardShortcut(.cancelAction); Spacer() }
                 QuickAssetPreview(store: value.store, reference: value.reference, compact: false)
+                Button(baselineText(language, "files.inspect", fallback: "查看文件位置")) {
+                    Task {
+                        let snapshot = await value.store.snapshot()
+                        pendingFilesRoute = .init(store: value.store, instanceID: snapshot.effectiveInstanceID,
+                            assetID: value.reference.assetID)
+                        previewAsset = nil
+                    }
+                }
             }.padding(20).frame(minWidth: 560, minHeight: 360)
         }
         .sheet(item: $libraryInfo, onDismiss: restoreLibraryIfNeeded) { value in
@@ -244,15 +294,29 @@ public struct DualWorkbenchView: View {
         }
         quick.useSettings(node); navigate(to: .quick)
     }
-    private func store(for projectID: UUID) async throws -> ProjectStore {
-        if await quick.store.snapshot().id == projectID { return quick.store }
-        if let store = model.projectSession.currentStore, await store.snapshot().id == projectID { return store }
-        throw WorkflowIssue("所属项目已关闭，请重新打开；没有扩大素材访问范围。")
+    private func store(for projectID: UUID, instanceID: UUID? = nil) async throws -> ProjectStore {
+        var candidates: [(ProjectStore, ProjectManifest)] = [(quick.store, await quick.store.snapshot())]
+        if let current = model.projectSession.currentStore, current !== quick.store {
+            candidates.append((current, await current.snapshot()))
+        }
+        guard let resolved = SharedLibraryProjection.resolvedInstanceID(projectID: projectID,
+            instanceID: instanceID, projects: candidates.map { $0.1 }),
+            let found = candidates.first(where: { $0.1.effectiveInstanceID == resolved }) else {
+            throw WorkflowIssue(instanceID == nil ? "旧素材拖放缺少实例身份；同一项目有多个实例，请从当前资料库重新拖放。" : "所属项目实例已关闭，请重新打开。")
+        }
+        return found.0
+    }
+    private func assetIdentity(_ selection: SharedLibraryBrowserSelection) -> (UUID, UUID?, UUID)? {
+        switch selection {
+        case .asset(let projectID, let assetID): return (projectID, nil, assetID)
+        case .assetInstance(let projectID, let instanceID, let assetID): return (projectID, instanceID, assetID)
+        default: return nil
+        }
     }
     private func previewLibraryEntry(_ value: SharedLibraryBrowserEntry) async {
-        guard case .asset(let projectID, let assetID) = value.selection else { presentLibraryDestination(.info(value)); return }
-        do { let source = try await store(for: projectID)
-            let ref = try await source.pinWorkflowAsset(assetID)
+        guard let identity = assetIdentity(value.selection) else { presentLibraryDestination(.info(value)); return }
+        do { let source = try await store(for: identity.0, instanceID: identity.1)
+            let ref = try await source.pinWorkflowAsset(identity.2)
             presentLibraryDestination(.asset(.init(store: source, reference: ref)))
         } catch { issue = error.localizedDescription }
     }
@@ -272,10 +336,9 @@ public struct DualWorkbenchView: View {
         } catch { issue = error.localizedDescription }
     }
     private func importLibraryAsset() async {
-        let panel = NSOpenPanel(); panel.canChooseDirectories = false; panel.canChooseFiles = true
-        guard await panel.begin() == .OK, let url = panel.url else { return }
+        guard let (url, mode) = await NativeAssetImportPanel.choose(language: language) else { return }
         let scope = url.startAccessingSecurityScopedResource(); defer { if scope { url.stopAccessingSecurityScopedResource() } }
-        do { _ = try await quick.store.importWorkflowMediaFile(at: url); await refreshLibrary(checkModels: false) }
+        do { _ = try await quick.store.importWorkflowMediaFile(at: url, mode: mode); await refreshLibrary(checkModels: false) }
         catch { issue = error.localizedDescription }
     }
     private func addLibraryEntry(_ value: SharedLibraryBrowserEntry, at point: CGPoint) async {
@@ -290,9 +353,10 @@ public struct DualWorkbenchView: View {
             case .tool(let reference):
                 guard let tool = controller.tools.first(where: { $0.id == reference.id && $0.version == reference.version && (try? WorkflowPlanCompiler.digest($0)) == reference.digest }) else { throw WorkflowIssue("工具不属于当前项目的固定版本。") }
                 controller.addTool(tool, x: point.x, y: point.y)
-            case .asset(let projectID, let assetID):
-                let source = try await store(for: projectID)
-                let ref = try await source.pinWorkflowAsset(assetID)
+            case .asset, .assetInstance:
+                guard let identity = assetIdentity(value.selection) else { throw WorkflowIssue("素材身份无效。") }
+                let source = try await store(for: identity.0, instanceID: identity.1)
+                let ref = try await source.pinWorkflowAsset(identity.2)
                 let copied = try await copiedReference(ref, from: source, to: controller.services.store)
                 guard target.projectSession.workflow === controller else { throw WorkflowIssue("目标项目已改变。") }
                 try await controller.insertQuickResult(copied, target: scope, x: point.x, y: point.y)
@@ -326,13 +390,16 @@ public struct DualWorkbenchView: View {
         }
         return try replace(value)
     }
-    private func acceptSharedAssetDrop(_ projectID: UUID, _ assetID: UUID, _ point: CGPoint, _ target: WorkflowCanvasInsertionTarget) -> Bool {
+    private func acceptSharedAssetDrop(_ projectID: UUID, _ instanceID: UUID?, _ assetID: UUID,
+                                       _ point: CGPoint, _ target: WorkflowCanvasInsertionTarget) -> Bool {
         guard let controller = canvasModel.projectSession.workflow, controller.isCurrent(target),
-              projects.contains(where: { $0.id == projectID && $0.assets.contains(where: { $0.id == assetID }) }) else { return false }
+              let resolved = SharedLibraryProjection.resolvedInstanceID(projectID: projectID,
+                  instanceID: instanceID, projects: projects),
+              projects.contains(where: { $0.effectiveInstanceID == resolved && $0.assets.contains(where: { $0.id == assetID }) }) else { return false }
         let owner = canvasModel.projectSession
         Task {
             do {
-                let source = try await store(for: projectID)
+                let source = try await store(for: projectID, instanceID: resolved)
                 let ref = try await source.pinWorkflowAsset(assetID)
                 let copied = try await copiedReference(ref, from: source, to: controller.services.store)
                 guard owner.workflow === controller, controller.isCurrent(target) else { throw WorkflowIssue("拖放期间目标已改变，未插入其他流程。") }

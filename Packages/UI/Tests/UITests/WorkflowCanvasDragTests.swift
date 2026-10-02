@@ -286,6 +286,7 @@ struct WorkflowCanvasDragTests {
             .operation(id: "d.image.generate", modelID: nil),
             .operation(id: "d.model.language", modelID: "org/model"),
             .asset(projectID: UUID(), assetID: UUID()),
+            .assetInstance(projectID: UUID(), instanceID: UUID(), assetID: UUID()),
             .output(rootGraphID: rootGraphID, bodyPath: [], graphID: graphID,
                     revision: revision, nodeID: nodeID, port: "output"),
         ]

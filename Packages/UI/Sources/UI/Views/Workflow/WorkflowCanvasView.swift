@@ -29,7 +29,8 @@ public struct WorkflowCanvasView: View {
     private let onDropFile: (URL) -> Bool
     private let onQuickUse: ((WorkflowNode) -> Void)?
     private let libraryContent: ((CGPoint, @escaping () -> Void) -> AnyView)?
-    private let onSharedAssetDrop: ((UUID, UUID, CGPoint, WorkflowCanvasInsertionTarget) -> Bool)?
+    private let onSharedAssetDrop: ((UUID, UUID?, UUID, CGPoint, WorkflowCanvasInsertionTarget) -> Bool)?
+    private let acceptsLegacyAsset: ((UUID, UUID) -> Bool)?
     private let onDestination: () -> Void
     private let onPublishText: () -> Void
     private let onReturnText: (WorkflowAssetReference) -> Void
@@ -89,7 +90,8 @@ public struct WorkflowCanvasView: View {
         onDropFile: @escaping (URL) -> Bool = { _ in false },
         onQuickUse: ((WorkflowNode) -> Void)? = nil,
         libraryContent: ((CGPoint, @escaping () -> Void) -> AnyView)? = nil,
-        onSharedAssetDrop: ((UUID, UUID, CGPoint, WorkflowCanvasInsertionTarget) -> Bool)? = nil
+        onSharedAssetDrop: ((UUID, UUID?, UUID, CGPoint, WorkflowCanvasInsertionTarget) -> Bool)? = nil,
+        acceptsLegacyAsset: ((UUID, UUID) -> Bool)? = nil
     ) {
         self.controller = controller
         self.nodeTags = nodeTags ?? ModelNodeTagStore()
@@ -101,6 +103,7 @@ public struct WorkflowCanvasView: View {
         self.onImportAsset = onImportAsset
         self.onDropFile = onDropFile
         self.onSharedAssetDrop = onSharedAssetDrop
+        self.acceptsLegacyAsset = acceptsLegacyAsset
         self.onQuickUse = onQuickUse; self.libraryContent = libraryContent
         self.onDestination = onDestination
         self.onPublishText = onPublishText
@@ -229,6 +232,7 @@ public struct WorkflowCanvasView: View {
                     onDropItem: dropItem,
                     onBindAsset: { project, asset, node in
                         guard controller.canEditCanvas, controller.projectID == project,
+                              acceptsLegacyAsset?(project, asset) ?? true,
                               let target = controller.assetBindingTarget(nodeID: node) else { return false }
                         Task { await controller.bindLibraryAsset(projectID: project, assetID: asset, target: target) }
                         return true
@@ -297,13 +301,11 @@ public struct WorkflowCanvasView: View {
             controller.addNode(operationID: id, modelID: model, x: point.x, y: point.y)
             showInspector = true; return controller.errorMessage == nil
         case .asset(let project, let asset):
-            if controller.projectID != project, let onSharedAssetDrop, let target = controller.canvasInsertionTarget() {
-                return onSharedAssetDrop(project, asset, point, target)
-            }
-            guard controller.projectID == project, controller.availableAssets.contains(where: { $0.id == asset }) else { return false }
-            guard let target = controller.canvasInsertionTarget() else { return false }
-            Task { await controller.addAssetNode(projectID: project, assetID: asset, x: point.x, y: point.y, target: target) }
-            return true
+            guard let onSharedAssetDrop, let target = controller.canvasInsertionTarget() else { return false }
+            return onSharedAssetDrop(project, nil, asset, point, target)
+        case .assetInstance(let project, let instance, let asset):
+            guard let onSharedAssetDrop, let target = controller.canvasInsertionTarget() else { return false }
+            return onSharedAssetDrop(project, instance, asset, point, target)
         case .tool(let reference):
             guard let tool = controller.tools.first(where: { $0.id == reference.id && $0.version == reference.version && (try? WorkflowPlanCompiler.digest($0)) == reference.digest }) else { return false }
             controller.addTool(tool, x: point.x, y: point.y)

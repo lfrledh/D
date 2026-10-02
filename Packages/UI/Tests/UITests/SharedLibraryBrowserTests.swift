@@ -10,6 +10,37 @@ import UniformTypeIdentifiers
 
 @Suite @MainActor
 struct SharedLibraryBrowserTests {
+    @Test func restoredInstanceHasSeparateRowsAndDragWhileTagKeyRemainsLogical() async throws {
+        let root = URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory())
+            .appendingPathComponent("library-instances-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = root.appendingPathComponent("source.txt")
+        try Data("one content version".utf8).write(to: source)
+        let original = try await ProjectStore.create(at: root.appendingPathComponent("Original.dproject"), name: "Original")
+        let asset = try await original.importWorkflowMediaFile(at: source)
+        let backup = root.appendingPathComponent("Backup.dbackup")
+        _ = try await original.createBackup(at: backup)
+        _ = try await ProjectStore.restoreBackup(at: backup, to: root.appendingPathComponent("Restored.dproject"))
+        let restored = try await ProjectStore.open(at: root.appendingPathComponent("Restored.dproject"))
+        let first = await original.snapshot(), second = await restored.snapshot()
+        #expect(first.id == second.id)
+        #expect(first.effectiveInstanceID != second.effectiveInstanceID)
+        let rows = SharedLibraryProjection.entries(models: [], readiness: [:], tools: [],
+            projects: [first, second], language: nil).filter { $0.item.kind == .asset }
+        #expect(rows.count == 2)
+        #expect(rows[0].id != rows[1].id)
+        #expect(rows[0].item.key == rows[1].item.key)
+        #expect(rows[0].item.key == "asset:\(first.id.uuidString):\(asset.asset.id.uuidString)")
+        #expect(SharedLibraryProjection.resolvedInstanceID(projectID: first.id, instanceID: nil,
+            projects: [first, second]) == nil)
+        #expect(SharedLibraryProjection.resolvedInstanceID(projectID: first.id,
+            instanceID: second.effectiveInstanceID, projects: [first, second]) == second.effectiveInstanceID)
+        let payload = try #require(SharedLibraryBrowserLogic.canvasTransfer(for: rows[1]))
+        #expect(try WorkflowCanvasTransfer.decode(payload.encoded()) ==
+            .assetInstance(projectID: first.id, instanceID: second.effectiveInstanceID, assetID: asset.asset.id))
+        try await restored.close(); try await original.close()
+    }
     @Test func externalVideoModelsKeepExactQuickAndCanvasOperationBindings() throws {
         let profiles = ExternalVideoExecutionProfile.allCases
         let choices = profiles.map { WorkflowModelChoice(id: "video:" + $0.modelIdentity, kind: .video, displayName: "registered copy") }
