@@ -32,6 +32,11 @@ struct ModelRequiredTree: Sendable, Equatable {
     }
 }
 
+/// The replacement index may already be visible even when its directory sync fails.
+enum ModelAtomicWriteError: Error, Sendable {
+    case publishedButUnsynced(ModelLibraryError)
+}
+
 /// Immutable descriptor ownership; all operations remain anchored even during directory replacement.
 final class ModelDirectory: Sendable {
     let url: URL
@@ -155,7 +160,8 @@ final class ModelDirectory: Sendable {
         return result
     }
 
-    func atomicWrite(_ data: Data, to path: String, replace: Bool = true) throws {
+    func atomicWrite(_ data: Data, to path: String, replace: Bool = true,
+                     afterRename: (@Sendable () throws -> Void)? = nil) throws {
         try validateLocation()
         let (parent, name) = try parent(path, create: true)
         defer { Darwin.close(parent) }
@@ -173,8 +179,11 @@ final class ModelDirectory: Sendable {
         }
         try validateLocation()
         let flags: UInt32 = replace ? 0 : UInt32(RENAME_EXCL)
-        guard renameatx_np(parent, temporary, parent, name, flags) == 0, fsync(parent) == 0 else {
-            throw Self.failure("提交状态文件")
+        guard renameatx_np(parent, temporary, parent, name, flags) == 0 else { throw Self.failure("提交状态文件") }
+        do { try afterRename?() }
+        catch { throw ModelAtomicWriteError.publishedButUnsynced(.storage("状态文件已替换，但目录同步未确认：\(error.localizedDescription)")) }
+        guard fsync(parent) == 0 else {
+            throw ModelAtomicWriteError.publishedButUnsynced(Self.failure("状态文件已替换，但目录同步失败"))
         }
     }
 
@@ -246,6 +255,62 @@ final class ModelDirectory: Sendable {
             throw ModelLibraryError.integrity("模型必要目录或文件在校验期间发生变化。")
         }
         return before
+    }
+
+    /// Copy only catalog paths into a fresh private stage. The callback records
+    /// identities before and after writes so cancellation cleanup never guesses.
+    func copyRequired(_ files: [ModelFile], from source: ModelDirectory, expected: ModelRequiredTree,
+                      progress: @Sendable (String, UInt64, ModelFileIdentity) async throws -> Void) async throws {
+        guard try source.requiredTree(paths: Set(files.map(\.path))) == expected else {
+            throw ModelLibraryError.integrity("复制前原始模型必要文件已改变。")
+        }
+        var buffer = [UInt8](repeating: 0, count: 4 * 1024 * 1024)
+        var total: UInt64 = 0
+        for file in files {
+            try Task.checkCancellation()
+            let input = try source.openFile(file.path)
+            defer { Darwin.close(input) }
+            guard try Self.identity(input, regular: true) == expected.files[file.path] else {
+                throw ModelLibraryError.integrity("复制时原始文件已改变：\(file.path)")
+            }
+            let output = try openFile(file.path, writing: true, create: true)
+            defer { Darwin.close(output) }
+            let created = try Self.identity(output, regular: true)
+            try await progress(file.path, total, created)
+            var remaining = file.size
+            while remaining > 0 {
+                try Task.checkCancellation()
+                let count = buffer.withUnsafeMutableBytes {
+                    Darwin.read(input, $0.baseAddress, min($0.count, Int(remaining)))
+                }
+                if count < 0 && errno == EINTR { continue }
+                guard count > 0 else { throw Self.failure("读取原始模型文件") }
+                try Self.write(Data(buffer.prefix(count)), to: output)
+                remaining -= UInt64(count); total += UInt64(count)
+                let current = try Self.identity(output, regular: true)
+                guard current.sameNode(created) else { throw ModelLibraryError.integrity("复制目标已被替换。") }
+                try await progress(file.path, total, current)
+            }
+            guard fsync(output) == 0, try Self.identity(input, regular: true) == expected.files[file.path] else {
+                throw ModelLibraryError.integrity("复制期间原始文件改变或目标保存失败：\(file.path)")
+            }
+        }
+        guard try source.requiredTree(paths: Set(files.map(\.path))) == expected else {
+            throw ModelLibraryError.integrity("复制期间原始模型必要文件已改变。")
+        }
+        // File fsync does not persist the directory entries naming those files.
+        // Flush known children before their parents while this is still a private
+        // stage, so an error cannot publish an installed index entry.
+        let copied = try requiredTree(paths: Set(files.map(\.path)))
+        for path in copied.directories.keys.sorted(by: {
+            let left = $0.split(separator: "/").count, right = $1.split(separator: "/").count
+            return left == right ? $0 < $1 : left > right
+        }) {
+            let directory = try openDirectory(path)
+            defer { Darwin.close(directory) }
+            guard fsync(directory) == 0 else { throw Self.failure("同步复制模型子目录") }
+        }
+        guard fsync(descriptor) == 0 else { throw Self.failure("同步复制模型内容目录") }
     }
 
     func verify(_ files: [ModelFile]) throws -> [String: ModelFileIdentity] {

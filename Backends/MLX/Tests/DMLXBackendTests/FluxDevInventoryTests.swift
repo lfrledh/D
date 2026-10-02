@@ -43,7 +43,7 @@ struct FluxDevInventoryTests {
             _ = try LocalFluxDevInventory.inspect(missingFixture.request(), manifest: missingFixture.manifest)
             Issue.record("Missing Dev text encoder shard unexpectedly passed admission")
         } catch InferenceFailure.invalidRequest(let reason) {
-            #expect(reason.contains("missing manifest files"))
+            #expect(reason.contains("Cannot open image model file"))
         } catch {
             Issue.record("Expected missing-file admission failure, received \(error)")
         }
@@ -69,6 +69,22 @@ struct FluxDevInventoryTests {
         } catch {
             Issue.record("Expected digest algorithm failure, received \(error)")
         }
+    }
+
+    @Test("Dev inventory ignores unrelated files and broken links but detects required changes")
+    func externalExtras() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        try Data("notes".utf8).write(to: fixture.directory.appendingPathComponent("README.md"))
+        try FileManager.default.createSymbolicLink(
+            at: fixture.directory.appendingPathComponent("unrelated-link"),
+            withDestinationURL: fixture.directory.appendingPathComponent("absent"))
+        let inventory = try LocalFluxDevInventory.inspect(fixture.request(), manifest: fixture.manifest)
+        try Data("cache".utf8).write(to: fixture.directory.appendingPathComponent("tokenizer/unrelated.cache"))
+        try inventory.verifyContents()
+        let required = fixture.directory.appendingPathComponent("model_index.json")
+        try Data("changed".utf8).write(to: required)
+        #expect(throws: (any Error).self) { try inventory.verifyContents() }
     }
 
     @Test("Layered budget includes every ordered reference and stays below resident floor")

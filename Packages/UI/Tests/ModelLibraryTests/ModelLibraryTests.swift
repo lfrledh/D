@@ -6,6 +6,22 @@ import Testing
 
 @Suite(.serialized)
 struct ModelLibraryTests {
+    private func expectSameVerifiedSource(_ library: ModelLibrary, id: ModelID,
+                                          fixture: LibraryFixture, before: ModelRequiredTree? = nil) async throws {
+        let resolved = try await library.resolve(id).directory
+        let source = try ModelDirectory(fixture.source)
+        let actual = try ModelDirectory(resolved)
+        let paths = Set(fixture.entry.files.map(\.path))
+        let sourceTree = try source.verifyRequired(fixture.entry.files)
+        let resolvedTree = try actual.verifyRequired(fixture.entry.files)
+        print("source=\(fixture.source.absoluteString) hasDirectoryPath=\(fixture.source.hasDirectoryPath) root=\(source.identity.device):\(source.identity.inode) required=\(sourceTree)")
+        print("resolved=\(resolved.absoluteString) hasDirectoryPath=\(resolved.hasDirectoryPath) root=\(actual.identity.device):\(actual.identity.inode) required=\(resolvedTree)")
+        #expect(resolved.path == fixture.source.path)
+        #expect(actual.identity.sameNode(source.identity))
+        #expect(resolvedTree == sourceTree)
+        #expect(try actual.requiredTree(paths: paths) == sourceTree)
+        if let before { #expect(sourceTree == before) }
+    }
     @Test func bundledCatalogMatchesCanonicalBackendManifest() throws {
         let here = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
         let repo = here.deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
@@ -232,20 +248,276 @@ struct ModelLibraryTests {
         try await library.shutdown()
     }
 
-    @Test(arguments: ["symlink", "hardlink", "empty-directory", "extra-file"])
-    func verificationRejectsUnknownContent(kind: String) async throws {
+    @Test(arguments: ["symlink", "empty-directory", "extra-file"])
+    func externalVerificationIgnoresUnrelatedContent(kind: String) async throws {
         let fixture = try LibraryFixture(); defer { fixture.clean() }
         let extra = fixture.source.appendingPathComponent("unknown")
         switch kind {
-        case "symlink": try FileManager.default.createSymbolicLink(at: extra, withDestinationURL: fixture.source.appendingPathComponent("config.json"))
-        case "hardlink": try FileManager.default.linkItem(at: fixture.source.appendingPathComponent("config.json"), to: extra)
+        case "symlink": try FileManager.default.createSymbolicLink(at: extra, withDestinationURL: fixture.source.appendingPathComponent("absent"))
         case "empty-directory": try FileManager.default.createDirectory(at: extra, withIntermediateDirectories: true)
         default: try Data("unknown".utf8).write(to: extra)
         }
         let library = try await fixture.library()
-        await #expect(throws: ModelLibraryError.self) { _ = try await library.registerExisting(at: fixture.source, catalogID: fixture.entry.id) }
+        try await library.configureRoot(at: fixture.destination)
+        let before = try ModelDirectory(fixture.source).verifyRequired(fixture.entry.files)
+        let id = try await library.registerExisting(at: fixture.source, catalogID: fixture.entry.id)
+        try await expectSameVerifiedSource(library, id: id, fixture: fixture, before: before)
+        try Data("later extra".utf8).write(to: fixture.source.appendingPathComponent("README.md"))
+        try await expectSameVerifiedSource(library, id: id, fixture: fixture, before: before)
+        var extraStat = stat()
+        #expect(lstat(extra.path, &extraStat) == 0)
+        let installations = fixture.destination.appendingPathComponent(".d-model-library/Installations")
+        #expect(try FileManager.default.contentsOfDirectory(atPath: installations.path).isEmpty)
+        try await library.shutdown()
+    }
+
+    @Test func requiredLeafHardlinkIsRejected() async throws {
+        let fixture = try LibraryFixture(); defer { fixture.clean() }
+        try FileManager.default.linkItem(at: fixture.source.appendingPathComponent("config.json"),
+                                         to: fixture.source.appendingPathComponent("other-name"))
+        let library = try await fixture.library()
+        await #expect(throws: ModelLibraryError.self) {
+            _ = try await library.registerExisting(at: fixture.source, catalogID: fixture.entry.id)
+        }
+        try await library.shutdown()
+    }
+
+    @Test(arguments: ["missing", "damaged", "symlink", "parent-symlink"])
+    func externalRequiredPathsRemainStrict(kind: String) async throws {
+        let fixture = try LibraryFixture(); defer { fixture.clean() }
+        let target = fixture.source.appendingPathComponent("weights/payload.bin")
+        switch kind {
+        case "missing": try FileManager.default.removeItem(at: target)
+        case "damaged": try Data(repeating: 0, count: 4096).write(to: target)
+        case "symlink":
+            try FileManager.default.removeItem(at: target)
+            try FileManager.default.createSymbolicLink(at: target,
+                withDestinationURL: fixture.root.appendingPathComponent("not-a-model"))
+        default:
+            let parent = fixture.source.appendingPathComponent("weights")
+            let moved = fixture.root.appendingPathComponent("moved-weights")
+            try FileManager.default.moveItem(at: parent, to: moved)
+            try FileManager.default.createSymbolicLink(at: parent, withDestinationURL: moved)
+        }
+        let library = try await fixture.library()
+        await #expect(throws: ModelLibraryError.self) {
+            _ = try await library.registerExisting(at: fixture.source, catalogID: fixture.entry.id)
+        }
         #expect(await library.snapshot().records.first?.state == .failed)
-        #expect(FileManager.default.fileExists(atPath: extra.path))
+        try await library.shutdown()
+    }
+
+    @Test func copiedInstallationIsIndependentAndSurvivesReopen() async throws {
+        let fixture = try LibraryFixture(); defer { fixture.clean() }
+        var library: ModelLibrary? = try await fixture.library()
+        try await library!.configureRoot(at: fixture.destination)
+        let sourceID = try await library!.registerExisting(at: fixture.source, catalogID: fixture.entry.id)
+        let copyID = try await library!.copyExistingToLibrary(sourceID)
+        #expect(copyID != sourceID)
+        let copied = try await library!.resolve(copyID)
+        #expect(copied.directory.path.hasPrefix(fixture.destination.path + "/"))
+        #expect(try ModelDirectory(copied.directory).verify(fixture.entry.files).count == fixture.entry.files.count)
+        let sourceNode = try ModelDirectory(fixture.source).fileIdentity("config.json")
+        let copyNode = try ModelDirectory(copied.directory).fileIdentity("config.json")
+        #expect(!sourceNode.sameNode(copyNode))
+        try Data("changed".utf8).write(to: fixture.source.appendingPathComponent("config.json"))
+        await #expect(throws: ModelLibraryError.self) { _ = try await library!.resolve(sourceID) }
+        #expect(try await library!.resolve(copyID).directory == copied.directory)
+        try await library!.shutdown(); library = nil
+        let reopened = try await fixture.library()
+        #expect(try await reopened.resolve(copyID).directory == copied.directory)
+        try await reopened.shutdown()
+    }
+
+    @Test func copySpaceFailureKeepsReferenceAndCreatesNoManagedRecord() async throws {
+        let fixture = try LibraryFixture(); defer { fixture.clean() }
+        let library = try await fixture.library(availableBytes: 1)
+        try await library.configureRoot(at: fixture.destination)
+        let sourceID = try await library.registerExisting(at: fixture.source, catalogID: fixture.entry.id)
+        await #expect(throws: ModelLibraryError.self) { _ = try await library.copyExistingToLibrary(sourceID) }
+        #expect(await library.snapshot().records.map(\.id) == [sourceID])
+        try await expectSameVerifiedSource(library, id: sourceID, fixture: fixture)
+        try await library.shutdown()
+    }
+
+    @Test func copyIndexFailureRollsBackPublishedContent() async throws {
+        let fixture = try LibraryFixture(); defer { fixture.clean() }
+        let library = try await fixture.library()
+        try await library.configureRoot(at: fixture.destination)
+        let sourceID = try await library.registerExisting(at: fixture.source, catalogID: fixture.entry.id)
+        let index = fixture.state.appendingPathComponent("index.json")
+        let backup = fixture.state.appendingPathComponent("index.backup")
+        try FileManager.default.moveItem(at: index, to: backup)
+        try FileManager.default.createDirectory(at: index, withIntermediateDirectories: false)
+        await #expect(throws: ModelLibraryError.self) { _ = try await library.copyExistingToLibrary(sourceID) }
+        #expect(await library.snapshot().records.map(\.id) == [sourceID])
+        let published = fixture.destination.appendingPathComponent(".d-model-library/Installations")
+        #expect(try FileManager.default.contentsOfDirectory(atPath: published.path).isEmpty)
+        try await expectSameVerifiedSource(library, id: sourceID, fixture: fixture)
+        try FileManager.default.removeItem(at: index)
+        try FileManager.default.moveItem(at: backup, to: index)
+        try await library.shutdown()
+    }
+
+    @Test func copyIndexAfterRenameFailureRetainsPublishedContentOnReopen() async throws {
+        let fixture = try LibraryFixture(); defer { fixture.clean() }
+        var library: ModelLibrary? = try await fixture.library()
+        try await library!.configureRoot(at: fixture.destination)
+        let sourceID = try await library!.registerExisting(at: fixture.source, catalogID: fixture.entry.id)
+        do {
+            _ = try await library!.copyExistingToLibrary(sourceID, checkpoint: { _ in }, afterIndexRename: {
+                throw ModelLibraryError.storage("injected after index rename")
+            })
+            Issue.record("The injected index sync failure must be reported")
+        } catch ModelLibraryError.storage(let reason) {
+            #expect(reason.contains("索引目录同步未确认"))
+            #expect(reason.contains("injected after index rename"))
+        }
+        let records = await library!.snapshot().records
+        let copy = try #require(records.first { $0.storage == .managed })
+        #expect(records.count == 2)
+        let published = try #require(copy.directory)
+        #expect(try ModelDirectory(published).verify(fixture.entry.files).count == fixture.entry.files.count)
+        let index = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: fixture.state.appendingPathComponent("index.json"))) as? [String: Any])
+        let indexedRecords = try #require(index["records"] as? [[String: Any]])
+        #expect(indexedRecords.count == 2)
+        #expect(try String(contentsOf: fixture.state.appendingPathComponent("index.json"), encoding: .utf8).contains(copy.id.description))
+        try await expectSameVerifiedSource(library!, id: sourceID, fixture: fixture)
+        try await library!.shutdown(); library = nil
+        let reopened = try await fixture.library()
+        #expect(await reopened.snapshot().records.count == 2)
+        #expect(try await reopened.resolve(copy.id).directory.path == published.path)
+        #expect(try ModelDirectory(published).verify(fixture.entry.files).count == fixture.entry.files.count)
+        try await reopened.shutdown()
+    }
+
+    @Test func legacyNestedExternalDirectoryMapMigratesOnlyAfterVerifiedLeaves() async throws {
+        let fixture = try LibraryFixture(); defer { fixture.clean() }
+        var library: ModelLibrary? = try await fixture.library()
+        let id = try await library!.registerExisting(at: fixture.source, catalogID: fixture.entry.id)
+        try await library!.shutdown(); library = nil
+        let indexURL = fixture.state.appendingPathComponent("index.json")
+        func emptyDirectoryMap() throws {
+            var index = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: indexURL)) as? [String: Any])
+            var records = try #require(index["records"] as? [[String: Any]])
+            records[0]["verifiedDirectories"] = [String: Any]()
+            index["records"] = records
+            try JSONSerialization.data(withJSONObject: index, options: [.sortedKeys]).write(to: indexURL)
+        }
+        try emptyDirectoryMap()
+        library = try await fixture.library()
+        try await expectSameVerifiedSource(library!, id: id, fixture: fixture)
+        let migrated = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: indexURL)) as? [String: Any])
+        let records = try #require(migrated["records"] as? [[String: Any]])
+        let directories = try #require(records[0]["verifiedDirectories"] as? [String: Any])
+        #expect(Set(directories.keys) == ["weights"])
+        try await library!.shutdown(); library = nil
+        try emptyDirectoryMap()
+        try Data(repeating: 0, count: fixture.contents["weights/payload.bin"]!.count)
+            .write(to: fixture.source.appendingPathComponent("weights/payload.bin"))
+        let damaged = try await fixture.library()
+        await #expect(throws: ModelLibraryError.self) { _ = try await damaged.resolve(id) }
+        #expect(await damaged.snapshot().records.first?.activeLeaseCount == 0)
+        try await damaged.shutdown()
+    }
+
+    @Test func rawBackupLeasePinsExternalRecordAndErrorsLeaveNoLease() async throws {
+        let fixture = try LibraryFixture(); defer { fixture.clean() }
+        let raw = ModelCatalogEntry(id: "raw-fixture", title: "raw fixture", repository: fixture.entry.repository,
+            revision: fixture.entry.revision, files: fixture.entry.files, preparation: .required)
+        let library = try await ModelLibrary(stateDirectory: fixture.state, catalog: [raw])
+        let id = try await library.registerExisting(at: fixture.source, catalogID: raw.id)
+        #expect(await library.snapshot().records.first?.state == .preparationRequired)
+        await #expect(throws: ModelLibraryError.self) { _ = try await library.acquire(id) }
+        let lease = try await library.acquireForBackup(id)
+        #expect(lease.reference.directory.path == fixture.source.path)
+        #expect(await library.snapshot().records.first?.activeLeaseCount == 1)
+        let candidate = fixture.root.appendingPathComponent("candidate")
+        try fixture.writeModel(at: candidate)
+        await #expect(throws: ModelLibraryError.self) { try await library.rebind(id, to: candidate) }
+        await #expect(throws: ModelLibraryError.self) { try await library.remove(id) }
+        await library.release(lease)
+        #expect(await library.snapshot().records.first?.activeLeaseCount == 0)
+        try await library.rebind(id, to: candidate)
+        // Moving a raw resource does not make it inference-ready. Its backup
+        // lease must nevertheless resolve the verified new directory.
+        await #expect(throws: ModelLibraryError.self) { _ = try await library.resolve(id) }
+        let movedLease = try await library.acquireForBackup(id)
+        #expect(movedLease.reference.directory.path == candidate.path)
+        await library.release(movedLease)
+        try await library.remove(id)
+        await #expect(throws: ModelLibraryError.self) { _ = try await library.acquireForBackup(id) }
+        #expect(await library.snapshot().records.isEmpty)
+        try await library.shutdown()
+    }
+
+    @Test func failedVerificationCannotAcquireBackupLease() async throws {
+        let fixture = try LibraryFixture(); defer { fixture.clean() }
+        try Data(repeating: 0, count: fixture.contents["weights/payload.bin"]!.count)
+            .write(to: fixture.source.appendingPathComponent("weights/payload.bin"))
+        let library = try await fixture.library()
+        await #expect(throws: ModelLibraryError.self) {
+            _ = try await library.registerExisting(at: fixture.source, catalogID: fixture.entry.id)
+        }
+        let record = try #require(await library.snapshot().records.first)
+        #expect(record.state == .failed)
+        await #expect(throws: ModelLibraryError.self) { _ = try await library.acquireForBackup(record.id) }
+        #expect(await library.snapshot().records.first?.activeLeaseCount == 0)
+        try await library.shutdown()
+    }
+
+    @Test func interruptedDownloadCannotAcquireBackupLease() async throws {
+        let fixture = try LibraryFixture(); defer { fixture.clean() }
+        var library: ModelLibrary? = try await fixture.library()
+        let id = try await library!.registerExisting(at: fixture.source, catalogID: fixture.entry.id)
+        try await library!.shutdown(); library = nil
+        let indexURL = fixture.state.appendingPathComponent("index.json")
+        var index = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: indexURL)) as? [String: Any])
+        var records = try #require(index["records"] as? [[String: Any]])
+        var record = try #require(records[0]["record"] as? [String: Any])
+        record["state"] = "downloading"
+        records[0]["record"] = record; index["records"] = records
+        try JSONSerialization.data(withJSONObject: index, options: [.sortedKeys]).write(to: indexURL)
+        let reopened = try await fixture.library()
+        #expect(await reopened.snapshot().records.first?.state == .paused)
+        await #expect(throws: ModelLibraryError.self) { _ = try await reopened.acquireForBackup(id) }
+        #expect(await reopened.snapshot().records.first?.activeLeaseCount == 0)
+        try await reopened.shutdown()
+    }
+
+    @Test func copyCancellationAfterFirstWriteRemovesOnlyItsStage() async throws {
+        let fixture = try LibraryFixture(); defer { fixture.clean() }
+        let library = try await fixture.library()
+        try await library.configureRoot(at: fixture.destination)
+        let sourceID = try await library.registerExisting(at: fixture.source, catalogID: fixture.entry.id)
+        await #expect(throws: CancellationError.self) {
+            _ = try await library.copyExistingToLibrary(sourceID, checkpoint: { bytes in
+                if bytes > 0 { throw CancellationError() }
+            })
+        }
+        #expect(await library.snapshot().records.map(\.id) == [sourceID])
+        let managed = fixture.destination.appendingPathComponent(".d-model-library")
+        #expect(try FileManager.default.contentsOfDirectory(atPath: managed.appendingPathComponent("Installations").path).isEmpty)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: managed.appendingPathComponent("Staging").path).isEmpty)
+        try await expectSameVerifiedSource(library, id: sourceID, fixture: fixture)
+        try await library.shutdown()
+    }
+
+    @Test func sourceChangeDuringCopyCannotPublishManagedInstallation() async throws {
+        let fixture = try LibraryFixture(); defer { fixture.clean() }
+        let library = try await fixture.library()
+        try await library.configureRoot(at: fixture.destination)
+        let sourceID = try await library.registerExisting(at: fixture.source, catalogID: fixture.entry.id)
+        let sourceConfig = fixture.source.appendingPathComponent("config.json")
+        await #expect(throws: ModelLibraryError.self) {
+            _ = try await library.copyExistingToLibrary(sourceID, checkpoint: { bytes in
+                if bytes > 0 { try Data("source changed".utf8).write(to: sourceConfig) }
+            })
+        }
+        #expect(await library.snapshot().records.map(\.id) == [sourceID])
+        let installations = fixture.destination.appendingPathComponent(".d-model-library/Installations")
+        #expect(try FileManager.default.contentsOfDirectory(atPath: installations.path).isEmpty)
+        await #expect(throws: ModelLibraryError.self) { _ = try await library.resolve(sourceID) }
         try await library.shutdown()
     }
 

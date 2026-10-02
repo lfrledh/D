@@ -45,6 +45,9 @@ public actor ModelLibrary {
     private var preparationJobs: [ModelID: (job: Task<URL, any Error>, lease: ModelUsageLease, scope: ModelScopedLocation)] = [:]
     private var accepting = true
     private var cancelledOperations: Set<ModelID> = []
+    private var copyJob: Task<[String: ModelFileIdentity], any Error>?
+    private var currentCopy: ModelCopyProgress?
+    private var copyKnownFiles: [String: ModelFileIdentity] = [:]
     private static let chunkBytes: UInt64 = 16 * 1024 * 1024
 
     public init(stateDirectory: URL, wanPreparation: (@Sendable (URL, URL) async throws -> Void)? = nil) async throws {
@@ -147,7 +150,8 @@ public actor ModelLibrary {
             return record
         }
         return .init(revision: disk.revision, rootURL: rootScope?.url ?? disk.rootURL, catalog: catalog,
-                     records: records, downloadCredentialConnected: disk.downloadCredentialBookmark != nil)
+                     records: records, downloadCredentialConnected: disk.downloadCredentialBookmark != nil,
+                     copyProgress: currentCopy)
     }
 
     public func connectDownloadCredential(at selected: URL) throws {
@@ -171,7 +175,7 @@ public actor ModelLibrary {
 
     public func configureRoot(at selected: URL) throws {
         try requireAdmission()
-        guard workers.isEmpty, preparationJobs.isEmpty, leases.isEmpty else { throw ModelLibraryError.busy("模型正在下载、校验或用于任务；请等待结束后更换模型库位置。") }
+        guard workers.isEmpty, preparationJobs.isEmpty, copyJob == nil, leases.isEmpty else { throw ModelLibraryError.busy("模型正在下载、校验或用于任务；请等待结束后更换模型库位置。") }
         let scope = try ModelScopedLocation(selected)
         let hasManaged = disk.records.contains { $0.record.storage == .managed }
         let candidate = try ModelDirectory(scope.url)
@@ -256,12 +260,23 @@ public actor ModelLibrary {
         try persist(); try resume(id)
     }
 
-    public func registerExisting(at selected: URL, catalogID: String = ModelCatalog.flux2ID) async throws -> ModelID {
+    public func registerExisting(at selected: URL, catalogID: String = ModelCatalog.flux2ID,
+                                 storage: ModelStorageKind = .external) async throws -> ModelID {
+        let sourceID = try await registerExternal(at: selected, catalogID: catalogID)
+        return storage == .managed ? try await copyExistingToLibrary(sourceID) : sourceID
+    }
+
+    private func registerExternal(at selected: URL, catalogID: String) async throws -> ModelID {
         try requireAdmission(); try requireIdleWorker()
         let entry = try catalogEntry(catalogID)
         let scope = try ModelScopedLocation(selected)
         let directory = try ModelDirectory(scope.url)
-        if let existing = disk.records.first(where: { $0.record.catalogID == catalogID && $0.verifiedRoot?.sameNode(directory.identity) == true }) {
+        guard !disk.records.contains(where: { $0.record.storage == .managed &&
+            $0.verifiedRoot?.sameNode(directory.identity) == true }) else {
+            throw ModelLibraryError.busy("所选目录已属于 D 管理的安装，请使用现有记录。")
+        }
+        if let existing = disk.records.first(where: { $0.record.catalogID == catalogID &&
+            $0.record.storage == .external && $0.verifiedRoot?.sameNode(directory.identity) == true }) {
             _ = try resolved(existing)
             return existing.record.id
         }
@@ -273,13 +288,181 @@ public actor ModelLibrary {
         externalScopes[id] = scope
         do { try persist() } catch { disk.records.removeAll { $0.record.id == id }; externalScopes[id] = nil; throw error }
         launchVerification(id, scope: scope)
-        await workers[id]?.value
+        let worker = workers[id]
+        await withTaskCancellationHandler { await worker?.value } onCancel: { worker?.cancel() }
+        try Task.checkCancellation()
         let completed = try stored(id)
         if cancelledOperations.contains(id) { throw ModelLibraryError.operationPaused }
         guard completed.record.state == .installed || completed.record.state == .preparationRequired else {
             throw ModelLibraryError.integrity(completed.record.error ?? "模型校验未完成。")
         }
         return id
+    }
+
+    /// Creates a separate installation ID. The source registration and its bookmark
+    /// remain available; the copy contains only fixed catalog files.
+    public func copyExistingToLibrary(_ sourceID: ModelID) async throws -> ModelID {
+        try await copyExistingToLibrary(sourceID, checkpoint: { _ in })
+    }
+
+    func copyExistingToLibrary(_ sourceID: ModelID,
+                               checkpoint: @escaping @Sendable (UInt64) throws -> Void,
+                               afterIndexRename: @escaping @Sendable () throws -> Void = {}) async throws -> ModelID {
+        try requireAdmission(); try requireIdleWorker(); try Task.checkCancellation()
+        let original = try stored(sourceID)
+        guard original.record.storage == .external,
+              [.installed, .preparationRequired].contains(original.record.state) else {
+            throw ModelLibraryError.unavailable("请先校验保留原位置的模型，再复制到模型库。")
+        }
+        if let existing = disk.records.first(where: { $0.record.catalogID == original.record.catalogID && $0.record.storage == .managed }) {
+            guard [.installed, .preparationRequired].contains(existing.record.state) else {
+                throw ModelLibraryError.busy("已有同版本受管理安装尚未完成，请先处理该记录。")
+            }
+            _ = try resolved(existing)
+            return existing.record.id
+        }
+        let entry = try entry(for: sourceID)
+        guard let root = libraryRoot else { throw ModelLibraryError.unavailable("复制前请先选择模型库位置。") }
+        try root.validateLocation(); try requireSpace(entry.totalBytes)
+        let source = try resolved(original)
+        let verifiedSource = try stored(sourceID)
+        let expected = ModelRequiredTree(files: verifiedSource.verifiedFiles, directories: verifiedSource.verifiedDirectories ?? [:])
+        guard try source.requiredTree(paths: Set(entry.files.map(\.path))) == expected else {
+            throw ModelLibraryError.integrity("原始模型必要文件已改变，请重新校验。")
+        }
+        let id = ModelID()
+        copyKnownFiles = [:]
+        let staging = try root.child("Staging")
+        guard !(try Self.exists(id.description, in: staging)) else { throw ModelLibraryError.busy("暂存标识冲突，请重试。") }
+        let stage = try staging.child(id.description, create: true)
+        let marker = Data((disk.libraryID.uuidString + "\n" + id.description + "\n" + entry.revision).utf8)
+        let content: ModelDirectory
+        do {
+            try stage.atomicWrite(marker, to: "owner", replace: false)
+            content = try stage.child("Content", create: true)
+        } catch {
+            let setupError = error
+            do {
+                if try Self.exists("owner", in: stage) {
+                    let unfinished = try Self.exists("Content", in: stage) ? stage.child("Content") : nil
+                    try cleanupCopyStage(stage: stage, staging: staging, marker: marker, content: unfinished)
+                } else {
+                    guard try stage.entries(expectedPaths: []).isEmpty,
+                          unlinkat(staging.descriptor, id.description, AT_REMOVEDIR) == 0 else {
+                        throw ModelLibraryError.unsafePath("复制暂存目录含未知文件，已保留。")
+                    }
+                }
+            } catch {
+                throw ModelLibraryError.storage("复制未开始，暂存清理未完成：\(error.localizedDescription)")
+            }
+            throw setupError
+        }
+        let lease = ModelUsageLease(id: UUID(), modelID: sourceID,
+                                    reference: .init(directory: source.url, revision: entry.revision))
+        leases[lease.id] = lease; disk.revision &+= 1
+        currentCopy = .init(sourceID: sourceID, copiedBytes: 0, totalBytes: entry.totalBytes)
+        defer {
+            release(lease); copyJob = nil; currentCopy = nil; copyKnownFiles = [:]
+            disk.revision &+= 1
+        }
+        let job = Task.detached { [self] in
+            try await content.copyRequired(entry.files, from: source, expected: expected) { path, bytes, identity in
+                await self.noteCopy(path: path, bytes: bytes, identity: identity, sourceID: sourceID, total: entry.totalBytes)
+                try checkpoint(bytes)
+            }
+            try Task.checkCancellation()
+            return try content.verify(entry.files)
+        }
+        copyJob = job
+        var publishedFiles: [String: ModelFileIdentity]?
+        var indexPublished = false
+        do {
+            let verified = try await withTaskCancellationHandler { try await job.value } onCancel: { job.cancel() }
+            try Task.checkCancellation()
+            guard try source.requiredTree(paths: Set(entry.files.map(\.path))) == expected,
+                  try content.entries(expectedPaths: Set(entry.files.map(\.path))) == verified else {
+                throw ModelLibraryError.integrity("发布前原始文件或复制内容已改变。")
+            }
+            let installations = try root.child("Installations")
+            try root.validateLocation(); try content.validateLocation()
+            guard renameatx_np(stage.descriptor, "Content", installations.descriptor, id.description, UInt32(RENAME_EXCL)) == 0 else {
+                throw ModelDirectory.failure("原子发布复制模型")
+            }
+            publishedFiles = verified
+            guard fsync(installations.descriptor) == 0, fsync(stage.descriptor) == 0 else {
+                throw ModelDirectory.failure("同步复制模型发布目录")
+            }
+            try Task.checkCancellation()
+            let installed = try installations.child(id.description)
+            guard installed.identity.sameNode(content.identity),
+                  try installed.entries(expectedPaths: Set(entry.files.map(\.path))) == verified else {
+                throw ModelLibraryError.integrity("发布后复制文件已改变，已保留原件。")
+            }
+            let previous = disk
+            disk.records.append(StoredRecord(record: .init(id: id, catalogID: entry.id, revision: entry.revision,
+                storage: .managed, state: entry.preparation == .required ? .preparationRequired : .installed,
+                availability: .available, downloadedBytes: entry.totalBytes, totalBytes: entry.totalBytes,
+                error: nil, directory: installed.url, activeLeaseCount: 0),
+                recipeIdentity: try Self.recipeIdentity(entry), verifiedFiles: verified,
+                verifiedRoot: installed.identity, publicationRoot: installed.identity))
+            do { try persist(afterRename: afterIndexRename) }
+            catch {
+                if case ModelAtomicWriteError.publishedButUnsynced(let reason) = error {
+                    indexPublished = true
+                    throw ModelLibraryError.storage("复制模型及索引已发布，但索引目录同步未确认；已保留完整复制目录：\(installed.url.path)。\(reason.localizedDescription)")
+                }
+                disk = previous
+                throw error
+            }
+            try? cleanupCopyStage(stage: stage, staging: staging, marker: marker, content: nil)
+            return id
+        } catch {
+            if indexPublished {
+                // The replacement index is already visible. Removing the copy would
+                // leave a durable record pointing at missing content after reopen.
+                try? cleanupCopyStage(stage: stage, staging: staging, marker: marker, content: nil)
+                throw error
+            }
+            if let publishedFiles {
+                let installations = try root.child("Installations")
+                let installed = try installations.child(id.description)
+                guard installed.identity.sameNode(content.identity),
+                      try installed.entries(expectedPaths: Set(entry.files.map(\.path))) == publishedFiles else {
+                    throw ModelLibraryError.unsafePath("复制目录发布后发生变化，未回退；原件与索引未覆盖。")
+                }
+                try installed.removeKnownFiles(publishedFiles)
+                guard unlinkat(installations.descriptor, id.description, AT_REMOVEDIR) == 0,
+                      fsync(installations.descriptor) == 0 else { throw ModelDirectory.failure("回退未登记的复制目录") }
+                do { try cleanupCopyStage(stage: stage, staging: staging, marker: marker, content: nil) }
+                catch { throw ModelLibraryError.storage("复制未登记，发布内容已回退；暂存清理未完成：\(error.localizedDescription)") }
+            } else {
+                do { try cleanupCopyStage(stage: stage, staging: staging, marker: marker, content: content) }
+                catch { throw ModelLibraryError.storage("复制未登记，原件保留；暂存清理未完成：\(error.localizedDescription)") }
+            }
+            throw error
+        }
+    }
+
+    private func noteCopy(path: String, bytes: UInt64, identity: ModelFileIdentity,
+                          sourceID: ModelID, total: UInt64) {
+        copyKnownFiles[path] = identity
+        currentCopy = .init(sourceID: sourceID, copiedBytes: bytes, totalBytes: total)
+        disk.revision &+= 1
+    }
+
+    private func cleanupCopyStage(stage: ModelDirectory, staging: ModelDirectory, marker: Data,
+                                  content: ModelDirectory?) throws {
+        guard try stage.read("owner") == marker else { throw ModelLibraryError.unsafePath("复制暂存所有权已改变，保留文件。") }
+        if let content {
+            let actual = try content.entries(expectedPaths: Set(copyKnownFiles.keys))
+            guard actual == copyKnownFiles else { throw ModelLibraryError.unsafePath("复制暂存文件已改变，保留文件。") }
+            try content.removeKnownFiles(actual)
+            guard unlinkat(stage.descriptor, "Content", AT_REMOVEDIR) == 0 else { throw ModelDirectory.failure("移除空复制暂存目录") }
+        }
+        let owner = try stage.fileIdentity("owner")
+        try stage.removeKnownFiles(["owner": owner])
+        guard unlinkat(staging.descriptor, stage.url.lastPathComponent, AT_REMOVEDIR) == 0,
+              fsync(staging.descriptor) == 0 else { throw ModelDirectory.failure("移除空复制暂存任务") }
     }
 
     public func rebind(_ id: ModelID, to selected: URL) async throws {
@@ -396,6 +579,20 @@ public actor ModelLibrary {
         leases[lease.id] = lease; disk.revision &+= 1
         return lease
     }
+    /// Pins an unchanged, verified raw installation for an optional backup.
+    /// Preparation-required resources are valid backup sources, not inference inputs.
+    public func acquireForBackup(_ id: ModelID) throws -> ModelUsageLease {
+        try requireAdmission()
+        let value = try stored(id)
+        guard [.installed, .preparationRequired].contains(value.record.state) else {
+            throw ModelLibraryError.unavailable("模型尚未完成安装和完整校验，不能备份。")
+        }
+        let directory = try resolved(value)
+        let lease = ModelUsageLease(id: UUID(), modelID: id,
+                                    reference: .init(directory: directory.url, revision: value.record.revision))
+        leases[lease.id] = lease; disk.revision &+= 1
+        return lease
+    }
     public func release(_ lease: ModelUsageLease) {
         guard leases[lease.id]?.modelID == lease.modelID else { return }
         leases.removeValue(forKey: lease.id); disk.revision &+= 1
@@ -483,6 +680,11 @@ public actor ModelLibrary {
             let pending = Array(workers.values)
             for worker in pending { worker.cancel() }
             for worker in pending { await worker.value }
+            if let copyJob {
+                copyJob.cancel()
+                _ = await copyJob.result
+                while self.copyJob != nil { await Task.yield() }
+            }
             guard leases.isEmpty else { throw ModelLibraryError.busy("推理任务仍持有模型，请先取消并等待资源释放。") }
             try persist()
             externalScopes = [:]; libraryRoot = nil; libraryLock = nil; rootScope = nil
@@ -517,8 +719,7 @@ public actor ModelLibrary {
         }
     }
     private static func verifyExternal(_ directory: ModelDirectory, entry: ModelCatalogEntry) throws -> ModelRequiredTree {
-        if ModelWanPreparation.allowsExternalRawProjection(entry) { return try directory.verifyRequired(entry.files) }
-        return ModelRequiredTree(files: try directory.verify(entry.files), directories: [:])
+        try directory.verifyRequired(entry.files)
     }
 
     private func verified(_ id: ModelID, directory: ModelDirectory, files: [String: ModelFileIdentity],
@@ -716,14 +917,31 @@ public actor ModelLibrary {
             throw ModelLibraryError.integrity("模型文件已改变或位置不符，请重新校验。")
         }
         let entry = try entry(for: stored.record.id)
-        if stored.record.storage == .external && ModelWanPreparation.allowsExternalRawProjection(entry) {
+        if stored.record.storage == .external {
             let current = try directory.requiredTree(paths: Set(entry.files.map(\.path)))
-            // Earlier strict registrations of the official three root files had
-            // no intermediate directory identities to persist.
-            let directories = stored.verifiedDirectories ?? (current.directories.isEmpty ? [:] : nil)
-            guard let directories,
-                  current == ModelRequiredTree(files: stored.verifiedFiles, directories: directories) else {
-                throw ModelLibraryError.integrity("Wan 原始仓必要文件或目录已改变，请重新校验。")
+            // Earlier external records tracked the exact root and leaves but no
+            // parent map. Rehash those fixed leaves once before adopting parents.
+            if (stored.verifiedDirectories?.isEmpty ?? true) && !current.directories.isEmpty {
+                let verified = try directory.verifyRequired(entry.files)
+                guard verified.files == stored.verifiedFiles,
+                      verified == current else {
+                    throw ModelLibraryError.integrity("旧模型记录的必要文件已改变，请重新校验。")
+                }
+                guard let index = disk.records.firstIndex(where: { $0.record.id == stored.record.id }) else {
+                    throw ModelLibraryError.unavailable("模型记录不存在。")
+                }
+                let previous = disk.records[index].verifiedDirectories
+                disk.records[index].verifiedDirectories = verified.directories
+                do { try persist() }
+                catch {
+                    if case ModelAtomicWriteError.publishedButUnsynced = error { throw error }
+                    disk.records[index].verifiedDirectories = previous
+                    throw error
+                }
+            }
+            let directories = disk.records.first(where: { $0.record.id == stored.record.id })?.verifiedDirectories ?? [:]
+            guard current == ModelRequiredTree(files: stored.verifiedFiles, directories: directories) else {
+                throw ModelLibraryError.integrity("模型必要文件或目录已改变，请重新校验。")
             }
         } else {
             guard try directory.entries(expectedPaths: Set(stored.verifiedFiles.keys)) == stored.verifiedFiles else {
@@ -748,13 +966,13 @@ public actor ModelLibrary {
         guard !overflow else { throw ModelLibraryError.invalidCatalog("模型总大小溢出。") }
         guard available >= required else { throw ModelLibraryError.insufficientSpace(required: required, available: available) }
     }
-    private func persist() throws {
+    private func persist(afterRename: (@Sendable () throws -> Void)? = nil) throws {
         disk.revision &+= 1
         let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
-        try stateDirectory.atomicWrite(encoder.encode(disk), to: "index.json")
+        try stateDirectory.atomicWrite(encoder.encode(disk), to: "index.json", afterRename: afterRename)
     }
     private func requireAdmission() throws { if !accepting { throw ModelLibraryError.busy("模型库正在关闭，请等待应用退出。") } }
-    private func requireIdleWorker() throws { if !workers.isEmpty || !preparationJobs.isEmpty { throw ModelLibraryError.busy("请先等待或暂停当前模型操作。") } }
+    private func requireIdleWorker() throws { if !workers.isEmpty || !preparationJobs.isEmpty || copyJob != nil { throw ModelLibraryError.busy("请先等待或暂停当前模型操作。") } }
     private func stored(_ id: ModelID) throws -> StoredRecord {
         guard let result = disk.records.first(where: { $0.record.id == id }) else { throw ModelLibraryError.unavailable("模型记录不存在。") }; return result
     }

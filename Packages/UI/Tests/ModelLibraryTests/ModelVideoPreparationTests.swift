@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 import Testing
 @testable import DWorkbench
@@ -90,6 +91,62 @@ struct ModelVideoPreparationTests {
         #expect(throws: (any Error).self) {
             try ModelVideoPreparation.prepare(source: source, entry: entry(fixture), parent: try source.child("weights"), name: "inside")
         }
+    }
+    @Test(arguments: ["readme", "cache", "link"])
+    func fixedVideoSourceIgnoresUnrelatedEntries(kind: String) throws {
+        let fixture = try LibraryFixture(); defer { fixture.clean() }
+        let extra = fixture.source.appendingPathComponent(kind)
+        switch kind {
+        case "readme": try Data("unrelated".utf8).write(to: extra)
+        case "cache": try FileManager.default.createDirectory(at: extra, withIntermediateDirectories: true)
+        default: try FileManager.default.createSymbolicLink(at: extra,
+            withDestinationURL: fixture.root.appendingPathComponent("missing-extra"))
+        }
+        let source = try ModelDirectory(fixture.source), parent = try ModelDirectory(fixture.destination)
+        let before = try source.verifyRequired(entry(fixture).files)
+        let output = try ModelVideoPreparation.prepare(source: source, entry: entry(fixture), parent: parent, name: "with-extra")
+        let target = try ModelDirectory(output)
+        #expect(try source.requiredTree(paths: Set(entry(fixture).files.map(\.path))) == before)
+        for (path, bytes) in fixture.contents { #expect(try target.read("model/" + path) == bytes) }
+        var info = stat()
+        #expect(lstat(extra.path, &info) == 0)
+        #expect(try target.entries().keys.sorted() == (fixture.contents.keys.map { "model/" + $0 } + ["D-VIDEO-PACK.json"]).sorted())
+    }
+    @Test(arguments: ["missing", "changed", "leaf-link", "parent-link"])
+    func fixedVideoSourceRejectsChangedRequiredPaths(kind: String) throws {
+        let fixture = try LibraryFixture(); defer { fixture.clean() }
+        let leaf = fixture.source.appendingPathComponent("weights/payload.bin")
+        switch kind {
+        case "missing": try FileManager.default.removeItem(at: leaf)
+        case "changed": try Data(repeating: 0, count: fixture.contents["weights/payload.bin"]!.count).write(to: leaf)
+        case "leaf-link":
+            try FileManager.default.removeItem(at: leaf)
+            try FileManager.default.createSymbolicLink(at: leaf, withDestinationURL: fixture.root.appendingPathComponent("missing"))
+        default:
+            let parent = fixture.source.appendingPathComponent("weights")
+            let moved = fixture.root.appendingPathComponent("moved-weights")
+            try FileManager.default.moveItem(at: parent, to: moved)
+            try FileManager.default.createSymbolicLink(at: parent, withDestinationURL: moved)
+        }
+        let source = try ModelDirectory(fixture.source), parent = try ModelDirectory(fixture.destination)
+        #expect(throws: (any Error).self) {
+            try ModelVideoPreparation.prepare(source: source, entry: entry(fixture), parent: parent, name: "invalid")
+        }
+        #expect(!FileManager.default.fileExists(atPath: fixture.destination.appendingPathComponent("invalid").path))
+    }
+    @Test func sourceChangeDuringFixedVideoPreparationCannotPublish() throws {
+        let fixture = try LibraryFixture(); defer { fixture.clean() }
+        let source = try ModelDirectory(fixture.source), parent = try ModelDirectory(fixture.destination)
+        let expected = entry(fixture)
+        #expect(throws: (any Error).self) {
+            try ModelVideoPreparation.prepare(source: source, entry: expected, parent: parent, name: "source-changed") { index in
+                if index == expected.files.count {
+                    try Data(repeating: 0, count: fixture.contents["weights/payload.bin"]!.count)
+                        .write(to: fixture.source.appendingPathComponent("weights/payload.bin"))
+                }
+            }
+        }
+        #expect(!FileManager.default.fileExists(atPath: fixture.destination.appendingPathComponent("source-changed").path))
     }
     @Test func damagedBytesAndUnconvertedRecipeCannotBecomeReadyPack() throws {
         let fixture = try LibraryFixture(); defer { fixture.clean() }

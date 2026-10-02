@@ -212,7 +212,7 @@ struct LocalImageModelInventoryTests {
         expectInvalidImageRequest(containing: "SHA-256 mismatch") { try inventory.verifyContents() }
     }
 
-    @Test("Extra loadable files, hidden files, directories and download state are rejected", arguments: [
+    @Test("Extra source entries are outside the fixed inventory", arguments: [
         "scheduler/config.json", "transformer/extra.safetensors", ".DS_Store", "unused/", ".d-model-download/",
     ])
     func unlistedEntries(name: String) throws {
@@ -224,9 +224,8 @@ struct LocalImageModelInventoryTests {
         } else {
             try Data("unlisted".utf8).write(to: url)
         }
-        expectInvalidImageRequest(containing: "Unlisted") {
-            _ = try LocalImageModelInventory.inspect(fixture.request(), manifest: fixture.manifest)
-        }
+        let inventory = try LocalImageModelInventory.inspect(fixture.request(), manifest: fixture.manifest)
+        try inventory.verifyContents()
     }
 
     @Test("Symbolic links in files, subdirectories, root or ancestors are rejected", arguments: ["file", "directory", "root", "ancestor"])
@@ -268,13 +267,13 @@ struct LocalImageModelInventoryTests {
         expectInvalidImageRequest(containing: "changed after admission") { try inventory.verifyContents() }
     }
 
-    @Test("New files appearing after admission cannot bypass the complete tree check")
+    @Test("New unrelated files do not invalidate admitted required files")
     func extraFileAfterAdmission() throws {
         let fixture = try ImageInventoryFixture()
         defer { fixture.remove() }
         let inventory = try LocalImageModelInventory.inspect(fixture.request(), manifest: fixture.manifest)
         try Data("unexpected".utf8).write(to: fixture.directory.appendingPathComponent("extra.safetensors"))
-        expectInvalidImageRequest(containing: "Unlisted") { try inventory.verifyContents() }
+        try inventory.verifyContents()
     }
 
     @Test("Full file verification honors task cancellation")

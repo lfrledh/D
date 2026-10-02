@@ -181,6 +181,13 @@ public struct ModelLibrarySnapshot: Sendable {
     public let catalog: [ModelCatalogEntry]
     public let records: [ModelRecord]
     public let downloadCredentialConnected: Bool
+    public let copyProgress: ModelCopyProgress?
+}
+
+public struct ModelCopyProgress: Sendable {
+    public let sourceID: ModelID
+    public let copiedBytes: UInt64
+    public let totalBytes: UInt64
 }
 
 public struct ModelUsageLease: Sendable {
