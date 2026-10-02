@@ -307,7 +307,7 @@ public actor ModelLibrary {
 
     func copyExistingToLibrary(_ sourceID: ModelID,
                                checkpoint: @escaping @Sendable (UInt64) throws -> Void,
-                               afterIndexRename: @Sendable () throws -> Void = {}) async throws -> ModelID {
+                               afterIndexRename: @escaping @Sendable () throws -> Void = {}) async throws -> ModelID {
         try requireAdmission(); try requireIdleWorker(); try Task.checkCancellation()
         let original = try stored(sourceID)
         guard original.record.storage == .external,
