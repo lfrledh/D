@@ -74,9 +74,13 @@ public actor MLXTextBackend: InferenceBackend {
             // per-run RNG isolation is not a substitute for that core lifetime fix.
             let randomSeed = UInt64.random(in: .min ... .max)
             let randomState = MLXRandom.RandomState(seed: randomSeed)
+            let factory = inventory.fileSet.map {
+                LLMModelFactory(typeRegistry: LLMTypeRegistry.shared, modelRegistry: LLMRegistry.shared,
+                                fileSelection: $0.selection)
+            } ?? LLMModelFactory.shared
             let loaded = try await withRandomState(randomState) {
-                try await LLMModelFactory.shared.loadContainer(
-                    from: inventory.directory, using: LocalTokenizerLoader())
+                try await factory.loadContainer(
+                    from: inventory.directory, using: LocalTokenizerLoader(fileSet: inventory.fileSet))
             }
             container = loaded
             await observer(MLXLifecycleEvent(runID: request.id, phase: .loaded))

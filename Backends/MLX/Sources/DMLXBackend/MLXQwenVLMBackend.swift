@@ -150,9 +150,11 @@ public actor MLXQwenVLMBackend: InferenceBackend {
             ])
             let factory = VLMModelFactory(typeRegistry: VLMTypeRegistry.shared,
                                           processorRegistry: registry, modelRegistry: VLMRegistry.shared,
-                                          layeredQwen35: input.loadingStrategy == .ssdLayered)
+                                          layeredQwen35: input.loadingStrategy == .ssdLayered,
+                                          fileSelection: inventory.fileSet?.selection)
             let loaded = try await withRandomState(randomState) {
-                try await factory.loadContainer(from: inventory.directory, using: LocalTokenizerLoader())
+                try await factory.loadContainer(from: inventory.directory,
+                                                using: LocalTokenizerLoader(fileSet: inventory.fileSet))
             }
             container = loaded
             await observer(MLXLifecycleEvent(runID: request.id, phase: .loaded))

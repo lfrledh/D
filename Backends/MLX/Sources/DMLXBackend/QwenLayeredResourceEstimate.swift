@@ -34,7 +34,9 @@ enum QwenLayeredResourceEstimate {
         var visionMerger: UInt64 = 0
         var visionBlocks = [Int: UInt64]()
         var byLayer = [Int: UInt64]()
-        let files = try FileManager.default.contentsOfDirectory(at: inventory.directory,
+        let files = try inventory.fileSet.map { fileSet in
+            fileSet.weightNames.map { inventory.directory.appendingPathComponent($0) }
+        } ?? FileManager.default.contentsOfDirectory(at: inventory.directory,
             includingPropertiesForKeys: nil).filter { $0.pathExtension == "safetensors" }
         for file in files {
             try Task.checkCancellation()

@@ -311,12 +311,14 @@ public final class VLMModelFactory: GenericModelFactory {
 
     public init(
         typeRegistry: ModelTypeRegistry<LanguageModel>, processorRegistry: ProcessorTypeRegistry,
-        modelRegistry: AbstractModelRegistry, layeredQwen35: Bool = false
+        modelRegistry: AbstractModelRegistry, layeredQwen35: Bool = false,
+        fileSelection: ModelFileSelection? = nil
     ) {
         self.typeRegistry = typeRegistry
         self.processorRegistry = processorRegistry
         self.modelRegistry = modelRegistry
         self.layeredQwen35 = layeredQwen35
+        self.fileSelection = fileSelection
     }
 
     /// Shared instance with default behavior.
@@ -333,6 +335,7 @@ public final class VLMModelFactory: GenericModelFactory {
     /// registry of model id to configuration, e.g. `mlx-community/paligemma-3b-mix-448-8bit`
     public let modelRegistry: AbstractModelRegistry
     private let layeredQwen35: Bool
+    private let fileSelection: ModelFileSelection?
 
     public func _load(
         configuration: ResolvedModelConfiguration,
@@ -385,14 +388,23 @@ public final class VLMModelFactory: GenericModelFactory {
         // Load EOS token IDs from config.json, with optional override from generation_config.json
         var eosTokenIds = Set(baseConfig.eosTokenIds?.values ?? [])
         let generationConfigURL = modelDirectory.appending(component: "generation_config.json")
-        let generationConfig: GenerationConfigFile? =
-            if let generationData = try? (layeredQwen35
-                ? Qwen35LayeredWeights.readBounded(generationConfigURL, maximum: 4 * 1024 * 1024)
-                : Data(contentsOf: generationConfigURL)) {
-                try? JSONDecoder.json5().decode(GenerationConfigFile.self, from: generationData)
+        let generationConfig: GenerationConfigFile?
+        if let fileSelection {
+            if fileSelection.contains("generation_config.json") {
+                let data = try layeredQwen35
+                    ? Qwen35LayeredWeights.readBounded(generationConfigURL, maximum: 4 * 1024 * 1024)
+                    : Data(contentsOf: generationConfigURL)
+                generationConfig = try decodeAdmittedGenerationConfig(data)
             } else {
-                nil
+                generationConfig = nil
             }
+        } else if let data = try? (layeredQwen35
+            ? Qwen35LayeredWeights.readBounded(generationConfigURL, maximum: 4 * 1024 * 1024)
+            : Data(contentsOf: generationConfigURL)) {
+            generationConfig = try? JSONDecoder.json5().decode(GenerationConfigFile.self, from: data)
+        } else {
+            generationConfig = nil
+        }
         if let genEosIds = generationConfig?.eosTokenIds?.values {
             eosTokenIds = Set(genEosIds)  // Override per Python mlx-lm behavior
         }
@@ -413,15 +425,17 @@ public final class VLMModelFactory: GenericModelFactory {
         // but the config file is small and model loading is not a high-concurrency path.
         async let tokenizerTask = tokenizerLoader.load(
             from: configuration.tokenizerDirectory)
-        async let processorConfigTask = loadProcessorConfig(from: modelDirectory)
+        async let processorConfigTask = loadProcessorConfig(from: modelDirectory, fileSelection: fileSelection)
 
         if let layered = model as? Qwen35, layeredQwen35 {
             try layered.loadLayeredWeights(from: modelDirectory,
                                            expectedConfiguration: configData,
-                                           expectedConfigurationIdentity: configurationIdentity)
+                                           expectedConfigurationIdentity: configurationIdentity,
+                                           fileSelection: fileSelection)
         } else {
             try loadWeights(modelDirectory: modelDirectory, model: model,
-                perLayerQuantization: baseConfig.perLayerQuantization)
+                perLayerQuantization: baseConfig.perLayerQuantization,
+                fileSelection: fileSelection)
         }
 
         let tokenizer = try await tokenizerTask
@@ -482,15 +496,20 @@ private struct ProcessorConfigError: Error {
 /// Loads processor configuration, preferring preprocessor_config.json over processor_config.json.
 /// Marked async to enable parallel scheduling via async let, though the underlying I/O is synchronous.
 /// Throws ProcessorConfigError wrapping any underlying error with the filename.
-private func loadProcessorConfig(from modelDirectory: URL) async throws -> (
+private func loadProcessorConfig(from modelDirectory: URL,
+                                 fileSelection: ModelFileSelection? = nil) async throws -> (
     Data, BaseProcessorConfiguration
 ) {
     let processorConfigURL = modelDirectory.appending(component: "processor_config.json")
     let preprocessorConfigURL = modelDirectory.appending(component: "preprocessor_config.json")
-    let url =
-        FileManager.default.fileExists(atPath: preprocessorConfigURL.path)
-        ? preprocessorConfigURL
-        : processorConfigURL
+    let url: URL
+    if let fileSelection {
+        url = fileSelection.contains("preprocessor_config.json")
+            ? preprocessorConfigURL : processorConfigURL
+    } else {
+        url = FileManager.default.fileExists(atPath: preprocessorConfigURL.path)
+            ? preprocessorConfigURL : processorConfigURL
+    }
     do {
         let data = try Data(contentsOf: url)
         let config = try JSONDecoder.json5().decode(BaseProcessorConfiguration.self, from: data)

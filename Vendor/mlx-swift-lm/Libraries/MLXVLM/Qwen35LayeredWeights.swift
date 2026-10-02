@@ -35,6 +35,7 @@ final class Qwen35LayeredWeights {
     private let metadata: [URL: [String: String]]
     private let indexURL: URL?
     private let indexIdentity: Identity?
+    private let indexAdmitted: Bool?
     static let maximumHeaderBytes: UInt64 = 16 * 1024 * 1024
     static let maximumIndexBytes: UInt64 = 4 * 1024 * 1024
 
@@ -82,10 +83,15 @@ final class Qwen35LayeredWeights {
     /// Test seam after selection and before lazy MLX arrays are evaluated.
     var beforeSelectedEvaluation: (() throws -> Void)?
 
-    init(directory: URL) throws {
+    init(directory: URL, fileSelection: ModelFileSelection? = nil) throws {
         _ = try Self.identity(directory, directory: true)
-        let files = try FileManager.default.contentsOfDirectory(at: directory,
-            includingPropertiesForKeys: nil).filter { $0.pathExtension == "safetensors" }.sorted { $0.path < $1.path }
+        let files: [URL]
+        if let fileSelection {
+            files = fileSelection.weightURLs(in: directory)
+        } else {
+            files = try FileManager.default.contentsOfDirectory(at: directory,
+                includingPropertiesForKeys: nil).filter { $0.pathExtension == "safetensors" }.sorted { $0.path < $1.path }
+        }
         guard !files.isEmpty else { throw Failure.invalid("no safetensors shards") }
         var identities: [URL: Identity] = [:]
         var entries: [String: Entry] = [:]
@@ -153,7 +159,10 @@ final class Qwen35LayeredWeights {
         let index = directory.appendingPathComponent("model.safetensors.index.json")
         var indexIdentity: Identity?
         var indexStat = stat()
-        if lstat(index.path, &indexStat) == 0 {
+        if fileSelection?.contains("model.safetensors.index.json") == true && lstat(index.path, &indexStat) != 0 {
+            throw Failure.invalid("admitted safetensors index is missing")
+        }
+        if (fileSelection?.contains("model.safetensors.index.json") ?? true) && lstat(index.path, &indexStat) == 0 {
             indexIdentity = try Self.identity(index)
             let data = try Self.readBounded(index, maximum: Self.maximumIndexBytes)
             guard try Self.identity(index) == indexIdentity else {
@@ -177,6 +186,7 @@ final class Qwen35LayeredWeights {
         self.metadata = metadata
         self.indexURL = indexIdentity == nil ? nil : index
         self.indexIdentity = indexIdentity
+        self.indexAdmitted = fileSelection?.contains("model.safetensors.index.json")
     }
 
     private static func identity(_ url: URL, directory: Bool = false) throws -> Identity {
@@ -435,7 +445,7 @@ final class Qwen35LayeredWeights {
             guard try Self.identity(indexURL) == indexIdentity else {
                 throw Failure.invalid("safetensors index changed during loading")
             }
-        } else if let firstShard = identity.keys.first {
+        } else if indexAdmitted != false, let firstShard = identity.keys.first {
             let index = firstShard.deletingLastPathComponent()
                 .appendingPathComponent("model.safetensors.index.json")
             var value = stat()

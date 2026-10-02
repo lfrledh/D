@@ -13,6 +13,7 @@ public struct QwenVLMModelInventory: Sendable {
     public let quantized: Bool
     public let minimumPixels: Int
     public let maximumPixels: Int
+    let fileSet: LocalModelFileSet?
 
     static func inspect(_ request: InferenceRequest, capability: TextExecutionCapability) throws -> Self {
         try request.validate()
@@ -30,7 +31,8 @@ public struct QwenVLMModelInventory: Sendable {
         }) else {
             throw InferenceFailure.invalidRequest("VLM request needs text or visual input, and text is limited to 1 MiB.")
         }
-        let inventory = try validateModel(at: request.model.directory)
+        let fileSet = try LocalModelFileSet.resolve(request.model.revision)
+        let inventory = try validateModel(at: request.model.directory, fileSet: fileSet)
         if text.loadingStrategy == .ssdLayered && inventory.quantized {
             throw InferenceFailure.invalidRequest("SSD layered loading requires original BF16 Qwen3.5 weights.")
         }
@@ -44,8 +46,13 @@ public struct QwenVLMModelInventory: Sendable {
     }
 
     public static func validateModel(at location: URL) throws -> Self {
+        try validateModel(at: location, fileSet: nil)
+    }
+
+    static func validateModel(at location: URL, fileSet: LocalModelFileSet?) throws -> Self {
         let directory = try AudioFileSystem.absoluteLocal(location, label: "VLM model")
         try AudioFileSystem.validateDirectory(directory, label: "VLM model")
+        try fileSet?.validateRequired(in: directory)
         for name in ["config.json", "preprocessor_config.json", "tokenizer.json", "tokenizer_config.json"] {
             _ = try AudioFileSystem.regularFile(directory.appendingPathComponent(name), label: name,
                                                 maximumBytes: name == "tokenizer.json" ? 128 * 1024 * 1024 : 4 * 1024 * 1024)
@@ -115,31 +122,43 @@ public struct QwenVLMModelInventory: Sendable {
         let budgets = try QwenVLMProcessorConfiguration.normalized(processorData, overrides: nil)
         let manager = FileManager.default
         var enumerationError: Error?
-        guard let files = manager.enumerator(at: directory,
-                                             includingPropertiesForKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey],
-                                             errorHandler: { _, error in enumerationError = error; return false }) else {
-            throw InferenceFailure.invalidRequest("Cannot enumerate VLM model directory.")
+        let weightURLs: [URL]
+        if let fileSet {
+            weightURLs = fileSet.weightNames.map { directory.appendingPathComponent($0) }
+        } else {
+            guard let files = manager.enumerator(at: directory,
+                                                 includingPropertiesForKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey],
+                                                 errorHandler: { _, error in enumerationError = error; return false }) else {
+                throw InferenceFailure.invalidRequest("Cannot enumerate VLM model directory.")
+            }
+            var discovered: [URL] = []
+            for case let url as URL in files {
+                let values = try url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey])
+                guard values.isSymbolicLink != true else {
+                    throw InferenceFailure.invalidRequest("VLM model contains a symbolic link.")
+                }
+                if url.pathExtension == "safetensors" { discovered.append(url) }
+            }
+            weightURLs = discovered
         }
         var bytes: UInt64 = 0
-        for case let url as URL in files {
+        for url in weightURLs {
             let values = try url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey])
             guard values.isSymbolicLink != true else {
                 throw InferenceFailure.invalidRequest("VLM model contains a symbolic link.")
             }
-            if url.pathExtension == "safetensors" {
-                guard values.isRegularFile == true, let length = values.fileSize, length > 8 else {
-                    throw InferenceFailure.invalidRequest("Invalid safetensors weight file.")
-                }
-                let (sum, overflow) = bytes.addingReportingOverflow(UInt64(length))
-                guard !overflow else { throw InferenceFailure.invalidRequest("Weight size overflow.") }
-                bytes = sum
+            guard values.isRegularFile == true, let length = values.fileSize, length > 8 else {
+                throw InferenceFailure.invalidRequest("Invalid safetensors weight file.")
             }
+            let (sum, overflow) = bytes.addingReportingOverflow(UInt64(length))
+            guard !overflow else { throw InferenceFailure.invalidRequest("Weight size overflow.") }
+            bytes = sum
         }
         if let enumerationError { throw enumerationError }
         guard bytes > 0 else { throw InferenceFailure.invalidRequest("No VLM weights found.") }
         return Self(directory: directory, family: "qwen3_5", size: size, contextLimit: context,
                     weightBytes: bytes, quantized: config["quantization"] != nil || config["quantization_config"] != nil,
-                    minimumPixels: budgets.minimum, maximumPixels: budgets.maximum)
+                    minimumPixels: budgets.minimum, maximumPixels: budgets.maximum, fileSet: fileSet)
     }
 
     static func object(_ data: Data) throws -> [String: Any] {
