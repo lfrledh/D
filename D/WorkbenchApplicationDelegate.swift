@@ -73,7 +73,7 @@ private enum WorkbenchInputDiagnostic {
     static var lastCursorSignature: String?
 
     static func install(window: NSWindow) {
-        guard enabled else { return }
+        guard enabled || WorkbenchNaturalInputTrace.enabled else { return }
         observedWindow = window
         guard monitor == nil else { return }
         monitor = NSEvent.addLocalMonitorForEvents(matching: [.cursorUpdate, .mouseMoved, .mouseEntered, .mouseExited, .keyDown]) { event in
@@ -89,9 +89,14 @@ private enum WorkbenchInputDiagnostic {
             }
             return event
         }
+        WorkbenchNaturalInputTrace.installNativeControlIfRequested()
     }
 
     static func record(window: NSWindow, reason: String) {
+        if WorkbenchNaturalInputTrace.enabled {
+            WorkbenchNaturalInputTrace.observe(window: window, reason: reason)
+            return // Do not create diagnostic firstRect calls in the natural trace.
+        }
         guard enabled else { return }
         func identity(_ object: AnyObject?) -> String {
             guard let object else { return "nil" }

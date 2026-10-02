@@ -282,8 +282,8 @@
     {
       "path": "Libraries/MLXLLM/LLMModelFactory.swift",
       "upstreamSHA256": "7185ddfe5847fbbdd5b44b682c645d269ddfc3c33f18e405f6ad00e97e167bd0",
-      "sha256": "7185ddfe5847fbbdd5b44b682c645d269ddfc3c33f18e405f6ad00e97e167bd0",
-      "size": 26082
+      "sha256": "cfb0a935fcbc0f1a073284737c07dbdac535aeed52bbe33ffb4e6979e9d859ee",
+      "size": 26516
     },
     {
       "path": "Libraries/MLXLLM/Lora+Data.swift",
@@ -810,8 +810,8 @@
     {
       "path": "Libraries/MLXLMCommon/Load.swift",
       "upstreamSHA256": "943ccce03af736f8c5c70a57294d41be8f70dfea8c7d1c3d5abfee87852d7043",
-      "sha256": "943ccce03af736f8c5c70a57294d41be8f70dfea8c7d1c3d5abfee87852d7043",
-      "size": 2090
+      "sha256": "66a5a2ea6e63e402a3162fe79797ca220832b84522ef512fffbb86d84d02ff0d",
+      "size": 3917
     },
     {
       "path": "Libraries/MLXLMCommon/MTPDrafterModel.swift",
@@ -1164,8 +1164,8 @@
     {
       "path": "Libraries/MLXVLM/Models/Qwen35.swift",
       "upstreamSHA256": "94ece218b65aa528373dde25347513b6758db6a59f82f175f2dde48c2aebc49e",
-      "sha256": "55ec778884d0e03fdcb1ea8285d12d29b9dfb09ce4ef1bbc7c26304c11d9c0d0",
-      "size": 57343
+      "sha256": "e5fe02839a65e4b85513f8840884eff1efc6b27addd9d2f61ba49de7e08234cd",
+      "size": 57450
     },
     {
       "path": "Libraries/MLXVLM/Models/Qwen35MoE.swift",
@@ -1194,8 +1194,8 @@
     {
       "path": "Libraries/MLXVLM/Qwen35LayeredWeights.swift",
       "upstreamSHA256": null,
-      "sha256": "d5f6adcbc114aa41896853e9dff7725dca39dd093f3dd0d0d610d1a31d7e13d5",
-      "size": 26771,
+      "sha256": "c92eb44f7addf9ca6e2c0b43cc1625b982ed7acddf4946ab96b667425124694d",
+      "size": 27375,
       "origin": "D local addition"
     },
     {
@@ -1213,8 +1213,8 @@
     {
       "path": "Libraries/MLXVLM/VLMModelFactory.swift",
       "upstreamSHA256": "f754278a81c182a60dfdbab4871fbbf09ddb4bc77307272f310b9a5a1c24d292",
-      "sha256": "4d8a819ad0fb96a7406d4fc04b47035529f4c8b21e8ade532914273415d5d22e",
-      "size": 21422
+      "sha256": "a9efe8335e429514e0f6e30704238626f05bbe4d621e160daa4df3c970143ab6",
+      "size": 22412
     },
     {
       "path": "Package.swift",
@@ -1666,7 +1666,7 @@
   "patches": [
     {
       "path": "patches/mlx-lm-local-integration.patch",
-      "sha256": "7f77486ca8ce3c01ed2903ec18888707b4a1e848d8c8ed9c1ffe49ca577cf279",
+      "sha256": "74b996da8a2489d4a5aa4bd4f85412df7b8d943797dbf6d04600e6409a44222b",
       "description": "Complete D delta from the fixed upstream snapshot; supersedes historical presampled-only patch."
     }
   ]
