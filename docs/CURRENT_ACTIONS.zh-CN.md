@@ -1,43 +1,45 @@
 # 当前行动与接手点
 
-最后核实：2026-10-02。当前任务、真实基线、候选、阻塞和下一动作只从本页进入。历史回执不自动授权续跑。
+最后核实：2026-10-03。当前任务、基线、候选、阻塞与下一动作只从本页进入。历史记录不自动授权续跑。
 
 ## D-RELEASE-FREEZE-01 / D-DISCUSSION-FREEZE-20261002
 
-本轮实现收尾，**部分完成**；正在交付公开开发主线及同版App，原生/质量/文件入口缺口保持未关闭。结束后等用户试用与冻结判断，不增加模型/平台、不进入正式发行。
+**本轮有限续修已到交付检查点，整体部分完成。** 文件入口/核对范围的工程修补与相称CPU检查通过；H22未形成真实IME候选，不虚构根因或改文本系统。桌面开始可用，完成旧同代码包的隔离准备；新包连接时再次明确锁屏，剩余原生操作与真实README截图保留。main可以按已批准开发门槛正常推进，功能冻结/正式发行尚未通过。
 
-- main为唯一公开开发集成线，用户已批准有限门槛后正常推进，不要求全部发行QA先过。首批已推b5004991e0323c976e4ba3f8bf55774b28222cb6；最终main与远端核对见R/lead/final-receipt.json。非强推，无Release或许可证/收费变化。
-- 代码、最终文件CPU及正常App受测版本：**ca2121c771d6b7cd65a1d8f068440fdf7bba9221**。后续只更新本轮文档；最终SHA见回执，不把尚未产生的文档SHA记为重跑测试版本。
-- 实施/同树Xcode：`/Volumes/CodexProjects/Codex/D-Worktrees/D-RELEASE-FREEZE-01`，分支`codex/release-freeze-01`；干净main集成树为同级`D-DISCUSSION-MAIN`。唯一启动器见[试用指南](RELEASE_FREEZE_TRY.zh-CN.md)。两版README对外描述开发预览，不链接私人目录作公开下载。
-- 旧main708f5fbb7e5e78b5583c487a67329c0eeaf6e5cf已保留`archive/main-before-refresh-2026-10-02`及验证过的D-main.bundle；六个历史子模块bundle覆盖准确gitlink。路径/摘要见R/lead/main-backup.json。同SSD备份不是异地容灾，不含所有未提交数据/模型。
-- 保护源仍`/Volumes/CodexProjects/Codex/D`、`codex/inference-foundation@01758b81527dc27eb4563bf1b66fd1ceab6647ee`。个人scheme仍未暂存orderHint1→6，SHA256`ca3635d88aa5a15397b90e528667c66c0e6db7e596176e885c79d194b544206c`，索引保持旧值；不切分支/暂存/还原。当前main不再经过这个旧源。
+- 起点main：`9586e35f6e3e2bb4c47432f2fa3132ab7c7b55a8`。
+- 本轮生产代码/正常签名App：`1e2501faed39fab954bbb205bc556ea537916219`。最终CPU受测：`43d6ab3e51583a31e7c8a08ac60911a6be9ddcce`；两者仅新增测试夹具修正，产品代码一致。后续仅文档，最终main/远端SHA见RN/lead/final-receipt.json，不把文档SHA冒充重新执行过测试。
+- 实施与同树Xcode：`/Volumes/CodexProjects/Codex/D-Worktrees/D-RELEASE-FREEZE-01`，`codex/release-freeze-01`；干净main接纳树为同级`D-DISCUSSION-MAIN`。唯一启动器及D Nodes Run见[试用指南](RELEASE_FREEZE_TRY.zh-CN.md)。旧候选保留，不自动接纳AP1/CORE/I2V。
+- main是唯一公开开发集成线；旧main归档与六个旧gitlink bundle已在前轮完成，本轮不重复、不强推、不改许可证、不发Release。
+- 保护源`/Volumes/CodexProjects/Codex/D`仍为`codex/inference-foundation@01758b81527dc27eb4563bf1b66fd1ceab6647ee`。个人scheme orderHint1→6仍未暂存，SHA256`ca3635d88aa5a15397b90e528667c66c0e6db7e596176e885c79d194b544206c`；索引/旧App/原件保护以最终回执为准，不切换或整理个人源。
 
-R=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261002T062206Z-discussion`；R4为同级`run-20261001T162316Z-r4`，R3为同级`run-20261001T040512Z-low-memory`。详细变化、失败、预算和验收映射只保留[任务记录](tasks/D-RELEASE-FREEZE-01.md)最新“讨论冻结本地实现收尾”段。
+RN=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261002T160047Z-native-closeout`。
+R为同级`run-20261002T062206Z-discussion`，R4=`run-20261001T162316Z-r4`，R3=`run-20261001T040512Z-low-memory`。
 
-## 当前能力与证据边界
+## 已完成与未闭合
 
-| 切片 | 已实现/实测 | 未闭合 |
+| 范围 | 已实现/本轮证据 | 尚未证明 |
 |---|---|---|
-| W1公开开发线 | 旧历史可恢复，双语README、About/Topics准确；正常推main不触发发行 | 公开源码不等于开放许可证、正式安装包或功能冻结 |
-| W4A模型导入 | 原位引用/独立复制，固定必要树校验，外部附加文件不删不执行；共享ModelLibrary与执行读取一致。64项模型库、35项Qwen/Flux、23项图像目录检查；Dev原目录metadata/header准入通过 | 原生文件面板/即时就绪刷新待H32；不是任意模型格式发现 |
-| 本轮真实计算 | cd4cd4b Qwen9原始精度SSD四采样帧正确先红后蓝；Klein BF16取消/完整生成/有序双参考归零，两份固定PNG与R3字节一致 | 非任意确定性/大内存常驻证明。其余未变的长计算沿用R3/R4，不重复生成 |
-| W4B媒体与位置 | 固定资产版本、引用/独立副本、在途快照、同内容重定位/收纳；普通副本深检漏比摘要先失败后通过。独立实例ID防恢复项目串写 | **文件UI切片预算耗尽**：Quick原件失联且另有命名Canvas项目时，资料库先预览失败，不能进入该条目的位置页；服务可用，入口未闭环。详情仅本项目已知使用计数，无导航关系清单/Finder入口/离线库聚合；lastVerifiedAt未随显式深检持久更新，副本时间未独立展示 |
-| W4C手动备份 | 默认元数据+媒体，可选模型、缓存不含；先保存Quick/Canvas草稿，取消/失败/换项目不发布；恢复新目录及独立实例、原件保留。结构音乐、嵌套工具/历史、源位置不可用恢复通过 | 原生文件选择/恢复操作和真实NAS未测。模型恢复需正常重新登记，设备授权不复制 |
-| 最终组合CPU | ca2121c：UI28项/文件与备份服务36项通过；非实现者审阅关键Lead修改和两项修复，无新增数据损坏风险 | 组件通过不关闭原生/hosting失败。新增入口缺陷已单列，未“测试绿就全部完成” |
-| H22 | DEBUG显式开关的自然client firstRect透传与cursor set/push/pop来源诊断可编译，非实现者审阅通过；不记录正文 | **未定位/未修复**候选不随动和指针回退；未提交组字消失是跨App线索，未在D复现。Mac locked阻塞自然输入和正常包复验 |
-| W3质量 | 4份旧完整LTX/H3视频全部帧已看，R/quality可直接查看原MP4；真实上游条件/采样代码CPU哨兵排除一项跨帧mask冻结假设 | LTX红区域持续/H3首尾跳变原因及通用控制质量未定；真人音轨/审美未验，不改称模型固有限制 |
-| E01性能 | 1000条元数据索引、20次标签筛选/100条标签保存重开观测；默认浏览不散列媒体 | workflowState仍读取/散列流程快照；不是零I/O、键入延迟或全部规模/NAS保证 |
+| F1直接恢复入口 | 资料库条目独立位置动作不先pin/预览原件；Quick与命名Canvas按Store+instance区分，顶栏按当前入口；文件模态阻止隐藏生成，预览失败保留恢复入口 | 新包中“失联Quick+独立Canvas→定位→收纳→重开”完整原生序列待解锁 |
+| F2核对范围/时间 | 默认概览轻检；选项深检与显式核对只读目标；摘要/长度/前后fingerprint和项目revision一致后更新lastVerifiedAt。验证后Session只更新元信息，不二次散列全媒体；实际内容变化仍刷新。失败/取消不记成功 | CPU/接线反例通过，不等于原生点击/NAS/无限规模性能 |
+| F3已知位置 | 本项目graph/node、派生资产与运行来源展示；图已加载时可导航，运行记录标不直接导航；Finder入口、已登记库离线聚合、原件/副本时间分开 | 仅已知范围，非全磁盘/跨软件索引；本轮原生点击待验 |
+| 文件CPU/构建 | `files-cpu-final`：UI18、Workbench42均通过；原始失败保留。普通签名App build exit0，未构建后手补provider；独立非实现者审阅修补与测试 | 两项旧offscreen hosting失败未重跑/未抹去；新包可见操作未完成 |
+| 原生已做 | ca2121c包与起点9586产品代码相同：登记模型库根、NSOpenPanel原位引用小PNG、NSSavePanel创建命名Canvas、保存、正常退出；均仅任务夹具 | 模型嵌套菜单自动操作未完成登记。此准备不是1e2501f新包F4通过；新包process启动后CUA返回Mac locked，自有新进程已结束 |
+| H22 | 15次实际client/context观察一致；现有trace调用由同PID符号化到NSHostingView.cursorUpdate→NSCursor.set，未截断；无新增日志装置 | CUA按键没有marked text或自然firstRect，不是IME复现。A候选/B指针根因未定、未修；C未在D复现。需实体键盘最短触发 |
+| README | 唯一全文改成同页EN在前/中文在后，小字引导、双语标题、显式锚点；旧中文页兼容跳转。源码/链接/构建说明非实现者复核 | 真实当前原生脱敏截图未取得，随H32补。GitHub桌面/窄屏观察见最终回执，不假称已有图片 |
+| 模型与质量 | 计算代码未改，沿用cd4cd4b的Qwen9原始精度SSD四帧、Klein BF16取消/完整/有序参考及R3/R4 Dev/H3/LTX/ACE/Wan有效结果；原MP4和全部帧证据保留 | 本轮没有新GPU/试听。LTX红区域/H3合成尾帧跳变原因及一般控制质量未定，不改称模型固有限制 |
 
-## 唯一集中本人清单与下一动作
+模型导入/必要树64项、Qwen/Flux35项、图像目录23项及备份等旧证据只按未变路径复用，不相加虚构本轮通过率。完整版本/命令/失败和修复来源只见[原任务记录](tasks/D-RELEASE-FREEZE-01.md)最新段。
 
-桌面工具本轮最后明确返回`Mac locked / apps=[]`，证据R/lead/native-final-blocker.json。不要无状态变化重复检查/解锁；不关闭旧D或要求重复授权。H22、H32和必要旧产物试听/质量判断统一在[集中待办](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md)。H31及已关闭录音、断网/Xcode事项不重开。
+## 唯一集中待办与下一动作
 
-新普通App通过正常签名构建与入口只读检查，但**锁屏未启动本包、未点Xcode Run**。两项旧hosting未到达真实目标的失败保留；解锁后换到可见路径才能补，不无限AX遍历。待用户返回先保存退出旧D，再用唯一新入口集中办；诊断包和关闭诊断的正常包结果分开。
+[集中待办](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md)维护H22实体组字/指针、H32解锁后代理可自行完成的原生操作/截图，以及四份旧视频的本人质量判断。H31账号/下载和已办录音、离线、Xcode事项不重开；没有状态变化不重复探测锁屏或催问。
 
-## 恢复与停止规则
+同版App启动器不会关闭另一份D；用户试用前自行保存退出旧App。诊断默认关闭。新包已启动进程但未取得窗口/点击证据，未在Xcode界面点Run；不要写成“原生验收通过”。
 
-Model/备份/文件UI/Qwen受限Worker均已交回；本轮自有模型/CPU/构建作业终态和最后保护快照见R/lead/final-receipt.json。CLI为可观察gpt-6-sol/high，hidden解析/完整Lead消耗/订阅费用unknown。文件UI初交+两修复+一次Lead接管已经用尽，下一次修改必须先明确新的有限修补范围，不能换编号重置。其他切片旧额度和失败见任务记录。
+## 预算、恢复与停止
 
-恢复核真实HEAD/index、个人scheme、活跃句柄/已知写入者及受测二进制，不只相信摘要。源码/测试/引擎无变化的历史结果按影响复用；旧App、模型、项目、候选、外盘证据不删除。AP1/CORE/I2V候选不自动合入；Pitch内嵌评估权重、首次使用/升级恢复、依赖/渠道与许可等[发行责任](MODEL_SUPPORT_AND_RELEASE.zh-CN.md)仍在。
+旧FILES-UI初交/两修复/Lead接管历史不变。本次用户明确批准的新有限续修由受限gpt-6-sol/high初交+两次修复完成，Lead未实质重写实现；非实现者静态复核及Lead实际CPU/构建分开。repair1解决旧深检回归、全媒体二次读取和项目副本移出角色；repair2仅修测试的未同步前置状态。无剩余普通修复，本次有界Lead接管未使用。权限/模型路由及异常逐轮已查，无成功越界证据；隐藏解析和完整Lead/订阅费用unknown。
 
-**公开主线可更新；本轮全部用户闭环、功能冻结和正式发行尚未通过。** 下一步停在用户试用和冻结判断，先处理上述具体缺口，不恢复开放式模型扩张。
+恢复先核真实HEAD/index、个人文件、活跃句柄/已知写入者及App摘要；当前受限Worker/CPU/build已结束，自有测试进程终态见RN/lead/final-receipt.json，旧D未关闭。保留模型/项目/候选/证据，不清理。不通过重复生成或新抽象掩盖未验。
+
+**停在用户试用与冻结判断。** 不增加聊天/富文本/联网/模型平台；Pitch内部评估权重、无权重分发、首次使用/依赖封装/升级恢复/渠道等[发行责任](MODEL_SUPPORT_AND_RELEASE.zh-CN.md)继续保留。

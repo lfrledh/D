@@ -390,3 +390,43 @@ Model导入Sol初交＋两修复后Lead一次有限接管（最深目录同步�
 
 
 **最终非实现者入口复核新增停点**：ca2121c没有发现该问题会改写/损坏数据，但`previewLibraryEntry`先pin并读取原件，唯一条目位置按钮在成功预览后；Quick原件失联且已有命名Canvas项目时，顶栏又指向后者，该Quick位置恢复页不可达。FILES-UI初交/两修复/一次Lead接管均已耗尽，本轮停止该项修改。W4B另有有限展示未完：仅本项目使用计数，缺导航关系清单/Finder/离线库聚合；显式深检不持久更新lastVerifiedAt，副本创建时间未独立显示。服务检查通过仍有效，**W4B完整用户闭环未完成**；不以公开开发门槛掩盖。上述无破坏性已知缺口在双语README、试用指南与当前行动明确标记，main可以正常更新，功能冻结不得据此通过。
+
+
+### 2026-10-03 原生有限续修授权（授权时记录，结案见下）
+
+起点 main/candidate `9586e35f6e3e2bb4c47432f2fa3132ab7c7b55a8`；证据 `run-20261002T160047Z-native-closeout`。用户明确再次授权 F1–F3 有限续修，不抹去上轮 FILES-UI 初交、两修复和 Lead 接管后未闭环的历史。Lead 负责 H22 现场、README、整合和验收；受限独立 Sol/high Worker 负责已知文件入口/核对/展示和对应局部测试，先只读预检再实施，普通初交及最多两次定向修复、必要时一次有界 Lead 接管。此次不新增模型/架构/权限。
+
+桌面工具本次可访问；用户不能亲自组字/试听。H22 复用自然 firstRect 和 cursor trace，默认关闭；真实系统按键、控件替身与真人结果分开。保留旧 D 进程与数据。源个人 scheme 内容、摘要及索引起始快照见本 run 的 `lead/start.json`。受管工作树工具绑定内盘空仓而不能解析本项目 SHA，本次经核验无活动 Git hooks 后在正确外盘 Git 仓手工创建专属工作树；不操作空仓。
+
+H22 首轮现场（ca2121c App，与9586e35代码一致）：自有PID56184/独立UUID，旧D37434未关闭。CUA单独pressKey(n/i)，不是AX填字或粘贴；中文ITABC及临时ABC均直接插入，15次client观察没有marked text/自然firstRect，未达到系统候选复现条件。输入源已恢复ITABC。原生zoom实际改变窗口，前后invalidate的responder/context与active client/context一致；没有发给另一输入对象的证据。现有cursor栈由同PID atos解到NSHostingView.cursorUpdate → NSView/NSTrackingArea → NSCursor.set；对象地址不等于光标形状，截图工具合成指针也不作系统光标证据。日志未截断。未建立原故障因果，不猜测替换TextEditor或强制光标；A/B仍未修，C未在D复现。诊断实例已Cmd+Q退出，旧D仍在。证据为gui/h22-diagnostic-summary.json、原日志和符号表。最小缺失是实体键盘建立真实候选后保持组字水平移窗一次，再看自然查询，不是新增授权。非实现者native_h22_diagnosis独立核对了证据限制。
+
+
+#### native-1 初交与第一次定向修复（当时停点，结果见下）
+
+受限 gpt-6-sol/high 初交已交回并由 Lead 按八文件提交为 `d27974b0762f272eafe4b8640087a351ca18027e`，仅进入 release-freeze 候选，main 未动。编译后 UI 18 项通过；Workbench 40 项中旧 `independentLibraryCopyAndSameVersionRelocation` 一项失败，不能因新默认轻检而删改显式深检断言。只读非实现者另发现：文件页核对后的 Session 刷新又散列其他媒体；同 inode 的项目副本移出后错误保留 projectCopy。合并为 repair1，保留初次失败。仅为这些反例新增允许 `ProjectSession.refreshAfterFileOperation` 的有限刷新区分与 `ProjectInstanceRoutingTests` 接线回归，不重构资产系统。普通修复两轮额度已使用第一轮，等待复验。
+
+Lead 已用普通 ca2121c 包原生建立隔离 Quick 的 reference.png 外部引用和独立 Canvas-Closeout 项目。仅操作本轮夹具；旧普通 D PID37434 保留。模型库根目录已通过文件面板选择；嵌套模型菜单的自动点击未进入导入对话框，不能记作模型登记通过。自有旧测试实例57183已正常退出，等待同版新包执行完整 F4。
+
+
+#### native-closeout 交付检查点（2026-10-03，工程通过，原生部分未验）
+
+RN=`run-20261002T160047Z-native-closeout`，相对本任务AgentTrials根。起点main `9586e35f6e3e2bb4c47432f2fa3132ab7c7b55a8`，不是Dot旧快照。初交 `d27974b0762f272eafe4b8640087a351ca18027e`；修复1产品/构建版本 **1e2501faed39fab954bbb205bc556ea537916219**；修复2只改新增测试前置，最终CPU **43d6ab3e51583a31e7c8a08ac60911a6be9ddcce**。此后只有获准文档；最终main/远端SHA写RN/lead/final-receipt.json，不为自引用再次提交。
+
+| 本轮项 | 实际改动/证据 | 结论边界 |
+|---|---|---|
+| F1 | SharedLibraryBrowser独立location动作；DualWorkbenchView按Quick/命名Canvas的Store+instance解析，不先pin/预览；顶栏跟随入口；位置/等待模态禁隐式生成；失败预览也可恢复 | 代码与组件通过，未宣称完整原生闭环 |
+| F2 | ProjectStore.verifyAssetLocation仅核对所选位置，摘要/长度、前后fingerprint及实例/revision/磁盘manifest相合才提交lastVerifiedAt；失败取消不成功。默认概览轻检，显式asset deep仍检查该asset所有位置，保留旧契约 | 修复1纠正初交破坏旧显式deep语义的失败；不靠删旧断言变绿 |
+| F2接线 | ProjectSession.refreshAfterFileOperation增加窄metadata-only区分；workflow.refreshAvailableAssets和refreshLibrary(false)只投影不散列媒体，真实新增/位置/内容变更退回原媒体刷新 | 真实Session接线测试在基线同步后破坏无关原件，核对另一文件成功/失败/取消仍保留缓存且无无关读取错误；新增内容反例仍刷新。不是新缓存平台 |
+| F3 | 本项目graph/node、派生资产、run来源；图已加载可跳转，运行项明确不直接导航；Finder、已登记库离线聚合；原件/此副本时间区分。项目副本同inode移出后改为externalOriginal，不继续读缺失包内路径 | 只知本项目/已登记范围，未知创建时间不补造；新UI点击待验 |
+| CPU | `lead/files-cpu-final-{command,result}.json/.log`：18项UI、42项Workbench均通过，命令7.191秒；过滤为实例/位置/文件呈现/资料库/备份/元数据相关检查 | 最终1个命令的两target结果，不叠加旧通过率。原两项offscreen hosting失败仍保留 |
+| 正常App | `lead/app-build-result.json`：正常签名build60.159秒exit0；原资源六引擎由正常构建验证/嵌入，未构建后补provider。`delivery/D Native Closeout.app`及唯一启动器--check通过；无默认trace | build在1e2501f；与43d6ab3仅测试差异，产品相同。进程59433启动后CUA报Mac locked，未获窗口/点击证据，自有该进程SIGTERM后确认结束 |
+| 已做原生 | 旧ca2121c/起点同代码包：隔离模型库根选择、小PNG的原位引用、命名Canvas创建/保存，任务Fixture数据已保留；自身正常CmdQ，未关闭用户旧D | MRT2嵌套菜单自动点击未完成登记，不是模型引用/复制通过；新包F4恢复/收纳/备份/重开未验 |
+| H22 | 复用现有trace；15次client/context一致、natural firstRect0/marked0、未截断；同PID atos解出NSHostingView.cursorUpdate→NSCursor.set。输入源恢复；非实现者复核证据限制 | 不证明坐标正确或错误覆盖者，A/B未修；C未在D复现。需要实体键盘最短触发；没有强制光标/抢焦点/清组字 |
+| README | 唯一同页EN→中文、双语标题/小字/显式锚点、旧中文兼容页，19+2本地链接和构建说明非实现者核对；公开浏览见最终回执 | 原生新截图未能固定到可公开文件；再次锁屏后不伪造或用旧界面冒充。图片项仍未完成，不影响本轮正常main开发更新 |
+| 质量/模型 | 生产推理/资源未改，前文cd4cd4b/R3/R4固定完整模型和条件证据继续适用；四份完整H3/LTX视频原件/全帧/有限mask反证复用 | 本轮没有新推理、试听或质量批准；不以“慢/锁屏”为由降低精度 |
+
+**本轮失败与来源**：Sol/high初交+两次普通修复，无Lead实质实现重写或有界接管。repair1解决非实现者提出的全媒体二次读取和移出项目副本角色，并恢复旧deep行为；实际CPU18通过，42服务中新增fixture一项7断言失败。原因是测试直接向Store导入两资产却未同步owner，正确触发内容刷新；repair2先建立真实基线并保留新增内容反例，只改该新测试。两轮静态非实现者复核没有剩余明确问题；Lead独立运行实际CPU和构建，未冒称Reviewer也执行测试。
+
+受限CLI初交线程`01a0fd5e-0b5b-7c63-bde6-a25322fe38bc`，修复1`01a0fd77-d5ad-7571-9470-2fceb1113066`，修复2`01a0fd84-723e-7083-8698-81158b09b265`，请求/运行上下文均gpt-6-sol/high、workspace-write、networkfalse；WT为`D-NATIVE-FILES-CLOSEOUT`，输出/tmp只在RN/files，公共.git不授权Worker。逐轮route、process、event-review可核。repair2一次rg误拼日志目录ENOENT，修正只读定位；不是权限拒绝/成功越界。未读凭据/改全局/访问用户素材。三个写运行墙钟1236.57/383.29/251.51秒；末次turn增量输入439184（含缓存395136）、输出8747（reasoning4235是其中分类），不重复累计。完整Lead消耗、服务端隐藏解析、订阅实际费用unknown，不复算旧批次或宣称最优成本。
+
+**恢复点**：所有自有Worker/CPU/build结束；诊断56184、普通前置57183已正常退出，新包59433锁屏停点后结束；旧D37434未操作。个人scheme内容/索引/未暂存状态和旧App四关键文件由最终保护回执核对；仅操作任务Fixtures，原模型/项目/候选保留。main获准正常接入、推送，当前图/聊天/新功能不在授权内。集中清单仅H22实体输入、H32桌面可用后代理原生和截图、旧视频本人质量；H31不重开。工程修补完成不等于功能冻结通过或正式发布。
