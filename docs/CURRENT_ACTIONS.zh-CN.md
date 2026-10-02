@@ -10,7 +10,7 @@
 - 个人旧源仍 `codex/inference-foundation@01758b81527dc27eb4563bf1b66fd1ceab6647ee`，scheme未暂存orderHint 1→6，SHA-256 `ca3635d88aa5a15397b90e528667c66c0e6db7e596176e885c79d194b544206c`；不切分支/暂存/还原。
 - R=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261002T062206Z-discussion`。本轮W0核对完成，W1双语首页/历史备份/公开基线先行；随后W4A外部目录导入、W4B引用/入库/已知位置/项目收纳、W4C手动备份恢复分片实现并检查。W2只针对H22实际客户端/指针和hosting，W3复用已有完整产物解决质量疑点；不新增模型或同步平台。
 - R4=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261001T162316Z-r4`；R3=`…/run-20261001T040512Z-low-memory`。既有证据与失败保留[原任务](tasks/D-RELEASE-FREEZE-01.md)，未受影响不重跑。r4正常签名App及受测代码6328d9cd7dca1edb1b2a5b233089bb73469be7ca；0555仅后续文档。
-- 唯一[测试政策](TESTING_POLICY.zh-CN.md)补文件生命周期与公开主线边界。W4新功能尚未实现/验收，不以README更新冒称可用。
+- 唯一[测试政策](TESTING_POLICY.zh-CN.md)补文件生命周期与公开主线边界。W4文件服务切片已实现：引用/独立副本、固定版本读取、位置恢复/收纳、手动备份及独立恢复；受测代码 `dac0316f4810c73a32df8545b01adc4d2ee255de` 的相关实现与 `lead/backup-integration-05.log` 对应，18项CPU检查通过，非实现者定向审阅无剩余P1/P2阻塞。包含音频→音符→和弦来源、嵌套工具/执行历史和原位置不可用后的恢复。此为服务切片，UI仍在独立候选审阅，不宣称原生用户闭环。
 
 ## 本轮已核实与当前在做
 
