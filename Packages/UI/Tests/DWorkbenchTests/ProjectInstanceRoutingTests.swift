@@ -34,21 +34,43 @@ struct ProjectInstanceRoutingTests {
         try Data("selected".utf8).write(to: selected)
         try Data("unrelated".utf8).write(to: unrelated)
         let first = try await store.importWorkflowMediaFile(at: selected, mode: .reference)
-        _ = try await store.importWorkflowMediaFile(at: unrelated, mode: .reference)
+        await owner.refreshAfterFileOperation(store: store, instanceID: instanceID)
+        let second = try await store.importWorkflowMediaFile(at: unrelated, mode: .reference)
+        // Adding an asset is a content change even when the caller requests a metadata-only refresh.
+        await owner.refreshAfterFileOperation(store: store, instanceID: instanceID, refreshMedia: false)
+        let baseline = await store.snapshot()
+        #expect(owner.manifest?.revision == baseline.revision)
+        #expect(owner.manifest?.assets == baseline.assets)
+        let cachedURLs = owner.assetURLs
+        #expect(cachedURLs.count == 2)
+        let selectedCache = try #require(cachedURLs[first.asset.id])
+        let unrelatedCache = try #require(cachedURLs[second.asset.id])
+        #expect(FileManager.default.fileExists(atPath: selectedCache.path))
+        #expect(FileManager.default.fileExists(atPath: unrelatedCache.path))
+        #expect(try Data(contentsOf: selectedCache) == Data("selected".utf8))
+        #expect(try Data(contentsOf: unrelatedCache) == Data("unrelated".utf8))
+        #expect(owner.errorMessage == nil)
+
         try FileManager.default.removeItem(at: unrelated)
         try FileManager.default.createDirectory(at: unrelated, withIntermediateDirectories: false)
         try await store.verifyAssetLocation(first.asset.id)
         await owner.refreshAfterFileOperation(store: store, instanceID: instanceID, refreshMedia: false)
         #expect(owner.manifest?.revision == (await store.snapshot()).revision)
-        #expect(owner.manifest?.assets.first(where: { $0.id == first.asset.id })?.fileLocations?.locations.first?.lastVerifiedAt != nil)
-        #expect(owner.assetURLs.isEmpty)
-        #expect(!FileManager.default.fileExists(atPath: store.rootURL.appendingPathComponent("AssetInputs").path))
+        let verifiedAt = try #require(owner.manifest?.assets.first(where: { $0.id == first.asset.id })?
+            .fileLocations?.locations.first?.lastVerifiedAt)
+        #expect(owner.assetURLs == cachedURLs)
+        #expect(try Data(contentsOf: selectedCache) == Data("selected".utf8))
+        #expect(try Data(contentsOf: unrelatedCache) == Data("unrelated".utf8))
         #expect(owner.errorMessage == nil)
         try Data("changed selected".utf8).write(to: selected)
         await #expect(throws: (any Error).self) { try await store.verifyAssetLocation(first.asset.id) }
         await owner.refreshAfterFileOperation(store: store, instanceID: instanceID, refreshMedia: false)
         #expect(owner.manifest?.revision == (await store.snapshot()).revision)
-        #expect(owner.assetURLs.isEmpty)
+        #expect(owner.manifest?.assets.first(where: { $0.id == first.asset.id })?
+            .fileLocations?.locations.first?.lastVerifiedAt == verifiedAt)
+        #expect(owner.assetURLs == cachedURLs)
+        #expect(try Data(contentsOf: selectedCache) == Data("selected".utf8))
+        #expect(try Data(contentsOf: unrelatedCache) == Data("unrelated".utf8))
         #expect(owner.errorMessage == nil)
         let cancelled = Task { @MainActor in
             withUnsafeCurrentTask { $0?.cancel() }
@@ -57,7 +79,11 @@ struct ProjectInstanceRoutingTests {
         await #expect(throws: (any Error).self) { try await cancelled.value }
         await owner.refreshAfterFileOperation(store: store, instanceID: instanceID, refreshMedia: false)
         #expect(owner.manifest?.revision == (await store.snapshot()).revision)
-        #expect(owner.assetURLs.isEmpty)
+        #expect(owner.manifest?.assets.first(where: { $0.id == first.asset.id })?
+            .fileLocations?.locations.first?.lastVerifiedAt == verifiedAt)
+        #expect(owner.assetURLs == cachedURLs)
+        #expect(try Data(contentsOf: selectedCache) == Data("selected".utf8))
+        #expect(try Data(contentsOf: unrelatedCache) == Data("unrelated".utf8))
         #expect(owner.errorMessage == nil)
         await owner.closeProject()
     }
