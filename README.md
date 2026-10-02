@@ -15,7 +15,7 @@ The node workbench is implemented. This repository is an active development base
 | Images | FLUX.2-klein-4B and FLUX.2-dev: text generation and ordered reference images. Original precision and separately identified quantized profiles are not interchangeable. |
 | Video | Wan2.1-T2V-1.3B (text to silent video); LTX-2.5 dev single-stage (text / first frame to audiovisual video); MiniMax H3 Base FL2VA (text / first and last frame to audiovisual video). This is not every mode of each model family. |
 | Music | MRT2 small/export-v1 with actual note/chord conditions; ACE-Step 1.5 XL SFT F32/no-LM generation, lyrics/reference, cover and repaint. Music control is approximate, not guaranteed score fidelity. |
-| Resources | Explicit model download/import, preparation and validation, shared installation leases, cancellation and asset provenance. Location management, copy-to-library and manual backup/restore are the current implementation slice; do not assume they are complete. |
+| Resources | Explicit model download/import, preparation and validation, shared installation leases, cancellation and asset provenance. Explicit external references or independent copies, known-location inspection/recovery, project media collection and manual backup/independent restore are implemented. File services and connected component tests pass; native file-panel acceptance remains pending. |
 
 The [model capability matrix](docs/RELEASE_MODEL_MATRIX.zh-CN.md) records exact profiles, revisions and tested modes. Full representative original-precision requests have run using SSD layering for Dev, H3 and LTX, with cancellation and real artifact storage checks. This does not establish every parameter combination, large-memory resident mode or current App interaction.
 
@@ -64,7 +64,8 @@ Add `--offline` only when the required dependencies are already cached. It does 
 - IME candidate positioning and mouse-cursor reversion remain under targeted diagnosis. Input selection has passed previous human checks; that does not close positioning defects.
 - Current App acceptance is incomplete. Two offscreen hosting tests did not reach their intended controls; their failures remain recorded.
 - The LTX synthetic first-frame sample retains a planar red region. Its cause and general control quality are not settled. Short H3 samples do not establish long-video quality.
-- Import, known-location recovery, project collection and manual backup are being completed in bounded slices. No cloud synchronization or concurrent multi-Mac library writing is provided.
+- A known UI recovery gap remains: a missing Quick asset can fail preview before its location inspector opens when a separate named Canvas project is active. Known-use navigation and verification-time presentation also remain incomplete.
+- The new file-management panels are compiled but await native acceptance. Default browsing checks metadata rather than rehashing media; an explicit content check does read the file. Backups exclude models by default, restore to a new project instance, and do not include device authorization. Real NAS behavior remains untested; there is no cloud synchronization or concurrent multi-Mac library writing.
 - Clean-machine setup, dependency packaging, upgrades/recovery and distribution checks remain. The intended distributed App does not bundle model weights; the current internal Pitch development engine still includes an evaluation ONNX weight and is **not** a distribution package.
 
 Models are acquired explicitly by the user; their terms and sources are separate from D's code. No new model family, training system, remote service or mobile client is part of the current closeout.
