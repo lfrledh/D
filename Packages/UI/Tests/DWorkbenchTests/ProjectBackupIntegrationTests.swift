@@ -60,7 +60,7 @@ struct ProjectBackupIntegrationTests {
 
     @Test @MainActor func damagedRestoredQuickIsReadOnlyAndSurvivesClose() async throws {
         let root = URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory())
-            .appendingPathComponent("BadRestoredQuick-" + UUID().uuidString)
+            .appendingPathComponent("BadRestoredQuick-" + UUID().uuidString + ".dproject")
         let store = try await ProjectStore.create(at: root, name: "损坏草稿保留")
         try await store.close()
         let data = Data("invalid quick JSON".utf8)
