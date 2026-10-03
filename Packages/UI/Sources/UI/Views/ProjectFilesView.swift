@@ -454,7 +454,7 @@ struct ProjectFilesView: View {
             guard await source.begin() == .OK, let backup = source.url else { return }
             let destination = NSSavePanel(); destination.title = word("restoreDestination", "选择新的 .dproject 位置")
             destination.nameFieldStringValue = "Restored.dproject"
-            destination.allowedContentTypes = [UTType(filenameExtension: "dproject") ?? .package]
+            destination.allowedContentTypes = ProjectDocumentType.allowedContentTypes
             guard await destination.begin() == .OK, let target = destination.url else { return }
             guard !FileManager.default.fileExists(atPath: target.path) else { message = word("exists", "目标已存在；请选择新名称。"); return }
             runRestore(from: backup, to: target, allowIncomplete: false)
