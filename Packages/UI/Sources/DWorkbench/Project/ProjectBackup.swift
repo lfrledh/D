@@ -54,6 +54,7 @@ public enum ProjectBackupError: LocalizedError, Sendable {
         public let operation: String
         public let code: Int32
         public let published: Bool
+        public let existingBackup: Bool
     }
     public struct FoundationFailure: Sendable {
         public let operation: String
@@ -67,6 +68,7 @@ public enum ProjectBackupError: LocalizedError, Sendable {
     case alreadyExists(String)
     case invalidPackage(String)
     case integrity(String)
+    case publishedIntegrity(String)
     case insufficientSpace
     case io(String)
     case posix(POSIXFailure)
@@ -78,12 +80,15 @@ public enum ProjectBackupError: LocalizedError, Sendable {
         case .alreadyExists: return "目标位置已有文件。请选择其他名称，现有文件未被覆盖。"
         case .invalidPackage: return "备份包无效或不完整。请检查备份来源。"
         case .integrity: return "备份文件核对失败。请检查原文件或备份包。"
+        case .publishedIntegrity: return "已发布的结果核对失败；本操作未删除结果，请检查所选位置，勿直接重试。"
         case .insufficientSpace: return "目标磁盘空间不足。请释放空间后重试。"
         case .io(let detail): return "备份或恢复失败：\(detail)"
         case .posix(let failure):
-            let state = failure.published
-                ? "结果可能已发布并保留，请先检查所选位置，勿直接重试。"
-                : "结果未发布，现有文件未被覆盖。"
+            let state = failure.existingBackup
+                ? "核验未删除所选备份，请检查备份包和所在磁盘。"
+                : failure.published
+                    ? "结果已发布，本操作未删除结果；请先检查所选位置，勿直接重试。"
+                    : "结果未发布，现有文件未被覆盖。"
             let action: String
             switch failure.code {
             case EACCES, EPERM: action = "请检查所选位置的访问权限。"
@@ -95,7 +100,7 @@ public enum ProjectBackupError: LocalizedError, Sendable {
             return "备份或恢复失败（\(failure.operation)，POSIX \(failure.code)：\(String(cString: strerror(failure.code)))）。\(state)\(action)"
         case .foundation(let failure):
             let underlying = failure.underlyingDomain.map { "；底层 \($0) \(failure.underlyingCode ?? 0)" } ?? ""
-            return "备份清单处理失败（\(failure.operation)，\(failure.domain) \(failure.code)\(underlying)）。请检查备份包或原文件。"
+            return "备份或恢复失败（\(failure.operation)，\(failure.domain) \(failure.code)\(underlying)）。本次操作未发布新结果，已有文件未被覆盖；请检查所选位置、备份包或原文件。"
         }
     }
 }
@@ -109,10 +114,11 @@ public enum ProjectBackup {
     // Internal seam: deterministic cancellation and source mutation tests without a public hook.
     static func create(_ plan: ProjectBackupPlan, at destination: URL, allowIncomplete: Bool = false,
                        checkpoint: @escaping @Sendable (Int) throws -> Void,
-                       markerCheckpoint: @escaping @Sendable () throws -> Void = {}) async throws -> ProjectBackupReceipt {
+                       stageCheckpoint: @escaping @Sendable (URL) throws -> Void = { _ in },
+                       markerCheckpoint: @escaping @Sendable (URL) throws -> Void = { _ in }) async throws -> ProjectBackupReceipt {
         let work = Task.detached(priority: .userInitiated) {
             try createSync(plan, at: destination, allowIncomplete: allowIncomplete,
-                           checkpoint: checkpoint, markerCheckpoint: markerCheckpoint)
+                           checkpoint: checkpoint, stageCheckpoint: stageCheckpoint, markerCheckpoint: markerCheckpoint)
         }
         return try await withTaskCancellationHandler { try await work.value } onCancel: { work.cancel() }
     }
@@ -129,9 +135,11 @@ public enum ProjectBackup {
 
     // The descriptor is borrowed for this synchronous call. The helper owns and closes it.
     static func restore(at backup: URL, to destination: URL, allowIncomplete: Bool = false,
-                        prepare: @escaping @Sendable (Int32) throws -> Void) async throws -> ProjectBackupReceipt {
+                        prepare: @escaping @Sendable (Int32) throws -> Void,
+                        publicationCheckpoint: @escaping @Sendable (URL) throws -> Void = { _ in }) async throws -> ProjectBackupReceipt {
         let work = Task.detached(priority: .userInitiated) {
-            try restoreSync(at: backup, to: destination, allowIncomplete: allowIncomplete, prepare: prepare)
+            try restoreSync(at: backup, to: destination, allowIncomplete: allowIncomplete,
+                            prepare: prepare, publicationCheckpoint: publicationCheckpoint)
         }
         return try await withTaskCancellationHandler { try await work.value } onCancel: { work.cancel() }
     }
@@ -171,10 +179,66 @@ private extension ProjectBackup {
         let device: dev_t; let inode: ino_t
         init(_ value: stat) { device = value.st_dev; inode = value.st_ino }
     }
+    struct ReplacementDirectory {
+        let url: URL
+        let fd: Int32
+        let owner: Int32
+        let identity: DirectoryIdentity
+
+        func close() {
+            // The system directory is removed only if it is still ours and empty.
+            var named = stat()
+            if fstatat(owner, url.lastPathComponent, &named, AT_SYMLINK_NOFOLLOW) == 0,
+               named.st_mode & S_IFMT == S_IFDIR, DirectoryIdentity(named) == identity {
+                _ = unlinkat(owner, url.lastPathComponent, AT_REMOVEDIR)
+            }
+            Darwin.close(owner)
+            Darwin.close(fd)
+        }
+    }
+
+    static func replacementDirectory(for target: URL, destinationParent: Int32) throws -> ReplacementDirectory {
+        let temporary: URL
+        do {
+            temporary = try FileManager.default.url(for: .itemReplacementDirectory, in: .userDomainMask,
+                                                    appropriateFor: target, create: true)
+        } catch { throw foundation("create same-volume replacement directory", error) }
+        // Only the OS-created path is canonicalized; the selected destination keeps its
+        // component-by-component O_NOFOLLOW traversal.
+        guard let resolved = realpath(temporary.path, nil) else { throw io("resolve replacement directory") }
+        defer { free(resolved) }
+        let location = URL(fileURLWithPath: String(cString: resolved), isDirectory: true)
+        let fd = try directory(location)
+        do {
+            let owner = try directory(location.deletingLastPathComponent())
+            do {
+                let identity = try directoryIdentity(fd)
+                guard try namedDirectoryIdentity(location.lastPathComponent, in: owner) == identity else {
+                    throw ProjectBackupError.integrity("replacement directory changed")
+                }
+                let destinationIdentity = try directoryIdentity(destinationParent)
+                guard identity.device == destinationIdentity.device else {
+                    throw ProjectBackupError.io("系统临时位置与目标不在同一卷；结果未发布。")
+                }
+                return ReplacementDirectory(url: location, fd: fd, owner: owner, identity: identity)
+            } catch {
+                var opened = stat(), named = stat()
+                if fstat(fd, &opened) == 0,
+                   fstatat(owner, location.lastPathComponent, &named, AT_SYMLINK_NOFOLLOW) == 0,
+                   named.st_mode & S_IFMT == S_IFDIR,
+                   DirectoryIdentity(opened) == DirectoryIdentity(named) {
+                    _ = unlinkat(owner, location.lastPathComponent, AT_REMOVEDIR)
+                }
+                Darwin.close(owner)
+                throw error
+            }
+        } catch { Darwin.close(fd); throw error }
+    }
 
     static func createSync(_ plan: ProjectBackupPlan, at destination: URL, allowIncomplete: Bool,
                            checkpoint: @Sendable (Int) throws -> Void,
-                           markerCheckpoint: @Sendable () throws -> Void) throws -> ProjectBackupReceipt {
+                           stageCheckpoint: @Sendable (URL) throws -> Void,
+                           markerCheckpoint: @Sendable (URL) throws -> Void) throws -> ProjectBackupReceipt {
         try Task.checkCancellation()
         let target = try absolute(destination)
         let manifest = try makeManifest(plan, allowIncomplete: allowIncomplete)
@@ -188,9 +252,12 @@ private extension ProjectBackup {
             }
         }
         try capacity(for: manifest.files, in: parent)
+        let staging = try replacementDirectory(for: target, destinationParent: parent)
+        defer { staging.close() }
         let stageName = ".d-backup-\(UUID().uuidString).partial"
-        guard mkdirat(parent, stageName, 0o700) == 0 else { throw io("create staging directory") }
-        let stage = try childDirectory(stageName, in: parent)
+        guard mkdirat(staging.fd, stageName, 0o700) == 0 else { throw io("create staging directory") }
+        let stage = try childDirectory(stageName, in: staging.fd)
+        let stageURL = staging.url.appendingPathComponent(stageName, isDirectory: true)
         defer { Darwin.close(stage) }
         let ownedStage = try directoryIdentity(stage)
         var markerFD: Int32 = -1
@@ -210,7 +277,7 @@ private extension ProjectBackup {
                 Darwin.close(markerFD)
             }
         }
-        guard fsync(parent) == 0 else { throw io("sync staging parent") }
+        guard fsync(staging.fd) == 0 else { throw io("sync staging parent") }
         for (index, input) in plan.files.enumerated() {
             try Task.checkCancellation()
             let (folder, name) = try createParent(input.relativePath, in: stage)
@@ -252,6 +319,7 @@ private extension ProjectBackup {
         catch { throw foundation("encode backup manifest", error) }
         guard bytes.count <= maxManifestBytes else { throw ProjectBackupError.invalidPackage("manifest too large") }
         try writeSmall(bytes, named: manifestName, in: stage)
+        try stageCheckpoint(stageURL)
         try Task.checkCancellation()
         _ = try inspect(manifest: manifest, in: stage, directory: target, verifyFiles: true)
         try absent(target.lastPathComponent, in: parent)
@@ -262,32 +330,40 @@ private extension ProjectBackup {
         try write(Data(digest(bytes).utf8), to: marker)
         guard fsync(marker) == 0 else { throw io("sync completion marker") }
         guard fsync(stage) == 0 else { throw io("sync completion directory") }
-        try markerCheckpoint()
+        try markerCheckpoint(stageURL)
         try Task.checkCancellation()
         try checkPublicationRoute(parent: parent, parentURL: target.deletingLastPathComponent(),
+                                  stagingParent: staging.fd, stagingURL: staging.url,
                                   stage: stage, stageName: stageName, stageIdentity: ownedStage)
-        guard renameatx_np(parent, stageName, parent, target.lastPathComponent, UInt32(RENAME_EXCL)) == 0 else {
+        guard renameatx_np(staging.fd, stageName, parent, target.lastPathComponent, UInt32(RENAME_EXCL)) == 0 else {
             let failure = errno
             if failure == EEXIST { throw ProjectBackupError.alreadyExists(target.path) }
             throw io("publish backup package", code: failure)
         }
         published = true
         try checkPublishedTarget(target.lastPathComponent, in: parent, expected: ownedStage)
+        guard fsync(staging.fd) == 0 else { throw io("sync replacement directory after backup publication", published: true) }
         guard fsync(parent) == 0 else { throw io("sync published backup parent", published: true) }
         return receipt(manifest, at: target)
     }
 
     static func verifySync(at backup: URL) throws -> ProjectBackupReceipt {
-        let location = try absolute(backup)
-        try rejectPartial(location)
-        let root = try directory(location)
-        defer { Darwin.close(root) }
-        let manifest = try loadManifest(in: root)
-        return try inspect(manifest: manifest, in: root, directory: location, verifyFiles: true)
+        do {
+            let location = try absolute(backup)
+            try rejectPartial(location)
+            let root = try directory(location)
+            defer { Darwin.close(root) }
+            let manifest = try loadManifest(in: root)
+            return try inspect(manifest: manifest, in: root, directory: location, verifyFiles: true)
+        } catch ProjectBackupError.posix(let failure) {
+            throw ProjectBackupError.posix(.init(operation: failure.operation, code: failure.code,
+                                                 published: false, existingBackup: true))
+        }
     }
 
     static func restoreSync(at backup: URL, to destination: URL, allowIncomplete: Bool,
-                            prepare: @Sendable (Int32) throws -> Void) throws -> ProjectBackupReceipt {
+                            prepare: @Sendable (Int32) throws -> Void,
+                            publicationCheckpoint: @Sendable (URL) throws -> Void) throws -> ProjectBackupReceipt {
         try Task.checkCancellation()
         let source = try absolute(backup), target = try absolute(destination)
         try rejectPartial(source)
@@ -302,12 +378,15 @@ private extension ProjectBackup {
         defer { Darwin.close(parent) }
         try absent(target.lastPathComponent, in: parent)
         try capacity(for: manifest.files, in: parent)
+        let staging = try replacementDirectory(for: target, destinationParent: parent)
+        defer { staging.close() }
         let stageName = ".d-restore-\(UUID().uuidString).partial"
-        guard mkdirat(parent, stageName, 0o700) == 0 else { throw io("create restore staging directory") }
-        let stage = try childDirectory(stageName, in: parent)
+        guard mkdirat(staging.fd, stageName, 0o700) == 0 else { throw io("create restore staging directory") }
+        let stage = try childDirectory(stageName, in: staging.fd)
+        let stageURL = staging.url.appendingPathComponent(stageName, isDirectory: true)
         defer { Darwin.close(stage) }
         let ownedStage = try directoryIdentity(stage)
-        guard fsync(parent) == 0 else { throw io("sync restore staging parent") }
+        guard fsync(staging.fd) == 0 else { throw io("sync restore staging parent") }
         for entry in manifest.files {
             try Task.checkCancellation()
             let input = try relativeFile(entry.path, in: backupFD)
@@ -328,18 +407,22 @@ private extension ProjectBackup {
         _ = try inspect(manifest: manifest, in: stage, directory: target, verifyFiles: true)
         try Task.checkCancellation()
         try checkPublicationRoute(parent: parent, parentURL: target.deletingLastPathComponent(),
+                                  stagingParent: staging.fd, stagingURL: staging.url,
                                   stage: stage, stageName: stageName, stageIdentity: ownedStage)
         try prepare(stage)
+        try publicationCheckpoint(stageURL)
         try Task.checkCancellation()
         guard fsync(stage) == 0 else { throw io("sync restore package") }
         try checkPublicationRoute(parent: parent, parentURL: target.deletingLastPathComponent(),
+                                  stagingParent: staging.fd, stagingURL: staging.url,
                                   stage: stage, stageName: stageName, stageIdentity: ownedStage)
-        guard renameatx_np(parent, stageName, parent, target.lastPathComponent, UInt32(RENAME_EXCL)) == 0 else {
+        guard renameatx_np(staging.fd, stageName, parent, target.lastPathComponent, UInt32(RENAME_EXCL)) == 0 else {
             let failure = errno
             if failure == EEXIST { throw ProjectBackupError.alreadyExists(target.path) }
             throw io("publish restore", code: failure)
         }
         try checkPublishedTarget(target.lastPathComponent, in: parent, expected: ownedStage)
+        guard fsync(staging.fd) == 0 else { throw io("sync replacement directory after restore publication", published: true) }
         guard fsync(parent) == 0 else { throw io("sync published restore parent", published: true) }
         return receipt(manifest, at: target)
     }
@@ -527,20 +610,28 @@ private extension ProjectBackup {
         guard value.st_mode & S_IFMT == S_IFDIR else { throw ProjectBackupError.unsafePath(name) }
         return DirectoryIdentity(value)
     }
-    static func checkPublicationRoute(parent: Int32, parentURL: URL, stage: Int32,
-                                      stageName: String, stageIdentity: DirectoryIdentity) throws {
+    static func checkPublicationRoute(parent: Int32, parentURL: URL,
+                                      stagingParent: Int32, stagingURL: URL,
+                                      stage: Int32, stageName: String, stageIdentity: DirectoryIdentity) throws {
         let route = try directory(parentURL)
         defer { Darwin.close(route) }
+        let stagingRoute = try directory(stagingURL)
+        defer { Darwin.close(stagingRoute) }
         guard try directoryIdentity(route) == directoryIdentity(parent),
+              try directoryIdentity(stagingRoute) == directoryIdentity(stagingParent),
               try directoryIdentity(stage) == stageIdentity,
-              try namedDirectoryIdentity(stageName, in: parent) == stageIdentity else {
+              try namedDirectoryIdentity(stageName, in: stagingParent) == stageIdentity else {
             throw ProjectBackupError.integrity("staging directory or destination parent changed")
         }
     }
     static func checkPublishedTarget(_ name: String, in parent: Int32,
                                      expected: DirectoryIdentity) throws {
-        guard try namedDirectoryIdentity(name, in: parent, published: true) == expected else {
-            throw ProjectBackupError.integrity("published directory identity changed; result retained")
+        var named = stat()
+        guard fstatat(parent, name, &named, AT_SYMLINK_NOFOLLOW) == 0 else {
+            throw io("stat published directory", published: true)
+        }
+        guard named.st_mode & S_IFMT == S_IFDIR, DirectoryIdentity(named) == expected else {
+            throw ProjectBackupError.publishedIntegrity("published directory identity changed")
         }
     }
     static func rejectPartial(_ url: URL) throws {
@@ -711,7 +802,7 @@ private extension ProjectBackup {
         bytes.map { String(format: "%02x", $0) }.joined()
     }
     static func io(_ action: String, code: Int32 = errno, published: Bool = false) -> ProjectBackupError {
-        .posix(.init(operation: action, code: code, published: published))
+        .posix(.init(operation: action, code: code, published: published, existingBackup: false))
     }
     static func foundation(_ action: String, _ error: Error) -> ProjectBackupError {
         let primary = error as NSError

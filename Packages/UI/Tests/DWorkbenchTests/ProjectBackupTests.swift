@@ -68,6 +68,62 @@ struct ProjectBackupTests {
         }
     }
 
+    @Test func backupAndRestoreStageInsideSystemReplacementDirectory() async throws {
+        try await fixture { root in
+            let data = Data("same volume".utf8)
+            let plan = ProjectBackupPlan(projectID: UUID(), revision: 1, files: [
+                .init(relativePath: "project.json", sourceURL: nil, data: data,
+                      sha256: hash(data), byteCount: UInt64(data.count))
+            ])
+            let backup = root.appendingPathComponent("backup")
+            _ = try await ProjectBackup.create(plan, at: backup, checkpoint: { _ in }, stageCheckpoint: { stage in
+                #expect(stage.deletingLastPathComponent() != root)
+                #expect(FileManager.default.fileExists(atPath: stage.path))
+                var targetInfo = stat(), stageInfo = stat()
+                #expect(stat(root.path, &targetInfo) == 0)
+                #expect(stat(stage.path, &stageInfo) == 0)
+                #expect(targetInfo.st_dev == stageInfo.st_dev)
+            })
+            let restored = root.appendingPathComponent("restored")
+            _ = try await ProjectBackup.restore(at: backup, to: restored, prepare: { _ in },
+                                                 publicationCheckpoint: { stage in
+                #expect(stage.deletingLastPathComponent() != root)
+                #expect(FileManager.default.fileExists(atPath: stage.path))
+            })
+            #expect(try Data(contentsOf: restored.appendingPathComponent("project.json")) == data)
+            #expect(try FileManager.default.contentsOfDirectory(atPath: root.path).sorted() == ["backup", "restored"])
+        }
+    }
+
+    @Test func existingBackupReadFailureDoesNotClaimUnpublishedResult() async throws {
+        try await fixture { root in
+            let backup = root.appendingPathComponent("backup")
+            _ = try await ProjectBackup.create(.init(projectID: UUID(), revision: 0, files: []), at: backup)
+            try FileManager.default.removeItem(at: backup.appendingPathComponent("manifest.json"))
+            do {
+                _ = try await ProjectBackup.verify(at: backup)
+                Issue.record("verification unexpectedly succeeded")
+            } catch let error as ProjectBackupError {
+                guard case .posix(let failure) = error else {
+                    Issue.record("expected a structured read failure, got \(error)")
+                    return
+                }
+                #expect(failure.operation == "open package metadata")
+                #expect(failure.code == ENOENT)
+                #expect(failure.existingBackup)
+                #expect(error.localizedDescription.contains("核验未删除所选备份"))
+                #expect(!error.localizedDescription.contains("结果未发布"))
+            }
+            #expect(FileManager.default.fileExists(atPath: backup.path))
+        }
+    }
+
+    @Test func publishedIdentityFailureExplainsRetainedResult() {
+        let error = ProjectBackupError.publishedIntegrity("published directory identity changed")
+        #expect(error.localizedDescription.contains("已发布"))
+        #expect(error.localizedDescription.contains("未删除结果"))
+    }
+
     @Test func noOverwriteAndCorruptionAreRejected() async throws {
         try await fixture { root in
             let data = Data("same".utf8)
@@ -144,20 +200,19 @@ struct ProjectBackupTests {
                 .init(relativePath: "file", sourceURL: source, data: nil, sha256: hash(data), byteCount: UInt64(data.count))
             ])
             let target = root.appendingPathComponent("backup")
+            let (stages, reportStage) = AsyncStream<URL>.makeStream()
             await #expect(throws: ProjectBackupError.self) {
-                try await ProjectBackup.create(plan, at: target, checkpoint: { _ in
-                    let stage = try FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)
-                        .first { $0.lastPathComponent.hasPrefix(".d-backup-") && $0.lastPathComponent.hasSuffix(".partial") }
-                    guard let stage else { throw Interrupted.now }
+                try await ProjectBackup.create(plan, at: target, checkpoint: { _ in }, stageCheckpoint: { stage in
+                    reportStage.yield(stage)
                     try FileManager.default.moveItem(at: stage, to: root.appendingPathComponent("moved"))
                     try FileManager.default.createDirectory(at: stage, withIntermediateDirectories: false)
                 })
             }
             #expect(!FileManager.default.fileExists(atPath: target.path))
             #expect(!FileManager.default.fileExists(atPath: root.appendingPathComponent("moved/complete.sha256").path))
-            let partial = try FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)
-                .first { $0.lastPathComponent.hasPrefix(".d-backup-") && $0.lastPathComponent.hasSuffix(".partial") }
-            if let partial {
+            reportStage.finish()
+            var stageIterator = stages.makeAsyncIterator()
+            if let partial = await stageIterator.next() {
                 await #expect(throws: ProjectBackupError.self) { try await ProjectBackup.verify(at: partial) }
                 await #expect(throws: ProjectBackupError.self) {
                     try await ProjectBackup.restore(at: partial, to: root.appendingPathComponent("refused"))
@@ -237,23 +292,23 @@ struct ProjectBackupTests {
             _ = try await ProjectBackup.create(plan, at: backup)
             let target = root.appendingPathComponent("restored")
             let retained = root.appendingPathComponent("retained-stage")
+            let (stages, reportStage) = AsyncStream<URL>.makeStream()
             await #expect(throws: ProjectBackupError.self) {
                 try await ProjectBackup.restore(at: backup, to: target, prepare: { stageFD in
-                    let stage = try FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)
-                        .first { $0.lastPathComponent.hasPrefix(".d-restore-") && $0.lastPathComponent.hasSuffix(".partial") }
-                    guard let stage else { throw Interrupted.now }
+                    #expect(try readStageFile("project.json", in: stageFD) == original)
+                    try writeStageFile(prepared, named: "project.json", in: stageFD)
+                }, publicationCheckpoint: { stage in
+                    reportStage.yield(stage)
                     try FileManager.default.moveItem(at: stage, to: retained)
                     try FileManager.default.createDirectory(at: stage, withIntermediateDirectories: false)
                     try replacement.write(to: stage.appendingPathComponent("project.json"))
-                    #expect(try readStageFile("project.json", in: stageFD) == original)
-                    try writeStageFile(prepared, named: "project.json", in: stageFD)
                 })
             }
             #expect(!FileManager.default.fileExists(atPath: target.path))
             #expect(try Data(contentsOf: retained.appendingPathComponent("project.json")) == prepared)
-            let replacementStage = try FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)
-                .first { $0.lastPathComponent.hasPrefix(".d-restore-") && $0.lastPathComponent.hasSuffix(".partial") }
-            guard let replacementStage else { Issue.record("replacement stage missing"); return }
+            reportStage.finish()
+            var stageIterator = stages.makeAsyncIterator()
+            guard let replacementStage = await stageIterator.next() else { Issue.record("replacement stage missing"); return }
             #expect(try Data(contentsOf: replacementStage.appendingPathComponent("project.json")) == replacement)
         }
     }
@@ -267,11 +322,10 @@ struct ProjectBackupTests {
                       sha256: hash(data), byteCount: UInt64(data.count))
             ])
             let target = root.appendingPathComponent("backup")
+            let (stages, reportStage) = AsyncStream<URL>.makeStream()
             await #expect(throws: Interrupted.self) {
-                try await ProjectBackup.create(plan, at: target, checkpoint: { _ in }, markerCheckpoint: {
-                    let stage = try FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)
-                        .first { $0.lastPathComponent.hasPrefix(".d-backup-") && $0.lastPathComponent.hasSuffix(".partial") }
-                    guard let stage else { throw Interrupted.now }
+                try await ProjectBackup.create(plan, at: target, checkpoint: { _ in }, markerCheckpoint: { stage in
+                    reportStage.yield(stage)
                     try FileManager.default.moveItem(at: stage.appendingPathComponent("complete.sha256"),
                                                      to: stage.appendingPathComponent("original-marker"))
                     try replacement.write(to: stage.appendingPathComponent("complete.sha256"))
@@ -279,9 +333,9 @@ struct ProjectBackupTests {
                 })
             }
             #expect(!FileManager.default.fileExists(atPath: target.path))
-            let partial = try FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)
-                .first { $0.lastPathComponent.hasPrefix(".d-backup-") && $0.lastPathComponent.hasSuffix(".partial") }
-            guard let partial else { Issue.record("partial backup missing"); return }
+            reportStage.finish()
+            var stageIterator = stages.makeAsyncIterator()
+            guard let partial = await stageIterator.next() else { Issue.record("partial backup missing"); return }
             #expect(try Data(contentsOf: partial.appendingPathComponent("complete.sha256")) == replacement)
             await #expect(throws: ProjectBackupError.self) { try await ProjectBackup.verify(at: partial) }
         }
