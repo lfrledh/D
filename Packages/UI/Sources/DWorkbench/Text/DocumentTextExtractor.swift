@@ -82,6 +82,19 @@ public enum DocumentTextExtractionError: Error, LocalizedError, Sendable, Equata
 }
 
 public enum DocumentTextExtractor {
+    public static let docxMediaType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    /// Admission preserves originals, including scan-only PDFs. Text extraction and
+    /// opt-in OCR remain separate operations and may report a narrower reading limit.
+    public static func validateOriginal(_ data: Data, mediaType: String) throws {
+        guard !data.isEmpty, data.count <= 16 * 1_024 * 1_024 else { throw DocumentTextExtractionError.inputTooLarge }
+        if mediaType == "application/pdf" {
+            guard data.starts(with: [0x25, 0x50, 0x44, 0x46, 0x2D]), let pdf = PDFDocument(data: data),
+                  pdf.pageCount > 0 else { throw DocumentTextExtractionError.invalidPDF }
+            guard !pdf.isEncrypted, !pdf.isLocked else { throw DocumentTextExtractionError.encryptedPDF }
+        } else if mediaType == docxMediaType {
+            try DocxTextReader.validateOriginal(data)
+        } else { throw DocumentTextExtractionError.unsupportedFormat }
+    }
     /// Cancellation is checked between pages and around synchronous PDFKit/Vision calls.
     /// An in-progress framework call may finish before cancellation is observed.
     public static func extract(data: Data, fileName: String, ocr: Bool = false) async throws -> DocumentTextExtraction {
@@ -115,18 +128,27 @@ public enum DocumentTextExtractor {
                 warnings: ["DOCX 提取主正文与表格文字；没有排版页码，不读取页眉、批注、嵌入对象或外部关系。"] )
         }
         guard plainTextExtensions.contains(suffix) else { throw DocumentTextExtractionError.unsupportedFormat }
-        guard !isPDF, !isZIP else { throw DocumentTextExtractionError.formatMismatch }
-        guard !data.contains(0) else { throw DocumentTextExtractionError.binaryText }
-        let bytes = data.starts(with: [0xEF, 0xBB, 0xBF]) ? data.dropFirst(3) : data[...]
-        guard let value = String(bytes: bytes, encoding: .utf8) else {
-            throw DocumentTextExtractionError.invalidUTF8
-        }
+        let value = try validatePlainText(data)
         guard !value.isEmpty else { throw DocumentTextExtractionError.emptyInput }
         guard value.utf8.count <= limits.maxOutputBytes else { throw DocumentTextExtractionError.outputTooLarge }
         try Task.checkCancellation()
         return .init(text: value, sourceSHA256: digest, format: "plain-text",
                      parserVersion: "utf8-lines-v1", locations: lineLocations(in: value, page: nil, offset: 0),
                      warnings: [])
+    }
+
+    static func validatePlainText(_ data: Data) throws -> String {
+        guard !data.starts(with: [0x25, 0x50, 0x44, 0x46, 0x2D]), !data.starts(with: [0x50, 0x4B, 0x03, 0x04]) else {
+            throw DocumentTextExtractionError.formatMismatch
+        }
+        guard !data.contains(0) else { throw DocumentTextExtractionError.binaryText }
+        let bytes = data.starts(with: [0xEF, 0xBB, 0xBF]) ? data.dropFirst(3) : data[...]
+        guard let value = String(bytes: bytes, encoding: .utf8) else { throw DocumentTextExtractionError.invalidUTF8 }
+        return value
+    }
+
+    public static func supportsPlainText(fileExtension: String) -> Bool {
+        plainTextExtensions.contains(fileExtension.lowercased())
     }
 
     private static let plainTextExtensions: Set<String> = [

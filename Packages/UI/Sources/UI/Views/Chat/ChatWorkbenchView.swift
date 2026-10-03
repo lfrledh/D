@@ -1538,13 +1538,14 @@ private struct ChatEditForm: View {
     }
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text(switch edit.kind {
+            let title = switch edit.kind {
                 case .rename: label("rename", "重命名对话")
                 case .message: label("editBranch", "编辑消息 · 创建新分支")
                 case .answer: newLabel("editAdopt", english: "Edit and adopt answer", chinese: "编辑并采用回答")
                 case .tags: newLabel("editTags", english: "Edit tags", chinese: "编辑标签")
                 case .defaultSystem: newLabel("editDefaultSystem", english: "Default system prompt for new conversations", chinese: "新会话默认系统提示")
-            }).font(.headline)
+            }
+            Text(title).font(.headline)
             if edit.kind == .answer {
                 Text(newLabel("originalPreserved", english: "The original model output stays unchanged. Save explicitly to adopt this version.",
                     chinese: "原始模型输出保持不变；明确保存后才采用此版本。"))

@@ -7,8 +7,11 @@ public struct ChatAttachment: Codable, Sendable, Equatable, Identifiable {
     public let reference: WorkflowAssetReference
     /// Exact UTF-8 source material captured when the attachment was admitted.
     public let textSnapshot: String?
-    public init(id: UUID = UUID(), name: String, reference: WorkflowAssetReference, textSnapshot: String? = nil) {
+    public let documentSnapshot: ChatDocumentSnapshot?
+    public init(id: UUID = UUID(), name: String, reference: WorkflowAssetReference, textSnapshot: String? = nil,
+                documentSnapshot: ChatDocumentSnapshot? = nil) {
         self.id = id; self.name = name; self.reference = reference; self.textSnapshot = textSnapshot
+        self.documentSnapshot = documentSnapshot
     }
 }
 
@@ -181,10 +184,14 @@ public struct ChatState: Codable, Sendable, Equatable {
         guard items.count <= 32, Set(items.map(\.id)).count == items.count else { throw WorkflowIssue("聊天附件数量或身份无效。") }
         for item in items {
             guard !item.name.isEmpty, item.name.utf8.count <= 512,
-                  [.text, .image, .video].contains(item.reference.kind),
+                  [.text, .image, .video, .document].contains(item.reference.kind),
                   (item.textSnapshot?.utf8.count ?? 0) <= 524_288,
-                  (item.reference.kind == .text) == (item.textSnapshot != nil) else {
+                  ([.text, .document].contains(item.reference.kind)) == (item.textSnapshot != nil),
+                  (item.reference.kind == .document) == (item.documentSnapshot != nil) else {
                 throw WorkflowIssue("聊天附件类型、快照或名称无效。")
+            }
+            if let document = item.documentSnapshot, let text = item.textSnapshot {
+                try document.validate(reference: item.reference, text: text)
             }
         }
     }

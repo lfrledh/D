@@ -1,7 +1,7 @@
 import DInference
 import Foundation
 
-public enum WorkflowDataKind: String, Codable, Sendable, CaseIterable { case text, image, images, receipt, number, boolean, enumeration, record, list, optional, result, audio, video, notes, chords, tempo, pitch }
+public enum WorkflowDataKind: String, Codable, Sendable, CaseIterable { case text, image, images, receipt, number, boolean, enumeration, record, list, optional, result, audio, video, notes, chords, tempo, pitch, document }
 public enum WorkflowScalar: Codable, Sendable, Equatable {
     case text(String), integer(Int), decimal(Double), flag(Bool)
     public var string: String? { if case .text(let v) = self { v } else { nil } }

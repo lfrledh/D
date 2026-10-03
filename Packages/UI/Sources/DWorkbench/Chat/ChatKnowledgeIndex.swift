@@ -159,11 +159,12 @@ public struct ChatKnowledgeIndex: Sendable {
             // A UTF-16 cap can land inside an otherwise ordinary word. Move the
             // boundary to its tokenizer start so the next chunk indexes it whole.
             // When a tokenizer word alone exceeds the cap, reject the source.
-            if cursor < text.endIndex,
-               let word = boundaryTokenizer.tokenRange(at: cursor),
-               word.lowerBound < cursor, word.upperBound > cursor {
-                guard word.lowerBound > start else { throw ChatKnowledgeError.chunkBudgetExceeded }
-                cursor = word.lowerBound
+            if cursor < text.endIndex {
+                let word = boundaryTokenizer.tokenRange(at: cursor)
+                if word.lowerBound < cursor, word.upperBound > cursor {
+                    guard word.lowerBound > start else { throw ChatKnowledgeError.chunkBudgetExceeded }
+                    cursor = word.lowerBound
+                }
             }
             let fragment = String(text[start..<cursor])
             let tokens = try Self.tokens(in: fragment, maximum: limits.maxTokensPerSource - totalTokens,

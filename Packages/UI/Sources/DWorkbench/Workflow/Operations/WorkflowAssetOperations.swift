@@ -5,13 +5,13 @@ enum WorkflowAssetOperations {
     static let assetReference = WorkflowOperation(
         definition: .init(
             id: "d.asset.reference", title: "项目素材", detail: "引用已发布且不可变的项目素材。", inputs: [],
-            outputs: [.init("output", "素材", kinds: [.text, .image, .audio, .video, .notes, .chords, .tempo, .pitch])], interaction: .assetInput
+            outputs: [.init("output", "素材", kinds: [.text, .image, .audio, .video, .notes, .chords, .tempo, .pitch, .document])], interaction: .assetInput
         ),
         execute: { context, services in
             guard let reference = context.node.assetReference else {
                 throw WorkflowIssue("尚未选择项目素材。", nodeID: context.node.id)
             }
-            guard [.text, .image, .audio, .video, .notes, .chords, .tempo, .pitch].contains(reference.kind) else {
+            guard [.text, .image, .audio, .video, .notes, .chords, .tempo, .pitch, .document].contains(reference.kind) else {
                 throw WorkflowIssue("该素材类型不能作为普通素材引用。", nodeID: context.node.id)
             }
             try await services.verifyAsset(reference)

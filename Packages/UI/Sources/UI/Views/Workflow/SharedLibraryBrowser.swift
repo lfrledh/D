@@ -1090,6 +1090,7 @@ public struct SharedLibraryBrowser: View {
         let fallback: String
         switch kind {
         case .text: fallback = "文字"
+        case .document: fallback = "文档 / Document"
         case .image: fallback = "图像"
         case .images: fallback = "图像组"
         case .receipt: fallback = "记录"

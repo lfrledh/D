@@ -377,6 +377,7 @@ struct QuickAssetPreview: View {
                     let data = try await store.workflowData(reference)
                     if reference.kind == .image { image = NSImage(data: data) }
                     else if reference.kind == .text { text = try await store.workflowText(reference) }
+                    else if reference.kind == .document { text = "原始文档已保留；可加入聊天后读取文字。 / Original document preserved; add it to chat to read its text." }
                     else { text = String(data: data, encoding: .utf8) ?? "此素材不支持文本预览" }
                 }
             } catch { issue = error.localizedDescription }

@@ -10,6 +10,8 @@ enum WorkflowMediaFormat {
         switch mediaType {
         case "text/plain": (.text, "txt", 1_048_576)
         case "text/markdown": (.text, "md", 1_048_576)
+        case "application/pdf": (.document, "pdf", 16 * 1_024 * 1_024)
+        case DocumentTextExtractor.docxMediaType: (.document, "docx", 16 * 1_024 * 1_024)
         case WorkflowTextResponseFile.mediaType: (.text, "response.json", WorkflowTextResponseFile.maximumBytes)
         case "image/png": (.image, "png", 64 * 1_024 * 1_024)
         case "image/jpeg": (.image, "jpg", 64 * 1_024 * 1_024)

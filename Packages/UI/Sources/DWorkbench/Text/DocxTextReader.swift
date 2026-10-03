@@ -6,54 +6,108 @@ import ZIPFoundation
 
 /// Reads only the package's main document part. Never extracts files or follows relationships.
 enum DocxTextReader {
+    static func validateOriginal(_ data: Data) throws {
+        let parts = try readParts(data, xmlLimit: 16 * 1_024 * 1_024)
+        let root = PackageReader(kind: .document)
+        try parse(parts["word/document.xml"]!, using: root)
+        guard root.matches == 1, root.hasBody else { throw WorkflowIssue("DOCX 主正文结构无效。") }
+    }
+
     static func extract(_ data: Data, outputLimit: Int) throws -> String {
-        try validateZIP32(data)
-        let archive = try Archive(data: data, accessMode: .read)
-        var document: Entry?, count = 0
-        for entry in archive {
-            try Task.checkCancellation()
-            count += 1
-            guard count <= 2048 else { throw WorkflowIssue("DOCX 条目超过读取预算。") }
-            if entry.path == "word/document.xml" {
-                guard document == nil, entry.type == .file else { throw WorkflowIssue("DOCX 主正文重复或不是普通条目。") }
-                document = entry
-            }
-        }
-        guard let document else { throw WorkflowIssue("DOCX 缺少主正文。") }
         let xmlLimit = min(16 * 1_024 * 1_024, outputLimit.multipliedReportingOverflow(by: 8).overflow
             ? Int.max : outputLimit * 8)
-        guard document.uncompressedSize <= UInt64(xmlLimit) else { throw DocumentTextExtractionError.outputTooLarge }
-        var xml = Data()
-        let crc = try archive.extract(document, bufferSize: 32 * 1024, skipCRC32: false) { bytes in
-            try Task.checkCancellation()
-            guard bytes.count <= xmlLimit - xml.count else { throw DocumentTextExtractionError.outputTooLarge }
-            xml.append(bytes)
-        }
-        guard UInt64(xml.count) == document.uncompressedSize, crc == document.checksum else {
-            throw WorkflowIssue("DOCX 主正文长度或校验和不匹配。")
-        }
-        // Normalize only declared UTF-8/UTF-16 XML so the DTD check cannot be bypassed
-        // by embedded NULs or a different byte encoding. XMLParser still validates markup.
-        let source: String?
-        if xml.starts(with: [0xFF, 0xFE]) || xml.starts(with: [0xFE, 0xFF]) {
-            source = String(data: xml, encoding: .utf16)
-        } else { source = String(data: xml, encoding: .utf8) }
-        guard let source, !source.contains("\0"),
-              !source.localizedCaseInsensitiveContains("<!DOCTYPE"),
-              !source.localizedCaseInsensitiveContains("<!ENTITY") else {
-            throw WorkflowIssue("DOCX XML 编码不支持或包含不允许的实体声明。")
-        }
+        let parts = try readParts(data, xmlLimit: xmlLimit)
         let reader = BodyReader(limit: outputLimit)
-        let parser = XMLParser(data: xml)
-        parser.shouldProcessNamespaces = true
-        parser.shouldResolveExternalEntities = false
-        parser.externalEntityResolvingPolicy = .never
-        parser.delegate = reader
-        let parsed = parser.parse()
+        try parse(parts["word/document.xml"]!, using: reader)
         if let error = reader.error { throw error }
-        guard parsed, reader.hasDocument, reader.hasBody else { throw WorkflowIssue("DOCX 主正文 XML 损坏或命名空间不支持。") }
+        guard reader.hasDocument, reader.hasBody else { throw WorkflowIssue("DOCX 主正文 XML 损坏或命名空间不支持。") }
         try Task.checkCancellation()
         return reader.text
+    }
+
+    private static func readParts(_ data: Data, xmlLimit: Int) throws -> [String: Data] {
+        try validateZIP32(data)
+        let archive = try Archive(data: data, accessMode: .read)
+        let required = Set(["word/document.xml", "[Content_Types].xml", "_rels/.rels"])
+        var parts: [String: Data] = [:], count = 0
+        for entry in archive {
+            try Task.checkCancellation(); count += 1
+            guard count <= 2048 else { throw WorkflowIssue("DOCX 条目超过读取预算。") }
+            guard required.contains(entry.path) else { continue }
+            guard parts[entry.path] == nil, entry.type == .file else { throw WorkflowIssue("DOCX 必需部件重复或不是普通条目。") }
+            let limit = entry.path == "word/document.xml" ? xmlLimit : 1_048_576
+            guard entry.uncompressedSize <= UInt64(limit) else { throw DocumentTextExtractionError.outputTooLarge }
+            var xml = Data()
+            let crc = try archive.extract(entry, bufferSize: 32 * 1024, skipCRC32: false) { bytes in
+                try Task.checkCancellation()
+                guard bytes.count <= limit - xml.count else { throw DocumentTextExtractionError.outputTooLarge }
+                xml.append(bytes)
+            }
+            guard UInt64(xml.count) == entry.uncompressedSize, crc == entry.checksum else {
+                throw WorkflowIssue("DOCX 部件长度或校验和不匹配。")
+            }
+            parts[entry.path] = xml
+        }
+        guard Set(parts.keys) == required else { throw WorkflowIssue("DOCX 缺少正文、内容类型或根关系；普通ZIP不能冒充文档。") }
+        let types = PackageReader(kind: .types), relationships = PackageReader(kind: .relationships)
+        try parse(parts["[Content_Types].xml"]!, using: types)
+        try parse(parts["_rels/.rels"]!, using: relationships)
+        guard types.matches == 1, relationships.matches == 1 else {
+            throw WorkflowIssue("DOCX 主正文声明/关系不支持；本读取器只读取标准word/document.xml内部部件。")
+        }
+        return parts
+    }
+
+    private static func parse(_ xml: Data, using delegate: any XMLParserDelegate) throws {
+        let source: String?
+        if xml.starts(with: [0xFF, 0xFE]) || xml.starts(with: [0xFE, 0xFF]) { source = String(data: xml, encoding: .utf16) }
+        else { source = String(data: xml, encoding: .utf8) }
+        guard let source, !source.contains("\0"),
+              !source.localizedCaseInsensitiveContains("<!DOCTYPE"), !source.localizedCaseInsensitiveContains("<!ENTITY") else {
+            throw WorkflowIssue("DOCX XML 编码不支持或包含不允许的实体声明。")
+        }
+        let parser = XMLParser(data: xml)
+        parser.shouldProcessNamespaces = true; parser.shouldResolveExternalEntities = false
+        parser.externalEntityResolvingPolicy = .never; parser.delegate = delegate
+        let parsed = parser.parse()
+        if let body = delegate as? BodyReader, let error = body.error { throw error }
+        guard parsed else { throw WorkflowIssue("DOCX XML损坏或超过读取预算。") }
+    }
+
+    private final class PackageReader: NSObject, XMLParserDelegate {
+        enum Kind { case types, relationships, document }
+        let kind: Kind
+        var matches = 0, depth = 0, hasBody = false
+        init(kind: Kind) { self.kind = kind }
+        func parser(_ parser: XMLParser, didStartElement name: String, namespaceURI ns: String?,
+                    qualifiedName: String?, attributes: [String: String]) {
+            depth += 1
+            guard depth <= 128, !Task.isCancelled else { parser.abortParsing(); return }
+            switch kind {
+            case .types:
+                if depth == 1, name != "Types" || ns != "http://schemas.openxmlformats.org/package/2006/content-types" { parser.abortParsing(); return }
+                if depth == 2, name == "Override", ns == "http://schemas.openxmlformats.org/package/2006/content-types",
+                   attributes["PartName"] == "/word/document.xml" {
+                    guard attributes["ContentType"] == "application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml" else { parser.abortParsing(); return }
+                    matches += 1
+                }
+            case .relationships:
+                if depth == 1, name != "Relationships" || ns != "http://schemas.openxmlformats.org/package/2006/relationships" { parser.abortParsing(); return }
+                if depth == 2, name == "Relationship", ns == "http://schemas.openxmlformats.org/package/2006/relationships",
+                   ["http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument",
+                    "http://purl.oclc.org/ooxml/officeDocument/relationships/officeDocument"].contains(attributes["Type"] ?? "") {
+                    guard ["word/document.xml", "/word/document.xml"].contains(attributes["Target"] ?? ""),
+                          attributes["TargetMode"] == nil || attributes["TargetMode"] == "Internal" else { parser.abortParsing(); return }
+                    matches += 1
+                }
+            case .document:
+                if ["http://schemas.openxmlformats.org/wordprocessingml/2006/main", "http://purl.oclc.org/ooxml/wordprocessingml/main"].contains(ns ?? "") {
+                    if depth == 1, name == "document" { matches += 1 }
+                    if depth == 2, name == "body", matches == 1 { hasBody = true }
+                }
+            }
+        }
+        func parser(_ parser: XMLParser, didEndElement: String, namespaceURI: String?, qualifiedName: String?) { depth -= 1 }
     }
 
     /// Admission bounds for ZIPFoundation 0.9.20's in-memory seek/conversion paths.

@@ -551,6 +551,97 @@ struct ChatTests {
         try await chat.flush(); try await store.close()
     }
 
+    @Test func attachmentPreparationDoesNotWriteAfterProjectExit() async throws {
+        let (store, _, old) = try await fixture()
+        let id = try old.newSession(); try await old.flush()
+        let reference = try await store.publishWorkflowAsset(data: Data("source".utf8), mediaType: "text/plain",
+            name: "source.txt", operationID: "d.asset.import").record.reference
+        var accepting = true
+        let chat = ChatController(store: store, allowsSubmission: { accepting }) { throw WorkflowIssue("No inference") }
+        await chat.load()
+        let (entered, signal) = AsyncStream<Void>.makeStream(), release = DispatchSemaphore(value: 0)
+        let blocker = Task.detached { await store.holdChatReadFixture(entered: signal, release: release) }
+        defer { release.signal() }
+        for await _ in entered { break }
+        var started = false
+        let operation = Task { @MainActor in
+            started = true
+            return try await chat.addAttachment(reference, name: "source.txt", sessionID: id)
+        }
+        for _ in 0..<100 { if started { break }; try await Task.sleep(for: .milliseconds(5)) }
+        #expect(started)
+        accepting = false // same admission closure as a ProjectSession closing/changing Store
+        release.signal(); await blocker.value
+        await #expect(throws: (any Error).self) { try await operation.value }
+        #expect(chat.selectedSession?.attachments.isEmpty == true)
+        #expect(try await store.chatState().sessions.first?.attachments.isEmpty == true)
+        try await store.close()
+    }
+
+    @Test func originalDocumentAndFrozenInterpretationSurviveIndependentRestore() async throws {
+        let (store, engine, chat) = try await fixture()
+        let id = try chat.newSession(); try configure(chat, session: id)
+        let original = Data(base64Encoded: "UEsDBBQAAAAIAAAAIVwm9nT53QAAACYBAAARAAAAd29yZC9kb2N1bWVudC54bWyzsa/IzVEoSy0qzszPs1Uy1DNQUkjNS85PycxLt1UKDXHTtVCyt7Mpt0rJTy7NTc0rUQCqzyu2KrdVyigpKbDS1y9OzkjNTSzWyy9IzQPKpeUX5SaWALlF6frl+UUpBUX5yanFxUDjcnP0jQwMzPRzEzPzlKDG5CYTY05uYlF2aYFucn5uQWJJZlJmTmZJJdgsJZDLkvJTKkF0AYgoAhEldjaK0c4ujiGO0Y4KagpOCk92rH02rf3D/IkrP8zv3/uooffD/L4VsbF2NvpgxfpgffpgI/RhBuoj/GwHAFBLAwQUAAAAAAAAAERdrG4SWtwAAADcAAAAEwAAAFtDb250ZW50X1R5cGVzXS54bWw8VHlwZXMgeG1sbnM9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy9wYWNrYWdlLzIwMDYvY29udGVudC10eXBlcyI+PE92ZXJyaWRlIFBhcnROYW1lPSIvd29yZC9kb2N1bWVudC54bWwiIENvbnRlbnRUeXBlPSJhcHBsaWNhdGlvbi92bmQub3BlbnhtbGZvcm1hdHMtb2ZmaWNlZG9jdW1lbnQud29yZHByb2Nlc3NpbmdtbC5kb2N1bWVudC5tYWluK3htbCIvPjwvVHlwZXM+UEsDBBQAAAAAAAAARF1hey9D8gAAAPIAAAALAAAAX3JlbHMvLnJlbHM8UmVsYXRpb25zaGlwcyB4bWxucz0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL3BhY2thZ2UvMjAwNi9yZWxhdGlvbnNoaXBzIj48UmVsYXRpb25zaGlwIElkPSJySWQxIiBUeXBlPSJodHRwOi8vc2NoZW1hcy5vcGVueG1sZm9ybWF0cy5vcmcvb2ZmaWNlRG9jdW1lbnQvMjAwNi9yZWxhdGlvbnNoaXBzL29mZmljZURvY3VtZW50IiBUYXJnZXQ9IndvcmQvZG9jdW1lbnQueG1sIi8+PC9SZWxhdGlvbnNoaXBzPlBLAQIUAxQAAAAIAAAAIVwm9nT53QAAACYBAAARAAAAAAAAAAAAAACAAQAAAAB3b3JkL2RvY3VtZW50LnhtbFBLAQIUAxQAAAAAAAAARF2sbhJa3AAAANwAAAATAAAAAAAAAAAAAACAAQwBAABbQ29udGVudF9UeXBlc10ueG1sUEsBAhQDFAAAAAAAAABEXWF7L0PyAAAA8gAAAAsAAAAAAAAAAAAAAIABGQIAAF9yZWxzLy5yZWxzUEsFBgAAAAADAAMAuQAAADQDAAAAAA==")!
+        let external = store.rootURL.deletingLastPathComponent().appendingPathComponent("原件 👩🏽‍🎨.docx")
+        try original.write(to: external, options: .withoutOverwriting)
+        let imported = try await store.importWorkflowFile(at: external).record.reference
+        #expect(imported.kind == .document)
+        #expect(try Data(contentsOf: external) == original)
+        _ = try await chat.addAttachment(imported, name: "原件.docx", sessionID: id)
+        let attachment = try #require(chat.selectedSession?.attachments.first)
+        #expect(attachment.textSnapshot == "A & B 中文👩🏽‍🎨\n")
+        #expect(attachment.documentSnapshot?.sourceSHA256 == imported.sha256)
+        #expect(attachment.documentSnapshot?.locations.first?.line == 1)
+        #expect(attachment.documentSnapshot?.ocrRequested == false)
+        let scannedBytes = DocumentTextExtractorTests().makePDF(pageTexts: [nil])
+        let scanned = try await store.publishWorkflowAsset(data: scannedBytes, mediaType: "application/pdf",
+            name: "scan.pdf", operationID: "d.asset.import").record.reference
+        await #expect(throws: DocumentTextExtractionError.noText(page: 1)) {
+            _ = try await chat.addAttachment(scanned, name: "scan.pdf", sessionID: id)
+        }
+        #expect(chat.selectedSession?.attachments == [attachment])
+        #expect(try await store.workflowData(scanned) == scannedBytes)
+
+        let beforeBad = try await store.snapshot()
+        let mislabeled = store.rootURL.deletingLastPathComponent().appendingPathComponent("wrong.csv")
+        try Data("%PDF-1.4\nASCII PDF bytes".utf8).write(to: mislabeled, options: .withoutOverwriting)
+        await #expect(throws: (any Error).self) { _ = try await store.importWorkflowFile(at: mislabeled) }
+
+        await #expect(throws: (any Error).self) {
+            _ = try await store.publishWorkflowAsset(data: Data("not a document".utf8),
+                mediaType: DocumentTextExtractor.docxMediaType, name: "bad.docx", operationID: "d.asset.import")
+        }
+        #expect(try await store.snapshot().assets == beforeBad.assets)
+        let moved = external.deletingLastPathComponent().appendingPathComponent("原件已移动.docx")
+        try FileManager.default.moveItem(at: external, to: moved) // only this test's owned fixture
+        try chat.updateDraft("Explain the attached document", sessionID: id)
+        try await chat.send(sessionID: id); await chat.waitForCompletion()
+        let attempt = try #require(chat.selectedSession?.attempts.first)
+        #expect(attempt.messagesJSON.contains("A & B"))
+        let requests = await engine.requests
+        if case .text(let body) = try #require(requests.first).input {
+            #expect(body.allImages.isEmpty)
+            #expect(body.resolvedMessages.count == 1)
+        } else { Issue.record("Expected document text in a text request") }
+        try await chat.flush()
+        let before = try await store.chatState()
+        let backup = store.rootURL.deletingLastPathComponent().appendingPathComponent("document.dbackup")
+        _ = try await store.createBackup(at: backup)
+        let restoredURL = backup.deletingLastPathComponent().appendingPathComponent("DocumentRestored.dproject")
+        _ = try await ProjectStore.restoreBackup(at: backup, to: restoredURL)
+        let restored = try await ProjectStore.open(at: restoredURL)
+        #expect(try await restored.workflowData(imported) == original)
+        #expect(try await restored.workflowData(scanned) == scannedBytes)
+        let recovered = try #require(try await restored.chatState().sessions.first?.messages.first?.attachments.first)
+        let location = try #require(recovered.documentSnapshot?.locations.first)
+        let content = try #require(recovered.textSnapshot)
+        #expect((content as NSString).substring(with: NSRange(location: location.utf16Offset, length: location.utf16Length)) == "A & B 中文👩🏽‍🎨")
+
+        #expect(try await restored.chatState().sessions == before.sessions)
+        #expect(try Data(contentsOf: moved) == original)
+        try await restored.close(); try await store.close()
+    }
+
     @Test func frozenTextAndImageAttachmentsSurviveIndependentBackupRestore() async throws {
         let (store, engine, chat) = try await fixture()
         let id = try chat.newSession(); try configure(chat, session: id)
@@ -569,6 +660,9 @@ struct ChatTests {
             #expect(body.resolvedMessages.first?.parts.count == 3)
         } else { Issue.record("Expected text request") }
         try await chat.flush()
+        // Actual v1 text/image sidecar has no newly optional documentSnapshot field.
+        let legacyBytes = try Data(contentsOf: store.rootURL.appendingPathComponent("quick-chat.json"))
+        #expect(!String(decoding: legacyBytes, as: UTF8.self).contains("documentSnapshot"))
         let backup = store.rootURL.deletingLastPathComponent().appendingPathComponent("chat.dbackup")
         _ = try await store.createBackup(at: backup)
         try await store.close()

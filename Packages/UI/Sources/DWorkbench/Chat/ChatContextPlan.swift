@@ -90,7 +90,7 @@ public struct ChatContextPlan: Sendable, Equatable {
                                         videos: inout [WorkflowAssetReference]) throws {
         for item in attachments {
             switch item.reference.kind {
-            case .text:
+            case .text, .document:
                 guard let snapshot = item.textSnapshot else { throw WorkflowIssue("文字附件缺少冻结快照。") }
                 parts.append(.init(type: "text", text: "[Source material: \(item.name)]\n\(snapshot)\n[/Source material]", index: nil))
             case .image:

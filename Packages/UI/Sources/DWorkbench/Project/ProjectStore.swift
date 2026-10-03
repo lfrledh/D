@@ -3432,6 +3432,8 @@ extension ProjectStore {
             guard data.count <= 1_048_576, String(data: data, encoding: .utf8) != nil else { throw WorkflowIssue("文字必须为不超过 1 MiB 的 UTF-8。") }
         } else if mediaType == WorkflowTextResponseFile.mediaType {
             _ = try WorkflowTextResponseFile.decode(data)
+        } else if format.kind == .document {
+            try DocumentTextExtractor.validateOriginal(data, mediaType: mediaType)
         } else if format.kind == .image {
             guard let source = CGImageSourceCreateWithData(data as CFData, nil), CGImageSourceGetCount(source) == 1,
                   CGImageSourceGetStatus(source) == .statusComplete,
@@ -3665,15 +3667,20 @@ extension ProjectStore {
                 assetID: UUID(), checkpoint: nil, externalLocation: placement)
         }
         if audioImport { return try publish(source.pathExtension.lowercased() == "wav" ? "audio/wav" : "audio/x-caf") }
+        if source.pathExtension.lowercased() == "pdf" { return try publish("application/pdf") }
+        if source.pathExtension.lowercased() == "docx" { return try publish(DocumentTextExtractor.docxMediaType) }
         if source.lastPathComponent.hasSuffix(".notes.json") || source.lastPathComponent.hasSuffix(".chords.json") || source.lastPathComponent.hasSuffix(".tempo.json") {
             let type = source.lastPathComponent.hasSuffix(".notes.json") ? WorkflowMediaFormat.noteType :
                 (source.lastPathComponent.hasSuffix(".chords.json") ? WorkflowMediaFormat.chordType : WorkflowMediaFormat.tempoType)
             return try publish(type)
         }
-        if ["txt", "md"].contains(source.pathExtension.lowercased()) { return try publish("text/plain") }
+        if DocumentTextExtractor.supportsPlainText(fileExtension: source.pathExtension) {
+            _ = try DocumentTextExtractor.validatePlainText(data)
+            return try publish("text/plain")
+        }
         guard let image = CGImageSourceCreateWithData(data as CFData, nil),
               let type = CGImageSourceGetType(image) as String?, ["public.png", "public.jpeg"].contains(type),
-              let props = CGImageSourceCopyPropertiesAtIndex(image, 0, nil) as? [String: Any] else { throw WorkflowIssue("请选择当前支持的 TXT、MD、PNG、JPEG、PCM WAV/CAF 或音乐结构文件。") }
+              let props = CGImageSourceCopyPropertiesAtIndex(image, 0, nil) as? [String: Any] else { throw WorkflowIssue("请选择当前支持的UTF-8文字/代码/CSV、PDF、DOCX、PNG、JPEG、PCM WAV/CAF或音乐结构文件。") }
         let media = MediaMetadata(width: props[kCGImagePropertyPixelWidth as String] as? Int,
                                   height: props[kCGImagePropertyPixelHeight as String] as? Int,
                                   bitDepth: props[kCGImagePropertyDepth as String] as? Int,

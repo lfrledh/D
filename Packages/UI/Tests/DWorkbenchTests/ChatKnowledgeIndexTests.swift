@@ -143,10 +143,10 @@ struct ChatKnowledgeIndexTests {
             try index.update(source("second moon", assetID: UUID()))
         }
         #expect(throws: ChatKnowledgeError.queryTooLarge) {
-            try index.search(String(repeating: "q", count: 17), within: [asset])
+            try index.search(String(repeating: "q", count: 17), within: [asset], maximumHits: 1)
         }
         #expect(throws: ChatKnowledgeError.queryTokenBudgetExceeded) {
-            try index.search("one two three", within: [asset])
+            try index.search("one two three", within: [asset], maximumHits: 1)
         }
         #expect(throws: ChatKnowledgeError.invalidMaximumHits) {
             try index.search("moon", within: [asset], maximumHits: -1)

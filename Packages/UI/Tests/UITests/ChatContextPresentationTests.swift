@@ -65,14 +65,14 @@ private final class ContextPresentationSettings: UserDefaults, @unchecked Sendab
 
     private func render(_ chat: ChatController, model: WorkbenchModel,
                         inspector: Bool = false, preview: Bool = false,
-                        attemptID: UUID? = nil) -> [String: CGRect] {
+                        attemptID: UUID? = nil, height: CGFloat = 700) -> [String: CGRect] {
         var positions: [String: CGRect] = [:]
         let host = NSHostingView(rootView: ChatWorkbenchView(chat: chat, model: model,
             onChooseModel: {}, onSavedAsset: { _ in }, onAssetsChanged: {},
             initialInspectorVisible: inspector, initialContextPreviewVisible: preview,
             initialInspectedAttemptID: attemptID)
             .observingLayout { positions[$0] = $1 })
-        host.frame = .init(x: 0, y: 0, width: 1_300, height: 700)
+        host.frame = .init(x: 0, y: 0, width: 1_300, height: height)
         host.layoutSubtreeIfNeeded()
         RunLoop.main.run(until: Date().addingTimeInterval(0.05))
         host.layoutSubtreeIfNeeded()
@@ -96,7 +96,8 @@ private final class ContextPresentationSettings: UserDefaults, @unchecked Sendab
         let (chat, model, engine, store, root) = try await fixture(state)
         #expect(render(chat, model: model)["message-\(otherMessage.id.uuidString)"] != nil)
         let hit = try #require(ChatHistorySearch.matches(in: chat.state.sessions, query: "needle").first)
-        let jump = try #require(ChatContextCommands.open(hit, in: chat))
+        let opened = try ChatContextCommands.open(hit, in: chat)
+        let jump = try #require(opened)
         #expect(jump.sessionID == first.id && jump.messageID == target.id)
         #expect(chat.selectedSession?.selectedLeafID == target.id)
         #expect(render(chat, model: model)["message-\(target.id.uuidString)"] != nil)
@@ -163,7 +164,10 @@ private final class ContextPresentationSettings: UserDefaults, @unchecked Sendab
             #expect(chat.selectedSession?.selectedLeafID == answer2.id)
             #expect(chat.selectedSession?.draft == "unsent continuation")
             #expect(try chat.contextPreview(sessionID: session.id) == preview)
-            #expect(render(chat, model: model)["message-\(answer2.id.uuidString)"] != nil)
+            #expect(chat.selectedPath.map(\.id) == [user1.id, answer1.id, user2.id, answer2.id])
+            // This checks retained transcript layout, not a scroll gesture. Lazy rows
+            // outside a 700pt viewport need not emit geometry; lay out this small path.
+            #expect(render(chat, model: model, height: 2_000)["message-\(answer2.id.uuidString)"] != nil)
         }
         #expect(await engine.submissions == 0)
         try await close(store, root: root)

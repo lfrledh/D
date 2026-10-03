@@ -210,16 +210,30 @@ import Observation
             configuration: $0.configuration, selectionInstruction: $0.selectionInstruction) }
         try candidate.validate(); state = candidate; changed()
     }
-    public func addAttachment(_ reference: WorkflowAssetReference, name: String, sessionID: UUID) async throws -> UUID {
+    public func addAttachment(_ reference: WorkflowAssetReference, name: String, sessionID: UUID,
+                              ocr: Bool = false) async throws -> UUID {
         try requireLoaded()
-        guard [.text, .image, .video].contains(reference.kind), !name.isEmpty, name.utf8.count <= 512 else { throw WorkflowIssue("附件类型或名称无效。") }
+        guard [.text, .image, .video, .document].contains(reference.kind), !name.isEmpty, name.utf8.count <= 512 else { throw WorkflowIssue("附件类型或名称无效。") }
         let snapshot: String?
+        var document: ChatDocumentSnapshot?
         if reference.kind == .text {
             let bytes = try await store.workflowData(reference)
             guard bytes.count <= 524_288, let text = String(data: bytes, encoding: .utf8) else { throw WorkflowIssue("TXT/MD 来源必须是不超过512KiB的 UTF-8。") }
             snapshot = text
+        } else if reference.kind == .document {
+            let bytes = try await store.workflowData(reference)
+            let manifest = await store.snapshot()
+            guard let asset = manifest.assets.first(where: { $0.id == reference.assetID }) else { throw WorkflowIssue("文档原件不存在。") }
+            let fileName = asset.mediaType == "application/pdf" ? "source.pdf" : "source.docx"
+            let extraction = try await DocumentTextExtractor.extract(data: bytes, fileName: fileName, ocr: ocr,
+                limits: .init(maxOutputBytes: 524_288))
+            document = .init(extraction: extraction, ocrRequested: ocr); snapshot = extraction.text
+            try document?.validate(reference: reference, text: extraction.text)
         } else { _ = try await store.workflowData(reference); snapshot = nil }
-        let attachment = ChatAttachment(name: name, reference: reference, textSnapshot: snapshot)
+        try Task.checkCancellation()
+        try requireLoaded()
+        guard allowsSubmission() else { throw WorkflowIssue("项目已关闭或正在离开；未添加迟到的附件。") }
+        let attachment = ChatAttachment(name: name, reference: reference, textSnapshot: snapshot, documentSnapshot: document)
         let i = try index(sessionID)
         guard state.sessions[i].attachments.count < 32 else { throw WorkflowIssue("一次最多32个附件。") }
         state.sessions[i].attachments.append(attachment); changed(); return attachment.id

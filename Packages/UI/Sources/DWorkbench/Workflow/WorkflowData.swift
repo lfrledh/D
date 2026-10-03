@@ -35,7 +35,7 @@ public indirect enum WorkflowDataSchema: Codable, Sendable, Equatable {
             case .number(let unit):
                 guard unit == nil || (!(unit?.isEmpty ?? true) && (unit?.utf8.count ?? 0) <= 64) else { throw WorkflowIssue("数字单位无效。") }
             case .asset(let kind):
-                guard [.text, .image, .audio, .video, .notes, .chords, .tempo, .pitch].contains(kind) else { throw WorkflowIssue("此类型不能作为媒体资产。") }
+                guard [.text, .image, .audio, .video, .notes, .chords, .tempo, .pitch, .document].contains(kind) else { throw WorkflowIssue("此类型不能作为媒体资产。") }
             default: break
             }
         }
