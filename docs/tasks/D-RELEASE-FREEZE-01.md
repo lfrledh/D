@@ -643,3 +643,7 @@ S01受限Sol/high初交、修复1、修复2分别679.58/661.15/548.879秒，均�
 - 保护和结束：自有11225忙循环留样后SIGTERM，12161及最后测试实例正常Cmd+Q；本轮未打开Terminal窗口。原项目26文件352751字节及个人scheme内容/索引/未暂存状态不变，App四关键文件不变。没有改普通App、模型或原作品。过程/结果见`native-observations.json`、`long-stream-observations.json`、`s00-native-hang.sample.txt`、`protection-end.json`。
 
 恢复检查点：项目列表、定长无损接收、坐标停止→下一请求有新原生证据；候选菜单/AX响应问题未修，S00整体不接纳main。main仍`f31dced209855722d2f04cc0fc8c5f6712396120`。当前无必须本人立即办理的事项；先按样本定位，修后只复验受影响路径。S01新宿主实际组字留装配后的集中项。完整F01–F36仍为原已批范围，但本次停在用户代码审计点，不宣称功能冻结或发行。
+
+### CHAT-PRODUCT续作：同一F01–F36冻结范围
+
+用户2026-10-03授权连续完成S00–S06，不重置历史失败。起点候选5c6b0ba4ddb7283b8cf19b61d37d57d64742fa97、main f31dced209855722d2f04cc0fc8c5f6712396120、VIEW 3e86f12a184f12b6ec11c22494af92ebfe8f559a均核实。本次证据`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261003T150039Z-chat-continue`。先以已留样本和可控流定位候选菜单忙循环/AX迟滞，固定输入区停止；再组合VIEW，保留F07与输入/数据语义。允许路径按既有Chat、受影响Store/Runtime/服务和对应测试逐包签发；共享契约由Lead协调。只读定位并行，写Worker继续独立受限CLI；GPU/构建/GUI串行。已验1024-token长生成、H22/账号等不重复。旧预算保留，本次已明确批准缺陷不得因旧额度耗尽永久停工；同因两次无进展改变定位方法。
