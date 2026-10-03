@@ -348,7 +348,8 @@ import Observation
                         prepared: (WorkflowNode, String, [String: WorkflowValue]),
                         systemPrompt: String, expectedLeafID: UUID?, clearDraft: Bool,
                         replayedAttemptID: UUID? = nil) async throws {
-        guard !hasInvalidParameterText(sessionID: sessionID) else {
+        // A replay uses the immutable attempt, never the currently edited fields.
+        guard replayedAttemptID != nil || !hasInvalidParameterText(sessionID: sessionID) else {
             throw WorkflowIssue("回答参数仍有未完成或无效输入，请先修正。")
         }
         guard allowsSubmission(), !isRunning, pendingSaveAttemptID == nil else {

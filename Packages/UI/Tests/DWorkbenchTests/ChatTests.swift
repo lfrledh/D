@@ -74,7 +74,15 @@ struct ChatTests {
         try chat.setSystemPrompt("changed later", sessionID: id)
         node.parameters["temperature"] = .decimal(0.1)
         try chat.updateConfiguration(node, sessionID: id)
+        let unfinishedField = id.uuidString + ":temperature"
+        chat.parameterText[unfinishedField] = "-"
+        chat.invalidParameterFields.insert(unfinishedField)
+        await #expect(throws: (any Error).self) {
+            try await chat.regenerate(first.userMessageID, sessionID: id)
+        }
         try await chat.reproduce(first.id, sessionID: id); await chat.waitForCompletion()
+        #expect(chat.parameterText[unfinishedField] == "-")
+        #expect(chat.invalidParameterFields.contains(unfinishedField))
         let requests = await engine.requests
         #expect(requests.count == 3)
         if case .text(let original) = requests[0].input, case .text(let newer) = requests[1].input,
