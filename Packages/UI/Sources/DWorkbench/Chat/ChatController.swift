@@ -38,6 +38,8 @@ import Observation
     /// Publication retries are busy but are not a cancellable model run.
     public var canStopGeneration: Bool { isRunning && activeAttemptID != nil }
     @ObservationIgnored private var debounceGeneration: UInt64 = 0
+    @ObservationIgnored private var knowledgeIndex: ChatKnowledgeIndex?
+    @ObservationIgnored private var indexedKnowledge: [UUID: ChatKnowledgeDocument] = [:]
 
     public init(store: ProjectStore, settings: UserDefaults? = nil, allowsSubmission: @escaping @MainActor () -> Bool = { true },
                 makeServices: @escaping @MainActor () throws -> WorkflowServices) {
@@ -210,8 +212,8 @@ import Observation
             configuration: $0.configuration, selectionInstruction: $0.selectionInstruction) }
         try candidate.validate(); state = candidate; changed()
     }
-    public func addAttachment(_ reference: WorkflowAssetReference, name: String, sessionID: UUID,
-                              ocr: Bool = false) async throws -> UUID {
+    private func captureAttachment(_ reference: WorkflowAssetReference, name: String,
+                                   ocr: Bool) async throws -> ChatAttachment {
         try requireLoaded()
         guard [.text, .image, .video, .document].contains(reference.kind), !name.isEmpty, name.utf8.count <= 512 else { throw WorkflowIssue("附件类型或名称无效。") }
         let snapshot: String?
@@ -233,10 +235,105 @@ import Observation
         try Task.checkCancellation()
         try requireLoaded()
         guard allowsSubmission() else { throw WorkflowIssue("项目已关闭或正在离开；未添加迟到的附件。") }
-        let attachment = ChatAttachment(name: name, reference: reference, textSnapshot: snapshot, documentSnapshot: document)
+        return ChatAttachment(name: name, reference: reference, textSnapshot: snapshot, documentSnapshot: document)
+    }
+    public func addAttachment(_ reference: WorkflowAssetReference, name: String, sessionID: UUID,
+                              ocr: Bool = false) async throws -> UUID {
+        let attachment = try await captureAttachment(reference, name: name, ocr: ocr)
         let i = try index(sessionID)
         guard state.sessions[i].attachments.count < 32 else { throw WorkflowIssue("一次最多32个附件。") }
         state.sessions[i].attachments.append(attachment); changed(); return attachment.id
+    }
+
+    /// Register a verified interpretation, never scan a user's folders implicitly.
+    public func addKnowledgeDocument(_ reference: WorkflowAssetReference, name: String,
+                                     ocr: Bool = false) async throws {
+        guard [.text, .document].contains(reference.kind) else { throw WorkflowIssue("资料检索接受文字或已解释的文档。") }
+        let material = try await captureAttachment(reference, name: name, ocr: ocr)
+        let document = ChatKnowledgeDocument(material: material)
+        _ = try document.extraction()
+        var candidate = state
+        var documents = candidate.knowledgeDocuments ?? []
+        documents.removeAll { $0.id == reference.assetID }; documents.append(document)
+        candidate.knowledgeDocuments = documents
+        try candidate.validate(); state = candidate; changed()
+        // Existing frozen messages remain; unsubmitted old-version excerpts are
+        // visibly rejected by useKnowledgeExcerpts/prepared until selected again.
+    }
+    public func removeKnowledgeDocument(_ assetID: UUID) throws {
+        try requireLoaded()
+        state.knowledgeDocuments?.removeAll { $0.id == assetID }
+        for i in state.sessions.indices {
+            state.sessions[i].knowledgeScope?.removeAll { $0 == assetID }
+            state.sessions[i].knowledgeExcerpts?.removeAll { $0.source.assetID == assetID }
+        }
+        if let old = indexedKnowledge.removeValue(forKey: assetID) { knowledgeIndex?.remove(source: old.material.reference) }
+        changed() // Does not delete the original asset or historical citations.
+    }
+    public func setKnowledgeScope(_ ids: [UUID], sessionID: UUID) throws {
+        try requireLoaded(); let i = try index(sessionID)
+        var candidate = state; candidate.sessions[i].knowledgeScope = ids
+        try candidate.validate(); state = candidate; changed()
+    }
+    public func useKnowledgeExcerpts(_ excerpts: [ChatKnowledgeExcerpt], sessionID: UUID) throws {
+        try requireLoaded(); let i = try index(sessionID)
+        let documents = state.knowledgeDocuments ?? []
+        for excerpt in excerpts {
+            try excerpt.validate()
+            guard let document = documents.first(where: { $0.material.reference == excerpt.source }),
+                  let text = document.material.textSnapshot,
+                  let range = Range(NSRange(location: excerpt.utf16Offset, length: excerpt.utf16Length), in: text),
+                  String(text[range]) == excerpt.text else {
+                throw WorkflowIssue("引用对应的资料版本已改变或不在本资料库；请重新检索。")
+            }
+        }
+        var candidate = state; candidate.sessions[i].knowledgeExcerpts = excerpts
+        try candidate.validate(); state = candidate; changed()
+    }
+    public func searchKnowledge(_ query: String, sessionID: UUID) async throws -> ChatKnowledgeSearchResult {
+        try requireLoaded()
+        let session = state.sessions[try index(sessionID)]
+        let scope = session.knowledgeScope ?? [], documents = state.knowledgeDocuments ?? []
+        guard !scope.isEmpty else { throw WorkflowIssue("请先选择检索资料范围。") }
+        let projectID = await store.snapshot().id
+        var index = try knowledgeIndex ?? ChatKnowledgeIndex(projectID: projectID)
+        var indexed = indexedKnowledge
+        var issues: [String] = []
+        var valid: [ChatKnowledgeDocument] = []
+        for document in documents where scope.contains(document.id) {
+            do {
+                _ = try await store.workflowData(document.material.reference)
+                try Task.checkCancellation()
+                valid.append(document)
+            } catch is CancellationError { throw CancellationError() }
+            catch {
+                if let old = indexed.removeValue(forKey: document.id) { index.remove(source: old.material.reference) }
+                issues.append(document.material.name + ": " + error.localizedDescription)
+            }
+        }
+        let search = Task.detached(priority: .userInitiated) { [index, indexed, valid] in
+            var next = index, snapshots = indexed
+            for document in valid where snapshots[document.id] != document {
+                try next.update(.init(reference: document.material.reference, extraction: document.extraction()))
+                snapshots[document.id] = document
+            }
+            let hits = try next.search(query, within: Set(valid.map(\.id)), maximumHits: 12)
+            return (next, snapshots, hits)
+        }
+        let result = try await withTaskCancellationHandler { try await search.value } onCancel: { search.cancel() }
+        try Task.checkCancellation(); try requireLoaded()
+        guard allowsSubmission(), documents == (state.knowledgeDocuments ?? []),
+              scope == (state.sessions[try self.index(sessionID)].knowledgeScope ?? []) else {
+            throw WorkflowIssue("检索期间项目或资料范围已改变，请重新检索。")
+        }
+        knowledgeIndex = result.0; indexedKnowledge = result.1
+        let excerpts = result.2.map { hit in
+            ChatKnowledgeExcerpt(source: hit.source,
+                name: documents.first(where: { $0.id == hit.source.assetID })!.material.name,
+                text: hit.text, utf16Offset: hit.range.location, utf16Length: hit.range.length,
+                page: hit.page, line: hit.line)
+        }
+        return .init(excerpts: excerpts, issues: issues)
     }
     public func removeAttachment(_ id: UUID, sessionID: UUID) throws {
         try requireLoaded(); let i = try index(sessionID)
@@ -252,7 +349,7 @@ import Observation
         try requireLoaded(); guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, text.utf8.count <= 1_048_576 else { throw WorkflowIssue("消息为空或超过1MiB。") }
         let i = try index(sessionID)
         guard let old = state.sessions[i].messages.first(where: { $0.id == id && $0.role == .user }) else { throw WorkflowIssue("只能编辑已有用户消息。") }
-        let sibling = ChatMessage(parentID: old.parentID, role: .user, text: text, attachments: old.attachments)
+        let sibling = ChatMessage(parentID: old.parentID, role: .user, text: text, attachments: old.attachments, knowledgeExcerpts: old.knowledgeExcerpts)
         state.sessions[i].messages.append(sibling); state.sessions[i].selectedLeafID = sibling.id; changed(); return sibling.id
     }
     @discardableResult public func forkSession(_ id: UUID, leafID: UUID? = nil) throws -> UUID {
@@ -278,6 +375,7 @@ import Observation
         }
         fork.selectedLeafID = leaf; fork.configuration = source.configuration; fork.systemPrompt = source.systemPrompt
         fork.draft = source.draft; fork.attachments = source.attachments
+        fork.knowledgeScope = source.knowledgeScope; fork.knowledgeExcerpts = source.knowledgeExcerpts
         if var choices = source.contextChoices {
             let pathIDs = Set(path.map(\.id))
             choices.revisions = choices.revisions.filter { pathIDs.contains($0.messageID) }
@@ -347,23 +445,33 @@ import Observation
         try requireLoaded(); let session = state.sessions[try index(sessionID)]
         if session.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
            let user = try session.path(to: session.selectedLeafID).last, user.role == .user {
-            return try contextPlan(session, path: session.path(to: user.parentID), prompt: user.text, attachments: user.attachments)
+            return try contextPlan(session, path: session.path(to: user.parentID), prompt: user.text, attachments: user.attachments, excerpts: user.knowledgeExcerpts ?? [])
         }
-        return try contextPlan(session, path: session.path(to: session.selectedLeafID), prompt: session.draft, attachments: session.attachments)
+        return try contextPlan(session, path: session.path(to: session.selectedLeafID), prompt: session.draft, attachments: session.attachments, excerpts: session.knowledgeExcerpts ?? [])
     }
-    private func contextPlan(_ session: ChatSession, path: [ChatMessage], prompt: String, attachments: [ChatAttachment]) throws -> ChatContextPlan {
+    private func contextPlan(_ session: ChatSession, path: [ChatMessage], prompt: String, attachments: [ChatAttachment], excerpts: [ChatKnowledgeExcerpt]) throws -> ChatContextPlan {
         let ids = Set(path.map(\.id)), choices = session.contextChoices
         let excluded = Set(choices?.excludedMessageIDs ?? []).intersection(ids)
         let adopted = (choices?.adopted ?? [:]).filter { ids.contains($0.key) && !excluded.contains($0.key) }
         return try ChatContextPlan.build(path: path, attempts: session.attempts, prompt: prompt,
-            attachments: attachments, system: session.systemPrompt, adopted: adopted, excluded: excluded)
+            attachments: attachments, system: session.systemPrompt, adopted: adopted, excluded: excluded, knowledgeExcerpts: excerpts)
     }
     private func prepared(_ path: [ChatMessage], session: ChatSession, prompt: String, attachments: [ChatAttachment],
-                          node source: WorkflowNode) async throws -> (WorkflowNode, String, [String: WorkflowValue]) {
-        let plan = try contextPlan(session, path: path, prompt: prompt, attachments: attachments)
+                          node source: WorkflowNode, excerpts: [ChatKnowledgeExcerpt]) async throws -> (WorkflowNode, String, [String: WorkflowValue]) {
+        let plan = try contextPlan(session, path: path, prompt: prompt, attachments: attachments, excerpts: excerpts)
         let excluded = Set(session.contextChoices?.excludedMessageIDs ?? [])
         for item in path.filter({ !excluded.contains($0.id) }).flatMap(\.attachments) + attachments {
             _ = try await store.workflowData(item.reference)
+        }
+        for reference in Set(path.filter { !excluded.contains($0.id) }
+            .flatMap { $0.knowledgeExcerpts ?? [] }.map(\.source)) {
+            _ = try await store.workflowData(reference)
+        }
+        for excerpt in excerpts {
+            guard state.knowledgeDocuments?.contains(where: { $0.material.reference == excerpt.source }) == true else {
+                throw WorkflowIssue("待发送引用的来源已移除或更新，请重新选择。")
+            }
+            _ = try await store.workflowData(excerpt.source)
         }
         let limit = source.parameters["maximumPromptTokens"]?.integer ?? 0
         guard limit > 0, plan.estimatedTokens <= limit else { throw WorkflowIssue("保守估计输入约\(plan.estimatedTokens) token，超过所选上限\(limit)；这不是精确分词。请显式排除消息或分叉较短路径。") }
@@ -400,8 +508,8 @@ import Observation
               !session.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw WorkflowIssue("请填写消息并选择模型。") }
         let path = try session.path(to: session.selectedLeafID)
         guard path.last?.role != .user else { throw WorkflowIssue("所选路径已有待回复用户消息，请重试该消息或选择已完成路径。") }
-        let prepared = try await prepared(path, session: session, prompt: session.draft, attachments: session.attachments, node: node)
-        let user = ChatMessage(parentID: session.selectedLeafID, role: .user, text: session.draft, attachments: session.attachments)
+        let prepared = try await prepared(path, session: session, prompt: session.draft, attachments: session.attachments, node: node, excerpts: session.knowledgeExcerpts ?? [])
+        let user = ChatMessage(parentID: session.selectedLeafID, role: .user, text: session.draft, attachments: session.attachments, knowledgeExcerpts: session.knowledgeExcerpts)
         try await launch(sessionID: sessionID, user: user, prepared: prepared,
                          systemPrompt: session.systemPrompt, expectedLeafID: session.selectedLeafID, clearDraft: true)
     }
@@ -420,7 +528,7 @@ import Observation
         while previousSeeds.contains(String(seed)) { seed = UInt64.random(in: .min ... .max) }
         node.parameters["seed"] = .text(String(seed))
         let prior = try session.path(to: user.parentID)
-        let prepared = try await prepared(prior, session: session, prompt: user.text, attachments: user.attachments, node: node)
+        let prepared = try await prepared(prior, session: session, prompt: user.text, attachments: user.attachments, node: node, excerpts: user.knowledgeExcerpts ?? [])
         try await launch(sessionID: sessionID, user: user, prepared: prepared,
                          systemPrompt: session.systemPrompt, expectedLeafID: session.selectedLeafID, clearDraft: false)
     }
@@ -499,6 +607,7 @@ import Observation
         if clearDraft {
             if state.sessions[i].draft == user.text && state.sessions[i].attachments == user.attachments {
                 state.sessions[i].draft = ""; state.sessions[i].attachments = []
+                if state.sessions[i].knowledgeExcerpts == user.knowledgeExcerpts { state.sessions[i].knowledgeExcerpts = nil }
             }
             if let firstMessageTitle { state.sessions[i].title = firstMessageTitle }
         }

@@ -23,7 +23,8 @@ public struct ChatContextPlan: Sendable, Equatable {
 
     public static func build(path: [ChatMessage], attempts: [ChatAttempt], prompt: String,
                              attachments: [ChatAttachment], system: String,
-                             adopted: [UUID: String] = [:], excluded: Set<UUID> = []) throws -> Self {
+                             adopted: [UUID: String] = [:], excluded: Set<UUID> = [],
+                             knowledgeExcerpts: [ChatKnowledgeExcerpt] = []) throws -> Self {
         let pathIDs = Set(path.map(\.id))
         guard pathIDs.count == path.count, Set(attempts.map(\.id)).count == attempts.count,
               excluded.isSubset(of: pathIDs), Set(adopted.keys).isDisjoint(with: excluded),
@@ -45,7 +46,7 @@ public struct ChatContextPlan: Sendable, Equatable {
             var reasoning: String?
             if entry.role == .user {
                 try appendUserParts(entry.attachments, text: entry.text, to: &parts,
-                                    images: &images, videos: &videos)
+                                    images: &images, videos: &videos, excerpts: entry.knowledgeExcerpts ?? [])
             } else {
                 guard let attemptID = entry.attemptID, let attempt = byAttempt[attemptID],
                       attempt.assistantMessageID == entry.id,
@@ -73,7 +74,7 @@ public struct ChatContextPlan: Sendable, Equatable {
         }
         var promptParts: [FormPart] = []
         try appendUserParts(attachments, text: prompt, to: &promptParts,
-                            images: &images, videos: &videos)
+                            images: &images, videos: &videos, excerpts: knowledgeExcerpts)
         messages.append(.init(role: "user", parts: promptParts, reasoningContent: nil, toolCalls: nil))
         let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
         let bytes = try encoder.encode(messages)
@@ -87,7 +88,12 @@ public struct ChatContextPlan: Sendable, Equatable {
     private static func appendUserParts(_ attachments: [ChatAttachment], text: String,
                                         to parts: inout [FormPart],
                                         images: inout [WorkflowAssetReference],
-                                        videos: inout [WorkflowAssetReference]) throws {
+                                        videos: inout [WorkflowAssetReference],
+                                        excerpts: [ChatKnowledgeExcerpt]) throws {
+        for excerpt in excerpts {
+            try excerpt.validate()
+            parts.append(.init(type: "text", text: excerpt.promptText, index: nil))
+        }
         for item in attachments {
             switch item.reference.kind {
             case .text, .document:

@@ -22,11 +22,14 @@ public struct ChatMessage: Codable, Sendable, Equatable, Identifiable {
     public let role: Role
     public let text: String
     public let attachments: [ChatAttachment]
+    public let knowledgeExcerpts: [ChatKnowledgeExcerpt]?
     public let attemptID: UUID?
     public init(id: UUID = UUID(), parentID: UUID?, role: Role, text: String,
-                attachments: [ChatAttachment] = [], attemptID: UUID? = nil) {
+                attachments: [ChatAttachment] = [], attemptID: UUID? = nil,
+                knowledgeExcerpts: [ChatKnowledgeExcerpt]? = nil) {
         self.id = id; self.parentID = parentID; self.role = role; self.text = text
         self.attachments = attachments; self.attemptID = attemptID
+        self.knowledgeExcerpts = knowledgeExcerpts
     }
 }
 
@@ -74,6 +77,8 @@ public struct ChatSession: Codable, Sendable, Equatable, Identifiable {
     public var originSessionID: UUID?
     public var originLeafID: UUID?
     public var contextChoices: ChatContextChoices?
+    public var knowledgeScope: [UUID]?
+    public var knowledgeExcerpts: [ChatKnowledgeExcerpt]?
     public init(id: UUID = UUID(), title: String = "新对话") { self.id = id; self.title = title }
 
     public func path(to leaf: UUID?) throws -> [ChatMessage] {
@@ -107,6 +112,7 @@ public struct ChatState: Codable, Sendable, Equatable {
     public var selectedSessionID: UUID?
     public var sessions: [ChatSession] = []
     public var presets: [ChatPromptPreset] = []
+    public var knowledgeDocuments: [ChatKnowledgeDocument]?
     public init() {}
 
     public func validate() throws {
@@ -125,6 +131,14 @@ public struct ChatState: Codable, Sendable, Equatable {
             }
             if let node = preset.configuration { try Self.validateNode(node) }
         }
+        let documents = knowledgeDocuments ?? []
+        guard documents.count <= 64, Set(documents.map(\.id)).count == documents.count,
+              documents.reduce(0, { $0 + ($1.material.textSnapshot?.utf8.count ?? 0) }) <= 8_388_608 else {
+            throw WorkflowIssue("资料库容量或身份无效。")
+        }
+        for document in documents {
+            try Self.validateAttachments([document.material]); _ = try document.extraction()
+        }
         for session in sessions {
             guard !session.title.isEmpty, session.title.utf8.count <= 512,
                   session.draft.utf8.count <= 1_048_576, session.systemPrompt.utf8.count <= 65_536,
@@ -137,6 +151,13 @@ public struct ChatState: Codable, Sendable, Equatable {
             if let node = session.configuration { try Self.validateNode(node) }
             try session.contextChoices?.validate(messages: session.messages)
             try Self.validateAttachments(session.attachments)
+            if let scope = session.knowledgeScope {
+                guard scope.count <= 64, Set(scope).count == scope.count,
+                      Set(scope).isSubset(of: Set(documents.map(\.id))) else {
+                    throw WorkflowIssue("资料范围引用了未登记的内容。")
+                }
+            }
+            try Self.validateExcerpts(session.knowledgeExcerpts)
             let byID = Dictionary(uniqueKeysWithValues: session.messages.map { ($0.id, $0) })
             let attempts = Dictionary(uniqueKeysWithValues: session.attempts.map { ($0.id, $0) })
             for message in session.messages {
@@ -144,6 +165,7 @@ public struct ChatState: Codable, Sendable, Equatable {
                       message.parentID == nil || byID[message.parentID!] != nil,
                       message.parentID != message.id else { throw WorkflowIssue("聊天消息内容或父项无效。") }
                 try Self.validateAttachments(message.attachments)
+                try Self.validateExcerpts(message.knowledgeExcerpts)
                 switch message.role {
                 case .user:
                     guard !message.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
@@ -174,6 +196,14 @@ public struct ChatState: Codable, Sendable, Equatable {
                 }
             }
         }
+    }
+    private static func validateExcerpts(_ excerpts: [ChatKnowledgeExcerpt]?) throws {
+        guard let excerpts else { return }
+        guard excerpts.count <= 32, Set(excerpts.map(\.id)).count == excerpts.count,
+              excerpts.reduce(0, { $0 + $1.text.utf8.count }) <= 524_288 else {
+            throw WorkflowIssue("资料引用数量或大小无效。")
+        }
+        for excerpt in excerpts { try excerpt.validate() }
     }
     private static func validateNode(_ node: WorkflowNode) throws {
         guard [WorkflowModelRoutes.qwen35, WorkflowModelRoutes.qwen38].contains(node.operationID),

@@ -642,6 +642,93 @@ struct ChatTests {
         try await restored.close(); try await store.close()
     }
 
+    @Test func knowledgeSelectionFreezesExactExcerptsAndSurvivesBackupWithoutIndex() async throws {
+        let (store, engine, chat) = try await fixture()
+        let id = try chat.newSession(); try configure(chat, session: id)
+        let bytes = Data("Unselected prefix\nmoon 中文 👩🏽‍🎨 e\u{301} visible source\nother line".utf8)
+        let ref = try await store.publishWorkflowAsset(data: bytes, mediaType: "text/plain",
+            name: "Knowledge.txt", operationID: "d.asset.import").record.reference
+        try await chat.addKnowledgeDocument(ref, name: "Knowledge.txt")
+        await #expect(throws: (any Error).self) { _ = try await chat.searchKnowledge("moon", sessionID: id) }
+        try chat.setKnowledgeScope([ref.assetID], sessionID: id)
+        let found = try await chat.searchKnowledge("moon", sessionID: id)
+        #expect(found.issues.isEmpty)
+        let hit = try #require(found.excerpts.first)
+        #expect(hit.line == 2 && hit.text == "moon 中文 👩🏽‍🎨 e\u{301} visible source")
+        #expect((String(decoding: bytes, as: UTF8.self) as NSString)
+            .substring(with: NSRange(location: hit.utf16Offset, length: hit.utf16Length)) == hit.text)
+        try chat.useKnowledgeExcerpts([hit], sessionID: id)
+        let bad = ChatKnowledgeExcerpt(source: ref, name: "Knowledge.txt", text: "forged",
+            utf16Offset: hit.utf16Offset, utf16Length: 6, page: nil, line: 2)
+        #expect(throws: (any Error).self) { try chat.useKnowledgeExcerpts([bad], sessionID: id) }
+        #expect(chat.selectedSession?.knowledgeExcerpts == [hit])
+        try chat.updateDraft("Explain this passage", sessionID: id)
+        let before = try chat.contextPreview(sessionID: id)
+        #expect(before.messagesJSON.contains(hit.text))
+        #expect(!before.messagesJSON.contains("Unselected prefix"))
+        try await chat.send(sessionID: id); await chat.waitForCompletion()
+        let attempt = try #require(chat.selectedSession?.attempts.first)
+        #expect(attempt.messagesJSON == before.messagesJSON)
+        let question = try #require(chat.selectedSession?.messages.first)
+        #expect(question.knowledgeExcerpts == [hit])
+        #expect(chat.selectedSession?.knowledgeExcerpts == nil)
+        _ = try chat.editUserMessage(question.id, text: "Explain again", sessionID: id)
+        #expect(chat.selectedPath.last?.knowledgeExcerpts == [hit])
+        try await chat.flush()
+        let backup = store.rootURL.deletingLastPathComponent().appendingPathComponent("knowledge.dbackup")
+        _ = try await store.createBackup(at: backup)
+        let destination = backup.deletingLastPathComponent().appendingPathComponent("KnowledgeRestored.dproject")
+        _ = try await ProjectStore.restoreBackup(at: backup, to: destination)
+        let restored = try await ProjectStore.open(at: destination)
+        #expect(try await restored.chatState().knowledgeDocuments == chat.state.knowledgeDocuments)
+        #expect(try await restored.workflowData(ref) == bytes)
+        let reopened = ChatController(store: restored) { throw WorkflowIssue("Search must not create inference services") }
+        await reopened.load()
+        let rebuilt = try await reopened.searchKnowledge("moon", sessionID: id)
+        #expect(rebuilt.excerpts.map(\.text) == found.excerpts.map(\.text))
+        #expect(rebuilt.excerpts.map(\.utf16Offset) == found.excerpts.map(\.utf16Offset))
+        try chat.removeKnowledgeDocument(ref.assetID)
+        #expect(chat.selectedSession?.knowledgeScope == [])
+        #expect(chat.selectedSession?.messages.first?.knowledgeExcerpts == [hit])
+        #expect(try await store.workflowData(ref) == bytes)
+        #expect(await engine.requests.count == 1)
+        try await restored.close(); try await store.close()
+    }
+
+    @Test func missingReferencedKnowledgeNeverReturnsCachedHits() async throws {
+        let (store, engine, chat) = try await fixture()
+        let id = try chat.newSession(); try configure(chat, session: id)
+        let source = store.rootURL.deletingLastPathComponent().appendingPathComponent("external.txt")
+        try Data("moon source".utf8).write(to: source, options: .withoutOverwriting)
+        let reference = try await store.importWorkflowFile(at: source, mode: .reference).record.reference
+        try await chat.addKnowledgeDocument(reference, name: "external.txt")
+        try chat.setKnowledgeScope([reference.assetID], sessionID: id)
+        let first = try await chat.searchKnowledge("moon", sessionID: id)
+        #expect(first.excerpts.count == 1)
+        try chat.useKnowledgeExcerpts(first.excerpts, sessionID: id)
+        try chat.updateDraft("First question", sessionID: id)
+        try await chat.send(sessionID: id); await chat.waitForCompletion()
+        try #require(chat.selectedSession?.attempts.first?.status == .completed)
+        let history = chat.selectedPath
+        try chat.updateDraft("Follow up", sessionID: id)
+        let moved = source.deletingLastPathComponent().appendingPathComponent("external-moved.txt")
+        try FileManager.default.moveItem(at: source, to: moved)
+        let missing = try await chat.searchKnowledge("moon", sessionID: id)
+        #expect(missing.excerpts.isEmpty && missing.issues.count == 1)
+        #expect(try Data(contentsOf: moved) == Data("moon source".utf8))
+        #expect(chat.state.knowledgeDocuments?.count == 1)
+        await #expect(throws: (any Error).self) { try await chat.send(sessionID: id) }
+        #expect(chat.selectedPath == history)
+        #expect(chat.selectedSession?.draft == "Follow up")
+        #expect(await engine.requests.count == 1)
+        var choices = ChatContextChoices(); choices.excludedMessageIDs = history.map(\.id)
+        try chat.updateContextChoices(choices, sessionID: id)
+        try await chat.send(sessionID: id); await chat.waitForCompletion()
+        #expect(await engine.requests.count == 2)
+        #expect(chat.selectedSession?.attempts.last?.messagesJSON.contains("moon source") == false)
+        try await store.close()
+    }
+
     @Test func frozenTextAndImageAttachmentsSurviveIndependentBackupRestore() async throws {
         let (store, engine, chat) = try await fixture()
         let id = try chat.newSession(); try configure(chat, session: id)

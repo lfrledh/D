@@ -330,6 +330,8 @@ struct ChatWorkbenchView: View {
     @State private var issues: [UUID: String] = [:]
     @State private var globalIssue: String?
     @State private var newPresetName = ""
+    @State private var filePanelBusy = false
+    @State private var ocrImport = false
     private var layoutProbe: ((String, CGRect) -> Void)?
 
     func observingLayout(_ observer: @escaping (String, CGRect) -> Void) -> Self {
@@ -888,6 +890,15 @@ struct ChatWorkbenchView: View {
                                let attempt = session.attempts.first(where: { $0.id == attemptID }) {
                                 requestInspectionPanel(attempt)
                             }
+                            ChatKnowledgePanel(chat: chat, session: session,
+                                importDocuments: { Task { await chooseAttachments(for: session.id, knowledge: true) } },
+                                preview: { present(.preview($0)) },
+                                wording: { english, chinese in
+                                    language?.effectiveLanguageIdentifier.hasPrefix("zh") == true ? chinese : english
+                                }).id(session.id.uuidString + ":knowledge")
+                            Toggle(newLabel("importOCR", english: "Use on-device OCR for scanned PDF pages on import",
+                                chinese: "导入扫描PDF时使用本地OCR"), isOn: $ocrImport)
+                                .font(.caption)
                             Text(newLabel("attachments", english: "Pending attachments", chinese: "待发送附件")).font(.headline)
                             if session.attachments.isEmpty {
                                 Text(newLabel("noAttachments", english: "No attachments", chinese: "暂无附件")) .foregroundStyle(.secondary)
@@ -1108,6 +1119,17 @@ struct ChatWorkbenchView: View {
                     .accessibilityLabel(newLabel("messageActions", english: "Message actions: ", chinese: "消息操作：") + branchSummary(message))
             }.font(.caption)
             ChatMessageContent(message: message, attempt: attempt, onPreview: { present(.preview($0)) })
+            if let excerpts = message.knowledgeExcerpts, !excerpts.isEmpty {
+                DisclosureGroup(newLabel("usedSources", english: "Source excerpts sent with this question", chinese: "本次问题使用的资料片段")) {
+                    ForEach(excerpts) { excerpt in
+                        VStack(alignment: .leading) {
+                            Text(excerpt.name + " · " + excerpt.source.assetID.uuidString.prefix(8)).font(.caption.bold())
+                            Text(excerpt.text).font(.caption).textSelection(.enabled)
+                            Button(newLabel("sourceOriginal", english: "View original", chinese: "查看原件")) { present(.preview(excerpt.source)) }
+                        }
+                    }
+                }
+            }
             if let adopted = revisions.first(where: { $0.id == adoptedID }) {
                 DisclosureGroup(newLabel("adoptedVersion", english: "Adopted manual version · original above preserved",
                     chinese: "已采用人工版本 · 上方原输出保留")) {
@@ -1318,6 +1340,7 @@ struct ChatWorkbenchView: View {
         case .text: label("kind.text", "文字")
         case .image: label("kind.image", "图像")
         case .video: label("kind.video", "视频")
+        case .document: newLabel("kind.document", english: "Document", chinese: "文档")
         default: kind.rawValue
         }
     }
@@ -1359,28 +1382,36 @@ struct ChatWorkbenchView: View {
         }
     }
 
-    private func chooseAttachments(for sessionID: UUID) async {
+    private func chooseAttachments(for sessionID: UUID, knowledge: Bool = false) async {
+        guard !filePanelBusy else { return }
+        filePanelBusy = true; defer { filePanelBusy = false }
         let owner = chat, store = chat.store
         let panel = NSOpenPanel(); panel.canChooseDirectories = false; panel.allowsMultipleSelection = true
         guard await panel.begin() == .OK, owner === chat, store === chat.store else { return }
-        await importURLs(panel.urls, sessionID: sessionID)
+        await importURLs(panel.urls, sessionID: sessionID, knowledge: knowledge)
     }
-    private func importURLs(_ urls: [URL], sessionID: UUID) async {
+    private func importURLs(_ urls: [URL], sessionID: UUID, knowledge: Bool = false) async {
+        let ocr = ocrImport
         let owner = chat, store = chat.store
         var failures: [String] = []
         for url in urls {
             guard owner === chat, store === chat.store, chat.isLoaded,
                   chat.state.sessions.contains(where: { $0.id == sessionID }) else { break }
             guard url.isFileURL else { failures.append(url.absoluteString + ": " + label("fileOnly", "仅接受本地文件")); continue }
-            guard ["txt", "md", "png", "jpg", "jpeg", "mp4"].contains(url.pathExtension.lowercased()) else {
-                failures.append(url.lastPathComponent + ": " + label("unsupportedAttachment", "只接受 TXT、MD、PNG、JPEG、MP4"))
+            guard DocumentTextExtractor.supportsPlainText(fileExtension: url.pathExtension) ||
+                  ["pdf", "docx", "png", "jpg", "jpeg", "mp4"].contains(url.pathExtension.lowercased()) else {
+                failures.append(url.lastPathComponent + ": " + newLabel("supportedDocuments", english: "Supported: UTF-8 text/code/CSV, PDF, DOCX, PNG/JPEG and MP4", chinese: "支持UTF-8文字/代码/CSV、PDF、DOCX、PNG/JPEG和MP4"))
                 continue
             }
             let scoped = url.startAccessingSecurityScopedResource()
             do {
                 let published = try await store.importWorkflowMediaFile(at: url)
                 onAssetsChanged()
-                try await chat.addAttachment(published.record.reference, name: url.lastPathComponent, sessionID: sessionID)
+                if knowledge {
+                    try await chat.addKnowledgeDocument(published.record.reference, name: url.lastPathComponent, ocr: ocr)
+                } else {
+                    _ = try await chat.addAttachment(published.record.reference, name: url.lastPathComponent, sessionID: sessionID, ocr: ocr)
+                }
             } catch { failures.append(url.lastPathComponent + ": " + error.localizedDescription) }
             if scoped { url.stopAccessingSecurityScopedResource() }
         }
