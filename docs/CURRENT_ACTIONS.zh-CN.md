@@ -4,7 +4,7 @@
 
 ## 当前授权：先修可靠性，再加入最小聊天（2026-10-03）
 
-用户批准继续同一 D-RELEASE-FREEZE-01，起点 main/candidate `3a2801abab22273256923ce1f3c14407515f20ce`。当前顺序：A1 普通沙盒备份与独立恢复、A2 冷启按需模型就绪 → 两项真实 App 门槛通过并独立接纳 main → B 最小文字聊天。Q 视频质量独立继续。**当前 A 进行中，B 尚未允许生产实施**；下列上一批停点是历史事实，不再是本轮排程。
+用户批准继续同一 D-RELEASE-FREEZE-01，起点 main/candidate `3a2801abab22273256923ce1f3c14407515f20ce`。当前顺序：A1 普通沙盒备份与独立恢复、A2 冷启按需模型就绪 → 两项真实 App 门槛通过并独立接纳 main → B 最小文字聊天。Q 视频质量独立继续。**A 的 G1/G2 已通过；正在独立接纳 main，接纳后进入 B**；下列上一批停点是历史事实，不再是本轮排程。A受测8511718c472e788a8dcfc088eea0fde9dad050b3；独立原生证据RC/lead/a-native-gates.json、集成回执RC/lead/a-integration.json。B包含常驻四分类，文字为聊天，另三类复用；Q继续独立，未宣称冻结。
 
 证据 RC=`D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261003T035843Z-stabilize-chat`。H22/菜单/失联恢复保持，不重复本人操作；旧失败和预算保留。新增有限续修及角色、范围、门槛见任务记录末节。没有新的登录或资格事项；不发布 Release。
 

@@ -496,3 +496,13 @@ Q的小型阶段对照：官方现有音频编码→解码/声码器，另按生
 用户明确：Quick 常驻文字/图像/视频/音频四分类；顶层仍为 Quick/工作流，Canvas 不分模态。实际 d82e135 树只有当前模型工作面与资料库切换，没有合适的四分类，因此 B 开始布局时补齐。分类只是导航/筛选：文字 VLM 图片/视频输入、其他模型全部已适配条件及视频音轨保留。复用现有 per-model drafts/runs、共享能力/运行时/Store，分类记住最近模型、草稿、附件、结果，文字记住当前会话；切换不取消、不加载、不下载、不提交。状态在控制器/存储，不保留四个隐藏输入器。不重新设计三类工作面；主要使用可控事件验证筛选、状态和在途归属，不重跑九模型。该补充不是 A 未通过时启动聊天的许可。
 
 A 接线补核：项目 Quick 所属位置切换后，ModelLibrary 的异步选择回调还需固定 session/controller/draft 并在返回时检查；Lead 已做局部保护，未改变模型安装或请求语义。等待组合检查及非实现者审核。
+
+### 2026-10-03 A 独立修补基线：G1/G2 已通过
+
+普通 App / 最终相关受测代码 `8511718c472e788a8dcfc088eea0fde9dad050b3`；组合50项CPU在9a802b90通过，后续8511718仅将关闭屏障测试等待改为必需条件且单项复验通过，生产代码相同。普通签名构建58.348秒exit0，资源沿用R4，未手补provider。证据RC/lead/{a-combined-r2-cpu,a-close-barrier-cpu,a-combined-build}-result.json。
+
+G1：原生仅目标授权的备份和恢复成功。未保存Quick/Canvas草稿与88字节PNG进入4文件小备份；退出后仅将本轮合成源移到保留路径，恢复为不同instance的新.dproject。原生检查Quick中文/组合字符/emoji、Canvas文字和媒体均正确，Cmd+Q后Cmd+O冷重开再次一致。原件/备份摘要不变；新全局Quick没有被导入覆盖。RC/lead/a-native-gates.json、g1-source-preservation.json及CUA截图/操作记录。跨盘rename首先被EXDEV拒绝、未改变数据，改为同卷保留加外盘证据副本，不扩大权限。G2：未打开完整资料库sheet，冷启所选MRT2由核验中至文件已核验，Canvas同状态；未准备模型仍明确未准备。跨owner、失联/版本变化/取消及合并检查用真实Session的确定性CPU补足，未重跑模型。
+
+A1 Sol/high初交诊断+事务、repair1修复编译与原攻击时序；A2 Sol/high初交、repair1修复类型/ctime/旧结果与spinner。两者剩一轮普通额度，本次不再使用。Lead实现恢复Quick owner及关闭/异步归属；非实现者native_h22_diagnosis/native_files_review定点审阅，无剩余已知生产阻断。非实现者没有重复跑测试。旧失败与Lead证据命名事故保留，模型隐藏解析/完整费用unknown。
+
+A当前可独立试用，允许正常接纳main后进入B。Q音频组件有限对照通过但完整生成的质量来源尚未关闭；整体冻结/发行未通过。所有A自有App/CPU/build/Worker已结束，Terminal受工具策略限制不宣称关闭。恢复前仍核对个人scheme、真实Git状态。最终main SHA仅写RC/lead/a-integration.json，避免文档自引用。
