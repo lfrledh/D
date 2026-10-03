@@ -47,6 +47,12 @@ public struct DualWorkbenchView: View {
     private var installationStates: [String] {
         library.records.map { "\($0.id):\($0.state.rawValue):\($0.availability.rawValue)" }.sorted()
     }
+    private var quickModelIdentity: String? {
+        quick.draft?.node.parameters["modelID"]?.string
+    }
+    private var graphModelIdentities: Set<String> {
+        canvasModel.projectSession.openGraphModelIdentities
+    }
     public init(model: WorkbenchModel, quickModel: WorkbenchModel, quick: QuickGenerationController,
                 library: ModelLibraryModel, nodeTags: ModelNodeTagStore, metadata: SharedLibraryStore?, metadataIssue: String? = nil) {
         self.model = model; self.quickModel = quickModel; self.quick = quick; self.library = library; self.nodeTags = nodeTags; self.metadata = metadata; self.metadataIssue = metadataIssue
@@ -98,6 +104,15 @@ public struct DualWorkbenchView: View {
                 } label: { Image(systemName: "ellipsis.circle") }
             }.padding(.horizontal, 20).padding(.vertical, 12).background(.bar)
             Divider()
+            if entry == .quick, let identity = quickModelIdentity,
+               quickModel.projectSession.explicitModelChecking.contains(identity) {
+                Text("正在核验所选模型文件与执行适配…")
+                    .font(.caption).foregroundStyle(.secondary).padding(.horizontal, 20).padding(.vertical, 4)
+            } else if entry == .workflow,
+                      !canvasModel.projectSession.explicitModelChecking.isDisjoint(with: graphModelIdentities) {
+                Text("正在核验当前流程使用的模型…")
+                    .font(.caption).foregroundStyle(.secondary).padding(.horizontal, 20).padding(.vertical, 4)
+            }
             ZStack {
                 QuickGenerationView(quick: quick, model: quickModel, onChooseModel: { libraryVisible = true },
                     onSettingsToCanvas: { draft in Task { await settingsToCanvas(draft) } },
@@ -120,9 +135,15 @@ public struct DualWorkbenchView: View {
         }
         .frame(minWidth: 860, minHeight: 580)
         .sheet(isPresented: $libraryVisible, onDismiss: finishLibraryDismissal) {
-            libraryBrowser(compact: false, at: CGPoint(x: 160, y: 140))
-                .frame(minWidth: 820, minHeight: 540)
-                .task { await refreshLibrary(checkModels: true) }
+            VStack(spacing: 0) {
+                if !quickModel.projectSession.explicitModelChecking.isEmpty {
+                    Text("正在核验模型文件与执行适配…")
+                        .font(.caption).foregroundStyle(.secondary).padding(.vertical, 5)
+                }
+                libraryBrowser(compact: false, at: CGPoint(x: 160, y: 140))
+            }
+            .frame(minWidth: 820, minHeight: 540)
+            .task { await refreshLibrary(checkModels: true) }
         }
         .sheet(isPresented: $projectsVisible) {
             VStack(spacing: 0) {
@@ -253,6 +274,8 @@ public struct DualWorkbenchView: View {
         .onChange(of: library.isPresented) { _, presented in if !presented { Task { await refreshLibrary(checkModels: false) } } }
         .onChange(of: installationStates) { _, _ in Task { await refreshLibrary(checkModels: false) } }
         .onChange(of: model.manifest?.revision) { _, _ in Task { await refreshLibrary(checkModels: false) } }
+        .onChange(of: quickModelIdentity) { _, _ in Task { await checkDemandReadiness() } }
+        .onChange(of: graphModelIdentities) { _, _ in Task { await checkDemandReadiness() } }
         .sheet(item: $previewAsset, onDismiss: {
             if let pendingFilesRoute {
                 returnToLibrary = false; filesRoute = pendingFilesRoute; self.pendingFilesRoute = nil
@@ -335,6 +358,7 @@ public struct DualWorkbenchView: View {
         quickModel.projectSession.observeModelAvailability(installationSnapshot)
         if model.projectSession !== quickModel.projectSession { model.projectSession.observeModelAvailability(installationSnapshot) }
         if checkModels { await quickModel.projectSession.checkExplicitModelReadiness() }
+        else { await checkDemandReadiness() }
         let otherStore = model.projectSession.currentStore
         var snapshots = [await quick.store.snapshot()]
         if let otherStore, otherStore !== quick.store {
@@ -359,6 +383,19 @@ public struct DualWorkbenchView: View {
                     }
                 }
             } catch { issue = error.localizedDescription }
+        }
+    }
+    private func checkDemandReadiness() async {
+        let quickIDs = Set([quickModelIdentity].compactMap { $0 }.filter { !$0.isEmpty })
+        let quickOwner = quickModel.projectSession
+        let canvasOwner = canvasModel.projectSession
+        if quickOwner === canvasOwner {
+            await quickOwner.checkExplicitModelReadiness(for: quickIDs.union(graphModelIdentities))
+        } else {
+            let canvasIDs = graphModelIdentities
+            async let quickCheck: Void = quickOwner.checkExplicitModelReadiness(for: quickIDs)
+            async let canvasCheck: Void = canvasOwner.checkExplicitModelReadiness(for: canvasIDs)
+            _ = await (quickCheck, canvasCheck)
         }
     }
     private func useLibraryEntry(_ value: SharedLibraryBrowserEntry) {

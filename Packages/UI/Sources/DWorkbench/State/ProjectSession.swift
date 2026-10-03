@@ -705,6 +705,8 @@ public final class ProjectSession {
             let relocated = try await previousStore.relocated(to: lease.url)
             let previousSession = session
             store = relocated
+            modelReadinessGeneration = UUID()
+            explicitModelChecking = []
             session = replacement
             projectURL = lease.url
             assetURLs = [:]
@@ -761,6 +763,11 @@ public final class ProjectSession {
         audioCreationDraft = nil
         text = nil
         textSources = nil
+        modelReadinessGeneration = UUID()
+        explicitModelChoices = []
+        explicitModelReadiness = [:]
+        explicitModelIssues = [:]
+        explicitModelChecking = []
         store = candidate
         session = createdSession
         projectLease = lease
@@ -1072,6 +1079,11 @@ public final class ProjectSession {
         modelReadinessGeneration = UUID()
         modelAvailabilityRevision = max(modelAvailabilityRevision, installationSnapshot.revision)
         explicitModelReadiness[identity] = .available; explicitModelIssues[identity] = nil
+        if let record = installationSnapshot.records.first(where: { $0.id == id }),
+           let stamps = try? WorkflowModelReadiness.stamps(for: record, in: installationSnapshot) {
+            WorkflowModelReadiness.rememberSuccess(.init(library: ObjectIdentifier(library), installation: id,
+                                                         identity: identity), stamps: stamps)
+        }
         refreshWorkflowModels()
         return choice
     }
@@ -1195,8 +1207,38 @@ public final class ProjectSession {
     }
     public private(set) var explicitModelReadiness: [String: SharedLibraryReadiness] = [:]
     public private(set) var explicitModelIssues: [String: String] = [:]
+    public private(set) var explicitModelChecking: Set<String> = []
     @ObservationIgnored private var modelReadinessGeneration = UUID()
     @ObservationIgnored private var modelAvailabilityRevision: UInt64 = 0
+    /// Only dependencies of the currently open graph are requested by the host.
+    /// Nested control bodies and pinned tool bodies belong to that graph.
+    public var openGraphModelIdentities: Set<String> {
+        guard let controller = workflow, let graph = controller.rootGraph else { return [] }
+        var result = Set<String>(), visitedTools = Set<String>()
+        func visit(_ graph: WorkflowGraph, depth: Int) {
+            guard depth <= 16 else { return }
+            for node in graph.nodes {
+                if let kind = WorkflowRegistry.standard.operation(node.operationID)?.definition.modelKind {
+                    let identity = node.parameters["modelID"]?.string ?? ""
+                    let required = identity.isEmpty ? defaultWorkflowModel(kind) : identity
+                    if !required.isEmpty { result.insert(required) }
+                }
+                switch node.control {
+                case .some(.branch(_, let yes, let no)): visit(yes, depth: depth + 1); visit(no, depth: depth + 1)
+                case .some(.map(let body, _)), .some(.loop(let body, _, _, _)): visit(body, depth: depth + 1)
+                case .some(.invoke(let reference)):
+                    let key = reference.id.uuidString + ":\(reference.version):" + reference.digest
+                    guard visitedTools.insert(key).inserted,
+                          let tool = controller.tools.first(where: { $0.id == reference.id && $0.version == reference.version &&
+                              (try? WorkflowPlanCompiler.digest($0)) == reference.digest }) else { continue }
+                    visit(tool.graph, depth: depth + 1)
+                case nil: break
+                }
+            }
+        }
+        visit(graph, depth: 0)
+        return result
+    }
     /// Installation state can revoke an earlier readiness observation. It cannot
     /// grant execution: only the real resolver above can validate an installation.
     public func observeModelAvailability(_ snapshot: ModelLibrarySnapshot) {
@@ -1209,26 +1251,119 @@ public final class ProjectSession {
                 let record = snapshot.records.first { $0.id == id }
                 guard record?.state != .installed || record?.availability != .available else { continue }
                 modelReadinessGeneration = UUID()
-                explicitModelReadiness[identity] = .unavailable
-                explicitModelIssues[identity] = record?.error ?? "模型安装已不可用或仍需准备，请在模型库检查。"
+                if let library = modelLibrary {
+                    WorkflowModelReadiness.invalidate(.init(library: ObjectIdentifier(library), installation: id,
+                                                            identity: identity))
+                }
+                explicitModelChecking.remove(identity)
+                explicitModelReadiness[identity] = record?.state == .preparationRequired ? .unprepared : .unavailable
+                explicitModelIssues[identity] = record?.error ?? (record?.state == .preparationRequired
+                    ? "模型原始文件已校验，仍需准备执行引擎。" : "模型安装已不可用，请在模型库检查。")
             }
         } catch { workflow?.errorMessage = error.localizedDescription }
     }
-    public func checkExplicitModelReadiness() async {
-        guard let session, let capturedStore = store else { return }
-        let generation = UUID(); modelReadinessGeneration = generation
-        let choices = explicitModelChoices
+    /// Passing identities requests only visible Quick/graph dependencies. The
+    /// no-argument form is the deliberate full-library inspection.
+    public func checkExplicitModelReadiness(for identities: Set<String>? = nil) async {
+        guard let session, let capturedStore = store, !isChangingProject, !closePending else { return }
+        let generation = modelReadinessGeneration
+        var choices = explicitModelChoices.filter { identities?.contains($0.id) ?? true }
+        if let identities {
+            for identity in identities where !choices.contains(where: { $0.id == identity }) {
+                guard let kind = WorkflowModelKind(rawValue: String(identity.prefix { $0 != ":" })) else { continue }
+                choices.append(.init(id: identity, kind: kind, displayName: identity))
+            }
+        }
         for choice in choices {
-            guard !Task.isCancelled, modelReadinessGeneration == generation else { return }
+            guard !Task.isCancelled, store === capturedStore, modelReadinessGeneration == generation else { return }
+            var rawNeedsPreparation = false
             do {
-                let binding = try await resolveWorkflowModel(choice.kind, identity: choice.id, session: session)
-                await binding.release()
+                let installation = try WorkflowModelBookmarks(settings: settings).installation(for: choice.id)
+                if let installation, let library = modelLibrary {
+                    let snapshot = await library.snapshot()
+                    guard snapshot.revision >= modelAvailabilityRevision,
+                          let record = snapshot.records.first(where: { $0.id == installation }) else {
+                        throw WorkflowIssue("模型安装记录已改变或移除。")
+                    }
+                    rawNeedsPreparation = record.state == .preparationRequired
+                    let stamps = try WorkflowModelReadiness.stamps(for: record, in: snapshot)
+                    let key = WorkflowModelReadiness.Key(library: ObjectIdentifier(library),
+                                                         installation: installation, identity: choice.id)
+                    let cached = WorkflowModelReadiness.hasSuccess(key, stamps: stamps)
+                    guard store === capturedStore, modelReadinessGeneration == generation, !isChangingProject,
+                          !closePending else { return }
+                    if !cached || identities == nil {
+                        explicitModelChecking.insert(choice.id)
+                        explicitModelReadiness[choice.id] = .unknown
+                        explicitModelIssues[choice.id] = "正在核验模型文件与执行适配。"
+                    }
+                    try await WorkflowModelReadiness.check(key, stamps: stamps, force: identities == nil) {
+                        let binding = try await self.resolveWorkflowModel(choice.kind, identity: choice.id, session: session)
+                        await binding.release()
+                    }
+                    let current = await library.snapshot()
+                    guard current.revision >= modelAvailabilityRevision,
+                          current.records.contains(where: { $0.id == installation && $0.state == .installed &&
+                              $0.availability == .available }),
+                          let currentRecord = current.records.first(where: { $0.id == installation }),
+                          (try? WorkflowModelReadiness.stamps(for: currentRecord, in: current)) == stamps else {
+                        WorkflowModelReadiness.invalidate(key, matching: stamps)
+                        throw WorkflowIssue("核验期间模型文件或安装状态已改变。")
+                    }
+                    modelAvailabilityRevision = max(modelAvailabilityRevision, current.revision)
+                } else if let entry = try WorkflowModelBookmarks(settings: settings).entries().first(where: {
+                    $0.identity == choice.id && $0.kind == choice.kind
+                }) {
+                    let location = try await access.restore(entry.bookmark)
+                    let stamps: [WorkflowModelReadiness.FileStamp]
+                    do { stamps = try WorkflowModelReadiness.stamps(in: location.url) }
+                    catch { await access.release(location); throw error }
+                    await access.release(location)
+                    let key = WorkflowModelReadiness.Key(bookmark: entry.bookmark, identity: choice.id)
+                    let cached = WorkflowModelReadiness.hasSuccess(key, stamps: stamps)
+                    guard store === capturedStore, modelReadinessGeneration == generation, !isChangingProject,
+                          !closePending else { return }
+                    if !cached || identities == nil {
+                        explicitModelChecking.insert(choice.id)
+                        explicitModelReadiness[choice.id] = .unknown
+                        explicitModelIssues[choice.id] = "正在核验模型文件与执行适配。"
+                    }
+                    try await WorkflowModelReadiness.check(key, stamps: stamps, force: identities == nil) {
+                        let binding = try await self.resolveWorkflowModel(choice.kind, identity: choice.id, session: session)
+                        await binding.release()
+                    }
+                    let latest = try WorkflowModelBookmarks(settings: settings).entries().first {
+                        $0.identity == choice.id && $0.kind == choice.kind
+                    }
+                    guard latest?.bookmark == entry.bookmark else {
+                        WorkflowModelReadiness.invalidate(key, matching: stamps)
+                        throw WorkflowIssue("核验期间模型授权已改变。")
+                    }
+                    let current = try await access.restore(entry.bookmark)
+                    let currentStamps: [WorkflowModelReadiness.FileStamp]
+                    do { currentStamps = try WorkflowModelReadiness.stamps(in: current.url) }
+                    catch { await access.release(current); throw error }
+                    await access.release(current)
+                    guard currentStamps == stamps else {
+                        WorkflowModelReadiness.invalidate(key, matching: stamps)
+                        throw WorkflowIssue("核验期间模型文件已改变。")
+                    }
+                } else {
+                    explicitModelChecking.insert(choice.id)
+                    explicitModelReadiness[choice.id] = .unknown
+                    explicitModelIssues[choice.id] = "正在核验模型文件与执行适配。"
+                    let binding = try await resolveWorkflowModel(choice.kind, identity: choice.id, session: session)
+                    await binding.release()
+                }
                 guard !Task.isCancelled, store === capturedStore, modelReadinessGeneration == generation else { return }
+                explicitModelChecking.remove(choice.id)
                 explicitModelReadiness[choice.id] = .available; explicitModelIssues[choice.id] = nil
             } catch is CancellationError { return
             } catch {
                 guard !Task.isCancelled, store === capturedStore, modelReadinessGeneration == generation else { return }
-                explicitModelReadiness[choice.id] = .unavailable; explicitModelIssues[choice.id] = error.localizedDescription
+                explicitModelChecking.remove(choice.id)
+                explicitModelReadiness[choice.id] = rawNeedsPreparation ? .unprepared : .unavailable
+                explicitModelIssues[choice.id] = error.localizedDescription
             }
         }
     }
@@ -2357,6 +2492,11 @@ public final class ProjectSession {
             stableAudioModelStatus = "选择已安装的本地声音模型"
             audio = nil
             self.store = nil
+            modelReadinessGeneration = UUID()
+            explicitModelChoices = []
+            explicitModelReadiness = [:]
+            explicitModelIssues = [:]
+            explicitModelChecking = []
             workflow?.deactivateAfterClose()
             workflow = nil
             session = nil
