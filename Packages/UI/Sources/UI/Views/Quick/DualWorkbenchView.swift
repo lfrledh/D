@@ -9,6 +9,7 @@ public struct DualWorkbenchView: View {
     let automaticQuickModel: WorkbenchModel
     let automaticQuick: QuickGenerationController
     @State private var useProjectQuick = true
+    @State private var modelPickerCategory: QuickCategory?
     private var quick: QuickGenerationController {
         useProjectQuick ? (model.projectSession.projectQuick ?? automaticQuick) : automaticQuick
     }
@@ -104,7 +105,7 @@ public struct DualWorkbenchView: View {
                         filesRoute = .init(store: store, instanceID: manifest.effectiveInstanceID, assetID: nil)
                     }.accessibilityIdentifier("project-files-open")
                 }
-                Button { libraryVisible = true } label: { Label(baselineText(language, "label.433bdcb25776", fallback: "资料库"), systemImage: "square.stack.3d.up") }
+                Button { modelPickerCategory = nil; libraryVisible = true } label: { Label(baselineText(language, "label.433bdcb25776", fallback: "资料库"), systemImage: "square.stack.3d.up") }
                     .accessibilityIdentifier("shared-library-open")
                 Menu {
                     Button(baselineText(language, "label.a6b4608f6c77", fallback: "项目…")) { projectsVisible = true }
@@ -129,8 +130,17 @@ public struct DualWorkbenchView: View {
                 Text("正在核验当前流程使用的模型…")
                     .font(.caption).foregroundStyle(.secondary).padding(.horizontal, 20).padding(.vertical, 4)
             }
+            if entry == .quick {
+                Picker("创作分类", selection: Binding(get: { quick.category }, set: { quick.selectCategory($0) })) {
+                    Text(workflowText(language, "quick.category.text", fallback: "文字")).tag(QuickCategory.text)
+                    Text(workflowText(language, "quick.category.image", fallback: "图像")).tag(QuickCategory.image)
+                    Text(workflowText(language, "quick.category.video", fallback: "视频")).tag(QuickCategory.video)
+                    Text(workflowText(language, "quick.category.audio", fallback: "音频")).tag(QuickCategory.audio)
+                }.pickerStyle(.segmented).frame(maxWidth: 520).padding(.horizontal, 20).padding(.vertical, 8)
+                    .disabled(quickOwnerIsChanging).accessibilityIdentifier("quick-category")
+            }
             ZStack {
-                QuickGenerationView(quick: quick, model: quickModel, onChooseModel: { libraryVisible = true },
+                QuickGenerationView(quick: quick, model: quickModel, onChooseModel: { modelPickerCategory = quick.category; libraryVisible = true },
                     onSettingsToCanvas: { draft in let source = quick.store; Task { await settingsToCanvas(draft, from: source) } },
                     onResultToCanvas: { ref in let source = quick.store; Task { await resultToCanvas(ref, from: source) } },
                     onValueToCanvas: { value in let source = quick.store; Task { await valueToCanvas(value, from: source) } },
@@ -292,7 +302,7 @@ public struct DualWorkbenchView: View {
             }
         } message: { Text(issue ?? "") }
         .task {
-            if quick.draft == nil { quick.select(operationID: "d.model.language", modelID: "") }
+            if quick.state.drafts.isEmpty && quick.state.navigation == nil { quick.select(operationID: "d.model.language", modelID: "") }
             await refreshLibrary(checkModels: false)
         }
         // Draft autosaves do not change installed models or assets. Refresh at
@@ -364,7 +374,11 @@ public struct DualWorkbenchView: View {
     }
     @ViewBuilder private func libraryBrowser(compact: Bool, at point: CGPoint, onBack: (() -> Void)? = nil) -> some View {
         if let metadata {
-            SharedLibraryBrowser(entries: entries, store: metadata, compact: compact, state: compact ? compactLibraryState : fullLibraryState,
+            SharedLibraryBrowser(entries: entries.filter { value in
+                guard !compact, let family = modelPickerCategory else { return true }
+                guard case .operation(let operation, _) = value.selection else { return false }
+                return QuickCategory.category(for: operation) == family
+            }, store: metadata, compact: compact, state: compact ? compactLibraryState : fullLibraryState,
                 onUse: useLibraryEntry, onAdd: { value in Task { await addLibraryEntry(value, at: point) } },
                 onPreview: { value in Task { await previewLibraryEntry(value) } },
                 onLocation: { value in Task { await showAssetLocation(value) } },

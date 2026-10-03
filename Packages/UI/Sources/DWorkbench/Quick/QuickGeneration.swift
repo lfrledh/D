@@ -25,10 +25,31 @@ public struct QuickRunRecord: Codable, Sendable, Equatable, Identifiable {
     public var candidates: [WorkflowCandidate]
     public var issue: String?
 }
+/// Output-family navigation does not restrict the selected model's input ports.
+public enum QuickCategory: String, Codable, Sendable, CaseIterable {
+    case text, image, video, audio
+    public static func category(for operationID: String) -> QuickCategory? {
+        switch WorkflowRegistry.standard.operation(operationID)?.definition.modelKind {
+        case .text: .text
+        case .image: .image
+        case .video: .video
+        case .music, .pitch: .audio
+        case nil: nil
+        }
+    }
+}
+public struct QuickNavigationState: Codable, Sendable, Equatable {
+    public var selected: QuickCategory
+    public var lastDrafts: [String: String]
+    public init(selected: QuickCategory, lastDrafts: [String: String] = [:]) {
+        self.selected = selected; self.lastDrafts = lastDrafts
+    }
+}
 public struct QuickCreationState: Codable, Sendable, Equatable {
     public var version = 1
     public var revision: UInt64 = 0
     public var selectedDraftID: String?
+    public var navigation: QuickNavigationState?
     public var drafts: [QuickDraft] = []
     public var runs: [QuickRunRecord] = []
     public init() {}
@@ -37,6 +58,18 @@ public struct QuickCreationState: Codable, Sendable, Equatable {
               Set(drafts.map(\.id)).count == drafts.count, Set(runs.map(\.id)).count == runs.count,
               selectedDraftID == nil || drafts.contains(where: { $0.id == selectedDraftID }) else {
             throw WorkflowIssue("快速记录的版本或内容无效，已保留原件。")
+        }
+        if let navigation {
+            for (category, draftID) in navigation.lastDrafts {
+                guard let family = QuickCategory(rawValue: category),
+                      let draft = drafts.first(where: { $0.id == draftID }),
+                      QuickCategory.category(for: draft.node.operationID) == family else {
+                    throw WorkflowIssue("快速分类记录无效，原件未改。")
+                }
+            }
+            guard selectedDraftID == navigation.lastDrafts[navigation.selected.rawValue] else {
+                throw WorkflowIssue("快速分类与所选草稿不一致，原件未改。")
+            }
         }
         for draft in drafts + runs.map(\.draft) {
             guard !draft.id.isEmpty, draft.id.utf8.count <= 2048,
@@ -70,6 +103,28 @@ public struct QuickCreationState: Codable, Sendable, Equatable {
 
     public init(store: ProjectStore, allowsSubmission: @escaping @MainActor () -> Bool = { true }, makeServices: @escaping @MainActor () throws -> WorkflowServices) {
         self.store = store; self.allowsSubmission = allowsSubmission; self.makeServices = makeServices
+    }
+    public var category: QuickCategory {
+        state.navigation?.selected ?? draft.flatMap { QuickCategory.category(for: $0.node.operationID) } ?? .text
+    }
+    public func selectCategory(_ value: QuickCategory) {
+        guard isLoaded else { return }
+        var navigation = state.navigation ?? navigationFromExistingDrafts()
+        navigation.selected = value
+        state.selectedDraftID = navigation.lastDrafts[value.rawValue]
+        state.navigation = navigation; scheduleSave()
+    }
+    private func navigationFromExistingDrafts() -> QuickNavigationState {
+        var navigation = QuickNavigationState(selected: category)
+        for draft in state.drafts {
+            if let family = QuickCategory.category(for: draft.node.operationID) {
+                navigation.lastDrafts[family.rawValue] = draft.id
+            }
+        }
+        if let draft, let family = QuickCategory.category(for: draft.node.operationID) {
+            navigation.lastDrafts[family.rawValue] = draft.id
+        }
+        return navigation
     }
     public var draft: QuickDraft? { state.drafts.first { $0.id == state.selectedDraftID } }
     public var definition: WorkflowOperationDefinition? {
@@ -148,6 +203,11 @@ public struct QuickCreationState: Codable, Sendable, Equatable {
             if WorkflowModelRoutes.isImage(operationID) { node.parameters["count"] = .integer(1) }
             state.drafts.append(.init(id: key, node: node))
         }
+        var navigation = state.navigation ?? navigationFromExistingDrafts()
+        if let family = QuickCategory.category(for: operationID) {
+            navigation.selected = family; navigation.lastDrafts[family.rawValue] = key
+        }
+        state.navigation = navigation
         state.selectedDraftID = key; scheduleSave()
     }
     public func setParameter(_ key: String, value: WorkflowScalar, draftID: String) {

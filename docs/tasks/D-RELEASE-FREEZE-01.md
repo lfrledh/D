@@ -506,3 +506,11 @@ G1：原生仅目标授权的备份和恢复成功。未保存Quick/Canvas草稿
 A1 Sol/high初交诊断+事务、repair1修复编译与原攻击时序；A2 Sol/high初交、repair1修复类型/ctime/旧结果与spinner。两者剩一轮普通额度，本次不再使用。Lead实现恢复Quick owner及关闭/异步归属；非实现者native_h22_diagnosis/native_files_review定点审阅，无剩余已知生产阻断。非实现者没有重复跑测试。旧失败与Lead证据命名事故保留，模型隐藏解析/完整费用unknown。
 
 A当前可独立试用，允许正常接纳main后进入B。Q音频组件有限对照通过但完整生成的质量来源尚未关闭；整体冻结/发行未通过。所有A自有App/CPU/build/Worker已结束，Terminal受工具策略限制不宣称关闭。恢复前仍核对个人scheme、真实Git状态。最终main SHA仅写RC/lead/a-integration.json，避免文档自引用。
+
+### B 启动与契约 chat-core-r1
+
+A已独立接纳/推送main `f31dced209855722d2f04cc0fc8c5f6712396120`，RC/lead/a-integration.json。新B core受限Sol/high工作树D-CHAT-CORE，只拥有ChatState/ChatController、ProjectStore聊天侧车/备份局部、ChatTests；允许初交+两修复，详细冻结规格RC/b-core/spec.txt，不继承A余额或抹旧失败。Lead协调四分类与App装配。
+
+最小行为表：切分类/会话只改持久导航；在途结果固定提交session/attempt/Store。编辑旧用户内容/再生成产生兄弟分支；旧路径保持。修改系统/模型/附件仅影响以后提交；请求使用固定完整选定路径和输入版本，超预算明确拒绝而不裁剪。停止等待Runtime释放，保留已收到的部分回答；重开将未终态标中断不续跑。未知/损坏侧车只读保护，保存失败保留内存和可重试产物；备份包含会话与已导入附件，恢复为独立实例。文字VLM图片/视频端口保留；图像/视频/音频仍用原Quick服务与控件。
+
+B开始不改变Q与整体冻结门槛，未通过真实聊天路径前不作为用户交付版。输入组件复用H22安全宿主；不新增后台/数据库或四套输入/执行系统。
