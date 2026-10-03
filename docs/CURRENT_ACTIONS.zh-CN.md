@@ -12,14 +12,14 @@ Lead 持有共享 Runtime/WorkflowServices/ChatController/Store；文件面板�
 
 ### 当前恢复检查点（2026-10-04 JST，持续实施中）
 
-- 唯一Lead候选树为同级 `D-RELEASE-FREEZE-01` / `codex/release-freeze-01`。已提交的记忆/工具接线 `4ae52508d38a1cbd3db8a227e1a3bbe4aacd7d25`；随后保留历史合入静态预览 `59b0093c247498d62063c18ed72e65c0de6e1182`。恢复时核实际HEAD与未提交文档/测试，不以这条检查点替代Git。
-- main仍为 `f31dced209855722d2f04cc0fc8c5f6712396120`（A稳定基线），未强合原生菜单/迟滞未验候选。受保护源仍 `01758b81527dc27eb4563bf1b66fd1ceab6647ee`；个人scheme未暂存，保护摘要沿下文。
-- S00/S01组合 `807dc5a5c4f55fd85ac240e18cc942e953aa2e2d` 已正常签名构建；输入区主停止稳定可见的CPU检查通过，普通App原生未验。最近桌面返回锁屏，自有未输入测试实例17547已结束。锁屏/新宿主本人组字沿唯一集中清单；H22/H31/宏/菜单及自然视频旧本人结论不重开。
-- S02/S03/S04继续在同候选完成：人工/部分回答版本、比较、模板预设、实际请求检查、PDF/DOCX提取、词法资料检索、个人/项目记忆、手动来源摘要、联网与确定性工具。各组未完项仍见唯一[清单](CHAT_FEATURE_LEDGER.zh-CN.md)，组件不冒充普通App完整使用。
-- 当前外盘证据 `R=/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261003T150039Z-chat-continue`。`lead/s04-wiring-r2` 21项/4suite通过（含先前Unicode失败修复、保存冲突撤权、工具drain前停止生成）；r3定向5项通过，补采用后附件移除/重复/替换反例。`lead/memory-review-r1`38项/2suite通过；不与旧记录相加成全套通过率。
-- 受限独立CLI Worker均禁网、独立外盘写根、无Git共享目录写授权。MCP树基线 `3d20feb4026bd8690d04b1a35731ae098ac00e44` 正在repair1；MENU树基线 `2b9e75c5beb86ca33f337aa01a5e005b8fba56a6` 正在初次实施。两者均Sol/high；运行身份和PID以R对应job/request/process/route记录为准。WEB repair1与PREVIEW repair1均已结束；未知服务端解析/总Lead费用仍unknown。
-- 下一动作：完成菜单受控生命周期与接线；核MCP取消修补及实际SDK编译/服务；继续F18/F23–25/F32–34等未完成清单。真实搜索与静态预览编译检查正在运行，结果见R/lead对应记录。代码、测试、CPU替身、真实联网、GUI和模型证据分别记；没有新模型/平台授权扩张。
-- 锁屏只挡原生门槛。受影响新路径未默认替换main稳定包；旧推荐稳定入口继续有效，R/delivery旧组合App不是最新实现包。恢复必须先核本轮进程/写入者和受测版本，再继续构建或接纳。
+- Lead隔离候选 `D-RELEASE-FREEZE-01` / `codex/release-freeze-01`，已提交 `cdcaa7758381ac0718793b1118a34b59d9780c40`。已合入S00/S01、格式与引用、MCP、记忆/工具和辅助纯值；当前未提交F23–25辅助生产接线/测试和此检查点由Lead持有。恢复必须看真实Git。
+- main仍 `f31dced209855722d2f04cc0fc8c5f6712396120`，没有强合原生菜单门槛。受保护源仍 `01758b81527dc27eb4563bf1b66fd1ceab6647ee`，个人scheme未暂存，保护摘要不变。
+- 当前普通签名App受测代码 `cdcaa7758381ac0718793b1118a34b59d9780c40`，R/delivery/D Chat Integrated.app及同目录启动器。构建R/lead/chat-current-app-r3通过；启动PID63889；刚进入项目面板后CUA明确锁屏，尚未打开R/gui/Chat-integration.dproject副本。原生菜单/停止/引用仍未验，已记集中待办，不重开H22/H31。
+- R=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261003T150039Z-chat-continue`。格式/引用CPU通过；s02-format-quote-green末进程exit0掩盖前一个hosting事件身份失败，**不能**称整组通过；R/lead/s02-format-quote-review.json分别列出。旧真实1024长流/取消接续结果复用，不重跑同质生成。
+- PREVIEW独立受限CLI interactive1已结束；Sol/high route已核，生产代码经只读审核无确定P1/P2；Lead补测试callback有界等待，实际WK隔离尚待串行验证。AUX生产接线13方法/2suite通过，含跨owner保存、冷恢复、忘记/撤权/取消和独立备份。保存失败及冷恢复反例经历先红后绿；非实现者复核最后无阻断。真实辅助模型和原生控件仍未验。
+- INSPECTION仅F14两文件的受限Sol/high初交已完成，固定cdcaa基线；只读审核发现解析与脱敏P2，现第一轮定点修复中；输出/临时根在R/s02-inspection，网络关闭、无共享Git写权限。所有活跃运行以R/*process/route记录为准，不以历史worker状态推断。
+- 下一动作：完成辅助保存生命周期反例和接线、验证F30实际WebKit、完善F14，继续唯一F01–F36清单的未完项。锁屏仅挡原生交互，不冻结无依赖工程；不扩模型、平台、完整视觉改版或重写存储。
+- 恢复先核代码/自有进程/写入者/权限。当前候选尚未接纳main，App与后续未提交代码分开；未经当前原生门槛不得替代稳定入口。
 
 ## 历史：先修可靠性，再加入最小聊天（2026-10-03，已被上述新授权替代）
 

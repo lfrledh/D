@@ -55,7 +55,7 @@ import Observation
         speechService = service
         return service
     }
-    public var isBusy: Bool { isRunning || isToolRunning || isMCPConnecting || isMCPStopping || isTranscribing || speechPlaybackState != .idle }
+    public var isBusy: Bool { isAssisting || isRunning || isToolRunning || isMCPConnecting || isMCPStopping || isTranscribing || speechPlaybackState != .idle }
     public private(set) var isCancelling = false
     /// Publication retries are busy but are not a cancellable model run.
     public var canStopGeneration: Bool { isRunning && activeAttemptID != nil }
@@ -73,6 +73,14 @@ import Observation
     public private(set) var mcpStatus: ChatMCPStatus = .disconnected
     public private(set) var mcpTools: [ChatMCPTool] = []
     public var isMCPConnecting: Bool { mcpConnectionTask != nil }
+    public private(set) var activeAssistanceSessionID: UUID?
+    public private(set) var pendingAssistanceSaveID: UUID?
+    public private(set) var assistancePhase = ""
+    public var isAssisting: Bool { activeAssistanceSessionID != nil }
+    @ObservationIgnored private var assistanceTask: Task<Void, Never>?
+    @ObservationIgnored private var assistanceRetryTask: Task<Void, Error>?
+    @ObservationIgnored private var assistanceServices: WorkflowServices?
+    @ObservationIgnored private var assistanceCancelled = false
     @ObservationIgnored private var knowledgeIndex: ChatKnowledgeIndex?
     @ObservationIgnored private var indexedKnowledge: [UUID: ChatKnowledgeDocument] = [:]
 
@@ -94,6 +102,14 @@ import Observation
             projectIdentity = await store.snapshot().id
             state = loaded; diskRevision = loaded.revision; isLoaded = true
             for i in state.sessions.indices {
+                for j in (state.sessions[i].assistanceExecutions ?? []).indices {
+                    let old = state.sessions[i].assistanceExecutions![j].record
+                    if [.pending, .running].contains(old.status) {
+                        state.sessions[i].assistanceExecutions![j].record = try Self.endingAssistance(old, status: .failed,
+                            issue: "上次辅助任务中断；不会自动重跑。")
+                        changed()
+                    }
+                }
                 for j in (state.sessions[i].toolActivities ?? []).indices where state.sessions[i].toolActivities?[j].status == .running {
                     state.sessions[i].toolActivities?[j].status = .interrupted
                     state.sessions[i].toolActivities?[j].issue = "上次工具操作中断；不会自动重做。"
@@ -105,6 +121,10 @@ import Observation
                     changed()
                 }
             }
+            let pending = state.sessions.flatMap { $0.assistanceExecutions ?? [] }.filter { $0.pendingMemoryEntries != nil }
+            guard pending.count <= 1 else { throw WorkflowIssue("发现多个待恢复的辅助保存，请保留原件检查。") }
+            pendingAssistanceSaveID = pending.first?.id
+            if pendingAssistanceSaveID != nil { assistancePhase = "个人记忆的保存尚待核对，请显式重试；不会重推理。" }
             if mutation != savedMutation { try await flush() }
         } catch { self.error = error.localizedDescription }
     }
@@ -159,7 +179,7 @@ import Observation
     public func prepareForBackup() async throws {
         func requireDurableBoundary() throws {
             guard !isBusy else { throw WorkflowIssue("聊天仍在生成、语音处理或停止中，请待资源释放后再备份。") }
-            guard pendingSaveAttemptID == nil else {
+            guard pendingSaveAttemptID == nil, pendingAssistanceSaveID == nil else {
                 throw WorkflowIssue("聊天回答尚未写入项目，请先在文字页重试保存；原记录和生成结果仍保留。")
             }
         }
@@ -572,7 +592,7 @@ import Observation
             let priorUses = session.attempts.filter { summary.source.coveredMessageIDs.contains($0.assistantMessageID) }.flatMap { $0.memoryUses ?? [] }
             try validateMemoryUses(priorUses, session: session)
             for use in priorUses where !uses.contains(use) { uses.append(use) }
-            extras.append("[User-reviewed context summary \(summary.id), revision \(summary.revision)]\n\(summary.text)\n[/Context summary]")
+            extras.append("[Context summary \(summary.id), revision \(summary.revision), origin: \(summary.auxiliaryAttemptID == nil ? "user" : "model-generated")]\n\(summary.text)\n[/Context summary]")
         }
         guard uses.count <= 1024 else { throw WorkflowIssue("本次上下文的记忆来源超过预算，请减少启用条目。") }
         excluded.formUnion(covered)
@@ -641,6 +661,309 @@ import Observation
         candidate.sessions[i].contextSummaries = (session.contextSummaries ?? []) + [try old.settingEnabled(enabled)]
         try candidate.validate(); state = candidate; changed()
     }
+    public func appendAssistanceFollowUp(_ text: String, executionID: UUID, sessionID: UUID) throws {
+        try requireLoaded(); let i = try index(sessionID), current = state.sessions[i]
+        guard !current.archived, current.contextChoices?.deletedAt == nil,
+              let execution = current.assistanceExecutions?.first(where: { $0.id == executionID }),
+              case .followUps(let questions) = execution.record.result, questions.contains(text) else {
+            throw WorkflowIssue("建议已不属于此会话。")
+        }
+        try execution.record.source.validate(current: current)
+        try updateDraft(current.draft + (current.draft.isEmpty ? "" : "\n") + text, sessionID: sessionID)
+    }
+    public func setAssistanceOptions(_ options: ChatAssistanceOptions, sessionID: UUID) throws {
+        try requireLoaded(); try options.validate()
+        guard options.memoryTarget == nil || options.memoryTarget == .personal ||
+              options.memoryTarget == projectIdentity.map(ChatMemoryScope.project) else { throw WorkflowIssue("辅助记忆范围不属于当前项目。") }
+        let i = try index(sessionID)
+        if let limit = state.sessions[i].configuration?.parameters["maximumOutputTokens"]?.integer {
+            for kind in ChatAssistanceKind.allCases where options.isEnabled(kind) {
+                guard options.outputTokenBudgets.value(for: kind) <= limit else { throw WorkflowIssue("辅助任务预算超过当前模型请求上限；请明确调整预算。") }
+            }
+        }
+        state.sessions[i].assistanceOptions = options; changed()
+    }
+    private static func endingAssistance(_ old: ChatAssistanceRecord, status: ChatAssistanceStatus,
+                                        output: WorkflowAssetReference? = nil, result: ChatAssistanceResult? = nil,
+                                        issue: String? = nil) throws -> ChatAssistanceRecord {
+        try .init(id: old.id, kind: old.kind, source: old.source, createdAt: old.createdAt,
+                  endedAt: Date(), status: status, output: output, result: result, issue: issue,
+                  maximumOutputTokens: old.maximumOutputTokens)
+    }
+    /// Called once on successful primary completion, never on view appearance or sidebar selection.
+    private func scheduleAssistance(sessionID: UUID) {
+        guard allowsSubmission(), assistanceTask == nil, assistanceRetryTask == nil, !isAssisting, pendingAssistanceSaveID == nil,
+              state.sessions.first(where: { $0.id == sessionID })?.assistanceOptions != nil else { return }
+        assistanceCancelled = false; activeAssistanceSessionID = sessionID
+        assistanceTask = Task { [self] in
+            defer { assistanceTask = nil; activeAssistanceSessionID = nil
+                    if pendingAssistanceSaveID == nil { assistanceServices = nil } }
+            do { try await performAssistance(sessionID: sessionID) }
+            catch { assistancePhase = error.localizedDescription }
+        }
+    }
+    public func runAssistance(sessionID: UUID) throws {
+        try requireLoaded()
+        guard !isRunning, !isAssisting, pendingAssistanceSaveID == nil, allowsSubmission() else {
+            throw WorkflowIssue("请等待当前生成或辅助任务结束／保存。")
+        }
+        _ = try index(sessionID); scheduleAssistance(sessionID: sessionID)
+    }
+    public func waitForAssistance() async { await assistanceTask?.value }
+    public func cancelAssistance() async {
+        assistanceCancelled = true
+        await assistanceServices?.cancel()
+        await assistanceTask?.value
+        _ = try? await assistanceRetryTask?.value
+    }
+    private func assistanceSource(_ session: ChatSession) throws -> ChatContextSource {
+        let excluded = Set(session.contextChoices?.excludedMessageIDs ?? [])
+        return try .capture(session: session, coveredMessageIDs: session.path(to: session.selectedLeafID).map(\.id).filter { !excluded.contains($0) })
+    }
+    private func memoryFingerprint() throws -> String {
+        let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
+        let data = try encoder.encode((state.memoryEntries ?? []).filter { $0.scope != .personal } + personalMemories)
+        return SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+    }
+    private func assistanceIsCurrent(_ execution: ChatAssistanceExecution, sessionID: UUID) throws -> Int {
+        let i = try index(sessionID), current = state.sessions[i]
+        guard allowsSubmission(), !assistanceCancelled, !current.archived, current.contextChoices?.deletedAt == nil,
+              current.assistanceOptions == execution.options else { throw WorkflowIssue("辅助任务授权或会话状态已改变；原结果保留但不自动采用。") }
+        try execution.record.source.validate(current: current)
+        return i
+    }
+    private func performAssistance(sessionID: UUID) async throws {
+        let captured = state.sessions[try index(sessionID)]
+        guard let options = captured.assistanceOptions, let originalNode = captured.configuration,
+              !captured.archived, captured.contextChoices?.deletedAt == nil else { return }
+        let source = try assistanceSource(captured)
+        let path = try captured.path(to: captured.selectedLeafID)
+        var modelContext = captured
+        // Auxiliary output is not a transcript message. Keep actual source media and adopted text,
+        // but do not recursively summarize summaries or silently read long-term memories.
+        modelContext.outputFormat = nil; modelContext.contextSummaries = nil; modelContext.memoryScopes = []
+        for kind in ChatAssistanceKind.allCases where options.isEnabled(kind) {
+            if assistanceCancelled { return }
+            let current = state.sessions[try index(sessionID)]
+            try source.validate(current: current)
+            guard current.assistanceOptions == options, allowsSubmission(), !current.archived,
+                  current.contextChoices?.deletedAt == nil else { return }
+            if current.assistanceExecutions?.contains(where: { $0.record.kind == kind && $0.record.source == source }) == true { continue }
+            if kind == .title && current.contextChoices?.manuallyNamed == true { continue }
+            let budget = options.outputTokenBudgets.value(for: kind)
+            guard budget <= (originalNode.parameters["maximumOutputTokens"]?.integer ?? 0) else {
+                throw WorkflowIssue("辅助任务预算超过所选请求上限，没有自动降低或提交。")
+            }
+            if kind == .summary {
+                let estimate = try contextPlan(modelContext, path: path, prompt: "", attachments: [], excerpts: []).estimatedTokens
+                if estimate < options.summaryThresholdEstimatedTokens { continue }
+            }
+            let memoryVersion = try memoryFingerprint()
+            modelContext.systemPrompt = kind.promptInstruction
+            var node = originalNode; node.parameters["maximumOutputTokens"] = .integer(budget)
+            let preparation = try await prepared(path, session: modelContext,
+                prompt: "Return the requested value for the preceding source conversation. Its original system rules were:\n" + captured.systemPrompt,
+                attachments: [], node: node, excerpts: [])
+            let record = try ChatAssistanceRecord(kind: kind, source: source, status: .running, maximumOutputTokens: budget)
+            let execution = ChatAssistanceExecution(record: record, options: options, node: preparation.0,
+                messagesJSON: preparation.1, inputs: preparation.2, originalTags: captured.contextChoices?.tags ?? [],
+                memoryFingerprint: memoryVersion)
+            let i = try assistanceIsCurrent(execution, sessionID: sessionID)
+            var candidate = state
+            candidate.sessions[i].assistanceExecutions = (candidate.sessions[i].assistanceExecutions ?? []) + [execution]
+            try candidate.validate(); state = candidate; changed()
+            do {
+                try await flush()
+                _ = try assistanceIsCurrent(execution, sessionID: sessionID)
+                let service = try makeServices(); assistanceServices = service
+                try service.useBackgroundLanguageAdmission(); try service.beginPlan()
+                assistancePhase = "辅助任务：" + kind.rawValue
+                let result = try await service.executeCall(.init(node: execution.node, stepID: execution.id, inputs: execution.inputs))
+                guard case .outputs(let values) = result, let raw = values["raw"]?.asset ?? values["output"]?.asset else {
+                    throw WorkflowIssue("辅助任务没有发布完整原文。")
+                }
+                try await finishAssistance(execution, reference: raw)
+                assistanceServices = nil
+            } catch {
+                if let terminal = state.sessions.first(where: { $0.id == sessionID })?.assistanceExecutions?.first(where: { $0.id == execution.id })?.record,
+                   terminal.status == .completed || (terminal.status == .stale && terminal.output != nil) {
+                    // Application already occurred before a sidecar flush failed. Keep that truth
+                    // and retain a save-only continuation, never re-apply generated content.
+                    pendingAssistanceSaveID = execution.id
+                    assistancePhase = "辅助结果处理记录尚未保存：" + error.localizedDescription
+                    return
+                }
+                if assistanceServices?.hasPendingSaves == true { pendingAssistanceSaveID = execution.id }
+                let raw = try? await store.workflowAssets(forStepID: execution.id).first
+                let status: ChatAssistanceStatus = assistanceCancelled ? .cancelled :
+                    ((try? assistanceIsCurrent(execution, sessionID: sessionID)) == nil ? .stale : .failed)
+                try setAssistanceRecord(Self.endingAssistance(record, status: status, output: raw,
+                    issue: error.localizedDescription), sessionID: sessionID)
+                try? await flush()
+                assistancePhase = error.localizedDescription
+                if pendingAssistanceSaveID != nil || assistanceCancelled || status == .stale { return }
+            }
+        }
+    }
+    private func setAssistanceRecord(_ record: ChatAssistanceRecord, sessionID: UUID) throws {
+        let i = try index(sessionID)
+        guard let j = state.sessions[i].assistanceExecutions?.firstIndex(where: { $0.id == record.id }) else { throw WorkflowIssue("辅助记录不存在。") }
+        state.sessions[i].assistanceExecutions![j].record = record; changed()
+    }
+    private func finishAssistance(_ execution: ChatAssistanceExecution, reference: WorkflowAssetReference) async throws {
+        let response = try await assistanceServices?.readLanguageResponse(reference)
+        guard let response, response.finishReason == .stop, response.toolCalls.isEmpty, let text = response.finalText else {
+            throw WorkflowIssue("辅助输出未完整结束；原文保留，未采用截断／工具内容。")
+        }
+        let result = try ChatAssistanceResult.parse(text, as: execution.record.kind)
+        let i = try assistanceIsCurrent(execution, sessionID: execution.record.source.sessionID)
+        var candidate = state
+        switch result {
+        case .summary(let text):
+            // Model-generated origin remains visible; enabling authorizes future use, not deletion.
+            let summary = try ChatContextSummary(id: execution.id, text: text, source: execution.record.source,
+                auxiliaryAttemptID: execution.id, enabled: false)
+            candidate.sessions[i].contextSummaries = (candidate.sessions[i].contextSummaries ?? []) + [summary]
+        case .title(let title):
+            if candidate.sessions[i].contextChoices?.manuallyNamed != true { candidate.sessions[i].title = title }
+        case .tags(let tags):
+            if (candidate.sessions[i].contextChoices?.tags ?? []) == execution.originalTags {
+                var choices = candidate.sessions[i].contextChoices ?? .init(); choices.tags = tags
+                candidate.sessions[i].contextChoices = choices
+            }
+        case .followUps: break // Visible suggestions only; never submitted automatically.
+        case .memory: break // Commit the scoped batch only after every source and consent check.
+        }
+        try candidate.validate()
+        if case .memory(let values) = result {
+            guard try memoryFingerprint() == execution.memoryFingerprint,
+                  let scope = execution.options.memoryTarget, let acceptance = execution.options.requestedMemoryAcceptance else {
+                throw WorkflowIssue("记忆在提取期间改变；没有重新创建已忘记内容。")
+            }
+            let owner: ChatController
+            if scope == .personal && !ownsPersonalMemory {
+                guard let personal = personalMemoryProvider() else { throw WorkflowIssue("个人记忆尚未就绪。") }
+                owner = personal
+            } else { owner = self }
+            try owner.requireLoaded()
+            var memoryCandidate = owner.state
+            for (offset, text) in values.enumerated() {
+                let digest = Array(SHA256.hash(data: Data("\(execution.id.uuidString):\(offset)".utf8)).prefix(16))
+                let id = UUID(uuid: (digest[0], digest[1], digest[2], digest[3], digest[4], digest[5], digest[6], digest[7],
+                    digest[8], digest[9], digest[10], digest[11], digest[12], digest[13], digest[14], digest[15]))
+                memoryCandidate.memoryEntries = (memoryCandidate.memoryEntries ?? []) + [try .init(id: id, text: text,
+                    scope: scope, source: .chat(execution.record.source), acceptance: acceptance, enabled: false)]
+            }
+            try memoryCandidate.validate()
+            if owner === self { candidate.memoryEntries = memoryCandidate.memoryEntries }
+            else {
+                let j = candidate.sessions[i].assistanceExecutions!.firstIndex { $0.id == execution.id }!
+                // Keep the exact new values, including stable IDs, before any persistence await.
+                candidate.sessions[i].assistanceExecutions![j].pendingMemoryEntries = Array((memoryCandidate.memoryEntries ?? []).suffix(values.count))
+            }
+        }
+        guard let j = candidate.sessions[i].assistanceExecutions?.firstIndex(where: { $0.id == execution.id }) else {
+            throw WorkflowIssue("辅助任务回执缺失。")
+        }
+        candidate.sessions[i].assistanceExecutions![j].record = try Self.endingAssistance(execution.record,
+            status: .completed, output: reference, result: result)
+        // The scoped application and completed receipt become visible before any await. A failed
+        // flush keeps both with a save-only retry; cross-store commits are not claimed atomic.
+        state = candidate; changed()
+        if state.sessions[i].assistanceExecutions?[j].pendingMemoryEntries != nil {
+            // Persist the continuation in this project first. It must survive another owner's disk failure.
+            try await flush()
+            try await persistAssistanceMemory(executionID: execution.id, sessionID: execution.record.source.sessionID)
+        }
+        try await flush()
+        assistancePhase = "辅助结果已保存"
+    }
+    private func persistAssistanceMemory(executionID: UUID, sessionID: UUID) async throws {
+        let i = try index(sessionID)
+        guard let j = state.sessions[i].assistanceExecutions?.firstIndex(where: { $0.id == executionID }),
+              let entries = state.sessions[i].assistanceExecutions?[j].pendingMemoryEntries else { return }
+        let execution = state.sessions[i].assistanceExecutions![j]
+        guard let owner = personalMemoryProvider() else { throw WorkflowIssue("个人记忆所有者尚未就绪；保存续作已保留。") }
+        guard owner.isLoaded else { throw WorkflowIssue("个人记忆尚未读取。") }
+        let missing = entries.contains { entry in !(owner.state.memoryEntries ?? []).contains { $0.id == entry.id } }
+        if missing {
+            do {
+                _ = try assistanceIsCurrent(execution, sessionID: sessionID)
+                guard try memoryFingerprint() == execution.memoryFingerprint else {
+                    throw WorkflowIssue("记忆在保存续作前改变；未重新创建可能已忘记的内容。")
+                }
+            } catch {
+                // Revoke only the unapplied continuation. Preserve raw output and all existing
+                // memory versions; no renewed consent is required merely to close or back up.
+                state.sessions[i].assistanceExecutions![j].pendingMemoryEntries = nil
+                state.sessions[i].assistanceExecutions![j].record = try Self.endingAssistance(execution.record,
+                    status: .stale, output: execution.record.output, issue: error.localizedDescription)
+                changed()
+                try await flush()
+                return
+            }
+        }
+        var candidate = owner.state
+        for entry in entries {
+            let versions = (candidate.memoryEntries ?? []).filter { $0.id == entry.id }
+            if versions.isEmpty {
+                candidate.memoryEntries = (candidate.memoryEntries ?? []) + [entry]
+            } else {
+                guard versions.contains(entry), versions.allSatisfy({ $0.scope == entry.scope && $0.source == entry.source }) else {
+                    throw WorkflowIssue("个人记忆存在不同来源的同名身份；原件保持。")
+                }
+                // Newer edited/forgotten revisions win. Never resurrect the pending old value.
+            }
+        }
+        try candidate.validate(); owner.state = candidate; owner.changed()
+        // A prior transient save error is retried by flush; requireLoaded otherwise keeps edits safe.
+        try await owner.flush()
+        let current = try index(sessionID)
+        guard let currentIndex = state.sessions[current].assistanceExecutions?.firstIndex(where: { $0.id == executionID }) else {
+            throw WorkflowIssue("辅助保存回执已改变。")
+        }
+        state.sessions[current].assistanceExecutions![currentIndex].pendingMemoryEntries = nil; changed()
+    }
+    public func retryAssistanceSave() async throws {
+        if let task = assistanceRetryTask { try await task.value; return }
+        guard !isAssisting, let id = pendingAssistanceSaveID,
+              let execution = state.sessions.flatMap({ $0.assistanceExecutions ?? [] }).first(where: { $0.id == id }) else { return }
+        activeAssistanceSessionID = execution.record.source.sessionID
+        let task = Task { @MainActor [self] in
+            if execution.record.status == .completed || (execution.record.status == .stale && execution.record.output != nil) {
+                try await persistAssistanceMemory(executionID: id, sessionID: execution.record.source.sessionID)
+                try await flush()
+            } else {
+                guard let service = assistanceServices else { throw WorkflowIssue("待保存原文的所有者不存在；不会重推理。") }
+                let values: [String: WorkflowValue]
+                do { values = try await service.retryQuickPublications(.init(node: execution.node, stepID: id, inputs: execution.inputs)) }
+                catch {
+                    if !service.hasPendingSaves {
+                        try setAssistanceRecord(Self.endingAssistance(execution.record, status: .failed,
+                            issue: "原文发布已终止，不能继续重试：" + error.localizedDescription), sessionID: execution.record.source.sessionID)
+                        pendingAssistanceSaveID = nil; assistanceServices = nil
+                        try await flush()
+                    }
+                    throw error
+                }
+                guard let raw = values["raw"]?.asset ?? values["output"]?.asset else { throw WorkflowIssue("辅助保存没有返回原文。") }
+                do { try await finishAssistance(execution, reference: raw) }
+                catch {
+                    if state.sessions.flatMap({ $0.assistanceExecutions ?? [] }).first(where: { $0.id == id })?.record.status == .completed { throw error }
+                    try setAssistanceRecord(Self.endingAssistance(execution.record, status: .stale, output: raw,
+                        issue: error.localizedDescription), sessionID: execution.record.source.sessionID)
+                    try await flush()
+                }
+            }
+            pendingAssistanceSaveID = nil; assistanceServices = nil
+            let saved = state.sessions.flatMap { $0.assistanceExecutions ?? [] }.first { $0.id == id }?.record
+            assistancePhase = saved?.status == .stale ? (saved?.issue ?? "辅助结果已保留，未采用。") : "辅助结果已保存"
+        }
+        assistanceRetryTask = task
+        defer { assistanceRetryTask = nil; activeAssistanceSessionID = nil }
+        try await task.value
+    }
+
     private func prepared(_ path: [ChatMessage], session: ChatSession, prompt: String, attachments: [ChatAttachment],
                           node source: WorkflowNode, excerpts: [ChatKnowledgeExcerpt]) async throws -> (WorkflowNode, String, [String: WorkflowValue], [ChatMemoryUse], [ChatContextSummary]) {
         let plan = try contextPlan(session, path: path, prompt: prompt, attachments: attachments, excerpts: excerpts)
@@ -838,7 +1161,9 @@ import Observation
         changed(); isCancelling = false; error = nil; isRunning = true; activeSessionID = sessionID; activeAttemptID = attemptID; phase = "正在保存冻结输入…"
         runTask = Task { [self] in
             defer { isRunning = false; isCancelling = false; activeSessionID = nil; activeAttemptID = nil; runTask = nil
-                    if pendingSaveAttemptID == nil { services = nil } }
+                    if pendingSaveAttemptID == nil { services = nil }
+                    if let finished = state.sessions.first(where: { $0.id == sessionID })?.attempts.first(where: { $0.id == attemptID }),
+                       finished.status == .completed, pendingSaveAttemptID == nil { scheduleAssistance(sessionID: sessionID) } }
             do {
                 try await flush() // Immutable attempt is durable before model admission.
                 if isCancelling { throw CancellationError() }
@@ -948,6 +1273,8 @@ import Observation
 
     /// Project shutdown owns all chat activities. The composer Stop only cancels generation.
     public func cancelAll() async {
+        assistanceCancelled = true
+        let auxiliaryStop = Task { await cancelAssistance() }
         toolTask?.cancel(); mcpConnectionTask?.cancel()
         let mcpStop = Task { await disconnectMCP() }
         speechTask?.cancel(); speechService?.cancelTranscription(); speechService?.stopSpeech()
@@ -957,6 +1284,7 @@ import Observation
         await cancelSpeechTranscription()
         await speechService?.stopSpeechAndWait()
         await mcpStop.value
+        await auxiliaryStop.value
     }
 
     public func cancel() async {
@@ -1015,7 +1343,7 @@ import Observation
     }
     public func prepareForTermination() async throws {
         guard isLoaded else { return }
-        guard !isBusy, pendingSaveAttemptID == nil else { throw WorkflowIssue("聊天仍在运行、播放或有待保存结果。") }
+        guard !isBusy, pendingSaveAttemptID == nil, pendingAssistanceSaveID == nil else { throw WorkflowIssue("聊天仍在运行、播放或有待保存结果。") }
         try await flush()
     }
     /// An explicit endpoint grant is independent of the Wikipedia switch. No auto-connect on load.

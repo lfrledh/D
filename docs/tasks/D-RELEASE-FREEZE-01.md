@@ -673,3 +673,9 @@ S01受限Sol/high初交、修复1、修复2分别679.58/661.15/548.879秒，均�
 非实现者两项P2均修复：`lead/s02-quote-owner-red`真实Store占用期间项目关闭先失败；`s02-format-quote-green`中9项格式XCTest、10项Workbench Swift Testing通过（源码为14f0c20f加本次增量）。其中UITests宿主事件注入发生identity-mismatch，尽管多测试二进制runner最终exit0，**此UI结果不算通过**；旧`s02-quote-host-geometry`1项通过仅作历史，不覆盖本次冲突。原生App将定向验证选段与菜单；不重跑长GPU。F13最初fork断言选中了regenerate的新分支，已明确指定旧assistant并补compare，未改生产fork语义。QUOTE组件初交/repair1，Lead补Swift返回/SDK getter和真实按钮geometry检查；保留所有失败证据，不归为Worker独立通过。
 
 R仍为run-20261003T150039Z-chat-continue。MCP已有真实SDK服务controller往返与取消；AUX优先队列已验。s03-assistance初交+repair1已结束，模型/权限同先前，纯值组件待CPU及接线。当前桌面可截图，不再直接沿用锁屏事实；普通App门槛尚未通过。main仍f31dced209855722d2f04cc0fc8c5f6712396120。没有新本人授权、模型或平台。
+
+### CHAT-PRODUCT-20261003 / S03 辅助生产接线（2026-10-04）
+
+Sol/high辅助纯值组件后，由Lead接入既有WorkflowServices后台语言准入与ChatController。标题/标签/追问/摘要/记忆分别开关、独立预算；不变主消息和未发送草稿。原文、冻结输入与来源落入原Store；个人记忆跨owner先记录续作，失败只重试保存。只读非实现者指出保存关闭、重复应用、撤权/遗忘恢复反例，Lead逐项修补；不是Sol独立完成或另有独立模型实测。
+
+风险→保存/恢复、隐私、后台取消；最少证据R/lead/s03-assistance-save-red2及s03-assistance-cold-red在修前失败，s03-assistance-wiring-final 13方法/2suite通过（参数化冷恢复3场景，非独立通过率），实际Store独立备份恢复与受控模型流。受测base cdcaa7758381ac0718793b1118a34b59d9780c40加Lead差分，逐文件摘要在R/lead/s03-assistance-code-evidence.json。真实辅助模型和普通App控件尚未验。R为run-20261003T150039Z-chat-continue。所有CLI已结束的事实与当前INSPECTION第一轮修复运行分开；费用unknown。

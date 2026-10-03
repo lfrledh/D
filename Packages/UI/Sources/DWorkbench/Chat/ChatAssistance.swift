@@ -309,3 +309,39 @@ public struct ChatAssistanceRecord: Codable, Sendable, Equatable, Identifiable {
         }
     }
 }
+
+/// Durable execution input. UI settings are never consulted to reproduce this receipt.
+public struct ChatAssistanceExecution: Codable, Sendable, Equatable, Identifiable {
+    public var id: UUID { record.id }
+    public var record: ChatAssistanceRecord
+    public let options: ChatAssistanceOptions
+    public let node: WorkflowNode
+    public let messagesJSON: String
+    public let inputs: [String: WorkflowValue]
+    public let originalTags: [String]
+    public let memoryFingerprint: String
+    /// Cross-owner save continuation. This is not an implicit memory-read grant.
+    public var pendingMemoryEntries: [ChatMemoryEntry]?
+    public init(record: ChatAssistanceRecord, options: ChatAssistanceOptions, node: WorkflowNode,
+                messagesJSON: String, inputs: [String: WorkflowValue], originalTags: [String], memoryFingerprint: String) {
+        self.record = record; self.options = options; self.node = node
+        self.messagesJSON = messagesJSON; self.inputs = inputs
+        self.originalTags = originalTags; self.memoryFingerprint = memoryFingerprint
+    }
+    public func validate() throws {
+        try record.validate(); try options.validate(); try ChatState.validateNode(node)
+        if let entries = pendingMemoryEntries {
+            guard record.status == .completed, record.kind == .memory, entries.count <= 16,
+                  Set(entries.map(\.id)).count == entries.count else { throw WorkflowIssue("记忆保存续作无效。") }
+            for entry in entries {
+                try entry.validate()
+                guard entry.scope == options.memoryTarget, entry.source == .chat(record.source), !entry.enabled else {
+                    throw WorkflowIssue("记忆保存续作的来源或范围不符。")
+                }
+            }
+        }
+        guard node.parameters["messagesJSON"]?.string == messagesJSON,
+              node.parameters["maximumOutputTokens"]?.integer == record.maximumOutputTokens,
+              messagesJSON.utf8.count <= 16_777_216 else { throw WorkflowIssue("辅助任务的冻结输入不一致。") }
+    }
+}

@@ -103,6 +103,8 @@ public struct ChatSession: Codable, Sendable, Equatable, Identifiable {
     public var webOptions: ChatWebOptions?
     public var outputFormat: ChatOutputFormat?
     public var mcpEndpoint: String?
+    public var assistanceOptions: ChatAssistanceOptions?
+    public var assistanceExecutions: [ChatAssistanceExecution]?
     public var importLossNotes: [String]?
     public var toolActivities: [ChatToolActivity]?
     public var knowledgeScope: [UUID]?
@@ -183,6 +185,15 @@ public struct ChatState: Codable, Sendable, Equatable {
             }
             if let node = session.configuration { try Self.validateNode(node) }
             try session.outputFormat?.validate()
+            try session.assistanceOptions?.validate()
+            let assistance = session.assistanceExecutions ?? []
+            guard assistance.count <= 256, Set(assistance.map(\.id)).count == assistance.count else {
+                throw WorkflowIssue("辅助任务历史数量或身份无效。")
+            }
+            for execution in assistance {
+                try execution.validate()
+                guard execution.record.source.sessionID == session.id else { throw WorkflowIssue("辅助任务来源不属于本会话。") }
+            }
             let importNotes = session.importLossNotes ?? []
             guard importNotes.count <= 4096, importNotes.reduce(0, { $0 + $1.utf8.count }) <= 524_288 else {
                 throw WorkflowIssue("Imported transcript mapping notes exceed the supported limit.")
@@ -269,7 +280,7 @@ public struct ChatState: Codable, Sendable, Equatable {
         }
         for excerpt in excerpts { try excerpt.validate() }
     }
-    private static func validateNode(_ node: WorkflowNode) throws {
+    static func validateNode(_ node: WorkflowNode) throws {
         guard [WorkflowModelRoutes.qwen35, WorkflowModelRoutes.qwen38].contains(node.operationID),
               node.parameters["modelID"]?.string?.isEmpty == false else { throw WorkflowIssue("聊天必须使用明确的文字模型。") }
         try WorkflowRegistry.standard.validate(node)

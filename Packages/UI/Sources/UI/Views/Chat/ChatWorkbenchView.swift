@@ -1253,6 +1253,9 @@ struct ChatWorkbenchView: View {
                     }
 
                 }
+                ChatAssistancePanel(chat: chat, session: session, wording: { english, chinese in
+                    language?.effectiveLanguageIdentifier.hasPrefix("zh") == true ? chinese : english
+                }).id(session.id.uuidString + ":assistance")
                 ChatMemoryPanel(chat: chat, session: session, wording: { english, chinese in
                     language?.effectiveLanguageIdentifier.hasPrefix("zh") == true ? chinese : english
                 }).id(session.id.uuidString + ":memory")
