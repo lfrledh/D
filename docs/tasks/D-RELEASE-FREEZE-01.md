@@ -524,3 +524,12 @@ B开始不改变Q与整体冻结门槛，未通过真实聊天路径前不作为
 - 原生Markdown采用Microsoft SwiftStreamingMarkdown v0.7.0固定 `5f7c04e0558df6146f90d482edb62cb456986bda`，仅UI target；真实解析锁记录依赖（cmark0.9.0、swift-syntax603.0.2，区别于上游历史锁）。MIT等原文声明随UI资源保留，未改D许可证。无图片opt-in、禁外部openURL，原文始终保留。尚待本机布局/复制/性能检查。
 - Q一次自然首帧请求源e57952f，provider相对A未变。只读非实现者核四hook各原调用一次/原值返回；不改精度/输入/随机数，完整30步、704×480、97帧24fps、seed42。记录RC/q/ltx-natural-boundaries-01与lead/q-natural-full-*，最长14400s程序回收。尚未有生成结论，不因观察数据当作修复。
 - 当前仅候选，不接纳B至main。保护A App、源个人scheme和旧证据；无新本人动作。CPU/构建等等待Q独占结束，不能叠加旧通过为新通过。
+
+
+### 2026-10-03 B 组合源码复核检查点
+
+core初交7130829、两修复0c15f5f/2fb1f41已合并；六项原反例经native_h22_diagnosis在2825e27源码关闭，含Lead实际备份屏障；普通修复剩0。UI初交7737c39、修复1e12a94a已合并，四项生成门禁/错误归属/SDK检查/空Markdown问题经native_files_review源码关闭，普通修复剩1。两条受限Sol/highCLI均已结束，实际设置/权限和运行时间见RC相应process/route记录；无新Worker派生，无独立行为验收宣称。
+
+Lead后续7ff155a/05e637b处理用户分类要求的真实边界：临时数值状态在原ChatController按会话保留；显式模型替换才清除其旧参数文本，普通键入不清；文字内“聊天/单次生成”复用原Quick，旧Qwen模型显式到单次，不能静默继续另一聊天模型。其他三类仍直接复用，Canvas不拆分；设置内容有界滚动。此处属于Lead实现，不追记为Worker独立通过。新增兼容/实际服务门禁反例待CPU；非实现者明确源码检查不代表GUI。Markdown发布为实际text/markdown/.md，沿原Store校验和导出；原文/远程资源禁用保留。
+
+组合05e637b尚待CPU/编译/普通App真实多轮附件/聊天独立备份和原生操作。Q程序运行自然LTX完整请求后再运行一份语义相容H3首尾；原模型/数值/生产provider未变，观察hook不改变返回值。A独立f31仍可用，main未接纳B，功能冻结仍未通过。RC/lead/b-review-checkpoint-2.json为中途索引，恢复先查真实Git/进程，勿重复提交生成。

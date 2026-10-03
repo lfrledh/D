@@ -6,7 +6,7 @@
 
 用户批准继续同一 D-RELEASE-FREEZE-01，起点 main/candidate `3a2801abab22273256923ce1f3c14407515f20ce`。当前顺序：A1 普通沙盒备份与独立恢复、A2 冷启按需模型就绪 → 两项真实 App 门槛通过并独立接纳 main → B 最小文字聊天。Q 视频质量独立继续。**A 的 G1/G2 已通过，独立修补基线 f31dced209855722d2f04cc0fc8c5f6712396120 已接纳并推送 main；B 正在隔离候选实现**；下列上一批停点是历史事实，不再是本轮排程。A受测8511718c472e788a8dcfc088eea0fde9dad050b3；独立原生证据RC/lead/a-native-gates.json、集成回执RC/lead/a-integration.json。B包含常驻四分类，文字为聊天，另三类复用；Q继续独立，未宣称冻结。
 
-当前 B：四分类导航e57952f已通过定向CPU；聊天core初交7130829、初步组合803ae9c尚未编译/原生验收，非实现者指出保存/分支边界，受限Sol/high修复1进行中。UI独立受限Sol/high实现中；Lead负责项目所有权/导航/最终集成。Q固定自然首帧完整30步BF16请求独占GPU，程序最长4小时，保存生成音频latent→mel→float波形→PCM供AAC交叉检查；不是再次抽卡。不得在此时启动重构建/其他GPU/GUI。各子作业准确状态见RC各slice `*-process.json`及lead检查结果，接手先核进程，不重启。
+当前 B：四分类导航e57952f已通过初始定向CPU；最新组合`05e637b02df10328c512aafab4f57c552f30024e`尚未编译/原生验收。core Sol/high初交及两修复完成；UI Sol/high初交+修复1完成（剩一轮普通修复）。Lead协调所有权、备份屏障、Markdown资产、四分类/文字子面、参数临时状态与有界设置滚动；非实现者已定点复核已发现反例。临时半截数字保留于同一控制器，不宣称冷启恢复；合法配置、会话、Quick导航在Store。Q固定自然首帧完整30步BF16请求独占GPU，随后程序只提交已准备的一份H3自然首尾；不是抽卡批次。两者均结束后才进行重构建/GUI，准确状态见RC/lead/q-*-result.json，缺结果不重启。B未接纳main。
 
 证据 RC=`D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261003T035843Z-stabilize-chat`。H22/菜单/失联恢复保持，不重复本人操作；旧失败和预算保留。新增有限续修及角色、范围、门槛见任务记录末节。没有新的登录或资格事项；不发布 Release。
 
