@@ -33,6 +33,7 @@ public struct ChatSessionArchiveSelection: Sendable, Equatable {
                    ($0.response?.toolCalls.isEmpty == true &&
                     ($0.response?.finishReason == .stop || $0.response?.finishReason == .length)))
               }),
+              (session.knowledgeReranks ?? []).allSatisfy({ $0.status != .running }),
               (session.toolActivities ?? []).allSatisfy({
                   $0.status != .running && ($0.status == .interrupted || $0.endedAt != nil)
               }),
@@ -53,7 +54,8 @@ public struct ChatSessionArchiveSelection: Sendable, Equatable {
         chat.sessions = [selected]
 
         let excerpts = (session.knowledgeExcerpts ?? []) +
-            session.messages.flatMap { $0.knowledgeExcerpts ?? [] }
+            session.messages.flatMap { $0.knowledgeExcerpts ?? [] } +
+            (session.knowledgeReranks ?? []).flatMap(\.excerpts)
         let excerptSources = Set(excerpts.map(\.source))
         let scopedIDs = Set(session.knowledgeScope ?? [])
         let documents = state.knowledgeDocuments ?? []
@@ -129,6 +131,9 @@ public struct ChatSessionArchiveSelection: Sendable, Equatable {
             roots += activity.request.parents
             if let output = activity.output { roots.append(output) }
         }
+        for rerank in session.knowledgeReranks ?? [] {
+            if let output = rerank.output { roots.append(output) }
+        }
         for artifact in session.artifacts ?? [] {
             if let source = artifact.source { roots.append(source) }
             if let output = artifact.output { roots.append(output) }
@@ -157,6 +162,25 @@ public struct ChatSessionArchiveSelection: Sendable, Equatable {
                 throw WorkflowIssue("A saved answer has mismatched message or version provenance.")
             }
             roots.append(record.reference)
+        }
+
+        for record in archive.assets where record.metadata["chatSessionID"] == sessionID.uuidString {
+            if record.operationID == "d.chat.save-field" {
+                guard let messageID = record.metadata["chatMessageID"].flatMap(UUID.init(uuidString:)),
+                      messageByID[messageID]?.role == .assistant,
+                      let answerID = record.metadata["answerAssetID"].flatMap(UUID.init(uuidString:)),
+                      answerID == messageID || revisionByID[answerID]?.messageID == messageID,
+                      record.parents.count == 1, record.parents[0].assetID == answerID else {
+                    throw WorkflowIssue("A saved field has mismatched answer provenance.")
+                }
+                roots.append(record.reference)
+            } else if record.operationID == "d.chat.quote" {
+                guard let sourceID = record.metadata["sourceID"].flatMap(UUID.init(uuidString:)),
+                      record.metadata["sourceKind"] == "document" || messageByID[sourceID] != nil else {
+                    throw WorkflowIssue("A saved quotation has mismatched conversation provenance.")
+                }
+                roots.append(record.reference)
+            }
         }
 
         guard Set(archive.assets.map { $0.reference.assetID }).count == archive.assets.count else {

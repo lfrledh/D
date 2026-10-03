@@ -70,6 +70,7 @@ struct ChatMemoryPanel: View {
                     change { try chat.writeSummary(text: summaryText, sessionID: session.id, replacingID: editingSummary); summaryText = ""; editingSummary = nil }
                 }.disabled(summaryText.isEmpty || chat.isRunning)
                 Divider()
+                if !chat.isTemporary {
                 Toggle(wording("Use personal memories", "使用个人记忆"), isOn: scopeBinding(.personal))
                 if let id = chat.projectIdentity { Toggle(wording("Use this project's memories", "使用本项目记忆"), isOn: scopeBinding(.project(id))) }
                 ForEach(memories) { entry in
@@ -102,6 +103,7 @@ struct ChatMemoryPanel: View {
                         return try .manual(text: memoryText, scope: personal ? .personal : .project(projectID))
                     }
                 }.disabled(memoryText.isEmpty)
+                } else { Text(wording("Temporary chat does not read or write long-term memory.", "临时会话不读写长期记忆。")).font(.caption) }
                 if let issue { Text(issue).foregroundStyle(.red).font(.caption).textSelection(.enabled) }
             }.padding(.top, 6)
         }

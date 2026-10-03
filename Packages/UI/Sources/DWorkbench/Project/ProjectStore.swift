@@ -14,6 +14,11 @@ enum ProjectExportCheckpoint: Sendable { case contentDurable(URL), published(URL
 public actor ProjectStore {
     public nonisolated let rootURL: URL
     public nonisolated var artifactDirectory: URL { rootURL.appendingPathComponent("Tasks", isDirectory: true) }
+    private var isTemporaryChatStorage = false
+    public func excludeFromBackupsForTemporaryChat() throws {
+        guard manifest.assets.isEmpty, manifest.jobs.isEmpty, try readChatState().bytes == nil else { throw ProjectStoreError.invalidTransition }
+        isTemporaryChatStorage = true
+    }
     public static let maximumChatStateBytes = 16 * 1_024 * 1_024
     public static let manifestFilename = "project.json"
     public static let versionOneBackupFilename = "project.v1.backup.json"
@@ -4230,6 +4235,7 @@ extension ProjectStore {
     /// mutable external inputs are snapshotted now. No caches or device bookmarks are portable.
     public func backupPlan(modelDependencies: [ProjectBackupModelDependency] = [],
                            modelFiles: [ProjectBackupInput] = []) throws -> ProjectBackupPlan {
+        guard !isTemporaryChatStorage else { throw WorkflowIssue("临时会话不进入常规备份；请显式保存需要的成果。") }
         try checkLocation(); try verifyUnchangedManifest(); try Task.checkCancellation()
         var portable = manifest
         var inputs = [ProjectBackupInput](), missing = [String]()
@@ -4297,6 +4303,63 @@ extension ProjectStore {
         try verifyUnchangedManifest()
         return .init(projectID: manifest.id, revision: manifest.revision, files: inputs,
                      modelDependencies: dependencies, missing: Array(Set(missing)).sorted())
+    }
+
+    /// A recoverable single-session package uses the existing backup container. Only
+    /// selected immutable dependency bytes are copied; unrelated projects/graphs,
+    /// preferences, bookmarks, and model weights never enter this projection.
+    public func chatSessionBackupPlan(sessionID: UUID, expectedChatRevision: UInt64) throws -> ProjectBackupPlan {
+        guard !isTemporaryChatStorage else { throw WorkflowIssue("临时会话不进入常规备份。") }
+        try checkLocation(); try verifyUnchangedManifest(); try Task.checkCancellation()
+        let captured = try readChatState()
+        guard chatWriteBaselineInitialized, captured.bytes == chatValidatedBytes,
+              captured.state.revision == expectedChatRevision else { throw ProjectStoreError.externalModification }
+        let chat = captured.state
+        let selection = try ChatSessionArchiveSelection.make(state: chat,
+            archive: workflowState().archive ?? WorkflowArchive(), sessionID: sessionID)
+        let known = Dictionary(uniqueKeysWithValues: manifest.assets.map { ($0.id, $0) })
+        var assets: [ProjectAsset] = [], files: [ProjectBackupInput] = []
+        for record in selection.archive.assets {
+            try Task.checkCancellation()
+            guard var asset = known[record.reference.assetID],
+                  let format = WorkflowMediaFormat.descriptor(asset.mediaType) else { throw ProjectStoreError.missingAsset }
+            let data = try readAssetData(asset, limit: format.maximumBytes)
+            guard AssetLocationFiles.hash(data) == record.reference.sha256 else { throw ProjectStoreError.externalModification }
+            let source = try assetURL(for: asset)
+            // Physical placement is local to this restored copy; logical asset IDs,
+            // media metadata, request snapshots and provenance remain unchanged.
+            if asset.metadata.audio?.origin != .microphone {
+                asset.relativePath = "WorkflowAssets/\(asset.id.uuidString)/content.\(format.suffix)"
+            } // A microphone original keeps its checked Audio/<id>/source.caf location and origin.
+            asset.jobID = nil; asset.fileLocations = nil
+            assets.append(asset)
+            files.append(.init(relativePath: asset.relativePath, sourceURL: source, data: nil,
+                sha256: record.reference.sha256, byteCount: UInt64(data.count)))
+        }
+        try validateWorkflowArchive(selection.archive, assets: assets)
+        let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+        let archiveData = try encoder.encode(selection.archive), chatData = try encoder.encode(selection.chat)
+        guard archiveData.count <= 32 * 1_024 * 1_024, chatData.count <= Self.maximumChatStateBytes else {
+            throw WorkflowIssue("会话包超出既有存储预算；原会话未改变。")
+        }
+        let pointer = WorkflowSnapshotPointer(generation: UUID(), byteCount: archiveData.count,
+            sha256: AssetLocationFiles.hash(archiveData))
+        var portable = ProjectManifest(revision: manifest.revision, id: manifest.id,
+            name: selection.chat.sessions[0].title, createdAt: manifest.createdAt, assets: assets)
+        portable.workflowSnapshot = pointer
+        try ProjectFiles.validate(portable)
+        func inline(_ path: String, _ bytes: Data) {
+            files.append(.init(relativePath: path, sourceURL: nil, data: bytes,
+                sha256: AssetLocationFiles.hash(bytes), byteCount: UInt64(bytes.count)))
+        }
+        inline(pointer.relativePath, archiveData); inline("quick-chat.json", chatData)
+        inline(Self.manifestFilename, try ProjectFiles.manifestData(portable))
+        let revisions = Set(selection.archive.assets.compactMap { $0.request?.model.revision })
+        let dependencies = try ModelCatalog.entries().filter { revisions.contains($0.revision) }
+            .map { ProjectBackupModelDependency(catalogID: $0.id, revision: $0.revision, files: $0.files) }
+        try verifyUnchangedManifest()
+        guard try readChatState().bytes == captured.bytes else { throw ProjectStoreError.externalModification }
+        return .init(projectID: manifest.id, revision: manifest.revision, files: files, modelDependencies: dependencies)
     }
 
     /// Restore into a new independent instance; historical content references retain logical identity.

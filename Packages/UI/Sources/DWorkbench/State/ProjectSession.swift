@@ -781,7 +781,7 @@ public final class ProjectSession {
         projectURL = lease.url
         if !isInternalWorkspace { settings.set(lease.bookmark, forKey: Self.projectBookmarkKey) }
         manifest = await candidate.snapshot()
-        if let owner = createdSession.artifactStore, owner !== candidate {
+        if !isTemporaryChatWorkspace, let owner = createdSession.artifactStore, owner !== candidate {
             do { manifest = try await candidate.recoverSharedRuntimeArtifacts(from: owner) }
             catch { errorMessage = "共享计算产物尚未恢复，原文件保留：" + error.localizedDescription }
         }
@@ -883,12 +883,48 @@ public final class ProjectSession {
         catch { await access.release(lease); throw error }
     }
 
+    public private(set) var temporaryChatSession: ProjectSession?
+    public private(set) var isTemporaryChatWorkspace = false
+    @ObservationIgnored private var temporaryChatStorage: ChatTemporaryStorage?
+    @ObservationIgnored private var changingTemporaryChat = false
+    public func startTemporaryChat(in cacheParent: URL) async throws -> ProjectSession {
+        if let temporaryChatSession { return temporaryChatSession }
+        guard !changingTemporaryChat, !closePending, !isChangingProject, let session, let store else { throw WorkflowIssue("工作区尚未就绪。") }
+        changingTemporaryChat = true; defer { changingTemporaryChat = false }
+        let owned = try await ChatTemporaryStorage.create(in: cacheParent)
+        // Borrow the current execution owner; never construct a second model engine.
+        let borrowed = session.borrowed(artifactStore: session.artifactStore ?? store)
+        let child = ProjectSession(sessionFactory: { _ in borrowed }, settings: settings,
+            modelLibrary: modelLibrary, audioEnabled: audioEnabled, audioRecordingEnabled: audioRecordingEnabled,
+            closeDecision: { .cancel })
+        child.isTemporaryChatWorkspace = true
+        child.temporaryChatStorage = owned
+        temporaryChatSession = child // Retain cleanup ownership even if activation fails.
+        try await child.activateInternalWorkspace(owned.store)
+        guard let chat = child.chat, chat.isLoaded else { throw WorkflowIssue(child.chat?.error ?? "临时会话未打开。") }
+        _ = try chat.newSession(title: "Temporary chat")
+        child.refreshWorkflowModels()
+        return child
+    }
+    public func endTemporaryChat() async throws {
+        guard !changingTemporaryChat else { throw WorkflowIssue("临时会话正在切换。") }
+        guard let child = temporaryChatSession else { return }
+        changingTemporaryChat = true; defer { changingTemporaryChat = false }
+        child.closePending = true; child.isChangingProject = true
+        defer { child.closePending = false; child.isChangingProject = false }
+        guard await child.prepareOwnedAudioNavigation() else { throw WorkflowIssue("录音尚未结束；临时材料仍保留。") }
+        try await child.chat?.discardTemporary()
+        guard await child.closeDrainedProject() else { throw WorkflowIssue(child.errorMessage ?? "临时工作区尚未关闭。") }
+        try child.temporaryChatStorage?.discardClosedStore()
+        temporaryChatSession = nil
+    }
+
     public var personalChatOwner: (@MainActor () -> ChatController?)?
     private func makeChatController(store candidate: ProjectStore) -> ChatController {
         ChatController(store: candidate, settings: settings, allowsSubmission: { [weak self] in
             guard let self else { return false }
             return self.store === candidate && !self.closePending && !self.isChangingProject
-        }, ownsPersonalMemory: isInternalWorkspace, personalMemoryProvider: { [weak self] in self?.personalChatOwner?() }) { [weak self] in
+        }, ownsPersonalMemory: isInternalWorkspace && !isTemporaryChatWorkspace, isTemporary: isTemporaryChatWorkspace, personalMemoryProvider: { [weak self] in self?.personalChatOwner?() }) { [weak self] in
             guard let self, self.store === candidate else { throw WorkflowIssue("聊天所属项目已关闭或切换。") }
             return try self.makeExplicitOperationServices(allowDrainingQuick: self.chat?.isRunning == true)
         }
@@ -2515,6 +2551,8 @@ public final class ProjectSession {
     /// App termination's reversible preflight for the automatic workspace. Keep its Store
     /// and borrowed runtime usable until every other application owner has accepted Quit.
     public func prepareInternalForTermination() async -> Bool {
+        // Reversible Quit preflight: other owners may still refuse termination.
+        if let temporaryChatSession, !(await temporaryChatSession.prepareInternalForTermination()) { return false }
         guard isInternalWorkspace, !isRegisteringTextModel, !isRegisteringAudioModel,
               !isRegisteringVideoModel, !isChangingProject, !closePending,
               workflow?.hasPendingSaves != true, chat?.pendingSaveAttemptID == nil, text?.hasPendingCandidate != true else { return false }

@@ -75,7 +75,7 @@ private enum ChatDetail: Identifiable {
     case edit(ChatEdit), preview(WorkflowAssetReference)
     case comparison(UUID, UUID), presetImport([ChatPromptPreset], Data)
     case conversationImport(ChatInterchange.ImportPreview, Data, String)
-    case quote(UUID, ChatQuoteSource), artifact(ChatArtifactContent)
+    case quote(UUID, ChatQuoteSource), artifact(ChatArtifactContent), fields([ChatAnswerField])
     case knowledgeDirectory(UUID, URL, ChatKnowledgeDirectoryInventory, Bool)
     var id: String {
         switch self {
@@ -86,6 +86,7 @@ private enum ChatDetail: Identifiable {
         case .conversationImport: "conversation-import"
         case .knowledgeDirectory(let owner, let url, _, _): "knowledge-directory-\(owner)-\(url.path)"
         case .artifact(let value): "artifact-\(value.id)-\(value.revision)"
+        case .fields(let values): "fields-\(values.first?.answer.assetID.uuidString ?? "empty")"
         case .quote(let session, let source): "quote-\(session)-\(source.id)"
         }
     }
@@ -318,7 +319,9 @@ struct ChatWorkbenchView: View {
     let model: WorkbenchModel
     let onChooseModel: () -> Void
     let onSavedAsset: (WorkflowAssetReference) -> Void
+    let onRetainTemporary: ((WorkflowAssetReference, Bool, UUID) async throws -> Void)?
     let onAssetsChanged: () -> Void
+    let onSavedValue: ((WorkflowDatum, UUID) async throws -> Void)?
 
     @Environment(\.dLanguageStore) private var language
     @State private var search = ""
@@ -356,7 +359,9 @@ struct ChatWorkbenchView: View {
     init(chat: ChatController, model: WorkbenchModel,
          onChooseModel: @escaping () -> Void,
          onSavedAsset: @escaping (WorkflowAssetReference) -> Void,
+         onRetainTemporary: ((WorkflowAssetReference, Bool, UUID) async throws -> Void)? = nil,
          onAssetsChanged: @escaping () -> Void,
+         onSavedValue: ((WorkflowDatum, UUID) async throws -> Void)? = nil,
          initialInspectorVisible: Bool = false,
          initialSettingsVisible: Bool = false,
          initialContextPreviewVisible: Bool = false,
@@ -364,7 +369,7 @@ struct ChatWorkbenchView: View {
          initiallyFollowsBottom: Bool = true,
          initiallyHasNewContent: Bool = false) {
         self.chat = chat; self.model = model; self.onChooseModel = onChooseModel
-        self.onSavedAsset = onSavedAsset; self.onAssetsChanged = onAssetsChanged
+        self.onSavedAsset = onSavedAsset; self.onRetainTemporary = onRetainTemporary; self.onAssetsChanged = onAssetsChanged; self.onSavedValue = onSavedValue
         _showInspector = State(initialValue: initialInspectorVisible)
         _inspectorTab = State(initialValue: initialSettingsVisible ? .settings : .data)
         _showContextPreview = State(initialValue: initialContextPreviewVisible)
@@ -503,9 +508,32 @@ struct ChatWorkbenchView: View {
                         onAssetsChanged(); return saved
                     }, onClose: { sheets.detail = nil })
 
+            case .fields(let choices):
+                ChatAnswerFieldSheet(choices: choices, wording: { en, zh in newLabel(en, english: en, chinese: zh) },
+                    onSave: { field, publication, useInWorkflow in
+                        let activity = try chat.beginExternalActivity(); defer { chat.endExternalActivity(activity) }
+                        let envelope = try await chat.saveAnswerField(field, assetID: publication)
+                        try Task.checkCancellation()
+                        if chat.isTemporary {
+                            guard let source = envelope.fields?["source"]?.assetReferences.first, let onRetainTemporary else { throw WorkflowIssue("长期保存入口不可用。") }
+                            if useInWorkflow, let onSavedValue { try await onSavedValue(envelope, activity) }
+                            else { try await onRetainTemporary(source, false, activity) }
+                        } else {
+                            onAssetsChanged()
+                            if useInWorkflow, let onSavedValue { try await onSavedValue(envelope, activity) }
+                        }
+                    }, onClose: { sheets.detail = nil })
             case .quote(let sessionID, let source):
                 ChatQuoteSheet(chat: chat, sessionID: sessionID, source: source,
-                    onSaved: { onAssetsChanged() }, onClose: { sheets.detail = nil })
+                    onSaved: { onAssetsChanged() }, onKeep: { reference, workflow, activity in
+                        if chat.isTemporary {
+                            guard let onRetainTemporary else { throw WorkflowIssue("长期保存入口不可用。") }
+                            try await onRetainTemporary(reference, workflow, activity)
+                        } else {
+                            onAssetsChanged()
+                            if workflow, let onSavedValue { try await onSavedValue(.asset(reference), activity) }
+                        }
+                    }, onClose: { sheets.detail = nil })
             case .comparison(let sessionID, let attemptID):
                 ScrollView {
                     ChatComparisonPanel(chat: chat, sessionID: sessionID, sourceAttemptID: attemptID,
@@ -1093,6 +1121,11 @@ struct ChatWorkbenchView: View {
                 .init(id: "html", title: newLabel("exportHTML", english: "Export local HTML", chinese: "导出本地 HTML")) { Task { await export(sessionID: item.id, markdown: false, html: true) } }
             ]
         }
+        if !chat.isTemporary {
+            result.append(.init(id: "sessionPackage", title: newLabel("exportSessionPackage", english: "Export recoverable session…", chinese: "导出可恢复会话包…"), enabled: !chat.isBusy) {
+                Task { await exportSessionPackage(sessionID: item.id) }
+            })
+        }
         return result
     }
 
@@ -1185,6 +1218,11 @@ struct ChatWorkbenchView: View {
                 .init(id: "save", title: label("saveAsset", "保存回答为素材")) { Task { await saveFinal(message.id, sessionID: session.id, useInWorkflow: false) } },
                 .init(id: "workflow", title: label("useWorkflow", "用于工作流")) { Task { await saveFinal(message.id, sessionID: session.id, useInWorkflow: true) } }
             ]
+        }
+        if session.selectedAnswer(messageID: message.id)?.attempt?.outputFormat?.kind == .schema {
+            result.append(.init(id: "fields", title: newLabel("answerFields", english: "Save / hand off structured fields…", chinese: "保存／交接结构化字段…")) {
+                perform(sessionID: session.id) { present(.fields(try ChatAnswerField.choices(session: session, messageID: message.id))) }
+            })
         }
         return result
     }
@@ -1519,6 +1557,8 @@ struct ChatWorkbenchView: View {
                             directoryEntries: [ChatKnowledgeDirectoryInventory.Entry] = []) async {
         let ocr = ocrImport
         let owner = chat, store = chat.store
+        guard let activity = try? owner.beginExternalActivity() else { return }
+        defer { owner.endExternalActivity(activity) }
         var failures: [String] = []
         for url in urls {
             guard owner === chat, store === chat.store, chat.isLoaded,
@@ -1547,6 +1587,8 @@ struct ChatWorkbenchView: View {
     }
     private func importSharedAssets(_ items: [WorkflowCanvasTransfer], sessionID: UUID) async {
         let owner = chat, store = chat.store
+        guard let activity = try? owner.beginExternalActivity() else { return }
+        defer { owner.endExternalActivity(activity) }
         do {
             let manifest = await store.snapshot()
             let state = try await store.workflowState()
@@ -1627,6 +1669,24 @@ struct ChatWorkbenchView: View {
         } catch { report(error.localizedDescription, for: sessionID) }
     }
 
+    private func exportSessionPackage(sessionID: UUID) async {
+        guard !filePanelBusy else { return }
+        filePanelBusy = true; defer { filePanelBusy = false }
+        let owner = chat
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "D-chat.dbackup"
+        panel.message = newLabel("sessionPackagePrivacy", english: "Includes all branches, unsent draft, attachments and frozen inputs (which may contain private facts). Personal-memory identities without local content remain provenance only. Future memory reads start disabled. Restore as an independent project through the existing Restore Backup entry.", chinese: "包含所有分支、未发送草稿、附件及冻结输入（可能含私人信息）。未保存本地内容的个人记忆仅保留来源标识，恢复后默认不读取记忆。使用现有“恢复备份”入口恢复为独立项目。")
+        guard await panel.begin() == .OK, let destination = panel.url, owner === chat else { return }
+        let scoped = destination.startAccessingSecurityScopedResource()
+        defer { if scoped { destination.stopAccessingSecurityScopedResource() } }
+        do {
+            let plan = try await owner.sessionBackupPlan(sessionID: sessionID)
+            let activity = try owner.beginExternalActivity(); defer { owner.endExternalActivity(activity) }
+            _ = try await ProjectBackup.create(plan, at: destination)
+            report(nil, for: sessionID)
+        } catch { report(error.localizedDescription, for: sessionID) }
+    }
+
     private func export(sessionID: UUID, markdown: Bool, html: Bool = false) async {
         guard !filePanelBusy else { return }
         filePanelBusy = true; defer { filePanelBusy = false }
@@ -1646,6 +1706,7 @@ struct ChatWorkbenchView: View {
         let scoped = directory.startAccessingSecurityScopedResource()
         defer { if scoped { directory.stopAccessingSecurityScopedResource() } }
         do {
+            let activity = try owner.beginExternalActivity(); defer { owner.endExternalActivity(activity) }
             if html, let snapshot, let leaf = snapshot.selectedLeafID {
                 _ = try await store.exportChatHTML(snapshot, leafID: leaf, exportID: UUID(), directory: directory)
                 report(nil, for: sessionID); return
@@ -1662,10 +1723,16 @@ struct ChatWorkbenchView: View {
     private func saveFinal(_ messageID: UUID, sessionID: UUID, useInWorkflow: Bool) async {
         let owner = chat
         do {
+            let activity = try owner.beginExternalActivity(); defer { owner.endExternalActivity(activity) }
             let asset = try await owner.saveAssistantFinal(messageID, sessionID: sessionID)
             guard owner === chat else { return }
-            onAssetsChanged()
-            if useInWorkflow { onSavedAsset(asset) }
+            if owner.isTemporary {
+                guard let onRetainTemporary else { throw WorkflowIssue("长期保存入口不可用；成果仍在临时会话。") }
+                try await onRetainTemporary(asset, useInWorkflow, activity)
+            } else {
+                onAssetsChanged()
+                if useInWorkflow { onSavedAsset(asset) }
+            }
             report(nil, for: sessionID)
         } catch { report(error.localizedDescription, for: sessionID) }
     }

@@ -20,9 +20,44 @@ import Observation
     @ObservationIgnored private let settings: UserDefaults?
     @ObservationIgnored private let personalMemoryProvider: @MainActor () -> ChatController?
     public let ownsPersonalMemory: Bool
+    public let isTemporary: Bool
+    public private(set) var isDiscarding = false
+    @ObservationIgnored private var externalActivities = Set<UUID>()
+    /// UI imports/exports join the same close boundary; late panels cannot admit work.
+    public func beginExternalActivity() throws -> UUID {
+        try requireLoaded(); guard !isDiscarding, allowsSubmission() else { throw WorkflowIssue("会话正在关闭。") }
+        let id = UUID(); externalActivities.insert(id); return id
+    }
+    public func endExternalActivity(_ id: UUID) { externalActivities.remove(id) }
+    public func discardTemporary() async throws {
+        guard isTemporary else { throw WorkflowIssue("仅可丢弃临时会话。") }
+        isDiscarding = true
+        await cancelAll()
+        while isBusy { try await Task.sleep(for: .milliseconds(50)) }
+        debounce?.cancel(); debounce = nil
+        _ = try? await writeTail?.value
+        // Discard is an explicit user decision, unlike ordinary close/save retry.
+        services = nil; assistanceServices = nil; rerankServices = nil
+        pendingSaveAttemptID = nil; pendingAssistanceSaveID = nil; pendingKnowledgeRerankSaveID = nil
+        isLoaded = false
+    }
+    public func retainTemporaryText(_ reference: WorkflowAssetReference, in destination: ProjectStore, admittedActivity: UUID? = nil) async throws -> WorkflowAssetReference {
+        guard isTemporary, reference.kind == .text, destination !== store else { throw WorkflowIssue("请选择独立的长期保存位置。") }
+        let activity: UUID
+        if let admittedActivity {
+            guard externalActivities.contains(admittedActivity) else { throw WorkflowIssue("保存操作已结束。") }
+            activity = admittedActivity
+        } else { activity = try beginExternalActivity() }
+        defer { if admittedActivity == nil { endExternalActivity(activity) } }
+        let data = try await store.workflowData(reference)
+        guard String(data: data, encoding: .utf8) != nil else { throw WorkflowIssue("成果不是UTF-8文字。") }
+        return try await destination.publishWorkflowAsset(data: data, mediaType: "text/plain", name: "Temporary chat · selected result",
+            operationID: "d.chat.retain-temporary-result", details: ["selectedContentSHA256": reference.sha256,
+                "provenance": "Explicit content-only copy; private temporary prompt/history not included"]).record.reference
+    }
     public private(set) var projectIdentity: UUID?
     public var personalMemories: [ChatMemoryEntry] {
-        (ownsPersonalMemory ? state.memoryEntries : personalMemoryProvider()?.state.memoryEntries)?.filter { $0.scope == .personal } ?? []
+        isTemporary ? [] : (ownsPersonalMemory ? state.memoryEntries : personalMemoryProvider()?.state.memoryEntries)?.filter { $0.scope == .personal } ?? []
     }
     /// Incomplete numeric edits survive view/category changes in this owner.
     /// Valid values persist in configuration; these transient edits are not cold-start state.
@@ -55,7 +90,7 @@ import Observation
         speechService = service
         return service
     }
-    public var isBusy: Bool { !knowledgeCopies.isEmpty || !artifactSaves.isEmpty || isRerankingKnowledge || isAssisting || isRunning || isToolRunning || isMCPConnecting || isMCPStopping || isTranscribing || speechPlaybackState != .idle }
+    public var isBusy: Bool { !externalActivities.isEmpty || !knowledgeCopies.isEmpty || !artifactSaves.isEmpty || isRerankingKnowledge || isAssisting || isRunning || isToolRunning || isMCPConnecting || isMCPStopping || isTranscribing || speechPlaybackState != .idle }
     public private(set) var isCancelling = false
     /// Publication retries are busy but are not a cancellable model run.
     public var canStopGeneration: Bool { isRunning && activeAttemptID != nil }
@@ -89,18 +124,19 @@ import Observation
     @ObservationIgnored private var rerankServices: WorkflowServices?
     @ObservationIgnored private var rerankCancelled = false
     public var personalKnowledgeDocuments: [ChatKnowledgeDocument] {
-        (ownsPersonalMemory ? state.knowledgeDocuments : personalMemoryProvider()?.state.knowledgeDocuments) ?? []
+        isTemporary ? [] : (ownsPersonalMemory ? state.knowledgeDocuments : personalMemoryProvider()?.state.knowledgeDocuments) ?? []
     }
     @ObservationIgnored private var knowledgeCopies = Set<UUID>()
     @ObservationIgnored private var knowledgeIndex: ChatKnowledgeIndex?
     @ObservationIgnored private var indexedKnowledge: [UUID: ChatKnowledgeDocument] = [:]
 
     public init(store: ProjectStore, settings: UserDefaults? = nil, allowsSubmission: @escaping @MainActor () -> Bool = { true },
-                ownsPersonalMemory: Bool = false, webClient: ChatWebSearchClient = .init(), mcpService: any ChatMCPServing = ChatMCPService(),
+                ownsPersonalMemory: Bool = false, isTemporary: Bool = false, webClient: ChatWebSearchClient = .init(), mcpService: any ChatMCPServing = ChatMCPService(),
                 personalMemoryProvider: @escaping @MainActor () -> ChatController? = { nil },
                 makeServices: @escaping @MainActor () throws -> WorkflowServices) {
-        self.store = store; self.settings = settings; self.webClient = webClient; self.mcpService = mcpService
-        self.ownsPersonalMemory = ownsPersonalMemory; self.personalMemoryProvider = personalMemoryProvider
+        self.store = store; self.isTemporary = isTemporary; self.settings = isTemporary ? nil : settings; self.webClient = webClient; self.mcpService = mcpService
+        self.ownsPersonalMemory = ownsPersonalMemory && !isTemporary
+        if isTemporary { self.personalMemoryProvider = { nil } } else { self.personalMemoryProvider = personalMemoryProvider }
         self.allowsSubmission = allowsSubmission; self.makeServices = makeServices
     }
     public var selectedSession: ChatSession? { state.sessions.first { $0.id == state.selectedSessionID } }
@@ -145,7 +181,7 @@ import Observation
         } catch { self.error = error.localizedDescription }
     }
     private func requireLoaded() throws {
-        guard isLoaded else { throw WorkflowIssue(error ?? "聊天记录尚未读取，不能覆盖原件。") }
+        guard isLoaded, !isDiscarding else { throw WorkflowIssue(error ?? "聊天记录尚未读取或已关闭，不能覆盖原件。") }
         guard saveIssue == nil else { throw WorkflowIssue("聊天记录保存失败，请先重试保存。") }
     }
     private func index(_ id: UUID) throws -> Int {
@@ -193,6 +229,7 @@ import Observation
     /// Backup includes durable chat state only. A live or unpublished response must
     /// finish/save first; recheck after the actor hop used by sidecar publication.
     public func prepareForBackup() async throws {
+        guard !isTemporary else { throw WorkflowIssue("临时会话不进入常规备份，请显式保存成果。") }
         func requireDurableBoundary() throws {
             guard !isBusy else { throw WorkflowIssue("聊天仍在生成、语音处理或停止中，请待资源释放后再备份。") }
             guard pendingSaveAttemptID == nil, pendingAssistanceSaveID == nil, pendingKnowledgeRerankSaveID == nil else {
@@ -202,6 +239,16 @@ import Observation
         try requireDurableBoundary()
         try await flush()
         try requireDurableBoundary()
+    }
+    /// Freeze one durable state before any destination writes. The returned plan
+    /// is revision-bound and ProjectBackup verifies every source digest on copy.
+    public func sessionBackupPlan(sessionID: UUID) async throws -> ProjectBackupPlan {
+        try requireLoaded(); _ = try index(sessionID)
+        try await prepareForBackup()
+        let revision = state.revision
+        let plan = try await store.chatSessionBackupPlan(sessionID: sessionID, expectedChatRevision: revision)
+        guard state.revision == revision, !isBusy else { throw WorkflowIssue("聊天已改变，请重新导出会话包。") }
+        return plan
     }
     @discardableResult public func newSession(title: String = "新对话") throws -> UUID {
         try requireLoaded()
@@ -402,7 +449,7 @@ import Observation
     /// Copy only the explicitly selected source using the existing asset provenance boundary.
     public func copyKnowledgeDocument(_ id: UUID, toPersonal: Bool) async throws {
         try requireLoaded()
-        guard allowsSubmission() else { throw WorkflowIssue("项目正在关闭。") }
+        guard !isTemporary, allowsSubmission() else { throw WorkflowIssue("临时会话不连接长期资料集合，或项目正在关闭。") }
         guard let personal = ownsPersonalMemory ? self : personalMemoryProvider() else { throw WorkflowIssue("个人资料库尚未就绪。") }
         try personal.requireLoaded()
         let source = toPersonal ? self : personal, destination = toPersonal ? personal : self
@@ -789,6 +836,7 @@ import Observation
     }
 
     private func currentMemories(_ session: ChatSession) -> [ChatMemoryEntry] {
+        guard !isTemporary else { return [] }
         let project = (state.memoryEntries ?? []).filter { $0.scope != .personal }
         return ChatMemoryEntry.activeProjection(project + personalMemories, enabledScopes: Set(session.memoryScopes ?? []))
     }
@@ -798,12 +846,14 @@ import Observation
     }
     public func setMemoryScopes(_ scopes: [ChatMemoryScope], sessionID: UUID) throws {
         try requireLoaded(); let i = try index(sessionID)
+        guard !isTemporary || scopes.isEmpty else { throw WorkflowIssue("临时会话不读取长期记忆。") }
         guard Set(scopes).count == scopes.count, scopes.count <= 2,
               scopes.allSatisfy({ $0 == .personal || $0 == projectIdentity.map(ChatMemoryScope.project) }) else { throw WorkflowIssue("记忆范围不属于当前项目。") }
         state.sessions[i].memoryScopes = scopes; changed()
     }
     public func writeMemory(_ entry: ChatMemoryEntry) async throws {
         try requireLoaded(); try entry.validate()
+        guard !isTemporary else { throw WorkflowIssue("临时会话不写入长期记忆。") }
         if entry.scope == .personal && !ownsPersonalMemory {
             guard let owner = personalMemoryProvider(), owner !== self else { throw WorkflowIssue("个人记忆所有者尚未就绪；项目记忆仍可用。") }
             try await owner.writeMemory(entry); return
@@ -853,6 +903,7 @@ import Observation
     }
     public func setAssistanceOptions(_ options: ChatAssistanceOptions, sessionID: UUID) throws {
         try requireLoaded(); try options.validate()
+        guard !isTemporary || options.memoryTarget == nil else { throw WorkflowIssue("临时会话不提取长期记忆。") }
         guard options.memoryTarget == nil || options.memoryTarget == .personal ||
               options.memoryTarget == projectIdentity.map(ChatMemoryScope.project) else { throw WorkflowIssue("辅助记忆范围不属于当前项目。") }
         let i = try index(sessionID)
@@ -1809,6 +1860,35 @@ import Observation
         guard let answer = session.selectedAnswer(messageID: messageID) else {
             throw WorkflowIssue("请先采用部分回答，或选择已完成的回答后保存。")
         }
+        return try await publishAnswer(answer, messageID: messageID, sessionID: sessionID)
+    }
+    public func saveAnswerField(_ field: ChatAnswerField, assetID: UUID = UUID()) async throws -> WorkflowDatum {
+        try requireLoaded(); let session = state.sessions[try index(field.sessionID)]
+        guard allowsSubmission(), !session.archived, session.contextChoices?.deletedAt == nil else { throw WorkflowIssue("请在可用会话中保存字段。") }
+        try field.validateCurrent(session)
+        let activity = try beginExternalActivity(); defer { endExternalActivity(activity) }
+        // Freeze once before suspension. An edit during publication creates a new
+        // answer; it never changes the explicitly selected version being saved.
+        let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+        let bytes = try encoder.encode(field.value)
+        guard bytes.count <= 1_048_576 else { throw WorkflowIssue("字段超出文字资产容量。") }
+        let path = String(decoding: try encoder.encode(field.path), as: UTF8.self)
+        // The provenance envelope adds structure: validate its complete budget
+        // before publishing either answer or field, without loosening core limits.
+        let prospective = WorkflowAssetReference(projectID: await store.snapshot().id, assetID: assetID,
+            kind: .text, sha256: SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined())
+        _ = try field.envelope(source: prospective)
+        try Task.checkCancellation()
+        let source = try await publishAnswer(field.answer, messageID: field.messageID, sessionID: field.sessionID)
+        try Task.checkCancellation()
+        let output = try await store.publishWorkflowAsset(data: bytes, mediaType: "text/plain", name: "聊天结构字段",
+            parents: [source], operationID: "d.chat.save-field", stepID: assetID,
+            details: ["chatSessionID": field.sessionID.uuidString, "chatMessageID": field.messageID.uuidString,
+                      "answerAssetID": field.answer.assetID.uuidString, "fieldPathJSON": path,
+                      "encoding": "D.WorkflowDatum.Codable.v1", "valueKind": field.value.kind.rawValue], assetID: assetID).record.reference
+        return try field.envelope(source: output)
+    }
+    private func publishAnswer(_ answer: ChatSelectedAnswer, messageID: UUID, sessionID: UUID) async throws -> WorkflowAssetReference {
         var details = ["chatSessionID": sessionID.uuidString, "chatMessageID": messageID.uuidString]
         if let attempt = answer.attempt { details["chatAttemptID"] = attempt.id.uuidString }
         if let revision = answer.revisionID { details["chatRevisionID"] = revision.uuidString }

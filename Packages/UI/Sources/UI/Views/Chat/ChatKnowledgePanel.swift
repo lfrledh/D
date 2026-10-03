@@ -24,7 +24,7 @@ struct ChatKnowledgePanel: View {
                     Button(wording("Add documents…", "添加资料…"), action: importDocuments)
                     Button(wording("Choose folder…", "选择文件夹…"), action: importDirectory)
                 }
-                if !chat.ownsPersonalMemory {
+                if !chat.ownsPersonalMemory && !chat.isTemporary {
                     DisclosureGroup(wording("Personal collection · explicit copies", "个人资料库 · 显式复制")) {
                         Text(wording("Choose sources to copy into this project. Existing project copies do not change when the personal collection changes.", "选择要复制入本项目的资料。个人集合后来改变不会悄悄替换本项目副本。"))
                             .font(.caption).foregroundStyle(.secondary)
@@ -51,7 +51,7 @@ struct ChatKnowledgePanel: View {
                         Menu {
                             Button(wording("Quote a selection…", "选择片段引用…")) { quote(document.id) }
                             Button(wording("View original", "查看原件")) { preview(document.material.reference) }
-                            if !chat.ownsPersonalMemory {
+                            if !chat.ownsPersonalMemory && !chat.isTemporary {
                                 Button(wording("Copy to personal collection", "复制到个人资料库")) { copy(document.id, toPersonal: true) }
                             }
                             Button(wording("Remove from search collection", "移出检索集合")) {

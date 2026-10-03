@@ -6,6 +6,7 @@ struct ChatQuoteSheet: View {
     let sessionID: UUID
     let source: ChatQuoteSource
     let onSaved: () -> Void
+    var onKeep: ((WorkflowAssetReference, Bool, UUID) async throws -> Void)? = nil
     let onClose: () -> Void
     @Environment(\.dLanguageStore) private var language
     @State private var task: Task<Void, Never>?
@@ -29,13 +30,20 @@ struct ChatQuoteSheet: View {
                 case .ask: wording("My question about this quotation: ", "关于这段引用，我的问题是：")
                 case .explain: wording("Explain this quotation.", "请解释这段引用。")
                 case .translate: wording("Translate this quotation into: ", "请将这段引用翻译为：")
+                case .save, .workflow: ""
                 case .rewrite: wording("Rewrite this quotation as follows: ", "请按以下要求改写这段引用：")
                 }
                 let publicationID = publication.id(for: selection)
                 task = Task { @MainActor in
                     defer { task = nil }
                     do {
-                        try await chat.appendQuote(selection, instruction: instruction, sessionID: sessionID, assetID: publicationID)
+                        let activity = try chat.beginExternalActivity(); defer { chat.endExternalActivity(activity) }
+                        if action == .save || action == .workflow {
+                            let reference = try await chat.saveQuote(selection, sessionID: sessionID, assetID: publicationID)
+                            try Task.checkCancellation()
+                            if let onKeep { try await onKeep(reference, action == .workflow, activity) }
+                            else if action == .workflow { throw WorkflowIssue("工作流交接入口不可用；选段已保留。") }
+                        } else { try await chat.appendQuote(selection, instruction: instruction, sessionID: sessionID, assetID: publicationID) }
                         try Task.checkCancellation(); onSaved(); onClose()
                     } catch is CancellationError {} catch { issue = error.localizedDescription }
                 }

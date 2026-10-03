@@ -71,7 +71,8 @@ struct ChatSessionArchiveSelectionTests {
         session.knowledgeScope = [scopedDocument.assetID]
         let source = try ChatContextSource.capture(session: session, coveredMessageIDs: [user1.id, answer1.id])
         session.contextSummaries = [try .init(text: "summary", source: source)]
-        let auxRecord = try ChatAssistanceRecord(kind: .title, source: source, endedAt: Date(),
+        let auxTime = Date()
+        let auxRecord = try ChatAssistanceRecord(kind: .title, source: source, createdAt: auxTime, endedAt: auxTime,
             status: .completed, output: auxOutput, result: .title("title"), maximumOutputTokens: 16)
         var auxiliaryNode = first.node
         auxiliaryNode.parameters["maximumOutputTokens"] = .integer(16)
@@ -322,7 +323,8 @@ struct ChatSessionArchiveSelectionTests {
             messagesJSON: running.messagesJSON, inputs: [:], originalTags: [], memoryFingerprint: "fixture")]
         #expect(throws: (any Error).self) { try ChatSessionArchiveSelection.make(state: state, archive: archive, sessionID: session.id) }
         state.sessions[0].assistanceExecutions = nil
-        let completed = try ChatAssistanceRecord(kind: .memory, source: context, endedAt: Date(),
+        let completedTime = Date()
+        let completed = try ChatAssistanceRecord(kind: .memory, source: context, createdAt: completedTime, endedAt: completedTime,
             status: .completed, output: source, result: .memory(["fact"]), maximumOutputTokens: 16)
         var execution = ChatAssistanceExecution(record: completed, options: .init(memoryMode: .suggest,
             memoryTarget: .project(projectID)), node: auxiliaryNode, messagesJSON: running.messagesJSON,

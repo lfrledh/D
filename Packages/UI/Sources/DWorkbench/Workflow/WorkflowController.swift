@@ -351,8 +351,10 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
     }
 
     public func insertQuickResult(_ reference: WorkflowAssetReference, target: WorkflowCanvasInsertionTarget, x: Double = 80, y: Double = 100, title: String? = nil) async throws {
+        try Task.checkCancellation()
         guard x.isFinite, y.isFinite, isCurrent(target), let definition = registry.operation("d.asset.reference")?.definition else { throw WorkflowIssue("目标流程已改变。") }
         _ = try await services.store.workflowData(reference)
+        try Task.checkCancellation()
         guard isCurrent(target) else { throw WorkflowIssue("读取期间流程已改变。") }
         var node = definition.makeNode(); node.assetReference = reference
         if let title { node.title = title }
@@ -374,9 +376,11 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
 
     /// A structured published result is a frozen value input, not a generator or hidden execution.
     public func insertQuickValue(_ value: WorkflowDatum, target: WorkflowCanvasInsertionTarget) async throws {
+        try Task.checkCancellation()
         guard isCurrent(target), target.rootID != nil, let definition = registry.operation("d.value.input")?.definition else { throw WorkflowIssue("目标流程已改变。") }
         try value.validate()
         for reference in value.assetReferences { _ = try await services.store.workflowData(reference) }
+        try Task.checkCancellation()
         guard isCurrent(target) else { throw WorkflowIssue("读取期间流程已改变。") }
         var node = definition.makeNode(); node.dataConfiguration = .init(value: value)
         edit { $0.nodes.append(node); $0.layout.append(.init(nodeID: node.id, x: 80, y: 100)) }

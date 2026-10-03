@@ -479,6 +479,17 @@ public final class WorkbenchModel {
                                         closeDecision: Self.chooseCloseDecision)
     }
 
+    public private(set) var temporaryChatModel: WorkbenchModel?
+    public func startTemporaryChat() async throws {
+        let cache = try FileManager.default.url(for: .cachesDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
+            .appendingPathComponent("D/TemporaryChats", isDirectory: true)
+        let child = try await projectSession.startTemporaryChat(in: cache)
+        temporaryChatModel = WorkbenchModel(projectSession: child, audioRecordingEnabled: audioRecordingEnabled)
+    }
+    public func endTemporaryChat() async throws {
+        try await projectSession.endTemporaryChat(); temporaryChatModel = nil
+    }
+
     /// A headless service can outlive or be presented by a new facade without transferring tasks.
     public init(projectSession: ProjectSession, audioRecordingEnabled: Bool = false,
                 audioPanels: any AudioWorkbenchPanelProviding = NativeAudioWorkbenchPanels()) {

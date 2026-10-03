@@ -7,6 +7,7 @@ enum ChatQuoteSelectionAction: String, CaseIterable, Hashable, Sendable {
     case explain
     case translate
     case rewrite
+    case save, workflow
 }
 
 /// An optional raw-text source view; rich transcript rendering stays with ChatMessageView.
@@ -33,6 +34,13 @@ struct ChatQuoteSelectionView: View {
             }
             .frame(minHeight: 120)
 
+            ScrollView(.horizontal) { actionRow }
+
+        }
+        .coordinateSpace(name: "chat-quote-selection")
+        .onChange(of: source) { _, _ in selection = nil }
+    }
+    private var actionRow: some View {
             HStack {
                 ForEach(ChatQuoteSelectionAction.allCases, id: \.self) { action in
                     Button(title(for: action)) {
@@ -46,9 +54,6 @@ struct ChatQuoteSelectionView: View {
                     }
                 }
             }
-        }
-        .coordinateSpace(name: "chat-quote-selection")
-        .onChange(of: source) { _, _ in selection = nil }
     }
 
     private func title(for action: ChatQuoteSelectionAction) -> String {
@@ -57,6 +62,8 @@ struct ChatQuoteSelectionView: View {
         case .ask: workflowText(language, "chat.quote.ask", fallback: chinese ? "引用提问" : "Ask")
         case .explain: workflowText(language, "chat.quote.explain", fallback: chinese ? "解释" : "Explain")
         case .translate: workflowText(language, "chat.quote.translate", fallback: chinese ? "翻译" : "Translate")
+        case .save: workflowText(language, "chat.quote.save", fallback: chinese ? "保存选段" : "Save selection")
+        case .workflow: workflowText(language, "chat.quote.workflow", fallback: chinese ? "选段用于工作流" : "Selection to workflow")
         case .rewrite: workflowText(language, "chat.quote.rewrite", fallback: chinese ? "改写" : "Rewrite")
         }
     }

@@ -241,6 +241,10 @@ final class WorkbenchBootstrap {
         isTerminating = true
         do {
             try await library?.shutdown()
+            // Every fallible admission/save gate has now accepted Quit. Only here
+            // discard temporary conversations; an earlier refusal keeps them intact.
+            do { try await quickModel?.endTemporaryChat() }
+            catch { NSLog("D: temporary chat cleanup incomplete; owned cache preserved: %@", error.localizedDescription) }
             await sharedSession?.shutdown()
             // All fallible save gates have accepted Quit; process termination releases the
             // automatic Store's descriptor/lock. Do not close it before another owner can refuse.

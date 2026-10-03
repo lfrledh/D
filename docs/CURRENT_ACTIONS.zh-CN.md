@@ -12,14 +12,12 @@ Lead 持有共享 Runtime/WorkflowServices/ChatController/Store；文件面板�
 
 ### 当前恢复检查点（2026-10-04 JST，持续实施中）
 
-- Lead隔离候选 `D-RELEASE-FREEZE-01` / `codex/release-freeze-01`，本片受测组合基点 `77cb3c0e2fdcfb3276b1fa6435ece0004f39d88a` 加Lead F30保存/预览接线。已整合F14、F30组件和目录准备；完整F01–F36继续，未称专题完成。
-- main仍 `f31dced209855722d2f04cc0fc8c5f6712396120`；受保护源仍 `01758b81527dc27eb4563bf1b66fd1ceab6647ee`，个人scheme未暂存。没有硬合普通App菜单门槛。
-- R=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261003T150039Z-chat-continue`。当前已构建App仍是 `cdcaa7758381ac0718793b1118a34b59d9780c40`，唯一该版启动器R/delivery/启动聊天当前验收.command；后续代码不冒称已打包。自有PID63889停在打开项目面板，CUA明确锁屏；不反复催解锁、不重开H22/H31。
-- F14 s02-inspection-final 8方法通过；AUX s03-assistance-wiring-final 13方法/2suite通过；真实辅助模型/原生控件仍未验。格式/引用早前组合exit0掩盖hosting身份失败仍保留，见s02-format-quote-review.json。
-- F30实际WK s05-preview-wk-final 8方法通过；固定本地Mermaid s05-mermaid-local 9方法通过，含健康loopback正控制、未观察出站、服务关闭。成果保存/原件/版本/备份/保存重试/退出准入/完整sidecar预算：s05-artifact-store-r4 UI9方法1suite、Workbench11方法2suite通过（含资料目录6方法），不加总为全专题。r1/r2/r3的真实失败及测试夹具修正保留。
-- ARTIFACT受限Sol/high初交+两修；Lead承担实际Store/UI/Mermaid接线及反例修补，非实现者审核最后无P1/P2。KNOWLEDGE两修后编码NUL检查通过，原两文件允许范围内；资料个人范围/重排尚待接线。
-- CHANNELS受限Sol/high当前从 `439b0d2d09ad3f7d9f8f48a33c38e75884aa678b` 独立树实现F16/F22展示；具体状态以R/s02-channels过程/route为准。其他写者结束，三个只读评审不写文件。
-- 下一动作：完成F21生产接线、F22真实上下文状态、F32临时会话、F33会话包及清单余项；解锁后补同版原生菜单/停止与交接。恢复先核真实HEAD/差异/进程/权限，不用旧摘要当写入许可。成本和隐藏服务端模型解析仍unknown。
+- Lead树D-RELEASE-FREEZE-01/codex/release-freeze-01；F32/F33/F34受测基点477245011956c86cd0f48d7a21ec3daf7439a4be加Lead增量，最终提交见Git及R/lead回执。能力状态只读[清单](CHAT_FEATURE_LEDGER.zh-CN.md)，不称完整专题通过。
+- main仍f31dced209855722d2f04cc0fc8c5f6712396120；旧源01758b81527dc27eb4563bf1b66fd1ceab6647ee、个人scheme未暂存不动。普通App门槛未过，不硬合。
+- R=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261003T150039Z-chat-continue`。F21/F22定向检查与F30实际WK/本地Mermaid/Store证据沿用；F32临时/F33完整包/F34字段新增CPU通过。r4 UI点击runner无完成记录，不能凭exit0当绿；正在定点诊断。
+- 已构建App仍cdcaa7758381ac0718793b1118a34b59d9780c40，R/delivery/启动聊天当前验收.command只代表该版。自有PID63889停在打开项目面板；CUA最后明确锁屏，无状态变化不再重复。本人入口在唯一集中清单，不重开H22/H31。
+- 当前写Worker仅s01-chat-preferences，树D-CHAT-PRODUCT-PREFERENCES、base477245、Sol/high、networkfalse，允许四个局部展示/测试文件；共享Controller/Store/宿主/输入由Lead协调。PACKAGE已停写，旧候选保留。恢复先核真实HEAD/差异/进程/权限；隐藏模型解析、完整Lead归因和实际费用unknown。
+- 下一动作：完成F19/F31/F35/F36缺口与F28准确阻塞；组合构建与解锁后的普通App菜单/停止/新路径验收；可靠切片按已授权main流程接纳后继续，不把中途记录当整项结案。
 
 ## 历史：先修可靠性，再加入最小聊天（2026-10-03，已被上述新授权替代）
 

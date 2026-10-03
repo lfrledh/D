@@ -10,7 +10,22 @@ public struct DualWorkbenchView: View {
     let automaticQuick: QuickGenerationController
     @State private var useProjectQuick = true
     @State private var modelPickerCategory: QuickCategory?
-    private var chat: ChatController? { quickModel.projectSession.chat }
+    private var usesTemporaryChat: Bool { entry == .quick && quick.category == .text && quick.textPresentation == .chat && automaticQuickModel.temporaryChatModel != nil }
+    private var chatModel: WorkbenchModel { usesTemporaryChat ? (automaticQuickModel.temporaryChatModel ?? quickModel) : quickModel }
+    private var selectionModel: WorkbenchModel { usesTemporaryChat ? chatModel : quickModel }
+    private var chat: ChatController? { chatModel.projectSession.chat }
+    @State private var temporaryChatChanging = false
+    private func changeTemporaryChat() {
+        guard !temporaryChatChanging else { return }
+        temporaryChatChanging = true
+        Task { @MainActor in
+            defer { temporaryChatChanging = false }
+            do {
+                if automaticQuickModel.temporaryChatModel == nil { try await automaticQuickModel.startTemporaryChat() }
+                else { try await automaticQuickModel.endTemporaryChat() }
+            } catch { issue = error.localizedDescription }
+        }
+    }
     private var quick: QuickGenerationController {
         useProjectQuick ? (model.projectSession.projectQuick ?? automaticQuick) : automaticQuick
     }
@@ -160,12 +175,47 @@ public struct DualWorkbenchView: View {
                                 }.pickerStyle(.segmented).frame(maxWidth: 300).padding(.horizontal, 20)
                                     .accessibilityIdentifier("quick-text-surface")
                                 if quick.textPresentation == .chat {
-                                    ChatWorkbenchView(chat: chat, model: quickModel,
+                                    HStack {
+                                        Button(chat.isTemporary ? "End temporary chat / 结束临时会话" : "Temporary chat / 临时会话", action: changeTemporaryChat)
+                                            .disabled(temporaryChatChanging).accessibilityIdentifier("chat-temporary-toggle")
+                                        if chat.isTemporary {
+                                            Text("Temporary cache only; no history, memory or normal backup. Explicit exports and remote tools may retain copies. / 仅临时缓存；不入长期历史、记忆或普通备份。显式导出与外部工具可能留存。")
+                                                .font(.caption).foregroundStyle(.secondary)
+                                        }
+                                    }.padding(.horizontal, 20)
+                                    ChatWorkbenchView(chat: chat, model: chatModel,
                                         onChooseModel: { modelPickerCategory = .text; libraryVisible = true },
-                                        onSavedAsset: { reference in let source = chat.store; Task { await resultToCanvas(reference, from: source) } },
-                                        onAssetsChanged: { Task { await refreshLibrary(checkModels: false) } })
+                                        onSavedAsset: { reference in
+                                            Task {
+                                                do {
+                                                    if chat.isTemporary, let destination = automaticQuickModel.projectSession.currentStore {
+                                                        let saved = try await chat.retainTemporaryText(reference, in: destination)
+                                                        await resultToCanvas(saved, from: destination)
+                                                    } else { await resultToCanvas(reference, from: chat.store) }
+                                                } catch { issue = error.localizedDescription }
+                                            }
+                                        },
+                                        onRetainTemporary: { reference, useInWorkflow, activity in
+                                            guard let destination = automaticQuickModel.projectSession.currentStore else { throw WorkflowIssue("长期工作区不可用。") }
+                                            let saved = try await chat.retainTemporaryText(reference, in: destination, admittedActivity: activity)
+                                            await refreshLibrary(checkModels: false)
+                                            try Task.checkCancellation()
+                                            if useInWorkflow { await resultToCanvas(saved, from: destination) }
+                                        },
+                                        onAssetsChanged: { Task { await refreshLibrary(checkModels: false) } },
+                                        onSavedValue: { value, activity in
+                                            try Task.checkCancellation()
+                                            if chat.isTemporary {
+                                                guard let destination = automaticQuickModel.projectSession.currentStore,
+                                                      case .record(let schema, var fields) = value,
+                                                      case .asset(let source)? = fields["source"] else { throw WorkflowIssue("字段来源不可用。") }
+                                                fields["source"] = .asset(try await chat.retainTemporaryText(source, in: destination, admittedActivity: activity))
+                                                try Task.checkCancellation()
+                                                await valueToCanvas(.record(schema: schema, fields: fields), from: destination)
+                                            } else { await valueToCanvas(value, from: chat.store) }
+                                        })
                                         .id(chat.store.rootURL.standardizedFileURL.path)
-                                        .disabled(quickOwnerIsChanging)
+                                        .disabled(quickOwnerIsChanging || chat.isDiscarding || chatModel.projectSession.isChangingProject)
                                 } else { quickSurface }
                             }
                         } else { quickSurface }
@@ -285,26 +335,26 @@ public struct DualWorkbenchView: View {
             }.frame(minWidth: 960, minHeight: 650)
         }
         .sheet(isPresented: Binding(get: { library.isPresented }, set: { library.isPresented = $0 }), onDismiss: restoreLibraryIfNeeded) {
-            ModelLibraryView(model: library, selectedModelID: quickModel.projectSession.workflowInstallationID(for: quickModelIdentity), canSelect: true, onPrepare: { id, parent in
+            ModelLibraryView(model: library, selectedModelID: selectionModel.projectSession.workflowInstallationID(for: quickModelIdentity), canSelect: true, onPrepare: { id, parent in
                 // Preparing resources does not navigate or replace a newer draft.
                 _ = try await quickModel.projectSession.prepareWorkflowVideo(id: id, in: parent)
                 await refreshLibrary(checkModels: false)
             }) { id in
-                let owner = quickModel.projectSession
+                let owner = selectionModel.projectSession
+                let temporary = usesTemporaryChat
                 let controller = quick
                 let selectedDraftID = controller.draft?.id
                 let selectedChatID = chat?.state.selectedSessionID
                 do {
                     guard !quickOwnerIsChanging else { throw WorkflowIssue("项目正在切换；模型选择未应用。") }
                     let choice = try await owner.selectWorkflowInstallation(id: id)
-                    guard !quickOwnerIsChanging, quickModel.projectSession === owner,
+                    guard !quickOwnerIsChanging, selectionModel.projectSession === owner, temporary == usesTemporaryChat,
                           quick === controller, controller.draft?.id == selectedDraftID,
                           chat?.state.selectedSessionID == selectedChatID else {
                         throw WorkflowIssue("快速草稿或所属项目已切换；模型选择未应用。")
                     }
                     guard let operation = WorkflowModelRoutes.operation(for: choice) else { throw WorkflowIssue("此模型没有可用的共享操作。") }
-                    controller.select(operationID: operation, modelID: choice.id)
-                    applySelectedModelToChat()
+                    try selectModel(operation: operation, identity: choice.id)
                     returnToLibrary = false; library.isPresented = false; navigate(to: .quick)
                     await refreshLibrary(checkModels: false)
                 } catch is CancellationError { }
@@ -466,7 +516,7 @@ public struct DualWorkbenchView: View {
 
     private func checkDemandReadiness() async {
         let quickIDs = Set([quickModelIdentity].compactMap { $0 }.filter { !$0.isEmpty })
-        let quickOwner = quickModel.projectSession
+        let quickOwner = selectionModel.projectSession
         let canvasOwner = canvasModel.projectSession
         if quickOwner === canvasOwner {
             await quickOwner.checkExplicitModelReadiness(for: quickIDs.union(graphModelIdentities))
@@ -493,12 +543,25 @@ public struct DualWorkbenchView: View {
         } catch { issue = error.localizedDescription }
     }
 
+    /// Temporary selection never writes the ordinary Quick draft or its navigation.
+    private func selectModel(operation: String, identity: String) throws {
+        if usesTemporaryChat, let chat {
+            guard [WorkflowModelRoutes.qwen35, WorkflowModelRoutes.qwen38].contains(operation),
+                  var node = WorkflowRegistry.standard.operation(operation)?.definition.makeNode() else {
+                throw WorkflowIssue("临时聊天需要支持有序消息的文字模型；其他能力请返回普通快速生成。")
+            }
+            node.parameters["modelID"] = .text(identity); node.parameters["outputMode"] = .text("text")
+            try chat.selectModelConfiguration(node, sessionID: try chat.state.selectedSessionID ?? chat.newSession())
+            return
+        }
+        quick.select(operationID: operation, modelID: identity); applySelectedModelToChat()
+    }
     private func useLibraryEntry(_ value: SharedLibraryBrowserEntry) {
         guard !quickOwnerIsChanging else { issue = "项目正在切换，当前快速草稿未改变。"; return }
         guard case .operation(let operation, let id) = value.selection,
               let id, WorkflowRegistry.standard.operation(operation)?.definition.modelKind != nil else { presentLibraryDestination(.info(value)); return }
-        quick.select(operationID: operation, modelID: id)
-        applySelectedModelToChat()
+        do { try selectModel(operation: operation, identity: id) }
+        catch { issue = error.localizedDescription; return }
         libraryVisible = false; navigate(to: .quick)
     }
     private func useNode(_ node: WorkflowNode) {
@@ -582,6 +645,10 @@ public struct DualWorkbenchView: View {
         if [WorkflowModelRoutes.qwen35, WorkflowModelRoutes.qwen38, WorkflowModelRoutes.fluxDev,
             WorkflowModelRoutes.ace, "d.image.generate", "d.music.generate"].contains(id) {
             presentLibraryDestination(.models); return
+        }
+        guard !usesTemporaryChat else {
+            issue = language?.effectiveLanguageIdentifier.hasPrefix("zh") == true ? "此模型不能用于临时聊天；请在模型库选择已支持的聊天模型。" : "This model is not available for temporary chat. Choose a supported chat model in the model library."
+            return
         }
         let owner = quickModel.projectSession, controller = quick
         let draftID = controller.draft?.id
@@ -692,26 +759,34 @@ public struct DualWorkbenchView: View {
     private func resultToCanvas(_ ref: WorkflowAssetReference, from source: ProjectStore) async {
         let target = canvasModel
         await target.projectSession.openWorkflow()
+        guard !Task.isCancelled else { return }
         guard let controller = target.projectSession.workflow else { return }
         if controller.graph == nil { controller.addBlankGraph() }
         guard let scope = controller.canvasInsertionTarget() else { issue = "流程当前不可编辑"; return }
         do {
+            try Task.checkCancellation()
             let copy = try await copiedReference(ref, from: source, to: controller.services.store)
+            try Task.checkCancellation()
             guard target.projectSession.workflow === controller else { throw WorkflowIssue("目标项目已改变。") }
             try await controller.insertQuickResult(copy, target: scope)
+            try Task.checkCancellation()
             navigate(to: .workflow)
         } catch { issue = error.localizedDescription }
     }
     private func valueToCanvas(_ value: WorkflowDatum, from source: ProjectStore) async {
         let target = canvasModel
         await target.projectSession.openWorkflow()
+        guard !Task.isCancelled else { return }
         guard let controller = target.projectSession.workflow else { return }
         if controller.graph == nil { controller.addBlankGraph() }
         guard let scope = controller.canvasInsertionTarget() else { issue = "流程当前不可编辑"; return }
         do {
+            try Task.checkCancellation()
             let copy = try await copiedDatum(value, from: source, to: controller.services.store)
+            try Task.checkCancellation()
             guard target.projectSession.workflow === controller else { throw WorkflowIssue("目标项目已改变。") }
             try await controller.insertQuickValue(copy, target: scope)
+            try Task.checkCancellation()
             navigate(to: .workflow)
         } catch { issue = error.localizedDescription }
     }
