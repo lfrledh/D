@@ -7,11 +7,15 @@ enum ChatMarkdownPresentation {
 
     static func discardURL(_ url: URL) -> OpenURLAction.Result { .discarded }
 
+    static func parse(_ source: String) async -> RenderableDocument {
+        await MarkdownParserImpl().parse(text: source, config: config)
+    }
+
     /// Exact source shown before parse, during streaming, and on explicit raw.
     static func literalText(rendered: String, raw: String, streaming: Bool,
-                            showingRaw: Bool, parsed: String?, hasDocument: Bool) -> String? {
+                            showingRaw: Bool, parsed: String?, document: RenderableDocument?) -> String? {
         if showingRaw { return raw }
-        if streaming || parsed != rendered || !hasDocument { return rendered }
+        if streaming || parsed != rendered || document == nil || document == .empty { return rendered }
         return nil
     }
 }
@@ -66,7 +70,7 @@ struct ChatMarkdownView: View {
                 Spacer()
             }.font(.caption)
             if let literal = ChatMarkdownPresentation.literalText(rendered: text, raw: rawText,
-                streaming: isStreaming, showingRaw: showsRaw, parsed: parsedText, hasDocument: document != nil) {
+                streaming: isStreaming, showingRaw: showsRaw, parsed: parsedText, document: document) {
                 Text(literal).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
                     .accessibilityIdentifier("chat-raw-\(messageID.uuidString)")
             } else if let document {
@@ -81,7 +85,7 @@ struct ChatMarkdownView: View {
             if let cached = ChatMarkdownCache.shared.document(for: messageID, source: source) {
                 parsedText = source; document = cached; return
             }
-            let rendered = await MarkdownParserImpl().parse(text: source, config: ChatMarkdownPresentation.config)
+            let rendered = await ChatMarkdownPresentation.parse(source)
             guard !Task.isCancelled else { return }
             ChatMarkdownCache.shared.insert(rendered, for: messageID, source: source)
             parsedText = source
