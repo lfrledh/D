@@ -58,6 +58,55 @@ struct ProjectBackupIntegrationTests {
         try await global.close()
     }
 
+    @Test @MainActor func chatDraftUsesProjectOwnerAndIndependentBackup() async throws {
+        let root = URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory())
+            .appendingPathComponent("ChatOwner-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let originalURL = root.appendingPathComponent("original.dproject")
+        let original = try await ProjectStore.create(at: originalURL, name: "聊天归属")
+        try await original.close()
+        let engine = BackupNoGenerationEngine()
+        let suite = "D.ChatOwner." + UUID().uuidString
+        let settings = try #require(UserDefaults(suiteName: suite))
+        defer { settings.removePersistentDomain(forName: suite) }
+        func owner() -> ProjectSession {
+            ProjectSession(sessionFactory: { _ in WorkbenchSession(engine: engine, backendID: "fixture",
+                status: { .init(activeRunID: nil, phase: nil, queuedRunIDs: []) }, shutdown: {}, cleanup: {}, validateModel: { _ in }) },
+                settings: settings)
+        }
+        let active = owner()
+        await active.openProject(at: originalURL)
+        #expect(active.chat == nil) // Missing state is not written or silently redirected.
+        await active.enableProjectQuick()
+        let chat = try #require(active.chat), store = try #require(active.currentStore)
+        #expect(chat.store === store)
+        let id = try chat.newSession(title: "中文 e\u{301} 🙂")
+        try chat.updateDraft("只保存草稿，不提交模型", sessionID: id)
+        try chat.setSystemPrompt("显式提示", sessionID: id)
+        let instance = try #require(active.manifest?.effectiveInstanceID)
+        try await active.saveWorkflowForBackup(store: store, instanceID: instance)
+        let backup = root.appendingPathComponent("chat.dbackup")
+        _ = try await store.createBackup(at: backup)
+        #expect(await active.requestClose())
+        #expect(active.chat == nil)
+        let restoredURL = root.appendingPathComponent("independent.dproject")
+        _ = try await ProjectStore.restoreBackup(at: backup, to: restoredURL)
+        let restored = owner()
+        await restored.openProject(at: restoredURL)
+        let restoredChat = try #require(restored.chat)
+        #expect(restoredChat.store === restored.currentStore)
+        #expect(restored.manifest?.effectiveInstanceID != instance)
+        #expect(restoredChat.state.selectedSessionID == id)
+        #expect(restoredChat.selectedSession?.draft == "只保存草稿，不提交模型")
+        #expect(restoredChat.selectedSession?.systemPrompt == "显式提示")
+        try restoredChat.updateDraft("副本修改", sessionID: id)
+        #expect(await restored.requestClose())
+        let prior = try await ProjectStore.open(at: originalURL)
+        #expect(try await prior.chatState().sessions.first?.draft == "只保存草稿，不提交模型")
+        try await prior.close()
+        #expect(await engine.submissions == 0)
+    }
+
     @Test @MainActor func restoredQuickCloseDrainsSubmittedBatchAndBlocksNewStarts() async throws {
         // 0: close before the first task gets past its input save; 1: close while
         // the first attempt is admitted; 2: cancel before admission.

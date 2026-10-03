@@ -514,3 +514,13 @@ A已独立接纳/推送main `f31dced209855722d2f04cc0fc8c5f6712396120`，RC/lead
 最小行为表：切分类/会话只改持久导航；在途结果固定提交session/attempt/Store。编辑旧用户内容/再生成产生兄弟分支；旧路径保持。修改系统/模型/附件仅影响以后提交；请求使用固定完整选定路径和输入版本，超预算明确拒绝而不裁剪。停止等待Runtime释放，保留已收到的部分回答；重开将未终态标中断不续跑。未知/损坏侧车只读保护，保存失败保留内存和可重试产物；备份包含会话与已导入附件，恢复为独立实例。文字VLM图片/视频端口保留；图像/视频/音频仍用原Quick服务与控件。
 
 B开始不改变Q与整体冻结门槛，未通过真实聊天路径前不作为用户交付版。输入组件复用H22安全宿主；不新增后台/数据库或四套输入/执行系统。
+
+
+### 2026-10-03 B 候选接线与 Q 固定观察（未验收）
+- A `8511718c472e788a8dcfc088eea0fde9dad050b3`普通App G1/G2通过；仅文档后main `f31dced209855722d2f04cc0fc8c5f6712396120`已正常推送，证据RC/lead/a-integration.json。
+- B常驻四分类 `e57952ffc6278c9daa8c4cd7d97d2e07bdf4f21b`：Quick导航状态按类别记住模型/草稿，旧无navigation sidecar兼容，切换无submit。定向QuickCategory/QuickGeneration/ProjectBackupIntegration CPU通过，RC/lead/b-categories-cpu-result.json；不称聊天GUI通过。
+- B-core Sol/high初交 `7130829082a70d303a09295ca7ace2da87dad2b5`（1458.98s，不含Lead/订阅费用unknown），受限CLI route accepted；无构建/测试。Lead提交并组合 `803ae9c0e75785e64f88aa063cf5410361080f91`。只读非实现者发现重复媒体、读取刷新CAS、重试pending、备份待发布、fork作用域、派生标题六个P2；core修复1解决其允许路径，Lead接线备份预检，剩余标题与编译反例随后合并处理；不是独立通过。
+- B-UI按同一候选接口在独立树D-CHAT-UI、Sol/high受限CLI实现；精确任务/权限/模型/输出在RC/b-ui。Lead拥有DualWorkbench/ProjectSession、共享语言资源和依赖，Worker不改这些文件。
+- 原生Markdown采用Microsoft SwiftStreamingMarkdown v0.7.0固定 `5f7c04e0558df6146f90d482edb62cb456986bda`，仅UI target；真实解析锁记录依赖（cmark0.9.0、swift-syntax603.0.2，区别于上游历史锁）。MIT等原文声明随UI资源保留，未改D许可证。无图片opt-in、禁外部openURL，原文始终保留。尚待本机布局/复制/性能检查。
+- Q一次自然首帧请求源e57952f，provider相对A未变。只读非实现者核四hook各原调用一次/原值返回；不改精度/输入/随机数，完整30步、704×480、97帧24fps、seed42。记录RC/q/ltx-natural-boundaries-01与lead/q-natural-full-*，最长14400s程序回收。尚未有生成结论，不因观察数据当作修复。
+- 当前仅候选，不接纳B至main。保护A App、源个人scheme和旧证据；无新本人动作。CPU/构建等等待Q独占结束，不能叠加旧通过为新通过。

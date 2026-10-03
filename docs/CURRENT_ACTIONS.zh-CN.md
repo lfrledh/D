@@ -4,11 +4,13 @@
 
 ## 当前授权：先修可靠性，再加入最小聊天（2026-10-03）
 
-用户批准继续同一 D-RELEASE-FREEZE-01，起点 main/candidate `3a2801abab22273256923ce1f3c14407515f20ce`。当前顺序：A1 普通沙盒备份与独立恢复、A2 冷启按需模型就绪 → 两项真实 App 门槛通过并独立接纳 main → B 最小文字聊天。Q 视频质量独立继续。**A 的 G1/G2 已通过；正在独立接纳 main，接纳后进入 B**；下列上一批停点是历史事实，不再是本轮排程。A受测8511718c472e788a8dcfc088eea0fde9dad050b3；独立原生证据RC/lead/a-native-gates.json、集成回执RC/lead/a-integration.json。B包含常驻四分类，文字为聊天，另三类复用；Q继续独立，未宣称冻结。
+用户批准继续同一 D-RELEASE-FREEZE-01，起点 main/candidate `3a2801abab22273256923ce1f3c14407515f20ce`。当前顺序：A1 普通沙盒备份与独立恢复、A2 冷启按需模型就绪 → 两项真实 App 门槛通过并独立接纳 main → B 最小文字聊天。Q 视频质量独立继续。**A 的 G1/G2 已通过，独立修补基线 f31dced209855722d2f04cc0fc8c5f6712396120 已接纳并推送 main；B 正在隔离候选实现**；下列上一批停点是历史事实，不再是本轮排程。A受测8511718c472e788a8dcfc088eea0fde9dad050b3；独立原生证据RC/lead/a-native-gates.json、集成回执RC/lead/a-integration.json。B包含常驻四分类，文字为聊天，另三类复用；Q继续独立，未宣称冻结。
+
+当前 B：四分类导航e57952f已通过定向CPU；聊天core初交7130829、初步组合803ae9c尚未编译/原生验收，非实现者指出保存/分支边界，受限Sol/high修复1进行中。UI独立受限Sol/high实现中；Lead负责项目所有权/导航/最终集成。Q固定自然首帧完整30步BF16请求独占GPU，程序最长4小时，保存生成音频latent→mel→float波形→PCM供AAC交叉检查；不是再次抽卡。不得在此时启动重构建/其他GPU/GUI。各子作业准确状态见RC各slice `*-process.json`及lead检查结果，接手先核进程，不重启。
 
 证据 RC=`D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261003T035843Z-stabilize-chat`。H22/菜单/失联恢复保持，不重复本人操作；旧失败和预算保留。新增有限续修及角色、范围、门槛见任务记录末节。没有新的登录或资格事项；不发布 Release。
 
-## D-RELEASE-FREEZE-01 / D-DISCUSSION-FREEZE-20261002
+## 上一批历史停点：D-RELEASE-FREEZE-01 / D-DISCUSSION-FREEZE-20261002
 
 **集中本人操作已办理；有限原生收尾部分完成。** H22按本人复验关闭，模型嵌套菜单修补通过本人操作。MRT2引用/独立复制、Quick失联文件恢复/收纳/冷重开、Canvas草稿保存重开已完成。原生手动备份返回I/O失败，独立恢复未验；不再以锁屏或权限审批解释工程缺口。当前无需新增登录、组字或试听，集中清单见[唯一待办](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md)。
 

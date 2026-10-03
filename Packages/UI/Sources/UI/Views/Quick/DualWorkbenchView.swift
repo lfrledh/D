@@ -10,6 +10,8 @@ public struct DualWorkbenchView: View {
     let automaticQuick: QuickGenerationController
     @State private var useProjectQuick = true
     @State private var modelPickerCategory: QuickCategory?
+    @State private var legacyTextVisible = false
+    private var chat: ChatController? { quickModel.projectSession.chat }
     private var quick: QuickGenerationController {
         useProjectQuick ? (model.projectSession.projectQuick ?? automaticQuick) : automaticQuick
     }
@@ -59,7 +61,10 @@ public struct DualWorkbenchView: View {
         library.records.map { "\($0.id):\($0.state.rawValue):\($0.availability.rawValue)" }.sorted()
     }
     private var quickModelIdentity: String? {
-        quick.draft?.node.parameters["modelID"]?.string
+        if quick.category == .text, let modelID = chat?.selectedSession?.configuration?.parameters["modelID"]?.string {
+            return modelID
+        }
+        return quick.draft?.node.parameters["modelID"]?.string
     }
     private var graphModelIdentities: Set<String> {
         canvasModel.projectSession.openGraphModelIdentities
@@ -109,6 +114,11 @@ public struct DualWorkbenchView: View {
                     .accessibilityIdentifier("shared-library-open")
                 Menu {
                     Button(baselineText(language, "label.a6b4608f6c77", fallback: "项目…")) { projectsVisible = true }
+                    if model.manifest != nil, model.projectSession.projectQuick == nil {
+                        Button("在当前项目中快速创作") {
+                            Task { await model.projectSession.enableProjectQuick(); useProjectQuick = true; navigate(to: .quick) }
+                        }
+                    }
                     if let manifest = (entry == .quick ? quickModel.manifest : canvasModel.manifest),
                        let store = (entry == .quick ? quickModel.projectSession.currentStore : canvasModel.projectSession.currentStore) {
                         Button(baselineText(language, "files.title", fallback: "项目文件…")) {
@@ -140,14 +150,27 @@ public struct DualWorkbenchView: View {
                     .disabled(quickOwnerIsChanging).accessibilityIdentifier("quick-category")
             }
             ZStack {
-                QuickGenerationView(quick: quick, model: quickModel, onChooseModel: { modelPickerCategory = quick.category; libraryVisible = true },
-                    onSettingsToCanvas: { draft in let source = quick.store; Task { await settingsToCanvas(draft, from: source) } },
-                    onResultToCanvas: { ref in let source = quick.store; Task { await resultToCanvas(ref, from: source) } },
-                    onValueToCanvas: { value in let source = quick.store; Task { await valueToCanvas(value, from: source) } },
-                    onAssetsChanged: { Task { await refreshLibrary(checkModels: false) } })
-                    .id(quick.store.rootURL.standardizedFileURL.path)
-                    .disabled(quickOwnerIsChanging)
-                    .opacity(entry == .quick ? 1 : 0).allowsHitTesting(entry == .quick).accessibilityHidden(entry != .quick)
+                Group {
+                    if entry == .quick {
+                        if quick.category == .text, let chat {
+                            VStack(spacing: 0) {
+                                HStack {
+                                    Spacer()
+                                    if quick.state.drafts.contains(where: { QuickCategory.category(for: $0.node.operationID) == .text }) {
+                                        Button("以前的单次文字记录…") { legacyTextVisible = true }
+                                            .accessibilityIdentifier("chat-legacy-quick")
+                                    }
+                                }.padding(.horizontal, 20)
+                                ChatWorkbenchView(chat: chat, model: quickModel,
+                                    onChooseModel: { modelPickerCategory = .text; libraryVisible = true },
+                                    onSavedAsset: { reference in let source = chat.store; Task { await resultToCanvas(reference, from: source) } },
+                                    onAssetsChanged: { Task { await refreshLibrary(checkModels: false) } })
+                                    .id(chat.store.rootURL.standardizedFileURL.path)
+                                    .disabled(quickOwnerIsChanging)
+                            }
+                        } else { quickSurface }
+                    }
+                }
                 WorkflowHostView(model: canvasModel, nodeTags: nodeTags, onQuickUse: useNode,
                     libraryContent: { point, close in AnyView(libraryBrowser(compact: true, at: point, onBack: close)) },
                     onSharedAssetDrop: acceptSharedAssetDrop,
@@ -162,6 +185,12 @@ public struct DualWorkbenchView: View {
 
         }
         .frame(minWidth: 860, minHeight: 580)
+        .sheet(isPresented: $legacyTextVisible) {
+            VStack {
+                HStack { Button("返回聊天") { legacyTextVisible = false }; Spacer() }.padding()
+                quickSurface
+            }.frame(minWidth: 800, minHeight: 520)
+        }
         .sheet(isPresented: $libraryVisible, onDismiss: finishLibraryDismissal) {
             VStack(spacing: 0) {
                 if !quickModel.projectSession.explicitModelChecking.isEmpty {
@@ -262,7 +291,7 @@ public struct DualWorkbenchView: View {
             }.frame(minWidth: 960, minHeight: 650)
         }
         .sheet(isPresented: Binding(get: { library.isPresented }, set: { library.isPresented = $0 }), onDismiss: restoreLibraryIfNeeded) {
-            ModelLibraryView(model: library, selectedModelID: quickModel.projectSession.workflowInstallationID(for: quick.draft?.node.parameters["modelID"]?.string), canSelect: true, onPrepare: { id, parent in
+            ModelLibraryView(model: library, selectedModelID: quickModel.projectSession.workflowInstallationID(for: quickModelIdentity), canSelect: true, onPrepare: { id, parent in
                 // Preparing resources does not navigate or replace a newer draft.
                 _ = try await quickModel.projectSession.prepareWorkflowVideo(id: id, in: parent)
                 await refreshLibrary(checkModels: false)
@@ -270,15 +299,18 @@ public struct DualWorkbenchView: View {
                 let owner = quickModel.projectSession
                 let controller = quick
                 let selectedDraftID = controller.draft?.id
+                let selectedChatID = chat?.state.selectedSessionID
                 do {
                     guard !quickOwnerIsChanging else { throw WorkflowIssue("项目正在切换；模型选择未应用。") }
                     let choice = try await owner.selectWorkflowInstallation(id: id)
                     guard !quickOwnerIsChanging, quickModel.projectSession === owner,
-                          quick === controller, controller.draft?.id == selectedDraftID else {
+                          quick === controller, controller.draft?.id == selectedDraftID,
+                          chat?.state.selectedSessionID == selectedChatID else {
                         throw WorkflowIssue("快速草稿或所属项目已切换；模型选择未应用。")
                     }
                     guard let operation = WorkflowModelRoutes.operation(for: choice) else { throw WorkflowIssue("此模型没有可用的共享操作。") }
                     controller.select(operationID: operation, modelID: choice.id)
+                    applySelectedModelToChat()
                     returnToLibrary = false; library.isPresented = false; navigate(to: .quick)
                     await refreshLibrary(checkModels: false)
                 } catch is CancellationError { }
@@ -428,6 +460,16 @@ public struct DualWorkbenchView: View {
             } catch { issue = error.localizedDescription }
         }
     }
+    private var quickSurface: some View {
+        QuickGenerationView(quick: quick, model: quickModel, onChooseModel: { modelPickerCategory = quick.category; libraryVisible = true },
+                    onSettingsToCanvas: { draft in let source = quick.store; Task { await settingsToCanvas(draft, from: source) } },
+                    onResultToCanvas: { ref in let source = quick.store; Task { await resultToCanvas(ref, from: source) } },
+                    onValueToCanvas: { value in let source = quick.store; Task { await valueToCanvas(value, from: source) } },
+                    onAssetsChanged: { Task { await refreshLibrary(checkModels: false) } })
+                    .id(quick.store.rootURL.standardizedFileURL.path)
+                    .disabled(quickOwnerIsChanging)
+    }
+
     private func checkDemandReadiness() async {
         let quickIDs = Set([quickModelIdentity].compactMap { $0 }.filter { !$0.isEmpty })
         let quickOwner = quickModel.projectSession
@@ -441,11 +483,22 @@ public struct DualWorkbenchView: View {
             _ = await (quickCheck, canvasCheck)
         }
     }
+    /// Only an explicit model/settings selection changes the future chat configuration.
+    private func applySelectedModelToChat() {
+        guard quick.category == .text, let chat, let node = quick.draft?.node,
+              [WorkflowModelRoutes.qwen35, WorkflowModelRoutes.qwen38].contains(node.operationID) else { return }
+        do {
+            let sessionID = try chat.state.selectedSessionID ?? chat.newSession()
+            try chat.updateConfiguration(node, sessionID: sessionID)
+        } catch { issue = error.localizedDescription }
+    }
+
     private func useLibraryEntry(_ value: SharedLibraryBrowserEntry) {
         guard !quickOwnerIsChanging else { issue = "项目正在切换，当前快速草稿未改变。"; return }
         guard case .operation(let operation, let id) = value.selection,
               let id, WorkflowRegistry.standard.operation(operation)?.definition.modelKind != nil else { presentLibraryDestination(.info(value)); return }
         quick.select(operationID: operation, modelID: id)
+        applySelectedModelToChat()
         libraryVisible = false; navigate(to: .quick)
     }
     private func useNode(_ node: WorkflowNode) {
@@ -455,7 +508,7 @@ public struct DualWorkbenchView: View {
         guard controller.graph?.connections.contains(where: { $0.targetNode == node.id }) != true else {
             issue = "此节点包含连线输入。请先把所需结果存为素材，再在快速界面显式选择；未忽略连线或修改原节点。"; return
         }
-        quick.useSettings(node); navigate(to: .quick)
+        quick.useSettings(node); applySelectedModelToChat(); navigate(to: .quick)
     }
     private func store(for projectID: UUID, instanceID: UUID? = nil) async throws -> ProjectStore {
         var candidates: [(ProjectStore, ProjectManifest)] = [(automaticQuick.store, await automaticQuick.store.snapshot())]
@@ -542,6 +595,7 @@ public struct DualWorkbenchView: View {
             guard !quickOwnerIsChanging, quickModel.projectSession === owner,
                   quick === controller, controller.draft?.id == draftID else { throw WorkflowIssue("快速草稿已切换，已登记的模型未替换当前草稿。") }
             controller.select(operationID: id, modelID: choice.id)
+            applySelectedModelToChat()
             await refreshLibrary(checkModels: true)
         } catch { issue = error.localizedDescription }
     }
