@@ -1,9 +1,9 @@
 import Foundation
 
-/// Single-consumer event sequence with cancellation at the iterator boundary.
+/// Single-consumer event sequence with cancellation at the pull iterator boundary.
 /// Unlike AsyncThrowingStream(unfolding:), cancellation before the first pull must
 /// still notify the runtime that owns the producer. Existing stream-based engines
-/// remain supported by InferenceRun's original initializer.
+/// retain their original stream cancellation behavior via InferenceRun's original initializer.
 public struct InferenceEvents: AsyncSequence, Sendable {
     public typealias Element = InferenceOutput
     private let stream: AsyncThrowingStream<InferenceOutput, Error>?
@@ -27,11 +27,13 @@ public struct InferenceEvents: AsyncSequence, Sendable {
         fileprivate let cancel: @Sendable () async -> Void
 
         public mutating func next() async throws -> InferenceOutput? {
+            // Legacy engines and their callers already own stream cancellation.
+            // Adding a second callback here would change the original initializer's contract.
+            guard let pull else { return try await iterator?.next() }
             let cancel = cancel
             return try await withTaskCancellationHandler {
                 try Task.checkCancellation()
-                if let pull { return try await pull() }
-                return try await iterator?.next()
+                return try await pull()
             } onCancel: {
                 Task { await cancel() }
             }
