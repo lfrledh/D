@@ -1,13 +1,29 @@
 {
-  "originHash" : "d830cad0097a9dc203b59184f2aff8366aef563c6a993a49ca6a724df8ff2153",
+  "originHash" : "ccd85fdf2b9ae62a58d164752c3105b4f105c5472b96b98e5fd31aed0ce13534",
   "pins" : [
     {
-      "identity" : "mlx-swift-lm",
+      "identity" : "equatable",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/ml-explore/mlx-swift-lm",
+      "location" : "https://github.com/ordo-one/equatable",
       "state" : {
-        "revision" : "bd4b7434e6bdb588c7ef55706ff8904cb7fd4c57",
-        "version" : "3.31.4"
+        "revision" : "597c2bb34af0c51331eb3b5e705f942d8ee20daa",
+        "version" : "1.4.1"
+      }
+    },
+    {
+      "identity" : "highlightswift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/appstefan/highlightswift",
+      "state" : {
+        "revision" : "99c431b38a1444a5fd6a4978307fbbefe3a7af53"
+      }
+    },
+    {
+      "identity" : "iosmath",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/junyan72/iosMath",
+      "state" : {
+        "revision" : "ba9ab7729b151329c54fd895a7c1859981d9484c"
       }
     },
     {
@@ -26,6 +42,15 @@
       "state" : {
         "revision" : "810496cf121e525d660cd0ea89a758740476b85f",
         "version" : "1.5.1"
+      }
+    },
+    {
+      "identity" : "swift-cmark",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/swiftlang/swift-cmark.git",
+      "state" : {
+        "revision" : "08ddb528923cc1a6527e02b7a1aee9e516ca749a",
+        "version" : "0.9.0"
       }
     },
     {
@@ -56,6 +81,15 @@
       }
     },
     {
+      "identity" : "swift-markdown",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/swiftlang/swift-markdown.git",
+      "state" : {
+        "revision" : "7d9a5ce307528578dfa777d505496bd5f544ad94",
+        "version" : "0.7.3"
+      }
+    },
+    {
       "identity" : "swift-numerics",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-numerics",
@@ -80,6 +114,23 @@
       "state" : {
         "revision" : "f3d5cbfa653dd248ae8c92313453d5fdcfdf049e",
         "version" : "1.1.8"
+      }
+    },
+    {
+      "identity" : "swiftstreamingmarkdown",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/microsoft/SwiftStreamingMarkdown",
+      "state" : {
+        "revision" : "5f7c04e0558df6146f90d482edb62cb456986bda"
+      }
+    },
+    {
+      "identity" : "swiftui-shimmer",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/markiv/SwiftUI-Shimmer",
+      "state" : {
+        "revision" : "0226e21f9bf355d40e07e5f5e1c33679d50e167f",
+        "version" : "1.5.1"
       }
     },
     {
