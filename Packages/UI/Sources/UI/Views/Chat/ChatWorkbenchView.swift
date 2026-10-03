@@ -36,6 +36,155 @@ enum ChatRunAdmission {
     }
 }
 
+enum ChatPresentationLayout {
+    static let sidebarWidth: CGFloat = 240
+    static let inspectorWidth: CGFloat = 320
+    static let messageWidth: CGFloat = 760
+    // The transcript and composer each reserve 16 points on both sides.
+    static let minimumBodyWidth: CGFloat = 680 + 32
+    static func showsSidebar(width: CGFloat, requested: Bool) -> Bool {
+        requested && width >= minimumBodyWidth + sidebarWidth + 1
+    }
+    static func showsInspector(width: CGFloat, requested: Bool, sidebar: Bool) -> Bool {
+        requested && width >= minimumBodyWidth + inspectorWidth + 1 + (sidebar ? sidebarWidth + 1 : 0)
+    }
+}
+
+private enum ChatInspectorTab: String, CaseIterable, Identifiable {
+    case data, settings, artifacts
+    var id: Self { self }
+}
+
+enum ChatNarrowPanel: String, Identifiable {
+    case sessions, inspector
+    var id: Self { self }
+}
+
+extension ChatPresentationLayout {
+    static func dismissesNarrowPanel(_ panel: ChatNarrowPanel, width: CGFloat,
+                                     sidebarRequested: Bool, inspectorRequested: Bool) -> Bool {
+        let sidebar = showsSidebar(width: width, requested: sidebarRequested)
+        switch panel {
+        case .sessions: return sidebar
+        case .inspector: return showsInspector(width: width, requested: inspectorRequested, sidebar: sidebar)
+        }
+    }
+}
+
+private enum ChatDetail: Identifiable {
+    case edit(ChatEdit), preview(WorkflowAssetReference)
+    var id: String {
+        switch self {
+        case .edit(let edit): "edit-\(edit.id)"
+        case .preview(let reference): "preview-\(reference.assetID)"
+        }
+    }
+}
+
+struct ChatSheetQueue<Detail: Identifiable> {
+    var narrowPanel: ChatNarrowPanel?
+    var detail: Detail?
+    private(set) var pendingDetail: Detail?
+    private(set) var narrowSheetVisible = false
+
+    init() {}
+
+    mutating func openNarrow(_ panel: ChatNarrowPanel) {
+        narrowPanel = panel
+        narrowSheetVisible = true
+    }
+
+    mutating func present(_ item: Detail) {
+        if narrowSheetVisible {
+            pendingDetail = item
+            narrowPanel = nil
+        } else {
+            detail = item
+        }
+    }
+
+    mutating func didDismissNarrowPanel() {
+        guard narrowPanel == nil else { return }
+        narrowSheetVisible = false
+        if let pendingDetail {
+            detail = pendingDetail
+            self.pendingDetail = nil
+        }
+    }
+}
+
+struct ChatScrollPosition: Equatable {
+    let offset: CGFloat
+    let distanceToBottom: CGFloat
+
+    static func followsBottom(previous: Self, current: Self, wasFollowing: Bool) -> Bool {
+        guard abs(previous.offset - current.offset) > 1 else { return wasFollowing }
+        return current.distanceToBottom <= 28
+    }
+}
+
+private struct ChatSessionScrollState {
+    var followsBottom: Bool
+    var hasNewContent: Bool
+    var anchor: UUID?
+}
+
+private enum ChatLayoutSpace { static let name = "chat-presentation-layout" }
+
+private extension View {
+    @ViewBuilder
+    func chatMeasured(_ id: String, probe: ((String, CGRect) -> Void)?) -> some View {
+        if let probe {
+            onGeometryChange(for: CGRect.self) { $0.frame(in: .named(ChatLayoutSpace.name)) }
+                action: { probe(id, $0) }
+        } else { self }
+    }
+}
+
+/// AppKit hiding retains the pane's editor identity while removing hidden views
+/// from input and key-view navigation. Resizing an open pane never hides it.
+struct ChatPaneHost<Content: View>: NSViewRepresentable {
+    let content: Content
+    let visible: Bool
+    let identifier: String
+
+    func makeNSView(context: Context) -> NSHostingView<Content> {
+        let host = NSHostingView(rootView: content)
+        host.sizingOptions = []
+        host.setAccessibilityIdentifier(identifier)
+        host.isHidden = !visible
+        return host
+    }
+    func updateNSView(_ host: NSHostingView<Content>, context: Context) {
+        host.rootView = content
+        // Only an actual close/open changes native visibility. Hiding can release
+        // the first responder; a layout change must not transiently hide an editor.
+        if host.isHidden != !visible { host.isHidden = !visible }
+    }
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSHostingView<Content>, context: Context) -> CGSize? {
+        .init(width: proposal.width ?? 240, height: proposal.height ?? 640)
+    }
+}
+
+struct ChatScrollRestoration: Equatable {
+    let ticket = UUID()
+    let sessionID: UUID
+    let followsBottom: Bool
+    let anchor: UUID?
+
+    func isCurrent(sessionID: UUID?, pending: Self?) -> Bool {
+        sessionID == self.sessionID && pending?.ticket == ticket
+    }
+}
+
+enum ChatPresentationText {
+    static func branchSummary(_ message: ChatMessage, you: String, assistant: String) -> String {
+        let summary = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "\n", with: " ")
+        return String((summary.isEmpty ? (message.role == .user ? you : assistant) : summary).prefix(44))
+    }
+}
+
 /// Presentation for a Store-owned chat. Lead owns construction, loading, and
 /// model selection; this view never constructs a second controller or backend.
 @MainActor
@@ -49,23 +198,49 @@ struct ChatWorkbenchView: View {
     @Environment(\.dLanguageStore) private var language
     @State private var search = ""
     @State private var showArchived = false
-    @State private var showAdvanced = false
+    @State private var showSidebar = true
+    @State private var showInspector = false
+    @State private var sidebarWasPresented = false
+    @State private var inspectorTab: ChatInspectorTab = .data
+    @State private var sheets = ChatSheetQueue<ChatDetail>()
+    @State private var followsBottom = true
+    @State private var hasNewContent = false
+    @State private var scrollStates: [UUID: ChatSessionScrollState] = [:]
+    @State private var visibleMessageID: UUID?
+    @State private var scrollRestoration: ChatScrollRestoration?
     @State private var issues: [UUID: String] = [:]
     @State private var globalIssue: String?
-    @State private var editing: ChatEdit?
-    @State private var preview: WorkflowAssetReference?
     @State private var newPresetName = ""
+    private var layoutProbe: ((String, CGRect) -> Void)?
+
+    func observingLayout(_ observer: @escaping (String, CGRect) -> Void) -> Self {
+        var copy = self
+        copy.layoutProbe = observer
+        return copy
+    }
 
     init(chat: ChatController, model: WorkbenchModel,
          onChooseModel: @escaping () -> Void,
          onSavedAsset: @escaping (WorkflowAssetReference) -> Void,
-         onAssetsChanged: @escaping () -> Void) {
+         onAssetsChanged: @escaping () -> Void,
+         initialInspectorVisible: Bool = false,
+         initialSettingsVisible: Bool = false,
+         initiallyFollowsBottom: Bool = true,
+         initiallyHasNewContent: Bool = false) {
         self.chat = chat; self.model = model; self.onChooseModel = onChooseModel
         self.onSavedAsset = onSavedAsset; self.onAssetsChanged = onAssetsChanged
+        _showInspector = State(initialValue: initialInspectorVisible)
+        _inspectorTab = State(initialValue: initialSettingsVisible ? .settings : .data)
+        _followsBottom = State(initialValue: initiallyFollowsBottom)
+        _hasNewContent = State(initialValue: initiallyHasNewContent)
     }
 
     private func label(_ key: String, _ fallback: String) -> String {
         workflowText(language, "chat." + key, fallback: fallback)
+    }
+    private func newLabel(_ key: String, english: String, chinese: String) -> String {
+        workflowText(language, "chat." + key,
+            fallback: language?.effectiveLanguageIdentifier.hasPrefix("zh") == true ? chinese : english)
     }
     private var session: ChatSession? { chat.selectedSession }
     private func canRun(_ session: ChatSession) -> Bool {
@@ -91,30 +266,132 @@ struct ChatWorkbenchView: View {
     }
 
     var body: some View {
-        HSplitView {
-            sidebar.frame(minWidth: 190, idealWidth: 230, maxWidth: 340)
-            if !chat.isLoaded {
-                ContentUnavailableView(label("loadFailed", "聊天记录不可用"), systemImage: "exclamationmark.triangle",
-                    description: Text(chat.error ?? label("loading", "正在读取聊天记录…")))
-                    .frame(minWidth: 500)
-            } else if let session {
-                conversation(session).frame(minWidth: 500)
-            } else {
-                ContentUnavailableView(label("empty", "开始新对话"), systemImage: "bubble.left.and.bubble.right",
-                    description: Text(label("emptyHelp", "新建对话后选择模型。不会自动发送。")))
-                    .frame(minWidth: 500)
+        GeometryReader { geometry in
+            let sidebarShown = ChatPresentationLayout.showsSidebar(width: geometry.size.width, requested: showSidebar)
+            let inspectorShown = ChatPresentationLayout.showsInspector(width: geometry.size.width,
+                requested: showInspector, sidebar: sidebarShown)
+            let inspectorInline = inspectorShown && sheets.narrowPanel != .inspector
+            let sidebarInline = sidebarShown && sheets.narrowPanel != .sessions
+            // An already open pane remains visible as an overlay while the width
+            // changes. Do not briefly hide its native editor before onChange runs.
+            let sidebarVisible = showSidebar && (sidebarInline || sidebarWasPresented || sheets.narrowPanel == .sessions)
+            let inspectorVisible = showInspector
+            let sidebarPaneWidth = min(ChatPresentationLayout.sidebarWidth, geometry.size.width)
+            let inspectorPaneWidth = min(ChatPresentationLayout.inspectorWidth, geometry.size.width)
+            ZStack(alignment: .topLeading) {
+                Group {
+                    if !chat.isLoaded {
+                        ContentUnavailableView(label("loadFailed", "聊天记录不可用"), systemImage: "exclamationmark.triangle",
+                            description: Text(chat.error ?? label("loading", "正在读取聊天记录…")))
+                    } else if let session {
+                        conversation(session, width: geometry.size.width, sidebarShown: sidebarShown)
+                    } else {
+                        emptyConversation(width: geometry.size.width, sidebarShown: sidebarShown)
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(.leading, sidebarInline ? ChatPresentationLayout.sidebarWidth + 1 : 0)
+                .padding(.trailing, inspectorInline && session != nil ? ChatPresentationLayout.inspectorWidth + 1 : 0)
+                .chatMeasured("conversation", probe: layoutProbe)
+
+                if sheets.narrowPanel != nil {
+                    Color.black.opacity(0.18)
+                        .ignoresSafeArea()
+                        .onTapGesture { closeNarrowPanel() }
+                        .accessibilityHidden(true)
+                }
+                ChatPaneHost(content: sidebar.background(.background).disabled(!sidebarVisible)
+                    .environment(\.dLanguageStore, language), visible: sidebarVisible,
+                    identifier: "chat-sessions-host")
+                    .frame(width: sidebarPaneWidth)
+                    .frame(maxHeight: .infinity)
+                    .overlay(alignment: .trailing) { if sidebarInline { Divider() } }
+                    .allowsHitTesting(sidebarVisible)
+                    .accessibilityHidden(!sidebarVisible)
+                    .chatMeasured("sessions-pane", probe: layoutProbe)
+                if let session {
+                    ChatPaneHost(content: inspector(session).background(.background).disabled(!inspectorVisible)
+                        .environment(\.dLanguageStore, language), visible: inspectorVisible,
+                        identifier: "chat-inspector-host")
+                        .frame(width: inspectorPaneWidth)
+                        .frame(maxHeight: .infinity)
+                        .overlay(alignment: .leading) { if inspectorInline { Divider() } }
+                        .chatMeasured("inspector-pane", probe: layoutProbe)
+                        .allowsHitTesting(inspectorVisible)
+                        .accessibilityHidden(!inspectorVisible)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                }
+            }
+            .clipped()
+            .coordinateSpace(name: ChatLayoutSpace.name)
+            .onAppear {
+                sidebarWasPresented = sidebarVisible
+            }
+            .onChange(of: geometry.size.width) { oldWidth, width in
+                if sidebarShown { sidebarWasPresented = true }
+                if let narrowPanel = sheets.narrowPanel, ChatPresentationLayout.dismissesNarrowPanel(narrowPanel,
+                    width: width, sidebarRequested: showSidebar, inspectorRequested: showInspector) {
+                    closeNarrowPanel(keepPreference: true)
+                } else if sheets.narrowPanel == nil {
+                    let oldSidebar = ChatPresentationLayout.showsSidebar(width: oldWidth, requested: showSidebar)
+                    let newSidebar = ChatPresentationLayout.showsSidebar(width: width, requested: showSidebar)
+                    if ChatPresentationLayout.showsInspector(width: oldWidth, requested: showInspector, sidebar: oldSidebar) &&
+                       !ChatPresentationLayout.showsInspector(width: width, requested: showInspector, sidebar: newSidebar) {
+                        sheets.openNarrow(.inspector)
+                    } else if oldSidebar && !newSidebar {
+                        sheets.openNarrow(.sessions)
+                    }
+                }
             }
         }
         .task { if !chat.isLoaded { await chat.load() } }
-        .sheet(item: $editing) { edit in editSheet(edit) }
-        .sheet(isPresented: Binding(get: { preview != nil }, set: { if !$0 { preview = nil } })) {
-            if let preview {
+        .sheet(item: Binding(get: { sheets.detail }, set: { sheets.detail = $0 })) { item in
+            switch item {
+            case .edit(let edit): editSheet(edit)
+            case .preview(let preview):
                 VStack(alignment: .leading) {
-                    Button(label("close", "关闭")) { self.preview = nil }.keyboardShortcut(.cancelAction)
+                    Button(label("close", "关闭")) { sheets.detail = nil }.keyboardShortcut(.cancelAction)
                     QuickAssetPreview(store: chat.store, reference: preview, compact: false)
                 }.padding(20).frame(minWidth: 560, minHeight: 360)
             }
         }
+    }
+
+    private func emptyConversation(width: CGFloat, sidebarShown: Bool) -> some View {
+        VStack(spacing: 0) {
+            HStack {
+                paneButtons(width: width, sidebarShown: sidebarShown)
+                Spacer()
+            }.padding(12)
+            Divider()
+            ChatEmptyConversationView { createSession() }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .chatMeasured("empty-conversation", probe: layoutProbe)
+        }
+    }
+
+    private func paneButtons(width: CGFloat, sidebarShown: Bool) -> some View {
+        HStack(spacing: 8) {
+            Button {
+                if !ChatPresentationLayout.showsSidebar(width: width, requested: true) {
+                    showSidebar = true
+                    sidebarWasPresented = true
+                    sheets.openNarrow(.sessions)
+                } else {
+                    showSidebar.toggle()
+                    if showSidebar { sidebarWasPresented = true }
+                }
+            } label: { Label(label("history", "对话"), systemImage: "sidebar.left") }
+                .accessibilityIdentifier("chat-sessions-toggle")
+            Button {
+                if !ChatPresentationLayout.showsInspector(width: width, requested: true, sidebar: sidebarShown) {
+                    showInspector = true
+                    sheets.openNarrow(.inspector)
+                }
+                else { showInspector.toggle() }
+            } label: { Label(newLabel("inspector", english: "Inspector", chinese: "检查器"), systemImage: "sidebar.right") }
+                .accessibilityIdentifier("chat-inspector-toggle")
+        }.labelStyle(.iconOnly)
     }
 
     private var sidebar: some View {
@@ -122,8 +399,14 @@ struct ChatWorkbenchView: View {
             HStack {
                 Text(label("history", "对话")) .font(.headline)
                 Spacer()
-                Button(label("new", "新建"), systemImage: "plus") { perform { _ = try chat.newSession() } }
+                Button(label("new", "新建"), systemImage: "plus") { createSession() }
                     .disabled(!chat.isLoaded || chat.saveIssue != nil)
+                Button(label("close", "关闭"), systemImage: "xmark") {
+                    showSidebar = false
+                    if sheets.narrowPanel == .sessions { closeNarrowPanel() }
+                }
+                .labelStyle(.iconOnly)
+                .accessibilityIdentifier("chat-sessions-close")
             }
             TextField(label("search", "搜索标题与内容"), text: $search)
                 .textFieldStyle(.roundedBorder)
@@ -133,7 +416,11 @@ struct ChatWorkbenchView: View {
                     ForEach(visibleSessions) { item in
                         HStack(spacing: 6) {
                             Button {
-                                perform(sessionID: item.id, clearOnSuccess: false) { try chat.selectSession(item.id) }
+                                do {
+                                    if let currentID = chat.state.selectedSessionID { saveScrollState(for: currentID) }
+                                    try chat.selectSession(item.id)
+                                    closeNarrowPanel()
+                                } catch { report(error.localizedDescription, for: item.id) }
                             } label: {
                                 VStack(alignment: .leading, spacing: 3) {
                                     Text(item.title).lineLimit(2)
@@ -143,13 +430,23 @@ struct ChatWorkbenchView: View {
                             }.buttonStyle(.plain)
                             Menu {
                                 Button(label("rename", "重命名")) {
-                                    editing = ChatEdit(kind: .rename, sessionID: item.id, messageID: nil, text: item.title)
+                                    present(.edit(ChatEdit(kind: .rename, sessionID: item.id, messageID: nil, text: item.title)))
                                 }
                                 if !item.archived {
                                     Button(label("archive", "归档")) { perform(sessionID: item.id) { try chat.archive(item.id) } }
                                         .disabled(chat.activeSessionID == item.id)
                                 }
-                            } label: { Image(systemName: "ellipsis") }.menuStyle(.borderlessButton)
+                                if item.selectedLeafID != nil {
+                                    Divider()
+                                    Button(label("copyPath", "复制所选路径")) {
+                                        perform(sessionID: item.id) { copy(try chat.exportSelectedPath(sessionID: item.id, markdown: false)) }
+                                    }
+                                    Button(label("exportMarkdown", "导出 Markdown")) { Task { await export(sessionID: item.id, markdown: true) } }
+                                    Button(label("exportPlain", "导出纯文字")) { Task { await export(sessionID: item.id, markdown: false) } }
+                                }
+                            } label: { Image(systemName: "ellipsis") }
+                                .menuStyle(.borderlessButton)
+                                .accessibilityLabel(newLabel("sessionActions", english: "Conversation actions: ", chinese: "对话操作：") + item.title)
                         }
                         .padding(9)
                         .background(chat.state.selectedSessionID == item.id ? Color.accentColor.opacity(0.14) : Color.clear,
@@ -160,7 +457,7 @@ struct ChatWorkbenchView: View {
         }.padding(14)
     }
 
-    private func conversation(_ session: ChatSession) -> some View {
+    private func conversation(_ session: ChatSession, width: CGFloat, sidebarShown: Bool) -> some View {
         let parentIDs = Set(session.messages.compactMap(\.parentID))
         let leaves = session.messages.filter { !parentIDs.contains($0.id) }
         let siblings = Dictionary(grouping: session.messages, by: {
@@ -168,39 +465,33 @@ struct ChatWorkbenchView: View {
         })
         let attempts = Dictionary(uniqueKeysWithValues: session.attempts.map { ($0.id, $0) })
         return VStack(spacing: 0) {
-            HStack(alignment: .top, spacing: 12) {
+            HStack(alignment: .center, spacing: 12) {
+                paneButtons(width: width, sidebarShown: sidebarShown)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(session.title).font(.title3.bold()).lineLimit(2)
+                    Text(session.title).font(.headline).lineLimit(1)
                     if let node = session.configuration {
                         let id = node.parameters["modelID"]?.string ?? ""
-                        Text(model.projectSession.explicitModelChoices.first(where: { $0.id == id })?.displayName ??
-                             (id.isEmpty ? label("chooseModel", "选择模型") : id))
-                            .font(.subheadline)
-                        Text(readiness(id)).font(.caption).foregroundStyle(.secondary)
+                        Text((model.projectSession.explicitModelChoices.first(where: { $0.id == id })?.displayName ??
+                             (id.isEmpty ? label("chooseModel", "选择模型") : id)) + " · " + readiness(id))
+                            .font(.caption).foregroundStyle(.secondary).lineLimit(1)
                     } else {
                         Text(label("noModel", "尚未选择模型")) .foregroundStyle(.secondary)
                     }
                 }
                 Spacer()
                 Button(label("changeModel", "更换模型"), action: onChooseModel)
+                    .lineLimit(1)
                 if !session.messages.isEmpty {
                     Menu(label("paths", "路径")) {
                         ForEach(leaves) { leaf in
-                            Button((leaf.id == session.selectedLeafID ? "✓ " : "") +
-                                   String(leaf.text.isEmpty ? leaf.id.uuidString.prefix(8) : leaf.text.prefix(40))) {
+                            Button((leaf.id == session.selectedLeafID ? "✓ " : "") + branchSummary(leaf)) {
                                 perform(sessionID: session.id) { try chat.selectLeaf(leaf.id, sessionID: session.id) }
                             }
                         }
                     }
                 }
-                Menu(label("export", "导出所选路径")) {
-                    Button(label("copyPath", "复制所选路径")) {
-                        perform(sessionID: session.id) { copy(try chat.exportSelectedPath(sessionID: session.id, markdown: false)) }
-                    }
-                    Button(label("exportMarkdown", "Markdown 内容")) { Task { await export(sessionID: session.id, markdown: true) } }
-                    Button(label("exportPlain", "纯文字")) { Task { await export(sessionID: session.id, markdown: false) } }
-                }.disabled(session.selectedLeafID == nil)
-            }.padding(16)
+            }.padding(.horizontal, 16).padding(.vertical, 10)
+                .chatMeasured("topbar", probe: layoutProbe)
             Divider()
             if chat.isRunning, let active = chat.activeSessionID,
                let owner = chat.state.sessions.first(where: { $0.id == active }) {
@@ -212,7 +503,7 @@ struct ChatWorkbenchView: View {
                     Button(label("stop", "停止当前生成")) { Task { await chat.cancel() } }
                 }.padding(.horizontal, 16).padding(.vertical, 8)
             }
-            ScrollViewReader { proxy in
+              ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 16) {
                         if session.originSessionID != nil {
@@ -224,23 +515,163 @@ struct ChatWorkbenchView: View {
                                 siblings: siblings[(message.parentID?.uuidString ?? "root") + ":" + message.role.rawValue] ?? [],
                                 attempt: message.attemptID.flatMap { attempts[$0] })
                                 .id(message.id)
+                                .chatMeasured("message-\(message.id.uuidString)", probe: layoutProbe)
                         }
                         if session.selectedLeafID == nil {
                             Text(label("noMessages", "暂无消息")) .foregroundStyle(.secondary)
                         }
                         Color.clear.frame(height: 1).id("chat-bottom")
-                    }.padding(20)
+                    }.scrollTargetLayout()
+                        .frame(maxWidth: ChatPresentationLayout.messageWidth)
+                        .frame(maxWidth: .infinity)
+                        .padding(.horizontal, 16).padding(.vertical, 20)
+                }
+                .scrollPosition(id: $visibleMessageID)
+                .chatMeasured("transcript", probe: layoutProbe)
+                .onScrollGeometryChange(for: ChatScrollPosition.self) { geometry in
+                    ChatScrollPosition(offset: geometry.contentOffset.y,
+                        distanceToBottom: geometry.contentSize.height - geometry.contentOffset.y - geometry.containerSize.height)
+                } action: { previous, current in
+                    guard chat.state.selectedSessionID == session.id,
+                          scrollRestoration?.sessionID != session.id else { return }
+                    followsBottom = ChatScrollPosition.followsBottom(previous: previous, current: current,
+                        wasFollowing: followsBottom)
+                    if followsBottom { hasNewContent = false }
+                    saveScrollState(for: session.id)
+                }
+                .onChange(of: visibleMessageID) { _, _ in
+                    if chat.state.selectedSessionID == session.id, scrollRestoration?.sessionID != session.id {
+                        saveScrollState(for: session.id)
+                    }
+                }
+                .onChange(of: transcriptRevision(session)) { previous, _ in
+                    guard previous.hasPrefix(session.id.uuidString + ":"),
+                          scrollRestoration?.sessionID != session.id else { return }
+                    if followsBottom {
+                        proxy.scrollTo("chat-bottom", anchor: .bottom)
+                    } else {
+                        hasNewContent = true
+                    }
+                    saveScrollState(for: session.id)
+                }
+                .onChange(of: session.id) { oldID, newID in
+                    if scrollStates[oldID] == nil { saveScrollState(for: oldID) }
+                    let restored = scrollStates[newID]
+                    followsBottom = restored?.followsBottom ?? true
+                    hasNewContent = restored?.hasNewContent ?? false
+                    visibleMessageID = restored?.anchor
+                    let restore = ChatScrollRestoration(sessionID: newID,
+                        followsBottom: followsBottom, anchor: restored?.anchor)
+                    scrollRestoration = restore
+                    Task { @MainActor in
+                        await Task.yield()
+                        guard restore.isCurrent(sessionID: chat.state.selectedSessionID,
+                                                pending: scrollRestoration) else { return }
+                        if restore.followsBottom { proxy.scrollTo("chat-bottom", anchor: .bottom) }
+                        else if let anchor = restore.anchor { proxy.scrollTo(anchor, anchor: .top) }
+                        scrollRestoration = nil
+                    }
+                }
+                .onAppear {
+                    if let saved = scrollStates[session.id] {
+                        followsBottom = saved.followsBottom
+                        hasNewContent = saved.hasNewContent
+                        visibleMessageID = saved.anchor
+                        if saved.followsBottom { proxy.scrollTo("chat-bottom", anchor: .bottom) }
+                        else if let anchor = saved.anchor { proxy.scrollTo(anchor, anchor: .top) }
+                    } else if followsBottom { proxy.scrollTo("chat-bottom", anchor: .bottom) }
                 }
                 .overlay(alignment: .bottomTrailing) {
-                    Button(label("bottom", "到底部"), systemImage: "arrow.down") {
-                        withAnimation { proxy.scrollTo("chat-bottom", anchor: .bottom) }
-                    }.padding(12)
+                    if !followsBottom {
+                        Button(hasNewContent ? newLabel("newContent", english: "New content · Bottom", chinese: "有新内容 · 到底部") : label("bottom", "到底部"),
+                               systemImage: "arrow.down") {
+                            followsBottom = true; hasNewContent = false
+                            saveScrollState(for: session.id)
+                            withAnimation { proxy.scrollTo("chat-bottom", anchor: .bottom) }
+                        }.padding(12).accessibilityIdentifier("chat-bottom-button")
+                            .chatMeasured("bottom-button", probe: layoutProbe)
+                    }
+                }
+              }
+            Divider()
+            composer(session)
+                .chatMeasured("composer", probe: layoutProbe)
+        }
+    }
+
+    private func transcriptRevision(_ session: ChatSession) -> String {
+        let latest = session.attempts.last
+        return "\(session.id):\(session.selectedLeafID?.uuidString ?? ""):\(session.messages.count):\(latest?.rawText.utf8.count ?? 0):\(latest?.status.rawValue ?? "")"
+    }
+
+    private func saveScrollState(for sessionID: UUID) {
+        scrollStates[sessionID] = .init(followsBottom: followsBottom,
+            hasNewContent: hasNewContent, anchor: visibleMessageID)
+    }
+
+    private func branchSummary(_ message: ChatMessage) -> String {
+        ChatPresentationText.branchSummary(message, you: label("you", "你"), assistant: label("assistant", "助手"))
+    }
+
+    private func inspector(_ session: ChatSession) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text(newLabel("inspector", english: "Inspector", chinese: "检查器")).font(.headline)
+                Spacer()
+                Button(label("close", "关闭"), systemImage: "xmark") {
+                    showInspector = false; closeNarrowPanel()
+                }.labelStyle(.iconOnly).keyboardShortcut(.cancelAction)
+                    .accessibilityIdentifier("chat-inspector-close")
+            }.padding(14)
+            Picker(newLabel("inspector", english: "Inspector", chinese: "检查器"), selection: $inspectorTab) {
+                Text(newLabel("inspectorData", english: "Data", chinese: "资料")).tag(ChatInspectorTab.data)
+                Text(newLabel("inspectorSettings", english: "Settings", chinese: "设置")).tag(ChatInspectorTab.settings)
+                Text(newLabel("inspectorArtifacts", english: "Artifacts", chinese: "成果")).tag(ChatInspectorTab.artifacts)
+            }.pickerStyle(.segmented).padding(.horizontal, 12)
+            Divider().padding(.top, 12)
+            ScrollView {
+                Group {
+                    switch inspectorTab {
+                    case .data:
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text(newLabel("selectedPath", english: "Selected path", chinese: "当前路径")).font(.headline)
+                            Text("\(chat.selectedPath.count) " + label("messages", "条消息"))
+                                .foregroundStyle(.secondary)
+                            if session.originSessionID != nil {
+                                Text(label("forkOrigin", "此对话从另一条路径分叉；原对话仍保留。"))
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }
+                            Text(newLabel("attachments", english: "Pending attachments", chinese: "待发送附件")).font(.headline)
+                            if session.attachments.isEmpty {
+                                Text(newLabel("noAttachments", english: "No attachments", chinese: "暂无附件")) .foregroundStyle(.secondary)
+                            } else {
+                                ForEach(session.attachments) { item in
+                                    attachmentRow(item, removable: true, sessionID: session.id)
+                                }
+                            }
+                        }.padding(16).frame(maxWidth: .infinity, alignment: .leading)
+                    case .settings:
+                        settings(session)
+                    case .artifacts:
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text(newLabel("savedAnswers", english: "Saved answers", chinese: "回答成果")).font(.headline)
+                            ForEach(session.attempts.filter { $0.output != nil }) { attempt in
+                                if let output = attempt.output {
+                                    Button(label("preview", "预览") + " · " +
+                                           String((attempt.response?.finalText ?? attempt.rawText).prefix(36))) {
+                                        present(.preview(output))
+                                    }
+                                }
+                            }
+                            if !session.attempts.contains(where: { $0.output != nil }) {
+                                Text(newLabel("noArtifacts", english: "No saved answers", chinese: "尚无已保存回答")) .foregroundStyle(.secondary)
+                            }
+                        }.padding(16).frame(maxWidth: .infinity, alignment: .leading)
+                    }
                 }
             }
-            Divider()
-            settings(session)
-            composer(session)
         }
+        .accessibilityIdentifier("chat-inspector")
     }
 
     private func messageCard(_ message: ChatMessage, session: ChatSession,
@@ -252,11 +683,11 @@ struct ChatWorkbenchView: View {
                     Menu(label("branch", "分支") + " \((siblings.firstIndex(where: { $0.id == message.id }) ?? 0) + 1)/\(siblings.count)") {
                         ForEach(siblings) { sibling in
                             Button("\((siblings.firstIndex(where: { $0.id == sibling.id }) ?? 0) + 1) · " +
-                                   (sibling.text.isEmpty ? String(sibling.id.uuidString.prefix(8)) : String(sibling.text.prefix(36)))) {
+                                   branchSummary(sibling)) {
                                 perform(sessionID: session.id) { try chat.selectLeaf(sibling.id, sessionID: session.id) }
                             }
                         }
-                    }
+                    }.chatMeasured("branch-menu-\(message.id.uuidString)", probe: layoutProbe)
                 }
                 Spacer()
                 Button(label("copy", "复制")) {
@@ -264,12 +695,14 @@ struct ChatWorkbenchView: View {
                 }
                 if message.role == .user {
                     Button(label("edit", "编辑")) {
-                        editing = ChatEdit(kind: .message, sessionID: session.id, messageID: message.id, text: message.text)
+                        present(.edit(ChatEdit(kind: .message, sessionID: session.id, messageID: message.id, text: message.text)))
                     }
-                    Button(label("generateReply", "生成回复")) { Task { await run(sessionID: session.id) { try await chat.regenerate(message.id, sessionID: session.id) } } }
-                        .disabled(!canRun(session))
-                } else if let parent = message.parentID {
-                    Menu(label("candidates", "候选")) {
+                }
+                Menu {
+                    if message.role == .user {
+                        Button(label("generateReply", "生成回复")) { Task { await run(sessionID: session.id) { try await chat.regenerate(message.id, sessionID: session.id) } } }
+                            .disabled(!canRun(session))
+                    } else if let parent = message.parentID {
                         Button(label("newCandidate", "生成新候选（新随机种子）")) {
                             Task { await run(sessionID: session.id) { try await chat.regenerate(parent, sessionID: session.id) } }
                         }.disabled(!canRun(session))
@@ -280,54 +713,33 @@ struct ChatWorkbenchView: View {
                                 isRunning: chat.isRunning, hasPendingSave: chat.pendingSaveAttemptID != nil,
                                 hasSaveIssue: chat.saveIssue != nil))
                         }
-                    }.accessibilityIdentifier("chat-candidate-actions")
-                }
-                Button(label("forkHere", "从这里分叉")) {
-                    perform(sessionID: session.id) { _ = try chat.forkSession(session.id, leafID: message.id) }
-                }
+                    }
+                    Button(label("forkHere", "从这里分叉")) {
+                        perform(sessionID: session.id) { _ = try chat.forkSession(session.id, leafID: message.id) }
+                    }
+                    if attempt?.status == .completed, attempt?.response?.finalText?.isEmpty == false {
+                        Button(label("saveAsset", "保存回答为素材")) { Task { await saveFinal(message.id, sessionID: session.id, useInWorkflow: false) } }
+                        Button(label("useWorkflow", "用于工作流")) { Task { await saveFinal(message.id, sessionID: session.id, useInWorkflow: true) } }
+                    }
+                } label: { Image(systemName: "ellipsis") }
+                    .menuStyle(.borderlessButton)
+                    .accessibilityLabel(newLabel("messageActions", english: "Message actions: ", chinese: "消息操作：") + branchSummary(message))
             }.font(.caption)
+            ChatMessageContent(message: message, attempt: attempt, onPreview: { present(.preview($0)) })
             if let attempt {
-                let final = attempt.response?.finalText
-                let raw = attempt.response?.rawText ?? attempt.rawText
-                let shown = attempt.status == .running ? attempt.rawText : (final ?? raw)
-                if !shown.isEmpty {
-                    ChatMarkdownView(messageID: message.id, text: shown, rawText: raw,
-                                     isStreaming: attempt.status == .running)
-                        .id(message.id)
-                }
-                if let reasoning = attempt.response?.reasoningText, !reasoning.isEmpty {
-                    DisclosureGroup(label("reasoning", "思考内容")) {
-                        Text(reasoning).textSelection(.enabled)
-                        Button(label("copyReasoning", "复制思考内容")) { copy(reasoning) }
-                    }
-                }
-                if let calls = attempt.response?.toolCalls, !calls.isEmpty {
-                    DisclosureGroup(label("toolCalls", "工具调用声明 · 未执行")) {
-                        ForEach(calls, id: \.id) { call in
-                            VStack(alignment: .leading) {
-                                Text(call.name).font(.subheadline.bold())
-                                Text(String(data: (try? JSONEncoder().encode(call)) ?? Data(), encoding: .utf8) ?? "")
-                                    .font(.caption.monospaced()).textSelection(.enabled)
-                            }
-                        }
-                    }
-                }
                 HStack {
                     Text(status(attempt)).font(.caption).foregroundStyle(.secondary)
+                        .chatMeasured("attempt-status-\(attempt.id.uuidString)", probe: layoutProbe)
                     if let response = attempt.response {
                         Text(label("finish", "结束原因") + ": " + finish(response.finishReason))
                             .font(.caption).foregroundStyle(.secondary)
                     }
                     Spacer()
-                    if attempt.status == .completed, final?.isEmpty == false {
-                        Button(label("saveAsset", "保存回答为素材")) { Task { await saveFinal(message.id, sessionID: session.id, useInWorkflow: false) } }
-                        Button(label("useWorkflow", "用于工作流")) { Task { await saveFinal(message.id, sessionID: session.id, useInWorkflow: true) } }
-                    }
                 }
-                if let issue = attempt.issue { Text(issue).font(.caption).foregroundStyle(.red).textSelection(.enabled) }
-            } else {
-                Text(message.text).textSelection(.enabled)
-                ForEach(message.attachments) { attachment in attachmentRow(attachment, removable: false, sessionID: session.id) }
+                if let issue = attempt.issue {
+                    Text(issue).font(.caption).foregroundStyle(.red).textSelection(.enabled)
+                        .chatMeasured("attempt-issue-\(attempt.id.uuidString)", probe: layoutProbe)
+                }
             }
         }
         .padding(14)
@@ -337,9 +749,8 @@ struct ChatWorkbenchView: View {
     }
 
     private func settings(_ session: ChatSession) -> some View {
-        DisclosureGroup(label("nextAnswer", "下一次回答设置"), isExpanded: $showAdvanced) {
-            ScrollView {
             VStack(alignment: .leading, spacing: 12) {
+                Text(label("nextAnswer", "下一次回答设置")).font(.headline)
                 Text(label("futureOnly", "更改只影响之后的生成。")) .font(.caption).foregroundStyle(.secondary)
                 Text(label("systemPrompt", "系统提示（默认空）")) .font(.subheadline)
                 TextSourcesQuestionEditor(value: session.systemPrompt, editEpoch: 0, isEditable: true,
@@ -347,7 +758,7 @@ struct ChatWorkbenchView: View {
                     onEdit: { value in perform(sessionID: session.id) { try chat.setSystemPrompt(value, sessionID: session.id) } })
                     .id(session.id.uuidString + ":system")
                     .frame(height: 90)
-                HStack {
+                VStack(alignment: .leading, spacing: 8) {
                     Button(label("clearSystem", "清空系统提示")) { perform(sessionID: session.id) { try chat.setSystemPrompt("", sessionID: session.id) } }
                     Menu(label("applyPreset", "应用本地预设")) {
                         ForEach(chat.state.presets) { preset in
@@ -364,7 +775,7 @@ struct ChatWorkbenchView: View {
                             }
                         }
                     }
-                    TextField(label("presetName", "预设名称"), text: $newPresetName).frame(maxWidth: 160)
+                    TextField(label("presetName", "预设名称"), text: $newPresetName)
                     Button(label("savePreset", "保存预设")) { savePreset(session) }
                         .disabled(newPresetName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
@@ -382,9 +793,7 @@ struct ChatWorkbenchView: View {
                             .font(.caption).foregroundStyle(.secondary)
                     }
                 }
-            }.padding(.top, 10)
-            }.frame(maxHeight: 220)
-        }.padding(.horizontal, 16).padding(.vertical, 8)
+            }.padding(16).frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func composer(_ session: ChatSession) -> some View {
@@ -401,12 +810,12 @@ struct ChatWorkbenchView: View {
                 onEdit: { value in perform(sessionID: session.id) { try chat.updateDraft(value, sessionID: session.id) } })
                 .id(session.id.uuidString + ":draft")
                 .frame(minHeight: 80, idealHeight: 110)
+            Text(label("dropFiles", "可拖入 TXT、MD、图像或视频；Enter 换行。"))
+                .font(.caption).foregroundStyle(.secondary)
             HStack {
                 Button(label("attach", "添加附件…"), systemImage: "paperclip") {
                     Task { await chooseAttachments(for: session.id) }
                 }.disabled(session.archived)
-                Text(label("dropFiles", "可拖入 TXT、MD、图像或视频；Enter 换行。"))
-                    .font(.caption).foregroundStyle(.secondary)
                 Spacer()
                 if chat.pendingSaveAttemptID != nil || chat.saveIssue != nil {
                     Button(label("retrySave", "重试保存（不重新生成）")) { Task { await chat.retrySave() } }
@@ -439,6 +848,8 @@ struct ChatWorkbenchView: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
+        .frame(maxWidth: ChatPresentationLayout.messageWidth)
+        .frame(maxWidth: .infinity)
         .padding(16)
         .dropDestination(for: URL.self) { urls, _ in
             let owner = session.id
@@ -452,11 +863,12 @@ struct ChatWorkbenchView: View {
             Image(systemName: item.reference.kind == .image ? "photo" : item.reference.kind == .video ? "film" : "doc.text")
             Text(item.name).lineLimit(1)
             Text(attachmentKind(item.reference.kind)).font(.caption).foregroundStyle(.secondary)
-            Button(label("preview", "预览")) { preview = item.reference }
+            Button(label("preview", "预览")) { present(.preview(item.reference)) }
             if removable {
                 Button(label("remove", "移除")) { perform(sessionID: sessionID) { try chat.removeAttachment(item.id, sessionID: sessionID) } }
             }
         }.font(.caption).padding(6).background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
+            .chatMeasured("attachment-\(item.id.uuidString)", probe: layoutProbe)
     }
 
     private func readiness(_ id: String) -> String {
@@ -621,8 +1033,35 @@ struct ChatWorkbenchView: View {
         } catch { report(error.localizedDescription, for: sessionID) }
     }
 
+    private func present(_ item: ChatDetail) {
+        // Close the actual narrow pane as well as its presentation state before
+        // replacing it with a detail sheet. Inline panes remain in place.
+        if sheets.narrowPanel != nil { closeNarrowPanel() }
+        sheets.present(item)
+    }
+
+    private func closeNarrowPanel(keepPreference: Bool = false) {
+        if !keepPreference {
+            switch sheets.narrowPanel {
+            case .sessions: showSidebar = false
+            case .inspector: showInspector = false
+            case nil: break
+            }
+        }
+        sheets.narrowPanel = nil
+        sheets.didDismissNarrowPanel()
+    }
+
+    private func createSession() {
+        do {
+            if let currentID = chat.state.selectedSessionID { saveScrollState(for: currentID) }
+            _ = try chat.newSession()
+            closeNarrowPanel()
+        } catch { report(error.localizedDescription, for: chat.state.selectedSessionID) }
+    }
+
     private func editSheet(_ edit: ChatEdit) -> some View {
-        ChatEditForm(edit: edit, onCancel: { editing = nil }, onCommit: { text in
+        ChatEditForm(edit: edit, onCancel: { sheets.detail = nil }, onCommit: { text in
             perform(sessionID: edit.sessionID) {
                 switch edit.kind {
                 case .rename: try chat.rename(edit.sessionID, title: text)
@@ -631,7 +1070,7 @@ struct ChatWorkbenchView: View {
                     _ = try chat.editUserMessage(id, text: text, sessionID: edit.sessionID)
                 }
             }
-            if issues[edit.sessionID] == nil { editing = nil }
+            if issues[edit.sessionID] == nil { sheets.detail = nil }
         })
     }
 }
