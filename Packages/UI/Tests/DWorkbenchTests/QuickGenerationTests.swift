@@ -280,6 +280,27 @@ struct QuickGenerationTests {
         try await quick.flush(); try await canvas.close(); try await store.close()
     }
 
+    @Test func switchingCategoryDuringGenerationPreservesSubmittingCategory() async throws {
+        let (store, engine, quick, canvas) = try await fixture()
+        let submitted = try #require(quick.draft)
+        quick.start()
+        quick.selectCategory(.image)
+        quick.select(operationID: "d.image.generate", modelID: "image:fixture")
+        let image = try #require(quick.draft)
+        quick.setParameter("promptText", value: .text("图像草稿"), draftID: image.id)
+        await quick.waitForCompletion()
+        #expect(quick.category == .image)
+        #expect(quick.visibleRuns.isEmpty)
+        #expect(quick.state.runs.last?.draft == submitted)
+        #expect(quick.state.runs.last?.status == .completed)
+        #expect(await engine.requests.count == 1)
+        quick.selectCategory(.text)
+        #expect(quick.visibleRuns.count == 1)
+        quick.selectCategory(.image)
+        #expect(quick.draft?.node.parameters["promptText"] == .text("图像草稿"))
+        try await quick.flush(); try await canvas.close(); try await store.close()
+    }
+
     @Test func cancelBeforeAdmissionDoesNotSubmitAndCanRunAgain() async throws {
         let (store, engine, quick, canvas) = try await fixture()
         quick.start(); await quick.cancel()

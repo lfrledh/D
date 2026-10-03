@@ -157,7 +157,7 @@ public struct DualWorkbenchView: View {
                                 HStack {
                                     Spacer()
                                     if quick.state.drafts.contains(where: { QuickCategory.category(for: $0.node.operationID) == .text }) {
-                                        Button("以前的单次文字记录…") { legacyTextVisible = true }
+                                        Button("单次文字生成与旧记录…") { legacyTextVisible = true }
                                             .accessibilityIdentifier("chat-legacy-quick")
                                     }
                                 }.padding(.horizontal, 20)
@@ -400,7 +400,7 @@ public struct DualWorkbenchView: View {
         returnToLibrary = false; libraryVisible = true
     }
     private var quickCommandEnabled: Bool {
-        entry == .quick && !quickOwnerIsChanging && quick.canStart && !libraryVisible && !projectsVisible && !compatibilityVisible &&
+        entry == .quick && quick.category != .text && !quickOwnerIsChanging && quick.canStart && !libraryVisible && !projectsVisible && !compatibilityVisible &&
         !languageVisible && !library.isPresented && previewAsset == nil && libraryInfo == nil &&
         filesRoute == nil && pendingFilesRoute == nil
     }
