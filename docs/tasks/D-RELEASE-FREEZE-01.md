@@ -430,3 +430,11 @@ RN=`run-20261002T160047Z-native-closeout`，相对本任务AgentTrials根。起�
 受限CLI初交线程`01a0fd5e-0b5b-7c63-bde6-a25322fe38bc`，修复1`01a0fd77-d5ad-7571-9470-2fceb1113066`，修复2`01a0fd84-723e-7083-8698-81158b09b265`，请求/运行上下文均gpt-6-sol/high、workspace-write、networkfalse；WT为`D-NATIVE-FILES-CLOSEOUT`，输出/tmp只在RN/files，公共.git不授权Worker。逐轮route、process、event-review可核。repair2一次rg误拼日志目录ENOENT，修正只读定位；不是权限拒绝/成功越界。未读凭据/改全局/访问用户素材。三个写运行墙钟1236.57/383.29/251.51秒；末次turn增量输入439184（含缓存395136）、输出8747（reasoning4235是其中分类），不重复累计。完整Lead消耗、服务端隐藏解析、订阅实际费用unknown，不复算旧批次或宣称最优成本。
 
 **恢复点**：所有自有Worker/CPU/build结束；诊断56184、普通前置57183已正常退出，新包59433锁屏停点后结束；旧D37434未操作。个人scheme内容/索引/未暂存状态和旧App四关键文件由最终保护回执核对；仅操作任务Fixtures，原模型/项目/候选保留。main获准正常接入、推送，当前图/聊天/新功能不在授权内。集中清单仅H22实体输入、H32桌面可用后代理原生和截图、旧视频本人质量；H31不重开。工程修补完成不等于功能冻结通过或正式发布。
+
+## 2026-10-03 集中验收恢复与H22定点接管（进行中）
+
+RH=`D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261003T015601Z-human-closeout`。基线a3c5b091de6e5af5bad0a1365d09ff80306d0cef，普通App代码1e2501f。用户返回后，诊断ON及同二进制/同session/单窗OFF均真人复现未确认拼音消失，H22-C现已在D复现；旧A/B缺陷不追认已修。用户要求用完关闭测试窗口/终端，已正常退出旧自有测试版37434和OFF实例64649，ON实例64007定点SIGTERM，真实数据/产物不删除。
+
+Lead启动一次有界H22局部修补；允许仅QuickGenerationView的多行字段与直接回归，不整体替换文本系统、强制光标、抢焦点或清组字。既有TextSourcesQuestionEditor复用，以draftID+fieldID隔离所有者。新增QuickCompositionTests用实际QuickParameterField和真实QuickGenerationController/Store，原实现在无窗口变化、仅保存revision的对照下失败；两次失败分别11/9个断言保留RH/lead/h22-before*.log。后续同用例+所有者切换/Unicode/持久化复验及真人检查分别记录，不把hosting当真人。非实现者复核在Lead修补后进行；旧FILES-UI与Sol两轮预算不重置。本轮文件原生验收继续复用既有正常包/夹具，不重跑模型。
+
+H22局部修补后，RH/lead/h22-after：UI实际hosting5项（含新增Quick字段与已有composition）和Workbench Quick19项通过，7.707秒；未跑GPU。新增用例先在未修控件失败，再用相同契约通过；附加草稿切换不串写和保存冷重开。此时仍待普通App真人与非实现者复核，不提前关闭H22-A/B。测试时HEAD为a3c5b09加本提交差异，不冒称旧提交原样通过。

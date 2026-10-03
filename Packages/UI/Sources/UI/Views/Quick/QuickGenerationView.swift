@@ -53,7 +53,7 @@ struct QuickGenerationView: View {
                         Text(baselineText(language, "label.39a07dc80743", fallback: "创作输入")).font(.headline)
                         if let definition, let draft = quick.draft {
                             ForEach(definition.fields.filter { ["task", "promptText"].contains($0.id) }) { field in
-                                QuickParameterField(operationID: draft.node.operationID, field: field, value: draft.node.parameters[field.id] ?? field.defaultValue,
+                                QuickParameterField(ownerID: draft.id, operationID: draft.node.operationID, field: field, value: draft.node.parameters[field.id] ?? field.defaultValue,
                                     onChange: { quick.setParameter(field.id, value: $0, draftID: draft.id) }, raw: draft.fieldText[field.id], onRaw: { quick.setFieldText(field.id, text: $0, draftID: draft.id) })
                             }
                             if definition.inputs.contains(where: { $0.id == "content" && $0.assetListKind == nil && $0.kinds.contains(.text) }) {
@@ -109,7 +109,7 @@ struct QuickGenerationView: View {
                             DisclosureGroup(baselineText(language, "label.44455611b910", fallback: "高级设置"), isExpanded: $advanced) {
                                 VStack(alignment: .leading, spacing: 14) {
                                     ForEach(definition.fields.filter { !["modelID", "task", "promptText", "count"].contains($0.id) }) { field in
-                                        QuickParameterField(operationID: draft.node.operationID, field: field, value: draft.node.parameters[field.id] ?? field.defaultValue,
+                                        QuickParameterField(ownerID: draft.id, operationID: draft.node.operationID, field: field, value: draft.node.parameters[field.id] ?? field.defaultValue,
                                             onChange: { quick.setParameter(field.id, value: $0, draftID: draft.id) }, raw: draft.fieldText[field.id], onRaw: { quick.setFieldText(field.id, text: $0, draftID: draft.id) })
                                     }
                                     if WorkflowModelRoutes.isLanguage(draft.node.operationID),
@@ -314,7 +314,8 @@ private struct QuickInputAssetName: View {
     }
 }
 
-private struct QuickParameterField: View {
+struct QuickParameterField: View {
+    let ownerID: String
     let operationID: String
     let field: WorkflowFieldDefinition
     let value: WorkflowScalar
@@ -328,7 +329,15 @@ private struct QuickParameterField: View {
             Text(title).font(.subheadline)
             switch field.kind {
             case .text(let multiline):
-                if multiline { TextEditor(text: stringBinding).frame(minHeight: 130).padding(6).background(.quaternary, in: RoundedRectangle(cornerRadius: 9)) }
+                if multiline {
+                    // Reuse the existing composition-safe editor: a save revision
+                    // must not write the last committed value over marked text.
+                    TextSourcesQuestionEditor(value: value.string ?? "", editEpoch: 0, isEditable: true,
+                        accessibilityIdentifier: "quick-field-" + field.id,
+                        onEdit: { onChange(.text($0)) })
+                        .id([ownerID, field.id])
+                        .frame(minHeight: 130).padding(6).background(.quaternary, in: RoundedRectangle(cornerRadius: 9))
+                }
                 else { TextField(title, text: stringBinding).textFieldStyle(.roundedBorder) }
             case .choice(let options):
                 Picker(title, selection: stringBinding) { ForEach(options, id: \.self) { Text(WorkflowCanvasPresentation.choiceTitle(fieldID: field.id, value: $0, language: language)).tag($0) } }.labelsHidden()
