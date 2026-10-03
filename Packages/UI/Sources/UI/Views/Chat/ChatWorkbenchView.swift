@@ -1101,6 +1101,9 @@ struct ChatWorkbenchView: View {
                         }
                     }
                     if message.role == .assistant {
+                        Button(newLabel("readAnswer", english: "Read aloud with system voice", chinese: "使用系统声音朗读")) {
+                            perform(sessionID: session.id) { try chat.speech.speak(answerText) }
+                        }.disabled(chat.speechPlaybackState != .idle)
                         Button(newLabel("editAdopt", english: "Edit and adopt…", chinese: "编辑并采用…")) {
                             present(.edit(ChatEdit(kind: .answer, sessionID: session.id,
                                                    messageID: message.id, text: answerText)))
@@ -1260,6 +1263,8 @@ struct ChatWorkbenchView: View {
                 onEdit: { value in perform(sessionID: session.id) { try chat.updateDraft(value, sessionID: session.id) } })
                 .id(session.id.uuidString + ":draft")
                 .frame(minHeight: 80, idealHeight: 110)
+            ChatSpeechPanel(chat: chat, project: model.projectSession, sessionID: session.id)
+                .id(session.id.uuidString + ":speech")
             Text(label("dropFiles", "可拖入 TXT、MD、图像或视频；Enter 换行。"))
                 .font(.caption).foregroundStyle(.secondary)
             HStack {

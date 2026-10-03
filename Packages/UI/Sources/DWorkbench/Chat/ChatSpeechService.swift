@@ -239,8 +239,15 @@ public final class ChatSpeechService: NSObject, AVSpeechSynthesizerDelegate {
     private var selectedVoiceID: String?
     private var selectedLanguage: String = AVSpeechSynthesisVoice.currentLanguageCode()
     private var selectedRate: Float = AVSpeechUtteranceDefaultSpeechRate
+    private var playbackDrain: [CheckedContinuation<Void, Never>] = []
     public private(set) var playbackState: ChatSpeechPlaybackState = .idle {
-        didSet { if playbackState != oldValue { onPlaybackStateChange?(playbackState) } }
+        didSet {
+            if playbackState != oldValue { onPlaybackStateChange?(playbackState) }
+            if playbackState == .idle {
+                let waiting = playbackDrain; playbackDrain.removeAll()
+                for continuation in waiting { continuation.resume() }
+            }
+        }
     }
     public var onPlaybackStateChange: (@MainActor (ChatSpeechPlaybackState) -> Void)?
     public private(set) var recognitionState: ChatSpeechRecognitionState = .idle {
@@ -415,6 +422,13 @@ public final class ChatSpeechService: NSObject, AVSpeechSynthesizerDelegate {
             utterance = nil
             playbackState = .idle
         }
+    }
+
+    /// Closing waits for this synthesizer's terminal acknowledgment, including paused speech.
+    public func stopSpeechAndWait() async {
+        stopSpeech()
+        guard playbackState != .idle else { return }
+        await withCheckedContinuation { playbackDrain.append($0) }
     }
 
     nonisolated public func speechSynthesizer(

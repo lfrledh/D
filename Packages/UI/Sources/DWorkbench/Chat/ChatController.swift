@@ -34,6 +34,21 @@ import Observation
     @ObservationIgnored private var diskRevision: UInt64 = 0
     @ObservationIgnored private var mutation: UInt64 = 0
     @ObservationIgnored private var savedMutation: UInt64 = 0
+    @ObservationIgnored private var speechService: ChatSpeechService?
+    @ObservationIgnored private var speechTask: Task<Void, Error>?
+    public private(set) var isTranscribing = false
+    public private(set) var speechRecognitionState: ChatSpeechRecognitionState = .idle
+    public private(set) var speechPlaybackState: ChatSpeechPlaybackState = .idle
+    public var speechDrafts: [UUID: ChatAttachment] { Dictionary(uniqueKeysWithValues: state.sessions.compactMap { session in session.pendingSpeechDraft.map { (session.id, $0) } }) }
+    public var speech: ChatSpeechService {
+        if let speechService { return speechService }
+        let service = ChatSpeechService()
+        service.onRecognitionStateChange = { [weak self] in self?.speechRecognitionState = $0 }
+        service.onPlaybackStateChange = { [weak self] in self?.speechPlaybackState = $0 }
+        speechService = service
+        return service
+    }
+    public var isBusy: Bool { isRunning || isTranscribing || speechPlaybackState != .idle }
     public private(set) var isCancelling = false
     /// Publication retries are busy but are not a cancellable model run.
     public var canStopGeneration: Bool { isRunning && activeAttemptID != nil }
@@ -114,7 +129,7 @@ import Observation
     /// finish/save first; recheck after the actor hop used by sidecar publication.
     public func prepareForBackup() async throws {
         func requireDurableBoundary() throws {
-            guard !isRunning else { throw WorkflowIssue("聊天仍在生成或停止中，请待资源释放后再备份。") }
+            guard !isBusy else { throw WorkflowIssue("聊天仍在生成、语音处理或停止中，请待资源释放后再备份。") }
             guard pendingSaveAttemptID == nil else {
                 throw WorkflowIssue("聊天回答尚未写入项目，请先在文字页重试保存；原记录和生成结果仍保留。")
             }
@@ -694,6 +709,66 @@ import Observation
         }
         changed()
     }
+    /// The SDK receives only a verified local original. No cloud fallback or automatic send.
+    public func transcribeSpeech(_ reference: WorkflowAssetReference, sessionID: UUID,
+                                 locale: String) async throws {
+        try requireLoaded(); let captured = state.sessions[try index(sessionID)]
+        guard allowsSubmission(), !isRunning, !isTranscribing, !captured.archived,
+              captured.contextChoices?.deletedAt == nil, reference.kind == .audio else { throw WorkflowIssue("当前不能开始本地转写。") }
+        isTranscribing = true
+        let service = speech
+        let task = Task { @MainActor [self] in
+            let (url, _) = try await store.workflowMedia(reference)
+            _ = try await store.workflowData(reference)
+            try Task.checkCancellation()
+            let result = try await service.transcribeFile(at: url, localeIdentifier: locale)
+            try Task.checkCancellation()
+            let i = try index(sessionID)
+            guard allowsSubmission(), !state.sessions[i].archived, state.sessions[i].contextChoices?.deletedAt == nil else {
+                throw WorkflowIssue("会话已关闭；转写没有写入其他会话。")
+            }
+            let asset = try await store.publishWorkflowAsset(data: Data(result.text.utf8), mediaType: "text/plain",
+                name: "语音转写", parents: [reference], operationID: "d.chat.local-transcription",
+                details: ["recognition.route": result.route, "recognition.locale": result.localeIdentifier])
+            try Task.checkCancellation()
+            let current = try index(sessionID)
+            guard allowsSubmission(), !state.sessions[current].archived, state.sessions[current].contextChoices?.deletedAt == nil else {
+                throw WorkflowIssue("会话已关闭，原件与转写资产仍保留。")
+            }
+            state.sessions[current].pendingSpeechDraft = .init(name: "语音转写原稿", reference: asset.record.reference,
+                textSnapshot: result.text, sourceOnly: true)
+            changed(); try await flush()
+        }
+        speechTask = task
+        defer { speechTask = nil; isTranscribing = false }
+        try await withTaskCancellationHandler { try await task.value } onCancel: { task.cancel() }
+    }
+    public func cancelSpeechTranscription() async {
+        speechTask?.cancel(); speechService?.cancelTranscription()
+        _ = try? await speechTask?.value
+    }
+    public func adoptSpeechDraft(sessionID: UUID) throws {
+        try requireLoaded(); let i = try index(sessionID)
+        guard let original = speechDrafts[sessionID], let text = original.textSnapshot,
+              !state.sessions[i].archived, state.sessions[i].contextChoices?.deletedAt == nil else { throw WorkflowIssue("没有可采用的语音转写。") }
+        let updated = state.sessions[i].draft + (state.sessions[i].draft.isEmpty ? "" : "\n") + text
+        guard updated.utf8.count <= 1_048_576, state.sessions[i].attachments.count < 32 else { throw WorkflowIssue("草稿或来源数量已达上限；原转写仍保留。") }
+        state.sessions[i].draft = updated
+        state.sessions[i].attachments.append(original)
+        state.sessions[i].pendingSpeechDraft = nil; changed()
+    }
+    public func discardSpeechDraft(sessionID: UUID) throws {
+        try requireLoaded(); state.sessions[try index(sessionID)].pendingSpeechDraft = nil; changed()
+    }
+
+    /// Project shutdown owns all chat activities. The composer Stop only cancels generation.
+    public func cancelAll() async {
+        speechTask?.cancel(); speechService?.cancelTranscription(); speechService?.stopSpeech()
+        await cancel()
+        await cancelSpeechTranscription()
+        await speechService?.stopSpeechAndWait()
+    }
+
     public func cancel() async {
         guard let task = runTask else { return }
         if !isCancelling {
@@ -750,7 +825,7 @@ import Observation
     }
     public func prepareForTermination() async throws {
         guard isLoaded else { return }
-        guard !isRunning, pendingSaveAttemptID == nil else { throw WorkflowIssue("聊天仍在运行或有待保存结果。") }
+        guard !isBusy, pendingSaveAttemptID == nil else { throw WorkflowIssue("聊天仍在运行、播放或有待保存结果。") }
         try await flush()
     }
     public func exportSelectedPath(sessionID: UUID, markdown: Bool = true) throws -> String {

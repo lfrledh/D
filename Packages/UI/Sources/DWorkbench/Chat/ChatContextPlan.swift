@@ -94,7 +94,7 @@ public struct ChatContextPlan: Sendable, Equatable {
             try excerpt.validate()
             parts.append(.init(type: "text", text: excerpt.promptText, index: nil))
         }
-        for item in attachments {
+        for item in attachments where item.sourceOnly != true {
             switch item.reference.kind {
             case .text, .document:
                 guard let snapshot = item.textSnapshot else { throw WorkflowIssue("文字附件缺少冻结快照。") }

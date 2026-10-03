@@ -2,6 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>将您明确选择或录制的语音在本机转成待发送文字；不自动发送到聊天。</string>
     <key>NSMicrophoneUsageDescription</key>
     <string>D 会在你点击开始录音后录制哼唱或声音灵感，并保存在本地项目中。</string>
     <key>CFBundleDocumentTypes</key>

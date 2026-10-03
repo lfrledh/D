@@ -8,10 +8,12 @@ public struct ChatAttachment: Codable, Sendable, Equatable, Identifiable {
     /// Exact UTF-8 source material captured when the attachment was admitted.
     public let textSnapshot: String?
     public let documentSnapshot: ChatDocumentSnapshot?
+    /// Provenance retained with the draft; content is represented by the editable draft text.
+    public let sourceOnly: Bool?
     public init(id: UUID = UUID(), name: String, reference: WorkflowAssetReference, textSnapshot: String? = nil,
-                documentSnapshot: ChatDocumentSnapshot? = nil) {
+                documentSnapshot: ChatDocumentSnapshot? = nil, sourceOnly: Bool? = nil) {
         self.id = id; self.name = name; self.reference = reference; self.textSnapshot = textSnapshot
-        self.documentSnapshot = documentSnapshot
+        self.documentSnapshot = documentSnapshot; self.sourceOnly = sourceOnly
     }
 }
 
@@ -77,6 +79,7 @@ public struct ChatSession: Codable, Sendable, Equatable, Identifiable {
     public var originSessionID: UUID?
     public var originLeafID: UUID?
     public var contextChoices: ChatContextChoices?
+    public var pendingSpeechDraft: ChatAttachment?
     public var knowledgeScope: [UUID]?
     public var knowledgeExcerpts: [ChatKnowledgeExcerpt]?
     public init(id: UUID = UUID(), title: String = "新对话") { self.id = id; self.title = title }
@@ -151,6 +154,10 @@ public struct ChatState: Codable, Sendable, Equatable {
             if let node = session.configuration { try Self.validateNode(node) }
             try session.contextChoices?.validate(messages: session.messages)
             try Self.validateAttachments(session.attachments)
+            if let pending = session.pendingSpeechDraft {
+                try Self.validateAttachments([pending])
+                guard pending.sourceOnly == true else { throw WorkflowIssue("语音原稿必须是明确的来源引用。") }
+            }
             if let scope = session.knowledgeScope {
                 guard scope.count <= 64, Set(scope).count == scope.count,
                       Set(scope).isSubset(of: Set(documents.map(\.id))) else {
@@ -215,6 +222,7 @@ public struct ChatState: Codable, Sendable, Equatable {
         for item in items {
             guard !item.name.isEmpty, item.name.utf8.count <= 512,
                   [.text, .image, .video, .document].contains(item.reference.kind),
+                  item.sourceOnly != true || item.reference.kind == .text,
                   (item.textSnapshot?.utf8.count ?? 0) <= 524_288,
                   ([.text, .document].contains(item.reference.kind)) == (item.textSnapshot != nil),
                   (item.reference.kind == .document) == (item.documentSnapshot != nil) else {

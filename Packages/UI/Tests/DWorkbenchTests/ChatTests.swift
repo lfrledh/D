@@ -382,6 +382,38 @@ struct ChatTests {
         try await chat.flush(); try await store.close()
     }
 
+    @Test func reviewedSpeechAppendsToEditedDraftAndPersistsSourceWithoutDuplicatingPrompt() async throws {
+        let (store, _, original) = try await fixture()
+        let id = try original.newSession(); try configure(original, session: id)
+        try await original.flush()
+        let text = "原声转写 👩🏽‍🎨 e\u{301}"
+        let reference = try await store.publishWorkflowAsset(data: Data(text.utf8), mediaType: "text/plain",
+            name: "Transcript", operationID: "d.chat.local-transcription").record.reference
+        var saved = try await store.chatState()
+        saved.sessions[0].pendingSpeechDraft = .init(name: "Transcript", reference: reference, textSnapshot: text, sourceOnly: true)
+        _ = try await store.saveChatState(saved, expectedRevision: saved.revision)
+        let chat = ChatController(store: store) { throw WorkflowIssue("No inference in this test") }
+        await chat.load()
+        try chat.updateDraft("手写的新草稿", sessionID: id)
+        try chat.adoptSpeechDraft(sessionID: id)
+        let session = try #require(chat.selectedSession)
+        #expect(session.draft == "手写的新草稿\n" + text)
+        #expect(session.pendingSpeechDraft == nil && session.attachments.first?.sourceOnly == true)
+        let plan = try ChatContextPlan.build(path: [], attempts: [], prompt: session.draft,
+            attachments: session.attachments, system: "")
+        #expect(!plan.messagesJSON.contains("Source material"))
+        #expect(throws: (any Error).self) { try chat.adoptSpeechDraft(sessionID: id) }
+        try await chat.prepareForBackup()
+        let backup = store.rootURL.deletingLastPathComponent().appendingPathComponent("speech.dbackup")
+        _ = try await store.createBackup(at: backup)
+        let restoredURL = backup.deletingLastPathComponent().appendingPathComponent("SpeechRestored.dproject")
+        _ = try await ProjectStore.restoreBackup(at: backup, to: restoredURL)
+        let restored = try await ProjectStore.open(at: restoredURL)
+        #expect(try await restored.chatState().sessions.first?.attachments == session.attachments)
+        #expect(try await restored.workflowData(reference) == Data(text.utf8))
+        try await restored.close(); try await store.close()
+    }
+
     private func fixture(preview: (@Sendable (ModelReference, TextRequest) async throws -> TextTemplatePreview)? = nil) async throws -> (ProjectStore, ChatFixtureEngine, ChatController) {
         let root = URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory())
             .appendingPathComponent("Chat-" + UUID().uuidString)

@@ -259,6 +259,8 @@ public final class ProjectSession {
     public private(set) var isRegisteringAudioModel = false
     public let audioCreationTransport: AudioTransport
     public private(set) var workflowRecordingNodeID: UUID?
+    public private(set) var chatRecordingSessionID: UUID?
+    @ObservationIgnored private var chatCapture: (id: UUID, chat: ChatController, store: ProjectStore, audio: ProjectAudioController, identity: AudioCaptureHandle?, locale: String)?
     @ObservationIgnored private var workflowCapture: (id: UUID, controller: WorkflowController, target: WorkflowAssetBindingTarget, audio: ProjectAudioController, admitted: Bool, identity: AudioCaptureHandle?)?
     public private(set) var workflowPreviewReference: WorkflowAssetReference?
     @ObservationIgnored private var workflowPreviewRequestID: UUID?
@@ -375,7 +377,7 @@ public final class ProjectSession {
     @ObservationIgnored private var textModelLease: LocationAccess.Lease?
     @ObservationIgnored private var textWork: Task<Void, Never>?
     @ObservationIgnored private var textContextID = UUID()
-    public var isBusy: Bool { chat?.isRunning == true || projectQuick?.isRunning == true || workflow?.isRunning == true || workflow?.isSaving == true || !activeJobIDs.isEmpty || isTextWorking || textSources?.isSaving == true || audio?.isBusy == true }
+    public var isBusy: Bool { chat?.isBusy == true || chatCapture != nil || projectQuick?.isRunning == true || workflow?.isRunning == true || workflow?.isSaving == true || !activeJobIDs.isEmpty || isTextWorking || textSources?.isSaving == true || audio?.isBusy == true }
     public var canGenerate: Bool {
         creatorMode == .image && manifest != nil && activeDocument?.kind == .image && !isTextWorking && ((selectedModelID != nil && selectedModelReady) || modelLease != nil)
         && !isChangingProject && !showingAllArtworks && !closePending && pendingSaves.isEmpty
@@ -690,7 +692,7 @@ public final class ProjectSession {
             return
         }
         guard !isRegisteringTextModel, !isRegisteringAudioModel, !isRegisteringVideoModel, text?.hasPendingCandidate != true,
-              await audio?.prepareForNavigation() != false, await drainForClose() else {
+              await prepareOwnedAudioNavigation(), await drainForClose() else {
             audio?.resumeAdmissions()
             await access.release(lease)
             errorMessage = "请先完成模型校验并处理文字候选，再重新定位项目。"
@@ -1984,7 +1986,7 @@ public final class ProjectSession {
     }
 
     public func startAudioRecording(name: String) async -> Bool {
-        guard workflowCapture == nil else { return false }
+        guard workflowCapture == nil, chatCapture == nil else { return false }
         guard audioRecordingEnabled else {
             errorMessage = "无法开始录音。\n当前项目会话未启用录音能力。"
             return false
@@ -1997,13 +1999,48 @@ public final class ProjectSession {
         return result
     }
 
+    public func startChatRecording(sessionID: UUID, controller: ChatController, locale: String) async {
+        guard chat === controller, !isBusy, !isChangingProject, !closePending, audioRecordingEnabled,
+              let store, let audio, workflowCapture == nil, chatCapture == nil else { return }
+        let id = UUID()
+        chatCapture = (id, controller, store, audio, nil, locale); chatRecordingSessionID = sessionID
+        do {
+            try await flushDraft(to: store)
+            await drainVideoPreview(); audioCreationTransport.stopPlayback()
+            guard chat === controller, self.store === store, chatCapture?.id == id else { return }
+            let identity = await audio.startRecordingWithIdentity(name: "聊天语音原声")
+            guard chatCapture?.id == id else { return }
+            guard let identity else { throw WorkflowIssue(audio.errorMessage ?? "录音未开始。") }
+            chatCapture?.identity = identity
+        } catch {
+            if chatCapture?.id == id { chatCapture = nil; chatRecordingSessionID = nil }
+            report(error, context: "聊天录音未开始")
+        }
+    }
+    public func finishChatRecording() async {
+        guard let capture = chatCapture, let owner = chatRecordingSessionID else { return }
+        do {
+            guard let identity = capture.identity else {
+                _ = await capture.audio.finishRecording()
+                if chatCapture?.id == capture.id { chatCapture = nil; chatRecordingSessionID = nil }
+                return
+            }
+            let assetID = try await capture.audio.finishRecordingAsset(identity)
+            guard chatCapture?.id == capture.id else { return }
+            chatCapture = nil; chatRecordingSessionID = nil
+            guard chat === capture.chat, store === capture.store else { return }
+            let reference = try await capture.store.pinWorkflowAsset(assetID)
+            try await capture.chat.transcribeSpeech(reference, sessionID: owner, locale: capture.locale)
+        } catch { report(error, context: "原录音已保留；聊天转写未完成") }
+    }
+
     public func startWorkflowRecording(nodeID: UUID, controller: WorkflowController) async {
         guard workflow === controller else { return }
         guard navigationReady() else {
             controller.errorMessage = errorMessage
             return
         }
-        guard workflow === controller, workflowCapture == nil, !controller.isRunning,
+        guard workflow === controller, workflowCapture == nil, chatCapture == nil, !controller.isRunning,
               audioRecordingEnabled, let store, let audio,
               let target = controller.assetBindingTarget(nodeID: nodeID), !audio.isBusy, !isChangingProject, !closePending else { return }
         let id = UUID()
@@ -2482,7 +2519,7 @@ public final class ProjectSession {
               workflow?.hasPendingSaves != true, chat?.pendingSaveAttemptID == nil, text?.hasPendingCandidate != true else { return false }
         closePending = true; isChangingProject = true
         defer { closePending = false; isChangingProject = false; workflow?.cancelClosing(); audio?.resumeAdmissions() }
-        guard await audio?.prepareForNavigation() != false, await drainForClose() else { return false }
+        guard await prepareOwnedAudioNavigation(), await drainForClose() else { return false }
         do {
             try await workflow?.prepareForClose()
             try await chat?.prepareForTermination()
@@ -2511,7 +2548,7 @@ public final class ProjectSession {
         closePending = true
         isChangingProject = true
         defer { closePending = false; isChangingProject = false }
-        guard await audio?.prepareForNavigation() != false else {
+        guard await prepareOwnedAudioNavigation() else {
             if let message = audio?.errorMessage { errorMessage = message }
             return false
         }
@@ -2526,7 +2563,7 @@ public final class ProjectSession {
             if selected == .cancel {
                 await workflow?.cancel()
                 await projectQuick?.cancel()
-                await chat?.cancel()
+                await chat?.cancelAll()
                 await cancelTextRewrite()
                 for id in activeJobIDs { await cancel(id) }
             }
@@ -2541,13 +2578,13 @@ public final class ProjectSession {
         closePending = true
         isChangingProject = true
         defer { closePending = false; isChangingProject = false }
-        guard await audio?.prepareForNavigation() != false else {
+        guard await prepareOwnedAudioNavigation() else {
             if let message = audio?.errorMessage { errorMessage = message }
             return false
         }
         await workflow?.cancel()
         await projectQuick?.cancel()
-        await chat?.cancel()
+        await chat?.cancelAll()
         await cancelTextRewrite()
         for id in activeJobIDs { await cancel(id) }
         while isBusy { try? await Task.sleep(for: .milliseconds(100)) }
@@ -2672,6 +2709,17 @@ public final class ProjectSession {
         return true
     }
 
+    /// Audio navigation publishes the recording before releasing this chat's capture owner.
+    /// Closing or changing documents must not start recognition as a side effect.
+    private func prepareOwnedAudioNavigation() async -> Bool {
+        let capturedID = chatCapture?.id
+        guard await audio?.prepareForNavigation() != false else { return false }
+        if let capturedID, chatCapture?.id == capturedID {
+            chatCapture = nil; chatRecordingSessionID = nil
+        }
+        return true
+    }
+
     private func prepareAudioNavigation() async throws {
         await drainVideoPreview()
         audioCreationTransport.stopPlayback()
@@ -2679,7 +2727,7 @@ public final class ProjectSession {
         if let id = activeDocumentID, activeDocument?.audioDraft != nil, let store {
             applyManifest(try await store.invalidatePitchCandidates(documentID: id))
         }
-        guard await audio?.prepareForNavigation() != false else {
+        guard await prepareOwnedAudioNavigation() else {
             throw ProjectStoreError.invalidTransition
         }
     }

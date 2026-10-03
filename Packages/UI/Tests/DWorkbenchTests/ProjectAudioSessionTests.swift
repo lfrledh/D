@@ -302,11 +302,49 @@ struct ProjectAudioSessionTests {
         #expect(await subject.requestClose())
     }
 
+    @Test func closingChatCapturePublishesOriginalAndReleasesChatOwnerWithoutRecognition() async throws {
+        let f = try fixture("ChatCaptureClose"); defer { cleanup(f) }
+        let factory = SessionAudioFactory(), subject = session(f, factory: factory, recording: true)
+        await subject.createProject(at: f.project); await subject.enableProjectQuick()
+        let chat = try #require(subject.chat)
+        let id = try chat.newSession()
+        await subject.startChatRecording(sessionID: id, controller: chat, locale: "en_US")
+        #expect(subject.chatRecordingSessionID == id)
+        #expect(subject.isBusy)
+        let recorder = try #require(factory.recordings.last)
+        #expect(await subject.cancelAndCloseProject())
+        #expect(subject.chatRecordingSessionID == nil)
+        #expect(recorder.stopCount == 1)
+        #expect(!chat.isTranscribing && chat.speechDrafts.isEmpty)
+        let reopened = try await ProjectStore.open(at: f.project)
+        let manifest = try await reopened.snapshot()
+        #expect(manifest.assets.contains { $0.metadata.audio?.origin == .microphone })
+        #expect(try await reopened.chatState().sessions.first?.pendingSpeechDraft == nil)
+        try await reopened.close()
+    }
+
     private struct Fixture {
         let root: URL
         let project: URL
         let settings: UserDefaults
         let settingsName: String
+    }
+
+    @Test func closingChatWhilePermissionWaitsRejectsLateRecordingStart() async throws {
+        let f = try fixture("ChatCapturePermission"); defer { cleanup(f) }
+        let factory = SessionAudioFactory(); factory.suspendPermission = true
+        let subject = session(f, factory: factory, recording: true)
+        await subject.createProject(at: f.project); await subject.enableProjectQuick()
+        let chat = try #require(subject.chat), id = try chat.newSession()
+        let starting = Task { await subject.startChatRecording(sessionID: id, controller: chat, locale: "en_US") }
+        try await waitUntil { factory.permissionContinuation != nil }
+        #expect(await subject.cancelAndCloseProject())
+        #expect(subject.chatRecordingSessionID == nil)
+        factory.resolvePermission(true); await starting.value
+        #expect(factory.recordings.isEmpty && !chat.isTranscribing)
+        let reopened = try await ProjectStore.open(at: f.project)
+        #expect(await reopened.snapshot().pendingAudioCaptures.count == 1)
+        try await reopened.close()
     }
 
     private func fixture(_ name: String) throws -> Fixture {
