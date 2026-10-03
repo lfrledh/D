@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 
 /// One process-wide observation per installed copy. Execution still uses the
@@ -21,6 +22,8 @@ import Foundation
         let size: Int
         let modified: Date?
         let fileID: String
+        let changedSeconds: Int64?
+        let changedNanoseconds: Int64?
     }
 
     private struct Pending {
@@ -48,21 +51,28 @@ import Foundation
                 throw WorkflowIssue("模型必要文件缺失或不是普通文件。")
             }
             return FileStamp(path: file.path, size: size, modified: values.contentModificationDate,
-                             fileID: String(describing: values.fileResourceIdentifier ?? ""))
+                             fileID: values.fileResourceIdentifier.map { String(describing: $0) } ?? "",
+                             changedSeconds: nil, changedNanoseconds: nil)
         }
     }
 
     static func stamps(in directory: URL) throws -> [FileStamp] {
-        let keys: Set<URLResourceKey> = [.fileSizeKey, .contentModificationDateKey, .fileResourceIdentifierKey]
         func stamp(_ url: URL) throws -> FileStamp {
-            let values = try url.resourceValues(forKeys: keys)
-            return FileStamp(path: String(url.path.dropFirst(directory.path.count)), size: values.fileSize ?? -1,
-                             modified: values.contentModificationDate,
-                             fileID: String(describing: values.fileResourceIdentifier ?? ""))
+            var info = stat()
+            guard lstat(url.path, &info) == 0,
+                  (info.st_mode & S_IFMT == S_IFREG || info.st_mode & S_IFMT == S_IFDIR) else {
+                throw WorkflowIssue("模型目录含不可检查的文件或链接。")
+            }
+            return FileStamp(path: String(url.path.dropFirst(directory.path.count)), size: Int(info.st_size),
+                             modified: Date(timeIntervalSince1970: Double(info.st_mtimespec.tv_sec) +
+                                 Double(info.st_mtimespec.tv_nsec) / 1_000_000_000),
+                             fileID: "\(info.st_dev):\(info.st_ino):\(info.st_mode & S_IFMT)",
+                             changedSeconds: Int64(info.st_ctimespec.tv_sec),
+                             changedNanoseconds: Int64(info.st_ctimespec.tv_nsec))
         }
         var result = [try stamp(directory)]
         var traversalError: Error?
-        guard let files = FileManager.default.enumerator(at: directory, includingPropertiesForKeys: Array(keys),
+        guard let files = FileManager.default.enumerator(at: directory, includingPropertiesForKeys: nil,
                                                          errorHandler: { _, error in traversalError = error; return false }) else {
             throw WorkflowIssue("模型目录当前无法检查。")
         }

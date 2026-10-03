@@ -1209,6 +1209,7 @@ public final class ProjectSession {
     public private(set) var explicitModelIssues: [String: String] = [:]
     public private(set) var explicitModelChecking: Set<String> = []
     @ObservationIgnored private var modelReadinessGeneration = UUID()
+    @ObservationIgnored private var modelReadinessRequests: [String: UUID] = [:]
     @ObservationIgnored private var modelAvailabilityRevision: UInt64 = 0
     /// Only dependencies of the currently open graph are requested by the host.
     /// Nested control bodies and pinned tool bodies belong to that graph.
@@ -1255,12 +1256,22 @@ public final class ProjectSession {
                     WorkflowModelReadiness.invalidate(.init(library: ObjectIdentifier(library), installation: id,
                                                             identity: identity))
                 }
+                modelReadinessRequests[identity] = nil
                 explicitModelChecking.remove(identity)
                 explicitModelReadiness[identity] = record?.state == .preparationRequired ? .unprepared : .unavailable
                 explicitModelIssues[identity] = record?.error ?? (record?.state == .preparationRequired
                     ? "模型原始文件已校验，仍需准备执行引擎。" : "模型安装已不可用，请在模型库检查。")
             }
         } catch { workflow?.errorMessage = error.localizedDescription }
+    }
+    private func workflowBindingMatches(_ choice: WorkflowModelChoice, installation: ModelID?, bookmark: Data?) -> Bool {
+        do {
+            let bookmarks = WorkflowModelBookmarks(settings: settings)
+            guard try bookmarks.installation(for: choice.id) == installation else { return false }
+            if installation != nil { return true }
+            let current = try bookmarks.entries().first { $0.identity == choice.id && $0.kind == choice.kind }
+            return current?.bookmark == bookmark
+        } catch { return false }
     }
     /// Passing identities requests only visible Quick/graph dependencies. The
     /// no-argument form is the deliberate full-library inspection.
@@ -1276,9 +1287,26 @@ public final class ProjectSession {
         }
         for choice in choices {
             guard !Task.isCancelled, store === capturedStore, modelReadinessGeneration == generation else { return }
+            let request = UUID()
+            modelReadinessRequests[choice.id] = request
+            defer {
+                if modelReadinessRequests[choice.id] == request {
+                    modelReadinessRequests[choice.id] = nil
+                    explicitModelChecking.remove(choice.id)
+                }
+            }
             var rawNeedsPreparation = false
+            var checkedInstallation: ModelID?
+            var checkedBookmark: Data?
             do {
-                let installation = try WorkflowModelBookmarks(settings: settings).installation(for: choice.id)
+                let bookmarks = WorkflowModelBookmarks(settings: settings)
+                let installation = try bookmarks.installation(for: choice.id)
+                checkedInstallation = installation
+                if installation == nil {
+                    checkedBookmark = try bookmarks.entries().first {
+                        $0.identity == choice.id && $0.kind == choice.kind
+                    }?.bookmark
+                }
                 if let installation, let library = modelLibrary {
                     let snapshot = await library.snapshot()
                     guard snapshot.revision >= modelAvailabilityRevision,
@@ -1290,7 +1318,9 @@ public final class ProjectSession {
                     let key = WorkflowModelReadiness.Key(library: ObjectIdentifier(library),
                                                          installation: installation, identity: choice.id)
                     let cached = WorkflowModelReadiness.hasSuccess(key, stamps: stamps)
-                    guard store === capturedStore, modelReadinessGeneration == generation, !isChangingProject,
+                    guard modelReadinessRequests[choice.id] == request,
+                          workflowBindingMatches(choice, installation: installation, bookmark: nil),
+                          store === capturedStore, modelReadinessGeneration == generation, !isChangingProject,
                           !closePending else { return }
                     if !cached || identities == nil {
                         explicitModelChecking.insert(choice.id)
@@ -1302,6 +1332,8 @@ public final class ProjectSession {
                         await binding.release()
                     }
                     let current = await library.snapshot()
+                    guard modelReadinessRequests[choice.id] == request,
+                          workflowBindingMatches(choice, installation: installation, bookmark: nil) else { return }
                     guard current.revision >= modelAvailabilityRevision,
                           current.records.contains(where: { $0.id == installation && $0.state == .installed &&
                               $0.availability == .available }),
@@ -1311,7 +1343,7 @@ public final class ProjectSession {
                         throw WorkflowIssue("核验期间模型文件或安装状态已改变。")
                     }
                     modelAvailabilityRevision = max(modelAvailabilityRevision, current.revision)
-                } else if let entry = try WorkflowModelBookmarks(settings: settings).entries().first(where: {
+                } else if let entry = try bookmarks.entries().first(where: {
                     $0.identity == choice.id && $0.kind == choice.kind
                 }) {
                     let location = try await access.restore(entry.bookmark)
@@ -1321,7 +1353,9 @@ public final class ProjectSession {
                     await access.release(location)
                     let key = WorkflowModelReadiness.Key(bookmark: entry.bookmark, identity: choice.id)
                     let cached = WorkflowModelReadiness.hasSuccess(key, stamps: stamps)
-                    guard store === capturedStore, modelReadinessGeneration == generation, !isChangingProject,
+                    guard modelReadinessRequests[choice.id] == request,
+                          workflowBindingMatches(choice, installation: nil, bookmark: entry.bookmark),
+                          store === capturedStore, modelReadinessGeneration == generation, !isChangingProject,
                           !closePending else { return }
                     if !cached || identities == nil {
                         explicitModelChecking.insert(choice.id)
@@ -1332,10 +1366,8 @@ public final class ProjectSession {
                         let binding = try await self.resolveWorkflowModel(choice.kind, identity: choice.id, session: session)
                         await binding.release()
                     }
-                    let latest = try WorkflowModelBookmarks(settings: settings).entries().first {
-                        $0.identity == choice.id && $0.kind == choice.kind
-                    }
-                    guard latest?.bookmark == entry.bookmark else {
+                    guard modelReadinessRequests[choice.id] == request else { return }
+                    guard workflowBindingMatches(choice, installation: nil, bookmark: entry.bookmark) else {
                         WorkflowModelReadiness.invalidate(key, matching: stamps)
                         throw WorkflowIssue("核验期间模型授权已改变。")
                     }
@@ -1349,19 +1381,23 @@ public final class ProjectSession {
                         throw WorkflowIssue("核验期间模型文件已改变。")
                     }
                 } else {
+                    guard modelReadinessRequests[choice.id] == request,
+                          workflowBindingMatches(choice, installation: installation, bookmark: checkedBookmark) else { return }
                     explicitModelChecking.insert(choice.id)
                     explicitModelReadiness[choice.id] = .unknown
                     explicitModelIssues[choice.id] = "正在核验模型文件与执行适配。"
                     let binding = try await resolveWorkflowModel(choice.kind, identity: choice.id, session: session)
                     await binding.release()
                 }
-                guard !Task.isCancelled, store === capturedStore, modelReadinessGeneration == generation else { return }
-                explicitModelChecking.remove(choice.id)
+                guard !Task.isCancelled, modelReadinessRequests[choice.id] == request,
+                      workflowBindingMatches(choice, installation: checkedInstallation, bookmark: checkedBookmark),
+                      store === capturedStore, modelReadinessGeneration == generation else { return }
                 explicitModelReadiness[choice.id] = .available; explicitModelIssues[choice.id] = nil
             } catch is CancellationError { return
             } catch {
-                guard !Task.isCancelled, store === capturedStore, modelReadinessGeneration == generation else { return }
-                explicitModelChecking.remove(choice.id)
+                guard !Task.isCancelled, modelReadinessRequests[choice.id] == request,
+                      workflowBindingMatches(choice, installation: checkedInstallation, bookmark: checkedBookmark),
+                      store === capturedStore, modelReadinessGeneration == generation else { return }
                 explicitModelReadiness[choice.id] = rawNeedsPreparation ? .unprepared : .unavailable
                 explicitModelIssues[choice.id] = error.localizedDescription
             }

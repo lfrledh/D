@@ -1,4 +1,5 @@
 import CryptoKit
+import Darwin
 import DInference
 import Foundation
 import Testing
@@ -16,18 +17,20 @@ private actor ReadinessValidator {
     var calls = 0
     var suspendNext = false
     var failSuspended = true
-    var pending: CheckedContinuation<Void, Never>?
+    var pending: [CheckedContinuation<Void, Never>] = []
     func arm(fail: Bool = true) { suspendNext = true; failSuspended = fail }
-    func finish() { pending?.resume(); pending = nil }
+    func finish() { if !pending.isEmpty { pending.removeFirst().resume() } }
     func validate() async throws {
         calls += 1
         if suspendNext {
             suspendNext = false
-            await withCheckedContinuation { pending = $0 }
-            if failSuspended { throw WorkflowIssue("old inspection failed after a new installation was selected") }
+            let fail = failSuspended
+            await withCheckedContinuation { pending.append($0) }
+            if fail { throw WorkflowIssue("old inspection failed after a new installation was selected") }
         }
     }
-    var waiting: Bool { pending != nil }
+    var waiting: Bool { !pending.isEmpty }
+    var pendingCount: Int { pending.count }
 }
 
 @Suite(.serialized) @MainActor
@@ -101,6 +104,126 @@ struct WorkflowModelReadinessTests {
             #expect(owner.explicitModelIssues[fixture.identity] != nil)
             #expect(await fixture.engine.submissions == 0)
             #expect(await owner.requestClose())
+        }
+    }
+
+    @Test func legacyStampRevokesSameInodeSameSizeAndRestoredMtime() async throws {
+        let root = URL(fileURLWithPath: try #require(ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"]))
+            .appendingPathComponent("legacy-stamp-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let file = root.appendingPathComponent("weights.bin")
+        try Data("AAAA".utf8).write(to: file)
+        let first = try WorkflowModelReadiness.stamps(in: root)
+        var before = stat()
+        try #require(lstat(file.path, &before) == 0)
+        let key = WorkflowModelReadiness.Key(bookmark: Data([1]), identity: "image:legacy-stamp")
+        var validations = 0
+        try await WorkflowModelReadiness.check(key, stamps: first, force: false) { validations += 1 }
+        #expect(WorkflowModelReadiness.hasSuccess(key, stamps: first))
+        try await Task.sleep(for: .milliseconds(20))
+        let writer = try FileHandle(forWritingTo: file)
+        try writer.write(contentsOf: Data("BBBB".utf8))
+        try writer.close()
+        var times = [before.st_atimespec, before.st_mtimespec]
+        try #require(utimensat(AT_FDCWD, file.path, &times, 0) == 0)
+        var after = stat()
+        try #require(lstat(file.path, &after) == 0)
+        #expect(before.st_ino == after.st_ino && before.st_size == after.st_size)
+        #expect(before.st_mtimespec.tv_sec == after.st_mtimespec.tv_sec &&
+                before.st_mtimespec.tv_nsec == after.st_mtimespec.tv_nsec)
+        let changed = try WorkflowModelReadiness.stamps(in: root)
+        #expect(first != changed, "ctime must revoke the legacy success despite restored mtime")
+        #expect(!WorkflowModelReadiness.hasSuccess(key, stamps: changed))
+        try await WorkflowModelReadiness.check(key, stamps: changed, force: false) { validations += 1 }
+        #expect(validations == 2)
+        WorkflowModelReadiness.invalidate(key)
+    }
+
+    @Test func cancelledReadinessRequestClearsItsCheckingState() async throws {
+        try await withColdFixture { fixture in
+            let owner = await fixture.owner(at: "cancelled")
+            owner.refreshWorkflowModels()
+            await fixture.validator.arm(fail: false)
+            let check = Task { await owner.checkExplicitModelReadiness(for: [fixture.identity]) }
+            let deadline = ContinuousClock.now + .seconds(3)
+            while !(await fixture.validator.waiting) && ContinuousClock.now < deadline { await Task.yield() }
+            try #require(await fixture.validator.waiting)
+            #expect(owner.explicitModelChecking.contains(fixture.identity))
+            check.cancel()
+            await fixture.validator.finish()
+            await check.value
+            #expect(!owner.explicitModelChecking.contains(fixture.identity))
+            #expect(owner.explicitModelReadiness[fixture.identity] != .available)
+            #expect(await fixture.engine.submissions == 0)
+            #expect(await owner.requestClose())
+        }
+    }
+
+    @Test(arguments: [false, true])
+    func canvasOldInstallationCannotPublishAfterQuickRebind(oldFails: Bool) async throws {
+        try await withColdFixture { fixture in
+            let second = fixture.root.appendingPathComponent("other-model")
+            try FileManager.default.createDirectory(at: second, withIntermediateDirectories: true)
+            try fixture.bytes.write(to: second.appendingPathComponent("weights.bin"))
+            let oldID = try #require(try WorkflowModelBookmarks(settings: fixture.settings).installation(for: fixture.identity))
+            let newID = try await fixture.library.registerExisting(at: second, catalogID: ModelCatalog.flux2ID)
+            #expect(newID != oldID)
+            let quick = await fixture.owner(at: "quick-rebind")
+            let canvas = await fixture.owner(at: "canvas-rebind")
+            canvas.refreshWorkflowModels()
+            await fixture.validator.arm(fail: oldFails)
+            let old = Task { await canvas.checkExplicitModelReadiness(for: [fixture.identity]) }
+            let deadline = ContinuousClock.now + .seconds(3)
+            while !(await fixture.validator.waiting) && ContinuousClock.now < deadline { await Task.yield() }
+            try #require(await fixture.validator.waiting)
+            #expect(canvas.explicitModelChecking.contains(fixture.identity))
+            _ = try await quick.selectWorkflowInstallation(id: newID)
+            #expect(quick.workflowInstallationID(for: fixture.identity) == newID)
+            await fixture.validator.arm(fail: false)
+            let newer = Task { await canvas.checkExplicitModelReadiness() }
+            let newerDeadline = ContinuousClock.now + .seconds(3)
+            while (await fixture.validator.pendingCount) < 2 && ContinuousClock.now < newerDeadline { await Task.yield() }
+            try #require(await fixture.validator.pendingCount == 2)
+            await fixture.validator.finish()
+            await old.value
+            #expect(canvas.explicitModelReadiness[fixture.identity] != .available)
+            #expect(canvas.explicitModelChecking.contains(fixture.identity),
+                    "An old completion must not clear the newer request's indicator")
+            await fixture.validator.finish()
+            await newer.value
+            #expect(canvas.explicitModelReadiness[fixture.identity] == .available)
+            #expect(!canvas.explicitModelChecking.contains(fixture.identity))
+            #expect(await fixture.engine.submissions == 0)
+            #expect(await quick.requestClose())
+            #expect(await canvas.requestClose())
+        }
+    }
+
+    @Test(arguments: [false, true])
+    func canvasOldResultCannotPublishWhenSharedBindingChanges(oldFails: Bool) async throws {
+        try await withColdFixture { fixture in
+            let second = fixture.root.appendingPathComponent("replacement")
+            try FileManager.default.createDirectory(at: second, withIntermediateDirectories: true)
+            try fixture.bytes.write(to: second.appendingPathComponent("weights.bin"))
+            let newID = try await fixture.library.registerExisting(at: second, catalogID: ModelCatalog.flux2ID)
+            let quick = await fixture.owner(at: "quick-binding")
+            let canvas = await fixture.owner(at: "canvas-binding")
+            canvas.refreshWorkflowModels()
+            await fixture.validator.arm(fail: oldFails)
+            let old = Task { await canvas.checkExplicitModelReadiness(for: [fixture.identity]) }
+            let deadline = ContinuousClock.now + .seconds(3)
+            while !(await fixture.validator.waiting) && ContinuousClock.now < deadline { await Task.yield() }
+            try #require(await fixture.validator.waiting)
+            _ = try await quick.selectWorkflowInstallation(id: newID)
+            await fixture.validator.finish()
+            await old.value
+            #expect(canvas.explicitModelReadiness[fixture.identity] != .available)
+            #expect(!canvas.explicitModelChecking.contains(fixture.identity))
+            await canvas.checkExplicitModelReadiness(for: [fixture.identity])
+            #expect(canvas.explicitModelReadiness[fixture.identity] == .available)
+            #expect(await fixture.engine.submissions == 0)
+            #expect(await quick.requestClose())
+            #expect(await canvas.requestClose())
         }
     }
 
@@ -228,6 +351,7 @@ struct WorkflowModelReadinessTests {
             await old.value
             #expect(quickOwner.explicitModelReadiness[choice.id] == .available)
             #expect(quickOwner.explicitModelIssues[choice.id] == nil)
+            #expect(!quickOwner.explicitModelChecking.contains(choice.id))
         }
         canvasOwner.refreshWorkflowModels()
         #expect(controller.modelChoices.contains { $0.id == choice.id })
