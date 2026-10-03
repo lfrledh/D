@@ -15,7 +15,8 @@ enum WorkflowLanguageOperations {
         let visualFields: [WorkflowFieldDefinition] = visual ? [
             .init("minimumPixels", "每图最小像素（0使用模型配置）", .integer, .integer(0)),
             .init("maximumPixels", "每图最大像素（0使用模型配置）", .integer, .integer(0)),
-            .init("maximumVideoFrames", "抽帧安全预算", .integer, .integer(64))] : []
+            .init("maximumVideoFrames", "抽帧安全预算", .integer, .integer(64)),
+            .init("chatTemplateOverride", "聊天模板 Jinja（留空使用模型原模板）", .text(multiline: true), .text(""))] : []
         return WorkflowOperation(definition: .init(id: id, title: title, detail: "任务生成文字；可配置 JSON 解析与结构校验，不是原生约束解码。",
         inputs: [.init("task", "任务", kinds: [.text], required: false), .init("content", "内容", kinds: [.text], required: false)] + visualInputs,
         outputs: [.init("output", "结果", kinds: WorkflowDataKind.allCases), .init("raw", "原始模型文字", kinds: [.text])],
@@ -36,6 +37,11 @@ enum WorkflowLanguageOperations {
             let p = try WorkflowScalarReader.decimal("topP", in: node)
             guard p > 0 && p <= 1 else { throw WorkflowIssue("Top P 必须大于0且不超过1。") }
             if visual {
+                if let template = node.parameters["chatTemplateOverride"] {
+                    guard case .text(let source) = template, source.utf8.count <= 65_536 else {
+                        throw WorkflowIssue("聊天模板必须是至多64KiB的文字。")
+                    }
+                }
                 _ = try WorkflowLanguageMessageForm.loadingStrategy(node.parameters)
                 _ = try WorkflowLanguageMessageForm.memoryBudgetBytes(node.parameters)
                 _ = try WorkflowLanguageMessageForm.thinking(node.parameters)

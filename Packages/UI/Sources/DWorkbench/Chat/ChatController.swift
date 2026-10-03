@@ -492,6 +492,31 @@ import Observation
         return (node, plan.messagesJSON, inputs)
     }
 
+    /// The preview uses the exact same immutable request and source checks as send.
+    public func previewTemplate(sessionID: UUID) async throws -> TextTemplatePreview {
+        try requireLoaded()
+        guard allowsSubmission(), !isRunning, pendingSaveAttemptID == nil else { throw WorkflowIssue("请等待当前操作结束后预览模板。") }
+        let captured = state.sessions[try index(sessionID)]
+        guard let node = captured.configuration, !captured.archived, captured.contextChoices?.deletedAt == nil else {
+            throw WorkflowIssue("请选择可用会话和模型。")
+        }
+        var path = try captured.path(to: captured.selectedLeafID)
+        var prompt = captured.draft, attachments = captured.attachments, excerpts = captured.knowledgeExcerpts ?? []
+        if prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, let user = path.last, user.role == .user {
+            path = try captured.path(to: user.parentID)
+            prompt = user.text; attachments = user.attachments; excerpts = user.knowledgeExcerpts ?? []
+        }
+        let prepared = try await prepared(path, session: captured, prompt: prompt,
+            attachments: attachments, node: node, excerpts: excerpts)
+        let service = try makeServices()
+        let result = try await service.previewLanguageTemplate(node: prepared.0, inputs: prepared.2)
+        try Task.checkCancellation()
+        guard allowsSubmission(), state.sessions[try index(sessionID)] == captured else {
+            throw WorkflowIssue("会话在预览期间已改变，请重新预览；旧结果没有应用。")
+        }
+        return result
+    }
+
     public func send(sessionID: UUID) async throws {
         try requireLoaded()
         guard !hasInvalidParameterText(sessionID: sessionID) else {

@@ -7,6 +7,13 @@ import Testing
 import UniformTypeIdentifiers
 @testable import DWorkbench
 
+private actor ChatTemplateCapture {
+    private(set) var requests: [TextRequest] = []
+    private(set) var releases = 0
+    func append(_ request: TextRequest) { requests.append(request) }
+    func release() { releases += 1 }
+}
+
 private actor ChatFixtureEngine: InferenceEngine {
     private(set) var requests: [InferenceRequest] = []
     private var finishReason: TextFinishReason = .stop
@@ -172,6 +179,78 @@ struct ChatTests {
         try await store.close()
     }
 
+    @Test func templatePreviewAndSubmissionUseSameUserAndTemplateWithoutInference() async throws {
+        let capture = ChatTemplateCapture()
+        let (store, engine, chat) = try await fixture(preview: { _, request in
+            await capture.append(request)
+            return .init(sourceTemplate: "installed", renderedTemplate: "preview", templateTokenIDs: [1, 2], diagnostics: [])
+        })
+        let id = try chat.newSession(); try configure(chat, session: id)
+        var node = try #require(chat.selectedSession?.configuration)
+        node.parameters["chatTemplateOverride"] = .text("{{ messages }}")
+        node.parameters["seed"] = .text("42")
+        try chat.updateConfiguration(node, sessionID: id)
+        try chat.updateDraft("问题 👩🏽‍🎨", sessionID: id)
+        _ = try await chat.previewTemplate(sessionID: id)
+        #expect(await engine.requests.isEmpty)
+        try await chat.send(sessionID: id); await chat.waitForCompletion()
+        let request = try #require(await engine.requests.first)
+        guard case .text(let text) = request.input else { Issue.record("wrong input"); return }
+        #expect(await capture.requests.first == text)
+        let user = try #require(chat.selectedSession?.messages.first)
+        try chat.selectLeaf(user.id, sessionID: id)
+        _ = try await chat.previewTemplate(sessionID: id)
+        #expect(await capture.requests.last?.messages == text.messages)
+        #expect(await capture.requests.last?.chatTemplateOverride == "{{ messages }}")
+        #expect(await engine.requests.count == 1)
+        try await chat.flush(); try await store.close()
+    }
+
+    @Test func templatePreviewRejectsMismatchedRouteAndReleasesLease() async throws {
+        let capture = ChatTemplateCapture()
+        let (store, engine, chat) = try await fixture()
+        let runtime = WorkbenchSession(engine: engine, backendID: "fixture", status: {
+            .init(activeRunID: nil, phase: nil, queuedRunIDs: [])
+        }, shutdown: {}, cleanup: {}, validateModel: { _ in }, previewTextTemplate: { _, request in
+            await capture.append(request)
+            return .init(sourceTemplate: "", renderedTemplate: "", templateTokenIDs: [], diagnostics: [])
+        })
+        let service = WorkflowServices(store: store, session: runtime) { _, identity in
+            .init(identity: identity, reference: .init(directory: store.rootURL), backendID: "fixture",
+                  operationID: WorkflowModelRoutes.qwen38, release: { await capture.release() })
+        }
+        var node = try #require(WorkflowRegistry.standard.operation(WorkflowModelRoutes.qwen35)?.definition.makeNode())
+        node.parameters["modelID"] = .text("text:fixture")
+        await #expect(throws: (any Error).self) { _ = try await service.previewLanguageTemplate(node: node, inputs: [:]) }
+        #expect(await capture.requests.isEmpty)
+        #expect(await capture.releases == 1)
+        #expect(await engine.requests.isEmpty)
+        try await chat.flush(); try await store.close()
+    }
+
+    @Test func presetExportIsSettingsOnlyAndRefusesChangedDestination() async throws {
+        let (store, _, chat) = try await fixture()
+        let before = await store.snapshot()
+        let preset = ChatPromptPreset(name: "中文 👩🏽‍🎨", prompt: "Keep original e\u{301}")
+        let parent = store.rootURL.deletingLastPathComponent(), exportID = UUID()
+        let receipt = try await store.exportChatPresets([preset], exportID: exportID, directory: parent)
+        let file = parent.appendingPathComponent("D-chat-presets-" + exportID.uuidString + ".dexport/presets.json")
+        let bytes = try Data(contentsOf: file)
+        #expect(try ChatPresetFile.decode(bytes) == [preset])
+        try chat.importPresets(bytes)
+        #expect(chat.state.presets.first?.id != preset.id)
+        #expect(chat.state.presets.first?.prompt == preset.prompt)
+        #expect(await store.snapshot() == before)
+        #expect(try await store.exportChatPresets([preset], exportID: exportID, directory: parent) == receipt)
+        let altered = Data("existing user change".utf8)
+        try altered.write(to: file)
+        await #expect(throws: (any Error).self) {
+            _ = try await store.exportChatPresets([preset], exportID: exportID, directory: parent)
+        }
+        #expect(try Data(contentsOf: file) == altered)
+        try await chat.flush(); try await store.close()
+    }
+
     @Test func partialAnswerAdoptionPreservesOutputAndReopensAsExplicitVersion() async throws {
         let (store, engine, chat) = try await fixture()
         let id = try chat.newSession(); try configure(chat, session: id)
@@ -303,7 +382,7 @@ struct ChatTests {
         try await chat.flush(); try await store.close()
     }
 
-    private func fixture() async throws -> (ProjectStore, ChatFixtureEngine, ChatController) {
+    private func fixture(preview: (@Sendable (ModelReference, TextRequest) async throws -> TextTemplatePreview)? = nil) async throws -> (ProjectStore, ChatFixtureEngine, ChatController) {
         let root = URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory())
             .appendingPathComponent("Chat-" + UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -311,7 +390,7 @@ struct ChatTests {
         let engine = ChatFixtureEngine()
         let runtime = WorkbenchSession(engine: engine, backendID: "fixture", status: {
             .init(activeRunID: nil, phase: nil, queuedRunIDs: [])
-        }, shutdown: {}, cleanup: {}, validateModel: { _ in }, textBackendID: "fixture.text")
+        }, shutdown: {}, cleanup: {}, validateModel: { _ in }, textBackendID: "fixture.text", previewTextTemplate: preview)
         let controller = ChatController(store: store) {
             WorkflowServices(store: store, session: runtime) { _, identity in
                 .init(identity: identity, reference: .init(directory: root, revision: identity),

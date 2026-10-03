@@ -185,6 +185,8 @@ enum AppSessionFactory {
                 _ = try await textBackend.estimate(InferenceRequest(model: reference, input: .text(TextRequest(prompt: "Registration", maxTokens: 256,
                     execution: .init(profile: .init(identifier: "qwen2-text"), maximumPromptTokens: 2048)))))
                 return reference
+            }, previewTextTemplate: { model, request in
+                try await TextTemplatePreviewProvider.preview(model: model, request: request)
             }, audioBackendID: audioBackend?.descriptor.id,
             validateAudioModel: validateAudioModel, musicBackendID: musicBackend?.descriptor.id,
             validateMusicModel: validateMusicModel,

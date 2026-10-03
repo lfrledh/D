@@ -88,7 +88,7 @@ public struct ChatContextSource: Codable, Sendable, Equatable {
                       attempt.response?.toolCalls.isEmpty != false,
                       attempt.response?.finishReason != .toolCalls,
                       attempt.response?.finishReason != .incomplete,
-                      isAdopted || (attempt.status == .completed && attempt.response?.finalText.isEmpty == false) else {
+                      isAdopted || (attempt.status == .completed && attempt.response?.finalText?.isEmpty == false) else {
                     throw WorkflowIssue("未完成、工具待处理或未采用的部分回答不能作为摘要来源。")
                 }
             }

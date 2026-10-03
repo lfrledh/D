@@ -171,13 +171,16 @@ struct WorkflowSaveFailure: LocalizedError {
         guard let binding = bindings[context.node.id], binding.identity == context.node.parameters["modelID"]?.string else {
             throw WorkflowIssue("模型未绑定到本次操作。")
         }
-        if [WorkflowModelRoutes.qwen35, WorkflowModelRoutes.qwen38, WorkflowModelRoutes.fluxDev, WorkflowModelRoutes.ace].contains(context.node.operationID), binding.operationID == nil {
+        try validate(binding: binding, node: context.node)
+        return binding
+    }
+    private func validate(binding: WorkflowModelBinding, node: WorkflowNode) throws {
+        if [WorkflowModelRoutes.qwen35, WorkflowModelRoutes.qwen38, WorkflowModelRoutes.fluxDev, WorkflowModelRoutes.ace].contains(node.operationID), binding.operationID == nil {
             throw WorkflowIssue("所选模型未提供此能力契约。")
         }
-        if let operationID = binding.operationID, operationID != context.node.operationID {
+        if let operationID = binding.operationID, operationID != node.operationID {
             throw WorkflowIssue("模型身份与此节点的能力契约不匹配；不会静默改用其他实现。")
         }
-        return binding
     }
     private func infer(_ request: InferenceRequest, binding: WorkflowModelBinding) async throws -> (InferenceResult, String) {
         try request.validate(); try checkCancellation()
@@ -242,7 +245,26 @@ struct WorkflowSaveFailure: LocalizedError {
     }
     public func generateLanguage(task: String, content: String?, context: WorkflowExecutionContext) async throws -> WorkflowAssetReference {
         if pending[context.stepID] != nil { return try await publish(context) }
-        let binding = try model(for: context), p = context.node.parameters
+        let binding = try model(for: context)
+        let request = try await languageRequest(task: task, content: content, context: context, binding: binding)
+        languagePreview = ""
+        languagePreviewChanged(context.stepID, "")
+        defer { languagePreviewChanged(context.stepID, "") }
+        let (result, text) = try await infer(request, binding: binding)
+        let raw = result.textResponse?.rawText ?? text
+        guard !raw.isEmpty else { throw WorkflowIssue("语言模型未交付文字。") }
+        let details = result.metadata.merging(["backend": binding.backendID, "modelIdentity": binding.identity,
+            "outputValidation": "raw model response retained; final-only parsing is separate"]) { _, new in new }
+        let bytes = try result.textResponse.map(WorkflowTextResponseFile.encode) ?? Data(raw.utf8)
+        let mediaType = result.textResponse == nil ? "text/plain" : WorkflowTextResponseFile.mediaType
+        pending[context.stepID] = Publication(id: UUID(), data: bytes, mediaType: mediaType, metadata: .init(),
+            parents: context.inputs.values.flatMap { $0.datum?.assetReferences ?? [] }, request: request,
+            details: details)
+        return try await publish(context)
+    }
+    private func languageRequest(task: String, content: String?, context: WorkflowExecutionContext,
+                                 binding: WorkflowModelBinding) async throws -> InferenceRequest {
+        let p = context.node.parameters
         let messagesJSON = p["messagesJSON"]?.string ?? ""
         guard !task.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !messagesJSON.isEmpty else { throw WorkflowIssue("任务或有序消息不能为空。") }
         let prompt = task + (content.map { "\n\nContent:\n" + $0 } ?? "")
@@ -289,24 +311,37 @@ struct WorkflowSaveFailure: LocalizedError {
             images: messages == nil && !images.isEmpty ? images : nil, video: messages == nil ? videos.first : nil, visualProcessing: processing,
             messages: messages, tools: try WorkflowLanguageMessageForm.tools(p["toolsJSON"]?.string ?? ""),
             thinking: try WorkflowLanguageMessageForm.thinking(p), seed: try WorkflowLanguageMessageForm.seed(p),
-            loadingStrategy: try WorkflowLanguageMessageForm.loadingStrategy(p))
+            loadingStrategy: try WorkflowLanguageMessageForm.loadingStrategy(p),
+            chatTemplateOverride: (p["chatTemplateOverride"]?.string ?? "").isEmpty ? nil : p["chatTemplateOverride"]?.string)
         try capability?.validate(input)
-        let request = InferenceRequest(id: context.stepID, model: binding.reference, input: .text(input),
+        return InferenceRequest(id: context.stepID, model: binding.reference, input: .text(input),
             memoryBudgetBytes: try WorkflowLanguageMessageForm.memoryBudgetBytes(p))
-        languagePreview = ""
-        languagePreviewChanged(context.stepID, "")
-        defer { languagePreviewChanged(context.stepID, "") }
-        let (result, text) = try await infer(request, binding: binding)
-        let raw = result.textResponse?.rawText ?? text
-        guard !raw.isEmpty else { throw WorkflowIssue("语言模型未交付文字。") }
-        let details = result.metadata.merging(["backend": binding.backendID, "modelIdentity": binding.identity,
-            "outputValidation": "raw model response retained; final-only parsing is separate"]) { _, new in new }
-        let bytes = try result.textResponse.map(WorkflowTextResponseFile.encode) ?? Data(raw.utf8)
-        let mediaType = result.textResponse == nil ? "text/plain" : WorkflowTextResponseFile.mediaType
-        pending[context.stepID] = Publication(id: UUID(), data: bytes, mediaType: mediaType, metadata: .init(),
-            parents: context.inputs.values.flatMap { $0.datum?.assetReferences ?? [] }, request: request,
-            details: details)
-        return try await publish(context)
+    }
+    /// Uses the same request construction and model lease without entering inference.
+    public func previewLanguageTemplate(node: WorkflowNode, inputs: [String: WorkflowValue]) async throws -> TextTemplatePreview {
+        guard !languageCallActive, bindings.isEmpty, let preview = session.previewTextTemplate else {
+            throw WorkflowIssue("模板预览当前不可用或已有操作尚未释放。")
+        }
+        try registry.validate(node)
+        guard [WorkflowModelRoutes.qwen35, WorkflowModelRoutes.qwen38].contains(node.operationID),
+              let identity = node.parameters["modelID"]?.string, !identity.isEmpty else {
+            throw WorkflowIssue("请选择支持模板预览的明确文字模型。")
+        }
+        languageCallActive = true
+        defer { languageCallActive = false }
+        let binding = try await resolveModel(.text, identity)
+        do {
+            guard binding.identity == identity else { throw WorkflowIssue("模板模型身份不一致。") }
+            try validate(binding: binding, node: node)
+            try Task.checkCancellation()
+            let context = WorkflowExecutionContext(node: node, stepID: UUID(), inputs: inputs)
+            let request = try await languageRequest(task: node.parameters["task"]?.string ?? "", content: nil,
+                                                    context: context, binding: binding)
+            guard case .text(let text) = request.input else { throw WorkflowIssue("模板请求类型无效。") }
+            let result = try await preview(binding.reference, text)
+            await binding.release()
+            return result
+        } catch { await binding.release(); throw error }
     }
     public func readLanguageResponse(_ reference: WorkflowAssetReference) async throws -> TextResponse? {
         if let response = try await store.workflowTextResponse(reference) { return response }

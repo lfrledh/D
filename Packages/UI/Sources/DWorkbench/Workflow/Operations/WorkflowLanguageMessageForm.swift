@@ -4,7 +4,7 @@ import Foundation
 /// Shared Quick/Canvas form transport. Media are indexes into admitted asset
 /// ports, never arbitrary paths or URLs supplied by a text field.
 enum WorkflowLanguageMessageForm {
-    static let optionalFields: Set<String> = ["messagesJSON", "toolsJSON", "thinking", "reasoningEffort", "preserveThinking", "seed", "memoryBudgetGiB", "loadingStrategy"]
+    static let optionalFields: Set<String> = ["messagesJSON", "toolsJSON", "thinking", "reasoningEffort", "preserveThinking", "seed", "memoryBudgetGiB", "loadingStrategy", "chatTemplateOverride"]
     static let fields: [WorkflowFieldDefinition] = [
         .init("memoryBudgetGiB", "显式内存预算 GiB（0使用运行时策略）", .integer, .integer(0)),
         .init("loadingStrategy", "加载方式（精度不变）", .choice(["resident", "ssdLayered"]), .text("resident")),

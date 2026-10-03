@@ -17,6 +17,7 @@ public struct WorkbenchSession: Sendable {
     public let validateMusicModel: (@Sendable (URL) async throws -> ModelReference)?
     public let audioBackendID: String?
     public let validateAudioModel: (@Sendable (URL) async throws -> ModelReference)?
+    public let previewTextTemplate: (@Sendable (ModelReference, TextRequest) async throws -> TextTemplatePreview)?
     public let textBackendID: String?
     public let validateTextModel: (@Sendable (URL) async throws -> ModelReference)?
     public let pitchBackendID: String?
@@ -34,7 +35,7 @@ public struct WorkbenchSession: Sendable {
     public func borrowed(artifactStore: ProjectStore) -> Self {
         var value = Self(engine: engine, backendID: backendID, status: status,
             shutdown: {}, cleanup: {}, validateModel: validateModel,
-            textBackendID: textBackendID, validateTextModel: validateTextModel,
+            textBackendID: textBackendID, validateTextModel: validateTextModel, previewTextTemplate: previewTextTemplate,
             audioBackendID: audioBackendID, validateAudioModel: validateAudioModel,
             musicBackendID: musicBackendID, validateMusicModel: validateMusicModel,
             imageCapability: imageCapability, textCapability: textCapability,
@@ -53,6 +54,7 @@ public struct WorkbenchSession: Sendable {
                 validateModel: @escaping @Sendable (URL) async throws -> Void,
                 textBackendID: String? = nil,
                 validateTextModel: (@Sendable (URL) async throws -> ModelReference)? = nil,
+                previewTextTemplate: (@Sendable (ModelReference, TextRequest) async throws -> TextTemplatePreview)? = nil,
                 audioBackendID: String? = nil,
                 validateAudioModel: (@Sendable (URL) async throws -> ModelReference)? = nil,
                 musicBackendID: String? = nil,
@@ -84,6 +86,7 @@ public struct WorkbenchSession: Sendable {
         self.validateMusicModel = validateMusicModel
         self.audioBackendID = audioBackendID
         self.validateAudioModel = validateAudioModel
+        self.previewTextTemplate = previewTextTemplate
         self.textBackendID = textBackendID
         self.validateTextModel = validateTextModel
         self.engine = engine

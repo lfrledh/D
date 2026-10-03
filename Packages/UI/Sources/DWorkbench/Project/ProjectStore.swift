@@ -3790,6 +3790,15 @@ extension ProjectStore {
         return try publishWorkflowExport(files: files, name: name, exportID: exportID, directory: directory)
     }
 
+    /// Presets are settings data, not generated artwork. Reuse the scoped atomic publisher.
+    public func exportChatPresets(_ presets: [ChatPromptPreset], exportID: UUID,
+                                  directory: URL) throws -> WorkflowExportReceipt {
+        try checkLocation()
+        let bytes = try ChatPresetFile.encode(presets)
+        return try publishWorkflowExport(files: [("presets.json", bytes)], name: "D-chat-presets",
+                                         exportID: exportID, directory: directory)
+    }
+
     /// Explicit value export uses the same non-overwriting atomic package publication as media.
     public func exportWorkflowDatum(_ value: WorkflowDatum, format: String, name: String, exportID: UUID, directory: URL) throws -> WorkflowExportReceipt {
         try checkLocation(); try value.validate()

@@ -73,10 +73,13 @@ extension ChatPresentationLayout {
 
 private enum ChatDetail: Identifiable {
     case edit(ChatEdit), preview(WorkflowAssetReference)
+    case comparison(UUID, UUID), presetImport([ChatPromptPreset], Data)
     var id: String {
         switch self {
         case .edit(let edit): "edit-\(edit.id)"
         case .preview(let reference): "preview-\(reference.assetID)"
+        case .comparison(let session, let attempt): "compare-\(session)-\(attempt)"
+        case .presetImport: "preset-import"
         }
     }
 }
@@ -475,6 +478,32 @@ struct ChatWorkbenchView: View {
         .sheet(item: Binding(get: { sheets.detail }, set: { sheets.detail = $0 })) { item in
             switch item {
             case .edit(let edit): editSheet(edit)
+            case .comparison(let sessionID, let attemptID):
+                ScrollView {
+                    ChatComparisonPanel(chat: chat, sessionID: sessionID, sourceAttemptID: attemptID,
+                        onClose: { sheets.detail = nil })
+                }.frame(minWidth: 700, idealWidth: 900, minHeight: 420)
+            case .presetImport(let presets, let data):
+                VStack(alignment: .leading, spacing: 12) {
+                    Text(newLabel("importPresetsTitle", english: "Import preset copies", chinese: "导入预设副本")).font(.headline)
+                    Text(newLabel("importPresetsNote", english: "This creates new presets. It does not change any conversation or run a model.",
+                        chinese: "将创建新预设，不改变现有会话，也不会运行模型。"))
+                    ScrollView {
+                        ForEach(presets) { item in
+                            VStack(alignment: .leading) {
+                                Text(item.name).font(.headline)
+                                Text(item.prompt).textSelection(.enabled)
+                                if let configuration = item.configuration { Text(configuration.operationID).font(.caption) }
+                            }.padding(.vertical, 6)
+                        }
+                    }
+                    HStack {
+                        Button(label("cancel", "取消")) { sheets.detail = nil }
+                        Button(newLabel("importCopies", english: "Import copies", chinese: "导入副本")) {
+                            perform(sessionID: chat.state.selectedSessionID) { try chat.importPresets(data); sheets.detail = nil }
+                        }
+                    }
+                }.padding(20).frame(minWidth: 560, minHeight: 360)
             case .preview(let preview):
                 VStack(alignment: .leading) {
                     Button(label("close", "关闭")) { sheets.detail = nil }.keyboardShortcut(.cancelAction)
@@ -1061,6 +1090,9 @@ struct ChatWorkbenchView: View {
                             Button(newLabel("inspectRequest", english: "Inspect frozen request", chinese: "检查冻结请求")) {
                                 openDataInspector(attemptID: attempt.id)
                             }.accessibilityIdentifier("chat-inspect-request-\(attempt.id.uuidString)")
+                            Button(newLabel("compareAnswers", english: "Compare answers…", chinese: "比较回答…")) {
+                                present(.comparison(session.id, attempt.id))
+                            }.accessibilityIdentifier("chat-compare-" + attempt.id.uuidString)
                             Button(label("replayRequest", "按原请求与种子重现")) {
                                 Task { await run(sessionID: session.id) { try await chat.reproduce(attempt.id, sessionID: session.id) } }
                             }.disabled(!ChatRunAdmission.allowsReplay(session, attempt: attempt,
@@ -1185,24 +1217,13 @@ struct ChatWorkbenchView: View {
                         perform(sessionID: session.id) { try chat.setDefaultSystemPrompt("") }
                     }
                     Divider()
-                    Menu(label("applyPreset", "应用本地预设")) {
-                        ForEach(chat.state.presets) { preset in
-                            Menu(preset.name) {
-                                Button(label("apply", "应用")) { perform(sessionID: session.id) { try chat.setSystemPrompt(preset.prompt, sessionID: session.id) } }
-                                Button(label("replacePreset", "用当前提示更新")) {
-                                    perform(sessionID: session.id) { try chat.setPreset(ChatPromptPreset(id: preset.id, name: preset.name, prompt: session.systemPrompt)) }
-                                }
-                                Button(label("duplicatePreset", "复制预设")) {
-                                    perform(sessionID: session.id) { try chat.setPreset(ChatPromptPreset(name: preset.name +
-                                        label("presetCopySuffix", " 副本"), prompt: preset.prompt)) }
-                                }
-                                Button(label("deletePreset", "删除预设")) { perform(sessionID: session.id) { try chat.removePreset(preset.id) } }
-                            }
-                        }
+                    DisclosureGroup(newLabel("managePresets", english: "Presets", chinese: "预设")) {
+                        ChatPresetsPanel(chat: chat, sessionID: session.id,
+                            onImport: { Task { await importPresets() } },
+                            onExport: { presets in Task { await exportPresets(presets, sessionID: session.id) } })
+                            .id(session.id.uuidString + ":presets")
                     }
-                    TextField(label("presetName", "预设名称"), text: $newPresetName)
-                    Button(label("savePreset", "保存预设")) { savePreset(session) }
-                        .disabled(newPresetName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
                 }
                 if let node = session.configuration,
                    let definition = WorkflowRegistry.standard.definition(for: node) {
@@ -1212,6 +1233,9 @@ struct ChatWorkbenchView: View {
                             onChange: { value in changeParameter(field.id, value: value, node: node, sessionID: session.id) },
                             raw: chat.parameterText[session.id.uuidString + ":" + field.id],
                             onRaw: { raw in changeNumeric(field: field, raw: raw, node: node, sessionID: session.id) })
+                    }
+                    DisclosureGroup(newLabel("templatePreview", english: "Chat template preview", chinese: "聊天模板预览")) {
+                        ChatTemplatePanel(chat: chat, sessionID: session.id).id(session.id.uuidString + ":template")
                     }
                     if definition.fields.contains(where: { $0.id == "toolsJSON" }) {
                         Text(label("toolsUnexecuted", "工具 JSON 仅向模型声明；D 不执行工具调用。"))
@@ -1451,7 +1475,40 @@ struct ChatWorkbenchView: View {
             report(failures.isEmpty ? nil : failures.joined(separator: "\n"), for: sessionID)
         } catch { report(error.localizedDescription, for: sessionID) }
     }
+    private func importPresets() async {
+        guard !filePanelBusy else { return }
+        filePanelBusy = true; defer { filePanelBusy = false }
+        let owner = chat
+        let panel = NSOpenPanel(); panel.canChooseDirectories = false; panel.allowsMultipleSelection = false
+        guard await panel.begin() == .OK, let url = panel.url, owner === chat else { return }
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        do {
+            let info = try url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
+            guard info.isRegularFile == true, let size = info.fileSize, size <= 2_097_152 else { throw WorkflowIssue("Preset file must be at most 2 MiB. / 预设文件不能超过2MiB。") }
+            let data = try Data(contentsOf: url)
+            let presets = try ChatPresetFile.decode(data)
+            present(.presetImport(presets, data))
+        } catch { report(error.localizedDescription, for: chat.state.selectedSessionID) }
+    }
+    private func exportPresets(_ presets: [ChatPromptPreset], sessionID: UUID) async {
+        guard !filePanelBusy else { return }
+        filePanelBusy = true; defer { filePanelBusy = false }
+        let owner = chat, store = chat.store
+        do {
+            _ = try ChatPresetFile.encode(presets)
+            let panel = NSOpenPanel(); panel.canChooseDirectories = true; panel.canChooseFiles = false
+            guard await panel.begin() == .OK, let directory = panel.url, owner === chat, store === chat.store else { return }
+            let scoped = directory.startAccessingSecurityScopedResource()
+            defer { if scoped { directory.stopAccessingSecurityScopedResource() } }
+            _ = try await store.exportChatPresets(presets, exportID: UUID(), directory: directory)
+            report(nil, for: sessionID)
+        } catch { report(error.localizedDescription, for: sessionID) }
+    }
+
     private func export(sessionID: UUID, markdown: Bool) async {
+        guard !filePanelBusy else { return }
+        filePanelBusy = true; defer { filePanelBusy = false }
         let owner = chat, store = chat.store
         let value: String
         do { value = try chat.exportSelectedPath(sessionID: sessionID, markdown: markdown) }

@@ -33,15 +33,15 @@ struct ChatSpeechServiceTests {
         lifecycle.receiveFinal("recognized words")
         #expect(lifecycle.finalText == "recognized words")
         #expect(!lifecycle.canRelease)
-        #expect(lifecycle.acknowledgeEnd())
+        let ended = lifecycle.acknowledgeEnd(); #expect(ended)
         #expect(lifecycle.canRelease)
-        #expect(!lifecycle.acknowledgeEnd())
+        let duplicate = lifecycle.acknowledgeEnd(); #expect(!duplicate)
     }
 
     @Test func cancellationRetainsOwnershipUntilEnd() {
         var lifecycle = ChatSpeechLifecycle()
         lifecycle.receiveFinal("old result")
-        #expect(lifecycle.requestStop(.cancelled))
+        let stopped = lifecycle.requestStop(.cancelled); #expect(stopped)
         #expect(lifecycle.state == .stopping(.cancelled))
         #expect(lifecycle.finalText == nil)
         lifecycle.receiveFinal("late result")
@@ -50,7 +50,7 @@ struct ChatSpeechServiceTests {
         lifecycle.markStalled()
         #expect(lifecycle.state == .stalledDrain(.cancelled))
         #expect(!lifecycle.canRelease)
-        #expect(lifecycle.acknowledgeEnd())
+        let ended = lifecycle.acknowledgeEnd(); #expect(ended)
         #expect(lifecycle.canRelease)
     }
 
@@ -58,16 +58,16 @@ struct ChatSpeechServiceTests {
         let oldID = UUID()
         let retryID = UUID()
         var old = ChatSpeechLifecycle(id: oldID)
-        #expect(old.requestStop(.timedOut))
+        let stopped = old.requestStop(.timedOut); #expect(stopped)
         old.markStalled()
         #expect(old.stopReason == .timedOut)
         #expect(old.state == .stalledDrain(.timedOut))
         #expect(!old.canRelease)
-        #expect(!old.requestStop(.cancelled))
+        let duplicate = old.requestStop(.cancelled); #expect(!duplicate)
         old.receiveFinal("late old result")
         #expect(old.finalText == nil)
 
-        #expect(old.acknowledgeEnd())
+        let ended = old.acknowledgeEnd(); #expect(ended)
         #expect(old.canRelease)
         var retry = ChatSpeechLifecycle(id: retryID)
         #expect(!retry.acceptsCallback(id: oldID))
