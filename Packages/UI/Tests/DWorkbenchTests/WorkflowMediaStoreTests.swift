@@ -5,6 +5,34 @@ import Testing
 
 @Suite("Workflow media publication through the existing Store")
 struct WorkflowMediaStoreTests {
+    @Test func markdownExportPreservesBytesAndDoesNotOverwrite() async throws {
+        let root = URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory())
+            .appendingPathComponent("Markdown-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let store = try await ProjectStore.create(at: root.appendingPathComponent("text.dproject"), name: "Markdown")
+        let bytes = Data("# 原文 👩🏽‍🎨\n\n| A | B |\n|---|---|\n| 1 | 2 |\n".utf8)
+        let ref = try await store.publishWorkflowAsset(data: bytes, mediaType: "text/markdown",
+            name: "聊天路径", operationID: "d.chat.export-path").record.reference
+        #expect(ref.kind == .text)
+        let exportID = UUID()
+        let receipt = try await store.exportWorkflowAssets([ref], name: "chat", exportID: exportID, directory: root)
+        #expect(receipt.names == ["1.md", "recipe.json"])
+        let output = root.appendingPathComponent("chat-\(exportID).dexport/1.md")
+        #expect(try Data(contentsOf: output) == bytes)
+        let edited = Data("keep user edit".utf8)
+        try edited.write(to: output)
+        await #expect(throws: (any Error).self) {
+            _ = try await store.exportWorkflowAssets([ref], name: "chat", exportID: exportID, directory: root)
+        }
+        #expect(try Data(contentsOf: output) == edited)
+        await #expect(throws: (any Error).self) {
+            _ = try await store.publishWorkflowAsset(data: Data([0xff]), mediaType: "text/markdown", name: "bad", operationID: "d.chat.export-path")
+        }
+        try await store.close()
+        let reopened = try await ProjectStore.open(at: store.rootURL)
+        #expect(try await reopened.workflowData(ref) == bytes)
+        try await reopened.close()
+    }
     /// Reuse a completed real run; this checks Store/recipe behavior, not inference or GUI.
     @Test(.enabled(if: ProcessInfo.processInfo.environment["D_TEST_REAL_IMAGE_RESULT"] != nil))
     func realImagePublishesReopensAndExports() async throws {

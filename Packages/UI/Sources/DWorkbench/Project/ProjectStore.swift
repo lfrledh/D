@@ -3428,7 +3428,7 @@ extension ProjectStore {
         guard !manifest.assets.contains(where: { $0.id == assetID }), !name.isEmpty,
               let format = WorkflowMediaFormat.descriptor(mediaType),
               data.count <= format.maximumBytes else { throw WorkflowIssue("发布内容类型、大小或身份不合法。") }
-        if mediaType == "text/plain" {
+        if mediaType == "text/plain" || mediaType == "text/markdown" {
             guard data.count <= 1_048_576, String(data: data, encoding: .utf8) != nil else { throw WorkflowIssue("文字必须为不超过 1 MiB 的 UTF-8。") }
         } else if mediaType == WorkflowTextResponseFile.mediaType {
             _ = try WorkflowTextResponseFile.decode(data)
