@@ -49,13 +49,55 @@ public struct ProjectBackupReceipt: Sendable {
     }
 }
 
-public enum ProjectBackupError: Error, Sendable {
+public enum ProjectBackupError: LocalizedError, Sendable {
+    public struct POSIXFailure: Sendable {
+        public let operation: String
+        public let code: Int32
+        public let published: Bool
+    }
+    public struct FoundationFailure: Sendable {
+        public let operation: String
+        public let domain: String
+        public let code: Int
+        public let underlyingDomain: String?
+        public let underlyingCode: Int?
+    }
+
     case unsafePath(String)
     case alreadyExists(String)
     case invalidPackage(String)
     case integrity(String)
     case insufficientSpace
     case io(String)
+    case posix(POSIXFailure)
+    case foundation(FoundationFailure)
+
+    public var errorDescription: String? {
+        switch self {
+        case .unsafePath: return "备份位置或文件路径不安全。请重新选择有效位置。"
+        case .alreadyExists: return "目标位置已有文件。请选择其他名称，现有文件未被覆盖。"
+        case .invalidPackage: return "备份包无效或不完整。请检查备份来源。"
+        case .integrity: return "备份文件核对失败。请检查原文件或备份包。"
+        case .insufficientSpace: return "目标磁盘空间不足。请释放空间后重试。"
+        case .io(let detail): return "备份或恢复失败：\(detail)"
+        case .posix(let failure):
+            let state = failure.published
+                ? "结果可能已发布并保留，请先检查所选位置，勿直接重试。"
+                : "结果未发布，现有文件未被覆盖。"
+            let action: String
+            switch failure.code {
+            case EACCES, EPERM: action = "请检查所选位置的访问权限。"
+            case ENOSPC: action = "请释放目标磁盘空间。"
+            case ENOENT: action = "请确认所选磁盘或文件仍已连接。"
+            case EROFS: action = "请选择可写位置。"
+            default: action = "请检查所选位置和磁盘状态。"
+            }
+            return "备份或恢复失败（\(failure.operation)，POSIX \(failure.code)：\(String(cString: strerror(failure.code)))）。\(state)\(action)"
+        case .foundation(let failure):
+            let underlying = failure.underlyingDomain.map { "；底层 \($0) \(failure.underlyingCode ?? 0)" } ?? ""
+            return "备份清单处理失败（\(failure.operation)，\(failure.domain) \(failure.code)\(underlying)）。请检查备份包或原文件。"
+        }
+    }
 }
 
 public enum ProjectBackup {
@@ -205,7 +247,9 @@ private extension ProjectBackup {
             Darwin.close(output)
             guard fsync(folder) == 0 else { throw io("sync backup directory") }
         }
-        let bytes = try JSONEncoder.backupEncoder.encode(manifest)
+        let bytes: Data
+        do { bytes = try JSONEncoder.backupEncoder.encode(manifest) }
+        catch { throw foundation("encode backup manifest", error) }
         guard bytes.count <= maxManifestBytes else { throw ProjectBackupError.invalidPackage("manifest too large") }
         try writeSmall(bytes, named: manifestName, in: stage)
         try Task.checkCancellation()
@@ -223,12 +267,13 @@ private extension ProjectBackup {
         try checkPublicationRoute(parent: parent, parentURL: target.deletingLastPathComponent(),
                                   stage: stage, stageName: stageName, stageIdentity: ownedStage)
         guard renameatx_np(parent, stageName, parent, target.lastPathComponent, UInt32(RENAME_EXCL)) == 0 else {
-            if errno == EEXIST { throw ProjectBackupError.alreadyExists(target.path) }
-            throw io("publish backup package")
+            let failure = errno
+            if failure == EEXIST { throw ProjectBackupError.alreadyExists(target.path) }
+            throw io("publish backup package", code: failure)
         }
         published = true
         try checkPublishedTarget(target.lastPathComponent, in: parent, expected: ownedStage)
-        guard fsync(parent) == 0 else { throw ProjectBackupError.io("backup published but parent sync failed; retained at \(target.path)") }
+        guard fsync(parent) == 0 else { throw io("sync published backup parent", published: true) }
         return receipt(manifest, at: target)
     }
 
@@ -290,11 +335,12 @@ private extension ProjectBackup {
         try checkPublicationRoute(parent: parent, parentURL: target.deletingLastPathComponent(),
                                   stage: stage, stageName: stageName, stageIdentity: ownedStage)
         guard renameatx_np(parent, stageName, parent, target.lastPathComponent, UInt32(RENAME_EXCL)) == 0 else {
-            if errno == EEXIST { throw ProjectBackupError.alreadyExists(target.path) }
-            throw io("publish restore")
+            let failure = errno
+            if failure == EEXIST { throw ProjectBackupError.alreadyExists(target.path) }
+            throw io("publish restore", code: failure)
         }
         try checkPublishedTarget(target.lastPathComponent, in: parent, expected: ownedStage)
-        guard fsync(parent) == 0 else { throw ProjectBackupError.io("restore published but parent sync failed; retained at \(target.path)") }
+        guard fsync(parent) == 0 else { throw io("sync published restore parent", published: true) }
         return receipt(manifest, at: target)
     }
 
@@ -345,7 +391,7 @@ private extension ProjectBackup {
         guard marker == Data(digest(bytes).utf8) else { throw ProjectBackupError.integrity("completion marker") }
         let manifest: Manifest
         do { manifest = try JSONDecoder().decode(Manifest.self, from: bytes) }
-        catch { throw ProjectBackupError.invalidPackage("invalid manifest JSON") }
+        catch { throw foundation("decode backup manifest", error) }
         guard manifest.version == 1, manifest.files.count <= maxEntries,
               manifest.missing.count <= maxEntries, manifest.modelDependencies.count <= maxEntries else {
             throw ProjectBackupError.invalidPackage("unsupported or oversized manifest")
@@ -454,8 +500,9 @@ private extension ProjectBackup {
         if location.path == "/" { return current }
         for component in location.path.dropFirst().split(separator: "/") {
             let next = openat(current, String(component), O_SEARCH | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+            let failure = errno
             Darwin.close(current)
-            guard next >= 0 else { throw io("open directory") }
+            guard next >= 0 else { throw io("open directory", code: failure) }
             current = next
         }
         return current
@@ -471,9 +518,12 @@ private extension ProjectBackup {
         guard value.st_mode & S_IFMT == S_IFDIR else { throw ProjectBackupError.unsafePath("non-directory") }
         return DirectoryIdentity(value)
     }
-    static func namedDirectoryIdentity(_ name: String, in parent: Int32) throws -> DirectoryIdentity {
+    static func namedDirectoryIdentity(_ name: String, in parent: Int32,
+                                       published: Bool = false) throws -> DirectoryIdentity {
         var value = stat()
-        guard fstatat(parent, name, &value, AT_SYMLINK_NOFOLLOW) == 0 else { throw io("stat named directory") }
+        guard fstatat(parent, name, &value, AT_SYMLINK_NOFOLLOW) == 0 else {
+            throw io("stat named directory", published: published)
+        }
         guard value.st_mode & S_IFMT == S_IFDIR else { throw ProjectBackupError.unsafePath(name) }
         return DirectoryIdentity(value)
     }
@@ -489,7 +539,7 @@ private extension ProjectBackup {
     }
     static func checkPublishedTarget(_ name: String, in parent: Int32,
                                      expected: DirectoryIdentity) throws {
-        guard try namedDirectoryIdentity(name, in: parent) == expected else {
+        guard try namedDirectoryIdentity(name, in: parent, published: true) == expected else {
             throw ProjectBackupError.integrity("published directory identity changed; result retained")
         }
     }
@@ -506,13 +556,22 @@ private extension ProjectBackup {
         guard current >= 0 else { throw io("duplicate directory") }
         for component in parts {
             if mkdirat(current, component, 0o700) == 0 {
-                if fsync(current) != 0 { Darwin.close(current); throw io("sync new directory entry") }
-            } else if errno != EEXIST {
-                Darwin.close(current); throw io("create backup directory")
+                if fsync(current) != 0 {
+                    let failure = errno
+                    Darwin.close(current)
+                    throw io("sync new directory entry", code: failure)
+                }
+            } else {
+                let failure = errno
+                if failure != EEXIST {
+                    Darwin.close(current)
+                    throw io("create backup directory", code: failure)
+                }
             }
             let next = openat(current, component, O_SEARCH | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+            let failure = errno
             Darwin.close(current)
-            guard next >= 0 else { throw io("open backup directory") }
+            guard next >= 0 else { throw io("open backup directory", code: failure) }
             current = next
         }
         return (current, name)
@@ -525,13 +584,15 @@ private extension ProjectBackup {
         guard current >= 0 else { throw io("duplicate directory") }
         for part in parts {
             let next = openat(current, part, O_SEARCH | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+            let failure = errno
             Darwin.close(current)
-            guard next >= 0 else { throw ProjectBackupError.unsafePath(path) }
+            guard next >= 0 else { throw io("open package directory", code: failure) }
             current = next
         }
         let fd = openat(current, name, O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC)
+        let failure = errno
         Darwin.close(current)
-        guard fd >= 0 else { throw io("open package file") }
+        guard fd >= 0 else { throw io("open package file", code: failure) }
         do { _ = try identity(fd); return fd } catch { Darwin.close(fd); throw error }
     }
     static func sourceFile(_ url: URL) throws -> Int32 {
@@ -539,7 +600,7 @@ private extension ProjectBackup {
         let parent = try directory(location.deletingLastPathComponent())
         defer { Darwin.close(parent) }
         let fd = openat(parent, location.lastPathComponent, O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC)
-        guard fd >= 0 else { throw ProjectBackupError.unsafePath(location.path) }
+        guard fd >= 0 else { throw io("open source file") }
         do { _ = try identity(fd); return fd } catch { Darwin.close(fd); throw error }
     }
     static func identity(_ fd: Int32) throws -> Identity {
@@ -553,7 +614,8 @@ private extension ProjectBackup {
     static func absent(_ name: String, in parent: Int32) throws {
         var value = stat()
         if fstatat(parent, name, &value, AT_SYMLINK_NOFOLLOW) == 0 { throw ProjectBackupError.alreadyExists(name) }
-        guard errno == ENOENT else { throw io("check destination") }
+        let failure = errno
+        guard failure == ENOENT else { throw io("check destination", code: failure) }
     }
     static func exclusiveFile(_ name: String, in folder: Int32) throws -> Int32 {
         let fd = openat(folder, name, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0o600)
@@ -574,7 +636,8 @@ private extension ProjectBackup {
                 try Task.checkCancellation()
                 let count = Darwin.write(fd, bytes.baseAddress!.advanced(by: offset), min(chunkSize, bytes.count - offset))
                 if count < 0 && errno == EINTR { continue }
-                guard count > 0 else { throw io("write file") }
+                if count < 0 { throw io("write file") }
+                guard count > 0 else { throw ProjectBackupError.io("write file returned zero bytes") }
                 offset += count
             }
         }
@@ -618,7 +681,7 @@ private extension ProjectBackup {
     }
     static func readSmall(_ name: String, in root: Int32, limit: Int) throws -> Data {
         let fd = openat(root, name, O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC)
-        guard fd >= 0 else { throw ProjectBackupError.invalidPackage("missing or unsafe metadata") }
+        guard fd >= 0 else { throw io("open package metadata") }
         defer { Darwin.close(fd) }
         let before = try identity(fd)
         guard before.size <= limit else { throw ProjectBackupError.invalidPackage("metadata too large") }
@@ -647,7 +710,15 @@ private extension ProjectBackup {
     static func hex<D: Sequence>(_ bytes: D) -> String where D.Element == UInt8 {
         bytes.map { String(format: "%02x", $0) }.joined()
     }
-    static func io(_ action: String) -> ProjectBackupError { .io("\(action): \(String(cString: strerror(errno)))") }
+    static func io(_ action: String, code: Int32 = errno, published: Bool = false) -> ProjectBackupError {
+        .posix(.init(operation: action, code: code, published: published))
+    }
+    static func foundation(_ action: String, _ error: Error) -> ProjectBackupError {
+        let primary = error as NSError
+        let underlying = primary.userInfo[NSUnderlyingErrorKey] as? NSError
+        return .foundation(.init(operation: action, domain: primary.domain, code: primary.code,
+                                 underlyingDomain: underlying?.domain, underlyingCode: underlying?.code))
+    }
 }
 
 private extension JSONEncoder {

@@ -9,6 +9,35 @@ import Testing
 struct ProjectBackupTests {
     private enum Interrupted: Error { case now }
 
+    @Test func posixFailureReportsOperationAndNeverPublishes() async throws {
+        try await fixture { root in
+            let blocked = root.appendingPathComponent("blocked")
+            let original = Data("keep existing bytes".utf8)
+            try original.write(to: blocked)
+            let target = blocked.appendingPathComponent("backup")
+            let plan = ProjectBackupPlan(projectID: UUID(), revision: 0, files: [])
+            do {
+                _ = try await ProjectBackup.create(plan, at: target)
+                Issue.record("backup unexpectedly succeeded")
+            } catch let error as ProjectBackupError {
+                guard case .posix(let failure) = error else {
+                    Issue.record("expected a structured POSIX failure, got \(error)")
+                    return
+                }
+                #expect(failure.operation == "open directory")
+                #expect(failure.code == ENOTDIR)
+                #expect(!failure.published)
+                #expect(error.localizedDescription.contains("open directory"))
+                #expect(error.localizedDescription.contains("POSIX \(ENOTDIR)"))
+                #expect(!error.localizedDescription.contains(blocked.path))
+            } catch {
+                Issue.record("expected ProjectBackupError, got \(error)")
+            }
+            #expect(try Data(contentsOf: blocked) == original)
+            #expect(!FileManager.default.fileExists(atPath: target.path))
+        }
+    }
+
     @Test func completeBackupVerifiesAndRestoresIndependentBytes() async throws {
         try await fixture { root in
             let source = root.appendingPathComponent("source.bin")
