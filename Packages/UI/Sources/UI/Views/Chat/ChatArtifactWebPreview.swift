@@ -38,9 +38,12 @@ public struct ChatArtifactWebPreview: NSViewRepresentable {
         private var webView: WKWebView?
         private var ruleIdentifier: String?
         private var initialNavigationPending = false
+        private enum LoadPhase { case bootstrap, source }
+        private var loadPhase: LoadPhase?
+        private var bootstrapTimeout: Task<Void, Never>?
         private let ruleStore: WKContentRuleListStore? = WKContentRuleListStore.default()
 
-        fileprivate func update(in container: NSView, source newSource: String,
+        func update(in container: NSView, source newSource: String,
                                 javaScriptEnabled newJavaScriptEnabled: Bool,
                                 onError newOnError: @escaping @MainActor (ChatArtifactWebPreviewError) -> Void) {
             onError = newOnError
@@ -75,15 +78,25 @@ public struct ChatArtifactWebPreview: NSViewRepresentable {
                     }
                     return
                 }
-                self.install(in: container, source: newSource, ruleList: ruleList)
+                self.install(in: container, source: newSource,
+                             javaScriptEnabled: newJavaScriptEnabled, ruleList: ruleList)
             }
         }
 
-        private func install(in container: NSView, source: String, ruleList: WKContentRuleList) {
+        private func install(in container: NSView, source: String, javaScriptEnabled: Bool,
+                             ruleList: WKContentRuleList) {
             let configuration = WKWebViewConfiguration()
             configuration.websiteDataStore = .nonPersistent()
             configuration.userContentController.add(ruleList)
-            configuration.defaultWebpagePreferences.allowsContentJavaScript = false
+            configuration.defaultWebpagePreferences.allowsContentJavaScript = javaScriptEnabled
+            if javaScriptEnabled {
+                // Public, page-scoped preference. The bootstrap also checks the resulting JS world.
+                configuration.defaultWebpagePreferences.isLockdownModeEnabled = true
+                guard configuration.defaultWebpagePreferences.isLockdownModeEnabled else {
+                    onError?(.protectionUnavailable)
+                    return
+                }
+            }
             configuration.mediaTypesRequiringUserActionForPlayback = .all
 
             let viewer = WKWebView(frame: container.bounds, configuration: configuration)
@@ -93,13 +106,30 @@ public struct ChatArtifactWebPreview: NSViewRepresentable {
             viewer.allowsLinkPreview = false
             webView = viewer
             initialNavigationPending = true
+            loadPhase = javaScriptEnabled ? .bootstrap : .source
             container.addSubview(viewer)
-            // The CSP precedes every byte of the untrusted document; no base URL or file grant.
-            viewer.loadHTMLString(ChatArtifactWebPreviewPolicy.document(source), baseURL: nil)
+            if javaScriptEnabled {
+                // Untrusted source is held outside WebKit until the trusted, empty page is guarded.
+                viewer.loadHTMLString(ChatArtifactWebPreviewPolicy.bootstrapDocument, baseURL: nil)
+                let currentGeneration = generation
+                bootstrapTimeout = Task { @MainActor [weak self, weak viewer] in
+                    try? await Task.sleep(for: .seconds(5))
+                    guard let self, let viewer, self.generation == currentGeneration,
+                          self.webView === viewer, self.loadPhase == .bootstrap else { return }
+                    self.fail(.protectionUnavailable, for: viewer)
+                }
+            } else {
+                // The CSP precedes every byte of the untrusted document; no base URL or file grant.
+                viewer.loadHTMLString(ChatArtifactWebPreviewPolicy.document(source,
+                                                                            javaScriptEnabled: false), baseURL: nil)
+            }
         }
 
         private func closeViewer() {
             generation = UUID()
+            bootstrapTimeout?.cancel()
+            bootstrapTimeout = nil
+            loadPhase = nil
             initialNavigationPending = false
             if let webView {
                 webView.stopLoading()
@@ -114,7 +144,7 @@ public struct ChatArtifactWebPreview: NSViewRepresentable {
             ruleIdentifier = nil
         }
 
-        fileprivate func close() {
+        func close() {
             closeViewer()
             source = nil
             onError = nil
@@ -126,14 +156,38 @@ public struct ChatArtifactWebPreview: NSViewRepresentable {
             onError?(error)
         }
 
+        public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            guard self.webView === webView, loadPhase == .bootstrap else { return }
+            let currentGeneration = generation
+            webView.evaluateJavaScript(ChatArtifactWebPreviewPolicy.bootstrapProbe) { [weak self, weak webView] result, error in
+                guard let self, let webView, self.generation == currentGeneration,
+                      self.webView === webView, self.loadPhase == .bootstrap else { return }
+                guard error == nil, result as? Bool == true, let source = self.source else {
+                    self.fail(.protectionUnavailable, for: webView)
+                    return
+                }
+                self.bootstrapTimeout?.cancel()
+                self.bootstrapTimeout = nil
+                self.loadPhase = .source
+                self.initialNavigationPending = true
+                webView.loadHTMLString(ChatArtifactWebPreviewPolicy.document(source,
+                                                                             javaScriptEnabled: true), baseURL: nil)
+            }
+        }
+
         public func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
-                            decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+                            preferences: WKWebpagePreferences,
+                            decisionHandler: @escaping (WKNavigationActionPolicy, WKWebpagePreferences) -> Void) {
             let initial = self.webView === webView && initialNavigationPending
                 && navigationAction.targetFrame?.isMainFrame == true
                 && navigationAction.navigationType == .other
                 && navigationAction.request.url?.absoluteString == "about:blank"
             if initial { initialNavigationPending = false }
-            decisionHandler(initial ? .allow : .cancel)
+            // Check the per-navigation value before WebKit can run source scripts.
+            let guarded = !javaScriptEnabled || (preferences.isLockdownModeEnabled
+                && preferences.allowsContentJavaScript)
+            decisionHandler(initial && guarded ? .allow : .cancel, preferences)
+            if initial && !guarded { fail(.protectionUnavailable, for: webView) }
         }
 
         public func webView(_ webView: WKWebView, decidePolicyFor navigationResponse: WKNavigationResponse,
@@ -228,8 +282,6 @@ enum ChatArtifactWebPreviewPolicy {
 
     static func preflightError(source: String, javaScriptEnabled: Bool) -> ChatArtifactWebPreviewError? {
         if !accepts(source) { return .sourceTooLarge }
-        // CSP and resource rules do not isolate JavaScript RTC/STUN traffic.
-        if javaScriptEnabled { return .javaScriptUnsupported }
         return nil
     }
 
@@ -241,9 +293,27 @@ enum ChatArtifactWebPreviewPolicy {
          {"trigger":{"url-filter":"^about:blank$","resource-type":["document"]},"action":{"type":"ignore-previous-rules"}}]
         """
 
-    static func document(_ source: String) -> String {
+    static let bootstrapDocument = document("", javaScriptEnabled: true)
+
+    // Evaluated only in the trusted empty document. Lockdown is also checked through
+    // the public navigation preference; a visible RTC constructor fails closed.
+    static let bootstrapProbe = """
+        (() => {
+          const known = ['RTCPeerConnection', 'webkitRTCPeerConnection',
+            'mozRTCPeerConnection', 'RTCDataChannel', 'webkitRTCDataChannel'];
+          const names = Object.getOwnPropertyNames(globalThis);
+          return !known.some(name => typeof globalThis[name] === 'function')
+            && !names.some(name => /rtc|peerconnection/i.test(name)
+              && typeof globalThis[name] === 'function');
+        })()
+        """
+
+    static func document(_ source: String, javaScriptEnabled: Bool = false) -> String {
+        let scripts = javaScriptEnabled
+            ? "script-src 'unsafe-inline'; script-src-attr 'unsafe-inline'; "
+            : "script-src 'none'; script-src-attr 'none'; "
         let policy = "default-src 'none'; img-src data:; style-src 'unsafe-inline'; "
-            + "script-src 'none'; script-src-attr 'none'; connect-src 'none'; "
+            + scripts + "connect-src 'none'; "
             + "worker-src 'none'; frame-src 'none'; child-src 'none'; font-src 'none'; "
             + "media-src 'none'; object-src 'none'; form-action 'none'; base-uri 'none'"
         return "<!doctype html><html><head><meta charset=\"utf-8\"><meta http-equiv=\"Content-Security-Policy\" content=\"\(policy)\"></head><body>\(source)</body></html>"
