@@ -586,3 +586,26 @@ H3固定自然首尾请求两次在模型运行前拒绝：第一次缺task/cach
 选择依据：Swift Async Algorithms Channel 的 send/取消语义需显式处理生产者等待与运行取消，不直接把 send 返回当成功；D 当前 Runtime 保持标准库依赖。项目过滤优先验证 `.data` 默认类型与 `.package` 注册差异，不放开全部目录。LibreChat v0.8.8 / Open WebUI v0.11.4 / LM Studio 官方交互只参考；Open WebUI 含品牌条款，不复制源码/资产。D 保持四分类、一个 ChatController、一个按需检查器和稳定输入身份。
 
 出口仍为同版普通 App、真实长流/停止与原生选择，分层报告；未验不接纳。后续 S02–S06 在同一批准范围，不因分片而延期。
+
+### S00候选与S01并行展示（2026-10-03）
+
+RCP=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261003T115108Z-chat-product`。主候选起点`40d51ee73f72eb54407e6eedbd693c9ba67068e4`，准备提交`0a5d4fde051f78c2d4d11aa86f2be9796b3991b7`；main仍`f31dced209855722d2f04cc0fc8c5f6712396120`，未接纳本切片。
+
+- **长流根因和修补**：固定256事件生产缓冲遇MainActor逐事件处理时会失败。实际WorkflowServices/Runtime慢显示反例先报consumerTooSlow；保留原容量，改为有界等待，并由非MainActor收集完整文本、80ms向显示发布累计快照。取消停止生产，继续排空已接受前缀，等待release后公布权威终态。没有宣称上游MLX/GPU token流也已改成背压；其既有maxTokens边界不变。峰值/等待/显示次数记录在结果元信息，非全局遥测。
+- **审查发现并修复**：unfolding在首次next前已取消时可能不进入pull；新增InferenceEvents只对Runtime pull安装外层取消，旧stream构造保留原有取消责任。先红后绿保留；另补取消发送者被唤醒后再次取消导致空槽未交接的反例。原TextDraftSession取消计数出现回归，`b8ae14c5d8f6e362c2d5646304abe8c4c429b284`修复，不改旧断言。
+- **候选/重现**：新候选使用新seed；旧请求重现使用原node/messages/inputs/system并保留来源attempt。菜单分开且保留当前未完成参数草稿；历史无seed不冒充重现。非实现者发现重现误受当前无效字段阻挡，先补真实Controller失败再修，最终代码`457cb9a04178f6a9f01a41bd84607119a158d5c7`。不承诺同seed跨设备逐token完全确定。
+- **文件入口**：panel受限Worker修正.dproject默认动态data推导为明确package过滤；3入口复用同一类型来源，不放开全部目录、不改Info.plist/签名。独立提交`700a999fa409bbaed23df9217ea323cda4d8597a`，合并`a7225dcb57d6ebea65584b3a15ae9339616311b4`。CPU类型对照与声明检查通过；真实列表选择尚未通过。
+
+| 验证 | 实际版本、结果与限制 |
+|---|---|
+| Runtime/取消 | b8ae14c5：104方法/19suite通过；包含首次拉取前取消、有界慢消费和64个发送者交接交错。不是穷尽调度，也不是GPU证据。RCP/lead/s00-runtime-compat-result.json |
+| 组合消费者 | b8ae14c5：DWorkbench90方法/7suite及UI包类型2方法通过；实际WorkflowServices处理2048个Unicode片段、受控慢UI、原文持久化与最终预览清空。RCP/lead/s00-combined-cpu-r1-result.json |
+| F07/面板UI逻辑 | 457cb9a0：Chat16、UI8分别通过；不把重复覆盖相加成独立总通过率。RCP/lead/s00-actions-final-result.json |
+| 普通签名构建 | 457cb9a0：exit0，71.863秒；已有宏信任和固定开发引擎复用。独立完整App复制后deep/strict签名检查通过，四关键文件摘要留s00-packaged-app.json；未改包后补丁、未跳宏校验。 |
+| 原生/真实模型 | 桌面工具明确Mac locked。未启动此包、未跑本轮GPU，长回答/停止/项目列表选择待解锁。H32集中收纳；旧H22/H31/H33/菜单/自然视频证据不重跑。 |
+
+来源：Lead实现共享消费者及F07、执行测试；非实现者`native_h22_diagnosis`只读审核并提供上述反例，不冒称第二模型执行过测试。panel为可观察`gpt-6-sol/high`受限CLI，初交+一修；S01同模型独立树，初交首审发现宽度、sheet并存和夹具不足，一修进行中。每次路由/写根/网络关闭证据在对应`*-route-accepted.json`；隐藏服务端解析unknown，不继承全访问冒充隔离。
+
+过程失败保留：早期证据驱动参数键误用，一次包装退出但自有Swift检查完成，后以正确受控超时重跑同一反例；新UI测试曾误修改不可变node，已改为构造独立旧记录，未改产品保护。panel首次探针仅构造NSOpenPanel即遇XPC退出，未展示/越权，修复前已审核并禁止继续原生探针；S01报告ps被拒绝，未提权或重试，精确命令未取回，不补造无事故证明。详见RCP/lead/harness-setup-events.json、panel-first-review.json、view-review-before-repair.json。
+
+恢复：候选W与panel/view独立树保留；普通App、模型、旧项目及源个人scheme不动。S00独立启动器仅用于待验候选，不能标成稳定main。S01交回和审核完成后再装配；正常App门槛通过前不接纳main，不开始新存储/工具生产接线。完整F状态只维护CHAT_FEATURE_LEDGER，不归回发布后。Lead完整费用unknown，旧费用不重算。

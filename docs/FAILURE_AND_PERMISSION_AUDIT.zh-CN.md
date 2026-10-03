@@ -2,6 +2,8 @@
 
 ## 当前集中待办（2026-10-03）
 
+**CHAT-PRODUCT-20261003 增量：H32 等待解锁。** 本轮桌面工具明确报告 Mac locked，未启动新测试App。本人只需解锁后告知；Lead随后自行完成新S00包的长回答、停止/释放、项目包列表选择，以及S01新宿主的原生布局检查。必要组字仅按新宿主影响集中安排，不重开已关闭H22，不重复账号、宏信任、模型资格或旧登记。长流/列表修补的CPU和构建通过不替代此门槛。证据：`D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261003T115108Z-chat-product/lead/native-block.json`、`s00-packaged-app.json`。以下旧B“本人已办”继续有效，但“当前无需新本人操作”已由本增量替代。
+
 本轮仍为D-RELEASE-FREEZE-01 / D-DISCUSSION-FREEZE-20261002。RN=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261002T160047Z-native-closeout`。当前唯一入口和同树Xcode见[试用指南](RELEASE_FREEZE_TRY.zh-CN.md)。下方原日期的“当前”“下一次”等表述均为历史快照，以本节为当前队列。
 
 1. **H22：2026-10-03本人复验通过，关闭**。修补版`9baaacbc74855aaa84fa03868e62a1676d882250`，本人确认鼠标不再闪回；此前不能确认拼音的问题已解除。候选窗未随窗口移动，但本人对照Finder等苹果应用后确认表现一致，明确接受为当前系统默认行为。本项不再要求重复组字或跟随修补；这不是所有系统版本的普遍保证，未来若出现丢字、无法选字或与系统对照不同的新反例，再单独登记。旧ON/OFF失败、revision导致marked消失、UI5/Quick19及非实现者审核保留。RH=`D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261003T015601Z-human-closeout`，本人证据`gui/h22-final-human.json`。参考正文/单行/Canvas未因该局部补丁改写，不将此次通过扩大为所有输入控件全面测试。
