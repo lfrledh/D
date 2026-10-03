@@ -1,5 +1,6 @@
 import DInference
 import Foundation
+import Darwin
 import CoreGraphics
 import ImageIO
 import Testing
@@ -158,14 +159,14 @@ struct ChatTests {
         let (store, engine, chat) = try await fixture()
         let id = try chat.newSession(); try configure(chat, session: id)
         let prompt = String(repeating: "👩🏽‍🎨", count: 40)
-        #expect(prompt.utf8.count == 680)
+        #expect(prompt.utf8.count == 600)
         try chat.updateDraft(prompt, sessionID: id)
         try await chat.send(sessionID: id); await chat.waitForCompletion()
         try chat.state.validate()
         try await chat.flush()
         let saved = try await store.chatState()
         let session = try #require(saved.sessions.first(where: { $0.id == id }))
-        #expect(session.title == String(repeating: "👩🏽‍🎨", count: 30))
+        #expect(session.title == String(repeating: "👩🏽‍🎨", count: 34))
         #expect(session.title.utf8.count == 510)
         #expect(session.messages.first?.text == prompt)
         let frozen = try #require(session.attempts.first?.messagesJSON)
@@ -377,14 +378,21 @@ struct ChatTests {
     @Test func failedAssetPublicationRetriesWithoutNewInference() async throws {
         let (store, engine, chat) = try await fixture()
         let id = try chat.newSession(); try configure(chat, session: id)
+        // A real owned directory produces retryable mkdir EACCES. A regular file
+        // at this path is unsafePath and must remain a terminal protection failure.
         let obstruction = store.rootURL.appendingPathComponent("WorkflowAssets")
-        try Data("fixture obstruction".utf8).write(to: obstruction)
+        try FileManager.default.createDirectory(at: obstruction, withIntermediateDirectories: false,
+                                                attributes: [.posixPermissions: 0o700])
+        let permissions = try #require(FileManager.default.attributesOfItem(atPath: obstruction.path)[.posixPermissions])
+        defer { try? FileManager.default.setAttributes([.posixPermissions: permissions], ofItemAtPath: obstruction.path) }
+        try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: obstruction.path)
         try chat.updateDraft("save once", sessionID: id)
         try await chat.send(sessionID: id); await chat.waitForCompletion()
-        #expect(chat.pendingSaveAttemptID != nil)
+        try #require(chat.pendingSaveAttemptID != nil)
+        #expect(chat.error == WorkflowSaveFailure(reason: ProjectStoreError.io(String(cString: strerror(EACCES))).localizedDescription).localizedDescription)
         await #expect(throws: (any Error).self) { try await chat.prepareForBackup() }
         #expect(await engine.requests.count == 1)
-        try FileManager.default.removeItem(at: obstruction)
+        try FileManager.default.setAttributes([.posixPermissions: permissions], ofItemAtPath: obstruction.path)
         await chat.retrySave()
         #expect(chat.pendingSaveAttemptID == nil)
         #expect(chat.state.sessions.first?.attempts.first?.status == .completed)
@@ -395,14 +403,21 @@ struct ChatTests {
     @Test func terminalRetryFailureClearsPendingAndKeepsEvidence() async throws {
         let (store, engine, chat) = try await fixture()
         let id = try chat.newSession(); try configure(chat, session: id)
+        // A real owned directory produces retryable mkdir EACCES. A regular file
+        // at this path is unsafePath and must remain a terminal protection failure.
         let obstruction = store.rootURL.appendingPathComponent("WorkflowAssets")
-        try Data("fixture obstruction".utf8).write(to: obstruction)
+        try FileManager.default.createDirectory(at: obstruction, withIntermediateDirectories: false,
+                                                attributes: [.posixPermissions: 0o700])
+        let permissions = try #require(FileManager.default.attributesOfItem(atPath: obstruction.path)[.posixPermissions])
+        defer { try? FileManager.default.setAttributes([.posixPermissions: permissions], ofItemAtPath: obstruction.path) }
+        try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: obstruction.path)
         try chat.updateDraft("retain preview", sessionID: id)
         try await chat.send(sessionID: id); await chat.waitForCompletion()
-        #expect(chat.pendingSaveAttemptID != nil)
+        try #require(chat.pendingSaveAttemptID != nil)
+        #expect(chat.error == WorkflowSaveFailure(reason: ProjectStoreError.io(String(cString: strerror(EACCES))).localizedDescription).localizedDescription)
         let preview = try #require(chat.state.sessions.first?.attempts.first?.rawText)
         #expect(!preview.isEmpty)
-        try FileManager.default.removeItem(at: obstruction)
+        try FileManager.default.setAttributes([.posixPermissions: permissions], ofItemAtPath: obstruction.path)
         let manifest = store.rootURL.appendingPathComponent(ProjectStore.manifestFilename)
         var object = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: manifest)) as? [String: Any])
         object["name"] = "external project edit"
@@ -425,13 +440,21 @@ struct ChatTests {
     @Test func forkPartialCannotBorrowCompletedOriginAttempt() async throws {
         let (store, engine, chat) = try await fixture()
         let origin = try chat.newSession(); try configure(chat, session: origin)
+        // A real owned directory produces retryable mkdir EACCES. A regular file
+        // at this path is unsafePath and must remain a terminal protection failure.
         let obstruction = store.rootURL.appendingPathComponent("WorkflowAssets")
-        try Data("fixture obstruction".utf8).write(to: obstruction)
+        try FileManager.default.createDirectory(at: obstruction, withIntermediateDirectories: false,
+                                                attributes: [.posixPermissions: 0o700])
+        let permissions = try #require(FileManager.default.attributesOfItem(atPath: obstruction.path)[.posixPermissions])
+        defer { try? FileManager.default.setAttributes([.posixPermissions: permissions], ofItemAtPath: obstruction.path) }
+        try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: obstruction.path)
         try chat.updateDraft("origin", sessionID: origin)
         try await chat.send(sessionID: origin); await chat.waitForCompletion()
+        try #require(chat.pendingSaveAttemptID != nil)
+        #expect(chat.error == WorkflowSaveFailure(reason: ProjectStoreError.io(String(cString: strerror(EACCES))).localizedDescription).localizedDescription)
         #expect(chat.state.sessions.first?.attempts.first?.status == .partial)
         let fork = try chat.forkSession(origin)
-        try FileManager.default.removeItem(at: obstruction)
+        try FileManager.default.setAttributes([.posixPermissions: permissions], ofItemAtPath: obstruction.path)
         await chat.retrySave()
         #expect(chat.state.sessions.first?.attempts.first?.status == .completed)
         #expect(chat.state.sessions.last?.attempts.first?.status == .partial)
@@ -439,6 +462,25 @@ struct ChatTests {
         await #expect(throws: (any Error).self) { try await chat.send(sessionID: fork) }
         #expect(await engine.requests.count == 1)
         #expect(chat.state.sessions.last?.attempts.first?.status == .partial)
+        try await chat.flush(); try await store.close()
+    }
+
+    @Test func unsafeAssetDirectoryIsTerminalAndPreservesObstructionAndPreview() async throws {
+        let (store, engine, chat) = try await fixture()
+        let id = try chat.newSession(); try configure(chat, session: id)
+        let obstruction = store.rootURL.appendingPathComponent("WorkflowAssets")
+        let original = Data("fixture obstruction".utf8)
+        try original.write(to: obstruction)
+        try chat.updateDraft("retain unsafe path evidence", sessionID: id)
+        try await chat.send(sessionID: id); await chat.waitForCompletion()
+        #expect(chat.pendingSaveAttemptID == nil)
+        #expect(chat.error == ProjectStoreError.unsafePath("WorkflowAssets").localizedDescription)
+        #expect(chat.state.sessions.first?.attempts.first?.status == .partial)
+        #expect(chat.state.sessions.first?.attempts.first?.rawText.isEmpty == false)
+        await chat.retrySave()
+        #expect(chat.pendingSaveAttemptID == nil)
+        #expect(await engine.requests.count == 1)
+        #expect(try Data(contentsOf: obstruction) == original)
         try await chat.flush(); try await store.close()
     }
 
