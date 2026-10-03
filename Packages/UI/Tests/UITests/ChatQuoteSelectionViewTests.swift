@@ -61,7 +61,7 @@ private struct QuoteSelectionHarness: View {
     private func expectActionsEnabled(_ enabled: Bool, in host: NSView) throws {
         for actionKind in ChatQuoteSelectionAction.allCases {
             let control = try #require(action(actionKind, in: host))
-            #expect(control.accessibilityEnabled() == enabled)
+            #expect(control.isAccessibilityEnabled() == enabled)
         }
     }
 

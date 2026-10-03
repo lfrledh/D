@@ -48,7 +48,7 @@ struct ChatQuoteSelectionView: View {
 
     private func title(for action: ChatQuoteSelectionAction) -> String {
         let chinese = language?.effectiveLanguageIdentifier.hasPrefix("zh") == true
-        switch action {
+        return switch action {
         case .ask: workflowText(language, "chat.quote.ask", fallback: chinese ? "引用提问" : "Ask")
         case .explain: workflowText(language, "chat.quote.explain", fallback: chinese ? "解释" : "Explain")
         case .translate: workflowText(language, "chat.quote.translate", fallback: chinese ? "翻译" : "Translate")
