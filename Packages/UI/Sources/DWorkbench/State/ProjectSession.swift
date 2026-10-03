@@ -2462,10 +2462,7 @@ public final class ProjectSession {
         }
         if let chat {
             guard chat.store === captured else { throw WorkflowIssue("聊天所属项目已改变。") }
-            guard chat.pendingSaveAttemptID == nil else {
-                throw WorkflowIssue("聊天回答尚未写入项目，暂不能创建完整备份。请先在文字页重试保存；原记录和生成结果仍保留。")
-            }
-            try await chat.flush()
+            try await chat.prepareForBackup()
         }
         try Task.checkCancellation()
         guard store === captured, manifest?.effectiveInstanceID == instanceID,

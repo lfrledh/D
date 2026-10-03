@@ -93,6 +93,19 @@ import Observation
         writeTail = task
         do { try await task.value } catch { saveIssue = error.localizedDescription; throw error }
     }
+    /// Backup includes durable chat state only. A live or unpublished response must
+    /// finish/save first; recheck after the actor hop used by sidecar publication.
+    public func prepareForBackup() async throws {
+        func requireDurableBoundary() throws {
+            guard !isRunning else { throw WorkflowIssue("聊天仍在生成或停止中，请待资源释放后再备份。") }
+            guard pendingSaveAttemptID == nil else {
+                throw WorkflowIssue("聊天回答尚未写入项目，请先在文字页重试保存；原记录和生成结果仍保留。")
+            }
+        }
+        try requireDurableBoundary()
+        try await flush()
+        try requireDurableBoundary()
+    }
     @discardableResult public func newSession(title: String = "新对话") throws -> UUID {
         try requireLoaded()
         guard state.sessions.count < 512, !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,

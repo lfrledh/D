@@ -322,6 +322,7 @@ struct ChatTests {
         try chat.updateDraft("start", sessionID: first)
         try await chat.send(sessionID: first)
         await engine.gate.waitSubmitted()
+        await #expect(throws: (any Error).self) { try await chat.prepareForBackup() }
         let second = try chat.newSession()
         #expect(chat.selectedSession?.id == second)
         #expect(chat.activeSessionID == first)
@@ -335,6 +336,7 @@ struct ChatTests {
         #expect(chat.state.sessions.first?.attempts.first?.rawText == "partial 👩🏽‍🎨 e\u{301}")
         #expect(chat.state.sessions.first?.attempts.first?.status == .partial)
         #expect(await engine.cancellations > 0)
+        try await chat.prepareForBackup()
         try await chat.flush(); try await store.close()
     }
 
@@ -346,6 +348,7 @@ struct ChatTests {
         try chat.updateDraft("save once", sessionID: id)
         try await chat.send(sessionID: id); await chat.waitForCompletion()
         #expect(chat.pendingSaveAttemptID != nil)
+        await #expect(throws: (any Error).self) { try await chat.prepareForBackup() }
         #expect(await engine.requests.count == 1)
         try FileManager.default.removeItem(at: obstruction)
         await chat.retrySave()
