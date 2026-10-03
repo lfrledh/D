@@ -10,7 +10,7 @@ import Testing
         var session = ChatSession()
         var node = WorkflowNode(operationID: "d.model.qwen35-9b", title: "Qwen")
         node.parameters["seed"] = .text("18446744073709551614")
-        var attempt = ChatAttempt(sessionID: session.id, userMessageID: UUID(), assistantMessageID: UUID(),
+        let attempt = ChatAttempt(sessionID: session.id, userMessageID: UUID(), assistantMessageID: UUID(),
             node: node, messagesJSON: "[]", inputs: [:], systemPrompt: "old", status: .completed)
         // An absent current configuration must not replace or invalidate a recorded request.
         session.configuration = nil
@@ -24,8 +24,10 @@ import Testing
             hasPendingSave: false, hasSaveIssue: true))
         #expect(!ChatRunAdmission.allowsReplay(ChatSession(), attempt: attempt, isRunning: false,
             hasPendingSave: false, hasSaveIssue: false))
-        attempt.node.parameters.removeValue(forKey: "seed")
-        #expect(!ChatRunAdmission.allowsReplay(session, attempt: attempt, isRunning: false,
+        node.parameters.removeValue(forKey: "seed")
+        let oldUnseeded = ChatAttempt(sessionID: session.id, userMessageID: UUID(), assistantMessageID: UUID(),
+            node: node, messagesJSON: "[]", inputs: [:], systemPrompt: "old", status: .completed)
+        #expect(!ChatRunAdmission.allowsReplay(session, attempt: oldUnseeded, isRunning: false,
             hasPendingSave: false, hasSaveIssue: false))
     }
 
