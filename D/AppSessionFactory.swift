@@ -186,7 +186,7 @@ enum AppSessionFactory {
                     execution: .init(profile: .init(identifier: "qwen2-text"), maximumPromptTokens: 2048)))))
                 return reference
             }, previewTextTemplate: { model, request in
-                try await TextTemplatePreviewProvider.preview(model: model, request: request)
+                try await ChatTemplatePreviewProvider.preview(model: model, request: request)
             }, audioBackendID: audioBackend?.descriptor.id,
             validateAudioModel: validateAudioModel, musicBackendID: musicBackend?.descriptor.id,
             validateMusicModel: validateMusicModel,
