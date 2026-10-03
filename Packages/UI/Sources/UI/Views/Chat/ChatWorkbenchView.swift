@@ -191,6 +191,8 @@ struct ChatWorkbenchView: View {
     @State private var showArchived = false
     @State private var showSidebar = true
     @State private var showInspector = false
+    @State private var sidebarWasPresented = false
+    @State private var inspectorWasPresented = false
     @State private var inspectorTab: ChatInspectorTab = .data
     @State private var sheets = ChatSheetQueue<ChatDetail>()
     @State private var followsBottom = true
@@ -214,11 +216,13 @@ struct ChatWorkbenchView: View {
          onSavedAsset: @escaping (WorkflowAssetReference) -> Void,
          onAssetsChanged: @escaping () -> Void,
          initialInspectorVisible: Bool = false,
+         initialSettingsVisible: Bool = false,
          initiallyFollowsBottom: Bool = true,
          initiallyHasNewContent: Bool = false) {
         self.chat = chat; self.model = model; self.onChooseModel = onChooseModel
         self.onSavedAsset = onSavedAsset; self.onAssetsChanged = onAssetsChanged
         _showInspector = State(initialValue: initialInspectorVisible)
+        _inspectorTab = State(initialValue: initialSettingsVisible ? .settings : .data)
         _followsBottom = State(initialValue: initiallyFollowsBottom)
         _hasNewContent = State(initialValue: initiallyHasNewContent)
     }
@@ -260,8 +264,10 @@ struct ChatWorkbenchView: View {
                 requested: showInspector, sidebar: sidebarShown)
             let inspectorInline = inspectorShown && sheets.narrowPanel != .inspector
             let sidebarInline = sidebarShown && sheets.narrowPanel != .sessions
-            let sidebarVisible = sidebarInline || sheets.narrowPanel == .sessions
-            let inspectorVisible = inspectorInline || sheets.narrowPanel == .inspector
+            // An already open pane remains visible as an overlay while the width
+            // changes. Do not briefly hide its native editor before onChange runs.
+            let sidebarVisible = showSidebar && (sidebarInline || sidebarWasPresented || sheets.narrowPanel == .sessions)
+            let inspectorVisible = showInspector && (inspectorInline || inspectorWasPresented || sheets.narrowPanel == .inspector)
             let sidebarPaneWidth = min(ChatPresentationLayout.sidebarWidth, geometry.size.width)
             let inspectorPaneWidth = min(ChatPresentationLayout.inspectorWidth, geometry.size.width)
             ZStack(alignment: .topLeading) {
@@ -310,7 +316,13 @@ struct ChatWorkbenchView: View {
             }
             .clipped()
             .coordinateSpace(name: ChatLayoutSpace.name)
+            .onAppear {
+                sidebarWasPresented = sidebarVisible
+                inspectorWasPresented = inspectorVisible
+            }
             .onChange(of: geometry.size.width) { oldWidth, width in
+                if sidebarShown { sidebarWasPresented = true }
+                if inspectorShown { inspectorWasPresented = true }
                 if let narrowPanel = sheets.narrowPanel, ChatPresentationLayout.dismissesNarrowPanel(narrowPanel,
                     width: width, sidebarRequested: showSidebar, inspectorRequested: showInspector) {
                     closeNarrowPanel(keepPreference: true)
@@ -357,6 +369,7 @@ struct ChatWorkbenchView: View {
             Button {
                 if !ChatPresentationLayout.showsSidebar(width: width, requested: true) {
                     showSidebar = true
+                    sidebarWasPresented = true
                     sheets.openNarrow(.sessions)
                 } else { showSidebar.toggle() }
             } label: { Label(label("history", "对话"), systemImage: "sidebar.left") }
@@ -364,6 +377,7 @@ struct ChatWorkbenchView: View {
             Button {
                 if !ChatPresentationLayout.showsInspector(width: width, requested: true, sidebar: sidebarShown) {
                     showInspector = true
+                    inspectorWasPresented = true
                     sheets.openNarrow(.inspector)
                 }
                 else { showInspector.toggle() }
@@ -379,11 +393,12 @@ struct ChatWorkbenchView: View {
                 Spacer()
                 Button(label("new", "新建"), systemImage: "plus") { createSession() }
                     .disabled(!chat.isLoaded || chat.saveIssue != nil)
-                if sheets.narrowPanel == .sessions {
-                    Button(label("close", "关闭"), systemImage: "xmark") { closeNarrowPanel() }
-                        .labelStyle(.iconOnly).keyboardShortcut(.cancelAction)
-                        .accessibilityIdentifier("chat-sessions-close")
+                Button(label("close", "关闭"), systemImage: "xmark") {
+                    showSidebar = false
+                    if sheets.narrowPanel == .sessions { closeNarrowPanel() }
                 }
+                .labelStyle(.iconOnly)
+                .accessibilityIdentifier("chat-sessions-close")
             }
             TextField(label("search", "搜索标题与内容"), text: $search)
                 .textFieldStyle(.roundedBorder)

@@ -400,6 +400,62 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
         #expect(first.anchor == anchor && !first.followsBottom)
     }
 
+    @Test func realWorkbenchResizePreservesInspectorComposition() async throws {
+        let session = try answeredSession(raw: "正文", status: .completed)
+        var state = ChatState(); state.sessions = [session]; state.selectedSessionID = session.id
+        let (chat, model, store, root) = try await fixture(state)
+        let view = ChatWorkbenchView(chat: chat, model: model, onChooseModel: {},
+            onSavedAsset: { _ in }, onAssetsChanged: {}, initialInspectorVisible: true,
+            initialSettingsVisible: true)
+        let host = NSHostingView(rootView: view)
+        host.frame = .init(x: 0, y: 0, width: 1300, height: 700)
+        let window = NSWindow(contentRect: host.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; window.contentView = host
+        defer { window.close() }
+        func settle() {
+            host.layoutSubtreeIfNeeded()
+            RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+            host.layoutSubtreeIfNeeded()
+        }
+        settle()
+        let editor = try #require(descendants(host).compactMap { $0 as? NSTextView }.first {
+            $0.accessibilityIdentifier() == "chat-system-\(session.id.uuidString)"
+        })
+        #expect(window.makeFirstResponder(editor))
+        editor.setMarkedText("pinyin", selectedRange: .init(location: 6, length: 0),
+                             replacementRange: .init(location: NSNotFound, length: 0))
+        print("CHAT_FOCUS before-resize", editor.hasMarkedText(), window.firstResponder === editor,
+              String(describing: window.firstResponder), editor.isHiddenOrHasHiddenAncestor)
+        for width: CGFloat in [1273, 1000, 1300] {
+            window.setContentSize(.init(width: width, height: 700))
+            settle()
+            #expect(descendants(host).contains { $0 === editor })
+            #expect(!editor.isHiddenOrHasHiddenAncestor)
+            print("CHAT_FOCUS width", width, editor.hasMarkedText(), window.firstResponder === editor,
+                  String(describing: window.firstResponder), editor.isHiddenOrHasHiddenAncestor)
+            #expect(editor.hasMarkedText() && window.firstResponder === editor)
+        }
+        try await close(store, root: root)
+    }
+
+    @Test func offscreenNativeWindowResizeFocusControl() {
+        let editor = NSTextView(frame: .init(x: 0, y: 0, width: 1300, height: 700))
+        editor.autoresizingMask = [.width, .height]
+        let window = NSWindow(contentRect: editor.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; window.contentView = editor
+        defer { window.close() }
+        #expect(window.makeFirstResponder(editor))
+        editor.setMarkedText("pinyin", selectedRange: .init(location: 6, length: 0),
+                             replacementRange: .init(location: NSNotFound, length: 0))
+        for width: CGFloat in [1273, 1000, 1300] {
+            window.setContentSize(.init(width: width, height: 700))
+            window.contentView?.layoutSubtreeIfNeeded()
+            RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+            print("CHAT_FOCUS native-control", width, editor.hasMarkedText(), window.firstResponder === editor)
+            #expect(editor.hasMarkedText() && window.firstResponder === editor)
+        }
+    }
+
     @Test func paneResizeKeepsNativeEditorAndExplicitHidingReleasesInput() throws {
         func pane(_ visible: Bool) -> some View {
             ChatPaneHost(content: TextSourcesQuestionEditor(value: "", editEpoch: 0,
