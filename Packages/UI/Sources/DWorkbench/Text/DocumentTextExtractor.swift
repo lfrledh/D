@@ -59,7 +59,6 @@ public enum DocumentTextExtractionError: Error, LocalizedError, Sendable, Equata
     case invalidPDF
     case encryptedPDF
     case noText(page: Int)
-    case docxUnavailable
     case ocrFailed(page: Int)
 
     public var errorDescription: String? {
@@ -77,7 +76,6 @@ public enum DocumentTextExtractionError: Error, LocalizedError, Sendable, Equata
         case .invalidPDF: "PDF 内容损坏或没有可读取页面。"
         case .encryptedPDF: "加密 PDF 暂不能提取，请提供未加密原件。"
         case .noText(let page): "PDF 第\(page)页没有可提取文字；如为扫描页，请显式启用本地 OCR。"
-        case .docxUnavailable: "DOCX 的安全正文解析尚未接线，当前不能声称已读取。"
         case .ocrFailed(let page): "PDF 第\(page)页本地 OCR 未能完成。"
         }
     }
@@ -111,7 +109,10 @@ public enum DocumentTextExtractor {
         }
         if suffix == "docx" {
             guard isZIP else { throw DocumentTextExtractionError.formatMismatch }
-            throw DocumentTextExtractionError.docxUnavailable
+            let text = try DocxTextReader.extract(data, outputLimit: limits.maxOutputBytes)
+            return .init(text: text, sourceSHA256: digest, format: "docx", parserVersion: "zipfoundation-0.9.20-word-main-v1",
+                locations: lineLocations(in: text, page: nil, offset: 0),
+                warnings: ["DOCX 提取主正文与表格文字；没有排版页码，不读取页眉、批注、嵌入对象或外部关系。"] )
         }
         guard plainTextExtensions.contains(suffix) else { throw DocumentTextExtractionError.unsupportedFormat }
         guard !isPDF, !isZIP else { throw DocumentTextExtractionError.formatMismatch }

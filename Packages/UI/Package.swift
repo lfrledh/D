@@ -8,9 +8,11 @@ let package = Package(
     products: [.library(name: "UI", targets: ["UI"]),
                .library(name: "DWorkbench", targets: ["DWorkbench"])],
     dependencies: [.package(name: "DPlatform", path: "../.."),
-        .package(url: "https://github.com/microsoft/SwiftStreamingMarkdown", revision: "5f7c04e0558df6146f90d482edb62cb456986bda")],
+        .package(url: "https://github.com/microsoft/SwiftStreamingMarkdown", revision: "5f7c04e0558df6146f90d482edb62cb456986bda"),
+        .package(url: "https://github.com/weichsel/ZIPFoundation", revision: "22787ffb59de99e5dc1fbfe80b19c97a904ad48d")],
     targets: [
-        .target(name: "DWorkbench", dependencies: [.product(name: "DInference", package: "DPlatform")],
+        .target(name: "DWorkbench", dependencies: [.product(name: "DInference", package: "DPlatform"),
+                .product(name: "ZIPFoundation", package: "ZIPFoundation")],
                 resources: [.process("Models/Resources")]),
         .target(name: "UI", dependencies: ["DWorkbench", .product(name: "DInference", package: "DPlatform"),
                 .product(name: "SwiftStreamingMarkdown", package: "SwiftStreamingMarkdown")],

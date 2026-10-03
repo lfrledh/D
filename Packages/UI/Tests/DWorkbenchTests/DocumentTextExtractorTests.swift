@@ -49,7 +49,7 @@ struct DocumentTextExtractorTests {
         await expectError(.formatMismatch, data: Data("plain".utf8), name: "impostor.pdf")
         await expectError(.invalidPDF, data: Data("%PDF-broken".utf8), name: "broken.pdf")
         await expectError(.formatMismatch, data: Data("plain".utf8), name: "impostor.docx")
-        await expectError(.docxUnavailable, data: Data([0x50, 0x4B, 0x03, 0x04]), name: "file.docx")
+        await #expect(throws: (any Error).self) { try await DocumentTextExtractor.extract(data: Data([0x50, 0x4B, 0x03, 0x04]), fileName: "file.docx") }
         await expectError(.unsupportedFormat, data: Data("plain".utf8), name: "file.rtf")
     }
 
@@ -119,6 +119,65 @@ struct DocumentTextExtractorTests {
         #expect(result.text.uppercased().contains(word))
         #expect(result.locations.contains { $0.page == 1 &&
             (result.text as NSString).substring(with: $0.range).uppercased().contains(word) })
+    }
+
+    @Test func docxContainerBoundsCDATAAndCompatibilityAreExplicit() async throws {
+        let bytes = Data(base64Encoded: "UEsDBBQAAAAIAAAAIVwm9nT53QAAACYBAAARAAAAd29yZC9kb2N1bWVudC54bWyzsa/IzVEoSy0qzszPs1Uy1DNQUkjNS85PycxLt1UKDXHTtVCyt7Mpt0rJTy7NTc0rUQCqzyu2KrdVyigpKbDS1y9OzkjNTSzWyy9IzQPKpeUX5SaWALlF6frl+UUpBUX5yanFxUDjcnP0jQwMzPRzEzPzlKDG5CYTY05uYlF2aYFucn5uQWJJZlJmTmZJJdgsJZDLkvJTKkF0AYgoAhEldjaK0c4ujiGO0Y4KagpOCk92rH02rf3D/IkrP8zv3/uooffD/L4VsbF2NvpgxfpgffpgI/RhBuoj/GwHAFBLAQIUAxQAAAAIAAAAIVwm9nT53QAAACYBAAARAAAAAAAAAAAAAACAAQAAAAB3b3JkL2RvY3VtZW50LnhtbFBLBQYAAAAAAQABAD8AAAAMAQAAAAA=")!
+        let result = try await DocumentTextExtractor.extract(data: bytes, fileName: "cdata.docx")
+        #expect(result.text == "A & B 中文👩🏽‍🎨\n")
+        let first = try #require(result.locations.first)
+        #expect((result.text as NSString).substring(with: first.range) == "A & B 中文👩🏽‍🎨")
+        for corrupt in [0, 1, 2, 3, 4] {
+            var bad = bytes
+            let end = bad.count - 22
+            let central = Int(bad[end + 16]) | Int(bad[end + 17]) << 8
+            let target: Int
+            switch corrupt {
+            case 0: target = end + 16 // central directory outside input
+            case 1: target = central + 42 // local header outside input
+            case 2: target = central + 20 // ZIP64/sentinel compressed size
+            default: target = central + 24 // ZIP64/sentinel expanded size
+            }
+            bad.replaceSubrange(target..<(target + 4), with: [0xff, 0xff, 0xff, 0xff])
+            if corrupt == 4 {
+                // Stored descriptor addressing uses expanded size in the dependency.
+                // A non-sentinel 4GiB claim must fail before its in-memory seek.
+                bad[central + 24] = 0xfe
+                bad[central + 8] = 8; bad[central + 10] = 0
+                bad[6] = 8; bad[8] = 0
+            }
+            await #expect(throws: (any Error).self) {
+                try await DocumentTextExtractor.extract(data: bad, fileName: "bounds.docx")
+            }
+        }
+        for encoded in ["UEsDBBQAAAAIAAAAIVxTuidP2AAAAJABAAARAAAAd29yZC9kb2N1bWVudC54bWyNkE1OwzAQha8Sed86sKhQlKSqKvUAFRzAcYbGqsdjxhNCb48dAd2w6OZp/t6np2n3X+irT+DkKHTqaVurCoKl0YVLp95eT5sXte/bpRnJzghBqnwfUrN0ahKJjdbJToAmbSlCyLt3YjSSW77ohXiMTBZSyjj0+rmudxqNC+oHg/YRDhq+znFjCaMRNzjv5LayVEk20HjrW7TNwQtwMAJHCpKjrsPjRM5CdYaP2TGkTi2rKRbhItJTgFaXoiivmtf6z7xyTsb7wdjr4+a7Q/8bTv9G1/fv9t9QSwECFAMUAAAACAAAACFcU7onT9gAAACQAQAAEQAAAAAAAAAAAAAAgAEAAAAAd29yZC9kb2N1bWVudC54bWxQSwUGAAAAAAEAAQA/AAAABwEAAAAA", "UEsDBBQAAAAIAAAAIVyepJ4ioAAAAPYAAAARAAAAd29yZC9kb2N1bWVudC54bWyNj0EOgjAQRa9CuoeiC2MI4M4T6AFKW6GRmWmmReT2tkT3bl7yMz8vf9rLG+biZTk4wk4cqloUFjUZh2Mn7rdreRaXvl0bQ3oBi7FIfQzN2okpRt9IGfRkQYWKvMV0exCDiinyKFdi45m0DSHpYJbHuj5JUA7FVwP6Hw8ofi6+1AReRTe42cVtd4m8zGdwRuyRYjGQ2VqZUybv9Dt/P/QfUEsBAhQDFAAAAAgAAAAhXJ6kniKgAAAA9gAAABEAAAAAAAAAAAAAAIABAAAAAHdvcmQvZG9jdW1lbnQueG1sUEsFBgAAAAABAAEAPwAAAM8AAAAAAA=="] {
+            await #expect(throws: (any Error).self) {
+                try await DocumentTextExtractor.extract(data: Data(base64Encoded: encoded)!, fileName: "unsupported.docx")
+            }
+        }
+    }
+
+    @Test func docxMainPartIsExtractedWithLocationsAndNoExternalRelationships() async throws {
+        let bytes = Data(base64Encoded: "UEsDBBQAAAAAAAAAIVy88eX87gAAAO4AAAARAAAAd29yZC9kb2N1bWVudC54bWw8P3htbCB2ZXJzaW9uPSIxLjAiIGVuY29kaW5nPSJVVEYtOCI/Pjx3OmRvY3VtZW50IHhtbG5zOnc9Imh0dHA6Ly9zY2hlbWFzLm9wZW54bWxmb3JtYXRzLm9yZy93b3JkcHJvY2Vzc2luZ21sLzIwMDYvbWFpbiI+PHc6Ym9keT48dzpwPjx3OnI+PHc6dD7otYTmlpkg8J+RqfCfj73igI3wn46oIGXMgTwvdzp0Pjx3OnRhYi8+PHc6dD7nrKzkuozpobk8L3c6dD48L3c6cj48L3c6cD48L3c6Ym9keT48L3c6ZG9jdW1lbnQ+UEsBAhQDFAAAAAAAAAAhXLzx5fzuAAAA7gAAABEAAAAAAAAAAAAAAIABAAAAAHdvcmQvZG9jdW1lbnQueG1sUEsFBgAAAAABAAEAPwAAAB0BAAAAAA==")!
+        let result = try await DocumentTextExtractor.extract(data: bytes, fileName: "資料.docx")
+        #expect(result.text == "资料 👩🏽‍🎨 é\t第二项\n")
+        #expect(result.locations.first?.line == 1)
+        #expect(result.locations.first?.page == nil)
+        #expect(!result.warnings.isEmpty)
+        let hostile = Data(base64Encoded: "UEsDBBQAAAAAAAAAIVxwrSXLKQEAACkBAAARAAAAd29yZC9kb2N1bWVudC54bWw8P3htbCB2ZXJzaW9uPSIxLjAiIGVuY29kaW5nPSJVVEYtOCI/PjwhRE9DVFlQRSBkb2MgWzwhRU5USVRZIGJhZCBTWVNURU0gImZpbGU6Ly8vbm90LWFsbG93ZWQiPl0+PHc6ZG9jdW1lbnQgeG1sbnM6dz0iaHR0cDovL3NjaGVtYXMub3BlbnhtbGZvcm1hdHMub3JnL3dvcmRwcm9jZXNzaW5nbWwvMjAwNi9tYWluIj48dzpib2R5Pjx3OnA+PHc6cj48dzp0Pui1hOaWmSDwn5Gp8J+PveKAjfCfjqggZcyBPC93OnQ+PHc6dGFiLz48dzp0PuesrOS6jOmhuTwvdzp0PjwvdzpyPjwvdzpwPjwvdzpib2R5Pjwvdzpkb2N1bWVudD5QSwECFAMUAAAAAAAAACFccK0lyykBAAApAQAAEQAAAAAAAAAAAAAAgAEAAAAAd29yZC9kb2N1bWVudC54bWxQSwUGAAAAAAEAAQA/AAAAWAEAAAAA")!
+        await #expect(throws: (any Error).self) {
+            try await DocumentTextExtractor.extract(data: hostile, fileName: "hostile.docx")
+        }
+        await #expect(throws: (any Error).self) {
+            try await DocumentTextExtractor.extract(data: bytes, fileName: "large.docx",
+                limits: .init(maxOutputBytes: 8))
+        }
+        var damaged = bytes
+        // Content byte changed without repairing the ZIP CRC; must not read as valid.
+        if let range = damaged.range(of: Data("<w:t>".utf8)) { damaged[range.upperBound] ^= 1 }
+        await #expect(throws: (any Error).self) {
+            try await DocumentTextExtractor.extract(data: damaged, fileName: "damaged.docx")
+        }
     }
 
     private func expectError(_ expected: DocumentTextExtractionError, data: Data, name: String,
