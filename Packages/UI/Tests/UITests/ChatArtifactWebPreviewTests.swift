@@ -214,9 +214,24 @@ struct ChatArtifactWebPreviewTests {
 
 @MainActor private func inspect(_ viewer: WKWebView, _ script: String) async -> String? {
     await withCheckedContinuation { continuation in
+        let reply = BoundedPreviewReply(continuation)
         viewer.evaluateJavaScript(script) { value, error in
-            continuation.resume(returning: error == nil ? value as? String : nil)
+            reply.finish(error == nil ? value as? String : nil)
         }
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(2))
+            reply.finish(nil)
+        }
+    }
+}
+
+/// WebKit can terminate without completing a pending evaluation. The timeout must
+/// bound the callback itself, not only the polling loop around it.
+@MainActor private final class BoundedPreviewReply {
+    private var continuation: CheckedContinuation<String?, Never>?
+    init(_ continuation: CheckedContinuation<String?, Never>) { self.continuation = continuation }
+    func finish(_ value: String?) {
+        let current = continuation; continuation = nil; current?.resume(returning: value)
     }
 }
 
