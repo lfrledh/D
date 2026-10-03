@@ -3790,6 +3790,15 @@ extension ProjectStore {
         return try publishWorkflowExport(files: files, name: name, exportID: exportID, directory: directory)
     }
 
+    /// A reading export, not an executable asset or a replacement for the private conversation tree.
+    public func exportChatHTML(_ session: ChatSession, leafID: UUID, exportID: UUID,
+                               directory: URL) throws -> WorkflowExportReceipt {
+        try checkLocation()
+        let text = try ChatInterchange.exportHTML(session: session, leafID: leafID)
+        return try publishWorkflowExport(files: [("conversation.html", Data(text.utf8))],
+            name: "D-chat-html", exportID: exportID, directory: directory)
+    }
+
     /// Presets are settings data, not generated artwork. Reuse the scoped atomic publisher.
     public func exportChatPresets(_ presets: [ChatPromptPreset], exportID: UUID,
                                   directory: URL) throws -> WorkflowExportReceipt {

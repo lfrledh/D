@@ -49,6 +49,10 @@ public struct ChatContextPlan: Sendable, Equatable {
             if entry.role == .user {
                 try appendUserParts(entry.attachments, text: entry.text, to: &parts,
                                     images: &images, videos: &videos, excerpts: entry.knowledgeExcerpts ?? [])
+            } else if entry.importedSource != nil {
+                try entry.importedSource?.validate()
+                guard entry.attemptID == nil else { throw WorkflowIssue("Imported text has conflicting execution provenance.") }
+                parts.append(.init(type: "text", text: adopted[entry.id] ?? entry.text, index: nil))
             } else {
                 guard let attemptID = entry.attemptID, let attempt = byAttempt[attemptID],
                       attempt.assistantMessageID == entry.id,

@@ -74,12 +74,14 @@ extension ChatPresentationLayout {
 private enum ChatDetail: Identifiable {
     case edit(ChatEdit), preview(WorkflowAssetReference)
     case comparison(UUID, UUID), presetImport([ChatPromptPreset], Data)
+    case conversationImport(ChatInterchange.ImportPreview, Data, String)
     var id: String {
         switch self {
         case .edit(let edit): "edit-\(edit.id)"
         case .preview(let reference): "preview-\(reference.assetID)"
         case .comparison(let session, let attempt): "compare-\(session)-\(attempt)"
         case .presetImport: "preset-import"
+        case .conversationImport: "conversation-import"
         }
     }
 }
@@ -504,6 +506,12 @@ struct ChatWorkbenchView: View {
                         }
                     }
                 }.padding(20).frame(minWidth: 560, minHeight: 360)
+            case .conversationImport(let preview, let data, let title):
+                ChatConversationImportSheet(preview: preview, title: title,
+                    onCancel: { sheets.detail = nil }, onAccept: { allowingLosses, importID in
+                        _ = try await chat.importConversation(data, title: title, allowingLosses: allowingLosses, importID: importID)
+                        sheets.detail = nil
+                    })
             case .preview(let preview):
                 VStack(alignment: .leading) {
                     Button(label("close", "关闭")) { sheets.detail = nil }.keyboardShortcut(.cancelAction)
@@ -564,6 +572,8 @@ struct ChatWorkbenchView: View {
                 .labelStyle(.iconOnly)
                 .accessibilityIdentifier("chat-sessions-close")
             }
+            Button(newLabel("importConversation", english: "Import conversation…", chinese: "导入会话…")) { Task { await importConversation() } }
+                .disabled(filePanelBusy || !chat.isLoaded || chat.saveIssue != nil)
             TextField(newLabel("lexicalSearch", english: "Lexical search", chinese: "词法搜索"), text: $search)
                 .textFieldStyle(.roundedBorder)
                 .accessibilityIdentifier("chat-history-search")
@@ -625,39 +635,9 @@ struct ChatWorkbenchView: View {
                                     }
                                 }.frame(maxWidth: .infinity, alignment: .leading)
                             }.buttonStyle(.plain)
-                            Menu {
-                                Button(label("rename", "重命名")) {
-                                    present(.edit(ChatEdit(kind: .rename, sessionID: item.id, messageID: nil, text: item.title)))
-                                }
-                                Button(item.contextChoices?.pinned == true
-                                    ? newLabel("unpin", english: "Unpin", chinese: "取消置顶")
-                                    : newLabel("pin", english: "Pin", chinese: "置顶")) {
-                                    perform(sessionID: item.id) { try ChatContextCommands.choices(item, mutate: { $0.pinned.toggle() }, in: chat) }
-                                }
-                                Button(newLabel("editTags", english: "Edit tags…", chinese: "编辑标签…")) {
-                                    present(.edit(ChatEdit(kind: .tags, sessionID: item.id, messageID: nil,
-                                                           text: (item.contextChoices?.tags ?? []).joined(separator: "\n"))))
-                                }
-                                Button(item.archived ? newLabel("restoreArchive", english: "Restore from archive", chinese: "从归档恢复")
-                                    : label("archive", "归档")) {
-                                    perform(sessionID: item.id) { try chat.setArchived(!item.archived, sessionID: item.id) }
-                                }.disabled(chat.activeSessionID == item.id)
-                                Button(item.contextChoices?.deletedAt == nil
-                                    ? newLabel("softDelete", english: "Move to Deleted", chinese: "移到已删除")
-                                    : newLabel("restoreDeleted", english: "Restore conversation", chinese: "恢复对话")) {
-                                    perform(sessionID: item.id) { try chat.setDeleted(item.contextChoices?.deletedAt == nil, sessionID: item.id) }
-                                }.disabled(chat.activeSessionID == item.id)
-                                if item.selectedLeafID != nil {
-                                    Divider()
-                                    Button(label("copyPath", "复制所选路径")) {
-                                        perform(sessionID: item.id) { copy(try chat.exportSelectedPath(sessionID: item.id, markdown: false)) }
-                                    }
-                                    Button(label("exportMarkdown", "导出 Markdown")) { Task { await export(sessionID: item.id, markdown: true) } }
-                                    Button(label("exportPlain", "导出纯文字")) { Task { await export(sessionID: item.id, markdown: false) } }
-                                }
-                            } label: { Image(systemName: "ellipsis") }
-                                .menuStyle(.borderlessButton)
-                                .accessibilityLabel(newLabel("sessionActions", english: "Conversation actions: ", chinese: "对话操作：") + item.title)
+                            ChatActionMenu(title: newLabel("sessionActionsShort", english: "Actions", chinese: "操作"),
+                                accessibilityIdentifier: "chat-session-actions-" + item.id.uuidString,
+                                items: sessionMenuItems(item)).fixedSize()
                         }
                         .padding(9)
                         .background(chat.state.selectedSessionID == item.id ? Color.accentColor.opacity(0.14) : Color.clear,
@@ -705,13 +685,12 @@ struct ChatWorkbenchView: View {
                 Button(label("changeModel", "更换模型"), action: onChooseModel)
                     .lineLimit(1).disabled(session.contextChoices?.deletedAt != nil)
                 if !session.messages.isEmpty {
-                    Menu(label("paths", "路径")) {
-                        ForEach(leaves) { leaf in
-                            Button((leaf.id == session.selectedLeafID ? "✓ " : "") + branchSummary(leaf)) {
+                    ChatActionMenu(title: label("paths", "路径"), accessibilityIdentifier: "chat-paths",
+                        items: leaves.map { leaf in
+                            .init(id: leaf.id.uuidString, title: branchSummary(leaf), selected: leaf.id == session.selectedLeafID) {
                                 perform(sessionID: session.id) { try chat.selectLeaf(leaf.id, sessionID: session.id) }
                             }
-                        }
-                    }
+                        }).fixedSize()
                 }
             }.padding(.horizontal, 16).padding(.vertical, 10)
                 .chatMeasured("topbar", probe: layoutProbe)
@@ -728,6 +707,11 @@ struct ChatWorkbenchView: View {
               ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 16) {
+                        if let notes = session.importLossNotes, !notes.isEmpty {
+                            DisclosureGroup(newLabel("importLosses", english: "Import mapping notes", chinese: "导入映射记录")) {
+                                ForEach(notes.indices, id: \.self) { Text(notes[$0]).font(.caption).textSelection(.enabled) }
+                            }
+                        }
                         if session.originSessionID != nil {
                             Text(label("forkOrigin", "此对话从另一条路径分叉；原对话仍保留。"))
                                 .font(.caption).foregroundStyle(.secondary)
@@ -907,7 +891,12 @@ struct ChatWorkbenchView: View {
                             Text(newLabel("selectedPath", english: "Selected path", chinese: "当前路径")).font(.headline)
                             Text("\(chat.selectedPath.count) " + label("messages", "条消息"))
                                 .foregroundStyle(.secondary)
-                            if session.originSessionID != nil {
+                            if let notes = session.importLossNotes, !notes.isEmpty {
+                            DisclosureGroup(newLabel("importLosses", english: "Import mapping notes", chinese: "导入映射记录")) {
+                                ForEach(notes.indices, id: \.self) { Text(notes[$0]).font(.caption).textSelection(.enabled) }
+                            }
+                        }
+                        if session.originSessionID != nil {
                                 Text(label("forkOrigin", "此对话从另一条路径分叉；原对话仍保留。"))
                                     .font(.caption).foregroundStyle(.secondary)
                             }
@@ -1033,27 +1022,134 @@ struct ChatWorkbenchView: View {
             .chatMeasured("request-inspection-\(attempt.id.uuidString)", probe: layoutProbe)
     }
 
+    private func sessionMenuItems(_ item: ChatSession) -> [ChatActionMenuItem] {
+        var result: [ChatActionMenuItem] = [
+            .init(id: "rename", title: label("rename", "重命名")) {
+                present(.edit(ChatEdit(kind: .rename, sessionID: item.id, messageID: nil, text: item.title)))
+            },
+            .init(id: "pin", title: item.contextChoices?.pinned == true
+                ? newLabel("unpin", english: "Unpin", chinese: "取消置顶") : newLabel("pin", english: "Pin", chinese: "置顶")) {
+                perform(sessionID: item.id) { try ChatContextCommands.choices(item, mutate: { $0.pinned.toggle() }, in: chat) }
+            },
+            .init(id: "tags", title: newLabel("editTags", english: "Edit tags…", chinese: "编辑标签…")) {
+                present(.edit(ChatEdit(kind: .tags, sessionID: item.id, messageID: nil, text: (item.contextChoices?.tags ?? []).joined(separator: "\n"))))
+            },
+            .init(id: "archive", title: item.archived ? newLabel("restoreArchive", english: "Restore from archive", chinese: "从归档恢复") : label("archive", "归档"), enabled: chat.activeSessionID != item.id) {
+                perform(sessionID: item.id) { try chat.setArchived(!item.archived, sessionID: item.id) }
+            },
+            .init(id: "delete", title: item.contextChoices?.deletedAt == nil ? newLabel("softDelete", english: "Move to Deleted", chinese: "移到已删除") : newLabel("restoreDeleted", english: "Restore conversation", chinese: "恢复对话"), enabled: chat.activeSessionID != item.id) {
+                perform(sessionID: item.id) { try chat.setDeleted(item.contextChoices?.deletedAt == nil, sessionID: item.id) }
+            }
+        ]
+        if item.selectedLeafID != nil {
+            result += [
+                .init(id: "copy", title: label("copyPath", "复制所选路径")) { perform(sessionID: item.id) { copy(try chat.exportSelectedPath(sessionID: item.id, markdown: false)) } },
+                .init(id: "markdown", title: label("exportMarkdown", "导出 Markdown")) { Task { await export(sessionID: item.id, markdown: true) } },
+                .init(id: "text", title: label("exportPlain", "导出纯文字")) { Task { await export(sessionID: item.id, markdown: false) } },
+                .init(id: "html", title: newLabel("exportHTML", english: "Export local HTML", chinese: "导出本地 HTML")) { Task { await export(sessionID: item.id, markdown: false, html: true) } }
+            ]
+        }
+        return result
+    }
+
+    private func messageMenuItems(_ message: ChatMessage, session: ChatSession, attempt: ChatAttempt?) -> [ChatActionMenuItem] {
+        let choices = session.contextChoices
+        let favorite = choices?.favoriteMessageIDs.contains(message.id) == true
+        let excluded = choices?.excludedMessageIDs.contains(message.id) == true
+        let revisions = choices?.revisions.filter { $0.messageID == message.id } ?? []
+        let adoptedID = revisions.first { choices?.adoptedRevisionIDs.contains($0.id) == true }?.id
+        let answerText = attempt?.response?.finalText ?? attempt?.rawText ?? message.text
+        let canAdopt = session.contextChoices?.deletedAt == nil && ChatContextCommands.canAdopt(attempt, in: chat)
+        var result: [ChatActionMenuItem] = [
+            .init(id: "favorite", title: favorite ? newLabel("unfavorite", english: "Remove favorite", chinese: "取消收藏") : newLabel("favorite", english: "Favorite", chinese: "收藏")) {
+                changeMessageChoice(session: session) { value in
+                    if value.favoriteMessageIDs.contains(message.id) { value.favoriteMessageIDs.removeAll { $0 == message.id } }
+                    else { value.favoriteMessageIDs.append(message.id) }
+                }
+            }
+        ]
+        if ChatContextRowStatus.forMessage(message, in: session).canExclude {
+            result.append(.init(id: "context", title: excluded ? newLabel("includeContext", english: "Include in context", chinese: "回纳上下文") : newLabel("excludeContext", english: "Exclude from context", chinese: "排除上下文")) {
+                changeMessageChoice(session: session) { value in
+                    if value.excludedMessageIDs.contains(message.id) { value.excludedMessageIDs.removeAll { $0 == message.id } }
+                    else { value.excludedMessageIDs.append(message.id) }
+                }
+            })
+        }
+        if message.role == .user {
+            result.append(.init(id: "generate", title: label("generateReply", "生成回复"), enabled: canRun(session)) {
+                Task { await run(sessionID: session.id) { try await chat.regenerate(message.id, sessionID: session.id) } }
+            })
+        } else if let parent = message.parentID {
+            result.append(.init(id: "new-candidate", title: label("newCandidate", "生成新候选（新随机种子）"), enabled: canRun(session)) {
+                Task { await run(sessionID: session.id) { try await chat.regenerate(parent, sessionID: session.id) } }
+            })
+            if let attempt {
+                result += [
+                    .init(id: "inspect", title: newLabel("inspectRequest", english: "Inspect frozen request", chinese: "检查冻结请求")) { openDataInspector(attemptID: attempt.id) },
+                    .init(id: "compare", title: newLabel("compareAnswers", english: "Compare answers…", chinese: "比较回答…")) { present(.comparison(session.id, attempt.id)) },
+                    .init(id: "reproduce", title: label("replayRequest", "按原请求与种子重现"), enabled: ChatRunAdmission.allowsReplay(session, attempt: attempt, isRunning: chat.isRunning, hasPendingSave: chat.pendingSaveAttemptID != nil, hasSaveIssue: chat.saveIssue != nil)) {
+                        Task { await run(sessionID: session.id) { try await chat.reproduce(attempt.id, sessionID: session.id) } }
+                    }
+                ]
+            }
+        }
+        if message.role == .assistant {
+            result += [
+                .init(id: "speak", title: newLabel("readAnswer", english: "Read aloud with system voice", chinese: "使用系统声音朗读"), enabled: chat.speechPlaybackState == .idle) {
+                    perform(sessionID: session.id) { try chat.speech.speak(answerText) }
+                },
+                .init(id: "adopt", title: newLabel("editAdopt", english: "Edit and adopt…", chinese: "编辑并采用…"), enabled: canAdopt) {
+                    present(.edit(ChatEdit(kind: .answer, sessionID: session.id, messageID: message.id, text: answerText)))
+                }
+            ]
+            if let attempt, attempt.status != .completed {
+                result.append(.init(id: "adopt-partial", title: newLabel("adoptPartial", english: "Adopt current partial answer", chinese: "采用当前部分回答"), enabled: canAdopt) {
+                    perform(sessionID: session.id) { try ChatContextCommands.adopt(answerText, messageID: message.id, sessionID: session.id, in: chat) }
+                })
+            }
+            if !revisions.isEmpty {
+                var versions: [ChatActionMenuItem] = [.init(id: "original", title: newLabel("originalOutput", english: "Original model output", chinese: "原始模型输出"), selected: adoptedID == nil) {
+                    perform(sessionID: session.id) { try ChatContextCommands.selectVersion(nil, messageID: message.id, sessionID: session.id, in: chat) }
+                }]
+                versions += revisions.enumerated().map { index, revision in
+                    .init(id: revision.id.uuidString, title: newLabel("manualVersion", english: "Manual version ", chinese: "人工版本 ") + String(index + 1) + " · " + String(revision.text.prefix(28)), selected: adoptedID == revision.id) {
+                        perform(sessionID: session.id) { try ChatContextCommands.selectVersion(revision.id, messageID: message.id, sessionID: session.id, in: chat) }
+                    }
+                }
+                result.append(.init(id: "versions", title: newLabel("answerVersions", english: "Answer versions", chinese: "回答版本"), enabled: canAdopt, children: versions))
+            }
+        }
+        result.append(.init(id: "fork", title: label("forkHere", "从这里分叉")) {
+            perform(sessionID: session.id) { _ = try chat.forkSession(session.id, leafID: message.id) }
+        })
+        if session.selectedAnswer(messageID: message.id) != nil {
+            result += [
+                .init(id: "save", title: label("saveAsset", "保存回答为素材")) { Task { await saveFinal(message.id, sessionID: session.id, useInWorkflow: false) } },
+                .init(id: "workflow", title: label("useWorkflow", "用于工作流")) { Task { await saveFinal(message.id, sessionID: session.id, useInWorkflow: true) } }
+            ]
+        }
+        return result
+    }
+
     private func messageCard(_ message: ChatMessage, session: ChatSession,
                              siblings: [ChatMessage], attempt: ChatAttempt?) -> some View {
         let choices = session.contextChoices
         let favorite = choices?.favoriteMessageIDs.contains(message.id) == true
         let excluded = choices?.excludedMessageIDs.contains(message.id) == true
-        let canExclude = ChatContextRowStatus.forMessage(message, in: session).canExclude
         let revisions = choices?.revisions.filter { $0.messageID == message.id } ?? []
         let adoptedID = revisions.first { choices?.adoptedRevisionIDs.contains($0.id) == true }?.id
-        let answerText = attempt?.response?.finalText ?? attempt?.rawText ?? ""
         return VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text(message.role == .user ? label("you", "你") : label("assistant", "助手")) .font(.headline)
                 if siblings.count > 1 {
-                    Menu(label("branch", "分支") + " \((siblings.firstIndex(where: { $0.id == message.id }) ?? 0) + 1)/\(siblings.count)") {
-                        ForEach(siblings) { sibling in
-                            Button("\((siblings.firstIndex(where: { $0.id == sibling.id }) ?? 0) + 1) · " +
-                                   branchSummary(sibling)) {
+                    ChatActionMenu(title: label("branch", "分支") + " \((siblings.firstIndex(where: { $0.id == message.id }) ?? 0) + 1)/\(siblings.count)",
+                        accessibilityIdentifier: "chat-branch-" + message.id.uuidString,
+                        items: siblings.enumerated().map { index, sibling in
+                            .init(id: sibling.id.uuidString, title: "\(index + 1) · " + branchSummary(sibling), selected: sibling.id == message.id) {
                                 perform(sessionID: session.id) { try chat.selectLeaf(sibling.id, sessionID: session.id) }
                             }
-                        }
-                    }.chatMeasured("branch-menu-\(message.id.uuidString)", probe: layoutProbe)
+                        }).fixedSize().chatMeasured("branch-menu-\(message.id.uuidString)", probe: layoutProbe)
                 }
                 Spacer()
                 Button(label("copy", "复制")) {
@@ -1064,97 +1160,9 @@ struct ChatWorkbenchView: View {
                         present(.edit(ChatEdit(kind: .message, sessionID: session.id, messageID: message.id, text: message.text)))
                     }.disabled(session.contextChoices?.deletedAt != nil)
                 }
-                Menu {
-                    Button(favorite ? newLabel("unfavorite", english: "Remove favorite", chinese: "取消收藏")
-                        : newLabel("favorite", english: "Favorite", chinese: "收藏")) {
-                        changeMessageChoice(session: session) { value in
-                            if value.favoriteMessageIDs.contains(message.id) { value.favoriteMessageIDs.removeAll { $0 == message.id } }
-                            else { value.favoriteMessageIDs.append(message.id) }
-                        }
-                    }
-                    if canExclude {
-                        Button(excluded ? newLabel("includeContext", english: "Include in context", chinese: "回纳上下文")
-                            : newLabel("excludeContext", english: "Exclude from context", chinese: "排除上下文")) {
-                            changeMessageChoice(session: session) { value in
-                                if value.excludedMessageIDs.contains(message.id) { value.excludedMessageIDs.removeAll { $0 == message.id } }
-                                else { value.excludedMessageIDs.append(message.id) }
-                            }
-                        }
-                    }
-                    Divider()
-                    if message.role == .user {
-                        Button(label("generateReply", "生成回复")) { Task { await run(sessionID: session.id) { try await chat.regenerate(message.id, sessionID: session.id) } } }
-                            .disabled(!canRun(session))
-                    } else if let parent = message.parentID {
-                        Button(label("newCandidate", "生成新候选（新随机种子）")) {
-                            Task { await run(sessionID: session.id) { try await chat.regenerate(parent, sessionID: session.id) } }
-                        }.disabled(!canRun(session))
-                        if let attempt {
-                            Button(newLabel("inspectRequest", english: "Inspect frozen request", chinese: "检查冻结请求")) {
-                                openDataInspector(attemptID: attempt.id)
-                            }.accessibilityIdentifier("chat-inspect-request-\(attempt.id.uuidString)")
-                            Button(newLabel("compareAnswers", english: "Compare answers…", chinese: "比较回答…")) {
-                                present(.comparison(session.id, attempt.id))
-                            }.accessibilityIdentifier("chat-compare-" + attempt.id.uuidString)
-                            Button(label("replayRequest", "按原请求与种子重现")) {
-                                Task { await run(sessionID: session.id) { try await chat.reproduce(attempt.id, sessionID: session.id) } }
-                            }.disabled(!ChatRunAdmission.allowsReplay(session, attempt: attempt,
-                                isRunning: chat.isRunning, hasPendingSave: chat.pendingSaveAttemptID != nil,
-                                hasSaveIssue: chat.saveIssue != nil))
-                        }
-                    }
-                    if message.role == .assistant {
-                        Button(newLabel("readAnswer", english: "Read aloud with system voice", chinese: "使用系统声音朗读")) {
-                            perform(sessionID: session.id) { try chat.speech.speak(answerText) }
-                        }.disabled(chat.speechPlaybackState != .idle)
-                        Button(newLabel("editAdopt", english: "Edit and adopt…", chinese: "编辑并采用…")) {
-                            present(.edit(ChatEdit(kind: .answer, sessionID: session.id,
-                                                   messageID: message.id, text: answerText)))
-                        }.disabled(session.contextChoices?.deletedAt != nil || !ChatContextCommands.canAdopt(attempt, in: chat))
-                            .accessibilityIdentifier("chat-edit-adopt-\(message.id.uuidString)")
-                        if attempt?.status != .completed {
-                            Button(newLabel("adoptPartial", english: "Adopt current partial answer", chinese: "采用当前部分回答")) {
-                                perform(sessionID: session.id) {
-                                    try ChatContextCommands.adopt(answerText, messageID: message.id,
-                                                                  sessionID: session.id, in: chat)
-                                }
-                            }.disabled(session.contextChoices?.deletedAt != nil || !ChatContextCommands.canAdopt(attempt, in: chat))
-                                .accessibilityIdentifier("chat-adopt-partial-\(message.id.uuidString)")
-                        }
-                        if !revisions.isEmpty {
-                            Menu(newLabel("answerVersions", english: "Answer versions", chinese: "回答版本")) {
-                                Divider()
-                                Button((adoptedID == nil ? "✓ " : "") +
-                                    newLabel("originalOutput", english: "Original model output", chinese: "原始模型输出")) {
-                                    perform(sessionID: session.id) {
-                                        try ChatContextCommands.selectVersion(nil, messageID: message.id,
-                                                                              sessionID: session.id, in: chat)
-                                    }
-                                }
-                                ForEach(revisions.indices, id: \.self) { index in
-                                    let revision = revisions[index]
-                                    Button((adoptedID == revision.id ? "✓ " : "") +
-                                        newLabel("manualVersion", english: "Manual version ", chinese: "人工版本 ") + String(index + 1) +
-                                        " · " + String(revision.text.prefix(28))) {
-                                        perform(sessionID: session.id) {
-                                            try ChatContextCommands.selectVersion(revision.id, messageID: message.id,
-                                                                                  sessionID: session.id, in: chat)
-                                        }
-                                    }
-                                }
-                            }.disabled(session.contextChoices?.deletedAt != nil || !ChatContextCommands.canAdopt(attempt, in: chat))
-                        }
-                    }
-                    Button(label("forkHere", "从这里分叉")) {
-                        perform(sessionID: session.id) { _ = try chat.forkSession(session.id, leafID: message.id) }
-                    }
-                    if attempt?.status == .completed, attempt?.response?.finalText?.isEmpty == false {
-                        Button(label("saveAsset", "保存回答为素材")) { Task { await saveFinal(message.id, sessionID: session.id, useInWorkflow: false) } }
-                        Button(label("useWorkflow", "用于工作流")) { Task { await saveFinal(message.id, sessionID: session.id, useInWorkflow: true) } }
-                    }
-                } label: { Image(systemName: "ellipsis") }
-                    .menuStyle(.borderlessButton)
-                    .accessibilityLabel(newLabel("messageActions", english: "Message actions: ", chinese: "消息操作：") + branchSummary(message))
+                ChatActionMenu(title: newLabel("messageActionsShort", english: "Actions", chinese: "操作"),
+                    accessibilityIdentifier: "chat-message-actions-" + message.id.uuidString,
+                    items: messageMenuItems(message, session: session, attempt: attempt)).fixedSize()
             }.font(.caption)
             ChatMessageContent(message: message, attempt: attempt, onPreview: { present(.preview($0)) })
             if let excerpts = message.knowledgeExcerpts, !excerpts.isEmpty {
@@ -1486,6 +1494,23 @@ struct ChatWorkbenchView: View {
             report(failures.isEmpty ? nil : failures.joined(separator: "\n"), for: sessionID)
         } catch { report(error.localizedDescription, for: sessionID) }
     }
+    private func importConversation() async {
+        guard !filePanelBusy else { return }
+        filePanelBusy = true; defer { filePanelBusy = false }
+        let owner = chat
+        let panel = NSOpenPanel(); panel.canChooseDirectories = false; panel.allowsMultipleSelection = false
+        guard await panel.begin() == .OK, let url = panel.url, owner === chat else { return }
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        do {
+            let info = try url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
+            guard info.isRegularFile == true, let size = info.fileSize, size <= ChatInterchange.maximumImportBytes else { throw WorkflowIssue("Conversation import must be a regular file up to 2 MiB. / 会话导入限2MiB普通文件。") }
+            let data = try Data(contentsOf: url)
+            let preview = try ChatInterchange.previewOpenAIMessagesV1(data)
+            present(.conversationImport(preview, data, String(url.deletingPathExtension().lastPathComponent.prefix(100))))
+        } catch { report(error.localizedDescription, for: chat.state.selectedSessionID) }
+    }
+
     private func importPresets() async {
         guard !filePanelBusy else { return }
         filePanelBusy = true; defer { filePanelBusy = false }
@@ -1517,12 +1542,18 @@ struct ChatWorkbenchView: View {
         } catch { report(error.localizedDescription, for: sessionID) }
     }
 
-    private func export(sessionID: UUID, markdown: Bool) async {
+    private func export(sessionID: UUID, markdown: Bool, html: Bool = false) async {
         guard !filePanelBusy else { return }
         filePanelBusy = true; defer { filePanelBusy = false }
         let owner = chat, store = chat.store
+        let snapshot = chat.state.sessions.first(where: { $0.id == sessionID })
         let value: String
-        do { value = try chat.exportSelectedPath(sessionID: sessionID, markdown: markdown) }
+        do {
+            if html {
+                guard let session = snapshot, let leaf = session.selectedLeafID else { throw WorkflowIssue("No selected conversation path. / 尚无所选会话路径。") }
+                value = try ChatInterchange.exportHTML(session: session, leafID: leaf)
+            } else { value = try chat.exportSelectedPath(sessionID: sessionID, markdown: markdown) }
+        }
         catch { report(error.localizedDescription, for: sessionID); return }
         let panel = NSOpenPanel(); panel.canChooseDirectories = true; panel.canChooseFiles = false
         guard await panel.begin() == .OK, let directory = panel.url,
@@ -1530,11 +1561,15 @@ struct ChatWorkbenchView: View {
         let scoped = directory.startAccessingSecurityScopedResource()
         defer { if scoped { directory.stopAccessingSecurityScopedResource() } }
         do {
-            let reference = try await store.publishWorkflowAsset(data: Data(value.utf8), mediaType: markdown ? "text/markdown" : "text/plain",
-                name: markdown ? "聊天路径 Markdown" : "聊天路径纯文字", operationID: "d.chat.export-path",
-                details: ["chatSessionID": sessionID.uuidString, "format": markdown ? "markdown" : "plain"]).record.reference
+            if html, let snapshot, let leaf = snapshot.selectedLeafID {
+                _ = try await store.exportChatHTML(snapshot, leafID: leaf, exportID: UUID(), directory: directory)
+                report(nil, for: sessionID); return
+            }
+            let reference = try await store.publishWorkflowAsset(data: Data(value.utf8), mediaType: html ? "text/html" : markdown ? "text/markdown" : "text/plain",
+                name: html ? "聊天路径 HTML" : markdown ? "聊天路径 Markdown" : "聊天路径纯文字", operationID: "d.chat.export-path",
+                details: ["chatSessionID": sessionID.uuidString, "format": html ? "html" : markdown ? "markdown" : "plain"]).record.reference
             onAssetsChanged()
-            _ = try await store.exportWorkflowAssets([reference], name: markdown ? "D-chat-markdown" : "D-chat-text",
+            _ = try await store.exportWorkflowAssets([reference], name: html ? "D-chat-html" : markdown ? "D-chat-markdown" : "D-chat-text",
                                                       exportID: UUID(), directory: directory)
             report(nil, for: sessionID)
         } catch { report(error.localizedDescription, for: sessionID) }

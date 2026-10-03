@@ -57,3 +57,34 @@ public struct ChatContextChoices: Codable, Sendable, Equatable {
         }
     }
 }
+
+/// One explicit, reusable answer choice. Manual revisions remain distinct assets;
+/// the model's original receipt and earlier published assets are never rewritten.
+public struct ChatSelectedAnswer: Sendable, Equatable {
+    public let text: String
+    public let assetID: UUID
+    public let revisionID: UUID?
+    public let attempt: ChatAttempt?
+    public let importedSource: ChatImportedSource?
+}
+
+extension ChatSession {
+    public func selectedAnswer(messageID: UUID) -> ChatSelectedAnswer? {
+        guard let message = messages.first(where: { $0.id == messageID && $0.role == .assistant }) else { return nil }
+        let attempt = message.attemptID.flatMap { id in attempts.first { $0.id == id && $0.assistantMessageID == messageID } }
+        // A running answer cannot be published, even if a stale UI offers an action.
+        guard attempt?.status != .running, attempt?.status != .saving else { return nil }
+        if let choices = contextChoices,
+           let revision = choices.revisions.first(where: { $0.messageID == messageID && choices.adoptedRevisionIDs.contains($0.id) }) {
+            return .init(text: revision.text, assetID: revision.id, revisionID: revision.id,
+                         attempt: attempt, importedSource: message.importedSource)
+        }
+        if let attempt, attempt.status == .completed, let text = attempt.response?.finalText, !text.isEmpty {
+            return .init(text: text, assetID: message.id, revisionID: nil, attempt: attempt, importedSource: nil)
+        }
+        if let source = message.importedSource, !message.text.isEmpty {
+            return .init(text: message.text, assetID: message.id, revisionID: nil, attempt: nil, importedSource: source)
+        }
+        return nil // Partial output needs explicit adoption before it becomes an asset.
+    }
+}

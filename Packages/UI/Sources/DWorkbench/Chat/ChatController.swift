@@ -1,4 +1,5 @@
 import DInference
+import CryptoKit
 import Foundation
 import Observation
 
@@ -411,6 +412,7 @@ import Observation
         fork.selectedLeafID = leaf; fork.configuration = source.configuration; fork.systemPrompt = source.systemPrompt
         fork.draft = source.draft; fork.attachments = source.attachments
         fork.memoryScopes = source.memoryScopes
+        fork.importLossNotes = source.importLossNotes
         fork.knowledgeScope = source.knowledgeScope; fork.knowledgeExcerpts = source.knowledgeExcerpts
         if var choices = source.contextChoices {
             let pathIDs = Set(path.map(\.id))
@@ -1043,12 +1045,40 @@ import Observation
         throw WorkflowIssue("搜索列表不是网页正文，请先选择并读取一个结果。")
     }
 
+    /// The caller previews the same bytes before explicitly accepting any reported losses.
+    @discardableResult public func importConversation(_ data: Data, title: String,
+                                                       allowingLosses: Bool, importID: UUID = UUID()) async throws -> UUID {
+        guard isLoaded else { throw WorkflowIssue(error ?? "Chat history has not loaded.") }
+        let imported = try ChatInterchange.previewOpenAIMessagesV1(data).accept(allowingLosses: allowingLosses)
+        let digest = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+        if let existing = state.sessions.first(where: { $0.id == importID }) {
+            guard !existing.messages.isEmpty, existing.messages.allSatisfy({ $0.importedSource?.sourceSHA256 == digest }) else { throw WorkflowIssue("Import identity conflicts with an existing conversation.") }
+            try await flush(); return importID // Retry saving the already created transcript, never create it twice.
+        }
+        try requireLoaded() // A new import cannot bypass an unresolved save failure.
+        var session = ChatSession(id: importID, title: title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Imported conversation" : title)
+        session.systemPrompt = imported.systemPrompt
+        session.importLossNotes = imported.acknowledgedLosses.map { $0.location + ": " + $0.reason }
+        var parent: UUID?
+        for item in imported.messages {
+            let message = ChatMessage(parentID: parent, role: item.role == .user ? .user : .assistant,
+                text: item.text, importedSource: .init(format: imported.format, version: imported.version,
+                    sourceSHA256: digest, sourceIndex: item.sourceIndex))
+            session.messages.append(message); parent = message.id
+        }
+        session.selectedLeafID = parent
+        var candidate = state; candidate.sessions.append(session); candidate.selectedSessionID = session.id
+        try candidate.validate(); state = candidate; changed(); try await flush()
+        return session.id
+    }
+
     public func exportSelectedPath(sessionID: UUID, markdown: Bool = true) throws -> String {
         try requireLoaded(); let session = state.sessions[try index(sessionID)]
         let path = try session.path(to: session.selectedLeafID)
         return path.map { message in
             let body: String
-            if let id = message.attemptID, let attempt = session.attempts.first(where: { $0.id == id }) {
+            if let answer = session.selectedAnswer(messageID: message.id) { body = answer.text
+            } else if let id = message.attemptID, let attempt = session.attempts.first(where: { $0.id == id }) {
                 body = attempt.response?.finalText ?? attempt.rawText
             } else { body = message.text }
             return markdown ? "## \(message.role == .user ? "User" : "Assistant")\n\n\(body)" : "\(message.role == .user ? "User" : "Assistant"):\n\(body)"
@@ -1056,17 +1086,19 @@ import Observation
     }
     public func saveAssistantFinal(_ messageID: UUID, sessionID: UUID) async throws -> WorkflowAssetReference {
         try requireLoaded(); let session = state.sessions[try index(sessionID)]
-        guard let message = session.messages.first(where: { $0.id == messageID && $0.role == .assistant }),
-              let attemptID = message.attemptID,
-              let attempt = session.attempts.first(where: { $0.id == attemptID }),
-              attempt.status == .completed, let final = attempt.response?.finalText, !final.isEmpty else {
-            throw WorkflowIssue("只能保存已完成的助手最终正文。")
+        guard let answer = session.selectedAnswer(messageID: messageID) else {
+            throw WorkflowIssue("请先采用部分回答，或选择已完成的回答后保存。")
         }
-        return try await store.publishWorkflowAsset(data: Data(final.utf8), mediaType: "text/plain", name: "聊天回答",
-                                                    parents: attempt.output.map { [$0] } ?? [], operationID: "d.chat.save-final",
-                                                    stepID: attemptID, details: ["chatSessionID": sessionID.uuidString,
-                                                                                "chatMessageID": messageID.uuidString,
-                                                                                "chatAttemptID": attemptID.uuidString],
-                                                    assetID: messageID).record.reference
+        var details = ["chatSessionID": sessionID.uuidString, "chatMessageID": messageID.uuidString]
+        if let attempt = answer.attempt { details["chatAttemptID"] = attempt.id.uuidString }
+        if let revision = answer.revisionID { details["chatRevisionID"] = revision.uuidString }
+        if let source = answer.importedSource {
+            details["importSourceSHA256"] = source.sourceSHA256
+            details["importSourceIndex"] = String(source.sourceIndex)
+        }
+        return try await store.publishWorkflowAsset(data: Data(answer.text.utf8), mediaType: "text/plain", name: "聊天回答",
+            parents: answer.attempt?.output.map { [$0] } ?? [], operationID: "d.chat.save-final",
+            stepID: answer.revisionID ?? answer.attempt?.id ?? messageID, details: details,
+            assetID: answer.assetID).record.reference
     }
 }

@@ -76,6 +76,11 @@ public struct ChatContextSource: Codable, Sendable, Equatable {
         let byAttempt = Dictionary(uniqueKeysWithValues: session.attempts.map { ($0.id, $0) })
         var attempts: [ChatAttempt] = []
         for message in path where message.role == .assistant {
+            if let source = message.importedSource {
+                try source.validate()
+                guard message.attemptID == nil else { throw WorkflowIssue("Imported text has conflicting execution provenance.") }
+                continue
+            }
             guard let id = message.attemptID, let parentID = message.parentID,
                   let attempt = byAttempt[id],
                   attempt.sessionID == session.id, attempt.assistantMessageID == message.id,

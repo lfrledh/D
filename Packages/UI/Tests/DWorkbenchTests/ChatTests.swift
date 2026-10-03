@@ -261,6 +261,28 @@ struct ChatTests {
         try await chat.flush(); try await store.close()
     }
 
+    @Test func selectedAnswerAssetsAndExportsUseAdoptedVersionWithoutReplacingOriginal() async throws {
+        let (store, engine, chat) = try await fixture()
+        let id = try chat.newSession(); try configure(chat, session: id)
+        await engine.setFinishReason(.length)
+        try await chat.sendAfterDraft("question", sessionID: id)
+        let original = try #require(chat.selectedSession?.attempts.first)
+        let text = "Selected manual <answer> 👩🏽‍🎨"
+        let revision = try chat.adoptAnswer(original.assistantMessageID, text: text, sessionID: id)
+        let asset = try await chat.saveAssistantFinal(original.assistantMessageID, sessionID: id)
+        #expect(try await store.workflowText(asset) == text)
+        #expect(asset.assetID == revision)
+        #expect(try await chat.saveAssistantFinal(original.assistantMessageID, sessionID: id) == asset)
+        #expect(try chat.exportSelectedPath(sessionID: id).contains(text))
+        #expect(try ChatInterchange.exportHTML(session: #require(chat.selectedSession), leafID: original.assistantMessageID).contains("Selected manual &lt;answer&gt;"))
+        let second = try chat.adoptAnswer(original.assistantMessageID, text: "Second version", sessionID: id)
+        let asset2 = try await chat.saveAssistantFinal(original.assistantMessageID, sessionID: id)
+        #expect(asset2.assetID == second && asset2 != asset)
+        #expect(try await store.workflowText(asset) == text)
+        #expect(chat.selectedSession?.attempts.first == original)
+        try await chat.flush(); try await store.close()
+    }
+
     @Test func partialAnswerAdoptionPreservesOutputAndReopensAsExplicitVersion() async throws {
         let (store, engine, chat) = try await fixture()
         let id = try chat.newSession(); try configure(chat, session: id)

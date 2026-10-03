@@ -80,7 +80,8 @@ public enum ChatInterchange {
         }
         for message in path {
             let body: String
-            if message.role == .assistant {
+            if let answer = session.selectedAnswer(messageID: message.id) { body = answer.text
+            } else if message.role == .assistant, message.importedSource == nil {
                 guard let id = message.attemptID, let attempt = attempts[id],
                       attempt.assistantMessageID == message.id else {
                     throw ChatInterchangeError.invalid("Selected assistant message has no matching attempt.")

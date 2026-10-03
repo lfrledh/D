@@ -41,6 +41,20 @@ private struct SlowWebTransport: ChatWebTransport {
 
 @Suite("Bounded public Wikipedia route")
 struct ChatWebSearchTests {
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["D_CHAT_LIVE_WEB"] == "1"))
+    func realAuthorizedSearchAndWholePage() async throws {
+        let client = ChatWebSearchClient()
+        let hits = try await client.search("Macintosh", language: .en, networkAuthorized: true)
+        let hit = try #require(hits.first)
+        let page = try await client.readPage(hit, networkAuthorized: true)
+        #expect(page.pageID == hit.pageID && page.revisionID > 0)
+        #expect(!page.text.isEmpty && page.canonicalURL.host == "en.wikipedia.org")
+        if let root = ProcessInfo.processInfo.environment["D_CHAT_WEB_EVIDENCE"] {
+            let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys, .prettyPrinted]
+            try encoder.encode(page).write(to: URL(fileURLWithPath: root).appendingPathComponent("public-wikipedia-page.json"), options: .withoutOverwriting)
+        }
+    }
+
     private static let selected = ChatWebSearchHit(language: .ja, pageID: 42, title: "選択した記事")
 
     private static func searchBody(pageID: Int = 42) -> Data {

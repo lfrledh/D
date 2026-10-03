@@ -17,6 +17,21 @@ public struct ChatAttachment: Codable, Sendable, Equatable, Identifiable {
     }
 }
 
+/// Imported transcript provenance is not a model execution receipt.
+public struct ChatImportedSource: Codable, Sendable, Equatable {
+    public let format: String
+    public let version: Int
+    public let sourceSHA256: String
+    public let sourceIndex: Int
+    func validate() throws {
+        guard format == ChatInterchange.sourceFormat, version == ChatInterchange.sourceVersion,
+              sourceIndex >= 0, sourceIndex < ChatInterchange.maximumMessages,
+              sourceSHA256.count == 64, sourceSHA256.allSatisfy({ $0.isASCII && $0.isHexDigit }) else {
+            throw WorkflowIssue("Invalid imported transcript provenance.")
+        }
+    }
+}
+
 public struct ChatMessage: Codable, Sendable, Equatable, Identifiable {
     public enum Role: String, Codable, Sendable { case user, assistant }
     public let id: UUID
@@ -26,12 +41,13 @@ public struct ChatMessage: Codable, Sendable, Equatable, Identifiable {
     public let attachments: [ChatAttachment]
     public let knowledgeExcerpts: [ChatKnowledgeExcerpt]?
     public let attemptID: UUID?
+    public let importedSource: ChatImportedSource?
     public init(id: UUID = UUID(), parentID: UUID?, role: Role, text: String,
                 attachments: [ChatAttachment] = [], attemptID: UUID? = nil,
-                knowledgeExcerpts: [ChatKnowledgeExcerpt]? = nil) {
+                knowledgeExcerpts: [ChatKnowledgeExcerpt]? = nil, importedSource: ChatImportedSource? = nil) {
         self.id = id; self.parentID = parentID; self.role = role; self.text = text
         self.attachments = attachments; self.attemptID = attemptID
-        self.knowledgeExcerpts = knowledgeExcerpts
+        self.knowledgeExcerpts = knowledgeExcerpts; self.importedSource = importedSource
     }
 }
 
@@ -84,6 +100,7 @@ public struct ChatSession: Codable, Sendable, Equatable, Identifiable {
     public var contextSummaries: [ChatContextSummary]?
     public var memoryScopes: [ChatMemoryScope]?
     public var webOptions: ChatWebOptions?
+    public var importLossNotes: [String]?
     public var toolActivities: [ChatToolActivity]?
     public var knowledgeScope: [UUID]?
     public var knowledgeExcerpts: [ChatKnowledgeExcerpt]?
@@ -162,6 +179,10 @@ public struct ChatState: Codable, Sendable, Equatable {
                 throw WorkflowIssue("聊天会话内容或分支身份无效；原件保持只读。")
             }
             if let node = session.configuration { try Self.validateNode(node) }
+            let importNotes = session.importLossNotes ?? []
+            guard importNotes.count <= 4096, importNotes.reduce(0, { $0 + $1.utf8.count }) <= 524_288 else {
+                throw WorkflowIssue("Imported transcript mapping notes exceed the supported limit.")
+            }
             let activities = session.toolActivities ?? []
             guard activities.count <= 256, Set(activities.map(\.id)).count == activities.count,
                   activities.reduce(0, { $0 + ($1.resultJSON?.utf8.count ?? 0) }) <= 8_388_608 else { throw WorkflowIssue("工具历史超过保存预算。") }
@@ -189,6 +210,7 @@ public struct ChatState: Codable, Sendable, Equatable {
                 guard message.text.utf8.count <= 1_048_576,
                       message.parentID == nil || byID[message.parentID!] != nil,
                       message.parentID != message.id else { throw WorkflowIssue("聊天消息内容或父项无效。") }
+                try message.importedSource?.validate()
                 try Self.validateAttachments(message.attachments)
                 try Self.validateExcerpts(message.knowledgeExcerpts)
                 switch message.role {
@@ -199,6 +221,13 @@ public struct ChatState: Codable, Sendable, Equatable {
                         throw WorkflowIssue("用户消息文字或父助手消息无效。")
                     }
                 case .assistant:
+                    if message.importedSource != nil {
+                        guard message.attemptID == nil, !message.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                              message.parentID.flatMap({ byID[$0]?.role }) == .user else {
+                            throw WorkflowIssue("Imported assistant text cannot masquerade as a local model attempt.")
+                        }
+                        break
+                    }
                     guard let attemptID = message.attemptID, let attempt = attempts[attemptID],
                           attempt.assistantMessageID == message.id, attempt.userMessageID == message.parentID,
                           message.parentID.flatMap({ byID[$0]?.role }) == .user else {
@@ -210,6 +239,8 @@ public struct ChatState: Codable, Sendable, Equatable {
             for attempt in session.attempts {
                 guard attempt.sessionID == session.id, byID[attempt.userMessageID]?.role == .user,
                       byID[attempt.assistantMessageID]?.role == .assistant,
+                      byID[attempt.assistantMessageID]?.attemptID == attempt.id,
+                      byID[attempt.assistantMessageID]?.importedSource == nil,
                       attempt.rawText.utf8.count <= 4_194_304,
                       (attempt.response?.rawText.utf8.count ?? 0) <= 4_194_304,
                       attempt.messagesJSON.utf8.count <= 1_048_576,

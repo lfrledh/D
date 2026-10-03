@@ -59,6 +59,7 @@ struct ChatActionMenu: NSViewRepresentable {
         }
 
         private struct DisplayedAction {
+            let item: NSMenuItem
             let enabled: Bool
             let action: @MainActor () -> Void
         }
@@ -114,7 +115,10 @@ struct ChatActionMenu: NSViewRepresentable {
             displayedActions.removeAll()
             menu.removeAllItems()
             append(snapshot.items, to: menu, parentEnabled: true)
-            button.title = snapshot.title
+            // usesItemFromMenu=false requires an independent cell display item.
+            // Do not insert a dummy row into the actionable menu.
+            (button.cell as? NSPopUpButtonCell)?.menuItem = NSMenuItem(title: snapshot.title, action: nil, keyEquivalent: "")
+            button.invalidateIntrinsicContentSize()
             button.setAccessibilityLabel(snapshot.title)
             button.setAccessibilityIdentifier(snapshot.accessibilityIdentifier)
             button.isEnabled = !snapshot.items.isEmpty
@@ -134,7 +138,7 @@ struct ChatActionMenu: NSViewRepresentable {
                 } else if let action = value.action {
                     item.target = self
                     item.action = #selector(selectItem(_:))
-                    displayedActions[ObjectIdentifier(item)] = DisplayedAction(enabled: item.isEnabled, action: action)
+                    displayedActions[ObjectIdentifier(item)] = DisplayedAction(item: item, enabled: item.isEnabled, action: action)
                 }
                 menu.addItem(item)
             }
@@ -186,7 +190,7 @@ struct ChatActionMenu: NSViewRepresentable {
         @objc func selectItem(_ sender: NSMenuItem) {
             guard !dismantled, !selectionCaptured, sender.isEnabled,
                   let displayed = (cycleStarted ? displayedActions : endedCycleActions)[ObjectIdentifier(sender)],
-                  displayed.enabled else { return }
+                  displayed.item === sender, displayed.enabled else { return }
             selectionCaptured = true
             endedCycleActions.removeAll()
             if cycleStarted {
