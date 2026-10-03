@@ -156,12 +156,12 @@ public struct DualWorkbenchView: View {
             ProjectFilesView(store: route.store, instanceID: route.instanceID,
                 isActive: { (canvasModel.projectSession.currentStore === route.store &&
                     canvasModel.manifest?.effectiveInstanceID == route.instanceID) ||
-                    (quickModel.projectSession.currentStore === route.store &&
-                     quickModel.manifest?.effectiveInstanceID == route.instanceID) },
+                    (automaticQuickModel.projectSession.currentStore === route.store &&
+                     automaticQuickModel.manifest?.effectiveInstanceID == route.instanceID) },
                 modelLibrary: library.library,
                 onContentsChanged: { changedStore, instanceID, refreshMedia in
                     let primary = model.projectSession
-                    let quickOwner = quickModel.projectSession
+                    let quickOwner = automaticQuickModel.projectSession
                     if primary.currentStore === changedStore {
                         await primary.refreshAfterFileOperation(store: changedStore, instanceID: instanceID,
                             refreshMedia: refreshMedia)
@@ -179,7 +179,7 @@ public struct DualWorkbenchView: View {
                         throw WorkflowIssue("项目已切换；备份未创建。")
                     }
                     let primary = model.projectSession
-                    let quickOwner = quickModel.projectSession
+                    let quickOwner = automaticQuickModel.projectSession
                     let primaryMatches = primary.currentStore === captured && primary.manifest?.effectiveInstanceID == instanceID
                     let quickMatches = quickOwner.currentStore === captured && quickOwner.manifest?.effectiveInstanceID == instanceID
                     guard primaryMatches || quickMatches else { throw WorkflowIssue("项目已切换；备份未创建。") }
@@ -192,7 +192,7 @@ public struct DualWorkbenchView: View {
                           (quickOwner.currentStore === captured && quickOwner.manifest?.effectiveInstanceID == instanceID) else {
                         throw WorkflowIssue("项目已切换；备份未创建。")
                     }
-                    if quick.store === captured && quick.isLoaded { try await quick.flush() }
+                    if automaticQuick.store === captured && automaticQuick.isLoaded { try await automaticQuick.flush() }
                     try Task.checkCancellation()
                     guard (primary.currentStore === captured && primary.manifest?.effectiveInstanceID == instanceID) ||
                           (quickOwner.currentStore === captured && quickOwner.manifest?.effectiveInstanceID == instanceID) else {
@@ -211,8 +211,8 @@ public struct DualWorkbenchView: View {
                 }, onOpenGraph: { graphID, nodeID in
                     guard ((model.projectSession.currentStore === route.store &&
                             model.manifest?.effectiveInstanceID == route.instanceID) ||
-                           (quickModel.projectSession.currentStore === route.store &&
-                            quickModel.manifest?.effectiveInstanceID == route.instanceID)),
+                           (automaticQuickModel.projectSession.currentStore === route.store &&
+                            automaticQuickModel.manifest?.effectiveInstanceID == route.instanceID)),
                           let controller = canvasModel.projectSession.workflow,
                           controller.projectInstanceID == route.instanceID,
                           controller.graphs.contains(where: { $0.id == graphID && $0.nodes.contains(where: { $0.id == nodeID }) }) else { return false }
@@ -432,7 +432,7 @@ public struct DualWorkbenchView: View {
         guard let identity = assetIdentity(value.selection) else { return }
         do {
             var active = [(ProjectStore, ProjectManifest)]()
-            if let current = quickModel.projectSession.currentStore {
+            if let current = automaticQuickModel.projectSession.currentStore {
                 active.append((current, await current.snapshot()))
             }
             if let current = model.projectSession.currentStore,
@@ -447,8 +447,8 @@ public struct DualWorkbenchView: View {
             let snapshot = await source.snapshot()
             guard snapshot.id == identity.0,
                   snapshot.assets.contains(where: { $0.id == identity.2 }),
-                  (quickModel.projectSession.currentStore === source &&
-                   quickModel.manifest?.effectiveInstanceID == snapshot.effectiveInstanceID) ||
+                  (automaticQuickModel.projectSession.currentStore === source &&
+                   automaticQuickModel.manifest?.effectiveInstanceID == snapshot.effectiveInstanceID) ||
                   (model.projectSession.currentStore === source &&
                    model.manifest?.effectiveInstanceID == snapshot.effectiveInstanceID) else {
                 throw WorkflowIssue("所属项目尚未打开，请从项目入口打开后再查看文件位置。")
