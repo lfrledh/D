@@ -1,6 +1,37 @@
 import DWorkbench
 import SwiftUI
 
+/// Uses frozen provenance from the displayed revision; it does not recapture
+/// a possibly changed chat path when the panel redraws.
+struct ChatProvenancePresentation {
+    enum Origin: Equatable {
+        case manual
+        case auxiliary(UUID)
+        case chat
+    }
+
+    let revision: UInt64
+    let scope: ChatMemoryScope?
+    let origin: Origin
+    let source: ChatContextSource?
+
+    init(summary: ChatContextSummary) {
+        revision = summary.revision
+        scope = nil
+        origin = summary.auxiliaryAttemptID.map { .auxiliary($0) } ?? .manual
+        source = summary.source
+    }
+
+    init(memory: ChatMemoryEntry) {
+        revision = memory.revision
+        scope = memory.scope
+        switch memory.source {
+        case .manual: origin = .manual; source = nil
+        case .chat(let captured): origin = .chat; source = captured
+        }
+    }
+}
+
 /// Explicit, versioned context changes. Ordinary browsing never starts model work.
 struct ChatMemoryPanel: View {
     let chat: ChatController
@@ -25,9 +56,11 @@ struct ChatMemoryPanel: View {
                 Text(wording("Summaries replace only reviewed context. Originals remain. Memory is off until explicitly enabled.", "摘要仅替代经过确认的上下文，原文保留。记忆须显式启用。"))
                     .font(.caption).foregroundStyle(.secondary)
                 ForEach(summaries) { summary in
-                    Toggle(wording("Summary revision ", "摘要版本 ") + String(summary.revision), isOn: Binding(get: { summary.enabled }, set: { value in
+                    let provenance = ChatProvenancePresentation(summary: summary)
+                    Toggle(wording("Summary revision ", "摘要版本 ") + String(provenance.revision), isOn: Binding(get: { summary.enabled }, set: { value in
                         change { try chat.setSummaryEnabled(summary.id, enabled: value, sessionID: session.id) }
                     }))
+                    provenanceDetails(provenance)
                     Text(summary.text).lineLimit(4).font(.caption).textSelection(.enabled)
                     Button(wording("Edit a new revision", "编辑为新版本")) { summaryText = summary.text; editingSummary = summary.id }
                 }
@@ -40,9 +73,11 @@ struct ChatMemoryPanel: View {
                 Toggle(wording("Use personal memories", "使用个人记忆"), isOn: scopeBinding(.personal))
                 if let id = chat.projectIdentity { Toggle(wording("Use this project's memories", "使用本项目记忆"), isOn: scopeBinding(.project(id))) }
                 ForEach(memories) { entry in
+                    let provenance = ChatProvenancePresentation(memory: entry)
                     VStack(alignment: .leading) {
-                        Text((entry.scope == .personal ? wording("Personal · ", "个人 · ") : wording("Project · ", "项目 · ")) + entry.text)
+                        Text(entry.text)
                             .font(.caption).textSelection(.enabled)
+                        provenanceDetails(provenance)
                         if entry.forgottenAt == nil {
                             HStack {
                                 Toggle(wording("Enabled", "启用"), isOn: Binding(get: { entry.enabled }, set: { value in
@@ -70,6 +105,37 @@ struct ChatMemoryPanel: View {
                 if let issue { Text(issue).foregroundStyle(.red).font(.caption).textSelection(.enabled) }
             }.padding(.top, 6)
         }
+    }
+    @ViewBuilder private func provenanceDetails(_ value: ChatProvenancePresentation) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(wording("Revision", "版本") + " \(value.revision)")
+            if let scope = value.scope {
+                switch scope {
+                case .personal: Text(wording("Scope: personal", "范围：个人"))
+                case .project(let id): Text(wording("Scope: project ", "范围：项目 ") + id.uuidString)
+                }
+            }
+            switch value.origin {
+            case .manual: Text(wording("Origin: manual", "来源：人工"))
+            case .auxiliary(let id): Text(wording("Origin: auxiliary attempt ", "来源：辅助尝试 ") + id.uuidString)
+            case .chat: Text(wording("Origin: source chat", "来源：源聊天"))
+            }
+            if let source = value.source {
+                Text(wording("Source chat: ", "源聊天：") + source.sessionID.uuidString)
+                Text(wording("Source leaf: ", "来源末消息：") + source.selectedLeafID.uuidString)
+                if let first = source.coveredMessageIDs.first,
+                   let last = source.coveredMessageIDs.last {
+                    Text(wording("Covered range: ", "覆盖范围：") + first.uuidString + " … " + last.uuidString)
+                }
+                DisclosureGroup(wording("Covered message IDs (\(source.coveredMessageIDs.count))",
+                                        "覆盖消息 ID（\(source.coveredMessageIDs.count)）")) {
+                    ForEach(source.coveredMessageIDs, id: \.self) { id in
+                        Text(id.uuidString).textSelection(.enabled)
+                    }
+                }
+            }
+        }
+        .font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
     }
     private func scopeBinding(_ scope: ChatMemoryScope) -> Binding<Bool> {
         Binding(get: { session.memoryScopes?.contains(scope) == true }, set: { value in
