@@ -29,7 +29,9 @@ import Observation
     @ObservationIgnored private var diskRevision: UInt64 = 0
     @ObservationIgnored private var mutation: UInt64 = 0
     @ObservationIgnored private var savedMutation: UInt64 = 0
-    @ObservationIgnored private var cancelRequested = false
+    public private(set) var isCancelling = false
+    /// Publication retries are busy but are not a cancellable model run.
+    public var canStopGeneration: Bool { isRunning && activeAttemptID != nil }
     @ObservationIgnored private var debounceGeneration: UInt64 = 0
 
     public init(store: ProjectStore, allowsSubmission: @escaping @MainActor () -> Bool = { true },
@@ -373,13 +375,13 @@ import Observation
             }
             if let firstMessageTitle { state.sessions[i].title = firstMessageTitle }
         }
-        changed(); cancelRequested = false; error = nil; isRunning = true; activeSessionID = sessionID; activeAttemptID = attemptID; phase = "正在保存冻结输入…"
+        changed(); isCancelling = false; error = nil; isRunning = true; activeSessionID = sessionID; activeAttemptID = attemptID; phase = "正在保存冻结输入…"
         runTask = Task { [self] in
-            defer { isRunning = false; activeSessionID = nil; activeAttemptID = nil; runTask = nil
+            defer { isRunning = false; isCancelling = false; activeSessionID = nil; activeAttemptID = nil; runTask = nil
                     if pendingSaveAttemptID == nil { services = nil } }
             do {
                 try await flush() // Immutable attempt is durable before model admission.
-                if cancelRequested { throw CancellationError() }
+                if isCancelling { throw CancellationError() }
                 let service = try makeServices(); services = service
                 service.progress = { [weak self] value in self?.phase = value }
                 service.languagePreviewChanged = { [weak self] stepID, text in
@@ -390,7 +392,7 @@ import Observation
                     self.state.sessions[si].attempts[ai].rawText = text
                     self.changed(checkpoint: true)
                 }
-                if cancelRequested { throw CancellationError() }
+                if isCancelling { throw CancellationError() }
                 try service.beginPlan()
                 let result = try await service.executeCall(.init(node: prepared.0, stepID: attemptID, inputs: prepared.2))
                 guard case .outputs(let values) = result, let raw = values["raw"]?.asset ?? values["output"]?.asset else { throw WorkflowIssue("文字输出缺少已发布原文。") }
@@ -409,10 +411,11 @@ import Observation
                     } else {
                         state.sessions[si].attempts[ai].status = !state.sessions[si].attempts[ai].rawText.isEmpty ? .partial : (error is CancellationError ? .cancelled : .failed)
                     }
-                    state.sessions[si].attempts[ai].issue = error.localizedDescription
+                    state.sessions[si].attempts[ai].issue = error is CancellationError ? "已停止；已接收的文字已保留。" : error.localizedDescription
                     changed()
                 }
-                self.error = error.localizedDescription; phase = "已停止"
+                self.error = error is CancellationError ? nil : error.localizedDescription
+                phase = error is CancellationError ? "已停止" : "生成失败"
                 do { try await flush() } catch { saveIssue = error.localizedDescription }
             }
         }
@@ -431,11 +434,14 @@ import Observation
         changed()
     }
     public func cancel() async {
-        guard isRunning else { return }
-        cancelRequested = true
-        phase = "正在取消并释放资源…"
-        await services?.cancel()
-        await runTask?.value
+        guard let task = runTask else { return }
+        if !isCancelling {
+            isCancelling = true
+            phase = "正在取消并释放资源…"
+            await services?.cancel()
+        }
+        // Every caller waits for the same run, even when the signal was already sent.
+        await task.value
     }
     public func waitForCompletion() async { await runTask?.value }
     public func retrySave() async {
@@ -470,7 +476,7 @@ import Observation
                         state.sessions[si].attempts[ai].rawText = response.rawText
                     }
                     state.sessions[si].attempts[ai].status = .failed
-                    state.sessions[si].attempts[ai].issue = error.localizedDescription
+                    state.sessions[si].attempts[ai].issue = error is CancellationError ? "已停止；已接收的文字已保留。" : error.localizedDescription
                     changed()
                 }
                 pendingSaveAttemptID = nil; services = nil

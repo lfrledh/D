@@ -500,7 +500,6 @@ struct ChatWorkbenchView: View {
                     Text(label("runningIn", "正在生成：") + owner.title + " · " + chat.phase)
                         .font(.caption).lineLimit(2)
                     Spacer()
-                    Button(label("stop", "停止当前生成")) { Task { await chat.cancel() } }
                 }.padding(.horizontal, 16).padding(.vertical, 8)
             }
               ScrollViewReader { proxy in
@@ -821,12 +820,26 @@ struct ChatWorkbenchView: View {
                     Button(label("retrySave", "重试保存（不重新生成）")) { Task { await chat.retrySave() } }
                         .disabled(chat.isRunning)
                 }
-                Button(label("send", "发送")) { Task { await run(sessionID: session.id) { try await chat.send(sessionID: session.id) } } }
+                if chat.canStopGeneration {
+                    Button(chat.isCancelling
+                        ? newLabel("stopping", english: "Stopping…", chinese: "正在停止…")
+                        : label("stop", "停止当前生成"), systemImage: "stop.fill") {
+                        Task { await chat.cancel() }
+                    }
                     .buttonStyle(.borderedProminent)
-                    .disabled(!ChatRunAdmission.allowsSend(session, isRunning: chat.isRunning,
-                        hasPendingSave: chat.pendingSaveAttemptID != nil, hasSaveIssue: chat.saveIssue != nil,
-                        invalidFields: chat.invalidParameterFields))
-                    .accessibilityIdentifier("chat-send")
+                    .disabled(chat.isCancelling)
+                    .accessibilityIdentifier("chat-stop")
+                    .help(newLabel("stopHelp", english: "Stop generation and keep received text. Resources are released before the next request.",
+                        chinese: "停止生成并保留已接收文字；资源释放后才能开始下一次。"))
+                    .chatMeasured("composer-stop", probe: layoutProbe)
+                } else {
+                    Button(label("send", "发送")) { Task { await run(sessionID: session.id) { try await chat.send(sessionID: session.id) } } }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(!ChatRunAdmission.allowsSend(session, isRunning: chat.isRunning,
+                            hasPendingSave: chat.pendingSaveAttemptID != nil, hasSaveIssue: chat.saveIssue != nil,
+                            invalidFields: chat.invalidParameterFields))
+                        .accessibilityIdentifier("chat-send")
+                }
             }
             .dropDestination(for: WorkflowCanvasTransfer.self) { items, _ in
                 let owner = session.id

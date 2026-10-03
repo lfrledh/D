@@ -34,6 +34,35 @@ private actor ChatPresentationStreamEngine: InferenceEngine {
     }
 }
 
+private actor ChatPresentationGatedStreamEngine: InferenceEngine {
+    private var continuation: AsyncThrowingStream<InferenceOutput, Error>.Continuation?
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+    private var drained = false
+    private(set) var cancellationSeen = false
+    private(set) var submissions = 0
+    func submit(_ request: InferenceRequest, backendID: String) async throws -> InferenceRun {
+        submissions += 1
+        let pair = AsyncThrowingStream<InferenceOutput, Error>.makeStream()
+        continuation = pair.continuation
+        return .init(id: request.id, events: pair.stream,
+            cancel: { await self.cancel() }, outcome: {
+                await self.waitForDrain()
+                return .cancelled
+            })
+    }
+    func emit(_ text: String) { continuation?.yield(.textDelta(text)) }
+    private func cancel() { cancellationSeen = true; continuation?.finish() }
+    private func waitForDrain() async {
+        if drained { return }
+        await withCheckedContinuation { waiters.append($0) }
+    }
+    func drain() {
+        drained = true; continuation?.finish()
+        let pending = waiters; waiters.removeAll()
+        for waiter in pending { waiter.resume() }
+    }
+}
+
 private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sendable {
     private let lock = NSLock()
     private var values: [String: Any] = [:]
@@ -161,6 +190,54 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
     private func close(_ store: ProjectStore, root: URL) async throws {
         try await store.close()
         try FileManager.default.removeItem(at: root)
+    }
+
+    @Test func continuousStreamKeepsComposerStopReachableUntilDrain() async throws {
+        var session = ChatSession(title: "可控连续流")
+        session.configuration = try node(); session.draft = "保持原输入 👩🏽‍🎨"
+        var state = ChatState(); state.sessions = [session]; state.selectedSessionID = session.id
+        let engine = ChatPresentationGatedStreamEngine()
+        let (chat, model, store, root) = try await fixture(state, engine: engine)
+        var rectangles: [String: CGRect] = [:]
+        let host = NSHostingView(rootView: ChatWorkbenchView(chat: chat, model: model,
+            onChooseModel: {}, onSavedAsset: { _ in }, onAssetsChanged: {})
+            .observingLayout { rectangles[$0] = $1 })
+        host.frame = .init(x: 0, y: 0, width: 900, height: 640)
+        host.layoutSubtreeIfNeeded()
+        try await chat.send(sessionID: session.id)
+        for _ in 0..<100 {
+            if await engine.submissions == 1 { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(await engine.submissions == 1)
+        // Host exists before admission and stays mounted across multiple publications.
+        for i in 0..<12 {
+            await engine.emit("第\(i)段 é 👩🏽‍🎨\n")
+            try await Task.sleep(for: .milliseconds(100))
+            host.layoutSubtreeIfNeeded()
+        }
+        #expect(chat.selectedSession?.attempts.first?.rawText.contains("第11段") == true)
+        let composer = rectangles["composer"]
+        let stop = rectangles["composer-stop"]
+        #expect(stop != nil, "Stop must be a stable primary action beside the input, not transcript chrome")
+        if let stop, let composer { #expect(composer.contains(stop)) }
+        let cancelling = Task { await chat.cancel() }
+        for _ in 0..<100 {
+            if await engine.cancellationSeen { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(await engine.cancellationSeen)
+        #expect(chat.isRunning, "Cancellation must remain busy until the execution drains")
+        var repeatedCancelReturned = false
+        let secondCancellation = Task { await chat.cancel(); repeatedCancelReturned = true }
+        try await Task.sleep(for: .milliseconds(30))
+        #expect(!repeatedCancelReturned, "Repeated cancellation must also wait for drain")
+        #expect(chat.canStopGeneration && chat.isCancelling)
+        await engine.drain(); await cancelling.value; await secondCancellation.value
+        #expect(!chat.isRunning && !chat.isCancelling && !chat.canStopGeneration)
+        #expect(chat.selectedSession?.attempts.first?.status == .partial)
+        #expect(chat.selectedSession?.attempts.first?.rawText.contains("第11段") == true)
+        try await chat.flush(); try await close(store, root: root)
     }
 
     @Test func emptyConversationRealViewFixture() async throws {
