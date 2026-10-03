@@ -14,7 +14,7 @@ public enum ChatWebRoute: String, Codable, Sendable {
     case wikipediaActionAPI
 }
 
-public enum ChatWebError: Error, Equatable, Sendable {
+public enum ChatWebError: Error, Equatable, LocalizedError, Sendable {
     case permissionDenied
     case unsupportedLanguage
     case invalidQuery
@@ -25,6 +25,21 @@ public enum ChatWebError: Error, Equatable, Sendable {
     case redirectRejected
     case httpStatus(Int)
     case transportFailure
+
+    public var errorDescription: String? {
+        switch self {
+        case .permissionDenied: "Allow network access before searching or reading a page."
+        case .unsupportedLanguage: "Web search supports English, Chinese, and Japanese Wikipedia only."
+        case .invalidQuery: "Enter a non-empty query of at most 512 UTF-8 bytes without C0 or C1 control characters."
+        case .invalidPageID: "Choose a valid page from the supported Wikipedia search route."
+        case .invalidResponse: "Wikipedia returned a response that could not be verified or read."
+        case .responseTooLarge: "The Wikipedia response exceeds the 128 KiB search or 2 MiB page download limit."
+        case .sourceTooLarge: "The extracted page text exceeds the 1 MiB UTF-8 limit."
+        case .redirectRejected: "The Wikipedia request redirected or returned from an unexpected URL."
+        case .httpStatus(let code): "Wikipedia returned HTTP status \(code)."
+        case .transportFailure: "The Wikipedia request failed during transport."
+        }
+    }
 }
 
 /// Search metadata is not article text. The server's HTML snippet is deliberately discarded.
@@ -155,7 +170,7 @@ public struct ChatWebSearchClient: Sendable {
         try Task.checkCancellation()
         let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !query.isEmpty, query.utf8.count <= Self.maximumQueryBytes,
-              !query.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }) else {
+              !query.unicodeScalars.contains(where: { $0.value <= 0x1F || (0x7F...0x9F).contains($0.value) }) else {
             throw ChatWebError.invalidQuery
         }
         let request = try Self.request(language: language, parameters: [

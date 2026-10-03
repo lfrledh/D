@@ -83,6 +83,12 @@ struct ChatWebSearchTests {
         await #expect(throws: ChatWebError.invalidQuery) {
             try await client.search("line\u{000A}break", language: .en, networkAuthorized: true)
         }
+        await #expect(throws: ChatWebError.invalidQuery) {
+            try await client.search("nul\u{0000}byte", language: .en, networkAuthorized: true)
+        }
+        await #expect(throws: ChatWebError.invalidQuery) {
+            try await client.search("c1\u{0085}control", language: .en, networkAuthorized: true)
+        }
         #expect(await transport.recorded().isEmpty)
     }
 
