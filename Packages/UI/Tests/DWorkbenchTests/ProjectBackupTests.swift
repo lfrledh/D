@@ -297,7 +297,7 @@ struct ProjectBackupTests {
                 try await ProjectBackup.restore(at: backup, to: target, prepare: { stageFD in
                     #expect(try readStageFile("project.json", in: stageFD) == original)
                     try writeStageFile(prepared, named: "project.json", in: stageFD)
-                }, publicationCheckpoint: { stage in
+                }, preparationCheckpoint: { stage in
                     reportStage.yield(stage)
                     try FileManager.default.moveItem(at: stage, to: retained)
                     try FileManager.default.createDirectory(at: stage, withIntermediateDirectories: false)
@@ -336,7 +336,8 @@ struct ProjectBackupTests {
             reportStage.finish()
             var stageIterator = stages.makeAsyncIterator()
             guard let partial = await stageIterator.next() else { Issue.record("partial backup missing"); return }
-            #expect(try Data(contentsOf: partial.appendingPathComponent("complete.sha256")) == replacement)
+            let marker = try Data(contentsOf: partial.appendingPathComponent("complete.sha256"))
+            #expect(marker == replacement)
             await #expect(throws: ProjectBackupError.self) { try await ProjectBackup.verify(at: partial) }
         }
     }

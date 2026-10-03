@@ -136,10 +136,12 @@ public enum ProjectBackup {
     // The descriptor is borrowed for this synchronous call. The helper owns and closes it.
     static func restore(at backup: URL, to destination: URL, allowIncomplete: Bool = false,
                         prepare: @escaping @Sendable (Int32) throws -> Void,
+                        preparationCheckpoint: @escaping @Sendable (URL) throws -> Void = { _ in },
                         publicationCheckpoint: @escaping @Sendable (URL) throws -> Void = { _ in }) async throws -> ProjectBackupReceipt {
         let work = Task.detached(priority: .userInitiated) {
             try restoreSync(at: backup, to: destination, allowIncomplete: allowIncomplete,
-                            prepare: prepare, publicationCheckpoint: publicationCheckpoint)
+                            prepare: prepare, preparationCheckpoint: preparationCheckpoint,
+                            publicationCheckpoint: publicationCheckpoint)
         }
         return try await withTaskCancellationHandler { try await work.value } onCancel: { work.cancel() }
     }
@@ -363,6 +365,7 @@ private extension ProjectBackup {
 
     static func restoreSync(at backup: URL, to destination: URL, allowIncomplete: Bool,
                             prepare: @Sendable (Int32) throws -> Void,
+                            preparationCheckpoint: @Sendable (URL) throws -> Void,
                             publicationCheckpoint: @Sendable (URL) throws -> Void) throws -> ProjectBackupReceipt {
         try Task.checkCancellation()
         let source = try absolute(backup), target = try absolute(destination)
@@ -409,6 +412,7 @@ private extension ProjectBackup {
         try checkPublicationRoute(parent: parent, parentURL: target.deletingLastPathComponent(),
                                   stagingParent: staging.fd, stagingURL: staging.url,
                                   stage: stage, stageName: stageName, stageIdentity: ownedStage)
+        try preparationCheckpoint(stageURL)
         try prepare(stage)
         try publicationCheckpoint(stageURL)
         try Task.checkCancellation()
