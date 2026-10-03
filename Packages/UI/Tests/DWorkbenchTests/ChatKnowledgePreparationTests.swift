@@ -116,7 +116,8 @@ struct ChatKnowledgeDirectoryInventoryTests {
         _ = try write("fixture", named: "note.txt", in: selected)
 
         let nulURL = try #require(URL(string: root.absoluteString + "selected%00suffix"))
-        #expect(nulURL.path.contains("\0"))
+        let encodedPath = try #require(URLComponents(url: nulURL, resolvingAgainstBaseURL: false)?.percentEncodedPath)
+        #expect(encodedPath.hasSuffix("selected%00suffix"))
         #expect(throws: ChatKnowledgeDirectoryInventory.InventoryError.invalidDirectory) {
             try ChatKnowledgeDirectoryInventory.inspect(nulURL)
         }

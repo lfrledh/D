@@ -181,7 +181,9 @@ public struct ChatKnowledgeDirectoryInventory: Sendable {
     }
 
     fileprivate static func openSelectedDirectory(_ url: URL) throws -> Int32 {
-        guard url.isFileURL, url.query == nil, url.fragment == nil,
+        guard let encodedPath = URLComponents(url: url, resolvingAgainstBaseURL: false)?.percentEncodedPath,
+              encodedPath.range(of: "%00", options: .caseInsensitive) == nil,
+              url.isFileURL, url.query == nil, url.fragment == nil,
               url.host == nil || url.host == "" || url.host?.lowercased() == "localhost",
               url.path.hasPrefix("/"), url.standardizedFileURL.path == url.path else {
             throw InventoryError.invalidDirectory
