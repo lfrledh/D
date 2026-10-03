@@ -14,6 +14,7 @@ enum ChatQuoteSelectionAction: String, CaseIterable, Hashable, Sendable {
 struct ChatQuoteSelectionView: View {
     let source: ChatQuoteSource
     let onUse: (ChatQuoteSelection, ChatQuoteSelectionAction) -> Void
+    var actionFrameProbe: ((ChatQuoteSelectionAction, CGRect) -> Void)? = nil
 
     @Environment(\.dLanguageStore) private var language
     @State private var selection: ChatQuoteSelection?
@@ -40,9 +41,13 @@ struct ChatQuoteSelectionView: View {
                     }
                     .disabled(usableSelection == nil)
                     .accessibilityIdentifier("chat-quote-\(action.rawValue)")
+                    .onGeometryChange(for: CGRect.self) { $0.frame(in: .named("chat-quote-selection")) } action: { frame in
+                        actionFrameProbe?(action, frame)
+                    }
                 }
             }
         }
+        .coordinateSpace(name: "chat-quote-selection")
         .onChange(of: source) { _, _ in selection = nil }
     }
 

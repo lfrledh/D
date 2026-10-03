@@ -55,6 +55,16 @@ struct ChatMessageContent: View {
                         }
                     }
                 }
+                if attempt.status != .running && attempt.status != .saving,
+                   let format = attempt.outputFormat, [.json, .schema].contains(format.kind) {
+                    DisclosureGroup(label("formatCheck", "输出格式检查 · 不代表生成已完整结束")) {
+                        let report = format.check(attempt.response?.finalText ?? attempt.rawText)
+                        Text(report.status == .valid ? label("validFormat", "原文符合请求的格式") : label("invalidFormat", "原文未通过格式检查"))
+                        if let reason = report.reason { Text(reason).font(.caption).textSelection(.enabled) }
+                        Text(label("formatAdvisory", "这是生成后检查，不是受约束解码；原回答保持不变。"))
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                }
                 if let calls = attempt.response?.toolCalls, !calls.isEmpty {
                     DisclosureGroup(label("toolCalls", "工具调用声明 · 未执行")) {
                         ForEach(calls, id: \.id) { call in

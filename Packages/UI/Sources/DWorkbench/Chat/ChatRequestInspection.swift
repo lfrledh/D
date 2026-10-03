@@ -38,6 +38,7 @@ public struct ChatRequestInspection: Sendable {
         }
         var inputFields: [Field] = [
             field("system", "System prompt", attempt.systemPrompt),
+            field("format", "Requested response format (advisory, validated after generation)", attempt.outputFormat?.kind.rawValue ?? "automatic"),
             field("messages", "Encoded messages", attempt.messagesJSON)
         ]
         for key in attempt.inputs.keys.sorted() {

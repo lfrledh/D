@@ -647,3 +647,29 @@ S01受限Sol/high初交、修复1、修复2分别679.58/661.15/548.879秒，均�
 ### CHAT-PRODUCT续作：同一F01–F36冻结范围
 
 用户2026-10-03授权连续完成S00–S06，不重置历史失败。起点候选5c6b0ba4ddb7283b8cf19b61d37d57d64742fa97、main f31dced209855722d2f04cc0fc8c5f6712396120、VIEW 3e86f12a184f12b6ec11c22494af92ebfe8f559a均核实。本次证据`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261003T150039Z-chat-continue`。先以已留样本和可控流定位候选菜单忙循环/AX迟滞，固定输入区停止；再组合VIEW，保留F07与输入/数据语义。允许路径按既有Chat、受影响Store/Runtime/服务和对应测试逐包签发；共享契约由Lead协调。只读定位并行，写Worker继续独立受限CLI；GPU/构建/GUI串行。已验1024-token长生成、H22/账号等不重复。旧预算保留，本次已明确批准缺陷不得因旧额度耗尽永久停工；同因两次无进展改变定位方法。
+
+
+### CHAT-PRODUCT-20261003 续作检查点：范围不缩减（2026-10-04）
+
+证据R=`D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261003T150039Z-chat-continue`。本段只追加实际增量，完整状态仍为CHAT_FEATURE_LEDGER。
+
+- `263857f113c20de36c5a347423cd12e3e6de5c76`模板/预设/比较；`6bca3bbba297e63fa26a927ccc4bb04e3b184e37`系统Speech接线及关闭；`4ae52508d38a1cbd3db8a227e1a3bbe4aacd7d25`个人/项目记忆、手动摘要、真实工具活动与上下文采用。共享控制器与接线为Lead实现，独立纯服务为受限Sol/high初交/记录中的有限返工；非实现者定点源码审核，不称另一个模型执行了所有测试。
+- CPU证据：memory-product-wiring编译/定向通过；memory-review-r1 38项/2suite通过；s04-components最初真实Foundation编译失败（枚举重命名），r1发现乘法静默舍入与Unicode ZWJ被误作控制符；修补未放宽原断言。工具worker初交+两修后Lead保守十进制有效位预算修补；WEB worker repair1使用C0/C1标量规则保持组合字符。
+- s04-wiring首编译捕获Sendable错误，标记局部helper后修复；r1仍只有已知WEB版本Unicode失败。r2 21项/4suite通过119.65秒；r3 5项通过17.64秒，精确验证采用后网页附件仍恰好存在。测试于2b9e75c5+对应工作差异，提交4ae52508代码等同最终r3受测；新增不受此筛选覆盖的App装配仍待正常构建。
+- 审核的交错反例：自动搜索后修改草稿/设置不能串旧正文；保存失败仍可撤销联网并取消；关闭项目先给工具/语音/生成停止信号再等待真实drain；flush期间移除/替换自动采用附件不继续发模型。新增实际控制器保存冲突、挂起工具/模型反例；自动采用最后窗口用生产纯值校验反例，不冒称已做暂停文件系统的端到端测试。
+- 官方MCP 0.12.1固定上游快照及单行URLSession注入补丁由Lead准备，注册不启动工具。接入取消的两处审阅问题在独立候选repair1修复中；收到结果后的2MiB检查不等于接收前内存硬上限。PREVIEW只实现WebKit静态HTML/SVG；RTC外联边界尚未证明，显式JS模式目前拒绝，F30仍未完成。F28只读准备调用遭自动安全审核拒绝，未通过换描述或宿主裸执行绕开；这不取消功能范围。
+- 最近桌面锁屏，GUI暂停并关闭自有未输入实例。未重跑3次已过1024-token长生成，不重开H22/H31/宏/本人视频；新App菜单、输入区停止、跨页/滚动与语音仍须同版原生证据。main仍A稳定基线，组件通过不更新整体冻结状态。
+
+### CHAT-PRODUCT v2 续作：菜单、导入和采用版本（2026-10-04）
+
+- MENU Sol/high初交+两修后，真实NSMenu生命周期9方法中标题两断言失败；Lead按SDK补独立cell显示项并保持原断言，9方法通过。非实现者核API与生命周期；普通App忙循环仍待实际验证。
+- Lead F33/F34：导入明确来源/损失确认/同receipt保存失败重试、HTML既有导出发布路径；采用的人工/部分回答独立资产及导出一致。F34反例先红后绿，导入4/交换8/采用1分别见R/lead/s02-s03-import-menu-r1与r2，不能与UI9相加称整套原生通过。实现提交d2badef2，测试时为c0d2a9e4加同一Lead源码增量；随后MCP保留历史合并与本提交，不声称已在新组合重跑。
+- 详细最小证据R/lead/menu-import-closeout-evidence.json。MCP固定SDK真实本机服务通过，生产接线进行中。QUOTE与FORMAT为新范围内隔离Sol/high组件，独立工作树，禁网无构建；Lead逐次核验路由。main/旧scheme未推进。
+
+### CHAT-PRODUCT S02 输出格式与选段接线（2026-10-04，持续实施）
+
+同一F01–F36范围。FORMAT/QUOTE组件由受限Sol/high实现；Lead接入现有ChatController/State/界面。格式不改变后端解码器，生成后检查不会吞原文；replay/compare冻结原参数，fork仅复制选中分支。引用始终捕获源/范围/摘要，发布前与await后检查项目owner，重选同文不同位置生成不同资产身份，重试同一选段保留身份；不自动发送或替换输入。
+
+非实现者两项P2均修复：`lead/s02-quote-owner-red`真实Store占用期间项目关闭先失败；`s02-format-quote-green`中9项格式XCTest、10项Workbench Swift Testing通过（源码为14f0c20f加本次增量）。其中UITests宿主事件注入发生identity-mismatch，尽管多测试二进制runner最终exit0，**此UI结果不算通过**；旧`s02-quote-host-geometry`1项通过仅作历史，不覆盖本次冲突。原生App将定向验证选段与菜单；不重跑长GPU。F13最初fork断言选中了regenerate的新分支，已明确指定旧assistant并补compare，未改生产fork语义。QUOTE组件初交/repair1，Lead补Swift返回/SDK getter和真实按钮geometry检查；保留所有失败证据，不归为Worker独立通过。
+
+R仍为run-20261003T150039Z-chat-continue。MCP已有真实SDK服务controller往返与取消；AUX优先队列已验。s03-assistance初交+repair1已结束，模型/权限同先前，纯值组件待CPU及接线。当前桌面可截图，不再直接沿用锁屏事实；普通App门槛尚未通过。main仍f31dced209855722d2f04cc0fc8c5f6712396120。没有新本人授权、模型或平台。

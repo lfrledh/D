@@ -67,6 +67,7 @@ public struct ChatAttempt: Codable, Sendable, Equatable, Identifiable {
     /// Comparison reuses the frozen input but deliberately changes model/settings.
     public var comparisonSourceAttemptID: UUID?
     public var memoryUses: [ChatMemoryUse]?
+    public var outputFormat: ChatOutputFormat?
     public var status: Status
     public var rawText: String
     public var response: TextResponse?
@@ -100,6 +101,7 @@ public struct ChatSession: Codable, Sendable, Equatable, Identifiable {
     public var contextSummaries: [ChatContextSummary]?
     public var memoryScopes: [ChatMemoryScope]?
     public var webOptions: ChatWebOptions?
+    public var outputFormat: ChatOutputFormat?
     public var mcpEndpoint: String?
     public var importLossNotes: [String]?
     public var toolActivities: [ChatToolActivity]?
@@ -180,6 +182,7 @@ public struct ChatState: Codable, Sendable, Equatable {
                 throw WorkflowIssue("聊天会话内容或分支身份无效；原件保持只读。")
             }
             if let node = session.configuration { try Self.validateNode(node) }
+            try session.outputFormat?.validate()
             let importNotes = session.importLossNotes ?? []
             guard importNotes.count <= 4096, importNotes.reduce(0, { $0 + $1.utf8.count }) <= 524_288 else {
                 throw WorkflowIssue("Imported transcript mapping notes exceed the supported limit.")
@@ -250,6 +253,7 @@ public struct ChatState: Codable, Sendable, Equatable {
                       attempt.systemPrompt.utf8.count <= 65_536 else { throw WorkflowIssue("聊天尝试引用或大小无效。") }
                 guard (attempt.memoryUses?.count ?? 0) <= 1024 else { throw WorkflowIssue("记忆来源数量无效。") }
                 for use in attempt.memoryUses ?? [] { guard use.revision > 0 else { throw WorkflowIssue("记忆来源版本无效。") } }
+                try attempt.outputFormat?.validate()
                 try Self.validateNode(attempt.node)
                 for value in attempt.inputs.values {
                     for ref in value.datum?.assetReferences ?? [] { guard [.image, .video].contains(ref.kind) else { throw WorkflowIssue("聊天媒体端口类型无效。") } }

@@ -8,16 +8,18 @@
 
 本轮起点核实候选 `40d51ee73f72eb54407e6eedbd693c9ba67068e4`、main `f31dced209855722d2f04cc0fc8c5f6712396120` 均干净且与远端一致。旧 inference-foundation 与个人 scheme 不动。A、H22、菜单、宏信任、HF 及自然视频本人结果复用；新存储和聊天宿主按影响另验。旧 B 失败和已耗预算保留；用户现明确批准这些已知缺陷继续收口，不再沿用旧停工排程，不伪造旧预算未使用。
 
-Lead 持有共享 Runtime/WorkflowServices/ChatController/Store；文件面板和纯展示在独立受限任务树实施。当前证据目录 RCP=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261003T115108Z-chat-product`。完整 Lead 成本与订阅费用 unknown。S00代码候选已完成CPU和正常签名构建，普通App已实际启动：项目列表、真实1024-token接收和坐标点击停止→下一请求通过；候选菜单忙循环及生成中AX迟滞仍阻塞S00整体接纳；S01独立布局候选的缩放焦点反例已修并通过hosting；普通App仍待验，未合入主候选或main。新存储/工具生产接线等待可靠接收边界；F01–F36范围不取消。
+Lead 持有共享 Runtime/WorkflowServices/ChatController/Store；文件面板和纯展示在独立受限任务树实施。当前证据目录 RCP=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261003T115108Z-chat-product`。完整 Lead 成本与订阅费用 unknown。S00代码候选已完成CPU和正常签名构建，普通App已实际启动：项目列表、真实1024-token接收和坐标点击停止→下一请求通过；候选菜单忙循环及生成中AX迟滞仍阻塞S00整体接纳；S01独立布局候选的缩放焦点反例已修并通过hosting，现已在隔离主候选与S00组合；普通App门槛仍待验，未入main。无依赖的S02–S05组件与生产接线继续；F01–F36范围不取消。
 
-### 当前恢复检查点
+### 当前恢复检查点（2026-10-04 JST，持续实施中）
 
-- S00 App/动作受测代码 `457cb9a04178f6a9f01a41bd84607119a158d5c7`；运行时与受影响消费者受测 `b8ae14c5d8f6e362c2d5646304abe8c4c429b284`，后续仅F07界面及冻结重现当前草稿门禁变更并定向复验。原有原生失败不追改。
-- main仍`f31dced209855722d2f04cc0fc8c5f6712396120`。S00独立包位于RCP/delivery/s00；代码、签名与启动器见RCP/lead/s00-packaged-app.json。这是验收候选，不替换已验A稳定入口。
-- 本人已解锁；目前没有新的必办授权/设备事项。H32本次项目包列表选择通过，三次Qwen真实长回答各接收1024 deltas并正常到length；坐标点击停止保留568字，同一App下一短请求completed。候选菜单一次主线程SwiftUI忙循环、生成中AX切会话40.645秒及停止控件查找35.804秒迟滞仍未解释，不能称整体流畅。本人未找到停止按钮、未实际点击；不能记作真人停止通过。证据RH=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261003T134350Z-chat-human`。自有测试App均结束，原件和scheme不变。
-- S01树为同级`D-CHAT-PRODUCT-VIEW`，分支`codex/s01-view-chat-product@3e86f12a184f12b6ec11c22494af92ebfe8f559a`，不改Controller/Store。初交+两修后Lead定点接管；原真实ChatWorkbench跨阈值反例先失败，调用栈及逐次状态确认瞬时hidden，合并检查器打开状态后18项CPU/hosting通过。显式关闭/重开不抢焦点；普通App、实际鼠标/组字与滚动仍未验，AttributeGraph诊断保留。这个候选没有进入S00包。
-- 下一动作：先用已保存的SwiftUI主线程样本与候选菜单反例定位，区分真实交互和AX查找迟滞；不重复未受影响的1024-token全量生成、项目列表或本人授权。S00整体暂不接纳main。随后装配独立S01并验窄窗面板→预览/重命名→关闭及输入/滚动。合并时保留W的F07重现菜单/门禁，不能直接以VIEW旧基线覆盖。已验切片独立接纳，失败不硬合。S02–S06仍为同批批准工作，未进入生产接线；只读资料准备见原任务末节。
-- 旧源与个人scheme不动；不写普通App、原作品或权重。最终提交自身SHA留外部回执；恢复先核真实分支、索引、写入者和保护文件。
+- 唯一Lead候选树为同级 `D-RELEASE-FREEZE-01` / `codex/release-freeze-01`。已提交的记忆/工具接线 `4ae52508d38a1cbd3db8a227e1a3bbe4aacd7d25`；随后保留历史合入静态预览 `59b0093c247498d62063c18ed72e65c0de6e1182`。恢复时核实际HEAD与未提交文档/测试，不以这条检查点替代Git。
+- main仍为 `f31dced209855722d2f04cc0fc8c5f6712396120`（A稳定基线），未强合原生菜单/迟滞未验候选。受保护源仍 `01758b81527dc27eb4563bf1b66fd1ceab6647ee`；个人scheme未暂存，保护摘要沿下文。
+- S00/S01组合 `807dc5a5c4f55fd85ac240e18cc942e953aa2e2d` 已正常签名构建；输入区主停止稳定可见的CPU检查通过，普通App原生未验。最近桌面返回锁屏，自有未输入测试实例17547已结束。锁屏/新宿主本人组字沿唯一集中清单；H22/H31/宏/菜单及自然视频旧本人结论不重开。
+- S02/S03/S04继续在同候选完成：人工/部分回答版本、比较、模板预设、实际请求检查、PDF/DOCX提取、词法资料检索、个人/项目记忆、手动来源摘要、联网与确定性工具。各组未完项仍见唯一[清单](CHAT_FEATURE_LEDGER.zh-CN.md)，组件不冒充普通App完整使用。
+- 当前外盘证据 `R=/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261003T150039Z-chat-continue`。`lead/s04-wiring-r2` 21项/4suite通过（含先前Unicode失败修复、保存冲突撤权、工具drain前停止生成）；r3定向5项通过，补采用后附件移除/重复/替换反例。`lead/memory-review-r1`38项/2suite通过；不与旧记录相加成全套通过率。
+- 受限独立CLI Worker均禁网、独立外盘写根、无Git共享目录写授权。MCP树基线 `3d20feb4026bd8690d04b1a35731ae098ac00e44` 正在repair1；MENU树基线 `2b9e75c5beb86ca33f337aa01a5e005b8fba56a6` 正在初次实施。两者均Sol/high；运行身份和PID以R对应job/request/process/route记录为准。WEB repair1与PREVIEW repair1均已结束；未知服务端解析/总Lead费用仍unknown。
+- 下一动作：完成菜单受控生命周期与接线；核MCP取消修补及实际SDK编译/服务；继续F18/F23–25/F32–34等未完成清单。真实搜索与静态预览编译检查正在运行，结果见R/lead对应记录。代码、测试、CPU替身、真实联网、GUI和模型证据分别记；没有新模型/平台授权扩张。
+- 锁屏只挡原生门槛。受影响新路径未默认替换main稳定包；旧推荐稳定入口继续有效，R/delivery旧组合App不是最新实现包。恢复必须先核本轮进程/写入者和受测版本，再继续构建或接纳。
 
 ## 历史：先修可靠性，再加入最小聊天（2026-10-03，已被上述新授权替代）
 

@@ -5,6 +5,7 @@ import SwiftUI
 struct ChatKnowledgePanel: View {
     let chat: ChatController
     let session: ChatSession
+    let quote: (UUID) -> Void
     let importDocuments: () -> Void
     let preview: (WorkflowAssetReference) -> Void
     let wording: (String, String) -> String
@@ -34,6 +35,7 @@ struct ChatKnowledgePanel: View {
                             }
                         }))
                         Menu {
+                            Button(wording("Quote a selection…", "选择片段引用…")) { quote(document.id) }
                             Button(wording("View original", "查看原件")) { preview(document.material.reference) }
                             Button(wording("Remove from search collection", "移出检索集合")) {
                                 change { try chat.removeKnowledgeDocument(document.id) }

@@ -113,3 +113,15 @@ public struct ChatQuoteSelection: Codable, Sendable, Equatable {
         }
     }
 }
+
+/// One publication identity per exact selection, including its source and range.
+/// A retry retains its identity; selecting equal text at another location does not.
+public struct ChatQuotePublication: Sendable {
+    private var selection: ChatQuoteSelection?
+    private var assetID = UUID()
+    public init() {}
+    public mutating func id(for value: ChatQuoteSelection) -> UUID {
+        if selection != value { selection = value; assetID = UUID() }
+        return assetID
+    }
+}

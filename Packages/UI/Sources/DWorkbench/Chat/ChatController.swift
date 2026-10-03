@@ -191,6 +191,65 @@ import Observation
         try requireLoaded(); guard text.utf8.count <= 1_048_576 else { throw WorkflowIssue("草稿超过1MiB。") }
         state.sessions[try index(sessionID)].draft = text; changed()
     }
+    public func setOutputFormat(_ format: ChatOutputFormat, sessionID: UUID) throws {
+        try requireLoaded(); try format.validate()
+        state.sessions[try index(sessionID)].outputFormat = format; changed()
+    }
+    /// Capture the selected, immutable message version or registered document interpretation.
+    public func quoteSource(kind: ChatQuoteSource.Kind, id: UUID, sessionID: UUID) throws -> ChatQuoteSource {
+        try requireLoaded(); let session = state.sessions[try index(sessionID)]
+        switch kind {
+        case .document:
+            guard let document = state.knowledgeDocuments?.first(where: { $0.id == id }) else { throw WorkflowIssue("资料已移除，请重新选择。") }
+            let extraction = try document.extraction()
+            return try .init(kind: .document, id: id, version: document.material.reference.version.uuidString + ":" + extraction.parserVersion, text: extraction.text)
+        case .message:
+            guard let message = session.messages.first(where: { $0.id == id }) else { throw WorkflowIssue("原消息不属于此会话。") }
+            if message.role == .user { return try .init(kind: .message, id: id, version: "user:" + id.uuidString, text: message.text) }
+            if let answer = session.selectedAnswer(messageID: id) {
+                return try .init(kind: .message, id: id, version: answer.assetID.uuidString, text: answer.text)
+            }
+            guard let attempt = session.attempts.first(where: { $0.id == message.attemptID }),
+                  attempt.status != .running, attempt.status != .saving, !attempt.rawText.isEmpty else { throw WorkflowIssue("请等待回答结束或停止后再选择引用。") }
+            return try .init(kind: .message, id: id, version: attempt.id.uuidString + ":partial", text: attempt.response?.finalText ?? attempt.rawText)
+        }
+    }
+    /// Explicitly publish a selection; source text and prior answer versions stay unchanged.
+    public func saveQuote(_ quote: ChatQuoteSelection, sessionID: UUID, assetID: UUID = UUID()) async throws -> WorkflowAssetReference {
+        try requireLoaded(); let session = state.sessions[try index(sessionID)]
+        guard allowsSubmission(), !session.archived, session.contextChoices?.deletedAt == nil else { throw WorkflowIssue("请在可用会话中保存选段。") }
+        try quote.validate(against: quoteSource(kind: quote.sourceKind, id: quote.sourceID, sessionID: sessionID))
+        let parents: [WorkflowAssetReference]
+        if quote.sourceKind == .document {
+            parents = state.knowledgeDocuments?.first { $0.id == quote.sourceID }.map { [$0.material.reference] } ?? []
+        } else {
+            parents = session.messages.first { $0.id == quote.sourceID }?.attemptID.flatMap { id in session.attempts.first { $0.id == id }?.output }.map { [$0] } ?? []
+        }
+        return try await store.publishWorkflowAsset(data: Data(quote.text.utf8), mediaType: "text/plain", name: "引用选段",
+            parents: parents, operationID: "d.chat.quote", stepID: assetID,
+            details: ["chatSessionID": sessionID.uuidString, "sourceKind": quote.sourceKind.rawValue,
+                      "sourceID": quote.sourceID.uuidString, "sourceVersion": quote.sourceVersion,
+                      "sourceSHA256": quote.sourceSHA256, "utf16Location": String(quote.utf16Location), "utf16Length": String(quote.utf16Length)],
+            assetID: assetID).record.reference
+    }
+    /// Add an editable proposal to its captured conversation. Never send or replace the source.
+    public func appendQuote(_ quote: ChatQuoteSelection, instruction: String, sessionID: UUID, assetID: UUID = UUID()) async throws {
+        try requireLoaded(); let captured = state.sessions[try index(sessionID)]
+        let addition = "[Quote · " + quote.sourceKind.rawValue + " · " + quote.sourceID.uuidString + "]\n" + quote.text + "\n[/Quote]\n" + instruction
+        let draft = captured.draft + (captured.draft.isEmpty ? "" : "\n\n") + addition
+        guard draft.utf8.count <= 1_048_576, captured.attachments.count < 32, instruction.utf8.count <= 16_384 else { throw WorkflowIssue("引用超过草稿或附件容量；原文未改。") }
+        let reference = try await saveQuote(quote, sessionID: sessionID, assetID: assetID)
+        try Task.checkCancellation(); try requireLoaded(); let i = try index(sessionID)
+        try quote.validate(against: quoteSource(kind: quote.sourceKind, id: quote.sourceID, sessionID: sessionID))
+        guard allowsSubmission(), !state.sessions[i].archived, state.sessions[i].contextChoices?.deletedAt == nil,
+              state.sessions[i].draft == captured.draft, state.sessions[i].attachments == captured.attachments else {
+            throw WorkflowIssue("草稿或来源已改变；选段已保存在素材中，没有覆盖新输入。")
+        }
+        state.sessions[i].draft = draft
+        state.sessions[i].attachments.append(.init(name: "引用选段", reference: reference, textSnapshot: quote.text, sourceOnly: true))
+        changed(); try await flush()
+    }
+
     public func updateConfiguration(_ node: WorkflowNode, sessionID: UUID) throws {
         try requireLoaded()
         let chatNode = try Self.chatConfiguration(node)
@@ -414,11 +473,12 @@ import Observation
                                createdAt: a.createdAt, status: a.status)
             copy.replayedAttemptID = a.replayedAttemptID
             copy.comparisonSourceAttemptID = a.comparisonSourceAttemptID
-            copy.memoryUses = a.memoryUses
+            copy.memoryUses = a.memoryUses; copy.outputFormat = a.outputFormat
             copy.rawText = a.rawText; copy.response = a.response; copy.output = a.output; copy.issue = a.issue
             return copy
         }
         fork.selectedLeafID = leaf; fork.configuration = source.configuration; fork.systemPrompt = source.systemPrompt
+        fork.outputFormat = source.outputFormat
         fork.draft = source.draft; fork.attachments = source.attachments
         fork.memoryScopes = source.memoryScopes
         fork.importLossNotes = source.importLossNotes
@@ -500,6 +560,8 @@ import Observation
         let ids = Set(path.map(\.id)), choices = session.contextChoices
         var excluded = Set(choices?.excludedMessageIDs ?? []).intersection(ids)
         var extras: [String] = []
+        try session.outputFormat?.validate()
+        if let instruction = session.outputFormat?.promptInstruction { extras.append(instruction) }
         let memories = currentMemories(session)
         let latest = Dictionary(grouping: session.contextSummaries ?? [], by: \.id).compactMap { $0.value.max { $0.revision < $1.revision } }
         var covered = Set<UUID>(), uses = memories.map(ChatMemoryUse.init)
@@ -660,7 +722,7 @@ import Observation
         let prepared = try await prepared(path, session: session, prompt: session.draft, attachments: session.attachments, node: node, excerpts: session.knowledgeExcerpts ?? [])
         let user = ChatMessage(parentID: session.selectedLeafID, role: .user, text: session.draft, attachments: session.attachments, knowledgeExcerpts: session.knowledgeExcerpts)
         try await launch(sessionID: sessionID, user: user, prepared: prepared,
-                         systemPrompt: session.systemPrompt, expectedLeafID: session.selectedLeafID, clearDraft: true)
+                         systemPrompt: session.systemPrompt, outputFormat: session.outputFormat, expectedLeafID: session.selectedLeafID, clearDraft: true)
     }
     public func regenerate(_ userMessageID: UUID, sessionID: UUID) async throws {
         try requireLoaded()
@@ -679,7 +741,7 @@ import Observation
         let prior = try session.path(to: user.parentID)
         let prepared = try await prepared(prior, session: session, prompt: user.text, attachments: user.attachments, node: node, excerpts: user.knowledgeExcerpts ?? [])
         try await launch(sessionID: sessionID, user: user, prepared: prepared,
-                         systemPrompt: session.systemPrompt, expectedLeafID: session.selectedLeafID, clearDraft: false)
+                         systemPrompt: session.systemPrompt, outputFormat: session.outputFormat, expectedLeafID: session.selectedLeafID, clearDraft: false)
     }
 
     /// Fixed question/context/media with explicitly chosen model settings. The same
@@ -707,7 +769,7 @@ import Observation
         }
         for reference in refs { _ = try await store.workflowData(reference) }
         try await launch(sessionID: sessionID, user: user, prepared: (node, original.messagesJSON, original.inputs, original.memoryUses ?? [], []),
-                         systemPrompt: original.systemPrompt, expectedLeafID: session.selectedLeafID,
+                         systemPrompt: original.systemPrompt, outputFormat: original.outputFormat, expectedLeafID: session.selectedLeafID,
                          clearDraft: false, comparisonSourceAttemptID: attemptID)
     }
 
@@ -723,7 +785,7 @@ import Observation
         }
         try await launch(sessionID: sessionID, user: user,
             prepared: (attempt.node, attempt.messagesJSON, attempt.inputs, attempt.memoryUses ?? [], []),
-            systemPrompt: attempt.systemPrompt, expectedLeafID: session.selectedLeafID,
+            systemPrompt: attempt.systemPrompt, outputFormat: attempt.outputFormat, expectedLeafID: session.selectedLeafID,
             clearDraft: false, replayedAttemptID: attemptID)
     }
     // Used after every asynchronous source read, immediately before mutating history.
@@ -737,7 +799,7 @@ import Observation
     }
     private func launch(sessionID: UUID, user: ChatMessage,
                         prepared: (WorkflowNode, String, [String: WorkflowValue], [ChatMemoryUse], [ChatContextSummary]),
-                        systemPrompt: String, expectedLeafID: UUID?, clearDraft: Bool,
+                        systemPrompt: String, outputFormat: ChatOutputFormat?, expectedLeafID: UUID?, clearDraft: Bool,
                         replayedAttemptID: UUID? = nil, comparisonSourceAttemptID: UUID? = nil) async throws {
         // A replay uses the immutable attempt, never the currently edited fields.
         guard replayedAttemptID != nil || !hasInvalidParameterText(sessionID: sessionID) else {
@@ -760,6 +822,7 @@ import Observation
                                   assistantMessageID: assistantID, node: prepared.0, messagesJSON: prepared.1,
                                   inputs: prepared.2, systemPrompt: systemPrompt)
         attempt.memoryUses = prepared.3.isEmpty ? nil : prepared.3
+        attempt.outputFormat = outputFormat
         attempt.replayedAttemptID = replayedAttemptID
         attempt.comparisonSourceAttemptID = comparisonSourceAttemptID
         if !state.sessions[i].messages.contains(where: { $0.id == user.id }) { state.sessions[i].messages.append(user) }

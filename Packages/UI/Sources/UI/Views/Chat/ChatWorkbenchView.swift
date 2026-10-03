@@ -75,6 +75,7 @@ private enum ChatDetail: Identifiable {
     case edit(ChatEdit), preview(WorkflowAssetReference)
     case comparison(UUID, UUID), presetImport([ChatPromptPreset], Data)
     case conversationImport(ChatInterchange.ImportPreview, Data, String)
+    case quote(UUID, ChatQuoteSource)
     var id: String {
         switch self {
         case .edit(let edit): "edit-\(edit.id)"
@@ -82,6 +83,7 @@ private enum ChatDetail: Identifiable {
         case .comparison(let session, let attempt): "compare-\(session)-\(attempt)"
         case .presetImport: "preset-import"
         case .conversationImport: "conversation-import"
+        case .quote(let session, let source): "quote-\(session)-\(source.id)"
         }
     }
 }
@@ -480,6 +482,9 @@ struct ChatWorkbenchView: View {
         .sheet(item: Binding(get: { sheets.detail }, set: { sheets.detail = $0 })) { item in
             switch item {
             case .edit(let edit): editSheet(edit)
+            case .quote(let sessionID, let source):
+                ChatQuoteSheet(chat: chat, sessionID: sessionID, source: source,
+                    onSaved: { onAssetsChanged() }, onClose: { sheets.detail = nil })
             case .comparison(let sessionID, let attemptID):
                 ScrollView {
                     ChatComparisonPanel(chat: chat, sessionID: sessionID, sourceAttemptID: attemptID,
@@ -908,7 +913,9 @@ struct ChatWorkbenchView: View {
                                let attempt = session.attempts.first(where: { $0.id == attemptID }) {
                                 requestInspectionPanel(attempt)
                             }
-                            ChatKnowledgePanel(chat: chat, session: session,
+                            ChatKnowledgePanel(chat: chat, session: session, quote: { id in
+                            perform(sessionID: session.id) { present(.quote(session.id, try chat.quoteSource(kind: .document, id: id, sessionID: session.id))) }
+                        },
                                 importDocuments: { Task { await chooseAttachments(for: session.id, knowledge: true) } },
                                 preview: { present(.preview($0)) },
                                 wording: { english, chinese in
@@ -1071,6 +1078,9 @@ struct ChatWorkbenchView: View {
                 }
             }
         ]
+        result.append(.init(id: "quote", title: newLabel("quoteSelection", english: "Quote a selection…", chinese: "选择片段引用…"), enabled: attempt?.status != .running && attempt?.status != .saving) {
+            perform(sessionID: session.id) { present(.quote(session.id, try chat.quoteSource(kind: .message, id: message.id, sessionID: session.id))) }
+        })
         if ChatContextRowStatus.forMessage(message, in: session).canExclude {
             result.append(.init(id: "context", title: excluded ? newLabel("includeContext", english: "Include in context", chinese: "回纳上下文") : newLabel("excludeContext", english: "Exclude from context", chinese: "排除上下文")) {
                 changeMessageChoice(session: session) { value in
@@ -1212,6 +1222,7 @@ struct ChatWorkbenchView: View {
             VStack(alignment: .leading, spacing: 12) {
                 Text(label("nextAnswer", "下一次回答设置")).font(.headline)
                 Text(label("futureOnly", "更改只影响之后的生成。")) .font(.caption).foregroundStyle(.secondary)
+                ChatOutputFormatPanel(chat: chat, sessionID: session.id).id(session.id.uuidString + ":output-format")
                 Text(label("systemPrompt", "系统提示（默认空）")) .font(.subheadline)
                 TextSourcesQuestionEditor(value: session.systemPrompt, editEpoch: 0, isEditable: true,
                     accessibilityIdentifier: "chat-system-\(session.id.uuidString)",

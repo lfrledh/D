@@ -9,6 +9,7 @@ import Testing
 private final class QuoteSelectionFixture {
     var source: ChatQuoteSource
     var uses: [(ChatQuoteSelection, ChatQuoteSelectionAction)] = []
+    @ObservationIgnored var frames: [ChatQuoteSelectionAction: CGRect] = [:]
 
     init(source: ChatQuoteSource) { self.source = source }
 }
@@ -20,7 +21,7 @@ private struct QuoteSelectionHarness: View {
     var body: some View {
         ChatQuoteSelectionView(source: fixture.source) { selection, action in
             fixture.uses.append((selection, action))
-        }
+        } actionFrameProbe: { action, frame in fixture.frames[action] = frame }
     }
 }
 
@@ -30,18 +31,15 @@ private struct QuoteSelectionHarness: View {
         [root] + root.subviews.flatMap(descendants)
     }
 
-    private func action(_ action: ChatQuoteSelectionAction, in root: NSView) -> (any NSAccessibilityProtocol)? {
-        var pending: [NSObject] = [root]
-        var visited: Set<ObjectIdentifier> = []
-        while let object = pending.popLast(), visited.count < 2_000 {
-            guard visited.insert(ObjectIdentifier(object)).inserted else { continue }
-            if let element = object as? any NSAccessibilityProtocol {
-                if element.accessibilityIdentifier() == "chat-quote-\(action.rawValue)" { return element }
-                pending += (element.accessibilityChildren() ?? []).compactMap { $0 as? NSObject }
-            }
-            if let view = object as? NSView { pending += view.subviews }
-        }
-        return nil
+    private func click(_ action: ChatQuoteSelectionAction, fixture: QuoteSelectionFixture, host: NSView) throws {
+        let rect = try #require(fixture.frames[action]), window = try #require(host.window)
+        #expect(rect.width > 0 && rect.height > 0)
+        // SwiftUI's virtual AX elements are absent in this offscreen host. Use
+        // the production button geometry with the existing process-only event helper.
+        let geometry = NSAccessibilityElement()
+        geometry.setAccessibilityIdentifier("chat-quote-" + action.rawValue)
+        geometry.setAccessibilityFrame(window.convertToScreen(host.convert(rect, to: nil)))
+        #expect(HostingControlClick.send(to: geometry, in: host))
     }
 
     private func settle(_ host: NSView) async throws {
@@ -58,13 +56,6 @@ private struct QuoteSelectionHarness: View {
                                                             object: textView))
     }
 
-    private func expectActionsEnabled(_ enabled: Bool, in host: NSView) throws {
-        for actionKind in ChatQuoteSelectionAction.allCases {
-            let control = try #require(action(actionKind, in: host))
-            #expect(control.isAccessibilityEnabled() == enabled)
-        }
-    }
-
     @Test func hostedSelectionClearsActionsAfterDeselectOversizeAndSourceReset() async throws {
         let raw = "Quote " + String(repeating: "a", count: ChatQuoteSelection.maximumUTF8Bytes + 1)
         let source = try ChatQuoteSource(kind: .document, id: UUID(), version: "v1", text: raw)
@@ -78,13 +69,13 @@ private struct QuoteSelectionHarness: View {
         try await settle(host)
         let textView = try #require(descendants(host).compactMap { $0 as? NSTextView }
             .first { $0.string == source.text })
-        try expectActionsEnabled(false, in: host)
+        #expect(fixture.frames.count == ChatQuoteSelectionAction.allCases.count)
 
         try select(NSRange(location: 0, length: 5), in: textView)
         try await settle(host)
-        try expectActionsEnabled(true, in: host)
-        let ask = try #require(action(.ask, in: host))
-        #expect(HostingControlClick.send(to: ask, in: host))
+
+        try click(.ask, fixture: fixture, host: host)
+        try await settle(host)
         #expect(fixture.uses.count == 1)
         #expect(fixture.uses.first?.0.text == "Quote")
         #expect(fixture.uses.first?.0.sourceKind == .document)
@@ -92,30 +83,30 @@ private struct QuoteSelectionHarness: View {
 
         try select(NSRange(location: 0, length: 0), in: textView)
         try await settle(host)
-        try expectActionsEnabled(false, in: host)
-        let disabledAsk = try #require(action(.ask, in: host))
-        #expect(HostingControlClick.send(to: disabledAsk, in: host))
+        #expect(fixture.frames.count == ChatQuoteSelectionAction.allCases.count)
+        try click(.ask, fixture: fixture, host: host)
+        try await settle(host)
         #expect(fixture.uses.count == 1)
 
         try select(NSRange(location: 0, length: ChatQuoteSelection.maximumUTF8Bytes + 1), in: textView)
         try await settle(host)
-        try expectActionsEnabled(false, in: host)
-        let disabledExplain = try #require(action(.explain, in: host))
-        #expect(HostingControlClick.send(to: disabledExplain, in: host))
+        #expect(fixture.frames.count == ChatQuoteSelectionAction.allCases.count)
+        try click(.explain, fixture: fixture, host: host)
+        try await settle(host)
         #expect(fixture.uses.count == 1)
 
         try select(NSRange(location: 0, length: 5), in: textView)
         try await settle(host)
-        try expectActionsEnabled(true, in: host)
+
         let replacement = try ChatQuoteSource(kind: .document, id: source.id,
                                               version: source.version, text: "Replacement")
         fixture.source = replacement
         try await settle(host)
         #expect(textView.string == replacement.text)
         #expect(textView.selectedRange().length == 0)
-        try expectActionsEnabled(false, in: host)
-        let disabledTranslate = try #require(action(.translate, in: host))
-        #expect(HostingControlClick.send(to: disabledTranslate, in: host))
+        #expect(fixture.frames.count == ChatQuoteSelectionAction.allCases.count)
+        try click(.translate, fixture: fixture, host: host)
+        try await settle(host)
         #expect(fixture.uses.count == 1)
     }
 

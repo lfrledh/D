@@ -80,6 +80,134 @@ private actor ChatGatedToolTransport: ChatWebTransport {
 
 @Suite("Chat sidecar and service", .serialized) @MainActor
 struct ChatTests {
+    @Test func outputFormatIsFrozenForReplayButAutomaticRestoresEmptySystem() async throws {
+        let (store, engine, chat) = try await fixture()
+        let id = try chat.newSession(); try configure(chat, session: id)
+        try chat.setSystemPrompt("", sessionID: id)
+        try chat.setOutputFormat(.init(kind: .json), sessionID: id)
+        try await chat.sendAfterDraft("answer", sessionID: id)
+        let original = try #require(chat.selectedSession?.attempts.first)
+        #expect(original.outputFormat?.kind == .json && original.messagesJSON.contains("one complete JSON value"))
+        #expect(original.outputFormat?.check(original.rawText).status == .invalid)
+        let saved = chat.selectedSession?.outputFormat
+        #expect(throws: (any Error).self) { try chat.setOutputFormat(.init(kind: .schema), sessionID: id) }
+        #expect(chat.selectedSession?.outputFormat == saved)
+        try chat.setOutputFormat(.init(), sessionID: id)
+        try await chat.reproduce(original.id, sessionID: id); await chat.waitForCompletion()
+        #expect(chat.selectedSession?.attempts.last?.outputFormat == original.outputFormat)
+        let requests = await engine.requests
+        #expect(requests[0].input == requests[1].input)
+        try await chat.regenerate(original.userMessageID, sessionID: id); await chat.waitForCompletion()
+        let fresh = try #require(chat.selectedSession?.attempts.last)
+        #expect(fresh.outputFormat?.kind == .automatic && !fresh.messagesJSON.contains("one complete JSON value"))
+        #expect(!fresh.messagesJSON.contains("system"))
+        // A fork keeps the chosen branch only, not every candidate in the source session.
+        try await chat.compare(original.id, configuration: original.node, sessionID: id); await chat.waitForCompletion()
+        #expect(chat.selectedSession?.attempts.last?.outputFormat == original.outputFormat)
+        let fork = try chat.forkSession(id, leafID: original.assistantMessageID)
+        #expect(chat.state.sessions.first { $0.id == fork }?.attempts.first?.outputFormat == original.outputFormat)
+        try await chat.flush()
+        #expect(try await store.chatState().sessions == chat.state.sessions)
+        try await store.close()
+    }
+
+    @Test func quoteSelectionKeepsOriginDraftAndPersistsExactRangeWithoutSubmitting() async throws {
+        let (store, engine, chat) = try await fixture()
+        let a = try chat.newSession(); try configure(chat, session: a)
+        try await chat.sendAfterDraft("中文👩🏽‍🎨e\u{301}原文", sessionID: a)
+        let original = try #require(chat.selectedSession), message = try #require(original.messages.first)
+        let source = try chat.quoteSource(kind: .message, id: message.id, sessionID: a)
+        let selection = try ChatQuoteSelection(source: source, range: (source.text as NSString).range(of: "👩🏽‍🎨e\u{301}"))
+        let b = try chat.newSession(); try chat.updateDraft("Other draft", sessionID: b)
+        let assetID = UUID()
+        try await chat.appendQuote(selection, instruction: "Explain", sessionID: a, assetID: assetID)
+        let updated = try #require(chat.state.sessions.first { $0.id == a })
+        #expect(chat.selectedSession?.id == b && chat.selectedSession?.draft == "Other draft")
+        #expect(updated.messages == original.messages && updated.attempts == original.attempts)
+        #expect(updated.draft.contains(selection.text) && updated.draft.contains("Explain"))
+        let attachment = try #require(updated.attachments.last)
+        #expect(attachment.sourceOnly == true && attachment.reference.assetID == assetID)
+        #expect(try await store.workflowText(attachment.reference) == selection.text)
+        #expect(await engine.requests.count == 1)
+        let record = try #require(try await store.workflowState().archive?.assets.first { $0.reference == attachment.reference })
+        #expect(record.metadata["sourceSHA256"] == source.sha256 && record.metadata["utf16Location"] == String(selection.utf16Location))
+        try await chat.prepareForBackup()
+        let backup = store.rootURL.deletingLastPathComponent().appendingPathComponent("quote.dbackup")
+        _ = try await store.createBackup(at: backup)
+        let target = store.rootURL.deletingLastPathComponent().appendingPathComponent("quote-restored.dproject")
+        _ = try await ProjectStore.restoreBackup(at: backup, to: target)
+        let restored = try await ProjectStore.open(at: target)
+        #expect(try await restored.chatState().sessions == chat.state.sessions)
+        #expect(try await restored.workflowText(attachment.reference) == selection.text)
+        try await restored.close(); try await store.close()
+    }
+
+    @Test func quotePublicationDoesNotAppendAfterProjectExit() async throws {
+        let (store, _, old) = try await fixture()
+        let id = try old.newSession(); try configure(old, session: id)
+        try await old.sendAfterDraft("foo foo", sessionID: id); try await old.flush()
+        var accepting = true
+        let chat = ChatController(store: store, allowsSubmission: { accepting }) { throw WorkflowIssue("No inference") }
+        await chat.load()
+        let message = try #require(chat.selectedSession?.messages.first)
+        let source = try chat.quoteSource(kind: .message, id: message.id, sessionID: id)
+        let quote = try ChatQuoteSelection(source: source, range: NSRange(location: 0, length: 3))
+        let before = chat.state
+        let (entered, signal) = AsyncStream<Void>.makeStream(), release = DispatchSemaphore(value: 0)
+        let blocker = Task.detached { await store.holdChatReadFixture(entered: signal, release: release) }
+        defer { release.signal() }
+        for await _ in entered { break }
+        var started = false
+        let operation = Task { @MainActor in
+            started = true
+            try await chat.appendQuote(quote, instruction: "Explain", sessionID: id)
+        }
+        for _ in 0..<100 { if started { break }; try await Task.sleep(for: .milliseconds(5)) }
+        #expect(started)
+        accepting = false
+        release.signal(); await blocker.value
+        await #expect(throws: (any Error).self) { try await operation.value }
+        #expect(chat.state == before)
+        #expect(try await store.chatState().sessions == before.sessions)
+        try await store.close()
+    }
+
+    @Test func reselectedEqualQuoteKeepsItsOwnLocationAndRetryIdentity() async throws {
+        let (store, _, chat) = try await fixture()
+        let id = try chat.newSession(); try configure(chat, session: id)
+        try await chat.sendAfterDraft("foo foo", sessionID: id)
+        let message = try #require(chat.selectedSession?.messages.first)
+        let source = try chat.quoteSource(kind: .message, id: message.id, sessionID: id)
+        let first = try ChatQuoteSelection(source: source, range: NSRange(location: 0, length: 3))
+        let second = try ChatQuoteSelection(source: source, range: NSRange(location: 4, length: 3))
+        var publication = ChatQuotePublication()
+        let firstID = publication.id(for: first)
+        _ = try await chat.saveQuote(first, sessionID: id, assetID: firstID)
+        #expect(publication.id(for: first) == firstID)
+        let secondID = publication.id(for: second)
+        #expect(secondID != firstID && publication.id(for: second) == secondID)
+        try await chat.appendQuote(second, instruction: "Explain", sessionID: id, assetID: secondID)
+        let assets = try await store.workflowState().archive?.assets ?? []
+        #expect(assets.first { $0.reference.assetID == firstID }?.metadata["utf16Location"] == "0")
+        #expect(assets.first { $0.reference.assetID == secondID }?.metadata["utf16Location"] == "4")
+        try await chat.flush(); try await store.close()
+    }
+
+    @Test func staleQuotedAnswerRejectsWithoutChangingNewDraft() async throws {
+        let (store, _, chat) = try await fixture()
+        let id = try chat.newSession(); try configure(chat, session: id)
+        try await chat.sendAfterDraft("question", sessionID: id)
+        let message = try #require(chat.selectedSession?.messages.last)
+        let source = try chat.quoteSource(kind: .message, id: message.id, sessionID: id)
+        let quote = try ChatQuoteSelection(source: source, range: NSRange(location: 0, length: 5))
+        _ = try chat.adoptAnswer(message.id, text: "new manual version", sessionID: id)
+        try chat.updateDraft("Keep new input", sessionID: id)
+        let before = chat.state
+        await #expect(throws: (any Error).self) { try await chat.appendQuote(quote, instruction: "Explain", sessionID: id) }
+        #expect(chat.state == before)
+        try await chat.flush(); try await store.close()
+    }
+
     @Test func newCandidateChangesActualSeedButReplayKeepsFrozenRequest() async throws {
         let (store, engine, chat) = try await fixture()
         let id = try chat.newSession(); try configure(chat, session: id)
