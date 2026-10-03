@@ -66,6 +66,9 @@ struct ChatActionMenu: NSViewRepresentable {
         private weak var button: NSPopUpButton?
         private var rootMenu: NSMenu?
         private var displayedActions: [ObjectIdentifier: DisplayedAction] = [:]
+        // AppKit can send the item action after end-tracking, including after
+        // the deferred drain has installed a newer snapshot.
+        private var endedCycleActions: [ObjectIdentifier: DisplayedAction] = [:]
         private var pendingSnapshot: Snapshot?
         private var queuedActions: [@MainActor () -> Void] = []
         private var cycleStarted = false
@@ -73,6 +76,7 @@ struct ChatActionMenu: NSViewRepresentable {
         private var trackingEnded = false
         private var selectionCaptured = false
         private var drainScheduled = false
+        private var refreshOnNeedsUpdate = false
         private var dismantled = false
 
         private var isTracking: Bool {
@@ -138,10 +142,32 @@ struct ChatActionMenu: NSViewRepresentable {
 
         func menuWillOpen(_ menu: NSMenu) {
             guard !dismantled, menu === rootMenu else { return }
+            // AppKit can reopen before the deferred drain. The next safe menu
+            // update may install the pending rows; this callback only records
+            // the new tracking cycle.
+            refreshOnNeedsUpdate = cycleStarted && !isTracking && pendingSnapshot != nil
+            endedCycleActions.removeAll()
             cycleStarted = true
             menuClosed = false
             trackingEnded = false
             selectionCaptured = false
+        }
+
+        func menuNeedsUpdate(_ menu: NSMenu) {
+            guard !dismantled, menu === rootMenu, let button else { return }
+            if cycleStarted && !isTracking {
+                // An ended cycle may still have a scheduled drain. Apply its
+                // prepared snapshot here, but leave parent actions deferred.
+                endedCycleActions = selectionCaptured ? [:] : displayedActions
+                cycleStarted = false
+            } else if !refreshOnNeedsUpdate {
+                return
+            }
+            refreshOnNeedsUpdate = false
+            if let pendingSnapshot {
+                self.pendingSnapshot = nil
+                apply(pendingSnapshot, to: button)
+            }
         }
 
         func menuDidClose(_ menu: NSMenu) {
@@ -158,12 +184,17 @@ struct ChatActionMenu: NSViewRepresentable {
         }
 
         @objc func selectItem(_ sender: NSMenuItem) {
-            guard !dismantled, cycleStarted, !selectionCaptured,
-                  sender.isEnabled, let displayed = displayedActions[ObjectIdentifier(sender)],
+            guard !dismantled, !selectionCaptured, sender.isEnabled,
+                  let displayed = (cycleStarted ? displayedActions : endedCycleActions)[ObjectIdentifier(sender)],
                   displayed.enabled else { return }
             selectionCaptured = true
-            queuedActions.append(displayed.action)
-            scheduleDrainIfFinished()
+            endedCycleActions.removeAll()
+            if cycleStarted {
+                queuedActions.append(displayed.action)
+                scheduleDrainIfFinished()
+            } else {
+                displayed.action()
+            }
         }
 
         @objc private func selectButton(_ sender: NSPopUpButton) {
@@ -181,15 +212,19 @@ struct ChatActionMenu: NSViewRepresentable {
 
         /// The same drain is called by the deferred native path and lifecycle tests.
         func drainAfterTracking() {
-            guard !dismantled, cycleStarted, !isTracking else { return }
+            guard !dismantled else { return }
             drainScheduled = false
-            if let pendingSnapshot, let button {
-                self.pendingSnapshot = nil
-                apply(pendingSnapshot, to: button)
+            guard !isTracking else { return }
+            if cycleStarted {
+                endedCycleActions = selectionCaptured ? [:] : displayedActions
+                if let pendingSnapshot, let button {
+                    self.pendingSnapshot = nil
+                    apply(pendingSnapshot, to: button)
+                }
+                cycleStarted = false
             }
             let actions = queuedActions
             queuedActions.removeAll()
-            cycleStarted = false
             actions.forEach { $0() }
         }
 
@@ -197,8 +232,10 @@ struct ChatActionMenu: NSViewRepresentable {
             guard !dismantled else { return }
             dismantled = true
             pendingSnapshot = nil
+            refreshOnNeedsUpdate = false
             queuedActions.removeAll()
             displayedActions.removeAll()
+            endedCycleActions.removeAll()
             if let menu = rootMenu {
                 menu.cancelTracking()
                 NotificationCenter.default.removeObserver(self, name: NSMenu.didEndTrackingNotification, object: menu)

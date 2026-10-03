@@ -34,7 +34,7 @@ import Testing
                            items: [.init(id: "candidate", title: "Intermediate") { calls.append("intermediate") }])
         coordinator.update(button, title: "Newest title", accessibilityIdentifier: "newest-id",
                            items: [.init(id: "candidate", title: "Newest") { calls.append("newest") }])
-        #expect(menu.itemArray.count == 1)
+        #expect(menu.items.count == 1)
         #expect(menu.item(at: 0) === displayed)
         #expect(displayed.title == "Original")
         #expect(displayed.state == .on)
@@ -43,6 +43,8 @@ import Testing
         coordinator.selectItem(displayed)
         #expect(calls.isEmpty)
         coordinator.menuDidClose(menu)
+        #expect(menu.item(at: 0) === displayed)
+        #expect(calls.isEmpty)
         coordinator.drainAfterTracking() // Closing alone is still inside native tracking.
         #expect(calls.isEmpty)
         #expect(menu.item(at: 0) === displayed)
@@ -74,6 +76,100 @@ import Testing
         coordinator.selectItem(item)
         coordinator.drainAfterTracking()
         #expect(count == 1)
+        coordinator.dismantle(button)
+    }
+
+    @Test func actionAfterCloseAndDrainUsesTheDisplayedCycle() throws {
+        var calls: [String] = []
+        let (coordinator, button, menu) = fixture([
+            .init(id: "same", title: "Original") { calls.append("original") }
+        ])
+        let oldItem = try #require(menu.item(at: 0))
+        coordinator.menuWillOpen(menu)
+        coordinator.update(button, title: "Replacement", accessibilityIdentifier: "replacement",
+                           items: [.init(id: "same", title: "New") { calls.append("new") }])
+        endTracking(coordinator, menu: menu)
+        coordinator.drainAfterTracking()
+        let newItem = try #require(menu.item(at: 0))
+        #expect(newItem !== oldItem)
+        #expect(calls.isEmpty)
+
+        coordinator.selectItem(oldItem) // AppKit may dispatch after end-tracking and the drain.
+        coordinator.selectItem(oldItem)
+        coordinator.selectItem(newItem)
+        #expect(calls == ["original"])
+        coordinator.dismantle(button)
+    }
+
+    @Test func actionAfterCloseBeforeEndWaitsForTrackingAndKeepsOriginal() throws {
+        var calls: [String] = []
+        let (coordinator, button, menu) = fixture([
+            .init(id: "same", title: "Original") { calls.append("original") }
+        ])
+        let oldItem = try #require(menu.item(at: 0))
+        coordinator.menuWillOpen(menu)
+        coordinator.update(button, title: "Replacement", accessibilityIdentifier: "replacement",
+                           items: [.init(id: "same", title: "New") { calls.append("new") }])
+        coordinator.menuDidClose(menu)
+        coordinator.selectItem(oldItem)
+        coordinator.drainAfterTracking()
+        #expect(calls.isEmpty)
+        NotificationCenter.default.post(name: NSMenu.didEndTrackingNotification, object: menu)
+        coordinator.drainAfterTracking()
+        #expect(calls == ["original"])
+        coordinator.dismantle(button)
+    }
+
+    @Test func escapeThenReopenInvalidatesTheEndedCycle() throws {
+        var calls: [String] = []
+        let (coordinator, button, menu) = fixture([
+            .init(id: "same", title: "Original") { calls.append("original") }
+        ])
+        let oldItem = try #require(menu.item(at: 0))
+        coordinator.menuWillOpen(menu)
+        coordinator.update(button, title: "Replacement", accessibilityIdentifier: "replacement",
+                           items: [.init(id: "same", title: "New") { calls.append("new") }])
+        endTracking(coordinator, menu: menu) // Escape: no action was sent.
+        #expect(menu.item(at: 0) === oldItem)
+        #expect(calls.isEmpty)
+        // AppKit asks for an update before the next opening.
+        coordinator.menuNeedsUpdate(menu)
+        let newItem = try #require(menu.item(at: 0))
+        #expect(newItem !== oldItem)
+        coordinator.menuWillOpen(menu)
+        coordinator.selectItem(oldItem)
+        coordinator.selectItem(newItem)
+        endTracking(coordinator, menu: menu)
+        coordinator.drainAfterTracking()
+        #expect(calls == ["new"])
+        coordinator.dismantle(button)
+    }
+
+    @Test func callbacksDoNotPublishRowsOrInvokeQueuedParentAction() throws {
+        var calls: [String] = []
+        let (coordinator, button, menu) = fixture([
+            .init(id: "old", title: "Old") { calls.append("old") }
+        ])
+        let oldItem = try #require(menu.item(at: 0))
+        coordinator.menuWillOpen(menu)
+        coordinator.selectItem(oldItem)
+        coordinator.update(button, title: "New", accessibilityIdentifier: "new",
+                           items: [.init(id: "new", title: "New") { calls.append("new") }])
+        coordinator.menuDidClose(menu)
+        #expect(menu.item(at: 0) === oldItem)
+        #expect(calls.isEmpty)
+        NotificationCenter.default.post(name: NSMenu.didEndTrackingNotification, object: menu)
+
+        // Synthetic race: the next willOpen arrives before its deferred drain.
+        coordinator.menuWillOpen(menu)
+        #expect(menu.item(at: 0) === oldItem)
+        #expect(calls.isEmpty)
+        coordinator.menuNeedsUpdate(menu) // Documented menu update point.
+        #expect(menu.item(at: 0)?.title == "New")
+        #expect(calls.isEmpty)
+        endTracking(coordinator, menu: menu)
+        coordinator.drainAfterTracking()
+        #expect(calls == ["old"])
         coordinator.dismantle(button)
     }
 
@@ -114,5 +210,21 @@ import Testing
         coordinator.drainAfterTracking()
         #expect(count == 0)
         #expect(menu.item(at: 0)?.title == "Old")
+    }
+
+    @Test func dismantleInvalidatesLateItemAfterDrain() throws {
+        var count = 0
+        let (coordinator, button, menu) = fixture([
+            .init(id: "old", title: "Old") { count += 1 }
+        ])
+        let oldItem = try #require(menu.item(at: 0))
+        coordinator.menuWillOpen(menu)
+        coordinator.update(button, title: "New", accessibilityIdentifier: "new",
+                           items: [.init(id: "new", title: "New") { count += 10 }])
+        endTracking(coordinator, menu: menu)
+        coordinator.drainAfterTracking()
+        coordinator.dismantle(button)
+        coordinator.selectItem(oldItem)
+        #expect(count == 0)
     }
 }
