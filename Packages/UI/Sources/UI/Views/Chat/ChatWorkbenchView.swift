@@ -14,6 +14,13 @@ enum ChatAssetDropScope {
 /// Shared presentation gate for every control that can start model work.
 /// ChatController still performs the final admission check.
 enum ChatRunAdmission {
+    static func allowsReplay(_ session: ChatSession, attempt: ChatAttempt, isRunning: Bool,
+                             hasPendingSave: Bool, hasSaveIssue: Bool) -> Bool {
+        guard let seed = attempt.node.parameters["seed"]?.string, UInt64(seed) != nil else { return false }
+        return !session.archived && !isRunning && !hasPendingSave && !hasSaveIssue &&
+            attempt.sessionID == session.id && attempt.status != .running && attempt.status != .saving
+    }
+
     static func allows(_ session: ChatSession, isRunning: Bool, hasPendingSave: Bool,
                        hasSaveIssue: Bool, invalidFields: Set<String>) -> Bool {
         !session.archived && session.configuration != nil && !isRunning &&
@@ -262,8 +269,18 @@ struct ChatWorkbenchView: View {
                     Button(label("generateReply", "生成回复")) { Task { await run(sessionID: session.id) { try await chat.regenerate(message.id, sessionID: session.id) } } }
                         .disabled(!canRun(session))
                 } else if let parent = message.parentID {
-                    Button(label("regenerate", "重新生成")) { Task { await run(sessionID: session.id) { try await chat.regenerate(parent, sessionID: session.id) } } }
-                        .disabled(!canRun(session))
+                    Menu(label("candidates", "候选")) {
+                        Button(label("newCandidate", "生成新候选（新随机种子）")) {
+                            Task { await run(sessionID: session.id) { try await chat.regenerate(parent, sessionID: session.id) } }
+                        }.disabled(!canRun(session))
+                        if let attempt {
+                            Button(label("replayRequest", "按原请求与种子重现")) {
+                                Task { await run(sessionID: session.id) { try await chat.reproduce(attempt.id, sessionID: session.id) } }
+                            }.disabled(!ChatRunAdmission.allowsReplay(session, attempt: attempt,
+                                isRunning: chat.isRunning, hasPendingSave: chat.pendingSaveAttemptID != nil,
+                                hasSaveIssue: chat.saveIssue != nil))
+                        }
+                    }.accessibilityIdentifier("chat-candidate-actions")
                 }
                 Button(label("forkHere", "从这里分叉")) {
                     perform(sessionID: session.id) { _ = try chat.forkSession(session.id, leafID: message.id) }

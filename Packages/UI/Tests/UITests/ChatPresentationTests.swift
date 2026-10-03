@@ -6,6 +6,29 @@ import Testing
 
 @Suite("Chat presentation boundaries")
 @MainActor struct ChatPresentationTests {
+    @Test func replayRequiresRecordedSeedAndSafeSessionButNotCurrentDraftSettings() {
+        var session = ChatSession()
+        var node = WorkflowNode(operationID: "d.model.qwen35-9b", title: "Qwen")
+        node.parameters["seed"] = .text("18446744073709551614")
+        var attempt = ChatAttempt(sessionID: session.id, userMessageID: UUID(), assistantMessageID: UUID(),
+            node: node, messagesJSON: "[]", inputs: [:], systemPrompt: "old", status: .completed)
+        // An absent current configuration must not replace or invalidate a recorded request.
+        session.configuration = nil
+        #expect(ChatRunAdmission.allowsReplay(session, attempt: attempt, isRunning: false,
+            hasPendingSave: false, hasSaveIssue: false))
+        #expect(!ChatRunAdmission.allowsReplay(session, attempt: attempt, isRunning: true,
+            hasPendingSave: false, hasSaveIssue: false))
+        #expect(!ChatRunAdmission.allowsReplay(session, attempt: attempt, isRunning: false,
+            hasPendingSave: true, hasSaveIssue: false))
+        #expect(!ChatRunAdmission.allowsReplay(session, attempt: attempt, isRunning: false,
+            hasPendingSave: false, hasSaveIssue: true))
+        #expect(!ChatRunAdmission.allowsReplay(ChatSession(), attempt: attempt, isRunning: false,
+            hasPendingSave: false, hasSaveIssue: false))
+        attempt.node.parameters.removeValue(forKey: "seed")
+        #expect(!ChatRunAdmission.allowsReplay(session, attempt: attempt, isRunning: false,
+            hasPendingSave: false, hasSaveIssue: false))
+    }
+
     @Test func literalSourceRemainsAvailableDuringStreamingAndParseDelay() async {
         let final = "# Answer\n\n| A | B |\n|---|---|\n| 1 | 2 |"
         let original = "<think>reasoning</think>\n" + final
