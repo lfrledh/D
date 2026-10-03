@@ -55,6 +55,18 @@ import Observation
         guard let i = state.sessions.firstIndex(where: { $0.id == id }) else { throw WorkflowIssue("对话不存在。") }
         return i
     }
+    private static func derivedTitle(_ source: String, characterLimit: Int = .max, suffix: String = "") -> String {
+        let byteLimit = 512 - suffix.utf8.count
+        var title = "", byteCount = 0
+        for character in source.prefix(characterLimit) {
+            let characterBytes = String(character).utf8.count
+            guard byteCount + characterBytes <= byteLimit else { break }
+            title.append(character)
+            byteCount += characterBytes
+        }
+        if title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { title = "新对话" }
+        return title + suffix
+    }
     private func changed(checkpoint: Bool = false) {
         mutation &+= 1
         if checkpoint && debounce != nil { return }
@@ -162,7 +174,7 @@ import Observation
         if let activeAttemptID, path.contains(where: { $0.attemptID == activeAttemptID }) {
             throw WorkflowIssue("这条路径仍在生成，请等待停止后再分叉。")
         }
-        var fork = ChatSession(title: source.title + " · 分支")
+        var fork = ChatSession(title: Self.derivedTitle(source.title, suffix: " · 分支"))
         fork.messages = path; fork.attempts = source.attempts.filter { a in path.contains(where: { $0.attemptID == a.id }) }.map { a in
             // Attempt provenance remains tied to its originating session. A fork's copied
             // immutable history is not eligible for retry or mutation of that attempt.
@@ -281,6 +293,8 @@ import Observation
             throw WorkflowIssue("另一次聊天推理已开始；请等待资源释放后重试。")
         }
         let i = try index(sessionID)
+        let firstMessageTitle = clearDraft && !state.sessions[i].messages.contains(where: { $0.role == .user })
+            ? Self.derivedTitle(user.text, characterLimit: 80) : nil
         let attemptID = UUID(), assistantID = UUID()
         let assistant = ChatMessage(id: assistantID, parentID: user.id, role: .assistant, text: "", attemptID: attemptID)
         let attempt = ChatAttempt(id: attemptID, sessionID: sessionID, userMessageID: user.id,
@@ -293,9 +307,7 @@ import Observation
             if state.sessions[i].draft == user.text && state.sessions[i].attachments == user.attachments {
                 state.sessions[i].draft = ""; state.sessions[i].attachments = []
             }
-            if state.sessions[i].messages.filter({ $0.role == .user }).count == 1 {
-                state.sessions[i].title = String(user.text.prefix(80))
-            }
+            if let firstMessageTitle { state.sessions[i].title = firstMessageTitle }
         }
         changed(); cancelRequested = false; error = nil; isRunning = true; activeSessionID = sessionID; activeAttemptID = attemptID; phase = "正在保存冻结输入…"
         runTask = Task { [self] in
