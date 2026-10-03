@@ -61,6 +61,30 @@ private actor CloseoutResponseEngine: InferenceEngine {
 }
 
 @MainActor extension WorkflowLanguageCloseoutTests {
+    @Test func auxiliaryPriorityIsIdenticalAtSubmissionAndPublication() async throws {
+        let root = URL(fileURLWithPath: try #require(ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"]))
+            .appendingPathComponent("aux-priority-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let store = try await ProjectStore.create(at: root.appendingPathComponent("Fixture.dproject"), name: "Auxiliary")
+        let engine = CloseoutResponseEngine(.init(rawText: "result", finalText: "result", finishReason: .stop))
+        let session = WorkbenchSession(engine: engine, backendID: "fixture", status: { .init(activeRunID: nil, phase: nil, queuedRunIDs: []) }, shutdown: {}, cleanup: {}, validateModel: { _ in })
+        let service = WorkflowServices(store: store, session: session) { _, identity in
+            .init(identity: identity, reference: .init(directory: root), backendID: "fixture", operationID: WorkflowModelRoutes.qwen35,
+                  textCapability: .init(maximumPromptTokens: 2048, maximumOutputTokens: 256, profile: TextExecutionCapability.qwen35VLMProfile))
+        }
+        try service.useBackgroundLanguageAdmission()
+        var node = try #require(WorkflowRegistry.standard.operation(WorkflowModelRoutes.qwen35)?.definition.makeNode())
+        node.parameters["modelID"] = .text("text:fixture"); node.parameters["outputMode"] = .text("response")
+        try service.beginPlan()
+        #expect(throws: (any Error).self) { try service.useBackgroundLanguageAdmission() }
+        let step = UUID()
+        _ = try await service.executeCall(.init(node: node, stepID: step, inputs: [:]))
+        let submitted = try #require(await engine.requests.first)
+        let record = try #require(try await store.workflowState().archive?.assets.first { $0.request?.id == step })
+        #expect(submitted.priority == .background && record.request == submitted)
+        try await store.close()
+    }
+
     @Test func longResponsePublishesOnceSurvivesOutputFailureReopenAndCopy() async throws {
         let root = URL(fileURLWithPath: try #require(ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"]))
             .appendingPathComponent("response-" + UUID().uuidString)

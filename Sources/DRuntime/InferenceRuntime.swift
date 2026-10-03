@@ -1,7 +1,7 @@
 import DInference
 import Foundation
 
-/// A bounded FIFO scheduler. Actor reentrancy alone does not serialize whole async jobs;
+/// A bounded scheduler: interactive before background, FIFO within each class. Actor reentrancy alone does not serialize whole async jobs;
 /// activeRunID is an explicit lease retained through estimate, execute, drain, and release.
 public actor InferenceRuntime: InferenceEngine {
     private struct Entry {
@@ -55,7 +55,10 @@ public actor InferenceRuntime: InferenceEngine {
         let token = UUID()
         entries[id] = Entry(token: token, request: request, backend: backend,
                             events: events, completion: completion)
-        queue.append(id)
+        if request.priority != .background,
+           let background = queue.firstIndex(where: { entries[$0]?.request.priority == .background }) {
+            queue.insert(id, at: background)
+        } else { queue.append(id) }
         startNextIfIdle()
         return InferenceRun(id: id, nextEvent: { try await events.next() },
                             cancel: { [weak self] in await self?.cancel(id, token: token) },

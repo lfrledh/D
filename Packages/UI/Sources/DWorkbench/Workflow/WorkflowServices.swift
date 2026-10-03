@@ -17,6 +17,13 @@ struct WorkflowSaveFailure: LocalizedError {
     private var bindings: [UUID: WorkflowModelBinding] = [:]
     private var activeRun: InferenceRun?
     private var languageCallActive = false
+    private var admissionStarted = false
+    private var backgroundLanguageAdmission = false
+    /// Configure a fresh auxiliary service once. This does not change the shared engine.
+    public func useBackgroundLanguageAdmission() throws {
+        guard !admissionStarted else { throw WorkflowIssue("Admission is already fixed for this service.") }
+        backgroundLanguageAdmission = true
+    }
     private var activeOperation: Task<WorkflowOperationResult, Error>?
     private var textSession: TextDraftSession?
     private var languagePreview = ""
@@ -117,10 +124,14 @@ struct WorkflowSaveFailure: LocalizedError {
     public func capturedModelDefaults() -> [String: String] { Dictionary(uniqueKeysWithValues: WorkflowModelKind.allCases.map { ($0.rawValue, defaultIdentity($0)) }) }
     public func beginPlan() throws {
         guard bindings.isEmpty, activeRun == nil, !languageCallActive else { throw WorkflowIssue("上一操作尚未释放。") }
-        cancelled = false; languagePreview = ""
+        admissionStarted = true; cancelled = false; languagePreview = ""
     }
     /// Plan Call is the only lazy admission point. A branch/tool does not own a model by itself.
     public func executeCall(_ context: WorkflowExecutionContext) async throws -> WorkflowOperationResult {
+        admissionStarted = true
+        if backgroundLanguageAdmission && ![WorkflowModelRoutes.qwen35, WorkflowModelRoutes.qwen38].contains(context.node.operationID) {
+            throw WorkflowIssue("Background language services accept only the declared text operations.")
+        }
         try checkCancellation()
         guard !languageCallActive, bindings.isEmpty, let operation = registry.operation(context.node.operationID) else { throw WorkflowIssue("操作未注册或上一模型租约未释放。") }
         try registry.validate(context.node)
@@ -264,6 +275,7 @@ struct WorkflowSaveFailure: LocalizedError {
     }
     private func languageRequest(task: String, content: String?, context: WorkflowExecutionContext,
                                  binding: WorkflowModelBinding) async throws -> InferenceRequest {
+        admissionStarted = true
         let p = context.node.parameters
         let messagesJSON = p["messagesJSON"]?.string ?? ""
         guard !task.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !messagesJSON.isEmpty else { throw WorkflowIssue("任务或有序消息不能为空。") }
@@ -315,7 +327,8 @@ struct WorkflowSaveFailure: LocalizedError {
             chatTemplateOverride: (p["chatTemplateOverride"]?.string ?? "").isEmpty ? nil : p["chatTemplateOverride"]?.string)
         try capability?.validate(input)
         return InferenceRequest(id: context.stepID, model: binding.reference, input: .text(input),
-            memoryBudgetBytes: try WorkflowLanguageMessageForm.memoryBudgetBytes(p))
+            memoryBudgetBytes: try WorkflowLanguageMessageForm.memoryBudgetBytes(p),
+            priority: backgroundLanguageAdmission ? .background : nil)
     }
     /// Uses the same request construction and model lease without entering inference.
     public func previewLanguageTemplate(node: WorkflowNode, inputs: [String: WorkflowValue]) async throws -> TextTemplatePreview {

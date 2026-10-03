@@ -49,6 +49,9 @@ public enum InferenceInput: Sendable, Codable, Equatable {
     }
 }
 
+/// Admission order only; an active job is never preempted.
+public enum InferenceAdmissionPriority: String, Sendable, Codable { case interactive, background }
+
 public struct InferenceRequest: Sendable, Codable, Equatable, Identifiable {
     public let id: UUID
     public let model: ModelReference
@@ -57,13 +60,16 @@ public struct InferenceRequest: Sendable, Codable, Equatable, Identifiable {
     /// This is a runtime admission budget, never a measured physical-memory cap.
     /// Backends may explicitly map it to a soft guidance value; video currently does.
     public let memoryBudgetBytes: UInt64?
+    /// Nil preserves old records and schedules as interactive.
+    public let priority: InferenceAdmissionPriority?
 
     public init(id: UUID = UUID(), model: ModelReference, input: InferenceInput,
-                memoryBudgetBytes: UInt64? = nil) {
+                memoryBudgetBytes: UInt64? = nil, priority: InferenceAdmissionPriority? = nil) {
         self.id = id
         self.model = model
         self.input = input
         self.memoryBudgetBytes = memoryBudgetBytes
+        self.priority = priority
     }
 
     /// Common validation only. Backends must also validate architecture and capabilities.
