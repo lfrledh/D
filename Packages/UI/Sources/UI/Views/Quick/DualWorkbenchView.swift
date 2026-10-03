@@ -236,10 +236,18 @@ public struct DualWorkbenchView: View {
                 _ = try await quickModel.projectSession.prepareWorkflowVideo(id: id, in: parent)
                 await refreshLibrary(checkModels: false)
             }) { id in
+                let owner = quickModel.projectSession
+                let controller = quick
+                let selectedDraftID = controller.draft?.id
                 do {
-                    let choice = try await quickModel.projectSession.selectWorkflowInstallation(id: id)
+                    guard !quickOwnerIsChanging else { throw WorkflowIssue("项目正在切换；模型选择未应用。") }
+                    let choice = try await owner.selectWorkflowInstallation(id: id)
+                    guard !quickOwnerIsChanging, quickModel.projectSession === owner,
+                          quick === controller, controller.draft?.id == selectedDraftID else {
+                        throw WorkflowIssue("快速草稿或所属项目已切换；模型选择未应用。")
+                    }
                     guard let operation = WorkflowModelRoutes.operation(for: choice) else { throw WorkflowIssue("此模型没有可用的共享操作。") }
-                    quick.select(operationID: operation, modelID: choice.id)
+                    controller.select(operationID: operation, modelID: choice.id)
                     returnToLibrary = false; library.isPresented = false; navigate(to: .quick)
                     await refreshLibrary(checkModels: false)
                 } catch is CancellationError { }
