@@ -96,6 +96,39 @@ private final class MCPFixtureURLProtocol: URLProtocol, @unchecked Sendable {
 
 @Suite("MCP local permission and input boundary")
 struct ChatMCPServiceTests {
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["D_CHAT_LIVE_MCP"] == "1"))
+    func actualPinnedConformanceServerRoundTripAndLocalCancellation() async throws {
+        let endpoint = try #require(ProcessInfo.processInfo.environment["D_CHAT_MCP_ENDPOINT"])
+        let url = try ChatMCPService.validateEndpoint(endpoint)
+        try #require(url.host == "127.0.0.1")
+        let service = ChatMCPService()
+        do {
+            try await service.connect(endpoint: endpoint, permitted: true, timeoutSeconds: 5)
+            let tools = try await service.listTools(timeoutSeconds: 5)
+            try #require(tools.contains { $0.name == "add_numbers" })
+            await #expect(throws: ChatMCPError.permissionDenied) { try await service.callTool(name: "add_numbers", argumentsJSON: "{}", permitted: false) }
+            await #expect(throws: ChatMCPError.unknownTool) { try await service.callTool(name: "not_registered", argumentsJSON: "{}", permitted: true) }
+            let answer = try await service.callTool(name: "add_numbers", argumentsJSON: #"{"a":17,"b":25}"#, permitted: true, timeoutSeconds: 5)
+            let json = try #require(JSONSerialization.jsonObject(with: Data(answer.resultJSON.utf8)) as? [String: Any])
+            let content = try #require(json["content"] as? [[String: Any]])
+            #expect(content.first?["text"] as? String == "42" && !answer.isError)
+            let failure = try await service.callTool(name: "test_error_handling", argumentsJSON: "{}", permitted: true, timeoutSeconds: 5)
+            #expect(failure.isError)
+            let pending = Task { try await service.callTool(name: "test_progress", argumentsJSON: #"{"duration_ms":2000}"#, permitted: true, timeoutSeconds: 5) }
+            try await Task.sleep(for: .milliseconds(150))
+            await service.cancel()
+            await #expect(throws: ChatMCPError.cancelled) { try await pending.value }
+            #expect(await service.status() == .localStoppedServerUnknown)
+            try await service.connect(endpoint: endpoint, permitted: true, timeoutSeconds: 5)
+            _ = try await service.listTools(timeoutSeconds: 5)
+            let next = try await service.callTool(name: "add_numbers", argumentsJSON: #"{"a":1,"b":2}"#, permitted: true, timeoutSeconds: 5)
+            #expect(!next.isError)
+            await #expect(throws: ChatMCPError.timedOut) { try await service.callTool(name: "test_progress", argumentsJSON: #"{"duration_ms":2000}"#, permitted: true, timeoutSeconds: 1) }
+            await service.disconnect()
+            #expect(await service.status() == .disconnected)
+        } catch { await service.disconnect(); throw error }
+    }
+
     @Test func endpointValidationAllowsOnlyExplicitSecureOrLiteralLoopbackRoutes() throws {
         #expect(try ChatMCPService.validateEndpoint("https://example.org/mcp").absoluteString == "https://example.org/mcp")
         #expect(try ChatMCPService.validateEndpoint("http://127.0.0.1:8765/mcp").host == "127.0.0.1")
