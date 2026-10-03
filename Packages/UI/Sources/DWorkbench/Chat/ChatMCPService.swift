@@ -57,8 +57,18 @@ private final class ChatMCPURLSessionDelegate: NSObject, URLSessionTaskDelegate,
     }
 }
 
+/// The controller owns connection lifetime; the production implementation is the official SDK client.
+public protocol ChatMCPServing: Sendable {
+    func status() async -> ChatMCPStatus
+    func connect(endpoint: String, permitted: Bool, timeoutSeconds: Int) async throws
+    func listTools(timeoutSeconds: Int) async throws -> [ChatMCPTool]
+    func callTool(name: String, argumentsJSON: String, permitted: Bool, timeoutSeconds: Int) async throws -> ChatMCPCallResult
+    func cancel() async
+    func disconnect() async
+}
+
 /// One explicit MCP endpoint and one operation at a time. This service never handles reverse requests.
-public actor ChatMCPService {
+public actor ChatMCPService: ChatMCPServing {
     private struct OperationIdentity: Hashable, Sendable {
         let generation: Int
         let sequence: Int
@@ -224,7 +234,7 @@ public actor ChatMCPService {
               let parts = URLComponents(string: raw),
               let scheme = parts.scheme?.lowercased(),
               let parsedHost = parts.host?.lowercased(),
-              !parsedHost.isEmpty, parts.user == nil, parts.password == nil, parts.fragment == nil,
+              !parsedHost.isEmpty, parts.user == nil, parts.password == nil, parts.fragment == nil, parts.query == nil,
               parts.port.map({ (1...65535).contains($0) }) ?? true,
               let url = parts.url, url.scheme?.lowercased() == scheme else {
             throw ChatMCPError.invalidEndpoint

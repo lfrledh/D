@@ -8,6 +8,7 @@ public enum ChatToolRequest: Codable, Sendable, Equatable {
     case csv(WorkflowAssetReference, columns: [String])
     case webSearch(query: String, language: ChatWebLanguage)
     case webRead(ChatWebSearchHit)
+    case mcp(endpoint: String, tool: String, argumentsJSON: String)
 
     public var identifier: String {
         switch self {
@@ -17,6 +18,7 @@ public enum ChatToolRequest: Codable, Sendable, Equatable {
         case .csv: "d.chat.csv.v1"
         case .webSearch: "d.chat.wikipedia.search.v1"
         case .webRead: "d.chat.wikipedia.read.v1"
+        case .mcp: "d.chat.mcp.call.v1"
         }
     }
     public var usesNetwork: Bool {
@@ -42,6 +44,11 @@ public struct ChatToolActivity: Codable, Sendable, Equatable, Identifiable {
         self.id = id; self.request = request; startedAt = Date(); status = .running
     }
     public func validate() throws {
+        if case .mcp(let endpoint, let tool, let arguments) = request {
+            _ = try ChatMCPService.validateEndpoint(endpoint)
+            guard !tool.isEmpty, tool.utf8.count <= 1024 else { throw ChatMCPError.unknownTool }
+            _ = try ChatMCPService.parseArguments(arguments)
+        }
         let requestBytes = try JSONEncoder().encode(request)
         guard requestBytes.count <= 65_536, (resultJSON?.utf8.count ?? 0) <= 2_097_152,
               (issue?.utf8.count ?? 0) <= 16_384, output == nil || output?.kind == .text,
@@ -57,7 +64,7 @@ public struct ChatWebOptions: Codable, Sendable, Equatable {
 }
 
 extension ChatToolRequest {
-    func execute(store: ProjectStore, authorized: Bool, web: ChatWebSearchClient) async throws -> String {
+    func execute(store: ProjectStore, authorized: Bool, web: ChatWebSearchClient, mcp: (any ChatMCPServing)?) async throws -> String {
         @Sendable func encoded<T: Encodable>(_ value: T) throws -> String {
             let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys, .prettyPrinted]
             let data = try encoder.encode(value)
@@ -74,6 +81,9 @@ extension ChatToolRequest {
             return try await WorkflowCPU.run { try encoded(ChatDeterministicTools.analyze(.init(csvData: bytes, numericColumns: columns))) }
         case .webSearch(let query, let language): return try encoded(await web.search(query, language: language, networkAuthorized: authorized))
         case .webRead(let hit): return try encoded(await web.readPage(hit, networkAuthorized: authorized))
+        case .mcp(let endpoint, let tool, let arguments):
+            guard let mcp, await mcp.status() == .connected(endpoint: endpoint) else { throw ChatMCPError.notConnected }
+            return try await mcp.callTool(name: tool, argumentsJSON: arguments, permitted: authorized, timeoutSeconds: 30).resultJSON
         }
     }
 }

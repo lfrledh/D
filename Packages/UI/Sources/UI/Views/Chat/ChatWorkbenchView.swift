@@ -917,6 +917,9 @@ struct ChatWorkbenchView: View {
                             ChatToolsPanel(chat: chat, session: session, wording: { english, chinese in
                                 language?.effectiveLanguageIdentifier.hasPrefix("zh") == true ? chinese : english
                             }).id(session.id.uuidString + ":tools")
+                            ChatMCPPanel(chat: chat, session: session, wording: { english, chinese in
+                                language?.effectiveLanguageIdentifier.hasPrefix("zh") == true ? chinese : english
+                            }).id(session.id.uuidString + ":mcp")
                             Toggle(newLabel("importOCR", english: "Use on-device OCR for scanned PDF pages on import",
                                 chinese: "导入扫描PDF时使用本地OCR"), isOn: $ocrImport)
                                 .font(.caption)

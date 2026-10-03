@@ -100,6 +100,7 @@ public struct ChatSession: Codable, Sendable, Equatable, Identifiable {
     public var contextSummaries: [ChatContextSummary]?
     public var memoryScopes: [ChatMemoryScope]?
     public var webOptions: ChatWebOptions?
+    public var mcpEndpoint: String?
     public var importLossNotes: [String]?
     public var toolActivities: [ChatToolActivity]?
     public var knowledgeScope: [UUID]?
@@ -192,6 +193,7 @@ public struct ChatState: Codable, Sendable, Equatable {
                   (session.memoryScopes?.count ?? 0) <= 2 else { throw WorkflowIssue("摘要历史或记忆范围无效。") }
             for summary in summaries { try summary.validate() }
             try session.contextChoices?.validate(messages: session.messages)
+            if let endpoint = session.mcpEndpoint { _ = try ChatMCPService.validateEndpoint(endpoint) }
             try Self.validateAttachments(session.attachments)
             if let pending = session.pendingSpeechDraft {
                 try Self.validateAttachments([pending])

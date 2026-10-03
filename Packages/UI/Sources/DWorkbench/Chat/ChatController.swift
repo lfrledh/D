@@ -55,23 +55,32 @@ import Observation
         speechService = service
         return service
     }
-    public var isBusy: Bool { isRunning || isToolRunning || isTranscribing || speechPlaybackState != .idle }
+    public var isBusy: Bool { isRunning || isToolRunning || isMCPConnecting || isMCPStopping || isTranscribing || speechPlaybackState != .idle }
     public private(set) var isCancelling = false
     /// Publication retries are busy but are not a cancellable model run.
     public var canStopGeneration: Bool { isRunning && activeAttemptID != nil }
     @ObservationIgnored private var debounceGeneration: UInt64 = 0
     @ObservationIgnored private var toolTask: Task<UUID, Error>?
+    @ObservationIgnored private var activeToolIsMCP = false
     @ObservationIgnored private let webClient: ChatWebSearchClient
     public private(set) var activeToolSessionID: UUID?
     public var isToolRunning: Bool { activeToolSessionID != nil }
+    @ObservationIgnored private let mcpService: any ChatMCPServing
+    @ObservationIgnored private var mcpConnectionTask: Task<Void, Error>?
+    @ObservationIgnored private var mcpDisconnectTask: Task<Void, Never>?
+    public private(set) var isMCPStopping = false
+    public private(set) var mcpSessionID: UUID?
+    public private(set) var mcpStatus: ChatMCPStatus = .disconnected
+    public private(set) var mcpTools: [ChatMCPTool] = []
+    public var isMCPConnecting: Bool { mcpConnectionTask != nil }
     @ObservationIgnored private var knowledgeIndex: ChatKnowledgeIndex?
     @ObservationIgnored private var indexedKnowledge: [UUID: ChatKnowledgeDocument] = [:]
 
     public init(store: ProjectStore, settings: UserDefaults? = nil, allowsSubmission: @escaping @MainActor () -> Bool = { true },
-                ownsPersonalMemory: Bool = false, webClient: ChatWebSearchClient = .init(),
+                ownsPersonalMemory: Bool = false, webClient: ChatWebSearchClient = .init(), mcpService: any ChatMCPServing = ChatMCPService(),
                 personalMemoryProvider: @escaping @MainActor () -> ChatController? = { nil },
                 makeServices: @escaping @MainActor () throws -> WorkflowServices) {
-        self.store = store; self.settings = settings; self.webClient = webClient
+        self.store = store; self.settings = settings; self.webClient = webClient; self.mcpService = mcpService
         self.ownsPersonalMemory = ownsPersonalMemory; self.personalMemoryProvider = personalMemoryProvider
         self.allowsSubmission = allowsSubmission; self.makeServices = makeServices
     }
@@ -876,13 +885,15 @@ import Observation
 
     /// Project shutdown owns all chat activities. The composer Stop only cancels generation.
     public func cancelAll() async {
-        toolTask?.cancel()
+        toolTask?.cancel(); mcpConnectionTask?.cancel()
+        let mcpStop = Task { await disconnectMCP() }
         speechTask?.cancel(); speechService?.cancelTranscription(); speechService?.stopSpeech()
         // Signal every owner before waiting for a possibly slow tool drain.
         await cancel()
         _ = try? await toolTask?.value
         await cancelSpeechTranscription()
         await speechService?.stopSpeechAndWait()
+        await mcpStop.value
     }
 
     public func cancel() async {
@@ -944,6 +955,56 @@ import Observation
         guard !isBusy, pendingSaveAttemptID == nil else { throw WorkflowIssue("聊天仍在运行、播放或有待保存结果。") }
         try await flush()
     }
+    /// An explicit endpoint grant is independent of the Wikipedia switch. No auto-connect on load.
+    public func connectMCP(endpoint: String, sessionID: UUID, permitted: Bool) async throws {
+        try requireLoaded(); let i = try index(sessionID)
+        guard permitted else { throw ChatMCPError.permissionDenied }
+        _ = try ChatMCPService.validateEndpoint(endpoint)
+        guard allowsSubmission(), !isToolRunning, !isMCPConnecting, !isMCPStopping, mcpSessionID == nil,
+              !state.sessions[i].archived, state.sessions[i].contextChoices?.deletedAt == nil else { throw ChatMCPError.busy }
+        state.sessions[i].mcpEndpoint = endpoint; changed()
+        mcpSessionID = sessionID; mcpStatus = .connecting
+        let task = Task { @MainActor [self] in
+            defer { mcpConnectionTask = nil }
+            do {
+                try await flush(); try Task.checkCancellation()
+                try await mcpService.connect(endpoint: endpoint, permitted: true, timeoutSeconds: 30)
+                let tools = try await mcpService.listTools(timeoutSeconds: 30); try Task.checkCancellation()
+                let si = try index(sessionID)
+                guard allowsSubmission(), !state.sessions[si].archived, state.sessions[si].contextChoices?.deletedAt == nil else { throw CancellationError() }
+                mcpTools = tools; mcpStatus = .connected(endpoint: endpoint)
+            } catch {
+                // A concurrent disconnect owns the drain and final connection state.
+                if mcpDisconnectTask == nil {
+                    await mcpService.disconnect(); mcpStatus = await mcpService.status()
+                    mcpSessionID = nil; mcpTools = []
+                }
+                throw error
+            }
+        }
+        mcpConnectionTask = task
+        try await withTaskCancellationHandler { try await task.value } onCancel: { task.cancel() }
+    }
+    public func disconnectMCP() async {
+        if let task = mcpDisconnectTask { await task.value; return }
+        // Capture owners before suspension. A web/CSV task in the same conversation is unrelated.
+        let connection = mcpConnectionTask
+        let call = activeToolIsMCP ? toolTask : nil
+        connection?.cancel(); call?.cancel()
+        isMCPStopping = true; mcpStatus = .stopping
+        let task = Task { @MainActor [self] in
+            await mcpService.disconnect()
+            _ = try? await connection?.value
+            _ = try? await call?.value
+            let status = await mcpService.status()
+            // No suspension after opening the gate: a late disconnect cannot erase a new owner.
+            mcpStatus = status; mcpTools = []; mcpSessionID = nil
+            mcpDisconnectTask = nil; isMCPStopping = false
+        }
+        mcpDisconnectTask = task
+        await task.value
+    }
+
     private func prepareAutomaticWeb(sessionID: UUID) async throws {
         let captured = state.sessions[try index(sessionID)]
         guard let options = captured.webOptions, options.allowed, options.automaticSearch,
@@ -969,39 +1030,52 @@ import Observation
         let i = try index(sessionID)
         guard !options.automaticSearch || options.allowed else { throw WorkflowIssue("自动搜索需要先允许联网。") }
         state.sessions[i].webOptions = options
-        if !options.allowed && activeToolSessionID == sessionID { toolTask?.cancel() }
+        if !options.allowed && activeToolSessionID == sessionID, state.sessions[i].toolActivities?.last?.request.usesNetwork == true { toolTask?.cancel() }
         changed()
     }
-    @discardableResult public func executeTool(_ request: ChatToolRequest, sessionID: UUID) async throws -> UUID {
+    @discardableResult public func executeTool(_ request: ChatToolRequest, sessionID: UUID, mcpPermission: Bool = false) async throws -> UUID {
         try requireLoaded(); let i = try index(sessionID)
         guard allowsSubmission(), !isToolRunning, !state.sessions[i].archived,
               state.sessions[i].contextChoices?.deletedAt == nil else { throw WorkflowIssue("请等待当前工具结束，并选择可用会话。") }
         let usedBytes = (state.sessions[i].toolActivities ?? []).reduce(0) { $0 + ($1.resultJSON?.utf8.count ?? 0) }
         guard usedBytes <= 6_291_456 else { throw WorkflowIssue("工具历史没有足够空间保存完整结果，请新建会话。") }
-        let allowed = state.sessions[i].webOptions?.allowed == true
+        let allowed: Bool
+        if case .mcp(let endpoint, _, _) = request {
+            _ = try ChatMCPService.validateEndpoint(endpoint)
+            guard mcpPermission, mcpSessionID == sessionID, mcpStatus == .connected(endpoint: endpoint), !isMCPConnecting, !isMCPStopping else { throw ChatMCPError.permissionDenied }
+            allowed = true
+        } else { allowed = state.sessions[i].webOptions?.allowed == true }
         guard !request.usesNetwork || allowed else { throw WorkflowIssue("请先允许本会话联网；没有发送查询。") }
         let activity = ChatToolActivity(request: request), id = activity.id
         var candidate = state; candidate.sessions[i].toolActivities = (candidate.sessions[i].toolActivities ?? []) + [activity]
         try candidate.validate(); state = candidate; changed(); activeToolSessionID = sessionID
+        if case .mcp = request { activeToolIsMCP = true } else { activeToolIsMCP = false }
         let task = Task { @MainActor [self] () throws -> UUID in
-            defer { activeToolSessionID = nil; toolTask = nil }
+            defer { activeToolSessionID = nil; toolTask = nil; activeToolIsMCP = false }
             do {
                 try await flush(); try Task.checkCancellation()
-                let result = try await request.execute(store: store, authorized: allowed, web: webClient)
+                let result = try await request.execute(store: store, authorized: allowed, web: webClient, mcp: mcpService)
                 try Task.checkCancellation()
+                if case .mcp = request { mcpStatus = await mcpService.status() }
                 let si = try index(sessionID)
                 guard let ai = state.sessions[si].toolActivities?.firstIndex(where: { $0.id == id }) else { throw WorkflowIssue("工具记录不存在。") }
                 var updated = state
                 updated.sessions[si].toolActivities?[ai].resultJSON = result
-                updated.sessions[si].toolActivities?[ai].status = .completed
+                let serverError: Bool
+                if case .mcp = request {
+                    serverError = (try? JSONSerialization.jsonObject(with: Data(result.utf8)) as? [String: Any])?["isError"] as? Bool == true
+                } else { serverError = false }
+                updated.sessions[si].toolActivities?[ai].status = serverError ? .failed : .completed
+                if serverError { updated.sessions[si].toolActivities?[ai].issue = "The MCP server reported a tool error; its returned details are preserved." }
                 updated.sessions[si].toolActivities?[ai].endedAt = Date()
                 try updated.validate(); state = updated; changed(); try await flush()
                 return id
             } catch {
+                if case .mcp = request { mcpStatus = await mcpService.status() }
                 if let si = state.sessions.firstIndex(where: { $0.id == sessionID }),
                    let ai = state.sessions[si].toolActivities?.firstIndex(where: { $0.id == id }),
                    state.sessions[si].toolActivities?[ai].status == .running {
-                    state.sessions[si].toolActivities?[ai].status = error is CancellationError ? .cancelled : .failed
+                    state.sessions[si].toolActivities?[ai].status = (error is CancellationError || Task.isCancelled || (error as? ChatMCPError) == .cancelled) ? .cancelled : .failed
                     state.sessions[si].toolActivities?[ai].issue = String(error.localizedDescription.prefix(2048))
                     state.sessions[si].toolActivities?[ai].endedAt = Date(); changed()
                     try? await flush()
