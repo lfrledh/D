@@ -69,7 +69,7 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
             if let png = bitmap.representation(using: .png, properties: [:]) {
                 let name = chat.selectedSession?.title ?? "empty"
                 let output = URL(fileURLWithPath: directory, isDirectory: true)
-                    .appendingPathComponent(name.replacingOccurrences(of: "/", with: "_") + ".png")
+                    .appendingPathComponent(name.replacingOccurrences(of: "/", with: "_") + "-\(Int(width)).png")
                 do { try png.write(to: output, options: .withoutOverwriting) }
                 catch { Issue.record("Fixture image write failed: \(error)") }
             }
