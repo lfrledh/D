@@ -804,6 +804,9 @@ public final class ProjectSession {
             if restoredQuick.error != nil || !restoredQuick.state.drafts.isEmpty || !restoredQuick.state.runs.isEmpty
                 || restoredChat.error != nil || !restoredChat.state.sessions.isEmpty {
                 projectQuick = restoredQuick
+                // An existing named Quick workspace can begin its first chat.
+                // Retain the loaded owner; loading an absent sidecar does not write it.
+                chat = restoredChat
             }
         }
         lastDocuments = [:]
