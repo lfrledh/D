@@ -6,16 +6,17 @@
 
 用户已批准 F01–F36、S00–S06 同一批实施。唯一功能状态见 [聊天清单](CHAT_FEATURE_LEDGER.zh-CN.md)。先 S00 长流/停止、正常项目包选择和新候选/旧参数重现，再 S01 布局、S02 编辑与上下文、S03 资料/记忆/备份、S04 联网工具、S05 受限代码/MCP/成果/语音、S06 组合验收。可靠切片通过普通 App 门槛后正常接纳 main，不以整个专题完成为前提；不硬合失败长流。
 
-本轮核实候选 `40d51ee73f72eb54407e6eedbd693c9ba67068e4`、main `f31dced209855722d2f04cc0fc8c5f6712396120` 均干净且与远端一致。旧 inference-foundation 与个人 scheme 不动。A、H22、菜单、宏信任、HF 及自然视频本人结果复用；新存储和聊天宿主按影响另验。旧 B 失败和已耗预算保留；用户现明确批准这些已知缺陷继续收口，不再沿用旧停工排程，不伪造旧预算未使用。
+本轮起点核实候选 `40d51ee73f72eb54407e6eedbd693c9ba67068e4`、main `f31dced209855722d2f04cc0fc8c5f6712396120` 均干净且与远端一致。旧 inference-foundation 与个人 scheme 不动。A、H22、菜单、宏信任、HF 及自然视频本人结果复用；新存储和聊天宿主按影响另验。旧 B 失败和已耗预算保留；用户现明确批准这些已知缺陷继续收口，不再沿用旧停工排程，不伪造旧预算未使用。
 
-Lead 持有共享 Runtime/WorkflowServices/ChatController/Store；文件面板和纯展示在独立受限任务树实施。当前证据目录 RCP=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261003T115108Z-chat-product`。完整 Lead 成本与订阅费用 unknown。S00代码候选已完成CPU和正常签名构建，普通App门槛因锁屏待验；S01展示候选在定向修补，不接纳main。新存储/工具生产接线等待可靠接收边界；F01–F36范围不取消。
+Lead 持有共享 Runtime/WorkflowServices/ChatController/Store；文件面板和纯展示在独立受限任务树实施。当前证据目录 RCP=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261003T115108Z-chat-product`。完整 Lead 成本与订阅费用 unknown。S00代码候选已完成CPU和正常签名构建，普通App门槛因锁屏待验；S01独立布局候选的缩放焦点反例已修并通过hosting；普通App仍待验，未合入主候选或main。新存储/工具生产接线等待可靠接收边界；F01–F36范围不取消。
 
 ### 当前恢复检查点
 
 - S00 App/动作受测代码 `457cb9a04178f6a9f01a41bd84607119a158d5c7`；运行时与受影响消费者受测 `b8ae14c5d8f6e362c2d5646304abe8c4c429b284`，后续仅F07界面及冻结重现当前草稿门禁变更并定向复验。原有原生失败不追改。
 - main仍`f31dced209855722d2f04cc0fc8c5f6712396120`。S00独立包位于RCP/delivery/s00；代码、签名与启动器见RCP/lead/s00-packaged-app.json。这是验收候选，不替换已验A稳定入口。
-- 当前最小本人动作只有解锁Mac。H32收纳新门槛；H22、H31、H33与固定自然视频已办责任不重开。新App尚未启动，未执行新GPU；S01自有CLI状态以RCP/s01-view对应process.json为准，交回前Lead不写该树。
-- S01树为同级`D-CHAT-PRODUCT-VIEW`，不改Controller/Store。下一动作是完成局部修补、非实现者审核和CPU检查，解锁后补S00普通App长流、停止与列表选择；不越过此门槛先接新存储或工具。
+- 当前最小本人动作只有解锁Mac，已集中询问一次，没有状态变化不重试。H32收纳新门槛；H22、H31、H33与固定自然视频已办责任不重开。S00新App尚未启动，未执行新GPU；两个写Worker及所有本轮CPU/构建均已结束。
+- S01树为同级`D-CHAT-PRODUCT-VIEW`，分支`codex/s01-view-chat-product@3e86f12a184f12b6ec11c22494af92ebfe8f559a`，不改Controller/Store。初交+两修后Lead定点接管；原真实ChatWorkbench跨阈值反例先失败，调用栈及逐次状态确认瞬时hidden，合并检查器打开状态后18项CPU/hosting通过。显式关闭/重开不抢焦点；普通App、实际鼠标/组字与滚动仍未验，AttributeGraph诊断保留。这个候选没有进入S00包。
+- 下一动作：解锁后先验S00普通App长流、停止与项目列表；随后装配独立S01并验窄窗面板→预览/重命名→关闭及输入/滚动。合并时保留W的F07重现菜单/门禁，不能直接以VIEW旧基线覆盖。已验切片独立接纳，失败不硬合。S02–S06仍为同批批准工作，未进入生产接线；只读资料准备见原任务末节。
 - 旧源与个人scheme不动；不写普通App、原作品或权重。最终提交自身SHA留外部回执；恢复先核真实分支、索引、写入者和保护文件。
 
 ## 历史：先修可靠性，再加入最小聊天（2026-10-03，已被上述新授权替代）

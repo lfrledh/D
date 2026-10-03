@@ -609,3 +609,22 @@ RCP=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/
 过程失败保留：早期证据驱动参数键误用，一次包装退出但自有Swift检查完成，后以正确受控超时重跑同一反例；新UI测试曾误修改不可变node，已改为构造独立旧记录，未改产品保护。panel首次探针仅构造NSOpenPanel即遇XPC退出，未展示/越权，修复前已审核并禁止继续原生探针；S01报告ps被拒绝，未提权或重试，精确命令未取回，不补造无事故证明。详见RCP/lead/harness-setup-events.json、panel-first-review.json、view-review-before-repair.json。
 
 恢复：候选W与panel/view独立树保留；普通App、模型、旧项目及源个人scheme不动。S00独立启动器仅用于待验候选，不能标成稳定main。S01交回和审核完成后再装配；正常App门槛通过前不接纳main，不开始新存储/工具生产接线。完整F状态只维护CHAT_FEATURE_LEDGER，不归回发布后。Lead完整费用unknown，旧费用不重算。
+
+
+### CHAT-PRODUCT：S01定点接管、锁屏检查点（2026-10-03）
+
+S00没有新增实现变化：代码/App仍为`457cb9a04178f6a9f01a41bd84607119a158d5c7`，后续W提交仅记录。只读复核确认F07冻结重现仍经原WorkflowServices/请求校验，当前参数草稿不会篡改历史请求；普通break放弃InferenceRun仍须显式cancel，是已有契约，不宣称迭代器析构自动释放。已修A、H22、宏信任、账号和固定自然视频证据沿用。
+
+S01受限Sol/high初交、修复1、修复2分别679.58/661.15/548.879秒，均为各自进程墙钟，不含Lead、审核或订阅费用。最后Worker版本`3f0b51031048b8c913e921a29b1426a799e1afc2`；初交及两修未独立满足边界。Lead唯一有界接管保留`4101afcd…/86cf75f0…/9e780b81…`历史，最终独立候选 **`3e86f12a184f12b6ec11c22494af92ebfe8f559a`**，未合W/main，未打进S00 App。
+
+- 非实现者指出offset隐藏仍可输入、A→B→A迟到滚动缺票据；Lead使用本地NSHostingView真实可见状态、唯一访问票据，保留同一编辑器，无强制焦点/清组字。首次16项通过后新增真实ChatWorkbench缩放反例失败；不能用组件通过掩盖。
+- 普通NSTextView/NSWindow同宽度缩放通过，真实宿主1300→1290保焦点，→1273失焦点。仅在测试窗口override makeFirstResponder取栈；短暂局部状态输出确认visible true→false→true，settled时看起来仍显示。第一次“只避免重复setter”仍失败，旧日志保留，撤回重复false是根因的判断。
+- 最小修补去掉检查器第二份打开状态，resize只决定inline/overlay；显式关闭仍真正hide，重开不抢焦点。sidebar宽窗重开同步已展示标记。非实现者又指出窄pane→详情仅清queue而未关实际pane，present统一先closeNarrowPanel再开详情，inline不关闭。只改本任务两文件，未改旧输入组件、Store、模型或数值。
+- 最终`RCP/lead/s01-view-final-result.json`：exit0/9.732秒，18方法/1suite；包含真实host marked text、原生普通控件对照、显式隐藏/重开、滚动票据、空态/长Markdown/部分失败/流式/附件/窄窗。运行时HEAD为9e780b81+已记录差异，随后3e86f12a提交完全同一内容，文件SHA对应见s01-final-submission.json。未声称在提交生成后重跑；旧失败日志不删除。
+- 临时诊断输出/trace已移除，证据留`s01-focus-stack.log`、`s01-visibility-trace.log`、`s01-visibility-fix-result.json`；全套通过中仍有AttributeGraph cycle，未解释，不隐藏。离屏渲染PNG不适于视觉判定，不作为真实界面截图或美观通过。窄pane预览/重命名、真实鼠标/滚动/组字均待普通App。
+
+来源为“Sol初步布局＋两轮修复，Lead定点接管，非实现者只读复核”；Lead同时实现与执行验证，不冒称独立模型运行过测试。未新建Worker轮数或重置旧预算；之后实测发现需按新反例继续定位，不反复同因盲试。
+
+**后续只读准备，尚未接线：** F12复用已固定swift-jinja 2.3.2 AST与transformers 1.1.8 per-call literal模板；未知变量默认空的行为需显式作用域校验，不修改模型目录。F20/21现TextSourceReader仅TXT/MD UTF8≤512KiB，版本/来源和Store可复用，PDF/DOCX/检索/备份新数据尚无实现。F26候选SearXNG JSON+Mozilla Readability（需DOM，不仅JSC）；F27用明确Swift运算/Foundation/TabularData；F28候选CPython WASI+Wasmtime实际预开放目录/fuel/内存限制，未安装或证明隔离，无裸Python回退；F29官方MCP Swift SDK，未固定依赖或接服务，roots/注释不作权限。官方来源及适配差异见RCP/lead/future-source-preparation.json。这里不是把未实施功能记完成，也不增加新平台。
+
+**恢复：** H32已询问解锁一次，未收到新状态，未重试GUI；S00本轮未启动、无GPU生成。所有本轮Worker/CPU/build结束；当前保护结果及最终W SHA在RCP/lead/chat-product-checkpoint.json。解锁后先S00普通App真实长回答/停止/项目列表→独立接纳；再组合S01并保留F07 W改动，继续S02–S06。新存储/工具生产接线等待可靠接收边界，整个F01–F36仍是同批批准范围。main不变，不称专题完成、功能冻结或发行。
