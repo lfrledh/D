@@ -150,7 +150,9 @@ struct ChatPaneHost<Content: View>: NSViewRepresentable {
     }
     func updateNSView(_ host: NSHostingView<Content>, context: Context) {
         host.rootView = content
-        host.isHidden = !visible
+        // Only an actual close/open changes native visibility. Hiding can release
+        // the first responder; a layout change must not transiently hide an editor.
+        if host.isHidden != !visible { host.isHidden = !visible }
     }
     func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSHostingView<Content>, context: Context) -> CGSize? {
         .init(width: proposal.width ?? 240, height: proposal.height ?? 640)
@@ -192,7 +194,6 @@ struct ChatWorkbenchView: View {
     @State private var showSidebar = true
     @State private var showInspector = false
     @State private var sidebarWasPresented = false
-    @State private var inspectorWasPresented = false
     @State private var inspectorTab: ChatInspectorTab = .data
     @State private var sheets = ChatSheetQueue<ChatDetail>()
     @State private var followsBottom = true
@@ -267,7 +268,7 @@ struct ChatWorkbenchView: View {
             // An already open pane remains visible as an overlay while the width
             // changes. Do not briefly hide its native editor before onChange runs.
             let sidebarVisible = showSidebar && (sidebarInline || sidebarWasPresented || sheets.narrowPanel == .sessions)
-            let inspectorVisible = showInspector && (inspectorInline || inspectorWasPresented || sheets.narrowPanel == .inspector)
+            let inspectorVisible = showInspector
             let sidebarPaneWidth = min(ChatPresentationLayout.sidebarWidth, geometry.size.width)
             let inspectorPaneWidth = min(ChatPresentationLayout.inspectorWidth, geometry.size.width)
             ZStack(alignment: .topLeading) {
@@ -318,11 +319,9 @@ struct ChatWorkbenchView: View {
             .coordinateSpace(name: ChatLayoutSpace.name)
             .onAppear {
                 sidebarWasPresented = sidebarVisible
-                inspectorWasPresented = inspectorVisible
             }
             .onChange(of: geometry.size.width) { oldWidth, width in
                 if sidebarShown { sidebarWasPresented = true }
-                if inspectorShown { inspectorWasPresented = true }
                 if let narrowPanel = sheets.narrowPanel, ChatPresentationLayout.dismissesNarrowPanel(narrowPanel,
                     width: width, sidebarRequested: showSidebar, inspectorRequested: showInspector) {
                     closeNarrowPanel(keepPreference: true)
@@ -371,13 +370,15 @@ struct ChatWorkbenchView: View {
                     showSidebar = true
                     sidebarWasPresented = true
                     sheets.openNarrow(.sessions)
-                } else { showSidebar.toggle() }
+                } else {
+                    showSidebar.toggle()
+                    if showSidebar { sidebarWasPresented = true }
+                }
             } label: { Label(label("history", "对话"), systemImage: "sidebar.left") }
                 .accessibilityIdentifier("chat-sessions-toggle")
             Button {
                 if !ChatPresentationLayout.showsInspector(width: width, requested: true, sidebar: sidebarShown) {
                     showInspector = true
-                    inspectorWasPresented = true
                     sheets.openNarrow(.inspector)
                 }
                 else { showInspector.toggle() }
@@ -1018,9 +1019,10 @@ struct ChatWorkbenchView: View {
     }
 
     private func present(_ item: ChatDetail) {
+        // Close the actual narrow pane as well as its presentation state before
+        // replacing it with a detail sheet. Inline panes remain in place.
+        if sheets.narrowPanel != nil { closeNarrowPanel() }
         sheets.present(item)
-        // Narrow panes are overlays, so there is no AppKit sheet dismissal to await.
-        if sheets.narrowPanel == nil { sheets.didDismissNarrowPanel() }
     }
 
     private func closeNarrowPanel(keepPreference: Bool = false) {

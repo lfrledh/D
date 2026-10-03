@@ -424,15 +424,11 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
         #expect(window.makeFirstResponder(editor))
         editor.setMarkedText("pinyin", selectedRange: .init(location: 6, length: 0),
                              replacementRange: .init(location: NSNotFound, length: 0))
-        print("CHAT_FOCUS before-resize", editor.hasMarkedText(), window.firstResponder === editor,
-              String(describing: window.firstResponder), editor.isHiddenOrHasHiddenAncestor)
-        for width: CGFloat in [1273, 1000, 1300] {
+        for width: CGFloat in [1290, 1273, 1000, 1300] {
             window.setContentSize(.init(width: width, height: 700))
             settle()
             #expect(descendants(host).contains { $0 === editor })
             #expect(!editor.isHiddenOrHasHiddenAncestor)
-            print("CHAT_FOCUS width", width, editor.hasMarkedText(), window.firstResponder === editor,
-                  String(describing: window.firstResponder), editor.isHiddenOrHasHiddenAncestor)
             #expect(editor.hasMarkedText() && window.firstResponder === editor)
         }
         try await close(store, root: root)
@@ -451,7 +447,6 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
             window.setContentSize(.init(width: width, height: 700))
             window.contentView?.layoutSubtreeIfNeeded()
             RunLoop.main.run(until: Date().addingTimeInterval(0.05))
-            print("CHAT_FOCUS native-control", width, editor.hasMarkedText(), window.firstResponder === editor)
             #expect(editor.hasMarkedText() && window.firstResponder === editor)
         }
     }
