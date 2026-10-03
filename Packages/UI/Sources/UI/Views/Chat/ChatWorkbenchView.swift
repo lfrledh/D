@@ -125,9 +125,46 @@ private struct ChatSessionScrollState {
 private enum ChatLayoutSpace { static let name = "chat-presentation-layout" }
 
 private extension View {
+    @ViewBuilder
     func chatMeasured(_ id: String, probe: ((String, CGRect) -> Void)?) -> some View {
-        onGeometryChange(for: CGRect.self) { $0.frame(in: .named(ChatLayoutSpace.name)) }
-            action: { probe?(id, $0) }
+        if let probe {
+            onGeometryChange(for: CGRect.self) { $0.frame(in: .named(ChatLayoutSpace.name)) }
+                action: { probe(id, $0) }
+        } else { self }
+    }
+}
+
+/// AppKit hiding retains the pane's editor identity while removing hidden views
+/// from input and key-view navigation. Resizing an open pane never hides it.
+struct ChatPaneHost<Content: View>: NSViewRepresentable {
+    let content: Content
+    let visible: Bool
+    let identifier: String
+
+    func makeNSView(context: Context) -> NSHostingView<Content> {
+        let host = NSHostingView(rootView: content)
+        host.sizingOptions = []
+        host.setAccessibilityIdentifier(identifier)
+        host.isHidden = !visible
+        return host
+    }
+    func updateNSView(_ host: NSHostingView<Content>, context: Context) {
+        host.rootView = content
+        host.isHidden = !visible
+    }
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSHostingView<Content>, context: Context) -> CGSize? {
+        .init(width: proposal.width ?? 240, height: proposal.height ?? 640)
+    }
+}
+
+struct ChatScrollRestoration: Equatable {
+    let ticket = UUID()
+    let sessionID: UUID
+    let followsBottom: Bool
+    let anchor: UUID?
+
+    func isCurrent(sessionID: UUID?, pending: Self?) -> Bool {
+        sessionID == self.sessionID && pending?.ticket == ticket
     }
 }
 
@@ -160,7 +197,7 @@ struct ChatWorkbenchView: View {
     @State private var hasNewContent = false
     @State private var scrollStates: [UUID: ChatSessionScrollState] = [:]
     @State private var visibleMessageID: UUID?
-    @State private var restoringScrollFor: UUID?
+    @State private var scrollRestoration: ChatScrollRestoration?
     @State private var issues: [UUID: String] = [:]
     @State private var globalIssue: String?
     @State private var newPresetName = ""
@@ -223,6 +260,8 @@ struct ChatWorkbenchView: View {
                 requested: showInspector, sidebar: sidebarShown)
             let inspectorInline = inspectorShown && sheets.narrowPanel != .inspector
             let sidebarInline = sidebarShown && sheets.narrowPanel != .sessions
+            let sidebarVisible = sidebarInline || sheets.narrowPanel == .sessions
+            let inspectorVisible = inspectorInline || sheets.narrowPanel == .inspector
             let sidebarPaneWidth = min(ChatPresentationLayout.sidebarWidth, geometry.size.width)
             let inspectorPaneWidth = min(ChatPresentationLayout.inspectorWidth, geometry.size.width)
             ZStack(alignment: .topLeading) {
@@ -247,26 +286,26 @@ struct ChatWorkbenchView: View {
                         .onTapGesture { closeNarrowPanel() }
                         .accessibilityHidden(true)
                 }
-                sidebar
+                ChatPaneHost(content: sidebar.background(.background).disabled(!sidebarVisible)
+                    .environment(\.dLanguageStore, language), visible: sidebarVisible,
+                    identifier: "chat-sessions-host")
                     .frame(width: sidebarPaneWidth)
                     .frame(maxHeight: .infinity)
-                    .background(.background)
                     .overlay(alignment: .trailing) { if sidebarInline { Divider() } }
-                    .offset(x: sidebarInline || sheets.narrowPanel == .sessions ? 0 : -sidebarPaneWidth - 2)
-                    .allowsHitTesting(sidebarInline || sheets.narrowPanel == .sessions)
-                    .accessibilityHidden(!(sidebarInline || sheets.narrowPanel == .sessions))
+                    .allowsHitTesting(sidebarVisible)
+                    .accessibilityHidden(!sidebarVisible)
                     .chatMeasured("sessions-pane", probe: layoutProbe)
                 if let session {
-                    inspector(session)
+                    ChatPaneHost(content: inspector(session).background(.background).disabled(!inspectorVisible)
+                        .environment(\.dLanguageStore, language), visible: inspectorVisible,
+                        identifier: "chat-inspector-host")
                         .frame(width: inspectorPaneWidth)
                         .frame(maxHeight: .infinity)
-                        .background(.background)
                         .overlay(alignment: .leading) { if inspectorInline { Divider() } }
                         .chatMeasured("inspector-pane", probe: layoutProbe)
-                        .allowsHitTesting(inspectorInline || sheets.narrowPanel == .inspector)
-                        .accessibilityHidden(!(inspectorInline || sheets.narrowPanel == .inspector))
+                        .allowsHitTesting(inspectorVisible)
+                        .accessibilityHidden(!inspectorVisible)
                         .frame(maxWidth: .infinity, alignment: .trailing)
-                        .offset(x: inspectorInline || sheets.narrowPanel == .inspector ? 0 : inspectorPaneWidth + 2)
                 }
             }
             .clipped()
@@ -274,7 +313,7 @@ struct ChatWorkbenchView: View {
             .onChange(of: geometry.size.width) { oldWidth, width in
                 if let narrowPanel = sheets.narrowPanel, ChatPresentationLayout.dismissesNarrowPanel(narrowPanel,
                     width: width, sidebarRequested: showSidebar, inspectorRequested: showInspector) {
-                    closeNarrowPanel()
+                    closeNarrowPanel(keepPreference: true)
                 } else if sheets.narrowPanel == nil {
                     let oldSidebar = ChatPresentationLayout.showsSidebar(width: oldWidth, requested: showSidebar)
                     let newSidebar = ChatPresentationLayout.showsSidebar(width: width, requested: showSidebar)
@@ -471,20 +510,20 @@ struct ChatWorkbenchView: View {
                         distanceToBottom: geometry.contentSize.height - geometry.contentOffset.y - geometry.containerSize.height)
                 } action: { previous, current in
                     guard chat.state.selectedSessionID == session.id,
-                          restoringScrollFor != session.id else { return }
+                          scrollRestoration?.sessionID != session.id else { return }
                     followsBottom = ChatScrollPosition.followsBottom(previous: previous, current: current,
                         wasFollowing: followsBottom)
                     if followsBottom { hasNewContent = false }
                     saveScrollState(for: session.id)
                 }
                 .onChange(of: visibleMessageID) { _, _ in
-                    if chat.state.selectedSessionID == session.id, restoringScrollFor != session.id {
+                    if chat.state.selectedSessionID == session.id, scrollRestoration?.sessionID != session.id {
                         saveScrollState(for: session.id)
                     }
                 }
                 .onChange(of: transcriptRevision(session)) { previous, _ in
                     guard previous.hasPrefix(session.id.uuidString + ":"),
-                          restoringScrollFor != session.id else { return }
+                          scrollRestoration?.sessionID != session.id else { return }
                     if followsBottom {
                         proxy.scrollTo("chat-bottom", anchor: .bottom)
                     } else {
@@ -498,12 +537,16 @@ struct ChatWorkbenchView: View {
                     followsBottom = restored?.followsBottom ?? true
                     hasNewContent = restored?.hasNewContent ?? false
                     visibleMessageID = restored?.anchor
-                    restoringScrollFor = newID
+                    let restore = ChatScrollRestoration(sessionID: newID,
+                        followsBottom: followsBottom, anchor: restored?.anchor)
+                    scrollRestoration = restore
                     Task { @MainActor in
                         await Task.yield()
-                        if followsBottom { proxy.scrollTo("chat-bottom", anchor: .bottom) }
-                        else if let anchor = restored?.anchor { proxy.scrollTo(anchor, anchor: .top) }
-                        restoringScrollFor = nil
+                        guard restore.isCurrent(sessionID: chat.state.selectedSessionID,
+                                                pending: scrollRestoration) else { return }
+                        if restore.followsBottom { proxy.scrollTo("chat-bottom", anchor: .bottom) }
+                        else if let anchor = restore.anchor { proxy.scrollTo(anchor, anchor: .top) }
+                        scrollRestoration = nil
                     }
                 }
                 .onAppear {
@@ -965,7 +1008,14 @@ struct ChatWorkbenchView: View {
         if sheets.narrowPanel == nil { sheets.didDismissNarrowPanel() }
     }
 
-    private func closeNarrowPanel() {
+    private func closeNarrowPanel(keepPreference: Bool = false) {
+        if !keepPreference {
+            switch sheets.narrowPanel {
+            case .sessions: showSidebar = false
+            case .inspector: showInspector = false
+            case nil: break
+            }
+        }
         sheets.narrowPanel = nil
         sheets.didDismissNarrowPanel()
     }

@@ -50,7 +50,8 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
         ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory(), isDirectory: true)
 
     private func renderFixture(_ chat: ChatController, model: WorkbenchModel, width: CGFloat,
-                               inspector: Bool = false, scrolledUp: Bool = false) -> [String: CGRect] {
+                               inspector: Bool = false, scrolledUp: Bool = false,
+                               inspect: (NSView) -> Void = { _ in }) -> [String: CGRect] {
         var rectangles: [String: CGRect] = [:]
         let view = ChatWorkbenchView(chat: chat, model: model, onChooseModel: {},
             onSavedAsset: { _ in }, onAssetsChanged: {}, initialInspectorVisible: inspector,
@@ -61,7 +62,23 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
         host.layoutSubtreeIfNeeded()
         RunLoop.main.run(until: Date().addingTimeInterval(0.05))
         host.layoutSubtreeIfNeeded()
+        inspect(host)
+        if let directory = ProcessInfo.processInfo.environment["D_CHAT_PRESENTATION_EVIDENCE"],
+           let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds) {
+            host.cacheDisplay(in: host.bounds, to: bitmap)
+            if let png = bitmap.representation(using: .png, properties: [:]) {
+                let name = chat.selectedSession?.title ?? "empty"
+                let output = URL(fileURLWithPath: directory, isDirectory: true)
+                    .appendingPathComponent(name.replacingOccurrences(of: "/", with: "_") + ".png")
+                do { try png.write(to: output, options: .withoutOverwriting) }
+                catch { Issue.record("Fixture image write failed: \(error)") }
+            }
+        }
         return rectangles
+    }
+
+    private func descendants(_ root: NSView) -> [NSView] {
+        [root] + root.subviews.flatMap(descendants)
     }
 
     private func horizontallyInside(_ rectangle: CGRect?, width: CGFloat) -> Bool {
@@ -207,10 +224,12 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
         let (chat, model, store, root) = try await fixture(state)
         #expect(chat.selectedSession?.attempts.first?.issue == "保存失败；回答仍保留")
         #expect(chat.selectedSession?.messages.count == 3)
-        let layout = renderFixture(chat, model: model, width: 320)
+        let layout = renderFixture(chat, model: model, width: 320) { host in
+            let pane = descendants(host).first { $0.accessibilityIdentifier() == "chat-sessions-host" }
+            #expect(pane != nil && pane?.isHiddenOrHasHiddenAncestor == true)
+        }
         #expect(horizontallyInside(layout["transcript"], width: 320))
         #expect(horizontallyInside(layout["composer"], width: 320))
-        #expect(layout["sessions-pane"]?.maxX ?? 0 < 0)
         #expect(layout["attempt-issue-\(session.attempts[0].id.uuidString)"] != nil)
         #expect(layout["branch-menu-\(session.messages[0].id.uuidString)"] != nil)
         #expect(ChatPresentationText.branchSummary(sibling, you: "你", assistant: "助手") == "修改后的提问")
@@ -367,6 +386,56 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
         let returnedToBottom = ChatScrollPosition(offset: 1_250, distanceToBottom: 0)
         #expect(ChatScrollPosition.followsBottom(previous: grewAgain, current: returnedToBottom,
             wasFollowing: false))
+    }
+
+    @Test func delayedRestoreCannotApplyToAnotherVisitToSameSession() {
+        let a = UUID(), b = UUID(), anchor = UUID()
+        let first = ChatScrollRestoration(sessionID: a, followsBottom: false, anchor: anchor)
+        let other = ChatScrollRestoration(sessionID: b, followsBottom: true, anchor: nil)
+        let returnVisit = ChatScrollRestoration(sessionID: a, followsBottom: false, anchor: UUID())
+        #expect(first.isCurrent(sessionID: a, pending: first))
+        #expect(!first.isCurrent(sessionID: b, pending: other))
+        #expect(!first.isCurrent(sessionID: a, pending: returnVisit))
+        #expect(!first.isCurrent(sessionID: a, pending: nil))
+        #expect(first.anchor == anchor && !first.followsBottom)
+    }
+
+    @Test func paneResizeKeepsNativeEditorAndExplicitHidingReleasesInput() throws {
+        func pane(_ visible: Bool) -> some View {
+            ChatPaneHost(content: TextSourcesQuestionEditor(value: "", editEpoch: 0,
+                isEditable: true, accessibilityIdentifier: "pane-editor", onEdit: { _ in }),
+                visible: visible, identifier: "pane-host")
+        }
+        let host = NSHostingView(rootView: pane(true))
+        host.frame = .init(x: 0, y: 0, width: 320, height: 300)
+        let window = NSWindow(contentRect: host.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = host
+        defer { window.close() }
+        func settle() {
+            host.layoutSubtreeIfNeeded()
+            RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+            host.layoutSubtreeIfNeeded()
+        }
+        settle()
+        let editor = try #require(descendants(host).compactMap { $0 as? NSTextView }.first)
+        #expect(window.makeFirstResponder(editor))
+        editor.setMarkedText("pinyin", selectedRange: .init(location: 6, length: 0),
+                             replacementRange: .init(location: NSNotFound, length: 0))
+        host.frame.size.width = 240
+        host.rootView = pane(true)
+        settle()
+        #expect(descendants(host).contains { $0 === editor })
+        #expect(editor.hasMarkedText() && window.firstResponder === editor)
+        host.rootView = pane(false)
+        settle()
+        #expect(editor.isHiddenOrHasHiddenAncestor)
+        #expect(window.firstResponder !== editor)
+        host.rootView = pane(true)
+        settle()
+        #expect(descendants(host).contains { $0 === editor })
+        #expect(!editor.isHiddenOrHasHiddenAncestor)
+        #expect(window.firstResponder !== editor)
     }
 
     @Test func branchesUseReadableTextAndEmptyFallback() {
