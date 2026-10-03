@@ -20,9 +20,15 @@ The node workbench is implemented. This repository is an active development base
 | Images | FLUX.2-klein-4B and FLUX.2-dev: text-to-image generation and ordered reference images. Original precision and separately identified quantized profiles are not interchangeable. |
 | Video | Wan2.1-T2V-1.3B (text to silent video); LTX-2.5 dev single-stage (text / first frame to audiovisual video); MiniMax H3 Base FL2VA (text / first and last frame to audiovisual video). This is not every mode of each model family. |
 | Music | MRT2 small/export-v1 with actual note/chord conditions; ACE-Step 1.5 XL SFT F32/no-LM generation, lyrics/reference, cover and repaint. Music control is approximate, not guaranteed score fidelity. |
-| Resources | Explicit model download/import, preparation and validation, shared installation leases, cancellation and asset provenance. Explicit external references or independent copies, known-location inspection/recovery, project media collection and manual backup/independent restore are implemented. The location inspector can be opened directly without loading a missing original. Verification records are scoped to the selected asset; normal-App file-panel acceptance is still incomplete. |
+| Resources | Explicit model download/import, preparation and validation, shared installation leases, cancellation and asset provenance. Explicit external references or independent copies, known-location inspection/recovery, project media collection and manual backup/independent restore are implemented. The location inspector can be opened directly without loading a missing original. Verification records are scoped to the selected asset; native registration, external-reference recovery, collection and cold reopening have been exercised on small fixtures. Manual backup currently fails in the ordinary sandboxed App; independent native restore remains unverified. |
 
 The [model capability matrix](docs/RELEASE_MODEL_MATRIX.zh-CN.md) records exact profiles, revisions and tested modes. Full representative original-precision requests have run using SSD layering for Dev, H3 and LTX, with cancellation and real artifact storage checks. This does not establish every parameter combination, large-memory resident mode or current App interaction.
+
+### Native preview
+
+![Native Quick preview](docs/images/native-quick-20261003.png)
+
+Actual native App, code `35f373a`, captured on 2026-10-03 with a synthetic prompt and isolated preferences. This cold-start screenshot honestly shows preparation status awaiting verification; it is not a generated mockup or evidence of a new model run.
 
 ### Requirements and development build
 
@@ -66,11 +72,11 @@ Add `--offline` only when the required dependencies are already cached. It does 
 
 ### Known limitations and next work
 
-- IME candidate positioning and mouse-cursor reversion remain under targeted diagnosis. Input selection has passed previous human checks; that does not close positioning defects.
+- The current Quick input fix has passed the owner's native retest: composition works and the cursor no longer reverts. Candidate-window non-following was compared with Finder and accepted as the current system behavior; this is not a guarantee for every macOS/input method.
 - Current App acceptance is incomplete. Two offscreen hosting tests did not reach their intended controls; their failures remain recorded.
-- The LTX synthetic first-frame sample retains a planar red region. Its cause and general control quality are not settled. Short H3 samples do not establish long-video quality.
-- The Quick/Canvas file-location routing gap has been patched, along with selected-file verification, known-use navigation and timestamps. These changes still need the complete native recovery/backup walkthrough; compiled and component-tested does not mean user acceptance.
-- The new file-management panels are compiled but await native acceptance. Default browsing checks metadata rather than rehashing media; an explicit content check does read the file. Backups exclude models by default, restore to a new project instance, and do not include device authorization. Real NAS behavior remains untested; there is no cloud synchronization or concurrent multi-Mac library writing.
+- The LTX samples are near-silent, and the synthetic first-frame sample retains a planar red region. Its cause and general control quality are not settled. The owner accepted the short H3 text sample; natural-scene first/last-frame continuity and long-video quality remain unverified.
+- Native checks passed for MRT2 registration by reference and independent copy, Quick missing-file recovery while a separate Canvas project exists, copying into the project and cold reopening. Idle model-library snapshots no longer continually reset native menus; the owner confirmed the repaired menu.
+- Manual backup failed with an I/O error after the native Save panel; the source draft was saved and survived reopening, but no backup was published. The existing backup implementation assumes access to a sibling staging directory; the exact failing syscall still needs confirmation. Do not rely on this App for backups yet. Independent native restore, real NAS and the remaining drag/port matrix are not accepted. Cold-start model readiness is also retained as a separate observation, not claimed ready from registration alone.
 - Clean-machine setup, dependency packaging, upgrades/recovery and distribution checks remain. The intended distributed App does not bundle model weights; the current internal Pitch development engine still includes an evaluation ONNX weight and is **not** a distribution package.
 
 Models are acquired explicitly by the user; their terms and sources are separate from D's code. No new model family, training system, remote service or mobile client is part of the current closeout.
@@ -101,9 +107,15 @@ D 是 Apple Silicon Mac 上的原生多模态 AI 工作台。**快速生成**用
 | 图像 | FLUX.2-klein-4B、FLUX.2-dev：文生图与有序参考图。原始精度和单独标识的量化profile不能混为同一验证结果。 |
 | 视频 | Wan2.1-T2V-1.3B：文字生成无声视频；LTX-2.5 dev单阶段：文字／首帧生成音视频；MiniMax H3 Base FL2VA：文字／首尾帧生成音视频。不代表每个模型家族的全部模式。 |
 | 音乐 | MRT2 small/export-v1实际读取音符／和弦条件；ACE-Step 1.5 XL SFT F32/no-LM支持生成、歌词／参考、cover和repaint。音乐控制是近似的，不保证精确服从乐谱。 |
-| 资源 | 显式下载／导入、准备校验、共享安装使用权、取消与资产来源记录。已实现显式原位引用／独立副本、已知位置查看与恢复、项目媒体收纳、手动备份和独立恢复。位置页可以直接打开，不依赖失联原件预览；核对记录限定在所选素材。普通App的文件面板验收仍未完成。 |
+| 资源 | 显式下载／导入、准备校验、共享安装使用权、取消与资产来源记录。已实现显式原位引用／独立副本、已知位置查看与恢复、项目媒体收纳、手动备份和独立恢复。位置页可以直接打开，不依赖失联原件预览；核对记录限定在所选素材。小夹具已完成原生登记、外部引用恢复、收纳及冷重开；普通沙盒App的手动备份目前失败，原生独立恢复未验。 |
 
 [模型能力矩阵](docs/RELEASE_MODEL_MATRIX.zh-CN.md)列出精确profile、revision及实测模式。Dev、H3和LTX已经通过SSD分层加载完成原始精度的完整代表请求及取消、真实产物存储检查；这不证明所有参数组合、大内存整模型常驻模式或当前App交互均通过。
+
+### 原生界面预览
+
+![原生快速生成预览](docs/images/native-quick-20261003.png)
+
+2026-10-03实际原生App截图，代码`35f373a`，仅合成提示词与隔离偏好。冷启动截图中的“准备状态待核验”保留真实状态；不是设计稿，也不代表新一轮模型生成通过。
 
 ### 环境与开发构建
 
@@ -147,11 +159,11 @@ D_DEVELOPMENT_ROOT=/absolute/path/build-output ./scripts/build-local.sh
 
 ### 已知限制与接下来的工作
 
-- 输入法候选窗位置和鼠标指针回退仍在定向定位。历史真人检查中选字正常，不表示定位问题已关闭。
+- 当前Quick输入修补已通过本人原生复验：组字可用、鼠标不再闪回。候选窗不随动与本人对照的Finder表现一致，已接受为当前系统行为，不推广为所有macOS／输入法的保证。
 - 当前App原生验收未完成；两项离屏hosting测试未触达目标控件，失败记录保留。
-- LTX合成首帧样本的平面红色区域持续存在，原因和通用控制质量未确定；H3短样本不证明长视频质量。
-- Quick／Canvas文件位置归属已修补，新增单项核对、已知使用关系与时间展示。完整原生恢复／备份操作仍待验收，不能由编译和组件通过推定用户操作通过。
-- 新文件管理面板已编译，原生操作仍待验收。默认浏览核对元信息，不重复散列媒体；显式核对内容会读取媒体文件。备份默认不含模型，恢复为独立项目实例，不复制设备授权；真实NAS未测，没有云同步或多台Mac并发写同一库。
+- LTX样本近静音，合成首帧样本的平面红色区域持续存在，原因和通用控制质量未确定。本人认可H3短文生样本；自然场景首尾帧连续性与长视频质量仍未验证。
+- 原生已验MRT2原位登记／独立复制，独立Canvas存在时Quick失联素材的直接定位、收纳及冷重开。模型库空闲快照不再持续重置原生菜单，本人已确认菜单修补有效。
+- 手动备份在原生保存面板后返回I/O错误；源草稿已保存且重开保留，但没有发布备份。现有备份实现假设可写目标旁的临时目录，具体失败系统调用尚待确认。暂勿依赖本App备份。原生独立恢复、真实NAS及剩余拖放／端口矩阵未接纳；模型冷启动就绪状态也单列观察，不由已登记推定就绪。
 - 干净机器首次使用、依赖封装、升级恢复及发行验证仍有缺口。最终分发App的目标是不附模型权重；当前内部Pitch开发引擎仍含评估ONNX权重，**不是发行包**。
 
 模型由用户显式获取，其条款与来源和D源码分别记录。本轮收尾不增加模型家族、训练系统、远程服务或移动端。

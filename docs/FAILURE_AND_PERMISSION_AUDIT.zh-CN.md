@@ -4,9 +4,10 @@
 
 本轮仍为D-RELEASE-FREEZE-01 / D-DISCUSSION-FREEZE-20261002。RN=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261002T160047Z-native-closeout`。当前唯一入口和同树Xcode见[试用指南](RELEASE_FREEZE_TRY.zh-CN.md)。下方原日期的“当前”“下一次”等表述均为历史快照，以本节为当前队列。
 
-1. **H22：需要一次实体键盘组字及实际指针观察**。本轮桌面曾可用，CUA单独按键未形成marked text/自然firstRect，不能把直接插入当IME组字。活动client/context一致，cursor调用已符号化到NSHostingView.cursorUpdate，但未识别错误形状覆盖者；A候选位置/B指针仍未修，C组字消失未在D复现。用户方便时，在同版隔离诊断的Quick字段建立真正候选，保持未确认文字移动窗口一次，观察mouse-up后位置与指针；不用重复登录或授权。不强制光标/抢焦点/清组字。
-2. **H32：只需桌面解锁，以下可由Lead独立完成**。新正常包连接时工具再次明确Mac locked，见RN/gui/native-after-blocked.json。待状态改变后，用同一包完成模型含附加文件的引用/复制与Quick/Canvas就绪、失联Quick素材在另有命名Canvas时的直接位置恢复/收纳/重开、未保存草稿备份及独立恢复；补既有hosting替代和相关原生入口。无需本人重复操作整套工程。README真实脱敏截图同受锁屏阻塞；不使用虚构或旧界面冒充当前。
-3. **已有视频质量**：前轮`run-20261002T062206Z-discussion/quality/先看这里.md`列四份完整LTX/H3 MP4及请求，用户方便时查看/试听原件。LTX平面红区域和H3合成尾帧跳变原因未定；不重新随机生成。本人声音/质量判断不能由解码、看帧或旧ACE试听替代。
+1. **H22：2026-10-03本人复验通过，关闭**。修补版`9baaacbc74855aaa84fa03868e62a1676d882250`，本人确认鼠标不再闪回；此前不能确认拼音的问题已解除。候选窗未随窗口移动，但本人对照Finder等苹果应用后确认表现一致，明确接受为当前系统默认行为。本项不再要求重复组字或跟随修补；这不是所有系统版本的普遍保证，未来若出现丢字、无法选字或与系统对照不同的新反例，再单独登记。旧ON/OFF失败、revision导致marked消失、UI5/Quick19及非实现者审核保留。RH=`D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261003T015601Z-human-closeout`，本人证据`gui/h22-final-human.json`。参考正文/单行/Canvas未因该局部补丁改写，不将此次通过扩大为所有输入控件全面测试。
+2. **H32：2026-10-03原生部分通过，剩余为工程项**。35f373普通App的模型嵌套菜单由本人确认可操作；MRT2原位登记/独立复制（6必要文件摘要一致、原件保留）和Quick/Canvas当时就绪通过。Quick失联PNG在独立Canvas存在时直接恢复、同内容定位、Finder显示、复制入项目与冷重开通过。Canvas未保存草稿在备份预检保存并可重开；**原生手动备份报I/O错误，未发布备份，独立恢复未验**。现有target授权与parent兄弟stage实现冲突是源码风险，具体syscall尚未确认；不得要求本人扩大权限解决。冷启MRT2仍待核验，现有完整资料库sheet才触发显式检查，非菜单修补引入。两项旧hosting失败和剩余拖放/端口矩阵仍保留。当前无需本人重做这些工程检查或再确认MRT2资格。证据RH/gui与RH/lead，摘要在原任务记录。
+3. **已有视频质量：本人已看，问题转为工程跟进**。同四个旧MP4：本人反馈LTX两段无声、首帧红块持续，H3文生正常、首尾条件太抽象难判尾跳，要求自然场景。只读PCM核对LTX-text约−61.70dBFS RMS、first-frame约−96.21dBFS，不能用AAC存在宣称声音正常；D wrapper/发布未overlay，红块已在上游candidate。原因与自然首尾复验仍未完成。上游条件参数第四值33是H264 CRF，不是叠加33帧；不再以此解释红块。证据RH/gui/video-human-review.json、RH/lead/video-quality-analysis.json、RH/lead/ltx-quality-source-followup.json；不重复旧样本人工询问。
+4. **用完关闭测试窗口**：本轮最终35f测试进程67978及冷重开68398均正常Cmd+Q结束，自有Finder窗口已关闭；旧重复启动事故和旧实例终态保留于RH。工具明确禁止控制Terminal，未绕过该限制，无法确认启动器终端是否仍开着。若有“启动集中验收.command”已完成窗口，本人可关闭；其他终端不动。不把关闭窗口当删除证据。
 
 **工程与授权区分**：用户本次已明确批准F1–F3有限续修；旧FILES-UI耗尽预算和历史失败仍保留。新入口、单项核对和展示已修，CPU/原生结果以[当前行动](CURRENT_ACTIONS.zh-CN.md)和任务记录为准，不能再要求用户通过登录/权限解决代码问题。H31、麦克风、断网、Xcode设置均不重开。再次锁屏仅阻塞桌面相关检查，不暂停安全代码/文档/main收口；没有状态变化不重复尝试或催问。
 

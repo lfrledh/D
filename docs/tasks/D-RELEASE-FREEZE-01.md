@@ -438,3 +438,35 @@ RH=`D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261003T015601Z-human-clo
 Lead启动一次有界H22局部修补；允许仅QuickGenerationView的多行字段与直接回归，不整体替换文本系统、强制光标、抢焦点或清组字。既有TextSourcesQuestionEditor复用，以draftID+fieldID隔离所有者。新增QuickCompositionTests用实际QuickParameterField和真实QuickGenerationController/Store，原实现在无窗口变化、仅保存revision的对照下失败；两次失败分别11/9个断言保留RH/lead/h22-before*.log。后续同用例+所有者切换/Unicode/持久化复验及真人检查分别记录，不把hosting当真人。非实现者复核在Lead修补后进行；旧FILES-UI与Sol两轮预算不重置。本轮文件原生验收继续复用既有正常包/夹具，不重跑模型。
 
 H22局部修补后，RH/lead/h22-after：UI实际hosting5项（含新增Quick字段与已有composition）和Workbench Quick19项通过，7.707秒；未跑GPU。新增用例先在未修控件失败，再用相同契约通过；附加草稿切换不串写和保存冷重开。此时仍待普通App真人与非实现者复核，不提前关闭H22-A/B。测试时HEAD为a3c5b09加本提交差异，不冒称旧提交原样通过。
+
+
+## 2026-10-03 本人H22接纳与H32原生菜单有限接管
+
+H22本人确认修补版鼠标不再闪回；候选窗不随窗口移动与Finder等苹果软件一致，明确按当前系统正常行为接纳。关闭H22，不以此推断所有系统/输入控件；先前ON/OFF组字失败与修补证据保持。本人证据RH/gui/h22-final-human.json。
+
+随后H32登记菜单由本人实际复现：高亮约一秒消失、点击模型无反应，Lead的AX/键盘/坐标也不能打开子菜单。属于工程入口失败，不是账号/权限，已正常退出唯一测试PID66154。使用本次FILES续修尚未使用的一次有界Lead接管，不重置此前初交+两修复记录。ModelLibraryModel每400ms无条件发布相同snapshot；在35f373ad4973a0f1dee91c68ddb9f440f25c6520中仅对四个纯值类型合成Equatable并跳过完整相同快照，保留原generation/revision守卫、真实下载/复制进度、可用性与租约变化；未变导入策略、模型计算/精度、签名或项目schema。
+
+最小检查：新增实际actor/model Observation回归。初版夹具空catalog被拒绝、URL目录斜线比较不当，各自日志保留并修正；正式未修基线model-menu-baseline只有两条预期空刷新断言失败。修后model-menu-after：UI 2方法/2suite（含原Quick组字）、模型库64方法/3suite、就绪2方法/1suite通过；代码当时为9baaHEAD加与35f373相同的实现/测试差分，摘要见RH/lead/model-menu-scope.json。不将三次测试入口冒充一个suite。native_files_review只读复核完整值涵盖与原守卫，未自行跑测试。普通App构建/原生菜单及后续文件闭环结果另行追加，当前不能由CPU断言关闭菜单。
+
+
+### 2026-10-03 集中验收交付检查点（35f373，部分完成）
+
+RH为上述human-closeout run。H22生产修补`9baaacbc74855aaa84fa03868e62a1676d882250`由本人接纳，非实现者native_h22_diagnosis复核；菜单生产/最终原生版本 **35f373ad4973a0f1dee91c68ddb9f440f25c6520**。RH/lead/model-menu-app-build-result.json记录正常签名构建exit0、50.3787秒。三个菜单相关CPU入口结果见上一节，不与H22或RN相加。RN/43d6ab3的UI18、Workbench42及未改模型结果复用，不重新生成。以下代码没有额外修补。
+
+| 路径 | 本轮原生结果与证据 | 限制 |
+|---|---|---|
+| 菜单 | 本人报告修前高亮闪回/无法点击；修后本人到达文件面板，RH/gui/model-menu-human-pass.json | AX嵌套同名菜单选择仍会歧义，真人鼠标证据与工具限制分开 |
+| MRT2 | external实例8E7EEEBC、独立managed实例BF29862C登记完成；6必要文件摘要相同、inode独立，源ordinary-note.txt保留、未复制入安装；本人亲自确认资格；Quick/Canvas当时可用 | model-copy-checked.json初次多余文件检查误用了extra文件名，其false不代表原件丢失；model-copy-extra-check.json纠正实际ordinary-note.txt，旧证据保留。没有模型推理 |
+| Quick恢复 | 新fixture/reference.png原位引用；另有Canvas-Closeout项目，移动仅本fixture后从Quick条目直接打开缺失页→定位Relocated同内容→Finder→复制项目→正常冷重开并核对 | gui/{quick-missing-direct,quick-relocated,quick-collected,quick-files-cold-reopen}.txt。88字节PNG，原件/副本SHA cbce8e398b05835e0605e58b252ca13c8741637e7702431e82eca899516c369a，独立inode。非全媒体/NAS证明 |
+| 草稿/备份 | Canvas新图/文字节点，未点保存；持久清单最初无标记。备份预检后标记已保存，原生NSSavePanel报`ProjectBackupError error 4`；Backups为空。冷重开原项目/文字成功 | gui/canvas-before-backup.json、canvas-backup-native-failure.{txt,png}、file-protection-after-native.json、canvas-cold-reopen.txt。**没有备份成功/独立恢复证据**。首次工具typeText仅插空格，改用paste并实际检查完整Unicode标记，不冒称实体组字 |
+| 冷启就绪 | Quick提示待核验、Canvas MRT2/SwiftF0未知；已登记不能写成就绪通过 | 非实现者源码核清：会话readiness初始空，启动/状态刷新checkModels:false，完整资料库sheet才触发显式核验；Canvas嵌入列表不触发。35f首次snapshot必发布，actor核验绕过该guard；相关调用未改，非菜单回归 |
+| README | 新35f实际Quick截图，合成文字/无账号、路径或私有资料，SHA见delivery-launcher-check.json；EN在前/中文在后/页内跳转 | 截图诚实保留冷启待核验。不是设计稿，不证明全App可用。没有为截图伪造模型结果 |
+| 产物质量 | 本人旧四视频反馈及PCM/固定源码只读分析，RH/gui/video-human-review.json、lead/{video-quality-analysis,ltx-quality-source-followup}.json | LTX-text RMS -61.70dBFS、first -96.21；D无后叠图，candidate已含红块。上游`0 1.0 33`中的33为输入H264 CRF，不是33帧条件；仅首latent受条件，画质原因未全定。自然场景H3/有效LTX对照仍未做 |
+
+**备份定点诊断和预算停点**：非实现者native_files_review只读确认同版二进制error4映射`.io(String)`，UI localizedDescription丢关联操作/errno。ProjectBackup.swift:139、149–150在target.parent创建兄弟stage，ProjectFilesView:442仅启用target授权；restore:260–261同类。该链从9586到35f无变，不是菜单改动引入；具体失败syscall尚未证实。最小后续是复用现有同卷itemReplacementDirectory导出方法及准确错误，同时保留nofollow/不覆盖/失败原件/发布后保留保护。**本次FILES初交+两修复后一次Lead接管已用于菜单，不继续新一轮修补**。现有服务测试通过不得抵销普通沙盒失败，未向用户要求全盘权限或父目录扩大授权。
+
+**来源/交付/恢复**：原文件实现为受限Sol/high初交+两修复；H22和菜单为Lead局部实现，非实现者分别审阅、Lead运行测试/普通GUI，不冒称另一个模型也跑过。readiness/备份及视频源分析只读复核，没有GPU。完整Lead消耗/订阅费用unknown。新推荐唯一启动器为RH/delivery/menu-fix/启动D开发预览.command，App代码35f，`--check`签名通过，与同树D Nodes使用4DFA8D40试用身份；本轮实际原生验收在另外9F276A92隔离会话，未点Xcode Run、未验证4DFA现有资料。App/源个人文件/旧原件终态见RH/lead/final-receipt.json，最终文档SHA也写该回执而非反复提交自引用。
+
+自有66154/67978/68398正常退出，先前ON/OFF及重复启动处理历史保留；Finder自有窗口关闭。工具禁止Terminal控制，无法确认启动器终端是否仍在，不以绕行技术关闭。无活跃Worker/CPU/build/GPU作业；不是系统所有未知进程均结束的保证。原模型/项目/普通App/旧候选/证据保留；仅本轮合成图移动。源个人scheme未暂存差异应与起始快照一致。
+
+结论：工程修补/原生部分通过、本人事项当前办结；备份/初始化就绪/视频质量/剩余交互仍未完成。main获准按公开开发门槛更新，不宣称功能冻结或发行。到用户试用与冻结判断点停止，后续有限修补延续失败和明确预算，不新编号重置。
