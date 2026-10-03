@@ -2,6 +2,15 @@ import Foundation
 
 /// Converts a complete, bounded JSON value into a workflow datum without executing it.
 public enum WorkflowStructuredText {
+    /// Syntax-only validation reuses the same bounded parser as structured output.
+    public static func validateJSONSyntax(_ text: String) throws {
+        guard text.utf8.count <= JSONParser.maximumInputBytes else {
+            throw StructuredTextError(path: "$", reason: "JSON input exceeds 1 MiB.")
+        }
+        var parser = JSONParser(text)
+        _ = try parser.parse()
+    }
+
     public static func parse(_ text: String, as schema: WorkflowDataSchema) throws -> WorkflowDatum {
         guard text.utf8.count <= JSONParser.maximumInputBytes else {
             throw StructuredTextError(path: "$", reason: "JSON input exceeds 1 MiB.")
