@@ -543,3 +543,11 @@ afc72101锁文件由真实Xcode解析：Markdown依赖与已测UI包一致，已
 最终受测代码 **55fcbaa74921007a3768ed8d94a4c896e2989297**，RC/lead/b-combined-cpu-owner-result.json：exit0，18.25秒；DWorkbench45方法/5suite、UI5方法各自通过，不累加历史数字。覆盖四分类状态/在途归属、会话/附件/分支/取消/保存与备份、Markdown导出不覆盖及呈现门禁。单作业峰值344MiB，没有App/GPU运行。原生输入/真实多轮/普通聊天备份待验；CPU不替代这些门槛。
 
 主线仍A/f31；Q固定作业继续，未因CPU夹具问题重跑模型。下一动作：Q结束后组合普通签名构建及B原生最小闭环。证据索引RC/lead/b-cpu-gate.json、b-core-lead-takeover.json；恢复仍先核真实版本和自有进程。
+
+### 2026-10-03 B原生构建停点与Q边界结果
+
+普通Xcode构建b3e2abc6在编译前exit65（6.39秒），需要首次启用固定EquatableMacros；不是生产编译错误，不消耗Worker普通修复。非实现者native_files_review核597c2bb的宏目标生成Equatable/Hashable与诊断，未发现文件/网络/额外进程副作用。未跳过宏校验或修改信任配置。CUA恢复后明确报Mac locked，H33和解锁进入唯一集中待办；旧H22关闭状态不变。B App尚未产生，CPU55fc通过不能冒充原生/真实聊天通过。
+
+Q自然LTX完整BF16/30步/97帧生成exit0、9780.49秒。四阶段观察各调用一次且原值返回：latent BF16 RMS1.2295，mel BF16 RMS6.5836，vocoder waveform实际BF16 −33.962dBFS，PCM16 −33.966dBFS，AAC解码 −34.018dBFS；非有限均0。PCM→AAC只差约−0.052dB。输出aeb4ad04da07492fcac17e33525d1297b5a7219bf990c30d941f81e13498009b；非实现者独立核查数值。Lead读取0/12/24/36/48/60/72/84/96帧：倒水后水流停止、液面沉静，未见参考画面整段不动。上述只证明本请求链没有坍缩，不足定位不同旧请求−61.70/−96.21dBFS的根因，也不是人耳声音/同步验收。证据q/ltx-natural-boundaries-01/evidence/summary.json、lead/q-ltx-contact-sheet.json。
+
+H3固定自然首尾请求两次在模型运行前拒绝：第一次缺task/cache，第二次缺LTX2_GEMMA_MAX_LENGTH=1024；旧result只记录首次失败，第二失败由独立command/log/result记录。Lead保留原目录，普通复制同一request和两图到task-attempt-3，补生产环境与唯一tmp/cache；native只读审核确认静态参数/路径要求，未预宣称模型admission通过。新执行沿原50步/全50层BF16/seed42，不是随机抽卡或重新生成不同样本。lead/q-h3-final-preparation.json、q-h3-final-preflight.json及q-h3-natural-final-result.json（仅实际结束才存在）。没有修改生产provider/模型精度。

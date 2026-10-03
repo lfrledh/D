@@ -8,7 +8,9 @@
 
 当前 B：四分类、文字聊天/单次生成、原三类工作面已接线。组合`55fcbaa74921007a3768ed8d94a4c896e2989297`定向DWorkbench45方法/5suite、UI呈现5方法通过；组件均编译通过，尚未普通App/真实聊天验收。afc72101为真实Xcode解析的Markdown依赖锁；55fcbaa7补旧命名Quick项目缺少首个聊天入口，反例修前失败、修后通过。core Sol/high初交+两修复后Lead一次有界接管修正编译/夹具；UI初交+修复1，剩一轮普通修复。重要Lead差异由非实现者复核。临时半截数字在控制器按会话保留，不宣称冷启恢复；合法配置、会话、导航在Store。Q固定自然首帧完整30步BF16请求独占GPU，随后程序只提交一份已准备H3自然首尾；不是抽卡批次。两者结束才进行重构建/GUI；独立低内存CPU检查已串行完成。准确状态见RC/lead/q-*-result.json，缺结果不重启。B未接纳main。
 
-证据 RC=`D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261003T035843Z-stabilize-chat`。H22/菜单/失联恢复保持，不重复本人操作；旧失败和预算保留。新增有限续修及角色、范围、门槛见任务记录末节。没有新的登录或资格事项；不发布 Release。
+最新停点：B普通Xcode构建b3e2abc6在依赖宏首次启用检查处exit65，尚无B App；Mac已锁屏，H33与解锁合并在集中待办，不绕过验证。Q的LTX完整BF16自然首帧样本已成功（9780.49秒）；声码器至AAC约−34dBFS，没有观察到幅值坍缩，自然画面动作可辨，旧近静音首次发生层仍未知。H3两次准备在加载前因缺cache和环境值拒绝，失败保留；经独立核对后同一请求/seed在新task-attempt-3正式执行，资源由程序独占，勿重复提交。Q结束前不构建或开模型GUI。
+
+证据 RC=`D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261003T035843Z-stabilize-chat`。H22/菜单/失联恢复保持，不重复本人操作；旧失败和预算保留。新增有限续修及角色、范围、门槛见任务记录末节。没有新的登录或模型资格事项；不发布 Release。
 
 ## 上一批历史停点：D-RELEASE-FREEZE-01 / D-DISCUSSION-FREEZE-20261002
 
