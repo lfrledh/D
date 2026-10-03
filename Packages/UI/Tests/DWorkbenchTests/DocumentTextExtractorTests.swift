@@ -107,7 +107,7 @@ struct DocumentTextExtractorTests {
         #expect(DocumentTextExtractor.ocrReadingOrder(for: [a, a]) == [0, 1])
     }
 
-    @Test(arguments: [90, 270])
+    @Test(arguments: [0, 90, 270])
     func rotatedRasterPDFKeepsHorizontalWord(rotation: Int) async throws {
         let word = "HORIZONTAL"
         let data = makeRotatedRasterPDF(rotation: rotation, word: word)
@@ -148,8 +148,8 @@ struct DocumentTextExtractorTests {
         return serializePDF(objects: objects)
     }
 
-    /// Native 200 x 400 page; /Rotate displays it as 400 x 200. The image is
-    /// counter-rotated in page coordinates so OCR sees a horizontal word.
+    /// Native 200 x 400 page; quarter turns display it as 400 x 200. The image
+    /// placement keeps the upright word horizontal in each display rotation.
     private func makeRotatedRasterPDF(rotation: Int, word: String) -> Data {
         let width = 320
         let height = 64
@@ -160,9 +160,8 @@ struct DocumentTextExtractorTests {
         bitmap.setFillColor(CGColor(gray: 1, alpha: 1))
         bitmap.fill(CGRect(x: 0, y: 0, width: width, height: height))
         bitmap.setFillColor(CGColor(gray: 0, alpha: 1))
-        // PDF image rows start at the top; bitmap context rows start at the bottom.
-        bitmap.translateBy(x: 0, y: CGFloat(height))
-        bitmap.scaleBy(x: 1, y: -1)
+        // CoreText draws upright in the bitmap's default coordinates. Flipping
+        // here turns the embedded PDF image upside down on every page rotation.
         let font = CTFontCreateWithName("Helvetica-Bold" as CFString, 38, nil)
         let attributed = NSAttributedString(string: word, attributes: [
             NSAttributedString.Key(rawValue: kCTFontAttributeName as String): font
@@ -172,7 +171,8 @@ struct DocumentTextExtractorTests {
         bitmap.flush()
         let pixels = Data(bytes: bitmap.data!, count: width * height)
         let hex = pixels.map { String(format: "%02X", $0) }.joined() + ">"
-        let placement = rotation == 90 ? "0 320 -64 0 132 40" : "0 -320 64 0 68 360"
+        let placement = rotation == 0 ? "180 0 0 36 10 150" :
+            (rotation == 90 ? "0 320 -64 0 132 40" : "0 -320 64 0 68 360")
         let content = "q \(placement) cm /Im0 Do Q"
         return serializePDF(objects: [
             "<< /Type /Catalog /Pages 2 0 R >>",
