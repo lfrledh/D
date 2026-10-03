@@ -25,7 +25,7 @@ private actor ChatOutcomeGate {
     private var submitted = false
     private var open = false
     private var submissionWaiter: CheckedContinuation<Void, Never>?
-    private var outcomeWaiter: CheckedContinuation<Void, Never>?
+    private var outcomeWaiters: [CheckedContinuation<Void, Never>] = []
     func markSubmitted() {
         submitted = true; submissionWaiter?.resume(); submissionWaiter = nil
     }
@@ -35,9 +35,13 @@ private actor ChatOutcomeGate {
     }
     func waitOutcome() async {
         if open { return }
-        await withCheckedContinuation { outcomeWaiter = $0 }
+        await withCheckedContinuation { outcomeWaiters.append($0) }
     }
-    func release() { open = true; outcomeWaiter?.resume(); outcomeWaiter = nil }
+    func release() {
+        open = true
+        let pending = outcomeWaiters; outcomeWaiters.removeAll()
+        for waiter in pending { waiter.resume() }
+    }
 }
 
 private actor ChatGatedEngine: InferenceEngine {
