@@ -19,6 +19,8 @@ public struct TextRequest: Sendable, Codable, Equatable {
     public let thinking: TextThinkingOptions?
     public let seed: UInt64?
     public let loadingStrategy: TextLoadingStrategy?
+    /// Literal Jinja template for this request only. Nil selects the installed model default.
+    public let chatTemplateOverride: String?
 
     public init(prompt: String, maxTokens: Int = 256, temperature: Float = 0.7, topP: Float = 0.95,
                 execution: TextExecutionSelection? = nil,
@@ -26,7 +28,8 @@ public struct TextRequest: Sendable, Codable, Equatable {
                 visualProcessing: TextVisualProcessing? = nil,
                 messages: [TextMessage]? = nil, tools: [TextToolDefinition]? = nil,
                 thinking: TextThinkingOptions? = nil, seed: UInt64? = nil,
-                loadingStrategy: TextLoadingStrategy? = nil) {
+                loadingStrategy: TextLoadingStrategy? = nil,
+                chatTemplateOverride: String? = nil) {
         self.prompt = prompt
         self.maxTokens = maxTokens
         self.temperature = temperature
@@ -40,6 +43,7 @@ public struct TextRequest: Sendable, Codable, Equatable {
         self.thinking = thinking
         self.seed = seed
         self.loadingStrategy = loadingStrategy
+        self.chatTemplateOverride = chatTemplateOverride
     }
 
     public var hasVisualInput: Bool {

@@ -16,6 +16,8 @@ let package = Package(
         .package(path: "../../Vendor/flux2-swift"),
         .package(path: "../../Vendor/mlx-swift-lm"),
         .package(url: "https://github.com/huggingface/swift-transformers", exact: "1.1.8"),
+        .package(url: "https://github.com/huggingface/swift-jinja.git",
+                 exact: "2.3.2"),
     ],
     targets: [
         .target(name: "DMLXBackend", dependencies: [
@@ -27,6 +29,8 @@ let package = Package(
             .product(name: "MLXLMCommon", package: "mlx-swift-lm"),
             .product(name: "MLXVLM", package: "mlx-swift-lm"),
             .product(name: "Tokenizers", package: "swift-transformers"),
+            .product(name: "Hub", package: "swift-transformers"),
+            .product(name: "Jinja", package: "swift-jinja"),
         ], resources: [.process("Resources")]),
         .executableTarget(name: "DInferenceCLI", dependencies: [
             "DMLXBackend",
@@ -45,6 +49,8 @@ let package = Package(
             .product(name: "DRuntime", package: "DPlatform"),
             .product(name: "MLX", package: "mlx-swift"),
             .product(name: "Flux2", package: "flux2-swift"),
+            .product(name: "Hub", package: "swift-transformers"),
+            .product(name: "Tokenizers", package: "swift-transformers"),
         ]),
     ],
     swiftLanguageModes: [.v6]
