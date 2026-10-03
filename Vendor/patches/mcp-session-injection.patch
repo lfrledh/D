@@ -1,0 +1,11 @@
+--- a/Sources/MCP/Base/Transports/HTTPClientTransport.swift
++++ b/Sources/MCP/Base/Transports/HTTPClientTransport.swift
+@@ -129,7 +129,7 @@
+         )
+     }
+ 
+-    internal init(
++    public init(
+         endpoint: URL,
+         session: URLSession,
+         streaming: Bool = false,

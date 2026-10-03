@@ -1,0 +1,515 @@
+{
+  "repository": "https://github.com/modelcontextprotocol/swift-sdk",
+  "revision": "a0ae212ebf6eab5f754c3129608bc5557637e605",
+  "tag": "0.12.1",
+  "archiveSHA256": "497caabc0cdf669fe442421b4fff13bf5ce7aa132bc747e851c9fdc63f56c0c5",
+  "files": [
+    {
+      "path": ".github/workflows/ci.yml",
+      "sha256": "2c4d72dd0f82a160661c4c2601de38e71765ce6896793aedab4dd521ac77c880",
+      "bytes": 3606
+    },
+    {
+      "path": ".gitignore",
+      "sha256": "d1452042cf922a2f55b5dc7caf401665f19f025c4ab991d12a3c662ba8066f8e",
+      "bytes": 172
+    },
+    {
+      "path": ".spi.yml",
+      "sha256": "a0445391034ee32b8f798f314a7a7a41dc7ebdb4e4d78bc693d3a9fc8dc2d4b5",
+      "bytes": 65
+    },
+    {
+      "path": ".vscode/extensions.json",
+      "sha256": "2d1f208522cc55a20f1f918fa95f982faa79c1364261feb60a72124cedbfd180",
+      "bytes": 77
+    },
+    {
+      "path": ".vscode/settings.json",
+      "sha256": "6419d333b2f4549dc14248882fc5ed1c2632d8f78b509fde56d97851720d9712",
+      "bytes": 353
+    },
+    {
+      "path": "LICENSE",
+      "sha256": "0382b0057770ca05e9c350a50aa3b1c1fea84da0bc81d723bf00b9aa841be58a",
+      "bytes": 12227
+    },
+    {
+      "path": "Package.resolved",
+      "sha256": "9d6586496c8b53f4c5be7c6c80c11472da39567910224b607254e6ea8f9d59dd",
+      "bytes": 2297
+    },
+    {
+      "path": "Package.swift",
+      "sha256": "67fa9b6a0d1f334fd836cabb7af8c36110a6b88c5b49fa5a42a50125b18a056b",
+      "bytes": 2997
+    },
+    {
+      "path": "Package@swift-6.0.swift",
+      "sha256": "017b6dbe7fb787cb608e9cd666aca18efcffb39869c1571598e0d094049a2db8",
+      "bytes": 1719
+    },
+    {
+      "path": "README.md",
+      "sha256": "ad833069a6dbbaa6db3b01a1150b69f013d076ab2c5434ce14b69dd1a050c493",
+      "bytes": 52292
+    },
+    {
+      "path": "SECURITY.md",
+      "sha256": "61a6e6a15741271faeacfdf763387ba384b40da233bc8fe9e3a86caa86254012",
+      "bytes": 764
+    },
+    {
+      "path": "Sources/MCP/Base/Authorization/OAuthAuthorizationCodeFlow.swift",
+      "sha256": "ee467e1a4a30e1c8d59b646562bb97bdbbad33a2fbc8db92623f278392472755",
+      "bytes": 9452
+    },
+    {
+      "path": "Sources/MCP/Base/Authorization/OAuthAuthorizer.swift",
+      "sha256": "8b0463e7b0f35bed8e18072c23070af29b0f4e2d4871ca1fc37b93d8df08d1ec",
+      "bytes": 36578
+    },
+    {
+      "path": "Sources/MCP/Base/Authorization/OAuthClientRegistrar.swift",
+      "sha256": "8529d8a60a17040f78699edb62b49d85584e9a1db2378459c9314c5c2a07c1a3",
+      "bytes": 7293
+    },
+    {
+      "path": "Sources/MCP/Base/Authorization/OAuthConfiguration.swift",
+      "sha256": "ed662860ace6eed00bcaa65ed83d37a7eebe67ac7196b1588bb9845ab973b5ee",
+      "bytes": 18723
+    },
+    {
+      "path": "Sources/MCP/Base/Authorization/OAuthConstants.swift",
+      "sha256": "99390231931f552d38d0651e11c677e84950d3d3832abcca21fa74430023b5eb",
+      "bytes": 3676
+    },
+    {
+      "path": "Sources/MCP/Base/Authorization/OAuthDiscovery.swift",
+      "sha256": "34dd32e4909298c20922234da8939178a3b269372e4e12b7b8011d5c19f86242",
+      "bytes": 13842
+    },
+    {
+      "path": "Sources/MCP/Base/Authorization/OAuthDiscoveryClient.swift",
+      "sha256": "5289771d94e100b99d031ee9d5c8a4adda9a18a0fc0d56493e67b74eb283e961",
+      "bytes": 5954
+    },
+    {
+      "path": "Sources/MCP/Base/Authorization/OAuthErrors.swift",
+      "sha256": "284c3104468f7af3f08d6a19261911a4f18f4599bd7e8ee6ba083de4f929e9cf",
+      "bytes": 10224
+    },
+    {
+      "path": "Sources/MCP/Base/Authorization/OAuthModels.swift",
+      "sha256": "63e19c0879065adce30b297d9b1496c3832d504d93f2bde55c7960245c9ade0e",
+      "bytes": 9607
+    },
+    {
+      "path": "Sources/MCP/Base/Authorization/OAuthTokenEndpointClient.swift",
+      "sha256": "ad8a181d09c7a3fcbd8c74c489717b6abbeacee2634eba79bd2fb4051623296c",
+      "bytes": 3309
+    },
+    {
+      "path": "Sources/MCP/Base/Authorization/OAuthURLValidator.swift",
+      "sha256": "948953bd04885dc9db3f21fb2b3dffcfcc5191fadc320e283aa5a9ab620bb743",
+      "bytes": 5457
+    },
+    {
+      "path": "Sources/MCP/Base/Authorization/OAuthWWWAuthenticateParser.swift",
+      "sha256": "1a937b720f6cf759167446a293720faeef05ef04aabec1ae2d3b775dc9e6649a",
+      "bytes": 7161
+    },
+    {
+      "path": "Sources/MCP/Base/Authorization/PKCE.swift",
+      "sha256": "40160d01a54562a00b35611fe463ea2c82b4129fa480672ec235bce91a5b4997",
+      "bytes": 2755
+    },
+    {
+      "path": "Sources/MCP/Base/Authorization/TokenStorage.swift",
+      "sha256": "ff07cc210bb012172c81684d1a2ef76e4d9ff1d667686648aa6c9238ce78008d",
+      "bytes": 1012
+    },
+    {
+      "path": "Sources/MCP/Base/Error.swift",
+      "sha256": "8e8e09ad9a44c50aa27109e4109630bb166d431bfa19ec833b8339b4f45dc1e5",
+      "bytes": 12687
+    },
+    {
+      "path": "Sources/MCP/Base/ID.swift",
+      "sha256": "519d7804eabbf14299b8f067374bf714aa03303b711d2c4423e0078e8e4ee4da",
+      "bytes": 1809
+    },
+    {
+      "path": "Sources/MCP/Base/Icon.swift",
+      "sha256": "d8c259e2a08a4fa7e326b54f8a00b8abf3edbe46e1d0ffa4adb1aa93f29d18eb",
+      "bytes": 2523
+    },
+    {
+      "path": "Sources/MCP/Base/Lifecycle.swift",
+      "sha256": "e360527fa92f79b8fa5793d793aac60051825aa3b25932d83e6077b00bcbfeb3",
+      "bytes": 4049
+    },
+    {
+      "path": "Sources/MCP/Base/Messages.swift",
+      "sha256": "7162e0b3e6bc851bcc266ce8358e77c0026d3d91a4d6f2de07ff18f86f1b4f90",
+      "bytes": 14206
+    },
+    {
+      "path": "Sources/MCP/Base/PendingRequest.swift",
+      "sha256": "abd9eb09ac78621ab95cbc3ef10f11925697244ffda53a946649fece47ee6aed",
+      "bytes": 1475
+    },
+    {
+      "path": "Sources/MCP/Base/Transport.swift",
+      "sha256": "25d1e9389e78d88412cf88cc0dc303b36a5f7b69d5e0b357b46d5c4cc0259647",
+      "bytes": 496
+    },
+    {
+      "path": "Sources/MCP/Base/Transports/HTTPClientTransport.swift",
+      "sha256": "fcc363bca0bb5710f51fdccfbed5b5c83db5b19386797b8bf55853bafcc4bf97",
+      "bytes": 26731
+    },
+    {
+      "path": "Sources/MCP/Base/Transports/HTTPServer/HTTPRequestValidation.swift",
+      "sha256": "19ceb8e2bbdf64f8ecedfb35c9946deb8109a3922464bd7bff3fd8d68864632e",
+      "bytes": 27937
+    },
+    {
+      "path": "Sources/MCP/Base/Transports/HTTPServer/HTTPServerTypes.swift",
+      "sha256": "f53c2a98c2c98aacc24e959ad51cc88bad89d85ad3563f77227714e71ccdb85e",
+      "bytes": 9648
+    },
+    {
+      "path": "Sources/MCP/Base/Transports/HTTPServer/StatefulHTTPServerTransport.swift",
+      "sha256": "0b818515a57bd2e188c67f2f62781db13504cfd29025cb80cfe5aadd63800714",
+      "bytes": 21590
+    },
+    {
+      "path": "Sources/MCP/Base/Transports/HTTPServer/StatelessHTTPServerTransport.swift",
+      "sha256": "47e3a72742d301a0d68b0d44ac0eb87cec0c291767a68bbd8eeb0006d85832cc",
+      "bytes": 9309
+    },
+    {
+      "path": "Sources/MCP/Base/Transports/InMemoryTransport.swift",
+      "sha256": "7988e53d9ed98c67f54763211beef929f65b11d78c9ebb4845a8ecc89120d0ac",
+      "bytes": 6876
+    },
+    {
+      "path": "Sources/MCP/Base/Transports/NetworkTransport.swift",
+      "sha256": "b9191de0d3bba42437c1889605fd85f8a6dea5c14b4cc5939b4be0448d68335d",
+      "bytes": 34160
+    },
+    {
+      "path": "Sources/MCP/Base/Transports/StdioTransport.swift",
+      "sha256": "56b5d57eb8168f97a149bd68d3502a359cf2c42ecd7661b10241957f5e4b2995",
+      "bytes": 9380
+    },
+    {
+      "path": "Sources/MCP/Base/UnitInterval.swift",
+      "sha256": "e54b8ddca6816c88ee49dc49ec79eb01590e104055208c55470d67314e3e8a74",
+      "bytes": 4219
+    },
+    {
+      "path": "Sources/MCP/Base/Utilities/Cancellation.swift",
+      "sha256": "31c75336c5351f15a88e8f29a580f8b55859d7899f41814aa9f92519a0e7682e",
+      "bytes": 1166
+    },
+    {
+      "path": "Sources/MCP/Base/Utilities/Ping.swift",
+      "sha256": "8256e931cd320ba1fc7d3a4b1958f330e80d253ae2e0521b44f8368618418711",
+      "bytes": 345
+    },
+    {
+      "path": "Sources/MCP/Base/Utilities/Progress.swift",
+      "sha256": "44d219777d0d549f3b4d606e6831abe113f988b015eb3e8aba420ba9925061ce",
+      "bytes": 5687
+    },
+    {
+      "path": "Sources/MCP/Base/Utilities/RequestContext.swift",
+      "sha256": "7a655d7c254bcd68e571932b5f1a06b0940a2c8cdc94b34176417c9881330bc6",
+      "bytes": 1132
+    },
+    {
+      "path": "Sources/MCP/Base/Value.swift",
+      "sha256": "6a8399cb11db842faac9f549143058e24d15763705be65701ffba714111aabeb",
+      "bytes": 12933
+    },
+    {
+      "path": "Sources/MCP/Base/Versioning.swift",
+      "sha256": "90e48d38b27f138c3e33a4e3ea47c48f5e00b007c01a6c5dbc9287d4099912c5",
+      "bytes": 1256
+    },
+    {
+      "path": "Sources/MCP/Client/Client.swift",
+      "sha256": "380e5ebd7c5fae2706b1ce9a57ce08f3e7a3bc9ffbb7a2dfad6794855b1eb6b2",
+      "bytes": 46420
+    },
+    {
+      "path": "Sources/MCP/Client/Elicitation.swift",
+      "sha256": "eda15f5fe4f2e91ba89447122870f884cf675933ce691c97f553a930c58484f7",
+      "bytes": 8893
+    },
+    {
+      "path": "Sources/MCP/Client/Roots.swift",
+      "sha256": "121d2b1d784473e97f26e65fdf028ed40d3d97c7bcd0d0ce052caa97caefcc31",
+      "bytes": 3527
+    },
+    {
+      "path": "Sources/MCP/Client/Sampling.swift",
+      "sha256": "2a8fb1f0152c2655daca047eb9ec000487bc02a187530c878f13829ddf37927d",
+      "bytes": 24717
+    },
+    {
+      "path": "Sources/MCP/Extensions/Data+Extensions.swift",
+      "sha256": "4694218cc05959b1103ab90bcfa9c4f5178688074ae2a2070868c786e8587782",
+      "bytes": 3133
+    },
+    {
+      "path": "Sources/MCP/Server/Completion.swift",
+      "sha256": "fc1e4ec44301685e945c27c2bd42dcc302e5f6d3a9b03239cdd01706198f07fb",
+      "bytes": 6170
+    },
+    {
+      "path": "Sources/MCP/Server/Logging.swift",
+      "sha256": "d4053258a549e191246dd6c31f351a5e609635671718fa8d304e07dc633e6956",
+      "bytes": 2360
+    },
+    {
+      "path": "Sources/MCP/Server/Prompts.swift",
+      "sha256": "a4746119be4b517dc9c108a8e14326438855e7a3e076c522ff7cd12001f2c819",
+      "bytes": 15210
+    },
+    {
+      "path": "Sources/MCP/Server/Resources.swift",
+      "sha256": "adda0919e933eb304bedb9bb199bc10098c3bb4a24c6a3485eb1443e0bf0d333",
+      "bytes": 16299
+    },
+    {
+      "path": "Sources/MCP/Server/Server.swift",
+      "sha256": "61cd2439525e73a417cbc36711b7e0340a2442f14acbb1631915ee3d792962f3",
+      "bytes": 41297
+    },
+    {
+      "path": "Sources/MCP/Server/Tools.swift",
+      "sha256": "79c4fc03714468c4a41c05544371ea7ffbf4517dc647db1b679abf8b71df7f0f",
+      "bytes": 21291
+    },
+    {
+      "path": "Sources/MCPConformance/Client/main.swift",
+      "sha256": "84acf369d1dda5f4ff2b09a0d084202ed4987ffe6c3a9567ff4f853fd6479484",
+      "bytes": 24956
+    },
+    {
+      "path": "Sources/MCPConformance/Server/HTTPApp.swift",
+      "sha256": "8713248b9918fc6511f07d4e61e94e7b15b367f1628f19bf8b9f3aefbe5f9e7f",
+      "bytes": 14486
+    },
+    {
+      "path": "Sources/MCPConformance/Server/main.swift",
+      "sha256": "0a815351121479ed2439f8121e3f341759931c99076435603f3c7e8990ba853c",
+      "bytes": 27083
+    },
+    {
+      "path": "Tests/MCPTests/Base64DataTests.swift",
+      "sha256": "dba328dc501942442919c23caef9d4411540fd591426d22e65e9ed6a199f9c2e",
+      "bytes": 4868
+    },
+    {
+      "path": "Tests/MCPTests/CancellationTests.swift",
+      "sha256": "24965f26e6a264ac311a572266176be0a8c7ec1ef803eef597d8e610103a5d3d",
+      "bytes": 9279
+    },
+    {
+      "path": "Tests/MCPTests/ClientTests.swift",
+      "sha256": "e5db331a7b53c6e06768c52f437ae6dffb23cb1e9c699e685725b917d1a2b599",
+      "bytes": 30434
+    },
+    {
+      "path": "Tests/MCPTests/CompletionTests.swift",
+      "sha256": "49235126da3fb8ea3d31808d91b117c133dfd7947a55fdb02cee54dbb3dff179",
+      "bytes": 20657
+    },
+    {
+      "path": "Tests/MCPTests/ElicitationTests.swift",
+      "sha256": "4f212e5a96d1f19cb996d46ddfd4f4b8a534e864c2bdc90489054dcd6e792819",
+      "bytes": 21188
+    },
+    {
+      "path": "Tests/MCPTests/HTTPClientTransportTests.swift",
+      "sha256": "9084c38e03d8deaf79557e6b0ed0efaa10c7cad7d3c6d8c9ccaae6406235d81f",
+      "bytes": 110531
+    },
+    {
+      "path": "Tests/MCPTests/HTTPServerTransportTests.swift",
+      "sha256": "853c0c9b94183299f8d2225fde46f2efdfaaffde5358014cfac33f92ed1ac6e8",
+      "bytes": 43166
+    },
+    {
+      "path": "Tests/MCPTests/Helpers/MockTransport.swift",
+      "sha256": "b4cd77bfdb349c7f936d02d78b6bc1f6ead718d2ce25be0d4504d07179acb499",
+      "bytes": 3388
+    },
+    {
+      "path": "Tests/MCPTests/IDTests.swift",
+      "sha256": "d56207d772beb7ba16e647b89435ea372feefd1d128ab74581f15726337a4e73",
+      "bytes": 1375
+    },
+    {
+      "path": "Tests/MCPTests/InMemoryTransportTests.swift",
+      "sha256": "2ec5ffd2e2e471e18221a8f806d53446c9ae36534739eb7965ff0020965bba18",
+      "bytes": 14056
+    },
+    {
+      "path": "Tests/MCPTests/LoggingTests.swift",
+      "sha256": "74a4781dfe7a50c122f4b4a2736e094278c3c68b0282e95cdc8dbc1b1c7339c1",
+      "bytes": 17739
+    },
+    {
+      "path": "Tests/MCPTests/MetaFieldsTests.swift",
+      "sha256": "0dd576fb05ca541602e03e7c243135bf3f7b90b470d5a3839408ae223e804783",
+      "bytes": 11037
+    },
+    {
+      "path": "Tests/MCPTests/MockResponses.swift",
+      "sha256": "8edf1777bfa56e76d2e86b43fd4a68a59679b9025b8c08226988b02416bc17ab",
+      "bytes": 8837
+    },
+    {
+      "path": "Tests/MCPTests/NetworkTransportTests.swift",
+      "sha256": "ceea5e904a9bd55abdbfba5aad0b5125954e20919edbeb8d3694b8fdace0366a",
+      "bytes": 22338
+    },
+    {
+      "path": "Tests/MCPTests/NotificationTests.swift",
+      "sha256": "5f2fe04d625790507d0b62fc0d653670d04aa033cfcb53fb6de71b5ab2c9cfff",
+      "bytes": 6391
+    },
+    {
+      "path": "Tests/MCPTests/OAuthAuthorizationCodeFlowTests.swift",
+      "sha256": "ae36cff1398dc00c76481ded420cc1aa71d3634e98a14792dae36cc635b35080",
+      "bytes": 6414
+    },
+    {
+      "path": "Tests/MCPTests/OAuthAuthorizationTests.swift",
+      "sha256": "83a59c8a39735b44e104dcf86e1b0d3c4c1a17556eab19216929eda84dd87e18",
+      "bytes": 31553
+    },
+    {
+      "path": "Tests/MCPTests/OAuthAuthorizerTests.swift",
+      "sha256": "66c7fcdb04c445c0346f8a9d465268b6e16eff30f7bf89cc68ab67b82053c494",
+      "bytes": 15002
+    },
+    {
+      "path": "Tests/MCPTests/OAuthClientRegistrarTests.swift",
+      "sha256": "dc183668a26615bec6dd5bd1ed7fdf6a0d9344f10ae32e72dcebf1214ad9f02e",
+      "bytes": 8564
+    },
+    {
+      "path": "Tests/MCPTests/OAuthComponentTestHelpers.swift",
+      "sha256": "22f9f8b1ba4bd2b2c736af84f6d5a9c35a96f72fac3aa1a45058be9bae7cff22",
+      "bytes": 3483
+    },
+    {
+      "path": "Tests/MCPTests/OAuthDiscoveryClientTests.swift",
+      "sha256": "85777bc1d8afab3f4460ab34ac2e84d39075270ca0c0caffe4dd8a2796fe63d2",
+      "bytes": 11026
+    },
+    {
+      "path": "Tests/MCPTests/OAuthTestScenarios.swift",
+      "sha256": "fa0790f387661e9a400fb21b3d41b1536d37f0bd54b2a4896b348f4514f3ffc9",
+      "bytes": 126616
+    },
+    {
+      "path": "Tests/MCPTests/OAuthTokenEndpointClientTests.swift",
+      "sha256": "1fe7c099437363d1c0f1df1bf97b4a2f5059f696f931653578136266b2cbdba0",
+      "bytes": 8001
+    },
+    {
+      "path": "Tests/MCPTests/OAuthURLValidatorTests.swift",
+      "sha256": "df0b20821024a5aba75aa363a61ee6d196a3b72e2f5934d7f20853d34ec9313f",
+      "bytes": 5061
+    },
+    {
+      "path": "Tests/MCPTests/ProgressTests.swift",
+      "sha256": "86742b463405f163ab0b7b34e9be2acf9707a76ae1b8354fde88ee47e4a368e5",
+      "bytes": 13768
+    },
+    {
+      "path": "Tests/MCPTests/PromptTests.swift",
+      "sha256": "1ea48bfd4d339209340955c50ed79888e398cb110a1a9ea58896e75a214c1c2c",
+      "bytes": 32087
+    },
+    {
+      "path": "Tests/MCPTests/RequestTests.swift",
+      "sha256": "6fd588095ee091665f2a57bf6a83106ad17a2b6ca2d9b88670891e8779276553",
+      "bytes": 11071
+    },
+    {
+      "path": "Tests/MCPTests/ResourceTests.swift",
+      "sha256": "969d2f46758db4cb840904e90f80d1be2ec5fe5d43e2d02971ede22da92d381f",
+      "bytes": 6444
+    },
+    {
+      "path": "Tests/MCPTests/ResponseTests.swift",
+      "sha256": "f0bd9f2d0eabd533f70806ab2bd4548926e69abcea9f9c9ea473f1c190d5cee4",
+      "bytes": 3810
+    },
+    {
+      "path": "Tests/MCPTests/RootsTests.swift",
+      "sha256": "871af5edfb8e5b9f64e39080870e05bdf2a357d60fd5a64261348c9e5f06e796",
+      "bytes": 16310
+    },
+    {
+      "path": "Tests/MCPTests/RoundtripTests.swift",
+      "sha256": "7fba84c3c8dd636bd2022f5e4a600268e9ce476327511185c94b2da3826629fe",
+      "bytes": 7463
+    },
+    {
+      "path": "Tests/MCPTests/SamplingTests.swift",
+      "sha256": "ca74a87de917c9204c0dc4133925cc62fe48796d59e838885512129776b6e030",
+      "bytes": 39716
+    },
+    {
+      "path": "Tests/MCPTests/ServerTests.swift",
+      "sha256": "6e30e0a1f99ddb63dc6f139238a62c7259c8c634c1a5ee486445211ea7f2e62d",
+      "bytes": 7155
+    },
+    {
+      "path": "Tests/MCPTests/StdioTransportTests.swift",
+      "sha256": "9018bb8e08078ae49e3e267d2cec7e2a7d7d4cfb4df2406948dc5bec84710b9c",
+      "bytes": 4196
+    },
+    {
+      "path": "Tests/MCPTests/ToolTests.swift",
+      "sha256": "98c14070ddd900bb95ef7fa1e85276e64cb0ed57910ca66a32cf80bab0c8a3ff",
+      "bytes": 20411
+    },
+    {
+      "path": "Tests/MCPTests/UnitIntervalTests.swift",
+      "sha256": "68a1877642bd8a5c92a0235a627c61ad1913391d33d580721ddfad312c20be8a",
+      "bytes": 6596
+    },
+    {
+      "path": "Tests/MCPTests/VersioningTests.swift",
+      "sha256": "ff96a883465025ad30e9c0e9d680bad642ac943087d7072516f9687b9a1c2d18",
+      "bytes": 2401
+    },
+    {
+      "path": "conformance-baseline.yml",
+      "sha256": "4726265b16d1f2df4b4d82eb7fba7c18836182b5bc45bf7816b5f516dd5e38e4",
+      "bytes": 11
+    },
+    {
+      "path": "scripts/run-conformance.sh",
+      "sha256": "f7aa5473c926bb6533fe02f328f226db7402f5ee2a70be1f628010835bbee84e",
+      "bytes": 2695
+    }
+  ],
+  "patch": {
+    "file": "patches/mcp-session-injection.patch",
+    "sha256": "4b4ef0db9873d2bbabb2ba32f14fee3905883eab87f641c1cddd86593e3228f8",
+    "reason": "Expose existing URLSession initializer for explicit redirect rejection; no JSON-RPC or protocol changes",
+    "modified": "Sources/MCP/Base/Transports/HTTPClientTransport.swift",
+    "modifiedSHA256": "bf4ba05abc0ced46832c964eddeba840eadbb2b6087147ee163738c44e2408d0"
+  }
+}

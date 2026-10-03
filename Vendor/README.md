@@ -66,3 +66,9 @@ python3 scripts/verify-mlx-vendor.py
 2026-10-02补充实例独立的 `ModelFileSelection`：固定目录的权重、索引、tokenizer、processor与生成配置只读已登记文件；额外sidecar不参与执行，选中的必要文件失败仍报错。没有固定清单的调用继续原严格路径，不能把已知清单变成全局模型白名单。此项不改变张量、精度或采样；完整补丁已在固定上游独立重放并核对全部跟踪文件摘要。
 
 本地细小BF16模型的13项对照/边界测试通过，涵盖非平凡图片/视频位置、逐段预填充与decode/cache精确对照、文件变动和取消；这不是完整9B/27B权重或GUI验收。真实模型与App证据以当前任务记录为准。更新依赖时重新判断局部补丁适用性，不在SwiftPM缓存内悄悄打补丁；回退保留Git历史及原始权重。
+
+## MCP Swift SDK 0.12.1
+
+`mcp-swift-sdk/` preserves all 100 files from official commit `a0ae212ebf6eab5f754c3129608bc5557637e605`, including Apache-2.0 licensing and upstream tests. `mcp-swift-sdk.provenance.json` records original hashes. The only code patch, `patches/mcp-session-injection.patch`, exposes the existing URLSession initializer so D can reject redirects before forwarding tool parameters. Protocol, JSON-RPC and SSE remain implemented by the official SDK. Never patch SwiftPM caches.
+
+Existing Package.resolved files lock transitive dependencies, including the upstream documentation plugin branch. That plugin is not invoked for chat operation. On updates, check upstream session injection support, replay this narrow patch and test zero outgoing requests to 307/308 targets, cancellation and connection. Cancellation is advisory, not proof of server completion. D does not provide roots, sampling or elicitation permissions; explicit calls only. Build and live transport evidence remain in the active task record.
