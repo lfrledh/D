@@ -15,6 +15,9 @@ public struct DualWorkbenchView: View {
     private var quickModel: WorkbenchModel {
         useProjectQuick && model.projectSession.projectQuick != nil ? model : automaticQuickModel
     }
+    private var quickOwnerIsChanging: Bool {
+        quickModel.projectSession.isChangingProject || (useProjectQuick && model.projectSession.isChangingProject)
+    }
     let library: ModelLibraryModel
     let nodeTags: ModelNodeTagStore
     let metadata: SharedLibraryStore?
@@ -118,7 +121,7 @@ public struct DualWorkbenchView: View {
                     onValueToCanvas: { value in Task { await valueToCanvas(value) } },
                     onAssetsChanged: { Task { await refreshLibrary(checkModels: false) } })
                     .id(quick.store.rootURL.standardizedFileURL.path)
-                    .disabled(quickModel.projectSession.isChangingProject)
+                    .disabled(quickOwnerIsChanging)
                     .opacity(entry == .quick ? 1 : 0).allowsHitTesting(entry == .quick).accessibilityHidden(entry != .quick)
                 WorkflowHostView(model: canvasModel, nodeTags: nodeTags, onQuickUse: useNode,
                     libraryContent: { point, close in AnyView(libraryBrowser(compact: true, at: point, onBack: close)) },
@@ -324,7 +327,7 @@ public struct DualWorkbenchView: View {
         returnToLibrary = false; libraryVisible = true
     }
     private var quickCommandEnabled: Bool {
-        entry == .quick && !quickModel.projectSession.isChangingProject && quick.canStart && !libraryVisible && !projectsVisible && !compatibilityVisible &&
+        entry == .quick && !quickOwnerIsChanging && quick.canStart && !libraryVisible && !projectsVisible && !compatibilityVisible &&
         !languageVisible && !library.isPresented && previewAsset == nil && libraryInfo == nil &&
         filesRoute == nil && pendingFilesRoute == nil
     }
@@ -380,12 +383,14 @@ public struct DualWorkbenchView: View {
         }
     }
     private func useLibraryEntry(_ value: SharedLibraryBrowserEntry) {
+        guard !quickOwnerIsChanging else { issue = "项目正在切换，当前快速草稿未改变。"; return }
         guard case .operation(let operation, let id) = value.selection,
               let id, WorkflowRegistry.standard.operation(operation)?.definition.modelKind != nil else { presentLibraryDestination(.info(value)); return }
         quick.select(operationID: operation, modelID: id)
         libraryVisible = false; navigate(to: .quick)
     }
     private func useNode(_ node: WorkflowNode) {
+        guard !quickOwnerIsChanging else { issue = "项目正在切换，当前快速草稿未改变。"; return }
         guard let controller = canvasModel.projectSession.workflow else { return }
         // Connected values are not silently guessed from stale history; the graph is untouched.
         guard controller.graph?.connections.contains(where: { $0.targetNode == node.id }) != true else {
