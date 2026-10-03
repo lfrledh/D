@@ -12,6 +12,13 @@ import Observation
     public private(set) var activeSessionID: UUID?
     public private(set) var activeAttemptID: UUID?
     public private(set) var pendingSaveAttemptID: UUID?
+    /// Incomplete numeric edits survive view/category changes in this owner.
+    /// Valid values persist in configuration; these transient edits are not cold-start state.
+    public var parameterText: [String: String] = [:]
+    public var invalidParameterFields: Set<String> = []
+    public func hasInvalidParameterText(sessionID: UUID) -> Bool {
+        invalidParameterFields.contains { $0.hasPrefix(sessionID.uuidString + ":") }
+    }
     public let store: ProjectStore
     @ObservationIgnored private let allowsSubmission: @MainActor () -> Bool
     @ObservationIgnored private let makeServices: @MainActor () throws -> WorkflowServices
@@ -270,6 +277,9 @@ import Observation
 
     public func send(sessionID: UUID) async throws {
         try requireLoaded()
+        guard !hasInvalidParameterText(sessionID: sessionID) else {
+            throw WorkflowIssue("回答参数仍有未完成或无效输入，请先修正。")
+        }
         guard allowsSubmission(), !isRunning, pendingSaveAttemptID == nil else { throw WorkflowIssue("已有聊天推理或待保存结果；请等待或重试保存。其他会话可以继续编辑。") }
         let i = try index(sessionID), session = state.sessions[i]
         if session.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
@@ -289,6 +299,9 @@ import Observation
     }
     public func regenerate(_ userMessageID: UUID, sessionID: UUID) async throws {
         try requireLoaded()
+        guard !hasInvalidParameterText(sessionID: sessionID) else {
+            throw WorkflowIssue("回答参数仍有未完成或无效输入，请先修正。")
+        }
         guard allowsSubmission(), !isRunning, pendingSaveAttemptID == nil else { throw WorkflowIssue("已有聊天推理或待保存结果。") }
         let session = state.sessions[try index(sessionID)]
         guard !session.archived, let node = session.configuration,
@@ -302,6 +315,9 @@ import Observation
     private func launch(sessionID: UUID, user: ChatMessage,
                         prepared: (WorkflowNode, String, [String: WorkflowValue]),
                         systemPrompt: String, expectedLeafID: UUID?, clearDraft: Bool) async throws {
+        guard !hasInvalidParameterText(sessionID: sessionID) else {
+            throw WorkflowIssue("回答参数仍有未完成或无效输入，请先修正。")
+        }
         guard allowsSubmission(), !isRunning, pendingSaveAttemptID == nil else {
             throw WorkflowIssue("另一次聊天推理已开始；请等待资源释放后重试。")
         }

@@ -38,6 +38,7 @@ public enum QuickCategory: String, Codable, Sendable, CaseIterable {
         }
     }
 }
+public enum QuickTextPresentation: String, Codable, Sendable { case chat, single }
 public struct QuickNavigationState: Codable, Sendable, Equatable {
     public var selected: QuickCategory
     public var lastDrafts: [String: String]
@@ -50,6 +51,7 @@ public struct QuickCreationState: Codable, Sendable, Equatable {
     public var revision: UInt64 = 0
     public var selectedDraftID: String?
     public var navigation: QuickNavigationState?
+    public var textPresentation: QuickTextPresentation?
     public var drafts: [QuickDraft] = []
     public var runs: [QuickRunRecord] = []
     public init() {}
@@ -106,6 +108,11 @@ public struct QuickCreationState: Codable, Sendable, Equatable {
     }
     public var category: QuickCategory {
         state.navigation?.selected ?? draft.flatMap { QuickCategory.category(for: $0.node.operationID) } ?? .text
+    }
+    public var textPresentation: QuickTextPresentation { state.textPresentation ?? .chat }
+    public func selectTextPresentation(_ value: QuickTextPresentation) {
+        guard isLoaded else { return }
+        state.textPresentation = value; scheduleSave()
     }
     public func selectCategory(_ value: QuickCategory) {
         guard isLoaded else { return }

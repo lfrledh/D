@@ -1099,6 +1099,9 @@
     "chat.unsupportedDrop": "Only project assets can be dropped here.",
     "chat.useWorkflow": "Use in workflow",
     "chat.you": "You",
-    "chat.projectSaveIssue": "Project chat save failed: "
+    "chat.projectSaveIssue": "Project chat save failed: ",
+    "chat.textSurface": "Text workspace",
+    "chat.conversation": "Chat",
+    "chat.single": "Single generation and history"
   }
 }

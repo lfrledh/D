@@ -45,8 +45,6 @@ struct ChatWorkbenchView: View {
     @State private var showAdvanced = false
     @State private var issues: [UUID: String] = [:]
     @State private var globalIssue: String?
-    @State private var rawFields: [String: String] = [:]
-    @State private var invalidFields: Set<String> = []
     @State private var editing: ChatEdit?
     @State private var preview: WorkflowAssetReference?
     @State private var newPresetName = ""
@@ -66,7 +64,7 @@ struct ChatWorkbenchView: View {
     private func canRun(_ session: ChatSession) -> Bool {
         ChatRunAdmission.allows(session, isRunning: chat.isRunning,
             hasPendingSave: chat.pendingSaveAttemptID != nil, hasSaveIssue: chat.saveIssue != nil,
-            invalidFields: invalidFields)
+            invalidFields: chat.invalidParameterFields)
     }
     private func report(_ message: String?, for sessionID: UUID?) {
         if let sessionID { issues[sessionID] = message }
@@ -323,6 +321,7 @@ struct ChatWorkbenchView: View {
 
     private func settings(_ session: ChatSession) -> some View {
         DisclosureGroup(label("nextAnswer", "下一次回答设置"), isExpanded: $showAdvanced) {
+            ScrollView {
             VStack(alignment: .leading, spacing: 12) {
                 Text(label("futureOnly", "更改只影响之后的生成。")) .font(.caption).foregroundStyle(.secondary)
                 Text(label("systemPrompt", "系统提示（默认空）")) .font(.subheadline)
@@ -358,7 +357,7 @@ struct ChatWorkbenchView: View {
                         QuickParameterField(ownerID: session.id.uuidString, operationID: node.operationID,
                             field: field, value: node.parameters[field.id] ?? field.defaultValue,
                             onChange: { value in changeParameter(field.id, value: value, node: node, sessionID: session.id) },
-                            raw: rawFields[session.id.uuidString + ":" + field.id],
+                            raw: chat.parameterText[session.id.uuidString + ":" + field.id],
                             onRaw: { raw in changeNumeric(field: field, raw: raw, node: node, sessionID: session.id) })
                     }
                     if definition.fields.contains(where: { $0.id == "toolsJSON" }) {
@@ -367,6 +366,7 @@ struct ChatWorkbenchView: View {
                     }
                 }
             }.padding(.top, 10)
+            }.frame(maxHeight: 220)
         }.padding(.horizontal, 16).padding(.vertical, 8)
     }
 
@@ -399,7 +399,7 @@ struct ChatWorkbenchView: View {
                     .buttonStyle(.borderedProminent)
                     .disabled(!ChatRunAdmission.allowsSend(session, isRunning: chat.isRunning,
                         hasPendingSave: chat.pendingSaveAttemptID != nil, hasSaveIssue: chat.saveIssue != nil,
-                        invalidFields: invalidFields))
+                        invalidFields: chat.invalidParameterFields))
                     .accessibilityIdentifier("chat-send")
             }
             .dropDestination(for: WorkflowCanvasTransfer.self) { items, _ in
@@ -495,19 +495,19 @@ struct ChatWorkbenchView: View {
         var copy = node; copy.parameters[key] = value
         perform(sessionID: sessionID) { try chat.updateConfiguration(copy, sessionID: sessionID) }
         let fieldKey = sessionID.uuidString + ":" + key
-        if issues[sessionID] == nil { invalidFields.remove(fieldKey) }
-        else { invalidFields.insert(fieldKey) }
+        if issues[sessionID] == nil { chat.invalidParameterFields.remove(fieldKey) }
+        else { chat.invalidParameterFields.insert(fieldKey) }
     }
     private func changeNumeric(field: WorkflowFieldDefinition, raw: String, node: WorkflowNode, sessionID: UUID) {
         let key = sessionID.uuidString + ":" + field.id
-        rawFields[key] = raw
+        chat.parameterText[key] = raw
         switch field.kind {
         case .integer:
             if let value = Int(raw) { changeParameter(field.id, value: .integer(value), node: node, sessionID: sessionID) }
-            else { invalidFields.insert(key); report(label("invalidNumber", "数值未完成或无效；修正后才能生成。"), for: sessionID) }
+            else { chat.invalidParameterFields.insert(key); report(label("invalidNumber", "数值未完成或无效；修正后才能生成。"), for: sessionID) }
         case .decimal:
             if let value = Double(raw), value.isFinite { changeParameter(field.id, value: .decimal(value), node: node, sessionID: sessionID) }
-            else { invalidFields.insert(key); report(label("invalidNumber", "数值未完成或无效；修正后才能生成。"), for: sessionID) }
+            else { chat.invalidParameterFields.insert(key); report(label("invalidNumber", "数值未完成或无效；修正后才能生成。"), for: sessionID) }
         default: break
         }
     }

@@ -1099,6 +1099,9 @@
     "chat.unsupportedDrop": "只能拖入项目素材。",
     "chat.useWorkflow": "用于工作流",
     "chat.you": "你",
-    "chat.projectSaveIssue": "项目聊天保存失败："
+    "chat.projectSaveIssue": "项目聊天保存失败：",
+    "chat.textSurface": "文字工作面",
+    "chat.conversation": "聊天",
+    "chat.single": "单次生成与旧记录"
   }
 }

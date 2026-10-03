@@ -92,6 +92,28 @@ struct ChatTests {
         #expect(CGImageDestinationFinalize(destination))
         return data as Data
     }
+    @Test func incompleteParametersStayWithControllerAndBlockOnlyTheirOwner() async throws {
+        let (store, engine, chat) = try await fixture()
+        let a = try chat.newSession(); try configure(chat, session: a)
+        try chat.updateDraft("first", sessionID: a)
+        try await chat.send(sessionID: a); await chat.waitForCompletion()
+        let user = try #require(chat.selectedPath.first)
+        let field = a.uuidString + ":temperature"
+        chat.parameterText[field] = "-"; chat.invalidParameterFields.insert(field)
+        let b = try chat.newSession(); try configure(chat, session: b)
+        try chat.updateDraft("independent", sessionID: b)
+        try await chat.send(sessionID: b); await chat.waitForCompletion()
+        try chat.selectSession(a)
+        #expect(chat.parameterText[field] == "-")
+        try chat.updateDraft("next", sessionID: a)
+        await #expect(throws: (any Error).self) { try await chat.send(sessionID: a) }
+        await #expect(throws: (any Error).self) { try await chat.regenerate(user.id, sessionID: a) }
+        #expect(await engine.requests.count == 2)
+        chat.parameterText[field] = "0.5"; chat.invalidParameterFields.remove(field)
+        try await chat.regenerate(user.id, sessionID: a); await chat.waitForCompletion()
+        #expect(await engine.requests.count == 3)
+        try await chat.prepareForTermination(); try await store.close()
+    }
     @Test func twoTurnsFreezeHistoryAndBranchWithoutLosingOriginal() async throws {
         let (store, engine, chat) = try await fixture()
         let id = try chat.newSession(); try configure(chat, session: id)

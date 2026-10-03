@@ -17,6 +17,7 @@ struct QuickCategoryTests {
         c.setInput("content", value: .data(.text("参考材料")), draftID: text)
         #expect(c.definition?.inputs.contains(where: { $0.id == "images" }) == true)
         #expect(c.definition?.inputs.contains(where: { $0.id == "video" }) == true)
+        c.selectTextPresentation(.single)
         c.selectCategory(.audio); #expect(c.draft == nil)
         c.select(operationID: "d.image.generate", modelID: "image:fixture")
         #expect(c.category == .image)
@@ -24,12 +25,17 @@ struct QuickCategoryTests {
         c.selectCategory(.text)
         #expect(c.draft?.node.parameters["task"] == .text("草稿 e\u{301} 🙂"))
         #expect(c.draft?.inputs["content"] == .data(.text("参考材料")))
+        #expect(c.textPresentation == .single)
         #expect(calls == 0)
         try await c.flush(); let saved = c.state
         try await store.close()
         let reopened = try await ProjectStore.open(at: base)
         let restored = QuickGenerationController(store: reopened) { throw WorkflowIssue("no execution") }
         await restored.load(); #expect(restored.state == saved); #expect(restored.category == .text)
+        #expect(restored.textPresentation == .single)
+        restored.selectTextPresentation(.chat)
+        #expect(restored.category == .text)
+        #expect(restored.draft?.id == text)
         restored.selectCategory(.image); #expect(restored.draft?.node.parameters["modelID"] == .text("image:fixture"))
         try await restored.prepareForTermination(); try await reopened.close()
     }

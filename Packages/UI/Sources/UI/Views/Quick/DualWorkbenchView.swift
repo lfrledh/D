@@ -10,7 +10,6 @@ public struct DualWorkbenchView: View {
     let automaticQuick: QuickGenerationController
     @State private var useProjectQuick = true
     @State private var modelPickerCategory: QuickCategory?
-    @State private var legacyTextVisible = false
     private var chat: ChatController? { quickModel.projectSession.chat }
     private var quick: QuickGenerationController {
         useProjectQuick ? (model.projectSession.projectQuick ?? automaticQuick) : automaticQuick
@@ -61,7 +60,7 @@ public struct DualWorkbenchView: View {
         library.records.map { "\($0.id):\($0.state.rawValue):\($0.availability.rawValue)" }.sorted()
     }
     private var quickModelIdentity: String? {
-        if quick.category == .text, let modelID = chat?.selectedSession?.configuration?.parameters["modelID"]?.string {
+        if quick.category == .text, quick.textPresentation == .chat, let modelID = chat?.selectedSession?.configuration?.parameters["modelID"]?.string {
             return modelID
         }
         return quick.draft?.node.parameters["modelID"]?.string
@@ -154,19 +153,20 @@ public struct DualWorkbenchView: View {
                     if entry == .quick {
                         if quick.category == .text, let chat {
                             VStack(spacing: 0) {
-                                HStack {
-                                    Spacer()
-                                    if quick.state.drafts.contains(where: { QuickCategory.category(for: $0.node.operationID) == .text }) {
-                                        Button("单次文字生成与旧记录…") { legacyTextVisible = true }
-                                            .accessibilityIdentifier("chat-legacy-quick")
-                                    }
-                                }.padding(.horizontal, 20)
-                                ChatWorkbenchView(chat: chat, model: quickModel,
-                                    onChooseModel: { modelPickerCategory = .text; libraryVisible = true },
-                                    onSavedAsset: { reference in let source = chat.store; Task { await resultToCanvas(reference, from: source) } },
-                                    onAssetsChanged: { Task { await refreshLibrary(checkModels: false) } })
-                                    .id(chat.store.rootURL.standardizedFileURL.path)
-                                    .disabled(quickOwnerIsChanging)
+                                Picker(workflowText(language, "chat.textSurface", fallback: "文字工作面"),
+                                    selection: Binding(get: { quick.textPresentation }, set: { quick.selectTextPresentation($0) })) {
+                                    Text(workflowText(language, "chat.conversation", fallback: "聊天")).tag(QuickTextPresentation.chat)
+                                    Text(workflowText(language, "chat.single", fallback: "单次生成与旧记录")).tag(QuickTextPresentation.single)
+                                }.pickerStyle(.segmented).frame(maxWidth: 300).padding(.horizontal, 20)
+                                    .accessibilityIdentifier("quick-text-surface")
+                                if quick.textPresentation == .chat {
+                                    ChatWorkbenchView(chat: chat, model: quickModel,
+                                        onChooseModel: { modelPickerCategory = .text; libraryVisible = true },
+                                        onSavedAsset: { reference in let source = chat.store; Task { await resultToCanvas(reference, from: source) } },
+                                        onAssetsChanged: { Task { await refreshLibrary(checkModels: false) } })
+                                        .id(chat.store.rootURL.standardizedFileURL.path)
+                                        .disabled(quickOwnerIsChanging)
+                                } else { quickSurface }
                             }
                         } else { quickSurface }
                     }
@@ -185,12 +185,6 @@ public struct DualWorkbenchView: View {
 
         }
         .frame(minWidth: 860, minHeight: 580)
-        .sheet(isPresented: $legacyTextVisible) {
-            VStack {
-                HStack { Button("返回聊天") { legacyTextVisible = false }; Spacer() }.padding()
-                quickSurface
-            }.frame(minWidth: 800, minHeight: 520)
-        }
         .sheet(isPresented: $libraryVisible, onDismiss: finishLibraryDismissal) {
             VStack(spacing: 0) {
                 if !quickModel.projectSession.explicitModelChecking.isEmpty {
@@ -400,7 +394,7 @@ public struct DualWorkbenchView: View {
         returnToLibrary = false; libraryVisible = true
     }
     private var quickCommandEnabled: Bool {
-        entry == .quick && quick.category != .text && !quickOwnerIsChanging && quick.canStart && !libraryVisible && !projectsVisible && !compatibilityVisible &&
+        entry == .quick && (quick.category != .text || quick.textPresentation == .single) && !quickOwnerIsChanging && quick.canStart && !libraryVisible && !projectsVisible && !compatibilityVisible &&
         !languageVisible && !library.isPresented && previewAsset == nil && libraryInfo == nil &&
         filesRoute == nil && pendingFilesRoute == nil
     }
@@ -485,8 +479,14 @@ public struct DualWorkbenchView: View {
     }
     /// Only an explicit model/settings selection changes the future chat configuration.
     private func applySelectedModelToChat() {
-        guard quick.category == .text, let chat, let node = quick.draft?.node,
-              [WorkflowModelRoutes.qwen35, WorkflowModelRoutes.qwen38].contains(node.operationID) else { return }
+        guard quick.category == .text, let node = quick.draft?.node else { return }
+        guard [WorkflowModelRoutes.qwen35, WorkflowModelRoutes.qwen38].contains(node.operationID) else {
+            // The selected legacy model has single-turn semantics. Show its real
+            // surface rather than silently retaining a different chat model.
+            quick.selectTextPresentation(.single)
+            return
+        }
+        guard quick.textPresentation == .chat, let chat else { return }
         do {
             let sessionID = try chat.state.selectedSessionID ?? chat.newSession()
             try chat.updateConfiguration(node, sessionID: sessionID)
