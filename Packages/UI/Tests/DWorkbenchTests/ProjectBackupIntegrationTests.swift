@@ -1,9 +1,87 @@
 import Foundation
+import DInference
 import Testing
 @testable import DWorkbench
 
 @Suite("Project backup snapshot and independent restore", .serialized)
 struct ProjectBackupIntegrationTests {
+    @Test @MainActor func restoredQuickUsesNamedOwnerAndColdReopensWithoutGlobalWrites() async throws {
+        let root = URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory())
+            .appendingPathComponent("RestoredQuick-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let original = try await ProjectStore.create(at: root.appendingPathComponent("original.dproject"), name: "恢复草稿")
+        let global = try await ProjectStore.create(at: root.appendingPathComponent("global.dproject"), name: "全局不变")
+        let engine = BackupNoGenerationEngine()
+        let suite = "D.RestoredQuick." + UUID().uuidString
+        let settings = try #require(UserDefaults(suiteName: suite))
+        defer { settings.removePersistentDomain(forName: suite) }
+        func owner(_ suffix: String) -> ProjectSession {
+            ProjectSession(sessionFactory: { _ in WorkbenchSession(engine: engine, backendID: "fixture",
+                status: { .init(activeRunID: nil, phase: nil, queuedRunIDs: []) }, shutdown: {}, cleanup: {}, validateModel: { _ in }) },
+                settings: settings)
+        }
+        let originalQuick = QuickGenerationController(store: original) { throw WorkflowIssue("No generation") }
+        await originalQuick.load(); originalQuick.select(operationID: "d.image.generate", modelID: "image:fixture")
+        let draft = try #require(originalQuick.draft)
+        originalQuick.setParameter("promptText", value: .text("未保存中文 e\u{301} 🙂"), draftID: draft.id)
+        try await originalQuick.flush()
+        let globalBefore = try await global.quickCreationState()
+        let backup = root.appendingPathComponent("quick.dbackup")
+        _ = try await original.createBackup(at: backup)
+        let originalID = await original.snapshot().effectiveInstanceID
+        try await original.close()
+        try FileManager.default.moveItem(at: original.rootURL, to: root.appendingPathComponent("original-preserved.dproject"))
+        let restoredURL = root.appendingPathComponent("restored.dproject")
+        _ = try await ProjectStore.restoreBackup(at: backup, to: restoredURL)
+        let opened = owner("first")
+        await opened.openProject(at: restoredURL)
+        let restoredQuick = try #require(opened.projectQuick)
+        #expect(restoredQuick.store === opened.currentStore)
+        #expect(opened.manifest?.effectiveInstanceID != originalID)
+        #expect(restoredQuick.draft?.node.parameters["promptText"]?.string == "未保存中文 e\u{301} 🙂")
+        restoredQuick.setParameter("promptText", value: .text("只修改恢复副本"), draftID: draft.id)
+        await opened.openWorkflow()
+        opened.workflow?.addNode(operationID: "d.value.input")
+        let nodeCount = opened.workflow?.graph?.nodes.count
+        try await opened.saveWorkflowForBackup(store: restoredQuick.store,
+            instanceID: try #require(opened.manifest?.effectiveInstanceID))
+        #expect(await opened.requestClose())
+        #expect(opened.projectQuick == nil)
+        let reopened = owner("second")
+        await reopened.openProject(at: restoredURL)
+        #expect(reopened.projectQuick?.draft?.node.parameters["promptText"]?.string == "只修改恢复副本")
+        await reopened.openWorkflow()
+        #expect(reopened.workflow?.graph?.nodes.count == nodeCount)
+        #expect(try await global.quickCreationState() == globalBefore)
+        #expect(await engine.submissions == 0)
+        #expect(await reopened.requestClose())
+        try await global.close()
+    }
+
+    @Test @MainActor func damagedRestoredQuickIsReadOnlyAndSurvivesClose() async throws {
+        let root = URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory())
+            .appendingPathComponent("BadRestoredQuick-" + UUID().uuidString)
+        let store = try await ProjectStore.create(at: root, name: "损坏草稿保留")
+        try await store.close()
+        let data = Data("invalid quick JSON".utf8)
+        let sidecar = root.appendingPathComponent("quick-creation.json")
+        try data.write(to: sidecar)
+        let engine = BackupNoGenerationEngine()
+        let suite = "D.BadRestoredQuick." + UUID().uuidString
+        let settings = try #require(UserDefaults(suiteName: suite))
+        defer { settings.removePersistentDomain(forName: suite) }
+        let session = ProjectSession(sessionFactory: { _ in WorkbenchSession(engine: engine, backendID: "fixture",
+            status: { .init(activeRunID: nil, phase: nil, queuedRunIDs: []) }, shutdown: {}, cleanup: {}, validateModel: { _ in }) },
+            settings: settings)
+        await session.openProject(at: root)
+        let quick = try #require(session.projectQuick)
+        #expect(!quick.isLoaded && quick.error != nil)
+        quick.select(operationID: "d.image.generate", modelID: "image:fixture")
+        #expect(quick.draft == nil)
+        #expect(await session.requestClose())
+        #expect(try Data(contentsOf: sidecar) == data)
+    }
+
     @Test @MainActor func structuredMusicAndNestedHistorySurviveIndependentRestore() async throws {
         let base = URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory())
             .appendingPathComponent("StructuredBackup-" + UUID().uuidString)
@@ -112,5 +190,13 @@ struct ProjectBackupIntegrationTests {
         await #expect(throws: (any Error).self) { try await ProjectStore.restoreBackup(at: backup, to: base.appendingPathComponent("restore.dproject")) }
         #expect(await store.snapshot().assets.contains { $0.id == imported.asset.id })
         try await store.close()
+    }
+}
+
+private actor BackupNoGenerationEngine: InferenceEngine {
+    private(set) var submissions = 0
+    func submit(_ request: InferenceRequest, backendID: String) async throws -> InferenceRun {
+        submissions += 1
+        throw WorkflowIssue("Backup must not generate")
     }
 }

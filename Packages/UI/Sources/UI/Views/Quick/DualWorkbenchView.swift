@@ -6,8 +6,15 @@ import SwiftUI
 public struct DualWorkbenchView: View {
     public enum Entry: String, CaseIterable { case quick, workflow }
     let model: WorkbenchModel
-    let quickModel: WorkbenchModel
-    let quick: QuickGenerationController
+    let automaticQuickModel: WorkbenchModel
+    let automaticQuick: QuickGenerationController
+    @State private var useProjectQuick = true
+    private var quick: QuickGenerationController {
+        useProjectQuick ? (model.projectSession.projectQuick ?? automaticQuick) : automaticQuick
+    }
+    private var quickModel: WorkbenchModel {
+        useProjectQuick && model.projectSession.projectQuick != nil ? model : automaticQuickModel
+    }
     let library: ModelLibraryModel
     let nodeTags: ModelNodeTagStore
     let metadata: SharedLibraryStore?
@@ -43,13 +50,13 @@ public struct DualWorkbenchView: View {
     @State private var issue: String?
     @State private var failedAssetRoute: FilesRoute?
     @Environment(\.dLanguageStore) private var language
-    private var canvasModel: WorkbenchModel { model.manifest == nil ? quickModel : model }
+    private var canvasModel: WorkbenchModel { model.manifest == nil ? automaticQuickModel : model }
     private var installationStates: [String] {
         library.records.map { "\($0.id):\($0.state.rawValue):\($0.availability.rawValue)" }.sorted()
     }
     public init(model: WorkbenchModel, quickModel: WorkbenchModel, quick: QuickGenerationController,
                 library: ModelLibraryModel, nodeTags: ModelNodeTagStore, metadata: SharedLibraryStore?, metadataIssue: String? = nil) {
-        self.model = model; self.quickModel = quickModel; self.quick = quick; self.library = library; self.nodeTags = nodeTags; self.metadata = metadata; self.metadataIssue = metadataIssue
+        self.model = model; self.automaticQuickModel = quickModel; self.automaticQuick = quick; self.library = library; self.nodeTags = nodeTags; self.metadata = metadata; self.metadataIssue = metadataIssue
     }
     private func navigate(to destination: Entry) {
         guard destination != entry else { return }
@@ -73,6 +80,12 @@ public struct DualWorkbenchView: View {
                     Text(baselineText(language, "label.c71d0bca46eb", fallback: "工作流")).tag(Entry.workflow)
                 }.pickerStyle(.segmented).frame(width: 230).accessibilityIdentifier("workbench-entry")
                 Spacer()
+                if entry == .quick, model.projectSession.projectQuick != nil {
+                    Picker("快速草稿所属位置", selection: $useProjectQuick) {
+                        Text("本项目：" + (model.manifest?.name ?? "恢复项目")).tag(true)
+                        Text("全局快速创作").tag(false)
+                    }.frame(maxWidth: 250).accessibilityIdentifier("quick-project-owner")
+                }
                 if entry == .workflow {
                     Button(canvasModel.manifest?.name ?? "流程项目") { projectsVisible = true }
                 }
@@ -104,6 +117,8 @@ public struct DualWorkbenchView: View {
                     onResultToCanvas: { ref in Task { await resultToCanvas(ref) } },
                     onValueToCanvas: { value in Task { await valueToCanvas(value) } },
                     onAssetsChanged: { Task { await refreshLibrary(checkModels: false) } })
+                    .id(quick.store.rootURL.standardizedFileURL.path)
+                    .disabled(quickModel.projectSession.isChangingProject)
                     .opacity(entry == .quick ? 1 : 0).allowsHitTesting(entry == .quick).accessibilityHidden(entry != .quick)
                 WorkflowHostView(model: canvasModel, nodeTags: nodeTags, onQuickUse: useNode,
                     libraryContent: { point, close in AnyView(libraryBrowser(compact: true, at: point, onBack: close)) },
@@ -187,7 +202,9 @@ public struct DualWorkbenchView: View {
                 onOpenRestored: { url in
                     await model.openProject(at: url)
                     if model.projectSession.currentStore?.rootURL.standardizedFileURL == url.standardizedFileURL {
-                        filesRoute = nil; navigate(to: .workflow); await refreshLibrary(checkModels: false)
+                        filesRoute = nil; useProjectQuick = true
+                        navigate(to: model.projectSession.projectQuick == nil ? .workflow : .quick)
+                        await refreshLibrary(checkModels: false)
                         return nil
                     }
                     return model.errorMessage ?? "无法打开已恢复项目；请使用项目入口重新选择。"
@@ -252,6 +269,7 @@ public struct DualWorkbenchView: View {
         .onChange(of: quick.pendingSaveRunID) { _, _ in Task { await refreshLibrary(checkModels: false) } }
         .onChange(of: library.isPresented) { _, presented in if !presented { Task { await refreshLibrary(checkModels: false) } } }
         .onChange(of: installationStates) { _, _ in Task { await refreshLibrary(checkModels: false) } }
+        .onChange(of: model.manifest?.effectiveInstanceID) { _, _ in useProjectQuick = true }
         .onChange(of: model.manifest?.revision) { _, _ in Task { await refreshLibrary(checkModels: false) } }
         .sheet(item: $previewAsset, onDismiss: {
             if let pendingFilesRoute {
@@ -306,7 +324,7 @@ public struct DualWorkbenchView: View {
         returnToLibrary = false; libraryVisible = true
     }
     private var quickCommandEnabled: Bool {
-        entry == .quick && quick.canStart && !libraryVisible && !projectsVisible && !compatibilityVisible &&
+        entry == .quick && !quickModel.projectSession.isChangingProject && quick.canStart && !libraryVisible && !projectsVisible && !compatibilityVisible &&
         !languageVisible && !library.isPresented && previewAsset == nil && libraryInfo == nil &&
         filesRoute == nil && pendingFilesRoute == nil
     }
@@ -336,8 +354,8 @@ public struct DualWorkbenchView: View {
         if model.projectSession !== quickModel.projectSession { model.projectSession.observeModelAvailability(installationSnapshot) }
         if checkModels { await quickModel.projectSession.checkExplicitModelReadiness() }
         let otherStore = model.projectSession.currentStore
-        var snapshots = [await quick.store.snapshot()]
-        if let otherStore, otherStore !== quick.store {
+        var snapshots = [await automaticQuick.store.snapshot()]
+        if let otherStore, otherStore !== automaticQuick.store {
             let snapshot = await otherStore.snapshot()
             guard model.projectSession.currentStore === otherStore,
                   model.manifest?.effectiveInstanceID == snapshot.effectiveInstanceID else { return }
@@ -376,8 +394,8 @@ public struct DualWorkbenchView: View {
         quick.useSettings(node); navigate(to: .quick)
     }
     private func store(for projectID: UUID, instanceID: UUID? = nil) async throws -> ProjectStore {
-        var candidates: [(ProjectStore, ProjectManifest)] = [(quick.store, await quick.store.snapshot())]
-        if let current = model.projectSession.currentStore, current !== quick.store {
+        var candidates: [(ProjectStore, ProjectManifest)] = [(automaticQuick.store, await automaticQuick.store.snapshot())]
+        if let current = model.projectSession.currentStore, current !== automaticQuick.store {
             candidates.append((current, await current.snapshot()))
         }
         guard let resolved = SharedLibraryProjection.resolvedInstanceID(projectID: projectID,

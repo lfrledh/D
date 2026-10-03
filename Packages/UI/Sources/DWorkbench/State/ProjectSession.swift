@@ -20,6 +20,8 @@ public enum ProjectCloseDecision: Sendable {
 public final class ProjectSession {
     public private(set) var manifest: ProjectManifest?
     public private(set) var projectURL: URL?
+    /// Quick records restored with a named project keep that project instance as owner.
+    public private(set) var projectQuick: QuickGenerationController?
     public private(set) var modelName: String?
     public private(set) var selectedModelID: ModelID?
     public private(set) var imageProfile: ImageModelProfile = .flux2Klein
@@ -372,7 +374,7 @@ public final class ProjectSession {
     @ObservationIgnored private var textModelLease: LocationAccess.Lease?
     @ObservationIgnored private var textWork: Task<Void, Never>?
     @ObservationIgnored private var textContextID = UUID()
-    public var isBusy: Bool { workflow?.isRunning == true || workflow?.isSaving == true || !activeJobIDs.isEmpty || isTextWorking || textSources?.isSaving == true || audio?.isBusy == true }
+    public var isBusy: Bool { projectQuick?.isRunning == true || workflow?.isRunning == true || workflow?.isSaving == true || !activeJobIDs.isEmpty || isTextWorking || textSources?.isSaving == true || audio?.isBusy == true }
     public var canGenerate: Bool {
         creatorMode == .image && manifest != nil && activeDocument?.kind == .image && !isTextWorking && ((selectedModelID != nil && selectedModelReady) || modelLease != nil)
         && !isChangingProject && !showingAllArtworks && !closePending && pendingSaves.isEmpty
@@ -681,7 +683,7 @@ public final class ProjectSession {
         // Workflow services retain the Store/runtime that owns their saved and pending
         // results. Replacing only the audio controller would leave a usable-looking
         // workflow attached to closed file descriptors and an obsolete runtime.
-        guard workflow == nil, workflowCapture == nil else {
+        guard workflow == nil, workflowCapture == nil, projectQuick == nil else {
             await access.release(lease)
             errorMessage = "流程工作台仍持有当前项目。请先将项目移回原位置，完成录音绑定并保存、关闭项目，再移动后重新打开；现有图稿与原声均保留。"
             return
@@ -761,6 +763,7 @@ public final class ProjectSession {
         audioCreationDraft = nil
         text = nil
         textSources = nil
+        projectQuick = nil
         store = candidate
         session = createdSession
         projectLease = lease
@@ -770,6 +773,20 @@ public final class ProjectSession {
         if let owner = createdSession.artifactStore, owner !== candidate {
             do { manifest = try await candidate.recoverSharedRuntimeArtifacts(from: owner) }
             catch { errorMessage = "共享计算产物尚未恢复，原文件保留：" + error.localizedDescription }
+        }
+        if !isInternalWorkspace {
+            // Absence remains absence. A rejected sidecar stays visible/read-only rather
+            // than becoming an empty editable replacement or a global Quick workspace.
+            let restoredQuick = QuickGenerationController(store: candidate) { [weak self] in
+                guard let self, self.store === candidate, !self.closePending, !self.isChangingProject else {
+                    throw WorkflowIssue("快速草稿所属项目已关闭或切换。")
+                }
+                return try self.makeExplicitOperationServices()
+            }
+            await restoredQuick.load()
+            if restoredQuick.error != nil || !restoredQuick.state.drafts.isEmpty || !restoredQuick.state.runs.isEmpty {
+                projectQuick = restoredQuick
+            }
         }
         lastDocuments = [:]
         rememberProject()
@@ -2224,6 +2241,10 @@ public final class ProjectSession {
             }
             try await workflow.saveExplicitEdits()
         }
+        if let projectQuick {
+            guard projectQuick.store === captured else { throw WorkflowIssue("快速草稿所属项目已改变。") }
+            try await projectQuick.flush()
+        }
         try Task.checkCancellation()
         guard store === captured, manifest?.effectiveInstanceID == instanceID,
               !isChangingProject, !closePending else { throw WorkflowIssue("项目已切换；备份未创建。") }
@@ -2256,6 +2277,7 @@ public final class ProjectSession {
     /// Used by project switching and native window/application close delegates.
     public func requestClose(decision: ProjectCloseDecision? = nil) async -> Bool {
         if isRegisteringTextModel || isRegisteringAudioModel || isRegisteringVideoModel { return false }
+        if projectQuick?.pendingSaveRunID != nil { errorMessage = "本项目快速生成仍有待保存结果，请恢复保存后关闭。"; return false }
         if workflow?.hasPendingSaves == true { errorMessage = "流程仍有待保存结果，请恢复保存后关闭。"; return false }
         if text?.hasPendingCandidate == true {
             errorMessage = "请先接受或拒绝文字候选，再关闭项目。正文可以随时保存。"
@@ -2279,6 +2301,7 @@ public final class ProjectSession {
             if selected == .keepOpen { return false }
             if selected == .cancel {
                 await workflow?.cancel()
+                await projectQuick?.cancel()
                 await cancelTextRewrite()
                 for id in activeJobIDs { await cancel(id) }
             }
@@ -2298,6 +2321,7 @@ public final class ProjectSession {
             return false
         }
         await workflow?.cancel()
+        await projectQuick?.cancel()
         await cancelTextRewrite()
         for id in activeJobIDs { await cancel(id) }
         while isBusy { try? await Task.sleep(for: .milliseconds(100)) }
@@ -2317,6 +2341,7 @@ public final class ProjectSession {
         }
         do {
             try await workflow?.prepareForClose()
+            try await projectQuick?.prepareForTermination()
             try await flushDraft(to: store)
             for (id, outcome) in pendingSaves {
                 try await persist(id: id, outcome: outcome, store: store)
@@ -2357,6 +2382,7 @@ public final class ProjectSession {
             stableAudioModelStatus = "选择已安装的本地声音模型"
             audio = nil
             self.store = nil
+            projectQuick = nil
             workflow?.deactivateAfterClose()
             workflow = nil
             session = nil
