@@ -551,3 +551,27 @@ afc72101锁文件由真实Xcode解析：Markdown依赖与已测UI包一致，已
 Q自然LTX完整BF16/30步/97帧生成exit0、9780.49秒。四阶段观察各调用一次且原值返回：latent BF16 RMS1.2295，mel BF16 RMS6.5836，vocoder waveform实际BF16 −33.962dBFS，PCM16 −33.966dBFS，AAC解码 −34.018dBFS；非有限均0。PCM→AAC只差约−0.052dB。输出aeb4ad04da07492fcac17e33525d1297b5a7219bf990c30d941f81e13498009b；非实现者独立核查数值。Lead读取0/12/24/36/48/60/72/84/96帧：倒水后水流停止、液面沉静，未见参考画面整段不动。上述只证明本请求链没有坍缩，不足定位不同旧请求−61.70/−96.21dBFS的根因，也不是人耳声音/同步验收。证据q/ltx-natural-boundaries-01/evidence/summary.json、lead/q-ltx-contact-sheet.json。
 
 H3固定自然首尾请求两次在模型运行前拒绝：第一次缺task/cache，第二次缺LTX2_GEMMA_MAX_LENGTH=1024；旧result只记录首次失败，第二失败由独立command/log/result记录。Lead保留原目录，普通复制同一request和两图到task-attempt-3，补生产环境与唯一tmp/cache；native只读审核确认静态参数/路径要求，未预宣称模型admission通过。新执行沿原50步/全50层BF16/seed42，不是随机抽卡或重新生成不同样本。lead/q-h3-final-preparation.json、q-h3-final-preflight.json及q-h3-natural-final-result.json（仅实际结束才存在）。没有修改生产provider/模型精度。
+
+### 2026-10-03 本人集中办理后：B原生部分通过，长流拒绝接纳
+
+**版本**：A main保持`f31dced209855722d2f04cc0fc8c5f6712396120`。B普通App/本次原生受测`7754a2b70f3e761ef30b45fe3c5ba76bf12b817a`，相对CPU受测`55fcbaa74921007a3768ed8d94a4c896e2989297`仅文档；最终追加记录的候选SHA/远端状态写RC/lead/b-native-closeout-receipt.json。本次没有追加产品补丁、重新构建或重跑已经通过的CPU；不把记录提交当成重新验收。
+
+| 固定检查 | 实际结果及边界 |
+|---|---|
+| 本人办理/正常构建 | 本人信任固定EquatableMacros、登记Qwen3.5-9B Q4、显示聊天、取消Go To/导出面板。普通签名构建exit0/79.033秒，App四关键文件在原生操作前后摘要/大小/mtime一致。RC/lead/b-native-after-trust-result.json；旧exit65不删除 |
+| B-N1 四分类 | 鼠标进入文字/图像/视频/音频并查看实名筛选；Klein BF16草稿/参考控件、Wan T2V、MRT2音符和和弦入口可达，往返保留草稿。分类切换不触发模型；没有重跑九模型或把T2V改称I2V。旧单次文字入口仍有CPU/源码证据，本轮未完整原生走查；MP4附件往返未验 |
+| B-N2 真实多轮 | Qwen3.5-9B Q4 revision`8b2b98c00a6b4d291155e4890773ca8f769aee53`，resident/显式15GiB，TXT+PNG三次短回答均completed/stop，37/7/16字符；第二次生成时切图像页再回来，结果保持提交会话。输入2048、前三次输出192、temperature0.7/topP0.95/thinking off；不是原始BF16/27B能力验收 |
+| B-N2 长流/停止 | 后两次输出上限1024，均`partial/consumerTooSlow`，保留633/562字符，没有finishReason；点击切会话的工具调用曾耗56.30秒，原生停止尚未验证通过。选中叶/分支在磁盘正确，旧AX未滚到底不能算消息丢失。RC/lead/b-native-long-stream-failure.json；不增加缓冲、放宽失败或反复生成到偶然成功 |
+| B-N3 候选/来源 | 编辑旧用户消息产生兄弟分支，返回旧路径；再生成保留旧候选。系统提示与“中文试用”预设进入后续请求；保存回答为素材、显式送工作流新增资产节点并保存，没有自动执行下游。原生Markdown/文本导出只含所选路径，分别360/348字节；覆盖拒绝复用CPU，没有声称本次原生试过覆盖 |
+| B-N4 原生呈现 | 同一9955字节合成Markdown，表格/公式/高亮代码可见，代码复制到未发送草稿、跳到底部END-SYNTHETIC-24、原文开关与完整复制通过，落盘内容和原文严格一致。SHA256`11f75b66e2070c1d6ac1e2c93e04a1f2d0de00b366aca8fcf8f6eaba70b9f0d9`；不调用模型。最小尺寸设置/非法数值往返、聊天宿主真人组字未验；不重新打开已关闭H22 |
+| B-N5 普通沙盒备份 | 2会话、9消息、5次尝试和6份资产进入原生备份，含两次partial；退出后仅同卷移动自有原测试项目至保留名，独立恢复为新instance `EF885B9A-5AF6-425E-91E6-20250FF2E53B`。会话/配置/分支/资产字节一致，原件与备份不变；普通退出冷重开、PNG预览、新的未发送Unicode草稿保持。RC/lead/b-chat-{source-preservation,native-backup}.json为中途证据，最终结论见b-native-final-acceptance.json |
+| 文件面板限制 | 本人取消时观察多次Go To，可能由自动重试叠加；随后只操作一个面板，导出/恢复成功，不直接断言产品重复弹窗。冷重开列表的.dproject灰色，普通Go To完整路径后Open启用并成功；数据恢复通过，列表选包入口未关闭。非实现者核A/B的WorkbenchModel:765、整个Info.plist及类型/权限无差异，实际过滤/包判定原因unknown；未改UTI/权限或项目文件 |
+| Q固定样本 | H3 attempt-3 exit0/2132.65秒，原始BF16张量+F32组件、全50层/50步，512²/22帧24fps，输出`7fa32f28987abe135c010405cf8f395b2a4eef114dad69191cffb0eadd0f67d3`，带32kHz双声道AAC。本人确认该样本与LTX自然样本“两段视频都正常了”。未重跑；固定样本观感通过，不补造旧近静音首异常层、不代表B App视频生成入口或全部参数质量 |
+
+**问题定位与来源**：只读非实现者native_h22_diagnosis核Runtime沿用256事件有界队列，WorkflowServices在MainActor逐delta发布，消费者落后时按既有契约终止并清理；ChatController保留已消费部分，不伪装正常结束。尚无时序证据判定具体堵塞来自布局、切会话或保存；流式时未做Markdown渲染、保存有约2秒checkpoint，不能简单归因库、模型或16GiB。native_files_review核文件面板，不是新增独立测试或生产修补。证据b-native-readonly-review.json、b-native-open-panel-review.json。
+
+**预算/停止**：core初交+两次普通修复+唯一Lead接管已使用；UI尚余一次普通修复，但本长流跨共享消费/界面边界，不擅自改名计入UI预算。没有追加实现或第三轮Worker。下一有限修补应先定位长流与响应迟滞、保持取消/释放和partial契约，再复验原生长流/停止；文件选择过滤单独定点。待用户审计决定，不据此自动开工。
+
+**恢复与保护**：本次自有95339/96335/96473正常Cmd+Q后均结束，pgrep无D；Finder自有b-chat窗口关闭。Terminal受工具限制未操作，不能宣称关闭；若本人仍见已完成启动器窗口可关闭，不影响证据。候选仅四份记录差异，旧源个人scheme仍orderHint1→6/未暂存/原索引，SHA256`ca3635d88aa5a15397b90e528667c66c0e6db7e596176e885c79d194b544206c`；main和普通App/模型未动。B测试原件/备份保留，不清理。证据核对脚本初次在系统Python使用不支持的zip(strict=True)，写入前失败；改为等长断言+zip后全部比较通过，仅证据脚本兼容修正，不是产品缺陷。完整Lead用量/订阅费用unknown，不重算旧样本。
+
+**交付结论**：A修补已独立接纳，Q固定样本已获本人确认；B组件/短链/恢复部分通过，长流门槛失败，不能称B完成或功能冻结。唯一推荐稳定入口仍为A，B App与同树Xcode仅供审计；最终记录/分支同步后停在用户审计点，不合入main、不发Release。
