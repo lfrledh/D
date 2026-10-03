@@ -90,6 +90,7 @@ struct ProjectBackupIntegrationTests {
                 try #require(await engine.waiting)
                 let closing = Task { await owner.requestClose(decision: .wait) }
                 while !owner.isChangingProject && ContinuousClock.now < deadline { await Task.yield() }
+                try #require(owner.isChangingProject, "The close transaction must own admission before releasing the attempt")
                 #expect(!quick.canStart)
                 quick.start() // cannot admit a new batch during close
                 await engine.release()
