@@ -1050,7 +1050,7 @@
     "chat.futureOnly": "Changes affect future generations only.",
     "chat.generateReply": "Generate reply",
     "chat.history": "Conversations",
-    "chat.invalidNumber": "The number is incomplete or invalid. Correct it before sending.",
+    "chat.invalidNumber": "The number is incomplete or invalid. Correct it before generating.",
     "chat.kind.image": "Image",
     "chat.kind.text": "Text",
     "chat.kind.video": "Video",
@@ -1098,6 +1098,7 @@
     "chat.unsupportedAttachment": "Only TXT, MD, PNG, JPEG, and MP4 are accepted",
     "chat.unsupportedDrop": "Only project assets can be dropped here.",
     "chat.useWorkflow": "Use in workflow",
-    "chat.you": "You"
+    "chat.you": "You",
+    "chat.projectSaveIssue": "Project chat save failed: "
   }
 }

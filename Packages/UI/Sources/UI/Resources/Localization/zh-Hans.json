@@ -1050,7 +1050,7 @@
     "chat.futureOnly": "更改只影响之后的生成。",
     "chat.generateReply": "生成回复",
     "chat.history": "对话",
-    "chat.invalidNumber": "数值未完成或无效；修正后才能发送。",
+    "chat.invalidNumber": "数值未完成或无效；修正后才能生成。",
     "chat.kind.image": "图像",
     "chat.kind.text": "文字",
     "chat.kind.video": "视频",
@@ -1098,6 +1098,7 @@
     "chat.unsupportedAttachment": "只接受 TXT、MD、PNG、JPEG、MP4",
     "chat.unsupportedDrop": "只能拖入项目素材。",
     "chat.useWorkflow": "用于工作流",
-    "chat.you": "你"
+    "chat.you": "你",
+    "chat.projectSaveIssue": "项目聊天保存失败："
   }
 }

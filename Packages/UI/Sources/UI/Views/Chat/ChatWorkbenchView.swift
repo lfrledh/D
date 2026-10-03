@@ -584,7 +584,7 @@ struct ChatWorkbenchView: View {
         let scoped = directory.startAccessingSecurityScopedResource()
         defer { if scoped { directory.stopAccessingSecurityScopedResource() } }
         do {
-            let reference = try await store.publishWorkflowAsset(data: Data(value.utf8), mediaType: "text/plain",
+            let reference = try await store.publishWorkflowAsset(data: Data(value.utf8), mediaType: markdown ? "text/markdown" : "text/plain",
                 name: markdown ? "聊天路径 Markdown" : "聊天路径纯文字", operationID: "d.chat.export-path",
                 details: ["chatSessionID": sessionID.uuidString, "format": markdown ? "markdown" : "plain"]).record.reference
             onAssetsChanged()
