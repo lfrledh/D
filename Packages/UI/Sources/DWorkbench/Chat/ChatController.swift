@@ -146,14 +146,19 @@ import Observation
         state.sessions[try index(sessionID)].draft = text; changed()
     }
     public func updateConfiguration(_ node: WorkflowNode, sessionID: UUID) throws {
-        try requireLoaded(); guard [WorkflowModelRoutes.qwen35, WorkflowModelRoutes.qwen38].contains(node.operationID),
+        try requireLoaded()
+        let chatNode = try Self.chatConfiguration(node)
+        state.sessions[try index(sessionID)].configuration = chatNode; changed()
+    }
+    private static func chatConfiguration(_ node: WorkflowNode) throws -> WorkflowNode {
+        guard [WorkflowModelRoutes.qwen35, WorkflowModelRoutes.qwen38].contains(node.operationID),
                                    node.parameters["modelID"]?.string?.isEmpty == false else { throw WorkflowIssue("请选择支持有序消息的明确文字模型。") }
         var chatNode = node
         chatNode.parameters["outputMode"] = .text("response")
         chatNode.parameters["task"] = .text("")
         chatNode.parameters["messagesJSON"] = .text("")
         try WorkflowRegistry.standard.validate(chatNode)
-        state.sessions[try index(sessionID)].configuration = chatNode; changed()
+        return chatNode
     }
     /// An explicit model/settings replacement supersedes only this session's
     /// numeric editor text. Ordinary edits keep partially typed valid numbers.
@@ -168,13 +173,43 @@ import Observation
         state.sessions[try index(sessionID)].systemPrompt = prompt; changed()
     }
     public func setPreset(_ preset: ChatPromptPreset) throws {
-        try requireLoaded(); guard !preset.name.isEmpty, preset.name.utf8.count <= 256, preset.prompt.utf8.count <= 65_536 else { throw WorkflowIssue("提示预设无效。") }
+        try requireLoaded(); guard !preset.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                                  preset.name.utf8.count <= 256, preset.prompt.utf8.count <= 65_536 else { throw WorkflowIssue("提示预设无效。") }
         var candidate = state
         if let i = candidate.presets.firstIndex(where: { $0.id == preset.id }) { candidate.presets[i] = preset }
         else { candidate.presets.append(preset) }
         try candidate.validate(); state = candidate; changed()
     }
     public func removePreset(_ id: UUID) throws { try requireLoaded(); state.presets.removeAll { $0.id == id }; changed() }
+    /// Applying copies future settings; later preset edits never mutate this copy.
+    public func applyPreset(_ id: UUID, sessionID: UUID) throws {
+        try requireLoaded(); let i = try index(sessionID)
+        guard let preset = state.presets.first(where: { $0.id == id }) else { throw WorkflowIssue("预设不存在。") }
+        let configuration = try preset.configuration.map(Self.chatConfiguration)
+        state.sessions[i].systemPrompt = preset.prompt
+        if let configuration {
+            state.sessions[i].configuration = configuration
+            let prefix = sessionID.uuidString + ":"
+            parameterText = parameterText.filter { !$0.key.hasPrefix(prefix) }
+            invalidParameterFields = invalidParameterFields.filter { !$0.hasPrefix(prefix) }
+        }
+        changed()
+    }
+    @discardableResult public func copyPreset(_ id: UUID, name: String) throws -> UUID {
+        try requireLoaded()
+        guard let source = state.presets.first(where: { $0.id == id }) else { throw WorkflowIssue("预设不存在。") }
+        let copy = ChatPromptPreset(name: name, prompt: source.prompt, configuration: source.configuration,
+                                    selectionInstruction: source.selectionInstruction)
+        try setPreset(copy); return copy.id
+    }
+    /// Import always creates new preset identities. Replacement is a separate edit.
+    public func importPresets(_ data: Data) throws {
+        try requireLoaded(); let presets = try ChatPresetFile.decode(data)
+        var candidate = state
+        candidate.presets += presets.map { .init(name: $0.name, prompt: $0.prompt,
+            configuration: $0.configuration, selectionInstruction: $0.selectionInstruction) }
+        try candidate.validate(); state = candidate; changed()
+    }
     public func addAttachment(_ reference: WorkflowAssetReference, name: String, sessionID: UUID) async throws -> UUID {
         try requireLoaded()
         guard [.text, .image, .video].contains(reference.kind), !name.isEmpty, name.utf8.count <= 512 else { throw WorkflowIssue("附件类型或名称无效。") }
@@ -223,6 +258,7 @@ import Observation
                                messagesJSON: a.messagesJSON, inputs: a.inputs, systemPrompt: a.systemPrompt,
                                createdAt: a.createdAt, status: a.status)
             copy.replayedAttemptID = a.replayedAttemptID
+            copy.comparisonSourceAttemptID = a.comparisonSourceAttemptID
             copy.rawText = a.rawText; copy.response = a.response; copy.output = a.output; copy.issue = a.issue
             return copy
         }
@@ -375,6 +411,35 @@ import Observation
                          systemPrompt: session.systemPrompt, expectedLeafID: session.selectedLeafID, clearDraft: false)
     }
 
+    /// Fixed question/context/media with explicitly chosen model settings. The same
+    /// runtime serializes work; this does not create parallel model residency.
+    public func compare(_ attemptID: UUID, configuration: WorkflowNode, sessionID: UUID) async throws {
+        try requireLoaded(); let session = state.sessions[try index(sessionID)]
+        guard let original = session.attempts.first(where: { $0.id == attemptID }),
+              original.status != .running, original.status != .saving,
+              let user = session.messages.first(where: { $0.id == original.userMessageID }),
+              configuration.parameters["modelID"]?.string?.isEmpty == false,
+              [WorkflowModelRoutes.qwen35, WorkflowModelRoutes.qwen38].contains(configuration.operationID) else {
+            throw WorkflowIssue("比较需要已有固定问题与明确的文字模型配置。")
+        }
+        var node = try Self.chatConfiguration(configuration)
+        node.parameters["task"] = .text("")
+        node.parameters["messagesJSON"] = .text(original.messagesJSON)
+        if (node.parameters["seed"]?.string ?? "").isEmpty {
+            node.parameters["seed"] = .text(String(UInt64.random(in: .min ... .max)))
+        }
+        try WorkflowRegistry.standard.validate(node)
+        let refs = original.inputs.values.flatMap { $0.datum?.assetReferences ?? [] }
+        let estimate = (original.messagesJSON.utf8.count + 2) / 3 + refs.reduce(0) { $0 + ($1.kind == .video ? 4096 : 1024) }
+        guard estimate <= (node.parameters["maximumPromptTokens"]?.integer ?? 0) else {
+            throw WorkflowIssue("固定比较输入超过所选上下文预算；没有删减原始问题。")
+        }
+        for reference in refs { _ = try await store.workflowData(reference) }
+        try await launch(sessionID: sessionID, user: user, prepared: (node, original.messagesJSON, original.inputs),
+                         systemPrompt: original.systemPrompt, expectedLeafID: session.selectedLeafID,
+                         clearDraft: false, comparisonSourceAttemptID: attemptID)
+    }
+
     /// Replay the captured request, not settings or history edited since that attempt.
     public func reproduce(_ attemptID: UUID, sessionID: UUID) async throws {
         try requireLoaded()
@@ -393,7 +458,7 @@ import Observation
     private func launch(sessionID: UUID, user: ChatMessage,
                         prepared: (WorkflowNode, String, [String: WorkflowValue]),
                         systemPrompt: String, expectedLeafID: UUID?, clearDraft: Bool,
-                        replayedAttemptID: UUID? = nil) async throws {
+                        replayedAttemptID: UUID? = nil, comparisonSourceAttemptID: UUID? = nil) async throws {
         // A replay uses the immutable attempt, never the currently edited fields.
         guard replayedAttemptID != nil || !hasInvalidParameterText(sessionID: sessionID) else {
             throw WorkflowIssue("回答参数仍有未完成或无效输入，请先修正。")
@@ -413,6 +478,7 @@ import Observation
                                   assistantMessageID: assistantID, node: prepared.0, messagesJSON: prepared.1,
                                   inputs: prepared.2, systemPrompt: systemPrompt)
         attempt.replayedAttemptID = replayedAttemptID
+        attempt.comparisonSourceAttemptID = comparisonSourceAttemptID
         if !state.sessions[i].messages.contains(where: { $0.id == user.id }) { state.sessions[i].messages.append(user) }
         state.sessions[i].messages.append(assistant); state.sessions[i].attempts.append(attempt)
         if state.sessions[i].selectedLeafID == expectedLeafID { state.sessions[i].selectedLeafID = assistantID }

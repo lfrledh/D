@@ -27,6 +27,7 @@ public struct ChatRequestInspection: Sendable {
             field("user", "User message", attempt.userMessageID.uuidString),
             field("assistant", "Assistant message", attempt.assistantMessageID.uuidString),
             field("replay", "Replayed attempt", attempt.replayedAttemptID?.uuidString ?? "—"),
+            field("comparison", "Comparison input source", attempt.comparisonSourceAttemptID?.uuidString ?? "—"),
             field("status", "Status", attempt.status.rawValue),
             field("operation", "Operation", node.operationID),
             field("version", "Definition version", String(node.definitionVersion))
@@ -66,6 +67,7 @@ public struct ChatRequestInspection: Sendable {
             let userMessageID: UUID
             let assistantMessageID: UUID
             let replayedAttemptID: UUID?
+            let comparisonSourceAttemptID: UUID?
             let operationID: String
             let definitionVersion: Int
             let parameters: [String: String]
@@ -90,6 +92,7 @@ public struct ChatRequestInspection: Sendable {
         let report = SafeReport(attemptID: attempt.id, sessionID: attempt.sessionID,
                                 userMessageID: attempt.userMessageID, assistantMessageID: attempt.assistantMessageID,
                                 replayedAttemptID: attempt.replayedAttemptID,
+                                comparisonSourceAttemptID: attempt.comparisonSourceAttemptID,
                                 operationID: knownOperation ? node.operationID : "[withheld]",
                                 definitionVersion: node.definitionVersion, parameters: safeParameters,
                                 assets: safeAssets, systemPrompt: "[withheld]", messagesJSON: "[withheld]")

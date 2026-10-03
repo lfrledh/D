@@ -102,6 +102,76 @@ struct ChatTests {
         try await chat.prepareForTermination(); try await store.close()
     }
 
+    @Test func legacyWhitespacePresetRemainsReadableWhileNewWritesRejectIt() async throws {
+        let (store, _, chat) = try await fixture()
+        var legacy = try await store.chatState()
+        legacy.presets = [.init(name: " ", prompt: "old preserved instructions")]
+        _ = try await store.saveChatState(legacy, expectedRevision: legacy.revision)
+        let reader = ChatController(store: store) { throw WorkflowIssue("No inference in migration test") }
+        await reader.load()
+        #expect(reader.isLoaded && reader.error == nil)
+        _ = try reader.newSession()
+        try await reader.flush()
+        #expect(try await store.chatState().presets == legacy.presets)
+        #expect(throws: (any Error).self) { try reader.setPreset(.init(name: " ", prompt: "new")) }
+        #expect(chat.state.presets.isEmpty)
+        try await store.close()
+    }
+
+    @Test func comparisonKeepsFrozenInputAndPresetExchangeDoesNotRewriteHistory() async throws {
+        let (store, engine, chat) = try await fixture()
+        let id = try chat.newSession(); try configure(chat, session: id)
+        try chat.setSystemPrompt("original rules", sessionID: id)
+        try await chat.sendAfterDraft("fixed question", sessionID: id)
+        let original = try #require(chat.selectedSession?.attempts.first)
+        let unbound = try #require(WorkflowRegistry.standard.operation(WorkflowModelRoutes.qwen35)?.definition.makeNode())
+        let beforeInvalidComparison = chat.state
+        await #expect(throws: (any Error).self) {
+            try await chat.compare(original.id, configuration: unbound, sessionID: id)
+        }
+        #expect(chat.state == beforeInvalidComparison && chat.saveIssue == nil)
+        try chat.setSystemPrompt("different future rules", sessionID: id)
+        try chat.updateDraft("unsubmitted future question", sessionID: id)
+        var alternative = try #require(chat.selectedSession?.configuration)
+        alternative.parameters["temperature"] = .decimal(0.2)
+        alternative.parameters["modelID"] = .text("text:another-fixture")
+        try await chat.compare(original.id, configuration: alternative, sessionID: id)
+        await chat.waitForCompletion()
+        let compared = try #require(chat.selectedSession?.attempts.last)
+        #expect(compared.messagesJSON == original.messagesJSON && compared.inputs == original.inputs)
+        #expect(compared.systemPrompt == original.systemPrompt && compared.comparisonSourceAttemptID == original.id)
+        #expect(compared.node.parameters["modelID"] == alternative.parameters["modelID"])
+        #expect(chat.selectedSession?.draft == "unsubmitted future question")
+        #expect(chat.selectedSession?.attempts.first == original)
+        #expect(await engine.requests.count == 2)
+        #expect(ChatRequestInspection(attempt: compared).redactedJSON.contains(original.id.uuidString))
+
+        let preset = ChatPromptPreset(name: "Translate", prompt: "new system", configuration: alternative,
+                                      selectionInstruction: "Explain the quoted selection")
+        try chat.setPreset(preset); try chat.applyPreset(preset.id, sessionID: id)
+        let applied = try #require(chat.selectedSession)
+        var updated = preset; updated.prompt = "changed preset only"
+        try chat.setPreset(updated)
+        #expect(chat.selectedSession == applied)
+        let copiedID = try chat.copyPreset(preset.id, name: "Copy")
+        #expect(copiedID != preset.id)
+        let bytes = try ChatPresetFile.encode([preset])
+        #expect(try ChatPresetFile.decode(bytes) == [preset])
+        try chat.importPresets(bytes)
+        #expect(chat.state.presets.count == 3)
+        #expect(chat.state.presets.first?.prompt == "changed preset only")
+        #expect(chat.state.presets.last?.id != preset.id)
+        var object = try #require(try JSONSerialization.jsonObject(with: bytes) as? [String: Any])
+        object["unexpected"] = true
+        #expect(throws: (any Error).self) { try chat.importPresets(JSONSerialization.data(withJSONObject: object)) }
+        object.removeValue(forKey: "unexpected"); object["version"] = true
+        #expect(throws: (any Error).self) { try ChatPresetFile.decode(JSONSerialization.data(withJSONObject: object)) }
+        #expect(chat.state.presets.count == 3)
+        try await chat.flush()
+        #expect(try await store.chatState() == chat.state)
+        try await store.close()
+    }
+
     @Test func partialAnswerAdoptionPreservesOutputAndReopensAsExplicitVersion() async throws {
         let (store, engine, chat) = try await fixture()
         let id = try chat.newSession(); try configure(chat, session: id)

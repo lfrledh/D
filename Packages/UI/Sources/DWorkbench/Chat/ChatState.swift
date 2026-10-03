@@ -40,6 +40,8 @@ public struct ChatAttempt: Codable, Sendable, Equatable, Identifiable {
     public let createdAt: Date
     /// An explicit replay keeps the source attempt immutable; nil also decodes old records.
     public var replayedAttemptID: UUID?
+    /// Comparison reuses the frozen input but deliberately changes model/settings.
+    public var comparisonSourceAttemptID: UUID?
     public var status: Status
     public var rawText: String
     public var response: TextResponse?
@@ -87,7 +89,13 @@ public struct ChatPromptPreset: Codable, Sendable, Equatable, Identifiable {
     public let id: UUID
     public var name: String
     public var prompt: String
-    public init(id: UUID = UUID(), name: String, prompt: String) { self.id = id; self.name = name; self.prompt = prompt }
+    public var configuration: WorkflowNode?
+    public var selectionInstruction: String?
+    public init(id: UUID = UUID(), name: String, prompt: String,
+                configuration: WorkflowNode? = nil, selectionInstruction: String? = nil) {
+        self.id = id; self.name = name; self.prompt = prompt
+        self.configuration = configuration; self.selectionInstruction = selectionInstruction
+    }
 }
 
 public struct ChatState: Codable, Sendable, Equatable {
@@ -106,9 +114,13 @@ public struct ChatState: Codable, Sendable, Equatable {
             throw WorkflowIssue("聊天记录版本、身份或选中会话无效；原件保持只读。")
         }
         for preset in presets {
-            guard !preset.name.isEmpty, preset.name.utf8.count <= 256, preset.prompt.utf8.count <= 65_536 else {
+            // v1 accepted whitespace-only names; preserve old archives on read.
+            guard !preset.name.isEmpty,
+                  preset.name.utf8.count <= 256, preset.prompt.utf8.count <= 65_536,
+                  (preset.selectionInstruction?.utf8.count ?? 0) <= 16_384 else {
                 throw WorkflowIssue("聊天提示预设无效；原件保持只读。")
             }
+            if let node = preset.configuration { try Self.validateNode(node) }
         }
         for session in sessions {
             guard !session.title.isEmpty, session.title.utf8.count <= 512,
