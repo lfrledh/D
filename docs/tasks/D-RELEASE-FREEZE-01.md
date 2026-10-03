@@ -533,3 +533,13 @@ core初交7130829、两修复0c15f5f/2fb1f41已合并；六项原反例经native
 Lead后续7ff155a/05e637b处理用户分类要求的真实边界：临时数值状态在原ChatController按会话保留；显式模型替换才清除其旧参数文本，普通键入不清；文字内“聊天/单次生成”复用原Quick，旧Qwen模型显式到单次，不能静默继续另一聊天模型。其他三类仍直接复用，Canvas不拆分；设置内容有界滚动。此处属于Lead实现，不追记为Worker独立通过。新增兼容/实际服务门禁反例待CPU；非实现者明确源码检查不代表GUI。Markdown发布为实际text/markdown/.md，沿原Store校验和导出；原文/远程资源禁用保留。
 
 组合05e637b尚待CPU/编译/普通App真实多轮附件/聊天独立备份和原生操作。Q程序运行自然LTX完整请求后再运行一份语义相容H3首尾；原模型/数值/生产provider未变，观察hook不改变返回值。A独立f31仍可用，main未接纳B，功能冻结仍未通过。RC/lead/b-review-checkpoint-2.json为中途索引，恢复先查真实Git/进程，勿重复提交生成。
+
+### 2026-10-03 B 编译与CPU门槛（原生仍待验）
+
+1cea585仅修ChatController.load的catch变量遮蔽（self.error）。Lead使用core唯一有界接管，未增加Worker轮数。初次CPU的4个Chat方法/11断言失败源于夹具：emoji每个15字节（40个600，512字节标题34个510）；普通文件WorkflowAssets实际是终止型unsafePath，非可重试I/O。92e5528改用自有真实目录0500，require pending且检查精确EACCES包装，defer恢复原权限；另保留普通文件保护反例。随后取消夹具单waiter被执行/取消双等待覆盖，产生continuation misuse；仅停止自有CPU组并保留日志，855d1a3用等待数组匹配既有RunCompletion，不移除生产drain。以上由native_h22_diagnosis独立核对依据，旧失败保留。
+
+afc72101锁文件由真实Xcode解析：Markdown依赖与已测UI包一致，已有共存pin未变，远程mlx-swift-lm被省略是原有Vendor局部包覆盖，不是更换计算实现。native_files_review另发现旧命名Quick项目没有首个聊天入口；Lead55fcbaa7只在保留项目Quick时保留已加载的空chat，不提前写缺失侧车。真实ProjectSession反例修前require失败、修后通过，非实现者复核关闭。
+
+最终受测代码 **55fcbaa74921007a3768ed8d94a4c896e2989297**，RC/lead/b-combined-cpu-owner-result.json：exit0，18.25秒；DWorkbench45方法/5suite、UI5方法各自通过，不累加历史数字。覆盖四分类状态/在途归属、会话/附件/分支/取消/保存与备份、Markdown导出不覆盖及呈现门禁。单作业峰值344MiB，没有App/GPU运行。原生输入/真实多轮/普通聊天备份待验；CPU不替代这些门槛。
+
+主线仍A/f31；Q固定作业继续，未因CPU夹具问题重跑模型。下一动作：Q结束后组合普通签名构建及B原生最小闭环。证据索引RC/lead/b-cpu-gate.json、b-core-lead-takeover.json；恢复仍先核真实版本和自有进程。

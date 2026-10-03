@@ -6,7 +6,7 @@
 
 用户批准继续同一 D-RELEASE-FREEZE-01，起点 main/candidate `3a2801abab22273256923ce1f3c14407515f20ce`。当前顺序：A1 普通沙盒备份与独立恢复、A2 冷启按需模型就绪 → 两项真实 App 门槛通过并独立接纳 main → B 最小文字聊天。Q 视频质量独立继续。**A 的 G1/G2 已通过，独立修补基线 f31dced209855722d2f04cc0fc8c5f6712396120 已接纳并推送 main；B 正在隔离候选实现**；下列上一批停点是历史事实，不再是本轮排程。A受测8511718c472e788a8dcfc088eea0fde9dad050b3；独立原生证据RC/lead/a-native-gates.json、集成回执RC/lead/a-integration.json。B包含常驻四分类，文字为聊天，另三类复用；Q继续独立，未宣称冻结。
 
-当前 B：四分类导航e57952f已通过初始定向CPU；最新组合`05e637b02df10328c512aafab4f57c552f30024e`尚未编译/原生验收。core Sol/high初交及两修复完成；UI Sol/high初交+修复1完成（剩一轮普通修复）。Lead协调所有权、备份屏障、Markdown资产、四分类/文字子面、参数临时状态与有界设置滚动；非实现者已定点复核已发现反例。临时半截数字保留于同一控制器，不宣称冷启恢复；合法配置、会话、Quick导航在Store。Q固定自然首帧完整30步BF16请求独占GPU，随后程序只提交已准备的一份H3自然首尾；不是抽卡批次。两者均结束后才进行重构建/GUI，准确状态见RC/lead/q-*-result.json，缺结果不重启。B未接纳main。
+当前 B：四分类、文字聊天/单次生成、原三类工作面已接线。组合`55fcbaa74921007a3768ed8d94a4c896e2989297`定向DWorkbench45方法/5suite、UI呈现5方法通过；组件均编译通过，尚未普通App/真实聊天验收。afc72101为真实Xcode解析的Markdown依赖锁；55fcbaa7补旧命名Quick项目缺少首个聊天入口，反例修前失败、修后通过。core Sol/high初交+两修复后Lead一次有界接管修正编译/夹具；UI初交+修复1，剩一轮普通修复。重要Lead差异由非实现者复核。临时半截数字在控制器按会话保留，不宣称冷启恢复；合法配置、会话、导航在Store。Q固定自然首帧完整30步BF16请求独占GPU，随后程序只提交一份已准备H3自然首尾；不是抽卡批次。两者结束才进行重构建/GUI；独立低内存CPU检查已串行完成。准确状态见RC/lead/q-*-result.json，缺结果不重启。B未接纳main。
 
 证据 RC=`D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261003T035843Z-stabilize-chat`。H22/菜单/失联恢复保持，不重复本人操作；旧失败和预算保留。新增有限续修及角色、范围、门槛见任务记录末节。没有新的登录或资格事项；不发布 Release。
 
