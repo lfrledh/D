@@ -60,6 +60,7 @@ public struct QuickCreationState: Codable, Sendable, Equatable {
     @ObservationIgnored private var cancelRequested = false
     public private(set) var activeRunID: UUID?
     public let store: ProjectStore
+    @ObservationIgnored private let allowsSubmission: @MainActor () -> Bool
     @ObservationIgnored private let makeServices: @MainActor () throws -> WorkflowServices
     @ObservationIgnored private var services: WorkflowServices?
     @ObservationIgnored private var runTask: Task<Void, Never>?
@@ -67,8 +68,8 @@ public struct QuickCreationState: Codable, Sendable, Equatable {
     @ObservationIgnored private var writeTail: Task<Void, Error>?
     @ObservationIgnored private var diskRevision: UInt64 = 0
 
-    public init(store: ProjectStore, makeServices: @escaping @MainActor () throws -> WorkflowServices) {
-        self.store = store; self.makeServices = makeServices
+    public init(store: ProjectStore, allowsSubmission: @escaping @MainActor () -> Bool = { true }, makeServices: @escaping @MainActor () throws -> WorkflowServices) {
+        self.store = store; self.allowsSubmission = allowsSubmission; self.makeServices = makeServices
     }
     public var draft: QuickDraft? { state.drafts.first { $0.id == state.selectedDraftID } }
     public var definition: WorkflowOperationDefinition? {
@@ -100,7 +101,7 @@ public struct QuickCreationState: Codable, Sendable, Equatable {
         return nil
     }
     public var canStart: Bool {
-        isLoaded && !isRunning && pendingSaveRunID == nil && saveIssue == nil && inputIssue == nil &&
+        allowsSubmission() && isLoaded && !isRunning && pendingSaveRunID == nil && saveIssue == nil && inputIssue == nil &&
         draft?.node.parameters["modelID"]?.string?.isEmpty == false
     }
     public func setFieldText(_ key: String, text: String, draftID: String) {
@@ -320,7 +321,7 @@ public struct QuickCreationState: Codable, Sendable, Equatable {
     }
     /// Explicitly rerun one failed attempt's frozen inputs, without replacing its prior evidence.
     public func retryAttempt(_ id: UUID) {
-        guard isLoaded, !isRunning, saveIssue == nil, pendingSaveRunID == nil,
+        guard allowsSubmission(), isLoaded, !isRunning, saveIssue == nil, pendingSaveRunID == nil,
               let previous = state.runs.first(where: { $0.id == id }),
               [.failed, .cancelled, .interrupted, .partial].contains(previous.status) else { return }
         var captured = previous.draft; captured.attempts = 1

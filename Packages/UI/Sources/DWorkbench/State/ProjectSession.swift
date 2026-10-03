@@ -784,11 +784,14 @@ public final class ProjectSession {
         if !isInternalWorkspace {
             // Absence remains absence. A rejected sidecar stays visible/read-only rather
             // than becoming an empty editable replacement or a global Quick workspace.
-            let restoredQuick = QuickGenerationController(store: candidate) { [weak self] in
-                guard let self, self.store === candidate, !self.closePending, !self.isChangingProject else {
+            let restoredQuick = QuickGenerationController(store: candidate, allowsSubmission: { [weak self] in
+                guard let self else { return false }
+                return self.store === candidate && !self.closePending && !self.isChangingProject
+            }) { [weak self] in
+                guard let self, self.store === candidate else {
                     throw WorkflowIssue("快速草稿所属项目已关闭或切换。")
                 }
-                return try self.makeExplicitOperationServices()
+                return try self.makeExplicitOperationServices(allowDrainingQuick: self.projectQuick?.isRunning == true)
             }
             await restoredQuick.load()
             if restoredQuick.error != nil || !restoredQuick.state.drafts.isEmpty || !restoredQuick.state.runs.isEmpty {
@@ -869,7 +872,10 @@ public final class ProjectSession {
 
     public var currentStore: ProjectStore? { store }
     public func makeExplicitOperationServices() throws -> WorkflowServices {
-        guard let store, let session, !closePending else { throw WorkflowIssue("工作区尚未准备。") }
+        try makeExplicitOperationServices(allowDrainingQuick: false)
+    }
+    private func makeExplicitOperationServices(allowDrainingQuick: Bool) throws -> WorkflowServices {
+        guard let store, let session, !closePending || allowDrainingQuick else { throw WorkflowIssue("工作区尚未准备。") }
         try rememberCurrentWorkflowModels()
         return WorkflowServices(store: store, session: session,
             defaultIdentity: { [weak self] in self?.defaultWorkflowModel($0) ?? "" },

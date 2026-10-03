@@ -58,6 +58,60 @@ struct ProjectBackupIntegrationTests {
         try await global.close()
     }
 
+    @Test @MainActor func restoredQuickCloseDrainsSubmittedBatchAndBlocksNewStarts() async throws {
+        // 0: close before the first task gets past its input save; 1: close while
+        // the first attempt is admitted; 2: cancel before admission.
+        for boundary in 0...2 {
+            let root = URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory())
+                .appendingPathComponent("QuickClose-" + UUID().uuidString + ".dproject")
+            let source = try await ProjectStore.create(at: root, name: "关闭中保持尝试归属")
+            let seed = QuickGenerationController(store: source) { throw WorkflowIssue("No generation") }
+            await seed.load(); seed.select(operationID: "d.model.language", modelID: "text:fixture.close")
+            let draftID = try #require(seed.draft?.id)
+            seed.setParameter("task", value: .text("保留两个已提交尝试"), draftID: draftID)
+            seed.setAttempts(2, draftID: draftID); try await seed.flush(); try await source.close()
+            let engine = BackupCloseEngine(holdFirst: boundary == 1)
+            let suite = "D.QuickClose." + UUID().uuidString
+            let settings = try #require(UserDefaults(suiteName: suite))
+            defer { settings.removePersistentDomain(forName: suite) }
+            let owner = ProjectSession(sessionFactory: { _ in
+                WorkbenchSession(engine: engine, backendID: "fixture", status: { .init(activeRunID: nil, phase: nil, queuedRunIDs: []) },
+                    shutdown: {}, cleanup: {}, validateModel: { _ in }, textBackendID: "fixture.text",
+                    validateTextModel: { .init(directory: $0, revision: "fixture.close") })
+            }, settings: settings)
+            await owner.openProject(at: root)
+            _ = try await owner.registerExplicitModel(at: root, kind: .text)
+            let quick = try #require(owner.projectQuick)
+            quick.start(); #expect(quick.isRunning)
+            let closed: Bool
+            if boundary == 1 {
+                let deadline = ContinuousClock.now + .seconds(5)
+                while !(await engine.waiting) && ContinuousClock.now < deadline { await Task.yield() }
+                try #require(await engine.waiting)
+                let closing = Task { await owner.requestClose(decision: .wait) }
+                while !owner.isChangingProject && ContinuousClock.now < deadline { await Task.yield() }
+                #expect(!quick.canStart)
+                quick.start() // cannot admit a new batch during close
+                await engine.release()
+                closed = await closing.value
+            } else {
+                closed = await owner.requestClose(decision: boundary == 2 ? .cancel : .wait)
+            }
+            #expect(closed && owner.currentStore == nil && !quick.isRunning)
+            #expect(!quick.canStart, "A retained controller cannot submit after its owner closes")
+            let reopened = try await ProjectStore.open(at: root)
+            let state = try await reopened.quickCreationState()
+            if boundary == 2 {
+                #expect(state.runs.count == 1 && state.runs.first?.status == .cancelled)
+                #expect(await engine.submissions == 0)
+            } else {
+                #expect(state.runs.count == 2 && state.runs.allSatisfy { $0.status == .completed })
+                #expect(await engine.submissions == 2)
+            }
+            try await reopened.close()
+        }
+    }
+
     @Test @MainActor func damagedRestoredQuickIsReadOnlyAndSurvivesClose() async throws {
         let root = URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory())
             .appendingPathComponent("BadRestoredQuick-" + UUID().uuidString + ".dproject")
@@ -198,5 +252,20 @@ private actor BackupNoGenerationEngine: InferenceEngine {
     func submit(_ request: InferenceRequest, backendID: String) async throws -> InferenceRun {
         submissions += 1
         throw WorkflowIssue("Backup must not generate")
+    }
+}
+
+private actor BackupCloseEngine: InferenceEngine {
+    private(set) var submissions = 0
+    private var holdFirst: Bool
+    private var continuation: CheckedContinuation<Void, Never>?
+    var waiting: Bool { continuation != nil }
+    init(holdFirst: Bool) { self.holdFirst = holdFirst }
+    func release() { continuation?.resume(); continuation = nil }
+    func submit(_ request: InferenceRequest, backendID: String) async throws -> InferenceRun {
+        submissions += 1
+        if holdFirst { holdFirst = false; await withCheckedContinuation { continuation = $0 } }
+        return .init(id: request.id, events: AsyncThrowingStream { c in c.yield(.textDelta("已完成")); c.finish() },
+            cancel: {}, outcome: { .completed(.init(metadata: ["fixture": "CPU"])) })
     }
 }

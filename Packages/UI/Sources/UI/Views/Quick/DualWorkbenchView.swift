@@ -131,9 +131,9 @@ public struct DualWorkbenchView: View {
             }
             ZStack {
                 QuickGenerationView(quick: quick, model: quickModel, onChooseModel: { libraryVisible = true },
-                    onSettingsToCanvas: { draft in Task { await settingsToCanvas(draft) } },
-                    onResultToCanvas: { ref in Task { await resultToCanvas(ref) } },
-                    onValueToCanvas: { value in Task { await valueToCanvas(value) } },
+                    onSettingsToCanvas: { draft in let source = quick.store; Task { await settingsToCanvas(draft, from: source) } },
+                    onResultToCanvas: { ref in let source = quick.store; Task { await resultToCanvas(ref, from: source) } },
+                    onValueToCanvas: { value in let source = quick.store; Task { await valueToCanvas(value, from: source) } },
                     onAssetsChanged: { Task { await refreshLibrary(checkModels: false) } })
                     .id(quick.store.rootURL.standardizedFileURL.path)
                     .disabled(quickOwnerIsChanging)
@@ -516,18 +516,26 @@ public struct DualWorkbenchView: View {
             WorkflowModelRoutes.ace, "d.image.generate", "d.music.generate"].contains(id) {
             presentLibraryDestination(.models); return
         }
+        let owner = quickModel.projectSession, controller = quick
+        let draftID = controller.draft?.id
         let panel = NSOpenPanel(); panel.canChooseDirectories = true; panel.canChooseFiles = false
         panel.message = "登记已有模型的原位置；不会复制、移动或删除权重。"
         guard await panel.begin() == .OK, let url = panel.url else { return }
-        do { let choice = try await quickModel.projectSession.registerExplicitModel(at: url, kind: kind)
-            quick.select(operationID: id, modelID: choice.id)
+        do {
+            guard !quickOwnerIsChanging, quickModel.projectSession === owner,
+                  quick === controller, controller.draft?.id == draftID else { throw WorkflowIssue("快速草稿已切换，未登记模型。") }
+            let choice = try await owner.registerExplicitModel(at: url, kind: kind)
+            guard !quickOwnerIsChanging, quickModel.projectSession === owner,
+                  quick === controller, controller.draft?.id == draftID else { throw WorkflowIssue("快速草稿已切换，已登记的模型未替换当前草稿。") }
+            controller.select(operationID: id, modelID: choice.id)
             await refreshLibrary(checkModels: true)
         } catch { issue = error.localizedDescription }
     }
     private func importLibraryAsset() async {
+        let destination = quick.store
         guard let (url, mode) = await NativeAssetImportPanel.choose(language: language) else { return }
         let scope = url.startAccessingSecurityScopedResource(); defer { if scope { url.stopAccessingSecurityScopedResource() } }
-        do { _ = try await quick.store.importWorkflowMediaFile(at: url, mode: mode); await refreshLibrary(checkModels: false) }
+        do { _ = try await destination.importWorkflowMediaFile(at: url, mode: mode); await refreshLibrary(checkModels: false) }
         catch { issue = error.localizedDescription }
     }
     private func addLibraryEntry(_ value: SharedLibraryBrowserEntry, at point: CGPoint) async {
@@ -555,16 +563,15 @@ public struct DualWorkbenchView: View {
             libraryVisible = false; navigate(to: .workflow)
         } catch { issue = error.localizedDescription }
     }
-    private func copiedReference(_ reference: WorkflowAssetReference, from original: ProjectStore? = nil, to destination: ProjectStore) async throws -> WorkflowAssetReference {
-        let source = original ?? quick.store
+    private func copiedReference(_ reference: WorkflowAssetReference, from source: ProjectStore, to destination: ProjectStore) async throws -> WorkflowAssetReference {
         if destination === source { return reference }
         return try await destination.copyWorkflowAsset(reference, from: source)
     }
-    private func copiedDatum(_ value: WorkflowDatum, to destination: ProjectStore) async throws -> WorkflowDatum {
+    private func copiedDatum(_ value: WorkflowDatum, from source: ProjectStore, to destination: ProjectStore) async throws -> WorkflowDatum {
         try value.validate()
         var copies: [WorkflowAssetReference: WorkflowAssetReference] = [:]
         for ref in value.assetReferences where copies[ref] == nil {
-            copies[ref] = try await copiedReference(ref, to: destination)
+            copies[ref] = try await copiedReference(ref, from: source, to: destination)
         }
         func replace(_ datum: WorkflowDatum) throws -> WorkflowDatum {
             switch datum {
@@ -597,7 +604,7 @@ public struct DualWorkbenchView: View {
         }
         return true
     }
-    private func settingsToCanvas(_ draft: QuickDraft) async {
+    private func settingsToCanvas(_ draft: QuickDraft, from source: ProjectStore) async {
         let target = canvasModel
         await target.projectSession.openWorkflow()
         guard let controller = target.projectSession.workflow else { return }
@@ -607,34 +614,34 @@ public struct DualWorkbenchView: View {
             var copy = draft
             for (port, value) in copy.inputs {
                 guard let datum = value.datum else { throw WorkflowIssue("请先选择单项输入，不能隐式复制候选集合。") }
-                copy.inputs[port] = .data(try await copiedDatum(datum, to: controller.services.store))
+                copy.inputs[port] = .data(try await copiedDatum(datum, from: source, to: controller.services.store))
             }
             guard target.projectSession.workflow === controller else { throw WorkflowIssue("目标项目已改变，未放入其他流程。") }
             try await controller.insertQuickSettings(copy, target: scope)
             navigate(to: .workflow)
         } catch { issue = error.localizedDescription }
     }
-    private func resultToCanvas(_ ref: WorkflowAssetReference) async {
+    private func resultToCanvas(_ ref: WorkflowAssetReference, from source: ProjectStore) async {
         let target = canvasModel
         await target.projectSession.openWorkflow()
         guard let controller = target.projectSession.workflow else { return }
         if controller.graph == nil { controller.addBlankGraph() }
         guard let scope = controller.canvasInsertionTarget() else { issue = "流程当前不可编辑"; return }
         do {
-            let copy = try await copiedReference(ref, to: controller.services.store)
+            let copy = try await copiedReference(ref, from: source, to: controller.services.store)
             guard target.projectSession.workflow === controller else { throw WorkflowIssue("目标项目已改变。") }
             try await controller.insertQuickResult(copy, target: scope)
             navigate(to: .workflow)
         } catch { issue = error.localizedDescription }
     }
-    private func valueToCanvas(_ value: WorkflowDatum) async {
+    private func valueToCanvas(_ value: WorkflowDatum, from source: ProjectStore) async {
         let target = canvasModel
         await target.projectSession.openWorkflow()
         guard let controller = target.projectSession.workflow else { return }
         if controller.graph == nil { controller.addBlankGraph() }
         guard let scope = controller.canvasInsertionTarget() else { issue = "流程当前不可编辑"; return }
         do {
-            let copy = try await copiedDatum(value, to: controller.services.store)
+            let copy = try await copiedDatum(value, from: source, to: controller.services.store)
             guard target.projectSession.workflow === controller else { throw WorkflowIssue("目标项目已改变。") }
             try await controller.insertQuickValue(copy, target: scope)
             navigate(to: .workflow)
