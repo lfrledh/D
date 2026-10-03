@@ -48,6 +48,7 @@ public actor ProjectStore {
     private var quickPendingBytes: Data?
     private var quickPendingBaseRevision: UInt64?
     private var chatValidatedBytes: Data?
+    private var chatWriteBaselineInitialized = false
     private var chatPendingBytes: Data?
     private var chatPendingBaseRevision: UInt64?
     private var pendingManifest: (bytes: Data, value: ProjectManifest)?
@@ -3954,13 +3955,12 @@ extension ProjectStore {
 }
 
 extension ProjectStore {
-    public func chatState() throws -> ChatState {
+    private func readChatState() throws -> (state: ChatState, bytes: Data?) {
         try checkLocation()
         var info = stat()
         if fstatat(rootFD, "quick-chat.json", &info, AT_SYMLINK_NOFOLLOW) != 0 {
             guard errno == ENOENT else { throw ProjectFiles.error() }
-            chatValidatedBytes = nil
-            return ChatState()
+            return (ChatState(), nil)
         }
         let data = try ProjectFiles.read(relative: "quick-chat.json", in: rootFD, limit: 16 * 1_024 * 1_024)
         let state = try JSONDecoder().decode(ChatState.self, from: data)
@@ -3971,8 +3971,17 @@ extension ProjectStore {
         }
         guard try normalized(data) == normalized(reencoded) else { throw WorkflowIssue("聊天记录含未知字段或数值，原件保持只读。") }
         try state.validate()
-        chatValidatedBytes = data
-        return state
+        return (state, data)
+    }
+    public func chatState() throws -> ChatState {
+        let read = try readChatState()
+        // A later read (including backup inspection) must not authorize a loaded writer
+        // to replace someone else's same-revision edit.
+        if !chatWriteBaselineInitialized {
+            chatValidatedBytes = read.bytes
+            chatWriteBaselineInitialized = true
+        }
+        return read.state
     }
 
     @discardableResult public func saveChatState(_ state: ChatState, expectedRevision: UInt64) throws -> UInt64 {
@@ -3982,14 +3991,14 @@ extension ProjectStore {
                        afterPublication: (@Sendable () throws -> Void)?) throws -> UInt64 {
         try checkLocation(); try state.validate()
         let expectedBytes = chatValidatedBytes
-        let previous = try chatState()
-        let ownPublishedFailure = chatPendingBaseRevision == expectedRevision && chatPendingBytes != nil && chatValidatedBytes == chatPendingBytes
-        guard chatValidatedBytes == expectedBytes || ownPublishedFailure else {
-            chatValidatedBytes = expectedBytes
+        let read = try readChatState()
+        let previous = read.state
+        let ownPublishedFailure = chatPendingBaseRevision == expectedRevision && chatPendingBytes != nil && read.bytes == chatPendingBytes
+        guard (chatWriteBaselineInitialized || read.bytes == nil || ownPublishedFailure) &&
+              (read.bytes == expectedBytes || ownPublishedFailure) else {
             throw ProjectStoreError.externalModification
         }
         guard previous.revision == expectedRevision || ownPublishedFailure, previous.revision < UInt64.max else {
-            chatValidatedBytes = expectedBytes
             throw ProjectStoreError.externalModification
         }
         var value = state; value.revision = previous.revision + 1
@@ -4005,10 +4014,10 @@ extension ProjectStore {
             try afterPublication?()
         } catch {
             chatPendingBytes = data; chatPendingBaseRevision = expectedRevision
-            chatValidatedBytes = expectedBytes
             throw error
         }
-        chatValidatedBytes = data; chatPendingBytes = nil; chatPendingBaseRevision = nil
+        chatValidatedBytes = data; chatWriteBaselineInitialized = true
+        chatPendingBytes = nil; chatPendingBaseRevision = nil
         return value.revision
     }
 
@@ -4232,8 +4241,7 @@ extension ProjectStore {
         }
         _ = try quickCreationState()
         if let bytes = quickValidatedBytes { inline("quick-creation.json", bytes) }
-        _ = try chatState()
-        if let bytes = chatValidatedBytes { inline("quick-chat.json", bytes) }
+        if let bytes = try readChatState().bytes { inline("quick-chat.json", bytes) }
         for index in manifest.assets.indices {
             try Task.checkCancellation()
             let asset = manifest.assets[index]
