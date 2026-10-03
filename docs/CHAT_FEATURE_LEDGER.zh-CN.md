@@ -108,7 +108,7 @@ S00–S05是同一份已批准范围的实施切片，完成一片可集成一�
 | F27 | 生产工具接线与CPU通过；原生待验 | 4ae52508：Foundation Decimal保守精度边界、单位/时区、TabularData全CSV；独立工具活动/完整结果采用/备份/取消。乘法静默舍入反例已修；不把preview截取当实际结果截断。 |
 | F28 | 未实现；隔离方案尚未证明 | CPython WASI+Wasmtime候选尚未安装/验证；只读准备子任务被工具安全审查拒绝，未绕行或裸跑宿主Python。此工具事件不证明产品不可实现，保留同一编号继续评估合法隔离入口。 |
 | F29 | 官方客户端与真实本机服务通过；生产接线检查中 | 317e1d13固定SDK 0.12.1，actualPinnedConformanceServerRoundTripAndLocalCancellation实际连接/列工具/调用/取消/重连/超时/断开通过，服务PID已回收。Lead当前加入会话所有权、显式调用和备份；原生App未验，不保证服务端动作撤回。 |
-| F30 | 静态预览组件候选；整项未完 | 59b0093c：真实WebKit静态HTML/SVG，预算/CSP/资源规则。启用任意JS的RTC出站隔离未获证明，当前明确拒绝该模式；不是交互预览完成。编辑成果/版本/保存/Mermaid仍待完成。 |
+| F30 | 本地交互预览组件已验；编辑/保存/Mermaid接线中 | s05-preview-wk-final 8方法实际WK通过：DOM交互正例、静态不执行、RTC不可用、导航/弹窗/媒体/file拒绝及loopback出站零请求（健康正控制、服务已关闭）。Lead修SDK委托签名及误匹配AbortController；不等于普通App/任意网络全面证明。编辑成果/版本/保存/Mermaid尚未完成。 |
 | F31 | 本地系统服务与UI候选/CPU通过；真人路径待验 | 6bca3bbba297e63fa26a927ccc4bb04e3b184e37：本地Speech显式转写→原稿待采用、系统TTS语言/音色/速度/暂停/停止；close先停信号后drain。未宣称本机语种/权限/实际收听已验。 |
 | F32 | 未核对 | 按冻结条目核对当前实现；本轮批准，不转发布后。 |
 | F33 | 外部导入/HTML/备份切片CPU通过；整项未完 | d2badef2：D封装v1 OpenAI role/content预览和损失确认、新会话来源、同ID保存重试、HTML原子不覆盖导出；4项导入+8项纯交换检查及备份恢复。可恢复单会话完整树包仍待补，原生导入/导出待验。 |

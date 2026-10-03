@@ -73,6 +73,18 @@ struct ChatArtifactWebPreviewTests {
         #expect(interactive.contains("object-src 'none'"))
     }
 
+    @Test @MainActor func realDelegateImplementsSDKSelectors() {
+        let coordinator = ChatArtifactWebPreview.Coordinator()
+        for name in ["webView:decidePolicyForNavigationAction:preferences:decisionHandler:",
+                     "webView:decidePolicyForNavigationResponse:decisionHandler:",
+                     "webView:runJavaScriptAlertPanelWithMessage:initiatedByFrame:completionHandler:",
+                     "webView:runJavaScriptConfirmPanelWithMessage:initiatedByFrame:completionHandler:",
+                     "webView:runJavaScriptTextInputPanelWithPrompt:defaultText:initiatedByFrame:completionHandler:",
+                     "webView:runOpenPanelWithParameters:initiatedByFrame:completionHandler:",
+                     "webView:requestMediaCapturePermissionForOrigin:initiatedByFrame:type:decisionHandler:"] {
+            #expect(coordinator.responds(to: NSSelectorFromString(name)))
+        }
+    }
     @Test @MainActor func realViewerRunsLocalDOMOnlyInInteractiveMode() async throws {
         let container = NSView(frame: NSRect(x: 0, y: 0, width: 480, height: 320))
         let coordinator = ChatArtifactWebPreview.Coordinator()
@@ -110,9 +122,11 @@ struct ChatArtifactWebPreviewTests {
         #expect(interactiveViewer !== staticViewer)
         #expect(interactiveViewer.configuration.websiteDataStore.isPersistent == false)
         #expect(interactiveViewer.configuration.defaultWebpagePreferences.isLockdownModeEnabled)
+        #expect(await inspect(interactiveViewer, "typeof AbortController") == "function")
+        #expect(await inspect(interactiveViewer, "String(" + ChatArtifactWebPreviewPolicy.bootstrapProbe + ")") == "true")
         #expect(await inspect(interactiveViewer, "getComputedStyle(document.getElementById('out')).color") == "rgb(7, 8, 9)")
         #expect(await inspect(interactiveViewer, "document.getElementById('entry').value='after'; document.getElementById('go').click(); document.getElementById('out').textContent") == "after")
-        #expect(await inspect(interactiveViewer, "String(!Object.getOwnPropertyNames(globalThis).some(n => /rtc|peerconnection/i.test(n) && typeof globalThis[n] === 'function'))") == "true")
+        #expect(await inspect(interactiveViewer, "String(!Object.getOwnPropertyNames(globalThis).some(n => /^(?:(?:webkit|moz)?rtc|.*peerconnection)/i.test(n) && typeof globalThis[n] === 'function'))") == "true")
         #expect(await inspect(interactiveViewer, "String(!(window.webkit && window.webkit.messageHandlers && Object.keys(window.webkit.messageHandlers).length))") == "true")
         #expect(errors.isEmpty)
     }

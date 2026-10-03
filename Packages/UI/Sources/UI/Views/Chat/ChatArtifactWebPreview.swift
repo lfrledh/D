@@ -177,7 +177,7 @@ public struct ChatArtifactWebPreview: NSViewRepresentable {
 
         public func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
                             preferences: WKWebpagePreferences,
-                            decisionHandler: @escaping (WKNavigationActionPolicy, WKWebpagePreferences) -> Void) {
+                            decisionHandler: @escaping @MainActor (WKNavigationActionPolicy, WKWebpagePreferences) -> Void) {
             let initial = self.webView === webView && initialNavigationPending
                 && navigationAction.targetFrame?.isMainFrame == true
                 && navigationAction.navigationType == .other
@@ -191,7 +191,7 @@ public struct ChatArtifactWebPreview: NSViewRepresentable {
         }
 
         public func webView(_ webView: WKWebView, decidePolicyFor navigationResponse: WKNavigationResponse,
-                            decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void) {
+                            decisionHandler: @escaping @MainActor (WKNavigationResponsePolicy) -> Void) {
             let internalDocument = self.webView === webView && navigationResponse.isForMainFrame
                 && navigationResponse.response.url?.absoluteString == "about:blank"
             decisionHandler(internalDocument ? .allow : .cancel)
@@ -211,7 +211,7 @@ public struct ChatArtifactWebPreview: NSViewRepresentable {
         }
 
         public func webView(_ webView: WKWebView, didReceive challenge: URLAuthenticationChallenge,
-                            completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
+                            completionHandler: @escaping @MainActor (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
             if challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust {
                 completionHandler(.performDefaultHandling, nil)
             } else {
@@ -220,7 +220,7 @@ public struct ChatArtifactWebPreview: NSViewRepresentable {
         }
 
         public func webView(_ webView: WKWebView, authenticationChallenge challenge: URLAuthenticationChallenge,
-                            shouldAllowDeprecatedTLS decisionHandler: @escaping (Bool) -> Void) {
+                            shouldAllowDeprecatedTLS decisionHandler: @escaping @MainActor (Bool) -> Void) {
             decisionHandler(false)
         }
 
@@ -229,37 +229,37 @@ public struct ChatArtifactWebPreview: NSViewRepresentable {
                             windowFeatures: WKWindowFeatures) -> WKWebView? { nil }
 
         public func webView(_ webView: WKWebView, runJavaScriptAlertPanelWithMessage message: String,
-                            initiatedBy frame: WKFrameInfo, completionHandler: @escaping () -> Void) {
+                            initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping @MainActor () -> Void) {
             completionHandler()
         }
 
         public func webView(_ webView: WKWebView, runJavaScriptConfirmPanelWithMessage message: String,
-                            initiatedBy frame: WKFrameInfo, completionHandler: @escaping (Bool) -> Void) {
+                            initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping @MainActor (Bool) -> Void) {
             completionHandler(false)
         }
 
         public func webView(_ webView: WKWebView, runJavaScriptTextInputPanelWithPrompt prompt: String,
-                            defaultText: String?, initiatedBy frame: WKFrameInfo,
-                            completionHandler: @escaping (String?) -> Void) {
+                            defaultText: String?, initiatedByFrame frame: WKFrameInfo,
+                            completionHandler: @escaping @MainActor (String?) -> Void) {
             completionHandler(nil)
         }
 
         public func webView(_ webView: WKWebView, runOpenPanelWith parameters: WKOpenPanelParameters,
-                            initiatedBy frame: WKFrameInfo,
-                            completionHandler: @escaping ([URL]?) -> Void) {
+                            initiatedByFrame frame: WKFrameInfo,
+                            completionHandler: @escaping @MainActor ([URL]?) -> Void) {
             completionHandler(nil)
         }
 
         public func webView(_ webView: WKWebView, requestMediaCapturePermissionFor origin: WKSecurityOrigin,
-                            initiatedBy frame: WKFrameInfo, type: WKMediaCaptureType,
-                            decisionHandler: @escaping (WKPermissionDecision) -> Void) {
+                            initiatedByFrame frame: WKFrameInfo, type: WKMediaCaptureType,
+                            decisionHandler: @escaping @MainActor (WKPermissionDecision) -> Void) {
             decisionHandler(.deny)
         }
 
         @available(macOS 27.0, *)
         public func webView(_ webView: WKWebView, requestGeolocationPermissionFor origin: WKSecurityOrigin,
-                            initiatedBy frame: WKFrameInfo,
-                            decisionHandler: @escaping (WKPermissionDecision) -> Void) {
+                            initiatedByFrame frame: WKFrameInfo,
+                            decisionHandler: @escaping @MainActor (WKPermissionDecision) -> Void) {
             decisionHandler(.deny)
         }
     }
@@ -303,7 +303,7 @@ enum ChatArtifactWebPreviewPolicy {
             'mozRTCPeerConnection', 'RTCDataChannel', 'webkitRTCDataChannel'];
           const names = Object.getOwnPropertyNames(globalThis);
           return !known.some(name => typeof globalThis[name] === 'function')
-            && !names.some(name => /rtc|peerconnection/i.test(name)
+            && !names.some(name => /^(?:(?:webkit|moz)?rtc|.*peerconnection)/i.test(name)
               && typeof globalThis[name] === 'function');
         })()
         """

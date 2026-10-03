@@ -679,3 +679,5 @@ R仍为run-20261003T150039Z-chat-continue。MCP已有真实SDK服务controller�
 Sol/high辅助纯值组件后，由Lead接入既有WorkflowServices后台语言准入与ChatController。标题/标签/追问/摘要/记忆分别开关、独立预算；不变主消息和未发送草稿。原文、冻结输入与来源落入原Store；个人记忆跨owner先记录续作，失败只重试保存。只读非实现者指出保存关闭、重复应用、撤权/遗忘恢复反例，Lead逐项修补；不是Sol独立完成或另有独立模型实测。
 
 风险→保存/恢复、隐私、后台取消；最少证据R/lead/s03-assistance-save-red2及s03-assistance-cold-red在修前失败，s03-assistance-wiring-final 13方法/2suite通过（参数化冷恢复3场景，非独立通过率），实际Store独立备份恢复与受控模型流。受测base cdcaa7758381ac0718793b1118a34b59d9780c40加Lead差分，逐文件摘要在R/lead/s03-assistance-code-evidence.json。真实辅助模型和普通App控件尚未验。R为run-20261003T150039Z-chat-continue。所有CLI已结束的事实与当前INSPECTION第一轮修复运行分开；费用unknown。
+
+F30交互组件：Sol/high interactive1，经只读审阅合入962f90d98ba52b6399dd1479853f087cd64b2feb候选。Lead真实WK反例先失败：SDK27 optional delegate签名与实现不符，bootstrap子串/rtc/又误匹配AbortController；R/lead/s05-preview-diagnose保留实际JS错误。不删除隔离要求，修为真实SDK签名与RTC前缀检查，保留AbortController正例和选择器检查。s05-preview-wk-final 8方法通过，loopback健康请求成功、所列五条出站尝试零到达，子进程/监听回收；非实现者复核无剩余P1/P2。纯组件并非普通App或全部网络证明；编辑/保存/Mermaid继续实施。官方依据本机SDK WebKit headers及WebKit RTCPeerConnection.idl/RTCDataChannel.idl的PeerConnectionEnabled。
