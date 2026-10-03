@@ -65,7 +65,7 @@ public struct ModelFile: Codable, Hashable, Sendable {
 public enum ModelDigestAlgorithm: String, Codable, Hashable, Sendable { case sha256, gitBlobSHA1 }
 public enum ModelPreparation: String, Codable, Hashable, Sendable { case none, required }
 
-public struct ModelCatalogEntry: Identifiable, Codable, Sendable {
+public struct ModelCatalogEntry: Identifiable, Codable, Sendable, Equatable {
     public let id: String
     public let title: String
     public let repository: String
@@ -161,7 +161,7 @@ public enum ModelInstallationState: String, Codable, Sendable {
 public enum ModelAvailability: String, Codable, Sendable { case available, unavailable, needsAuthorization }
 public enum ModelStorageKind: String, Codable, Sendable { case managed, external }
 
-public struct ModelRecord: Identifiable, Codable, Sendable {
+public struct ModelRecord: Identifiable, Codable, Sendable, Equatable {
     public let id: ModelID
     public let catalogID: String
     public let revision: String
@@ -175,7 +175,7 @@ public struct ModelRecord: Identifiable, Codable, Sendable {
     public var activeLeaseCount: Int
 }
 
-public struct ModelLibrarySnapshot: Sendable {
+public struct ModelLibrarySnapshot: Sendable, Equatable {
     public let revision: UInt64
     public let rootURL: URL?
     public let catalog: [ModelCatalogEntry]
@@ -184,7 +184,7 @@ public struct ModelLibrarySnapshot: Sendable {
     public let copyProgress: ModelCopyProgress?
 }
 
-public struct ModelCopyProgress: Sendable {
+public struct ModelCopyProgress: Sendable, Equatable {
     public let sourceID: ModelID
     public let copiedBytes: UInt64
     public let totalBytes: UInt64

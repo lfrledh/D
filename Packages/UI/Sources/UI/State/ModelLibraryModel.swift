@@ -141,6 +141,9 @@ public final class ModelLibraryModel {
         let generation = refreshGeneration
         let updated = await library.snapshot()
         guard generation == refreshGeneration, updated.revision >= (snapshot?.revision ?? 0) else { return }
+        // Keep native menu tracking intact while idle. Compare all visible values,
+        // including transient copy progress, so real readiness changes still publish.
+        guard snapshot != updated else { return }
         snapshot = updated
     }
 
