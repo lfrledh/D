@@ -92,7 +92,7 @@ S00–S05是同一份已批准范围的实施切片，完成一片可集成一�
 | F11 | 实现与CPU通过；原生待验 | 263857f1：系统/模型参数预设复制更新、版本化JSON导入导出及可编辑短任务模板；现有Store不覆盖导出。 |
 | F12 | 实现与CPU/固定tokenizer通过；原生待验 | 263857f1：复用固定swift-jinja/transformers、每请求模板覆盖/恢复及实际预览；12项真实已安装分词器CPU等值检查，未重跑GPU。 |
 | F13 | 格式接线与CPU通过；原生待验 | 自动/纯文/Markdown/JSON/D结构定义：显式指令与生成后校验；原文保留，不冒称约束解码。replay/compare/fork冻结格式、非法schema保护与备份在R/lead/s02-format-quote-green核对。 |
-| F14 | 候选实现；原生待验 | ChatRequestInspection按冻结attempt显示分组与脱敏JSON；不能用当前界面设置冒充已执行请求。新工具/记忆来源还需完整呈现核对。 |
+| F14 | 冻结快照与CPU通过；原生待验 | typed messages/tools、资料与记忆版本、真实结束/用量来源；历史未保存的模板/token明确unknown。s02-inspection-final 8方法通过，凭据标记脱敏不宣称任意秘密检测。 |
 | F15 | 实际接收/停止接续通过；交互迟滞待修 | 457cb9a0普通App：保留TXT+PNG多轮，三次各1024 deltas、256容量下无consumerTooSlow并正常length；坐标点击停止保留568字，随后短回答completed。AX切会话40.645秒、停止查找失效仍未解释；本人未点击，不能记真人通过。`D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261003T134350Z-chat-human/lead/long-stream-observations.json`。 |
 | F16 | 未核对 | 按冻结条目核对当前实现；本轮批准，不转发布后。 |
 | F17 | 已有部分 | 固定Markdown库和旧B合成长Markdown原生证据复用；新宿主及操作仍待验。 |
@@ -108,7 +108,7 @@ S00–S05是同一份已批准范围的实施切片，完成一片可集成一�
 | F27 | 生产工具接线与CPU通过；原生待验 | 4ae52508：Foundation Decimal保守精度边界、单位/时区、TabularData全CSV；独立工具活动/完整结果采用/备份/取消。乘法静默舍入反例已修；不把preview截取当实际结果截断。 |
 | F28 | 未实现；隔离方案尚未证明 | CPython WASI+Wasmtime候选尚未安装/验证；只读准备子任务被工具安全审查拒绝，未绕行或裸跑宿主Python。此工具事件不证明产品不可实现，保留同一编号继续评估合法隔离入口。 |
 | F29 | 官方客户端与真实本机服务通过；生产接线检查中 | 317e1d13固定SDK 0.12.1，actualPinnedConformanceServerRoundTripAndLocalCancellation实际连接/列工具/调用/取消/重连/超时/断开通过，服务PID已回收。Lead当前加入会话所有权、显式调用和备份；原生App未验，不保证服务端动作撤回。 |
-| F30 | 本地交互预览组件已验；编辑/保存/Mermaid接线中 | s05-preview-wk-final 8方法实际WK通过：DOM交互正例、静态不执行、RTC不可用、导航/弹窗/媒体/file拒绝及loopback出站零请求（健康正控制、服务已关闭）。Lead修SDK委托签名及误匹配AbortController；不等于普通App/任意网络全面证明。编辑成果/版本/保存/Mermaid尚未完成。 |
+| F30 | 编辑/保存/备份与实际WK通过；原生待验 | s05-preview-wk-final 8方法实际WK通过：DOM交互正例、静态不执行、RTC不可用、导航/弹窗/媒体/file拒绝及loopback出站零请求（健康正控制、服务已关闭）。Lead修SDK委托签名及误匹配AbortController；不等于普通App/任意网络全面证明。固定Mermaid 11.12.1本地渲染及脚本反例通过；s05-artifact-store-r4覆盖独立版本、原回答不变、保存失败重试、备份恢复、退出准入和容量拒绝。真实App操作未验。 |
 | F31 | 本地系统服务与UI候选/CPU通过；真人路径待验 | 6bca3bbba297e63fa26a927ccc4bb04e3b184e37：本地Speech显式转写→原稿待采用、系统TTS语言/音色/速度/暂停/停止；close先停信号后drain。未宣称本机语种/权限/实际收听已验。 |
 | F32 | 未核对 | 按冻结条目核对当前实现；本轮批准，不转发布后。 |
 | F33 | 外部导入/HTML/备份切片CPU通过；整项未完 | d2badef2：D封装v1 OpenAI role/content预览和损失确认、新会话来源、同ID保存重试、HTML原子不覆盖导出；4项导入+8项纯交换检查及备份恢复。可恢复单会话完整树包仍待补，原生导入/导出待验。 |

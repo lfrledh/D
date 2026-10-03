@@ -55,7 +55,7 @@ import Observation
         speechService = service
         return service
     }
-    public var isBusy: Bool { isAssisting || isRunning || isToolRunning || isMCPConnecting || isMCPStopping || isTranscribing || speechPlaybackState != .idle }
+    public var isBusy: Bool { !artifactSaves.isEmpty || isAssisting || isRunning || isToolRunning || isMCPConnecting || isMCPStopping || isTranscribing || speechPlaybackState != .idle }
     public private(set) var isCancelling = false
     /// Publication retries are busy but are not a cancellable model run.
     public var canStopGeneration: Bool { isRunning && activeAttemptID != nil }
@@ -81,6 +81,7 @@ import Observation
     @ObservationIgnored private var assistanceRetryTask: Task<Void, Error>?
     @ObservationIgnored private var assistanceServices: WorkflowServices?
     @ObservationIgnored private var assistanceCancelled = false
+    @ObservationIgnored private var artifactSaves = Set<UUID>()
     @ObservationIgnored private var knowledgeIndex: ChatKnowledgeIndex?
     @ObservationIgnored private var indexedKnowledge: [UUID: ChatKnowledgeDocument] = [:]
 
@@ -1549,6 +1550,78 @@ import Observation
             return markdown ? "## \(message.role == .user ? "User" : "Assistant")\n\n\(body)" : "\(message.role == .user ? "User" : "Assistant"):\n\(body)"
         }.joined(separator: "\n\n")
     }
+    /// A copied, editable artifact; the original answer and its adopted version stay immutable.
+    public func artifactFromAnswer(_ messageID: UUID, sessionID: UUID) async throws -> ChatArtifactContent {
+        let snapshot = state.sessions[try index(sessionID)].selectedAnswer(messageID: messageID)
+        guard let answer = snapshot else { throw WorkflowIssue("请先选择或采用回答。") }
+        let source = try await saveAssistantFinal(messageID, sessionID: sessionID)
+        return .init(sessionID: sessionID, title: "Answer / 回答", kind: .markdown, text: answer.text, source: source)
+    }
+
+    /// Store owns immutable bytes; ChatState retains the editable version history.
+    /// A failed sidecar save is retried with the same publication identity.
+    public func saveArtifact(_ content: ChatArtifactContent) async throws -> ChatArtifactContent {
+        guard isLoaded else { throw WorkflowIssue(error ?? "聊天记录尚未读取。") }
+        try content.validate()
+        guard allowsSubmission(), artifactSaves.insert(content.id).inserted else {
+            throw WorkflowIssue("成果正在保存，或项目已离开。")
+        }
+        defer { artifactSaves.remove(content.id) }
+        let i = try index(content.sessionID)
+        let versions = (state.sessions[i].artifacts ?? []).filter { $0.id == content.id }
+        if let existing = versions.first(where: { $0.revision == content.revision }) {
+            guard existing.title.utf8.elementsEqual(content.title.utf8), existing.kind == content.kind,
+                  existing.text.utf8.elementsEqual(content.text.utf8), existing.source == content.source else {
+                throw WorkflowIssue("此成果版本已有不同内容；请重新打开最新版本。")
+            }
+            _ = try await store.workflowData(existing.output!)
+            try await flush(); return existing
+        }
+        try requireLoaded() // Only a matching publication retry may bypass saveIssue.
+        let previous = versions.max { $0.revision < $1.revision }
+        guard (previous?.revision ?? 0) < Int.max, content.output == nil, content.revision == (previous?.revision ?? 0) + 1,
+              previous == nil || previous?.source == content.source else {
+            throw WorkflowIssue("成果版本或来源已变化；未覆盖已有版本。")
+        }
+        guard (state.sessions[i].artifacts?.count ?? 0) < 1024 else { throw WorkflowIssue("成果版本已达保存上限。") }
+        let digest = Array(SHA256.hash(data: Data("d.chat.artifact:\(content.id):\(content.revision)".utf8)).prefix(16))
+        let assetID = UUID(uuid: (digest[0], digest[1], digest[2], digest[3], digest[4], digest[5], digest[6], digest[7],
+            digest[8], digest[9], digest[10], digest[11], digest[12], digest[13], digest[14], digest[15]))
+        let parents = Array(Set([content.source, previous?.output].compactMap { $0 }))
+        func budgetedState(_ saved: ChatArtifactContent) throws -> ChatState {
+            var candidate = state
+            let current = try index(content.sessionID)
+            candidate.sessions[current].artifacts = (candidate.sessions[current].artifacts ?? []) + [saved]
+            try candidate.validate()
+            guard candidate.revision < UInt64.max else { throw WorkflowIssue("聊天记录版本已达上限。") }
+            var disk = candidate; disk.revision += 1
+            let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
+            guard try encoder.encode(disk).count <= ProjectStore.maximumChatStateBytes else {
+                throw WorkflowIssue("完整聊天及成果超过16MiB；未更改现有版本，请在新的独立项目中保存。")
+            }
+            return candidate
+        }
+        var prospective = content
+        prospective.output = .init(projectID: await store.snapshot().id, assetID: assetID,
+            kind: .text, sha256: SHA256.hash(data: Data(content.text.utf8)).map { String(format: "%02x", $0) }.joined())
+        _ = try budgetedState(prospective)
+
+        // All formats remain inert UTF-8 source assets. The saved kind determines
+        // the explicit local preview, never executable file behavior.
+        let output = try await store.publishWorkflowAsset(data: Data(content.text.utf8),
+            mediaType: content.kind == .markdown ? "text/markdown" : "text/plain", name: content.title,
+            parents: parents, operationID: "d.chat.artifact", stepID: content.id,
+            details: ["chatSessionID": content.sessionID.uuidString, "artifactID": content.id.uuidString,
+                      "artifactRevision": String(content.revision), "artifactKind": content.kind.rawValue], assetID: assetID).record.reference
+        // Admission is checked before work starts. Once accepted, finish in this
+        // immutable Store even while ProjectSession waits for this save to drain.
+        // A closed Store or missing session still fails its own checks.
+        var saved = content; saved.output = output
+        state = try budgetedState(saved)
+        changed(); try await flush()
+        return saved
+    }
+
     public func saveAssistantFinal(_ messageID: UUID, sessionID: UUID) async throws -> WorkflowAssetReference {
         try requireLoaded(); let session = state.sessions[try index(sessionID)]
         guard let answer = session.selectedAnswer(messageID: messageID) else {

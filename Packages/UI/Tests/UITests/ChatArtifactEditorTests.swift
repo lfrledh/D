@@ -233,14 +233,10 @@ struct ChatArtifactEditorTests {
     @Test @MainActor func csvSyntaxAndEscapingRecognizeASCIIBeforeCombiningMarks() throws {
         let combining = "\u{301}"
         let html = try ChatArtifactCSVPreview.document("a,\(combining)b\n\"\(combining)c\",<\(combining)d")
-        let cells = html.components(separatedBy: "<td>").dropFirst().map {
-            $0.components(separatedBy: "</td>")[0]
-        }
-        let expected = ["a", "\(combining)b", "\(combining)c", "&lt;\(combining)d"]
-        #expect(cells.count == expected.count)
-        for (cell, value) in zip(cells, expected) {
-            #expect(cell.utf8.elementsEqual(value.utf8))
-        }
-        #expect(html.components(separatedBy: "<tr>").count == 3)
+        let table = "<table><tr><td>a</td><td>\(combining)b</td></tr><tr><td>\(combining)c</td><td>&lt;\(combining)d</td></tr></table>"
+        // String.components uses grapheme-aware matching; compare the complete
+        // escaped table bytes so a combining mark at a tag boundary is not a false oracle.
+        #expect(html.utf8.suffix(table.utf8.count).elementsEqual(table.utf8))
+
     }
 }

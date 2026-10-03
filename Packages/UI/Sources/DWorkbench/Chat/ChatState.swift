@@ -107,6 +107,7 @@ public struct ChatSession: Codable, Sendable, Equatable, Identifiable {
     public var assistanceExecutions: [ChatAssistanceExecution]?
     public var importLossNotes: [String]?
     public var toolActivities: [ChatToolActivity]?
+    public var artifacts: [ChatArtifactContent]?
     public var knowledgeScope: [UUID]?
     public var knowledgeExcerpts: [ChatKnowledgeExcerpt]?
     public init(id: UUID = UUID(), title: String = "新对话") { self.id = id; self.title = title }
@@ -184,6 +185,17 @@ public struct ChatState: Codable, Sendable, Equatable {
                 throw WorkflowIssue("聊天会话内容或分支身份无效；原件保持只读。")
             }
             if let node = session.configuration { try Self.validateNode(node) }
+            let artifacts = session.artifacts ?? []
+            guard artifacts.count <= 1024,
+                  Set(artifacts.map { "\($0.id):\($0.revision)" }).count == artifacts.count else {
+                throw WorkflowIssue("成果版本数量或身份无效。")
+            }
+            for artifact in artifacts {
+                try artifact.validate()
+                guard artifact.sessionID == session.id, artifact.output != nil else {
+                    throw WorkflowIssue("成果不属于本会话或未发布。")
+                }
+            }
             try session.outputFormat?.validate()
             try session.assistanceOptions?.validate()
             let assistance = session.assistanceExecutions ?? []

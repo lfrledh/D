@@ -12,14 +12,14 @@ Lead 持有共享 Runtime/WorkflowServices/ChatController/Store；文件面板�
 
 ### 当前恢复检查点（2026-10-04 JST，持续实施中）
 
-- Lead隔离候选 `D-RELEASE-FREEZE-01` / `codex/release-freeze-01`，已提交 `cdcaa7758381ac0718793b1118a34b59d9780c40`。已合入S00/S01、格式与引用、MCP、记忆/工具和辅助纯值；当前未提交F23–25辅助生产接线/测试和此检查点由Lead持有。恢复必须看真实Git。
-- main仍 `f31dced209855722d2f04cc0fc8c5f6712396120`，没有强合原生菜单门槛。受保护源仍 `01758b81527dc27eb4563bf1b66fd1ceab6647ee`，个人scheme未暂存，保护摘要不变。
-- 当前普通签名App受测代码 `cdcaa7758381ac0718793b1118a34b59d9780c40`，R/delivery/D Chat Integrated.app及同目录启动器。构建R/lead/chat-current-app-r3通过；启动PID63889；刚进入项目面板后CUA明确锁屏，尚未打开R/gui/Chat-integration.dproject副本。原生菜单/停止/引用仍未验，已记集中待办，不重开H22/H31。
-- R=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261003T150039Z-chat-continue`。格式/引用CPU通过；s02-format-quote-green末进程exit0掩盖前一个hosting事件身份失败，**不能**称整组通过；R/lead/s02-format-quote-review.json分别列出。旧真实1024长流/取消接续结果复用，不重跑同质生成。
-- PREVIEW独立受限CLI interactive1已结束；Sol/high route已核，生产代码经只读审核无确定P1/P2；Lead补测试callback有界等待，实际WK隔离尚待串行验证。AUX生产接线13方法/2suite通过，含跨owner保存、冷恢复、忘记/撤权/取消和独立备份。保存失败及冷恢复反例经历先红后绿；非实现者复核最后无阻断。真实辅助模型和原生控件仍未验。
-- INSPECTION仅F14两文件的受限Sol/high初交已完成，固定cdcaa基线；只读审核发现解析与脱敏P2，现第一轮定点修复中；输出/临时根在R/s02-inspection，网络关闭、无共享Git写权限。所有活跃运行以R/*process/route记录为准，不以历史worker状态推断。
-- 下一动作：完成辅助保存生命周期反例和接线、验证F30实际WebKit、完善F14，继续唯一F01–F36清单的未完项。锁屏仅挡原生交互，不冻结无依赖工程；不扩模型、平台、完整视觉改版或重写存储。
-- 恢复先核代码/自有进程/写入者/权限。当前候选尚未接纳main，App与后续未提交代码分开；未经当前原生门槛不得替代稳定入口。
+- Lead隔离候选 `D-RELEASE-FREEZE-01` / `codex/release-freeze-01`，本片受测组合基点 `77cb3c0e2fdcfb3276b1fa6435ece0004f39d88a` 加Lead F30保存/预览接线。已整合F14、F30组件和目录准备；完整F01–F36继续，未称专题完成。
+- main仍 `f31dced209855722d2f04cc0fc8c5f6712396120`；受保护源仍 `01758b81527dc27eb4563bf1b66fd1ceab6647ee`，个人scheme未暂存。没有硬合普通App菜单门槛。
+- R=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261003T150039Z-chat-continue`。当前已构建App仍是 `cdcaa7758381ac0718793b1118a34b59d9780c40`，唯一该版启动器R/delivery/启动聊天当前验收.command；后续代码不冒称已打包。自有PID63889停在打开项目面板，CUA明确锁屏；不反复催解锁、不重开H22/H31。
+- F14 s02-inspection-final 8方法通过；AUX s03-assistance-wiring-final 13方法/2suite通过；真实辅助模型/原生控件仍未验。格式/引用早前组合exit0掩盖hosting身份失败仍保留，见s02-format-quote-review.json。
+- F30实际WK s05-preview-wk-final 8方法通过；固定本地Mermaid s05-mermaid-local 9方法通过，含健康loopback正控制、未观察出站、服务关闭。成果保存/原件/版本/备份/保存重试/退出准入/完整sidecar预算：s05-artifact-store-r4 UI9方法1suite、Workbench11方法2suite通过（含资料目录6方法），不加总为全专题。r1/r2/r3的真实失败及测试夹具修正保留。
+- ARTIFACT受限Sol/high初交+两修；Lead承担实际Store/UI/Mermaid接线及反例修补，非实现者审核最后无P1/P2。KNOWLEDGE两修后编码NUL检查通过，原两文件允许范围内；资料个人范围/重排尚待接线。
+- CHANNELS受限Sol/high当前从 `439b0d2d09ad3f7d9f8f48a33c38e75884aa678b` 独立树实现F16/F22展示；具体状态以R/s02-channels过程/route为准。其他写者结束，三个只读评审不写文件。
+- 下一动作：完成F21生产接线、F22真实上下文状态、F32临时会话、F33会话包及清单余项；解锁后补同版原生菜单/停止与交接。恢复先核真实HEAD/差异/进程/权限，不用旧摘要当写入许可。成本和隐藏服务端模型解析仍unknown。
 
 ## 历史：先修可靠性，再加入最小聊天（2026-10-03，已被上述新授权替代）
 

@@ -73,6 +73,33 @@ struct ChatArtifactWebPreviewTests {
         #expect(interactive.contains("object-src 'none'"))
     }
 
+    @Test @MainActor func fixedMermaidRendersAndSourceCannotEscapeIntoScript() async throws {
+        let container = NSView(frame: NSRect(x: 0, y: 0, width: 480, height: 320))
+        let coordinator = ChatArtifactWebPreview.Coordinator()
+        var errors: [ChatArtifactWebPreviewError] = []
+        defer { coordinator.close() }
+        coordinator.update(in: container,
+            source: try ChatMermaidDocument.document("flowchart LR\n A[Hello] --> B[世界]"),
+            javaScriptEnabled: true, bundledLibrary: .mermaid) { errors.append($0) }
+        #expect(await waitUntil {
+            guard let web = viewer(in: container) else { return false }
+            return await inspect(web, "document.querySelector('#diagram')?.dataset.ready") == "yes"
+        })
+        let web = try #require(viewer(in: container))
+        #expect(await inspect(web, "document.querySelector('#diagram svg')?.textContent.includes('世界').toString()") == "true")
+        #expect(errors.isEmpty)
+        let attack = "</script><script>globalThis.injection = true</script>"
+        let document = try ChatMermaidDocument.document(attack)
+        #expect(!document.contains(attack))
+        coordinator.update(in: container, source: document, javaScriptEnabled: true, bundledLibrary: .mermaid) { errors.append($0) }
+        #expect(await waitUntil {
+            guard let web = viewer(in: container) else { return false }
+            return await inspect(web, "String((document.getElementById('diagram-error')?.textContent.length ?? 0) > 0)") == "true"
+        })
+        let errorWeb = try #require(viewer(in: container))
+        #expect(await inspect(errorWeb, "typeof globalThis.injection") == "undefined")
+    }
+
     @Test @MainActor func realDelegateImplementsSDKSelectors() {
         let coordinator = ChatArtifactWebPreview.Coordinator()
         for name in ["webView:decidePolicyForNavigationAction:preferences:decisionHandler:",

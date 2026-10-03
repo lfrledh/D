@@ -681,3 +681,11 @@ Sol/high辅助纯值组件后，由Lead接入既有WorkflowServices后台语言�
 风险→保存/恢复、隐私、后台取消；最少证据R/lead/s03-assistance-save-red2及s03-assistance-cold-red在修前失败，s03-assistance-wiring-final 13方法/2suite通过（参数化冷恢复3场景，非独立通过率），实际Store独立备份恢复与受控模型流。受测base cdcaa7758381ac0718793b1118a34b59d9780c40加Lead差分，逐文件摘要在R/lead/s03-assistance-code-evidence.json。真实辅助模型和普通App控件尚未验。R为run-20261003T150039Z-chat-continue。所有CLI已结束的事实与当前INSPECTION第一轮修复运行分开；费用unknown。
 
 F30交互组件：Sol/high interactive1，经只读审阅合入962f90d98ba52b6399dd1479853f087cd64b2feb候选。Lead真实WK反例先失败：SDK27 optional delegate签名与实现不符，bootstrap子串/rtc/又误匹配AbortController；R/lead/s05-preview-diagnose保留实际JS错误。不删除隔离要求，修为真实SDK签名与RTC前缀检查，保留AbortController正例和选择器检查。s05-preview-wk-final 8方法通过，loopback健康请求成功、所列五条出站尝试零到达，子进程/监听回收；非实现者复核无剩余P1/P2。纯组件并非普通App或全部网络证明；编辑/保存/Mermaid继续实施。官方依据本机SDK WebKit headers及WebKit RTCPeerConnection.idl/RTCDataChannel.idl的PeerConnectionEnabled。
+
+### CHAT-PRODUCT-20261003 F14/F30/资料准备续片（2026-10-04）
+
+- 固定输入检查F14由受限Sol/high初交+两修，62157a62目录修补亦两修；请求/可观察设置及写根见R/s02-inspection和R/s03-knowledge的route记录，隐藏服务端解析unknown。ARTIFACT初交+两修提供纯内容/编辑器；Lead实际接Store/UI、固定本地Mermaid及预算/失败恢复，不能归为Worker独立完成。
+- F30通过：独立版本与精确UTF8、HTML/SVG/Mermaid可编辑预览、原回答保留、旧成果与独立备份恢复、保存失败只重试flush、已准入保存drain、完整sidecar预算在发布前拒绝。非实现者native_h22限定源码复核未发现剩余P1/P2；不是独立执行测试。
+- R/lead/s05-artifact-store-r4：基点77cb3c0e2fdcfb3276b1fa6435ece0004f39d88a+本次Lead差异，UI9方法1suite、Workbench11方法2suite通过，exit0/8.424秒。早前真实重试失败修正；CSV组合字符测试oracle误用Foundation子串比较改为完整预期UTF8；新增预算夹具先因无效用户父链、再因缺parentID编译失败，改成15个合法独立会话后通过，未改容量断言。
+- 实际WK固定库测试R/lead/s05-mermaid-local（9方法，38.39秒）；健康本机HTTP正控制、未观察出站、服务已收回。Mermaid官方11.12.1固定IIFE、许可及依赖声明入资源；没有CDN、npm运行环境或宿主桥接。s02-inspection-final（8方法）及未变辅助13方法复用，不累加成全套通过率。
+- 代码提交后的完整SHA写Git和外部回执，不自引用amend。普通App仍cdcaa775…；锁屏未解，新宿主门槛未验，不接纳main。F21个人/目录/重排、F32临时、F33单会话包等仍属本次完整范围，继续实施。

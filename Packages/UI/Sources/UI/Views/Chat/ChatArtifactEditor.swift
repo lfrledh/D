@@ -314,6 +314,7 @@ struct ChatArtifactEditor: View {
         .padding(16)
         }
         .frame(minWidth: 640, minHeight: 560)
+        .interactiveDismissDisabled(state.isDirty || state.isSaving)
         .confirmationDialog(wording("Discard unsaved edits?", "放弃未保存的修改？"),
                             isPresented: $state.asksToDiscard) {
             Button(wording("Discard edits", "放弃修改"), role: .destructive) {
@@ -337,7 +338,8 @@ struct ChatArtifactEditor: View {
             }
         case .csv, .html, .svg, .mermaid:
             if let document = preview.webDocument {
-                ChatArtifactWebPreview(source: document, javaScriptEnabled: preview.javaScriptEnabled) { error in
+                ChatArtifactWebPreview(source: document, javaScriptEnabled: preview.javaScriptEnabled,
+                    bundledLibrary: preview.kind == .mermaid ? .mermaid : nil) { error in
                     state.previewIssue = String(describing: error)
                 }
             }

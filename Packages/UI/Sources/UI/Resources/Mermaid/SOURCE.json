@@ -1,0 +1,27 @@
+{
+  "name": "mermaid",
+  "version": "11.12.1",
+  "license": "MIT",
+  "dist": {
+    "shasum": "97445451ce7d0d3740bc2159cb25464bece60b67",
+    "tarball": "https://registry.npmjs.org/mermaid/-/mermaid-11.12.1.tgz",
+    "fileCount": 793,
+    "integrity": "sha512-UlIZrRariB11TY1RtTgUWp65tphtBv4CSq7vyS2ZZ2TgoMjs2nloq+wFqxiwcxlhHUvs7DPGgMjs2aeQxz5h9g==",
+    "signatures": [
+      {
+        "sig": "MEYCIQDtl//N5mGkgS0M/EszC74Q+YIDG4WnMkeZM2IyepB8cwIhAMCTEtSLC9Fk8dLGlYM6L/njc7qSK+ApsgyLgzLnrv/c",
+        "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U"
+      }
+    ],
+    "attestations": {
+      "url": "https://registry.npmjs.org/-/npm/v1/attestations/mermaid@11.12.1",
+      "provenance": {
+        "predicateType": "https://slsa.dev/provenance/v1"
+      }
+    },
+    "unpackedSize": 66071789
+  },
+  "verified_integrity": true,
+  "scriptSHA256": "198b19442f86f0b46a17e56d3abf744c3a28a3427e66fa8dada3b589a77babcc",
+  "selection": "official self-contained IIFE; fixed local resource, no CDN/npm execution. strict per-render settings; guarded WebKit. Not all diagram families prevalidated."
+}

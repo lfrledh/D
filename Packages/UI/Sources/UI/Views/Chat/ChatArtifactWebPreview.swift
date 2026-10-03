@@ -5,13 +5,16 @@ import WebKit
 
 /// A local, bounded HTML/SVG surface. The owner presents errors and decides when to retry.
 public struct ChatArtifactWebPreview: NSViewRepresentable {
+    public enum BundledLibrary: Sendable { case mermaid }
     public let source: String
+    public let bundledLibrary: BundledLibrary?
     public let javaScriptEnabled: Bool
     public let onError: @MainActor (ChatArtifactWebPreviewError) -> Void
 
-    public init(source: String, javaScriptEnabled: Bool = false,
+    public init(source: String, javaScriptEnabled: Bool = false, bundledLibrary: BundledLibrary? = nil,
                 onError: @escaping @MainActor (ChatArtifactWebPreviewError) -> Void) {
         self.source = source
+        self.bundledLibrary = bundledLibrary
         self.javaScriptEnabled = javaScriptEnabled
         self.onError = onError
     }
@@ -22,7 +25,7 @@ public struct ChatArtifactWebPreview: NSViewRepresentable {
 
     public func updateNSView(_ nsView: NSView, context: Context) {
         context.coordinator.update(in: nsView, source: source,
-                                   javaScriptEnabled: javaScriptEnabled, onError: onError)
+                                   javaScriptEnabled: javaScriptEnabled, bundledLibrary: bundledLibrary, onError: onError)
     }
 
     public static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
@@ -33,6 +36,7 @@ public struct ChatArtifactWebPreview: NSViewRepresentable {
     public final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate {
         private var source: String?
         private var javaScriptEnabled = false
+        private var bundledLibrary: BundledLibrary?
         private var onError: (@MainActor (ChatArtifactWebPreviewError) -> Void)?
         private var generation = UUID()
         private var webView: WKWebView?
@@ -44,13 +48,14 @@ public struct ChatArtifactWebPreview: NSViewRepresentable {
         private let ruleStore: WKContentRuleListStore? = WKContentRuleListStore.default()
 
         func update(in container: NSView, source newSource: String,
-                                javaScriptEnabled newJavaScriptEnabled: Bool,
+                                javaScriptEnabled newJavaScriptEnabled: Bool, bundledLibrary newLibrary: BundledLibrary? = nil,
                                 onError newOnError: @escaping @MainActor (ChatArtifactWebPreviewError) -> Void) {
             onError = newOnError
-            guard source != newSource || javaScriptEnabled != newJavaScriptEnabled else { return }
+            guard source != newSource || javaScriptEnabled != newJavaScriptEnabled || bundledLibrary != newLibrary else { return }
             closeViewer()
             source = newSource
             javaScriptEnabled = newJavaScriptEnabled
+            bundledLibrary = newLibrary
             let currentGeneration = generation
 
             if let error = ChatArtifactWebPreviewPolicy.preflightError(
@@ -168,6 +173,13 @@ public struct ChatArtifactWebPreview: NSViewRepresentable {
                 }
                 self.bootstrapTimeout?.cancel()
                 self.bootstrapTimeout = nil
+                if self.bundledLibrary == .mermaid {
+                    do {
+                        let library = try ChatMermaidDocument.librarySource()
+                        webView.configuration.userContentController.addUserScript(
+                            WKUserScript(source: library, injectionTime: .atDocumentStart, forMainFrameOnly: true))
+                    } catch { self.fail(.protectionUnavailable, for: webView); return }
+                }
                 self.loadPhase = .source
                 self.initialNavigationPending = true
                 webView.loadHTMLString(ChatArtifactWebPreviewPolicy.document(source,

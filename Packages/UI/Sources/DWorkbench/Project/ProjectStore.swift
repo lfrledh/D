@@ -14,6 +14,7 @@ enum ProjectExportCheckpoint: Sendable { case contentDurable(URL), published(URL
 public actor ProjectStore {
     public nonisolated let rootURL: URL
     public nonisolated var artifactDirectory: URL { rootURL.appendingPathComponent("Tasks", isDirectory: true) }
+    public static let maximumChatStateBytes = 16 * 1_024 * 1_024
     public static let manifestFilename = "project.json"
     public static let versionOneBackupFilename = "project.v1.backup.json"
     public static let versionTwoBackupFilename = "project.v2.backup.json"
@@ -4029,7 +4030,7 @@ extension ProjectStore {
         var value = state; value.revision = previous.revision + 1
         let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
         let data = try encoder.encode(value)
-        guard data.count <= 16 * 1_024 * 1_024 else { throw WorkflowIssue("聊天记录超过16MiB，原件未被替换。") }
+        guard data.count <= Self.maximumChatStateBytes else { throw WorkflowIssue("聊天记录超过16MiB，原件未被替换。") }
         var info = stat()
         let exists = fstatat(rootFD, "quick-chat.json", &info, AT_SYMLINK_NOFOLLOW) == 0
         do {

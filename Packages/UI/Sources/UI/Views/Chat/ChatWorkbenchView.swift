@@ -75,7 +75,7 @@ private enum ChatDetail: Identifiable {
     case edit(ChatEdit), preview(WorkflowAssetReference)
     case comparison(UUID, UUID), presetImport([ChatPromptPreset], Data)
     case conversationImport(ChatInterchange.ImportPreview, Data, String)
-    case quote(UUID, ChatQuoteSource)
+    case quote(UUID, ChatQuoteSource), artifact(ChatArtifactContent)
     var id: String {
         switch self {
         case .edit(let edit): "edit-\(edit.id)"
@@ -83,6 +83,7 @@ private enum ChatDetail: Identifiable {
         case .comparison(let session, let attempt): "compare-\(session)-\(attempt)"
         case .presetImport: "preset-import"
         case .conversationImport: "conversation-import"
+        case .artifact(let value): "artifact-\(value.id)-\(value.revision)"
         case .quote(let session, let source): "quote-\(session)-\(source.id)"
         }
     }
@@ -482,6 +483,13 @@ struct ChatWorkbenchView: View {
         .sheet(item: Binding(get: { sheets.detail }, set: { sheets.detail = $0 })) { item in
             switch item {
             case .edit(let edit): editSheet(edit)
+            case .artifact(let content):
+                ChatArtifactEditor(content: content, mermaidDocument: ChatMermaidDocument.document,
+                    onSave: { value in
+                        let saved = try await chat.saveArtifact(value)
+                        onAssetsChanged(); return saved
+                    }, onClose: { sheets.detail = nil })
+
             case .quote(let sessionID, let source):
                 ChatQuoteSheet(chat: chat, sessionID: sessionID, source: source,
                     onSaved: { onAssetsChanged() }, onClose: { sheets.detail = nil })
@@ -944,6 +952,17 @@ struct ChatWorkbenchView: View {
                     case .artifacts:
                         VStack(alignment: .leading, spacing: 12) {
                             Text(newLabel("savedAnswers", english: "Saved answers", chinese: "回答成果")).font(.headline)
+                            Button(newLabel("newArtifact", english: "New editable artifact", chinese: "新建可编辑成果")) {
+                                present(.artifact(.init(sessionID: session.id, title: newLabel("untitledArtifact", english: "Untitled", chinese: "未命名"), kind: .markdown, text: "")))
+                            }
+                            ForEach(session.artifacts ?? [], id: \.output) { value in
+                                HStack {
+                                    Button("\(value.title) · v\(value.revision)") { present(.artifact(value)) }
+                                    if let output = value.output {
+                                        Button(newLabel("useWorkflow", english: "Use in workflow", chinese: "用于工作流")) { onSavedAsset(output) }
+                                    }
+                                }
+                            }
                             ForEach(session.attempts.filter { $0.output != nil }) { attempt in
                                 if let output = attempt.output {
                                     Button(label("preview", "预览") + " · " +
@@ -1138,6 +1157,16 @@ struct ChatWorkbenchView: View {
         })
         if session.selectedAnswer(messageID: message.id) != nil {
             result += [
+                .init(id: "artifact", title: newLabel("editArtifact", english: "Create editable artifact…", chinese: "建立可编辑成果…")) {
+                    Task { @MainActor in
+                        do {
+                            let content = try await chat.artifactFromAnswer(message.id, sessionID: session.id)
+                            onAssetsChanged()
+                            guard chat.state.selectedSessionID == session.id else { return }
+                            present(.artifact(content))
+                        } catch { issues[session.id] = error.localizedDescription }
+                    }
+                },
                 .init(id: "save", title: label("saveAsset", "保存回答为素材")) { Task { await saveFinal(message.id, sessionID: session.id, useInWorkflow: false) } },
                 .init(id: "workflow", title: label("useWorkflow", "用于工作流")) { Task { await saveFinal(message.id, sessionID: session.id, useInWorkflow: true) } }
             ]
