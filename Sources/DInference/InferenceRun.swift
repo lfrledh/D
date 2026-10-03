@@ -43,12 +43,14 @@ public enum RunOutcome: Sendable, Equatable {
     case failed(InferenceFailure)
 }
 
-/// Single-consumer output stream. Draining it also surfaces buffer overflow/backend errors.
+/// Single-consumer output stream. Runtime production awaits bounded capacity without losing deltas.
+/// Consume events while awaiting completion; an unconsumed full stream pauses production.
+/// Backend errors follow the already accepted prefix. Historical overflow failures remain decodable.
 /// outcome() is authoritative: it resolves only after backend cleanup, even on cancellation.
 /// Call cancel() when abandoning a run; merely retaining an unconsumed handle does not cancel it.
 public struct InferenceRun: Sendable {
     public let id: UUID
-    public let events: AsyncThrowingStream<InferenceOutput, Error>
+    public let events: InferenceEvents
     private let cancelOperation: @Sendable () async -> Void
     private let outcomeOperation: @Sendable () async -> RunOutcome
 
@@ -56,7 +58,17 @@ public struct InferenceRun: Sendable {
                 cancel: @escaping @Sendable () async -> Void,
                 outcome: @escaping @Sendable () async -> RunOutcome) {
         self.id = id
-        self.events = events
+        self.events = InferenceEvents(stream: events, cancel: cancel)
+        self.cancelOperation = cancel
+        self.outcomeOperation = outcome
+    }
+
+    /// Pull-based delivery lets the runtime await bounded capacity without an extra stream buffer.
+    public init(id: UUID, nextEvent: @escaping @Sendable () async throws -> InferenceOutput?,
+                cancel: @escaping @Sendable () async -> Void,
+                outcome: @escaping @Sendable () async -> RunOutcome) {
+        self.id = id
+        self.events = InferenceEvents(pull: nextEvent, cancel: cancel)
         self.cancelOperation = cancel
         self.outcomeOperation = outcome
     }

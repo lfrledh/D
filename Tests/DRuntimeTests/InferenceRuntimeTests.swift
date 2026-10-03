@@ -5,6 +5,40 @@ import Testing
 
 @Suite("Runtime contract", .timeLimit(.minutes(1)))
 struct InferenceRuntimeTests {
+    @Test("A stalled display does not lose the authoritative Unicode answer")
+    func slowDisplayIsLossless() async throws {
+        let input = request()
+        let outputs = (0..<512).map { InferenceOutput.textDelta("\($0):中e\u{301}👩🏽‍💻\n") }
+        let backend = ControlledBackend(plans: [input.id: TestPlan(outputs: outputs)])
+        let engine = try runtime([backend], bufferCapacity: 2)
+        let run = try await engine.submit(input, backendID: "controlled")
+        // Simulate a temporarily stalled display; neither token count nor precision changes.
+        try await Task.sleep(for: .milliseconds(100))
+        var received: [InferenceOutput] = []
+        do { for try await event in run.events { received.append(event) } }
+        catch { Issue.record("A slow display terminated inference: \(error)") }
+        #expect(received == outputs)
+        await expectCompleted(run)
+        #expect(await backend.observations().calls.contains(.releaseFinished(input.id)))
+    }
+
+    @Test("Cancellation before the first pull also stops a blocked producer")
+    func consumerCancelledBeforeFirstPull() async throws {
+        let input = request(), ready = TestGate(), begin = TestGate()
+        let backend = ControlledBackend(plans: [input.id: TestPlan(outputs: [.textDelta("a"), .textDelta("b")])])
+        let engine = try runtime([backend], bufferCapacity: 1)
+        let run = try await engine.submit(input, backendID: "controlled")
+        let consumer = Task {
+            await ready.open(); await begin.wait()
+            do { for try await _ in run.events {} } catch is CancellationError {} catch { Issue.record("\(error)") }
+        }
+        await ready.wait(); consumer.cancel(); await begin.open(); await consumer.value
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(await backend.observations().calls.contains(.releaseFinished(input.id)))
+        await run.cancel() // Always clean up the counterexample even on the old broken path.
+        #expect(await run.outcome() == .cancelled)
+    }
+
     @Test("FIFO lease survives suspension of a reentrant backend")
     func fifoAndReentrancy() async throws {
         let first = request(), second = request(), third = request()
@@ -231,25 +265,27 @@ struct InferenceRuntimeTests {
         #expect(await backend.observations().calls.contains(.releaseFinished(first.id)))
     }
 
-    @Test("Overflow surfaces an explicit failure on both outcome and event stream")
-    func consumerOverflow() async throws {
-        let overflowing = request(), next = request()
-        let backend = ControlledBackend(plans: [overflowing.id: TestPlan(
-            outputs: [.textDelta("one"), .textDelta("two"), .textDelta("three")])])
+    @Test("A full output queue cancels and releases before the next backend enters")
+    func fullBufferCancellation() async throws {
+        let input = request(), next = request(), releaseGate = TestGate()
+        let backend = ControlledBackend(plans: [input.id: TestPlan(releaseGate: releaseGate,
+            outputs: (0..<512).map { .textDelta(String($0)) })])
         let engine = try runtime([backend], bufferCapacity: 1)
-        let run = try await engine.submit(overflowing, backendID: "controlled")
-        #expect(await run.outcome() == .failed(.consumerTooSlow))
+        let run = try await engine.submit(input, backendID: "controlled")
+        try await Task.sleep(for: .milliseconds(100))
+        let following = try await engine.submit(next, backendID: "controlled")
+        let waiter1 = Task { await run.outcome() }, waiter2 = Task { await run.outcome() }
+        await run.cancel()
+        await releaseGate.waitForArrival()
+        #expect(!((await backend.observations()).calls.contains(.executeStarted(next.id))))
+        await releaseGate.open()
+        #expect(await waiter1.value == .cancelled)
+        #expect(await waiter2.value == .cancelled)
         var received: [InferenceOutput] = []
-        do {
-            for try await output in run.events { received.append(output) }
-            Issue.record("Overflowed stream completed without an error")
-        } catch let failure as InferenceFailure {
-            #expect(failure == .consumerTooSlow)
-        }
-        #expect(received == [.textDelta("one")])
-        #expect(await backend.observations().calls.contains(.releaseFinished(overflowing.id)))
-        let nextRun = try await engine.submit(next, backendID: "controlled")
-        await expectCompleted(nextRun)
+        do { for try await value in run.events { received.append(value) }; Issue.record("Expected cancellation") }
+        catch is CancellationError {} catch { Issue.record("Unexpected error: \(error)") }
+        #expect(received == [.textDelta("0")])
+        await expectCompleted(following)
     }
 
     @Test("Batch cancellation drains active work, skips queued work, and permits later submissions")

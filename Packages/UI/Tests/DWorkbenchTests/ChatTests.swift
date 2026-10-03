@@ -60,6 +60,37 @@ private actor ChatGatedEngine: InferenceEngine {
 
 @Suite("Chat sidecar and service", .serialized) @MainActor
 struct ChatTests {
+    @Test func newCandidateChangesActualSeedButReplayKeepsFrozenRequest() async throws {
+        let (store, engine, chat) = try await fixture()
+        let id = try chat.newSession(); try configure(chat, session: id)
+        var node = try #require(chat.selectedSession?.configuration)
+        node.parameters["seed"] = .text("18446744073709551614")
+        try chat.updateConfiguration(node, sessionID: id)
+        try chat.setSystemPrompt("original system", sessionID: id)
+        try chat.updateDraft("fixed question", sessionID: id)
+        try await chat.send(sessionID: id); await chat.waitForCompletion()
+        let first = try #require(chat.selectedSession?.attempts.first)
+        try await chat.regenerate(first.userMessageID, sessionID: id); await chat.waitForCompletion()
+        try chat.setSystemPrompt("changed later", sessionID: id)
+        node.parameters["temperature"] = .decimal(0.1)
+        try chat.updateConfiguration(node, sessionID: id)
+        try await chat.reproduce(first.id, sessionID: id); await chat.waitForCompletion()
+        let requests = await engine.requests
+        #expect(requests.count == 3)
+        if case .text(let original) = requests[0].input, case .text(let newer) = requests[1].input,
+           case .text(let replay) = requests[2].input {
+            #expect(original.seed == 18_446_744_073_709_551_614)
+            #expect(newer.seed != original.seed)
+            #expect(replay == original)
+        } else { Issue.record("Expected text requests") }
+        #expect(chat.selectedSession?.attempts.last?.replayedAttemptID == first.id)
+        #expect(chat.selectedSession?.attempts.first == first)
+        try await chat.flush()
+        let saved = try await store.chatState()
+        #expect(saved.sessions.first?.attempts.last?.replayedAttemptID == first.id)
+        try await chat.prepareForTermination(); try await store.close()
+    }
+
     private func fixture() async throws -> (ProjectStore, ChatFixtureEngine, ChatController) {
         let root = URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory())
             .appendingPathComponent("Chat-" + UUID().uuidString)

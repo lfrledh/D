@@ -270,6 +270,9 @@ import Observation
         let estimate = (bytes.count + 2) / 3 + images.count * 1024 + videos.count * 4096
         guard limit > 0, estimate <= limit else { throw WorkflowIssue("保守估计输入约\(estimate) token，超过所选上限\(limit)；这不是精确分词。请显式开启新会话或分叉较短路径。") }
         var node = source
+        if (node.parameters["seed"]?.string ?? "").isEmpty {
+            node.parameters["seed"] = .text(String(UInt64.random(in: .min ... .max)))
+        }
         node.parameters["task"] = .text("")
         node.parameters["messagesJSON"] = .text(String(decoding: bytes, as: UTF8.self))
         try WorkflowRegistry.standard.validate(node)
@@ -312,17 +315,39 @@ import Observation
         }
         guard allowsSubmission(), !isRunning, pendingSaveAttemptID == nil else { throw WorkflowIssue("已有聊天推理或待保存结果。") }
         let session = state.sessions[try index(sessionID)]
-        guard !session.archived, let node = session.configuration,
+        guard !session.archived, var node = session.configuration,
               let user = session.messages.first(where: { $0.id == userMessageID && $0.role == .user }) else { throw WorkflowIssue("需要已有用户消息和模型。") }
+        let previousSeeds = Set(session.attempts.filter { $0.userMessageID == userMessageID }
+            .compactMap { $0.node.parameters["seed"]?.string })
+        var seed = UInt64.random(in: .min ... .max)
+        while previousSeeds.contains(String(seed)) { seed = UInt64.random(in: .min ... .max) }
+        node.parameters["seed"] = .text(String(seed))
         let prior = try session.path(to: user.parentID)
         let prepared = try await prepared(prior, attempts: session.attempts, prompt: user.text, attachments: user.attachments,
                                           system: session.systemPrompt, node: node)
         try await launch(sessionID: sessionID, user: user, prepared: prepared,
                          systemPrompt: session.systemPrompt, expectedLeafID: session.selectedLeafID, clearDraft: false)
     }
+
+    /// Replay the captured request, not settings or history edited since that attempt.
+    public func reproduce(_ attemptID: UUID, sessionID: UUID) async throws {
+        try requireLoaded()
+        let session = state.sessions[try index(sessionID)]
+        guard !session.archived, let attempt = session.attempts.first(where: { $0.id == attemptID }),
+              attempt.status != .running, attempt.status != .saving,
+              let user = session.messages.first(where: { $0.id == attempt.userMessageID }),
+              let seed = attempt.node.parameters["seed"]?.string, UInt64(seed) != nil else {
+            throw WorkflowIssue("旧尝试缺少可重现的冻结参数或种子，不能按当前设置冒充重现。")
+        }
+        try await launch(sessionID: sessionID, user: user,
+            prepared: (attempt.node, attempt.messagesJSON, attempt.inputs),
+            systemPrompt: attempt.systemPrompt, expectedLeafID: session.selectedLeafID,
+            clearDraft: false, replayedAttemptID: attemptID)
+    }
     private func launch(sessionID: UUID, user: ChatMessage,
                         prepared: (WorkflowNode, String, [String: WorkflowValue]),
-                        systemPrompt: String, expectedLeafID: UUID?, clearDraft: Bool) async throws {
+                        systemPrompt: String, expectedLeafID: UUID?, clearDraft: Bool,
+                        replayedAttemptID: UUID? = nil) async throws {
         guard !hasInvalidParameterText(sessionID: sessionID) else {
             throw WorkflowIssue("回答参数仍有未完成或无效输入，请先修正。")
         }
@@ -334,9 +359,10 @@ import Observation
             ? Self.derivedTitle(user.text, characterLimit: 80) : nil
         let attemptID = UUID(), assistantID = UUID()
         let assistant = ChatMessage(id: assistantID, parentID: user.id, role: .assistant, text: "", attemptID: attemptID)
-        let attempt = ChatAttempt(id: attemptID, sessionID: sessionID, userMessageID: user.id,
+        var attempt = ChatAttempt(id: attemptID, sessionID: sessionID, userMessageID: user.id,
                                   assistantMessageID: assistantID, node: prepared.0, messagesJSON: prepared.1,
                                   inputs: prepared.2, systemPrompt: systemPrompt)
+        attempt.replayedAttemptID = replayedAttemptID
         if !state.sessions[i].messages.contains(where: { $0.id == user.id }) { state.sessions[i].messages.append(user) }
         state.sessions[i].messages.append(assistant); state.sessions[i].attempts.append(attempt)
         if state.sessions[i].selectedLeafID == expectedLeafID { state.sessions[i].selectedLeafID = assistantID }

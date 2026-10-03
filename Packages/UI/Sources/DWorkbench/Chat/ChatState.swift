@@ -38,6 +38,8 @@ public struct ChatAttempt: Codable, Sendable, Equatable, Identifiable {
     public let inputs: [String: WorkflowValue]
     public let systemPrompt: String
     public let createdAt: Date
+    /// An explicit replay keeps the source attempt immutable; nil also decodes old records.
+    public var replayedAttemptID: UUID?
     public var status: Status
     public var rawText: String
     public var response: TextResponse?

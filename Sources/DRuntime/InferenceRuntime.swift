@@ -8,7 +8,7 @@ public actor InferenceRuntime: InferenceEngine {
         let token: UUID
         let request: InferenceRequest
         let backend: any InferenceBackend
-        let continuation: AsyncThrowingStream<InferenceOutput, Error>.Continuation
+        let events: BoundedInferenceEvents
         let completion: RunCompletion
         var cancellationRequested = false
     }
@@ -49,22 +49,15 @@ public actor InferenceRuntime: InferenceEngine {
         guard activeRunID == nil || queue.count < configuration.maximumQueuedRuns else {
             throw InferenceFailure.queueFull
         }
-        let (stream, continuation) = AsyncThrowingStream<InferenceOutput, Error>.makeStream(
-            bufferingPolicy: .bufferingOldest(configuration.eventBufferCapacity)
-        )
+        let events = BoundedInferenceEvents(capacity: configuration.eventBufferCapacity)
         let completion = RunCompletion()
         let id = request.id
         let token = UUID()
-        continuation.onTermination = { [weak self] termination in
-            if case .cancelled = termination {
-                Task { await self?.cancel(id, token: token) }
-            }
-        }
         entries[id] = Entry(token: token, request: request, backend: backend,
-                            continuation: continuation, completion: completion)
+                            events: events, completion: completion)
         queue.append(id)
         startNextIfIdle()
-        return InferenceRun(id: id, events: stream,
+        return InferenceRun(id: id, nextEvent: { try await events.next() },
                             cancel: { [weak self] in await self?.cancel(id, token: token) },
                             outcome: { await completion.wait() })
     }
@@ -82,10 +75,11 @@ public actor InferenceRuntime: InferenceEngine {
         if activeRunID == id {
             phase = .cancelling
             worker?.cancel()
+            await entry.events.cancelProduction()
         } else {
             queue.removeAll { $0 == id }
             entries.removeValue(forKey: id)
-            entry.continuation.finish(throwing: CancellationError())
+            await entry.events.finish(.failure(CancellationError()))
             await entry.completion.resolve(.cancelled)
         }
     }
@@ -109,11 +103,15 @@ public actor InferenceRuntime: InferenceEngine {
                 phase = .cancelling
             } else {
                 entries.removeValue(forKey: id)
-                entry.continuation.finish(throwing: CancellationError())
+
             }
         }
         worker?.cancel()
+        if let activeAtCancellation, let entry = batch[activeAtCancellation] {
+            await entry.events.cancelProduction()
+        }
         for (id, entry) in batch where id != activeAtCancellation {
+            await entry.events.finish(.failure(CancellationError()))
             await entry.completion.resolve(.cancelled)
         }
         for entry in batch.values { _ = await entry.completion.wait() }
@@ -153,7 +151,16 @@ public actor InferenceRuntime: InferenceEngine {
                 try await self.emit(output, for: id, token: entry.token)
             }
             try checkCancellation(id)
-            outcome = .completed(result)
+            let events = await entry.events.snapshot()
+            try checkCancellation(id)
+            let diagnostics = ["runtime.events.accepted": String(events.accepted),
+                "runtime.events.peakBuffered": String(events.peakBuffered),
+                "runtime.events.capacity": String(configuration.eventBufferCapacity),
+                "runtime.events.waits": String(events.capacityWaits),
+                "runtime.events.waitSeconds": String(events.capacityWaitSeconds)]
+            outcome = .completed(InferenceResult(artifacts: result.artifacts,
+                metadata: result.metadata.merging(diagnostics) { _, measured in measured },
+                textResponse: result.textResponse))
         } catch is CancellationError {
             outcome = .cancelled
         } catch let failure as InferenceFailure {
@@ -181,12 +188,7 @@ public actor InferenceRuntime: InferenceEngine {
             isClosed = true
             refused = queue.compactMap { entries.removeValue(forKey: $0) }
             queue.removeAll()
-            for waiting in refused { waiting.continuation.finish(throwing: InferenceFailure.runtimeClosed) }
-        }
-        switch outcome {
-        case .completed: entry.continuation.finish()
-        case .cancelled: entry.continuation.finish(throwing: CancellationError())
-        case .failed(let failure): entry.continuation.finish(throwing: failure)
+
         }
         // Commit all scheduler state together before the completion actor can suspend
         // us. Otherwise a resubmission can reuse id while activeRunID still identifies
@@ -198,6 +200,12 @@ public actor InferenceRuntime: InferenceEngine {
         worker = nil
         // release has finished. A reentrant submission may start the FIFO head during
         // this await; after resuming, never clear or replace that newer run's state.
+        switch outcome {
+        case .completed: await entry.events.finish(.success(()))
+        case .cancelled: await entry.events.finish(.failure(CancellationError()))
+        case .failed(let failure): await entry.events.finish(.failure(failure))
+        }
+        for waiting in refused { await waiting.events.finish(.failure(InferenceFailure.runtimeClosed)) }
         await entry.completion.resolve(outcome)
         for waiting in refused { await waiting.completion.resolve(.failed(.runtimeClosed)) }
         startNextIfIdle()
@@ -208,15 +216,11 @@ public actor InferenceRuntime: InferenceEngine {
         guard entries[id]?.cancellationRequested == false else { throw CancellationError() }
     }
 
-    private func emit(_ output: InferenceOutput, for id: UUID, token: UUID) throws {
+    private func emit(_ output: InferenceOutput, for id: UUID, token: UUID) async throws {
         guard entries[id]?.token == token else { throw CancellationError() }
         try checkCancellation(id)
         guard activeRunID == id, let entry = entries[id] else { throw CancellationError() }
-        switch entry.continuation.yield(output) {
-        case .enqueued: break
-        case .dropped: throw InferenceFailure.consumerTooSlow
-        case .terminated: throw CancellationError()
-        @unknown default: throw InferenceFailure.consumerTooSlow
-        }
+        try await entry.events.send(output)
+        try checkCancellation(id)
     }
 }

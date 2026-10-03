@@ -184,21 +184,40 @@ struct WorkflowSaveFailure: LocalizedError {
         let run = try await session.engine.submit(request, backendID: binding.backendID)
         activeRun = run
         if cancelled || Task.isCancelled { await run.cancel() }
-        var text = "", failure: (any Error)?
-        do {
-            for try await event in run.events {
-                if cancelled || Task.isCancelled { await run.cancel() }
-                switch event {
-                case .textDelta(let delta):
-                    let limit = binding.textCapability?.profile == TextExecutionCapability.qwen35VLMProfile ? WorkflowTextResponseFile.maximumBytes : 1_048_576
-                    guard text.utf8.count + delta.utf8.count <= limit else { throw WorkflowIssue("文字输出超过应用接收预算。") }
-                    text += delta; languagePreview = text
-                    languagePreviewChanged(request.id, text)
-                case .progress(let completed, let total): progress("\(completed)/\(total)")
-                default: break
+        let limit = binding.textCapability?.profile == TextExecutionCapability.qwen35VLMProfile
+            ? WorkflowTextResponseFile.maximumBytes : 1_048_576
+        let collector = WorkflowEventCollector(maximumBytes: limit)
+        // The actor consumes each delta independently of MainActor scheduling.
+        let consumer = Task { await collector.consume(run) }
+        var displayedRevision = -1, displayPublications = 0
+        let collectionStarted = ContinuousClock.now
+        let display = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                let snapshot = await collector.snapshot()
+                if snapshot.revision != displayedRevision, let self {
+                    displayedRevision = snapshot.revision
+                    displayPublications += 1
+                    self.languagePreview = snapshot.text
+                    self.languagePreviewChanged(request.id, snapshot.text)
+                    if !self.cancelled, let value = snapshot.progress { self.progress(value) }
                 }
+                do { try await Task.sleep(for: .milliseconds(80)) } catch { break }
             }
-        } catch { failure = error; await run.cancel() }
+        }
+        let failure = await withTaskCancellationHandler {
+            await consumer.value
+        } onCancel: {
+            // Keep draining accepted events until Runtime finishes after release.
+            // Cancelling this reader would discard its already queued prefix.
+            Task { await run.cancel() }
+        }
+        display.cancel()
+        await display.value
+        // Flush the last prefix even for failure/cancellation, before caller persistence.
+        let final = await collector.snapshot()
+        let text = final.text
+        languagePreview = text
+        languagePreviewChanged(request.id, text)
         let outcome = await run.outcome(); activeRun = nil
         if case .failed(let authoritativeFailure) = outcome {
             switch authoritativeFailure {
@@ -209,7 +228,14 @@ struct WorkflowSaveFailure: LocalizedError {
         try checkCancellation()
         if let failure { throw failure }
         switch outcome {
-        case .completed(let result): return (result, text)
+        case .completed(let result):
+            let duration = collectionStarted.duration(to: .now).components
+            let metrics = ["application.stream.deltas": String(final.deltaCount),
+                "application.stream.bytes": String(final.byteCount),
+                "application.stream.displayPublications": String(displayPublications + 1),
+                "application.stream.seconds": String(Double(duration.seconds) + Double(duration.attoseconds) / 1e18)]
+            return (InferenceResult(artifacts: result.artifacts,
+                metadata: result.metadata.merging(metrics) { _, measured in measured }, textResponse: result.textResponse), text)
         case .cancelled: throw CancellationError()
         case .failed(let error): throw error
         }
