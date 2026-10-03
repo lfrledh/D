@@ -1,0 +1,89 @@
+import DWorkbench
+import SwiftUI
+
+/// Explicit, versioned context changes. Ordinary browsing never starts model work.
+struct ChatMemoryPanel: View {
+    let chat: ChatController
+    let session: ChatSession
+    let wording: (String, String) -> String
+    @State private var summaryText = ""
+    @State private var memoryText = ""
+    @State private var personal = false
+    @State private var editingSummary: UUID?
+    @State private var editingMemory: ChatMemoryEntry?
+    @State private var issue: String?
+    private var summaries: [ChatContextSummary] {
+        Dictionary(grouping: session.contextSummaries ?? [], by: \.id).values.compactMap { $0.max { $0.revision < $1.revision } }.sorted { $0.createdAt < $1.createdAt }
+    }
+    private var memories: [ChatMemoryEntry] {
+        Dictionary(grouping: (chat.state.memoryEntries ?? []).filter { $0.scope != .personal } + chat.personalMemories, by: \.id).values
+            .compactMap { $0.max { $0.revision < $1.revision } }.sorted { $0.createdAt < $1.createdAt }
+    }
+    var body: some View {
+        DisclosureGroup(wording("Summaries and memory", "摘要与记忆")) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(wording("Summaries replace only reviewed context. Originals remain. Memory is off until explicitly enabled.", "摘要仅替代经过确认的上下文，原文保留。记忆须显式启用。"))
+                    .font(.caption).foregroundStyle(.secondary)
+                ForEach(summaries) { summary in
+                    Toggle(wording("Summary revision ", "摘要版本 ") + String(summary.revision), isOn: Binding(get: { summary.enabled }, set: { value in
+                        change { try chat.setSummaryEnabled(summary.id, enabled: value, sessionID: session.id) }
+                    }))
+                    Text(summary.text).lineLimit(4).font(.caption).textSelection(.enabled)
+                    Button(wording("Edit a new revision", "编辑为新版本")) { summaryText = summary.text; editingSummary = summary.id }
+                }
+                TextSourcesQuestionEditor(value: summaryText, editEpoch: 0, isEditable: true,
+                    accessibilityIdentifier: "chat-summary-editor", onEdit: { summaryText = $0 }).frame(minHeight: 65)
+                Button(editingSummary == nil ? wording("Save reviewed summary", "保存人工整理的摘要") : wording("Save summary revision", "保存摘要新版本")) {
+                    change { try chat.writeSummary(text: summaryText, sessionID: session.id, replacingID: editingSummary); summaryText = ""; editingSummary = nil }
+                }.disabled(summaryText.isEmpty || chat.isRunning)
+                Divider()
+                Toggle(wording("Use personal memories", "使用个人记忆"), isOn: scopeBinding(.personal))
+                if let id = chat.projectIdentity { Toggle(wording("Use this project's memories", "使用本项目记忆"), isOn: scopeBinding(.project(id))) }
+                ForEach(memories) { entry in
+                    VStack(alignment: .leading) {
+                        Text((entry.scope == .personal ? wording("Personal · ", "个人 · ") : wording("Project · ", "项目 · ")) + entry.text)
+                            .font(.caption).textSelection(.enabled)
+                        if entry.forgottenAt == nil {
+                            HStack {
+                                Toggle(wording("Enabled", "启用"), isOn: Binding(get: { entry.enabled }, set: { value in
+                                    write { try entry.settingEnabled(value) }
+                                })).disabled(entry.acceptance != .accepted)
+                                if entry.acceptance == .suggested {
+                                    Button(wording("Accept", "采用")) { write { try entry.approved() } }
+                                }
+                                Button(wording("Edit", "编辑")) { editingMemory = entry; memoryText = entry.text; personal = entry.scope == .personal }
+                                Button(wording("Forget", "忘记"), role: .destructive) { write { try entry.forgotten() } }
+                            }
+                        } else { Text(wording("Forgotten · retained only as history", "已忘记 · 仅保留历史" )).font(.caption).foregroundStyle(.secondary) }
+                    }
+                }
+                Toggle(wording("New memory is personal", "新增为个人记忆"), isOn: $personal).disabled(editingMemory != nil)
+                TextSourcesQuestionEditor(value: memoryText, editEpoch: 0, isEditable: true,
+                    accessibilityIdentifier: "chat-memory-editor", onEdit: { memoryText = $0 }).frame(minHeight: 65)
+                Button(wording("Save memory", "保存记忆")) {
+                    write(clearEditor: true) {
+                        if let editingMemory { return try editingMemory.edited(text: memoryText) }
+                        guard let projectID = chat.projectIdentity else { throw WorkflowIssue("项目尚未准备。") }
+                        return try .manual(text: memoryText, scope: personal ? .personal : .project(projectID))
+                    }
+                }.disabled(memoryText.isEmpty)
+                if let issue { Text(issue).foregroundStyle(.red).font(.caption).textSelection(.enabled) }
+            }.padding(.top, 6)
+        }
+    }
+    private func scopeBinding(_ scope: ChatMemoryScope) -> Binding<Bool> {
+        Binding(get: { session.memoryScopes?.contains(scope) == true }, set: { value in
+            change { var values = session.memoryScopes ?? []; values.removeAll { $0 == scope }; if value { values.append(scope) }; try chat.setMemoryScopes(values, sessionID: session.id) }
+        })
+    }
+    private func change(_ action: () throws -> Void) { do { try action(); issue = nil } catch { issue = error.localizedDescription } }
+    private func write(clearEditor: Bool = false, _ value: () throws -> ChatMemoryEntry) {
+        do {
+            let entry = try value(), capturedText = memoryText
+            Task { @MainActor in
+                do { try await chat.writeMemory(entry); if clearEditor && memoryText == capturedText { memoryText = ""; editingMemory = nil }; issue = nil }
+                catch { issue = error.localizedDescription }
+            }
+        } catch { issue = error.localizedDescription }
+    }
+}

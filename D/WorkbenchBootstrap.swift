@@ -166,6 +166,7 @@ final class WorkbenchBootstrap {
             await quick.load()
             let model = WorkbenchModel(sessionFactory: { _ in borrowed }, settings: settings,
                 modelLibrary: library, audioEnabled: true, audioRecordingEnabled: true)
+            model.projectSession.personalChatOwner = { [weak quickModel] in quickModel?.projectSession.chat }
             self.sharedSession = shared
             self.quickModel = quickModel
             self.quick = quick

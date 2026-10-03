@@ -925,6 +925,9 @@ struct ChatWorkbenchView: View {
                                 wording: { english, chinese in
                                     language?.effectiveLanguageIdentifier.hasPrefix("zh") == true ? chinese : english
                                 }).id(session.id.uuidString + ":knowledge")
+                            ChatToolsPanel(chat: chat, session: session, wording: { english, chinese in
+                                language?.effectiveLanguageIdentifier.hasPrefix("zh") == true ? chinese : english
+                            }).id(session.id.uuidString + ":tools")
                             Toggle(newLabel("importOCR", english: "Use on-device OCR for scanned PDF pages on import",
                                 chinese: "导入扫描PDF时使用本地OCR"), isOn: $ocrImport)
                                 .font(.caption)
@@ -1228,6 +1231,9 @@ struct ChatWorkbenchView: View {
                     }
 
                 }
+                ChatMemoryPanel(chat: chat, session: session, wording: { english, chinese in
+                    language?.effectiveLanguageIdentifier.hasPrefix("zh") == true ? chinese : english
+                }).id(session.id.uuidString + ":memory")
                 if let node = session.configuration,
                    let definition = WorkflowRegistry.standard.definition(for: node) {
                     ForEach(definition.fields.filter { !["modelID", "task", "messagesJSON", "outputMode"].contains($0.id) }) { field in

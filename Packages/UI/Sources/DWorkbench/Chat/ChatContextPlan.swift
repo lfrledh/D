@@ -8,6 +8,8 @@ public struct ChatContextPlan: Sendable, Equatable {
     public let videos: [WorkflowAssetReference]
     /// The existing conservative byte estimate, not a tokenizer result.
     public let estimatedTokens: Int
+    public var memoryUses: [ChatMemoryUse] = []
+    var summaryUses: [ChatContextSummary] = []
 
     private struct FormMessage: Encodable {
         let role: String

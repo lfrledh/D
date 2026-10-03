@@ -883,11 +883,12 @@ public final class ProjectSession {
         catch { await access.release(lease); throw error }
     }
 
+    public var personalChatOwner: (@MainActor () -> ChatController?)?
     private func makeChatController(store candidate: ProjectStore) -> ChatController {
         ChatController(store: candidate, settings: settings, allowsSubmission: { [weak self] in
             guard let self else { return false }
             return self.store === candidate && !self.closePending && !self.isChangingProject
-        }) { [weak self] in
+        }, ownsPersonalMemory: isInternalWorkspace, personalMemoryProvider: { [weak self] in self?.personalChatOwner?() }) { [weak self] in
             guard let self, self.store === candidate else { throw WorkflowIssue("聊天所属项目已关闭或切换。") }
             return try self.makeExplicitOperationServices(allowDrainingQuick: self.chat?.isRunning == true)
         }

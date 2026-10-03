@@ -68,6 +68,16 @@ private actor ChatGatedEngine: InferenceEngine {
     private func recordCancel() { cancellations += 1 }
 }
 
+private actor ChatGatedToolTransport: ChatWebTransport {
+    let gate = ChatOutcomeGate()
+    func send(_ request: URLRequest, maximumBytes: Int) async throws -> ChatWebHTTPResponse {
+        await gate.markSubmitted()
+        await gate.waitOutcome() // Deliberately uncooperative, as a CPU parse/drain can be.
+        try Task.checkCancellation()
+        throw ChatWebError.transportFailure
+    }
+}
+
 @Suite("Chat sidecar and service", .serialized) @MainActor
 struct ChatTests {
     @Test func newCandidateChangesActualSeedButReplayKeepsFrozenRequest() async throws {
@@ -414,16 +424,140 @@ struct ChatTests {
         try await restored.close(); try await store.close()
     }
 
-    private func fixture(preview: (@Sendable (ModelReference, TextRequest) async throws -> TextTemplatePreview)? = nil) async throws -> (ProjectStore, ChatFixtureEngine, ChatController) {
+    @Test func enabledMemoryIsFrozenAndForgetBlocksOldReplayButKeepsHistoryAndBackup() async throws {
+        let (store, engine, chat) = try await fixture()
+        let id = try chat.newSession(); try configure(chat, session: id)
+        let projectID = try #require(chat.projectIdentity)
+        let entry = try ChatMemoryEntry.manual(text: "Use the term 海风", scope: .project(projectID)).settingEnabled(true)
+        // A first persisted value must be revision one; enable is a separate history revision.
+        let first = try ChatMemoryEntry(id: entry.id, text: entry.text, scope: entry.scope, source: .manual,
+            acceptance: .accepted, enabled: false, createdAt: entry.createdAt)
+        try await chat.writeMemory(first); try await chat.writeMemory(entry)
+        try chat.setMemoryScopes([.project(projectID)], sessionID: id)
+        try chat.updateDraft("Write a sentence", sessionID: id)
+        #expect(try chat.contextPreview(sessionID: id).memoryUses == [ChatMemoryUse(entry)])
+        try await chat.send(sessionID: id); await chat.waitForCompletion()
+        let attempt = try #require(chat.selectedSession?.attempts.first)
+        #expect(attempt.memoryUses == [ChatMemoryUse(entry)] && attempt.messagesJSON.contains("海风"))
+        try await chat.writeMemory(entry.forgotten())
+        await #expect(throws: (any Error).self) { try await chat.reproduce(attempt.id, sessionID: id) }
+        #expect(await engine.requests.count == 1)
+        try chat.updateDraft("Next", sessionID: id)
+        #expect(try chat.contextPreview(sessionID: id).memoryUses.isEmpty)
+        try await chat.prepareForBackup()
+        let backup = store.rootURL.deletingLastPathComponent().appendingPathComponent("memory.dbackup")
+        _ = try await store.createBackup(at: backup)
+        let destination = backup.deletingLastPathComponent().appendingPathComponent("MemoryRestored.dproject")
+        _ = try await ProjectStore.restoreBackup(at: backup, to: destination)
+        let restored = try await ProjectStore.open(at: destination), state = try await restored.chatState()
+        #expect(state.sessions.first?.attempts.first == attempt)
+        #expect(ChatMemoryEntry.activeProjection(state.memoryEntries ?? [], enabledScopes: [.project(projectID)]).isEmpty)
+        try await restored.close(); try await store.close()
+    }
+
+    @Test func summaryReplacesReviewedPrefixAndInvalidatesWhenSourceSelectionChanges() async throws {
+        let (store, _, chat) = try await fixture()
+        let id = try chat.newSession(); try configure(chat, session: id)
+        try chat.updateDraft("Original", sessionID: id); try await chat.send(sessionID: id); await chat.waitForCompletion()
+        let original = try #require(chat.selectedSession)
+        try chat.writeSummary(text: "Reviewed summary", sessionID: id, enabled: true)
+        try chat.updateDraft("Next", sessionID: id)
+        let preview = try chat.contextPreview(sessionID: id)
+        #expect(preview.messagesJSON.contains("Reviewed summary") && !preview.messagesJSON.contains("Original"))
+        try await chat.send(sessionID: id); await chat.waitForCompletion()
+        try chat.updateDraft("Third", sessionID: id)
+        #expect(try chat.contextPreview(sessionID: id).messagesJSON.contains("Reviewed summary"))
+        let answer = try #require(original.messages.last)
+        _ = try chat.adoptAnswer(answer.id, text: "Changed source", sessionID: id)
+        #expect(throws: (any Error).self) { try chat.contextPreview(sessionID: id) }
+        let summary = try #require(chat.selectedSession?.contextSummaries?.first)
+        try chat.setSummaryEnabled(summary.id, enabled: false, sessionID: id)
+        #expect(try chat.contextPreview(sessionID: id).messagesJSON.contains("Changed source"))
+        #expect(chat.selectedSession?.messages.prefix(original.messages.count).elementsEqual(original.messages) == true)
+        try await chat.flush(); try await store.close()
+    }
+
+    @Test func repeatedSummariesDeduplicateMemoryProvenanceAndRecheckPreparedSources() async throws {
+        let (store, _, chat) = try await fixture()
+        let id = try chat.newSession(); try configure(chat, session: id)
+        let scope = ChatMemoryScope.project(try #require(chat.projectIdentity))
+        let memory = try ChatMemoryEntry(text: "term", scope: scope, source: .manual, acceptance: .accepted, enabled: true)
+        try await chat.writeMemory(memory); try chat.setMemoryScopes([scope], sessionID: id)
+        try chat.updateDraft("Start", sessionID: id); try await chat.send(sessionID: id); await chat.waitForCompletion()
+        for n in 0..<11 {
+            for summary in Dictionary(grouping: chat.selectedSession!.contextSummaries ?? [], by: \.id).values.compactMap({ $0.max { $0.revision < $1.revision } }) where summary.enabled {
+                try chat.setSummaryEnabled(summary.id, enabled: false, sessionID: id)
+            }
+            try chat.writeSummary(text: "Summary \(n)", sessionID: id, enabled: true)
+            try chat.updateDraft("Next \(n)", sessionID: id)
+            #expect(try chat.contextPreview(sessionID: id).memoryUses == [ChatMemoryUse(memory)])
+            try await chat.send(sessionID: id); await chat.waitForCompletion()
+            #expect(chat.selectedSession?.attempts.last?.memoryUses == [ChatMemoryUse(memory)])
+        }
+        let session = try #require(chat.selectedSession)
+        let summary = try #require(session.contextSummaries?.last)
+        try ChatController.validatePreparedSummaries([summary], session: session, parentID: session.selectedLeafID)
+        let sourceAnswer = try #require(summary.source.coveredMessageIDs.first(where: { id in session.messages.contains { $0.id == id && $0.role == .assistant } }))
+        _ = try chat.adoptAnswer(sourceAnswer, text: "edited while awaiting source read", sessionID: id)
+        #expect(throws: (any Error).self) {
+            try ChatController.validatePreparedSummaries([summary], session: chat.selectedSession!, parentID: session.selectedLeafID)
+        }
+        #expect(throws: (any Error).self) { try chat.writeSummary(text: "missing", sessionID: id, replacingID: UUID()) }
+        try await chat.prepareForTermination(); try await store.close()
+    }
+
+    @Test func personalMemoryUsesSingleOwnerAcrossProjectsAndForgetRejectsReplay() async throws {
+        let (ownerStore, _, owner) = try await fixture(ownsPersonalMemory: true)
+        let (aStore, aEngine, a) = try await fixture(personalMemoryProvider: { owner })
+        let (bStore, _, b) = try await fixture(personalMemoryProvider: { owner })
+        let entry = try ChatMemoryEntry(text: "shared term", scope: .personal, source: .manual, acceptance: .accepted, enabled: true)
+        try await a.writeMemory(entry)
+        #expect(a.state.memoryEntries == nil && b.state.memoryEntries == nil)
+        #expect(owner.state.memoryEntries == [entry])
+        let first = try a.newSession(); try configure(a, session: first); try a.setMemoryScopes([.personal], sessionID: first)
+        let second = try b.newSession(); try configure(b, session: second); try b.setMemoryScopes([.personal], sessionID: second)
+        try a.updateDraft("A", sessionID: first); try b.updateDraft("B", sessionID: second)
+        #expect(try b.contextPreview(sessionID: second).messagesJSON.contains("shared term"))
+        try await a.send(sessionID: first); await a.waitForCompletion()
+        let attempt = try #require(a.selectedSession?.attempts.last)
+        try await b.writeMemory(entry.forgotten())
+        #expect(try b.contextPreview(sessionID: second).memoryUses.isEmpty)
+        await #expect(throws: (any Error).self) { try await a.reproduce(attempt.id, sessionID: first) }
+        #expect(await aEngine.requests.count == 1)
+        for controller in [a, b, owner] { try await controller.prepareForTermination() }
+        for store in [aStore, bStore, ownerStore] { try await store.close() }
+    }
+
+    @Test func combinedPersonalAndProjectMemoryBudgetRejectsBeforeHistoryOrDraftMutation() async throws {
+        let (ownerStore, _, owner) = try await fixture(ownsPersonalMemory: true, memoryCount: 513)
+        let (store, engine, chat) = try await fixture(personalMemoryProvider: { owner }, memoryCount: 512)
+        let id = try chat.newSession(); try configure(chat, session: id)
+        try chat.setMemoryScopes([.personal, .project(try #require(chat.projectIdentity))], sessionID: id)
+        try chat.updateDraft("Preserve me", sessionID: id)
+        let before = try #require(chat.selectedSession)
+        await #expect(throws: (any Error).self) { try await chat.send(sessionID: id) }
+        #expect(chat.selectedSession == before && !chat.isRunning)
+        #expect(await engine.requests.isEmpty)
+        try await chat.prepareForTermination(); try await owner.prepareForTermination()
+        try await store.close(); try await ownerStore.close()
+    }
+
+    private func fixture(ownsPersonalMemory: Bool = false, personalMemoryProvider: @escaping @MainActor () -> ChatController? = { nil }, memoryCount: Int = 0, preview: (@Sendable (ModelReference, TextRequest) async throws -> TextTemplatePreview)? = nil) async throws -> (ProjectStore, ChatFixtureEngine, ChatController) {
         let root = URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory())
             .appendingPathComponent("Chat-" + UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         let store = try await ProjectStore.create(at: root.appendingPathComponent("Conversation.dproject"), name: "Chat CPU")
+        if memoryCount > 0 {
+            let scope: ChatMemoryScope = ownsPersonalMemory ? .personal : .project(await store.snapshot().id)
+            var seeded = ChatState()
+            seeded.memoryEntries = try (0..<memoryCount).map { try ChatMemoryEntry(text: "m\($0)", scope: scope, source: .manual, acceptance: .accepted, enabled: true) }
+            try await store.saveChatState(seeded, expectedRevision: 0)
+        }
         let engine = ChatFixtureEngine()
         let runtime = WorkbenchSession(engine: engine, backendID: "fixture", status: {
             .init(activeRunID: nil, phase: nil, queuedRunIDs: [])
         }, shutdown: {}, cleanup: {}, validateModel: { _ in }, textBackendID: "fixture.text", previewTextTemplate: preview)
-        let controller = ChatController(store: store) {
+        let controller = ChatController(store: store, ownsPersonalMemory: ownsPersonalMemory, personalMemoryProvider: personalMemoryProvider) {
             WorkflowServices(store: store, session: runtime) { _, identity in
                 .init(identity: identity, reference: .init(directory: root, revision: identity),
                       backendID: "fixture.text", operationID: WorkflowModelRoutes.qwen35,
@@ -910,6 +1044,49 @@ struct ChatTests {
         #expect(chat.state.sessions.first?.attempts.first?.rawText == "partial 👩🏽‍🎨 e\u{301}")
         #expect(chat.state.sessions.first?.attempts.first?.status == .partial)
         #expect(await engine.cancellations > 0)
+        try await chat.prepareForBackup()
+        try await chat.flush(); try await store.close()
+    }
+
+    @Test func projectStopSignalsGenerationBeforeWaitingForUncooperativeTool() async throws {
+        let root = URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory())
+            .appendingPathComponent("ChatGate-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let store = try await ProjectStore.create(at: root.appendingPathComponent("Gate.dproject"), name: "Chat gate")
+        let engine = ChatGatedEngine()
+        let runtime = WorkbenchSession(engine: engine, backendID: "fixture", status: {
+            .init(activeRunID: nil, phase: nil, queuedRunIDs: [])
+        }, shutdown: {}, cleanup: {}, validateModel: { _ in }, textBackendID: "fixture.text")
+        let transport = ChatGatedToolTransport()
+        let chat = ChatController(store: store, webClient: ChatWebSearchClient(transport: transport)) {
+            WorkflowServices(store: store, session: runtime) { _, identity in
+                .init(identity: identity, reference: .init(directory: root, revision: identity),
+                      backendID: "fixture.text", operationID: WorkflowModelRoutes.qwen35,
+                      textCapability: .init(maximumPromptTokens: 8192, maximumOutputTokens: 1024,
+                                            profile: TextExecutionCapability.qwen35VLMProfile))
+            }
+        }
+        await chat.load()
+        let first = try chat.newSession(); try configure(chat, session: first)
+        try chat.updateDraft("start", sessionID: first)
+        try await chat.send(sessionID: first)
+        await engine.gate.waitSubmitted()
+        await #expect(throws: (any Error).self) { try await chat.prepareForBackup() }
+        var options = ChatWebOptions(); options.allowed = true
+        try chat.setWebOptions(options, sessionID: first)
+        let tool = Task { try await chat.executeTool(.webSearch(query: "slow", language: .en), sessionID: first) }
+        await transport.gate.waitSubmitted()
+        let cancellation = Task { await chat.cancelAll() }
+        for _ in 0..<200 {
+            if await engine.cancellations > 0 { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(await engine.cancellations > 0)
+        #expect(chat.isToolRunning && chat.isRunning)
+        await engine.gate.release(); await transport.gate.release()
+        await cancellation.value
+        await #expect(throws: (any Error).self) { try await tool.value }
+        #expect(!chat.isRunning && !chat.isToolRunning)
         try await chat.prepareForBackup()
         try await chat.flush(); try await store.close()
     }

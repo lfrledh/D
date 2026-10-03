@@ -316,3 +316,20 @@ public struct ChatMemoryEntry: Codable, Sendable, Equatable, Identifiable {
         }
     }
 }
+
+/// Identity of an explicitly injected memory; old request replay must consult current consent.
+public struct ChatMemoryUse: Codable, Sendable, Equatable {
+    public let id: UUID
+    public let revision: UInt64
+    public let scope: ChatMemoryScope
+    public init(_ entry: ChatMemoryEntry) { id = entry.id; revision = entry.revision; scope = entry.scope }
+}
+
+extension ChatContextSource {
+    /// A summary covers an unchanged ancestor, not unrelated later messages.
+    public func validateAncestor(of session: ChatSession, path: [ChatMessage]) throws {
+        guard path.contains(where: { $0.id == selectedLeafID }) else { throw WorkflowIssue("摘要不属于当前路径，请停用或重新整理。") }
+        var anchor = session; anchor.selectedLeafID = selectedLeafID
+        try validate(current: anchor)
+    }
+}

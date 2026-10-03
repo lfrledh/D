@@ -50,6 +50,7 @@ public struct ChatAttempt: Codable, Sendable, Equatable, Identifiable {
     public var replayedAttemptID: UUID?
     /// Comparison reuses the frozen input but deliberately changes model/settings.
     public var comparisonSourceAttemptID: UUID?
+    public var memoryUses: [ChatMemoryUse]?
     public var status: Status
     public var rawText: String
     public var response: TextResponse?
@@ -80,6 +81,10 @@ public struct ChatSession: Codable, Sendable, Equatable, Identifiable {
     public var originLeafID: UUID?
     public var contextChoices: ChatContextChoices?
     public var pendingSpeechDraft: ChatAttachment?
+    public var contextSummaries: [ChatContextSummary]?
+    public var memoryScopes: [ChatMemoryScope]?
+    public var webOptions: ChatWebOptions?
+    public var toolActivities: [ChatToolActivity]?
     public var knowledgeScope: [UUID]?
     public var knowledgeExcerpts: [ChatKnowledgeExcerpt]?
     public init(id: UUID = UUID(), title: String = "新对话") { self.id = id; self.title = title }
@@ -116,6 +121,7 @@ public struct ChatState: Codable, Sendable, Equatable {
     public var sessions: [ChatSession] = []
     public var presets: [ChatPromptPreset] = []
     public var knowledgeDocuments: [ChatKnowledgeDocument]?
+    public var memoryEntries: [ChatMemoryEntry]?
     public init() {}
 
     public func validate() throws {
@@ -142,6 +148,10 @@ public struct ChatState: Codable, Sendable, Equatable {
         for document in documents {
             try Self.validateAttachments([document.material]); _ = try document.extraction()
         }
+        let memories = memoryEntries ?? []
+        guard memories.count <= 1024, Set(memories.map { "\($0.id):\($0.revision)" }).count == memories.count,
+              memories.reduce(0, { $0 + $1.text.utf8.count }) <= 2_097_152 else { throw WorkflowIssue("记忆记录容量或版本身份无效。") }
+        for entry in memories { try entry.validate() }
         for session in sessions {
             guard !session.title.isEmpty, session.title.utf8.count <= 512,
                   session.draft.utf8.count <= 1_048_576, session.systemPrompt.utf8.count <= 65_536,
@@ -152,6 +162,14 @@ public struct ChatState: Codable, Sendable, Equatable {
                 throw WorkflowIssue("聊天会话内容或分支身份无效；原件保持只读。")
             }
             if let node = session.configuration { try Self.validateNode(node) }
+            let activities = session.toolActivities ?? []
+            guard activities.count <= 256, Set(activities.map(\.id)).count == activities.count,
+                  activities.reduce(0, { $0 + ($1.resultJSON?.utf8.count ?? 0) }) <= 8_388_608 else { throw WorkflowIssue("工具历史超过保存预算。") }
+            for activity in activities { try activity.validate() }
+            let summaries = session.contextSummaries ?? []
+            guard summaries.count <= 256, Set(summaries.map { "\($0.id):\($0.revision)" }).count == summaries.count,
+                  (session.memoryScopes?.count ?? 0) <= 2 else { throw WorkflowIssue("摘要历史或记忆范围无效。") }
+            for summary in summaries { try summary.validate() }
             try session.contextChoices?.validate(messages: session.messages)
             try Self.validateAttachments(session.attachments)
             if let pending = session.pendingSpeechDraft {
@@ -197,6 +215,8 @@ public struct ChatState: Codable, Sendable, Equatable {
                       attempt.messagesJSON.utf8.count <= 1_048_576,
                       attempt.node.parameters["messagesJSON"]?.string == attempt.messagesJSON,
                       attempt.systemPrompt.utf8.count <= 65_536 else { throw WorkflowIssue("聊天尝试引用或大小无效。") }
+                guard (attempt.memoryUses?.count ?? 0) <= 1024 else { throw WorkflowIssue("记忆来源数量无效。") }
+                for use in attempt.memoryUses ?? [] { guard use.revision > 0 else { throw WorkflowIssue("记忆来源版本无效。") } }
                 try Self.validateNode(attempt.node)
                 for value in attempt.inputs.values {
                     for ref in value.datum?.assetReferences ?? [] { guard [.image, .video].contains(ref.kind) else { throw WorkflowIssue("聊天媒体端口类型无效。") } }

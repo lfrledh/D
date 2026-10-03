@@ -35,6 +35,15 @@ public enum ChatDeterministicTools {
         if request.operation == .divide && right == 0 {
             throw ToolError(.divisionByZero, "Division by zero.")
         }
+        // Foundation can silently round multiplication too. A conservative decimal
+        // digit budget establishes exact representability before non-division arithmetic.
+        if request.operation != .divide {
+            let a = decimalShape(request.left), b = decimalShape(request.right)
+            let needed: Int
+            if request.operation == .multiply { needed = a.digits + b.digits }
+            else { let exponent = min(a.exponent, b.exponent); needed = max(a.digits + a.exponent - exponent, b.digits + b.exponent - exponent) + 1 }
+            guard needed <= 38 else { throw ToolError(.arithmetic, "Decimal operation would lose precision.") }
+        }
         var answer = Decimal()
         let status: NSDecimalNumber.CalculationError
         switch request.operation {
@@ -321,6 +330,15 @@ public enum ChatDeterministicTools {
         let actual = calendar.dateComponents([.year, .month, .day, .hour, .minute, .second], from: date)
         return actual.year == year && actual.month == month && actual.day == day &&
             actual.hour == hour && actual.minute == minute && actual.second == second
+    }
+
+    private static func decimalShape(_ text: String) -> (digits: Int, exponent: Int) {
+        let unsigned = text.trimmingCharacters(in: CharacterSet(charactersIn: "+-"))
+        let pieces = unsigned.split(separator: ".", omittingEmptySubsequences: false)
+        var digits = Array(pieces.joined()), exponent = pieces.count == 2 ? -pieces[1].count : 0
+        while digits.first == "0" { digits.removeFirst() }
+        while digits.last == "0" { digits.removeLast(); exponent += 1 }
+        return (max(1, digits.count), digits.isEmpty ? 0 : exponent)
     }
 
     private static func decimal(_ text: String) throws -> Decimal {

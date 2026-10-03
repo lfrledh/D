@@ -17,6 +17,12 @@ import Observation
         settings?.string(forKey: "D.Chat.NewSessionSystemPrompt.v1") ?? inMemoryDefaultSystemPrompt
     }
     @ObservationIgnored private let settings: UserDefaults?
+    @ObservationIgnored private let personalMemoryProvider: @MainActor () -> ChatController?
+    public let ownsPersonalMemory: Bool
+    public private(set) var projectIdentity: UUID?
+    public var personalMemories: [ChatMemoryEntry] {
+        (ownsPersonalMemory ? state.memoryEntries : personalMemoryProvider()?.state.memoryEntries)?.filter { $0.scope == .personal } ?? []
+    }
     /// Incomplete numeric edits survive view/category changes in this owner.
     /// Valid values persist in configuration; these transient edits are not cold-start state.
     public var parameterText: [String: String] = [:]
@@ -48,17 +54,24 @@ import Observation
         speechService = service
         return service
     }
-    public var isBusy: Bool { isRunning || isTranscribing || speechPlaybackState != .idle }
+    public var isBusy: Bool { isRunning || isToolRunning || isTranscribing || speechPlaybackState != .idle }
     public private(set) var isCancelling = false
     /// Publication retries are busy but are not a cancellable model run.
     public var canStopGeneration: Bool { isRunning && activeAttemptID != nil }
     @ObservationIgnored private var debounceGeneration: UInt64 = 0
+    @ObservationIgnored private var toolTask: Task<UUID, Error>?
+    @ObservationIgnored private let webClient: ChatWebSearchClient
+    public private(set) var activeToolSessionID: UUID?
+    public var isToolRunning: Bool { activeToolSessionID != nil }
     @ObservationIgnored private var knowledgeIndex: ChatKnowledgeIndex?
     @ObservationIgnored private var indexedKnowledge: [UUID: ChatKnowledgeDocument] = [:]
 
     public init(store: ProjectStore, settings: UserDefaults? = nil, allowsSubmission: @escaping @MainActor () -> Bool = { true },
+                ownsPersonalMemory: Bool = false, webClient: ChatWebSearchClient = .init(),
+                personalMemoryProvider: @escaping @MainActor () -> ChatController? = { nil },
                 makeServices: @escaping @MainActor () throws -> WorkflowServices) {
-        self.store = store; self.settings = settings
+        self.store = store; self.settings = settings; self.webClient = webClient
+        self.ownsPersonalMemory = ownsPersonalMemory; self.personalMemoryProvider = personalMemoryProvider
         self.allowsSubmission = allowsSubmission; self.makeServices = makeServices
     }
     public var selectedSession: ChatSession? { state.sessions.first { $0.id == state.selectedSessionID } }
@@ -68,8 +81,14 @@ import Observation
         guard !isLoaded else { return }
         do {
             let loaded = try await store.chatState()
+            projectIdentity = await store.snapshot().id
             state = loaded; diskRevision = loaded.revision; isLoaded = true
             for i in state.sessions.indices {
+                for j in (state.sessions[i].toolActivities ?? []).indices where state.sessions[i].toolActivities?[j].status == .running {
+                    state.sessions[i].toolActivities?[j].status = .interrupted
+                    state.sessions[i].toolActivities?[j].issue = "上次工具操作中断；不会自动重做。"
+                    changed()
+                }
                 for j in state.sessions[i].attempts.indices where [.running, .saving].contains(state.sessions[i].attempts[j].status) {
                     state.sessions[i].attempts[j].status = .interrupted
                     state.sessions[i].attempts[j].issue = "上次运行中断；已保留部分文字，不会自动重跑。"
@@ -385,11 +404,13 @@ import Observation
                                createdAt: a.createdAt, status: a.status)
             copy.replayedAttemptID = a.replayedAttemptID
             copy.comparisonSourceAttemptID = a.comparisonSourceAttemptID
+            copy.memoryUses = a.memoryUses
             copy.rawText = a.rawText; copy.response = a.response; copy.output = a.output; copy.issue = a.issue
             return copy
         }
         fork.selectedLeafID = leaf; fork.configuration = source.configuration; fork.systemPrompt = source.systemPrompt
         fork.draft = source.draft; fork.attachments = source.attachments
+        fork.memoryScopes = source.memoryScopes
         fork.knowledgeScope = source.knowledgeScope; fork.knowledgeExcerpts = source.knowledgeExcerpts
         if var choices = source.contextChoices {
             let pathIDs = Set(path.map(\.id))
@@ -466,13 +487,89 @@ import Observation
     }
     private func contextPlan(_ session: ChatSession, path: [ChatMessage], prompt: String, attachments: [ChatAttachment], excerpts: [ChatKnowledgeExcerpt]) throws -> ChatContextPlan {
         let ids = Set(path.map(\.id)), choices = session.contextChoices
-        let excluded = Set(choices?.excludedMessageIDs ?? []).intersection(ids)
+        var excluded = Set(choices?.excludedMessageIDs ?? []).intersection(ids)
+        var extras: [String] = []
+        let memories = currentMemories(session)
+        let latest = Dictionary(grouping: session.contextSummaries ?? [], by: \.id).compactMap { $0.value.max { $0.revision < $1.revision } }
+        var covered = Set<UUID>(), uses = memories.map(ChatMemoryUse.init)
+        for summary in latest.sorted(by: { $0.createdAt < $1.createdAt }) where summary.enabled {
+            try summary.source.validateAncestor(of: session, path: path)
+            guard covered.isDisjoint(with: summary.source.coveredMessageIDs) else { throw WorkflowIssue("已启用摘要覆盖范围重叠，请仅保留一个版本。") }
+            covered.formUnion(summary.source.coveredMessageIDs)
+            let priorUses = session.attempts.filter { summary.source.coveredMessageIDs.contains($0.assistantMessageID) }.flatMap { $0.memoryUses ?? [] }
+            try validateMemoryUses(priorUses, session: session)
+            for use in priorUses where !uses.contains(use) { uses.append(use) }
+            extras.append("[User-reviewed context summary \(summary.id), revision \(summary.revision)]\n\(summary.text)\n[/Context summary]")
+        }
+        guard uses.count <= 1024 else { throw WorkflowIssue("本次上下文的记忆来源超过预算，请减少启用条目。") }
+        excluded.formUnion(covered)
+        if !memories.isEmpty {
+            extras.append("[Explicitly enabled memories]\n" + memories.map { "[\($0.scope)] \($0.text)" }.joined(separator: "\n") + "\n[/Memories]")
+        }
         let adopted = (choices?.adopted ?? [:]).filter { ids.contains($0.key) && !excluded.contains($0.key) }
-        return try ChatContextPlan.build(path: path, attempts: session.attempts, prompt: prompt,
-            attachments: attachments, system: session.systemPrompt, adopted: adopted, excluded: excluded, knowledgeExcerpts: excerpts)
+        let system = ([session.systemPrompt].filter { !$0.isEmpty } + extras).joined(separator: "\n\n")
+        var plan = try ChatContextPlan.build(path: path, attempts: session.attempts, prompt: prompt,
+            attachments: attachments, system: system, adopted: adopted, excluded: excluded, knowledgeExcerpts: excerpts)
+        plan.memoryUses = uses
+        plan.summaryUses = latest.filter(\.enabled)
+        return plan
+    }
+
+    private func currentMemories(_ session: ChatSession) -> [ChatMemoryEntry] {
+        let project = (state.memoryEntries ?? []).filter { $0.scope != .personal }
+        return ChatMemoryEntry.activeProjection(project + personalMemories, enabledScopes: Set(session.memoryScopes ?? []))
+    }
+    private func validateMemoryUses(_ uses: [ChatMemoryUse], session: ChatSession) throws {
+        let current = currentMemories(session).map(ChatMemoryUse.init)
+        guard uses.allSatisfy({ current.contains($0) }) else { throw WorkflowIssue("这份旧请求或摘要使用的记忆已修改、关闭或忘记，不能按原请求重现；请生成新候选。") }
+    }
+    public func setMemoryScopes(_ scopes: [ChatMemoryScope], sessionID: UUID) throws {
+        try requireLoaded(); let i = try index(sessionID)
+        guard Set(scopes).count == scopes.count, scopes.count <= 2,
+              scopes.allSatisfy({ $0 == .personal || $0 == projectIdentity.map(ChatMemoryScope.project) }) else { throw WorkflowIssue("记忆范围不属于当前项目。") }
+        state.sessions[i].memoryScopes = scopes; changed()
+    }
+    public func writeMemory(_ entry: ChatMemoryEntry) async throws {
+        try requireLoaded(); try entry.validate()
+        if entry.scope == .personal && !ownsPersonalMemory {
+            guard let owner = personalMemoryProvider(), owner !== self else { throw WorkflowIssue("个人记忆所有者尚未就绪；项目记忆仍可用。") }
+            try await owner.writeMemory(entry); return
+        }
+        guard entry.scope == .personal || entry.scope == projectIdentity.map(ChatMemoryScope.project) else { throw WorkflowIssue("记忆不属于当前项目。") }
+        let versions = (state.memoryEntries ?? []).filter { $0.id == entry.id }
+        if let previous = versions.max(by: { $0.revision < $1.revision }) {
+            guard previous.forgottenAt == nil, previous.scope == entry.scope, previous.source == entry.source,
+                  previous.createdAt == entry.createdAt, previous.revision < UInt64.max, entry.revision == previous.revision + 1 else { throw WorkflowIssue("记忆版本已过期或已忘记。") }
+        } else { guard entry.revision == 1 else { throw WorkflowIssue("缺少记忆初始版本。") } }
+        var candidate = state; candidate.memoryEntries = (candidate.memoryEntries ?? []) + [entry]
+        try candidate.validate(); state = candidate; changed(); try await flush()
+    }
+    public func writeSummary(text: String, sessionID: UUID, replacingID: UUID? = nil, enabled: Bool = false) throws {
+        try requireLoaded(); let i = try index(sessionID), session = state.sessions[i]
+        let value: ChatContextSummary
+        if let replacingID {
+            guard let old = session.contextSummaries?.filter({ $0.id == replacingID }).max(by: { $0.revision < $1.revision }) else { throw WorkflowIssue("要编辑的摘要已不存在。") }
+            value = try old.edited(text: text)
+        } else {
+            let path = try session.path(to: session.selectedLeafID)
+            let excluded = Set(session.contextChoices?.excludedMessageIDs ?? [])
+            let source = try ChatContextSource.capture(session: session, coveredMessageIDs: path.map(\.id).filter { !excluded.contains($0) })
+            value = try .init(text: text, source: source, enabled: enabled)
+        }
+        var candidate = state
+        candidate.sessions[i].contextSummaries = (session.contextSummaries ?? []) + [value]
+        try candidate.validate(); state = candidate; changed()
+    }
+    public func setSummaryEnabled(_ id: UUID, enabled: Bool, sessionID: UUID) throws {
+        try requireLoaded(); let i = try index(sessionID), session = state.sessions[i]
+        guard let old = session.contextSummaries?.filter({ $0.id == id }).max(by: { $0.revision < $1.revision }) else { throw WorkflowIssue("摘要不存在。") }
+        if enabled { try old.source.validateAncestor(of: session, path: session.path(to: session.selectedLeafID)) }
+        var candidate = state
+        candidate.sessions[i].contextSummaries = (session.contextSummaries ?? []) + [try old.settingEnabled(enabled)]
+        try candidate.validate(); state = candidate; changed()
     }
     private func prepared(_ path: [ChatMessage], session: ChatSession, prompt: String, attachments: [ChatAttachment],
-                          node source: WorkflowNode, excerpts: [ChatKnowledgeExcerpt]) async throws -> (WorkflowNode, String, [String: WorkflowValue]) {
+                          node source: WorkflowNode, excerpts: [ChatKnowledgeExcerpt]) async throws -> (WorkflowNode, String, [String: WorkflowValue], [ChatMemoryUse], [ChatContextSummary]) {
         let plan = try contextPlan(session, path: path, prompt: prompt, attachments: attachments, excerpts: excerpts)
         let excluded = Set(session.contextChoices?.excludedMessageIDs ?? [])
         for item in path.filter({ !excluded.contains($0.id) }).flatMap(\.attachments) + attachments {
@@ -504,7 +601,7 @@ import Observation
         var inputs: [String: WorkflowValue] = [:]
         if let value = port(plan.images, kind: .image) { inputs["images"] = value }
         if let value = port(plan.videos, kind: .video) { inputs["video"] = value }
-        return (node, plan.messagesJSON, inputs)
+        return (node, plan.messagesJSON, inputs, plan.memoryUses, plan.summaryUses)
     }
 
     /// The preview uses the exact same immutable request and source checks as send.
@@ -538,6 +635,7 @@ import Observation
             throw WorkflowIssue("回答参数仍有未完成或无效输入，请先修正。")
         }
         guard allowsSubmission(), !isRunning, pendingSaveAttemptID == nil else { throw WorkflowIssue("已有聊天推理或待保存结果；请等待或重试保存。其他会话可以继续编辑。") }
+        try await prepareAutomaticWeb(sessionID: sessionID)
         let i = try index(sessionID), session = state.sessions[i]
         if session.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
            let user = try session.path(to: session.selectedLeafID).last, user.role == .user {
@@ -597,7 +695,7 @@ import Observation
             throw WorkflowIssue("固定比较输入超过所选上下文预算；没有删减原始问题。")
         }
         for reference in refs { _ = try await store.workflowData(reference) }
-        try await launch(sessionID: sessionID, user: user, prepared: (node, original.messagesJSON, original.inputs),
+        try await launch(sessionID: sessionID, user: user, prepared: (node, original.messagesJSON, original.inputs, original.memoryUses ?? [], []),
                          systemPrompt: original.systemPrompt, expectedLeafID: session.selectedLeafID,
                          clearDraft: false, comparisonSourceAttemptID: attemptID)
     }
@@ -613,12 +711,21 @@ import Observation
             throw WorkflowIssue("旧尝试缺少可重现的冻结参数或种子，不能按当前设置冒充重现。")
         }
         try await launch(sessionID: sessionID, user: user,
-            prepared: (attempt.node, attempt.messagesJSON, attempt.inputs),
+            prepared: (attempt.node, attempt.messagesJSON, attempt.inputs, attempt.memoryUses ?? [], []),
             systemPrompt: attempt.systemPrompt, expectedLeafID: session.selectedLeafID,
             clearDraft: false, replayedAttemptID: attemptID)
     }
+    // Used after every asynchronous source read, immediately before mutating history.
+    static func validatePreparedSummaries(_ summaries: [ChatContextSummary], session: ChatSession, parentID: UUID?) throws {
+        let path = try session.path(to: parentID)
+        for summary in summaries {
+            guard let latest = session.contextSummaries?.filter({ $0.id == summary.id }).max(by: { $0.revision < $1.revision }),
+                  latest == summary, latest.enabled else { throw WorkflowIssue("摘要在准备期间已改变，请重新发送。") }
+            try summary.source.validateAncestor(of: session, path: path)
+        }
+    }
     private func launch(sessionID: UUID, user: ChatMessage,
-                        prepared: (WorkflowNode, String, [String: WorkflowValue]),
+                        prepared: (WorkflowNode, String, [String: WorkflowValue], [ChatMemoryUse], [ChatContextSummary]),
                         systemPrompt: String, expectedLeafID: UUID?, clearDraft: Bool,
                         replayedAttemptID: UUID? = nil, comparisonSourceAttemptID: UUID? = nil) async throws {
         // A replay uses the immutable attempt, never the currently edited fields.
@@ -632,6 +739,8 @@ import Observation
         guard !state.sessions[i].archived, state.sessions[i].contextChoices?.deletedAt == nil else {
             throw WorkflowIssue("会话在准备期间已归档或删除；没有提交新的生成。")
         }
+        try validateMemoryUses(prepared.3, session: state.sessions[i])
+        try Self.validatePreparedSummaries(prepared.4, session: state.sessions[i], parentID: user.parentID)
         let firstMessageTitle = clearDraft && state.sessions[i].contextChoices?.manuallyNamed != true && !state.sessions[i].messages.contains(where: { $0.role == .user })
             ? Self.derivedTitle(user.text, characterLimit: 80) : nil
         let attemptID = UUID(), assistantID = UUID()
@@ -639,6 +748,7 @@ import Observation
         var attempt = ChatAttempt(id: attemptID, sessionID: sessionID, userMessageID: user.id,
                                   assistantMessageID: assistantID, node: prepared.0, messagesJSON: prepared.1,
                                   inputs: prepared.2, systemPrompt: systemPrompt)
+        attempt.memoryUses = prepared.3.isEmpty ? nil : prepared.3
         attempt.replayedAttemptID = replayedAttemptID
         attempt.comparisonSourceAttemptID = comparisonSourceAttemptID
         if !state.sessions[i].messages.contains(where: { $0.id == user.id }) { state.sessions[i].messages.append(user) }
@@ -664,7 +774,8 @@ import Observation
                     guard let self, self.isRunning, self.activeAttemptID == stepID, !text.isEmpty,
                           let si = self.state.sessions.firstIndex(where: { $0.id == sessionID }),
                           let ai = self.state.sessions[si].attempts.firstIndex(where: { $0.id == attemptID }),
-                          self.state.sessions[si].attempts[ai].status == .running else { return }
+                          self.state.sessions[si].attempts[ai].status == .running,
+                          self.state.sessions[si].attempts[ai].rawText != text else { return }
                     self.state.sessions[si].attempts[ai].rawText = text
                     self.changed(checkpoint: true)
                 }
@@ -763,8 +874,11 @@ import Observation
 
     /// Project shutdown owns all chat activities. The composer Stop only cancels generation.
     public func cancelAll() async {
+        toolTask?.cancel()
         speechTask?.cancel(); speechService?.cancelTranscription(); speechService?.stopSpeech()
+        // Signal every owner before waiting for a possibly slow tool drain.
         await cancel()
+        _ = try? await toolTask?.value
         await cancelSpeechTranscription()
         await speechService?.stopSpeechAndWait()
     }
@@ -828,6 +942,107 @@ import Observation
         guard !isBusy, pendingSaveAttemptID == nil else { throw WorkflowIssue("聊天仍在运行、播放或有待保存结果。") }
         try await flush()
     }
+    private func prepareAutomaticWeb(sessionID: UUID) async throws {
+        let captured = state.sessions[try index(sessionID)]
+        guard let options = captured.webOptions, options.allowed, options.automaticSearch,
+              !captured.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        let expectedInput = ChatAutomaticWebInput(captured)
+        // This explicit mode sends only the visible question, never prior history or attachments.
+        let searchID = try await executeTool(.webSearch(query: captured.draft, language: options.language), sessionID: sessionID)
+        let current = state.sessions[try index(sessionID)]
+        try expectedInput.validate(current)
+        guard let json = current.toolActivities?.first(where: { $0.id == searchID })?.resultJSON else { throw WorkflowIssue("搜索缺少结果。") }
+        let hits = try JSONDecoder().decode([ChatWebSearchHit].self, from: Data(json.utf8))
+        guard let hit = hits.first else { throw WorkflowIssue("搜索没有结果；未凭空添加引用。可以关闭自动搜索后发送。") }
+        let pageID = try await executeTool(.webRead(hit), sessionID: sessionID)
+        let final = state.sessions[try index(sessionID)]
+        try expectedInput.validate(final)
+        try await attachToolResult(pageID, sessionID: sessionID, expectedInput: expectedInput)
+    }
+
+    public func setWebOptions(_ options: ChatWebOptions, sessionID: UUID) throws {
+        // Withdrawal remains effective even when durable saving has failed.
+        guard isLoaded else { throw WorkflowIssue(error ?? "Chat state is not loaded.") }
+        if options.allowed { try requireLoaded() }
+        let i = try index(sessionID)
+        guard !options.automaticSearch || options.allowed else { throw WorkflowIssue("自动搜索需要先允许联网。") }
+        state.sessions[i].webOptions = options
+        if !options.allowed && activeToolSessionID == sessionID { toolTask?.cancel() }
+        changed()
+    }
+    @discardableResult public func executeTool(_ request: ChatToolRequest, sessionID: UUID) async throws -> UUID {
+        try requireLoaded(); let i = try index(sessionID)
+        guard allowsSubmission(), !isToolRunning, !state.sessions[i].archived,
+              state.sessions[i].contextChoices?.deletedAt == nil else { throw WorkflowIssue("请等待当前工具结束，并选择可用会话。") }
+        let usedBytes = (state.sessions[i].toolActivities ?? []).reduce(0) { $0 + ($1.resultJSON?.utf8.count ?? 0) }
+        guard usedBytes <= 6_291_456 else { throw WorkflowIssue("工具历史没有足够空间保存完整结果，请新建会话。") }
+        let allowed = state.sessions[i].webOptions?.allowed == true
+        guard !request.usesNetwork || allowed else { throw WorkflowIssue("请先允许本会话联网；没有发送查询。") }
+        let activity = ChatToolActivity(request: request), id = activity.id
+        var candidate = state; candidate.sessions[i].toolActivities = (candidate.sessions[i].toolActivities ?? []) + [activity]
+        try candidate.validate(); state = candidate; changed(); activeToolSessionID = sessionID
+        let task = Task { @MainActor [self] () throws -> UUID in
+            defer { activeToolSessionID = nil; toolTask = nil }
+            do {
+                try await flush(); try Task.checkCancellation()
+                let result = try await request.execute(store: store, authorized: allowed, web: webClient)
+                try Task.checkCancellation()
+                let si = try index(sessionID)
+                guard let ai = state.sessions[si].toolActivities?.firstIndex(where: { $0.id == id }) else { throw WorkflowIssue("工具记录不存在。") }
+                var updated = state
+                updated.sessions[si].toolActivities?[ai].resultJSON = result
+                updated.sessions[si].toolActivities?[ai].status = .completed
+                updated.sessions[si].toolActivities?[ai].endedAt = Date()
+                try updated.validate(); state = updated; changed(); try await flush()
+                return id
+            } catch {
+                if let si = state.sessions.firstIndex(where: { $0.id == sessionID }),
+                   let ai = state.sessions[si].toolActivities?.firstIndex(where: { $0.id == id }),
+                   state.sessions[si].toolActivities?[ai].status == .running {
+                    state.sessions[si].toolActivities?[ai].status = error is CancellationError ? .cancelled : .failed
+                    state.sessions[si].toolActivities?[ai].issue = String(error.localizedDescription.prefix(2048))
+                    state.sessions[si].toolActivities?[ai].endedAt = Date(); changed()
+                    try? await flush()
+                }
+                throw error
+            }
+        }
+        toolTask = task
+        return try await withTaskCancellationHandler { try await task.value } onCancel: { task.cancel() }
+    }
+    public func cancelTool() async { toolTask?.cancel(); _ = try? await toolTask?.value }
+    /// Explicit adoption into context. Search metadata can be inspected but is never labelled full text.
+    public func attachToolResult(_ activityID: UUID, sessionID: UUID) async throws {
+        try await attachToolResult(activityID, sessionID: sessionID, expectedInput: nil)
+    }
+    private func attachToolResult(_ activityID: UUID, sessionID: UUID,
+                                  expectedInput: ChatAutomaticWebInput?) async throws {
+        try requireLoaded(); let session = state.sessions[try index(sessionID)]
+        guard let activity = session.toolActivities?.first(where: { $0.id == activityID }), activity.status == .completed,
+              let result = activity.resultJSON else { throw WorkflowIssue("工具结果尚未完成。") }
+        guard case .webSearch = activity.request else {
+            let text = "[Untrusted tool/source data · \(activity.request.identifier)]\n" + result + "\n[/Tool/source data]"
+            guard text.utf8.count <= 524_288 else { throw WorkflowIssue("完整工具正文超过附件预算，请显式选取材料；没有截断。") }
+            let reference = try await store.publishWorkflowAsset(data: Data(text.utf8), mediaType: "text/plain", name: activity.request.identifier,
+                parents: activity.request.parents, operationID: activity.request.identifier, stepID: activity.id,
+                details: ["chatSessionID": sessionID.uuidString, "toolActivityID": activity.id.uuidString], assetID: activity.id).record.reference
+            try Task.checkCancellation(); try requireLoaded()
+            let si = try index(sessionID)
+            guard allowsSubmission(), !state.sessions[si].archived, state.sessions[si].contextChoices?.deletedAt == nil else { throw WorkflowIssue("会话已关闭；已保存工具结果未自动加入草稿。") }
+            try expectedInput?.validate(state.sessions[si])
+            if !state.sessions[si].attachments.contains(where: { $0.reference == reference }) {
+                guard state.sessions[si].attachments.count < 32 else { throw WorkflowIssue("附件数量已达上限。") }
+                state.sessions[si].attachments.append(.init(name: activity.request.identifier, reference: reference, textSnapshot: text))
+            }
+            if let ai = state.sessions[si].toolActivities?.firstIndex(where: { $0.id == activityID }) { state.sessions[si].toolActivities?[ai].output = reference }
+            let adopted = state.sessions[si].attachments.first { $0.reference == reference }
+            changed(); try await flush()
+            try expectedInput?.validate(state.sessions[try index(sessionID)], addedAttachment: adopted)
+            return
+        }
+        throw WorkflowIssue("搜索列表不是网页正文，请先选择并读取一个结果。")
+    }
+
     public func exportSelectedPath(sessionID: UUID, markdown: Bool = true) throws -> String {
         try requireLoaded(); let session = state.sessions[try index(sessionID)]
         let path = try session.path(to: session.selectedLeafID)
