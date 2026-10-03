@@ -52,7 +52,7 @@ import Observation
                 }
             }
             if mutation != savedMutation { try await flush() }
-        } catch { error = error.localizedDescription }
+        } catch { self.error = error.localizedDescription }
     }
     private func requireLoaded() throws {
         guard isLoaded else { throw WorkflowIssue(error ?? "聊天记录尚未读取，不能覆盖原件。") }
