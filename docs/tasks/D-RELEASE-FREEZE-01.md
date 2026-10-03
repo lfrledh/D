@@ -628,3 +628,18 @@ S01受限Sol/high初交、修复1、修复2分别679.58/661.15/548.879秒，均�
 **后续只读准备，尚未接线：** F12复用已固定swift-jinja 2.3.2 AST与transformers 1.1.8 per-call literal模板；未知变量默认空的行为需显式作用域校验，不修改模型目录。F20/21现TextSourceReader仅TXT/MD UTF8≤512KiB，版本/来源和Store可复用，PDF/DOCX/检索/备份新数据尚无实现。F26候选SearXNG JSON+Mozilla Readability（需DOM，不仅JSC）；F27用明确Swift运算/Foundation/TabularData；F28候选CPython WASI+Wasmtime实际预开放目录/fuel/内存限制，未安装或证明隔离，无裸Python回退；F29官方MCP Swift SDK，未固定依赖或接服务，roots/注释不作权限。官方来源及适配差异见RCP/lead/future-source-preparation.json。这里不是把未实施功能记完成，也不增加新平台。
 
 **恢复：** H32已询问解锁一次，未收到新状态，未重试GUI；S00本轮未启动、无GPU生成。所有本轮Worker/CPU/build结束；当前保护结果及最终W SHA在RCP/lead/chat-product-checkpoint.json。解锁后先S00普通App真实长回答/停止/项目列表→独立接纳；再组合S01并保留F07 W改动，继续S02–S06。新存储/工具生产接线等待可靠接收边界，整个F01–F36仍是同批批准范围。main不变，不称专题完成、功能冻结或发行。
+
+
+### CHAT-PRODUCT：2026-10-03集中原生验收（未改生产代码）
+
+起点W=`b46f0c0cc4c160208431faaffd560eafef42857f`；同一普通签名App代码=`457cb9a04178f6a9f01a41bd84607119a158d5c7`，未受影响CPU/构建不重跑。RH=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261003T134350Z-chat-human`。本轮只更新四份现行记录；最终文档SHA见外部回执。未把文档提交当新受测代码。
+
+- 本人解锁后实际Finder/D可访问。原9消息/5尝试的旧测试项目逐文件保留，只在独立副本运行。Cmd+O→定位父目录→列表选择`.dproject`→Open启用并打开，关闭旧列表灰色缺陷；冷重开同路径继续成功。登记既有Qwen Q4及“用于当前项目”均由代理原生完成，无需新增下载或本人资格声明。
+- 最初仅登记未选“用于当前项目”，旧会话目录绑定缺失明确报错并保留一次failed尝试；随后从现有入口绑定同一固定版本并恢复原参数，未篡改旧attempt。保留notes.txt+pouring.png、原两轮路径、2048输入/1024输出、temperature0.7/topP0.95、thinking off、262144像素、resident/15GiB；原图SHA匹配。旧seed缺失时重现菜单disabled；新候选记录真实不同seed。
+- 三次真实长回答分别1434/1483/1574字，均1024 deltas、finishReason=length，正常保留partial而非虚报100条完成；其中两次原为停止测试，但AX查找失效或本人未找到按钮，没有发生有效停止，不称三次计划性能基准。Runtime容量仍256、等待/峰值指标按真实值记录，没有通过扩大buffer过测。
+- 有限换方法：旧AX索引停止调用35.804秒后invalidUIElement；改截图定位坐标点击，调用5.185秒返回，attempt `A8FD1A7A-67D9-4F0A-9C01-586EBA3C3D4E`取消并保留568字。随后同一App生成两条标题，attempt `20ADBE4D-14B8-4127-82E0-7F5111EF6C7B`正常completed/stop；证明本次取消终态与接续，不以调用耗时冒充精确drain时长。停止错误显示仍是原始CancellationError，留可读状态改进责任。
+- 未关闭：第一次候选Menu点击后120秒超时，主线程1402/1407采样在SwiftUI transaction更新，磁盘未增加attempt；非实现者只读检查未见MLX/Runtime执行栈，不能归因模型或16GiB，也未唯一定位控件。直接用户消息“生成回复”可运行同一regenerate回调，不能据此覆盖Menu失败。生成中AX切空会话40.645秒，最终归属正确但响应迟滞未解释。用户表示未看明白停止按钮、没有任何动作，不记真人停止通过；可发现性并入已有F15/F36，不另造功能。
+- 来源：Lead独立执行原生/真实模型验收；native_h22_diagnosis只读提取冻结输入并看样本，native_files_review只读核对待办及最终四份记录，并直接核对持久attempt状态；两处措辞建议已采纳，未声称他们执行测试。未修改生产代码，未重算费用、未再派写Worker。S01 VIEW候选仍未装配，本次不重开H22或重复宏/账号/视频等本人事项。
+- 保护和结束：自有11225忙循环留样后SIGTERM，12161及最后测试实例正常Cmd+Q；本轮未打开Terminal窗口。原项目26文件352751字节及个人scheme内容/索引/未暂存状态不变，App四关键文件不变。没有改普通App、模型或原作品。过程/结果见`native-observations.json`、`long-stream-observations.json`、`s00-native-hang.sample.txt`、`protection-end.json`。
+
+恢复检查点：项目列表、定长无损接收、坐标停止→下一请求有新原生证据；候选菜单/AX响应问题未修，S00整体不接纳main。main仍`f31dced209855722d2f04cc0fc8c5f6712396120`。当前无必须本人立即办理的事项；先按样本定位，修后只复验受影响路径。S01新宿主实际组字留装配后的集中项。完整F01–F36仍为原已批范围，但本次停在用户代码审计点，不宣称功能冻结或发行。

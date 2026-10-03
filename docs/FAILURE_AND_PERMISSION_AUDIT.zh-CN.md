@@ -2,19 +2,21 @@
 
 ## 当前集中待办（2026-10-03）
 
-**CHAT-PRODUCT-20261003 增量：H32 等待解锁。** 本轮桌面工具明确报告 Mac locked，未启动新测试App。本人只需解锁后告知；Lead随后自行完成新S00包的长回答、停止/释放、项目包列表选择，以及S01新宿主的原生布局检查。必要组字仅按新宿主影响集中安排，不重开已关闭H22，不重复账号、宏信任、模型资格或旧登记。长流/列表修补的CPU和构建通过不替代此门槛。证据：`D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261003T115108Z-chat-product/lead/native-block.json`、`s00-packaged-app.json`。以下旧B“本人已办”继续有效，但“当前无需新本人操作”已由本增量替代。
+**CHAT-PRODUCT-20261003 增量：本人已解锁，当前无新必办授权/设备操作。** 2026-10-03新S00普通App实际完成项目包列表选择、既有Qwen登记/绑定、三次1024-token长回答完整接收、坐标点击停止保留568字及下一短请求成功。长回答正常到长度上限不是全部100条完成，也不是全专题验收。H22、H31、H33、模型资格及固定自然视频不重开。
 
-S01新增的**工程反例已在独立候选修补并通过18项hosting检查**：跨窄窗阈值时检查器瞬时隐藏，造成焦点离开；现只保留一个打开状态。普通App缩放、面板详情与输入路径仍待解锁，不把CPU称为真人结果。旧失败、诊断和修补位于任务末节；S01不在S00验收App中，无需重新处理旧H22系统候选窗行为。
+**剩余为工程项，不是本人权限阻塞。** 候选菜单一次触发主线程SwiftUI更新忙循环；生成中AX切会话40.645秒、AX停止查找35.804秒后失效，实际坐标点击停止5.185秒调用返回且取消落盘。本人因未看明白停止按钮位置未做操作；不记真人停止成功，并将可发现性问题留在F15/F36。Agent先定位这些反例；不再让本人重复点或加权限。RH=`D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261003T134350Z-chat-human`，见`lead/native-observations.json`、`long-stream-observations.json`、`protection-end.json`。
+
+S01独立候选`3e86f12a…`的18项hosting结论保留，尚未装配进普通App。装配后由Agent验窄窗面板/详情/关闭/鼠标与滚动；仅新宿主实际中文/日文组字在确有可测包时集中补一次，当前不要求本人操作。自有11225因忙循环留样后SIGTERM结束，12161及最后停止检查实例正常Cmd+Q；结束时没有D进程，没有新建Terminal窗口。
 
 本轮仍为D-RELEASE-FREEZE-01 / D-DISCUSSION-FREEZE-20261002。RN=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261002T160047Z-native-closeout`。当前唯一入口和同树Xcode见[试用指南](RELEASE_FREEZE_TRY.zh-CN.md)。下方原日期的“当前”“下一次”等表述均为历史快照，以本节为当前队列。
 
 1. **H22：2026-10-03本人复验通过，关闭**。修补版`9baaacbc74855aaa84fa03868e62a1676d882250`，本人确认鼠标不再闪回；此前不能确认拼音的问题已解除。候选窗未随窗口移动，但本人对照Finder等苹果应用后确认表现一致，明确接受为当前系统默认行为。本项不再要求重复组字或跟随修补；这不是所有系统版本的普遍保证，未来若出现丢字、无法选字或与系统对照不同的新反例，再单独登记。旧ON/OFF失败、revision导致marked消失、UI5/Quick19及非实现者审核保留。RH=`D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261003T015601Z-human-closeout`，本人证据`gui/h22-final-human.json`。参考正文/单行/Canvas未因该局部补丁改写，不将此次通过扩大为所有输入控件全面测试。
-2. **H32：本次本人事项已办，B原生仅部分通过**。本人已登记Qwen3.5-9B Q4、切回聊天并取消Go To/导出面板；本人观察需多次点击，可能是自动操作重试叠加，不能直接归因产品重复创建。随后逐步确认单面板完成Markdown/文本导出及聊天备份→独立恢复→冷重开，原件/备份不变。长流`consumerTooSlow`及项目包列表灰色是工程项，不要求本人加权限或换模型；完整路径打开恢复成功不关闭列表问题。原生停止等缺口见CURRENT_ACTIONS，不用旧CPU覆盖。当前无需新本人操作，不重复H22、菜单、登记/资格。证据RC/lead/b-native-final-acceptance.json。
+2. **H32：本次本人事项已办，B原生仅部分通过**。本人已登记Qwen3.5-9B Q4、切回聊天并取消Go To/导出面板；本人观察需多次点击，可能是自动操作重试叠加，不能直接归因产品重复创建。随后逐步确认单面板完成Markdown/文本导出及聊天备份→独立恢复→冷重开，原件/备份不变。旧长流`consumerTooSlow`及旧项目列表灰色保留为历史工程问题；本次列表直接选择已通过，新长流到1024-token上限无溢出，尚有上述交互阻塞。不要求本人加权限或换模型。停止按钮可发现性和交互迟滞等缺口见CURRENT_ACTIONS，不用旧CPU覆盖。当前无需新本人操作，不重复H22、菜单、登记/资格。证据RC/lead/b-native-final-acceptance.json。
 3. **Q固定自然场景视频：2026-10-03本人确认“两段视频都正常了”**。LTX完整30步原始BF16固定首帧结果（97帧、24fps）和H3完整50步自然首尾结果（22帧、24fps，原始BF16张量及F32组件）均成功。本轮LTX音频边界记录约−34dBFS，PCM→AAC未见幅值坍缩，画面倒水→停止可辨；不能据此补造旧−61.70/−96.21dBFS样本的首个异常层或所有配置质量保证。此前合成红块已存在于上游candidate，D无后叠图；自然条件样本不再出现该现象。本人判断关联RC/gui/human-concentrated-20261003.json，精确样本/参数见RC/q与lead/q-*-result.json；这是固定产物观感验收，不是B App的视频生成入口实测。
 4. **用完关闭测试窗口**：本次B App的95339、96335、96473均正常Cmd+Q结束，进程检查无D，自有b-chat Finder窗口关闭至桌面；前次35f的67978/68398退出和旧重复启动事故保留于RH。工具限制Terminal控制，未绕过，不能确认启动器终端是否仍开着。若有“启动D聊天试用.command”等已完成窗口，本人可随时关闭，不是工程继续的必需审批；其他终端不动。证据RC/lead/b-native-final-acceptance.json。
 5. **H33：已关闭**。本人2026-10-03在Xcode点击固定EquatableMacros的“Trust & Enable”；随后同树7754a2b7普通签名构建exit0/79.033秒，未跳过宏验证或修改全局信任设置。旧b3e2abc6、exit65保留；固定依赖Equatable 1.4.1/597c2bb34af0c51331eb3b5e705f942d8ee20daa及非实现者检查记录不变。证据RC/gui/human-concentrated-20261003.json、RC/lead/b-native-after-trust-result.json。
 
-**工程与授权区分**：用户本次已明确批准F1–F3有限续修；旧FILES-UI耗尽预算和历史失败仍保留。新入口、单项核对和展示已修，CPU/原生结果以[当前行动](CURRENT_ACTIONS.zh-CN.md)和任务记录为准，不能再要求用户通过登录/权限解决代码问题。H31、麦克风、断网、Xcode设置均不重开。再次锁屏仅阻塞桌面相关检查，不暂停安全代码/文档/main收口；没有状态变化不重复尝试或催问。
+**工程与授权区分**：当前有效授权是CHAT-PRODUCT-20261003的F01–F36/S00–S06；此前F1–F3续修、旧FILES-UI已耗预算及历史失败仍保留。新入口、单项核对和展示已修，CPU/原生结果以[当前行动](CURRENT_ACTIONS.zh-CN.md)和任务记录为准，不能再要求用户通过登录/权限解决代码问题。H31、麦克风、断网、Xcode设置均不重开。再次锁屏仅阻塞桌面相关检查，不暂停安全代码/文档/main收口；没有状态变化不重复尝试或催问。
 
 ## 以下为历史办理记录，非当前待办
 
