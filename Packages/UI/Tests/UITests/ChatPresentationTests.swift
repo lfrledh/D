@@ -47,16 +47,26 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
 @Suite("Chat presentation boundaries")
 @MainActor struct ChatPresentationTests {
     private let fixtureRoot = URL(fileURLWithPath:
-        "/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261003T115108Z-chat-product/s01-view/tmp")
+        ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory(), isDirectory: true)
 
     private func renderFixture(_ chat: ChatController, model: WorkbenchModel, width: CGFloat,
-                               inspector: Bool = false, scrolledUp: Bool = false) -> NSImage? {
+                               inspector: Bool = false, scrolledUp: Bool = false) -> [String: CGRect] {
+        var rectangles: [String: CGRect] = [:]
         let view = ChatWorkbenchView(chat: chat, model: model, onChooseModel: {},
             onSavedAsset: { _ in }, onAssetsChanged: {}, initialInspectorVisible: inspector,
             initiallyFollowsBottom: !scrolledUp, initiallyHasNewContent: scrolledUp)
-        let renderer = ImageRenderer(content: view.frame(width: width, height: 640))
-        renderer.scale = 1
-        return renderer.nsImage
+            .observingLayout { rectangles[$0] = $1 }
+        let host = NSHostingView(rootView: view)
+        host.frame = NSRect(x: 0, y: 0, width: width, height: 640)
+        host.layoutSubtreeIfNeeded()
+        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        host.layoutSubtreeIfNeeded()
+        return rectangles
+    }
+
+    private func horizontallyInside(_ rectangle: CGRect?, width: CGFloat) -> Bool {
+        guard let rectangle else { return false }
+        return rectangle.width > 0 && rectangle.minX >= -1 && rectangle.maxX <= width + 1
     }
 
     private func node() throws -> WorkflowNode {
@@ -78,12 +88,14 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
     }
 
     private func fixture(_ state: ChatState,
-                         engine: any InferenceEngine = ChatPresentationNoInference()) async throws
+                         engine: any InferenceEngine = ChatPresentationNoInference(),
+                         prepare: ((ProjectStore) async throws -> ChatState)? = nil) async throws
         -> (ChatController, WorkbenchModel, ProjectStore, URL) {
         let root = fixtureRoot.appendingPathComponent("chat-presentation-\(UUID())")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         let store = try await ProjectStore.create(at: root.appendingPathComponent("Fixture.dproject"), name: "Chat fixture")
-        if !state.sessions.isEmpty { _ = try await store.saveChatState(state, expectedRevision: 0) }
+        let savedState = try await prepare?(store) ?? state
+        if !savedState.sessions.isEmpty { _ = try await store.saveChatState(savedState, expectedRevision: 0) }
         let runtime = WorkbenchSession(engine: engine, backendID: "presentation.fixture",
             status: { .init(activeRunID: nil, phase: nil, queuedRunIDs: []) },
             shutdown: {}, cleanup: {}, validateModel: { _ in }, textBackendID: "fixture.text")
@@ -112,7 +124,9 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
     @Test func emptyConversationRealViewFixture() async throws {
         let (chat, model, store, root) = try await fixture(ChatState())
         #expect(chat.selectedSession == nil)
-        #expect(renderFixture(chat, model: model, width: 560)?.size.width == 560)
+        let layout = renderFixture(chat, model: model, width: 560)
+        #expect(horizontallyInside(layout["empty-conversation"], width: 560))
+        #expect(layout["composer"] == nil)
         try await close(store, root: root)
     }
 
@@ -123,7 +137,13 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
         var state = ChatState(); state.sessions = [session]; state.selectedSessionID = session.id
         let (chat, model, store, root) = try await fixture(state)
         #expect(chat.selectedPath.count == 2)
-        #expect(renderFixture(chat, model: model, width: 900)?.size.width == 900)
+        let layout = renderFixture(chat, model: model, width: 900)
+        #expect(horizontallyInside(layout["topbar"], width: 900))
+        #expect(horizontallyInside(layout["transcript"], width: 900))
+        #expect(horizontallyInside(layout["composer"], width: 900))
+        #expect(layout["message-\(session.messages[1].id.uuidString)"] != nil)
+        #expect(layout["attempt-status-\(session.attempts[0].id.uuidString)"] != nil)
+        #expect(layout["composer"]!.minY >= layout["transcript"]!.maxY - 1)
         try await close(store, root: root)
     }
 
@@ -140,7 +160,12 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
         }
         #expect(chat.selectedSession?.attempts.first?.status == .running)
         #expect(chat.selectedSession?.attempts.first?.rawText.isEmpty == false)
-        #expect(renderFixture(chat, model: model, width: 620, scrolledUp: true)?.size.width == 620)
+        let layout = renderFixture(chat, model: model, width: 620, scrolledUp: true)
+        #expect(horizontallyInside(layout["transcript"], width: 620))
+        #expect(horizontallyInside(layout["bottom-button"], width: 620))
+        if let attemptID = chat.selectedSession?.attempts.first?.id {
+            #expect(layout["attempt-status-\(attemptID.uuidString)"] != nil)
+        }
         #expect(!ChatScrollPosition.followsBottom(
             previous: .init(offset: 200, distanceToBottom: 800),
             current: .init(offset: 200, distanceToBottom: 900), wasFollowing: false))
@@ -150,17 +175,26 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
     }
 
     @Test func attachmentMessageRealViewFixture() async throws {
-        let reference = WorkflowAssetReference(projectID: UUID(), assetID: UUID(), kind: .image,
-            sha256: String(repeating: "a", count: 64))
-        let attachment = ChatAttachment(name: "草图.png", reference: reference)
-        var session = ChatSession(title: "附件与检查器")
-        session.messages = [ChatMessage(parentID: nil, role: .user, text: "请看这张图", attachments: [attachment])]
-        session.selectedLeafID = session.messages[0].id
-        session.attachments = [attachment]
-        var state = ChatState(); state.sessions = [session]; state.selectedSessionID = session.id
-        let (chat, model, store, root) = try await fixture(state)
+        let (chat, model, store, root) = try await fixture(ChatState(), prepare: { store in
+            let png = Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL/nwAAAABJRU5ErkJggg==")!
+            let published = try await store.publishWorkflowAsset(data: png, mediaType: "image/png",
+                metadata: .init(width: 1, height: 1), name: "草图.png", operationID: "d.asset.import")
+            let attachment = ChatAttachment(name: "草图.png", reference: published.record.reference)
+            var session = ChatSession(title: "附件与检查器")
+            session.messages = [ChatMessage(parentID: nil, role: .user, text: "请看这张图", attachments: [attachment])]
+            session.selectedLeafID = session.messages[0].id
+            session.attachments = [attachment]
+            var state = ChatState(); state.sessions = [session]; state.selectedSessionID = session.id
+            return state
+        })
         #expect(chat.selectedSession?.attachments.count == 1)
-        #expect(renderFixture(chat, model: model, width: 1_300, inspector: true)?.size.width == 1_300)
+        let layout = renderFixture(chat, model: model, width: 1_300, inspector: true)
+        #expect(horizontallyInside(layout["inspector-pane"], width: 1_300))
+        #expect(layout["inspector-pane"]?.width == ChatPresentationLayout.inspectorWidth)
+        #expect(horizontallyInside(layout["composer"], width: 1_300))
+        if let attachmentID = chat.selectedSession?.attachments.first?.id {
+            #expect(layout["attachment-\(attachmentID.uuidString)"] != nil)
+        }
         try await close(store, root: root)
     }
 
@@ -173,7 +207,12 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
         let (chat, model, store, root) = try await fixture(state)
         #expect(chat.selectedSession?.attempts.first?.issue == "保存失败；回答仍保留")
         #expect(chat.selectedSession?.messages.count == 3)
-        #expect(renderFixture(chat, model: model, width: 320)?.size.width == 320)
+        let layout = renderFixture(chat, model: model, width: 320)
+        #expect(horizontallyInside(layout["transcript"], width: 320))
+        #expect(horizontallyInside(layout["composer"], width: 320))
+        #expect(layout["sessions-pane"]?.maxX ?? 0 < 0)
+        #expect(layout["attempt-issue-\(session.attempts[0].id.uuidString)"] != nil)
+        #expect(layout["branch-menu-\(session.messages[0].id.uuidString)"] != nil)
         #expect(ChatPresentationText.branchSummary(sibling, you: "你", assistant: "助手") == "修改后的提问")
         try await close(store, root: root)
     }
@@ -272,21 +311,24 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
     @Test func sidePanesCollapseBeforeConversationIsClipped() {
         #expect(!ChatPresentationLayout.showsSidebar(width: 600, requested: true))
         #expect(!ChatPresentationLayout.showsSidebar(width: 920, requested: true))
-        #expect(ChatPresentationLayout.showsSidebar(width: 921, requested: true))
+        #expect(!ChatPresentationLayout.showsSidebar(width: 952, requested: true))
+        #expect(ChatPresentationLayout.showsSidebar(width: 953, requested: true))
         #expect(!ChatPresentationLayout.showsInspector(width: 1_080, requested: true, sidebar: true))
-        #expect(ChatPresentationLayout.showsInspector(width: 1_242, requested: true, sidebar: true))
+        #expect(!ChatPresentationLayout.showsInspector(width: 1_273, requested: true, sidebar: true))
+        #expect(ChatPresentationLayout.showsInspector(width: 1_274, requested: true, sidebar: true))
         #expect(!ChatPresentationLayout.showsInspector(width: 1_000, requested: true, sidebar: false))
-        #expect(ChatPresentationLayout.showsInspector(width: 1_001, requested: true, sidebar: false))
+        #expect(!ChatPresentationLayout.showsInspector(width: 1_032, requested: true, sidebar: false))
+        #expect(ChatPresentationLayout.showsInspector(width: 1_033, requested: true, sidebar: false))
         #expect(ChatPresentationLayout.dismissesNarrowPanel(.inspector, width: 1_300,
             sidebarRequested: true, inspectorRequested: true))
         #expect(!ChatPresentationLayout.dismissesNarrowPanel(.inspector, width: 1_080,
             sidebarRequested: true, inspectorRequested: true))
-        #expect(ChatPresentationLayout.dismissesNarrowPanel(.sessions, width: 921,
+        #expect(ChatPresentationLayout.dismissesNarrowPanel(.sessions, width: 953,
             sidebarRequested: true, inspectorRequested: false))
         #expect(ChatPresentationLayout.sidebarWidth == 240)
         #expect(ChatPresentationLayout.inspectorWidth == 320)
         #expect(ChatPresentationLayout.messageWidth == 760)
-        #expect(ChatPresentationLayout.minimumBodyWidth == 680)
+        #expect(ChatPresentationLayout.minimumBodyWidth == 712)
     }
 
     @Test func narrowRenameAndPreviewWaitForPanelDismissal() {
