@@ -108,6 +108,7 @@ public struct ChatSession: Codable, Sendable, Equatable, Identifiable {
     public var importLossNotes: [String]?
     public var toolActivities: [ChatToolActivity]?
     public var artifacts: [ChatArtifactContent]?
+    public var knowledgeReranks: [ChatKnowledgeRerank]?
     public var knowledgeScope: [UUID]?
     public var knowledgeExcerpts: [ChatKnowledgeExcerpt]?
     public init(id: UUID = UUID(), title: String = "新对话") { self.id = id; self.title = title }
@@ -196,6 +197,9 @@ public struct ChatState: Codable, Sendable, Equatable {
                     throw WorkflowIssue("成果不属于本会话或未发布。")
                 }
             }
+            let reranks = session.knowledgeReranks ?? []
+            guard reranks.count <= 256, Set(reranks.map(\.id)).count == reranks.count else { throw WorkflowIssue("资料重排记录数量或身份无效。") }
+            for record in reranks { try record.validate() }
             try session.outputFormat?.validate()
             try session.assistanceOptions?.validate()
             let assistance = session.assistanceExecutions ?? []

@@ -689,3 +689,7 @@ F30交互组件：Sol/high interactive1，经只读审阅合入962f90d98ba52b639
 - R/lead/s05-artifact-store-r4：基点77cb3c0e2fdcfb3276b1fa6435ece0004f39d88a+本次Lead差异，UI9方法1suite、Workbench11方法2suite通过，exit0/8.424秒。早前真实重试失败修正；CSV组合字符测试oracle误用Foundation子串比较改为完整预期UTF8；新增预算夹具先因无效用户父链、再因缺parentID编译失败，改成15个合法独立会话后通过，未改容量断言。
 - 实际WK固定库测试R/lead/s05-mermaid-local（9方法，38.39秒）；健康本机HTTP正控制、未观察出站、服务已收回。Mermaid官方11.12.1固定IIFE、许可及依赖声明入资源；没有CDN、npm运行环境或宿主桥接。s02-inspection-final（8方法）及未变辅助13方法复用，不累加成全套通过率。
 - 代码提交后的完整SHA写Git和外部回执，不自引用amend。普通App仍cdcaa775…；锁屏未解，新宿主门槛未验，不接纳main。F21个人/目录/重排、F32临时、F33单会话包等仍属本次完整范围，继续实施。
+
+### CHAT-PRODUCT F21/F22 生产收口（2026-10-04）
+
+受测 `616ba8e17be5fad7c94ca4c64838d6d31ad630e2` +本节代码差异；R/lead/s03-knowledge-wiring-final exit0，UI5方法1suite、Workbench12方法3suite。范围是来源复制、目录选择、明确模型重排与真实上下文状态；不声称真实重排模型或原生界面验收。r3的发布反例错误触发结构损坏，改为仅task自有目录不可写；r4恢复并通过，原失败保留。代码修复保留pending原文与保存owner，重试不重推理；精确来源匹配才能复用复制回的原资产；取消/范围检查置于最后await之后；目录逐项成功取消勾选避免重试重复。非实现者native_files_review提出并复核三个既有P2及新增异步窗口；同一Lead实现并执行测试。CHANNELS Sol/high初交+一修，route/耗时见R/s02-channels；真实通道和记忆来源展示，非新后端。主线未更新，原生菜单/停止仍须解锁后在同版App核验。

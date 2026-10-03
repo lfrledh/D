@@ -7,6 +7,7 @@ struct ChatKnowledgePanel: View {
     let session: ChatSession
     let quote: (UUID) -> Void
     let importDocuments: () -> Void
+    let importDirectory: () -> Void
     let preview: (WorkflowAssetReference) -> Void
     let wording: (String, String) -> String
     @State private var query = ""
@@ -14,11 +15,24 @@ struct ChatKnowledgePanel: View {
     @State private var issue: String?
     @State private var task: Task<Void, Never>?
     @State private var ticket: UUID?
+    @State private var rerankBudget = "512"
 
     var body: some View {
         DisclosureGroup(wording("Knowledge sources · lexical search", "资料来源 · 词法检索")) {
             VStack(alignment: .leading, spacing: 8) {
-                Button(wording("Add documents…", "添加资料…"), action: importDocuments)
+                HStack {
+                    Button(wording("Add documents…", "添加资料…"), action: importDocuments)
+                    Button(wording("Choose folder…", "选择文件夹…"), action: importDirectory)
+                }
+                if !chat.ownsPersonalMemory {
+                    DisclosureGroup(wording("Personal collection · explicit copies", "个人资料库 · 显式复制")) {
+                        Text(wording("Choose sources to copy into this project. Existing project copies do not change when the personal collection changes.", "选择要复制入本项目的资料。个人集合后来改变不会悄悄替换本项目副本。"))
+                            .font(.caption).foregroundStyle(.secondary)
+                        ForEach(chat.personalKnowledgeDocuments) { item in
+                            Button(item.material.name) { copy(item.id, toPersonal: false) }
+                        }
+                    }
+                }
                 Text(wording("Choose the scope. Only excerpts you adopt are sent; this is not vector search.",
                     "先选择范围；仅发送您采用的片段。这不是向量语义检索。"))
                     .font(.caption).foregroundStyle(.secondary)
@@ -37,6 +51,9 @@ struct ChatKnowledgePanel: View {
                         Menu {
                             Button(wording("Quote a selection…", "选择片段引用…")) { quote(document.id) }
                             Button(wording("View original", "查看原件")) { preview(document.material.reference) }
+                            if !chat.ownsPersonalMemory {
+                                Button(wording("Copy to personal collection", "复制到个人资料库")) { copy(document.id, toPersonal: true) }
+                            }
                             Button(wording("Remove from search collection", "移出检索集合")) {
                                 change { try chat.removeKnowledgeDocument(document.id) }
                             }
@@ -56,6 +73,17 @@ struct ChatKnowledgePanel: View {
                 }
                 if let issue { Text(issue).foregroundStyle(.red).textSelection(.enabled) }
                 if let result {
+                    if result.excerpts.count > 1 {
+                        VStack(alignment: .leading) {
+                            HStack {
+                                TextField(wording("Output token budget", "输出 token 预算"), text: $rerankBudget).frame(maxWidth: 130)
+                                Button(wording("Reorder with selected model", "用所选模型重排")) { reorder(result) }
+                                    .disabled(task != nil || chat.isRerankingKnowledge || Int(rerankBudget) == nil || session.configuration == nil)
+                            }
+                            Text(wording("Explicit local inference; only ordering changes. Sources are not adopted automatically.", "显式本地推理，只改变排序；不会自动采用资料。"))
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
                     ForEach(result.issues, id: \.self) { Text($0).font(.caption).foregroundStyle(.red) }
                     if result.excerpts.isEmpty { Text(wording("No matching excerpt", "没有匹配片段")).font(.caption) }
                     ForEach(result.excerpts) { excerpt in
@@ -73,6 +101,20 @@ struct ChatKnowledgePanel: View {
                                 Button(wording("Original", "原件")) { preview(excerpt.source) }
                             }
                         }.padding(.vertical, 6)
+                    }
+                }
+                if chat.pendingKnowledgeRerankSaveID != nil {
+                    Button(wording("Retry saving raw ordering · no inference", "重试保存重排原文 · 不重推理")) {
+                        Task { do { try await chat.retryKnowledgeRerankSave() } catch { issue = error.localizedDescription } }
+                    }.disabled(chat.isRerankingKnowledge)
+                }
+                if let last = session.knowledgeReranks?.last {
+                    DisclosureGroup(wording("Last model ordering", "上次模型重排")) {
+                        Text(last.status.rawValue).font(.caption)
+                        Text(last.query).textSelection(.enabled)
+                        if let issue = last.issue { Text(issue).foregroundStyle(.red) }
+                        Text(last.node.operationID).font(.caption)
+                        if let output = last.output { Button(wording("Raw output", "原始输出")) { preview(output) } }
                     }
                 }
                 ForEach(session.knowledgeExcerpts ?? []) { excerpt in
@@ -95,7 +137,32 @@ struct ChatKnowledgePanel: View {
     private func change(_ action: () throws -> Void) {
         do { try action(); issue = nil } catch { issue = error.localizedDescription }
     }
-    private func stop() { task?.cancel(); task = nil; ticket = nil }
+    private func stop() {
+        task?.cancel(); task = nil; ticket = nil
+        if chat.rerankingSessionID == session.id { Task { await chat.cancelKnowledgeRerank() } }
+    }
+    private func copy(_ id: UUID, toPersonal: Bool) {
+        guard task == nil else { return }
+        let current = UUID(); ticket = current; issue = nil
+        task = Task { @MainActor in
+            defer { if ticket == current { task = nil } }
+            do { try await chat.copyKnowledgeDocument(id, toPersonal: toPersonal) }
+            catch { if ticket == current { issue = error.localizedDescription } }
+        }
+    }
+    private func reorder(_ source: ChatKnowledgeSearchResult) {
+        guard let budget = Int(rerankBudget), task == nil else { return }
+        let current = UUID(), owner = session.id, input = query
+        ticket = current; issue = nil
+        task = Task { @MainActor in
+            defer { if ticket == current { task = nil } }
+            do {
+                let ordered = try await chat.rerankKnowledge(source.excerpts, query: input, sessionID: owner, maximumOutputTokens: budget)
+                guard ticket == current, chat.state.selectedSessionID == owner, query == input else { return }
+                result = ChatKnowledgeSearchResult(excerpts: ordered, issues: source.issues)
+            } catch is CancellationError {} catch { if ticket == current { issue = error.localizedDescription } }
+        }
+    }
     private func search() {
         stop(); let current = UUID(), input = query, owner = session.id
         ticket = current; issue = nil; result = nil

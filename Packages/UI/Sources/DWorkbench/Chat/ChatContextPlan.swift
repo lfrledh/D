@@ -9,7 +9,7 @@ public struct ChatContextPlan: Sendable, Equatable {
     /// The existing conservative byte estimate, not a tokenizer result.
     public let estimatedTokens: Int
     public var memoryUses: [ChatMemoryUse] = []
-    var summaryUses: [ChatContextSummary] = []
+    public internal(set) var summaryUses: [ChatContextSummary] = []
 
     private struct FormMessage: Encodable {
         let role: String

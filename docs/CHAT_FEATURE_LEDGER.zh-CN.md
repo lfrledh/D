@@ -94,13 +94,13 @@ S00–S05是同一份已批准范围的实施切片，完成一片可集成一�
 | F13 | 格式接线与CPU通过；原生待验 | 自动/纯文/Markdown/JSON/D结构定义：显式指令与生成后校验；原文保留，不冒称约束解码。replay/compare/fork冻结格式、非法schema保护与备份在R/lead/s02-format-quote-green核对。 |
 | F14 | 冻结快照与CPU通过；原生待验 | typed messages/tools、资料与记忆版本、真实结束/用量来源；历史未保存的模板/token明确unknown。s02-inspection-final 8方法通过，凭据标记脱敏不宣称任意秘密检测。 |
 | F15 | 实际接收/停止接续通过；交互迟滞待修 | 457cb9a0普通App：保留TXT+PNG多轮，三次各1024 deltas、256容量下无consumerTooSlow并正常length；坐标点击停止保留568字，随后短回答completed。AX切会话40.645秒、停止查找失效仍未解释；本人未点击，不能记真人通过。`D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261003T134350Z-chat-human/lead/long-stream-observations.json`。 |
-| F16 | 未核对 | 按冻结条目核对当前实现；本轮批准，不转发布后。 |
+| F16 | 已接真实响应通道；CPU/hosting通过，App待验 | CHANNELS `287a114d845bb09ce7a7cd0b20bde158fa1da61e` 与Lead F22组合：流中及无解析终态明确原始字节，结束后只用实际response；结构折叠仅严格校验通过值。s03-knowledge-wiring-final UI5方法，无真实模型新增验收。 |
 | F17 | 已有部分 | 固定Markdown库和旧B合成长Markdown原生证据复用；新宿主及操作仍待验。 |
 | F18 | 引用接线与CPU通过；原生待验 | UTF16/Swift Character选区、源版本/摘要、询问/解释/翻译/改写草稿与来源资产。owner退出反例先失败后修；重选同文异位换身份。hosting单测曾通过，组合再跑出现事件身份冲突，不能据exit0称全部通过；真实App待验。 |
 | F19 | 已有部分 | 已有TXT/图像/视频资产绑定及旧B TXT+PNG多轮；新增文档/音频仍待接线。 |
 | F20 | 原件与读取接线已实现，原生待验 | 6185c805保存PDF/DOCX原件、提取配置/定位/摘要；无文本扫描原件可保存，显式OCR；标准DOCX结构/冲突拒绝。R/lead/s02-s03-combined-r4通过；新UI导入及资料接线继续，未称原生完成。 |
-| F21 | 项目资料检索已实现；整项未完 | ChatKnowledgeIndex复用Store原件/提取版本，本地词法检索、片段与原件入口已接；未称向量语义。个人目录范围、模型重排及原生导入尚未完成。 |
-| F22 | 未核对 | 按冻结条目核对当前实现；本轮批准，不转发布后。 |
+| F21 | 生产接线与定向CPU通过；真实模型/原生待验 | 个人/项目显式复制、目录直属选择与逐项身份复核、既有模型显式低优先级重排已接。s03-knowledge-wiring-final包含严格顺序、源范围/取消、保存重试不再推理、原件/独立备份；未称向量检索或真实重排模型通过。 |
+| F22 | 上下文实际计划投影已接；CPU通过，App待验 | 排除/采用/当前问题/被审核摘要替代分别显示；summaryUses由真实contextPreview提供。s03-knowledge-wiring-final覆盖该区别及摘要失效，历史不删。 |
 | F23 | 自动/手动摘要生产接线及CPU通过；原生待验 | 辅助模型阈值、独立预算、后台准入、原文/来源保存、默认不自动启用摘要。R/lead/s03-assistance-wiring-final；不是精确token估算或真人App通过。 |
 | F24 | 版本/提取/审核生产接线及CPU通过；临时范围未完 | 自动/建议提取与读取授权独立；跨个人owner续作先持久化，冷开忘记/撤权/取消先红后绿，无重新生成。原件与当前版本保留；临时会话F32仍需实现。 |
 | F25 | 生产接线及CPU通过；真实辅助/原生待验 | 标题/标签/追问独立开关与预算，默认关闭；成功主回答后后台排队，手动标题不覆盖，追问仅显式入草稿。13方法/2suite含独立备份恢复，不等于模型输出质量或App通过。 |

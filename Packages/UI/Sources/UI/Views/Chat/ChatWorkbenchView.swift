@@ -76,6 +76,7 @@ private enum ChatDetail: Identifiable {
     case comparison(UUID, UUID), presetImport([ChatPromptPreset], Data)
     case conversationImport(ChatInterchange.ImportPreview, Data, String)
     case quote(UUID, ChatQuoteSource), artifact(ChatArtifactContent)
+    case knowledgeDirectory(UUID, URL, ChatKnowledgeDirectoryInventory, Bool)
     var id: String {
         switch self {
         case .edit(let edit): "edit-\(edit.id)"
@@ -83,6 +84,7 @@ private enum ChatDetail: Identifiable {
         case .comparison(let session, let attempt): "compare-\(session)-\(attempt)"
         case .presetImport: "preset-import"
         case .conversationImport: "conversation-import"
+        case .knowledgeDirectory(let owner, let url, _, _): "knowledge-directory-\(owner)-\(url.path)"
         case .artifact(let value): "artifact-\(value.id)-\(value.revision)"
         case .quote(let session, let source): "quote-\(session)-\(source.id)"
         }
@@ -170,14 +172,15 @@ enum ChatContextSessionList {
 }
 
 enum ChatContextRowStatus: Equatable {
-    case currentQuestion, excluded, adopted, included
+    case currentQuestion, excluded, summarized, adopted, included
 
-    static func forMessage(_ message: ChatMessage, in session: ChatSession) -> Self {
+    static func forMessage(_ message: ChatMessage, in session: ChatSession, summaryUses: [ChatContextSummary] = []) -> Self {
         if message.role == .user && session.selectedLeafID == message.id &&
             session.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return .currentQuestion
         }
         if session.contextChoices?.excludedMessageIDs.contains(message.id) == true { return .excluded }
+        if summaryUses.contains(where: { $0.source.coveredMessageIDs.contains(message.id) }) { return .summarized }
         if session.contextChoices?.adopted[message.id] != nil { return .adopted }
         return .included
     }
@@ -187,6 +190,7 @@ enum ChatContextRowStatus: Equatable {
         switch self {
         case .currentQuestion: "Current question · still sent"
         case .excluded: "Excluded"
+        case .summarized: "Replaced by reviewed summary"
         case .adopted: "Adopted"
         case .included: "Included"
         }
@@ -195,6 +199,7 @@ enum ChatContextRowStatus: Equatable {
         switch self {
         case .currentQuestion: "本次问题，仍会发送"
         case .excluded: "已排除"
+        case .summarized: "由已审核摘要代替"
         case .adopted: "已采用人工版本"
         case .included: "纳入"
         }
@@ -483,6 +488,14 @@ struct ChatWorkbenchView: View {
         .sheet(item: Binding(get: { sheets.detail }, set: { sheets.detail = $0 })) { item in
             switch item {
             case .edit(let edit): editSheet(edit)
+            case .knowledgeDirectory(let owner, let url, let inventory, let scoped):
+                ChatKnowledgeDirectorySheet(inventory: inventory, wording: { en, zh in newLabel(en, english: en, chinese: zh) },
+                    importEntries: { entries in
+                        guard chat.state.sessions.contains(where: { $0.id == owner }) else { throw WorkflowIssue("原会话已离开。") }
+                        await importURLs(entries.map(\.url), sessionID: owner, knowledge: true, directoryEntries: entries)
+                        if let issue = issues[owner] { throw WorkflowIssue(issue) }
+                    }, close: { sheets.detail = nil })
+                    .onDisappear { if scoped { url.stopAccessingSecurityScopedResource() } }
             case .artifact(let content):
                 ChatArtifactEditor(content: content, mermaidDocument: ChatMermaidDocument.document,
                     onSave: { value in
@@ -925,6 +938,7 @@ struct ChatWorkbenchView: View {
                             perform(sessionID: session.id) { present(.quote(session.id, try chat.quoteSource(kind: .document, id: id, sessionID: session.id))) }
                         },
                                 importDocuments: { Task { await chooseAttachments(for: session.id, knowledge: true) } },
+                                importDirectory: { Task { await chooseKnowledgeDirectory(for: session.id) } },
                                 preview: { present(.preview($0)) },
                                 wording: { english, chinese in
                                     language?.effectiveLanguageIdentifier.hasPrefix("zh") == true ? chinese : english
@@ -989,15 +1003,16 @@ struct ChatWorkbenchView: View {
             Text(newLabel("contextPreviewNote", english: "Current path and draft only. This preview does not send or change them.",
                 chinese: "仅显示当前路径与草稿；预览不会发送或修改它们。"))
                 .font(.caption).foregroundStyle(.secondary)
+            let result = Result { try chat.contextPreview(sessionID: session.id) }
+            let summaries = (try? result.get().summaryUses) ?? []
             ForEach(chat.selectedPath) { message in
-                let status = ChatContextRowStatus.forMessage(message, in: session)
+                let status = ChatContextRowStatus.forMessage(message, in: session, summaryUses: summaries)
                 Text(newLabel("contextRow.\(status)", english: status.english, chinese: status.chinese) +
                      " · " + branchSummary(message))
                     .font(.caption).lineLimit(2)
                     .chatMeasured("context-row-\(message.id.uuidString)", probe: layoutProbe)
                     .accessibilityIdentifier("chat-context-row-\(message.id.uuidString)")
             }
-            let result = Result { try chat.contextPreview(sessionID: session.id) }
             switch result {
             case .success(let plan):
                 Text(newLabel("conservativeBudget", english: "Conservative input estimate (not exact tokenization): ",
@@ -1471,6 +1486,27 @@ struct ChatWorkbenchView: View {
         }
     }
 
+    private func chooseKnowledgeDirectory(for sessionID: UUID) async {
+        guard !filePanelBusy else { return }
+        filePanelBusy = true; defer { filePanelBusy = false }
+        let owner = chat, store = chat.store
+        let panel = NSOpenPanel(); panel.canChooseDirectories = true; panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        guard await panel.begin() == .OK, let url = panel.url, owner === chat, store === chat.store else { return }
+        let scoped = url.startAccessingSecurityScopedResource()
+        do {
+            let inspection = Task.detached(priority: .userInitiated) { try ChatKnowledgeDirectoryInventory.inspect(url) }
+            let inventory = try await withTaskCancellationHandler { try await inspection.value } onCancel: { inspection.cancel() }
+            guard owner === chat, store === chat.store, chat.state.sessions.contains(where: { $0.id == sessionID }) else {
+                if scoped { url.stopAccessingSecurityScopedResource() }; return
+            }
+            sheets.present(.knowledgeDirectory(sessionID, url, inventory, scoped))
+        } catch {
+            if scoped { url.stopAccessingSecurityScopedResource() }
+            report(error.localizedDescription, for: sessionID)
+        }
+    }
+
     private func chooseAttachments(for sessionID: UUID, knowledge: Bool = false) async {
         guard !filePanelBusy else { return }
         filePanelBusy = true; defer { filePanelBusy = false }
@@ -1479,7 +1515,8 @@ struct ChatWorkbenchView: View {
         guard await panel.begin() == .OK, owner === chat, store === chat.store else { return }
         await importURLs(panel.urls, sessionID: sessionID, knowledge: knowledge)
     }
-    private func importURLs(_ urls: [URL], sessionID: UUID, knowledge: Bool = false) async {
+    private func importURLs(_ urls: [URL], sessionID: UUID, knowledge: Bool = false,
+                            directoryEntries: [ChatKnowledgeDirectoryInventory.Entry] = []) async {
         let ocr = ocrImport
         let owner = chat, store = chat.store
         var failures: [String] = []
@@ -1494,6 +1531,8 @@ struct ChatWorkbenchView: View {
             }
             let scoped = url.startAccessingSecurityScopedResource()
             do {
+                if let entry = directoryEntries.first(where: { $0.url == url }) { try entry.validateUnchanged() }
+                try Task.checkCancellation()
                 let published = try await store.importWorkflowMediaFile(at: url)
                 onAssetsChanged()
                 if knowledge {

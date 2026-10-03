@@ -78,6 +78,21 @@ import Testing
         }
     }
 
+    @Test func contextRowsDistinguishReviewedSummaryAndOriginalHistory() throws {
+        let first = ChatMessage(parentID: nil, role: .user, text: "原问题")
+        let next = ChatMessage(parentID: first.id, role: .user, text: "新问题")
+        var session = ChatSession(title: "summary")
+        session.messages = [first, next]; session.selectedLeafID = next.id
+        let source = try ChatContextSource.capture(session: session, coveredMessageIDs: [first.id])
+        let summary = try ChatContextSummary(text: "已确认摘要", source: source, enabled: true)
+        #expect(ChatContextRowStatus.forMessage(first, in: session, summaryUses: [summary]) == .summarized)
+        #expect(ChatContextRowStatus.forMessage(next, in: session, summaryUses: [summary]) == .currentQuestion)
+        #expect(ChatContextRowStatus.forMessage(first, in: session) == .included)
+        var choices = ChatContextChoices(); choices.excludedMessageIDs = [first.id]; session.contextChoices = choices
+        #expect(ChatContextRowStatus.forMessage(first, in: session, summaryUses: [summary]) == .excluded)
+        #expect(session.messages == [first, next])
+    }
+
     @Test func structuredFoldUsesOnlyStrictlyCheckedOriginal() {
         let json = #"{"name":"🎨","ok":true}"#
         var valid = attempt(status: .completed, format: .init(kind: .json))

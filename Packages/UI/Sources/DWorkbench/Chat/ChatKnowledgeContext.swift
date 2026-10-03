@@ -64,4 +64,32 @@ public struct ChatKnowledgeSearchResult: Sendable {
     public let excerpts: [ChatKnowledgeExcerpt]
     /// Failed current sources were excluded from this query, not served from cache.
     public let issues: [String]
+    public init(excerpts: [ChatKnowledgeExcerpt], issues: [String]) { self.excerpts = excerpts; self.issues = issues }
+}
+
+/// A model may only order the exact retrieved excerpts. Its raw response remains
+/// an immutable asset; it cannot rewrite source text or silently adopt a result.
+public struct ChatKnowledgeRerank: Codable, Sendable, Equatable, Identifiable {
+    public enum Status: String, Codable, Sendable { case running, completed, cancelled, stale, failed, interrupted }
+    public let id: UUID
+    public let query: String
+    public let excerpts: [ChatKnowledgeExcerpt]
+    public let scope: [UUID]
+    public let node: WorkflowNode
+    public var status: Status
+    public var output: WorkflowAssetReference?
+    public var order: [UUID]?
+    public var issue: String?
+    public let createdAt: Date
+    public func validate() throws {
+        _ = try ChatKnowledgeReranking.prepare(query: query, excerpts: excerpts)
+        try ChatState.validateNode(node)
+        guard scope.count <= 64, Set(scope).count == scope.count,
+              output == nil || output?.kind == .text,
+              (issue?.utf8.count ?? 0) <= 65_536 else { throw WorkflowIssue("资料重排记录无效。") }
+        if status == .completed {
+            guard output != nil, let order, order.count == excerpts.count,
+                  Set(order) == Set(excerpts.map(\.id)) else { throw WorkflowIssue("重排结果缺少完整来源。") }
+        } else if order != nil { throw WorkflowIssue("未完成的重排不能有已采用顺序。") }
+    }
 }

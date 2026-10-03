@@ -614,6 +614,7 @@ struct ChatTests {
         try chat.updateDraft("Next", sessionID: id)
         let preview = try chat.contextPreview(sessionID: id)
         #expect(preview.messagesJSON.contains("Reviewed summary") && !preview.messagesJSON.contains("Original"))
+        #expect(preview.summaryUses.map(\.source.coveredMessageIDs) == [original.messages.map(\.id)])
         try await chat.send(sessionID: id); await chat.waitForCompletion()
         try chat.updateDraft("Third", sessionID: id)
         #expect(try chat.contextPreview(sessionID: id).messagesJSON.contains("Reviewed summary"))
