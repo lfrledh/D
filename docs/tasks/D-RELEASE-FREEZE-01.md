@@ -575,3 +575,14 @@ H3固定自然首尾请求两次在模型运行前拒绝：第一次缺task/cach
 **恢复与保护**：本次自有95339/96335/96473正常Cmd+Q后均结束，pgrep无D；Finder自有b-chat窗口关闭。Terminal受工具限制未操作，不能宣称关闭；若本人仍见已完成启动器窗口可关闭，不影响证据。候选仅四份记录差异，旧源个人scheme仍orderHint1→6/未暂存/原索引，SHA256`ca3635d88aa5a15397b90e528667c66c0e6db7e596176e885c79d194b544206c`；main和普通App/模型未动。B测试原件/备份保留，不清理。证据核对脚本初次在系统Python使用不支持的zip(strict=True)，写入前失败；改为等长断言+zip后全部比较通过，仅证据脚本兼容修正，不是产品缺陷。完整Lead用量/订阅费用unknown，不重算旧样本。
 
 **交付结论**：A修补已独立接纳，Q固定样本已获本人确认；B组件/短链/恢复部分通过，长流门槛失败，不能称B完成或功能冻结。唯一推荐稳定入口仍为A，B App与同树Xcode仅供审计；最终记录/分支同步后停在用户审计点，不合入main、不发Release。
+
+
+## CHAT-PRODUCT-20261003：完整聊天专题启动
+
+2026-10-03 用户明确批准附件 v2.0，F01–F36 为固定清单，S00–S06 连续推进。附件原件/摘要及保护快照保留于 `/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261003T115108Z-chat-product/inputs` 和 `lead/initial-state.json`。当前候选40d51ee/main f31dced，完整值见当前行动。旧最小聊天和停止预算记录保持历史；新批准修复不能解释成旧 Terra/Sol 独立成功。共享契约由 Lead 实施、非实现者检查，写任务沿用受限 CLI。
+
+最小工作包：S00 Lead 负责有界无损消费、取消与新候选/旧参数重现；panel Worker 仅项目类型/面板和直接 UI 测试；S01 view Worker 仅聊天展示和呈现测试，不改存储/Runtime。各新工作包初交+两轮同因定向修复，最多一次有界 Lead 接管；两次同因无进展换方法并记录。源模型与实际输入/精度不改。
+
+选择依据：Swift Async Algorithms Channel 的 send/取消语义需显式处理生产者等待与运行取消，不直接把 send 返回当成功；D 当前 Runtime 保持标准库依赖。项目过滤优先验证 `.data` 默认类型与 `.package` 注册差异，不放开全部目录。LibreChat v0.8.8 / Open WebUI v0.11.4 / LM Studio 官方交互只参考；Open WebUI 含品牌条款，不复制源码/资产。D 保持四分类、一个 ChatController、一个按需检查器和稳定输入身份。
+
+出口仍为同版普通 App、真实长流/停止与原生选择，分层报告；未验不接纳。后续 S02–S06 在同一批准范围，不因分片而延期。

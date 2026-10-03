@@ -2,7 +2,15 @@
 
 最后核实：2026-10-03。当前任务、基线、候选、阻塞与下一动作只从本页进入。历史记录不自动授权续跑。
 
-## 当前授权：先修可靠性，再加入最小聊天（2026-10-03）
+## 当前授权：完整文字聊天专题 CHAT-PRODUCT-20261003
+
+用户已批准 F01–F36、S00–S06 同一批实施。唯一功能状态见 [聊天清单](CHAT_FEATURE_LEDGER.zh-CN.md)。先 S00 长流/停止、正常项目包选择和新候选/旧参数重现，再 S01 布局、S02 编辑与上下文、S03 资料/记忆/备份、S04 联网工具、S05 受限代码/MCP/成果/语音、S06 组合验收。可靠切片通过普通 App 门槛后正常接纳 main，不以整个专题完成为前提；不硬合失败长流。
+
+本轮核实候选 `40d51ee73f72eb54407e6eedbd693c9ba67068e4`、main `f31dced209855722d2f04cc0fc8c5f6712396120` 均干净且与远端一致。旧 inference-foundation 与个人 scheme 不动。A、H22、菜单、宏信任、HF 及自然视频本人结果复用；新存储和聊天宿主按影响另验。旧 B 失败和已耗预算保留；用户现明确批准这些已知缺陷继续收口，不再沿用旧停工排程，不伪造旧预算未使用。
+
+Lead 持有共享 Runtime/WorkflowServices/ChatController/Store；文件面板和纯展示可在独立受限任务树实施。当前活动和精确进程记录在本轮证据目录：`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261003T115108Z-chat-product`。完整 Lead 成本与订阅费用 unknown。尚未完成任一新切片；本页不宣称聊天全范围或功能冻结通过。
+
+## 历史：先修可靠性，再加入最小聊天（2026-10-03，已被上述新授权替代）
 
 用户批准继续同一 D-RELEASE-FREEZE-01，起点 main/candidate `3a2801abab22273256923ce1f3c14407515f20ce`。批准顺序：A1 普通沙盒备份与独立恢复、A2 冷启按需模型就绪 → 两项真实 App 门槛通过并独立接纳 main → B 最小文字聊天；Q 视频质量独立。**A 的 G1/G2 已通过，独立修补基线 f31dced209855722d2f04cc0fc8c5f6712396120 已接纳并推送 main；B隔离候选原生验收部分通过、长流失败，暂停接纳**；下列上一批停点是历史事实。A受测8511718c472e788a8dcfc088eea0fde9dad050b3；独立原生证据RC/lead/a-native-gates.json、集成回执RC/lead/a-integration.json。B包含常驻四分类，文字为聊天，另三类复用；Q固定自然样本获本人确认，未宣称全部质量或冻结通过。
 
