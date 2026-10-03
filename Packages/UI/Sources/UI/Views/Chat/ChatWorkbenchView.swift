@@ -17,13 +17,13 @@ enum ChatRunAdmission {
     static func allowsReplay(_ session: ChatSession, attempt: ChatAttempt, isRunning: Bool,
                              hasPendingSave: Bool, hasSaveIssue: Bool) -> Bool {
         guard let seed = attempt.node.parameters["seed"]?.string, UInt64(seed) != nil else { return false }
-        return !session.archived && !isRunning && !hasPendingSave && !hasSaveIssue &&
+        return !session.archived && session.contextChoices?.deletedAt == nil && !isRunning && !hasPendingSave && !hasSaveIssue &&
             attempt.sessionID == session.id && attempt.status != .running && attempt.status != .saving
     }
 
     static func allows(_ session: ChatSession, isRunning: Bool, hasPendingSave: Bool,
                        hasSaveIssue: Bool, invalidFields: Set<String>) -> Bool {
-        !session.archived && session.configuration != nil && !isRunning &&
+        !session.archived && session.contextChoices?.deletedAt == nil && session.configuration != nil && !isRunning &&
         !hasPendingSave && !hasSaveIssue &&
         !invalidFields.contains(where: { $0.hasPrefix(session.id.uuidString + ":") })
     }
@@ -77,6 +77,118 @@ private enum ChatDetail: Identifiable {
         switch self {
         case .edit(let edit): "edit-\(edit.id)"
         case .preview(let reference): "preview-\(reference.assetID)"
+        }
+    }
+}
+
+struct ChatSearchJump: Equatable {
+    let sessionID: UUID
+    let messageID: UUID
+    let ticket = UUID()
+}
+
+enum ChatContextSessionList {
+    static func visible(_ sessions: [ChatSession], archived: Bool, deleted: Bool,
+                        favoritesOnly: Bool, tag: String) -> [ChatSession] {
+        sessions.enumerated().filter { pair in
+            let item = pair.element
+            return item.archived == archived && (item.contextChoices?.deletedAt != nil) == deleted &&
+                (tag.isEmpty || item.contextChoices?.tags.contains(tag) == true) &&
+                (!favoritesOnly || item.contextChoices?.favoriteMessageIDs.isEmpty == false)
+        }.sorted { lhs, rhs in
+            let left = lhs.element.contextChoices?.pinned == true
+            let right = rhs.element.contextChoices?.pinned == true
+            return left == right ? lhs.offset > rhs.offset : left
+        }.map { $0.element }
+    }
+}
+
+/// These commands are used by the hosted controls and by the presentation fixture.
+@MainActor enum ChatContextCommands {
+    static func open(_ hit: ChatSearchHit, in chat: ChatController) throws -> ChatSearchJump? {
+        guard let session = chat.state.sessions.first(where: { $0.id == hit.sessionID }),
+              session.contextChoices?.deletedAt == nil else { throw WorkflowIssue("对话已删除或不存在。") }
+        try chat.selectSession(session.id)
+        guard let messageID = hit.messageID else { return nil }
+        // An ancestor is already visible; changing the leaf would discard the rest of this path.
+        if !chat.selectedPath.contains(where: { $0.id == messageID }) {
+            try chat.selectLeaf(messageID, sessionID: session.id)
+        }
+        return .init(sessionID: session.id, messageID: messageID)
+    }
+
+    static func adopt(_ text: String, messageID: UUID, sessionID: UUID,
+                      in chat: ChatController) throws {
+        guard chat.state.selectedSessionID == sessionID else {
+            throw WorkflowIssue("请返回原对话后再采用此回答。")
+        }
+        guard let session = chat.selectedSession,
+              let attemptID = session.messages.first(where: { $0.id == messageID && $0.role == .assistant })?.attemptID,
+              canAdopt(session.attempts.first(where: { $0.id == attemptID }), in: chat) else {
+            throw WorkflowIssue("回答仍在运行、待保存或等待工具完成，不能采用。")
+        }
+        _ = try chat.adoptAnswer(messageID, text: text, sessionID: sessionID)
+    }
+
+    static func choices(_ session: ChatSession, mutate: (inout ChatContextChoices) -> Void,
+                        in chat: ChatController) throws {
+        guard let current = chat.state.sessions.first(where: { $0.id == session.id }) else {
+            throw WorkflowIssue("对话不存在。")
+        }
+        var value = current.contextChoices ?? .init()
+        mutate(&value)
+        try chat.updateContextChoices(value, sessionID: session.id)
+    }
+
+    static func canAdopt(_ attempt: ChatAttempt?, in chat: ChatController) -> Bool {
+        guard let attempt, attempt.status != .running, attempt.status != .saving,
+              !chat.isRunning, chat.pendingSaveAttemptID == nil, chat.saveIssue == nil,
+              attempt.response?.toolCalls.isEmpty != false,
+              attempt.response?.finishReason != .toolCalls,
+              attempt.response?.finishReason != .incomplete else { return false }
+        return !(attempt.response?.finalText ?? attempt.rawText).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    static func selectVersion(_ revisionID: UUID?, messageID: UUID, sessionID: UUID,
+                              in chat: ChatController) throws {
+        guard chat.state.selectedSessionID == sessionID,
+              let session = chat.selectedSession,
+              let attemptID = session.messages.first(where: { $0.id == messageID && $0.role == .assistant })?.attemptID,
+              canAdopt(session.attempts.first(where: { $0.id == attemptID }), in: chat) else {
+            throw WorkflowIssue("请等待回答完成并返回原对话后再选择版本。")
+        }
+        try chat.selectAnswerRevision(revisionID, messageID: messageID, sessionID: sessionID)
+    }
+}
+
+enum ChatContextRowStatus: Equatable {
+    case currentQuestion, excluded, adopted, included
+
+    static func forMessage(_ message: ChatMessage, in session: ChatSession) -> Self {
+        if message.role == .user && session.selectedLeafID == message.id &&
+            session.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return .currentQuestion
+        }
+        if session.contextChoices?.excludedMessageIDs.contains(message.id) == true { return .excluded }
+        if session.contextChoices?.adopted[message.id] != nil { return .adopted }
+        return .included
+    }
+
+    var canExclude: Bool { self != .currentQuestion }
+    var english: String {
+        switch self {
+        case .currentQuestion: "Current question · still sent"
+        case .excluded: "Excluded"
+        case .adopted: "Adopted"
+        case .included: "Included"
+        }
+    }
+    var chinese: String {
+        switch self {
+        case .currentQuestion: "本次问题，仍会发送"
+        case .excluded: "已排除"
+        case .adopted: "已采用人工版本"
+        case .included: "纳入"
         }
     }
 }
@@ -198,6 +310,13 @@ struct ChatWorkbenchView: View {
     @Environment(\.dLanguageStore) private var language
     @State private var search = ""
     @State private var showArchived = false
+    @State private var showDeleted = false
+    @State private var favoritesOnly = false
+    @State private var selectedTag = ""
+    @State private var searchJump: ChatSearchJump?
+    @State private var inspectedAttemptID: UUID?
+    @State private var showContextPreview = false
+    @State private var lastBodyWidth: CGFloat = 0
     @State private var showSidebar = true
     @State private var showInspector = false
     @State private var sidebarWasPresented = false
@@ -225,12 +344,16 @@ struct ChatWorkbenchView: View {
          onAssetsChanged: @escaping () -> Void,
          initialInspectorVisible: Bool = false,
          initialSettingsVisible: Bool = false,
+         initialContextPreviewVisible: Bool = false,
+         initialInspectedAttemptID: UUID? = nil,
          initiallyFollowsBottom: Bool = true,
          initiallyHasNewContent: Bool = false) {
         self.chat = chat; self.model = model; self.onChooseModel = onChooseModel
         self.onSavedAsset = onSavedAsset; self.onAssetsChanged = onAssetsChanged
         _showInspector = State(initialValue: initialInspectorVisible)
         _inspectorTab = State(initialValue: initialSettingsVisible ? .settings : .data)
+        _showContextPreview = State(initialValue: initialContextPreviewVisible)
+        _inspectedAttemptID = State(initialValue: initialInspectedAttemptID)
         _followsBottom = State(initialValue: initiallyFollowsBottom)
         _hasNewContent = State(initialValue: initiallyHasNewContent)
     }
@@ -253,16 +376,16 @@ struct ChatWorkbenchView: View {
         else { globalIssue = message }
     }
     private var visibleSessions: [ChatSession] {
-        Array(chat.state.sessions.filter { item in
-            item.archived == showArchived &&
-            (search.isEmpty || item.title.localizedCaseInsensitiveContains(search) ||
-             item.messages.contains { $0.text.localizedCaseInsensitiveContains(search) } ||
-             item.messages.contains { $0.attachments.contains(where: {
-                 $0.name.localizedCaseInsensitiveContains(search) ||
-                 ($0.textSnapshot?.localizedCaseInsensitiveContains(search) ?? false)
-             }) } ||
-             item.attempts.contains { ($0.response?.finalText ?? $0.rawText).localizedCaseInsensitiveContains(search) })
-        }.reversed())
+        ChatContextSessionList.visible(chat.state.sessions, archived: showArchived, deleted: showDeleted,
+                                       favoritesOnly: favoritesOnly, tag: selectedTag)
+    }
+    private var searchHits: [ChatSearchHit] {
+        guard !showDeleted else { return [] }
+        return ChatHistorySearch.matches(in: visibleSessions, query: search)
+    }
+    private var allTags: [String] {
+        Array(Set(chat.state.sessions.filter { ($0.contextChoices?.deletedAt != nil) == showDeleted }
+            .flatMap { $0.contextChoices?.tags ?? [] })).sorted()
     }
 
     var body: some View {
@@ -326,8 +449,10 @@ struct ChatWorkbenchView: View {
             .coordinateSpace(name: ChatLayoutSpace.name)
             .onAppear {
                 sidebarWasPresented = sidebarVisible
+                lastBodyWidth = geometry.size.width
             }
             .onChange(of: geometry.size.width) { oldWidth, width in
+                lastBodyWidth = width
                 if sidebarShown { sidebarWasPresented = true }
                 if let narrowPanel = sheets.narrowPanel, ChatPresentationLayout.dismissesNarrowPanel(narrowPanel,
                     width: width, sidebarRequested: showSidebar, inspectorRequested: showInspector) {
@@ -408,12 +533,46 @@ struct ChatWorkbenchView: View {
                 .labelStyle(.iconOnly)
                 .accessibilityIdentifier("chat-sessions-close")
             }
-            TextField(label("search", "搜索标题与内容"), text: $search)
+            TextField(newLabel("lexicalSearch", english: "Lexical search", chinese: "词法搜索"), text: $search)
                 .textFieldStyle(.roundedBorder)
-            Toggle(label("archived", "已归档"), isOn: $showArchived).controlSize(.small)
+                .accessibilityIdentifier("chat-history-search")
+                .disabled(showDeleted)
+            HStack {
+                Toggle(label("archived", "已归档"), isOn: $showArchived)
+                Toggle(newLabel("deleted", english: "Deleted", chinese: "已删除"), isOn: $showDeleted)
+                    .onChange(of: showDeleted) { _, _ in selectedTag = "" }
+            }.controlSize(.small)
+            HStack {
+                Toggle(newLabel("favoritesOnly", english: "Favorites", chinese: "收藏"), isOn: $favoritesOnly)
+                Picker(newLabel("tagFilter", english: "Tag", chinese: "标签"), selection: $selectedTag) {
+                    Text(newLabel("allTags", english: "All tags", chinese: "全部标签")).tag("")
+                    ForEach(allTags, id: \.self) { tag in Text(tag).tag(tag) }
+                }.labelsHidden().accessibilityLabel(newLabel("tagFilter", english: "Filter by tag", chinese: "按标签筛选"))
+            }.controlSize(.small)
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 4) {
-                    ForEach(visibleSessions) { item in
+                    if !search.isEmpty && !showDeleted {
+                        Text(newLabel("lexicalResults", english: "Lexical matches in stored messages", chinese: "已保存消息的词法命中"))
+                            .font(.caption).foregroundStyle(.secondary)
+                        ForEach(searchHits.indices, id: \.self) { index in
+                            let hit = searchHits[index]
+                            Button {
+                                do {
+                                    if let currentID = chat.state.selectedSessionID { saveScrollState(for: currentID) }
+                                    searchJump = try ChatContextCommands.open(hit, in: chat)
+                                    closeNarrowPanel()
+                                } catch { report(error.localizedDescription, for: hit.sessionID) }
+                            } label: {
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(chat.state.sessions.first(where: { $0.id == hit.sessionID })?.title ?? "")
+                                        .font(.caption).bold().lineLimit(1)
+                                    Text(searchExcerpt(hit)).lineLimit(2)
+                                }.frame(maxWidth: .infinity, alignment: .leading)
+                            }.buttonStyle(.plain)
+                                .accessibilityLabel(newLabel("searchResult", english: "Open search result: ", chinese: "打开搜索结果：") + searchExcerpt(hit))
+                                .accessibilityIdentifier("chat-search-hit-\(hit.sessionID.uuidString)-\(hit.messageID?.uuidString ?? "title")-\(index)")
+                        }
+                    } else { ForEach(visibleSessions) { item in
                         HStack(spacing: 6) {
                             Button {
                                 do {
@@ -423,19 +582,40 @@ struct ChatWorkbenchView: View {
                                 } catch { report(error.localizedDescription, for: item.id) }
                             } label: {
                                 VStack(alignment: .leading, spacing: 3) {
-                                    Text(item.title).lineLimit(2)
+                                    HStack {
+                                        if item.contextChoices?.pinned == true { Image(systemName: "pin.fill") }
+                                        Text(item.title).lineLimit(2)
+                                    }
                                     Text("\(item.messages.count) " + label("messages", "条消息"))
                                         .font(.caption).foregroundStyle(.secondary)
+                                    if let tags = item.contextChoices?.tags, !tags.isEmpty {
+                                        Text(tags.joined(separator: " · ")).font(.caption2)
+                                            .foregroundStyle(.secondary).lineLimit(1)
+                                    }
                                 }.frame(maxWidth: .infinity, alignment: .leading)
                             }.buttonStyle(.plain)
                             Menu {
                                 Button(label("rename", "重命名")) {
                                     present(.edit(ChatEdit(kind: .rename, sessionID: item.id, messageID: nil, text: item.title)))
                                 }
-                                if !item.archived {
-                                    Button(label("archive", "归档")) { perform(sessionID: item.id) { try chat.archive(item.id) } }
-                                        .disabled(chat.activeSessionID == item.id)
+                                Button(item.contextChoices?.pinned == true
+                                    ? newLabel("unpin", english: "Unpin", chinese: "取消置顶")
+                                    : newLabel("pin", english: "Pin", chinese: "置顶")) {
+                                    perform(sessionID: item.id) { try ChatContextCommands.choices(item, mutate: { $0.pinned.toggle() }, in: chat) }
                                 }
+                                Button(newLabel("editTags", english: "Edit tags…", chinese: "编辑标签…")) {
+                                    present(.edit(ChatEdit(kind: .tags, sessionID: item.id, messageID: nil,
+                                                           text: (item.contextChoices?.tags ?? []).joined(separator: "\n"))))
+                                }
+                                Button(item.archived ? newLabel("restoreArchive", english: "Restore from archive", chinese: "从归档恢复")
+                                    : label("archive", "归档")) {
+                                    perform(sessionID: item.id) { try chat.setArchived(!item.archived, sessionID: item.id) }
+                                }.disabled(chat.activeSessionID == item.id)
+                                Button(item.contextChoices?.deletedAt == nil
+                                    ? newLabel("softDelete", english: "Move to Deleted", chinese: "移到已删除")
+                                    : newLabel("restoreDeleted", english: "Restore conversation", chinese: "恢复对话")) {
+                                    perform(sessionID: item.id) { try chat.setDeleted(item.contextChoices?.deletedAt == nil, sessionID: item.id) }
+                                }.disabled(chat.activeSessionID == item.id)
                                 if item.selectedLeafID != nil {
                                     Divider()
                                     Button(label("copyPath", "复制所选路径")) {
@@ -451,10 +631,17 @@ struct ChatWorkbenchView: View {
                         .padding(9)
                         .background(chat.state.selectedSessionID == item.id ? Color.accentColor.opacity(0.14) : Color.clear,
                                     in: RoundedRectangle(cornerRadius: 8))
-                    }
+                    } }
                 }
             }
         }.padding(14)
+    }
+
+    private func searchExcerpt(_ hit: ChatSearchHit) -> String {
+        guard let range = Range(hit.range, in: hit.sourceText) else { return String(hit.sourceText.prefix(80)) }
+        let start = hit.sourceText.index(range.lowerBound, offsetBy: -35, limitedBy: hit.sourceText.startIndex) ?? hit.sourceText.startIndex
+        let end = hit.sourceText.index(range.upperBound, offsetBy: 45, limitedBy: hit.sourceText.endIndex) ?? hit.sourceText.endIndex
+        return String(hit.sourceText[start..<end]).replacingOccurrences(of: "\n", with: " ")
     }
 
     private func conversation(_ session: ChatSession, width: CGFloat, sidebarShown: Bool) -> some View {
@@ -469,6 +656,11 @@ struct ChatWorkbenchView: View {
                 paneButtons(width: width, sidebarShown: sidebarShown)
                 VStack(alignment: .leading, spacing: 4) {
                     Text(session.title).font(.headline).lineLimit(1)
+                    if session.contextChoices?.deletedAt != nil {
+                        Text(newLabel("deletedReadOnly", english: "Deleted · restore from the conversation list",
+                            chinese: "已删除 · 请在对话列表恢复"))
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
                     if let node = session.configuration {
                         let id = node.parameters["modelID"]?.string ?? ""
                         Text((model.projectSession.explicitModelChoices.first(where: { $0.id == id })?.displayName ??
@@ -480,7 +672,7 @@ struct ChatWorkbenchView: View {
                 }
                 Spacer()
                 Button(label("changeModel", "更换模型"), action: onChooseModel)
-                    .lineLimit(1)
+                    .lineLimit(1).disabled(session.contextChoices?.deletedAt != nil)
                 if !session.messages.isEmpty {
                     Menu(label("paths", "路径")) {
                         ForEach(leaves) { leaf in
@@ -565,13 +757,27 @@ struct ChatWorkbenchView: View {
                     Task { @MainActor in
                         await Task.yield()
                         guard restore.isCurrent(sessionID: chat.state.selectedSessionID,
-                                                pending: scrollRestoration) else { return }
+                                                pending: scrollRestoration),
+                              searchJump?.sessionID != newID else { return }
                         if restore.followsBottom { proxy.scrollTo("chat-bottom", anchor: .bottom) }
                         else if let anchor = restore.anchor { proxy.scrollTo(anchor, anchor: .top) }
                         scrollRestoration = nil
                     }
                 }
                 .onAppear {
+                    if let jump = searchJump, jump.sessionID == session.id {
+                        Task { @MainActor in
+                            await Task.yield()
+                            guard searchJump == jump, chat.state.selectedSessionID == jump.sessionID else { return }
+                            followsBottom = false; hasNewContent = false
+                            visibleMessageID = jump.messageID
+                            proxy.scrollTo(jump.messageID, anchor: .center)
+                            saveScrollState(for: session.id)
+                            scrollRestoration = nil
+                            searchJump = nil
+                        }
+                        return
+                    }
                     if let saved = scrollStates[session.id] {
                         followsBottom = saved.followsBottom
                         hasNewContent = saved.hasNewContent
@@ -579,6 +785,20 @@ struct ChatWorkbenchView: View {
                         if saved.followsBottom { proxy.scrollTo("chat-bottom", anchor: .bottom) }
                         else if let anchor = saved.anchor { proxy.scrollTo(anchor, anchor: .top) }
                     } else if followsBottom { proxy.scrollTo("chat-bottom", anchor: .bottom) }
+                }
+                .onChange(of: searchJump) { _, jump in
+                    guard let jump, jump.sessionID == session.id,
+                          chat.state.selectedSessionID == jump.sessionID else { return }
+                    Task { @MainActor in
+                        await Task.yield()
+                        guard searchJump == jump, chat.state.selectedSessionID == jump.sessionID else { return }
+                        followsBottom = false; hasNewContent = false
+                        visibleMessageID = jump.messageID
+                        proxy.scrollTo(jump.messageID, anchor: .center)
+                        saveScrollState(for: session.id)
+                        scrollRestoration = nil
+                        searchJump = nil
+                    }
                 }
                 .overlay(alignment: .bottomTrailing) {
                     if !followsBottom {
@@ -612,6 +832,26 @@ struct ChatWorkbenchView: View {
         ChatPresentationText.branchSummary(message, you: label("you", "你"), assistant: label("assistant", "助手"))
     }
 
+    private func openDataInspector(attemptID: UUID? = nil, preview: Bool = false) {
+        inspectedAttemptID = attemptID
+        showContextPreview = preview
+        inspectorTab = .data
+        showInspector = true
+        let sidebar = ChatPresentationLayout.showsSidebar(width: lastBodyWidth, requested: showSidebar)
+        if !ChatPresentationLayout.showsInspector(width: lastBodyWidth, requested: true, sidebar: sidebar) {
+            sheets.openNarrow(.inspector)
+        }
+    }
+
+    private func changeMessageChoice(session: ChatSession,
+                                     mutate: (inout ChatContextChoices) -> Void) {
+        perform(sessionID: session.id) {
+            guard chat.state.selectedSessionID == session.id else { throw WorkflowIssue("请返回原对话后再修改消息。") }
+            guard chat.selectedSession?.contextChoices?.deletedAt == nil else { throw WorkflowIssue("请先恢复已删除的对话。") }
+            try ChatContextCommands.choices(session, mutate: mutate, in: chat)
+        }
+    }
+
     private func inspector(_ session: ChatSession) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
@@ -639,6 +879,14 @@ struct ChatWorkbenchView: View {
                             if session.originSessionID != nil {
                                 Text(label("forkOrigin", "此对话从另一条路径分叉；原对话仍保留。"))
                                     .font(.caption).foregroundStyle(.secondary)
+                            }
+                            Button(newLabel("contextPreview", english: "Preview next context", chinese: "预览下次上下文")) {
+                                showContextPreview.toggle(); inspectedAttemptID = nil
+                            }.accessibilityIdentifier("chat-context-preview-toggle")
+                            if showContextPreview { contextPreviewPanel(session) }
+                            if let attemptID = inspectedAttemptID,
+                               let attempt = session.attempts.first(where: { $0.id == attemptID }) {
+                                requestInspectionPanel(attempt)
                             }
                             Text(newLabel("attachments", english: "Pending attachments", chinese: "待发送附件")).font(.headline)
                             if session.attachments.isEmpty {
@@ -673,8 +921,84 @@ struct ChatWorkbenchView: View {
         .accessibilityIdentifier("chat-inspector")
     }
 
+    @ViewBuilder private func contextPreviewPanel(_ session: ChatSession) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(newLabel("contextPreviewTitle", english: "Next request preview", chinese: "下次请求预览"))
+                .font(.subheadline.bold())
+            Text(newLabel("contextPreviewNote", english: "Current path and draft only. This preview does not send or change them.",
+                chinese: "仅显示当前路径与草稿；预览不会发送或修改它们。"))
+                .font(.caption).foregroundStyle(.secondary)
+            ForEach(chat.selectedPath) { message in
+                let status = ChatContextRowStatus.forMessage(message, in: session)
+                Text(newLabel("contextRow.\(status)", english: status.english, chinese: status.chinese) +
+                     " · " + branchSummary(message))
+                    .font(.caption).lineLimit(2)
+                    .chatMeasured("context-row-\(message.id.uuidString)", probe: layoutProbe)
+                    .accessibilityIdentifier("chat-context-row-\(message.id.uuidString)")
+            }
+            let result = Result { try chat.contextPreview(sessionID: session.id) }
+            switch result {
+            case .success(let plan):
+                Text(newLabel("conservativeBudget", english: "Conservative input estimate (not exact tokenization): ",
+                    chinese: "保守输入估计（非精确分词）：") + String(plan.estimatedTokens))
+                    .font(.caption)
+                if let limit = session.configuration?.parameters["maximumPromptTokens"]?.integer {
+                    Text(newLabel("configuredLimit", english: "Configured input limit: ", chinese: "所选输入上限：") + String(limit))
+                        .font(.caption)
+                    if plan.estimatedTokens > limit {
+                        Text(newLabel("overEstimate", english: "Estimate exceeds the configured limit.",
+                            chinese: "估计值超过所选上限。"))
+                            .font(.caption).foregroundStyle(.red)
+                    }
+                }
+                Text(newLabel("contextMedia", english: "Images: ", chinese: "图像：") + String(plan.images.count) +
+                     newLabel("contextVideos", english: " · Videos: ", chinese: " · 视频：") + String(plan.videos.count))
+                    .font(.caption)
+            case .failure(let error):
+                Text(error.localizedDescription).font(.caption).foregroundStyle(.red).textSelection(.enabled)
+                    .accessibilityIdentifier("chat-context-preview-error")
+            }
+        }.accessibilityIdentifier("chat-context-preview")
+            .chatMeasured("context-preview-\(session.id.uuidString)", probe: layoutProbe)
+    }
+
+    private func requestInspectionPanel(_ attempt: ChatAttempt) -> some View {
+        let snapshot = ChatRequestInspection(attempt: attempt)
+        return VStack(alignment: .leading, spacing: 8) {
+            Text(newLabel("frozenRequest", english: "Frozen request", chinese: "冻结请求"))
+                .font(.subheadline.bold())
+            Text(newLabel("frozenRequestNote", english: "Saved attempt only. The JSON omits free text and credentials.",
+                chinese: "仅来自已保存的尝试；JSON 省略自由文本与凭据。"))
+                .font(.caption).foregroundStyle(.secondary)
+            ForEach(snapshot.sections) { section in
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(section.title).font(.caption.bold())
+                    ForEach(section.fields) { field in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(field.label).font(.caption).foregroundStyle(.secondary)
+                            Text(field.value).font(.caption.monospaced()).textSelection(.enabled)
+                        }.chatMeasured("request-field-\(section.id)-\(field.id)-\(attempt.id.uuidString)", probe: layoutProbe)
+                    }
+                }
+            }
+            Button(newLabel("copyRedactedJSON", english: "Copy redacted JSON", chinese: "复制脱敏 JSON")) {
+                copy(snapshot.redactedJSON)
+            }.accessibilityIdentifier("chat-copy-request-json")
+            Text(snapshot.redactedJSON).font(.caption.monospaced()).textSelection(.enabled)
+                .accessibilityIdentifier("chat-request-json")
+        }.accessibilityIdentifier("chat-request-inspection")
+            .chatMeasured("request-inspection-\(attempt.id.uuidString)", probe: layoutProbe)
+    }
+
     private func messageCard(_ message: ChatMessage, session: ChatSession,
                              siblings: [ChatMessage], attempt: ChatAttempt?) -> some View {
+        let choices = session.contextChoices
+        let favorite = choices?.favoriteMessageIDs.contains(message.id) == true
+        let excluded = choices?.excludedMessageIDs.contains(message.id) == true
+        let canExclude = ChatContextRowStatus.forMessage(message, in: session).canExclude
+        let revisions = choices?.revisions.filter { $0.messageID == message.id } ?? []
+        let adoptedID = revisions.first { choices?.adoptedRevisionIDs.contains($0.id) == true }?.id
+        let answerText = attempt?.response?.finalText ?? attempt?.rawText ?? ""
         return VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text(message.role == .user ? label("you", "你") : label("assistant", "助手")) .font(.headline)
@@ -695,9 +1019,26 @@ struct ChatWorkbenchView: View {
                 if message.role == .user {
                     Button(label("edit", "编辑")) {
                         present(.edit(ChatEdit(kind: .message, sessionID: session.id, messageID: message.id, text: message.text)))
-                    }
+                    }.disabled(session.contextChoices?.deletedAt != nil)
                 }
                 Menu {
+                    Button(favorite ? newLabel("unfavorite", english: "Remove favorite", chinese: "取消收藏")
+                        : newLabel("favorite", english: "Favorite", chinese: "收藏")) {
+                        changeMessageChoice(session: session) { value in
+                            if value.favoriteMessageIDs.contains(message.id) { value.favoriteMessageIDs.removeAll { $0 == message.id } }
+                            else { value.favoriteMessageIDs.append(message.id) }
+                        }
+                    }
+                    if canExclude {
+                        Button(excluded ? newLabel("includeContext", english: "Include in context", chinese: "回纳上下文")
+                            : newLabel("excludeContext", english: "Exclude from context", chinese: "排除上下文")) {
+                            changeMessageChoice(session: session) { value in
+                                if value.excludedMessageIDs.contains(message.id) { value.excludedMessageIDs.removeAll { $0 == message.id } }
+                                else { value.excludedMessageIDs.append(message.id) }
+                            }
+                        }
+                    }
+                    Divider()
                     if message.role == .user {
                         Button(label("generateReply", "生成回复")) { Task { await run(sessionID: session.id) { try await chat.regenerate(message.id, sessionID: session.id) } } }
                             .disabled(!canRun(session))
@@ -706,11 +1047,53 @@ struct ChatWorkbenchView: View {
                             Task { await run(sessionID: session.id) { try await chat.regenerate(parent, sessionID: session.id) } }
                         }.disabled(!canRun(session))
                         if let attempt {
+                            Button(newLabel("inspectRequest", english: "Inspect frozen request", chinese: "检查冻结请求")) {
+                                openDataInspector(attemptID: attempt.id)
+                            }.accessibilityIdentifier("chat-inspect-request-\(attempt.id.uuidString)")
                             Button(label("replayRequest", "按原请求与种子重现")) {
                                 Task { await run(sessionID: session.id) { try await chat.reproduce(attempt.id, sessionID: session.id) } }
                             }.disabled(!ChatRunAdmission.allowsReplay(session, attempt: attempt,
                                 isRunning: chat.isRunning, hasPendingSave: chat.pendingSaveAttemptID != nil,
                                 hasSaveIssue: chat.saveIssue != nil))
+                        }
+                    }
+                    if message.role == .assistant {
+                        Button(newLabel("editAdopt", english: "Edit and adopt…", chinese: "编辑并采用…")) {
+                            present(.edit(ChatEdit(kind: .answer, sessionID: session.id,
+                                                   messageID: message.id, text: answerText)))
+                        }.disabled(session.contextChoices?.deletedAt != nil || !ChatContextCommands.canAdopt(attempt, in: chat))
+                            .accessibilityIdentifier("chat-edit-adopt-\(message.id.uuidString)")
+                        if attempt?.status != .completed {
+                            Button(newLabel("adoptPartial", english: "Adopt current partial answer", chinese: "采用当前部分回答")) {
+                                perform(sessionID: session.id) {
+                                    try ChatContextCommands.adopt(answerText, messageID: message.id,
+                                                                  sessionID: session.id, in: chat)
+                                }
+                            }.disabled(session.contextChoices?.deletedAt != nil || !ChatContextCommands.canAdopt(attempt, in: chat))
+                                .accessibilityIdentifier("chat-adopt-partial-\(message.id.uuidString)")
+                        }
+                        if !revisions.isEmpty {
+                            Menu(newLabel("answerVersions", english: "Answer versions", chinese: "回答版本")) {
+                                Divider()
+                                Button((adoptedID == nil ? "✓ " : "") +
+                                    newLabel("originalOutput", english: "Original model output", chinese: "原始模型输出")) {
+                                    perform(sessionID: session.id) {
+                                        try ChatContextCommands.selectVersion(nil, messageID: message.id,
+                                                                              sessionID: session.id, in: chat)
+                                    }
+                                }
+                                ForEach(revisions.indices, id: \.self) { index in
+                                    let revision = revisions[index]
+                                    Button((adoptedID == revision.id ? "✓ " : "") +
+                                        newLabel("manualVersion", english: "Manual version ", chinese: "人工版本 ") + String(index + 1) +
+                                        " · " + String(revision.text.prefix(28))) {
+                                        perform(sessionID: session.id) {
+                                            try ChatContextCommands.selectVersion(revision.id, messageID: message.id,
+                                                                                  sessionID: session.id, in: chat)
+                                        }
+                                    }
+                                }
+                            }.disabled(session.contextChoices?.deletedAt != nil || !ChatContextCommands.canAdopt(attempt, in: chat))
                         }
                     }
                     Button(label("forkHere", "从这里分叉")) {
@@ -725,6 +1108,13 @@ struct ChatWorkbenchView: View {
                     .accessibilityLabel(newLabel("messageActions", english: "Message actions: ", chinese: "消息操作：") + branchSummary(message))
             }.font(.caption)
             ChatMessageContent(message: message, attempt: attempt, onPreview: { present(.preview($0)) })
+            if let adopted = revisions.first(where: { $0.id == adoptedID }) {
+                DisclosureGroup(newLabel("adoptedVersion", english: "Adopted manual version · original above preserved",
+                    chinese: "已采用人工版本 · 上方原输出保留")) {
+                    Text(adopted.text).textSelection(.enabled)
+                }.font(.caption).accessibilityIdentifier("chat-adopted-version-\(message.id.uuidString)")
+                    .chatMeasured("adopted-version-\(message.id.uuidString)", probe: layoutProbe)
+            }
             if let attempt {
                 HStack {
                     Text(status(attempt)).font(.caption).foregroundStyle(.secondary)
@@ -759,6 +1149,20 @@ struct ChatWorkbenchView: View {
                     .frame(height: 90)
                 VStack(alignment: .leading, spacing: 8) {
                     Button(label("clearSystem", "清空系统提示")) { perform(sessionID: session.id) { try chat.setSystemPrompt("", sessionID: session.id) } }
+                    Divider()
+                    Text(newLabel("newSessionDefault", english: "Default system prompt for new conversations",
+                        chinese: "新会话默认系统提示")).font(.subheadline)
+                    Text(newLabel("newSessionDefaultNote", english: "Saving this default does not change existing conversations.",
+                        chinese: "保存默认值不会回写现有会话。"))
+                        .font(.caption).foregroundStyle(.secondary)
+                    Button(newLabel("editDefaultSystem", english: "Edit default…", chinese: "编辑默认提示…")) {
+                        present(.edit(ChatEdit(kind: .defaultSystem, sessionID: session.id,
+                                               messageID: nil, text: chat.defaultSystemPrompt)))
+                    }.accessibilityIdentifier("chat-edit-default-system")
+                    Button(newLabel("clearDefaultSystem", english: "Clear default", chinese: "清空默认提示")) {
+                        perform(sessionID: session.id) { try chat.setDefaultSystemPrompt("") }
+                    }
+                    Divider()
                     Menu(label("applyPreset", "应用本地预设")) {
                         ForEach(chat.state.presets) { preset in
                             Menu(preset.name) {
@@ -804,7 +1208,8 @@ struct ChatWorkbenchView: View {
                     }
                 }
             }
-            TextSourcesQuestionEditor(value: session.draft, editEpoch: 0, isEditable: !session.archived,
+            TextSourcesQuestionEditor(value: session.draft, editEpoch: 0,
+                isEditable: !session.archived && session.contextChoices?.deletedAt == nil,
                 accessibilityIdentifier: "chat-draft-\(session.id.uuidString)",
                 onEdit: { value in perform(sessionID: session.id) { try chat.updateDraft(value, sessionID: session.id) } })
                 .id(session.id.uuidString + ":draft")
@@ -814,7 +1219,7 @@ struct ChatWorkbenchView: View {
             HStack {
                 Button(label("attach", "添加附件…"), systemImage: "paperclip") {
                     Task { await chooseAttachments(for: session.id) }
-                }.disabled(session.archived)
+                }.disabled(session.archived || session.contextChoices?.deletedAt != nil)
                 Spacer()
                 if chat.pendingSaveAttemptID != nil || chat.saveIssue != nil {
                     Button(label("retrySave", "重试保存（不重新生成）")) { Task { await chat.retrySave() } }
@@ -1074,13 +1479,26 @@ struct ChatWorkbenchView: View {
     }
 
     private func editSheet(_ edit: ChatEdit) -> some View {
-        ChatEditForm(edit: edit, onCancel: { sheets.detail = nil }, onCommit: { text in
+        ChatEditForm(edit: edit, issue: issues[edit.sessionID], onCancel: { sheets.detail = nil }, onCommit: { text in
             perform(sessionID: edit.sessionID) {
                 switch edit.kind {
                 case .rename: try chat.rename(edit.sessionID, title: text)
                 case .message:
-                    guard let id = edit.messageID else { return }
+                    guard let id = edit.messageID else { throw WorkflowIssue("消息不存在。") }
+                    guard chat.state.selectedSessionID == edit.sessionID else { throw WorkflowIssue("请返回原对话后再编辑消息。") }
                     _ = try chat.editUserMessage(id, text: text, sessionID: edit.sessionID)
+                case .answer:
+                    guard let id = edit.messageID else { throw WorkflowIssue("回答不存在。") }
+                    try ChatContextCommands.adopt(text, messageID: id, sessionID: edit.sessionID, in: chat)
+                case .tags:
+                    guard let session = chat.state.sessions.first(where: { $0.id == edit.sessionID }) else {
+                        throw WorkflowIssue("对话不存在。")
+                    }
+                    let tags = text.split(separator: "\n", omittingEmptySubsequences: false)
+                        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                        .filter { !$0.isEmpty }
+                    try ChatContextCommands.choices(session, mutate: { $0.tags = tags }, in: chat)
+                case .defaultSystem: try chat.setDefaultSystemPrompt(text)
                 }
             }
             if issues[edit.sessionID] == nil { sheets.detail = nil }
@@ -1089,7 +1507,7 @@ struct ChatWorkbenchView: View {
 }
 
 private struct ChatEdit: Identifiable {
-    enum Kind: Equatable { case rename, message }
+    enum Kind: Equatable { case rename, message, answer, tags, defaultSystem }
     let id = UUID()
     let kind: Kind
     let sessionID: UUID
@@ -1100,6 +1518,7 @@ private struct ChatEdit: Identifiable {
 @MainActor
 private struct ChatEditForm: View {
     let edit: ChatEdit
+    let issue: String?
     let onCancel: () -> Void
     let onCommit: (String) -> Void
     @State private var text: String
@@ -1108,23 +1527,45 @@ private struct ChatEditForm: View {
     private func label(_ key: String, _ fallback: String) -> String {
         workflowText(language, "chat." + key, fallback: fallback)
     }
+    private func newLabel(_ key: String, english: String, chinese: String) -> String {
+        workflowText(language, "chat." + key,
+            fallback: language?.effectiveLanguageIdentifier.hasPrefix("zh") == true ? chinese : english)
+    }
 
-    init(edit: ChatEdit, onCancel: @escaping () -> Void, onCommit: @escaping (String) -> Void) {
-        self.edit = edit; self.onCancel = onCancel; self.onCommit = onCommit
+    init(edit: ChatEdit, issue: String?, onCancel: @escaping () -> Void, onCommit: @escaping (String) -> Void) {
+        self.edit = edit; self.issue = issue; self.onCancel = onCancel; self.onCommit = onCommit
         _text = State(initialValue: edit.text)
     }
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text(edit.kind == .rename ? label("rename", "重命名对话") : label("editBranch", "编辑消息 · 创建新分支"))
-                .font(.headline)
+            Text(switch edit.kind {
+                case .rename: label("rename", "重命名对话")
+                case .message: label("editBranch", "编辑消息 · 创建新分支")
+                case .answer: newLabel("editAdopt", english: "Edit and adopt answer", chinese: "编辑并采用回答")
+                case .tags: newLabel("editTags", english: "Edit tags", chinese: "编辑标签")
+                case .defaultSystem: newLabel("editDefaultSystem", english: "Default system prompt for new conversations", chinese: "新会话默认系统提示")
+            }).font(.headline)
+            if edit.kind == .answer {
+                Text(newLabel("originalPreserved", english: "The original model output stays unchanged. Save explicitly to adopt this version.",
+                    chinese: "原始模型输出保持不变；明确保存后才采用此版本。"))
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            if edit.kind == .tags {
+                Text(newLabel("tagLines", english: "One tag per line; up to 24 tags of 32 characters each.",
+                    chinese: "每行一个标签；最多24个，每个不超过32字。"))
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             TextSourcesQuestionEditor(value: text, editEpoch: 0, isEditable: true,
                 accessibilityIdentifier: "chat-edit-\(edit.sessionID.uuidString)", onEdit: { text = $0 })
                 .id(edit.id).frame(height: edit.kind == .rename ? 70 : 220)
+            if let issue { Text(issue).font(.caption).foregroundStyle(.red).textSelection(.enabled) }
             HStack {
                 Spacer()
                 Button(label("cancel", "取消"), action: onCancel)
-                Button(edit.kind == .rename ? label("save", "保存") : label("createBranch", "创建分支")) { onCommit(text) }
-                    .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                Button(edit.kind == .message ? label("createBranch", "创建分支") : label("save", "保存")) { onCommit(text) }
+                    .disabled((edit.kind == .rename || edit.kind == .message || edit.kind == .answer) &&
+                              text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .accessibilityIdentifier("chat-edit-save")
             }
         }.padding(20).frame(minWidth: 440)
     }
