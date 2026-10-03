@@ -154,7 +154,9 @@ public actor MLXQwenVLMBackend: InferenceBackend {
                                           fileSelection: inventory.fileSet?.selection)
             let loaded = try await withRandomState(randomState) {
                 try await factory.loadContainer(from: inventory.directory,
-                                                using: LocalTokenizerLoader(fileSet: inventory.fileSet))
+                                                using: LocalTokenizerLoader(fileSet: inventory.fileSet,
+                                                    chatTemplateOverride: input.chatTemplateOverride,
+                                                    hasTools: !(input.tools ?? []).isEmpty))
             }
             container = loaded
             await observer(MLXLifecycleEvent(runID: request.id, phase: .loaded))

@@ -11,10 +11,31 @@ struct TextConversationTests {
         let old = Data(#"{"prompt":"old","maxTokens":8,"temperature":0.7,"topP":0.95,"execution":null,"images":null,"video":null,"visualProcessing":null}"#.utf8)
         let request = try JSONDecoder().decode(TextRequest.self, from: old)
         #expect(request.messages == nil && request.tools == nil && request.thinking == nil && request.seed == nil)
+        #expect(request.chatTemplateOverride == nil)
+        #expect(!(String(decoding: try JSONEncoder().encode(request), as: UTF8.self)
+            .contains("chatTemplateOverride")))
         #expect(try JSONDecoder().decode(TextRequest.self, from: JSONEncoder().encode(request)) == request)
         let result = try JSONDecoder().decode(InferenceResult.self,
             from: Data(#"{"artifacts":[],"metadata":{"stopReason":"stop"}}"#.utf8))
         #expect(result.textResponse == nil)
+    }
+
+    @Test func requestTemplateValidationAndRoundtrip() throws {
+        let source = "{% for message in messages %}{{ message.role }}{% endfor %}"
+        let request = TextRequest(prompt: "hello", chatTemplateOverride: source)
+        try vlm.validate(request)
+        #expect(try JSONDecoder().decode(TextRequest.self, from: JSONEncoder().encode(request)) == request)
+        #expect(throws: (any Error).self) {
+            try TextExecutionCapability(maximumPromptTokens: 2048, maximumOutputTokens: 256)
+                .validate(request)
+        }
+        #expect(throws: (any Error).self) {
+            try vlm.validate(TextRequest(prompt: "hello", chatTemplateOverride: " \n "))
+        }
+        #expect(throws: (any Error).self) {
+            try vlm.validate(TextRequest(prompt: "hello",
+                chatTemplateOverride: String(repeating: "é", count: 32_769)))
+        }
     }
 
     @Test func mediaOrderAndTwoVideosStayVisible() throws {

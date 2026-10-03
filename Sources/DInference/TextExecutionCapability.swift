@@ -38,6 +38,15 @@ public struct TextExecutionCapability: Codable, Equatable, Sendable {
         guard profile == Self.qwen2Profile || profile == Self.qwen35VLMProfile else {
             throw InferenceFailure.invalidRequest("Unsupported text execution capability profile.")
         }
+        if let override = request.chatTemplateOverride {
+            guard profile == Self.qwen35VLMProfile else {
+                throw InferenceFailure.invalidRequest("This text profile does not support a chat template override.")
+            }
+            guard !override.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  override.utf8.count <= 65_536 else {
+                throw InferenceFailure.invalidRequest("Chat template override must contain text and be at most 64 KiB UTF-8.")
+            }
+        }
         let ceiling = profile == Self.qwen35VLMProfile ? 262_144 : 32_768
         let outputCeiling = profile == Self.qwen35VLMProfile ? 262_144 : 8_192
         guard (1...ceiling).contains(maximumPromptTokens),

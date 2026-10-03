@@ -1,21 +1,34 @@
 import Foundation
 import Hub
+import Jinja
 import MLXLMCommon
 import Tokenizers
 
 /// Loads only an already-installed tokenizer. It cannot fall back to a Hub download.
 struct LocalTokenizerLoader: MLXLMCommon.TokenizerLoader {
     let fileSet: LocalModelFileSet?
+    let chatTemplateOverride: String?
+    let hasTools: Bool
 
-    init(fileSet: LocalModelFileSet? = nil) { self.fileSet = fileSet }
+    init(fileSet: LocalModelFileSet? = nil, chatTemplateOverride: String? = nil,
+         hasTools: Bool = false) {
+        self.fileSet = fileSet
+        self.chatTemplateOverride = chatTemplateOverride
+        self.hasTools = hasTools
+    }
 
     func load(from directory: URL) async throws -> any MLXLMCommon.Tokenizer {
+        try await loadLocal(from: directory)
+    }
+
+    func loadLocal(from directory: URL) async throws -> LocalTokenizer {
         guard directory.isFileURL, directory.path.hasPrefix("/") else {
             throw LocalTokenizerFailure.invalidTemplate("Tokenizer directory must be local.")
         }
         if let fileSet { return try loadFixed(from: directory, fileSet: fileSet) }
         // The upstream local loader uses try? for optional template sidecars. Validate
         // the selected sidecar first so damage cannot fall back to an older template.
+        var validatedSidecar: String?
         for name in ["chat_template.jinja", "chat_template.json"] {
             let url = directory.appendingPathComponent(name)
             if !FileManager.default.fileExists(atPath: url.path) { continue }
@@ -31,16 +44,20 @@ struct LocalTokenizerLoader: MLXLMCommon.TokenizerLoader {
             guard let template, !template.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                 throw LocalTokenizerFailure.invalidTemplate("Unreadable local chat template: " + name)
             }
+            validatedSidecar = template
             break // Same documented preference as the upstream loader: jinja before json.
         }
         let tokenizer = try await AutoTokenizer.from(modelFolder: directory)
         guard tokenizer.hasChatTemplate else {
             throw LocalTokenizerFailure.invalidTemplate("This profile requires a local chat template.")
         }
-        return LocalTokenizer(base: tokenizer)
+        let config = try parseConfig(directory.appendingPathComponent("tokenizer_config.json"))
+        let source = try validatedSidecar ?? selectedTemplate(config: config, hasTools: hasTools)
+        return LocalTokenizer(base: tokenizer, config: config, sourceTemplate: source,
+                              chatTemplateOverride: chatTemplateOverride)
     }
 
-    private func loadFixed(from directory: URL, fileSet: LocalModelFileSet) throws -> any MLXLMCommon.Tokenizer {
+    private func loadFixed(from directory: URL, fileSet: LocalModelFileSet) throws -> LocalTokenizer {
         // The upstream folder API probes sidecars. Its config/data initializer performs
         // the same tokenization without observing undeclared neighboring files.
         let configURL = directory.appendingPathComponent("tokenizer_config.json")
@@ -70,11 +87,29 @@ struct LocalTokenizerLoader: MLXLMCommon.TokenizerLoader {
             values["chat_template"] = Config(template)
             config = Config(values)
         }
+        let source = try selectedTemplate(config: config, hasTools: hasTools)
         let tokenizer = try PreTrainedTokenizer(tokenizerConfig: config, tokenizerData: data, strict: true)
         guard tokenizer.hasChatTemplate else {
             throw LocalTokenizerFailure.invalidTemplate("This profile requires a local chat template.")
         }
-        return LocalTokenizer(base: tokenizer)
+        return LocalTokenizer(base: tokenizer, config: config, sourceTemplate: source,
+                              chatTemplateOverride: chatTemplateOverride)
+    }
+
+    private func selectedTemplate(config: Config, hasTools: Bool) throws -> String {
+        // Match PreTrainedTokenizer's literal sidecar > tool_use > default selection.
+        if let value = config.chatTemplate.string() { return value }
+        if let entries = config.chatTemplate.array() {
+            var templates = [String: String]()
+            for entry in entries {
+                if let name = entry["name"].string(), let value = entry["template"].string() {
+                    templates[name] = value
+                }
+            }
+            if hasTools, let value = templates["tool_use"] { return value }
+            if let value = templates["default"] { return value }
+        }
+        throw LocalTokenizerFailure.invalidTemplate("The selected default chat template is unavailable.")
     }
 
     private func parseConfig(_ url: URL) throws -> Config {
@@ -86,8 +121,11 @@ struct LocalTokenizerLoader: MLXLMCommon.TokenizerLoader {
     }
 }
 
-private struct LocalTokenizer: MLXLMCommon.Tokenizer {
+struct LocalTokenizer: MLXLMCommon.Tokenizer {
     let base: any Tokenizers.Tokenizer
+    let config: Config
+    let sourceTemplate: String
+    let chatTemplateOverride: String?
     func encode(text: String, addSpecialTokens: Bool) -> [Int] {
         base.encode(text: text, addSpecialTokens: addSpecialTokens)
     }
@@ -103,11 +141,45 @@ private struct LocalTokenizer: MLXLMCommon.Tokenizer {
                            tools: [[String: any Sendable]]?,
                            additionalContext: [String: any Sendable]?) throws -> [Int] {
         do {
+            if let chatTemplateOverride {
+                try ChatTemplateOverride.validate(chatTemplateOverride, source: sourceTemplate,
+                                                  messages: messages, tools: tools,
+                                                  additionalContext: additionalContext)
+                if chatTemplateOverride != sourceTemplate {
+                    try ChatTemplateOverride.validateProbe(chatTemplateOverride, config: config)
+                    let rendered = try ChatTemplateOverride.render(chatTemplateOverride,
+                        config: config, messages: messages, tools: tools,
+                        additionalContext: additionalContext)
+                    try ChatTemplateOverride.validateOutput(rendered, messages: messages, tools: tools)
+                }
+                return try base.applyChatTemplate(messages: messages,
+                    chatTemplate: .literal(chatTemplateOverride), addGenerationPrompt: true,
+                    truncation: false, maxLength: nil, tools: tools,
+                    additionalContext: additionalContext)
+            }
             return try base.applyChatTemplate(messages: messages, tools: tools,
                                               additionalContext: additionalContext)
         } catch Tokenizers.TokenizerError.missingChatTemplate {
             throw LocalTokenizerFailure.invalidTemplate("The selected chat template is unavailable.")
         }
+    }
+
+    func preview(messages: [[String: any Sendable]], tools: [[String: any Sendable]]?,
+                 additionalContext: [String: any Sendable]?) throws -> (String, String, [Int]) {
+        let source = chatTemplateOverride ?? sourceTemplate
+        if chatTemplateOverride != nil {
+            try ChatTemplateOverride.validate(source, source: sourceTemplate, messages: messages,
+                                              tools: tools, additionalContext: additionalContext)
+        }
+        let rendered = try ChatTemplateOverride.render(source, config: config, messages: messages,
+                                                       tools: tools, additionalContext: additionalContext)
+        let ids = try applyChatTemplate(messages: messages, tools: tools,
+                                        additionalContext: additionalContext)
+        guard base.encode(text: rendered, addSpecialTokens: false) == ids else {
+            throw LocalTokenizerFailure.invalidTemplate(
+                "Preview rendering differs from the selected tokenizer template; cannot show exact text.")
+        }
+        return (source, rendered, ids)
     }
 }
 
