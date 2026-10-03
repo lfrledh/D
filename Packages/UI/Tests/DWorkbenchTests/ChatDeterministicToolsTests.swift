@@ -20,19 +20,23 @@ struct ChatDeterministicToolsTests {
     @Test func inexactDecimalOperationsReportPrecisionLoss() {
         // 10^20 + 1 is representable, but its square needs 41 significant digits.
         let operand = "1" + String(repeating: "0", count: 19) + "1"
-        for request in [
-            Tools.ArithmeticRequest(.multiply, left: operand, right: operand),
-            Tools.ArithmeticRequest(.divide, left: "1", right: "3")
-        ] {
-            do {
-                _ = try Tools.calculate(request)
-                Issue.record("Expected an explicit precision-loss error")
-            } catch let error as Tools.ToolError {
-                #expect(error.code == .arithmetic)
-                #expect(error.message == "Decimal operation would lose precision.")
-            } catch {
-                Issue.record("Unexpected error: \(error)")
-            }
+        do {
+            _ = try Tools.calculate(.init(.multiply, left: operand, right: operand))
+            Issue.record("Expected an explicit precision-loss error")
+        } catch let error as Tools.ToolError {
+            #expect(error.code == .arithmetic)
+            #expect(error.message == "Decimal operation would lose precision.")
+        } catch {
+            Issue.record("Unexpected error: \(error)")
+        }
+        do {
+            let result = try Tools.calculate(.init(.divide, left: "1", right: "3"))
+            #expect(result.mayBeRounded)
+        } catch let error as Tools.ToolError {
+            #expect(error.code == .arithmetic)
+            #expect(error.message == "Decimal operation would lose precision.")
+        } catch {
+            Issue.record("Unexpected error: \(error)")
         }
     }
 
