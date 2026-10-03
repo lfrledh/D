@@ -112,6 +112,18 @@ struct ChatTests {
         chat.parameterText[field] = "0.5"; chat.invalidParameterFields.remove(field)
         try await chat.regenerate(user.id, sessionID: a); await chat.waitForCompletion()
         #expect(await engine.requests.count == 3)
+        var replacement = try #require(chat.selectedSession?.configuration)
+        replacement.parameters["temperature"] = .decimal(0.7)
+        chat.parameterText[field] = "0.2"
+        let otherField = b.uuidString + ":temperature"
+        chat.parameterText[otherField] = "-"; chat.invalidParameterFields.insert(otherField)
+        try chat.updateConfiguration(replacement, sessionID: a)
+        #expect(chat.parameterText[field] == "0.2")
+        try chat.selectModelConfiguration(replacement, sessionID: a)
+        #expect(chat.parameterText[field] == nil)
+        #expect(chat.selectedSession?.configuration?.parameters["temperature"] == .decimal(0.7))
+        #expect(chat.parameterText[otherField] == "-")
+        #expect(chat.hasInvalidParameterText(sessionID: b))
         try await chat.prepareForTermination(); try await store.close()
     }
     @Test func twoTurnsFreezeHistoryAndBranchWithoutLosingOriginal() async throws {

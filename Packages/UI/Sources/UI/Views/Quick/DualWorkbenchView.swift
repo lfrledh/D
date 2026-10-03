@@ -489,7 +489,7 @@ public struct DualWorkbenchView: View {
         guard quick.textPresentation == .chat, let chat else { return }
         do {
             let sessionID = try chat.state.selectedSessionID ?? chat.newSession()
-            try chat.updateConfiguration(node, sessionID: sessionID)
+            try chat.selectModelConfiguration(node, sessionID: sessionID)
         } catch { issue = error.localizedDescription }
     }
 

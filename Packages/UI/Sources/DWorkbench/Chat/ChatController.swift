@@ -143,6 +143,14 @@ import Observation
         try WorkflowRegistry.standard.validate(chatNode)
         state.sessions[try index(sessionID)].configuration = chatNode; changed()
     }
+    /// An explicit model/settings replacement supersedes only this session's
+    /// numeric editor text. Ordinary edits keep partially typed valid numbers.
+    public func selectModelConfiguration(_ node: WorkflowNode, sessionID: UUID) throws {
+        try updateConfiguration(node, sessionID: sessionID)
+        let prefix = sessionID.uuidString + ":"
+        parameterText = parameterText.filter { !$0.key.hasPrefix(prefix) }
+        invalidParameterFields = invalidParameterFields.filter { !$0.hasPrefix(prefix) }
+    }
     public func setSystemPrompt(_ prompt: String, sessionID: UUID) throws {
         try requireLoaded(); guard prompt.utf8.count <= 65_536 else { throw WorkflowIssue("系统提示超过64KiB。") }
         state.sessions[try index(sessionID)].systemPrompt = prompt; changed()
