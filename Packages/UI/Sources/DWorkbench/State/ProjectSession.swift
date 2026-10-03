@@ -882,7 +882,7 @@ public final class ProjectSession {
     }
 
     private func makeChatController(store candidate: ProjectStore) -> ChatController {
-        ChatController(store: candidate, allowsSubmission: { [weak self] in
+        ChatController(store: candidate, settings: settings, allowsSubmission: { [weak self] in
             guard let self else { return false }
             return self.store === candidate && !self.closePending && !self.isChangingProject
         }) { [weak self] in

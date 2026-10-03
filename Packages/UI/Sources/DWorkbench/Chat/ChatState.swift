@@ -68,6 +68,7 @@ public struct ChatSession: Codable, Sendable, Equatable, Identifiable {
     public var systemPrompt = ""
     public var originSessionID: UUID?
     public var originLeafID: UUID?
+    public var contextChoices: ChatContextChoices?
     public init(id: UUID = UUID(), title: String = "新对话") { self.id = id; self.title = title }
 
     public func path(to leaf: UUID?) throws -> [ChatMessage] {
@@ -119,6 +120,7 @@ public struct ChatState: Codable, Sendable, Equatable {
                 throw WorkflowIssue("聊天会话内容或分支身份无效；原件保持只读。")
             }
             if let node = session.configuration { try Self.validateNode(node) }
+            try session.contextChoices?.validate(messages: session.messages)
             try Self.validateAttachments(session.attachments)
             let byID = Dictionary(uniqueKeysWithValues: session.messages.map { ($0.id, $0) })
             let attempts = Dictionary(uniqueKeysWithValues: session.attempts.map { ($0.id, $0) })

@@ -9,14 +9,17 @@ import UniformTypeIdentifiers
 
 private actor ChatFixtureEngine: InferenceEngine {
     private(set) var requests: [InferenceRequest] = []
+    private var finishReason: TextFinishReason = .stop
+    func setFinishReason(_ reason: TextFinishReason) { finishReason = reason }
     func submit(_ request: InferenceRequest, backendID: String) async throws -> InferenceRun {
         requests.append(request)
         let index = requests.count
+        let reason = finishReason
         let final = "reply \(index) 👩🏽‍🎨 e\u{301}"
         return .init(id: request.id, events: AsyncThrowingStream { continuation in
             continuation.yield(.textDelta(final)); continuation.finish()
         }, cancel: {}, outcome: {
-            .completed(.init(textResponse: .init(rawText: final, finalText: final, finishReason: .stop)))
+            .completed(.init(textResponse: .init(rawText: final, finalText: final, finishReason: reason)))
         })
     }
 }
@@ -97,6 +100,137 @@ struct ChatTests {
         let saved = try await store.chatState()
         #expect(saved.sessions.first?.attempts.last?.replayedAttemptID == first.id)
         try await chat.prepareForTermination(); try await store.close()
+    }
+
+    @Test func partialAnswerAdoptionPreservesOutputAndReopensAsExplicitVersion() async throws {
+        let (store, engine, chat) = try await fixture()
+        let id = try chat.newSession(); try configure(chat, session: id)
+        await engine.setFinishReason(.length)
+        try chat.updateDraft("first", sessionID: id)
+        try await chat.send(sessionID: id); await chat.waitForCompletion()
+        let original = try #require(chat.selectedSession?.attempts.first)
+        #expect(original.status == .partial)
+        try chat.updateDraft("continue", sessionID: id)
+        await #expect(throws: (any Error).self) { try await chat.send(sessionID: id) }
+        #expect(await engine.requests.count == 1)
+        let revised = "人工采用 👩🏽‍🎨 e\u{301}，保留这个部分继续。"
+        let revision = try chat.adoptAnswer(original.assistantMessageID, text: revised, sessionID: id)
+        let preview = try chat.contextPreview(sessionID: id)
+        #expect(preview.messagesJSON.contains(revised))
+        await engine.setFinishReason(.stop)
+        try await chat.send(sessionID: id); await chat.waitForCompletion()
+        #expect(chat.selectedSession?.attempts.first == original)
+        #expect(chat.selectedSession?.attempts.last?.messagesJSON == preview.messagesJSON)
+        #expect(chat.selectedSession?.contextChoices?.revisions.first?.id == revision)
+        try await chat.flush()
+        let durable = try await store.chatState()
+        #expect(durable.sessions.first?.contextChoices?.adopted[original.assistantMessageID] == revised)
+        let backup = store.rootURL.deletingLastPathComponent().appendingPathComponent("adopted.dbackup")
+        _ = try await store.createBackup(at: backup)
+        let restoredURL = backup.deletingLastPathComponent().appendingPathComponent("AdoptedRestored.dproject")
+        _ = try await ProjectStore.restoreBackup(at: backup, to: restoredURL)
+        let restored = try await ProjectStore.open(at: restoredURL)
+        #expect(try await restored.chatState() == durable)
+        try await restored.close()
+        try await chat.prepareForTermination(); try await store.close()
+    }
+
+    @Test func contextPreviewMatchesReplyToEditedUserWithoutExtraDraftOrSeedMutation() async throws {
+        let (store, engine, chat) = try await fixture()
+        let id = try chat.newSession(); try configure(chat, session: id)
+        try await chat.sendAfterDraft("question", sessionID: id)
+        let original = try #require(chat.selectedSession?.messages.first)
+        _ = try chat.editUserMessage(original.id, text: "edited 中文", sessionID: id)
+        let stateBefore = chat.state
+        let preview = try chat.contextPreview(sessionID: id)
+        #expect(chat.state == stateBefore)
+        try await chat.send(sessionID: id); await chat.waitForCompletion()
+        #expect(chat.selectedSession?.attempts.last?.messagesJSON == preview.messagesJSON)
+        #expect(await engine.requests.count == 2)
+        try await chat.flush(); try await store.close()
+    }
+
+    @Test func contextChoicesExcludeMessagesWithoutDeletingHistoryAndPreserveManualTitle() async throws {
+        let (store, engine, chat) = try await fixture()
+        let id = try chat.newSession(); try configure(chat, session: id)
+        try chat.rename(id, title: "手动题目")
+        try await chat.sendAfterDraft("question", sessionID: id)
+        #expect(chat.selectedSession?.title == "手动题目")
+        let before = try #require(chat.selectedSession)
+        var choices = before.contextChoices ?? .init()
+        choices.excludedMessageIDs = [try #require(before.messages.last?.id)]
+        choices.tags = ["资料", "👩🏽‍🎨"]; choices.pinned = true
+        try chat.updateContextChoices(choices, sessionID: id)
+        try chat.updateDraft("next", sessionID: id)
+        let preview = try chat.contextPreview(sessionID: id)
+        #expect(!preview.messagesJSON.contains("reply 1"))
+        #expect(preview.messagesJSON.contains("question"))
+        #expect(chat.selectedSession?.messages == before.messages)
+        try chat.setDeleted(true, sessionID: id)
+        await #expect(throws: (any Error).self) { try await chat.send(sessionID: id) }
+        #expect(await engine.requests.count == 1)
+        try chat.setDeleted(false, sessionID: id)
+        try await chat.send(sessionID: id); await chat.waitForCompletion()
+        #expect(chat.selectedSession?.attempts.last?.messagesJSON == preview.messagesJSON)
+        try await chat.flush(); try await store.close()
+    }
+
+    @Test func deletionDuringAssetPreparationCannotSubmitOrAddAttempt() async throws {
+        let (store, engine, chat) = try await fixture()
+        let id = try chat.newSession(); try configure(chat, session: id)
+        let ref = try await store.publishWorkflowAsset(data: Data("material".utf8), mediaType: "text/plain",
+            name: "material.txt", operationID: "d.asset.import").record.reference
+        _ = try await chat.addAttachment(ref, name: "material.txt", sessionID: id)
+        try chat.updateDraft("request", sessionID: id); try await chat.flush()
+        let (entered, signal) = AsyncStream<Void>.makeStream()
+        let release = DispatchSemaphore(value: 0)
+        let blocker = Task.detached { await store.holdChatReadFixture(entered: signal, release: release) }
+        defer { release.signal() }
+        for await _ in entered { break }
+        var started = false
+        let submission = Task { @MainActor in
+            started = true
+            try await chat.send(sessionID: id)
+        }
+        for _ in 0..<100 {
+            if started { break }
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        #expect(started)
+        try chat.setDeleted(true, sessionID: id)
+        release.signal(); await blocker.value
+        await #expect(throws: (any Error).self) { try await submission.value }
+        #expect(await engine.requests.isEmpty)
+        #expect(chat.selectedSession?.attempts.isEmpty == true)
+        try await chat.flush(); try await store.close()
+    }
+
+    @Test func newConversationDefaultsUseOnlyInjectedSuiteAndDoNotRewriteExistingSessions() async throws {
+        let (store, _, oldChat) = try await fixture()
+        let suite = "D.Chat.Defaults." + UUID().uuidString
+        let settings = try #require(UserDefaults(suiteName: suite))
+        defer { settings.removePersistentDomain(forName: suite) }
+        let chat = ChatController(store: store, settings: settings) { throw WorkflowIssue("No model calls in defaults test") }
+        await chat.load()
+        let (otherStore, _, _) = try await fixture()
+        let other = ChatController(store: otherStore, settings: settings) { throw WorkflowIssue("No model calls in defaults test") }
+        await other.load()
+        let first = try chat.newSession()
+        try chat.setDefaultSystemPrompt("new rules 中文")
+        let second = try chat.newSession()
+        #expect(chat.state.sessions.first { $0.id == first }?.systemPrompt == "")
+        #expect(chat.state.sessions.first { $0.id == second }?.systemPrompt == "new rules 中文")
+        _ = try other.newSession()
+        #expect(other.selectedSession?.systemPrompt == "new rules 中文")
+        try chat.setSystemPrompt("", sessionID: second)
+        #expect(chat.selectedSession?.systemPrompt == "")
+        #expect(settings.string(forKey: "D.Chat.NewSessionSystemPrompt.v1") == "new rules 中文")
+        #expect(oldChat.defaultSystemPrompt == "")
+        try chat.setDefaultSystemPrompt("")
+        _ = try other.newSession()
+        #expect(other.selectedSession?.systemPrompt == "")
+        try await other.flush(); try await otherStore.close()
+        try await chat.flush(); try await store.close()
     }
 
     private func fixture() async throws -> (ProjectStore, ChatFixtureEngine, ChatController) {
@@ -542,5 +676,20 @@ struct ChatTests {
         #expect((try await store.chatState()).sessions[0].title == "durable candidate")
         #expect(await engine.requests.isEmpty)
         try await store.close()
+    }
+}
+
+@MainActor private extension ChatController {
+    func sendAfterDraft(_ text: String, sessionID: UUID) async throws {
+        try updateDraft(text, sessionID: sessionID)
+        try await send(sessionID: sessionID); await waitForCompletion()
+    }
+}
+
+private extension ProjectStore {
+    func holdChatReadFixture(entered: AsyncStream<Void>.Continuation, release: DispatchSemaphore) {
+        entered.yield(()); entered.finish()
+        // Test-only actor occupation; bounded even if the test fails before release.
+        _ = release.wait(timeout: .now() + 3)
     }
 }

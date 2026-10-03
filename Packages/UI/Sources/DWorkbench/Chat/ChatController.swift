@@ -12,6 +12,11 @@ import Observation
     public private(set) var activeSessionID: UUID?
     public private(set) var activeAttemptID: UUID?
     public private(set) var pendingSaveAttemptID: UUID?
+    private var inMemoryDefaultSystemPrompt = ""
+    public var defaultSystemPrompt: String {
+        settings?.string(forKey: "D.Chat.NewSessionSystemPrompt.v1") ?? inMemoryDefaultSystemPrompt
+    }
+    @ObservationIgnored private let settings: UserDefaults?
     /// Incomplete numeric edits survive view/category changes in this owner.
     /// Valid values persist in configuration; these transient edits are not cold-start state.
     public var parameterText: [String: String] = [:]
@@ -34,9 +39,10 @@ import Observation
     public var canStopGeneration: Bool { isRunning && activeAttemptID != nil }
     @ObservationIgnored private var debounceGeneration: UInt64 = 0
 
-    public init(store: ProjectStore, allowsSubmission: @escaping @MainActor () -> Bool = { true },
+    public init(store: ProjectStore, settings: UserDefaults? = nil, allowsSubmission: @escaping @MainActor () -> Bool = { true },
                 makeServices: @escaping @MainActor () throws -> WorkflowServices) {
-        self.store = store; self.allowsSubmission = allowsSubmission; self.makeServices = makeServices
+        self.store = store; self.settings = settings
+        self.allowsSubmission = allowsSubmission; self.makeServices = makeServices
     }
     public var selectedSession: ChatSession? { state.sessions.first { $0.id == state.selectedSessionID } }
     public var selectedPath: [ChatMessage] { (try? selectedSession?.path(to: selectedSession?.selectedLeafID)) ?? [] }
@@ -119,13 +125,17 @@ import Observation
         try requireLoaded()
         guard state.sessions.count < 512, !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               title.utf8.count <= 512 else { throw WorkflowIssue("会话标题无效或数量已达上限。") }
-        let session = ChatSession(title: title)
+        var session = ChatSession(title: title)
+        session.systemPrompt = defaultSystemPrompt
         state.sessions.append(session); state.selectedSessionID = session.id; changed(); return session.id
     }
     public func selectSession(_ id: UUID) throws { try requireLoaded(); _ = try index(id); state.selectedSessionID = id; changed() }
     public func rename(_ id: UUID, title: String) throws {
         try requireLoaded(); guard !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, title.utf8.count <= 512 else { throw WorkflowIssue("会话标题无效。") }
-        state.sessions[try index(id)].title = title; changed()
+        let i = try index(id)
+        state.sessions[i].title = title
+        var choices = state.sessions[i].contextChoices ?? .init(); choices.manuallyNamed = true
+        state.sessions[i].contextChoices = choices; changed()
     }
     public func archive(_ id: UUID) throws {
         try requireLoaded(); guard activeSessionID != id else { throw WorkflowIssue("当前会话仍在运行，请等待其停止后归档。") }
@@ -212,80 +222,116 @@ import Observation
                                assistantMessageID: a.assistantMessageID, node: a.node,
                                messagesJSON: a.messagesJSON, inputs: a.inputs, systemPrompt: a.systemPrompt,
                                createdAt: a.createdAt, status: a.status)
+            copy.replayedAttemptID = a.replayedAttemptID
             copy.rawText = a.rawText; copy.response = a.response; copy.output = a.output; copy.issue = a.issue
             return copy
         }
         fork.selectedLeafID = leaf; fork.configuration = source.configuration; fork.systemPrompt = source.systemPrompt
         fork.draft = source.draft; fork.attachments = source.attachments
+        if var choices = source.contextChoices {
+            let pathIDs = Set(path.map(\.id))
+            choices.revisions = choices.revisions.filter { pathIDs.contains($0.messageID) }
+            let revisionIDs = Set(choices.revisions.map(\.id))
+            choices.adoptedRevisionIDs = choices.adoptedRevisionIDs.filter { revisionIDs.contains($0) }
+            choices.excludedMessageIDs = choices.excludedMessageIDs.filter { pathIDs.contains($0) }
+            choices.favoriteMessageIDs = choices.favoriteMessageIDs.filter { pathIDs.contains($0) }
+            choices.deletedAt = nil; choices.pinned = false
+            fork.contextChoices = choices
+        }
         fork.originSessionID = id; fork.originLeafID = leaf
         state.sessions.append(fork); state.selectedSessionID = fork.id; changed(); return fork.id
     }
 
-    private struct FormMessage: Encodable {
-        let role: String
-        let parts: [FormPart]
-        let reasoningContent: String?
-        let toolCalls: [TextToolCall]?
+    public func setDefaultSystemPrompt(_ value: String) throws {
+        try requireLoaded(); guard value.utf8.count <= 65_536 else { throw WorkflowIssue("系统提示超过64KiB。") }
+        inMemoryDefaultSystemPrompt = value
+        settings?.set(value, forKey: "D.Chat.NewSessionSystemPrompt.v1")
     }
-    private struct FormPart: Encodable { let type: String; let text: String?; let index: Int? }
-    private func prepared(_ path: [ChatMessage], attempts: [ChatAttempt], prompt: String, attachments: [ChatAttachment], system: String,
-                          node source: WorkflowNode) async throws -> (WorkflowNode, String, [String: WorkflowValue]) {
-        var messages: [FormMessage] = []
-        var images: [WorkflowAssetReference] = [], videos: [WorkflowAssetReference] = []
-        if !system.isEmpty { messages.append(.init(role: "system", parts: [.init(type: "text", text: system, index: nil)], reasoningContent: nil, toolCalls: nil)) }
-        for entry in path + [ChatMessage(parentID: path.last?.id, role: .user, text: prompt, attachments: attachments)] {
-            var parts: [FormPart] = []
-            var reasoning: String?
-            if entry.role == .user {
-                for item in entry.attachments {
-                    _ = try await store.workflowData(item.reference)
-                    switch item.reference.kind {
-                    case .text:
-                        guard let text = item.textSnapshot else { throw WorkflowIssue("文字附件缺少冻结快照。") }
-                        parts.append(.init(type: "text", text: "[Source material: \(item.name)]\n\(text)\n[/Source material]", index: nil))
-                    case .image:
-                        parts.append(.init(type: "image", text: nil, index: images.count)); images.append(item.reference)
-                    case .video:
-                        parts.append(.init(type: "video", text: nil, index: videos.count)); videos.append(item.reference)
-                    default: throw WorkflowIssue("附件类型不能用于文字聊天。")
-                    }
-                }
-                parts.append(.init(type: "text", text: entry.text, index: nil))
-            } else {
-                guard let attemptID = entry.attemptID,
-                      let attempt = attempts.first(where: { $0.id == attemptID }),
-                      attempt.status == .completed, let response = attempt.response,
-                      response.toolCalls.isEmpty, response.finishReason != .toolCalls,
-                      response.finishReason != .incomplete,
-                      let final = response.finalText, !final.isEmpty else {
-                    throw WorkflowIssue("所选路径含未完成或待处理工具调用；请从此前用户消息分叉或缩短上下文。")
-                }
-                parts.append(.init(type: "text", text: final, index: nil))
-                reasoning = response.reasoningText
-            }
-            messages.append(.init(role: entry.role.rawValue, parts: parts, reasoningContent: reasoning, toolCalls: nil))
+    public func updateContextChoices(_ choices: ChatContextChoices, sessionID: UUID) throws {
+        try requireLoaded(); let i = try index(sessionID)
+        try choices.validate(messages: state.sessions[i].messages)
+        state.sessions[i].contextChoices = choices; changed()
+    }
+    public func setArchived(_ archived: Bool, sessionID: UUID) throws {
+        try requireLoaded(); guard activeSessionID != sessionID else { throw WorkflowIssue("请等待当前会话停止。") }
+        state.sessions[try index(sessionID)].archived = archived; changed()
+    }
+    public func setDeleted(_ deleted: Bool, sessionID: UUID) throws {
+        try requireLoaded(); guard activeSessionID != sessionID else { throw WorkflowIssue("请等待当前会话停止。") }
+        let i = try index(sessionID)
+        var choices = state.sessions[i].contextChoices ?? .init()
+        choices.deletedAt = deleted ? Date() : nil
+        state.sessions[i].contextChoices = choices; changed()
+    }
+    @discardableResult public func adoptAnswer(_ messageID: UUID, text: String, sessionID: UUID) throws -> UUID {
+        try requireLoaded(); let i = try index(sessionID), session = state.sessions[i]
+        guard session.contextChoices?.deletedAt == nil, !session.archived,
+              let message = session.messages.first(where: { $0.id == messageID && $0.role == .assistant }),
+              let attempt = session.attempts.first(where: { $0.id == message.attemptID }),
+              attempt.status != .running, attempt.status != .saving,
+              attempt.response?.toolCalls.isEmpty != false,
+              attempt.response?.finishReason != .toolCalls,
+              attempt.response?.finishReason != .incomplete else {
+            throw WorkflowIssue("运行中或待处理工具的回答不能作为人工正文采用。")
         }
-        let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
-        let bytes = try encoder.encode(messages)
-        guard bytes.count <= 1_048_576 else { throw WorkflowIssue("完整聊天消息超过1MiB；请显式开启新会话或分叉较短路径。") }
+        var choices = session.contextChoices ?? .init()
+        let revision = ChatTextRevision(messageID: messageID, text: text)
+        choices.adoptedRevisionIDs.removeAll { id in choices.revisions.contains { $0.id == id && $0.messageID == messageID } }
+        choices.revisions.append(revision); choices.adoptedRevisionIDs.append(revision.id)
+        choices.excludedMessageIDs.removeAll { $0 == messageID }
+        try updateContextChoices(choices, sessionID: sessionID)
+        return revision.id
+    }
+    public func selectAnswerRevision(_ revisionID: UUID?, messageID: UUID, sessionID: UUID) throws {
+        try requireLoaded(); let session = state.sessions[try index(sessionID)]
+        guard session.messages.contains(where: { $0.id == messageID && $0.role == .assistant }) else { throw WorkflowIssue("助手消息不存在。") }
+        var choices = session.contextChoices ?? .init()
+        if let revisionID {
+            guard choices.revisions.contains(where: { $0.id == revisionID && $0.messageID == messageID }) else { throw WorkflowIssue("人工版本不属于该消息。") }
+        }
+        choices.adoptedRevisionIDs.removeAll { id in choices.revisions.contains { $0.id == id && $0.messageID == messageID } }
+        if let revisionID { choices.adoptedRevisionIDs.append(revisionID); choices.excludedMessageIDs.removeAll { $0 == messageID } }
+        try updateContextChoices(choices, sessionID: sessionID)
+    }
+    public func contextPreview(sessionID: UUID) throws -> ChatContextPlan {
+        try requireLoaded(); let session = state.sessions[try index(sessionID)]
+        if session.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+           let user = try session.path(to: session.selectedLeafID).last, user.role == .user {
+            return try contextPlan(session, path: session.path(to: user.parentID), prompt: user.text, attachments: user.attachments)
+        }
+        return try contextPlan(session, path: session.path(to: session.selectedLeafID), prompt: session.draft, attachments: session.attachments)
+    }
+    private func contextPlan(_ session: ChatSession, path: [ChatMessage], prompt: String, attachments: [ChatAttachment]) throws -> ChatContextPlan {
+        let ids = Set(path.map(\.id)), choices = session.contextChoices
+        let excluded = Set(choices?.excludedMessageIDs ?? []).intersection(ids)
+        let adopted = (choices?.adopted ?? [:]).filter { ids.contains($0.key) && !excluded.contains($0.key) }
+        return try ChatContextPlan.build(path: path, attempts: session.attempts, prompt: prompt,
+            attachments: attachments, system: session.systemPrompt, adopted: adopted, excluded: excluded)
+    }
+    private func prepared(_ path: [ChatMessage], session: ChatSession, prompt: String, attachments: [ChatAttachment],
+                          node source: WorkflowNode) async throws -> (WorkflowNode, String, [String: WorkflowValue]) {
+        let plan = try contextPlan(session, path: path, prompt: prompt, attachments: attachments)
+        let excluded = Set(session.contextChoices?.excludedMessageIDs ?? [])
+        for item in path.filter({ !excluded.contains($0.id) }).flatMap(\.attachments) + attachments {
+            _ = try await store.workflowData(item.reference)
+        }
         let limit = source.parameters["maximumPromptTokens"]?.integer ?? 0
-        let estimate = (bytes.count + 2) / 3 + images.count * 1024 + videos.count * 4096
-        guard limit > 0, estimate <= limit else { throw WorkflowIssue("保守估计输入约\(estimate) token，超过所选上限\(limit)；这不是精确分词。请显式开启新会话或分叉较短路径。") }
+        guard limit > 0, plan.estimatedTokens <= limit else { throw WorkflowIssue("保守估计输入约\(plan.estimatedTokens) token，超过所选上限\(limit)；这不是精确分词。请显式排除消息或分叉较短路径。") }
         var node = source
         if (node.parameters["seed"]?.string ?? "").isEmpty {
             node.parameters["seed"] = .text(String(UInt64.random(in: .min ... .max)))
         }
         node.parameters["task"] = .text("")
-        node.parameters["messagesJSON"] = .text(String(decoding: bytes, as: UTF8.self))
+        node.parameters["messagesJSON"] = .text(plan.messagesJSON)
         try WorkflowRegistry.standard.validate(node)
         func port(_ refs: [WorkflowAssetReference], kind: WorkflowDataKind) -> WorkflowValue? {
             guard !refs.isEmpty else { return nil }
             return .data(.list(element: .asset(kind), items: refs.map { .init(id: UUID().uuidString, value: .asset($0)) }))
         }
         var inputs: [String: WorkflowValue] = [:]
-        if let value = port(images, kind: .image) { inputs["images"] = value }
-        if let value = port(videos, kind: .video) { inputs["video"] = value }
-        return (node, String(decoding: bytes, as: UTF8.self), inputs)
+        if let value = port(plan.images, kind: .image) { inputs["images"] = value }
+        if let value = port(plan.videos, kind: .video) { inputs["video"] = value }
+        return (node, plan.messagesJSON, inputs)
     }
 
     public func send(sessionID: UUID) async throws {
@@ -300,12 +346,11 @@ import Observation
             try await regenerate(user.id, sessionID: sessionID)
             return
         }
-        guard !session.archived, let node = session.configuration,
+        guard !session.archived, session.contextChoices?.deletedAt == nil, let node = session.configuration,
               !session.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw WorkflowIssue("请填写消息并选择模型。") }
         let path = try session.path(to: session.selectedLeafID)
         guard path.last?.role != .user else { throw WorkflowIssue("所选路径已有待回复用户消息，请重试该消息或选择已完成路径。") }
-        let prepared = try await prepared(path, attempts: session.attempts, prompt: session.draft, attachments: session.attachments,
-                                          system: session.systemPrompt, node: node)
+        let prepared = try await prepared(path, session: session, prompt: session.draft, attachments: session.attachments, node: node)
         let user = ChatMessage(parentID: session.selectedLeafID, role: .user, text: session.draft, attachments: session.attachments)
         try await launch(sessionID: sessionID, user: user, prepared: prepared,
                          systemPrompt: session.systemPrompt, expectedLeafID: session.selectedLeafID, clearDraft: true)
@@ -317,7 +362,7 @@ import Observation
         }
         guard allowsSubmission(), !isRunning, pendingSaveAttemptID == nil else { throw WorkflowIssue("已有聊天推理或待保存结果。") }
         let session = state.sessions[try index(sessionID)]
-        guard !session.archived, var node = session.configuration,
+        guard !session.archived, session.contextChoices?.deletedAt == nil, var node = session.configuration,
               let user = session.messages.first(where: { $0.id == userMessageID && $0.role == .user }) else { throw WorkflowIssue("需要已有用户消息和模型。") }
         let previousSeeds = Set(session.attempts.filter { $0.userMessageID == userMessageID }
             .compactMap { $0.node.parameters["seed"]?.string })
@@ -325,8 +370,7 @@ import Observation
         while previousSeeds.contains(String(seed)) { seed = UInt64.random(in: .min ... .max) }
         node.parameters["seed"] = .text(String(seed))
         let prior = try session.path(to: user.parentID)
-        let prepared = try await prepared(prior, attempts: session.attempts, prompt: user.text, attachments: user.attachments,
-                                          system: session.systemPrompt, node: node)
+        let prepared = try await prepared(prior, session: session, prompt: user.text, attachments: user.attachments, node: node)
         try await launch(sessionID: sessionID, user: user, prepared: prepared,
                          systemPrompt: session.systemPrompt, expectedLeafID: session.selectedLeafID, clearDraft: false)
     }
@@ -335,7 +379,7 @@ import Observation
     public func reproduce(_ attemptID: UUID, sessionID: UUID) async throws {
         try requireLoaded()
         let session = state.sessions[try index(sessionID)]
-        guard !session.archived, let attempt = session.attempts.first(where: { $0.id == attemptID }),
+        guard !session.archived, session.contextChoices?.deletedAt == nil, let attempt = session.attempts.first(where: { $0.id == attemptID }),
               attempt.status != .running, attempt.status != .saving,
               let user = session.messages.first(where: { $0.id == attempt.userMessageID }),
               let seed = attempt.node.parameters["seed"]?.string, UInt64(seed) != nil else {
@@ -358,7 +402,10 @@ import Observation
             throw WorkflowIssue("另一次聊天推理已开始；请等待资源释放后重试。")
         }
         let i = try index(sessionID)
-        let firstMessageTitle = clearDraft && !state.sessions[i].messages.contains(where: { $0.role == .user })
+        guard !state.sessions[i].archived, state.sessions[i].contextChoices?.deletedAt == nil else {
+            throw WorkflowIssue("会话在准备期间已归档或删除；没有提交新的生成。")
+        }
+        let firstMessageTitle = clearDraft && state.sessions[i].contextChoices?.manuallyNamed != true && !state.sessions[i].messages.contains(where: { $0.role == .user })
             ? Self.derivedTitle(user.text, characterLimit: 80) : nil
         let attemptID = UUID(), assistantID = UUID()
         let assistant = ChatMessage(id: assistantID, parentID: user.id, role: .assistant, text: "", attemptID: attemptID)
