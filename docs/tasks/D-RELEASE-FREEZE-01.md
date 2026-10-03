@@ -477,3 +477,16 @@ RH为上述human-closeout run。H22生产修补`9baaacbc74855aaa84fa03868e62a167
 源/候选起点3a2801abab22273256923ce1f3c14407515f20ce；RC为run-20261003T035843Z-stabilize-chat。用户本次明确新增有限A/Q续修授权，不抹除先前FILES预算耗尽。A1备份事务/错误、A2按需就绪分属受限Sol/high工作树，初交各含事先约定的诊断/实现步骤，最多两轮针对性修复及一次有界Lead接管；未经真实G1/G2不得实现B。Lead独立审核/CPU/普通App验证，Q先只读数据边界调查，重构建/GPU/GUI串行。A1先只补错误来源，在未改发布方法的普通包确认具体失败，再改事务。详细允许文件、规格r1和运行路由保存在RC/{a1,a2}；Worker不写此记录/公共Git/原件/模型/应用，不递归、不安装或联网。
 
 G1为仅目标授权的普通App备份→测试源不可用→新实例独立恢复/冷重开；G2为不打开资料库sheet的当前模型/实际图依赖就绪，不假定登记即ready。menu相同snapshot保护不改；就绪检查不得轮询全权重。A验证后独立提交/接纳main再进入B；Q结果不以聊天抵销。旧H22/真人事项已结不重开。保护snapshot见RC/lead/start.json及scheme副本。
+
+
+### 2026-10-03 A 中途检查点（尚未通过普通 App 门槛）
+
+RC/lead/a1-native-before.json：普通签名42e7f3在仅经NSSavePanel选择的新目标执行，`create staging directory / NSPOSIXErrorDomain / 1 (EPERM)`，未发布。已定位为兄弟暂存越过目标授权范围；A1受限Sol按原定诊断→事务两个子步骤实现系统同卷暂存，候选4460f4c，尚待组合复验。无权限扩大。
+
+非实现者复核发现G1还有真实入口缺口：备份保留Quick侧车，但恢复路由只开Canvas。Lead在f252a85新增命名项目的可选Quick owner，沿现有Store/组件/关闭与备份保存接线；不改schema、不导入覆盖全局Quick，不属于B聊天开工。审核反例的全局位置入口与项目切换过渡守卫继续修正。新增损坏侧车夹具先因缺少.dproject扩展被正确拒绝，44ddd63仅纠正夹具路径；不放宽生产校验。
+
+A2受限Sol初交f036337未编译通过（资源标识符类型）；独立审核另发现旧书签ctime、取消指示、跨owner安装更换三项反例，repair1=dba6a10，正在按原测试政策验收。A1事务新增测试的非throwing闭包尚有编译失败，待原预算内repair1。所有候选尚未接纳main。
+
+Lead一次证据命名失误覆盖了本run较早的诊断CPU文字日志；旧结构化结果已保留`a1-diagnostic-cpu-prior-result.json`，原13测试通过的工具记录仍在，新f252结果另存`a1-restored-owner-cpu-*`且明确失败。事件见`evidence-naming-incident.json`；不将新结果冒充旧结果，也不影响项目/模型/用户数据。后续使用独立证据名。
+
+Q的小型阶段对照：官方现有音频编码→解码/声码器，另按生产BF16 latent重放→PCM→AAC，均有限且约−32dB，无整段零值；证据`q/audio-components-*`。只排除所测组件路径普遍静音，尚未定位完整LTX生成的低幅值来源，不计Q通过。A的G1/G2未过，B生产未开始。
