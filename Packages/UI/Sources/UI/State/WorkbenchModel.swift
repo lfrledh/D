@@ -749,7 +749,7 @@ public final class WorkbenchModel {
         panel.title = "新建 D 项目"
         panel.nameFieldStringValue = "未命名.dproject"
         panel.canCreateDirectories = true
-        panel.allowedContentTypes = [UTType(filenameExtension: "dproject") ?? .package]
+        panel.allowedContentTypes = ProjectDocumentType.allowedContentTypes
         panel.isExtensionHidden = false
         guard await panel.begin() == .OK, let url = panel.url else { return false }
         projectSession.clearError()
@@ -764,9 +764,10 @@ public final class WorkbenchModel {
         defer { isChoosingLocation = false }
         let panel = NSOpenPanel()
         panel.title = "打开 D 项目"
+        panel.allowedContentTypes = ProjectDocumentType.allowedContentTypes
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
-        panel.allowedContentTypes = [UTType(filenameExtension: "dproject") ?? .package]
+        panel.treatsFilePackagesAsDirectories = false
         panel.allowsMultipleSelection = false
         guard await panel.begin() == .OK, let url = panel.url else { return false }
         projectSession.clearError()
