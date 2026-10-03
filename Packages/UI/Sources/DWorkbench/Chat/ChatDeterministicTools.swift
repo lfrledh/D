@@ -22,10 +22,12 @@ public enum ChatDeterministicTools {
     }
     public struct ArithmeticResult: Codable, Sendable, Equatable {
         public let decimal: String
+        /// Always true for division: Foundation can round a quotient without reporting precision loss.
+        public let mayBeRounded: Bool
     }
 
     /// Decimal operands are decimal strings so JSON never routes them through binary floating point.
-    /// Results are returned only when the decimal operation is exact.
+    /// Reported precision loss is rejected. A successful division may still be rounded.
     public static func calculate(_ request: ArithmeticRequest) throws -> ArithmeticResult {
         try Task.checkCancellation()
         var left = try decimal(request.left)
@@ -34,7 +36,7 @@ public enum ChatDeterministicTools {
             throw ToolError(.divisionByZero, "Division by zero.")
         }
         var answer = Decimal()
-        let status: NSCalculationError
+        let status: NSDecimalNumber.CalculationError
         switch request.operation {
         case .add: status = NSDecimalAdd(&answer, &left, &right, .plain)
         case .subtract: status = NSDecimalSubtract(&answer, &left, &right, .plain)
@@ -49,7 +51,8 @@ public enum ChatDeterministicTools {
               NSDecimalNumber(decimal: answer) != NSDecimalNumber.notANumber else {
             throw ToolError(.arithmetic, "Decimal operation overflowed or underflowed.")
         }
-        return ArithmeticResult(decimal: NSDecimalNumber(decimal: answer).stringValue)
+        return ArithmeticResult(decimal: NSDecimalNumber(decimal: answer).stringValue,
+                                mayBeRounded: request.operation == .divide)
     }
 
     public enum UnitFamily: String, Codable, Sendable { case length, mass, temperature, duration }
