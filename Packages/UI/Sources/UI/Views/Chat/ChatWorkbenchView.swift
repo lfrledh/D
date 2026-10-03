@@ -11,6 +11,24 @@ enum ChatAssetDropScope {
     }
 }
 
+/// Shared presentation gate for every control that can start model work.
+/// ChatController still performs the final admission check.
+enum ChatRunAdmission {
+    static func allows(_ session: ChatSession, isRunning: Bool, hasPendingSave: Bool,
+                       hasSaveIssue: Bool, invalidFields: Set<String>) -> Bool {
+        !session.archived && session.configuration != nil && !isRunning &&
+        !hasPendingSave && !hasSaveIssue &&
+        !invalidFields.contains(where: { $0.hasPrefix(session.id.uuidString + ":") })
+    }
+
+    static func allowsSend(_ session: ChatSession, isRunning: Bool, hasPendingSave: Bool,
+                           hasSaveIssue: Bool, invalidFields: Set<String>) -> Bool {
+        allows(session, isRunning: isRunning, hasPendingSave: hasPendingSave,
+               hasSaveIssue: hasSaveIssue, invalidFields: invalidFields) &&
+        !session.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+}
+
 /// Presentation for a Store-owned chat. Lead owns construction, loading, and
 /// model selection; this view never constructs a second controller or backend.
 @MainActor
@@ -25,7 +43,8 @@ struct ChatWorkbenchView: View {
     @State private var search = ""
     @State private var showArchived = false
     @State private var showAdvanced = false
-    @State private var issue: String?
+    @State private var issues: [UUID: String] = [:]
+    @State private var globalIssue: String?
     @State private var rawFields: [String: String] = [:]
     @State private var invalidFields: Set<String> = []
     @State private var editing: ChatEdit?
@@ -44,6 +63,15 @@ struct ChatWorkbenchView: View {
         workflowText(language, "chat." + key, fallback: fallback)
     }
     private var session: ChatSession? { chat.selectedSession }
+    private func canRun(_ session: ChatSession) -> Bool {
+        ChatRunAdmission.allows(session, isRunning: chat.isRunning,
+            hasPendingSave: chat.pendingSaveAttemptID != nil, hasSaveIssue: chat.saveIssue != nil,
+            invalidFields: invalidFields)
+    }
+    private func report(_ message: String?, for sessionID: UUID?) {
+        if let sessionID { issues[sessionID] = message }
+        else { globalIssue = message }
+    }
     private var visibleSessions: [ChatSession] {
         Array(chat.state.sessions.filter { item in
             item.archived == showArchived &&
@@ -100,7 +128,7 @@ struct ChatWorkbenchView: View {
                     ForEach(visibleSessions) { item in
                         HStack(spacing: 6) {
                             Button {
-                                perform { try chat.selectSession(item.id) }
+                                perform(sessionID: item.id, clearOnSuccess: false) { try chat.selectSession(item.id) }
                             } label: {
                                 VStack(alignment: .leading, spacing: 3) {
                                     Text(item.title).lineLimit(2)
@@ -113,7 +141,7 @@ struct ChatWorkbenchView: View {
                                     editing = ChatEdit(kind: .rename, sessionID: item.id, messageID: nil, text: item.title)
                                 }
                                 if !item.archived {
-                                    Button(label("archive", "归档")) { perform { try chat.archive(item.id) } }
+                                    Button(label("archive", "归档")) { perform(sessionID: item.id) { try chat.archive(item.id) } }
                                         .disabled(chat.activeSessionID == item.id)
                                 }
                             } label: { Image(systemName: "ellipsis") }.menuStyle(.borderlessButton)
@@ -155,14 +183,14 @@ struct ChatWorkbenchView: View {
                         ForEach(leaves) { leaf in
                             Button((leaf.id == session.selectedLeafID ? "✓ " : "") +
                                    String(leaf.text.isEmpty ? leaf.id.uuidString.prefix(8) : leaf.text.prefix(40))) {
-                                perform { try chat.selectLeaf(leaf.id, sessionID: session.id) }
+                                perform(sessionID: session.id) { try chat.selectLeaf(leaf.id, sessionID: session.id) }
                             }
                         }
                     }
                 }
                 Menu(label("export", "导出所选路径")) {
                     Button(label("copyPath", "复制所选路径")) {
-                        perform { copy(try chat.exportSelectedPath(sessionID: session.id, markdown: false)) }
+                        perform(sessionID: session.id) { copy(try chat.exportSelectedPath(sessionID: session.id, markdown: false)) }
                     }
                     Button(label("exportMarkdown", "Markdown 内容")) { Task { await export(sessionID: session.id, markdown: true) } }
                     Button(label("exportPlain", "纯文字")) { Task { await export(sessionID: session.id, markdown: false) } }
@@ -208,7 +236,6 @@ struct ChatWorkbenchView: View {
             settings(session)
             composer(session)
         }
-        .onChange(of: session.id) { _, _ in issue = nil; rawFields = [:]; invalidFields = [] }
     }
 
     private func messageCard(_ message: ChatMessage, session: ChatSession,
@@ -221,7 +248,7 @@ struct ChatWorkbenchView: View {
                         ForEach(siblings) { sibling in
                             Button("\((siblings.firstIndex(where: { $0.id == sibling.id }) ?? 0) + 1) · " +
                                    (sibling.text.isEmpty ? String(sibling.id.uuidString.prefix(8)) : String(sibling.text.prefix(36)))) {
-                                perform { try chat.selectLeaf(sibling.id, sessionID: session.id) }
+                                perform(sessionID: session.id) { try chat.selectLeaf(sibling.id, sessionID: session.id) }
                             }
                         }
                     }
@@ -234,14 +261,14 @@ struct ChatWorkbenchView: View {
                     Button(label("edit", "编辑")) {
                         editing = ChatEdit(kind: .message, sessionID: session.id, messageID: message.id, text: message.text)
                     }
-                    Button(label("generateReply", "生成回复")) { Task { await run { try await chat.regenerate(message.id, sessionID: session.id) } } }
-                        .disabled(chat.isRunning || chat.pendingSaveAttemptID != nil || session.configuration == nil)
+                    Button(label("generateReply", "生成回复")) { Task { await run(sessionID: session.id) { try await chat.regenerate(message.id, sessionID: session.id) } } }
+                        .disabled(!canRun(session))
                 } else if let parent = message.parentID {
-                    Button(label("regenerate", "重新生成")) { Task { await run { try await chat.regenerate(parent, sessionID: session.id) } } }
-                        .disabled(chat.isRunning || chat.pendingSaveAttemptID != nil || session.configuration == nil)
+                    Button(label("regenerate", "重新生成")) { Task { await run(sessionID: session.id) { try await chat.regenerate(parent, sessionID: session.id) } } }
+                        .disabled(!canRun(session))
                 }
                 Button(label("forkHere", "从这里分叉")) {
-                    perform { _ = try chat.forkSession(session.id, leafID: message.id) }
+                    perform(sessionID: session.id) { _ = try chat.forkSession(session.id, leafID: message.id) }
                 }
             }.font(.caption)
             if let attempt {
@@ -301,23 +328,23 @@ struct ChatWorkbenchView: View {
                 Text(label("systemPrompt", "系统提示（默认空）")) .font(.subheadline)
                 TextSourcesQuestionEditor(value: session.systemPrompt, editEpoch: 0, isEditable: true,
                     accessibilityIdentifier: "chat-system-\(session.id.uuidString)",
-                    onEdit: { value in perform { try chat.setSystemPrompt(value, sessionID: session.id) } })
+                    onEdit: { value in perform(sessionID: session.id) { try chat.setSystemPrompt(value, sessionID: session.id) } })
                     .id(session.id.uuidString + ":system")
                     .frame(height: 90)
                 HStack {
-                    Button(label("clearSystem", "清空系统提示")) { perform { try chat.setSystemPrompt("", sessionID: session.id) } }
+                    Button(label("clearSystem", "清空系统提示")) { perform(sessionID: session.id) { try chat.setSystemPrompt("", sessionID: session.id) } }
                     Menu(label("applyPreset", "应用本地预设")) {
                         ForEach(chat.state.presets) { preset in
                             Menu(preset.name) {
-                                Button(label("apply", "应用")) { perform { try chat.setSystemPrompt(preset.prompt, sessionID: session.id) } }
+                                Button(label("apply", "应用")) { perform(sessionID: session.id) { try chat.setSystemPrompt(preset.prompt, sessionID: session.id) } }
                                 Button(label("replacePreset", "用当前提示更新")) {
-                                    perform { try chat.setPreset(ChatPromptPreset(id: preset.id, name: preset.name, prompt: session.systemPrompt)) }
+                                    perform(sessionID: session.id) { try chat.setPreset(ChatPromptPreset(id: preset.id, name: preset.name, prompt: session.systemPrompt)) }
                                 }
                                 Button(label("duplicatePreset", "复制预设")) {
-                                    perform { try chat.setPreset(ChatPromptPreset(name: preset.name +
+                                    perform(sessionID: session.id) { try chat.setPreset(ChatPromptPreset(name: preset.name +
                                         label("presetCopySuffix", " 副本"), prompt: preset.prompt)) }
                                 }
-                                Button(label("deletePreset", "删除预设")) { perform { try chat.removePreset(preset.id) } }
+                                Button(label("deletePreset", "删除预设")) { perform(sessionID: session.id) { try chat.removePreset(preset.id) } }
                             }
                         }
                     }
@@ -354,7 +381,7 @@ struct ChatWorkbenchView: View {
             }
             TextSourcesQuestionEditor(value: session.draft, editEpoch: 0, isEditable: !session.archived,
                 accessibilityIdentifier: "chat-draft-\(session.id.uuidString)",
-                onEdit: { value in perform { try chat.updateDraft(value, sessionID: session.id) } })
+                onEdit: { value in perform(sessionID: session.id) { try chat.updateDraft(value, sessionID: session.id) } })
                 .id(session.id.uuidString + ":draft")
                 .frame(minHeight: 80, idealHeight: 110)
             HStack {
@@ -368,12 +395,11 @@ struct ChatWorkbenchView: View {
                     Button(label("retrySave", "重试保存（不重新生成）")) { Task { await chat.retrySave() } }
                         .disabled(chat.isRunning)
                 }
-                Button(label("send", "发送")) { Task { await run { try await chat.send(sessionID: session.id) } } }
+                Button(label("send", "发送")) { Task { await run(sessionID: session.id) { try await chat.send(sessionID: session.id) } } }
                     .buttonStyle(.borderedProminent)
-                    .disabled(session.archived || session.configuration == nil ||
-                              invalidFields.contains(where: { $0.hasPrefix(session.id.uuidString + ":") }) || chat.isRunning ||
-                              chat.pendingSaveAttemptID != nil || chat.saveIssue != nil ||
-                              session.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(!ChatRunAdmission.allowsSend(session, isRunning: chat.isRunning,
+                        hasPendingSave: chat.pendingSaveAttemptID != nil, hasSaveIssue: chat.saveIssue != nil,
+                        invalidFields: invalidFields))
                     .accessibilityIdentifier("chat-send")
             }
             .dropDestination(for: WorkflowCanvasTransfer.self) { items, _ in
@@ -381,14 +407,15 @@ struct ChatWorkbenchView: View {
                 Task { await importSharedAssets(items, sessionID: owner) }
                 return !items.isEmpty
             }
-            if let issue {
+            if let issue = issues[session.id] {
                 Text(issue).font(.caption).foregroundStyle(.red).textSelection(.enabled)
             }
-            if let saveIssue = chat.saveIssue, saveIssue != issue {
-                Text(saveIssue).font(.caption).foregroundStyle(.red).textSelection(.enabled)
+            if let saveIssue = chat.saveIssue, saveIssue != issues[session.id] {
+                Text(label("projectSaveIssue", "项目聊天保存失败：") + saveIssue)
+                    .font(.caption).foregroundStyle(.red).textSelection(.enabled)
             }
-            if let error = chat.error, error != issue, error != chat.saveIssue {
-                Text(error).font(.caption).foregroundStyle(.red).textSelection(.enabled)
+            if let globalIssue {
+                Text(globalIssue).font(.caption).foregroundStyle(.red).textSelection(.enabled)
             }
             if chat.selectedPath.last?.role == .user {
                 Text(label("awaitingReply", "所选路径止于用户消息；请点“生成回复”，或选已完成路径。"))
@@ -410,7 +437,7 @@ struct ChatWorkbenchView: View {
             Text(attachmentKind(item.reference.kind)).font(.caption).foregroundStyle(.secondary)
             Button(label("preview", "预览")) { preview = item.reference }
             if removable {
-                Button(label("remove", "移除")) { perform { try chat.removeAttachment(item.id, sessionID: sessionID) } }
+                Button(label("remove", "移除")) { perform(sessionID: sessionID) { try chat.removeAttachment(item.id, sessionID: sessionID) } }
             }
         }.font(.caption).padding(6).background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
     }
@@ -450,22 +477,25 @@ struct ChatWorkbenchView: View {
     private func copy(_ string: String) {
         NSPasteboard.general.clearContents(); NSPasteboard.general.setString(string, forType: .string)
     }
-    private func perform(_ action: () throws -> Void) {
-        do { try action(); issue = nil } catch { issue = error.localizedDescription }
+    private func perform(sessionID: UUID? = nil, clearOnSuccess: Bool = true, _ action: () throws -> Void) {
+        let owner = sessionID ?? chat.state.selectedSessionID
+        do { try action(); if clearOnSuccess { report(nil, for: owner) } }
+        catch { report(error.localizedDescription, for: owner) }
     }
-    private func run(_ action: () async throws -> Void) async {
-        do { try await action(); issue = nil } catch { issue = error.localizedDescription }
+    private func run(sessionID: UUID, _ action: () async throws -> Void) async {
+        do { try await action(); report(nil, for: sessionID) }
+        catch { report(error.localizedDescription, for: sessionID) }
     }
     private func savePreset(_ session: ChatSession) {
         let name = newPresetName.trimmingCharacters(in: .whitespacesAndNewlines)
-        perform { try chat.setPreset(ChatPromptPreset(name: name, prompt: session.systemPrompt)) }
-        if issue == nil { newPresetName = "" }
+        perform(sessionID: session.id) { try chat.setPreset(ChatPromptPreset(name: name, prompt: session.systemPrompt)) }
+        if issues[session.id] == nil { newPresetName = "" }
     }
     private func changeParameter(_ key: String, value: WorkflowScalar, node: WorkflowNode, sessionID: UUID) {
         var copy = node; copy.parameters[key] = value
-        perform { try chat.updateConfiguration(copy, sessionID: sessionID) }
+        perform(sessionID: sessionID) { try chat.updateConfiguration(copy, sessionID: sessionID) }
         let fieldKey = sessionID.uuidString + ":" + key
-        if issue == nil { invalidFields.remove(fieldKey) }
+        if issues[sessionID] == nil { invalidFields.remove(fieldKey) }
         else { invalidFields.insert(fieldKey) }
     }
     private func changeNumeric(field: WorkflowFieldDefinition, raw: String, node: WorkflowNode, sessionID: UUID) {
@@ -474,10 +504,10 @@ struct ChatWorkbenchView: View {
         switch field.kind {
         case .integer:
             if let value = Int(raw) { changeParameter(field.id, value: .integer(value), node: node, sessionID: sessionID) }
-            else { invalidFields.insert(key); issue = label("invalidNumber", "数值未完成或无效；修正后才能发送。") }
+            else { invalidFields.insert(key); report(label("invalidNumber", "数值未完成或无效；修正后才能生成。"), for: sessionID) }
         case .decimal:
             if let value = Double(raw), value.isFinite { changeParameter(field.id, value: .decimal(value), node: node, sessionID: sessionID) }
-            else { invalidFields.insert(key); issue = label("invalidNumber", "数值未完成或无效；修正后才能发送。") }
+            else { invalidFields.insert(key); report(label("invalidNumber", "数值未完成或无效；修正后才能生成。"), for: sessionID) }
         default: break
         }
     }
@@ -507,16 +537,19 @@ struct ChatWorkbenchView: View {
             } catch { failures.append(url.lastPathComponent + ": " + error.localizedDescription) }
             if scoped { url.stopAccessingSecurityScopedResource() }
         }
-        issue = failures.isEmpty ? nil : failures.joined(separator: "\n")
+        report(failures.isEmpty ? nil : failures.joined(separator: "\n"), for: sessionID)
     }
     private func importSharedAssets(_ items: [WorkflowCanvasTransfer], sessionID: UUID) async {
+        let owner = chat, store = chat.store
         do {
-            let manifest = await chat.store.snapshot()
-            let state = try await chat.store.workflowState()
+            let manifest = await store.snapshot()
+            let state = try await store.workflowState()
+            guard owner === chat, store === chat.store else { return }
             guard let archive = state.archive else { throw WorkflowIssue(state.readOnlyReason ?? "素材记录不可读。") }
             var failures: [String] = []
             for item in items {
-                guard chat.isLoaded, chat.state.sessions.contains(where: { $0.id == sessionID }) else { break }
+                guard owner === chat, store === chat.store, chat.isLoaded,
+                      chat.state.sessions.contains(where: { $0.id == sessionID }) else { break }
                 let projectID: UUID, instanceID: UUID?, assetID: UUID
                 switch item {
                 case .asset(let project, let asset): (projectID, instanceID, assetID) = (project, nil, asset)
@@ -537,16 +570,17 @@ struct ChatWorkbenchView: View {
                     failures.append(String(assetID.uuidString.prefix(8)) + ": " + error.localizedDescription)
                 }
             }
-            issue = failures.isEmpty ? nil : failures.joined(separator: "\n")
-        } catch { issue = error.localizedDescription }
+            report(failures.isEmpty ? nil : failures.joined(separator: "\n"), for: sessionID)
+        } catch { report(error.localizedDescription, for: sessionID) }
     }
     private func export(sessionID: UUID, markdown: Bool) async {
+        let owner = chat, store = chat.store
         let value: String
         do { value = try chat.exportSelectedPath(sessionID: sessionID, markdown: markdown) }
-        catch { issue = error.localizedDescription; return }
-        let store = chat.store
+        catch { report(error.localizedDescription, for: sessionID); return }
         let panel = NSOpenPanel(); panel.canChooseDirectories = true; panel.canChooseFiles = false
-        guard await panel.begin() == .OK, let directory = panel.url else { return }
+        guard await panel.begin() == .OK, let directory = panel.url,
+              owner === chat, store === chat.store else { return }
         let scoped = directory.startAccessingSecurityScopedResource()
         defer { if scoped { directory.stopAccessingSecurityScopedResource() } }
         do {
@@ -556,21 +590,23 @@ struct ChatWorkbenchView: View {
             onAssetsChanged()
             _ = try await store.exportWorkflowAssets([reference], name: markdown ? "D-chat-markdown" : "D-chat-text",
                                                       exportID: UUID(), directory: directory)
-            issue = nil
-        } catch { issue = error.localizedDescription }
+            report(nil, for: sessionID)
+        } catch { report(error.localizedDescription, for: sessionID) }
     }
     private func saveFinal(_ messageID: UUID, sessionID: UUID, useInWorkflow: Bool) async {
+        let owner = chat
         do {
-            let asset = try await chat.saveAssistantFinal(messageID, sessionID: sessionID)
+            let asset = try await owner.saveAssistantFinal(messageID, sessionID: sessionID)
+            guard owner === chat else { return }
             onAssetsChanged()
             if useInWorkflow { onSavedAsset(asset) }
-            issue = nil
-        } catch { issue = error.localizedDescription }
+            report(nil, for: sessionID)
+        } catch { report(error.localizedDescription, for: sessionID) }
     }
 
     private func editSheet(_ edit: ChatEdit) -> some View {
         ChatEditForm(edit: edit, onCancel: { editing = nil }, onCommit: { text in
-            perform {
+            perform(sessionID: edit.sessionID) {
                 switch edit.kind {
                 case .rename: try chat.rename(edit.sessionID, title: text)
                 case .message:
@@ -578,7 +614,7 @@ struct ChatWorkbenchView: View {
                     _ = try chat.editUserMessage(id, text: text, sessionID: edit.sessionID)
                 }
             }
-            if issue == nil { editing = nil }
+            if issues[edit.sessionID] == nil { editing = nil }
         })
     }
 }
