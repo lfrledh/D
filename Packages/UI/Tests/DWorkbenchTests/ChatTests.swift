@@ -168,6 +168,66 @@ struct ChatTests {
         try await store.close()
     }
 
+    @Test func readsAndBackupDoNotRenewStaleChatWriteAuthority() async throws {
+        let (store, _, chat) = try await fixture()
+        let id = try chat.newSession(); try await chat.flush()
+        let sidecar = store.rootURL.appendingPathComponent("quick-chat.json")
+        var external = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: sidecar)) as? [String: Any])
+        var sessions = try #require(external["sessions"] as? [[String: Any]])
+        sessions[0]["title"] = "external title B"
+        external["sessions"] = sessions
+        let bytes = try JSONSerialization.data(withJSONObject: external, options: [.sortedKeys])
+        try bytes.write(to: sidecar, options: .atomic)
+        #expect((try await store.chatState()).sessions[0].title == "external title B")
+        _ = try await store.backupPlan()
+        try chat.rename(id, title: "stale controller edit")
+        await #expect(throws: ProjectStoreError.externalModification) { try await chat.flush() }
+        #expect(try Data(contentsOf: sidecar) == bytes)
+        try await store.close()
+    }
+
+    @Test func repeatedMediaOccurrencesKeepDistinctOrderedPortItems() async throws {
+        let (store, engine, chat) = try await fixture()
+        let id = try chat.newSession(); try configure(chat, session: id)
+        let image = try await store.publishWorkflowAsset(data: imageData(), mediaType: "image/png",
+                                                         metadata: .init(width: 2, height: 2), name: "repeat.png",
+                                                         operationID: "d.asset.import").record.reference
+        _ = try await chat.addAttachment(image, name: "repeat.png", sessionID: id)
+        _ = try await chat.addAttachment(image, name: "repeat again.png", sessionID: id)
+        try chat.updateDraft("first", sessionID: id)
+        try await chat.send(sessionID: id); await chat.waitForCompletion()
+        let first = try #require(chat.state.sessions.first?.attempts.first)
+        if case .list(_, let items)? = first.inputs["images"]?.datum {
+            #expect(items.count == 2)
+            #expect(Set(items.map(\.id)).count == 2)
+            #expect(items.map(\.value.assetReferences) == [[image], [image]])
+        } else { Issue.record("Expected first image list") }
+        _ = try await chat.addAttachment(image, name: "repeat next turn.png", sessionID: id)
+        try chat.updateDraft("second", sessionID: id)
+        try await chat.send(sessionID: id); await chat.waitForCompletion()
+        let second = try #require(chat.state.sessions.first?.attempts.last)
+        if case .list(_, let items)? = second.inputs["images"]?.datum {
+            #expect(items.count == 3)
+            #expect(Set(items.map(\.id)).count == 3)
+            #expect(items.map(\.value.assetReferences) == [[image], [image], [image]])
+        } else { Issue.record("Expected second image list") }
+        let messages = try #require(JSONSerialization.jsonObject(with: Data(second.messagesJSON.utf8)) as? [[String: Any]])
+        let imageIndexes = messages.flatMap { message in
+            (message["parts"] as? [[String: Any]] ?? []).compactMap { part -> Int? in
+                guard part["type"] as? String == "image" else { return nil }
+                return part["index"] as? Int
+            }
+        }
+        #expect(imageIndexes == [0, 1, 2])
+        let requests = await engine.requests
+        #expect(requests.count == 2)
+        if requests.count == 2, case .text(let body) = requests[1].input {
+            #expect(body.allImages.count == 3)
+            #expect(body.resolvedMessages.count == 3)
+        }
+        try await chat.flush(); try await store.close()
+    }
+
     @Test func frozenTextAndImageAttachmentsSurviveIndependentBackupRestore() async throws {
         let (store, engine, chat) = try await fixture()
         let id = try chat.newSession(); try configure(chat, session: id)
@@ -251,6 +311,56 @@ struct ChatTests {
         #expect(chat.pendingSaveAttemptID == nil)
         #expect(chat.state.sessions.first?.attempts.first?.status == .completed)
         #expect(await engine.requests.count == 1)
+        try await chat.flush(); try await store.close()
+    }
+
+    @Test func terminalRetryFailureClearsPendingAndKeepsEvidence() async throws {
+        let (store, engine, chat) = try await fixture()
+        let id = try chat.newSession(); try configure(chat, session: id)
+        let obstruction = store.rootURL.appendingPathComponent("WorkflowAssets")
+        try Data("fixture obstruction".utf8).write(to: obstruction)
+        try chat.updateDraft("retain preview", sessionID: id)
+        try await chat.send(sessionID: id); await chat.waitForCompletion()
+        #expect(chat.pendingSaveAttemptID != nil)
+        let preview = try #require(chat.state.sessions.first?.attempts.first?.rawText)
+        #expect(!preview.isEmpty)
+        try FileManager.default.removeItem(at: obstruction)
+        let manifest = store.rootURL.appendingPathComponent(ProjectStore.manifestFilename)
+        var object = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: manifest)) as? [String: Any])
+        object["name"] = "external project edit"
+        let externalBytes = try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
+        try externalBytes.write(to: manifest, options: .atomic)
+        await chat.retrySave()
+        #expect(chat.pendingSaveAttemptID == nil)
+        #expect(chat.state.sessions.first?.attempts.first?.status == .failed)
+        #expect(chat.state.sessions.first?.attempts.first?.rawText == preview)
+        #expect(chat.state.sessions.first?.attempts.first?.issue == ProjectStoreError.externalModification.localizedDescription)
+        #expect(chat.error == ProjectStoreError.externalModification.localizedDescription)
+        await chat.retrySave()
+        #expect(chat.error == ProjectStoreError.externalModification.localizedDescription)
+        #expect(await engine.requests.count == 1)
+        #expect(try Data(contentsOf: manifest) == externalBytes)
+        try await chat.prepareForTermination()
+        try await store.close(preserveExternalChanges: true)
+    }
+
+    @Test func forkPartialCannotBorrowCompletedOriginAttempt() async throws {
+        let (store, engine, chat) = try await fixture()
+        let origin = try chat.newSession(); try configure(chat, session: origin)
+        let obstruction = store.rootURL.appendingPathComponent("WorkflowAssets")
+        try Data("fixture obstruction".utf8).write(to: obstruction)
+        try chat.updateDraft("origin", sessionID: origin)
+        try await chat.send(sessionID: origin); await chat.waitForCompletion()
+        #expect(chat.state.sessions.first?.attempts.first?.status == .partial)
+        let fork = try chat.forkSession(origin)
+        try FileManager.default.removeItem(at: obstruction)
+        await chat.retrySave()
+        #expect(chat.state.sessions.first?.attempts.first?.status == .completed)
+        #expect(chat.state.sessions.last?.attempts.first?.status == .partial)
+        try chat.updateDraft("must reject partial history", sessionID: fork)
+        await #expect(throws: (any Error).self) { try await chat.send(sessionID: fork) }
+        #expect(await engine.requests.count == 1)
+        #expect(chat.state.sessions.last?.attempts.first?.status == .partial)
         try await chat.flush(); try await store.close()
     }
 

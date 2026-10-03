@@ -186,7 +186,7 @@ import Observation
         let toolCalls: [TextToolCall]?
     }
     private struct FormPart: Encodable { let type: String; let text: String?; let index: Int? }
-    private func prepared(_ path: [ChatMessage], prompt: String, attachments: [ChatAttachment], system: String,
+    private func prepared(_ path: [ChatMessage], attempts: [ChatAttempt], prompt: String, attachments: [ChatAttachment], system: String,
                           node source: WorkflowNode) async throws -> (WorkflowNode, String, [String: WorkflowValue]) {
         var messages: [FormMessage] = []
         var images: [WorkflowAssetReference] = [], videos: [WorkflowAssetReference] = []
@@ -211,7 +211,7 @@ import Observation
                 parts.append(.init(type: "text", text: entry.text, index: nil))
             } else {
                 guard let attemptID = entry.attemptID,
-                      let attempt = state.sessions.flatMap(\.attempts).first(where: { $0.id == attemptID }),
+                      let attempt = attempts.first(where: { $0.id == attemptID }),
                       attempt.status == .completed, let response = attempt.response,
                       response.toolCalls.isEmpty, response.finishReason != .toolCalls,
                       response.finishReason != .incomplete,
@@ -235,7 +235,7 @@ import Observation
         try WorkflowRegistry.standard.validate(node)
         func port(_ refs: [WorkflowAssetReference], kind: WorkflowDataKind) -> WorkflowValue? {
             guard !refs.isEmpty else { return nil }
-            return .data(.list(element: .asset(kind), items: refs.map { .init(id: $0.version.uuidString, value: .asset($0)) }))
+            return .data(.list(element: .asset(kind), items: refs.map { .init(id: UUID().uuidString, value: .asset($0)) }))
         }
         var inputs: [String: WorkflowValue] = [:]
         if let value = port(images, kind: .image) { inputs["images"] = value }
@@ -256,7 +256,7 @@ import Observation
               !session.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw WorkflowIssue("请填写消息并选择模型。") }
         let path = try session.path(to: session.selectedLeafID)
         guard path.last?.role != .user else { throw WorkflowIssue("所选路径已有待回复用户消息，请重试该消息或选择已完成路径。") }
-        let prepared = try await prepared(path, prompt: session.draft, attachments: session.attachments,
+        let prepared = try await prepared(path, attempts: session.attempts, prompt: session.draft, attachments: session.attachments,
                                           system: session.systemPrompt, node: node)
         let user = ChatMessage(parentID: session.selectedLeafID, role: .user, text: session.draft, attachments: session.attachments)
         try await launch(sessionID: sessionID, user: user, prepared: prepared,
@@ -269,7 +269,7 @@ import Observation
         guard !session.archived, let node = session.configuration,
               let user = session.messages.first(where: { $0.id == userMessageID && $0.role == .user }) else { throw WorkflowIssue("需要已有用户消息和模型。") }
         let prior = try session.path(to: user.parentID)
-        let prepared = try await prepared(prior, prompt: user.text, attachments: user.attachments,
+        let prepared = try await prepared(prior, attempts: session.attempts, prompt: user.text, attachments: user.attachments,
                                           system: session.systemPrompt, node: node)
         try await launch(sessionID: sessionID, user: user, prepared: prepared,
                          systemPrompt: session.systemPrompt, expectedLeafID: session.selectedLeafID, clearDraft: false)
@@ -363,20 +363,47 @@ import Observation
     }
     public func waitForCompletion() async { await runTask?.value }
     public func retrySave() async {
-        guard !isRunning else { return }
+        guard !isRunning, pendingSaveAttemptID != nil || saveIssue != nil else { return }
+        let hadPendingPublication = pendingSaveAttemptID != nil
         do {
-            if let id = pendingSaveAttemptID,
-               let session = state.sessions.first(where: { $0.attempts.contains(where: { $0.id == id }) }),
-               let attempt = session.attempts.first(where: { $0.id == id }), let services {
+            if let id = pendingSaveAttemptID {
+                guard let session = state.sessions.first(where: { $0.attempts.contains(where: { $0.id == id }) }),
+                      let attempt = session.attempts.first(where: { $0.id == id }), let services else {
+                    throw WorkflowIssue("待保存聊天结果已失去原始保存上下文。")
+                }
                 isRunning = true; defer { isRunning = false }
                 let values = try await services.retryQuickPublications(.init(node: attempt.node, stepID: id, inputs: attempt.inputs))
-                if let raw = values["raw"]?.asset ?? values["output"]?.asset {
-                    try await finishAttempt(sessionID: session.id, attemptID: id, reference: raw)
+                guard let raw = values["raw"]?.asset ?? values["output"]?.asset else {
+                    throw WorkflowIssue("保存恢复未返回已发布文字结果。")
                 }
+                try await finishAttempt(sessionID: session.id, attemptID: id, reference: raw)
                 pendingSaveAttemptID = nil; self.services = nil
             }
-            saveIssue = nil; try await flush(); error = nil
-        } catch { saveIssue = error.localizedDescription; self.error = error.localizedDescription }
+            saveIssue = nil; try await flush()
+            if hadPendingPublication { error = nil }
+        } catch {
+            var terminalSaveFailure = false
+            if let id = pendingSaveAttemptID, services?.hasPendingSaves != true {
+                terminalSaveFailure = true
+                if let si = state.sessions.firstIndex(where: { $0.attempts.contains(where: { $0.id == id }) }),
+                   let ai = state.sessions[si].attempts.firstIndex(where: { $0.id == id }) {
+                    let refs = (try? await store.workflowAssets(forStepID: id)) ?? []
+                    if let raw = refs.first, let response = try? await services?.readLanguageResponse(raw) {
+                        state.sessions[si].attempts[ai].output = raw
+                        state.sessions[si].attempts[ai].response = response
+                        state.sessions[si].attempts[ai].rawText = response.rawText
+                    }
+                    state.sessions[si].attempts[ai].status = .failed
+                    state.sessions[si].attempts[ai].issue = error.localizedDescription
+                    changed()
+                }
+                pendingSaveAttemptID = nil; services = nil
+                do { try await flush(); saveIssue = nil }
+                catch { saveIssue = error.localizedDescription }
+            }
+            if !terminalSaveFailure { saveIssue = error.localizedDescription }
+            self.error = error.localizedDescription
+        }
     }
     public func prepareForTermination() async throws {
         guard isLoaded else { return }
