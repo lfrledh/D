@@ -1004,6 +1004,10 @@
     "model.downloadCredential.choose": "选择文件…",
     "model.downloadCredential.remove": "移除连接",
     "workflow.operation.d.model.qwen35-9b.field.loadingStrategy": "加载方式（精度不变）",
-    "workflow.operation.d.model.qwen38-27b.field.loadingStrategy": "加载方式（精度不变）"
+    "workflow.operation.d.model.qwen38-27b.field.loadingStrategy": "加载方式（精度不变）",
+    "quick.category.text": "文字",
+    "quick.category.image": "图像",
+    "quick.category.video": "视频",
+    "quick.category.audio": "音频"
   }
 }

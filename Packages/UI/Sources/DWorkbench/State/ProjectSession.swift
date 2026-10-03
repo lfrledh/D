@@ -22,6 +22,7 @@ public final class ProjectSession {
     public private(set) var projectURL: URL?
     /// Quick records restored with a named project keep that project instance as owner.
     public private(set) var projectQuick: QuickGenerationController?
+    public private(set) var chat: ChatController?
     public private(set) var modelName: String?
     public private(set) var selectedModelID: ModelID?
     public private(set) var imageProfile: ImageModelProfile = .flux2Klein
@@ -374,7 +375,7 @@ public final class ProjectSession {
     @ObservationIgnored private var textModelLease: LocationAccess.Lease?
     @ObservationIgnored private var textWork: Task<Void, Never>?
     @ObservationIgnored private var textContextID = UUID()
-    public var isBusy: Bool { projectQuick?.isRunning == true || workflow?.isRunning == true || workflow?.isSaving == true || !activeJobIDs.isEmpty || isTextWorking || textSources?.isSaving == true || audio?.isBusy == true }
+    public var isBusy: Bool { chat?.isRunning == true || projectQuick?.isRunning == true || workflow?.isRunning == true || workflow?.isSaving == true || !activeJobIDs.isEmpty || isTextWorking || textSources?.isSaving == true || audio?.isBusy == true }
     public var canGenerate: Bool {
         creatorMode == .image && manifest != nil && activeDocument?.kind == .image && !isTextWorking && ((selectedModelID != nil && selectedModelReady) || modelLease != nil)
         && !isChangingProject && !showingAllArtworks && !closePending && pendingSaves.isEmpty
@@ -683,7 +684,7 @@ public final class ProjectSession {
         // Workflow services retain the Store/runtime that owns their saved and pending
         // results. Replacing only the audio controller would leave a usable-looking
         // workflow attached to closed file descriptors and an obsolete runtime.
-        guard workflow == nil, workflowCapture == nil, projectQuick == nil else {
+        guard workflow == nil, workflowCapture == nil, projectQuick == nil, chat == nil else {
             await access.release(lease)
             errorMessage = "流程工作台仍持有当前项目。请先将项目移回原位置，完成录音绑定并保存、关闭项目，再移动后重新打开；现有图稿与原声均保留。"
             return
@@ -766,6 +767,7 @@ public final class ProjectSession {
         text = nil
         textSources = nil
         projectQuick = nil
+        chat = nil
         modelReadinessGeneration = UUID()
         explicitModelChoices = []
         explicitModelReadiness = [:]
@@ -781,6 +783,11 @@ public final class ProjectSession {
             do { manifest = try await candidate.recoverSharedRuntimeArtifacts(from: owner) }
             catch { errorMessage = "共享计算产物尚未恢复，原文件保留：" + error.localizedDescription }
         }
+        let restoredChat = makeChatController(store: candidate)
+        await restoredChat.load()
+        if isInternalWorkspace || restoredChat.error != nil || !restoredChat.state.sessions.isEmpty {
+            chat = restoredChat
+        }
         if !isInternalWorkspace {
             // Absence remains absence. A rejected sidecar stays visible/read-only rather
             // than becoming an empty editable replacement or a global Quick workspace.
@@ -794,7 +801,8 @@ public final class ProjectSession {
                 return try self.makeExplicitOperationServices(allowDrainingQuick: self.projectQuick?.isRunning == true)
             }
             await restoredQuick.load()
-            if restoredQuick.error != nil || !restoredQuick.state.drafts.isEmpty || !restoredQuick.state.runs.isEmpty {
+            if restoredQuick.error != nil || !restoredQuick.state.drafts.isEmpty || !restoredQuick.state.runs.isEmpty
+                || restoredChat.error != nil || !restoredChat.state.sessions.isEmpty {
                 projectQuick = restoredQuick
             }
         }
@@ -868,6 +876,36 @@ public final class ProjectSession {
         let lease = try await access.acquire(selected: candidate.rootURL)
         do { try await activate(candidate, lease: lease) }
         catch { await access.release(lease); throw error }
+    }
+
+    private func makeChatController(store candidate: ProjectStore) -> ChatController {
+        ChatController(store: candidate, allowsSubmission: { [weak self] in
+            guard let self else { return false }
+            return self.store === candidate && !self.closePending && !self.isChangingProject
+        }) { [weak self] in
+            guard let self, self.store === candidate else { throw WorkflowIssue("聊天所属项目已关闭或切换。") }
+            return try self.makeExplicitOperationServices(allowDrainingQuick: self.chat?.isRunning == true)
+        }
+    }
+
+    public func enableProjectQuick() async {
+        guard !isInternalWorkspace, projectQuick == nil, let candidate = store, !isChangingProject, !closePending else { return }
+        let controller = QuickGenerationController(store: candidate, allowsSubmission: { [weak self] in
+            guard let self else { return false }
+            return self.store === candidate && !self.closePending && !self.isChangingProject
+        }) { [weak self] in
+            guard let self, self.store === candidate else { throw WorkflowIssue("快速草稿所属项目已关闭或切换。") }
+            return try self.makeExplicitOperationServices(allowDrainingQuick: self.projectQuick?.isRunning == true)
+        }
+        await controller.load()
+        guard store === candidate, !isChangingProject, !closePending else { return }
+        projectQuick = controller
+        if chat == nil {
+            let restored = makeChatController(store: candidate)
+            await restored.load()
+            guard store === candidate, !isChangingProject, !closePending else { return }
+            chat = restored
+        }
     }
 
     public var currentStore: ProjectStore? { store }
@@ -2422,6 +2460,10 @@ public final class ProjectSession {
             guard projectQuick.store === captured else { throw WorkflowIssue("快速草稿所属项目已改变。") }
             try await projectQuick.flush()
         }
+        if let chat {
+            guard chat.store === captured else { throw WorkflowIssue("聊天所属项目已改变。") }
+            try await chat.flush()
+        }
         try Task.checkCancellation()
         guard store === captured, manifest?.effectiveInstanceID == instanceID,
               !isChangingProject, !closePending else { throw WorkflowIssue("项目已切换；备份未创建。") }
@@ -2434,12 +2476,13 @@ public final class ProjectSession {
     public func prepareInternalForTermination() async -> Bool {
         guard isInternalWorkspace, !isRegisteringTextModel, !isRegisteringAudioModel,
               !isRegisteringVideoModel, !isChangingProject, !closePending,
-              workflow?.hasPendingSaves != true, text?.hasPendingCandidate != true else { return false }
+              workflow?.hasPendingSaves != true, chat?.pendingSaveAttemptID == nil, text?.hasPendingCandidate != true else { return false }
         closePending = true; isChangingProject = true
         defer { closePending = false; isChangingProject = false; workflow?.cancelClosing(); audio?.resumeAdmissions() }
         guard await audio?.prepareForNavigation() != false, await drainForClose() else { return false }
         do {
             try await workflow?.prepareForClose()
+            try await chat?.prepareForTermination()
             if let store {
                 try await flushDraft(to: store)
                 for (id, outcome) in pendingSaves {
@@ -2454,6 +2497,7 @@ public final class ProjectSession {
     /// Used by project switching and native window/application close delegates.
     public func requestClose(decision: ProjectCloseDecision? = nil) async -> Bool {
         if isRegisteringTextModel || isRegisteringAudioModel || isRegisteringVideoModel { return false }
+        if chat?.pendingSaveAttemptID != nil { errorMessage = "聊天仍有待保存结果，请恢复保存后关闭。"; return false }
         if projectQuick?.pendingSaveRunID != nil { errorMessage = "本项目快速生成仍有待保存结果，请恢复保存后关闭。"; return false }
         if workflow?.hasPendingSaves == true { errorMessage = "流程仍有待保存结果，请恢复保存后关闭。"; return false }
         if text?.hasPendingCandidate == true {
@@ -2479,6 +2523,7 @@ public final class ProjectSession {
             if selected == .cancel {
                 await workflow?.cancel()
                 await projectQuick?.cancel()
+                await chat?.cancel()
                 await cancelTextRewrite()
                 for id in activeJobIDs { await cancel(id) }
             }
@@ -2499,6 +2544,7 @@ public final class ProjectSession {
         }
         await workflow?.cancel()
         await projectQuick?.cancel()
+        await chat?.cancel()
         await cancelTextRewrite()
         for id in activeJobIDs { await cancel(id) }
         while isBusy { try? await Task.sleep(for: .milliseconds(100)) }
@@ -2519,6 +2565,7 @@ public final class ProjectSession {
         do {
             try await workflow?.prepareForClose()
             try await projectQuick?.prepareForTermination()
+            try await chat?.prepareForTermination()
             try await flushDraft(to: store)
             for (id, outcome) in pendingSaves {
                 try await persist(id: id, outcome: outcome, store: store)
@@ -2560,6 +2607,7 @@ public final class ProjectSession {
             audio = nil
             self.store = nil
             projectQuick = nil
+            chat = nil
             modelReadinessGeneration = UUID()
             explicitModelChoices = []
             explicitModelReadiness = [:]

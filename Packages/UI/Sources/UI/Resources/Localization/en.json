@@ -1004,6 +1004,10 @@
     "model.downloadCredential.choose": "Choose file…",
     "model.downloadCredential.remove": "Disconnect",
     "workflow.operation.d.model.qwen35-9b.field.loadingStrategy": "Loading strategy (precision unchanged)",
-    "workflow.operation.d.model.qwen38-27b.field.loadingStrategy": "Loading strategy (precision unchanged)"
+    "workflow.operation.d.model.qwen38-27b.field.loadingStrategy": "Loading strategy (precision unchanged)",
+    "quick.category.text": "Text",
+    "quick.category.image": "Image",
+    "quick.category.video": "Video",
+    "quick.category.audio": "Audio"
   }
 }
