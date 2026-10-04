@@ -693,6 +693,66 @@ struct ChatTests {
         try await store.close(); try await ownerStore.close()
     }
 
+    @Test func terminalNoticeIsDurableLengthAwareAndHistoryLoadIsSilent() async throws {
+        let (store, engine, chat) = try await fixture()
+        var notices: [ChatAttempt] = []; chat.onPersistedTerminal = { notices.append($0) }
+        let id = try chat.newSession(); try configure(chat, session: id)
+        await engine.setFinishReason(.length)
+        try await chat.sendAfterDraft("bounded answer", sessionID: id)
+        #expect(notices.count == 1 && notices[0].response?.finishReason == .length)
+        #expect(chat.phase.contains("Length limit"))
+        #expect(try await store.chatState().sessions.first?.attempts.first == notices.first)
+        try await chat.flush(); await chat.retrySave()
+        #expect(notices.count == 1)
+        let reopened = ChatController(store: store) { throw WorkflowIssue("No new request") }
+        reopened.onPersistedTerminal = { notices.append($0) }; await reopened.load()
+        #expect(notices.count == 1)
+        #expect(try await chat.runFeedback(for: notices[0]).generationTokens == nil)
+        #expect(await engine.requests.count == 1)
+        try await store.close()
+    }
+
+    @Test func pastedPNGUsesRealStoreValidationAndRejectsInvalidWithoutDraftChange() async throws {
+        let (store, engine, chat) = try await fixture()
+        let sessionID = try chat.newSession()
+        try chat.updateDraft("中文👩🏽‍💻 unchanged", sessionID: sessionID)
+        let png = Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aT1sAAAAASUVORK5CYII=")!
+        _ = try await chat.addPastedPNG(png, sessionID: sessionID)
+        let attachment = try #require(chat.state.sessions.first?.attachments.first)
+        #expect(try await store.workflowData(attachment.reference) == png)
+        #expect(attachment.reference.kind == .image)
+        await #expect(throws: (any Error).self) { try await chat.addPastedPNG(Data("invalid".utf8), sessionID: sessionID) }
+        #expect(chat.state.sessions.first?.draft == "中文👩🏽‍💻 unchanged")
+        #expect(chat.state.sessions.first?.attachments.count == 1)
+        #expect(await engine.requests.isEmpty)
+        try await chat.flush(); try await store.close()
+    }
+
+    @Test func explicitSharedAttachmentsCopyOrderAndProtectSourceAndFrozenRequests() async throws {
+        let (store, engine, chat) = try await fixture()
+        let id = try chat.newSession(); try configure(chat, session: id)
+        let (source, _, sourceChat) = try await fixture()
+        let ref = try await source.publishWorkflowAsset(data: Data("source unchanged".utf8), mediaType: "text/plain", name: "Shared", operationID: "fixture").record.reference
+        let original = try await source.workflowData(ref)
+        let shared = try await chat.addSharedAttachment(ref, from: source, name: "Shared", sessionID: id)
+        let local = try await store.publishWorkflowAsset(data: Data("local".utf8), mediaType: "text/plain", name: "Local", operationID: "fixture").record.reference
+        let second = try await chat.addAttachment(local, name: "Local", sessionID: id)
+        try chat.moveAttachment(second, by: -1, sessionID: id)
+        #expect(chat.selectedSession?.attachments.map(\.id) == [second, shared])
+        let snapshot = try #require(chat.selectedSession)
+        #expect(snapshot.attachments[1].reference.projectID == (await store.snapshot()).id)
+        #expect(try await source.workflowData(ref) == original)
+        try chat.updateDraft("Question", sessionID: id)
+        try await chat.send(sessionID: id); await chat.waitForCompletion()
+        let frozen = try #require(chat.selectedSession?.messages.first { $0.role == .user })
+        #expect(frozen.attachments.map(\.id) == [second, shared])
+        let requests = await engine.requests
+        #expect(requests.count == 1)
+        await #expect(throws: (any Error).self) { _ = try await chat.addSharedAttachment(ref, from: source, name: "bad", sessionID: UUID()) }
+        #expect(chat.selectedSession?.messages.first { $0.role == .user } == frozen)
+        try await chat.prepareForBackup(); try await sourceChat.prepareForBackup()
+        try await store.close(); try await source.close()
+    }
     private func fixture(ownsPersonalMemory: Bool = false, personalMemoryProvider: @escaping @MainActor () -> ChatController? = { nil }, memoryCount: Int = 0, preview: (@Sendable (ModelReference, TextRequest) async throws -> TextTemplatePreview)? = nil) async throws -> (ProjectStore, ChatFixtureEngine, ChatController) {
         let root = URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory())
             .appendingPathComponent("Chat-" + UUID().uuidString)
@@ -1244,6 +1304,7 @@ struct ChatTests {
 
     @Test func failedAssetPublicationRetriesWithoutNewInference() async throws {
         let (store, engine, chat) = try await fixture()
+        var notices: [ChatAttempt] = []; chat.onPersistedTerminal = { notices.append($0) }
         let id = try chat.newSession(); try configure(chat, session: id)
         // A real owned directory produces retryable mkdir EACCES. A regular file
         // at this path is unsafePath and must remain a terminal protection failure.
@@ -1256,6 +1317,7 @@ struct ChatTests {
         try chat.updateDraft("save once", sessionID: id)
         try await chat.send(sessionID: id); await chat.waitForCompletion()
         try #require(chat.pendingSaveAttemptID != nil)
+        #expect(notices.isEmpty)
         #expect(chat.error == WorkflowSaveFailure(reason: ProjectStoreError.io(String(cString: strerror(EACCES))).localizedDescription).localizedDescription)
         await #expect(throws: (any Error).self) { try await chat.prepareForBackup() }
         #expect(await engine.requests.count == 1)
@@ -1264,7 +1326,10 @@ struct ChatTests {
         #expect(chat.pendingSaveAttemptID == nil)
         #expect(chat.state.sessions.first?.attempts.first?.status == .completed)
         #expect(await engine.requests.count == 1)
-        try await chat.flush(); try await store.close()
+        #expect(notices.count == 1 && notices.first?.status == .completed)
+        await chat.retrySave(); try await chat.flush()
+        #expect(notices.count == 1)
+        try await store.close()
     }
 
     @Test func terminalRetryFailureClearsPendingAndKeepsEvidence() async throws {

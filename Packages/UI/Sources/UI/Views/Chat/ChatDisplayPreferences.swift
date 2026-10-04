@@ -16,6 +16,7 @@ struct ChatDisplayPreferences: Codable, Equatable {
     static let defaultTextPointSize = 14
     static let defaultTranscriptWidth = 760
 
+    var endSound: Bool? = nil
     var theme: Theme = .system
     var textPointSize = ChatDisplayPreferences.defaultTextPointSize
     var transcriptWidth = ChatDisplayPreferences.defaultTranscriptWidth

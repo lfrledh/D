@@ -30,6 +30,9 @@ enum ChatMarkdownPresentation {
         let heading = MarkdownRenderConfig.defaultHeadingStyle
         let inline = MarkdownRenderConfig.defaultInlineStyle
         let codeBlock = CodeBlockConfig.default
+        var block = CodeBlockConfig(theme: codeBlock.theme, backgroundColor: codeBlock.backgroundColor,
+            foregroundColor: codeBlock.foregroundColor, codeTextFonts: code, chromeTextFonts: fonts(max(12, size - 2)))
+        block.wrapsLines = preferences.wrapsCode
         return MarkdownRenderConfig(
             blockQuoteStyle: .init(textFonts: base, textColor: quote.textColor),
             headingStyle: .init(h1Font: fonts(size * 28 / 17), h2Font: fonts(size * 24 / 17),
@@ -48,9 +51,7 @@ enum ChatMarkdownPresentation {
                                codeTextFont: code.normal, codeTextColor: inline.codeTextColor,
                                codeBackgroundColor: inline.codeBackgroundColor,
                                codeUnderlineColor: inline.codeUnderlineColor),
-            codeBlockConfig: .init(theme: codeBlock.theme, backgroundColor: codeBlock.backgroundColor,
-                                   foregroundColor: codeBlock.foregroundColor,
-                                   codeTextFonts: code, chromeTextFonts: fonts(max(12, size - 2))),
+            codeBlockConfig: block,
             imageConfig: .disabled)
     }
 

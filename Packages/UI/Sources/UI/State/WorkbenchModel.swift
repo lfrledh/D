@@ -9,6 +9,7 @@ import UniformTypeIdentifiers
 /// every task and persistence transaction independently of this facade or any SwiftUI view.
 @MainActor @Observable
 public final class WorkbenchModel {
+    var chatDisplaySettings = ChatDisplayPreferencesState()
     public let projectSession: ProjectSession
     public let audioRecordingEnabled: Bool
     private let audioPanels: any AudioWorkbenchPanelProviding
@@ -465,12 +466,14 @@ public final class WorkbenchModel {
 
     public init(sessionFactory: @escaping @Sendable (URL) async throws -> WorkbenchSession,
                 settings: UserDefaults = .standard, modelLibrary: ModelLibrary? = nil,
+                displaySettingsOwner: WorkbenchModel? = nil,
                 audioEnabled: Bool = false, audioRecordingEnabled: Bool = false,
                 audioTransport: AudioTransport? = nil,
                 textSourcesEnabled: Bool = true,
                 audioPanels: any AudioWorkbenchPanelProviding = NativeAudioWorkbenchPanels()) {
         self.audioRecordingEnabled = audioRecordingEnabled
         self.audioPanels = audioPanels
+        chatDisplaySettings = displaySettingsOwner?.chatDisplaySettings ?? ChatDisplayPreferencesState(settings: settings)
         projectSession = ProjectSession(sessionFactory: sessionFactory, settings: settings,
                                         modelLibrary: modelLibrary, audioEnabled: audioEnabled,
                                         audioRecordingEnabled: audioRecordingEnabled,
@@ -485,6 +488,7 @@ public final class WorkbenchModel {
             .appendingPathComponent("D/TemporaryChats", isDirectory: true)
         let child = try await projectSession.startTemporaryChat(in: cache)
         temporaryChatModel = WorkbenchModel(projectSession: child, audioRecordingEnabled: audioRecordingEnabled)
+        temporaryChatModel?.chatDisplaySettings = chatDisplaySettings
     }
     public func endTemporaryChat() async throws {
         try await projectSession.endTemporaryChat(); temporaryChatModel = nil

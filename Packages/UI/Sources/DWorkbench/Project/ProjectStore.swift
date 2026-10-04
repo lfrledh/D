@@ -3656,6 +3656,22 @@ extension ProjectStore {
             assetID: id, checkpoint: nil, verifiedVideo: metadata, externalLocation: placement)
     }
 
+    /// Explicit clipboard snapshot, using the same image validation/publication as file import.
+    public func importWorkflowPNG(_ data: Data, name: String) throws -> WorkflowPublishedAsset {
+        guard data.count <= 64 * 1_024 * 1_024,
+              let image = CGImageSourceCreateWithData(data as CFData, nil),
+              (CGImageSourceGetType(image) as String?) == "public.png",
+              let props = CGImageSourceCopyPropertiesAtIndex(image, 0, nil) as? [String: Any] else {
+            throw WorkflowIssue("Clipboard image is not a supported PNG. / 剪贴板图像不是受支持的PNG。")
+        }
+        return try publishWorkflowAsset(data: data, mediaType: "image/png", metadata: .init(
+            width: props[kCGImagePropertyPixelWidth as String] as? Int,
+            height: props[kCGImagePropertyPixelHeight as String] as? Int,
+            bitDepth: props[kCGImagePropertyDepth as String] as? Int,
+            colorSpace: props[kCGImagePropertyProfileName as String] as? String),
+            name: name, operationID: "d.asset.import", details: ["origin": "explicit-clipboard-snapshot"])
+    }
+
     /// Import snapshots approved files. Subsequent source changes do not change the published version.
     public func importWorkflowFile(at source: URL, mode: AssetImportMode = .copy) throws -> WorkflowPublishedAsset {
         try checkLocation()

@@ -1,0 +1,788 @@
+{
+  "upstream": "https://github.com/microsoft/SwiftStreamingMarkdown",
+  "revision": "5f7c04e0558df6146f90d482edb62cb456986bda",
+  "scope": "Production Sources plus Package/LICENSE/README/SECURITY only; upstream examples, tools and snapshot tests intentionally omitted. No upstream files modified in cache.",
+  "patch": "patches/markdown-code-wrap.patch",
+  "files": [
+    {
+      "path": "LICENSE",
+      "upstreamSHA256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383",
+      "currentSHA256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
+    },
+    {
+      "path": "Package.swift",
+      "upstreamSHA256": "9a6d87007499587933bbd04e3edf9aadb4bfceba91c3b1914bfc383e96f7aa8e",
+      "currentSHA256": "c8b24b8d37a81e9b812c37202cd450b63767282c0a3327410abac75e12c19572"
+    },
+    {
+      "path": "README.md",
+      "upstreamSHA256": "42c532f12cb5ad91188b036135485ea676d928ce05b0e02828dce2e611af8465",
+      "currentSHA256": "42c532f12cb5ad91188b036135485ea676d928ce05b0e02828dce2e611af8465"
+    },
+    {
+      "path": "SECURITY.md",
+      "upstreamSHA256": "b02bf4e236e9335b27298a77688c751d18ca7e6052873d0d3d29eda37d0a72fa",
+      "currentSHA256": "b02bf4e236e9335b27298a77688c751d18ca7e6052873d0d3d29eda37d0a72fa"
+    },
+    {
+      "path": "Sources/MarkdownText/Block/BlockConvertible.swift",
+      "upstreamSHA256": "93509c2b6a17445f9af62d552698834de625f40b25081777c71444552ac81ec9",
+      "currentSHA256": "93509c2b6a17445f9af62d552698834de625f40b25081777c71444552ac81ec9"
+    },
+    {
+      "path": "Sources/MarkdownText/Block/BlockQuote+.swift",
+      "upstreamSHA256": "163198a5f0773a2542a13a9ed286c97d3a9e7d536495a7a893707ae488283e24",
+      "currentSHA256": "163198a5f0773a2542a13a9ed286c97d3a9e7d536495a7a893707ae488283e24"
+    },
+    {
+      "path": "Sources/MarkdownText/Block/CodeBlock+.swift",
+      "upstreamSHA256": "05c58f46c22516997effc32512d5ab36adc66754cd026ececefd683d1d078c01",
+      "currentSHA256": "05c58f46c22516997effc32512d5ab36adc66754cd026ececefd683d1d078c01"
+    },
+    {
+      "path": "Sources/MarkdownText/Block/Document+.swift",
+      "upstreamSHA256": "203a445c5be893be0b6129bbd3a495a11935d73a793ce6b47c1ecb3193c15d4a",
+      "currentSHA256": "203a445c5be893be0b6129bbd3a495a11935d73a793ce6b47c1ecb3193c15d4a"
+    },
+    {
+      "path": "Sources/MarkdownText/Block/Heading+.swift",
+      "upstreamSHA256": "b81cc18b9fd946763fc89b54c406f5ea7ae89c687bba27722d557b2e33f3a8ea",
+      "currentSHA256": "b81cc18b9fd946763fc89b54c406f5ea7ae89c687bba27722d557b2e33f3a8ea"
+    },
+    {
+      "path": "Sources/MarkdownText/Block/OrderedList+.swift",
+      "upstreamSHA256": "317a2d518b291edb3a4aed1148dfa973212131bfd9b047bc3e8ea69d9bb2c33c",
+      "currentSHA256": "317a2d518b291edb3a4aed1148dfa973212131bfd9b047bc3e8ea69d9bb2c33c"
+    },
+    {
+      "path": "Sources/MarkdownText/Block/Paragraph+.swift",
+      "upstreamSHA256": "9ce2e7f9f7de3a13b41e29eed7a8307d9fda5a4ab9a3cf4ceab4ca9becaa2dff",
+      "currentSHA256": "9ce2e7f9f7de3a13b41e29eed7a8307d9fda5a4ab9a3cf4ceab4ca9becaa2dff"
+    },
+    {
+      "path": "Sources/MarkdownText/Block/Table+.swift",
+      "upstreamSHA256": "8def9bbbd113b18b128e5a790a1ad07279dd8e8414435d2cec2cb62e0ca8c5e6",
+      "currentSHA256": "8def9bbbd113b18b128e5a790a1ad07279dd8e8414435d2cec2cb62e0ca8c5e6"
+    },
+    {
+      "path": "Sources/MarkdownText/Block/ThematicBreak+.swift",
+      "upstreamSHA256": "a24bb85d3a6ef1571668c22eec4494b105ed84e8adc18d28704965c49f52901d",
+      "currentSHA256": "a24bb85d3a6ef1571668c22eec4494b105ed84e8adc18d28704965c49f52901d"
+    },
+    {
+      "path": "Sources/MarkdownText/Block/UnorderedList+.swift",
+      "upstreamSHA256": "be29253180fd0c84e82e94b7b46caec0291afcc203cee163e1940ff3ff74e5ec",
+      "currentSHA256": "be29253180fd0c84e82e94b7b46caec0291afcc203cee163e1940ff3ff74e5ec"
+    },
+    {
+      "path": "Sources/MarkdownText/Citation/CitationCoder.swift",
+      "upstreamSHA256": "8f33b5225b4e9585eb8091ae374d76cc27425ae6b9f830ac52bad1d97291f17a",
+      "currentSHA256": "8f33b5225b4e9585eb8091ae374d76cc27425ae6b9f830ac52bad1d97291f17a"
+    },
+    {
+      "path": "Sources/MarkdownText/Citation/InlineAttachmentData.swift",
+      "upstreamSHA256": "7efa0ff944c9f9ce54143c1839b7d2d0f4855126dc44a3b722accdac38e87670",
+      "currentSHA256": "7efa0ff944c9f9ce54143c1839b7d2d0f4855126dc44a3b722accdac38e87670"
+    },
+    {
+      "path": "Sources/MarkdownText/Citation/InlineCitationAttachment.swift",
+      "upstreamSHA256": "903597c06503c3b4e9f87575d41683cc09c8daff45f564dfa17d89ed85baea6e",
+      "currentSHA256": "903597c06503c3b4e9f87575d41683cc09c8daff45f564dfa17d89ed85baea6e"
+    },
+    {
+      "path": "Sources/MarkdownText/ContextMenu/TextContextMenu.swift",
+      "upstreamSHA256": "95877e09e3fd3faa59a173a515cc99497d8d5c80f9c2746cd5bfddaf884a101b",
+      "currentSHA256": "95877e09e3fd3faa59a173a515cc99497d8d5c80f9c2746cd5bfddaf884a101b"
+    },
+    {
+      "path": "Sources/MarkdownText/ContextMenu/TextContextMenuGroup.swift",
+      "upstreamSHA256": "e082697e35cb727d1cfca56fb0d4fe1e7085777d5682d0e98f310861c1e29f75",
+      "currentSHA256": "e082697e35cb727d1cfca56fb0d4fe1e7085777d5682d0e98f310861c1e29f75"
+    },
+    {
+      "path": "Sources/MarkdownText/ContextMenu/TextContextMenuItem.swift",
+      "upstreamSHA256": "ec80109cb82224faa4ef25f4fcdf33bc6158cc74f30087175954e792171dbb66",
+      "currentSHA256": "ec80109cb82224faa4ef25f4fcdf33bc6158cc74f30087175954e792171dbb66"
+    },
+    {
+      "path": "Sources/MarkdownText/Inline/InlineConvertible.swift",
+      "upstreamSHA256": "30dfbda87424a177c6545f1271ae5565996253be7292744a53ba653c2c08c927",
+      "currentSHA256": "30dfbda87424a177c6545f1271ae5565996253be7292744a53ba653c2c08c927"
+    },
+    {
+      "path": "Sources/MarkdownText/Inline/Markdown+InlineConvertible.swift",
+      "upstreamSHA256": "39f679d0c8b6ef032416459867d7dac3c706d9e00433cd84906a515d906f0558",
+      "currentSHA256": "39f679d0c8b6ef032416459867d7dac3c706d9e00433cd84906a515d906f0558"
+    },
+    {
+      "path": "Sources/MarkdownText/Inline/Markup+.swift",
+      "upstreamSHA256": "6c341774f549815df732afc0538fee9b72f4b96644f54af6bccc880345d870d4",
+      "currentSHA256": "6c341774f549815df732afc0538fee9b72f4b96644f54af6bccc880345d870d4"
+    },
+    {
+      "path": "Sources/MarkdownText/MarkdownView.swift",
+      "upstreamSHA256": "f5e30b7d2a1dc408c98b7a96dc372f64a67678fd3a35c01ee1d8c4132bd71a8b",
+      "currentSHA256": "f5e30b7d2a1dc408c98b7a96dc372f64a67678fd3a35c01ee1d8c4132bd71a8b"
+    },
+    {
+      "path": "Sources/MarkdownText/Models/CodeBlockConfig.swift",
+      "upstreamSHA256": "88373a402ec150870f1a87ff84a12f7c38940ef455d95e0fbd55868c423b96a7",
+      "currentSHA256": "ae82e53fa8fe0a24c6a75c30ac996d2cefcd7354a814d75255b0d839be9dec63"
+    },
+    {
+      "path": "Sources/MarkdownText/Models/ImageConfig+SourceResolution.swift",
+      "upstreamSHA256": "343506b31a9b4b37801b3cf9448ce0ef255141920800f43b6f5c45a6d330d587",
+      "currentSHA256": "343506b31a9b4b37801b3cf9448ce0ef255141920800f43b6f5c45a6d330d587"
+    },
+    {
+      "path": "Sources/MarkdownText/Models/ImageConfig.swift",
+      "upstreamSHA256": "8b19050c0772fe6212ab3aab840ec0b5f6dbde612280b0c93df04c4e5f388a74",
+      "currentSHA256": "8b19050c0772fe6212ab3aab840ec0b5f6dbde612280b0c93df04c4e5f388a74"
+    },
+    {
+      "path": "Sources/MarkdownText/Models/ImageData.swift",
+      "upstreamSHA256": "fe51b87df7d40f70f233015b91fa3067373df47242bb258ac7738bc202dc0639",
+      "currentSHA256": "fe51b87df7d40f70f233015b91fa3067373df47242bb258ac7738bc202dc0639"
+    },
+    {
+      "path": "Sources/MarkdownText/Models/LatexAttachmentData.swift",
+      "upstreamSHA256": "6f7a75c1dd50ba24d17bddc38af324fb85a65bbe45cb1963a0b3bc7d567b1f01",
+      "currentSHA256": "6f7a75c1dd50ba24d17bddc38af324fb85a65bbe45cb1963a0b3bc7d567b1f01"
+    },
+    {
+      "path": "Sources/MarkdownText/Models/ListItem+.swift",
+      "upstreamSHA256": "bfbefa41605e986f3643ca113f466d19e0f86085d569625267ed31575142df5d",
+      "currentSHA256": "bfbefa41605e986f3643ca113f466d19e0f86085d569625267ed31575142df5d"
+    },
+    {
+      "path": "Sources/MarkdownText/Models/MarkdownImage.swift",
+      "upstreamSHA256": "b354d0b4b9fb2bae091da5c6a092d46edb851080badf72dc14259265d7b0cc9e",
+      "currentSHA256": "b354d0b4b9fb2bae091da5c6a092d46edb851080badf72dc14259265d7b0cc9e"
+    },
+    {
+      "path": "Sources/MarkdownText/Models/MarkdownRenderConfig+Builders.swift",
+      "upstreamSHA256": "b714c5dbdc9c161043e82edfb3ca5d69a5ed0f43dab92a9325e8443d731efeca",
+      "currentSHA256": "b714c5dbdc9c161043e82edfb3ca5d69a5ed0f43dab92a9325e8443d731efeca"
+    },
+    {
+      "path": "Sources/MarkdownText/Models/MarkdownRenderConfig.swift",
+      "upstreamSHA256": "e48063556e118cda45ec3699c0bb2df5347c5adfc53a11bde6ac36029dd52636",
+      "currentSHA256": "e48063556e118cda45ec3699c0bb2df5347c5adfc53a11bde6ac36029dd52636"
+    },
+    {
+      "path": "Sources/MarkdownText/Models/MarkdownRenderable.swift",
+      "upstreamSHA256": "88cdbc934bd1cb2887f63891290d16218f5025d9766bfd82f8fcf72e2eed2286",
+      "currentSHA256": "88cdbc934bd1cb2887f63891290d16218f5025d9766bfd82f8fcf72e2eed2286"
+    },
+    {
+      "path": "Sources/MarkdownText/Models/Markup+ID.swift",
+      "upstreamSHA256": "98277a49f41aa8e6d0de3fec1af5457550463ffd70d5d136a27479ca96ad998e",
+      "currentSHA256": "98277a49f41aa8e6d0de3fec1af5457550463ffd70d5d136a27479ca96ad998e"
+    },
+    {
+      "path": "Sources/MarkdownText/Models/RenderableDocument.swift",
+      "upstreamSHA256": "b0eb1fbf5beee57314468473f3847d6edb40bd90010d419669be550013d66330",
+      "currentSHA256": "b0eb1fbf5beee57314468473f3847d6edb40bd90010d419669be550013d66330"
+    },
+    {
+      "path": "Sources/MarkdownText/Models/TextSelectionConfig.swift",
+      "upstreamSHA256": "4c15850b22b6e4c036aa08ce625a1979ca2d108c822721d8263d37c07b5ae2e4",
+      "currentSHA256": "4c15850b22b6e4c036aa08ce625a1979ca2d108c822721d8263d37c07b5ae2e4"
+    },
+    {
+      "path": "Sources/MarkdownText/Parser/LaTexPreProcessor.swift",
+      "upstreamSHA256": "451986d1977adf93d6bddc81591e0c35aa3854aad02ed1870be7e87c72f03c50",
+      "currentSHA256": "451986d1977adf93d6bddc81591e0c35aa3854aad02ed1870be7e87c72f03c50"
+    },
+    {
+      "path": "Sources/MarkdownText/Parser/MarkdownParseOption.swift",
+      "upstreamSHA256": "2b309748a8e726c3c20c2341c8c6148d724a7f85fe239d08932534d9a84032bd",
+      "currentSHA256": "2b309748a8e726c3c20c2341c8c6148d724a7f85fe239d08932534d9a84032bd"
+    },
+    {
+      "path": "Sources/MarkdownText/Parser/MarkdownParseResult.swift",
+      "upstreamSHA256": "2c159f092fcda4d35a3a7f12822ab8570a2a22b0d3f39ccf3858de5c91b5647f",
+      "currentSHA256": "2c159f092fcda4d35a3a7f12822ab8570a2a22b0d3f39ccf3858de5c91b5647f"
+    },
+    {
+      "path": "Sources/MarkdownText/Parser/MarkdownParser.swift",
+      "upstreamSHA256": "7d79fc7ca7ab593510084a4fec54b3ac29665a4945c1dd5e472b3606d06b19bb",
+      "currentSHA256": "7d79fc7ca7ab593510084a4fec54b3ac29665a4945c1dd5e472b3606d06b19bb"
+    },
+    {
+      "path": "Sources/MarkdownText/Parser/MarkdownParserImpl.swift",
+      "upstreamSHA256": "e04cd6e7d4b4363fd1fe4d94f850bb51158497f2aaa06213a10d05337a506f19",
+      "currentSHA256": "e04cd6e7d4b4363fd1fe4d94f850bb51158497f2aaa06213a10d05337a506f19"
+    },
+    {
+      "path": "Sources/MarkdownText/Parser/Rewriters/ImageBlockRewriter.swift",
+      "upstreamSHA256": "3d2789e5a5f24e9afc7754d04c35317c42ecb394ba3507f31f4f48789b804599",
+      "currentSHA256": "3d2789e5a5f24e9afc7754d04c35317c42ecb394ba3507f31f4f48789b804599"
+    },
+    {
+      "path": "Sources/MarkdownText/Parser/Rewriters/PartialEmphasisRewriter.swift",
+      "upstreamSHA256": "11d7e3b8c284d3784292aa449296a8cb6933fba81c67a93ca8faaf8f262d2d70",
+      "currentSHA256": "11d7e3b8c284d3784292aa449296a8cb6933fba81c67a93ca8faaf8f262d2d70"
+    },
+    {
+      "path": "Sources/MarkdownText/Parser/Rewriters/PartialTableRewriter.swift",
+      "upstreamSHA256": "d7d25f4e0115158b8a37c80829bd16b712976e4decd06d42b57e0510af563f0f",
+      "currentSHA256": "d7d25f4e0115158b8a37c80829bd16b712976e4decd06d42b57e0510af563f0f"
+    },
+    {
+      "path": "Sources/MarkdownText/Parser/Scanners/MarkupPostParsingRewriter.swift",
+      "upstreamSHA256": "3f032d0a20ac1884e2125fddd85a8cbe20e1c11a4c985b7e16a0ba65599d48ca",
+      "currentSHA256": "3f032d0a20ac1884e2125fddd85a8cbe20e1c11a4c985b7e16a0ba65599d48ca"
+    },
+    {
+      "path": "Sources/MarkdownText/Parser/Scanners/MarkupScanner.swift",
+      "upstreamSHA256": "45015e04b90f4e7d3f2fa104a24c4b5a9d892833582da7ee5b0dd9888aadd533",
+      "currentSHA256": "45015e04b90f4e7d3f2fa104a24c4b5a9d892833582da7ee5b0dd9888aadd533"
+    },
+    {
+      "path": "Sources/MarkdownText/Parser/Scanners/PartialEmphasisScanner.swift",
+      "upstreamSHA256": "a3356e08620dd94564409534a192c49d6b8d5ac104ebfa76558d89a0b7815c56",
+      "currentSHA256": "a3356e08620dd94564409534a192c49d6b8d5ac104ebfa76558d89a0b7815c56"
+    },
+    {
+      "path": "Sources/MarkdownText/Parser/Scanners/PartialTableScanner.swift",
+      "upstreamSHA256": "8901657462e695bdd51152a3e5fc7edaccc6235d59accd7b6b1e04ad3db7c606",
+      "currentSHA256": "8901657462e695bdd51152a3e5fc7edaccc6235d59accd7b6b1e04ad3db7c606"
+    },
+    {
+      "path": "Sources/MarkdownText/Resources/Assets.xcassets/Colors/Contents.json",
+      "upstreamSHA256": "7a5a4baafa4056ebe5d4924557393780a62c698125ce3c42f665adc405f77993",
+      "currentSHA256": "7a5a4baafa4056ebe5d4924557393780a62c698125ce3c42f665adc405f77993"
+    },
+    {
+      "path": "Sources/MarkdownText/Resources/Assets.xcassets/Colors/Copilot/Contents.json",
+      "upstreamSHA256": "7a5a4baafa4056ebe5d4924557393780a62c698125ce3c42f665adc405f77993",
+      "currentSHA256": "7a5a4baafa4056ebe5d4924557393780a62c698125ce3c42f665adc405f77993"
+    },
+    {
+      "path": "Sources/MarkdownText/Resources/Assets.xcassets/Colors/Copilot/Static/Contents.json",
+      "upstreamSHA256": "cd1e9d842caff01294b668d62662221973def7a34765e2393264454ab4f7a01c",
+      "currentSHA256": "cd1e9d842caff01294b668d62662221973def7a34765e2393264454ab4f7a01c"
+    },
+    {
+      "path": "Sources/MarkdownText/Resources/Assets.xcassets/Colors/Copilot/Static/Stone/350.colorset/Contents.json",
+      "upstreamSHA256": "3cd7cac644e8549f99c2ad786d167c1354650d0efddfe00360514c4215c83761",
+      "currentSHA256": "3cd7cac644e8549f99c2ad786d167c1354650d0efddfe00360514c4215c83761"
+    },
+    {
+      "path": "Sources/MarkdownText/Resources/Assets.xcassets/Colors/Copilot/Static/Stone/Contents.json",
+      "upstreamSHA256": "cd1e9d842caff01294b668d62662221973def7a34765e2393264454ab4f7a01c",
+      "currentSHA256": "cd1e9d842caff01294b668d62662221973def7a34765e2393264454ab4f7a01c"
+    },
+    {
+      "path": "Sources/MarkdownText/Resources/Assets.xcassets/Colors/Copilot/Theme/Accent/600.colorset/Contents.json",
+      "upstreamSHA256": "e5d9b1b39a2263b9dc38289f635853a2c5205cb92de515d28c826dc58ccfe4c9",
+      "currentSHA256": "e5d9b1b39a2263b9dc38289f635853a2c5205cb92de515d28c826dc58ccfe4c9"
+    },
+    {
+      "path": "Sources/MarkdownText/Resources/Assets.xcassets/Colors/Copilot/Theme/Accent/Contents.json",
+      "upstreamSHA256": "cd1e9d842caff01294b668d62662221973def7a34765e2393264454ab4f7a01c",
+      "currentSHA256": "cd1e9d842caff01294b668d62662221973def7a34765e2393264454ab4f7a01c"
+    },
+    {
+      "path": "Sources/MarkdownText/Resources/Assets.xcassets/Colors/Copilot/Theme/Background/Contents.json",
+      "upstreamSHA256": "cd1e9d842caff01294b668d62662221973def7a34765e2393264454ab4f7a01c",
+      "currentSHA256": "cd1e9d842caff01294b668d62662221973def7a34765e2393264454ab4f7a01c"
+    },
+    {
+      "path": "Sources/MarkdownText/Resources/Assets.xcassets/Colors/Copilot/Theme/Background/Page/Chat/Contents.json",
+      "upstreamSHA256": "cd1e9d842caff01294b668d62662221973def7a34765e2393264454ab4f7a01c",
+      "currentSHA256": "cd1e9d842caff01294b668d62662221973def7a34765e2393264454ab4f7a01c"
+    },
+    {
+      "path": "Sources/MarkdownText/Resources/Assets.xcassets/Colors/Copilot/Theme/Background/Page/Chat/flat.colorset/Contents.json",
+      "upstreamSHA256": "a725372b11fce7bc2d45fe56b117b681c27b3a29228b199250bbe1a0066cd0c5",
+      "currentSHA256": "a725372b11fce7bc2d45fe56b117b681c27b3a29228b199250bbe1a0066cd0c5"
+    },
+    {
+      "path": "Sources/MarkdownText/Resources/Assets.xcassets/Colors/Copilot/Theme/Background/Page/Contents.json",
+      "upstreamSHA256": "cd1e9d842caff01294b668d62662221973def7a34765e2393264454ab4f7a01c",
+      "currentSHA256": "cd1e9d842caff01294b668d62662221973def7a34765e2393264454ab4f7a01c"
+    },
+    {
+      "path": "Sources/MarkdownText/Resources/Assets.xcassets/Colors/Copilot/Theme/Component/Button/Contents.json",
+      "upstreamSHA256": "cd1e9d842caff01294b668d62662221973def7a34765e2393264454ab4f7a01c",
+      "currentSHA256": "cd1e9d842caff01294b668d62662221973def7a34765e2393264454ab4f7a01c"
+    },
+    {
+      "path": "Sources/MarkdownText/Resources/Assets.xcassets/Colors/Copilot/Theme/Component/Button/Foreground/Contents.json",
+      "upstreamSHA256": "cd1e9d842caff01294b668d62662221973def7a34765e2393264454ab4f7a01c",
+      "currentSHA256": "cd1e9d842caff01294b668d62662221973def7a34765e2393264454ab4f7a01c"
+    },
+    {
+      "path": "Sources/MarkdownText/Resources/Assets.xcassets/Colors/Copilot/Theme/Component/Button/Foreground/pressed.colorset/Contents.json",
+      "upstreamSHA256": "26b1690e305536949e2ffe61b670e98ea1548ea617a66162faa51c67c6ac0b7a",
+      "currentSHA256": "26b1690e305536949e2ffe61b670e98ea1548ea617a66162faa51c67c6ac0b7a"
+    },
+    {
+      "path": "Sources/MarkdownText/Resources/Assets.xcassets/Colors/Copilot/Theme/Component/Button/Foreground/rest.colorset/Contents.json",
+      "upstreamSHA256": "c3ca467673affed6b200e3ab05a8a82ee63d683956259c4be5fd949c15df2650",
+      "currentSHA256": "c3ca467673affed6b200e3ab05a8a82ee63d683956259c4be5fd949c15df2650"
+    },
+    {
+      "path": "Sources/MarkdownText/Resources/Assets.xcassets/Colors/Copilot/Theme/Component/CodeBlock/Background/750.colorset/Contents.json",
+      "upstreamSHA256": "1a8040bbf70cf96f6d9c40cd308ae12ef3222dd33a49df7e1f5274ae9ed3a31f",
+      "currentSHA256": "1a8040bbf70cf96f6d9c40cd308ae12ef3222dd33a49df7e1f5274ae9ed3a31f"
+    },
+    {
+      "path": "Sources/MarkdownText/Resources/Assets.xcassets/Colors/Copilot/Theme/Component/CodeBlock/Background/Contents.json",
+      "upstreamSHA256": "cd1e9d842caff01294b668d62662221973def7a34765e2393264454ab4f7a01c",
+      "currentSHA256": "cd1e9d842caff01294b668d62662221973def7a34765e2393264454ab4f7a01c"
+    },
+    {
+      "path": "Sources/MarkdownText/Resources/Assets.xcassets/Colors/Copilot/Theme/Component/CodeBlock/Contents.json",
+      "upstreamSHA256": "cd1e9d842caff01294b668d62662221973def7a34765e2393264454ab4f7a01c",
+      "currentSHA256": "cd1e9d842caff01294b668d62662221973def7a34765e2393264454ab4f7a01c"
+    },
+    {
+      "path": "Sources/MarkdownText/Resources/Assets.xcassets/Colors/Copilot/Theme/Component/CodeBlock/Foreground/Contents.json",
+      "upstreamSHA256": "cd1e9d842caff01294b668d62662221973def7a34765e2393264454ab4f7a01c",
+      "currentSHA256": "cd1e9d842caff01294b668d62662221973def7a34765e2393264454ab4f7a01c"
+    },
+    {
+      "path": "Sources/MarkdownText/Resources/Assets.xcassets/Colors/Copilot/Theme/Component/CodeBlock/Foreground/functionparameter.colorset/Contents.json",
+      "upstreamSHA256": "82e9e320a0008b90987272475af09f5765789c59640e191bd462bd2aebcf0c11",
+      "currentSHA256": "82e9e320a0008b90987272475af09f5765789c59640e191bd462bd2aebcf0c11"
+    },
+    {
+      "path": "Sources/MarkdownText/Resources/Assets.xcassets/Colors/Copilot/Theme/Component/CodeBlock/Foreground/header.colorset/Contents.json",
+      "upstreamSHA256": "534df5a7e80dd6a7c3315c9e17202c48a93eee519d3670dc638b3330f85fb912",
+      "currentSHA256": "534df5a7e80dd6a7c3315c9e17202c48a93eee519d3670dc638b3330f85fb912"
+    },
+    {
+      "path": "Sources/MarkdownText/Resources/Assets.xcassets/Colors/Copilot/Theme/Component/Contents.json",
+      "upstreamSHA256": "cd1e9d842caff01294b668d62662221973def7a34765e2393264454ab4f7a01c",
+      "currentSHA256": "cd1e9d842caff01294b668d62662221973def7a34765e2393264454ab4f7a01c"
+    },
+    {
+      "path": "Sources/MarkdownText/Resources/Assets.xcassets/Colors/Copilot/Theme/Component/Table/Background/Contents.json",
+      "upstreamSHA256": "cd1e9d842caff01294b668d62662221973def7a34765e2393264454ab4f7a01c",
+      "currentSHA256": "cd1e9d842caff01294b668d62662221973def7a34765e2393264454ab4f7a01c"
+    },
+    {
+      "path": "Sources/MarkdownText/Resources/Assets.xcassets/Colors/Copilot/Theme/Component/Table/Background/header.colorset/Contents.json",
+      "upstreamSHA256": "c5b873e4ef63560c6aa46529f618e855ce261490cd491effe1958a6ad43cc62b",
+      "currentSHA256": "c5b873e4ef63560c6aa46529f618e855ce261490cd491effe1958a6ad43cc62b"
+    },
+    {
+      "path": "Sources/MarkdownText/Resources/Assets.xcassets/Colors/Copilot/Theme/Component/Table/Contents.json",
+      "upstreamSHA256": "cd1e9d842caff01294b668d62662221973def7a34765e2393264454ab4f7a01c",
+      "currentSHA256": "cd1e9d842caff01294b668d62662221973def7a34765e2393264454ab4f7a01c"
+    },
+    {
+      "path": "Sources/MarkdownText/Resources/Assets.xcassets/Colors/Copilot/Theme/Contents.json",
+      "upstreamSHA256": "cd1e9d842caff01294b668d62662221973def7a34765e2393264454ab4f7a01c",
+      "currentSHA256": "cd1e9d842caff01294b668d62662221973def7a34765e2393264454ab4f7a01c"
+    },
+    {
+      "path": "Sources/MarkdownText/Resources/Assets.xcassets/Colors/Copilot/Theme/Foreground/Contents.json",
+      "upstreamSHA256": "cd1e9d842caff01294b668d62662221973def7a34765e2393264454ab4f7a01c",
+      "currentSHA256": "cd1e9d842caff01294b668d62662221973def7a34765e2393264454ab4f7a01c"
+    },
+    {
+      "path": "Sources/MarkdownText/Resources/Assets.xcassets/Colors/Copilot/Theme/Foreground/Primary/450.colorset/Contents.json",
+      "upstreamSHA256": "f04761cef39c242ebb75c526543c4956ac138d48439bc6a333bc2ff84bba6cf2",
+      "currentSHA256": "f04761cef39c242ebb75c526543c4956ac138d48439bc6a333bc2ff84bba6cf2"
+    },
+    {
+      "path": "Sources/MarkdownText/Resources/Assets.xcassets/Colors/Copilot/Theme/Foreground/Primary/550.colorset/Contents.json",
+      "upstreamSHA256": "7a71f3932da423f536181fdff5a3ba844f8717053098494cc781643e2bdbf822",
+      "currentSHA256": "7a71f3932da423f536181fdff5a3ba844f8717053098494cc781643e2bdbf822"
+    },
+    {
+      "path": "Sources/MarkdownText/Resources/Assets.xcassets/Colors/Copilot/Theme/Foreground/Primary/650.colorset/Contents.json",
+      "upstreamSHA256": "38fa6332835d5042b746cf343d8b9bbcdeb74f669de57f09804065f0e132a168",
+      "currentSHA256": "38fa6332835d5042b746cf343d8b9bbcdeb74f669de57f09804065f0e132a168"
+    },
+    {
+      "path": "Sources/MarkdownText/Resources/Assets.xcassets/Colors/Copilot/Theme/Foreground/Primary/750.colorset/Contents.json",
+      "upstreamSHA256": "c38d6a458a07f481ecb23f88ec545c948b7f6059c82edd27c7a39b2a1b357691",
+      "currentSHA256": "c38d6a458a07f481ecb23f88ec545c948b7f6059c82edd27c7a39b2a1b357691"
+    },
+    {
+      "path": "Sources/MarkdownText/Resources/Assets.xcassets/Colors/Copilot/Theme/Foreground/Primary/800.colorset/Contents.json",
+      "upstreamSHA256": "c3ca467673affed6b200e3ab05a8a82ee63d683956259c4be5fd949c15df2650",
+      "currentSHA256": "c3ca467673affed6b200e3ab05a8a82ee63d683956259c4be5fd949c15df2650"
+    },
+    {
+      "path": "Sources/MarkdownText/Resources/Assets.xcassets/Colors/Copilot/Theme/Foreground/Primary/Contents.json",
+      "upstreamSHA256": "cd1e9d842caff01294b668d62662221973def7a34765e2393264454ab4f7a01c",
+      "currentSHA256": "cd1e9d842caff01294b668d62662221973def7a34765e2393264454ab4f7a01c"
+    },
+    {
+      "path": "Sources/MarkdownText/Resources/Assets.xcassets/Colors/Copilot/Theme/Overlay/Black/5.colorset/Contents.json",
+      "upstreamSHA256": "e0881af20f7f88b4024f3d828ddd8e4a24895b8d3068dd5362fba729840b28f7",
+      "currentSHA256": "e0881af20f7f88b4024f3d828ddd8e4a24895b8d3068dd5362fba729840b28f7"
+    },
+    {
+      "path": "Sources/MarkdownText/Resources/Assets.xcassets/Colors/Copilot/Theme/Overlay/Black/Contents.json",
+      "upstreamSHA256": "cd1e9d842caff01294b668d62662221973def7a34765e2393264454ab4f7a01c",
+      "currentSHA256": "cd1e9d842caff01294b668d62662221973def7a34765e2393264454ab4f7a01c"
+    },
+    {
+      "path": "Sources/MarkdownText/Resources/Assets.xcassets/Colors/Copilot/Theme/Overlay/Contents.json",
+      "upstreamSHA256": "cd1e9d842caff01294b668d62662221973def7a34765e2393264454ab4f7a01c",
+      "currentSHA256": "cd1e9d842caff01294b668d62662221973def7a34765e2393264454ab4f7a01c"
+    },
+    {
+      "path": "Sources/MarkdownText/Resources/Assets.xcassets/Colors/Copilot/Theme/Stroke/Contents.json",
+      "upstreamSHA256": "cd1e9d842caff01294b668d62662221973def7a34765e2393264454ab4f7a01c",
+      "currentSHA256": "cd1e9d842caff01294b668d62662221973def7a34765e2393264454ab4f7a01c"
+    },
+    {
+      "path": "Sources/MarkdownText/Resources/Assets.xcassets/Colors/Copilot/Theme/Stroke/Default/250.colorset/Contents.json",
+      "upstreamSHA256": "e9295af53ce653c31041b84377c8c08dc52d09213a619df95de8cbf53527386d",
+      "currentSHA256": "e9295af53ce653c31041b84377c8c08dc52d09213a619df95de8cbf53527386d"
+    },
+    {
+      "path": "Sources/MarkdownText/Resources/Assets.xcassets/Colors/Copilot/Theme/Stroke/Default/300.colorset/Contents.json",
+      "upstreamSHA256": "7207137944966b5df129f3ad61481d459c2c7f8e076189f42d1001f79f50c125",
+      "currentSHA256": "7207137944966b5df129f3ad61481d459c2c7f8e076189f42d1001f79f50c125"
+    },
+    {
+      "path": "Sources/MarkdownText/Resources/Assets.xcassets/Colors/Copilot/Theme/Stroke/Default/Contents.json",
+      "upstreamSHA256": "cd1e9d842caff01294b668d62662221973def7a34765e2393264454ab4f7a01c",
+      "currentSHA256": "cd1e9d842caff01294b668d62662221973def7a34765e2393264454ab4f7a01c"
+    },
+    {
+      "path": "Sources/MarkdownText/Resources/Assets.xcassets/Colors/Copilot/Theme/Stroke/Muted/300.colorset/Contents.json",
+      "upstreamSHA256": "914626f46ae598b67d92cf30bebcd2438f1128b997af9b24c77eecee256f01e7",
+      "currentSHA256": "914626f46ae598b67d92cf30bebcd2438f1128b997af9b24c77eecee256f01e7"
+    },
+    {
+      "path": "Sources/MarkdownText/Resources/Assets.xcassets/Colors/Copilot/Theme/Stroke/Muted/Contents.json",
+      "upstreamSHA256": "cd1e9d842caff01294b668d62662221973def7a34765e2393264454ab4f7a01c",
+      "currentSHA256": "cd1e9d842caff01294b668d62662221973def7a34765e2393264454ab4f7a01c"
+    },
+    {
+      "path": "Sources/MarkdownText/Resources/Assets.xcassets/Contents.json",
+      "upstreamSHA256": "0fd49ba3c3585c709678e0046a821c3c60685ec7063720d30d3a3448be3a208b",
+      "currentSHA256": "0fd49ba3c3585c709678e0046a821c3c60685ec7063720d30d3a3448be3a208b"
+    },
+    {
+      "path": "Sources/MarkdownText/Resources/Localizable.xcstrings",
+      "upstreamSHA256": "293cbc3173bd50a10317710641db46d61db9dd9dde50fa3c03d4d4f147dd9b5b",
+      "currentSHA256": "293cbc3173bd50a10317710641db46d61db9dd9dde50fa3c03d4d4f147dd9b5b"
+    },
+    {
+      "path": "Sources/MarkdownText/Resources/Media.xcassets/Contents.json",
+      "upstreamSHA256": "0fd49ba3c3585c709678e0046a821c3c60685ec7063720d30d3a3448be3a208b",
+      "currentSHA256": "0fd49ba3c3585c709678e0046a821c3c60685ec7063720d30d3a3448be3a208b"
+    },
+    {
+      "path": "Sources/MarkdownText/Resources/Media.xcassets/Copy.imageset/Contents.json",
+      "upstreamSHA256": "ab418836c77a10f1c6b041dc15f26cc147311ba7366a18646cac11661cafc1c1",
+      "currentSHA256": "ab418836c77a10f1c6b041dc15f26cc147311ba7366a18646cac11661cafc1c1"
+    },
+    {
+      "path": "Sources/MarkdownText/Resources/Media.xcassets/Copy.imageset/Copy.svg",
+      "upstreamSHA256": "922468286c69478dd122b94b25b32ce6f525b5e4a30393599ec60b8ddc40d864",
+      "currentSHA256": "922468286c69478dd122b94b25b32ce6f525b5e4a30393599ec60b8ddc40d864"
+    },
+    {
+      "path": "Sources/MarkdownText/Resources/Media.xcassets/CopyFilled.imageset/Contents.json",
+      "upstreamSHA256": "7c995de52a5384fa933096be1aff9cbe43467d7dcf8ed2eea04637c914e150db",
+      "currentSHA256": "7c995de52a5384fa933096be1aff9cbe43467d7dcf8ed2eea04637c914e150db"
+    },
+    {
+      "path": "Sources/MarkdownText/Resources/Media.xcassets/CopyFilled.imageset/CopyFilled.svg",
+      "upstreamSHA256": "427732bdee833263a6b633f93834c4a0533cde6a6bb0730acad8701478984c44",
+      "currentSHA256": "427732bdee833263a6b633f93834c4a0533cde6a6bb0730acad8701478984c44"
+    },
+    {
+      "path": "Sources/MarkdownText/Resources/Media.xcassets/copyIcon14.imageset/Contents.json",
+      "upstreamSHA256": "dd3b7648e93f7d5593ba0be1043f19d01cedab156a74410b01d94f2cd60fa04c",
+      "currentSHA256": "dd3b7648e93f7d5593ba0be1043f19d01cedab156a74410b01d94f2cd60fa04c"
+    },
+    {
+      "path": "Sources/MarkdownText/Resources/Media.xcassets/copyIcon14.imageset/copy_icon_14.png",
+      "upstreamSHA256": "6ae702c2261d2ae6f4cf2a8077a59513d605a4a6b2649e2b403e6d6dac854950",
+      "currentSHA256": "6ae702c2261d2ae6f4cf2a8077a59513d605a4a6b2649e2b403e6d6dac854950"
+    },
+    {
+      "path": "Sources/MarkdownText/Resources/Media.xcassets/copyIcon14.imageset/copy_icon_14@2x.png",
+      "upstreamSHA256": "b44faf81a06345895e0e87cbc32ae0c37fcafc8e3394c192b2404c42d540fe35",
+      "currentSHA256": "b44faf81a06345895e0e87cbc32ae0c37fcafc8e3394c192b2404c42d540fe35"
+    },
+    {
+      "path": "Sources/MarkdownText/Resources/Media.xcassets/copyIcon14.imageset/copy_icon_14@3x.png",
+      "upstreamSHA256": "0db6f2b45b1ae9fe9e127b98419645fdb6e44103a7546892e107270f58b37881",
+      "currentSHA256": "0db6f2b45b1ae9fe9e127b98419645fdb6e44103a7546892e107270f58b37881"
+    },
+    {
+      "path": "Sources/MarkdownText/Resources/Media.xcassets/downloadArrow.imageset/Contents.json",
+      "upstreamSHA256": "261c8c381cd45d36f85dd401bbc9ccec46fb4c82be0aa0239c3e6610c2d80eb4",
+      "currentSHA256": "261c8c381cd45d36f85dd401bbc9ccec46fb4c82be0aa0239c3e6610c2d80eb4"
+    },
+    {
+      "path": "Sources/MarkdownText/Resources/Media.xcassets/downloadArrow.imageset/downloadArrow.svg",
+      "upstreamSHA256": "d880ec39591c606e5d55a04053eec8d8c668f32bef58ce8b29ee7dd1f7fbafbc",
+      "currentSHA256": "d880ec39591c606e5d55a04053eec8d8c668f32bef58ce8b29ee7dd1f7fbafbc"
+    },
+    {
+      "path": "Sources/MarkdownText/StreamedMarkdownView.swift",
+      "upstreamSHA256": "03886c6a640804f4e7f38b34f127f651fabeebf50cd7bb6d4ff67510ac91a57d",
+      "currentSHA256": "03886c6a640804f4e7f38b34f127f651fabeebf50cd7bb6d4ff67510ac91a57d"
+    },
+    {
+      "path": "Sources/MarkdownText/Style/Color+Dynamic.swift",
+      "upstreamSHA256": "1ddebcc3ef4deb53d02f8e9aef69902e7532a5a207d7841bb507829bb75e5c52",
+      "currentSHA256": "1ddebcc3ef4deb53d02f8e9aef69902e7532a5a207d7841bb507829bb75e5c52"
+    },
+    {
+      "path": "Sources/MarkdownText/Style/Colors+Static.swift",
+      "upstreamSHA256": "d3d6a9195ca2ca4f5d40d91eacf261cb0593c83e1674c4a8b82fc6a1f15a6321",
+      "currentSHA256": "d3d6a9195ca2ca4f5d40d91eacf261cb0593c83e1674c4a8b82fc6a1f15a6321"
+    },
+    {
+      "path": "Sources/MarkdownText/Style/Colors+Theme.swift",
+      "upstreamSHA256": "da10e049c8d5f2766a0db42dcff6eb51a2d9db2453394119d49b116258a28ee5",
+      "currentSHA256": "da10e049c8d5f2766a0db42dcff6eb51a2d9db2453394119d49b116258a28ee5"
+    },
+    {
+      "path": "Sources/MarkdownText/Style/TextFonts.swift",
+      "upstreamSHA256": "0ed757d3ec3475966eb90712a679b0e016de4a574f71b9f65a582cafb073fa16",
+      "currentSHA256": "0ed757d3ec3475966eb90712a679b0e016de4a574f71b9f65a582cafb073fa16"
+    },
+    {
+      "path": "Sources/MarkdownText/Style/Typography.swift",
+      "upstreamSHA256": "e8187229dd82b78d25875ba1a2ef50cfe34be57eb2a9809cd6aa15158bb51698",
+      "currentSHA256": "e8187229dd82b78d25875ba1a2ef50cfe34be57eb2a9809cd6aa15158bb51698"
+    },
+    {
+      "path": "Sources/MarkdownText/TextTransition/FadeInTextTransition.swift",
+      "upstreamSHA256": "f2e0cbd3bc74a602dd5869a52986a5ff40196ea593e01177a871bb84898bfe36",
+      "currentSHA256": "f2e0cbd3bc74a602dd5869a52986a5ff40196ea593e01177a871bb84898bfe36"
+    },
+    {
+      "path": "Sources/MarkdownText/TextTransition/FadeInTextTransitionViewModifier.swift",
+      "upstreamSHA256": "7fd6c86fdc12a78fe362e54944bb0fd38da0a7dea8058f12b3f64d1a44fe38d9",
+      "currentSHA256": "7fd6c86fdc12a78fe362e54944bb0fd38da0a7dea8058f12b3f64d1a44fe38d9"
+    },
+    {
+      "path": "Sources/MarkdownText/UI/BlockMathView.swift",
+      "upstreamSHA256": "a94c53ac913385a55fbafba4fb3ea1333629dbbecc012d4e07b77ac7692d1842",
+      "currentSHA256": "a94c53ac913385a55fbafba4fb3ea1333629dbbecc012d4e07b77ac7692d1842"
+    },
+    {
+      "path": "Sources/MarkdownText/UI/BlockQuoteView.swift",
+      "upstreamSHA256": "efd810af4234ba51ac81c61ef3385a20cf5281172f6bd8426532a6da9d656d02",
+      "currentSHA256": "efd810af4234ba51ac81c61ef3385a20cf5281172f6bd8426532a6da9d656d02"
+    },
+    {
+      "path": "Sources/MarkdownText/UI/BlockView.swift",
+      "upstreamSHA256": "f8e804bebfc5466ff42e01b9485407b48198163dfdb19677600b77717e0f1574",
+      "currentSHA256": "f8e804bebfc5466ff42e01b9485407b48198163dfdb19677600b77717e0f1574"
+    },
+    {
+      "path": "Sources/MarkdownText/UI/CodeBlockView.swift",
+      "upstreamSHA256": "db30fa36da0d657af8434c8e28ca948120f908be7236ff6a0f866c971fe9feba",
+      "currentSHA256": "9e08acfbfac7a5c55cda967342dfb15f93f2dab42f8d3c303ddbb02276ff6460"
+    },
+    {
+      "path": "Sources/MarkdownText/UI/DocumentView.swift",
+      "upstreamSHA256": "2585bcea8aaebb77eb2d21ae572ca09eb2e48009f37a8434601237d02ed7e20d",
+      "currentSHA256": "2585bcea8aaebb77eb2d21ae572ca09eb2e48009f37a8434601237d02ed7e20d"
+    },
+    {
+      "path": "Sources/MarkdownText/UI/EdgeBorder.swift",
+      "upstreamSHA256": "927ad3bc9283dfaf7062b7be61d30fa9cded67b131d2e0587600642841ad995b",
+      "currentSHA256": "927ad3bc9283dfaf7062b7be61d30fa9cded67b131d2e0587600642841ad995b"
+    },
+    {
+      "path": "Sources/MarkdownText/UI/HighlightTaskManager.swift",
+      "upstreamSHA256": "09022669529d6f9151dcd03d1eaead986154d069126f1bac53a096059aa0d4e5",
+      "currentSHA256": "09022669529d6f9151dcd03d1eaead986154d069126f1bac53a096059aa0d4e5"
+    },
+    {
+      "path": "Sources/MarkdownText/UI/Images/BlockImageFailureView.swift",
+      "upstreamSHA256": "1c2b9104c2eee6e336ae38c4f7977d1e6109d968bcf7cf146469c1447bd092cf",
+      "currentSHA256": "1c2b9104c2eee6e336ae38c4f7977d1e6109d968bcf7cf146469c1447bd092cf"
+    },
+    {
+      "path": "Sources/MarkdownText/UI/Images/BlockImageLoadingView.swift",
+      "upstreamSHA256": "3da41731304a09df0ff4f72eeacb7404e04664655bdf8cdc43914da155d3b5ff",
+      "currentSHA256": "3da41731304a09df0ff4f72eeacb7404e04664655bdf8cdc43914da155d3b5ff"
+    },
+    {
+      "path": "Sources/MarkdownText/UI/Images/BlockImageView.swift",
+      "upstreamSHA256": "e7e7c55865e769d994cee3369750d2387718bed0993707a323467be1ca719915",
+      "currentSHA256": "e7e7c55865e769d994cee3369750d2387718bed0993707a323467be1ca719915"
+    },
+    {
+      "path": "Sources/MarkdownText/UI/Images/BundledResourceImage.swift",
+      "upstreamSHA256": "17b1a3f7d92c49c1487f800917979ac284fe9ab2647618b4ba2081985fefa3df",
+      "currentSHA256": "17b1a3f7d92c49c1487f800917979ac284fe9ab2647618b4ba2081985fefa3df"
+    },
+    {
+      "path": "Sources/MarkdownText/UI/Images/ImageViewerView.swift",
+      "upstreamSHA256": "3f0a8ac0272ddc28c9ea5696debb22d67ea116b210be768f07e1c45373fbbcf3",
+      "currentSHA256": "3f0a8ac0272ddc28c9ea5696debb22d67ea116b210be768f07e1c45373fbbcf3"
+    },
+    {
+      "path": "Sources/MarkdownText/UI/Images/PinchZoomView.swift",
+      "upstreamSHA256": "4d59c9a6bd4516764771cf4fc4a27d09b75407913a20c842f0bac4229670f969",
+      "currentSHA256": "4d59c9a6bd4516764771cf4fc4a27d09b75407913a20c842f0bac4229670f969"
+    },
+    {
+      "path": "Sources/MarkdownText/UI/OrderedListView.swift",
+      "upstreamSHA256": "95a2e7e107008173a3a5fbbe4f6aea9a5c87886c1ceb8a5b13183210892fe710",
+      "currentSHA256": "95a2e7e107008173a3a5fbbe4f6aea9a5c87886c1ceb8a5b13183210892fe710"
+    },
+    {
+      "path": "Sources/MarkdownText/UI/Paragraph/AppKit/ParagraphNSView.swift",
+      "upstreamSHA256": "676f82daf472cd7fe3da1c9fe621eabd92d8d356d2689b5a97ac16a9c4c46d6b",
+      "currentSHA256": "676f82daf472cd7fe3da1c9fe621eabd92d8d356d2689b5a97ac16a9c4c46d6b"
+    },
+    {
+      "path": "Sources/MarkdownText/UI/Paragraph/AppKit/ParagraphView+macOS.swift",
+      "upstreamSHA256": "ddc297ea4d094b57d5225cf0ccda996a8ca9052d59da77d62525d547d916c415",
+      "currentSHA256": "ddc297ea4d094b57d5225cf0ccda996a8ca9052d59da77d62525d547d916c415"
+    },
+    {
+      "path": "Sources/MarkdownText/UI/Paragraph/LatexViewProvider.swift",
+      "upstreamSHA256": "ee99025fee95e0bed8d47d8178949e2c0001153b9d309868e4b5b322f1ac24a5",
+      "currentSHA256": "ee99025fee95e0bed8d47d8178949e2c0001153b9d309868e4b5b322f1ac24a5"
+    },
+    {
+      "path": "Sources/MarkdownText/UI/Paragraph/ParagraphAnimation.swift",
+      "upstreamSHA256": "2e952f05e5ad8cc521066fa16be5766c17bb47d35ba47033fbd513b81a8902ee",
+      "currentSHA256": "2e952f05e5ad8cc521066fa16be5766c17bb47d35ba47033fbd513b81a8902ee"
+    },
+    {
+      "path": "Sources/MarkdownText/UI/Paragraph/ParagraphViewCache.swift",
+      "upstreamSHA256": "4852e18a6b579c5e416a2c6d991d3bc83ac890ea3cdb2f1e7c8f071c51d4705e",
+      "currentSHA256": "4852e18a6b579c5e416a2c6d991d3bc83ac890ea3cdb2f1e7c8f071c51d4705e"
+    },
+    {
+      "path": "Sources/MarkdownText/UI/Paragraph/UIKit/ParagraphUIView.swift",
+      "upstreamSHA256": "99b4c14e8777c19f4d26b6f9cc901ddf5f94201e404cdc4ade742fbb36d87500",
+      "currentSHA256": "99b4c14e8777c19f4d26b6f9cc901ddf5f94201e404cdc4ade742fbb36d87500"
+    },
+    {
+      "path": "Sources/MarkdownText/UI/Paragraph/UIKit/ParagraphView+iOS.swift",
+      "upstreamSHA256": "b2cb3363eb582e427ca7a5b63dc6ff2d850bd2f03b90725018f0b73cb44a2148",
+      "currentSHA256": "b2cb3363eb582e427ca7a5b63dc6ff2d850bd2f03b90725018f0b73cb44a2148"
+    },
+    {
+      "path": "Sources/MarkdownText/UI/TableView.swift",
+      "upstreamSHA256": "02078a3f60d432ad3b9c9f54a54eb3b12cb2bdca994eec04ada0f743f4652b0e",
+      "currentSHA256": "02078a3f60d432ad3b9c9f54a54eb3b12cb2bdca994eec04ada0f743f4652b0e"
+    },
+    {
+      "path": "Sources/MarkdownText/UI/TextSelection/SelectableTextView.swift",
+      "upstreamSHA256": "b5486d03175d35437338bf8cbef9854504b5bfa8ca6f15177e863418930ee4dc",
+      "currentSHA256": "b5486d03175d35437338bf8cbef9854504b5bfa8ca6f15177e863418930ee4dc"
+    },
+    {
+      "path": "Sources/MarkdownText/UI/TextSelection/TextSelectionView.swift",
+      "upstreamSHA256": "79dd0c5ec2d16590044efb73fc7d3e489b104a3f76dd27e53d0700aa143f4ee0",
+      "currentSHA256": "79dd0c5ec2d16590044efb73fc7d3e489b104a3f76dd27e53d0700aa143f4ee0"
+    },
+    {
+      "path": "Sources/MarkdownText/UI/ThematicBreakView.swift",
+      "upstreamSHA256": "d02b511795aee3a715685c6b69c5076aa0343a74fdd9d74ee92c8d238cd4353e",
+      "currentSHA256": "d02b511795aee3a715685c6b69c5076aa0343a74fdd9d74ee92c8d238cd4353e"
+    },
+    {
+      "path": "Sources/MarkdownText/UI/UnorderedListView.swift",
+      "upstreamSHA256": "66046a08c402461c61212af8129e6deafb3a7da04b436ff78efa19321ad5024e",
+      "currentSHA256": "66046a08c402461c61212af8129e6deafb3a7da04b436ff78efa19321ad5024e"
+    },
+    {
+      "path": "Sources/MarkdownText/Utilities/AppAppearance.swift",
+      "upstreamSHA256": "29f7c83817d44c7607ef5fea908f3072626a2dd485bb46a27bb12c11330348e8",
+      "currentSHA256": "29f7c83817d44c7607ef5fea908f3072626a2dd485bb46a27bb12c11330348e8"
+    },
+    {
+      "path": "Sources/MarkdownText/Utilities/Image+MDImage.swift",
+      "upstreamSHA256": "a785ab00e4cabe660ddf3a96161949f12ff3acc9860e33ce567ba5a60d66e585",
+      "currentSHA256": "a785ab00e4cabe660ddf3a96161949f12ff3acc9860e33ce567ba5a60d66e585"
+    },
+    {
+      "path": "Sources/MarkdownText/Utilities/MDColor+Hex.swift",
+      "upstreamSHA256": "e57e17ec26720db73aa6f0c769788870dd9b1069020fc63a036422af99c9d9d6",
+      "currentSHA256": "e57e17ec26720db73aa6f0c769788870dd9b1069020fc63a036422af99c9d9d6"
+    },
+    {
+      "path": "Sources/MarkdownText/Utilities/MDColor.swift",
+      "upstreamSHA256": "a7ec86fc53c116b0c283cd65ff4485dd83c4d04ec9898e0f464f1e6ba59298cf",
+      "currentSHA256": "a7ec86fc53c116b0c283cd65ff4485dd83c4d04ec9898e0f464f1e6ba59298cf"
+    },
+    {
+      "path": "Sources/MarkdownText/Utilities/MDEdgeInsets.swift",
+      "upstreamSHA256": "79b3e722e9cc498c4c269f940a8377175cc7f15ef7757d2875c7a60177ef2172",
+      "currentSHA256": "79b3e722e9cc498c4c269f940a8377175cc7f15ef7757d2875c7a60177ef2172"
+    },
+    {
+      "path": "Sources/MarkdownText/Utilities/MDFont.swift",
+      "upstreamSHA256": "62a3db4f7a7516be32cec9ee8299b9debcd1b1ab98ff5cf137a6b251e0c319b0",
+      "currentSHA256": "62a3db4f7a7516be32cec9ee8299b9debcd1b1ab98ff5cf137a6b251e0c319b0"
+    },
+    {
+      "path": "Sources/MarkdownText/Utilities/MDImage.swift",
+      "upstreamSHA256": "d9f766925abaa54fd1226e74c934ac6f0c0cade3ce7d8481473fd10aa985dc58",
+      "currentSHA256": "d9f766925abaa54fd1226e74c934ac6f0c0cade3ce7d8481473fd10aa985dc58"
+    },
+    {
+      "path": "Sources/MarkdownText/Utilities/MDParagraphView.swift",
+      "upstreamSHA256": "8534d4ecb18130603cad50d5d579d96bf59717ae0e3c2651cd56739229db6750",
+      "currentSHA256": "8534d4ecb18130603cad50d5d579d96bf59717ae0e3c2651cd56739229db6750"
+    },
+    {
+      "path": "Sources/MarkdownText/Utilities/MarkdownListener.swift",
+      "upstreamSHA256": "c4a167c2295d9391cc477e19f492fd924ce44698ea0b420c5abb6893adc99821",
+      "currentSHA256": "c4a167c2295d9391cc477e19f492fd924ce44698ea0b420c5abb6893adc99821"
+    },
+    {
+      "path": "Sources/MarkdownText/Utilities/NSAttributedString+.swift",
+      "upstreamSHA256": "716b12ee79c2e5c248fec7a78d62b7a59cd34e3ee5b57d7c306a7e7c824a06e1",
+      "currentSHA256": "716b12ee79c2e5c248fec7a78d62b7a59cd34e3ee5b57d7c306a7e7c824a06e1"
+    },
+    {
+      "path": "Sources/MarkdownText/Utilities/NSFont+LineHeight.swift",
+      "upstreamSHA256": "3b39968d6ebcbba48023144fea9fd02814dc4ec57c0f0cc0fc117d8bb8906fc0",
+      "currentSHA256": "3b39968d6ebcbba48023144fea9fd02814dc4ec57c0f0cc0fc117d8bb8906fc0"
+    },
+    {
+      "path": "Sources/MarkdownText/Utilities/String+.swift",
+      "upstreamSHA256": "b652f8b0311e50f25f3008f6daeaa7db45fdd3b1e90b7b2759d3bbe8bcc44039",
+      "currentSHA256": "b652f8b0311e50f25f3008f6daeaa7db45fdd3b1e90b7b2759d3bbe8bcc44039"
+    },
+    {
+      "path": "Sources/MarkdownText/Utilities/String+BundledImage.swift",
+      "upstreamSHA256": "394656682b6b841a2942172d6c95c37b7a5cd6e7bfdb316d6170c24de6fe13c5",
+      "currentSHA256": "394656682b6b841a2942172d6c95c37b7a5cd6e7bfdb316d6170c24de6fe13c5"
+    },
+    {
+      "path": "Sources/MarkdownText/Utilities/TaskExtensions.swift",
+      "upstreamSHA256": "ed6b86e1a22119b2cc7628482955eb7537497cebc9c1338e95406a8357ad9720",
+      "currentSHA256": "ed6b86e1a22119b2cc7628482955eb7537497cebc9c1338e95406a8357ad9720"
+    },
+    {
+      "path": "Sources/MarkdownText/Utilities/URL+MixedEncoding.swift",
+      "upstreamSHA256": "3cec5d83dd52c9c73d7e02273ffe867946a0741a952d05b96ecc33d22c515226",
+      "currentSHA256": "3cec5d83dd52c9c73d7e02273ffe867946a0741a952d05b96ecc33d22c515226"
+    },
+    {
+      "path": "Sources/MarkdownText/Utilities/View+If.swift",
+      "upstreamSHA256": "5ec866ee60594ff1d3d45440729d2662e70058393440204dea712c82ad2827ad",
+      "currentSHA256": "5ec866ee60594ff1d3d45440729d2662e70058393440204dea712c82ad2827ad"
+    },
+    {
+      "path": "Sources/MarkdownText/Utilities/View+TrackSize.swift",
+      "upstreamSHA256": "39e94d0826a0a0a5f9652c7121fa835a14d6e7b0569b57e80d031c829ecf8709",
+      "currentSHA256": "39e94d0826a0a0a5f9652c7121fa835a14d6e7b0569b57e80d031c829ecf8709"
+    },
+    {
+      "path": "Sources/MarkdownText/Utilities/WithLock.swift",
+      "upstreamSHA256": "d4d29265dd05fd89e648c6ec4356164a4af9d4f4371d68779f49affda5e80cdf",
+      "currentSHA256": "d4d29265dd05fd89e648c6ec4356164a4af9d4f4371d68779f49affda5e80cdf"
+    }
+  ]
+}

@@ -1,11 +1,61 @@
 import AppKit
 import Foundation
+import DWorkbench
 import SwiftStreamingMarkdown
 import Testing
 @testable import UI
 
 @Suite("Chat display preferences")
 @MainActor struct ChatDisplayPreferencesTests {
+    @Test func preferencesDuringCompositionApplyAfterConfirmationWithoutReplacingOwnerOrText() {
+        let editor = NSTextView(), coordinator = TextSourcesQuestionEditor.Coordinator()
+        editor.delegate = coordinator
+        var submitted = 0, wrongOwner = 0, edited = ""
+        coordinator.update(editor, value: "original", isEditable: true, onEdit: { edited = $0 },
+            pointSize: 14, sendsOnReturn: false, onSubmit: { submitted += 1 })
+        editor.setSelectedRange(NSRange(location: editor.string.utf16.count, length: 0))
+        editor.setMarkedText("pinyin", selectedRange: NSRange(location: 6, length: 0),
+                             replacementRange: NSRange(location: NSNotFound, length: 0))
+        let composed = editor.string
+        coordinator.update(editor, value: "stale overwrite", isEditable: true,
+            onEdit: { _ in wrongOwner += 1 }, pointSize: 28, sendsOnReturn: true, onSubmit: { wrongOwner += 1 })
+        #expect(editor.string == composed && editor.hasMarkedText())
+        #expect(editor.font?.pointSize == 14)
+        #expect(!coordinator.submitIfAllowed(editor, modifiers: []))
+        editor.unmarkText()
+        coordinator.textDidChange(Notification(name: NSText.didChangeNotification, object: editor))
+        #expect(editor.string == composed && edited == composed && editor.font?.pointSize == 28)
+        #expect(coordinator.submitIfAllowed(editor, modifiers: []))
+        #expect(submitted == 1 && wrongOwner == 0)
+    }
+
+    @Test func sendShortcutAlwaysDefersMarkedTextAndModifiedNewlines() {
+        typealias C = TextSourcesQuestionEditor.Coordinator
+        #expect(!C.shouldSubmit(markedText: true, sendsOnReturn: true, modifiers: []))
+        #expect(!C.shouldSubmit(markedText: true, sendsOnReturn: false, modifiers: .command))
+        #expect(C.shouldSubmit(markedText: false, sendsOnReturn: true, modifiers: []))
+        #expect(C.shouldSubmit(markedText: false, sendsOnReturn: false, modifiers: .command))
+        #expect(!C.shouldSubmit(markedText: false, sendsOnReturn: true, modifiers: .shift))
+        #expect(!C.shouldSubmit(markedText: false, sendsOnReturn: false, modifiers: [.command, .shift]))
+        #expect(!C.shouldSubmit(markedText: false, sendsOnReturn: true, modifiers: .option))
+    }
+
+    @Test func globalAndProjectModelsShareOnePreferenceOwner() throws {
+        let suiteName = "chat-display-models-\(UUID().uuidString)"
+        let settings = try #require(UserDefaults(suiteName: suiteName))
+        defer { settings.removePersistentDomain(forName: suiteName) }
+        let global = WorkbenchModel(sessionFactory: { _ in throw WorkflowIssue("No inference") }, settings: settings)
+        let project = WorkbenchModel(sessionFactory: { _ in throw WorkflowIssue("No inference") },
+            settings: settings, displaySettingsOwner: global)
+        var choice = global.chatDisplaySettings.preferences; choice.textPointSize = 22
+        #expect(global.chatDisplaySettings.update(choice))
+        #expect(project.chatDisplaySettings.preferences.textPointSize == 22)
+        choice = project.chatDisplaySettings.preferences; choice.theme = .dark
+        #expect(project.chatDisplaySettings.update(choice))
+        #expect(global.chatDisplaySettings.preferences.theme == .dark)
+        #expect(ChatDisplayPreferencesState(settings: settings).preferences.textPointSize == 22)
+    }
+
     @Test func defaultsAndMemoryOnlyState() {
         let state = ChatDisplayPreferencesState()
         #expect(state.preferences == ChatDisplayPreferences())
@@ -87,6 +137,8 @@ import Testing
         #expect(config.codeBlockConfig.codeTextFonts.normal.pointSize == 22)
         #expect(config.inlineStyle.codeTextFont.pointSize == 22)
         #expect(!config.imageConfig.enabled)
+        #expect(config.codeBlockConfig.wrapsLines)
+        #expect(!ChatMarkdownPresentation.config.codeBlockConfig.wrapsLines)
         let document = await ChatMarkdownPresentation.parse("**Hello**", pointSize: 22)
         #expect(document != .empty)
         #expect(ChatMarkdownPresentation.literalText(rendered: "**Hello**", raw: "original",

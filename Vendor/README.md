@@ -72,3 +72,9 @@ python3 scripts/verify-mlx-vendor.py
 `mcp-swift-sdk/` preserves all 100 files from official commit `a0ae212ebf6eab5f754c3129608bc5557637e605`, including Apache-2.0 licensing and upstream tests. `mcp-swift-sdk.provenance.json` records original hashes. The only code patch, `patches/mcp-session-injection.patch`, exposes the existing URLSession initializer so D can reject redirects before forwarding tool parameters. Protocol, JSON-RPC and SSE remain implemented by the official SDK. Never patch SwiftPM caches.
 
 Existing Package.resolved files lock transitive dependencies, including the upstream documentation plugin branch. That plugin is not invoked for chat operation. On updates, check upstream session injection support, replay this narrow patch and test zero outgoing requests to 307/308 targets, cancellation and connection. Cancellation is advisory, not proof of server completion. D does not provide roots, sampling or elicitation permissions; explicit calls only. Build and live transport evidence remain in the active task record.
+
+## SwiftStreamingMarkdown：聊天代码换行
+
+`SwiftStreamingMarkdown/`保留固定官方提交`5f7c04e0558df6146f90d482edb62cb456986bda`的全部生产Sources及Package/LICENSE/README/SECURITY（MIT）。它是生产子集，不含上游示例、工具和30MB快照测试；Package移除了相应测试依赖/target。依赖版本不变，Equatable宏继续按既有信任校验。`SwiftStreamingMarkdown.provenance.json`记录原始/当前摘要，`patches/markdown-code-wrap.patch`可重放。
+
+局部补丁仅给现有CodeBlockConfig/CodeBlockView增加默认关闭的换行展示开关；保留高亮、原始代码复制及解析器。选择依据：固定库只提供横向ScrollView且无公开代码块替换入口；用小补丁复用成熟渲染而不再解析Markdown。升级时检查上游是否已支持、核局部补丁并运行字体/原文/代码宽度回归；不得修改SwiftPM缓存。实际运行证据见CHAT-PRODUCT任务记录。

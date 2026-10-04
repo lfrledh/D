@@ -1,0 +1,93 @@
+--- a/Package.swift
++++ b/Package.swift
+@@ -14,7 +14,6 @@
+   ],
+   dependencies: [
+     .package(url: "https://github.com/ordo-one/equatable", exact: "1.4.1"),
+-    .package(url: "https://github.com/pointfreeco/swift-snapshot-testing", exact: "1.19.3"),
+     .package(url: "https://github.com/swiftlang/swift-markdown.git", exact: "0.7.3"),
+     .package(url: "https://github.com/appstefan/highlightswift", revision: "99c431b38a1444a5fd6a4978307fbbefe3a7af53"),
+     .package(url: "https://github.com/junyan72/iosMath", revision: "ba9ab7729b151329c54fd895a7c1859981d9484c"),
+@@ -34,16 +33,6 @@
+       resources: [
+         .process("Resources")
+       ]
+-    ),
+-    .testTarget(
+-      name: "SwiftStreamingMarkdownTests",
+-      dependencies: [
+-        "SwiftStreamingMarkdown",
+-        .product(name: "SnapshotTesting", package: "swift-snapshot-testing")
+-      ],
+-      path: "Tests/MarkdownTextTests",
+-      resources: [
+-        .process("Resources")
+-      ])
++    )
+   ]
+ )
+--- a/Sources/MarkdownText/Models/CodeBlockConfig.swift
++++ b/Sources/MarkdownText/Models/CodeBlockConfig.swift
+@@ -9,6 +9,9 @@
+ /// Styling configuration for fenced code blocks, primarily the syntax-
+ /// highlighting color theme.
+ public struct CodeBlockConfig: Hashable, Sendable {
++
++  /// D local presentation option; the copied code is never rewritten.
++  public var wrapsLines = false
+ 
+   /// Syntax-highlighting color theme applied to code blocks.
+   ///
+--- a/Sources/MarkdownText/UI/CodeBlockView.swift
++++ b/Sources/MarkdownText/UI/CodeBlockView.swift
+@@ -42,28 +42,30 @@
+   }
+ 
+   @ViewBuilder
++  private var codeText: some View {
++    if #available(iOS 16.1, *) {
++      Text(attributedString ?? AttributedString(code))
++        .font(config.codeBlockConfig.codeTextFonts)
++        .transition(.opacity)
++    } else {
++      Text(code)
++        .font(config.codeBlockConfig.codeTextFonts)
++        .foregroundStyle(Color.Theme.Component.CodeBlock.Foreground.FunctionParameter)
++    }
++  }
++
++  @ViewBuilder
+   var codeblock: some View {
+-    ScrollView(.horizontal) {
+-      HStack(alignment: .top) {
+-        if #available(iOS 16.1, *) {  // Minimum version for HighlightSwift
+-          Text(attributedString ?? AttributedString(code))
+-            .font(config.codeBlockConfig.codeTextFonts)
+-            .transition(.opacity)
+-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+-        } else {
+-          Text(code)
+-            .font(config.codeBlockConfig.codeTextFonts)
+-            .foregroundStyle(Color.Theme.Component.CodeBlock.Foreground.FunctionParameter)
+-            .transition(.opacity)
+-        }
++    Group {
++      if config.codeBlockConfig.wrapsLines {
++        codeText
++          .frame(maxWidth: .infinity, alignment: .leading)
++          .fixedSize(horizontal: false, vertical: true)
++      } else {
++        ScrollView(.horizontal) { codeText.fixedSize(horizontal: true, vertical: false) }
+       }
+-
+-    }.transaction { transaction in
+-      // The horizontal scrollView resizing animation was causing the code block to animate
+-      // all janky.
+-      transaction.animation = nil
+-    }
+-    .padding(16)
++    }.transaction { $0.animation = nil }
++      .padding(16)
+   }
+ 
+   var body: some View {

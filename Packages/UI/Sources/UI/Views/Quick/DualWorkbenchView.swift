@@ -213,6 +213,13 @@ public struct DualWorkbenchView: View {
                                                 try Task.checkCancellation()
                                                 await valueToCanvas(.record(schema: schema, fields: fields), from: destination)
                                             } else { await valueToCanvas(value, from: chat.store) }
+                                        },
+                                        onResolveSharedAsset: { projectID, instanceID, assetID in
+                                            let source = try await store(for: projectID, instanceID: instanceID)
+                                            let manifest = await source.snapshot()
+                                            guard let asset = manifest.assets.first(where: { $0.id == assetID }) else { throw WorkflowIssue("源素材已不存在。") }
+                                            let reference = try await source.pinWorkflowAsset(assetID)
+                                            return (source, reference, asset.name)
                                         })
                                         .id(chat.store.rootURL.standardizedFileURL.path)
                                         .disabled(quickOwnerIsChanging || chat.isDiscarding || chatModel.projectSession.isChangingProject)

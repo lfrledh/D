@@ -64,6 +64,7 @@ struct ChatMessageContent: View {
     let attempt: ChatAttempt?
     let onPreview: (WorkflowAssetReference) -> Void
 
+    @Environment(\.chatDisplayPreferences) private var displayPreferences
     @State private var rawOutputExpanded = true
 
     @Environment(\.dLanguageStore) private var language
@@ -103,7 +104,7 @@ struct ChatMessageContent: View {
                 if !presentation.isUnseparatedRaw,
                    let reasoning = attempt.response?.reasoningText, !reasoning.isEmpty {
                     DisclosureGroup(label("reasoning", "思考内容")) {
-                        Text(reasoning).textSelection(.enabled)
+                        Text(reasoning).font(.system(size: CGFloat(displayPreferences.textPointSize))).textSelection(.enabled)
                         Button(label("copyReasoning", "复制思考内容")) {
                             NSPasteboard.general.clearContents()
                             NSPasteboard.general.setString(reasoning, forType: .string)
@@ -137,7 +138,7 @@ struct ChatMessageContent: View {
                     }
                 }
             } else {
-                Text(message.text).textSelection(.enabled)
+                Text(message.text).font(.system(size: CGFloat(displayPreferences.textPointSize))).textSelection(.enabled)
                 ForEach(message.attachments) { attachment in
                     HStack(spacing: 6) {
                         Image(systemName: attachment.reference.kind == .image ? "photo" :

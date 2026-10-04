@@ -111,3 +111,12 @@ public struct WorkbenchRuntimeStatus: Sendable {
         self.queuedRunIDs = queuedRunIDs
     }
 }
+
+public extension WorkbenchRuntimeStatus {
+    /// A different active request must never label the inspected/queued request.
+    func phase(for runID: UUID) -> String? {
+        if activeRunID == runID { return phase }
+        if queuedRunIDs.contains(runID) { return "Queued / 正在排队" }
+        return nil
+    }
+}

@@ -49,10 +49,10 @@ struct ChatDisplayPreferencesPanel: View {
             Toggle(wording("Wrap code lines", "代码自动换行"), isOn: Binding(
                 get: { state.preferences.wrapsCode }, set: { value in change { $0.wrapsCode = value } }))
                 .accessibilityIdentifier("chat-display-code-wrap")
-            Text(wording("Code wrapping requires renderer support; code currently scrolls horizontally.",
-                         "代码换行仍需渲染器支持；目前代码可横向滚动。"))
-                .font(.caption).foregroundStyle(.secondary)
 
+            Toggle(wording("Sound after a result is saved", "结果保存后播放提示音"), isOn: Binding(
+                get: { state.preferences.endSound == true }, set: { value in change { $0.endSound = value } }))
+                .accessibilityIdentifier("chat-display-end-sound")
             Picker(wording("Send shortcut", "发送快捷键"), selection: Binding(
                 get: { state.preferences.sendShortcut }, set: { value in change { $0.sendShortcut = value } })) {
                     Text(wording("Command–Return", "Command–回车")).tag(ChatDisplayPreferences.SendShortcut.commandReturn)

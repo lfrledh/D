@@ -6,6 +6,7 @@ struct ChatSpeechPanel: View {
     let chat: ChatController
     let project: ProjectSession
     let sessionID: UUID
+    let onImportAudio: (String) -> Void
     @Environment(\.dLanguageStore) private var language
     @State private var locale = Locale.current.identifier.replacingOccurrences(of: "_", with: "-")
     @State private var voice = ""
@@ -31,6 +32,9 @@ struct ChatSpeechPanel: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 HStack {
+                    Button(text("Choose audio and transcribe…", "选择音频并转写…")) { onImportAudio(locale) }
+                        .disabled(project.isBusy || capability?.canTranscribeLocally != true)
+                        .accessibilityIdentifier("chat-transcribe-file")
                     if project.chatRecordingSessionID != nil {
                         Button(text("Finish recording", "结束录音")) { Task { await project.finishChatRecording() } }
                             .buttonStyle(.borderedProminent)

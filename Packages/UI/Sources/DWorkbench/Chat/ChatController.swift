@@ -13,6 +13,26 @@ import Observation
     public private(set) var activeSessionID: UUID?
     public private(set) var activeAttemptID: UUID?
     public private(set) var pendingSaveAttemptID: UUID?
+    /// Delivered only after this live attempt's terminal record is durable. Loading history is silent.
+    @ObservationIgnored public var onPersistedTerminal: @MainActor (ChatAttempt) -> Void = { _ in }
+    @ObservationIgnored private var pendingTerminalNotices = Set<UUID>()
+
+    private func announcePersistedTerminals(_ snapshot: ChatState) {
+        for attempt in snapshot.sessions.flatMap(\.attempts) where pendingTerminalNotices.contains(attempt.id) {
+            guard attempt.status != .running, attempt.status != .saving, pendingSaveAttemptID != attempt.id else { continue }
+            pendingTerminalNotices.remove(attempt.id)
+            onPersistedTerminal(attempt)
+        }
+    }
+
+    public func runFeedback(for attempt: ChatAttempt) async throws -> ChatRunFeedback {
+        guard let reference = attempt.output else { return .init(metadata: [:]) }
+        let archive = try await store.workflowState().archive
+        guard let record = archive?.assets.first(where: { $0.reference == reference }) else {
+            throw WorkflowIssue("Measured output metadata is unavailable. / 找不到该输出的实际记录。")
+        }
+        return .init(metadata: record.metadata)
+    }
     private var inMemoryDefaultSystemPrompt = ""
     public var defaultSystemPrompt: String {
         settings?.string(forKey: "D.Chat.NewSessionSystemPrompt.v1") ?? inMemoryDefaultSystemPrompt
@@ -222,6 +242,7 @@ import Observation
             let snapshot = state, captured = mutation
             let revision = try await store.saveChatState(snapshot, expectedRevision: diskRevision)
             diskRevision = revision; savedMutation = captured; state.revision = revision; saveIssue = nil
+            announcePersistedTerminals(snapshot)
         }
         writeTail = task
         do { try await task.value } catch { saveIssue = error.localizedDescription; throw error }
@@ -425,10 +446,51 @@ import Observation
     }
     public func addAttachment(_ reference: WorkflowAssetReference, name: String, sessionID: UUID,
                               ocr: Bool = false) async throws -> UUID {
+        try requireEditableAttachments(sessionID)
         let attachment = try await captureAttachment(reference, name: name, ocr: ocr)
+        try requireEditableAttachments(sessionID)
         let i = try index(sessionID)
         guard state.sessions[i].attachments.count < 32 else { throw WorkflowIssue("一次最多32个附件。") }
         state.sessions[i].attachments.append(attachment); changed(); return attachment.id
+    }
+
+    /// The caller resolves only an explicitly opened/authorized project instance.
+    /// Copying keeps the original asset immutable and uses the existing Store provenance.
+    public func addSharedAttachment(_ reference: WorkflowAssetReference, from source: ProjectStore,
+                                    name: String, sessionID: UUID) async throws -> UUID {
+        try requireEditableAttachments(sessionID)
+        guard [.text, .image, .video, .document].contains(reference.kind) else {
+            throw WorkflowIssue("This attachment needs an explicit conversion first. / 此素材需要先显式转换。")
+        }
+        let activity = try beginExternalActivity(); defer { endExternalActivity(activity) }
+        let copied = source === store ? reference : try await store.copyWorkflowAsset(reference, from: source)
+        try Task.checkCancellation()
+        return try await addAttachment(copied, name: name, sessionID: sessionID)
+    }
+
+    public func addPastedPNG(_ data: Data, sessionID: UUID) async throws -> UUID {
+        try requireEditableAttachments(sessionID)
+        let activity = try beginExternalActivity(); defer { endExternalActivity(activity) }
+        try Task.checkCancellation()
+        let asset = try await store.importWorkflowPNG(data, name: "Clipboard PNG")
+        try Task.checkCancellation()
+        return try await addAttachment(asset.record.reference, name: "Clipboard PNG", sessionID: sessionID)
+    }
+
+    public func moveAttachment(_ id: UUID, by offset: Int, sessionID: UUID) throws {
+        try requireEditableAttachments(sessionID)
+        let i = try index(sessionID)
+        guard [-1, 1].contains(offset), let old = state.sessions[i].attachments.firstIndex(where: { $0.id == id }),
+              state.sessions[i].attachments.indices.contains(old + offset) else {
+            throw WorkflowIssue("Attachment position is no longer available. / 附件位置已经变化。")
+        }
+        state.sessions[i].attachments.swapAt(old, old + offset); changed()
+    }
+    private func requireEditableAttachments(_ sessionID: UUID) throws {
+        try requireLoaded(); let session = state.sessions[try index(sessionID)]
+        guard allowsSubmission(), !isDiscarding, !session.archived, session.contextChoices?.deletedAt == nil else {
+            throw WorkflowIssue("This conversation cannot accept attachments. / 此会话目前不能修改附件。")
+        }
     }
 
     /// Register a verified interpretation, never scan a user's folders implicitly.
@@ -686,7 +748,7 @@ import Observation
         return .init(excerpts: excerpts, issues: issues)
     }
     public func removeAttachment(_ id: UUID, sessionID: UUID) throws {
-        try requireLoaded(); let i = try index(sessionID)
+        try requireEditableAttachments(sessionID); let i = try index(sessionID)
         guard state.sessions[i].attachments.contains(where: { $0.id == id }) else { throw WorkflowIssue("附件不存在。") }
         state.sessions[i].attachments.removeAll { $0.id == id }; changed()
     }
@@ -1390,6 +1452,7 @@ import Observation
             if let firstMessageTitle { state.sessions[i].title = firstMessageTitle }
         }
         changed(); isCancelling = false; error = nil; isRunning = true; activeSessionID = sessionID; activeAttemptID = attemptID; phase = "正在保存冻结输入…"
+        pendingTerminalNotices.insert(attemptID)
         runTask = Task { [self] in
             defer { isRunning = false; isCancelling = false; activeSessionID = nil; activeAttemptID = nil; runTask = nil
                     if pendingSaveAttemptID == nil { services = nil }
@@ -1414,7 +1477,9 @@ import Observation
                 let result = try await service.executeCall(.init(node: prepared.0, stepID: attemptID, inputs: prepared.2))
                 guard case .outputs(let values) = result, let raw = values["raw"]?.asset ?? values["output"]?.asset else { throw WorkflowIssue("文字输出缺少已发布原文。") }
                 try await finishAttempt(sessionID: sessionID, attemptID: attemptID, reference: raw)
-                phase = "已完成"; try await flush()
+                phase = state.sessions.first(where: { $0.id == sessionID })?.attempts.first(where: { $0.id == attemptID })?.response?.finishReason == .length
+                    ? "Length limit · partial answer kept / 长度上限 · 部分回答已保留" : "Completed / 已完成"
+                try await flush()
             } catch {
                 if services?.hasPendingSaves == true { pendingSaveAttemptID = attemptID }
                 if let si = state.sessions.firstIndex(where: { $0.id == sessionID }),

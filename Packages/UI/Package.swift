@@ -9,7 +9,7 @@ let package = Package(
                .library(name: "DWorkbench", targets: ["DWorkbench"])],
     dependencies: [.package(name: "DPlatform", path: "../.."),
         .package(name: "DMCPSDK", path: "../../Vendor/mcp-swift-sdk"),
-        .package(url: "https://github.com/microsoft/SwiftStreamingMarkdown", revision: "5f7c04e0558df6146f90d482edb62cb456986bda"),
+        .package(name: "SwiftStreamingMarkdown", path: "../../Vendor/SwiftStreamingMarkdown"),
         .package(url: "https://github.com/weichsel/ZIPFoundation", revision: "22787ffb59de99e5dc1fbfe80b19c97a904ad48d")],
     targets: [
         .target(name: "DWorkbench", dependencies: [.product(name: "DInference", package: "DPlatform"),

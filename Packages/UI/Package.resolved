@@ -1,5 +1,5 @@
 {
-  "originHash" : "8d12610129d07c893944301d1914b62a60348c4339e1895fc3e4fb57de88f61b",
+  "originHash" : "7fdfe9da65e29d8eb2dacd8055148d6d6173dff54092d2f4e3e7a48ccd1f6c66",
   "pins" : [
     {
       "identity" : "equatable",
@@ -105,14 +105,6 @@
       "state" : {
         "revision" : "869129b7bf4ecc57b97d0193ad29690ca2134750",
         "version" : "1.8.1"
-      }
-    },
-    {
-      "identity" : "swiftstreamingmarkdown",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/microsoft/SwiftStreamingMarkdown",
-      "state" : {
-        "revision" : "5f7c04e0558df6146f90d482edb62cb456986bda"
       }
     },
     {

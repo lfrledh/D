@@ -19,9 +19,9 @@ enum AppSessionFactory {
         let stages = BackendStageMonitor()
         let backend = try MLXImageBackend(configuration: .init(artifactDirectory: artifactDirectory, profile: .scalableKlein4B),
                                          observer: { await stages.record($0) })
-        let textBackend = try MLXTextBackend(configuration: .init(maximumPromptTokens: 32768, maximumOutputTokens: 8192))
+        let textBackend = try MLXTextBackend(configuration: .init(maximumPromptTokens: 32768, maximumOutputTokens: 8192), observer: { await stages.record($0) })
         let vlmBackend = try MLXQwenVLMBackend(configuration: .init(artifactDirectory: artifactDirectory,
-            maximumPromptTokens: 262144, maximumOutputTokens: 262144))
+            maximumPromptTokens: 262144, maximumOutputTokens: 262144), observer: { await stages.record($0) })
         let devBackend = try MLXFluxDevBackend(configuration: .init(artifactDirectory: artifactDirectory, profile: .flux2Dev))
         var modelAdapters: [WorkflowModelAdapter] = []
         for profile in try TextModelProfiles.registeredVLM() {
@@ -256,10 +256,13 @@ enum AppSessionFactory {
             switch stage {
             case .verifying: "正在校验模型完整性"
             case .tokenizing: "正在处理提示词"
-            case .loading, .loadingTextEncoder: "正在加载文本编码器"
-            case .loaded, .textEncoderLoaded, .encoding: "正在编码提示词"
+            case .loading: "Loading model / 正在加载模型"
+            case .loadingTextEncoder: "正在加载文本编码器"
+            case .loaded: "Preparing context / 正在准备上下文"
+            case .textEncoderLoaded, .encoding: "正在编码提示词"
             case .encoded, .loadingTransformer: "正在加载图像模型"
-            case .transformerLoaded, .denoising, .generating: "正在生成图像"
+            case .generating: "Generating raw model output / 正在生成原始模型输出"
+            case .transformerLoaded, .denoising: "正在生成图像"
             case .loadingVAE, .vaeLoaded: "正在加载图像解码器"
             case .decoding: "正在解码图像"
             case .decoded, .publishing: "正在写入图像文件"

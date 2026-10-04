@@ -322,6 +322,7 @@ struct ChatWorkbenchView: View {
     let onRetainTemporary: ((WorkflowAssetReference, Bool, UUID) async throws -> Void)?
     let onAssetsChanged: () -> Void
     let onSavedValue: ((WorkflowDatum, UUID) async throws -> Void)?
+    let onResolveSharedAsset: ((UUID, UUID?, UUID) async throws -> (ProjectStore, WorkflowAssetReference, String))?
 
     @Environment(\.dLanguageStore) private var language
     @State private var search = ""
@@ -362,6 +363,7 @@ struct ChatWorkbenchView: View {
          onRetainTemporary: ((WorkflowAssetReference, Bool, UUID) async throws -> Void)? = nil,
          onAssetsChanged: @escaping () -> Void,
          onSavedValue: ((WorkflowDatum, UUID) async throws -> Void)? = nil,
+         onResolveSharedAsset: ((UUID, UUID?, UUID) async throws -> (ProjectStore, WorkflowAssetReference, String))? = nil,
          initialInspectorVisible: Bool = false,
          initialSettingsVisible: Bool = false,
          initialContextPreviewVisible: Bool = false,
@@ -370,6 +372,7 @@ struct ChatWorkbenchView: View {
          initiallyHasNewContent: Bool = false) {
         self.chat = chat; self.model = model; self.onChooseModel = onChooseModel
         self.onSavedAsset = onSavedAsset; self.onRetainTemporary = onRetainTemporary; self.onAssetsChanged = onAssetsChanged; self.onSavedValue = onSavedValue
+        self.onResolveSharedAsset = onResolveSharedAsset
         _showInspector = State(initialValue: initialInspectorVisible)
         _inspectorTab = State(initialValue: initialSettingsVisible ? .settings : .data)
         _showContextPreview = State(initialValue: initialContextPreviewVisible)
@@ -489,7 +492,15 @@ struct ChatWorkbenchView: View {
                 }
             }
         }
-        .task { if !chat.isLoaded { await chat.load() } }
+        .environment(\.chatDisplayPreferences, model.chatDisplaySettings.preferences)
+        .preferredColorScheme(model.chatDisplaySettings.preferences.preferredColorScheme)
+        .task {
+            let preferences = model.chatDisplaySettings
+            chat.onPersistedTerminal = { _ in
+                if preferences.preferences.endSound == true { NSSound(named: "Glass")?.play() }
+            }
+            if !chat.isLoaded { await chat.load() }
+        }
         .sheet(item: Binding(get: { sheets.detail }, set: { sheets.detail = $0 })) { item in
             switch item {
             case .edit(let edit): editSheet(edit)
@@ -782,7 +793,7 @@ struct ChatWorkbenchView: View {
                         }
                         Color.clear.frame(height: 1).id("chat-bottom")
                     }.scrollTargetLayout()
-                        .frame(maxWidth: ChatPresentationLayout.messageWidth)
+                        .frame(maxWidth: CGFloat(model.chatDisplaySettings.preferences.transcriptWidth))
                         .frame(maxWidth: .infinity)
                         .padding(.horizontal, 16).padding(.vertical, 20)
                 }
@@ -1088,6 +1099,7 @@ struct ChatWorkbenchView: View {
             Button(newLabel("copyRedactedJSON", english: "Copy redacted JSON", chinese: "复制脱敏 JSON")) {
                 copy(snapshot.redactedJSON)
             }.accessibilityIdentifier("chat-copy-request-json")
+            ChatRunFeedbackView(chat: chat, attempt: attempt)
             Text(snapshot.redactedJSON).font(.caption.monospaced()).textSelection(.enabled)
                 .accessibilityIdentifier("chat-request-json")
         }.accessibilityIdentifier("chat-request-inspection")
@@ -1302,6 +1314,9 @@ struct ChatWorkbenchView: View {
 
     private func settings(_ session: ChatSession) -> some View {
             VStack(alignment: .leading, spacing: 12) {
+                DisclosureGroup(newLabel("displaySettings", english: "Display and keyboard", chinese: "显示与键盘")) {
+                    ChatDisplayPreferencesPanel(state: model.chatDisplaySettings)
+                }
                 Text(label("nextAnswer", "下一次回答设置")).font(.headline)
                 Text(label("futureOnly", "更改只影响之后的生成。")) .font(.caption).foregroundStyle(.secondary)
                 ChatOutputFormatPanel(chat: chat, sessionID: session.id).id(session.id.uuidString + ":output-format")
@@ -1373,16 +1388,25 @@ struct ChatWorkbenchView: View {
             TextSourcesQuestionEditor(value: session.draft, editEpoch: 0,
                 isEditable: !session.archived && session.contextChoices?.deletedAt == nil,
                 accessibilityIdentifier: "chat-draft-\(session.id.uuidString)",
-                onEdit: { value in perform(sessionID: session.id) { try chat.updateDraft(value, sessionID: session.id) } })
+                onEdit: { value in perform(sessionID: session.id) { try chat.updateDraft(value, sessionID: session.id) } },
+                pointSize: CGFloat(model.chatDisplaySettings.preferences.textPointSize),
+                sendsOnReturn: model.chatDisplaySettings.preferences.sendShortcut == .return,
+                onSubmit: { submitFromComposer(session.id) })
                 .id(session.id.uuidString + ":draft")
                 .frame(minHeight: 80, idealHeight: 110)
-            ChatSpeechPanel(chat: chat, project: model.projectSession, sessionID: session.id)
+            ChatSpeechPanel(chat: chat, project: model.projectSession, sessionID: session.id,
+                onImportAudio: { locale in Task { await chooseTranscriptionFile(sessionID: session.id, locale: locale) } })
                 .id(session.id.uuidString + ":speech")
-            Text(label("dropFiles", "可拖入 TXT、MD、图像或视频；Enter 换行。"))
+            Text(model.chatDisplaySettings.preferences.sendShortcut == .return
+                ? newLabel("enterSend", english: "Return sends; Shift–Return adds a line. Input method conversion takes priority.", chinese: "回车发送，Shift–回车换行；输入法选字优先。")
+                : newLabel("commandSend", english: "Command–Return sends; Return adds a line. Drop files or paste attachments below.", chinese: "Command–回车发送，回车换行；可拖入文件或粘贴附件。"))
                 .font(.caption).foregroundStyle(.secondary)
             HStack {
                 Button(label("attach", "添加附件…"), systemImage: "paperclip") {
                     Task { await chooseAttachments(for: session.id) }
+                }.disabled(session.archived || session.contextChoices?.deletedAt != nil)
+                Button(newLabel("pasteAttachments", english: "Paste attachments", chinese: "粘贴附件")) {
+                    Task { await pasteAttachments(sessionID: session.id) }
                 }.disabled(session.archived || session.contextChoices?.deletedAt != nil)
                 Spacer()
                 if chat.pendingSaveAttemptID != nil || chat.saveIssue != nil {
@@ -1402,7 +1426,7 @@ struct ChatWorkbenchView: View {
                         chinese: "停止生成并保留已接收文字；资源释放后才能开始下一次。"))
                     .chatMeasured("composer-stop", probe: layoutProbe)
                 } else {
-                    Button(label("send", "发送")) { Task { await run(sessionID: session.id) { try await chat.send(sessionID: session.id) } } }
+                    Button(label("send", "发送")) { submitFromComposer(session.id) }
                         .buttonStyle(.borderedProminent)
                         .disabled(!ChatRunAdmission.allowsSend(session, isRunning: chat.isRunning,
                             hasPendingSave: chat.pendingSaveAttemptID != nil, hasSaveIssue: chat.saveIssue != nil,
@@ -1430,7 +1454,7 @@ struct ChatWorkbenchView: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
-        .frame(maxWidth: ChatPresentationLayout.messageWidth)
+        .frame(maxWidth: CGFloat(model.chatDisplaySettings.preferences.transcriptWidth))
         .frame(maxWidth: .infinity)
         .padding(16)
         .dropDestination(for: URL.self) { urls, _ in
@@ -1440,6 +1464,14 @@ struct ChatWorkbenchView: View {
         }
     }
 
+    private func submitFromComposer(_ sessionID: UUID) {
+        guard let session = chat.state.sessions.first(where: { $0.id == sessionID }),
+              ChatRunAdmission.allowsSend(session, isRunning: chat.isRunning,
+                hasPendingSave: chat.pendingSaveAttemptID != nil, hasSaveIssue: chat.saveIssue != nil,
+                invalidFields: chat.invalidParameterFields) else { return }
+        Task { await run(sessionID: sessionID) { try await chat.send(sessionID: sessionID) } }
+    }
+
     private func attachmentRow(_ item: ChatAttachment, removable: Bool, sessionID: UUID) -> some View {
         HStack(spacing: 6) {
             Image(systemName: item.reference.kind == .image ? "photo" : item.reference.kind == .video ? "film" : "doc.text")
@@ -1447,6 +1479,13 @@ struct ChatWorkbenchView: View {
             Text(attachmentKind(item.reference.kind)).font(.caption).foregroundStyle(.secondary)
             Button(label("preview", "预览")) { present(.preview(item.reference)) }
             if removable {
+                let items = chat.state.sessions.first(where: { $0.id == sessionID })?.attachments ?? []
+                Button(newLabel("attachmentEarlier", english: "Earlier", chinese: "前移")) {
+                    perform(sessionID: sessionID) { try chat.moveAttachment(item.id, by: -1, sessionID: sessionID) }
+                }.disabled(items.first?.id == item.id)
+                Button(newLabel("attachmentLater", english: "Later", chinese: "后移")) {
+                    perform(sessionID: sessionID) { try chat.moveAttachment(item.id, by: 1, sessionID: sessionID) }
+                }.disabled(items.last?.id == item.id)
                 Button(label("remove", "移除")) { perform(sessionID: sessionID) { try chat.removeAttachment(item.id, sessionID: sessionID) } }
             }
         }.font(.caption).padding(6).background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
@@ -1553,6 +1592,39 @@ struct ChatWorkbenchView: View {
         guard await panel.begin() == .OK, owner === chat, store === chat.store else { return }
         await importURLs(panel.urls, sessionID: sessionID, knowledge: knowledge)
     }
+    private func chooseTranscriptionFile(sessionID: UUID, locale: String) async {
+        guard !filePanelBusy else { return }
+        filePanelBusy = true; defer { filePanelBusy = false }
+        let owner = chat, store = chat.store
+        let panel = NSOpenPanel(); panel.canChooseDirectories = false; panel.allowsMultipleSelection = false
+        panel.message = newLabel("audioImport", english: "Choose a local PCM WAV or CAF. D keeps a copy, transcribes on device, and waits for your review before adding text to the draft.", chinese: "选择本地PCM WAV或CAF；D保留副本并在本机转写，审核后才加入草稿，不自动发送。")
+        guard await panel.begin() == .OK, let url = panel.url, owner === chat, store === chat.store else { return }
+        let scoped = url.startAccessingSecurityScopedResource(); defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        do {
+            guard ["wav", "caf"].contains(url.pathExtension.lowercased()) else { throw WorkflowIssue(panel.message) }
+            let activity = try owner.beginExternalActivity(); defer { owner.endExternalActivity(activity) }
+            let asset = try await store.importWorkflowMediaFile(at: url)
+            onAssetsChanged(); try Task.checkCancellation()
+            try await owner.transcribeSpeech(asset.record.reference, sessionID: sessionID, locale: locale)
+            report(nil, for: sessionID)
+        } catch { report(error.localizedDescription, for: sessionID) }
+    }
+    private func pasteAttachments(sessionID: UUID) async {
+        // Explicit user action only; never poll the clipboard or follow web URLs.
+        let pasteboard = NSPasteboard.general
+        let files = (pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL]) ?? []
+        if !files.isEmpty { await importURLs(files, sessionID: sessionID); return }
+        guard let png = pasteboard.data(forType: .png), png.count <= 64 * 1_024 * 1_024 else {
+            report(newLabel("pasteAttachmentMissing", english: "Copy local files or a PNG image first. Paste ordinary text directly in the draft. Other image formats can be added as files.", chinese: "请先复制本地文件或PNG图像；普通文字直接粘贴到草稿，其他图片格式可通过文件添加。"), for: sessionID); return
+        }
+        let owner = chat
+        do {
+            let activity = try owner.beginExternalActivity(); defer { owner.endExternalActivity(activity) }
+            _ = try await owner.addPastedPNG(png, sessionID: sessionID)
+            onAssetsChanged()
+            report(nil, for: sessionID)
+        } catch { report(error.localizedDescription, for: sessionID) }
+    }
     private func importURLs(_ urls: [URL], sessionID: UUID, knowledge: Bool = false,
                             directoryEntries: [ChatKnowledgeDirectoryInventory.Entry] = []) async {
         let ocr = ocrImport
@@ -1607,6 +1679,15 @@ struct ChatWorkbenchView: View {
                     continue
                 }
                 do {
+                    if !ChatAssetDropScope.accepts(projectID: projectID, instanceID: instanceID,
+                        manifestProjectID: manifest.id, manifestInstanceID: manifest.effectiveInstanceID),
+                       let onResolveSharedAsset {
+                        let (source, reference, name) = try await onResolveSharedAsset(projectID, instanceID, assetID)
+                        try Task.checkCancellation()
+                        guard owner === chat, store === chat.store else { throw CancellationError() }
+                        _ = try await owner.addSharedAttachment(reference, from: source, name: name, sessionID: sessionID)
+                        onAssetsChanged(); continue
+                    }
                     guard ChatAssetDropScope.accepts(projectID: projectID, instanceID: instanceID,
                         manifestProjectID: manifest.id, manifestInstanceID: manifest.effectiveInstanceID),
                           let asset = manifest.assets.first(where: { $0.id == assetID }),

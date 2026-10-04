@@ -204,16 +204,22 @@ struct WorkflowSaveFailure: LocalizedError {
         // The actor consumes each delta independently of MainActor scheduling.
         let consumer = Task { await collector.consume(run) }
         var displayedRevision = -1, displayPublications = 0
+        var displayedPhase: String?
         let collectionStarted = ContinuousClock.now
         let display = Task { @MainActor [weak self] in
             while !Task.isCancelled {
+                let status = await self?.session.status()
+                let phase = status.flatMap { $0.phase(for: request.id) }
+                if let self, !self.cancelled, let phase, phase != displayedPhase {
+                    displayedPhase = phase; self.progress(phase)
+                }
                 let snapshot = await collector.snapshot()
                 if snapshot.revision != displayedRevision, let self {
                     displayedRevision = snapshot.revision
                     displayPublications += 1
                     self.languagePreview = snapshot.text
                     self.languagePreviewChanged(request.id, snapshot.text)
-                    if !self.cancelled, let value = snapshot.progress { self.progress(value) }
+                    if !self.cancelled, let value = snapshot.progress, phase == nil { self.progress(value) }
                 }
                 do { try await Task.sleep(for: .milliseconds(80)) } catch { break }
             }
@@ -257,6 +263,7 @@ struct WorkflowSaveFailure: LocalizedError {
     public func generateLanguage(task: String, content: String?, context: WorkflowExecutionContext) async throws -> WorkflowAssetReference {
         if pending[context.stepID] != nil { return try await publish(context) }
         let binding = try model(for: context)
+        progress("Preparing context / 正在准备上下文")
         let request = try await languageRequest(task: task, content: content, context: context, binding: binding)
         languagePreview = ""
         languagePreviewChanged(context.stepID, "")
@@ -465,6 +472,7 @@ struct WorkflowSaveFailure: LocalizedError {
 
     private func publish(_ context: WorkflowExecutionContext) async throws -> WorkflowAssetReference {
         guard let content = pending[context.stepID] else { throw WorkflowIssue("没有待保存结果。") }
+        progress("Saving result / 正在保存结果")
         do {
             let result: WorkflowPublishedAsset
             if let request = content.request, case .video(let expected) = request.input {

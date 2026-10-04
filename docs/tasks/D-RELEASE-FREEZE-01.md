@@ -703,3 +703,12 @@ F30交互组件：Sol/high interactive1，经只读审阅合入962f90d98ba52b639
 - Evidence R/lead/s03-package-fields-r1/r2/r3 preserves fixture failures. r4 Workbench26 methods/5 suites passed; UI runner only started with no completion, despite parent exit0, so hosting NOT passed. New real process event helper eliminated pre-dispatch identity rejection but requires exit diagnosis; no production assertion deleted. Final targeted s03-fields-final 5 methods passed after last cancellation review. ActualApp remains cdcaa775…; no claims new package/native acceptance.
 - Nonimplementer native_files_review checked temporary routing/quit/file ownership; align_layout_diagnosis checked package exact-byte/original-audio protection; native_h22_diagnosis found envelope and cancellation defects, Lead fixes+counterexamples above. This is Lead implementation/reviewed by nonimplementers, not Sol independently passing whole slice. Main remains f31dced… pending ordinaryApp gate. New preferences Worker s01-chat-preferences-v1 from477245, Sol/high exact restricted tree/output/tmp, networkfalse; Lead owns controller/host/input integration; no recursive/build/GPU.
 - Remaining F19 audio/paste/order/cross-project, F35 display preferences, F36 status/notification wiring continue within same frozen ledger. F28 safety-review blockage unchanged; no bypass. Native lock gate remains one central item; no new human action repeated.
+
+### CHAT-PRODUCT F19/F31/F35/F36 增量（2026-10-04）
+
+- 受测基点7aac9e200d08913028500d4422d9036ba798c9c9加本次Lead增量；最终候选见Git和R/lead。F19显式PNG/文件粘贴、附件排序和已打开项目复制；F31复用系统本地转写增加选取音频文件。独立审阅发现PNG缺实际尺寸导致必拒，改用原Store验证后真实PNG/坏输入通过。Quick端口共用拖入仍待补，不称F19完成。
+- F35受限Sol/high初交325f3d06（365.793秒，初交一次）实现偏好值/面板/字体投影；Lead接入真实模型owner、现有编辑器和固定Markdown库小补丁。非实现者两P2（双owner旧值覆盖、marked期间设置丢失）定点修复；actual NSTextView marked/unmark及双model反例通过。不是真人IME或原生窗口验收。源码/许可/最小补丁见Vendor记录；依赖版本未变，没有缓存打补丁。
+- F36复用已有Runtime状态及唯一流消费者，文字observer仅提供实际阶段；token/加载来自完整输出引用对应元数据，未知不填0。终态提示仅持久化后且每次尝试一次，保存重试不重新推理；设置默认关闭。流中正文/思考尚无可靠独立事件，仍明确原始流，禁止猜测。
+- R/lead/s05-preferences-attachments：UI6方法/1suite、Workbench7方法/2suite通过；s06-feedback：UI7方法/1suite、Workbench6方法/3suite通过，含真实Runtime慢显示全文、EACCES→保存恢复仅一次提示；s01-preferences-final：UI8方法/1suite通过（最终组字/共享owner修正）。不叠加为全功能通过率。没有重跑已验长模型。F36无delta阶段专门检查与原生门槛仍需补。
+- Hosting点击实验未完成：真实LLDB退出栈为Swift async主队列drain退出，未证实AppKit按钮内部退出。实验patch留R/lead/hosting-direct-send-experiment.patch并撤回自身未成功驱动变化；原测试/断言保留，不放宽。r4外层exit0不代表UI通过。
+- F28自动安全审查阻塞无变化；原生最后明确锁屏，集中事项不重复。main未动。来源为Sol局部初步实现＋Lead接线/修补＋非实现者源码复核；完整Lead消耗/订阅费用unknown。
