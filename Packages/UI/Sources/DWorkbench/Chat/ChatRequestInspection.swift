@@ -46,7 +46,7 @@ public struct ChatRequestInspection: Sendable {
                   attempt.messagesJSON.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                     ? "No ordered message snapshot recorded" : "See ordered messages below; raw JSON withheld"),
             field("displayLimit", "Local display protection",
-                  "Credential indicators withhold entire fields; arbitrary secrets may still be visible. Use the redacted export for sharing")
+                  "Recognized credential assignments and token patterns are redacted locally; arbitrary secrets may still be visible. Use the redacted export for sharing")
         ]
         let media = Self.mediaReferences(attempt.inputs)
         for key in attempt.inputs.keys.sorted() {
@@ -256,18 +256,34 @@ public struct ChatRequestInspection: Sendable {
     }
 
     private static func localText(_ value: String) -> String {
-        containsCredentialMarker(value) ? "[withheld: credential indicator in field]" : value
+        // Inspect the decoded text: JSON escapes must not bypass field redaction.
+        let assignments = #"(?i)(?<![A-Za-z0-9_])((?:['"]?(?:api[_-]?(?:key|token)|access[_-]?(?:key|token)|refresh[_-]?token|auth[_-]?token|private[_-]?key|client[_-]?secret|authorization|password|secret|credential|bearer)['"]?)[ \t]*[:=][ \t\r\n]*)("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\n,;}]+)"#
+        let bearer = #"(?i)(?<![A-Za-z0-9_])(bearer[ \t\r\n]+)([A-Za-z0-9._~+/-]+)"#
+        return redactMatches(redactMatches(redactMatches(value, pattern: assignments, group: 2),
+                                          pattern: bearer, group: 2),
+                             pattern: concreteTokenPattern, group: 0)
     }
 
     private static func isSensitiveVisibleIdentifier(_ value: String) -> Bool {
         if value == "maximumPromptTokens" || value == "maximumOutputTokens" { return false }
-        return isCredentialKey(value) || containsCredentialMarker(value)
+        return isCredentialKey(value) || containsMatch(value, pattern: concreteTokenPattern)
     }
 
-    private static func containsCredentialMarker(_ value: String) -> Bool {
-        let credentialWords = ["password", "secret", "credential", "authorization", "bearer", "token", "key", "sk-", "ghp_", "xox"]
-        let lower = value.lowercased()
-        return credentialWords.contains(where: { lower.contains($0) })
+    private static let concreteTokenPattern = #"(?i)(?<![A-Za-z0-9_])(?:sk-|ghp_|github_pat_|xox[baprs]-)[A-Za-z0-9_-]+"#
+
+    private static func containsMatch(_ value: String, pattern: String) -> Bool {
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return false }
+        return regex.firstMatch(in: value, range: NSRange(value.startIndex..., in: value)) != nil
+    }
+
+    private static func redactMatches(_ value: String, pattern: String, group: Int) -> String {
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return value }
+        var result = value
+        for match in regex.matches(in: value, range: NSRange(value.startIndex..., in: value)).reversed() {
+            guard let range = Range(match.range(at: group), in: result) else { continue }
+            result.replaceSubrange(range, with: "[redacted]")
+        }
+        return result
     }
 
     private static func localValue(_ value: WorkflowScalar) -> String {
@@ -282,8 +298,14 @@ public struct ChatRequestInspection: Sendable {
     private static func isCredentialKey(_ key: String) -> Bool {
         if key == "maximumPromptTokens" || key == "maximumOutputTokens" { return false }
         let lower = key.lowercased()
-        return ["bookmark", "credential", "password", "secret", "token", "authorization", "header", "apikey", "api_key"]
-            .contains(where: { lower.contains($0) })
+        if ["bookmark", "credential", "password", "secret", "token", "key", "authorization", "header",
+            "apikey", "api_key", "accesskey", "access_token", "accesstoken"].contains(lower) { return true }
+        if ["Password", "Secret", "Credential", "Token", "Key", "Authorization", "Header"].contains(where: key.hasSuffix) {
+            return true
+        }
+        return key.split(whereSeparator: { $0 == "_" || $0 == "-" || $0 == "." }).contains {
+            ["password", "secret", "credential", "token", "key", "authorization", "header"].contains($0.lowercased())
+        }
     }
 
     private static func exportValue(_ value: WorkflowScalar, key: String,

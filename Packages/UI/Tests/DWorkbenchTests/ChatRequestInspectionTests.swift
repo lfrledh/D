@@ -23,7 +23,7 @@ struct ChatRequestInspectionTests {
         let inspection = ChatRequestInspection(attempt: attempt)
         #expect(inspection.sections.first?.fields.contains { $0.value == attempt.id.uuidString } == true)
         #expect(inspection.sections.first { $0.id == "input" }?.fields.contains {
-            $0.id == "system" && $0.value == "[withheld: credential indicator in field]"
+            $0.id == "system" && $0.value == "system secret"
         } == true)
         #expect(inspection.sections.first { $0.id == "seed" }?.fields.contains {
             $0.id == "seed" && $0.value == "42"
@@ -212,29 +212,78 @@ struct ChatRequestInspectionTests {
         }
     }
 
-    @Test func credentialIndicatorsWithholdWholeFieldsAfterJSONDecoding() throws {
+    @Test func localInspectionKeepsProseAndRedactsCredentialValuesAfterJSONDecoding() throws {
         var node = WorkflowNode(operationID: WorkflowModelRoutes.qwen35, definitionVersion: 2, title: "chat")
         node.parameters["seed"] = .text("Authorization:\nseed-canary")
         node.parameters["minimumPixels"] = .text("Bearer\nmedia-canary")
-        node.parameters["customPrompt"] = .text("Authorization:\nparameter-canary")
-        let messages = #"[{"role":"user","parts":[{"type":"text","text":"Ordinary input"},{"type":"text","text":"Authorization:\nline-canary"},{"type":"text","text":"authorizati\u006fn: unicode-canary"}]}]"#
+        node.parameters["customPrompt"] = .text("Explain token budgets and key differences; api_key = parameter-canary; keep keyframe readable")
+        node.parameters["monkey"] = .text("ordinary value")
+        node.parameters["tokenizer"] = .text("ordinary value")
+        node.parameters["keyframe"] = .text("ordinary value")
+        let messages = #"[{"role":"user","parts":[{"type":"text","text":"Ordinary input: monkey keyboard, tokenizer, keyframe"},{"type":"text","text":"Authorization: Bearer line-canary; continue the explanation"},{"type":"text","text":"authorizati\u006fn: unicode-canary"},{"type":"text","text":"settings {\"api_key\":\"json-canary\"}; discuss token budgets"}]}]"#
         let attempt = ChatAttempt(sessionID: UUID(), userMessageID: UUID(), assistantMessageID: UUID(),
                                   node: node, messagesJSON: messages, inputs: [:],
-                                  systemPrompt: "Authorization:\nsystem-canary", status: .completed)
+                                  systemPrompt: "Explain token budgets and key differences. password: system-canary; keep the explanation", status: .completed)
         let inspection = ChatRequestInspection(attempt: attempt)
         let ordered = try #require(inspection.sections.first { $0.id == "messages" })
         #expect(ordered.fields[0].value.contains("Decoded 1"))
-        #expect(ordered.fields[1].value.contains("Ordinary input"))
-        #expect(ordered.fields[1].value.contains("[withheld: credential indicator in field]"))
+        #expect(ordered.fields[1].value.contains("Ordinary input: monkey keyboard, tokenizer, keyframe"))
+        #expect(ordered.fields[1].value.contains("continue the explanation"))
+        #expect(ordered.fields[1].value.contains("discuss token budgets"))
         let visible = inspection.sections.flatMap(\.fields).map(\.value).joined(separator: "\n")
-        for canary in ["line-canary", "unicode-canary", "system-canary", "seed-canary", "media-canary", "parameter-canary"] {
+        #expect(visible.contains("Explain token budgets and key differences"))
+        #expect(visible.contains("keep keyframe readable"))
+        #expect(visible.contains("keep the explanation"))
+        let parameters = try #require(inspection.sections.first { $0.id == "parameters" })
+        for key in ["monkey", "tokenizer", "keyframe"] {
+            #expect(parameters.fields.contains { $0.id == key && $0.label == key && $0.value == "ordinary value" })
+        }
+        for canary in ["line-canary", "unicode-canary", "json-canary", "system-canary", "seed-canary", "media-canary", "parameter-canary"] {
             #expect(!visible.contains(canary))
             #expect(!inspection.redactedJSON.contains(canary))
         }
-        #expect(inspection.sections.first { $0.id == "seed" }?.fields.first?.value == "[withheld: credential indicator in field]")
+        #expect(inspection.sections.first { $0.id == "seed" }?.fields.first?.value.contains("[redacted]") == true)
         #expect(inspection.sections.first { $0.id == "media" }?.fields.contains {
-            $0.id == "minimumPixels" && $0.value == "[withheld: credential indicator in field]"
+            $0.id == "minimumPixels" && $0.value.contains("[redacted]")
         } == true)
+        #expect(!inspection.redactedJSON.contains("Explain token budgets"))
+    }
+
+    @Test func concreteTokenPatternsAreRedactedWithinOrdinaryText() throws {
+        let node = WorkflowNode(operationID: WorkflowModelRoutes.qwen35, definitionVersion: 2, title: "chat")
+        let attempt = ChatAttempt(sessionID: UUID(), userMessageID: UUID(), assistantMessageID: UUID(),
+                                  node: node, messagesJSON: "[]", inputs: [:],
+                                  systemPrompt: "Compare tokenizer and keyframe; sk-local-canary, ghp_local_canary; then explain monkey keyboard",
+                                  status: .completed)
+        let inspection = ChatRequestInspection(attempt: attempt)
+        let system = try #require(inspection.sections.first { $0.id == "input" }?.fields.first { $0.id == "system" }?.value)
+        #expect(system.contains("Compare tokenizer and keyframe"))
+        #expect(system.contains("then explain monkey keyboard"))
+        #expect(!system.contains("sk-local-canary"))
+        #expect(!system.contains("ghp_local_canary"))
+        #expect(!inspection.redactedJSON.contains("Compare tokenizer"))
+    }
+
+    @Test func explicitCredentialAssignmentsAreRedactedWithoutHidingDefinitions() throws {
+        let node = WorkflowNode(operationID: WorkflowModelRoutes.qwen35, definitionVersion: 2, title: "chat")
+        let source = "{'password':'quoted-canary'}; refresh_token: refresh-canary; authToken: auth-canary; " +
+            "apiKey = api-canary; access_token: access-canary; " +
+            "token: the smallest unit of text; key: primary identifier"
+        let attempt = ChatAttempt(sessionID: UUID(), userMessageID: UUID(), assistantMessageID: UUID(),
+                                  node: node, messagesJSON: "[]", inputs: [:],
+                                  systemPrompt: source, status: .completed)
+        let inspection = ChatRequestInspection(attempt: attempt)
+        let system = try #require(inspection.sections.first { $0.id == "input" }?.fields.first { $0.id == "system" }?.value)
+        #expect(system.contains("'password':[redacted]"))
+        #expect(system.contains("refresh_token: [redacted]"))
+        #expect(system.contains("authToken: [redacted]"))
+        #expect(system.contains("apiKey = [redacted]"))
+        #expect(system.contains("access_token: [redacted]"))
+        #expect(system.contains("token: the smallest unit of text; key: primary identifier"))
+        for canary in ["quoted-canary", "refresh-canary", "auth-canary", "api-canary", "access-canary"] {
+            #expect(!system.contains(canary))
+            #expect(!inspection.redactedJSON.contains(canary))
+        }
     }
 
     @Test func credentialMarkersInVisibleIdentifiersAreWithheld() throws {
