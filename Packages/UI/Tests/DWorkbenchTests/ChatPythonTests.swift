@@ -41,11 +41,14 @@ struct ChatPythonTests {
 
     @Test func decodesOnlyExactFileDeclarationsAndPreservesOtherText() throws {
         let source = "before👩‍💻\nD_CHAT_FILE_V1:{\"name\":\"图表.svg\",\"kind\":\"svg\",\"text\":\"<svg/>\"}\n" +
-                     "D_CHAT_FILE_V1 is ordinary text?\n"
+                     "D_CHAT_FILE_V1:not-json\n"
         // A malformed prefixed line rejects the whole result, even after a valid declaration.
         #expect(throws: ChatPythonError.invalidOutput) {
             try ChatPythonPolicy.decode(stdout: Data(source.utf8), stderr: Data())
         }
+        let ordinary = try ChatPythonPolicy.decode(stdout: Data("D_CHAT_FILE_V1 is ordinary text?\n".utf8), stderr: Data())
+        #expect(ordinary.stdout == "D_CHAT_FILE_V1 is ordinary text?\n")
+        #expect(ordinary.outputs.isEmpty)
         let valid = "before👩‍💻\nD_CHAT_FILE_V1:{\"name\":\"图表.svg\",\"kind\":\"svg\",\"text\":\"<svg/>\"}\nafter\n"
         let result = try ChatPythonPolicy.decode(stdout: Data(valid.utf8), stderr: Data("提醒\n".utf8))
         #expect(result.stdout == "before👩‍💻\nafter\n")
@@ -65,6 +68,9 @@ struct ChatPythonTests {
             "{\"name\":\"a.txt\",\"kind\":\"csv\",\"text\":\"x\"}",
             "{\"name\":\"a.txt\",\"kind\":\"plainText\",\"text\":\"x\\u0000\"}",
             "{\"name\":\"a.txt\",\"kind\":\"plainText\",\"text\":\"x\",\"id\":\"forged\"}",
+            "{\"name\":\"a.txt\",\"name\":\"b.txt\",\"kind\":\"plainText\",\"text\":\"x\"}",
+            "{\"name\":\"a.txt\",\"kind\":\"plainText\",\"k\\u0069nd\":\"plainText\",\"text\":\"x\"}",
+            "{\"name\":\"a.txt\",\"kind\":\"plainText\",\"text\":\"x\",\"text\":\"y\"}",
             "not-json"
         ]
         for declaration in bad {
@@ -121,8 +127,68 @@ struct ChatPythonTests {
         #expect(throws: ChatPythonError.unavailable) { try ChatPythonPolicy.package(at: root) }
         try writeManifest(engine: "pulley64")
         #expect(try ChatPythonPolicy.package(at: root).runner == runner)
+        try Data(repeating: 65, count: 65_537).write(to: manifest)
+        #expect(throws: ChatPythonError.unavailable) { try ChatPythonPolicy.package(at: root) }
+        try writeManifest(engine: "pulley64")
         try FileManager.default.removeItem(at: module)
         try FileManager.default.createSymbolicLink(at: module, withDestinationURL: runner)
         #expect(throws: ChatPythonError.unavailable) { try ChatPythonPolicy.package(at: root) }
+    }
+
+    @Test func ownedFixtureChildCancelsDrainsCleansAndAllowsNextRun() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("d-chat-python-lifecycle-\(UUID())", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: false)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let runner = root.appendingPathComponent("runner")
+        let runtime = root.appendingPathComponent("runtime", isDirectory: true)
+        try FileManager.default.createDirectory(at: runtime.appendingPathComponent("lib/python3.14"),
+                                                withIntermediateDirectories: true)
+        try Data("fixture module, never executed".utf8).write(to: runtime.appendingPathComponent("python.wasm"))
+        let manifest: [String: Any] = ["schemaVersion": 1, "kind": "d-chat-python-wasi",
+                                       "pythonVersion": "3.14.8", "wasmtimeVersion": "49.0.2", "engine": "pulley64"]
+        try JSONSerialization.data(withJSONObject: manifest).write(to: root.appendingPathComponent("engine.json"))
+        // This fixed, trusted script ignores program.py. It only exercises the client's own Process lifecycle.
+        let script = """
+        #!/bin/sh
+        printf '%s' "$TMPDIR" > "$0.started"
+        if [ -f "$0.slow" ]; then
+            exec /bin/sleep 30
+        fi
+        printf '%s\n' 'D_CHAT_FILE_V1:{"name":"answer.txt","kind":"plainText","text":"fixture"}'
+        """
+        try Data(script.utf8).write(to: runner)
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: runner.path)
+        let slow = root.appendingPathComponent("runner.slow")
+        let started = root.appendingPathComponent("runner.started")
+        try Data().write(to: slow)
+        let client = ChatPythonClient(packageURL: root)
+        let task = Task { try await client.run(code: "print('guest only')", inputs: []) }
+        defer { task.cancel() }
+        var privatePath: String?
+        for _ in 0..<100 {
+            if let path = try? String(contentsOf: started, encoding: .utf8), !path.isEmpty {
+                privatePath = path
+                break
+            }
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+        guard let privatePath else {
+            task.cancel()
+            _ = try? await task.value
+            Issue.record("The owned fixture child did not start")
+            return
+        }
+        #expect(FileManager.default.fileExists(atPath: privatePath))
+        task.cancel()
+        await #expect(throws: ChatPythonError.cancelled) { try await task.value }
+        #expect(!FileManager.default.fileExists(atPath: privatePath))
+
+        try FileManager.default.removeItem(at: slow)
+        try FileManager.default.removeItem(at: started)
+        let result = try await client.run(code: "print('still guest only')", inputs: [])
+        #expect(result.outputs == [.init(name: "answer.txt", kind: .plainText, text: "fixture")])
+        let nextPath = try String(contentsOf: started, encoding: .utf8)
+        #expect(nextPath != privatePath)
+        #expect(!FileManager.default.fileExists(atPath: nextPath))
     }
 }
