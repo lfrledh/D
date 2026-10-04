@@ -33,9 +33,34 @@ public struct ChatPythonResult: Codable, Sendable, Equatable {
     public let engine: String
 }
 
+/// Bounded output from a child that did not complete the success protocol.
+public struct ChatPythonDiagnostic: Sendable, Equatable {
+    public let stdout: String
+    public let stderr: String
+    public let terminationStatus: Int32
+    public let terminatedBySignal: Bool
+    public let stdoutTruncated: Bool
+    public let stderrTruncated: Bool
+
+    fileprivate var summary: String {
+        let status = terminatedBySignal ? "signal \(terminationStatus)" : "exit status \(terminationStatus)"
+        var sections = [status]
+        // The Controller stores only the first 2048 characters of localizedDescription.
+        // Reserve separate display space for both streams and put the error stream first.
+        let shownStderr = String(stderr.prefix(900))
+        let shownStdout = String(stdout.prefix(600))
+        if !shownStderr.isEmpty { sections.append("stderr:\n\(shownStderr)") }
+        if stderrTruncated || stderr.count > 900 { sections.append("[stderr truncated]") }
+        if !shownStdout.isEmpty { sections.append("stdout:\n\(shownStdout)") }
+        if stdoutTruncated || stdout.count > 600 { sections.append("[stdout truncated]") }
+        return sections.joined(separator: "\n")
+    }
+}
+
 public enum ChatPythonError: Error, Equatable, LocalizedError, Sendable {
     case invalidCode, invalidInput, inputTooLarge, invalidOutput, outputTooLarge
     case unavailable, setupFailed, guestFailed, resourceLimit, timedOut, cancelled
+    indirect case executionFailed(reason: ChatPythonError, diagnostic: ChatPythonDiagnostic)
     indirect case cleanupFailed(after: ChatPythonError?)
 
     public var errorDescription: String? {
@@ -51,6 +76,8 @@ public enum ChatPythonError: Error, Equatable, LocalizedError, Sendable {
         case .resourceLimit: "Python execution exceeded an engine resource limit."
         case .timedOut: "Python execution timed out."
         case .cancelled: "Python execution was cancelled."
+        case .executionFailed(let reason, let diagnostic):
+            "\(reason.localizedDescription)\n\(diagnostic.summary)"
         case .cleanupFailed(let original):
             if let original {
                 "Private Python files could not be fully removed after \(original.localizedDescription)"
@@ -161,20 +188,40 @@ public struct ChatPythonClient: Sendable {
         control.exited()
         try? stdout.close()
         try? stderr.close()
+        let terminationStatus = process.terminationStatus
+        let terminatedBySignal = process.terminationReason != .exit
+        let diagnostic = ChatPythonPolicy.readDiagnostic(stdoutURL, stderrURL,
+            privateDirectory: directory, terminationStatus: terminationStatus,
+            terminatedBySignal: terminatedBySignal)
+        // Cancellation is intentionally surfaced as cancelled, never as a child crash or UI diagnostic.
         if control.wasCancelled { throw ChatPythonError.cancelled }
-        if control.didTimeOut { throw ChatPythonError.timedOut }
-        guard process.terminationReason == .exit else { throw ChatPythonError.guestFailed }
-        switch process.terminationStatus {
-        case 0: break
-        case 2: throw ChatPythonError.setupFailed
-        case 3: throw ChatPythonError.guestFailed
-        case 4: throw ChatPythonError.resourceLimit
-        case 5: throw ChatPythonError.timedOut
-        case 6: throw ChatPythonError.cancelled
-        default: throw ChatPythonError.guestFailed
+        let failure: ChatPythonError?
+        if control.didTimeOut {
+            failure = .timedOut
+        } else if terminatedBySignal {
+            failure = .guestFailed
+        } else {
+            switch terminationStatus {
+            case 0: failure = nil
+            case 2: failure = .setupFailed
+            case 3: failure = .guestFailed
+            case 4: failure = .resourceLimit
+            case 5: failure = .timedOut
+            case 6: throw ChatPythonError.cancelled
+            default: failure = .guestFailed
+            }
         }
-        let out = try ChatPythonPolicy.readOutput(stdoutURL, stderrURL)
-        return try ChatPythonPolicy.decode(stdout: out.0, stderr: out.1)
+        if let failure {
+            throw ChatPythonError.executionFailed(reason: failure, diagnostic: diagnostic)
+        }
+        do {
+            let out = try ChatPythonPolicy.readOutput(stdoutURL, stderrURL)
+            return try ChatPythonPolicy.decode(stdout: out.0, stderr: out.1)
+        } catch let error as ChatPythonError {
+            throw ChatPythonError.executionFailed(reason: error, diagnostic: diagnostic)
+        } catch {
+            throw ChatPythonError.executionFailed(reason: .invalidOutput, diagnostic: diagnostic)
+        }
     }
 }
 
@@ -186,6 +233,7 @@ struct ChatPythonPackage: Sendable {
 /// Pure validation and protocol decoding are also exercised directly by fixture tests.
 enum ChatPythonPolicy {
     static let maximumOutputBytes = 1_048_576
+    private static let maximumDiagnosticBytesPerStream = 65_536
     // Matches the prepared engine inventory budget, not the user-code budget.
     static let maximumManifestBytes = 4 * 1_024 * 1_024
     private static let protocolPrefix = "D_CHAT_FILE_V1:"
@@ -338,13 +386,51 @@ enum ChatPythonPolicy {
 
     static func readOutput(_ stdout: URL, _ stderr: URL) throws -> (Data, Data) {
         guard let outSize = (try? FileManager.default.attributesOfItem(atPath: stdout.path)[.size] as? NSNumber)?.intValue,
-              let errSize = (try? FileManager.default.attributesOfItem(atPath: stderr.path)[.size] as? NSNumber)?.intValue,
+              let errSize = (try? FileManager.default.attributesOfItem(atPath: stderr.path)[.size] as? NSNumber)?.intValue
+        else { throw ChatPythonError.invalidOutput }
+        guard outSize <= maximumOutputBytes, errSize <= maximumOutputBytes,
               outSize + errSize <= maximumOutputBytes else { throw ChatPythonError.outputTooLarge }
         guard let out = try? Data(contentsOf: stdout), let err = try? Data(contentsOf: stderr) else {
             throw ChatPythonError.invalidOutput
         }
         guard out.count + err.count <= maximumOutputBytes else { throw ChatPythonError.outputTooLarge }
         return (out, err)
+    }
+
+    static func readDiagnostic(_ stdout: URL, _ stderr: URL, privateDirectory: URL,
+                               terminationStatus: Int32, terminatedBySignal: Bool) -> ChatPythonDiagnostic {
+        let out = diagnosticPrefix(at: stdout, privateDirectory: privateDirectory)
+        let err = diagnosticPrefix(at: stderr, privateDirectory: privateDirectory)
+        return .init(stdout: out.0, stderr: err.0, terminationStatus: terminationStatus,
+                     terminatedBySignal: terminatedBySignal,
+                     stdoutTruncated: out.1, stderrTruncated: err.1)
+    }
+
+    private static func diagnosticPrefix(at url: URL, privateDirectory: URL) -> (String, Bool) {
+        let descriptor = open(url.path, O_RDONLY | O_NOFOLLOW | O_CLOEXEC)
+        guard descriptor >= 0 else { return ("[diagnostic output could not be read]", false) }
+        let handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
+        defer { try? handle.close() }
+        var info = stat()
+        guard fstat(descriptor, &info) == 0,
+              (info.st_mode & mode_t(S_IFMT)) == mode_t(S_IFREG) else {
+            return ("[diagnostic output is not a regular file]", false)
+        }
+        do {
+            var prefix = Data()
+            while prefix.count <= maximumDiagnosticBytesPerStream {
+                let remaining = maximumDiagnosticBytesPerStream + 1 - prefix.count
+                guard let chunk = try handle.read(upToCount: remaining), !chunk.isEmpty else { break }
+                prefix.append(chunk)
+            }
+            let truncated = prefix.count > maximumDiagnosticBytesPerStream
+            let shown = prefix.prefix(maximumDiagnosticBytesPerStream)
+            let text = String(decoding: shown, as: UTF8.self)
+                .replacingOccurrences(of: privateDirectory.path, with: "<private Python directory>")
+            return (text, truncated)
+        } catch {
+            return ("[diagnostic output could not be read]", false)
+        }
     }
 }
 

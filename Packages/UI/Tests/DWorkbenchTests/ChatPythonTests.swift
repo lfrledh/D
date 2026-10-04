@@ -169,15 +169,46 @@ struct ChatPythonTests {
             printf '%s\n' '  File "program.py", line 1' 'SyntaxError: invalid syntax' >&2
             exit 3
         fi
-        if [ -f "$0.oversized-failure" ]; then
+        if [ -f "$0.invalid-declaration" ]; then
+            printf '%s\n' 'printed before invalid declaration' 'D_CHAT_FILE_V1:not-json'
+            printf '%s\n' 'protocol fixture stderr' >&2
+            exit 0
+        fi
+        if [ -f "$0.unreadable-output" ]; then
+            /bin/rm "$TMPDIR/stdout"
+            printf '%s\n' 'output read fixture stderr' >&2
+            exit 0
+        fi
+        if [ -f "$0.nine-outputs" ]; then
+            i=0
+            while [ "$i" -lt 9 ]; do
+                printf 'D_CHAT_FILE_V1:{"name":"%s.txt","kind":"plainText","text":"x"}\n' "$i"
+                i=$((i + 1))
+            done
+            exit 0
+        fi
+        if [ -f "$0.output-total" ]; then
+            printf 'D_CHAT_FILE_V1:{"name":"large.txt","kind":"plainText","text":"'
+            printf '%0262145d' 0
+            printf '"}\n'
+            exit 0
+        fi
+        if [ -f "$0.oversized-failure" ] || [ -f "$0.oversized-success" ] || [ -f "$0.oversized-syntax" ]; then
             printf '%s\n' 'visible-prefix:'
             i=0
             while [ "$i" -lt 1025 ]; do
                 printf '%01024d' 0
                 i=$((i + 1))
             done
-            printf '%s\n' 'ValueError: after long output' >&2
-            exit 3
+            if [ -f "$0.oversized-failure" ]; then
+                printf '%s\n' 'ValueError: after long output' >&2
+                exit 3
+            fi
+            if [ -f "$0.oversized-syntax" ]; then
+                printf '%s\n' 'SyntaxError: after long stdout' >&2
+                exit 3
+            fi
+            exit 0
         fi
         printf '%s\n' 'D_CHAT_FILE_V1:{"name":"answer.txt","kind":"plainText","text":"fixture"}'
         """
@@ -218,7 +249,19 @@ struct ChatPythonTests {
         } catch {
             #expect(error.localizedDescription.contains("printed before failure"))
             #expect(error.localizedDescription.contains("ValueError: fixture failure"))
+            if let error = error as? ChatPythonError,
+               case let .executionFailed(reason, diagnostic) = error {
+                #expect(reason == .guestFailed)
+                #expect(diagnostic.terminationStatus == 3)
+                #expect(!diagnostic.terminatedBySignal)
+                #expect(diagnostic.stdout.contains("printed before failure"))
+                #expect(diagnostic.stderr.contains("ValueError: fixture failure"))
+            } else {
+                Issue.record("Expected a typed guest diagnostic")
+            }
         }
+        let failurePath = try String(contentsOf: started, encoding: .utf8)
+        #expect(!FileManager.default.fileExists(atPath: failurePath))
         try FileManager.default.removeItem(at: failure)
 
         let syntax = root.appendingPathComponent("runner.syntax-failure")
@@ -231,6 +274,40 @@ struct ChatPythonTests {
         }
         try FileManager.default.removeItem(at: syntax)
 
+        for (marker, reason) in [("invalid-declaration", ChatPythonError.invalidOutput),
+                                 ("unreadable-output", .invalidOutput),
+                                 ("nine-outputs", .outputTooLarge),
+                                 ("output-total", .outputTooLarge)] {
+            let fixture = root.appendingPathComponent("runner.\(marker)")
+            try Data().write(to: fixture)
+            do {
+                _ = try await client.run(code: "print('protocol fixture')", inputs: [])
+                Issue.record("Expected \(marker) protocol failure")
+            } catch {
+                if let error = error as? ChatPythonError,
+                   case let .executionFailed(actualReason, diagnostic) = error {
+                    #expect(actualReason == reason)
+                    #expect(diagnostic.terminationStatus == 0)
+                    #expect(!diagnostic.terminatedBySignal)
+                    if marker == "unreadable-output" {
+                        #expect(diagnostic.stderr.contains("output read fixture stderr"))
+                    } else {
+                        #expect(diagnostic.stdout.contains("D_CHAT_FILE_V1:"))
+                    }
+                    #expect(error.localizedDescription.contains("exit status 0"))
+                    if marker == "invalid-declaration" {
+                        #expect(diagnostic.stderr.contains("protocol fixture stderr"))
+                        #expect(error.localizedDescription.contains("protocol fixture stderr"))
+                    }
+                } else {
+                    Issue.record("Expected a typed protocol diagnostic for \(marker)")
+                }
+            }
+            let failurePath = try String(contentsOf: started, encoding: .utf8)
+            #expect(!FileManager.default.fileExists(atPath: failurePath))
+            try FileManager.default.removeItem(at: fixture)
+        }
+
         let oversized = root.appendingPathComponent("runner.oversized-failure")
         try Data().write(to: oversized)
         do {
@@ -239,8 +316,58 @@ struct ChatPythonTests {
         } catch {
             #expect(error.localizedDescription.contains("visible-prefix:"))
             #expect(error.localizedDescription.contains("truncated"))
+            if let error = error as? ChatPythonError,
+               case let .executionFailed(reason, diagnostic) = error {
+                #expect(reason == .guestFailed)
+                #expect(diagnostic.stdoutTruncated)
+                #expect(!diagnostic.stderrTruncated)
+                #expect(diagnostic.stderr.contains("ValueError: after long output"))
+                #expect(diagnostic.stdout.utf8.count <= 65_536)
+            } else {
+                Issue.record("Expected a typed bounded diagnostic")
+            }
         }
         try FileManager.default.removeItem(at: oversized)
+
+        let oversizedSyntax = root.appendingPathComponent("runner.oversized-syntax")
+        try Data().write(to: oversizedSyntax)
+        do {
+            _ = try await client.run(code: "broken syntax after output", inputs: [])
+            Issue.record("Expected oversized syntax failure")
+        } catch {
+            let visibleIssue = String(error.localizedDescription.prefix(2048))
+            #expect(visibleIssue.contains("exit status 3"))
+            #expect(visibleIssue.contains("SyntaxError: after long stdout"))
+            #expect(visibleIssue.contains("stdout truncated"))
+            if let error = error as? ChatPythonError,
+               case let .executionFailed(reason, diagnostic) = error {
+                #expect(reason == .guestFailed)
+                #expect(diagnostic.stdoutTruncated)
+                #expect(diagnostic.stderr.contains("SyntaxError: after long stdout"))
+            } else {
+                Issue.record("Expected a typed syntax diagnostic")
+            }
+        }
+        try FileManager.default.removeItem(at: oversizedSyntax)
+
+        let oversizedSuccess = root.appendingPathComponent("runner.oversized-success")
+        try Data().write(to: oversizedSuccess)
+        do {
+            _ = try await client.run(code: "print('long output')", inputs: [])
+            Issue.record("Expected output limit failure")
+        } catch {
+            #expect(error.localizedDescription.contains("visible-prefix:"))
+            #expect(error.localizedDescription.contains("truncated"))
+            if let error = error as? ChatPythonError,
+               case let .executionFailed(reason, diagnostic) = error {
+                #expect(reason == .outputTooLarge)
+                #expect(diagnostic.terminationStatus == 0)
+                #expect(diagnostic.stdoutTruncated)
+            } else {
+                Issue.record("Expected a typed output limit diagnostic")
+            }
+        }
+        try FileManager.default.removeItem(at: oversizedSuccess)
 
         let result = try await client.run(code: "print('still guest only')", inputs: [])
         #expect(result.outputs == [.init(name: "answer.txt", kind: .plainText, text: "fixture")])
