@@ -775,3 +775,19 @@ main从f31dced209855722d2f04cc0fc8c5f6712396120快进8d64000c849b70c8ad18cb574ea
 - f08ca242普通签名App构建 `chat-f28-app` exit0、91.924秒；资源验证与原生Xcode复制/签名通过，候选包含完整既有引擎和新的WASI资源。交付副本、四关键文件、WASI关键文件及唯一启动器见 `lead/app-f08ca242-delivery.json`。没有在锁屏时重复启动D，构建不替代普通App原生验收；本树Xcode使用已准备的忽略配置即可重建，不靠事后手补App。
 
 恢复：先核真实HEAD/index/个人scheme、当前App与任务进程，再使用唯一新包继续未验原生路径；同一冻结范围不重新审批。全局质量审计/Liquid Glass精修仍未启动，许可证/正式Release不变。Lead与非实现者检查分别留证，不把来源标签当质量保证；完整Lead归因及订阅货币费用unknown，未重算历史五次样本。
+
+
+## 2026-10-05 连续收口：四个反例与同版原生使用验收（进行中）
+
+同一 CHAT-PRODUCT-20261003 / F01–F36，按用户2026-10-04连续收口授权；不扩大范围、不重置历史失败。起点候选07efd2ceac720d9865fbb201c4a04716f49d2312 / 代码f08ca242，main f9a439db5c0542d7a6bd6def8f88a9a7965b67df；保护源01758b81及未暂存scheme原样。R=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261004T145523Z-continuous-closeout`，精确保护见lead/preflight.json。
+
+- 桌面本次实际可读；核实唯一自有c16 PID829。点击Canvas保存后明确显示“流程、人工决定与运行历史已保存”，正常CmdQ，pgrep确认无D。证据lead/old-app-save-quit.json；不是沿用旧锁屏结论。
+- Lead负责搜索逐条处理及共享Controller/UI。搜索混合反例先红（invalidResponse），修后provider/wiring 23方法通过；独立只读复核补原始数组数量和拒绝数据不持久化反例后24方法通过，lead/search-mixed-red、search-green、search-final。身份/配额/包络损坏保持整体失败，坏条不影响后续好条，全拒绝与零结果区分；搜索摘要仍只在临时缓存。b5fa7f23固定该改动，未在此检查点宣称GUI通过。
+- 两个独立受限CLI Worker分别负责Python诊断和网页DOCTYPE/逐跳读取；请求和运行上下文均gpt-6-sol/high、各自外盘树、workspace-write且网络关闭，只能写明确源码/测试和自有输出/tmp，无共享.git权限，Lead串行编译。精确线程/模型/目录在各slice/*route-accepted.json，隐藏服务端解析unknown。Web任务单误写不存在的ChatWeb.swift，由Worker停报、Lead纠正为真实ChatWebSearch.swift且仅限HTTP response元信息；这是Lead规格路径错误，不是Worker越界或代码修复额度。
+- Python/HTML/fragment的旧API持久反例先在原生产实现运行，3方法7项失败（lead/python-web-red），f9d69990保留测试检查点；不能把此中间版本标为可接纳。Python独立复核发现exit0协议拒绝仍丢诊断，Lead另指出2048字符界面摘要会遮住长stdout后的stderr，已明确一轮修复；未通过前不集成main。
+- 选择依据：HTML遵循WHATWG DOCTYPE语义并复用Foundation静态解析的禁止外部实体选项；curl逐跳读取使用官方write-out/redirect_url，不自动-follow、不把搜索API密钥传入网页。没有新浏览器、依赖、搜索来源或模型。既有WASI/Runtime/Store继续使用。
+- F26两家真实凭据、F31实际Speech/本地资源及新宿主本人检查仍在唯一集中队列；未改动的旧长流、H22、HF、宏与视频证据沿用。四项修补后继续同版App代表路径，不把本节当专题完成。完整Lead消耗/订阅费用unknown，不重算历史样本。
+
+- 四项组合收尾代码543e7148：Python初交＋一修后，由Lead按非实现者反例补UTF8字节预算（组合字符不能绕过Store16KiB）；Web补逐跳curl剩余预算与完整raw-text结束名，Foundation HTML4自身误恢复再通过省略原本不提取的script/style区域修正，原响应摘要不变。lead/review-red及abcd-reviewed失败保留，最终abcd-final为53方法/5suite全部通过，43.045秒；含真实WASI失败→Store、取消→后续成功、example.com和Python官方HTTPS跳转。不是收费搜索API或GUI结论。
+- 代码提交前受测HEAD48a4b7d2加工作差异，lead/abcd-reviewed-final.diff与abcd-tested-files.json绑定最终543e7148；两个Worker生产历史分别9f400172/80d73f7c，普通合并保留，测试冲突只合并重复旧API反例与新增断言。非实现者Web复核确认两项P2关闭，Python复核另留记录。Lead实质收尾不记作Worker独立通过。
+- Python repair1曾尝试任务禁止的pgrep，被受限环境拒绝；无观察到成功枚举/扩权，最终报告有提及，但未先停报，保留协议事件，与代码质量分开。Web在错误允许路径处停报后由Lead修正任务，不重置旧预算。所有Worker已交回；完整Lead费用unknown。

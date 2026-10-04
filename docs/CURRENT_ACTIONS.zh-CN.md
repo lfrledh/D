@@ -12,14 +12,14 @@
 
 Lead 持有共享 Runtime/WorkflowServices/ChatController/Store；文件面板和纯展示在独立受限任务树实施。早期S00/S01历史证据目录 RCP=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261003T115108Z-chat-product`。完整 Lead 成本与订阅费用 unknown。早期S00代码完成CPU和签名构建，曾通过项目列表、真实1024-token接收和坐标停止→下一请求；当时菜单忙循环和生成中AX迟滞阻塞接纳。S01缩放焦点反例后来修复并通过hosting、与S00组合。以上是早期门槛来源，已被下述c16普通App复验和main接纳推进；最新S02–S05接线、R证据目录及剩余状态以以下恢复检查点为准，F01–F36范围不取消。
 
-### 当前恢复检查点（2026-10-04，代码续作及待解锁验收）
+### 当前恢复检查点（2026-10-05，连续收口进行中）
 
-- main与远端已为 `f9a439db5c0542d7a6bd6def8f88a9a7965b67df`，生产代码与普通App受测 `c16ab4015193d90def32a7cc6629dde9136b6f5c`一致。菜单展开/关闭、短发送、输入区主停止、partial保留→显式采用→再发及切会话通过；TXT检索采用、上下文、计算器与选段解释也通过。旧失败保留，不重复长生成。
-- Lead候选树 `D-RELEASE-FREEZE-01/codex/release-freeze-01` 新代码 **f08ca2427b54e0519780e473ea7dfcce431af234**：F14本地/分享分离、F26 Brave/博查/BYOK/实际网页与本地回答接线、F31两语言、F28 WASI真实分析及成果保存。F18的组合hosting失败已由实际事件/退出栈定位并修测试驱动，1 XCTest+2协调方法完整结束。每项证据见[唯一清单](CHAT_FEATURE_LEDGER.zh-CN.md)，不是F01–F36全部通过。
-- R=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261004T041401Z-chat-resume`。F28真实CSV→成果→独立备份恢复与取消→下一请求通过；签名沙盒测试宿主通过，未冒充普通D操作。既有真实模型计算未改，不重复九模型。最终构建/候选推送、文档SHA、保护状态在R/lead/resume-delivery-receipt.json。
-- Mac已由CUA确认锁屏，不因时间流逝重复检查。自有c16 App PID829留现场、无在途生成；解锁后先核实并正常退出再使用[唯一新入口](RELEASE_FREEZE_TRY.zh-CN.md)，不双开。新工具/成果/Canvas、会话交换/恢复及更完整鼠标键盘路径仍待原生验收；新聊天组字、F31授权/本地资源/试听、F26 key与真实API统一在[集中队列](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md)。旧H22/HF/宏信任/固定视频不重开。
-- 受限Sol/high Worker已交回，Lead维护共享接线/资源/存储，非实现者分别审阅；精确模型/写根/阶段和限制事件在R各slice，不声称隐藏服务端模型身份。原helper两轮修复、client一轮及Lead装配修补分别保留，完整Lead成本/订阅费用unknown。
-- 保护源 `D/codex/inference-foundation` 仍 `01758b81527dc27eb4563bf1b66fd1ceab6647ee`；个人scheme摘要 `ca3635d88aa5a15397b90e528667c66c0e6db7e596176e885c79d194b544206c`、索引和未暂存状态保持。旧候选/项目/模型/普通App不动。此为外部阻塞检查点，不是功能冻结或发行；解锁后继续同一冻结清单，无需另批阶段。
+- main及远端仍为 `f9a439db5c0542d7a6bd6def8f88a9a7965b67df`，c16核心操作历史证据复用。Lead树 `D-RELEASE-FREEZE-01/codex/release-freeze-01` 新代码 `543e7148`，完整SHA与当前构建见本轮R/lead/continuous-app-{command,result}.json；不是功能冻结。
+- R=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261004T145523Z-continuous-closeout`。Python有界退出诊断、合法HTML、fragment/有限安全重定向、搜索逐条拒绝已修；先红后绿，组合53方法/5suite全部执行通过（含真实WASI与两个公开网页探针）。精确受测文件摘要见lead/abcd-tested-files.json，代码随后提交543e7148，测试时HEAD48a4b7d2加该差异；不混写测试版本。
+- 桌面本轮实际可读；自有旧c16 PID829在保存Canvas成功后正常退出，已确认无D。正在构建同一普通签名App，之后继续资料/工具/成果/Canvas/会话交换与新组合独立恢复；旧锁屏已不是当前阻塞，不双开或重复旧长生成。
+- 两名受限Sol/high Worker已结束，Lead合并/修补；非实现者定向复核，精确任务/线程/权限及一次未停报进程枚举拒绝见任务记录和R各slice。订阅费用及完整Lead归因unknown。
+- F26两家本地key、F31系统本地语音/本人结果、新聊天宿主组字仅保留于[集中队列](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md)。未验证的能力组仍按[唯一聊天清单](CHAT_FEATURE_LEDGER.zh-CN.md)，继续无依赖工程，不把CPU通过冒称普通App通过。
+- 保护源 `D/codex/inference-foundation@01758b81527dc27eb4563bf1b66fd1ceab6647ee`、个人scheme摘要 `ca3635d88aa5a15397b90e528667c66c0e6db7e596176e885c79d194b544206c` 及索引/未暂存状态不变。旧候选、模型、项目与App保留。main仅在相关普通App门槛通过后正常接纳可靠切片；不发布Release。
 
 ### 历史恢复检查点（2026-10-04，解锁原生检查与审计同步）
 
