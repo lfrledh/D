@@ -23,6 +23,13 @@ struct ChatSessionPackageTests {
         let a = ChatMessage(parentID: nil, role: .user, text: "branch a")
         let b = ChatMessage(parentID: nil, role: .user, text: "branch b")
         state.sessions[index].messages = [a, b]; state.sessions[index].selectedLeafID = b.id
+        // Reviewing a suggestion must survive export even before another request uses it.
+        let source = try ChatContextSource.capture(session: state.sessions[index], coveredMessageIDs: [b.id])
+        let projectID = await store.snapshot().id
+        let suggestion = try ChatMemoryEntry.suggestion(text: "记忆 e\u{301} 👩🏽‍🎨", scope: .project(projectID), source: source)
+        let approved = try suggestion.approved()
+        let unused = try ChatMemoryEntry.manual(text: "CANARY unrelated project memory", scope: approved.scope)
+        state.memoryEntries = [suggestion, approved, unused]
         _ = try await store.saveChatState(state, expectedRevision: state.revision)
         let before = try await store.chatState(), manifestBefore = await store.snapshot()
         let plan = try await store.chatSessionBackupPlan(sessionID: selected, expectedChatRevision: before.revision)
@@ -44,6 +51,7 @@ struct ChatSessionPackageTests {
         #expect(restoredChat.sessions[0].draft == "unsent selected")
         #expect(restoredChat.sessions[0].artifacts?.count == 2)
         #expect(restoredChat.sessions[0].memoryScopes == [])
+        #expect(restoredChat.memoryEntries == [suggestion, approved])
         #expect(try await restored.workflowText(parent) == "original source")
         #expect(try await restored.workflowText(#require(first.output)) == "print(1)")
         #expect(await restored.snapshot().effectiveInstanceID != manifestBefore.effectiveInstanceID)

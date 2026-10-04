@@ -107,7 +107,21 @@ public struct ChatSessionArchiveSelection: Sendable, Equatable {
                 }
             }
         }
-        chat.memoryEntries = allMemories.filter { usedIDs.contains($0.id) }
+        // A reviewed suggestion belongs to its source conversation even if no later
+        // request injected it. Retain its version history (including forgetting),
+        // without pulling in unrelated or unbound manual project memories.
+        let sourcedIDs = Set(allMemories.compactMap { entry -> UUID? in
+            guard case .chat(let source) = entry.source, source.sessionID == sessionID else { return nil }
+            return entry.id
+        })
+        for versions in Dictionary(grouping: allMemories, by: \.id).values {
+            guard let first = versions.first, sourcedIDs.contains(first.id) else { continue }
+            guard versions.allSatisfy({ $0.source == first.source && $0.scope == first.scope &&
+                                        $0.createdAt == first.createdAt }) else {
+                throw WorkflowIssue("A session memory has conflicting source, scope, or creation history.")
+            }
+        }
+        chat.memoryEntries = allMemories.filter { usedIDs.contains($0.id) || sourcedIDs.contains($0.id) }
         try chat.validate()
 
         var roots: [WorkflowAssetReference] = []

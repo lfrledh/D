@@ -32,6 +32,53 @@ struct ChatSessionArchiveSelectionTests {
         return result
     }
 
+    @Test func unusedSessionSuggestionsKeepReviewAndForgetHistoryWithoutOtherOwners() throws {
+        var session = ChatSession(title: "selected")
+        let first = ChatMessage(parentID: nil, role: .user, text: "earlier branch")
+        let next = ChatMessage(parentID: nil, role: .user, text: "current branch")
+        session.messages = [first, next]; session.selectedLeafID = first.id
+        let source = try ChatContextSource.capture(session: session, coveredMessageIDs: [first.id])
+        let suggestion = try ChatMemoryEntry.suggestion(text: "review me", scope: .project(projectID), source: source)
+        let approved = try suggestion.approved(), forgotten = try approved.forgotten()
+        session.selectedLeafID = next.id
+        var other = ChatSession(title: "other")
+        let otherMessage = ChatMessage(parentID: nil, role: .user, text: "private")
+        other.messages = [otherMessage]; other.selectedLeafID = otherMessage.id
+        let otherSource = try ChatContextSource.capture(session: other, coveredMessageIDs: [otherMessage.id])
+        let unrelated = try ChatMemoryEntry.suggestion(text: "other source canary", scope: .project(projectID), source: otherSource)
+        let manual = try ChatMemoryEntry.manual(text: "unbound manual canary", scope: .project(projectID))
+        var state = ChatState(); state.sessions = [session, other]
+        state.memoryEntries = [suggestion, approved, forgotten, unrelated, manual]
+        let selection = try ChatSessionArchiveSelection.make(state: state, archive: .init(), sessionID: session.id)
+        #expect(selection.chat.memoryEntries == [suggestion, approved, forgotten])
+        #expect(selection.chat.sessions[0].selectedLeafID == next.id)
+        #expect(selection.chat.sessions[0].memoryScopes == [])
+        #expect(ChatMemoryEntry.activeProjection(try #require(selection.chat.memoryEntries), enabledScopes: [.project(projectID)]).isEmpty)
+        #expect(selection.unresolvedExternalMemoryUses.isEmpty)
+    }
+
+    @Test func conflictingSessionMemoryIdentityCannotPullInAnotherSource() throws {
+        var session = ChatSession(title: "selected")
+        let message = ChatMessage(parentID: nil, role: .user, text: "source")
+        session.messages = [message]; session.selectedLeafID = message.id
+        let source = try ChatContextSource.capture(session: session, coveredMessageIDs: [message.id])
+        let suggestion = try ChatMemoryEntry.suggestion(text: "selected", scope: .project(projectID), source: source)
+        var state = ChatState(); state.sessions = [session]
+        for conflict in [
+            try ChatMemoryEntry(id: suggestion.id, revision: 2, text: "unbound private canary", scope: suggestion.scope,
+                source: .manual, createdAt: suggestion.createdAt),
+            try ChatMemoryEntry(id: suggestion.id, revision: 2, text: "wrong scope", scope: .personal,
+                source: suggestion.source, createdAt: suggestion.createdAt),
+            try ChatMemoryEntry(id: suggestion.id, revision: 2, text: "wrong creation", scope: suggestion.scope,
+                source: suggestion.source, createdAt: suggestion.createdAt.addingTimeInterval(1))
+        ] {
+            state.memoryEntries = [suggestion, conflict]
+            #expect(throws: (any Error).self) {
+                try ChatSessionArchiveSelection.make(state: state, archive: .init(), sessionID: session.id)
+            }
+        }
+    }
+
     @Test func completeBranchAndDependenciesExcludeOtherOwners() throws {
         let image = ref(.image), output1 = ref(), output2 = ref(), parent = ref()
         let draftAsset = ref(), speech = ref(), document = ref(), scopedDocument = ref()
