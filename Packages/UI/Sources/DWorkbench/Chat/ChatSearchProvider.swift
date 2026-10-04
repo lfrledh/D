@@ -22,6 +22,13 @@ public struct ChatSearchResult: Codable, Equatable, Sendable {
     }
 }
 
+/// A transient preview; rejected entries never become clickable or persistent sources.
+public struct ChatSearchResponse: Codable, Equatable, Sendable {
+    public let results: [ChatSearchResult]
+    public let rejectedCount: Int
+    public var allRejected: Bool { results.isEmpty && rejectedCount > 0 }
+}
+
 public enum ChatSearchError: Error, Equatable, LocalizedError, Sendable {
     case permissionDenied
     case unsupportedProvider
@@ -80,6 +87,12 @@ public struct ChatSearchClient: Sendable {
     /// The caller must authorize this operation and supply its credential explicitly.
     public func search(query: String, provider: ChatSearchProvider, credential: String,
                        networkAuthorized: Bool) async throws -> [ChatSearchResult] {
+        try await searchResponse(query: query, provider: provider, credential: credential,
+                                 networkAuthorized: networkAuthorized).results
+    }
+
+    public func searchResponse(query: String, provider: ChatSearchProvider, credential: String,
+                               networkAuthorized: Bool) async throws -> ChatSearchResponse {
         guard networkAuthorized else { throw ChatSearchError.permissionDenied }
         try Task.checkCancellation()
         guard Self.validQuery(query, provider: provider) else { throw ChatSearchError.invalidQuery }
@@ -122,7 +135,7 @@ public struct ChatSearchClient: Sendable {
             .trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard mimeType == "application/json" else { throw ChatSearchError.invalidResponse }
 
-        let entries: [SearchEntry]
+        let entries: [SearchEntry?]
         switch provider {
         case .brave:
             let envelope: BraveEnvelope
@@ -130,7 +143,7 @@ public struct ChatSearchClient: Sendable {
             catch { throw ChatSearchError.invalidResponse }
             guard envelope.error == nil, let results = envelope.web?.results,
                   results.count <= Self.maximumResults else { throw ChatSearchError.invalidResponse }
-            entries = results.map { SearchEntry(title: $0.title, url: $0.url, snippet: $0.description) }
+            entries = results.map { $0.value.map { SearchEntry(title: $0.title, url: $0.url, snippet: $0.description) } }
         case .bocha:
             let status: BochaStatus
             do { status = try JSONDecoder().decode(BochaStatus.self, from: response.body) }
@@ -141,18 +154,19 @@ public struct ChatSearchClient: Sendable {
             catch { throw ChatSearchError.invalidResponse }
             let results = envelope.data.webPages.value
             guard results.count <= Self.maximumResults else { throw ChatSearchError.invalidResponse }
-            entries = results.map { SearchEntry(title: $0.name, url: $0.url, snippet: $0.snippet) }
+            entries = results.map { $0.value.map { SearchEntry(title: $0.name, url: $0.url, snippet: $0.snippet) } }
         }
         try Task.checkCancellation()
         let fetchedAt = now()
-        return try entries.map { entry in
+        var accepted: [ChatSearchResult] = []
+        for entry in entries {
             try Task.checkCancellation()
-            guard !entry.title.isEmpty, let url = Self.validResultURL(entry.url) else {
-                throw ChatSearchError.invalidResponse
-            }
-            return ChatSearchResult(provider: provider, title: entry.title, url: url,
-                                    snippet: entry.snippet, fetchedAt: fetchedAt)
+            guard let entry, !entry.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  let url = Self.validResultURL(entry.url) else { continue }
+            accepted.append(ChatSearchResult(provider: provider, title: entry.title, url: url,
+                                             snippet: entry.snippet, fetchedAt: fetchedAt))
         }
+        return ChatSearchResponse(results: accepted, rejectedCount: entries.count - accepted.count)
     }
 
     private static func validQuery(_ query: String, provider: ChatSearchProvider) -> Bool {
@@ -257,11 +271,19 @@ public struct ChatSearchClient: Sendable {
         return url
     }
 
+    /// Decode each array element with its own decoder. Invalid JSON or envelope shape
+    /// still fails the request; a well-formed but invalid entry is counted and omitted.
+    private struct DecodedEntry<Value: Decodable>: Decodable {
+        let value: Value?
+        init(from decoder: any Decoder) throws {
+            value = try? Value(from: decoder)
+        }
+    }
     private struct BraveEnvelope: Decodable {
         let web: BraveWeb?
         let error: String?
     }
-    private struct BraveWeb: Decodable { let results: [BraveEntry] }
+    private struct BraveWeb: Decodable { let results: [DecodedEntry<BraveEntry>] }
     private struct BraveEntry: Decodable {
         let title: String
         let url: String
@@ -283,7 +305,7 @@ public struct ChatSearchClient: Sendable {
     }
     private struct BochaSuccessEnvelope: Decodable { let data: BochaData }
     private struct BochaData: Decodable { let webPages: BochaWebPages }
-    private struct BochaWebPages: Decodable { let value: [BochaEntry] }
+    private struct BochaWebPages: Decodable { let value: [DecodedEntry<BochaEntry>] }
     private struct BochaEntry: Decodable {
         let name: String
         let url: String

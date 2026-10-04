@@ -127,7 +127,7 @@ import Observation
     private struct SearchPreview {
         let sessionID: UUID
         let expiresAt: Date
-        let results: [ChatSearchResult]
+        let response: ChatSearchResponse
     }
     private var searchPreviews: [UUID: SearchPreview] = [:]
     public private(set) var activeToolSessionID: UUID?
@@ -1727,8 +1727,12 @@ import Observation
         let searchID = try await executeTool(.providerSearch(query: captured.draft, provider: provider), sessionID: sessionID)
         let current = state.sessions[try index(sessionID)]
         try expectedInput.validate(current)
-        guard let hits = searchResults(activityID: searchID, sessionID: sessionID) else { throw WorkflowIssue("Search results expired; explicitly search again. No request was repeated.") }
-        guard let hit = hits.first else { throw WorkflowIssue("搜索没有结果；未凭空添加引用。可以关闭自动搜索后发送。") }
+        guard let preview = searchResponse(activityID: searchID, sessionID: sessionID) else { throw WorkflowIssue("Search results expired; explicitly search again. No request was repeated.") }
+        guard let hit = preview.results.first else {
+            throw WorkflowIssue(preview.allRejected
+                ? "搜索返回的 \(preview.rejectedCount) 条结果均不符合安全或格式要求；没有读取网页或调用模型。"
+                : "搜索没有结果；未凭空添加引用。可以关闭自动搜索后发送。")
+        }
         let pageID = try await executeTool(.pageRead(hit.url), sessionID: sessionID)
         let final = state.sessions[try index(sessionID)]
         try expectedInput.validate(final)
@@ -1764,9 +1768,12 @@ import Observation
     }
     /// Search snippets are runtime previews, never part of chat history, packages or backups.
     public func searchResults(activityID: UUID, sessionID: UUID) -> [ChatSearchResult]? {
+        searchResponse(activityID: activityID, sessionID: sessionID)?.results
+    }
+    public func searchResponse(activityID: UUID, sessionID: UUID) -> ChatSearchResponse? {
         guard let preview = searchPreviews[activityID], preview.sessionID == sessionID,
               preview.expiresAt > Date() else { return nil }
-        return preview.results
+        return preview.response
     }
     private func cancelToolsForClosedSession(_ id: UUID) {
         searchPreviews = searchPreviews.filter { $0.value.sessionID != id }
@@ -1823,12 +1830,12 @@ import Observation
                 guard let ai = state.sessions[si].toolActivities?.firstIndex(where: { $0.id == id }) else { throw WorkflowIssue("工具记录不存在。") }
                 var updated = state
                 if request.hasTransientResult {
-                    let hits = try JSONDecoder().decode([ChatSearchResult].self, from: Data(result.utf8))
+                    let hits = try JSONDecoder().decode(ChatSearchResponse.self, from: Data(result.utf8))
                     searchPreviews = searchPreviews.filter { $0.value.expiresAt > Date() }
                     if searchPreviews.count >= 8, let oldest = searchPreviews.min(by: { $0.value.expiresAt < $1.value.expiresAt })?.key {
                         searchPreviews[oldest] = nil
                     }
-                    searchPreviews[id] = SearchPreview(sessionID: sessionID, expiresAt: Date().addingTimeInterval(900), results: hits)
+                    searchPreviews[id] = SearchPreview(sessionID: sessionID, expiresAt: Date().addingTimeInterval(900), response: hits)
                 } else { updated.sessions[si].toolActivities?[ai].resultJSON = result }
                 let serverError: Bool
                 if case .mcp = request {

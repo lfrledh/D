@@ -66,6 +66,47 @@ private struct FailingSearchTransport: ChatWebTransport {
 struct ChatSearchProviderTests {
     private static let moment = Date(timeIntervalSince1970: 1_700_000_000)
 
+    @Test func mixedEntriesDoNotPoisonValidResults() async throws {
+        for provider in ChatSearchProvider.allCases {
+            let name = provider == .brave ? "title" : "name"
+            let snippet = provider == .brave ? "description" : "snippet"
+            let entries: [Any] = [
+                [name: "Good", "url": "https://example.org/page#section", snippet: "Readable"],
+                [name: "Unsafe", "url": "http://127.0.0.1/private", snippet: "Do not expose"],
+                [name: 42, "url": "https://example.org/bad", snippet: "Malformed"]
+            ]
+            let envelope: [String: Any] = provider == .brave
+                ? ["web": ["results": entries]]
+                : ["code": 200, "data": ["webPages": ["value": entries]]]
+            let transport = SearchFixtureTransport([.init(body: try JSONSerialization.data(withJSONObject: envelope))])
+            let results = try await ChatSearchClient(transport: transport)
+                .search(query: "public", provider: provider, credential: "synthetic-key", networkAuthorized: true)
+            #expect(results.count == 1)
+            #expect(results.first?.title == "Good")
+            #expect(results.first?.url.fragment == "section")
+        }
+    }
+
+    @Test func rejectsIndividualEntriesAndDistinguishesEmptyResponses() async throws {
+        for provider in ChatSearchProvider.allCases {
+            let title = provider == .brave ? "title" : "name"
+            let snippet = provider == .brave ? "description" : "snippet"
+            let good: [String: Any] = [title: "Good", "url": "https://example.org/a", snippet: "Source"]
+            let bad: [Any] = [[:], NSNull(), [title: " ", "url": "https://example.org/b", snippet: "Blank title"]]
+            for entries in [bad + [good], bad, []] {
+                let envelope: [String: Any] = provider == .brave
+                    ? ["web": ["results": entries]]
+                    : ["code": 200, "data": ["webPages": ["value": entries]]]
+                let transport = SearchFixtureTransport([.init(body: try JSONSerialization.data(withJSONObject: envelope))])
+                let result = try await ChatSearchClient(transport: transport).searchResponse(
+                    query: "q", provider: provider, credential: "synthetic-key", networkAuthorized: true)
+                #expect(result.rejectedCount == (entries.isEmpty ? 0 : 3))
+                #expect(result.results.count == (entries.count == 4 ? 1 : 0))
+                #expect(result.allRejected == (entries.count == 3))
+            }
+        }
+    }
+
     private static func body(title: String = "An article", url: String = "https://example.org/article",
                              description: String = "A plain snippet") -> Data {
         let value: [String: Any] = ["web": ["results": [[
@@ -173,7 +214,6 @@ struct ChatSearchProviderTests {
 
         let invalid = [Data("{}".utf8), Data("{\"web\":{}}".utf8),
                        Data("{\"web\":{\"results\":null}}".utf8), Data("{".utf8),
-                       Data("{\"web\":{\"results\":[{}]}}".utf8),
                        Data("{\"web\":{\"results\":[]},\"error\":\"failure\"}".utf8),
                        Data("{\"web\":{\"results\":[]},\"error\":{\"code\":\"failure\"}}".utf8)]
         for body in invalid {
@@ -192,10 +232,9 @@ struct ChatSearchProviderTests {
                     "http://2130706433/a", "http://0177.0.0.1/a", "https://user:pass@example.org/a",
                     "file:///tmp/a", "javascript:alert(1)", "/relative"] {
             let client = ChatSearchClient(transport: SearchFixtureTransport([.init(body: Self.body(url: url))]))
-            await #expect(throws: ChatSearchError.invalidResponse) {
-                try await client.search(query: "public", provider: .brave,
-                                        credential: "synthetic-key", networkAuthorized: true)
-            }
+            let response = try await client.searchResponse(query: "public", provider: .brave,
+                                                          credential: "synthetic-key", networkAuthorized: true)
+            #expect(response.results.isEmpty && response.rejectedCount == 1 && response.allRejected)
         }
         let client = ChatSearchClient(transport: SearchFixtureTransport([.init(body: Self.body(url: "http://8.8.8.8/a"))]))
         let hits = try await client.search(query: "public", provider: .brave,
@@ -210,6 +249,18 @@ struct ChatSearchProviderTests {
         await #expect(throws: ChatSearchError.invalidResponse) {
             try await client.search(query: "public", provider: .brave,
                                     credential: "synthetic-key", networkAuthorized: true)
+        }
+    }
+
+    @Test func originalArrayLimitAppliesBeforeRejectingEntries() async throws {
+        for provider in ChatSearchProvider.allCases {
+            let title = provider == .brave ? "title" : "name", snippet = provider == .brave ? "description" : "snippet"
+            let entries: [Any] = Array(repeating: [String: String](), count: 5) + [[title: "Good", "url": "https://example.org/a", snippet: "One"]]
+            let envelope: [String: Any] = provider == .brave ? ["web": ["results": entries]] : ["code": 200, "data": ["webPages": ["value": entries]]]
+            let transport = SearchFixtureTransport([.init(body: try JSONSerialization.data(withJSONObject: envelope))])
+            await #expect(throws: ChatSearchError.invalidResponse) {
+                try await ChatSearchClient(transport: transport).searchResponse(query: "q", provider: provider, credential: "synthetic-key", networkAuthorized: true)
+            }
         }
     }
 
@@ -333,7 +384,6 @@ struct ChatSearchProviderTests {
                        Data("{\"code\":\"200\",\"data\":{\"webPages\":{\"value\":[]}}}".utf8),
                        Data("{\"code\":200}".utf8), Data("{\"code\":200,\"data\":{}}".utf8),
                        Data("{\"code\":200,\"data\":{\"webPages\":{\"value\":null}}}".utf8),
-                       Data("{\"code\":200,\"data\":{\"webPages\":{\"value\":[{}]}}}".utf8),
                        Data("{".utf8)]
         for body in invalid {
             let client = ChatSearchClient(transport: SearchFixtureTransport([.init(body: body)]))
@@ -343,10 +393,9 @@ struct ChatSearchProviderTests {
             }
         }
         let badURL = ChatSearchClient(transport: SearchFixtureTransport([.init(body: Self.bochaBody(url: "http://127.0.0.1/a"))]))
-        await #expect(throws: ChatSearchError.invalidResponse) {
-            try await badURL.search(query: "public", provider: .bocha,
-                                    credential: "synthetic-key", networkAuthorized: true)
-        }
+        let rejected = try await badURL.searchResponse(query: "public", provider: .bocha,
+                                                      credential: "synthetic-key", networkAuthorized: true)
+        #expect(rejected.results.isEmpty && rejected.rejectedCount == 1 && rejected.allRejected)
         let entries = Array(repeating: ["name": "Page", "url": "https://example.org/a", "snippet": "Summary"], count: 6)
         let excess = try JSONSerialization.data(withJSONObject: ["code": 200, "data": ["webPages": ["value": entries]]])
         let tooMany = ChatSearchClient(transport: SearchFixtureTransport([.init(body: excess)]))

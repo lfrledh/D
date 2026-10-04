@@ -50,11 +50,18 @@ struct ChatToolsPanel: View {
                     DisclosureGroup(activity.request.identifier + " · " + status(activity.status)) {
                         Text(requestText(activity.request)).font(.caption).textSelection(.enabled)
                         if activity.request.hasTransientResult, activity.status == .completed {
-                            if let results = chat.searchResults(activityID: activity.id, sessionID: session.id) {
+                            if let preview = chat.searchResponse(activityID: activity.id, sessionID: session.id) {
                                 Text(wording("Search summaries only. Read a page to obtain source text.", "以下是搜索摘要；读取网页后才获得正文。"))
                                     .font(.caption).foregroundStyle(.secondary)
-                                if results.isEmpty { Text(wording("No results.", "没有结果。")) }
-                                ForEach(Array(results.enumerated()), id: \.offset) { _, result in
+                                if preview.rejectedCount > 0 {
+                                    Text(wording("Skipped \(preview.rejectedCount) invalid or unsafe results.", "已拒绝 \(preview.rejectedCount) 条格式错误或不安全的结果。"))
+                                }
+                                if preview.results.isEmpty {
+                                    Text(preview.allRejected
+                                         ? wording("All returned results were rejected.", "返回结果全部被拒绝。")
+                                         : wording("No results.", "没有结果。"))
+                                }
+                                ForEach(Array(preview.results.enumerated()), id: \.offset) { _, result in
                                     VStack(alignment: .leading, spacing: 4) {
                                         Text(result.title).font(.subheadline).textSelection(.enabled)
                                         Text(result.url.absoluteString).font(.caption).textSelection(.enabled)

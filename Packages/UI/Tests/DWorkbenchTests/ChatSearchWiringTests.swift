@@ -7,8 +7,10 @@ private actor SearchWiringTransport: ChatWebTransport {
     nonisolated let entered: AsyncStream<URLRequest>
     private let signal: AsyncStream<URLRequest>.Continuation
     private var calls: [URLRequest] = []
+    private let searchBody: String?
     private let waits: Bool
-    init(waits: Bool = false) {
+    init(waits: Bool = false, searchBody: String? = nil) {
+        self.searchBody = searchBody
         (entered, signal) = AsyncStream.makeStream()
         self.waits = waits
     }
@@ -18,7 +20,7 @@ private actor SearchWiringTransport: ChatWebTransport {
         if waits { try await Task.sleep(for: .seconds(30)) }
         let search = request.url?.host == "api.search.brave.com"
         let body = search
-            ? #"{"web":{"results":[{"title":"Search title","url":"https://example.com/source","description":"TRANSIENT_SNIPPET_CANARY"}]}}"#
+            ? (searchBody ?? #"{"web":{"results":[{"title":"Search title","url":"https://example.com/source","description":"TRANSIENT_SNIPPET_CANARY"}]}}"#)
             : "PAGE_BODY_CANARY: actual independently read text."
         return .init(statusCode: 200, mimeType: search ? "application/json" : "text/plain", url: request.url, body: Data(body.utf8))
     }
@@ -122,7 +124,7 @@ struct ChatSearchWiringTests {
     }
 
     @Test func automaticSearchReadsActualPageBeforeLocalModelWithoutSendingHistory() async throws {
-        let transport = SearchWiringTransport(), engine = SearchAnswerEngine()
+        let transport = SearchWiringTransport(searchBody: #"{"web":{"results":[{"title":"Bad","url":"file:///private","description":"REJECTED_CANARY"},{"title":"Good","url":"https://example.com/source","description":"TRANSIENT_SNIPPET_CANARY"}]}}"#), engine = SearchAnswerEngine()
         let parent = URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory()).appendingPathComponent("AutomaticSearch-" + UUID().uuidString)
         try FileManager.default.createDirectory(at: parent, withIntermediateDirectories: true)
         let store = try await ProjectStore.create(at: parent.appendingPathComponent("Search.dproject"), name: "Automatic search")
@@ -147,6 +149,8 @@ struct ChatSearchWiringTests {
         try await chat.send(sessionID: id); await chat.waitForCompletion()
         let requests = await transport.requests()
         #expect(requests.count == 2)
+        let searchRecord = try #require(chat.selectedSession?.toolActivities?.first)
+        #expect(chat.searchResponse(activityID: searchRecord.id, sessionID: id)?.rejectedCount == 1)
         #expect(URLComponents(url: requests[0].url!, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "q" }?.value == "visible question")
         #expect(!requests.contains { $0.url!.absoluteString.contains("PRIVATE_SYSTEM_CANARY") })
         #expect(await engine.requests.count == 1)
@@ -161,7 +165,31 @@ struct ChatSearchWiringTests {
         let content = messages.flatMap { $0["parts"] as? [[String: Any]] ?? [] }.compactMap { $0["text"] as? String }.joined(separator: "\n")
         #expect(content.contains(try #require(pageRecord.resultJSON)))
         #expect(!attempt.messagesJSON.contains("TRANSIENT_SNIPPET_CANARY") && !attempt.messagesJSON.contains("fixture-secret-canary"))
+        #expect(!attempt.messagesJSON.contains("REJECTED_CANARY"))
+        try await chat.flush()
+        #expect(!String(decoding: try JSONEncoder().encode(await store.chatState()), as: UTF8.self).contains("REJECTED_CANARY"))
         try await store.close()
+    }
+
+    @Test func allRejectedIsNotZeroResultsAndCannotTriggerPageOrModel() async throws {
+        for body in [#"{"web":{"results":[{},null]}}"#, #"{"web":{"results":[]}}"#] {
+            let transport = SearchWiringTransport(searchBody: body)
+            let (store, chat) = try await fixture(transport)
+            let id = try chat.newSession()
+            try chat.updateDraft("original question", sessionID: id)
+            var options = ChatWebOptions(); options.allowed = true; options.automaticSearch = true; options.provider = .brave
+            try chat.setWebOptions(options, sessionID: id)
+            await #expect(throws: (any Error).self) { try await chat.send(sessionID: id) }
+            let activity = try #require(chat.selectedSession?.toolActivities?.last)
+            let preview = try #require(chat.searchResponse(activityID: activity.id, sessionID: id))
+            #expect(preview.rejectedCount == (body.contains("null") ? 2 : 0))
+            #expect(preview.allRejected == body.contains("null"))
+            #expect(await transport.requests().count == 1)
+            #expect(chat.selectedSession?.attempts.isEmpty == true)
+            #expect(chat.selectedSession?.draft == "original question")
+            #expect(activity.status == .completed && activity.resultJSON == nil)
+            try await store.close()
+        }
     }
 
     @Test func closingSessionWhileCredentialWaitsPreventsNetworkAndLateResults() async throws {

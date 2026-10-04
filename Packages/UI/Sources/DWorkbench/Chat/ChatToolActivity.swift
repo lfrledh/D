@@ -118,7 +118,7 @@ extension ChatToolRequest {
         case .webRead(let hit): return try encoded(await web.readPage(hit, networkAuthorized: authorized))
         case .providerSearch(let query, let provider):
             guard let credential else { throw ChatSearchError.invalidCredential }
-            return try encoded(await search.search(query: query, provider: provider, credential: credential, networkAuthorized: authorized))
+            return try encoded(await search.searchResponse(query: query, provider: provider, credential: credential, networkAuthorized: authorized))
         case .pageRead(let url): return try encoded(await page.read(url, networkAuthorized: authorized))
         case .mcp(let endpoint, let tool, let arguments):
             guard let mcp, await mcp.status() == .connected(endpoint: endpoint) else { throw ChatMCPError.notConnected }
