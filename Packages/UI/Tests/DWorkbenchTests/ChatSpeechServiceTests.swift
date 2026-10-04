@@ -14,6 +14,20 @@ struct ChatSpeechServiceTests {
         #expect(ChatSpeechRecognitionLanguage.allCases.count == 2)
     }
 
+    @Test func recognizerLocaleAliasesKeepLanguageAndRegion() {
+        for identifier in ["en-US", "en_US"] {
+            #expect(ChatSpeechRecognitionLanguage.recognizerLanguage(for: identifier) == .english)
+        }
+        for identifier in ["zh-CN", "zh_CN", "zh-Hans-CN", "zh_Hans_CN"] {
+            #expect(ChatSpeechRecognitionLanguage.recognizerLanguage(for: identifier) == .mandarin)
+        }
+        for identifier in ["en-GB", "en_AU", "zh-TW", "zh_Hant_TW", "zh-HK", "yue-CN", "fr-FR", "zh-Hans-HK", "en-US-x-private"] {
+            #expect(ChatSpeechRecognitionLanguage.recognizerLanguage(for: identifier) == nil)
+        }
+        #expect(ChatSpeechRecognitionLanguage.recognizerLanguage(for: nil) == nil)
+        #expect(ChatSpeechRecognitionLanguage(identifier: "zh-Hans-CN") == nil)
+    }
+
     @Test func unsupportedRecognitionLanguageCannotBeAdmitted() {
         let unsupported = ChatSpeechCapability(localeIdentifier: "fr_FR", authorization: .authorized,
                                                recognizerAvailable: true, supportsOnDeviceRecognition: true)
@@ -21,6 +35,12 @@ struct ChatSpeechServiceTests {
         let noChoice = ChatSpeechCapability(localeIdentifier: nil, authorization: .notDetermined,
                                            recognizerAvailable: false, supportsOnDeviceRecognition: false)
         #expect(noChoice.admissionError == .localeUnsupported)
+        let otherEnglishRegion = ChatSpeechCapability(localeIdentifier: "en_GB", authorization: .authorized,
+                                                       recognizerAvailable: true, supportsOnDeviceRecognition: true)
+        #expect(otherEnglishRegion.admissionError == .localeUnsupported)
+        let traditionalChinese = ChatSpeechCapability(localeIdentifier: "zh_Hant_TW", authorization: .authorized,
+                                                       recognizerAvailable: true, supportsOnDeviceRecognition: true)
+        #expect(traditionalChinese.admissionError == .localeUnsupported)
     }
 
     @Test func authorizationAndDeviceSupportMustBothBePresent() {
@@ -31,6 +51,9 @@ struct ChatSpeechServiceTests {
         let mandarin = ChatSpeechCapability(localeIdentifier: "zh_CN", authorization: .authorized,
                                             recognizerAvailable: true, supportsOnDeviceRecognition: true)
         #expect(mandarin.canTranscribeLocally)
+        let scriptedMandarin = ChatSpeechCapability(localeIdentifier: "zh_Hans_CN", authorization: .authorized,
+                                                    recognizerAvailable: true, supportsOnDeviceRecognition: true)
+        #expect(scriptedMandarin.canTranscribeLocally)
 
         let noPermission = ChatSpeechCapability(localeIdentifier: "en_US", authorization: .notDetermined,
                                                 recognizerAvailable: true, supportsOnDeviceRecognition: true)
