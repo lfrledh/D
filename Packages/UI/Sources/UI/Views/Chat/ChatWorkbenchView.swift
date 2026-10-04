@@ -42,7 +42,9 @@ enum ChatPresentationLayout {
     static let inspectorWidth: CGFloat = 320
     static let messageWidth: CGFloat = 760
     // The transcript and composer each reserve 16 points on both sides.
-    static let minimumBodyWidth: CGFloat = 680 + 32
+    // Actions have their own compact rows; the body no longer needs room for
+    // every attachment and submit button on a single line.
+    static let minimumBodyWidth: CGFloat = 400 + 32
     static func showsSidebar(width: CGFloat, requested: Bool) -> Bool {
         requested && width >= minimumBodyWidth + sidebarWidth + 1
     }
@@ -747,17 +749,17 @@ struct ChatWorkbenchView: View {
                     } else {
                         Text(label("noModel", "尚未选择模型")) .foregroundStyle(.secondary)
                     }
-                }
-                Spacer()
+                }.frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
                 Button(label("changeModel", "更换模型"), action: onChooseModel)
                     .lineLimit(1).disabled(session.contextChoices?.deletedAt != nil)
+                    .chatMeasured("change-model", probe: layoutProbe)
                 if !session.messages.isEmpty {
                     ChatActionMenu(title: label("paths", "路径"), accessibilityIdentifier: "chat-paths",
                         items: leaves.map { leaf in
                             .init(id: leaf.id.uuidString, title: branchSummary(leaf), selected: leaf.id == session.selectedLeafID) {
                                 perform(sessionID: session.id) { try chat.selectLeaf(leaf.id, sessionID: session.id) }
                             }
-                        }).fixedSize()
+                        }).fixedSize().chatMeasured("paths", probe: layoutProbe)
                 }
             }.padding(.horizontal, 16).padding(.vertical, 10)
                 .chatMeasured("topbar", probe: layoutProbe)
@@ -1400,13 +1402,12 @@ struct ChatWorkbenchView: View {
                 ? newLabel("enterSend", english: "Return sends; Shift–Return adds a line. Input method conversion takes priority.", chinese: "回车发送，Shift–回车换行；输入法选字优先。")
                 : newLabel("commandSend", english: "Command–Return sends; Return adds a line. Drop files or paste attachments below.", chinese: "Command–回车发送，回车换行；可拖入文件或粘贴附件。"))
                 .font(.caption).foregroundStyle(.secondary)
+            VStack(alignment: .leading) {
+            ViewThatFits(in: .horizontal) {
+                HStack { attachmentButtons(session) }
+                VStack(alignment: .leading) { attachmentButtons(session) }
+            }.frame(maxWidth: .infinity, alignment: .leading)
             HStack {
-                Button(label("attach", "添加附件…"), systemImage: "paperclip") {
-                    Task { await chooseAttachments(for: session.id) }
-                }.disabled(session.archived || session.contextChoices?.deletedAt != nil)
-                Button(newLabel("pasteAttachments", english: "Paste attachments", chinese: "粘贴附件")) {
-                    Task { await pasteAttachments(sessionID: session.id) }
-                }.disabled(session.archived || session.contextChoices?.deletedAt != nil)
                 Spacer()
                 if chat.pendingSaveAttemptID != nil || chat.saveIssue != nil {
                     Button(label("retrySave", "重试保存（不重新生成）")) { Task { await chat.retrySave() } }
@@ -1431,7 +1432,9 @@ struct ChatWorkbenchView: View {
                             hasPendingSave: chat.pendingSaveAttemptID != nil, hasSaveIssue: chat.saveIssue != nil,
                             invalidFields: chat.invalidParameterFields))
                         .accessibilityIdentifier("chat-send")
+                        .chatMeasured("composer-send", probe: layoutProbe)
                 }
+            }
             }
             .dropDestination(for: WorkflowCanvasTransfer.self) { items, _ in
                 let owner = session.id
@@ -1461,6 +1464,15 @@ struct ChatWorkbenchView: View {
             Task { await importURLs(urls, sessionID: owner) }
             return !urls.isEmpty
         }
+    }
+
+    @ViewBuilder private func attachmentButtons(_ session: ChatSession) -> some View {
+        Button(label("attach", "添加附件…"), systemImage: "paperclip") {
+            Task { await chooseAttachments(for: session.id) }
+        }.disabled(session.archived || session.contextChoices?.deletedAt != nil)
+        Button(newLabel("pasteAttachments", english: "Paste attachments", chinese: "粘贴附件")) {
+            Task { await pasteAttachments(sessionID: session.id) }
+        }.disabled(session.archived || session.contextChoices?.deletedAt != nil)
     }
 
     private func submitFromComposer(_ sessionID: UUID) {

@@ -221,6 +221,11 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
         let stop = rectangles["composer-stop"]
         #expect(stop != nil, "Stop must be a stable primary action beside the input, not transcript chrome")
         if let stop, let composer { #expect(composer.contains(stop)) }
+        let withInspector = renderFixture(chat, model: model, width: 1_057, inspector: true)
+        let pane = try #require(withInspector["inspector-pane"])
+        let visibleStop = try #require(withInspector["composer-stop"])
+        #expect(!visibleStop.intersects(pane))
+        #expect(horizontallyInside(visibleStop, width: 1_057))
         let cancelling = Task { await chat.cancel() }
         for _ in 0..<100 {
             if await engine.cancellationSeen { break }
@@ -338,6 +343,22 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
         try await close(store, root: root)
     }
 
+    @Test func mediumWindowInspectorDoesNotCoverPrimaryActions() async throws {
+        var session = try answeredSession(raw: "Keep the original answer", status: .completed)
+        session.draft = "Unsent 中文 👩🏽‍🎨"
+        var state = ChatState(); state.sessions = [session]; state.selectedSessionID = session.id
+        let (chat, model, store, root) = try await fixture(state)
+        let layout = renderFixture(chat, model: model, width: 1_057, inspector: true)
+        let inspector = try #require(layout["inspector-pane"])
+        for key in ["composer-send", "change-model", "paths"] {
+            let control = try #require(layout[key])
+            #expect(horizontallyInside(control, width: 1_057))
+            #expect(!control.intersects(inspector), "\(key) must remain outside the inspector")
+        }
+        #expect(chat.selectedSession?.draft == session.draft)
+        try await close(store, root: root)
+    }
+
     private func answeredSession(raw: String, status: ChatAttempt.Status) throws -> ChatSession {
         var session = ChatSession(title: "回答夹具")
         let user = ChatMessage(parentID: nil, role: .user, text: "请回答")
@@ -432,25 +453,25 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
 
     @Test func sidePanesCollapseBeforeConversationIsClipped() {
         #expect(!ChatPresentationLayout.showsSidebar(width: 600, requested: true))
-        #expect(!ChatPresentationLayout.showsSidebar(width: 920, requested: true))
-        #expect(!ChatPresentationLayout.showsSidebar(width: 952, requested: true))
-        #expect(ChatPresentationLayout.showsSidebar(width: 953, requested: true))
-        #expect(!ChatPresentationLayout.showsInspector(width: 1_080, requested: true, sidebar: true))
-        #expect(!ChatPresentationLayout.showsInspector(width: 1_273, requested: true, sidebar: true))
-        #expect(ChatPresentationLayout.showsInspector(width: 1_274, requested: true, sidebar: true))
-        #expect(!ChatPresentationLayout.showsInspector(width: 1_000, requested: true, sidebar: false))
-        #expect(!ChatPresentationLayout.showsInspector(width: 1_032, requested: true, sidebar: false))
-        #expect(ChatPresentationLayout.showsInspector(width: 1_033, requested: true, sidebar: false))
+        #expect(!ChatPresentationLayout.showsSidebar(width: 640, requested: true))
+        #expect(!ChatPresentationLayout.showsSidebar(width: 672, requested: true))
+        #expect(ChatPresentationLayout.showsSidebar(width: 673, requested: true))
+        #expect(!ChatPresentationLayout.showsInspector(width: 960, requested: true, sidebar: true))
+        #expect(!ChatPresentationLayout.showsInspector(width: 993, requested: true, sidebar: true))
+        #expect(ChatPresentationLayout.showsInspector(width: 994, requested: true, sidebar: true))
+        #expect(!ChatPresentationLayout.showsInspector(width: 740, requested: true, sidebar: false))
+        #expect(!ChatPresentationLayout.showsInspector(width: 752, requested: true, sidebar: false))
+        #expect(ChatPresentationLayout.showsInspector(width: 753, requested: true, sidebar: false))
         #expect(ChatPresentationLayout.dismissesNarrowPanel(.inspector, width: 1_300,
             sidebarRequested: true, inspectorRequested: true))
-        #expect(!ChatPresentationLayout.dismissesNarrowPanel(.inspector, width: 1_080,
+        #expect(!ChatPresentationLayout.dismissesNarrowPanel(.inspector, width: 960,
             sidebarRequested: true, inspectorRequested: true))
-        #expect(ChatPresentationLayout.dismissesNarrowPanel(.sessions, width: 953,
+        #expect(ChatPresentationLayout.dismissesNarrowPanel(.sessions, width: 673,
             sidebarRequested: true, inspectorRequested: false))
         #expect(ChatPresentationLayout.sidebarWidth == 240)
         #expect(ChatPresentationLayout.inspectorWidth == 320)
         #expect(ChatPresentationLayout.messageWidth == 760)
-        #expect(ChatPresentationLayout.minimumBodyWidth == 712)
+        #expect(ChatPresentationLayout.minimumBodyWidth == 432)
     }
 
     @Test func narrowRenameAndPreviewWaitForPanelDismissal() {
@@ -507,9 +528,11 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
         let session = try answeredSession(raw: "正文", status: .completed)
         var state = ChatState(); state.sessions = [session]; state.selectedSessionID = session.id
         let (chat, model, store, root) = try await fixture(state)
+        var rectangles: [String: CGRect] = [:]
         let view = ChatWorkbenchView(chat: chat, model: model, onChooseModel: {},
             onSavedAsset: { _ in }, onAssetsChanged: {}, initialInspectorVisible: true,
             initialSettingsVisible: true)
+            .observingLayout { rectangles[$0] = $1 }
         let host = NSHostingView(rootView: view)
         host.frame = .init(x: 0, y: 0, width: 1300, height: 700)
         let window = NSWindow(contentRect: host.frame, styleMask: [.titled], backing: .buffered, defer: false)
@@ -527,12 +550,19 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
         #expect(window.makeFirstResponder(editor))
         editor.setMarkedText("pinyin", selectedRange: .init(location: 6, length: 0),
                              replacementRange: .init(location: NSNotFound, length: 0))
-        for width: CGFloat in [1290, 1273, 1000, 1300] {
+        for width: CGFloat in [1290, 1273, 1057, 1000, 993, 1300] {
             window.setContentSize(.init(width: width, height: 700))
             settle()
             #expect(descendants(host).contains { $0 === editor })
             #expect(!editor.isHiddenOrHasHiddenAncestor)
             #expect(editor.hasMarkedText() && window.firstResponder === editor)
+            if width >= 994 {
+                let pane = try #require(rectangles["inspector-pane"])
+                for key in ["composer-send", "change-model", "paths"] {
+                    let control = try #require(rectangles[key])
+                    #expect(!control.intersects(pane), "\(key) covered at \(width)")
+                }
+            }
         }
         try await close(store, root: root)
     }
