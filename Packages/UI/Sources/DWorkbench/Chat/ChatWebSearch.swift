@@ -75,12 +75,14 @@ public struct ChatWebHTTPResponse: Sendable {
     public let mimeType: String?
     public let url: URL?
     public let body: Data
+    public let location: String?
 
-    public init(statusCode: Int, mimeType: String?, url: URL?, body: Data) {
+    public init(statusCode: Int, mimeType: String?, url: URL?, body: Data, location: String? = nil) {
         self.statusCode = statusCode
         self.mimeType = mimeType
         self.url = url
         self.body = body
+        self.location = location
     }
 }
 

@@ -18,6 +18,22 @@ private actor PageFixtureTransport: ChatWebTransport {
     func first() -> (URLRequest, Int)? { calls.first }
 }
 
+private actor PageSequenceTransport: ChatWebTransport {
+    private var responses: [ChatWebHTTPResponse]
+    private(set) var requests: [URLRequest] = []
+
+    init(_ responses: [ChatWebHTTPResponse]) { self.responses = responses }
+
+    func send(_ request: URLRequest, maximumBytes: Int) async throws -> ChatWebHTTPResponse {
+        requests.append(request)
+        guard !responses.isEmpty else { throw ChatWebPageError.invalidResponse }
+        return responses.removeFirst()
+    }
+
+    func fetchedURLs() -> [URL?] { requests.map(\.url) }
+    func timeouts() -> [TimeInterval] { requests.map(\.timeoutInterval) }
+}
+
 private actor WaitingPageTransport: ChatWebTransport {
     private var entered = false
     private var entryWaiter: CheckedContinuation<Void, Never>?
@@ -75,8 +91,9 @@ struct ChatWebPageTests {
     private let url = URL(string: "https://example.org/article?q=one")!
 
     private func reply(_ body: String, mime: String? = "text/html", status: Int = 200,
-                       responseURL: URL? = nil) -> ChatWebHTTPResponse {
-        .init(statusCode: status, mimeType: mime, url: responseURL ?? url, body: Data(body.utf8))
+                       responseURL: URL? = nil, location: String? = nil) -> ChatWebHTTPResponse {
+        .init(statusCode: status, mimeType: mime, url: responseURL ?? url, body: Data(body.utf8),
+              location: location)
     }
 
     @Test(.enabled(if: ProcessInfo.processInfo.environment["D_CHAT_PUBLIC_PAGE_PROBE"] == "1"))
@@ -121,6 +138,9 @@ struct ChatWebPageTests {
         #expect(pairs.contains(["--proxy", ""]))
         #expect(pairs.contains(["--noproxy", "*"]))
         #expect(pairs.contains(["--max-time", "30"]))
+        let bounded = ChatWebPagePolicy.curlArguments(url: url, address: "8.8.8.8",
+                                                      bodyPath: "/tmp/owned/body", timeout: 1.25)
+        #expect(Array(zip(bounded, bounded.dropFirst())).contains { $0.0 == "--max-time" && $0.1 == "1.250" })
         #expect(pairs.contains(["--max-filesize", "2097152"]))
         #expect(!argv.contains("--location") && !argv.contains("--netrc"))
         #expect(argv.last == url.absoluteString)
@@ -223,8 +243,83 @@ struct ChatWebPageTests {
         let transport = PageFixtureTransport(reply("<body>Visible</body>"))
         let page = try await ChatWebPageClient(transport: transport).read(sourceURL, networkAuthorized: true)
         #expect(page.url == sourceURL)
+        #expect(page.resolvedURL == url)
         let call = try #require(await transport.first())
         #expect(call.0.url == url)
+    }
+
+    @Test func followsRelativeAndCrossHostPublicRedirectsWithOriginalSource() async throws {
+        let middle = URL(string: "https://example.org/next")!
+        let final = URL(string: "https://public.example.net/final")!
+        let transport = PageSequenceTransport([
+            reply("", status: 302, location: "/next#ignored"),
+            reply("", status: 307, responseURL: middle, location: final.absoluteString),
+            reply("<body>Visible</body>", responseURL: final)
+        ])
+        let page = try await ChatWebPageClient(transport: transport).read(url, networkAuthorized: true)
+        #expect(page.url == url)
+        #expect(page.resolvedURL == final)
+        #expect(page.text == "Visible")
+        #expect(await transport.fetchedURLs() == [url, middle, final])
+        let timeouts = await transport.timeouts()
+        #expect(timeouts.count == 3 && timeouts.allSatisfy { $0 > 0 && $0 <= 30 })
+    }
+
+    @Test func rejectsRedirectLoopsExcessHopsAndUnsafeTargets() async throws {
+        let loop = PageSequenceTransport([reply("", status: 301, location: "/article?q=one")])
+        await #expect(throws: ChatWebPageError.redirectRejected) {
+            try await ChatWebPageClient(transport: loop).read(url, networkAuthorized: true)
+        }
+        #expect(await loop.fetchedURLs() == [url])
+
+        let hops = (1...4).map { index in
+            reply("", status: 302, responseURL: index == 1 ? url : URL(string: "https://example.org/\(index - 1)")!,
+                  location: "/\(index)")
+        }
+        let tooMany = PageSequenceTransport(hops)
+        await #expect(throws: ChatWebPageError.redirectRejected) {
+            try await ChatWebPageClient(transport: tooMany).read(url, networkAuthorized: true)
+        }
+        let fetched = await tooMany.fetchedURLs()
+        #expect(fetched.count == 4)
+
+        for status in [301, 302, 303, 307, 308] {
+            let final = URL(string: "https://example.org/final")!
+            let transport = PageSequenceTransport([
+                reply("", status: status, location: "/final"),
+                reply("<body>Visible</body>", responseURL: final)
+            ])
+            let page = try await ChatWebPageClient(transport: transport).read(url, networkAuthorized: true)
+            #expect(page.resolvedURL == final)
+        }
+        await #expect(throws: ChatWebPageError.redirectRejected) {
+            try await ChatWebPageClient(transport: PageFixtureTransport(reply("", status: 304, location: "/final")))
+                .read(url, networkAuthorized: true)
+        }
+
+        for location in ["http://example.org/", "file:///etc/passwd", "https://127.0.0.1/",
+                         "https://u:p@example.org/", "https://example.org:8443/", "https://[::1]/"] {
+            let transport = PageSequenceTransport([reply("", status: 302, location: location)])
+            await #expect(throws: ChatWebPageError.redirectRejected) {
+                try await ChatWebPageClient(transport: transport).read(url, networkAuthorized: true)
+            }
+            #expect(await transport.fetchedURLs() == [url])
+        }
+    }
+
+    @Test func readEligibilityAndLegacySourceDecoding() async throws {
+        try ChatWebPageClient.validateReadURL(URL(string: "https://example.org/path#heading")!)
+        #expect(throws: ChatWebPageError.invalidURL) {
+            try ChatWebPageClient.validateReadURL(URL(string: "http://example.org/")!)
+        }
+        let page = try await ChatWebPageClient(transport: PageFixtureTransport(reply("<body>Visible</body>")))
+            .read(url, networkAuthorized: true)
+        var object = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(page)) as? [String: Any])
+        object.removeValue(forKey: "resolvedURL")
+        let oldData = try JSONSerialization.data(withJSONObject: object)
+        let decoded = try JSONDecoder().decode(ChatWebPageSource.self, from: oldData)
+        #expect(decoded.resolvedURL == nil)
+        #expect(decoded.url == url && decoded.text == "Visible")
     }
 
     @Test func enforcesDownloadAndTextCaps() async throws {
@@ -238,6 +333,15 @@ struct ChatWebPageTests {
             try await ChatWebPageClient(transport: PageFixtureTransport(reply(String(repeating: "x", count: 512 * 1024 + 1), mime: "text/plain")))
                 .read(url, networkAuthorized: true)
         }
+        let almostFull = String(repeating: "x", count: 2 * 1024 * 1024)
+        let cumulative = PageSequenceTransport([
+            reply(almostFull, status: 302, location: "/next"),
+            reply("<body>Visible</body>", responseURL: URL(string: "https://example.org/next")!)
+        ])
+        await #expect(throws: ChatWebPageError.responseTooLarge) {
+            try await ChatWebPageClient(transport: cumulative).read(url, networkAuthorized: true)
+        }
+        #expect(await cumulative.fetchedURLs() == [url])
     }
 
     @Test func cancellationPropagates() async throws {
