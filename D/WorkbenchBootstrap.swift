@@ -161,7 +161,7 @@ final class WorkbenchBootstrap {
             quickModel.projectSession.refreshWorkflowModels()
             let quick = QuickGenerationController(store: quickStore, allowsSubmission: { [weak self, weak quickModel] in
                 guard let self, let quickModel else { return false }
-                return !self.isTerminating && quickModel.projectSession.store === quickStore
+                return !self.isTerminating && quickModel.projectSession.currentStore === quickStore
                     && !quickModel.projectSession.isChangingProject
             }) { [weak quickModel] in
                 guard let quickModel else { throw WorkflowIssue("快速工作区已关闭。") }
