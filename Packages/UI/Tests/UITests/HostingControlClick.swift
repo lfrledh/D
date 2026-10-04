@@ -61,7 +61,9 @@ import AppKit
               frame.minX.isFinite, frame.minY.isFinite else { return reject("invalid-frame") }
         let point = window.convertPoint(fromScreen: CGPoint(x: frame.midX, y: frame.midY))
         guard root.bounds.contains(root.convert(point, from: nil)) else { return reject("outside-root") }
-        let identity = Int.random(in: 1...Int(Int32.max))
+        // AppKit's queued mouse event number round-trips as a signed 16-bit value.
+        // Keep the exact identity check; generate an identity representable by that queue.
+        let identity = Int.random(in: 1...Int(Int16.max))
         func event(_ type: NSEvent.EventType) -> NSEvent? {
             NSEvent.mouseEvent(with: type, location: point, modifierFlags: [],
                 timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
@@ -75,6 +77,12 @@ import AppKit
         guard let queued = NSApp.nextEvent(matching: .leftMouseDown,
             until: Date(timeIntervalSinceNow: 0.1), inMode: .default, dequeue: true) else { return reject("dequeue-empty") }
         guard queued.windowNumber == window.windowNumber, queued.eventNumber == identity else {
+            // Preserve the identity guard; record the actual factory/queue boundary once it fails.
+            for (name, value) in [("down", down), ("up", up), ("queued", queued)] {
+                print("D_HOSTING_EVENT", name, "requested", identity, "targetWindow", window.windowNumber,
+                      "type", value.type.rawValue, "window", value.windowNumber, "number", value.eventNumber,
+                      "timestamp", value.timestamp, "location", value.locationInWindow, "sameDown", value === down)
+            }
             NSApp.postEvent(queued, atStart: true)
             return reject("identity-mismatch")
         }

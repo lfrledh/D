@@ -3,6 +3,7 @@ import DWorkbench
 import Observation
 import SwiftUI
 import Testing
+import XCTest
 @testable import UI
 
 @MainActor @Observable
@@ -27,89 +28,6 @@ private struct QuoteSelectionHarness: View {
 
 @Suite("Native chat quote selection", .serialized)
 @MainActor struct ChatQuoteSelectionViewTests {
-    private func descendants(_ root: NSView) -> [NSView] {
-        [root] + root.subviews.flatMap(descendants)
-    }
-
-    private func click(_ action: ChatQuoteSelectionAction, fixture: QuoteSelectionFixture, host: NSView) throws {
-        let rect = try #require(fixture.frames[action]), window = try #require(host.window)
-        #expect(rect.width > 0 && rect.height > 0)
-        // SwiftUI's virtual AX elements are absent in this offscreen host. Use
-        // the production button geometry with the existing process-only event helper.
-        let geometry = NSAccessibilityElement()
-        geometry.setAccessibilityIdentifier("chat-quote-" + action.rawValue)
-        geometry.setAccessibilityFrame(window.convertToScreen(host.convert(rect, to: nil)))
-        #expect(HostingControlClick.send(to: geometry, in: host))
-    }
-
-    private func settle(_ host: NSView) async throws {
-        for _ in 0..<12 {
-            host.layoutSubtreeIfNeeded()
-            try await Task.sleep(for: .milliseconds(15))
-        }
-    }
-
-    private func select(_ range: NSRange, in textView: NSTextView) throws {
-        textView.setSelectedRange(range)
-        let coordinator = try #require(textView.delegate as? ChatQuoteSelectionView.NativeTextView.Coordinator)
-        coordinator.textViewDidChangeSelection(Notification(name: NSTextView.didChangeSelectionNotification,
-                                                            object: textView))
-    }
-
-    @Test func hostedSelectionClearsActionsAfterDeselectOversizeAndSourceReset() async throws {
-        let raw = "Quote " + String(repeating: "a", count: ChatQuoteSelection.maximumUTF8Bytes + 1)
-        let source = try ChatQuoteSource(kind: .document, id: UUID(), version: "v1", text: raw)
-        let fixture = QuoteSelectionFixture(source: source)
-        let host = NSHostingView(rootView: QuoteSelectionHarness(fixture: fixture))
-        host.frame = CGRect(x: 0, y: 0, width: 850, height: 300)
-        let window = NSWindow(contentRect: host.frame, styleMask: [.titled], backing: .buffered, defer: false)
-        window.isReleasedWhenClosed = false
-        window.contentView = host
-        defer { window.close() }
-        try await settle(host)
-        let textView = try #require(descendants(host).compactMap { $0 as? NSTextView }
-            .first { $0.string == source.text })
-        #expect(fixture.frames.count == ChatQuoteSelectionAction.allCases.count)
-
-        try select(NSRange(location: 0, length: 5), in: textView)
-        try await settle(host)
-
-        try click(.ask, fixture: fixture, host: host)
-        try await settle(host)
-        #expect(fixture.uses.count == 1)
-        #expect(fixture.uses.first?.0.text == "Quote")
-        #expect(fixture.uses.first?.0.sourceKind == .document)
-        #expect(fixture.uses.first?.1 == .ask)
-
-        try select(NSRange(location: 0, length: 0), in: textView)
-        try await settle(host)
-        #expect(fixture.frames.count == ChatQuoteSelectionAction.allCases.count)
-        try click(.ask, fixture: fixture, host: host)
-        try await settle(host)
-        #expect(fixture.uses.count == 1)
-
-        try select(NSRange(location: 0, length: ChatQuoteSelection.maximumUTF8Bytes + 1), in: textView)
-        try await settle(host)
-        #expect(fixture.frames.count == ChatQuoteSelectionAction.allCases.count)
-        try click(.explain, fixture: fixture, host: host)
-        try await settle(host)
-        #expect(fixture.uses.count == 1)
-
-        try select(NSRange(location: 0, length: 5), in: textView)
-        try await settle(host)
-
-        let replacement = try ChatQuoteSource(kind: .document, id: source.id,
-                                              version: source.version, text: "Replacement")
-        fixture.source = replacement
-        try await settle(host)
-        #expect(textView.string == replacement.text)
-        #expect(textView.selectedRange().length == 0)
-        #expect(fixture.frames.count == ChatQuoteSelectionAction.allCases.count)
-        try click(.translate, fixture: fixture, host: host)
-        try await settle(host)
-        #expect(fixture.uses.count == 1)
-    }
-
     @Test func coordinatorPreservesSelectionForSameSourceAndResetsOnReplacement() throws {
         let id = UUID()
         let first = try ChatQuoteSource(kind: .message, id: id, version: "1", text: "原文👩‍💻e\u{301}")
@@ -178,4 +96,99 @@ private struct QuoteSelectionHarness: View {
         #expect(received == nil)
         #expect(textView.string == source.text)
     }
+}
+
+// This fixture uses XCTest’s synchronous host loop: the observed Swift Testing
+// async-main helper exited during event tracking before reporting the method.
+@MainActor final class ChatQuoteSelectionHostingTests: XCTestCase {
+    private enum ClickFailure: Error { case notDispatched }
+
+    private func descendants(_ root: NSView) -> [NSView] {
+        [root] + root.subviews.flatMap(descendants)
+    }
+
+    private func click(_ action: ChatQuoteSelectionAction, fixture: QuoteSelectionFixture, host: NSView) throws {
+        let rect = try XCTUnwrap(fixture.frames[action]), window = try XCTUnwrap(host.window)
+        XCTAssertTrue(rect.width > 0 && rect.height > 0)
+        // SwiftUI's virtual AX elements are absent in this test-process host. Use
+        // the production button geometry with the existing process-only event helper.
+        let geometry = NSAccessibilityElement()
+        geometry.setAccessibilityIdentifier("chat-quote-" + action.rawValue)
+        geometry.setAccessibilityFrame(window.convertToScreen(host.convert(rect, to: nil)))
+        guard HostingControlClick.send(to: geometry, in: host) else {
+            XCTFail("The expected mouse pair was not dispatched")
+            throw ClickFailure.notDispatched
+        }
+    }
+
+    private func settle(_ host: NSView) {
+        for _ in 0..<12 {
+            host.layoutSubtreeIfNeeded()
+            RunLoop.main.run(until: Date().addingTimeInterval(0.015))
+        }
+    }
+
+    private func select(_ range: NSRange, in textView: NSTextView) throws {
+        textView.setSelectedRange(range)
+        let coordinator = try XCTUnwrap(textView.delegate as? ChatQuoteSelectionView.NativeTextView.Coordinator)
+        coordinator.textViewDidChangeSelection(Notification(name: NSTextView.didChangeSelectionNotification,
+                                                            object: textView))
+    }
+
+    func testHostedSelectionClearsActionsAfterDeselectOversizeAndSourceReset() throws {
+        let raw = "Quote " + String(repeating: "a", count: ChatQuoteSelection.maximumUTF8Bytes + 1)
+        let source = try ChatQuoteSource(kind: .document, id: UUID(), version: "v1", text: raw)
+        let fixture = QuoteSelectionFixture(source: source)
+        let host = NSHostingView(rootView: QuoteSelectionHarness(fixture: fixture))
+        host.frame = CGRect(x: 0, y: 0, width: 850, height: 300)
+        let window = NSWindow(contentRect: host.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = host
+        window.orderFront(nil)
+        defer { window.close() }
+        XCTAssertTrue(window.isVisible)
+        settle(host)
+        let textView = try XCTUnwrap(descendants(host).compactMap { $0 as? NSTextView }
+            .first { $0.string == source.text })
+        XCTAssertTrue(fixture.frames.count == ChatQuoteSelectionAction.allCases.count)
+
+        try select(NSRange(location: 0, length: 5), in: textView)
+        settle(host)
+
+        try click(.ask, fixture: fixture, host: host)
+        settle(host)
+        XCTAssertTrue(fixture.uses.count == 1)
+        XCTAssertTrue(fixture.uses.first?.0.text == "Quote")
+        XCTAssertTrue(fixture.uses.first?.0.sourceKind == .document)
+        XCTAssertTrue(fixture.uses.first?.1 == .ask)
+
+        try select(NSRange(location: 0, length: 0), in: textView)
+        settle(host)
+        XCTAssertTrue(fixture.frames.count == ChatQuoteSelectionAction.allCases.count)
+        try click(.ask, fixture: fixture, host: host)
+        settle(host)
+        XCTAssertTrue(fixture.uses.count == 1)
+
+        try select(NSRange(location: 0, length: ChatQuoteSelection.maximumUTF8Bytes + 1), in: textView)
+        settle(host)
+        XCTAssertTrue(fixture.frames.count == ChatQuoteSelectionAction.allCases.count)
+        try click(.explain, fixture: fixture, host: host)
+        settle(host)
+        XCTAssertTrue(fixture.uses.count == 1)
+
+        try select(NSRange(location: 0, length: 5), in: textView)
+        settle(host)
+
+        let replacement = try ChatQuoteSource(kind: .document, id: source.id,
+                                              version: source.version, text: "Replacement")
+        fixture.source = replacement
+        settle(host)
+        XCTAssertTrue(textView.string == replacement.text)
+        XCTAssertTrue(textView.selectedRange().length == 0)
+        XCTAssertTrue(fixture.frames.count == ChatQuoteSelectionAction.allCases.count)
+        try click(.translate, fixture: fixture, host: host)
+        settle(host)
+        XCTAssertTrue(fixture.uses.count == 1)
+    }
+
 }
