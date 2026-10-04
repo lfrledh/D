@@ -8,6 +8,8 @@ public enum ChatToolRequest: Codable, Sendable, Equatable {
     case csv(WorkflowAssetReference, columns: [String])
     case webSearch(query: String, language: ChatWebLanguage)
     case webRead(ChatWebSearchHit)
+    case providerSearch(query: String, provider: ChatSearchProvider)
+    case pageRead(URL)
     case mcp(endpoint: String, tool: String, argumentsJSON: String)
 
     public var identifier: String {
@@ -18,11 +20,17 @@ public enum ChatToolRequest: Codable, Sendable, Equatable {
         case .csv: "d.chat.csv.v1"
         case .webSearch: "d.chat.wikipedia.search.v1"
         case .webRead: "d.chat.wikipedia.read.v1"
+        case .providerSearch: "d.chat.search.v1"
+        case .pageRead: "d.chat.webpage.read.v1"
         case .mcp: "d.chat.mcp.call.v1"
         }
     }
     public var usesNetwork: Bool {
-        switch self { case .webSearch, .webRead: true; default: false }
+        switch self { case .webSearch, .webRead, .providerSearch, .pageRead: true; default: false }
+    }
+    /// API search metadata is transient; only the request and completion receipt persist.
+    public var hasTransientResult: Bool {
+        if case .providerSearch = self { true } else { false }
     }
     public var parents: [WorkflowAssetReference] {
         if case .csv(let reference, _) = self { [reference] } else { [] }
@@ -52,7 +60,8 @@ public struct ChatToolActivity: Codable, Sendable, Equatable, Identifiable {
         let requestBytes = try JSONEncoder().encode(request)
         guard requestBytes.count <= 65_536, (resultJSON?.utf8.count ?? 0) <= 2_097_152,
               (issue?.utf8.count ?? 0) <= 16_384, output == nil || output?.kind == .text,
-              status != .completed || resultJSON != nil else { throw WorkflowIssue("工具记录大小或结果无效。") }
+              status != .completed || resultJSON != nil || request.hasTransientResult,
+              !request.hasTransientResult || (resultJSON == nil && output == nil) else { throw WorkflowIssue("工具记录大小或结果无效。") }
     }
 }
 
@@ -60,11 +69,15 @@ public struct ChatWebOptions: Codable, Sendable, Equatable {
     public var allowed = false
     public var automaticSearch = false
     public var language: ChatWebLanguage = .zh
+    /// nil in legacy documents requires an explicit new provider choice. It is not a fallback.
+    public var provider: ChatSearchProvider?
     public init() {}
 }
 
 extension ChatToolRequest {
-    func execute(store: ProjectStore, authorized: Bool, web: ChatWebSearchClient, mcp: (any ChatMCPServing)?) async throws -> String {
+    func execute(store: ProjectStore, authorized: Bool, web: ChatWebSearchClient, mcp: (any ChatMCPServing)?,
+                 search: ChatSearchClient = .init(), credential: String? = nil,
+                 page: ChatWebPageClient = .init()) async throws -> String {
         @Sendable func encoded<T: Encodable>(_ value: T) throws -> String {
             let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys, .prettyPrinted]
             let data = try encoder.encode(value)
@@ -81,6 +94,10 @@ extension ChatToolRequest {
             return try await WorkflowCPU.run { try encoded(ChatDeterministicTools.analyze(.init(csvData: bytes, numericColumns: columns))) }
         case .webSearch(let query, let language): return try encoded(await web.search(query, language: language, networkAuthorized: authorized))
         case .webRead(let hit): return try encoded(await web.readPage(hit, networkAuthorized: authorized))
+        case .providerSearch(let query, let provider):
+            guard let credential else { throw ChatSearchError.invalidCredential }
+            return try encoded(await search.search(query: query, provider: provider, credential: credential, networkAuthorized: authorized))
+        case .pageRead(let url): return try encoded(await page.read(url, networkAuthorized: authorized))
         case .mcp(let endpoint, let tool, let arguments):
             guard let mcp, await mcp.status() == .connected(endpoint: endpoint) else { throw ChatMCPError.notConnected }
             return try await mcp.callTool(name: tool, argumentsJSON: arguments, permitted: authorized, timeoutSeconds: 30).resultJSON

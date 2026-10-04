@@ -118,6 +118,17 @@ import Observation
     @ObservationIgnored private var toolTask: Task<UUID, Error>?
     @ObservationIgnored private var activeToolIsMCP = false
     @ObservationIgnored private let webClient: ChatWebSearchClient
+    @ObservationIgnored private let searchClient: ChatSearchClient
+    @ObservationIgnored private let pageClient: ChatWebPageClient
+    @ObservationIgnored private let searchCredentials: ChatSearchCredentials
+    @ObservationIgnored private let injectedSearchCredential: (@Sendable (ChatSearchProvider) async throws -> String)?
+    public private(set) var configuredSearchProviders: Set<ChatSearchProvider> = []
+    private struct SearchPreview {
+        let sessionID: UUID
+        let expiresAt: Date
+        let results: [ChatSearchResult]
+    }
+    private var searchPreviews: [UUID: SearchPreview] = [:]
     public private(set) var activeToolSessionID: UUID?
     public var isToolRunning: Bool { activeToolSessionID != nil }
     @ObservationIgnored private let mcpService: any ChatMCPServing
@@ -152,9 +163,16 @@ import Observation
 
     public init(store: ProjectStore, settings: UserDefaults? = nil, allowsSubmission: @escaping @MainActor () -> Bool = { true },
                 ownsPersonalMemory: Bool = false, isTemporary: Bool = false, webClient: ChatWebSearchClient = .init(), mcpService: any ChatMCPServing = ChatMCPService(),
+                searchClient: ChatSearchClient = .init(), pageClient: ChatWebPageClient = .init(),
+                searchCredential: (@Sendable (ChatSearchProvider) async throws -> String)? = nil,
                 personalMemoryProvider: @escaping @MainActor () -> ChatController? = { nil },
                 makeServices: @escaping @MainActor () throws -> WorkflowServices) {
         self.store = store; self.isTemporary = isTemporary; self.settings = isTemporary ? nil : settings; self.webClient = webClient; self.mcpService = mcpService
+        self.searchClient = searchClient; self.pageClient = pageClient
+        let credentials = ChatSearchCredentials(settings: settings)
+        self.searchCredentials = credentials
+        self.injectedSearchCredential = searchCredential
+        self.configuredSearchProviders = Set(ChatSearchProvider.allCases.filter { credentials.configured($0) })
         self.ownsPersonalMemory = ownsPersonalMemory && !isTemporary
         if isTemporary { self.personalMemoryProvider = { nil } } else { self.personalMemoryProvider = personalMemoryProvider }
         self.allowsSubmission = allowsSubmission; self.makeServices = makeServices
@@ -289,7 +307,7 @@ import Observation
     }
     public func archive(_ id: UUID) throws {
         try requireLoaded(); guard activeSessionID != id else { throw WorkflowIssue("当前会话仍在运行，请等待其停止后归档。") }
-        state.sessions[try index(id)].archived = true; changed()
+        state.sessions[try index(id)].archived = true; cancelToolsForClosedSession(id); changed()
     }
     public func updateDraft(_ text: String, sessionID: UUID) throws {
         try requireLoaded(); guard text.utf8.count <= 1_048_576 else { throw WorkflowIssue("草稿超过1MiB。") }
@@ -818,14 +836,16 @@ import Observation
     }
     public func setArchived(_ archived: Bool, sessionID: UUID) throws {
         try requireLoaded(); guard activeSessionID != sessionID else { throw WorkflowIssue("请等待当前会话停止。") }
-        state.sessions[try index(sessionID)].archived = archived; changed()
+        state.sessions[try index(sessionID)].archived = archived
+        if archived { cancelToolsForClosedSession(sessionID) }; changed()
     }
     public func setDeleted(_ deleted: Bool, sessionID: UUID) throws {
         try requireLoaded(); guard activeSessionID != sessionID else { throw WorkflowIssue("请等待当前会话停止。") }
         let i = try index(sessionID)
         var choices = state.sessions[i].contextChoices ?? .init()
         choices.deletedAt = deleted ? Date() : nil
-        state.sessions[i].contextChoices = choices; changed()
+        state.sessions[i].contextChoices = choices
+        if deleted { cancelToolsForClosedSession(sessionID) }; changed()
     }
     @discardableResult public func adoptAnswer(_ messageID: UUID, text: String, sessionID: UUID) throws -> UUID {
         try requireLoaded(); let i = try index(sessionID), session = state.sessions[i]
@@ -1700,14 +1720,14 @@ import Observation
         guard let options = captured.webOptions, options.allowed, options.automaticSearch,
               !captured.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         let expectedInput = ChatAutomaticWebInput(captured)
+        guard let provider = options.provider else { throw WorkflowIssue("Choose a search provider and configure its API key before automatic search.") }
         // This explicit mode sends only the visible question, never prior history or attachments.
-        let searchID = try await executeTool(.webSearch(query: captured.draft, language: options.language), sessionID: sessionID)
+        let searchID = try await executeTool(.providerSearch(query: captured.draft, provider: provider), sessionID: sessionID)
         let current = state.sessions[try index(sessionID)]
         try expectedInput.validate(current)
-        guard let json = current.toolActivities?.first(where: { $0.id == searchID })?.resultJSON else { throw WorkflowIssue("搜索缺少结果。") }
-        let hits = try JSONDecoder().decode([ChatWebSearchHit].self, from: Data(json.utf8))
+        guard let hits = searchResults(activityID: searchID, sessionID: sessionID) else { throw WorkflowIssue("Search results expired; explicitly search again. No request was repeated.") }
         guard let hit = hits.first else { throw WorkflowIssue("搜索没有结果；未凭空添加引用。可以关闭自动搜索后发送。") }
-        let pageID = try await executeTool(.webRead(hit), sessionID: sessionID)
+        let pageID = try await executeTool(.pageRead(hit.url), sessionID: sessionID)
         let final = state.sessions[try index(sessionID)]
         try expectedInput.validate(final)
         try await attachToolResult(pageID, sessionID: sessionID, expectedInput: expectedInput)
@@ -1719,9 +1739,43 @@ import Observation
         if options.allowed { try requireLoaded() }
         let i = try index(sessionID)
         guard !options.automaticSearch || options.allowed else { throw WorkflowIssue("自动搜索需要先允许联网。") }
+        let providerChanged = state.sessions[i].webOptions?.provider != options.provider
         state.sessions[i].webOptions = options
-        if !options.allowed && activeToolSessionID == sessionID, state.sessions[i].toolActivities?.last?.request.usesNetwork == true { toolTask?.cancel() }
+        if !options.allowed || providerChanged {
+            searchPreviews = searchPreviews.filter { $0.value.sessionID != sessionID }
+            if activeToolSessionID == sessionID, state.sessions[i].toolActivities?.last?.request.usesNetwork == true { toolTask?.cancel() }
+        }
         changed()
+    }
+
+    public func configureSearchCredential(_ url: URL, provider: ChatSearchProvider) throws {
+        try requireLoaded()
+        guard !isToolRunning else { throw WorkflowIssue("Wait for the current tool to stop before changing its credential.") }
+        try searchCredentials.choose(url, provider: provider)
+        configuredSearchProviders.insert(provider)
+    }
+    public func removeSearchCredential(_ provider: ChatSearchProvider) {
+        searchCredentials.remove(provider); configuredSearchProviders.remove(provider)
+        searchPreviews.removeAll()
+        if let id = activeToolSessionID, let request = state.sessions.first(where: { $0.id == id })?.toolActivities?.last?.request,
+           case .providerSearch(_, let active) = request, active == provider { toolTask?.cancel() }
+    }
+    /// Search snippets are runtime previews, never part of chat history, packages or backups.
+    public func searchResults(activityID: UUID, sessionID: UUID) -> [ChatSearchResult]? {
+        guard let preview = searchPreviews[activityID], preview.sessionID == sessionID,
+              preview.expiresAt > Date() else { return nil }
+        return preview.results
+    }
+    private func cancelToolsForClosedSession(_ id: UUID) {
+        searchPreviews = searchPreviews.filter { $0.value.sessionID != id }
+        if activeToolSessionID == id { toolTask?.cancel() }
+    }
+    private func requireToolOwner(_ id: UUID) throws {
+        try Task.checkCancellation()
+        let session = state.sessions[try index(id)]
+        guard allowsSubmission(), !session.archived, session.contextChoices?.deletedAt == nil else {
+            throw CancellationError()
+        }
     }
     @discardableResult public func executeTool(_ request: ChatToolRequest, sessionID: UUID, mcpPermission: Bool = false) async throws -> UUID {
         try requireLoaded(); let i = try index(sessionID)
@@ -1736,6 +1790,9 @@ import Observation
             allowed = true
         } else { allowed = state.sessions[i].webOptions?.allowed == true }
         guard !request.usesNetwork || allowed else { throw WorkflowIssue("请先允许本会话联网；没有发送查询。") }
+        if case .providerSearch(_, let provider) = request {
+            guard state.sessions[i].webOptions?.provider == provider else { throw WorkflowIssue("Select this search provider before sending a query.") }
+        }
         let activity = ChatToolActivity(request: request), id = activity.id
         var candidate = state; candidate.sessions[i].toolActivities = (candidate.sessions[i].toolActivities ?? []) + [activity]
         try candidate.validate(); state = candidate; changed(); activeToolSessionID = sessionID
@@ -1743,14 +1800,28 @@ import Observation
         let task = Task { @MainActor [self] () throws -> UUID in
             defer { activeToolSessionID = nil; toolTask = nil; activeToolIsMCP = false }
             do {
-                try await flush(); try Task.checkCancellation()
-                let result = try await request.execute(store: store, authorized: allowed, web: webClient, mcp: mcpService)
-                try Task.checkCancellation()
+                try await flush(); try requireToolOwner(sessionID)
+                let credential: String?
+                if case .providerSearch(_, let provider) = request {
+                    if let injectedSearchCredential { credential = try await injectedSearchCredential(provider) }
+                    else { credential = try searchCredentials.token(provider) }
+                } else { credential = nil }
+                try requireToolOwner(sessionID)
+                let result = try await request.execute(store: store, authorized: allowed, web: webClient, mcp: mcpService,
+                                                       search: searchClient, credential: credential, page: pageClient)
+                try requireToolOwner(sessionID)
                 if case .mcp = request { mcpStatus = await mcpService.status() }
                 let si = try index(sessionID)
                 guard let ai = state.sessions[si].toolActivities?.firstIndex(where: { $0.id == id }) else { throw WorkflowIssue("工具记录不存在。") }
                 var updated = state
-                updated.sessions[si].toolActivities?[ai].resultJSON = result
+                if request.hasTransientResult {
+                    let hits = try JSONDecoder().decode([ChatSearchResult].self, from: Data(result.utf8))
+                    searchPreviews = searchPreviews.filter { $0.value.expiresAt > Date() }
+                    if searchPreviews.count >= 8, let oldest = searchPreviews.min(by: { $0.value.expiresAt < $1.value.expiresAt })?.key {
+                        searchPreviews[oldest] = nil
+                    }
+                    searchPreviews[id] = SearchPreview(sessionID: sessionID, expiresAt: Date().addingTimeInterval(900), results: hits)
+                } else { updated.sessions[si].toolActivities?[ai].resultJSON = result }
                 let serverError: Bool
                 if case .mcp = request {
                     serverError = (try? JSONSerialization.jsonObject(with: Data(result.utf8)) as? [String: Any])?["isError"] as? Bool == true
@@ -1784,6 +1855,9 @@ import Observation
     private func attachToolResult(_ activityID: UUID, sessionID: UUID,
                                   expectedInput: ChatAutomaticWebInput?) async throws {
         try requireLoaded(); let session = state.sessions[try index(sessionID)]
+        if session.toolActivities?.first(where: { $0.id == activityID })?.request.hasTransientResult == true {
+            throw WorkflowIssue("Search snippets are not page text. Read a result before adopting its source.")
+        }
         guard let activity = session.toolActivities?.first(where: { $0.id == activityID }), activity.status == .completed,
               let result = activity.resultJSON else { throw WorkflowIssue("工具结果尚未完成。") }
         guard case .webSearch = activity.request else {

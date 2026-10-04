@@ -79,6 +79,17 @@ struct ChatWebPageTests {
         .init(statusCode: status, mimeType: mime, url: responseURL ?? url, body: Data(body.utf8))
     }
 
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["D_CHAT_PUBLIC_PAGE_PROBE"] == "1"))
+    func explicitlyEnabledPublicPageUsesProductionTransport() async throws {
+        // Opt-in public reference only: no project data, API key or authenticated request.
+        let page = try await ChatWebPageClient().read(URL(string: "https://example.com/")!, networkAuthorized: true)
+        #expect(page.text.contains("documentation examples"))
+        #expect(page.title == "Example Domain")
+        #expect(page.contentSHA256.count == 64)
+        #expect(page.url.absoluteString == "https://example.com/")
+        print("D_PUBLIC_PAGE", page.url.absoluteString, page.contentSHA256, page.text.utf8.count, page.extractorVersion)
+    }
+
     @Test func unauthorizedNeverCallsTransport() async throws {
         let transport = PageFixtureTransport(reply("<body>text</body>"))
         await #expect(throws: ChatWebPageError.permissionDenied) {
@@ -152,6 +163,13 @@ struct ChatWebPageTests {
         let numbers = try await ChatWebPageClient(transport: PageFixtureTransport(reply(adjacentNumbers)))
             .read(url, networkAuthorized: true)
         #expect(numbers.text == "12\t34")
+        let empty = "<body><table><tr><td></td><td></td></tr></table></body>"
+        await #expect(throws: ChatWebPageError.emptyContent) {
+            try await ChatWebPageClient(transport: PageFixtureTransport(reply(empty))).read(url, networkAuthorized: true)
+        }
+        let edges = "<body><table><tr><td></td><td>12</td><td></td></tr></table></body>"
+        let edgePage = try await ChatWebPageClient(transport: PageFixtureTransport(reply(edges))).read(url, networkAuthorized: true)
+        #expect(edgePage.text == "\t12\t")
 
         let html = "<html><body><h1>第 1 章 🎨</h1><p>12</p><p>34</p>" +
             "<table><tr><th>项目</th><th>数量</th></tr>" +

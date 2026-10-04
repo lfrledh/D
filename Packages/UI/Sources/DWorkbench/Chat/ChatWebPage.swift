@@ -169,8 +169,10 @@ private enum ChatWebPageExtractor {
         if lower.contains("<!doctype") || lower.contains("<!entity") || lower.contains("<?xml") {
             throw ChatWebPageError.unsafeHTML
         }
+        // The input was strictly decoded as UTF-8. A BOM tells Foundation HTML tidy
+        // to retain that encoding when the page has no charset declaration.
         let document: XMLDocument
-        do { document = try XMLDocument(data: Data(safe.utf8), options: [.documentTidyHTML, .nodeLoadExternalEntitiesNever]) }
+        do { document = try XMLDocument(data: Data([0xef, 0xbb, 0xbf]) + Data(safe.utf8), options: [.documentTidyHTML, .nodeLoadExternalEntitiesNever]) }
         catch { throw ChatWebPageError.invalidResponse }
         guard let root = document.rootElement() else { throw ChatWebPageError.emptyContent }
         var title = "", text = "", nodes = 0, textBytes = 0
@@ -213,9 +215,14 @@ private enum ChatWebPageExtractor {
             if body && blocks.contains(name) && !text.hasSuffix("\n") { try append("\n") }
         }
         try visit(root, depth: 0, inBody: false, inTitle: false)
-        text = text.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        text = text.split(whereSeparator: \.isNewline).map { line in
+            // Tidy may insert formatting spaces at cell ends. Keep every cell separator,
+            // including empty cells, while normalizing only surrounding display whitespace.
+            line.split(separator: "\t", omittingEmptySubsequences: false)
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.joined(separator: "\t")
+        }
             .filter { !$0.isEmpty }.joined(separator: "\n")
-        guard !text.isEmpty else { throw ChatWebPageError.emptyContent }
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw ChatWebPageError.emptyContent }
         return (title.trimmingCharacters(in: .whitespacesAndNewlines), text)
     }
 }

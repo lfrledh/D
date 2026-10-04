@@ -5,6 +5,7 @@ struct ChatToolsPanel: View {
     @Environment(\.dLanguageStore) private var language
     let chat: ChatController
     let session: ChatSession
+    let chooseSearchCredential: (ChatSearchProvider) -> Void
     let wording: (String, String) -> String
     @State private var tool = "web"
     @State private var query = ""
@@ -23,7 +24,7 @@ struct ChatToolsPanel: View {
         DisclosureGroup(wording("Search and tools", "搜索与工具")) {
             VStack(alignment: .leading, spacing: 8) {
                 Picker(wording("Tool", "工具"), selection: $tool) {
-                    Text(wording("Wikipedia", "维基百科搜索")).tag("web")
+                    Text(wording("Web search", "联网搜索")).tag("web")
                     Text(wording("Calculator", "计算器")).tag("calculator")
                     Text(wording("Units", "单位换算")).tag("units")
                     Text(wording("Time zones", "时区换算")).tag("time")
@@ -37,6 +38,25 @@ struct ChatToolsPanel: View {
                 ForEach((session.toolActivities ?? []).reversed()) { activity in
                     DisclosureGroup(activity.request.identifier + " · " + status(activity.status)) {
                         Text(requestText(activity.request)).font(.caption).textSelection(.enabled)
+                        if activity.request.hasTransientResult, activity.status == .completed {
+                            if let results = chat.searchResults(activityID: activity.id, sessionID: session.id) {
+                                Text(wording("Search summaries only. Read a page to obtain source text.", "以下是搜索摘要；读取网页后才获得正文。"))
+                                    .font(.caption).foregroundStyle(.secondary)
+                                if results.isEmpty { Text(wording("No results.", "没有结果。")) }
+                                ForEach(Array(results.enumerated()), id: \.offset) { _, result in
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(result.title).font(.subheadline).textSelection(.enabled)
+                                        Text(result.url.absoluteString).font(.caption).textSelection(.enabled)
+                                        Text(result.snippet).font(.caption).textSelection(.enabled)
+                                        Button(wording("Read page", "读取网页正文")) { run(.pageRead(result.url)) }
+                                            .disabled(chat.isToolRunning || session.webOptions?.allowed != true)
+                                    }
+                                }
+                            } else {
+                                Text(wording("Temporary search summaries are no longer available. Search again explicitly if needed.", "临时搜索摘要已不可用；需要时请重新搜索，不会自动重试。"))
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }
+                        }
                         if let json = activity.resultJSON {
                             if case .webSearch = activity.request, let hits = try? JSONDecoder().decode([ChatWebSearchHit].self, from: Data(json.utf8)) {
                                 ForEach(hits, id: \.pageID) { hit in
@@ -62,19 +82,37 @@ struct ChatToolsPanel: View {
     @ViewBuilder private var toolInput: some View {
         switch tool {
         case "web":
+            Picker(wording("Search service", "搜索服务"), selection: Binding(get: { session.webOptions?.provider }, set: { value in
+                updateWeb { $0.provider = value; $0.allowed = false; $0.automaticSearch = false }
+            })) {
+                Text(wording("Choose a service", "选择服务")).tag(nil as ChatSearchProvider?)
+                Text("Brave Search").tag(Optional(ChatSearchProvider.brave))
+                Text(wording("Bocha Web Search", "博查 Web Search")).tag(Optional(ChatSearchProvider.bocha))
+            }
+            if let provider = session.webOptions?.provider {
+                HStack {
+                    Button(chat.configuredSearchProviders.contains(provider)
+                           ? wording("Change API key file…", "更换 API 密钥文件…")
+                           : wording("Choose API key file…", "选择 API 密钥文件…")) { chooseSearchCredential(provider) }
+                        .disabled(chat.isToolRunning)
+                    if chat.configuredSearchProviders.contains(provider) {
+                        Button(wording("Forget key", "移除密钥关联")) { chat.removeSearchCredential(provider) }
+                    }
+                }
+                Text(wording("Choose a local plain-text file containing only your API key, without a trailing newline. Only its bookmark stays in app settings; the key is excluded from projects and backups.", "选择仅含您本人 API 密钥、末尾无换行的本地纯文本文件。App 设置仅保存该文件的访问关联；密钥不进入项目与备份。"))
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             Toggle(wording("Allow this conversation to search online", "允许本会话联网搜索"), isOn: Binding(get: { session.webOptions?.allowed == true }, set: { value in
                 updateWeb { $0.allowed = value; if !value { $0.automaticSearch = false } }
-            }))
+            })).disabled(session.webOptions?.provider == nil && session.webOptions?.allowed != true)
             Toggle(wording("Before sending, search the visible question and read the first result", "发送前搜索当前问题并读取首项正文"), isOn: Binding(get: { session.webOptions?.automaticSearch == true }, set: { value in updateWeb { $0.automaticSearch = value } }))
-                .disabled(session.webOptions?.allowed != true)
-            Text(wording("Only the question or selected page ID is sent to Wikipedia. Previous messages and attachments are not uploaded. Long questions over 512 UTF-8 bytes are rejected without truncation.", "仅向维基百科发送当前问题或所选页面编号，不上传历史与附件。超过512个UTF-8字节的查询会明确拒绝，不截断。"))
+                .disabled(session.webOptions?.allowed != true || session.webOptions?.provider == nil)
+            Text(wording("Only the visible query goes to the selected search service. Reading a result contacts that website without your API key. History and attachments are not uploaded. Search summaries stay temporarily in memory; adopted page text is saved separately and the final answer uses your local model.", "仅将可见搜索词发送给所选服务；读取结果时另行访问该网站，不携带 API 密钥。不上传历史与附件。搜索摘要仅临时驻留内存；采用的网页正文独立保存，最终回答仍由本地模型生成。"))
                 .font(.caption).foregroundStyle(.secondary)
-            Picker(wording("Search language", "搜索语言"), selection: Binding(get: { session.webOptions?.language ?? .zh }, set: { value in updateWeb { $0.language = value } })) {
-                ForEach(ChatWebLanguage.allCases, id: \.rawValue) { Text($0.rawValue).tag($0) }
-            }
             TextField(wording("Search query", "搜索词"), text: $query)
-            Button(wording("Search", "搜索")) { run(.webSearch(query: query, language: session.webOptions?.language ?? .zh)) }
-                .disabled(chat.isToolRunning || session.webOptions?.allowed != true || query.isEmpty)
+            Button(wording("Search", "搜索")) {
+                if let provider = session.webOptions?.provider { run(.providerSearch(query: query, provider: provider)) }
+            }.disabled(chat.isToolRunning || session.webOptions?.allowed != true || query.isEmpty || session.webOptions?.provider == nil)
         case "calculator":
             HStack {
                 TextField(wording("Left number", "左数"), text: $left)

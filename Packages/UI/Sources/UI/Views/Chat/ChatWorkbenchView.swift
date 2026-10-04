@@ -984,7 +984,9 @@ struct ChatWorkbenchView: View {
                                 wording: { english, chinese in
                                     language?.effectiveLanguageIdentifier.hasPrefix("zh") == true ? chinese : english
                                 }).id(session.id.uuidString + ":knowledge")
-                            ChatToolsPanel(chat: chat, session: session, wording: { english, chinese in
+                            ChatToolsPanel(chat: chat, session: session, chooseSearchCredential: { provider in
+                                Task { await chooseSearchCredential(provider, sessionID: session.id) }
+                            }, wording: { english, chinese in
                                 language?.effectiveLanguageIdentifier.hasPrefix("zh") == true ? chinese : english
                             }).id(session.id.uuidString + ":tools")
                             ChatMCPPanel(chat: chat, session: session, wording: { english, chinese in
@@ -1565,6 +1567,19 @@ struct ChatWorkbenchView: View {
             else { chat.invalidParameterFields.insert(key); report(label("invalidNumber", "数值未完成或无效；修正后才能生成。"), for: sessionID) }
         default: break
         }
+    }
+
+    private func chooseSearchCredential(_ provider: ChatSearchProvider, sessionID: UUID) async {
+        guard !filePanelBusy else { return }
+        filePanelBusy = true; defer { filePanelBusy = false }
+        let owner = chat, store = chat.store
+        let panel = NSOpenPanel(); panel.canChooseDirectories = false; panel.allowsMultipleSelection = false
+        panel.message = newLabel("searchKeyFile", english: "Choose your local API key file for \(provider.rawValue). The key is not copied into the project.",
+                                 chinese: "选择 \(provider.rawValue) 的本地 API 密钥文件；密钥不会复制到项目中。")
+        guard await panel.begin() == .OK, let url = panel.url, owner === chat, store === chat.store,
+              chat.state.sessions.contains(where: { $0.id == sessionID }) else { return }
+        do { try chat.configureSearchCredential(url, provider: provider); report(nil, for: sessionID) }
+        catch { report(error.localizedDescription, for: sessionID) }
     }
 
     private func chooseKnowledgeDirectory(for sessionID: UUID) async {
