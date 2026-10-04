@@ -717,3 +717,25 @@ F30交互组件：Sol/high interactive1，经只读审阅合入962f90d98ba52b639
 348e7b6之后native_files_review发现阶段提示吞掉数值进度，以及检查器可能短暂串用上一回答统计。Lead将阶段与数值一同去重发布；检查器按attempt隔离，读取先清旧值，取消/票据阻止迟到发布。R/lead/s06-progress-red在真实Runtime+WorkflowServices先失败两项1/30、2/30断言；修后s06-feedback-review-green：UI2方法/1suite、Workbench5方法/2suite通过（含无首token时的加载提示及释放）。非实现者源码复核关闭两项P2，没有另跑GUI或模型。受测基线348e7b6加本次明确差分，最终代码SHA见Git；此前通知、Store和模型证据不重复。本轮使用Lead修补，不追记为Worker独立成功。
 
 F35非实现者发现英文核心错误和输入AX名称缺口。Lead为真实NSTextView增加可选accessibilityLabel并为草稿/系统/编辑传入本地化名称，不改文本值/焦点/组字；R/lead/s01-accessibility 9方法/1suite通过，实际NSHostingView检验底层名称与原文，沿用8项偏好和组字保护。普通App/VoiceOver仍未验。错误语言继续在同一F35范围处理，不以本项关闭整组。
+
+
+### CHAT-PRODUCT F19/F33/F35 组合接线（2026-10-04）
+
+- 候选代码 b31c66311c0b65d9cf658bb8270f2554dbcedf88；三名受限独立CLI Sol/high（Quick初交＋repair1；external与language各初交），请求/观察模型、写根、精确线程、耗时与逐轮usage见R/lead/three-worker-receipt.json。隐藏服务端解析/完整Lead用量/订阅费用unknown；没有重算此前五次历史样本。
+- Lead维护共享Quick活动/ProjectSession/Bootstrap、Controller/ChatState/Store来源和UI接线，Worker并未独立完成整片。非实现者审出剪贴板URL优先遮蔽PNG、重复JSON成员、重复键集合CoW性能问题；分别修补。取消时已发布素材仍保留，迟到resolver不再复制/绑定；close waiter即使被取消也等真实drain，使用一次continuation而非轮询。未改模型请求/精度。
+- F33外部格式依据Open WebUI官方import/export说明；上游格式无version，`open-webui-history` v1是D映射，不伪称官方版本。多会话须显式选择；完整选中树校验，含done:false树拒绝；loss经明确许可，原JSON不执行/下载、不覆盖原件。conversationIndex保留到来源/保存/备份，防同文件不同entry冒充重试。既有D wrapper兼容。
+- F35只在展示边界映射产品错误，存储原始reason不改。固定中英键/外部包覆盖/未知诊断原文通过；这是组件语言覆盖，不冒称所有系统诊断已翻译或VoiceOver完成。
+- R/lead/chat-three-integration和r2分别为Lead遗漏Environment以及测试宏嵌套表达式编译失败；修复后r3 exit0/98.296s，UI12方法2suite与Workbench14方法3suite完整结束。最终continuation变化由chat-three-final补验：UI7方法1suite、Workbench16方法3suite，exit0/33.155s。两组重叠不相加成总通过率。12k宽JSON检查0.029s，仅该夹具；正式原生性能仍待验。精确受测文件摘要见three-wiring-tested-files.json；测试时HEAD893bb2e1加已列Lead差异，最终代码由b31c6631固定。
+- language Worker自报一次shell here-document临时路径被拒绝后继续，仍作为协议事件记录；可访问命令输出未找到对应拒绝原文，不臆造具体目标或完整证明。未观察到权限扩大/成功越界；只在授权树保留四文件且Lead独立审核，不追改为合规。其余非零只读搜索已核为未匹配/不存在读取目标。
+- 普通App菜单/主停止/拖入及新原生闭环仍待解锁；F28先前自动审查阻塞保留，无裸宿主执行/换名绕行。main仍f31dced，未接纳未验证宿主。构建/交付索引与最终文档SHA见R/lead/continuation-receipt.json；不是整项任务完成或发行。
+
+
+### CHAT-PRODUCT 组合候选与可恢复检查点（2026-10-04）
+
+- 最终代码/测试/App **e80fc15e34eff1b5ad0c27f3010103c1eb1ef10a**。b31后App r5发现Lead装配访问private store，b1b696dd改用已有public currentStore；r6构建通过。非实现者再发现关闭准入不等于取消已接纳导入，以及legacy实例缺失不能猜测本地来源；Lead最小修补由e80固定，未改推理参数/媒体。原先F19三任务及失败/来源继续保留，不追记Sol独立完成。
+- 新关闭反例 `R/lead/quick-admission-red` 在b1b代码真实失败（CancellationError）；保持预期，修后green通过。最终e80的 `quick-admission-final` exit0/14.317秒：UI9方法/2suite、Workbench2方法/1suite完整结束，覆盖已接纳导入可在wait关闭完成、新导入拒绝、明确cancel仍拒绝、legacy resolver与原件保护、取消drain不忙等。与旧重复测试不相加成通过率。native_files_review只读审e80关闭两项P2，未声称另跑测试。
+- 普通签名 `chat-current-app-r7` exit0/41.049秒。复制为R/delivery/**D Chat Product e80fc15e.app**；codesign --verify --deep --strict通过，四关键文件与构建产物摘要一致。唯一 `启动聊天当前验收.command` 已更新且语法通过，复用原隔离session；新包未启动。App/签名/入口证据 `current-app-delivery.json`、`delivery-entry.json`，不是原生操作或发行验收。
+- CUA最后明确锁屏；旧自有App PID63889正常退出请求已发，但延后检查仍存在，不强制结束、不假称已清场，解锁后先处理该项目面板。当前全部Worker与持有CPU/build已结束；另观察到旧R4 helper88174，不属当前句柄、未处置。Terminal工具限制沿用，不绕过关闭未知窗口。
+- 原native长流、1024token与停止接续证据复用；本轮未重复长GPU。F01–F36唯一清单保留原生、真实辅助/重排、Speech和F28缺口；只读范围复核未把F19/F33/F35局部通过升级为整组完成。main与远端仍f31dced209855722d2f04cc0fc8c5f6712396120，未经新宿主门槛不硬合；未推送或发布。用户的连续授权仍有效，不需要每片重新批准。
+- 保护源01758b81527dc27eb4563bf1b66fd1ceab6647ee、scheme未暂存摘要ca3635d88aa5a15397b90e528667c66c0e6db7e596176e885c79d194b544206c；原始长流项目未改，最终详情在R/lead/continuation-receipt.json。当前后续仅五份获准状态/试用文档，与e80代码相同；最终文档SHA写外部回执，不反复自引用提交。完整Lead成本/订阅扣费unknown。
+- 恢复：核HEAD/index/个人修改与上述进程→确认桌面解锁→正常收回旧测试窗口→从新包完成菜单/主停止/导航、素材/导入/备份等原生门槛→完成剩余真实路径并按授权接纳可靠切片。F28具体安全拒绝理由unknown，不声称可通过加Mac权限解决；保留同号工程阻塞。**本记录是阻塞检查点，不是完整聊天专题、功能冻结或正式发行完成。**

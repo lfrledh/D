@@ -1,6 +1,6 @@
 # 当前行动与接手点
 
-最后核实：2026-10-03。当前任务、基线、候选、阻塞与下一动作只从本页进入。历史记录不自动授权续跑。
+最后核实：2026-10-04。当前任务、基线、候选、阻塞与下一动作只从本页进入。历史记录不自动授权续跑。
 
 ## 当前授权：完整文字聊天专题 CHAT-PRODUCT-20261003
 
@@ -12,12 +12,13 @@ Lead 持有共享 Runtime/WorkflowServices/ChatController/Store；文件面板�
 
 ### 当前恢复检查点（2026-10-04 JST，持续实施中）
 
-- Lead树D-RELEASE-FREEZE-01/codex/release-freeze-01；F32/F33/F34受测基点477245011956c86cd0f48d7a21ec3daf7439a4be加Lead增量，最终提交见Git及R/lead回执。能力状态只读[清单](CHAT_FEATURE_LEDGER.zh-CN.md)，不称完整专题通过。
+- Lead树D-RELEASE-FREEZE-01/codex/release-freeze-01；最终代码与签名构建为 **e80fc15e34eff1b5ad0c27f3010103c1eb1ef10a**。已组合S00/S01及S02–S05生产接线；F19共享素材、F33外部聊天导入、F35错误语言与关闭/取消反例完成本轮定点修补。文档检查点提交SHA见R/lead/continuation-receipt.json，不把文档提交当重新执行测试。能力状态只读[清单](CHAT_FEATURE_LEDGER.zh-CN.md)，不称完整专题通过。
 - main仍f31dced209855722d2f04cc0fc8c5f6712396120；旧源01758b81527dc27eb4563bf1b66fd1ceab6647ee、个人scheme未暂存不动。普通App门槛未过，不硬合。
-- R=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261003T150039Z-chat-continue`。F21/F22定向检查与F30实际WK/本地Mermaid/Store证据沿用；F32临时/F33完整包/F34字段新增CPU通过。r4 UI点击runner无完成记录，不能凭exit0当绿；正在定点诊断。
-- 已构建App仍cdcaa7758381ac0718793b1118a34b59d9780c40，R/delivery/启动聊天当前验收.command只代表该版。自有PID63889停在打开项目面板；CUA最后明确锁屏，无状态变化不再重复。本人入口在唯一集中清单，不重开H22/H31。
-- 当前写Worker仅s01-chat-preferences，树D-CHAT-PRODUCT-PREFERENCES、base477245、Sol/high、networkfalse，允许四个局部展示/测试文件；共享Controller/Store/宿主/输入由Lead协调。PACKAGE已停写，旧候选保留。恢复先核真实HEAD/差异/进程/权限；隐藏模型解析、完整Lead归因和实际费用unknown。
-- 下一动作：完成F19/F31/F35/F36缺口与F28准确阻塞；组合构建与解锁后的普通App菜单/停止/新路径验收；可靠切片按已授权main流程接纳后继续，不把中途记录当整项结案。
+- R=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261003T150039Z-chat-continue`。F21/F22、F30实际WK/本地Mermaid/Store、F32临时/F33完整包/F34字段CPU证据沿用；F36真实Runtime无首delta阶段/数值进度先红后绿，统计归属和F35输入AX名字通过。原离屏点击runner无完成记录，不凭exit0当绿；不重复同因探针。
+- 最新构建R/lead/chat-current-app-r7-result.json exit0/41.049秒；复制为R/delivery/D Chat Product e80fc15e.app，签名与四关键文件一致。唯一启动器及同树Xcode见[试用指南](RELEASE_FREEZE_TRY.zh-CN.md)。新包未启动；CUA最后明确锁屏，无状态变化不轮询。旧自有PID63889已正常请求退出但仍存在，不强杀、不称已关闭，解锁后先处理其项目面板再启动新包；启动器阻止双开。本人入口在唯一集中清单，不重开H22/H31。
+- 三个受限独立CLI任务均已结束：s01-quick-attachments（初交＋repair1；base348e7b6）、s03-external-import、s01-chat-error-language（各初交；base6abe6c83）。均Sol/high、networkfalse、独立tree/output/tmp；Lead完成共享接线与审阅发现的修补，非实现者已复核。模型/线程/用量及language未停报事件见R/lead/three-worker-receipt.json；事件原文未能定位，不追改合规。CPU/build均结束。另观察到旧R4测试helper PID88174，无当前任务所有权，未处置，不宣称全系统无进程。
+- F28隔离执行仍未实现，先前只读准备被自动安全审核拒绝，具体拒绝理由在可用记录中unknown，不推测为用户未授权；未安装隔离运行时，不裸跑宿主Python或换名绕行。此项需要澄清原工具拒绝及获准的执行边界，不能靠按钮或文档关闭。完整Lead归因、隐藏模型解析和实际费用unknown。
+- 下一动作：解锁后先收回旧测试窗口，再验组合App菜单/输入区主停止/导航/新导入和备份；不重复已通过的1024-token长模型。其后完成资料重排/辅助短任务、本地语音及其他新原生路径；可靠切片按既有授权接纳main。F28保持具体阻塞；这是可恢复检查点，不是整批完成或取消其余清单。
 
 ## 历史：先修可靠性，再加入最小聊天（2026-10-03，已被上述新授权替代）
 
