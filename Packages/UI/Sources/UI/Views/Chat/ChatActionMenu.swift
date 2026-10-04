@@ -89,6 +89,7 @@ struct ChatActionMenu: NSViewRepresentable {
         private var rowPresentation: [RowPresentation]?
         private var displayedTitle: String?
         private var displayedAccessibilityIdentifier: String?
+        private var rowsNeedRenewal = false
         private var queuedActions: [@MainActor () -> Void] = []
         private var cycleStarted = false
         private var menuClosed = false
@@ -133,13 +134,13 @@ struct ChatActionMenu: NSViewRepresentable {
             let presentation = snapshot.items.map(RowPresentation.init)
             // A late AppKit action must retain its old row identity across a
             // completed tracking cycle. Idle SwiftUI updates need no such rebuild.
-            let retainsEndedRows = displayedActions.keys.contains { endedCycleActions[$0] != nil }
-            let rebuild = rowPresentation != presentation || renewRows || retainsEndedRows
+            let rebuild = rowPresentation != presentation || renewRows || rowsNeedRenewal
             displayedActions.removeAll()
             if rebuild {
                 menu.removeAllItems()
                 append(snapshot.items, to: menu, parentEnabled: true)
                 rowPresentation = presentation
+                rowsNeedRenewal = false
             } else {
                 refreshActions(snapshot.items, in: menu)
             }
@@ -221,6 +222,9 @@ struct ChatActionMenu: NSViewRepresentable {
         func menuDidClose(_ menu: NSMenu) {
             guard !dismantled, menu === rootMenu else { return }
             menuClosed = true
+            // Even a selected cycle can deliver a duplicate sender after the
+            // drain. The next update rotates rows once, then stays idle-stable.
+            rowsNeedRenewal = true
             scheduleDrainIfFinished()
         }
 

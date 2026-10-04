@@ -106,6 +106,33 @@ import Testing
         coordinator.dismantle(button)
     }
 
+    @Test func idleUpdateAfterSelectedCycleRenewsRowsOnlyOnce() throws {
+        var calls: [String] = []
+        let (coordinator, button, menu) = fixture([
+            .init(id: "same", title: "Same") { calls.append("original") }
+        ])
+        let oldItem = try #require(menu.item(at: 0))
+        coordinator.menuWillOpen(menu)
+        coordinator.selectItem(oldItem)
+        endTracking(coordinator, menu: menu)
+        coordinator.drainAfterTracking()
+        func update() {
+            coordinator.update(button, title: "Conversation actions", accessibilityIdentifier: "chat-actions",
+                items: [.init(id: "same", title: "Same") { calls.append("replacement") }])
+        }
+        update()
+        let newItem = try #require(menu.item(at: 0))
+        #expect(newItem !== oldItem)
+        update()
+        #expect(menu.item(at: 0) === newItem)
+        coordinator.menuWillOpen(menu)
+        coordinator.selectItem(oldItem)
+        endTracking(coordinator, menu: menu)
+        coordinator.drainAfterTracking()
+        #expect(calls == ["original"])
+        coordinator.dismantle(button)
+    }
+
     private func fixture(_ items: [ChatActionMenuItem]) ->
         (ChatActionMenu.Coordinator, NSPopUpButton, NSMenu) {
         let coordinator = ChatActionMenu.Coordinator()
