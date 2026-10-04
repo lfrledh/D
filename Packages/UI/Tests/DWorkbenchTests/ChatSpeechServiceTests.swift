@@ -4,11 +4,33 @@ import Testing
 
 @Suite("Chat speech local admission")
 struct ChatSpeechServiceTests {
+    @Test func recognitionLanguageRequiresAnExplicitSupportedChoice() {
+        #expect(ChatSpeechRecognitionLanguage(identifier: "zh-CN") == .mandarin)
+        #expect(ChatSpeechRecognitionLanguage(identifier: "en-US") == .english)
+        #expect(ChatSpeechRecognitionLanguage(identifier: nil) == nil)
+        #expect(ChatSpeechRecognitionLanguage(identifier: "fr-FR") == nil)
+        #expect(ChatSpeechRecognitionLanguage(identifier: "en_US") == nil)
+        #expect(ChatSpeechRecognitionLanguage(identifier: "zh-HK") == nil)
+        #expect(ChatSpeechRecognitionLanguage.allCases.count == 2)
+    }
+
+    @Test func unsupportedRecognitionLanguageCannotBeAdmitted() {
+        let unsupported = ChatSpeechCapability(localeIdentifier: "fr_FR", authorization: .authorized,
+                                               recognizerAvailable: true, supportsOnDeviceRecognition: true)
+        #expect(unsupported.admissionError == .localeUnsupported)
+        let noChoice = ChatSpeechCapability(localeIdentifier: nil, authorization: .notDetermined,
+                                           recognizerAvailable: false, supportsOnDeviceRecognition: false)
+        #expect(noChoice.admissionError == .localeUnsupported)
+    }
+
     @Test func authorizationAndDeviceSupportMustBothBePresent() {
         let ready = ChatSpeechCapability(localeIdentifier: "en_US", authorization: .authorized,
                                          recognizerAvailable: true, supportsOnDeviceRecognition: true)
         #expect(ready.canTranscribeLocally)
         #expect(ready.admissionError == nil)
+        let mandarin = ChatSpeechCapability(localeIdentifier: "zh_CN", authorization: .authorized,
+                                            recognizerAvailable: true, supportsOnDeviceRecognition: true)
+        #expect(mandarin.canTranscribeLocally)
 
         let noPermission = ChatSpeechCapability(localeIdentifier: "en_US", authorization: .notDetermined,
                                                 recognizerAvailable: true, supportsOnDeviceRecognition: true)
@@ -52,6 +74,21 @@ struct ChatSpeechServiceTests {
         #expect(!lifecycle.canRelease)
         let ended = lifecycle.acknowledgeEnd(); #expect(ended)
         #expect(lifecycle.canRelease)
+    }
+
+    @Test func cancelledRecognitionCannotOfferLateTextForAdoption() {
+        var lifecycle = ChatSpeechLifecycle()
+        lifecycle.receiveFinal("candidate transcript")
+        #expect(lifecycle.finalText == "candidate transcript")
+        let stopped = lifecycle.requestStop(.cancelled)
+        #expect(stopped)
+        lifecycle.receiveFinal("late transcript")
+        #expect(lifecycle.finalText == nil)
+        #expect(!lifecycle.canRelease)
+        let ended = lifecycle.acknowledgeEnd()
+        #expect(ended)
+        #expect(lifecycle.stopReason == .cancelled)
+        #expect(lifecycle.finalText == nil)
     }
 
     @Test func timeoutAndMissingAcknowledgmentCannotAdmitRetry() {

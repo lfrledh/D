@@ -53,6 +53,24 @@ public enum ChatSpeechAuthorization: Sendable, Equatable {
     }
 }
 
+/// The two explicit recognition choices for this release. TTS voices remain independent.
+public enum ChatSpeechRecognitionLanguage: String, CaseIterable, Identifiable, Sendable {
+    case mandarin = "zh-CN"
+    case english = "en-US"
+
+    public var id: String { rawValue }
+
+    public init?(identifier: String?) {
+        guard let identifier, let language = Self(rawValue: identifier) else { return nil }
+        self = language
+    }
+
+    fileprivate static func includesRecognizerLocale(_ identifier: String?) -> Bool {
+        guard let identifier else { return false }
+        return allCases.contains { Locale(identifier: $0.rawValue).identifier == identifier }
+    }
+}
+
 public struct ChatSpeechCapability: Sendable, Equatable {
     public let localeIdentifier: String?
     public let authorization: ChatSpeechAuthorization
@@ -64,10 +82,12 @@ public struct ChatSpeechCapability: Sendable, Equatable {
     }
 
     var admissionError: ChatSpeechError? {
+        guard ChatSpeechRecognitionLanguage.includesRecognizerLocale(localeIdentifier) else {
+            return .localeUnsupported
+        }
         guard authorization == .authorized else {
             return authorization == .notDetermined ? .authorizationRequired : .authorizationDenied
         }
-        guard localeIdentifier != nil else { return .localeUnsupported }
         guard supportsOnDeviceRecognition else { return .onDeviceUnavailable }
         guard recognizerAvailable else { return .recognizerUnavailable }
         return nil
@@ -375,6 +395,10 @@ public final class ChatSpeechService: NSObject, AVSpeechSynthesizerDelegate {
         selectedVoiceID = nil
     }
 
+    public func selectSystemDefaultVoice() throws {
+        try selectLanguage(AVSpeechSynthesisVoice.currentLanguageCode())
+    }
+
     public func setRate(_ rate: Float) throws {
         guard rate.isFinite, rateRange.contains(rate) else { throw ChatSpeechError.invalidRate }
         selectedRate = rate
@@ -452,8 +476,8 @@ public final class ChatSpeechService: NSObject, AVSpeechSynthesizerDelegate {
     }
 
     private func makeRecognizer(localeIdentifier: String?) -> SFSpeechRecognizer? {
-        guard let localeIdentifier else { return SFSpeechRecognizer() }
-        let requested = Locale(identifier: localeIdentifier)
+        guard let language = ChatSpeechRecognitionLanguage(identifier: localeIdentifier) else { return nil }
+        let requested = Locale(identifier: language.rawValue)
         guard SFSpeechRecognizer.supportedLocales().contains(where: {
             $0.identifier == requested.identifier
         }) else { return nil }
