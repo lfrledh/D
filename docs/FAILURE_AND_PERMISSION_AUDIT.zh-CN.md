@@ -2,17 +2,16 @@
 
 ## 当前唯一集中队列（2026-10-04，CHAT-PRODUCT-20261003）
 
-当前代码/签名包 **c16ab4015193d90def32a7cc6629dde9136b6f5c**；唯一入口见[试用指南](RELEASE_FREEZE_TRY.zh-CN.md)，实际源状态见[当前行动](CURRENT_ACTIONS.zh-CN.md)。本次本人已解锁但不能操作；Lead完成部分原生检查后Mac再次锁屏。下方历史“当前”不覆盖本队列。
+普通App受测 **c16ab4015193d90def32a7cc6629dde9136b6f5c**，核心菜单/发送/主停止/部分采用/再发/切会话通过；本地main已接纳同码8d64000c（其余仅文档）。准确远端见[当前行动](CURRENT_ACTIONS.zh-CN.md)，入口见[试用指南](RELEASE_FREEZE_TRY.zh-CN.md)。下方旧“当前”是历史，不再要求重复已过门槛。
 
-| 顺序与归属 | 待办与准备 | 通过边界 |
+| 事项 | 当前事实 | 最小后续 |
 |---|---|---|
-| H32：修补版原生复验，等待下次解锁 | e80已通过项目列表打开、候选菜单展开和冻结请求查看；发送后卡顿留样，Lead修菜单重复尺寸失效/行换代并通过14方法和构建。c16新包未启动：CUA明确再次锁屏，不无变化重试或催本人。 | 解锁后由Lead验原场景与清晰主停止；当前是工程修补待原生复验，不能称仅解锁就已修好。旧63889已结束，本次96263已结束，先核现场、不双开。 |
-| H32：新聊天宿主本人检查 | 本人当前不能组字，后置；Lead准备可用现场后集中一次中文/日文与键盘确认。 | 只验新聊天宿主，不重开旧H22或要求候选窗跟随已接受的系统行为。 |
-| F31：本地语音的新路径 | 系统Speech当前语言离线能力及实际授权仍待验；需要时本人确认真实系统提示、短输入/朗读试听。 | 不自动转云；录音授权不等于Speech授权。准备前不重复索要设备或权限。 |
+| H32：后续原生检查，等待解锁 | TXT资料检索采用、上下文、计算器采用和选段解释也已实际通过；随后Mac再次锁屏，CUA拒绝。自有PID829保留，无在途推理。 | 解锁后Lead续成果/Canvas、会话交换、新聊天组合备份→独立恢复；先核现场，不双开、不重复长生成。 |
+| H32：新聊天宿主本人检查 | 本人当前不能组字；后置。 | 准备好现场后集中中文/日文与键盘确认，不重开旧H22或要求候选窗跟随。 |
+| F31：本地系统语音 | 两语言代码修补候选验证中；当前系统本地资源和实际Speech授权仍待验。 | 准备后如确需本人确认真实权限、短录音/试听，再集中一次；不转云。 |
+| F26：搜索服务凭据及真实调用 | Brave/博查BYOK未配置，接线候选与夹具继续；未发送真实收费请求。 | 用户在本地提供所选服务凭据文件；不在聊天索要token，不擅自注册/绑卡/购买；大陆可达性未测。 |
 
-H22、H31、模型资格、宏信任及固定视频结果继续有效。F28是工程/执行安全阻塞，先前自动安全审核拒绝理由unknown，不要求本人扩大Mac权限、不裸跑宿主；保留原编号。
-
-RN=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261004T023138Z-chat-native-audit`：native-observations、send-timeout.sample、menu-reviewed-result、menu-review、native-recheck-locked、current-app-delivery、protection-end与audit-receipt均在lead/。96263正常退出也超时后，仅对已核验的自有隔离PID发SIGTERM并确认结束，**不称正常保存/drain通过**；原项目不变，测试副本保留。CPU/build与本次App均已结束，Terminal窗口状态未知，没有新建终端窗口。本人下次返回集中处理本表，不重开已办事项。
+R=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261004T041401Z-chat-resume`：核心与锁屏记录在lead/c16-native-core.json、native-lock-checkpoint.json。旧RN的96263已结束结论只属旧运行；当前PID829未因锁屏被杀，不宣称已关闭。CPU/Worker状态按当前行动恢复点核对。无新终端窗口，旧终端状态未知。H22/HF/宏信任/固定视频已办，不重复办理。
 
 ## 历史快照：当前队列之前的本轮过程
 

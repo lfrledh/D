@@ -750,3 +750,9 @@ F35非实现者发现英文核心错误和输入AX名称缺口。Lead为真实NS
 - 进程/数据：63889本次开始前已结束；96263正常CmdQ27.25秒超时后，核对精确可执行路径，仅对自有隔离PID发SIGTERM，确认结束，不称正常清理/保存通过。最终无D，持有CPU/build结束；非本任务旧helper/未知终端未操作。原始quick-chat摘要34ecae422482b014903e6e69902fca32aad41dad6034e1262de354cd3d839175不变；测试副本保留；个人scheme完整差异/摘要/索引/未暂存状态不变。证据protection-end.json、owned-app-stop.json。
 - 本人组字/Speech权限与试听后置到唯一集中队列，H22/H31/宏及固定视频不重开。F28自动安全拒绝缺口不绕行、不移除。main仍f31dced209855722d2f04cc0fc8c5f6712396120，不硬合失败宿主；候选和检查点正常推送供审计，最终SHA/远端核对见RN/lead/audit-receipt.json。完整Lead费用unknown。
 - 恢复：核c16之后仅文档差异、保护状态和自有进程→下次解锁先用唯一包完成原发送/菜单/主停止反例→其余F01–F36继续。**这次是审计同步和局部修补，不是聊天全范围、功能冻结或发行完成。**
+
+## 2026-10-04 c16普通App复验与可靠基线接纳
+
+R=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261004T041401Z-chat-resume`。复用c16既有14方法、正常签名构建及非实现者菜单审核；本轮普通App实际菜单/短发送/输入区停止/partial保留/拒绝未采用继续/显式采用后再发/切会话通过，精确attempt和耗时见lead/c16-native-core.json。TXT导入→词法第3行→采用、上下文预览、工具42采用、选段解释也完成；随后CUA报告锁屏，剩余原生路径如实在唯一清单/队列，不重跑模型。
+
+main从f31dced209855722d2f04cc0fc8c5f6712396120快进8d64000c849b70c8ad18cb574ea1f31b02b93f79，后者相对受测c16仅文档；保护快照lead/main-core-preflight.json，提交/推送回执lead/main-core-integration.json。源scheme内容/索引/未暂存保持，不接入其他候选。F14/F31/F26新实现仍在独立候选，受限Sol/high + Lead接线/复核，最终费用unknown。F28尚未实现，历史拒绝详情unknown。新App代码和完整专题/冻结出口均不由本次主线推进自动通过。
