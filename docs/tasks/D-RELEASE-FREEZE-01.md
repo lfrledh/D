@@ -791,3 +791,18 @@ main从f31dced209855722d2f04cc0fc8c5f6712396120快进8d64000c849b70c8ad18cb574ea
 - 四项组合收尾代码543e7148：Python初交＋一修后，由Lead按非实现者反例补UTF8字节预算（组合字符不能绕过Store16KiB）；Web补逐跳curl剩余预算与完整raw-text结束名，Foundation HTML4自身误恢复再通过省略原本不提取的script/style区域修正，原响应摘要不变。lead/review-red及abcd-reviewed失败保留，最终abcd-final为53方法/5suite全部通过，43.045秒；含真实WASI失败→Store、取消→后续成功、example.com和Python官方HTTPS跳转。不是收费搜索API或GUI结论。
 - 代码提交前受测HEAD48a4b7d2加工作差异，lead/abcd-reviewed-final.diff与abcd-tested-files.json绑定最终543e7148；两个Worker生产历史分别9f400172/80d73f7c，普通合并保留，测试冲突只合并重复旧API反例与新增断言。非实现者Web复核确认两项P2关闭，Python复核另留记录。Lead实质收尾不记作Worker独立通过。
 - Python repair1曾尝试任务禁止的pgrep，被受限环境拒绝；无观察到成功枚举/扩权，最终报告有提及，但未先停报，保留协议事件，与代码质量分开。Web在错误允许路径处停报后由Lead修正任务，不重置旧预算。所有Worker已交回；完整Lead费用unknown。
+
+
+### 2026-10-05 同版代表使用、增量接纳与锁屏停点
+
+R沿上一节。普通App543完成PDF/DOCX/显式OCR、Python抛错→具体stdout/stderr/无成果→CSV mean20成功并保存CSV、HTML静态→显式本地JS交互→保存/Canvas，以及官方MCP本机加法/采用/断开；输入原件保留。精确分段见lead/native-segments.json；不将CSV/SVG候选都称已保存。真实Qwen短回答首次12GiB估算拒绝，显式15GiB后成功；辅助记忆首次JSON类型错误保留，另一完成回答提取成功并经本人以外的明确测试Accept审核。摘要/标题/标签/追问、两份完成候选比较均有真实结果，不追加长流或全模型。
+
+- 原生反例：人工采用后primary仍旧。af0103b532ed4b14a35518c3cd5aae7727dcf327改主文、copy/speech/re-edit共用selected answer，原响应单独保留；部分回答采用仍用raw attempt，不能被旧手工版本代替。10方法/2suite与非实现者检查；普通App冷开/原输出折叠/再编辑/切原版与中文版通过，adopted-display-native-red.json、native-adopted-display-green.json。预设导出3→导入3新副本、非法模板拒绝/恢复375token、来源/摘要失效及启用状态分别留在native-configuration.json、native-aux-and-comparison.json，不称所有F行通过。
+- 原生1057pt双pane遮住主操作是main已有缺陷，不是af引入。117d63b27014300fd03ff2e4c007469048268f98有限收缩顶栏、附件/提交分行，994pt起并排，低于此保持可关闭模态层；原Transfer接收区域与编辑器身份不变。实际几何先红3项→最终30方法/2suite通过，连续缩放/marked/focus/Stop断言保留。非实现者无剩余P1/P2；普通鼠标仍待锁屏解除，不冒称hosting即原生。
+- af原生会话包→独立恢复打开：6消息、3attempt、3工具、2成果、3资料、已用记忆2版本和Unicode未发草稿保留，17媒体独立inode/同字节。核对发现尚未请求使用的本会话suggested/approved记忆2版本在导出时被筛除；旧备份不重写，不能称全部新增记忆已恢复。无关旧会话cafe-notes排除正确。详见native-recovery.json的projectionReview。
+- **1ebe7042175de441f708939618a3a4686f5d5ae1**修F33筛选：本地state内当前会话source身份纳入完整历史；未来memoryScopes仍空，其他会话/无关manual不带入；source/scope/createdAt冲突拒绝，不重校历史分支为当前状态。物理恢复先红1项、审阅身份反例再红3项；最终14方法/2suite通过（11.088秒），含原件/不覆盖/独立实例。Lead三文件实修，native_files_review只读复核无P1/P2，不称另有模型运行测试。memory-package-tested-files将117d+差异绑定1ebe，原生新导出/恢复未验。
+- 真实摘要/标签/追问及首次记忆失败在543普通App（native-model-and-versions.json）；后续标题/成功记忆/比较与恢复在af普通App（native-aux-and-comparison.json、native-recovery.json）；新1ebe同树普通签名构建31.875秒exit0，交付app-delivery-final.json、四关键文件、launcher映射；不在锁屏时重复启动。af正常CmdQ；117自有49135在CUA明确锁屏后按精确路径SIGTERM结束，没有该实例UI操作/模型提交，不称正常drain。旧终端未操作；进程及保护终态见continuous-receipt.json。
+- main从f9a439db5c0542d7a6bd6def8f88a9a7965b67df正常FF/推送**af0103b5**作为已验修补基线，保留已知旧紧凑/记忆包缺口及新候选，不等整个专题才接纳，也不硬合117/1ebe未验原生。main-slice-{preflight,integration}.json记录历史/保护/远端；后续仅五份现行状态文档，代码与af一致。候选正常保留历史合入同份主线文档，最终SHA写外部回执不自引用反复提交。
+- 下一动作是解锁后同包紧凑控制→新的会话包独立恢复/冷开，再按唯一F表补剩余管理/上下文/临时/字段/重排/工具取消。F21无现成同链路无GUI入口，现有CLI不经过ChatController且路由不同，不拿它替代普通App。F26两key、F31本地权限/资源/实际转写/试听、新宿主组字在原队列；仅对应阻塞，无功能静默延期。完整Lead消耗/订阅费用unknown。
+
+本节是已实施修补与可恢复外部阻塞点，**F01–F36仍未完整验收，非功能冻结/正式发行**。不启动全局质量审计、视觉重排或新功能。保护源01758b81和scheme差异/摘要/索引/未暂存保持；旧证据与候选全部保留。
