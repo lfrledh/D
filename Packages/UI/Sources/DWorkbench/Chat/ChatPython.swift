@@ -36,6 +36,7 @@ public struct ChatPythonResult: Codable, Sendable, Equatable {
 public enum ChatPythonError: Error, Equatable, LocalizedError, Sendable {
     case invalidCode, invalidInput, inputTooLarge, invalidOutput, outputTooLarge
     case unavailable, setupFailed, guestFailed, resourceLimit, timedOut, cancelled
+    indirect case cleanupFailed(after: ChatPythonError?)
 
     public var errorDescription: String? {
         switch self {
@@ -50,6 +51,12 @@ public enum ChatPythonError: Error, Equatable, LocalizedError, Sendable {
         case .resourceLimit: "Python execution exceeded an engine resource limit."
         case .timedOut: "Python execution timed out."
         case .cancelled: "Python execution was cancelled."
+        case .cleanupFailed(let original):
+            if let original {
+                "Private Python files could not be fully removed after \(original.localizedDescription)"
+            } else {
+                "Private Python files could not be fully removed after execution."
+            }
         }
     }
 }
@@ -85,7 +92,33 @@ public struct ChatPythonClient: Sendable {
                                 package: ChatPythonPackage, control: ChatPythonChildControl) throws -> ChatPythonResult {
         try control.checkCancellation()
         let directory = try ChatPythonPolicy.privateDirectory()
-        defer { try? FileManager.default.removeItem(at: directory) }
+        let outcome = Result {
+            try executeInDirectory(code: code, inputs: inputs, package: package,
+                                   control: control, directory: directory)
+        }
+        do {
+            try FileManager.default.removeItem(at: directory)
+        } catch {
+            let original: ChatPythonError?
+            switch outcome {
+            case .success: original = nil
+            case .failure(let error):
+                if let error = error as? ChatPythonError {
+                    original = error
+                } else if error is CancellationError {
+                    original = .cancelled
+                } else {
+                    original = .setupFailed
+                }
+            }
+            throw ChatPythonError.cleanupFailed(after: original)
+        }
+        return try outcome.get()
+    }
+
+    private static func executeInDirectory(code: String, inputs: [ChatPythonInput],
+                                           package: ChatPythonPackage, control: ChatPythonChildControl,
+                                           directory: URL) throws -> ChatPythonResult {
         let inputDirectory = directory.appendingPathComponent("input", isDirectory: true)
         do {
             try FileManager.default.createDirectory(at: inputDirectory, withIntermediateDirectories: false,
@@ -192,6 +225,11 @@ enum ChatPythonPolicy {
             if value.hasPrefix(protocolPrefix) {
                 guard outputs.count < 8 else { throw ChatPythonError.outputTooLarge }
                 let payload = Data(value.dropFirst(protocolPrefix.count).utf8)
+                do {
+                    try WorkflowStructuredText.validateJSONSyntax(String(value.dropFirst(protocolPrefix.count)))
+                } catch {
+                    throw ChatPythonError.invalidOutput
+                }
                 guard let object = try? JSONSerialization.jsonObject(with: payload) as? [String: Any],
                       object.count == 3, let name = object["name"] as? String,
                       let kindName = object["kind"] as? String,
@@ -240,7 +278,18 @@ enum ChatPythonPolicy {
               isPlain(standardLibrary, directory: true) else { throw ChatPythonError.unavailable }
         let manifest = root.appendingPathComponent("engine.json")
         guard isPlain(manifest, directory: false),
-              let bytes = try? Data(contentsOf: manifest), bytes.count <= 65_536,
+              let handle = try? FileHandle(forReadingFrom: manifest) else { throw ChatPythonError.unavailable }
+        defer { try? handle.close() }
+        var bytes = Data()
+        do {
+            while bytes.count <= 65_536 {
+                guard let chunk = try handle.read(upToCount: 65_537 - bytes.count), !chunk.isEmpty else { break }
+                bytes.append(chunk)
+            }
+        } catch {
+            throw ChatPythonError.unavailable
+        }
+        guard bytes.count <= 65_536,
               let object = try? JSONSerialization.jsonObject(with: bytes) as? [String: Any],
               let schema = object["schemaVersion"] as? NSNumber,
               CFGetTypeID(schema) != CFBooleanGetTypeID(),
@@ -337,8 +386,8 @@ private final class ChatPythonChildControl: @unchecked Sendable {
         DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 1) { [self] in
             lock.lock()
             defer { lock.unlock() }
-            guard !finished, let process, process.isRunning else { return }
-            _ = Darwin.kill(process.processIdentifier, SIGKILL)
+            guard !finished, let ownedProcess = self.process, ownedProcess.isRunning else { return }
+            _ = Darwin.kill(ownedProcess.processIdentifier, SIGKILL)
         }
     }
 
