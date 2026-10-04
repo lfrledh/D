@@ -204,22 +204,24 @@ struct WorkflowSaveFailure: LocalizedError {
         // The actor consumes each delta independently of MainActor scheduling.
         let consumer = Task { await collector.consume(run) }
         var displayedRevision = -1, displayPublications = 0
-        var displayedPhase: String?
+        var displayedProgress: String?
         let collectionStarted = ContinuousClock.now
         let display = Task { @MainActor [weak self] in
             while !Task.isCancelled {
                 let status = await self?.session.status()
                 let phase = status.flatMap { $0.phase(for: request.id) }
-                if let self, !self.cancelled, let phase, phase != displayedPhase {
-                    displayedPhase = phase; self.progress(phase)
-                }
                 let snapshot = await collector.snapshot()
+                // Stage is observable before the first event; numeric progress is
+                // still meaningful for image/audio/video calls using this bridge.
+                let progressText = [phase, snapshot.progress].compactMap { $0 }.joined(separator: " · ")
+                if let self, !self.cancelled, !progressText.isEmpty, progressText != displayedProgress {
+                    displayedProgress = progressText; self.progress(progressText)
+                }
                 if snapshot.revision != displayedRevision, let self {
                     displayedRevision = snapshot.revision
                     displayPublications += 1
                     self.languagePreview = snapshot.text
                     self.languagePreviewChanged(request.id, snapshot.text)
-                    if !self.cancelled, let value = snapshot.progress, phase == nil { self.progress(value) }
                 }
                 do { try await Task.sleep(for: .milliseconds(80)) } catch { break }
             }

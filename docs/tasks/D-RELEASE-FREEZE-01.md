@@ -712,3 +712,6 @@ F30交互组件：Sol/high interactive1，经只读审阅合入962f90d98ba52b639
 - R/lead/s05-preferences-attachments：UI6方法/1suite、Workbench7方法/2suite通过；s06-feedback：UI7方法/1suite、Workbench6方法/3suite通过，含真实Runtime慢显示全文、EACCES→保存恢复仅一次提示；s01-preferences-final：UI8方法/1suite通过（最终组字/共享owner修正）。不叠加为全功能通过率。没有重跑已验长模型。F36无delta阶段专门检查与原生门槛仍需补。
 - Hosting点击实验未完成：真实LLDB退出栈为Swift async主队列drain退出，未证实AppKit按钮内部退出。实验patch留R/lead/hosting-direct-send-experiment.patch并撤回自身未成功驱动变化；原测试/断言保留，不放宽。r4外层exit0不代表UI通过。
 - F28自动安全审查阻塞无变化；原生最后明确锁屏，集中事项不重复。main未动。来源为Sol局部初步实现＋Lead接线/修补＋非实现者源码复核；完整Lead消耗/订阅费用unknown。
+
+### 2026-10-04 F36 非实现者反例修补
+348e7b6之后native_files_review发现阶段提示吞掉数值进度，以及检查器可能短暂串用上一回答统计。Lead将阶段与数值一同去重发布；检查器按attempt隔离，读取先清旧值，取消/票据阻止迟到发布。R/lead/s06-progress-red在真实Runtime+WorkflowServices先失败两项1/30、2/30断言；修后s06-feedback-review-green：UI2方法/1suite、Workbench5方法/2suite通过（含无首token时的加载提示及释放）。非实现者源码复核关闭两项P2，没有另跑GUI或模型。受测基线348e7b6加本次明确差分，最终代码SHA见Git；此前通知、Store和模型证据不重复。本轮使用Lead修补，不追记为Worker独立成功。

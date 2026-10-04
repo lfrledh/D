@@ -1099,7 +1099,7 @@ struct ChatWorkbenchView: View {
             Button(newLabel("copyRedactedJSON", english: "Copy redacted JSON", chinese: "复制脱敏 JSON")) {
                 copy(snapshot.redactedJSON)
             }.accessibilityIdentifier("chat-copy-request-json")
-            ChatRunFeedbackView(chat: chat, attempt: attempt)
+            ChatRunFeedbackView(chat: chat, attempt: attempt).id(attempt.id)
             Text(snapshot.redactedJSON).font(.caption.monospaced()).textSelection(.enabled)
                 .accessibilityIdentifier("chat-request-json")
         }.accessibilityIdentifier("chat-request-inspection")
