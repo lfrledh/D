@@ -4,6 +4,108 @@ import Testing
 
 @Suite("Native chat action menu lifecycle", .serialized)
 @MainActor struct ChatActionMenuTests {
+    @MainActor private final class MeasuredButton: NSPopUpButton {
+        var invalidations = 0
+        override func invalidateIntrinsicContentSize() {
+            invalidations += 1
+            super.invalidateIntrinsicContentSize()
+        }
+    }
+
+    @Test func unchangedPresentationKeepsNativeRowsAndSizeButRefreshesActions() throws {
+        var calls: [Int] = []
+        let coordinator = ChatActionMenu.Coordinator()
+        let button = MeasuredButton(frame: .zero, pullsDown: true)
+        button.usesItemFromMenu = false
+        coordinator.install(on: button)
+        func update(_ generation: Int) {
+            coordinator.update(button, title: "Actions", accessibilityIdentifier: "actions", items: [
+                .init(id: "parent", title: "Parent", children: [
+                    .init(id: "child", title: "Same title") { calls.append(generation) }
+                ])
+            ])
+        }
+        update(0)
+        let menu = try #require(button.menu)
+        let parent = try #require(menu.item(at: 0))
+        let child = try #require(parent.submenu?.item(at: 0))
+        let cellItem = (button.cell as? NSPopUpButtonCell)?.menuItem
+        let invalidations = button.invalidations
+        for generation in 1...20 { update(generation) }
+        #expect(menu.item(at: 0) === parent)
+        #expect(menu.item(at: 0)?.submenu?.item(at: 0) === child)
+        #expect((button.cell as? NSPopUpButtonCell)?.menuItem === cellItem)
+        #expect(button.invalidations == invalidations)
+        coordinator.menuWillOpen(menu)
+        coordinator.selectItem(try #require(menu.item(at: 0)?.submenu?.item(at: 0)))
+        endTracking(coordinator, menu: menu)
+        coordinator.drainAfterTracking()
+        #expect(calls == [20])
+        coordinator.dismantle(button)
+    }
+
+    @Test func samePresentationPendingUpdateRetainsEndedCycleAction() throws {
+        var calls: [String] = []
+        let (coordinator, button, menu) = fixture([
+            .init(id: "same", title: "Same") { calls.append("displayed") }
+        ])
+        let item = try #require(menu.item(at: 0))
+        coordinator.menuWillOpen(menu)
+        coordinator.update(button, title: "Conversation actions", accessibilityIdentifier: "chat-actions",
+            items: [.init(id: "same", title: "Same") { calls.append("next") }])
+        endTracking(coordinator, menu: menu)
+        coordinator.drainAfterTracking()
+        coordinator.selectItem(item)
+        #expect(calls == ["displayed"])
+        coordinator.menuWillOpen(menu)
+        coordinator.selectItem(item) // Late sender from the previous cycle is not this cycle's row.
+        #expect(calls == ["displayed"])
+        coordinator.selectItem(try #require(menu.item(at: 0)))
+        endTracking(coordinator, menu: menu)
+        coordinator.drainAfterTracking()
+        #expect(calls == ["displayed", "next"])
+        coordinator.dismantle(button)
+    }
+
+    @Test func samePresentationReopenBeforeDrainRejectsOldSelectedRow() throws {
+        var calls: [String] = []
+        let (coordinator, button, menu) = fixture([
+            .init(id: "same", title: "Same") { calls.append("original") }
+        ])
+        let oldItem = try #require(menu.item(at: 0))
+        coordinator.menuWillOpen(menu)
+        coordinator.selectItem(oldItem)
+        coordinator.update(button, title: "Conversation actions", accessibilityIdentifier: "chat-actions",
+            items: [.init(id: "same", title: "Same") { calls.append("replacement") }])
+        endTracking(coordinator, menu: menu)
+        coordinator.menuNeedsUpdate(menu) // A native reopen can precede the deferred drain.
+        #expect(menu.item(at: 0) !== oldItem)
+        coordinator.menuWillOpen(menu)
+        coordinator.selectItem(oldItem)
+        endTracking(coordinator, menu: menu)
+        coordinator.drainAfterTracking()
+        #expect(calls == ["original"])
+        coordinator.dismantle(button)
+    }
+
+    @Test func changedPresentationUpdatesStateAndAvailability() throws {
+        let (coordinator, button, menu) = fixture([.init(id: "one", title: "One") {}])
+        coordinator.update(button, title: "Conversation actions", accessibilityIdentifier: "chat-actions",
+            items: [.init(id: "one", title: "Changed", enabled: false, selected: true) {}])
+        #expect(menu.item(at: 0)?.title == "Changed")
+        #expect(menu.item(at: 0)?.isEnabled == false)
+        #expect(menu.item(at: 0)?.state == .on)
+        coordinator.update(button, title: "Empty", accessibilityIdentifier: "empty", items: [])
+        #expect(!button.isEnabled)
+        #expect(menu.items.isEmpty)
+        coordinator.update(button, title: "Ready", accessibilityIdentifier: "ready",
+            items: [.init(id: "two", title: "Two") {}])
+        #expect(button.isEnabled)
+        #expect(button.title == "Ready")
+        #expect(menu.item(at: 0)?.title == "Two")
+        coordinator.dismantle(button)
+    }
+
     private func fixture(_ items: [ChatActionMenuItem]) ->
         (ChatActionMenu.Coordinator, NSPopUpButton, NSMenu) {
         let coordinator = ChatActionMenu.Coordinator()

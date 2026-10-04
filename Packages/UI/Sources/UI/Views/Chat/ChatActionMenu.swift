@@ -58,6 +58,21 @@ struct ChatActionMenu: NSViewRepresentable {
             let items: [ChatActionMenuItem]
         }
 
+        private struct RowPresentation: Equatable {
+            let id: String
+            let title: String
+            let enabled: Bool
+            let selected: Bool
+            let children: [RowPresentation]?
+            let hasAction: Bool
+
+            init(_ item: ChatActionMenuItem) {
+                id = item.id; title = item.title; enabled = item.enabled; selected = item.selected
+                children = item.children?.map(Self.init)
+                hasAction = item.action != nil
+            }
+        }
+
         private struct DisplayedAction {
             let item: NSMenuItem
             let enabled: Bool
@@ -71,6 +86,9 @@ struct ChatActionMenu: NSViewRepresentable {
         // the deferred drain has installed a newer snapshot.
         private var endedCycleActions: [ObjectIdentifier: DisplayedAction] = [:]
         private var pendingSnapshot: Snapshot?
+        private var rowPresentation: [RowPresentation]?
+        private var displayedTitle: String?
+        private var displayedAccessibilityIdentifier: String?
         private var queuedActions: [@MainActor () -> Void] = []
         private var cycleStarted = false
         private var menuClosed = false
@@ -110,18 +128,44 @@ struct ChatActionMenu: NSViewRepresentable {
             }
         }
 
-        private func apply(_ snapshot: Snapshot, to button: NSPopUpButton) {
+        private func apply(_ snapshot: Snapshot, to button: NSPopUpButton, renewRows: Bool = false) {
             guard let menu = rootMenu else { return }
+            let presentation = snapshot.items.map(RowPresentation.init)
+            // A late AppKit action must retain its old row identity across a
+            // completed tracking cycle. Idle SwiftUI updates need no such rebuild.
+            let retainsEndedRows = displayedActions.keys.contains { endedCycleActions[$0] != nil }
+            let rebuild = rowPresentation != presentation || renewRows || retainsEndedRows
             displayedActions.removeAll()
-            menu.removeAllItems()
-            append(snapshot.items, to: menu, parentEnabled: true)
+            if rebuild {
+                menu.removeAllItems()
+                append(snapshot.items, to: menu, parentEnabled: true)
+                rowPresentation = presentation
+            } else {
+                refreshActions(snapshot.items, in: menu)
+            }
             // usesItemFromMenu=false requires an independent cell display item.
             // Do not insert a dummy row into the actionable menu.
-            (button.cell as? NSPopUpButtonCell)?.menuItem = NSMenuItem(title: snapshot.title, action: nil, keyEquivalent: "")
-            button.invalidateIntrinsicContentSize()
-            button.setAccessibilityLabel(snapshot.title)
-            button.setAccessibilityIdentifier(snapshot.accessibilityIdentifier)
-            button.isEnabled = !snapshot.items.isEmpty
+            if displayedTitle != snapshot.title {
+                (button.cell as? NSPopUpButtonCell)?.menuItem = NSMenuItem(title: snapshot.title, action: nil, keyEquivalent: "")
+                button.invalidateIntrinsicContentSize()
+                button.setAccessibilityLabel(snapshot.title)
+                displayedTitle = snapshot.title
+            }
+            if displayedAccessibilityIdentifier != snapshot.accessibilityIdentifier {
+                button.setAccessibilityIdentifier(snapshot.accessibilityIdentifier)
+                displayedAccessibilityIdentifier = snapshot.accessibilityIdentifier
+            }
+            if button.isEnabled != !snapshot.items.isEmpty { button.isEnabled = !snapshot.items.isEmpty }
+        }
+
+        private func refreshActions(_ values: [ChatActionMenuItem], in menu: NSMenu) {
+            for (value, item) in zip(values, menu.items) {
+                if let children = value.children, let submenu = item.submenu {
+                    refreshActions(children, in: submenu)
+                } else if let action = value.action {
+                    displayedActions[ObjectIdentifier(item)] = DisplayedAction(item: item, enabled: item.isEnabled, action: action)
+                }
+            }
         }
 
         private func append(_ items: [ChatActionMenuItem], to menu: NSMenu, parentEnabled: Bool) {
@@ -170,7 +214,7 @@ struct ChatActionMenu: NSViewRepresentable {
             refreshOnNeedsUpdate = false
             if let pendingSnapshot {
                 self.pendingSnapshot = nil
-                apply(pendingSnapshot, to: button)
+                apply(pendingSnapshot, to: button, renewRows: true)
             }
         }
 
@@ -223,7 +267,7 @@ struct ChatActionMenu: NSViewRepresentable {
                 endedCycleActions = selectionCaptured ? [:] : displayedActions
                 if let pendingSnapshot, let button {
                     self.pendingSnapshot = nil
-                    apply(pendingSnapshot, to: button)
+                    apply(pendingSnapshot, to: button, renewRows: true)
                 }
                 cycleStarted = false
             }
