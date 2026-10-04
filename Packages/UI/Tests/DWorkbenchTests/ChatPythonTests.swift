@@ -160,6 +160,25 @@ struct ChatPythonTests {
         if [ -f "$0.slow" ]; then
             exec /bin/sleep 30
         fi
+        if [ -f "$0.guest-failure" ]; then
+            printf '%s\n' 'printed before failure'
+            printf '%s\n' 'Traceback (most recent call last):' 'ValueError: fixture failure' >&2
+            exit 3
+        fi
+        if [ -f "$0.syntax-failure" ]; then
+            printf '%s\n' '  File "program.py", line 1' 'SyntaxError: invalid syntax' >&2
+            exit 3
+        fi
+        if [ -f "$0.oversized-failure" ]; then
+            printf '%s\n' 'visible-prefix:'
+            i=0
+            while [ "$i" -lt 1025 ]; do
+                printf '%01024d' 0
+                i=$((i + 1))
+            done
+            printf '%s\n' 'ValueError: after long output' >&2
+            exit 3
+        fi
         printf '%s\n' 'D_CHAT_FILE_V1:{"name":"answer.txt","kind":"plainText","text":"fixture"}'
         """
         try Data(script.utf8).write(to: runner)
@@ -191,6 +210,38 @@ struct ChatPythonTests {
 
         try FileManager.default.removeItem(at: slow)
         try FileManager.default.removeItem(at: started)
+        let failure = root.appendingPathComponent("runner.guest-failure")
+        try Data().write(to: failure)
+        do {
+            _ = try await client.run(code: "raise ValueError('fixture failure')", inputs: [])
+            Issue.record("Expected guest failure")
+        } catch {
+            #expect(error.localizedDescription.contains("printed before failure"))
+            #expect(error.localizedDescription.contains("ValueError: fixture failure"))
+        }
+        try FileManager.default.removeItem(at: failure)
+
+        let syntax = root.appendingPathComponent("runner.syntax-failure")
+        try Data().write(to: syntax)
+        do {
+            _ = try await client.run(code: "broken syntax", inputs: [])
+            Issue.record("Expected syntax failure")
+        } catch {
+            #expect(error.localizedDescription.contains("SyntaxError: invalid syntax"))
+        }
+        try FileManager.default.removeItem(at: syntax)
+
+        let oversized = root.appendingPathComponent("runner.oversized-failure")
+        try Data().write(to: oversized)
+        do {
+            _ = try await client.run(code: "raise ValueError('long output')", inputs: [])
+            Issue.record("Expected oversized guest failure")
+        } catch {
+            #expect(error.localizedDescription.contains("visible-prefix:"))
+            #expect(error.localizedDescription.contains("truncated"))
+        }
+        try FileManager.default.removeItem(at: oversized)
+
         let result = try await client.run(code: "print('still guest only')", inputs: [])
         #expect(result.outputs == [.init(name: "answer.txt", kind: .plainText, text: "fixture")])
         let nextPath = try String(contentsOf: started, encoding: .utf8)

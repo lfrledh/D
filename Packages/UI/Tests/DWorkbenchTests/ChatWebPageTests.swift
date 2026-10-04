@@ -201,6 +201,32 @@ struct ChatWebPageTests {
         #expect(normalDoctype.text == "Visible")
     }
 
+    @Test func readsLegalDoctypeVariantsAndKeepsMarkupLikeDataInert() async throws {
+        let documents = [
+            "<!DOCTYPE HTML ><html><body><p>Visible</p></body></html>",
+            "<!DoCtYpE\tHtMl\n><html><body><p>Visible</p></body></html>",
+            "<!DOCTYPE html SYSTEM \"about:legacy-compat\"><html><body><p>Visible</p></body></html>",
+            "<html><body><!-- <!DOCTYPE html [<!ENTITY x SYSTEM 'file:///etc/passwd'>]> -->" +
+                "<script>const example = '<!DOCTYPE html>';</script><p>Visible</p></body></html>"
+        ]
+        for html in documents {
+            let page = try await ChatWebPageClient(transport: PageFixtureTransport(reply(html)))
+                .read(url, networkAuthorized: true)
+            #expect(page.text == "Visible")
+            let digest = SHA256.hash(data: Data(html.utf8)).map { String(format: "%02x", $0) }.joined()
+            #expect(page.contentSHA256 == digest)
+        }
+    }
+
+    @Test func fragmentDoesNotPreventFetchingPublicPage() async throws {
+        let sourceURL = URL(string: "https://example.org/article?q=one#section")!
+        let transport = PageFixtureTransport(reply("<body>Visible</body>"))
+        let page = try await ChatWebPageClient(transport: transport).read(sourceURL, networkAuthorized: true)
+        #expect(page.url == sourceURL)
+        let call = try #require(await transport.first())
+        #expect(call.0.url == url)
+    }
+
     @Test func enforcesDownloadAndTextCaps() async throws {
         let hugeDownload = ChatWebHTTPResponse(statusCode: 200, mimeType: "text/plain", url: url,
                                                body: Data(repeating: 65, count: 2 * 1024 * 1024 + 1))
