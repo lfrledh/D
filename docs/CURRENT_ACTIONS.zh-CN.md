@@ -6,13 +6,22 @@
 
 用户已批准 F01–F36、S00–S06 同一批实施。 2026-10-03再次授权连续续作：先用已有采样与可控流修候选菜单/交互迟滞，将停止固定在输入区主操作；允许S00/S01隔离组合验证，不等待旧布局全部修好。按本清单完成S02–S06（含显式采用部分回答继续），可靠切片正常接纳main后继续，不以阶段回执终止整项。需求冻结，不新增功能/模型/平台；Liquid Glass只沿用系统控件与语义层级，不全面视觉改版。唯一功能状态见 [聊天清单](CHAT_FEATURE_LEDGER.zh-CN.md)。先 S00 长流/停止、正常项目包选择和新候选/旧参数重现，再 S01 布局、S02 编辑与上下文、S03 资料/记忆/备份、S04 联网工具、S05 受限代码/MCP/成果/语音、S06 组合验收。可靠切片通过普通 App 门槛后正常接纳 main，不以整个专题完成为前提；不硬合失败长流。
 
-2026-10-04用户补充决议已原位进入[唯一聊天清单](CHAT_FEATURE_LEDGER.zh-CN.md)：F26通用搜索服务边界、F31两语言本地识别与[功能完成后的质量审计](CHAT_FEATURE_LEDGER.zh-CN.md#post-function-quality-review)。本次只更新需求和现状，不变更当前菜单/迟滞/主停止优先级，不启动全局重构；不把文档更新计作能力实现。
+2026-10-04用户补充决议已原位进入[唯一聊天清单](CHAT_FEATURE_LEDGER.zh-CN.md)：F26通用搜索服务边界、F31两语言本地识别与[功能完成后的质量审计](CHAT_FEATURE_LEDGER.zh-CN.md#post-function-quality-review)。该次只更新需求和现状；本轮已恢复代码和原生续作，先完成菜单/迟滞/主停止优先级，不启动全局重构；不把文档更新计作能力实现。
 
 本轮起点核实候选 `40d51ee73f72eb54407e6eedbd693c9ba67068e4`、main `f31dced209855722d2f04cc0fc8c5f6712396120` 均干净且与远端一致。旧 inference-foundation 与个人 scheme 不动。A、H22、菜单、宏信任、HF 及自然视频本人结果复用；新存储和聊天宿主按影响另验。旧 B 失败和已耗预算保留；用户现明确批准这些已知缺陷继续收口，不再沿用旧停工排程，不伪造旧预算未使用。
 
 Lead 持有共享 Runtime/WorkflowServices/ChatController/Store；文件面板和纯展示在独立受限任务树实施。早期S00/S01历史证据目录 RCP=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261003T115108Z-chat-product`。完整 Lead 成本与订阅费用 unknown。S00代码候选已完成CPU和正常签名构建，普通App已实际启动：项目列表、真实1024-token接收和坐标点击停止→下一请求通过；候选菜单忙循环及生成中AX迟滞仍阻塞S00整体接纳；S01独立布局候选的缩放焦点反例已修并通过hosting，现已在隔离主候选与S00组合；普通App门槛仍待验，未入main。该段保留早期门槛来源；最新S02–S05接线、R证据目录及剩余状态以以下恢复检查点为准，F01–F36范围不取消。
 
-### 当前恢复检查点（2026-10-04 JST，解锁原生检查与审计同步）
+### 当前恢复检查点（2026-10-04，c16普通App门槛通过）
+
+- main已从 `f31dced209855722d2f04cc0fc8c5f6712396120` 本地快进至 `8d64000c849b70c8ad18cb574ea1f31b02b93f79`；与普通App受测代码 `c16ab4015193d90def32a7cc6629dde9136b6f5c` 仅有文档差异。此次结案文档提交及推送SHA在下述R/lead/main-core-integration.json，不自引用提交。不是F01–F36全部完成。
+- R=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261004T041401Z-chat-resume`。`lead/c16-native-core.json`：菜单展开0.558秒/关闭、短发送、清晰输入区主停止、保留部分回答、未采用时拒绝继续、显式采用后再次发送、空会话往返约1.2秒通过；未复现旧布局忙循环，不继续猜测补丁，也未重跑旧1024-token长流。
+- 同一普通App/隔离小项目进一步通过TXT导入、词法检索定位第3行并采用、上下文预览、计算器42结果采用、F18真实消息选段→解释草稿（含来源，不自动发送）。只证明这些路径；组合hosting事件身份失败仍保留。成果/Canvas、会话交换、新组合备份与独立恢复等原生项目尚待。
+- Mac再次锁屏，CUA明确拒绝，保留现场：自有App PID829未关闭，无在途模型任务；不重复启动或催本人。新聊天组字、F31授权/本地资源与试听、F26本地凭据/真实调用在[唯一集中队列](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md)。不重开旧H22/HF/宏信任/固定视频。
+- `D-RELEASE-FREEZE-01`另有F14查看脱敏、F31两语言选择和F26通用搜索候选；未测组合不算main能力。受限Sol/high在独立外盘树实施，Lead持有共享接线/审核/串行测试；本轮路线、事件、修复与证据在R。F28实际隔离未实现，历史工具拒绝具体理由仍unknown，不裸跑或换名绕行。
+- 源 `D/codex/inference-foundation` 仍 `01758b81527dc27eb4563bf1b66fd1ceab6647ee`；个人scheme摘要 `ca3635d88aa5a15397b90e528667c66c0e6db7e596176e885c79d194b544206c`、索引与未暂存状态保持。下一动作继续范围内代码/CPU验证；解锁后续原生路径，不以更新文档终止专题。
+
+### 历史恢复检查点（2026-10-04，解锁原生检查与审计同步）
 
 - Lead树 `D-RELEASE-FREEZE-01/codex/release-freeze-01`；本次起点 `7caebde0c9c662ffd60c4b99e9aa81002d5bba27`（代码e80fc15e）。本次新增代码 **c16ab4015193d90def32a7cc6629dde9136b6f5c**，仅修原生聊天菜单的重复重建/尺寸失效及跨周期迟到动作，保留S00–S05组合成果。F01–F36仍按[唯一清单](CHAT_FEATURE_LEDGER.zh-CN.md)，不称专题完成。
 - **已推送候选供审计，main未接纳**：起点7caebde已推送；本轮最终文档/远端完整SHA见RN/lead/audit-receipt.json。main仍 `f31dced209855722d2f04cc0fc8c5f6712396120`；原生发送/主停止门槛未过，不硬合。源01758b81527dc27eb4563bf1b66fd1ceab6647ee及个人scheme内容、索引、未暂存状态保持。
