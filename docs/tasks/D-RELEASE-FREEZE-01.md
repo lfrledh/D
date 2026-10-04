@@ -756,3 +756,22 @@ F35非实现者发现英文核心错误和输入AX名称缺口。Lead为真实NS
 R=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261004T041401Z-chat-resume`。复用c16既有14方法、正常签名构建及非实现者菜单审核；本轮普通App实际菜单/短发送/输入区停止/partial保留/拒绝未采用继续/显式采用后再发/切会话通过，精确attempt和耗时见lead/c16-native-core.json。TXT导入→词法第3行→采用、上下文预览、工具42采用、选段解释也完成；随后CUA报告锁屏，剩余原生路径如实在唯一清单/队列，不重跑模型。
 
 main从f31dced209855722d2f04cc0fc8c5f6712396120快进8d64000c849b70c8ad18cb574ea1f31b02b93f79，后者相对受测c16仅文档；保护快照lead/main-core-preflight.json，提交/推送回执lead/main-core-integration.json。源scheme内容/索引/未暂存保持，不接入其他候选。F14/F31/F26新实现仍在独立候选，受限Sol/high + Lead接线/复核，最终费用unknown。F28尚未实现，历史拒绝详情unknown。新App代码和完整专题/冻结出口均不由本次主线推进自动通过。
+
+
+## 2026-10-04 CHAT-PRODUCT续作：F14/F18/F26/F28/F31
+
+同一F01–F36与8d64000c决议；不是新任务/重置预算。R沿上一节。代码候选f08ca2427b54e0519780e473ea7dfcce431af234，最终仅文档SHA与推送记录在R/lead/resume-delivery-receipt.json。main已通过c16核心门槛并推送f9a439db；新原生工具路径尚待解锁，不把候选状态硬写成main全功能。
+
+- F14 local/share使用不同投影：普通token/key正文保留、真实凭据字段遮蔽；F31仅手选普通话/英语。受限Sol/high分别初交+一修，Lead复核实际别名错误再修，10/9方法通过。F26 Brave先实现再补博查，同一显式服务设置和本地凭据文件关联；摘要与真实正文分离、真实公网example.com读取、取消/关闭/归属/备份/no-secret反例通过。带key调用及大陆可达性未知；自动回答测试为fake本地engine接线。公开API/价格/保存条件只作前次一次核对，未重做市场研究。
+- F26 e742组合定向报告55项/6suite，其中54执行通过、1显式跳过；该跳过项已在另次实际网页探针中通过。与重叠历史结果不累计通过率。readonly native_files_review核对Lead接线。临时摘要8条活动、900秒为访问时过期，并非定时内存擦除；持久记录不留摘要/key。网页读取使用既有静态公开HTTPS边界，正文引用绑定实际读取。
+- F18事件号Int32→系统16位截断，以及SwiftTesting异步NSApp事件退出前无suite终态已定位；LLDB退出栈在f18-exit-stack-r3.log。仅该真实hosting方法转同步XCTest，仍NSApp.sendEvent，全部行为断言保留；审阅发现Bool被XCTUnwrap误当真，修为guard+XCTFail。最终1 hosting方法及另2协调方法完整通过，测试提交e0cc7496，无生产输入补丁。
+- F28采用官方CPython3.14.8 WASI与Wasmtime49.0.2完整CAPI，Pulley解释模式，无JIT/裸宿主用户代码/网络/进程/任意文件/pip。来源、固定下载摘要、编译命令和许可证在R/f28-dependencies及每个资源包PROVENANCE.json/许可证。WASI SDK24官方构建脚本指定版本，本地摘要有记录但上游旧release无digest；不称上游摘要已验。选择依据：成熟WASI能力隔离与现有Process/Store装配；差异是只读选定输入和有预算文本成果，不是通用Python环境。
+- helper受限Sol/high初交+两修（9600749a）；client初交+一修（b22408c8/e72fc32b）。模型请求、观察设置、独立树、精确线程及增量usage原记录分别在f28-helper/client；隐藏解析unknown。helper初交pgrep被拒却未写回报、repair1 heredoc临时路径被拒后停止，两次未观察权限扩大/成功越界；Lead先核异常再允许明确授权目录的文件写法，未重试进程枚举。client初交相同枚举拒绝已报告，后续不重试。Lead自己的早期提示文件名/引号/测试筛选错误分开记，不算Worker代码缺陷。
+- Lead复现真实CPython关闭stdout退出-13，repair2忽略helper自身SIGPIPE使EPIPE走完整清理返回2；原证据不覆盖。helper12 WAT方法、此前真实CPython7边界用例、修后闭管道、签名固定沙盒宿主分别留证。独立审阅关闭取消初始化、满管道及SIGPIPE P2。client修编译捕获、错误测试前缀、cleanup可见错误、复用严格JSON解析；Lead按实际125127字节/602文件库存将manifest预算对齐既有4MiB，代码预算仍64KiB。无全局权限修改。
+- Lead共享装配：明确所选文字/CSV副本→真实WASI→可检查stdout/CSV/SVG→现有成果编辑器→显式保存；receipt保留代码/输入摘要/实现与结果摘要，并经parents纳入既有备份闭包。候选f08实际`f28-wiring-real`3方法通过：未选输入拒绝、真实分析/两个成果/原文保留/另一会话不串/独立恢复、取消后下一调用。原input保护和保存失败测试复用未改Store。`f28-client-r2`报告18条中实际16执行+2显式跳过，后两项由真实接线单独执行，不误计18全部实测。
+- 签名资源不是独立CLI：直接启动inherit helper退出-5已记录，未降低App沙盒绕过；依据[Apple helper文档](https://developer.apple.com/documentation/xcode/embedding-a-helper-tool-in-a-sandboxed-app)在同身份、仅app-sandbox的固定测试宿主中验证，exit0并输出mean20/CSV。CPU测试使用同源码的自有无App-inherit helper副本运行WASI，两者不混为普通D验收。未验证清理失败注入、忽略TERM后KILL及35秒外层到期；既有真实取消/fullwait/下一调用、资源上限与输入拒绝是已验范围。
+- 所有新资源在外盘任务目录，不入Git，不附模型权重；打包器不下载/全局安装，正常Xcode沿既有resource-set嵌入。相关资源夹具检查通过，旧模型执行未改故不重跑。普通D GUI、两家真实key和本地Speech/新聊天组字仍受锁屏/本人操作限制；只阻塞相应项，唯一清单保持待验，不宣称完整聊天或冻结。
+- F28修改了共享ChatController，因此在最终代码f08另补F26接线回归 `f28-search-combination`：6方法/1suite全部执行通过，4.888秒；覆盖取消/归属、临时摘要和凭据不持久化、实际网页先于本地回答的受控接线。未重复provider全套、真实收费API或模型生成。
+- f08ca242普通签名App构建 `chat-f28-app` exit0、91.924秒；资源验证与原生Xcode复制/签名通过，候选包含完整既有引擎和新的WASI资源。交付副本、四关键文件、WASI关键文件及唯一启动器见 `lead/app-f08ca242-delivery.json`。没有在锁屏时重复启动D，构建不替代普通App原生验收；本树Xcode使用已准备的忽略配置即可重建，不靠事后手补App。
+
+恢复：先核真实HEAD/index/个人scheme、当前App与任务进程，再使用唯一新包继续未验原生路径；同一冻结范围不重新审批。全局质量审计/Liquid Glass精修仍未启动，许可证/正式Release不变。Lead与非实现者检查分别留证，不把来源标签当质量保证；完整Lead归因及订阅货币费用unknown，未重算历史五次样本。

@@ -111,11 +111,11 @@ S00–S05是同一份已批准范围的实施切片，完成一片可集成一�
 | F11 | 实现与CPU通过；原生待验 | 263857f1：系统/模型参数预设复制更新、版本化JSON导入导出及可编辑短任务模板；现有Store不覆盖导出。 |
 | F12 | 实现与CPU/固定tokenizer通过；原生待验 | 263857f1：复用固定swift-jinja/transformers、每请求模板覆盖/恢复及实际预览；12项真实已安装分词器CPU等值检查，未重跑GPU。 |
 | F13 | 格式接线与CPU通过；原生待验 | 自动/纯文/Markdown/JSON/D结构定义：显式指令与生成后校验；原文保留，不冒称约束解码。replay/compare/fork冻结格式、非法schema保护与备份在R/lead/s02-format-quote-green核对。 |
-| F14 | 冻结快照与CPU通过；原生待验 | typed messages/tools、资料与记忆版本、真实结束/用量来源；历史未保存的模板/token明确unknown。s02-inspection-final 8方法通过，凭据标记脱敏不宣称任意秘密检测。 |
+| F14 | 本地查看/分享分离已修，10方法通过；新检查器App待验 | bf8f66a6→e742ffd7：本地普通正文含token/key不再整段遮蔽，真实凭据字段仍遮蔽；分享仍默认省略自由正文，损坏JSON不泄漏。R/lead/f26-host-r4包含10项检查，未宣称可检测任意秘密。 |
 | F15 | 长流历史证据复用；新宿主主停止/接续原生通过 | c16普通App真实短请求，20步问题流中点击输入区“停止当前生成”，partial保留；显式采用后短回答“继续正常。”完成，切会话约1.2秒。没有重复三次1024token证据；一次较短请求点击前已完成，不计取消。R/lead/c16-native-core.json；旧e80失败保留。 |
 | F16 | 已接真实响应通道；CPU/hosting通过，App待验 | CHANNELS `287a114d845bb09ce7a7cd0b20bde158fa1da61e` 与Lead F22组合：流中及无解析终态明确原始字节，结束后只用实际response；结构折叠仅严格校验通过值。s03-knowledge-wiring-final UI5方法，无真实模型新增验收。 |
 | F17 | 已有部分 | 固定Markdown库和旧B合成长Markdown原生证据复用；新宿主及操作仍待验。 |
-| F18 | 引用生产路径原生部分通过；组合hosting仍待定位 | c16助手菜单→选段引用→解释实际产生可编辑草稿及具体消息来源资产，不自动提交、不改原文。UTF16/Character/失效CPU证据复用；组合hosting事件身份失败未凭单条GUI通过关闭，其他动作待验。 |
+| F18 | 组合hosting已修并通过；引用原生部分通过 | e0cc7496813646ae885690e19da37bf9aaf08dbc只改测试：NSEvent事件号按实际16位范围、同一NSApp.sendEvent路径保留；SwiftTesting异步宿主退出前未报告完成，改该项为同步XCTest并保留全部断言。R/lead/f18-xctest-final实际1方法、f18-coordinator-final另2方法均完整结束；c16真实选段解释证据复用。不把其他动作全判通过。 |
 | F19 | 统一素材生产接线/定向CPU通过；原生待验 | b31c6631与e80fc15e：聊天与Quick使用现有Store，PNG/本地文件粘贴、共享项目已授权素材复制、排序、预览/移除；关闭只停止新准入，已接纳导入仍可完成；显式取消阻止迟到绑定。legacy素材经resolver确认实例，不猜原件/恢复副本。旧草稿、单面板、剪贴板反例通过。原生拖入与完整四分类往返未验。 |
 | F20 | TXT导入原生通过；其余格式原生待验 | c16隔离小项目导入157字节TXT，原件保存/可读。PDF/DOCX、OCR既有实现和CPU证据复用，未本轮实际走完这些格式。 |
 | F21 | 词法检索/采用原生通过；模型重排待验 | c16对TXT查询reading corner，定位第3行400 lux并显式采用。个人/项目复制、直属目录及重排CPU证据复用；不称向量检索或真实重排模型通过。 |
@@ -123,12 +123,12 @@ S00–S05是同一份已批准范围的实施切片，完成一片可集成一�
 | F23 | 自动/手动摘要生产接线及CPU通过；原生待验 | 辅助模型阈值、独立预算、后台准入、原文/来源保存、默认不自动启用摘要。R/lead/s03-assistance-wiring-final；不是精确token估算或真人App通过。 |
 | F24 | 版本/提取/审核生产接线及CPU通过；App待验 | 自动/建议提取与读取授权独立；个人owner续作先持久化。F32临时owner不提供个人记忆读取/写入，独立缓存不进入正常备份。R/lead/s03-assistance-wiring-final及s03-package-fields-r4；非真人App通过。 |
 | F25 | 生产接线及CPU通过；真实辅助/原生待验 | 标题/标签/追问独立开关与预算，默认关闭；成功主回答后后台排队，手动标题不覆盖，追问仅显式入草稿。13方法/2suite含独立备份恢复，不等于模型输出质量或App通过。 |
-| F26 | **通用搜索尚未实现；既有百科证据仅局部复用** | 当前 `Packages/UI/Sources/DWorkbench/Chat/ChatWebSearch.swift` 仅有wikipediaActionAPI，4ae52508+2df8fcb9及R/lead/s04-live-s05-preview只证明该来源的搜索/读取，不能满足通用搜索。Brave/博查适配、同App选择/BYOK、通用网页读取与真实成功均待实现/验证；旧取消/来源/输入保护按差分复用。公开接口核对不等于带凭据调用成功；大陆可达性未测。 |
+| F26 | Brave/博查与真实网页实现、接线/CPU通过；带凭据与App待验 | e742ffd787cfe02c1869c1de8ba137ef856b66f3：同App选择/BYOK、受限HTTPS网页读取、来源与本地回答接线已实现；Brave先行后博查，无静默fallback。provider15/page10/wiring6相关方法通过，真实example.com正文另有R/lead/f26-page-host-r3证据。搜索摘要仅8条活动/访问时900秒失效，不保存到项目；已读正文显式采用后可保存。凭据仅本地文件访问关联，不进项目/备份。自动本地回答接线用fake engine验证，缺两家key故实际API和大陆可达性未验，不借百科旧证据算通过。 |
 | F27 | 计算器原生采用通过；其他工具App待验 | c16实际12+30得到decimal42/mayBeRounded=false，显式采用为草稿附件，不自动发送；CSV/单位/时区/取消与备份CPU证据复用。 |
-| F28 | 未实现；隔离方案尚未证明 | CPython WASI+Wasmtime候选尚未安装/验证；只读准备子任务被工具安全审查拒绝，未绕行或裸跑宿主Python。此工具事件不证明产品不可实现，保留同一编号继续评估合法隔离入口。 |
+| F28 | 受限Python已实现并真实WASI/Store通过；D原生入口待验 | f08ca2427b54e0519780e473ea7dfcce431af234：固定CPython3.14.8+Wasmtime49.0.2 Pulley解释器，选定文字/CSV只读副本，标准库统计→CSV/SVG→显式成果保存→独立备份恢复；不裸跑宿主Python。C helper12个WAT方法、真实CPython7个权限/资源/取消场景、闭管道反例-13→2、真实接线3方法分别留证。签名固定测试宿主运行成功，不冒称D GUI通过。8份输入/4MiB合计、64KiB代码、256MiB线性内存、5B fuel/30s guest、35s外层、1MiB输出、8份256KiB文本成果为本版明确预算；无pip/native扩展/网络/任意宿主文件。旧安全工具事件仍保留，不据此删除功能。 |
 | F29 | 官方客户端、生产接线与真实本机服务通过；App待验 | 固定SDK0.12.1；真实本机连接/列工具/调用/取消/重连/超时/关闭已验，会话归属/显式调用/结果采用/备份已接。不是服务端操作撤回保证；普通App仍待验。 |
 | F30 | 编辑/保存/备份与实际WK通过；原生待验 | s05-preview-wk-final 8方法实际WK通过：DOM交互正例、静态不执行、RTC不可用、导航/弹窗/媒体/file拒绝及loopback出站零请求（健康正控制、服务已关闭）。Lead修SDK委托签名及误匹配AbortController；不等于普通App/任意网络全面证明。固定Mermaid 11.12.1本地渲染及脚本反例通过；s05-artifact-store-r4覆盖独立版本、原回答不变、保存失败重试、备份恢复、退出准入和容量拒绝。真实App操作未验。 |
-| F31 | 本地系统/音频导入及CPU已有；两语言选择收敛与真实闭环待验 | 6bca3bbb及348e7b6的 `ChatSpeechService` 使用系统Speech且requiresOnDeviceRecognition=true；录音/现有WAV或CAF、审核采用、TTS及关闭时停止并等待drain的保护复用。当前 `ChatSpeechPanel` 仍为任意BCP-47文本框，尚未收敛成普通话/英语手动选择；不能把本次需求记录当已实现。两语言本地资源/新Speech授权/真实转写与试听分别未验，旧录音授权不替代；本人事项集中后置，不影响其他工程或文字模型语言。 |
+| F31 | 普通话/英语手选已接并CPU通过；系统授权/真实转写待验 | 7f190128+0c1deea7→e742ffd7：仅zh-CN/en-US及规范兼容别名，初始不代选语言；requiresOnDeviceRecognition继续强制本地，审核采用到草稿不自动发送，现有录音/导入/TTS/drain保留。9方法含别名反例通过；两语言本地资源、Speech权限、录音→转写→采用与试听仍在唯一集中队列。不影响文字模型语言范围。 |
 | F32 | 生产接线/CPU通过；App待验 | 专属缓存ProjectStore、共享Runtime、借用模型、退出drain后仅删自有树；临时不进历史/记忆/正常备份，显式成果仅复制所选文字。s03-package-fields-r4 5方法，含退出预检不得先删、外部文件活动/符号链接原件保护。不能宣称零磁盘痕迹。 |
 | F33 | 独立会话包/HTML/外部格式接线与CPU通过；App待验 | b31c6631：完整消息树/配置/附件闭包沿用；Open WebUI标准/legacy history导入明确为上游无版本格式、D映射v1，显式选择会话/预览损失后新建。重复JSON字段拒绝、不同archive entry不能冒充保存重试、原件/独立备份恢复通过。含未完成消息树明确拒绝；普通App文件入口与新选择sheet未验。 |
 | F34 | 采用版本/选段/结构化字段接线与CPU通过；原生待验 | 冻结选段UTF16范围及回答版本，严格schema字段保留类型/单位/来源，显式送既有值节点不运行模型。s03-fields-final 5方法含独立备份/过期/预算/取消；非实现者审核。离屏点击驱动r4未报告UI完成，不能算hosting通过；真实Canvas交接待验。 |
