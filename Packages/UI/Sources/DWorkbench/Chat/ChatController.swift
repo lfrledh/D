@@ -120,6 +120,7 @@ import Observation
     @ObservationIgnored private let webClient: ChatWebSearchClient
     @ObservationIgnored private let searchClient: ChatSearchClient
     @ObservationIgnored private let pageClient: ChatWebPageClient
+    @ObservationIgnored private let pythonClient: ChatPythonClient
     @ObservationIgnored private let searchCredentials: ChatSearchCredentials
     @ObservationIgnored private let injectedSearchCredential: (@Sendable (ChatSearchProvider) async throws -> String)?
     public private(set) var configuredSearchProviders: Set<ChatSearchProvider> = []
@@ -163,12 +164,13 @@ import Observation
 
     public init(store: ProjectStore, settings: UserDefaults? = nil, allowsSubmission: @escaping @MainActor () -> Bool = { true },
                 ownsPersonalMemory: Bool = false, isTemporary: Bool = false, webClient: ChatWebSearchClient = .init(), mcpService: any ChatMCPServing = ChatMCPService(),
-                searchClient: ChatSearchClient = .init(), pageClient: ChatWebPageClient = .init(),
+                searchClient: ChatSearchClient = .init(), pageClient: ChatWebPageClient = .init(), pythonClient: ChatPythonClient = .init(),
                 searchCredential: (@Sendable (ChatSearchProvider) async throws -> String)? = nil,
                 personalMemoryProvider: @escaping @MainActor () -> ChatController? = { nil },
                 makeServices: @escaping @MainActor () throws -> WorkflowServices) {
         self.store = store; self.isTemporary = isTemporary; self.settings = isTemporary ? nil : settings; self.webClient = webClient; self.mcpService = mcpService
         self.searchClient = searchClient; self.pageClient = pageClient
+        self.pythonClient = pythonClient
         let credentials = ChatSearchCredentials(settings: settings)
         self.searchCredentials = credentials
         self.injectedSearchCredential = searchCredential
@@ -1793,6 +1795,12 @@ import Observation
         if case .providerSearch(_, let provider) = request {
             guard state.sessions[i].webOptions?.provider == provider else { throw WorkflowIssue("Select this search provider before sending a query.") }
         }
+        if case .python(_, let inputs) = request {
+            let selected = Set(state.sessions[i].attachments.map(\.reference))
+            guard inputs.allSatisfy({ selected.contains($0) }) else {
+                throw WorkflowIssue("Python 只能读取本会话明确选择的附件副本。")
+            }
+        }
         let activity = ChatToolActivity(request: request), id = activity.id
         var candidate = state; candidate.sessions[i].toolActivities = (candidate.sessions[i].toolActivities ?? []) + [activity]
         try candidate.validate(); state = candidate; changed(); activeToolSessionID = sessionID
@@ -1808,7 +1816,7 @@ import Observation
                 } else { credential = nil }
                 try requireToolOwner(sessionID)
                 let result = try await request.execute(store: store, authorized: allowed, web: webClient, mcp: mcpService,
-                                                       search: searchClient, credential: credential, page: pageClient)
+                                                       search: searchClient, credential: credential, page: pageClient, python: pythonClient)
                 try requireToolOwner(sessionID)
                 if case .mcp = request { mcpStatus = await mcpService.status() }
                 let si = try index(sessionID)
@@ -1933,6 +1941,55 @@ import Observation
         guard let answer = snapshot else { throw WorkflowIssue("请先选择或采用回答。") }
         let source = try await saveAssistantFinal(messageID, sessionID: sessionID)
         return .init(sessionID: sessionID, title: "Answer / 回答", kind: .markdown, text: answer.text, source: source)
+    }
+
+    /// Opens one explicit Python output in the existing artifact editor; never sends a message.
+    public func artifactFromPython(_ activityID: UUID, outputIndex: Int, sessionID: UUID) async throws -> ChatArtifactContent {
+        try requireLoaded()
+        let session = state.sessions[try index(sessionID)]
+        guard allowsSubmission(), !session.archived, session.contextChoices?.deletedAt == nil,
+              let activity = session.toolActivities?.first(where: { $0.id == activityID }),
+              activity.status == .completed, let json = activity.resultJSON,
+              case .python(let code, let inputs) = activity.request else {
+            throw WorkflowIssue("请选择已完成的 Python 分析结果。")
+        }
+        let result = try JSONDecoder().decode(ChatPythonResult.self, from: Data(json.utf8))
+        guard result.outputs.indices.contains(outputIndex) else { throw WorkflowIssue("分析成果不存在。") }
+        let item = result.outputs[outputIndex]
+        func identifier(_ suffix: String) -> UUID {
+            let bytes = Array(SHA256.hash(data: Data("d.chat.python:\(activityID):\(suffix)".utf8)).prefix(16))
+            return UUID(uuid: (bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
+                               bytes[8], bytes[9], bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15]))
+        }
+        let artifactID = identifier("output-\(outputIndex)")
+        if let saved = (session.artifacts ?? []).filter({ $0.id == artifactID }).max(by: { $0.revision < $1.revision }) {
+            return saved
+        }
+        struct Receipt: Encodable {
+            let code: String
+            let inputSHA256: [String]
+            let pythonVersion: String
+            let runtimeVersion: String
+            let engine: String
+            let resultSHA256: String
+        }
+        let receipt = Receipt(code: code, inputSHA256: inputs.map(\.sha256), pythonVersion: result.pythonVersion,
+                              runtimeVersion: result.runtimeVersion, engine: result.engine,
+                              resultSHA256: SHA256.hash(data: Data(json.utf8)).map { String(format: "%02x", $0) }.joined())
+        let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys, .prettyPrinted]
+        let data = try encoder.encode(receipt)
+        guard data.count <= 1_048_576 else { throw WorkflowIssue("完整执行来源超过素材预算；未截断。") }
+        let source = try await store.publishWorkflowAsset(data: data, mediaType: "text/plain", name: "Python execution / 执行来源",
+            parents: inputs, operationID: "d.chat.python.receipt.v1", stepID: activityID,
+            details: ["chatSessionID": sessionID.uuidString, "toolActivityID": activityID.uuidString],
+            assetID: identifier("receipt")).record.reference
+        try Task.checkCancellation(); try requireLoaded()
+        let current = state.sessions[try index(sessionID)]
+        guard allowsSubmission(), !current.archived, current.contextChoices?.deletedAt == nil,
+              current.toolActivities?.first(where: { $0.id == activityID }) == activity else {
+            throw WorkflowIssue("原会话或结果已改变；未打开其他会话的成果。")
+        }
+        return .init(id: artifactID, sessionID: sessionID, title: item.name, kind: item.kind, text: item.text, source: source)
     }
 
     /// Store owns immutable bytes; ChatState retains the editable version history.

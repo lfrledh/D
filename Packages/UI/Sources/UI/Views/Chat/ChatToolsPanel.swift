@@ -6,6 +6,7 @@ struct ChatToolsPanel: View {
     let chat: ChatController
     let session: ChatSession
     let chooseSearchCredential: (ChatSearchProvider) -> Void
+    let openArtifact: (ChatArtifactContent) -> Void
     let wording: (String, String) -> String
     @State private var tool = "web"
     @State private var query = ""
@@ -19,6 +20,15 @@ struct ChatToolsPanel: View {
     @State private var columns = ""
     @State private var csvID: UUID?
     @State private var issue: String?
+    @State private var pythonInputs: Set<UUID> = []
+    @State private var pythonCode = """
+    import statistics
+    from d_result import publish
+    values = [10, 20, 30]
+    print("Mean:", statistics.mean(values))
+    publish("summary.csv", "csv", "count,mean\\n3,20\\n")
+    publish("chart.svg", "svg", '<svg xmlns="http://www.w3.org/2000/svg" width="240" height="120"><rect x="20" y="20" width="40" height="80" fill="steelblue"/><rect x="80" y="40" width="40" height="60" fill="orange"/></svg>')
+    """
 
     var body: some View {
         DisclosureGroup(wording("Search and tools", "搜索与工具")) {
@@ -29,7 +39,8 @@ struct ChatToolsPanel: View {
                     Text(wording("Units", "单位换算")).tag("units")
                     Text(wording("Time zones", "时区换算")).tag("time")
                     Text(wording("CSV statistics", "CSV统计")).tag("csv")
-                }.pickerStyle(.segmented)
+                    Text(wording("Python analysis", "Python 分析")).tag("python")
+                }.pickerStyle(.menu).accessibilityIdentifier("chat-tool-kind")
                 toolInput
                 if chat.isToolRunning {
                     Button(wording("Stop tool", "停止工具")) { Task { await chat.cancelTool() } }
@@ -58,6 +69,20 @@ struct ChatToolsPanel: View {
                             }
                         }
                         if let json = activity.resultJSON {
+                            if case .python = activity.request, activity.status == .completed,
+                               let result = try? JSONDecoder().decode(ChatPythonResult.self, from: Data(json.utf8)) {
+                                ForEach(Array(result.outputs.enumerated()), id: \.offset) { index, output in
+                                    Button(wording("Open artifact: ", "打开成果：") + output.name) {
+                                        Task { @MainActor in
+                                            do {
+                                                let content = try await chat.artifactFromPython(activity.id, outputIndex: index, sessionID: session.id)
+                                                guard chat.state.selectedSessionID == session.id else { return }
+                                                openArtifact(content); issue = nil
+                                            } catch { issue = error.localizedDescription }
+                                        }
+                                    }
+                                }
+                            }
                             if case .webSearch = activity.request, let hits = try? JSONDecoder().decode([ChatWebSearchHit].self, from: Data(json.utf8)) {
                                 ForEach(hits, id: \.pageID) { hit in
                                     Button(hit.title + " · " + wording("Read page", "读取正文")) { run(.webRead(hit)) }
@@ -81,6 +106,26 @@ struct ChatToolsPanel: View {
     }
     @ViewBuilder private var toolInput: some View {
         switch tool {
+        case "python":
+            Text(wording("Runs only in bundled CPython/WASI. No network, host files, credentials, pip or native extensions. Selected text/CSV files are copied read-only. 30s guest time, 256 MiB linear memory; results are saved only when you choose.",
+                         "仅在内置 CPython/WASI 中执行，不能访问网络、宿主文件或凭据，不支持 pip 和原生扩展。选中的文字/CSV以只读副本提供；guest 时限30秒、线性内存256 MiB。成果由您决定是否保存。"))
+                .font(.caption).foregroundStyle(.secondary)
+            ForEach(session.attachments.filter { $0.reference.kind == .text }) { item in
+                Toggle(item.name, isOn: Binding(get: { pythonInputs.contains(item.id) }, set: { selected in
+                    if selected { pythonInputs.insert(item.id) } else { pythonInputs.remove(item.id) }
+                })).toggleStyle(.checkbox)
+            }
+            ForEach(Array(selectedPythonInputs.enumerated()), id: \.element.id) { index, item in
+                Text("/inputs/input-\(index + 1).csv ← \(item.name)").font(.caption.monospaced()).textSelection(.enabled)
+            }
+            TextSourcesQuestionEditor(value: pythonCode, editEpoch: 0, isEditable: !chat.isToolRunning,
+                accessibilityIdentifier: "chat-python-code", onEdit: { pythonCode = $0 }).frame(height: 180)
+            Text(wording("Use csv/statistics from Python’s standard library. d_result.publish(name, kind, text) offers a .txt/.csv/.svg artifact; it never writes to your project by itself.",
+                         "可使用标准库 csv/statistics。d_result.publish(name, kind, text) 提交 .txt/.csv/.svg 成果，不会自行写入项目。"))
+                .font(.caption).foregroundStyle(.secondary)
+            Button(wording("Run selected code", "运行这段代码")) {
+                run(.python(code: pythonCode, inputs: selectedPythonInputs.map(\.reference)))
+            }.disabled(chat.isToolRunning).accessibilityIdentifier("chat-python-run")
         case "web":
             Picker(wording("Search service", "搜索服务"), selection: Binding(get: { session.webOptions?.provider }, set: { value in
                 updateWeb { $0.provider = value; $0.allowed = false; $0.automaticSearch = false }
@@ -153,6 +198,9 @@ struct ChatToolsPanel: View {
         }
     }
     private var units: [ChatDeterministicTools.UnitChoice] { [.meters, .centimeters, .kilometers, .feet, .miles, .grams, .kilograms, .pounds, .celsius, .fahrenheit, .kelvin, .seconds, .minutes, .hours] }
+    private var selectedPythonInputs: [ChatAttachment] {
+        session.attachments.filter { $0.reference.kind == .text && pythonInputs.contains($0.id) }
+    }
     private func run(_ request: ChatToolRequest) {
         Task { do { try await chat.executeTool(request, sessionID: session.id); issue = nil } catch { issue = error.localizedDescription } }
     }

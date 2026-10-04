@@ -127,7 +127,13 @@ struct ChatPythonTests {
         #expect(throws: ChatPythonError.unavailable) { try ChatPythonPolicy.package(at: root) }
         try writeManifest(engine: "pulley64")
         #expect(try ChatPythonPolicy.package(at: root).runner == runner)
-        try Data(repeating: 65, count: 65_537).write(to: manifest)
+        // A real stdlib inventory is larger than the 64 KiB code limit.
+        var withInventory: [String: Any] = ["schemaVersion": 1, "kind": "d-chat-python-wasi",
+            "pythonVersion": "3.14.8", "wasmtimeVersion": "49.0.2", "engine": "pulley64"]
+        withInventory["files"] = String(repeating: "inventory fixture", count: 10_000)
+        try JSONSerialization.data(withJSONObject: withInventory).write(to: manifest)
+        #expect(try ChatPythonPolicy.package(at: root).runner == runner)
+        try Data(repeating: 65, count: ChatPythonPolicy.maximumManifestBytes + 1).write(to: manifest)
         #expect(throws: ChatPythonError.unavailable) { try ChatPythonPolicy.package(at: root) }
         try writeManifest(engine: "pulley64")
         try FileManager.default.removeItem(at: module)

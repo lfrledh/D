@@ -76,7 +76,7 @@ ENGINE_CONTRACTS: dict[str, dict[str, Any]] = {
     },
 }
 
-OPTIONAL_ENGINE_NAMES = ("ExternalVideoEngine.dengine", "ACEMusicEngine.dengine")
+OPTIONAL_ENGINE_NAMES = ("ExternalVideoEngine.dengine", "ACEMusicEngine.dengine", "ChatPython.dengine")
 ENGINE_CONTRACTS["ExternalVideoEngine.dengine"] = {
     "kind": "d-external-video-engine",
     "providerScript": "provider/app_video_driver.py",
@@ -100,6 +100,17 @@ ENGINE_CONTRACTS["ACEMusicEngine.dengine"] = {
         "model-manifests/ace-xl-sft.json", "vendor/acestep/handler.py", "vendor/LICENSE",
     ),
 }
+
+ENGINE_CONTRACTS["ChatPython.dengine"] = {
+    "kind": "d-chat-python-wasi", "vendorDirectory": "runtime", "required": (
+        "runner", "libwasmtime.dylib", "runtime/python.wasm",
+        "runtime/lib/python3.14/encodings/__init__.py",
+        "runtime/lib/python3.14/csv.py", "runtime/lib/python3.14/statistics.py",
+        "runtime/lib/python3.14/d_result.py", "LICENSE-CPython.txt", "LICENSE-Wasmtime.txt",
+        "PROVENANCE.json",
+    ),
+}
+
 
 def engine_names(value: dict[str, Any]) -> tuple[str, ...]:
     """Four existing engines remain mandatory; the new deployment is explicit."""
@@ -367,15 +378,19 @@ def inspect_engine(root: Path, name: str) -> dict[str, Any]:
     manifest = _read_json(manifest_path, f"{name} engine manifest", manifest_limit)
     if not isinstance(manifest, dict):
         raise ResourceError(f"{name} engine manifest root must be an object")
-    exact = {
-        "schemaVersion": 1,
-        "kind": ENGINE_CONTRACTS[name]["kind"],
-        "pythonABI": "3.12",
-        "pythonExecutable": "python/bin/python3",
-        "providerScript": ENGINE_CONTRACTS[name]["providerScript"],
-        "vendorDirectory": ENGINE_CONTRACTS[name]["vendorDirectory"],
-        "modelManifestsDirectory": "model-manifests",
-    }
+    if name == "ChatPython.dengine":
+        exact = {"schemaVersion": 1, "kind": "d-chat-python-wasi", "pythonVersion": "3.14.8",
+                 "wasmtimeVersion": "49.0.2", "engine": "pulley64"}
+    else:
+        exact = {
+            "schemaVersion": 1,
+            "kind": ENGINE_CONTRACTS[name]["kind"],
+            "pythonABI": "3.12",
+            "pythonExecutable": "python/bin/python3",
+            "providerScript": ENGINE_CONTRACTS[name]["providerScript"],
+            "vendorDirectory": ENGINE_CONTRACTS[name]["vendorDirectory"],
+            "modelManifestsDirectory": "model-manifests",
+        }
     _strict_keys(manifest, set(exact) | {"files"}, f"{name} engine manifest")
     for key, expected in exact.items():
         actual = manifest.get(key)

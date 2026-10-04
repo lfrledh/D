@@ -186,6 +186,8 @@ struct ChatPythonPackage: Sendable {
 /// Pure validation and protocol decoding are also exercised directly by fixture tests.
 enum ChatPythonPolicy {
     static let maximumOutputBytes = 1_048_576
+    // Matches the prepared engine inventory budget, not the user-code budget.
+    static let maximumManifestBytes = 4 * 1_024 * 1_024
     private static let protocolPrefix = "D_CHAT_FILE_V1:"
 
     static func validate(code: String, inputs: [ChatPythonInput]) throws {
@@ -282,14 +284,14 @@ enum ChatPythonPolicy {
         defer { try? handle.close() }
         var bytes = Data()
         do {
-            while bytes.count <= 65_536 {
-                guard let chunk = try handle.read(upToCount: 65_537 - bytes.count), !chunk.isEmpty else { break }
+            while bytes.count <= maximumManifestBytes {
+                guard let chunk = try handle.read(upToCount: maximumManifestBytes + 1 - bytes.count), !chunk.isEmpty else { break }
                 bytes.append(chunk)
             }
         } catch {
             throw ChatPythonError.unavailable
         }
-        guard bytes.count <= 65_536,
+        guard bytes.count <= maximumManifestBytes,
               let object = try? JSONSerialization.jsonObject(with: bytes) as? [String: Any],
               let schema = object["schemaVersion"] as? NSNumber,
               CFGetTypeID(schema) != CFBooleanGetTypeID(),

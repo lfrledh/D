@@ -256,6 +256,35 @@ class DevelopmentResourceTests(unittest.TestCase):
             path.write_bytes(original)
             rewrite_engine_manifest(engine, name)
 
+    def test_optional_wasi_python_uses_its_own_contract_and_embeds(self) -> None:
+        name = "ChatPython.dengine"
+        engine = self.inputs / name
+        required = ("runner", "libwasmtime.dylib", "runtime/python.wasm",
+                    "runtime/lib/python3.14/encodings/__init__.py", "runtime/lib/python3.14/csv.py",
+                    "runtime/lib/python3.14/statistics.py", "runtime/lib/python3.14/d_result.py",
+                    "LICENSE-CPython.txt", "LICENSE-Wasmtime.txt", "PROVENANCE.json")
+        for relative in required:
+            path = engine / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("fixture, not executable Python\n")
+        (engine / "runner").chmod(0o755)
+        manifest = {"schemaVersion": 1, "kind": "d-chat-python-wasi", "pythonVersion": "3.14.8",
+                    "wasmtimeVersion": "49.0.2", "engine": "pulley64", "files": manifest_files(engine)}
+        (engine / "engine.json").write_text(json.dumps(manifest))
+        self.write_config({**{key: str(value) for key, value in self.engines.items()}, name: str(engine)})
+        output, result = self.prepare()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        destination = self.root / "app-resources" / "Engines"
+        destination.parent.mkdir()
+        embedded = self.run_cli(EMBED, "--prepared", output, "--destination", destination)
+        self.assertEqual(embedded.returncode, 0, embedded.stderr)
+        self.assertEqual((destination / name / "runtime/python.wasm").read_bytes(),
+                         (engine / "runtime/python.wasm").read_bytes())
+        manifest["engine"] = "native-host-python"
+        (engine / "engine.json").write_text(json.dumps(manifest))
+        _, rejected = self.prepare(self.root / "invalid-wasi-resources")
+        self.assert_failure(rejected)
+
     def test_optional_external_video_is_explicit_verified_and_reusable(self) -> None:
         name = "ExternalVideoEngine.dengine"
         external = write_engine(self.inputs, name)

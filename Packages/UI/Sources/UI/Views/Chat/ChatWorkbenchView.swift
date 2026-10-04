@@ -986,7 +986,7 @@ struct ChatWorkbenchView: View {
                                 }).id(session.id.uuidString + ":knowledge")
                             ChatToolsPanel(chat: chat, session: session, chooseSearchCredential: { provider in
                                 Task { await chooseSearchCredential(provider, sessionID: session.id) }
-                            }, wording: { english, chinese in
+                            }, openArtifact: { present(.artifact($0)) }, wording: { english, chinese in
                                 language?.effectiveLanguageIdentifier.hasPrefix("zh") == true ? chinese : english
                             }).id(session.id.uuidString + ":tools")
                             ChatMCPPanel(chat: chat, session: session, wording: { english, chinese in

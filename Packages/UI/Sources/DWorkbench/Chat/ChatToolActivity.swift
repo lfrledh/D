@@ -6,6 +6,7 @@ public enum ChatToolRequest: Codable, Sendable, Equatable {
     case units(ChatDeterministicTools.UnitRequest)
     case time(ChatDeterministicTools.TimeRequest)
     case csv(WorkflowAssetReference, columns: [String])
+    case python(code: String, inputs: [WorkflowAssetReference])
     case webSearch(query: String, language: ChatWebLanguage)
     case webRead(ChatWebSearchHit)
     case providerSearch(query: String, provider: ChatSearchProvider)
@@ -18,6 +19,7 @@ public enum ChatToolRequest: Codable, Sendable, Equatable {
         case .units: "d.chat.units.v1"
         case .time: "d.chat.time.v1"
         case .csv: "d.chat.csv.v1"
+        case .python: "d.chat.python.wasi.v1"
         case .webSearch: "d.chat.wikipedia.search.v1"
         case .webRead: "d.chat.wikipedia.read.v1"
         case .providerSearch: "d.chat.search.v1"
@@ -33,7 +35,11 @@ public enum ChatToolRequest: Codable, Sendable, Equatable {
         if case .providerSearch = self { true } else { false }
     }
     public var parents: [WorkflowAssetReference] {
-        if case .csv(let reference, _) = self { [reference] } else { [] }
+        switch self {
+        case .csv(let reference, _): [reference]
+        case .python(_, let inputs): inputs
+        default: []
+        }
     }
 }
 
@@ -52,6 +58,13 @@ public struct ChatToolActivity: Codable, Sendable, Equatable, Identifiable {
         self.id = id; self.request = request; startedAt = Date(); status = .running
     }
     public func validate() throws {
+        if case .python(let code, let inputs) = request {
+            guard !code.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  code.utf8.count <= 65_536, !code.contains("\0"), inputs.count <= 8,
+                  Set(inputs).count == inputs.count, inputs.allSatisfy({ $0.kind == .text }) else {
+                throw WorkflowIssue("Python 分析需要有界代码和明确选择的文字/CSV素材。")
+            }
+        }
         if case .mcp(let endpoint, let tool, let arguments) = request {
             _ = try ChatMCPService.validateEndpoint(endpoint)
             guard !tool.isEmpty, tool.utf8.count <= 1024 else { throw ChatMCPError.unknownTool }
@@ -77,7 +90,7 @@ public struct ChatWebOptions: Codable, Sendable, Equatable {
 extension ChatToolRequest {
     func execute(store: ProjectStore, authorized: Bool, web: ChatWebSearchClient, mcp: (any ChatMCPServing)?,
                  search: ChatSearchClient = .init(), credential: String? = nil,
-                 page: ChatWebPageClient = .init()) async throws -> String {
+                 page: ChatWebPageClient = .init(), python: ChatPythonClient = .init()) async throws -> String {
         @Sendable func encoded<T: Encodable>(_ value: T) throws -> String {
             let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys, .prettyPrinted]
             let data = try encoder.encode(value)
@@ -92,6 +105,15 @@ extension ChatToolRequest {
             guard reference.kind == .text else { throw WorkflowIssue("CSV分析需要选定的文字资产。") }
             let bytes = try await store.workflowData(reference)
             return try await WorkflowCPU.run { try encoded(ChatDeterministicTools.analyze(.init(csvData: bytes, numericColumns: columns))) }
+        case .python(let code, let references):
+            var inputs: [ChatPythonInput] = []
+            for (index, reference) in references.enumerated() {
+                guard reference.kind == .text else { throw WorkflowIssue("Python 输入必须是已选择的文字/CSV素材。") }
+                try Task.checkCancellation()
+                let bytes = try await store.workflowData(reference)
+                inputs.append(.init(name: "input-\(index + 1).csv", data: bytes))
+            }
+            return try encoded(await python.run(code: code, inputs: inputs))
         case .webSearch(let query, let language): return try encoded(await web.search(query, language: language, networkAuthorized: authorized))
         case .webRead(let hit): return try encoded(await web.readPage(hit, networkAuthorized: authorized))
         case .providerSearch(let query, let provider):
