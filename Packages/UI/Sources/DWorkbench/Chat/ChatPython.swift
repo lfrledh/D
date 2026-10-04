@@ -1,0 +1,348 @@
+import CoreFoundation
+import Darwin
+import Foundation
+
+public struct ChatPythonInput: Sendable {
+    public let name: String
+    public let data: Data
+
+    public init(name: String, data: Data) {
+        self.name = name
+        self.data = data
+    }
+}
+
+public struct ChatPythonOutput: Codable, Sendable, Equatable {
+    public let name: String
+    public let kind: ChatArtifactContent.Kind
+    public let text: String
+
+    public init(name: String, kind: ChatArtifactContent.Kind, text: String) {
+        self.name = name
+        self.kind = kind
+        self.text = text
+    }
+}
+
+public struct ChatPythonResult: Codable, Sendable, Equatable {
+    public let stdout: String
+    public let stderr: String
+    public let outputs: [ChatPythonOutput]
+    public let pythonVersion: String
+    public let runtimeVersion: String
+    public let engine: String
+}
+
+public enum ChatPythonError: Error, Equatable, LocalizedError, Sendable {
+    case invalidCode, invalidInput, inputTooLarge, invalidOutput, outputTooLarge
+    case unavailable, setupFailed, guestFailed, resourceLimit, timedOut, cancelled
+
+    public var errorDescription: String? {
+        switch self {
+        case .invalidCode: "Python code must be nonblank UTF-8, at most 64 KiB, without NUL."
+        case .invalidInput: "Select up to eight uniquely named regular input files."
+        case .inputTooLarge: "Selected inputs exceed the per-file or combined size limit."
+        case .invalidOutput: "Python returned an invalid UTF-8 result or file declaration."
+        case .outputTooLarge: "Python output exceeds the allowed size."
+        case .unavailable: "The bundled Python WASI engine is unavailable or invalid."
+        case .setupFailed: "The Python WASI engine could not start or prepare its inputs."
+        case .guestFailed: "Python execution failed inside the WASI engine."
+        case .resourceLimit: "Python execution exceeded an engine resource limit."
+        case .timedOut: "Python execution timed out."
+        case .cancelled: "Python execution was cancelled."
+        }
+    }
+}
+
+/// Runs only the packaged WASI helper. The returned files are untrusted text, not saved assets.
+public struct ChatPythonClient: Sendable {
+    private let packageURL: URL?
+
+    public init(packageURL: URL? = nil) { self.packageURL = packageURL }
+
+    public func run(code: String, inputs: [ChatPythonInput]) async throws -> ChatPythonResult {
+        if Task.isCancelled { throw ChatPythonError.cancelled }
+        try ChatPythonPolicy.validate(code: code, inputs: inputs)
+        let package = try ChatPythonPolicy.package(at: packageURL)
+        if Task.isCancelled { throw ChatPythonError.cancelled }
+        let control = ChatPythonChildControl()
+        do {
+            let result = try await withTaskCancellationHandler {
+                try await WorkflowCPU.run {
+                    try Self.execute(code: code, inputs: inputs, package: package, control: control)
+                }
+            } onCancel: {
+                control.stop(cancelled: true)
+            }
+            try Task.checkCancellation()
+            return result
+        } catch is CancellationError {
+            throw ChatPythonError.cancelled
+        }
+    }
+
+    private static func execute(code: String, inputs: [ChatPythonInput],
+                                package: ChatPythonPackage, control: ChatPythonChildControl) throws -> ChatPythonResult {
+        try control.checkCancellation()
+        let directory = try ChatPythonPolicy.privateDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let inputDirectory = directory.appendingPathComponent("input", isDirectory: true)
+        do {
+            try FileManager.default.createDirectory(at: inputDirectory, withIntermediateDirectories: false,
+                                                    attributes: [.posixPermissions: 0o700])
+            try ChatPythonPolicy.write(Data(code.utf8), to: inputDirectory.appendingPathComponent("program.py"))
+            for input in inputs {
+                try control.checkCancellation()
+                try ChatPythonPolicy.write(input.data, to: inputDirectory.appendingPathComponent(input.name))
+            }
+        } catch is CancellationError {
+            throw ChatPythonError.cancelled
+        } catch let error as ChatPythonError {
+            throw error
+        } catch {
+            throw ChatPythonError.setupFailed
+        }
+        let stdoutURL = directory.appendingPathComponent("stdout")
+        let stderrURL = directory.appendingPathComponent("stderr")
+        let stdout = try ChatPythonPolicy.outputFile(at: stdoutURL)
+        defer { try? stdout.close() }
+        let stderr = try ChatPythonPolicy.outputFile(at: stderrURL)
+        defer { try? stderr.close() }
+        let process = Process()
+        process.executableURL = package.runner
+        process.arguments = ["--runtime", package.runtime.path, "--inputs", inputDirectory.path]
+        process.environment = ["LC_ALL": "C", "LANG": "C", "TMPDIR": directory.path]
+        process.currentDirectoryURL = directory
+        process.standardInput = FileHandle.nullDevice
+        process.standardOutput = stdout
+        process.standardError = stderr
+        do {
+            try control.start(process)
+        } catch is CancellationError {
+            throw ChatPythonError.cancelled
+        } catch {
+            throw ChatPythonError.setupFailed
+        }
+        // The worker owns the blocking wait. Cancellation and the watchdog only signal this child.
+        process.waitUntilExit()
+        control.exited()
+        try? stdout.close()
+        try? stderr.close()
+        if control.wasCancelled { throw ChatPythonError.cancelled }
+        if control.didTimeOut { throw ChatPythonError.timedOut }
+        guard process.terminationReason == .exit else { throw ChatPythonError.guestFailed }
+        switch process.terminationStatus {
+        case 0: break
+        case 2: throw ChatPythonError.setupFailed
+        case 3: throw ChatPythonError.guestFailed
+        case 4: throw ChatPythonError.resourceLimit
+        case 5: throw ChatPythonError.timedOut
+        case 6: throw ChatPythonError.cancelled
+        default: throw ChatPythonError.guestFailed
+        }
+        let out = try ChatPythonPolicy.readOutput(stdoutURL, stderrURL)
+        return try ChatPythonPolicy.decode(stdout: out.0, stderr: out.1)
+    }
+}
+
+struct ChatPythonPackage: Sendable {
+    let runner: URL
+    let runtime: URL
+}
+
+/// Pure validation and protocol decoding are also exercised directly by fixture tests.
+enum ChatPythonPolicy {
+    static let maximumOutputBytes = 1_048_576
+    private static let protocolPrefix = "D_CHAT_FILE_V1:"
+
+    static func validate(code: String, inputs: [ChatPythonInput]) throws {
+        guard !code.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              code.utf8.count <= 65_536, !code.contains("\0") else { throw ChatPythonError.invalidCode }
+        guard inputs.count <= 8 else { throw ChatPythonError.invalidInput }
+        var names = Set<String>()
+        var total = 0
+        for input in inputs {
+            guard validName(input.name), names.insert(input.name).inserted else { throw ChatPythonError.invalidInput }
+            guard input.data.count <= 2_097_152 else { throw ChatPythonError.inputTooLarge }
+            total += input.data.count
+            guard total <= 4_194_304 else { throw ChatPythonError.inputTooLarge }
+        }
+    }
+
+    private static func validName(_ name: String) -> Bool {
+        !name.isEmpty && name.count <= 128 && name.utf8.count <= 512 &&
+        name != "." && name != ".." && name != "program.py" &&
+        !name.unicodeScalars.contains(where: { scalar in
+            scalar == "/" || scalar == "\\" || scalar.value <= 0x1f ||
+            (0x7f...0x9f).contains(scalar.value)
+        })
+    }
+
+    static func decode(stdout: Data, stderr: Data) throws -> ChatPythonResult {
+        guard stdout.count + stderr.count <= maximumOutputBytes else { throw ChatPythonError.outputTooLarge }
+        guard let rawOut = String(data: stdout, encoding: .utf8),
+              let rawErr = String(data: stderr, encoding: .utf8) else { throw ChatPythonError.invalidOutput }
+        var shown = ""
+        var outputs: [ChatPythonOutput] = []
+        var names = Set<String>()
+        var total = 0
+        let lines = rawOut.split(separator: "\n", omittingEmptySubsequences: false)
+        for (index, line) in lines.enumerated() {
+            let value = String(line)
+            if value.hasPrefix(protocolPrefix) {
+                guard outputs.count < 8 else { throw ChatPythonError.outputTooLarge }
+                let payload = Data(value.dropFirst(protocolPrefix.count).utf8)
+                guard let object = try? JSONSerialization.jsonObject(with: payload) as? [String: Any],
+                      object.count == 3, let name = object["name"] as? String,
+                      let kindName = object["kind"] as? String,
+                      let text = object["text"] as? String,
+                      validName(name), names.insert(name).inserted,
+                      let kind = ChatArtifactContent.Kind(rawValue: kindName),
+                      let suffix = suffix(for: kind),
+                      name.hasSuffix(suffix), !text.contains("\0") else { throw ChatPythonError.invalidOutput }
+                total += text.utf8.count
+                guard total <= 262_144 else { throw ChatPythonError.outputTooLarge }
+                outputs.append(.init(name: name, kind: kind, text: text))
+            } else {
+                shown += value
+                if index < lines.count - 1 { shown += "\n" }
+            }
+        }
+        return .init(stdout: shown, stderr: rawErr, outputs: outputs,
+                     pythonVersion: "3.14.8", runtimeVersion: "49.0.2", engine: "pulley")
+    }
+
+    private static func suffix(for kind: ChatArtifactContent.Kind) -> String? {
+        switch kind {
+        case .plainText: ".txt"
+        case .csv: ".csv"
+        case .svg: ".svg"
+        default: nil
+        }
+    }
+
+    static func package(at injected: URL?) throws -> ChatPythonPackage {
+        let root: URL
+        if let injected {
+            root = injected
+        } else {
+            guard let resources = Bundle.main.resourceURL else { throw ChatPythonError.unavailable }
+            root = resources.appendingPathComponent("Engines/ChatPython.dengine", isDirectory: true)
+        }
+        let runner = root.appendingPathComponent("runner")
+        let runtime = root.appendingPathComponent("runtime", isDirectory: true)
+        let module = runtime.appendingPathComponent("python.wasm")
+        let standardLibrary = runtime.appendingPathComponent("lib/python3.14", isDirectory: true)
+        guard isPlain(root, directory: true), isPlain(runner, directory: false),
+              FileManager.default.isExecutableFile(atPath: runner.path),
+              isPlain(runtime, directory: true), isPlain(module, directory: false),
+              isPlain(runtime.appendingPathComponent("lib"), directory: true),
+              isPlain(standardLibrary, directory: true) else { throw ChatPythonError.unavailable }
+        let manifest = root.appendingPathComponent("engine.json")
+        guard isPlain(manifest, directory: false),
+              let bytes = try? Data(contentsOf: manifest), bytes.count <= 65_536,
+              let object = try? JSONSerialization.jsonObject(with: bytes) as? [String: Any],
+              let schema = object["schemaVersion"] as? NSNumber,
+              CFGetTypeID(schema) != CFBooleanGetTypeID(),
+              !["f", "d"].contains(String(cString: schema.objCType)), schema.intValue == 1,
+              object["kind"] as? String == "d-chat-python-wasi",
+              object["pythonVersion"] as? String == "3.14.8",
+              object["wasmtimeVersion"] as? String == "49.0.2",
+              object["engine"] as? String == "pulley64" else { throw ChatPythonError.unavailable }
+        let dynamicLibrary = root.appendingPathComponent("libwasmtime.dylib")
+        if FileManager.default.fileExists(atPath: dynamicLibrary.path) && !isPlain(dynamicLibrary, directory: false) {
+            throw ChatPythonError.unavailable
+        }
+        return .init(runner: runner, runtime: runtime)
+    }
+
+    private static func isPlain(_ url: URL, directory: Bool) -> Bool {
+        var info = stat()
+        guard lstat(url.path, &info) == 0 else { return false }
+        return (info.st_mode & mode_t(S_IFMT)) == mode_t(directory ? S_IFDIR : S_IFREG)
+    }
+
+    static func privateDirectory() throws -> URL {
+        let template = FileManager.default.temporaryDirectory.appendingPathComponent("d-python-XXXXXX").path
+        var name = Array(template.utf8CString)
+        guard name.withUnsafeMutableBufferPointer({ mkdtemp($0.baseAddress) }) != nil else {
+            throw ChatPythonError.setupFailed
+        }
+        return URL(fileURLWithPath: String(cString: name), isDirectory: true)
+    }
+
+    static func write(_ data: Data, to url: URL) throws {
+        let descriptor = open(url.path, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0o600)
+        guard descriptor >= 0 else { throw ChatPythonError.setupFailed }
+        let file = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
+        defer { try? file.close() }
+        do { try file.write(contentsOf: data) } catch { throw ChatPythonError.setupFailed }
+    }
+
+    static func outputFile(at url: URL) throws -> FileHandle {
+        let descriptor = open(url.path, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0o600)
+        guard descriptor >= 0 else { throw ChatPythonError.setupFailed }
+        return FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
+    }
+
+    static func readOutput(_ stdout: URL, _ stderr: URL) throws -> (Data, Data) {
+        guard let outSize = (try? FileManager.default.attributesOfItem(atPath: stdout.path)[.size] as? NSNumber)?.intValue,
+              let errSize = (try? FileManager.default.attributesOfItem(atPath: stderr.path)[.size] as? NSNumber)?.intValue,
+              outSize + errSize <= maximumOutputBytes else { throw ChatPythonError.outputTooLarge }
+        guard let out = try? Data(contentsOf: stdout), let err = try? Data(contentsOf: stderr) else {
+            throw ChatPythonError.invalidOutput
+        }
+        guard out.count + err.count <= maximumOutputBytes else { throw ChatPythonError.outputTooLarge }
+        return (out, err)
+    }
+}
+
+/// Synchronizes cancellation, launch and the single owned process. The delayed KILL is inert after exit.
+private final class ChatPythonChildControl: @unchecked Sendable {
+    private let lock = NSLock()
+    private var process: Process?
+    private var finished = false
+    private var cancelled = false
+    private var timedOut = false
+    private var stopped = false
+
+    var wasCancelled: Bool { lock.lock(); defer { lock.unlock() }; return cancelled }
+    var didTimeOut: Bool { lock.lock(); defer { lock.unlock() }; return timedOut }
+
+    func checkCancellation() throws {
+        if wasCancelled { throw CancellationError() }
+    }
+
+    func start(_ child: Process) throws {
+        lock.lock()
+        defer { lock.unlock() }
+        if cancelled { throw CancellationError() }
+        try child.run()
+        process = child
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 35) { [self] in
+            stop(cancelled: false)
+        }
+    }
+
+    func stop(cancelled isCancellation: Bool) {
+        lock.lock()
+        defer { lock.unlock() }
+        if finished { return }
+        if isCancellation { cancelled = true }
+        guard let process, process.isRunning else { return }
+        if !isCancellation { timedOut = true }
+        guard !stopped else { return }
+        stopped = true
+        process.terminate()
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 1) { [self] in
+            lock.lock()
+            defer { lock.unlock() }
+            guard !finished, let process, process.isRunning else { return }
+            _ = Darwin.kill(process.processIdentifier, SIGKILL)
+        }
+    }
+
+    func exited() {
+        lock.lock(); finished = true; lock.unlock()
+    }
+}
