@@ -2,17 +2,17 @@
 
 ## 当前唯一集中队列（2026-10-04，CHAT-PRODUCT-20261003）
 
-当前代码/签名包 **e80fc15e34eff1b5ad0c27f3010103c1eb1ef10a**；唯一入口见[试用指南](RELEASE_FREEZE_TRY.zh-CN.md)，实际源状态见[当前行动](CURRENT_ACTIONS.zh-CN.md)。下面历史“当前”仅代表原日期，不覆盖本队列。
+当前代码/签名包 **c16ab4015193d90def32a7cc6629dde9136b6f5c**；唯一入口见[试用指南](RELEASE_FREEZE_TRY.zh-CN.md)，实际源状态见[当前行动](CURRENT_ACTIONS.zh-CN.md)。本次本人已解锁但不能操作；Lead完成部分原生检查后Mac再次锁屏。下方历史“当前”不覆盖本队列。
 
 | 顺序与归属 | 待办与准备 | 通过边界 |
 |---|---|---|
-| H32：先解锁，再由Lead操作 | 最后CUA明确锁屏，未无变化重试。旧隔离D Chat Integrated.app/PID63889停在项目面板；正常退出请求已发、进程仍在，不强杀。解锁后先核现场并正常关闭，再用唯一入口打开新包。 | 原生菜单无忙循环、输入区停止可达/响应、窄窗导航与新文件/素材/备份路径；没做的仍未验，不重跑已通过的1024-token长模型。 |
-| H32：新聊天宿主本人检查 | Lead准备好现场后集中一次中文/日文组字与键盘确认。 | 只验新的聊天宿主，不重新打开旧H22或要求候选窗跟随已接受的系统行为。 |
-| F31：本地语音的新路径 | 系统Speech当前语言的离线能力及实际授权尚未验；需要时本人确认真实系统提示、短输入/朗读试听。录音授权不等于Speech授权。 | 明确本地转写→待发送草稿→显式发送，朗读暂停/停止；不得暗中切云。准备前不重复索要设备/权限。 |
+| H32：修补版原生复验，等待下次解锁 | e80已通过项目列表打开、候选菜单展开和冻结请求查看；发送后卡顿留样，Lead修菜单重复尺寸失效/行换代并通过14方法和构建。c16新包未启动：CUA明确再次锁屏，不无变化重试或催本人。 | 解锁后由Lead验原场景与清晰主停止；当前是工程修补待原生复验，不能称仅解锁就已修好。旧63889已结束，本次96263已结束，先核现场、不双开。 |
+| H32：新聊天宿主本人检查 | 本人当前不能组字，后置；Lead准备可用现场后集中一次中文/日文与键盘确认。 | 只验新聊天宿主，不重开旧H22或要求候选窗跟随已接受的系统行为。 |
+| F31：本地语音的新路径 | 系统Speech当前语言离线能力及实际授权仍待验；需要时本人确认真实系统提示、短输入/朗读试听。 | 不自动转云；录音授权不等于Speech授权。准备前不重复索要设备或权限。 |
 
-H22、H31账号、旧模型资格、宏信任与固定自然视频的已办结果继续有效，不重复办理。F28是**工程/执行安全阻塞**，不是让本人重新授予Mac全盘权限：先前只读准备被自动安全审核拒绝，具体理由可用记录未提供，当前未实现隔离Python；不裸跑宿主、不换名绕行，不从冻结清单删除。
+H22、H31、模型资格、宏信任及固定视频结果继续有效。F28是工程/执行安全阻塞，先前自动安全审核拒绝理由unknown，不要求本人扩大Mac权限、不裸跑宿主；保留原编号。
 
-R=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261003T150039Z-chat-continue`。证据：`lead/native-chat-lock.json`、`lead/owned-app-normal-close.json`、`lead/delivery-entry.json`、`lead/continuation-receipt.json`。构建/CPU/Worker已结束；旧R4测试helper PID88174不是当前持有进程，未处置，不宣称所有系统任务已结束。未另开新测试App或Terminal。
+RN=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261004T023138Z-chat-native-audit`：native-observations、send-timeout.sample、menu-reviewed-result、menu-review、native-recheck-locked、current-app-delivery、protection-end与audit-receipt均在lead/。96263正常退出也超时后，仅对已核验的自有隔离PID发SIGTERM并确认结束，**不称正常保存/drain通过**；原项目不变，测试副本保留。CPU/build与本次App均已结束，Terminal窗口状态未知，没有新建终端窗口。本人下次返回集中处理本表，不重开已办事项。
 
 ## 历史快照：当前队列之前的本轮过程
 

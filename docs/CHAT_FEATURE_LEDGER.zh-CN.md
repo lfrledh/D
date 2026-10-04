@@ -80,12 +80,12 @@ S00–S05是同一份已批准范围的实施切片，完成一片可集成一�
 | ID | 状态 | 入口／证据／剩余 |
 |---|---|---|
 | F01 | 已有部分；新宿主待验 | 四分类与共享模型保留；旧B原生往返复用，S01装配仍需复验。 |
-| F02 | 独立候选CPU/hosting通过；普通App待验 | S01 3e86f12a184f12b6ec11c22494af92ebfe8f559a：实际宿主瞬时隐藏反例先失败后修复，18项通过；窄pane→详情关闭状态经非实现者核查，鼠标路径尚未验。已并入807dc5a5组合App；锁屏导致原生未验，AttributeGraph诊断保留。 |
+| F02 | 独立候选CPU/hosting通过；普通App待验 | S01 3e86f12a184f12b6ec11c22494af92ebfe8f559a：实际宿主瞬时隐藏反例先失败后修复，18项通过；窄pane→详情关闭状态经非实现者核查，鼠标路径尚未验。已入组合；e80项目与会话栏实际显示，但发送后布局忙循环。c16局部菜单修补14方法通过、普通签名构建通过，再次锁屏前未做修后原生复验。 |
 | F03 | 实现与CPU部分通过；原生待验 | 会话置顶、归档、软删除/恢复及手动命名已接现有ChatContextChoices；不物理删除共享素材。新宿主操作待同版App验。 |
 | F04 | 实现与CPU部分通过；原生待验 | 正文/标题关键词、消息收藏、标签和命中跳转已入候选；非向量检索。新宿主真实跳转待验。 |
 | F05 | 已入组合候选；原生待验、未接纳main | 当前Store保存草稿/附件/模型；组合候选加入按会话阅读位置和访问票据，CPU反例覆盖A→B→A迟到恢复。实际滚动、焦点和完整切换仍待原生验证。 |
 | F06 | 已有部分 | 旧B编辑、分支和路径返回已部分验；不把整个能力组判完成。 |
-| F07 | 实现/CPU通过；原生部分通过、菜单阻塞 | 457cb9a0：regenerate新seed，reproduce冻结旧node/messages/inputs/system；候选菜单分开。实际请求等值、原记录不变、无效当前草稿反例通过；不是逐token确定性保证。2026-10-03旧seed缺失菜单正确禁用，直接生成实际记录不同seed；候选Menu一次触发SwiftUI忙循环，仍未关闭。 |
+| F07 | 实现/CPU通过；原生部分通过、菜单阻塞 | 457cb9a0：regenerate新seed，reproduce冻结旧node/messages/inputs/system；候选菜单分开。实际请求等值、原记录不变、无效当前草稿反例通过；不是逐token确定性保证。2026-10-03旧seed缺失菜单正确禁用，直接生成实际记录不同seed；e80菜单554ms展开且冻结请求查看通过，但发送仍触发布局卡顿。c16修重复重建/尺寸失效和迟到动作，14方法通过；原生根因仍未关闭。 |
 | F08 | 控制器与UI已接；原生待验 | 人工版本、版本切换与显式采用部分回答接消息操作；原输出和工具完整性保留，CPU/独立备份反例通过。候选菜单门槛仍在。 |
 | F09 | 实现与CPU通过；真实比较待验 | 263857f113c20de36c5a347423cd12e3e6de5c76：固定原问题/资料的串行配置比较、比较来源、选择继续入口；未声称不同真实模型组合完成。 |
 | F10 | 共享默认/当前会话作用域已接；CPU通过，App待验 | 现有共享settings→新会话继承，当前会话独立替换/清空；ChatContextDefaults相关测试沿用。2026-10-04定点源码复核未发现新缺口，不重新制造实现。 |
@@ -93,7 +93,7 @@ S00–S05是同一份已批准范围的实施切片，完成一片可集成一�
 | F12 | 实现与CPU/固定tokenizer通过；原生待验 | 263857f1：复用固定swift-jinja/transformers、每请求模板覆盖/恢复及实际预览；12项真实已安装分词器CPU等值检查，未重跑GPU。 |
 | F13 | 格式接线与CPU通过；原生待验 | 自动/纯文/Markdown/JSON/D结构定义：显式指令与生成后校验；原文保留，不冒称约束解码。replay/compare/fork冻结格式、非法schema保护与备份在R/lead/s02-format-quote-green核对。 |
 | F14 | 冻结快照与CPU通过；原生待验 | typed messages/tools、资料与记忆版本、真实结束/用量来源；历史未保存的模板/token明确unknown。s02-inspection-final 8方法通过，凭据标记脱敏不宣称任意秘密检测。 |
-| F15 | 实际接收/停止接续通过；交互迟滞待修 | 457cb9a0普通App：保留TXT+PNG多轮，三次各1024 deltas、256容量下无consumerTooSlow并正常length；坐标点击停止保留568字，随后短回答completed。AX切会话40.645秒、停止查找失效仍未解释；本人未点击，不能记真人通过。`D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261003T134350Z-chat-human/lead/long-stream-observations.json`。 |
+| F15 | 实际接收/停止接续通过；交互迟滞修补待原生复验 | 457cb9a0普通App：保留TXT+PNG多轮，三次各1024 deltas、256容量下无consumerTooSlow并正常length；坐标点击停止保留568字，随后短回答completed。e80新宿主发送后主线程布局卡顿，c16菜单幂等修补后待原生重验；旧AX切会话40.645秒、停止查找失效未由组件测试关闭；本人未点击，不能记真人通过。`D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261003T134350Z-chat-human/lead/long-stream-observations.json`。 |
 | F16 | 已接真实响应通道；CPU/hosting通过，App待验 | CHANNELS `287a114d845bb09ce7a7cd0b20bde158fa1da61e` 与Lead F22组合：流中及无解析终态明确原始字节，结束后只用实际response；结构折叠仅严格校验通过值。s03-knowledge-wiring-final UI5方法，无真实模型新增验收。 |
 | F17 | 已有部分 | 固定Markdown库和旧B合成长Markdown原生证据复用；新宿主及操作仍待验。 |
 | F18 | 引用接线与CPU通过；原生待验 | UTF16/Swift Character选区、源版本/摘要、询问/解释/翻译/改写草稿与来源资产。owner退出反例先失败后修；重选同文异位换身份。hosting单测曾通过，组合再跑出现事件身份冲突，不能据exit0称全部通过；真实App待验。 |

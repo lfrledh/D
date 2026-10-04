@@ -739,3 +739,14 @@ F35非实现者发现英文核心错误和输入AX名称缺口。Lead为真实NS
 - 原native长流、1024token与停止接续证据复用；本轮未重复长GPU。F01–F36唯一清单保留原生、真实辅助/重排、Speech和F28缺口；只读范围复核未把F19/F33/F35局部通过升级为整组完成。main与远端仍f31dced209855722d2f04cc0fc8c5f6712396120，未经新宿主门槛不硬合；未推送或发布。用户的连续授权仍有效，不需要每片重新批准。
 - 保护源01758b81527dc27eb4563bf1b66fd1ceab6647ee、scheme未暂存摘要ca3635d88aa5a15397b90e528667c66c0e6db7e596176e885c79d194b544206c；原始长流项目未改，最终详情在R/lead/continuation-receipt.json。当前后续仅五份获准状态/试用文档，与e80代码相同；最终文档SHA写外部回执，不反复自引用提交。完整Lead成本/订阅扣费unknown。
 - 恢复：核HEAD/index/个人修改与上述进程→确认桌面解锁→正常收回旧测试窗口→从新包完成菜单/主停止/导航、素材/导入/备份等原生门槛→完成剩余真实路径并按授权接纳可靠切片。F28具体安全拒绝理由unknown，不声称可通过加Mac权限解决；保留同号工程阻塞。**本记录是阻塞检查点，不是完整聊天专题、功能冻结或正式发行完成。**
+
+
+### 2026-10-04 解锁原生诊断、菜单定点修补与候选审计同步
+
+- 用户当前解锁但不能本人操作，要求优先原生并推送所有当前代码供审计。起点7caebde0c9c662ffd60c4b99e9aa81002d5bba27/code e80；RN=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261004T023138Z-chat-native-audit`。先由非实现者核对远端5c6b0ba4至候选的完整108提交/409文件公开范围：新增Vendor源码/许可证，无权重/原始媒体/凭据或根CI发布入口；精确推送7caebde成功。其后两次本地代码提交556da69a、**c16ab4015193d90def32a7cc6629dde9136b6f5c**均为本任务菜单修补，不改Runtime/Store/模型参数/签名。
+- e80真实原生：正常打开隔离项目列表中的.dproject；候选菜单554ms展开，新候选与冻结请求重现分开，检查器打开/关闭。发送后17.43秒工具超时，第二次AX/截图16.69秒超时，96263进程CPU约100%，主线程采样显示SwiftUI布局，并命中ChatActionMenu.apply无条件重建/尺寸失效。测试副本仍11次旧attempt；不据此断言send未入内存，也不归为模型或16GiB硬限制。File菜单曾出现AX旧索引；正常重启一次后直接打开项目可用，未把工具错误全归产品。
+- 风险→反例：相同展示idle反复更新保持菜单/行/标题项身份和尺寸，仅刷新动作；tracking期间不得改已显示动作；结束后迟到sender不能串到新周期。menu-red（未改实现）4断言失败；只读审阅补reopen-before-drain与idle-post-drain两个反例分别先红。最终记录一次性rowsNeedRenewal并在既有安全点换代；menu-reviewed **14方法/1suite通过，命令总耗时10.205秒**，不是13+14累计。源码复核关闭已报P2、未发现新增P1/P2；审阅者未另跑测试。Lead实施与测试，不归为Worker独立通过。
+- 受测版本：最终菜单测试在556da69a上带两文件明确差异，随后由c16提交固定，精确摘要见menu-reviewed-tested-files.json。c16普通签名构建menu-app-reviewed exit0/28.331秒；复制delivery/D Chat Product c16ab401.app，签名、四关键文件和启动器语法通过。**CUA此时明确Mac再次锁屏，新包未启动；不能把修补/CPU当发送与主停止原生通过。** 不重复已过1024-token或全模型。
+- 进程/数据：63889本次开始前已结束；96263正常CmdQ27.25秒超时后，核对精确可执行路径，仅对自有隔离PID发SIGTERM，确认结束，不称正常清理/保存通过。最终无D，持有CPU/build结束；非本任务旧helper/未知终端未操作。原始quick-chat摘要34ecae422482b014903e6e69902fca32aad41dad6034e1262de354cd3d839175不变；测试副本保留；个人scheme完整差异/摘要/索引/未暂存状态不变。证据protection-end.json、owned-app-stop.json。
+- 本人组字/Speech权限与试听后置到唯一集中队列，H22/H31/宏及固定视频不重开。F28自动安全拒绝缺口不绕行、不移除。main仍f31dced209855722d2f04cc0fc8c5f6712396120，不硬合失败宿主；候选和检查点正常推送供审计，最终SHA/远端核对见RN/lead/audit-receipt.json。完整Lead费用unknown。
+- 恢复：核c16之后仅文档差异、保护状态和自有进程→下次解锁先用唯一包完成原发送/菜单/主停止反例→其余F01–F36继续。**这次是审计同步和局部修补，不是聊天全范围、功能冻结或发行完成。**
