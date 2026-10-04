@@ -65,9 +65,17 @@ public enum ChatSpeechRecognitionLanguage: String, CaseIterable, Identifiable, S
         self = language
     }
 
+    static func recognizerLanguage(for identifier: String?) -> Self? {
+        guard let identifier else { return nil }
+        switch identifier.replacingOccurrences(of: "_", with: "-").lowercased() {
+        case "en-us": return .english
+        case "zh-cn", "zh-hans-cn": return .mandarin
+        default: return nil
+        }
+    }
+
     fileprivate static func includesRecognizerLocale(_ identifier: String?) -> Bool {
-        guard let identifier else { return false }
-        return allCases.contains { Locale(identifier: $0.rawValue).identifier == identifier }
+        recognizerLanguage(for: identifier) != nil
     }
 }
 
@@ -477,12 +485,13 @@ public final class ChatSpeechService: NSObject, AVSpeechSynthesizerDelegate {
 
     private func makeRecognizer(localeIdentifier: String?) -> SFSpeechRecognizer? {
         guard let language = ChatSpeechRecognitionLanguage(identifier: localeIdentifier) else { return nil }
-        let requested = Locale(identifier: language.rawValue)
-        guard SFSpeechRecognizer.supportedLocales().contains(where: {
-            $0.identifier == requested.identifier
+        guard let supported = SFSpeechRecognizer.supportedLocales().first(where: {
+            ChatSpeechRecognitionLanguage.recognizerLanguage(for: $0.identifier) == language
         }) else { return nil }
-        let recognizer = SFSpeechRecognizer(locale: requested)
-        guard recognizer?.locale.identifier == requested.identifier else { return nil }
+        let recognizer = SFSpeechRecognizer(locale: supported)
+        guard ChatSpeechRecognitionLanguage.recognizerLanguage(for: recognizer?.locale.identifier) == language else {
+            return nil
+        }
         return recognizer
     }
 
