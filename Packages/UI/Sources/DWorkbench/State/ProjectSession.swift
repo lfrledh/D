@@ -377,7 +377,7 @@ public final class ProjectSession {
     @ObservationIgnored private var textModelLease: LocationAccess.Lease?
     @ObservationIgnored private var textWork: Task<Void, Never>?
     @ObservationIgnored private var textContextID = UUID()
-    public var isBusy: Bool { chat?.isBusy == true || chatCapture != nil || projectQuick?.isRunning == true || workflow?.isRunning == true || workflow?.isSaving == true || !activeJobIDs.isEmpty || isTextWorking || textSources?.isSaving == true || audio?.isBusy == true }
+    public var isBusy: Bool { chat?.isBusy == true || chatCapture != nil || projectQuick?.isRunning == true || projectQuick?.isImporting == true || workflow?.isRunning == true || workflow?.isSaving == true || !activeJobIDs.isEmpty || isTextWorking || textSources?.isSaving == true || audio?.isBusy == true }
     public var canGenerate: Bool {
         creatorMode == .image && manifest != nil && activeDocument?.kind == .image && !isTextWorking && ((selectedModelID != nil && selectedModelReady) || modelLease != nil)
         && !isChangingProject && !showingAllArtworks && !closePending && pendingSaves.isEmpty

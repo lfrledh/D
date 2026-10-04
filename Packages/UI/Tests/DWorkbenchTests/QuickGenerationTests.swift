@@ -18,6 +18,40 @@ private actor QuickFixtureEngine: InferenceEngine {
 
 @Suite("Quick generation ownership", .serialized) @MainActor
 struct QuickGenerationTests {
+    @Test func inputActivityBlocksCloseAndLateCommitAfterOwnerStopsAdmitting() async throws {
+        let (store, _, _, canvas) = try await fixture()
+        var allowed = true
+        let quick = QuickGenerationController(store: store, allowsSubmission: { allowed }) { throw WorkflowIssue("Never generate") }
+        await quick.load(); quick.select(operationID: WorkflowModelRoutes.qwen35, modelID: "fixture")
+        let draft = try #require(quick.draft)
+        let port = try #require(quick.definition?.inputs.first { $0.assetListKind == .image })
+        let ref = try await store.publishWorkflowAsset(data: imageData(), mediaType: "image/png",
+            metadata: .init(width: 2, height: 2), name: "source", operationID: "d.asset.import").record.reference
+        let activity = try quick.beginInputActivity()
+        #expect(quick.isImporting)
+        await #expect(throws: (any Error).self) { try await quick.prepareForTermination() }
+        allowed = false
+        #expect(throws: (any Error).self) { try quick.beginInputActivity() }
+        #expect(throws: (any Error).self) {
+            try quick.commitImportedAssets([ref], port: port, draftID: draft.id,
+                expectedNode: draft.node, expectedInputs: draft.inputs)
+        }
+        #expect(quick.draft == draft)
+        allowed = true
+        try quick.checkInputActivity(activity)
+        var drained = false, entered = false
+        let stopping = Task { entered = true; await quick.cancel(); drained = true }
+        while !entered { await Task.yield() }
+        #expect(quick.isImporting && !drained)
+        #expect(throws: (any Error).self) { try quick.checkInputActivity(activity) }
+        quick.endInputActivity(activity)
+        await stopping.value
+        #expect(drained && !quick.isImporting)
+        try await quick.prepareForTermination()
+        #expect(try await store.workflowData(ref) == imageData())
+        try await canvas.close(); try await store.close()
+    }
+
     private func fixture() async throws -> (ProjectStore, QuickFixtureEngine, QuickGenerationController, WorkflowController) {
         let folder = URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory())
             .appendingPathComponent("Quick-" + UUID().uuidString)

@@ -159,7 +159,11 @@ final class WorkbenchBootstrap {
                 modelLibrary: library, audioEnabled: true, audioRecordingEnabled: true)
             try await quickModel.projectSession.activateInternalWorkspace(quickStore)
             quickModel.projectSession.refreshWorkflowModels()
-            let quick = QuickGenerationController(store: quickStore) { [weak quickModel] in
+            let quick = QuickGenerationController(store: quickStore, allowsSubmission: { [weak self, weak quickModel] in
+                guard let self, let quickModel else { return false }
+                return !self.isTerminating && quickModel.projectSession.store === quickStore
+                    && !quickModel.projectSession.isChangingProject
+            }) { [weak quickModel] in
                 guard let quickModel else { throw WorkflowIssue("快速工作区已关闭。") }
                 return try quickModel.projectSession.makeExplicitOperationServices()
             }
@@ -210,13 +214,13 @@ final class WorkbenchBootstrap {
     func prepareQuickForTermination() async -> Bool {
         isTerminating = true
         do {
-            if let quick, quick.isRunning {
+            if let quick, quick.isRunning || quick.isImporting {
                 let alert = NSAlert()
-                alert.messageText = "快速生成仍在运行"
-                alert.informativeText = "可以等待完成后退出，或取消本次生成。已保存的创作会保留。"
+                alert.messageText = "快速创作仍有进行中的任务"
+                alert.informativeText = "可以等待导入或生成完成后退出，或取消本次任务。已保存的创作会保留。"
                 alert.addButton(withTitle: "等待完成并退出")
                 alert.addButton(withTitle: "继续使用 D")
-                alert.addButton(withTitle: "取消生成并退出")
+                alert.addButton(withTitle: "取消任务并退出")
                 let response = alert.runModal()
                 if response == .alertSecondButtonReturn { isTerminating = false; return false }
                 if response == .alertThirdButtonReturn { await quick.cancel() }

@@ -88,6 +88,24 @@ public struct QuickCreationState: Codable, Sendable, Equatable {
     public private(set) var error: String?
     public private(set) var isLoaded = false
     public private(set) var isRunning = false
+    public var isImporting: Bool { !inputActivities.isEmpty }
+    private var inputActivities = Set<UUID>()
+    @ObservationIgnored private var cancelledInputActivities = Set<UUID>()
+    /// File preparation joins the same owner/close boundary as generation.
+    public func beginInputActivity() throws -> UUID {
+        try Task.checkCancellation()
+        guard isLoaded, allowsSubmission() else { throw WorkflowIssue("快速工作区已关闭或正在切换。") }
+        let id = UUID(); inputActivities.insert(id); return id
+    }
+    public func checkInputActivity(_ id: UUID) throws {
+        try Task.checkCancellation()
+        guard inputActivities.contains(id), !cancelledInputActivities.contains(id), allowsSubmission() else {
+            throw CancellationError()
+        }
+    }
+    public func endInputActivity(_ id: UUID) {
+        inputActivities.remove(id); cancelledInputActivities.remove(id)
+    }
     public private(set) var phase = ""
     public private(set) var streamingText = ""
     public private(set) var saveIssue: String?
@@ -238,7 +256,8 @@ public struct QuickCreationState: Codable, Sendable, Equatable {
     public func commitImportedAssets(_ assets: [WorkflowAssetReference], port: WorkflowPortDefinition,
                                      draftID: String, expectedNode: WorkflowNode,
                                      expectedInputs: [String: WorkflowValue]) throws {
-        guard isLoaded, state.selectedDraftID == draftID,
+        try Task.checkCancellation()
+        guard isLoaded, allowsSubmission(), state.selectedDraftID == draftID,
               let index = state.drafts.firstIndex(where: { $0.id == draftID }),
               state.drafts[index].node == expectedNode,
               state.drafts[index].inputs == expectedInputs,
@@ -447,11 +466,12 @@ public struct QuickCreationState: Codable, Sendable, Equatable {
         }
     }
     public func cancel() async {
+        cancelledInputActivities.formUnion(inputActivities)
         cancelRequested = true
         phase = "正在取消并释放资源…"
         await services?.cancel()
         // No view owns this task; wait for the actual runtime outcome before declaring idle.
-        await runTask?.value
+        await waitForCompletion()
     }
     private func updateOutcome(at index: Int) {
         let candidates = state.runs[index].outputs.values.flatMap(\.candidates)
@@ -482,11 +502,14 @@ public struct QuickCreationState: Codable, Sendable, Equatable {
             self.error = error.localizedDescription
         }
     }
-    public func waitForCompletion() async { await runTask?.value }
+    public func waitForCompletion() async {
+        await runTask?.value
+        while isImporting { try? await Task.sleep(for: .milliseconds(40)) }
+    }
     public func prepareForTermination() async throws {
         // A rejected sidecar is read-only: no edits were admitted and its bytes must remain intact.
         guard isLoaded else { return }
-        guard !isRunning, pendingSaveRunID == nil else { throw WorkflowIssue("快速生成仍有运行或待保存结果。") }
+        guard !isRunning, !isImporting, pendingSaveRunID == nil else { throw WorkflowIssue("快速生成仍有导入、运行或待保存结果。") }
         try await flush()
     }
 }
