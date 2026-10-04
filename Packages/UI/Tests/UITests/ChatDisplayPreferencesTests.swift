@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 import Foundation
 import DWorkbench
 import SwiftStreamingMarkdown
@@ -7,6 +8,22 @@ import Testing
 
 @Suite("Chat display preferences")
 @MainActor struct ChatDisplayPreferencesTests {
+    @Test func nativeInputReceivesReadableAccessibilityName() throws {
+        let editor = TextSourcesQuestionEditor(value: "original", editEpoch: 0, isEditable: true,
+            accessibilityIdentifier: "fixture-chat-draft", accessibilityLabel: "Message draft", onEdit: { _ in })
+        let host = NSHostingView(rootView: editor)
+        host.frame = NSRect(x: 0, y: 0, width: 400, height: 100)
+        host.layoutSubtreeIfNeeded()
+        func find(_ view: NSView) -> NSTextView? {
+            if let value = view as? NSTextView { return value }
+            return view.subviews.compactMap { find($0) }.first
+        }
+        let text = try #require(find(host))
+        #expect(text.accessibilityLabel() == "Message draft")
+        #expect(text.accessibilityIdentifier() == "fixture-chat-draft")
+        #expect(text.string == "original")
+    }
+
     @Test func preferencesDuringCompositionApplyAfterConfirmationWithoutReplacingOwnerOrText() {
         let editor = NSTextView(), coordinator = TextSourcesQuestionEditor.Coordinator()
         editor.delegate = coordinator

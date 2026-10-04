@@ -715,3 +715,5 @@ F30交互组件：Sol/high interactive1，经只读审阅合入962f90d98ba52b639
 
 ### 2026-10-04 F36 非实现者反例修补
 348e7b6之后native_files_review发现阶段提示吞掉数值进度，以及检查器可能短暂串用上一回答统计。Lead将阶段与数值一同去重发布；检查器按attempt隔离，读取先清旧值，取消/票据阻止迟到发布。R/lead/s06-progress-red在真实Runtime+WorkflowServices先失败两项1/30、2/30断言；修后s06-feedback-review-green：UI2方法/1suite、Workbench5方法/2suite通过（含无首token时的加载提示及释放）。非实现者源码复核关闭两项P2，没有另跑GUI或模型。受测基线348e7b6加本次明确差分，最终代码SHA见Git；此前通知、Store和模型证据不重复。本轮使用Lead修补，不追记为Worker独立成功。
+
+F35非实现者发现英文核心错误和输入AX名称缺口。Lead为真实NSTextView增加可选accessibilityLabel并为草稿/系统/编辑传入本地化名称，不改文本值/焦点/组字；R/lead/s01-accessibility 9方法/1suite通过，实际NSHostingView检验底层名称与原文，沿用8项偏好和组字保护。普通App/VoiceOver仍未验。错误语言继续在同一F35范围处理，不以本项关闭整组。

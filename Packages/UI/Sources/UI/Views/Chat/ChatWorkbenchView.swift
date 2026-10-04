@@ -1323,6 +1323,7 @@ struct ChatWorkbenchView: View {
                 Text(label("systemPrompt", "系统提示（默认空）")) .font(.subheadline)
                 TextSourcesQuestionEditor(value: session.systemPrompt, editEpoch: 0, isEditable: true,
                     accessibilityIdentifier: "chat-system-\(session.id.uuidString)",
+                    accessibilityLabel: label("systemPrompt", "系统提示（默认空）"),
                     onEdit: { value in perform(sessionID: session.id) { try chat.setSystemPrompt(value, sessionID: session.id) } })
                     .id(session.id.uuidString + ":system")
                     .frame(height: 90)
@@ -1388,6 +1389,7 @@ struct ChatWorkbenchView: View {
             TextSourcesQuestionEditor(value: session.draft, editEpoch: 0,
                 isEditable: !session.archived && session.contextChoices?.deletedAt == nil,
                 accessibilityIdentifier: "chat-draft-\(session.id.uuidString)",
+                accessibilityLabel: newLabel("messageDraft", english: "Message draft", chinese: "待发送消息"),
                 onEdit: { value in perform(sessionID: session.id) { try chat.updateDraft(value, sessionID: session.id) } },
                 pointSize: CGFloat(model.chatDisplaySettings.preferences.textPointSize),
                 sendsOnReturn: model.chatDisplaySettings.preferences.sendShortcut == .return,
@@ -1924,7 +1926,7 @@ private struct ChatEditForm: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
             TextSourcesQuestionEditor(value: text, editEpoch: 0, isEditable: true,
-                accessibilityIdentifier: "chat-edit-\(edit.sessionID.uuidString)", onEdit: { text = $0 })
+                accessibilityIdentifier: "chat-edit-\(edit.sessionID.uuidString)", accessibilityLabel: title, onEdit: { text = $0 })
                 .id(edit.id).frame(height: edit.kind == .rename ? 70 : 220)
             if let issue { Text(issue).font(.caption).foregroundStyle(.red).textSelection(.enabled) }
             HStack {

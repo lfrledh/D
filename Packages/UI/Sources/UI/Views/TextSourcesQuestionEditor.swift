@@ -8,6 +8,7 @@ struct TextSourcesQuestionEditor: NSViewRepresentable {
     let editEpoch: UInt64
     let isEditable: Bool
     var accessibilityIdentifier: String = "text-sources-question"
+    var accessibilityLabel: String? = nil
     let onEdit: (String) -> Void
     var pointSize: CGFloat? = nil
     var sendsOnReturn = false
@@ -33,6 +34,7 @@ struct TextSourcesQuestionEditor: NSViewRepresentable {
                                                     height: CGFloat.greatestFiniteMagnitude)
         editor.textContainer?.widthTracksTextView = true
         editor.setAccessibilityIdentifier(accessibilityIdentifier)
+        editor.setAccessibilityLabel(accessibilityLabel)
         editor.delegate = context.coordinator
         let scroll = NSScrollView()
         scroll.hasVerticalScroller = true
@@ -51,6 +53,7 @@ struct TextSourcesQuestionEditor: NSViewRepresentable {
 
     func updateNSView(_ scroll: NSScrollView, context: Context) {
         guard let editor = scroll.documentView as? NSTextView else { return }
+        if editor.accessibilityLabel() != accessibilityLabel { editor.setAccessibilityLabel(accessibilityLabel) }
         context.coordinator.update(editor, value: value, isEditable: isEditable, onEdit: onEdit,
             pointSize: pointSize, sendsOnReturn: sendsOnReturn, onSubmit: onSubmit)
     }
