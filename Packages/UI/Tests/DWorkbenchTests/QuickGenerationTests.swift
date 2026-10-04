@@ -53,6 +53,37 @@ struct QuickGenerationTests {
         try await canvas.close(); try await store.close()
     }
 
+    @Test func admittedImportCanFinishWhileCloseWaitsOrUserKeepsProjectOpen() async throws {
+        let (store, _, _, canvas) = try await fixture()
+        var admitsNew = true
+        let quick = QuickGenerationController(store: store, allowsSubmission: { admitsNew }) { throw WorkflowIssue("Never generate") }
+        await quick.load(); quick.select(operationID: WorkflowModelRoutes.qwen35, modelID: "fixture")
+        let draft = try #require(quick.draft)
+        let port = try #require(quick.definition?.inputs.first { $0.assetListKind == .image })
+        let ref = try await store.publishWorkflowAsset(data: imageData(), mediaType: "image/png",
+            metadata: .init(width: 2, height: 2), name: "source", operationID: "d.asset.import").record.reference
+        let activity = try quick.beginInputActivity()
+        admitsNew = false // A close decision is visible; neither wait nor keep-open means cancel.
+        #expect(throws: (any Error).self) { try quick.beginInputActivity() }
+        try quick.checkInputActivity(activity)
+        admitsNew = true // User keeps the owner open; the existing import is still valid.
+        try quick.checkInputActivity(activity)
+        admitsNew = false // The wait-for-completion branch must still publish the accepted input.
+        var waitEntered = false, drained = false
+        let waiting = Task { waitEntered = true; await quick.waitForCompletion(); drained = true }
+        while !waitEntered { await Task.yield() }
+        #expect(!drained)
+        try quick.commitImportedAssets([ref], port: port, draftID: draft.id,
+            expectedNode: draft.node, expectedInputs: draft.inputs, admittedActivity: activity)
+        let bound = try port.resolveAssets(#require(quick.draft?.inputs[port.id]))
+        #expect(bound == [ref])
+        quick.endInputActivity(activity)
+        await waiting.value
+        #expect(drained)
+        #expect(try await store.workflowData(ref) == imageData())
+        try await quick.flush(); try await canvas.close(); try await store.close()
+    }
+
     private func fixture() async throws -> (ProjectStore, QuickFixtureEngine, QuickGenerationController, WorkflowController) {
         let folder = URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory())
             .appendingPathComponent("Quick-" + UUID().uuidString)

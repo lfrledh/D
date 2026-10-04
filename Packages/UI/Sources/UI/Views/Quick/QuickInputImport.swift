@@ -79,8 +79,7 @@ import Foundation
                     let manifest = await destination.snapshot()
                     try quick.checkInputActivity(activity)
                     if projectID == manifest.id &&
-                        (instanceID == manifest.effectiveInstanceID ||
-                         (instanceID == nil && manifest.effectiveInstanceID == manifest.id)) {
+                        instanceID == manifest.effectiveInstanceID {
                         reference = try await destination.pinWorkflowAsset(assetID)
                         result.published += 1
                         try quick.checkInputActivity(activity)
@@ -95,7 +94,8 @@ import Foundation
                               pinned.assetID == assetID, pinned.projectID == projectID else {
                             throw WorkflowIssue("来源项目或素材身份已改变。")
                         }
-                        reference = try await destination.copyWorkflowAsset(pinned, from: source)
+                        if source === destination { reference = pinned }
+                        else { reference = try await destination.copyWorkflowAsset(pinned, from: source) }
                         if source !== destination { result.copied += 1 }
                         result.published += 1
                         try quick.checkInputActivity(activity)
@@ -128,7 +128,7 @@ import Foundation
             guard quick.store === destination else { throw WorkflowIssue("项目已改变；素材已保留在资料库，未修改当前输入。") }
             try quick.checkInputActivity(activity)
             try quick.commitImportedAssets(compatible, port: port, draftID: draft.id,
-                                           expectedNode: draft.node, expectedInputs: draft.inputs)
+                                           expectedNode: draft.node, expectedInputs: draft.inputs, admittedActivity: activity)
             result.bound = compatible.count
         } catch is CancellationError {
             result.cancelled = true

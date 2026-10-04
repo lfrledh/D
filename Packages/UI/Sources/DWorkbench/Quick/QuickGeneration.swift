@@ -100,7 +100,7 @@ public struct QuickCreationState: Codable, Sendable, Equatable {
     }
     public func checkInputActivity(_ id: UUID) throws {
         try Task.checkCancellation()
-        guard inputActivities.contains(id), !cancelledInputActivities.contains(id), allowsSubmission() else {
+        guard inputActivities.contains(id), !cancelledInputActivities.contains(id) else {
             throw CancellationError()
         }
     }
@@ -260,9 +260,12 @@ public struct QuickCreationState: Codable, Sendable, Equatable {
     /// Commit the whole imported batch only against the state captured before opening it.
     public func commitImportedAssets(_ assets: [WorkflowAssetReference], port: WorkflowPortDefinition,
                                      draftID: String, expectedNode: WorkflowNode,
-                                     expectedInputs: [String: WorkflowValue]) throws {
+                                     expectedInputs: [String: WorkflowValue], admittedActivity: UUID? = nil) throws {
         try Task.checkCancellation()
-        guard isLoaded, allowsSubmission(), state.selectedDraftID == draftID,
+        if let admittedActivity { try checkInputActivity(admittedActivity) }
+        // Closing new admission does not revoke an already-owned import. The owner
+        // cannot close its Store until this activity drains; explicit cancel revokes it.
+        guard isLoaded, (admittedActivity != nil || allowsSubmission()), state.selectedDraftID == draftID,
               let index = state.drafts.firstIndex(where: { $0.id == draftID }),
               state.drafts[index].node == expectedNode,
               state.drafts[index].inputs == expectedInputs,

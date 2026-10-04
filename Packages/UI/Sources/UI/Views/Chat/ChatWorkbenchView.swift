@@ -6,8 +6,9 @@ import SwiftUI
 enum ChatAssetDropScope {
     static func accepts(projectID: UUID, instanceID: UUID?,
                         manifestProjectID: UUID, manifestInstanceID: UUID) -> Bool {
-        projectID == manifestProjectID &&
-        (instanceID == nil ? manifestInstanceID == manifestProjectID : instanceID == manifestInstanceID)
+        // A legacy payload needs the shared library's uniqueness resolution, even
+        // when this Store is the original: a restored instance may also be open.
+        projectID == manifestProjectID && instanceID == manifestInstanceID
     }
 }
 
@@ -1683,8 +1684,8 @@ struct ChatWorkbenchView: View {
                 }
                 do {
                     if !ChatAssetDropScope.accepts(projectID: projectID, instanceID: instanceID,
-                        manifestProjectID: manifest.id, manifestInstanceID: manifest.effectiveInstanceID),
-                       let onResolveSharedAsset {
+                        manifestProjectID: manifest.id, manifestInstanceID: manifest.effectiveInstanceID) {
+                        guard let onResolveSharedAsset else { throw WorkflowIssue("请从资料库重新拖入具有明确项目实例的素材。") }
                         let (source, reference, name) = try await onResolveSharedAsset(projectID, instanceID, assetID)
                         try Task.checkCancellation()
                         guard owner === chat, store === chat.store else { throw CancellationError() }

@@ -425,7 +425,8 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
             manifestProjectID: project, manifestInstanceID: original))
         #expect(!ChatAssetDropScope.accepts(projectID: project, instanceID: nil,
             manifestProjectID: project, manifestInstanceID: copy))
-        #expect(ChatAssetDropScope.accepts(projectID: project, instanceID: nil,
+        // Even the original cannot disambiguate a legacy payload by itself.
+        #expect(!ChatAssetDropScope.accepts(projectID: project, instanceID: nil,
             manifestProjectID: project, manifestInstanceID: project))
     }
 

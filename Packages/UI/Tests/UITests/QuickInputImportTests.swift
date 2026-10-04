@@ -141,6 +141,29 @@ struct QuickInputImportTests {
         try await quick.flush(); try await store.close()
     }
 
+    @Test func legacySameProjectDropMustResolveInstanceAmbiguity() async throws {
+        let root = try folder()
+        let (store, quick) = try await quick(at: root, operation: WorkflowModelRoutes.qwen35)
+        let original = try await store.importWorkflowPNG(png(), name: "same.png").record.reference
+        let manifest = await store.snapshot(), draft = try #require(quick.draft)
+        let port = try #require(quick.definition?.inputs.first { $0.assetListKind == .image })
+        let oldPayload = WorkflowCanvasTransfer.asset(projectID: manifest.id, assetID: original.assetID)
+        var resolved = false
+        let result = await QuickInputImport.run([.managed(oldPayload)], quick: quick, draft: draft, port: port,
+            resolveSharedAsset: { _, instance, _ in
+                #expect(instance == nil); resolved = true
+                throw WorkflowIssue("Multiple instances; choose the exact source")
+            })
+        #expect(resolved && result.bound == 0 && result.failures.count == 1)
+        #expect(quick.draft?.inputs == draft.inputs)
+        #expect((await store.snapshot()).assets == manifest.assets)
+        let exact = WorkflowCanvasTransfer.assetInstance(projectID: manifest.id,
+            instanceID: manifest.effectiveInstanceID, assetID: original.assetID)
+        let explicit = await QuickInputImport.run([.managed(exact)], quick: quick, draft: draft, port: port)
+        #expect(explicit.bound == 1 && explicit.copied == 0)
+        try await quick.flush(); try await store.close()
+    }
+
     @Test func foreignManagedDropCopiesPinnedVersionAndProtectsOriginal() async throws {
         let root = try folder()
         let source = try await ProjectStore.create(at: root.appendingPathComponent("Source.dproject"), name: "Source")
