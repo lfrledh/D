@@ -33,6 +33,7 @@ public enum ChatSearchError: Error, Equatable, LocalizedError, Sendable {
     case unauthorized
     case forbidden
     case rateLimited
+    case apiCode(Int)
     case serviceUnavailable(Int)
     case httpStatus(Int)
     case transportFailure
@@ -41,7 +42,7 @@ public enum ChatSearchError: Error, Equatable, LocalizedError, Sendable {
         switch self {
         case .permissionDenied: "Allow network access before searching."
         case .unsupportedProvider: "This search provider is not available yet."
-        case .invalidQuery: "Enter a non-empty query of at most 600 characters, 75 words, and 2048 UTF-8 bytes, without control characters."
+        case .invalidQuery: "Enter a non-empty query within the local 600-character and 2048-byte safety limits, without control characters. Brave also limits queries to 75 words."
         case .invalidCredential: "Enter a valid search API credential."
         case .invalidResponse: "The search provider returned an invalid response."
         case .responseTooLarge: "The search response exceeds the download limit."
@@ -49,6 +50,7 @@ public enum ChatSearchError: Error, Equatable, LocalizedError, Sendable {
         case .unauthorized: "The search credential was rejected. Check the API key."
         case .forbidden: "The search provider denied access. Check the API key and subscription."
         case .rateLimited: "The search provider rate limit was reached. Try again later."
+        case .apiCode(let code): "The search provider returned API code \(code)."
         case .serviceUnavailable(let status): "The search provider is unavailable (HTTP \(status)). Try again later."
         case .httpStatus(let status): "The search provider returned HTTP \(status)."
         case .transportFailure: "The search request failed during transport."
@@ -57,7 +59,8 @@ public enum ChatSearchError: Error, Equatable, LocalizedError, Sendable {
 }
 
 public struct ChatSearchClient: Sendable {
-    // Brave's q limit is 600 characters / 75 words. The byte cap bounds local URL construction.
+    // Brave documents 600 characters / 75 words. The character and byte caps are
+    // also local safety limits for Bocha; its documented query length is unknown.
     public static let maximumQueryCharacters = 600
     public static let maximumQueryWords = 75
     public static let maximumQueryBytes = 2_048
@@ -79,11 +82,14 @@ public struct ChatSearchClient: Sendable {
                        networkAuthorized: Bool) async throws -> [ChatSearchResult] {
         guard networkAuthorized else { throw ChatSearchError.permissionDenied }
         try Task.checkCancellation()
-        guard provider == .brave else { throw ChatSearchError.unsupportedProvider }
-        guard Self.validQuery(query) else { throw ChatSearchError.invalidQuery }
+        guard Self.validQuery(query, provider: provider) else { throw ChatSearchError.invalidQuery }
         guard Self.validCredential(credential) else { throw ChatSearchError.invalidCredential }
 
-        let request = try Self.braveRequest(query: query, credential: credential)
+        let request: URLRequest
+        switch provider {
+        case .brave: request = try Self.braveRequest(query: query, credential: credential)
+        case .bocha: request = try Self.bochaRequest(query: query, credential: credential)
+        }
         let response: ChatWebHTTPResponse
         do {
             response = try await transport.send(request, maximumBytes: Self.maximumResponseBytes)
@@ -116,12 +122,26 @@ public struct ChatSearchClient: Sendable {
             .trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard mimeType == "application/json" else { throw ChatSearchError.invalidResponse }
 
-        let envelope: BraveEnvelope
-        do { envelope = try JSONDecoder().decode(BraveEnvelope.self, from: response.body) }
-        catch { throw ChatSearchError.invalidResponse }
-        guard envelope.error == nil, let entries = envelope.web?.results,
-              entries.count <= Self.maximumResults else {
-            throw ChatSearchError.invalidResponse
+        let entries: [SearchEntry]
+        switch provider {
+        case .brave:
+            let envelope: BraveEnvelope
+            do { envelope = try JSONDecoder().decode(BraveEnvelope.self, from: response.body) }
+            catch { throw ChatSearchError.invalidResponse }
+            guard envelope.error == nil, let results = envelope.web?.results,
+                  results.count <= Self.maximumResults else { throw ChatSearchError.invalidResponse }
+            entries = results.map { SearchEntry(title: $0.title, url: $0.url, snippet: $0.description) }
+        case .bocha:
+            let status: BochaStatus
+            do { status = try JSONDecoder().decode(BochaStatus.self, from: response.body) }
+            catch { throw ChatSearchError.invalidResponse }
+            guard status.code == 200 else { throw ChatSearchError.apiCode(status.code) }
+            let envelope: BochaSuccessEnvelope
+            do { envelope = try JSONDecoder().decode(BochaSuccessEnvelope.self, from: response.body) }
+            catch { throw ChatSearchError.invalidResponse }
+            let results = envelope.data.webPages.value
+            guard results.count <= Self.maximumResults else { throw ChatSearchError.invalidResponse }
+            entries = results.map { SearchEntry(title: $0.name, url: $0.url, snippet: $0.snippet) }
         }
         try Task.checkCancellation()
         let fetchedAt = now()
@@ -130,16 +150,18 @@ public struct ChatSearchClient: Sendable {
             guard !entry.title.isEmpty, let url = Self.validResultURL(entry.url) else {
                 throw ChatSearchError.invalidResponse
             }
-            return ChatSearchResult(provider: .brave, title: entry.title, url: url,
-                                    snippet: entry.description, fetchedAt: fetchedAt)
+            return ChatSearchResult(provider: provider, title: entry.title, url: url,
+                                    snippet: entry.snippet, fetchedAt: fetchedAt)
         }
     }
 
-    private static func validQuery(_ query: String) -> Bool {
+    private static func validQuery(_ query: String, provider: ChatSearchProvider) -> Bool {
         guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               query.count <= maximumQueryCharacters,
-              query.utf8.count <= maximumQueryBytes,
-              query.split(whereSeparator: { $0.isWhitespace }).count <= maximumQueryWords else { return false }
+              query.utf8.count <= maximumQueryBytes else { return false }
+        if provider == .brave && query.split(whereSeparator: { $0.isWhitespace }).count > maximumQueryWords {
+            return false
+        }
         return !query.unicodeScalars.contains(where: { $0.value <= 0x1F || (0x7F...0x9F).contains($0.value) })
     }
 
@@ -172,6 +194,22 @@ public struct ChatSearchClient: Sendable {
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("identity", forHTTPHeaderField: "Accept-Encoding")
         request.setValue(credential, forHTTPHeaderField: "X-Subscription-Token")
+        return request
+    }
+
+    private static func bochaRequest(query: String, credential: String) throws -> URLRequest {
+        guard let url = URL(string: "https://api.bochaai.com/v1/web-search") else {
+            throw ChatSearchError.invalidResponse
+        }
+        let body = BochaRequest(query: query, count: maximumResults, freshness: "noLimit", summary: false)
+        var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 30)
+        request.httpMethod = "POST"
+        request.httpShouldHandleCookies = false
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("identity", forHTTPHeaderField: "Accept-Encoding")
+        request.setValue("Bearer \(credential)", forHTTPHeaderField: "Authorization")
+        request.httpBody = try JSONEncoder().encode(body)
         return request
     }
 
@@ -228,5 +266,27 @@ public struct ChatSearchClient: Sendable {
         let title: String
         let url: String
         let description: String
+    }
+    private struct SearchEntry {
+        let title: String
+        let url: String
+        let snippet: String
+    }
+    private struct BochaRequest: Encodable {
+        let query: String
+        let count: Int
+        let freshness: String
+        let summary: Bool
+    }
+    private struct BochaStatus: Decodable {
+        let code: Int
+    }
+    private struct BochaSuccessEnvelope: Decodable { let data: BochaData }
+    private struct BochaData: Decodable { let webPages: BochaWebPages }
+    private struct BochaWebPages: Decodable { let value: [BochaEntry] }
+    private struct BochaEntry: Decodable {
+        let name: String
+        let url: String
+        let snippet: String
     }
 }
