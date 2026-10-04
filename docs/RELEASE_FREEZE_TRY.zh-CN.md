@@ -46,7 +46,7 @@ Quick/Canvas选真实模型，高级参数选择**省内存（SSD分层加载，
 打开：
 `/Volumes/CodexProjects/Codex/D-Worktrees/D-RELEASE-FREEZE-01/D.xcworkspace`
 
-选择 **D Nodes / My Mac / Debug** 后Run。该树代码与上述App的 `e80fc15e34eff1b5ad0c27f3010103c1eb1ef10a` 一致，之后检查点仅改获准文档；最终文档SHA见当前run的 `lead/continuation-receipt.json`。main仍为已验A `f31dced209855722d2f04cc0fc8c5f6712396120`。本轮正常签名构建通过，复用已有EquatableMacros信任，未跳过宏校验；未在Xcode界面点Run。若需复用验收注册，在Scheme运行环境填写上述 `D_UI_TEST_SESSION`，不修改共享Scheme。先正常退出旧D，不打开内盘空仓库或保护源旧版本。
+选择 **D Nodes / My Mac / Debug** 后Run。该树代码与上述App的 `e80fc15e34eff1b5ad0c27f3010103c1eb1ef10a` 一致，之后检查点仅改获准文档；最终文档SHA见当前run的 `lead/continuation-receipt.json`。main仍为已验A `f31dced209855722d2f04cc0fc8c5f6712396120`。本轮正常签名构建通过，复用已有EquatableMacros信任，未跳过宏校验；未在Xcode界面点Run。若需复用验收注册，在Scheme运行环境填写 `D_UI_TEST_SESSION=BC96EF26-C157-4A48-84B4-A54785B1A42E`，不修改共享Scheme。先正常退出旧D，不打开内盘空仓库或保护源旧版本。
 
 旧B长流失败与旧S00菜单忙循环/AX迟滞保留；当前已组合修补代码但仍待原生反例关闭。不要把组件/构建通过写成新布局已经验收。
 

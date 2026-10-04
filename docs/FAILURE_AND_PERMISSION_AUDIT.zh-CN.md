@@ -29,7 +29,7 @@ R=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/ru
 
 S01独立候选`3e86f12a…`的18项hosting结论保留，尚未装配进普通App。装配后由Agent验窄窗面板/详情/关闭/鼠标与滚动；仅新宿主实际中文/日文组字在确有可测包时集中补一次，当前不要求本人操作。自有11225因忙循环留样后SIGTERM结束，12161及最后停止检查实例正常Cmd+Q；结束时没有D进程，没有新建Terminal窗口。
 
-本轮仍为D-RELEASE-FREEZE-01 / D-DISCUSSION-FREEZE-20261002。RN=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261002T160047Z-native-closeout`。当前唯一入口和同树Xcode见[试用指南](RELEASE_FREEZE_TRY.zh-CN.md)。下方原日期的“当前”“下一次”等表述均为历史快照，以本节为当前队列。
+本轮仍为D-RELEASE-FREEZE-01 / D-DISCUSSION-FREEZE-20261002。RN=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261002T160047Z-native-closeout`。当前唯一入口和同树Xcode见[试用指南](RELEASE_FREEZE_TRY.zh-CN.md)。本节及下方原日期的“当前”“下一次”等表述均为历史快照，以页面顶部唯一集中队列为准。
 
 1. **H22：2026-10-03本人复验通过，关闭**。修补版`9baaacbc74855aaa84fa03868e62a1676d882250`，本人确认鼠标不再闪回；此前不能确认拼音的问题已解除。候选窗未随窗口移动，但本人对照Finder等苹果应用后确认表现一致，明确接受为当前系统默认行为。本项不再要求重复组字或跟随修补；这不是所有系统版本的普遍保证，未来若出现丢字、无法选字或与系统对照不同的新反例，再单独登记。旧ON/OFF失败、revision导致marked消失、UI5/Quick19及非实现者审核保留。RH=`D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261003T015601Z-human-closeout`，本人证据`gui/h22-final-human.json`。参考正文/单行/Canvas未因该局部补丁改写，不将此次通过扩大为所有输入控件全面测试。
 2. **H32：本次本人事项已办，B原生仅部分通过**。本人已登记Qwen3.5-9B Q4、切回聊天并取消Go To/导出面板；本人观察需多次点击，可能是自动操作重试叠加，不能直接归因产品重复创建。随后逐步确认单面板完成Markdown/文本导出及聊天备份→独立恢复→冷重开，原件/备份不变。旧长流`consumerTooSlow`及旧项目列表灰色保留为历史工程问题；本次列表直接选择已通过，新长流到1024-token上限无溢出，尚有上述交互阻塞。不要求本人加权限或换模型。停止按钮可发现性和交互迟滞等缺口见CURRENT_ACTIONS，不用旧CPU覆盖。当前无需新本人操作，不重复H22、菜单、登记/资格。证据RC/lead/b-native-final-acceptance.json。

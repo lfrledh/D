@@ -8,7 +8,7 @@
 
 本轮起点核实候选 `40d51ee73f72eb54407e6eedbd693c9ba67068e4`、main `f31dced209855722d2f04cc0fc8c5f6712396120` 均干净且与远端一致。旧 inference-foundation 与个人 scheme 不动。A、H22、菜单、宏信任、HF 及自然视频本人结果复用；新存储和聊天宿主按影响另验。旧 B 失败和已耗预算保留；用户现明确批准这些已知缺陷继续收口，不再沿用旧停工排程，不伪造旧预算未使用。
 
-Lead 持有共享 Runtime/WorkflowServices/ChatController/Store；文件面板和纯展示在独立受限任务树实施。当前证据目录 RCP=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261003T115108Z-chat-product`。完整 Lead 成本与订阅费用 unknown。S00代码候选已完成CPU和正常签名构建，普通App已实际启动：项目列表、真实1024-token接收和坐标点击停止→下一请求通过；候选菜单忙循环及生成中AX迟滞仍阻塞S00整体接纳；S01独立布局候选的缩放焦点反例已修并通过hosting，现已在隔离主候选与S00组合；普通App门槛仍待验，未入main。无依赖的S02–S05组件与生产接线继续；F01–F36范围不取消。
+Lead 持有共享 Runtime/WorkflowServices/ChatController/Store；文件面板和纯展示在独立受限任务树实施。早期S00/S01历史证据目录 RCP=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261003T115108Z-chat-product`。完整 Lead 成本与订阅费用 unknown。S00代码候选已完成CPU和正常签名构建，普通App已实际启动：项目列表、真实1024-token接收和坐标点击停止→下一请求通过；候选菜单忙循环及生成中AX迟滞仍阻塞S00整体接纳；S01独立布局候选的缩放焦点反例已修并通过hosting，现已在隔离主候选与S00组合；普通App门槛仍待验，未入main。该段保留早期门槛来源；最新S02–S05接线、R证据目录及剩余状态以以下恢复检查点为准，F01–F36范围不取消。
 
 ### 当前恢复检查点（2026-10-04 JST，持续实施中）
 
