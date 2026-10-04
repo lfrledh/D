@@ -62,7 +62,7 @@ private struct FailingSearchTransport: ChatWebTransport {
     }
 }
 
-@Suite("Provider neutral search and Brave adapter")
+@Suite("Provider neutral search, Brave and Bocha adapters")
 struct ChatSearchProviderTests {
     private static let moment = Date(timeIntervalSince1970: 1_700_000_000)
 
@@ -71,6 +71,14 @@ struct ChatSearchProviderTests {
         let value: [String: Any] = ["web": ["results": [[
             "title": title, "url": url, "description": description
         ]]]]
+        return try! JSONSerialization.data(withJSONObject: value)
+    }
+
+    private static func bochaBody(name: String = "A page", url: String = "https://example.org/page",
+                                  snippet: String = "Search summary") -> Data {
+        let value: [String: Any] = ["code": 200, "data": ["webPages": ["value": [[
+            "name": name, "url": url, "snippet": snippet
+        ]]]]]
         return try! JSONSerialization.data(withJSONObject: value)
     }
 
@@ -115,16 +123,12 @@ struct ChatSearchProviderTests {
         #expect(!String(decoding: encoded, as: UTF8.self).contains("synthetic-key"))
     }
 
-    @Test func validationAndUnsupportedProviderMakeNoCalls() async throws {
+    @Test func braveValidationMakesNoCalls() async throws {
         let transport = SearchFixtureTransport()
         let client = ChatSearchClient(transport: transport)
         await #expect(throws: ChatSearchError.permissionDenied) {
             try await client.search(query: "secret", provider: .brave,
                                     credential: "synthetic-key", networkAuthorized: false)
-        }
-        await #expect(throws: ChatSearchError.unsupportedProvider) {
-            try await client.search(query: "secret", provider: .bocha,
-                                    credential: "synthetic-key", networkAuthorized: true)
         }
         for query in [" \t ", "a\n b", "a\u{0000}b", "a\u{0085}b",
                       String(repeating: "x", count: 601),
@@ -251,5 +255,158 @@ struct ChatSearchProviderTests {
                                     credential: "synthetic-key", networkAuthorized: true)
         }
         #expect(!(ChatSearchError.transportFailure.errorDescription ?? "").contains("synthetic-key"))
+    }
+
+    @Test func bochaUsesFrozenPostRequestAndReturnsSearchMetadata() async throws {
+        let query = "  東京 C++ 👩🏽‍🎨  "
+        let transport = SearchFixtureTransport([.init(body: Self.bochaBody())])
+        let client = ChatSearchClient(transport: transport, now: { Self.moment })
+        let results = try await client.search(query: query, provider: .bocha,
+                                              credential: "synthetic-key", networkAuthorized: true)
+        let result = try #require(results.first)
+        #expect(results.count == 1)
+        #expect(result.provider == .bocha)
+        #expect(result.title == "A page")
+        #expect(result.url.absoluteString == "https://example.org/page")
+        #expect(result.snippet == "Search summary")
+        #expect(result.fetchedAt == Self.moment)
+        #expect(try JSONDecoder().decode(ChatSearchResult.self, from: JSONEncoder().encode(result)) == result)
+
+        let call = try #require(await transport.recorded().first)
+        #expect(call.maximumBytes == ChatSearchClient.maximumResponseBytes)
+        #expect(call.request.httpMethod == "POST")
+        #expect(call.request.url?.absoluteString == "https://api.bochaai.com/v1/web-search")
+        #expect(call.request.url?.query == nil)
+        #expect(call.request.value(forHTTPHeaderField: "Authorization") == "Bearer synthetic-key")
+        #expect(call.request.value(forHTTPHeaderField: "X-Subscription-Token") == nil)
+        #expect(call.request.value(forHTTPHeaderField: "Accept") == "application/json")
+        #expect(call.request.value(forHTTPHeaderField: "Content-Type") == "application/json")
+        #expect(call.request.httpShouldHandleCookies == false)
+        let body = try #require(call.request.httpBody)
+        let payload = try #require(JSONSerialization.jsonObject(with: body) as? [String: Any])
+        #expect(Set(payload.keys) == ["query", "count", "freshness", "summary"])
+        #expect(payload["query"] as? String == query)
+        #expect(payload["count"] as? Int == 5)
+        #expect(payload["freshness"] as? String == "noLimit")
+        #expect(payload["summary"] as? Bool == false)
+        #expect(!String(decoding: body, as: UTF8.self).contains("synthetic-key"))
+    }
+
+    @Test func bochaValidationUsesLocalCharacterAndByteBounds() async throws {
+        let transport = SearchFixtureTransport()
+        let client = ChatSearchClient(transport: transport)
+        await #expect(throws: ChatSearchError.permissionDenied) {
+            try await client.search(query: "secret", provider: .bocha,
+                                    credential: "synthetic-key", networkAuthorized: false)
+        }
+        for query in [" \t ", "a\n b", "a\u{0000}b", "a\u{0085}b",
+                      String(repeating: "x", count: 601), String(repeating: "😀", count: 513)] {
+            await #expect(throws: ChatSearchError.invalidQuery) {
+                try await client.search(query: query, provider: .bocha,
+                                        credential: "synthetic-key", networkAuthorized: true)
+            }
+        }
+        for credential in ["", "bad\r\nheader", " spaced", "bad space", "é",
+                           String(repeating: "x", count: ChatSearchClient.maximumCredentialBytes + 1)] {
+            await #expect(throws: ChatSearchError.invalidCredential) {
+                try await client.search(query: "public", provider: .bocha,
+                                        credential: credential, networkAuthorized: true)
+            }
+        }
+        #expect(await transport.recorded().isEmpty)
+
+        // The 75-word bound belongs to Brave; Bocha has only the local character/byte caps.
+        let manyWords = Array(repeating: "word", count: 76).joined(separator: " ")
+        let valid = ChatSearchClient(transport: SearchFixtureTransport([.init(body: Self.bochaBody())]))
+        let manyWordResults = try await valid.search(query: manyWords, provider: .bocha,
+                                                     credential: "synthetic-key", networkAuthorized: true)
+        #expect(manyWordResults.count == 1)
+    }
+
+    @Test func bochaSuccessRequiresNumericCodeAndCompleteResultsShape() async throws {
+        let empty = Data("{\"code\":200,\"data\":{\"webPages\":{\"value\":[]}}}".utf8)
+        let result = try await ChatSearchClient(transport: SearchFixtureTransport([.init(body: empty)]))
+            .search(query: "public", provider: .bocha, credential: "synthetic-key", networkAuthorized: true)
+        #expect(result.isEmpty)
+
+        let invalid = [Data("{}".utf8), Data("{\"code\":true,\"data\":{\"webPages\":{\"value\":[]}}}".utf8),
+                       Data("{\"code\":\"200\",\"data\":{\"webPages\":{\"value\":[]}}}".utf8),
+                       Data("{\"code\":200}".utf8), Data("{\"code\":200,\"data\":{}}".utf8),
+                       Data("{\"code\":200,\"data\":{\"webPages\":{\"value\":null}}}".utf8),
+                       Data("{\"code\":200,\"data\":{\"webPages\":{\"value\":[{}]}}}".utf8),
+                       Data("{".utf8)]
+        for body in invalid {
+            let client = ChatSearchClient(transport: SearchFixtureTransport([.init(body: body)]))
+            await #expect(throws: ChatSearchError.invalidResponse) {
+                try await client.search(query: "public", provider: .bocha,
+                                        credential: "synthetic-key", networkAuthorized: true)
+            }
+        }
+        let badURL = ChatSearchClient(transport: SearchFixtureTransport([.init(body: Self.bochaBody(url: "http://127.0.0.1/a"))]))
+        await #expect(throws: ChatSearchError.invalidResponse) {
+            try await badURL.search(query: "public", provider: .bocha,
+                                    credential: "synthetic-key", networkAuthorized: true)
+        }
+        let entries = Array(repeating: ["name": "Page", "url": "https://example.org/a", "snippet": "Summary"], count: 6)
+        let excess = try JSONSerialization.data(withJSONObject: ["code": 200, "data": ["webPages": ["value": entries]]])
+        let tooMany = ChatSearchClient(transport: SearchFixtureTransport([.init(body: excess)]))
+        await #expect(throws: ChatSearchError.invalidResponse) {
+            try await tooMany.search(query: "public", provider: .bocha,
+                                     credential: "synthetic-key", networkAuthorized: true)
+        }
+    }
+
+    @Test func bochaApiAndHttpFailuresDoNotExposeProviderMessageOrSwitchProvider() async throws {
+        let apiError = Data("{\"code\":401,\"msg\":\"synthetic-key private message\",\"data\":\"unexpected\"}".utf8)
+        let transport = SearchFixtureTransport([.init(body: apiError)])
+        let client = ChatSearchClient(transport: transport)
+        await #expect(throws: ChatSearchError.apiCode(401)) {
+            try await client.search(query: "public", provider: .bocha,
+                                    credential: "synthetic-key", networkAuthorized: true)
+        }
+        let calls = await transport.recorded()
+        #expect(calls.count == 1)
+        #expect(calls.first?.request.url?.host == "api.bochaai.com")
+        #expect(!(ChatSearchError.apiCode(401).errorDescription ?? "").contains("synthetic-key"))
+        #expect(!(ChatSearchError.apiCode(401).errorDescription ?? "").contains("private message"))
+
+        let cases: [(SearchFixtureTransport.Reply, ChatSearchError)] = [
+            (.init(body: Self.bochaBody(), finalURL: URL(string: "https://api.bocha.cn/v1/web-search"), useRequestURL: false), .redirectRejected),
+            (.init(body: Self.bochaBody(), statusCode: 302), .redirectRejected),
+            (.init(body: apiError, statusCode: 401), .unauthorized),
+            (.init(body: apiError, statusCode: 403), .forbidden),
+            (.init(body: apiError, statusCode: 429), .rateLimited),
+            (.init(body: apiError, statusCode: 503), .serviceUnavailable(503)),
+            (.init(body: apiError, statusCode: 400), .httpStatus(400)),
+            (.init(body: Self.bochaBody(), mimeType: "text/html"), .invalidResponse),
+            (.init(body: Data(repeating: 65, count: ChatSearchClient.maximumResponseBytes + 1)), .responseTooLarge)
+        ]
+        for (reply, expected) in cases {
+            let transport = SearchFixtureTransport([reply])
+            let client = ChatSearchClient(transport: transport)
+            await #expect(throws: expected) {
+                try await client.search(query: "public", provider: .bocha,
+                                        credential: "synthetic-key", networkAuthorized: true)
+            }
+            #expect(await transport.recorded().count == 1)
+            #expect(!(expected.errorDescription ?? "").contains("synthetic-key"))
+        }
+    }
+
+    @Test func bochaCancellationAndTransportErrorsPropagateSafely() async throws {
+        let transport = ControlledSearchTransport()
+        let client = ChatSearchClient(transport: transport)
+        let task = Task { try await client.search(query: "public", provider: .bocha,
+                                                  credential: "synthetic-key", networkAuthorized: true) }
+        await transport.waitUntilEntered()
+        task.cancel()
+        await #expect(throws: CancellationError.self) { try await task.value }
+        #expect(await transport.hasExited())
+
+        let failing = ChatSearchClient(transport: FailingSearchTransport())
+        await #expect(throws: ChatSearchError.transportFailure) {
+            try await failing.search(query: "public", provider: .bocha,
+                                     credential: "synthetic-key", networkAuthorized: true)
+        }
     }
 }
