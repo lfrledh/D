@@ -46,13 +46,14 @@ public struct ChatPythonDiagnostic: Sendable, Equatable {
         let status = terminatedBySignal ? "signal \(terminationStatus)" : "exit status \(terminationStatus)"
         var sections = [status]
         // The Controller stores only the first 2048 characters of localizedDescription.
-        // Reserve separate display space for both streams and put the error stream first.
-        let shownStderr = String(stderr.prefix(900))
-        let shownStdout = String(stdout.prefix(600))
+        // Reserve space for both streams; also bound UTF-8 bytes because a single
+        // composed Character can exceed the Store issue budget. Put the error stream first.
+        let shownStderr = String(decoding: stderr.prefix(900).utf8.prefix(4096), as: UTF8.self)
+        let shownStdout = String(decoding: stdout.prefix(600).utf8.prefix(4096), as: UTF8.self)
         if !shownStderr.isEmpty { sections.append("stderr:\n\(shownStderr)") }
-        if stderrTruncated || stderr.count > 900 { sections.append("[stderr truncated]") }
+        if stderrTruncated || stderr.count > 900 || stderr.utf8.count > 4096 { sections.append("[stderr truncated]") }
         if !shownStdout.isEmpty { sections.append("stdout:\n\(shownStdout)") }
-        if stdoutTruncated || stdout.count > 600 { sections.append("[stdout truncated]") }
+        if stdoutTruncated || stdout.count > 600 || stdout.utf8.count > 4096 { sections.append("[stdout truncated]") }
         return sections.joined(separator: "\n")
     }
 }

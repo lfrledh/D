@@ -146,6 +146,25 @@ struct ChatWebPageTests {
         #expect(argv.last == url.absoluteString)
     }
 
+    @Test func curlUsesRemainingByteBudgetAfterRedirect() throws {
+        let remaining = ChatWebPageClient.maximumResponseBytes - 1_572_864
+        let argv = ChatWebPagePolicy.curlArguments(url: url, address: "8.8.8.8", bodyPath: "/fixture/body",
+                                                   timeout: 12, maximumBytes: remaining)
+        let position = try #require(argv.firstIndex(of: "--max-filesize"))
+        #expect(argv[position + 1] == "524288")
+        #expect(!argv.contains("--location"))
+    }
+
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["D_CHAT_PUBLIC_PAGE_PROBE"] == "1"))
+    func publicRedirectAndFragmentUseProductionTransport() async throws {
+        let original = URL(string: "https://docs.python.org/3#documentation")!
+        let page = try await ChatWebPageClient().read(original, networkAuthorized: true)
+        #expect(page.url == original)
+        #expect(page.resolvedURL?.absoluteString == "https://docs.python.org/3/")
+        #expect(page.text.contains("Python"))
+        #expect(!page.contentSHA256.isEmpty)
+    }
+
     @Test func curlExitStatusesKeepTimeoutAndSizeErrorsDistinct() {
         #expect(ChatWebPagePolicy.curlExitError(0) == nil)
         #expect(ChatWebPagePolicy.curlExitError(28) == .timedOut)
@@ -235,6 +254,15 @@ struct ChatWebPageTests {
             #expect(page.text == "Visible")
             let digest = SHA256.hash(data: Data(html.utf8)).map { String(format: "%02x", $0) }.joined()
             #expect(page.contentSHA256 == digest)
+        }
+    }
+
+    @Test func rawTextClosingTagsRequireExactNameBoundary() async throws {
+        for tag in ["script", "style"] {
+            let html = "<body><\(tag)>const s=\"</\(tag)ure><!DOCTYPE html>\";</\(tag)><p>Visible</p></body>"
+            let page = try await ChatWebPageClient(transport: PageFixtureTransport(reply(html)))
+                .read(url, networkAuthorized: true)
+            #expect(page.text == "Visible")
         }
     }
 

@@ -194,13 +194,13 @@ enum ChatWebPagePolicy {
     }
 
     static func curlArguments(url: URL, address: String, bodyPath: String,
-                              timeout: TimeInterval = 30) -> [String] {
+                              timeout: TimeInterval = 30, maximumBytes: Int = ChatWebPageClient.maximumResponseBytes) -> [String] {
         let host = url.host!.lowercased()
         let maximumTime = timeout == 30 ? "30" : String(format: "%.3f", max(0.001, timeout))
         return ["-q", "--globoff", "--silent", "--show-error", "--request", "GET",
                 "--proto", "=https", "--proxy", "", "--noproxy", "*",
                 "--resolve", "\(host):443:\(address)", "--connect-timeout", "10",
-                "--max-time", maximumTime, "--max-filesize", "2097152",
+                "--max-time", maximumTime, "--max-filesize", String(maximumBytes),
                 "--header", "Accept-Encoding: identity", "--output", bodyPath,
                 "--write-out", "%{http_code}\n%{content_type}\n%{redirect_url}\n", url.absoluteString]
     }
@@ -305,6 +305,7 @@ private enum ChatWebPageExtractor {
         }
         var cursor = raw.startIndex
         var declarations: [Range<String.Index>] = []
+        var rawTextElements: [Range<String.Index>] = []
         var sawElement = false
         while cursor < raw.endIndex {
             guard raw[cursor] == "<" else { cursor = raw.index(after: cursor); continue }
@@ -337,13 +338,23 @@ private enum ChatWebPageExtractor {
                 if afterName == raw.endIndex || " \t\n\r\u{000C}/>".contains(raw[afterName]) {
                     guard let openingEnd = tagEnd(from: cursor) else { break }
                     sawElement = true
-                    if let closing = raw.range(of: "</\(name)", options: .caseInsensitive,
-                                               range: openingEnd..<raw.endIndex),
-                       let closingEnd = tagEnd(from: closing.lowerBound) {
-                        cursor = closingEnd
-                    } else {
-                        cursor = raw.endIndex
+                    var searchStart = openingEnd
+                    var closingEnd: String.Index?
+                    while let closing = raw.range(of: "</\(name)", options: .caseInsensitive,
+                                                  range: searchStart..<raw.endIndex) {
+                        let endOfName = closing.upperBound
+                        if endOfName < raw.endIndex, " \t\n\r\u{000C}/>".contains(raw[endOfName]) {
+                            closingEnd = tagEnd(from: closing.lowerBound)
+                            break
+                        }
+                        searchStart = endOfName
                     }
+                    let end = closingEnd ?? raw.endIndex
+                    // Foundation's HTML4 recovery may treat </scripture> as </script>.
+                    // These elements are omitted from extracted text anyway; remove the
+                    // complete HTML raw-text region before asking it to recover the tree.
+                    rawTextElements.append(cursor..<end)
+                    cursor = end
                     continue
                 }
             }
@@ -357,7 +368,9 @@ private enum ChatWebPageExtractor {
             }
         }
         var safe = raw
-        for range in declarations.reversed() { safe.removeSubrange(range) }
+        for range in (declarations + rawTextElements).sorted(by: { $0.lowerBound > $1.lowerBound }) {
+            safe.removeSubrange(range)
+        }
         return safe
     }
 }
@@ -456,7 +469,7 @@ public struct PinnedChatWebPageTransport: ChatWebTransport {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/curl")
         process.arguments = ChatWebPagePolicy.curlArguments(url: url, address: address,
-                                                            bodyPath: body.path, timeout: remaining)
+                                                            bodyPath: body.path, timeout: remaining, maximumBytes: maximumBytes)
         process.environment = ["HOME": directory.path, "CURL_HOME": directory.path,
                                "XDG_CONFIG_HOME": directory.path, "LC_ALL": "C"]
         process.currentDirectoryURL = directory

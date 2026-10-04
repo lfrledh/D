@@ -88,6 +88,7 @@ struct ChatPythonWiringTests {
         let (store, chat) = try await fixture(); let id = try chat.newSession()
         try chat.updateDraft("原文 must survive", sessionID: id)
         let cases = [
+            ("import sys\nprint('A' + '\\u0301' * 10000, file=sys.stderr)\nraise ValueError('unicode boundary')", "", "stderr truncated"),
             ("print('before failure', flush=True)\nraise ValueError('specific diagnostic')", "before failure", "ValueError: specific diagnostic"),
             ("def broken(:", "", "SyntaxError"),
             ("import sys\nprint('visible-prefix:' + 'x' * 3000, flush=True)\nprint('specific stderr diagnostic', file=sys.stderr, flush=True)\nprint('D_CHAT_FILE_V1:not-json')", "visible-prefix:", "specific stderr diagnostic")
@@ -97,6 +98,7 @@ struct ChatPythonWiringTests {
             let activity = try #require(chat.selectedSession?.toolActivities?.last)
             #expect(activity.status == .failed)
             #expect(activity.issue?.contains(stderr) == true)
+            #expect((activity.issue?.utf8.count ?? 0) <= 16_384)
             if !stdout.isEmpty { #expect(activity.issue?.contains(stdout) == true) }
             #expect(activity.resultJSON == nil && activity.output == nil)
             #expect(chat.selectedSession?.artifacts?.isEmpty != false)
@@ -107,7 +109,7 @@ struct ChatPythonWiringTests {
         #expect(chat.selectedSession?.toolActivities?.last?.status == .completed)
         try await chat.flush()
         let saved = try await store.chatState()
-        #expect(saved.sessions.first?.toolActivities?.filter { $0.status == .failed }.count == 3)
+        #expect(saved.sessions.first?.toolActivities?.filter { $0.status == .failed }.count == 4)
         try await store.close()
     }
 

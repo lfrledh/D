@@ -8,6 +8,16 @@ struct ChatPythonTests {
         .init(name: name, data: Data(repeating: 65, count: bytes))
     }
 
+    @Test func diagnosticsRespectPersistenceByteBudgetForCombinedUnicode() throws {
+        let diagnostic = ChatPythonDiagnostic(stdout: "visible", stderr: "A" + String(repeating: "\u{0301}", count: 10_000),
+            terminationStatus: 3, terminatedBySignal: false, stdoutTruncated: false, stderrTruncated: false)
+        let error = ChatPythonError.executionFailed(reason: .guestFailed, diagnostic: diagnostic)
+        let issue = String(error.localizedDescription.prefix(2048))
+        #expect(issue.utf8.count <= 16_384)
+        #expect(issue.contains("stderr truncated"))
+        #expect(issue.contains("stdout:") && issue.contains("visible"))
+    }
+
     @Test func validatesCodeAndSelectedInputCopies() throws {
         try ChatPythonPolicy.validate(code: " print('👩‍💻')\n", inputs: [input("数据.csv")])
         try ChatPythonPolicy.validate(code: "import os\n", inputs: [])
