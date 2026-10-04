@@ -84,6 +84,34 @@ struct ChatPythonWiringTests {
     }
 
     @Test(.enabled(if: ProcessInfo.processInfo.environment["D_CHAT_PYTHON_TEST_PACKAGE"] != nil))
+    func realGuestFailuresRetainDiagnosticsWithoutPublishingAndCanRetry() async throws {
+        let (store, chat) = try await fixture(); let id = try chat.newSession()
+        try chat.updateDraft("原文 must survive", sessionID: id)
+        let cases = [
+            ("print('before failure', flush=True)\nraise ValueError('specific diagnostic')", "before failure", "ValueError: specific diagnostic"),
+            ("def broken(:", "", "SyntaxError"),
+            ("import sys\nprint('visible-prefix:' + 'x' * 3000, flush=True)\nprint('specific stderr diagnostic', file=sys.stderr, flush=True)\nprint('D_CHAT_FILE_V1:not-json')", "visible-prefix:", "specific stderr diagnostic")
+        ]
+        for (code, stdout, stderr) in cases {
+            await #expect(throws: (any Error).self) { try await chat.executeTool(.python(code: code, inputs: []), sessionID: id) }
+            let activity = try #require(chat.selectedSession?.toolActivities?.last)
+            #expect(activity.status == .failed)
+            #expect(activity.issue?.contains(stderr) == true)
+            if !stdout.isEmpty { #expect(activity.issue?.contains(stdout) == true) }
+            #expect(activity.resultJSON == nil && activity.output == nil)
+            #expect(chat.selectedSession?.artifacts?.isEmpty != false)
+            #expect(chat.selectedSession?.draft == "原文 must survive")
+            #expect(!chat.isToolRunning)
+        }
+        _ = try await chat.executeTool(.python(code: "print('recovered')", inputs: []), sessionID: id)
+        #expect(chat.selectedSession?.toolActivities?.last?.status == .completed)
+        try await chat.flush()
+        let saved = try await store.chatState()
+        #expect(saved.sessions.first?.toolActivities?.filter { $0.status == .failed }.count == 3)
+        try await store.close()
+    }
+
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["D_CHAT_PYTHON_TEST_PACKAGE"] != nil))
     func realCancellationKeepsDraftThenNextRequestWorks() async throws {
         let (store, chat) = try await fixture(); let id = try chat.newSession()
         try chat.updateDraft("Keep this", sessionID: id)

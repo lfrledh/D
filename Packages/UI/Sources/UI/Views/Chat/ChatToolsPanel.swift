@@ -66,8 +66,12 @@ struct ChatToolsPanel: View {
                                         Text(result.title).font(.subheadline).textSelection(.enabled)
                                         Text(result.url.absoluteString).font(.caption).textSelection(.enabled)
                                         Text(result.snippet).font(.caption).textSelection(.enabled)
+                                        let unavailable = pageReadIssue(result.url)
                                         Button(wording("Read page", "读取网页正文")) { run(.pageRead(result.url)) }
-                                            .disabled(chat.isToolRunning || session.webOptions?.allowed != true)
+                                            .disabled(chat.isToolRunning || session.webOptions?.allowed != true || unavailable != nil)
+                                        if let unavailable {
+                                            Text(unavailable).font(.caption).foregroundStyle(.secondary)
+                                        }
                                     }
                                 }
                             } else {
@@ -220,4 +224,9 @@ struct ChatToolsPanel: View {
     private func status(_ value: ChatToolActivity.Status) -> String {
         switch value { case .running: wording("Running", "运行中"); case .completed: wording("Completed", "已完成"); case .failed: wording("Failed", "失败"); case .cancelled: wording("Stopped", "已停止"); case .interrupted: wording("Interrupted", "已中断") }
     }
+    private func pageReadIssue(_ url: URL) -> String? {
+        do { try ChatWebPageClient.validateReadURL(url); return nil }
+        catch { return ChatErrorText.display(error.localizedDescription, language: language) }
+    }
+
 }
