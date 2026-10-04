@@ -3,6 +3,7 @@ import SwiftUI
 
 /// One optional settings group, not a second chat composer or model runner.
 struct ChatAssistancePanel: View {
+    @Environment(\.dLanguageStore) private var language
     @Bindable var chat: ChatController
     let session: ChatSession
     let wording: (String, String) -> String
@@ -59,12 +60,12 @@ struct ChatAssistancePanel: View {
                     }
                 }
                 if !chat.assistancePhase.isEmpty { Text(chat.assistancePhase).font(.caption).textSelection(.enabled) }
-                if let error { Text(error).foregroundStyle(.red).textSelection(.enabled) }
+                if let error { Text(ChatErrorText.display(error, language: language)).foregroundStyle(.red).textSelection(.enabled) }
                 ForEach((session.assistanceExecutions ?? []).reversed()) { execution in
                     DisclosureGroup(label(execution.record.kind) + " · " + execution.record.status.rawValue) {
                         Text("ID: " + execution.id.uuidString).font(.caption).textSelection(.enabled)
                         Text(wording("Output budget: ", "输出预算：") + String(execution.record.maximumOutputTokens))
-                        if let issue = execution.record.issue { Text(issue).foregroundStyle(.red) }
+                        if let issue = execution.record.issue { Text(ChatErrorText.display(issue, language: language)).foregroundStyle(.red) }
                         if let result = execution.record.result {
                             switch result {
                             case .summary(let text), .title(let text): Text(text).textSelection(.enabled)

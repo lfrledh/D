@@ -75,7 +75,7 @@ struct ChatSpeechPanel: View {
                     if chat.speechPlaybackState == .paused { Button(text("Resume", "继续")) { chat.speech.resumeSpeech() } }
                     if chat.speechPlaybackState != .idle { Button(text("Stop reading", "停止朗读")) { chat.speech.stopSpeech() } }
                 }
-                if let issue { Text(issue).foregroundStyle(.red).textSelection(.enabled) }
+                if let issue { Text(ChatErrorText.display(issue, language: language)).foregroundStyle(.red).textSelection(.enabled) }
                 if let message = project.errorMessage { Text(message).foregroundStyle(.red).font(.caption) }
             }
         }.task { capability = chat.speech.capability(localeIdentifier: locale); rate = Double(chat.speech.rate); voice = chat.speech.voiceID ?? "" }

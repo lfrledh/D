@@ -34,6 +34,7 @@ struct ChatProvenancePresentation {
 
 /// Explicit, versioned context changes. Ordinary browsing never starts model work.
 struct ChatMemoryPanel: View {
+    @Environment(\.dLanguageStore) private var language
     let chat: ChatController
     let session: ChatSession
     let wording: (String, String) -> String
@@ -104,7 +105,7 @@ struct ChatMemoryPanel: View {
                     }
                 }.disabled(memoryText.isEmpty)
                 } else { Text(wording("Temporary chat does not read or write long-term memory.", "临时会话不读写长期记忆。")).font(.caption) }
-                if let issue { Text(issue).foregroundStyle(.red).font(.caption).textSelection(.enabled) }
+                if let issue { Text(ChatErrorText.display(issue, language: language)).foregroundStyle(.red).font(.caption).textSelection(.enabled) }
             }.padding(.top, 6)
         }
     }

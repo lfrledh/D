@@ -45,6 +45,21 @@ struct ChatOpenWebUIImportTests {
         catch { return "Unexpected error: \(error)" }
     }
 
+    @Test func duplicateCheckHandlesWideMetadataWithoutCopyingWholeKeySets() throws {
+        let metadata = Dictionary(uniqueKeysWithValues: (0..<12_000).map { ("k\($0)", $0) })
+        let data = try JSONSerialization.data(withJSONObject: ["metadata": metadata])
+        try ChatInterchange.checkJSONDepth(data)
+    }
+
+    @Test func duplicateRawJSONMembersAreRejectedBeforeDictionaryConversion() throws {
+        let raw = #"{"title":"test","history":{"currentId":"a","messages":{"u":{"id":"u","parentId":null,"childrenIds":["a"],"role":"user","content":"question"},"a":{"id":"a","parentId":"u","childrenIds":[],"role":"assistant","content":"answer","done":false,"done":true}}}}"#
+        #expect(throws: (any Error).self) { try ChatInterchange.previewImport(Data(raw.utf8)) }
+        let escaped = #"{"format":"openai-messages","version":1,"messages":[{"role":"user","content":"original","\u0063ontent":"replacement"}]}"#
+        #expect(throws: (any Error).self) { try ChatInterchange.previewImport(Data(escaped.utf8)) }
+        let separate = #"{"format":"openai-messages","version":1,"messages":[{"role":"user","content":"one"},{"role":"assistant","content":"two"}]}"#
+        #expect(try ChatInterchange.previewImport(Data(separate.utf8)).messages.count == 2)
+    }
+
     @Test func documentedStandardBranchPreservesLiteralTextAndRequiresLossApproval() throws {
         let original = try data([standard(chat())]); let copy = original
         let choices = try ChatOpenWebUIImport.conversations(in: original)

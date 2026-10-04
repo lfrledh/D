@@ -78,6 +78,43 @@ struct ChatImportControllerTests {
         try await store.close()
     }
 
+    @Test func selectedExternalConversationKeepsSourceIdentityAcrossRetryAndBackup() async throws {
+        let entry = #"{"title":"External","history":{"currentId":"a","messages":{"u":{"id":"u","parentId":null,"childrenIds":["a"],"role":"user","content":"中文 👩🏽‍🎨"},"a":{"id":"a","parentId":"u","childrenIds":[],"role":"assistant","content":"A <script>literal</script>","done":true}}}}"#
+        let bytes = Data(("[" + entry + "," + entry.replacingOccurrences(of: "External", with: "Second") + "]").utf8)
+        let original = bytes
+        let (store, chat) = try await fixture()
+        await #expect(throws: (any Error).self) {
+            try await chat.importConversation(bytes, title: "Must choose", allowingLosses: true)
+        }
+        #expect(chat.state.sessions.isEmpty)
+        let receipt = UUID()
+        let id = try await chat.importConversation(bytes, title: "Second", allowingLosses: true,
+                                                   importID: receipt, selectedConversationIndex: 1)
+        let session = try #require(chat.selectedSession)
+        #expect(session.id == id && session.attempts.isEmpty && session.configuration == nil)
+        #expect(session.messages.allSatisfy { $0.importedSource?.conversationIndex == 1 })
+        _ = try await chat.importConversation(bytes, title: "Retry title ignored", allowingLosses: true,
+                                              importID: receipt, selectedConversationIndex: 1)
+        await #expect(throws: (any Error).self) {
+            try await chat.importConversation(bytes, title: "Wrong entry", allowingLosses: true,
+                                               importID: receipt, selectedConversationIndex: 0)
+        }
+        #expect(chat.state.sessions == [session])
+        let leaf = try #require(session.selectedLeafID)
+        let output = try await chat.saveAssistantFinal(leaf, sessionID: id)
+        #expect(String(decoding: try await store.workflowData(output), as: UTF8.self) == "A <script>literal</script>")
+        try await chat.prepareForBackup()
+        let backup = store.rootURL.deletingLastPathComponent().appendingPathComponent("external.dbackup")
+        _ = try await store.createBackup(at: backup)
+        let target = backup.deletingLastPathComponent().appendingPathComponent("ExternalRestored.dproject")
+        _ = try await ProjectStore.restoreBackup(at: backup, to: target)
+        let restored = try await ProjectStore.open(at: target)
+        let saved = try await store.chatState(), recovered = try await restored.chatState()
+        #expect(saved == recovered)
+        #expect(bytes == original)
+        try await restored.close(); try await store.close()
+    }
+
     private func fixture() async throws -> (ProjectStore, ChatController) {
         let root = URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory())
             .appendingPathComponent("ChatImport-" + UUID().uuidString)

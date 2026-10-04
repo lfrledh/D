@@ -177,7 +177,7 @@ struct ChatPresetsPanel: View {
                     .disabled(chat.state.presets.isEmpty)
             }
             if editorOpen { editor }
-            if let issue { Text(issue).font(.caption).foregroundStyle(.red).textSelection(.enabled) }
+            if let issue { Text(ChatErrorText.display(issue, language: language)).font(.caption).foregroundStyle(.red).textSelection(.enabled) }
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -335,14 +335,14 @@ struct ChatComparisonPanel: View {
                     "未发送草稿会保留。选择回答只切换分支，不会生成。"))
                     .font(.caption).foregroundStyle(.secondary)
                 if let originalError = source.issue {
-                    Text(text("sourceIssue", "Source issue", "原回答问题") + ": " + originalError)
+                    Text(text("sourceIssue", "Source issue", "原回答问题") + ": " + ChatErrorText.display(originalError, language: language))
                         .font(.caption).foregroundStyle(.red).textSelection(.enabled)
                 }
             } else {
                 Text(text("missing", "The source answer is no longer in this conversation.", "原回答已不在此对话中。"))
                     .foregroundStyle(.secondary)
             }
-            if let issue { Text(issue).font(.caption).foregroundStyle(.red).textSelection(.enabled) }
+            if let issue { Text(ChatErrorText.display(issue, language: language)).font(.caption).foregroundStyle(.red).textSelection(.enabled) }
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -376,7 +376,7 @@ struct ChatComparisonPanel: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }.frame(minHeight: 120, maxHeight: 260)
             if let issue = attempt.issue {
-                Text(issue).font(.caption).foregroundStyle(.red).textSelection(.enabled)
+                Text(ChatErrorText.display(issue, language: language)).font(.caption).foregroundStyle(.red).textSelection(.enabled)
             }
             Button(text("choose", "Choose this answer", "选择此回答")) {
                 perform { try ChatConfigurationActions.choose(attempt, sessionID: sessionID, chat: chat) }

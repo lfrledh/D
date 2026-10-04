@@ -62,6 +62,19 @@ struct QuickInputImportTests {
         return bytes as Data
     }
 
+    @Test func clipboardRemoteURLDoesNotHideImageFallback() throws {
+        let board = NSPasteboard.withUniqueName()
+        defer { board.releaseGlobally() }
+        let image = try png()
+        board.declareTypes([.URL, .png], owner: nil)
+        board.setString("https://example.invalid/image.png", forType: .URL)
+        board.setData(image, forType: .png)
+        let items = try QuickInputImport.clipboardItems(board)
+        #expect(items.count == 1)
+        guard case .png(let actual) = items.first else { Issue.record("Expected PNG fallback"); return }
+        #expect(actual == image)
+    }
+
     @Test func mixedFileBatchReportsBadFileAndBindsGoodImagesInOrder() async throws {
         let root = try folder()
         let (store, quick) = try await quick(at: root, operation: WorkflowModelRoutes.qwen35)
@@ -144,7 +157,8 @@ struct QuickInputImportTests {
                 return (source, try await source.pinWorkflowAsset(asset), "source.png")
             })
         #expect(result.published == 1 && result.copied == 1 && result.bound == 1)
-        let copied = try #require(port.resolveAssets(#require(quick.draft?.inputs[port.id])).first)
+        let copiedList = try port.resolveAssets(#require(quick.draft?.inputs[port.id]))
+        let copied = try #require(copiedList.first)
         #expect(copied.projectID == (await destination.snapshot()).id)
         let copiedBytes = try await destination.workflowData(copied)
         let originalBytes = try await source.workflowData(original)
@@ -175,9 +189,13 @@ struct QuickInputImportTests {
                 })
         }
         await gate.waitUntilEntered()
-        runTask.cancel()
+        var cancelEntered = false
+        let cancellation = Task { cancelEntered = true; await quick.cancel() }
+        while !cancelEntered { await Task.yield() }
         gate.release()
         let result = await runTask.value
+        await cancellation.value
+        #expect(!quick.isImporting)
         #expect(result.cancelled && result.bound == 0 && result.published == 1 && result.copied == 0)
         #expect(result.message?.contains("取消") == true)
         #expect(quick.draft?.inputs == draft.inputs)

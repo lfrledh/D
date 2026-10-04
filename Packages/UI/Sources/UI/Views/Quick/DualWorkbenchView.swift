@@ -516,7 +516,15 @@ public struct DualWorkbenchView: View {
                     onSettingsToCanvas: { draft in let source = quick.store; Task { await settingsToCanvas(draft, from: source) } },
                     onResultToCanvas: { ref in let source = quick.store; Task { await resultToCanvas(ref, from: source) } },
                     onValueToCanvas: { value in let source = quick.store; Task { await valueToCanvas(value, from: source) } },
-                    onAssetsChanged: { Task { await refreshLibrary(checkModels: false) } })
+                    onAssetsChanged: { Task { await refreshLibrary(checkModels: false) } },
+                    onResolveSharedAsset: { projectID, instanceID, assetID in
+                        let source = try await store(for: projectID, instanceID: instanceID)
+                        let manifest = await source.snapshot()
+                        guard let asset = manifest.assets.first(where: { $0.id == assetID }) else {
+                            throw WorkflowIssue("源素材已不存在。")
+                        }
+                        return (source, try await source.pinWorkflowAsset(assetID), asset.name)
+                    })
                     .id(quick.store.rootURL.standardizedFileURL.path)
                     .disabled(quickOwnerIsChanging)
     }

@@ -91,6 +91,7 @@ public struct QuickCreationState: Codable, Sendable, Equatable {
     public var isImporting: Bool { !inputActivities.isEmpty }
     private var inputActivities = Set<UUID>()
     @ObservationIgnored private var cancelledInputActivities = Set<UUID>()
+    @ObservationIgnored private var inputDrainWaiters: [CheckedContinuation<Void, Never>] = []
     /// File preparation joins the same owner/close boundary as generation.
     public func beginInputActivity() throws -> UUID {
         try Task.checkCancellation()
@@ -105,6 +106,10 @@ public struct QuickCreationState: Codable, Sendable, Equatable {
     }
     public func endInputActivity(_ id: UUID) {
         inputActivities.remove(id); cancelledInputActivities.remove(id)
+        if inputActivities.isEmpty {
+            let waiters = inputDrainWaiters; inputDrainWaiters.removeAll()
+            for waiter in waiters { waiter.resume() }
+        }
     }
     public private(set) var phase = ""
     public private(set) var streamingText = ""
@@ -504,7 +509,7 @@ public struct QuickCreationState: Codable, Sendable, Equatable {
     }
     public func waitForCompletion() async {
         await runTask?.value
-        while isImporting { try? await Task.sleep(for: .milliseconds(40)) }
+        if isImporting { await withCheckedContinuation { inputDrainWaiters.append($0) } }
     }
     public func prepareForTermination() async throws {
         // A rejected sidecar is read-only: no edits were admitted and its bytes must remain intact.

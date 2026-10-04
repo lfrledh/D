@@ -35,7 +35,7 @@ struct ChatTemplatePanel: View {
                     } catch { self.error = error.localizedDescription }
                 }.disabled(task != nil)
             }
-            if let error { Text(error).foregroundStyle(.red).textSelection(.enabled) }
+            if let error { Text(ChatErrorText.display(error, language: language)).foregroundStyle(.red).textSelection(.enabled) }
             if let result {
                 DisclosureGroup(text("Installed source", "模型原模板")) {
                     ScrollView { Text(result.sourceTemplate).font(.system(.caption, design: .monospaced)).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading) }.frame(maxHeight: 220)

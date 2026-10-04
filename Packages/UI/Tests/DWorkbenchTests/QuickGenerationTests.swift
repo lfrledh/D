@@ -42,6 +42,7 @@ struct QuickGenerationTests {
         var drained = false, entered = false
         let stopping = Task { entered = true; await quick.cancel(); drained = true }
         while !entered { await Task.yield() }
+        stopping.cancel() // Cancellation of the close waiter must still drain without a busy loop.
         #expect(quick.isImporting && !drained)
         #expect(throws: (any Error).self) { try quick.checkInputActivity(activity) }
         quick.endInputActivity(activity)

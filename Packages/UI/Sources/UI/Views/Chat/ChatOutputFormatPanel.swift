@@ -55,7 +55,7 @@ struct ChatOutputFormatPanel: View {
                         try chat.setOutputFormat(.init(kind: kind, schema: schema), sessionID: sessionID); issue = nil
                     } catch { issue = error.localizedDescription }
                 }.accessibilityIdentifier("chat-output-format-apply")
-                if let issue { Text(issue).foregroundStyle(.red).textSelection(.enabled) }
+                if let issue { Text(ChatErrorText.display(issue, language: language)).foregroundStyle(.red).textSelection(.enabled) }
             }.padding(.top, 6)
         }.onAppear {
             guard !loaded else { return }; loaded = true

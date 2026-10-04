@@ -74,7 +74,7 @@ extension ChatPresentationLayout {
 private enum ChatDetail: Identifiable {
     case edit(ChatEdit), preview(WorkflowAssetReference)
     case comparison(UUID, UUID), presetImport([ChatPromptPreset], Data)
-    case conversationImport(ChatInterchange.ImportPreview, Data, String)
+    case conversationImport(Data, String)
     case quote(UUID, ChatQuoteSource), artifact(ChatArtifactContent), fields([ChatAnswerField])
     case knowledgeDirectory(UUID, URL, ChatKnowledgeDirectoryInventory, Bool)
     var id: String {
@@ -428,7 +428,7 @@ struct ChatWorkbenchView: View {
                 Group {
                     if !chat.isLoaded {
                         ContentUnavailableView(label("loadFailed", "聊天记录不可用"), systemImage: "exclamationmark.triangle",
-                            description: Text(chat.error ?? label("loading", "正在读取聊天记录…")))
+                            description: Text(chat.error.map { ChatErrorText.display($0, language: language) } ?? label("loading", "正在读取聊天记录…")))
                     } else if let session {
                         conversation(session, width: geometry.size.width, sidebarShown: sidebarShown)
                     } else {
@@ -571,10 +571,11 @@ struct ChatWorkbenchView: View {
                         }
                     }
                 }.padding(20).frame(minWidth: 560, minHeight: 360)
-            case .conversationImport(let preview, let data, let title):
-                ChatConversationImportSheet(preview: preview, title: title,
-                    onCancel: { sheets.detail = nil }, onAccept: { allowingLosses, importID in
-                        _ = try await chat.importConversation(data, title: title, allowingLosses: allowingLosses, importID: importID)
+            case .conversationImport(let data, let title):
+                ChatConversationImportSheet(data: data, title: title,
+                    onCancel: { sheets.detail = nil }, onAccept: { index, chosenTitle, allowingLosses, importID in
+                        _ = try await chat.importConversation(data, title: chosenTitle, allowingLosses: allowingLosses,
+                                                              importID: importID, selectedConversationIndex: index)
                         sheets.detail = nil
                     })
             case .preview(let preview):
@@ -1070,7 +1071,7 @@ struct ChatWorkbenchView: View {
                      newLabel("contextVideos", english: " · Videos: ", chinese: " · 视频：") + String(plan.videos.count))
                     .font(.caption)
             case .failure(let error):
-                Text(error.localizedDescription).font(.caption).foregroundStyle(.red).textSelection(.enabled)
+                Text(ChatErrorText.display(error.localizedDescription, language: language)).font(.caption).foregroundStyle(.red).textSelection(.enabled)
                     .accessibilityIdentifier("chat-context-preview-error")
             }
         }.accessibilityIdentifier("chat-context-preview")
@@ -1301,7 +1302,7 @@ struct ChatWorkbenchView: View {
                     Spacer()
                 }
                 if let issue = attempt.issue {
-                    Text(issue).font(.caption).foregroundStyle(.red).textSelection(.enabled)
+                    Text(ChatErrorText.display(issue, language: language)).font(.caption).foregroundStyle(.red).textSelection(.enabled)
                         .chatMeasured("attempt-issue-\(attempt.id.uuidString)", probe: layoutProbe)
                 }
             }
@@ -1442,7 +1443,7 @@ struct ChatWorkbenchView: View {
                 return !items.isEmpty
             }
             if let issue = issues[session.id] {
-                Text(issue).font(.caption).foregroundStyle(.red).textSelection(.enabled)
+                Text(ChatErrorText.display(issue, language: language)).font(.caption).foregroundStyle(.red).textSelection(.enabled)
             }
             if let saveIssue = chat.saveIssue, saveIssue != issues[session.id] {
                 Text(label("projectSaveIssue", "项目聊天保存失败：") + saveIssue)
@@ -1716,8 +1717,10 @@ struct ChatWorkbenchView: View {
             let info = try url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
             guard info.isRegularFile == true, let size = info.fileSize, size <= ChatInterchange.maximumImportBytes else { throw WorkflowIssue("Conversation import must be a regular file up to 2 MiB. / 会话导入限2MiB普通文件。") }
             let data = try Data(contentsOf: url)
-            let preview = try ChatInterchange.previewOpenAIMessagesV1(data)
-            present(.conversationImport(preview, data, String(url.deletingPathExtension().lastPathComponent.prefix(100))))
+            if let choices = try? ChatOpenWebUIImport.conversations(in: data), choices.count > 1 {
+                // Selection and the selected tree's validation happen in the preview sheet.
+            } else { _ = try ChatInterchange.previewImport(data) }
+            present(.conversationImport(data, String(url.deletingPathExtension().lastPathComponent.prefix(100))))
         } catch { report(error.localizedDescription, for: chat.state.selectedSessionID) }
     }
 
@@ -1928,7 +1931,7 @@ private struct ChatEditForm: View {
             TextSourcesQuestionEditor(value: text, editEpoch: 0, isEditable: true,
                 accessibilityIdentifier: "chat-edit-\(edit.sessionID.uuidString)", accessibilityLabel: title, onEdit: { text = $0 })
                 .id(edit.id).frame(height: edit.kind == .rename ? 70 : 220)
-            if let issue { Text(issue).font(.caption).foregroundStyle(.red).textSelection(.enabled) }
+            if let issue { Text(ChatErrorText.display(issue, language: language)).font(.caption).foregroundStyle(.red).textSelection(.enabled) }
             HStack {
                 Spacer()
                 Button(label("cancel", "取消"), action: onCancel)

@@ -1811,12 +1811,17 @@ import Observation
 
     /// The caller previews the same bytes before explicitly accepting any reported losses.
     @discardableResult public func importConversation(_ data: Data, title: String,
-                                                       allowingLosses: Bool, importID: UUID = UUID()) async throws -> UUID {
+                                                       allowingLosses: Bool, importID: UUID = UUID(),
+                                                       selectedConversationIndex: Int? = nil) async throws -> UUID {
         guard isLoaded else { throw WorkflowIssue(error ?? "Chat history has not loaded.") }
-        let imported = try ChatInterchange.previewOpenAIMessagesV1(data).accept(allowingLosses: allowingLosses)
+        guard allowsSubmission(), !isDiscarding else { throw WorkflowIssue("会话正在关闭。") }
+        let preview = try ChatInterchange.previewImport(data, selectedConversationIndex: selectedConversationIndex)
+        let imported = try preview.accept(allowingLosses: allowingLosses)
         let digest = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
         if let existing = state.sessions.first(where: { $0.id == importID }) {
-            guard !existing.messages.isEmpty, existing.messages.allSatisfy({ $0.importedSource?.sourceSHA256 == digest }) else { throw WorkflowIssue("Import identity conflicts with an existing conversation.") }
+            guard !existing.messages.isEmpty, existing.messages.allSatisfy({ $0.importedSource?.sourceSHA256 == digest &&
+                $0.importedSource?.format == imported.format && $0.importedSource?.version == imported.version &&
+                $0.importedSource?.conversationIndex == preview.conversationIndex }) else { throw WorkflowIssue("Import identity conflicts with an existing conversation.") }
             try await flush(); return importID // Retry saving the already created transcript, never create it twice.
         }
         try requireLoaded() // A new import cannot bypass an unresolved save failure.
@@ -1827,7 +1832,7 @@ import Observation
         for item in imported.messages {
             let message = ChatMessage(parentID: parent, role: item.role == .user ? .user : .assistant,
                 text: item.text, importedSource: .init(format: imported.format, version: imported.version,
-                    sourceSHA256: digest, sourceIndex: item.sourceIndex))
+                    sourceSHA256: digest, sourceIndex: item.sourceIndex, conversationIndex: preview.conversationIndex))
             session.messages.append(message); parent = message.id
         }
         session.selectedLeafID = parent
@@ -1960,6 +1965,7 @@ import Observation
         if let source = answer.importedSource {
             details["importSourceSHA256"] = source.sourceSHA256
             details["importSourceIndex"] = String(source.sourceIndex)
+            if let index = source.conversationIndex { details["importConversationIndex"] = String(index) }
         }
         return try await store.publishWorkflowAsset(data: Data(answer.text.utf8), mediaType: "text/plain", name: "聊天回答",
             parents: answer.attempt?.output.map { [$0] } ?? [], operationID: "d.chat.save-final",

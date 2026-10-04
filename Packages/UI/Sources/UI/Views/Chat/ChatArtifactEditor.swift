@@ -289,12 +289,12 @@ struct ChatArtifactEditor: View {
                         .accessibilityIdentifier("chat-artifact-preview")
                 }
                 if let error = state.previewIssue {
-                    Text(error).foregroundStyle(.red).textSelection(.enabled)
+                    Text(ChatErrorText.display(error, language: language)).foregroundStyle(.red).textSelection(.enabled)
                         .accessibilityIdentifier("chat-artifact-preview-error")
                 }
             }
             if let issue = state.issue {
-                Text(issue).foregroundStyle(.red).textSelection(.enabled)
+                Text(ChatErrorText.display(issue, language: language)).foregroundStyle(.red).textSelection(.enabled)
                     .accessibilityIdentifier("chat-artifact-save-error")
             }
             HStack {

@@ -158,7 +158,8 @@ public struct ChatSessionArchiveSelection: Sendable, Equatable {
                   record.reference.assetID == (revisionID ?? messageID),
                   record.stepID == (revisionID ?? attemptID ?? messageID),
                   record.metadata["importSourceSHA256"] == message.importedSource?.sourceSHA256,
-                  record.metadata["importSourceIndex"] == message.importedSource.map({ String($0.sourceIndex) }) else {
+                  record.metadata["importSourceIndex"] == message.importedSource.map({ String($0.sourceIndex) }),
+                  record.metadata["importConversationIndex"] == message.importedSource?.conversationIndex.map(String.init) else {
                 throw WorkflowIssue("A saved answer has mismatched message or version provenance.")
             }
             roots.append(record.reference)

@@ -2,6 +2,7 @@ import DWorkbench
 import SwiftUI
 
 struct ChatToolsPanel: View {
+    @Environment(\.dLanguageStore) private var language
     let chat: ChatController
     let session: ChatSession
     let wording: (String, String) -> String
@@ -32,7 +33,7 @@ struct ChatToolsPanel: View {
                 if chat.isToolRunning {
                     Button(wording("Stop tool", "停止工具")) { Task { await chat.cancelTool() } }
                 }
-                if let issue { Text(issue).font(.caption).foregroundStyle(.red).textSelection(.enabled) }
+                if let issue { Text(ChatErrorText.display(issue, language: language)).font(.caption).foregroundStyle(.red).textSelection(.enabled) }
                 ForEach((session.toolActivities ?? []).reversed()) { activity in
                     DisclosureGroup(activity.request.identifier + " · " + status(activity.status)) {
                         Text(requestText(activity.request)).font(.caption).textSelection(.enabled)

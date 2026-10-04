@@ -3,6 +3,7 @@ import SwiftUI
 
 /// A per-conversation explicit client, not automatic model tool execution.
 struct ChatMCPPanel: View {
+    @Environment(\.dLanguageStore) private var language
     let chat: ChatController
     let session: ChatSession
     let wording: (String, String) -> String
@@ -54,7 +55,7 @@ struct ChatMCPPanel: View {
                         }.disabled(!permission || chat.isToolRunning || chat.isMCPConnecting)
                     }
                 }
-                if let issue { Text(issue).font(.caption).foregroundStyle(.red).textSelection(.enabled) }
+                if let issue { Text(ChatErrorText.display(issue, language: language)).font(.caption).foregroundStyle(.red).textSelection(.enabled) }
                 Text(wording("Results appear in Search and tools below; they enter the model context only when explicitly adopted.", "结果记录在下方搜索与工具历史中；只有明确采用后才进入模型上下文。" )).font(.caption)
             }.padding(.top, 6)
         }.onAppear { endpoint = session.mcpEndpoint ?? "" }

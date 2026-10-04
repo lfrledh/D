@@ -154,7 +154,6 @@ public enum ChatOpenWebUIImport {
         var nextRole: ChatInterchange.ImportedMessage.Role = .user
         var textBytes = 0
         for node in path {
-            let location = "chat.history.messages[\(node.sourceIndex)]"
             if node.role == "system" || node.role == "tool" {
                 continue
             }

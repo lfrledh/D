@@ -23,7 +23,7 @@ public enum ChatInterchange {
         public enum Role: String, Sendable { case user, assistant }
         public let role: Role
         public let text: String
-        /// Index in the external messages array, including any omitted tool entries.
+        /// Array index in the D wrapper; ordinal of sorted history keys in Open WebUI.
         public let sourceIndex: Int
     }
 
@@ -243,6 +243,7 @@ public enum ChatInterchange {
     }
 
     static func checkJSONDepth(_ data: Data) throws {
+        try rejectDuplicateMembers(data)
         var depth = 0
         var quoted = false
         var escapedCharacter = false
@@ -261,6 +262,47 @@ public enum ChatInterchange {
             } else if byte == 0x7D || byte == 0x5D {
                 depth -= 1
             }
+        }
+    }
+
+    /// Foundation collapses duplicate members when decoding dictionaries. Check decoded
+    /// keys before that conversion; Foundation remains responsible for JSON grammar.
+    private static func rejectDuplicateMembers(_ data: Data) throws {
+        let bytes = Array(data)
+        var containers: [Set<String>?] = []
+        var index = 0
+        while index < bytes.count {
+            switch bytes[index] {
+            case 0x7B, 0x5B:
+                containers.append(bytes[index] == 0x7B ? Set<String>() : nil)
+                guard containers.count <= maximumJSONDepth else {
+                    throw ChatInterchangeError.invalid("JSON nesting exceeds \(maximumJSONDepth).")
+                }
+            case 0x7D, 0x5D:
+                if !containers.isEmpty { containers.removeLast() }
+            case 0x22:
+                let start = index
+                index += 1
+                var escaped = false
+                while index < bytes.count {
+                    if escaped { escaped = false }
+                    else if bytes[index] == 0x5C { escaped = true }
+                    else if bytes[index] == 0x22 { break }
+                    index += 1
+                }
+                guard index < bytes.count else { throw ChatInterchangeError.invalid("Unterminated JSON string.") }
+                var after = index + 1
+                while after < bytes.count && [UInt8(9), 10, 13, 32].contains(bytes[after]) { after += 1 }
+                if after < bytes.count, bytes[after] == 0x3A, !containers.isEmpty,
+                   containers[containers.count - 1] != nil {
+                    let key = try JSONSerialization.jsonObject(with: Data(bytes[start...index]), options: [.fragmentsAllowed]) as? String
+                    guard let key, containers[containers.count - 1]?.insert(key).inserted == true else {
+                        throw ChatInterchangeError.invalid("Duplicate JSON object member.")
+                    }
+                }
+            default: break
+            }
+            index += 1
         }
     }
 

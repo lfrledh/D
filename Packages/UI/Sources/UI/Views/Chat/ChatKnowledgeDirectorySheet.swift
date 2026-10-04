@@ -3,6 +3,7 @@ import SwiftUI
 
 /// The caller retains the selected security scope until this sheet closes.
 struct ChatKnowledgeDirectorySheet: View {
+    @Environment(\.dLanguageStore) private var language
     let inventory: ChatKnowledgeDirectoryInventory
     let wording: (String, String) -> String
     let importEntries: ([ChatKnowledgeDirectoryInventory.Entry]) async throws -> Void
@@ -23,7 +24,7 @@ struct ChatKnowledgeDirectorySheet: View {
                 }
                 ForEach(inventory.excluded, id: \.self) { Text($0).font(.caption).foregroundStyle(.secondary) }
             }
-            if let issue { Text(issue).foregroundStyle(.red).textSelection(.enabled) }
+            if let issue { Text(ChatErrorText.display(issue, language: language)).foregroundStyle(.red).textSelection(.enabled) }
             HStack {
                 Button(wording("Close", "关闭"), action: close).disabled(importing).keyboardShortcut(.cancelAction)
                 Spacer()

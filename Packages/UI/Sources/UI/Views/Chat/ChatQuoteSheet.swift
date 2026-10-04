@@ -48,7 +48,7 @@ struct ChatQuoteSheet: View {
                     } catch is CancellationError {} catch { issue = error.localizedDescription }
                 }
             }.disabled(task != nil)
-            if let issue { Text(issue).foregroundStyle(.red).textSelection(.enabled) }
+            if let issue { Text(ChatErrorText.display(issue, language: language)).foregroundStyle(.red).textSelection(.enabled) }
             if task != nil { ProgressView().controlSize(.small) }
         }.padding(20).frame(minWidth: 600, idealWidth: 800, minHeight: 400)
             .onDisappear { task?.cancel() }

@@ -2,6 +2,7 @@ import DWorkbench
 import SwiftUI
 
 struct ChatAnswerFieldSheet: View {
+    @Environment(\.dLanguageStore) private var language
     let choices: [ChatAnswerField]
     let wording: (String, String) -> String
     let onSave: (ChatAnswerField, UUID, Bool) async throws -> Void
@@ -29,7 +30,7 @@ struct ChatAnswerFieldSheet: View {
                     Text(preview(choices[selected].value)).font(.system(.body, design: .monospaced)).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
                 }.frame(minHeight: 160)
             }
-            if let issue { Text(issue).foregroundStyle(.red).textSelection(.enabled) }
+            if let issue { Text(ChatErrorText.display(issue, language: language)).foregroundStyle(.red).textSelection(.enabled) }
             HStack {
                 Button(wording("Save field", "保存字段")) { save(false) }
                 Button(wording("Save and send to workflow", "保存并交给工作流")) { save(true) }

@@ -23,8 +23,18 @@ public struct ChatImportedSource: Codable, Sendable, Equatable {
     public let version: Int
     public let sourceSHA256: String
     public let sourceIndex: Int
+    /// Source archive entry; nil for the legacy D role/content wrapper.
+    public let conversationIndex: Int?
+    public init(format: String, version: Int, sourceSHA256: String, sourceIndex: Int,
+                conversationIndex: Int? = nil) {
+        self.format = format; self.version = version; self.sourceSHA256 = sourceSHA256
+        self.sourceIndex = sourceIndex; self.conversationIndex = conversationIndex
+    }
     func validate() throws {
-        guard format == ChatInterchange.sourceFormat, version == ChatInterchange.sourceVersion,
+        let wrapper = format == ChatInterchange.sourceFormat && version == ChatInterchange.sourceVersion && conversationIndex == nil
+        let external = format == ChatOpenWebUIImport.format && version == ChatOpenWebUIImport.formatVersion &&
+            conversationIndex.map { (0..<ChatOpenWebUIImport.maximumConversations).contains($0) } == true
+        guard wrapper || external,
               sourceIndex >= 0, sourceIndex < ChatInterchange.maximumMessages,
               sourceSHA256.count == 64, sourceSHA256.allSatisfy({ $0.isASCII && $0.isHexDigit }) else {
             throw WorkflowIssue("Invalid imported transcript provenance.")

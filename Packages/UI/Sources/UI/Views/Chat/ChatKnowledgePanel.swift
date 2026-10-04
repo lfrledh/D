@@ -3,6 +3,7 @@ import SwiftUI
 
 /// A view onto the existing project chat owner. It has no independent asset store.
 struct ChatKnowledgePanel: View {
+    @Environment(\.dLanguageStore) private var language
     let chat: ChatController
     let session: ChatSession
     let quote: (UUID) -> Void
@@ -71,7 +72,7 @@ struct ChatKnowledgePanel: View {
                         ProgressView().controlSize(.small)
                     }
                 }
-                if let issue { Text(issue).foregroundStyle(.red).textSelection(.enabled) }
+                if let issue { Text(ChatErrorText.display(issue, language: language)).foregroundStyle(.red).textSelection(.enabled) }
                 if let result {
                     if result.excerpts.count > 1 {
                         VStack(alignment: .leading) {
@@ -112,7 +113,7 @@ struct ChatKnowledgePanel: View {
                     DisclosureGroup(wording("Last model ordering", "上次模型重排")) {
                         Text(last.status.rawValue).font(.caption)
                         Text(last.query).textSelection(.enabled)
-                        if let issue = last.issue { Text(issue).foregroundStyle(.red) }
+                        if let issue = last.issue { Text(ChatErrorText.display(issue, language: language)).foregroundStyle(.red) }
                         Text(last.node.operationID).font(.caption)
                         if let output = last.output { Button(wording("Raw output", "原始输出")) { preview(output) } }
                     }
