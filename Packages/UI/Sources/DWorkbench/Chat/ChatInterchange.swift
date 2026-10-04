@@ -39,6 +39,16 @@ public enum ChatInterchange {
         public let systemPrompt: String
         public let messages: [ImportedMessage]
         public let losses: [Loss]
+        /// Set for an external archive; the D wrapper has neither property.
+        public let sourceTitle: String?
+        public let conversationIndex: Int?
+
+        init(format: String, version: Int, systemPrompt: String, messages: [ImportedMessage],
+             losses: [Loss], sourceTitle: String? = nil, conversationIndex: Int? = nil) {
+            self.format = format; self.version = version; self.systemPrompt = systemPrompt
+            self.messages = messages; self.losses = losses
+            self.sourceTitle = sourceTitle; self.conversationIndex = conversationIndex
+        }
 
         /// An explicit acceptance step. The returned values still need Lead-owned storage wiring.
         public func accept(allowingLosses: Bool = false) throws -> AcceptedImport {
@@ -57,6 +67,24 @@ public enum ChatInterchange {
         public let systemPrompt: String
         public let messages: [ImportedMessage]
         public let acknowledgedLosses: [Loss]
+    }
+
+    /// Auto-preview for the exact D wrapper or a documented Open WebUI history export.
+    /// An archive with multiple conversations requires an explicit selection index.
+    public static func previewImport(_ data: Data, selectedConversationIndex: Int? = nil) throws -> ImportPreview {
+        guard !data.isEmpty, data.count <= maximumImportBytes,
+              String(data: data, encoding: .utf8) != nil, !data.contains(0) else {
+            throw ChatInterchangeError.invalid("Import must be nonempty UTF-8 JSON of at most 2 MiB.")
+        }
+        try checkJSONDepth(data)
+        let root = try JSONSerialization.jsonObject(with: data)
+        if let object = root as? [String: Any], object.keys.contains("format") {
+            guard selectedConversationIndex == nil else {
+                throw ChatInterchangeError.invalid("The D import wrapper has no conversation selection index.")
+            }
+            return try previewOpenAIMessagesV1(data)
+        }
+        return try ChatOpenWebUIImport.preview(data, selectedConversationIndex: selectedConversationIndex)
     }
 
     /// UTF-8 HTML for one selected path. Body text is never interpreted as markup.
@@ -214,7 +242,7 @@ public enum ChatInterchange {
         losses.append(loss)
     }
 
-    private static func checkJSONDepth(_ data: Data) throws {
+    static func checkJSONDepth(_ data: Data) throws {
         var depth = 0
         var quoted = false
         var escapedCharacter = false
