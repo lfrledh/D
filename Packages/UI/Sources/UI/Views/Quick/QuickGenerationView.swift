@@ -9,6 +9,11 @@ import UniformTypeIdentifiers
 }
 
 struct QuickGenerationView: View {
+    private struct InputAction {
+        let ticket: UUID
+        var feedbackValid = true
+    }
+
     @Bindable var quick: QuickGenerationController
     let model: WorkbenchModel
     let onChooseModel: () -> Void
@@ -16,11 +21,18 @@ struct QuickGenerationView: View {
     let onResultToCanvas: (WorkflowAssetReference) -> Void
     let onValueToCanvas: (WorkflowDatum) -> Void
     var onAssetsChanged: () -> Void = {}
+    var onResolveSharedAsset: QuickInputImport.SharedAssetResolver? = nil
     @State private var advanced = false
     @State private var history = false
     @State private var inputIssue: String?
+    @State private var inputNotice: String?
+    @State private var inputAction: InputAction?
     @State private var preview: WorkflowAssetReference?
     @Environment(\.dLanguageStore) private var language
+    private func inputLabel(_ key: String, english: String, chinese: String) -> String {
+        workflowText(language, "quick.input." + key,
+                     fallback: language?.effectiveLanguageIdentifier.hasPrefix("zh") == true ? chinese : english)
+    }
     private var definition: WorkflowOperationDefinition? { quick.definition }
     private var title: String {
         let id = quick.draft?.node.parameters["modelID"]?.string ?? ""
@@ -103,7 +115,36 @@ struct QuickGenerationView: View {
                                             }
                                         }
                                     }
-                                    Button(baselineText(language, "label.1b9818e1adfe", fallback: "导入…")) { Task { await importInput(port: port, draft: draft) } }
+                                    HStack {
+                                        Button(baselineText(language, "label.1b9818e1adfe", fallback: "导入…")) {
+                                            _ = startInputAction { ticket in await importInput(port: port, draft: draft, ticket: ticket) }
+                                        }
+                                        Button(inputLabel("paste", english: "Paste", chinese: "粘贴")) {
+                                            _ = startInputAction { ticket in await pasteInput(port: port, draft: draft, ticket: ticket) }
+                                        }
+                                        .disabled(inputAction != nil)
+                                    }
+                                    .disabled(inputAction != nil)
+                                    HStack(spacing: 8) {
+                                        Text(inputLabel("dropFiles", english: "Drop Finder files", chinese: "拖入 Finder 文件"))
+                                            .frame(maxWidth: .infinity, minHeight: 34)
+                                            .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
+                                            .dropDestination(for: URL.self) { urls, _ in
+                                                guard !urls.isEmpty else { return false }
+                                                return startInputAction { ticket in
+                                                    await applyInput(urls.map(QuickInputImport.Item.file), port: port, draft: draft, ticket: ticket)
+                                                }
+                                            }
+                                        Text(inputLabel("dropAssets", english: "Drop library assets", chinese: "拖入资料库素材"))
+                                            .frame(maxWidth: .infinity, minHeight: 34)
+                                            .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
+                                            .dropDestination(for: WorkflowCanvasTransfer.self) { items, _ in
+                                                guard !items.isEmpty else { return false }
+                                                return startInputAction { ticket in
+                                                    await applyInput(items.map(QuickInputImport.Item.managed), port: port, draft: draft, ticket: ticket)
+                                                }
+                                            }
+                                    }.font(.caption).foregroundStyle(.secondary).disabled(inputAction != nil)
                                 }
                             }
                             DisclosureGroup(baselineText(language, "label.44455611b910", fallback: "高级设置"), isExpanded: $advanced) {
@@ -126,6 +167,7 @@ struct QuickGenerationView: View {
                             Text(baselineText(language, "label.3238f75ca285", fallback: "每次单独排队、保存；有种子的模型按次递增，不与模型内部批量相乘。"))
                                 .font(.caption).foregroundStyle(.secondary)
                             if let issue = inputIssue ?? quick.inputIssue ?? quick.saveIssue ?? quick.error { Text(issue).foregroundStyle(.red).textSelection(.enabled) }
+                            if let inputNotice { Text(inputNotice).font(.caption).foregroundStyle(.secondary).textSelection(.enabled) }
                         } else {
                             if let error = quick.error { Text(error).foregroundStyle(.red).textSelection(.enabled) }
                             ContentUnavailableView(baselineText(language, "label.48ccfc0d2104", fallback: "从一个模型开始"), systemImage: "square.stack.3d.up",
@@ -179,7 +221,15 @@ struct QuickGenerationView: View {
                 QuickAssetPreview(store: quick.store, reference: reference, compact: false)
             }.padding(20).frame(minWidth: 560, minHeight: 360) }
         }
-        .onChange(of: quick.state.selectedDraftID) { _, _ in inputIssue = nil; history = false }
+        .onChange(of: quick.state.selectedDraftID) { _, _ in
+            inputAction?.feedbackValid = false
+            inputIssue = nil; inputNotice = nil; history = false
+        }
+        .onChange(of: ObjectIdentifier(quick)) { _, _ in
+            inputAction?.feedbackValid = false
+            inputIssue = nil; inputNotice = nil
+        }
+        .onDisappear { inputAction?.feedbackValid = false }
     }
     private var currentRuns: [QuickRunRecord] {
         guard let latest = quick.visibleRuns.first else { return [] }
@@ -255,34 +305,54 @@ struct QuickGenerationView: View {
         for ref in run.candidates.compactMap(\.asset) where !refs.contains(ref) { refs.append(ref) }
         return refs
     }
-    private func importInput(port: WorkflowPortDefinition, draft: QuickDraft) async {
+    private func startInputAction(_ action: @escaping (UUID) async -> Void) -> Bool {
+        guard inputAction == nil else { return false }
+        let ticket = UUID()
+        inputAction = InputAction(ticket: ticket)
+        Task {
+            await action(ticket)
+            if inputAction?.ticket == ticket { inputAction = nil }
+        }
+        return true
+    }
+    private func canShowInputFeedback(_ ticket: UUID, draft: QuickDraft,
+                                      controller: QuickGenerationController, store: ProjectStore) -> Bool {
+        inputAction?.ticket == ticket && inputAction?.feedbackValid == true &&
+            quick === controller && quick.store === store && quick.draft?.id == draft.id
+    }
+    private func importInput(port: WorkflowPortDefinition, draft: QuickDraft, ticket: UUID) async {
         let panel = NSOpenPanel(); panel.canChooseDirectories = false
-        panel.allowsMultipleSelection = port.assetListKind != nil
+        panel.allowsMultipleSelection = true
         guard await panel.begin() == .OK else { return }
         let urls = panel.urls
         guard !urls.isEmpty else { return }
-        var publishedAssets = false
-        defer { if publishedAssets { onAssetsChanged() } }
+        await applyInput(urls.map(QuickInputImport.Item.file), port: port, draft: draft, ticket: ticket)
+    }
+    private func pasteInput(port: WorkflowPortDefinition, draft: QuickDraft, ticket: UUID) async {
+        let controller = quick, store = quick.store
         do {
-            var imported: [WorkflowAssetReference] = []
-            for url in urls {
-                let scoped = url.startAccessingSecurityScopedResource()
-                do {
-                    let published = try await quick.store.importWorkflowMediaFile(at: url)
-                    publishedAssets = true
-                    imported.append(published.record.reference)
-                    if scoped { url.stopAccessingSecurityScopedResource() }
-                } catch {
-                    if scoped { url.stopAccessingSecurityScopedResource() }
-                    throw error
-                }
-            }
-            try quick.commitImportedAssets(imported, port: port, draftID: draft.id,
-                                           expectedNode: draft.node, expectedInputs: draft.inputs)
-            inputIssue = nil
+            await applyInput(try QuickInputImport.clipboardItems(), port: port, draft: draft, ticket: ticket)
         } catch {
-            if quick.draft?.id == draft.id { inputIssue = error.localizedDescription }
+            if canShowInputFeedback(ticket, draft: draft, controller: controller, store: store) {
+                inputIssue = error.localizedDescription
+            }
         }
+    }
+    private func applyInput(_ items: [QuickInputImport.Item], port: WorkflowPortDefinition,
+                            draft: QuickDraft, ticket: UUID) async {
+        let controller = quick, store = quick.store
+        let result = await QuickInputImport.run(items, quick: controller, draft: draft, port: port,
+                                                resolveSharedAsset: onResolveSharedAsset)
+        if result.published > 0 { onAssetsChanged() }
+        guard canShowInputFeedback(ticket, draft: draft, controller: controller, store: store) else { return }
+        inputIssue = result.cancelled
+            ? inputLabel("cancelled", english: "Import cancelled. Already saved assets remain in the library; the current input was not changed.",
+                         chinese: "导入已取消；已保存的素材仍在资料库，当前输入未修改。")
+            : result.message
+        inputNotice = result.copied > 0
+            ? inputLabel("copied", english: "Assets from another project were copied into this project; the originals are unchanged.",
+                         chinese: "跨项目素材已复制到当前项目；来源原件保持不变。")
+            : nil
     }
     private func editInput(_ action: () throws -> Void) {
         do { try action(); inputIssue = nil }
