@@ -242,8 +242,11 @@ private final class ContextPresentationSettings: UserDefaults, @unchecked Sendab
         #expect(inspection.sections.first(where: { $0.id == "input" })?.fields.contains {
             $0.id == "system" && $0.value == "old system"
         } == true)
-        #expect(inspection.sections.first(where: { $0.id == "input" })?.fields.contains {
-            $0.id == "messages" && $0.value == frozenMessages
+        // The current local inspector shows decoded ordered parts; it does not
+        // repeat raw JSON in the input summary. The frozen source stays exact.
+        #expect(before.messagesJSON == frozenMessages)
+        #expect(inspection.sections.first(where: { $0.id == "messages" })?.fields.contains {
+            $0.id == "message.0" && $0.value == "Part 1 · text: old materials"
         } == true)
         #expect(inspection.sections.first(where: { $0.id == "parameters" })?.fields.contains {
             $0.id == "modelID" && $0.value == "text:fixture"

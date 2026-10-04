@@ -78,6 +78,44 @@ import Testing
         }
     }
 
+    @Test func selectedManualVersionIsPrimaryAndOriginalChannelsRemainUntouched() throws {
+        for status in [ChatAttempt.Status.completed, .partial] {
+            var original = attempt(status: status)
+            original.rawText = "original model bytes"
+            if status == .completed {
+                original.response = .init(rawText: original.rawText, reasoningText: "original reasoning",
+                                          finalText: "original answer", finishReason: .stop)
+            }
+            let message = ChatMessage(id: original.assistantMessageID, parentID: original.userMessageID,
+                                      role: .assistant, text: "", attemptID: original.id)
+            let revision = ChatTextRevision(messageID: message.id, text: "人工采用 é 👩🏽‍🎨")
+            var session = ChatSession(title: "selection")
+            session.messages = [message]; session.attempts = [original]
+            var choices = ChatContextChoices()
+            choices.revisions = [revision]; choices.adoptedRevisionIDs = [revision.id]
+            session.contextChoices = choices
+            let selected = try #require(session.selectedAnswer(messageID: message.id))
+            let view = ChatMessageContent(message: message, attempt: original,
+                                          selectedAnswer: selected, onPreview: { _ in })
+            #expect(view.primaryText == revision.text)
+            #expect(ChatMessageContent.answerText(message: message, attempt: original,
+                                                 selectedAnswer: selected) == revision.text)
+            let host = NSHostingView(rootView: view)
+            host.frame = .init(x: 0, y: 0, width: 680, height: 360)
+            host.layoutSubtreeIfNeeded()
+            #expect(host.fittingSize.height > 0)
+            #expect(session.attempts == [original])
+            #expect(ChatChannelPresentation(original).rawText == original.rawText)
+            // Choosing the original version restores its display/action source; it
+            // does not destroy the saved manual revision or classify partial bytes.
+            choices.adoptedRevisionIDs = []; session.contextChoices = choices
+            let restored = ChatMessageContent(message: message, attempt: original,
+                selectedAnswer: session.selectedAnswer(messageID: message.id), onPreview: { _ in })
+            #expect(restored.primaryText == (original.response?.finalText ?? original.rawText))
+            #expect(session.contextChoices?.revisions == [revision])
+        }
+    }
+
     @Test func contextRowsDistinguishReviewedSummaryAndOriginalHistory() throws {
         let first = ChatMessage(parentID: nil, role: .user, text: "原问题")
         let next = ChatMessage(parentID: first.id, role: .user, text: "新问题")

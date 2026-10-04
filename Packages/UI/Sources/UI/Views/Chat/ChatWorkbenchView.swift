@@ -1151,7 +1151,8 @@ struct ChatWorkbenchView: View {
         let excluded = choices?.excludedMessageIDs.contains(message.id) == true
         let revisions = choices?.revisions.filter { $0.messageID == message.id } ?? []
         let adoptedID = revisions.first { choices?.adoptedRevisionIDs.contains($0.id) == true }?.id
-        let answerText = attempt?.response?.finalText ?? attempt?.rawText ?? message.text
+        let answerText = ChatMessageContent.answerText(message: message, attempt: attempt,
+            selectedAnswer: session.selectedAnswer(messageID: message.id))
         let canAdopt = session.contextChoices?.deletedAt == nil && ChatContextCommands.canAdopt(attempt, in: chat)
         var result: [ChatActionMenuItem] = [
             .init(id: "favorite", title: favorite ? newLabel("unfavorite", english: "Remove favorite", chinese: "取消收藏") : newLabel("favorite", english: "Favorite", chinese: "收藏")) {
@@ -1201,7 +1202,7 @@ struct ChatWorkbenchView: View {
             ]
             if let attempt, attempt.status != .completed {
                 result.append(.init(id: "adopt-partial", title: newLabel("adoptPartial", english: "Adopt current partial answer", chinese: "采用当前部分回答"), enabled: canAdopt) {
-                    perform(sessionID: session.id) { try ChatContextCommands.adopt(answerText, messageID: message.id, sessionID: session.id, in: chat) }
+                    perform(sessionID: session.id) { try ChatContextCommands.adopt(attempt.response?.finalText ?? attempt.rawText, messageID: message.id, sessionID: session.id, in: chat) }
                 })
             }
             if !revisions.isEmpty {
@@ -1245,11 +1246,6 @@ struct ChatWorkbenchView: View {
 
     private func messageCard(_ message: ChatMessage, session: ChatSession,
                              siblings: [ChatMessage], attempt: ChatAttempt?) -> some View {
-        let choices = session.contextChoices
-        let favorite = choices?.favoriteMessageIDs.contains(message.id) == true
-        let excluded = choices?.excludedMessageIDs.contains(message.id) == true
-        let revisions = choices?.revisions.filter { $0.messageID == message.id } ?? []
-        let adoptedID = revisions.first { choices?.adoptedRevisionIDs.contains($0.id) == true }?.id
         return VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text(message.role == .user ? label("you", "你") : label("assistant", "助手")) .font(.headline)
@@ -1264,7 +1260,8 @@ struct ChatWorkbenchView: View {
                 }
                 Spacer()
                 Button(label("copy", "复制")) {
-                    copy(attempt?.response?.finalText ?? attempt?.rawText ?? message.text)
+                    copy(ChatMessageContent.answerText(message: message, attempt: attempt,
+                        selectedAnswer: session.selectedAnswer(messageID: message.id)))
                 }
                 if message.role == .user {
                     Button(label("edit", "编辑")) {
@@ -1275,7 +1272,10 @@ struct ChatWorkbenchView: View {
                     accessibilityIdentifier: "chat-message-actions-" + message.id.uuidString,
                     items: messageMenuItems(message, session: session, attempt: attempt)).fixedSize()
             }.font(.caption)
-            ChatMessageContent(message: message, attempt: attempt, onPreview: { present(.preview($0)) })
+            ChatMessageContent(message: message, attempt: attempt,
+                selectedAnswer: session.selectedAnswer(messageID: message.id), onPreview: { present(.preview($0)) })
+                .chatMeasured(session.selectedAnswer(messageID: message.id)?.revisionID != nil
+                    ? "adopted-version-\(message.id.uuidString)" : "original-version-\(message.id.uuidString)", probe: layoutProbe)
             if let excerpts = message.knowledgeExcerpts, !excerpts.isEmpty {
                 DisclosureGroup(newLabel("usedSources", english: "Source excerpts sent with this question", chinese: "本次问题使用的资料片段")) {
                     ForEach(excerpts) { excerpt in
@@ -1286,13 +1286,6 @@ struct ChatWorkbenchView: View {
                         }
                     }
                 }
-            }
-            if let adopted = revisions.first(where: { $0.id == adoptedID }) {
-                DisclosureGroup(newLabel("adoptedVersion", english: "Adopted manual version · original above preserved",
-                    chinese: "已采用人工版本 · 上方原输出保留")) {
-                    Text(adopted.text).textSelection(.enabled)
-                }.font(.caption).accessibilityIdentifier("chat-adopted-version-\(message.id.uuidString)")
-                    .chatMeasured("adopted-version-\(message.id.uuidString)", probe: layoutProbe)
             }
             if let attempt {
                 HStack {

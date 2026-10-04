@@ -62,6 +62,7 @@ struct ChatEmptyConversationView: View {
 struct ChatMessageContent: View {
     let message: ChatMessage
     let attempt: ChatAttempt?
+    var selectedAnswer: ChatSelectedAnswer? = nil
     let onPreview: (WorkflowAssetReference) -> Void
 
     @Environment(\.chatDisplayPreferences) private var displayPreferences
@@ -77,7 +78,33 @@ struct ChatMessageContent: View {
         language?.effectiveLanguageIdentifier.hasPrefix("zh") == true ? chinese : english
     }
 
+    /// Copy, speech and editing use the same selected version as the transcript.
+    static func answerText(message: ChatMessage, attempt: ChatAttempt?, selectedAnswer: ChatSelectedAnswer?) -> String {
+        selectedAnswer?.text ?? attempt?.response?.finalText ?? attempt?.rawText ?? message.text
+    }
+
+    var primaryText: String { Self.answerText(message: message, attempt: attempt, selectedAnswer: selectedAnswer) }
+
     var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if let selectedAnswer, let revisionID = selectedAnswer.revisionID {
+                Text(wording("Adopted manual version", "已采用人工版本"))
+                    .font(.caption).foregroundStyle(.secondary)
+                ChatMarkdownView(messageID: message.id, text: primaryText,
+                                 rawText: primaryText, isStreaming: false)
+                    .id(revisionID)
+                DisclosureGroup(wording("Original model output · preserved", "原始模型输出 · 已保留")) {
+                    sourceContent
+                }.accessibilityIdentifier("chat-original-version-\(message.id.uuidString)")
+            } else {
+                sourceContent
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityIdentifier("chat-message-content-\(message.id.uuidString)")
+    }
+
+    private var sourceContent: some View {
         VStack(alignment: .leading, spacing: 8) {
             if let attempt {
                 let presentation = ChatChannelPresentation(attempt)
@@ -152,6 +179,5 @@ struct ChatMessageContent: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .accessibilityIdentifier("chat-message-content-\(message.id.uuidString)")
     }
 }
