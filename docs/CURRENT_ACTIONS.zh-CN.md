@@ -1,10 +1,10 @@
 # 当前行动与接手点
 
-最后核实：2026-10-05。当前任务、基线、候选、阻塞与下一动作只从本页进入。历史记录不自动授权续跑。
+最后核实：2026-10-06。当前任务、基线、候选、阻塞与下一动作只从本页进入。历史记录不自动授权续跑。
 
 ## 当前授权：完整文字聊天专题 CHAT-PRODUCT-20261003
 
-**持续工作条件（2026-10-05晚，本人已明确改变条件）**：Mac已解锁，本人可以配合集中验收；Lead已恢复唯一隔离App和原集中队列。F26凭据本人尚未准备，继续保留，不重复催办。旧无桌面记录保留为历史，不再作为当前禁止条件。
+**持续工作条件（2026-10-06）**：旧禁止桌面条件已解除；本轮已做原生操作，末尾CUA再次报告锁屏，暂停GUI而不重复探测或催本人。英语失败按本人要求后置，原声保持；F26凭据尚未准备。无依赖工程继续，唯一本人/桌面队列见集中待办。
 
 用户已批准 F01–F36、S00–S06 同一批实施。 2026-10-03再次授权连续续作：先用已有采样与可控流修候选菜单/交互迟滞，将停止固定在输入区主操作；允许S00/S01隔离组合验证，不等待旧布局全部修好。按本清单完成S02–S06（含显式采用部分回答继续），可靠切片正常接纳main后继续，不以阶段回执终止整项。需求冻结，不新增功能/模型/平台；Liquid Glass只沿用系统控件与语义层级，不全面视觉改版。唯一功能状态见 [聊天清单](CHAT_FEATURE_LEDGER.zh-CN.md)。先 S00 长流/停止、正常项目包选择和新候选/旧参数重现，再 S01 布局、S02 编辑与上下文、S03 资料/记忆/备份、S04 联网工具、S05 受限代码/MCP/成果/语音、S06 组合验收。可靠切片通过普通 App 门槛后正常接纳 main，不以整个专题完成为前提；不硬合失败长流。
 
@@ -14,7 +14,16 @@
 
 Lead 持有共享 Runtime/WorkflowServices/ChatController/Store；文件面板和纯展示在独立受限任务树实施。早期S00/S01历史证据目录 RCP=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261003T115108Z-chat-product`。完整 Lead 成本与订阅费用 unknown。早期S00代码完成CPU和签名构建，曾通过项目列表、真实1024-token接收和坐标停止→下一请求；当时菜单忙循环和生成中AX迟滞阻塞接纳。S01缩放焦点反例后来修复并通过hosting、与S00组合。以上是早期门槛来源，已被下述c16普通App复验和main接纳推进；最新S02–S05接线、R证据目录及剩余状态以以下恢复检查点为准，F01–F36范围不取消。
 
-### 当前恢复检查点（2026-10-05晚，英语后置与原生续验）
+### 当前恢复检查点（2026-10-06，输入热点与原生尾项）
+
+- 起点候选 **0f33808a4195b8f09ad06f5a09e352da4a9be5c4**；当前代码/构建 **ff20f2bcfbf13b57836d62fd695954b726f4a010**。本轮实际原生App为 **b8b5ebcbee286c6f750d5166b107c35ee2573336**；ff20只新增“添加附件→本项目成果与素材”直接入口及保护测试，签名构建通过但因再次锁屏未启动/实点。main仍 **90819739e99b366d7cdb2f549c129eea28728206**，不硬合未关闭Bottom的组合。最终文档/远端SHA写本轮R/lead/native-tail-receipt.json。
+- R=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261005T141348Z-native-tail`。输入路径差分确认隐藏Workflow随每次编辑重复读取固定模型注册；b8只缓存固定身份，不缓存安装/就绪。实际paste/delete trace：该布局约123.7–130.8ms→4.5–5.3ms，旧14次Microhang、新两trace均0；不是像素/IME延迟保证。SpeechPanel另有约63–68ms墙钟、仅约1ms CPU的区间，阻塞归因未知，未猜改。证据lead/typing-fixed-analysis/findings.txt；原生旧包/b8代码、命令和区间均有记录。
+- **Bottom仍开放**：新增受控真实列表/紧凑高度、隐藏Workflow/父状态、真实共享库投影三组差分，分别2方法通过和1方法通过；未复制调度器或改生产滚动。b8普通App一次冻结短请求重现后上滚→Bottom响应，不能消除旧间歇失败；gui/bottom-b8-native.json。下一实验只在新失败时核实时视口/面板/分支与现有诊断，不泛加日志或反复生成。
+- 原生尾项：CSV原文件→统计20→显式采用；非空附件预览/排序/冷重开；字号/换行/输出格式保留；结构JSON真实模型返回不合schema的原始结果如实保留，人工版本→字段title→Canvas并保存，返回聊天不运行；答案嵌套版本菜单经鼠标展开＋键盘选择；三类非空草稿/图像参考→文字的状态保留。精确范围见唯一F表及R/gui/{native-csv-attachments,format-display,structured-field,nested-versions,category-nonempty}.json，不外推全部格式或在途交接。
+- 新项目成果选择入口复用已发布asset/version和既有附件API，只加入待发草稿，不生成。1方法实际通过；首次属性名编译失败和一次过滤器0方法均保留，不算通过。非实现者审阅通过，ff20普通签名构建30.346秒；原生列表→选择→采用/取消与三类草稿最终冷开待桌面恢复。唯一启动/Xcode见[试用指南](RELEASE_FREEZE_TRY.zh-CN.md)。
+- 锁屏发生在正常Cmd+Q前，旧b8自有PID78554仍存在；未强杀、未假称退出，未新开Terminal。构建/测试/trace已结束，模型短请求已正常完成。旧源个人scheme、普通App、模型/原录音和历史证据保持；新包单独复制，入口拒绝双开。恢复先核已有测试进程与项目保存状态，不重开已办本人项。未功能冻结，不启动全局质量/Liquid Glass。
+
+### 历史恢复检查点（2026-10-05晚，英语后置与原生续验）
 
 - 起点fab6762ce6fb7b052353298e7e85e083e86c7183；新测试提交 **eba9c370dfe0ce5c672bc0955ee7365ce0afdba0**。仅既有ChatPresentationTests和UITests测试scheme；生产App仍 **cc404e4e3889c8035714075c9dd86f3a2cff233d**，唯一启动/Xcode不变。main仍90819739e99b366d7cdb2f549c129eea28728206，不硬合当前Bottom失败。最终文档/候选远端SHA写RHuman/lead/continuation-receipt.json。
 - RHuman=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261005T121357Z-human-queue`。普通话本人录音→本地转写→Lead审核采用草稿/保存通过，不自动发送。英语No speech was recognized，按本人新指示后置；不重试、不索要新权限。3份本轮原声核对清单摘要保持，失败UI未暴露精确录音ID。F26凭据仍未准备。

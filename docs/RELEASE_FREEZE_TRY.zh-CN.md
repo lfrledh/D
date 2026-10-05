@@ -1,32 +1,36 @@
 # D 开发预览：本轮试用
 
-2026-10-05 · 完整聊天专题仍在连续收口，**尚未达到功能冻结**。main为90819739e99b366d7cdb2f549c129eea28728206（生产af0103b5）；下列为审计/继续验收候选，不能当成原生门槛全部通过的稳定版。唯一逐项状态见[聊天清单](CHAT_FEATURE_LEDGER.zh-CN.md)。
+2026-10-06 · 完整聊天专题仍在连续收口，**尚未达到功能冻结**。main为90819739e99b366d7cdb2f549c129eea28728206（生产af0103b5）；下列为审计/继续验收候选，不能当成原生门槛全部通过的稳定版。唯一逐项状态见[聊天清单](CHAT_FEATURE_LEDGER.zh-CN.md)。
 
 ## 唯一推荐启动入口（开发验收包）
 
 双击：
 `/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261004T145523Z-continuous-closeout/delivery/启动聊天当前验收.command`
 
-入口原位保留，当前只指向 **D Chat Product cc404e4e.app**：
-`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261005T121357Z-human-queue/delivery/D Chat Product cc404e4e.app`。
-代码 **cc404e4e3889c8035714075c9dd86f3a2cff233d**。本包修复4102首次语音授权在后台回调触发MainActor断言的真实崩溃；10个受影响方法通过、非实现者复核、正常签名构建36.338秒。RHuman为上述run，见lead/{speech-callback-result,speech-app-result,patched-app}.json。旧包保留但不另作启动建议。
+入口原位保留，当前只指向 **D Chat Product ff20f2bc.app**：
+`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261005T141348Z-native-tail/delivery/D Chat Product ff20f2bc.app`。
+代码 **ff20f2bcfbf13b57836d62fd695954b726f4a010**，正常签名构建30.346秒，副本签名与四关键文件一致。RNative为上述run，见lead/{attachment-app-result,attachment-app,project-attachment-validation}.json。
 
-入口复用隔离偏好`BC96EF26-C157-4A48-84B4-A54785B1A42E`和已登记模型，不替换普通D，并拒绝双开。本人现已明确解锁，可办理集中验收。修补包已正常启动、重开原隔离项目并显示Speech已允许；普通话录音→本地转写→采用草稿/保存已验。英语识别失败，按本人要求后置；不是完整两语言验收通过。重命名与收藏首项、请求检查器/脱敏复制、四分类空态往返已有对应原生证据。输入/删除迟滞与动态Bottom卡死仍为工程缺口；候选窗不随动不重新列为失败。后续eba9c370只增加测试和测试scheme，App未改、未重建；自有测试窗口已关闭。
+本包包括已实际运行的b8固定模型身份缓存修补，以及“添加附件→本项目成果与素材”的直接入口。后者只选择已入库版本加入待发附件，不自动发送；归属/草稿/固定版本/保存测试通过。**锁屏后尚未启动ff20或实点新入口**，不能把b8原生结果写成ff20已验。b8实际输入热点布局约125ms→5ms，仍不保证所有IME/像素延迟或Bottom已修。
 
-F09/F12的4266579ab5fe449ab9cdd38a474153684f5c0b56真实BF16比较/模板/释放/Store重开证据沿用：`run-20261005T063244Z-real-chat/lead/real-chat-evidence.json`，未重复生成。cc404e4e不改模型、输入器或存储。
+入口复用隔离偏好`BC96EF26-C157-4A48-84B4-A54785B1A42E`和已登记模型，不替换普通D，拒绝双开。锁屏在旧b8正常退出操作前发生，已知自有PID78554仍存在；恢复后先正常退出该测试窗口再双击入口，不能通过强杀未知实例解决。旧包/项目保留，但仅本入口推荐。
+
+普通话转写/采用、Speech授权、重命名/收藏、请求/分享、H22及固定视频有效证据复用；英语失败后置，不重录。b8新增CSV、非空附件、人工字段/Canvas及分类状态证据；Bottom新一次通过不关闭历史间歇卡死。F09/F12原始BF16真实比较/模板/资源释放沿用4266579a，无重复生成。未完责任见[唯一清单](CHAT_FEATURE_LEDGER.zh-CN.md)与[集中队列](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md)。
 
 ## 从保留的小项目继续
 
 1. 解锁后启动，菜单“文件→打开项目”，选择本轮独立恢复副本：
    `/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261004T145523Z-continuous-closeout/gui/unlocked-20261005/Restored-chat-1ebe7042.dproject`。
    “Reading corner lighting”保留比较、人工版本、PDF/DOCX/OCR与记忆；“List twelve…”保留部分回答、空取消、成功OK及工具/成果；两个空会话用于默认系统提示词作用域检查。不要覆盖原项目或旧包。
-2. Quick→文字。主操作为输入区“发送／停止”；未接受前不替换历史原文。671已修首字前停止后不能续发，并实际得到OK。新菜单首项“重命名”已实点保存；“收藏”和已有分支首项已用鼠标+Return操作，嵌套子菜单仍待；1057/962pt主操作和浮层关闭已在1ebe验证，不等于所有布局完成。
+2. Quick→文字。主操作为输入区“发送／停止”；未接受前不替换历史原文。671已修首字前停止后不能续发，并实际得到OK。新菜单首项“重命名”已实点保存；“收藏”和已有分支首项已用鼠标+Return操作，答案版本子菜单经鼠标展开＋键盘选择已补；1057/962pt主操作和浮层关闭已在1ebe验证，不等于所有布局完成。
 3. 检查器可看已有知识重排、Python失败/成功/取消记录、单位/时区及HTML/Mermaid成果。Mermaid两个保存版本互不覆盖，放弃未保存不会改旧版；临时会话只有显式保留成果进入Canvas，不自动运行。Python仍是有预算的WASI标准库，不是宿主任意终端。
 4. 1ebe已用普通App执行新包→独立恢复→冷重开，完整4版本会话记忆及17份独立媒体保持。旧af包遗漏不会自动补写；新恢复不自动打开未来记忆授权。全局预设另行交换。
 5. 联网“搜索与工具”选择Brave/博查、本地选择自己的凭据文件并允许本会话联网。两家真实API尚未验，不在聊天贴key、不代注册或购买。摘要不是已读取正文；采用正文后才交本地模型。
 6. 输入托盘“语音输入与系统朗读”手选普通话/英语。能力查询已验，Speech现已报告允许，普通话本地转写→审核→采用草稿已通过；英语“No speech was recognized”和系统朗读仍在[唯一集中队列](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md)。本人暂不便时不催办、不自动转云。
 
-已验版本分开：1ebe完成新恢复、紧凑布局、真实重排与临时成果；671完成空取消真实接续、管理/默认系统提示词、工具取消和Mermaid；1b00是标准菜单首项修补，其重命名/收藏首项后来在4102/cc404补验；4102增加有界诊断和CSV/MCP服务检查，未改模型/Store/滚动决策；cc404修语音授权回调；eba9只补Bottom受控hosting覆盖，不能代替原生失败收口。有效旧证据复用，完整组合仍待验，不称功能冻结。
+已验版本分开：旧1ebe/671/cc404的恢复、输入/停止、工具、语音证据按影响复用；b8新增输入性能测量与本轮原生尾项；ff20仅追加项目成果选择接线与测试。App在锁屏时未替换运行，代码、构建和原生范围不可混写。所有历史失败继续保留，未完整冻结。
+
+新增直接回流待验步骤：聊天输入区“添加附件→本项目成果与素材”→选择“聊天结构字段”→加入待发送附件→预览；不自动发送。关闭弹窗不应新增附件。随后正常退出重开检查该附件/原草稿；本次锁屏前未执行，不能按此步骤存在就判通过。
 
 ## 使用已下载模型
 
@@ -56,7 +60,7 @@ Quick/Canvas选真实模型，高级参数选择**省内存（SSD分层加载，
 选择 **D Nodes / My Mac / Debug**。本机忽略配置`Development/Development.local.xcconfig`使用既有签名身份，资源目录为：
 `/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261004T041401Z-chat-resume/delivery/resources-with-python`
 
-正常Xcode资源阶段嵌入现有引擎与ChatPython，无需手补App或重装模型。本轮同树普通签名构建通过，已独立启动并重开测试项目；没有人工在Xcode点Run。换机按[开发说明](../Development/README.md)准备资源。**main工作树目前是af生产基线，紧凑控制、记忆导出、空取消接续与菜单首项补丁仍在候选**，不能用main Run冒称上述包的相同代码。
+正常Xcode资源阶段嵌入现有引擎与ChatPython，无需手补App或重装模型。本轮同树普通签名构建通过；b8独立启动/重开测试项目已验，ff20因锁屏尚未启动，没有人工在Xcode点Run。换机按[开发说明](../Development/README.md)准备资源。**main工作树目前是af生产基线，紧凑控制、记忆导出、空取消接续与菜单首项补丁仍在候选**，不能用main Run冒称上述包的相同代码。
 
 ## 集中办理与交付边界
 

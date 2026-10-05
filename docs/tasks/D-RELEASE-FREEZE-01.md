@@ -876,3 +876,16 @@ RHuman=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-
 - 改动/风险→测试入口和动态分支覆盖→既有hosting方法＋非实现者差分审阅；生产未变，cc404签名App、真实模型、Store/备份及其余已验结果复用，不重建App或重跑全模态。71206核实自有路径并留样后SIGTERM（非正常退出）；72005/73712正常Cmd+Q，测试/trace命令结束，未新开Terminal。保护和最终候选/远端映射见lead/continuation-receipt.json。
 
 同一专题续验检查点：普通话、F14及部分导航/菜单新增实际证据；英语、输入迟滞、Bottom和F表其余缺口保持。main仍90819739e99b366d7cdb2f549c129eea28728206；候选正常推送供审计，不硬合当前原生故障组合。Lead实施测试/执行原生，非实现者只读复核；完整Lead用量与订阅成本unknown。不宣称功能冻结，不启动质量重构/视觉改版，未发布Release。
+
+### 2026-10-06：输入迟滞实测、Bottom差分与原生尾项
+
+本轮起点0f33808a4195b8f09ad06f5a09e352da4a9be5c4；RNative=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261005T141348Z-native-tail`。沿用F01–F36，不重开旧本人事项；main90819739保持，源01758b81与个人scheme保持。Lead实施/原生，既有两位只读Agent按明确差异定位与复核；没有新写Worker、额外平台或整体视觉/质量改造。
+
+- **41e6cedc031f703d326666f17e021cd05fc4e89a / d8d7105000b495cdb622736eccd1afc875fe19d3**只扩既有Bottom hosting：固定实际截断列表＋1057×520、隐藏Workflow/父状态、真实SharedLibraryProjection/Browser。分别2方法通过7.190秒、1方法通过3.961秒；未改生产滚动。b8普通App重现一次原冻结短请求后上滚→Bottom响应，旧真实卡死仍开放；新pass不能证明旧sample根因。lead/{bottom-composition,bottom-shared-library}与gui/bottom-b8-native.json。没有再加诊断或跑旧长回答。
+- **b8b5ebcbee286c6f750d5166b107c35ee2573336**：实际输入trace确认隐藏画布每次编辑重复读取固定模型注册。只将SharedLibraryProjection固定身份集缓存一次，模型安装/ready输入不缓存。SharedLibraryBrowserTests最终16方法通过，包括ready→unavailable→removed；首次15通过保留，不累计为31。非实现者native_files_review无P1/P2，首次bundle读取失败空集会保持到进程重启的边界保留。
+- 普通签名b8实际paste/delete与原cc404对照：隐藏Workflow布局123.7–130.8ms→4.5–5.3ms，粘贴主线程CPU124.2→4.9ms；旧14次Microhang，新两trace均0。原生草稿/删除/保存保留。首trace CPU未覆盖删除、SwiftUI表覆盖，补采样专为删除CPU，不虚构相同覆盖。SpeechPanel约63–68ms墙钟/约1ms CPU缺阻塞栈，未全归因声音API或猜补丁。lead/typing-fixed-analysis/findings.txt；原始trace含环境元数据仅外盘，不入Git；工具往返时间不等于IME/像素延迟。
+- 原生cc404/b8代表尾项：numbers.csv→原始预览→value统计(mean20)→显式采用/排序→切会话/冷重开；格式/字号/换行保存；真实Qwen结构请求返回schema本身而失败的记录保留，人工采用合法JSON→title字段→Canvas节点保存→返回；答案原始/人工版本子菜单鼠标展开＋键盘选择；三分类非空草稿及图像参考→文字保留原会话/两附件。无需全模型生成，具体未验范围按F表。gui/{native-csv-attachments,format-display,structured-field,nested-versions,category-nonempty}.json。
+- **ff20f2bcfbf13b57836d62fd695954b726f4a010**：原资料库模态面板缺聊天直接采用资产入口，新增“添加附件→本项目成果与素材”，复用当前发布引用/版本与ChatController.addAttachment；project/instance/session核对，原草稿不变、不自动生成。1方法实际通过0.017秒，测试基线d8d71050＋文件摘要与ff20一致。第一次versionID属性名编译失败已按实际version修正；r1过滤器0方法不计通过，r2完整SwiftTesting方法选择执行1项。独立源码审阅无新增P1/P2；助手函数测试不是菜单验收，底层既有取消/关闭测试复用。lead/project-attachment-{validation,review}.json。
+- ff20正常签名构建30.346秒、独立副本strict验签与四关键文件相同，同树Xcode D Nodes资源装配未手补。唯一启动器更新，但CUA在旧b8正常Cmd+Q之前报锁屏，**ff20未启动/未原生验收**；自有78554仍在，未强杀，不声称测试窗口已收完。原生新成果采用/取消、三分类最终冷开与剩余交互在唯一H32续验；英语失败/原声和朗读分列，搜索无凭据不催办。无新Terminal，测试/trace/编译进程结束，唯一已知App保留现场。
+
+恢复检查点：先核真实HEAD/索引/源scheme/已知App身份；桌面恢复后正常退出旧测试包，再从唯一入口启动ff20。只补尚缺入口与同包原生门槛，Bottom有新失败才按已有诊断缩小实际差异。最终文档/远端完整SHA、保护和App对应见RNative/lead/native-tail-receipt.json；不自引用amend。仅推送候选，不硬合main，未功能冻结/发行。可观测CPU/构建时间如上，完整Lead消耗/订阅费用unknown，不重算历史。

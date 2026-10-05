@@ -1,17 +1,17 @@
 # 历史失败与权限审计
 
-## 当前唯一集中队列（2026-10-05，CHAT-PRODUCT-20261003）
+## 当前唯一集中队列（2026-10-06，CHAT-PRODUCT-20261003）
 
-2026-10-05晚本人明确已解锁且可以操作，本轮恢复原集中队列。F26本人暂无凭据，保留；不要重新索要HF、宏信任或旧H22/固定视频。语音授权期间出现工程崩溃，先修代码，不要求本人通过系统设置绕过。
+旧无桌面条件已解除；本轮代理已执行原生操作，末尾CUA又报告锁屏，仅暂停GUI。不探测/催解锁，不重开已办H22、HF、宏、Speech授权、普通话采用或固定视频。
 
 | 事项 | 当前事实 | 最小后续 |
 |---|---|---|
-| H32：桌面恢复后的代理原生续验 | 本轮4102重命名首项已保存，cc404e4e重开保留；cc404收藏首项经鼠标+Return选择后显示“Remove favorite”，已有分支首项亦可选。真实短回答完成后Bottom再次卡死（71206），采样为主线程SwiftUI懒布局更新循环，未修。 | replay sibling/实际跟底→上滚→Bottom受控hosting已补且通过；同包冷开和一次官方trace下原请求短重现响应，均不能关闭未加trace时的真实卡死。下一步用已有sample/trace对照收窄懒布局失效路径，不能无新证据反复生成/加日志或猜改。F14请求/分享与四分类空态往返已补；非空附件、字段、CSV等原生仍待。输入迟滞留工程项，不要求本人反复点击或扩大权限。 |
-| H32：新聊天宿主本人检查 | 4102新宿主本人确认可以选字，但输入/删除感觉约200ms迟滞（未测量）；旧H22不重开。 | 先由Lead定点定位延迟；有鉴别意义时再集中最短复验，不反复整套组字。 |
-| F31：本地系统语音 | 4102授权回调崩溃已修，cc404e4e普通话真实录音→本地转写→审核→追加草稿→落盘通过，无自动发送。英语显示“No speech was recognized in this recording”，原录音保留、已停止，未采用；本人要求先继续其他工作。3个本轮录音文件与清单摘要相符，但失败UI未给出具体后两条录音的ID，不猜配对。 | 英语保留未通过，当前不要求再次录音、不重置已允许权限；后续只在有鉴别依据时续验该语言。系统朗读/试听仍待单列，不转云。 |
-| F26：搜索凭据及真实调用 | 两适配器及真实公开网页已验；2026-10-05本人答复尚未准备凭据，先保留，未发收费请求。 | 从服务方获取自己的key并保存本机纯文本文件；检查器→工具→Brave/博查→选择凭据文件→允许本会话联网。两家分别验，不在聊天发key，不代注册/绑卡/购买；大陆可达性未测。 |
+| H32：代理原生续验/Bottom工程问题 | b8普通App补CSV→统计/采用、非空附件预览/排序/冷开、格式/显示、人工结构字段→Canvas、答案版本子菜单、三类非空草稿/参考切换。b8一次短冻结重现后Bottom响应，旧71206真实卡死仍未定位；受控三组差分通过不关闭它。 | 新包ff20菜单→本项目成果→采用/取消→预览/冷开尚未执行；三类草稿/图像参考最终冷开、附件移除/拖入及在途归属保留。Bottom只在新失败时对照既有sample与视口/面板/分支，不反复生成或泛加日志。解锁后先核自有旧b8 PID78554并正常退出，再启唯一新包；原Cmd+Q被锁屏挡住，未假称已结束。 |
+| H32：输入迟滞 | 本人约200ms为主观反馈。b8已修实测热点：隐藏Workflow重复固定身份读取，单轮布局约125ms→5ms；新两trace未记录Microhang。SpeechPanel仍有约63–68ms墙钟而CPU约1ms，原因未知，未猜补丁。 | 像素/组字体验尚无新本人结果，先保留测量边界；不再整套重复已确认可选字/不丢字检查，不重新判候选不随动为失败。 |
+| F31：英语识别与朗读分列 | 普通话真实录音→本地转写→审核采用/保存通过、无自动发送。英语No speech was recognized，原声保留，3份CAF与原清单匹配；失败UI与后两份精确配对未知。 | 按本人决定后置英语，不要求重录/重置权限；系统朗读与听感仍待，未执行不记通过，不自动转云。 |
+| F26：搜索凭据及真实调用 | 两适配器/公开网页有效证据复用；本人暂无Brave/博查凭据，不新增免费路线或收费请求。 | 待本人准备后在App工具中选择本地凭据文件并显式允许会话联网。只阻塞对应真实API链；不在聊天发key，不代注册、绑卡或购买，不催办。 |
 
-证据R=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261004T145523Z-continuous-closeout`；本次gui/unlocked-20261005及lead/unlocked-{app-stop,receipt}.json。无新终端窗口；未知历史终端不操作。本人事项只列本表，其他实施/验收缺口看唯一聊天清单。 本轮RHuman=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261005T121357Z-human-queue`，lead/patched-app.json、user-status.json及gui/menu-first-rename.json、mandarin-adopted.json、english-failure.json、bottom-reproduced.json和lead/bottom-after-short.sample.txt。新增gui/{request-inspection-share,category-roundtrip,traced-bottom,voice-original-protection}.json；71206因卡死留样后仅结束核实的自有实例（非正常退出），72005/73712均正常Cmd+Q结束，未新开Terminal。
+本轮RNative=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261005T141348Z-native-tail`，gui/内各项摘要，lead/{locked-tail,attachment-app,native-tail-receipt}.json及typing-fixed-analysis/findings.txt。RHuman=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261005T121357Z-human-queue`保留旧失败sample/普通话/英语/录音保护，不覆盖原证据。构建/测试/trace已结束；旧b8测试App仍存在，无新Terminal，不处理未知历史窗口。功能状态仍只见唯一F表，未功能冻结。
 
 ## 历史快照：当前队列之前的本轮过程
 
