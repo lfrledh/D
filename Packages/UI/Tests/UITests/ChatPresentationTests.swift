@@ -644,8 +644,17 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
 // XCTest owns the AppKit event loop; Swift Testing may exit during native tracking.
 @MainActor final class ChatDynamicBottomHostingTests: XCTestCase {
     func testCompletedShortStreamCanJumpPastAdoptedListAndEmptyCancellation() async throws {
+        try await exerciseCompletedStream(replay: false)
+    }
+
+    func testReplayedSiblingCanScrollAwayThenReturnToBottom() async throws {
+        try await exerciseCompletedStream(replay: true)
+    }
+
+    private func exerciseCompletedStream(replay: Bool) async throws {
         let fixture = ChatPresentationTests()
-        let modelNode = try fixture.node()
+        var modelNode = try fixture.node()
+        modelNode.parameters["seed"] = .text("4202")
         var session = ChatSession(title: "Dynamic bottom regression")
         session.configuration = modelNode
         let first = ChatMessage(parentID: nil, role: .user, text: "List reading corner tips")
@@ -664,13 +673,31 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
         session.contextChoices = .init()
         session.contextChoices?.revisions = [adopted]; session.contextChoices?.adoptedRevisionIDs = [adopted.id]
         session.selectedLeafID = cancelled.id; session.draft = "Reply only OK."
+        var replaySource: ChatAttempt?
+        if replay {
+            let prompt = ChatMessage(parentID: cancelled.id, role: .user, text: "Reply only OK.")
+            let oldAnswer = ChatMessage(parentID: prompt.id, role: .assistant, text: "", attemptID: UUID())
+            let messages = #"[{"role":"user","parts":[{"type":"text","text":"Reply only OK."}]}]"#
+            var replayNode = modelNode
+            replayNode.parameters["messagesJSON"] = .text(messages)
+            var old = ChatAttempt(id: oldAnswer.attemptID!, sessionID: session.id,
+                userMessageID: prompt.id, assistantMessageID: oldAnswer.id, node: replayNode,
+                messagesJSON: messages,
+                inputs: [:], systemPrompt: "", status: .completed)
+            old.rawText = "OK"
+            old.response = .init(rawText: "OK", finalText: "OK", finishReason: .stop)
+            session.messages += [prompt, oldAnswer]; session.attempts.append(old)
+            session.selectedLeafID = oldAnswer.id
+            session.draft = "保留会话草稿 👩🏽‍🎨"
+            replaySource = old
+        }
         var state = ChatState(); state.sessions = [session]; state.selectedSessionID = session.id
         let engine = ChatPresentationGatedStreamEngine()
         let (chat, model, store, root) = try await fixture.fixture(state, engine: engine)
         var frames: [String: CGRect] = [:]
         let host = NSHostingView(rootView: ChatWorkbenchView(chat: chat, model: model, onChooseModel: {},
             onSavedAsset: { _ in }, onAssetsChanged: {}, initialInspectorVisible: true,
-            initialSettingsVisible: true, initiallyFollowsBottom: false, initiallyHasNewContent: true)
+            initialSettingsVisible: true, initiallyFollowsBottom: replay, initiallyHasNewContent: !replay)
             .observingLayout { frames[$0] = $1 })
         host.frame = .init(x: 0, y: 0, width: 1057, height: 640)
         let window = NSWindow(contentRect: host.frame, styleMask: [.titled], backing: .buffered, defer: false)
@@ -679,7 +706,11 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
         do {
         host.layoutSubtreeIfNeeded()
         try await Task.sleep(for: .milliseconds(100))
-        try await chat.send(sessionID: session.id)
+        if let replaySource {
+            try await chat.reproduce(replaySource.id, sessionID: session.id)
+        } else {
+            try await chat.send(sessionID: session.id)
+        }
         for _ in 0..<100 {
             if await engine.submissions == 1 { break }
             try await Task.sleep(for: .milliseconds(10))
@@ -708,6 +739,30 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
             return frame.contains(.init(x: viewportBefore.midX, y: viewportBefore.midY))
                 && frame.width > 300
         }, "Native transcript scroll view must be identifiable")
+        if replay {
+            func distanceToBottom() -> CGFloat {
+                (scroll.documentView?.frame.height ?? 0) - scroll.contentView.bounds.minY
+                    - scroll.contentView.bounds.height
+            }
+            for _ in 0..<100 {
+                if distanceToBottom() <= 28 { break }
+                try await Task.sleep(for: .milliseconds(10))
+            }
+            guard distanceToBottom() <= 28 else {
+                throw WorkflowIssue("Replay fixture did not follow its completed sibling to the bottom: \(distanceToBottom())")
+            }
+            print("D_DYNAMIC_BOTTOM", "replay followed before scrolling", distanceToBottom())
+            XCTAssertEqual(chat.selectedSession?.messages.count, 7)
+            XCTAssertEqual(chat.selectedSession?.attempts.last?.replayedAttemptID, replaySource?.id)
+            XCTAssertEqual(chat.selectedSession?.draft, session.draft)
+            XCTAssertEqual(chat.selectedSession?.attempts.dropLast(), session.attempts[...])
+            // The native failure starts following a replaced sibling, then the user
+            // leaves the bottom. The earlier send fixture never crossed this state.
+            scroll.contentView.scroll(to: NSPoint(x: 0, y: 0))
+            scroll.reflectScrolledClipView(scroll.contentView)
+            try await Task.sleep(for: .milliseconds(150))
+            host.layoutSubtreeIfNeeded()
+        }
         let beforeOffset = scroll.contentView.bounds.minY
         let beforeDistance = try XCTUnwrap(scroll.documentView).frame.height
             - beforeOffset - scroll.contentView.bounds.height
