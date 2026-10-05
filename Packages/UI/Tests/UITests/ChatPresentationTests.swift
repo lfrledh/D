@@ -672,8 +672,13 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
         try await exerciseCompletedStream(replay: true, nativeHistory: true, hiddenWorkflow: true)
     }
 
+    func testNativeListWithHiddenSharedLibraryProjection() async throws {
+        try await exerciseCompletedStream(replay: true, nativeHistory: true,
+            hiddenWorkflow: true, sharedLibrary: true)
+    }
+
     private func exerciseCompletedStream(replay: Bool, nativeHistory: Bool = false,
-                                         hiddenWorkflow: Bool = false) async throws {
+                                         hiddenWorkflow: Bool = false, sharedLibrary: Bool = false) async throws {
         let fixture = ChatPresentationTests()
         var modelNode = try fixture.node()
         modelNode.parameters["seed"] = .text("4202")
@@ -739,7 +744,8 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
         let host: NSView
         if nativeHistory {
             host = NSHostingView(rootView: ChatBottomCompositionFixture(chat: chat, model: model,
-                content: AnyView(content), includesHiddenWorkflow: hiddenWorkflow))
+                content: AnyView(content), includesHiddenWorkflow: hiddenWorkflow,
+                libraryStore: sharedLibrary ? try SharedLibraryStore() : nil))
         } else { host = NSHostingView(rootView: content) }
         host.frame = .init(x: 0, y: 0, width: 1057, height: nativeHistory ? 520 : 640)
         let window = NSWindow(contentRect: host.frame, styleMask: [.titled], backing: .buffered, defer: false)
@@ -855,12 +861,28 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
     let model: WorkbenchModel
     let content: AnyView
     let includesHiddenWorkflow: Bool
+    let libraryStore: SharedLibraryStore?
+    private let libraryState = SharedLibraryBrowserState()
+    private var libraryEntries: [SharedLibraryBrowserEntry] {
+        SharedLibraryProjection.entries(models: model.projectSession.explicitModelChoices,
+            readiness: model.projectSession.explicitModelReadiness,
+            tools: model.projectSession.workflow?.tools ?? [],
+            projects: model.manifest.map { [$0] } ?? [], language: nil)
+    }
     private let tags = ModelNodeTagStore()
     var body: some View {
         if includesHiddenWorkflow {
             ZStack {
                 content
-                WorkflowHostView(model: model, nodeTags: tags)
+                WorkflowHostView(model: model, nodeTags: tags, libraryContent: libraryStore.map { store in
+                    { _, close in AnyView(SharedLibraryBrowser(entries: libraryEntries, store: store,
+                        compact: true, state: libraryState,
+                        onUse: { _ in XCTFail("Hidden library must not execute") },
+                        onAdd: { _ in XCTFail("Hidden library must not add") },
+                        onPreview: { _ in XCTFail("Hidden library must not preview") },
+                        onPrepare: { _ in XCTFail("Hidden library must not prepare") },
+                        onImport: { XCTFail("Hidden library must not import") }, onClose: close)) }
+                })
                     .opacity(0).allowsHitTesting(false).accessibilityHidden(true)
             }
             .onChange(of: chat.selectedSession?.configuration?.parameters["modelID"]?.string) { _, _ in }
