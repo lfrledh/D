@@ -24,7 +24,11 @@ import Foundation
         default: return nil
         }
     }
-    private static var TextModelProfilesIdentity: Set<String> { Set((((try? TextModelProfiles.registered()) ?? []) + ((try? TextModelProfiles.registeredVLM()) ?? [])).map(\.id)) }
+    // These are immutable identities from this App bundle, not installed-model
+    // readiness. Re-reading their manifests for every descriptor on every draft
+    // edit stalls the main thread; live installation state still comes from inputs.
+    private static let TextModelProfilesIdentity: Set<String> = Set(
+        (((try? TextModelProfiles.registered()) ?? []) + ((try? TextModelProfiles.registeredVLM()) ?? [])).map(\.id))
     private static func externalProfile(_ descriptor: ModelNodeDescriptor) -> ExternalVideoExecutionProfile? {
         ExternalVideoExecutionProfile.allCases.first { descriptor.id == "video.model." + $0.rawValue }
     }

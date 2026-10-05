@@ -56,6 +56,31 @@ struct SharedLibraryBrowserTests {
             }
         }
     }
+    @Test func fixedTextIdentitySnapshotDoesNotCacheLiveModelReadiness() throws {
+        let identities = [try #require(TextModelProfiles.registered().first?.id),
+                          try #require(TextModelProfiles.registeredVLM().first?.id)]
+        for identity in identities {
+            let descriptor = try #require(ModelNodeCatalog.entries.first { $0.modelIdentity == identity })
+            let initial = try #require(SharedLibraryProjection.entries(models: [], readiness: [:], tools: [],
+                projects: [], language: nil).first { $0.id == descriptor.id })
+            guard case .operation(let operation, let modelID) = initial.selection else {
+                Issue.record("Bundled text model lost its operation"); continue
+            }
+            let choice = WorkflowModelChoice(id: try #require(modelID), kind: .text, displayName: "installed model")
+            #expect(initial.item.readiness == .unprepared)
+            for readiness in [SharedLibraryReadiness.available, .unavailable] {
+                let current = try #require(SharedLibraryProjection.entries(models: [choice],
+                    readiness: [choice.id: readiness], tools: [], projects: [], language: nil)
+                    .first { $0.id == descriptor.id })
+                #expect(current.item.readiness == readiness)
+                #expect(current.selection == .operation(id: operation, modelID: modelID))
+            }
+            let removed = try #require(SharedLibraryProjection.entries(models: [], readiness: [:], tools: [],
+                projects: [], language: nil).first { $0.id == descriptor.id })
+            #expect(removed.item.readiness == .unprepared)
+            #expect(removed.selection == initial.selection)
+        }
+    }
     @Test func applicationDeclaresTheActualCanvasTransferType() throws {
         var root = URL(fileURLWithPath: #filePath)
         for _ in 0..<5 { root.deleteLastPathComponent() }
