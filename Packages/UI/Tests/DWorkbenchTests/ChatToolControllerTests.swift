@@ -19,6 +19,49 @@ private actor ToolWebFixture: ChatWebTransport {
 
 @Suite("Chat tool activity ownership", .serialized) @MainActor
 struct ChatToolControllerTests {
+    @Test func csvUsesOriginalVersionAndAdoptsIntoItsOwnerWithoutChangingDraft() async throws {
+        let (store, initial) = try await fixture()
+        let bytes = Data("name,value\n東京,10\n👩🏽‍🎨,20\nC,30\n".utf8)
+        let source = store.rootURL.deletingLastPathComponent().appendingPathComponent("numbers.csv")
+        try bytes.write(to: source, options: .withoutOverwriting)
+        let reference = try await store.importWorkflowFile(at: source).record.reference
+        let owner = try initial.newSession()
+        try initial.updateDraft("Keep my draft", sessionID: owner)
+        try await initial.flush()
+        // The attachment preview is deliberately different: CSV analysis must
+        // read the selected immutable asset, not the language-context snapshot.
+        var saved = initial.state
+        saved.sessions[0].attachments = [.init(name: "numbers.csv", reference: reference,
+            textSnapshot: "name,value\npreview,999\n")]
+        _ = try await store.saveChatState(saved, expectedRevision: saved.revision)
+        let chat = ChatController(store: store) { throw WorkflowIssue("CSV must not run models") }
+        await chat.load()
+        let other = try chat.newSession()
+        let activityID = try await chat.executeTool(.csv(reference, columns: ["value"]), sessionID: owner)
+        let record = try #require(chat.state.sessions.first { $0.id == owner }?.toolActivities?.last)
+        let result = try JSONDecoder().decode(ChatDeterministicTools.CSVResult.self,
+            from: Data(try #require(record.resultJSON).utf8))
+        #expect(record.status == .completed && result.rowCount == 3 && result.numeric.first?.mean == 20)
+        #expect(chat.state.sessions.first { $0.id == owner }?.attachments.count == 1)
+        try await chat.attachToolResult(activityID, sessionID: owner)
+        try await chat.attachToolResult(activityID, sessionID: owner)
+        let ownerState = try #require(chat.state.sessions.first { $0.id == owner })
+        let output = try #require(ownerState.toolActivities?.last?.output)
+        let archive = try #require(try await store.workflowState().archive)
+        #expect(archive.assets.first { $0.reference == output }?.parents == [reference])
+        #expect(ownerState.draft == "Keep my draft" && ownerState.attachments.count == 2)
+        #expect(chat.selectedSession?.id == other && chat.selectedSession?.attachments.isEmpty == true)
+        #expect(try await store.workflowData(reference) == bytes)
+        try await chat.prepareForTermination()
+        let root = store.rootURL
+        try await store.close()
+        let reopened = try await ProjectStore.open(at: root)
+        #expect(try await reopened.chatState().sessions.first { $0.id == owner } == ownerState)
+        #expect(try await reopened.workflowData(reference) == bytes)
+        #expect(try Data(contentsOf: source) == bytes)
+        try await reopened.close()
+    }
+
     @Test func realCalculatorResultAdoptionAndBackupDoNotChangeDraftOrReexecute() async throws {
         let (store, chat) = try await fixture()
         let id = try chat.newSession(); try chat.updateDraft("Keep original", sessionID: id)

@@ -258,6 +258,28 @@ private struct ChatSessionScrollState {
     var anchor: UUID?
 }
 
+#if DEBUG
+/// The existing layout probe measures offscreen fixtures. This bounded trace
+/// supplies the missing command/callback order in an ordinary diagnostic App.
+/// It observes only IDs, counts and geometry; never message text or input state.
+@MainActor private enum ChatScrollTrace {
+    static let enabled = ProcessInfo.processInfo.environment["D_CHAT_SCROLL_TRACE"] == "1"
+        && UUID(uuidString: ProcessInfo.processInfo.environment["D_UI_TEST_SESSION"] ?? "") != nil
+    private static var count = 0
+    static var canRecord: Bool { enabled && count <= 512 }
+    static func write(_ values: [String: Any]) {
+        guard canRecord else { return }
+        var row = count == 512 ? ["event": "limit", "incomplete": true] : values
+        row["sequence"] = count
+        row["uptime"] = ProcessInfo.processInfo.systemUptime
+        count += 1
+        guard let bytes = try? JSONSerialization.data(withJSONObject: row, options: [.sortedKeys]),
+              let text = String(data: bytes, encoding: .utf8) else { return }
+        NSLog("D_CHAT_SCROLL_TRACE %@", text)
+    }
+}
+#endif
+
 private enum ChatLayoutSpace { static let name = "chat-presentation-layout" }
 
 private extension View {
@@ -812,10 +834,12 @@ struct ChatWorkbenchView: View {
                     followsBottom = ChatScrollPosition.followsBottom(previous: previous, current: current,
                         wasFollowing: followsBottom)
                     if followsBottom { hasNewContent = false }
+                    traceScroll("geometry", session: session, position: current)
                     saveScrollState(for: session.id)
                 }
                 .onChange(of: visibleMessageID) { _, _ in
                     if chat.state.selectedSessionID == session.id, scrollRestoration?.sessionID != session.id {
+                        traceScroll("anchor", session: session)
                         saveScrollState(for: session.id)
                     }
                 }
@@ -823,9 +847,11 @@ struct ChatWorkbenchView: View {
                     guard previous.hasPrefix(session.id.uuidString + ":"),
                           scrollRestoration?.sessionID != session.id else { return }
                     if followsBottom {
+                        traceScroll("scroll:auto-bottom", session: session, target: "bottom")
                         proxy.scrollTo("chat-bottom", anchor: .bottom)
                     } else {
                         hasNewContent = true
+                        traceScroll("revision:no-scroll", session: session)
                     }
                     saveScrollState(for: session.id)
                 }
@@ -843,8 +869,13 @@ struct ChatWorkbenchView: View {
                         guard restore.isCurrent(sessionID: chat.state.selectedSessionID,
                                                 pending: scrollRestoration),
                               searchJump?.sessionID != newID else { return }
-                        if restore.followsBottom { proxy.scrollTo("chat-bottom", anchor: .bottom) }
-                        else if let anchor = restore.anchor { proxy.scrollTo(anchor, anchor: .top) }
+                        if restore.followsBottom {
+                            traceScroll("scroll:restore", session: session, target: "bottom")
+                            proxy.scrollTo("chat-bottom", anchor: .bottom)
+                        } else if let anchor = restore.anchor {
+                            traceScroll("scroll:restore", session: session, target: anchor.uuidString)
+                            proxy.scrollTo(anchor, anchor: .top)
+                        }
                         scrollRestoration = nil
                     }
                 }
@@ -855,6 +886,7 @@ struct ChatWorkbenchView: View {
                             guard searchJump == jump, chat.state.selectedSessionID == jump.sessionID else { return }
                             followsBottom = false; hasNewContent = false
                             visibleMessageID = jump.messageID
+                            traceScroll("scroll:appear-search", session: session, target: jump.messageID.uuidString)
                             proxy.scrollTo(jump.messageID, anchor: .center)
                             saveScrollState(for: session.id)
                             scrollRestoration = nil
@@ -866,9 +898,17 @@ struct ChatWorkbenchView: View {
                         followsBottom = saved.followsBottom
                         hasNewContent = saved.hasNewContent
                         visibleMessageID = saved.anchor
-                        if saved.followsBottom { proxy.scrollTo("chat-bottom", anchor: .bottom) }
-                        else if let anchor = saved.anchor { proxy.scrollTo(anchor, anchor: .top) }
-                    } else if followsBottom { proxy.scrollTo("chat-bottom", anchor: .bottom) }
+                        if saved.followsBottom {
+                            traceScroll("scroll:appear-saved", session: session, target: "bottom")
+                            proxy.scrollTo("chat-bottom", anchor: .bottom)
+                        } else if let anchor = saved.anchor {
+                            traceScroll("scroll:appear-saved", session: session, target: anchor.uuidString)
+                            proxy.scrollTo(anchor, anchor: .top)
+                        }
+                    } else if followsBottom {
+                        traceScroll("scroll:appear-bottom", session: session, target: "bottom")
+                        proxy.scrollTo("chat-bottom", anchor: .bottom)
+                    }
                 }
                 .onChange(of: searchJump) { _, jump in
                     guard let jump, jump.sessionID == session.id,
@@ -878,6 +918,7 @@ struct ChatWorkbenchView: View {
                         guard searchJump == jump, chat.state.selectedSessionID == jump.sessionID else { return }
                         followsBottom = false; hasNewContent = false
                         visibleMessageID = jump.messageID
+                        traceScroll("scroll:search", session: session, target: jump.messageID.uuidString)
                         proxy.scrollTo(jump.messageID, anchor: .center)
                         saveScrollState(for: session.id)
                         scrollRestoration = nil
@@ -890,6 +931,7 @@ struct ChatWorkbenchView: View {
                                systemImage: "arrow.down") {
                             followsBottom = true; hasNewContent = false
                             saveScrollState(for: session.id)
+                            traceScroll("scroll:manual-bottom", session: session, target: "bottom")
                             withAnimation { proxy.scrollTo("chat-bottom", anchor: .bottom) }
                         }.padding(12).accessibilityIdentifier("chat-bottom-button")
                             .chatMeasured("bottom-button", probe: layoutProbe)
@@ -910,6 +952,25 @@ struct ChatWorkbenchView: View {
     private func saveScrollState(for sessionID: UUID) {
         scrollStates[sessionID] = .init(followsBottom: followsBottom,
             hasNewContent: hasNewContent, anchor: visibleMessageID)
+    }
+
+    private func traceScroll(_ event: String, session: ChatSession, position: ChatScrollPosition? = nil,
+                             target: String? = nil) {
+        #if DEBUG
+        guard ChatScrollTrace.canRecord else { return }
+        var row: [String: Any] = ["event": event, "session": session.id.uuidString,
+            "revision": transcriptRevision(session), "followsBottom": followsBottom,
+            "newContent": hasNewContent, "anchor": visibleMessageID?.uuidString ?? "none",
+            "restoreTicket": scrollRestoration?.ticket.uuidString ?? "none",
+            "inspectorRequested": showInspector, "sidebarRequested": showSidebar,
+            "bodyWidth": lastBodyWidth]
+        if let target { row["target"] = target }
+        if let position {
+            row["offset"] = position.offset
+            row["distanceToBottom"] = position.distanceToBottom
+        }
+        ChatScrollTrace.write(row)
+        #endif
     }
 
     private func branchSummary(_ message: ChatMessage) -> String {

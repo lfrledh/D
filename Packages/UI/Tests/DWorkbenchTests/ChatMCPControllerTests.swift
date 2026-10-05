@@ -72,10 +72,19 @@ private actor ControlledChatMCP: ChatMCPServing {
     private var hold = true
     private var releases: [CheckedContinuation<Void, Never>] = []
     private(set) var disconnects = 0
+    private(set) var callEntered = false
+    private var callRelease: CheckedContinuation<Void, Never>?
+    func releaseCall() { callRelease?.resume(); callRelease = nil }
     func status() -> ChatMCPStatus { current }
     func connect(endpoint: String, permitted: Bool, timeoutSeconds: Int) throws { current = .connected(endpoint: endpoint) }
     func listTools(timeoutSeconds: Int) -> [ChatMCPTool] { [] }
-    func callTool(name: String, argumentsJSON: String, permitted: Bool, timeoutSeconds: Int) throws -> ChatMCPCallResult { throw ChatMCPError.unknownTool }
+    func callTool(name: String, argumentsJSON: String, permitted: Bool, timeoutSeconds: Int) async throws -> ChatMCPCallResult {
+        guard name == "controlled-slow" else { throw ChatMCPError.unknownTool }
+        callEntered = true
+        await withCheckedContinuation { callRelease = $0 }
+        try Task.checkCancellation()
+        return .init(toolName: name, resultJSON: "{\"value\":42}", isError: false)
+    }
     func cancel() async { await disconnect() }
     func disconnect() async {
         disconnects += 1
@@ -95,6 +104,45 @@ private actor UnrelatedSlowWeb: ChatWebTransport {
 }
 
 extension ChatMCPControllerTests {
+    @Test func directUIDisconnectWaitsForActiveCallAndPreservesOriginalOwner() async throws {
+        let (store, unused) = try await fixture(); _ = unused
+        let service = ControlledChatMCP(); await service.resume()
+        let chat = ChatController(store: store, mcpService: service) { throw WorkflowIssue("No generation") }
+        await chat.load()
+        let a = try chat.newSession(), b = try chat.newSession()
+        let endpoint = "http://127.0.0.1:12345/mcp"
+        try await chat.connectMCP(endpoint: endpoint, sessionID: a, permitted: true)
+        let call = Task { try await chat.executeTool(.mcp(endpoint: endpoint,
+            tool: "controlled-slow", argumentsJSON: "{}"), sessionID: a, mcpPermission: true) }
+        do {
+            for _ in 0..<200 { if await service.callEntered { break }; try await Task.sleep(for: .milliseconds(10)) }
+            try #require(await service.callEntered)
+            // Invoke exactly the UI entry, without cancelAll pre-cancelling it.
+            let stop = Task { await chat.disconnectMCP() }
+            for _ in 0..<200 { if await service.disconnects > 0 { break }; try await Task.sleep(for: .milliseconds(10)) }
+            try #require(await service.disconnects == 1)
+            #expect(chat.isMCPStopping && chat.isToolRunning && chat.mcpSessionID == a)
+            await #expect(throws: ChatMCPError.busy) {
+                try await chat.connectMCP(endpoint: endpoint, sessionID: b, permitted: true)
+            }
+            await service.releaseCall()
+            await #expect(throws: CancellationError.self) { try await call.value }
+            await stop.value
+            #expect(!chat.isMCPStopping && !chat.isToolRunning && chat.mcpSessionID == nil)
+            #expect(chat.state.sessions.first { $0.id == a }?.toolActivities?.last?.status == .cancelled)
+            #expect(chat.state.sessions.first { $0.id == a }?.toolActivities?.last?.output == nil)
+            #expect(chat.selectedSession?.id == b && chat.selectedSession?.toolActivities == nil)
+            try await chat.connectMCP(endpoint: endpoint, sessionID: b, permitted: true)
+            #expect(chat.mcpSessionID == b)
+            await chat.disconnectMCP()
+            try await chat.prepareForTermination(); try await store.close()
+        } catch {
+            await service.releaseCall(); await chat.disconnectMCP(); _ = try? await call.value
+            try? await chat.flush(); try? await store.close()
+            throw error
+        }
+    }
+
     @Test func mcpDisconnectDoesNotCancelAnUnrelatedWebRequest() async throws {
         let (store, unused) = try await fixture(); _ = unused
         let service = ControlledChatMCP(), web = UnrelatedSlowWeb()
