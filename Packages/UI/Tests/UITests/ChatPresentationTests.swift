@@ -167,11 +167,24 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
 
     fileprivate func fixture(_ state: ChatState,
                          engine: any InferenceEngine = ChatPresentationNoInference(),
+                         withWorkflowOwner: Bool = false,
                          prepare: ((ProjectStore) async throws -> ChatState)? = nil) async throws
         -> (ChatController, WorkbenchModel, ProjectStore, URL) {
         let root = fixtureRoot.appendingPathComponent("chat-presentation-\(UUID())")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        let store = try await ProjectStore.create(at: root.appendingPathComponent("Fixture.dproject"), name: "Chat fixture")
+        let project = ProjectSession(sessionFactory: { _ in
+            WorkbenchSession(engine: engine, backendID: "presentation.fixture",
+                status: { .init(activeRunID: nil, phase: nil, queuedRunIDs: []) },
+                shutdown: {}, cleanup: {}, validateModel: { _ in })
+        }, settings: ChatPresentationMemorySettings())
+        let store: ProjectStore
+        if withWorkflowOwner {
+            await project.createProject(at: root.appendingPathComponent("Fixture.dproject"))
+            store = try #require(project.currentStore)
+            #expect(project.chat == nil, "The fixture must have only one chat writer")
+        } else {
+            store = try await ProjectStore.create(at: root.appendingPathComponent("Fixture.dproject"), name: "Chat fixture")
+        }
         let savedState = try await prepare?(store) ?? state
         if !savedState.sessions.isEmpty { _ = try await store.saveChatState(savedState, expectedRevision: 0) }
         let runtime = WorkbenchSession(engine: engine, backendID: "presentation.fixture",
@@ -186,11 +199,11 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
             }
         }
         await chat.load()
-        let project = ProjectSession(sessionFactory: { _ in
-            WorkbenchSession(engine: engine, backendID: "presentation.fixture",
-                status: { .init(activeRunID: nil, phase: nil, queuedRunIDs: []) },
-                shutdown: {}, cleanup: {}, validateModel: { _ in })
-        }, settings: ChatPresentationMemorySettings())
+        if withWorkflowOwner {
+            await project.openWorkflow()
+            #expect(project.workflow != nil)
+            #expect(project.chat == nil)
+        }
         return (chat, WorkbenchModel(projectSession: project), store, root)
     }
 
@@ -651,7 +664,16 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
         try await exerciseCompletedStream(replay: true)
     }
 
-    private func exerciseCompletedStream(replay: Bool) async throws {
+    func testNativeListAtCompactHeightWithoutHiddenWorkflow() async throws {
+        try await exerciseCompletedStream(replay: true, nativeHistory: true)
+    }
+
+    func testNativeListAtCompactHeightWithHiddenWorkflowAndParentDependency() async throws {
+        try await exerciseCompletedStream(replay: true, nativeHistory: true, hiddenWorkflow: true)
+    }
+
+    private func exerciseCompletedStream(replay: Bool, nativeHistory: Bool = false,
+                                         hiddenWorkflow: Bool = false) async throws {
         let fixture = ChatPresentationTests()
         var modelNode = try fixture.node()
         modelNode.parameters["seed"] = .text("4202")
@@ -661,7 +683,10 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
         let partial = ChatMessage(parentID: first.id, role: .assistant, text: "", attemptID: UUID())
         let second = ChatMessage(parentID: partial.id, role: .user, text: "Give five tips")
         let cancelled = ChatMessage(parentID: second.id, role: .assistant, text: "", attemptID: UUID())
-        let list = (1...11).map { "\($0). Use adjustable shelves and comfortable lighting for a small reading corner with books and seating." }.joined(separator: "\n")
+        // Fixed generated list from bottom-reproduced.json (2026-10-05): the
+        // final item is short, unlike the earlier equal-length synthetic fixture.
+        let nativeList = "1. Maximize vertical space by installing adjustable wall shelves to store books without consuming valuable floor area.\n2. Utilize an ottoman or storage stool to hide spare reading materials while providing a comfortable, plush seat.\n3. Hang a small book ladder on the wall or near a window to display favorite titles at eye level.\n4. Use a floor-to-ceiling bookcase with sliding doors to keep the collection organized and out of sight when not in use.\n5. Repurpose a sturdy box or crate as a movable side table for holding a current read or a cup of tea.\n6. Choose a multi-functional piece of furniture, such as a daybed, that can serve as both a reading chair and guest seating.\n7. Install a pocket organizer system on the inside of a closet door to hold lighter novels or magazines.\n8. Create a designated \"reading nook\" in an alcove or under a staircase using a bench and a single overhead shelf.\n9. Hang a fabric hanging organizer from a rod or hook to display paperbacks and readers in a tiered fashion.\n10. Use under-bed storage bins to stash books you plan to read later, keeping the immediate area clutter-free.\n11. Add a"
+        let list = nativeHistory ? nativeList : (1...11).map { "\($0). Use adjustable shelves and comfortable lighting for a small reading corner with books and seating." }.joined(separator: "\n")
         var earlier = fixture.attempt(sessionID: session.id, user: first, assistant: partial,
             status: .partial, raw: list, node: modelNode)
         earlier.response = .init(rawText: list, finalText: list, finishReason: .length)
@@ -692,14 +717,31 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
             replaySource = old
         }
         var state = ChatState(); state.sessions = [session]; state.selectedSessionID = session.id
+        if nativeHistory {
+            state.sessions += [ChatSession(title: "Reading corner lighting"),
+                               ChatSession(title: "集中验收"), ChatSession(title: "新对话")]
+        }
         let engine = ChatPresentationGatedStreamEngine()
-        let (chat, model, store, root) = try await fixture.fixture(state, engine: engine)
+        let (chat, model, store, root) = try await fixture.fixture(state, engine: engine,
+            withWorkflowOwner: nativeHistory)
+        func closeFixture() async throws {
+            if nativeHistory {
+                let closed = await model.projectSession.requestClose()
+                XCTAssertTrue(closed)
+                if closed { try FileManager.default.removeItem(at: root) }
+            } else { try await fixture.close(store, root: root) }
+        }
         var frames: [String: CGRect] = [:]
-        let host = NSHostingView(rootView: ChatWorkbenchView(chat: chat, model: model, onChooseModel: {},
+        let content = ChatWorkbenchView(chat: chat, model: model, onChooseModel: {},
             onSavedAsset: { _ in }, onAssetsChanged: {}, initialInspectorVisible: true,
             initialSettingsVisible: true, initiallyFollowsBottom: replay, initiallyHasNewContent: !replay)
-            .observingLayout { frames[$0] = $1 })
-        host.frame = .init(x: 0, y: 0, width: 1057, height: 640)
+            .observingLayout { frames[$0] = $1 }
+        let host: NSView
+        if nativeHistory {
+            host = NSHostingView(rootView: ChatBottomCompositionFixture(chat: chat, model: model,
+                content: AnyView(content), includesHiddenWorkflow: hiddenWorkflow))
+        } else { host = NSHostingView(rootView: content) }
+        host.frame = .init(x: 0, y: 0, width: 1057, height: nativeHistory ? 520 : 640)
         let window = NSWindow(contentRect: host.frame, styleMask: [.titled], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false; window.contentView = host; window.orderFront(nil)
         defer { window.close() }
@@ -794,13 +836,34 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
         } catch {
             await engine.drain()
             await chat.waitForCompletion()
-            try? await fixture.close(store, root: root)
+            try? await chat.flush()
+            try? await closeFixture()
             throw error
         }
-        try await chat.flush(); try await fixture.close(store, root: root)
+        try await chat.flush(); try await closeFixture()
     }
 
     private static func descendants(_ view: NSView) -> [NSView] {
         [view] + view.subviews.flatMap(descendants)
+    }
+}
+
+// This comparison changes one hosting boundary only. It is not a replacement
+// App or a native acceptance gate: both sides use the same controlled stream.
+@MainActor private struct ChatBottomCompositionFixture: View {
+    let chat: ChatController
+    let model: WorkbenchModel
+    let content: AnyView
+    let includesHiddenWorkflow: Bool
+    private let tags = ModelNodeTagStore()
+    var body: some View {
+        if includesHiddenWorkflow {
+            ZStack {
+                content
+                WorkflowHostView(model: model, nodeTags: tags)
+                    .opacity(0).allowsHitTesting(false).accessibilityHidden(true)
+            }
+            .onChange(of: chat.selectedSession?.configuration?.parameters["modelID"]?.string) { _, _ in }
+        } else { content }
     }
 }
