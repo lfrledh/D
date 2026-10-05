@@ -2,6 +2,8 @@
 <Workspace version="1.0">
    <FileRef location="group:D.xcodeproj">
    </FileRef>
+   <FileRef location="group:Packages/UI">
+   </FileRef>
    <FileRef location="group:Backends/MLX">
    </FileRef>
    <FileRef location="group:Vendor/mlx-swift">

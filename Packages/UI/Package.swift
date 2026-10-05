@@ -8,6 +8,8 @@ let package = Package(
     products: [.library(name: "UI", targets: ["UI"]),
                .library(name: "DWorkbench", targets: ["DWorkbench"])],
     dependencies: [.package(name: "DPlatform", path: "../.."),
+        // Real chat integration tests only; production DWorkbench/UI never import MLX.
+        .package(name: "DMLXIntegration", path: "../../Backends/MLX"),
         .package(name: "DMCPSDK", path: "../../Vendor/mcp-swift-sdk"),
         .package(name: "SwiftStreamingMarkdown", path: "../../Vendor/SwiftStreamingMarkdown"),
         .package(url: "https://github.com/weichsel/ZIPFoundation", revision: "22787ffb59de99e5dc1fbfe80b19c97a904ad48d")],
@@ -19,7 +21,8 @@ let package = Package(
         .target(name: "UI", dependencies: ["DWorkbench", .product(name: "DInference", package: "DPlatform"),
                 .product(name: "SwiftStreamingMarkdown", package: "SwiftStreamingMarkdown")],
                 resources: [.process("Resources/Localization"), .copy("Resources/Chat-Third-Party-Notices.txt"), .copy("Resources/Mermaid")]),
-        .testTarget(name: "DWorkbenchTests", dependencies: ["DWorkbench", .product(name: "DRuntime", package: "DPlatform")]),
+        .testTarget(name: "DWorkbenchTests", dependencies: ["DWorkbench", .product(name: "DRuntime", package: "DPlatform"),
+                .product(name: "DMLXBackend", package: "DMLXIntegration")]),
         .testTarget(name: "UITests", dependencies: ["UI", "DWorkbench"]),
         .testTarget(name: "ModelLibraryTests", dependencies: ["DWorkbench", .product(name: "DInference", package: "DPlatform")]),
     ],
