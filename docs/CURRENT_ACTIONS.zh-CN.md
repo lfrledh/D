@@ -14,7 +14,16 @@
 
 Lead 持有共享 Runtime/WorkflowServices/ChatController/Store；文件面板和纯展示在独立受限任务树实施。早期S00/S01历史证据目录 RCP=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261003T115108Z-chat-product`。完整 Lead 成本与订阅费用 unknown。早期S00代码完成CPU和签名构建，曾通过项目列表、真实1024-token接收和坐标停止→下一请求；当时菜单忙循环和生成中AX迟滞阻塞接纳。S01缩放焦点反例后来修复并通过hosting、与S00组合。以上是早期门槛来源，已被下述c16普通App复验和main接纳推进；最新S02–S05接线、R证据目录及剩余状态以以下恢复检查点为准，F01–F36范围不取消。
 
-### 当前恢复检查点（2026-10-05晚，集中验收与语音授权崩溃）
+### 当前恢复检查点（2026-10-05晚，英语后置与原生续验）
+
+- 起点fab6762ce6fb7b052353298e7e85e083e86c7183；新测试提交 **eba9c370dfe0ce5c672bc0955ee7365ce0afdba0**。仅既有ChatPresentationTests和UITests测试scheme；生产App仍 **cc404e4e3889c8035714075c9dd86f3a2cff233d**，唯一启动/Xcode不变。main仍90819739e99b366d7cdb2f549c129eea28728206，不硬合当前Bottom失败。最终文档/候选远端SHA写RHuman/lead/continuation-receipt.json。
+- RHuman=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261005T121357Z-human-queue`。普通话本人录音→本地转写→Lead审核采用草稿/保存通过，不自动发送。英语No speech was recognized，按本人新指示后置；不重试、不索要新权限。3份本轮原声核对清单摘要保持，失败UI未暴露精确录音ID。F26凭据仍未准备。
+- cc404普通App补收藏/分支首项（鼠标+Return）、冻结请求全文/参数/来源查看与脱敏复制、四分类空态往返/聊天草稿保留。证据gui/{request-inspection-share,category-roundtrip,cold-branch-bottom}.json；不是所有菜单、非空多模态附件或在途任务通过。
+- **Bottom未修**：真实原请求短重现已完成落盘，随后上滚→Bottom导致71206主线程约98%CPU；sample指向SwiftUI懒布局phase/prefetch更新，尚非唯一根因。同包冷开切分支正常；一次有目的官方SwiftUI trace下同短重现也正常，均不能将失败关闭。没有继续加日志、改变模型/输入或猜改生产滚动。输入/删除主观迟滞约200ms仍待定位。
+- eba9补实际reproduce→跟底→上滚→Bottom hosting：旧send方法在xcode3通过2.306秒（该整次因当时replay夹具失败）；新replay在xcode4单独通过2.638秒，没有拼成同轮全过。最终文件对应final-tested-files.json；早期source摘要在夹具修正前，不能冒充最终版本。非实现者复核无新增阻断，组件通过不关闭原生卡死。
+- 自有71206卡死后核路径SIGTERM结束；72005/73712正常Cmd+Q。CPU/trace命令结束，未新开Terminal；保留测试项目/录音、原件、旧证据和个人scheme。下一步仍在同一F01–F36：依据已有采样收窄Bottom与输入迟滞，继续独立未验原生入口；英语/搜索按唯一集中队列，不重开旧本人事项。未功能冻结，质量重构/视觉统一后置。
+
+### 历史恢复检查点（2026-10-05晚，集中验收与语音授权崩溃）
 
 - 起点候选1c2c6b54ba61ff2c6dbbb942669d760c521d9472干净，main仍90819739e99b366d7cdb2f549c129eea28728206；源个人scheme保持。RHuman=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261005T121357Z-human-queue`。
 - 4102普通App完成会话菜单首项“重命名”→保存并重开保留；本人确认可以选字，但输入/删除主观约200ms迟滞，未作计时，不以完整IME通过关闭。旧H22候选不随动仍按本人决定接受；没有新滚动或输入猜测补丁。

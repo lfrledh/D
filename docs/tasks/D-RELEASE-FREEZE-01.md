@@ -863,3 +863,16 @@ RHuman=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-
 - 输入迟滞只做定点只读检查：没有固定200ms显示等待，350ms是显示回写后的防抖保存；可观察状态/hosting更新范围尚未计时，不加猜测补丁。Bottom诊断沿用旧有装置，未新增日志或重跑旧长回答。后续状态以CURRENT_ACTIONS和原集中队列为准。
 
 证据：lead/{preflight,crash-summary,tested-files,speech-callback-result,nonimplementer-review,speech-app-result,patched-app,input-latency-review,user-status}.json，gui/menu-first-rename.json。本次Lead实施/CPU/原生，非实现者只读审核；完整Lead用量/订阅费用unknown。候选未硬合main，未功能冻结/发行；录音验收期间不抢用户窗口，自有进程最终状态写外部回执。
+
+### 2026-10-05晚：英语失败后置，普通App与Bottom差分续验
+
+起点fab6762ce6fb7b052353298e7e85e083e86c7183；生产App/本节原生操作均为cc404e4e3889c8035714075c9dd86f3a2cff233d。RHuman沿用上一节。本人要求英语失败先转其他工作，没有再次请求录音/权限；F26无凭据继续保留。
+
+- F31：本人普通话录音正常结束，实际本地转写匹配“这是本地语音测试今天我来检查聊天功能”，Lead审核采用草稿并持久化文本资产/原声来源，未发送。随后本人自行缩短草稿，保留真实编辑，不判数据丢失。英语能力可用但实际No speech was recognized，未采用；本轮3份CAF与清单摘要一致，后两份与具体失败的配对未知。gui/{mandarin-adopted,english-failure,voice-original-protection}.json。
+- 独立原生补证：收藏首项、已有分支首项经鼠标+Return生效/重开保持；F14完整冻结请求可读，4条有序消息/来源/参数与磁盘attempt552337C2匹配，Copy redacted JSON→隔离搜索粘贴核对正文withheld、modelID/路径省略→清空搜索，没有发送。操作摘要而非完整AX导出见gui/request-inspection-share.json。Text→Image→Video→Audio→Text保持所选聊天/第三分支/Unicode草稿且无自动生成；另三类为空，不关闭非空附件/在途归属，见category-roundtrip.json。
+- Bottom再次留证：71206原冻结短请求/seed4202正常输出OK并保存attempt7A2F1ECC，上滚后Bottom触发主线程忙循环；399/400采样在GraphHost.flushTransactions，含phase/prefetch重入。冷开72005切已有分支→Bottom正常。仅一次有鉴别目的的官方xctrace SwiftUI捕获，再用相同短请求重现552337C2，两次不同上滚距离后Bottom均响应；86.133秒trace结束exit0，没有复现卡死，Bottom按钮仍可见。未跑旧长回答、未缩输入/精度、未新增日志/猜改滚动；sample与trace不能证明唯一根因。trace/toc/causes含本地环境元数据，只保留外盘，不进Git。
+- 受控覆盖 **eba9c370dfe0ce5c672bc0955ee7365ce0afdba0**：仅在既有ChatDynamicBottomHostingTests增加chat.reproduce→O/K/completed→跟底→上滚→点击Bottom，保留旧send、冻结输入/历史/草稿与实际距离断言。UITests scheme复用既有工作区锁定依赖，无App宿主、无新测试平台/产品服务。最终新方法距离13.5→670.0→20.5点。native_files_review要求补“实际已跟底”前置后复核无新增P1/P2；align_layout_diagnosis只读定位，未将静态Markdown尺寸失效风险当根因。
+- 入口/夹具失败保留：UI默认scheme无test action；旧SwiftPM独立锁缺swift-numerics，未更新依赖；测试初始化let错误已改；xcode未传递临时根导致unsafePath(var)，按Apple环境变量文档改用TEST_RUNNER_传递，没有放宽保护；replay node/messages不一致在模型调用前被拒绝，修夹具不改契约。xcode3旧send通过2.306秒、该整次replay失败；xcode4只运行新replay通过2.638秒/进程12.523秒。受测基线fab676加未提交文件与eba9一致，final-tested-files.json核源码mtime/实际重编译日志/最终摘要；早期replay-bottom-source.json在夹具修正前，不覆盖或伪称一致。不是同一轮2/2，不代表普通App卡死已修。
+- 改动/风险→测试入口和动态分支覆盖→既有hosting方法＋非实现者差分审阅；生产未变，cc404签名App、真实模型、Store/备份及其余已验结果复用，不重建App或重跑全模态。71206核实自有路径并留样后SIGTERM（非正常退出）；72005/73712正常Cmd+Q，测试/trace命令结束，未新开Terminal。保护和最终候选/远端映射见lead/continuation-receipt.json。
+
+同一专题续验检查点：普通话、F14及部分导航/菜单新增实际证据；英语、输入迟滞、Bottom和F表其余缺口保持。main仍90819739e99b366d7cdb2f549c129eea28728206；候选正常推送供审计，不硬合当前原生故障组合。Lead实施测试/执行原生，非实现者只读复核；完整Lead用量与订阅成本unknown。不宣称功能冻结，不启动质量重构/视觉改版，未发布Release。
