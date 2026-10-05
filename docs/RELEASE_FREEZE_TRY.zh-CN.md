@@ -7,24 +7,24 @@
 双击：
 `/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261004T145523Z-continuous-closeout/delivery/启动聊天当前验收.command`
 
-入口原位保留，当前只指向 **D Chat Product 4102cff1.app**：
-`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261005T040538Z-no-desktop/delivery/D Chat Product 4102cff1.app`。
-代码 **4102cff1bf3f61251e725e31a8ad38842cdd8901**；RNo指该新run目录。普通签名构建60.033秒通过，副本签名和四关键文件见RNo/lead/app-delivery.json；最终文档/候选远端SHA见RNo/lead/no-desktop-receipt.json。10个服务方法执行通过、另1方法显式跳过，结果不与历史相加。本轮没有启动App，构建不代表新包原生验收通过。
+入口原位保留，当前只指向 **D Chat Product cc404e4e.app**：
+`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261005T121357Z-human-queue/delivery/D Chat Product cc404e4e.app`。
+代码 **cc404e4e3889c8035714075c9dd86f3a2cff233d**。本包修复4102首次语音授权在后台回调触发MainActor断言的真实崩溃；10个受影响方法通过、非实现者复核、正常签名构建36.338秒。RHuman为上述run，见lead/{speech-callback-result,speech-app-result,patched-app}.json。旧包保留但不另作启动建议。
 
-本次F09/F12无GUI真实集成受测 **4266579ab5fe449ab9cdd38a474153684f5c0b56**，仅测试/工作区入口与记录变化；生产源码仍与4102相同，因此复用同一App，不重复构建或启动。Qwen9B/27B原始BF16的比较、模板、释放和Store重开通过，证据`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261005T063244Z-real-chat/lead/real-chat-evidence.json`。最终候选/远端见同目录`real-chat-receipt.json`；这不补写原生验收结论。
+入口复用隔离偏好`BC96EF26-C157-4A48-84B4-A54785B1A42E`和已登记模型，不替换普通D，并拒绝双开。本人现已明确解锁，可办理集中验收。修补包已正常启动、重开原隔离项目并显示Speech已允许；这不等于两语言转写或完整聊天验收已过。会话重命名首项已用4102实点成功并在新包重开保留。输入/删除迟滞和旧Bottom仍是工程缺口；不把候选窗不随动重新列为失败。
 
-入口复用隔离偏好`BC96EF26-C157-4A48-84B4-A54785B1A42E`和已登记模型，不替换普通D，并拒绝双开。旧包保留但不另给启动建议。**本人明确不能操作或解锁，持续到另行通知；当前不启动、不探测桌面。** 4102仅增加默认关闭诊断与测试，菜单首项仍待鼠标。671曾出现完成后Bottom卡顿，原因仍未确定；不要把受控hosting通过当作该原生失败已修复。
+F09/F12的4266579ab5fe449ab9cdd38a474153684f5c0b56真实BF16比较/模板/释放/Store重开证据沿用：`run-20261005T063244Z-real-chat/lead/real-chat-evidence.json`，未重复生成。cc404e4e不改模型、输入器或存储。
 
 ## 从保留的小项目继续
 
 1. 解锁后启动，菜单“文件→打开项目”，选择本轮独立恢复副本：
    `/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261004T145523Z-continuous-closeout/gui/unlocked-20261005/Restored-chat-1ebe7042.dproject`。
    “Reading corner lighting”保留比较、人工版本、PDF/DOCX/OCR与记忆；“List twelve…”保留部分回答、空取消、成功OK及工具/成果；两个空会话用于默认系统提示词作用域检查。不要覆盖原项目或旧包。
-2. Quick→文字。主操作为输入区“发送／停止”；未接受前不替换历史原文。671已修首字前停止后不能续发，并实际得到OK。新菜单首项“重命名／收藏”有修补但未完成鼠标验收，先由Lead在解锁后验证；1057/962pt主操作和浮层关闭已在1ebe验证，不等于所有布局完成。
+2. Quick→文字。主操作为输入区“发送／停止”；未接受前不替换历史原文。671已修首字前停止后不能续发，并实际得到OK。新菜单首项“重命名”已实点保存；“收藏”及子菜单仍由Lead续验；1057/962pt主操作和浮层关闭已在1ebe验证，不等于所有布局完成。
 3. 检查器可看已有知识重排、Python失败/成功/取消记录、单位/时区及HTML/Mermaid成果。Mermaid两个保存版本互不覆盖，放弃未保存不会改旧版；临时会话只有显式保留成果进入Canvas，不自动运行。Python仍是有预算的WASI标准库，不是宿主任意终端。
 4. 1ebe已用普通App执行新包→独立恢复→冷重开，完整4版本会话记忆及17份独立媒体保持。旧af包遗漏不会自动补写；新恢复不自动打开未来记忆授权。全局预设另行交换。
 5. 联网“搜索与工具”选择Brave/博查、本地选择自己的凭据文件并允许本会话联网。两家真实API尚未验，不在聊天贴key、不代注册或购买。摘要不是已读取正文；采用正文后才交本地模型。
-6. 输入托盘“语音输入与系统朗读”手选普通话/英语。能力查询已验，首次Speech授权、实际本地转写→审核→采用草稿以及朗读/组字仍在[唯一集中队列](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md)。本人暂不便时不催办、不自动转云。
+6. 输入托盘“语音输入与系统朗读”手选普通话/英语。能力查询已验，Speech现已报告允许，实际本地转写→审核→采用草稿及朗读仍在[唯一集中队列](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md)。本人暂不便时不催办、不自动转云。
 
 已验版本分开：1ebe完成新恢复、紧凑布局、真实重排与临时成果；671完成空取消真实接续、管理/默认系统提示词、工具取消和Mermaid；1b00是标准菜单首项修补，编译/CPU通过，原生操作未执行；4102增加有界诊断和CSV/MCP服务检查，未改模型/Store/滚动决策。有效旧证据复用，完整组合仍待验，不称功能冻结。
 
@@ -56,10 +56,10 @@ Quick/Canvas选真实模型，高级参数选择**省内存（SSD分层加载，
 选择 **D Nodes / My Mac / Debug**。本机忽略配置`Development/Development.local.xcconfig`使用既有签名身份，资源目录为：
 `/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261004T041401Z-chat-resume/delivery/resources-with-python`
 
-正常Xcode资源阶段嵌入现有引擎与ChatPython，无需手补App或重装模型。本轮同树普通签名构建通过；没有人工点Run或原生验收，当前不启动。换机按[开发说明](../Development/README.md)准备资源。**main工作树目前是af生产基线，紧凑控制、记忆导出、空取消接续与菜单首项补丁仍在候选**，不能用main Run冒称上述包的相同代码。
+正常Xcode资源阶段嵌入现有引擎与ChatPython，无需手补App或重装模型。本轮同树普通签名构建通过，已独立启动并重开测试项目；没有人工在Xcode点Run。换机按[开发说明](../Development/README.md)准备资源。**main工作树目前是af生产基线，紧凑控制、记忆导出、空取消接续与菜单首项补丁仍在候选**，不能用main Run冒称上述包的相同代码。
 
 ## 集中办理与交付边界
 
-此前解锁时完成的恢复、紧凑布局、真实重排、临时成果和工具取消等证据沿用。前轮的无桌面服务检查和构建沿用；本次只补F09/F12一组真实后端集成，不运行GUI。本人明确改变条件后，由Lead继续最短Bottom诊断、菜单首项及其余原生路径；新聊天组字、Speech/试听和搜索凭据仍仅在[唯一队列](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md)。不催办、不重复H22/HF/宏/固定视频。
+此前已验的恢复、紧凑布局、真实重排、临时成果和工具取消等证据沿用。本次处理原集中队列，首次语音授权的工程崩溃已修补；语音实测、Bottom与其他原生操作的最新结果只见[当前行动](CURRENT_ACTIONS.zh-CN.md)及[唯一队列](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md)。搜索凭据本人尚未准备，保留；不重复旧授权和固定视频。
 
 这是可构建的试用候选与准确停点，**不是完整聊天验收通过、功能冻结或正式发行**。未完条目保留同号，不移至发布后；未强推、改许可证或发布Release。首次使用、无权重分发/依赖封装、升级恢复和渠道责任仍保留。

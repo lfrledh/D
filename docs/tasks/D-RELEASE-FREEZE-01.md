@@ -850,3 +850,16 @@ R沿上一节。普通App543完成PDF/DOCX/显式OCR、Python抛错→具体stdo
 - 源/main/个人scheme不变；模型清单stat及小配置摘要前后相同，沿用原完整权重验证不再全hash。App4102四关键文件未变，唯一入口沿用；没有App启动/构建或界面验收。所有本轮自有编译/测试命令已收回终态，未终止未知进程。最终文档/候选远端与保护见lead/real-chat-receipt.json；测试不冒称运行于后产生的文档SHA。
 
 恢复点：F09/F12本次无GUI集成缺口已补，底层代码无需修补；Bottom与菜单仍保留原生待验/失败，原队列H32/F26/F31不另建或催办。后续无已确认独立工程缺口需重复制造测试，等本人明确改变桌面条件后用既备最短实验接续。main未接纳关键缺口候选，正常推送候选供审计；功能冻结/发行均未通过，全局质量与Liquid Glass后置。可观察本次测试用时如上，完整Lead消耗/订阅费用unknown，未重算历史。
+
+
+### 2026-10-05晚：集中验收，F31授权回调崩溃定点修补
+
+RHuman=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261005T121357Z-human-queue`。起点候选1c2c6b54ba61ff2c6dbbb942669d760c521d9472干净；本人已解除无桌面条件。main90819739e99b366d7cdb2f549c129eea28728206及源个人scheme保持。F26本人暂无凭据，原队列保留。
+
+- 原生4102完成会话菜单第一项重命名→保存；本人新聊天宿主选字可用，但报告输入/删除感觉约200ms迟滞（未测量），不记完整通过。旧H22候选窗不随动仍接受。本次无模型生成。
+- 点击语音授权后自有69919崩溃，用户系统报告精确命中`requestRecognitionAuthorization`的后台completion及Swift actor断言；同机SDK头文件明确handler不保证main queue。报告副本仅在外盘私有证据，不上传设备信息。没有重演同一崩溃或将其归因16GiB/用户操作。
+- Lead补丁 **cc404e4e3889c8035714075c9dd86f3a2cff233d** 明确最外层completion为Sendable，只恢复continuation；服务仍MainActor，实际调用通过同一内部桥接。未改权限、语言、requiresOnDeviceRecognition、取消释放、数据或输入系统。新增回归从后台交付四种状态，调用者回到MainActor且不启动识别；与旧准入/生命周期合计10方法通过/无跳过。测试执行时为1c2c6b54＋两文件补丁，其摘要与cc404e4e相同，不能把基线HEAD单独当受测代码。实际失败→补丁测试通过，不伪称未修版新增测试曾执行。
+- 非实现者native_files_review审阅实际diff及紧邻SDK回调，无新增P1/P2；未重复执行测试。普通签名构建36.338秒，副本签名通过；唯一启动器原位指向新包，同树Xcode不变。修补App已正常启动/重开同一测试项目，OS现报告Speech已允许，无需重置授权；真实授权callback因已授权按钮不再出现，不能把重开当原按钮重新执行。正在原队列续验转写/采用/朗读，不以CPU代替真人或本地语音结果。
+- 输入迟滞只做定点只读检查：没有固定200ms显示等待，350ms是显示回写后的防抖保存；可观察状态/hosting更新范围尚未计时，不加猜测补丁。Bottom诊断沿用旧有装置，未新增日志或重跑旧长回答。后续状态以CURRENT_ACTIONS和原集中队列为准。
+
+证据：lead/{preflight,crash-summary,tested-files,speech-callback-result,nonimplementer-review,speech-app-result,patched-app,input-latency-review,user-status}.json，gui/menu-first-rename.json。本次Lead实施/CPU/原生，非实现者只读审核；完整Lead用量/订阅费用unknown。候选未硬合main，未功能冻结/发行；录音验收期间不抢用户窗口，自有进程最终状态写外部回执。

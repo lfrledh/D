@@ -4,7 +4,7 @@
 
 ## 当前授权：完整文字聊天专题 CHAT-PRODUCT-20261003
 
-**持续工作条件（2026-10-05用户新授权）**：本人不能操作或解锁，直到本人明确改变条件。禁止桌面探测、截图、GUI验收、反复启动App及催办；不修改锁屏/权限。优先现有Bottom采样定位，再完成无桌面接线与非交互检查；需桌面事项只保留原集中队列。一般“继续”不解除此条件。
+**持续工作条件（2026-10-05晚，本人已明确改变条件）**：Mac已解锁，本人可以配合集中验收；Lead已恢复唯一隔离App和原集中队列。F26凭据本人尚未准备，继续保留，不重复催办。旧无桌面记录保留为历史，不再作为当前禁止条件。
 
 用户已批准 F01–F36、S00–S06 同一批实施。 2026-10-03再次授权连续续作：先用已有采样与可控流修候选菜单/交互迟滞，将停止固定在输入区主操作；允许S00/S01隔离组合验证，不等待旧布局全部修好。按本清单完成S02–S06（含显式采用部分回答继续），可靠切片正常接纳main后继续，不以阶段回执终止整项。需求冻结，不新增功能/模型/平台；Liquid Glass只沿用系统控件与语义层级，不全面视觉改版。唯一功能状态见 [聊天清单](CHAT_FEATURE_LEDGER.zh-CN.md)。先 S00 长流/停止、正常项目包选择和新候选/旧参数重现，再 S01 布局、S02 编辑与上下文、S03 资料/记忆/备份、S04 联网工具、S05 受限代码/MCP/成果/语音、S06 组合验收。可靠切片通过普通 App 门槛后正常接纳 main，不以整个专题完成为前提；不硬合失败长流。
 
@@ -14,7 +14,15 @@
 
 Lead 持有共享 Runtime/WorkflowServices/ChatController/Store；文件面板和纯展示在独立受限任务树实施。早期S00/S01历史证据目录 RCP=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261003T115108Z-chat-product`。完整 Lead 成本与订阅费用 unknown。早期S00代码完成CPU和签名构建，曾通过项目列表、真实1024-token接收和坐标停止→下一请求；当时菜单忙循环和生成中AX迟滞阻塞接纳。S01缩放焦点反例后来修复并通过hosting、与S00组合。以上是早期门槛来源，已被下述c16普通App复验和main接纳推进；最新S02–S05接线、R证据目录及剩余状态以以下恢复检查点为准，F01–F36范围不取消。
 
-### 当前恢复检查点（2026-10-05，F09/F12真实集成）
+### 当前恢复检查点（2026-10-05晚，集中验收与语音授权崩溃）
+
+- 起点候选1c2c6b54ba61ff2c6dbbb942669d760c521d9472干净，main仍90819739e99b366d7cdb2f549c129eea28728206；源个人scheme保持。RHuman=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261005T121357Z-human-queue`。
+- 4102普通App完成会话菜单首项“重命名”→保存并重开保留；本人确认可以选字，但输入/删除主观约200ms迟滞，未作计时，不以完整IME通过关闭。旧H22候选不随动仍按本人决定接受；没有新滚动或输入猜测补丁。
+- 点击本地语音授权后69919实际崩溃：default-qos回调继承MainActor，dispatch_assert_queue_fail。用户报告及本机Speech SDK明确的非主队列语义相符。**cc404e4e3889c8035714075c9dd86f3a2cff233d**只修授权completion的Sendable边界并增加后台四状态回归，不改权限、识别/取消或存储。10方法通过（基线＋同内容未提交文件，摘要见tested-files.json）；非实现者窄审通过，正常签名构建36.338秒。CPU不冒充真实识别。
+- 修补App已正常启动并重开原隔离项目，OS报告Speech已允许，不重置授权或重复弹窗；两语言实际转写、采用和朗读继续原队列。唯一入口原位指向cc404e4e副本，同树Xcode保持。F09/F12及其他未受影响证据复用；Bottom/输入迟滞与剩余原生路径未关闭，main未硬合，未功能冻结。
+
+### 历史恢复检查点（2026-10-05，F09/F12真实集成）
+
 
 - 起点候选d8fd464c0efe4a55ba858aea420fc3aab1867433；本轮实际受测 **4266579ab5fe449ab9cdd38a474153684f5c0b56**。只增加真实集成测试及既有DWorkbenchTests的Xcode入口，未改生产Runtime/Store/输入/滚动；App代码仍 **4102cff1bf3f61251e725e31a8ad38842cdd8901**，四关键文件与唯一启动器保持，见[试用指南](RELEASE_FREEZE_TRY.zh-CN.md)。main仍90819739e99b366d7cdb2f549c129eea28728206，未硬合原生关键缺口。
 - RReal=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261005T063244Z-real-chat`。lead/real-chat-evidence.json、real-chat-summary.json：实际1方法通过/0跳过，2次真实短生成，整组238.85秒。9B/27B完整BF16、固定revision、SSD分层、15GiB显式预算，同一问题；释放交接、归属、选用后的上下文与关闭重开通过。F12编辑模板实际39 token、默认31，完成真实执行传递；准确范围只更新[唯一F表](CHAT_FEATURE_LEDGER.zh-CN.md)F09/F12。

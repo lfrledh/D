@@ -103,8 +103,8 @@ S00–S05是同一份已批准范围的实施切片，完成一片可集成一�
 | ID | 状态 | 入口／证据／剩余 |
 |---|---|---|
 | F01 | 已有部分；新宿主待验 | 四分类与共享模型保留；旧B原生往返复用，S01装配仍需复验。 |
-| F02 | 核心/紧凑布局原生通过；新首项菜单待鼠标 | c16旧门槛沿用；117d/1ebe普通App1057pt主操作与962pt Inspector浮层关闭、草稿保持已验，E/compact*.png。首项菜单“重命名/收藏”普通App缺失，1b00标准根标题占位修补及15方法/1suite通过，保持idle/迟到动作；新包鼠标因再次锁屏待验。 |
-| F03 | 切换及管理部分原生通过；重命名修补待验 | 671普通App置顶、Unicode标签、归档恢复、软删除恢复；deleted时编辑/发送禁用，恢复后草稿保持。E/native-management-tools-artifacts.json与native-management-context-defaults.json。重命名原菜单首项不可见，1b00已修/未原生复验，不能判全组完成。 |
+| F02 | 核心/紧凑布局及重命名首项已验；迟滞保留 | c16旧门槛沿用；117d/1ebe普通App1057pt主操作与962pt Inspector浮层关闭、草稿保持已验，E/compact*.png。首项菜单“重命名/收藏”普通App缺失，1b00标准根标题占位修补及15方法/1suite通过，保持idle/迟到动作；2026-10-05晚4102重命名首项已实点保存，cc404e4e重开保留；收藏/子菜单仍待。本人新宿主选字可用但输入/删除感觉约200ms迟滞（未计时），工程定位保留。 |
+| F03 | 切换及管理部分原生通过；重命名已验 | 671普通App置顶、Unicode标签、归档恢复、软删除恢复；deleted时编辑/发送禁用，恢复后草稿保持。E/native-management-tools-artifacts.json与native-management-context-defaults.json。重命名原菜单首项不可见，1b00修补已在4102实点并于cc404e4e重开保持；其他未验管理路径仍不判全组完成。 |
 | F04 | 词法搜索命中原生通过；收藏入口修补待验 | 671查询Reply only OK.找到正确会话/消息，当前消息已可见，未把此作为全部跨会话跳转证明。收藏原第一项不可见，1b00修补待原生；非向量检索，标签已持久。 |
 | F05 | 草稿/恢复原生通过；动态滚动仍有当前失败 | 1ebe会话包/独立恢复/冷开保留Unicode草稿，671管理/设置切换未丢草稿。671一次真实完成后的Bottom卡顿留样，冷开及受控动态hosting通过未能关闭该失败；E/recovery-data-check.json及lead/empty-cancel-native-hang.sample.txt。4102cff1复核未证实命令循环，只备默认关闭/限量/无正文的诊断；最短现场实验留H32，不改滚动行为。 |
 | F06 | 已有部分 | 旧B编辑、分支和路径返回已部分验；不把整个能力组判完成。 |
@@ -132,7 +132,7 @@ S00–S05是同一份已批准范围的实施切片，完成一片可集成一�
 | F28 | 真实WASI及普通App失败/成果/取消后续跑通过 | 543失败stdout/traceback exit3不发成果、CSV mean20和保存沿用。671实际sleep20运行→Stop显示cancelled→print(6*7)得到42；无迟到成果，E/native-python-cancel-and-resume.ax.txt及native-management-tools-artifacts.json。最初默认样例在Stop前已结束，不算取消。原隔离/恢复证据复用，不宿主裸跑。 |
 | F29 | 普通App真实本机服务调用/采用/断开通过；App取消待补 | 官方SDK0.12.1，明确允许loopback测试端点，普通App连接/列工具/add_numbers(17,25)=42，显式采用附件，不自动发送；主动断开并结束自有服务。原真实SDK取消/重连/超时证据复用。4102cff1新增UI实际disconnectMCP服务入口的受控在途调用：drain前拒绝新连接、取消归原会话、drain后重连，RNo/lead/offline-wiring-final。不是普通App点击或远端副作用撤回保证。 |
 | F30 | HTML及Mermaid代表原生版本路径通过；其余展示待补 | HTML静态/显式本地JS/保存/Canvas/恢复沿用。671 Mermaid v1 A→B，v2 A→C均真实预览/保存，重开v1仍A→B，Discard未保存修改不覆盖；E/mermaid*.png/ax、native-management-tools-artifacts.json。其他格式与跨编辑场景不以此全部关闭。 |
-| F31 | 手选与本地能力查询通过；实际授权/转写待验 | 仅zh-CN/en-US手选、本地requiresOnDeviceRecognition；9方法等值/别名保护沿用。普通App两种语言均显示recognizer available/supportsOnDevice=true，但Speech尚未请求，不等于语言资源和实际转写已通过。录音/文件→审核→采用不发送及朗读真人验收在唯一队列；无云fallback。 |
+| F31 | 授权回调崩溃已定点修补；真实转写续验 | 仅zh-CN/en-US手选、本地requiresOnDeviceRecognition；9方法等值/别名保护沿用。普通App两种语言均显示recognizer available/supportsOnDevice=true，4102首次授权实际触发后台callback的MainActor断言崩溃；cc404e4e明确Sendable桥接，后台四状态＋旧生命周期共10方法通过、签名App正常重开。系统已报告允许；真实转写仍单列。录音/文件→审核→采用不发送及朗读真人验收在唯一队列；无云fallback。 |
 | F32 | 代表临时会话隔离与显式成果保留原生通过 | 1ebe独立临时session草稿不入普通历史；显式保存单一Markdown成果→Canvas，结束移除自有TemporaryChat缓存，所选作品保留，普通记忆/资料不变，不自动运行Canvas。E/native-rerank-temporary-stop.json、temporary-workflow-transfer.ax.txt。无临时真实生成，CPU取消/drain/原件保护沿用，不声称零磁盘痕迹。 |
 | F33 | 新会话包/独立恢复/冷开代表路径通过 | 1ebe普通App重新导出→新位置独立恢复→正常退出/冷进程打开，消息/attempt/工具/成果/资料及4个相关记忆版本保持（已用手工记忆2版及本会话建议/审核记忆2版）；17媒体相同字节/独立inode，future memoryScopes空。E/recovery-data-check.json、restored-cold*.ax.txt。旧af遗漏与14方法/2suite先红后绿保留，不重写旧包；全局预设仍独立交换，未外推所有外部格式。 |
 | F34 | 普通App素材到Canvas通过；字段/回流待补 | HTML保存成果显式交给既有资产节点并保存Canvas，无运行记录、未修改原对话；人工/选段/严格结构字段CPU与过期保护复用。结构化字段和Canvas成果拖回新聊天宿主原生仍待验，不能以一个素材节点代替全部。 |
