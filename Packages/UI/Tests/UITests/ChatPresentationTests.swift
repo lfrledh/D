@@ -4,6 +4,7 @@ import Foundation
 import DWorkbench
 import SwiftUI
 import Testing
+import XCTest
 @testable import UI
 
 private actor ChatPresentationNoInference: InferenceEngine {
@@ -38,6 +39,7 @@ private actor ChatPresentationGatedStreamEngine: InferenceEngine {
     private var continuation: AsyncThrowingStream<InferenceOutput, Error>.Continuation?
     private var waiters: [CheckedContinuation<Void, Never>] = []
     private var drained = false
+    private var completedResponse: TextResponse?
     private(set) var cancellationSeen = false
     private(set) var submissions = 0
     func submit(_ request: InferenceRequest, backendID: String) async throws -> InferenceRun {
@@ -47,7 +49,7 @@ private actor ChatPresentationGatedStreamEngine: InferenceEngine {
         return .init(id: request.id, events: pair.stream,
             cancel: { await self.cancel() }, outcome: {
                 await self.waitForDrain()
-                return .cancelled
+                return await self.result()
             })
     }
     func emit(_ text: String) { continuation?.yield(.textDelta(text)) }
@@ -56,7 +58,12 @@ private actor ChatPresentationGatedStreamEngine: InferenceEngine {
         if drained { return }
         await withCheckedContinuation { waiters.append($0) }
     }
-    func drain() {
+    private func result() -> RunOutcome {
+        if let completedResponse { return .completed(.init(textResponse: completedResponse)) }
+        return .cancelled
+    }
+    func drain(response: TextResponse? = nil) {
+        completedResponse = response
         drained = true; continuation?.finish()
         let pending = waiters; waiters.removeAll()
         for waiter in pending { waiter.resume() }
@@ -140,7 +147,7 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
         return rectangle.width > 0 && rectangle.minX >= -1 && rectangle.maxX <= width + 1
     }
 
-    private func node() throws -> WorkflowNode {
+    fileprivate func node() throws -> WorkflowNode {
         var node = try #require(WorkflowRegistry.standard.operation(WorkflowModelRoutes.qwen35)?.definition.makeNode())
         node.parameters["modelID"] = .text("text:fixture")
         node.parameters["outputMode"] = .text("response")
@@ -149,7 +156,7 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
         return node
     }
 
-    private func attempt(sessionID: UUID, user: ChatMessage, assistant: ChatMessage,
+    fileprivate func attempt(sessionID: UUID, user: ChatMessage, assistant: ChatMessage,
                          status: ChatAttempt.Status, raw: String, node: WorkflowNode) -> ChatAttempt {
         var value = ChatAttempt(id: assistant.attemptID!, sessionID: sessionID, userMessageID: user.id,
             assistantMessageID: assistant.id, node: node,
@@ -158,7 +165,7 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
         return value
     }
 
-    private func fixture(_ state: ChatState,
+    fileprivate func fixture(_ state: ChatState,
                          engine: any InferenceEngine = ChatPresentationNoInference(),
                          prepare: ((ProjectStore) async throws -> ChatState)? = nil) async throws
         -> (ChatController, WorkbenchModel, ProjectStore, URL) {
@@ -187,7 +194,7 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
         return (chat, WorkbenchModel(projectSession: project), store, root)
     }
 
-    private func close(_ store: ProjectStore, root: URL) async throws {
+    fileprivate func close(_ store: ProjectStore, root: URL) async throws {
         try await store.close()
         try FileManager.default.removeItem(at: root)
     }
@@ -631,5 +638,114 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
         #expect(summary.count <= 44)
         #expect(!summary.contains(root.id.uuidString))
         #expect(ChatPresentationText.branchSummary(empty, you: "你", assistant: "助手") == "助手")
+    }
+}
+
+// XCTest owns the AppKit event loop; Swift Testing may exit during native tracking.
+@MainActor final class ChatDynamicBottomHostingTests: XCTestCase {
+    func testCompletedShortStreamCanJumpPastAdoptedListAndEmptyCancellation() async throws {
+        let fixture = ChatPresentationTests()
+        let modelNode = try fixture.node()
+        var session = ChatSession(title: "Dynamic bottom regression")
+        session.configuration = modelNode
+        let first = ChatMessage(parentID: nil, role: .user, text: "List reading corner tips")
+        let partial = ChatMessage(parentID: first.id, role: .assistant, text: "", attemptID: UUID())
+        let second = ChatMessage(parentID: partial.id, role: .user, text: "Give five tips")
+        let cancelled = ChatMessage(parentID: second.id, role: .assistant, text: "", attemptID: UUID())
+        let list = (1...11).map { "\($0). Use adjustable shelves and comfortable lighting for a small reading corner with books and seating." }.joined(separator: "\n")
+        var earlier = fixture.attempt(sessionID: session.id, user: first, assistant: partial,
+            status: .partial, raw: list, node: modelNode)
+        earlier.response = .init(rawText: list, finalText: list, finishReason: .length)
+        var stopped = fixture.attempt(sessionID: session.id, user: second, assistant: cancelled,
+            status: .cancelled, raw: "", node: modelNode)
+        stopped.issue = "已停止；已接收的文字已保留。"
+        session.messages = [first, partial, second, cancelled]; session.attempts = [earlier, stopped]
+        let adopted = ChatTextRevision(messageID: partial.id, text: list)
+        session.contextChoices = .init()
+        session.contextChoices?.revisions = [adopted]; session.contextChoices?.adoptedRevisionIDs = [adopted.id]
+        session.selectedLeafID = cancelled.id; session.draft = "Reply only OK."
+        var state = ChatState(); state.sessions = [session]; state.selectedSessionID = session.id
+        let engine = ChatPresentationGatedStreamEngine()
+        let (chat, model, store, root) = try await fixture.fixture(state, engine: engine)
+        var frames: [String: CGRect] = [:]
+        let host = NSHostingView(rootView: ChatWorkbenchView(chat: chat, model: model, onChooseModel: {},
+            onSavedAsset: { _ in }, onAssetsChanged: {}, initialInspectorVisible: true,
+            initialSettingsVisible: true, initiallyFollowsBottom: false, initiallyHasNewContent: true)
+            .observingLayout { frames[$0] = $1 })
+        host.frame = .init(x: 0, y: 0, width: 1057, height: 640)
+        let window = NSWindow(contentRect: host.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; window.contentView = host; window.orderFront(nil)
+        defer { window.close() }
+        do {
+        host.layoutSubtreeIfNeeded()
+        try await Task.sleep(for: .milliseconds(100))
+        try await chat.send(sessionID: session.id)
+        for _ in 0..<100 {
+            if await engine.submissions == 1 { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        let startedCount = await engine.submissions
+        XCTAssertEqual(startedCount, 1)
+        await engine.emit("O")
+        for _ in 0..<100 {
+            if chat.selectedSession?.attempts.last?.rawText == "O" { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        _ = try XCTUnwrap(chat.selectedSession?.attempts.last?.rawText == "O" && chat.isRunning ? true : nil,
+            "Controlled stream did not expose its in-flight state")
+        host.layoutSubtreeIfNeeded()
+        print("D_DYNAMIC_BOTTOM", "in-flight O observed, host layout updated")
+        await engine.emit("K")
+        await engine.drain(response: .init(rawText: "OK", finalText: "OK", finishReason: .stop))
+        await chat.waitForCompletion()
+        XCTAssertTrue(chat.selectedSession?.attempts.last?.status == .completed)
+        XCTAssertTrue(chat.selectedSession?.attempts.last?.rawText == "OK")
+        host.layoutSubtreeIfNeeded()
+        try await Task.sleep(for: .milliseconds(150))
+        let viewportBefore = try XCTUnwrap(frames["transcript"])
+        let scroll = try XCTUnwrap(Self.descendants(host).compactMap { $0 as? NSScrollView }.first {
+            let frame = host.convert($0.bounds, from: $0)
+            return frame.contains(.init(x: viewportBefore.midX, y: viewportBefore.midY))
+                && frame.width > 300
+        }, "Native transcript scroll view must be identifiable")
+        let beforeOffset = scroll.contentView.bounds.minY
+        let beforeDistance = try XCTUnwrap(scroll.documentView).frame.height
+            - beforeOffset - scroll.contentView.bounds.height
+        XCTAssertGreaterThan(beforeDistance, 28, "Fixture must actually start away from Bottom")
+        let rect = try XCTUnwrap(frames["bottom-button"])
+        let target = NSAccessibilityElement()
+        target.setAccessibilityIdentifier("chat-bottom-button")
+        target.setAccessibilityFrame(window.convertToScreen(host.convert(rect, to: nil)))
+        print("D_DYNAMIC_BOTTOM", "before click", rect, "offset", beforeOffset, "distance", beforeDistance)
+        _ = try XCTUnwrap(HostingControlClick.send(to: target, in: host) ? true : nil,
+            "Bottom event not delivered")
+        print("D_DYNAMIC_BOTTOM", "click returned")
+        try await Task.sleep(for: .milliseconds(600))
+        host.layoutSubtreeIfNeeded()
+        let finalCount = await engine.submissions
+        XCTAssertEqual(finalCount, 1)
+        XCTAssertTrue(chat.selectedSession?.attempts.prefix(2) == [earlier, stopped][...])
+        XCTAssertTrue(chat.selectedSession?.contextChoices?.adopted[partial.id] == list)
+        let finalID = try XCTUnwrap(chat.selectedSession?.messages.last?.id)
+        let finalRect = try XCTUnwrap(frames["message-" + finalID.uuidString])
+        let viewport = try XCTUnwrap(frames["transcript"])
+        XCTAssertTrue(finalRect.intersects(viewport), "Completed answer must be visible after Bottom")
+        let afterOffset = scroll.contentView.bounds.minY
+        let afterDistance = try XCTUnwrap(scroll.documentView).frame.height
+            - afterOffset - scroll.contentView.bounds.height
+        print("D_DYNAMIC_BOTTOM", "after click offset", afterOffset, "distance", afterDistance)
+        XCTAssertGreaterThan(afterOffset, beforeOffset)
+        XCTAssertLessThanOrEqual(afterDistance, 28)
+        } catch {
+            await engine.drain()
+            await chat.waitForCompletion()
+            try? await fixture.close(store, root: root)
+            throw error
+        }
+        try await chat.flush(); try await fixture.close(store, root: root)
+    }
+
+    private static func descendants(_ view: NSView) -> [NSView] {
+        [view] + view.subviews.flatMap(descendants)
     }
 }
