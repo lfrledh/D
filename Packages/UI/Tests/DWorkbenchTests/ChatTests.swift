@@ -57,10 +57,15 @@ private actor ChatOutcomeGate {
 private actor ChatGatedEngine: InferenceEngine {
     let gate = ChatOutcomeGate()
     private(set) var cancellations = 0
+    private(set) var requests: [InferenceRequest] = []
+    let delta: String
+    init(delta: String = "partial 👩🏽‍🎨 e\u{301}") { self.delta = delta }
     func submit(_ request: InferenceRequest, backendID: String) async throws -> InferenceRun {
+        requests.append(request)
         await gate.markSubmitted()
+        let delta = self.delta
         return .init(id: request.id, events: AsyncThrowingStream { continuation in
-            continuation.yield(.textDelta("partial 👩🏽‍🎨 e\u{301}")); continuation.finish()
+            if !delta.isEmpty { continuation.yield(.textDelta(delta)) }; continuation.finish()
         }, cancel: { await self.recordCancel() }, outcome: {
             await self.gate.waitOutcome(); return .cancelled
         })
@@ -1255,6 +1260,49 @@ struct ChatTests {
         #expect(chat.state.sessions.first?.attempts.first?.rawText == "partial 👩🏽‍🎨 e\u{301}")
         #expect(chat.state.sessions.first?.attempts.first?.status == .partial)
         #expect(await engine.cancellations > 0)
+        try await chat.prepareForBackup()
+        try await chat.flush(); try await store.close()
+    }
+
+    @Test func stopBeforeFirstDeltaCanSendAgainWithoutDeletingCancelledAttempt() async throws {
+        let root = URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory())
+            .appendingPathComponent("ChatGate-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let store = try await ProjectStore.create(at: root.appendingPathComponent("Gate.dproject"), name: "Chat gate")
+        let engine = ChatGatedEngine(delta: "")
+        let runtime = WorkbenchSession(engine: engine, backendID: "fixture", status: {
+            .init(activeRunID: nil, phase: nil, queuedRunIDs: [])
+        }, shutdown: {}, cleanup: {}, validateModel: { _ in }, textBackendID: "fixture.text")
+        let chat = ChatController(store: store) {
+            WorkflowServices(store: store, session: runtime) { _, identity in
+                .init(identity: identity, reference: .init(directory: root, revision: identity),
+                      backendID: "fixture.text", operationID: WorkflowModelRoutes.qwen35,
+                      textCapability: .init(maximumPromptTokens: 8192, maximumOutputTokens: 1024,
+                                            profile: TextExecutionCapability.qwen35VLMProfile))
+            }
+        }
+        await chat.load()
+        let first = try chat.newSession(); try configure(chat, session: first)
+        try chat.updateDraft("start", sessionID: first)
+        try await chat.send(sessionID: first)
+        await engine.gate.waitSubmitted()
+        await #expect(throws: (any Error).self) { try await chat.prepareForBackup() }
+        let cancellation = Task { await chat.cancel() }
+        await Task.yield()
+        #expect(chat.isRunning)
+        await engine.gate.release()
+        await cancellation.value
+        #expect(!chat.isRunning)
+        let original = try #require(chat.selectedSession?.attempts.first)
+        #expect(original.rawText.isEmpty && original.response == nil && original.status == .cancelled)
+        #expect(await engine.cancellations > 0)
+        try chat.updateDraft("next question", sessionID: first)
+        let preview = try chat.contextPreview(sessionID: first)
+        try await chat.send(sessionID: first); await chat.waitForCompletion()
+        #expect(await engine.requests.count == 2)
+        #expect(chat.selectedSession?.attempts.last?.messagesJSON == preview.messagesJSON)
+        #expect(chat.selectedSession?.attempts.first == original)
+        #expect(chat.selectedSession?.messages.count == 4)
         try await chat.prepareForBackup()
         try await chat.flush(); try await store.close()
     }

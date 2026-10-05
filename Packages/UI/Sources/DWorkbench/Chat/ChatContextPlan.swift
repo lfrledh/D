@@ -66,6 +66,14 @@ public struct ChatContextPlan: Sendable, Equatable {
                 if let replacement = adopted[entry.id] {
                     selectedText = replacement
                 } else {
+                    // Keep the failed/cancelled attempt in history, but an attempt that
+                    // produced nothing has no answer for the user to adopt into context.
+                    if (attempt.status == .cancelled || attempt.status == .failed),
+                       entry.text.isEmpty, attempt.rawText.isEmpty,
+                       attempt.response == nil, attempt.output == nil,
+                       entry.attachments.isEmpty, (entry.knowledgeExcerpts ?? []).isEmpty {
+                        continue
+                    }
                     guard attempt.status == .completed,
                           let final = attempt.response?.finalText, !final.isEmpty else {
                         throw WorkflowIssue("部分回答须显式采用后才能进入上下文。")

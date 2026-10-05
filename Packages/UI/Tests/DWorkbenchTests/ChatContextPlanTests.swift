@@ -103,6 +103,65 @@ struct ChatContextPlanTests {
         #expect(finished.response?.finalText == "final")
     }
 
+    @Test func emptyTerminalAttemptsAllowContinuationWithoutChangingHistory() throws {
+        let user = ChatMessage(parentID: nil, role: .user, text: "original question")
+        let answer = ChatMessage(parentID: user.id, role: .assistant, text: "", attemptID: UUID())
+        let partial = attempt(for: answer, user: user, status: .partial, response: nil)
+        let next = ChatMessage(parentID: answer.id, role: .user, text: "cancelled question")
+        let empty = ChatMessage(parentID: next.id, role: .assistant, text: "", attemptID: UUID())
+        for status in [ChatAttempt.Status.cancelled, .failed] {
+            var terminal = attempt(for: empty, user: next, status: status, response: nil)
+            terminal.rawText = ""
+            terminal.issue = "retained failure"
+            let original = terminal
+            let plan = try ChatContextPlan.build(path: [user, answer, next, empty], attempts: [partial, terminal],
+                prompt: "try again", attachments: [], system: "", adopted: [answer.id: "chosen partial"])
+            let messages = try #require(JSONSerialization.jsonObject(with: Data(plan.messagesJSON.utf8)) as? [[String: Any]])
+            #expect(messages.compactMap { $0["role"] as? String } == ["user", "assistant", "user", "user"])
+            #expect(plan.messagesJSON.contains("chosen partial") && plan.messagesJSON.contains("cancelled question"))
+            #expect(!plan.messagesJSON.contains("raw original"))
+            #expect(terminal == original && partial.rawText == "raw original")
+            let revised = try ChatContextPlan.build(path: [next, empty], attempts: [terminal], prompt: "next",
+                attachments: [], system: "", adopted: [empty.id: "explicit replacement"])
+            #expect(revised.messagesJSON.contains("explicit replacement"))
+        }
+    }
+
+    @Test func emptyTerminalExceptionDoesNotDiscardContentOrNonterminalState() throws {
+        let user = ChatMessage(parentID: nil, role: .user, text: "question")
+        let answer = ChatMessage(parentID: user.id, role: .assistant, text: "", attemptID: UUID())
+        var base = attempt(for: answer, user: user, status: .cancelled, response: nil)
+        base.rawText = ""
+        var cases: [ChatAttempt] = []
+        for text in ["partial", " "] { var item = base; item.rawText = text; cases.append(item) }
+        for status in [ChatAttempt.Status.partial, .interrupted, .completed, .running, .saving] {
+            var item = base; item.status = status; cases.append(item)
+        }
+        for response in [TextResponse(rawText: "", finalText: "", finishReason: .stop),
+                         TextResponse(rawText: "", reasoningText: "reasoning", finalText: "", finishReason: .incomplete),
+                         TextResponse(rawText: "", reasoningText: "reasoning", finalText: "", finishReason: .stop),
+                         TextResponse(rawText: "", finalText: "", toolCalls: [.init(id: "call", name: "lookup", arguments: [:])], finishReason: .toolCalls)] {
+            var item = base; item.response = response; cases.append(item)
+        }
+        let output = WorkflowAssetReference(projectID: UUID(), assetID: UUID(), kind: .text,
+                                            sha256: String(repeating: "a", count: 64))
+        var published = base; published.output = output; cases.append(published)
+        let withAttachment = ChatMessage(id: answer.id, parentID: user.id, role: .assistant, text: "",
+            attachments: [.init(name: "output", reference: output, textSnapshot: "source")], attemptID: answer.attemptID)
+        #expect(throws: (any Error).self) {
+            try ChatContextPlan.build(path: [user, withAttachment], attempts: [base], prompt: "next", attachments: [], system: "")
+        }
+        for item in cases {
+            #expect(throws: (any Error).self) {
+                try ChatContextPlan.build(path: [user, answer], attempts: [item], prompt: "next", attachments: [], system: "")
+            }
+        }
+        let withText = ChatMessage(id: answer.id, parentID: user.id, role: .assistant, text: "retained text", attemptID: answer.attemptID)
+        #expect(throws: (any Error).self) {
+            try ChatContextPlan.build(path: [user, withText], attempts: [base], prompt: "next", attachments: [], system: "")
+        }
+    }
+
     @Test func mixedAttachmentsKeepOrderAndEmptySystemAddsNothing() throws {
         let project = UUID()
         func attachment(_ kind: WorkflowDataKind, _ name: String, _ text: String? = nil) -> ChatAttachment {
