@@ -34,7 +34,7 @@ struct ChatActionMenu: NSViewRepresentable {
 
     func makeNSView(context: Context) -> NSPopUpButton {
         let button = NSPopUpButton(frame: .zero, pullsDown: true)
-        button.usesItemFromMenu = false
+        button.usesItemFromMenu = true
         button.autoenablesItems = false
         context.coordinator.install(on: button)
         context.coordinator.update(button, title: title,
@@ -138,17 +138,20 @@ struct ChatActionMenu: NSViewRepresentable {
             displayedActions.removeAll()
             if rebuild {
                 menu.removeAllItems()
+                // AppKit hides the first row of a standard pull-down. Reserve
+                // it for the control title, never for a caller's first action.
+                menu.addItem(NSMenuItem(title: snapshot.title, action: nil, keyEquivalent: ""))
                 append(snapshot.items, to: menu, parentEnabled: true)
                 rowPresentation = presentation
                 rowsNeedRenewal = false
             } else {
                 refreshActions(snapshot.items, in: menu)
             }
-            // usesItemFromMenu=false requires an independent cell display item.
-            // Do not insert a dummy row into the actionable menu.
+            if rebuild || displayedTitle != snapshot.title {
+                menu.item(at: 0)?.title = snapshot.title
+                button.synchronizeTitleAndSelectedItem()
+            }
             if displayedTitle != snapshot.title {
-                (button.cell as? NSPopUpButtonCell)?.menuItem = NSMenuItem(title: snapshot.title, action: nil, keyEquivalent: "")
-                button.invalidateIntrinsicContentSize()
                 button.setAccessibilityLabel(snapshot.title)
                 displayedTitle = snapshot.title
             }
@@ -160,7 +163,8 @@ struct ChatActionMenu: NSViewRepresentable {
         }
 
         private func refreshActions(_ values: [ChatActionMenuItem], in menu: NSMenu) {
-            for (value, item) in zip(values, menu.items) {
+            let rows = menu === rootMenu ? Array(menu.items.dropFirst()) : menu.items
+            for (value, item) in zip(values, rows) {
                 if let children = value.children, let submenu = item.submenu {
                     refreshActions(children, in: submenu)
                 } else if let action = value.action {
