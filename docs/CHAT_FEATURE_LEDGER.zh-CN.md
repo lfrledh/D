@@ -98,6 +98,8 @@ S00–S05是同一份已批准范围的实施切片，完成一片可集成一�
 
 2026-10-05连续收口证据RClose=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261004T145523Z-continuous-closeout`；下表“连续收口”均指此目录。main仍为90819739（生产af0103b5）；候选代码4102cff1仅在1b00后增加默认关闭诊断和测试。解锁后117d布局/1ebe记忆包已补原生，671空取消接续已修并真实验证，1b00菜单首项修补待鼠标；Bottom卡顿仍未关闭。E=RClose/gui/unlocked-20261005。无桌面条件持续有效，新RNo=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261005T040538Z-no-desktop`仅增加非交互证据，不刷新旧原生通过日期。
 
+2026-10-05定点真实集成RReal=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261005T063244Z-real-chat`，受测`4266579ab5fe449ab9cdd38a474153684f5c0b56`。仅增加既有工作台测试目标的真实后端接线与Xcode测试入口；App生产代码仍4102cff1。实际1方法/2次短生成，不累计旧测试，不代表原生操作。
+
 | ID | 状态 | 入口／证据／剩余 |
 |---|---|---|
 | F01 | 已有部分；新宿主待验 | 四分类与共享模型保留；旧B原生往返复用，S01装配仍需复验。 |
@@ -108,10 +110,10 @@ S00–S05是同一份已批准范围的实施切片，完成一片可集成一�
 | F06 | 已有部分 | 旧B编辑、分支和路径返回已部分验；不把整个能力组判完成。 |
 | F07 | 实现/CPU通过；菜单原生门槛通过 | regenerate新seed与reproduce冻结旧node/messages/inputs/system继续分开。c16菜单可展开关闭且短发送不复现旧反馈循环；旧真实不同seed/缺seed禁用证据复用，未重跑长生成或宣称逐token确定性。 |
 | F08 | 原生部分采用/人工多版本通过 | c16部分回答采用→继续证据复用；af0103b5修复人工采用后主文仍显示旧结果。普通App冷开、中文主文、原始英文折叠、再编辑初值、切原版/人工版通过；原attempt不改。RClose/lead/adopted-display-native-red.json、native-adopted-display-green.json；定向10方法/2suite。 |
-| F09 | 真实同模型不同配置比较通过；跨模型未新增验证 | 同一冻结问题、上下文与seed4201，温度0.7/64输出与0/128输出分别得到两份完成回答；普通App比较并选用第二份，未发追问草稿保持。最初12GiB准入失败保留，改显式15GiB后成功，不降精度/删输入。RClose/lead/native-aux-and-comparison.json。 |
+| F09 | 同模型比较原生通过；真实跨模型服务链通过 | 旧RClose同模型不同参数与普通App选用证据沿用。RReal中实际ChatController.compare→WorkflowServices→Runtime串行运行Qwen3.5-9B与Qwen3.8-27B完整BF16/SSD；同一冻结问题及seed42，正常结束各8 token。模型/revision、先释放后加载、结果/会话归属、选用第二assistant的路径和下次上下文、未发草稿保护、Store关闭重开与输出可读均通过。两答案恰好相同，按ID/路径验证选用，不凭文本差异；不是新原生跨模型鼠标验收。lead/real-chat-evidence.json。 |
 | F10 | 代表作用域普通App通过 | 671实际设置新会话默认DEFAULT-ONLY，旧A812系统提示仍空，新EDB继承；清除默认后EDB保留，另一新E36为空。E/native-management-context-defaults.json，隔离suite，未生成、不改旧请求。当前独立替换/清空CPU与既有预设证据沿用。 |
 | F11 | 预设原生交换通过；短任务部分待验 | 普通App新建/保存/应用、复制、编辑未保存→恢复已保存、导出3项→导入预览→新建3副本通过，旧会话与请求保留。RClose/lead/native-configuration.json；选段短任务沿用CPU，完整App待补。 |
-| F12 | 原生模板读取/拒绝/恢复通过；覆盖后生成未新增实测 | 普通App实际tokenizer预览375 token；非法Jinja给出明确解析原因，恢复安装模型模板后再预览成功。12项固定tokenizerCPU等值证据复用，不冒称最终视觉token或约束解码。RClose/lead/native-configuration.json。 |
+| F12 | 原生读取/拒绝/恢复沿用；自定义模板真实传递/生成通过 | RClose原生tokenizer预览/非法Jinja拒绝/恢复与既有12项固定tokenizer检查沿用。RReal复用已支持的有限模板加marker，9B实际冻结请求保留override，真实后端promptTokens=39与编辑预览一致、不同于默认31；随后27B使用自己的默认模板，无串入。1方法内同一组生成覆盖，不额外重跑。没有宣称任意Jinja或新增普通App模板生成交互通过；lead/real-chat-evidence.json及template/token/request原件。 |
 | F13 | 格式接线与CPU通过；原生待验 | 自动/纯文/Markdown/JSON/D结构定义：显式指令与生成后校验；原文保留，不冒称约束解码。replay/compare/fork冻结格式、非法schema保护与备份在R/lead/s02-format-quote-green核对。 |
 | F14 | 本地查看已操作；完整界面证据及分享操作待补 | bf8/e742本地正文token/key过度遮蔽已修，10方法保护沿用。671普通检查器已打开并观察请求内容，但E/local-request-visible.ax.txt只保存AX差分及选中句子，不能独立证明完整字段展示，后续补完整界面证据。真实凭据仍遮蔽，分享JSON默认省正文，复制分享原生尚待补；不承诺检测任意秘密。 |
 | F15 | 停止与空取消后接续通过；Bottom交互失败独立保留 | 旧c16长流/部分回答采用沿用。本次真实首字前Stop产生空cancelled，原投影错误阻断后续；671仅下一请求跳过真正空/无产物cancelled或failed assistant，历史/user/非空partial/tool保留。先红后绿54方法/2suite及非实现者审阅；671原失败会话实际得到OK。完成后一次Bottom卡顿不掩盖，受控动态1方法通过但未定位根因。 |

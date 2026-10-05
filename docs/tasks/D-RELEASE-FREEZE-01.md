@@ -836,3 +836,17 @@ R沿上一节。普通App543完成PDF/DOCX/显式OCR、Python抛错→具体stdo
 - 风险验证：默认关闭诊断→隐私/无状态副作用/记录真实性只读审阅＋正常编译；新增CSV/MCP测试→实际服务路径/小文件/受控取消＋受影响两suite。未改模型或保存生产语义，旧模型/恢复/长流证据复用。原生Bottom及菜单、附件/格式/字段/四分类等仍待验；F26真实两服务凭据、F31本地授权/两语言转写/试听和新宿主本人检查只保留原队列。完整Lead用量/订阅费用unknown，不重算历史。
 
 恢复：代码4102；最终仅五份现行记录的文档/远端SHA、保护终态、进程与App索引在R/lead/no-desktop-receipt.json。候选正常推送；main保持90819739，不能将未关闭关键原生问题的组合硬合。用户明确改变条件前无桌面续验，不以普通“继续”解除；之后先同版最短Bottom和菜单检查，再按F表续作。不宣称功能冻结，不启动全局质量审计或Liquid Glass统一，未公开Release。没有新增必需本人问题或第二套待办。
+
+### 2026-10-05 F09/F12无桌面真实后端证据收口
+
+同一CHAT-PRODUCT-20261003范围，起点d8fd464c0efe4a55ba858aea420fc3aab1867433；受测 **4266579ab5fe449ab9cdd38a474153684f5c0b56**。RReal=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261005T063244Z-real-chat`，完整命令/环境/结果为lead/real-chat-{command,result,summary}.json，汇总real-chat-evidence.json。没有桌面探测、GUI、权限请求、新下载或其他模型运行。
+
+- 原有证据分别覆盖比较请求冻结及真实模型，缺实际连接；F12已覆盖实际分词器与请求映射，缺编辑模板真实生成。仅在既有DWorkbenchTests增加1个opt-in集成方法、测试专用DMLX依赖及工作区scheme；生产DWorkbench/UI不依赖计算库，不另建运行器。变化/风险→实际请求、选择/资产/版本、生命周期→一组固定短生成＋同进程Store关闭后重新打开（不是App冷启动）；未变生产代码/CPU保护、长流、CSV/MCP、App与既有模型证据复用。
+- 入口准备失败保留：自动DWorkbench scheme的TestConfigurations为空不算通过；显式方案首次未将UI包登记为工作区成员，exit66；登记后新测试期望表达式触发类型检查超时，exit65，改为等价显式序列。最终build-for-testing exit0/49.67秒；xctestrun核实host为Agents/xctest、无App宿主/UITest。没有借锁屏解释命令或构建错误，也未借空测试报通过。
+- 既有native_files_review只读检查新测试和入口：发现默认模型模板含macro/set，加marker会被有限自定义语法拒绝；在首次生成前改用既有ChatTemplateOverrideTests已验证有限source，保留默认作独立token对照。其余身份、转发、释放、选择/上下文、持久化断言及test-only依赖复核无阻断。Lead实现，不称另有模型执行验收；没有新写Worker。
+- **实际1方法/1suite通过，0失败/0跳过；只2次生成**。9B revision c202236235762e1c871ad0ccb60c8ee5ba337b9a、27B revision 1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0，完整原始BF16/SSD、seed42/temperature0/思考off、完整固定问题、输出上限32；各正常stop/8 token，回答均为“Red and blue are two primary colors.”。相同文本不作为模型同一性依据；实际revision/权重规模/请求/run/assistant ID均核对。9B loading→release65.67秒，27B166.92秒，总进程238.85秒；MLX峰值8644240451/6039226089 bytes，仅为分配计数非整机RSS/性能基准。
+- 两次均loading→loaded→generating→drained→released，末端active/cache=0、runtime无任务/预约；第一release先于第二load。比较保留原system/messages/inputs，未混入之后修改的未来system/草稿，不污染另一选中会话；选用第二assistant按ID/路径核验，下次上下文和全部状态/两份输出经真实Store关闭重开保持。绑定使用权通过现有WorkflowServices注入解析器跟踪，不冒充普通App模型安装/OS书签权限验证。
+- F12实际9B override冻结后进入真实后端，promptTokens=39与编辑模板预览一致且不同于默认31；27B默认不串模板。模板/token IDs/请求/结果/lifecycle/保存状态/项目保留于RReal/tmp/Chat-real-AB4B0F85-A50E-40C1-9DE2-C2BBC906B73E（外盘持久证据，无自动清理），不重复第二组生成。
+- 源/main/个人scheme不变；模型清单stat及小配置摘要前后相同，沿用原完整权重验证不再全hash。App4102四关键文件未变，唯一入口沿用；没有App启动/构建或界面验收。所有本轮自有编译/测试命令已收回终态，未终止未知进程。最终文档/候选远端与保护见lead/real-chat-receipt.json；测试不冒称运行于后产生的文档SHA。
+
+恢复点：F09/F12本次无GUI集成缺口已补，底层代码无需修补；Bottom与菜单仍保留原生待验/失败，原队列H32/F26/F31不另建或催办。后续无已确认独立工程缺口需重复制造测试，等本人明确改变桌面条件后用既备最短实验接续。main未接纳关键缺口候选，正常推送候选供审计；功能冻结/发行均未通过，全局质量与Liquid Glass后置。可观察本次测试用时如上，完整Lead消耗/订阅费用unknown，未重算历史。

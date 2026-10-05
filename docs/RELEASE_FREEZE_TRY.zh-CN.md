@@ -11,6 +11,8 @@
 `/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261005T040538Z-no-desktop/delivery/D Chat Product 4102cff1.app`。
 代码 **4102cff1bf3f61251e725e31a8ad38842cdd8901**；RNo指该新run目录。普通签名构建60.033秒通过，副本签名和四关键文件见RNo/lead/app-delivery.json；最终文档/候选远端SHA见RNo/lead/no-desktop-receipt.json。10个服务方法执行通过、另1方法显式跳过，结果不与历史相加。本轮没有启动App，构建不代表新包原生验收通过。
 
+本次F09/F12无GUI真实集成受测 **4266579ab5fe449ab9cdd38a474153684f5c0b56**，仅测试/工作区入口与记录变化；生产源码仍与4102相同，因此复用同一App，不重复构建或启动。Qwen9B/27B原始BF16的比较、模板、释放和Store重开通过，证据`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261005T063244Z-real-chat/lead/real-chat-evidence.json`。最终候选/远端见同目录`real-chat-receipt.json`；这不补写原生验收结论。
+
 入口复用隔离偏好`BC96EF26-C157-4A48-84B4-A54785B1A42E`和已登记模型，不替换普通D，并拒绝双开。旧包保留但不另给启动建议。**本人明确不能操作或解锁，持续到另行通知；当前不启动、不探测桌面。** 4102仅增加默认关闭诊断与测试，菜单首项仍待鼠标。671曾出现完成后Bottom卡顿，原因仍未确定；不要把受控hosting通过当作该原生失败已修复。
 
 ## 从保留的小项目继续
@@ -58,6 +60,6 @@ Quick/Canvas选真实模型，高级参数选择**省内存（SSD分层加载，
 
 ## 集中办理与交付边界
 
-此前解锁时完成的恢复、紧凑布局、真实重排、临时成果和工具取消等证据沿用。本轮只完成无桌面接线核查、两项新增服务检查和同版构建。本人明确改变条件后，由Lead继续最短Bottom诊断、菜单首项及其余原生路径；新聊天组字、Speech/试听和搜索凭据仍仅在[唯一队列](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md)。不催办、不重复H22/HF/宏/固定视频。
+此前解锁时完成的恢复、紧凑布局、真实重排、临时成果和工具取消等证据沿用。前轮的无桌面服务检查和构建沿用；本次只补F09/F12一组真实后端集成，不运行GUI。本人明确改变条件后，由Lead继续最短Bottom诊断、菜单首项及其余原生路径；新聊天组字、Speech/试听和搜索凭据仍仅在[唯一队列](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md)。不催办、不重复H22/HF/宏/固定视频。
 
 这是可构建的试用候选与准确停点，**不是完整聊天验收通过、功能冻结或正式发行**。未完条目保留同号，不移至发布后；未强推、改许可证或发布Release。首次使用、无权重分发/依赖封装、升级恢复和渠道责任仍保留。

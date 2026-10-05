@@ -14,7 +14,15 @@
 
 Lead 持有共享 Runtime/WorkflowServices/ChatController/Store；文件面板和纯展示在独立受限任务树实施。早期S00/S01历史证据目录 RCP=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261003T115108Z-chat-product`。完整 Lead 成本与订阅费用 unknown。早期S00代码完成CPU和签名构建，曾通过项目列表、真实1024-token接收和坐标停止→下一请求；当时菜单忙循环和生成中AX迟滞阻塞接纳。S01缩放焦点反例后来修复并通过hosting、与S00组合。以上是早期门槛来源，已被下述c16普通App复验和main接纳推进；最新S02–S05接线、R证据目录及剩余状态以以下恢复检查点为准，F01–F36范围不取消。
 
-### 当前恢复检查点（2026-10-05，无桌面连续收口）
+### 当前恢复检查点（2026-10-05，F09/F12真实集成）
+
+- 起点候选d8fd464c0efe4a55ba858aea420fc3aab1867433；本轮实际受测 **4266579ab5fe449ab9cdd38a474153684f5c0b56**。只增加真实集成测试及既有DWorkbenchTests的Xcode入口，未改生产Runtime/Store/输入/滚动；App代码仍 **4102cff1bf3f61251e725e31a8ad38842cdd8901**，四关键文件与唯一启动器保持，见[试用指南](RELEASE_FREEZE_TRY.zh-CN.md)。main仍90819739e99b366d7cdb2f549c129eea28728206，未硬合原生关键缺口。
+- RReal=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261005T063244Z-real-chat`。lead/real-chat-evidence.json、real-chat-summary.json：实际1方法通过/0跳过，2次真实短生成，整组238.85秒。9B/27B完整BF16、固定revision、SSD分层、15GiB显式预算，同一问题；释放交接、归属、选用后的上下文与关闭重开通过。F12编辑模板实际39 token、默认31，完成真实执行传递；准确范围只更新[唯一F表](CHAT_FEATURE_LEDGER.zh-CN.md)F09/F12。
+- 默认scheme原先无testables及显式scheme未登记包的构建失败均留证；登记现有UI包/测试scheme后实际编译并核xctest非App宿主。没有新runner、生产后端依赖或测试平台，没有下载/GUI/桌面探测/旧长生成。Lead编写，既有只读非实现者窄审指出模板夹具需使用有限语法，已在任何生成前修正；未改产品限制。
+- 源01758b81527dc27eb4563bf1b66fd1ceab6647ee与scheme内容/索引/未暂存保持；模型只核清单文件stat及小配置摘要，未再全权重hash。自有编译/测试进程结束，Runtime两次drain/release；细节见RReal/lead/protection-after.json。最终文档/远端SHA和App对应写RReal/lead/real-chat-receipt.json，不自引用反复提交。
+- 当前已识别的这两个独立真实集成缺口已补，不重复上轮CSV/MCP或只读盘点。剩余Bottom、菜单和附件/四分类/字段等原生路径需新现场证据；F26真实凭据与F31系统授权/两语言转写仍在[唯一集中队列](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md)。**无桌面条件持续**，不再加Bottom日志/猜补丁；等待本人明确改变条件再按既备最短实验接续。未功能冻结，质量重构/视觉统一后置。
+
+### 历史恢复检查点（2026-10-05，无桌面连续收口）
 
 - 起点候选 `53d4cdc442d84b676e048b1da5636a555ddabad3`，新代码/受测文件对应 **4102cff1bf3f61251e725e31a8ad38842cdd8901**。main仍 `90819739e99b366d7cdb2f549c129eea28728206`（生产af0103b5）。最终仅文档/远端SHA写本轮R/lead/no-desktop-receipt.json；不将未关闭Bottom的组合硬合main。
 - R=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261005T040538Z-no-desktop`。本轮没有探测桌面、启动App、GUI/hosting、模型生成或本人操作；无桌面条件继续有效。唯一入口及同树Xcode见[试用指南](RELEASE_FREEZE_TRY.zh-CN.md)。
