@@ -82,6 +82,41 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
 
 @Suite("Chat presentation boundaries")
 @MainActor struct ChatPresentationTests {
+    @Test func publishedProjectAttachmentPreservesOwnerDraftAndVersion() async throws {
+        var session = ChatSession(title: "Asset recipient")
+        session.draft = "保留草稿 👩🏽‍🎨"
+        let other = ChatSession(title: "Other conversation")
+        var state = ChatState(); state.sessions = [session, other]; state.selectedSessionID = session.id
+        let (chat, _, store, root) = try await fixture(state)
+        do {
+            let before = await store.snapshot()
+            #expect(try await ChatProjectAttachmentChoice.load(from: store).isEmpty)
+            #expect(await store.snapshot() == before)
+            let file = root.appendingPathComponent("result.txt")
+            let bytes = Data("Reading corner".utf8)
+            try bytes.write(to: file)
+            let published = try await store.importWorkflowFile(at: file)
+            let choices = try await ChatProjectAttachmentChoice.load(from: store)
+            let choice = try #require(choices.first { $0.reference == published.record.reference })
+            try chat.selectSession(other.id)
+            await #expect(throws: (any Error).self) { try await choice.adopt(in: chat, sessionID: session.id) }
+            try chat.selectSession(session.id)
+            let wrongInstance = ChatProjectAttachmentChoice(name: choice.name, reference: choice.reference, instanceID: UUID())
+            await #expect(throws: (any Error).self) { try await wrongInstance.adopt(in: chat, sessionID: session.id) }
+            #expect(chat.selectedSession?.attachments.isEmpty == true)
+            try await choice.adopt(in: chat, sessionID: session.id)
+            #expect(chat.selectedSession?.draft == session.draft)
+            #expect(chat.selectedSession?.attachments.map(\.reference) == [published.record.reference])
+            #expect(chat.selectedSession?.attempts.isEmpty == true)
+            #expect(chat.state.sessions.first { $0.id == other.id }?.attachments.isEmpty == true)
+            try await chat.flush()
+            let saved = try await store.chatState()
+            #expect(saved.sessions.first { $0.id == session.id }?.attachments.map(\.reference) == [published.record.reference])
+            #expect(try Data(contentsOf: file) == bytes)
+            try await close(store, root: root)
+        } catch { try? await close(store, root: root); throw error }
+    }
+
     @Test func replayRequiresRecordedSeedAndSafeSessionButNotCurrentDraftSettings() {
         var session = ChatSession()
         var node = WorkflowNode(operationID: "d.model.qwen35-9b", title: "Qwen")

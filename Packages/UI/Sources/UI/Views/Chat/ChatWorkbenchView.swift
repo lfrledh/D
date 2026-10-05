@@ -76,6 +76,7 @@ extension ChatPresentationLayout {
 
 private enum ChatDetail: Identifiable {
     case edit(ChatEdit), preview(WorkflowAssetReference)
+    case projectAttachments(UUID)
     case comparison(UUID, UUID), presetImport([ChatPromptPreset], Data)
     case conversationImport(Data, String)
     case quote(UUID, ChatQuoteSource), artifact(ChatArtifactContent), fields([ChatAnswerField])
@@ -83,6 +84,7 @@ private enum ChatDetail: Identifiable {
     var id: String {
         switch self {
         case .edit(let edit): "edit-\(edit.id)"
+        case .projectAttachments(let owner): "project-attachments-\(owner)"
         case .preview(let reference): "preview-\(reference.assetID)"
         case .comparison(let session, let attempt): "compare-\(session)-\(attempt)"
         case .presetImport: "preset-import"
@@ -529,6 +531,10 @@ struct ChatWorkbenchView: View {
         .sheet(item: Binding(get: { sheets.detail }, set: { sheets.detail = $0 })) { item in
             switch item {
             case .edit(let edit): editSheet(edit)
+            case .projectAttachments(let owner):
+                ChatProjectAttachmentSheet(chat: chat, sessionID: owner,
+                    wording: { en, zh in newLabel(en, english: en, chinese: zh) },
+                    close: { sheets.detail = nil })
             case .knowledgeDirectory(let owner, let url, let inventory, let scoped):
                 ChatKnowledgeDirectorySheet(inventory: inventory, wording: { en, zh in newLabel(en, english: en, chinese: zh) },
                     importEntries: { entries in
@@ -1528,9 +1534,19 @@ struct ChatWorkbenchView: View {
     }
 
     @ViewBuilder private func attachmentButtons(_ session: ChatSession) -> some View {
-        Button(label("attach", "添加附件…"), systemImage: "paperclip") {
-            Task { await chooseAttachments(for: session.id) }
-        }.disabled(session.archived || session.contextChoices?.deletedAt != nil)
+        ChatActionMenu(title: label("attach", "添加附件…"), accessibilityIdentifier: "chat-attachments-menu",
+            items: [
+                .init(id: "files", title: newLabel("files", english: "Choose files…", chinese: "选择文件…"),
+                      enabled: !filePanelBusy && !session.archived && session.contextChoices?.deletedAt == nil) {
+                    guard chat.state.selectedSessionID == session.id, !filePanelBusy else { return }
+                    Task { await chooseAttachments(for: session.id) }
+                },
+                .init(id: "project-assets", title: newLabel("projectAttachments", english: "Project assets…", chinese: "本项目成果与素材…"),
+                      enabled: !filePanelBusy && !session.archived && session.contextChoices?.deletedAt == nil) {
+                    guard chat.state.selectedSessionID == session.id, !filePanelBusy else { return }
+                    present(.projectAttachments(session.id))
+                }
+            ]).disabled(filePanelBusy || session.archived || session.contextChoices?.deletedAt != nil)
         Button(newLabel("pasteAttachments", english: "Paste attachments", chinese: "粘贴附件")) {
             Task { await pasteAttachments(sessionID: session.id) }
         }.disabled(session.archived || session.contextChoices?.deletedAt != nil)
