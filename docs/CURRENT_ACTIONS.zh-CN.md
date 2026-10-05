@@ -4,6 +4,8 @@
 
 ## 当前授权：完整文字聊天专题 CHAT-PRODUCT-20261003
 
+**持续工作条件（2026-10-05用户新授权）**：本人不能操作或解锁，直到本人明确改变条件。禁止桌面探测、截图、GUI验收、反复启动App及催办；不修改锁屏/权限。优先现有Bottom采样定位，再完成无桌面接线与非交互检查；需桌面事项只保留原集中队列。一般“继续”不解除此条件。
+
 用户已批准 F01–F36、S00–S06 同一批实施。 2026-10-03再次授权连续续作：先用已有采样与可控流修候选菜单/交互迟滞，将停止固定在输入区主操作；允许S00/S01隔离组合验证，不等待旧布局全部修好。按本清单完成S02–S06（含显式采用部分回答继续），可靠切片正常接纳main后继续，不以阶段回执终止整项。需求冻结，不新增功能/模型/平台；Liquid Glass只沿用系统控件与语义层级，不全面视觉改版。唯一功能状态见 [聊天清单](CHAT_FEATURE_LEDGER.zh-CN.md)。先 S00 长流/停止、正常项目包选择和新候选/旧参数重现，再 S01 布局、S02 编辑与上下文、S03 资料/记忆/备份、S04 联网工具、S05 受限代码/MCP/成果/语音、S06 组合验收。可靠切片通过普通 App 门槛后正常接纳 main，不以整个专题完成为前提；不硬合失败长流。
 
 2026-10-04用户补充决议已原位进入[唯一聊天清单](CHAT_FEATURE_LEDGER.zh-CN.md)：F26通用搜索服务边界、F31两语言本地识别与[功能完成后的质量审计](CHAT_FEATURE_LEDGER.zh-CN.md#post-function-quality-review)。该次只更新需求和现状；本轮已恢复代码和原生续作，先完成菜单/迟滞/主停止优先级，不启动全局重构；不把文档更新计作能力实现。
@@ -12,7 +14,17 @@
 
 Lead 持有共享 Runtime/WorkflowServices/ChatController/Store；文件面板和纯展示在独立受限任务树实施。早期S00/S01历史证据目录 RCP=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261003T115108Z-chat-product`。完整 Lead 成本与订阅费用 unknown。早期S00代码完成CPU和签名构建，曾通过项目列表、真实1024-token接收和坐标停止→下一请求；当时菜单忙循环和生成中AX迟滞阻塞接纳。S01缩放焦点反例后来修复并通过hosting、与S00组合。以上是早期门槛来源，已被下述c16普通App复验和main接纳推进；最新S02–S05接线、R证据目录及剩余状态以以下恢复检查点为准，F01–F36范围不取消。
 
-### 当前恢复检查点（2026-10-05，解锁验收后再次锁屏）
+### 当前恢复检查点（2026-10-05，无桌面连续收口）
+
+- 起点候选 `53d4cdc442d84b676e048b1da5636a555ddabad3`，新代码/受测文件对应 **4102cff1bf3f61251e725e31a8ad38842cdd8901**。main仍 `90819739e99b366d7cdb2f549c129eea28728206`（生产af0103b5）。最终仅文档/远端SHA写本轮R/lead/no-desktop-receipt.json；不将未关闭Bottom的组合硬合main。
+- R=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261005T040538Z-no-desktop`。本轮没有探测桌面、启动App、GUI/hosting、模型生成或本人操作；无桌面条件继续有效。唯一入口及同树Xcode见[试用指南](RELEASE_FREEZE_TRY.zh-CN.md)。
+- Bottom复用旧主线程采样并核对真实回调：未证实重复scrollTo循环，动画中几何回调可能改变跟随状态也不能解释布局卡死。只补默认关闭的隔离DEBUG诊断，最多512事件＋截断标记，记录实际命令/目标/几何/版本，不记录正文或改滚动/焦点。非实现者定点审核通过；**原生故障仍未关闭**。最短后续实验在原H32队列，不反复长生成。
+- CSV新增实际文件导入→原始字节统计→采用/来源→冷重开的服务检查；MCP新增直接disconnectMCP→等待当前调用→阻止抢连→取消归属→再连接检查。两受影响suite报告11方法：10执行通过、1真实服务集成显式跳过；已有真实SDK/App证据复用，新增两个方法均通过。首测CSV夹具选错内部发布类型的失败保留，修正为产品导入入口，没有修改产品限制或断言。
+- 无依赖接线核查没有确认新的生产缺实现：附件/恢复实例/字段/记忆/临时/交换沿用现有真实接线及有效检查，不重复开发或新增假入口。真实跨模型比较仍是模型集成待验，不能用已有同模型比较或假引擎关闭。其余原生剩余精确状态继续只在[F清单](CHAT_FEATURE_LEDGER.zh-CN.md)。
+- Lead实现诊断和测试，三个既有只读Agent核对各自边界，没有新写Worker；源scheme内容/索引/未暂存保护不变。CPU与构建的自有进程终态、App对应、审核及最终保护见R回执；未枚举或处置其他进程。完整Lead用量/订阅费用unknown。
+- 下一动作须先等本人明确改变条件：Lead只用同包与既有小项目完成菜单首项、Bottom最短诊断，再做剩余附件/格式/字段/工具/四分类原生路径。F26本地凭据、F31授权/两语言转写及新宿主真人检查只留[唯一集中队列](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md)，当前不催办。未功能冻结，不启动全局质量审计或视觉统一。
+
+### 历史恢复检查点（2026-10-05，解锁验收后再次锁屏）
 
 - **main保持90819739e99b366d7cdb2f549c129eea28728206**（生产代码af0103b532ed4b14a35518c3cd5aae7727dcf327）。候选生产代码 **1b00d37a55277a1de0c6cf149d3ee5f3b4766bd6**，工作树/分支仍为 `D-RELEASE-FREEZE-01/codex/release-freeze-01`。最新文档/远端完整SHA见下述R/lead/unlocked-receipt.json。保留候选，未因CPU通过硬合仍有原生关键缺口的组合。
 - R=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261004T145523Z-continuous-closeout`，E=`R/gui/unlocked-20261005`。此前四项修补、af人工版本及旧菜单/长流/H22/HF/宏/视频证据沿用。唯一App/启动/Xcode见[试用指南](RELEASE_FREEZE_TRY.zh-CN.md)，F01–F36状态只维护于[聊天清单](CHAT_FEATURE_LEDGER.zh-CN.md)。

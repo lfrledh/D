@@ -822,3 +822,17 @@ R沿上一节。普通App543完成PDF/DOCX/显式OCR、Python抛错→具体stdo
 - main保持90819739，不硬合有关键原生缺口的组合；本次候选普通推送用于审计。后续仅本五份状态文档，代码与1b00一致；最终SHA/远端写lead/unlocked-receipt.json，不自引用amend。保护核对、App摘要及进程记录同回执。完整Lead用量/订阅扣费unknown，不重算旧样本。
 
 **恢复点**：先核真实HEAD/index/个人scheme/自有任务，再解锁后原生验新首项→附件/四分类/Canvas回流→格式/显示设置，独立继续Bottom反例定位。旧成功证据不重跑；F26本地两key、F31本地语音/试听、新宿主本人组字统一保留。需求未删，尚有工程/原生缺口，非功能冻结、非正式发行；不启动全局质量审计或Liquid Glass改版。
+
+### 2026-10-05 无桌面连续收口（CHAT-PRODUCT原范围）
+
+用户持续不能操作或解锁，明确禁止桌面探测/启动/GUI；直到本人通知改变条件。本轮R=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261005T040538Z-no-desktop`。起点候选53d4cdc442d84b676e048b1da5636a555ddabad3，main90819739e99b366d7cdb2f549c129eea28728206；源与scheme见R/lead/preflight.json。没有改冻结需求、模型、Runtime或Store。
+
+- **Bottom仍未关闭**：复用旧empty-cancel-native-hang.sample.txt（SwiftUI布局/SelectionOverlay），核实际scrollPosition、proxy、revision、restore ticket及缓存调用；未见可证的生产重复scrollTo环。动画中geometry可能暂时取消follow只是一项可疑状态，不足以解释卡死。Apple ScrollPosition/SwiftUI滚动官方语义不保证绑定与proxy混用必错，因此不猜改生产滚动、焦点或缓冲。
+- **4102cff1bf3f61251e725e31a8ad38842cdd8901**仅补默认关闭隔离DEBUG诊断和直接服务测试。D_CHAT_SCROLL_TRACE=1且D_UI_TEST_SESSION有效UUID才记录；512事件＋截断标记后连记录字典都不构造。只记ID/版本计数/状态/几何和实际命令目标，不记正文、路径、凭据。相同App内聊天都有独立session标识，不宣称仅跟踪一个聊天。align_layout_diagnosis非实现者提出实际分支记录和封顶早退两点，Lead已修，复核关闭。诊断可能改变调试时序，不冒称完全无扰动或已证明根因；最短现场实验原位留H32。
+- **无桌面接线检查**：native_files_review确认CSV与MCP两项独立缺口，Lead补实际Controller入口测试。CSV从实际文件导入而非语言预览读取，原始三行均值20/预览999、重复采用只一次、父来源/原草稿/异会话/重开/原文件保护。MCP直接UI所用disconnectMCP，在调用仍挂起时禁止抢连，结束后取消仍归原会话并允许后续连接。没有增加生产服务或第二套调度。
+- 首测offline-wiring exit1：CSV夹具错误使用不接受text/csv的内部发布入口，在测试准备阶段被保护拒绝；MCP通过。改走真实importWorkflowFile默认copy，没有更改产品限制或放宽业务断言。失败证据保留。最终offline-wiring-final exit0/22.396秒，报告11方法/2suite，**10实际通过、1实际服务集成显式跳过**，新增2方法均通过。已有真实SDK/普通App证据复用；不是新的鼠标或外部服务验证。受测HEAD53d4+差异由tested-source-files.json及patch绑定4102，提交内容一致，不假称在尚未产生的SHA上运行测试。
+- 既有三位只读Agent完成有限分工：Bottom、工具/展示、附件/实例/知识/记忆/临时/交换及编辑比较。后两组未确认其他生产缺实现，沿用已有覆盖，不制造重复测试。F09真实跨模型比较仍未验证，不能用同模型不同参数或fake engine关闭。各行余项仍留唯一F表；无新写Worker，不冒称全访问子代理具备写隔离。
+- 4102普通签名构建no-desktop-app exit0/60.033秒；交付签名与四关键文件核对见app-delivery.json，旧1b00包保持。唯一启动器原位更新，**未启动新App、未运行GUI/hosting/真实模型、未探测锁屏、未请求本人**。本树Xcode资源装配复用，无手补App。自有测试/构建/交付进程已等待结束，其他进程未知且未处置。
+- 风险验证：默认关闭诊断→隐私/无状态副作用/记录真实性只读审阅＋正常编译；新增CSV/MCP测试→实际服务路径/小文件/受控取消＋受影响两suite。未改模型或保存生产语义，旧模型/恢复/长流证据复用。原生Bottom及菜单、附件/格式/字段/四分类等仍待验；F26真实两服务凭据、F31本地授权/两语言转写/试听和新宿主本人检查只保留原队列。完整Lead用量/订阅费用unknown，不重算历史。
+
+恢复：代码4102；最终仅五份现行记录的文档/远端SHA、保护终态、进程与App索引在R/lead/no-desktop-receipt.json。候选正常推送；main保持90819739，不能将未关闭关键原生问题的组合硬合。用户明确改变条件前无桌面续验，不以普通“继续”解除；之后先同版最短Bottom和菜单检查，再按F表续作。不宣称功能冻结，不启动全局质量审计或Liquid Glass统一，未公开Release。没有新增必需本人问题或第二套待办。
