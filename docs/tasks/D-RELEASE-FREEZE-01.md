@@ -806,3 +806,19 @@ R沿上一节。普通App543完成PDF/DOCX/显式OCR、Python抛错→具体stdo
 - 下一动作是解锁后同包紧凑控制→新的会话包独立恢复/冷开，再按唯一F表补剩余管理/上下文/临时/字段/重排/工具取消。F21无现成同链路无GUI入口，现有CLI不经过ChatController且路由不同，不拿它替代普通App。F26两key、F31本地权限/资源/实际转写/试听、新宿主组字在原队列；仅对应阻塞，无功能静默延期。完整Lead消耗/订阅费用unknown。
 
 本节是已实施修补与可恢复外部阻塞点，**F01–F36仍未完整验收，非功能冻结/正式发行**。不启动全局质量审计、视觉重排或新功能。保护源01758b81和scheme差异/摘要/索引/未暂存保持；旧证据与候选全部保留。
+
+
+### 2026-10-05 解锁后的代理集中验收与定点修补
+
+沿同一CHAT-PRODUCT-20261003/F01–F36，用户能解锁但不能亲自操作；不索取旧授权、不新建任务包。起点候选20f26f6c9fe9b051b26161e277ec1e5e67996255（生产1ebe7042）、main90819739e99b366d7cdb2f549c129eea28728206；源01758b81/个人scheme保持。证据R仍为run-20261004T145523Z-continuous-closeout，E=R/gui/unlocked-20261005。
+
+- 1ebe普通App补齐117d紧凑布局鼠标/浮层关闭；重新导出会话包→独立恢复→冷重开，4份记忆版本、17媒体独立且同字节，未来memoryScopes空。E/recovery-data-check.json及compact/restore系列，不改写旧af失败包。
+- 真实Qwen重排两个现有PDF片段成功，保存原始JSON与输出资产；未自动采用。临时草稿不进普通历史，显式保留Markdown成果→Canvas后结束临时，自有缓存移除而所选成果保持。E/native-rerank-temporary-stop.json；没有临时AI生成或Canvas自动执行。
+- **671b290475bc703016fb8ab0919d7881850efe10**：普通App首字前Stop留下空cancelled，原上下文投影误判需采用但没有可采用文字。先真实反例＋CPU反例，再只跳过真正空/无输出/无附件的cancelled/failed assistant；不删历史、user、tool或非空partial。54方法/2suite，非实现者align_layout_diagnosis复核；真实原失败会话再次发送得到OK并落盘。Lead实现/复核不冒称另有独立模型运行验收。lead/empty-cancel-{red2,final}-result.json、empty-cancel-review.json及E中的stop证据；更早red/green构造fixture编译错误不是产品红测。
+- 671完成置顶/标签/归档恢复/软删除恢复、搜索命中、排除回纳、默认系统提示词新旧作用域；单位1m→100cm/UTC→东京；WASI sleep20取消→print42；Mermaid A→B与A→C两版本/旧版重开/Discard不覆盖。E/native-management-tools-artifacts.json、native-management-context-defaults.json。第一轮Python默认样例因编辑器未聚焦先完成，不算取消；后续真实sleep命令已核对。新默认只写隔离suite，不触发模型。
+- **独立未关闭问题**：671完成后点击Bottom，主线程采样在SwiftUI布局/SelectionOverlay，未证唯一根因。留样后核路径仅SIGTERM自有56752，磁盘OK完成；冷开同会话可用。5afa416a8b7e15bbe87c5d10a1acf3e28f89d1e3增加现有hosting中的同host受控O→OK、真实取消issue、双栏、实际滚动几何（offset0/distance2475.5→offset1580.5/distance20），XCTest1方法通过。早期SwiftTesting驱动只有开始无终态不计通过；无猜测性生产滚动补丁，不用绿夹具关闭原生失败。非实现者已复核，后续需真实失败现场的面板/几何；671失败前完整AX未保留，不能拿冷开diff推断。
+- **1b00d37a55277a1de0c6cf149d3ee5f3b4766bd6**：原生菜单第一项重命名/收藏不可达，E/menu-first-row-red.{png,ax.txt}。采用Apple NSPopUpButton标准pull-down标题占位/usesItemFromMenu=true，根刷新跳标题、子菜单不跳，保留idle无重建/迟到sender/一次执行。false本身也是官方支持模式，不能从文档声称其必然隐藏首项；本机反例才是修补依据。SDK NSPopUpButton.h及Apple usesItemFromMenu文档核实。CPU先红；首次green有2项错误地要求AppKit不挂私有selector，改测无业务target/占位不能消费门禁，未移除业务保护。最终15菜单方法/1suite与1动态hosting方法通过；旧断言只按根占位移位。native_files_review非实现者复核无P1/P2。
+- 1b00普通签名构建28.022秒exit0，delivery复制/strict codesign/四关键文件一致，唯一启动器原位指向新包，lead/app-delivery-menu-first.json。新App已开到Open面板，但CUA再次明确锁屏；未打开项目/运行生成，自有58949核路径SIGTERM结束，不称正常退出或菜单鼠标通过。56752异常结束之后重开的671实例已正常退出；无新Terminal，旧不明终端不操作。
+- main保持90819739，不硬合有关键原生缺口的组合；本次候选普通推送用于审计。后续仅本五份状态文档，代码与1b00一致；最终SHA/远端写lead/unlocked-receipt.json，不自引用amend。保护核对、App摘要及进程记录同回执。完整Lead用量/订阅扣费unknown，不重算旧样本。
+
+**恢复点**：先核真实HEAD/index/个人scheme/自有任务，再解锁后原生验新首项→附件/四分类/Canvas回流→格式/显示设置，独立继续Bottom反例定位。旧成功证据不重跑；F26本地两key、F31本地语音/试听、新宿主本人组字统一保留。需求未删，尚有工程/原生缺口，非功能冻结、非正式发行；不启动全局质量审计或Liquid Glass改版。

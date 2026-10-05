@@ -12,18 +12,18 @@
 
 Lead 持有共享 Runtime/WorkflowServices/ChatController/Store；文件面板和纯展示在独立受限任务树实施。早期S00/S01历史证据目录 RCP=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261003T115108Z-chat-product`。完整 Lead 成本与订阅费用 unknown。早期S00代码完成CPU和签名构建，曾通过项目列表、真实1024-token接收和坐标停止→下一请求；当时菜单忙循环和生成中AX迟滞阻塞接纳。S01缩放焦点反例后来修复并通过hosting、与S00组合。以上是早期门槛来源，已被下述c16普通App复验和main接纳推进；最新S02–S05接线、R证据目录及剩余状态以以下恢复检查点为准，F01–F36范围不取消。
 
-### 当前恢复检查点（2026-10-05，锁屏后保留原生门槛）
+### 当前恢复检查点（2026-10-05，解锁验收后再次锁屏）
 
-- **main生产基线已正常快进并推送af0103b532ed4b14a35518c3cd5aae7727dcf327**，包含四项诊断/网页/搜索修补和人工采用显示修补；起点f9a439db5c0542d7a6bd6def8f88a9a7965b67df。后续main仅同步本检查点文档，最终精确远端见下述R/lead/continuous-receipt.json。未接纳紧凑布局117d63b2和记忆导出1ebe7042；已知旧缺口不称完整专题通过。
-- 候选树 `D-RELEASE-FREEZE-01/codex/release-freeze-01` 当前代码 **1ebe7042175de441f708939618a3a4686f5d5ae1**；仅文档/正常合并后的最终候选SHA同见外部回执。唯一App/启动/Xcode路径见[试用指南](RELEASE_FREEZE_TRY.zh-CN.md)。F01–F36唯一状态仍在[聊天清单](CHAT_FEATURE_LEDGER.zh-CN.md)。
-- R=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261004T145523Z-continuous-closeout`。四项组合53方法/5suite、真实WASI及两个公开网页通过；543普通App另验PDF/DOCX/OCR、Python失败/CSV成功、HTML交互与Canvas、真实本机MCP。短真实Qwen完成比较、摘要、标题、标签、追问与经审核记忆，保留一次资源准入失败和类型错误，不重跑旧长流/九模型。
-- af修复采用后主文仍旧，10方法/2suite与普通App冷开/多版本/再编辑通过。af会话包独立恢复保留消息、工具、成果、资料及草稿，17媒体独立且相同；随后核实**未使用但已审核的会话来源记忆被导出筛选遗漏**。1ebe修补及矛盾身份反例先红后绿，14方法/2suite（真实小文件备份/独立恢复）；旧备份不重写。新包普通App重新导出/恢复及冷重开尚未通过。见lead/native-recovery.json、memory-package-final-result.json。
-- 1057pt Inspector遮主操作是main原有缺陷。117d候选顶栏收缩、附件/提交分行，994pt起双栏内联；30方法/2suite含Stop几何和持续组字身份通过，低于994pt仍为可关闭模态层。仅静态非实现者审核/hosting，不冒称鼠标通过。
-- **桌面重新锁屏**，CUA明确拒绝，未反复尝试。117d自有实例49135尚未操作/提交任务，按核实路径SIGTERM结束；不称正常退出/drain。af此前正常CmdQ。CPU、构建和受限Worker均已结束，最终进程/包核对在回执；不操作未知终端。新1ebe包不在锁屏时重复启动。
-- 恢复顺序：核HEAD/index/个人修改/进程 → 解锁后由Lead验1057与约960pt主操作/关闭、修补后的会话包→独立恢复→冷开 → 继续管理/上下文/字段交接/临时/工具取消等剩余普通App路径。F21真实重排现无同链路无GUI入口，不能拿CLI或假引擎替代；按原入口解锁后补。
-- F26两家本地key、F31系统授权/实际本地转写/试听、新聊天组字在[唯一集中队列](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md)。两语言能力查询支持本地、授权notRequested不是实际转写通过。缺凭据/锁屏只保留对应门槛，不豁免功能。
-- Lead定点实现+非实现者只读复核；两名受限Sol/high Worker原修补/一修与拒绝未停报历史保留，完整Lead与订阅费用unknown。main与候选按验收边界分开，未完成项不移到发布后；非功能冻结、非正式发行。
-- 保护源 `D/codex/inference-foundation@01758b81527dc27eb4563bf1b66fd1ceab6647ee`、scheme SHA256 `ca3635d88aa5a15397b90e528667c66c0e6db7e596176e885c79d194b544206c`、索引及未暂存保持。不删候选/证据、不发布Release。
+- **main保持90819739e99b366d7cdb2f549c129eea28728206**（生产代码af0103b532ed4b14a35518c3cd5aae7727dcf327）。候选生产代码 **1b00d37a55277a1de0c6cf149d3ee5f3b4766bd6**，工作树/分支仍为 `D-RELEASE-FREEZE-01/codex/release-freeze-01`。最新文档/远端完整SHA见下述R/lead/unlocked-receipt.json。保留候选，未因CPU通过硬合仍有原生关键缺口的组合。
+- R=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261004T145523Z-continuous-closeout`，E=`R/gui/unlocked-20261005`。此前四项修补、af人工版本及旧菜单/长流/H22/HF/宏/视频证据沿用。唯一App/启动/Xcode见[试用指南](RELEASE_FREEZE_TRY.zh-CN.md)，F01–F36状态只维护于[聊天清单](CHAT_FEATURE_LEDGER.zh-CN.md)。
+- **原锁屏门槛实际推进**：1ebe普通App完成1057pt主操作、962pt可关闭Inspector；重新导出会话包→独立恢复→正常退出/冷重开，4份记忆历史及17份媒体保留，媒体同字节/独立inode，恢复后未来记忆读取授权仍为空。见E/recovery-data-check.json及compact截图，不重写旧失败包。
+- 1ebe普通App真实Qwen知识重排完成，两个片段ID各一次、原始JSON及输出资产保存；临时会话显式保存单一Markdown成果→Canvas→结束，临时缓存移除、所选成果保留，不自动运行Canvas。671普通App完成置顶/标签/归档恢复/软删除恢复、词法搜索命中、上下文排除回纳、默认系统提示词只影响新会话、单位/时区、WASI Python取消→后续42、Mermaid预览两版本/重开旧版/放弃未保存。具体范围在E三份native-*.json，不外推未验路径。
+- **已修真实反例**：在首字前停止后，空assistant错误阻断下一次发送。671b290475bc703016fb8ab0919d7881850efe10只在下一请求投影跳过真正空且无产物的cancelled/failed assistant，历史/user/tool/非空partial保留；54方法/2suite，非实现者审核，671普通App原失败会话再次发送实际得到OK。另发现根菜单第一操作“重命名/收藏”不可见；1b00采用AppKit标准标题占位、保持旧tracking保护，15菜单方法及1动态hosting方法通过，普通签名构建通过；**新菜单鼠标复验被再次锁屏阻断**。
+- **未关闭工程缺陷**：671真实短完成后一次点击Bottom导致主线程SwiftUI布局忙循环；留样后只结束核实的自有实例56752。冷开同项目Bottom可用，受控同host O→OK、真实取消诊断、双栏及实际非底→底几何通过（5afa416a测试）；没有复现唯一根因、没有猜测性滚动生产补丁，不能用这次绿测试关闭卡顿。lead/empty-cancel-native-hang.sample.txt、dynamic-bottom-inspector.log。
+- 最后1b00已启动，但在Open面板选择隔离项目时CUA明确报告再次锁屏。自有58949尚未打开项目/提交任务，核路径后SIGTERM结束，不称正常退出；56752异常结束后重开的671实例已正常CmdQ。CPU/build/只读审阅均结束，无新Terminal。见lead/unlocked-app-stop.json。
+- 下次解锁后Lead自行：同包实点会话重命名、消息收藏和子菜单首项→既有小夹具附件/四分类/Canvas回流/CSV→格式/显示设置；继续Bottom实际反例定位。不得重做上述已通过同路径或长生成。F26两家本地key、F31首次Speech/本地转写及试听、新聊天组字仍在[唯一集中队列](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md)，本人暂不便不催办；工程失败不归给本人权限。
+- 本次Lead定点实现、既有只读非实现者复核；没有新写Worker，旧失败/预算/来源不改。完整Lead用量及订阅费用unknown。未功能冻结、未正式发行，下一质量审计/视觉统一不启动。
+- 保护源 `D/codex/inference-foundation@01758b81527dc27eb4563bf1b66fd1ceab6647ee`，个人scheme SHA256 `ca3635d88aa5a15397b90e528667c66c0e6db7e596176e885c79d194b544206c`、索引及未暂存保持；main/候选/旧证据保留。
 
 ### 历史恢复检查点（2026-10-04，解锁原生检查与审计同步）
 

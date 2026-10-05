@@ -1,28 +1,28 @@
 # D 开发预览：本轮试用
 
-2026-10-05 · 完整聊天专题仍在连续收口，**尚未达到功能冻结**。main已接纳af0103b532ed4b14a35518c3cd5aae7727dcf327可靠修补基线；下列候选另含紧凑主操作和记忆导出修补，不能把编译/CPU通过当作新包全部原生操作通过。唯一逐项状态见[聊天清单](CHAT_FEATURE_LEDGER.zh-CN.md)。
+2026-10-05 · 完整聊天专题仍在连续收口，**尚未达到功能冻结**。main为90819739e99b366d7cdb2f549c129eea28728206（生产af0103b5）；下列为审计/继续验收候选，不能当成原生门槛全部通过的稳定版。唯一逐项状态见[聊天清单](CHAT_FEATURE_LEDGER.zh-CN.md)。
 
-## 唯一推荐试用入口
+## 唯一推荐启动入口（开发验收包）
 
 双击：
 `/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261004T145523Z-continuous-closeout/delivery/启动聊天当前验收.command`
 
-启动同目录 **D Chat Product 1ebe7042.app**，固定代码 **1ebe7042175de441f708939618a3a4686f5d5ae1**。R指该run目录；签名/副本/构建见 `lead/app-delivery-final.json`、`lead/memory-package-app-result.json`，最终文档和远端SHA见 `lead/continuous-receipt.json`。后续仅文档不改变包代码。
+它只启动同目录 **D Chat Product 1b00d37a.app**，代码 **1b00d37a55277a1de0c6cf149d3ee5f3b4766bd6**。R指该run目录；普通签名构建28.022秒通过，副本四关键文件一致，见 `lead/app-delivery-menu-first.json`。最终文档/候选远端SHA见 `lead/unlocked-receipt.json`。后续仅文档不刷新代码测试。
 
-入口复用隔离偏好`BC96EF26-C157-4A48-84B4-A54785B1A42E`与已登记模型，不替换普通D，并拒绝双开。旧包保留但不再推荐。af实例已正常退出；锁屏时新117实例未操作，仅对核实的自有进程结束，1ebe包未启动。请勿同时打开其他测试包。
+入口复用隔离偏好`BC96EF26-C157-4A48-84B4-A54785B1A42E`和已登记模型，不替换普通D，并拒绝双开。旧包保留但不另给启动建议。新包启动后在打开项目时再次锁屏，未完成菜单修补鼠标复验；自有实例已结束，无生成。**671曾出现完成后Bottom卡顿，原因仍未确定；不要把受控hosting通过当作该原生失败已修复。**
 
 ## 从保留的小项目继续
 
-1. 解锁后打开上述入口。菜单“文件→打开项目”，选择：
-   `/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261003T150039Z-chat-continue/gui/Chat-integration.dproject`。
-   当前会话为“Reading corner lighting”，保留两份短候选、人工版本、PDF/DOCX/OCR资料、工具成果和未发送Unicode草稿；不用重复下载或修改原始长流项目。
-2. Quick→文字。输入区“发送／停止当前生成”为主操作；回答菜单区分新候选与旧请求重现。人工采用后主文应显示选中版本，原始输出可展开，继续聊天不改历史请求。af已实际验证采用/切版本/再编辑；新候选待补1057pt及较窄窗口的按钮与关闭可达性。
-3. 检查器“资料／工具”可看已有Python失败诊断及CSV分析、MCP结果、HTML成果。成果必须明确保存/采用，进入Canvas不会自动生成。Python是有预算的WASI标准库分析，不是宿主任意终端；无pip、网络和任意文件访问。
-4. 会话菜单“导出可恢复会话包…”→项目文件“恢复手动备份…”→选择**新位置**，再退出重开副本。af旧包已验证17媒体独立，但漏掉尚未使用的本会话审核记忆；1ebe补齐该历史，**新包原生导出/恢复及冷开仍待验**，请保留旧包和原项目，不覆盖它们。
-5. 联网在“搜索与工具”选择Brave或博查、本地选择自己的凭据文件并允许本会话联网。不要把key放到聊天。搜索摘要不是正文，读取并采用正文后才进入本地回答；两家真实API尚未验，不代注册或购买。
-6. 输入托盘“语音输入与系统朗读”手选普通话/英语，录音或已有音频→本地转写→审核→采用草稿，不自动发送。两语言能力查询通过，系统许可和实际转写/听感仍需[集中办理](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md)。
+1. 解锁后启动，菜单“文件→打开项目”，选择本轮独立恢复副本：
+   `/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261004T145523Z-continuous-closeout/gui/unlocked-20261005/Restored-chat-1ebe7042.dproject`。
+   “Reading corner lighting”保留比较、人工版本、PDF/DOCX/OCR与记忆；“List twelve…”保留部分回答、空取消、成功OK及工具/成果；两个空会话用于默认系统提示词作用域检查。不要覆盖原项目或旧包。
+2. Quick→文字。主操作为输入区“发送／停止”；未接受前不替换历史原文。671已修首字前停止后不能续发，并实际得到OK。新菜单首项“重命名／收藏”有修补但未完成鼠标验收，先由Lead在解锁后验证；1057/962pt主操作和浮层关闭已在1ebe验证，不等于所有布局完成。
+3. 检查器可看已有知识重排、Python失败/成功/取消记录、单位/时区及HTML/Mermaid成果。Mermaid两个保存版本互不覆盖，放弃未保存不会改旧版；临时会话只有显式保留成果进入Canvas，不自动运行。Python仍是有预算的WASI标准库，不是宿主任意终端。
+4. 1ebe已用普通App执行新包→独立恢复→冷重开，完整4版本会话记忆及17份独立媒体保持。旧af包遗漏不会自动补写；新恢复不自动打开未来记忆授权。全局预设另行交换。
+5. 联网“搜索与工具”选择Brave/博查、本地选择自己的凭据文件并允许本会话联网。两家真实API尚未验，不在聊天贴key、不代注册或购买。摘要不是已读取正文；采用正文后才交本地模型。
+6. 输入托盘“语音输入与系统朗读”手选普通话/英语。能力查询已验，首次Speech授权、实际本地转写→审核→采用草稿以及朗读/组字仍在[唯一集中队列](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md)。本人暂不便时不催办、不自动转云。
 
-已沿用旧c16菜单/真实长流/主停止/H22/HF/宏及固定视频结果。本轮普通App另已完成文档提取、Python成败和CSV保存、HTML交互/Canvas、本机MCP、真实短模型比较及辅助、预设交换和模板错误恢复。它们不替代未验的管理、目录/真实重排、临时会话、字段交接和新数据完整恢复；精确范围只维护在唯一清单。
+已验版本分开：1ebe完成新恢复、紧凑布局、真实重排与临时成果；671完成空取消真实接续、管理/默认系统提示词、工具取消和Mermaid；1b00是后续标准菜单首项修补，编译/CPU通过，原生操作因锁屏未执行。未改动模型/Store证据可复用，但完整组合仍待验，不称功能冻结。
 
 ## 使用已下载模型
 
@@ -52,10 +52,10 @@ Quick/Canvas选真实模型，高级参数选择**省内存（SSD分层加载，
 选择 **D Nodes / My Mac / Debug**。本机忽略配置`Development/Development.local.xcconfig`使用既有签名身份，资源目录为：
 `/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261004T041401Z-chat-resume/delivery/resources-with-python`
 
-正常Xcode资源阶段嵌入现有引擎与ChatPython，无需手补App或重装模型。本轮同树普通签名构建通过；没有在锁屏时声称人工点Run/原生验收通过。换机按[开发说明](../Development/README.md)准备资源。**main工作树目前是af生产基线，紧凑控制与记忆导出补丁仍在候选**，不能用main Run冒称上述包的相同代码。
+正常Xcode资源阶段嵌入现有引擎与ChatPython，无需手补App或重装模型。本轮同树普通签名构建通过；没有在锁屏时声称人工点Run/原生验收通过。换机按[开发说明](../Development/README.md)准备资源。**main工作树目前是af生产基线，紧凑控制、记忆导出、空取消接续与菜单首项补丁仍在候选**，不能用main Run冒称上述包的相同代码。
 
 ## 集中办理与交付边界
 
-桌面再次锁屏后仅完成可独立的记忆筛选修补、CPU/恢复、签名构建及审计同步。下一次解锁由Lead先补剩余原生；本人只需按[唯一队列](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md)集中处理新聊天组字、Speech/试听和搜索凭据，不重复H22/HF/宏/固定视频。
+本轮解锁后已完成上述恢复、紧凑布局、真实重排、临时成果和工具取消等原生检查。桌面再次锁屏时，新1b00菜单修补包停在打开测试项目，首项鼠标复验后置；Bottom卡顿仍待定位，未用受控测试替代结论。下一次解锁由Lead继续剩余原生，不重做已通过路径；本人事项按[唯一队列](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md)集中处理新聊天组字、Speech/试听和搜索凭据，不重复H22/HF/宏/固定视频。
 
 这是可构建的试用候选与准确停点，**不是完整聊天验收通过、功能冻结或正式发行**。未完条目保留同号，不移至发布后；未强推、改许可证或发布Release。首次使用、无权重分发/依赖封装、升级恢复和渠道责任仍保留。
