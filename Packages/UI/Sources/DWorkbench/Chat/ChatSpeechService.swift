@@ -301,8 +301,17 @@ public final class ChatSpeechService: NSObject, AVSpeechSynthesizerDelegate {
 
     /// An explicit caller action only. The host App must supply NSSpeechRecognitionUsageDescription.
     public func requestRecognitionAuthorization() async -> ChatSpeechAuthorization {
+        await requestRecognitionAuthorization(using: SFSpeechRecognizer.requestAuthorization)
+    }
+
+    // Speech may deliver authorization on a background queue. The completion must not
+    // inherit this service's MainActor isolation; resuming the continuation is thread-safe.
+    // The caller resumes on MainActor before publishing any observable state.
+    func requestRecognitionAuthorization(
+        using request: (@escaping @Sendable (SFSpeechRecognizerAuthorizationStatus) -> Void) -> Void
+    ) async -> ChatSpeechAuthorization {
         await withCheckedContinuation { continuation in
-            SFSpeechRecognizer.requestAuthorization { status in
+            request { @Sendable status in
                 continuation.resume(returning: ChatSpeechAuthorization(status))
             }
         }

@@ -1,9 +1,29 @@
 import Foundation
+import Speech
 import Testing
 @testable import DWorkbench
 
 @Suite("Chat speech local admission")
 struct ChatSpeechServiceTests {
+    @MainActor @Test func authorizationFromBackgroundQueueReturnsToCallerActor() async {
+        let service = ChatSpeechService()
+        let cases: [(SFSpeechRecognizerAuthorizationStatus, ChatSpeechAuthorization)] = [
+            (.authorized, .authorized), (.denied, .denied),
+            (.restricted, .restricted), (.notDetermined, .notDetermined)
+        ]
+        for (systemStatus, expected) in cases {
+            let result = await service.requestRecognitionAuthorization { completion in
+                DispatchQueue.global().async {
+                    #expect(!Thread.isMainThread)
+                    completion(systemStatus)
+                }
+            }
+            MainActor.assertIsolated()
+            #expect(result == expected)
+            #expect(service.recognitionState == .idle)
+        }
+    }
+
     @Test func recognitionLanguageRequiresAnExplicitSupportedChoice() {
         #expect(ChatSpeechRecognitionLanguage(identifier: "zh-CN") == .mandarin)
         #expect(ChatSpeechRecognitionLanguage(identifier: "en-US") == .english)
