@@ -889,3 +889,15 @@ RHuman=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-
 - ff20正常签名构建30.346秒、独立副本strict验签与四关键文件相同，同树Xcode D Nodes资源装配未手补。唯一启动器更新，但CUA在旧b8正常Cmd+Q之前报锁屏，**ff20未启动/未原生验收**；自有78554仍在，未强杀，不声称测试窗口已收完。原生新成果采用/取消、三分类最终冷开与剩余交互在唯一H32续验；英语失败/原声和朗读分列，搜索无凭据不催办。无新Terminal，测试/trace/编译进程结束，唯一已知App保留现场。
 
 恢复检查点：先核真实HEAD/索引/源scheme/已知App身份；桌面恢复后正常退出旧测试包，再从唯一入口启动ff20。只补尚缺入口与同包原生门槛，Bottom有新失败才按已有诊断缩小实际差异。最终文档/远端完整SHA、保护和App对应见RNative/lead/native-tail-receipt.json；不自引用amend。仅推送候选，不硬合main，未功能冻结/发行。可观测CPU/构建时间如上，完整Lead消耗/订阅费用unknown，不重算历史。
+
+### 2026-10-06：解锁补原生尾项，拒绝未通过的Bottom实验
+
+起点3d6c4fa4c21e65a9f9b21fd37618815f24f85e09，推荐App代码ff20f2bcfbf13b57836d62fd695954b726f4a010。RUnlock=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261006T002853Z-unlock-native`。用户仅可解锁不能操作，本轮没有请求本人事项、重复权限或试听。main90819739保持，不硬合关键失败。
+
+- ff20普通App项目成果选择取消/添加/预览/移除/再加/冷开完成。已发布asset60DA50DA、versionD709D7F9、32字节结构字段不变；待发引用归6F会话，不发送，原3消息/2attempt/空草稿保持。非实现者native_files_review只读核对磁盘与来源，无UI代验。
+- 四分类非空状态/图像参考冷开保留。唯一新增真实模型运行是Qwen3.5-9B Q4旧请求E5E8DBB6的冻结重现：FC5EA5D7在途切图像后完成OK，归原A812，node/messages/inputs/system及旧历史、草稿/两附件保持；无其他分类生成。不是长流重跑或新模型矩阵。gui/inflight-category-final.json记录时间、ID、比较项与冷开；原生回流见gui/attachment-cold-reopen.json。
+- Bottom原版84335卡死留sample；84630冷开无生成但切分类同样卡死；84846冷开且不切分类也复现。由此不再以模型完成瞬时状态为必要条件。采样集中GraphHost.flushTransactions与lazy phase/prefetch，仍非内部唯一根因。留样后正常CmdQ不响应的三个自有实例才按路径SIGTERM，后来冷开与实验App正常退出。
+- 有界差分：①仅移除动画，原生不死但未到最后OK，拒绝；②统一ScrollPosition edge/id，普通App可见末条OK、分类/搜索/消息级恢复可操作，但hosting 3失败（2策略方法过滤未命中，不计通过）；③改为最后消息UUID，send hosting通过，2 replay方法在真实离底前置/完成跟底仍失败，2位置策略方法通过。没有降低距离/可见性/历史断言。wheel事件替换直接clip写入只属实验；非实现者核对API/消息语义，不替代测试。所有失败、源码摘要、两份App、补丁在lead/bottom-{position,message}-*及rejected-bottom-message.patch；未将局部通过冒称修复。
+- **实验未接纳**：恢复本轮自有两文件至起点完全相同内容，git diff核空后仅追加本次文档；不使用Git reset/restore、不触碰用户差异。推荐App仍ff20，同树Xcode源码一致；两个实验App不列推荐、不替换原包。不再为绿色结果重试同因；下一定位从稳定冷开反例与host滚动事件/布局差异继续，无需本人或再次模型生成。
+
+最终保护/进程/候选远端对应见lead/unlock-native-receipt.json；旧源scheme内容/索引/未暂存保持。Lead实施实验和原生检查，两位非实现者做窄范围只读检查；完整Lead用量/订阅费用unknown。无新管理平台/全局重构。F01/F19/F34代表路径推进，Bottom、F26凭据、F31英语/朗读及其余原生边界保留，未功能冻结/发行。

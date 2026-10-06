@@ -2,16 +2,16 @@
 
 ## 当前唯一集中队列（2026-10-06，CHAT-PRODUCT-20261003）
 
-旧无桌面条件已解除；本轮代理已执行原生操作，末尾CUA又报告锁屏，仅暂停GUI。不探测/催解锁，不重开已办H22、HF、宏、Speech授权、普通话采用或固定视频。
+用户已解锁但不能亲自操作。代理可执行部分已补下述证据；无新本人授权请求，不重开H22、HF、宏、Speech、普通话或固定视频。
 
 | 事项 | 当前事实 | 最小后续 |
 |---|---|---|
-| H32：代理原生续验/Bottom工程问题 | b8普通App补CSV→统计/采用、非空附件预览/排序/冷开、格式/显示、人工结构字段→Canvas、答案版本子菜单、三类非空草稿/参考切换。b8一次短冻结重现后Bottom响应，旧71206真实卡死仍未定位；受控三组差分通过不关闭它。 | 新包ff20菜单→本项目成果→采用/取消→预览/冷开尚未执行；三类草稿/图像参考最终冷开、附件移除/拖入及在途归属保留。Bottom只在新失败时对照既有sample与视口/面板/分支，不反复生成或泛加日志。解锁后先核自有旧b8 PID78554并正常退出，再启唯一新包；原Cmd+Q被锁屏挡住，未假称已结束。 |
-| H32：输入迟滞 | 本人约200ms为主观反馈。b8已修实测热点：隐藏Workflow重复固定身份读取，单轮布局约125ms→5ms；新两trace未记录Microhang。SpeechPanel仍有约63–68ms墙钟而CPU约1ms，原因未知，未猜补丁。 | 像素/组字体验尚无新本人结果，先保留测量边界；不再整套重复已确认可选字/不丢字检查，不重新判候选不随动为失败。 |
-| F31：英语识别与朗读分列 | 普通话真实录音→本地转写→审核采用/保存通过、无自动发送。英语No speech was recognized，原声保留，3份CAF与原清单匹配；失败UI与后两份精确配对未知。 | 按本人决定后置英语，不要求重录/重置权限；系统朗读与听感仍待，未执行不记通过，不自动转云。 |
-| F26：搜索凭据及真实调用 | 两适配器/公开网页有效证据复用；本人暂无Brave/博查凭据，不新增免费路线或收费请求。 | 待本人准备后在App工具中选择本地凭据文件并显式允许会话联网。只阻塞对应真实API链；不在聊天发key，不代注册、绑卡或购买，不催办。 |
+| H32：代理原生续验/Bottom工程问题 | ff20已完成项目成果选择取消/采用/预览/移除/冷开；三类非空草稿/图像参考冷开；一组真实文字在途切图像后结果归属与原输入/历史保持。旧CSV、格式、字段/Canvas和嵌套菜单证据复用。Bottom已获得不生成、不切分类的冷开稳定反例；本轮两个滚动实现实验未过全部回归，已撤回本轮改动，未替换推荐包。 | 工程继续比对现有冷开反例、受控宿主与滚动事件；不需本人点击/模型重跑。不能将实验原生一次改善写为修好。其余拖放/跨项目/原生未验按唯一F表保留，不扩大成全排列。 |
+| H32：输入迟滞 | 先前b8实测固定身份热点约125ms→5ms，两trace无Microhang。本人约200ms仅主观反馈；SpeechPanel等待原因仍未知。 | 本人不便时不催组字；新体验有机会再集中反馈，不重判候选不随动。 |
+| F31：英语识别与朗读分列 | 普通话真实转写/审核采用/保存通过；英语No speech was recognized，原声保留。 | 按本人决定后置英语，不重录/重置权限；朗读听感仍待，不自动转云。 |
+| F26：搜索凭据及真实调用 | 两适配器/公开网页证据复用；本人暂无Brave/博查凭据。 | 准备后在App本地选择凭据并允许会话联网；不在聊天发key，不代购买、不催办。 |
 
-本轮RNative=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261005T141348Z-native-tail`，gui/内各项摘要，lead/{locked-tail,attachment-app,native-tail-receipt}.json及typing-fixed-analysis/findings.txt。RHuman=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261005T121357Z-human-queue`保留旧失败sample/普通话/英语/录音保护，不覆盖原证据。构建/测试/trace已结束；旧b8测试App仍存在，无新Terminal，不处理未知历史窗口。功能状态仍只见唯一F表，未功能冻结。
+本轮RUnlock=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261006T002853Z-unlock-native`；gui/attachment-cold-reopen.json、inflight-category-final.json、bottom-*.json及lead/bottom-experiment-decision.json、unlock-native-receipt.json。旧RNative/RHuman证据保留。测试App及自有编译/测试已结束，没有新Terminal；旧卡死进程的强制结束与后来正常退出分开记录。功能状态只在唯一F表，未功能冻结。
 
 ## 历史快照：当前队列之前的本轮过程
 

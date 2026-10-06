@@ -102,15 +102,17 @@ S00–S05是同一份已批准范围的实施切片，完成一片可集成一�
 
 2026-10-05晚集中验收RHuman=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261005T121357Z-human-queue`；普通App代码cc404e4e。后续eba9c370只补既有hosting测试和UITests scheme，未改生产代码；真实失败与成功分开，不刷新未执行项目。
 
-2026-10-06 RNative=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261005T141348Z-native-tail`；原生b8b5ebcb、最新代码/构建ff20f2bc（仅新增成果附件选择入口，原生待验）。下列增量不把旧失败消去，不把不同测试相加成总通过率。
+2026-10-06 RNative=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261005T141348Z-native-tail`；当时原生b8b5ebcb、代码/构建ff20f2bc（原生后来由RUnlock补验）。下列增量不把旧失败消去，不把不同测试相加成总通过率。
+
+2026-10-06解锁补验RUnlock=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261006T002853Z-unlock-native`；实际推荐普通App仍ff20f2bc，新滚动实验未通过/未接纳。下列状态保留失败与模拟/原生区别。
 
 | ID | 状态 | 入口／证据／剩余 |
 |---|---|---|
-| F01 | 非空三类草稿/图像参考与文字往返已验；最终冷开待 | b8普通App分别保存图像/视频/音频草稿，图像带已导入参考1份；逐类切换后文字仍为原会话/Unicode草稿/两个附件，无自动生成。RNative/gui/category-nonempty.json。聊天附件/草稿冷开已验；三类非空状态的最终冷开及在途结果不外推。 |
+| F01 | 非空四分类冷开与一组在途归属原生通过 | RUnlock/gui/inflight-category-final.json：图像/视频/音频非空草稿、图像参考冷开保持；文字真实Qwen3.5-9B Q4冻结短重现运行中切图像，完成OK仍归A812，原请求/历史/草稿/两附件保持，其他分类无新增运行。只做一组，不外推全排列或全部模型。 |
 | F02 | 核心/菜单代表操作已验；主要输入热点已修 | 旧c16/1ebe/cc404布局、主操作、重命名/收藏保留。b8缓存固定模型身份后，实际编辑触发的隐藏Workflow布局由约125ms降约5ms，安装/就绪仍即时；16方法与原生trace见RNative。答案版本嵌套经鼠标展开＋键盘选中可用，非全部鼠标菜单覆盖。像素/IME延迟及SpeechPanel等待归因仍未证实。 |
 | F03 | 切换及管理部分原生通过；重命名已验 | 671普通App置顶、Unicode标签、归档恢复、软删除恢复；deleted时编辑/发送禁用，恢复后草稿保持。E/native-management-tools-artifacts.json与native-management-context-defaults.json。重命名原菜单首项不可见，1b00修补已在4102实点并于cc404e4e重开保持；其他未验管理路径仍不判全组完成。 |
 | F04 | 词法搜索命中及收藏首项原生通过；其余跳转待验 | 671查询Reply only OK.找到正确会话/消息，当前消息已可见，未把此作为全部跨会话跳转证明。收藏原第一项不可见的历史保留，1b00修补已于cc404经鼠标+Return选择，菜单重开显示Remove favorite；不把键盘协助写成纯鼠标覆盖。非向量检索，标签已持久。 |
-| F05 | 草稿/恢复原生通过；动态滚动仍有当前失败 | 1ebe会话包/独立恢复/冷开保留Unicode草稿，671管理/设置切换未丢草稿。671一次真实完成后的Bottom卡顿留样，冷开及受控动态hosting通过未能关闭该失败；E/recovery-data-check.json及lead/empty-cancel-native-hang.sample.txt。4102cff1复核未证实命令循环，只备默认关闭/限量/无正文的诊断；2026-10-05晚cc404再次复现：原请求重现OK成功落盘→上滚→Bottom导致71206主线程约98%CPU，sample指向懒布局phase/prefetch与Graph事务循环。同包冷开/切已有分支可用，不能推断动态已修；RHuman/gui/bottom-reproduced.json及lead/bottom-after-short.sample.txt。eba9新增Controller的reproduce→跟底→上滚→Bottom受控hosting通过，但未复现普通App卡死；一次官方SwiftUI trace下同短请求也响应，不能关闭失败。Bottom按钮仍留着另列状态缺口，没有猜改生产滚动。 RNative三项差分hosting通过；b8一次相同冻结短请求后的原生Bottom响应（218ms工具调用、不是帧延迟），旧间歇卡死仍开放，未修改生产滚动。 |
+| F05 | 草稿/恢复原生通过；动态滚动仍有当前失败 | 1ebe会话包/独立恢复/冷开保留Unicode草稿，671管理/设置切换未丢草稿。671一次真实完成后的Bottom卡顿留样，冷开及受控动态hosting通过未能关闭该失败；E/recovery-data-check.json及lead/empty-cancel-native-hang.sample.txt。4102cff1复核未证实命令循环，只备默认关闭/限量/无正文的诊断；2026-10-05晚cc404再次复现：原请求重现OK成功落盘→上滚→Bottom导致71206主线程约98%CPU，sample指向懒布局phase/prefetch与Graph事务循环。同包冷开/切已有分支可用，不能推断动态已修；RHuman/gui/bottom-reproduced.json及lead/bottom-after-short.sample.txt。eba9新增Controller的reproduce→跟底→上滚→Bottom受控hosting通过，但未复现普通App卡死；一次官方SwiftUI trace下同短请求也响应，不能关闭失败。Bottom按钮仍留着另列状态缺口，没有猜改生产滚动。 RNative三项差分hosting通过；b8一次相同冻结短请求后的原生Bottom响应（218ms工具调用、不是帧延迟），旧间歇卡死仍开放，未修改生产滚动。 RUnlock补稳定冷开反例（无生成/无分类切换）；单一ScrollPosition实验原生改善但hosting失败，已撤回，不关闭Bottom。消息级搜索/恢复实验不外推精确像素或生产通过。 |
 | F06 | 已有部分 | 旧B编辑、分支和路径返回已部分验；不把整个能力组判完成。 |
 | F07 | 实现/CPU通过；菜单原生门槛通过 | regenerate新seed与reproduce冻结旧node/messages/inputs/system继续分开。c16菜单可展开关闭且短发送不复现旧反馈循环；旧真实不同seed/缺seed禁用证据复用，未重跑长生成或宣称逐token确定性。 |
 | F08 | 原生部分采用/人工多版本通过 | c16部分回答采用→继续证据复用；af0103b5修复人工采用后主文仍显示旧结果。普通App冷开、中文主文、原始英文折叠、再编辑初值、切原版/人工版通过；原attempt不改。RClose/lead/adopted-display-native-red.json、native-adopted-display-green.json；定向10方法/2suite。 b8答案版本子菜单切原始→人工后主文正确，固定schema错误原始仍保留；见RNative/gui/nested-versions.json。 |
@@ -120,11 +122,11 @@ S00–S05是同一份已批准范围的实施切片，完成一片可集成一�
 | F12 | 原生读取/拒绝/恢复沿用；自定义模板真实传递/生成通过 | RClose原生tokenizer预览/非法Jinja拒绝/恢复与既有12项固定tokenizer检查沿用。RReal复用已支持的有限模板加marker，9B实际冻结请求保留override，真实后端promptTokens=39与编辑预览一致、不同于默认31；随后27B使用自己的默认模板，无串入。1方法内同一组生成覆盖，不额外重跑。没有宣称任意Jinja或新增普通App模板生成交互通过；lead/real-chat-evidence.json及template/token/request原件。 |
 | F13 | 格式/显示原生保留与人工字段通过；模型结构输出失败留证 | 普通App自动→JSON→D结构定义、字号14→15/换行开关保存，冷开保持。现有Qwen真实请求返回schema本身而非目标对象，明确校验失败/原文保留；不是约束解码通过。显式人工编辑采用合法JSON后可提取title送Canvas。RNative/gui/{format-display,structured-field}.json，不通过反复抽样掩盖模型失败。 |
 | F14 | 代表冻结请求查看与脱敏复制原生通过 | bf8/e742本地正文token/key过度遮蔽修补及10方法沿用；旧差分AX记录不足不抹去。cc404实际Inspect frozen request显示4条有序消息全文、冻结system/格式/媒体限制/model/seed/预算与重现来源；未记录usage和约499保守估计分开。Copy redacted JSON后粘入隔离词法搜索核对：messagesJSON/systemPrompt为[withheld]，modelID/绝对路径不在分享结果，安全参数/ID保留；随后清空搜索、未发送。与已保存attempt交叉核对，RHuman/gui/request-inspection-share.json；这是操作摘要和磁盘核对，未另存完整AX原件；不承诺检测任意秘密。 |
-| F15 | 停止与空取消后接续通过；Bottom交互失败独立保留 | 旧c16长流/部分回答采用沿用。本次真实首字前Stop产生空cancelled，原投影错误阻断后续；671仅下一请求跳过真正空/无产物cancelled或failed assistant，历史/user/非空partial/tool保留。先红后绿54方法/2suite及非实现者审阅；671原失败会话实际得到OK。完成后一次Bottom卡顿不掩盖，受控动态1方法通过但未定位根因。 |
+| F15 | 停止与空取消后接续通过；Bottom交互失败继续按F05保留 | 旧c16长流/部分回答采用沿用。本次真实首字前Stop产生空cancelled，原投影错误阻断后续；671仅下一请求跳过真正空/无产物cancelled或failed assistant，历史/user/非空partial/tool保留。先红后绿54方法/2suite及非实现者审阅；671原失败会话实际得到OK。完成后一次Bottom卡顿不掩盖，受控动态1方法通过但未定位根因。 |
 | F16 | 已接真实响应通道；CPU/hosting通过，App待验 | CHANNELS `287a114d845bb09ce7a7cd0b20bde158fa1da61e` 与Lead F22组合：流中及无解析终态明确原始字节，结束后只用实际response；结构折叠仅严格校验通过值。s03-knowledge-wiring-final UI5方法，无真实模型新增验收。 |
 | F17 | 已有部分 | 固定Markdown库和旧B合成长Markdown原生证据复用；新宿主及操作仍待验。 本轮原生Markdown列表、JSON原文/人工值及字号/换行可显示并冷开保持；不外推所有排版和选区。 |
 | F18 | 组合hosting已修并通过；引用原生部分通过 | e0cc7496813646ae885690e19da37bf9aaf08dbc只改测试：NSEvent事件号按实际16位范围、同一NSApp.sendEvent路径保留；SwiftTesting异步宿主退出前未报告完成，改该项为同步XCTest并保留全部断言。R/lead/f18-xctest-final实际1方法、f18-coordinator-final另2方法均完整结束；c16真实选段解释证据复用。不把其他动作全判通过。 |
-| F19 | 非空附件代表入口通过；新增项目成果入口待原生 | cc404→b8实际选择numbers.csv、预览原文、CSV工具成果显式采用附件、排序、切会话和冷重开保持，源不变。b8图像参考与分类切换保留；gui/native-csv-attachments.json。ff20新增明确“添加附件→本项目成果与素材”，同project/instance/session、固定version、草稿/保存1方法通过并复核；仅待原生选择/采用/取消。其他拖入、移除及在途组合不由此全部关闭。 |
+| F19 | 项目成果与非空附件代表原生入口通过；拖放等余项保留 | 旧numbers.csv、预览/排序/切会话/冷开证据复用。ff20本项目成果选择取消→添加→预览→移除→再加→冷开已实际完成，只改待发引用、不自动发送；空草稿Send禁用。32字节原文件/asset/version及原历史保持，非实现者磁盘核对见RUnlock/lead/asset-native-review.json、gui/attachment-cold-reopen.json。不是全部Finder/跨项目拖放验收。 |
 | F20 | 代表格式普通App提取/采用通过 | 同隔离项目TXT、CSV、PDF页定位、DOCX中文/emoji、显式扫描PDF本地OCR均通过，PDF片段显式采用，DOCX/OCR提取与定位通过；源文件不变。图像/视频旧真实模型证据复用。RClose/lead/native-segments.json，不外推任意文档格式。 |
 | F21 | 词法/采用及代表真实重排原生通过 | 1ebe普通App对现有PDF两页查询page，真实Qwen重排完成，两片段ID各一次、原始JSON/输出资产保存，未自动采用或改草稿/资料。E/rerank-raw.ax.txt、native-rerank-temporary-stop.json；c16行定位/400 lux采用沿用。个人/项目复制、目录CPU沿用，未冒称向量检索。 |
 | F22 | 预览及排除回纳普通App通过；其余策略按既有证据 | 671实际将OK消息排除并持久，再回纳，预览恢复所选路径；E/native-context-excluded.json、native-management-context-defaults.json。空cancelled投影保护已修，预算仍是保守估计而非实际token。摘要失效/替代原生沿用，不把全部组合判通过。 |
@@ -139,6 +141,6 @@ S00–S05是同一份已批准范围的实施切片，完成一片可集成一�
 | F31 | 授权崩溃已修；普通话闭环通过，英语失败保留 | 仅zh-CN/en-US手选、本地requiresOnDeviceRecognition；9方法等值/别名保护沿用。普通App两种语言均显示recognizer available/supportsOnDevice=true，4102首次授权实际触发后台callback的MainActor断言崩溃；cc404e4e明确Sendable桥接，后台四状态＋旧生命周期共10方法通过、签名App正常重开。系统已允许，cc404本人普通话录音正常结束，转写匹配句子；Lead审核追加草稿、落盘text资产关联原audio，sourceOnly、不自动发送。en-US本地能力可用但本次报No speech was recognized，原录音保留，当前已停止；用户要求转其他工作，英语与朗读仍待。RHuman/gui/{mandarin-adopted,english-failure}.json；无云fallback。 |
 | F32 | 代表临时会话隔离与显式成果保留原生通过 | 1ebe独立临时session草稿不入普通历史；显式保存单一Markdown成果→Canvas，结束移除自有TemporaryChat缓存，所选作品保留，普通记忆/资料不变，不自动运行Canvas。E/native-rerank-temporary-stop.json、temporary-workflow-transfer.ax.txt。无临时真实生成，CPU取消/drain/原件保护沿用，不声称零磁盘痕迹。 |
 | F33 | 新会话包/独立恢复/冷开代表路径通过 | 1ebe普通App重新导出→新位置独立恢复→正常退出/冷进程打开，消息/attempt/工具/成果/资料及4个相关记忆版本保持（已用手工记忆2版及本会话建议/审核记忆2版）；17媒体相同字节/独立inode，future memoryScopes空。E/recovery-data-check.json、restored-cold*.ax.txt。旧af遗漏与14方法/2suite先红后绿保留，不重写旧包；全局预设仍独立交换，未外推所有外部格式。 |
-| F34 | 素材/字段到Canvas已验；直接回聊天入口已实现待实点 | 旧HTML素材交接沿用。本轮合法人工JSON版本→title字段→Data Input节点保存，原模型输出/人工版本分开；回文字仍为原会话，不运行下游。RNative/gui/structured-field.json。资料库原只提供拖动，ff20补已入库项目成果选择到聊天待发附件，不新增Store；owner/version/draft/persistence测试通过，锁屏后未做原生回流，仍未关闭。 |
+| F34 | 代表字段到Canvas与已发布成果回聊天原生通过 | RNative人工JSON→title字段→Data Input节点保存与原结果保护沿用；ff20“添加附件→本项目成果”回流同一已发布32字节结构字段，取消/预览/移除/重新采用/冷开保持来源与原草稿，不自动发送/运行。RUnlock/gui/attachment-cold-reopen.json；不宣称任意节点和跨项目组合全验。 |
 | F35 | 紧凑布局/组选字沿用；主要输入热点改善，端到端仍有限 | 本人约200ms是主观值；实际cc404/b8 trace定位固定身份重复读取，布局123.7–130.8ms→4.5–5.3ms，未丢草稿/保存，字号/换行普通App冷开保持。RNative/lead/typing-fixed-analysis/findings.txt。工具往返耗时不是App输入延迟；没有新本人中日组字/全Tab/VoiceOver，不重开候选不随动。 |
-| F36 | 主停止/工具状态原生通过；完整统计及滚动仍待收口 | 671真实空取消→下一请求完成、WASI取消→下一工具完成均已保存；Bottom原生卡顿仍留F05/F15；菜单重命名/收藏首项与F14请求检查器本次已补，嵌套/完整重试等未全验。统计/保存失败CPU沿用。 b8嵌套答案版本与CSV代表操作新增证据；Bottom当前一次通过不能覆盖旧卡死。 |
+| F36 | 主停止/工具状态原生通过；完整统计及滚动仍待收口 | 671真实空取消→下一请求完成、WASI取消→下一工具完成均已保存；Bottom原生卡顿仍留F05/F15；菜单重命名/收藏首项与F14请求检查器本次已补，嵌套/完整重试等未全验。统计/保存失败CPU沿用。 b8嵌套答案版本与CSV代表操作新增证据；Bottom当前一次通过不能覆盖旧卡死。 RUnlock已补一组在途归属和成果回流；Bottom实验未通过，不更新为关闭。 |

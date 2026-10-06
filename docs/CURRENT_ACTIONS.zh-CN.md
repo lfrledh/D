@@ -4,7 +4,7 @@
 
 ## 当前授权：完整文字聊天专题 CHAT-PRODUCT-20261003
 
-**持续工作条件（2026-10-06）**：旧禁止桌面条件已解除；本轮已做原生操作，末尾CUA再次报告锁屏，暂停GUI而不重复探测或催本人。英语失败按本人要求后置，原声保持；F26凭据尚未准备。无依赖工程继续，唯一本人/桌面队列见集中待办。
+**持续工作条件（2026-10-06）**：用户已解锁但不能亲自操作；本轮已独立完成下述原生补验，结束时测试App正常退出。本人组字/试听/凭据继续后置，不要求现在办理。英语失败按本人要求后置，原声保持；F26凭据尚未准备。无依赖工程继续，唯一本人/桌面队列见集中待办。
 
 用户已批准 F01–F36、S00–S06 同一批实施。 2026-10-03再次授权连续续作：先用已有采样与可控流修候选菜单/交互迟滞，将停止固定在输入区主操作；允许S00/S01隔离组合验证，不等待旧布局全部修好。按本清单完成S02–S06（含显式采用部分回答继续），可靠切片正常接纳main后继续，不以阶段回执终止整项。需求冻结，不新增功能/模型/平台；Liquid Glass只沿用系统控件与语义层级，不全面视觉改版。唯一功能状态见 [聊天清单](CHAT_FEATURE_LEDGER.zh-CN.md)。先 S00 长流/停止、正常项目包选择和新候选/旧参数重现，再 S01 布局、S02 编辑与上下文、S03 资料/记忆/备份、S04 联网工具、S05 受限代码/MCP/成果/语音、S06 组合验收。可靠切片通过普通 App 门槛后正常接纳 main，不以整个专题完成为前提；不硬合失败长流。
 
@@ -14,7 +14,15 @@
 
 Lead 持有共享 Runtime/WorkflowServices/ChatController/Store；文件面板和纯展示在独立受限任务树实施。早期S00/S01历史证据目录 RCP=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261003T115108Z-chat-product`。完整 Lead 成本与订阅费用 unknown。早期S00代码完成CPU和签名构建，曾通过项目列表、真实1024-token接收和坐标停止→下一请求；当时菜单忙循环和生成中AX迟滞阻塞接纳。S01缩放焦点反例后来修复并通过hosting、与S00组合。以上是早期门槛来源，已被下述c16普通App复验和main接纳推进；最新S02–S05接线、R证据目录及剩余状态以以下恢复检查点为准，F01–F36范围不取消。
 
-### 当前恢复检查点（2026-10-06，输入热点与原生尾项）
+### 当前恢复检查点（2026-10-06，解锁后的原生补验）
+
+- 起点/本轮源快照 **3d6c4fa4c21e65a9f9b21fd37618815f24f85e09**；有效生产代码/推荐普通App仍 **ff20f2bcfbf13b57836d62fd695954b726f4a010**。本轮新滚动实验未通过，已撤回本轮自有两文件改动、保存外部补丁；最终提交只更新下列事实，不替换App。main仍 **90819739e99b366d7cdb2f549c129eea28728206**，不硬合Bottom失败组合。
+- RUnlock=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261006T002853Z-unlock-native`。ff20普通App实际完成项目成果选择取消→添加→预览→移除→再加→冷开；移除仅待发引用，32字节原成果/版本及原历史不变。非实现者只读核对磁盘来源。证据gui/attachment-cold-reopen.json、lead/asset-native-review.json。三类非空草稿和图像参考冷开保持；仅一组已有Qwen3.5-9B Q4短冻结重现用于在途归属：文字运行时切图像，OK仍归原会话，原node/messages/inputs/system/seed、草稿和两个附件保持，其他分类没有新运行。gui/inflight-category-final.json；非全排列/非拖放验收。
+- **Bottom工程缺陷仍开放，但已不依赖再生成或本人操作**：ff20在同一保存历史中冷开→上滚→Bottom也稳定复现（无生成，进一步排除分类切换必要性）；两份sample集中于GraphHost事务/懒布局，不能声称Apple唯一内部根因。仅去动画不卡但没到末条；单一ScrollPosition edge方案原生到OK但3项hosting失败；last-message方案send通过、replay跟底/离底前置仍失败，2项位置策略通过。没有放宽断言，未接纳实验。lead/bottom-experiment-decision.json、bottom-position-tests.*、bottom-message-tests.*，gui/bottom-{ff20-failure,no-generation,cold-no-category,position-native}.json。
+- 下一工程动作从已有冷开反例和上述三种差分接续：缩小完整App与hosting的阅读位置/懒布局及原生滚动事件差异；先验证确定假设，不加泛日志、不重复模型请求。F01/F19/F34新增代表原生证据已原位写唯一F表；其余未验范围保留。英语后置/原声、系统朗读和输入主观体验、搜索凭据仅留原队列。
+- 自有84335/84630/84846卡死时正常Cmd+Q无效，留证并核实路径后SIGTERM，不能称正常退出；后续冷开实例及两个实验App正常退出。本轮未新开Terminal，编译/测试/模型均结束，最终进程/个人scheme/远端SHA见RUnlock/lead/unlock-native-receipt.json。未功能冻结/发行，不启动全局质量或视觉改版。
+
+### 历史恢复检查点（2026-10-06，输入热点与原生尾项）
 
 - 起点候选 **0f33808a4195b8f09ad06f5a09e352da4a9be5c4**；当前代码/构建 **ff20f2bcfbf13b57836d62fd695954b726f4a010**。本轮实际原生App为 **b8b5ebcbee286c6f750d5166b107c35ee2573336**；ff20只新增“添加附件→本项目成果与素材”直接入口及保护测试，签名构建通过但因再次锁屏未启动/实点。main仍 **90819739e99b366d7cdb2f549c129eea28728206**，不硬合未关闭Bottom的组合。最终文档/远端SHA写本轮R/lead/native-tail-receipt.json。
 - R=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261005T141348Z-native-tail`。输入路径差分确认隐藏Workflow随每次编辑重复读取固定模型注册；b8只缓存固定身份，不缓存安装/就绪。实际paste/delete trace：该布局约123.7–130.8ms→4.5–5.3ms，旧14次Microhang、新两trace均0；不是像素/IME延迟保证。SpeechPanel另有约63–68ms墙钟、仅约1ms CPU的区间，阻塞归因未知，未猜改。证据lead/typing-fixed-analysis/findings.txt；原生旧包/b8代码、命令和区间均有记录。
