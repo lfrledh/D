@@ -841,8 +841,31 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
             XCTAssertEqual(chat.selectedSession?.attempts.dropLast(), session.attempts[...])
             // The native failure starts following a replaced sibling, then the user
             // leaves the bottom. The earlier send fixture never crossed this state.
-            scroll.contentView.scroll(to: NSPoint(x: 0, y: 0))
-            scroll.reflectScrolledClipView(scroll.contentView)
+            // A clip-view mutation bypasses SwiftUI's user-scroll tracking and
+            // leaves its programmatic position active. Send a real wheel event
+            // through this hosting window, as the production interaction does.
+            // CG events do not carry this test window's NSEvent identity (0).
+            // Route their native phases to the identified transcript scroll view,
+            // rather than mutating its clip bounds or sending to an unrelated window.
+            let point = host.convert(CGPoint(x: viewportBefore.midX, y: viewportBefore.midY), to: nil)
+            let screenPoint = window.convertPoint(toScreen: point)
+            func wheel(_ amount: Int32, phase: CGScrollPhase) throws {
+                let cg = try XCTUnwrap(CGEvent(scrollWheelEvent2Source: nil, units: .pixel,
+                    wheelCount: 1, wheel1: amount, wheel2: 0, wheel3: 0))
+                cg.location = .init(x: screenPoint.x,
+                    y: try XCTUnwrap(window.screen).frame.maxY - screenPoint.y)
+                cg.setIntegerValueField(.scrollWheelEventScrollPhase, value: Int64(phase.rawValue))
+                cg.setIntegerValueField(.scrollWheelEventIsContinuous, value: 1)
+                let event = try XCTUnwrap(NSEvent(cgEvent: cg))
+                print("D_SCROLL_DRIVER", type(of: scroll), "location", event.locationInWindow,
+                      "delta", event.scrollingDeltaY, "phase", event.phase.rawValue,
+                      "before", scroll.contentView.bounds.minY)
+                scroll.scrollWheel(with: event)
+                print("D_SCROLL_DRIVER", "after", scroll.contentView.bounds.minY)
+            }
+            try wheel(0, phase: .began)
+            try wheel(600, phase: .changed)
+            try wheel(0, phase: .ended)
             try await Task.sleep(for: .milliseconds(150))
             host.layoutSubtreeIfNeeded()
         }

@@ -369,7 +369,9 @@ struct ChatWorkbenchView: View {
     @State private var followsBottom = true
     @State private var hasNewContent = false
     @State private var scrollStates: [UUID: ChatSessionScrollState] = [:]
-    @State private var visibleMessageID: UUID?
+    @State private var transcriptPosition = ScrollPosition(idType: UUID.self)
+    @State private var userScrollingTranscript = false
+    private var visibleMessageID: UUID? { transcriptPosition.viewID(type: UUID.self) }
     @State private var scrollRestoration: ChatScrollRestoration?
     @State private var issues: [UUID: String] = [:]
     @State private var globalIssue: String?
@@ -801,7 +803,7 @@ struct ChatWorkbenchView: View {
                     Spacer()
                 }.padding(.horizontal, 16).padding(.vertical, 8)
             }
-              ScrollViewReader { proxy in
+              Group {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 16) {
                         if let notes = session.importLossNotes, !notes.isEmpty {
@@ -823,13 +825,26 @@ struct ChatWorkbenchView: View {
                         if session.selectedLeafID == nil {
                             Text(label("noMessages", "暂无消息")) .foregroundStyle(.secondary)
                         }
-                        Color.clear.frame(height: 1).id("chat-bottom")
+                        Color.clear.frame(height: 1)
                     }.scrollTargetLayout()
                         .frame(maxWidth: CGFloat(model.chatDisplaySettings.preferences.transcriptWidth))
                         .frame(maxWidth: .infinity)
                         .padding(.horizontal, 16).padding(.vertical, 20)
                 }
-                .scrollPosition(id: $visibleMessageID)
+                .scrollPosition($transcriptPosition)
+                .defaultScrollAnchor(followsBottom ? .bottom : nil, for: .sizeChanges)
+                .onScrollPhaseChange { _, newPhase, context in
+                    guard chat.state.selectedSessionID == session.id,
+                          scrollRestoration?.sessionID != session.id else { return }
+                    let userPhase = newPhase == .tracking || newPhase == .interacting || newPhase == .decelerating
+                    if userPhase || (userScrollingTranscript && newPhase == .idle) {
+                        followsBottom = context.geometry.contentSize.height - context.geometry.contentOffset.y
+                            - context.geometry.containerSize.height <= 28
+                        if followsBottom { hasNewContent = false }
+                        saveScrollState(for: session.id)
+                    }
+                    userScrollingTranscript = userPhase
+                }
                 .chatMeasured("transcript", probe: layoutProbe)
                 .onScrollGeometryChange(for: ChatScrollPosition.self) { geometry in
                     ChatScrollPosition(offset: geometry.contentOffset.y,
@@ -837,9 +852,13 @@ struct ChatWorkbenchView: View {
                 } action: { previous, current in
                     guard chat.state.selectedSessionID == session.id,
                           scrollRestoration?.sessionID != session.id else { return }
-                    followsBottom = ChatScrollPosition.followsBottom(previous: previous, current: current,
-                        wasFollowing: followsBottom)
-                    if followsBottom { hasNewContent = false }
+                    // Layout and programmatic movement are not a user's choice
+                    // to leave the bottom. Only an actual scroll gesture changes follow intent.
+                    if userScrollingTranscript {
+                        followsBottom = ChatScrollPosition.followsBottom(previous: previous, current: current,
+                            wasFollowing: followsBottom)
+                        if followsBottom { hasNewContent = false }
+                    }
                     traceScroll("geometry", session: session, position: current)
                     saveScrollState(for: session.id)
                 }
@@ -854,7 +873,7 @@ struct ChatWorkbenchView: View {
                           scrollRestoration?.sessionID != session.id else { return }
                     if followsBottom {
                         traceScroll("scroll:auto-bottom", session: session, target: "bottom")
-                        proxy.scrollTo("chat-bottom", anchor: .bottom)
+                        scrollToLastMessage(in: session)
                     } else {
                         hasNewContent = true
                         traceScroll("revision:no-scroll", session: session)
@@ -866,7 +885,8 @@ struct ChatWorkbenchView: View {
                     let restored = scrollStates[newID]
                     followsBottom = restored?.followsBottom ?? true
                     hasNewContent = restored?.hasNewContent ?? false
-                    visibleMessageID = restored?.anchor
+                    transcriptPosition = ScrollPosition(idType: UUID.self)
+                    userScrollingTranscript = false
                     let restore = ChatScrollRestoration(sessionID: newID,
                         followsBottom: followsBottom, anchor: restored?.anchor)
                     scrollRestoration = restore
@@ -877,10 +897,10 @@ struct ChatWorkbenchView: View {
                               searchJump?.sessionID != newID else { return }
                         if restore.followsBottom {
                             traceScroll("scroll:restore", session: session, target: "bottom")
-                            proxy.scrollTo("chat-bottom", anchor: .bottom)
+                            scrollToLastMessage(in: session)
                         } else if let anchor = restore.anchor {
                             traceScroll("scroll:restore", session: session, target: anchor.uuidString)
-                            proxy.scrollTo(anchor, anchor: .top)
+                            transcriptPosition.scrollTo(id: anchor, anchor: .top)
                         }
                         scrollRestoration = nil
                     }
@@ -891,9 +911,8 @@ struct ChatWorkbenchView: View {
                             await Task.yield()
                             guard searchJump == jump, chat.state.selectedSessionID == jump.sessionID else { return }
                             followsBottom = false; hasNewContent = false
-                            visibleMessageID = jump.messageID
                             traceScroll("scroll:appear-search", session: session, target: jump.messageID.uuidString)
-                            proxy.scrollTo(jump.messageID, anchor: .center)
+                            transcriptPosition.scrollTo(id: jump.messageID, anchor: .center)
                             saveScrollState(for: session.id)
                             scrollRestoration = nil
                             searchJump = nil
@@ -903,17 +922,16 @@ struct ChatWorkbenchView: View {
                     if let saved = scrollStates[session.id] {
                         followsBottom = saved.followsBottom
                         hasNewContent = saved.hasNewContent
-                        visibleMessageID = saved.anchor
                         if saved.followsBottom {
                             traceScroll("scroll:appear-saved", session: session, target: "bottom")
-                            proxy.scrollTo("chat-bottom", anchor: .bottom)
+                            scrollToLastMessage(in: session)
                         } else if let anchor = saved.anchor {
                             traceScroll("scroll:appear-saved", session: session, target: anchor.uuidString)
-                            proxy.scrollTo(anchor, anchor: .top)
+                            transcriptPosition.scrollTo(id: anchor, anchor: .top)
                         }
                     } else if followsBottom {
                         traceScroll("scroll:appear-bottom", session: session, target: "bottom")
-                        proxy.scrollTo("chat-bottom", anchor: .bottom)
+                        scrollToLastMessage(in: session)
                     }
                 }
                 .onChange(of: searchJump) { _, jump in
@@ -923,9 +941,8 @@ struct ChatWorkbenchView: View {
                         await Task.yield()
                         guard searchJump == jump, chat.state.selectedSessionID == jump.sessionID else { return }
                         followsBottom = false; hasNewContent = false
-                        visibleMessageID = jump.messageID
                         traceScroll("scroll:search", session: session, target: jump.messageID.uuidString)
-                        proxy.scrollTo(jump.messageID, anchor: .center)
+                        transcriptPosition.scrollTo(id: jump.messageID, anchor: .center)
                         saveScrollState(for: session.id)
                         scrollRestoration = nil
                         searchJump = nil
@@ -938,7 +955,7 @@ struct ChatWorkbenchView: View {
                             followsBottom = true; hasNewContent = false
                             saveScrollState(for: session.id)
                             traceScroll("scroll:manual-bottom", session: session, target: "bottom")
-                            withAnimation { proxy.scrollTo("chat-bottom", anchor: .bottom) }
+                            scrollToLastMessage(in: session)
                         }.padding(12).accessibilityIdentifier("chat-bottom-button")
                             .chatMeasured("bottom-button", probe: layoutProbe)
                     }
@@ -953,6 +970,16 @@ struct ChatWorkbenchView: View {
     private func transcriptRevision(_ session: ChatSession) -> String {
         let latest = session.attempts.last
         return "\(session.id):\(session.selectedLeafID?.uuidString ?? ""):\(session.messages.count):\(latest?.rawText.utf8.count ?? 0):\(latest?.status.rawValue ?? "")"
+    }
+
+    private func scrollToLastMessage(in session: ChatSession) {
+        // Resolve a concrete lazy-layout target; an estimated content edge may
+        // precede the final message until its height has been measured.
+        if let lastID = session.selectedLeafID {
+            transcriptPosition.scrollTo(id: lastID, anchor: .bottom)
+        } else {
+            transcriptPosition.scrollTo(edge: .bottom)
+        }
     }
 
     private func saveScrollState(for sessionID: UUID) {
