@@ -579,6 +579,31 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
         #expect(first.anchor == anchor && !first.followsBottom)
     }
 
+    @Test func delayedBottomRestoreUsesCurrentSiblingWithoutChangingHistory() throws {
+        let question = ChatMessage(parentID: nil, role: .user, text: "Question")
+        let first = ChatMessage(parentID: question.id, role: .assistant, text: "First")
+        let second = ChatMessage(parentID: question.id, role: .assistant, text: "Second")
+        var captured = ChatSession(title: "Restore branch")
+        captured.messages = [question, first, second]; captured.selectedLeafID = first.id
+        captured.draft = "保留 👩🏽‍🎨"
+        let restore = ChatScrollRestoration(sessionID: captured.id, followsBottom: true, anchor: nil)
+        var state = ChatState(); state.sessions = [captured]; state.selectedSessionID = captured.id
+        // This is the state change across the restoration task's yield, not a
+        // fabricated scroll gesture or a claim of native window acceptance.
+        state.sessions[0].selectedLeafID = second.id
+        let beforeResolve = state
+        let current = try #require(restore.currentSession(in: state, pending: restore))
+        let path = try current.path(to: current.selectedLeafID)
+        #expect(captured.selectedLeafID == first.id)
+        #expect(current.selectedLeafID == second.id && path.last?.id == second.id)
+        #expect(!path.contains { $0.id == first.id })
+        #expect(current.messages == captured.messages && current.draft == captured.draft)
+        #expect(state == beforeResolve)
+        #expect(restore.currentSession(in: state, pending: nil) == nil)
+        state.selectedSessionID = UUID()
+        #expect(restore.currentSession(in: state, pending: restore) == nil)
+    }
+
     @Test func realWorkbenchResizePreservesInspectorComposition() async throws {
         let session = try answeredSession(raw: "正文", status: .completed)
         var state = ChatState(); state.sessions = [session]; state.selectedSessionID = session.id
@@ -686,6 +711,21 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
         #expect(summary.count <= 44)
         #expect(!summary.contains(root.id.uuidString))
         #expect(ChatPresentationText.branchSummary(empty, you: "你", assistant: "助手") == "助手")
+    }
+}
+
+// Bounded test-local observation; never changes scroll state or publishes events.
+@MainActor private final class ChatClipMovement {
+    private(set) var minimumOffset: CGFloat
+    private(set) var maximumOffset: CGFloat
+    private(set) var changes = 0
+    init(initialOffset: CGFloat) {
+        minimumOffset = initialOffset; maximumOffset = initialOffset
+    }
+    func record(_ offset: CGFloat) {
+        changes += 1
+        minimumOffset = min(minimumOffset, offset)
+        maximumOffset = max(maximumOffset, offset)
     }
 }
 
@@ -817,11 +857,13 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
         host.layoutSubtreeIfNeeded()
         try await Task.sleep(for: .milliseconds(150))
         let viewportBefore = try XCTUnwrap(frames["transcript"])
-        let scroll = try XCTUnwrap(Self.descendants(host).compactMap { $0 as? NSScrollView }.first {
+        let scrollCandidates = Self.descendants(host).compactMap { $0 as? NSScrollView }.filter {
             let frame = host.convert($0.bounds, from: $0)
             return frame.contains(.init(x: viewportBefore.midX, y: viewportBefore.midY))
-                && frame.width > 300
-        }, "Native transcript scroll view must be identifiable")
+                && frame.width > 300 && !$0.isHiddenOrHasHiddenAncestor
+        }
+        let scroll = try XCTUnwrap(scrollCandidates.count == 1 ? scrollCandidates.first : nil,
+            "Transcript scroll view must be unique, found \(scrollCandidates.count)")
         if replay {
             func distanceToBottom() -> CGFloat {
                 (scroll.documentView?.frame.height ?? 0) - scroll.contentView.bounds.minY
@@ -839,14 +881,24 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
             XCTAssertEqual(chat.selectedSession?.attempts.last?.replayedAttemptID, replaySource?.id)
             XCTAssertEqual(chat.selectedSession?.draft, session.draft)
             XCTAssertEqual(chat.selectedSession?.attempts.dropLast(), session.attempts[...])
-            // The native failure starts following a replaced sibling, then the user
-            // leaves the bottom. The earlier send fixture never crossed this state.
-            // A clip-view mutation bypasses SwiftUI's user-scroll tracking and
-            // leaves its programmatic position active. Send a real wheel event
-            // through this hosting window, as the production interaction does.
-            // CG events do not carry this test window's NSEvent identity (0).
-            // Route their native phases to the identified transcript scroll view,
-            // rather than mutating its clip bounds or sending to an unrelated window.
+            // This direct test-process call is not equivalent to window-routed
+            // user input. Record any synchronous clip movement as well as the
+            // settled offset: equal before/after values alone cannot rule out a
+            // movement followed by position maintenance in the same call stack.
+            let movement = ChatClipMovement(initialOffset: scroll.contentView.bounds.minY)
+            let postedBounds = scroll.contentView.postsBoundsChangedNotifications
+            scroll.contentView.postsBoundsChangedNotifications = true
+            let observation = NotificationCenter.default.addObserver(
+                forName: NSView.boundsDidChangeNotification, object: scroll.contentView, queue: nil
+            ) { [weak scroll] _ in
+                MainActor.assumeIsolated {
+                    if let offset = scroll?.contentView.bounds.minY { movement.record(offset) }
+                }
+            }
+            defer {
+                NotificationCenter.default.removeObserver(observation)
+                scroll.contentView.postsBoundsChangedNotifications = postedBounds
+            }
             let point = host.convert(CGPoint(x: viewportBefore.midX, y: viewportBefore.midY), to: nil)
             let screenPoint = window.convertPoint(toScreen: point)
             func wheel(_ amount: Int32, phase: CGScrollPhase) throws {
@@ -859,6 +911,7 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
                 let event = try XCTUnwrap(NSEvent(cgEvent: cg))
                 print("D_SCROLL_DRIVER", type(of: scroll), "location", event.locationInWindow,
                       "delta", event.scrollingDeltaY, "phase", event.phase.rawValue,
+                      "eventWindow", event.windowNumber, "targetWindow", window.windowNumber,
                       "before", scroll.contentView.bounds.minY)
                 scroll.scrollWheel(with: event)
                 print("D_SCROLL_DRIVER", "after", scroll.contentView.bounds.minY)
@@ -868,6 +921,9 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
             try wheel(0, phase: .ended)
             try await Task.sleep(for: .milliseconds(150))
             host.layoutSubtreeIfNeeded()
+            print("D_SCROLL_DRIVER", "boundsChanges", movement.changes,
+                  "minimumOffset", movement.minimumOffset, "maximumOffset", movement.maximumOffset,
+                  "settledOffset", scroll.contentView.bounds.minY)
         }
         let beforeOffset = scroll.contentView.bounds.minY
         let beforeDistance = try XCTUnwrap(scroll.documentView).frame.height

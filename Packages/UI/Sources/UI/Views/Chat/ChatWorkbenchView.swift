@@ -328,6 +328,11 @@ struct ChatScrollRestoration: Equatable {
     func isCurrent(sessionID: UUID?, pending: Self?) -> Bool {
         sessionID == self.sessionID && pending?.ticket == ticket
     }
+
+    func currentSession(in state: ChatState, pending: Self?) -> ChatSession? {
+        guard isCurrent(sessionID: state.selectedSessionID, pending: pending) else { return nil }
+        return state.sessions.first { $0.id == sessionID }
+    }
 }
 
 enum ChatPresentationText {
@@ -892,12 +897,13 @@ struct ChatWorkbenchView: View {
                     scrollRestoration = restore
                     Task { @MainActor in
                         await Task.yield()
-                        guard restore.isCurrent(sessionID: chat.state.selectedSessionID,
-                                                pending: scrollRestoration),
+                        // A sibling can change while this task yields. Resolve the
+                        // current path only after validating the restoration ticket.
+                        guard let current = restore.currentSession(in: chat.state, pending: scrollRestoration),
                               searchJump?.sessionID != newID else { return }
                         if restore.followsBottom {
-                            traceScroll("scroll:restore", session: session, target: "bottom")
-                            scrollToLastMessage(in: session)
+                            traceScroll("scroll:restore", session: current, target: "bottom")
+                            scrollToLastMessage(in: current)
                         } else if let anchor = restore.anchor {
                             traceScroll("scroll:restore", session: session, target: anchor.uuidString)
                             transcriptPosition.scrollTo(id: anchor, anchor: .top)
