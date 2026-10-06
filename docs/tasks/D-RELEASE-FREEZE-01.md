@@ -962,3 +962,16 @@ align_layout_diagnosis为只读非实现者，先指出临时根入口，再核�
 本轮原生固定冷开反例与搜索路径已推进，两个hosting事件驱动仍缺有效离底覆盖，不能报通过。F11短任务、F16真实通道表现、F19代表跨项目/拖放等剩余按原F表，不再扩成所有组合；F24/F29及已有模型不无变化重复。本人英语/朗读/输入体验、搜索凭据留唯一队列，本轮不催办。未功能冻结；不开始全局质量/视觉工程。
 
 恢复检查点：源01758b8及scheme内容/索引/未暂存保持；main90819739不动，本次只正常推送审计候选。测试项目五会话原文/历史/草稿/附件保持；正常保存令project revision93→97、quick revision40→44和workflow修订UUID改变，工作流其余内容及资产/文稿/任务记录一致，旧快照保留；没有媒体写入或重复全媒体散列。新增个人历史和两工具结果保留。自有测试App/服务均结束（异常SIGTERM与正常CmdQ分别记录），无新Terminal；最终文档提交SHA、远端及精确保护/进程结果写RNow/lead/unlocked-closeout-receipt.json，不为自引用反复提交。
+
+
+### 2026-10-06 本人集中收尾：输入体验、英语与系统朗读
+
+起点cbd4df7c73be3881a8b7f20a0ed0243b15535f6d；受测普通App/生产代码仍9230a6cdabf40b540b17401d39b9ac64181cd265，未改实现、未重建、未重跑模型。本人当前可操作。RHumanNow=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261006T115611Z-human-queue`。
+
+- H32输入：本人反馈改善有限、体感约100ms，仍未通过。无新的精确延迟测量，也未显式回答丢字/重复各项，不据此补造通过。下一工程检查为draft更新/保存真实额外工作，保留组字、历史和保存，不预设与Bottom同源。
+- F31英语：本人恢复一次集中检查。App手选en-US，已有授权/本地支持；现场生成两份录音和两份转写，最后可见转写“This is a local speech test today I'm checking the chat application”，本人确认正确。Lead点击Append to draft，来源附件sourceOnly；保存后正常退出/冷开仍保留，无消息或模型尝试。两份新原声均留存，最终6.165秒CAF和67字节转写摘要核对；旧英语失败原因未明，不追改旧记录。
+- 系统朗读：App Read draft实际进入speaking，Samantha en-US、rate0.5，本人确认正常。未把shell提示音当朗读；暂停/继续/停止本轮未操作，不扩大结论。凭据沿本人原未准备状态保留，不催办。
+- 来源/保护：同一Lead操作与核对，native_files_review只读定位既有语音入口和旧失败原件身份限制，没有其他模型执行原生验收。原五会话字段、旧资产、既有文稿及jobs不变；两次本轮录音新增两份文稿记录，文稿列表整体并非不变（lead/document-delta.json）。新增测试会话0766E08D…只含未发送草稿与附件。无普通用户项目、权重或源scheme修改。
+- 启动异常：正常open后CUA首次全路径绑定额外启动同代码实验包98151，两个AX超时。精确sample主线程等待、后台权重校验，不是Bottom复发证据；仅该自有副实例SIGTERM结束。验收PID98131及冷开实例正常CmdQ退出，未创建Terminal。问题与证据留lead/preparation.json及duplicate-start.sample.txt，不隐去重复启动。
+
+证据：gui/{input-human-result,human-acceptance-result}.json、english-{transcribed,adopted,cold-reopen}.txt，lead/project-after-speech.json。本次只更新原集中队列/F表/恢复点；唯一App和Xcode入口不变。最终文档SHA、远端及结束保护见lead/human-closeout-receipt.json。main保持90819739，推送候选；未功能冻结，不启动全局质量/视觉改版。完整Lead成本unknown。

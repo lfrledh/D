@@ -2,14 +2,16 @@
 
 ## 当前唯一集中队列（2026-10-06，CHAT-PRODUCT-20261003）
 
-用户最新条件：Mac已解锁，允许Lead自行处理原生待验；本人暂不能操作，组字/试听/凭据后置，不催办。旧无桌面条件已解除；若再次锁屏，仅暂停对应GUI。不重开H22、HF、宏、Speech、普通话或固定视频。
+用户最新条件：Mac已解锁且本人可以操作。本次输入体验、英语转写与系统朗读已集中办理；无需重复H22、HF、宏、Speech、普通话或固定视频。再次锁屏仅暂停对应GUI；凭据仍未准备，不催办。
 
 | 事项 | 当前事实 | 最小后续 |
 |---|---|---|
 | H32：代理原生续验/Bottom工程问题 | 9230a6cd普通App已通过固定冷开上滚/Bottom、搜索修补后的同/跨会话命中、输入Undo及历史保护。37b30搜索卡死/sample保留；仅两处center→top。两原replay同步boundsChanges=0，仍未有效离底，不能算通过。F24个人记忆管理/冷开、F29在途停止→重连42/冷开已补。 | 后续只修正hosting有效事件覆盖及F表具体未验入口，不重做上述代表原生路径、不生成模型。F11短任务、F16通道、F19跨项目/拖放按既有缺口接续，不扩成全排列；工程任务不要求本人代做。 |
-| H32：输入迟滞 | 先前b8实测固定身份热点约125ms→5ms，两trace无Microhang。本人约200ms仅主观反馈；SpeechPanel等待原因仍未知。 | 本人不便时不催组字；新体验有机会再集中反馈，不重判候选不随动。 |
-| F31：英语识别与朗读分列 | 普通话真实转写/审核采用/保存通过；英语No speech was recognized，原声保留。 | 按本人决定后置英语，不重录/重置权限；朗读听感仍待，不自动转云。 |
+| H32：输入迟滞 | 9230a6cd本人复验：有改善但不多，体感约100ms；仍未关闭。旧b8固定身份热点约125ms→5ms仅局部测量，不能代替实际输入体验。 | 工程继续定点测量draft更新/保存的额外负担，再按证据修补；不预设与Bottom同源，不重判候选不随动。 |
+| F31：英语识别与朗读分列 | 本人本次恢复检查，9230a6cd英语本地录音→转写正确→审核后采用未发送草稿→冷重开通过；App系统Samantha朗读本人确认正常。旧No speech was recognized失败及原声保留。 | 本次本人事项关闭；不是旧失败根因已查明，也不新增暂停/继续/停止朗读的真人结论。既有取消/释放保护证据复用，不转云。 |
 | F26：搜索凭据及真实调用 | 两适配器/公开网页证据复用；本人暂无Brave/博查凭据。 | 准备后在App本地选择凭据并允许会话联网；不在聊天发key，不代购买、不催办。 |
+
+本次本人证据RHumanNow=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261006T115611Z-human-queue`：`gui/human-acceptance-result.json`、`english-cold-reopen.txt`与`lead/project-after-speech.json`。新会话无message/attempt，原五会话及旧资产不变；新录音与转写保留。自有测试窗口正常关闭，未新建Terminal。代码仍9230a6cd，仅原位更新状态。
 
 本轮RNow=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261006T110535Z-unlocked-bottom`：`gui/search-top-native-result.json`、`personal-memory-native.json`、`mcp-native-result.json`。受测代码9230a6cd，唯一启动器见试用指南；main保持90819739，最终仅文档/远端与保护见`lead/unlocked-closeout-receipt.json`。自有构建/测试/App/服务均结束，无新Terminal；未功能冻结。旧RFollow原始失败与预算保留。
 

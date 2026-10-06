@@ -110,7 +110,9 @@ S00–S05是同一份已批准范围的实施切片，完成一片可集成一�
 
 2026-10-06无桌面续作RFollow=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261006T071736Z-bottom-no-desktop`，代码37b30df22b11af1e8b5b621845fc935c7eca2369。只关闭异步恢复的旧分支目标缺口；2项纯值执行、最终驱动编译分开留证。当时两项旧replay/普通App冷开Bottom仍未通过，无桌面未运行hosting；被下段解锁补验推进，历史失败保留。
 
-2026-10-06最新解锁补验RNow=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261006T110535Z-unlocked-bottom`；受测生产代码9230a6cdabf40b540b17401d39b9ac64181cd265，普通App固定冷开/搜索代表路径、个人记忆管理及MCP停止/重连已补。两replay观察到零位移，驱动前置仍失败；不虚报通过或整组冻结。用户当前已解锁但不能亲自操作，最新保护/启动/远端见当前行动。
+2026-10-06本人集中补验RHumanNow=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261006T115611Z-human-queue`，同一9230a6cd普通App，无代码变化；只推进下述F31/F35状态，不重跑模型。
+
+2026-10-06最新解锁补验RNow=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261006T110535Z-unlocked-bottom`；受测生产代码9230a6cdabf40b540b17401d39b9ac64181cd265，普通App固定冷开/搜索代表路径、个人记忆管理及MCP停止/重连已补。两replay观察到零位移，驱动前置仍失败；不虚报通过或整组冻结。当时本人已解锁但不能亲自操作；之后本人集中结果见RHumanNow，最新保护/启动/远端见当前行动。
 
 | ID | 状态 | 入口／证据／剩余 |
 |---|---|---|
@@ -144,9 +146,9 @@ S00–S05是同一份已批准范围的实施切片，完成一片可集成一�
 | F28 | 真实WASI及普通App失败/成果/取消后续跑通过 | 543失败stdout/traceback exit3不发成果、CSV mean20和保存沿用。671实际sleep20运行→Stop显示cancelled→print(6*7)得到42；无迟到成果，E/native-python-cancel-and-resume.ax.txt及native-management-tools-artifacts.json。最初默认样例在Stop前已结束，不算取消。原隔离/恢复证据复用，不宿主裸跑。 |
 | F29 | 普通App真实调用、在途停止、重连和冷开通过 | 37b30普通App连接官方SDK loopback57659，test_progress(10000ms)在4.49秒时点Stop/disconnect，原会话保存cancelled；重连add_numbers(17,25)=42，显式断开，9230同源冷开保留两终态，草稿/附件/attempt无变化。RNow/gui/mcp-native-result.json。夹具只是延时，不是连续进度通知；取消不保证服务端副作用撤回，原诊断error9仍显示。旧显式采用/CPU drain保护沿用，无新服务实现。 |
 | F30 | HTML及Mermaid代表原生版本路径通过；其余展示待补 | HTML静态/显式本地JS/保存/Canvas/恢复沿用。671 Mermaid v1 A→B，v2 A→C均真实预览/保存，重开v1仍A→B，Discard未保存修改不覆盖；E/mermaid*.png/ax、native-management-tools-artifacts.json。其他格式与跨编辑场景不以此全部关闭。 |
-| F31 | 授权崩溃已修；普通话闭环通过，英语失败保留 | 仅zh-CN/en-US手选、本地requiresOnDeviceRecognition；9方法等值/别名保护沿用。普通App两种语言均显示recognizer available/supportsOnDevice=true，4102首次授权实际触发后台callback的MainActor断言崩溃；cc404e4e明确Sendable桥接，后台四状态＋旧生命周期共10方法通过、签名App正常重开。系统已允许，cc404本人普通话录音正常结束，转写匹配句子；Lead审核追加草稿、落盘text资产关联原audio，sourceOnly、不自动发送。en-US本地能力可用但本次报No speech was recognized，原录音保留，当前已停止；用户要求转其他工作，英语与朗读仍待。RHuman/gui/{mandarin-adopted,english-failure}.json；无云fallback。 |
+| F31 | 普通话沿用；英语真实录音/采用/冷开与系统朗读听感通过 | 仅zh-CN/en-US手选、本地requiresOnDeviceRecognition。旧授权崩溃Sendable修补/10方法与普通话证据沿用；旧英语No speech was recognized与原声保留。本次9230a6cd本人确认en-US转写正确，Lead审核后追加草稿，sourceOnly来源附件、原声及草稿冷开保持，无message/attempt；Samantha en-US系统朗读本人确认正常。RHumanNow/gui/human-acceptance-result.json、english-cold-reopen.txt。暂停/继续/停止朗读未在本次实际操作，不把朗读听感扩大为所有控制均原生通过；无云fallback。 |
 | F32 | 代表临时会话隔离与显式成果保留原生通过 | 1ebe独立临时session草稿不入普通历史；显式保存单一Markdown成果→Canvas，结束移除自有TemporaryChat缓存，所选作品保留，普通记忆/资料不变，不自动运行Canvas。E/native-rerank-temporary-stop.json、temporary-workflow-transfer.ax.txt。无临时真实生成，CPU取消/drain/原件保护沿用，不声称零磁盘痕迹。 |
 | F33 | 新会话包/独立恢复/冷开代表路径通过 | 1ebe普通App重新导出→新位置独立恢复→正常退出/冷进程打开，消息/attempt/工具/成果/资料及4个相关记忆版本保持（已用手工记忆2版及本会话建议/审核记忆2版）；17媒体相同字节/独立inode，future memoryScopes空。E/recovery-data-check.json、restored-cold*.ax.txt。旧af遗漏与14方法/2suite先红后绿保留，不重写旧包；全局预设仍独立交换，未外推所有外部格式。 |
 | F34 | 代表字段到Canvas与已发布成果回聊天原生通过 | RNative人工JSON→title字段→Data Input节点保存与原结果保护沿用；ff20“添加附件→本项目成果”回流同一已发布32字节结构字段，取消/预览/移除/重新采用/冷开保持来源与原草稿，不自动发送/运行。RUnlock/gui/attachment-cold-reopen.json；不宣称任意节点和跨项目组合全验。 |
-| F35 | 紧凑布局/组选字沿用；主要输入热点改善，端到端仍有限 | 本人约200ms是主观值；实际cc404/b8 trace定位固定身份重复读取，布局123.7–130.8ms→4.5–5.3ms，未丢草稿/保存，字号/换行普通App冷开保持。RNative/lead/typing-fixed-analysis/findings.txt。工具往返耗时不是App输入延迟；没有新本人中日组字/全Tab/VoiceOver，不重开候选不随动。 |
+| F35 | 紧凑布局/组选字沿用；输入迟滞仍为工程缺陷 | 本次9230a6cd本人反馈有改善但不多，体感约100ms；不是测量，不能用旧固定身份热点123.7–130.8ms→4.5–5.3ms关闭端到端问题。保留组字/原文/保存责任，下一步定点测量draft更新与保存负担，不预设Bottom同源；不重判候选不随动。RHumanNow/gui/input-human-result.json；全Tab/VoiceOver未验。 |
 | F36 | 主停止/工具状态原生通过；完整统计及滚动仍待收口 | 671真实空取消→下一请求完成、WASI取消→下一工具完成均已保存；Bottom原生卡顿仍留F05/F15；菜单重命名/收藏首项与F14请求检查器本次已补，嵌套/完整重试等未全验。统计/保存失败CPU沿用。 b8嵌套答案版本与CSV代表操作新增证据；Bottom当前一次通过不能覆盖旧卡死。 RUnlock已补一组在途归属和成果回流；Bottom实验未通过，不更新为关闭。 RBasic只推进未接纳滚动候选，测试/原生门槛见F05；未以可构建或单项绿色宣布关闭。 RNow新增固定冷开Bottom/搜索路径与MCP在途停止→重连/冷开证据，具体边界见F04/F05/F29；两个hosting驱动失败仍保留，不以本轮代表通过写成整个F36完成。 |
