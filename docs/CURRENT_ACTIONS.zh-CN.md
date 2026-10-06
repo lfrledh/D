@@ -14,7 +14,15 @@
 
 Lead 持有共享 Runtime/WorkflowServices/ChatController/Store；文件面板和纯展示在独立受限任务树实施。早期S00/S01历史证据目录 RCP=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261003T115108Z-chat-product`。完整 Lead 成本与订阅费用 unknown。早期S00代码完成CPU和签名构建，曾通过项目列表、真实1024-token接收和坐标停止→下一请求；当时菜单忙循环和生成中AX迟滞阻塞接纳。S01缩放焦点反例后来修复并通过hosting、与S00组合。以上是早期门槛来源，已被下述c16普通App复验和main接纳推进；最新S02–S05接线、R证据目录及剩余状态以以下恢复检查点为准，F01–F36范围不取消。
 
-### 当前恢复检查点（2026-10-06，解锁后的原生补验）
+### 当前恢复检查点（2026-10-06，基本可用性收口，原生门槛仍开放）
+
+- 起点 **fb77019ef40846b8b15972c8eede12f340c94d96**；新的**未接纳滚动候选代码 0219f61b204928feb83d36718a8bf4f0d46f5068**。只改 ChatWorkbenchView 的滚动所有者/跟随意图及原 hosting 测试驱动，不改模型、Store、历史和输入器。非实现者发现的恢复门禁缺失已补；不是已修好 Bottom 的结论。
+- RBasic=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261006T024827Z-basic-usability`。单一 UUID ScrollPosition 保留懒加载；跟随仅按用户滚动阶段改变，尺寸变化沿系统锚点处理。受控 replay 原来完成后距底116/177点，现为20点；新短流返回末条/历史、既有跟随策略、恢复ticket及输入pane焦点共4方法通过。两项 replay 的合成滚轮始终未移动 offset，离底前置失败；断言未删，不能以4项通过抵销失败。详见lead/bottom-protection-tests、located-wheel-tests与bottom-readonly-review.json。
+- 普通签名App构建通过（33.285秒），源码摘要与上述代码对应；CUA首次读取即明确Mac locked，**本轮未执行普通App冷开/鼠标验证**。只结束刚启动且未操作的自有实例90106，未重试解锁、未向本人请求操作。main **90819739e99b366d7cdb2f549c129eea28728206**、唯一推荐ff20包/启动器均不变；同树Xcode现在构建未接纳候选，两者不可混称同版。候选最终文档/远端SHA见RBasic/lead/basic-usability-receipt.json。
+- F13核对真实冻结messages/parameters/inputs，没有矛盾指令；保留单次软格式返回schema而非对象的失败、原输出及既有人工采用→Canvas证据，不重生成。F01/F19/F34、输入热点、CSV及已有模型证据复用；没有新模型运行、泛增日志、全局重构或视觉改版。
+- 下一步先修正/说明 hosting 滚轮驱动边界，再在桌面可用时用**现有保存项目、不生成模型**做上滚→Bottom→末条/响应、离底/恢复/搜索及焦点保护。原生尾项只补具体缺口：跨项目/拖放附件、短任务与搜索跳转、个人记忆管理、MCP在途停止/重连、通道展示；F24/F29最短步骤见唯一H32。英语、朗读听感和搜索凭据继续后置。未功能冻结，不硬合失败组合。
+
+### 历史恢复检查点（2026-10-06，解锁后的原生补验）
 
 - 起点/本轮源快照 **3d6c4fa4c21e65a9f9b21fd37618815f24f85e09**；有效生产代码/推荐普通App仍 **ff20f2bcfbf13b57836d62fd695954b726f4a010**。本轮新滚动实验未通过，已撤回本轮自有两文件改动、保存外部补丁；最终提交只更新下列事实，不替换App。main仍 **90819739e99b366d7cdb2f549c129eea28728206**，不硬合Bottom失败组合。
 - RUnlock=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261006T002853Z-unlock-native`。ff20普通App实际完成项目成果选择取消→添加→预览→移除→再加→冷开；移除仅待发引用，32字节原成果/版本及原历史不变。非实现者只读核对磁盘来源。证据gui/attachment-cold-reopen.json、lead/asset-native-review.json。三类非空草稿和图像参考冷开保持；仅一组已有Qwen3.5-9B Q4短冻结重现用于在途归属：文字运行时切图像，OK仍归原会话，原node/messages/inputs/system/seed、草稿和两个附件保持，其他分类没有新运行。gui/inflight-category-final.json；非全排列/非拖放验收。

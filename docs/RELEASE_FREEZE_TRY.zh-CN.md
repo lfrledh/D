@@ -13,7 +13,7 @@
 
 本包包括b8固定模型身份缓存修补及“添加附件→本项目成果与素材”直接入口。ff20已在本轮普通App实际通过选择取消/添加/预览/移除/再加/冷开，原成果不变；四分类非空状态和一组文字在途切图像的结果归属已验。证据RUnlock=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261006T002853Z-unlock-native`，gui/attachment-cold-reopen.json、inflight-category-final.json。
 
-**已知Bottom仍可能卡死，不作为完整聊天稳定版。** 本轮获得冷开已保存历史→上滚→Bottom的无模型反例；两个候选滚动方案未过回归，保留在外部实验目录且不作为推荐App。没有把实验包的局部通过混入本包，也没有放宽失败标准。
+**已知Bottom仍可能卡死，不作为完整聊天稳定版。** 本轮获得冷开已保存历史→上滚→Bottom的无模型反例；旧两个方案未过回归；2026-10-06新的0219f61b滚动候选已有局部保护通过，但合成滚轮离底驱动失败、普通App因再次锁屏未验，不作为推荐App。没有把实验包的局部通过混入本包，也没有放宽失败标准。
 
 入口复用隔离偏好`BC96EF26-C157-4A48-84B4-A54785B1A42E`及已登记模型，不替换普通D、拒绝双开。本轮全部自有App已结束，无新Terminal。旧包/项目/原录音保留，只有本入口推荐。
 
@@ -30,7 +30,7 @@
 5. 联网“搜索与工具”选择Brave/博查、本地选择自己的凭据文件并允许本会话联网。两家真实API尚未验，不在聊天贴key、不代注册或购买。摘要不是已读取正文；采用正文后才交本地模型。
 6. 输入托盘“语音输入与系统朗读”手选普通话/英语。能力查询已验，Speech现已报告允许，普通话本地转写→审核→采用草稿已通过；英语“No speech was recognized”和系统朗读仍在[唯一集中队列](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md)。本人暂不便时不催办、不自动转云。
 
-已验版本分开：旧恢复/输入/停止/工具/语音按影响复用；b8输入热点计时不等于本人IME体验；本轮ff20补原生项目成果回流与分类归属。源和测试文件恢复为原已提交版本，最终新增提交仅文档；不将未通过实验写成生产修补。
+已验版本分开：旧恢复/输入/停止/工具/语音按影响复用；b8输入热点计时不等于本人IME体验；本轮ff20补原生项目成果回流与分类归属。本轮工作树新增0219f61b未接纳候选，未替换推荐ff20包；候选不等于Bottom已修好。
 
 
 ## 使用已下载模型
@@ -55,13 +55,13 @@ Quick/Canvas选真实模型，高级参数选择**省内存（SSD分层加载，
 
 ## 同树 Xcode Run
 
-打开与本候选App相同的工作树：
+打开当前候选工作树（现在含未接纳的0219f61b滚动修补，**不再与上面的ff20推荐包等同**）：
 `/Volumes/CodexProjects/Codex/D-Worktrees/D-RELEASE-FREEZE-01/D.xcworkspace`
 
 选择 **D Nodes / My Mac / Debug**。本机忽略配置`Development/Development.local.xcconfig`使用既有签名身份，资源目录为：
 `/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261004T041401Z-chat-resume/delivery/resources-with-python`
 
-正常Xcode资源阶段嵌入现有引擎与ChatPython，无需手补App或重装模型。本轮同树普通签名构建通过；ff20独立启动/重开与上述原生路径已验，没有人工在Xcode点Run。换机按[开发说明](../Development/README.md)准备资源。**main工作树目前是af生产基线，紧凑控制、记忆导出、空取消接续与菜单首项补丁仍在候选**，不能用main Run冒称上述包的相同代码。
+正常Xcode资源阶段嵌入现有引擎与ChatPython，无需手补App或重装模型。0219f61b生产源码同树普通签名构建通过；RBasic/delivery/D Bottom Phase Candidate.app仅供下一次Lead定向复验，本轮锁屏未进行其原生操作。ff20独立启动/重开与上述旧原生路径已验，没有人工在Xcode点Run。换机按[开发说明](../Development/README.md)准备资源。**main工作树目前是af生产基线，紧凑控制、记忆导出、空取消接续与菜单首项补丁仍在候选**，不能用main Run冒称上述包的相同代码。
 
 ## 集中办理与交付边界
 

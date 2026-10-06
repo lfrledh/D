@@ -901,3 +901,27 @@ RHuman=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-
 - **实验未接纳**：恢复本轮自有两文件至起点完全相同内容，git diff核空后仅追加本次文档；不使用Git reset/restore、不触碰用户差异。推荐App仍ff20，同树Xcode源码一致；两个实验App不列推荐、不替换原包。不再为绿色结果重试同因；下一定位从稳定冷开反例与host滚动事件/布局差异继续，无需本人或再次模型生成。
 
 最终保护/进程/候选远端对应见lead/unlock-native-receipt.json；旧源scheme内容/索引/未暂存保持。Lead实施实验和原生检查，两位非实现者做窄范围只读检查；完整Lead用量/订阅费用unknown。无新管理平台/全局重构。F01/F19/F34代表路径推进，Bottom、F26凭据、F31英语/朗读及其余原生边界保留，未功能冻结/发行。
+
+
+### 2026-10-06 基本可用性有限续作（未接纳Bottom候选）
+
+用户任务 `D_Basic_Usability_Closeout_2026-10-06` 延续同一F01–F36；不运行模型、不泛增日志、不重开输入热点/旧本人事项。起点fb77019ef40846b8b15972c8eede12f340c94d96；代码/测试提交 **0219f61b204928feb83d36718a8bf4f0d46f5068**。RBasic=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261006T024827Z-basic-usability`。main90819739e99b366d7cdb2f549c129eea28728206，推荐ff20及旧source/scheme保护不变。
+
+改动/风险→单一ScrollPosition(UUID)管理Bottom/搜索/恢复，保留LazyVStack及历史；用实际用户scroll phase区分布局变化，sizeChanges沿系统bottom锚点→短流/恢复/焦点局部hosting＋原生冷开反例；普通App门槛未通过前不接纳main。依据[Apple scroll phase](https://developer.apple.com/documentation/swiftui/view/onscrollphasechange(_:)-1k12m)、[sizeChanges anchor](https://developer.apple.com/documentation/swiftui/view/defaultscrollanchor(_:for:))及现有固定失败。不是Apple内部唯一根因证明，也没有重建滚动框架或改存储/模型。
+
+| 对照 | 实际结果与边界 |
+|---|---|
+| 只改LazyVStack→VStack | eager-position-tests：send/replay各通过，compact初始跟随距底177失败；不是普遍修复，且会一次展开长历史，未采用。 |
+| 单一位置＋用户phase/尺寸锚点 | phase-position-tests中replay初始距底由旧116/177恢复20；窗口事件windowNumber=0没有产生离底。owned-window、直接scrollWheel对照也未建立离底；所有失败保留，不累计为通过。 |
+| 最终定位过的滚轮驱动 | located-wheel-tests（exit65，25.772秒）：HostingScrollView收began0/changed600/ended0，正文坐标匹配，changed前后offset346.5/321.5不变；2方法的离底前置失败，后续Bottom按钮不可测。只证明驱动尚未成立，不能判返回功能好坏；未删除/放宽离底、末条/距底、草稿/历史断言，不再猜换事件路由。 |
+| 受影响保护 | bottom-protection-tests（exit0，7.656秒）：短流Bottom/末条/原历史1个XCTest，加streamingGrowthDoesNotOverrideUserScrollPosition、delayedRestoreCannotApplyToAnotherVisitToSameSession、paneResizeKeepsNativeEditorAndExplicitHidingReleasesInput共3个Swift Testing；4执行/4通过。不以这些组件结论关闭普通App。 |
+| 普通签名构建 | bottom-phase-app-build exit0，33.285秒；副本codesign verify通过。生产文件SHA25643f804eee3794f9b185c228270aac4976f26d748326029737e3d5b966e336488与代码提交相同；测试随后变化不改变该App。 |
+| 原生验收 | getApp第一次读取即返回Mac locked，没有项目/鼠标动作。只结束刚启动的自有空实例90106；gui/locked-before-native.json。不重新探测/催解锁，不称正常Cmd+Q退出。原冷开/搜索/离底恢复门槛继续开放。 |
+
+Lead实现；align_layout_diagnosis只读非实现者审阅，发现phase回调缺少当前会话/恢复ticket门禁，Lead补齐后复核；未发现其他确定生产阻断，但实际行为未充分验证。测试驱动结束事件改为新建零位移，避免残余point delta。审阅不是另一次模型执行/原生验收。普通修补失败记录保留，不改号/不重算历史费用；本次完整Lead消耗及订阅费用unknown。
+
+独立核查：native_files_review与Lead核对F13真实attempt1BA463F2-2143-4162-9C52-3E3D7A50BF72，格式system和目标user相容，空task/systemPrompt/inputs，无冲突或消息快照差异；模型输出schema本身的单次软格式失败保留，不能推导普遍不支持，也不重生成。lead/f13-frozen-request-review.json含最小冻结内容。已验F01/F19/F34、输入热点/CSV/模型与恢复证据按差异复用。
+
+F24个人记忆管理和F29原生在途取消均已有真实服务/CPU支持，仅缺普通App交互，未重复开发或测试。F29已有官方SDK夹具可执行路径 `run-20261003T150039Z-chat-continue/lead/mcp-resolve-scratch/debug/mcp-everything-server --port <任务空闲端口>`，仅loopback；test_progress `duration_ms:10000`用于一次在途停止（不声称它产生连续progress通知），drain后重连add_numbers(17,25)=42。F24用已有个人范围新建/版本编辑/忘记及当前冻结请求预览，无需模型。均留同一H32，未启动服务；跨项目拖放、短任务/消息跳转和通道展示保持具体未验，未升级成全排列。
+
+恢复检查点：代码0219f61b，最终文档/远端SHA及代码/产物对应在RBasic/lead/basic-usability-receipt.json。先核实际状态；桌面可用后用同一既存项目、不生成，冷开上滚→Bottom末条/响应，继续离底/恢复/搜索/焦点及独立尾项。hosting驱动问题仍需解释或在正确层级补等价覆盖，不因锁屏把它掩盖为外部权限。英语/朗读听感/搜索凭据不催办。候选正常推送但不硬合main；未功能冻结，不进入质量/视觉阶段，不发布。
