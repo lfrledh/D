@@ -4,7 +4,7 @@
 
 ## 当前授权：完整文字聊天专题 CHAT-PRODUCT-20261003
 
-**持续工作条件（2026-10-06，本人最新覆盖）**：Mac已解锁且本人可以操作。本次英语本地转写/审核采用/冷重开和系统朗读听感通过；输入迟滞仍有约100ms主观反馈，继续作为工程缺陷，不用局部热点数据关闭。F26凭据沿用未准备状态，不催办。再次锁屏只暂停对应GUI；UI设计仍仅下阶段存档。
+**持续工作条件（2026-10-06，本人最新覆盖）**：Mac已解锁，但本人现在不能操作。输入迟滞已实测定位并修补，本人确认“现在差不多正常了”；偶发未确认字母消失随后未复现，本人说明其他App也偶有，保留观察，不猜改组字。英语本地转写/审核采用/冷重开及系统朗读听感通过，复用有效证据。F26真实API/凭据及完整联网验收由本人明确批准延期，退出本轮收口/视觉转段门槛，未实调状态保留。再次锁屏只暂停对应GUI，不催操作；UI设计仍仅下阶段存档。
 
 用户已批准 F01–F36、S00–S06 同一批实施。 2026-10-03再次授权连续续作：先用已有采样与可控流修候选菜单/交互迟滞，将停止固定在输入区主操作；允许S00/S01隔离组合验证，不等待旧布局全部修好。按本清单完成S02–S06（含显式采用部分回答继续），可靠切片正常接纳main后继续，不以阶段回执终止整项。需求冻结，不新增功能/模型/平台；Liquid Glass只沿用系统控件与语义层级，不全面视觉改版。唯一功能状态见 [聊天清单](CHAT_FEATURE_LEDGER.zh-CN.md)。先 S00 长流/停止、正常项目包选择和新候选/旧参数重现，再 S01 布局、S02 编辑与上下文、S03 资料/记忆/备份、S04 联网工具、S05 受限代码/MCP/成果/语音、S06 组合验收。可靠切片通过普通 App 门槛后正常接纳 main，不以整个专题完成为前提；不硬合失败长流。
 
@@ -14,11 +14,22 @@
 
 Lead 持有共享 Runtime/WorkflowServices/ChatController/Store；文件面板和纯展示在独立受限任务树实施。早期S00/S01历史证据目录 RCP=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261003T115108Z-chat-product`。完整 Lead 成本与订阅费用 unknown。早期S00代码完成CPU和签名构建，曾通过项目列表、真实1024-token接收和坐标停止→下一请求；当时菜单忙循环和生成中AX迟滞阻塞接纳。S01缩放焦点反例后来修复并通过hosting、与S00组合。以上是早期门槛来源，已被下述c16普通App复验和main接纳推进；最新S02–S05接线、R证据目录及剩余状态以以下恢复检查点为准，F01–F36范围不取消。
 
+### 本轮：输入响应与视觉转段收口（2026-10-06）
+
+- 起点 `d096dd5664beb593656fe16247eaead7c42c7332`；本轮实现/测试及普通App代码 **3cc71beecf13e70c7d6bce106172996c07daa210**。RQuality=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261006T130047Z-quality-transition`。最终文档/候选远端、保护与进程写 `lead/quality-transition-receipt.json`；main保持 `90819739e99b366d7cdb2f549c129eea28728206`，没有把尚缺原生门槛的整个候选合入main。
+- 输入：每次编辑重复查询系统声音约63ms，改为首次、系统声音变化及App激活时刷新缓存。修后对应局部body约0.17–0.25ms；固定编辑窗口中大于100ms的trace组15→0，窗口外另有139.5ms事件保留，不冒称按键到像素延迟。没有关自动保存、改历史或重建输入器；本人确认基本正常。
+- 滚动覆盖：5项真实Controller/hosting及同次链接校验通过；replay验证跟底/末条，非replay真实离底、Bottom点击与末条可见，保护断言保留。9230冷开/搜索原生通过复用，旧无效滚轮失败不抹去，也不再作为当前无限停点。
+- 具体尾项：普通App已补从选中消息分叉、自定义选段模板→PDF引用草稿、库成果采用、真实reasoning-only通道展示、CSV/SVG预览及系统默认朗读暂停/继续/停止。正常关闭重开后分支2消息、未发送草稿与2附件仍在；来源6消息/3attempt保留。跨项目83字节explicit-copy是10月5日既有副本，本轮只验采用，不冒称新复制。证据 `lead/native-tail-summary.json`。
+- **剩余两项**：长单条40节Markdown在滚动/外链确认返回时跳到Section18/19；无卡死/数据丢失，但原因及真人/工具差异未明。两种局部实验均未改善，已撤去自有实验改动、保留patch与失败证据，最终包不含它们。Finder跨窗拖入一次未形成附件，工具坐标不足，仍缺有效拖入/预览/重开证据，不判生产拒绝。最短现场区分留[唯一集中队列](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md)，本人当前不能操作，不催办；不重跑模型或已办授权。
+- 唯一启动器原位指向 **D Chat Product 3cc71bee.app**；同树 `D.xcworkspace / D Nodes / My Mac / Debug`，普通签名最终构建39.955秒成功，交付副本与受测包四关键文件一致。路径和用法只维护在[试用指南](RELEASE_FREEZE_TRY.zh-CN.md)。自有测试窗口已正常退出，旧包/失败证据保留。
+- **本轮尚未达到视觉转段/完整功能冻结**；不是被F26阻塞。Lead实现与原生操作，非实现者只读核对；没有新的写Worker或独立模型原生测试。全局质量重构、推理优化和Liquid Glass仍未启动。
+
+
 ### 本人集中验收补记（2026-10-06）
 
 起点cbd4df7c73be3881a8b7f20a0ed0243b15535f6d；同一9230a6cd普通App，无生产改动。RHumanNow=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261006T115611Z-human-queue`。英语en-US本人确认转写正确，Lead显式追加草稿、原录音/来源附件保存，正常退出重开仍在，无自动发送；Samantha系统朗读本人确认正常。旧失败保留，不说明其根因已修。输入/删除仍明显迟滞，约100ms不是测量；下一工程动作是核draft更新/保存实际负担。本人无需再重复本次检查。旧五会话/资产及个人scheme保护不变，自有App正常关闭；首次CUA绑定额外启动同版本实验包已留证并结束，不计验收。main保持90819739；最终仅文档/候选远端见本次`lead/human-closeout-receipt.json`。未功能冻结。
 
-### 当前恢复检查点（2026-10-06，解锁后的Bottom与独立原生尾项）
+### 历史恢复检查点（2026-10-06，解锁后的Bottom与独立原生尾项）
 
 - 起点c590b2a3460a342663d08cdc92cdb4f1e6c92512；本轮两行修补/受测生产代码 **9230a6cdabf40b540b17401d39b9ac64181cd265**。RNow=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261006T110535Z-unlocked-bottom`。最终仅文档/远端、保护及进程见`lead/unlocked-closeout-receipt.json`。main仍90819739e99b366d7cdb2f549c129eea28728206；本轮推送候选，不把代表原生通过写成整个组合已接纳。
 - 两项原replay已执行：初次被测试临时根`/var`安全校验拒绝，不是滚动结果；任务自有xctestrun明确注入既有`D_TEST_TEMP_DIR`后达到滚轮。两例同步boundsChanges=0、极值不变，未观察到先移动再回拉；**离底前置仍失败，不计通过**。原断言保留，没有猜换事件路由；`lead/driver-fixture-root.*`。测试驱动缺口与真实鼠标证据分开。

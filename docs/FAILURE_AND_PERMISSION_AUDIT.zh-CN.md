@@ -2,20 +2,19 @@
 
 ## 当前唯一集中队列（2026-10-06，CHAT-PRODUCT-20261003）
 
-用户最新条件：Mac已解锁且本人可以操作。本次输入体验、英语转写与系统朗读已集中办理；无需重复H22、HF、宏、Speech、普通话或固定视频。再次锁屏仅暂停对应GUI；凭据仍未准备，不催办。
+用户最新条件：Mac已解锁，但本人不能操作。代理可独立的本轮尾项已执行；现在不要求组字、试听、密钥或新权限。旧H22、HF、宏、Speech、普通话/英语及固定视频均不重办。再次锁屏只暂停对应GUI。
 
-| 事项 | 当前事实 | 最小后续 |
+| 事项 | 当前事实 | 最短接续与关闭条件 |
 |---|---|---|
-| H32：代理原生续验/Bottom工程问题 | 9230a6cd普通App已通过固定冷开上滚/Bottom、搜索修补后的同/跨会话命中、输入Undo及历史保护。37b30搜索卡死/sample保留；仅两处center→top。两原replay同步boundsChanges=0，仍未有效离底，不能算通过。F24个人记忆管理/冷开、F29在途停止→重连42/冷开已补。 | 后续只修正hosting有效事件覆盖及F表具体未验入口，不重做上述代表原生路径、不生成模型。F11短任务、F16通道、F19跨项目/拖放按既有缺口接续，不扩成全排列；工程任务不要求本人代做。 |
-| H32：输入迟滞 | 9230a6cd本人复验：有改善但不多，体感约100ms；仍未关闭。旧b8固定身份热点约125ms→5ms仅局部测量，不能代替实际输入体验。 | 工程继续定点测量draft更新/保存的额外负担，再按证据修补；不预设与Bottom同源，不重判候选不随动。 |
-| F31：英语识别与朗读分列 | 本人本次恢复检查，9230a6cd英语本地录音→转写正确→审核后采用未发送草稿→冷重开通过；App系统Samantha朗读本人确认正常。旧No speech was recognized失败及原声保留。 | 本次本人事项关闭；不是旧失败根因已查明，也不新增暂停/继续/停止朗读的真人结论。既有取消/释放保护证据复用，不转云。 |
-| F26：搜索凭据及真实调用 | 两适配器/公开网页证据复用；本人暂无Brave/博查凭据。 | 准备后在App本地选择凭据并允许会话联网；不在聊天发key，不代购买、不催办。 |
+| H32：长单条Markdown阅读位置 | 3cc71bee同普通App、保存的40节合成回答，滚动/外链确认取消可从开头跳到Section18/19；没有观察到卡死或内容丢失。两个局部实验未改善，已撤回并保留证据，尚不能区分全部工具影响和实际滚动逻辑。旧9230多消息Bottom/搜索通过，不重开。 | 本人下次方便时，只在同一已保存fixture普通滚轮/拖滚动条读首段，再点外链并取消，确认阅读位置；不生成。代理先准备唯一窗口，期间不操作。若真人也跳，沿该反例定位；若工具特有，保留边界并核实产品路径。现在不催本人。 |
+| H32：Finder文件拖入 | 非空项目附件、资料库既有explicit-copy成果采用/草稿保存冷开已通过；Finder一次跨窗自动拖动没形成附件，但坐标路径不足，不记通过或认定生产失败。 | 同包用既有小夹具从Finder拖到聊天输入区一次，核附件预览与重开；有效人工拖动或有据的原生驱动均可。本人当前不能操作，先保留，不重复点文件导入替代拖动。 |
+| H32：输入迟滞 | 本轮定位每次编辑重复查询声音约63ms，缓存后对应局部body约0.17–0.25ms；本人确认“现在差不多正常了”。偶发未确认字母消失后来未复现，本人说明其他软件亦偶有。 | 持续迟滞本轮收口；偶发组字只留观察，不加猜测补丁、不重测候选随动。没有新的确定反例前无需本人再输。 |
+| F31：英语识别与朗读 | 9230英语本人确认正确→审核采用未发草稿→冷重开、系统朗读听感通过；3cc默认声音别名解析修补后，代理实际Read→Pause→Resume→Stop通过。原失败和原声保留。 | 本人事项关闭，不把此次代理控制写作新的真人听感，也不追认旧失败根因。 |
+| F26：本人明确批准延期 | Brave/博查真实调用、凭据办理及完整联网验收退出本轮功能/视觉转段门槛；已有代码及未实调状态保留。 | 本轮不办理、不催、不注册/购买/索key、不新增provider或爬虫。 |
 
-本次本人证据RHumanNow=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261006T115611Z-human-queue`：`gui/human-acceptance-result.json`、`english-cold-reopen.txt`与`lead/project-after-speech.json`。新会话无message/attempt，原五会话及旧资产不变；新录音与转写保留。自有测试窗口正常关闭，未新建Terminal。代码仍9230a6cd，仅原位更新状态。
+当前证据RQuality=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261006T130047Z-quality-transition`：`lead/native-tail-summary.json`、`markdown-scroll-experiment-summary.json`、`quality-transition-receipt.json`。推荐包代码3cc71bee、同树Xcode和唯一启动器见[试用指南](RELEASE_FREEZE_TRY.zh-CN.md)。上述两项具体原生缺口仍不允许宣布功能冻结或视觉转段；不是等待新授权。测试App及自有Finder/Safari测试窗口已关闭，无新Terminal，主线仍90819739。
 
-本轮RNow=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261006T110535Z-unlocked-bottom`：`gui/search-top-native-result.json`、`personal-memory-native.json`、`mcp-native-result.json`。受测代码9230a6cd，唯一启动器见试用指南；main保持90819739，最终仅文档/远端与保护见`lead/unlocked-closeout-receipt.json`。自有构建/测试/App/服务均结束，无新Terminal；未功能冻结。旧RFollow原始失败与预算保留。
-
-复用历史RUnlock=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261006T002853Z-unlock-native`；gui/attachment-cold-reopen.json、inflight-category-final.json、bottom-*.json及lead/bottom-experiment-decision.json、unlock-native-receipt.json。旧RNative/RHuman证据保留。测试App及自有编译/测试已结束，没有新Terminal；旧卡死进程的强制结束与后来正常退出分开记录。功能状态只在唯一F表，未功能冻结。
+复用历史：RHumanNow=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261006T115611Z-human-queue` 的英语/听感；RNow=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261006T110535Z-unlocked-bottom` 的Bottom/搜索/记忆/MCP。旧失败、预算及原件保持，不刷新历史执行日期。详细功能状态只在唯一F表，不在本队列重复工程清单。
 
 ## 历史快照：当前队列之前的本轮过程
 

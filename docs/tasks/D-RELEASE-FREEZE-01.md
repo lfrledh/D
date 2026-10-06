@@ -975,3 +975,19 @@ align_layout_diagnosis为只读非实现者，先指出临时根入口，再核�
 - 启动异常：正常open后CUA首次全路径绑定额外启动同代码实验包98151，两个AX超时。精确sample主线程等待、后台权重校验，不是Bottom复发证据；仅该自有副实例SIGTERM结束。验收PID98131及冷开实例正常CmdQ退出，未创建Terminal。问题与证据留lead/preparation.json及duplicate-start.sample.txt，不隐去重复启动。
 
 证据：gui/{input-human-result,human-acceptance-result}.json、english-{transcribed,adopted,cold-reopen}.txt，lead/project-after-speech.json。本次只更新原集中队列/F表/恢复点；唯一App和Xcode入口不变。最终文档SHA、远端及结束保护见lead/human-closeout-receipt.json。main保持90819739，推送候选；未功能冻结，不启动全局质量/视觉改版。完整Lead成本unknown。
+
+
+### 2026-10-06 输入响应修补与代表能力尾项（视觉转段尚未通过）
+
+继续CHAT-PRODUCT-20261003/F01–F36；只F26实调/凭据获准延期，不静默删减其余功能。起点d096dd5664beb593656fe16247eaead7c42c7332；Lead实现/测试及最终普通App代码 **3cc71beecf13e70c7d6bce106172996c07daa210**。RQuality=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261006T130047Z-quality-transition`。main仍90819739e99b366d7cdb2f549c129eea28728206；没有接纳整个未过原生门槛的候选。最终文档/远端SHA记外部回执，避免自引用提交。
+
+- **输入有前后测量**：声音列表在SpeechPanel每次求值重复查询，约61–64ms（首次103ms）。改首次/系统声音改变/App激活刷新缓存；同条件折叠/展开删除的局部body63.531→0.172ms、63.309→0.250ms，事务max111.068→41.121及166.789→84.435ms，编辑＋2秒窗口中>100ms组15→0；窗口外139.5ms另记，不称按键到像素数据。未停自动保存或更改输入器。本人确认“现在差不多正常了”；偶发字母消失随后未复现、其他软件亦偶有，留观察，不猜修。原始/修后trace与分析在lead/{before,after}-input-readonly-analysis，反馈gui/input-human-result.json及followup。
+- **行为小修**：F11 selectionInstruction为可选会话/预设值，16KiB限制、旧数据nil、fork继承；实际QuoteSheet组合选段/来源到可编辑草稿，不替换system。F19库预览显式采用当前聊天，项目实例/会话保护沿用现有addSharedAttachment。F17使用既有Markdown listener复制表格，外链限HTTP(S)/有host/无userinfo并先确认，远程图片仍禁用。F16有解析response却无final时不把raw思考冒充答案；F31默认声音用系统language解析处理cmn-CN别名，个人声音排除保持。
+- **按风险验证**：F11先失败后2项通过；通道视图先3断言失败后7项通过；5项ChatDynamicBottomHosting＋1链接校验同次通过，分别保留跟底、真实离底、末条可见、恢复/焦点/历史。旧合成滚轮无位移不是生产故障，replay改验真实Controller短流，非replay仍实际离底/Bottom点击；不把懒布局估算高度当作末条可见性。另有默认声音1项、捕获通道独立重开1项及先前6项附件/滚动值检查，各证据单列，不加成总通过率。命令/结果见lead/{f11-final,scroll-visible,channels-view-green,speech-default,channels-reopen}的JSON/log；已过而未变的旧9230原生、英语/听感/记忆/MCP/恢复证据复用。
+- **真实模型范围有限**：一次环境参数错误导致skip，保留不计通过；随后Qwen3.5-9B Q4、思考/seed42/temp0、256与1024输出预算分别16.164和55.224秒，只返回真实reasoning、按length/incomplete落盘，未得到final。原测试错误要求完整答案的失败保留；冻结F16并不要求所有通道同时出现，新增读取实际捕获＋Store重开检查，不重推理。普通App显示“No answer body”及折叠真实思考，无假正文；lead/channel-capture-outcome.json。没有推理精度/模型变更或无限抽卡。
+- **普通签名App操作**：原6消息/3attempt保留，从前2条分叉新会话0attempt；新预设→PDF中400 lux选段→Explain→草稿/sourceOnly来源；库中Temporary chat选中成果加入该fork，83字节explicit-copy是10月5日已存在副本，本轮只验采用；CSV两列与SVG蓝矩形真实预览、SVG版本/receipt保留；外链取消/打开系统浏览器及真实表格复制；系统默认Read/Pause/Resume/Stop。最终正常退出/冷重开确认fork2消息、指令草稿与2附件保持。见lead/native-tail-summary.json及gui/final-fork-selected.ax.txt。不是新真人听感或新跨项目复制。
+- **仍有具体门槛**：40节单条Markdown滚动/外链确认返回跳到Section18/19；没有观察到卡死或数据丢失，不能证明Apple内部唯一根因。alert移出消息宿主、scroll state重复写入去重两次实验均未改善，已撤去自有改动，patch和原失败保留在lead/unaccepted-*.patch及markdown-scroll-experiment-summary.json。一次过期AX索引结果剔除，正确可见坐标打开alert/取消仍跳。Finder一次跨窗拖动没有新增附件，工具坐标不足，不作生产失败结论。两项最短真人/工具区分留原H32；用户最新已解锁但不能操作，不催办。
+
+最终从恢复后的3cc源码普通签名build exit0/39.955秒，未跳宏/签名检查；交付副本与实际受测包四关键文件相同、codesign核对通过。唯一旧启动器原位指向D Chat Product 3cc71bee.app；同树D.xcworkspace / D Nodes / My Mac / Debug，资源与具体路径见试用指南。两个失败实验不在交付包。非实现者native_files_review核对生产差分/数据与交付，align_layout_diagnosis只读核滚动和来源；没有独立模型执行原生验收，未新增写Worker。完整Lead用量/费用unknown，不重算旧样本。
+
+保护与恢复：旧源01758b8、scheme未暂存orderHint差异及摘要保持；仅自有隔离项目更新，原PDF/CSV与来源会话保持，既有个人草稿不回滚。自有App正常CmdQ退出，Finder/Safari自有测试窗口关闭，无新Terminal；没有处置未知长期helper。最终精确索引/保护/进程与候选推送见lead/quality-transition-receipt.json。F26明确延期，输入/多数尾项推进；F17长文位置和F19有效拖入仍开放，**未达到视觉转段/完整功能冻结**，不自动启动质量重构、Liquid Glass或Release。
