@@ -918,7 +918,7 @@ struct ChatWorkbenchView: View {
                             guard searchJump == jump, chat.state.selectedSessionID == jump.sessionID else { return }
                             followsBottom = false; hasNewContent = false
                             traceScroll("scroll:appear-search", session: session, target: jump.messageID.uuidString)
-                            transcriptPosition.scrollTo(id: jump.messageID, anchor: .center)
+                            transcriptPosition.scrollTo(id: jump.messageID, anchor: .top)
                             saveScrollState(for: session.id)
                             scrollRestoration = nil
                             searchJump = nil
@@ -948,7 +948,7 @@ struct ChatWorkbenchView: View {
                         guard searchJump == jump, chat.state.selectedSessionID == jump.sessionID else { return }
                         followsBottom = false; hasNewContent = false
                         traceScroll("scroll:search", session: session, target: jump.messageID.uuidString)
-                        transcriptPosition.scrollTo(id: jump.messageID, anchor: .center)
+                        transcriptPosition.scrollTo(id: jump.messageID, anchor: .top)
                         saveScrollState(for: session.id)
                         scrollRestoration = nil
                         searchJump = nil
