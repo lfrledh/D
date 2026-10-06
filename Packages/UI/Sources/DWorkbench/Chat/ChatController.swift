@@ -416,6 +416,7 @@ import Observation
         guard let preset = state.presets.first(where: { $0.id == id }) else { throw WorkflowIssue("预设不存在。") }
         let configuration = try preset.configuration.map(Self.chatConfiguration)
         state.sessions[i].systemPrompt = preset.prompt
+        state.sessions[i].selectionInstruction = preset.selectionInstruction
         if let configuration {
             state.sessions[i].configuration = configuration
             let prefix = sessionID.uuidString + ":"
@@ -807,6 +808,7 @@ import Observation
             return copy
         }
         fork.selectedLeafID = leaf; fork.configuration = source.configuration; fork.systemPrompt = source.systemPrompt
+        fork.selectionInstruction = source.selectionInstruction
         fork.outputFormat = source.outputFormat
         fork.draft = source.draft; fork.attachments = source.attachments
         fork.memoryScopes = source.memoryScopes

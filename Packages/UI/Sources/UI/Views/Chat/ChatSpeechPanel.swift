@@ -1,4 +1,5 @@
 import DWorkbench
+import AVFAudio
 import SwiftUI
 
 /// System speech is explicit and independent of the selected generation model.
@@ -13,6 +14,7 @@ struct ChatSpeechPanel: View {
     @State private var rate: Double = 0.5
     @State private var capability: ChatSpeechCapability?
     @State private var issue: String?
+    @State private var voices: [ChatSystemVoice] = []
     private func text(_ en: String, _ zh: String) -> String { language?.effectiveLanguageIdentifier.hasPrefix("zh") == true ? zh : en }
     var body: some View {
         DisclosureGroup(text("Voice input and system read-aloud", "语音输入与系统朗读")) {
@@ -94,7 +96,7 @@ struct ChatSpeechPanel: View {
                 Divider()
                 Picker(text("System voice", "系统声音"), selection: $voice) {
                     Text(text("System default", "系统默认")).tag("")
-                    ForEach(chat.speech.availableVoices) { voice in Text(voice.name + " · " + voice.language).tag(voice.id) }
+                    ForEach(voices) { voice in Text(voice.name + " · " + voice.language).tag(voice.id) }
                 }.onChange(of: voice) { _, value in
                     change {
                         if value.isEmpty {
@@ -121,13 +123,24 @@ struct ChatSpeechPanel: View {
                 if let message = project.errorMessage { Text(message).foregroundStyle(.red).font(.caption) }
             }
         }.task {
+            refreshVoices()
             if let recognitionLanguage {
                 capability = chat.speech.capability(localeIdentifier: recognitionLanguage.rawValue)
             }
             rate = Double(chat.speech.rate)
             voice = chat.speech.voiceID ?? ""
         }
+        .onReceive(NotificationCenter.default.publisher(for: AVSpeechSynthesizer.availableVoicesDidChangeNotification)
+            .receive(on: RunLoop.main)) { _ in
+            refreshVoices()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            refreshVoices()
+        }
     }
+    // System discovery can block for tens of milliseconds. Refresh on lifecycle
+    // and system changes, never as a side effect of editing the chat draft.
+    private func refreshVoices() { voices = chat.speech.availableVoices }
     private func authorizationText(_ authorization: ChatSpeechAuthorization) -> String {
         switch authorization {
         case .notDetermined: text("not requested", "未请求")

@@ -16,12 +16,12 @@ struct ChatChannelPresentation {
     init(_ attempt: ChatAttempt) {
         let runtimeActive = attempt.status == .running
         let unseparated = runtimeActive || attempt.response == nil
-        let selectedText = unseparated ? attempt.rawText : (attempt.response?.finalText ?? attempt.rawText)
+        let selectedText = unseparated ? attempt.rawText : (attempt.response?.finalText ?? "")
         isStreaming = runtimeActive
         isUnseparatedRaw = unseparated
         rawText = runtimeActive ? attempt.rawText : (attempt.response?.rawText ?? attempt.rawText)
         text = selectedText
-        if !unseparated, attempt.status != .saving,
+        if !unseparated, !selectedText.isEmpty, attempt.status != .saving,
            let format = attempt.outputFormat, [.json, .schema].contains(format.kind) {
             let checkedText = selectedText
             let report = format.check(checkedText)
@@ -80,7 +80,9 @@ struct ChatMessageContent: View {
 
     /// Copy, speech and editing use the same selected version as the transcript.
     static func answerText(message: ChatMessage, attempt: ChatAttempt?, selectedAnswer: ChatSelectedAnswer?) -> String {
-        selectedAnswer?.text ?? attempt?.response?.finalText ?? attempt?.rawText ?? message.text
+        if let selectedAnswer { return selectedAnswer.text }
+        if let response = attempt?.response { return response.finalText ?? "" }
+        return attempt?.rawText ?? message.text
     }
 
     var primaryText: String { Self.answerText(message: message, attempt: attempt, selectedAnswer: selectedAnswer) }
@@ -127,6 +129,18 @@ struct ChatMessageContent: View {
                     ChatMarkdownView(messageID: message.id, text: presentation.text,
                                      rawText: presentation.rawText, isStreaming: false)
                         .id(message.id)
+                } else {
+                    Text(wording("The model did not provide an answer body.", "模型尚未提供正文。"))
+                        .font(.caption).foregroundStyle(.secondary)
+                    if !presentation.rawText.isEmpty {
+                        DisclosureGroup(wording("Original model output · preserved", "原始模型输出 · 已保留")) {
+                            Text(presentation.rawText).textSelection(.enabled)
+                            Button(label("copyRaw", "复制原文")) {
+                                NSPasteboard.general.clearContents()
+                                NSPasteboard.general.setString(presentation.rawText, forType: .string)
+                            }
+                        }
+                    }
                 }
                 if !presentation.isUnseparatedRaw,
                    let reasoning = attempt.response?.reasoningText, !reasoning.isEmpty {

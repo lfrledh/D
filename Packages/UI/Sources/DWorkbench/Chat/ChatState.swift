@@ -104,6 +104,8 @@ public struct ChatSession: Codable, Sendable, Equatable, Identifiable {
     public var attachments: [ChatAttachment] = []
     public var configuration: WorkflowNode?
     public var systemPrompt = ""
+    /// Copied from an applied preset; later preset edits do not change this session.
+    public var selectionInstruction: String?
     public var originSessionID: UUID?
     public var originLeafID: UUID?
     public var contextChoices: ChatContextChoices?
@@ -189,6 +191,7 @@ public struct ChatState: Codable, Sendable, Equatable {
         for session in sessions {
             guard !session.title.isEmpty, session.title.utf8.count <= 512,
                   session.draft.utf8.count <= 1_048_576, session.systemPrompt.utf8.count <= 65_536,
+                  (session.selectionInstruction?.utf8.count ?? 0) <= 16_384,
                   session.messages.count <= 10_000, session.attempts.count <= 10_000,
                   Set(session.messages.map(\.id)).count == session.messages.count,
                   Set(session.attempts.map(\.id)).count == session.attempts.count,

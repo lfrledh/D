@@ -2,6 +2,21 @@ import AppKit
 import SwiftStreamingMarkdown
 import SwiftUI
 
+/// The renderer supplies normalized table Markdown, not a raw-source slice.
+struct ChatMarkdownListener: MarkdownListener {
+    func onTableCopyTap(content: String) async {
+        await MainActor.run {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(content, forType: .string)
+        }
+    }
+    func onRender(markdown: RenderableDocument) async {}
+    func onTableDownloadTap(content: String) async {}
+    func onContextMenuAppear(id: String, selectedContent: String) async {}
+    func onContextMenuTap(id: String, selectedContent: String) async {}
+    func onImageTap(image: MarkdownImage) async {}
+}
+
 enum ChatMarkdownPresentation {
     @MainActor
     static let config = config(for: ChatDisplayPreferences())
@@ -55,7 +70,16 @@ enum ChatMarkdownPresentation {
             imageConfig: .disabled)
     }
 
-    static func discardURL(_ url: URL) -> OpenURLAction.Result { .discarded }
+    /// Model links are untrusted. Clicking only proposes a visible destination;
+    /// opening it remains a separate, explicit browser action.
+    static func requestURL(_ url: URL, confirm: (URL) -> Void) -> OpenURLAction.Result {
+        guard let parts = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              ["http", "https"].contains(parts.scheme?.lowercased() ?? ""),
+              let host = parts.host, !host.isEmpty, parts.user == nil, parts.password == nil
+        else { return .discarded }
+        confirm(url)
+        return .handled
+    }
 
     @MainActor
     static func parse(_ source: String, pointSize: Int = ChatDisplayPreferences.defaultTextPointSize) async -> RenderableDocument {
@@ -109,6 +133,7 @@ struct ChatMarkdownView: View {
     @State private var parsedKey: ParseKey?
     @State private var document: RenderableDocument?
     @State private var showsRaw = false
+    @State private var pendingLink: URL?
     @Environment(\.dLanguageStore) private var language
     @Environment(\.chatDisplayPreferences) private var displayPreferences
 
@@ -140,11 +165,23 @@ struct ChatMarkdownView: View {
                     .accessibilityIdentifier("chat-raw-\(messageID.uuidString)")
             } else if let document {
                 DocumentView(renderableDocument: document,
-                             config: ChatMarkdownPresentation.config(for: displayPreferences))
-                    .environment(\.openURL, OpenURLAction { url in ChatMarkdownPresentation.discardURL(url) })
+                             config: ChatMarkdownPresentation.config(for: displayPreferences),
+                             listener: ChatMarkdownListener())
+                    .environment(\.openURL, OpenURLAction { url in
+                        ChatMarkdownPresentation.requestURL(url) { pendingLink = $0 }
+                    })
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
+        .alert(label("externalLink", "在浏览器中打开链接？"), isPresented: Binding(
+            get: { pendingLink != nil }, set: { if !$0 { pendingLink = nil } }), presenting: pendingLink) { url in
+            Button(label("openBrowser", "打开浏览器")) { NSWorkspace.shared.open(url); pendingLink = nil }
+            Button(label("cancel", "取消"), role: .cancel) { pendingLink = nil }
+        } message: { url in
+            Text(label("externalLinkNotice", "这是回答中的外部地址。打开后将由浏览器访问该网站：") + "\n\n" + url.absoluteString)
+        }
+        .onChange(of: parseKey) { _, _ in pendingLink = nil }
+        .onDisappear { pendingLink = nil }
         .task(id: isStreaming ? nil : parseKey) {
             guard !isStreaming, !text.isEmpty else { return }
             let key = parseKey

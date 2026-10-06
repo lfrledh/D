@@ -55,7 +55,14 @@ public struct DualWorkbenchView: View {
     @State private var pendingLibraryDestination: LibraryDestination?
     @State private var returnToLibrary = false
     @State private var libraryInfo: SharedLibraryBrowserEntry?
-    private struct LibraryAssetPreview: Identifiable { let store: ProjectStore; let reference: WorkflowAssetReference; var id: WorkflowAssetReference { reference } }
+    private struct LibraryAssetPreview: Identifiable {
+        let store: ProjectStore
+        let reference: WorkflowAssetReference
+        let chatTarget: ChatController?
+        let chatSessionID: UUID?
+        let chatChoice: ChatProjectAttachmentChoice?
+        var id: WorkflowAssetReference { reference }
+    }
     private var entries: [SharedLibraryBrowserEntry] {
         SharedLibraryProjection.entries(models: quickModel.projectSession.explicitModelChoices,
             readiness: quickModel.projectSession.explicitModelReadiness,
@@ -407,6 +414,12 @@ public struct DualWorkbenchView: View {
             VStack {
                 HStack { Button(baselineText(language, "label.572cf45ba436", fallback: "返回")) { previewAsset = nil }.keyboardShortcut(.cancelAction); Spacer() }
                 QuickAssetPreview(store: value.store, reference: value.reference, compact: false)
+                if let target = value.chatTarget, let sessionID = value.chatSessionID, let choice = value.chatChoice {
+                    ChatLibraryAttachmentButton(chat: target, sessionID: sessionID, source: value.store, choice: choice,
+                        isCurrent: { chat === target && target.state.selectedSessionID == sessionID && !quickOwnerIsChanging },
+                        wording: { en, zh in language?.effectiveLanguageIdentifier.hasPrefix("zh") == true ? zh : en },
+                        onAdopted: { returnToLibrary = false; previewAsset = nil; Task { await refreshLibrary(checkModels: false) } })
+                }
                 Button(baselineText(language, "files.inspect", fallback: "查看文件位置")) {
                     Task {
                         let snapshot = await value.store.snapshot()
@@ -610,9 +623,15 @@ public struct DualWorkbenchView: View {
     private func previewLibraryEntry(_ value: SharedLibraryBrowserEntry) async {
         failedAssetRoute = nil
         guard let identity = assetIdentity(value.selection) else { presentLibraryDestination(.info(value)); return }
+        let target = entry == .quick && quick.category == .text && quick.textPresentation == .chat ? chat : nil
+        let targetSession = target?.state.selectedSessionID
         do { let source = try await store(for: identity.0, instanceID: identity.1)
             let ref = try await source.pinWorkflowAsset(identity.2)
-            presentLibraryDestination(.asset(.init(store: source, reference: ref)))
+            let manifest = await source.snapshot()
+            let choice = [.text, .image, .video, .document].contains(ref.kind)
+                ? ChatProjectAttachmentChoice(name: value.item.title, reference: ref, instanceID: manifest.effectiveInstanceID) : nil
+            presentLibraryDestination(.asset(.init(store: source, reference: ref,
+                chatTarget: target, chatSessionID: targetSession, chatChoice: choice)))
         } catch {
             if let source = try? await store(for: identity.0, instanceID: identity.1) {
                 let snapshot = await source.snapshot()

@@ -16,6 +16,8 @@ struct ChatQuoteSheet: View {
         language?.effectiveLanguageIdentifier.hasPrefix("zh") == true ? zh : en
     }
     var body: some View {
+        let presetInstruction = chat.state.sessions.first { $0.id == sessionID }?.selectionInstruction
+            .flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 }
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text(wording("Select text to quote", "选择要引用的文字")).font(.headline)
@@ -24,15 +26,20 @@ struct ChatQuoteSheet: View {
             }
             Text(wording("This adds an editable quotation to the original conversation. Nothing is sent automatically.", "选段加入原会话的可编辑草稿，不自动发送，不替换原文。"))
                 .font(.caption).foregroundStyle(.secondary)
+            if let presetInstruction {
+                Text(wording("Applied selection instruction: ", "已应用的选段指令：") + presetInstruction)
+                    .font(.caption).textSelection(.enabled)
+            }
             ChatQuoteSelectionView(source: source) { selection, action in
                 guard task == nil else { return }
-                let instruction: String = switch action {
+                let defaultInstruction: String = switch action {
                 case .ask: wording("My question about this quotation: ", "关于这段引用，我的问题是：")
                 case .explain: wording("Explain this quotation.", "请解释这段引用。")
                 case .translate: wording("Translate this quotation into: ", "请将这段引用翻译为：")
                 case .save, .workflow: ""
                 case .rewrite: wording("Rewrite this quotation as follows: ", "请按以下要求改写这段引用：")
                 }
+                let instruction = presetInstruction ?? defaultInstruction
                 let publicationID = publication.id(for: selection)
                 task = Task { @MainActor in
                     defer { task = nil }

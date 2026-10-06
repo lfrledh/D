@@ -20,16 +20,49 @@ struct ChatProjectAttachmentChoice: Identifiable {
         }
     }
 
-    @MainActor func adopt(in chat: ChatController, sessionID: UUID) async throws {
+    @MainActor func adopt(in chat: ChatController, sessionID: UUID, from source: ProjectStore? = nil) async throws {
         let activity = try chat.beginExternalActivity()
         defer { chat.endExternalActivity(activity) }
-        let manifest = await chat.store.snapshot()
+        let source = source ?? chat.store
+        let manifest = await source.snapshot()
         guard manifest.effectiveInstanceID == instanceID, manifest.id == reference.projectID,
               chat.state.selectedSessionID == sessionID else {
             throw WorkflowIssue("Return to the original conversation and project. / 请返回原会话与项目后选择。")
         }
         try Task.checkCancellation()
-        _ = try await chat.addAttachment(reference, name: name, sessionID: sessionID)
+        _ = try await chat.addSharedAttachment(reference, from: source, name: name, sessionID: sessionID)
+    }
+}
+
+/// The library sheet cannot require a drop onto the inactive window behind it.
+/// This explicit adoption uses the same authorized Store and attachment boundary.
+struct ChatLibraryAttachmentButton: View {
+    let chat: ChatController
+    let sessionID: UUID
+    let source: ProjectStore
+    let choice: ChatProjectAttachmentChoice
+    let isCurrent: () -> Bool
+    let wording: (String, String) -> String
+    let onAdopted: () -> Void
+    @State private var task: Task<Void, Never>?
+    @State private var issue: String?
+
+    var body: some View {
+        VStack {
+            Button(wording("Add to current chat draft", "加入当前聊天草稿")) {
+                guard task == nil else { return }
+                task = Task { @MainActor in
+                    defer { task = nil }
+                    do {
+                        guard isCurrent() else { throw WorkflowIssue("Return to the original conversation. / 请返回原会话。") }
+                        try await choice.adopt(in: chat, sessionID: sessionID, from: source)
+                        try Task.checkCancellation()
+                        onAdopted()
+                    } catch is CancellationError {} catch { issue = error.localizedDescription }
+                }
+            }.disabled(task != nil).accessibilityIdentifier("library-asset-to-chat")
+            if let issue { Text(issue).foregroundStyle(.red).textSelection(.enabled) }
+        }.onDisappear { task?.cancel() }
     }
 }
 

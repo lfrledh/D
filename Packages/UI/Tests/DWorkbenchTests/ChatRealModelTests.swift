@@ -42,6 +42,34 @@ private func realChatWrite<T: Encodable>(_ value: T, to url: URL) throws {
 @Suite("Real chat comparison and template", .serialized,
        .enabled(if: ProcessInfo.processInfo.environment["D_REAL_CHAT_PAIR"] == "1"))
 @MainActor struct ChatRealModelTests {
+    // Reuses a captured real backend response; does not repeat inference merely
+    // to make a bounded reasoning model produce a final answer. Length is valid.
+    @Test func recordedActualChannelsSurviveIndependentReopen() async throws {
+        let env = ProcessInfo.processInfo.environment
+        let root = URL(fileURLWithPath: try #require(env["D_REAL_CHAT_CHANNEL_CAPTURE"]))
+        let files = try FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)
+        let resultURL = try #require(files.first { $0.lastPathComponent.hasPrefix("result-") && $0.pathExtension == "json" })
+        let result = try JSONDecoder().decode(InferenceResult.self, from: Data(contentsOf: resultURL))
+        let actual = try #require(result.textResponse)
+        #expect(actual.reasoningText?.isEmpty == false)
+        let store = try await ProjectStore.open(at: root.appendingPathComponent("Channels.dproject"))
+        do {
+            let saved = try await store.chatState()
+            let attempt = try #require(saved.sessions.first?.attempts.last)
+            #expect(attempt.response == actual)
+            #expect(attempt.rawText == actual.rawText)
+            if actual.finishReason == .incomplete {
+                #expect(attempt.status == .partial)
+                #expect(actual.finalText == nil)
+                #expect(result.metadata["stopReason"] == "length")
+            } else {
+                #expect(attempt.status == .completed)
+                #expect(actual.finalText?.isEmpty == false)
+            }
+            try await store.close()
+        } catch { try? await store.close(); throw error }
+    }
+
     @Test(.timeLimit(.minutes(60)))
     func frozenQuestionAcrossInstalledModelsAndCustomTemplate() async throws {
         let env = ProcessInfo.processInfo.environment

@@ -1,10 +1,24 @@
 import Foundation
+import AVFAudio
 import Speech
 import Testing
 @testable import DWorkbench
 
 @Suite("Chat speech local admission")
 struct ChatSpeechServiceTests {
+    @MainActor @Test func defaultVoiceUsesSystemLanguageResolution() throws {
+        let service = ChatSpeechService()
+        let code = AVSpeechSynthesisVoice.currentLanguageCode()
+        if let expected = AVSpeechSynthesisVoice(language: code), !expected.voiceTraits.contains(.isPersonalVoice) {
+            try service.selectSystemDefaultVoice()
+            #expect(service.language == expected.language)
+            #expect(service.voiceID == nil)
+        } else {
+            #expect(throws: ChatSpeechError.self) { try service.selectSystemDefaultVoice() }
+        }
+        #expect(service.playbackState == .idle) // Resolution neither speaks nor requests permission.
+    }
+
     @MainActor @Test func authorizationFromBackgroundQueueReturnsToCallerActor() async {
         let service = ChatSpeechService()
         let cases: [(SFSpeechRecognizerAuthorizationStatus, ChatSpeechAuthorization)] = [

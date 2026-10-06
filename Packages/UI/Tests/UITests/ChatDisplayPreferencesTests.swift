@@ -8,6 +8,24 @@ import Testing
 
 @Suite("Chat display preferences")
 @MainActor struct ChatDisplayPreferencesTests {
+    @Test func unmarkWithoutSyntheticChangeNotificationKeepsNativeTextOnEcho() {
+        let editor = NSTextView(), coordinator = TextSourcesQuestionEditor.Coordinator()
+        editor.delegate = coordinator
+        var accepted = "original ", edits: [String] = []
+        let publish: (String) -> Void = { accepted = $0; edits.append($0) }
+        coordinator.update(editor, value: accepted, isEditable: true, onEdit: publish)
+        editor.setSelectedRange(NSRange(location: editor.string.utf16.count, length: 0))
+        editor.setMarkedText("pinyin", selectedRange: NSRange(location: 6, length: 0),
+                             replacementRange: NSRange(location: NSNotFound, length: 0))
+        coordinator.update(editor, value: accepted, isEditable: true, onEdit: publish)
+        let composed = editor.string
+        editor.unmarkText()
+        print("D_IME_UNMARK", "callbacks", edits.count, "marked", editor.hasMarkedText(),
+              "nativeCount", editor.string.utf16.count, "acceptedCount", accepted.utf16.count)
+        coordinator.update(editor, value: accepted, isEditable: true, onEdit: publish)
+        #expect(editor.string == composed)
+    }
+
     @Test func nativeInputReceivesReadableAccessibilityName() throws {
         let editor = TextSourcesQuestionEditor(value: "original", editEpoch: 0, isEditable: true,
             accessibilityIdentifier: "fixture-chat-draft", accessibilityLabel: "Message draft", onEdit: { _ in })

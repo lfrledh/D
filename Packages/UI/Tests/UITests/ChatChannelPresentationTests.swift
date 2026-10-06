@@ -46,6 +46,19 @@ import Testing
         #expect(host.fittingSize.height > 0)
     }
 
+    @Test func parsedReasoningWithoutFinalIsNotPresentedAsAnswer() {
+        var value = attempt(status: .partial, format: .init(kind: .json))
+        value.rawText = "Thinking Process: 2 + 2 = 4; unfinished reasoning"
+        value.response = .init(rawText: value.rawText, reasoningText: value.rawText, finishReason: .incomplete)
+        let presentation = ChatChannelPresentation(value)
+        #expect(!presentation.isUnseparatedRaw)
+        #expect(presentation.text.isEmpty)
+        #expect(presentation.rawText == value.rawText)
+        #expect(presentation.formatReport == nil)
+        let message = ChatMessage(parentID: nil, role: .assistant, text: "", attemptID: value.id)
+        #expect(ChatMessageContent.answerText(message: message, attempt: value, selectedAnswer: nil).isEmpty)
+    }
+
     @Test func terminalBytesWithoutParsedResponseRemainUnseparatedFromManualAnswer() {
         for status in [ChatAttempt.Status.partial, .interrupted] {
             var unfinished = attempt(status: status, format: .init(kind: .json))

@@ -405,9 +405,10 @@ public final class ChatSpeechService: NSObject, AVSpeechSynthesizerDelegate {
     }
 
     public func selectLanguage(_ language: String) throws {
-        guard let voice = AVSpeechSynthesisVoice.speechVoices().first(where: {
-            $0.language == language && !$0.voiceTraits.contains(.isPersonalVoice)
-        }) else { throw ChatSpeechError.voiceUnavailable }
+        // The platform can return cmn-CN for the default while its installed
+        // voice advertises zh-CN. Let AVFoundation resolve language aliases.
+        guard let voice = AVSpeechSynthesisVoice(language: language),
+              !voice.voiceTraits.contains(.isPersonalVoice) else { throw ChatSpeechError.voiceUnavailable }
         selectedLanguage = voice.language
         selectedVoiceID = nil
     }
@@ -430,9 +431,7 @@ public final class ChatSpeechService: NSObject, AVSpeechSynthesizerDelegate {
         if let selectedVoiceID {
             voice = AVSpeechSynthesisVoice(identifier: selectedVoiceID)
         } else {
-            voice = AVSpeechSynthesisVoice.speechVoices().first(where: {
-                $0.language == selectedLanguage && !$0.voiceTraits.contains(.isPersonalVoice)
-            })
+            voice = AVSpeechSynthesisVoice(language: selectedLanguage)
         }
         guard let voice, !voice.voiceTraits.contains(.isPersonalVoice) else {
             throw ChatSpeechError.voiceUnavailable
