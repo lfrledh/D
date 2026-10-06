@@ -940,3 +940,25 @@ F24个人记忆管理和F29原生在途取消均已有真实服务/CPU支持，�
 唯一H32最短桌面实验（现在不执行）：①在明确恢复桌面条件后，两项原replay各一次，记录唯一滚动目标/窗口、视口和同步offset极值；没有位移说明驱动前置未成立，不能判Bottom正常。②若位移后回落，用既有phase/位置trace核实际更新；不泛加日志。③驱动不成立时不反复猜路由，直接在新普通签名候选App、原保存项目用实际鼠标冷开→上滚→Bottom，核末条可见与响应、离底/恢复/搜索及焦点/历史；不生成模型。测试进程事件与实际鼠标分层报告，不删行为要求。
 
 恢复点：本轮编译/纯值命令均结束，无新App/Terminal/服务；不宣称已盘点全系统进程。最终仅文档提交、候选远端/保护在lead/followup-receipt.json。正常推送候选，不接纳未过原生门槛的main。旧失败/预算保持，完整Lead消耗及费用unknown；当前可独立证据缺口已处理，剩余归原集中队列。功能冻结未达，不启动UI改版/全局质量重构。
+
+
+### 2026-10-06 解锁补验：原生Bottom/搜索定点修补与独立尾项
+
+用户明确解除无桌面条件，当前已解锁但本人不能操作。本轮不催组字/试听/密钥，不生成模型、不改UI方案。起点c590b2a3460a342663d08cdc92cdb4f1e6c92512；Lead两行实现/受测代码 **9230a6cdabf40b540b17401d39b9ac64181cd265**。RNow=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261006T110535Z-unlocked-bottom`。
+
+| 检查 | 结果与边界 |
+|---|---|
+| 两原replay | 首次driver-observation、parent TMPDIR修正尝试均在fixtureRoot落`/var`被ProjectStore安全拒绝，未进入滚动。只读核对既有D_TEST_TEMP_DIR入口，任务xctestrun副本注入该目录并展开原__TESTROOT__后真正执行：两例同步boundsChanges=0、前后及极值346.5/321.5均不变，距底20；离底>28和Bottom前置仍失败。driver-fixture-root exit65/16.034秒。没有删断言或弱化Store；结论是该事件未移动选中clip，没有同步回拉证据，不能计绿。 |
+| 37b30普通App | build38.921秒exit0；一次直接可执行文件启动随后CUA绑定造成双实例，已留launch-incident并仅结束自有实例，不计验收。改为正常open带隔离session后单实例：真实上滚/Bottom、离底会话往返可用；固定搜索Reply only OK.点击后99.8%CPU、AX失联，sample236/236主线程GraphHost.flushTransactions/lazy placement/view-ID translation。旧已有trace读取仅表头，不能虚构事件序列。保存sample后只结束自有96145；不称正常保存退出。 |
+| 唯一修补变量 | 两处搜索scrollTo(id:jump.messageID,anchor:.center)改.top。目标UUID、ticket、当前会话、跟随/恢复/保存不变；不加日志、不加状态去重、不改模型/Store。普通签名build51.718秒exit0；source SHA2565019ba2e41870050d47ee38405a3ebc83cd8b104642e90e499113b4784a392e7。先前失败和本次通过同保存项目/问题，可保留定点修补，不证明Apple内部唯一根因。 |
+| 修补后普通App | 原搜索1.23秒CUA操作/状态往返后目标消息可见；清搜索→上滚→Bottom末条、跨会话搜索→原目标、输入x/Undo、正常退出→冷开→上滚/Bottom与后续Inspector可用。Bottom点击时因控件消失CUA返回AXError，后续AX/截图核定已到最后OK/Completed且继续响应，非静默吞失败。五会话messages/attempts/leaf/config/system/draft/attachments相同；无新生成。gui/search-top-native-result.json及lead/history-protection-after-search.json。 |
+| F24个人记忆 | 普通AppSettings实际新增个人记录revision1默认禁用→启用revision2＋会话显式允许→编辑revision3→Forget revision4→冷开仍Forgotten/只历史，两读取开关关闭。个人隔离Quick Creations持久保存4版，项目memoryEntries仍原4条。未来context预览估算902→860但不逐项显示记忆，不以此冒称新冻结请求/模型验证；既有activeProjection服务证据沿用。gui/personal-memory-native.json。 |
+| F29 MCP | 官方SDK现成服务仅loopback57659，原生连接/list/test_progress10000ms，在4.49秒点击Stop/disconnect，记录cancelled归原会话；drain后重连add_numbers17+25=42，未采用/发送，断开后正常退出。9230冷开保留两终态；旧草稿/附件/attempt不变，memoryScopes仅此前记忆检查nil→显式[]。夹具没有连续progress，取消不是远端副作用撤回，原error9诊断保持。gui/mcp-native-result.json、lead/mcp-native-storage.json。 |
+
+align_layout_diagnosis为只读非实现者，先指出临时根入口，再核搜索控制流和最终两行差分/原生证据；未发现新确定P1/P2，可有限试用。没有写Worker、另一个评审模型执行测试或重算历史成本；完整Lead消耗/订阅费用unknown。review见lead/search-readonly-review.json。
+
+交付副本D Chat Product 9230a6cd.app与实际受测D Search Top Experiment.app保持同签名关键内容；唯一旧启动器已原位指向新副本，备份在lead/launcher-before.command。四关键文件/源码/Launcher对应见lead/delivery-version.json。同树D.xcworkspace / D Nodes / My Mac / Debug；旧ff20、0219、37b30与证据均保留，未发布或接纳main。
+
+本轮原生固定冷开反例与搜索路径已推进，两个hosting事件驱动仍缺有效离底覆盖，不能报通过。F11短任务、F16真实通道表现、F19代表跨项目/拖放等剩余按原F表，不再扩成所有组合；F24/F29及已有模型不无变化重复。本人英语/朗读/输入体验、搜索凭据留唯一队列，本轮不催办。未功能冻结；不开始全局质量/视觉工程。
+
+恢复检查点：源01758b8及scheme内容/索引/未暂存保持；main90819739不动，本次只正常推送审计候选。测试项目五会话原文/历史/草稿/附件保持；正常保存令project revision93→97、quick revision40→44和workflow修订UUID改变，工作流其余内容及资产/文稿/任务记录一致，旧快照保留；没有媒体写入或重复全媒体散列。新增个人历史和两工具结果保留。自有测试App/服务均结束（异常SIGTERM与正常CmdQ分别记录），无新Terminal；最终文档提交SHA、远端及精确保护/进程结果写RNow/lead/unlocked-closeout-receipt.json，不为自引用反复提交。

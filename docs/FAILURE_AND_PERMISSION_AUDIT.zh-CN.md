@@ -2,16 +2,16 @@
 
 ## 当前唯一集中队列（2026-10-06，CHAT-PRODUCT-20261003）
 
-用户最新条件：目前不能解锁或操作Mac，持续至本人明确改变。不探测锁屏/桌面、不启动App或窗口测试、不催操作；可独立执行部分已补下述证据。不重开H22、HF、宏、Speech、普通话或固定视频。
+用户最新条件：Mac已解锁，允许Lead自行处理原生待验；本人暂不能操作，组字/试听/凭据后置，不催办。旧无桌面条件已解除；若再次锁屏，仅暂停对应GUI。不重开H22、HF、宏、Speech、普通话或固定视频。
 
 | 事项 | 当前事实 | 最小后续 |
 |---|---|---|
-| H32：代理原生续验/Bottom工程问题 | ff20推荐包和0219旧诊断包保持；新代码37b30df2仅修异步恢复旧分支目标，两项纯值通过、驱动编译通过。旧两项replay只记录相同前后位置，无法区分无移动与同步回拉；当前仅补测试内同步clip极值/唯一目标，不以此关闭Bottom。RFollow/lead/followup-evidence.json；无桌面操作。 | 条件改变后：两项原replay各一次，先核唯一目标/窗口及同步位移；无位移则停止猜换路由，改用普通签名App实际鼠标冷开原保存项目，不生成，验上滚→Bottom末条/响应、离底/恢复/搜索/焦点。详细判别在任务本次检查点。F24个人记忆新建→启用→请求预览→编辑新版本→忘记→重开；F29原官方本机服务test_progress在途停止/断开→重连add_numbers=42。其余只补F表具体未验入口，不全排列。 |
+| H32：代理原生续验/Bottom工程问题 | 9230a6cd普通App已通过固定冷开上滚/Bottom、搜索修补后的同/跨会话命中、输入Undo及历史保护。37b30搜索卡死/sample保留；仅两处center→top。两原replay同步boundsChanges=0，仍未有效离底，不能算通过。F24个人记忆管理/冷开、F29在途停止→重连42/冷开已补。 | 后续只修正hosting有效事件覆盖及F表具体未验入口，不重做上述代表原生路径、不生成模型。F11短任务、F16通道、F19跨项目/拖放按既有缺口接续，不扩成全排列；工程任务不要求本人代做。 |
 | H32：输入迟滞 | 先前b8实测固定身份热点约125ms→5ms，两trace无Microhang。本人约200ms仅主观反馈；SpeechPanel等待原因仍未知。 | 本人不便时不催组字；新体验有机会再集中反馈，不重判候选不随动。 |
 | F31：英语识别与朗读分列 | 普通话真实转写/审核采用/保存通过；英语No speech was recognized，原声保留。 | 按本人决定后置英语，不重录/重置权限；朗读听感仍待，不自动转云。 |
 | F26：搜索凭据及真实调用 | 两适配器/公开网页证据复用；本人暂无Brave/博查凭据。 | 准备后在App本地选择凭据并允许会话联网；不在聊天发key，不代购买、不催办。 |
 
-本轮RFollow=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261006T071736Z-bottom-no-desktop`：纯值/编译、定点审阅和旧驱动分析见lead/followup-evidence.json，最终版本/保护见lead/followup-receipt.json；自有编译及值测试结束，无新App/Terminal/服务。未功能冻结。
+本轮RNow=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261006T110535Z-unlocked-bottom`：`gui/search-top-native-result.json`、`personal-memory-native.json`、`mcp-native-result.json`。受测代码9230a6cd，唯一启动器见试用指南；main保持90819739，最终仅文档/远端与保护见`lead/unlocked-closeout-receipt.json`。自有构建/测试/App/服务均结束，无新Terminal；未功能冻结。旧RFollow原始失败与预算保留。
 
 复用历史RUnlock=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261006T002853Z-unlock-native`；gui/attachment-cold-reopen.json、inflight-category-final.json、bottom-*.json及lead/bottom-experiment-decision.json、unlock-native-receipt.json。旧RNative/RHuman证据保留。测试App及自有编译/测试已结束，没有新Terminal；旧卡死进程的强制结束与后来正常退出分开记录。功能状态只在唯一F表，未功能冻结。
 
