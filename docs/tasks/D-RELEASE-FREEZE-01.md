@@ -925,3 +925,18 @@ Lead实现；align_layout_diagnosis只读非实现者审阅，发现phase回调�
 F24个人记忆管理和F29原生在途取消均已有真实服务/CPU支持，仅缺普通App交互，未重复开发或测试。F29已有官方SDK夹具可执行路径 `run-20261003T150039Z-chat-continue/lead/mcp-resolve-scratch/debug/mcp-everything-server --port <任务空闲端口>`，仅loopback；test_progress `duration_ms:10000`用于一次在途停止（不声称它产生连续progress通知），drain后重连add_numbers(17,25)=42。F24用已有个人范围新建/版本编辑/忘记及当前冻结请求预览，无需模型。均留同一H32，未启动服务；跨项目拖放、短任务/消息跳转和通道展示保持具体未验，未升级成全排列。
 
 恢复检查点：代码0219f61b，最终文档/远端SHA及代码/产物对应在RBasic/lead/basic-usability-receipt.json。先核实际状态；桌面可用后用同一既存项目、不生成，冷开上滚→Bottom末条/响应，继续离底/恢复/搜索/焦点及独立尾项。hosting驱动问题仍需解释或在正确层级补等价覆盖，不因锁屏把它掩盖为外部权限。英语/朗读听感/搜索凭据不催办。候选正常推送但不硬合main；未功能冻结，不进入质量/视觉阶段，不发布。
+
+
+### 2026-10-06 无桌面Bottom续作：驱动边界与异步旧目标
+
+任务仍CHAT-PRODUCT-20261003/F01–F36。最新本人条件不能解锁/操作，覆盖此前已解锁；本轮没有桌面/锁屏读取、App启动、hosting执行、模型生成或本人请求。UI设计仅下阶段存档。起点856bb1ed811a33ca2498d25d7c49fbaa49cd9a8d，代码/测试 **37b30df22b11af1e8b5b621845fc935c7eca2369**；RFollow=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261006T071736Z-bottom-no-desktop`。推荐ff20、0219旧诊断App、main90819739保持不同身份，未替换包或启动器。
+
+- **驱动结论有限**：复用RBasic/lead/located-wheel-tests.log，两例began/changed/ended为1/4/8，0/600/0，前后offset346.5及321.5相同，最终距底20；只证明未建立离底。直接scrollWheel绕过正常窗口命中/队列，旧选择器取首个匹配；不能将其当真人。前后快照不排除同栈内移动后回拉，几何循环/AX告警也不独自证明因果。没有继续猜换派发方式。
+- **测试驱动最小准备**：仅现有测试内要求唯一可见目标，并同步观察该NSClipView bounds的计数/极值，结束恢复原通知开关。nil queue依据本机Foundation公开契约保证发送线程同步；只存有界摘要，无生产日志。原离底>28、Bottom按钮/末条、历史/草稿及恢复断言保留。两项驱动尚未运行，不能报通过。
+- **局部真实代码缺口**：恢复Task.yield期间同会话可换sibling，原捕获session中的leaf已不属于当前显示path，但会话/ticket仍匹配。恢复现在经既有门禁后读取当前session；不改保存/历史/输入/模型。Lead实施，align_layout_diagnosis非实现者只读审阅指出同步observer要求后已落实；未新增写Worker。
+- **验证**：followup-build-for-testing exit0/25.547秒；followup-values exit0/2.524秒，实际2项纯值方法：delayedBottomRestoreUsesCurrentSiblingWithoutChangingHistory、delayedRestoreCannotApplyToAnotherVisitToSameSession。前者检查换sibling/历史草稿不变/失效拒绝，后者复用ticket保护；均无窗口/视图/Store/模型。最终唯一变化为测试observer.main→nil，followup-final-compile exit0/20.464秒；已用文件摘要反向对照确认生产和两方法未变，不冒称最终driver已执行。source SHA256 `8c07edd3400a836fb548a0ace115a50e891bef74216edf72f371589104c1f08b`；完整命令/环境与版本关系见lead/followup-evidence.json及三个执行JSON。
+- **风险与复用**：Apple ScrollPosition文档明确idType+scrollTargetLayout用户滚动后可更新viewID，未据旧印象改其保存语义。当前小修并未证实修复冷开Bottom；跟随/搜索/恢复与焦点原生风险仍在。F13真实冻结请求、F24/F29已有服务、模型/CSV/回流证据按影响复用，不重跑。
+
+唯一H32最短桌面实验（现在不执行）：①在明确恢复桌面条件后，两项原replay各一次，记录唯一滚动目标/窗口、视口和同步offset极值；没有位移说明驱动前置未成立，不能判Bottom正常。②若位移后回落，用既有phase/位置trace核实际更新；不泛加日志。③驱动不成立时不反复猜路由，直接在新普通签名候选App、原保存项目用实际鼠标冷开→上滚→Bottom，核末条可见与响应、离底/恢复/搜索及焦点/历史；不生成模型。测试进程事件与实际鼠标分层报告，不删行为要求。
+
+恢复点：本轮编译/纯值命令均结束，无新App/Terminal/服务；不宣称已盘点全系统进程。最终仅文档提交、候选远端/保护在lead/followup-receipt.json。正常推送候选，不接纳未过原生门槛的main。旧失败/预算保持，完整Lead消耗及费用unknown；当前可独立证据缺口已处理，剩余归原集中队列。功能冻结未达，不启动UI改版/全局质量重构。

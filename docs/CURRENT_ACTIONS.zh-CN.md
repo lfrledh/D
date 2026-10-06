@@ -4,20 +4,28 @@
 
 ## 当前授权：完整文字聊天专题 CHAT-PRODUCT-20261003
 
-**持续工作条件（2026-10-06）**：用户已解锁但不能亲自操作；本轮已独立完成下述原生补验，结束时测试App正常退出。本人组字/试听/凭据继续后置，不要求现在办理。英语失败按本人要求后置，原声保持；F26凭据尚未准备。无依赖工程继续，唯一本人/桌面队列见集中待办。
+**持续工作条件（2026-10-06，最新覆盖）**：用户目前不能解锁或操作Mac，直到本人明确改变条件。不探测桌面/锁屏、不启动App或窗口测试、不催组字/试听/凭据、不改系统设置。仅继续有独立证据价值的源码与非交互验证；UI设计文件仅供下一阶段存档。本轮未操作桌面。英语失败及原声、朗读听感、F26凭据继续留在唯一集中队列。
 
 用户已批准 F01–F36、S00–S06 同一批实施。 2026-10-03再次授权连续续作：先用已有采样与可控流修候选菜单/交互迟滞，将停止固定在输入区主操作；允许S00/S01隔离组合验证，不等待旧布局全部修好。按本清单完成S02–S06（含显式采用部分回答继续），可靠切片正常接纳main后继续，不以阶段回执终止整项。需求冻结，不新增功能/模型/平台；Liquid Glass只沿用系统控件与语义层级，不全面视觉改版。唯一功能状态见 [聊天清单](CHAT_FEATURE_LEDGER.zh-CN.md)。先 S00 长流/停止、正常项目包选择和新候选/旧参数重现，再 S01 布局、S02 编辑与上下文、S03 资料/记忆/备份、S04 联网工具、S05 受限代码/MCP/成果/语音、S06 组合验收。可靠切片通过普通 App 门槛后正常接纳 main，不以整个专题完成为前提；不硬合失败长流。
 
 2026-10-04用户补充决议已原位进入[唯一聊天清单](CHAT_FEATURE_LEDGER.zh-CN.md)：F26通用搜索服务边界、F31两语言本地识别与[功能完成后的质量审计](CHAT_FEATURE_LEDGER.zh-CN.md#post-function-quality-review)。该次只更新需求和现状；本轮已恢复代码和原生续作，先完成菜单/迟滞/主停止优先级，不启动全局重构；不把文档更新计作能力实现。
 
-本轮起点核实候选 `40d51ee73f72eb54407e6eedbd693c9ba67068e4`、main `f31dced209855722d2f04cc0fc8c5f6712396120` 均干净且与远端一致。旧 inference-foundation 与个人 scheme 不动。A、H22、菜单、宏信任、HF 及自然视频本人结果复用；新存储和聊天宿主按影响另验。旧 B 失败和已耗预算保留；用户现明确批准这些已知缺陷继续收口，不再沿用旧停工排程，不伪造旧预算未使用。
+本专题早期起点核实候选 `40d51ee73f72eb54407e6eedbd693c9ba67068e4`、main `f31dced209855722d2f04cc0fc8c5f6712396120` 均干净且与远端一致。旧 inference-foundation 与个人 scheme 不动。A、H22、菜单、宏信任、HF 及自然视频本人结果复用；新存储和聊天宿主按影响另验。旧 B 失败和已耗预算保留；用户现明确批准这些已知缺陷继续收口，不再沿用旧停工排程，不伪造旧预算未使用。
 
 Lead 持有共享 Runtime/WorkflowServices/ChatController/Store；文件面板和纯展示在独立受限任务树实施。早期S00/S01历史证据目录 RCP=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261003T115108Z-chat-product`。完整 Lead 成本与订阅费用 unknown。早期S00代码完成CPU和签名构建，曾通过项目列表、真实1024-token接收和坐标停止→下一请求；当时菜单忙循环和生成中AX迟滞阻塞接纳。S01缩放焦点反例后来修复并通过hosting、与S00组合。以上是早期门槛来源，已被下述c16普通App复验和main接纳推进；最新S02–S05接线、R证据目录及剩余状态以以下恢复检查点为准，F01–F36范围不取消。
 
-### 当前恢复检查点（2026-10-06，基本可用性收口，原生门槛仍开放）
+### 当前恢复检查点（2026-10-06，无桌面Bottom定点续作）
+
+- 起点 **856bb1ed811a33ca2498d25d7c49fbaa49cd9a8d**；本轮代码/测试 **37b30df22b11af1e8b5b621845fc935c7eca2369**。RFollow=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261006T071736Z-bottom-no-desktop`；最终文档/远端版本与保护核对见 `lead/followup-receipt.json`。main仍 **90819739e99b366d7cdb2f549c129eea28728206**。
+- 两项旧replay失败保留：滚轮前后offset相同、最终距底20点，但旧记录无法排除同一调用中先移动再回拉。直接调用 `scrollWheel` 不是正常窗口事件路由/真人等价输入；phase数值正确，旧目标仅取首个匹配。测试内现拒绝多目标，并同步记录选中clip的位移极值/次数；不改派发策略或行为断言，**未在本轮执行窗口测试**。不能将驱动不足当生产通过，也未证实生产拉回。详见 `lead/followup-evidence.json`。
+- 修补一个可确定的独立缺口：异步恢复等待后重新取当前会话/分支，避免同会话换回答后向旧leaf滚动；ticket及搜索门禁保持。两项纯值测试通过（2.524秒），最终测试驱动编译通过（20.464秒）；纯值执行后仅observer queue由.main改nil，生产和所执行方法完全相同。非实现者定点审阅已收口；**这不关闭Bottom原生卡死**。
+- **产物不混淆**：唯一推荐仍ff20f2bc，已知Bottom反例；旧0219f61b诊断App保持原样，不包含本轮修补。当前同树Xcode代码为本轮候选，尚无对应新普通签名App/原生通过记录；只编译UITests，不替换启动器。F13、F24/F29服务及其他有效证据复用，没有新模型/同质测试。
+- 下一动作只在桌面条件改变后执行[唯一H32队列](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md)的最短实验：先区分驱动无位移与位移后回拉，再用原保存项目冷开、实际滚动/Bottom验证行为，不生成模型。搜索/恢复/焦点、记忆管理及MCP等既有具体原生尾项保持；不重开已通过事项。本轮可独立执行工作已到精确停点，无桌面轮询或新的UI/全局重构；未功能冻结，不接纳main。
+
+### 历史恢复检查点（2026-10-06，基本可用性收口，原生门槛仍开放）
 
 - 起点 **fb77019ef40846b8b15972c8eede12f340c94d96**；新的**未接纳滚动候选代码 0219f61b204928feb83d36718a8bf4f0d46f5068**。只改 ChatWorkbenchView 的滚动所有者/跟随意图及原 hosting 测试驱动，不改模型、Store、历史和输入器。非实现者发现的恢复门禁缺失已补；不是已修好 Bottom 的结论。
-- RBasic=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261006T024827Z-basic-usability`。单一 UUID ScrollPosition 保留懒加载；跟随仅按用户滚动阶段改变，尺寸变化沿系统锚点处理。受控 replay 原来完成后距底116/177点，现为20点；新短流返回末条/历史、既有跟随策略、恢复ticket及输入pane焦点共4方法通过。两项 replay 的合成滚轮始终未移动 offset，离底前置失败；断言未删，不能以4项通过抵销失败。详见lead/bottom-protection-tests、located-wheel-tests与bottom-readonly-review.json。
+- RBasic=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261006T024827Z-basic-usability`。单一 UUID ScrollPosition 保留懒加载；跟随仅按用户滚动阶段改变，尺寸变化沿系统锚点处理。受控 replay 原来完成后距底116/177点，现为20点；新短流返回末条/历史、既有跟随策略、恢复ticket及输入pane焦点共4方法通过。两项 replay 的合成滚轮记录中前后offset相同（内部瞬态见上方续作），离底前置失败；断言未删，不能以4项通过抵销失败。详见lead/bottom-protection-tests、located-wheel-tests与bottom-readonly-review.json。
 - 普通签名App构建通过（33.285秒），源码摘要与上述代码对应；CUA首次读取即明确Mac locked，**本轮未执行普通App冷开/鼠标验证**。只结束刚启动且未操作的自有实例90106，未重试解锁、未向本人请求操作。main **90819739e99b366d7cdb2f549c129eea28728206**、唯一推荐ff20包/启动器均不变；同树Xcode现在构建未接纳候选，两者不可混称同版。候选最终文档/远端SHA见RBasic/lead/basic-usability-receipt.json。
 - F13核对真实冻结messages/parameters/inputs，没有矛盾指令；保留单次软格式返回schema而非对象的失败、原输出及既有人工采用→Canvas证据，不重生成。F01/F19/F34、输入热点、CSV及已有模型证据复用；没有新模型运行、泛增日志、全局重构或视觉改版。
 - 下一步先修正/说明 hosting 滚轮驱动边界，再在桌面可用时用**现有保存项目、不生成模型**做上滚→Bottom→末条/响应、离底/恢复/搜索及焦点保护。原生尾项只补具体缺口：跨项目/拖放附件、短任务与搜索跳转、个人记忆管理、MCP在途停止/重连、通道展示；F24/F29最短步骤见唯一H32。英语、朗读听感和搜索凭据继续后置。未功能冻结，不硬合失败组合。
