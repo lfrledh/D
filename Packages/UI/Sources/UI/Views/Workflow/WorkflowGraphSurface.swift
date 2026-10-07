@@ -4,6 +4,8 @@ import Foundation
 import SwiftUI
 
 struct WorkflowGraphSurface: View {
+    @Environment(\.chatDisplayPreferences) private var displayPreferences
+    @Environment(\.colorScheme) private var colorScheme
     private static let emptyGraph = WorkflowGraph()
     let controller: WorkflowController
     let graph: WorkflowGraph?
@@ -258,7 +260,7 @@ struct WorkflowGraphSurface: View {
                     scrollOffset = observation.contentOffset
                     onScrollObservation(viewContext, observation)
                 }
-                .background(Color(nsColor: .underPageBackgroundColor))
+                .background(displayPreferences.resolvedAppearance.palette(for: displayPreferences.preferredColorScheme ?? colorScheme).canvasColor)
                 .onAppear {
                     if let navigationRequest {
                         scrollPosition.scrollTo(point: layout.centeredOffset(
@@ -897,7 +899,7 @@ private struct WorkflowNodeCard: View {
             // Only the backdrop owns movement. Foreground controls keep their gestures;
             // passive labels opt out of hit testing so descriptions and gaps reach it.
             RoundedRectangle(cornerRadius: 13)
-                .fill(.regularMaterial)
+                .fill(Color.clear).workbenchPanel(cornerRadius: 13)
                 .contentShape(RoundedRectangle(cornerRadius: 13))
                 .help(node.operationID)
                 .gesture(cardMovement)
@@ -908,7 +910,6 @@ private struct WorkflowNodeCard: View {
                         lineWidth: selected ? 3 : 1)
                 .allowsHitTesting(false)
         }
-        .shadow(color: .black.opacity(0.12), radius: 8, y: 3)
         .contentShape(RoundedRectangle(cornerRadius: 13))
         .onTapGesture { onInspect(node.id) }
         .dropDestination(for: WorkflowCanvasTransfer.self) { (items: [WorkflowCanvasTransfer], _: CGPoint) -> Bool in
