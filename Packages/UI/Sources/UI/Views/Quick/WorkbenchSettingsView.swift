@@ -70,7 +70,7 @@ public struct WorkbenchSettingsView: View {
                                 Text("操作与辅助").font(.headline)
                                 Text("输入框内保留系统组字、选区及撤销。发送快捷键、正文大小和代码换行在外观中调整。")
                                 Text("画布：指针选择和连接；手形平移；滚轮缩放；中键回到中心。右下适配视图只移动视野，不重排节点。")
-                                Button("打开模型与组件说明") { modelsVisible = true }
+                                Button("打开模型下载与安装管理") { modelsVisible = true }
                             }.padding(24).frame(maxWidth: .infinity, alignment: .leading)
                         }
                     }

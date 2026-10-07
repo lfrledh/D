@@ -41,7 +41,10 @@ struct QuickMediaViewport: View {
                     .simultaneousGesture(MagnifyGesture().updating($magnification) { value, state, _ in
                         if image != nil { state = value.magnification }
                     }.onEnded { value in
-                        if image != nil { zoom = min(12, max(1, zoom * value.magnification)) }
+                        if image != nil {
+                            zoom = min(12, max(1, zoom * value.magnification))
+                            if zoom == 1 { offset = .zero }
+                        }
                     }, including: image == nil ? .none : .all)
                     .accessibilityIdentifier("quick-media-viewport")
             }.frame(minHeight: 100)
