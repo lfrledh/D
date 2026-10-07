@@ -374,9 +374,8 @@ struct ChatWorkbenchView: View {
     @State private var followsBottom = true
     @State private var hasNewContent = false
     @State private var scrollStates: [UUID: ChatSessionScrollState] = [:]
-    @State private var transcriptPosition = ScrollPosition(idType: UUID.self)
+    @State private var visibleMessageID: UUID?
     @State private var userScrollingTranscript = false
-    private var visibleMessageID: UUID? { transcriptPosition.viewID(type: UUID.self) }
     @State private var scrollRestoration: ChatScrollRestoration?
     @State private var issues: [UUID: String] = [:]
     @State private var globalIssue: String?
@@ -808,7 +807,7 @@ struct ChatWorkbenchView: View {
                     Spacer()
                 }.padding(.horizontal, 16).padding(.vertical, 8)
             }
-              Group {
+              ScrollViewReader { scrollProxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 16) {
                         if let notes = session.importLossNotes, !notes.isEmpty {
@@ -830,13 +829,23 @@ struct ChatWorkbenchView: View {
                         if session.selectedLeafID == nil {
                             Text(label("noMessages", "暂无消息")) .foregroundStyle(.secondary)
                         }
-                        Color.clear.frame(height: 1)
+                        Color.clear.frame(height: 1).id("chat-transcript-bottom")
                     }.scrollTargetLayout()
                         .frame(maxWidth: CGFloat(model.chatDisplaySettings.preferences.transcriptWidth))
                         .frame(maxWidth: .infinity)
                         .padding(.horizontal, 16).padding(.vertical, 20)
                 }
-                .scrollPosition($transcriptPosition)
+                // Reading is observation, not a persistent request to align the
+                // entire message. A Markdown paragraph may regain focus after a
+                // link alert; binding that event to a tall message moves the reader.
+                .onScrollTargetVisibilityChange(idType: UUID.self, threshold: 0.001) { ids in
+                    // A restore can produce the only visibility callback. Record
+                    // its current-path ID; the state-saving observer below still
+                    // defers while restoration is pending. This never scrolls.
+                    guard chat.state.selectedSessionID == session.id,
+                          let first = chat.selectedPath.first(where: { ids.contains($0.id) }) else { return }
+                    visibleMessageID = first.id
+                }
                 .defaultScrollAnchor(followsBottom ? .bottom : nil, for: .sizeChanges)
                 .onScrollPhaseChange { _, newPhase, context in
                     guard chat.state.selectedSessionID == session.id,
@@ -878,7 +887,7 @@ struct ChatWorkbenchView: View {
                           scrollRestoration?.sessionID != session.id else { return }
                     if followsBottom {
                         traceScroll("scroll:auto-bottom", session: session, target: "bottom")
-                        scrollToLastMessage(in: session)
+                        scrollToLastMessage(in: session, using: scrollProxy)
                     } else {
                         hasNewContent = true
                         traceScroll("revision:no-scroll", session: session)
@@ -890,7 +899,7 @@ struct ChatWorkbenchView: View {
                     let restored = scrollStates[newID]
                     followsBottom = restored?.followsBottom ?? true
                     hasNewContent = restored?.hasNewContent ?? false
-                    transcriptPosition = ScrollPosition(idType: UUID.self)
+                    visibleMessageID = nil
                     userScrollingTranscript = false
                     let restore = ChatScrollRestoration(sessionID: newID,
                         followsBottom: followsBottom, anchor: restored?.anchor)
@@ -903,10 +912,10 @@ struct ChatWorkbenchView: View {
                               searchJump?.sessionID != newID else { return }
                         if restore.followsBottom {
                             traceScroll("scroll:restore", session: current, target: "bottom")
-                            scrollToLastMessage(in: current)
+                            scrollToLastMessage(in: current, using: scrollProxy)
                         } else if let anchor = restore.anchor {
                             traceScroll("scroll:restore", session: session, target: anchor.uuidString)
-                            transcriptPosition.scrollTo(id: anchor, anchor: .top)
+                            scrollProxy.scrollTo(anchor, anchor: .top)
                         }
                         scrollRestoration = nil
                     }
@@ -918,7 +927,7 @@ struct ChatWorkbenchView: View {
                             guard searchJump == jump, chat.state.selectedSessionID == jump.sessionID else { return }
                             followsBottom = false; hasNewContent = false
                             traceScroll("scroll:appear-search", session: session, target: jump.messageID.uuidString)
-                            transcriptPosition.scrollTo(id: jump.messageID, anchor: .top)
+                            scrollProxy.scrollTo(jump.messageID, anchor: .top)
                             saveScrollState(for: session.id)
                             scrollRestoration = nil
                             searchJump = nil
@@ -930,14 +939,14 @@ struct ChatWorkbenchView: View {
                         hasNewContent = saved.hasNewContent
                         if saved.followsBottom {
                             traceScroll("scroll:appear-saved", session: session, target: "bottom")
-                            scrollToLastMessage(in: session)
+                            scrollToLastMessage(in: session, using: scrollProxy)
                         } else if let anchor = saved.anchor {
                             traceScroll("scroll:appear-saved", session: session, target: anchor.uuidString)
-                            transcriptPosition.scrollTo(id: anchor, anchor: .top)
+                            scrollProxy.scrollTo(anchor, anchor: .top)
                         }
                     } else if followsBottom {
                         traceScroll("scroll:appear-bottom", session: session, target: "bottom")
-                        scrollToLastMessage(in: session)
+                        scrollToLastMessage(in: session, using: scrollProxy)
                     }
                 }
                 .onChange(of: searchJump) { _, jump in
@@ -948,7 +957,7 @@ struct ChatWorkbenchView: View {
                         guard searchJump == jump, chat.state.selectedSessionID == jump.sessionID else { return }
                         followsBottom = false; hasNewContent = false
                         traceScroll("scroll:search", session: session, target: jump.messageID.uuidString)
-                        transcriptPosition.scrollTo(id: jump.messageID, anchor: .top)
+                        scrollProxy.scrollTo(jump.messageID, anchor: .top)
                         saveScrollState(for: session.id)
                         scrollRestoration = nil
                         searchJump = nil
@@ -961,7 +970,7 @@ struct ChatWorkbenchView: View {
                             followsBottom = true; hasNewContent = false
                             saveScrollState(for: session.id)
                             traceScroll("scroll:manual-bottom", session: session, target: "bottom")
-                            scrollToLastMessage(in: session)
+                            scrollToLastMessage(in: session, using: scrollProxy)
                         }.padding(12).accessibilityIdentifier("chat-bottom-button")
                             .chatMeasured("bottom-button", probe: layoutProbe)
                     }
@@ -978,13 +987,13 @@ struct ChatWorkbenchView: View {
         return "\(session.id):\(session.selectedLeafID?.uuidString ?? ""):\(session.messages.count):\(latest?.rawText.utf8.count ?? 0):\(latest?.status.rawValue ?? "")"
     }
 
-    private func scrollToLastMessage(in session: ChatSession) {
+    private func scrollToLastMessage(in session: ChatSession, using proxy: ScrollViewProxy) {
         // Resolve a concrete lazy-layout target; an estimated content edge may
         // precede the final message until its height has been measured.
         if let lastID = session.selectedLeafID {
-            transcriptPosition.scrollTo(id: lastID, anchor: .bottom)
+            proxy.scrollTo(lastID, anchor: .bottom)
         } else {
-            transcriptPosition.scrollTo(edge: .bottom)
+            proxy.scrollTo("chat-transcript-bottom", anchor: .bottom)
         }
     }
 
