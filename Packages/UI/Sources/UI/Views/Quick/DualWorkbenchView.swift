@@ -190,6 +190,7 @@ public struct DualWorkbenchView: View {
                                     ChatWorkbenchView(chat: chat, model: chatModel,
                                         onChooseModel: { modelPickerCategory = .text; libraryVisible = true },
                                         openToolsRequest: openToolsRequest,
+                                        onToolsOpened: { id in if openToolsRequest == id { openToolsRequest = nil } },
                                         onSavedAsset: { reference in
                                             Task {
                                                 do {

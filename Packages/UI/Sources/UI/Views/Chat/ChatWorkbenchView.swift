@@ -473,6 +473,7 @@ struct ChatWorkbenchView: View {
     @State private var filePanelBusy = false
     @State private var ocrImport = false
     private var openToolsRequest: UUID?
+    private var onToolsOpened: (UUID) -> Void
     private var layoutProbe: ((String, CGRect) -> Void)?
 
     func observingLayout(_ observer: @escaping (String, CGRect) -> Void) -> Self {
@@ -484,6 +485,7 @@ struct ChatWorkbenchView: View {
     init(chat: ChatController, model: WorkbenchModel,
          onChooseModel: @escaping () -> Void,
          openToolsRequest: UUID? = nil,
+         onToolsOpened: @escaping (UUID) -> Void = { _ in },
          onSavedAsset: @escaping (WorkflowAssetReference) -> Void,
          onRetainTemporary: ((WorkflowAssetReference, Bool, UUID) async throws -> Void)? = nil,
          onAssetsChanged: @escaping () -> Void,
@@ -496,6 +498,7 @@ struct ChatWorkbenchView: View {
          initiallyFollowsBottom: Bool = true,
          initiallyHasNewContent: Bool = false) {
         self.openToolsRequest = openToolsRequest
+        self.onToolsOpened = onToolsOpened
         self.chat = chat; self.model = model; self.onChooseModel = onChooseModel
         self.onSavedAsset = onSavedAsset; self.onRetainTemporary = onRetainTemporary; self.onAssetsChanged = onAssetsChanged; self.onSavedValue = onSavedValue
         self.onResolveSharedAsset = onResolveSharedAsset
@@ -619,9 +622,10 @@ struct ChatWorkbenchView: View {
             }
         }
         .task(id: openToolsRequest) {
-            if openToolsRequest != nil {
+            if let openToolsRequest {
                 showInspector = true; inspectorTab = .data
                 if !ChatPresentationLayout.showsInspector(width: lastBodyWidth, requested: true, sidebar: showSidebar) { sheets.openNarrow(.inspector) }
+                onToolsOpened(openToolsRequest)
             }
         }
         .environment(\.chatDisplayPreferences, model.chatDisplaySettings.preferences)

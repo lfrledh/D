@@ -27,6 +27,7 @@ struct QuickGenerationView: View {
     @State private var rightRequested = true
     @State private var selectedResults: [QuickCategory: WorkflowAssetReference] = [:]
     @State private var detailRun: QuickRunRecord?
+    @State private var pendingPreview: WorkflowAssetReference?
     @State private var advanced = false
     @State private var history = false
     @State private var inputIssue: String?
@@ -118,7 +119,9 @@ struct QuickGenerationView: View {
                 }
             }.padding(14)
         }
-        .sheet(item: $detailRun) { run in
+        .sheet(item: $detailRun, onDismiss: {
+            if let pendingPreview { preview = pendingPreview; self.pendingPreview = nil }
+        }) { run in
             VStack { HStack { Text("结果详情").font(.headline); Spacer(); Button("完成") { detailRun = nil }.keyboardShortcut(.cancelAction) }; ScrollView { runCard(run) } }
                 .padding(20).frame(minWidth: 580, minHeight: 420)
         }
@@ -362,7 +365,10 @@ struct QuickGenerationView: View {
                                     VStack(alignment: .leading) {
                                         QuickAssetPreview(store: quick.store, reference: reference, compact: true)
                                         HStack {
-                                            Button(baselineText(language, "label.db8db0530432", fallback: "查看")) { preview = reference }
+                                            Button(baselineText(language, "label.db8db0530432", fallback: "查看")) {
+                                                if detailRun != nil { pendingPreview = reference; detailRun = nil }
+                                                else { preview = reference }
+                                            }
                                             Button(baselineText(language, "label.1c66265feb9f", fallback: "带结果到工作流")) { onResultToCanvas(reference) }
                                             Button(baselineText(language, "label.643e7408e6a7", fallback: "导出…")) { Task { await export(reference) } }
                                         }
