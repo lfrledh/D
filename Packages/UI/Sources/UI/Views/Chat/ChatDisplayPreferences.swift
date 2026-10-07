@@ -22,6 +22,26 @@ struct ChatDisplayPreferences: Codable, Equatable {
     var transcriptWidth = ChatDisplayPreferences.defaultTranscriptWidth
     var wrapsCode = false
     var sendShortcut: SendShortcut = .commandReturn
+    var appearance: WorkbenchAppearance? = nil
+
+    init() {}
+
+    private enum CodingKeys: String, CodingKey {
+        case endSound, theme, textPointSize, transcriptWidth, wrapsCode, sendShortcut, appearance
+    }
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        endSound = try values.decodeIfPresent(Bool.self, forKey: .endSound)
+        theme = try values.decode(Theme.self, forKey: .theme)
+        textPointSize = try values.decode(Int.self, forKey: .textPointSize)
+        transcriptWidth = try values.decode(Int.self, forKey: .transcriptWidth)
+        wrapsCode = try values.decode(Bool.self, forKey: .wrapsCode)
+        sendShortcut = try values.decode(SendShortcut.self, forKey: .sendShortcut)
+        appearance = try values.decodeIfPresent(WorkbenchAppearance.self, forKey: .appearance)
+    }
+
+    var resolvedAppearance: WorkbenchAppearance { appearance ?? WorkbenchAppearance() }
 
     var preferredColorScheme: ColorScheme? {
         switch theme {
@@ -33,6 +53,7 @@ struct ChatDisplayPreferences: Codable, Equatable {
 
     var isValid: Bool {
         (12...28).contains(textPointSize) && (480...1100).contains(transcriptWidth)
+            && (appearance?.isValid ?? true)
     }
 }
 
