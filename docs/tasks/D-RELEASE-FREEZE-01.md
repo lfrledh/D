@@ -1031,3 +1031,9 @@ Lead按本机NSTextView.h推荐dragOperation钩子及perform接收阶段，只�
 非实现者human_drop_evidence_check只读交叉核对前后项目/CSV与四张截图及五文档差分，未发现矛盾；未另行执行GUI或测试。完整冷开AX与截图是直接依据，其他AX可为无变化增量，不能当完整树。
 
 F19本次原生代表门槛关闭；三项紧凑hosting仍是已有独立工程余项，不重测旧本人/模型、不改阈值、不宣称转段；F26继续批准延期。Finder验收窗口已关闭、pgrep D为空；Terminal已完成启动器窗口关闭状态未确认，先前工具拒绝未绕过。候选代码d1ab不变；此前5935ecd4及本次结案仅文档，最终远端SHA在`lead/human-drop-receipt.json`，不自引用提交。main908不变、推荐3cc不变，无新增本人必办事项。
+
+### 2026-10-07 文件落点一致性定点续作
+
+用户明确要求修光标左右接收/加号差异，保留前次d1ab单落点原生通过与旧失败，不重置预算。487b77b5→代码6fb4204d6b151eb3135e651ac660b6847a444cb2：Lead仅给真实fileURL直接destination entered/updated/prepare判定；普通文字仍super，现有IME/Undo/只读/拆除/复制权限、importURLs和会话归属保持，不动Store/模型。file_drop_boundary_review只读非实现者复核，无必修，收紧注释不宣称私有根因。
+
+RPosition见CURRENT_ACTIONS。旧实现坐标/选择范围1方法和viewport1方法均通过，不能写先红后绿；第一次过滤0方法如实保留。修后20方法/3suite通过，测试后仅注释措辞变化；普通App构建/签名/复制关键摘要通过。独立Drop-position副本7C6D1438会话与left/right/blank夹具，当前待真人跨窗三落点反馈，不用选择器/粘贴冒称拖入。原3项compact hosting、F26延期、main908及推荐3cc边界不变。无GUI模型生成、无系统权限改动。

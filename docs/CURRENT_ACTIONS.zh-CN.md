@@ -4,7 +4,7 @@
 
 ## 当前授权：完整文字聊天专题 CHAT-PRODUCT-20261003
 
-**持续工作条件（2026-10-07，最新指令）**：本人现可操作Mac；Finder拖入反例已局部修补，本人重拖成功，Lead已完成预览和退出冷重开保护核对，本次无新增必办本人项。不重办旧输入/语音/权限。若再次锁屏只停对应桌面操作。旧输入、英语/朗读及未变模型证据复用，F26实调/凭据继续批准延期。仍为F01–F36；UI v0.2只归档和接线准备，不实施视觉或全局重构。
+**持续工作条件（2026-10-07，最新指令）**：本人现可操作Mac；Finder拖入反例已局部修补，本人重拖成功，Lead已完成预览和退出冷重开保护核对，最新追加左右/空白落点一致性修补，同包已准备一次真人复验。不重办旧输入/语音/权限。若再次锁屏只停对应桌面操作。旧输入、英语/朗读及未变模型证据复用，F26实调/凭据继续批准延期。仍为F01–F36；UI v0.2只归档和接线准备，不实施视觉或全局重构。
 
 用户已批准 F01–F36、S00–S06 同一批实施。 2026-10-03再次授权连续续作：先用已有采样与可控流修候选菜单/交互迟滞，将停止固定在输入区主操作；允许S00/S01隔离组合验证，不等待旧布局全部修好。按本清单完成S02–S06（含显式采用部分回答继续），可靠切片正常接纳main后继续，不以阶段回执终止整项。需求冻结，不新增功能/模型/平台；Liquid Glass只沿用系统控件与语义层级，不全面视觉改版。唯一功能状态见 [聊天清单](CHAT_FEATURE_LEDGER.zh-CN.md)。先 S00 长流/停止、正常项目包选择和新候选/旧参数重现，再 S01 布局、S02 编辑与上下文、S03 资料/记忆/备份、S04 联网工具、S05 受限代码/MCP/成果/语音、S06 组合验收。可靠切片通过普通 App 门槛后正常接纳 main，不以整个专题完成为前提；不硬合失败长流。
 
@@ -14,7 +14,14 @@
 
 Lead 持有共享 Runtime/WorkflowServices/ChatController/Store；文件面板和纯展示在独立受限任务树实施。早期S00/S01历史证据目录 RCP=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261003T115108Z-chat-product`。完整 Lead 成本与订阅费用 unknown。早期S00代码完成CPU和签名构建，曾通过项目列表、真实1024-token接收和坐标停止→下一请求；当时菜单忙循环和生成中AX迟滞阻塞接纳。S01缩放焦点反例后来修复并通过hosting、与S00组合。以上是早期门槛来源，已被下述c16普通App复验和main接纳推进；最新S02–S05接线、R证据目录及剩余状态以以下恢复检查点为准，F01–F36范围不取消。
 
-### 本轮：本人拖入反例与定点修补（2026-10-07）
+### 本轮：文件落点与复制反馈一致性（2026-10-07）
+
+- 用户明确要求继续修光标左右落点和加号反馈，不再仅保留观察。基线`487b77b571df55dc613c025810cad3de932aa7ad`；代码`6fb4204d6b151eb3135e651ac660b6847a444cb2`；RPosition=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261007T132148Z-drop-position`。旧F19代表拖入/保存通过有效，但未覆盖左/右/空白；不追改原结论为全区域通过。
+- Lead局部修补仅在FileDropTextView的draggingEntered/Updated/prepare直接按现有保护返回copy/拒绝，不依赖文字插入位置；非file URL仍走super。没有强制指针、焦点、布局或新的拖动状态，没有更改Store/模型/导入。非实现者只读复核，注释收紧为设计保证，不宣称已证明AppKit私有根因。
+- 新落点/选区及viewport基线各1方法通过，**未复现真人跨窗反馈，不是先红后绿**；首次filter少括号0方法已纠正且保留。修后20方法/3suite通过，含真实控件四角、左右往返/选区、marked/只读/拆除/move-only与文字原生对照。测试后仅改说明注释；同代码普通签名App构建/复制摘要通过。`lead/position-decision.json`、`position-green-tests.*`、`position-app-version.json`。
+- 新普通App `RPosition/gui/D Chat Drop 6fb4204d.app`，同目录`启动文件落点验收.command`。独立任务副本/7C6D1438会话已准备left/right/blank三个34字节夹具；旧项目及旧验收样本不动。等待原集中队列的一次三落点真人反馈，随后Lead核原件/草稿/附件及冷开。不用服务检查替代Finder、没有重复已知无可靠命中的自动跨窗尝试。main908与推荐3cc不变；原3项compact hosting仍是独立工程余项，未宣称冻结。
+
+### 历史：本人拖入反例与定点修补（2026-10-07）
 
 - 起点`b5fee359cd7c344b901b26a01dd6025b3b1d912a`；新代码`d1ab5f71340bd4dcf764a80449e1d40be3306e05`，main仍`90819739e99b366d7cdb2f549c129eea28728206`。RDrop=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261007T121440Z-human-drop`。真人在abd5输入框松开numbers.csv后，草稿出现完整路径、附件为零；绿色加号短现不等于导入成功。失败AX/截图及项目快照已保存，不再仅归为工具命中未知。
 - 最小修补：仅聊天composer启用NSTextView文件拖放子类，按AppKit的dragOperation/perform钩子将真正file URL交现有importURLs；普通文字拖放/粘贴仍走原生路径，文件不插正文，marked/只读/拆除后不接收，不换输入系统或改Store/模型。Lead实现，非实现者只读复核。
