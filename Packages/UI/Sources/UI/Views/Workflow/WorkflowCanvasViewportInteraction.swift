@@ -1,6 +1,35 @@
 import AppKit
 import SwiftUI
 
+enum WorkflowCanvasTool: String, CaseIterable {
+    case pointer, hand
+}
+
+enum WorkflowCanvasViewportNavigationGate {
+    static func allows(marqueeActive: Bool, interactionLocked: Bool,
+                       nodeDragging: Bool, outputDragging: Bool) -> Bool {
+        !marqueeActive && !interactionLocked && !nodeDragging && !outputDragging
+    }
+}
+
+/// A view operation: the rectangle is measured in raw graph coordinates.
+enum WorkflowCanvasFit {
+    static func view(for bounds: CGRect, viewport: CGSize, margin: CGFloat = 28)
+        -> (zoom: CGFloat, center: CGPoint)? {
+        guard !bounds.isNull, bounds.width.isFinite, bounds.height.isFinite,
+              bounds.midX.isFinite, bounds.midY.isFinite,
+              viewport.width.isFinite, viewport.height.isFinite,
+              viewport.width > 0, viewport.height > 0 else { return nil }
+        let availableWidth = max(1, viewport.width - margin * 2)
+        let availableHeight = max(1, viewport.height - margin * 2)
+        let scale = min(1, min(availableWidth / max(bounds.width, 1),
+                               availableHeight / max(bounds.height, 1)))
+        guard scale.isFinite, scale > 0 else { return nil }
+        return (scale,
+                CGPoint(x: bounds.midX, y: bounds.midY))
+    }
+}
+
 struct WorkflowCanvasNavigationRequest: Equatable {
     let id = UUID()
     /// Nil requests the current graph's content center.
@@ -27,6 +56,7 @@ struct WorkflowCanvasPanSession: Equatable {
 /// that native view is mounted, and accepts events whose native hit path reaches its scroll view.
 struct WorkflowCanvasViewportInput: NSViewRepresentable {
     typealias Coordinator = Void
+    var navigationAllowed: () -> Bool
     var allowsEvent: (_ point: CGPoint, _ offset: CGPoint, _ viewport: CGSize) -> Bool
     var onViewportSize: (CGSize) -> Void
     var onWheel: (_ deltaY: CGFloat, _ point: CGPoint, _ offset: CGPoint, _ viewport: CGSize) -> Void
@@ -39,6 +69,7 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
     }
 
     func updateNSView(_ view: ProbeView, context: Context) {
+        view.navigationAllowed = navigationAllowed
         view.allowsEvent = allowsEvent
         view.onViewportSize = onViewportSize
         view.onWheel = onWheel
@@ -47,6 +78,7 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
     }
 
     final class ProbeView: NSView {
+        var navigationAllowed: () -> Bool = { false }
         var allowsEvent: (CGPoint, CGPoint, CGSize) -> Bool = { _, _, _ in false }
         var onViewportSize: (CGSize) -> Void = { _ in }
         var onWheel: (CGFloat, CGPoint, CGPoint, CGSize) -> Void = { _, _, _, _ in }
@@ -70,16 +102,37 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
                     x: location.x - clip.bounds.minX,
                     y: clip.isFlipped ? location.y - clip.bounds.minY : clip.bounds.maxY - location.y
                 )
-                guard self.allowsEvent(point, clip.bounds.origin, clip.bounds.size) else { return event }
+                if !self.navigationAllowed() {
+                    return event.type == .scrollWheel ? nil : event
+                }
+                guard self.allowsViewportEvent(point, clip.bounds.origin, clip.bounds.size) else { return event }
                 if event.type == .scrollWheel {
                     guard event.scrollingDeltaY != 0 else { return event }
-                    self.onWheel(event.scrollingDeltaY, point, clip.bounds.origin, clip.bounds.size)
-                    return nil // A zoom wheel event must not also scroll the native view.
+                    return self.dispatchWheel(event.scrollingDeltaY, point, clip.bounds.origin, clip.bounds.size)
+                        ? nil : event // A zoom wheel event must not also scroll the native view.
                 }
                 guard event.buttonNumber == 2 else { return event }
-                self.onMiddleClick(scroll.contentView.bounds.size)
-                return nil
+                return self.dispatchMiddleClick(scroll.contentView.bounds.size) ? nil : event
             }
+        }
+
+        func allowsViewportEvent(_ point: CGPoint, _ offset: CGPoint, _ viewport: CGSize) -> Bool {
+            navigationAllowed() && allowsEvent(point, offset, viewport)
+        }
+
+        @discardableResult
+        func dispatchWheel(_ delta: CGFloat, _ point: CGPoint, _ offset: CGPoint,
+                           _ viewport: CGSize) -> Bool {
+            guard navigationAllowed() else { return false }
+            onWheel(delta, point, offset, viewport)
+            return true
+        }
+
+        @discardableResult
+        func dispatchMiddleClick(_ viewport: CGSize) -> Bool {
+            guard navigationAllowed() else { return false }
+            onMiddleClick(viewport)
+            return true
         }
 
         override func viewDidMoveToSuperview() {
@@ -141,7 +194,9 @@ struct WorkflowCanvasViewportGeometry: Equatable {
 
     // Keep the same raw edge region at every zoom. Its screen size is at least one viewport.
     var padding: CGSize {
-        let factor = zoom / WorkflowCanvasLayoutPolicy.zoomRange.lowerBound
+        // Preserve the established edge space from 50% upward. Lower fit levels
+        // still need one screen of padding to keep the fitted center reachable.
+        let factor = max(1, zoom / 0.5)
         return CGSize(width: viewportSize.width * factor, height: viewportSize.height * factor)
     }
     var contentSize: CGSize {
@@ -187,7 +242,7 @@ struct WorkflowCanvasViewportGeometry: Equatable {
     /// Move only as far as the finite scroll surface can keep the raw point under the mouse.
     func anchoredZoom(toward requested: CGFloat, mouse: CGPoint, offset currentOffset: CGPoint)
         -> (zoom: CGFloat, offset: CGPoint) {
-        let requested = WorkflowCanvasLayoutPolicy.clampedZoom(requested)
+        let requested = WorkflowCanvasLayoutPolicy.clampedInteractiveZoom(requested, current: zoom)
         guard requested != zoom else { return (zoom, currentOffset) }
         let raw = rawPoint(screenPoint: mouse, offset: currentOffset)
         func candidate(_ scale: CGFloat) -> (zoom: CGFloat, offset: CGPoint, fits: Bool) {
