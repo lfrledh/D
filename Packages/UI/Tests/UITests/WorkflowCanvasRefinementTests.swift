@@ -155,7 +155,7 @@ struct WorkflowCanvasRefinementTests {
                 original: original, screenTranslation: translation, zoom: zoom) == original)
         }
         #expect(WorkflowCanvasDragGeometry.rawPosition(
-            original: original, screenTranslation: CGSize(width: .infinity, height: 0),
+            original: original, screenTranslation: CGSize(width: CGFloat.infinity, height: 0),
             zoom: 0.005) == original)
     }
 

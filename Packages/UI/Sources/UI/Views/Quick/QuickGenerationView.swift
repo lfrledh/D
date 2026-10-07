@@ -16,6 +16,7 @@ struct QuickGenerationView: View {
 
     @Bindable var quick: QuickGenerationController
     let model: WorkbenchModel
+    @Binding var selectedResults: [QuickCategory: WorkflowAssetReference]
     let onChooseModel: () -> Void
     let onSettingsToCanvas: (QuickDraft) -> Void
     let onResultToCanvas: (WorkflowAssetReference) -> Void
@@ -26,7 +27,6 @@ struct QuickGenerationView: View {
     @State private var narrowRight = false
     @State private var leftRequested = true
     @State private var rightRequested = true
-    @State private var selectedResults: [QuickCategory: WorkflowAssetReference] = [:]
     @State private var detailRun: QuickRunRecord?
     @State private var pendingPreview: WorkflowAssetReference?
     @State private var advanced = false
@@ -424,7 +424,8 @@ struct QuickGenerationView: View {
     }
     private func references(_ run: QuickRunRecord) -> [WorkflowAssetReference] {
         var refs: [WorkflowAssetReference] = []
-        for value in run.outputs.values {
+        for key in run.outputs.keys.sorted() {
+            guard let value = run.outputs[key] else { continue }
             if let ref = value.asset, !refs.contains(ref) { refs.append(ref) }
             for ref in value.candidates.compactMap(\.asset) where !refs.contains(ref) { refs.append(ref) }
         }

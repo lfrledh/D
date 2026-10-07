@@ -8,6 +8,7 @@ public struct DualWorkbenchView: View {
     let model: WorkbenchModel
     let automaticQuickModel: WorkbenchModel
     let automaticQuick: QuickGenerationController
+    @State private var quickPreviewSelections: [String: [QuickCategory: WorkflowAssetReference]] = [:]
     @State private var useProjectQuick = true
     @State private var modelPickerCategory: QuickCategory?
     private var usesTemporaryChat: Bool { entry == .quick && quick.category == .text && quick.textPresentation == .chat && automaticQuickModel.temporaryChatModel != nil }
@@ -543,7 +544,10 @@ public struct DualWorkbenchView: View {
         }
     }
     private var quickSurface: some View {
-        QuickGenerationView(quick: quick, model: quickModel, onChooseModel: { modelPickerCategory = quick.category; libraryVisible = true },
+        let owner = quick.store.rootURL.standardizedFileURL.path
+        return QuickGenerationView(quick: quick, model: quickModel,
+                    selectedResults: Binding(get: { quickPreviewSelections[owner] ?? [:] },
+                        set: { quickPreviewSelections[owner] = $0 }), onChooseModel: { modelPickerCategory = quick.category; libraryVisible = true },
                     onSettingsToCanvas: { draft in let source = quick.store; Task { await settingsToCanvas(draft, from: source) } },
                     onResultToCanvas: { ref in let source = quick.store; Task { await resultToCanvas(ref, from: source) } },
                     onValueToCanvas: { value in let source = quick.store; Task { await valueToCanvas(value, from: source) } },
