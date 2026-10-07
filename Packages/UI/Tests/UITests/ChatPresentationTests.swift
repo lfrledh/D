@@ -805,9 +805,18 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
             marker.frame.size.width = 600
         }
         scroll.contentView.scroll(to: .init(x: 0, y: 1200))
-        XCTAssertTrue(owner.alignTop(messageID: messageID, sessionID: sessionID))
+        XCTAssertFalse(try XCTUnwrap(owner.alignTop(messageID: messageID, sessionID: sessionID)).isAligned)
         XCTAssertEqual(scroll.contentView.bounds.origin.y, 80, accuracy: 0.5)
-        XCTAssertFalse(owner.alignTop(messageID: UUID(), sessionID: sessionID))
+        let aligned = try XCTUnwrap(owner.alignTop(messageID: messageID, sessionID: sessionID))
+        XCTAssertTrue(aligned.isAligned)
+        XCTAssertEqual(aligned.messageSize, marker.frame.size)
+        XCTAssertEqual(aligned.viewportSize, scroll.contentView.bounds.size)
+        // A subsequent layout shift must be observed, not assumed already aligned.
+        marker.frame.origin.y += 100
+        XCTAssertFalse(try XCTUnwrap(owner.alignTop(messageID: messageID, sessionID: sessionID)).isAligned)
+        XCTAssertEqual(scroll.contentView.bounds.origin.y, 180, accuracy: 0.5)
+        XCTAssertTrue(try XCTUnwrap(owner.alignTop(messageID: messageID, sessionID: sessionID)).isAligned)
+        XCTAssertNil(owner.alignTop(messageID: UUID(), sessionID: sessionID))
         marker.frame.size.height = 0
         let unavailable = ChatReadingPoint(messageID: messageID, offset: 500, width: 600, height: 3600)
         XCTAssertFalse(owner.restore(unavailable, sessionID: sessionID), "Unlaid-out markers must not consume restoration")

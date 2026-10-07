@@ -305,12 +305,27 @@ struct ChatReadingPoint {
         return nil
     }
 
-    func alignTop(messageID: UUID, sessionID: UUID) -> Bool {
+    struct TopAlignment: Equatable {
+        let offset: CGFloat
+        let messageSize: CGSize
+        let viewportSize: CGSize
+        var isAligned: Bool { abs(offset) <= 0.5 }
+    }
+
+    /// Reports geometry before correction so a later layout can confirm that the
+    /// explicit search stayed aligned, rather than treating a scroll call as success.
+    func alignTop(messageID: UUID, sessionID: UUID) -> TopAlignment? {
         guard let view = entries[Key(sessionID: sessionID, messageID: messageID)]?.view,
-              view.window != nil, let scroll = view.enclosingScrollView else { return false }
+              view.window != nil, let scroll = view.enclosingScrollView else { return nil }
         scroll.layoutSubtreeIfNeeded()
         let rect = view.convert(view.bounds, to: nil)
-        return align(offset: 0, rect: rect, in: scroll)
+        let viewport = scroll.contentView.convert(scroll.contentView.bounds, to: nil)
+        guard !rect.isEmpty, !viewport.isEmpty, rect.minY.isFinite, rect.maxY.isFinite,
+              viewport.minY.isFinite, viewport.maxY.isFinite else { return nil }
+        let measured = TopAlignment(offset: rect.maxY - viewport.maxY,
+            messageSize: rect.size, viewportSize: viewport.size)
+        if !measured.isAligned { _ = align(offset: 0, rect: rect, in: scroll) }
+        return measured
     }
 
     /// Called only after Reader has made the saved message available. It neither
@@ -1113,15 +1128,28 @@ struct ChatWorkbenchView: View {
                 && chat.selectedPath.contains { $0.id == jump.messageID }
         }
         guard isCurrent() else { return }
-        // An existing native marker gives the measured message edge. Reader is
-        // needed only to materialize a lazy target that is not available yet.
-        if !readingMarkers.alignTop(messageID: jump.messageID, sessionID: jump.sessionID) {
-            proxy.scrollTo(jump.messageID, anchor: .top)
-            for _ in 0..<5 {
-                try? await Task.sleep(for: .milliseconds(20))
-                guard isCurrent() else { return }
-                if readingMarkers.alignTop(messageID: jump.messageID, sessionID: jump.sessionID) { break }
+        // Leaving bottom-follow and moving a tall lazy message can each change
+        // layout after the first correction. Confirm the measured edge across
+        // two separate layouts, only for this explicit, cancellable navigation.
+        var previous: ChatReadingMarkers.TopAlignment?
+        var materialized = false
+        var aligned = false
+        for _ in 0..<6 {
+            try? await Task.sleep(for: .milliseconds(20))
+            guard isCurrent() else { return }
+            if let measured = readingMarkers.alignTop(messageID: jump.messageID, sessionID: jump.sessionID) {
+                if measured.isAligned, previous == measured { aligned = true; break }
+                previous = measured
+            } else {
+                previous = nil
+                if !materialized {
+                    proxy.scrollTo(jump.messageID, anchor: .top)
+                    materialized = true
+                }
             }
+        }
+        if !aligned, let current = chat.selectedSession {
+            traceScroll("search:alignment-incomplete", session: current, target: jump.messageID.uuidString)
         }
         guard isCurrent() else { return }
         visibleMessageID = jump.messageID
