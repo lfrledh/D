@@ -991,3 +991,17 @@ align_layout_diagnosis为只读非实现者，先指出临时根入口，再核�
 最终从恢复后的3cc源码普通签名build exit0/39.955秒，未跳宏/签名检查；交付副本与实际受测包四关键文件相同、codesign核对通过。唯一旧启动器原位指向D Chat Product 3cc71bee.app；同树D.xcworkspace / D Nodes / My Mac / Debug，资源与具体路径见试用指南。两个失败实验不在交付包。非实现者native_files_review核对生产差分/数据与交付，align_layout_diagnosis只读核滚动和来源；没有独立模型执行原生验收，未新增写Worker。完整Lead用量/费用unknown，不重算旧样本。
 
 保护与恢复：旧源01758b8、scheme未暂存orderHint差异及摘要保持；仅自有隔离项目更新，原PDF/CSV与来源会话保持，既有个人草稿不回滚。自有App正常CmdQ退出，Finder/Safari自有测试窗口关闭，无新Terminal；没有处置未知长期helper。最终精确索引/保护/进程与候选推送见lead/quality-transition-receipt.json。F26明确延期，输入/多数尾项推进；F17长文位置和F19有效拖入仍开放，**未达到视觉转段/完整功能冻结**，不自动启动质量重构、Liquid Glass或Release。
+
+
+### 2026-10-07 无桌面收口与UI接线准备（延续CHAT-PRODUCT-20261003）
+
+- 用户新条件：不能解锁或操作；本轮未调用桌面工具、未启动App/hosting/GPU，不办理本人事项。F26继续批准延期，F17/F19原生仍开放，未功能冻结/视觉转段。没有新任务编号、平台或模型。起点`67ac49f3e54f22a3e78e1b6ffc77d38705821615`；main`90819739e99b366d7cdb2f549c129eea28728206`不动。
+- RPrep=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261007T061930Z-no-desktop-ui-prep`。保护/精确SHA见`lead/baseline.json`与最终`no-desktop-ui-prep-receipt.json`；只读核对旧源个人scheme、候选、运行身份与现行入口，未清理/覆盖旧数据。推荐3cc及旧2cd包/证据不动。
+- A/B复用旧Reader审阅/原生反例及有效纯值证据，检查当前搜索/恢复票据、被动可见位置与主动滚动没有可独立确定的新修补；没有泛加日志或继续猜改。URL drop接收前命中与接收后导入分开；源码确认session/store/admission与copy保护，不能关闭真实Finder拖入。`lead/independent-boundaries.json`记录入口和最短未来动作；未重复服务/窗口测试。
+- C确证并修复一项旧遗漏：R3 e7728a0e拒绝Dev SSD，R4 271ac840已实现后端逐层encode/denoise和估算，但共享WorkflowImageOperations/WorkflowImageRecipe仍拒绝。本轮仅在既有两模式中开放Dev ssdLayered，默认staged、精度/尺寸/步数/有序参考及未知值拒绝保持。既有d3afbfb3正式Runtime完整50步文生/双参考/取消和dba33e6产物Store证据复用，不重跑真实模型。
+- Lead实施；只读非实现者审阅固定差异，指出新生命周期测试的旧空controller关闭可能覆盖新图，以及需要真正重开Store。已修夹具关闭次序，并关闭各owner后ProjectStore.open，再分别加载Quick/Canvas；不是重写生产存储。审阅没有测试或原生操作，不称独立模型已验。文档审阅还补正27B原始四帧视频已有实测、LTX保留290个F32调制表。
+- **先失败后通过**：原SwiftPM命令因既有Package.resolved缺swift-jinja pin未到测试，未改依赖。复用现成离线Xcode入口；初始64px夹具另受合法尺寸拒绝，保留失败记录；改为合法256px后，旧生产代码两个方法明确失败于Dev SSD遗漏（`dev-route-red-valid.*`）。修补后选定9个CPU方法通过（`dev-route-green.*`）；审阅仅改生命周期夹具后重跑该1方法通过（`dev-route-reviewed.*`），不相加为10项。8个未变方法结果复用。测试使用xctest进程/受控engine/隔离Store，不启动窗口；通过双入口staged/SSD请求捕获、原参数/身份、缺字段兼容、未知值拒绝、保存重开，无真实GPU或App选项操作。
+- 本轮最终代码/测试提交`9b6c982b8c7188164279abc6760fef6f7a97c376`。普通D Nodes签名构建33.770秒成功；独立副本`RPrep/delivery/D Chat Candidate 9b6c982b.app`四关键文件相同，签名验证通过，无手补/重签、未启动。测试与最终源码对应、命令/耗时和审阅在`lead/validation-summary.json`；原生未验不能由编译替代。
+- D归档用户[UI v0.2](../D_Quick_Generation_UI_Design_Decisions_v0.2_2026-10-07.md)，字节摘要与附件一致；来源文件自带研究陈述不作为本轮独立网页验证。[九模型能力/后端/节点/Quick及区域接线映射](../UI_CAPABILITY_WIRING.zh-CN.md)是人工派生索引，不是可执行schema。覆盖真实字段/默认/单位/条件、四种操作对象与控制器；只准备后续UI，不新建注册器、不实施视觉、不新增冻结门槛。
+- 恢复点：当前Xcode构建9b6；唯一推荐启动器仍3cc，main不变。最终仅文档提交和推送SHA写外部回执，不反复自引用。旧源scheme保持原内容/摘要及未暂存状态。本人条件改变后，Lead用现有40节项目验证可见链接确认/取消及Reader回归；先建立Finder真实跨窗命中再验预览/保存重开/原件和不自动发送。原集中H32队列承载操作，不新增本人清单；本轮所有自有命令进程结束，不推断旧Finder/Terminal窗口已关闭。
+- 成本：CPU/构建墙钟按各命令json保存；未重算历史token。Lead完整token/订阅费用与隐藏服务端模型解析unknown；只读协作不是写隔离或经济性试验。

@@ -2,17 +2,17 @@
 
 ## 当前唯一集中队列（2026-10-07，CHAT-PRODUCT-20261003）
 
-用户最新条件：本人不能操作。本轮已先使用解锁桌面；随后工具明确报告锁屏，已暂停GUI，不轮询。现在不要求组字、试听、密钥或新权限；旧H22、HF、宏、Speech、普通话/英语及固定视频均不重办。
+用户最新条件：本人不能解锁或操作Mac。本轮完全不探测桌面、不启动App/窗口/hosting或拖放，不催本人、不更改系统设置。继续命令通道工作；旧H22、HF、宏、Speech、普通话/英语及固定视频均不重办。
 
 | 事项 | 当前事实 | 最短接续与关闭条件 |
 |---|---|---|
-| H32：长单条Markdown阅读位置 | 已由Lead独立复现已可见链接→确认→取消跳位；普通滚轮停止稳定，已排除本次屏外定位干扰。断开持续位置绑定不跳，top锚点仍失败；2cd9a588局部Reader候选经编译/只读审阅，未通过原生验收。 | 只需桌面可用，由Lead运行固定40节项目两个位置的取消、Bottom/搜索/恢复及5项现有hosting，不生成、不需本人滚动。锁屏后未重试；不把诊断对照当候选通过。 |
-| H32：Finder文件拖入 | 公开App.drag已尝试；跨窗口坐标/目标命中仍缺可靠证据，未形成附件，不能判断生产拒收。源34字节CSV摘要/mtime及目标会话内容未变、无自动发送。 | 桌面恢复后Lead先摆好共同可见窗口、验证真实按住/移动/释放命中，再验预览和冷重开。若工具仍不能排除落点影响，留一次本人Finder→输入区拖入的最短对照；现在不催本人，不以文件选择器代替。 |
+| H32：长单条Markdown阅读位置 | 已由Lead独立复现已可见链接→确认→取消跳位；普通滚轮停止稳定，已排除本次屏外定位干扰。断开持续位置绑定不跳，top锚点仍失败；2cd9a588局部Reader改动保留在新9b6c982b候选；既有编译/只读审阅复用，本轮未改滚动，仍未通过原生验收。 | 只需桌面可用，由Lead运行固定40节项目两个位置的取消、Bottom/搜索/恢复及5项现有hosting，不生成、不需本人滚动。锁屏后未重试；不把诊断对照当候选通过。 |
+| H32：Finder文件拖入 | 公开App.drag已尝试；跨窗口坐标/目标命中仍缺可靠证据，未形成附件，不能判断生产拒收。源34字节CSV摘要/mtime及目标会话内容未变、无自动发送。 | 桌面恢复后Lead先摆好共同可见窗口、核对工具跨窗坐标基准，再验证真实按住/移动/释放命中，随后验附件出现、预览和保存冷重开、源不变且不自动发送。接收后服务保护已有证据，不证明接收前命中。若工具仍不能排除落点影响，留一次本人Finder→输入区拖入的最短对照；现在不催本人，不以文件选择器代替。 |
 | H32：输入迟滞 | 本轮定位每次编辑重复查询声音约63ms，缓存后对应局部body约0.17–0.25ms；本人确认“现在差不多正常了”。偶发未确认字母消失后来未复现，本人说明其他软件亦偶有。 | 持续迟滞本轮收口；偶发组字只留观察，不加猜测补丁、不重测候选随动。没有新的确定反例前无需本人再输。 |
 | F31：英语识别与朗读 | 9230英语本人确认正确→审核采用未发草稿→冷重开、系统朗读听感通过；3cc默认声音别名解析修补后，代理实际Read→Pause→Resume→Stop通过。原失败和原声保留。 | 本人事项关闭，不把此次代理控制写作新的真人听感，也不追认旧失败根因。 |
 | F26：本人明确批准延期 | Brave/博查真实调用、凭据办理及完整联网验收退出本轮功能/视觉转段门槛；已有代码及未实调状态保留。 | 本轮不办理、不催、不注册/购买/索key、不新增provider或爬虫。 |
 
-当前证据RDrag=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261007T004102Z-drag-reading`：`lead/drag-reading-evidence.json`、`drag-reading-receipt.json`、`reader-candidate-version.json`。推荐包仍3cc71bee；Xcode工作树含未接纳2cd9a588，不混称同版，见[试用指南](RELEASE_FREEZE_TRY.zh-CN.md)。两项门槛仍开放，非新授权阻塞。自有D进程已结束；锁屏前未及关闭的本轮Finder/Terminal窗口留待Lead核对关闭，不声称全部窗口已清理。main仍90819739。
+前次原生证据RDrag=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261007T004102Z-drag-reading`，本轮命令证据RPrep=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261007T061930Z-no-desktop-ui-prep`（`lead/independent-boundaries.json`、`candidate-version.json`、`no-desktop-ui-prep-receipt.json`）。推荐包仍3cc71bee，当前Xcode/新未启动审计包代码9b6c982b，含2cd阅读候选及Dev既有SSD入口修补；[试用指南](RELEASE_FREEZE_TRY.zh-CN.md)区分版本。两项原生门槛仍开放，main仍90819739。本轮没有App/窗口进程；前次自有D已结束，前次未关闭的Finder/Terminal窗口仅待桌面恢复后核身份处理，不声称已清理。Dev新增选项的原生选择/草稿保留可随受影响包核对，非新增本人授权或冻结门槛，不重跑GPU。
 
 复用历史：RHumanNow=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261006T115611Z-human-queue` 的英语/听感；RNow=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261006T110535Z-unlocked-bottom` 的Bottom/搜索/记忆/MCP。旧失败、预算及原件保持，不刷新历史执行日期。详细功能状态只在唯一F表，不在本队列重复工程清单。
 
