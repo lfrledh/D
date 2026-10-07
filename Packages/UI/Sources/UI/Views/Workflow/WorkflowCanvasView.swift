@@ -80,6 +80,9 @@ public struct WorkflowCanvasView: View {
     @State private var libraryMode: WorkflowCanvasLibraryMode = .nodes
     @State private var showInspector = true
     @State private var zoom: CGFloat = 1
+    @State private var canvasTool: WorkflowCanvasTool = .pointer
+    @State private var canvasViewportSize = CGSize(width: 800, height: 600)
+    @State private var measuredCardSizes: [UUID: CGSize] = [:]
     @State private var scrollPosition = ScrollPosition()
     @State private var navigationRequest: WorkflowCanvasNavigationRequest?
     @State private var viewportInteractionLocked = false
@@ -92,6 +95,7 @@ public struct WorkflowCanvasView: View {
     @State private var runPreview: WorkflowRunPreview?
     @State private var toolsPresented = false
     @State private var interfacePresented = false
+    @State private var portLegendPresented = false
 
     public init(
         controller: WorkflowController,
@@ -233,12 +237,17 @@ public struct WorkflowCanvasView: View {
             Divider().opacity(showLibrary ? 1 : 0)
             VStack(spacing: 0) {
                 WorkflowGraphSurface(controller: controller, graph: controller.graph, zoom: $zoom,
+                    tool: $canvasTool,
                     scrollPosition: $scrollPosition, navigationRequest: $navigationRequest,
                     viewportInteractionLocked: $viewportInteractionLocked,
                     viewContext: viewContext,
                     pendingConnection: $pendingConnection, selectedConnectionID: $selectedConnectionID,
                     readOnly: !controller.canEditCanvas,
-                    onPlan: presentPlan, nodeSizeObserver: nodeSizeObserver,
+                    onPlan: presentPlan, nodeSizeObserver: { id, size in
+                        measuredCardSizes[id] = size
+                        nodeSizeObserver?(id, size)
+                    },
+                    viewportSizeObserver: { canvasViewportSize = $0 },
                     portCenterObserver: portCenterObserver,
                     onScrollObservation: { context, observation in
                         guard context == viewContext, activeViewContext == context else { return }
@@ -265,15 +274,21 @@ public struct WorkflowCanvasView: View {
                     })
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .overlay(alignment: .bottomTrailing) {
-                        Button(workflowText(languageStore, "workflow.canvas.resetView",
-                                            fallback: "恢复默认视图"), systemImage: "scope") {
-                            guard !viewportInteractionLocked else { return }
-                            zoom = 1
-                            navigationRequest = WorkflowCanvasNavigationRequest(rawCenter: nil)
+                        HStack {
+                            Button("适配全部", systemImage: "arrow.up.left.and.arrow.down.right") {
+                                fitAllNodes()
+                            }
+                            .accessibilityIdentifier("workflow-canvas-fit-all")
+                            Button(workflowText(languageStore, "workflow.canvas.resetView",
+                                                fallback: "恢复默认视图"), systemImage: "scope") {
+                                guard !viewportInteractionLocked else { return }
+                                zoom = 1
+                                navigationRequest = WorkflowCanvasNavigationRequest(rawCenter: nil)
+                            }
+                            .accessibilityIdentifier("workflow-canvas-reset-view")
                         }
                         .buttonStyle(.bordered)
                         .disabled(viewportInteractionLocked)
-                        .accessibilityIdentifier("workflow-canvas-reset-view")
                         .padding(12)
                     }
                 Divider()
@@ -407,9 +422,19 @@ public struct WorkflowCanvasView: View {
                 Image(systemName: "sidebar.right")
             }.help(workflowText(languageStore, "canvas.inspector.toggle", fallback: "显示或隐藏检查器"))
                 .accessibilityIdentifier("canvas-inspector-toggle")
+            Picker("画布工具", selection: $canvasTool) {
+                Label("指针", systemImage: "cursorarrow").tag(WorkflowCanvasTool.pointer)
+                Label("手形", systemImage: "hand.draw").tag(WorkflowCanvasTool.hand)
+            }
+            .pickerStyle(.segmented)
+            .frame(width: 110)
+            .accessibilityIdentifier("workflow-canvas-tool")
+            Button("封装选区", systemImage: "square.on.square") { toolsPresented = true }
+                .disabled(isReadOnly || controller.selectedNodeIDs.isEmpty)
+                .accessibilityIdentifier("workflow-canvas-extract-selection")
             Text("\(Int((zoom * 100).rounded()))%")
                 .font(.caption.monospacedDigit()).frame(minWidth: 36)
-            Slider(value: $zoom, in: WorkflowCanvasLayoutPolicy.zoomRange)
+            Slider(value: $zoom, in: WorkflowCanvasLayoutPolicy.sliderZoomRange(current: zoom))
                 .frame(width: 76)
                 .disabled(viewportInteractionLocked)
                 .accessibilityLabel(workflowText(languageStore, "workflow.toolbar.zoom", fallback: "画布缩放"))
@@ -430,7 +455,7 @@ public struct WorkflowCanvasView: View {
                 Button(workflowText(languageStore, "workflow.action.redo", fallback: "重做")) { controller.redo() }
                     .disabled(isReadOnly || !controller.canRedo)
                 Menu(workflowText(languageStore, "workflow.toolbar.zoom", fallback: "画布缩放")) {
-                    ForEach([0.5, 1.0, 1.8], id: \.self) { value in
+                    ForEach([0.05, 0.25, 0.5, 1.0, 1.8], id: \.self) { value in
                         Button("\(Int(value * 100))%") { zoom = CGFloat(value) }
                             .disabled(viewportInteractionLocked)
                     }
@@ -471,6 +496,21 @@ public struct WorkflowCanvasView: View {
                 Text(controller.progressMessage).foregroundStyle(.secondary)
             }
             Spacer()
+            Button("类型图例", systemImage: "paintpalette") { portLegendPresented.toggle() }
+                .popover(isPresented: $portLegendPresented) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        ForEach(WorkflowPortStyle.legend.indices, id: \.self) { index in
+                            let entry = WorkflowPortStyle.legend[index]
+                            HStack(spacing: 8) {
+                                Circle().fill(WorkflowPortStyle.color(for: entry.1))
+                                    .frame(width: 10, height: 10)
+                                Text(entry.0)
+                            }
+                        }
+                    }
+                    .padding(14)
+                }
+                .accessibilityIdentifier("workflow-port-legend")
             if let error = controller.errorMessage {
                 Label(error, systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(.red)
@@ -498,9 +538,29 @@ public struct WorkflowCanvasView: View {
             selectedNodeID: controller.selectedNodeID, for: viewContext)
     }
 
+    private func fitAllNodes() {
+        guard !viewportInteractionLocked, let graph = controller.graph,
+              !graph.nodes.isEmpty else { return }
+        let geometry = WorkflowGraphGeometry(graph: graph, tools: controller.tools,
+                                             registry: controller.registry)
+        var bounds = CGRect.null
+        for node in graph.nodes {
+            let point = geometry.rawPosition(node.id)
+            let definition = controller.registry.definition(for: node, tools: controller.tools)
+            let height = measuredCardSizes[node.id]?.height ?? CGFloat(WorkflowLayout.cardHeightBudget(
+                inputs: definition?.inputs.count ?? 1, outputs: definition?.outputs.count ?? 1))
+            bounds = bounds.union(CGRect(x: point.x - WorkflowCanvasLayoutPolicy.nodeWidth / 2,
+                                        y: point.y - height / 2,
+                                        width: WorkflowCanvasLayoutPolicy.nodeWidth, height: height))
+        }
+        guard let fitted = WorkflowCanvasFit.view(for: bounds, viewport: canvasViewportSize) else { return }
+        zoom = fitted.zoom
+        navigationRequest = WorkflowCanvasNavigationRequest(rawCenter: fitted.center)
+    }
+
     private func restoreViewContext(_ context: WorkflowCanvasViewContext) {
         if let saved = viewStates.state(for: context) {
-            zoom = WorkflowCanvasLayoutPolicy.clampedZoom(saved.zoom)
+            zoom = WorkflowCanvasLayoutPolicy.restoredZoom(saved.zoom)
             actualVisibleRawCenter = saved.rawVisibleCenter
             navigationRequest = WorkflowCanvasNavigationRequest(rawCenter: saved.rawVisibleCenter)
             controller.selectedNodeID = controller.graph?.nodes.contains(where: { $0.id == saved.selectedNodeID }) == true
@@ -1839,12 +1899,26 @@ enum WorkflowCanvasLayoutPolicy {
     static let inspectorWidth: CGFloat = 300
     static let canvasMinimumWidth: CGFloat = 260
     static let nodeWidth: CGFloat = 240
-    static let zoomRange: ClosedRange<CGFloat> = 0.5...1.8
+    static let zoomRange: ClosedRange<CGFloat> = 0.05...1.8
 
     static func usesHorizontalPanelScroll(width: CGFloat) -> Bool { false }
 
     static func clampedZoom(_ value: CGFloat) -> CGFloat {
         min(zoomRange.upperBound, max(zoomRange.lowerBound, value))
+    }
+
+    static func clampedInteractiveZoom(_ value: CGFloat, current: CGFloat) -> CGFloat {
+        guard value.isFinite else { return current }
+        return min(zoomRange.upperBound, max(min(zoomRange.lowerBound, current), value))
+    }
+
+    static func sliderZoomRange(current: CGFloat) -> ClosedRange<CGFloat> {
+        min(zoomRange.lowerBound, current)...zoomRange.upperBound
+    }
+
+    static func restoredZoom(_ value: CGFloat) -> CGFloat {
+        guard value.isFinite, value > 0 else { return 1 }
+        return min(zoomRange.upperBound, value)
     }
 
     static func fallbackPosition(index: Int) -> CGPoint {
