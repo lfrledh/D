@@ -235,7 +235,7 @@ public struct DualWorkbenchView: View {
                         } else { quickSurface }
                     }
                 }
-                WorkflowHostView(model: canvasModel, nodeTags: nodeTags, onQuickUse: useNode,
+                RetainedContentHost(content: WorkflowHostView(model: canvasModel, nodeTags: nodeTags, onQuickUse: useNode,
                     libraryContent: { point, close in AnyView(libraryBrowser(compact: true, at: point, onBack: close)) },
                     onSharedAssetDrop: acceptSharedAssetDrop,
                     acceptsLegacyAsset: { projectID, assetID in
@@ -243,8 +243,10 @@ public struct DualWorkbenchView: View {
                             instanceID: nil, projects: projects) else { return false }
                         return canvasModel.projectSession.workflow?.projectInstanceID == instance &&
                             projects.contains(where: { $0.effectiveInstanceID == instance && $0.assets.contains(where: { $0.id == assetID }) })
-                    })
-                    .opacity(entry == .workflow ? 1 : 0).allowsHitTesting(entry == .workflow).accessibilityHidden(entry != .workflow)
+                    }).environment(\.dLanguageStore, language),
+                    visible: entry == .workflow, identifier: "workflow-retained-surface",
+                    fallbackSize: CGSize(width: 760, height: 500))
+                    .accessibilityHidden(entry != .workflow)
             }
 
         }

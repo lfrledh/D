@@ -100,6 +100,11 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
             try await Task.sleep(for: .milliseconds(150))
             let editor = try #require(descendants(host).compactMap { $0 as? FileDropTextView }.first)
             let clip = try #require(editor.enclosingScrollView?.contentView)
+            if hiddenWorkflow {
+                let canvas = try #require(descendants(host).compactMap { $0 as? WorkflowCanvasViewportInput.ProbeView }.first)
+                #expect(canvas.isHiddenOrHasHiddenAncestor,
+                    "Inactive workflow must be natively hidden; opacity/hit-testing alone leaves drag destinations active")
+            }
             #expect(editor.registeredDraggedTypes.contains(.fileURL), "Hit receiver must actually register file URLs; direct method calls bypass this prerequisite")
             for x in [CGFloat(2), clip.bounds.width * 0.25, clip.bounds.width * 0.5, clip.bounds.width - 2] {
                 let local = NSPoint(x: clip.bounds.minX + x, y: clip.bounds.minY + 12)
@@ -109,6 +114,50 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
             }
             #expect(chat.selectedSession?.draft == session.draft)
             #expect(chat.selectedSession?.attachments.isEmpty == true && chat.selectedSession?.messages.isEmpty == true)
+        }
+        _ = await model.projectSession.requestClose()
+        try await close(store, root: root)
+    }
+
+    @Test func inactiveWorkflowRetainsNativeViewportAndRestoresReceivers() async throws {
+        let (_, model, store, root) = try await fixture(ChatState(), withWorkflowOwner: true)
+        let tags = ModelNodeTagStore()
+        func pane(_ visible: Bool) -> some View {
+            RetainedContentHost(content: WorkflowHostView(model: model, nodeTags: tags),
+                visible: visible, identifier: "workflow-retained-surface",
+                fallbackSize: CGSize(width: 760, height: 500))
+        }
+        let host = NSHostingView(rootView: pane(true))
+        host.frame = .init(x: 0, y: 0, width: 1057, height: 520)
+        let window = NSWindow(contentRect: host.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; window.contentView = host; window.orderFront(nil)
+        defer { window.close() }
+        func settle() async throws {
+            for _ in 0..<8 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(20)) }
+        }
+        try await settle()
+        let probe = try #require(descendants(host).compactMap { $0 as? WorkflowCanvasViewportInput.ProbeView }.first)
+        let scroll = try #require(probe.enclosingScrollView)
+        let receivers = descendants(host).filter { !$0.registeredDraggedTypes.isEmpty }
+        #expect(!receivers.isEmpty && receivers.allSatisfy { !$0.isHiddenOrHasHiddenAncestor })
+        // Exercise the existing viewport callback, not a second navigation state.
+        probe.onWheel(12, .init(x: 120, y: 100), scroll.contentView.bounds.origin, scroll.contentView.bounds.size)
+        try await settle()
+        scroll.contentView.scroll(to: .init(x: 300, y: 400)); scroll.reflectScrolledClipView(scroll.contentView)
+        try await settle()
+        let documentSize = try #require(scroll.documentView).frame.size
+        let offset = scroll.contentView.bounds.origin
+        let graph = model.projectSession.workflow?.graph
+        for visible in [false, true] {
+            host.rootView = pane(visible); try await settle()
+            #expect(descendants(host).contains { $0 === probe })
+            #expect(receivers.allSatisfy { receiver in descendants(host).contains { $0 === receiver } })
+            #expect(receivers.allSatisfy { !$0.registeredDraggedTypes.isEmpty })
+            #expect(receivers.allSatisfy { $0.isHiddenOrHasHiddenAncestor == !visible })
+            #expect(try #require(scroll.documentView).frame.size == documentSize)
+            #expect(abs(scroll.contentView.bounds.minX - offset.x) < 1)
+            #expect(abs(scroll.contentView.bounds.minY - offset.y) < 1)
+            #expect(model.projectSession.workflow?.graph == graph)
         }
         _ = await model.projectSession.requestClose()
         try await close(store, root: root)
@@ -739,7 +788,7 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
 
     @Test func paneResizeKeepsNativeEditorAndExplicitHidingReleasesInput() throws {
         func pane(_ visible: Bool) -> some View {
-            ChatPaneHost(content: TextSourcesQuestionEditor(value: "", editEpoch: 0,
+            RetainedContentHost(content: TextSourcesQuestionEditor(value: "", editEpoch: 0,
                 isEditable: true, accessibilityIdentifier: "pane-editor", onEdit: { _ in }),
                 visible: visible, identifier: "pane-host")
         }
@@ -1097,7 +1146,7 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
         if includesHiddenWorkflow {
             ZStack {
                 content
-                WorkflowHostView(model: model, nodeTags: tags, libraryContent: libraryStore.map { store in
+                RetainedContentHost(content: WorkflowHostView(model: model, nodeTags: tags, libraryContent: libraryStore.map { store in
                     { _, close in AnyView(SharedLibraryBrowser(entries: libraryEntries, store: store,
                         compact: true, state: libraryState,
                         onUse: { _ in XCTFail("Hidden library must not execute") },
@@ -1105,8 +1154,9 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
                         onPreview: { _ in XCTFail("Hidden library must not preview") },
                         onPrepare: { _ in XCTFail("Hidden library must not prepare") },
                         onImport: { XCTFail("Hidden library must not import") }, onClose: close)) }
-                })
-                    .opacity(0).allowsHitTesting(false).accessibilityHidden(true)
+                }), visible: false, identifier: "workflow-retained-surface",
+                    fallbackSize: CGSize(width: 760, height: 500))
+                    .accessibilityHidden(true)
             }
             .onChange(of: chat.selectedSession?.configuration?.parameters["modelID"]?.string) { _, _ in }
         } else { content }
