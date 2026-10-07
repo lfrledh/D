@@ -2,17 +2,17 @@
 
 ## 当前唯一集中队列（2026-10-08，CHAT-PRODUCT-20261003）
 
-最新现场：本人fe0诊断拖动仍左侧退回；52ce修补隐藏Workflow原生接收区后24方法通过，普通App导航/缩放保留通过。摆放Finder前工具报告Mac再次锁屏，停止桌面操作；新包真实拖入尚未执行，不催办、不重复旧输入/语音/权限。
+最新现场：52ce左右两处真人实际松手、预览及冷开已通过；8cf原三项紧凑hosting和普通App阅读回归通过。没有新的必办本人事项。F26沿既有延期，不催凭据。
 
 | 事项 | 当前事实 | 最短接续与关闭条件 |
 |---|---|---|
-| H32：长单条Markdown阅读位置 | 9b6两个位置的可见链接取消不跳；1d5修内部位置，abd5修首次搜索对齐，最终普通App代表路径通过。原3项紧凑hosting底部留白仍超28点，是工程项，不是本人权限。 | Lead按已有失败几何继续定位；本人无需重复链接、滚动、输入或生成。不能以原生代表通过抵销3项失败。 |
-| H32：Finder文件拖入 | d1ab仅代表单落点预览/保存冷开通过；6fb、fe0左侧真实拒收。实际回调分界与隐藏Workflow原生区域边缘匹配，52ce改为原生隐藏；24方法及普通App导航通过，不代替Finder。 | 解锁后在52ce同一隔离项目核left.csv左侧、blank.csv右下空白；随后预览/保存冷开、草稿与原件保护。CSV不必弹确认框。证据RPosition的hidden-native-checkpoint.json；自有App已结束，Finder/已结束Terminal窗口待可控时关闭。没有新权限或模型事项。 |
+| H32：长单条Markdown阅读位置 | 已关闭本轮反例。8cf移除非空会话多余尾占位，原3失败保持28点标准通过；普通App上滚/Bottom、内部恢复、搜索及外链取消通过。 | 见RPosition/lead/compact-{tail-tests,native-result}；无需本人重复阅读、输入或生成。 |
+| H32：Finder文件拖入 | 已关闭左侧拒收反例。52ce本人先只悬停（不计通过），随后left.csv左侧与blank.csv右下实际松手均成功；Lead双预览、保存正常退出、冷开与原件/草稿保护通过。 | 见RPosition/lead/unlocked-drop-native-result.json。CSV无需确认框；外层输入托盘含16点padding，接收区略大于深色框；移出后加号短延迟仅留观察，未证实为刻意设计，不外推全部格式。8cf不改该路径，无需再拖。 |
 | H32：输入迟滞 | 本轮定位每次编辑重复查询声音约63ms，缓存后对应局部body约0.17–0.25ms；本人确认“现在差不多正常了”。偶发未确认字母消失后来未复现，本人说明其他软件亦偶有。 | 持续迟滞本轮收口；偶发组字只留观察，不加猜测补丁、不重测候选随动。没有新的确定反例前无需本人再输。 |
 | F31：英语识别与朗读 | 9230英语本人确认正确→审核采用未发草稿→冷重开、系统朗读听感通过；3cc默认声音别名解析修补后，代理实际Read→Pause→Resume→Stop通过。原失败和原声保留。 | 本人事项关闭，不把此次代理控制写作新的真人听感，也不追认旧失败根因。 |
 | F26：本人明确批准延期 | Brave/博查真实调用、凭据办理及完整联网验收退出本轮功能/视觉转段门槛；已有代码及未实调状态保留。 | 本轮不办理、不催、不注册/购买/索key、不新增provider或爬虫。 |
 
-历史RDesktop=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261007T104034Z-desktop-resume`，原生/工具/测试分层见`lead/desktop-native-result.json`，保护与最终SHA见`lead/desktop-resume-receipt.json`。候选代码abd5f67a，推荐包仍3cc71bee，main仍90819739；[试用指南](RELEASE_FREEZE_TRY.zh-CN.md)区分。Dev SSD选项与冷重开已由Lead完成，不需本人/GPU。自有D与Finder测试窗口已正常关闭；本轮查到前次遗留17446实际子进程并正常退出，不能沿用旧父进程回执称此前已全结束。Terminal UI被工具安全策略拒绝，未绕过；已完成启动器窗口可能仍在，可由本人日后关闭，不是继续工程的审批前提。
+最新证据与版本见[当前行动](CURRENT_ACTIONS.zh-CN.md)和[试用指南](RELEASE_FREEZE_TRY.zh-CN.md)。D与本轮Finder窗口已正常关闭；Terminal UI被工具安全策略拒绝，旧已结束启动器窗口可能仍在，未绕过也不称已清理。可日后手动关闭，不是工程审批前提。历史RDesktop的旧失败继续保留，本次以RPosition/lead/unlocked-closeout-receipt.json记录实际集成与保护。
 
 复用历史：RHumanNow=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261006T115611Z-human-queue` 的英语/听感；RNow=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261006T110535Z-unlocked-bottom` 的Bottom/搜索/记忆/MCP。旧失败、预算及原件保持，不刷新历史执行日期。详细功能状态只在唯一F表，不在本队列重复工程清单。
 

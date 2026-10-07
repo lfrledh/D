@@ -1,29 +1,22 @@
 # D 开发预览：本轮试用
 
-2026-10-08 · 完整聊天专题仍在连续收口，**尚未达到功能冻结**。main为90819739e99b366d7cdb2f549c129eea28728206（生产af0103b5）；下列为审计/继续验收候选，不能当成原生门槛全部通过的稳定版。唯一逐项状态见[聊天清单](CHAT_FEATURE_LEDGER.zh-CN.md)。
+2026-10-08 · CHAT-PRODUCT-20261003本轮功能门槛已收口，达到视觉转段门槛；F26真实搜索API/凭据按用户批准延期。尚非正式发行，未自动开始质量审计或UI改版。唯一逐项状态见[聊天清单](CHAT_FEATURE_LEDGER.zh-CN.md)。
 
 ## 唯一推荐启动入口（开发验收包）
 
-双击：
+双击原有入口：
 `/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261004T145523Z-continuous-closeout/delivery/启动聊天当前验收.command`
 
-入口原位保留，现在只指向 **D Chat Product 3cc71bee.app**：
-`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261006T130047Z-quality-transition/delivery/D Chat Product 3cc71bee.app`。
-实现/测试代码 **3cc71beecf13e70c7d6bce106172996c07daa210**；最终普通签名构建39.955秒成功。交付副本与实际受测构建包的可执行文件、调试库、Info.plist和CodeResources一致，签名复核通过，没有手补/重签。RQuality为上述run，证据 `lead/delivery-version.json`、`verified-source-final-build.json`；最终文档与远端SHA见 `lead/quality-transition-receipt.json`。
+现在只指向 **D Chat Product 8cf1b7dd.app**：
+`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261007T132148Z-drop-position/delivery/D Chat Product 8cf1b7dd.app`。
 
-本包减少每次编辑重复查询声音的负担，本人确认输入/删除基本正常。代理已实际操作：消息分叉、自定义选段指令＋PDF引用、资料库成果采用、思考/无正文分层、表格复制、外链确认、CSV/SVG预览和系统朗读暂停/继续/停止；正常关闭重开后草稿与附件保留。旧冷开Bottom/搜索、个人记忆/MCP、英语识别与听感证据按未变范围复用，新的5项滚动hosting已通过。
+实际受测生产代码 **8cf1b7dd46f6041dbcf1ac3db75b19839ae390c4**；普通签名构建27.966秒成功。复制前后可执行文件、调试库、Info.plist、CodeResources一致，签名验证通过，没有手补/重签。RPosition为上述run，见`lead/compact-app-version.json`、`compact-native-result.json`；最终仅文档版本及main/候选远端对应见`lead/unlocked-closeout-receipt.json`。不宣称在之后文档提交上重新跑过模型。
 
-**这是开发试用候选，尚未达到视觉转段或完整功能冻结。** 长单条Markdown在滚动/链接确认返回时有阅读位置跳动，两个局部实验未改善，已移除；Finder真实拖入尚缺有效操作证据。不要用此包处理唯一一份重要资料，继续使用下面的隔离小项目。旧包与失败证据保留，不混用启动入口。
+本包包含已收口的输入响应、长文阅读恢复/搜索、文件拖入修补与Dev SSD入口。52ce本人将left.csv拖到左侧文字区、blank.csv拖到右下空白区并实际松手，两处均成功；Lead双预览、保存退出、冷开和原件/草稿保护通过。8cf仅移除非空会话多余尾占位，6 XCTest＋4 Swift Testing通过（原3失败保持标准），同版普通App上滚/Bottom、内部位置恢复、首次搜索、可见链接取消和Undo通过。旧语音、模型、工具/恢复证据按未变路径复用，没有新一轮全模型生成。
 
-入口复用隔离偏好`BC96EF26-C157-4A48-84B4-A54785B1A42E`及已登记模型，已有D时拒绝双开，不替换普通D。最近原生续验时Mac再次锁屏；单落点路径误插反例已完成预览和保存冷开，但全输入区接收问题仍待新包复验，无新增授权、组字或试听。F26搜索实调/凭据已获准延期，未验不记通过。
+入口仍用隔离偏好`BC96EF26-C157-4A48-84B4-A54785B1A42E`，已有D时拒绝双开，不覆盖普通D。旧3cc/abd5/d1ab/6fb/fe0/52ce包及失败证据全部保留，已不是推荐入口；具体前后对照见[原任务记录](tasks/D-RELEASE-FREEZE-01.md)。不要同时打开旧测试版。
 
-本轮文件拖入定点修补包（不是替换唯一推荐入口）：代码 **d1ab5f71340bd4dcf764a80449e1d40be3306e05**，`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261007T121440Z-human-drop/gui/D Chat Drop d1ab5f71.app`。同目录`启动本轮文件拖入验收.command`为定点复验入口。本人Finder重拖、Lead附件预览/保存退出/同包冷重开已通过，原草稿和CSV保持、无自动发送；19项相关方法和普通签名构建另计。加号随落点变化仍只记观察。此包包含abd5阅读修补，原三项hosting余项不变，不能称功能冻结；本次测试D已正常退出。
-
-追加落点一致性测试包：`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261007T132148Z-drop-position/gui/D Chat Drop 6fb4204d.app`，代码 **6fb4204d6b151eb3135e651ac660b6847a444cb2**。同目录`启动文件落点验收.command`仅供此次left/right/blank三落点验收，20受控方法通过不代替真人结果。本人随后确认6fb左侧真实拒收，该包保留作失败对照；d1ab只代表历史单落点通过。
-
-历史失败对照：`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261007T132148Z-drop-position/gui/D Chat Drop fe0da792.app`；代码 **fe0da792b2c263ca2dea3f2c772ed6311503a811**。同目录`启动文件登记修补.command`，修正纯文本输入框未登记fileURL；22方法通过，普通构建/签名通过，本人随后确认左侧仍拒收。不要同时打开旧测试版。唯一推荐3cc不变。
-
-当前缺陷复验包：`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261007T132148Z-drop-position/gui/D Chat Drop 52ceab56.app`；代码 **52ceab561a32bba60941c0eca94ddf683605909f**。同目录`启动隐藏接收修补.command`只用于此次定点复验。新包真正隐藏未选中的Workflow原生接收区，保留原实例/画布状态；24方法通过，普通App往返和122%缩放保持通过。准备Finder时再次锁屏，**本包真实拖入未执行**；自有App已结束，不要与旧版同时打开。下次用Drop-position.dproject核左侧及右下空白，预期出现附件、草稿不变且不发送，CSV无需确认面板。唯一推荐3cc不变，不把此包提升为完整验收通过。
+CSV直接成为附件，无需确认框；输入托盘外侧16点padding也接收文件，故可比深色文本框略宽。移出后的加号短暂保留仅为用户观察，没有证据称是特意的延迟设计。成功应以松手后附件出现为准，未把悬停或加号本身当通过。
 
 ## 从保留的小项目继续
 
@@ -36,10 +29,7 @@
 5. 联网“搜索与工具”保留Brave/博查入口，但真实API和凭据本轮已批准延期，无需现在办理。未配置不会伪造结果；摘要不是已读取正文，采用正文后才交本地模型。
 6. 输入托盘“语音输入与系统朗读”手选普通话/英语。两种本地转写→审核→采用未发送草稿已有实际证据；英语本人确认及系统朗读听感已通过，本包补默认声音与暂停/继续/停止操作。无需重复录音或试听；旧失败记录保留，不自动转云。
 
-已验版本分开：推荐仍3cc71bee，保留其长文跳位已知限制。此前阅读定点审计包为 **abd5f67ad01b5afb30d45ce1445b5bb313567014**（包含本轮内部阅读点和显式搜索修补）：
-`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261007T104034Z-desktop-resume/gui/D Reading Settle abd5f67a.app`。
-
-它已在普通签名App实际通过Bottom→首次搜索标题、可见链接确认/取消、Section3会话往返及输入Undo；先前1d5的Section22/16内部位置、9b6的两个链接位置与Dev SSD选择/冷重开证据按未变范围复用。原3项紧凑hosting仍失败，Finder拖入仍缺有效命中，故**不替换唯一推荐启动器，不接纳main，不宣称转段**。RDesktop为上述run，`lead/settle-app-version.json`保存四关键文件/签名，`desktop-native-result.json`分层记录，`desktop-resume-receipt.json`记录最终仅文档/远端版本。无需本人现在试用多个包；旧候选/日志保留。
+本轮两个定点项目可继续查看：`run-20261007T132148Z-drop-position/gui/Drop-position.dproject`保留左右拖入附件；`run-20261007T104034Z-desktop-resume/gui/Reading-acceptance.dproject`保留24节长文（相对AgentTrials/D-RELEASE-FREEZE-01）。不需要重新运行模型或重复本人输入/试听。
 
 ## 使用已下载模型
 
@@ -55,7 +45,7 @@
 
 Dev现在可直接选择含来源sidecar的原目录，不必清理或另复制到“干净目录”。完整校验和实际推理是两个步骤；看到目录通过不代表所有能力已验证。
 
-Quick/Canvas选真实模型，高级参数选择**省内存（SSD分层加载，精度不变）**。Dev的该选项直到新9b6c982b候选才补通，推荐3cc包仍有旧入口限制；不要把后端实测写成旧包可以选择。常驻/分阶段保留；不自动量化、裁层或删条件。短起步配置可用：ACE6秒/50步/guidance7/seed7；Klein512²/4步/guidance1/seed42；Qwen关闭思考、输出上限256的简短请求。开发机短请求使用显式15GiB预算，不是产品上限或任意长输入保证。
+Quick/Canvas选真实模型，高级参数选择**省内存（SSD分层加载，精度不变）**。Dev的该选项已在9b6c982b补通，普通App选择与保存冷开证据保留，新推荐8cf包含该修补。常驻/分阶段保留；不自动量化、裁层或删条件。短起步配置可用：ACE6秒/50步/guidance7/seed7；Klein512²/4步/guidance1/seed42；Qwen关闭思考、输出上限256的简短请求。开发机短请求使用显式15GiB预算，不是产品上限或任意长输入保证。
 
 沿用前轮cd4cd4b的Qwen9四帧请求与Klein完整生成/有序参考实测；本轮为F16补两次已有Qwen Q4思考通道短请求，均按所设输出长度结束且没有final；不能把它当完整回答质量通过。其他模型没有重复生成。Dev50步、H3原始完整50步及LTX2.5原始30步的未变计算沿用R4结果，单次LTX约135–147分钟；不因慢而减少精度/层数。精确profile、已验条件及未验范围见[能力矩阵](RELEASE_MODEL_MATRIX.zh-CN.md)。H3既有执行包位于`Models/D-Video-Packs/H3-FL2VA-BF16`；LTX既有包位于`run-20261001T162316Z-r4/lead/ltx-production-prepare/prepared/ltx-2.5-bf16-9CB71D89-01ED-4227-9C35-E53AA16FB8CB`（相对AgentTrials/D-RELEASE-FREEZE-01）。Wan完整原仓服务已验，内嵌转换仍保持原件并独立发布，Wan仅T2V。无需重复准备已有有效包。
 
@@ -63,16 +53,16 @@ Quick/Canvas选真实模型，高级参数选择**省内存（SSD分层加载，
 
 ## 同树 Xcode Run
 
-打开当前候选工作树（52ceab56代码＋随后仅文档提交；与推荐3cc71bee包不同代码，含未接纳阅读候选，仅用于继续开发/验收）：
+打开与推荐包同生产代码的候选工作树（8cf1b7dd＋随后仅文档结案）：
 `/Volumes/CodexProjects/Codex/D-Worktrees/D-RELEASE-FREEZE-01/D.xcworkspace`
 
 选择 **D Nodes / My Mac / Debug**。本机忽略配置`Development/Development.local.xcconfig`使用既有签名身份，资源目录为：
 `/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261004T041401Z-chat-resume/delivery/resources-with-python`
 
-正常Xcode资源阶段嵌入现有引擎与ChatPython，无需手补App或重装模型。本轮同树D Nodes普通签名build通过，代理已在同代码App执行上述定点原生检查；没有让本人点击Run，未重跑模型。换机按[开发说明](../Development/README.md)准备资源。**main工作树仍为af生产基线**，不能用main Run冒称候选推荐包同代码。
+正常Xcode资源阶段嵌入现有引擎与ChatPython，无需手补App或重装模型。本轮同树D Nodes普通签名build通过，代理已在同代码App执行上述定点原生检查；没有让本人点击Run，未重跑模型。换机按[开发说明](../Development/README.md)准备资源。main正常接纳同一8cf生产代码及随后文档；main与候选精确SHA见本轮外部回执。构建入口仍推荐上述已核资源配置的同树workspace。
 
 ## 集中办理与交付边界
 
 此前已验的恢复、紧凑布局、真实重排、临时成果和工具取消等证据沿用。本次处理原集中队列，首次语音授权的工程崩溃已修补；语音实测、Bottom与其他原生操作的最新结果只见[当前行动](CURRENT_ACTIONS.zh-CN.md)及[唯一队列](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md)。搜索凭据/实调按本人决定延期；不重复旧授权和固定视频。
 
-这是可构建的试用候选与准确停点，**不是完整聊天验收通过、功能冻结或正式发行**。未完条目保留同号，不移至发布后；未强推、改许可证或发布Release。首次使用、无权重分发/依赖封装、升级恢复和渠道责任仍保留。
+本轮既定聊天代表验收已收口，可供用户审计并决定下一视觉阶段；F26仅按明确决议延期，未称真实联网通过。功能收口不等于正式发行：首次使用、无权重分发/依赖封装、升级恢复和渠道责任仍保留。没有强推、改许可证或发布Release。

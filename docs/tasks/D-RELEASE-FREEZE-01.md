@@ -1054,3 +1054,16 @@ RPosition见CURRENT_ACTIONS。旧实现坐标/选择范围1方法和viewport1方
 Lead复用既有ChatPaneHost为RetainedContentHost，以原生isHidden隐藏未选中Workflow，保留同实例、语言、视口与缩放，不改导入/Store/runtime/模型。临时限量诊断已移出生产，完整patch、实际trace与geometry保留。非实现者file_drop_boundary_review只读核验，无生产必修，建议强化接收器身份/登记已落实；不是独立原生测试。隐藏断言旧版先红1方法，修后24方法/4suite通过；补强后同1方法重跑通过，不加总。普通签名App对应固定52ce，4关键文件复制一致。证据lead/hidden-receiver-decision.json、hidden-{red,green,reviewed}-tests.*、hidden-app-version.json。
 
 普通App实际Quick/Workflow往返、100→122%缩放保持和全部会话/草稿不变通过；尚未进行新包Finder拖入，摆源文件时工具报告锁屏。自有PID39300身份核对后SIGTERM并确认结束，不算正常GUI退出；Finder/已结束Terminal窗口关闭未确认。恢复桌面后按原left/blank两落点→附件预览→保存冷开核对，不重复旧输入/模型。原CSV/旧项目及scheme差异、内容、索引和未暂存状态见hidden-final-protection.json；最终仅文档SHA与远端见hidden-closeout-receipt.json，不自引用提交。候选保留，main908与推荐3cc不变；原三项紧凑hosting独立保留，未功能冻结/视觉转段。无新Worker实现，Lead完整消耗和订阅费用unknown。
+
+
+### 2026-10-08 集中拖入通过与紧凑尾距收口
+
+继续原F01–F36，没有新增功能/模型/平台。起点f4895939cb3d344b1418a2115c168513efe56a3c；RPosition沿用，不另建清单。本人先只悬停，Lead见无附件而未计通过；补问后本人实际left.csv左侧/blank.csv右下松手均成功。52ce普通App两附件预览、保存正常退出、同包冷开及left再次预览通过；固定草稿、全部消息/尝试/其他会话完整保持，三份fixture哈希/大小/mtime及旧项目文件保持，无自动发送。human_drop_evidence_check只读核对并要求补旧项目根路径/摘要索引，已补证据；不是独立原生测试。`lead/unlocked-drop-native-result.json`关联全部AX/截图和保护。
+
+原三项compact工程余项先在未修补实现执行一项：临时测试几何对照显示cached/native gap同为28.5，文档余8.5合计37，符合16栈间距+1占位+20padding。未删28断言、未改原等待或历史保护。Lead只把未被非空会话用作滚动目标的fallback行移入空态；最终代码 **8cf1b7dd46f6041dbcf1ac3db75b19839ae390c4**。临时probe已移出源码，原测试字节保持；原红在`compact-edge-test.*`，修后6 XCTest＋4 Swift Testing同次通过在`compact-tail-tests.*`，三项尾距约20.18。file_drop_boundary_review非实现者定点审阅未见必修，未独立执行。不是证明Apple内部唯一机制，也不是新滚动框架。
+
+同8cf普通D Nodes签名build27.966秒；交付副本4关键文件匹配，签名验证通过。普通App实际滚离底部→Bottom末条/Completed；Section23切空会话再返回滚动值不变；首次搜索到标题；可见外链确认/取消滚动值不变；输入x/Undo、保存正常退出。原三会话所有字段/选择不变；project.json/quick-creation.json/quick-chat.json正常保存改变，不能称整包字节不变。`compact-native-result.json`、`compact-app-version.json`。首次连接工具超时、GoTo批量动作未命中后改用实际字段，不改变产品；无重复面板遗留。52ce→8cf唯一生产差异是尾占位，原真人拖入证据复用并核隐藏宿主相关方法，不再让本人重复。
+
+native_files_review只读核本轮结果与已有唯一F表，未发现其他具体未闭功能门槛；未重复老审阅或全库/模型测试。F26真实API/凭据仍批准延期，其余本轮代表功能门槛已收口，达到视觉转段检查点。main从90819739e99b366d7cdb2f549c129eea28728206正常快进接纳受测代码及其后仅文档；最终SHA/远端写`lead/unlocked-closeout-receipt.json`，不自引用提交。唯一原启动器指向D Chat Product 8cf1b7dd.app，同树D.xcworkspace/D Nodes/My Mac/Debug。全局质量审计与UI v0.2仍是后续阶段，不自动实施，不发布Release。
+
+保护/恢复：源01758b8及个人scheme内容/差异/索引/未暂存状态保持；模型、普通D、旧候选及证据不改。所有本轮D正常退出，Finder夹具窗口关闭；Terminal UI受工具策略拒绝，旧已结束启动器窗口关闭未确认，不绕过。没有新增本人必办事项。输入托盘含外侧padding的接收面积可大于深色框；加号退出短延迟仅留观察，不称有意计时或所有格式已验。Lead实现/原生核验，非实现者只读；命令墙钟留JSON，完整Lead归因和订阅成本unknown，不重算历史。
