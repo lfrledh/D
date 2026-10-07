@@ -176,7 +176,20 @@ struct TextSourcesQuestionEditor: NSViewRepresentable {
 /// can see them. Intercept only file URLs at the native destination; do not turn
 /// ordinary pasted path strings into file access or change text dragging.
 @MainActor final class FileDropTextView: NSTextView {
-    var onFileDrop: (([URL]) -> Void)?
+    var onFileDrop: (([URL]) -> Void)? {
+        didSet { updateDragTypeRegistration() }
+    }
+
+    override func updateDragTypeRegistration() {
+        super.updateDragTypeRegistration()
+        // NSTextView unregisters drag types for plain-text editors. Our file
+        // attachment callback is independent of rich-text insertion. Restore
+        // only file URLs after AppKit refreshes registration (e.g. editability).
+        // The native refresh can leave this subclass's extra registration in
+        // place; explicitly clear it before recomputing plain-text acceptance.
+        if !isRichText { unregisterDraggedTypes() }
+        if isEditable, onFileDrop != nil { registerForDraggedTypes([.fileURL]) }
+    }
 
     override var acceptableDragTypes: [NSPasteboard.PasteboardType] {
         let types = super.acceptableDragTypes

@@ -7,6 +7,29 @@ import Testing
 /// not replace Finder hit-testing or sandbox import/save/reopen acceptance.
 @Suite("Chat file drop boundary", .serialized) @MainActor
 struct ChatFileDropTests {
+    @Test func plainTextFileRegistrationSurvivesUpdatesAndFollowsBindingLifetime() {
+        let view = FileDropTextView(), coordinator = TextSourcesQuestionEditor.Coordinator()
+        view.isRichText = false
+        view.delegate = coordinator
+        view.onFileDrop = { _ in }
+        for _ in 0..<3 {
+            coordinator.update(view, value: "保留草稿", isEditable: true, onEdit: { _ in })
+            #expect(view.registeredDraggedTypes == [.fileURL])
+        }
+        coordinator.update(view, value: "保留草稿", isEditable: false, onEdit: { _ in })
+        #expect(view.registeredDraggedTypes.isEmpty)
+        coordinator.update(view, value: "保留草稿", isEditable: true, onEdit: { _ in })
+        #expect(view.registeredDraggedTypes == [.fileURL])
+        view.onFileDrop = nil
+        #expect(view.registeredDraggedTypes.isEmpty)
+        view.onFileDrop = { _ in }
+        #expect(view.registeredDraggedTypes == [.fileURL])
+        let scroll = NSScrollView(); scroll.documentView = view
+        TextSourcesQuestionEditor.dismantleNSView(scroll, coordinator: coordinator)
+        #expect(view.registeredDraggedTypes.isEmpty)
+        #expect(!view.isRichText && view.string == "保留草稿")
+    }
+
     @Test func fileCopyFeedbackAndAcceptanceIgnoreCaretAndTextSelection() throws {
         let view = FileDropTextView(), coordinator = TextSourcesQuestionEditor.Coordinator()
         view.delegate = coordinator

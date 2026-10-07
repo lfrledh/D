@@ -82,6 +82,38 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
 
 @Suite("Chat presentation boundaries")
 @MainActor struct ChatPresentationTests {
+    @Test func composerFileDropHitRegionInCompleteHost() async throws {
+        var session = ChatSession(title: "Drop geometry")
+        session.draft = "落点测试：左侧区域｜右侧区域。保留这段草稿，不发送。"
+        var state = ChatState(); state.sessions = [session]; state.selectedSessionID = session.id
+        let (chat, model, store, root) = try await fixture(state, withWorkflowOwner: true)
+        for hiddenWorkflow in [false, true] {
+            let content = ChatWorkbenchView(chat: chat, model: model, onChooseModel: {},
+                onSavedAsset: { _ in }, onAssetsChanged: {})
+            let host = NSHostingView(rootView: ChatBottomCompositionFixture(chat: chat, model: model,
+                content: AnyView(content), includesHiddenWorkflow: hiddenWorkflow, libraryStore: nil))
+            host.frame = .init(x: 0, y: 0, width: 1057, height: 520)
+            let window = NSWindow(contentRect: host.frame, styleMask: [.titled], backing: .buffered, defer: false)
+            window.isReleasedWhenClosed = false; window.contentView = host; window.orderFront(nil)
+            defer { window.close() }
+            host.layoutSubtreeIfNeeded()
+            try await Task.sleep(for: .milliseconds(150))
+            let editor = try #require(descendants(host).compactMap { $0 as? FileDropTextView }.first)
+            let clip = try #require(editor.enclosingScrollView?.contentView)
+            #expect(editor.registeredDraggedTypes.contains(.fileURL), "Hit receiver must actually register file URLs; direct method calls bypass this prerequisite")
+            for x in [CGFloat(2), clip.bounds.width * 0.25, clip.bounds.width * 0.5, clip.bounds.width - 2] {
+                let local = NSPoint(x: clip.bounds.minX + x, y: clip.bounds.minY + 12)
+                let inParent = clip.convert(local, to: host.superview)
+                let hit = host.hitTest(inParent)
+                #expect(hit === editor, "Visible composer point must hit its file receiver, hiddenWorkflow=\(hiddenWorkflow), x=\(x)")
+            }
+            #expect(chat.selectedSession?.draft == session.draft)
+            #expect(chat.selectedSession?.attachments.isEmpty == true && chat.selectedSession?.messages.isEmpty == true)
+        }
+        _ = await model.projectSession.requestClose()
+        try await close(store, root: root)
+    }
+
     @Test func libraryAttachmentCopiesFromExplicitInstanceWithoutSending() async throws {
         var session = ChatSession(title: "Destination"); session.draft = "保留草稿"
         var state = ChatState(); state.sessions = [session]; state.selectedSessionID = session.id
