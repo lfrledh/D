@@ -13,11 +13,15 @@ struct TextSourcesQuestionEditor: NSViewRepresentable {
     var pointSize: CGFloat? = nil
     var sendsOnReturn = false
     var onSubmit: (() -> Void)? = nil
+    var onFileDrop: (([URL]) -> Void)? = nil
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
     func makeNSView(context: Context) -> NSScrollView {
-        let editor = NSTextView()
+        // Only attachment composers opt in. Other question/system editors keep
+        // NSTextView's normal text/paste/drag behavior.
+        let editor: NSTextView = onFileDrop == nil ? NSTextView() : FileDropTextView()
+        (editor as? FileDropTextView)?.onFileDrop = onFileDrop
         editor.isRichText = false
         editor.allowsUndo = true
         editor.isSelectable = true
@@ -53,6 +57,7 @@ struct TextSourcesQuestionEditor: NSViewRepresentable {
 
     func updateNSView(_ scroll: NSScrollView, context: Context) {
         guard let editor = scroll.documentView as? NSTextView else { return }
+        (editor as? FileDropTextView)?.onFileDrop = onFileDrop
         if editor.accessibilityLabel() != accessibilityLabel { editor.setAccessibilityLabel(accessibilityLabel) }
         context.coordinator.update(editor, value: value, isEditable: isEditable, onEdit: onEdit,
             pointSize: pointSize, sendsOnReturn: sendsOnReturn, onSubmit: onSubmit)
@@ -61,6 +66,7 @@ struct TextSourcesQuestionEditor: NSViewRepresentable {
     static func dismantleNSView(_ scroll: NSScrollView, coordinator: Coordinator) {
         // A removed document must not receive a late input-method callback.
         (scroll.documentView as? NSTextView)?.delegate = nil
+        (scroll.documentView as? FileDropTextView)?.onFileDrop = nil
         coordinator.typingUndo.removeAllActions()
         coordinator.onSubmit = nil
         coordinator.onEdit = nil
@@ -164,4 +170,44 @@ struct TextSourcesQuestionEditor: NSViewRepresentable {
         }
     }
 
+}
+
+/// NSTextView consumes Finder drops before a surrounding SwiftUI dropDestination
+/// can see them. Intercept only file URLs at the native destination; do not turn
+/// ordinary pasted path strings into file access or change text dragging.
+@MainActor final class FileDropTextView: NSTextView {
+    var onFileDrop: (([URL]) -> Void)?
+
+    override var acceptableDragTypes: [NSPasteboard.PasteboardType] {
+        let types = super.acceptableDragTypes
+        return types.contains(.fileURL) ? types : types + [.fileURL]
+    }
+
+    private func files(_ pasteboard: NSPasteboard) -> [URL] {
+        (pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL]) ?? []
+    }
+
+    private func canReceive(_ sender: NSDraggingInfo) -> Bool {
+        isEditable && !hasMarkedText() && onFileDrop != nil && delegate != nil &&
+            sender.draggingSourceOperationMask.contains(.copy)
+    }
+
+    override func dragOperation(for draggingInfo: NSDraggingInfo,
+                                type: NSPasteboard.PasteboardType) -> NSDragOperation {
+        guard !files(draggingInfo.draggingPasteboard).isEmpty else {
+            return super.dragOperation(for: draggingInfo, type: type)
+        }
+        return canReceive(draggingInfo) ? .copy : []
+    }
+
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        let urls = files(sender.draggingPasteboard)
+        guard !urls.isEmpty else { return super.performDragOperation(sender) }
+        // Bypass native insertion only for file drops, before it can replace
+        // the selection or confirm marked text. Import errors remain visible
+        // through the composer's existing import path.
+        guard canReceive(sender), let onFileDrop else { return false }
+        onFileDrop(urls)
+        return true
+    }
 }

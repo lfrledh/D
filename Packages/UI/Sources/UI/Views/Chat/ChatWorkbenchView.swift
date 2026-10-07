@@ -1687,7 +1687,11 @@ struct ChatWorkbenchView: View {
                 onEdit: { value in perform(sessionID: session.id) { try chat.updateDraft(value, sessionID: session.id) } },
                 pointSize: CGFloat(model.chatDisplaySettings.preferences.textPointSize),
                 sendsOnReturn: model.chatDisplaySettings.preferences.sendShortcut == .return,
-                onSubmit: { submitFromComposer(session.id) })
+                onSubmit: { submitFromComposer(session.id) },
+                onFileDrop: { urls in
+                    let owner = session.id
+                    Task { await importURLs(urls, sessionID: owner) }
+                })
                 .id(session.id.uuidString + ":draft")
                 .frame(minHeight: 80, idealHeight: 110)
             ChatSpeechPanel(chat: chat, project: model.projectSession, sessionID: session.id,
