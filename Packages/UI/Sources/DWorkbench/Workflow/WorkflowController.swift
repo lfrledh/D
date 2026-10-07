@@ -468,6 +468,20 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
             else { g.layout.append(.init(nodeID: id, x: x, y: y)) }
         }, changesConfiguration: false)
     }
+    /// One layout gesture creates one undo entry; request revisions and outputs stay unchanged.
+    public func moveNodes(_ positions: [WorkflowLayout], target: WorkflowCanvasInsertionTarget) {
+        guard isCurrent(target), let graph, !positions.isEmpty,
+              Set(positions.map(\.nodeID)).count == positions.count,
+              positions.allSatisfy({ $0.x.isFinite && $0.y.isFinite }) else { return }
+        let ids = Set(graph.nodes.map(\.id))
+        guard positions.allSatisfy({ ids.contains($0.nodeID) }) else { return }
+        edit({ g in
+            for position in positions {
+                if let index = g.layout.firstIndex(where: { $0.nodeID == position.nodeID }) { g.layout[index] = position }
+                else { g.layout.append(position) }
+            }
+        }, changesConfiguration: false)
+    }
     public func modelSelectionTarget() -> WorkflowModelSelectionTarget? {
         guard !isRunning, !closed, !closing, let graph, let node = selectedNode,
               let kind = registry.operation(node.operationID)?.definition.modelKind else { return nil }
