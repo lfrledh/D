@@ -144,6 +144,22 @@ struct WorkflowCanvasRefinementTests {
     }
 
     @Test
+    func dragUsesActualFitZoomAndRejectsInvalidPositions() {
+        let original = CGPoint(x: 20, y: 30)
+        let translation = CGSize(width: 10, height: -5)
+        #expect(WorkflowCanvasDragGeometry.rawPosition(
+            original: original, screenTranslation: translation, zoom: 0.005)
+            == CGPoint(x: 2_020, y: -970))
+        for zoom in [CGFloat.zero, .nan, .infinity] {
+            #expect(WorkflowCanvasDragGeometry.rawPosition(
+                original: original, screenTranslation: translation, zoom: zoom) == original)
+        }
+        #expect(WorkflowCanvasDragGeometry.rawPosition(
+            original: original, screenTranslation: CGSize(width: .infinity, height: 0),
+            zoom: 0.005) == original)
+    }
+
+    @Test
     func marqueeUsesDisplayedGraphCoordinatesAndAddsShiftBaseline() {
         let a = WorkflowNode(operationID: "d.text.input", title: "A")
         let b = WorkflowNode(operationID: "d.text.input", title: "B")
