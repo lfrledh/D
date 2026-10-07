@@ -4,7 +4,7 @@
 
 ## 当前授权：完整文字聊天专题 CHAT-PRODUCT-20261003
 
-**持续工作条件（2026-10-07，最新指令）**：本人现可操作Mac，已做Finder拖入对照并确认原生缺陷；Lead已局部修补并准备同一动作复验，不重办旧输入/语音/权限。若再次锁屏只停对应桌面操作。旧输入、英语/朗读及未变模型证据复用，F26实调/凭据继续批准延期。仍为F01–F36；UI v0.2只归档和接线准备，不实施视觉或全局重构。
+**持续工作条件（2026-10-07，最新指令）**：本人现可操作Mac；Finder拖入反例已局部修补，本人重拖成功，Lead已完成预览和退出冷重开保护核对，本次无新增必办本人项。不重办旧输入/语音/权限。若再次锁屏只停对应桌面操作。旧输入、英语/朗读及未变模型证据复用，F26实调/凭据继续批准延期。仍为F01–F36；UI v0.2只归档和接线准备，不实施视觉或全局重构。
 
 用户已批准 F01–F36、S00–S06 同一批实施。 2026-10-03再次授权连续续作：先用已有采样与可控流修候选菜单/交互迟滞，将停止固定在输入区主操作；允许S00/S01隔离组合验证，不等待旧布局全部修好。按本清单完成S02–S06（含显式采用部分回答继续），可靠切片正常接纳main后继续，不以阶段回执终止整项。需求冻结，不新增功能/模型/平台；Liquid Glass只沿用系统控件与语义层级，不全面视觉改版。唯一功能状态见 [聊天清单](CHAT_FEATURE_LEDGER.zh-CN.md)。先 S00 长流/停止、正常项目包选择和新候选/旧参数重现，再 S01 布局、S02 编辑与上下文、S03 资料/记忆/备份、S04 联网工具、S05 受限代码/MCP/成果/语音、S06 组合验收。可靠切片通过普通 App 门槛后正常接纳 main，不以整个专题完成为前提；不硬合失败长流。
 
@@ -18,8 +18,9 @@ Lead 持有共享 Runtime/WorkflowServices/ChatController/Store；文件面板�
 
 - 起点`b5fee359cd7c344b901b26a01dd6025b3b1d912a`；新代码`d1ab5f71340bd4dcf764a80449e1d40be3306e05`，main仍`90819739e99b366d7cdb2f549c129eea28728206`。RDrop=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261007T121440Z-human-drop`。真人在abd5输入框松开numbers.csv后，草稿出现完整路径、附件为零；绿色加号短现不等于导入成功。失败AX/截图及项目快照已保存，不再仅归为工具命中未知。
 - 最小修补：仅聊天composer启用NSTextView文件拖放子类，按AppKit的dragOperation/perform钩子将真正file URL交现有importURLs；普通文字拖放/粘贴仍走原生路径，文件不插正文，marked/只读/拆除后不接收，不换输入系统或改Store/模型。Lead实现，非实现者只读复核。
-- 验证：19方法/3suite通过，包括文件完整destination方法链、普通文字及路径/URL字符串与原生控件对照、组字/Undo及既有显示保护。首次测试stub编译和allowsUndo夹具缺失分别留证，修正夹具后重跑；不是用服务检查冒充跨窗操作。普通签名App构建与四关键文件/签名核对通过，App `RDrop/gui/D Chat Drop d1ab5f71.app`；真实修后Finder拖入、预览/保存冷开**待当前现场完成**。不运行模型。
-- 失败草稿留在任务副本31890403会话；修后使用同项目9C77F56E会话及固定草稿，不覆盖旧样本。`lead/human-drop-failure.json`、`file-drop-code-review.json`、`file-drop-final-tests.json`、`file-drop-app-version.json`、`fixed-before-human.json`。原三项紧凑hosting仍是独立工程余项，未修改或重跑，不因此宣称转段。推荐启动器仍3cc；本轮仅定点修补测试包。
+- 验证：19方法/3suite通过，包括文件完整destination方法链、普通文字及路径/URL字符串与原生控件对照、组字/Undo及既有显示保护。首次测试stub编译和allowsUndo夹具缺失分别留证，修正夹具后重跑；不是用服务检查冒充跨窗操作。普通签名App构建与四关键文件/签名核对通过，App `RDrop/gui/D Chat Drop d1ab5f71.app`。本人真实重拖后出现numbers.csv附件；Lead预览34字节原文、保存退出、同包冷开同项目再次预览通过。固定草稿原样、全部会话messages/attempts/selectedLeafID不变、无自动发送。绿色加号随光标左右落点变化只记录观察，未验证所有位置。不运行模型。
+- 失败草稿留在任务副本31890403会话；修后使用同项目9C77F56E会话，不覆盖旧样本。原项目文件、CSV内容/大小/mtime、scheme完整差异/索引/未暂存状态不变；新增唯一附件资产摘要与CSV一致。直接后验见`lead/fixed-drop-native-result.json`及`gui/fixed-{human-drop,preview,reopen,reopen-preview}.*`；原失败/测试/构建索引保持。自有D两次正常退出、Finder验收窗关闭；Terminal已结束的启动器窗口关闭状态未确认，不绕过先前工具拒绝。
+- 精确接续：F19本次Finder→聊天附件→预览→保存冷开代表门槛通过；原三项紧凑hosting仍是独立工程余项，未修改或重跑，下一步只按已有几何证据定位，不改阈值、不重办本人项。推荐启动器仍3cc，本轮定点包代码d1ab；最终仅文档提交/远端见`lead/human-drop-receipt.json`。未接纳main，未宣称视觉转段或完整功能冻结。
 
 ### 历史：解锁后的阅读与拖放验收（2026-10-07）
 

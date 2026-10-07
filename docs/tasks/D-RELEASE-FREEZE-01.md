@@ -1026,4 +1026,8 @@ RDrop=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-0
 
 Lead按本机NSTextView.h推荐dragOperation钩子及perform接收阶段，只给composer增加可选onFileDrop；真实file URL进入既有importURLs，普通文字/paste照旧，不建另一导入器、不解析路径字符串、不动Store/模型。只读非实现者file_drop_boundary_review两次复核，补齐原生方法全生命周期及普通文字对照；并未代跑测试或验收。19方法/3suite实际通过；早先stub编译及undo测试夹具失败保留，生产allowsUndo一直为true。普通D Nodes构建、复制关键摘要及codesign通过，`file-drop-code-review.json`、`file-drop-final-tests.*`、`file-drop-app-version.json`定位精确版本。
 
-当前正在同一普通沙盒修补版等真人相同拖入；旧失败草稿保留，新用9C77F56E空会话的固定草稿作保护对照。随后只验附件预览、保存冷开、原件不变及无自动发送；没有证据前不关闭F19。三项紧凑hosting是已有独立工程余项，不重测旧本人/模型、不改阈值、不宣称转段；F26继续批准延期。最终结果/进程/仅文档SHA写外部回执，不自引用提交。
+本人同包重拖后确认UI出现附件；同时报告光标右侧出现加号、左侧不变，仅保留反馈差异观察，不声称所有落点已验。Lead直接核对numbers.csv附件及34字节内容、固定草稿，保存正常退出PID32734；同启动器冷开PID32976、打开同一项目，附件/草稿保持，再次预览通过，正常退出。全部会话完整messages/attempts/selectedLeafID不变，原会话与旧失败会话全部字段不变，项目无新job；新增唯一asset文件摘要等于原CSV。原项目、CSV内容/大小/mtime与个人scheme内容/完整diff/index/未暂存状态均保持。`lead/fixed-drop-native-result.json`及`gui/fixed-{human-drop,preview,reopen,reopen-preview}.*`，与此前方法测试分层记录。
+
+非实现者human_drop_evidence_check只读交叉核对前后项目/CSV与四张截图及五文档差分，未发现矛盾；未另行执行GUI或测试。完整冷开AX与截图是直接依据，其他AX可为无变化增量，不能当完整树。
+
+F19本次原生代表门槛关闭；三项紧凑hosting仍是已有独立工程余项，不重测旧本人/模型、不改阈值、不宣称转段；F26继续批准延期。Finder验收窗口已关闭、pgrep D为空；Terminal已完成启动器窗口关闭状态未确认，先前工具拒绝未绕过。候选代码d1ab不变；此前5935ecd4及本次结案仅文档，最终远端SHA在`lead/human-drop-receipt.json`，不自引用提交。main908不变、推荐3cc不变，无新增本人必办事项。
