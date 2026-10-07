@@ -1005,3 +1005,16 @@ align_layout_diagnosis为只读非实现者，先指出临时根入口，再核�
 - D归档用户[UI v0.2](../D_Quick_Generation_UI_Design_Decisions_v0.2_2026-10-07.md)，字节摘要与附件一致；来源文件自带研究陈述不作为本轮独立网页验证。[九模型能力/后端/节点/Quick及区域接线映射](../UI_CAPABILITY_WIRING.zh-CN.md)是人工派生索引，不是可执行schema。覆盖真实字段/默认/单位/条件、四种操作对象与控制器；只准备后续UI，不新建注册器、不实施视觉、不新增冻结门槛。
 - 恢复点：当前Xcode构建9b6；唯一推荐启动器仍3cc，main不变。最终仅文档提交和推送SHA写外部回执，不反复自引用。旧源scheme保持原内容/摘要及未暂存状态。本人条件改变后，Lead用现有40节项目验证可见链接确认/取消及Reader回归；先建立Finder真实跨窗命中再验预览/保存重开/原件和不自动发送。原集中H32队列承载操作，不新增本人清单；本轮所有自有命令进程结束，不推断旧Finder/Terminal窗口已关闭。
 - 成本：CPU/构建墙钟按各命令json保存；未重算历史token。Lead完整token/订阅费用与隐藏服务端模型解析unknown；只读协作不是写隔离或经济性试验。
+
+
+### 2026-10-07 解锁后代理原生续验（不重置专题或失败预算）
+
+RDesktop=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261007T104034Z-desktop-resume`。起点90bb9303883f3fda6c0608fb6116a18f8958b813，最终生产/普通App代码`abd5f67ad01b5afb30d45ce1445b5bb313567014`；main90819739保持。最新本人已解锁但不能操作，未请求任何新真人动作。实际代码仅ChatWorkbenchView与ChatPresentationTests，Lead实施，native_files_review定点只读审阅，ui_capability_mapping核三项失败几何；不是独立模型原生验收。
+
+- 9b6原候选：两个可见链接确认/取消、普通滚轮停止、Bottom通过；切会话却丢长消息内部位置。1d5补导航时才捕获的临时readingPoint、消息/leaf/revision/字节计数门禁及弱marker，不持续绑定滚动、不写项目schema；Section22/16两处实际往返通过。旧文档称40节，实际保存原件24节，此处校正本轮样本事实。
+- 1d5搜索反例到Section16/17；854测量边缘首次到表格、同命中第二次才到标题，指向大跳后的布局时序而非固定marker错位。abd5在同ticket内最多6次20ms实际边缘/尺寸采样，连续稳定才认对齐；用户滚动/新导航取消旧动作，未收敛保留可选trace，不无限重试。审阅补nil采样清previous。最终普通App第一次点击即到Assistant/标题/Apple链接，取消后不跳，Section3往返及x/Undo通过；未证明Apple内部唯一根因。
+- 新几何1方法通过，含独立clip500/1200、后续marker移100→clip180、错会话/reflow/零几何；版本值检查1方法通过。最后nil清理是测试后审阅小改，几何方法实现未变，最终普通构建/原生对应abd5。原5hosting本轮2过3败（28.31–28.54>28），600ms后加稳定采样仍失败，不round/放宽/删除断言。无效hosting按钮驱动未切会话，失败日志和外部patch保留，不计通过。各命令/结果独立，不能累加成全绿。
+- Finder源绑定和目标绑定尝试没有可靠接收命中；后者windowNotFoundAtPosition，不作D拒收或已通过。未用选择器/粘贴替代；最短一次本人拖入仅留H32日后办理。Dev SSD选项与冷重开已验，不重跑GPU。没有新视觉/架构/模型/凭据工作，F26延期。
+- 原18文件、原会话每字段、CSV摘要/大小/mtime、旧源scheme完整diff/摘要/index/未暂存保持。任务副本只新增两个空会话及Dev草稿选择。自有D/测试/构建结束，Finder关闭；工具拒绝Terminal UI，未绕过，不能声称那些已结束启动器窗口已关闭。旧17446实际子进程本轮正常退出，修正历史父进程回执不足。
+
+恢复点：`lead/desktop-native-result.json`是本轮证据索引，`final-protection.json`是保护，`settle-app-version.json`是App身份，最终仅文档和远端写`desktop-resume-receipt.json`。候选推送供审计，唯一推荐3cc不变，当前Xcode为abd5，二者不能混称同版。尚余三项紧凑hosting及真实Finder拖入门槛，未功能冻结/视觉转段；不启动UI改版。下一步按既有失败定位工程项，不要求本人重复旧输入/语音/模型。Lead完整用量/订阅成本unknown，不重算历史。

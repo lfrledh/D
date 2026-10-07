@@ -15,7 +15,7 @@
 
 **这是开发试用候选，尚未达到视觉转段或完整功能冻结。** 长单条Markdown在滚动/链接确认返回时有阅读位置跳动，两个局部实验未改善，已移除；Finder真实拖入尚缺有效操作证据。不要用此包处理唯一一份重要资料，继续使用下面的隔离小项目。旧包与失败证据保留，不混用启动入口。
 
-入口复用隔离偏好`BC96EF26-C157-4A48-84B4-A54785B1A42E`及已登记模型，已有D时拒绝双开，不替换普通D。本人最新条件为不能解锁或操作；本轮未探测桌面、未启动App，代理原生验收暂停，现在无需新增授权、输入或试听。F26搜索实调/凭据已获准延期，未验不记通过。
+入口复用隔离偏好`BC96EF26-C157-4A48-84B4-A54785B1A42E`及已登记模型，已有D时拒绝双开，不替换普通D。本人最新已解锁但不能操作；代理已完成下述阅读检查，当前无需新增授权、输入或试听。F26搜索实调/凭据已获准延期，未验不记通过。
 
 ## 从保留的小项目继续
 
@@ -28,11 +28,10 @@
 5. 联网“搜索与工具”保留Brave/博查入口，但真实API和凭据本轮已批准延期，无需现在办理。未配置不会伪造结果；摘要不是已读取正文，采用正文后才交本地模型。
 6. 输入托盘“语音输入与系统朗读”手选普通话/英语。两种本地转写→审核→采用未发送草稿已有实际证据；英语本人确认及系统朗读听感已通过，本包补默认声音与暂停/继续/停止操作。无需重复录音或试听；旧失败记录保留，不自动转云。
 
-已验版本分开：推荐仍3cc71bee；9230的未变Bottom/搜索/恢复与本人英语证据复用。旧阅读候选2cd9a588dd6d2c6a1f567019222bf3290d847c17仍保留。当前源码/新审计包为 **9b6c982b8c7188164279abc6760fef6f7a97c376**，含同一未验阅读修补及Dev既有SSD入口接通；后者CPU控制器请求/Store重开已验，未操作原生选项。**与推荐包不同代码**，不替换唯一启动器。main仍90819739（af生产基线）。
+已验版本分开：推荐仍3cc71bee，保留其长文跳位已知限制。当前代码/新的定点审计包为 **abd5f67ad01b5afb30d45ce1445b5bb313567014**（包含本轮内部阅读点和显式搜索修补）：
+`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261007T104034Z-desktop-resume/gui/D Reading Settle abd5f67a.app`。
 
-新审计包仅用于恢复桌面后的定点验收，本轮没有启动：
-`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261007T061930Z-no-desktop-ui-prep/delivery/D Chat Candidate 9b6c982b.app`。
-普通签名构建33.770秒成功，副本四关键文件与构建包相同、codesign验证通过，无手补/重签。该run的`lead/candidate-version.json`记录代码/包身份，`lead/no-desktop-ui-prep-receipt.json`记录最终仅文档提交和远端。编译/签名不是GUI通过；前次阅读与拖入失败不删除。
+它已在普通签名App实际通过Bottom→首次搜索标题、可见链接确认/取消、Section3会话往返及输入Undo；先前1d5的Section22/16内部位置、9b6的两个链接位置与Dev SSD选择/冷重开证据按未变范围复用。原3项紧凑hosting仍失败，Finder拖入仍缺有效命中，故**不替换唯一推荐启动器，不接纳main，不宣称转段**。RDesktop为上述run，`lead/settle-app-version.json`保存四关键文件/签名，`desktop-native-result.json`分层记录，`desktop-resume-receipt.json`记录最终仅文档/远端版本。无需本人现在试用多个包；旧候选/日志保留。
 
 ## 使用已下载模型
 
@@ -56,13 +55,13 @@ Quick/Canvas选真实模型，高级参数选择**省内存（SSD分层加载，
 
 ## 同树 Xcode Run
 
-打开当前候选工作树（9b6c982b代码＋随后仅文档提交；与推荐3cc71bee包不同代码，含未接纳阅读候选，仅用于继续开发/验收）：
+打开当前候选工作树（abd5f67a代码＋随后仅文档提交；与推荐3cc71bee包不同代码，含未接纳阅读候选，仅用于继续开发/验收）：
 `/Volumes/CodexProjects/Codex/D-Worktrees/D-RELEASE-FREEZE-01/D.xcworkspace`
 
 选择 **D Nodes / My Mac / Debug**。本机忽略配置`Development/Development.local.xcconfig`使用既有签名身份，资源目录为：
 `/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261004T041401Z-chat-resume/delivery/resources-with-python`
 
-正常Xcode资源阶段嵌入现有引擎与ChatPython，无需手补App或重装模型。本轮同树D Nodes普通签名build通过；只执行CPU路由测试，没有启动本版App或让本人点击Run。换机按[开发说明](../Development/README.md)准备资源。**main工作树仍为af生产基线**，不能用main Run冒称候选推荐包同代码。
+正常Xcode资源阶段嵌入现有引擎与ChatPython，无需手补App或重装模型。本轮同树D Nodes普通签名build通过，代理已在同代码App执行上述定点原生检查；没有让本人点击Run，未重跑模型。换机按[开发说明](../Development/README.md)准备资源。**main工作树仍为af生产基线**，不能用main Run冒称候选推荐包同代码。
 
 ## 集中办理与交付边界
 
