@@ -921,8 +921,10 @@ struct ChatWorkbenchView: View {
                         }
                         if session.selectedLeafID == nil {
                             Text(label("noMessages", "暂无消息")) .foregroundStyle(.secondary)
+                            // Only empty conversations use this fallback target.
+                            // With messages, an extra row adds trailing stack spacing.
+                            Color.clear.frame(height: 1).id("chat-transcript-bottom")
                         }
-                        Color.clear.frame(height: 1).id("chat-transcript-bottom")
                     }.scrollTargetLayout()
                         .frame(maxWidth: CGFloat(model.chatDisplaySettings.preferences.transcriptWidth))
                         .frame(maxWidth: .infinity)
