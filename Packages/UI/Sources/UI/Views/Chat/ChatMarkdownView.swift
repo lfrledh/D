@@ -79,9 +79,14 @@ enum ChatMarkdownPresentation {
     }
 
     @MainActor
-    static func parse(_ source: String, pointSize: Int = ChatDisplayPreferences.defaultTextPointSize) async -> RenderableDocument {
+    static func parse(_ source: String, pointSize: Int = ChatDisplayPreferences.defaultTextPointSize,
+                      palette: WorkbenchPalette? = nil) async -> RenderableDocument {
         var preferences = ChatDisplayPreferences()
         preferences.textPointSize = pointSize
+        if let palette {
+            var appearance = WorkbenchAppearance(); appearance.light = palette; appearance.dark = palette
+            preferences.appearance = appearance
+        }
         return await MarkdownParserImpl().parse(text: source, config: config(for: preferences))
     }
 
@@ -97,18 +102,18 @@ enum ChatMarkdownPresentation {
 @MainActor
 private final class ChatMarkdownCache {
     static let shared = ChatMarkdownCache()
-    private struct Entry { let source: String; let pointSize: Int; let document: RenderableDocument }
+    private struct Entry { let source: String; let pointSize: Int; let foreground: String; let accent: String; let document: RenderableDocument }
     private var entries: [UUID: Entry] = [:]
     private var order: [UUID] = []
     private let capacity = 32
 
-    func document(for id: UUID, source: String, pointSize: Int) -> RenderableDocument? {
-        guard let entry = entries[id], entry.source == source, entry.pointSize == pointSize else { return nil }
+    func document(for id: UUID, source: String, pointSize: Int, foreground: String, accent: String) -> RenderableDocument? {
+        guard let entry = entries[id], entry.source == source, entry.pointSize == pointSize, entry.foreground == foreground, entry.accent == accent else { return nil }
         order.removeAll { $0 == id }; order.append(id)
         return entry.document
     }
-    func insert(_ document: RenderableDocument, for id: UUID, source: String, pointSize: Int) {
-        entries[id] = Entry(source: source, pointSize: pointSize, document: document)
+    func insert(_ document: RenderableDocument, for id: UUID, source: String, pointSize: Int, foreground: String, accent: String) {
+        entries[id] = Entry(source: source, pointSize: pointSize, foreground: foreground, accent: accent, document: document)
         order.removeAll { $0 == id }; order.append(id)
         if order.count > capacity { entries.removeValue(forKey: order.removeFirst()) }
     }
@@ -121,6 +126,8 @@ struct ChatMarkdownView: View {
     private struct ParseKey: Hashable {
         let source: String
         let pointSize: Int
+        let foreground: String
+        let accent: String
     }
     let messageID: UUID
     let text: String
@@ -135,8 +142,12 @@ struct ChatMarkdownView: View {
     @Environment(\.chatDisplayPreferences) private var displayPreferences
     @Environment(\.colorScheme) private var colorScheme
 
+    private var renderPalette: WorkbenchPalette {
+        displayPreferences.resolvedAppearance.palette(for: displayPreferences.preferredColorScheme ?? colorScheme)
+    }
     private var parseKey: ParseKey {
-        ParseKey(source: text, pointSize: displayPreferences.textPointSize)
+        ParseKey(source: text, pointSize: displayPreferences.textPointSize,
+                 foreground: renderPalette.foreground, accent: renderPalette.accent)
     }
 
     private func label(_ key: String, _ fallback: String) -> String {
@@ -157,7 +168,7 @@ struct ChatMarkdownView: View {
             }.font(.caption)
             if let literal = ChatMarkdownPresentation.literalText(rendered: text, raw: rawText,
                 streaming: isStreaming, showingRaw: showsRaw,
-                parsed: parsedKey == parseKey ? parsedText : nil, document: document) {
+                parsed: parsedKey?.source == text && parsedKey?.pointSize == displayPreferences.textPointSize ? parsedText : nil, document: document) {
                 Text(literal).font(.system(size: CGFloat(displayPreferences.textPointSize)))
                     .textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
                     .accessibilityIdentifier("chat-raw-\(messageID.uuidString)")
@@ -178,19 +189,19 @@ struct ChatMarkdownView: View {
         } message: { url in
             Text(label("externalLinkNotice", "这是回答中的外部地址。打开后将由浏览器访问该网站：") + "\n\n" + url.absoluteString)
         }
-        .onChange(of: parseKey) { _, _ in pendingLink = nil }
+        .onChange(of: text) { _, _ in pendingLink = nil }
         .onDisappear { pendingLink = nil }
         .task(id: isStreaming ? nil : parseKey) {
             guard !isStreaming, !text.isEmpty else { return }
             let key = parseKey
             if let cached = ChatMarkdownCache.shared.document(for: messageID, source: key.source,
-                                                               pointSize: key.pointSize) {
+                                                               pointSize: key.pointSize, foreground: key.foreground, accent: key.accent) {
                 parsedKey = key; parsedText = key.source; document = cached; return
             }
-            let rendered = await ChatMarkdownPresentation.parse(key.source, pointSize: key.pointSize)
+            let rendered = await ChatMarkdownPresentation.parse(key.source, pointSize: key.pointSize, palette: renderPalette)
             guard !Task.isCancelled else { return }
             ChatMarkdownCache.shared.insert(rendered, for: messageID, source: key.source,
-                                            pointSize: key.pointSize)
+                                            pointSize: key.pointSize, foreground: key.foreground, accent: key.accent)
             parsedKey = key
             parsedText = key.source
             document = rendered

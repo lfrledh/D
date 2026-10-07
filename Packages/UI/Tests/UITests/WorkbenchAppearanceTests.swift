@@ -1,4 +1,6 @@
+import AppKit
 import Foundation
+@testable import SwiftStreamingMarkdown
 import SwiftUI
 import Testing
 @testable import UI
@@ -112,4 +114,22 @@ import Testing
         preferences.appearance = appearance
         #expect(!preferences.isValid)
     }
+    @Test func parsedMarkdownUsesActiveForegroundAndLinkPalette() async throws {
+        let text = "Palette sample [link](https://example.com)"
+        for palette in [WorkbenchPalette.defaultLight, WorkbenchPalette.defaultDark] {
+            let doc = await ChatMarkdownPresentation.parse(text, palette: palette)
+            let content = try #require(doc.attributedStrings.first { $0.string.contains("Palette sample") })
+            let ink = try #require(content.attribute(.foregroundColor, at: 0, effectiveRange: nil) as? NSColor)
+            let expected = try #require(NSColor(palette.foregroundColor).usingColorSpace(.sRGB))
+            let actual = try #require(ink.usingColorSpace(.sRGB))
+            #expect(abs(actual.redComponent - expected.redComponent) < 0.001)
+            #expect(abs(actual.greenComponent - expected.greenComponent) < 0.001)
+            #expect(abs(actual.blueComponent - expected.blueComponent) < 0.001)
+            let range = (content.string as NSString).range(of: "link")
+            let link = try #require(content.attribute(.foregroundColor, at: range.location, effectiveRange: nil) as? NSColor)
+            let accent = try #require(NSColor(palette.accentColor).usingColorSpace(.sRGB))
+            #expect(abs((link.usingColorSpace(.sRGB)?.greenComponent ?? -1) - accent.greenComponent) < 0.001)
+        }
+    }
+
 }

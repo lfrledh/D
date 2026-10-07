@@ -575,7 +575,7 @@ struct ChatWorkbenchView: View {
                         .onTapGesture { closeNarrowPanel() }
                         .accessibilityHidden(true)
                 }
-                RetainedContentHost(content: sidebar.workbenchPanel(cornerRadius: 0).disabled(!sidebarVisible)
+                RetainedContentHost(content: sidebar.workbenchPanel(cornerRadius: 0).workbenchTheme().disabled(!sidebarVisible)
                     .environment(\.chatDisplayPreferences, model.chatDisplaySettings.preferences)
                     .preferredColorScheme(model.chatDisplaySettings.preferences.preferredColorScheme)
                     .environment(\.dLanguageStore, language), visible: sidebarVisible,
@@ -587,7 +587,7 @@ struct ChatWorkbenchView: View {
                     .accessibilityHidden(!sidebarVisible)
                     .chatMeasured("sessions-pane", probe: layoutProbe)
                 if let session {
-                    RetainedContentHost(content: inspector(session).workbenchPanel(cornerRadius: 0).disabled(!inspectorVisible)
+                    RetainedContentHost(content: inspector(session).workbenchPanel(cornerRadius: 0).workbenchTheme().disabled(!inspectorVisible)
                         .environment(\.chatDisplayPreferences, model.chatDisplaySettings.preferences)
                         .preferredColorScheme(model.chatDisplaySettings.preferences.preferredColorScheme)
                         .environment(\.dLanguageStore, language), visible: inspectorVisible,
