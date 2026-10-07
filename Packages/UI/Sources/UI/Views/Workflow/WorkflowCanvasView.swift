@@ -76,6 +76,8 @@ public struct WorkflowCanvasView: View {
 
     @Environment(\.dLanguageStore) private var languageStore
 
+    @Environment(\.chatDisplayPreferences) private var displayPreferences
+    @State private var narrowLibrary = false
     @State private var showLibrary = true
     @State private var libraryMode: WorkflowCanvasLibraryMode = .nodes
     @State private var showInspector = true
@@ -138,10 +140,10 @@ public struct WorkflowCanvasView: View {
     public var body: some View {
         GeometryReader { viewport in
         VStack(spacing: 0) {
-            toolbar.frame(width: viewport.size.width)
+            toolbar(width: viewport.size.width).frame(width: viewport.size.width)
             Divider()
             GeometryReader { proxy in
-                panels(height: proxy.size.height)
+                panels(height: proxy.size.height, width: proxy.size.width)
                     .frame(width: proxy.size.width, height: proxy.size.height)
                     .accessibilityIdentifier("workflow-canvas-workspace")
             }
@@ -197,9 +199,11 @@ public struct WorkflowCanvasView: View {
         .onChange(of: controller.selectedNodeID) { _, _ in rememberViewContext() }
     }
 
-    private func panels(height: CGFloat) -> some View {
-        HStack(spacing: 0) {
-            Group {
+    private func panels(height: CGFloat, width: CGFloat) -> some View {
+        let shown = WorkflowCanvasLayoutPolicy.visiblePanels(width: width, library: showLibrary,
+            inspector: showInspector, preferLibrary: narrowLibrary)
+        return HStack(spacing: 0) {
+            RetainedContentHost(content: Group {
                 if let libraryContent { libraryContent(canvasInsertionPoint, { showLibrary = false }) }
                 else {
             VStack(spacing: 0) {
@@ -231,10 +235,14 @@ public struct WorkflowCanvasView: View {
                     }
                 }
                 }
-            }
-                .frame(width: showLibrary ? WorkflowCanvasLayoutPolicy.libraryWidth : 0)
-                .clipped().allowsHitTesting(showLibrary).accessibilityHidden(!showLibrary)
-            Divider().opacity(showLibrary ? 1 : 0)
+            }.workbenchPanel(cornerRadius: 0).workbenchTheme()
+                .environment(\.dLanguageStore, languageStore)
+                .environment(\.chatDisplayPreferences, displayPreferences)
+                .preferredColorScheme(displayPreferences.preferredColorScheme),
+                visible: shown.library, identifier: "canvas-library-host")
+                .frame(width: shown.library ? WorkflowCanvasLayoutPolicy.libraryWidth : 0)
+                .clipped().allowsHitTesting(shown.library).accessibilityHidden(!shown.library)
+            if shown.library { Divider() }
             VStack(spacing: 0) {
                 WorkflowGraphSurface(controller: controller, graph: controller.graph, zoom: $zoom,
                     tool: $canvasTool,
@@ -300,9 +308,9 @@ public struct WorkflowCanvasView: View {
                 }
                 statusStrip
             }.frame(minWidth: WorkflowCanvasLayoutPolicy.canvasMinimumWidth, maxWidth: .infinity)
-            Divider().opacity(showInspector ? 1 : 0)
-            // Keep the inspector mounted while folded so marked text and drafts survive.
-            ZStack {
+            if shown.inspector { Divider() }
+            // Native hiding keeps a folded inspector out of file-drop and input routing.
+            RetainedContentHost(content: ZStack {
                 WorkflowNodeInspector(controller: controller, node: controller.selectedNode,
                     readOnly: isReadOnly, onTextModel: guarded(onTextModel), onImageModel: guarded(onImageModel),
                     onAdditionalModel: { kind in guarded { onAdditionalModel(kind) }() },
@@ -325,9 +333,13 @@ public struct WorkflowCanvasView: View {
                     WorkflowCanvasConnectionInspector(controller: controller, connection: connection,
                         onClose: { selectedConnectionID = nil })
                 }
-            }
-                .frame(width: showInspector ? WorkflowCanvasLayoutPolicy.inspectorWidth : 0)
-                .clipped().allowsHitTesting(showInspector).accessibilityHidden(!showInspector)
+            }.workbenchPanel(cornerRadius: 0).workbenchTheme()
+                .environment(\.dLanguageStore, languageStore)
+                .environment(\.chatDisplayPreferences, displayPreferences)
+                .preferredColorScheme(displayPreferences.preferredColorScheme),
+                visible: shown.inspector, identifier: "canvas-inspector-host")
+                .frame(width: shown.inspector ? WorkflowCanvasLayoutPolicy.inspectorWidth : 0)
+                .clipped().allowsHitTesting(shown.inspector).accessibilityHidden(!shown.inspector)
         }
     }
 
@@ -365,8 +377,10 @@ public struct WorkflowCanvasView: View {
         return true
     }
 
-    private var toolbar: some View {
-        HStack(spacing: 8) {
+    private func toolbar(width: CGFloat) -> some View {
+        let shown = WorkflowCanvasLayoutPolicy.visiblePanels(width: width, library: showLibrary,
+            inspector: showInspector, preferLibrary: narrowLibrary)
+        return         HStack(spacing: 8) {
             if !controller.bodyPath.isEmpty {
                 Button(workflowText(languageStore, "workflow.language.control.back", fallback: "返回外层"),
                        systemImage: "arrow.up.backward") {
@@ -414,13 +428,13 @@ public struct WorkflowCanvasView: View {
                 .accessibilityIdentifier("workflow-run")
             }
             Spacer(minLength: 0)
-            Button { showLibrary.toggle() } label: {
-                Image(systemName: "sidebar.left")
-            }.help(workflowText(languageStore, "canvas.library.toggle", fallback: "显示或隐藏资料库"))
+            Button { showLibrary = !shown.library; narrowLibrary = true } label: {
+                Image(systemName: shown.library ? "sidebar.left" : "square.stack.3d.up").frame(width: 26, height: 26)
+            }.buttonStyle(.bordered).buttonBorderShape(.circle).help(workflowText(languageStore, "canvas.library.toggle", fallback: "显示或隐藏资料库"))
                 .accessibilityIdentifier("canvas-library-toggle")
-            Button { showInspector.toggle() } label: {
-                Image(systemName: "sidebar.right")
-            }.help(workflowText(languageStore, "canvas.inspector.toggle", fallback: "显示或隐藏检查器"))
+            Button { showInspector = !shown.inspector; narrowLibrary = false } label: {
+                Image(systemName: shown.inspector ? "sidebar.right" : "slider.horizontal.3").frame(width: 26, height: 26)
+            }.buttonStyle(.bordered).buttonBorderShape(.circle).help(workflowText(languageStore, "canvas.inspector.toggle", fallback: "显示或隐藏检查器"))
                 .accessibilityIdentifier("canvas-inspector-toggle")
             Picker("画布工具", selection: $canvasTool) {
                 Label("指针", systemImage: "cursorarrow").tag(WorkflowCanvasTool.pointer)
@@ -473,7 +487,7 @@ public struct WorkflowCanvasView: View {
         }
         .buttonStyle(.borderless)
         .padding(.horizontal, 10).padding(.vertical, 8)
-        .background(.bar)
+        .workbenchPanel(cornerRadius: 0)
     }
 
     @ViewBuilder
@@ -1902,6 +1916,13 @@ enum WorkflowCanvasLayoutPolicy {
     static let zoomRange: ClosedRange<CGFloat> = 0.05...1.8
 
     static func usesHorizontalPanelScroll(width: CGFloat) -> Bool { false }
+
+    static func visiblePanels(width: CGFloat, library: Bool, inspector: Bool,
+                              preferLibrary: Bool) -> (library: Bool, inspector: Bool) {
+        let bothFit = width >= libraryWidth + inspectorWidth + 440 + 2
+        let left = library && (bothFit || preferLibrary || !inspector)
+        return (left, inspector && (bothFit || !left))
+    }
 
     static func clampedZoom(_ value: CGFloat) -> CGFloat {
         min(zoomRange.upperBound, max(zoomRange.lowerBound, value))

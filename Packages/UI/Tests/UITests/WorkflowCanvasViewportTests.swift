@@ -68,7 +68,7 @@ struct WorkflowCanvasViewportTests {
     @Test func zoomBoundsDoNotMoveTheViewportAndEveryPanDirectionHasSpace() {
         let size = CGSize(width: 1400, height: 900)
         let viewport = CGSize(width: 440, height: 310)
-        for zoom: CGFloat in [0.5, 1, 1.8] {
+        for zoom: CGFloat in [0.05, 0.5, 1, 1.8] {
             let layout = WorkflowCanvasViewportGeometry(graphSize: size, viewportSize: viewport,
                 zoom: zoom, translation: CGSize(width: 150, height: 24))
             let initial = layout.centeredOffset(on: layout.centerRawPoint)
@@ -82,8 +82,8 @@ struct WorkflowCanvasViewportTests {
                 #expect(moved != initial)
             }
             let blocked = WorkflowCanvasLayoutPolicy.clampedZoom(
-                zoom == 0.5 ? zoom * 0.2 : zoom == 1.8 ? zoom * 3 : zoom)
-            if zoom != 1 { #expect(blocked == zoom) }
+                zoom == 0.05 ? zoom * 0.2 : zoom == 1.8 ? zoom * 3 : zoom)
+            if zoom == 0.05 || zoom == 1.8 { #expect(blocked == zoom) }
             #expect(layout.centeredOffset(on: layout.centerRawPoint) == initial)
         }
     }

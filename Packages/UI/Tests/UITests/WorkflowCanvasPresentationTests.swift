@@ -23,7 +23,8 @@ struct WorkflowCanvasPresentationTests {
 
     @Test
     func zoomIsBoundedAndFallbackLayoutIsDeterministic() {
-        #expect(WorkflowCanvasLayoutPolicy.clampedZoom(0.1) == 0.5)
+        #expect(WorkflowCanvasLayoutPolicy.clampedZoom(0.1) == 0.1)
+        #expect(WorkflowCanvasLayoutPolicy.clampedZoom(0) == 0.05)
         #expect(WorkflowCanvasLayoutPolicy.clampedZoom(1.25) == 1.25)
         #expect(WorkflowCanvasLayoutPolicy.clampedZoom(4) == 1.8)
 
