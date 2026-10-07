@@ -442,7 +442,7 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
         try await close(store, root: root)
     }
 
-    private func answeredSession(raw: String, status: ChatAttempt.Status) throws -> ChatSession {
+    fileprivate func answeredSession(raw: String, status: ChatAttempt.Status) throws -> ChatSession {
         var session = ChatSession(title: "回答夹具")
         let user = ChatMessage(parentID: nil, role: .user, text: "请回答")
         let assistant = ChatMessage(parentID: user.id, role: .assistant, text: "", attemptID: UUID())
@@ -743,6 +743,22 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
         #expect(window.firstResponder !== editor)
     }
 
+    @Test func readingPointRejectsChangedPathRevisionAndOutput() throws {
+        var session = try answeredSession(raw: "Original saved answer", status: .completed)
+        let message = try #require(session.messages.last)
+        var point = ChatReadingPoint(messageID: message.id, offset: 500, width: 600, height: 3600)
+        point.leafID = session.selectedLeafID
+        point.revisionID = session.selectedAnswer(messageID: message.id)?.revisionID
+        point.outputBytes = session.attempts[0].rawText.utf8.count
+        #expect(point.matches(session))
+        var otherPoint = point; otherPoint.revisionID = UUID()
+        #expect(!otherPoint.matches(session))
+        otherPoint = point; otherPoint.leafID = UUID()
+        #expect(!otherPoint.matches(session))
+        session.attempts[0].rawText += " More output"
+        #expect(!point.matches(session))
+    }
+
     @Test func branchesUseReadableTextAndEmptyFallback() {
         let root = ChatMessage(parentID: nil, role: .user,
             text: "第一段\n第二段，有足够长的摘要内容用于验证菜单裁剪不会暴露 UUID。")
@@ -757,6 +773,41 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
 
 // XCTest owns the AppKit event loop; Swift Testing may exit during native tracking.
 @MainActor final class ChatDynamicBottomHostingTests: XCTestCase {
+    func testReadingMarkerPreservesTwoInternalPositions() throws {
+        // Component geometry only. Real session navigation is an ordinary-App gate.
+        final class FlippedDocument: NSView { override var isFlipped: Bool { true } }
+        let document = FlippedDocument(frame: .init(x: 0, y: 0, width: 600, height: 4000))
+        let marker = NSView(frame: .init(x: 0, y: 80, width: 600, height: 3600))
+        document.addSubview(marker)
+        let scroll = NSScrollView(frame: .init(x: 0, y: 0, width: 600, height: 500))
+        scroll.documentView = document
+        let window = NSWindow(contentRect: scroll.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; window.contentView = scroll
+        defer { window.close() }
+        let owner = ChatReadingMarkers(), sessionID = UUID(), messageID = UUID()
+        owner.register(marker, messageID: messageID, sessionID: sessionID)
+        for target in [CGFloat(500), 1200] {
+            scroll.contentView.scroll(to: .init(x: 0, y: target))
+            scroll.reflectScrolledClipView(scroll.contentView)
+            let point = try XCTUnwrap(owner.capture(sessionID: sessionID, path: [messageID]))
+            XCTAssertGreaterThan(point.offset, 100)
+            scroll.contentView.scroll(to: .init(x: 0, y: 80))
+            scroll.reflectScrolledClipView(scroll.contentView)
+            XCTAssertTrue(owner.restore(point, sessionID: sessionID))
+            let restored = try XCTUnwrap(owner.capture(sessionID: sessionID, path: [messageID]))
+            XCTAssertEqual(restored.offset, point.offset, accuracy: 0.5)
+            XCTAssertFalse(owner.restore(point, sessionID: UUID()), "Never restore another session's marker")
+            marker.frame.size.width = 500
+            scroll.contentView.scroll(to: .init(x: 0, y: 80))
+            XCTAssertTrue(owner.restore(point, sessionID: sessionID), "Reflow keeps the message anchor fallback")
+            XCTAssertEqual(scroll.contentView.bounds.origin.y, 80, accuracy: 0.5)
+            marker.frame.size.width = 600
+        }
+        marker.frame.size.height = 0
+        let unavailable = ChatReadingPoint(messageID: messageID, offset: 500, width: 600, height: 3600)
+        XCTAssertFalse(owner.restore(unavailable, sessionID: sessionID), "Unlaid-out markers must not consume restoration")
+    }
+
     func testCompletedShortStreamCanJumpPastAdoptedListAndEmptyCancellation() async throws {
         try await exerciseCompletedStream(replay: false)
     }
@@ -929,7 +980,21 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
             print("D_DYNAMIC_BOTTOM", "click returned")
         }
         try await Task.sleep(for: .milliseconds(600))
-        host.layoutSubtreeIfNeeded()
+        // Sample a stable final layout, not independently cached rectangles from
+        // either side of an actor suspension. Never select the smallest distance.
+        var previousSample: [CGRect] = []
+        var stableSamples = 0
+        for _ in 0..<12 {
+            try await Task.sleep(for: .milliseconds(50))
+            host.layoutSubtreeIfNeeded()
+            let id = try XCTUnwrap(chat.selectedSession?.messages.last?.id)
+            let sample = [try XCTUnwrap(frames["message-" + id.uuidString]),
+                          try XCTUnwrap(frames["transcript"]), scroll.contentView.bounds]
+            stableSamples = sample == previousSample ? stableSamples + 1 : 0
+            previousSample = sample
+            if stableSamples >= 2 { break }
+        }
+        XCTAssertGreaterThanOrEqual(stableSamples, 2, "Final geometry must settle before checking the unchanged bottom requirement")
         let finalCount = await engine.submissions
         XCTAssertEqual(finalCount, 1)
         XCTAssertTrue(chat.selectedSession?.attempts.prefix(2) == [earlier, stopped][...])
