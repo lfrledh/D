@@ -1037,3 +1037,11 @@ F19本次原生代表门槛关闭；三项紧凑hosting仍是已有独立工程�
 用户明确要求修光标左右接收/加号差异，保留前次d1ab单落点原生通过与旧失败，不重置预算。487b77b5→代码6fb4204d6b151eb3135e651ac660b6847a444cb2：Lead仅给真实fileURL直接destination entered/updated/prepare判定；普通文字仍super，现有IME/Undo/只读/拆除/复制权限、importURLs和会话归属保持，不动Store/模型。file_drop_boundary_review只读非实现者复核，无必修，收紧注释不宣称私有根因。
 
 RPosition见CURRENT_ACTIONS。旧实现坐标/选择范围1方法和viewport1方法均通过，不能写先红后绿；第一次过滤0方法如实保留。修后20方法/3suite通过，测试后仅注释措辞变化；普通App构建/签名/复制关键摘要通过。独立Drop-position副本7C6D1438会话与left/right/blank夹具，当前待真人跨窗三落点反馈，不用选择器/粘贴冒称拖入。原3项compact hosting、F26延期、main908及推荐3cc边界不变。无GUI模型生成、无系统权限改动。
+
+### 2026-10-07 左侧拒收反例与文件类型登记修补
+
+6fb本人复验确认左侧无加号时实际退回、不添加，右侧成功；分界不随光标。基线b3cd63029c7af2b3741012299dc06108a0cb8b5e，新代码fe0da792b2c263ca2dea3f2c772ed6311503a811。RPosition/lead/position-human-failure.json与截图保留。Lead在现有ChatPresentationTests作完整宿主对照：四个横向点均hit生产FileDropTextView，有/无隐藏Workflow一致，但registeredDraggedTypes为空。登记断言先失败，证明旧方法直调绕过准入前提；不宣称已证明AppKit中固定分界的唯一内部原因。
+
+依Apple updateDragTypeRegistration规则，只在现有子类补登记更新和callback生命周期。初补super未清自定义登记，3项生命周期断言失败；显式重算plain-text登记后22方法/4suite通过。readonly/IME/Undo/普通文字/拆除保护未放宽，没有改Store、导入、模型或布局。非实现者file_drop_boundary_review只读核验，依据真实失败纠正其注销推断，无独立GUI测试。所有失败/命令/结果留registration-{red,green,final}-tests；测试后仅注释调整，App构建对应固定fe0。
+
+普通签名App、源码/复制4文件摘要见registration-app-version.json。首次工具文件菜单编号失效，正常退出自有空实例，重开后快捷键/已有文件面板打开同一Drop-position项目成功；没有重复面板或修改产品菜单。已请求一次左侧与右下空白Finder对照，等待结果；旧scheme/CSV/项目保留，main和推荐包不变，三项compact hosting独立保留。后续结果及最终文档提交写外部registration-checkpoint.json，不自引用提交。

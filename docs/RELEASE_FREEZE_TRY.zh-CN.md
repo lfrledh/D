@@ -19,7 +19,9 @@
 
 本轮文件拖入定点修补包（不是替换唯一推荐入口）：代码 **d1ab5f71340bd4dcf764a80449e1d40be3306e05**，`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261007T121440Z-human-drop/gui/D Chat Drop d1ab5f71.app`。同目录`启动本轮文件拖入验收.command`为定点复验入口。本人Finder重拖、Lead附件预览/保存退出/同包冷重开已通过，原草稿和CSV保持、无自动发送；19项相关方法和普通签名构建另计。加号随落点变化仍只记观察。此包包含abd5阅读修补，原三项hosting余项不变，不能称功能冻结；本次测试D已正常退出。
 
-追加落点一致性测试包：`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261007T132148Z-drop-position/gui/D Chat Drop 6fb4204d.app`，代码 **6fb4204d6b151eb3135e651ac660b6847a444cb2**。同目录`启动文件落点验收.command`仅供此次left/right/blank三落点验收，20受控方法通过不代替真人结果。推荐入口仍不更换；同树Xcode现在编译6fb，d1ab包是历史单落点通过包。
+追加落点一致性测试包：`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261007T132148Z-drop-position/gui/D Chat Drop 6fb4204d.app`，代码 **6fb4204d6b151eb3135e651ac660b6847a444cb2**。同目录`启动文件落点验收.command`仅供此次left/right/blank三落点验收，20受控方法通过不代替真人结果。本人随后确认6fb左侧真实拒收，该包保留作失败对照；d1ab只代表历史单落点通过。
+
+当前定点包：`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261007T132148Z-drop-position/gui/D Chat Drop fe0da792.app`；代码 **fe0da792b2c263ca2dea3f2c772ed6311503a811**。同目录`启动文件登记修补.command`，修正纯文本输入框未登记fileURL；22方法通过，普通构建/签名通过，真实左右落点等待复验。不要同时打开旧测试版。唯一推荐3cc不变。
 
 ## 从保留的小项目继续
 
@@ -59,7 +61,7 @@ Quick/Canvas选真实模型，高级参数选择**省内存（SSD分层加载，
 
 ## 同树 Xcode Run
 
-打开当前候选工作树（6fb4204d代码＋随后仅文档提交；与推荐3cc71bee包不同代码，含未接纳阅读候选，仅用于继续开发/验收）：
+打开当前候选工作树（fe0da792代码＋随后仅文档提交；与推荐3cc71bee包不同代码，含未接纳阅读候选，仅用于继续开发/验收）：
 `/Volumes/CodexProjects/Codex/D-Worktrees/D-RELEASE-FREEZE-01/D.xcworkspace`
 
 选择 **D Nodes / My Mac / Debug**。本机忽略配置`Development/Development.local.xcconfig`使用既有签名身份，资源目录为：
