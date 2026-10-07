@@ -184,7 +184,7 @@ public struct WorkflowCanvasView: View {
             runPreview = nil
         }
         .onChange(of: selectedConnectionID) { _, value in
-            if value != nil { showInspector = true }
+            if value != nil { revealInspector() }
         }
         .onChange(of: controller.graph?.connections) { _, connections in
             if let selectedConnectionID,
@@ -197,6 +197,11 @@ public struct WorkflowCanvasView: View {
         .onChange(of: zoom) { _, _ in rememberViewContext() }
         .onChange(of: viewportInteractionLocked) { _, locked in viewportLockObserver?(locked) }
         .onChange(of: controller.selectedNodeID) { _, _ in rememberViewContext() }
+    }
+
+    private func revealInspector() {
+        showInspector = true
+        narrowLibrary = false
     }
 
     private func panels(height: CGFloat, width: CGFloat) -> some View {
@@ -218,7 +223,7 @@ public struct WorkflowCanvasView: View {
                         WorkflowNodeLibrary(controller: controller, tagStore: nodeTags) { entry in
                             controller.addNode(operationID: entry.operation.id, modelID: entry.model?.id,
                                                x: canvasInsertionPoint.x, y: canvasInsertionPoint.y)
-                            showInspector = true
+                            revealInspector()
                         }
                         .opacity(libraryMode == .nodes ? 1 : 0)
                         .allowsHitTesting(libraryMode == .nodes)
@@ -278,7 +283,7 @@ public struct WorkflowCanvasView: View {
                         return true
                     }, onInspect: { id in
                         guard controller.graph?.nodes.contains(where: { $0.id == id }) == true else { return }
-                        controller.selectedNodeID = id; selectedConnectionID = nil; showInspector = true
+                        controller.selectedNodeID = id; selectedConnectionID = nil; revealInspector()
                     })
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .overlay(alignment: .bottomTrailing) {
@@ -349,7 +354,7 @@ public struct WorkflowCanvasView: View {
         case .operation(let id, let model):
             guard controller.registry.operation(id) != nil else { return false }
             controller.addNode(operationID: id, modelID: model, x: point.x, y: point.y)
-            showInspector = true; return controller.errorMessage == nil
+            revealInspector(); return controller.errorMessage == nil
         case .asset, .assetInstance:
             guard let identity = WorkflowCanvasAssetIdentity.payload(value) else { return false }
             return dropAsset(project: identity.project, instance: identity.instance,
@@ -357,7 +362,7 @@ public struct WorkflowCanvasView: View {
         case .tool(let reference):
             guard let tool = controller.tools.first(where: { $0.id == reference.id && $0.version == reference.version && (try? WorkflowPlanCompiler.digest($0)) == reference.digest }) else { return false }
             controller.addTool(tool, x: point.x, y: point.y)
-            showInspector = true; return controller.errorMessage == nil
+            revealInspector(); return controller.errorMessage == nil
         case .output: return false
         }
     }
@@ -380,7 +385,7 @@ public struct WorkflowCanvasView: View {
     private func toolbar(width: CGFloat) -> some View {
         let shown = WorkflowCanvasLayoutPolicy.visiblePanels(width: width, library: showLibrary,
             inspector: showInspector, preferLibrary: narrowLibrary)
-        return         HStack(spacing: 8) {
+        return HStack(spacing: 8) {
             if !controller.bodyPath.isEmpty {
                 Button(workflowText(languageStore, "workflow.language.control.back", fallback: "返回外层"),
                        systemImage: "arrow.up.backward") {
