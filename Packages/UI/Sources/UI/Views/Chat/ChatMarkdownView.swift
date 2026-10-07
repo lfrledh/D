@@ -34,34 +34,31 @@ enum ChatMarkdownPresentation {
     }
 
     @MainActor
-    static func config(for preferences: ChatDisplayPreferences) -> MarkdownRenderConfig {
+    static func config(for preferences: ChatDisplayPreferences, colorScheme: ColorScheme = .light) -> MarkdownRenderConfig {
+        let palette = preferences.resolvedAppearance.palette(for: preferences.preferredColorScheme ?? colorScheme)
         let size = CGFloat(preferences.textPointSize)
         let base = fonts(size)
         let code = fonts(size, monospaced: true)
-        let paragraph = MarkdownRenderConfig.defaultParagraphStyle
-        let quote = MarkdownRenderConfig.defaultBlockQuoteStyle
-        let list = MarkdownRenderConfig.defaultOrderedListStyle
         let table = MarkdownRenderConfig.defaultTableStyle
-        let heading = MarkdownRenderConfig.defaultHeadingStyle
         let inline = MarkdownRenderConfig.defaultInlineStyle
         let codeBlock = CodeBlockConfig.default
         var block = CodeBlockConfig(theme: codeBlock.theme, backgroundColor: codeBlock.backgroundColor,
             foregroundColor: codeBlock.foregroundColor, codeTextFonts: code, chromeTextFonts: fonts(max(12, size - 2)))
         block.wrapsLines = preferences.wrapsCode
         return MarkdownRenderConfig(
-            blockQuoteStyle: .init(textFonts: base, textColor: quote.textColor),
+            blockQuoteStyle: .init(textFonts: base, textColor: palette.foregroundColor),
             headingStyle: .init(h1Font: fonts(size * 28 / 17), h2Font: fonts(size * 24 / 17),
                                 h3Font: fonts(size * 20 / 17), h4Font: fonts(size * 20 / 17),
                                 h5Font: fonts(size * 20 / 17), h6Font: fonts(size * 20 / 17),
-                                textColor: heading.textColor),
-            orderedListStyle: .init(textFonts: base, textColor: list.textColor),
-            paragraphStyle: .init(textFonts: base, textColor: paragraph.textColor),
-            tableStyle: .init(textFonts: base, headerTextColor: table.headerTextColor,
-                              regularTextColor: table.regularTextColor,
-                              headerBackgroundColor: table.headerBackgroundColor,
-                              borderColor: table.borderColor, actionButtonColor: table.actionButtonColor),
-            inlineStyle: .init(boldTextColor: inline.boldTextColor, linkTextFont: base.normal,
-                               linkTextColor: inline.linkTextColor,
+                                textColor: palette.foregroundColor),
+            orderedListStyle: .init(textFonts: base, textColor: palette.foregroundColor),
+            paragraphStyle: .init(textFonts: base, textColor: palette.foregroundColor),
+            tableStyle: .init(textFonts: base, headerTextColor: palette.foregroundColor,
+                              regularTextColor: palette.foregroundColor,
+                              headerBackgroundColor: palette.panelColor,
+                              borderColor: table.borderColor, actionButtonColor: palette.accentColor),
+            inlineStyle: .init(boldTextColor: palette.foregroundColor, linkTextFont: base.normal,
+                               linkTextColor: palette.accentColor,
                                linkUnderlineStyle: inline.linkUnderlineStyle,
                                codeTextFont: code.normal, codeTextColor: inline.codeTextColor,
                                codeBackgroundColor: inline.codeBackgroundColor,
@@ -136,6 +133,7 @@ struct ChatMarkdownView: View {
     @State private var pendingLink: URL?
     @Environment(\.dLanguageStore) private var language
     @Environment(\.chatDisplayPreferences) private var displayPreferences
+    @Environment(\.colorScheme) private var colorScheme
 
     private var parseKey: ParseKey {
         ParseKey(source: text, pointSize: displayPreferences.textPointSize)
@@ -165,7 +163,7 @@ struct ChatMarkdownView: View {
                     .accessibilityIdentifier("chat-raw-\(messageID.uuidString)")
             } else if let document {
                 DocumentView(renderableDocument: document,
-                             config: ChatMarkdownPresentation.config(for: displayPreferences),
+                             config: ChatMarkdownPresentation.config(for: displayPreferences, colorScheme: colorScheme),
                              listener: ChatMarkdownListener())
                     .environment(\.openURL, OpenURLAction { url in
                         ChatMarkdownPresentation.requestURL(url) { pendingLink = $0 }

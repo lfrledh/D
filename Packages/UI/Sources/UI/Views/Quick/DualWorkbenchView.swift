@@ -156,7 +156,7 @@ public struct DualWorkbenchView: View {
                 } label: { Image(systemName: "gearshape").frame(width: 30, height: 30) }
                     .buttonStyle(.bordered).buttonBorderShape(.circle).help("设置").accessibilityLabel("设置")
                     .accessibilityIdentifier("workbench-settings")
-            }.padding(.horizontal, 20).padding(.vertical, 12).background(.bar)
+            }.padding(.horizontal, 20).padding(.vertical, 12).workbenchPanel(cornerRadius: 0)
             Divider()
             if entry == .quick, let identity = quickModelIdentity,
                quickModel.projectSession.explicitModelChecking.contains(identity) {
@@ -242,7 +242,8 @@ public struct DualWorkbenchView: View {
                             instanceID: nil, projects: projects) else { return false }
                         return canvasModel.projectSession.workflow?.projectInstanceID == instance &&
                             projects.contains(where: { $0.effectiveInstanceID == instance && $0.assets.contains(where: { $0.id == assetID }) })
-                    }).environment(\.dLanguageStore, language)
+                    }).workbenchTheme().environment(\.dLanguageStore, language)
+                    .preferredColorScheme(automaticQuickModel.chatDisplaySettings.preferences.preferredColorScheme)
                     .environment(\.chatDisplayPreferences, automaticQuickModel.chatDisplaySettings.preferences),
                     visible: entry == .workflow, identifier: "workflow-retained-surface",
                     fallbackSize: CGSize(width: 760, height: 500))
@@ -251,6 +252,7 @@ public struct DualWorkbenchView: View {
 
         }
         .frame(minWidth: 860, minHeight: 580)
+        .workbenchTheme()
         .environment(\.chatDisplayPreferences, automaticQuickModel.chatDisplaySettings.preferences)
         .preferredColorScheme(automaticQuickModel.chatDisplaySettings.preferences.preferredColorScheme)
         .sheet(isPresented: $settingsVisible, onDismiss: {
@@ -545,7 +547,8 @@ public struct DualWorkbenchView: View {
                     onSettingsToCanvas: { draft in let source = quick.store; Task { await settingsToCanvas(draft, from: source) } },
                     onResultToCanvas: { ref in let source = quick.store; Task { await resultToCanvas(ref, from: source) } },
                     onValueToCanvas: { value in let source = quick.store; Task { await valueToCanvas(value, from: source) } },
-                    onAssetsChanged: { Task { await refreshLibrary(checkModels: false) } },
+                    onOpenLibrary: { modelPickerCategory = nil; libraryVisible = true },
+            onAssetsChanged: { Task { await refreshLibrary(checkModels: false) } },
                     onResolveSharedAsset: { projectID, instanceID, assetID in
                         let source = try await store(for: projectID, instanceID: instanceID)
                         let manifest = await source.snapshot()

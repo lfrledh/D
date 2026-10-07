@@ -77,9 +77,11 @@ public struct WorkbenchSettingsView: View {
                 }.frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }.frame(minWidth: 700, idealWidth: 840, minHeight: 520, idealHeight: 660)
+            .workbenchTheme()
             .environment(\.dLanguageStore, language)
             .environment(\.chatDisplayPreferences, model.chatDisplaySettings.preferences)
             .preferredColorScheme(model.chatDisplaySettings.preferences.preferredColorScheme)
-            .sheet(isPresented: $modelsVisible) { ModelLibraryView(model: library).environment(\.dLanguageStore, language) }
+            .sheet(isPresented: $modelsVisible) { ModelLibraryView(model: library).workbenchTheme()
+            .environment(\.dLanguageStore, language) }
     }
 }

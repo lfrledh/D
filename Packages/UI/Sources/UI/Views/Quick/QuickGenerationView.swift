@@ -20,6 +20,7 @@ struct QuickGenerationView: View {
     let onSettingsToCanvas: (QuickDraft) -> Void
     let onResultToCanvas: (WorkflowAssetReference) -> Void
     let onValueToCanvas: (WorkflowDatum) -> Void
+    var onOpenLibrary: () -> Void = {}
     var onAssetsChanged: () -> Void = {}
     var onResolveSharedAsset: QuickInputImport.SharedAssetResolver? = nil
     @State private var narrowRight = false
@@ -57,7 +58,7 @@ struct QuickGenerationView: View {
                         modelHeader
                         Divider()
                         parameterPanel
-                    }.frame(width: 280).background(.background, in: RoundedRectangle(cornerRadius: 18))
+                    }.frame(width: 280).workbenchPanel(cornerRadius: 18)
                 }
                 VStack(spacing: 10) {
                     HStack {
@@ -99,6 +100,18 @@ struct QuickGenerationView: View {
                         HStack { Text("素材与结果").font(.headline); Spacer(); panelButton("收起素材与结果", "sidebar.right") { rightRequested = false } }.padding(12)
                         ScrollView {
                             LazyVStack(alignment: .leading, spacing: 10) {
+                                Button("全部资料库…", action: onOpenLibrary)
+                                if !inputReferences.isEmpty {
+                                    Text("当前输入").font(.caption.bold())
+                                    ForEach(inputReferences, id: \.self) { reference in
+                                        Button { preview = reference } label: {
+                                            QuickInputAssetName(store: quick.store, reference: reference)
+                                                .frame(maxWidth: .infinity, alignment: .leading)
+                                        }.buttonStyle(.bordered)
+                                    }
+                                    Divider()
+                                }
+                                Text("结果与候选").font(.caption.bold())
                                 ForEach(mediaReferences, id: \.self) { reference in
                                     Button { selectedResults[quick.category] = reference } label: {
                                         VStack(alignment: .leading, spacing: 4) {
@@ -115,7 +128,7 @@ struct QuickGenerationView: View {
                                 }
                             }.padding(10)
                         }
-                    }.frame(width: 220).background(.background, in: RoundedRectangle(cornerRadius: 18))
+                    }.frame(width: 220).workbenchPanel(cornerRadius: 18)
                 }
             }.padding(14)
         }
@@ -291,6 +304,13 @@ struct QuickGenerationView: View {
                         .accessibilityIdentifier("quick-generate")
                 }
             }.padding(16)
+    }
+    private var inputReferences: [WorkflowAssetReference] {
+        var result: [WorkflowAssetReference] = []
+        for key in (quick.draft?.inputs.keys.sorted() ?? []) {
+            for ref in quick.draft?.inputs[key]?.datum?.assetReferences ?? [] where !result.contains(ref) { result.append(ref) }
+        }
+        return result
     }
     private var mediaReferences: [WorkflowAssetReference] {
         var result: [WorkflowAssetReference] = []

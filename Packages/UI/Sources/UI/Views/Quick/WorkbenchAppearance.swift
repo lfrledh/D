@@ -153,3 +153,17 @@ extension View {
         modifier(WorkbenchPanelModifier(cornerRadius: cornerRadius))
     }
 }
+
+/// A presentation environment shared by SwiftUI and retained native hosts.
+private struct WorkbenchThemeModifier: ViewModifier {
+    @Environment(\.chatDisplayPreferences) private var preferences
+    @Environment(\.colorScheme) private var systemScheme
+    func body(content: Content) -> some View {
+        let palette = preferences.resolvedAppearance.palette(for: preferences.preferredColorScheme ?? systemScheme)
+        content.foregroundStyle(palette.foregroundColor, palette.secondaryColor)
+            .tint(palette.accentColor).background(palette.canvasColor)
+    }
+}
+extension View {
+    func workbenchTheme() -> some View { modifier(WorkbenchThemeModifier()) }
+}

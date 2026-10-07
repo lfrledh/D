@@ -575,7 +575,9 @@ struct ChatWorkbenchView: View {
                         .onTapGesture { closeNarrowPanel() }
                         .accessibilityHidden(true)
                 }
-                RetainedContentHost(content: sidebar.background(.background).disabled(!sidebarVisible)
+                RetainedContentHost(content: sidebar.workbenchPanel(cornerRadius: 0).disabled(!sidebarVisible)
+                    .environment(\.chatDisplayPreferences, model.chatDisplaySettings.preferences)
+                    .preferredColorScheme(model.chatDisplaySettings.preferences.preferredColorScheme)
                     .environment(\.dLanguageStore, language), visible: sidebarVisible,
                     identifier: "chat-sessions-host")
                     .frame(width: sidebarPaneWidth)
@@ -585,7 +587,9 @@ struct ChatWorkbenchView: View {
                     .accessibilityHidden(!sidebarVisible)
                     .chatMeasured("sessions-pane", probe: layoutProbe)
                 if let session {
-                    RetainedContentHost(content: inspector(session).background(.background).disabled(!inspectorVisible)
+                    RetainedContentHost(content: inspector(session).workbenchPanel(cornerRadius: 0).disabled(!inspectorVisible)
+                        .environment(\.chatDisplayPreferences, model.chatDisplaySettings.preferences)
+                        .preferredColorScheme(model.chatDisplaySettings.preferences.preferredColorScheme)
                         .environment(\.dLanguageStore, language), visible: inspectorVisible,
                         identifier: "chat-inspector-host")
                         .frame(width: inspectorPaneWidth)
@@ -1593,8 +1597,7 @@ struct ChatWorkbenchView: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(message.role == .user ? Color.accentColor.opacity(0.08) : Color.secondary.opacity(0.06),
-                    in: RoundedRectangle(cornerRadius: 12))
+        .workbenchPanel(cornerRadius: 12)
     }
 
     private func settings(_ session: ChatSession) -> some View {
