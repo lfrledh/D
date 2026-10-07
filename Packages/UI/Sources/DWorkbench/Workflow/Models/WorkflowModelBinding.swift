@@ -36,7 +36,7 @@ public struct WorkflowImageRecipe: Sendable {
         Self(ordered: { node, prompt, seed, references in
             let p = node.parameters
             let rawLoading = p["loadingStrategy"]?.string ?? "staged"
-            guard let loading = ImageLoadingStrategy(rawValue: rawLoading), !dev || loading == .staged else {
+            guard let loading = ImageLoadingStrategy(rawValue: rawLoading) else {
                 throw WorkflowIssue("所选图像实现不支持此加载方式。")
             }
             let value = ImageRequest(prompt: prompt, width: p["width"]?.integer ?? 512,

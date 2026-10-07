@@ -326,6 +326,64 @@ private func workflowFixturePNG(width: Int = 16, height: Int = 12) throws -> Dat
 
 @Suite("M0 workflow durable lifecycle", .serialized) @MainActor
 struct WorkflowLifecycleTests {
+    @Test func devLoadingChoiceReachesEngineFromQuickAndCanvasAndReopens() async throws {
+        let (root, store, engine, original) = try await fixture()
+        try await original.close() // Retire the empty fixture owner before a new Canvas owns this Store.
+        let session = WorkbenchSession(engine: engine, backendID: "fixture.dev",
+            status: { .init(activeRunID: nil, phase: nil, queuedRunIDs: []) },
+            shutdown: {}, cleanup: {}, validateModel: { _ in })
+        func services(for owner: ProjectStore) -> WorkflowServices {
+            WorkflowServices(store: owner, session: session, resolveModel: { kind, identity in
+                #expect(kind == .image && identity == "image:dev")
+                return .init(identity: identity, reference: .init(directory: root, revision: "dev-fixture"),
+                    backendID: "fixture.dev", operationID: WorkflowModelRoutes.fluxDev,
+                    imageRecipe: .fluxDev(capability: .flux2Dev))
+            })
+        }
+        let quick = QuickGenerationController(store: store) { services(for: store) }
+        await quick.load(); quick.select(operationID: WorkflowModelRoutes.fluxDev, modelID: "image:dev")
+        let draftID = try #require(quick.draft?.id)
+        let canvas = WorkflowController(services: services(for: store)); await canvas.load()
+        canvas.addNode(operationID: WorkflowModelRoutes.fluxDev)
+        let nodeID = try #require(canvas.selectedNodeID)
+        let parameters: [String: WorkflowScalar] = ["modelID": .text("image:dev"),
+            "promptText": .text("Unchanged full Dev prompt"), "width": .integer(256), "height": .integer(256),
+            "steps": .integer(50), "guidance": .decimal(4), "seed": .text("42"),
+            "count": .integer(1), "memoryBudgetGiB": .integer(2)]
+        for (key, value) in parameters {
+            quick.setParameter(key, value: value, draftID: draftID)
+            canvas.setParameter(nodeID: nodeID, key: key, value: value)
+        }
+        for (index, strategy) in [ImageLoadingStrategy.staged, .ssdLayered].enumerated() {
+            quick.setParameter("loadingStrategy", value: .text(strategy.rawValue), draftID: draftID)
+            canvas.setParameter(nodeID: nodeID, key: "loadingStrategy", value: .text(strategy.rawValue))
+            #expect(quick.definition?.fields.first { $0.id == "loadingStrategy" }?.kind == .choice(["staged", "ssdLayered"]))
+            #expect(quick.canStart)
+            quick.start(); await quick.waitForCompletion()
+            await canvas.run(target: nodeID, only: false)
+            let requests = await engine.requests
+            #expect(requests.count == (index + 1) * 2)
+            for request in requests.suffix(2) {
+                guard case .image(let image) = request.input else { Issue.record("Expected image request"); continue }
+                #expect(image.loadingStrategy == strategy && image.executionProfile == ImageExecutionCapability.flux2Dev.profile)
+                #expect(image.prompt == "Unchanged full Dev prompt" && image.steps == 50 && image.guidanceScale == 4 && image.seed == 42)
+                #expect(request.model.revision == "dev-fixture" && request.memoryBudgetBytes == 2 * 1_024 * 1_024 * 1_024)
+            }
+            #expect(quick.state.runs.last?.status == .completed)
+            #expect(canvas.runs.last?.status == .completed)
+        }
+        let graphID = try #require(canvas.graph?.id)
+        try await quick.prepareForTermination(); try await canvas.close(); try await store.close()
+        let reopened = try await ProjectStore.open(at: store.rootURL)
+        let restored = QuickGenerationController(store: reopened) { services(for: reopened) }
+        await restored.load()
+        #expect(restored.draft?.node.parameters["loadingStrategy"] == .text("ssdLayered"))
+        let restoredCanvas = WorkflowController(services: services(for: reopened)); await restoredCanvas.load()
+        #expect(restoredCanvas.graphs.first { $0.id == graphID }?.nodes.first?.parameters["loadingStrategy"] == .text("ssdLayered"))
+        #expect(await engine.requests.count == 4) // Reload does not submit another request.
+        try await restored.prepareForTermination(); try await restoredCanvas.close(); try await reopened.close()
+    }
+
     private func fixture(release: @escaping @MainActor () async -> Void = {}, prepare: @escaping @MainActor () async -> Void = {}) async throws -> (URL, ProjectStore, WorkflowFixtureEngine, WorkflowController) {
         let root = URL(fileURLWithPath: ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] ?? NSTemporaryDirectory())
             .appendingPathComponent("M0-" + UUID().uuidString)

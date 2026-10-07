@@ -77,8 +77,16 @@ struct ReleaseModelContractTests {
         #expect(throws: (any Error).self) { try WorkflowRegistry.standard.validate(node) }
         var dev = try #require(WorkflowRegistry.standard.operation(WorkflowModelRoutes.fluxDev)?.definition.makeNode())
         dev.parameters["loadingStrategy"] = .text("ssdLayered")
+        // R4 added the real Dev layered backend; both shared entry points must
+        // now preserve that explicit choice, without changing the old default.
+        try WorkflowRegistry.standard.validate(dev)
+        let devRecipe = WorkflowImageRecipe.fluxDev(capability: .flux2Dev)
+        #expect(try devRecipe.request(node: dev, prompt: "unchanged", seed: 7, references: []).loadingStrategy == .ssdLayered)
+        dev.parameters.removeValue(forKey: "loadingStrategy")
+        #expect(try devRecipe.request(node: dev, prompt: "unchanged", seed: 7, references: []).loadingStrategy == .staged)
+        dev.parameters["loadingStrategy"] = .text("invented")
         #expect(throws: (any Error).self) { try WorkflowRegistry.standard.validate(dev) }
-        #expect(throws: (any Error).self) { try WorkflowImageRecipe.fluxDev(capability: .flux2Dev).request(node: dev, prompt: "unchanged", seed: 7, references: []) }
+        #expect(throws: (any Error).self) { try devRecipe.request(node: dev, prompt: "unchanged", seed: 7, references: []) }
     }
     @Test func assetListSchemaRejectsContradictorySingleKindAndUnsupportedOutputAnnotation() throws {
         let contradictory = WorkflowPortDefinition("input", "Input", kinds: [.audio, .list], assetListKind: .image)
