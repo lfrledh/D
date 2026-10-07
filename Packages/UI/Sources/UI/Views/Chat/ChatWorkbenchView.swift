@@ -305,6 +305,14 @@ struct ChatReadingPoint {
         return nil
     }
 
+    func alignTop(messageID: UUID, sessionID: UUID) -> Bool {
+        guard let view = entries[Key(sessionID: sessionID, messageID: messageID)]?.view,
+              view.window != nil, let scroll = view.enclosingScrollView else { return false }
+        scroll.layoutSubtreeIfNeeded()
+        let rect = view.convert(view.bounds, to: nil)
+        return align(offset: 0, rect: rect, in: scroll)
+    }
+
     /// Called only after Reader has made the saved message available. It neither
     /// changes focus nor responds to a link's focus/geometry notifications.
     func restore(_ point: ChatReadingPoint, sessionID: UUID) -> Bool {
@@ -320,7 +328,15 @@ struct ChatReadingPoint {
         // Reflow or edited content invalidates a pixel offset. Reader's message
         // anchor remains a safe fallback; never apply a stale offset to new text.
         guard abs(rect.width - point.width) < 1, abs(rect.height - point.height) < 1 else { return true }
-        let delta = point.offset - (rect.maxY - viewport.maxY)
+        return align(offset: point.offset, rect: rect, in: scroll)
+    }
+
+    private func align(offset: CGFloat, rect: CGRect, in scroll: NSScrollView) -> Bool {
+        let clip = scroll.contentView
+        let viewport = clip.convert(clip.bounds, to: nil)
+        guard !rect.isEmpty, !viewport.isEmpty, rect.minY.isFinite, rect.maxY.isFinite,
+              viewport.minY.isFinite, viewport.maxY.isFinite, offset.isFinite else { return false }
+        let delta = offset - (rect.maxY - viewport.maxY)
         var proposed = clip.bounds
         proposed.origin.y += clip.isFlipped ? delta : -delta
         clip.scroll(to: clip.constrainBoundsRect(proposed).origin)
@@ -804,6 +820,7 @@ struct ChatWorkbenchView: View {
                             Button {
                                 do {
                                     if let currentID = chat.state.selectedSessionID { saveScrollState(for: currentID, captureReadingPoint: true) }
+                                    searchJump = nil
                                     try chat.selectSession(item.id)
                                     closeNarrowPanel()
                                 } catch { report(error.localizedDescription, for: item.id) }
@@ -935,7 +952,7 @@ struct ChatWorkbenchView: View {
                 .onScrollPhaseChange { _, newPhase, context in
                     guard chat.state.selectedSessionID == session.id else { return }
                     let userPhase = newPhase == .tracking || newPhase == .interacting || newPhase == .decelerating
-                    if userPhase { scrollRestoration = nil }
+                    if userPhase { scrollRestoration = nil; searchJump = nil }
                     guard scrollRestoration?.sessionID != session.id else { return }
                     if userPhase || (userScrollingTranscript && newPhase == .idle) {
                         followsBottom = context.geometry.contentSize.height - context.geometry.contentOffset.y
@@ -1016,10 +1033,7 @@ struct ChatWorkbenchView: View {
                             guard searchJump == jump, chat.state.selectedSessionID == jump.sessionID else { return }
                             followsBottom = false; hasNewContent = false
                             traceScroll("scroll:appear-search", session: session, target: jump.messageID.uuidString)
-                            scrollProxy.scrollTo(jump.messageID, anchor: .top)
-                            saveScrollState(for: session.id)
-                            scrollRestoration = nil
-                            searchJump = nil
+                            await alignSearchResult(jump, using: scrollProxy)
                         }
                         return
                     }
@@ -1055,17 +1069,14 @@ struct ChatWorkbenchView: View {
                         guard searchJump == jump, chat.state.selectedSessionID == jump.sessionID else { return }
                         followsBottom = false; hasNewContent = false
                         traceScroll("scroll:search", session: session, target: jump.messageID.uuidString)
-                        scrollProxy.scrollTo(jump.messageID, anchor: .top)
-                        saveScrollState(for: session.id)
-                        scrollRestoration = nil
-                        searchJump = nil
+                        await alignSearchResult(jump, using: scrollProxy)
                     }
                 }
                 .overlay(alignment: .bottomTrailing) {
                     if !followsBottom {
                         Button(hasNewContent ? newLabel("newContent", english: "New content · Bottom", chinese: "有新内容 · 到底部") : label("bottom", "到底部"),
                                systemImage: "arrow.down") {
-                            scrollRestoration = nil
+                            scrollRestoration = nil; searchJump = nil
                             followsBottom = true; hasNewContent = false
                             saveScrollState(for: session.id)
                             traceScroll("scroll:manual-bottom", session: session, target: "bottom")
@@ -1094,6 +1105,31 @@ struct ChatWorkbenchView: View {
         } else {
             proxy.scrollTo("chat-transcript-bottom", anchor: .bottom)
         }
+    }
+
+    private func alignSearchResult(_ jump: ChatSearchJump, using proxy: ScrollViewProxy) async {
+        func isCurrent() -> Bool {
+            searchJump == jump && chat.state.selectedSessionID == jump.sessionID
+                && chat.selectedPath.contains { $0.id == jump.messageID }
+        }
+        guard isCurrent() else { return }
+        // An existing native marker gives the measured message edge. Reader is
+        // needed only to materialize a lazy target that is not available yet.
+        if !readingMarkers.alignTop(messageID: jump.messageID, sessionID: jump.sessionID) {
+            proxy.scrollTo(jump.messageID, anchor: .top)
+            for _ in 0..<5 {
+                try? await Task.sleep(for: .milliseconds(20))
+                guard isCurrent() else { return }
+                if readingMarkers.alignTop(messageID: jump.messageID, sessionID: jump.sessionID) { break }
+            }
+        }
+        guard isCurrent() else { return }
+        visibleMessageID = jump.messageID
+        // Do not retain the reading point from before this explicit navigation.
+        scrollStates[jump.sessionID]?.readingPoint = nil
+        saveScrollState(for: jump.sessionID, captureReadingPoint: true)
+        scrollRestoration = nil
+        searchJump = nil
     }
 
     private func saveScrollState(for sessionID: UUID, captureReadingPoint: Bool = false) {
@@ -2107,6 +2143,7 @@ struct ChatWorkbenchView: View {
     private func createSession() {
         do {
             if let currentID = chat.state.selectedSessionID { saveScrollState(for: currentID, captureReadingPoint: true) }
+            searchJump = nil
             _ = try chat.newSession()
             closeNarrowPanel()
         } catch { report(error.localizedDescription, for: chat.state.selectedSessionID) }

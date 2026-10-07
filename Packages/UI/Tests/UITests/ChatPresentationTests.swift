@@ -796,6 +796,7 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
             XCTAssertTrue(owner.restore(point, sessionID: sessionID))
             let restored = try XCTUnwrap(owner.capture(sessionID: sessionID, path: [messageID]))
             XCTAssertEqual(restored.offset, point.offset, accuracy: 0.5)
+            XCTAssertEqual(scroll.contentView.bounds.origin.y, target, accuracy: 0.5)
             XCTAssertFalse(owner.restore(point, sessionID: UUID()), "Never restore another session's marker")
             marker.frame.size.width = 500
             scroll.contentView.scroll(to: .init(x: 0, y: 80))
@@ -803,6 +804,10 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
             XCTAssertEqual(scroll.contentView.bounds.origin.y, 80, accuracy: 0.5)
             marker.frame.size.width = 600
         }
+        scroll.contentView.scroll(to: .init(x: 0, y: 1200))
+        XCTAssertTrue(owner.alignTop(messageID: messageID, sessionID: sessionID))
+        XCTAssertEqual(scroll.contentView.bounds.origin.y, 80, accuracy: 0.5)
+        XCTAssertFalse(owner.alignTop(messageID: UUID(), sessionID: sessionID))
         marker.frame.size.height = 0
         let unavailable = ChatReadingPoint(messageID: messageID, offset: 500, width: 600, height: 3600)
         XCTAssertFalse(owner.restore(unavailable, sessionID: sessionID), "Unlaid-out markers must not consume restoration")
