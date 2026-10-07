@@ -1045,3 +1045,12 @@ RPosition见CURRENT_ACTIONS。旧实现坐标/选择范围1方法和viewport1方
 依Apple updateDragTypeRegistration规则，只在现有子类补登记更新和callback生命周期。初补super未清自定义登记，3项生命周期断言失败；显式重算plain-text登记后22方法/4suite通过。readonly/IME/Undo/普通文字/拆除保护未放宽，没有改Store、导入、模型或布局。非实现者file_drop_boundary_review只读核验，依据真实失败纠正其注销推断，无独立GUI测试。所有失败/命令/结果留registration-{red,green,final}-tests；测试后仅注释调整，App构建对应固定fe0。
 
 普通签名App、源码/复制4文件摘要见registration-app-version.json。首次工具文件菜单编号失效，正常退出自有空实例，重开后快捷键/已有文件面板打开同一Drop-position项目成功；没有重复面板或修改产品菜单。已请求一次左侧与右下空白Finder对照，等待结果；旧scheme/CSV/项目保留，main和推荐包不变，三项compact hosting独立保留。后续结果及最终文档提交写外部registration-checkpoint.json，不自引用提交。
+
+
+### 2026-10-07—08 隐藏工作流原生接收区定点收尾
+
+本人fe0左→右→左松手仍退回，边界在“保”右缘附近。基线fc4e59d15b23761bdf66bed5900dec9bb5069d62，代码52ceab561a32bba60941c0eca94ddf683605909f。RPosition的真实dragSequence52在window x约515进入/退出输入器，exit时普通hitTest仍为FileDropTextView；隐藏Workflow原生图形区域右边缘515、其接收器仍登记。此证据支持隐藏层干扰，不声称证明私有AppKit根因；canReceive字段在URL解码前记录，不能当最终copy返回证据。CSV直接导入无需确认框，纠正此前预期。
+
+Lead复用既有ChatPaneHost为RetainedContentHost，以原生isHidden隐藏未选中Workflow，保留同实例、语言、视口与缩放，不改导入/Store/runtime/模型。临时限量诊断已移出生产，完整patch、实际trace与geometry保留。非实现者file_drop_boundary_review只读核验，无生产必修，建议强化接收器身份/登记已落实；不是独立原生测试。隐藏断言旧版先红1方法，修后24方法/4suite通过；补强后同1方法重跑通过，不加总。普通签名App对应固定52ce，4关键文件复制一致。证据lead/hidden-receiver-decision.json、hidden-{red,green,reviewed}-tests.*、hidden-app-version.json。
+
+普通App实际Quick/Workflow往返、100→122%缩放保持和全部会话/草稿不变通过；尚未进行新包Finder拖入，摆源文件时工具报告锁屏。自有PID39300身份核对后SIGTERM并确认结束，不算正常GUI退出；Finder/已结束Terminal窗口关闭未确认。恢复桌面后按原left/blank两落点→附件预览→保存冷开核对，不重复旧输入/模型。原CSV/旧项目及scheme差异、内容、索引和未暂存状态见hidden-final-protection.json；最终仅文档SHA与远端见hidden-closeout-receipt.json，不自引用提交。候选保留，main908与推荐3cc不变；原三项紧凑hosting独立保留，未功能冻结/视觉转段。无新Worker实现，Lead完整消耗和订阅费用unknown。
