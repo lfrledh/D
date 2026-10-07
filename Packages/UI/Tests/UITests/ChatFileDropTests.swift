@@ -7,6 +7,43 @@ import Testing
 /// not replace Finder hit-testing or sandbox import/save/reopen acceptance.
 @Suite("Chat file drop boundary", .serialized) @MainActor
 struct ChatFileDropTests {
+    @Test func fileCopyFeedbackAndAcceptanceIgnoreCaretAndTextSelection() throws {
+        let view = FileDropTextView(), coordinator = TextSourcesQuestionEditor.Coordinator()
+        view.delegate = coordinator
+        coordinator.update(view, value: "保留草稿 abc 中文", isEditable: true, onEdit: { _ in })
+        view.textContainerInset = NSSize(width: 6, height: 6)
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 400, height: 180),
+                              styleMask: [.titled], backing: .buffered, defer: false)
+        window.contentView = view
+        defer { window.contentView = nil }
+        let drag = FileDropInfo(urls: [URL(fileURLWithPath: "/fixture/numbers.csv")])
+        drag.draggingDestinationWindow = window
+        defer { drag.draggingPasteboard.releaseGlobally() }
+        var received = 0
+        view.onFileDrop = { _ in received += 1 }
+        let original = view.string
+        // Traverse both sides of the caret, over selected glyphs and empty
+        // viewport space. File attachments have no text insertion position.
+        let points = [NSPoint(x: 1, y: 1), NSPoint(x: 8, y: 12),
+                      NSPoint(x: 50, y: 12), NSPoint(x: 390, y: 12),
+                      NSPoint(x: 200, y: 160), NSPoint(x: 8, y: 12)]
+        for selection in [NSRange(location: 0, length: 0), NSRange(location: 5, length: 0),
+                          NSRange(location: 0, length: view.string.utf16.count)] {
+            view.setSelectedRange(selection)
+            for (index, point) in points.enumerated() {
+                drag.draggingLocation = view.convert(point, to: nil)
+                let operation = index == 0 ? view.draggingEntered(drag) : view.draggingUpdated(drag)
+                #expect(operation == .copy, "File copy feedback at \(point), selection \(selection)")
+                #expect(view.prepareForDragOperation(drag))
+                #expect(view.string == original && view.selectedRange() == selection)
+            }
+            #expect(view.performDragOperation(drag))
+            view.concludeDragOperation(drag)
+            #expect(view.string == original && view.selectedRange() == selection)
+        }
+        #expect(received == 3)
+    }
+
     @Test func filesReachCallbackWithoutEditingSelectionOrUndo() throws {
         let view = FileDropTextView()
         view.allowsUndo = true
@@ -51,22 +88,30 @@ struct ChatFileDropTests {
         let drag = FileDropInfo(urls: [URL(fileURLWithPath: "/fixture/numbers.csv")])
         defer { drag.draggingPasteboard.releaseGlobally() }
         view.isEditable = false
+        #expect(view.draggingEntered(drag).isEmpty && view.draggingUpdated(drag).isEmpty)
+        #expect(!view.prepareForDragOperation(drag))
         #expect(view.dragOperation(for: drag, type: .fileURL).isEmpty)
         #expect(!view.performDragOperation(drag))
         view.isEditable = true
         drag.draggingSourceOperationMask = .move
+        #expect(view.draggingEntered(drag).isEmpty && view.draggingUpdated(drag).isEmpty)
+        #expect(!view.prepareForDragOperation(drag))
         #expect(view.dragOperation(for: drag, type: .fileURL).isEmpty)
         #expect(!view.performDragOperation(drag))
         drag.draggingSourceOperationMask = .copy
         view.setMarkedText("pinyin", selectedRange: NSRange(location: 6, length: 0),
             replacementRange: NSRange(location: view.string.utf16.count, length: 0))
         let marked = view.markedRange(), text = view.string, selection = view.selectedRange()
+        #expect(view.draggingEntered(drag).isEmpty && view.draggingUpdated(drag).isEmpty)
+        #expect(!view.prepareForDragOperation(drag))
         #expect(view.dragOperation(for: drag, type: .fileURL).isEmpty)
         #expect(!view.performDragOperation(drag))
         #expect(view.string == text && view.markedRange() == marked && view.selectedRange() == selection)
         view.unmarkText()
         let scroll = NSScrollView(); scroll.documentView = view
         TextSourcesQuestionEditor.dismantleNSView(scroll, coordinator: coordinator)
+        #expect(view.draggingEntered(drag).isEmpty && view.draggingUpdated(drag).isEmpty)
+        #expect(!view.prepareForDragOperation(drag))
         #expect(!view.performDragOperation(drag) && received == 0)
     }
 
@@ -132,6 +177,12 @@ struct ChatFileDropTests {
             return view.subviews.compactMap { find($0) }.first
         }
         let editor = try #require(find(host) as? FileDropTextView)
+        let clip = try #require(editor.superview as? NSClipView)
+        for point in [NSPoint(x: 2, y: 2), NSPoint(x: clip.bounds.width - 2, y: 2),
+                      NSPoint(x: 2, y: clip.bounds.height - 2),
+                      NSPoint(x: clip.bounds.width - 2, y: clip.bounds.height - 2)] {
+            #expect(editor.frame.contains(point), "Attachment editor must fill visible input at \(point)")
+        }
         let drag = FileDropInfo(urls: [URL(fileURLWithPath: "/fixture/numbers.csv")])
         defer { drag.draggingPasteboard.releaseGlobally() }
         #expect(editor.performDragOperation(drag) && received.count == 1)
@@ -149,7 +200,7 @@ struct ChatFileDropTests {
     let draggingPasteboard = NSPasteboard.withUniqueName()
     var draggingSourceOperationMask: NSDragOperation = .copy
     var draggingDestinationWindow: NSWindow?
-    var draggingLocation: NSPoint { NSPoint(x: 100, y: 80) }
+    var draggingLocation = NSPoint(x: 100, y: 80)
     var draggedImageLocation: NSPoint { .zero }
     nonisolated var draggedImage: NSImage? { nil }
     var draggingSource: Any? { nil }

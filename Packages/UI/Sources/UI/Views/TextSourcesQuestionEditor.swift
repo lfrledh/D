@@ -192,6 +192,24 @@ struct TextSourcesQuestionEditor: NSViewRepresentable {
             sender.draggingSourceOperationMask.contains(.copy)
     }
 
+    // Attachments belong to the composer, not to a text insertion position.
+    // Decide file-only acceptance directly at the destination entry points,
+    // independently of caret/selection. Preserve native text drag handling.
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        guard !files(sender.draggingPasteboard).isEmpty else { return super.draggingEntered(sender) }
+        return canReceive(sender) ? .copy : []
+    }
+
+    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+        guard !files(sender.draggingPasteboard).isEmpty else { return super.draggingUpdated(sender) }
+        return canReceive(sender) ? .copy : []
+    }
+
+    override func prepareForDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        guard !files(sender.draggingPasteboard).isEmpty else { return super.prepareForDragOperation(sender) }
+        return canReceive(sender)
+    }
+
     override func dragOperation(for draggingInfo: NSDraggingInfo,
                                 type: NSPasteboard.PasteboardType) -> NSDragOperation {
         guard !files(draggingInfo.draggingPasteboard).isEmpty else {
