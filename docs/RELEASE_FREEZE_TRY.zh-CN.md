@@ -1,68 +1,50 @@
-# D 开发预览：本轮试用
+# D 开发候选：原生界面第一版
 
-2026-10-08 · CHAT-PRODUCT-20261003本轮功能门槛已收口，达到视觉转段门槛；F26真实搜索API/凭据按用户批准延期。尚非正式发行，未自动开始质量审计或UI改版。唯一逐项状态见[聊天清单](CHAT_FEATURE_LEDGER.zh-CN.md)。
+2026-10-08 · **UI-REFINEMENT-01组合原生验收未完成**。代码/非交互检查与普通签名构建已完成，桌面再次锁屏后暂停窗口测试。新包不替换普通D、不接纳main、不作为正式发行包。详细状态见[当前行动](CURRENT_ACTIONS.zh-CN.md)及[任务证据](tasks/UI-REFINEMENT-01.md)。
 
-## 唯一推荐启动入口（开发验收包）
+## 唯一推荐试用入口
 
-双击原有入口：
+继续双击原有入口（已经原位指向新候选）：
 `/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261004T145523Z-continuous-closeout/delivery/启动聊天当前验收.command`
 
-现在只指向 **D Chat Product 8cf1b7dd.app**：
-`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261007T132148Z-drop-position/delivery/D Chat Product 8cf1b7dd.app`。
+本次只打开：
+`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/UI-REFINEMENT-01/run-20261007T184130Z/delivery/D Native UI baf91280.app`
 
-实际受测生产代码 **8cf1b7dd46f6041dbcf1ac3db75b19839ae390c4**；普通签名构建27.966秒成功。复制前后可执行文件、调试库、Info.plist、CodeResources一致，签名验证通过，没有手补/重签。RPosition为上述run，见`lead/compact-app-version.json`、`compact-native-result.json`；最终仅文档版本及main/候选远端对应见`lead/unlocked-closeout-receipt.json`。不宣称在之后文档提交上重新跑过模型。
+代码 **baf9128093fa214bf4ddf340331390331d9873dc**；普通签名构建33.70秒通过，复制关键文件一致、签名验证通过，没有手补。该最终包尚未原生操作，不把之前bb6窗口或fccf测试当它已通过。
 
-本包包含已收口的输入响应、长文阅读恢复/搜索、文件拖入修补与Dev SSD入口。52ce本人将left.csv拖到左侧文字区、blank.csv拖到右下空白区并实际松手，两处均成功；Lead双预览、保存退出、冷开和原件/草稿保护通过。8cf仅移除非空会话多余尾占位，6 XCTest＋4 Swift Testing通过（原3失败保持标准），同版普通App上滚/Bottom、内部位置恢复、首次搜索、可见链接取消和Undo通过。旧语音、模型、工具/恢复证据按未变路径复用，没有新一轮全模型生成。
+入口使用独立偏好`B7DA6B57-4CE1-49DF-9917-59FA18A8870F`，已有D时拒绝双开，不关闭用户应用。旧8cf功能包与入口备份保留在原位置及本轮delivery/previous-launcher.command；它们不是另一份新界面推荐入口。不要同时打开旧测试版。
 
-入口仍用隔离偏好`BC96EF26-C157-4A48-84B4-A54785B1A42E`，已有D时拒绝双开，不覆盖普通D。旧3cc/abd5/d1ab/6fb/fe0/52ce包及失败证据全部保留，已不是推荐入口；具体前后对照见[原任务记录](tasks/D-RELEASE-FREEZE-01.md)。不要同时打开旧测试版。
+## 不运行模型也能检查的试用材料
 
-CSV直接成为附件，无需确认框；输入托盘外侧16点padding也接收文件，故可比深色文本框略宽。移出后的加号短暂保留仅为用户观察，没有证据称是特意的延迟设计。成功应以松手后附件出现为准，未把悬停或加号本身当通过。
+打开“文件→打开项目”，选：
+`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/UI-REFINEMENT-01/run-20261007T184130Z/gui/UI acceptance.dproject`
 
-## 从保留的小项目继续
+这是独立测试副本，带既有24节长文、图片、视频和音频。媒体来自已存在的固定产物；为展示写入的记录明确标注**受控媒体展示记录，不是模型执行结果**，没有假模型或新推理。未选真实模型时生成按钮不可用是预期；无需下载、登录或生成。
 
-1. 解锁后启动，菜单“文件→打开项目”，选择本轮独立恢复副本：
-   `/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261004T145523Z-continuous-closeout/gui/unlocked-20261005/Restored-chat-1ebe7042.dproject`。
-   “Reading corner lighting”保留比较、人工版本、PDF/DOCX/OCR与记忆；“List twelve…”保留部分回答、空取消、成功OK及工具/成果；两个空会话用于默认系统提示词作用域检查。不要覆盖原项目或旧包。
-2. Quick→文字。主操作为输入区“发送／停止”；未接受前不替换历史原文。671已修首字前停止后不能续发，并实际得到OK。新菜单首项“重命名”已实点保存；“收藏”和已有分支首项已用鼠标+Return操作，答案版本子菜单经鼠标展开＋键盘选择已补；1057/962pt主操作和浮层关闭已在1ebe验证，不等于所有布局完成。
-3. 检查器可看已有知识重排、Python失败/成功/取消记录、单位/时区及HTML/Mermaid成果。Mermaid两个保存版本互不覆盖，放弃未保存不会改旧版；临时会话只有显式保留成果进入Canvas，不自动运行。Python仍是有预算的WASI标准库，不是宿主任意终端。
-4. 1ebe已用普通App执行新包→独立恢复→冷重开，完整4版本会话记忆及17份独立媒体保持。旧af包遗漏不会自动补写；新恢复不自动打开未来记忆授权。全局预设另行交换。
-5. 联网“搜索与工具”保留Brave/博查入口，但真实API和凭据本轮已批准延期，无需现在办理。未配置不会伪造结果；摘要不是已读取正文，采用正文后才交本地模型。
-6. 输入托盘“语音输入与系统朗读”手选普通话/英语。两种本地转写→审核→采用未发送草稿已有实际证据；英语本人确认及系统朗读听感已通过，本包补默认声音与暂停/继续/停止操作。无需重复录音或试听；旧失败记录保留，不自动转云。
+1. 顶部中央是文字/图像/视频/音频；右上相邻圆钮直接切换工作模式和打开设置。每侧圆钮收栏，中央回收空间；窄窗临时只展开一侧。
+2. 图像/视频中央固定预览，右侧选候选；图片可放大拖动、适配复位。视频保留播放器时间轴和原音轨。长参数与来源从详情看；浏览旧结果不改下一次输入。
+3. 设置包含外观、文件、网络、凭据、语言、操作与辅助。外观可分别改浅深色号、透明度、动效和轻量模式；低对比会提示，可恢复默认。网络/凭据沿原服务，不因打开设置而发起搜索，F26不在本轮办理。
+4. 工作流可在原小样例或新测试图中检查指针框选/多选移动、手形平移、原删除/Undo和封装。右下适配只改变视野，不重排。不要在真实作品上试未验操作。
+5. 文字页沿用当前聊天与输入组件。最终包仍需补可见外链取消、阅读恢复/Bottom以及输入区CSV左侧和右下拖放；不重复跑模型，也不默认要求本人组字或试听。
 
-本轮两个定点项目可继续查看：`run-20261007T132148Z-drop-position/gui/Drop-position.dproject`保留左右拖入附件；`run-20261007T104034Z-desktop-resume/gui/Reading-acceptance.dproject`保留24节长文（相对AgentTrials/D-RELEASE-FREEZE-01）。不需要重新运行模型或重复本人输入/试听。
-
-## 使用已下载模型
-
-原件均在`/Volumes/CodexProjects/Codex/D-Development/Models/`：
-
-| 模型 | 目录 |
-|---|---|
-| ACE-Step 1.5 XL SFT 原始F32 | ACE-Step-1.5-XL-SFT |
-| FLUX.2-klein-4B 原始BF16 | release-flux2-klein-4b-bf16 |
-| FLUX.2-dev 原始BF16 | release-flux2-dev-bf16 |
-| Qwen3.5-9B 原始权重 | release-qwen35-9b-bf16 |
-| Qwen3.8-27B 原始BF16 | release-qwen38-27b-bf16 |
-
-Dev现在可直接选择含来源sidecar的原目录，不必清理或另复制到“干净目录”。完整校验和实际推理是两个步骤；看到目录通过不代表所有能力已验证。
-
-Quick/Canvas选真实模型，高级参数选择**省内存（SSD分层加载，精度不变）**。Dev的该选项已在9b6c982b补通，普通App选择与保存冷开证据保留，新推荐8cf包含该修补。常驻/分阶段保留；不自动量化、裁层或删条件。短起步配置可用：ACE6秒/50步/guidance7/seed7；Klein512²/4步/guidance1/seed42；Qwen关闭思考、输出上限256的简短请求。开发机短请求使用显式15GiB预算，不是产品上限或任意长输入保证。
-
-沿用前轮cd4cd4b的Qwen9四帧请求与Klein完整生成/有序参考实测；本轮为F16补两次已有Qwen Q4思考通道短请求，均按所设输出长度结束且没有final；不能把它当完整回答质量通过。其他模型没有重复生成。Dev50步、H3原始完整50步及LTX2.5原始30步的未变计算沿用R4结果，单次LTX约135–147分钟；不因慢而减少精度/层数。精确profile、已验条件及未验范围见[能力矩阵](RELEASE_MODEL_MATRIX.zh-CN.md)。H3既有执行包位于`Models/D-Video-Packs/H3-FL2VA-BF16`；LTX既有包位于`run-20261001T162316Z-r4/lead/ltx-production-prepare/prepared/ltx-2.5-bf16-9CB71D89-01ED-4227-9C35-E53AA16FB8CB`（相对AgentTrials/D-RELEASE-FREEZE-01）。Wan完整原仓服务已验，内嵌转换仍保持原件并独立发布，Wan仅T2V。无需重复准备已有有效包。
-
-已有视频无需重复人工审阅：2026-10-03本人确认新的LTX倒水→停止、H3自然首尾两段均正常。LTX固定完整30步/原始BF16样本约−34dBFS，PCM至AAC没有幅值坍缩；H3固定完整50步/原始BF16张量与F32组件。旧LTX近静音及合成红块的历史不抹去，旧近静音首异常层仍未知；新样本通过不是所有参数的质量保证，也不是B App视频生成入口通过。精确记录在当前任务RC/q，未再随机抽卡。
+以上是待完成的实际步骤，不是已执行通过列表。桌面重新可用时由Lead先独立完成；无须现在本人操作。
 
 ## 同树 Xcode Run
 
-打开与推荐包同生产代码的候选工作树（8cf1b7dd＋随后仅文档结案）：
-`/Volumes/CodexProjects/Codex/D-Worktrees/D-RELEASE-FREEZE-01/D.xcworkspace`
+打开：
+`/Volumes/CodexProjects/Codex/D-Worktrees/D-UI-REFINEMENT-01/D.xcworkspace`
 
-选择 **D Nodes / My Mac / Debug**。本机忽略配置`Development/Development.local.xcconfig`使用既有签名身份，资源目录为：
+选择 **D Nodes / My Mac / Debug**。工作树在baf生产代码后只追加本轮说明；最终SHA见任务回执。本机忽略文件`Development/Development.local.xcconfig`复用既有签名，资源路径：
 `/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261004T041401Z-chat-resume/delivery/resources-with-python`
 
-正常Xcode资源阶段嵌入现有引擎与ChatPython，无需手补App或重装模型。本轮同树D Nodes普通签名build通过，代理已在同代码App执行上述定点原生检查；没有让本人点击Run，未重跑模型。换机按[开发说明](../Development/README.md)准备资源。main正常接纳同一8cf生产代码及随后文档；main与候选精确SHA见本轮外部回执。构建入口仍推荐上述已核资源配置的同树workspace。
+正常资源阶段嵌入原引擎与ChatPython，无需手补App、重装模型或改变签名方案。命令行同树构建已通过；本次没有实际点击Xcode Run，普通GUI组合验证尚缺。换机按[开发资源说明](../Development/README.md)准备环境。
 
-## 集中办理与交付边界
+## 证据与边界
 
-此前已验的恢复、紧凑布局、真实重排、临时成果和工具取消等证据沿用。本次处理原集中队列，首次语音授权的工程崩溃已修补；语音实测、Bottom与其他原生操作的最新结果只见[当前行动](CURRENT_ACTIONS.zh-CN.md)及[唯一队列](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md)。搜索凭据/实调按本人决定延期；不重复旧授权和固定视频。
+- fccf8889810a2340e0c151aa3d307cfeb27e30fa的59项/8套件通过，含外观/Markdown属性、Quick组字宿主、Canvas几何/手势门禁及原生隐藏保护。另一次原子移动与媒体Store夹具独立通过，不凑合计通过率。
+- baf比上述受测组合多窄窗检查器显式展开、设置按钮文案和缩回100%居中；构建通过，最后展示变化未做窗口测试。
+- 唯一现有新壳层截图如下，来自**bb6f5f1c中间版本**，不是最终主题/Canvas截图。最终四分类、设置、Canvas同版截图仍待桌面。
 
-本轮既定聊天代表验收已收口，可供用户审计并决定下一视觉阶段；F26仅按明确决议延期，未称真实联网通过。功能收口不等于正式发行：首次使用、无权重分发/依赖封装、升级恢复和渠道责任仍保留。没有强推、改许可证或发布Release。
+![中间壳层图像空态，bb6f5f1c，非最终验收](images/ui-refinement-shell-bb6f5f1c.png)
+
+main与旧release候选维持91bef7d720a8b6cb923207ef787230f36496f4cf；旧8cf功能基线及其真人/模型证据保留。新候选没有修改推理路径，不重复模型生成。README中备份/独立恢复、冷启和固定自然视频的过时描述仅按已有代表证据校正，不外推全场景、干净机器、NAS或正式发行。首次使用、无权重分发/依赖封装、升级与渠道责任仍在。
