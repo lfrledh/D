@@ -72,7 +72,11 @@ struct DApp: App {
         .defaultSize(width: 1280, height: 820)
         .windowResizability(.contentMinSize)
         .commands { WorkbenchCommands(bootstrap: bootstrap) }
-        Settings { LanguageSettingsView(store: bootstrap.languageStore).frame(width: 540, height: 420) }
+        Settings {
+            if let model = bootstrap.quickModel, let library = bootstrap.libraryModel {
+                WorkbenchSettingsView(model: model, library: library, language: bootstrap.languageStore)
+            } else { LanguageSettingsView(store: bootstrap.languageStore).frame(width: 540, height: 420) }
+        }
     }
 }
 

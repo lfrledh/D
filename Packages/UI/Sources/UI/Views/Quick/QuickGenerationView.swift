@@ -22,6 +22,11 @@ struct QuickGenerationView: View {
     let onValueToCanvas: (WorkflowDatum) -> Void
     var onAssetsChanged: () -> Void = {}
     var onResolveSharedAsset: QuickInputImport.SharedAssetResolver? = nil
+    @State private var narrowRight = false
+    @State private var leftRequested = true
+    @State private var rightRequested = true
+    @State private var selectedResults: [QuickCategory: WorkflowAssetReference] = [:]
+    @State private var detailRun: QuickRunRecord?
     @State private var advanced = false
     @State private var history = false
     @State private var inputIssue: String?
@@ -41,8 +46,104 @@ struct QuickGenerationView: View {
             ?? (id.isEmpty ? "选择一个模型" : "指定模型未准备")
     }
     var body: some View {
-        VStack(spacing: 0) {
-            HStack(alignment: .center, spacing: 12) {
+        GeometryReader { geometry in
+            let leftShown = leftRequested && geometry.size.width >= 790 && (geometry.size.width >= 1110 || !narrowRight)
+            let rightShown = rightRequested && geometry.size.width >= (leftShown ? 1110 : 700)
+            HStack(alignment: .top, spacing: 12) {
+                if leftShown {
+                    VStack(spacing: 0) {
+                        HStack { Text("生成设置").font(.headline); Spacer(); panelButton("收起生成设置", "sidebar.left") { leftRequested = false } }.padding(12)
+                        modelHeader
+                        Divider()
+                        parameterPanel
+                    }.frame(width: 280).background(.background, in: RoundedRectangle(cornerRadius: 18))
+                }
+                VStack(spacing: 10) {
+                    HStack {
+                        if !leftShown { panelButton("展开生成设置", "slider.horizontal.3") { leftRequested = true; narrowRight = false } }
+                        Text(title).font(.headline).lineLimit(1)
+                        Spacer()
+                        if let result = selectedMedia, let run = run(containing: result) {
+                            Button("结果详情", systemImage: "info.circle") { detailRun = run }
+                        }
+                        if !rightShown { panelButton("展开素材与结果", "square.grid.2x2") { rightRequested = true; narrowRight = true } }
+                    }
+                    if quick.category == .image || quick.category == .video {
+                        mediaStage
+                    } else {
+                        ScrollView {
+                            LazyVStack(alignment: .leading, spacing: 16) {
+                                if !quick.visibleStreamingText.isEmpty { Text(quick.visibleStreamingText).textSelection(.enabled) }
+                                ForEach(currentRuns) { run in runCard(run) }
+                                if !pastRuns.isEmpty { DisclosureGroup("以前的创作", isExpanded: $history) { ForEach(pastRuns) { run in runCard(run) } } }
+                                if quick.visibleRuns.isEmpty { ContentUnavailableView("开始一份创作", systemImage: "sparkles", description: Text("输入任务后生成；结果会自动保存。")) }
+                            }.padding(12)
+                        }.frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
+                    if let definition, let draft = quick.draft {
+                        VStack(alignment: .leading, spacing: 6) {
+                            ForEach(definition.fields.filter { ["task", "promptText"].contains($0.id) }) { field in
+                                QuickParameterField(ownerID: draft.id, operationID: draft.node.operationID, field: field, value: draft.node.parameters[field.id] ?? field.defaultValue,
+                                    onChange: { quick.setParameter(field.id, value: $0, draftID: draft.id) }, raw: draft.fieldText[field.id], onRaw: { quick.setFieldText(field.id, text: $0, draftID: draft.id) })
+                            }
+                        }.frame(maxHeight: min(180, geometry.size.height * 0.28))
+                    }
+                    if let issue = inputIssue ?? quick.inputIssue ?? quick.saveIssue ?? quick.error {
+                        Text(issue).font(.caption).foregroundStyle(.red).lineLimit(3).textSelection(.enabled)
+                    }
+                    generationBar
+                }.frame(maxWidth: .infinity, maxHeight: .infinity)
+                if rightShown {
+                    VStack(spacing: 0) {
+                        HStack { Text("素材与结果").font(.headline); Spacer(); panelButton("收起素材与结果", "sidebar.right") { rightRequested = false } }.padding(12)
+                        ScrollView {
+                            LazyVStack(alignment: .leading, spacing: 10) {
+                                ForEach(mediaReferences, id: \.self) { reference in
+                                    Button { selectedResults[quick.category] = reference } label: {
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            if reference.kind == .image { QuickAssetPreview(store: quick.store, reference: reference, compact: true).frame(height: 100) }
+                                            QuickInputAssetName(store: quick.store, reference: reference)
+                                            Text(reference.kind.rawValue).font(.caption).foregroundStyle(.secondary)
+                                        }.padding(8).frame(maxWidth: .infinity, alignment: .leading)
+                                            .background(selectedMedia == reference ? Color.accentColor.opacity(0.12) : .clear, in: RoundedRectangle(cornerRadius: 10))
+                                    }.buttonStyle(.plain)
+                                }
+                                if mediaReferences.isEmpty { Text("尚无结果").foregroundStyle(.secondary).padding() }
+                                ForEach(quick.visibleRuns) { run in
+                                    Button { detailRun = run } label: { HStack { Text(run.createdAt, style: .time); Text(statusTitle(run.status)); Spacer(); Image(systemName: "info.circle") } }
+                                }
+                            }.padding(10)
+                        }
+                    }.frame(width: 220).background(.background, in: RoundedRectangle(cornerRadius: 18))
+                }
+            }.padding(14)
+        }
+        .sheet(item: $detailRun) { run in
+            VStack { HStack { Text("结果详情").font(.headline); Spacer(); Button("完成") { detailRun = nil }.keyboardShortcut(.cancelAction) }; ScrollView { runCard(run) } }
+                .padding(20).frame(minWidth: 580, minHeight: 420)
+        }
+        .sheet(isPresented: Binding(get: { preview != nil }, set: { if !$0 { preview = nil } })) {
+            if let reference = preview { VStack {
+                HStack { Button(baselineText(language, "label.572cf45ba436", fallback: "返回")) { preview = nil }.keyboardShortcut(.cancelAction); Spacer() }
+                QuickAssetPreview(store: quick.store, reference: reference, compact: false)
+            }.padding(20).frame(minWidth: 560, minHeight: 360) }
+        }
+        .onChange(of: quick.state.selectedDraftID) { _, _ in
+            inputAction?.feedbackValid = false
+            inputIssue = nil; inputNotice = nil; history = false
+        }
+        .onChange(of: ObjectIdentifier(quick)) { _, _ in
+            inputAction?.feedbackValid = false
+            inputIssue = nil; inputNotice = nil
+        }
+        .onDisappear { inputAction?.feedbackValid = false }
+    }
+    private func panelButton(_ title: String, _ symbol: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) { Image(systemName: symbol).frame(width: 30, height: 30) }
+            .buttonStyle(.bordered).buttonBorderShape(.circle).help(title).accessibilityLabel(title)
+    }
+    private var modelHeader: some View {
+            VStack(alignment: .leading, spacing: 10) {
                 Image(systemName: "sparkles.rectangle.stack").font(.title2)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(title).font(.title3.bold())
@@ -52,22 +153,17 @@ struct QuickGenerationView: View {
                             .font(.caption).foregroundStyle(.secondary).help(id)
                     }
                 }
-                Spacer()
                 Button(baselineText(language, "label.48ff0f9d0b4d", fallback: "更换模型"), action: onChooseModel)
                 if let draft = quick.draft {
                     Button(baselineText(language, "label.7d9795fa3684", fallback: "带设置到工作流")) { onSettingsToCanvas(draft) }
                 }
             }.padding(20)
-            Divider()
-            HSplitView {
+    }
+    private var parameterPanel: some View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
                         Text(baselineText(language, "label.39a07dc80743", fallback: "创作输入")).font(.headline)
                         if let definition, let draft = quick.draft {
-                            ForEach(definition.fields.filter { ["task", "promptText"].contains($0.id) }) { field in
-                                QuickParameterField(ownerID: draft.id, operationID: draft.node.operationID, field: field, value: draft.node.parameters[field.id] ?? field.defaultValue,
-                                    onChange: { quick.setParameter(field.id, value: $0, draftID: draft.id) }, raw: draft.fieldText[field.id], onRaw: { quick.setFieldText(field.id, text: $0, draftID: draft.id) })
-                            }
                             if definition.inputs.contains(where: { $0.id == "content" && $0.assetListKind == nil && $0.kinds.contains(.text) }) {
                                 Text(baselineText(language, "label.bf8881ad5d3a", fallback: "参考正文（可选）")).font(.subheadline)
                                 TextEditor(text: Binding(get: { draft.inputs["content"]?.datum?.text ?? "" },
@@ -175,31 +271,9 @@ struct QuickGenerationView: View {
                             Button(baselineText(language, "label.72f5f0e15b59", fallback: "浏览模型"), action: onChooseModel)
                         }
                     }.padding(22)
-                }.frame(minWidth: 280, idealWidth: 410, maxWidth: 520)
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 18) {
-                        HStack { Text(baselineText(language, "label.a78c1924def7", fallback: "生成结果")).font(.headline); Spacer(); Text(baselineText(language, "label.f2db3712a685", fallback: "自动保存")).font(.caption).foregroundStyle(.secondary) }
-                        if quick.visibleRuns.isEmpty {
-                            ContentUnavailableView(baselineText(language, "label.45cfbda520a0", fallback: "结果会保存在这里"), systemImage: "photo.on.rectangle.angled",
-                                description: Text(baselineText(language, "label.2187866b8a29", fallback: "无需先命名项目。切换模型不会丢失已有创作。")))
-                                .frame(minHeight: 300)
-                        }
-                        if quick.isRunning && !quick.visibleStreamingText.isEmpty {
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text(baselineText(language, "generation.preview.pending", fallback: "正在生成 · 临时预览")).font(.caption).foregroundStyle(.secondary)
-                                Text(quick.visibleStreamingText).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
-                            }.accessibilityIdentifier("quick-streaming-text")
-                        }
-                        ForEach(currentRuns) { run in runCard(run) }
-                        if !pastRuns.isEmpty {
-                            DisclosureGroup(baselineText(language, "label.dda5a8cd017c", fallback: "以前的创作"), isExpanded: $history) {
-                                ForEach(pastRuns) { run in runCard(run) }
-                            }
-                        }
-                    }.padding(22)
-                }.frame(minWidth: 310).background(.quaternary.opacity(0.2))
-            }
-            Divider()
+                }
+    }
+    private var generationBar: some View {
             HStack {
                 Text(quick.isRunning ? quick.phase : "输入与结果保存到快速创作记录").font(.caption).foregroundStyle(.secondary)
                 Spacer()
@@ -214,22 +288,48 @@ struct QuickGenerationView: View {
                         .accessibilityIdentifier("quick-generate")
                 }
             }.padding(16)
+    }
+    private var mediaReferences: [WorkflowAssetReference] {
+        var result: [WorkflowAssetReference] = []
+        for run in quick.visibleRuns {
+            for reference in references(run) where !result.contains(reference) { result.append(reference) }
         }
-        .sheet(isPresented: Binding(get: { preview != nil }, set: { if !$0 { preview = nil } })) {
-            if let reference = preview { VStack {
-                HStack { Button(baselineText(language, "label.572cf45ba436", fallback: "返回")) { preview = nil }.keyboardShortcut(.cancelAction); Spacer() }
-                QuickAssetPreview(store: quick.store, reference: reference, compact: false)
-            }.padding(20).frame(minWidth: 560, minHeight: 360) }
-        }
-        .onChange(of: quick.state.selectedDraftID) { _, _ in
-            inputAction?.feedbackValid = false
-            inputIssue = nil; inputNotice = nil; history = false
-        }
-        .onChange(of: ObjectIdentifier(quick)) { _, _ in
-            inputAction?.feedbackValid = false
-            inputIssue = nil; inputNotice = nil
-        }
-        .onDisappear { inputAction?.feedbackValid = false }
+        return result
+    }
+    private var selectedMedia: WorkflowAssetReference? {
+        if let selected = selectedResults[quick.category], mediaReferences.contains(selected) { return selected }
+        return mediaReferences.first
+    }
+    private func run(containing reference: WorkflowAssetReference) -> QuickRunRecord? {
+        quick.visibleRuns.first { references($0).contains(reference) }
+    }
+    private func stepCandidate(_ delta: Int) {
+        guard let selectedMedia, let index = mediaReferences.firstIndex(of: selectedMedia) else { return }
+        let next = index + delta
+        if mediaReferences.indices.contains(next) { selectedResults[quick.category] = mediaReferences[next] }
+    }
+    private var mediaStage: some View {
+        VStack(spacing: 8) {
+            HStack {
+                Text("当前结果 · 与下次生成设置独立").font(.caption).foregroundStyle(.secondary)
+                Spacer()
+                Button("上一项", systemImage: "chevron.left") { stepCandidate(-1) }.labelStyle(.iconOnly).disabled(selectedMedia == mediaReferences.first)
+                Text("\(selectedMedia.flatMap { mediaReferences.firstIndex(of: $0) }.map { $0 + 1 } ?? 0) / \(mediaReferences.count)").monospacedDigit()
+                Button("下一项", systemImage: "chevron.right") { stepCandidate(1) }.labelStyle(.iconOnly).disabled(selectedMedia == mediaReferences.last)
+            }
+            if let reference = selectedMedia {
+                QuickMediaViewport(store: quick.store, reference: reference)
+                    .id(reference).frame(maxWidth: .infinity, maxHeight: .infinity)
+                HStack {
+                    Button("带结果到工作流", systemImage: "square.stack.3d.up") { onResultToCanvas(reference) }
+                    Spacer()
+                    Button("导出…", systemImage: "square.and.arrow.up") { Task { await export(reference) } }
+                }
+            } else {
+                ContentUnavailableView("预览", systemImage: quick.category == .image ? "photo" : "video", description: Text("生成后在这里查看；素材与结果保留在右侧。"))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }.accessibilityIdentifier("quick-fixed-preview")
     }
     private var currentRuns: [QuickRunRecord] {
         guard let latest = quick.visibleRuns.first else { return [] }

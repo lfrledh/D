@@ -472,6 +472,7 @@ struct ChatWorkbenchView: View {
     @State private var newPresetName = ""
     @State private var filePanelBusy = false
     @State private var ocrImport = false
+    private var openToolsRequest: UUID?
     private var layoutProbe: ((String, CGRect) -> Void)?
 
     func observingLayout(_ observer: @escaping (String, CGRect) -> Void) -> Self {
@@ -482,6 +483,7 @@ struct ChatWorkbenchView: View {
 
     init(chat: ChatController, model: WorkbenchModel,
          onChooseModel: @escaping () -> Void,
+         openToolsRequest: UUID? = nil,
          onSavedAsset: @escaping (WorkflowAssetReference) -> Void,
          onRetainTemporary: ((WorkflowAssetReference, Bool, UUID) async throws -> Void)? = nil,
          onAssetsChanged: @escaping () -> Void,
@@ -493,6 +495,7 @@ struct ChatWorkbenchView: View {
          initialInspectedAttemptID: UUID? = nil,
          initiallyFollowsBottom: Bool = true,
          initiallyHasNewContent: Bool = false) {
+        self.openToolsRequest = openToolsRequest
         self.chat = chat; self.model = model; self.onChooseModel = onChooseModel
         self.onSavedAsset = onSavedAsset; self.onRetainTemporary = onRetainTemporary; self.onAssetsChanged = onAssetsChanged; self.onSavedValue = onSavedValue
         self.onResolveSharedAsset = onResolveSharedAsset
@@ -613,6 +616,12 @@ struct ChatWorkbenchView: View {
                         sheets.openNarrow(.sessions)
                     }
                 }
+            }
+        }
+        .task(id: openToolsRequest) {
+            if openToolsRequest != nil {
+                showInspector = true; inspectorTab = .data
+                if !ChatPresentationLayout.showsInspector(width: lastBodyWidth, requested: true, sidebar: showSidebar) { sheets.openNarrow(.inspector) }
             }
         }
         .environment(\.chatDisplayPreferences, model.chatDisplaySettings.preferences)
@@ -748,7 +757,7 @@ struct ChatWorkbenchView: View {
                 else { showInspector.toggle() }
             } label: { Label(newLabel("inspector", english: "Inspector", chinese: "检查器"), systemImage: "sidebar.right") }
                 .accessibilityIdentifier("chat-inspector-toggle")
-        }.labelStyle(.iconOnly)
+        }.labelStyle(.iconOnly).buttonStyle(.bordered).buttonBorderShape(.circle)
     }
 
     private var sidebar: some View {
@@ -1586,9 +1595,6 @@ struct ChatWorkbenchView: View {
 
     private func settings(_ session: ChatSession) -> some View {
             VStack(alignment: .leading, spacing: 12) {
-                DisclosureGroup(newLabel("displaySettings", english: "Display and keyboard", chinese: "显示与键盘")) {
-                    ChatDisplayPreferencesPanel(state: model.chatDisplaySettings)
-                }
                 Text(label("nextAnswer", "下一次回答设置")).font(.headline)
                 Text(label("futureOnly", "更改只影响之后的生成。")) .font(.caption).foregroundStyle(.secondary)
                 ChatOutputFormatPanel(chat: chat, sessionID: session.id).id(session.id.uuidString + ":output-format")

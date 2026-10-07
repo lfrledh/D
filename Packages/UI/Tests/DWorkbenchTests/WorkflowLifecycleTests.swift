@@ -17,6 +17,34 @@ private actor WorkflowSubmitGate {
 @MainActor private final class WorkflowSaveSwitch { var fails = true }
 
 extension WorkflowLifecycleTests {
+    @Test func groupMoveIsOneUndoAndDoesNotChangeRequestsOrAcceptStaleTargets() async throws {
+        let (_, store, _, c) = try await fixture()
+        c.addExample("text")
+        let before = try #require(c.graph)
+        let nodes = Array(before.nodes.prefix(2)); try #require(nodes.count == 2)
+        let target = try #require(c.canvasInsertionTarget())
+        let moves = nodes.enumerated().map { WorkflowLayout(nodeID: $0.element.id, x: Double($0.offset * 320 - 100), y: 500) }
+        c.moveNodes(moves, target: target)
+        let moved = try #require(c.graph)
+        #expect(moved.revision == before.revision && moved.nodes == before.nodes && moved.connections == before.connections)
+        #expect(moves.allSatisfy { moved.layout.contains($0) })
+        c.undo(); #expect(c.graph == before)
+        c.redo(); #expect(c.graph == moved)
+        c.moveNodes([.init(nodeID: UUID(), x: 3, y: 4)], target: target)
+        c.moveNodes([.init(nodeID: nodes[0].id, x: .nan, y: 4)], target: target)
+        c.moveNodes([moves[0], moves[0]], target: target)
+        #expect(c.graph == moved)
+        c.externalOperationBusy = { true }; c.moveNodes([.init(nodeID: nodes[0].id, x: 0, y: 0)], target: target)
+        #expect(c.graph == moved); c.externalOperationBusy = { false }
+        c.setParameter(nodeID: nodes[0].id, key: "text", value: .text("changed"))
+        let changed = c.graph
+        c.moveNodes(moves, target: target); #expect(c.graph == changed)
+        try await c.saveExplicitEdits()
+        let archive = try #require(try await store.workflowState().archive)
+        #expect(archive.graphs == c.graphs && archive.runs.isEmpty && archive.assets.isEmpty)
+        try await c.close(); try await store.close()
+    }
+
     @Test func cardDeletionUsesIdentityAndScopeAndIsOneUndo() async throws {
         let (_, store, _, c) = try await fixture()
         c.addExample("text")

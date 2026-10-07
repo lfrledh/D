@@ -74,6 +74,10 @@ public struct DualWorkbenchView: View {
     @State private var projectsVisible = false
     @State private var compatibilityVisible = false
     @State private var languageVisible = false
+    @State private var settingsVisible = false
+    @State private var openToolsRequest: UUID?
+    @State private var settingsDestination: String?
+    @State private var settingsFilesRoute: FilesRoute?
     @State private var issue: String?
     @State private var failedAssetRoute: FilesRoute?
     @Environment(\.dLanguageStore) private var language
@@ -104,52 +108,54 @@ public struct DualWorkbenchView: View {
     }
     public var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 18) {
-                Button(action: goBack) {
-                    Label(baselineText(language, "label.572cf45ba436", fallback: "返回"), systemImage: "chevron.left")
-                }
-                .disabled(entryHistory.isEmpty)
-                .accessibilityIdentifier("workbench-back")
+            HStack(spacing: 12) {
+                Button(action: goBack) { Image(systemName: "chevron.left") }
+                    .disabled(entryHistory.isEmpty).help("返回").accessibilityIdentifier("workbench-back")
                 Text("D").font(.title2.bold())
-                Picker(baselineText(language, "label.78d18c6b29c7", fallback: "工作方式"), selection: Binding(get: { entry }, set: navigate)) {
-                    Text(baselineText(language, "label.893819bb34b0", fallback: "快速生成")).tag(Entry.quick)
-                    Text(baselineText(language, "label.c71d0bca46eb", fallback: "工作流")).tag(Entry.workflow)
-                }.pickerStyle(.segmented).frame(width: 230).accessibilityIdentifier("workbench-entry")
-                Spacer()
-                if entry == .quick, model.projectSession.projectQuick != nil {
-                    Picker("快速草稿所属位置", selection: $useProjectQuick) {
-                        Text("本项目：" + (model.manifest?.name ?? "恢复项目")).tag(true)
-                        Text("全局快速创作").tag(false)
-                    }.frame(maxWidth: 250).accessibilityIdentifier("quick-project-owner")
-                }
-                if entry == .workflow {
-                    Button(canvasModel.manifest?.name ?? "流程项目") { projectsVisible = true }
-                }
-                if let manifest = (entry == .quick ? quickModel.manifest : canvasModel.manifest),
-                   let store = (entry == .quick ? quickModel.projectSession.currentStore : canvasModel.projectSession.currentStore) {
-                    Button(baselineText(language, "files.title", fallback: "项目文件")) {
-                        filesRoute = .init(store: store, instanceID: manifest.effectiveInstanceID, assetID: nil)
-                    }.accessibilityIdentifier("project-files-open")
-                }
-                Button { modelPickerCategory = nil; libraryVisible = true } label: { Label(baselineText(language, "label.433bdcb25776", fallback: "资料库"), systemImage: "square.stack.3d.up") }
-                    .accessibilityIdentifier("shared-library-open")
                 Menu {
-                    Button(baselineText(language, "label.a6b4608f6c77", fallback: "项目…")) { projectsVisible = true }
-                    if model.manifest != nil, model.projectSession.projectQuick == nil {
-                        Button("在当前项目中快速创作") {
-                            Task { await model.projectSession.enableProjectQuick(); useProjectQuick = true; navigate(to: .quick) }
+                    Button("项目…") { projectsVisible = true }
+                    if model.projectSession.projectQuick != nil {
+                        Picker("快速草稿位置", selection: $useProjectQuick) {
+                            Text("本项目：" + (model.manifest?.name ?? "项目")).tag(true)
+                            Text("全局快速创作").tag(false)
                         }
+                    } else if model.manifest != nil {
+                        Button("在当前项目中快速创作") { Task { await model.projectSession.enableProjectQuick(); useProjectQuick = true; navigate(to: .quick) } }
                     }
                     if let manifest = (entry == .quick ? quickModel.manifest : canvasModel.manifest),
                        let store = (entry == .quick ? quickModel.projectSession.currentStore : canvasModel.projectSession.currentStore) {
-                        Button(baselineText(language, "files.title", fallback: "项目文件…")) {
-                            filesRoute = .init(store: store, instanceID: manifest.effectiveInstanceID, assetID: nil)
-                        }
+                        Button("项目文件与备份…") { filesRoute = .init(store: store, instanceID: manifest.effectiveInstanceID, assetID: nil) }
                     }
-                    Button(baselineText(language, "label.7e060553182c", fallback: "创作文稿与原有编辑器…")) { compatibilityVisible = true }
-                    Button(baselineText(language, "label.17bb056515cd", fallback: "模型下载与安装…")) { library.isPresented = true }
-                    Button(baselineText(language, "label.f1df761fb2f8", fallback: "显示语言…")) { languageVisible = true }
-                } label: { Image(systemName: "ellipsis.circle") }
+                    Button("创作文稿与原有编辑器…") { compatibilityVisible = true }
+                    Button("模型下载与安装…") { library.isPresented = true }
+                } label: { Image(systemName: "folder") }.help("项目与文件")
+                Button { modelPickerCategory = nil; libraryVisible = true } label: { Image(systemName: "square.stack.3d.up") }
+                    .help("资料库").accessibilityLabel("资料库").accessibilityIdentifier("shared-library-open")
+                Spacer(minLength: 8)
+                if entry == .quick {
+                    Picker("创作分类", selection: Binding(get: { quick.category }, set: { quick.selectCategory($0) })) {
+                        Text(workflowText(language, "quick.category.text", fallback: "文字")).tag(QuickCategory.text)
+                        Text(workflowText(language, "quick.category.image", fallback: "图像")).tag(QuickCategory.image)
+                        Text(workflowText(language, "quick.category.video", fallback: "视频")).tag(QuickCategory.video)
+                        Text(workflowText(language, "quick.category.audio", fallback: "音频")).tag(QuickCategory.audio)
+                    }.pickerStyle(.segmented).frame(width: 340)
+                        .disabled(quickOwnerIsChanging).accessibilityIdentifier("quick-category")
+                } else { Text("节点工作流").font(.headline).frame(width: 340) }
+                Spacer(minLength: 8)
+                Button { navigate(to: entry == .quick ? .workflow : .quick) } label: {
+                    Image(systemName: entry == .quick ? "rectangle.3.group" : "bolt.fill").frame(width: 30, height: 30)
+                }.buttonStyle(.bordered).buttonBorderShape(.circle)
+                    .help(entry == .quick ? "快速生成 · 切换到工作流" : "工作流 · 切换到快速生成")
+                    .accessibilityLabel(entry == .quick ? "切换到工作流" : "切换到快速生成").accessibilityIdentifier("workbench-entry")
+                Button {
+                    let owner = entry == .quick ? quickModel : canvasModel
+                    if let manifest = owner.manifest, let store = owner.projectSession.currentStore {
+                        settingsFilesRoute = .init(store: store, instanceID: manifest.effectiveInstanceID, assetID: nil)
+                    } else { settingsFilesRoute = nil }
+                    settingsVisible = true
+                } label: { Image(systemName: "gearshape").frame(width: 30, height: 30) }
+                    .buttonStyle(.bordered).buttonBorderShape(.circle).help("设置").accessibilityLabel("设置")
+                    .accessibilityIdentifier("workbench-settings")
             }.padding(.horizontal, 20).padding(.vertical, 12).background(.bar)
             Divider()
             if entry == .quick, let identity = quickModelIdentity,
@@ -160,15 +166,6 @@ public struct DualWorkbenchView: View {
                       !canvasModel.projectSession.explicitModelChecking.isDisjoint(with: graphModelIdentities) {
                 Text("正在核验当前流程使用的模型…")
                     .font(.caption).foregroundStyle(.secondary).padding(.horizontal, 20).padding(.vertical, 4)
-            }
-            if entry == .quick {
-                Picker("创作分类", selection: Binding(get: { quick.category }, set: { quick.selectCategory($0) })) {
-                    Text(workflowText(language, "quick.category.text", fallback: "文字")).tag(QuickCategory.text)
-                    Text(workflowText(language, "quick.category.image", fallback: "图像")).tag(QuickCategory.image)
-                    Text(workflowText(language, "quick.category.video", fallback: "视频")).tag(QuickCategory.video)
-                    Text(workflowText(language, "quick.category.audio", fallback: "音频")).tag(QuickCategory.audio)
-                }.pickerStyle(.segmented).frame(maxWidth: 520).padding(.horizontal, 20).padding(.vertical, 8)
-                    .disabled(quickOwnerIsChanging).accessibilityIdentifier("quick-category")
             }
             ZStack {
                 Group {
@@ -192,6 +189,7 @@ public struct DualWorkbenchView: View {
                                     }.padding(.horizontal, 20)
                                     ChatWorkbenchView(chat: chat, model: chatModel,
                                         onChooseModel: { modelPickerCategory = .text; libraryVisible = true },
+                                        openToolsRequest: openToolsRequest,
                                         onSavedAsset: { reference in
                                             Task {
                                                 do {
@@ -243,7 +241,8 @@ public struct DualWorkbenchView: View {
                             instanceID: nil, projects: projects) else { return false }
                         return canvasModel.projectSession.workflow?.projectInstanceID == instance &&
                             projects.contains(where: { $0.effectiveInstanceID == instance && $0.assets.contains(where: { $0.id == assetID }) })
-                    }).environment(\.dLanguageStore, language),
+                    }).environment(\.dLanguageStore, language)
+                    .environment(\.chatDisplayPreferences, automaticQuickModel.chatDisplaySettings.preferences),
                     visible: entry == .workflow, identifier: "workflow-retained-surface",
                     fallbackSize: CGSize(width: 760, height: 500))
                     .accessibilityHidden(entry != .workflow)
@@ -251,6 +250,20 @@ public struct DualWorkbenchView: View {
 
         }
         .frame(minWidth: 860, minHeight: 580)
+        .environment(\.chatDisplayPreferences, automaticQuickModel.chatDisplaySettings.preferences)
+        .preferredColorScheme(automaticQuickModel.chatDisplaySettings.preferences.preferredColorScheme)
+        .sheet(isPresented: $settingsVisible, onDismiss: {
+            let destination = settingsDestination; settingsDestination = nil
+            if destination == "search" { navigate(to: .quick); quick.selectCategory(.text); quick.selectTextPresentation(.chat); openToolsRequest = UUID() }
+            if destination == "files" { filesRoute = settingsFilesRoute }
+            settingsFilesRoute = nil
+        }) {
+            if let language {
+                WorkbenchSettingsView(model: entry == .quick ? quickModel : canvasModel, library: library, language: language,
+                    onProjectFiles: { settingsDestination = "files"; settingsVisible = false },
+                    onSearchSettings: { settingsDestination = "search"; settingsVisible = false })
+            }
+        }
         .sheet(isPresented: $libraryVisible, onDismiss: finishLibraryDismissal) {
             VStack(spacing: 0) {
                 if !quickModel.projectSession.explicitModelChecking.isEmpty {
@@ -467,7 +480,7 @@ public struct DualWorkbenchView: View {
     }
     private var quickCommandEnabled: Bool {
         entry == .quick && (quick.category != .text || quick.textPresentation == .single) && !quickOwnerIsChanging && quick.canStart && !libraryVisible && !projectsVisible && !compatibilityVisible &&
-        !languageVisible && !library.isPresented && previewAsset == nil && libraryInfo == nil &&
+        !languageVisible && !settingsVisible && !library.isPresented && previewAsset == nil && libraryInfo == nil &&
         filesRoute == nil && pendingFilesRoute == nil
     }
     @ViewBuilder private func libraryBrowser(compact: Bool, at point: CGPoint, onBack: (() -> Void)? = nil) -> some View {
