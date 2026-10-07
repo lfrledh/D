@@ -1018,3 +1018,12 @@ RDesktop=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZ
 - 原18文件、原会话每字段、CSV摘要/大小/mtime、旧源scheme完整diff/摘要/index/未暂存保持。任务副本只新增两个空会话及Dev草稿选择。自有D/测试/构建结束，Finder关闭；工具拒绝Terminal UI，未绕过，不能声称那些已结束启动器窗口已关闭。旧17446实际子进程本轮正常退出，修正历史父进程回执不足。
 
 恢复点：`lead/desktop-native-result.json`是本轮证据索引，`final-protection.json`是保护，`settle-app-version.json`是App身份，最终仅文档和远端写`desktop-resume-receipt.json`。候选推送供审计，唯一推荐3cc不变，当前Xcode为abd5，二者不能混称同版。尚余三项紧凑hosting及真实Finder拖入门槛，未功能冻结/视觉转段；不启动UI改版。下一步按既有失败定位工程项，不要求本人重复旧输入/语音/模型。Lead完整用量/订阅成本unknown，不重算历史。
+
+
+### 2026-10-07 本人Finder反例与局部修补
+
+RDrop=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261007T121440Z-human-drop`，起点b5fee359，新代码`d1ab5f71340bd4dcf764a80449e1d40be3306e05`，main90819739不变。本人将numbers.csv拖入abd5聊天大文本框后出现路径文字、无附件；旧工具坐标不足与这次已确认生产反例分开，绿色加号不能算通过。失败样本与用户描述、AX/截图见`lead/human-drop-failure.json`和`gui/human-path-instead-attachment.*`。
+
+Lead按本机NSTextView.h推荐dragOperation钩子及perform接收阶段，只给composer增加可选onFileDrop；真实file URL进入既有importURLs，普通文字/paste照旧，不建另一导入器、不解析路径字符串、不动Store/模型。只读非实现者file_drop_boundary_review两次复核，补齐原生方法全生命周期及普通文字对照；并未代跑测试或验收。19方法/3suite实际通过；早先stub编译及undo测试夹具失败保留，生产allowsUndo一直为true。普通D Nodes构建、复制关键摘要及codesign通过，`file-drop-code-review.json`、`file-drop-final-tests.*`、`file-drop-app-version.json`定位精确版本。
+
+当前正在同一普通沙盒修补版等真人相同拖入；旧失败草稿保留，新用9C77F56E空会话的固定草稿作保护对照。随后只验附件预览、保存冷开、原件不变及无自动发送；没有证据前不关闭F19。三项紧凑hosting是已有独立工程余项，不重测旧本人/模型、不改阈值、不宣称转段；F26继续批准延期。最终结果/进程/仅文档SHA写外部回执，不自引用提交。
