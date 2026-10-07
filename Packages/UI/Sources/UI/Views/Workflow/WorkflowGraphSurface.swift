@@ -1393,11 +1393,13 @@ struct WorkflowCanvasNodeDragCoordinator: Equatable {
 
 enum WorkflowCanvasDragGeometry {
     static func rawPosition(original: CGPoint, screenTranslation: CGSize, zoom: CGFloat) -> CGPoint {
-        let scale = max(zoom, 0.01)
-        return CGPoint(
-            x: original.x + screenTranslation.width / scale,
-            y: original.y + screenTranslation.height / scale
+        guard zoom.isFinite, zoom > 0 else { return original }
+        let position = CGPoint(
+            x: original.x + screenTranslation.width / zoom,
+            y: original.y + screenTranslation.height / zoom
         )
+        guard position.x.isFinite, position.y.isFinite else { return original }
+        return position
     }
 }
 
