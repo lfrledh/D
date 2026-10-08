@@ -572,6 +572,7 @@ struct ChatWorkbenchView: View {
                 .padding(.leading, sidebarInline ? ChatPresentationLayout.sidebarWidth + 1 : 0)
                 .padding(.trailing, inspectorInline && session != nil ? ChatPresentationLayout.inspectorWidth + 1 : 0)
                 .chatMeasured("conversation", probe: layoutProbe)
+                .workbenchMotion(value: sidebarInline).workbenchMotion(value: inspectorInline)
 
                 if sheets.narrowPanel != nil {
                     Color.black.opacity(0.18)
@@ -584,6 +585,7 @@ struct ChatWorkbenchView: View {
                     .preferredColorScheme(model.chatDisplaySettings.preferences.preferredColorScheme)
                     .environment(\.dLanguageStore, language), visible: sidebarVisible,
                     identifier: "chat-sessions-host")
+                    .transaction { $0.animation = nil }
                     .frame(width: sidebarPaneWidth)
                     .frame(maxHeight: .infinity)
                     .overlay(alignment: .trailing) { if sidebarInline { Divider() } }
@@ -596,6 +598,7 @@ struct ChatWorkbenchView: View {
                         .preferredColorScheme(model.chatDisplaySettings.preferences.preferredColorScheme)
                         .environment(\.dLanguageStore, language), visible: inspectorVisible,
                         identifier: "chat-inspector-host")
+                        .transaction { $0.animation = nil }
                         .frame(width: inspectorPaneWidth)
                         .frame(maxHeight: .infinity)
                         .overlay(alignment: .leading) { if inspectorInline { Divider() } }

@@ -708,6 +708,7 @@ struct WorkflowCanvasMarquee {
 }
 
 private struct WorkflowConnectionLayer: View {
+    @Environment(\.dLanguageStore) private var language
     let graph: WorkflowGraph
     let registry: WorkflowRegistry
     let tools: [WorkflowToolDefinition]
@@ -739,7 +740,9 @@ private struct WorkflowConnectionLayer: View {
                     .contentShape(hitPath)
                     .onTapGesture { onSelect(connection.id) }
                     .accessibilityElement(children: .ignore)
-                    .accessibilityLabel("\(WorkflowPortStyle.label(for: sourcePort(connection)))连接 \(connection.sourcePort) 到 \(connection.targetPort)")
+                    .accessibilityLabel(workflowText(language, "refinement.canvas.connectionLabel", fallback: "{type} connection from {source} to {target}",
+                        arguments: ["type": WorkflowPortStyle.label(for: sourcePort(connection), language: language),
+                                    "source": connection.sourcePort, "target": connection.targetPort]))
                     .accessibilityAddTraits(.isButton)
                     .accessibilityAction { onSelect(connection.id) }
                     .accessibilityIdentifier("workflow-connection-" + connection.id.uuidString)

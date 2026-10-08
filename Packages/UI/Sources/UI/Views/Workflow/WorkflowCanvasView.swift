@@ -245,7 +245,9 @@ public struct WorkflowCanvasView: View {
                 .environment(\.chatDisplayPreferences, displayPreferences)
                 .preferredColorScheme(displayPreferences.preferredColorScheme),
                 visible: shown.library, identifier: "canvas-library-host")
+                .transaction { $0.animation = nil }
                 .frame(width: shown.library ? WorkflowCanvasLayoutPolicy.libraryWidth : 0)
+                .workbenchMotion(value: shown.library)
                 .clipped().allowsHitTesting(shown.library).accessibilityHidden(!shown.library)
             if shown.library { Divider() }
             VStack(spacing: 0) {
@@ -343,7 +345,9 @@ public struct WorkflowCanvasView: View {
                 .environment(\.chatDisplayPreferences, displayPreferences)
                 .preferredColorScheme(displayPreferences.preferredColorScheme),
                 visible: shown.inspector, identifier: "canvas-inspector-host")
+                .transaction { $0.animation = nil }
                 .frame(width: shown.inspector ? WorkflowCanvasLayoutPolicy.inspectorWidth : 0)
+                .workbenchMotion(value: shown.inspector)
                 .clipped().allowsHitTesting(shown.inspector).accessibilityHidden(!shown.inspector)
         }
     }

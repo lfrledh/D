@@ -175,7 +175,8 @@ private struct WorkbenchMotionModifier<Value: Equatable>: ViewModifier {
         let effects = WorkbenchEffectsPolicy(
             appearance: preferences.resolvedAppearance, reduceMotion: reduceMotion,
             reduceTransparency: reduceTransparency, increasedContrast: contrast == .increased)
-        content.animation(effects.duration.map { .easeInOut(duration: $0) }, value: value)
+        content.symbolEffectsRemoved(effects.duration == nil)
+            .animation(effects.duration.map { .easeInOut(duration: $0) }, value: value)
     }
 }
 

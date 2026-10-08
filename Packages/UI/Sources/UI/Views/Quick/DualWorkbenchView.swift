@@ -216,13 +216,15 @@ public struct DualWorkbenchView: View {
                         Text(workflowText(language, "quick.category.audio", fallback: "音频")).tag(QuickCategory.audio)
                     }.pickerStyle(.segmented).frame(width: 340)
                         .disabled(quickOwnerIsChanging).accessibilityIdentifier("quick-category")
+                        .workbenchMotion(value: quick.category)
                 } else { Text(t("workflow", "Node workflow", "节点工作流")).font(.headline).frame(width: 340) }
                 Spacer(minLength: 8)
                 Button { navigate(to: entry == .quick ? .workflow : .quick) } label: {
                     Image(systemName: entry == .quick ? "rectangle.3.group" : "bolt.fill").frame(width: 30, height: 30)
+                        .contentTransition(.symbolEffect(.replace))
                 }.buttonStyle(.bordered).buttonBorderShape(.circle)
                     .help(entry == .quick ? t("quickSwitch", "Quick generation · Switch to workflow", "快速生成 · 切换到工作流") : t("workflowSwitch", "Workflow · Switch to Quick generation", "工作流 · 切换到快速生成"))
-                    .accessibilityLabel(entry == .quick ? t("switchToWorkflow", "Switch to workflow", "切换到工作流") : t("switchToQuick", "Switch to Quick generation", "切换到快速生成")).accessibilityIdentifier("workbench-entry")
+                    .accessibilityLabel(entry == .quick ? t("switchToWorkflow", "Switch to workflow", "切换到工作流") : t("switchToQuick", "Switch to Quick generation", "切换到快速生成")).accessibilityIdentifier("workbench-entry").workbenchMotion(value: entry)
                 Button(action: presentSettings) label: { Image(systemName: "gearshape").frame(width: 30, height: 30) }
                     .buttonStyle(.bordered).buttonBorderShape(.circle).help(t("settings", "Settings", "设置")).accessibilityLabel(t("settings", "Settings", "设置"))
                     .accessibilityIdentifier("workbench-settings").disabled(!canPresentSettings)
@@ -317,6 +319,7 @@ public struct DualWorkbenchView: View {
                     .environment(\.chatDisplayPreferences, automaticQuickModel.chatDisplaySettings.preferences),
                     visible: entry == .workflow, identifier: "workflow-retained-surface",
                     fallbackSize: CGSize(width: 760, height: 500))
+                    .transaction { $0.animation = nil }
                     .accessibilityHidden(entry != .workflow)
             }
 

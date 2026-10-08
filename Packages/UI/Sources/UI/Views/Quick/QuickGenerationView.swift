@@ -61,7 +61,7 @@ struct QuickGenerationView: View {
                         modelHeader
                         Divider()
                         parameterPanel
-                    }.frame(width: 280).workbenchPanel(cornerRadius: 18)
+                    }.frame(width: 280).workbenchPanel(cornerRadius: 18).transition(.identity)
                 }
                 VStack(spacing: 10) {
                     HStack {
@@ -131,9 +131,10 @@ struct QuickGenerationView: View {
                                 }
                             }.padding(10)
                         }
-                    }.frame(width: 220).workbenchPanel(cornerRadius: 18)
+                    }.frame(width: 220).workbenchPanel(cornerRadius: 18).transition(.identity)
                 }
             }.padding(14)
+                .workbenchMotion(value: leftShown).workbenchMotion(value: rightShown)
         }
         .sheet(item: $detailRun, onDismiss: {
             if let pendingPreview { preview = pendingPreview; self.pendingPreview = nil }
