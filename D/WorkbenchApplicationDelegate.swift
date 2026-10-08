@@ -278,7 +278,13 @@ final class WorkbenchApplicationDelegate: NSObject, NSApplicationDelegate, NSWin
     func windowDidEndSheet(_ notification: Notification) {
         previousWindowDelegate?.windowDidEndSheet?(notification)
         if let window = notification.object as? NSWindow, window === workbenchWindow {
-            hasPresentedSheet = window.attachedSheet != nil
+            // AppKit can still expose the departing sheet during this callback.
+            // Read the actual attachment after the end-sheet transaction completes;
+            // a newly presented replacement remains protected by the same check.
+            DispatchQueue.main.async { [weak self, weak window] in
+                guard let self, let window, window === self.workbenchWindow else { return }
+                self.hasPresentedSheet = window.attachedSheet != nil
+            }
         }
     }
     func windowWillStartLiveResize(_ notification: Notification) { previousWindowDelegate?.windowWillStartLiveResize?(notification) }

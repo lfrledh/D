@@ -1445,6 +1445,18 @@
     "refinement.chat.leftPane": "Left pane",
     "refinement.chat.model": "Model",
     "refinement.canvas.connectionLabel": "{type} connection from {source} to {target}",
-    "refinement.canvas.unresolvedType": "Unresolved type"
+    "refinement.canvas.unresolvedType": "Unresolved type",
+    "refinement.quick.moveUp": "Move up",
+    "refinement.quick.moveDown": "Move down",
+    "refinement.quick.removeInput": "Remove",
+    "refinement.quick.unboundInput": "No input attached",
+    "refinement.quick.savedInput": "Saved input snapshot",
+    "refinement.quick.clearInput": "Clear input",
+    "refinement.quick.chooseModel": "Choose a model",
+    "refinement.quick.modelNotReady": "Selected model is not ready",
+    "refinement.quick.saveNote": "Inputs and results are saved in Quick history",
+    "refinement.quick.invalidInput": "Saved input is invalid: ",
+    "refinement.quick.attempt": "Independent attempt {index}",
+    "refinement.quick.attemptCount": "Independent attempts: {count}"
   }
 }

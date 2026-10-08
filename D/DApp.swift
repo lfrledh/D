@@ -74,6 +74,7 @@ struct DApp: App {
             }
             .environment(\.dLanguageStore, bootstrap.languageStore)
             .disabled(bootstrap.isTerminating)
+            .onAppear { consumeFallbackSettings() }
             .onChange(of: settingsRequest) { _, _ in consumeFallbackSettings() }
             .onChange(of: fallbackSettingsReady) { _, ready in if ready { consumeFallbackSettings() } }
             .sheet(isPresented: $fallbackSettingsVisible) {

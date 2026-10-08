@@ -1445,6 +1445,18 @@
     "refinement.chat.leftPane": "左侧工作区",
     "refinement.chat.model": "模型",
     "refinement.canvas.connectionLabel": "{type}连接：{source} → {target}",
-    "refinement.canvas.unresolvedType": "未决类型"
+    "refinement.canvas.unresolvedType": "未决类型",
+    "refinement.quick.moveUp": "上移",
+    "refinement.quick.moveDown": "下移",
+    "refinement.quick.removeInput": "移除",
+    "refinement.quick.unboundInput": "未绑定输入",
+    "refinement.quick.savedInput": "已保存输入快照",
+    "refinement.quick.clearInput": "清空整个输入",
+    "refinement.quick.chooseModel": "选择一个模型",
+    "refinement.quick.modelNotReady": "指定模型未准备",
+    "refinement.quick.saveNote": "输入与结果保存到快速创作记录",
+    "refinement.quick.invalidInput": "已保存的输入无效：",
+    "refinement.quick.attempt": "独立尝试 {index}",
+    "refinement.quick.attemptCount": "独立尝试：{count} 次"
   }
 }

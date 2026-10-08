@@ -81,7 +81,7 @@ struct WorkflowGraphSurface: View {
                 let edge = layout.unscaledPadding
                 ScrollView([.horizontal, .vertical]) {
                     ZStack(alignment: .topLeading) {
-                        Color(nsColor: .textBackgroundColor)
+                        displayPreferences.resolvedAppearance.palette(for: colorScheme).canvasColor
                             .contentShape(Rectangle())
                             .onTapGesture {
                                 guard !panSession.suppressBlankTap else { return }

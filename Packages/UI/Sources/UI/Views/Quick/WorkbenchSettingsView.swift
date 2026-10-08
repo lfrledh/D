@@ -61,7 +61,9 @@ public struct WorkbenchSettingsView: View {
                 Divider()
                 Group {
                     switch selected {
-                    case .appearance: ChatDisplayPreferencesPanel(state: model.chatDisplaySettings)
+                    case .appearance:
+                        ScrollView { ChatDisplayPreferencesPanel(state: model.chatDisplaySettings).padding(16) }
+                            .accessibilityIdentifier("settings-appearance-scroll")
                     case .language: LanguageSettingsView(store: language)
                     case .files:
                         Form {

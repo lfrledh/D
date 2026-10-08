@@ -48,7 +48,7 @@ struct QuickGenerationView: View {
         let id = quick.draft?.node.parameters["modelID"]?.string ?? ""
         return model.projectSession.explicitModelChoices.first { $0.id == id }?.displayName
             ?? ModelNodeCatalog.entries.first { descriptor in WorkflowModelKind.allCases.contains { id == $0.rawValue + ":" + descriptor.revision } }?.title
-            ?? (id.isEmpty ? "选择一个模型" : "指定模型未准备")
+            ?? (id.isEmpty ? refinementText("chooseModel", fallback: "选择一个模型") : refinementText("modelNotReady", fallback: "指定模型未准备"))
     }
     var body: some View {
         GeometryReader { geometry in
@@ -204,18 +204,18 @@ struct QuickGenerationView: View {
                                                         Text("\(ordinal + 1).")
                                                         QuickInputAssetName(store: quick.store, reference: reference)
                                                         Spacer()
-                                                        Button("上移") { editInput { try quick.moveInputAsset(item.id, by: -1, port: port, draftID: draft.id) } }
+                                                        Button(refinementText("moveUp", fallback: "上移")) { editInput { try quick.moveInputAsset(item.id, by: -1, port: port, draftID: draft.id) } }
                                                             .disabled(ordinal == 0)
-                                                        Button("下移") { editInput { try quick.moveInputAsset(item.id, by: 1, port: port, draftID: draft.id) } }
+                                                        Button(refinementText("moveDown", fallback: "下移")) { editInput { try quick.moveInputAsset(item.id, by: 1, port: port, draftID: draft.id) } }
                                                             .disabled(ordinal == items.count - 1)
-                                                        Button("移除") { editInput { try quick.removeInputAsset(item.id, port: port, draftID: draft.id) } }
+                                                        Button(refinementText("removeInput", fallback: "移除")) { editInput { try quick.removeInputAsset(item.id, port: port, draftID: draft.id) } }
                                                     }
                                                 }
                                             }
-                                            if items.isEmpty { Text("未绑定输入").foregroundStyle(.secondary) }
+                                            if items.isEmpty { Text(refinementText("unboundInput", fallback: "未绑定输入")).foregroundStyle(.secondary) }
                                         case .invalid(let issue):
-                                            Text("已保存的输入无效：" + issue).foregroundStyle(.red).textSelection(.enabled)
-                                            Button("清空整个输入") {
+                                            Text(refinementText("invalidInput", fallback: "已保存的输入无效：") + issue).foregroundStyle(.red).textSelection(.enabled)
+                                            Button(refinementText("clearInput", fallback: "清空整个输入")) {
                                                 editInput {
                                                     try quick.clearInputAssetList(port: port, draftID: draft.id,
                                                                                   expectedNode: draft.node, expectedInputs: draft.inputs)
@@ -224,10 +224,10 @@ struct QuickGenerationView: View {
                                         }
                                     } else {
                                         HStack {
-                                            Text(draft.inputs[port.id] == nil ? "未绑定输入" : "已保存输入快照").foregroundStyle(.secondary)
+                                            Text(draft.inputs[port.id] == nil ? refinementText("unboundInput", fallback: "未绑定输入") : refinementText("savedInput", fallback: "已保存输入快照")).foregroundStyle(.secondary)
                                             Spacer()
                                             if draft.inputs[port.id] != nil {
-                                                Button(baselineText(language, "label.6135d4159e89", fallback: "移除")) { quick.setInput(port.id, value: nil, draftID: draft.id) }
+                                                Button(baselineText(language, "label.6135d4159e89", fallback: refinementText("removeInput", fallback: "移除"))) { quick.setInput(port.id, value: nil, draftID: draft.id) }
                                             }
                                         }
                                     }
@@ -278,7 +278,7 @@ struct QuickGenerationView: View {
                                     }
                                 }.padding(.top, 12)
                             }
-                            Stepper("独立尝试：\(draft.attempts) 次", value: Binding(get: { draft.attempts },
+                            Stepper(workflowText(language, "refinement.quick.attemptCount", fallback: "独立尝试：{count} 次", arguments: ["count": String(draft.attempts)]), value: Binding(get: { draft.attempts },
                                 set: { quick.setAttempts($0, draftID: draft.id) }), in: 1...8)
                             Text(baselineText(language, "label.3238f75ca285", fallback: "每次单独排队、保存；有种子的模型按次递增，不与模型内部批量相乘。"))
                                 .font(.caption).foregroundStyle(.secondary)
@@ -295,7 +295,7 @@ struct QuickGenerationView: View {
     }
     private var generationBar: some View {
             HStack {
-                Text(quick.isRunning ? quick.phase : "输入与结果保存到快速创作记录").font(.caption).foregroundStyle(.secondary)
+                Text(quick.isRunning ? quick.phase : refinementText("saveNote", fallback: "输入与结果保存到快速创作记录")).font(.caption).foregroundStyle(.secondary)
                 Spacer()
                 if quick.isRunning {
                     ProgressView().controlSize(.small)
@@ -376,7 +376,7 @@ struct QuickGenerationView: View {
     private func runCard(_ run: QuickRunRecord) -> some View {
                             VStack(alignment: .leading, spacing: 10) {
                                 HStack { Text(run.createdAt, style: .time); Spacer(); Text(statusTitle(run.status)).font(.caption) }
-                                if let index = run.attemptIndex { Text("独立尝试 \(index)").font(.caption).foregroundStyle(.secondary) }
+                                if let index = run.attemptIndex { Text(workflowText(language, "refinement.quick.attempt", fallback: "独立尝试 {index}", arguments: ["index": String(index)])).font(.caption).foregroundStyle(.secondary) }
                                 ForEach(Array(run.outputs.keys.sorted()), id: \.self) { key in
                                     if let text = run.outputs[key]?.datum?.text {
                                         Text(text).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
