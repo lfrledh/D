@@ -10,6 +10,15 @@ struct DApp: App {
     @State private var settingsRequest: UUID?
     @State private var fallbackSettingsVisible = false
 
+    private var fallbackSettingsReady: Bool {
+        bootstrap.quick == nil && bootstrap.model != nil && bootstrap.libraryModel != nil
+            && bootstrap.startupError != nil && !applicationDelegate.hasPresentedSheet
+    }
+    private func consumeFallbackSettings() {
+        guard settingsRequest != nil, fallbackSettingsReady else { return }
+        settingsRequest = nil; fallbackSettingsVisible = true
+    }
+
     private var deploymentProbeEnabled: Bool {
         #if DEBUG
         let env = ProcessInfo.processInfo.environment
@@ -65,14 +74,8 @@ struct DApp: App {
             }
             .environment(\.dLanguageStore, bootstrap.languageStore)
             .disabled(bootstrap.isTerminating)
-            .onChange(of: settingsRequest) { _, request in
-                // Store preparation failure retains the same global preference UI,
-                // with unavailable project/chat destinations explained explicitly.
-                if request != nil, bootstrap.quick == nil, bootstrap.model != nil,
-                   bootstrap.libraryModel != nil, !applicationDelegate.hasPresentedSheet {
-                    settingsRequest = nil; fallbackSettingsVisible = true
-                }
-            }
+            .onChange(of: settingsRequest) { _, _ in consumeFallbackSettings() }
+            .onChange(of: fallbackSettingsReady) { _, ready in if ready { consumeFallbackSettings() } }
             .sheet(isPresented: $fallbackSettingsVisible) {
                 if let model = bootstrap.model, let library = bootstrap.libraryModel {
                     VStack(spacing: 0) {
