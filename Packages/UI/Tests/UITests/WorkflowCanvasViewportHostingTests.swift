@@ -90,6 +90,13 @@ struct WorkflowCanvasViewportHostingTests {
         window.isReleasedWhenClosed = false
         window.contentView = host
         defer { window.close() }
+        NSApp.activate()
+        window.makeKeyAndOrderFront(nil)
+        for _ in 0..<40 {
+            if window.isVisible && window.isKeyWindow && host.window === window { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        try #require(window.isVisible && window.isKeyWindow && host.window === window)
         func descendants(_ view: NSView) -> [NSView] {
             view.subviews.flatMap { [$0] + descendants($0) }
         }
@@ -112,6 +119,38 @@ struct WorkflowCanvasViewportHostingTests {
         let graphGeometry = WorkflowGraphGeometry(graph: graph, tools: controller.tools,
             registry: controller.registry)
         let viewport = clip.bounds.size
+        try #require(viewport.width > 0 && viewport.height > 0)
+        func accessibilityElements(_ root: NSObject) -> [any NSAccessibilityProtocol] {
+            var pending = [root], seen = Set<ObjectIdentifier>()
+            var result: [any NSAccessibilityProtocol] = []
+            while let item = pending.popLast(), seen.count < 2_000 {
+                guard seen.insert(ObjectIdentifier(item)).inserted else { continue }
+                if let ax = item as? any NSAccessibilityProtocol {
+                    result.append(ax)
+                    pending += (ax.accessibilityChildren() ?? []).compactMap { $0 as? NSObject }
+                }
+                if let view = item as? NSView { pending += view.subviews }
+            }
+            return result
+        }
+        func selectTool(_ hand: Bool) async throws {
+            let picker = try #require(accessibilityElements(host).first {
+                $0.accessibilityIdentifier() == "workflow-canvas-tool"
+            })
+            let buttons = (picker.accessibilityChildren() ?? []).compactMap {
+                $0 as? any NSAccessibilityProtocol
+            }.filter { $0.accessibilityRole() == .radioButton }
+            try #require(buttons.count == 2)
+            let button = buttons[hand ? 1 : 0]
+            try #require(HostingControlClick.send(to: button, in: host))
+            for _ in 0..<20 {
+                host.layoutSubtreeIfNeeded()
+                if (button.accessibilityValue() as? NSNumber)?.boolValue == true { break }
+                try await Task.sleep(for: .milliseconds(10))
+            }
+            try #require((button.accessibilityValue() as? NSNumber)?.boolValue == true)
+        }
+        try await selectTool(false)
         #expect(viewport.width < scroll.bounds.width && viewport.height < scroll.bounds.height,
                 "Legacy scrollbars must consume real clip space in this fixture")
         #expect(observations.last?.containerSize == viewport)
@@ -138,22 +177,39 @@ struct WorkflowCanvasViewportHostingTests {
                 .scrollWheel, .otherMouseDown, .leftMouseDown, .leftMouseDragged, .leftMouseUp
             ],
                 until: Date(timeIntervalSinceNow: 0.1), inMode: .default, dequeue: true))
+            let sameIdentity = queued.type == event.type && queued.windowNumber == event.windowNumber
+                && (event.type == .scrollWheel
+                    ? abs(queued.timestamp - event.timestamp) < 0.001
+                    : queued.eventNumber == event.eventNumber)
+            if !sameIdentity { NSApp.postEvent(queued, atStart: true) }
+            try #require(sameIdentity, "The driver must dispatch its own queued event")
             NSApplication.shared.sendEvent(queued)
             for _ in 0..<10 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(10)) }
         }
         func wheel(at windowPoint: CGPoint, in target: NSWindow, delta: Int32) throws -> NSEvent {
             let cg = try #require(CGEvent(scrollWheelEvent2Source: nil, units: .pixel,
                 wheelCount: 1, wheel1: delta, wheel2: 0, wheel3: 0))
-            cg.location = target.convertPoint(toScreen: windowPoint)
+            // NSEvent converts AppKit's bottom-left coordinates to Quartz's screen coordinates.
+            let located = try #require(NSEvent.mouseEvent(with: .mouseMoved,
+                location: windowPoint, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                windowNumber: target.windowNumber, context: nil, eventNumber: 1, clickCount: 0, pressure: 0))
+            cg.location = try #require(located.cgEvent).location
             cg.setIntegerValueField(.mouseEventWindowUnderMousePointer, value: Int64(target.windowNumber))
             cg.setIntegerValueField(.mouseEventWindowUnderMousePointerThatCanHandleThisEvent,
                                     value: Int64(target.windowNumber))
-            return try #require(NSEvent(cgEvent: cg))
+            let event = try #require(NSEvent(cgEvent: cg))
+            try #require(event.windowNumber == target.windowNumber)
+            try #require(abs(event.locationInWindow.x - windowPoint.x) < 1
+                && abs(event.locationInWindow.y - windowPoint.y) < 1,
+                "Wheel must enter the requested window coordinates")
+            return event
         }
+        var gestureIdentity = 1
         func left(_ type: NSEvent.EventType, at point: CGPoint) throws -> NSEvent {
-            try #require(NSEvent.mouseEvent(with: type, location: point, modifierFlags: [],
-                timestamp: 0, windowNumber: window.windowNumber, context: nil,
-                eventNumber: 1, clickCount: 1, pressure: 1))
+            if type == .leftMouseDown { gestureIdentity = Int.random(in: 1...Int(Int16.max)) }
+            return try #require(NSEvent.mouseEvent(with: type, location: point, modifierFlags: [],
+                timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber, context: nil,
+                eventNumber: gestureIdentity, clickCount: 1, pressure: type == .leftMouseUp ? 0 : 1))
         }
         let originalRaw = initialLayout.rawPoint(screenPoint: mouseInClip, offset: initialOffset)
         try await dispatch(wheel(at: mouseInWindow, in: window, delta: 32))
@@ -269,6 +325,12 @@ struct WorkflowCanvasViewportHostingTests {
         #expect(scroll.documentView?.frame.size == sheetSize)
         window.endSheet(sheet)
         sheet.close()
+        for _ in 0..<20 {
+            if window.attachedSheet == nil { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        try #require(window.attachedSheet == nil)
+        try await selectTool(true)
 
         let beforePan = clip.bounds.origin
         try await dispatch(left(.leftMouseDown, at: mouseInWindow))
@@ -321,11 +383,13 @@ struct WorkflowCanvasViewportHostingTests {
         controller.selectedGraphID = graph.id
         for _ in 0..<20 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(10)) }
         #expect(controller.graph?.id == graph.id)
+        try await selectTool(false)
         controller.selectedNodeID = graph.nodes.first?.id
         #expect(controller.selectedNodeID != nil)
         try await dispatch(left(.leftMouseDown, at: mouseInWindow))
         try await dispatch(left(.leftMouseUp, at: mouseInWindow))
         #expect(controller.selectedNodeID == nil)
+        try await selectTool(true)
         let freshPanOffset = clip.bounds.origin
         try await dispatch(left(.leftMouseDown, at: mouseInWindow))
         try await dispatch(left(.leftMouseDragged,
