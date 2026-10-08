@@ -14,6 +14,10 @@ struct TextSourcesQuestionEditor: NSViewRepresentable {
     var sendsOnReturn = false
     var onSubmit: (() -> Void)? = nil
     var onFileDrop: (([URL]) -> Void)? = nil
+    // Opt-in for the chat composer. Other native editors keep their existing sizing.
+    var contentHeight: ClosedRange<CGFloat>? = nil
+    var transparentBackground = false
+    var foregroundColor: NSColor? = nil
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
@@ -47,16 +51,41 @@ struct TextSourcesQuestionEditor: NSViewRepresentable {
         scroll.documentView = editor
         context.coordinator.update(editor, value: value, isEditable: isEditable, onEdit: onEdit,
             pointSize: pointSize, sendsOnReturn: sendsOnReturn, onSubmit: onSubmit)
+        applyAppearance(scroll, editor: editor)
         return scroll
     }
 
+    private func applyAppearance(_ scroll: NSScrollView, editor: NSTextView) {
+        scroll.drawsBackground = !transparentBackground
+        editor.drawsBackground = !transparentBackground
+        let color = foregroundColor ?? .labelColor
+        if editor.textColor != color { editor.textColor = color }
+        if editor.insertionPointColor != color { editor.insertionPointColor = color }
+    }
+
+    static func fittedHeight(text: String, font: NSFont, width: CGFloat,
+                             range: ClosedRange<CGFloat>) -> CGFloat {
+        // Match the native 6-point insets and default 5-point line-fragment padding.
+        // This is a measurement only: no authoritative text, selection or Undo mutation.
+        let bounds = ((text.isEmpty ? " " : text + "\n") as NSString).boundingRect(
+            with: NSSize(width: max(1, width - 22), height: .greatestFiniteMagnitude),
+            options: [.usesLineFragmentOrigin, .usesFontLeading], attributes: [.font: font])
+        return min(range.upperBound, max(range.lowerBound, ceil(bounds.height) + 12))
+    }
+
     func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSScrollView, context: Context) -> CGSize? {
-        CGSize(width: proposal.width.flatMap { $0.isFinite ? max(0, $0) : nil } ?? 320,
+        let width = proposal.width.flatMap { $0.isFinite ? max(0, $0) : nil } ?? 320
+        if let contentHeight, let editor = nsView.documentView as? NSTextView {
+            return CGSize(width: width, height: Self.fittedHeight(text: editor.string,
+                font: editor.font ?? .preferredFont(forTextStyle: .body), width: width, range: contentHeight))
+        }
+        return CGSize(width: width,
                height: proposal.height.flatMap { $0.isFinite ? max(0, $0) : nil } ?? 90)
     }
 
     func updateNSView(_ scroll: NSScrollView, context: Context) {
         guard let editor = scroll.documentView as? NSTextView else { return }
+        applyAppearance(scroll, editor: editor)
         (editor as? FileDropTextView)?.onFileDrop = onFileDrop
         if editor.accessibilityLabel() != accessibilityLabel { editor.setAccessibilityLabel(accessibilityLabel) }
         context.coordinator.update(editor, value: value, isEditable: isEditable, onEdit: onEdit,

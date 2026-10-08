@@ -1,5 +1,7 @@
 # UI-REFINEMENT-01 — 第一版原生工作台
 
+> 2026-10-08 原位归档：**superseded-as-active / 部分实现与证据保留 / 未完项转接**。用户明确拒收展示；活动任务已转为[UI-PRESENTATION-REBUILD-01](UI-PRESENTATION-REBUILD-01.md)。不是全部完成，也不是取消工程成果。
+
 状态：r3 无桌面实现与定向检查完成，代码/App `2b4b9ad2215fa6f191ce43f0baf6848549e924f7`；原生组合待验，未接纳main。当前结果见文末r3；r1/r2是历史，旧失败/预算保留。
 
 源/候选起点：91bef7d720a8b6cb923207ef787230f36496f4cf；已验生产代码 8cf1b7dd46f6041dbcf1ac3db75b19839ae390c4。独立集成树 D-UI-REFINEMENT-01、分支 codex/ui-refinement-01。准备提交完整执行基线写外部派工记录，不自引用。
@@ -174,3 +176,11 @@ R3=`D-Development/AgentTrials/UI-REFINEMENT-01/run-20261008T045623Z-r3-no-deskto
 - 没有新的账号、设备或权限办理；F26继续延期。工具不足时只留下最短真人对照，当前不催本人。现状态为**定向修补与可独立检查完成，组合原生部分完成且新包待验**，不宣布最终UI、main接纳或发行通过。
 
 证据索引：R4/lead/{native-first-pass.json,tool-run-failure.json,move-undo-verification.json,local-red-fixed-result.json,local-green-result.json,viewport-native-result.json,tool-execution-final-result.json,review-summary.json,code-version.json,delivery-r4.json,protection-end.json,final-receipt.json}；gui保留本轮2b4实际状态与截图。旧包/分支/证据不删除。正常推送候选后停在待解锁审计检查点。
+
+## 2026-10-08 新Lead移交结论
+
+固定归档基线6abf4e1d4a1d1b6cd0cd454c338920a681e6d1e0；代码/App79f9eb53d6c93b18b99bda7a3eb2324e38abcec5未原生启动，r4实际操作2b4b9ad2。用户拒收截图运行SHA未知，只证明所见布局失败。旧r1–r4原文/失败/余额不改。
+
+已保留：输入/Undo与原生隐藏、统一设置、模型接线、媒体视口、节点移动/一次撤销/点击连线证据，以及79f阅读/fit/封装修补和准确CPU证据。转接：同内容跨模态/模式阅读，fit过渡与稳定后一次适配，新建正确封装调用/重开，真实端口和Finder拖放，大字/轻量，viewport宿主前置失败。视觉检查必须匹配原型状态，旧控件/玻璃存在不代表合格。
+
+停写核对：旧Lead聊天notLoaded，最后回执自有构建/检查结束、旧2b4正常退出、新79f未启动；新Lead核实际进程无相关构建/写Worker，旧树/索引干净。未强杀未知进程、未清理工作树。后继只在新独立树实施；旧任务不再是活动计划。

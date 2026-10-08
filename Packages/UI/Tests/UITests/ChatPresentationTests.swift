@@ -629,24 +629,17 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
     }
 
     @Test func sidePanesCollapseBeforeConversationIsClipped() {
-        #expect(!ChatPresentationLayout.showsSidebar(width: 600, requested: true))
-        #expect(!ChatPresentationLayout.showsSidebar(width: 640, requested: true))
-        #expect(!ChatPresentationLayout.showsSidebar(width: 672, requested: true))
-        #expect(ChatPresentationLayout.showsSidebar(width: 673, requested: true))
-        #expect(!ChatPresentationLayout.showsInspector(width: 960, requested: true, sidebar: true))
-        #expect(!ChatPresentationLayout.showsInspector(width: 993, requested: true, sidebar: true))
-        #expect(ChatPresentationLayout.showsInspector(width: 994, requested: true, sidebar: true))
-        #expect(!ChatPresentationLayout.showsInspector(width: 740, requested: true, sidebar: false))
-        #expect(!ChatPresentationLayout.showsInspector(width: 752, requested: true, sidebar: false))
-        #expect(ChatPresentationLayout.showsInspector(width: 753, requested: true, sidebar: false))
+        // The new floating panels reserve a 16-point gap, not the former divider.
+        #expect(!ChatPresentationLayout.showsSidebar(width: 707, requested: true))
+        #expect(ChatPresentationLayout.showsSidebar(width: 708, requested: true))
+        #expect(!ChatPresentationLayout.showsInspector(width: 1011, requested: true, sidebar: true))
+        #expect(ChatPresentationLayout.showsInspector(width: 1012, requested: true, sidebar: true))
+        #expect(!ChatPresentationLayout.showsInspector(width: 735, requested: true, sidebar: false))
+        #expect(ChatPresentationLayout.showsInspector(width: 736, requested: true, sidebar: false))
         #expect(ChatPresentationLayout.dismissesNarrowPanel(.inspector, width: 1_300,
             sidebarRequested: true, inspectorRequested: true))
         #expect(!ChatPresentationLayout.dismissesNarrowPanel(.inspector, width: 960,
             sidebarRequested: true, inspectorRequested: true))
-        #expect(ChatPresentationLayout.dismissesNarrowPanel(.sessions, width: 673,
-            sidebarRequested: true, inspectorRequested: false))
-        #expect(ChatPresentationLayout.sidebarWidth == 240)
-        #expect(ChatPresentationLayout.inspectorWidth == 320)
         #expect(ChatPresentationLayout.messageWidth == 760)
         #expect(ChatPresentationLayout.minimumBodyWidth == 432)
     }
@@ -758,7 +751,7 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
             #expect(descendants(host).contains { $0 === editor })
             #expect(!editor.isHiddenOrHasHiddenAncestor)
             #expect(editor.hasMarkedText() && window.firstResponder === editor)
-            if width >= 994 {
+            if width - 32 >= 1012 {
                 let pane = try #require(rectangles["inspector-pane"])
                 for key in ["composer-send", "change-model", "paths"] {
                     let control = try #require(rectangles[key])

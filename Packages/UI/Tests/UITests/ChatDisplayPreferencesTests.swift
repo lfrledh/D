@@ -42,6 +42,52 @@ import Testing
         #expect(text.string == "original")
     }
 
+    @Test func composerMeasuresContentWithinBoundWithoutReplacingNativeInput() throws {
+        func make(_ value: String, _ color: NSColor) -> TextSourcesQuestionEditor {
+            TextSourcesQuestionEditor(value: value, editEpoch: 0, isEditable: true,
+                onEdit: { _ in }, pointSize: 15, contentHeight: 52...180,
+                transparentBackground: true, foregroundColor: color)
+        }
+        func find(_ view: NSView) -> NSTextView? {
+            if let value = view as? NSTextView { return value }
+            return view.subviews.compactMap { find($0) }.first
+        }
+        let host = NSHostingView(rootView: make("A short idea", .black))
+        host.frame = NSRect(x: 0, y: 0, width: 500, height: 500)
+        host.layoutSubtreeIfNeeded()
+        let native = try #require(find(host))
+        #expect(host.fittingSize.height <= 60)
+        #expect(!native.drawsBackground && native.enclosingScrollView?.drawsBackground == false)
+        let manager = try #require(native.undoManager)
+        manager.beginUndoGrouping()
+        native.insertText("!", replacementRange: NSRange(location: native.string.utf16.count, length: 0))
+        manager.endUndoGrouping()
+        #expect(manager.canUndo)
+        let committed = native.string
+        native.setSelectedRange(NSRange(location: 2, length: 0))
+        native.setMarkedText("pinyin", selectedRange: NSRange(location: 6, length: 0),
+            replacementRange: NSRange(location: NSNotFound, length: 0))
+        let composed = native.string
+        let selection = native.selectedRange()
+        host.rootView = make(committed, .white)
+        host.frame.size.width = 340
+        host.layoutSubtreeIfNeeded()
+        #expect(find(host) === native)
+        #expect(native.string == composed && native.hasMarkedText())
+        #expect(native.selectedRange() == selection)
+        #expect(native.undoManager === manager && manager.canUndo)
+        native.unmarkText()
+        manager.undo()
+        #expect(native.string != composed)
+        let long = String(repeating: "A complete paragraph for a long draft.\n", count: 50)
+        host.rootView = make(long, .white)
+        host.layoutSubtreeIfNeeded()
+        #expect(find(host) === native)
+        #expect(native.string == long)
+        #expect(host.fittingSize.height == 180)
+        #expect(native.enclosingScrollView?.hasVerticalScroller == true)
+    }
+
     @Test func preferencesDuringCompositionApplyAfterConfirmationWithoutReplacingOwnerOrText() {
         let editor = NSTextView(), coordinator = TextSourcesQuestionEditor.Coordinator()
         editor.delegate = coordinator

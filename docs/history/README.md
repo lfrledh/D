@@ -28,3 +28,15 @@ current索引，2026-09-23。历史正文保留原义，不自动作为当前需
 - PROJECT_GUIDE_2026-02-25.md：项目与旧助手协作指南 2.0.0。
 
 这是历史依据，不是当前代码状态或执行规范。尤其“所有 Actor 方法 nonisolated”“Module 一律 unchecked Sendable”“AI 不能改文件/构建”等条款已不适合作为本项目当前规则。当前规则见根目录 AGENTS.md 与 docs/decisions。
+
+<a id="ui-presentation-takeover"></a>
+## 2026-10-08 展示重构接手
+
+UI-REFINEMENT-01 原位归档，展示被用户拒收，部分实现/证据保留；后继[UI-PRESENTATION-REBUILD-01](../tasks/UI-PRESENTATION-REBUILD-01.md)。79f未原生验、阅读/fit/封装/拖放/宿主失败转接；常驻规则/保护/旧预算继续有效。
+
+接手前完整正文固定于 **6abf4e1d4a1d1b6cd0cd454c338920a681e6d1e0**：
+- [旧当前行动](https://github.com/lfrledh/D/blob/6abf4e1d4a1d1b6cd0cd454c338920a681e6d1e0/docs/CURRENT_ACTIONS.zh-CN.md)
+- [旧集中审计](https://github.com/lfrledh/D/blob/6abf4e1d4a1d1b6cd0cd454c338920a681e6d1e0/docs/FAILURE_AND_PERMISSION_AUDIT.zh-CN.md)
+- [旧任务原位记录](../tasks/UI-REFINEMENT-01.md)
+
+离线：`git show 6abf4e1d4a1d1b6cd0cd454c338920a681e6d1e0:docs/CURRENT_ACTIONS.zh-CN.md`；集中队列将冒号后路径改为`docs/FAILURE_AND_PERMISSION_AUDIT.zh-CN.md`。只压缩当前入口，不搬/删旧证据或个人文件。

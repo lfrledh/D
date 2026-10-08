@@ -192,7 +192,18 @@ public struct DualWorkbenchView: View {
     }
     public var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 12) {
+            ZStack {
+                if entry == .quick {
+                    Picker(t("category", "Creation category", "创作分类"), selection: Binding(get: { quick.category }, set: { captureChatReading(); quick.selectCategory($0) })) {
+                        Text(workflowText(language, "quick.category.text", fallback: "文字")).tag(QuickCategory.text)
+                        Text(workflowText(language, "quick.category.image", fallback: "图像")).tag(QuickCategory.image)
+                        Text(workflowText(language, "quick.category.video", fallback: "视频")).tag(QuickCategory.video)
+                        Text(workflowText(language, "quick.category.audio", fallback: "音频")).tag(QuickCategory.audio)
+                    }.pickerStyle(.segmented).labelsHidden().frame(width: 310)
+                        .disabled(quickOwnerIsChanging).accessibilityIdentifier("quick-category")
+                        .workbenchMotion(value: quick.category)
+                } else { Text(t("workflow", "Node workflow", "节点工作流")).font(.headline).frame(width: 340) }
+                HStack(spacing: 8) {
                 Button(action: goBack) { Image(systemName: "chevron.left") }
                     .disabled(entryHistory.isEmpty).help(t("back", "Back", "返回")).accessibilityIdentifier("workbench-back")
                 Text("D").font(.title2.bold())
@@ -215,17 +226,24 @@ public struct DualWorkbenchView: View {
                 } label: { Image(systemName: "folder") }.help(t("projectsAndFiles", "Projects and files", "项目与文件"))
                 Button { modelPickerCategory = nil; libraryVisible = true } label: { Image(systemName: "square.stack.3d.up") }
                     .help(t("library", "Library", "资料库")).accessibilityLabel(t("library", "Library", "资料库")).accessibilityIdentifier("shared-library-open")
-                Spacer(minLength: 8)
-                if entry == .quick {
-                    Picker(t("category", "Creation category", "创作分类"), selection: Binding(get: { quick.category }, set: { captureChatReading(); quick.selectCategory($0) })) {
-                        Text(workflowText(language, "quick.category.text", fallback: "文字")).tag(QuickCategory.text)
-                        Text(workflowText(language, "quick.category.image", fallback: "图像")).tag(QuickCategory.image)
-                        Text(workflowText(language, "quick.category.video", fallback: "视频")).tag(QuickCategory.video)
-                        Text(workflowText(language, "quick.category.audio", fallback: "音频")).tag(QuickCategory.audio)
-                    }.pickerStyle(.segmented).frame(width: 340)
-                        .disabled(quickOwnerIsChanging).accessibilityIdentifier("quick-category")
-                        .workbenchMotion(value: quick.category)
-                } else { Text(t("workflow", "Node workflow", "节点工作流")).font(.headline).frame(width: 340) }
+                if entry == .quick, quick.category == .text {
+                    Menu {
+                        Picker(workflowText(language, "chat.textSurface", fallback: "文字工作面"),
+                            selection: Binding(get: { quick.textPresentation }, set: { captureChatReading(); quick.selectTextPresentation($0) })) {
+                            Text(workflowText(language, "chat.conversation", fallback: "聊天")).tag(QuickTextPresentation.chat)
+                            Text(workflowText(language, "chat.single", fallback: "单次生成与旧记录")).tag(QuickTextPresentation.single)
+                        }
+                        if quick.textPresentation == .chat {
+                            Divider()
+                            Button(chat?.isTemporary == true ? t("endTemporary", "End temporary chat", "结束临时会话") : t("temporary", "Temporary chat", "临时会话"), action: changeTemporaryChat)
+                                .disabled(temporaryChatChanging).accessibilityIdentifier("chat-temporary-toggle")
+                        }
+                    } label: {
+                        Label(quick.textPresentation == .single ? t("singleShort", "Single", "单次生成") :
+                            (chat?.isTemporary == true ? t("temporary", "Temporary chat", "临时会话") : t("chat", "Chat", "聊天")),
+                            systemImage: chat?.isTemporary == true ? "bubble.left.and.text.bubble.right" : "bubble.left")
+                    }.fixedSize().accessibilityIdentifier("quick-text-surface")
+                }
                 Spacer(minLength: 8)
                 Button { navigate(to: entry == .quick ? .workflow : .quick) } label: {
                     Image(systemName: entry == .quick ? "rectangle.3.group" : "bolt.fill").frame(width: 30, height: 30)
@@ -236,8 +254,8 @@ public struct DualWorkbenchView: View {
                 Button(action: presentSettings) { Image(systemName: "gearshape").frame(width: 30, height: 30) }
                     .buttonStyle(.bordered).buttonBorderShape(.circle).help(t("settings", "Settings", "设置")).accessibilityLabel(t("settings", "Settings", "设置"))
                     .accessibilityIdentifier("workbench-settings").disabled(!canPresentSettings)
-            }.padding(.horizontal, 20).padding(.vertical, 12).workbenchPanel(cornerRadius: 0)
-            Divider()
+                }
+            }.padding(.horizontal, 20).padding(.vertical, 14)
             if entry == .quick, let identity = quickModelIdentity,
                quickModel.projectSession.explicitModelChecking.contains(identity) {
                 Text(t("checkingModel", "Checking selected model files and execution adapter…", "正在核验所选模型文件与执行适配…"))
@@ -252,22 +270,7 @@ public struct DualWorkbenchView: View {
                     if entry == .quick {
                         if quick.category == .text, let chat {
                             VStack(spacing: 0) {
-                                Picker(workflowText(language, "chat.textSurface", fallback: "文字工作面"),
-                                    selection: Binding(get: { quick.textPresentation }, set: { captureChatReading(); quick.selectTextPresentation($0) })) {
-                                    Text(workflowText(language, "chat.conversation", fallback: "聊天")).tag(QuickTextPresentation.chat)
-                                    Text(workflowText(language, "chat.single", fallback: "单次生成与旧记录")).tag(QuickTextPresentation.single)
-                                }.pickerStyle(.segmented).labelsHidden().frame(maxWidth: 360).padding(.horizontal, 20)
-                                    .accessibilityLabel(workflowText(language, "chat.textSurface", fallback: "文字工作面"))
-                                    .accessibilityIdentifier("quick-text-surface")
                                 if quick.textPresentation == .chat {
-                                    HStack {
-                                        Button(chat.isTemporary ? "End temporary chat / 结束临时会话" : "Temporary chat / 临时会话", action: changeTemporaryChat)
-                                            .disabled(temporaryChatChanging).accessibilityIdentifier("chat-temporary-toggle")
-                                        if chat.isTemporary {
-                                            Text("Temporary cache only; no history, memory or normal backup. Explicit exports and remote tools may retain copies. / 仅临时缓存；不入长期历史、记忆或普通备份。显式导出与外部工具可能留存。")
-                                                .font(.caption).foregroundStyle(.secondary)
-                                        }
-                                    }.padding(.horizontal, 20)
                                     ChatWorkbenchView(chat: chat, model: chatModel,
                                         onChooseModel: { modelPickerCategory = .text; libraryVisible = true },
                                         openToolsRequest: openToolsRequest,

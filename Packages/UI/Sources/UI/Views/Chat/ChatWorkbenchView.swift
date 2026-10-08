@@ -38,18 +38,18 @@ enum ChatRunAdmission {
 }
 
 enum ChatPresentationLayout {
-    static let sidebarWidth: CGFloat = 240
-    static let inspectorWidth: CGFloat = 320
+    static let sidebarWidth: CGFloat = 260
+    static let inspectorWidth: CGFloat = 288
     static let messageWidth: CGFloat = 760
     // The transcript and composer each reserve 16 points on both sides.
     // Actions have their own compact rows; the body no longer needs room for
     // every attachment and submit button on a single line.
     static let minimumBodyWidth: CGFloat = 400 + 32
     static func showsSidebar(width: CGFloat, requested: Bool) -> Bool {
-        requested && width >= minimumBodyWidth + sidebarWidth + 1
+        requested && width >= minimumBodyWidth + sidebarWidth + 16
     }
     static func showsInspector(width: CGFloat, requested: Bool, sidebar: Bool) -> Bool {
-        requested && width >= minimumBodyWidth + inspectorWidth + 1 + (sidebar ? sidebarWidth + 1 : 0)
+        requested && width >= minimumBodyWidth + inspectorWidth + 16 + (sidebar ? sidebarWidth + 16 : 0)
     }
 }
 
@@ -499,6 +499,8 @@ struct ChatWorkbenchView: View {
     @State private var inspectedAttemptID: UUID?
     @State private var showContextPreview = false
     @State private var lastBodyWidth: CGFloat = 0
+    @Environment(\.colorScheme) private var colorScheme
+    @State private var speechExpanded = false
     @State private var showSidebar = true
     @State private var showsSessionList = false
     @State private var showInspector = false
@@ -600,8 +602,8 @@ struct ChatWorkbenchView: View {
             let sidebarInline = sidebarShown && sheets.narrowPanel != .sessions
             // An already open pane remains visible as an overlay while the width
             // changes. Do not briefly hide its native editor before onChange runs.
-            let sidebarVisible = showSidebar && (sidebarInline || sidebarWasPresented || sheets.narrowPanel == .sessions)
-            let inspectorVisible = showInspector
+            let sidebarVisible = showSidebar && (sidebarInline || sheets.narrowPanel == .sessions)
+            let inspectorVisible = showInspector && (inspectorInline || sheets.narrowPanel == .inspector)
             let sidebarPaneWidth = min(ChatPresentationLayout.sidebarWidth, geometry.size.width)
             let inspectorPaneWidth = min(ChatPresentationLayout.inspectorWidth, geometry.size.width)
             ZStack(alignment: .topLeading) {
@@ -610,14 +612,14 @@ struct ChatWorkbenchView: View {
                         ContentUnavailableView(label("loadFailed", "聊天记录不可用"), systemImage: "exclamationmark.triangle",
                             description: Text(chat.error.map { ChatErrorText.display($0, language: language) } ?? label("loading", "正在读取聊天记录…")))
                     } else if let session {
-                        conversation(session, width: geometry.size.width, sidebarShown: sidebarShown)
+                        conversation(session, width: geometry.size.width, height: geometry.size.height, sidebarShown: sidebarShown)
                     } else {
                         emptyConversation(width: geometry.size.width, sidebarShown: sidebarShown)
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .padding(.leading, sidebarInline ? ChatPresentationLayout.sidebarWidth + 1 : 0)
-                .padding(.trailing, inspectorInline && session != nil ? ChatPresentationLayout.inspectorWidth + 1 : 0)
+                .padding(.leading, sidebarInline ? ChatPresentationLayout.sidebarWidth + 16 : 0)
+                .padding(.trailing, inspectorInline && session != nil ? ChatPresentationLayout.inspectorWidth + 16 : 0)
                 .chatMeasured("conversation", probe: layoutProbe)
                 .workbenchMotion(value: sidebarInline).workbenchMotion(value: inspectorInline)
 
@@ -627,7 +629,7 @@ struct ChatWorkbenchView: View {
                         .onTapGesture { closeNarrowPanel() }
                         .accessibilityHidden(true)
                 }
-                RetainedContentHost(content: configurationPane.workbenchPanel(cornerRadius: 0).workbenchTheme().disabled(!sidebarVisible)
+                RetainedContentHost(content: configurationPane.workbenchPanel(cornerRadius: 22).disabled(!sidebarVisible)
                     .environment(\.chatDisplayPreferences, model.chatDisplaySettings.preferences)
                     .preferredColorScheme(model.chatDisplaySettings.preferences.preferredColorScheme)
                     .environment(\.dLanguageStore, language), visible: sidebarVisible,
@@ -635,12 +637,12 @@ struct ChatWorkbenchView: View {
                     .transaction { $0.animation = nil }
                     .frame(width: sidebarPaneWidth)
                     .frame(maxHeight: .infinity)
-                    .overlay(alignment: .trailing) { if sidebarInline { Divider() } }
+
                     .allowsHitTesting(sidebarVisible)
                     .accessibilityHidden(!sidebarVisible)
                     .chatMeasured("sessions-pane", probe: layoutProbe)
                 if let session {
-                    RetainedContentHost(content: inspector(session).workbenchPanel(cornerRadius: 0).workbenchTheme().disabled(!inspectorVisible)
+                    RetainedContentHost(content: inspector(session).workbenchPanel(cornerRadius: 22).disabled(!inspectorVisible)
                         .environment(\.chatDisplayPreferences, model.chatDisplaySettings.preferences)
                         .preferredColorScheme(model.chatDisplaySettings.preferences.preferredColorScheme)
                         .environment(\.dLanguageStore, language), visible: inspectorVisible,
@@ -648,7 +650,7 @@ struct ChatWorkbenchView: View {
                         .transaction { $0.animation = nil }
                         .frame(width: inspectorPaneWidth)
                         .frame(maxHeight: .infinity)
-                        .overlay(alignment: .leading) { if inspectorInline { Divider() } }
+
                         .chatMeasured("inspector-pane", probe: layoutProbe)
                         .allowsHitTesting(inspectorVisible)
                         .accessibilityHidden(!inspectorVisible)
@@ -679,6 +681,7 @@ struct ChatWorkbenchView: View {
                 }
             }
         }
+        .padding(.horizontal, 16).padding(.bottom, 16)
         .task(id: openToolsRequest) {
             if let openToolsRequest {
                 guard openToolsRequest.matches(chat) else { onToolsOpened(openToolsRequest.id); return }
@@ -789,38 +792,38 @@ struct ChatWorkbenchView: View {
     private func emptyConversation(width: CGFloat, sidebarShown: Bool) -> some View {
         VStack(spacing: 0) {
             HStack {
-                paneButtons(width: width, sidebarShown: sidebarShown)
+                leftPanelButton(width: width)
                 Spacer()
+                rightPanelButton(width: width, sidebarShown: sidebarShown)
             }.padding(12)
-            Divider()
             ChatEmptyConversationView { createSession() }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .chatMeasured("empty-conversation", probe: layoutProbe)
         }
     }
 
-    private func paneButtons(width: CGFloat, sidebarShown: Bool) -> some View {
-        HStack(spacing: 8) {
-            Button {
-                if !ChatPresentationLayout.showsSidebar(width: width, requested: true) {
-                    showSidebar = true
-                    sidebarWasPresented = true
-                    sheets.openNarrow(.sessions)
-                } else {
-                    showSidebar.toggle()
-                    if showSidebar { sidebarWasPresented = true }
-                }
-            } label: { Label(refinement("modelAndParameters", "Model and parameters", "模型与参数"), systemImage: "sidebar.left") }
-                .accessibilityIdentifier("chat-sessions-toggle")
-            Button {
-                if !ChatPresentationLayout.showsInspector(width: width, requested: true, sidebar: sidebarShown) {
-                    showInspector = true
-                    sheets.openNarrow(.inspector)
-                }
-                else { showInspector.toggle() }
-            } label: { Label(refinement("materialsAndResults", "Materials and results", "素材与成果"), systemImage: "sidebar.right") }
-                .accessibilityIdentifier("chat-inspector-toggle")
-        }.labelStyle(.iconOnly).buttonStyle(.bordered).buttonBorderShape(.circle)
+    private func leftPanelButton(width: CGFloat) -> some View {
+        Button {
+            if !ChatPresentationLayout.showsSidebar(width: width, requested: true) {
+                showSidebar = true; sidebarWasPresented = true; sheets.openNarrow(.sessions)
+            } else { showSidebar.toggle(); if showSidebar { sidebarWasPresented = true } }
+        } label: { Image(systemName: "slider.horizontal.3").frame(width: 28, height: 28) }
+            .buttonStyle(.bordered).buttonBorderShape(.circle)
+            .help(refinement("modelAndParameters", "Model and parameters", "模型与参数"))
+            .accessibilityLabel(refinement("modelAndParameters", "Model and parameters", "模型与参数"))
+            .accessibilityIdentifier("chat-sessions-toggle")
+    }
+
+    private func rightPanelButton(width: CGFloat, sidebarShown: Bool) -> some View {
+        Button {
+            if !ChatPresentationLayout.showsInspector(width: width, requested: true, sidebar: sidebarShown) {
+                showInspector = true; sheets.openNarrow(.inspector)
+            } else { showInspector.toggle() }
+        } label: { Image(systemName: "square.grid.2x2").frame(width: 28, height: 28) }
+            .buttonStyle(.bordered).buttonBorderShape(.circle)
+            .help(refinement("materialsAndResults", "Materials and results", "素材与成果"))
+            .accessibilityLabel(refinement("materialsAndResults", "Materials and results", "素材与成果"))
+            .accessibilityIdentifier("chat-inspector-toggle")
     }
 
     private func refinement(_ key: String, _ en: String, _ zh: String) -> String {
@@ -964,7 +967,7 @@ struct ChatWorkbenchView: View {
         return String(hit.sourceText[start..<end]).replacingOccurrences(of: "\n", with: " ")
     }
 
-    private func conversation(_ session: ChatSession, width: CGFloat, sidebarShown: Bool) -> some View {
+    private func conversation(_ session: ChatSession, width: CGFloat, height: CGFloat, sidebarShown: Bool) -> some View {
         let parentIDs = Set(session.messages.compactMap(\.parentID))
         let leaves = session.messages.filter { !parentIDs.contains($0.id) }
         let siblings = Dictionary(grouping: session.messages, by: {
@@ -973,7 +976,13 @@ struct ChatWorkbenchView: View {
         let attempts = Dictionary(uniqueKeysWithValues: session.attempts.map { ($0.id, $0) })
         return VStack(spacing: 0) {
             HStack(alignment: .center, spacing: 12) {
-                paneButtons(width: width, sidebarShown: sidebarShown)
+                if !sidebarShown { leftPanelButton(width: width) }
+                Button {
+                    showsSessionList = true; showSidebar = true
+                    if !ChatPresentationLayout.showsSidebar(width: width, requested: true) { sheets.openNarrow(.sessions) }
+                } label: { Image(systemName: "clock.arrow.circlepath").frame(width: 26, height: 28) }
+                    .buttonStyle(.plain).help(label("history", "对话"))
+                    .accessibilityLabel(label("history", "对话")).accessibilityIdentifier("chat-history-open")
                 VStack(alignment: .leading, spacing: 4) {
                     Text(session.title).font(.headline).lineLimit(1)
                     if session.contextChoices?.deletedAt != nil {
@@ -987,7 +996,11 @@ struct ChatWorkbenchView: View {
                              (id.isEmpty ? label("chooseModel", "选择模型") : id)) + " · " + readiness(id))
                             .font(.caption).foregroundStyle(.secondary).lineLimit(1)
                     } else {
-                        Text(label("noModel", "尚未选择模型")) .foregroundStyle(.secondary)
+                        Text(refinement("nextModel", "Choose a model for your next message", "为下一条消息选择模型")).font(.caption).foregroundStyle(.secondary)
+                    }
+                    if chat.isTemporary {
+                        Text(refinement("temporaryNotice", "Temporary · local cache; exports and external tools may retain copies", "临时会话 · 仅本机缓存；导出与外部工具可能留存"))
+                            .font(.caption2).foregroundStyle(.secondary).lineLimit(2)
                     }
                 }.frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
                 if !session.messages.isEmpty {
@@ -998,9 +1011,14 @@ struct ChatWorkbenchView: View {
                             }
                         }).fixedSize().chatMeasured("paths", probe: layoutProbe)
                 }
-            }.padding(.horizontal, 16).padding(.vertical, 10)
+                Button { createSession() } label: { Image(systemName: "plus").frame(width: 28, height: 28) }
+                    .buttonStyle(.plain).help(label("new", "新建"))
+                    .accessibilityLabel(label("new", "新建")).disabled(chat.saveIssue != nil)
+                if !ChatPresentationLayout.showsInspector(width: width, requested: showInspector, sidebar: sidebarShown) {
+                    rightPanelButton(width: width, sidebarShown: sidebarShown)
+                }
+            }.padding(.horizontal, 8).padding(.vertical, 8)
                 .chatMeasured("topbar", probe: layoutProbe)
-            Divider()
             if chat.isRunning, let active = chat.activeSessionID,
                let owner = chat.state.sessions.first(where: { $0.id == active }) {
                 HStack {
@@ -1031,7 +1049,18 @@ struct ChatWorkbenchView: View {
                                 .chatMeasured("message-\(message.id.uuidString)", probe: layoutProbe)
                         }
                         if session.selectedLeafID == nil {
-                            Text(label("noMessages", "暂无消息")) .foregroundStyle(.secondary)
+                            VStack(spacing: 14) {
+                                Image(systemName: "sparkles").font(.system(size: 28, weight: .light)).foregroundStyle(.secondary)
+                                Text(refinement("begin", "What would you like to create?", "从一个想法开始")).font(.title2.weight(.semibold))
+                                Text(session.configuration == nil
+                                    ? refinement("beginModel", "Choose a local model, then write your first message.", "先选择本地模型，再写下你的第一条消息。")
+                                    : refinement("beginReady", "Write a thought, ask a question, or add reference materials.", "写下想法、提出问题，或加入参考资料。"))
+                                    .foregroundStyle(.secondary).multilineTextAlignment(.center)
+                                if session.configuration == nil {
+                                    Button(label("chooseModel", "选择模型"), systemImage: "cpu", action: onChooseModel)
+                                        .buttonStyle(.borderedProminent).accessibilityIdentifier("chat-empty-model-picker")
+                                }
+                            }.frame(maxWidth: .infinity).padding(.vertical, 44)
                             // Only empty conversations use this fallback target.
                             // With messages, an extra row adds trailing stack spacing.
                             Color.clear.frame(height: 1).id("chat-transcript-bottom")
@@ -1198,8 +1227,7 @@ struct ChatWorkbenchView: View {
                     }
                 }
               }
-            Divider()
-            composer(session)
+            composer(session, availableHeight: height)
                 .chatMeasured("composer", probe: layoutProbe)
         }
     }
@@ -1775,8 +1803,10 @@ struct ChatWorkbenchView: View {
             }.padding(16).frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func composer(_ session: ChatSession) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+    private func composer(_ session: ChatSession, availableHeight: CGFloat) -> some View {
+        let editorLimit = speechExpanded ? min(100, max(52, availableHeight * 0.16)) : min(180, max(52, availableHeight * 0.3))
+        let speechLimit = min(180, max(72, availableHeight * 0.24))
+        return VStack(alignment: .leading, spacing: 8) {
             if !session.attachments.isEmpty {
                 ScrollView(.horizontal) {
                     HStack {
@@ -1795,23 +1825,36 @@ struct ChatWorkbenchView: View {
                 onFileDrop: { urls in
                     let owner = session.id
                     Task { await importURLs(urls, sessionID: owner) }
-                })
+                }, contentHeight: 52...editorLimit, transparentBackground: true,
+                foregroundColor: NSColor(model.chatDisplaySettings.preferences.resolvedAppearance.palette(for: colorScheme).foregroundColor))
                 .id(session.id.uuidString + ":draft")
-                .frame(minHeight: 80, idealHeight: 110)
-            ChatSpeechPanel(chat: chat, project: model.projectSession, sessionID: session.id,
-                onImportAudio: { locale in Task { await chooseTranscriptionFile(sessionID: session.id, locale: locale) } })
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(minHeight: 52, maxHeight: editorLimit)
+            RetainedContentHost(content:
+                ScrollView {
+                    ChatSpeechPanel(chat: chat, project: model.projectSession, sessionID: session.id,
+                        onImportAudio: { locale in Task { await chooseTranscriptionFile(sessionID: session.id, locale: locale) } })
+                        .padding(8)
+                }.environment(\.dLanguageStore, language)
+                    .environment(\.chatDisplayPreferences, model.chatDisplaySettings.preferences)
+                    .preferredColorScheme(colorScheme).workbenchTheme(),
+                visible: speechExpanded, identifier: "chat-speech-host")
                 .id(session.id.uuidString + ":speech")
-            Text(model.chatDisplaySettings.preferences.sendShortcut == .return
-                ? newLabel("enterSend", english: "Return sends; Shift–Return adds a line. Input method conversion takes priority.", chinese: "回车发送，Shift–回车换行；输入法选字优先。")
-                : newLabel("commandSend", english: "Command–Return sends; Return adds a line. Drop files or paste attachments below.", chinese: "Command–回车发送，回车换行；可拖入文件或粘贴附件。"))
-                .font(.caption).foregroundStyle(.secondary)
-            VStack(alignment: .leading) {
-            ViewThatFits(in: .horizontal) {
-                HStack { attachmentButtons(session) }
-                VStack(alignment: .leading) { attachmentButtons(session) }
-            }.frame(maxWidth: .infinity, alignment: .leading)
-            HStack {
-                Spacer()
+                .frame(height: speechExpanded ? speechLimit : 0).clipped()
+                .accessibilityHidden(!speechExpanded)
+            HStack(spacing: 10) {
+                attachmentButtons(session)
+                Button { speechExpanded.toggle() } label: {
+                    Image(systemName: "mic").frame(width: 28, height: 28)
+                }.buttonStyle(.plain)
+                    .help(refinement("speech", "Voice input and read-aloud", "语音输入与朗读"))
+                    .accessibilityLabel(refinement("speech", "Voice input and read-aloud", "语音输入与朗读"))
+                    .accessibilityIdentifier("chat-speech-toggle")
+                Spacer(minLength: 4)
+                if session.configuration == nil {
+                    Button(label("chooseModel", "选择模型"), action: onChooseModel)
+                        .accessibilityIdentifier("chat-composer-model-picker")
+                }
                 if chat.pendingSaveAttemptID != nil || chat.saveIssue != nil {
                     Button(label("retrySave", "重试保存（不重新生成）")) { Task { await chat.retrySave() } }
                         .disabled(chat.isRunning)
@@ -1829,7 +1872,7 @@ struct ChatWorkbenchView: View {
                         chinese: "停止生成并保留已接收文字；资源释放后才能开始下一次。"))
                     .chatMeasured("composer-stop", probe: layoutProbe)
                 } else {
-                    Button(label("send", "发送")) { submitFromComposer(session.id) }
+                    Button(label("send", "发送"), systemImage: "arrow.up") { submitFromComposer(session.id) }
                         .buttonStyle(.borderedProminent)
                         .disabled(!ChatRunAdmission.allowsSend(session, isRunning: chat.isRunning,
                             hasPendingSave: chat.pendingSaveAttemptID != nil, hasSaveIssue: chat.saveIssue != nil,
@@ -1837,7 +1880,6 @@ struct ChatWorkbenchView: View {
                         .accessibilityIdentifier("chat-send")
                         .chatMeasured("composer-send", probe: layoutProbe)
                 }
-            }
             }
             .dropDestination(for: WorkflowCanvasTransfer.self) { items, _ in
                 let owner = session.id
@@ -1859,9 +1901,14 @@ struct ChatWorkbenchView: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
-        .frame(maxWidth: CGFloat(model.chatDisplaySettings.preferences.transcriptWidth))
+        .padding(14)
+        .workbenchPanel(cornerRadius: 22)
+        .frame(maxWidth: CGFloat(model.chatDisplaySettings.preferences.transcriptWidth) + 28)
         .frame(maxWidth: .infinity)
-        .padding(16)
+        .padding(.horizontal, 8).padding(.top, 8).padding(.bottom, 4)
+        .help(model.chatDisplaySettings.preferences.sendShortcut == .return
+            ? refinement("returnHint", "Return sends; Shift–Return adds a line. Input method conversion takes priority.", "回车发送，Shift–回车换行；输入法选字优先。")
+            : refinement("commandHint", "Command–Return sends; Return adds a line. Drop files here to attach them.", "Command–回车发送，回车换行。拖入文件即可添加附件。"))
         .dropDestination(for: URL.self) { urls, _ in
             let owner = session.id
             Task { await importURLs(urls, sessionID: owner) }
@@ -1870,7 +1917,7 @@ struct ChatWorkbenchView: View {
     }
 
     @ViewBuilder private func attachmentButtons(_ session: ChatSession) -> some View {
-        ChatActionMenu(title: label("attach", "添加附件…"), accessibilityIdentifier: "chat-attachments-menu",
+        ChatActionMenu(title: refinement("attachShort", "Attach", "附件"), accessibilityIdentifier: "chat-attachments-menu",
             items: [
                 .init(id: "files", title: newLabel("files", english: "Choose files…", chinese: "选择文件…"),
                       enabled: !filePanelBusy && !session.archived && session.contextChoices?.deletedAt == nil) {
@@ -1882,10 +1929,14 @@ struct ChatWorkbenchView: View {
                     guard chat.state.selectedSessionID == session.id, !filePanelBusy else { return }
                     present(.projectAttachments(session.id))
                 }
-            ]).disabled(filePanelBusy || session.archived || session.contextChoices?.deletedAt != nil)
-        Button(newLabel("pasteAttachments", english: "Paste attachments", chinese: "粘贴附件")) {
+            ]).fixedSize().disabled(filePanelBusy || session.archived || session.contextChoices?.deletedAt != nil)
+        Button {
             Task { await pasteAttachments(sessionID: session.id) }
-        }.disabled(session.archived || session.contextChoices?.deletedAt != nil)
+        } label: { Image(systemName: "document.on.clipboard").frame(width: 28, height: 28) }
+            .buttonStyle(.plain)
+            .help(newLabel("pasteAttachments", english: "Paste attachments", chinese: "粘贴附件"))
+            .accessibilityLabel(newLabel("pasteAttachments", english: "Paste attachments", chinese: "粘贴附件"))
+            .disabled(session.archived || session.contextChoices?.deletedAt != nil)
     }
 
     private func submitFromComposer(_ sessionID: UUID) {
@@ -2264,7 +2315,7 @@ struct ChatWorkbenchView: View {
         sheets.present(item)
     }
 
-    private func closeNarrowPanel(keepPreference: Bool = false) {
+    private func closeNarrowPanel(keepPreference: Bool = true) {
         if !keepPreference {
             switch sheets.narrowPanel {
             case .sessions: showSidebar = false
