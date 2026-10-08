@@ -814,7 +814,7 @@ struct ChatWorkbenchView: View {
                 showSidebar = true; sidebarWasPresented = true; sheets.openNarrow(.sessions)
             } else { showSidebar.toggle(); if showSidebar { sidebarWasPresented = true } }
         } label: { Image(systemName: "slider.horizontal.3").frame(width: 28, height: 28) }
-            .buttonStyle(.bordered).buttonBorderShape(.circle)
+            .buttonStyle(.plain).padding(5).workbenchPanel(cornerRadius: 20)
             .help(refinement("modelAndParameters", "Model and parameters", "模型与参数"))
             .accessibilityLabel(refinement("modelAndParameters", "Model and parameters", "模型与参数"))
             .accessibilityIdentifier("chat-sessions-toggle")
@@ -826,7 +826,7 @@ struct ChatWorkbenchView: View {
                 showInspector = true; sheets.openNarrow(.inspector)
             } else { showInspector.toggle() }
         } label: { Image(systemName: "square.grid.2x2").frame(width: 28, height: 28) }
-            .buttonStyle(.bordered).buttonBorderShape(.circle)
+            .buttonStyle(.plain).padding(5).workbenchPanel(cornerRadius: 20)
             .help(refinement("materialsAndResults", "Materials and results", "素材与成果"))
             .accessibilityLabel(refinement("materialsAndResults", "Materials and results", "素材与成果"))
             .accessibilityIdentifier("chat-inspector-toggle")
@@ -845,7 +845,7 @@ struct ChatWorkbenchView: View {
                 Picker(refinement("leftPane", "Left pane", "左侧工作区"), selection: $showsSessionList) {
                     Text(refinement("model", "Model", "模型")).tag(false)
                     Text(label("history", "对话")).tag(true)
-                }.pickerStyle(.segmented).accessibilityIdentifier("chat-left-section")
+                }.pickerStyle(.segmented).labelsHidden().accessibilityIdentifier("chat-left-section")
                 Button(label("close", "关闭"), systemImage: "xmark") {
                     showSidebar = false
                     if sheets.narrowPanel == .sessions { closeNarrowPanel() }
@@ -1064,7 +1064,9 @@ struct ChatWorkbenchView: View {
                                     .foregroundStyle(.secondary).multilineTextAlignment(.center)
                                 if session.configuration == nil {
                                     Button(label("chooseModel", "选择模型"), systemImage: "cpu", action: onChooseModel)
-                                        .buttonStyle(.borderedProminent).accessibilityIdentifier("chat-empty-model-picker")
+                                        .buttonStyle(.borderedProminent)
+                                        .foregroundStyle(model.chatDisplaySettings.preferences.resolvedAppearance.palette(for: colorScheme).canvasColor)
+                                        .accessibilityIdentifier("chat-empty-model-picker")
                                 }
                             }.frame(maxWidth: .infinity).padding(.vertical, 44)
                             // Only empty conversations use this fallback target.
@@ -1759,9 +1761,9 @@ struct ChatWorkbenchView: View {
                     onEdit: { value in perform(sessionID: session.id) { try chat.setSystemPrompt(value, sessionID: session.id) } })
                     .id(session.id.uuidString + ":system")
                     .frame(height: 90)
-                VStack(alignment: .leading, spacing: 8) {
-                    Button(label("clearSystem", "清空系统提示")) { perform(sessionID: session.id) { try chat.setSystemPrompt("", sessionID: session.id) } }
-                    Divider()
+                Button(label("clearSystem", "清空系统提示")) { perform(sessionID: session.id) { try chat.setSystemPrompt("", sessionID: session.id) } }
+                DisclosureGroup(refinement("defaultsAndPresets", "Defaults and presets", "默认提示与预设")) {
+                    VStack(alignment: .leading, spacing: 8) {
                     Text(newLabel("newSessionDefault", english: "Default system prompt for new conversations",
                         chinese: "新会话默认系统提示")).font(.subheadline)
                     Text(newLabel("newSessionDefaultNote", english: "Saving this default does not change existing conversations.",
@@ -1782,6 +1784,7 @@ struct ChatWorkbenchView: View {
                             .id(session.id.uuidString + ":presets")
                     }
 
+                    }.padding(.top, 8)
                 }
                 ChatAssistancePanel(chat: chat, session: session, wording: { english, chinese in
                     language?.effectiveLanguageIdentifier.hasPrefix("zh") == true ? chinese : english
@@ -1835,7 +1838,9 @@ struct ChatWorkbenchView: View {
                 foregroundColor: NSColor(model.chatDisplaySettings.preferences.resolvedAppearance.palette(for: colorScheme).foregroundColor))
                 .id(session.id.uuidString + ":draft")
                 .fixedSize(horizontal: false, vertical: true)
-                .frame(minHeight: 52, maxHeight: editorLimit)
+                .help(model.chatDisplaySettings.preferences.sendShortcut == .return
+                    ? refinement("returnHint", "Return sends; Shift–Return adds a line. Input method conversion takes priority.", "回车发送，Shift–回车换行；输入法选字优先。")
+                    : refinement("commandHint", "Command–Return sends; Return adds a line. Drop files here to attach them.", "Command–回车发送，回车换行。拖入文件即可添加附件。"))
             RetainedContentHost(content:
                 ScrollView {
                     ChatSpeechPanel(chat: chat, project: model.projectSession, sessionID: session.id,
@@ -1872,6 +1877,7 @@ struct ChatWorkbenchView: View {
                         Task { await chat.cancel() }
                     }
                     .buttonStyle(.borderedProminent)
+                    .foregroundStyle(model.chatDisplaySettings.preferences.resolvedAppearance.palette(for: colorScheme).canvasColor)
                     .disabled(chat.isCancelling)
                     .accessibilityIdentifier("chat-stop")
                     .help(newLabel("stopHelp", english: "Stop generation and keep received text. Resources are released before the next request.",
@@ -1880,6 +1886,7 @@ struct ChatWorkbenchView: View {
                 } else {
                     Button(label("send", "发送"), systemImage: "arrow.up") { submitFromComposer(session.id) }
                         .buttonStyle(.borderedProminent)
+                        .foregroundStyle(model.chatDisplaySettings.preferences.resolvedAppearance.palette(for: colorScheme).canvasColor)
                         .disabled(!ChatRunAdmission.allowsSend(session, isRunning: chat.isRunning,
                             hasPendingSave: chat.pendingSaveAttemptID != nil, hasSaveIssue: chat.saveIssue != nil,
                             invalidFields: chat.invalidParameterFields))
@@ -1912,9 +1919,6 @@ struct ChatWorkbenchView: View {
         .frame(maxWidth: CGFloat(model.chatDisplaySettings.preferences.transcriptWidth) + 28)
         .frame(maxWidth: .infinity)
         .padding(.horizontal, 8).padding(.top, 8).padding(.bottom, 4)
-        .help(model.chatDisplaySettings.preferences.sendShortcut == .return
-            ? refinement("returnHint", "Return sends; Shift–Return adds a line. Input method conversion takes priority.", "回车发送，Shift–回车换行；输入法选字优先。")
-            : refinement("commandHint", "Command–Return sends; Return adds a line. Drop files here to attach them.", "Command–回车发送，回车换行。拖入文件即可添加附件。"))
         .dropDestination(for: URL.self) { urls, _ in
             let owner = session.id
             Task { await importURLs(urls, sessionID: owner) }

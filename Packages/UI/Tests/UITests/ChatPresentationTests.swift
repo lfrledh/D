@@ -82,6 +82,42 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
 
 @Suite("Chat presentation boundaries")
 @MainActor struct ChatPresentationTests {
+    @Test func completeComposerGrowsFromShortDraftWithoutReplacingInput() async throws {
+        var session = ChatSession(title: "Composer size")
+        var state = ChatState(); state.sessions = [session]; state.selectedSessionID = session.id
+        let (chat, model, store, root) = try await fixture(state)
+        var rectangles: [String: CGRect] = [:]
+        let host = NSHostingView(rootView: ChatWorkbenchView(chat: chat, model: model, onChooseModel: {},
+            onSavedAsset: { _ in }, onAssetsChanged: {}).observingLayout { rectangles[$0] = $1 })
+        let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 1280, height: 820),
+            styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; window.contentView = host; window.orderFront(nil)
+        defer { window.close() }
+        for size in [CGSize(width: 1280, height: 820), CGSize(width: 860, height: 580)] {
+            host.frame.size = size; host.layoutSubtreeIfNeeded()
+            try await Task.sleep(for: .milliseconds(120))
+            let editor = try #require(descendants(host).compactMap { $0 as? FileDropTextView }.first)
+            let scroll = try #require(editor.enclosingScrollView)
+            #expect(scroll.frame.height >= 52 && scroll.frame.height <= 60)
+            #expect(try #require(rectangles["composer"]).height < 150)
+            window.makeFirstResponder(editor)
+            editor.insertText("Short draft", replacementRange: .init(location: 0, length: editor.string.utf16.count))
+            try await Task.sleep(for: .milliseconds(100)); host.layoutSubtreeIfNeeded()
+            #expect(scroll.frame.height <= 60)
+            editor.insertText(String(repeating: "Long draft line\n", count: 40),
+                replacementRange: .init(location: 0, length: editor.string.utf16.count))
+            try await Task.sleep(for: .milliseconds(100)); host.layoutSubtreeIfNeeded()
+            #expect(descendants(host).compactMap { $0 as? FileDropTextView }.first === editor)
+            #expect(scroll.frame.height > 100 && scroll.frame.height <= 180)
+            let composer = try #require(rectangles["composer"])
+            #expect(composer.contains(try #require(rectangles["composer-send"])))
+            editor.insertText("", replacementRange: .init(location: 0, length: editor.string.utf16.count))
+            try await Task.sleep(for: .milliseconds(100)); host.layoutSubtreeIfNeeded()
+            #expect(scroll.frame.height <= 60)
+        }
+        try await chat.flush(); try await close(store, root: root)
+    }
+
     @Test func composerFileDropHitRegionInCompleteHost() async throws {
         var session = ChatSession(title: "Drop geometry")
         session.draft = "落点测试：左侧区域｜右侧区域。保留这段草稿，不发送。"
