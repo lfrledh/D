@@ -1,7 +1,18 @@
 # Quick UI 实施接线映射
 
-2026-10-07；对应[用户设计 v0.2](D_Quick_Generation_UI_Design_Decisions_v0.2_2026-10-07.md)。这是从现有定义、校验和真实消费者派生的**人工核对索引**，不是第二份执行协议、注册平台或已实施UI。起点67ac49f3；本轮补通Dev既有SSD入口，实际代码/包/审阅版本见[当前行动](CURRENT_ACTIONS.zh-CN.md)。设计中的新布局、玻璃、细粒度阅读锚点均未实施，也不新增F17/F19之外的转段门槛。
+2026-10-08增量：本页仍是能力/消费者的人工索引，不是第二执行协议。当前展示由[UI-PRESENTATION-REBUILD-01](tasks/UI-PRESENTATION-REBUILD-01.md)接续，依据设计v0.3；下方模型表沿用原核对范围，不自动升级为本轮实调。
 
+| 本轮呈现位置 | 既有动作/所有者 |
+|---|---|
+| 顶部中央四模态；右上模式/设置 | DualWorkbenchView；captureChatReading/navigate；统一SettingsContext |
+| 左上聊天菜单 | Chat/Single与临时聊天切换，仍用原Quick/Temporary owner |
+| 左浮动面板；会话标题旁历史按钮 | 模型与下一次参数；同面板模型/会话切换，不改历史配置 |
+| 中央空态与输入旁选择模型 | 原共享选择器；不隐式下载或发送 |
+| 底部完整输入组件 | 原NSTextView稳定session ID、原附件/粘贴/URL与共享素材导入、发送/停止/保存重试 |
+| 麦克风按钮展开持续语音区域 | 原ChatSpeechPanel、原project/chat控制器，保留隐藏实例 |
+| 右浮动面板 | 原资料/成果/工具/请求检查，右边圆钮恢复 |
+
+以上为代码接线，视觉与行为实际结果只见任务回执。
 ## 1. 真相来源与使用方法
 
 1. 输入/字段/操作版本：[WorkflowTypes.swift](../Packages/UI/Sources/DWorkbench/Workflow/WorkflowTypes.swift) 的 `WorkflowOperationDefinition / WorkflowPortDefinition / WorkflowFieldDefinition`；下列模型操作现均为definition version 1。操作ID不是模型revision、安装实例、后端版本或未来节点实例ID。

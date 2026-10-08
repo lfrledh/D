@@ -37,6 +37,7 @@ UI-REFINEMENT-01 原位归档，展示被用户拒收，部分实现/证据保�
 接手前完整正文固定于 **6abf4e1d4a1d1b6cd0cd454c338920a681e6d1e0**：
 - [旧当前行动](https://github.com/lfrledh/D/blob/6abf4e1d4a1d1b6cd0cd454c338920a681e6d1e0/docs/CURRENT_ACTIONS.zh-CN.md)
 - [旧集中审计](https://github.com/lfrledh/D/blob/6abf4e1d4a1d1b6cd0cd454c338920a681e6d1e0/docs/FAILURE_AND_PERMISSION_AUDIT.zh-CN.md)
+- [旧79f试用入口与结论](https://github.com/lfrledh/D/blob/6abf4e1d4a1d1b6cd0cd454c338920a681e6d1e0/docs/RELEASE_FREEZE_TRY.zh-CN.md)
 - [旧任务原位记录](../tasks/UI-REFINEMENT-01.md)
 
 离线：`git show 6abf4e1d4a1d1b6cd0cd454c338920a681e6d1e0:docs/CURRENT_ACTIONS.zh-CN.md`；集中队列将冒号后路径改为`docs/FAILURE_AND_PERMISSION_AUDIT.zh-CN.md`。只压缩当前入口，不搬/删旧证据或个人文件。

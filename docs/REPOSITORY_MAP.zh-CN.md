@@ -5,6 +5,15 @@
 **2026-09-26已集成增量导航**：M0与D-NODE-BOUNDARY-01已本地接入源，当前ProjectManifest格式16，已有Workflow节点组合执行及画布入口；实际受测组合及最终同步状态见CURRENT_ACTIONS。工作流的操作定义已分组到`DWorkbench/Workflow/Operations`，模型绑定/配方/私有授权记录到`Workflow/Models`；PNG/JPEG编码扩展在`DWorkbench/Media/ImageCodec{,Registry}.swift`；UI语言数据/校验在`UI/Localization`与`UI/Resources/Localization`。`WorkflowRemoveBlankLines.swift`移入Operations，类型/操作ID未改。`WorkflowController/Services`共用原Store和runtime；原型标签目录Nodes继续独立，用户标签键未迁移。App的Bootstrap注入语言和授权服务。具体已测/待验范围见[本批任务](tasks/D-NODE-BOUNDARY-01.md)，原生和离线补验已有直接证据；这不代表全模态节点化或发布。
 
 
+## 2026-10-08 当前展示切片导航
+
+- `UI/Sources/UI/Views/Quick/DualWorkbenchView.swift`：公共顶部、模式/临时会话及设置路由；不拥有推理。
+- `UI/Sources/UI/Views/Chat/ChatWorkbenchView.swift`：浮动面板、会话导航、阅读和完整输入组合；`ChatSpeechPanel.swift`为持续语音区域。
+- `UI/Sources/UI/Views/TextSourcesQuestionEditor.swift`：既有原生输入桥；仅聊天opt-in有界内容测量/透明背景，其他宿主默认保持。
+- `UI/Tests/UITests/ChatDisplayPreferencesTests.swift`、`ChatPresentationTests.swift`：真实输入身份/marked/Undo/高度、面板与停止/阅读检查。
+
+上述UI路径均相对`Packages/`（Views位于`Packages/UI/Sources/UI`，测试位于`Packages/UI/Tests/UITests`）。当前任务[UI-PRESENTATION-REBUILD-01](tasks/UI-PRESENTATION-REBUILD-01.md)，未称已在main或原生通过。
+
 ## 2026-09-24基础入口快照（历史；现行增量见上方）
 
 | 入口/区域 | 实际调用与职责 | 状态/何时阅读 |
