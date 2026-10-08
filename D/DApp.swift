@@ -7,6 +7,8 @@ import UI
 struct DApp: App {
     @NSApplicationDelegateAdaptor(WorkbenchApplicationDelegate.self) private var applicationDelegate
     @State private var bootstrap = WorkbenchBootstrap()
+    @State private var settingsRequest: UUID?
+    @State private var fallbackSettingsVisible = false
 
     private var deploymentProbeEnabled: Bool {
         #if DEBUG
@@ -30,7 +32,7 @@ struct DApp: App {
                     #endif
                 } else if let model = bootstrap.model, let library = bootstrap.libraryModel,
                           let quickModel = bootstrap.quickModel, let quick = bootstrap.quick, let nodeTags = bootstrap.nodeTags {
-                    DualWorkbenchView(model: model, quickModel: quickModel, quick: quick, library: library, nodeTags: nodeTags, metadata: bootstrap.sharedLibrary, metadataIssue: bootstrap.sharedLibraryIssue)
+                    DualWorkbenchView(model: model, quickModel: quickModel, quick: quick, library: library, nodeTags: nodeTags, metadata: bootstrap.sharedLibrary, metadataIssue: bootstrap.sharedLibraryIssue, settingsRequest: $settingsRequest, windowHasSheet: applicationDelegate.hasPresentedSheet)
                         .background(WorkbenchWindowConnection(delegate: applicationDelegate, model: model,
                             prepareLibraryForTermination: bootstrap.prepareLibraryForTermination,
                             prepareQuickForTermination: bootstrap.prepareQuickForTermination, cancelTermination: bootstrap.cancelTermination))
@@ -63,6 +65,24 @@ struct DApp: App {
             }
             .environment(\.dLanguageStore, bootstrap.languageStore)
             .disabled(bootstrap.isTerminating)
+            .onChange(of: settingsRequest) { _, request in
+                // Store preparation failure retains the same global preference UI,
+                // with unavailable project/chat destinations explained explicitly.
+                if request != nil, bootstrap.quick == nil, bootstrap.model != nil,
+                   bootstrap.libraryModel != nil, !applicationDelegate.hasPresentedSheet {
+                    settingsRequest = nil; fallbackSettingsVisible = true
+                }
+            }
+            .sheet(isPresented: $fallbackSettingsVisible) {
+                if let model = bootstrap.model, let library = bootstrap.libraryModel {
+                    VStack(spacing: 0) {
+                        if let issue = bootstrap.startupError { Text(issue).textSelection(.enabled).padding() }
+                        WorkbenchSettingsView(model: model, library: library, language: bootstrap.languageStore,
+                            projectPath: model.projectSession.currentStore?.rootURL.path, searchTargetLabel: nil,
+                            onProjectFiles: nil, onSearchSettings: nil)
+                    }
+                }
+            }
             .task { if !deploymentProbeEnabled { await bootstrap.start() } }
             .onOpenURL { url in
                 if deploymentProbeEnabled { print("D_AUDIO_DEPLOYMENT_IGNORED_OPEN_REQUEST") }
@@ -71,17 +91,14 @@ struct DApp: App {
         }
         .defaultSize(width: 1280, height: 820)
         .windowResizability(.contentMinSize)
-        .commands { WorkbenchCommands(bootstrap: bootstrap) }
-        Settings {
-            if let model = bootstrap.quickModel, let library = bootstrap.libraryModel {
-                WorkbenchSettingsView(model: model, library: library, language: bootstrap.languageStore)
-            } else { LanguageSettingsView(store: bootstrap.languageStore).frame(width: 540, height: 420) }
-        }
+        .commands { WorkbenchCommands(bootstrap: bootstrap, settingsBlocked: applicationDelegate.hasPresentedSheet, requestSettings: { settingsRequest = UUID() }) }
     }
 }
 
 private struct WorkbenchCommands: Commands {
     let bootstrap: WorkbenchBootstrap
+    let settingsBlocked: Bool
+    let requestSettings: () -> Void
     @FocusedValue(\.workbenchGeneration) private var generationCommand
     @Environment(\.openWindow) private var openWindow
     private var modalResourceOperation: Bool {
@@ -92,6 +109,15 @@ private struct WorkbenchCommands: Commands {
     private func label(_ key: String, _ fallback: String) -> String { bootstrap.languageStore.text(key, fallback: fallback) }
 
     var body: some Commands {
+        CommandGroup(replacing: .appSettings) {
+            Button(label("refinement.settings.title", "设置") + "…") {
+                // A single pending intent survives a closed window or an existing sheet.
+                // The workbench captures its exact owner only when presentation is admitted.
+                requestSettings()
+                openWindow(id: "workbench")
+            }.keyboardShortcut(",", modifiers: .command)
+                .disabled(bootstrap.isTerminating || settingsBlocked || modalResourceOperation)
+        }
         CommandGroup(replacing: .newItem) {
             Button(label("command.project.new", "新建项目…")) {
                 openWindow(id: "workbench")

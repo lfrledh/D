@@ -139,7 +139,8 @@ private enum WorkbenchInputDiagnostic {
 #endif
 
 @MainActor
-final class WorkbenchApplicationDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
+final class WorkbenchApplicationDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, ObservableObject {
+    @Published private(set) var hasPresentedSheet = false
     private weak var workbenchWindow: NSWindow?
     private weak var previousWindowDelegate: (any NSWindowDelegate)?
     private var closeGate: CloseRequestGate?
@@ -169,6 +170,7 @@ final class WorkbenchApplicationDelegate: NSObject, NSApplicationDelegate, NSWin
             return
         }
         workbenchWindow = window
+        hasPresentedSheet = window.attachedSheet != nil
         inputGeometry = WorkbenchInputGeometry(window: window, invalidate: invalidateInputContext)
         previousWindowDelegate = window.delegate
         closeGate = CloseRequestGate { await model.requestClose() }
@@ -268,8 +270,16 @@ final class WorkbenchApplicationDelegate: NSObject, NSApplicationDelegate, NSWin
         previousWindowDelegate?.windowDidChangeBackingProperties?(notification)
         inputGeometryChanged(notification)
     }
-    func windowWillBeginSheet(_ notification: Notification) { previousWindowDelegate?.windowWillBeginSheet?(notification) }
-    func windowDidEndSheet(_ notification: Notification) { previousWindowDelegate?.windowDidEndSheet?(notification) }
+    func windowWillBeginSheet(_ notification: Notification) {
+        if notification.object as? NSWindow === workbenchWindow { hasPresentedSheet = true }
+        previousWindowDelegate?.windowWillBeginSheet?(notification)
+    }
+    func windowDidEndSheet(_ notification: Notification) {
+        previousWindowDelegate?.windowDidEndSheet?(notification)
+        if let window = notification.object as? NSWindow, window === workbenchWindow {
+            hasPresentedSheet = window.attachedSheet != nil
+        }
+    }
     func windowWillStartLiveResize(_ notification: Notification) { previousWindowDelegate?.windowWillStartLiveResize?(notification) }
     func windowDidEndLiveResize(_ notification: Notification) {
         previousWindowDelegate?.windowDidEndLiveResize?(notification)

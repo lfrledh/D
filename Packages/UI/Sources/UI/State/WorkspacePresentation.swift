@@ -32,3 +32,20 @@ public extension FocusedValues {
         set { self[WorkbenchGenerationKey.self] = newValue }
     }
 }
+
+/// Ephemeral destination protection; never a saved chat/graph or execution request.
+@MainActor
+struct ChatToolsNavigationRequest: Equatable {
+    let id = UUID()
+    let controller: ObjectIdentifier
+    let store: ObjectIdentifier
+    let sessionID: UUID?
+    init(chat: ChatController) {
+        controller = ObjectIdentifier(chat); store = ObjectIdentifier(chat.store)
+        sessionID = chat.state.selectedSessionID
+    }
+    func matches(_ chat: ChatController) -> Bool {
+        controller == ObjectIdentifier(chat) && store == ObjectIdentifier(chat.store)
+            && sessionID == chat.state.selectedSessionID
+    }
+}

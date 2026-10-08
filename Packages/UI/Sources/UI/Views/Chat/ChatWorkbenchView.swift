@@ -54,7 +54,7 @@ enum ChatPresentationLayout {
 }
 
 private enum ChatInspectorTab: String, CaseIterable, Identifiable {
-    case data, settings, artifacts
+    case data, artifacts
     var id: Self { self }
 }
 
@@ -456,6 +456,7 @@ struct ChatWorkbenchView: View {
     @State private var showContextPreview = false
     @State private var lastBodyWidth: CGFloat = 0
     @State private var showSidebar = true
+    @State private var showsSessionList = false
     @State private var showInspector = false
     @State private var sidebarWasPresented = false
     @State private var inspectorTab: ChatInspectorTab = .data
@@ -472,7 +473,7 @@ struct ChatWorkbenchView: View {
     @State private var newPresetName = ""
     @State private var filePanelBusy = false
     @State private var ocrImport = false
-    private var openToolsRequest: UUID?
+    private var openToolsRequest: ChatToolsNavigationRequest?
     private var onToolsOpened: (UUID) -> Void
     private var layoutProbe: ((String, CGRect) -> Void)?
 
@@ -484,7 +485,7 @@ struct ChatWorkbenchView: View {
 
     init(chat: ChatController, model: WorkbenchModel,
          onChooseModel: @escaping () -> Void,
-         openToolsRequest: UUID? = nil,
+         openToolsRequest: ChatToolsNavigationRequest? = nil,
          onToolsOpened: @escaping (UUID) -> Void = { _ in },
          onSavedAsset: @escaping (WorkflowAssetReference) -> Void,
          onRetainTemporary: ((WorkflowAssetReference, Bool, UUID) async throws -> Void)? = nil,
@@ -503,7 +504,10 @@ struct ChatWorkbenchView: View {
         self.onSavedAsset = onSavedAsset; self.onRetainTemporary = onRetainTemporary; self.onAssetsChanged = onAssetsChanged; self.onSavedValue = onSavedValue
         self.onResolveSharedAsset = onResolveSharedAsset
         _showInspector = State(initialValue: initialInspectorVisible)
-        _inspectorTab = State(initialValue: initialSettingsVisible ? .settings : .data)
+        _inspectorTab = State(initialValue: .data)
+        // Compatibility for callers requesting the system-prompt editor: it now lives on the left.
+        _showSidebar = State(initialValue: true)
+        _showsSessionList = State(initialValue: false)
         _showContextPreview = State(initialValue: initialContextPreviewVisible)
         _inspectedAttemptID = State(initialValue: initialInspectedAttemptID)
         _followsBottom = State(initialValue: initiallyFollowsBottom)
@@ -575,7 +579,7 @@ struct ChatWorkbenchView: View {
                         .onTapGesture { closeNarrowPanel() }
                         .accessibilityHidden(true)
                 }
-                RetainedContentHost(content: sidebar.workbenchPanel(cornerRadius: 0).workbenchTheme().disabled(!sidebarVisible)
+                RetainedContentHost(content: configurationPane.workbenchPanel(cornerRadius: 0).workbenchTheme().disabled(!sidebarVisible)
                     .environment(\.chatDisplayPreferences, model.chatDisplaySettings.preferences)
                     .preferredColorScheme(model.chatDisplaySettings.preferences.preferredColorScheme)
                     .environment(\.dLanguageStore, language), visible: sidebarVisible,
@@ -627,9 +631,10 @@ struct ChatWorkbenchView: View {
         }
         .task(id: openToolsRequest) {
             if let openToolsRequest {
+                guard openToolsRequest.matches(chat) else { onToolsOpened(openToolsRequest.id); return }
                 showInspector = true; inspectorTab = .data
                 if !ChatPresentationLayout.showsInspector(width: lastBodyWidth, requested: true, sidebar: showSidebar) { sheets.openNarrow(.inspector) }
-                onToolsOpened(openToolsRequest)
+                onToolsOpened(openToolsRequest.id)
             }
         }
         .environment(\.chatDisplayPreferences, model.chatDisplaySettings.preferences)
@@ -755,7 +760,7 @@ struct ChatWorkbenchView: View {
                     showSidebar.toggle()
                     if showSidebar { sidebarWasPresented = true }
                 }
-            } label: { Label(label("history", "对话"), systemImage: "sidebar.left") }
+            } label: { Label(refinement("modelAndParameters", "Model and parameters", "模型与参数"), systemImage: "sidebar.left") }
                 .accessibilityIdentifier("chat-sessions-toggle")
             Button {
                 if !ChatPresentationLayout.showsInspector(width: width, requested: true, sidebar: sidebarShown) {
@@ -763,9 +768,51 @@ struct ChatWorkbenchView: View {
                     sheets.openNarrow(.inspector)
                 }
                 else { showInspector.toggle() }
-            } label: { Label(newLabel("inspector", english: "Inspector", chinese: "检查器"), systemImage: "sidebar.right") }
+            } label: { Label(refinement("materialsAndResults", "Materials and results", "素材与成果"), systemImage: "sidebar.right") }
                 .accessibilityIdentifier("chat-inspector-toggle")
         }.labelStyle(.iconOnly).buttonStyle(.bordered).buttonBorderShape(.circle)
+    }
+
+    private func refinement(_ key: String, _ en: String, _ zh: String) -> String {
+        workflowText(language, "refinement.chat." + key,
+            fallback: language?.effectiveLanguageIdentifier.hasPrefix("zh") == true ? zh : en)
+    }
+
+    /// One left pane: model/next-request controls by default, with the original
+    /// conversation browser a directly reachable alternate (never a fifth pane).
+    private var configurationPane: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Picker(refinement("leftPane", "Left pane", "左侧工作区"), selection: $showsSessionList) {
+                    Text(refinement("model", "Model", "模型")).tag(false)
+                    Text(label("history", "对话")).tag(true)
+                }.pickerStyle(.segmented).accessibilityIdentifier("chat-left-section")
+                Button(label("close", "关闭"), systemImage: "xmark") {
+                    showSidebar = false
+                    if sheets.narrowPanel == .sessions { closeNarrowPanel() }
+                }.labelStyle(.iconOnly).accessibilityIdentifier("chat-configuration-close")
+            }.padding(12)
+            Divider()
+            if showsSessionList { sidebar }
+            else {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 12) {
+                        if let session, let node = session.configuration {
+                            let identity = node.parameters["modelID"]?.string ?? ""
+                            Text(model.projectSession.explicitModelChoices.first(where: { $0.id == identity })?.displayName ?? identity)
+                                .font(.headline).textSelection(.enabled)
+                            Text(readiness(identity)).font(.caption).foregroundStyle(.secondary)
+                        } else { Text(label("noModel", "尚未选择模型")).foregroundStyle(.secondary) }
+                        Button(label("changeModel", "更换模型"), action: onChooseModel)
+                            .disabled(!chat.isLoaded || session?.contextChoices?.deletedAt != nil)
+                            .accessibilityIdentifier("chat-model-picker")
+                            .chatMeasured("change-model", probe: layoutProbe)
+                        if let session { settings(session) }
+                        else { Button(label("new", "新建")) { createSession() }.disabled(!chat.isLoaded || chat.saveIssue != nil) }
+                    }.padding(14).frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+        }
     }
 
     private var sidebar: some View {
@@ -893,9 +940,6 @@ struct ChatWorkbenchView: View {
                         Text(label("noModel", "尚未选择模型")) .foregroundStyle(.secondary)
                     }
                 }.frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
-                Button(label("changeModel", "更换模型"), action: onChooseModel)
-                    .lineLimit(1).disabled(session.contextChoices?.deletedAt != nil)
-                    .chatMeasured("change-model", probe: layoutProbe)
                 if !session.messages.isEmpty {
                     ChatActionMenu(title: label("paths", "路径"), accessibilityIdentifier: "chat-paths",
                         items: leaves.map { leaf in
@@ -1229,16 +1273,15 @@ struct ChatWorkbenchView: View {
     private func inspector(_ session: ChatSession) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
-                Text(newLabel("inspector", english: "Inspector", chinese: "检查器")).font(.headline)
+                Text(refinement("materialsAndResults", "Materials and results", "素材与成果")).font(.headline)
                 Spacer()
                 Button(label("close", "关闭"), systemImage: "xmark") {
                     showInspector = false; closeNarrowPanel()
                 }.labelStyle(.iconOnly).keyboardShortcut(.cancelAction)
                     .accessibilityIdentifier("chat-inspector-close")
             }.padding(14)
-            Picker(newLabel("inspector", english: "Inspector", chinese: "检查器"), selection: $inspectorTab) {
+            Picker(refinement("materialsAndResults", "Materials and results", "素材与成果"), selection: $inspectorTab) {
                 Text(newLabel("inspectorData", english: "Data", chinese: "资料")).tag(ChatInspectorTab.data)
-                Text(newLabel("inspectorSettings", english: "Settings", chinese: "设置")).tag(ChatInspectorTab.settings)
                 Text(newLabel("inspectorArtifacts", english: "Artifacts", chinese: "成果")).tag(ChatInspectorTab.artifacts)
             }.pickerStyle(.segmented).padding(.horizontal, 12)
             Divider().padding(.top, 12)
@@ -1296,8 +1339,6 @@ struct ChatWorkbenchView: View {
                                 }
                             }
                         }.padding(16).frame(maxWidth: .infinity, alignment: .leading)
-                    case .settings:
-                        settings(session)
                     case .artifacts:
                         VStack(alignment: .leading, spacing: 12) {
                             Text(newLabel("savedAnswers", english: "Saved answers", chinese: "回答成果")).font(.headline)
@@ -1536,6 +1577,27 @@ struct ChatWorkbenchView: View {
         return result
     }
 
+    private func quickMessageActions(_ message: ChatMessage, session: ChatSession, attempt: ChatAttempt?) -> [ChatMessageQuickActions.Item] {
+        var items: [ChatMessageQuickActions.Item] = [
+            .init(id: "copy", title: label("copy", "复制"), symbol: "doc.on.doc", enabled: true) {
+                copy(ChatMessageContent.answerText(message: message, attempt: attempt,
+                    selectedAnswer: session.selectedAnswer(messageID: message.id)))
+            }
+        ]
+        if message.role == .user {
+            items.append(.init(id: "edit", title: label("edit", "编辑"), symbol: "pencil", enabled: session.contextChoices?.deletedAt == nil) {
+                present(.edit(ChatEdit(kind: .message, sessionID: session.id, messageID: message.id, text: message.text)))
+            })
+        }
+        let menu = messageMenuItems(message, session: session, attempt: attempt)
+        for (id, symbol) in [("new-candidate", "arrow.clockwise"), ("compare", "rectangle.split.2x1"), ("adopt", "pencil")] {
+            if let item = menu.first(where: { $0.id == id }), let action = item.action {
+                items.append(.init(id: id, title: item.title, symbol: symbol, enabled: item.enabled, action: action))
+            }
+        }
+        return items
+    }
+
     private func messageCard(_ message: ChatMessage, session: ChatSession,
                              siblings: [ChatMessage], attempt: ChatAttempt?) -> some View {
         return VStack(alignment: .leading, spacing: 8) {
@@ -1551,15 +1613,7 @@ struct ChatWorkbenchView: View {
                         }).fixedSize().chatMeasured("branch-menu-\(message.id.uuidString)", probe: layoutProbe)
                 }
                 Spacer()
-                Button(label("copy", "复制")) {
-                    copy(ChatMessageContent.answerText(message: message, attempt: attempt,
-                        selectedAnswer: session.selectedAnswer(messageID: message.id)))
-                }
-                if message.role == .user {
-                    Button(label("edit", "编辑")) {
-                        present(.edit(ChatEdit(kind: .message, sessionID: session.id, messageID: message.id, text: message.text)))
-                    }.disabled(session.contextChoices?.deletedAt != nil)
-                }
+                ChatMessageQuickActions(items: quickMessageActions(message, session: session, attempt: attempt))
                 ChatActionMenu(title: newLabel("messageActionsShort", english: "Actions", chinese: "操作"),
                     accessibilityIdentifier: "chat-message-actions-" + message.id.uuidString,
                     items: messageMenuItems(message, session: session, attempt: attempt)).fixedSize()
@@ -2263,5 +2317,30 @@ private struct ChatEditForm: View {
                     .accessibilityIdentifier("chat-edit-save")
             }
         }.padding(20).frame(minWidth: 440)
+    }
+}
+
+/// A stable toolbar footprint; hovering or tab-focusing only changes emphasis,
+/// never message geometry or editor/reading identity. Native buttons remain accessible.
+private struct ChatMessageQuickActions: View {
+    struct Item: Identifiable {
+        let id: String
+        let title: String
+        let symbol: String
+        let enabled: Bool
+        let action: @MainActor () -> Void
+    }
+    let items: [Item]
+    @State private var hovered = false
+    @FocusState private var focused: String?
+    var body: some View {
+        HStack(spacing: 4) {
+            ForEach(items) { item in
+                Button(action: item.action) { Image(systemName: item.symbol).frame(width: 22, height: 22) }
+                    .buttonStyle(.borderless).help(item.title).accessibilityLabel(item.title)
+                    .disabled(!item.enabled).focused($focused, equals: item.id)
+            }
+        }.fixedSize().opacity(hovered || focused != nil ? 1 : 0.6)
+            .onHover { hovered = $0 }
     }
 }
