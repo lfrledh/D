@@ -288,7 +288,7 @@ public struct WorkflowCanvasView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .overlay(alignment: .bottomTrailing) {
                         HStack {
-                            Button("适配全部", systemImage: "arrow.up.left.and.arrow.down.right") {
+                            Button(workflowText(languageStore, "refinement.workflow.fitAll", fallback: "适配全部"), systemImage: "arrow.up.left.and.arrow.down.right") {
                                 fitAllNodes()
                             }
                             .accessibilityIdentifier("workflow-canvas-fit-all")
@@ -441,14 +441,14 @@ public struct WorkflowCanvasView: View {
                 Image(systemName: shown.inspector ? "sidebar.right" : "slider.horizontal.3").frame(width: 26, height: 26)
             }.buttonStyle(.bordered).buttonBorderShape(.circle).help(workflowText(languageStore, "canvas.inspector.toggle", fallback: "显示或隐藏检查器"))
                 .accessibilityIdentifier("canvas-inspector-toggle")
-            Picker("画布工具", selection: $canvasTool) {
-                Label("指针", systemImage: "cursorarrow").tag(WorkflowCanvasTool.pointer)
-                Label("手形", systemImage: "hand.draw").tag(WorkflowCanvasTool.hand)
+            Picker(workflowText(languageStore, "refinement.workflow.canvasTool", fallback: "画布工具"), selection: $canvasTool) {
+                Label(workflowText(languageStore, "refinement.workflow.pointer", fallback: "指针"), systemImage: "cursorarrow").tag(WorkflowCanvasTool.pointer)
+                Label(workflowText(languageStore, "refinement.workflow.hand", fallback: "手形"), systemImage: "hand.draw").tag(WorkflowCanvasTool.hand)
             }
             .pickerStyle(.segmented)
             .frame(width: 110)
             .accessibilityIdentifier("workflow-canvas-tool")
-            Button("封装选区", systemImage: "square.on.square") { toolsPresented = true }
+            Button(workflowText(languageStore, "refinement.workflow.extractSelection", fallback: "封装选区"), systemImage: "square.on.square") { toolsPresented = true }
                 .disabled(isReadOnly || controller.selectedNodeIDs.isEmpty)
                 .accessibilityIdentifier("workflow-canvas-extract-selection")
             Text("\(Int((zoom * 100).rounded()))%")
@@ -515,15 +515,15 @@ public struct WorkflowCanvasView: View {
                 Text(controller.progressMessage).foregroundStyle(.secondary)
             }
             Spacer()
-            Button("类型图例", systemImage: "paintpalette") { portLegendPresented.toggle() }
+            Button(workflowText(languageStore, "refinement.workflow.typeLegend", fallback: "类型图例"), systemImage: "paintpalette") { portLegendPresented.toggle() }
                 .popover(isPresented: $portLegendPresented) {
                     VStack(alignment: .leading, spacing: 8) {
                         ForEach(WorkflowPortStyle.legend.indices, id: \.self) { index in
                             let entry = WorkflowPortStyle.legend[index]
                             HStack(spacing: 8) {
-                                Circle().fill(WorkflowPortStyle.color(for: entry.1))
+                                Circle().fill(WorkflowPortStyle.color(for: entry.port))
                                     .frame(width: 10, height: 10)
-                                Text(entry.0)
+                                Text(workflowText(languageStore, "refinement.workflow.legend." + entry.key, fallback: entry.fallback))
                             }
                         }
                     }

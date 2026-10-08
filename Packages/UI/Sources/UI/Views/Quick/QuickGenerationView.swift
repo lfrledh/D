@@ -40,6 +40,9 @@ struct QuickGenerationView: View {
         workflowText(language, "quick.input." + key,
                      fallback: language?.effectiveLanguageIdentifier.hasPrefix("zh") == true ? chinese : english)
     }
+    private func refinementText(_ key: String, fallback: String) -> String {
+        workflowText(language, "refinement.quick." + key, fallback: fallback)
+    }
     private var definition: WorkflowOperationDefinition? { quick.definition }
     private var title: String {
         let id = quick.draft?.node.parameters["modelID"]?.string ?? ""
@@ -54,7 +57,7 @@ struct QuickGenerationView: View {
             HStack(alignment: .top, spacing: 12) {
                 if leftShown {
                     VStack(spacing: 0) {
-                        HStack { Text("生成设置").font(.headline); Spacer(); panelButton("收起生成设置", "sidebar.left") { leftRequested = false } }.padding(12)
+                        HStack { Text(refinementText("settings", fallback: "生成设置")).font(.headline); Spacer(); panelButton(refinementText("collapseSettings", fallback: "收起生成设置"), "sidebar.left") { leftRequested = false } }.padding(12)
                         modelHeader
                         Divider()
                         parameterPanel
@@ -62,13 +65,13 @@ struct QuickGenerationView: View {
                 }
                 VStack(spacing: 10) {
                     HStack {
-                        if !leftShown { panelButton("展开生成设置", "slider.horizontal.3") { leftRequested = true; narrowRight = false } }
+                        if !leftShown { panelButton(refinementText("expandSettings", fallback: "展开生成设置"), "slider.horizontal.3") { leftRequested = true; narrowRight = false } }
                         Text(title).font(.headline).lineLimit(1)
                         Spacer()
                         if let result = selectedMedia, let run = run(containing: result) {
-                            Button("结果详情", systemImage: "info.circle") { detailRun = run }
+                            Button(refinementText("resultDetails", fallback: "结果详情"), systemImage: "info.circle") { detailRun = run }
                         }
-                        if !rightShown { panelButton("展开素材与结果", "square.grid.2x2") { rightRequested = true; narrowRight = true } }
+                        if !rightShown { panelButton(refinementText("expandAssets", fallback: "展开素材与结果"), "square.grid.2x2") { rightRequested = true; narrowRight = true } }
                     }
                     if quick.category == .image || quick.category == .video {
                         mediaStage
@@ -77,8 +80,8 @@ struct QuickGenerationView: View {
                             LazyVStack(alignment: .leading, spacing: 16) {
                                 if !quick.visibleStreamingText.isEmpty { Text(quick.visibleStreamingText).textSelection(.enabled) }
                                 ForEach(currentRuns) { run in runCard(run) }
-                                if !pastRuns.isEmpty { DisclosureGroup("以前的创作", isExpanded: $history) { ForEach(pastRuns) { run in runCard(run) } } }
-                                if quick.visibleRuns.isEmpty { ContentUnavailableView("开始一份创作", systemImage: "sparkles", description: Text("输入任务后生成；结果会自动保存。")) }
+                                if !pastRuns.isEmpty { DisclosureGroup(refinementText("pastCreations", fallback: "以前的创作"), isExpanded: $history) { ForEach(pastRuns) { run in runCard(run) } } }
+                                if quick.visibleRuns.isEmpty { ContentUnavailableView(refinementText("startCreation", fallback: "开始一份创作"), systemImage: "sparkles", description: Text(refinementText("startCreationHelp", fallback: "输入任务后生成；结果会自动保存。"))) }
                             }.padding(12)
                         }.frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
@@ -97,12 +100,12 @@ struct QuickGenerationView: View {
                 }.frame(maxWidth: .infinity, maxHeight: .infinity)
                 if rightShown {
                     VStack(spacing: 0) {
-                        HStack { Text("素材与结果").font(.headline); Spacer(); panelButton("收起素材与结果", "sidebar.right") { rightRequested = false } }.padding(12)
+                        HStack { Text(refinementText("assetsAndResults", fallback: "素材与结果")).font(.headline); Spacer(); panelButton(refinementText("collapseAssets", fallback: "收起素材与结果"), "sidebar.right") { rightRequested = false } }.padding(12)
                         ScrollView {
                             LazyVStack(alignment: .leading, spacing: 10) {
-                                Button("全部资料库…", action: onOpenLibrary)
+                                Button(refinementText("openLibrary", fallback: "全部资料库…"), action: onOpenLibrary)
                                 if !inputReferences.isEmpty {
-                                    Text("当前输入").font(.caption.bold())
+                                    Text(refinementText("currentInputs", fallback: "当前输入")).font(.caption.bold())
                                     ForEach(inputReferences, id: \.self) { reference in
                                         Button { preview = reference } label: {
                                             QuickInputAssetName(store: quick.store, reference: reference)
@@ -111,18 +114,18 @@ struct QuickGenerationView: View {
                                     }
                                     Divider()
                                 }
-                                Text("结果与候选").font(.caption.bold())
+                                Text(refinementText("resultsAndCandidates", fallback: "结果与候选")).font(.caption.bold())
                                 ForEach(mediaReferences, id: \.self) { reference in
                                     Button { selectedResults[quick.category] = reference } label: {
                                         VStack(alignment: .leading, spacing: 4) {
                                             if reference.kind == .image { QuickAssetPreview(store: quick.store, reference: reference, compact: true).frame(height: 100) }
                                             QuickInputAssetName(store: quick.store, reference: reference)
-                                            Text(reference.kind.rawValue).font(.caption).foregroundStyle(.secondary)
+                                            Text(WorkflowCanvasPresentation.kind(reference.kind, language: language)).font(.caption).foregroundStyle(.secondary)
                                         }.padding(8).frame(maxWidth: .infinity, alignment: .leading)
                                             .background(selectedMedia == reference ? Color.accentColor.opacity(0.12) : .clear, in: RoundedRectangle(cornerRadius: 10))
                                     }.buttonStyle(.plain)
                                 }
-                                if mediaReferences.isEmpty { Text("尚无结果").foregroundStyle(.secondary).padding() }
+                                if mediaReferences.isEmpty { Text(refinementText("noResults", fallback: "尚无结果")).foregroundStyle(.secondary).padding() }
                                 ForEach(quick.visibleRuns) { run in
                                     Button { detailRun = run } label: { HStack { Text(run.createdAt, style: .time); Text(statusTitle(run.status)); Spacer(); Image(systemName: "info.circle") } }
                                 }
@@ -135,7 +138,7 @@ struct QuickGenerationView: View {
         .sheet(item: $detailRun, onDismiss: {
             if let pendingPreview { preview = pendingPreview; self.pendingPreview = nil }
         }) { run in
-            VStack { HStack { Text("结果详情").font(.headline); Spacer(); Button("完成") { detailRun = nil }.keyboardShortcut(.cancelAction) }; ScrollView { runCard(run) } }
+            VStack { HStack { Text(refinementText("resultDetails", fallback: "结果详情")).font(.headline); Spacer(); Button(refinementText("done", fallback: "完成")) { detailRun = nil }.keyboardShortcut(.cancelAction) }; ScrollView { runCard(run) } }
                 .padding(20).frame(minWidth: 580, minHeight: 420)
         }
         .sheet(isPresented: Binding(get: { preview != nil }, set: { if !$0 { preview = nil } })) {
@@ -334,22 +337,22 @@ struct QuickGenerationView: View {
     private var mediaStage: some View {
         VStack(spacing: 8) {
             HStack {
-                Text("当前结果 · 与下次生成设置独立").font(.caption).foregroundStyle(.secondary)
+                Text(refinementText("currentResultHelp", fallback: "当前结果 · 与下次生成设置独立")).font(.caption).foregroundStyle(.secondary)
                 Spacer()
-                Button("上一项", systemImage: "chevron.left") { stepCandidate(-1) }.labelStyle(.iconOnly).disabled(selectedMedia == mediaReferences.first)
+                Button(refinementText("previousResult", fallback: "上一项"), systemImage: "chevron.left") { stepCandidate(-1) }.labelStyle(.iconOnly).disabled(selectedMedia == mediaReferences.first)
                 Text("\(selectedMedia.flatMap { mediaReferences.firstIndex(of: $0) }.map { $0 + 1 } ?? 0) / \(mediaReferences.count)").monospacedDigit()
-                Button("下一项", systemImage: "chevron.right") { stepCandidate(1) }.labelStyle(.iconOnly).disabled(selectedMedia == mediaReferences.last)
+                Button(refinementText("nextResult", fallback: "下一项"), systemImage: "chevron.right") { stepCandidate(1) }.labelStyle(.iconOnly).disabled(selectedMedia == mediaReferences.last)
             }
             if let reference = selectedMedia {
                 QuickMediaViewport(store: quick.store, reference: reference)
                     .id(reference).frame(maxWidth: .infinity, maxHeight: .infinity)
                 HStack {
-                    Button("带结果到工作流", systemImage: "square.stack.3d.up") { onResultToCanvas(reference) }
+                    Button(baselineText(language, "label.1c66265feb9f", fallback: "带结果到工作流"), systemImage: "square.stack.3d.up") { onResultToCanvas(reference) }
                     Spacer()
-                    Button("导出…", systemImage: "square.and.arrow.up") { Task { await export(reference) } }
+                    Button(baselineText(language, "label.643e7408e6a7", fallback: "导出…"), systemImage: "square.and.arrow.up") { Task { await export(reference) } }
                 }
             } else {
-                ContentUnavailableView("预览", systemImage: quick.category == .image ? "photo" : "video", description: Text("生成后在这里查看；素材与结果保留在右侧。"))
+                ContentUnavailableView(refinementText("preview", fallback: "预览"), systemImage: quick.category == .image ? "photo" : "video", description: Text(refinementText("previewHelp", fallback: "生成后在这里查看；素材与结果保留在右侧。")))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }.accessibilityIdentifier("quick-fixed-preview")
