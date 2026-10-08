@@ -602,8 +602,14 @@ struct ChatWorkbenchView: View {
             let sidebarInline = sidebarShown && sheets.narrowPanel != .sessions
             // An already open pane remains visible as an overlay while the width
             // changes. Do not briefly hide its native editor before onChange runs.
-            let sidebarVisible = showSidebar && (sidebarInline || sheets.narrowPanel == .sessions)
-            let inspectorVisible = showInspector && (inspectorInline || sheets.narrowPanel == .inspector)
+            // During the resize transaction, retain the previous inline pane until
+            // onChange installs its narrow presentation. A dismissed narrow pane has
+            // the new width already, so this does not keep a closed overlay alive.
+            let previouslyInlineSidebar = ChatPresentationLayout.showsSidebar(width: lastBodyWidth, requested: showSidebar)
+            let previouslyInlineInspector = ChatPresentationLayout.showsInspector(width: lastBodyWidth,
+                requested: showInspector, sidebar: previouslyInlineSidebar)
+            let sidebarVisible = showSidebar && (sidebarInline || previouslyInlineSidebar || sheets.narrowPanel == .sessions)
+            let inspectorVisible = showInspector && (inspectorInline || previouslyInlineInspector || sheets.narrowPanel == .inspector)
             let sidebarPaneWidth = min(ChatPresentationLayout.sidebarWidth, geometry.size.width)
             let inspectorPaneWidth = min(ChatPresentationLayout.inspectorWidth, geometry.size.width)
             ZStack(alignment: .topLeading) {
