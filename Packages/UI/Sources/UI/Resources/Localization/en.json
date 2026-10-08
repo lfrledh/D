@@ -3,6 +3,7 @@
   "locale": "en",
   "displayName": "English",
   "strings": {
+    "refinement.workflow.fitReady": "Fit all (available after panels finish resizing)",
     "files.title": "Project Files and Locations",
     "files.inspect": "Inspect File Locations",
     "files.back": "Back",

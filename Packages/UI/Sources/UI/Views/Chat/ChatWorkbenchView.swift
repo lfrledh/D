@@ -254,11 +254,51 @@ struct ChatScrollPosition: Equatable {
     }
 }
 
-private struct ChatSessionScrollState {
+struct ChatSessionScrollState {
     var followsBottom: Bool
     var hasNewContent: Bool
     var anchor: UUID?
     var readingPoint: ChatReadingPoint?
+    var leafID: UUID?
+}
+
+/// Owned by the existing presentation facade, not the conditional chat view. No project I/O,
+/// native view ownership or model history retention. Rebinding a controller drops old snapshots.
+@MainActor final class ChatReadingStateStore {
+    private weak var owner: AnyObject?
+    private var snapshots: [UUID: ChatSessionScrollState] = [:]
+    weak var markers: ChatReadingMarkers?
+
+    func bind(_ owner: AnyObject) {
+        guard self.owner !== owner else { return }
+        reset(); self.owner = owner
+    }
+    func reset() { owner = nil; snapshots.removeAll(); markers = nil }
+    func isOwned(by owner: AnyObject) -> Bool { self.owner === owner }
+    func state(for session: ChatSession, owner: AnyObject) -> ChatSessionScrollState? {
+        bind(owner)
+        guard var saved = snapshots[session.id], saved.leafID == session.selectedLeafID,
+              saved.anchor.map({ id in ((try? session.path(to: session.selectedLeafID)) ?? []).contains { $0.id == id } }) ?? true else { return nil }
+        // A changed output invalidates exact internal geometry, not the user's intent to
+        // stay away from Bottom. Restore only the still-current message anchor in that case.
+        if saved.readingPoint?.matches(session) == false { saved.readingPoint = nil }
+        return saved
+    }
+    subscript(sessionID: UUID) -> ChatSessionScrollState? {
+        get { owner == nil ? nil : snapshots[sessionID] }
+        set { if owner != nil { snapshots[sessionID] = newValue } }
+    }
+    func capture(_ chat: ChatController) {
+        guard owner === chat, let session = chat.selectedSession,
+              var saved = state(for: session, owner: chat), !saved.followsBottom,
+              var point = markers?.capture(sessionID: session.id, path: chat.selectedPath.map(\.id)) else { return }
+        point.leafID = session.selectedLeafID
+        point.revisionID = session.selectedAnswer(messageID: point.messageID)?.revisionID
+        point.outputBytes = session.messages.first { $0.id == point.messageID }?.attemptID
+            .flatMap { id in session.attempts.first { $0.id == id } }?.rawText.utf8.count ?? 0
+        saved.anchor = point.messageID; saved.readingPoint = point
+        snapshots[session.id] = saved
+    }
 }
 
 /// Ephemeral view geometry, never project data or a continuously bound scroll target.
@@ -463,7 +503,7 @@ struct ChatWorkbenchView: View {
     @State private var sheets = ChatSheetQueue<ChatDetail>()
     @State private var followsBottom = true
     @State private var hasNewContent = false
-    @State private var scrollStates: [UUID: ChatSessionScrollState] = [:]
+    private let scrollStates: ChatReadingStateStore
     @State private var readingMarkers = ChatReadingMarkers()
     @State private var visibleMessageID: UUID?
     @State private var userScrollingTranscript = false
@@ -501,6 +541,7 @@ struct ChatWorkbenchView: View {
         self.openToolsRequest = openToolsRequest
         self.onToolsOpened = onToolsOpened
         self.chat = chat; self.model = model; self.onChooseModel = onChooseModel
+        self.scrollStates = model.readingState(for: chat)
         self.onSavedAsset = onSavedAsset; self.onRetainTemporary = onRetainTemporary; self.onAssetsChanged = onAssetsChanged; self.onSavedValue = onSavedValue
         self.onResolveSharedAsset = onResolveSharedAsset
         _showInspector = State(initialValue: initialInspectorVisible)
@@ -510,8 +551,10 @@ struct ChatWorkbenchView: View {
         _showsSessionList = State(initialValue: false)
         _showContextPreview = State(initialValue: initialContextPreviewVisible)
         _inspectedAttemptID = State(initialValue: initialInspectedAttemptID)
-        _followsBottom = State(initialValue: initiallyFollowsBottom)
-        _hasNewContent = State(initialValue: initiallyHasNewContent)
+        let saved = chat.selectedSession.flatMap { scrollStates.state(for: $0, owner: chat) }
+        _followsBottom = State(initialValue: saved?.followsBottom ?? initiallyFollowsBottom)
+        _hasNewContent = State(initialValue: saved?.hasNewContent ?? initiallyHasNewContent)
+        _visibleMessageID = State(initialValue: saved?.anchor)
     }
 
     private func label(_ key: String, _ fallback: String) -> String {
@@ -1056,7 +1099,7 @@ struct ChatWorkbenchView: View {
                 }
                 .onChange(of: session.id) { oldID, newID in
                     if scrollStates[oldID] == nil { saveScrollState(for: oldID) }
-                    let restored = scrollStates[newID]
+                    let restored = scrollStates.state(for: session, owner: chat)
                     followsBottom = restored?.followsBottom ?? true
                     hasNewContent = restored?.hasNewContent ?? false
                     visibleMessageID = nil
@@ -1084,6 +1127,7 @@ struct ChatWorkbenchView: View {
                     }
                 }
                 .onAppear {
+                    scrollStates.markers = readingMarkers
                     if let jump = searchJump, jump.sessionID == session.id {
                         Task { @MainActor in
                             await Task.yield()
@@ -1094,7 +1138,7 @@ struct ChatWorkbenchView: View {
                         }
                         return
                     }
-                    if let saved = scrollStates[session.id] {
+                    if let saved = scrollStates.state(for: session, owner: chat) {
                         followsBottom = saved.followsBottom
                         hasNewContent = saved.hasNewContent
                         if saved.followsBottom {
@@ -1116,6 +1160,13 @@ struct ChatWorkbenchView: View {
                         traceScroll("scroll:appear-bottom", session: session, target: "bottom")
                         scrollToLastMessage(in: session, using: scrollProxy)
                     }
+                }
+                .onDisappear {
+                    // Primary capture happens before shell navigation. This fallback never
+                    // replaces a valid internal point with a missing/unmounted marker.
+                    scrollStates.capture(chat)
+                    if scrollStates.markers === readingMarkers { scrollStates.markers = nil }
+                    scrollRestoration = nil
                 }
                 .onChange(of: searchJump) { _, jump in
                     guard let jump, jump.sessionID == session.id,
@@ -1214,7 +1265,8 @@ struct ChatWorkbenchView: View {
         let previous = scrollStates[sessionID]
         scrollStates[sessionID] = .init(followsBottom: followsBottom,
             hasNewContent: hasNewContent, anchor: point?.messageID ?? visibleMessageID ?? previous?.anchor,
-            readingPoint: point ?? previous?.readingPoint)
+            readingPoint: followsBottom ? nil : point ?? previous?.readingPoint,
+            leafID: chat.state.sessions.first { $0.id == sessionID }?.selectedLeafID)
     }
 
     private func restoreReadingPoint(_ point: ChatReadingPoint, ticket: ChatScrollRestoration) async {

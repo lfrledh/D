@@ -20,7 +20,7 @@ struct WorkflowGraphSurface: View {
     let readOnly: Bool
     let onPlan: (UUID, Bool) -> Void
     var nodeSizeObserver: ((UUID, CGSize) -> Void)?
-    var viewportSizeObserver: ((CGSize) -> Void)?
+    var viewportSizeObserver: ((WorkflowCanvasViewportMeasurement) -> Void)?
     var portCenterObserver: (([WorkflowPortIdentity: CGPoint]) -> Void)?
     var onScrollObservation: (WorkflowCanvasViewContext, WorkflowCanvasScrollObservation) -> Void = { _, _ in }
     var onDropItem: (WorkflowCanvasTransfer, CGPoint) -> Bool = { _, _ in false }
@@ -49,7 +49,8 @@ struct WorkflowGraphSurface: View {
                     rootGraphID: controller.rootGraph?.id ?? graph.id,
                     rootRevision: controller.rootGraph?.revision ?? graph.revision,
                     graphID: graph.id,
-                    bodyPath: controller.bodyPath
+                    bodyPath: controller.bodyPath,
+                    projectID: controller.projectID, instanceID: controller.projectInstanceID
                 )
                 let naturalGeometry = WorkflowGraphGeometry(
                     graph: graph, tools: controller.tools, registry: controller.registry
@@ -480,18 +481,19 @@ struct WorkflowGraphSurface: View {
                 }
                 return true
             },
-            onViewportSize: { size in
-                guard clipViewportSize != size else { return }
+            onViewportSize: { measured in
+                let size = measured.clip
                 let raw = clipViewportSize.map { oldSize in
                     WorkflowCanvasViewportGeometry(graphSize: geometry.size,
                         viewportSize: oldSize, zoom: zoom,
                         translation: geometry.translation).visibleRawCenter(offset: scrollOffset)
                 }
                 Task { @MainActor in
-                    guard clipViewportSize != size else { return }
-                    resizeAnchorRaw = raw
-                    clipViewportSize = size
-                    viewportSizeObserver?(size)
+                    if clipViewportSize != size {
+                        resizeAnchorRaw = raw
+                        clipViewportSize = size
+                    }
+                    viewportSizeObserver?(measured)
                 }
             },
             onWheel: { delta, point, offset, size in
@@ -603,7 +605,8 @@ struct WorkflowGraphSurface: View {
                 rootGraphID: controller.rootGraph?.id ?? $0.id,
                 rootRevision: controller.rootGraph?.revision ?? $0.revision,
                 graphID: $0.id,
-                bodyPath: controller.bodyPath
+                bodyPath: controller.bodyPath,
+                projectID: controller.projectID, instanceID: controller.projectInstanceID
             )
         }
         guard currentScope == scope,
@@ -1033,7 +1036,8 @@ private struct WorkflowNodeCard: View {
                 graphID: graph.id,
                 revision: scope.rootRevision,
                 nodeID: node.id,
-                port: port.id
+                port: port.id,
+                projectID: scope.projectID, instanceID: scope.instanceID
             ))
             .simultaneousGesture(
                 DragGesture(minimumDistance: 2, coordinateSpace: .named(WorkflowCanvasCoordinateSpace.name))
@@ -1090,7 +1094,7 @@ private struct WorkflowNodeCard: View {
         guard items.count == 1, !readOnly, !controller.isRunning,
               controller.readOnlyReason == nil,
               let item = try? items[0].validated(),
-              case .output(_, _, _, _, let sourceNodeID, let sourcePort) = item,
+              case .output(_, _, _, _, let sourceNodeID, let sourcePort, _, _) = item,
               item.matchesOutputScope(scope),
               scope.isCurrent(in: controller) else {
             onConnectionIssue(.staleScope)
@@ -1193,6 +1197,8 @@ struct WorkflowCanvasScope: Equatable {
     let rootRevision: UUID
     let graphID: UUID
     let bodyPath: [WorkflowBodyLocation]
+    var projectID: UUID? = nil
+    var instanceID: UUID? = nil
 
     var identity: WorkflowCanvasScopeIdentity {
         WorkflowCanvasScopeIdentity(rootGraphID: rootGraphID, graphID: graphID, bodyPath: bodyPath)
@@ -1200,7 +1206,8 @@ struct WorkflowCanvasScope: Equatable {
 
     @MainActor
     func isCurrent(in controller: WorkflowController) -> Bool {
-        guard let currentRoot = controller.rootGraph,
+        guard projectID == controller.projectID, instanceID == controller.projectInstanceID,
+              let currentRoot = controller.rootGraph,
               let currentGraph = controller.graph else { return false }
         return matches(
             rootGraphID: currentRoot.id,

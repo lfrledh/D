@@ -30,6 +30,18 @@ enum WorkflowCanvasFit {
     }
 }
 
+/// The native clip and enclosing surface are sampled together. Fit is visibly disabled
+/// while the surface still has an old/intermediate panel width; no delayed fit is queued.
+struct WorkflowCanvasViewportMeasurement: Equatable {
+    let clip: CGSize
+    let surfaceWidth: CGFloat
+    func permitsFit(targetWidth: CGFloat) -> Bool {
+        clip.width.isFinite && clip.height.isFinite && clip.width > 0 && clip.height > 0
+            && targetWidth.isFinite && targetWidth > 0 && surfaceWidth.isFinite
+            && abs(surfaceWidth - targetWidth) <= 0.5
+    }
+}
+
 struct WorkflowCanvasNavigationRequest: Equatable {
     let id = UUID()
     /// Nil requests the current graph's content center.
@@ -58,7 +70,7 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
     typealias Coordinator = Void
     var navigationAllowed: () -> Bool
     var allowsEvent: (_ point: CGPoint, _ offset: CGPoint, _ viewport: CGSize) -> Bool
-    var onViewportSize: (CGSize) -> Void
+    var onViewportSize: (WorkflowCanvasViewportMeasurement) -> Void
     var onWheel: (_ deltaY: CGFloat, _ point: CGPoint, _ offset: CGPoint, _ viewport: CGSize) -> Void
     var onMiddleClick: (_ viewport: CGSize) -> Void
 
@@ -80,11 +92,11 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
     final class ProbeView: NSView {
         var navigationAllowed: () -> Bool = { false }
         var allowsEvent: (CGPoint, CGPoint, CGSize) -> Bool = { _, _, _ in false }
-        var onViewportSize: (CGSize) -> Void = { _ in }
+        var onViewportSize: (WorkflowCanvasViewportMeasurement) -> Void = { _ in }
         var onWheel: (CGFloat, CGPoint, CGPoint, CGSize) -> Void = { _, _, _, _ in }
         var onMiddleClick: (CGSize) -> Void = { _ in }
         private var monitor: Any?
-        private var reportedSize: CGSize?
+        private var reportedSize: WorkflowCanvasViewportMeasurement?
 
         override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
@@ -146,10 +158,13 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
         }
 
         func reportViewportSize() {
-            guard let size = enclosingScrollView?.contentView.bounds.size,
-                  size.width > 0, size.height > 0, reportedSize != size else { return }
-            reportedSize = size
-            onViewportSize(size)
+            guard let scroll = enclosingScrollView else { return }
+            let measured = WorkflowCanvasViewportMeasurement(clip: scroll.contentView.bounds.size,
+                                                              surfaceWidth: scroll.frame.width)
+            guard measured.clip.width > 0, measured.clip.height > 0,
+                  reportedSize != measured else { return }
+            reportedSize = measured
+            onViewportSize(measured)
         }
 
         private func accepts(_ event: NSEvent) -> Bool {

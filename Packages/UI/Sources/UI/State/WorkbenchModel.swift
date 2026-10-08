@@ -10,6 +10,16 @@ import UniformTypeIdentifiers
 @MainActor @Observable
 public final class WorkbenchModel {
     var chatDisplaySettings = ChatDisplayPreferencesState()
+    @ObservationIgnored private var chatReadingState = ChatReadingStateStore()
+    func readingState(for chat: ChatController) -> ChatReadingStateStore {
+        // A disappearing old view keeps its own state object; it cannot rebind or
+        // erase the new project's snapshots through a late lifecycle callback.
+        if !chatReadingState.isOwned(by: chat) {
+            chatReadingState = ChatReadingStateStore()
+            chatReadingState.bind(chat)
+        }
+        return chatReadingState
+    }
     public let projectSession: ProjectSession
     public let audioRecordingEnabled: Bool
     private let audioPanels: any AudioWorkbenchPanelProviding
@@ -747,12 +757,16 @@ public final class WorkbenchModel {
     public func requestClose() async -> Bool {
         guard !refuseEditorClose() else { return false }
         guard !isChoosingLocation else { return false }
-        return await projectSession.requestClose()
+        let closed = await projectSession.requestClose()
+        if closed { chatReadingState.reset() }
+        return closed
     }
     public func cancelAndCloseProject() async -> Bool {
         guard !refuseEditorClose() else { return false }
         guard !isChoosingLocation else { return false }
-        return await projectSession.cancelAndCloseProject()
+        let closed = await projectSession.cancelAndCloseProject()
+        if closed { chatReadingState.reset() }
+        return closed
     }
 
     @discardableResult public func newProject() async -> Bool {

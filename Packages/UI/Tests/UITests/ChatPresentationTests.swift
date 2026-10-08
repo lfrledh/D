@@ -824,6 +824,42 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
         #expect(window.firstResponder !== editor)
     }
 
+    @Test func readingSnapshotOutlivesViewStateButNotOwnerOrPath() throws {
+        let owner = NSObject(), otherOwner = NSObject()
+        let state = ChatReadingStateStore()
+        var session = try answeredSession(raw: "Stable answer", status: .completed)
+        let message = try #require(session.messages.last)
+        var point = ChatReadingPoint(messageID: message.id, offset: 503, width: 600, height: 3600)
+        point.leafID = session.selectedLeafID; point.outputBytes = session.attempts[0].rawText.utf8.count
+        point.revisionID = session.selectedAnswer(messageID: message.id)?.revisionID
+        state.bind(owner)
+        state[session.id] = .init(followsBottom: false, hasNewContent: false,
+            anchor: message.id, readingPoint: point, leafID: session.selectedLeafID)
+        // Recreated presentation resolves the longer-lived snapshot, not a new empty dictionary.
+        #expect(state.state(for: session, owner: owner)?.readingPoint?.offset == 503)
+        #expect(state.state(for: ChatSession(), owner: owner) == nil)
+        var branch = session; branch.selectedLeafID = session.messages.first?.id
+        #expect(state.state(for: branch, owner: owner) == nil)
+        session.attempts[0].rawText += " new output"
+        #expect(state.state(for: session, owner: owner)?.readingPoint == nil)
+        #expect(state.state(for: session, owner: owner)?.followsBottom == false)
+        // Same persisted IDs in a different controller/Store must not share UI state.
+        #expect(state.state(for: session, owner: otherOwner) == nil)
+        #expect(state[session.id] == nil)
+        state[session.id] = .init(followsBottom: true, hasNewContent: false,
+            anchor: message.id, readingPoint: nil, leafID: session.selectedLeafID)
+        #expect(state.state(for: session, owner: otherOwner)?.followsBottom == true)
+        state.reset()
+        #expect(state[session.id] == nil)
+        weak var released: NSObject?
+        do {
+            let temporary = NSObject(); released = temporary; state.bind(temporary)
+            state[session.id] = .init(followsBottom: false, hasNewContent: false,
+                anchor: nil, readingPoint: nil, leafID: session.selectedLeafID)
+        }
+        #expect(released == nil && state[session.id] == nil)
+    }
+
     @Test func readingPointRejectsChangedPathRevisionAndOutput() throws {
         var session = try answeredSession(raw: "Original saved answer", status: .completed)
         let message = try #require(session.messages.last)

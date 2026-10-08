@@ -201,7 +201,7 @@ struct TextSourcesQuestionEditor: NSViewRepresentable {
     }
 
     private func canReceive(_ sender: NSDraggingInfo) -> Bool {
-        isEditable && !hasMarkedText() && onFileDrop != nil && delegate != nil &&
+        !isHiddenOrHasHiddenAncestor && isEditable && !hasMarkedText() && onFileDrop != nil && delegate != nil &&
             sender.draggingSourceOperationMask.contains(.copy)
     }
 

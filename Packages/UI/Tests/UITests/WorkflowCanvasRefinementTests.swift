@@ -6,6 +6,37 @@ import Testing
 
 @Suite @MainActor
 struct WorkflowCanvasRefinementTests {
+    @Test func fitWaitsForTheTargetSurfaceAndUsesItsActualClip() throws {
+        let old = WorkflowCanvasViewportMeasurement(clip: .init(width: 440, height: 520), surfaceWidth: 440)
+        let intermediate = WorkflowCanvasViewportMeasurement(clip: .init(width: 550, height: 520), surfaceWidth: 550)
+        let final = WorkflowCanvasViewportMeasurement(clip: .init(width: 665, height: 520), surfaceWidth: 680)
+        #expect(old.permitsFit(targetWidth: 440))
+        #expect(!old.permitsFit(targetWidth: 680))
+        #expect(!intermediate.permitsFit(targetWidth: 680))
+        #expect(final.permitsFit(targetWidth: 680))
+        // Legacy visible scrollers consume clip space; do not assume clip == surface.
+        let fitted = try #require(WorkflowCanvasFit.view(for: .init(x: 100, y: 100, width: 900, height: 500), viewport: final.clip))
+        #expect(abs(fitted.zoom - (665.0 - 56) / 900) < 0.001)
+        #expect(!final.permitsFit(targetWidth: 440)) // a newer panel decision supersedes readiness
+        #expect(!final.permitsFit(targetWidth: .nan))
+    }
+
+    @Test func outputTransferRejectsAnotherRestoredInstanceAndLegacyUnknownOrigin() throws {
+        let root = UUID(), graph = UUID(), revision = UUID(), project = UUID(), instance = UUID()
+        let scope = WorkflowCanvasScope(rootGraphID: root, rootRevision: revision, graphID: graph,
+            bodyPath: [], projectID: project, instanceID: instance)
+        let payload = WorkflowCanvasTransfer.output(rootGraphID: root, bodyPath: [], graphID: graph,
+            revision: revision, nodeID: UUID(), port: "output", projectID: project, instanceID: instance)
+        #expect(try WorkflowCanvasTransfer.decode(payload.encoded()).matchesOutputScope(scope))
+        var restored = scope; restored.instanceID = UUID()
+        #expect(!payload.matchesOutputScope(restored))
+        restored = scope; restored.projectID = UUID()
+        #expect(!payload.matchesOutputScope(restored))
+        let legacy = WorkflowCanvasTransfer.output(rootGraphID: root, bodyPath: [], graphID: graph,
+            revision: revision, nodeID: UUID(), port: "output")
+        #expect(try !WorkflowCanvasTransfer.decode(legacy.encoded()).matchesOutputScope(scope))
+    }
+
     @Test
     func portColorClassificationUsesContractAndLeavesUnionsNeutral() {
         #expect(WorkflowPortStyle.kind(for: .init("text", "Any title", kinds: [.text])) == .text)

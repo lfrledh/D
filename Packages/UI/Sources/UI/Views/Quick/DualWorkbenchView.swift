@@ -16,8 +16,14 @@ public struct DualWorkbenchView: View {
     private var selectionModel: WorkbenchModel { usesTemporaryChat ? chatModel : quickModel }
     private var chat: ChatController? { chatModel.projectSession.chat }
     @State private var temporaryChatChanging = false
+    private func captureChatReading() {
+        guard entry == .quick, quick.category == .text, quick.textPresentation == .chat,
+              let chat else { return }
+        chatModel.readingState(for: chat).capture(chat)
+    }
     private func changeTemporaryChat() {
         guard !temporaryChatChanging else { return }
+        captureChatReading()
         temporaryChatChanging = true
         Task { @MainActor in
             defer { temporaryChatChanging = false }
@@ -176,10 +182,12 @@ public struct DualWorkbenchView: View {
     }
     private func navigate(to destination: Entry) {
         guard destination != entry else { return }
+        captureChatReading()
         entryHistory.append(entry); entry = destination
     }
     private func goBack() {
         guard let previous = entryHistory.popLast() else { return }
+        captureChatReading()
         entry = previous
     }
     public var body: some View {
@@ -191,12 +199,12 @@ public struct DualWorkbenchView: View {
                 Menu {
                     Button(t("projects", "Projects…", "项目…")) { projectsVisible = true }
                     if model.projectSession.projectQuick != nil {
-                        Picker(t("draftLocation", "Quick draft location", "快速草稿位置"), selection: $useProjectQuick) {
+                        Picker(t("draftLocation", "Quick draft location", "快速草稿位置"), selection: Binding(get: { useProjectQuick }, set: { captureChatReading(); useProjectQuick = $0 })) {
                             Text(t("thisProject", "This project: ", "本项目：") + (model.manifest?.name ?? t("project", "Project", "项目"))).tag(true)
                             Text(t("globalQuick", "Global Quick workspace", "全局快速创作")).tag(false)
                         }
                     } else if model.manifest != nil {
-                        Button(t("enableProjectQuick", "Enable Quick in this project", "在当前项目中快速创作")) { Task { await model.projectSession.enableProjectQuick(); useProjectQuick = true; navigate(to: .quick) } }
+                        Button(t("enableProjectQuick", "Enable Quick in this project", "在当前项目中快速创作")) { captureChatReading(); Task { await model.projectSession.enableProjectQuick(); useProjectQuick = true; navigate(to: .quick) } }
                     }
                     if let manifest = (entry == .quick ? quickModel.manifest : canvasModel.manifest),
                        let store = (entry == .quick ? quickModel.projectSession.currentStore : canvasModel.projectSession.currentStore) {
@@ -209,7 +217,7 @@ public struct DualWorkbenchView: View {
                     .help(t("library", "Library", "资料库")).accessibilityLabel(t("library", "Library", "资料库")).accessibilityIdentifier("shared-library-open")
                 Spacer(minLength: 8)
                 if entry == .quick {
-                    Picker(t("category", "Creation category", "创作分类"), selection: Binding(get: { quick.category }, set: { quick.selectCategory($0) })) {
+                    Picker(t("category", "Creation category", "创作分类"), selection: Binding(get: { quick.category }, set: { captureChatReading(); quick.selectCategory($0) })) {
                         Text(workflowText(language, "quick.category.text", fallback: "文字")).tag(QuickCategory.text)
                         Text(workflowText(language, "quick.category.image", fallback: "图像")).tag(QuickCategory.image)
                         Text(workflowText(language, "quick.category.video", fallback: "视频")).tag(QuickCategory.video)
@@ -245,7 +253,7 @@ public struct DualWorkbenchView: View {
                         if quick.category == .text, let chat {
                             VStack(spacing: 0) {
                                 Picker(workflowText(language, "chat.textSurface", fallback: "文字工作面"),
-                                    selection: Binding(get: { quick.textPresentation }, set: { quick.selectTextPresentation($0) })) {
+                                    selection: Binding(get: { quick.textPresentation }, set: { captureChatReading(); quick.selectTextPresentation($0) })) {
                                     Text(workflowText(language, "chat.conversation", fallback: "聊天")).tag(QuickTextPresentation.chat)
                                     Text(workflowText(language, "chat.single", fallback: "单次生成与旧记录")).tag(QuickTextPresentation.single)
                                 }.pickerStyle(.segmented).labelsHidden().frame(maxWidth: 360).padding(.horizontal, 20)
@@ -656,6 +664,7 @@ public struct DualWorkbenchView: View {
         guard [WorkflowModelRoutes.qwen35, WorkflowModelRoutes.qwen38].contains(node.operationID) else {
             // The selected legacy model has single-turn semantics. Show its real
             // surface rather than silently retaining a different chat model.
+            captureChatReading()
             quick.selectTextPresentation(.single)
             return
         }
@@ -677,6 +686,7 @@ public struct DualWorkbenchView: View {
             try chat.selectModelConfiguration(node, sessionID: try chat.state.selectedSessionID ?? chat.newSession())
             return
         }
+        captureChatReading()
         quick.select(operationID: operation, modelID: identity); applySelectedModelToChat()
     }
     private func useLibraryEntry(_ value: SharedLibraryBrowserEntry) {

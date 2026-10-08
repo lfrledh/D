@@ -7,6 +7,28 @@ import Testing
 /// not replace Finder hit-testing or sandbox import/save/reopen acceptance.
 @Suite("Chat file drop boundary", .serialized) @MainActor
 struct ChatFileDropTests {
+    @Test func hiddenReceiverRejectsAStartedFileDragWithoutAWindow() {
+        let parent = NSView(), view = FileDropTextView()
+        let coordinator = TextSourcesQuestionEditor.Coordinator()
+        view.delegate = coordinator
+        coordinator.update(view, value: "保留草稿", isEditable: true, onEdit: { _ in })
+        parent.addSubview(view)
+        var received = 0
+        view.onFileDrop = { _ in received += 1 }
+        let drag = FileDropInfo(urls: [URL(fileURLWithPath: "/fixture/left.csv")])
+        defer { drag.draggingPasteboard.releaseGlobally() }
+        #expect(view.draggingEntered(drag) == .copy)
+        parent.isHidden = true
+        #expect(view.draggingUpdated(drag).isEmpty)
+        #expect(!view.prepareForDragOperation(drag))
+        #expect(!view.performDragOperation(drag))
+        #expect(received == 0 && view.string == "保留草稿")
+        parent.isHidden = false
+        #expect(view.draggingUpdated(drag) == .copy)
+        #expect(view.performDragOperation(drag))
+        #expect(received == 1 && view.string == "保留草稿")
+    }
+
     @Test func plainTextFileRegistrationSurvivesUpdatesAndFollowsBindingLifetime() {
         let view = FileDropTextView(), coordinator = TextSourcesQuestionEditor.Coordinator()
         view.isRichText = false

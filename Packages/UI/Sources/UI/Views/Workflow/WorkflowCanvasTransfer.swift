@@ -28,7 +28,9 @@ enum WorkflowCanvasTransfer: Codable, Transferable, Equatable, Sendable {
         graphID: UUID,
         revision: UUID,
         nodeID: UUID,
-        port: String
+        port: String,
+        projectID: UUID? = nil,
+        instanceID: UUID? = nil
     )
 
     private static let maximumEncodedBytes = 8 * 1_024
@@ -53,7 +55,7 @@ enum WorkflowCanvasTransfer: Codable, Transferable, Equatable, Sendable {
         case .tool(let reference):
             guard reference.version > 0, reference.digest.count == 64,
                   reference.digest.allSatisfy({ $0.isHexDigit }) else { throw WorkflowCanvasTransferError.invalidIdentifier }
-        case .output(_, let bodyPath, _, _, _, let port):
+        case .output(_, let bodyPath, _, _, _, let port, _, _):
             guard bodyPath.count <= 16 else { throw WorkflowCanvasTransferError.invalidIdentifier }
             for location in bodyPath {
                 try Self.validate(location.slot, maximum: Self.maximumIdentifierCharacters)
@@ -69,9 +71,10 @@ enum WorkflowCanvasTransfer: Codable, Transferable, Equatable, Sendable {
             let bodyPath,
             let graphID,
             let revision,
-            _, _
+            _, _, let projectID, let instanceID
         ) = self else { return false }
-        return rootGraphID == scope.rootGraphID
+        return projectID == scope.projectID && instanceID == scope.instanceID
+            && rootGraphID == scope.rootGraphID
             && bodyPath == scope.bodyPath.map(WorkflowCanvasBodyLocation.init)
             && graphID == scope.graphID
             && revision == scope.rootRevision

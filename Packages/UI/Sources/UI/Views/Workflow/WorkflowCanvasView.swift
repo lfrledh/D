@@ -83,7 +83,7 @@ public struct WorkflowCanvasView: View {
     @State private var showInspector = true
     @State private var zoom: CGFloat = 1
     @State private var canvasTool: WorkflowCanvasTool = .pointer
-    @State private var canvasViewportSize = CGSize(width: 800, height: 600)
+    @State private var canvasViewport: WorkflowCanvasViewportMeasurement?
     @State private var measuredCardSizes: [UUID: CGSize] = [:]
     @State private var scrollPosition = ScrollPosition()
     @State private var navigationRequest: WorkflowCanvasNavigationRequest?
@@ -207,6 +207,9 @@ public struct WorkflowCanvasView: View {
     private func panels(height: CGFloat, width: CGFloat) -> some View {
         let shown = WorkflowCanvasLayoutPolicy.visiblePanels(width: width, library: showLibrary,
             inspector: showInspector, preferLibrary: narrowLibrary)
+        let targetCanvasWidth = width - (shown.library ? WorkflowCanvasLayoutPolicy.libraryWidth + 1 : 0)
+            - (shown.inspector ? WorkflowCanvasLayoutPolicy.inspectorWidth + 1 : 0)
+        let fitReady = canvasViewport?.permitsFit(targetWidth: targetCanvasWidth) == true
         return HStack(spacing: 0) {
             RetainedContentHost(content: Group {
                 if let libraryContent { libraryContent(canvasInsertionPoint, { showLibrary = false }) }
@@ -249,7 +252,7 @@ public struct WorkflowCanvasView: View {
                 .frame(width: shown.library ? WorkflowCanvasLayoutPolicy.libraryWidth : 0)
                 .workbenchMotion(value: shown.library)
                 .clipped().allowsHitTesting(shown.library).accessibilityHidden(!shown.library)
-            if shown.library { Divider() }
+            if shown.library { Divider().frame(width: 1) }
             VStack(spacing: 0) {
                 WorkflowGraphSurface(controller: controller, graph: controller.graph, zoom: $zoom,
                     tool: $canvasTool,
@@ -262,7 +265,7 @@ public struct WorkflowCanvasView: View {
                         measuredCardSizes[id] = size
                         nodeSizeObserver?(id, size)
                     },
-                    viewportSizeObserver: { canvasViewportSize = $0 },
+                    viewportSizeObserver: { canvasViewport = $0 },
                     portCenterObserver: portCenterObserver,
                     onScrollObservation: { context, observation in
                         guard context == viewContext, activeViewContext == context else { return }
@@ -291,8 +294,10 @@ public struct WorkflowCanvasView: View {
                     .overlay(alignment: .bottomTrailing) {
                         HStack {
                             Button(workflowText(languageStore, "refinement.workflow.fitAll", fallback: "适配全部"), systemImage: "arrow.up.left.and.arrow.down.right") {
-                                fitAllNodes()
+                                fitAllNodes(targetWidth: targetCanvasWidth)
                             }
+                            .disabled(!fitReady)
+                            .help(workflowText(languageStore, "refinement.workflow.fitReady", fallback: "适配全部（面板调整完成后可用）"))
                             .accessibilityIdentifier("workflow-canvas-fit-all")
                             Button(workflowText(languageStore, "workflow.canvas.resetView",
                                                 fallback: "恢复默认视图"), systemImage: "scope") {
@@ -315,7 +320,7 @@ public struct WorkflowCanvasView: View {
                 }
                 statusStrip
             }.frame(minWidth: WorkflowCanvasLayoutPolicy.canvasMinimumWidth, maxWidth: .infinity)
-            if shown.inspector { Divider() }
+            if shown.inspector { Divider().frame(width: 1) }
             // Native hiding keeps a folded inspector out of file-drop and input routing.
             RetainedContentHost(content: ZStack {
                 WorkflowNodeInspector(controller: controller, node: controller.selectedNode,
@@ -563,8 +568,9 @@ public struct WorkflowCanvasView: View {
             selectedNodeID: controller.selectedNodeID, for: viewContext)
     }
 
-    private func fitAllNodes() {
-        guard !viewportInteractionLocked, let graph = controller.graph,
+    private func fitAllNodes(targetWidth: CGFloat) {
+        guard !viewportInteractionLocked, activeViewContext == viewContext,
+              let canvasViewport, canvasViewport.permitsFit(targetWidth: targetWidth), let graph = controller.graph,
               !graph.nodes.isEmpty else { return }
         let geometry = WorkflowGraphGeometry(graph: graph, tools: controller.tools,
                                              registry: controller.registry)
@@ -578,7 +584,7 @@ public struct WorkflowCanvasView: View {
                                         y: point.y - height / 2,
                                         width: WorkflowCanvasLayoutPolicy.nodeWidth, height: height))
         }
-        guard let fitted = WorkflowCanvasFit.view(for: bounds, viewport: canvasViewportSize) else { return }
+        guard let fitted = WorkflowCanvasFit.view(for: bounds, viewport: canvasViewport.clip) else { return }
         zoom = fitted.zoom
         navigationRequest = WorkflowCanvasNavigationRequest(rawCenter: fitted.center)
     }

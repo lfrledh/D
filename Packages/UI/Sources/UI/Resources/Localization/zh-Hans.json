@@ -3,6 +3,7 @@
   "locale": "zh-Hans",
   "displayName": "简体中文",
   "strings": {
+    "refinement.workflow.fitReady": "适配全部（面板调整完成后可用）",
     "files.title": "项目文件与位置",
     "files.inspect": "查看文件位置",
     "files.back": "返回",

@@ -354,6 +354,49 @@ private func workflowFixturePNG(width: Int = 16, height: Int = 12) throws -> Dat
 
 @Suite("M0 workflow durable lifecycle", .serialized) @MainActor
 struct WorkflowLifecycleTests {
+    @Test func controllerExtractionPersistsBoundaryMappingsAcrossStoreReopen() async throws {
+        let (_, store, engine, controller) = try await fixture()
+        controller.addBlankGraph(name: "Boundary fixture")
+        controller.addNode(operationID: "d.value.input")
+        let input = try #require(controller.selectedNode)
+        controller.setDataConfiguration(nodeID: input.id, value: .init(value: .text("原件 e\u{301} 👩🏽‍🎨")))
+        controller.addNode(operationID: "d.value.return")
+        let middle = try #require(controller.selectedNode)
+        controller.addNode(operationID: "d.value.return")
+        let output = try #require(controller.selectedNode)
+        controller.connect(source: input.id, sourcePort: "output", target: middle.id, targetPort: "input")
+        controller.connect(source: middle.id, sourcePort: "output", target: output.id, targetPort: "input")
+        try await controller.saveExplicitEdits()
+        let original = try #require(controller.graph)
+        let oldPointer = try #require(await store.snapshot().workflowSnapshot)
+        let oldFile = store.rootURL.appendingPathComponent(oldPointer.relativePath)
+        let originalBytes = try Data(contentsOf: oldFile)
+        controller.selectedNodeIDs = [middle.id]
+        controller.extractSelection(name: "Round trip tool", inputs: [.init(name: "content", schema: .text,
+            sourceNode: input.id, sourcePort: "output")], outputs: [.init(name: "answer", nodeID: middle.id, schema: .text)],
+            expectedGraphID: original.id, expectedRevision: original.revision)
+        #expect(controller.errorMessage == nil)
+        let extracted = try #require(controller.graph), tool = try #require(controller.tools.last)
+        let invocation = try #require(controller.selectedNodeID)
+        try await controller.saveExplicitEdits()
+        try await controller.close(); try await store.close()
+        let reopened = try await ProjectStore.open(at: store.rootURL)
+        let archive = try #require(try await reopened.workflowState().archive)
+        #expect(archive.graphs.first { $0.id == extracted.id } == extracted)
+        #expect(archive.tools?.last == tool)
+        #expect(tool.graph.nodes.contains { $0.id == middle.id && $0.parameters == middle.parameters })
+        let plan = try WorkflowPlanCompiler().compile(extracted, tools: archive.tools ?? [], target: output.id)
+        guard case .invoke(let reference, let body) = plan.steps.first(where: { $0.id == invocation })?.kind else {
+            Issue.record("Reopened invocation not compiled"); try await reopened.close(); return
+        }
+        #expect(reference.digest == (try WorkflowPlanCompiler.digest(tool)))
+        #expect(body.interface.inputs.map(\.name) == ["content"])
+        #expect(body.interface.outputs.map(\.name) == ["answer"])
+        #expect(try Data(contentsOf: oldFile) == originalBytes)
+        #expect(await engine.requests.isEmpty)
+        try await reopened.close()
+    }
+
     @Test func devLoadingChoiceReachesEngineFromQuickAndCanvasAndReopens() async throws {
         let (root, store, engine, original) = try await fixture()
         try await original.close() // Retire the empty fixture owner before a new Canvas owns this Store.
