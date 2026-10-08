@@ -114,6 +114,47 @@ import Testing
         preferences.appearance = appearance
         #expect(!preferences.isValid)
     }
+
+    @Test func glassPolicyUsesOpaqueFallbackForAccessibilityAndLightweight() {
+        let appearance = WorkbenchAppearance()
+        let normal = WorkbenchEffectsPolicy(appearance: appearance, reduceMotion: false,
+                                            reduceTransparency: false, increasedContrast: false)
+        #expect(normal.usesGlass)
+        #expect(normal.duration == 0.225)
+
+        let transparent = WorkbenchEffectsPolicy(appearance: appearance, reduceMotion: false,
+                                                 reduceTransparency: true, increasedContrast: false)
+        #expect(!transparent.usesGlass)
+        #expect(transparent.duration == normal.duration)
+
+        let contrast = WorkbenchEffectsPolicy(appearance: appearance, reduceMotion: false,
+                                              reduceTransparency: false, increasedContrast: true)
+        #expect(!contrast.usesGlass)
+
+        var lightweight = appearance
+        lightweight.lightweight = true
+        let light = WorkbenchEffectsPolicy(appearance: lightweight, reduceMotion: false,
+                                           reduceTransparency: false, increasedContrast: false)
+        #expect(!light.usesGlass)
+        #expect(light.duration == nil)
+    }
+
+    @Test func motionPolicyDisablesDecorationWithoutChangingSavedPreferences() {
+        var appearance = WorkbenchAppearance()
+        appearance.motion = 1
+        let reduced = WorkbenchEffectsPolicy(appearance: appearance, reduceMotion: true,
+                                             reduceTransparency: false, increasedContrast: false)
+        #expect(reduced.usesGlass)
+        #expect(reduced.duration == nil)
+        #expect(appearance.motion == 1)
+
+        appearance.motion = 0
+        let disabled = WorkbenchEffectsPolicy(appearance: appearance, reduceMotion: false,
+                                              reduceTransparency: false, increasedContrast: false)
+        #expect(disabled.duration == nil)
+        #expect(disabled.usesGlass)
+    }
+
     @Test func parsedMarkdownUsesActiveForegroundAndLinkPalette() async throws {
         let text = "Palette sample [link](https://example.com)"
         for palette in [WorkbenchPalette.defaultLight, WorkbenchPalette.defaultDark] {
