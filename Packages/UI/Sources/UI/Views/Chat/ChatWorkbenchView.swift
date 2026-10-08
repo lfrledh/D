@@ -1064,8 +1064,7 @@ struct ChatWorkbenchView: View {
                                     .foregroundStyle(.secondary).multilineTextAlignment(.center)
                                 if session.configuration == nil {
                                     Button(label("chooseModel", "选择模型"), systemImage: "cpu", action: onChooseModel)
-                                        .buttonStyle(.borderedProminent)
-                                        .foregroundStyle(model.chatDisplaySettings.preferences.resolvedAppearance.palette(for: colorScheme).canvasColor)
+                                        .buttonStyle(WorkbenchPrimaryButtonStyle())
                                         .accessibilityIdentifier("chat-empty-model-picker")
                                 }
                             }.frame(maxWidth: .infinity).padding(.vertical, 44)
@@ -1876,8 +1875,7 @@ struct ChatWorkbenchView: View {
                         : label("stop", "停止当前生成"), systemImage: "stop.fill") {
                         Task { await chat.cancel() }
                     }
-                    .buttonStyle(.borderedProminent)
-                    .foregroundStyle(model.chatDisplaySettings.preferences.resolvedAppearance.palette(for: colorScheme).canvasColor)
+                    .buttonStyle(WorkbenchPrimaryButtonStyle())
                     .disabled(chat.isCancelling)
                     .accessibilityIdentifier("chat-stop")
                     .help(newLabel("stopHelp", english: "Stop generation and keep received text. Resources are released before the next request.",
@@ -1885,8 +1883,7 @@ struct ChatWorkbenchView: View {
                     .chatMeasured("composer-stop", probe: layoutProbe)
                 } else {
                     Button(label("send", "发送"), systemImage: "arrow.up") { submitFromComposer(session.id) }
-                        .buttonStyle(.borderedProminent)
-                        .foregroundStyle(model.chatDisplaySettings.preferences.resolvedAppearance.palette(for: colorScheme).canvasColor)
+                        .buttonStyle(WorkbenchPrimaryButtonStyle())
                         .disabled(!ChatRunAdmission.allowsSend(session, isRunning: chat.isRunning,
                             hasPendingSave: chat.pendingSaveAttemptID != nil, hasSaveIssue: chat.saveIssue != nil,
                             invalidFields: chat.invalidParameterFields))

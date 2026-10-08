@@ -203,3 +203,20 @@ private struct WorkbenchThemeModifier: ViewModifier {
 extension View {
     func workbenchTheme() -> some View { modifier(WorkbenchThemeModifier()) }
 }
+
+/// Explicit foreground and fill keep primary actions readable in both palettes.
+/// Native borderedProminent can reinterpret foregroundStyle as its control tint.
+struct WorkbenchPrimaryButtonStyle: ButtonStyle {
+    @Environment(\.chatDisplayPreferences) private var preferences
+    @Environment(\.colorScheme) private var systemScheme
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        let palette = preferences.resolvedAppearance.palette(for: preferences.preferredColorScheme ?? systemScheme)
+        configuration.label
+            .foregroundStyle(palette.canvasColor)
+            .padding(.horizontal, 12).padding(.vertical, 7)
+            .background(palette.accentColor, in: RoundedRectangle(cornerRadius: 10))
+            .opacity(isEnabled ? (configuration.isPressed ? 0.8 : 1) : 0.45)
+    }
+}
