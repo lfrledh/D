@@ -821,7 +821,7 @@ struct ChatWorkbenchView: View {
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text(label("history", "对话")) .font(.headline)
+                Text(label("history", "对话")).font(.headline).lineLimit(1).minimumScaleFactor(0.8)
                 Spacer()
                 Button(label("new", "新建"), systemImage: "plus") { createSession() }
                     .disabled(!chat.isLoaded || chat.saveIssue != nil)

@@ -248,7 +248,8 @@ public struct DualWorkbenchView: View {
                                     selection: Binding(get: { quick.textPresentation }, set: { quick.selectTextPresentation($0) })) {
                                     Text(workflowText(language, "chat.conversation", fallback: "聊天")).tag(QuickTextPresentation.chat)
                                     Text(workflowText(language, "chat.single", fallback: "单次生成与旧记录")).tag(QuickTextPresentation.single)
-                                }.pickerStyle(.segmented).frame(maxWidth: 300).padding(.horizontal, 20)
+                                }.pickerStyle(.segmented).labelsHidden().frame(maxWidth: 360).padding(.horizontal, 20)
+                                    .accessibilityLabel(workflowText(language, "chat.textSurface", fallback: "文字工作面"))
                                     .accessibilityIdentifier("quick-text-surface")
                                 if quick.textPresentation == .chat {
                                     HStack {
