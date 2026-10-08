@@ -1,6 +1,6 @@
 # D 开发候选：原生界面第一版
 
-2026-10-08 · **UI-REFINEMENT-01 r3：无需桌面的实现与验证完成，同版原生候选待验。** 当前包未启动，未接纳main、未正式发行。具体已验/余项见[当前行动](CURRENT_ACTIONS.zh-CN.md)及[本轮任务](tasks/UI-REFINEMENT-01.md#r3-锁屏条件下连续收口2026-10-08)。
+2026-10-08 · **UI-REFINEMENT-01 r4：原生反例已定位并局部修补，新包待复验。** 当前包未启动，未接纳main、未正式发行。具体已验/余项见[当前行动](CURRENT_ACTIONS.zh-CN.md)及[本轮任务](tasks/UI-REFINEMENT-01.md#r4-解锁补验与定向修补2026-10-08)。
 
 ## 唯一推荐入口
 
@@ -8,16 +8,16 @@
 `/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261004T145523Z-continuous-closeout/delivery/启动聊天当前验收.command`
 
 只启动：
-`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/UI-REFINEMENT-01/run-20261008T045623Z-r3-no-desktop/delivery/D Native UI 2b4b9ad2.app`
+`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/UI-REFINEMENT-01/run-20261008T121613Z-r3-native/delivery/D Native UI 79f9eb53.app`
 
-代码 **2b4b9ad2215fa6f191ce43f0baf6848549e924f7**。同树构建通过；实际为既有配置的ad-hoc签名、启用App Sandbox，codesign验证通过，不是Developer ID发行包。4关键文件与构建产物一致，没有手补或重签复制包。其后只更新交接文档，最终文档SHA见R3/lead/final-receipt.json；不声称在文档提交上重新构建或测试。
+代码 **79f9eb53d6c93b18b99bda7a3eb2324e38abcec5**。同树构建通过；实际为既有配置的ad-hoc签名、启用App Sandbox，codesign验证通过，不是Developer ID发行包。4关键文件与构建产物一致，没有手补或重签复制包。其后只更新交接文档，最终文档SHA见R4/lead/final-receipt.json；不声称在文档提交上重新构建或测试。
 
-入口使用隔离偏好`B7DA6B57-4CE1-49DF-9917-59FA18A8870F`；已有D时拒绝双开，不关闭你的App。旧8cf功能基线及02df等历次候选保留，不是另一份推荐入口。本轮按用户桌面不可用条件未执行启动器，也未创建App或Finder窗口。
+入口使用隔离偏好`B7DA6B57-4CE1-49DF-9917-59FA18A8870F`；已有D时拒绝双开，不关闭你的App。旧8cf功能基线及02df等历次候选保留，不是另一份推荐入口。本轮已打开旧2b4作独立原生检查并正常退出；新79f构建后再次锁屏，尚未执行新包入口。
 
 ## 不运行模型的试用
 
 通过“文件→打开项目”打开专属副本：
-`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/UI-REFINEMENT-01/run-20261008T010729Z-no-desktop/gui/UI acceptance.dproject`
+`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/UI-REFINEMENT-01/run-20261008T121613Z-r3-native/gui/UI acceptance.dproject`
 
 带24节合成长文、固定图片/视频/音频和测试图。展示记录注明**受控媒体展示记录，不是模型执行结果**；没有为本轮重新生成。text:fixture不是可运行模型；未选真实模型时就绪失败/生成不可用属于夹具预期。
 
@@ -38,7 +38,7 @@
 
 ## 复用的r2真实截图
 
-以下是旧02df/10ee包的原生截图，不是网页原型；全部数据为隔离夹具。它们说明沿用的界面布局，不能证明r3阅读恢复、fit或拖放已经原生通过。本轮没有探测桌面或补拍截图。
+以下是旧02df/10ee包的原生截图，不是网页原型；全部数据为隔离夹具。它们说明沿用的界面布局，不能证明r3阅读恢复、fit或拖放已经原生通过。本轮2b4真实操作截图在R4/gui；旧布局截图不代表79f修补已验。
 
 ![02df6f1c：窄窗聊天、左模型参数与底部输入](images/ui-refinement-chat-02df6f1c.png)
 
@@ -48,10 +48,10 @@
 
 ## 已验与仍需检查
 
-- r3：29方法/5套件通过，包含阅读状态归属/失效、fit测量、端口实例、拖动值逻辑及隐藏文件接收；另1方法通过真实Controller封装、保存、Store重开和边界编译。没有窗口、真实拖放或模型运行。隐藏接收反例先失败后通过；测试快照与2b4代码对应关系见R3/lead/validation-summary.json。
-- 复用历史：10ee普通App框选/多移Undo/手形/点击连接/删除恢复/封装创建，以及02df冷开草稿、窄窗、固定图像与视频、设置返回结果保留。r2的12项纯值、3项hosting及r1的59项不累计为r3通过率。
-- 待原生路径一：现有24节长文离底→分类/模式往返→原段落恢复；Finder左侧及空白真实松手→附件预览→保存冷开、源文件与无发送保护。沿途补大字号、轻量及系统辅助显示检查。
-- 待原生路径二：端口实际拖连/拒绝、节点移动提交/Undo、封装调用与保存冷开；面板过渡时fit禁用、稳定后一次适配且节点不重排。旧viewport方法15处失败及随后visible/key前置失败原样保留，未删断言、未将前置失败认定为锁屏；该窗口方法仍待执行。
-- 不需要你现在操作，不重办语音、HF、宏信任或搜索凭据；F26继续明确延期。main保持91bef旧已验基线，新组合待验，不宣布最终UI或发行通过。
+- r4定向检查：8个UI组件/几何方法通过；2个Controller/Store方法通过，包括空/Unicode文字封装实际调用、资产内容与重开。阅读与祖先resize的新增断言在旧实现先失败。原viewport窗口方法仍停在visible/key/host前置，不能写为通过。代码/测试精确对应见R4/lead/code-version.json。
+- 2b4普通App：节点移动→单次Undo、点击端口建边、两栏收起后fit通过；长文分类往返和既有文字工具invoke失败，促成本轮79f修补。Finder和端口拖动缺有效命中证据，未当作产品根因。
+- 新79f仍需：长文内部阅读点分类/模式往返；新建正确接口的工具实际调用与冷重开；面板过渡fit、稳定后一击及不重排。旧`Two text inputs v1`保留错误接口，需编辑副本/另存工具，不会静默迁移。
+- Finder左侧/空白松手→附件/预览/保存冷开仍未完成；大字号、轻量、系统辅助显示保留。无需重复真人输入法/语音或模型生成。F26继续延期。
+- main保持91bef旧已验基线，新组合未通过完整原生验收，不宣布最终UI或发行通过。
 
-R3证据根：`D-Development/AgentTrials/UI-REFINEMENT-01/run-20261008T045623Z-r3-no-desktop`。`lead/validation-summary.json`、`review-summary.json`、`delivery-r3.json`和`final-receipt.json`分别记录检查、审阅、包与最终版本。r2历史原生结果继续在`run-20261008T010729Z-no-desktop/lead/native-results.json`，不覆盖旧证据。
+R4证据根：`D-Development/AgentTrials/UI-REFINEMENT-01/run-20261008T121613Z-r3-native`。`lead/native-first-pass.json`、`review-summary.json`、`code-version.json`、`delivery-r4.json`、`protection-end.json`及`final-receipt.json`记录原生、审核、版本、包、保护与远端。旧r2/r3证据保留、按未变范围复用，不累计为本轮通过率。

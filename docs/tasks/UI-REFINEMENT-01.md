@@ -139,3 +139,38 @@ R3=`D-Development/AgentTrials/UI-REFINEMENT-01/run-20261008T045623Z-r3-no-deskto
 保护：旧源01758b8个人scheme原orderHint 1→6、SHA256 ca3635…、索引与未暂存状态保持；main/旧release91bef不动。旧项目/模型/普通App不写入，新增Store夹具仅在R3/tmp。已结束本轮自有构建/检查进程，不声称控制或清理其他进程。最终源码与文档差异、远端、保护复核见外部回执。
 
 状态：**当前可独立的实现、无窗口验证与交付准备完成；新组合仍待原生验收。** 没有新的账号/设备/权限阻塞；F26仍为明确延期。到此停止，不自动等待/探测解锁，不强合main、不发布，也不追加UI或全局重构。
+
+## r4 解锁补验与定向修补（2026-10-08）
+
+用户最新授权为已解锁、不能亲自操作。Lead先独立完成可做的原生路径；没有重办本人输入法/录音/试听，没有模型生成。起点候选/远端`dcd2b80a06a2f48f10d681c366bc2e94bf5ec170`，实际先验包为代码`2b4b9ad2215fa6f191ce43f0baf6848549e924f7`；源/main与r3相同。R4=`D-Development/AgentTrials/UI-REFINEMENT-01/run-20261008T121613Z-r3-native`，项目为r2夹具的新副本，未操作用户作品。
+
+### 实际原生结果与修补
+
+| 路径 | 2b4普通App直接结果 | 本轮处理与证据边界 |
+|---|---|---|
+| 长文分类往返 | COPY-21、滚动值约0.9147→图像→文字后回到Synthetic Markdown标题、约0.3178；后续观测未恢复，草稿不变。 | `ChatReadingMarkers.restore`把临时尺寸不匹配返回成功，且align不检查约束后的实际位移。改为继续原5×20ms有界恢复，并核实际offset；保留票据/版本/用户滚动和搜索保护。新增尺寸暂态/不可达点断言旧版6处失败、修后通过。**新包原路径未复验**；未证明onDisappear捕获时序及后续排版全已解决，不再猜补。 |
+| 画布移动/Undo/连接 | 实际移动已连节点并提交；实际More→Undo一次恢复图节点/边/布局，资产与runs不变。点击端口建边成功。两次端口drag没有边，没有可靠接收命中证据。 | `move-undo-verification.json`、gui/06—10。只关闭移动/Undo和点击建边；端口拖连仍未验，不用点击代替。 |
+| fit | 两侧关闭后可用，一次适配至89%；另一稳定面板状态仍禁用。 | 原probe只随document布局采样，祖先ScrollView独立resize漏报。无窗口真实NSScrollView反例旧版3断言失败；新增frame/clip观察、去重和拆卸清理后通过。不扩大容差、不重排节点；新包面板动画时序待验。 |
+| 封装调用 | 已保存`Two text inputs v1`从库插入→确认计划→提交，父invoke实际失败“数据类型不符”；两个空文字子步骤已成功发布text asset。 | 表单默认把文字资产写作纯文字schema。仅改新草稿提议，按实际内置input/template版本、value/field/human配置或固定invoke摘要取类型；显式接口优先、旧类型后备保留。旧v1/摘要不覆写，运行校验不放宽。真实Controller提议→extract→run→读资产→保存重开通过，含空与Unicode文字、旧工具不变、零模型请求；**新建封装的原生调用待验**。 |
+| Finder | 用本轮复制CSV实际CUA按住/跨窗移/松开，没有附件或反馈。 | 没有足够目标命中证据，不认定产品拒绝；原CSV、草稿/消息不变。没有选择器/粘贴/直接服务代替拖放。新壳层真正附件→预览→冷开仍缺。 |
+
+实现/交付代码 **`79f9eb53d6c93b18b99bda7a3eb2324e38abcec5`**，7个生产/测试文件。Lead直接实施，两个既有只读非实现者分别审阅阅读与封装/viewport，没有新写Worker或模型测试。审阅发现初稿漏human显式结果schema，提交前补回并增加真实ToolBoundaryDraft boolean反例；不是用户接口缩减。封装资产重开后字节读取按审阅意见加入同一方法。
+
+### 验证与版本
+
+- `local-red`先遇fixture修改let字段的编译错误；改为构造新不可达point后，`local-red-fixed`真实执行：阅读6断言、ancestor resize 3断言失败。原错误和反例均保留。
+- `local-green`：**1 XCTest几何方法＋7 Swift Testing方法通过**，包含真实表单提议、视口尺寸、几何/平移边界；不是8次普通App验收。之后human保护补充由`viewport-native`中的该表单方法复验通过；未变阅读/视口实现复用，不重跑同质矩阵。
+- `tool-execution-final`：**2 Controller/Store方法通过**，在精确79f代码上执行，含封装纯程序真实执行、关闭后重新读输出字节及原工具/历史保护。初次同组未包含重开后字节读取，最后补断言再跑，不叠加计数。
+- `viewport-native`的保留窗口方法再次失败于visible/key/host前置；未进入wheel/middle/hand等行为断言。与随后工具明确报告锁屏是两条证据，不能把前置失败归因为锁屏、也不能删原断言。需要恢复时区分宿主激活和产品行为。
+- 同树D Nodes / Debug构建通过（36.003秒）；既有ad-hoc sandbox签名，codesign通过，4关键文件复制一致。没有手补产物/签名设置变更。新App为R4/delivery/D Native UI 79f9eb53.app；唯一启动器原位指向它。
+- 构建复制后，CUA选择启动器明确报告Mac锁屏。停止桌面，没有重试/轮询/系统策略更改；**79f新包尚未启动**。旧2b4已正常Cmd-Q，工具isRunning=false。任务Finder第一次Cmd-W后重新取得Desktop，旧drop-input不再显示（后续证据`native-end-state.json`，首次未确认记录保留）；最后选择启动器时锁屏，是否曾建立新的Finder窗口无法确认，不声称清理用户窗口或全部系统进程。
+- 受测未提交差分与79f代码对应见R4/lead/code-version.json；普通App此次只验2b4。最终仅文档SHA放外部回执，不自引用amend，不宣称在未来提交上测过。
+
+### 保护、剩余与接续
+
+- `protection-end.json`：源01758b8、个人scheme SHA256 ca3635…、索引9c76916b与未暂存orderHint 1→6均保持。候选main未接纳。R4夹具原52文件中50字节不变、无缺失；project.json记录本轮图/纯程序结果，quick-creation只有revision37→40（`quick-state-diff.json`），quick-chat完整字节不变。原资产/历史snapshot/CSV保持，没有自动发送。未改普通App、模型或用户作品。
+- 已结束本轮所有自有构建/检查，窗口测试正常退出进程；旧版测试D正常退出，新包未启动。完整Lead/审核token与订阅费用unknown，耗时只采用各result.json，不重算历史。
+- 唯一集中队列原位更新。恢复后先79f重复COPY-21→图像/文字、Quick/Canvas；新建正确输出接口工具→执行→保存冷开；面板过渡fit及稳定后一击，节点布局保持。再补实际端口drag、Finder真实松手/预览/冷开与大字号/轻量显示。已有r2布局/模型/本人证据按未受影响范围复用。
+- 没有新的账号、设备或权限办理；F26继续延期。工具不足时只留下最短真人对照，当前不催本人。现状态为**定向修补与可独立检查完成，组合原生部分完成且新包待验**，不宣布最终UI、main接纳或发行通过。
+
+证据索引：R4/lead/{native-first-pass.json,tool-run-failure.json,move-undo-verification.json,local-red-fixed-result.json,local-green-result.json,viewport-native-result.json,tool-execution-final-result.json,review-summary.json,code-version.json,delivery-r4.json,protection-end.json,final-receipt.json}；gui保留本轮2b4实际状态与截图。旧包/分支/证据不删除。正常推送候选后停在待解锁审计检查点。
