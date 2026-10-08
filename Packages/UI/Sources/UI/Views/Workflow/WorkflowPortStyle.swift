@@ -3,13 +3,13 @@ import SwiftUI
 
 /// One semantic mapping for port dots and the edges sourced from those ports.
 enum WorkflowPortStyle {
-    static let legend: [(String, WorkflowPortDefinition)] = [
-        ("文字", .init("text", "", kinds: [.text])),
-        ("图像", .init("image", "", kinds: [.image])),
-        ("视频", .init("video", "", kinds: [.video])),
-        ("音频", .init("audio", "", kinds: [.audio])),
-        ("音符与音高", .init("notes", "", kinds: [.notes])),
-        ("通用或未决", .init("generic", "", kinds: [.list]))
+    static let legend: [(key: String, fallback: String, port: WorkflowPortDefinition)] = [
+        ("text", "文字", .init("text", "", kinds: [.text])),
+        ("image", "图像", .init("image", "", kinds: [.image])),
+        ("video", "视频", .init("video", "", kinds: [.video])),
+        ("audio", "音频", .init("audio", "", kinds: [.audio])),
+        ("notes", "音符与音高", .init("notes", "", kinds: [.notes])),
+        ("generic", "通用或未决", .init("generic", "", kinds: [.list]))
     ]
 
     static func kind(for port: WorkflowPortDefinition) -> WorkflowDataKind? {

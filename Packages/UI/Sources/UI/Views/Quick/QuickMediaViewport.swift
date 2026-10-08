@@ -14,6 +14,11 @@ struct QuickMediaViewport: View {
     @State private var offset = CGSize.zero
     @GestureState private var dragOffset = CGSize.zero
     @GestureState private var magnification: CGFloat = 1
+    @Environment(\.dLanguageStore) private var language
+
+    private func refinementText(_ key: String, fallback: String) -> String {
+        workflowText(language, "refinement.quick.media." + key, fallback: fallback)
+    }
 
     var body: some View {
         VStack(spacing: 8) {
@@ -28,7 +33,7 @@ struct QuickMediaViewport: View {
                     } else if let player {
                         VideoPlayer(player: player).frame(width: proxy.size.width, height: proxy.size.height)
                     } else if let issue { Text(issue).foregroundStyle(.red).padding().textSelection(.enabled) }
-                    else { ProgressView("正在读取预览…") }
+                    else { ProgressView(refinementText("loading", fallback: "正在读取预览…")) }
                 }.frame(width: proxy.size.width, height: proxy.size.height).clipped()
                     .contentShape(Rectangle())
                     .gesture(DragGesture().updating($dragOffset) { value, state, _ in
@@ -52,10 +57,10 @@ struct QuickMediaViewport: View {
             if image != nil {
                 HStack {
                     Spacer()
-                    Button("缩小", systemImage: "minus") { zoom = max(1, zoom / 1.25); if zoom == 1 { offset = .zero } }.labelStyle(.iconOnly)
+                    Button(refinementText("zoomOut", fallback: "缩小"), systemImage: "minus") { zoom = max(1, zoom / 1.25); if zoom == 1 { offset = .zero } }.labelStyle(.iconOnly)
                     Text("\(Int(zoom * 100))%").monospacedDigit().font(.caption)
-                    Button("放大", systemImage: "plus") { zoom = min(12, zoom * 1.25) }.labelStyle(.iconOnly)
-                    Button("适合窗口", systemImage: "arrow.up.left.and.arrow.down.right") { zoom = 1; offset = .zero }
+                    Button(refinementText("zoomIn", fallback: "放大"), systemImage: "plus") { zoom = min(12, zoom * 1.25) }.labelStyle(.iconOnly)
+                    Button(refinementText("fit", fallback: "适合窗口"), systemImage: "arrow.up.left.and.arrow.down.right") { zoom = 1; offset = .zero }
                         .accessibilityIdentifier("quick-media-fit")
                 }
             }
@@ -70,9 +75,9 @@ struct QuickMediaViewport: View {
                 } else if reference.kind == .image {
                     let data = try await store.workflowData(reference)
                     try Task.checkCancellation()
-                    guard let decoded = NSImage(data: data) else { throw WorkflowIssue("图像不可读取；原素材仍保留。") }
+                    guard let decoded = NSImage(data: data) else { throw WorkflowIssue(refinementText("imageUnreadable", fallback: "图像不可读取；原素材仍保留。")) }
                     image = decoded
-                } else { issue = "该结果请从详情查看。" }
+                } else { issue = refinementText("viewInDetails", fallback: "该结果请从详情查看。") }
             } catch is CancellationError { }
             catch { issue = error.localizedDescription }
         }
