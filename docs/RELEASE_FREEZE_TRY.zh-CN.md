@@ -1,50 +1,56 @@
 # D 开发候选：原生界面第一版
 
-2026-10-08 · **UI-REFINEMENT-01组合原生验收未完成**。代码/非交互检查与普通签名构建已完成，桌面再次锁屏后暂停窗口测试。新包不替换普通D、不接纳main、不作为正式发行包。详细状态见[当前行动](CURRENT_ACTIONS.zh-CN.md)及[任务证据](tasks/UI-REFINEMENT-01.md)。
+2026-10-08 · **UI-REFINEMENT-01 r2：实现已补齐，组合原生验收部分完成。** 独立候选可试用，未接纳main、未正式发行。具体已验/余项见[当前行动](CURRENT_ACTIONS.zh-CN.md)及[本轮任务](tasks/UI-REFINEMENT-01.md)。
 
-## 唯一推荐试用入口
+## 唯一推荐入口
 
-继续双击原有入口（已经原位指向新候选）：
+双击原入口（已原位更新）：
 `/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261004T145523Z-continuous-closeout/delivery/启动聊天当前验收.command`
 
-本次只打开：
-`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/UI-REFINEMENT-01/run-20261007T184130Z/delivery/D Native UI baf91280.app`
+只启动：
+`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/UI-REFINEMENT-01/run-20261008T010729Z-no-desktop/delivery/D Native UI 02df6f1c.app`
 
-代码 **baf9128093fa214bf4ddf340331390331d9873dc**；普通签名构建33.70秒通过，复制关键文件一致、签名验证通过，没有手补。该最终包尚未原生操作，不把之前bb6窗口或fccf测试当它已通过。
+代码 **02df6f1c11f7043c4b3f395e0c05bbab7d3c3940**。同树普通签名构建通过；4关键文件与构建产物一致且验收后未变，没有手补或重签复制包。其后候选7ae57793仅改测试驱动，最终文档SHA见外部final-receipt，不声称该App由文档提交重建。
 
-入口使用独立偏好`B7DA6B57-4CE1-49DF-9917-59FA18A8870F`，已有D时拒绝双开，不关闭用户应用。旧8cf功能包与入口备份保留在原位置及本轮delivery/previous-launcher.command；它们不是另一份新界面推荐入口。不要同时打开旧测试版。
+入口使用隔离偏好`B7DA6B57-4CE1-49DF-9917-59FA18A8870F`；已有D时拒绝双开，不关闭你的App。旧8cf功能基线和历次候选保留，不是另一份推荐入口。验收结束已正常关闭本轮D和Finder窗口。
 
-## 不运行模型也能检查的试用材料
+## 不运行模型的试用
 
-打开“文件→打开项目”，选：
-`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/UI-REFINEMENT-01/run-20261007T184130Z/gui/UI acceptance.dproject`
+通过“文件→打开项目”打开专属副本：
+`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/UI-REFINEMENT-01/run-20261008T010729Z-no-desktop/gui/UI acceptance.dproject`
 
-这是独立测试副本，带既有24节长文、图片、视频和音频。媒体来自已存在的固定产物；为展示写入的记录明确标注**受控媒体展示记录，不是模型执行结果**，没有假模型或新推理。未选真实模型时生成按钮不可用是预期；无需下载、登录或生成。
+带24节合成长文、固定图片/视频/音频和测试图。展示记录注明**受控媒体展示记录，不是模型执行结果**；没有为本轮重新生成。text:fixture不是可运行模型；未选真实模型时就绪失败/生成不可用属于夹具预期。
 
-1. 顶部中央是文字/图像/视频/音频；右上相邻圆钮直接切换工作模式和打开设置。每侧圆钮收栏，中央回收空间；窄窗临时只展开一侧。
-2. 图像/视频中央固定预览，右侧选候选；图片可放大拖动、适配复位。视频保留播放器时间轴和原音轨。长参数与来源从详情看；浏览旧结果不改下一次输入。
-3. 设置包含外观、文件、网络、凭据、语言、操作与辅助。外观可分别改浅深色号、透明度、动效和轻量模式；低对比会提示，可恢复默认。网络/凭据沿原服务，不因打开设置而发起搜索，F26不在本轮办理。
-4. 工作流可在原小样例或新测试图中检查指针框选/多选移动、手形平移、原删除/Undo和封装。右下适配只改变视野，不重排。不要在真实作品上试未验操作。
-5. 文字页沿用当前聊天与输入组件。最终包仍需补可见外链取消、阅读恢复/Bottom以及输入区CSV左侧和右下拖放；不重复跑模型，也不默认要求本人组字或试听。
-
-以上是待完成的实际步骤，不是已执行通过列表。桌面重新可用时由Lead先独立完成；无须现在本人操作。
+1. 顶部文字/图像/视频/音频筛选；右上圆钮切快速/工作流或开设置。
+2. 文字左栏是模型与下一次参数，切“Conversations/会话”管理会话；右栏是资料/成果，底部仍是原输入器。面板可收起。合成长文可浏览、搜Section、点可见链接再取消；不要把文本夹具发送给模型。
+3. 图像/视频固定在中央，收栏后扩展；前后按钮或右侧选择候选。图片放大/拖动/适配只改预览，视频保留时间轴/原音轨。结果详情关闭后可再开设置。
+4. 画布“指针”在空白处框选，再从卡片非控件区一起移动；“手形”只平移。选端口也可点击输出再点击输入连接。删除及Undo、原有封装仍在；右下恢复视图不重排节点。
+5. 齿轮与Cmd-,共享分类/目标。外观可改浅深色、背景通透、动效及轻量模式；模型参数不放在全局设置。网络/凭据只是现有服务入口，F26真实调用仍延期。
 
 ## 同树 Xcode Run
 
-打开：
-`/Volumes/CodexProjects/Codex/D-Worktrees/D-UI-REFINEMENT-01/D.xcworkspace`
+打开 `/Volumes/CodexProjects/Codex/D-Worktrees/D-UI-REFINEMENT-01/D.xcworkspace`，选 **D Nodes / My Mac / Debug**。
 
-选择 **D Nodes / My Mac / Debug**。工作树在baf生产代码后只追加本轮说明；最终SHA见任务回执。本机忽略文件`Development/Development.local.xcconfig`复用既有签名，资源路径：
+本机`Development/Development.local.xcconfig`沿用现有签名，资源为：
 `/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261004T041401Z-chat-resume/delivery/resources-with-python`
 
-正常资源阶段嵌入原引擎与ChatPython，无需手补App、重装模型或改变签名方案。命令行同树构建已通过；本次没有实际点击Xcode Run，普通GUI组合验证尚缺。换机按[开发资源说明](../Development/README.md)准备环境。
+正常构建阶段嵌入已有引擎，不需要手补App或重复下载。命令行同树签名构建已通过；本轮没有另点Xcode Run。换机依[开发资源说明](../Development/README.md)，本包不是已完成首次分发验证的安装包。
 
-## 证据与边界
+## 本轮真实截图
 
-- fccf8889810a2340e0c151aa3d307cfeb27e30fa的59项/8套件通过，含外观/Markdown属性、Quick组字宿主、Canvas几何/手势门禁及原生隐藏保护。另一次原子移动与媒体Store夹具独立通过，不凑合计通过率。
-- baf比上述受测组合多窄窗检查器显式展开、设置按钮文案和缩回100%居中；构建通过，最后展示变化未做窗口测试。
-- 唯一现有新壳层截图如下，来自**bb6f5f1c中间版本**，不是最终主题/Canvas截图。最终四分类、设置、Canvas同版截图仍待桌面。
+以下是本机普通签名App的原生截图，不是网页原型。全部数据为隔离夹具。
 
-![中间壳层图像空态，bb6f5f1c，非最终验收](images/ui-refinement-shell-bb6f5f1c.png)
+![02df6f1c：窄窗聊天、左模型参数与底部输入](images/ui-refinement-chat-02df6f1c.png)
 
-main与旧release候选维持91bef7d720a8b6cb923207ef787230f36496f4cf；旧8cf功能基线及其真人/模型证据保留。新候选没有修改推理路径，不重复模型生成。README中备份/独立恢复、冷启和固定自然视频的过时描述仅按已有代表证据校正，不外推全场景、干净机器、NAS或正式发行。首次使用、无权重分发/依赖封装、升级与渠道责任仍在。
+![02df6f1c：两侧收起、固定图像结果与缩放](images/ui-refinement-image-02df6f1c.png)
+
+![10ee7b9c：真实框选两个节点；02df相对10ee仅改文字页标签](images/ui-refinement-canvas-10ee7b9c.png)
+
+## 已验与仍需检查
+
+- 10ee：12项纯值/路由及3项聊天hosting通过。普通App完成框选、多移一次Undo、手形、点击连线、删除恢复、封装创建、编辑Undo、Bottom和可见外链取消。02df仅标签小修，完成冷开草稿、窄窗标签、图像候选/缩放/收栏、视频到结尾及设置返回。
+- 旧viewport hosting原15处失败；驱动按当前工具规则对齐后，在窗口visible/key前置失败，不能写为通过。r1的59项不累计为本版通过率。
+- 新壳层Finder拖入仍无可靠自动目标命中；端口拖连未成功、点击连接已成功。封装冷开边界、分类往返精确阅读点、收栏过渡中fit、实际系统辅助偏好及大字号留待定点核验。旧真人输入/文件接收证据保留，不冒充新组合全验。
+- 不需要你现在操作，不重办语音、HF、宏信任或搜索凭据。main保持91bef旧已验基线；新UI验收、功能冻结与正式发行分别判断。
+
+证据根：`D-Development/AgentTrials/UI-REFINEMENT-01/run-20261008T010729Z-no-desktop`。`lead/native-results.json`汇总成功、未验及无效早期操作，`lead/final-receipt.json`绑定最终候选/远端版本。

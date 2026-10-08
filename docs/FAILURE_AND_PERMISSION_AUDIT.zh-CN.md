@@ -2,20 +2,21 @@
 
 ## 当前唯一集中队列（2026-10-08，UI-REFINEMENT-01）
 
-最新现场：UI-REFINEMENT新组合构建后工具返回Mac锁屏，已暂停GUI；没有新的必办本人点击、组字或试听事项，也不催解锁。旧52ce拖入、8cf阅读和其他本人结果保留，不冒充新壳层验收。F26继续延期。
+最新现场：用户已解锁但不能操作；Lead已利用桌面完成部分原生验收，本轮未要求本人点击/录音/组字。最终02df测试App与本轮Finder窗口正常关闭。仍有具体组合余项，不能全部归因于锁屏。F26继续延期。
 
 | 事项 | 当前事实 | 最短接续与关闭条件 |
 |---|---|---|
-| UI-REFINEMENT-01：新壳层组合原生验收 | baf91280普通签名包已构建、未做最终窗口操作。bb6中间壳层曾完成四分类/图像空态/收栏/设置；当前锁屏与实现缺陷分开。 | 下次桌面可用后由Lead先做固定媒体、窄窗收栏/主题、Canvas指针手形框选封装、阅读/附件代表路径，留同版截图。无需本人重做输入法/语音/模型资格。完整步骤与唯一包见当前行动/试用指南。 |
+| UI-REFINEMENT-01：原生组合余项 | 02df普通App已冷开、窄窗、图像候选/缩放/收栏、视频播放及详情→设置；10ee同底层有框选/Undo/手形/点击连接和阅读短回归。 | Lead先补新壳层Finder真实命中、端口拖连归因、封装冷开边界、分类阅读点和收栏过渡fit。大字号/系统辅助实际效果按原任务保留；不要求本人重做旧IME/语音。 |
+| UI-REFINEMENT-01：旧viewport测试驱动 | 旧方法15处失败；已显式选择工具、保留断言、核事件/坐标；7ae单方法在窗口visible/key前置失败，行为阶段未进入。 | 工程驱动问题独立定位，不将普通App操作抵销该失败，也不无依据再改产品。不是本人权限申请。 |
 | H32：长单条Markdown阅读位置 | 已关闭本轮反例。8cf移除非空会话多余尾占位，原3失败保持28点标准通过；普通App上滚/Bottom、内部恢复、搜索及外链取消通过。 | 见RPosition/lead/compact-{tail-tests,native-result}；无需本人重复阅读、输入或生成。 |
 | H32：Finder文件拖入 | 已关闭左侧拒收反例。52ce本人先只悬停（不计通过），随后left.csv左侧与blank.csv右下实际松手均成功；Lead双预览、保存正常退出、冷开与原件/草稿保护通过。 | 见RPosition/lead/unlocked-drop-native-result.json。CSV无需确认框；外层输入托盘含16点padding，接收区略大于深色框；移出后加号短延迟仅留观察，未证实为刻意设计，不外推全部格式。8cf不改该路径，无需再拖。 |
 | H32：输入迟滞 | 本轮定位每次编辑重复查询声音约63ms，缓存后对应局部body约0.17–0.25ms；本人确认“现在差不多正常了”。偶发未确认字母消失后来未复现，本人说明其他软件亦偶有。 | 持续迟滞本轮收口；偶发组字只留观察，不加猜测补丁、不重测候选随动。没有新的确定反例前无需本人再输。 |
 | F31：英语识别与朗读 | 9230英语本人确认正确→审核采用未发草稿→冷重开、系统朗读听感通过；3cc默认声音别名解析修补后，代理实际Read→Pause→Resume→Stop通过。原失败和原声保留。 | 本人事项关闭，不把此次代理控制写作新的真人听感，也不追认旧失败根因。 |
 | F26：本人明确批准延期 | Brave/博查真实调用、凭据办理及完整联网验收退出本轮功能/视觉转段门槛；已有代码及未实调状态保留。 | 本轮不办理、不催、不注册/购买/索key、不新增provider或爬虫。 |
 
-最新证据与版本见[当前行动](CURRENT_ACTIONS.zh-CN.md)和[试用指南](RELEASE_FREEZE_TRY.zh-CN.md)。旧功能验收D与Finder窗口已正常关闭；本轮05aa自有新实例核身份后SIGTERM结束（非正常GUI退出），最终baf未启动。Terminal UI此前被工具安全策略拒绝，旧已结束启动器窗口可能仍在，未绕过也不称已清理。可日后手动关闭，不是工程审批前提。历史RDesktop的旧失败继续保留，本次以RPosition/lead/unlocked-closeout-receipt.json记录实际集成与保护。
+最新代码/App/候选/保护见[当前行动](CURRENT_ACTIONS.zh-CN.md)、[任务r2](tasks/UI-REFINEMENT-01.md)及[唯一试用入口](RELEASE_FREEZE_TRY.zh-CN.md)。当前无新必办本人项。自动跨窗无命中与产品失败分开；确需真人区分时只提出一个有现场的最短对照，不现在催办。旧Terminal窗口关闭未确认的历史继续保留，不绕过工具拒绝。
 
-复用历史：RHumanNow=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261006T115611Z-human-queue` 的英语/听感；RNow=`/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261006T110535Z-unlocked-bottom` 的Bottom/搜索/记忆/MCP。旧失败、预算及原件保持，不刷新历史执行日期。详细功能状态只在唯一F表，不在本队列重复工程清单。
+复用历史：RHumanNow=`D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261006T115611Z-human-queue`英语/听感；RNow=`D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261006T110535Z-unlocked-bottom`阅读/MCP；RPosition=`D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261007T132148Z-drop-position`旧真人拖入/冷开。原失败、预算、原件与日期保持，详细功能状态只在唯一F表。
 
 ## 历史快照：当前队列之前的本轮过程
 
