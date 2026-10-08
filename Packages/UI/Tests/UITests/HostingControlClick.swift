@@ -78,8 +78,10 @@ import AppKit
         guard let down = event(.leftMouseDown), let up = event(.leftMouseUp) else { return reject("event-nil") }
         // Queue the complete pair before dispatch: a native control may consume
         // mouse-up synchronously in its mouse-down tracking loop.
+        let drag = releaseAt == nil ? nil : event(.leftMouseDragged)
+        guard releaseAt == nil || drag != nil else { return reject("drag-event-nil") }
         NSApp.postEvent(up, atStart: true)
-        if releaseAt != nil, let drag = event(.leftMouseDragged) { NSApp.postEvent(drag, atStart: true) }
+        if let drag { NSApp.postEvent(drag, atStart: true) }
         NSApp.postEvent(down, atStart: true)
         guard let queued = NSApp.nextEvent(matching: .leftMouseDown,
             until: Date(timeIntervalSinceNow: 0.1), inMode: .default, dequeue: true) else { return reject("dequeue-empty") }
@@ -99,7 +101,9 @@ import AppKit
                 until: Date(timeIntervalSinceNow: 0.1), inMode: .default, dequeue: true) else { break }
             guard remaining.windowNumber == window.windowNumber, remaining.eventNumber == identity else {
                 NSApp.postEvent(remaining, atStart: true)
-                return true // Own mouse-up was consumed by synchronous control tracking.
+                // Do not claim a negative hit assertion passed when delivery is
+                // ambiguous. The unrelated event remains queued for its owner.
+                return false
             }
             NSApp.sendEvent(remaining)
         }

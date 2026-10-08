@@ -57,24 +57,28 @@ import Testing
             let button = try element(id)
             let frame = button.accessibilityFrame()
             try #require(frame.width > 20 && frame.height > 20)
+            if let width: CGFloat = ["circle": 40, "icon": 28, "row": 198][id] {
+                try #require(abs(frame.width - width) < 1)
+            }
             // Centers plus four points 1 pt inside the visible body's cardinal edges.
             var points = [CGPoint(x: 0.5, y: 0.5), CGPoint(x: 1 / frame.width, y: 0.5),
                 CGPoint(x: 1 - 1 / frame.width, y: 0.5), CGPoint(x: 0.5, y: 1 / frame.height),
                 CGPoint(x: 0.5, y: 1 - 1 / frame.height)]
             if id == "circle" { points += [CGPoint(x: 0.18, y: 0.18), CGPoint(x: 0.82, y: 0.82)] }
             for point in points {
-                let before = calls[id, default: 0]
+                var expected = calls
+                expected[id, default: 0] += 1
                 try #require(HostingControlClick.send(to: button, in: host, unitPoint: point))
                 settle()
-                #expect(calls[id, default: 0] == before + 1)
+                #expect(calls == expected)
             }
-            let before = calls[id, default: 0]
+            let before = calls
             try #require(HostingControlClick.send(to: button, in: host, unitPoint: CGPoint(x: 1 + 3 / frame.width, y: 0.5)))
             settle()
-            #expect(calls[id, default: 0] == before)
+            #expect(calls == before)
             try #require(HostingControlClick.send(to: button, in: host, releaseAt: CGPoint(x: 1.8, y: 0.5)))
             settle()
-            #expect(calls[id, default: 0] == before)
+            #expect(calls == before)
         }
         let enabledCalls = calls
         host.rootView = root(disabled: true)
