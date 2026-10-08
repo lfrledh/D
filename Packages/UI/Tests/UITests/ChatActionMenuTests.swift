@@ -4,6 +4,31 @@ import Testing
 
 @Suite("Native chat action menu lifecycle", .serialized)
 @MainActor struct ChatActionMenuTests {
+    @Test func disablingControlRejectsTrackedSelectionAndCanEnableAgain() throws {
+        var calls = 0
+        let items: [ChatActionMenuItem] = [.init(id: "rename", title: "Rename") { calls += 1 }]
+        let (coordinator, button, menu) = fixture(items)
+        defer { coordinator.dismantle(button) }
+        coordinator.menuWillOpen(menu)
+        let original = try #require(menu.item(at: 1))
+        coordinator.update(button, title: "Actions", accessibilityIdentifier: "actions", items: items, isEnabled: false)
+        #expect(!button.isEnabled)
+        coordinator.selectItem(original)
+        endTracking(coordinator, menu: menu)
+        coordinator.drainAfterTracking()
+        coordinator.selectItem(original)
+        #expect(!button.isEnabled && calls == 0)
+        coordinator.update(button, title: "Actions", accessibilityIdentifier: "actions", items: items, isEnabled: true)
+        #expect(button.isEnabled)
+        coordinator.selectItem(original)
+        #expect(calls == 0)
+        coordinator.menuWillOpen(menu)
+        coordinator.selectItem(try #require(menu.item(at: 1)))
+        endTracking(coordinator, menu: menu)
+        coordinator.drainAfterTracking()
+        #expect(calls == 1)
+    }
+
     @Test func pullDownTitleCannotConsumeTheFirstAction() throws {
         var calls = 0
         let (coordinator, button, menu) = fixture([

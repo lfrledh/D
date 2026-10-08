@@ -51,7 +51,7 @@ public struct WorkbenchSettingsView: View {
                         Button { selected = section } label: {
                             Text(title(section)).frame(maxWidth: .infinity, alignment: .leading).padding(10)
                                 .background(selected == section ? Color.accentColor.opacity(0.12) : .clear, in: RoundedRectangle(cornerRadius: 10))
-                        }.buttonStyle(.plain).accessibilityIdentifier("settings-" + section.rawValue)
+                        }.buttonStyle(WorkbenchRowButtonStyle(cornerRadius: 10)).accessibilityIdentifier("settings-" + section.rawValue)
                             .accessibilityAddTraits(selected == section ? .isSelected : [])
                     }
                     Spacer()

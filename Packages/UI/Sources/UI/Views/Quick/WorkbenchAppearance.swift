@@ -154,8 +154,9 @@ private struct WorkbenchPanelModifier: ViewModifier {
                         .glassEffect(
                             .regular.tint(palette.panelColor.opacity(1 - appearance.backgroundTransparency)),
                             in: shape)
+                        .allowsHitTesting(false)
                 } else {
-                    shape.fill(palette.panelColor)
+                    shape.fill(palette.panelColor).allowsHitTesting(false)
                 }
             }
             .shadow(color: effects.usesGlass ? .black.opacity(0.10) : .clear,
@@ -217,6 +218,64 @@ struct WorkbenchPrimaryButtonStyle: ButtonStyle {
             .foregroundStyle(palette.canvasColor)
             .padding(.horizontal, 12).padding(.vertical, 7)
             .background(palette.accentColor, in: RoundedRectangle(cornerRadius: 10))
-            .opacity(isEnabled ? (configuration.isPressed ? 0.8 : 1) : 0.45)
+            .modifier(WorkbenchButtonFeedback(shape: RoundedRectangle(cornerRadius: 10),
+                isPressed: configuration.isPressed, ink: palette.canvasColor))
+            .opacity(isEnabled ? 1 : 0.45)
+    }
+}
+
+/// The complete visible plate belongs to the label. Its geometry never changes
+/// while pressing or hovering, so feedback cannot move an edge out from under the pointer.
+struct WorkbenchIconButtonStyle: ButtonStyle {
+    var diameter: CGFloat = 28
+    var panel = false
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        Group {
+            if panel {
+                configuration.label.frame(width: diameter, height: diameter)
+                    .workbenchPanel(cornerRadius: diameter / 2)
+            } else {
+                configuration.label.frame(width: diameter, height: diameter)
+            }
+        }
+        .modifier(WorkbenchButtonFeedback(shape: Circle(), isPressed: configuration.isPressed))
+        .opacity(isEnabled ? 1 : 0.45)
+    }
+}
+
+struct WorkbenchRowButtonStyle: ButtonStyle {
+    var cornerRadius: CGFloat = 8
+    @Environment(\.isEnabled) private var isEnabled
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .modifier(WorkbenchButtonFeedback(shape: RoundedRectangle(cornerRadius: cornerRadius),
+                isPressed: configuration.isPressed))
+            .opacity(isEnabled ? 1 : 0.45)
+    }
+}
+
+private struct WorkbenchButtonFeedback<S: InsettableShape>: ViewModifier {
+    let shape: S
+    let isPressed: Bool
+    var ink: Color = .accentColor
+    @Environment(\.isEnabled) private var isEnabled
+    @State private var hovered = false
+
+    func body(content: Content) -> some View {
+        content
+            .overlay {
+                shape.fill(ink.opacity(isEnabled ? (isPressed ? 0.22 : hovered ? 0.10 : 0) : 0))
+                    .allowsHitTesting(false)
+            }
+            .overlay {
+                shape.strokeBorder(ink.opacity(isEnabled && hovered ? 0.32 : 0), lineWidth: 1)
+                    .allowsHitTesting(false)
+            }
+            .contentShape(.interaction, shape)
+            .onHover { hovered = $0 }
+            .workbenchMotion(value: hovered)
+            .workbenchMotion(value: isPressed)
     }
 }

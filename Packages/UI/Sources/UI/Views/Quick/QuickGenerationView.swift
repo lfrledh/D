@@ -123,6 +123,7 @@ struct QuickGenerationView: View {
                                             Text(WorkflowCanvasPresentation.kind(reference.kind, language: language)).font(.caption).foregroundStyle(.secondary)
                                         }.padding(8).frame(maxWidth: .infinity, alignment: .leading)
                                             .background(selectedMedia == reference ? Color.accentColor.opacity(0.12) : .clear, in: RoundedRectangle(cornerRadius: 10))
+                                            .contentShape(.interaction, RoundedRectangle(cornerRadius: 10))
                                     }.buttonStyle(.plain)
                                 }
                                 if mediaReferences.isEmpty { Text(refinementText("noResults", fallback: "尚无结果")).foregroundStyle(.secondary).padding() }

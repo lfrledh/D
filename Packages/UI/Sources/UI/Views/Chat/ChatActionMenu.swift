@@ -29,6 +29,7 @@ struct ChatActionMenu: NSViewRepresentable {
     let title: String
     let accessibilityIdentifier: String
     let items: [ChatActionMenuItem]
+    @Environment(\.isEnabled) private var isEnabled
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
@@ -38,13 +39,13 @@ struct ChatActionMenu: NSViewRepresentable {
         button.autoenablesItems = false
         context.coordinator.install(on: button)
         context.coordinator.update(button, title: title,
-                                   accessibilityIdentifier: accessibilityIdentifier, items: items)
+                                   accessibilityIdentifier: accessibilityIdentifier, items: items, isEnabled: isEnabled)
         return button
     }
 
     func updateNSView(_ button: NSPopUpButton, context: Context) {
         context.coordinator.update(button, title: title,
-                                   accessibilityIdentifier: accessibilityIdentifier, items: items)
+                                   accessibilityIdentifier: accessibilityIdentifier, items: items, isEnabled: isEnabled)
     }
 
     static func dismantleNSView(_ button: NSPopUpButton, coordinator: Coordinator) {
@@ -119,14 +120,24 @@ struct ChatActionMenu: NSViewRepresentable {
         }
 
         func update(_ button: NSPopUpButton, title: String,
-                    accessibilityIdentifier: String, items: [ChatActionMenuItem]) {
+                    accessibilityIdentifier: String, items: [ChatActionMenuItem], isEnabled: Bool = true) {
             guard !dismantled, button === self.button else { return }
+            // Control availability is immediate; menu rows/closures still obey
+            // the existing immutable tracking snapshot and one-shot drain.
+            button.isEnabled = isEnabled && !items.isEmpty
+            if !button.isEnabled {
+                // Re-enabling must not revive a late sender from this cancelled
+                // cycle. Already captured selections remain queued exactly once.
+                endedCycleActions.removeAll()
+                if cycleStarted { selectionCaptured = true }
+            }
             let snapshot = Snapshot(title: title, accessibilityIdentifier: accessibilityIdentifier, items: items)
             if cycleStarted {
                 pendingSnapshot = snapshot
             } else {
                 apply(snapshot, to: button)
             }
+            if !button.isEnabled { rootMenu?.cancelTracking() }
         }
 
         private func apply(_ snapshot: Snapshot, to button: NSPopUpButton, renewRows: Bool = false) {
@@ -159,7 +170,6 @@ struct ChatActionMenu: NSViewRepresentable {
                 button.setAccessibilityIdentifier(snapshot.accessibilityIdentifier)
                 displayedAccessibilityIdentifier = snapshot.accessibilityIdentifier
             }
-            if button.isEnabled != !snapshot.items.isEmpty { button.isEnabled = !snapshot.items.isEmpty }
         }
 
         private func refreshActions(_ values: [ChatActionMenuItem], in menu: NSMenu) {
@@ -240,7 +250,7 @@ struct ChatActionMenu: NSViewRepresentable {
         }
 
         @objc func selectItem(_ sender: NSMenuItem) {
-            guard !dismantled, !selectionCaptured, sender.isEnabled,
+            guard !dismantled, !selectionCaptured, button?.isEnabled == true, sender.isEnabled,
                   let displayed = (cycleStarted ? displayedActions : endedCycleActions)[ObjectIdentifier(sender)],
                   displayed.item === sender, displayed.enabled else { return }
             selectionCaptured = true

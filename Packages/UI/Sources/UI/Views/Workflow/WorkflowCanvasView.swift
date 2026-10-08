@@ -867,7 +867,7 @@ private struct WorkflowNodeInspector: View {
                     Image(systemName: showTechnical ? "chevron.down" : "chevron.right")
                 }
             }
-            .buttonStyle(.plain)
+            .buttonStyle(WorkbenchRowButtonStyle())
             .accessibilityIdentifier("canvas-technical-toggle")
             if showTechnical {
                 WorkflowMetadataRow(workflowText(languageStore, "workflow.metadata.operation", fallback: "操作"),
@@ -1639,6 +1639,7 @@ private struct WorkflowCandidatePreview: View {
             .padding(7)
             .background(selected ? Color.accentColor.opacity(0.14) : Color.clear,
                         in: RoundedRectangle(cornerRadius: 8))
+            .contentShape(.interaction, RoundedRectangle(cornerRadius: 8))
         }
         .buttonStyle(.plain)
         .disabled(onSelect == nil)

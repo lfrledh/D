@@ -46,7 +46,8 @@ import AppKit
         return false
     }
 
-    static func send(to element: any NSAccessibilityProtocol, in root: NSView) -> Bool {
+    static func send(to element: any NSAccessibilityProtocol, in root: NSView,
+                     unitPoint: CGPoint = CGPoint(x: 0.5, y: 0.5), releaseAt: CGPoint? = nil) -> Bool {
         func reject(_ stage: String) -> Bool {
             let frame = element.accessibilityFrame()
             let point = root.window.map { root.convert($0.convertPoint(fromScreen: CGPoint(x: frame.midX, y: frame.midY)), from: nil) }
@@ -59,13 +60,18 @@ import AppKit
         let frame = element.accessibilityFrame()
         guard frame.width > 0, frame.height > 0,
               frame.minX.isFinite, frame.minY.isFinite else { return reject("invalid-frame") }
-        let point = window.convertPoint(fromScreen: CGPoint(x: frame.midX, y: frame.midY))
+        func location(_ unit: CGPoint) -> CGPoint {
+            window.convertPoint(fromScreen: CGPoint(x: frame.minX + frame.width * unit.x,
+                y: frame.minY + frame.height * unit.y))
+        }
+        let point = location(unitPoint)
+        let releasePoint = releaseAt.map(location) ?? point
         guard root.bounds.contains(root.convert(point, from: nil)) else { return reject("outside-root") }
         // AppKit's queued mouse event number round-trips as a signed 16-bit value.
         // Keep the exact identity check; generate an identity representable by that queue.
         let identity = Int.random(in: 1...Int(Int16.max))
         func event(_ type: NSEvent.EventType) -> NSEvent? {
-            NSEvent.mouseEvent(with: type, location: point, modifierFlags: [],
+            NSEvent.mouseEvent(with: type, location: type == .leftMouseDown ? point : releasePoint, modifierFlags: [],
                 timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
                 context: nil, eventNumber: identity, clickCount: 1, pressure: type == .leftMouseDown ? 1 : 0)
         }
@@ -73,6 +79,7 @@ import AppKit
         // Queue the complete pair before dispatch: a native control may consume
         // mouse-up synchronously in its mouse-down tracking loop.
         NSApp.postEvent(up, atStart: true)
+        if releaseAt != nil, let drag = event(.leftMouseDragged) { NSApp.postEvent(drag, atStart: true) }
         NSApp.postEvent(down, atStart: true)
         guard let queued = NSApp.nextEvent(matching: .leftMouseDown,
             until: Date(timeIntervalSinceNow: 0.1), inMode: .default, dequeue: true) else { return reject("dequeue-empty") }
@@ -87,8 +94,9 @@ import AppKit
             return reject("identity-mismatch")
         }
         NSApp.sendEvent(queued)
-        if let remaining = NSApp.nextEvent(matching: .leftMouseUp,
-            until: Date(timeIntervalSinceNow: 0.1), inMode: .default, dequeue: true) {
+        for _ in 0..<(releaseAt == nil ? 1 : 2) {
+            guard let remaining = NSApp.nextEvent(matching: [.leftMouseDragged, .leftMouseUp],
+                until: Date(timeIntervalSinceNow: 0.1), inMode: .default, dequeue: true) else { break }
             guard remaining.windowNumber == window.windowNumber, remaining.eventNumber == identity else {
                 NSApp.postEvent(remaining, atStart: true)
                 return true // Own mouse-up was consumed by synchronous control tracking.

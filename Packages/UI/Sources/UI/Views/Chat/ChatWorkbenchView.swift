@@ -635,7 +635,7 @@ struct ChatWorkbenchView: View {
                         .onTapGesture { closeNarrowPanel() }
                         .accessibilityHidden(true)
                 }
-                RetainedContentHost(content: configurationPane.workbenchPanel(cornerRadius: 22).disabled(!sidebarVisible)
+                RetainedContentHost(content: configurationPane.foregroundStyle(model.chatDisplaySettings.preferences.resolvedAppearance.palette(for: colorScheme).foregroundColor).disabled(!sidebarVisible)
                     .environment(\.chatDisplayPreferences, model.chatDisplaySettings.preferences)
                     .preferredColorScheme(model.chatDisplaySettings.preferences.preferredColorScheme)
                     .environment(\.dLanguageStore, language), visible: sidebarVisible,
@@ -643,12 +643,16 @@ struct ChatWorkbenchView: View {
                     .transaction { $0.animation = nil }
                     .frame(width: sidebarPaneWidth)
                     .frame(maxHeight: .infinity)
-
+                    .background {
+                        Color.clear.workbenchPanel(cornerRadius: 22)
+                            .opacity(sidebarVisible ? 1 : 0)
+                            .workbenchMotion(value: sidebarVisible).allowsHitTesting(false)
+                    }
                     .allowsHitTesting(sidebarVisible)
                     .accessibilityHidden(!sidebarVisible)
                     .chatMeasured("sessions-pane", probe: layoutProbe)
                 if let session {
-                    RetainedContentHost(content: inspector(session).workbenchPanel(cornerRadius: 22).disabled(!inspectorVisible)
+                    RetainedContentHost(content: inspector(session).foregroundStyle(model.chatDisplaySettings.preferences.resolvedAppearance.palette(for: colorScheme).foregroundColor).disabled(!inspectorVisible)
                         .environment(\.chatDisplayPreferences, model.chatDisplaySettings.preferences)
                         .preferredColorScheme(model.chatDisplaySettings.preferences.preferredColorScheme)
                         .environment(\.dLanguageStore, language), visible: inspectorVisible,
@@ -656,7 +660,11 @@ struct ChatWorkbenchView: View {
                         .transaction { $0.animation = nil }
                         .frame(width: inspectorPaneWidth)
                         .frame(maxHeight: .infinity)
-
+                        .background {
+                            Color.clear.workbenchPanel(cornerRadius: 22)
+                                .opacity(inspectorVisible ? 1 : 0)
+                                .workbenchMotion(value: inspectorVisible).allowsHitTesting(false)
+                        }
                         .chatMeasured("inspector-pane", probe: layoutProbe)
                         .allowsHitTesting(inspectorVisible)
                         .accessibilityHidden(!inspectorVisible)
@@ -814,7 +822,7 @@ struct ChatWorkbenchView: View {
                 showSidebar = true; sidebarWasPresented = true; sheets.openNarrow(.sessions)
             } else { showSidebar.toggle(); if showSidebar { sidebarWasPresented = true } }
         } label: { Image(systemName: "slider.horizontal.3").frame(width: 28, height: 28) }
-            .buttonStyle(.plain).padding(5).workbenchPanel(cornerRadius: 20)
+            .buttonStyle(WorkbenchIconButtonStyle(diameter: 38, panel: true))
             .help(refinement("modelAndParameters", "Model and parameters", "模型与参数"))
             .accessibilityLabel(refinement("modelAndParameters", "Model and parameters", "模型与参数"))
             .accessibilityIdentifier("chat-sessions-toggle")
@@ -826,7 +834,7 @@ struct ChatWorkbenchView: View {
                 showInspector = true; sheets.openNarrow(.inspector)
             } else { showInspector.toggle() }
         } label: { Image(systemName: "square.grid.2x2").frame(width: 28, height: 28) }
-            .buttonStyle(.plain).padding(5).workbenchPanel(cornerRadius: 20)
+            .buttonStyle(WorkbenchIconButtonStyle(diameter: 38, panel: true))
             .help(refinement("materialsAndResults", "Materials and results", "素材与成果"))
             .accessibilityLabel(refinement("materialsAndResults", "Materials and results", "素材与成果"))
             .accessibilityIdentifier("chat-inspector-toggle")
@@ -856,12 +864,13 @@ struct ChatWorkbenchView: View {
             else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 12) {
+                        Text(refinement("localModel", "Local model", "本机模型")).font(.caption).foregroundStyle(.secondary)
                         if let session, let node = session.configuration {
                             let identity = node.parameters["modelID"]?.string ?? ""
                             Text(model.projectSession.explicitModelChoices.first(where: { $0.id == identity })?.displayName ?? identity)
                                 .font(.headline).textSelection(.enabled)
                             Text(readiness(identity)).font(.caption).foregroundStyle(.secondary)
-                        } else { Text(label("noModel", "尚未选择模型")).foregroundStyle(.secondary) }
+                        } else { Text(label("noModel", "尚未选择模型")).font(.headline) }
                         Button(label("changeModel", "更换模型"), action: onChooseModel)
                             .disabled(!chat.isLoaded || session?.contextChoices?.deletedAt != nil)
                             .accessibilityIdentifier("chat-model-picker")
@@ -925,7 +934,7 @@ struct ChatWorkbenchView: View {
                                         .font(.caption).bold().lineLimit(1)
                                     Text(searchExcerpt(hit)).lineLimit(2)
                                 }.frame(maxWidth: .infinity, alignment: .leading)
-                            }.buttonStyle(.plain)
+                            }.buttonStyle(WorkbenchRowButtonStyle())
                                 .accessibilityLabel(newLabel("searchResult", english: "Open search result: ", chinese: "打开搜索结果：") + searchExcerpt(hit))
                                 .accessibilityIdentifier("chat-search-hit-\(hit.sessionID.uuidString)-\(hit.messageID?.uuidString ?? "title")-\(index)")
                         }
@@ -950,16 +959,15 @@ struct ChatWorkbenchView: View {
                                         Text(tags.joined(separator: " · ")).font(.caption2)
                                             .foregroundStyle(.secondary).lineLimit(1)
                                     }
-                                }.frame(maxWidth: .infinity, alignment: .leading)
-                            }.buttonStyle(.plain)
+                                }.frame(maxWidth: .infinity, alignment: .leading).padding(9)
+                                    .background(chat.state.selectedSessionID == item.id ? Color.accentColor.opacity(0.14) : Color.clear,
+                                                in: RoundedRectangle(cornerRadius: 8))
+                            }.buttonStyle(WorkbenchRowButtonStyle())
                                 .accessibilityIdentifier("chat-session-select-\(item.id.uuidString)")
                             ChatActionMenu(title: newLabel("sessionActionsShort", english: "Actions", chinese: "操作"),
                                 accessibilityIdentifier: "chat-session-actions-" + item.id.uuidString,
                                 items: sessionMenuItems(item)).fixedSize()
                         }
-                        .padding(9)
-                        .background(chat.state.selectedSessionID == item.id ? Color.accentColor.opacity(0.14) : Color.clear,
-                                    in: RoundedRectangle(cornerRadius: 8))
                     } }
                 }
             }
@@ -987,7 +995,7 @@ struct ChatWorkbenchView: View {
                     showsSessionList = true; showSidebar = true
                     if !ChatPresentationLayout.showsSidebar(width: width, requested: true) { sheets.openNarrow(.sessions) }
                 } label: { Image(systemName: "clock.arrow.circlepath").frame(width: 26, height: 28) }
-                    .buttonStyle(.plain).help(label("history", "对话"))
+                    .buttonStyle(WorkbenchIconButtonStyle()).help(label("history", "对话"))
                     .accessibilityLabel(label("history", "对话")).accessibilityIdentifier("chat-history-open")
                 VStack(alignment: .leading, spacing: 4) {
                     Text(session.title).font(.headline).lineLimit(1)
@@ -1018,7 +1026,7 @@ struct ChatWorkbenchView: View {
                         }).fixedSize().chatMeasured("paths", probe: layoutProbe)
                 }
                 Button { createSession() } label: { Image(systemName: "plus").frame(width: 28, height: 28) }
-                    .buttonStyle(.plain).help(label("new", "新建"))
+                    .buttonStyle(WorkbenchIconButtonStyle()).help(label("new", "新建"))
                     .accessibilityLabel(label("new", "新建")).disabled(chat.saveIssue != nil)
                 if !ChatPresentationLayout.showsInspector(width: width, requested: showInspector, sidebar: sidebarShown) {
                     rightPanelButton(width: width, sidebarShown: sidebarShown)
@@ -1757,9 +1765,11 @@ struct ChatWorkbenchView: View {
                 TextSourcesQuestionEditor(value: session.systemPrompt, editEpoch: 0, isEditable: true,
                     accessibilityIdentifier: "chat-system-\(session.id.uuidString)",
                     accessibilityLabel: label("systemPrompt", "系统提示（默认空）"),
-                    onEdit: { value in perform(sessionID: session.id) { try chat.setSystemPrompt(value, sessionID: session.id) } })
+                    onEdit: { value in perform(sessionID: session.id) { try chat.setSystemPrompt(value, sessionID: session.id) } },
+                    transparentBackground: true,
+                    foregroundColor: NSColor(model.chatDisplaySettings.preferences.resolvedAppearance.palette(for: colorScheme).foregroundColor))
                     .id(session.id.uuidString + ":system")
-                    .frame(height: 90)
+                    .frame(height: 90).padding(4).workbenchPanel(cornerRadius: 10)
                 Button(label("clearSystem", "清空系统提示")) { perform(sessionID: session.id) { try chat.setSystemPrompt("", sessionID: session.id) } }
                 DisclosureGroup(refinement("defaultsAndPresets", "Defaults and presets", "默认提示与预设")) {
                     VStack(alignment: .leading, spacing: 8) {
@@ -1818,9 +1828,9 @@ struct ChatWorkbenchView: View {
             if !session.attachments.isEmpty {
                 ScrollView(.horizontal) {
                     HStack {
-                        ForEach(session.attachments) { item in attachmentRow(item, removable: true, sessionID: session.id) }
+                        ForEach(session.attachments) { item in attachmentRow(item, removable: true, sessionID: session.id).transition(.identity) }
                     }
-                }
+                }.transition(.identity)
             }
             TextSourcesQuestionEditor(value: session.draft, editEpoch: 0,
                 isEditable: !session.archived && session.contextChoices?.deletedAt == nil,
@@ -1834,7 +1844,8 @@ struct ChatWorkbenchView: View {
                     let owner = session.id
                     Task { await importURLs(urls, sessionID: owner) }
                 }, contentHeight: 52...editorLimit, transparentBackground: true,
-                foregroundColor: NSColor(model.chatDisplaySettings.preferences.resolvedAppearance.palette(for: colorScheme).foregroundColor))
+                foregroundColor: NSColor(model.chatDisplaySettings.preferences.resolvedAppearance.palette(for: colorScheme).foregroundColor),
+                placeholder: refinement("draftPlaceholder", "Write a message, or drop files here…", "输入消息，或拖入文件…"))
                 .id(session.id.uuidString + ":draft")
                 .fixedSize(horizontal: false, vertical: true)
                 .help(model.chatDisplaySettings.preferences.sendShortcut == .return
@@ -1847,16 +1858,19 @@ struct ChatWorkbenchView: View {
                         .padding(8)
                 }.environment(\.dLanguageStore, language)
                     .environment(\.chatDisplayPreferences, model.chatDisplaySettings.preferences)
-                    .preferredColorScheme(colorScheme).workbenchTheme(),
+                    .preferredColorScheme(colorScheme).workbenchTheme().disabled(!speechExpanded),
                 visible: speechExpanded, identifier: "chat-speech-host")
                 .id(session.id.uuidString + ":speech")
+                .transaction { $0.animation = nil }
                 .frame(height: speechExpanded ? speechLimit : 0).clipped()
+                .allowsHitTesting(speechExpanded)
                 .accessibilityHidden(!speechExpanded)
+                .workbenchMotion(value: speechExpanded)
             HStack(spacing: 10) {
                 attachmentButtons(session)
                 Button { speechExpanded.toggle() } label: {
                     Image(systemName: "mic").frame(width: 28, height: 28)
-                }.buttonStyle(.plain)
+                }.buttonStyle(WorkbenchIconButtonStyle())
                     .help(refinement("speech", "Voice input and read-aloud", "语音输入与朗读"))
                     .accessibilityLabel(refinement("speech", "Voice input and read-aloud", "语音输入与朗读"))
                     .accessibilityIdentifier("chat-speech-toggle")
@@ -1881,6 +1895,7 @@ struct ChatWorkbenchView: View {
                     .help(newLabel("stopHelp", english: "Stop generation and keep received text. Resources are released before the next request.",
                         chinese: "停止生成并保留已接收文字；资源释放后才能开始下一次。"))
                     .chatMeasured("composer-stop", probe: layoutProbe)
+                    .transition(.identity)
                 } else {
                     Button(label("send", "发送"), systemImage: "arrow.up") { submitFromComposer(session.id) }
                         .buttonStyle(WorkbenchPrimaryButtonStyle())
@@ -1889,8 +1904,10 @@ struct ChatWorkbenchView: View {
                             invalidFields: chat.invalidParameterFields))
                         .accessibilityIdentifier("chat-send")
                         .chatMeasured("composer-send", probe: layoutProbe)
+                        .transition(.identity)
                 }
             }
+            .workbenchMotion(value: chat.canStopGeneration)
             .dropDestination(for: WorkflowCanvasTransfer.self) { items, _ in
                 let owner = session.id
                 Task { await importSharedAssets(items, sessionID: owner) }
@@ -1911,6 +1928,7 @@ struct ChatWorkbenchView: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
+        .workbenchMotion(value: session.attachments.map(\.id))
         .padding(14)
         .workbenchPanel(cornerRadius: 22)
         .frame(maxWidth: CGFloat(model.chatDisplaySettings.preferences.transcriptWidth) + 28)
@@ -1940,7 +1958,8 @@ struct ChatWorkbenchView: View {
         Button {
             Task { await pasteAttachments(sessionID: session.id) }
         } label: { Image(systemName: "document.on.clipboard").frame(width: 28, height: 28) }
-            .buttonStyle(.plain)
+            .buttonStyle(WorkbenchIconButtonStyle())
+            .accessibilityIdentifier("chat-paste-attachments")
             .help(newLabel("pasteAttachments", english: "Paste attachments", chinese: "粘贴附件"))
             .accessibilityLabel(newLabel("pasteAttachments", english: "Paste attachments", chinese: "粘贴附件"))
             .disabled(session.archived || session.contextChoices?.deletedAt != nil)

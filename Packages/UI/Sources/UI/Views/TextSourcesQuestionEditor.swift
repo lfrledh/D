@@ -18,6 +18,7 @@ struct TextSourcesQuestionEditor: NSViewRepresentable {
     var contentHeight: ClosedRange<CGFloat>? = nil
     var transparentBackground = false
     var foregroundColor: NSColor? = nil
+    var placeholder: String? = nil
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
@@ -61,6 +62,7 @@ struct TextSourcesQuestionEditor: NSViewRepresentable {
         let color = foregroundColor ?? .labelColor
         if editor.textColor != color { editor.textColor = color }
         if editor.insertionPointColor != color { editor.insertionPointColor = color }
+        (editor as? FileDropTextView)?.placeholder = placeholder
     }
 
     static func fittedHeight(text: String, font: NSFont, width: CGFloat,
@@ -205,6 +207,23 @@ struct TextSourcesQuestionEditor: NSViewRepresentable {
 /// can see them. Intercept only file URLs at the native destination; do not turn
 /// ordinary pasted path strings into file access or change text dragging.
 @MainActor final class FileDropTextView: NSTextView {
+    // Drawing only: no overlay receiver, text storage, selection or Undo entry.
+    var placeholder: String? {
+        didSet { if oldValue != placeholder { needsDisplay = true } }
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        guard string.isEmpty, !hasMarkedText(), let placeholder, !placeholder.isEmpty else { return }
+        let origin = textContainerOrigin
+        let padding = textContainer?.lineFragmentPadding ?? 5
+        (placeholder as NSString).draw(in: NSRect(
+            x: origin.x + padding, y: origin.y,
+            width: max(0, bounds.width - 2 * (origin.x + padding)), height: bounds.height - origin.y),
+            withAttributes: [.font: font ?? .preferredFont(forTextStyle: .body),
+                             .foregroundColor: (textColor ?? .labelColor).withAlphaComponent(0.65)])
+    }
+
     var onFileDrop: (([URL]) -> Void)? {
         didSet { updateDragTypeRegistration() }
     }

@@ -45,8 +45,8 @@ import Testing
     @Test func composerMeasuresContentWithinBoundWithoutReplacingNativeInput() throws {
         func make(_ value: String, _ color: NSColor) -> TextSourcesQuestionEditor {
             TextSourcesQuestionEditor(value: value, editEpoch: 0, isEditable: true,
-                onEdit: { _ in }, pointSize: 15, contentHeight: 52...180,
-                transparentBackground: true, foregroundColor: color)
+                onEdit: { _ in }, pointSize: 15, onFileDrop: { _ in }, contentHeight: 52...180,
+                transparentBackground: true, foregroundColor: color, placeholder: "Write a message…")
         }
         func find(_ view: NSView) -> NSTextView? {
             if let value = view as? NSTextView { return value }

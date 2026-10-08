@@ -7,6 +7,85 @@ import Testing
 
 @Suite("Workbench appearance preferences")
 @MainActor struct WorkbenchAppearanceTests {
+    /// Host-process mouse events exercise styles; this is not foreground/native acceptance.
+    @Test func buttonBodiesReceivePaddingEdgesAndCancelOutsideRelease() throws {
+        var calls = [String: Int]()
+        func root(disabled: Bool = false) -> some View {
+            VStack(spacing: 20) {
+                HStack(spacing: 30) {
+                    Button { calls["circle", default: 0] += 1 } label: { Image(systemName: "gearshape") }
+                        .buttonStyle(WorkbenchIconButtonStyle(diameter: 40, panel: true))
+                        .accessibilityIdentifier("circle")
+                    Button { calls["icon", default: 0] += 1 } label: { Image(systemName: "mic") }
+                        .buttonStyle(WorkbenchIconButtonStyle())
+                        .accessibilityIdentifier("icon")
+                }
+                Button("Send") { calls["primary", default: 0] += 1 }
+                    .buttonStyle(WorkbenchPrimaryButtonStyle()).accessibilityIdentifier("primary")
+                Button { calls["row", default: 0] += 1 } label: {
+                    HStack { Text("Conversation"); Spacer() }.frame(width: 180).padding(9)
+                }.buttonStyle(WorkbenchRowButtonStyle()).accessibilityIdentifier("row")
+            }.disabled(disabled).frame(width: 360, height: 280)
+        }
+        let host = NSHostingView(rootView: root())
+        let window = NSWindow(contentRect: NSRect(x: 100, y: 100, width: 360, height: 280),
+            styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = host
+        window.makeKeyAndOrderFront(nil)
+        defer { window.orderOut(nil); window.close() }
+        func settle() {
+            host.layoutSubtreeIfNeeded()
+            RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.05))
+        }
+        settle()
+        // Never interpret an invalid fixture as a successful hit test.
+        try #require(window.isVisible && window.isKeyWindow && host.window === window)
+        func element(_ id: String) throws -> any NSAccessibilityProtocol {
+            var pending: [NSObject] = [host], seen = Set<ObjectIdentifier>()
+            while let object = pending.popLast(), seen.count < 2000 {
+                guard seen.insert(ObjectIdentifier(object)).inserted else { continue }
+                if let value = object as? any NSAccessibilityProtocol {
+                    if value.accessibilityIdentifier() == id { return value }
+                    pending += (value.accessibilityChildren() ?? []).compactMap { $0 as? NSObject }
+                }
+                if let view = object as? NSView { pending += view.subviews }
+            }
+            throw NSError(domain: "Missing hosted button " + id, code: 1)
+        }
+        for id in ["circle", "icon", "primary", "row"] {
+            let button = try element(id)
+            let frame = button.accessibilityFrame()
+            try #require(frame.width > 20 && frame.height > 20)
+            // Centers plus four points 1 pt inside the visible body's cardinal edges.
+            var points = [CGPoint(x: 0.5, y: 0.5), CGPoint(x: 1 / frame.width, y: 0.5),
+                CGPoint(x: 1 - 1 / frame.width, y: 0.5), CGPoint(x: 0.5, y: 1 / frame.height),
+                CGPoint(x: 0.5, y: 1 - 1 / frame.height)]
+            if id == "circle" { points += [CGPoint(x: 0.18, y: 0.18), CGPoint(x: 0.82, y: 0.82)] }
+            for point in points {
+                let before = calls[id, default: 0]
+                try #require(HostingControlClick.send(to: button, in: host, unitPoint: point))
+                settle()
+                #expect(calls[id, default: 0] == before + 1)
+            }
+            let before = calls[id, default: 0]
+            try #require(HostingControlClick.send(to: button, in: host, unitPoint: CGPoint(x: 1 + 3 / frame.width, y: 0.5)))
+            settle()
+            #expect(calls[id, default: 0] == before)
+            try #require(HostingControlClick.send(to: button, in: host, releaseAt: CGPoint(x: 1.8, y: 0.5)))
+            settle()
+            #expect(calls[id, default: 0] == before)
+        }
+        let enabledCalls = calls
+        host.rootView = root(disabled: true)
+        settle()
+        for id in ["circle", "icon", "primary", "row"] {
+            try #require(HostingControlClick.send(to: element(id), in: host))
+            settle()
+        }
+        #expect(calls == enabledCalls)
+    }
+
     @Test func oldRecordDecodesWithoutAppearance() throws {
         let old = Data(#"{"theme":"dark","textPointSize":18,"transcriptWidth":760,"wrapsCode":true,"sendShortcut":"return"}"#.utf8)
         let preferences = try JSONDecoder().decode(ChatDisplayPreferences.self, from: old)

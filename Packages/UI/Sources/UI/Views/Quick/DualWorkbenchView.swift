@@ -248,11 +248,11 @@ public struct DualWorkbenchView: View {
                 Button { navigate(to: entry == .quick ? .workflow : .quick) } label: {
                     Image(systemName: entry == .quick ? "rectangle.3.group" : "bolt.fill").frame(width: 30, height: 30)
                         .contentTransition(.symbolEffect(.replace))
-                }.buttonStyle(.plain).padding(5).workbenchPanel(cornerRadius: 20)
+                }.buttonStyle(WorkbenchIconButtonStyle(diameter: 40, panel: true))
                     .help(entry == .quick ? t("quickSwitch", "Quick generation · Switch to workflow", "快速生成 · 切换到工作流") : t("workflowSwitch", "Workflow · Switch to Quick generation", "工作流 · 切换到快速生成"))
                     .accessibilityLabel(entry == .quick ? t("switchToWorkflow", "Switch to workflow", "切换到工作流") : t("switchToQuick", "Switch to Quick generation", "切换到快速生成")).accessibilityIdentifier("workbench-entry").workbenchMotion(value: entry)
                 Button(action: presentSettings) { Image(systemName: "gearshape").frame(width: 30, height: 30) }
-                    .buttonStyle(.plain).padding(5).workbenchPanel(cornerRadius: 20).help(t("settings", "Settings", "设置")).accessibilityLabel(t("settings", "Settings", "设置"))
+                    .buttonStyle(WorkbenchIconButtonStyle(diameter: 40, panel: true)).help(t("settings", "Settings", "设置")).accessibilityLabel(t("settings", "Settings", "设置"))
                     .accessibilityIdentifier("workbench-settings").disabled(!canPresentSettings)
                 }
             }.padding(.horizontal, 20).padding(.vertical, 14)
