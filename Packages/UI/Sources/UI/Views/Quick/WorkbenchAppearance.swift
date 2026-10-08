@@ -72,6 +72,20 @@ struct WorkbenchAppearance: Codable, Equatable {
     }
 }
 
+/// Decorative effects only. Saved appearance values and contrast calculations stay independent
+/// of the current accessibility settings.
+struct WorkbenchEffectsPolicy {
+    let usesGlass: Bool
+    let duration: Double?
+
+    init(appearance: WorkbenchAppearance, reduceMotion: Bool,
+         reduceTransparency: Bool, increasedContrast: Bool) {
+        usesGlass = !appearance.lightweight && !reduceTransparency && !increasedContrast
+        duration = appearance.lightweight || reduceMotion || appearance.motion == 0
+            ? nil : 0.1 + 0.25 * appearance.motion
+    }
+}
+
 private struct RGB {
     let red: Double
     let green: Double
@@ -121,36 +135,57 @@ private struct WorkbenchPanelModifier: ViewModifier {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorSchemeContrast) private var contrast
 
     func body(content: Content) -> some View {
         let appearance = preferences.resolvedAppearance
         let palette = appearance.palette(for: colorScheme)
-        let lightweight = appearance.lightweight
-        let transparent = !lightweight && !reduceTransparency
+        let effects = WorkbenchEffectsPolicy(
+            appearance: appearance, reduceMotion: reduceMotion,
+            reduceTransparency: reduceTransparency, increasedContrast: contrast == .increased)
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
         content
             .foregroundStyle(palette.foregroundColor)
             .background {
-                shape.fill(palette.canvasColor)
-                    .overlay {
-                        if transparent {
-                            shape.fill(.regularMaterial).opacity(1 - appearance.backgroundTransparency)
-                        }
-                    }
-                    .overlay {
-                        shape.fill(palette.panelColor.opacity(transparent ? 1 - appearance.backgroundTransparency : 1))
-                    }
-                    .clipShape(shape)
+                if effects.usesGlass {
+                    // Glass belongs to the background shape, never to the content or its text.
+                    // The saved slider controls tint and backing opacity through public APIs.
+                    shape.fill(palette.panelColor.opacity(1 - appearance.backgroundTransparency))
+                        .glassEffect(
+                            .regular.tint(palette.panelColor.opacity(1 - appearance.backgroundTransparency)),
+                            in: shape)
+                } else {
+                    shape.fill(palette.panelColor)
+                }
             }
-            .shadow(color: lightweight ? .clear : .black.opacity(0.10), radius: lightweight ? 0 : 8, y: lightweight ? 0 : 2)
-            .animation(lightweight || reduceMotion || appearance.motion == 0 ? nil :
-                .easeInOut(duration: 0.1 + 0.25 * appearance.motion), value: palette)
+            .shadow(color: effects.usesGlass ? .black.opacity(0.10) : .clear,
+                    radius: effects.usesGlass ? 8 : 0, y: effects.usesGlass ? 2 : 0)
+            .animation(effects.duration.map { .easeInOut(duration: $0) }, value: palette)
+    }
+}
+
+private struct WorkbenchMotionModifier<Value: Equatable>: ViewModifier {
+    let value: Value
+    @Environment(\.chatDisplayPreferences) private var preferences
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorSchemeContrast) private var contrast
+
+    func body(content: Content) -> some View {
+        let effects = WorkbenchEffectsPolicy(
+            appearance: preferences.resolvedAppearance, reduceMotion: reduceMotion,
+            reduceTransparency: reduceTransparency, increasedContrast: contrast == .increased)
+        content.animation(effects.duration.map { .easeInOut(duration: $0) }, value: value)
     }
 }
 
 extension View {
     func workbenchPanel(cornerRadius: CGFloat = 12) -> some View {
         modifier(WorkbenchPanelModifier(cornerRadius: cornerRadius))
+    }
+
+    func workbenchMotion<Value: Equatable>(value: Value) -> some View {
+        modifier(WorkbenchMotionModifier(value: value))
     }
 }
 
