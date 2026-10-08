@@ -731,6 +731,9 @@ private struct WorkflowConnectionLayer: View {
                                lineWidth: 2.5)
             }
         }
+        // Drawing is not an event surface. Only the explicit connection hit paths
+        // below participate, leaving the blank canvas drag target reachable.
+        .allowsHitTesting(false)
         .overlay {
             ForEach(graph.connections) { connection in
                 let hitPath = WorkflowConnectionGeometry.hitPath(

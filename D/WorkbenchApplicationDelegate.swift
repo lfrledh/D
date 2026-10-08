@@ -170,8 +170,17 @@ final class WorkbenchApplicationDelegate: NSObject, NSApplicationDelegate, NSWin
             }
             return
         }
+        if let previous = workbenchWindow {
+            for name in Self.sheetObservationNames {
+                NotificationCenter.default.removeObserver(self, name: name, object: previous)
+            }
+        }
         workbenchWindow = window
-        hasPresentedSheet = window.attachedSheet != nil
+        for name in Self.sheetObservationNames {
+            NotificationCenter.default.addObserver(self, selector: #selector(observeSheetState(_:)),
+                                                   name: name, object: window)
+        }
+        synchronizeSheetState(window)
         inputGeometry = WorkbenchInputGeometry(window: window, invalidate: invalidateInputContext)
         previousWindowDelegate = window.delegate
         closeGate = CloseRequestGate { await model.requestClose() }
@@ -271,21 +280,39 @@ final class WorkbenchApplicationDelegate: NSObject, NSApplicationDelegate, NSWin
         previousWindowDelegate?.windowDidChangeBackingProperties?(notification)
         inputGeometryChanged(notification)
     }
+    // Observe the actual connected window independently of SwiftUI's delegate chain.
+    // A departing sheet may still be attached during didEndSheet; subsequent native
+    // updates reconcile that transient state without polling or repeated publication.
+    private static let sheetObservationNames: [Notification.Name] = [
+        NSWindow.willBeginSheetNotification, NSWindow.didEndSheetNotification,
+        NSWindow.didUpdateNotification
+    ]
+
+    private func synchronizeSheetState(_ window: NSWindow) {
+        guard window === workbenchWindow else { return }
+        let attached = window.attachedSheet != nil
+        if hasPresentedSheet != attached { hasPresentedSheet = attached }
+    }
+
+    @objc private func observeSheetState(_ notification: Notification) {
+        guard let window = notification.object as? NSWindow, window === workbenchWindow else { return }
+        if notification.name == NSWindow.willBeginSheetNotification {
+            if !hasPresentedSheet { hasPresentedSheet = true }
+        } else if notification.name == NSWindow.didEndSheetNotification {
+            DispatchQueue.main.async { [weak self, weak window] in
+                guard let window else { return }
+                self?.synchronizeSheetState(window)
+            }
+        } else {
+            synchronizeSheetState(window)
+        }
+    }
+
     func windowWillBeginSheet(_ notification: Notification) {
-        if notification.object as? NSWindow === workbenchWindow { hasPresentedSheet = true }
         previousWindowDelegate?.windowWillBeginSheet?(notification)
     }
     func windowDidEndSheet(_ notification: Notification) {
         previousWindowDelegate?.windowDidEndSheet?(notification)
-        if let window = notification.object as? NSWindow, window === workbenchWindow {
-            // AppKit can still expose the departing sheet during this callback.
-            // Read the actual attachment after the end-sheet transaction completes;
-            // a newly presented replacement remains protected by the same check.
-            DispatchQueue.main.async { [weak self, weak window] in
-                guard let self, let window, window === self.workbenchWindow else { return }
-                self.hasPresentedSheet = window.attachedSheet != nil
-            }
-        }
     }
     func windowWillStartLiveResize(_ notification: Notification) { previousWindowDelegate?.windowWillStartLiveResize?(notification) }
     func windowDidEndLiveResize(_ notification: Notification) {

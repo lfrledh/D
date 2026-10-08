@@ -450,6 +450,8 @@ public struct WorkflowCanvasView: View {
                 Label(workflowText(languageStore, "refinement.workflow.hand", fallback: "手形"), systemImage: "hand.draw").tag(WorkflowCanvasTool.hand)
             }
             .pickerStyle(.segmented)
+            .labelsHidden()
+            .accessibilityLabel(workflowText(languageStore, "refinement.workflow.canvasTool", fallback: "画布工具"))
             .frame(width: 110)
             .accessibilityIdentifier("workflow-canvas-tool")
             Button(workflowText(languageStore, "refinement.workflow.extractSelection", fallback: "封装选区"), systemImage: "square.on.square") { toolsPresented = true }
