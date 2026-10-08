@@ -917,9 +917,17 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
             XCTAssertFalse(owner.restore(point, sessionID: UUID()), "Never restore another session's marker")
             marker.frame.size.width = 500
             scroll.contentView.scroll(to: .init(x: 0, y: 80))
-            XCTAssertTrue(owner.restore(point, sessionID: sessionID), "Reflow keeps the message anchor fallback")
+            XCTAssertFalse(owner.restore(point, sessionID: sessionID), "A temporary layout mismatch must not consume restoration")
             XCTAssertEqual(scroll.contentView.bounds.origin.y, 80, accuracy: 0.5)
             marker.frame.size.width = 600
+            marker.frame.size.height = 3000
+            XCTAssertFalse(owner.restore(point, sessionID: sessionID))
+            XCTAssertEqual(scroll.contentView.bounds.origin.y, 80, accuracy: 0.5)
+            marker.frame.size.height = 3600
+            XCTAssertTrue(owner.restore(point, sessionID: sessionID))
+            XCTAssertEqual(scroll.contentView.bounds.origin.y, target, accuracy: 0.5)
+            let unreachable = ChatReadingPoint(messageID: messageID, offset: 9000, width: point.width, height: point.height)
+            XCTAssertFalse(owner.restore(unreachable, sessionID: sessionID), "A clamped scroll is not restoration")
         }
         scroll.contentView.scroll(to: .init(x: 0, y: 1200))
         XCTAssertFalse(try XCTUnwrap(owner.alignTop(messageID: messageID, sessionID: sessionID)).isAligned)

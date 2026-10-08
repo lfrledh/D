@@ -68,7 +68,7 @@ struct WorkflowToolPanel: View {
 private extension WorkflowToolDefinition {
     var selfReference: String { id.uuidString + ":" + String(version) }
 }
-private struct ToolBoundaryDraft {
+struct ToolBoundaryDraft {
     struct Output { var included: Bool; var label: String; var value: WorkflowNamedOutput }
     let graphID: UUID
     let revision: UUID
@@ -82,13 +82,13 @@ private struct ToolBoundaryDraft {
             guard !inputs.contains(where: { $0.sourceNode == edge.sourceNode && $0.sourcePort == edge.sourcePort }) else { continue }
             // A visible initial proposal only. Exact schema is explicitly confirmed in this form.
             let node = graph.nodes.first { $0.id == edge.sourceNode }
-            let schema = node?.dataConfiguration?.value?.schema ?? node?.assetReference.map { WorkflowDataSchema.asset($0.kind) } ?? .text
+            let schema = node.flatMap { WorkflowToolEditing.outputSchemaProposal(for: $0, port: edge.sourcePort, registry: registry, tools: tools) } ?? .text
             inputs.append(.init(name: "input\(inputs.count + 1)", schema: schema, sourceNode: edge.sourceNode, sourcePort: edge.sourcePort))
         }
         for node in graph.nodes where selected.contains(node.id) {
             for port in registry.definition(for: node, tools: tools)?.outputs ?? [] {
                 let required = graph.connections.contains { $0.sourceNode == node.id && $0.sourcePort == port.id && !selected.contains($0.targetNode) } || graph.interface?.outputs.contains { $0.nodeID == node.id && $0.port == port.id } == true
-                let schema = graph.interface?.outputs.first { $0.nodeID == node.id && $0.port == port.id }?.schema ?? node.dataConfiguration?.value?.schema ?? node.dataConfiguration?.schema ?? .text
+                let schema = graph.interface?.outputs.first { $0.nodeID == node.id && $0.port == port.id }?.schema ?? WorkflowToolEditing.outputSchemaProposal(for: node, port: port.id, registry: registry, tools: tools) ?? node.dataConfiguration?.value?.schema ?? node.dataConfiguration?.schema ?? .text
                 outputs.append(.init(included: required, label: node.title + " · " + port.title,
                     value: .init(name: "output\(outputs.count + 1)", nodeID: node.id, port: port.id, schema: schema)))
             }

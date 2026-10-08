@@ -380,9 +380,10 @@ struct ChatReadingPoint {
         let viewport = clip.convert(clip.bounds, to: nil)
         guard !rect.isEmpty, !viewport.isEmpty, rect.minY.isFinite, rect.maxY.isFinite,
               viewport.minY.isFinite, viewport.maxY.isFinite else { return false }
-        // Reflow or edited content invalidates a pixel offset. Reader's message
-        // anchor remains a safe fallback; never apply a stale offset to new text.
-        guard abs(rect.width - point.width) < 1, abs(rect.height - point.height) < 1 else { return true }
+        // A remounted Markdown view may still have its temporary literal-text size.
+        // Do not consume the bounded restoration while layout is incomplete. Permanent
+        // reflow keeps Reader's message anchor after that bounded attempt expires.
+        guard abs(rect.width - point.width) < 1, abs(rect.height - point.height) < 1 else { return false }
         return align(offset: point.offset, rect: rect, in: scroll)
     }
 
@@ -392,11 +393,14 @@ struct ChatReadingPoint {
         guard !rect.isEmpty, !viewport.isEmpty, rect.minY.isFinite, rect.maxY.isFinite,
               viewport.minY.isFinite, viewport.maxY.isFinite, offset.isFinite else { return false }
         let delta = offset - (rect.maxY - viewport.maxY)
+        let before = clip.bounds.origin.y
         var proposed = clip.bounds
         proposed.origin.y += clip.isFlipped ? delta : -delta
         clip.scroll(to: clip.constrainBoundsRect(proposed).origin)
         scroll.reflectScrolledClipView(clip)
-        return true
+        let movement = clip.bounds.origin.y - before
+        let reached = rect.maxY - viewport.maxY + (clip.isFlipped ? movement : -movement)
+        return abs(reached - offset) <= 0.5
     }
 }
 

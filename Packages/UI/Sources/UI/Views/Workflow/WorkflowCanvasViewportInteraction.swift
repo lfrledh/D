@@ -97,6 +97,7 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
         var onMiddleClick: (CGSize) -> Void = { _ in }
         private var monitor: Any?
         private var reportedSize: WorkflowCanvasViewportMeasurement?
+        private weak var observedScroll: NSScrollView?
 
         override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
@@ -158,6 +159,7 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
         }
 
         func reportViewportSize() {
+            updateViewportObservation()
             guard let scroll = enclosingScrollView else { return }
             let measured = WorkflowCanvasViewportMeasurement(clip: scroll.contentView.bounds.size,
                                                               surfaceWidth: scroll.frame.width)
@@ -165,6 +167,31 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
                   reportedSize != measured else { return }
             reportedSize = measured
             onViewportSize(measured)
+        }
+
+        // The graph document can keep its size while its enclosing panel finishes
+        // resizing. Observe the actual surface and clip instead of waiting for a
+        // document layout that may never happen.
+        private func updateViewportObservation() {
+            let scroll = enclosingScrollView
+            guard observedScroll !== scroll else { return }
+            stopViewportObservation()
+            guard let scroll else { return }
+            observedScroll = scroll
+            scroll.postsFrameChangedNotifications = true
+            scroll.contentView.postsBoundsChangedNotifications = true
+            NotificationCenter.default.addObserver(self, selector: #selector(viewportChanged),
+                name: NSView.frameDidChangeNotification, object: scroll)
+            NotificationCenter.default.addObserver(self, selector: #selector(viewportChanged),
+                name: NSView.boundsDidChangeNotification, object: scroll.contentView)
+        }
+
+        @objc private func viewportChanged(_ notification: Notification) { reportViewportSize() }
+
+        private func stopViewportObservation() {
+            NotificationCenter.default.removeObserver(self, name: NSView.frameDidChangeNotification, object: nil)
+            NotificationCenter.default.removeObserver(self, name: NSView.boundsDidChangeNotification, object: nil)
+            observedScroll = nil
         }
 
         private func accepts(_ event: NSEvent) -> Bool {
@@ -191,6 +218,7 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
         }
 
         func stopMonitoring() {
+            stopViewportObservation()
             if let monitor { NSEvent.removeMonitor(monitor); self.monitor = nil }
         }
     }

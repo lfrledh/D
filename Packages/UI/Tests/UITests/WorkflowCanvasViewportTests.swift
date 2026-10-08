@@ -5,6 +5,49 @@ import Testing
 
 @Suite @MainActor
 struct WorkflowCanvasViewportTests {
+    @Test func viewportProbeObservesAncestorResizeWithoutDocumentLayout() {
+        let scroll = NSScrollView(frame: .init(x: 0, y: 0, width: 600, height: 400))
+        let document = NSView(frame: .init(x: 0, y: 0, width: 1800, height: 1200))
+        scroll.documentView = document
+        let probe = WorkflowCanvasViewportInput.ProbeView(frame: .init(x: 0, y: 0, width: 10, height: 10))
+        var samples: [WorkflowCanvasViewportMeasurement] = []
+        probe.onViewportSize = { samples.append($0) }
+        document.addSubview(probe)
+        scroll.layoutSubtreeIfNeeded()
+        let initial = samples.last
+        scroll.setFrameSize(.init(width: 359, height: 400))
+        scroll.layoutSubtreeIfNeeded()
+        #expect(samples.last?.surfaceWidth == 359)
+        #expect(samples.last?.clip == scroll.contentView.bounds.size)
+        #expect(samples.last != initial)
+        probe.removeFromSuperview()
+        let count = samples.count
+        scroll.setFrameSize(.init(width: 600, height: 400))
+        scroll.layoutSubtreeIfNeeded()
+        #expect(samples.count == count, "An unmounted receiver has no resize callbacks")
+    }
+
+    @Test func toolBoundaryUsesActualTextAssetAndValueContracts() throws {
+        let registry = WorkflowRegistry.standard
+        let input = try #require(registry.operation("d.text.input")).definition.makeNode()
+        var value = try #require(registry.operation("d.value.input")).definition.makeNode()
+        value.dataConfiguration = .init(value: .text("文字值"))
+        let template = try #require(registry.operation("d.text.template")).definition.makeNode()
+        let graph = WorkflowGraph(nodes: [input, value, template], connections: [
+            .init(sourceNode: input.id, targetNode: template.id, targetPort: "input")])
+        let selected = ToolBoundaryDraft(graph: graph, selected: [template.id], registry: registry, tools: [])
+        #expect(selected.inputs.first?.schema == .asset(.text))
+        #expect(selected.outputs.first?.value.schema == .asset(.text))
+        let literal = ToolBoundaryDraft(graph: graph, selected: [value.id], registry: registry, tools: [])
+        #expect(literal.outputs.first?.value.schema == .text)
+        var human = try #require(registry.operation("d.control.human")).definition.makeNode()
+        human.dataConfiguration = .init(schema: .boolean)
+        let humanDraft = ToolBoundaryDraft(graph: WorkflowGraph(nodes: [human]), selected: [human.id], registry: registry, tools: [])
+        #expect(humanDraft.outputs.first?.value.schema == .boolean)
+        var unsupported = input; unsupported.definitionVersion += 1
+        #expect(WorkflowToolEditing.outputSchemaProposal(for: unsupported, port: "output", registry: registry, tools: []) == nil)
+    }
+
     @Test func cancelledPanAllowsBlankClickAndStartsAtNewObservedOffset() {
         var session = WorkflowCanvasPanSession()
         let first = CGPoint(x: 430, y: 280)

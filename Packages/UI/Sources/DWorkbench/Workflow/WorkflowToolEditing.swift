@@ -18,6 +18,30 @@ public struct WorkflowToolExtraction: Sendable {
 
 /// Only transforms editable values. It never executes a node or publishes a media asset.
 public enum WorkflowToolEditing {
+    /// Initial form proposal from the actual output contract, not the displayed port kind.
+    /// Unknown ports still require an explicit type choice; saved tools are never rewritten.
+    public static func outputSchemaProposal(for node: WorkflowNode, port: String,
+                                            registry: WorkflowRegistry, tools: [WorkflowToolDefinition]) -> WorkflowDataSchema? {
+        guard let definition = registry.definition(for: node, tools: tools),
+              definition.version == node.definitionVersion,
+              definition.outputs.contains(where: { $0.id == port }) else { return nil }
+        if case .invoke(let reference) = node.control {
+            guard let tool = tools.first(where: { $0.id == reference.id && $0.version == reference.version }),
+                  (try? WorkflowPlanCompiler.digest(tool)) == reference.digest else { return nil }
+            return tool.graph.interface?.outputs.first { $0.name == port }?.schema
+        }
+        guard port == "output" else { return nil }
+        for operation in [WorkflowTextOperations.textInput, WorkflowTextOperations.textTemplate] {
+            if node.operationID == operation.definition.id && node.definitionVersion == operation.definition.version {
+                return .asset(.text)
+            }
+        }
+        if node.operationID == "d.value.input" { return node.dataConfiguration?.value?.schema ?? node.dataConfiguration?.schema }
+        if ["d.value.field", "d.control.human"].contains(node.operationID) { return node.dataConfiguration?.schema }
+        if let reference = node.assetReference { return .asset(reference.kind) }
+        return nil
+    }
+
     public static func extract(_ graph: WorkflowGraph, selected: Set<UUID>, name: String,
                                inputs: [WorkflowToolInputBinding], outputs: [WorkflowNamedOutput],
                                tools: [WorkflowToolDefinition], registry: WorkflowRegistry = .standard) throws -> WorkflowToolExtraction {

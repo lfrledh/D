@@ -354,6 +354,44 @@ private func workflowFixturePNG(width: Int = 16, height: Int = 12) throws -> Dat
 
 @Suite("M0 workflow durable lifecycle", .serialized) @MainActor
 struct WorkflowLifecycleTests {
+    @Test func extractedTextAssetsExecuteAndPersistWithoutChangingOldTools() async throws {
+        let (_, store, engine, controller) = try await fixture()
+        var results: [(WorkflowAssetReference, String)] = []
+        for (index, text) in ["", "原件 e\u{301} 👩🏽‍🎨"].enumerated() {
+            let oldTools = controller.tools
+            controller.addBlankGraph(name: "Text boundary \(index)")
+            controller.addNode(operationID: "d.text.input")
+            let input = try #require(controller.selectedNode)
+            controller.setParameter(nodeID: input.id, key: "text", value: .text(text))
+            let graph = try #require(controller.graph)
+            let schema = try #require(WorkflowToolEditing.outputSchemaProposal(for: input, port: "output", registry: controller.registry, tools: controller.tools))
+            #expect(schema == .asset(.text))
+            controller.selectedNodeIDs = [input.id]
+            controller.extractSelection(name: "Asset tool \(index)", inputs: [],
+                outputs: [.init(name: "answer", nodeID: input.id, schema: schema)],
+                expectedGraphID: graph.id, expectedRevision: graph.revision)
+            #expect(controller.errorMessage == nil)
+            let invocation = try #require(controller.selectedNodeID)
+            await controller.run(target: invocation, only: false)
+            let run = try #require(controller.runs.last)
+            #expect(run.status == .completed)
+            let asset = try #require(run.steps.first { $0.node.id == invocation }?.outputs["answer"]?.asset)
+            #expect(try await controller.services.readText(asset) == text)
+            results.append((asset, text))
+            #expect(Array(controller.tools.prefix(oldTools.count)) == oldTools)
+            try await controller.saveExplicitEdits()
+        }
+        let savedTools = controller.tools, savedRuns = controller.runs
+        try await controller.close(); try await store.close()
+        let reopened = try await ProjectStore.open(at: store.rootURL)
+        let archive = try #require(try await reopened.workflowState().archive)
+        #expect(archive.tools == savedTools)
+        #expect(archive.runs == savedRuns)
+        for (asset, text) in results { #expect(try await reopened.workflowText(asset) == text) }
+        #expect(await engine.requests.isEmpty)
+        try await reopened.close()
+    }
+
     @Test func controllerExtractionPersistsBoundaryMappingsAcrossStoreReopen() async throws {
         let (_, store, engine, controller) = try await fixture()
         controller.addBlankGraph(name: "Boundary fixture")
