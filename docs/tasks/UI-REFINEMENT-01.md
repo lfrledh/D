@@ -1,6 +1,6 @@
 # UI-REFINEMENT-01 — 第一版原生工作台
 
-状态：r2补齐聊天分工、设置路由、系统玻璃与本地化，已补部分普通App验收；组合余项明确保留，未接纳main。当前结果见文末“r2 无桌面补齐及解锁验收”，前面r1是历史。规格 r1＋2026-10-08续作附件；用户任务包 v1.0、设计 v0.3、交互原型 v0.2（2026-10-08）。
+状态：r3 无桌面实现与定向检查完成，代码/App `2b4b9ad2215fa6f191ce43f0baf6848549e924f7`；原生组合待验，未接纳main。当前结果见文末r3；r1/r2是历史，旧失败/预算保留。
 
 源/候选起点：91bef7d720a8b6cb923207ef787230f36496f4cf；已验生产代码 8cf1b7dd46f6041dbcf1ac3db75b19839ae390c4。独立集成树 D-UI-REFINEMENT-01、分支 codex/ui-refinement-01。准备提交完整执行基线写外部派工记录，不自引用。
 
@@ -106,3 +106,36 @@ R/lead/{baseline.json,scheme-before.plist,ui-tests-r2-result.json,ui-tests-r2.lo
 - 源01758b8与个人scheme完整差异、摘要、索引和未暂存状态一致（R2/lead/protection-end.json）。8个夹具资产原字节、聊天历史/附件/运行和Quick runs保持；独立项目既有26字节素材新增fileLocations核验信息、原asset字段不改，数组顺序不作内容一致依据。只主动编辑本轮R3 SAVE草稿与测试图。R2/lead/fixture-protection-end.json逐项列明。
 - 最终普通App4关键文件原样；D63339经菜单正常退出，任务Finder窗口关闭，无模型/自有构建作业续跑。旧Terminal关闭未确认的历史不绕过、不重报为已清理。
 - 精确证据索引：R2/lead/{native-results.json,targeted-r2-result.json,native-hosting-r1-result.json,viewport-driver-r2-result.json,delivery-native-r4.json,delivery-after-native.json,final-receipt.json}。唯一包与同树Xcode见[试用指南](../RELEASE_FREEZE_TRY.zh-CN.md)。剩余先由Lead独立办理；仅确需真人区分时进入原集中队列，不要求用户现在操作。
+
+
+## r3 锁屏条件下连续收口（2026-10-08）
+
+最新用户条件覆盖r2：不能解锁或操作，按桌面不可用处理。本轮未探测桌面、未启动App/Preview/NSWindow/hosting，未运行模型或改系统策略。起点候选 `4c42756415487a8ee7b3f53b5fdd3deef92eb723` 与远端一致，源/main及个人scheme与r2一致；没有回退或清理旧资料。
+
+R3=`D-Development/AgentTrials/UI-REFINEMENT-01/run-20261008T045623Z-r3-no-desktop`。实现与交付代码 **`2b4b9ad2215fa6f191ce43f0baf6848549e924f7`**；最终仅文档候选/远端写R3/lead/final-receipt.json。测试执行时为4c427上的未提交差分，保存逐次patch；`validation-summary.json`逐文件确认成功检查快照与该代码提交一致，不宣称在尚未产生的提交上执行过测试。
+
+| 项目 | 本轮实际结果 | 精确边界 |
+|---|---|---|
+| A 阅读生命周期 | 原条件分支会销毁Chat本地缓存。由已有WorkbenchModel持有轻量阅读状态，Chat按实际Controller取得独立对象；分类、模式、文字工作面、临时会话与草稿位置切换前捕获。原生marker只弱引用，不保存到项目；关闭释放，旧view迟到回调不重绑新owner。 | 保留现有Reader/票据。校验会话/分支/消息；旧像素点遇修订或输出变化失效，仍保留合法离底意图。没有新滚动器、schema、按键I/O；真实跨模态内部段落恢复待验。 |
+| B 过渡fit | 选择明确短暂禁用方案。现有原生probe同时报告scroll surface宽度和clip尺寸，按钮及动作均只在目标面板宽度有效后接纳；使用实际clip计算，可包含常驻滚动条。新增中英帮助名称。 | 无延时、排队或逐帧fit，不吞已接受的动作；原视图上下文/交互锁继续检查。仅视角/zoom，无节点坐标或Undo写入。真实动画回调/快速收放仍待验。 |
+| C 端口 | output载荷增加可选project/instance身份；真实生产源、接收及节点拖动结束的Scope一致，图版本/嵌套路径/类型检查仍在。 | 旧JSON可解码，但缺实例的旧端口载荷在当前真实接收端拒绝，须重新拖动；旧版接收端自身保护未改变。不是端口鼠标失败的已证根因。 |
+| C Finder | 隐藏祖先时文件接收入口重复拒绝，含hover后隐藏、prepare/perform；可见后恢复。异步导入仍重查原会话及Store，无新接收系统。 | 原生隐藏及先前左/右本人通过保留。新壳层跨窗命中仍缺，方法回调不能代替Finder松手。 |
+| D 封装与展示 | 新增公开Controller添加/配置/连接→extractSelection→保存/关闭→Store重开，校验图/工具、外部接口、digest、原snapshot字节及零推理。r2封装归档核对复用。 | r2小图仅保存“两文字输入”工具定义、没有外层invoke；新检查补跨边界代码路径，不冒充原生冷开。玻璃后备/153键及未变展示证据复用；仅新增fit帮助两语言检查。 |
+| D viewport驱动 | 有限复核未找到可确定的新驱动修补。曾怀疑空图zoom基准，但restoreViewContext会恢复独立空图上下文，反证后撤回。 | 保留原15失败与7ae的visible/key前置失败，不能据此前置判锁屏。旧opacity双层fixture不作为生产RetainedContentHost生命周期证据；原断言未删，未运行窗口方法。 |
+
+### 执行与审阅
+
+- `hidden-red`：新增一个无窗口方法，在尚未补可见性门禁时5处行为断言失败；修后同方法通过。`targeted-r3-fixed` **29方法/5套件通过**，涵盖读取快照/过期票据、fit/端口身份/拖动值逻辑、隐藏接收与注册、工具实名。普通NSView与pasteboard直接回调不等于原生拖放。
+- `extraction-reopen-fixed` **1方法通过**，真实Controller/Store/编译边界，未运行模型。仅检查新增缺口，没有重跑已有Store全矩阵。r2的12/3/59项不累计为本轮结果。
+- 首次UI检查误向shape-only matches传入身份参数而编译失败；首次封装夹具调用private edit而编译失败。均留原日志，分别修调用和改用公开编辑入口，未放宽断言。非实现者指出节点结束Scope遗漏身份，提交前修正；没有把普通节点移动默默破坏掉。
+- Lead直接实施及执行检查；两既有只读会话分别核A/B/D与C，不称独立模型执行GUI。没有新写Worker、重置旧预算或新派工设施。用量仅可核各命令耗时；本轮完整Lead/审核token、订阅实际费用unknown，不重算旧样本。
+- 同树 **D Nodes / Debug / My Mac** 构建通过（35.705秒），沿用既有资源和签名配置；实际ad-hoc签名、App Sandbox启用，未设置TeamIdentifier，不是Developer ID发行包。交付副本4关键文件与产物一致、codesign校验结果见`delivery-r3.json`；**未启动**，不是普通App本轮通过。唯一启动器原位更新，旧02df/8cf包与候选保留。
+
+### 待解锁的两个原生路径及恢复点
+
+1. 用r2已有24节项目主动离底→图像/视频→文字、Quick/Canvas往返，核原段落/草稿/附件；穿插已可见外链取消与显式搜索/Bottom。当前包Finder左侧/空白实际松手→附件/预览→保存冷开，核源文件与无发送。大字号、轻量及系统辅助效果沿该路径检查，不重办输入法/语音。
+2. 现有小图端口真实拖连（包括无效目标拒绝）、节点移动提交/Undo、封装调用及保存冷开；面板收放时fit清楚禁用、稳定后一次适配，核节点布局不变。桌面前置满足后运行保留的viewport方法；若工具命中不明，只做最短回调/落点区分，不能无依据重复坐标。
+
+保护：旧源01758b8个人scheme原orderHint 1→6、SHA256 ca3635…、索引与未暂存状态保持；main/旧release91bef不动。旧项目/模型/普通App不写入，新增Store夹具仅在R3/tmp。已结束本轮自有构建/检查进程，不声称控制或清理其他进程。最终源码与文档差异、远端、保护复核见外部回执。
+
+状态：**当前可独立的实现、无窗口验证与交付准备完成；新组合仍待原生验收。** 没有新的账号/设备/权限阻塞；F26仍为明确延期。到此停止，不自动等待/探测解锁，不强合main、不发布，也不追加UI或全局重构。
