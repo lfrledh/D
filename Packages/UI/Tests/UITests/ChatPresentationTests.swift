@@ -82,6 +82,125 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
 
 @Suite("Chat presentation boundaries")
 @MainActor struct ChatPresentationTests {
+    @Test func sidebarRevealCancellationAndOwnerDisableHideNativeReceiver() async throws {
+        try #require(!NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
+        func pane(open: Bool, enabled: Bool = true) -> some View {
+            WorkbenchSidebar(leading: true, expanded: open, title: "Fixture", identifier: "fixture-toggle",
+                hostIdentifier: "fixture-host", toggle: {}) {
+                    TextSourcesQuestionEditor(value: "保留输入", editEpoch: 0, isEditable: true, onEdit: { _ in })
+                }.disabled(!enabled)
+        }
+        let host = NSHostingView(rootView: pane(open: true))
+        host.frame = .init(x: 0, y: 0, width: 260, height: 500)
+        let window = NSWindow(contentRect: host.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; window.contentView = host
+        defer { window.close() }
+        func settle() async throws {
+            host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(80)); host.layoutSubtreeIfNeeded()
+        }
+        try await settle()
+        let editor = try #require(descendants(host).compactMap { $0 as? NSTextView }.first)
+        #expect(window.makeFirstResponder(editor))
+        host.rootView = pane(open: true, enabled: false); try await settle()
+        #expect(editor.isHiddenOrHasHiddenAncestor && window.firstResponder !== editor)
+        host.rootView = pane(open: false); try await settle()
+        host.rootView = pane(open: true); try await settle()
+        // Close before the pending reveal completes; it must not reopen an old receiver.
+        host.rootView = pane(open: false); try await settle()
+        try await Task.sleep(for: .milliseconds(800)); try await settle()
+        #expect(editor.isHiddenOrHasHiddenAncestor)
+        host.rootView = pane(open: true)
+        try await settle()
+        #expect(editor.isHiddenOrHasHiddenAncestor, "An expired reveal must not bypass the new opening transition")
+        try await Task.sleep(for: .milliseconds(800)); try await settle()
+        #expect(descendants(host).contains { $0 === editor })
+        #expect(!editor.isHiddenOrHasHiddenAncestor && editor.string == "保留输入")
+        #expect(window.firstResponder !== editor)
+    }
+
+    @Test func quickSidebarsStayOpenAcrossCategoriesAtMinimumWindow() async throws {
+        var state = ChatState(); let session = ChatSession(title: "Shared sidebar fixture")
+        state.sessions = [session]; state.selectedSessionID = session.id
+        let (_, model, store, root) = try await fixture(state)
+        let quick = QuickGenerationController(store: store) { throw WorkflowIssue("No inference permitted") }
+        await quick.load()
+        let sidebars = WorkbenchSidebarState(); sidebars.trailing = true
+        let host = NSHostingView(rootView: QuickGenerationView(quick: quick, model: model,
+            selectedResults: .constant([:]), onChooseModel: {}, onSettingsToCanvas: { _ in },
+            onResultToCanvas: { _ in }, onValueToCanvas: { _ in })
+            .environment(\.workbenchSidebars, sidebars))
+        host.frame = .init(x: 0, y: 0, width: 1080, height: 700)
+        let window = NSWindow(contentRect: host.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; window.contentView = host
+        defer { window.close() }
+        var previousLeft: NSView?, previousRight: NSView?
+        for category: QuickCategory in [.image, .video, .audio, .text] {
+            quick.selectCategory(category)
+            host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(120)); host.layoutSubtreeIfNeeded()
+            let left = try #require(descendants(host).first { $0.accessibilityIdentifier() == "quick-settings-host" })
+            let right = try #require(descendants(host).first { $0.accessibilityIdentifier() == "quick-assets-host" })
+            #expect(!left.isHiddenOrHasHiddenAncestor && !right.isHiddenOrHasHiddenAncestor)
+            let leftFrame = left.convert(left.bounds, to: host), rightFrame = right.convert(right.bounds, to: host)
+            #expect(leftFrame.width == 260 && rightFrame.width == 288)
+            #expect(rightFrame.minX - leftFrame.maxX >= 432)
+            if let previousLeft, let previousRight { #expect(left === previousLeft && right === previousRight) }
+            previousLeft = left; previousRight = right
+        }
+        #expect(quick.state.runs.isEmpty)
+        try await quick.flush(); try await close(store, root: root)
+    }
+
+    @Test func sharedSidebarsCoexistAndRetainInputWhenCollapsed() async throws {
+        let session = try answeredSession(raw: "保留阅读正文", status: .completed)
+        var state = ChatState(); state.sessions = [session]; state.selectedSessionID = session.id
+        let (chat, model, store, root) = try await fixture(state)
+        let sidebars = WorkbenchSidebarState(); sidebars.trailing = true
+        var rectangles: [String: CGRect] = [:]
+        let host = NSHostingView(rootView: ChatWorkbenchView(chat: chat, model: model, onChooseModel: {},
+            onSavedAsset: { _ in }, onAssetsChanged: {})
+            .observingLayout { rectangles[$0] = $1 }.environment(\.workbenchSidebars, sidebars))
+        host.frame = .init(x: 0, y: 0, width: 1080, height: 700)
+        let window = NSWindow(contentRect: host.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false; window.contentView = host
+        defer { window.close() }
+        func settle() {
+            host.layoutSubtreeIfNeeded()
+            RunLoop.main.run(until: Date().addingTimeInterval(0.08))
+            host.layoutSubtreeIfNeeded()
+        }
+        settle()
+        let left = try #require(descendants(host).first { $0.accessibilityIdentifier() == "chat-sessions-host" })
+        let right = try #require(descendants(host).first { $0.accessibilityIdentifier() == "chat-inspector-host" })
+        let editor = try #require(descendants(left).compactMap { $0 as? NSTextView }.first {
+            $0.accessibilityIdentifier() == "chat-system-\(session.id.uuidString)"
+        })
+        let composer = try #require(descendants(host).compactMap { $0 as? FileDropTextView }.first)
+        #expect(!left.isHiddenOrHasHiddenAncestor && !right.isHiddenOrHasHiddenAncestor)
+        for key in ["composer-send", "paths"] {
+            let control = try #require(rectangles[key])
+            #expect(!control.intersects(try #require(rectangles["sessions-pane"])))
+            #expect(!control.intersects(try #require(rectangles["inspector-pane"])))
+        }
+        #expect(window.makeFirstResponder(editor))
+        editor.setMarkedText("pinyin", selectedRange: .init(location: 6, length: 0),
+                             replacementRange: .init(location: NSNotFound, length: 0))
+        // The other pane can close and reopen without touching this editor or IME.
+        sidebars.trailing = false; settle()
+        #expect(right.isHiddenOrHasHiddenAncestor && !left.isHiddenOrHasHiddenAncestor)
+        sidebars.trailing = true
+        try await Task.sleep(for: .milliseconds(800)); settle()
+        #expect(editor.hasMarkedText() && window.firstResponder === editor)
+        sidebars.leading = false; settle()
+        #expect(left.isHiddenOrHasHiddenAncestor && !right.isHiddenOrHasHiddenAncestor)
+        #expect(window.firstResponder !== editor)
+        sidebars.leading = true
+        try await Task.sleep(for: .milliseconds(800)); settle()
+        #expect(descendants(host).contains { $0 === editor })
+        #expect(descendants(host).contains { $0 === composer })
+        #expect(!left.isHiddenOrHasHiddenAncestor && !right.isHiddenOrHasHiddenAncestor)
+        try await close(store, root: root)
+    }
+
     @Test func completeComposerGrowsFromShortDraftWithoutReplacingInput() async throws {
         var session = ChatSession(title: "Composer size")
         var state = ChatState(); state.sessions = [session]; state.selectedSessionID = session.id
@@ -93,7 +212,7 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
             styleMask: [.titled], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false; window.contentView = host; window.orderFront(nil)
         defer { window.close() }
-        for size in [CGSize(width: 1280, height: 820), CGSize(width: 860, height: 580)] {
+        for size in [CGSize(width: 1280, height: 820), CGSize(width: 1080, height: 580)] {
             host.frame.size = size; host.layoutSubtreeIfNeeded()
             try await Task.sleep(for: .milliseconds(120))
             let editor = try #require(descendants(host).compactMap { $0 as? FileDropTextView }.first)

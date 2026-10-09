@@ -24,9 +24,9 @@ struct QuickGenerationView: View {
     var onOpenLibrary: () -> Void = {}
     var onAssetsChanged: () -> Void = {}
     var onResolveSharedAsset: QuickInputImport.SharedAssetResolver? = nil
-    @State private var narrowRight = false
-    @State private var leftRequested = true
-    @State private var rightRequested = true
+    @Environment(\.workbenchSidebars) private var sharedSidebars
+    @State private var localSidebars = WorkbenchSidebarState()
+    private var sidebars: WorkbenchSidebarState { sharedSidebars ?? localSidebars }
     @State private var detailRun: QuickRunRecord?
     @State private var pendingPreview: WorkflowAssetReference?
     @State private var advanced = false
@@ -52,26 +52,16 @@ struct QuickGenerationView: View {
     }
     var body: some View {
         GeometryReader { geometry in
-            let leftShown = leftRequested && geometry.size.width >= 790 && (geometry.size.width >= 1110 || !narrowRight)
-            let rightShown = rightRequested && geometry.size.width >= (leftShown ? 1110 : 700)
-            HStack(alignment: .top, spacing: 12) {
-                if leftShown {
-                    VStack(spacing: 0) {
-                        HStack { Text(refinementText("settings", fallback: "生成设置")).font(.headline); Spacer(); panelButton(refinementText("collapseSettings", fallback: "收起生成设置"), "sidebar.left") { leftRequested = false } }.padding(12)
-                        modelHeader
-                        Divider()
-                        parameterPanel
-                    }.frame(width: 280).workbenchPanel(cornerRadius: 18).transition(.identity)
-                }
+            let leftShown = sidebars.leading
+            let rightShown = sidebars.trailing
+            ZStack(alignment: .topLeading) {
                 VStack(spacing: 10) {
                     HStack {
-                        if !leftShown { panelButton(refinementText("expandSettings", fallback: "展开生成设置"), "slider.horizontal.3") { leftRequested = true; narrowRight = false } }
                         Text(title).font(.headline).lineLimit(1)
                         Spacer()
                         if let result = selectedMedia, let run = run(containing: result) {
                             Button(refinementText("resultDetails", fallback: "结果详情"), systemImage: "info.circle") { detailRun = run }
                         }
-                        if !rightShown { panelButton(refinementText("expandAssets", fallback: "展开素材与结果"), "square.grid.2x2") { rightRequested = true; narrowRight = true } }
                     }
                     if quick.category == .image || quick.category == .video {
                         mediaStage
@@ -98,9 +88,19 @@ struct QuickGenerationView: View {
                     }
                     generationBar
                 }.frame(maxWidth: .infinity, maxHeight: .infinity)
-                if rightShown {
-                    VStack(spacing: 0) {
-                        HStack { Text(refinementText("assetsAndResults", fallback: "素材与结果")).font(.headline); Spacer(); panelButton(refinementText("collapseAssets", fallback: "收起素材与结果"), "sidebar.right") { rightRequested = false } }.padding(12)
+                    .padding(.leading, WorkbenchSidebarLayout.occupiedWidth(leftShown, leading: true))
+                    .padding(.trailing, WorkbenchSidebarLayout.occupiedWidth(rightShown, leading: false))
+                    .workbenchMorph(value: leftShown).workbenchMorph(value: rightShown)
+                WorkbenchSidebar(leading: true, expanded: leftShown,
+                    title: refinementText("settings", fallback: "生成设置"),
+                    identifier: "quick-settings-toggle", hostIdentifier: "quick-settings-host",
+                    toggle: { sidebars.leading.toggle() }) {
+                        VStack(spacing: 0) { modelHeader; Divider(); parameterPanel }
+                    }
+                WorkbenchSidebar(leading: false, expanded: rightShown,
+                    title: refinementText("assetsAndResults", fallback: "素材与结果"),
+                    identifier: "quick-assets-toggle", hostIdentifier: "quick-assets-host",
+                    toggle: { sidebars.trailing.toggle() }) {
                         ScrollView {
                             LazyVStack(alignment: .leading, spacing: 10) {
                                 Button(refinementText("openLibrary", fallback: "全部资料库…"), action: onOpenLibrary)
@@ -132,10 +132,8 @@ struct QuickGenerationView: View {
                                 }
                             }.padding(10)
                         }
-                    }.frame(width: 220).workbenchPanel(cornerRadius: 18).transition(.identity)
-                }
-            }.padding(14)
-                .workbenchMotion(value: leftShown).workbenchMotion(value: rightShown)
+                    }.frame(maxWidth: .infinity, alignment: .trailing)
+            }.padding(.horizontal, 16).padding(.bottom, 16)
         }
         .sheet(item: $detailRun, onDismiss: {
             if let pendingPreview { preview = pendingPreview; self.pendingPreview = nil }
@@ -158,10 +156,6 @@ struct QuickGenerationView: View {
             inputIssue = nil; inputNotice = nil
         }
         .onDisappear { inputAction?.feedbackValid = false }
-    }
-    private func panelButton(_ title: String, _ symbol: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) { Image(systemName: symbol).frame(width: 30, height: 30) }
-            .buttonStyle(.bordered).buttonBorderShape(.circle).help(title).accessibilityLabel(title)
     }
     private var modelHeader: some View {
             VStack(alignment: .leading, spacing: 10) {

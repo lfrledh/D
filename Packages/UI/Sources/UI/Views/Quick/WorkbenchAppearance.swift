@@ -87,12 +87,51 @@ struct WorkbenchAppearance: Codable, Equatable {
 struct WorkbenchEffectsPolicy {
     let usesCanvasBlend: Bool
     let duration: Double?
+    let morphAnimation: Animation?
 
     init(appearance: WorkbenchAppearance, reduceMotion: Bool,
          reduceTransparency: Bool, increasedContrast: Bool) {
         usesCanvasBlend = !appearance.lightweight && !reduceTransparency && !increasedContrast
         duration = appearance.lightweight || reduceMotion || appearance.motion == 0
             ? nil : 0.1 + 0.25 * appearance.motion
+        morphAnimation = duration.map { .spring(response: 0.34 + $0,
+            dampingFraction: 0.82 - 0.12 * appearance.motion, blendDuration: 0) }
+    }
+}
+
+/// App-local glass appearance over the opaque canvas blend. No platform backdrop
+/// sampler is introduced here. This is a highlight/rim treatment, not refraction.
+private struct WorkbenchGlassPlate<S: InsettableShape>: ViewModifier {
+    let shape: S
+    @Environment(\.chatDisplayPreferences) private var preferences
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.colorSchemeContrast) private var contrast
+    func body(content: Content) -> some View {
+        let decorated = !preferences.resolvedAppearance.lightweight && !reduceTransparency && contrast != .increased
+        content.workbenchPanel(in: shape)
+            .overlay {
+                if decorated {
+                    shape.fill(LinearGradient(colors: [.white.opacity(scheme == .dark ? 0.12 : 0.36),
+                        .white.opacity(0.015), .black.opacity(0.025)], startPoint: .topLeading, endPoint: .bottomTrailing))
+                    shape.strokeBorder(LinearGradient(colors: [.white.opacity(0.65), .white.opacity(0.10),
+                        .white.opacity(0.28)], startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 1)
+                }
+            }
+            .allowsHitTesting(false)
+    }
+}
+
+private struct WorkbenchMorphModifier<Value: Equatable>: ViewModifier {
+    let value: Value
+    @Environment(\.chatDisplayPreferences) private var preferences
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.colorSchemeContrast) private var contrast
+    func body(content: Content) -> some View {
+        let policy = WorkbenchEffectsPolicy(appearance: preferences.resolvedAppearance,
+            reduceMotion: reduceMotion, reduceTransparency: reduceTransparency, increasedContrast: contrast == .increased)
+        content.animation(policy.morphAnimation, value: value)
     }
 }
 
@@ -186,6 +225,14 @@ private struct WorkbenchMotionModifier<Value: Equatable>: ViewModifier {
 }
 
 extension View {
+    func workbenchGlassPlate<S: InsettableShape>(in shape: S) -> some View {
+        modifier(WorkbenchGlassPlate(shape: shape))
+    }
+
+    func workbenchMorph<Value: Equatable>(value: Value) -> some View {
+        modifier(WorkbenchMorphModifier(value: value))
+    }
+
     func workbenchPanel(cornerRadius: CGFloat = 12) -> some View {
         workbenchPanel(in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
     }
@@ -253,9 +300,8 @@ struct WorkbenchIconButtonStyle: ButtonStyle {
     }
 }
 
-/// The category strip uses the same capsule for its selected fill and hit body.
+/// Fixed capsule targets sit above the decorative moving lens.
 struct WorkbenchCategoryButtonStyle: ButtonStyle {
-    let selected: Bool
     @Environment(\.chatDisplayPreferences) private var preferences
     @Environment(\.colorScheme) private var scheme
     @Environment(\.isEnabled) private var isEnabled
@@ -264,9 +310,8 @@ struct WorkbenchCategoryButtonStyle: ButtonStyle {
         let shape = Capsule()
         let palette = preferences.resolvedAppearance.palette(for: scheme)
         configuration.label
-            .font(.body.weight(selected ? .semibold : .regular))
-            .frame(maxWidth: .infinity).padding(.vertical, 7).padding(.horizontal, 12)
-            .background(shape.fill(selected ? palette.accentColor.opacity(0.16) : .clear))
+            .font(.body)
+            .frame(maxWidth: .infinity).frame(height: 36)
             .modifier(WorkbenchButtonFeedback(shape: shape, isPressed: configuration.isPressed,
                                                ink: palette.accentColor))
             .opacity(isEnabled ? 1 : 0.45)

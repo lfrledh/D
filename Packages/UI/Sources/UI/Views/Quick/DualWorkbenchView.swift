@@ -75,6 +75,7 @@ public struct DualWorkbenchView: View {
             readiness: quickModel.projectSession.explicitModelReadiness,
             tools: canvasModel.projectSession.workflow?.tools ?? [], projects: projects, language: language)
     }
+    @State private var sidebarState = WorkbenchSidebarState()
     @FocusState private var focusedCategory: QuickCategory?
     @State private var entry: Entry = .quick
     @State private var entryHistory: [Entry] = []
@@ -202,12 +203,18 @@ public struct DualWorkbenchView: View {
                                 captureChatReading(); quick.selectCategory(category)
                             } label: {
                                 Text(workflowText(language, "quick.category.\(category.rawValue)", fallback: category.rawValue))
+                                    .foregroundStyle(.clear)
                             }
-                            .buttonStyle(WorkbenchCategoryButtonStyle(selected: quick.category == category))
+                            .buttonStyle(WorkbenchCategoryButtonStyle())
                             .focused($focusedCategory, equals: category)
                             .accessibilityAddTraits(quick.category == category ? .isSelected : [])
                             .accessibilityIdentifier("quick-category-\(category.rawValue)")
                         }
+                    }
+                    .background(alignment: .leading) {
+                        WorkbenchCategoryLensTrack(selection: CGFloat(QuickCategory.allCases.firstIndex(of: quick.category) ?? 0),
+                            titles: QuickCategory.allCases.map { workflowText(language, "quick.category.\($0.rawValue)", fallback: $0.rawValue) })
+                            .opacity(quickOwnerIsChanging ? 0.45 : 1)
                     }
                     .padding(4).frame(width: 264)
                     .workbenchPanel(in: Capsule())
@@ -229,7 +236,6 @@ public struct DualWorkbenchView: View {
                         captureChatReading(); quick.selectCategory(categories[next])
                         focusedCategory = categories[next]
                     }
-                    .workbenchMotion(value: quick.category)
                 } else { Text(t("workflow", "Node workflow", "节点工作流")).font(.headline).frame(width: 340) }
                 HStack(spacing: 8) {
                 Button(action: goBack) { Image(systemName: "chevron.left") }
@@ -364,7 +370,8 @@ public struct DualWorkbenchView: View {
             }
 
         }
-        .frame(minWidth: 860, minHeight: 580)
+        .frame(minWidth: WorkbenchSidebarLayout.minimumWindowWidth, minHeight: 580)
+        .environment(\.workbenchSidebars, sidebarState)
         .workbenchTheme()
         .environment(\.chatDisplayPreferences, automaticQuickModel.chatDisplaySettings.preferences)
         .preferredColorScheme(automaticQuickModel.chatDisplaySettings.preferences.preferredColorScheme)

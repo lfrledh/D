@@ -501,9 +501,18 @@ struct ChatWorkbenchView: View {
     @State private var lastBodyWidth: CGFloat = 0
     @Environment(\.colorScheme) private var colorScheme
     @State private var speechExpanded = false
-    @State private var showSidebar = true
+    @Environment(\.workbenchSidebars) private var sharedSidebars
+    @State private var localSidebars = WorkbenchSidebarState()
+    private var sidebars: WorkbenchSidebarState { sharedSidebars ?? localSidebars }
+    private var showSidebar: Bool {
+        get { sidebars.leading }
+        nonmutating set { sidebars.leading = newValue }
+    }
     @State private var showsSessionList = false
-    @State private var showInspector = false
+    private var showInspector: Bool {
+        get { sidebars.trailing }
+        nonmutating set { sidebars.trailing = newValue }
+    }
     @State private var sidebarWasPresented = false
     @State private var inspectorTab: ChatInspectorTab = .data
     @State private var sheets = ChatSheetQueue<ChatDetail>()
@@ -550,10 +559,11 @@ struct ChatWorkbenchView: View {
         self.scrollStates = model.readingState(for: chat)
         self.onSavedAsset = onSavedAsset; self.onRetainTemporary = onRetainTemporary; self.onAssetsChanged = onAssetsChanged; self.onSavedValue = onSavedValue
         self.onResolveSharedAsset = onResolveSharedAsset
-        _showInspector = State(initialValue: initialInspectorVisible)
+        let initialSidebars = WorkbenchSidebarState()
+        initialSidebars.trailing = initialInspectorVisible
+        _localSidebars = State(initialValue: initialSidebars)
         _inspectorTab = State(initialValue: .data)
         // Compatibility for callers requesting the system-prompt editor: it now lives on the left.
-        _showSidebar = State(initialValue: true)
         _showsSessionList = State(initialValue: false)
         _showContextPreview = State(initialValue: initialContextPreviewVisible)
         _inspectedAttemptID = State(initialValue: initialInspectedAttemptID)
@@ -595,24 +605,8 @@ struct ChatWorkbenchView: View {
 
     var body: some View {
         GeometryReader { geometry in
-            let sidebarShown = ChatPresentationLayout.showsSidebar(width: geometry.size.width, requested: showSidebar)
-            let inspectorShown = ChatPresentationLayout.showsInspector(width: geometry.size.width,
-                requested: showInspector, sidebar: sidebarShown)
-            let inspectorInline = inspectorShown && sheets.narrowPanel != .inspector
-            let sidebarInline = sidebarShown && sheets.narrowPanel != .sessions
-            // An already open pane remains visible as an overlay while the width
-            // changes. Do not briefly hide its native editor before onChange runs.
-            // During the resize transaction, retain the previous inline pane until
-            // onChange installs its narrow presentation. A dismissed narrow pane has
-            // the new width already, so this does not keep a closed overlay alive.
-            let previouslyInlineSidebar = ChatPresentationLayout.showsSidebar(width: lastBodyWidth, requested: showSidebar)
-            let previouslyInlineInspector = ChatPresentationLayout.showsInspector(width: lastBodyWidth,
-                requested: showInspector, sidebar: previouslyInlineSidebar)
-            let sidebarVisible = showSidebar && (sidebarInline || previouslyInlineSidebar || sheets.narrowPanel == .sessions)
-            let inspectorVisible = showInspector && (inspectorInline || previouslyInlineInspector || sheets.narrowPanel == .inspector)
-            let paneShape = RoundedRectangle(cornerRadius: 22, style: .continuous)
-            let sidebarPaneWidth = min(ChatPresentationLayout.sidebarWidth, geometry.size.width)
-            let inspectorPaneWidth = min(ChatPresentationLayout.inspectorWidth, geometry.size.width)
+            let sidebarShown = showSidebar
+            let inspectorShown = showInspector
             ZStack(alignment: .topLeading) {
                 Group {
                     if !chat.isLoaded {
@@ -625,86 +619,38 @@ struct ChatWorkbenchView: View {
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .padding(.leading, sidebarInline ? ChatPresentationLayout.sidebarWidth + 16 : 0)
-                .padding(.trailing, inspectorInline && session != nil ? ChatPresentationLayout.inspectorWidth + 16 : 0)
+                .padding(.leading, WorkbenchSidebarLayout.occupiedWidth(sidebarShown, leading: true))
+                .padding(.trailing, WorkbenchSidebarLayout.occupiedWidth(inspectorShown, leading: false))
                 .chatMeasured("conversation", probe: layoutProbe)
-                .workbenchMotion(value: sidebarInline).workbenchMotion(value: inspectorInline)
+                .workbenchMorph(value: sidebarShown).workbenchMorph(value: inspectorShown)
 
-                if sheets.narrowPanel != nil {
-                    Color.black.opacity(0.18)
-                        .ignoresSafeArea()
-                        .onTapGesture { closeNarrowPanel() }
-                        .accessibilityHidden(true)
-                }
-                RetainedContentHost(content: configurationPane.foregroundStyle(model.chatDisplaySettings.preferences.resolvedAppearance.palette(for: colorScheme).foregroundColor).disabled(!sidebarVisible)
-                    .environment(\.chatDisplayPreferences, model.chatDisplaySettings.preferences)
-                    .preferredColorScheme(model.chatDisplaySettings.preferences.preferredColorScheme)
-                    .environment(\.dLanguageStore, language), visible: sidebarVisible,
-                    identifier: "chat-sessions-host")
-                    .transaction { $0.animation = nil }
-                    .frame(width: sidebarPaneWidth)
-                    .frame(maxHeight: .infinity)
-                    .clipShape(paneShape)
-                    .background {
-                        Color.clear.workbenchPanel(in: paneShape)
-                            .opacity(sidebarVisible ? 1 : 0)
-                            .workbenchMotion(value: sidebarVisible).allowsHitTesting(false)
-                    }
-                    .allowsHitTesting(sidebarVisible)
-                    .accessibilityHidden(!sidebarVisible)
-                    .chatMeasured("sessions-pane", probe: layoutProbe)
-                if let session {
-                    RetainedContentHost(content: inspector(session).foregroundStyle(model.chatDisplaySettings.preferences.resolvedAppearance.palette(for: colorScheme).foregroundColor).disabled(!inspectorVisible)
-                        .environment(\.chatDisplayPreferences, model.chatDisplaySettings.preferences)
-                        .preferredColorScheme(model.chatDisplaySettings.preferences.preferredColorScheme)
-                        .environment(\.dLanguageStore, language), visible: inspectorVisible,
-                        identifier: "chat-inspector-host")
-                        .transaction { $0.animation = nil }
-                        .frame(width: inspectorPaneWidth)
-                        .frame(maxHeight: .infinity)
-                        .clipShape(paneShape)
-                        .background {
-                            Color.clear.workbenchPanel(in: paneShape)
-                                .opacity(inspectorVisible ? 1 : 0)
-                                .workbenchMotion(value: inspectorVisible).allowsHitTesting(false)
-                        }
-                        .chatMeasured("inspector-pane", probe: layoutProbe)
-                        .allowsHitTesting(inspectorVisible)
-                        .accessibilityHidden(!inspectorVisible)
-                        .frame(maxWidth: .infinity, alignment: .trailing)
-                }
+                WorkbenchSidebar(leading: true, expanded: sidebarShown,
+                    title: refinement("modelAndConversations", "Model and conversations", "模型与对话"),
+                    identifier: "chat-sessions-toggle", hostIdentifier: "chat-sessions-host",
+                    toggle: { showSidebar.toggle(); sidebarWasPresented = showSidebar }) {
+                        configurationPane
+                    }.chatMeasured("sessions-pane", probe: layoutProbe)
+                WorkbenchSidebar(leading: false, expanded: inspectorShown,
+                    title: refinement("materialsAndResults", "Materials and results", "素材与成果"),
+                    identifier: "chat-inspector-toggle", hostIdentifier: "chat-inspector-host",
+                    toggle: { showInspector.toggle() }) {
+                        if let session { inspector(session) }
+                        else { Text(label("noConversation", "尚未选择对话")).foregroundStyle(.secondary).padding() }
+                    }.chatMeasured("inspector-pane", probe: layoutProbe)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
             }
             // Pane content owns its clipping. The layout container must leave
             // room for each floating plate's outer shadow.
             .coordinateSpace(name: ChatLayoutSpace.name)
-            .onAppear {
-                sidebarWasPresented = sidebarVisible
-                lastBodyWidth = geometry.size.width
-            }
-            .onChange(of: geometry.size.width) { oldWidth, width in
-                lastBodyWidth = width
-                if sidebarShown { sidebarWasPresented = true }
-                if let narrowPanel = sheets.narrowPanel, ChatPresentationLayout.dismissesNarrowPanel(narrowPanel,
-                    width: width, sidebarRequested: showSidebar, inspectorRequested: showInspector) {
-                    closeNarrowPanel(keepPreference: true)
-                } else if sheets.narrowPanel == nil {
-                    let oldSidebar = ChatPresentationLayout.showsSidebar(width: oldWidth, requested: showSidebar)
-                    let newSidebar = ChatPresentationLayout.showsSidebar(width: width, requested: showSidebar)
-                    if ChatPresentationLayout.showsInspector(width: oldWidth, requested: showInspector, sidebar: oldSidebar) &&
-                       !ChatPresentationLayout.showsInspector(width: width, requested: showInspector, sidebar: newSidebar) {
-                        sheets.openNarrow(.inspector)
-                    } else if oldSidebar && !newSidebar {
-                        sheets.openNarrow(.sessions)
-                    }
-                }
-            }
+            .onAppear { sidebarWasPresented = sidebarShown; lastBodyWidth = geometry.size.width }
+            .onChange(of: geometry.size.width) { _, width in lastBodyWidth = width }
+
         }
         .padding(.horizontal, 16).padding(.bottom, 16)
         .task(id: openToolsRequest) {
             if let openToolsRequest {
                 guard openToolsRequest.matches(chat) else { onToolsOpened(openToolsRequest.id); return }
                 showInspector = true; inspectorTab = .data
-                if !ChatPresentationLayout.showsInspector(width: lastBodyWidth, requested: true, sidebar: showSidebar) { sheets.openNarrow(.inspector) }
                 onToolsOpened(openToolsRequest.id)
             }
         }
@@ -808,40 +754,9 @@ struct ChatWorkbenchView: View {
     }
 
     private func emptyConversation(width: CGFloat, sidebarShown: Bool) -> some View {
-        VStack(spacing: 0) {
-            HStack {
-                leftPanelButton(width: width)
-                Spacer()
-                rightPanelButton(width: width, sidebarShown: sidebarShown)
-            }.padding(12)
-            ChatEmptyConversationView { createSession() }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .chatMeasured("empty-conversation", probe: layoutProbe)
-        }
-    }
-
-    private func leftPanelButton(width: CGFloat) -> some View {
-        Button {
-            if !ChatPresentationLayout.showsSidebar(width: width, requested: true) {
-                showSidebar = true; sidebarWasPresented = true; sheets.openNarrow(.sessions)
-            } else { showSidebar.toggle(); if showSidebar { sidebarWasPresented = true } }
-        } label: { Image(systemName: "slider.horizontal.3").frame(width: 28, height: 28) }
-            .buttonStyle(WorkbenchIconButtonStyle(diameter: 38, panel: true))
-            .help(refinement("modelAndParameters", "Model and parameters", "模型与参数"))
-            .accessibilityLabel(refinement("modelAndParameters", "Model and parameters", "模型与参数"))
-            .accessibilityIdentifier("chat-sessions-toggle")
-    }
-
-    private func rightPanelButton(width: CGFloat, sidebarShown: Bool) -> some View {
-        Button {
-            if !ChatPresentationLayout.showsInspector(width: width, requested: true, sidebar: sidebarShown) {
-                showInspector = true; sheets.openNarrow(.inspector)
-            } else { showInspector.toggle() }
-        } label: { Image(systemName: "square.grid.2x2").frame(width: 28, height: 28) }
-            .buttonStyle(WorkbenchIconButtonStyle(diameter: 38, panel: true))
-            .help(refinement("materialsAndResults", "Materials and results", "素材与成果"))
-            .accessibilityLabel(refinement("materialsAndResults", "Materials and results", "素材与成果"))
-            .accessibilityIdentifier("chat-inspector-toggle")
+        ChatEmptyConversationView { createSession() }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .chatMeasured("empty-conversation", probe: layoutProbe)
     }
 
     private func refinement(_ key: String, _ en: String, _ zh: String) -> String {
@@ -858,10 +773,7 @@ struct ChatWorkbenchView: View {
                     Text(refinement("model", "Model", "模型")).tag(false)
                     Text(label("history", "对话")).tag(true)
                 }.pickerStyle(.segmented).labelsHidden().accessibilityIdentifier("chat-left-section")
-                Button(label("close", "关闭"), systemImage: "xmark") {
-                    showSidebar = false
-                    if sheets.narrowPanel == .sessions { closeNarrowPanel() }
-                }.labelStyle(.iconOnly).accessibilityIdentifier("chat-configuration-close")
+
             }.padding(12)
             Divider()
             if showsSessionList { sidebar }
@@ -894,12 +806,7 @@ struct ChatWorkbenchView: View {
                 Spacer()
                 Button(label("new", "新建"), systemImage: "plus") { createSession() }
                     .disabled(!chat.isLoaded || chat.saveIssue != nil)
-                Button(label("close", "关闭"), systemImage: "xmark") {
-                    showSidebar = false
-                    if sheets.narrowPanel == .sessions { closeNarrowPanel() }
-                }
-                .labelStyle(.iconOnly)
-                .accessibilityIdentifier("chat-sessions-close")
+
             }
             Button(newLabel("importConversation", english: "Import conversation…", chinese: "导入会话…")) { Task { await importConversation() } }
                 .disabled(filePanelBusy || !chat.isLoaded || chat.saveIssue != nil)
@@ -994,10 +901,8 @@ struct ChatWorkbenchView: View {
         let attempts = Dictionary(uniqueKeysWithValues: session.attempts.map { ($0.id, $0) })
         return VStack(spacing: 0) {
             HStack(alignment: .center, spacing: 12) {
-                if !sidebarShown { leftPanelButton(width: width) }
                 Button {
                     showsSessionList = true; showSidebar = true
-                    if !ChatPresentationLayout.showsSidebar(width: width, requested: true) { sheets.openNarrow(.sessions) }
                 } label: { Image(systemName: "clock.arrow.circlepath").frame(width: 26, height: 28) }
                     .buttonStyle(WorkbenchIconButtonStyle()).help(label("history", "对话"))
                     .accessibilityLabel(label("history", "对话")).accessibilityIdentifier("chat-history-open")
@@ -1032,9 +937,7 @@ struct ChatWorkbenchView: View {
                 Button { createSession() } label: { Image(systemName: "plus").frame(width: 28, height: 28) }
                     .buttonStyle(WorkbenchIconButtonStyle()).help(label("new", "新建"))
                     .accessibilityLabel(label("new", "新建")).disabled(chat.saveIssue != nil)
-                if !ChatPresentationLayout.showsInspector(width: width, requested: showInspector, sidebar: sidebarShown) {
-                    rightPanelButton(width: width, sidebarShown: sidebarShown)
-                }
+
             }.padding(.horizontal, 8).padding(.vertical, 8)
                 .chatMeasured("topbar", probe: layoutProbe)
             if chat.isRunning, let active = chat.activeSessionID,
@@ -1361,10 +1264,7 @@ struct ChatWorkbenchView: View {
         showContextPreview = preview
         inspectorTab = .data
         showInspector = true
-        let sidebar = ChatPresentationLayout.showsSidebar(width: lastBodyWidth, requested: showSidebar)
-        if !ChatPresentationLayout.showsInspector(width: lastBodyWidth, requested: true, sidebar: sidebar) {
-            sheets.openNarrow(.inspector)
-        }
+
     }
 
     private func changeMessageChoice(session: ChatSession,
@@ -1378,14 +1278,6 @@ struct ChatWorkbenchView: View {
 
     private func inspector(_ session: ChatSession) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                Text(refinement("materialsAndResults", "Materials and results", "素材与成果")).font(.headline)
-                Spacer()
-                Button(label("close", "关闭"), systemImage: "xmark") {
-                    showInspector = false; closeNarrowPanel()
-                }.labelStyle(.iconOnly).keyboardShortcut(.cancelAction)
-                    .accessibilityIdentifier("chat-inspector-close")
-            }.padding(14)
             Picker(refinement("materialsAndResults", "Materials and results", "素材与成果"), selection: $inspectorTab) {
                 Text(newLabel("inspectorData", english: "Data", chinese: "资料")).tag(ChatInspectorTab.data)
                 Text(newLabel("inspectorArtifacts", english: "Artifacts", chinese: "成果")).tag(ChatInspectorTab.artifacts)

@@ -7,6 +7,36 @@ import Testing
 
 @Suite("Workbench appearance preferences")
 @MainActor struct WorkbenchAppearanceTests {
+    /// Production lens paint samples for inspecting glyph alignment and the
+    /// reduced-effects selection marker. This is not a native-window screenshot.
+    @Test func categoryLensPaintSamples() throws {
+        let titles = ["文本", "图像", "视频", "音频"]
+        var lightweight = ChatDisplayPreferences()
+        lightweight.appearance = WorkbenchAppearance(lightweight: true)
+        let samples = HStack(spacing: 20) {
+            ForEach([ColorScheme.light, .dark], id: \.self) { scheme in
+                VStack(spacing: 16) {
+                    ForEach([CGFloat(0), 1, 1.5, 2, 3], id: \.self) { position in
+                        WorkbenchCategoryLensTrack(selection: position, titles: titles)
+                            .padding(4).workbenchPanel(in: Capsule())
+                    }
+                    WorkbenchCategoryLensTrack(selection: 2, titles: titles)
+                        .padding(4).workbenchPanel(in: Capsule())
+                        .environment(\.chatDisplayPreferences, lightweight)
+                }.padding(20).workbenchTheme().environment(\.colorScheme, scheme)
+            }
+        }
+        let renderer = ImageRenderer(content: samples)
+        renderer.scale = 2
+        let image = try #require(renderer.cgImage)
+        #expect(image.width > 1000 && image.height > 500)
+        if let directory = ProcessInfo.processInfo.environment["D_TEST_TEMP_DIR"] {
+            let bitmap = NSBitmapImageRep(cgImage: image)
+            try #require(bitmap.representation(using: .png, properties: [:]))
+                .write(to: URL(fileURLWithPath: directory).appendingPathComponent("lens-paint-samples.png"))
+        }
+    }
+
     /// A rectangular content probe must not change the plate's outer shadow.
     /// This isolates painting only; native host clipping still needs window review.
     @Test func capsuleBoundaryAndShadowExcludeContentLayers() throws {
@@ -321,6 +351,7 @@ import Testing
                                            reduceTransparency: false, increasedContrast: false)
         #expect(!light.usesCanvasBlend)
         #expect(light.duration == nil)
+        #expect(light.morphAnimation == nil)
     }
 
     @Test func motionPolicyDisablesDecorationWithoutChangingSavedPreferences() {
@@ -330,12 +361,14 @@ import Testing
                                              reduceTransparency: false, increasedContrast: false)
         #expect(reduced.usesCanvasBlend)
         #expect(reduced.duration == nil)
+        #expect(reduced.morphAnimation == nil)
         #expect(appearance.motion == 1)
 
         appearance.motion = 0
         let disabled = WorkbenchEffectsPolicy(appearance: appearance, reduceMotion: false,
                                               reduceTransparency: false, increasedContrast: false)
         #expect(disabled.duration == nil)
+        #expect(disabled.morphAnimation == nil)
         #expect(disabled.usesCanvasBlend)
     }
 
