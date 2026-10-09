@@ -26,6 +26,15 @@ struct WorkbenchPalette: Codable, Equatable {
     var panelColor: Color { Color(rgb: panel) }
     var accentColor: Color { Color(rgb: accent) }
 
+    /// Paint an opaque result, rather than asking a platform backdrop to choose
+    /// a sampling surface. This blends canvas color only, not underlying media.
+    func panelFill(canvasBlend: Double) -> Color {
+        guard let panel = RGB(hex: panel), let canvas = RGB(hex: canvas),
+              canvasBlend.isFinite, (0...1).contains(canvasBlend) else { return .black }
+        let fill = panel.composited(over: canvas, opacity: 1 - canvasBlend)
+        return Color(.sRGB, red: fill.red, green: fill.green, blue: fill.blue, opacity: 1)
+    }
+
     /// WCAG contrast against the canvas, composited panel, and opaque panel fallback.
     /// Invalid hex is reported by `isValid`, rather than being treated as a passing contrast value.
     func contrastIssues(backgroundTransparency: Double) -> [String] {
@@ -51,7 +60,8 @@ struct WorkbenchPalette: Codable, Equatable {
 struct WorkbenchAppearance: Codable, Equatable {
     var light = WorkbenchPalette.defaultLight
     var dark = WorkbenchPalette.defaultDark
-    /// 0 is opaque; 1 lets the canvas show through the panel background.
+    /// Saved key retained for compatibility. 0 is panel color, 1 is canvas color;
+    /// the rendered plate stays opaque at every blend value.
     var backgroundTransparency = 0.12
     /// 0 disables decorative motion; 1 selects the full subtle transition.
     var motion = 0.5
@@ -75,12 +85,12 @@ struct WorkbenchAppearance: Codable, Equatable {
 /// Decorative effects only. Saved appearance values and contrast calculations stay independent
 /// of the current accessibility settings.
 struct WorkbenchEffectsPolicy {
-    let usesMaterial: Bool
+    let usesCanvasBlend: Bool
     let duration: Double?
 
     init(appearance: WorkbenchAppearance, reduceMotion: Bool,
          reduceTransparency: Bool, increasedContrast: Bool) {
-        usesMaterial = !appearance.lightweight && !reduceTransparency && !increasedContrast
+        usesCanvasBlend = !appearance.lightweight && !reduceTransparency && !increasedContrast
         duration = appearance.lightweight || reduceMotion || appearance.motion == 0
             ? nil : 0.1 + 0.25 * appearance.motion
     }
@@ -147,20 +157,12 @@ private struct WorkbenchPanelModifier: ViewModifier {
         content
             .foregroundStyle(palette.foregroundColor)
             .background {
-                if effects.usesMaterial && appearance.backgroundTransparency > 0 {
-                    // Material samples app content beneath this plate. Liquid Glass
-                    // can bring the desktop into an otherwise opaque workbench.
-                    shape.fill(.regularMaterial)
-                        .overlay {
-                            shape.fill(palette.panelColor.opacity(1 - appearance.backgroundTransparency))
-                        }
-                        .allowsHitTesting(false)
-                } else {
-                    shape.fill(palette.panelColor).allowsHitTesting(false)
-                }
+                shape.fill(palette.panelFill(canvasBlend:
+                    effects.usesCanvasBlend ? appearance.backgroundTransparency : 0))
+                    .allowsHitTesting(false)
             }
-            .shadow(color: effects.usesMaterial ? .black.opacity(0.10) : .clear,
-                    radius: effects.usesMaterial ? 8 : 0, y: effects.usesMaterial ? 2 : 0)
+            .shadow(color: effects.usesCanvasBlend ? .black.opacity(0.10) : .clear,
+                    radius: effects.usesCanvasBlend ? 8 : 0, y: effects.usesCanvasBlend ? 2 : 0)
             .animation(effects.duration.map { .easeInOut(duration: $0) }, value: palette)
     }
 }

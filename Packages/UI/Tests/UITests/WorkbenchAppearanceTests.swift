@@ -7,6 +7,75 @@ import Testing
 
 @Suite("Workbench appearance preferences")
 @MainActor struct WorkbenchAppearanceTests {
+    /// Render the production paint without a window or desktop capture. This
+    /// proves pixel alpha/backdrop independence, not native window acceptance.
+    @Test func panelPixelsAreOpaqueAndIndependentOfExternalBackground() throws {
+        // These accessibility values are read-only environment inputs. Do not
+        // change system preferences to obtain a desired rendering result.
+        try #require(!NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency)
+        try #require(!NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast)
+        func pixels(appearance: WorkbenchAppearance, scheme: ColorScheme,
+                    behind: Color = .clear) throws -> [UInt8] {
+            var preferences = ChatDisplayPreferences()
+            preferences.appearance = appearance
+            let content = Color.clear.frame(width: 80, height: 80)
+                .workbenchPanel(cornerRadius: 12)
+                .environment(\.chatDisplayPreferences, preferences)
+                .environment(\.colorScheme, scheme)
+                .background(behind)
+            let renderer = ImageRenderer(content: content)
+            renderer.scale = 1
+            renderer.isOpaque = false
+            renderer.colorMode = .nonLinear
+            let image = try #require(renderer.cgImage)
+            try #require(image.width == 80 && image.height == 80)
+            // Normalize by drawing into explicit sRGB bytes, not NSColor's
+            // calibrated conversion of NSBitmapImageRep.colorAt values.
+            var rgba = [UInt8](repeating: 0, count: 80 * 80 * 4)
+            try rgba.withUnsafeMutableBytes { bytes in
+                let context = try #require(CGContext(data: bytes.baseAddress, width: 80, height: 80,
+                    bitsPerComponent: 8, bytesPerRow: 80 * 4,
+                    space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                    bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue))
+                context.draw(image, in: CGRect(x: 0, y: 0, width: 80, height: 80))
+            }
+            return rgba
+        }
+        func check(_ rgba: [UInt8], expected: [Double]) {
+            // Center and the inner left/top padding, not only a single center pixel.
+            for (x, y) in [(40, 40), (3, 40), (40, 3)] {
+                let offset = (y * 80 + x) * 4
+                #expect(rgba[offset + 3] == 255)
+                for channel in 0..<3 {
+                    #expect(abs(Double(rgba[offset + channel]) - expected[channel]) <= 1)
+                }
+            }
+        }
+        for scheme: ColorScheme in [.light, .dark] {
+            // Independent default palette fixtures, without calling panelFill.
+            let panel: [Double] = scheme == .light ? [250, 252, 249] : [29, 43, 37]
+            let canvas: [Double] = scheme == .light ? [237, 242, 235] : [17, 29, 26]
+            for blend in [0.0, 0.5, 1.0] {
+                var appearance = WorkbenchAppearance()
+                appearance.backgroundTransparency = blend
+                let expected = zip(panel, canvas).map { $0 * (1 - blend) + $1 * blend }
+                for background in [Color.clear, .red, .blue] {
+                    check(try pixels(appearance: appearance, scheme: scheme, behind: background), expected: expected)
+                }
+            }
+        }
+        // Lightweight fallback remains panel color at full canvas blend.
+        // Accessibility flag combinations are covered by the pure policy test;
+        // motion alone must not alter the rendered color.
+        var appearance = WorkbenchAppearance()
+        appearance.backgroundTransparency = 1
+        appearance.lightweight = true
+        check(try pixels(appearance: appearance, scheme: .light), expected: [250, 252, 249])
+        appearance.lightweight = false
+        appearance.motion = 0
+        check(try pixels(appearance: appearance, scheme: .light), expected: [237, 242, 235])
+    }
+
     /// Host-process mouse events exercise styles; this is not foreground/native acceptance.
     @Test func buttonBodiesReceivePaddingEdgesAndCancelOutsideRelease() throws {
         var calls = [String: Int]()
@@ -198,27 +267,27 @@ import Testing
         #expect(!preferences.isValid)
     }
 
-    @Test func materialPolicyUsesOpaqueFallbackForAccessibilityAndLightweight() {
+    @Test func canvasBlendPolicyUsesOpaqueFallbackForAccessibilityAndLightweight() {
         let appearance = WorkbenchAppearance()
         let normal = WorkbenchEffectsPolicy(appearance: appearance, reduceMotion: false,
                                             reduceTransparency: false, increasedContrast: false)
-        #expect(normal.usesMaterial)
+        #expect(normal.usesCanvasBlend)
         #expect(normal.duration == 0.225)
 
         let transparent = WorkbenchEffectsPolicy(appearance: appearance, reduceMotion: false,
                                                  reduceTransparency: true, increasedContrast: false)
-        #expect(!transparent.usesMaterial)
+        #expect(!transparent.usesCanvasBlend)
         #expect(transparent.duration == normal.duration)
 
         let contrast = WorkbenchEffectsPolicy(appearance: appearance, reduceMotion: false,
                                               reduceTransparency: false, increasedContrast: true)
-        #expect(!contrast.usesMaterial)
+        #expect(!contrast.usesCanvasBlend)
 
         var lightweight = appearance
         lightweight.lightweight = true
         let light = WorkbenchEffectsPolicy(appearance: lightweight, reduceMotion: false,
                                            reduceTransparency: false, increasedContrast: false)
-        #expect(!light.usesMaterial)
+        #expect(!light.usesCanvasBlend)
         #expect(light.duration == nil)
     }
 
@@ -227,7 +296,7 @@ import Testing
         appearance.motion = 1
         let reduced = WorkbenchEffectsPolicy(appearance: appearance, reduceMotion: true,
                                              reduceTransparency: false, increasedContrast: false)
-        #expect(reduced.usesMaterial)
+        #expect(reduced.usesCanvasBlend)
         #expect(reduced.duration == nil)
         #expect(appearance.motion == 1)
 
@@ -235,7 +304,7 @@ import Testing
         let disabled = WorkbenchEffectsPolicy(appearance: appearance, reduceMotion: false,
                                               reduceTransparency: false, increasedContrast: false)
         #expect(disabled.duration == nil)
-        #expect(disabled.usesMaterial)
+        #expect(disabled.usesCanvasBlend)
     }
 
     @Test func parsedMarkdownUsesActiveForegroundAndLinkPalette() async throws {

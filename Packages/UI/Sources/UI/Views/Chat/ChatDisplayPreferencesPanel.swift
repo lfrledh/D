@@ -231,7 +231,7 @@ struct ChatDisplayPreferencesPanel: View {
 
             Section(label("effects", "Effects", "视觉效果")) {
                 VStack(alignment: .leading) {
-                    Text("\(label("backgroundTransparency", "Background tint and backing transparency", "背景色调与底层透明度")): \(Int(state.preferences.resolvedAppearance.backgroundTransparency * 100))%")
+                    Text("\(label("backgroundTransparency", "Canvas color blend", "画布底色占比")): \(Int(state.preferences.resolvedAppearance.backgroundTransparency * 100))%")
                     Slider(value: Binding(
                         get: { state.preferences.resolvedAppearance.backgroundTransparency },
                         set: { value in change { preferences in
@@ -239,9 +239,10 @@ struct ChatDisplayPreferencesPanel: View {
                             appearance.backgroundTransparency = value
                             preferences.appearance = appearance
                         } }), in: 0...1)
-                        .accessibilityLabel(label("backgroundTransparency", "Background tint and backing transparency", "背景色调与底层透明度"))
+                        .accessibilityLabel(label("backgroundTransparency", "Canvas color blend", "画布底色占比"))
                         .accessibilityValue("\(Int(state.preferences.resolvedAppearance.backgroundTransparency * 100))%")
                         .accessibilityIdentifier("workbench-background-transparency")
+                        .help(label("backgroundBlendHint", "0% panel color; 100% canvas color.", "0% 为面板色，100% 为画布色。"))
                 }
                 VStack(alignment: .leading) {
                     Text("\(label("motion", "Decorative motion", "装饰性动态")): \(Int(state.preferences.resolvedAppearance.motion * 100))%")
@@ -265,8 +266,8 @@ struct ChatDisplayPreferencesPanel: View {
                     } }))
                     .accessibilityIdentifier("workbench-lightweight")
                 Text(label("performanceNote",
-                           "Glass follows macOS accessibility settings. Lightweight mode uses an opaque panel and removes decorative motion.",
-                           "玻璃效果遵循 macOS 辅助功能设置。轻量模式使用不透明面板并关闭装饰性动态。"))
+                           "Panels blend with the canvas color; they do not blur content behind them. Accessibility settings are respected. Lightweight mode uses panel color and removes decorative motion.",
+                           "面板与画布底色融合，不模糊下方内容，并遵循辅助功能设置。轻量模式使用面板原色并关闭装饰性动态。"))
                     .font(.caption).foregroundStyle(.secondary)
             }
             .disabled(state.hasInvalidStoredRecord)

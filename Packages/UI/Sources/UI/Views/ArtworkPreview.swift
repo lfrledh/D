@@ -105,7 +105,8 @@ struct ArtworkCanvas: View {
                 .background(Color(nsColor: .controlBackgroundColor), in: Capsule())
                 .overlay(Capsule().stroke(.separator.opacity(0.5)))
         } else {
-            zoomButtons.padding(6).background(.regularMaterial, in: Capsule())
+            zoomButtons.padding(6)
+                .background(Color(nsColor: .controlBackgroundColor.withAlphaComponent(1)), in: Capsule())
         }
     }
 

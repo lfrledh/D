@@ -444,7 +444,8 @@ public struct ProjectWorkspaceShell<Sidebar: View, Editor: View, Inspector: View
                 .overlay(RoundedRectangle(cornerRadius: 14).stroke(.separator.opacity(0.45)))
         } else {
             content().padding(7)
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+                .background(Color(nsColor: .controlBackgroundColor.withAlphaComponent(1)),
+                            in: RoundedRectangle(cornerRadius: 14))
         }
     }
 
