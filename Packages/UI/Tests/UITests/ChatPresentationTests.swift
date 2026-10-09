@@ -112,7 +112,9 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
         host.rootView = pane(open: true)
         try await settle()
         #expect(editor.isHiddenOrHasHiddenAncestor, "An expired reveal must not bypass the new opening transition")
-        try await Task.sleep(for: .milliseconds(800)); try await settle()
+        // Default morph is 200ms: native content must be ready before 300ms,
+        // without the previous 700ms reveal wait and subsequent title fade.
+        try await Task.sleep(for: .milliseconds(160)); host.layoutSubtreeIfNeeded()
         #expect(descendants(host).contains { $0 === editor })
         #expect(!editor.isHiddenOrHasHiddenAncestor && editor.string == "保留输入")
         #expect(window.firstResponder !== editor)

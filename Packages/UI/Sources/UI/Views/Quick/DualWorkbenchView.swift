@@ -77,6 +77,8 @@ public struct DualWorkbenchView: View {
     }
     @State private var sidebarState = WorkbenchSidebarState()
     @FocusState private var focusedCategory: QuickCategory?
+    @State private var hoveredCategory: QuickCategory?
+    @State private var pressedCategory: QuickCategory?
     @State private var entry: Entry = .quick
     @State private var entryHistory: [Entry] = []
     @State private var libraryVisible = false
@@ -205,7 +207,14 @@ public struct DualWorkbenchView: View {
                                 Text(workflowText(language, "quick.category.\(category.rawValue)", fallback: category.rawValue))
                                     .foregroundStyle(.clear)
                             }
-                            .buttonStyle(WorkbenchCategoryButtonStyle())
+                            .buttonStyle(WorkbenchCategoryButtonStyle(onPressChanged: { pressed in
+                                if pressed { pressedCategory = category }
+                                else if pressedCategory == category { pressedCategory = nil }
+                            }))
+                            .onHover { inside in
+                                if inside && !quickOwnerIsChanging { hoveredCategory = category }
+                                else if hoveredCategory == category { hoveredCategory = nil }
+                            }
                             .focused($focusedCategory, equals: category)
                             .accessibilityAddTraits(quick.category == category ? .isSelected : [])
                             .accessibilityIdentifier("quick-category-\(category.rawValue)")
@@ -213,12 +222,18 @@ public struct DualWorkbenchView: View {
                     }
                     .background(alignment: .leading) {
                         WorkbenchCategoryLensTrack(selection: CGFloat(QuickCategory.allCases.firstIndex(of: quick.category) ?? 0),
-                            titles: QuickCategory.allCases.map { workflowText(language, "quick.category.\($0.rawValue)", fallback: $0.rawValue) })
+                            titles: QuickCategory.allCases.map { workflowText(language, "quick.category.\($0.rawValue)", fallback: $0.rawValue) },
+                            hovered: hoveredCategory.flatMap { QuickCategory.allCases.firstIndex(of: $0) },
+                            pressed: pressedCategory.flatMap { QuickCategory.allCases.firstIndex(of: $0) })
                             .opacity(quickOwnerIsChanging ? 0.45 : 1)
                     }
                     .padding(4).frame(width: 264)
                     .workbenchPanel(in: Capsule())
                     .disabled(quickOwnerIsChanging)
+                    .onChange(of: quickOwnerIsChanging) { _, changing in
+                        if changing { hoveredCategory = nil; pressedCategory = nil }
+                    }
+                    .onDisappear { hoveredCategory = nil; pressedCategory = nil }
                     .accessibilityElement(children: .contain)
                     .accessibilityLabel(t("category", "Creation category", "创作分类"))
                     .accessibilityIdentifier("quick-category")

@@ -46,6 +46,11 @@ struct WorkbenchSidebar<Content: View>: View {
     @Environment(\.isEnabled) private var isEnabled
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    private var revealDuration: Double? {
+        WorkbenchEffectsPolicy(appearance: preferences.resolvedAppearance, reduceMotion: reduceMotion,
+            reduceTransparency: false, increasedContrast: false).morphDuration
+    }
+
     init(leading: Bool, expanded: Bool, title: String, identifier: String, hostIdentifier: String,
          toggle: @escaping () -> Void, @ViewBuilder content: @escaping () -> Content) {
         self.leading = leading; self.expanded = expanded; self.title = title
@@ -76,7 +81,7 @@ struct WorkbenchSidebar<Content: View>: View {
                         .padding(.trailing, leading ? 12 : 52)
                         .frame(height: 40)
                         .opacity(visible ? 1 : 0)
-                        .workbenchMotion(value: visible)
+                        .transaction { $0.animation = nil }
                         .accessibilityHidden(!visible)
                     RetainedContentHost(content: content()
                         .foregroundStyle(palette.foregroundColor, palette.secondaryColor)
@@ -110,14 +115,13 @@ struct WorkbenchSidebar<Content: View>: View {
         }
         .frame(width: leading ? WorkbenchSidebarLayout.leadingWidth : WorkbenchSidebarLayout.trailingWidth)
         .onChange(of: expanded) { _, open in if !open { revealed = false } }
-        .task(id: expanded) {
+        .task(id: expanded ? (revealDuration ?? 0) : -1) {
             guard expanded else { revealed = false; return }
             guard !revealed else { return }
-            let appearance = preferences.resolvedAppearance
-            if !reduceMotion && !appearance.lightweight && appearance.motion > 0 {
-                // Leave the native receiver hidden until the expanding plate has
-                // settled. Task identity cancels stale completions on rapid toggles.
-                do { try await Task.sleep(for: .seconds(0.5 + 0.4 * appearance.motion)) }
+            if let revealDuration {
+                // Same clock as the finite plate transition; no second fade or
+                // settling delay. Task identity cancels stale reveal completions.
+                do { try await Task.sleep(for: .seconds(revealDuration)) }
                 catch { return }
             }
             guard !Task.isCancelled else { return }
@@ -129,16 +133,35 @@ struct WorkbenchSidebar<Content: View>: View {
 struct WorkbenchCategoryLensTrack: View {
     let selection: CGFloat
     let titles: [String]
+    var hovered: Int? = nil
+    var pressed: Int? = nil
     var body: some View {
         ZStack(alignment: .leading) {
             HStack(spacing: 2) {
                 ForEach(titles.indices, id: \.self) { index in
-                    Text(titles[index]).font(.body).frame(maxWidth: .infinity).frame(height: 36)
+                    WorkbenchCategoryInk(title: titles[index], hovered: hovered == index, pressed: pressed == index)
+                        .frame(maxWidth: .infinity).frame(height: 36)
                 }
             }
-            WorkbenchCategoryLens(selection: selection, titles: titles)
+            WorkbenchCategoryLens(selection: selection, titles: titles, hovered: hovered, pressed: pressed)
                 .workbenchMorph(value: selection)
         }.frame(width: 256, height: 36).allowsHitTesting(false).accessibilityHidden(true)
+    }
+}
+
+private struct WorkbenchCategoryInk: View {
+    let title: String
+    let hovered: Bool
+    let pressed: Bool
+    @Environment(\.chatDisplayPreferences) private var preferences
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.isEnabled) private var isEnabled
+    var body: some View {
+        let palette = preferences.resolvedAppearance.palette(for: scheme)
+        Text(title).font(.body)
+            .foregroundStyle(isEnabled && (hovered || pressed) ? palette.accentColor : palette.foregroundColor)
+            .opacity(isEnabled && pressed ? 0.65 : 1)
+            .workbenchMotion(value: hovered).workbenchMotion(value: pressed)
     }
 }
 
@@ -147,6 +170,8 @@ struct WorkbenchCategoryLensTrack: View {
 struct WorkbenchCategoryLens: View, Animatable {
     nonisolated var selection: CGFloat
     let titles: [String]
+    var hovered: Int? = nil
+    var pressed: Int? = nil
     @Environment(\.chatDisplayPreferences) private var preferences
     @Environment(\.colorScheme) private var scheme
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
@@ -169,7 +194,8 @@ struct WorkbenchCategoryLens: View, Animatable {
             .overlay(alignment: .leading) {
                 HStack(spacing: 2) {
                     ForEach(titles.indices, id: \.self) { i in
-                        Text(titles[i]).font(.body).frame(width: width, height: 36)
+                        WorkbenchCategoryInk(title: titles[i], hovered: hovered == i, pressed: pressed == i)
+                            .frame(width: width, height: 36)
                     }
                 }
                 .frame(width: 256, height: 36)

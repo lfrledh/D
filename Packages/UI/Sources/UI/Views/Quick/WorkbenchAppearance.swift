@@ -87,6 +87,8 @@ struct WorkbenchAppearance: Codable, Equatable {
 struct WorkbenchEffectsPolicy {
     let usesCanvasBlend: Bool
     let duration: Double?
+    let morphDuration: Double?
+    let morphCurve: UnitCurve
     let morphAnimation: Animation?
 
     init(appearance: WorkbenchAppearance, reduceMotion: Bool,
@@ -94,13 +96,19 @@ struct WorkbenchEffectsPolicy {
         usesCanvasBlend = !appearance.lightweight && !reduceTransparency && !increasedContrast
         duration = appearance.lightweight || reduceMotion || appearance.motion == 0
             ? nil : 0.1 + 0.25 * appearance.motion
-        morphAnimation = duration.map { .spring(response: 0.34 + $0,
-            dampingFraction: 0.82 - 0.12 * appearance.motion, blendDuration: 0) }
+        // Finite timing curve: acceleration, deceleration and a small return.
+        // Unlike a spring's response, this duration is the entire transition.
+        morphDuration = duration == nil ? nil : 0.18 + 0.04 * appearance.motion
+        let curve = UnitCurve.bezier(startControlPoint: .init(x: 0.36, y: 0),
+                             endControlPoint: .init(x: 0.22, y: 1.12))
+        morphCurve = curve
+        morphAnimation = morphDuration.map { .timingCurve(curve, duration: $0) }
     }
 }
 
 /// App-local glass appearance over the opaque canvas blend. No platform backdrop
-/// sampler is introduced here. This is a highlight/rim treatment, not refraction.
+/// sampler is introduced here. A quiet boundary defines the local lens; there
+/// is no painted light source or full-surface reflection. This is not refraction.
 private struct WorkbenchGlassPlate<S: InsettableShape>: ViewModifier {
     let shape: S
     @Environment(\.chatDisplayPreferences) private var preferences
@@ -112,10 +120,8 @@ private struct WorkbenchGlassPlate<S: InsettableShape>: ViewModifier {
         content.workbenchPanel(in: shape)
             .overlay {
                 if decorated {
-                    shape.fill(LinearGradient(colors: [.white.opacity(scheme == .dark ? 0.12 : 0.36),
-                        .white.opacity(0.015), .black.opacity(0.025)], startPoint: .topLeading, endPoint: .bottomTrailing))
-                    shape.strokeBorder(LinearGradient(colors: [.white.opacity(0.65), .white.opacity(0.10),
-                        .white.opacity(0.28)], startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 1)
+                    shape.strokeBorder(preferences.resolvedAppearance.palette(for: scheme)
+                        .foregroundColor.opacity(0.12), lineWidth: 0.5)
                 }
             }
             .allowsHitTesting(false)
@@ -302,18 +308,15 @@ struct WorkbenchIconButtonStyle: ButtonStyle {
 
 /// Fixed capsule targets sit above the decorative moving lens.
 struct WorkbenchCategoryButtonStyle: ButtonStyle {
-    @Environment(\.chatDisplayPreferences) private var preferences
-    @Environment(\.colorScheme) private var scheme
+    var onPressChanged: (Bool) -> Void = { _ in }
     @Environment(\.isEnabled) private var isEnabled
 
     func makeBody(configuration: Configuration) -> some View {
-        let shape = Capsule()
-        let palette = preferences.resolvedAppearance.palette(for: scheme)
         configuration.label
             .font(.body)
             .frame(maxWidth: .infinity).frame(height: 36)
-            .modifier(WorkbenchButtonFeedback(shape: shape, isPressed: configuration.isPressed,
-                                               ink: palette.accentColor))
+            .contentShape(.interaction, Capsule())
+            .onChange(of: configuration.isPressed) { _, pressed in onPressChanged(isEnabled && pressed) }
             .opacity(isEnabled ? 1 : 0.45)
     }
 }

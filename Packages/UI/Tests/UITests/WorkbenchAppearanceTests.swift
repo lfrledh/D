@@ -7,6 +7,55 @@ import Testing
 
 @Suite("Workbench appearance preferences")
 @MainActor struct WorkbenchAppearanceTests {
+    @Test func morphHasFiniteShortDurationAndNonlinearVelocity() throws {
+        for strength in [0.01, 0.5, 1.0] {
+            var appearance = WorkbenchAppearance(); appearance.motion = strength
+            let policy = WorkbenchEffectsPolicy(appearance: appearance, reduceMotion: false,
+                reduceTransparency: false, increasedContrast: false)
+            let duration = try #require(policy.morphDuration)
+            #expect(duration >= 0.18 && duration <= 0.22)
+            if strength == 0.5 { #expect(abs(duration - 0.2) < 0.00001) }
+            let curve = policy.morphCurve
+            #expect(curve.value(at: 0) == 0 && curve.value(at: 1) == 1)
+            #expect(curve.velocity(at: 0.05) < curve.velocity(at: 0.35))
+            #expect(abs(curve.velocity(at: 0.95)) < curve.velocity(at: 0.35))
+            #expect(abs(curve.value(at: 0.5) - 0.5) > 0.1)
+        }
+    }
+
+    @Test func categoryHoverChangesInkWithoutPaintingAnotherPlate() throws {
+        func pixels(selection: CGFloat, hovered: Int?, scheme: ColorScheme) throws -> [NSColor] {
+            let renderer = ImageRenderer(content: WorkbenchCategoryLensTrack(selection: selection,
+                titles: ["文本", "图像", "视频", "音频"], hovered: hovered)
+                .environment(\.colorScheme, scheme))
+            renderer.scale = 1
+            let bitmap = NSBitmapImageRep(cgImage: try #require(renderer.cgImage))
+            return try (0..<36).flatMap { y in try (0..<256).map { x in try #require(bitmap.colorAt(x: x, y: y)) } }
+        }
+        for scheme: ColorScheme in [.light, .dark] {
+            for selection: CGFloat in [0, 1] {
+                let rest = try pixels(selection: selection, hovered: nil, scheme: scheme)
+                let hover = try pixels(selection: selection, hovered: 1, scheme: scheme)
+                let changed = rest.indices.filter { rest[$0] != hover[$0] }
+                #expect(!changed.isEmpty, "Both the normal and magnified label need visible ink feedback")
+                #expect(changed.allSatisfy { (76...118).contains($0 % 256) && (7...29).contains($0 / 256) },
+                    "Hover may change text pixels only, not a second capsule's padding or rim")
+            }
+        }
+    }
+
+    @Test func localGlassInteriorHasNoPaintedLightGradient() throws {
+        for scheme: ColorScheme in [.light, .dark] {
+            let renderer = ImageRenderer(content: Color.clear.frame(width: 180, height: 300)
+                .workbenchGlassPlate(in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                .environment(\.colorScheme, scheme))
+            renderer.scale = 1
+            let bitmap = NSBitmapImageRep(cgImage: try #require(renderer.cgImage))
+            let pixels = try [30, 150, 270].map { try #require(bitmap.colorAt(x: 90, y: $0)) }
+            #expect(pixels.allSatisfy { $0 == pixels[0] && $0.alphaComponent == 1 })
+        }
+    }
+
     /// Production lens paint samples for inspecting glyph alignment and the
     /// reduced-effects selection marker. This is not a native-window screenshot.
     @Test func categoryLensPaintSamples() throws {
@@ -23,6 +72,10 @@ import Testing
                     WorkbenchCategoryLensTrack(selection: 2, titles: titles)
                         .padding(4).workbenchPanel(in: Capsule())
                         .environment(\.chatDisplayPreferences, lightweight)
+                    WorkbenchCategoryLensTrack(selection: 0, titles: titles, hovered: 1)
+                        .padding(4).workbenchPanel(in: Capsule())
+                    WorkbenchCategoryLensTrack(selection: 1, titles: titles, hovered: 1)
+                        .padding(4).workbenchPanel(in: Capsule())
                 }.padding(20).workbenchTheme().environment(\.colorScheme, scheme)
             }
         }
@@ -352,6 +405,7 @@ import Testing
         #expect(!light.usesCanvasBlend)
         #expect(light.duration == nil)
         #expect(light.morphAnimation == nil)
+        #expect(light.morphDuration == nil)
     }
 
     @Test func motionPolicyDisablesDecorationWithoutChangingSavedPreferences() {
@@ -362,6 +416,7 @@ import Testing
         #expect(reduced.usesCanvasBlend)
         #expect(reduced.duration == nil)
         #expect(reduced.morphAnimation == nil)
+        #expect(reduced.morphDuration == nil)
         #expect(appearance.motion == 1)
 
         appearance.motion = 0
@@ -369,6 +424,7 @@ import Testing
                                               reduceTransparency: false, increasedContrast: false)
         #expect(disabled.duration == nil)
         #expect(disabled.morphAnimation == nil)
+        #expect(disabled.morphDuration == nil)
         #expect(disabled.usesCanvasBlend)
     }
 
