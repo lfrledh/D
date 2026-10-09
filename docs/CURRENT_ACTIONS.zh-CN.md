@@ -13,7 +13,9 @@
 
 ## 当前动作与证据
 
-当前生产 **0d3079d804a1a20ee051fa68a424cb1983026b08**：共享悬浮底板撤掉系统材质采样，直接绘制不透明的面板色/画布色混合；不是下方内容的模糊效果。旧偏好字段保留，设置改称“画布底色占比”。生产背景20组离屏渲染/每组3点的alpha及独立sRGB颜色检查通过，3项原有策略/偏好方法通过；普通构建27.33秒及独立包签名/沙盒/4文件摘要核对通过。非实现者审查通过。真实原生视觉、边缘和动效尚未验，不接纳main。R4=`D-Development/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261009-explicit-canvas-fill`，唯一入口已更新。
+当前生产 **787592119fb05b4652c68c8a207f34b456b2ed83**：投影只由底板形状绘制，移除聊天布局的矩形裁切，侧栏只裁内容；主输入与顶部分类栏为Capsule、圆钮为Circle。长输入及发送/停止保持，附件/语音/模型入口就近放在主体下方，展开区独立。沿用不透明画布和预混底色；真实应用内玻璃模糊/折射方向保留，尚未实现或验收。本轮普通构建28.04秒，独立包签名/沙盒/4文件摘要核对通过；最终几何/Stop/隐藏/阅读4方法通过，底板2方法及输入Undo/marked text2方法证据分层沿用。右缘2pt接收器断言仍失败，原composer对照同样失败，不改桥或放宽断言。非实现者静态审查通过。
+
+R5=`D-Development/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261009-contours`。已亲见并保存0d307浅色开栏/收栏两张原生基线图；用户确认桌面透色改善、提出矩形脏边。仅移除根裁切的单因素对照包启动成功，但截图返回-3811即暂停；不能凭AX读到界面就宣布对照通过。最终78759211未启动/未截图，真实边缘与分类键盘待验。诊断包和隔离会话保留，唯一试用入口已改指最终候选；不推进源/main。
 
 **79cdf5a6的材质修复被用户实机否定**：仍透出桌面色。已核实运行路径确为79cdf包（PID91348），不是误开旧版本；此前“只采样应用内背景”是未被实机支持的推断。本轮捕捉再次返回`-3811 音频/视频捕捉失败，无法开始流播放`，停止原生工作，不认作锁屏、不轮询或改权限。79cdf运行窗口和草稿保留；新包未启动。R3保留失败实现及原4策略/构建证据，不再推荐。
 
@@ -23,7 +25,7 @@
 
 上一轮原生工作于2026-10-09被 `SCStreamErrorDomain -3812`（参数无效）中断；立即暂停，不轮询、不提权、不改变策略。保留当时隔离候选与草稿。待桌面可用后只续[集中队列](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md)，不重开旧失败预算。下一步仍是本切片同状态对照与相关原生门槛，不进入下一产品阶段。
 
-任务正文与验收：[UI-PRESENTATION-REBUILD-01](tasks/UI-PRESENTATION-REBUILD-01.md)。证据根 `D-Development/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261008-first-slice`（下称R），接管 `lead/takeover.json`、包 `lead/delivery-review.json`、桌面停点 `lead/native-pause.json`；`delivery/原生UI首片评审.html`汇总真实图与原型差异。[唯一试用入口](RELEASE_FREEZE_TRY.zh-CN.md)现指向0d3079d8显式底色实现检查点；早期候选仅留作恢复，不再推荐。
+任务正文与验收：[UI-PRESENTATION-REBUILD-01](tasks/UI-PRESENTATION-REBUILD-01.md)。证据根 `D-Development/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261008-first-slice`（下称R），接管 `lead/takeover.json`、包 `lead/delivery-review.json`、桌面停点 `lead/native-pause.json`；`delivery/原生UI首片评审.html`汇总真实图与原型差异。[唯一试用入口](RELEASE_FREEZE_TRY.zh-CN.md)现指向78759211轮廓/胶囊候选；早期候选仅留作恢复，不再推荐。
 
 ## 继承与原位归档
 
