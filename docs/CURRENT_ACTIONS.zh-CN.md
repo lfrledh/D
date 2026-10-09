@@ -13,7 +13,9 @@
 
 ## 当前动作与证据
 
-当前生产 **79cdf5a6287e120b84bd8ccf1c809b2b128e712d**：保持画布不透明，共享悬浮背景和两处独立导航/缩放背景改为应用内部材质。4项无窗口策略检查、普通构建及包核对通过，独立审查通过。用户报告解锁后已优先尝试原生，但捕捉工具返回新错误`-3811 音频/视频捕捉失败，无法开始流播放`；应用库存正常、D仍运行，不认作锁屏。未重复截图或操作，原生边缘/动效/材质视觉仍待验。R3=`D-Development/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261009-canvas-material`。唯一入口已指向新包，保留运行中的a226及草稿；不合main。
+当前生产 **0d3079d804a1a20ee051fa68a424cb1983026b08**：共享悬浮底板撤掉系统材质采样，直接绘制不透明的面板色/画布色混合；不是下方内容的模糊效果。旧偏好字段保留，设置改称“画布底色占比”。生产背景20组离屏渲染/每组3点的alpha及独立sRGB颜色检查通过，3项原有策略/偏好方法通过；普通构建27.33秒及独立包签名/沙盒/4文件摘要核对通过。非实现者审查通过。真实原生视觉、边缘和动效尚未验，不接纳main。R4=`D-Development/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261009-explicit-canvas-fill`，唯一入口已更新。
+
+**79cdf5a6的材质修复被用户实机否定**：仍透出桌面色。已核实运行路径确为79cdf包（PID91348），不是误开旧版本；此前“只采样应用内背景”是未被实机支持的推断。本轮捕捉再次返回`-3811 音频/视频捕捉失败，无法开始流播放`，停止原生工作，不认作锁屏、不轮询或改权限。79cdf运行窗口和草稿保留；新包未启动。R3保留失败实现及原4策略/构建证据，不再推荐。
 
 前一轮命中/动效增量，生产 **96d6dcb2cd6c8a180e9d868106a73e1e84037600**：完整按钮主体命中、局部反馈/过渡及菜单禁用时序修补。普通构建/包核对通过；最终生产差分19组件方法通过，新增边缘宿主测试在key-window前置失败、零事件，整体测试exit65。该轮桌面工具明确报告Mac锁定，因此96d6无真实边缘点击、原生截图或动效展示；不把前次-3812解释为锁屏。交付实现检查点，唯一试用入口已更新。R2=`D-Development/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261009-hit-motion`；详见现有任务末节。
 
@@ -21,7 +23,7 @@
 
 上一轮原生工作于2026-10-09被 `SCStreamErrorDomain -3812`（参数无效）中断；立即暂停，不轮询、不提权、不改变策略。保留当时隔离候选与草稿。待桌面可用后只续[集中队列](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md)，不重开旧失败预算。下一步仍是本切片同状态对照与相关原生门槛，不进入下一产品阶段。
 
-任务正文与验收：[UI-PRESENTATION-REBUILD-01](tasks/UI-PRESENTATION-REBUILD-01.md)。证据根 `D-Development/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261008-first-slice`（下称R），接管 `lead/takeover.json`、包 `lead/delivery-review.json`、桌面停点 `lead/native-pause.json`；`delivery/原生UI首片评审.html`汇总真实图与原型差异。[唯一试用入口](RELEASE_FREEZE_TRY.zh-CN.md)现指向79cdf5a6材质实现检查点；早期候选仅留作恢复，不再推荐。
+任务正文与验收：[UI-PRESENTATION-REBUILD-01](tasks/UI-PRESENTATION-REBUILD-01.md)。证据根 `D-Development/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261008-first-slice`（下称R），接管 `lead/takeover.json`、包 `lead/delivery-review.json`、桌面停点 `lead/native-pause.json`；`delivery/原生UI首片评审.html`汇总真实图与原型差异。[唯一试用入口](RELEASE_FREEZE_TRY.zh-CN.md)现指向0d3079d8显式底色实现检查点；早期候选仅留作恢复，不再推荐。
 
 ## 继承与原位归档
 
