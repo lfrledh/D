@@ -610,6 +610,7 @@ struct ChatWorkbenchView: View {
                 requested: showInspector, sidebar: previouslyInlineSidebar)
             let sidebarVisible = showSidebar && (sidebarInline || previouslyInlineSidebar || sheets.narrowPanel == .sessions)
             let inspectorVisible = showInspector && (inspectorInline || previouslyInlineInspector || sheets.narrowPanel == .inspector)
+            let paneShape = RoundedRectangle(cornerRadius: 22, style: .continuous)
             let sidebarPaneWidth = min(ChatPresentationLayout.sidebarWidth, geometry.size.width)
             let inspectorPaneWidth = min(ChatPresentationLayout.inspectorWidth, geometry.size.width)
             ZStack(alignment: .topLeading) {
@@ -643,8 +644,9 @@ struct ChatWorkbenchView: View {
                     .transaction { $0.animation = nil }
                     .frame(width: sidebarPaneWidth)
                     .frame(maxHeight: .infinity)
+                    .clipShape(paneShape)
                     .background {
-                        Color.clear.workbenchPanel(cornerRadius: 22)
+                        Color.clear.workbenchPanel(in: paneShape)
                             .opacity(sidebarVisible ? 1 : 0)
                             .workbenchMotion(value: sidebarVisible).allowsHitTesting(false)
                     }
@@ -660,8 +662,9 @@ struct ChatWorkbenchView: View {
                         .transaction { $0.animation = nil }
                         .frame(width: inspectorPaneWidth)
                         .frame(maxHeight: .infinity)
+                        .clipShape(paneShape)
                         .background {
-                            Color.clear.workbenchPanel(cornerRadius: 22)
+                            Color.clear.workbenchPanel(in: paneShape)
                                 .opacity(inspectorVisible ? 1 : 0)
                                 .workbenchMotion(value: inspectorVisible).allowsHitTesting(false)
                         }
@@ -671,7 +674,8 @@ struct ChatWorkbenchView: View {
                         .frame(maxWidth: .infinity, alignment: .trailing)
                 }
             }
-            .clipped()
+            // Pane content owns its clipping. The layout container must leave
+            // room for each floating plate's outer shadow.
             .coordinateSpace(name: ChatLayoutSpace.name)
             .onAppear {
                 sidebarWasPresented = sidebarVisible
@@ -1824,33 +1828,21 @@ struct ChatWorkbenchView: View {
     private func composer(_ session: ChatSession, availableHeight: CGFloat) -> some View {
         let editorLimit = speechExpanded ? min(100, max(52, availableHeight * 0.16)) : min(180, max(52, availableHeight * 0.3))
         let speechLimit = min(180, max(72, availableHeight * 0.24))
+        let capsuleRadius = (editorLimit + 28) / 2
+        // The editor's top and bottom corners stay within the capsule even at
+        // maximum height; no mask clips text, selection, or the native scroller.
+        let verticalOffset = capsuleRadius - 14
+        let editorInset = ceil(capsuleRadius - (capsuleRadius * capsuleRadius - verticalOffset * verticalOffset).squareRoot() + 6)
+        let extensionShape = RoundedRectangle(cornerRadius: 16, style: .continuous)
+        let palette = model.chatDisplaySettings.preferences.resolvedAppearance.palette(for: colorScheme)
         return VStack(alignment: .leading, spacing: 8) {
             if !session.attachments.isEmpty {
                 ScrollView(.horizontal) {
                     HStack {
                         ForEach(session.attachments) { item in attachmentRow(item, removable: true, sessionID: session.id).transition(.identity) }
                     }
-                }.transition(.identity)
+                }.padding(10).workbenchPanel(cornerRadius: 16).transition(.identity)
             }
-            TextSourcesQuestionEditor(value: session.draft, editEpoch: 0,
-                isEditable: !session.archived && session.contextChoices?.deletedAt == nil,
-                accessibilityIdentifier: "chat-draft-\(session.id.uuidString)",
-                accessibilityLabel: newLabel("messageDraft", english: "Message draft", chinese: "待发送消息"),
-                onEdit: { value in perform(sessionID: session.id) { try chat.updateDraft(value, sessionID: session.id) } },
-                pointSize: CGFloat(model.chatDisplaySettings.preferences.textPointSize),
-                sendsOnReturn: model.chatDisplaySettings.preferences.sendShortcut == .return,
-                onSubmit: { submitFromComposer(session.id) },
-                onFileDrop: { urls in
-                    let owner = session.id
-                    Task { await importURLs(urls, sessionID: owner) }
-                }, contentHeight: 52...editorLimit, transparentBackground: true,
-                foregroundColor: NSColor(model.chatDisplaySettings.preferences.resolvedAppearance.palette(for: colorScheme).foregroundColor),
-                placeholder: refinement("draftPlaceholder", "Write a message, or drop files here…", "输入消息，或拖入文件…"))
-                .id(session.id.uuidString + ":draft")
-                .fixedSize(horizontal: false, vertical: true)
-                .help(model.chatDisplaySettings.preferences.sendShortcut == .return
-                    ? refinement("returnHint", "Return sends; Shift–Return adds a line. Input method conversion takes priority.", "回车发送，Shift–回车换行；输入法选字优先。")
-                    : refinement("commandHint", "Command–Return sends; Return adds a line. Drop files here to attach them.", "Command–回车发送，回车换行。拖入文件即可添加附件。"))
             RetainedContentHost(content:
                 ScrollView {
                     ChatSpeechPanel(chat: chat, project: model.projectSession, sessionID: session.id,
@@ -1858,14 +1850,47 @@ struct ChatWorkbenchView: View {
                         .padding(8)
                 }.environment(\.dLanguageStore, language)
                     .environment(\.chatDisplayPreferences, model.chatDisplaySettings.preferences)
-                    .preferredColorScheme(colorScheme).workbenchTheme().disabled(!speechExpanded),
+                    .preferredColorScheme(colorScheme)
+                    .foregroundStyle(palette.foregroundColor, palette.secondaryColor)
+                    .tint(palette.accentColor).disabled(!speechExpanded),
                 visible: speechExpanded, identifier: "chat-speech-host")
                 .id(session.id.uuidString + ":speech")
                 .transaction { $0.animation = nil }
                 .frame(height: speechExpanded ? speechLimit : 0).clipped()
                 .allowsHitTesting(speechExpanded)
                 .accessibilityHidden(!speechExpanded)
+                .clipShape(extensionShape)
+                .background {
+                    if speechExpanded { Color.clear.workbenchPanel(in: extensionShape) }
+                }
                 .workbenchMotion(value: speechExpanded)
+            HStack(spacing: 12) {
+                TextSourcesQuestionEditor(value: session.draft, editEpoch: 0,
+                    isEditable: !session.archived && session.contextChoices?.deletedAt == nil,
+                    accessibilityIdentifier: "chat-draft-\(session.id.uuidString)",
+                    accessibilityLabel: newLabel("messageDraft", english: "Message draft", chinese: "待发送消息"),
+                    onEdit: { value in perform(sessionID: session.id) { try chat.updateDraft(value, sessionID: session.id) } },
+                    pointSize: CGFloat(model.chatDisplaySettings.preferences.textPointSize),
+                    sendsOnReturn: model.chatDisplaySettings.preferences.sendShortcut == .return,
+                    onSubmit: { submitFromComposer(session.id) },
+                    onFileDrop: { urls in
+                        let owner = session.id
+                        Task { await importURLs(urls, sessionID: owner) }
+                    }, contentHeight: 52...editorLimit, transparentBackground: true,
+                    foregroundColor: NSColor(model.chatDisplaySettings.preferences.resolvedAppearance.palette(for: colorScheme).foregroundColor),
+                    placeholder: refinement("draftPlaceholder", "Write a message, or drop files here…", "输入消息，或拖入文件…"))
+                    .id(session.id.uuidString + ":draft")
+                    .fixedSize(horizontal: false, vertical: true)
+                    .chatMeasured("composer-editor", probe: layoutProbe)
+                    .help(model.chatDisplaySettings.preferences.sendShortcut == .return
+                        ? refinement("returnHint", "Return sends; Shift–Return adds a line. Input method conversion takes priority.", "回车发送，Shift–回车换行；输入法选字优先。")
+                        : refinement("commandHint", "Command–Return sends; Return adds a line. Drop files here to attach them.", "Command–回车发送，回车换行。拖入文件即可添加附件。"))
+                composerSubmitButton(session)
+            }
+            .padding(.leading, editorInset).padding(.trailing, 20).padding(.vertical, 14)
+            .workbenchPanel(in: Capsule())
+            .chatMeasured("composer-capsule", probe: layoutProbe)
+            .workbenchMotion(value: chat.canStopGeneration)
             HStack(spacing: 10) {
                 attachmentButtons(session)
                 Button { speechExpanded.toggle() } label: {
@@ -1883,36 +1908,8 @@ struct ChatWorkbenchView: View {
                     Button(label("retrySave", "重试保存（不重新生成）")) { Task { await chat.retrySave() } }
                         .disabled(chat.isRunning)
                 }
-                if chat.canStopGeneration {
-                    Button(chat.isCancelling
-                        ? newLabel("stopping", english: "Stopping…", chinese: "正在停止…")
-                        : label("stop", "停止当前生成"), systemImage: "stop.fill") {
-                        Task { await chat.cancel() }
-                    }
-                    .buttonStyle(WorkbenchPrimaryButtonStyle())
-                    .disabled(chat.isCancelling)
-                    .accessibilityIdentifier("chat-stop")
-                    .help(newLabel("stopHelp", english: "Stop generation and keep received text. Resources are released before the next request.",
-                        chinese: "停止生成并保留已接收文字；资源释放后才能开始下一次。"))
-                    .chatMeasured("composer-stop", probe: layoutProbe)
-                    .transition(.identity)
-                } else {
-                    Button(label("send", "发送"), systemImage: "arrow.up") { submitFromComposer(session.id) }
-                        .buttonStyle(WorkbenchPrimaryButtonStyle())
-                        .disabled(!ChatRunAdmission.allowsSend(session, isRunning: chat.isRunning,
-                            hasPendingSave: chat.pendingSaveAttemptID != nil, hasSaveIssue: chat.saveIssue != nil,
-                            invalidFields: chat.invalidParameterFields))
-                        .accessibilityIdentifier("chat-send")
-                        .chatMeasured("composer-send", probe: layoutProbe)
-                        .transition(.identity)
-                }
             }
-            .workbenchMotion(value: chat.canStopGeneration)
-            .dropDestination(for: WorkflowCanvasTransfer.self) { items, _ in
-                let owner = session.id
-                Task { await importSharedAssets(items, sessionID: owner) }
-                return !items.isEmpty
-            }
+            .padding(.horizontal, 16)
             if let issue = issues[session.id] {
                 Text(ChatErrorText.display(issue, language: language)).font(.caption).foregroundStyle(.red).textSelection(.enabled)
             }
@@ -1929,15 +1926,44 @@ struct ChatWorkbenchView: View {
             }
         }
         .workbenchMotion(value: session.attachments.map(\.id))
-        .padding(14)
-        .workbenchPanel(cornerRadius: 22)
         .frame(maxWidth: CGFloat(model.chatDisplaySettings.preferences.transcriptWidth) + 28)
         .frame(maxWidth: .infinity)
         .padding(.horizontal, 8).padding(.top, 8).padding(.bottom, 4)
+        .dropDestination(for: WorkflowCanvasTransfer.self) { items, _ in
+            let owner = session.id
+            Task { await importSharedAssets(items, sessionID: owner) }
+            return !items.isEmpty
+        }
         .dropDestination(for: URL.self) { urls, _ in
             let owner = session.id
             Task { await importURLs(urls, sessionID: owner) }
             return !urls.isEmpty
+        }
+    }
+
+    @ViewBuilder private func composerSubmitButton(_ session: ChatSession) -> some View {
+        if chat.canStopGeneration {
+            Button(chat.isCancelling
+                ? newLabel("stopping", english: "Stopping…", chinese: "正在停止…")
+                : label("stop", "停止当前生成"), systemImage: "stop.fill") {
+                Task { await chat.cancel() }
+            }
+            .buttonStyle(WorkbenchPrimaryButtonStyle())
+            .disabled(chat.isCancelling)
+            .accessibilityIdentifier("chat-stop")
+            .help(newLabel("stopHelp", english: "Stop generation and keep received text. Resources are released before the next request.",
+                chinese: "停止生成并保留已接收文字；资源释放后才能开始下一次。"))
+            .chatMeasured("composer-stop", probe: layoutProbe)
+            .transition(.identity)
+        } else {
+            Button(label("send", "发送"), systemImage: "arrow.up") { submitFromComposer(session.id) }
+                .buttonStyle(WorkbenchPrimaryButtonStyle())
+                .disabled(!ChatRunAdmission.allowsSend(session, isRunning: chat.isRunning,
+                    hasPendingSave: chat.pendingSaveAttemptID != nil, hasSaveIssue: chat.saveIssue != nil,
+                    invalidFields: chat.invalidParameterFields))
+                .accessibilityIdentifier("chat-send")
+                .chatMeasured("composer-send", probe: layoutProbe)
+                .transition(.identity)
         }
     }
 

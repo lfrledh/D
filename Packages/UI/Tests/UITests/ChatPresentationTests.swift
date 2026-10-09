@@ -111,6 +111,15 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
             #expect(scroll.frame.height > 100 && scroll.frame.height <= 180)
             let composer = try #require(rectangles["composer"])
             #expect(composer.contains(try #require(rectangles["composer-send"])))
+            let capsule = try #require(rectangles["composer-capsule"])
+            let outline = Capsule().path(in: capsule)
+            for key in ["composer-editor", "composer-send"] {
+                let bounds = try #require(rectangles[key])
+                for point in [CGPoint(x: bounds.minX, y: bounds.minY), CGPoint(x: bounds.maxX, y: bounds.minY),
+                              CGPoint(x: bounds.minX, y: bounds.maxY), CGPoint(x: bounds.maxX, y: bounds.maxY)] {
+                    #expect(outline.contains(point), "Native editor and action corners must stay inside the capsule")
+                }
+            }
             editor.insertText("", replacementRange: .init(location: 0, length: editor.string.utf16.count))
             try await Task.sleep(for: .milliseconds(100)); host.layoutSubtreeIfNeeded()
             #expect(scroll.frame.height <= 60)

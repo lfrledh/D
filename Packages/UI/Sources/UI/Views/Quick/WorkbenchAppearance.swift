@@ -139,8 +139,8 @@ private extension Color {
     }
 }
 
-private struct WorkbenchPanelModifier: ViewModifier {
-    let cornerRadius: CGFloat
+private struct WorkbenchPanelModifier<S: InsettableShape>: ViewModifier {
+    let shape: S
     @Environment(\.chatDisplayPreferences) private var preferences
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
@@ -153,16 +153,18 @@ private struct WorkbenchPanelModifier: ViewModifier {
         let effects = WorkbenchEffectsPolicy(
             appearance: appearance, reduceMotion: reduceMotion,
             reduceTransparency: reduceTransparency, increasedContrast: contrast == .increased)
-        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
         content
             .foregroundStyle(palette.foregroundColor)
             .background {
                 shape.fill(palette.panelFill(canvasBlend:
                     effects.usesCanvasBlend ? appearance.backgroundTransparency : 0))
+                    .overlay {
+                        shape.strokeBorder(palette.foregroundColor.opacity(0.08), lineWidth: 0.5)
+                    }
+                    .shadow(color: effects.usesCanvasBlend ? .black.opacity(0.10) : .clear,
+                            radius: effects.usesCanvasBlend ? 8 : 0, y: effects.usesCanvasBlend ? 2 : 0)
                     .allowsHitTesting(false)
             }
-            .shadow(color: effects.usesCanvasBlend ? .black.opacity(0.10) : .clear,
-                    radius: effects.usesCanvasBlend ? 8 : 0, y: effects.usesCanvasBlend ? 2 : 0)
             .animation(effects.duration.map { .easeInOut(duration: $0) }, value: palette)
     }
 }
@@ -185,7 +187,11 @@ private struct WorkbenchMotionModifier<Value: Equatable>: ViewModifier {
 
 extension View {
     func workbenchPanel(cornerRadius: CGFloat = 12) -> some View {
-        modifier(WorkbenchPanelModifier(cornerRadius: cornerRadius))
+        workbenchPanel(in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+    }
+
+    func workbenchPanel<S: InsettableShape>(in shape: S) -> some View {
+        modifier(WorkbenchPanelModifier(shape: shape))
     }
 
     func workbenchMotion<Value: Equatable>(value: Value) -> some View {
@@ -237,13 +243,33 @@ struct WorkbenchIconButtonStyle: ButtonStyle {
         Group {
             if panel {
                 configuration.label.frame(width: diameter, height: diameter)
-                    .workbenchPanel(cornerRadius: diameter / 2)
+                    .workbenchPanel(in: Circle())
             } else {
                 configuration.label.frame(width: diameter, height: diameter)
             }
         }
         .modifier(WorkbenchButtonFeedback(shape: Circle(), isPressed: configuration.isPressed))
         .opacity(isEnabled ? 1 : 0.45)
+    }
+}
+
+/// The category strip uses the same capsule for its selected fill and hit body.
+struct WorkbenchCategoryButtonStyle: ButtonStyle {
+    let selected: Bool
+    @Environment(\.chatDisplayPreferences) private var preferences
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        let shape = Capsule()
+        let palette = preferences.resolvedAppearance.palette(for: scheme)
+        configuration.label
+            .font(.body.weight(selected ? .semibold : .regular))
+            .frame(maxWidth: .infinity).padding(.vertical, 7).padding(.horizontal, 12)
+            .background(shape.fill(selected ? palette.accentColor.opacity(0.16) : .clear))
+            .modifier(WorkbenchButtonFeedback(shape: shape, isPressed: configuration.isPressed,
+                                               ink: palette.accentColor))
+            .opacity(isEnabled ? 1 : 0.45)
     }
 }
 

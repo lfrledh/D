@@ -7,6 +7,38 @@ import Testing
 
 @Suite("Workbench appearance preferences")
 @MainActor struct WorkbenchAppearanceTests {
+    /// A rectangular content probe must not change the plate's outer shadow.
+    /// This isolates painting only; native host clipping still needs window review.
+    @Test func capsuleBoundaryAndShadowExcludeContentLayers() throws {
+        try #require(!NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency)
+        try #require(!NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast)
+        for size in [CGSize(width: 312, height: 80), CGSize(width: 400, height: 208)] {
+            func render(rectangularContent: Bool) throws -> NSBitmapImageRep {
+                let content = Rectangle().fill(rectangularContent ? Color.black : .clear)
+                    .frame(width: size.width, height: size.height)
+                    .workbenchPanel(in: Capsule())
+                    .padding(24)
+                let renderer = ImageRenderer(content: content)
+                renderer.scale = 1; renderer.isOpaque = false
+                return NSBitmapImageRep(cgImage: try #require(renderer.cgImage))
+            }
+            let plate = try render(rectangularContent: false)
+            let withContent = try render(rectangularContent: true)
+            let width = Int(size.width), height = Int(size.height)
+            func alpha(_ bitmap: NSBitmapImageRep, _ x: Int, _ y: Int) throws -> CGFloat {
+                try #require(bitmap.colorAt(x: x, y: y)).alphaComponent
+            }
+            #expect(try alpha(plate, 24, 24) < 0.02, "No filled rectangle outside the capsule")
+            #expect(try alpha(plate, 24 + width / 2, 24 + height / 2) == 1)
+            #expect(try alpha(plate, 22, 24 + height / 2) > 0, "Outer shadow remains visible")
+            for (x, y) in [(22, 28), (22, 24 + height / 2),
+                           (26 + width, 28), (24 + width / 2, 26 + height)] {
+                #expect(try alpha(plate, x, y) == alpha(withContent, x, y),
+                        "Content must not cast an independent rectangular shadow")
+            }
+        }
+    }
+
     /// Render the production paint without a window or desktop capture. This
     /// proves pixel alpha/backdrop independence, not native window acceptance.
     @Test func panelPixelsAreOpaqueAndIndependentOfExternalBackground() throws {

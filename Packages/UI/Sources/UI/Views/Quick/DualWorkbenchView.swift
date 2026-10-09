@@ -75,6 +75,7 @@ public struct DualWorkbenchView: View {
             readiness: quickModel.projectSession.explicitModelReadiness,
             tools: canvasModel.projectSession.workflow?.tools ?? [], projects: projects, language: language)
     }
+    @FocusState private var focusedCategory: QuickCategory?
     @State private var entry: Entry = .quick
     @State private var entryHistory: [Entry] = []
     @State private var libraryVisible = false
@@ -194,14 +195,41 @@ public struct DualWorkbenchView: View {
         VStack(spacing: 0) {
             ZStack {
                 if entry == .quick {
-                    Picker(t("category", "Creation category", "创作分类"), selection: Binding(get: { quick.category }, set: { captureChatReading(); quick.selectCategory($0) })) {
-                        Text(workflowText(language, "quick.category.text", fallback: "文字")).tag(QuickCategory.text)
-                        Text(workflowText(language, "quick.category.image", fallback: "图像")).tag(QuickCategory.image)
-                        Text(workflowText(language, "quick.category.video", fallback: "视频")).tag(QuickCategory.video)
-                        Text(workflowText(language, "quick.category.audio", fallback: "音频")).tag(QuickCategory.audio)
-                    }.pickerStyle(.segmented).labelsHidden().frame(width: 310)
-                        .disabled(quickOwnerIsChanging).accessibilityIdentifier("quick-category")
-                        .workbenchMotion(value: quick.category)
+                    HStack(spacing: 2) {
+                        ForEach(QuickCategory.allCases, id: \.self) { category in
+                            Button {
+                                guard quick.category != category else { return }
+                                captureChatReading(); quick.selectCategory(category)
+                            } label: {
+                                Text(workflowText(language, "quick.category.\(category.rawValue)", fallback: category.rawValue))
+                            }
+                            .buttonStyle(WorkbenchCategoryButtonStyle(selected: quick.category == category))
+                            .focused($focusedCategory, equals: category)
+                            .accessibilityAddTraits(quick.category == category ? .isSelected : [])
+                            .accessibilityIdentifier("quick-category-\(category.rawValue)")
+                        }
+                    }
+                    .padding(4).frame(width: 264)
+                    .workbenchPanel(in: Capsule())
+                    .disabled(quickOwnerIsChanging)
+                    .accessibilityElement(children: .contain)
+                    .accessibilityLabel(t("category", "Creation category", "创作分类"))
+                    .accessibilityIdentifier("quick-category")
+                    .onMoveCommand { direction in
+                        guard !quickOwnerIsChanging else { return }
+                        let categories = QuickCategory.allCases
+                        guard let current = categories.firstIndex(of: focusedCategory ?? quick.category) else { return }
+                        let next: Int
+                        switch direction {
+                        case .left: next = max(0, current - 1)
+                        case .right: next = min(categories.count - 1, current + 1)
+                        default: return
+                        }
+                        guard next != current else { return }
+                        captureChatReading(); quick.selectCategory(categories[next])
+                        focusedCategory = categories[next]
+                    }
+                    .workbenchMotion(value: quick.category)
                 } else { Text(t("workflow", "Node workflow", "节点工作流")).font(.headline).frame(width: 340) }
                 HStack(spacing: 8) {
                 Button(action: goBack) { Image(systemName: "chevron.left") }
