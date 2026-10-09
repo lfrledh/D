@@ -105,9 +105,7 @@ struct ArtworkCanvas: View {
                 .background(Color(nsColor: .controlBackgroundColor), in: Capsule())
                 .overlay(Capsule().stroke(.separator.opacity(0.5)))
         } else {
-            GlassEffectContainer(spacing: 16) {
-                zoomButtons.padding(6).glassEffect(.regular, in: .capsule)
-            }
+            zoomButtons.padding(6).background(.regularMaterial, in: Capsule())
         }
     }
 

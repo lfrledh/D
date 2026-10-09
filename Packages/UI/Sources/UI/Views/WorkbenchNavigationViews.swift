@@ -443,11 +443,8 @@ public struct ProjectWorkspaceShell<Sidebar: View, Editor: View, Inspector: View
                 .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 14))
                 .overlay(RoundedRectangle(cornerRadius: 14).stroke(.separator.opacity(0.45)))
         } else {
-            GlassEffectContainer(spacing: 10) {
-                content()
-                    .padding(7)
-                    .glassEffect(.regular, in: .rect(cornerRadius: 14))
-            }
+            content().padding(7)
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
         }
     }
 

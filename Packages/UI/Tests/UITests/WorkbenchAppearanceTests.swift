@@ -198,27 +198,27 @@ import Testing
         #expect(!preferences.isValid)
     }
 
-    @Test func glassPolicyUsesOpaqueFallbackForAccessibilityAndLightweight() {
+    @Test func materialPolicyUsesOpaqueFallbackForAccessibilityAndLightweight() {
         let appearance = WorkbenchAppearance()
         let normal = WorkbenchEffectsPolicy(appearance: appearance, reduceMotion: false,
                                             reduceTransparency: false, increasedContrast: false)
-        #expect(normal.usesGlass)
+        #expect(normal.usesMaterial)
         #expect(normal.duration == 0.225)
 
         let transparent = WorkbenchEffectsPolicy(appearance: appearance, reduceMotion: false,
                                                  reduceTransparency: true, increasedContrast: false)
-        #expect(!transparent.usesGlass)
+        #expect(!transparent.usesMaterial)
         #expect(transparent.duration == normal.duration)
 
         let contrast = WorkbenchEffectsPolicy(appearance: appearance, reduceMotion: false,
                                               reduceTransparency: false, increasedContrast: true)
-        #expect(!contrast.usesGlass)
+        #expect(!contrast.usesMaterial)
 
         var lightweight = appearance
         lightweight.lightweight = true
         let light = WorkbenchEffectsPolicy(appearance: lightweight, reduceMotion: false,
                                            reduceTransparency: false, increasedContrast: false)
-        #expect(!light.usesGlass)
+        #expect(!light.usesMaterial)
         #expect(light.duration == nil)
     }
 
@@ -227,7 +227,7 @@ import Testing
         appearance.motion = 1
         let reduced = WorkbenchEffectsPolicy(appearance: appearance, reduceMotion: true,
                                              reduceTransparency: false, increasedContrast: false)
-        #expect(reduced.usesGlass)
+        #expect(reduced.usesMaterial)
         #expect(reduced.duration == nil)
         #expect(appearance.motion == 1)
 
@@ -235,7 +235,7 @@ import Testing
         let disabled = WorkbenchEffectsPolicy(appearance: appearance, reduceMotion: false,
                                               reduceTransparency: false, increasedContrast: false)
         #expect(disabled.duration == nil)
-        #expect(disabled.usesGlass)
+        #expect(disabled.usesMaterial)
     }
 
     @Test func parsedMarkdownUsesActiveForegroundAndLinkPalette() async throws {

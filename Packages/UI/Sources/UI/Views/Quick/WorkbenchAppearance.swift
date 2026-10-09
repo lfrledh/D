@@ -75,12 +75,12 @@ struct WorkbenchAppearance: Codable, Equatable {
 /// Decorative effects only. Saved appearance values and contrast calculations stay independent
 /// of the current accessibility settings.
 struct WorkbenchEffectsPolicy {
-    let usesGlass: Bool
+    let usesMaterial: Bool
     let duration: Double?
 
     init(appearance: WorkbenchAppearance, reduceMotion: Bool,
          reduceTransparency: Bool, increasedContrast: Bool) {
-        usesGlass = !appearance.lightweight && !reduceTransparency && !increasedContrast
+        usesMaterial = !appearance.lightweight && !reduceTransparency && !increasedContrast
         duration = appearance.lightweight || reduceMotion || appearance.motion == 0
             ? nil : 0.1 + 0.25 * appearance.motion
     }
@@ -147,20 +147,20 @@ private struct WorkbenchPanelModifier: ViewModifier {
         content
             .foregroundStyle(palette.foregroundColor)
             .background {
-                if effects.usesGlass {
-                    // Glass belongs to the background shape, never to the content or its text.
-                    // The saved slider controls tint and backing opacity through public APIs.
-                    shape.fill(palette.panelColor.opacity(1 - appearance.backgroundTransparency))
-                        .glassEffect(
-                            .regular.tint(palette.panelColor.opacity(1 - appearance.backgroundTransparency)),
-                            in: shape)
+                if effects.usesMaterial && appearance.backgroundTransparency > 0 {
+                    // Material samples app content beneath this plate. Liquid Glass
+                    // can bring the desktop into an otherwise opaque workbench.
+                    shape.fill(.regularMaterial)
+                        .overlay {
+                            shape.fill(palette.panelColor.opacity(1 - appearance.backgroundTransparency))
+                        }
                         .allowsHitTesting(false)
                 } else {
                     shape.fill(palette.panelColor).allowsHitTesting(false)
                 }
             }
-            .shadow(color: effects.usesGlass ? .black.opacity(0.10) : .clear,
-                    radius: effects.usesGlass ? 8 : 0, y: effects.usesGlass ? 2 : 0)
+            .shadow(color: effects.usesMaterial ? .black.opacity(0.10) : .clear,
+                    radius: effects.usesMaterial ? 8 : 0, y: effects.usesMaterial ? 2 : 0)
             .animation(effects.duration.map { .easeInOut(duration: $0) }, value: palette)
     }
 }
