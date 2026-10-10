@@ -85,7 +85,6 @@ public struct WorkflowCanvasView: View {
     @State private var canvasTool: WorkflowCanvasTool = .pointer
     @State private var canvasViewport: WorkflowCanvasViewportMeasurement?
     @State private var measuredCardSizes: [UUID: CGSize] = [:]
-    @State private var scrollPosition = ScrollPosition()
     @State private var navigationRequest: WorkflowCanvasNavigationRequest?
     @State private var viewportInteractionLocked = false
     @State private var viewStates = WorkflowCanvasViewStateStore()
@@ -138,6 +137,9 @@ public struct WorkflowCanvasView: View {
     }
 
     public var body: some View {
+        #if DEBUG
+        let _ = WorkflowCanvasUpdateProbe.canvasBody?()
+        #endif
         GeometryReader { viewport in
         VStack(spacing: 0) {
             toolbar(width: viewport.size.width).frame(width: viewport.size.width)
@@ -256,7 +258,7 @@ public struct WorkflowCanvasView: View {
             VStack(spacing: 0) {
                 WorkflowGraphSurface(controller: controller, graph: controller.graph, zoom: $zoom,
                     tool: $canvasTool,
-                    scrollPosition: $scrollPosition, navigationRequest: $navigationRequest,
+                    navigationRequest: $navigationRequest,
                     viewportInteractionLocked: $viewportInteractionLocked,
                     viewContext: viewContext,
                     pendingConnection: $pendingConnection, selectedConnectionID: $selectedConnectionID,
@@ -268,6 +270,12 @@ public struct WorkflowCanvasView: View {
                     viewportSizeObserver: { canvasViewport = $0 },
                     portCenterObserver: portCenterObserver,
                     onScrollObservation: { context, observation in
+                        if observation.isGestureEnd {
+                            // An interrupted pan may finish after another graph has mounted.
+                            // Save its captured context without moving the new graph's insertion point.
+                            viewStates.capture(zoom: observation.zoom, rawVisibleCenter: observation.visibleRawCenter,
+                                selectedNodeID: viewStates.state(for: context)?.selectedNodeID, for: context)
+                        }
                         guard context == viewContext, activeViewContext == context else { return }
                         actualVisibleRawCenter = observation.visibleRawCenter
                         canvasInsertionPoint = observation.visibleRawCenter

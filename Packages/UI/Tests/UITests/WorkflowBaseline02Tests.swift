@@ -139,8 +139,37 @@ struct WorkflowBaseline02Tests {
             try await Task.sleep(for: .milliseconds(10))
         }
         let canvas = try #require(scroll)
-        canvas.contentView.scroll(to: CGPoint(x: 237, y: 119))
-        canvas.reflectScrolledClipView(canvas.contentView)
+        let probe = try #require(descendants(host).compactMap { $0 as? WorkflowCanvasViewportInput.ProbeView }.first)
+        // Hosting measurement: production pan callback + actual native clip updates.
+        // This does not simulate desktop mouse routing or measure desktop FPS.
+        try await Task.sleep(for: .milliseconds(150))
+        probe.onPan(true, canvas.contentView.bounds.origin, canvas.contentView.bounds.size)
+        try await Task.sleep(for: .milliseconds(100))
+        var canvasUpdates = 0, surfaceUpdates = 0, retainedUpdates = 0
+        WorkflowCanvasUpdateProbe.canvasBody = { canvasUpdates += 1 }
+        WorkflowCanvasUpdateProbe.surfaceBody = { surfaceUpdates += 1 }
+        WorkbenchCategoryUpdateProbe.retainedUpdate = { retainedUpdates += 1 }
+        defer {
+            WorkflowCanvasUpdateProbe.canvasBody = nil
+            WorkflowCanvasUpdateProbe.surfaceBody = nil
+            WorkbenchCategoryUpdateProbe.retainedUpdate = nil
+        }
+        let observedBefore = observations[originalContext]?.count ?? 0
+        var offsets: [CGPoint] = []
+        let graphBefore = controller.graph
+        for frame in 1...36 {
+            canvas.contentView.scroll(to: CGPoint(x: 237 + frame * 3, y: 119 + frame * 2))
+            canvas.reflectScrolledClipView(canvas.contentView)
+            try await Task.sleep(for: .milliseconds(16))
+            host.layoutSubtreeIfNeeded()
+            offsets.append(canvas.contentView.bounds.origin)
+        }
+        #expect(Set(offsets.map { Int($0.x) }).count >= 20)
+        #expect(canvasUpdates == 0 && retainedUpdates == 0)
+        #expect((observations[originalContext]?.count ?? 0) == observedBefore)
+        #expect(controller.graph == graphBefore)
+        print("CANVAS_PAN frames=36 canvas=\(canvasUpdates) surface=\(surfaceUpdates) retained=\(retainedUpdates) offsets=\(Set(offsets.map { Int($0.x) }).count)")
+        probe.onPan(false, canvas.contentView.bounds.origin, canvas.contentView.bounds.size)
         let actual = canvas.contentView.bounds.origin
         #expect(actual.x > 20 && actual.y > 20, "The source graph must be manually scrolled before restoration")
         for _ in 0..<40 {
@@ -183,6 +212,10 @@ struct WorkflowBaseline02Tests {
             abs($0.x - expected.x) < 2 && abs($0.y - expected.y) < 2
         }) == true, "The blank graph must mount and report its reset offset before switching back")
         #expect(abs(blankOffset.x - expected.x) < 2 && abs(blankOffset.y - expected.y) < 2)
+        let blankProbe = try #require(descendants(host).compactMap { $0 as? WorkflowCanvasViewportInput.ProbeView }.first)
+        blankProbe.onWheel(30, CGPoint(x: 100, y: 100), blankScroll.contentView.bounds.origin,
+                           blankScroll.contentView.bounds.size)
+        try await Task.sleep(for: .milliseconds(150))
         controller.selectedGraphID = originalGraph.id
         var restored = CGPoint.zero
         for _ in 0..<40 {
@@ -192,6 +225,40 @@ struct WorkflowBaseline02Tests {
             try await Task.sleep(for: .milliseconds(10))
         }
         #expect(abs(restored.x - actual.x) < 2 && abs(restored.y - actual.y) < 2)
+        let resumedProbe = try #require(descendants(host).compactMap { $0 as? WorkflowCanvasViewportInput.ProbeView }.first)
+        let finishOldPan = resumedProbe.onPan
+        let resumedScroll = try #require(graphScrollView())
+        finishOldPan(true, resumedScroll.contentView.bounds.origin, resumedScroll.contentView.bounds.size)
+        resumedScroll.contentView.scroll(to: CGPoint(x: actual.x + 71, y: actual.y + 43))
+        resumedScroll.reflectScrolledClipView(resumedScroll.contentView)
+        let interrupted = resumedScroll.contentView.bounds.origin
+        let interruptedSize = resumedScroll.contentView.bounds.size
+        try await Task.sleep(for: .milliseconds(60))
+        controller.selectedGraphID = blankGraph.id
+        try await Task.sleep(for: .milliseconds(150))
+        host.layoutSubtreeIfNeeded()
+        finishOldPan(false, interrupted, interruptedSize)
+        controller.selectedGraphID = originalGraph.id
+        for _ in 0..<40 {
+            host.layoutSubtreeIfNeeded()
+            restored = graphScrollView()?.contentView.bounds.origin ?? .zero
+            if abs(restored.x - interrupted.x) < 2 && abs(restored.y - interrupted.y) < 2 { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(abs(restored.x - interrupted.x) < 2 && abs(restored.y - interrupted.y) < 2,
+                "Cancellation must save the old context at its captured zoom")
+        let restoredGraph = try #require(controller.graph)
+        let connection = try #require(restoredGraph.connections.first)
+        let scope = WorkflowCanvasScope(rootGraphID: restoredGraph.id, rootRevision: restoredGraph.revision,
+            graphID: restoredGraph.id, bodyPath: [], projectID: controller.projectID,
+            instanceID: controller.projectInstanceID)
+        #expect(WorkflowCanvasConnectionEditing.disconnect(connection, scope: scope, controller: controller))
+        let once = controller.graph
+        #expect(!WorkflowCanvasConnectionEditing.disconnect(connection, scope: scope, controller: controller))
+        #expect(controller.graph == once)
+        controller.undo()
+        #expect(controller.graph?.connections == restoredGraph.connections)
+        #expect(controller.graph?.layout == restoredGraph.layout)
         #expect(controller.runs.isEmpty)
         #expect(await engine.calls == 0)
         try await controller.close()
@@ -236,8 +303,18 @@ struct WorkflowBaseline02Tests {
         let end = CGPoint(x: geometry.displayPosition(target.id).x - WorkflowCanvasLayoutPolicy.nodeWidth / 2,
                           y: geometry.displayPosition(target.id).y)
         let hit = WorkflowConnectionGeometry.hitPath(for: connection, geometry: geometry, portCenters: [:])
-        #expect(!hit.contains(start) && !hit.contains(end))
+        #expect(!hit.cgPath.contains(start) && !hit.cgPath.contains(end))
         #expect(hit.boundingRect.width > 0)
+        let midpoint = CGPoint(x: (start.x + end.x) / 2, y: (start.y + end.y) / 2)
+        #expect(hit.cgPath.contains(midpoint))
+        let crossingPort = WorkflowPortIdentity(nodeID: UUID(), port: "third", input: true)
+        let excludedPort = WorkflowConnectionGeometry.hitPath(for: connection, geometry: geometry,
+            portCenters: [crossingPort: midpoint])
+        #expect(!excludedPort.cgPath.contains(midpoint))
+        let control = CGRect(x: midpoint.x - 15, y: midpoint.y - 15, width: 30, height: 30)
+        let excludedControl = WorkflowConnectionGeometry.hitPath(for: connection, geometry: geometry,
+            portCenters: [:], excluding: [control])
+        #expect(!excludedControl.cgPath.contains(midpoint))
     }
 
     @Test func connectionFailureNamesIncompatibleAndOccupiedInputs() throws {

@@ -44,7 +44,8 @@ final class WorkflowPortDragView: NSView {
 
     override func hitTest(_ point: NSPoint) -> NSView? {
         guard enabled, !isHiddenOrHasHiddenAncestor else { return nil }
-        return bounds.contains(convert(point, from: superview)) ? self : nil
+        let local = convert(point, from: superview)
+        return hypot(local.x - bounds.midX, local.y - bounds.midY) <= min(bounds.width, bounds.height) / 2 ? self : nil
     }
     override func mouseDown(with event: NSEvent) {
         guard enabled, event.buttonNumber == 0, let window, window.isKeyWindow else { return }
@@ -60,13 +61,13 @@ final class WorkflowPortDragView: NSView {
             }
     }
     override func mouseDragged(with event: NSEvent) {
-        guard enabled, let start, let port else { cancel(); return }
+        guard enabled, let start, port != nil else { cancel(); return }
         let point = convert(event.locationInWindow, from: nil)
         guard dragging || hypot(point.x - start.x, point.y - start.y) >= 2 else { return }
         dragging = true
-        // The measured dot is 9 pt wide at the corresponding row edge. Native
-        // conversion includes the graph's zoom; do not divide this delta again.
-        let dot = CGPoint(x: port.input ? 4.5 : bounds.width - 4.5, y: bounds.midY)
+        // The dot and its small receiver share the same center. Native conversion
+        // already includes the graph's zoom; do not divide this delta again.
+        let dot = CGPoint(x: bounds.midX, y: bounds.midY)
         onChange(CGSize(width: point.x - dot.x, height: point.y - dot.y))
     }
     override func mouseUp(with event: NSEvent) {

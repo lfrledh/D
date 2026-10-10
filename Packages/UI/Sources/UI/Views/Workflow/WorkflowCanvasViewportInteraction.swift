@@ -64,11 +64,40 @@ struct WorkflowCanvasPanSession: Equatable {
     }
 }
 
+/// The initial hit owns the complete mouse sequence; crossing a card cannot
+/// turn a blank pan into a node move, or a node move into a pan.
+enum WorkflowCanvasPointerTarget: Equatable {
+    case control, node(UUID), blank
+}
+
+struct WorkflowCanvasPointerUpdate {
+    enum Phase { case began, changed, ended, cancelled, clicked }
+    let phase: Phase
+    let sessionID: UUID
+    let target: WorkflowCanvasPointerTarget
+    let startPoint: CGPoint
+    let startOffset: CGPoint
+    let viewport: CGSize
+    let translation: CGSize
+    let extendingSelection: Bool
+}
+
+/// Scroll observations are presentation bookkeeping, not reactive graph state.
+/// Native panning publishes its final view once, including interrupted gestures.
+final class WorkflowCanvasScrollTracking {
+    var offset = CGPoint.zero
+    var isPanning = false
+}
+
 /// The probe lives inside the graph's scroll content. The local monitor is active only while
 /// that native view is mounted, and accepts events whose native hit path reaches its scroll view.
 struct WorkflowCanvasViewportInput: NSViewRepresentable {
     typealias Coordinator = Void
     var tool: WorkflowCanvasTool = .pointer
+    var interactionScope: WorkflowCanvasScope? = nil
+    var pointerTarget: (CGPoint, CGPoint, CGSize) -> WorkflowCanvasPointerTarget = { _, _, _ in .control }
+    var onPointer: (WorkflowCanvasPointerUpdate) -> Void = { _ in }
+    var onPan: (Bool, CGPoint, CGSize) -> Void = { _, _, _ in }
     var navigationAllowed: () -> Bool
     var allowsEvent: (_ point: CGPoint, _ offset: CGPoint, _ viewport: CGSize) -> Bool
     var onViewportSize: (WorkflowCanvasViewportMeasurement) -> Void
@@ -82,7 +111,12 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
     }
 
     func updateNSView(_ view: ProbeView, context: Context) {
+        if view.interactionScope != interactionScope { view.cancelPointer() }
+        view.interactionScope = interactionScope
         view.setTool(tool)
+        view.pointerTarget = pointerTarget
+        view.onPointer = onPointer
+        view.onPan = onPan
         view.navigationAllowed = navigationAllowed
         view.allowsEvent = allowsEvent
         view.onViewportSize = onViewportSize
@@ -92,6 +126,32 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
     }
 
     final class ProbeView: NSView {
+        var interactionScope: WorkflowCanvasScope?
+        var pointerTarget: (CGPoint, CGPoint, CGSize) -> WorkflowCanvasPointerTarget = { _, _, _ in .control }
+        var onPointer: (WorkflowCanvasPointerUpdate) -> Void = { _ in }
+        var onPan: (Bool, CGPoint, CGSize) -> Void = { _, _, _ in }
+        private struct PointerSession {
+            let id = UUID()
+            let target: WorkflowCanvasPointerTarget
+            let tool: WorkflowCanvasTool
+            let windowStart: CGPoint
+            let point: CGPoint
+            let offset: CGPoint
+            let viewport: CGSize
+            let shift: Bool
+            let pointer: (WorkflowCanvasPointerUpdate) -> Void
+            let pan: (Bool, CGPoint, CGSize) -> Void
+            var lastOffset: CGPoint?
+            var lastViewport: CGSize?
+            var moved = false
+            var translation = CGSize.zero
+            func update(_ phase: WorkflowCanvasPointerUpdate.Phase) {
+                pointer(WorkflowCanvasPointerUpdate(phase: phase, sessionID: id,
+                    target: target, startPoint: point, startOffset: offset, viewport: viewport,
+                    translation: translation, extendingSelection: shift))
+            }
+        }
+        private var pointerSession: PointerSession?
         var navigationAllowed: () -> Bool = { false }
         var allowsEvent: (CGPoint, CGPoint, CGSize) -> Bool = { _, _, _ in false }
         var onViewportSize: (WorkflowCanvasViewportMeasurement) -> Void = { _ in }
@@ -106,7 +166,7 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
 
         func setTool(_ next: WorkflowCanvasTool) {
             guard next != tool else { return }
-            resetHandCursor(); tool = next
+            cancelPointer(); resetHandCursor(); tool = next
             window?.invalidateCursorRects(for: self)
         }
 
@@ -140,7 +200,7 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
         private weak var observedScroll: NSScrollView?
 
         override func hitTest(_ point: NSPoint) -> NSView? { nil }
-        override func viewDidHide() { super.viewDidHide(); resetHandCursor() }
+        override func viewDidHide() { super.viewDidHide(); cancelPointer(); resetHandCursor() }
 
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
@@ -149,18 +209,20 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
             reportViewportSize()
             resignObserver = NotificationCenter.default.addObserver(forName: NSWindow.didResignKeyNotification,
                 object: window, queue: .main) { [weak self] _ in
-                    MainActor.assumeIsolated { self?.resetHandCursor() }
+                    MainActor.assumeIsolated { self?.cancelPointer(); self?.resetHandCursor() }
                 }
             monitor = NSEvent.addLocalMonitorForEvents(matching: [.scrollWheel, .otherMouseDown,
-                .mouseMoved, .leftMouseDown, .leftMouseDragged, .leftMouseUp]) { [weak self] event in
+                .mouseMoved, .leftMouseDown, .leftMouseDragged, .leftMouseUp, .keyDown]) { [weak self] event in
                 guard let self else { return event }
                 switch event.type {
-                case .leftMouseUp:
-                    self.resetHandCursor(); self.updateHandCursor(for: event); return event
-                case .leftMouseDown:
-                    if self.tool == .hand && self.accepts(event) { self.handPressed = true }
-                    self.updateHandCursor(for: event); return event
-                case .leftMouseDragged, .mouseMoved:
+                case .keyDown:
+                    if event.keyCode == 53, self.pointerSession != nil {
+                        self.cancelPointer(); return nil
+                    }
+                    return event
+                case .leftMouseDown, .leftMouseDragged, .leftMouseUp:
+                    return self.routePointer(event) ? nil : event
+                case .mouseMoved:
                     self.updateHandCursor(for: event); return event
                 default: break
                 }
@@ -172,7 +234,7 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
                     x: location.x - clip.bounds.minX,
                     y: clip.isFlipped ? location.y - clip.bounds.minY : clip.bounds.maxY - location.y
                 )
-                if !self.navigationAllowed() {
+                if self.pointerSession != nil || !self.navigationAllowed() {
                     return event.type == .scrollWheel ? nil : event
                 }
                 guard self.allowsViewportEvent(point, clip.bounds.origin, clip.bounds.size) else { return event }
@@ -184,6 +246,75 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
                 guard event.buttonNumber == 2 else { return event }
                 return self.dispatchMiddleClick(scroll.contentView.bounds.size) ? nil : event
             }
+        }
+
+        /// Uses native window deltas, so moving/scrolling the document does not
+        /// feed its own coordinate changes back into the gesture.
+        @discardableResult
+        func routePointer(_ event: NSEvent) -> Bool {
+            if event.type == .leftMouseDown {
+                guard window?.isKeyWindow == true, accepts(event), navigationAllowed(),
+                      let clip = enclosingScrollView?.contentView else { return false }
+                let location = clip.convert(event.locationInWindow, from: nil)
+                let point = CGPoint(x: location.x - clip.bounds.minX,
+                    y: clip.isFlipped ? location.y - clip.bounds.minY : clip.bounds.maxY - location.y)
+                let target = pointerTarget(point, clip.bounds.origin, clip.bounds.size)
+                guard target != .control else { return false }
+                cancelPointer()
+                pointerSession = PointerSession(target: target, tool: tool,
+                    windowStart: event.locationInWindow, point: point, offset: clip.bounds.origin,
+                    viewport: clip.bounds.size, shift: event.modifierFlags.contains(.shift),
+                    pointer: onPointer, pan: onPan)
+                handPressed = tool == .hand
+                updateHandCursor(for: event)
+                return true
+            }
+            guard var session = pointerSession else { return false }
+            guard event.window === window, window?.isKeyWindow == true,
+                  !isHiddenOrHasHiddenAncestor else { cancelPointer(); return true }
+            session.translation = CGSize(width: event.locationInWindow.x - session.windowStart.x,
+                                          height: session.windowStart.y - event.locationInWindow.y)
+            if event.type == .leftMouseDragged {
+                guard session.moved || hypot(session.translation.width, session.translation.height) >= 5 else { return true }
+                let began = !session.moved
+                session.moved = true
+                pointerSession = session
+                if session.target == .blank, session.tool == .hand,
+                   let scroll = enclosingScrollView {
+                    if began { session.pan(true, session.offset, session.viewport) }
+                    let clip = scroll.contentView
+                    var rect = clip.bounds
+                    rect.origin = CGPoint(x: session.offset.x - session.translation.width,
+                                          y: session.offset.y - session.translation.height)
+                    clip.scroll(to: clip.constrainBoundsRect(rect).origin)
+                    scroll.reflectScrolledClipView(clip)
+                    session.lastOffset = clip.bounds.origin
+                    session.lastViewport = clip.bounds.size
+                    pointerSession = session
+                } else { session.update(began ? .began : .changed) }
+                updateHandCursor(for: event)
+            } else if event.type == .leftMouseUp {
+                pointerSession = nil // Consume before controller mutations/revision changes.
+                if session.target == .blank, session.tool == .hand {
+                    if session.moved { finishPan(session) }
+                } else { session.update(session.moved ? .ended : .clicked) }
+                resetHandCursor(); updateHandCursor(for: event)
+            }
+            return true
+        }
+
+        private func finishPan(_ session: PointerSession) {
+            session.pan(false, session.lastOffset ?? session.offset, session.lastViewport ?? session.viewport)
+        }
+
+        func cancelPointer() {
+            guard let session = pointerSession else { return }
+            pointerSession = nil
+            if session.moved {
+                if session.target == .blank, session.tool == .hand { finishPan(session) }
+                else { session.update(.cancelled) }
+            }
+            resetHandCursor()
         }
 
         func allowsViewportEvent(_ point: CGPoint, _ offset: CGPoint, _ viewport: CGSize) -> Bool {
@@ -268,13 +399,14 @@ struct WorkflowCanvasViewportInput: NSViewRepresentable {
             guard let hit = content.hitTest(point) else { return false }
             var view: NSView? = hit
             while let current = view, current !== scroll {
-                if current is NSControl || current is NSTextView || current is WorkflowPortDragView { return false }
+                if current is NSControl || current is NSTextView || current is WorkflowPortDragView || current is WorkflowConnectionHitView { return false }
                 view = current.superview
             }
             return view === scroll
         }
 
         func stopMonitoring() {
+            cancelPointer()
             resetHandCursor()
             if let resignObserver { NotificationCenter.default.removeObserver(resignObserver) }; resignObserver = nil
             stopViewportObservation()
@@ -370,3 +502,11 @@ struct WorkflowCanvasViewportGeometry: Equatable {
             ? (limited.zoom, limited.offset) : (zoom, currentOffset)
     }
 }
+
+#if DEBUG
+@MainActor
+enum WorkflowCanvasUpdateProbe {
+    static var canvasBody: (() -> Void)?
+    static var surfaceBody: (() -> Void)?
+}
+#endif
