@@ -163,3 +163,20 @@ XCTest后`native-build`普通构建exit0/28.04秒；`delivery/D UI Review 787592
 原图见`R7/gui/native-dark-image-both.jpg`、`native-light-image-both.jpg`、`native-dark-hover-video-pointer.jpg`、`native-settings-visible-slider.jpg`；未重绘。详细操作/边界见`lead/native-sequence.json`，包回执已更新launched。恢复外观后Escape已关设置，紧接旧Done索引失败；一次新AX确认主窗，属于失效索引，不是捕捉流故障。无本轮-3811/锁屏、轮询、提权或系统策略变更。
 
 仍待验：连续原生动效录像/逐帧时间及用户手感；本轮工具仅提供静态截图，不能以结束状态替代。原生输入Undo/焦点/阅读、菜单/拖出/禁用与旧右缘2点接收器门槛沿用；未加载模型。候选留在图像双栏，唯一入口原位更新。设计增量原则：选中身份只用一个移动主体，hover以文字反馈；材质细节服从内容和边界，避免固定光源涂层；过渡总时长须含内容揭示，不叠多段等待。
+
+
+### 2026-10-10 最新反馈：增强回弹与应用内容折射代表
+
+基线本地/远端8a8eaec7一致，Lead单一写者，源01758/main91bef及个人scheme保持。用户授权保留现有速度曲线、加强回弹，并以分类选中镜片实现通透/折射，不扩整体布局。R8=`D-Development/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261010-local-refraction`，生产 **ad50e57f5fe51be481dcb5ec7a3c972eefd568dd**。
+
+[Apple镜片说明](https://developer.apple.com/videos/play/wwdc2025/219/)以透明内容折射建立存在感。经独立审查，本机默认macOS27 SDK公开的核心macOS26玻璃接口没有采样域参数；玻璃容器不是隔离边界，不能重用系统backdrop然后声称不透桌面。采用公开[layerEffect](https://developer.apple.com/documentation/swiftui/view/layereffect(_:maxsampleoffset:isenabled:))：只输入256×36的唯一分类标签层，胶囊内对真实输入像素进行连续位置取样、曲面边缘弯折和少量局部扩散，外部原样返回；透明alpha保持，透出已有不透明应用分类栏。删除旧镜片实色plate和第二份scale文字；单一描边/位置、固定真实按钮、hover文字、disabled/键盘/阅读捕获接线保持。只新增一个包内metal资源，不做整页截图/栅格化或新平台。**这是自定义应用内容折射，非苹果系统Liquid Glass；不涵盖未传入该层的图片/原生输入/全工作区。**
+
+回弹采用现有策略内的有限CustomAnimation：目标前Bezier(0.36,0,0.22,1.12)完全不改；超调分支以零端点斜率修正恢复旧spring阻尼对应的峰值，默认约2.5%、强度1约4.6%，总时长仍180–220毫秒。SwiftUI默认nonmerge按delta合成，和旧timingCurve一致，依据[Apple动画说明](https://developer.apple.com/videos/play/wwdc2023/10156/?time=1364)；未伪造合并状态。独立审查发现高窗关闭负高度风险，改由Animatable展示底板在插值后限制到至少34点，压缩时中心跟固定图标对齐；上限width+12/height+6保留窗口边界，末项镜片限制在原4点内缩空间。按钮/宿主不缩放，原生隐藏和可取消揭示保持。
+
+最终`refraction-final` **12方法全过/15.74秒**：真实Metal条纹取样位移、局部透明alpha、随来源变化、胶囊外不变；hover只改字形；曲线/回弹峰值与500/1000/1600点高度极值；动效/辅助降级、快速反转隐藏、双栏/输入身份、长草稿与阅读票据。离屏浅深/中间位置样张已看，不当原生动画。前面的5方法光学和7方法回归不累加覆盖数。首次build-for-testing65.46秒通过；该次输出目录日期标签误写为20261011，完成后仅改本次证据目录名到20261010，原command JSON保留原调用路径。生产源哈希逐项匹配，普通构建27.73秒/exit0在XCTest之后；独立包`R8/delivery/D UI Review ad50e57f.app`签名/沙盒及5关键文件（新增metallib）摘要一致，无补包/重签。
+
+原生本版PID13793通过原入口启动，库存先确认无D，未退出用户App。亲见2160×1590（约1080点宽）浅色图像/音频末项与深色聊天首项、恢复系统浅色的视频页：只有一枚镜片、实际字形放大、无内部白光涂层/矩形脏边；两栏共存。右圆钮(2124,248)、左(36,248)距可见外缘约2点；两侧分别clickCount3后收起/宿主消失、再单击展开，视频留白(1092,136)切换成功。调用次数与终态不证明每个中间动画帧或精确事件间隔。原图`gui/01-native-light.jpg`、`02-native-light-end.jpg`、`03-native-dark-start.jpg`、`04-native-light-hover.jpg`；主题图不是严格同状态对照，紫色光晕为工具指针标记。非实现者看过浅/深原图，静态范围无阻断。
+
+录屏有限尝试：CmdShift5未显示可用录屏工具，随后`getApp Screenshot`一次-10005 timeoutReached，停止此路径；无捕捉流/锁屏推断、重试、扩权或系统变更。D的后续AX/截图/操作成功，但无连续原生录像、逐帧时长或完整快速反转轨迹验收。原用户跟随系统/强度1/底色占比1/轻量关均恢复或保持；原聊天已删除路径未改，不编辑/恢复草稿，不加载模型。旧原生输入/Undo/阅读/菜单/拖入及最右2点接收器余项不关闭。
+
+候选留在视频双栏，原试用入口更新；只更新现有任务/当前行动/试用页。下一步用户复看该代表镜片与增强回弹；未因单组件通过推广系统玻璃或重做其他模态。

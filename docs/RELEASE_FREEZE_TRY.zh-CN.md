@@ -1,20 +1,20 @@
-# D 原生 UI 单镜片与短动效修订
+# D 原生 UI 内容折射镜片与增强回弹
 
-2026-10-10 · **UI-PRESENTATION-REBUILD-01**。当前候选 **052fdb4a**：悬停仅反馈文字，不叠第二块镜片；去掉内部白色反光渐变，保留细边与柔影；两侧开合改为非线性短过渡，默认200毫秒、最高强度220毫秒，正文不再额外等待。保留镜像标题/固定圆钮、两栏共存和移动选中镜片。真实内容模糊/折射仍未完成，原玻璃方向保留。状态见[当前行动](CURRENT_ACTIONS.zh-CN.md)，详见[任务末节](tasks/UI-PRESENTATION-REBUILD-01.md)。
+2026-10-10 · **UI-PRESENTATION-REBUILD-01**。当前候选 **ad50e57f**：分类选中镜片已从不透明plate/复制文字改为对唯一分类内容的真实像素折射，透明处直接透出现有应用分类栏，不采样桌面。仍只有一枚镜片，hover只改文字。回弹加强至前版阻尼对应的幅度，目标前速度曲线和180–220毫秒总时长保持。这是自定义应用内容镜片，不冒称苹果系统Liquid Glass，也未推广到所有浮层。详见[当前行动](CURRENT_ACTIONS.zh-CN.md)和[任务末节](tasks/UI-PRESENTATION-REBUILD-01.md)。
 
 ## 唯一推荐入口
 
-原入口已更新，本版当前已运行，可直接查看；入口仍拒绝已有D时双开：
+当前已运行本版，可直接查看。原入口原位更新，仍拒绝已有D时双开：
 
 `/Volumes/CodexProjects/Codex/D-Development/AgentTrials/D-RELEASE-FREEZE-01/run-20261004T145523Z-continuous-closeout/delivery/启动聊天当前验收.command`
 
-指向 `/Volumes/CodexProjects/Codex/D-Development/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261010-quiet-glass/delivery/D UI Review 052fdb4a.app`。
+指向 `/Volumes/CodexProjects/Codex/D-Development/AgentTrials/UI-PRESENTATION-REBUILD-01/run-20261010-local-refraction/delivery/D UI Review ad50e57f.app`。
 
-生产代码 **052fdb4a198a01500ef841a8d01785e714a10ee5**。10项定向组件检查通过；之后普通构建27.13秒，独立包签名/App Sandbox与4关键文件摘要一致。评审隔离会话仍为 `E6657FC1-65D2-4860-997C-8A0D531CAB07`。源/main未接纳。
+生产代码 **ad50e57f5fe51be481dcb5ec7a3c972eefd568dd**。最终12项定向检查通过；普通构建27.73秒，独立包签名/App Sandbox及5文件（含镜片shader）摘要一致。隔离会话仍为 `E6657FC1-65D2-4860-997C-8A0D531CAB07`，源/main未推进。
 
-本轮已成功查看同版浅深原生画面及设置的原生滑块。左右圆钮距外缘约2点各完成收起/展开，图像/视频按钮文字外留白切换成功，两栏保持；未选中项停指针时没有第二镜片。外观已恢复跟随系统，当前强度100%对应220毫秒，停在图像双栏、未加载模型。原图在`run-20261010-quiet-glass/gui`：`native-light-image-both.jpg`、`native-dark-image-both.jpg`、`native-dark-hover-video-pointer.jpg`。操作回执在`lead/native-sequence.json`。
+Lead已亲见同版浅深原生界面、首末选项镜片和最小宽度双栏；左右圆钮外缘、连续点击后的收展/隐藏及视频按钮文字外留白成功。原图在`run-20261010-local-refraction/gui`：`01-native-light.jpg`、`02-native-light-end.jpg`、`03-native-dark-start.jpg`、`04-native-light-hover.jpg`。外观已恢复跟随系统，强度100%对应220毫秒，候选停在视频双栏、未加载模型。
 
-此次没有连续原生录像或逐帧时长；代码/组件时序与点击后画面不能代替动效手感验收。请重点复看单镜片hover、材质是否仍显反光罩、约200毫秒的加速/减速与回弹。当前聊天路径原为已删除状态，未恢复或改草稿；本轮未做原生Undo/键盘焦点/阅读验收。旧输入最右2点接收器断言仍失败，不因圆钮边缘成功关闭。
+重点复看：镜片穿过分类文字时的折射/通透，以及约200毫秒的回弹强度。系统录屏工具打开一次超时，已停止该路径；没有连续录像/逐帧时长，原生终态不算完整动态验收。原聊天已删除路径未动，输入/Undo/阅读/拖入等旧门槛保留；旧输入最右2点接收器失败不因圆钮边缘通过关闭。证据在`lead/native-sequence.json`。
 
 ## 旧首片原生参考（a226，非本版截图）
 
@@ -30,7 +30,7 @@
 
 ## 保留现场与后续门槛
 
-旧-3812参数错误、曾明确报告锁屏、R6的-3811捕捉流失败分别保留。R7本轮桌面成功，无旧D进程时才启动052fdb4a；不改写前轮未验状态，不双开或丢弃现有工作。
+旧-3812参数错误、曾明确报告锁屏、R6的-3811捕捉流失败分别保留。R7和R8桌面成功，本轮无旧D进程时才启动ad50e57f；不改写前轮未验状态，不双开或丢弃现有工作。
 
 继续时用文件→打开项目，选择独立副本：
 
@@ -38,7 +38,7 @@
 
 它带24节合成长文与受控媒体展示记录，`text:fixture`不是可运行模型。c978中间包已实际打开此副本；a226最终包尚未完成它的冷重开。不要把这些夹具写成模型生成成果。
 
-当前优先待验：本版连续动效和用户观感；其余主体边缘点击、Escape/分类键盘焦点与菜单隔离/拖出/禁用、短长草稿原生回归；再顺路补同状态对照、右栏/焦点缩窗、浅色/大字/轻量、长文分类/模式往返、Finder附件→预览→保存冷开、已有Qwen短请求/停止及公共模态导航。模型文件已存在而本轮未登记/执行；不下载新模型。旧fit/封装/端口与viewport失败沿用原记录，见[集中队列](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md)。
+当前优先待验：本版内容折射与增强回弹的用户观感、连续动效；其余主体边缘点击、Escape/分类键盘焦点与菜单隔离/拖出/禁用、短长草稿原生回归；再顺路补同状态对照、右栏/焦点缩窗、浅色/大字/轻量、长文分类/模式往返、Finder附件→预览→保存冷开、已有Qwen短请求/停止及公共模态导航。模型文件已存在而本轮未登记/执行；不下载新模型。旧fit/封装/端口与viewport失败沿用原记录，见[集中队列](FAILURE_AND_PERMISSION_AUDIT.zh-CN.md)。
 
 ## 同树 Xcode Run
 
