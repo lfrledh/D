@@ -82,8 +82,7 @@ struct TextSourcesQuestionEditor: NSViewRepresentable {
     func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSScrollView, context: Context) -> CGSize? {
         let width = proposal.width.flatMap { $0.isFinite ? max(0, $0) : nil } ?? 320
         if let contentHeight, let editor = nsView.documentView as? NSTextView {
-            return CGSize(width: width, height: Self.fittedHeight(text: editor.string,
-                font: editor.font ?? .preferredFont(forTextStyle: .body), width: width, range: contentHeight))
+            return CGSize(width: width, height: context.coordinator.fittedHeight(editor, width: width, range: contentHeight))
         }
         return CGSize(width: width,
                height: proposal.height.flatMap { $0.isFinite ? max(0, $0) : nil } ?? 90)
@@ -119,6 +118,72 @@ struct TextSourcesQuestionEditor: NSViewRepresentable {
         private var pendingPreferences: (pointSize: CGFloat?, sendsOnReturn: Bool)?
         private var lastFocusRequest: UUID?
         private var mayFocus = false
+
+        private weak var observedStorage: NSTextStorage?
+        private var storageRevision: UInt64 = 0
+        private struct HeightKey: Equatable {
+            let revision: UInt64; let width: CGFloat; let font: NSFont; let range: ClosedRange<CGFloat>
+        }
+        private var heightKey: HeightKey?
+        private var height: CGFloat = 0
+        // A complete paragraph prefix already taller than the cap is a stable witness.
+        // Edits strictly after it cannot change earlier paragraph layout. Never make
+        // this assumption for a single paragraph, width/font changes or prefix edits.
+        private var cappedPrefix: (end: Int, width: CGFloat, font: NSFont, range: ClosedRange<CGFloat>)?
+        private(set) var heightMeasurements = 0
+
+        private func observeStorage(_ editor: NSTextView) {
+            guard observedStorage !== editor.textStorage else { return }
+            if let observedStorage {
+                NotificationCenter.default.removeObserver(self, name: NSTextStorage.didProcessEditingNotification, object: observedStorage)
+            }
+            observedStorage = editor.textStorage; heightKey = nil; cappedPrefix = nil
+            if let observedStorage {
+                NotificationCenter.default.addObserver(self, selector: #selector(storageDidEdit(_:)),
+                    name: NSTextStorage.didProcessEditingNotification, object: observedStorage)
+            }
+        }
+        @objc private func storageDidEdit(_ notification: Notification) {
+            // Includes marked text, native undo, same-length replacements, and external updates.
+            if let storage = notification.object as? NSTextStorage, let prefix = cappedPrefix,
+               storage.editedRange.location < prefix.end || storage.length < prefix.end { cappedPrefix = nil }
+            storageRevision &+= 1; heightKey = nil
+        }
+        func fittedHeight(_ editor: NSTextView, width: CGFloat, range: ClosedRange<CGFloat>) -> CGFloat {
+            observeStorage(editor)
+            let key = HeightKey(revision: storageRevision, width: width,
+                font: editor.font ?? .preferredFont(forTextStyle: .body), range: range)
+            if heightKey != key {
+                if let prefix = cappedPrefix, prefix.width == width, prefix.font == key.font, prefix.range == range {
+                    height = range.upperBound
+                } else {
+                    cappedPrefix = nil
+                    let text = editor.string as NSString
+                    // Check a bounded prefix at a paragraph boundary before measuring the whole draft.
+                    let search = NSRange(location: 0, length: min(text.length, 2048))
+                    let newline = text.range(of: "\n", options: .backwards, range: search)
+                    var measuredWholePrefix: CGFloat?
+                    if newline.location != NSNotFound {
+                        let end = NSMaxRange(newline)
+                        heightMeasurements += 1
+                        let prefixHeight = TextSourcesQuestionEditor.fittedHeight(text: text.substring(to: end),
+                            font: key.font, width: width, range: 0...(range.upperBound + key.font.pointSize * 2))
+                        if end == text.length { measuredWholePrefix = prefixHeight }
+                        if prefixHeight > range.upperBound + key.font.pointSize {
+                            cappedPrefix = (end, width, key.font, range)
+                        }
+                    }
+                    if cappedPrefix != nil { height = range.upperBound }
+                    else if let measuredWholePrefix { height = min(range.upperBound, max(range.lowerBound, measuredWholePrefix)) }
+                    else {
+                        height = TextSourcesQuestionEditor.fittedHeight(text: editor.string, font: key.font, width: width, range: range)
+                        heightMeasurements += 1
+                    }
+                }
+                heightKey = key
+            }
+            return height
+        }
 
         func focus(_ editor: NSTextView, request: UUID?, enabled: Bool) {
             mayFocus = enabled
@@ -185,6 +250,7 @@ struct TextSourcesQuestionEditor: NSViewRepresentable {
         func update(_ editor: NSTextView, value: String, isEditable: Bool,
                     onEdit: @escaping (String) -> Void, pointSize: CGFloat? = nil,
                     sendsOnReturn: Bool = false, onSubmit: (() -> Void)? = nil) {
+            observeStorage(editor)
             // Do not replace marked text, selection, or its callback owner during
             // composition, including layout-only redraws and rejected edits.
             guard !editor.hasMarkedText() else {

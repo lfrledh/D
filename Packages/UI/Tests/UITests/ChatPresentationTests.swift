@@ -82,6 +82,121 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
 
 @Suite("Chat presentation boundaries")
 @MainActor struct ChatPresentationTests {
+    @Test func repeatedTextAndMarkdownConfigurationBaseline() {
+        let clock = ContinuousClock(), text = String(repeating: "中文 input 👩🏽‍🎨 paragraph ", count: 500)
+        var total: CGFloat = 0
+        let measureTime = clock.measure {
+            for _ in 0..<100 {
+                total += TextSourcesQuestionEditor.fittedHeight(text: text, font: .systemFont(ofSize: 17),
+                    width: 560, range: 30...160)
+            }
+        }
+        let configTime = clock.measure {
+            for _ in 0..<100 { _ = ChatMarkdownPresentation.config(for: ChatDisplayPreferences()) }
+        }
+        #expect(total == 16_000)
+        print("R15_TEXT baseline100=\(measureTime) markdownConfig100=\(configTime)")
+    }
+
+    @Test func nativeHeightCacheTracksEditsCompositionAndCappedParagraphTail() {
+        let editor = NSTextView(), coordinator = TextSourcesQuestionEditor.Coordinator()
+        editor.delegate = coordinator
+        let text = String(repeating: "中文 input 👩🏽‍🎨 paragraph ", count: 500)
+        coordinator.update(editor, value: text, isEditable: true, onEdit: { _ in }, pointSize: 17)
+        let clock = ContinuousClock()
+        let elapsed = clock.measure { for _ in 0..<100 { _ = coordinator.fittedHeight(editor, width: 560, range: 30...160) } }
+        #expect(coordinator.heightMeasurements == 1)
+        print("R15_TEXT cached100=\(elapsed) measurements=\(coordinator.heightMeasurements)")
+        func accurate(_ width: CGFloat = 560, _ range: ClosedRange<CGFloat> = 30...160) {
+            #expect(coordinator.fittedHeight(editor, width: width, range: range) ==
+                TextSourcesQuestionEditor.fittedHeight(text: editor.string, font: editor.font!, width: width, range: range))
+        }
+        editor.string = "短"; accurate()
+        editor.string = String(repeating: "long line\n", count: 400); accurate()
+        let bounded = coordinator.heightMeasurements
+        for _ in 0..<36 { editor.textStorage?.append(NSAttributedString(string: "tail ")) ; accurate() }
+        #expect(coordinator.heightMeasurements == bounded)
+        accurate(280); accurate(280, 35...120)
+        editor.font = .systemFont(ofSize: 22); accurate(280)
+        let longValue = editor.string
+        editor.textStorage?.replaceCharacters(in: NSRange(location: 0, length: 2048), with: "")
+        accurate(); editor.string = longValue; accurate()
+        editor.textStorage?.replaceCharacters(in: NSRange(location: 0, length: editor.string.utf16.count), with: "same")
+        accurate(); let before = coordinator.heightMeasurements
+        editor.textStorage?.replaceCharacters(in: NSRange(location: 0, length: 4), with: "改了相同")
+        accurate(); #expect(coordinator.heightMeasurements > before)
+        editor.setMarkedText("zhong", selectedRange: NSRange(location: 5, length: 0), replacementRange: editor.selectedRange())
+        accurate(); editor.unmarkText(); accurate(180)
+        editor.font = .systemFont(ofSize: 24); accurate(180); accurate(180, 40...100)
+        editor.string = ""; accurate()
+    }
+
+    @Test func draftUpdatesDoNotRebuildUnchangedNativeMessageRows() async throws {
+        var session = ChatSession(title: "Row isolation")
+        for index in 0..<12 {
+            session.messages.append(.init(parentID: session.messages.last?.id,
+                role: index.isMultiple(of: 2) ? .user : .assistant, text: "Message \(index)",
+                importedSource: .init(format: ChatInterchange.sourceFormat, version: ChatInterchange.sourceVersion,
+                    sourceSHA256: String(repeating: "a", count: 64), sourceIndex: index)))
+        }
+        session.selectedLeafID = session.messages.last?.id; session.draft = "draft"
+        var state = ChatState(); state.sessions = [session]; state.selectedSessionID = session.id
+        let (chat, model, store, root) = try await fixture(state)
+        var browserUpdates = 0
+        ChatRowUpdateProbe.browserBody = { browserUpdates += 1 }
+        defer { ChatRowUpdateProbe.body = nil; ChatRowUpdateProbe.browserBody = nil }
+        let host = NSHostingView(rootView: ChatWorkbenchView(chat: chat, model: model,
+            onChooseModel: {}, onSavedAsset: { _ in }, onAssetsChanged: {}))
+        host.frame = .init(x: 0, y: 0, width: 1100, height: 800)
+        for _ in 0..<15 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(20)) }
+        func allViews(_ view: NSView) -> [NSView] { view.subviews.flatMap { [$0] + allViews($0) } }
+        #expect(allViews(host).contains { ($0.accessibilityIdentifier() ?? "").hasPrefix("chat-message-actions-") })
+        // Materialize the retained history host for this offscreen dependency
+        // measurement. This is not an assertion of native tab/AX interaction.
+        let browser = try #require(allViews(host).first { $0.accessibilityIdentifier() == "chat-history-page" })
+        browser.isHidden = false; browser.layoutSubtreeIfNeeded()
+        try await Task.sleep(for: .milliseconds(100))
+        try #require(browserUpdates > 0)
+        var updates: [UUID: Int] = [:]
+        ChatRowUpdateProbe.body = { updates[$0, default: 0] += 1 }
+        browserUpdates = 0
+        for index in 0..<36 {
+            try chat.updateDraft("draft \(index)", sessionID: session.id)
+            host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(16))
+        }
+        print("R15_CHAT draft36 oldRowBodies=\(updates.values.reduce(0,+)) browserBodies=\(browserUpdates)")
+        #expect(updates.isEmpty && browserUpdates == 0)
+        try await chat.flush(); try await close(store, root: root)
+    }
+
+    @Test func rowAdmissionRefreshesArchiveWhileAnotherGateAlreadyDisablesIt() async throws {
+        var session = ChatSession(title: "Admission")
+        session.configuration = try node()
+        let message = ChatMessage(parentID: nil, role: .user, text: "Question")
+        session.messages = [message]; session.selectedLeafID = message.id
+        var state = ChatState(); state.sessions = [session]; state.selectedSessionID = session.id
+        let (chat, model, store, root) = try await fixture(state)
+        chat.invalidParameterFields = [session.id.uuidString + ":temperature"]
+        let host = NSHostingView(rootView: ChatWorkbenchView(chat: chat, model: model,
+            onChooseModel: {}, onSavedAsset: { _ in }, onAssetsChanged: {}))
+        host.frame = .init(x: 0, y: 0, width: 1100, height: 800)
+        func settle() async throws { for _ in 0..<8 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(15)) } }
+        func views(_ view: NSView) -> [NSView] { view.subviews.flatMap { [$0] + views($0) } }
+        func generate() throws -> NSMenuItem {
+            let button = try #require(views(host).compactMap { $0 as? NSPopUpButton }.first {
+                $0.accessibilityIdentifier() == "chat-message-actions-" + message.id.uuidString
+            })
+            return try #require(button.menu?.items.first { $0.representedObject as? String == "generate" })
+        }
+        try await settle(); #expect(try !generate().isEnabled)
+        try chat.setArchived(true, sessionID: session.id); try await settle()
+        chat.invalidParameterFields = []; try await settle()
+        #expect(try !generate().isEnabled)
+        try chat.setArchived(false, sessionID: session.id); try await settle()
+        #expect(try generate().isEnabled)
+        try await chat.flush(); try await close(store, root: root)
+    }
+
     @Test func sidebarRevealCancellationAndOwnerDisableHideNativeReceiver() async throws {
         try #require(!NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
         func pane(open: Bool, enabled: Bool = true) -> some View {
@@ -649,6 +764,14 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
 
     @Test func continuousStreamKeepsComposerStopReachableUntilDrain() async throws {
         var session = ChatSession(title: "可控连续流")
+        for index in 0..<2 {
+            session.messages.append(.init(parentID: session.messages.last?.id,
+                role: index == 0 ? .user : .assistant, text: "Earlier message \(index)",
+                importedSource: .init(format: ChatInterchange.sourceFormat, version: ChatInterchange.sourceVersion,
+                    sourceSHA256: String(repeating: "a", count: 64), sourceIndex: index)))
+        }
+        session.selectedLeafID = session.messages.last?.id
+        let oldIDs = Set(session.messages.map(\.id))
         session.configuration = try node(); session.draft = "保持原输入 👩🏽‍🎨"
         var closed = ChatSession(title: "Archived reference"); closed.archived = true
         var state = ChatState(); state.sessions = [session, closed]; state.selectedSessionID = session.id
@@ -666,6 +789,10 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
             try await Task.sleep(for: .milliseconds(10))
         }
         #expect(await engine.submissions == 1)
+        for _ in 0..<10 { host.layoutSubtreeIfNeeded(); try await Task.sleep(for: .milliseconds(20)) }
+        var rowUpdates: [UUID: Int] = [:]
+        ChatRowUpdateProbe.body = { rowUpdates[$0, default: 0] += 1 }
+        defer { ChatRowUpdateProbe.body = nil }
         // Host exists before admission and stays mounted across multiple publications.
         for i in 0..<12 {
             await engine.emit("第\(i)段 é 👩🏽‍🎨\n")
@@ -673,6 +800,10 @@ private final class ChatPresentationMemorySettings: UserDefaults, @unchecked Sen
             host.layoutSubtreeIfNeeded()
         }
         #expect(chat.selectedSession?.attempts.first?.rawText.contains("第11段") == true)
+        print("R15_STREAM oldRows=\(rowUpdates.filter { oldIDs.contains($0.key) }.values.reduce(0,+)) activeRows=\(rowUpdates.filter { !oldIDs.contains($0.key) }.values.reduce(0,+))")
+        #expect(rowUpdates.filter { oldIDs.contains($0.key) }.isEmpty)
+        #expect(rowUpdates.values.reduce(0,+) > 0)
+        ChatRowUpdateProbe.body = nil
         let composer = rectangles["composer"]
         let stop = rectangles["composer-stop"]
         #expect(stop != nil, "Stop must be a stable primary action beside the input, not transcript chrome")

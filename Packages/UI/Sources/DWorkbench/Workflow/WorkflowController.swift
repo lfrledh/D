@@ -22,11 +22,11 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
 @MainActor @Observable public final class WorkflowController {
     public let registry: WorkflowRegistry
     public private(set) var graphs: [WorkflowGraph] = [] {
-        didSet { emptyInsertionRevision = UUID() }
+        didSet { emptyInsertionRevision = UUID(); displayGraphGeneration &+= 1 }
     }
     @ObservationIgnored private var emptyInsertionRevision = UUID()
-    public private(set) var runs: [WorkflowRun] = []
-    public private(set) var tools: [WorkflowToolDefinition] = []
+    public private(set) var runs: [WorkflowRun] = [] { didSet { displayHistoryGeneration &+= 1 } }
+    public private(set) var tools: [WorkflowToolDefinition] = [] { didSet { displayToolGeneration &+= 1 } }
     @ObservationIgnored private var activeExecutor: WorkflowPlanExecutor?
     public private(set) var availableAssets: [ProjectAsset] = []
     public private(set) var projectID: UUID?
@@ -562,8 +562,116 @@ public struct WorkflowCanvasInsertionTarget: Sendable, Equatable {
         } catch { errorMessage = error.localizedDescription }
     }
 
+    // One current-scope display cache, owned by this controller. Generations are
+    // observed even on warm reads; derived cache writes never publish view changes.
+    private var displayGraphGeneration: UInt64 = 0
+    private var displayHistoryGeneration: UInt64 = 0
+    private var displayToolGeneration: UInt64 = 0
+    @ObservationIgnored private var displaySnapshot = NodeDisplaySnapshot()
+    #if DEBUG
+    @ObservationIgnored var displayAnalysisCount = 0
+    @ObservationIgnored var displayHistoryCount = 0
+    #endif
+
+    public func presentationStatus(for nodeID: UUID) -> (status: WorkflowStepStatus, stale: Bool)? {
+        let graphGeneration = displayGraphGeneration, toolGeneration = displayToolGeneration
+        let historyGeneration = displayHistoryGeneration
+        let cache = displaySnapshot
+        let scope = NodeDisplaySnapshot.Scope(root: selectedGraphID, path: bodyPath,
+            project: projectID, instance: projectInstanceID)
+        if cache.historyPresenceScope != scope || cache.historyPresenceGeneration != historyGeneration {
+            cache.hasHistory = runs.contains { $0.graph.id == selectedGraphID && !$0.steps.isEmpty }
+            cache.historyPresenceScope = scope; cache.historyPresenceGeneration = historyGeneration
+        }
+        // New graphs have no status badges: do not introduce analysis work on that path.
+        guard cache.hasHistory else { return nil }
+        if cache.scope != scope || cache.graphGeneration != graphGeneration || cache.toolGeneration != toolGeneration {
+            guard let graph else { displaySnapshot = NodeDisplaySnapshot(); return nil }
+            var key = graph
+            key.name = ""; key.revision = graph.id; key.layout = []
+            for index in key.nodes.indices { key.nodes[index].title = "" }
+            let layoutIDs = Set(graph.layout.map(\.nodeID))
+            let validLayout = layoutIDs.count == graph.layout.count && layoutIDs.isSubset(of: Set(graph.nodes.map(\.id)))
+            if cache.scope != scope || cache.semanticGraph != key || cache.toolGeneration != toolGeneration || cache.validLayout != validLayout {
+                cache.signatures = (try? registry.signatures(in: graph, tools: tools)) ?? [:]
+                cache.incoming = Dictionary(grouping: graph.connections, by: \.targetNode)
+                cache.semanticGraph = key; cache.validLayout = validLayout
+                cache.historyGeneration = nil
+                #if DEBUG
+                displayAnalysisCount += 1
+                #endif
+            }
+            cache.scope = scope; cache.graphGeneration = graphGeneration; cache.toolGeneration = toolGeneration
+        }
+        if cache.historyGeneration != historyGeneration {
+            cache.statuses = [:]
+            guard let graphID = cache.semanticGraph?.id else { return nil }
+            // Preserve run/step array order. Latest display belongs to the selected root;
+            // reusable upstreams belong to the actual visible graph, including nested bodies.
+            typealias Index = (run: Int, step: Int)
+            var latest: [UUID: Index] = [:], reusable: [UUID: Index] = [:]
+            for ri in runs.indices.reversed() {
+                let run = runs[ri]
+                guard run.graph.id == selectedGraphID || run.graph.id == graphID else { continue }
+                for si in run.steps.indices.reversed() {
+                    let step = run.steps[si], id = step.node.id
+                    if run.graph.id == selectedGraphID, latest[id] == nil { latest[id] = (ri, si) }
+                    if run.graph.id == graphID, reusable[id] == nil,
+                       cache.signatures[id] == step.signature, [.completed, .partial].contains(step.status) {
+                        reusable[id] = (ri, si)
+                    }
+                }
+            }
+            var upstreamMemo: [UUID: Bool] = [:]
+            func upstreamChanged(_ value: WorkflowStepRun, visiting: Set<UUID>) -> Bool {
+                guard !visiting.contains(value.node.id) else { return true }
+                let seen = visiting.union([value.node.id])
+                for edge in cache.incoming[value.node.id] ?? [] {
+                    guard let index = reusable[edge.sourceNode] else { return true }
+                    let upstream = runs[index.run].steps[index.step]
+                    guard value.inputs[edge.targetPort] == upstream.outputs[edge.sourcePort] else { return true }
+                    let stale: Bool
+                    if let known = upstreamMemo[upstream.id] { stale = known }
+                    else { stale = upstreamChanged(upstream, visiting: seen); upstreamMemo[upstream.id] = stale }
+                    if stale { return true }
+                }
+                return false
+            }
+            for (id, index) in latest {
+                let step = runs[index.run].steps[index.step]
+                cache.statuses[id] = (step.status, cache.signatures[id] != step.signature || upstreamChanged(step, visiting: []))
+            }
+            cache.historyGeneration = historyGeneration
+            #if DEBUG
+            displayHistoryCount += 1
+            #endif
+        }
+        return cache.statuses[nodeID]
+    }
+
+    private final class NodeDisplaySnapshot {
+        struct Scope: Equatable {
+            let root: UUID?; let path: [WorkflowBodyLocation]; let project: UUID?; let instance: UUID?
+        }
+        var scope: Scope?
+        var historyPresenceScope: Scope?
+        var historyPresenceGeneration: UInt64?
+        var hasHistory = false
+        var graphGeneration: UInt64?
+        var toolGeneration: UInt64?
+        var historyGeneration: UInt64?
+        var semanticGraph: WorkflowGraph?
+        var validLayout = true
+        var signatures: [UUID: String] = [:]
+        var incoming: [UUID: [WorkflowConnection]] = [:]
+        var statuses: [UUID: (status: WorkflowStepStatus, stale: Bool)] = [:]
+    }
+
     public func latestStep(for nodeID: UUID) -> WorkflowStepRun? {
-        runs.reversed().filter { $0.graph.id == selectedGraphID }.flatMap { $0.steps.reversed() }.first { $0.node.id == nodeID }
+        for run in runs.reversed() where run.graph.id == selectedGraphID {
+            if let step = run.steps.reversed().first(where: { $0.node.id == nodeID }) { return step }
+        }
+        return nil
     }
     public func isStale(_ step: WorkflowStepRun) -> Bool {
         guard let graph else { return true }

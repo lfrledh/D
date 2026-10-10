@@ -16,6 +16,11 @@ struct QuickMediaViewport: View {
     @GestureState private var magnification: CGFloat = 1
     @Environment(\.dLanguageStore) private var language
 
+    private struct MediaLoadKey: Equatable {
+        let store: ObjectIdentifier
+        let reference: WorkflowAssetReference
+    }
+
     private func refinementText(_ key: String, fallback: String) -> String {
         workflowText(language, "refinement.quick.media." + key, fallback: fallback)
     }
@@ -65,7 +70,7 @@ struct QuickMediaViewport: View {
                 }
             }
         }
-        .task(id: reference) {
+        .task(id: MediaLoadKey(store: ObjectIdentifier(store), reference: reference)) {
             player?.pause(); player = nil; image = nil; issue = nil; zoom = 1; offset = .zero
             do {
                 if reference.kind == .video || reference.kind == .audio {
@@ -79,7 +84,7 @@ struct QuickMediaViewport: View {
                     image = decoded
                 } else { issue = refinementText("viewInDetails", fallback: "该结果请从详情查看。") }
             } catch is CancellationError { }
-            catch { issue = error.localizedDescription }
+            catch { if !Task.isCancelled { issue = error.localizedDescription } }
         }
         .onDisappear { player?.pause() }
     }

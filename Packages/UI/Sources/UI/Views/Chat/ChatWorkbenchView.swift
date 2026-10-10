@@ -616,16 +616,19 @@ struct ChatWorkbenchView: View {
         if let sessionID { issues[sessionID] = message }
         else { globalIssue = message }
     }
-    private var visibleSessions: [ChatSession] {
-        ChatContextSessionList.visible(chat.state.sessions, archived: showArchived, deleted: showDeleted,
+    private func visibleSessions(_ sessions: [ChatSession]) -> [ChatSession] {
+        ChatContextSessionList.visible(sessions, archived: showArchived, deleted: showDeleted,
                                        favoritesOnly: favoritesOnly, tag: selectedTag)
     }
-    private var searchHits: [ChatSearchHit] {
+    private func searchHits(_ sessions: [ChatSession]) -> [ChatSearchHit] {
         guard !showDeleted else { return [] }
-        return ChatHistorySearch.matches(in: visibleSessions, query: search)
+        #if DEBUG
+        ChatRowUpdateProbe.searchQuery?()
+        #endif
+        return ChatHistorySearch.matches(in: visibleSessions(sessions), query: search)
     }
-    private var allTags: [String] {
-        Array(Set(chat.state.sessions.filter { ($0.contextChoices?.deletedAt != nil) == showDeleted }
+    private func allTags(_ sessions: [ChatSession]) -> [String] {
+        Array(Set(sessions.filter { ($0.contextChoices?.deletedAt != nil) == showDeleted }
             .flatMap { $0.contextChoices?.tags ?? [] })).sorted()
     }
 
@@ -852,6 +855,16 @@ struct ChatWorkbenchView: View {
     }
 
     private var sidebar: some View {
+        let sessions = chat.state.sessions, selected = chat.state.selectedSessionID
+        return ChatSessionBrowser(projection: .init(owner: ObjectIdentifier(chat), sessions: sessions,
+            selected: selected, query: search, archived: showArchived, deleted: showDeleted,
+            favorites: favoritesOnly, tag: selectedTag, language: language?.effectiveLanguageIdentifier ?? "",
+            filePanelBusy: filePanelBusy)) {
+                sidebarContent(sessions, selected: selected, filePanelBusy: filePanelBusy)
+            }.equatable()
+    }
+
+    private func sidebarContent(_ sessions: [ChatSession], selected: UUID?, filePanelBusy: Bool) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Text(label("history", "对话")).font(.headline).lineLimit(1).minimumScaleFactor(0.8)
@@ -875,7 +888,7 @@ struct ChatWorkbenchView: View {
                 Toggle(newLabel("favoritesOnly", english: "Favorites", chinese: "收藏"), isOn: $favoritesOnly)
                 Picker(newLabel("tagFilter", english: "Tag", chinese: "标签"), selection: $selectedTag) {
                     Text(newLabel("allTags", english: "All tags", chinese: "全部标签")).tag("")
-                    ForEach(allTags, id: \.self) { tag in Text(tag).tag(tag) }
+                    ForEach(allTags(sessions), id: \.self) { tag in Text(tag).tag(tag) }
                 }.labelsHidden().accessibilityLabel(newLabel("tagFilter", english: "Filter by tag", chinese: "按标签筛选"))
             }.controlSize(.small)
             ScrollView {
@@ -883,8 +896,10 @@ struct ChatWorkbenchView: View {
                     if !search.isEmpty && !showDeleted {
                         Text(newLabel("lexicalResults", english: "Lexical matches in stored messages", chinese: "已保存消息的词法命中"))
                             .font(.caption).foregroundStyle(.secondary)
-                        ForEach(searchHits.indices, id: \.self) { index in
-                            let hit = searchHits[index]
+                        let hits = searchHits(sessions)
+                        let titles = Dictionary(uniqueKeysWithValues: sessions.map { ($0.id, $0.title) })
+                        ForEach(hits.indices, id: \.self) { index in
+                            let hit = hits[index]
                             Button {
                                 do {
                                     if let currentID = chat.state.selectedSessionID { saveScrollState(for: currentID, captureReadingPoint: true) }
@@ -893,7 +908,7 @@ struct ChatWorkbenchView: View {
                                 } catch { report(error.localizedDescription, for: hit.sessionID) }
                             } label: {
                                 VStack(alignment: .leading, spacing: 3) {
-                                    Text(chat.state.sessions.first(where: { $0.id == hit.sessionID })?.title ?? "")
+                                    Text(titles[hit.sessionID] ?? "")
                                         .font(.caption).bold().lineLimit(1)
                                     Text(searchExcerpt(hit)).lineLimit(2)
                                 }.frame(maxWidth: .infinity, alignment: .leading)
@@ -901,7 +916,7 @@ struct ChatWorkbenchView: View {
                                 .accessibilityLabel(newLabel("searchResult", english: "Open search result: ", chinese: "打开搜索结果：") + searchExcerpt(hit))
                                 .accessibilityIdentifier("chat-search-hit-\(hit.sessionID.uuidString)-\(hit.messageID?.uuidString ?? "title")-\(index)")
                         }
-                    } else { ForEach(visibleSessions) { item in
+                    } else { ForEach(visibleSessions(sessions)) { item in
                         HStack(spacing: 6) {
                             Button {
                                 do {
@@ -923,7 +938,7 @@ struct ChatWorkbenchView: View {
                                             .foregroundStyle(.secondary).lineLimit(1)
                                     }
                                 }.frame(maxWidth: .infinity, alignment: .leading).padding(9)
-                                    .background(chat.state.selectedSessionID == item.id ? Color.accentColor.opacity(0.14) : Color.clear,
+                                    .background(selected == item.id ? Color.accentColor.opacity(0.14) : Color.clear,
                                                 in: RoundedRectangle(cornerRadius: 8))
                             }.buttonStyle(WorkbenchRowButtonStyle())
                                 .accessibilityIdentifier("chat-session-select-\(item.id.uuidString)")
@@ -945,12 +960,8 @@ struct ChatWorkbenchView: View {
     }
 
     private func conversation(_ session: ChatSession, width: CGFloat, height: CGFloat, sidebarShown: Bool) -> some View {
-        let parentIDs = Set(session.messages.compactMap(\.parentID))
-        let leaves = session.messages.filter { !parentIDs.contains($0.id) }
-        let siblings = Dictionary(grouping: session.messages, by: {
-            ($0.parentID?.uuidString ?? "root") + ":" + $0.role.rawValue
-        })
-        let attempts = Dictionary(uniqueKeysWithValues: session.attempts.map { ($0.id, $0) })
+        let structure = chat.transcriptStructure(for: session)
+        let draftIsEmpty = session.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         return VStack(spacing: 0) {
             HStack(alignment: .center, spacing: 12) {
                 Button {
@@ -983,7 +994,7 @@ struct ChatWorkbenchView: View {
                 }.frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
                 if !session.messages.isEmpty {
                     ChatActionMenu(title: label("paths", "路径"), accessibilityIdentifier: "chat-paths",
-                        items: leaves.map { leaf in
+                        items: structure.leaves.map { leaf in
                             .init(id: leaf.id.uuidString, title: branchSummary(leaf), selected: leaf.id == session.selectedLeafID) {
                                 perform(sessionID: session.id) { try chat.selectLeaf(leaf.id, sessionID: session.id) }
                             }
@@ -1016,10 +1027,21 @@ struct ChatWorkbenchView: View {
                             Text(label("forkOrigin", "此对话从另一条路径分叉；原对话仍保留。"))
                                 .font(.caption).foregroundStyle(.secondary)
                         }
-                        ForEach(chat.selectedPath) { message in
-                            messageCard(message, session: session,
-                                siblings: siblings[(message.parentID?.uuidString ?? "root") + ":" + message.role.rawValue] ?? [],
-                                attempt: message.attemptID.flatMap { attempts[$0] })
+                        ForEach(structure.path) { message in
+                            let siblings = structure.siblings[(message.parentID?.uuidString ?? "root") + ":" + message.role.rawValue] ?? []
+                            let attempt = chat.transcriptAttempt(message.attemptID, in: session)
+                            ChatMessageRow(projection: .init(owner: ObjectIdentifier(chat), sessionID: session.id,
+                                message: message, attempt: attempt, siblings: siblings, choices: session.contextChoices,
+                                selectedLeafID: session.selectedLeafID,
+                                canExclude: !(message.role == .user && session.selectedLeafID == message.id && draftIsEmpty),
+                                archived: session.archived, hasConfiguration: session.configuration != nil,
+                                canRun: canRun(session),
+                                canReplay: attempt.map { ChatRunAdmission.allowsReplay(session, attempt: $0,
+                                    isRunning: chat.isRunning, hasPendingSave: chat.pendingSaveAttemptID != nil, hasSaveIssue: chat.saveIssue != nil) } ?? false,
+                                canAdopt: session.contextChoices?.deletedAt == nil && ChatContextCommands.canAdopt(attempt, in: chat),
+                                speech: chat.speechPlaybackState, language: language?.effectiveLanguageIdentifier ?? "")) {
+                                    messageCard(message, session: session, siblings: siblings, attempt: attempt)
+                                }.equatable()
                                 .background(ChatReadingMarker(owner: readingMarkers, sessionID: session.id, messageID: message.id))
                                 .id(message.id)
                                 .chatMeasured("message-\(message.id.uuidString)", probe: layoutProbe)
@@ -1678,7 +1700,7 @@ struct ChatWorkbenchView: View {
             ["speak", "pause-reading", "resume-reading", "stop-reading"], ["inspect"]])
     }
 
-    private func quickMessageActions(_ message: ChatMessage, session: ChatSession, attempt: ChatAttempt?) -> [ChatMessageQuickActions.Item] {
+    private func quickMessageActions(_ message: ChatMessage, session: ChatSession, attempt: ChatAttempt?, menu: [ChatActionMenuItem]) -> [ChatMessageQuickActions.Item] {
         var items: [ChatMessageQuickActions.Item] = [
             .init(id: "copy", title: label("copy", "复制"), symbol: "doc.on.doc", enabled: true) {
                 copy(ChatMessageContent.answerText(message: message, attempt: attempt,
@@ -1690,7 +1712,6 @@ struct ChatWorkbenchView: View {
                 present(.edit(ChatEdit(kind: .message, sessionID: session.id, messageID: message.id, text: message.text)))
             })
         }
-        let menu = messageMenuItems(message, session: session, attempt: attempt)
         for (id, symbol) in [("new-candidate", "arrow.clockwise"), ("compare", "rectangle.split.2x1"), ("adopt", "pencil")] {
             if let item = menu.first(where: { $0.id == id }), let action = item.action {
                 items.append(.init(id: id, title: item.title, symbol: symbol, enabled: item.enabled, action: action))
@@ -1701,6 +1722,8 @@ struct ChatWorkbenchView: View {
 
     private func messageCard(_ message: ChatMessage, session: ChatSession,
                              siblings: [ChatMessage], attempt: ChatAttempt?) -> some View {
+        let menu = messageMenuItems(message, session: session, attempt: attempt)
+        let selectedAnswer = session.selectedAnswer(messageID: message.id)
         return VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text(message.role == .user ? label("you", "你") : label("assistant", "助手")) .font(.headline)
@@ -1714,14 +1737,14 @@ struct ChatWorkbenchView: View {
                         }).fixedSize().chatMeasured("branch-menu-\(message.id.uuidString)", probe: layoutProbe)
                 }
                 Spacer()
-                ChatMessageQuickActions(items: quickMessageActions(message, session: session, attempt: attempt))
+                ChatMessageQuickActions(items: quickMessageActions(message, session: session, attempt: attempt, menu: menu))
                 ChatActionMenu(title: newLabel("messageActionsShort", english: "Actions", chinese: "操作"),
                     accessibilityIdentifier: "chat-message-actions-" + message.id.uuidString,
-                    items: messageMenuItems(message, session: session, attempt: attempt)).fixedSize()
+                    items: menu).fixedSize()
             }.font(.caption)
             ChatMessageContent(message: message, attempt: attempt,
-                selectedAnswer: session.selectedAnswer(messageID: message.id), onPreview: { present(.preview($0)) })
-                .chatMeasured(session.selectedAnswer(messageID: message.id)?.revisionID != nil
+                selectedAnswer: selectedAnswer, onPreview: { present(.preview($0)) })
+                .chatMeasured(selectedAnswer?.revisionID != nil
                     ? "adopted-version-\(message.id.uuidString)" : "original-version-\(message.id.uuidString)", probe: layoutProbe)
             if let excerpts = message.knowledgeExcerpts, !excerpts.isEmpty {
                 DisclosureGroup(newLabel("usedSources", english: "Source excerpts sent with this question", chinese: "本次问题使用的资料片段")) {
@@ -1756,7 +1779,8 @@ struct ChatWorkbenchView: View {
     }
 
     private func settings(_ session: ChatSession) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
+        let definition = session.configuration.flatMap { WorkflowRegistry.standard.definition(for: $0) }
+        return VStack(alignment: .leading, spacing: 14) {
             Divider()
             Text(newLabel("answerBehavior", english: "Answer behavior", chinese: "回答方式")).font(.headline)
             Text(label("futureOnly", "更改只影响之后的生成。")).font(.caption).foregroundStyle(.secondary)
@@ -1776,7 +1800,7 @@ struct ChatWorkbenchView: View {
             Button(newLabel("defaultRulesSettings", english: "New conversation defaults…", chinese: "新会话默认规则设置…")) { openSettings?("defaults") }
                 .disabled(openSettings == nil).accessibilityIdentifier("chat-edit-default-system")
             ChatOutputFormatPanel(chat: chat, sessionID: session.id).id(session.id.uuidString + ":output-format")
-            parameterFields(session, advanced: false)
+            parameterFields(session, definition: definition, advanced: false)
             Divider()
             Text(newLabel("contextMemory", english: "Context and memory", chinese: "上下文与记忆")).font(.headline)
             Button(newLabel("contextPreview", english: "What will be sent next", chinese: "下次将发送的内容")) { showContextPreview.toggle() }
@@ -1790,7 +1814,7 @@ struct ChatWorkbenchView: View {
                 .id(session.id.uuidString + ":organization").id("conversation-organization")
             Divider()
             DisclosureGroup(newLabel("advancedModelSettings", english: "Advanced model settings", chinese: "高级模型设置")) {
-                parameterFields(session, advanced: true)
+                parameterFields(session, definition: definition, advanced: true)
                 DisclosureGroup(newLabel("templatePreview", english: "Model input template (advanced)", chinese: "模型输入模板（高级）")) {
                     Text(newLabel("templatePurpose", english: "Encodes the conversation for this model; it does not define writing style.", chinese: "将对话编码为模型输入；不用于定义文风。")).font(.caption).foregroundStyle(.secondary)
                     ChatTemplatePanel(chat: chat, sessionID: session.id).id(session.id.uuidString + ":template")
@@ -1807,8 +1831,8 @@ struct ChatWorkbenchView: View {
         }.frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    @ViewBuilder private func parameterFields(_ session: ChatSession, advanced: Bool) -> some View {
-        if let node = session.configuration, let definition = WorkflowRegistry.standard.definition(for: node) {
+    @ViewBuilder private func parameterFields(_ session: ChatSession, definition: WorkflowOperationDefinition?, advanced: Bool) -> some View {
+        if let node = session.configuration, let definition {
             let common = Set(["maximumOutputTokens", "temperature", "topP"])
             ForEach(definition.fields.filter {
                 !["modelID", "task", "messagesJSON", "outputMode"].contains($0.id)
@@ -2567,5 +2591,84 @@ private struct ChatMessageQuickActions: View {
             }
         }.fixedSize().opacity(hovered || focused != nil ? 1 : 0.6)
             .onHover { hovered = $0 }
+    }
+}
+
+/// Explicit value boundary: construction of menus/Markdown stays inside body.
+/// Independent run/speech observations used by the content still invalidate it;
+/// mutable chat.state is read only in action closures, never during this row's render.
+struct ChatMessageRow<Content: View>: View, Equatable {
+    struct Projection: Equatable {
+        let owner: ObjectIdentifier
+        let sessionID: UUID
+        let message: ChatMessage
+        let attempt: ChatAttempt?
+        let siblings: [ChatMessage]
+        let choices: ChatContextChoices?
+        let selectedLeafID: UUID?
+        let canExclude: Bool
+        let archived: Bool
+        let hasConfiguration: Bool
+        let canRun: Bool
+        let canReplay: Bool
+        let canAdopt: Bool
+        let speech: ChatSpeechPlaybackState
+        let language: String
+    }
+    let projection: Projection
+    @ViewBuilder let content: () -> Content
+    nonisolated static func == (lhs: Self, rhs: Self) -> Bool { lhs.projection == rhs.projection }
+    var body: some View {
+        #if DEBUG
+        let _ = ChatRowUpdateProbe.body?(projection.message.id)
+        #endif
+        content()
+    }
+}
+#if DEBUG
+@MainActor enum ChatRowUpdateProbe {
+    static var body: ((UUID) -> Void)?
+    static var browserBody: (() -> Void)?
+    static var searchQuery: (() -> Void)?
+}
+#endif
+
+/// The history browser observes stored message text only while searching. Its
+/// ordinary list depends on summaries, not unsent draft or streaming bytes.
+struct ChatSessionBrowser<Content: View>: View, Equatable {
+    struct Projection: Equatable {
+        struct Summary: Equatable {
+            let id: UUID; let title: String; let count: Int; let archived: Bool
+            let choices: ChatContextChoices?; let leaf: UUID?
+        }
+        struct SearchSource: Equatable {
+            let messages: [ChatMessage]; let attempts: [ChatAttempt]
+        }
+        let owner: ObjectIdentifier
+        let summaries: [Summary]
+        let sources: [SearchSource]
+        let selected: UUID?
+        let query: String
+        let archived: Bool; let deleted: Bool; let favorites: Bool; let tag: String; let language: String
+        let filePanelBusy: Bool
+        init(owner: ObjectIdentifier, sessions: [ChatSession], selected: UUID?, query: String,
+             archived: Bool, deleted: Bool, favorites: Bool, tag: String, language: String, filePanelBusy: Bool) {
+            self.owner = owner; self.selected = selected; self.query = query
+            self.archived = archived; self.deleted = deleted; self.favorites = favorites
+            self.tag = tag; self.language = language
+            self.filePanelBusy = filePanelBusy
+            summaries = sessions.map { .init(id: $0.id, title: $0.title, count: $0.messages.count,
+                archived: $0.archived, choices: $0.contextChoices, leaf: $0.selectedLeafID) }
+            sources = query.isEmpty || deleted ? [] : sessions.map { .init(messages: $0.messages, attempts: $0.attempts) }
+        }
+    }
+    let projection: Projection
+    @ViewBuilder let content: () -> Content
+    nonisolated static func == (lhs: Self, rhs: Self) -> Bool { lhs.projection == rhs.projection }
+    var body: some View {
+        #if DEBUG
+        let _ = ChatRowUpdateProbe.browserBody?()
+        #endif
+        content()
     }
 }

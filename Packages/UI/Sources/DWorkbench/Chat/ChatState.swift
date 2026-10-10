@@ -251,6 +251,7 @@ public struct ChatState: Codable, Sendable, Equatable {
             try Self.validateExcerpts(session.knowledgeExcerpts)
             let byID = Dictionary(uniqueKeysWithValues: session.messages.map { ($0.id, $0) })
             let attempts = Dictionary(uniqueKeysWithValues: session.attempts.map { ($0.id, $0) })
+            var reachesRoot = Set<UUID>()
             for message in session.messages {
                 guard message.text.utf8.count <= 1_048_576,
                       message.parentID == nil || byID[message.parentID!] != nil,
@@ -279,7 +280,16 @@ public struct ChatState: Codable, Sendable, Equatable {
                         throw WorkflowIssue("助手消息缺少冻结尝试或父用户消息。")
                     }
                 }
-                _ = try session.path(to: message.id)
+                // Each parent chain is proved once, using the existing index. Preserve
+                // the old per-message error order, including parents stored after children.
+                var chain = Set<UUID>(), cursor: UUID? = message.id
+                while let id = cursor, !reachesRoot.contains(id) {
+                    guard chain.insert(id).inserted, let ancestor = byID[id] else {
+                        throw WorkflowIssue("聊天分支引用或循环无效。")
+                    }
+                    cursor = ancestor.parentID
+                }
+                reachesRoot.formUnion(chain)
             }
             for attempt in session.attempts {
                 guard attempt.sessionID == session.id, byID[attempt.userMessageID]?.role == .user,

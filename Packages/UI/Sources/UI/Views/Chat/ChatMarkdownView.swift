@@ -33,9 +33,23 @@ enum ChatMarkdownPresentation {
                          preferredLetterSpacing: nil, preferredLineHeight: nil)
     }
 
+    private struct ConfigurationKey: Equatable {
+        let size: Int; let wraps: Bool; let foreground: String; let accent: String; let panel: String
+    }
+    @MainActor private static var configurations: [(ConfigurationKey, MarkdownRenderConfig)] = []
+    #if DEBUG
+    @MainActor private(set) static var configurationBuilds = 0
+    #endif
+
     @MainActor
     static func config(for preferences: ChatDisplayPreferences, colorScheme: ColorScheme = .light) -> MarkdownRenderConfig {
         let palette = preferences.resolvedAppearance.palette(for: preferences.preferredColorScheme ?? colorScheme)
+        let key = ConfigurationKey(size: preferences.textPointSize, wraps: preferences.wrapsCode,
+            foreground: palette.foreground, accent: palette.accent, panel: palette.panel)
+        if let cached = configurations.first(where: { $0.0 == key }) { return cached.1 }
+        #if DEBUG
+        configurationBuilds += 1
+        #endif
         let size = CGFloat(preferences.textPointSize)
         let base = fonts(size)
         let code = fonts(size, monospaced: true)
@@ -45,11 +59,12 @@ enum ChatMarkdownPresentation {
         var block = CodeBlockConfig(theme: codeBlock.theme, backgroundColor: codeBlock.backgroundColor,
             foregroundColor: codeBlock.foregroundColor, codeTextFonts: code, chromeTextFonts: fonts(max(12, size - 2)))
         block.wrapsLines = preferences.wrapsCode
-        return MarkdownRenderConfig(
+        let minorHeading = fonts(size * 20 / 17)
+        let config = MarkdownRenderConfig(
             blockQuoteStyle: .init(textFonts: base, textColor: palette.foregroundColor),
             headingStyle: .init(h1Font: fonts(size * 28 / 17), h2Font: fonts(size * 24 / 17),
-                                h3Font: fonts(size * 20 / 17), h4Font: fonts(size * 20 / 17),
-                                h5Font: fonts(size * 20 / 17), h6Font: fonts(size * 20 / 17),
+                                h3Font: minorHeading, h4Font: minorHeading,
+                                h5Font: minorHeading, h6Font: minorHeading,
                                 textColor: palette.foregroundColor),
             orderedListStyle: .init(textFonts: base, textColor: palette.foregroundColor),
             paragraphStyle: .init(textFonts: base, textColor: palette.foregroundColor),
@@ -65,6 +80,11 @@ enum ChatMarkdownPresentation {
                                codeUnderlineColor: inline.codeUnderlineColor),
             codeBlockConfig: block,
             imageConfig: .disabled)
+        // Eight resolved styles, bounded independently of transcript length. A change
+        // of font, code wrapping or any used palette component creates a new entry.
+        configurations.append((key, config))
+        if configurations.count > 8 { configurations.removeFirst() }
+        return config
     }
 
     /// Model links are untrusted. Clicking only proposes a visible destination;

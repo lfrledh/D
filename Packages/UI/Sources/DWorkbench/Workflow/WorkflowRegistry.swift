@@ -24,10 +24,10 @@ public struct WorkflowRegistry: Sendable {
         operationsByID = table
     }
 
-    public static var standard: WorkflowRegistry {
+    public static let standard: WorkflowRegistry = {
         do { return try WorkflowRegistry(operations: WorkflowBuiltins.operations) }
         catch { preconditionFailure("内置工作流注册无效：\(error.localizedDescription)") }
-    }
+    }()
 
     public var definitions: [WorkflowOperationDefinition] { orderedOperations.map(\.definition) }
 
@@ -156,6 +156,12 @@ public struct WorkflowRegistry: Sendable {
 
     public func plan(_ graph: WorkflowGraph, target: UUID, only: Bool, tools: [WorkflowToolDefinition] = []) throws -> [UUID] {
         try validate(graph, tools: tools)
+        return try plannedOrder(graph, target: target, only: only,
+            incoming: Dictionary(grouping: graph.connections, by: \.targetNode))
+    }
+
+    private func plannedOrder(_ graph: WorkflowGraph, target: UUID, only: Bool,
+                              incoming: [UUID: [WorkflowConnection]]) throws -> [UUID] {
         guard graph.nodes.contains(where: { $0.id == target }) else {
             throw WorkflowIssue("目标节点不存在。", nodeID: target)
         }
@@ -164,7 +170,7 @@ public struct WorkflowRegistry: Sendable {
         var included: Set<UUID> = [target]
         var frontier = [target]
         while let current = frontier.popLast() {
-            for connection in graph.connections where connection.targetNode == current {
+            for connection in incoming[current] ?? [] {
                 if included.insert(connection.sourceNode).inserted { frontier.append(connection.sourceNode) }
             }
         }
@@ -194,8 +200,28 @@ public struct WorkflowRegistry: Sendable {
 
     public func signature(_ nodeID: UUID, in graph: WorkflowGraph, tools: [WorkflowToolDefinition] = []) throws -> String {
         let nodeOrder = try plan(graph, target: nodeID, only: false, tools: tools)
-        let included = Set(nodeOrder)
+        return try signature(nodeOrder: nodeOrder,
+            nodes: Dictionary(uniqueKeysWithValues: graph.nodes.map { ($0.id, $0) }), connections: graph.connections)
+    }
+
+    /// A display snapshot validates once. The canonical bytes and per-target UUID ordering
+    /// are identical to signature(_:in:tools:); execution admission still validates independently.
+    func signatures(in graph: WorkflowGraph, tools: [WorkflowToolDefinition]) throws -> [UUID: String] {
+        try validate(graph, tools: tools)
         let nodes = Dictionary(uniqueKeysWithValues: graph.nodes.map { ($0.id, $0) })
+        let incoming = Dictionary(grouping: graph.connections, by: \.targetNode)
+        var result: [UUID: String] = [:]
+        for node in graph.nodes {
+            let order = try plannedOrder(graph, target: node.id, only: false, incoming: incoming)
+            // Encoding one branch may fail without invalidating independent branches.
+            result[node.id] = try? signature(nodeOrder: order, nodes: nodes, connections: graph.connections)
+        }
+        return result
+    }
+
+    private func signature(nodeOrder: [UUID], nodes: [UUID: WorkflowNode],
+                           connections graphConnections: [WorkflowConnection]) throws -> String {
+        let included = Set(nodeOrder)
         var canonical = SignatureBytes()
         canonical.append("d.workflow.signature.v1")
 
@@ -232,7 +258,7 @@ public struct WorkflowRegistry: Sendable {
             }
         }
 
-        let connections = graph.connections
+        let connections = graphConnections
             .filter { included.contains($0.sourceNode) && included.contains($0.targetNode) }
             .sorted(by: Self.connectionOrder)
         for connection in connections {

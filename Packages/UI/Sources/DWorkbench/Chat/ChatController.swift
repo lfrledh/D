@@ -180,7 +180,17 @@ import Observation
         self.allowsSubmission = allowsSubmission; self.makeServices = makeServices
     }
     public var selectedSession: ChatSession? { state.sessions.first { $0.id == state.selectedSessionID } }
-    public var selectedPath: [ChatMessage] { (try? selectedSession?.path(to: selectedSession?.selectedLeafID)) ?? [] }
+    @ObservationIgnored private let transcriptCache = ChatTranscriptCache()
+    public var selectedPath: [ChatMessage] {
+        guard let selectedSession else { return [] }
+        return transcriptStructure(for: selectedSession).path
+    }
+    public func transcriptStructure(for session: ChatSession) -> ChatTranscriptStructure {
+        transcriptCache.structure(for: session)
+    }
+    public func transcriptAttempt(_ id: UUID?, in session: ChatSession) -> ChatAttempt? {
+        transcriptCache.attempt(id, in: session)
+    }
 
     public func load() async {
         guard !isLoaded else { return }
@@ -2111,5 +2121,59 @@ import Observation
             parents: answer.attempt?.output.map { [$0] } ?? [], operationID: "d.chat.save-final",
             stepID: answer.revisionID ?? answer.attempt?.id ?? messageID, details: details,
             assetID: answer.assetID).record.reference
+    }
+}
+
+public struct ChatTranscriptStructure: Sendable {
+    public let leaves: [ChatMessage]
+    public let siblings: [String: [ChatMessage]]
+    public let path: [ChatMessage]
+}
+
+/// One selected transcript's derived index. Arrays share immutable message storage;
+/// draft/stream text and disk revision are deliberately not cache dependencies.
+@MainActor final class ChatTranscriptCache {
+    private var sessionID: UUID?
+    private var messages: [ChatMessage] = []
+    private var byID: [UUID: ChatMessage] = [:]
+    private var leaves: [ChatMessage] = []
+    private var siblings: [String: [ChatMessage]] = [:]
+    private var leafID: UUID?
+    private var path: [ChatMessage] = []
+    private var attemptIndices: [UUID: Int] = [:]
+    private(set) var treeBuilds = 0
+    private(set) var pathBuilds = 0
+
+    func structure(for session: ChatSession) -> ChatTranscriptStructure {
+        let changed = sessionID != session.id || messages != session.messages
+        if changed {
+            if sessionID != session.id { attemptIndices = [:] }
+            sessionID = session.id; messages = session.messages
+            byID = Dictionary(messages.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+            let parents = Set(messages.compactMap(\.parentID))
+            leaves = messages.filter { !parents.contains($0.id) }
+            siblings = Dictionary(grouping: messages, by: { ($0.parentID?.uuidString ?? "root") + ":" + $0.role.rawValue })
+            treeBuilds += 1
+        }
+        if changed || leafID != session.selectedLeafID {
+            leafID = session.selectedLeafID; path = []
+            var cursor = leafID, seen = Set<UUID>()
+            while let id = cursor {
+                guard seen.insert(id).inserted, let message = byID[id] else { path = []; break }
+                path.append(message); cursor = message.parentID
+            }
+            path.reverse(); pathBuilds += 1
+        }
+        return .init(leaves: leaves, siblings: siblings, path: path)
+    }
+    func attempt(_ id: UUID?, in session: ChatSession) -> ChatAttempt? {
+        guard let id else { return nil }
+        if sessionID != session.id { _ = structure(for: session) }
+        if let index = attemptIndices[id], session.attempts.indices.contains(index), session.attempts[index].id == id {
+            return session.attempts[index]
+        }
+        attemptIndices = Dictionary(session.attempts.enumerated().map { ($0.element.id, $0.offset) },
+                                    uniquingKeysWith: { first, _ in first })
+        return attemptIndices[id].map { session.attempts[$0] }
     }
 }

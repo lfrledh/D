@@ -208,6 +208,20 @@ struct WorkflowBaseline02Tests {
         let restored = nativePort.convert(CGPoint(x: nativePort.bounds.midX, y: nativePort.bounds.midY), to: host)
         #expect(abs(restored.x - beforeCancel.x) < 1)
         #expect(controller.graph == originalGraph)
+        let receivers = descendants(host).compactMap { $0 as? WorkflowConnectionHitView }
+        nativePort.onChange(CGSize(width: 12, height: 10))
+        try await Task.sleep(for: .milliseconds(100)); host.layoutSubtreeIfNeeded()
+        surfaceUpdates = 0; nodeUpdates = [:]; wireBuilds = 0
+        for tick in 1...36 {
+            nativePort.onChange(CGSize(width: tick * 3, height: tick * 2))
+            try await Task.sleep(for: .milliseconds(16)); host.layoutSubtreeIfNeeded()
+        }
+        print("R15_WIRE_PREVIEW ticks36 surface=\(surfaceUpdates) cards=\(nodeUpdates.values.reduce(0,+)) hitBuilds=\(wireBuilds)")
+        #expect(surfaceUpdates == 0 && nodeUpdates.isEmpty && wireBuilds == 0)
+        #expect(!receivers.isEmpty && receivers.allSatisfy { receiver in descendants(host).contains { $0 === receiver } })
+        nativePort.onEnd(nil)
+        try await Task.sleep(for: .milliseconds(100)); host.layoutSubtreeIfNeeded()
+        #expect(controller.graph == originalGraph)
         #expect(await engine.calls == 0)
     }
 
@@ -432,6 +446,49 @@ struct WorkflowBaseline02Tests {
         let excludedControl = WorkflowConnectionGeometry.hitPath(for: connection, geometry: geometry,
             portCenters: [:], excluding: [control])
         #expect(!excludedControl.cgPath.contains(midpoint))
+    }
+
+    @Test func boundedWireCacheMatchesFullExclusionsAndInvalidatesNearbyChanges() {
+        let graph = WorkflowExamples.text(), cache = WorkflowConnectionHitCache()
+        let connection = graph.connections[0], geometry = WorkflowGraphGeometry(graph: graph)
+        let source = WorkflowPortIdentity(nodeID: connection.sourceNode, port: connection.sourcePort, input: false)
+        let target = WorkflowPortIdentity(nodeID: connection.targetNode, port: connection.targetPort, input: true)
+        var ports: [WorkflowPortIdentity: CGPoint] = [source: CGPoint(x: 480, y: 180), target: CGPoint(x: 180, y: 260)]
+        for i in 0..<100 { ports[.init(nodeID: UUID(), port: "far", input: true)] = CGPoint(x: 10_000 + i * 40, y: 10_000) }
+        var controls = [CGRect(x: 290, y: 210, width: 20, height: 20)]
+        func fullPath() -> Path {
+            let ends = WorkflowConnectionGeometry.endpoints(for: connection, geometry: geometry, portCenters: ports)
+            var path = WorkflowConnectionGeometry.path(for: connection, geometry: geometry, portCenters: ports)
+                .strokedPath(StrokeStyle(lineWidth: 12, lineCap: .round))
+            for point in Array(ports.values) + [ends.start, ends.end] {
+                path = path.subtracting(Path(ellipseIn: CGRect(x: point.x - 12, y: point.y - 12, width: 24, height: 24)))
+            }
+            for rect in controls { path = path.subtracting(Path(rect)) }
+            return path
+        }
+        func compare() {
+            let old = fullPath(), new = cache.path(for: connection, geometry: geometry, portCenters: ports, excluding: controls)
+            for x in stride(from: 130, through: 550, by: 3) {
+                for y in stride(from: 160, through: 280, by: 3) {
+                    let point = CGPoint(x: x, y: y)
+                    #expect(old.contains(point) == new.contains(point))
+                }
+            }
+        }
+        compare(); let initial = cache.builds
+        let clock = ContinuousClock()
+        let cold = clock.measure { for _ in 0..<36 { _ = fullPath() } }
+        let warm = clock.measure { for _ in 0..<36 { _ = cache.path(for: connection, geometry: geometry, portCenters: ports, excluding: controls) } }
+        #expect(cache.builds == initial)
+        print("R15_WIRE repeats36 full=\(cold) cached=\(warm) builds=\(cache.builds - initial)")
+        controls.append(CGRect(x: 50_000, y: 50_000, width: 30, height: 30)); compare()
+        #expect(cache.builds == initial)
+        controls.append(CGRect(x: 380, y: 195, width: 30, height: 30)); compare()
+        #expect(cache.builds == initial + 1)
+        ports[source] = CGPoint(x: 450, y: 190); compare()
+        #expect(cache.builds == initial + 2)
+        controls.removeAll(); compare()
+        #expect(cache.builds == initial + 3)
     }
 
     @Test func connectionFailureNamesIncompatibleAndOccupiedInputs() throws {

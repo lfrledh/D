@@ -1022,7 +1022,7 @@ private struct WorkflowNodeInspector: View {
 
             if let step = controller.latestStep(for: node.id) {
                 HStack {
-                    WorkflowStatusBadge(status: step.status, stale: controller.isStale(step))
+                    WorkflowStatusBadge(status: step.status, stale: controller.presentationStatus(for: node.id)?.stale ?? true)
                     Spacer()
                     Text(step.id.uuidString).font(.caption2.monospaced()).foregroundStyle(.secondary)
                 }
@@ -1445,7 +1445,7 @@ private struct WorkflowCanvasConnectionInspector: View {
                     }
                     if let step = controller.latestStep(for: source.id),
                        let value = step.outputs[connection.sourcePort] {
-                        Text(controller.isStale(step)
+                        Text(controller.presentationStatus(for: source.id)?.stale ?? true
                              ? workflowText(language, "canvas.connection.stale", fallback: "运行记录输出（来源版本已变化）")
                              : workflowText(language, "canvas.connection.saved", fallback: "运行记录输出"))
                             .font(.caption).foregroundStyle(.secondary)

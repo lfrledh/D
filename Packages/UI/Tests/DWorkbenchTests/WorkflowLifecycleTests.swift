@@ -1047,6 +1047,39 @@ struct WorkflowLifecycleTests {
         try await c.close(); try await store.close()
     }
 
+    @Test func displaySnapshotReusesLayoutAndTracksConfigurationAndNewHistory() async throws {
+        let (_, store, _, c) = try await fixture(); c.addExample("template")
+        let graph = try #require(c.graph)
+        for node in graph.nodes { #expect(c.presentationStatus(for: node.id) == nil) }
+        #expect(c.displayAnalysisCount == 0)
+        await c.run(target: graph.nodes[3].id, only: false)
+        func compare() {
+            for node in graph.nodes {
+                let display = c.presentationStatus(for: node.id)
+                let step = c.latestStep(for: node.id)
+                #expect(display?.status == step?.status)
+                if let step { #expect(display?.stale == c.isStale(step)) }
+            }
+        }
+        compare()
+        let analyses = c.displayAnalysisCount, histories = c.displayHistoryCount
+        let clock = ContinuousClock()
+        let warm = clock.measure { for _ in 0..<100 { for node in graph.nodes { _ = c.presentationStatus(for: node.id) } } }
+        let old = clock.measure { for _ in 0..<100 { for node in graph.nodes { if let step = c.latestStep(for: node.id) { _ = c.isStale(step) } } } }
+        print("R15_GRAPH nodes=\(graph.nodes.count) queries=100 warm=\(warm) authoritative=\(old) analysis=\(c.displayAnalysisCount - analyses)")
+        #expect(c.displayAnalysisCount == analyses && c.displayHistoryCount == histories)
+        c.selectedNodeID = graph.nodes[1].id
+        c.toggleCollapsed(graph.nodes[0].id); compare()
+        c.undo(); compare(); c.redo(); compare()
+        #expect(c.displayAnalysisCount == analyses)
+        c.setParameter(nodeID: graph.nodes[0].id, key: "text", value: .text("changed")); compare()
+        #expect(c.displayAnalysisCount == analyses + 1)
+        c.undo(); compare()
+        await c.run(target: graph.nodes[0].id, only: true); compare()
+        #expect(c.presentationStatus(for: graph.nodes[3].id)?.stale == true)
+        try await c.close(); try await store.close()
+    }
+
     @Test func sameConfigurationNewUpstreamVersionInvalidatesDescendants() async throws {
         let (_, store, _, c) = try await fixture(); c.addExample("template")
         let g = try #require(c.graph)
